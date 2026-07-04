@@ -83,7 +83,9 @@ private:
 	uint32_t m_sp;    // dedicated stack pointer (MN10200 reused A3 as the stack)
 	uint32_t m_mdr;   // multiply/divide register (32-bit on MN10300; 16-bit on MN10200)
 	uint16_t m_psw;   // processor status word
-	// TODO(MN10300/AM33): extended registers E0..E7, MDRQ, LIR/LAR, register banks.
+	uint32_t m_lir;   // loop-instruction register (setlb) - modelled for movm completeness
+	uint32_t m_lar;   // loop-address register     (setlb)
+	// TODO(MN10300/AM33): extended registers E0..E7, MDRQ, register banks.
 
 	int m_icount;     // remaining cycles this timeslice (MN10200 named this m_cycles)
 
