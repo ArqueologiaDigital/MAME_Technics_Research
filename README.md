@@ -36,16 +36,30 @@ in MAME; the core reuses it for the debugger.
 A full MN10300 core and a complete KN7000 machine are a large, multi-stage
 effort. What this repo aims to establish first:
 
-- [x] Repository / overlay layout and build-integration recipe
-- [ ] MN10300 CPU device scaffold (MAME `cpu_device` boilerplate, memory space,
-      state registration, disassembler hookup)
-- [ ] MN10300 execute loop with a fetch/decode/execute skeleton
-- [ ] A meaningful subset of MN10300 instructions (the ones the KN7000 boot code
-      uses: `mov` immediates, `movbu`/`movhu`, `add`/`sub`/`cmp`, branches,
-      `call`/`ret`, `jmp`, `movm`, `nop`)
-- [ ] KN7000 machine driver: memory map, ROM regions, LCD screen placeholder
-- [ ] The long tail: full instruction set, interrupts, peripherals (LCD, tone
-      generators, FDC, panel sub-CPUs, SD/USB), sound
+- [x] Repository / overlay layout and build-integration recipe ([`INTEGRATION.md`](INTEGRATION.md))
+- [x] MN10300 CPU device scaffold (MAME `cpu_device` boilerplate, 32-bit memory
+      space, state registration for the debugger, save-state, disassembler hookup)
+- [x] MN10300 execute loop with a fetch/decode/execute structure
+- [x] A first batch of MN10300 instructions: the single-byte group (clr, ext*,
+      inc, mov/cmp/add reg&imm8, mov (aM)/(disp8,sp), branches, `bra`, `nop`,
+      `jmp` disp16/disp32, `call`, `ret`, `movm`) plus the `0xFC` 32-bit-immediate
+      family (`mov`/`add`/`sub`/`cmp`/`and`/`or`/`xor` imm32) and `add imm8,sp`
+- [x] KN7000 machine driver: memory map, ROM regions (real CRC/SHA1), LCD placeholder
+- [ ] **Verify by building MAME** (not yet done — see caveat below) and stepping boot
+- [ ] The remaining prefixed groups (`0xF0`-`0xF6`, `0xF9`-`0xFB`, `0xFD`, `0xFE`,
+      and the `0xFA` 16-bit family), and the `0xFC` (disp32,sp)/(abs32) load-stores
+- [ ] `movm` register-mask low bits + exact push order + SP delta (needs the
+      AM33 manual — flagged in the code; getting it wrong corrupts stack frames)
+- [ ] Interrupts / exceptions, cycle timing
+- [ ] Peripherals (LCD controller, tone generators, DSP, FDC, panel sub-CPUs,
+      SD/USB) and sound
+
+> **Caveat — not yet build-tested.** These files have not been compiled against
+> MAME in this environment (a full MAME build is heavy). They are written to
+> MAME conventions and internally consistency-checked (every method defined is
+> declared; the instruction semantics follow the spec derived from the existing
+> disassembler), but expect to iterate on compile errors and, especially, to
+> confirm the `movm`/`ret` register-list handling before the core runs real code.
 
 The extracted flash images the driver loads (`kn7000_program.rom`,
 `kn7000_table.rom`) are produced by the sibling `kn7000_extraction` repo, and the
