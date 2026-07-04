@@ -45,6 +45,9 @@ effort. What this repo aims to establish first:
       `jmp` disp16/disp32, `call`, `ret`, `movm`) plus the `0xFC` 32-bit-immediate
       family (`mov`/`add`/`sub`/`cmp`/`and`/`or`/`xor` imm32) and `add imm8,sp`
 - [x] KN7000 machine driver: memory map, ROM regions (real CRC/SHA1), LCD placeholder
+- [x] **Instruction-length decoder validated** against MAME unidasm over the real
+      ROM — 656,050 legal instructions, 0 mismatches (see [`tests/`](tests/)). The
+      core uses it to stay aligned/steppable over unimplemented opcodes.
 - [ ] **Verify by building MAME** (not yet done — see caveat below) and stepping boot
 - [ ] The remaining prefixed groups (`0xF0`-`0xF6`, `0xF9`-`0xFB`, `0xFD`, `0xFE`,
       and the `0xFA` 16-bit family), and the `0xFC` (disp32,sp)/(abs32) load-stores
