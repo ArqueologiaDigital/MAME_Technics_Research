@@ -174,3 +174,16 @@ hardware-init I/O sequence (22 registers) is:
 work RAM extends past `0x50298000` (>2.5 MB), and there are device windows at
 `0x90000000` and `0x8C000000` (the boot copies data from the top of the program
 ROM into them) — likely the LCD V-RAM / video / wave-DMA windows.
+
+### How far the boot gets
+
+Once those device windows are backed with scratch RAM, the interpreter runs
+**4,589,920 instructions** — completing hardware init and BSS setup and entering
+the **MILK kernel in code region 2** (`0x487B8xxx`) — before it makes its first
+call into the undumped library ROM (`0x4C03CC4E`, from kernel code at
+`0x487B8D52`). That call is the hard frontier: with `--hle-lib` the library calls
+are stubbed (return 0), and the kernel diverges after only **2** of them
+(`0x4C03CC4E` d1=`0x15`, then `0x4C03BB8F` d0=`0x1F4`), because it immediately
+uses their return values (pointers). So the library/kernel ROM at `0x4C000000` is
+required from the very start of kernel initialisation — see
+[`library-rom-api.md`](library-rom-api.md).
