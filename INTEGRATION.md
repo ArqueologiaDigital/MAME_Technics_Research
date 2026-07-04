@@ -63,7 +63,31 @@ make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp   # focused build
 ./kn7000 kn7000 -debug                                          # step the boot code
 ```
 
-Expect the CPU to start fetching at `0x48400000` (`jmp 0x4840FF7E`). The execute
-core currently implements only a first batch of instructions, so it will soon
-hit an `unimplemented opcode` log entry — that is the current frontier of the
-work.
+Expect the CPU to start fetching at `0x48400000` (`jmp 0x4840FF7E`).
+
+## 6. Current state of knowledge
+
+The MN10300 execute core now implements **~99.94% of the instruction forms the
+firmware actually uses** (the remainder are unused `udf*` coprocessor ops). Its
+semantics were cross-checked by an independent Python interpreter
+(`kn7000_disassembly/tools/mn10300_sim.py`) that executes **4.59 million** real
+boot instructions coherently — through hardware init and BSS setup and into the
+MILK kernel — before the boot **calls into the undumped library/kernel ROM at
+`0x4C000000`**. That undumped ROM (~6 MB, the C runtime + kernel; 7,965 calls to
+298 entry points) is therefore the true frontier: the machine cannot boot to a UI
+in MAME until it is dumped, or its hot entry points are high-level emulated. See
+`notes/library-rom-api.md`.
+
+What *is* mapped and understood, for building out the peripherals:
+
+* **I/O** — 112 registers across five banks, decoded in `notes/io-map.md`
+  (timers `0x32000000`, GPIO `0x36008000`, the 58-register LCD/panel block
+  `0x34000000`, the **dual tone generators** `0x98040000`/`0x98050000`).
+* **Subsystems** — the firmware's event/dispatch, tasks/scheduler, display and
+  storage layers are documented from the disassembly on the kn5000-docs site
+  (KN7000 section), with the relevant work-RAM globals listed in the driver
+  header.
+
+So the productive next steps are (a) obtaining/HLE-ing the `0x4C000000` ROM, and
+(b) replacing the logging I/O handlers with real device models (LCD, tone
+generators, panel sub-CPUs, FDC/SD) using the register map and subsystem docs.
