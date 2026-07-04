@@ -48,11 +48,16 @@ effort. What this repo aims to establish first:
 - [x] **Instruction-length decoder validated** against MAME unidasm over the real
       ROM — 656,050 legal instructions, 0 mismatches (see [`tests/`](tests/)). The
       core uses it to stay aligned/steppable over unimplemented opcodes.
+- [x] The prefixed groups `0xF0` (reg-indirect moves + call/jmp/ret `(aM)`),
+      `0xF1` (cross-type reg-reg arith), `0xF2` (logical / mul / div / shift /
+      special-reg moves), `0xF3`/`0xF4` (indexed load/store), the `0xFA` 16-bit
+      family, and `0xFE` (bit ops on abs) — each consuming the validated length
 - [ ] **Verify by building MAME** (not yet done — see caveat below) and stepping boot
-- [ ] The remaining prefixed groups (`0xF0`-`0xF6`, `0xF9`-`0xFB`, `0xFD`, `0xFE`,
-      and the `0xFA` 16-bit family), and the `0xFC` (disp32,sp)/(abs32) load-stores
+- [ ] Remaining rare groups (`0xF5`/`0xF6` udf/coprocessor, `0xF9`/`0xFB`/`0xFD`
+      udf-imm), the `0xFC` (disp32,sp)/(abs32) load-stores, `0xF8` disp8 moves/shifts
 - [ ] `movm` register-mask low bits + exact push order + SP delta (needs the
-      AM33 manual — flagged in the code; getting it wrong corrupts stack frames)
+      AM33 manual — flagged in the code; getting it wrong corrupts stack frames);
+      also `F0` rti/trap and div-by-zero traps
 - [ ] Interrupts / exceptions, cycle timing
 - [ ] Peripherals (LCD controller, tone generators, DSP, FDC, panel sub-CPUs,
       SD/USB) and sound
