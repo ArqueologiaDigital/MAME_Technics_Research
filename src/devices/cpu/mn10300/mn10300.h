@@ -133,6 +133,11 @@ private:
 	// shift/logical flag helpers
 	inline void set_logic_flags(uint32_t r);   // and/or/xor/not: Z,N; clear V
 
+	// typed memory transfer used by the F8/FA/FC (disp,aM)/(disp,sp)/(abs) moves.
+	// type: 0/1 = 32-bit mov (a-reg iff a_reg), 2 = movbu (byte), 3 = movhu (half).
+	inline void typed_load_store(int type, bool a_reg, int reg, uint32_t ea, bool store);
+	inline void do_shift(int op, int dst, uint32_t count);  // 0=asl 1=lsr 2=asr
+
 	// ---- interrupts (stubs) ------------------------------------------------
 	void check_irq();
 	void take_irq(int level, int group);

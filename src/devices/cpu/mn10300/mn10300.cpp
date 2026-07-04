@@ -427,66 +427,147 @@ void mn10300_device::execute_run()
 // 0xFC prefix: 32-bit immediate / displacement / absolute forms (6 bytes total
 // for the reg-immediate cases). Only the common register-immediate ops are
 // implemented; the (disp32,sp)/(abs32) load-store forms are TODO.
-void mn10300_device::execute_fc()
+inline void mn10300_device::typed_load_store(int type, bool a_reg, int reg, uint32_t ea, bool store)
 {
-	const uint32_t start_pc = m_pc - 1;
-	const uint8_t op2 = read_arg8(m_pc);
-	m_pc += 1;
-	const int dst = op2 & 3;
-
-	if (op2 >= 0xC0)
+	switch (type)
 	{
-		const uint32_t imm = read_arg32(m_pc); m_pc += 4;
-		switch (op2 & 0xFC)
-		{
-			case 0xC0: m_d[dst] = do_add(m_d[dst], imm, 0); break;              // add imm32,dD
-			case 0xD0: m_a[dst] = do_add(m_a[dst], imm, 0); break;              // add imm32,aD
-			case 0xC4: m_d[dst] = do_sub(m_d[dst], imm, 0); break;              // sub imm32,dD
-			case 0xD4: m_a[dst] = do_sub(m_a[dst], imm, 0); break;              // sub imm32,aD
-			case 0xC8: do_sub(m_d[dst], imm, 0); break;                        // cmp imm32,dD
-			case 0xD8: do_sub(m_a[dst], imm, 0); break;                        // cmp imm32,aD
-			case 0xCC: m_d[dst] = imm; break;                                  // mov imm32,dD
-			case 0xDC: m_a[dst] = imm; break;                                  // mov imm32,aD
-			case 0xE0: m_d[dst] &= imm; set_nz32(m_d[dst]); m_psw &= ~FLAG_VF; break; // and
-			case 0xE4: m_d[dst] |= imm; set_nz32(m_d[dst]); m_psw &= ~FLAG_VF; break; // or
-			case 0xE8: m_d[dst] ^= imm; set_nz32(m_d[dst]); m_psw &= ~FLAG_VF; break; // xor
-			case 0xFC:
-				if (op2 == 0xFE) { m_sp = do_add(m_sp, read_arg32(m_pc), 0); m_pc += 4; } // add imm32,sp (no flags on real hw? see TODO)
-				else logerror("MN10300: unimplemented FC %02X @ %08X\n", op2, start_pc);
-				break;
-			default:
-				logerror("MN10300: unimplemented FC %02X @ %08X\n", op2, start_pc);
-				break;
-		}
-	}
-	else
-	{
-		// TODO(MN10300): FC op2 < 0xC0 = mov/movbu/movhu with (disp32,aM),
-		// and the 0x80-0xBF (disp32,sp)/(abs32) load-store forms.
-		logerror("MN10300: unimplemented FC %02X (disp32/abs32 move) @ %08X\n", op2, start_pc);
-		m_pc += 4; // best-effort length so the stream stays roughly aligned
+		case 0: case 1:  // 32-bit mov (a-reg iff a_reg)
+			if (a_reg) { if (store) write_mem32(ea, m_a[reg]); else m_a[reg] = read_mem32(ea); }
+			else       { if (store) write_mem32(ea, m_d[reg]); else m_d[reg] = read_mem32(ea); }
+			break;
+		case 2:  if (store) write_mem8 (ea, m_d[reg]); else m_d[reg] = read_mem8 (ea); break; // movbu
+		case 3:  if (store) write_mem16(ea, m_d[reg]); else m_d[reg] = read_mem16(ea); break; // movhu
 	}
 }
 
+inline void mn10300_device::do_shift(int op, int dst, uint32_t count)
+{
+	count &= 0x1F;
+	uint32_t carry = 0;
+	if (count)
+	{
+		if (op == 0)      { carry = (m_d[dst] >> (32 - count)) & 1; m_d[dst] <<= count; }          // asl
+		else if (op == 1) { carry = (m_d[dst] >> (count - 1)) & 1;  m_d[dst] >>= count; }           // lsr
+		else              { carry = (m_d[dst] >> (count - 1)) & 1;  m_d[dst] = (int32_t)m_d[dst] >> count; } // asr
+	}
+	m_psw = (m_psw & ~FLAG_CF) | (carry ? FLAG_CF : 0);
+	set_nz32(m_d[dst]);
+}
 
-// 0xF8 prefix: imm8 / disp8 forms (3 bytes total). Only add imm8,sp and the
-// byte/half SP-relative loads/stores that boot code uses are implemented.
+
+// 0xFC: imm32 / disp32 / abs32 forms. Always 6 bytes (op, op2, then a 32-bit
+// operand). PC is set to start+6 at the end unless a control-flow op returns.
+void mn10300_device::execute_fc()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t  op2 = read_arg8(m_pc);          // start+1
+	const uint32_t imm = read_arg32(m_pc + 1);     // start+2 : imm32 / disp32 / abs32
+	const int dst = op2 & 3;
+
+	if (op2 < 0x80)                                 // mov/movbu/movhu (disp32,aM)
+	{
+		const int  type = (op2 >> 5) & 3;
+		const bool a_reg = (type == 1);
+		typed_load_store(type, a_reg, (op2 >> 2) & 3, m_a[op2 & 3] + imm, op2 & 0x10);
+	}
+	else if (op2 < 0xA0)                            // store reg -> (disp32,sp) / (abs32)
+	{
+		const int  type = op2 & 3;
+		const bool a_reg = (type == 0);
+		typed_load_store(type, a_reg, (op2 >> 2) & 3, (op2 & 0x10) ? m_sp + imm : imm, true);
+	}
+	else if (op2 < 0xC0)                            // load (disp32,sp)/(abs32) -> reg
+	{
+		const int  type = (op2 >> 2) & 3;
+		const bool a_reg = (type == 0);
+		typed_load_store(type, a_reg, op2 & 3, (op2 & 0x10) ? m_sp + imm : imm, false);
+	}
+	else switch (op2 & 0xFC)
+	{
+		case 0xC0: m_d[dst] = do_add(m_d[dst], imm, 0); break;   // add imm32,dD
+		case 0xD0: m_a[dst] = do_add(m_a[dst], imm, 0); break;   // add imm32,aD
+		case 0xC4: m_d[dst] = do_sub(m_d[dst], imm, 0); break;   // sub imm32,dD
+		case 0xD4: m_a[dst] = do_sub(m_a[dst], imm, 0); break;   // sub imm32,aD
+		case 0xC8: do_sub(m_d[dst], imm, 0); break;              // cmp imm32,dD
+		case 0xD8: do_sub(m_a[dst], imm, 0); break;              // cmp imm32,aD
+		case 0xCC: m_d[dst] = imm; break;                        // mov imm32,dD
+		case 0xDC: m_a[dst] = imm; break;                        // mov imm32,aD
+		case 0xE0: m_d[dst] &= imm; set_logic_flags(m_d[dst]); break; // and
+		case 0xE4: m_d[dst] |= imm; set_logic_flags(m_d[dst]); break; // or
+		case 0xE8: m_d[dst] ^= imm; set_logic_flags(m_d[dst]); break; // xor
+		case 0xEC: m_psw = (m_psw & ~FLAG_ZF) | ((m_d[dst] & imm) ? 0 : FLAG_ZF); break; // btst imm32,dD
+		case 0xFC:
+			if (op2 == 0xFE)      { m_sp += imm; }               // add imm32,sp (SP arith, no flags)
+			else if (op2 == 0xFF) { push32(start_pc + 6); m_pc = start_pc + imm; return; } // calls (disp32)
+			else logerror("MN10300: unimplemented FC %02X @ %08X\n", op2, start_pc);
+			break;
+		default:
+			logerror("MN10300: unimplemented FC %02X @ %08X\n", op2, start_pc);
+			break;
+	}
+	m_pc = start_pc + 6;
+}
+
+
+// 0xF8: imm8 / disp8 forms. Always 3 bytes (op, op2, then one operand byte).
 void mn10300_device::execute_f8()
 {
 	const uint32_t start_pc = m_pc - 1;
-	const uint8_t op2 = read_arg8(m_pc);
-	m_pc += 1;
-	const int8_t imm = (int8_t)read_arg8(m_pc);
-	m_pc += 1;
+	const uint8_t  op2   = read_arg8(m_pc);        // start+1
+	const uint8_t  b     = read_arg8(m_pc + 1);    // start+2 : disp8 / imm8 / shift count
+	const int8_t   sdisp = (int8_t)b;
 
-	if (op2 == 0xFE)                       // add imm8,sp
+	if (op2 < 0x80)                                 // mov/movbu/movhu (disp8,aM)
 	{
-		m_sp = do_add(m_sp, (int32_t)imm, 0);
-		return;
+		const int  type = (op2 >> 5) & 3;
+		const bool a_reg = (type == 1);
+		typed_load_store(type, a_reg, (op2 >> 2) & 3, m_a[op2 & 3] + sdisp, op2 & 0x10);
 	}
-	// TODO(MN10300): the remaining F8 forms (mov/movbu/movhu (disp8,aM),
-	// shifts asl/lsr/asr imm8,dD, and/or/btst imm8,dD, ext branches).
-	logerror("MN10300: unimplemented F8 %02X @ %08X\n", op2, start_pc);
+	else if ((op2 & 0xF2) == 0x92)                  // movbu/movhu dD,(disp8,sp) store (disp8 unsigned)
+	{
+		typed_load_store(op2 & 3, false, (op2 >> 2) & 3, m_sp + b, true);
+	}
+	else switch (op2 & 0xFC)
+	{
+		case 0xB8: case 0xBC:                        // movbu/movhu (disp8,sp),dD load (disp8 unsigned)
+			typed_load_store((op2 >> 2) & 3, false, op2 & 3, m_sp + b, false);
+			break;
+		case 0xC0: case 0xC4: case 0xC8:             // asl/lsr/asr imm8,dD
+			do_shift((op2 >> 2) & 3, op2 & 3, b);
+			break;
+		case 0xE0: case 0xE4: case 0xEC:             // and/or/btst imm8(zx),dD
+		{
+			const int d = op2 & 3;
+			const int lop = (op2 >> 2) & 3;          // 0=and 1=or 3=btst
+			if (lop == 0)      { m_d[d] &= b; set_logic_flags(m_d[d]); }
+			else if (lop == 1) { m_d[d] |= b; set_logic_flags(m_d[d]); }
+			else               { m_psw = (m_psw & ~FLAG_ZF) | ((m_d[d] & b) ? 0 : FLAG_ZF); } // btst
+			break;
+		}
+		case 0xE8:                                   // ext-branch bvc/bvs/bnc/bns
+		{
+			bool take = false;
+			switch (op2 & 3)
+			{
+				case 0: take = !(m_psw & FLAG_VF); break; // bvc
+				case 1: take =  (m_psw & FLAG_VF); break; // bvs
+				case 2: take = !(m_psw & FLAG_NF); break; // bnc
+				case 3: take =  (m_psw & FLAG_NF); break; // bns
+			}
+			if (take) { m_pc = start_pc + sdisp; return; }
+			break;
+		}
+		case 0xF0: m_sp = read_mem32(m_a[op2 & 3] + sdisp); break;  // mov (disp8,aM),sp
+		case 0xF4: write_mem32(m_a[op2 & 3] + sdisp, m_sp); break;  // mov sp,(disp8,aM)
+		case 0xFC:
+			if (op2 == 0xFE) m_sp += (int32_t)sdisp;  // add imm8,sp (SP arith, no flags)
+			else logerror("MN10300: unimplemented F8 %02X @ %08X\n", op2, start_pc);
+			break;
+		default:
+			logerror("MN10300: unimplemented F8 %02X @ %08X\n", op2, start_pc);
+			break;
+	}
+	m_pc = start_pc + 3;
 }
 
 
