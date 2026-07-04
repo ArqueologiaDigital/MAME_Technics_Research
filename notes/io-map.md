@@ -154,3 +154,23 @@ absolute operands above. Bases seen in the code include `0x20000000`,
 `0x20000070`, `0x24000000`, `0x28000000`/`0x28400000`/`0x28401000`,
 `0x2C000000`, and `0x98010000` — likely DMA/bus windows or bulk-transfer
 ports (e.g. wave ROM / SD / video). These need data-flow tracing to pin down.
+
+## Boot execution trace (mn10300_sim)
+
+Running the firmware from reset in the `mn10300_sim` interpreter
+(`kn7000_disassembly/tools/mn10300_sim.py`) executes **3.06 million instructions
+coherently** before reaching the first region we can't model. The boot's
+hardware-init I/O sequence (22 registers) is:
+
+1. GPIO/control `0x36008024=0xFE`, `0x36008044=0x02`, `0x36008004=0x02`,
+   `0x36008064=0xBF`, then a reset pulse (`bset`/`bclr 0x20` on `0x36008004`)
+2. `0x20000070` ← `0x30` then `0x03`
+3. Timers: `0x32000040=0x497`, `0x32000042=0xEA6`, `0x32000028=0x865`, then a
+   read-modify-write of `0x32000020` (`|0x804`), `0x32000010=0x400`
+4. Reads `0x98070000` (sound status), reprograms the `0x32000020`-`0x3200002E`
+   timer block, repeats the GPIO init, then `0x34000280=0xFFFF`, `0x98060000=0xFF`
+
+**Memory regions discovered by execution** (not in the static map above):
+work RAM extends past `0x50298000` (>2.5 MB), and there are device windows at
+`0x90000000` and `0x8C000000` (the boot copies data from the top of the program
+ROM into them) — likely the LCD V-RAM / video / wave-DMA windows.

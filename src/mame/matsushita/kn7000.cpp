@@ -108,9 +108,20 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x48400000, 0x487fffff).rom().region("maincpu", 0);
 
 	// --- Work RAM -------------------------------------------------------
-	// At least 0x180000 bytes; the firmware sets the initial stack pointer
-	// to 0x50021CF8, which lies inside this region.
-	map(0x50000000, 0x5017ffff).ram().share("workram");
+	// The firmware sets the initial SP to 0x50021CF8 and, when single-stepped
+	// through boot with the mn10300_sim interpreter, touches RAM past 0x50298000
+	// (>2.5 MB), so the real work RAM (IC12/IC13) is larger than the ~1.5 MB BSS.
+	// TODO: confirm the exact size; mapping 4 MB here as a working estimate.
+	map(0x50000000, 0x503fffff).ram().share("workram");
+
+	// --- Device windows found by executing the boot (mn10300_sim) -------
+	// The boot code writes to 0x90000000 and 0x8C000000 (copying from the top of
+	// the program ROM). Neither is in the static I/O map (notes/io-map.md); they
+	// are almost certainly the LCD V-RAM / video / wave-DMA windows. Mapped as RAM
+	// placeholders so bring-up can proceed past them.
+	// TODO: identify the real devices (LCD V-RAM = IC104?).
+	map(0x8c000000, 0x8cffffff).ram();
+	map(0x90000000, 0x97ffffff).ram();
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
