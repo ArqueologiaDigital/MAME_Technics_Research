@@ -22,23 +22,46 @@
     CPU (peripherals, video, sound) is consequently guesswork and is marked with
     TODO where behavior is unknown.
 
-    Verified memory layout (from firmware analysis and the service-test IC map;
-    see the kn5000-docs "Technics KN7000" section):
+    Memory layout (from firmware static analysis, the mn10300_sim boot trace,
+    and the service-test IC map; see the kn5000-docs "Technics KN7000" pages and
+    this repo's notes/io-map.md + notes/library-rom-api.md). 112 individual I/O
+    registers have been recovered; the banks and their apparent purpose:
 
-        0x20000000  I/O registers (bank A)             (TODO: undecoded)
-        0x32000000  I/O registers (bank B)             (TODO: undecoded)
-        0x34000000  I/O registers (bank C)             (TODO: undecoded)
-        0x36008000  I/O registers (bank D)             (TODO: undecoded)
-        0x48000000  Table / rhythm flash               (kn7000_table.rom)
-        0x48400000  Program flash                      (kn7000_program.rom)
-        0x4C000000  Library / boot ROM                 (undumped)
-        0x50000000  Work RAM (initial SP = 0x50021CF8)
-        0x57800000  Picture flash
-        0x98020004  I/O register (bank E)              (TODO: undecoded)
+        0x20000000  small register block (7 regs; reset writes 0x30/0x03 to
+                                          0x20000070)
+        0x32000000  system / timers (15 regs; 0x40/0x42 loaded 0x497/0xEA6 at
+                                     reset; 0x800 is a 32-bit counter)
+        0x34000000  LCD/display controller + key/panel scan (58 regs - the
+                                     largest block; see Display subsystem doc)
+        0x36008000  bit-mapped control / GPIO (8 regs, all bset/bclr/btst;
+                                     0x36008004 toggled 125x = chip selects)
+        0x48000000  Table / rhythm flash               (kn7000_table.rom, ~4 MB)
+        0x48400000  Program flash                      (kn7000_program.rom, ~4 MB)
+        0x4C000000  Library / kernel ROM (undumped, >= ~6 MB): the C runtime +
+                                     MILK kernel; 7,965 calls to 298 entry points
+                                     (printf @0x4C001A48, memcpy @0x4C003051, ...)
+        0x50000000  Work RAM (>2.5 MB used; initial SP = 0x50021CF8)
+        0x57800000  Picture flash (undumped; only lightly referenced)
+        0x8C000000  device window / video path (boot copies ROM data here)
+        0x90000000  framebuffer / LCD V-RAM window (IC104?)
+        0x98040000  main tone generator (IC203/204) - 16-bit register set
+        0x98050000  sub  tone generator (IC207/208) - parallel 16-bit set
+        0x98020000  sound control (byte regs); 0x98060000/0x98070000 more sound
+
+    Notable work-RAM globals recovered from the disassembly (constants below):
+        0x50007578  LCD panel type (0=colour, 2=2-bit grayscale)
+        0x5000757A  LCD mode
+        0x5000757C  live UI object table (0x38-byte slots; +0x10 = current target)
+        0x50122DB8  font descriptor table pointer (0x14-byte entries)
+        0x50380004  currently-running task handle
+        0x5038002C  main task handle
+        0x500D3C5C / 0x500D3C60  per-task (AP / main) focused-object id
 
     Reset behavior: file offset 0 of the program flash (i.e. CPU address
     0x48400000) contains "jmp 0x4840FF7E", so the reset vector of the AM33 core
-    is expected to land at the base of the program flash region.
+    is expected to land at the base of the program flash region. The boot then
+    programs the GPIO/timer banks and enters the MILK kernel; mn10300_sim runs
+    ~4.59 M instructions before it must call into the undumped 0x4C000000 ROM.
 
     Hardware blocks named in the service-test IC map (not yet emulated):
         - Program ROMs IC16 / IC17
