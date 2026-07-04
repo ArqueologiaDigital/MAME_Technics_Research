@@ -24,7 +24,8 @@
 
 #include "emu.h"
 #include "mn10300.h"
-#include "mn103dasm.h"   // reuse the existing MN10300 disassembler
+#include "mn103dasm.h"           // reuse the existing MN10300 disassembler
+#include "mn10300_insn_length.h" // validated length table (shared with tests/)
 
 
 // PSW flag bits. The low nibble (Z,N,C,V) is definite and load-bearing; the
@@ -396,7 +397,13 @@ void mn10300_device::execute_run()
 
 		// TODO(MN10300): 0xF0,0xF1,0xF2,0xF3,0xF4,0xF5,0xF6,0xF9,0xFA,0xFB,0xFD,0xFE
 		default:
-			logerror("MN10300: unimplemented opcode %02X @ PC=%08X\n", op, start_pc);
+			// Not implemented yet. Advance PC by the (validated) real length so
+			// the fetch stream stays aligned and the machine remains steppable
+			// during bring-up. This treats the opcode as a no-op rather than a
+			// trap -- correct results require the real implementation.
+			m_pc = start_pc + mn10300_insn_length(op, read_arg8(start_pc + 1));
+			logerror("MN10300: unimplemented opcode %02X @ PC=%08X (skipped %d bytes)\n",
+				op, start_pc, (int)(m_pc - start_pc));
 			break;
 		}
 
