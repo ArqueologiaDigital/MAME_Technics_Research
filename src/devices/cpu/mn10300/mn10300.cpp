@@ -358,6 +358,23 @@ void mn10300_device::execute_run()
 		case 0xCE: load_regs(read_arg8(m_pc)); m_pc += 1; break;
 		case 0xCF: store_regs(read_arg8(m_pc)); m_pc += 1; break;
 
+		// ---- loop cache: setlb / Lcc (MN10300 hardware loop) ----
+		// setlb records the loop top (LAR = the instruction after setlb) and
+		// caches its first word (LIR). Lcc, at the loop bottom, branches back to
+		// LAR while its condition holds. We re-fetch from LAR rather than model
+		// the instruction-cache micro-op, which is functionally identical since
+		// the loop body in memory does not change.
+		case 0xDB: // setlb
+			m_lar = m_pc;
+			m_lir = read_arg32(m_pc);
+			break;
+		case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4:
+		case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9: // Lcc
+			if (test_cond(op & 0x0F)) m_pc = m_lar;
+			break;
+		// 0xDA (lra) is left to the default handler for now: its exact semantics
+		// (a loop-return-address variant) are unconfirmed and it is rare.
+
 		// ---- jmp disp32 (reset vector uses this) ----
 		case 0xDC:
 			m_pc = start_pc + read_arg32(m_pc); break;
