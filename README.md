@@ -57,8 +57,12 @@ effort. What this repo aims to establish first:
       KN7000 code uses only D2/D3/A2/A3 (bits 4-7); prologue mask == epilogue mask
       in all 320 checked functions. Bits 4-7 + the bit-1 group are implemented;
       the AM33 bits (never used here) are logged. See [`notes/movm-register-mask.md`](notes/movm-register-mask.md)
-- [ ] Remaining rare groups (`0xF5`/`0xF6` udf/coprocessor, `0xF9`/`0xFB`/`0xFD`
-      udf-imm), the `0xFC` (disp32,sp)/(abs32) load-stores, `0xF8` disp8 moves/shifts
+- [x] `0xF8` disp8 moves/shifts/logic/ext-branches and `0xFC` (disp32,sp)/(abs32)
+      load-stores implemented
+- [x] `setlb` + `Lcc` loop cache — **~99.94% of all real instructions now
+      implemented** (measured against unidasm over both code regions). The
+      remaining 0.06% are unused `udf*` coprocessor opcodes (data swept as code)
+      and the rare `lra`.
 - [ ] `F0` rti/trap and div-by-zero traps
 - [ ] Interrupts / exceptions, cycle timing
 - [ ] Peripherals (LCD controller, tone generators, DSP, FDC, panel sub-CPUs,
