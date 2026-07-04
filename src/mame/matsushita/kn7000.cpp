@@ -85,6 +85,10 @@ private:
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
+	// bring-up logging handlers for the (not-yet-decoded) I/O banks
+	uint16_t io_r(offs_t offset, uint16_t mem_mask = ~0);
+	void io_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 };
 
@@ -117,16 +121,47 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// TODO: Picture flash (splash / bitmap graphics), separate device.
 	//map(0x57800000, 0x57ffffff).rom().region("picture", 0);
 
-	// TODO: I/O register banks. Exact widths and decode unknown; the
-	//       firmware touches at least the following base addresses:
-	//map(0x20000000, 0x2000ffff).rw(FUNC(kn7000_state::io_a_r), FUNC(kn7000_state::io_a_w));
-	//map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_b_r), FUNC(kn7000_state::io_b_w));
-	//map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_c_r), FUNC(kn7000_state::io_c_w));
-	//map(0x36008000, 0x3600ffff).rw(FUNC(kn7000_state::io_d_r), FUNC(kn7000_state::io_d_w));
-	//map(0x98020004, 0x98020007).rw(FUNC(kn7000_state::io_e_r), FUNC(kn7000_state::io_e_w));
+	// --- I/O register banks -------------------------------------------------
+	// 112 I/O registers were recovered by static analysis of the firmware (see
+	// notes/io-map.md for the per-register table). Mapped here to logging
+	// handlers so every access is visible during bring-up; real device decode
+	// (LCD, tone generators, panel, FDC, ...) comes later.
+	//   0x20000000  small register block (reset writes 0x30/0x03 to 0x20000070)
+	//   0x32000000  system / timers (0x40/0x42 = 0x497/0xEA6 at reset; 0x800 counter)
+	//   0x34000000  large peripheral block, 58 regs (likely LCD/display + key/panel)
+	//   0x36008000  bit-mapped control / GPIO (0x36008004 toggled 125x)
+	//   0x98040000 & 0x98050000  parallel 16-bit sets = the DUAL tone generators
+	//                            (main TG IC203/204 + sub TG IC207/208); plus
+	//                            0x98020000/0x98060000/0x98070000 sound control
+	map(0x20000000, 0x2000ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	map(0x36008000, 0x360080ff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 
-	// TODO: LCD V-RAM (IC104), FDC (IC103), tone generators, DSP IC306/307,
-	//       panel sub-CPUs (CPL/CPC/CPR/CPSD), SD card and USB blocks.
+	// TODO: replace the logging handlers with real device models: LCD V-RAM
+	//       (IC104), FDC (IC103), tone generators, DSP IC306/307, panel sub-CPUs
+	//       (CPL/CPC/CPR/CPSD), SD card and USB blocks.
+}
+
+
+// Bring-up placeholder: log every I/O access and return 0. The CPU accesses
+// these banks at 8/16/32-bit widths; a 16-bit handler with mem_mask lets MAME
+// route all of them. One handler serves all five banks, so `offset` is relative
+// to the mapped range -- shift left 1 for the byte offset within the bank. The
+// decoded per-register list is in notes/io-map.md.
+uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
+{
+	if (!machine().side_effects_disabled())
+		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
+			offset << 1, mem_mask);
+	return 0;
+}
+
+void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
+		offset << 1, data, mem_mask);
 }
 
 
