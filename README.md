@@ -53,11 +53,13 @@ effort. What this repo aims to establish first:
       special-reg moves), `0xF3`/`0xF4` (indexed load/store), the `0xFA` 16-bit
       family, and `0xFE` (bit ops on abs) — each consuming the validated length
 - [ ] **Verify by building MAME** (not yet done — see caveat below) and stepping boot
+- [x] **`movm`/`call`/`ret` register mask resolved** — empirically, 99.84% of real
+      KN7000 code uses only D2/D3/A2/A3 (bits 4-7); prologue mask == epilogue mask
+      in all 320 checked functions. Bits 4-7 + the bit-1 group are implemented;
+      the AM33 bits (never used here) are logged. See [`notes/movm-register-mask.md`](notes/movm-register-mask.md)
 - [ ] Remaining rare groups (`0xF5`/`0xF6` udf/coprocessor, `0xF9`/`0xFB`/`0xFD`
       udf-imm), the `0xFC` (disp32,sp)/(abs32) load-stores, `0xF8` disp8 moves/shifts
-- [ ] `movm` register-mask low bits + exact push order + SP delta (needs the
-      AM33 manual — flagged in the code; getting it wrong corrupts stack frames);
-      also `F0` rti/trap and div-by-zero traps
+- [ ] `F0` rti/trap and div-by-zero traps
 - [ ] Interrupts / exceptions, cycle timing
 - [ ] Peripherals (LCD controller, tone generators, DSP, FDC, panel sub-CPUs,
       SD/USB) and sound
