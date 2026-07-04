@@ -118,8 +118,18 @@ private:
 	void load_regs(uint8_t mask);    // movm pop  / ret
 
 	// ---- prefixed-opcode group handlers ------------------------------------
-	void execute_fc();   // 0xFC: imm32 / disp32 / abs32 forms
+	void execute_f0();   // 0xF0: reg-indirect moves + call/jmp/ret (aM)
+	void execute_f1();   // 0xF1: cross-type reg-reg arithmetic
+	void execute_f2();   // 0xF2: logical / mul / div / shift / special-reg moves
+	void execute_f3();   // 0xF3: 32-bit indexed load/store (dI,aM)
+	void execute_f4();   // 0xF4: byte/half indexed load/store (dI,aM)
 	void execute_f8();   // 0xF8: imm8  / disp8  forms
+	void execute_fa();   // 0xFA: imm16 / disp16 forms
+	void execute_fc();   // 0xFC: imm32 / disp32 / abs32 forms
+	void execute_fe();   // 0xFE: bit ops on absolute address
+
+	// shift/logical flag helpers
+	inline void set_logic_flags(uint32_t r);   // and/or/xor/not: Z,N; clear V
 
 	// ---- interrupts (stubs) ------------------------------------------------
 	void check_irq();

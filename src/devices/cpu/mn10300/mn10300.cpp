@@ -392,10 +392,18 @@ void mn10300_device::execute_run()
 			m_d[dst] = do_add(m_d[dst], m_d[src], 0); break;
 
 		// ---- prefixed groups ----
-		case 0xFC: execute_fc(); break;   // imm32 / disp32 forms (mov imm32,reg etc.)
+		case 0xF0: execute_f0(); break;   // reg-indirect moves + call/jmp/ret (aM)
+		case 0xF1: execute_f1(); break;   // cross-type reg-reg arithmetic
+		case 0xF2: execute_f2(); break;   // logical / mul / div / shift / special regs
+		case 0xF3: execute_f3(); break;   // 32-bit indexed load/store
+		case 0xF4: execute_f4(); break;   // byte/half indexed load/store
 		case 0xF8: execute_f8(); break;   // imm8 / disp8 forms (incl. add imm8,sp)
+		case 0xFA: execute_fa(); break;   // imm16 / disp16 forms
+		case 0xFC: execute_fc(); break;   // imm32 / disp32 forms (mov imm32,reg etc.)
+		case 0xFE: execute_fe(); break;   // bit ops on absolute address
 
-		// TODO(MN10300): 0xF0,0xF1,0xF2,0xF3,0xF4,0xF5,0xF6,0xF9,0xFA,0xFB,0xFD,0xFE
+		// TODO(MN10300): 0xF5,0xF6 (udf/coprocessor), 0xF9,0xFB,0xFD (udf imm) --
+		// these fall through to the length-correct skip below until needed.
 		default:
 			// Not implemented yet. Advance PC by the (validated) real length so
 			// the fetch stream stays aligned and the machine remains steppable
@@ -477,6 +485,258 @@ void mn10300_device::execute_f8()
 	// TODO(MN10300): the remaining F8 forms (mov/movbu/movhu (disp8,aM),
 	// shifts asl/lsr/asr imm8,dD, and/or/btst imm8,dD, ext branches).
 	logerror("MN10300: unimplemented F8 %02X @ %08X\n", op2, start_pc);
+}
+
+
+inline void mn10300_device::set_logic_flags(uint32_t r)
+{
+	// and/or/xor/not: set Z,N; clear V (C left undefined -> cleared here).
+	m_psw &= ~(FLAG_ZF | FLAG_NF | FLAG_CF | FLAG_VF);
+	if (r == 0)          m_psw |= FLAG_ZF;
+	if (r & 0x80000000u) m_psw |= FLAG_NF;
+}
+
+
+// 0xF0: reg-indirect moves and indirect call/jmp/ret. Always 2 bytes.
+void mn10300_device::execute_f0()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const int r  = (op2 >> 2) & 3;   // data/addr register field
+	const int am = op2 & 3;          // base address register (aM)
+
+	switch (op2 >> 4)
+	{
+		case 0x0: m_a[r] = read_mem32(m_a[am]); break;                 // mov (aM),aD
+		case 0x4: m_d[r] = read_mem8 (m_a[am]); break;                 // movbu (aM),dD
+		case 0x6: m_d[r] = read_mem16(m_a[am]); break;                 // movhu (aM),dD
+		case 0x1: write_mem32(m_a[am], m_a[r]); break;                 // mov aS,(aM)
+		case 0x5: write_mem8 (m_a[am], m_d[r]); break;                 // movbu dS,(aM)
+		case 0x7: write_mem16(m_a[am], m_d[r]); break;                 // movhu dS,(aM)
+		case 0x8: { uint8_t v = read_mem8(m_a[am]); m_psw = (m_psw & ~FLAG_ZF) | ((v & m_d[r]) ? 0 : FLAG_ZF); write_mem8(m_a[am], v | m_d[r]); break; } // bset
+		case 0x9: { uint8_t v = read_mem8(m_a[am]); m_psw = (m_psw & ~FLAG_ZF) | ((v & m_d[r]) ? 0 : FLAG_ZF); write_mem8(m_a[am], v & ~m_d[r]); break; } // bclr
+		case 0xF:
+			// control-flow, selected by the whole op2 value
+			if (op2 <= 0xF3)      { push32(start_pc + 2); m_pc = m_a[am]; return; } // calls (aM)
+			else if (op2 <= 0xF7) { m_pc = m_a[am]; return; }                       // jmp (aM)
+			else if (op2 == 0xFC) { m_pc = pop32(); return; }                       // rets
+			// TODO(MN10300): FD rti (pop PC+PSW), FE trap
+			else logerror("MN10300: unimplemented F0 %02X @ %08X\n", op2, start_pc);
+			break;
+		default:
+			logerror("MN10300: unimplemented F0 %02X @ %08X\n", op2, start_pc);
+			break;
+	}
+	m_pc = start_pc + 2;
+}
+
+
+// 0xF1: cross-type reg-reg arithmetic (between data and address registers).
+// Always 2 bytes. dst=bits[1:0], src=bits[3:2].
+void mn10300_device::execute_f1()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+	const uint32_t C = (m_psw & FLAG_CF) ? 1 : 0;
+
+	switch (op2 >> 4)
+	{
+		case 0x0: m_d[dst] = do_sub(m_d[dst], m_d[src], 0); break; // sub dS,dD
+		case 0x1: m_d[dst] = do_sub(m_d[dst], m_a[src], 0); break; // sub aS,dD
+		case 0x2: m_a[dst] = do_sub(m_a[dst], m_d[src], 0); break; // sub dS,aD
+		case 0x3: m_a[dst] = do_sub(m_a[dst], m_a[src], 0); break; // sub aS,aD
+		case 0x4: m_d[dst] = do_add(m_d[dst], m_d[src], C); break; // addc dS,dD
+		case 0x5: m_d[dst] = do_add(m_d[dst], m_a[src], 0); break; // add aS,dD
+		case 0x6: m_a[dst] = do_add(m_a[dst], m_d[src], 0); break; // add dS,aD
+		case 0x7: m_a[dst] = do_add(m_a[dst], m_a[src], 0); break; // add aS,aD
+		case 0x8: m_d[dst] = do_sub(m_d[dst], m_d[src], C); break; // subc dS,dD
+		case 0x9: do_sub(m_d[dst], m_a[src], 0); break;            // cmp aS,dD
+		case 0xA: do_sub(m_a[dst], m_d[src], 0); break;            // cmp dS,aD
+		case 0xD: m_d[dst] = m_a[src]; break;                      // mov aS,dD
+		case 0xE: m_a[dst] = m_d[src]; break;                      // mov dS,aD
+		default:  logerror("MN10300: illegal F1 %02X @ %08X\n", op2, start_pc); break;
+	}
+	m_pc = start_pc + 2;
+}
+
+
+// 0xF2: logical / mul / div / shift / special-register moves. Always 2 bytes.
+void mn10300_device::execute_f2()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+
+	switch (op2 >> 4)
+	{
+		case 0x0: m_d[dst] &= m_d[src]; set_logic_flags(m_d[dst]); break; // and
+		case 0x1: m_d[dst] |= m_d[src]; set_logic_flags(m_d[dst]); break; // or
+		case 0x2: m_d[dst] ^= m_d[src]; set_logic_flags(m_d[dst]); break; // xor
+		case 0x3:
+			if (op2 < 0x34) { m_d[dst] = ~m_d[dst]; set_logic_flags(m_d[dst]); } // not dD
+			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
+			break;
+		case 0x4: { int64_t p = (int64_t)(int32_t)m_d[src] * (int32_t)m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_nz32(m_d[dst]); break; } // mul
+		case 0x5: { uint64_t p = (uint64_t)m_d[src] * m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_nz32(m_d[dst]); break; } // mulu
+		case 0x6: // div (signed): (MDR:dD) / dS
+			if (m_d[src]) { int64_t num = ((int64_t)m_mdr << 32) | m_d[dst]; int32_t dv = (int32_t)m_d[src]; m_d[dst] = (uint32_t)(num / dv); m_mdr = (uint32_t)(num % dv); set_nz32(m_d[dst]); }
+			else logerror("MN10300: div by zero @ %08X\n", start_pc); // TODO: real div-zero trap
+			break;
+		case 0x7: // divu (unsigned)
+			if (m_d[src]) { uint64_t num = ((uint64_t)m_mdr << 32) | m_d[dst]; m_d[dst] = (uint32_t)(num / m_d[src]); m_mdr = (uint32_t)(num % m_d[src]); set_nz32(m_d[dst]); }
+			else logerror("MN10300: divu by zero @ %08X\n", start_pc);
+			break;
+		case 0x8: // rol / ror dD (rotate through carry)
+		{
+			uint32_t c = (m_psw & FLAG_CF) ? 1 : 0;
+			if (op2 < 0x84) { uint32_t nc = m_d[dst] >> 31; m_d[dst] = (m_d[dst] << 1) | c; m_psw = (m_psw & ~FLAG_CF) | (nc ? FLAG_CF : 0); } // rol
+			else            { uint32_t nc = m_d[dst] & 1;   m_d[dst] = (m_d[dst] >> 1) | (c << 31); m_psw = (m_psw & ~FLAG_CF) | (nc ? FLAG_CF : 0); } // ror
+			set_nz32(m_d[dst]);
+			break;
+		}
+		case 0x9: case 0xA: case 0xB: // asl / lsr / asr dS,dD (shift dD by dS)
+		{
+			uint32_t n = m_d[src] & 0x1F;
+			uint32_t carry = 0;
+			if (n)
+			{
+				if ((op2 >> 4) == 0x9)      { carry = (m_d[dst] >> (32 - n)) & 1; m_d[dst] <<= n; }        // asl
+				else if ((op2 >> 4) == 0xA) { carry = (m_d[dst] >> (n - 1)) & 1;  m_d[dst] >>= n; }         // lsr
+				else                        { carry = (m_d[dst] >> (n - 1)) & 1;  m_d[dst] = (int32_t)m_d[dst] >> n; } // asr
+			}
+			m_psw = (m_psw & ~FLAG_CF) | (carry ? FLAG_CF : 0);
+			set_nz32(m_d[dst]);
+			break;
+		}
+		case 0xD:
+			if (op2 < 0xD4) m_mdr = (m_d[dst] & 0x80000000u) ? 0xFFFFFFFFu : 0; // ext dD
+			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
+			break;
+		case 0xE:
+			if (op2 < 0xE4)      m_d[dst] = m_mdr;       // mov mdr,dD
+			else if (op2 < 0xE8) m_d[dst] = m_psw;       // mov psw,dD
+			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
+			break;
+		case 0xF:
+			if (op2 & 2) { if (op2 & 1) m_psw = m_d[src]; else m_mdr = m_d[src]; } // mov dS,psw / mov dS,mdr
+			else if ((op2 & 1) == 0) m_sp = m_a[src];                              // mov aS,sp
+			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
+			break;
+		default: logerror("MN10300: unimplemented F2 %02X @ %08X\n", op2, start_pc); break;
+	}
+	m_pc = start_pc + 2;
+}
+
+
+// 0xF3: 32-bit indexed load/store, EA = aM + dI. Always 2 bytes.
+void mn10300_device::execute_f3()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const bool    store  = op2 & 0x40;
+	const bool    a_reg  = op2 & 0x80;
+	const int     reg    = (op2 >> 4) & 3;
+	const int     dI     = (op2 >> 2) & 3;
+	const int     am     = op2 & 3;
+	const uint32_t ea    = m_a[am] + m_d[dI];
+
+	if (store) write_mem32(ea, a_reg ? m_a[reg] : m_d[reg]);
+	else      (a_reg ? m_a[reg] : m_d[reg]) = read_mem32(ea);
+	m_pc = start_pc + 2;
+}
+
+
+// 0xF4: byte/half indexed load/store, EA = aM + dI. Always 2 bytes.
+void mn10300_device::execute_f4()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const bool    half   = op2 & 0x80;   // movhu vs movbu
+	const bool    store  = op2 & 0x40;
+	const int     reg    = (op2 >> 4) & 3;
+	const int     dI     = (op2 >> 2) & 3;
+	const int     am     = op2 & 3;
+	const uint32_t ea    = m_a[am] + m_d[dI];
+
+	if (store) { if (half) write_mem16(ea, m_d[reg]); else write_mem8(ea, m_d[reg]); }
+	else       { m_d[reg] = half ? read_mem16(ea) : read_mem8(ea); }
+	m_pc = start_pc + 2;
+}
+
+
+// 0xFA: imm16 / disp16 forms. Always 4 bytes (op, op2, imm16-lo, imm16-hi).
+void mn10300_device::execute_fa()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const uint16_t imm16 = read_arg16(m_pc + 1);   // operand at start+2
+	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+
+	if (op2 < 0x80)
+	{
+		// mov/movbu/movhu (disp16,aM): type=bits[6:5], bit4=dir(store), reg=bits[3:2], aM=bits[1:0]
+		const int type = (op2 >> 5) & 3;   // 0=mov.d 1=mov.a 2=movbu.d 3=movhu.d
+		const bool store = op2 & 0x10;
+		const int r = (op2 >> 2) & 3, am = op2 & 3;
+		const uint32_t ea = m_a[am] + (int32_t)(int16_t)imm16;
+		switch (type)
+		{
+			case 0: if (store) write_mem32(ea, m_d[r]); else m_d[r] = read_mem32(ea); break;
+			case 1: if (store) write_mem32(ea, m_a[r]); else m_a[r] = read_mem32(ea); break;
+			case 2: if (store) write_mem8 (ea, m_d[r]); else m_d[r] = read_mem8 (ea); break;
+			case 3: if (store) write_mem16(ea, m_d[r]); else m_d[r] = read_mem16(ea); break;
+		}
+	}
+	else
+	{
+		switch (op2 & 0xFC)
+		{
+			case 0xC0: m_d[dst] = do_add(m_d[dst], (int32_t)(int16_t)imm16, 0); break; // add imm16,dD (sx)
+			case 0xD0: m_a[dst] = do_add(m_a[dst], (int32_t)(int16_t)imm16, 0); break; // add imm16,aD (sx)
+			case 0xC8: do_sub(m_d[dst], (int32_t)(int16_t)imm16, 0); break;            // cmp imm16,dD (sx)
+			case 0xD8: do_sub(m_a[dst], (uint32_t)imm16, 0); break;                    // cmp imm16,aD (zx)
+			case 0xE0: m_d[dst] &= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // and imm16,dD (zx)
+			case 0xE4: m_d[dst] |= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // or
+			case 0xE8: m_d[dst] ^= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // xor
+			case 0xB0: m_a[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),aD
+			case 0xB4: m_d[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),dD
+			case 0xB8: m_d[dst] = read_mem8 (m_sp + imm16); break;                     // movbu (disp16,sp),dD
+			case 0xBC: m_d[dst] = read_mem16(m_sp + imm16); break;                     // movhu (disp16,sp),dD
+			case 0xA0: m_a[dst] = read_mem32(imm16); break;                            // mov (abs16),aD
+			case 0xFC:
+				if (op2 == 0xFE)      { m_sp += (int32_t)(int16_t)imm16; }             // add imm16,sp
+				else if (op2 == 0xFF) { push32(start_pc + 4); m_pc = start_pc + (int32_t)(int16_t)imm16; return; } // calls (disp16)
+				else if (op2 == 0xFC) { m_psw &= (uint32_t)imm16; }                    // and imm16,psw
+				else if (op2 == 0xFD) { m_psw |= (uint32_t)imm16; }                    // or imm16,psw
+				break;
+			default:
+				logerror("MN10300: unimplemented FA %02X @ %08X\n", op2, start_pc);
+				break;
+		}
+	}
+	m_pc = start_pc + 4;
+}
+
+
+// 0xFE: bit set/clear/test on an absolute address. 5 bytes (abs16) or 7 (abs32).
+void mn10300_device::execute_fe()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	uint32_t addr; uint8_t imm8; int len;
+
+	if (op2 <= 0x02)      { addr = read_arg32(m_pc + 1); imm8 = read_arg8(m_pc + 5); len = 7; }
+	else if (op2 >= 0x80 && op2 <= 0x82) { addr = read_arg16(m_pc + 1); imm8 = read_arg8(m_pc + 3); len = 5; }
+	else { logerror("MN10300: illegal FE %02X @ %08X\n", op2, start_pc); m_pc = start_pc + 2; return; }
+
+	const uint8_t v = read_mem8(addr);
+	m_psw = (m_psw & ~FLAG_ZF) | ((v & imm8) ? 0 : FLAG_ZF);
+	const int kind = op2 & 0x0F;
+	if (kind == 0x00)      write_mem8(addr, v | imm8);    // bset
+	else if (kind == 0x01) write_mem8(addr, v & ~imm8);   // bclr
+	// kind == 0x02: btst (no write)
+	m_pc = start_pc + len;
 }
 
 
