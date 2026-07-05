@@ -425,3 +425,59 @@ re-armed. NEXT: trace how the state machine re-arms the enable between transfers
 group mapping: arg 5/6 used by the sender; find what arg maps to group 0x1A and
 who calls enable per ping), then what the machine does at each step (it should
 turn the link around to RX and clock in the 2-byte reply).
+
+## THE COMPLETE BOOT HANDSHAKE CHAIN (2026-07-05, 6-agent workflow, fully verified)
+
+0x34000280 = **EXTMD** (MN103E external-interrupt trigger-mode register): eight
+2-bit fields, field n = trigger mode of external IRQ pin XIRQn = INTC group
+0x17+n. bits1:0<->0x17, bits3:2<->0x18, bits7:6<->**0x1A = the panel ATN pin**,
+bits9:8<->0x1B, bits11:10<->0x1C. Values: 11b idle/default, 10b = armed for the
+opposite edge. Pure config latch (never bit-tested). io_init writes 0xFFFF at
+0x484D725D.
+
+Interrupt registration (library registrar 0x4C03DB26; struct {valid,isr,group,
+icr,level,sub}; called from panel-init vtable entry 0x484ABB06 via 0x484ABBEC):
+slot 4 -> 0x484AC5F1 (group 0x1A ATN), slot 5 -> 0x484AC70E (group 0x11, TX state
+machine, jump table 0x48613034 indexed by state 0x5006BDA0), slot 6 -> 0x484AC74A
+(group 0x10, RX: status check + state dispatch; state-8 handler 0x484ACC13 reads
+0x34000809 -> ring 0x5006BDB4, head 0x5006BDB2). Index table 0x50380A6C entries
+at (group*8+sub*2); ISR table 0x50380B64 at slot*4. Tick = slot 1 (level 6).
+
+THE CHAIN (one ping transaction, retried 10x from 0x484ABBB5):
+1. 0x484AC2A8: clears result 0x5006BDA5, resets ring head/tail, sets flag bit0
+   of 0x5006BDA4, calls kick 0x484AC523(cmd,arg) -- commands: 0x20 00 ping CPL,
+   0xE0 00 ping CPR, 0x1F DA / 0x1F 1A init.
+2. TX side: each SIO0 byte completion raises group 0x11 -> state machine emits
+   [one/two 0x00 sync bytes + 2 command bytes] (states 1..7).
+3. Panel answers with an ATN PULSE (2 edges) on group 0x1A:
+   - pass 1 (0x5006BE92==0): EXTMD bits7:6 11b->10b (re-arm opposite edge),
+     be92=1, ack GxICR[0x1A].
+   - pass 2 (be92!=0): SIO CONFIG |= 0x07 then |= 0x4000 (RX enable), enable
+     group 0x10 (lib enable arg 6), disable group 0x11 (arg 5), state:=8,
+     EXTMD bits7:6 back to 11b, be92=0, ack.
+4. Panel sends reply bytes on SIO0: one group-0x10 interrupt per byte; state-8
+   handler stores into the ring, bumps head, sets 0x5006BDA1=2.
+5. SUCCESS: head 0x5006BDB2 != 0 within ~7 ticks (counter 0x50151BFC; the delay
+   0x484AC102 has NO timeout -- the tick must run); result nibble == 9 (bit0 =
+   0x20 answered, bit3 = 0xE0 answered).
+
+HLE (commit 2ed2d34): command detection in sio_tx_byte (first byte 0x20/0xE0/
+0x1F) queues a TYPE-3 reply + schedules ATN edge 1 (one-shot timer, 60us —
+NEVER assert synchronously from ISR-context register writes: pass 1 runs with
+IE clear and acks on exit, wiping sync asserts); EXTMD 11b->10b write schedules
+edge 2; CONFIG bit14 + queued reply -> deliver one byte per group-0x10 assert
+(timer-chained).
+
+STILL FAILING -- open questions for the next session:
+(a) Does the 2-byte command ever reach sio_tx_byte? Earlier tracing saw ONLY
+    0x00 bytes on the wire (the sync sender transmits ring slots 0x5006BE14/15
+    which were never filled by the FIFO 0x5006BD8C drain 0x484AD45F). If the
+    kick path enqueues but the drain never runs, the command never goes out and
+    nothing should reply. Trace 0x484AC523 -> FIFO -> drain -> ring -> sender.
+(b) Does state 0x5006BDA0 ever leave 0? (Probe showed 0 throughout earlier.)
+    Who sets state:=1 (the kick?) and what advances 1..7?
+(c) Sound-path unblock (from the workflow): the OTHER hot loop spins at
+    0x4854BC59 waiting for **0x9805000E to read back the value written**
+    (d1|0x80). A readback latch at 0x9805000E unblocks the sound init.
+(d) GxICR[0x17] REQUEST poll after the probe at 0x48404D48 (presence flag
+    0x500066CD) -- another device-presence gate to model eventually.
