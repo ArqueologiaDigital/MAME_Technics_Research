@@ -1124,9 +1124,19 @@ void kn7000_state::machine_reset()
 
 void kn7000_state::kn7000(machine_config &config)
 {
-	// Panasonic MN10300/AM33 main CPU.
-	// TODO: The actual clock frequency is unknown; 10 MHz is a placeholder.
-	MN10300(config, m_maincpu, 10_MHz_XTAL);
+	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
+	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
+	// reference crystal X1 (part H0J160500026 -- the H0J<freq*10> code family:
+	// X102 H0J177=17.73, X103 H0J240=24.0, X104 H0J143=14.32 MHz) drives clock
+	// generator IC6 (C02BZ0000667: XIN/XOUT/FRSEL/S1/S2 -> SSCLK). SSCLK also
+	// feeds a divide-by-2 flip-flop IC11 (TC7WH74) that clocks peripherals, so
+	// the CPU itself is NOT the /2 branch (an 8 MHz AM33 is implausible for a
+	// 2003 flagship that boots in ~12-15 s). The AM33 core runs the 16 MHz
+	// reference through its internal PLL; x2 = 32 MHz matches the measured boot
+	// work (~400M cycles / 32 MHz ~= 12.5 s, i.e. real-hardware boot time).
+	// TODO: confirm the exact PLL ratio against the C02BZ0000667 datasheet or a
+	// firmware serial-baud / timer-reload cross-check (MIDI = 31250 baud).
+	MN10300(config, m_maincpu, 16_MHz_XTAL * 2);
 	m_maincpu->set_irq_acknowledge_callback(FUNC(kn7000_state::irq_ack));
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
 
