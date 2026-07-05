@@ -240,8 +240,8 @@ private:
 	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
 	emu_timer *m_panel_txdone = nullptr;   // one-shot: sync-transfer complete -> group 0x11
 	emu_timer *m_panel_timer = nullptr;
-	uint8_t m_panel_tx_addr = 0;
-	bool    m_panel_tx_have_addr = false;
+	int     m_panel_pos = 0;               // position within the 7-byte TX frame
+	uint8_t m_panel_p1 = 0, m_panel_p2 = 0; // frame payload bytes (positions 2 and 4)
 	uint8_t m_btn_prev[23] = { };   // last scanned state, one per declared segment
 
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
@@ -638,35 +638,45 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 	switch (ch)
 	{
 	case SIO_PANEL:
-		// A data write triggers the armed sync transfer; completion -> group 0x11.
 		// Every data write clocks one sync transfer. Completion -> group 0x11 --
 		// ALWAYS deferred (an ISR-context write + synchronous assert is wiped by
 		// the exit ack). Safe with IAGR latched at accept.
 		m_panel_txdone->adjust(attotime::from_usec(40), 3);
-		// LED/command stream to the panel sub-CPUs: 2-byte [ADDR][DATA] frames.
-		if (!m_panel_tx_have_addr)
+		// The main CPU transmits 7-byte FRAMES with interleaved line syncs:
+		//   pos 0 sync, 1 sync, 2 PAYLOAD1, 3 sync, 4 PAYLOAD2, 5 sync, 6 sync
+		// (TX sites: sender 0x484AC5E9; states 1..6 at 0x484AC7FA / 0x484AC8D3 /
+		// 0x484AC977 / 0x484AC9FF / 0x484ACA96 / 0x484ACAEA). Parse by position.
+		switch (m_panel_pos)
 		{
-			m_panel_tx_addr = data;
-			m_panel_tx_have_addr = true;
+		case 2: m_panel_p1 = data; break;
+		case 4: m_panel_p2 = data; break;
 		}
-		else
+		if (++m_panel_pos >= 7)
 		{
-			m_panel_tx_have_addr = false;
-			// Handshake commands (first byte 0x20/0xE0 = ping CPL/CPR, 0x1F = init;
-			// KN5000-protocol match) get a TYPE-3 sync-packet reply and an ATN
-			// pulse on the panel's external-interrupt pin (group 0x1A). Leading
-			// 0x00 pairs are line-sync padding; C0..C9/01..0D pairs are LED frames.
-			if (m_panel_tx_addr == 0x20 || m_panel_tx_addr == 0xE0 || m_panel_tx_addr == 0x1F)
+			m_panel_pos = 0;
+			// Frame complete. Handshake commands (payload1 = 0x1F/0x1D/0x1E init,
+			// 0x20/0xE0 ping CPL/CPR, 0x29/0xDD -- the boot's observed sequence)
+			// are answered with a TYPE-3 sync packet and an ATN pulse on the
+			// panel's external-interrupt pin (group 0x1A, EXTMD bits 7:6). All
+			// other frames carry LED-register updates [addr][data].
+			switch (m_panel_p1)
 			{
+			case 0x1f: case 0x1d: case 0x1e: case 0x20: case 0xe0: case 0x29: case 0xdd:
 				m_panel_resp[0] = 0x18; m_panel_resp[1] = 0x00;
 				m_panel_resp_len = 2; m_panel_resp_pos = 0;
-				// ATN edge 1, deferred past the current ISR context (the group-0x11
-				// TX state machine runs with IE clear; a synchronous assert would
-				// be consumed/acked in the wrong pass).
+				// ATN edge 1, deferred past the ISR context (the state machine
+				// runs with IE clear; a synchronous assert would be consumed and
+				// acked in the wrong pass). Edge 2 is scheduled by the EXTMD
+				// 11b->10b re-arm write; the reply bytes deliver one per
+				// group-0x10 interrupt once the ISR's pass 2 sets RX enable.
 				m_panel_evt->adjust(attotime::from_usec(60), 1);
+				break;
+			case 0x00:
+				break;                     // idle/padding frame
+			default:
+				panel_led_frame(m_panel_p1, m_panel_p2);
+				break;
 			}
-			else if (m_panel_tx_addr != 0x00)
-				panel_led_frame(m_panel_tx_addr, data);
 		}
 		break;
 	case SIO_MIDI1:
@@ -1079,8 +1089,9 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_sio_rx_fifo));
 	save_item(NAME(m_sio_rx_head));
 	save_item(NAME(m_sio_rx_tail));
-	save_item(NAME(m_panel_tx_addr));
-	save_item(NAME(m_panel_tx_have_addr));
+	save_item(NAME(m_panel_pos));
+	save_item(NAME(m_panel_p1));
+	save_item(NAME(m_panel_p2));
 	save_item(NAME(m_btn_prev));
 }
 
@@ -1092,7 +1103,7 @@ void kn7000_state::machine_reset()
 		m_sio_control[ch] = 0;
 		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
 	}
-	m_panel_tx_have_addr = false;
+	m_panel_pos = 0;
 	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
