@@ -336,3 +336,36 @@ corrupts `calls`<->`ret` and `retf` frames. FIX NEXT: reimplement call (0xCD/0xD
 calls (F0/FA/FC forms), ret (0xDF) and retf (0xDE) to the imm8-total convention
 (ref: sim_mn10300.igen call/ret/retf; IMM8 = 4(PC) + regs_bytes + locals). movm's
 own store_regs/load_regs stay push/pop (movm really does push/pop).
+
+## UPDATE (2026-07-05, cont.3): call/ret convention rewritten -> runaway fixed; PANEL is next
+
+The call/calls/ret/rets/retf family was rewritten from the push/pop convention to
+the exact AM33 imm8-total convention (commit a933090). Verified three ways: an
+11-agent workflow that extracted the sim semantics (mn10300.igen 0xcd/0xdd/0xdf/
+0xde + calls/rets) and checked both firmware frames balance; the empirical run
+(runaway gone, all PCs valid, ~475%); and hand analysis. The convention:
+- call: [SP]=next_pc (no predecrement); regs at [SP-4],[SP-8],... (no SP move);
+  SP -= imm8; MDR = next_pc.  (imm8 = 4 + regs + locals; the ONLY SP move.)
+- calls: [SP]=next_pc; MDR=next_pc; SP UNCHANGED.
+- ret: SP += imm8; regs from [SP-4]...; PC = [SP].
+- rets: PC = [SP]; SP UNCHANGED.
+- retf: SP += imm8; PC = MDR; regs from [SP-4]...
+Helpers store_regs_at/load_regs_at do the offset-based block; movm (0xCE/0xCF)
+keeps the push/pop store_regs/load_regs (correct for movm).
+
+Tick-ISR frame now balances exactly: dispatcher `calls` leaves [S0]=retaddr, ISR
+prologue `movm [d2],(sp)`+`add -0x10,sp` puts D2 at S0-4 and SP at S0-0x14, and
+`ret [d2],0x14` does SP+=0x14->S0, D2=[S0-4], PC=[S0]=retaddr. No more return-to-0.
+
+### Next blocker: the panel-handshake self-test sub-check (0x484A4F06)
+With registers now restored correctly, the power-on self-test no longer fluke-
+passes (last tick it "passed" on corrupted regs, set IE, ran the tick ISR, and
+ran away). It now correctly LOOPS in the panel handshake at 0x484A4F06 -- a
+setlb/llt GPIO delay loop around 0x484A4F2D that strobes panel GPIO 0x36008004
+and waits for the panel sub-CPU to answer. My panel HLE does not answer, so the
+sub-test's error result is non-zero, the self-test retries forever, and PSW.IE is
+(correctly) never set -> no tick -> no UI. NEXT: make the panel handshake succeed
+(model the panel sub-CPU's expected response to the 0x484A4F06 protocol, likely
+delivering panel RX via intc_assert on the panel group), OR determine what
+0x484A4F06 checks and satisfy it. Then the self-test passes, IE is set, the tick
+ISR runs (now correctly), and the scheduler/display should follow.
