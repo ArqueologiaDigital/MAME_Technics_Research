@@ -187,6 +187,22 @@ private:
 	uint16_t io_r(offs_t offset, uint16_t mem_mask = ~0);
 	void io_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
+	// --- On-chip interrupt controller (INTC) at 0x34000100 ------------------
+	// GxICR(group) = 0x34000100 + group*4 (16-bit): bit0 DETECT, bit4 REQUEST,
+	// bit8 ENABLE, bits12-14 LEVEL. 0x34000100/0x104 double as the IAGR the
+	// (self-loaded) library dispatcher reads to find the pending group. A source
+	// is pending when its REQUEST bit is set; the CPU maskable line is asserted
+	// while any ENABLE&REQUEST source exists. See notes/interrupt-mechanism.md.
+	enum { IRQGRP_TIMER = 0x06, IRQGRP_PANEL = 0x1A, IRQGRP_MIDI1 = 0x12, IRQGRP_MIDI2 = 0x14 };
+	uint16_t intc_r(offs_t offset, uint16_t mem_mask = ~0);
+	void intc_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void intc_assert(int group);
+	void intc_recompute();
+	int  intc_pending_group() const;
+	uint16_t m_gxicr[0x20] = { };
+	emu_timer *m_sys_timer = nullptr;
+	TIMER_CALLBACK_MEMBER(sys_tick);
+
 	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
 	// ch0 = control panel, ch1 = MIDI port 1, ch2 = MIDI port 2 (see
 	// notes/panel-serial-protocol.md). Per channel, at +0x10 stride:
@@ -292,6 +308,8 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x20000000, 0x2000ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	// On-chip interrupt controller (GxICR array + IAGR) -- more-specific override.
+	map(0x34000100, 0x340001ff).rw(FUNC(kn7000_state::intc_r), FUNC(kn7000_state::intc_w));
 	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
 	// 0x34000000 bank; this more-specific mapping overrides the logger above.
 	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
@@ -321,6 +339,66 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
 		offset << 1, data, mem_mask);
+}
+
+
+// ============================================================================
+//  On-chip interrupt controller (INTC)
+// ============================================================================
+// The library-ROM interrupt handler (self-loaded, entry 0x4C03DDA0) reads the
+// pending group from the IAGR at 0x34000100, indexes its handler table, and
+// calls the registered ISR callback. offset is the 16-bit word index within
+// 0x34000100; group = offset/2, register = 0x34000100 + group*4.
+
+int kn7000_state::intc_pending_group() const
+{
+	// Highest-numbered enabled+requested group (priority handling is coarse for
+	// now; the timer is the only source that fires in early bring-up).
+	for (int g = 0x1f; g >= 2; g--)
+		if ((m_gxicr[g] & 0x0110) == 0x0110)   // ENABLE(0x100) & REQUEST(0x10)
+			return g;
+	return 0;
+}
+
+uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
+{
+	const int reg = offset << 1;                  // byte offset within 0x34000100
+	if (reg == 0x00)                              // IAGR: pending group, <<1 (dispatcher does lsr 1)
+		return intc_pending_group() << 1;
+	if (reg == 0x04)
+		return 0;
+	const int group = reg >> 2;                   // GxICR(group) at +group*4
+	if (group < 0x20)
+		return m_gxicr[group];
+	return 0;
+}
+
+void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	const int reg = offset << 1;
+	if (reg < 0x08)
+		return;                                   // IAGR is read-only
+	const int group = reg >> 2;
+	if (group >= 0x20)
+		return;
+	COMBINE_DATA(&m_gxicr[group]);
+	intc_recompute();
+}
+
+void kn7000_state::intc_assert(int group)
+{
+	m_gxicr[group] |= 0x0010;                     // set REQUEST
+	intc_recompute();
+}
+
+void kn7000_state::intc_recompute()
+{
+	m_maincpu->set_input_line(0, intc_pending_group() ? ASSERT_LINE : CLEAR_LINE);
+}
+
+TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
+{
+	intc_assert(IRQGRP_TIMER);
 }
 
 
@@ -788,6 +866,13 @@ void kn7000_state::machine_start()
 	// continuously and report changes over the serial link).
 	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
 
+	// The AM33 maskable interrupt vectors to the library-ROM low-level handler
+	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer
+	// raises the periodic interrupt that drives the MILK scheduler.
+	m_maincpu->set_irq_vector(0x4C03DDA0);
+	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
+
+	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
 	save_item(NAME(m_sio_control));
 	save_item(NAME(m_sio_rx_fifo));
@@ -808,9 +893,13 @@ void kn7000_state::machine_reset()
 	}
 	m_panel_tx_have_addr = false;
 	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
+	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
 	// Start scanning the panel at ~250 Hz.
 	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
+
+	// System tick ~1 kHz (real rate TBD -- input clock unknown; tune later).
+	m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 }
 
 void kn7000_state::kn7000(machine_config &config)

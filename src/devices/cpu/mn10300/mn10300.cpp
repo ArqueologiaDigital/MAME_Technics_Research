@@ -28,9 +28,9 @@
 #include "mn10300_insn_length.h" // validated length table (shared with tests/)
 
 
-// PSW flag bits. The low nibble (Z,N,C,V) is definite and load-bearing; the
-// interrupt-control bits are provisional and must be confirmed against the
-// MN103E/AM33 manual before implementing interrupts / rti.
+// PSW flag bits. The low nibble (Z,N,C,V) is definite and load-bearing; IE/IM
+// are confirmed from the firmware (every ICR update brackets `and 0xf7ff,psw` /
+// `or 0x0800,psw`, and the maskable-interrupt path works end-to-end).
 enum mn10300_flag
 {
 	FLAG_ZF = 0x0001, // zero
@@ -142,7 +142,7 @@ void mn10300_device::state_string_export(const device_state_entry &entry, std::s
 
 
 //**************************************************************************
-//  interrupts (stubs)
+//  interrupts
 //**************************************************************************
 
 void mn10300_device::execute_set_input(int inputnum, int state)
