@@ -395,3 +395,33 @@ HLE state: sio_rx_push now asserts the channel's group (panel 0x1A / MIDI 0x12,
 interrupt through the quick vector? a flag set by the panel-RX ISR at
 0x5006BDA4 bit3?), and check whether GxICR[0x1A] LEVEL/ENABLE are set by
 0x4C03DCE9/DCF2 (observed write 0x0100 = ENABLE once).
+
+## 0x34000280 + GxICR semantics + the transfer-complete interrupt (2026-07-05, RESOLVED)
+
+Commit 28ecc1d. Three model corrections, all firmware-evidence-based:
+
+1. **0x34000280 is a latched 2-bit-per-source control-field register.** All 8 real
+   code sites (ROM byte-pattern sweep; the other 0x340002xx hits are data): early
+   boot 0x48401EAF/EB9 + 0x48404D73/D80; panel init 0x484ABCE3 (`|0xC0`); ping
+   path 0x484AC600 (`&0xFF3F|0x80`) and 0x484AC6F1 (`|0xC0`); loader 0x484D725F
+   (write); sound path 0x4854BB6A (`|0x0C00`, paired with the 0x98050004 stream
+   port) + 0x4854BCC0. Pure RMWs, never tested -> HLE = latch.
+2. **GxICR write semantics:** high byte (ENABLE/LEVEL) stored; DETECT bits 0-3
+   write-1-to-clear LIMITED to mem_mask-covered bits (the firmware's control-byte
+   `movbu` writes, mask 0xFF00, must not ack DETECT); REQUEST derived from DETECT.
+   With plain COMBINE_DATA the enable write destroyed pending requests.
+3. **Group 0x1A = panel sync-transfer COMPLETE** (not RX-ready). Registered
+   dispatch: table1[0x50380A6C + 2*(group*4)] -> slot 8; table2[0x50380B64 +
+   2*slot] -> ISR 0x484AC5F1 = the ping sender's own state machine (one step per
+   completed transfer, either direction). (Tick sanity: slot 2 -> 0x4C02BB05.)
+   sio_w asserts 0x1A on each CONFIG-bit15 completion; panel replies (TYPE-3 sync
+   18 00) queue in m_panel_resp and deliver one byte per RX-direction transfer.
+
+STATUS: group 0x1A wins arbitration (0x0111, quick vector) and the state machine
+DISPATCHES (verified entry/exit) -- first time ever. It runs ONCE: the enable
+window (library enable-helper path 0x4C03DCE9/DCF2, one write of ctl=0x01) is not
+re-armed. NEXT: trace how the state machine re-arms the enable between transfers
+(the library enable/disable helpers around 0x4C03DCB0-0x4C03DD6A and their arg ->
+group mapping: arg 5/6 used by the sender; find what arg maps to group 0x1A and
+who calls enable per ping), then what the machine does at each step (it should
+turn the link around to RX and clock in the 2-byte reply).
