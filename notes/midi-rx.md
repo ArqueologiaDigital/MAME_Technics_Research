@@ -55,3 +55,21 @@ re-test -- the note handler should then allocate a voice and the note write will
 be distinguishable from the FC08..FC0B refresh. Also worth decoding: the
 0x98040000/0x98050000 command format (the FC0x cycle) and the voice/pitch
 register layout, so a note can be verified by its pitch value for note 60 (C4).
+
+## RX-path trace detail (tick xx+1)
+
+Followed the RX path one level deeper to understand where "note doesn't play"
+is decided:
+- ISR **Midi1RxIsr 0x484B1E86**: reads the byte from `0x34000819` (SC1 RX data),
+  checks RxRDY at `0x3400081C` bit 7, hands the byte to a low-level handler
+  (`0x484B312C`, updates MIDI-receive state at work RAM `0x50150F44..`), then acks
+  the channel ICR `0x34000148`.
+- The received bytes are consumed downstream by the MIDI task, which parses
+  running-status messages and routes note-on/off to parts. That routing is
+  governed by the (richly firmware-named) MIDI-config widgets -- TMidiInput /
+  MidiInputGrid (receive), TMidiControl, TMidiPart, TMidiPreset, MidiClock, etc.
+- So whether an incoming note *sounds* depends on (a) the default MIDI-receive
+  routing to a playing part, and (b) the tone generator producing a voice -- and
+  the TG playback path is not driven in the emulator (tone-generator.md). The
+  MIDI byte delivery itself is fully working; the gate is in this downstream
+  routing + the parked TG, not in the receive path.
