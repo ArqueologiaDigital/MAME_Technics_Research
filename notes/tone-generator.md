@@ -1,0 +1,74 @@
+# KN7000 tone generators — register interface (decode in progress)
+
+The KN7000 has two tone-generator LSIs on the MN10300 bus: the **main TG at
+0x98040000** (IC203/204) and the **sub TG at 0x98050000** (IC207/208). This note
+records the hardware register interface decoded from the firmware TG driver; it
+is the groundwork for eventually modeling sound (the current driver just logs
+these writes). Audible MIDI notes are blocked on this (see midi-rx.md).
+
+## Hardware interface: a 32-bit register write, split into two 16-bit ports
+
+The low-level TG write helper (0x487EFF70 sub / 0x487EFF92 main) takes a 32-bit
+value and writes it as two halves:
+
+```
+487eff92: and  0x3f, d0          ; a 6-bit field
+487eff98: asl  20, d0            ; -> bits 20..25 of the 32-bit word
+487eff9b: or   d1, d0            ; d1, d2 = the rest (address/data), from caller
+487eff9d: or   d2, d0
+487effa0: lsr  16, d1            ; d1 = high 16 bits
+487effa3: movhu d1, (0x98040000) ; HIGH 16 -> base+0   (main; sub uses 0x98050000)
+487effa9: and  0xffff, d0
+487effad: movhu d0, (0x98040002) ; LOW  16 -> base+2   (sub uses 0x98050002)
+```
+
+So one TG register access = **HIGH 16 bits -> 0x9804_0000, LOW 16 bits ->
+0x9804_0002** (main; +0x10000 for the sub TG). This mirrors the KN5000's
+register-indirect interface (address port + data port) but packs both into a
+single 32-bit word written across the two adjacent 16-bit ports.
+
+By analogy to the KN5000 (documented, shared codebase -- see below) and the
+observed traffic, the **HIGH 16 bits are the register ADDRESS and the LOW 16
+bits are the DATA**.
+
+## Observed traffic: the FC0x refresh (not note data)
+
+At the home screen the TG is written continuously with a cyclic pattern:
+`(0x9804_0000)=0xFC08, (0x9804_0002)=0x0000` cycling the low nibble FC08 -> FC09
+-> FC0A -> FC0B (both main and sub TG). Read as an address 0xFC0x, that is the
+0xFC register group, channels 8-0xB, data 0 -- i.e. a periodic system/global
+register refresh, NOT per-voice note data. This is consistent with the finding
+in midi-rx.md that an injected MIDI note did not produce a distinct voice write.
+
+## KN5000 voice-register map (the likely KN7000 template)
+
+The KN5000 TG (also 64-voice wavetable, register-indirect) is documented in
+kn5000-docs/tone-generator.md. Its register ADDRESS = `group<<8 | bank<<6 |
+channel(0..63)`; offset = group*0x100 + bank*0x40 + channel. Key per-voice
+registers (a MIDI note-on writes roughly these, then a key-on strobe):
+
+| group.bank | purpose |
+|---|---|
+| 0.0 | Voice Control -- key on/off / mode state machine |
+| 0.1 | Pitch increment (semitone table lookup) |
+| 0.2 | Voice mode / velocity (bit15 = latch strobe) |
+| 1.3 | Key-on flag (firmware writes 0x8100) |
+| 4.0 | Note key info (note<<8, bit15 = active) |
+| 5.0 | Modulation param (written just before KEY ON) |
+| 8.0 | Main Volume (0xFF80 = mute) |
+
+## Open / next
+
+- Confirm the KN7000 address bit-layout. The helper ORs a 6-bit field (masked
+  0x3f) at word bits 20..25 (= bits 4..9 of the high/address half) on top of the
+  caller-supplied d1/d2. Whether that field is the channel, or the channel sits
+  in d1 at bits 0..5 (KN5000-style) with this being a group/flag field, needs the
+  caller (the note->voice path) traced -- the helper's callers build d1/d2 from a
+  command stream interpreter at 0x487EFExx-0x487F00xx (bytes >=0x80 = commands).
+- The note->voice path: trace from the MIDI note handler (fed by ISR 0x484B1E86,
+  see midi-rx.md) to the first write of a voice's group-0.0 key-on for a real
+  note, and capture the exact address/data for note 60 (C4) to pin the format.
+- Then a minimal MAME `sound_stream` device on 0x98040000/0x98050000 can start:
+  latch the address/data pairs into a 64-voice x N-register state, and (later)
+  synthesize from the waveform ROMs. Even a silent state-capturing device would
+  let a note write be verified by its pitch/note-info registers.
