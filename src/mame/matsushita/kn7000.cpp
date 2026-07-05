@@ -281,7 +281,11 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
 	// (RAM/buffer); 0x9C000000 holds an unidentified peripheral at 0x9CC00000.
 	// Mapped as RAM placeholders so bring-up proceeds. TODO: identify these.
-	map(0x44000000, 0x44ffffff).ram();
+	// 0x44000000 and its +0x40000000 alias 0x84000000 are the same RAM (the same
+	// one-bit window pair as the library ROM 0x4c/0x8c). Boot init copies record
+	// arrays to 0x84030FF8..; without the alias those writes were dropped.
+	map(0x44000000, 0x44ffffff).ram().share("ram44");
+	map(0x84000000, 0x84ffffff).ram().share("ram44");
 	map(0x9c000000, 0x9cffffff).ram();
 
 	// --- Stubs for regions whose behavior is still unknown --------------
