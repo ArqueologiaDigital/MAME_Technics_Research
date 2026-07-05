@@ -97,3 +97,16 @@ pass and it accepts voice writes, (2) then the engine will drive voices, (3)
 then synthesize from the waveform ROMs -- which may be undumped (the KN7000's
 wave ROMs are separate from the program/table flash we have). This is not a
 near-term win; parked with the register interface fully documented above.
+
+### Update: DEMO press also produced no voice traffic (tick ww+1)
+
+Tried triggering internal playback a third way: a scripted press of the button
+labeled DEMO (SEG06 bit6). No non-0xFC TG write appeared, and a snapshot 6 s
+later showed the home screen UNCHANGED -- so that press did nothing visible.
+Likely the folklore label is wrong (the real DEMO button is elsewhere) or DEMO
+needs a different interaction; either way it did not start playback. Combined
+with the MIDI-note and START/STOP tests, three attempts now show no playback
+voice traffic. The blocker stands: the sound engine needs either a modeled TG
+that reports ready, or a reliably-triggerable playback action (which is limited
+by the button-label uncertainty -- see gui-toolkit-event-system.md on why button
+function names are widget-level, not a flat table). Sound remains parked.
