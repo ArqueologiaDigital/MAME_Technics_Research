@@ -172,6 +172,9 @@ void mn10300_device::execute_set_input(int inputnum, int state)
 // for faithfulness; the actual source is resolved by the handler reading IAGR.
 void mn10300_device::take_irq(int level, int group)
 {
+	// Standard MAME acknowledge: the driver's INTC latches its arbitration
+	// result (group + vector) at the exact accept instant, like real hardware.
+	standard_irq_callback(0, m_pc);
 	push32(m_pc);
 	push32(m_psw);
 	m_psw = ((m_psw & ~FLAG_IM) | (level << IM_SHIFT)) & ~FLAG_IE;

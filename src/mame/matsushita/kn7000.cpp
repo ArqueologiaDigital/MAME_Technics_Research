@@ -200,6 +200,9 @@ private:
 	void intc_recompute();
 	int  intc_pending_group() const;
 	uint16_t m_gxicr[0x20] = { };
+	IRQ_CALLBACK_MEMBER(irq_ack);              // latches IAGR (group+vector) at accept
+	bool m_c11_unserviced = false;             // a panel transfer-complete not yet accepted
+	int m_iagr_latch = 0;
 	uint16_t m_intc_280 = 0;                   // 0x34000280 latched control fields
 	uint16_t m_snd_500e = 0;                   // 0x9805000E readback latch (sound init spins on it)
 	emu_timer *m_sys_timer = nullptr;
@@ -233,8 +236,6 @@ private:
 	void panel_led_frame(uint8_t addr, uint8_t data);
 	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
 	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
-	bool    m_panel_tx_armed = false;      // cfg bit15 set; completes on the data write
-	bool    m_panel_tx_pending = false;    // data byte written; completes on the bit15 write
 	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
 	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
 	emu_timer *m_panel_txdone = nullptr;   // one-shot: sync-transfer complete -> group 0x11
@@ -409,15 +410,31 @@ int kn7000_state::intc_pending_group() const
 	return best;
 }
 
+// Freeze the arbitration result (group AND vector, atomically) at the instant
+// the CPU accepts the interrupt -- the real INTC latches IAGR at acknowledge.
+IRQ_CALLBACK_MEMBER(kn7000_state::irq_ack)
+{
+	const int g = intc_pending_group();
+	if (g)
+	{
+		m_iagr_latch = g;
+		if (g == 0x11)
+			m_c11_unserviced = false;
+		const int level = (m_gxicr[g] >> 12) & 7;
+		m_maincpu->set_irq_vector(level == 6 ? 0x4C03DE26 : 0x4C03DDA0);
+	}
+	return 0;
+}
+
 uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 {
 	const int reg = offset << 1;                  // byte offset within 0x34000100
-	if (reg == 0x00)                              // IAGR: encodes the pending group as group<<3
-		return intc_pending_group() << 3;         // dispatcher: (IAGR>>1)*2 = group*4 = table index
+	if (reg == 0x00)                              // IAGR: the group latched at interrupt accept
+		return m_iagr_latch << 3;
 	if (reg == 0x04)
 		return 0;
-	if (reg == 0x100)                             // 0x34000200: level-6 (scheduler) group register:
-		return intc_pending_group() << 2;         // group*4 = byte offset into the GxICR array & table index
+	if (reg == 0x100)                             // 0x34000200: level-6 group register (latched at accept)
+		return m_iagr_latch << 2;
 	if (reg == 0x180)                             // 0x34000280: per-source 2-bit control fields (latched)
 		return m_intc_280;                        // firmware only ever RMWs it (|0xC0 panel, |0x0C00 sound,
 		                                          // &0xFF3F|0x80 post-ping) -- state must accumulate
@@ -430,6 +447,14 @@ uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	const int reg = offset << 1;
+	// The panel transfer-complete (group 0x11) is level-like until serviced: the
+	// firmware's ISR-exit ack (full-word 0x0101 at 0x484AC736) w1c-clears DETECT,
+	// and on real hardware the NEXT byte's completion always arrives after that
+	// ack (the serial shift is slower than the ISR exit). If our deferred
+	// completion landed before the ack (and was thus wiped un-serviced),
+	// re-deliver it after the ack.
+	if (reg == 0x44 && m_c11_unserviced && (data & mem_mask & 0x000f))
+		m_panel_txdone->adjust(attotime::from_usec(40), 3);
 	if (reg == 0x180)                             // 0x34000280 = EXTMD (ext-int trigger modes)
 	{
 		const uint16_t prev = m_intc_280;
@@ -551,29 +576,13 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x8000))
 		{
 			m_sio_config[ch] &= 0x7fff;
-			// Both write orders occur: the sync sender arms (bit15) THEN writes
-			// data (0x484AC5E2/E9); the state-2 payload path writes data THEN
-			// sets bit15 (0x484AC8D3..). Complete on whichever comes second.
-			if (m_panel_tx_pending)
-			{
-				m_panel_tx_pending = false;
-				m_panel_txdone->adjust(attotime::from_usec(40), 3);
-			}
-			else
-			// Sync-transfer completion raises group 0x11 (ICR 0x34000144): its ISR
-			// (0x484AC70E, dispatch slot 0xA) is the protocol state machine -- a
-			// jump table at 0x48613034 indexed by the state byte 0x5006BDA0,
-			// advanced one step per completed transfer. The sender enables it
-			// (library enable-helper arg 5, descriptor table 0x50380BB8) right
-			// before each transfer. Group 0x10 (ICR 0x34000140, ISR 0x484AC74A =
-			// STATUS+RX reader) is for panel-INITIATED bytes; group 0x1A is a
-			// third panel event, no longer asserted here.
-			// TX direction (mode low3 = 4): the START bit only ARMS the transfer;
-			// it is triggered by the subsequent data write (0x484AC5E2 sets start,
-			// 0x484AC5E9 writes the byte) -- completed in sio_tx_byte. RX
-			// direction (low3 = 7): no data write follows; the panel supplies the
-			// next queued response byte and the transfer completes immediately.
-			m_panel_tx_armed = true;
+			// Bit15 = start/busy for the boot's POLLED bit-bang path only; it just
+			// self-clears here. The per-byte transfer trigger is the DATA write
+			// itself: state-2 (0x484AC8D2) and later payload states write data with
+			// NO bit15 write at all -- an armed/pending model makes each such
+			// transfer complete only on the NEXT retry's arm, advancing the state
+			// machine one step per retry (the observed parking). Completion is
+			// modeled per data write in sio_tx_byte.
 		}
 		// RX enable (bit14, set by the group-0x1A ISR's pass 2 together with mode
 		// low3=7 and state:=8): the panel now sends its queued reply, one byte per
@@ -628,16 +637,10 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 	{
 	case SIO_PANEL:
 		// A data write triggers the armed sync transfer; completion -> group 0x11.
-		if (m_panel_tx_armed)
-		{
-			// DEFERRED: this TX write often runs inside the group-0x11 ISR itself
-			// (the state machine transmits the next byte from ISR context and acks
-			// its GxICR on exit, which would w1c-wipe a synchronous assert).
-			m_panel_tx_armed = false;
-			m_panel_txdone->adjust(attotime::from_usec(40), 3);
-		}
-		else
-			m_panel_tx_pending = true;     // data first; the bit15 write completes it
+		// Every data write clocks one sync transfer. Completion -> group 0x11 --
+		// ALWAYS deferred (an ISR-context write + synchronous assert is wiped by
+		// the exit ack). Safe with IAGR latched at accept.
+		m_panel_txdone->adjust(attotime::from_usec(40), 3);
 		// LED/command stream to the panel sub-CPUs: 2-byte [ADDR][DATA] frames.
 		if (!m_panel_tx_have_addr)
 		{
@@ -701,7 +704,10 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 	if (param == 1)
 		intc_assert(0x1a);
 	else if (param == 3)
+	{
+		m_c11_unserviced = true;
 		intc_assert(0x11);                 // sync-transfer complete
+	}
 	else if (param == 2 && m_panel_resp_pos < m_panel_resp_len)
 	{
 		sio_rx_push(SIO_PANEL, m_panel_resp[m_panel_resp_pos++]);
@@ -1106,6 +1112,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// Panasonic MN10300/AM33 main CPU.
 	// TODO: The actual clock frequency is unknown; 10 MHz is a placeholder.
 	MN10300(config, m_maincpu, 10_MHz_XTAL);
+	m_maincpu->set_irq_acknowledge_callback(FUNC(kn7000_state::irq_ack));
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
 
 	/* video hardware */
