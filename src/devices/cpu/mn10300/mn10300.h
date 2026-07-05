@@ -47,6 +47,7 @@ public:
 	// interrupt vector points (set once at machine start). Input line 0 is the
 	// single maskable interrupt.
 	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
+	void set_irq_level(int l) { m_irq_level = l; }
 
 protected:
 	// device_t overrides
@@ -108,6 +109,7 @@ private:
 	bool     m_possible_irq; // an IRQ may be serviceable; re-checked at the loop top
 	int      m_irq_state;    // latched maskable IRQ line (execute_set_input)
 	uint32_t m_irq_vector;   // where the maskable interrupt vectors to
+	int      m_irq_level = 7; // priority level of the pending interrupt (0 = highest)
 
 	int m_icount;     // remaining cycles this timeslice (MN10200 named this m_cycles)
 

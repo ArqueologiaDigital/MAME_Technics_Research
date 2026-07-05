@@ -422,6 +422,7 @@ IRQ_CALLBACK_MEMBER(kn7000_state::irq_ack)
 			m_c11_unserviced = false;
 		const int level = (m_gxicr[g] >> 12) & 7;
 		m_maincpu->set_irq_vector(level == 6 ? 0x4C03DE26 : 0x4C03DDA0);
+		m_maincpu->set_irq_level(level);
 	}
 	return 0;
 }
@@ -520,6 +521,7 @@ void kn7000_state::intc_recompute()
 	{
 		const int level = (m_gxicr[g] >> 12) & 7;
 		m_maincpu->set_irq_vector(level == 6 ? 0x4C03DE26 : 0x4C03DDA0);
+		m_maincpu->set_irq_level(level);
 	}
 	m_maincpu->set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
 }

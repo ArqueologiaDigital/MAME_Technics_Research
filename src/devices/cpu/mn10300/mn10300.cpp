@@ -186,8 +186,17 @@ void mn10300_device::check_irq()
 {
 	if (!(m_psw & FLAG_IE))
 		return;
-	if (m_irq_state != CLEAR_LINE && m_irq_vector != 0)
-		take_irq(0, 0);
+	// PSW.IM level masking: a pending interrupt is accepted only when its
+	// priority level is numerically LOWER than IM (level 0 = highest priority;
+	// IM=7 accepts everything, IM=0 accepts nothing). take_irq sets IM to the
+	// accepted level, so an in-service level blocks same-or-lower priorities
+	// until rti restores the saved PSW -- without this, a handler that
+	// re-enables IE mid-body (the panel state machine does) immediately
+	// re-accepts its own still-pending level-0 interrupt and nests itself
+	// hundreds deep until the stack is destroyed.
+	const int im = (m_psw & FLAG_IM) >> IM_SHIFT;
+	if (m_irq_state != CLEAR_LINE && m_irq_vector != 0 && m_irq_level < im)
+		take_irq(m_irq_level, 0);
 }
 
 
