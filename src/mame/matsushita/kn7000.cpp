@@ -233,6 +233,7 @@ private:
 	void panel_rx_clock();                 // one RX byte per sync-transfer start
 	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
 	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
+	bool    m_panel_tx_armed = false;      // cfg bit15 set; completes on the data write
 	emu_timer *m_panel_timer = nullptr;
 	uint8_t m_panel_tx_addr = 0;
 	bool    m_panel_tx_have_addr = false;
@@ -523,14 +524,26 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x8000))
 		{
 			m_sio_config[ch] &= 0x7fff;
+			// Sync-transfer completion raises group 0x11 (ICR 0x34000144): its ISR
+			// (0x484AC70E, dispatch slot 0xA) is the protocol state machine -- a
+			// jump table at 0x48613034 indexed by the state byte 0x5006BDA0,
+			// advanced one step per completed transfer. The sender enables it
+			// (library enable-helper arg 5, descriptor table 0x50380BB8) right
+			// before each transfer. Group 0x10 (ICR 0x34000140, ISR 0x484AC74A =
+			// STATUS+RX reader) is for panel-INITIATED bytes; group 0x1A is a
+			// third panel event, no longer asserted here.
+			// TX direction (mode low3 = 4): the START bit only ARMS the transfer;
+			// it is triggered by the subsequent data write (0x484AC5E2 sets start,
+			// 0x484AC5E9 writes the byte) -- completed in sio_tx_byte. RX
+			// direction (low3 = 7): no data write follows; the panel supplies the
+			// next queued response byte and the transfer completes immediately.
 			if ((m_sio_config[ch] & 0x07) == 0x07)
+			{
 				panel_rx_clock();
-			// The panel-link interrupt (group 0x1A) signals TRANSFER COMPLETE --
-			// the registered "ISR" (0x484AC5F1, dispatch slot 8) is the firmware's
-			// sync-transfer state machine, which advances one step per completed
-			// byte in EITHER direction. Without this the ping sender transmits
-			// once and waits forever.
-			intc_assert(0x1a);
+				intc_assert(0x11);
+			}
+			else
+				m_panel_tx_armed = true;
 		}
 		break;
 	case 0x4:                    // control (byte @+4)
@@ -578,6 +591,12 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 	switch (ch)
 	{
 	case SIO_PANEL:
+		// A data write triggers the armed sync transfer; completion -> group 0x11.
+		if (m_panel_tx_armed)
+		{
+			m_panel_tx_armed = false;
+			intc_assert(0x11);
+		}
 		// LED/command stream to the panel sub-CPUs: 2-byte [ADDR][DATA] frames.
 		if (!m_panel_tx_have_addr)
 		{
