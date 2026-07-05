@@ -230,10 +230,11 @@ private:
 	// takes SIO interrupts -- see notes/panel-serial-protocol.md).
 	TIMER_CALLBACK_MEMBER(panel_scan);
 	void panel_led_frame(uint8_t addr, uint8_t data);
-	void panel_rx_clock();                 // one RX byte per sync-transfer start
 	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
 	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
 	bool    m_panel_tx_armed = false;      // cfg bit15 set; completes on the data write
+	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
+	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
 	emu_timer *m_panel_timer = nullptr;
 	uint8_t m_panel_tx_addr = 0;
 	bool    m_panel_tx_have_addr = false;
@@ -411,9 +412,17 @@ uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	const int reg = offset << 1;
-	if (reg == 0x180)                             // 0x34000280 control-field latch
+	if (reg == 0x180)                             // 0x34000280 = EXTMD (ext-int trigger modes)
 	{
+		const uint16_t prev = m_intc_280;
 		COMBINE_DATA(&m_intc_280);
+		// Panel ATN pulse, edge 2: the group-0x1A ISR's pass 1 re-arms the pin
+		// for the opposite edge (bits 7:6: 11b -> 10b) and expects the second
+		// edge of the panel's attention pulse to arrive after it returns.
+		// Deferred via timer: pass 1 runs with IE clear and acks its DETECT on
+		// exit, so a synchronous assert here would be wiped.
+		if (((prev & 0x00c0) == 0x00c0) && ((m_intc_280 & 0x00c0) == 0x0080))
+			m_panel_evt->adjust(attotime::from_usec(60), 1);
 		return;
 	}
 	if (reg < 0x08)
@@ -537,14 +546,14 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			// 0x484AC5E9 writes the byte) -- completed in sio_tx_byte. RX
 			// direction (low3 = 7): no data write follows; the panel supplies the
 			// next queued response byte and the transfer completes immediately.
-			if ((m_sio_config[ch] & 0x07) == 0x07)
-			{
-				panel_rx_clock();
-				intc_assert(0x11);
-			}
-			else
-				m_panel_tx_armed = true;
+			m_panel_tx_armed = true;
 		}
+		// RX enable (bit14, set by the group-0x1A ISR's pass 2 together with mode
+		// low3=7 and state:=8): the panel now sends its queued reply, one byte per
+		// group-0x10 interrupt (the state-8 handler reads 0x34000809 into the ring
+		// at 0x5006BDB4 and bumps the head that the handshake success test checks).
+		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x4000) && m_panel_resp_pos < m_panel_resp_len)
+			m_panel_evt->adjust(attotime::from_usec(60), 2);
 		break;
 	case 0x4:                    // control (byte @+4)
 		if (ACCESSING_BITS_0_7)
@@ -606,14 +615,22 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		else
 		{
 			m_panel_tx_have_addr = false;
-			panel_led_frame(m_panel_tx_addr, data);
+			// Handshake commands (first byte 0x20/0xE0 = ping CPL/CPR, 0x1F = init;
+			// KN5000-protocol match) get a TYPE-3 sync-packet reply and an ATN
+			// pulse on the panel's external-interrupt pin (group 0x1A). Leading
+			// 0x00 pairs are line-sync padding; C0..C9/01..0D pairs are LED frames.
+			if (m_panel_tx_addr == 0x20 || m_panel_tx_addr == 0xE0 || m_panel_tx_addr == 0x1F)
+			{
+				m_panel_resp[0] = 0x18; m_panel_resp[1] = 0x00;
+				m_panel_resp_len = 2; m_panel_resp_pos = 0;
+				// ATN edge 1, deferred past the current ISR context (the group-0x11
+				// TX state machine runs with IE clear; a synchronous assert would
+				// be consumed/acked in the wrong pass).
+				m_panel_evt->adjust(attotime::from_usec(60), 1);
+			}
+			else if (m_panel_tx_addr != 0x00)
+				panel_led_frame(m_panel_tx_addr, data);
 		}
-		// Queue the sub-CPU's reply: a TYPE-3 sync packet (header bits5-3 = 011;
-		// 2 bytes -- the main decoder's type-3/4/5 path sets handshake flag bit3
-		// at 0x5006BDA4). The bytes are DELIVERED one per RX-direction sync
-		// transfer by panel_rx_clock(), mirroring the half-duplex turnaround.
-		m_panel_resp[0] = 0x18; m_panel_resp[1] = 0x00;
-		m_panel_resp_len = 2; m_panel_resp_pos = 0;
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
@@ -642,14 +659,22 @@ void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
 		machine().describe_context(), addr, data);
 }
 
-// One synchronous RX transfer on the panel link: the main CPU clocked a byte in;
-// deliver the next queued panel-response byte (0x00 idle if none pending).
-void kn7000_state::panel_rx_clock()
+// Deferred panel events (one-shot; scheduled from ISR-context register writes so
+// the interrupt lands after the firmware's current handler returns):
+//  param 1: ATN edge on the panel's external-interrupt pin -> group 0x1A.
+//  param 2: the panel places its next reply byte on SIO0 -> group 0x10; the
+//           state-8 handler reads it from +9 and stores it into the RX ring.
+TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 {
-	uint8_t b = 0x00;
-	if (m_panel_resp_pos < m_panel_resp_len)
-		b = m_panel_resp[m_panel_resp_pos++];
-	sio_rx_push(SIO_PANEL, b);
+	if (param == 1)
+		intc_assert(0x1a);
+	else if (param == 2 && m_panel_resp_pos < m_panel_resp_len)
+	{
+		sio_rx_push(SIO_PANEL, m_panel_resp[m_panel_resp_pos++]);
+		intc_assert(0x10);
+		if (m_panel_resp_pos < m_panel_resp_len)
+			m_panel_evt->adjust(attotime::from_usec(120), 2);   // next byte
+	}
 }
 
 // Periodic button scan: read each declared segment ioport, and for any that
@@ -997,6 +1022,7 @@ void kn7000_state::machine_start()
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
 	// continuously and report changes over the serial link).
 	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
+	m_panel_evt = timer_alloc(FUNC(kn7000_state::panel_event), this);
 
 	// The AM33 maskable interrupt vectors to the library-ROM low-level handler
 	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer
