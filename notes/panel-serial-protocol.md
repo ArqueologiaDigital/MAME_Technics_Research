@@ -499,3 +499,26 @@ STILL FAILING -- open questions for the next session:
   expect the 0x1A ATN mid-command?). Also verify state-2's bit15 write actually
   arrived after the data write (the pending->complete path).
 - Sound: 0x9805000E readback latch added (init loop 0x4854BC59 unblocked).
+
+## Handshake bring-up part 3 (2026-07-05): per-data-write completion is right but needs IAGR latch-on-accept
+
+Static analysis of the state-2 handler (0x484AC84D) settled the transfer-trigger
+question: it acks GxICR[0x1A] (0x484AC890), ENABLES group 0x11 (0x4C03DCC8(5) --
+note: 0x4C03DD3F(id)=DISABLE / 0x4C03DCC8(id)=ENABLE, from the helper bodies:
+DD3F clears the ICR ctl bit, DCC8 sets it; one workflow agent had these swapped),
+transmits ring[read_idx] from 0x5006BE14 (idx 0x5006BE10, ++ mod 0x3C), sets
+0x5006BDA1=2, classifies the sent byte ((b&0x3F)>=0x30 -> bda1=(b&0xF)+3), and
+increments the state -- with NO CONFIG bit15 write anywhere. So bit15 is only
+the start/busy flag of the boot's POLLED bit-bang path; in the interrupt-driven
+protocol every DATA WRITE clocks one transfer.
+
+BUT the naive implementation (complete on every data write, deferred assert of
+group 0x11) caused a RUNAWAY to unmapped 0x0159xxxx: when the deferred assert
+races a disable, the CPU can accept the interrupt and the dispatcher's IAGR read
+returns 0; its fallback path reads 0x34000104 (our stub: 0) and dispatches a
+garbage slot. The INTC must LATCH IAGR AT INTERRUPT-ACCEPT TIME (real hardware
+freezes the group code when the CPU acknowledges) instead of recomputing it at
+read time, and 0x34000104's real semantics need modeling. That change (latch the
+winning group in take_irq/assert path, expose it via IAGR until acked) is the
+prerequisite for re-applying the per-data-write completion model. Tree reverted
+to caea343 (last good: [00 00 1F] transmitted, state 3, error screen, NO crash).
