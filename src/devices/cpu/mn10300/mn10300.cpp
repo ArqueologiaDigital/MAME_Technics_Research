@@ -269,11 +269,10 @@ void mn10300_device::execute_run()
 	do
 	{
 		// Service a pending maskable interrupt before fetching the next opcode.
-		while (m_possible_irq)
-		{
-			m_possible_irq = false;
-			check_irq();
-		}
+		// The on-chip INTC line is LEVEL-triggered, so this is checked every
+		// instruction (not just on the assert edge) -- it must fire the moment the
+		// firmware sets PSW.IE while a source is still pending.
+		check_irq();
 
 		debugger_instruction_hook(m_pc);
 
