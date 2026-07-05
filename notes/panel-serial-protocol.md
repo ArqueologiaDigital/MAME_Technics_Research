@@ -642,3 +642,31 @@ or (b) empirically: Lua-press each (addr,bit), OCR/inspect the UI reaction, and
 generate the corrected PORT_START blocks. The diagnostic panel-test screen's
 grid (board x seg x bit with labels) is the authoritative reference the firmware
 itself draws.
+
+## Button-map calibration (2026-07-05, in progress; commit 11401c1)
+
+Table dumps (program ROM):
+- **Normalization 0x486135A0** (wire idx -> logical seg; idx = ((ADDR&0xC0)>>1)|(ADDR&0x1F)):
+  bank00: subs 0-9 -> segs 0C 0D 0E 0F 10 11 12 13 14 15; sub 0x10 -> 0x1A; rest FF.
+  bank11: subs 0-B -> segs 00..0B; subs 0x10-0x13 -> 0x16-0x19; rest FF.
+- **Switch classes 0x4860C9F4** (2B/switch, switch# = seg*8+bit), notable rows:
+  seg00: FFF4 x4, FFF0(bit4=transport/START-STOP), FFF4, 0101, 0102
+  seg01: 0207..0200 (rhythm group A, reverse bit order)
+  seg02: 0407..0400 (rhythm group B)
+  seg03: 0100 FFF0 0807..0803 FFF1 | seg04: 0802 FFF0 0801 1000 0800 FFF0 x3
+  seg0C: 010C 010F 010B 010A 010D 200D 0108 FFFF ... (segs 0xC-0x15 = CPC/CPR)
+  (full dump reproducible: rd16(0x4860C9F4 + (seg*8+bit)*2) from the ROM)
+
+Empirical presses (mechanism verified, delivery chain flawless):
+- wire (bank11 sub0 bit4) -> the rhythm display with running style highlighted =
+  transport class 0xFFF0 = START/STOP as labeled. GOOD.
+- wire (bank00 sub0 bit1) -> the GUITAR sound-group page (driver label 'HELP'):
+  class(seg 0x0C, bit1)=0x010F apparently = GUITAR sound select. So the class
+  encoding is [group][index] with group 01 = 'UI/sound select', and the CPC/CPR
+  diag-grid columns do NOT correspond 1:1 to logical segs 0x0C.. as the driver's
+  port arrangement assumed.
+
+NEXT: scripted press-SWEEP -- one run, Lua presses each (port,bit) at spaced
+times and calls manager.machine.video:snapshot() after each; then read the
+snapshots to build the definitive wire->function map and regenerate PORT_STARTs
++ the artwork bindings. The class table then labels every position statically.
