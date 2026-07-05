@@ -329,6 +329,14 @@ void kn7000_state::maincpu_mem(address_map &map)
 // decoded per-register list is in notes/io-map.md.
 uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 {
+	// 0x98070000 (offset 0x38000 within the 0x98000000 window): a status/strap word.
+	// Boot init reads it and, if bit 15 is CLEAR, branches into a lengthy factory
+	// power-on diagnostic (a battery of RAM/HW tests whose results are bit-banged
+	// out on a panel GPIO with multi-second software delays -- not the normal boot
+	// path). On real hardware bit 15 is set, so the diagnostic is skipped. Model
+	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
+	if (offset == 0x38000)
+		return 0x8000;
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
