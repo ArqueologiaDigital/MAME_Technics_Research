@@ -363,8 +363,8 @@ int kn7000_state::intc_pending_group() const
 uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 {
 	const int reg = offset << 1;                  // byte offset within 0x34000100
-	if (reg == 0x00)                              // IAGR: pending group, <<1 (dispatcher does lsr 1)
-		return intc_pending_group() << 1;
+	if (reg == 0x00)                              // IAGR: encodes the pending group as group<<3
+		return intc_pending_group() << 3;         // dispatcher: (IAGR>>1)*2 = group*4 = table index
 	if (reg == 0x04)
 		return 0;
 	const int group = reg >> 2;                   // GxICR(group) at +group*4
@@ -899,7 +899,13 @@ void kn7000_state::machine_reset()
 	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
 
 	// System tick ~1 kHz (real rate TBD -- input clock unknown; tune later).
-	m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
+	// HELD until the AM33 F6 "udf" extended-ALU ops are implemented in the CPU
+	// core: the timer interrupt now dispatches (correctly, via IAGR=group<<3) to
+	// the real handler, but that handler's context save uses F6 udf12/13/15
+	// (0x4C03DDA7/AB/AF) which the core still skips -> it corrupts the saved
+	// context and the PC runs away. Re-enable this one line once F6 is done.
+	// See notes/interrupt-mechanism.md ("F6 / udf extended ops").
+	//m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 }
 
 void kn7000_state::kn7000(machine_config &config)
