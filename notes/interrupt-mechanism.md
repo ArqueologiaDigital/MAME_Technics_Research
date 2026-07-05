@@ -206,3 +206,47 @@ coprocessor ops. The boot only reached it now because it's in the interrupt path
   correct IAGR + INTC + CPU mechanics are all already in place, so the tick should
   then advance `ApTimer`/the scheduler.
 - STABLE STATE meanwhile: IAGR fixed; timer start commented out so nothing crashes.
+
+## UPDATE 2: the blocker is AM33 extended-state (32-bit EPSW + E-regs + F5/F6 ops)
+
+Full disassembly of the library interrupt handler's context save (0x4C03DDA0) and
+restore (epilogue @0x4C03DDF8..0x4C03DE24) shows exactly what's needed:
+
+PROLOGUE (save):
+```
+movm [d2,d3,a2,a3,other3],(sp)   ; 'other3' (mask bit3) = AM33 EXTENDED-reg group
+add  -0xc,sp                      ; 12-byte local frame (slots 0,4,8)
+mov  psw,d3 ; udf15 d3,d3 ; mov d3,(0xc,sp)   ; frame[0xc] (1st saved-reg slot) = f15(psw)
+            ; udf13 d3,d3 ; mov d3,(8,sp)     ; local[8] = f13(f15(psw))
+            ; udf12 d3,d3 ; mov d3,(4,sp)     ; local[4] = f12(...)
+mov  psw,d3 ; mov d3,(0,sp)                    ; local[0] = psw
+movhu (0x50380d0c),d3 ; add 1,d3 ; ...         ; nest-count++
+```
+EPILOGUE (restore):
+```
+mov (0,sp),d2 ; and 0x08,d2 ; mov psw,d3 ; or d2,d3 ; mov d3,psw  ; restore V (bit3) from saved psw
+mov (4,sp),d3 ; mov (8,sp),d2 ; udf21 d3,d2 ; ...                 ; udf21 = F5 1E
+... ; rti
+```
+
+Findings that pin the implementation:
+1. **`movm` extended groups.** The mask bits 0/2/3 ("other0"/"other2"/"other3")
+   are AM33 extended-register groups that the core's `store_regs`/`load_regs`
+   currently SKIP (they log "AM33 ext regs not modelled" and push/pop nothing).
+   Because `other3` is skipped, the handler's `mov f15(psw),(0xc,sp)` — meant for
+   the first *extended*-reg slot — instead lands on **a3's saved slot**, so a3 is
+   restored as garbage → the later use of a3 jumps into work RAM (the crash).
+   FIX: model the extended-register groups (add E0-E7 + whatever else they cover)
+   and push/pop the correct count so the frame lines up and a3 is preserved.
+2. **The `udf` ops are AM33 extended-ALU (F5/F6).** udf12/13/15 (F6 CF/DF/FF) and
+   udf21 (F5) transform psw-derived values; the epilogue restores the V flag and
+   runs udf21. These manage the AM33 **32-bit EPSW** (the core only models a 16-bit
+   `m_psw`). Implementing them needs the AM33 op semantics.
+3. So the scheduler-advance needs a cohesive AM33 extended-state feature:
+   **32-bit EPSW + E0-E7 (+ any other extended regs) + the F5/F6 op group + the
+   `movm` extended groups**. take_irq/rti may also need to route the saved PC/EPSW
+   through the extended regs the handler expects (confirm vs the AM33 interrupt
+   model). This is well-scoped but needs the AM33 instruction reference (binutils
+   `opcodes/mn10300-opc.c`, the sim `sim/mn10300/am33.igen`, GCC am33, or the AM33
+   manual) — research is in flight. The `store_regs` group sizes are the first
+   concrete thing to get from that source.
