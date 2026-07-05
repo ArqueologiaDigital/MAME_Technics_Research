@@ -58,3 +58,45 @@ to chase next tick:
 Find the routine that SHOULD write CLUT[0x1D+] (search for code that reads a BMP
 color table / the picture resource and stores 4-byte entries at 0x50031490+idx*4
 or an alias), and trace why it is skipped or mis-targeted.
+
+## Follow-up: the CLUT seed mechanism located (2026-07-05, tick pp+1)
+
+Directly instrumented the CLUT writer (the last-tick "0 writes" was a broken
+probe -- header edits weren't recompiling + a silent ENFILE build failure).
+
+- The CLUT is seeded by a 256-entry loop at **0x4842D9D7** (per-color routine
+  0x4842D9F6; the actual store is `mov d3,(d0,a0)` at **0x4842DB1E**, a0 =
+  0x50031490, index = a3, colour = d3). The seed source is the ROM table at
+  file 0x32573C (0x4872573C).
+- The writer runs at boot and writes ALL 256 entries: idx 0x00-0x1C = real UI
+  colours, **idx 0x1D-0xF3 = green 0x0080FF80** (the placeholder), idx 0xF4-0xFF
+  = misc (some 0x00FFFFFF white, etc.). Confirmed by logging every execution of
+  0x4842DB1E through boot: idx 0x1D+ receives ONLY the green seed and is never
+  re-written with real colours within the whole ~14 s boot.
+- 0x4842DB1E is the ONLY code in the image that writes 0x50031490 (the CLUT), so
+  ANY palette load must go through it -- and it only ever writes green to the
+  image range. Therefore the picture/background palette overwrite simply does
+  not execute during boot in MAME.
+
+### Assessment
+
+The full-screen green at boot is the framebuffer background/picture plane cleared
+to index 0xD0 (and neighbours 0xD1-0xD8), which resolve through the green
+placeholder; the home-screen UI then draws over most of it in indices 0x00-0x1C,
+leaving the central picture box green. Because 0x4842DB1E is the sole CLUT writer
+and it only writes green to idx 0x1D+, MAME appears to *faithfully* run what the
+firmware does: the firmware seeds a green placeholder and does not overwrite the
+image-palette range at boot.
+
+So this is most likely NOT a MAME rendering bug -- the real KN7000 very probably
+also shows the green picture area until content with its own palette is loaded.
+IF the real machine instead shows a coloured splash/logo at power-on, then the
+firmware's boot-picture display is GATED on state MAME doesn't provide (NVRAM
+settings, or a picture-flash/SmartMedia resource -- note the picture flash at
+0x57800000 is never read at boot). The image-display path itself works (it runs
+through library-ROM routines that decode the embedded BMP/JPEG assets, e.g. the
+palettized BMP 0x48745718 handled at 0x48496FC0); it is simply not invoked for a
+boot splash. Resolving "intended green vs missing splash" needs a reference for
+the real machine's power-on screen. Open: find the gate/config that would trigger
+a boot-picture palette load (search callers of 0x4842D9D7 / the picture-display
+entry and their enabling conditions).
