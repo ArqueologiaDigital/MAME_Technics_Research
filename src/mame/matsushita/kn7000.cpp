@@ -313,7 +313,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	// On-chip interrupt controller (GxICR array + IAGR) -- more-specific override.
-	map(0x34000100, 0x340001ff).rw(FUNC(kn7000_state::intc_r), FUNC(kn7000_state::intc_w));
+	map(0x34000100, 0x340002ff).rw(FUNC(kn7000_state::intc_r), FUNC(kn7000_state::intc_w)); // GxICR block + the 0x34000200 scheduler-level group reg
 	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
 	// 0x34000000 bank; this more-specific mapping overrides the logger above.
 	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
@@ -371,12 +371,18 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 int kn7000_state::intc_pending_group() const
 {
-	// Highest-numbered enabled+requested group (priority handling is coarse for
-	// now; the timer is the only source that fires in early bring-up).
-	for (int g = 0x1f; g >= 2; g--)
+	// Among enabled+requested groups, the winner is the highest-priority one =
+	// the LOWEST ICR LEVEL value (bits 14:12). Firmware programs: SIO panel/MIDI
+	// groups 0x12-0x15 LEVEL=1, 0x0F/0x19 LEVEL=3, group 7 LEVEL=4, and the
+	// system tick (group 6) LEVEL=6 -- the lowest priority in the system.
+	int best = 0, best_level = 8;
+	for (int g = 2; g < 0x20; g++)
 		if ((m_gxicr[g] & 0x0110) == 0x0110)   // ENABLE(0x100) & REQUEST(0x10)
-			return g;
-	return 0;
+		{
+			const int level = (m_gxicr[g] >> 12) & 7;
+			if (level < best_level) { best_level = level; best = g; }
+		}
+	return best;
 }
 
 uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
@@ -386,6 +392,8 @@ uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 		return intc_pending_group() << 3;         // dispatcher: (IAGR>>1)*2 = group*4 = table index
 	if (reg == 0x04)
 		return 0;
+	if (reg == 0x100)                             // 0x34000200: level-6 (scheduler) group register:
+		return intc_pending_group() << 2;         // group*4 = byte offset into the GxICR array & table index
 	const int group = reg >> 2;                   // GxICR(group) at +group*4
 	if (group < 0x20)
 		return m_gxicr[group];
@@ -406,13 +414,32 @@ void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 void kn7000_state::intc_assert(int group)
 {
-	m_gxicr[group] |= 0x0010;                     // set REQUEST
+	m_gxicr[group] |= 0x0011;                     // set REQUEST + DETECT bit0 (the scheduler-level dispatcher at 0x4C03DE72 scans the DETECT bits 0-3 to pick the sub-source within the group)
 	intc_recompute();
 }
 
 void kn7000_state::intc_recompute()
 {
-	m_maincpu->set_input_line(0, intc_pending_group() ? ASSERT_LINE : CLEAR_LINE);
+	// The AM33 dispatches each interrupt LEVEL through its own vector, and the
+	// firmware installs two distinct handlers:
+	//  - 0x4C03DDA0: quick dispatch (no stack switch) -- used by the high-
+	//    priority device levels (reads IAGR at 0x34000100).
+	//  - 0x4C03DE26: the SCHEDULER entry -- outermost entry saves the interrupted
+	//    task's SP into its TCB (*0x5038002C), switches to the scheduler stack
+	//    (*0x50380CBC), dispatches (reads the group register at 0x34000200), and
+	//    on exit reloads SP from the (possibly re-chosen) current TCB. Only the
+	//    system tick (group 6, LEVEL=6, the lowest priority) uses this one.
+	// Routing the tick to the quick handler instead desynchronizes the TCB
+	// saved-SPs from reality (the scheduler moves *0x5038002C but nothing
+	// switches stacks), which corrupts the next yield -- so the vector must be
+	// selected per pending level.
+	const int g = intc_pending_group();
+	if (g)
+	{
+		const int level = (m_gxicr[g] >> 12) & 7;
+		m_maincpu->set_irq_vector(level == 6 ? 0x4C03DE26 : 0x4C03DDA0);
+	}
+	m_maincpu->set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
 }
 
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
