@@ -43,6 +43,8 @@ ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.h"             "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.h"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_insn_length.h"
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
+mkdir -p "$BUILD_TREE/src/mame/layout"
+ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
 echo "==> overlay files symlinked"
 
 # 3. Register the MN10300 as a full CPU (idempotent).
