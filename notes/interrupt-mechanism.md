@@ -176,3 +176,33 @@ Not yet working — the boot takes the tick but does not advance:
   `udf12/13/15` AM33 ops are treated as unimplemented by the core and may corrupt
   the handler's PSW-field extraction; (c) tick rate/behaviour. Implementing the
   `udf*` (F6 extended) ops is the most likely missing piece.
+
+## UPDATE (2026-07-05, cont.): IAGR encoding fixed; blocked on F6/udf ops
+
+Debugging why the tick didn't advance the scheduler:
+- The dispatcher (0x4C03DDC0) turns the IAGR at `0x34000100` into a table index via
+  `d3 = IAGR; d3 >>= 1; d3 += d3` (i.e. `index_byte = IAGR & ~1`), reads a halfword
+  from `0x50380A6C[index]`, then a word handler from `0x50380B64[that*2]`.
+- Dumped those tables at runtime: the ONLY registered (non-null) handler is at
+  table index `0x18` → **`0x4C02BB05`**, which needs **IAGR = 0x30**. The enabled
+  timer is group `0x06` (GxICR `0x34000118`). So the IAGR must encode the pending
+  group as **`group << 3`** (`0x06<<3 = 0x30`) — NOT `group<<1`. FIXED in `intc_r`.
+  (`0x4C03DEE9` is the null/spurious handler = a bare `rets`.)
+- With the correct IAGR the timer dispatches to the real handler `0x4C02BB05`, but
+  it CRASHES (PC runs into work RAM). Cause pinned exactly: the ONLY unimplemented
+  opcodes hit are the **F6 `udf12/13/15` at `0x4C03DDA7/AB/AF`** (the handler's
+  context save: `mov psw,d3 ; udf15 d3,d3 ; mov d3,(0xc,sp) ; udf13 d3,d3 ;
+  mov d3,(8,sp) ; udf12 d3,d3`). The core skips F6 as a no-op → the saved context
+  is wrong → the later context-switch/return jumps to garbage.
+
+### The real blocker: the AM33 F6 extended-ALU group is unimplemented
+`F6 <op2>` is a whole instruction group MAME's disassembler doesn't decode (it
+prints `udf<op2>>4>`). It is **heavily used** across the firmware (F6 00 ×216,
+F6 FF ×199, F6 06 ×72, F6 63 ×62, F6 DF ×52, …), so it is real AM33 code, not rare
+coprocessor ops. The boot only reached it now because it's in the interrupt path.
+- NEXT: implement the F6 group in the core using the AM33 instruction semantics
+  (binutils `opcodes/mn10300-opc.c` / GCC am33 backend define the encodings). Then
+  re-enable the system-tick timer (one commented line in `machine_reset`) — the
+  correct IAGR + INTC + CPU mechanics are all already in place, so the tick should
+  then advance `ApTimer`/the scheduler.
+- STABLE STATE meanwhile: IAGR fixed; timer start commented out so nothing crashes.
