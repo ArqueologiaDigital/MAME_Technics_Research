@@ -771,7 +771,7 @@ void mn10300_device::execute_fa()
 	const uint32_t start_pc = m_pc - 1;
 	const uint8_t op2 = read_arg8(m_pc);
 	const uint16_t imm16 = read_arg16(m_pc + 1);   // operand at start+2
-	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+	const int dst = op2 & 3;
 
 	if (op2 < 0x80)
 	{

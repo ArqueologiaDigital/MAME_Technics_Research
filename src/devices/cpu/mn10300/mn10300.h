@@ -51,7 +51,9 @@ protected:
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }
 	virtual uint32_t execute_max_cycles() const noexcept override { return 24; } // TODO(MN10300): real worst-case opcode+IRQ cycles
-	virtual uint32_t execute_input_lines() const noexcept override { return MN10300_MAX_EXT_IRQ; }
+	// (device_execute_interface::execute_input_lines() was removed from MAME;
+	//  the input-line count is implicit. MN10300_MAX_EXT_IRQ lines are still used
+	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks

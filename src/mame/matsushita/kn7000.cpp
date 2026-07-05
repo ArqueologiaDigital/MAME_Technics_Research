@@ -118,7 +118,7 @@ private:
 	required_ioport_array<8> m_cpl_seg;
 	required_ioport_array<5> m_cpc_seg;
 	required_ioport_array<10> m_cpr_seg;
-	required_ioport<uint8_t> m_dial;
+	required_ioport m_dial;
 	output_finder<64> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<80> m_cpr_leds;
@@ -502,9 +502,8 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 
 void kn7000_state::machine_start()
 {
-	m_cpl_leds.resolve();
-	m_cpc_leds.resolve();
-	m_cpr_leds.resolve();
+	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
+	// no explicit resolve() call is needed or available.
 }
 
 void kn7000_state::machine_reset()
