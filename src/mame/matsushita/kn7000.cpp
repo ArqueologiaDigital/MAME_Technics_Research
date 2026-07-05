@@ -548,11 +548,11 @@ ROM_START(kn7000)
 	// ------------------------------------------------------------------
 
 	// Program flash -> mapped at CPU 0x48400000. Decompressed size 0x3F6F01.
-	ROM_REGION(0x400000, "maincpu", ROMREGION_ERASEFF)
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
 	ROM_LOAD("kn7000_program.rom", 0x000000, 0x3f6f01, BAD_DUMP CRC(d9399328) SHA1(cc1c364ce4fd8096eab4453825c0cc5e15009261))
 
 	// Table / rhythm flash -> mapped at CPU 0x48000000. Decompressed size 0x3E94D4.
-	ROM_REGION(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
 	ROM_LOAD("kn7000_table.rom", 0x000000, 0x3e94d4, BAD_DUMP CRC(eb3a0f01) SHA1(fcf5645a1a2300ff5e42e73b8f42ccd10a190d86))
 
 	// TODO: Library / boot ROM at 0x4C000000 - currently undumped.
