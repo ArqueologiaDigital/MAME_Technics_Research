@@ -41,7 +41,19 @@ memory map should decode.
 | `0x32000808` | 32 | mov×4 |
 | `0x3200080C` | 16 | movhu×4 |
 
-## `0x34000000` — large peripheral register block (58 regs) - likely the LCD/display controller and/or key/panel scan; dense 16-bit writes 0x108..0x280 + byte sub-block 0x800..0x82d + 0x1000..0x10a2
+## `0x34000000` — large peripheral register block (58 regs)
+
+The `0x108..0x280` dense 16-bit writes are the LCD/display controller (+ the
+interrupt-controller array `0x148..0x178`). The **byte sub-block `0x800..0x82d`
+is a multi-channel USART/SIO ASIC** — three channels at `+0x10` stride, each with
+`cfg(base)` / `ctrl(+4)` / `TX(+8)` / `RX(+9)` / `status(+C)`:
+
+* **`0x34000800` = the control-panel serial link** (CPL/CPC/CPR/CPSD sub-CPUs),
+  ISR `0x484ACC13`, ICR `0x34000168` — see the Control Panel Protocol doc.
+* **`0x34000810` = MIDI port 1** (ISR `0x484B1E86`, ICR `0x34000148`).
+* **`0x34000820` = MIDI port 2** (ISR `0x484B2037`, ICR `0x34000150`).
+
+Full per-register list below.
 
 | register | width | access sites |
 |----------|-------|--------------|
