@@ -138,8 +138,14 @@ private:
 	// ---- stack + register-list helpers -------------------------------------
 	inline void push32(uint32_t val);
 	inline uint32_t pop32();
-	void store_regs(uint8_t mask);   // movm push / call
-	void load_regs(uint8_t mask);    // movm pop  / ret
+	void store_regs(uint8_t mask);   // movm push (SP moves)
+	void load_regs(uint8_t mask);    // movm pop  (SP moves)
+	// call/ret/retf use the AM33 imm8-total frame convention: the return PC sits at
+	// [SP] and the saved registers at fixed negative offsets below it; SP is moved
+	// only by imm8. These write/read the register block at those offsets WITHOUT
+	// moving SP (mirrors the GDB simulator's ret/retf offset walk).
+	void store_regs_at(uint32_t base, uint8_t mask); // call: regs -> [base-4], [base-8], ...
+	void load_regs_at(uint32_t base, uint8_t mask);  // ret/retf: [base-4], ... -> regs
 
 	// ---- prefixed-opcode group handlers ------------------------------------
 	void execute_f0();   // 0xF0: reg-indirect moves + call/jmp/ret (aM)

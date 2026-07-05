@@ -395,10 +395,11 @@ void mn10300_device::execute_run()
 			uint8_t regs = read_arg8(m_pc + 2);
 			uint8_t adj  = read_arg8(m_pc + 3);
 			uint32_t ret = m_pc + 4;      // return past this 5-byte instruction
-			push32(ret);
-			store_regs(regs);
+			// imm8-total frame convention: return PC at [SP], regs below, SP -= imm8.
+			write_mem32(m_sp, ret);
+			store_regs_at(m_sp, regs);
 			m_sp -= adj;
-			m_mdr = ret;                  // AM33 caches the return address in MDR (for retf), same as 0xDD
+			m_mdr = ret;                  // AM33 caches the return address in MDR (for retf)
 			m_pc = start_pc + disp;
 			break;
 		}
@@ -435,8 +436,9 @@ void mn10300_device::execute_run()
 			uint8_t regs = read_arg8(m_pc + 4);
 			uint8_t adj  = read_arg8(m_pc + 5);
 			uint32_t ret = m_pc + 6;
-			push32(ret);
-			store_regs(regs);
+			// imm8-total frame convention (see 0xCD).
+			write_mem32(m_sp, ret);
+			store_regs_at(m_sp, regs);
 			m_sp -= adj;
 			m_mdr = ret;           // AM33 caches the return address in MDR (for retf)
 			m_pc = start_pc + disp;
@@ -444,31 +446,28 @@ void mn10300_device::execute_run()
 		}
 
 		// ---- retf regs, imm8 : fast return via the MDR-cached address ----
-		// Same stack unwind as `ret` (this core's call/ret use push/pop, so the
-		// frame is [return][regs][locals] top-to-bottom), but the return address
-		// comes from MDR (set by the paired call) instead of the stack, and the
-		// pushed return slot is discarded. MDR is read before load_regs, which may
-		// itself restore the caller's MDR.
+		// imm8-total convention: SP += imm8 puts SP at the frame top; the return
+		// PC comes from MDR (set by the paired call), and the saved registers are
+		// read from fixed offsets below the new SP. PC is taken before the register
+		// restore (which may itself reload the caller's MDR).
 		case 0xDE:
 		{
 			uint8_t regs = read_arg8(m_pc);
 			uint8_t adj  = read_arg8(m_pc + 1);
-			m_sp += adj;                 // discard locals
-			const uint32_t target = m_mdr;
-			load_regs(regs);             // restore the saved registers (same as ret)
-			m_sp += 4;                   // discard the pushed return-address slot
-			m_pc = target;
+			m_sp += adj;
+			m_pc = m_mdr;
+			load_regs_at(m_sp, regs);
 			break;
 		}
 
-		// ---- ret regs, imm8 : normal return (PC popped from the stack) ----
+		// ---- ret regs, imm8 : normal return (PC read from the frame top) ----
 		case 0xDF:
 		{
 			uint8_t regs = read_arg8(m_pc);
 			uint8_t adj  = read_arg8(m_pc + 1);
 			m_sp += adj;
-			load_regs(regs);
-			m_pc = pop32();
+			load_regs_at(m_sp, regs);
+			m_pc = read_mem32(m_sp);   // return PC sits at [SP] (the frame top)
 			break;
 		}
 
@@ -584,7 +583,7 @@ void mn10300_device::execute_fc()
 		case 0xEC: m_psw = (m_psw & ~FLAG_ZF) | ((m_d[dst] & imm) ? 0 : FLAG_ZF); break; // btst imm32,dD
 		case 0xFC:
 			if (op2 == 0xFE)      { m_sp += imm; }               // add imm32,sp (SP arith, no flags)
-			else if (op2 == 0xFF) { push32(start_pc + 6); m_pc = start_pc + imm; return; } // calls (disp32)
+			else if (op2 == 0xFF) { write_mem32(m_sp, start_pc + 6); m_mdr = start_pc + 6; m_pc = start_pc + imm; return; } // calls (disp32): PC->[SP], SP unchanged
 			else logerror("MN10300: unimplemented FC %02X @ %08X\n", op2, start_pc);
 			break;
 		default:
@@ -734,9 +733,9 @@ void mn10300_device::execute_f0()
 		case 0x9: { uint8_t v = read_mem8(m_a[am]); m_psw = (m_psw & ~FLAG_ZF) | ((v & m_d[r]) ? 0 : FLAG_ZF); write_mem8(m_a[am], v & ~m_d[r]); break; } // bclr
 		case 0xF:
 			// control-flow, selected by the whole op2 value
-			if (op2 <= 0xF3)      { push32(start_pc + 2); m_pc = m_a[am]; return; } // calls (aM)
+			if (op2 <= 0xF3)      { write_mem32(m_sp, start_pc + 2); m_mdr = start_pc + 2; m_pc = m_a[am]; return; } // calls (aM): PC->[SP], SP unchanged
 			else if (op2 <= 0xF7) { m_pc = m_a[am]; return; }                       // jmp (aM)
-			else if (op2 == 0xFC) { m_pc = pop32(); return; }                       // rets
+			else if (op2 == 0xFC) { m_pc = read_mem32(m_sp); return; }               // rets: PC from [SP], SP unchanged
 			else if (op2 == 0xFD) { m_psw = pop32(); m_pc = pop32(); m_possible_irq = true; return; } // rti
 			// TODO(MN10300): FE trap
 			else logerror("MN10300: unimplemented F0 %02X @ %08X\n", op2, start_pc);
@@ -924,7 +923,7 @@ void mn10300_device::execute_fa()
 			case 0xA0: m_a[dst] = read_mem32(imm16); break;                            // mov (abs16),aD
 			case 0xFC:
 				if (op2 == 0xFE)      { m_sp += (int32_t)(int16_t)imm16; }             // add imm16,sp
-				else if (op2 == 0xFF) { push32(start_pc + 4); m_pc = start_pc + (int32_t)(int16_t)imm16; return; } // calls (disp16)
+				else if (op2 == 0xFF) { write_mem32(m_sp, start_pc + 4); m_mdr = start_pc + 4; m_pc = start_pc + (int32_t)(int16_t)imm16; return; } // calls (disp16): PC->[SP], SP unchanged
 				else if (op2 == 0xFC) { m_psw &= (uint32_t)imm16; }                    // and imm16,psw
 				else if (op2 == 0xFD) { m_psw |= (uint32_t)imm16; }                    // or imm16,psw
 				break;
@@ -1014,4 +1013,42 @@ void mn10300_device::load_regs(uint8_t mask)   // pop (stack -> regs, SP up); ex
 	if (mask & 0x01) { m_sp += 16; m_e[1] = pop32(); m_e[0] = pop32(); } // MDRQ/... gap + E0/E1
 	if (mask & 0x02) { m_e[7] = pop32(); m_e[6] = pop32(); m_e[5] = pop32(); m_e[4] = pop32(); }
 	if (mask & 0x04) { m_e[3] = pop32(); m_e[2] = pop32(); }
+}
+
+// Offset-based register block used by call/ret/retf (NOT movm). The frame top is
+// `base` (= the SP where the return PC lives); the saved registers occupy fixed
+// negative offsets below it and SP is NOT touched here. The offset walk is exactly
+// the GDB simulator's (op_utils / the 0xdf,0xde igen), so store_regs_at and
+// load_regs_at round-trip and a call's frame is read back correctly by ret/retf.
+void mn10300_device::store_regs_at(uint32_t base, uint8_t mask)
+{
+	int32_t off = -4;
+	if (mask & 0x04) { write_mem32(base + off, m_e[2]); off -= 4; write_mem32(base + off, m_e[3]); off -= 4; }
+	if (mask & 0x02) { write_mem32(base + off, m_e[4]); off -= 4; write_mem32(base + off, m_e[5]); off -= 4;
+	                   write_mem32(base + off, m_e[6]); off -= 4; write_mem32(base + off, m_e[7]); off -= 4; }
+	if (mask & 0x01) { off -= 16; write_mem32(base + off, m_e[0]); off -= 4; write_mem32(base + off, m_e[1]); off -= 4; }
+	if (mask & 0x80) { write_mem32(base + off, m_d[2]); off -= 4; }
+	if (mask & 0x40) { write_mem32(base + off, m_d[3]); off -= 4; }
+	if (mask & 0x20) { write_mem32(base + off, m_a[2]); off -= 4; }
+	if (mask & 0x10) { write_mem32(base + off, m_a[3]); off -= 4; }
+	if (mask & 0x08) { write_mem32(base + off, m_d[0]); off -= 4; write_mem32(base + off, m_d[1]); off -= 4;
+	                   write_mem32(base + off, m_a[0]); off -= 4; write_mem32(base + off, m_a[1]); off -= 4;
+	                   write_mem32(base + off, m_mdr); off -= 4; write_mem32(base + off, m_lir); off -= 4;
+	                   write_mem32(base + off, m_lar); off -= 4; }
+}
+void mn10300_device::load_regs_at(uint32_t base, uint8_t mask)
+{
+	int32_t off = -4;
+	if (mask & 0x04) { m_e[2] = read_mem32(base + off); off -= 4; m_e[3] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x02) { m_e[4] = read_mem32(base + off); off -= 4; m_e[5] = read_mem32(base + off); off -= 4;
+	                   m_e[6] = read_mem32(base + off); off -= 4; m_e[7] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x01) { off -= 16; m_e[0] = read_mem32(base + off); off -= 4; m_e[1] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x80) { m_d[2] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x40) { m_d[3] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x20) { m_a[2] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x10) { m_a[3] = read_mem32(base + off); off -= 4; }
+	if (mask & 0x08) { m_d[0] = read_mem32(base + off); off -= 4; m_d[1] = read_mem32(base + off); off -= 4;
+	                   m_a[0] = read_mem32(base + off); off -= 4; m_a[1] = read_mem32(base + off); off -= 4;
+	                   m_mdr = read_mem32(base + off); off -= 4; m_lir = read_mem32(base + off); off -= 4;
+	                   m_lar = read_mem32(base + off); off -= 4; }
 }
