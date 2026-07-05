@@ -627,3 +627,18 @@ The complete solution stack, in dependency order:
  8. The ATN two-edge pulse (edge 1 on command completion, edge 2 on the EXTMD
     11b->10b re-arm) + state-8 per-byte RX delivery (group 0x10)
  9. The 7-byte frame parser (this commit)
+
+## Buttons are LIVE (2026-07-05, commit c9f6b38)
+
+Button events now deliver through the ATN chain (panel_queue helper) and the
+firmware REACTS: a scripted press navigated the UI to the RHYTHM style-selection
+page (screenshot in notes/images/). The delivery mechanism is fully proven.
+
+FOLLOW-UP: the (bank,subaddr,bit)->button map is only partially correct -- the
+CPL_SEG0 bit4 press decoded as the BALLAD group key, not START/STOP. Calibrate
+by either (a) reading the firmware's switch-class table 0x4860C9F4 + the
+normalization table 0x486135A0 and rebuilding the ioport arrangement to match,
+or (b) empirically: Lua-press each (addr,bit), OCR/inspect the UI reaction, and
+generate the corrected PORT_START blocks. The diagnostic panel-test screen's
+grid (board x seg x bit with labels) is the authoritative reference the firmware
+itself draws.
