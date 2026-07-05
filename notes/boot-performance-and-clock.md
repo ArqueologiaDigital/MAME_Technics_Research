@@ -59,10 +59,24 @@ Verified: full boot, panel handshake, and home-screen render all intact at
 32 MHz; boot now reaches home in ~12-13 emulated seconds. Host sustains ~46M
 cycles/s (measured), so throttled real-time playback is achievable.
 
-### Still open
+### CONFIRMED by firmware MIDI-baud cross-check (2026-07-05)
 
-The exact PLL ratio (x2 vs x3/x4) is inferred, not read off the schematic.
-Confirm it by either the C02BZ0000667 datasheet, or a firmware cross-check:
-a serial-baud divisor for MIDI (exactly 31250 baud) or a timer reload for a
-known tick rate directly yields fc. Candidate timer reloads already seen at
-reset: 0x32000040=0x497, 0x32000042=0xEA6 (3750), 0x32000028=0x865.
+The peripheral clock is pinned to 16.000 MHz exactly, and fc = 32 MHz confirmed:
+- The MIDI init at 0x484B2793 programs SC1/SC2 (0x34000810/0x34000820) to 8N1
+  (control = 0x0085 / 0x1181), with SC1's clock-source field CK = 0x5 =
+  "Timer-3 underflow / 8".
+- The timer setup at 0x484B2691 sets TM3MD = 0x80 (count enable, source = IOCLK)
+  and TM3BR = 0x3F (63) (reload byte from ROM table 0x4874C4F4). SC2's own
+  divisor at 0x3400082D is also 0x3F.
+- MIDI baud is exactly 31250, so with baud = IOCLK / (8 * (TM3BR+1)):
+    31250 = IOCLK / (8 * 64) = IOCLK / 512  =>  IOCLK = 16.000 MHz exactly.
+  Inverting the real MN10300 driver's formula at each candidate: 16 MHz needs
+  TM3BR = 0x3F (matches!), 32 MHz would need 0x7F, 40/48 MHz 0x9F/0xBF -- so
+  only 16 MHz IOCLK fits.
+- fc = 2 x IOCLK = 32.000 MHz (schematic /2 peripheral branch via IC11; the
+  MN10300 IOCLK = fc/2 convention). This upgrades the previously-inferred 32 MHz
+  to a cross-checked result. The only remaining assumption is the fc = 2*IOCLK
+  ratio, which rests on the schematic /2 topology + the MN10300 convention +
+  the boot-timing match (400M cycles / 32 MHz ~= 12.5 s = real boot time).
+
+Driver: `MN10300(config, m_maincpu, 16_MHz_XTAL * 2)`.

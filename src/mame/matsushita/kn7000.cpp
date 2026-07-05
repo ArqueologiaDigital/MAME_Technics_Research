@@ -1134,8 +1134,14 @@ void kn7000_state::kn7000(machine_config &config)
 	// 2003 flagship that boots in ~12-15 s). The AM33 core runs the 16 MHz
 	// reference through its internal PLL; x2 = 32 MHz matches the measured boot
 	// work (~400M cycles / 32 MHz ~= 12.5 s, i.e. real-hardware boot time).
-	// TODO: confirm the exact PLL ratio against the C02BZ0000667 datasheet or a
-	// firmware serial-baud / timer-reload cross-check (MIDI = 31250 baud).
+	// CONFIRMED via firmware MIDI-baud cross-check: the MIDI UARTs (SC1/SC2 at
+	// 0x34000810/0x34000820) are set to 8N1 with the baud clock = Timer-3
+	// underflow / 8 (SC1CTR CK field = 0x5), and TM3 counts at IOCLK with reload
+	// TM3BR = 0x3F (63). MIDI baud is exactly 31250, so
+	//   31250 = IOCLK / (8 * (0x3F + 1)) = IOCLK / 512  =>  IOCLK = 16.000 MHz.
+	// The AM33 core runs at 2x IOCLK (schematic /2 peripheral branch via IC11;
+	// MN10300 IOCLK = fc/2 convention) => fc = 32.000 MHz. Only 16 MHz IOCLK
+	// reproduces TM3BR=0x3F (32 MHz would need 0x7F); 40/48 excluded likewise.
 	MN10300(config, m_maincpu, 16_MHz_XTAL * 2);
 	m_maincpu->set_irq_acknowledge_callback(FUNC(kn7000_state::irq_ack));
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
