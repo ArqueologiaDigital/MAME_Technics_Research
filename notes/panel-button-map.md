@@ -597,3 +597,28 @@ silk-screen labels drawn beside the switches in the schematic image. A correct
 through physical->wire->normSeg to the SEGnn ports, so drawn position + label +
 binding are all consistent. The user's press anchors are ground truth for the
 functional side and will validate the rebuild. This is a careful, separate task.
+
+## Authoritative part / keyboard-section names (0x485FDE70) — feeds the mixer & mute buttons
+
+The firmware's own part-name pointer table lives at **0x485FDE70** (u32 ptrs into
+the string pool at **0x485FDD5C**). One array, three named entry points:
+
+- **+0 PartNamePtrTable** [0..15] = `PART 1`..`PART 16` — the 16 MIDI parts.
+- **+16 KeyboardPartNames** = `RIGHT 1`,`RIGHT 2`,`LEFT`,`ACCOMP 1`..`ACCOMP 5`,
+  `BASS`,`DRUM 1`,`DRUM 2`,`CHORD`,`R.BASS`,`PADS`,`PADS`,`BASS PEDAL`,
+  `CHORDFINDER`,`MICROPHONE`,`APC`,`CONTROL` — the sound-engine parts. **These
+  match the home-screen mixer sliders exactly** (the user's boot screenshot shows
+  DRM2/DRM1/ACP5..ACP1/BASS/APC/PADS/LEFT/RIGHT2/RIGHT1 — the same set, drawn
+  right-to-left).
+- **+24 AccompPartNames** = the auto-accompaniment subset (`BASS`,`DRUM 1/2`,
+  `CHORD`,`R.BASS`,`PADS`,…).
+
+Relevance to the button map: the part-mute buttons (descriptor events
+0x00702000 / 0x00702001 = mute-down / mute-up, on normSeg 0x08..0x0B) act on
+these parts, and the mixer display is driven by KeyboardPartNames. So this table
+is the authoritative source for naming the mixer/mute buttons once their event
+args are correlated to the part index (a safe, firmware-verifiable mapping, unlike
+the physical .lay positions). Separately, the CPR sound-mode labels at 0x485FDD0C
+(`DIGITAL DRAWBAR`,`ACCORDION REGISTER`,`SOUND EXPLORER`,`EW EXPANSION`,
+`ORGAN TABS`) are the firmware's names for those CPR buttons — note `ORGAN TABS`
+is the user-verified label for SEG0D.4 (event 0x702004/03).
