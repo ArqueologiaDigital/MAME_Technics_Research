@@ -200,6 +200,7 @@ private:
 	void intc_recompute();
 	int  intc_pending_group() const;
 	uint16_t m_gxicr[0x20] = { };
+	uint16_t m_intc_280 = 0;                   // 0x34000280 latched control fields
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 
@@ -397,6 +398,9 @@ uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 		return 0;
 	if (reg == 0x100)                             // 0x34000200: level-6 (scheduler) group register:
 		return intc_pending_group() << 2;         // group*4 = byte offset into the GxICR array & table index
+	if (reg == 0x180)                             // 0x34000280: per-source 2-bit control fields (latched)
+		return m_intc_280;                        // firmware only ever RMWs it (|0xC0 panel, |0x0C00 sound,
+		                                          // &0xFF3F|0x80 post-ping) -- state must accumulate
 	const int group = reg >> 2;                   // GxICR(group) at +group*4
 	if (group < 0x20)
 		return m_gxicr[group];
@@ -406,19 +410,40 @@ uint16_t kn7000_state::intc_r(offs_t offset, uint16_t mem_mask)
 void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	const int reg = offset << 1;
+	if (reg == 0x180)                             // 0x34000280 control-field latch
+	{
+		COMBINE_DATA(&m_intc_280);
+		return;
+	}
 	if (reg < 0x08)
 		return;                                   // IAGR is read-only
 	const int group = reg >> 2;
 	if (group >= 0x20)
 		return;
-	COMBINE_DATA(&m_gxicr[group]);
+	// GxICR write semantics (matches the on-chip INTC, and required for correct
+	// delivery): the high byte (ENABLE + LEVEL) is stored as written; the DETECT
+	// flags (bits 0-3) are WRITE-1-TO-CLEAR; REQUEST (0x10) is hardware status
+	// derived from the surviving DETECT bits. A plain latched write here would
+	// let the firmware's enable write (e.g. 0x0100) silently destroy a pending
+	// request that arrived between 'clear' and 'enable' -- observed in the panel
+	// handshake, where the reply's REQUEST was wiped by the subsequent enable.
+	{
+		const uint16_t cur = m_gxicr[group];
+		const uint16_t nv  = (cur & ~mem_mask) | (data & mem_mask);
+		// w1c applies ONLY to detect bits the access actually wrote (mem_mask):
+		// the firmware's control-byte writes (movbu to +1, mask 0xFF00) must not
+		// touch pending DETECT flags.
+		uint16_t detect = (cur & 0x000f) & ~(data & mem_mask & 0x000f);
+		m_gxicr[group] = (nv & 0xff00) | detect | (detect ? 0x0010 : 0x0000);
+	}
 	intc_recompute();
 }
 
 void kn7000_state::intc_assert(int group)
 {
 
-	m_gxicr[group] |= 0x0011;                     // set REQUEST + DETECT bit0 (the scheduler-level dispatcher at 0x4C03DE72 scans the DETECT bits 0-3 to pick the sub-source within the group)
+	m_gxicr[group] |= 0x0011;
+	// (REQUEST + DETECT bit0 were just set above; the scheduler-level dispatcher at 0x4C03DE72 scans the DETECT bits 0-3 to pick the sub-source within the group)
 	intc_recompute();
 }
 
@@ -500,6 +525,12 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			m_sio_config[ch] &= 0x7fff;
 			if ((m_sio_config[ch] & 0x07) == 0x07)
 				panel_rx_clock();
+			// The panel-link interrupt (group 0x1A) signals TRANSFER COMPLETE --
+			// the registered "ISR" (0x484AC5F1, dispatch slot 8) is the firmware's
+			// sync-transfer state machine, which advances one step per completed
+			// byte in EITHER direction. Without this the ping sender transmits
+			// once and waits forever.
+			intc_assert(0x1a);
 		}
 		break;
 	case 0x4:                    // control (byte @+4)
@@ -527,7 +558,9 @@ void kn7000_state::sio_rx_push(int ch, uint8_t data)
 	// 0x34000150 -> 0x14; see notes/panel-serial-protocol.md #6). The firmware's
 	// RX ISR reads +0x09 and acks its GxICR; polling paths see RxRDY regardless.
 	static constexpr int rx_group[3] = { 0x1a, 0x12, 0x14 };
-	intc_assert(rx_group[ch]);
+	if (ch != SIO_PANEL)                          // panel: the sync-transfer-complete
+		intc_assert(rx_group[ch]);                // assert in sio_w covers group 0x1A
+
 }
 
 uint8_t kn7000_state::sio_rx_pop(int ch)
@@ -556,14 +589,12 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 			m_panel_tx_have_addr = false;
 			panel_led_frame(m_panel_tx_addr, data);
 		}
-		// The sub-CPU acknowledges main-CPU traffic with a TYPE-3 sync packet
-		// (header bits5-3 = 011; 2 bytes, no payload -- the main decoder
-		// 0x484AD18D type-3/4/5 path just sets handshake flag bit3 at
-		// 0x5006BDA4). Without this the boot declares 'ERROR in CPU data
-		// transmission'. One reply per received byte is harmless: the decoder
-		// consumes sync packets idempotently.
-		sio_rx_push(SIO_PANEL, 0x18);
-		sio_rx_push(SIO_PANEL, 0x00);
+		// Queue the sub-CPU's reply: a TYPE-3 sync packet (header bits5-3 = 011;
+		// 2 bytes -- the main decoder's type-3/4/5 path sets handshake flag bit3
+		// at 0x5006BDA4). The bytes are DELIVERED one per RX-direction sync
+		// transfer by panel_rx_clock(), mirroring the half-duplex turnaround.
+		m_panel_resp[0] = 0x18; m_panel_resp[1] = 0x00;
+		m_panel_resp_len = 2; m_panel_resp_pos = 0;
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
