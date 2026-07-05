@@ -363,3 +363,35 @@ The two **banks** (flag `0x5006BE94`) are two different wiring maps of the *same
 2. Parse the `0x34000808` byte stream as `[addr][data]` pairs; map `addr` back through `ADDR_TABLE_A/B` to a register index; store `data` as that register's 8 LED bits.
 3. Light physical LEDs from the (register,bit) map in table (a) — e.g. Hold = reg0/bit5 (addr `C0`), Dial = reg18/bit1 (addr `0C`), OtherPart = reg3/bit5 (addr `C3`).
 4. Ignore `addr == 0xFF` and `data == 0xFF`. LED indices 15/16 are display GPIO (`0x9CC00008`), not panel-serial, and 17/18 are unused.
+## Boot handshake — live findings (2026-07-05, MAME HLE bring-up)
+
+Traced with an interleaved event log (panel SIO ops + GxICR[0x1A] ops, chronological):
+
+- The boot ping loop (sync sender `0x484AC59A`, caller region `0x484ABBA5..`) per
+  iteration: library helper `0x4C03DD5F/6A` reads + CLEARS `GxICR[0x1A]` (the
+  panel-RX group, ICR 0x34000168); config direction set to TX (`cfg&0xFFF8|0x04`);
+  one byte 0x00 transmitted (`cfg|=0x8000` start at 0x484AC5E2, byte written at
+  0x484AC5E9); then a wait, then retry. 33 pings, then the error screen.
+- **CONFIG bit15 = transfer START; the firmware polls the register until the
+  hardware self-clears it** (loop at 0x484AC5A3..: read, write, read, write ...).
+  The HLE now completes transfers instantly (bit15 self-clears in sio_w).
+- The firmware **never reads SIO STATUS (+0xC) or RX data (+0x9) during the
+  handshake** (verified with uncapped logging: reads are ONLY reg0). So the wait
+  is NOT SIO-status polling.
+- After the ping it programs **0x34000280** (read-modify-write: `& 0xFF3F | 0x80`
+  at 0x484AC5FE..60B) and sets flag byte `0x5006BE92=1`. 0x34000280 is an
+  unmodeled second INTC-level register (our intc map returns 0 / drops writes).
+  The handshake wait is gated by whatever 0x34000280 controls -- likely the
+  second-level enable/mask for the panel-RX group's interrupt delivery (compare
+  0x34000200 = the level-6 group register).
+- When our provisional replies set GxICR[0x1A] REQUEST, the firmware acked once
+  (read 0x0111 -> write 0x0101 at 0x484AC627/634) -- so it DOES look at the
+  group -- but the ISR/decoder never consumed the RX bytes.
+
+HLE state: sio_rx_push now asserts the channel's group (panel 0x1A / MIDI 0x12,
+0x14); panel replies (TYPE-3 sync `18 00`) are provisional. NEXT: model
+0x34000280 (semantics from the firmware's usage: bits 6-7 cleared, bit 7? set
+-- dump more read/write sites), find what completes the per-ping wait (an
+interrupt through the quick vector? a flag set by the panel-RX ISR at
+0x5006BDA4 bit3?), and check whether GxICR[0x1A] LEVEL/ENABLE are set by
+0x4C03DCE9/DCF2 (observed write 0x0100 = ENABLE once).
