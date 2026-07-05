@@ -229,6 +229,9 @@ private:
 	// takes SIO interrupts -- see notes/panel-serial-protocol.md).
 	TIMER_CALLBACK_MEMBER(panel_scan);
 	void panel_led_frame(uint8_t addr, uint8_t data);
+	void panel_rx_clock();                 // one RX byte per sync-transfer start
+	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
+	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
 	emu_timer *m_panel_timer = nullptr;
 	uint8_t m_panel_tx_addr = 0;
 	bool    m_panel_tx_have_addr = false;
@@ -414,6 +417,7 @@ void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 void kn7000_state::intc_assert(int group)
 {
+
 	m_gxicr[group] |= 0x0011;                     // set REQUEST + DETECT bit0 (the scheduler-level dispatcher at 0x4C03DE72 scans the DETECT bits 0-3 to pick the sub-source within the group)
 	intc_recompute();
 }
@@ -486,6 +490,17 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	{
 	case 0x0:                    // config
 		COMBINE_DATA(&m_sio_config[ch]);
+		// Bit 15 = transfer START on the synchronous panel link: the firmware
+		// sets it to clock one byte and then polls the register until the
+		// hardware self-clears it on completion. The HLE completes transfers
+		// instantly. In the RX direction (mode field low3 = 7) the panel
+		// sub-CPU supplies the next response byte of its pending reply.
+		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x8000))
+		{
+			m_sio_config[ch] &= 0x7fff;
+			if ((m_sio_config[ch] & 0x07) == 0x07)
+				panel_rx_clock();
+		}
 		break;
 	case 0x4:                    // control (byte @+4)
 		if (ACCESSING_BITS_0_7)
@@ -507,9 +522,12 @@ void kn7000_state::sio_rx_push(int ch, uint8_t data)
 		return;                  // FIFO full -- drop (overrun)
 	m_sio_rx_fifo[ch][m_sio_rx_head[ch]] = data;
 	m_sio_rx_head[ch] = next;
-	// TODO: assert this channel's SIO receive interrupt (ICR 0x34000168 / 148 /
-	// 150 -> MN10300 IRQ). The MN10300 core does not yet take interrupts, so a
-	// queued byte is not yet delivered to the firmware's RX ISR.
+	// Deliver the byte: assert the channel's RX interrupt group (ICRs: panel RX
+	// 0x34000168 -> group 0x1A, MIDI-1 RX 0x34000148 -> 0x12, MIDI-2 RX
+	// 0x34000150 -> 0x14; see notes/panel-serial-protocol.md #6). The firmware's
+	// RX ISR reads +0x09 and acks its GxICR; polling paths see RxRDY regardless.
+	static constexpr int rx_group[3] = { 0x1a, 0x12, 0x14 };
+	intc_assert(rx_group[ch]);
 }
 
 uint8_t kn7000_state::sio_rx_pop(int ch)
@@ -538,6 +556,14 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 			m_panel_tx_have_addr = false;
 			panel_led_frame(m_panel_tx_addr, data);
 		}
+		// The sub-CPU acknowledges main-CPU traffic with a TYPE-3 sync packet
+		// (header bits5-3 = 011; 2 bytes, no payload -- the main decoder
+		// 0x484AD18D type-3/4/5 path just sets handshake flag bit3 at
+		// 0x5006BDA4). Without this the boot declares 'ERROR in CPU data
+		// transmission'. One reply per received byte is harmless: the decoder
+		// consumes sync packets idempotently.
+		sio_rx_push(SIO_PANEL, 0x18);
+		sio_rx_push(SIO_PANEL, 0x00);
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
@@ -564,6 +590,16 @@ void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
 	}
 	logerror("%s: panel LED frame addr=%02X data=%02X\n",
 		machine().describe_context(), addr, data);
+}
+
+// One synchronous RX transfer on the panel link: the main CPU clocked a byte in;
+// deliver the next queued panel-response byte (0x00 idle if none pending).
+void kn7000_state::panel_rx_clock()
+{
+	uint8_t b = 0x00;
+	if (m_panel_resp_pos < m_panel_resp_len)
+		b = m_panel_resp[m_panel_resp_pos++];
+	sio_rx_push(SIO_PANEL, b);
 }
 
 // Periodic button scan: read each declared segment ioport, and for any that
