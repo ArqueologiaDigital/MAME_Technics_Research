@@ -124,3 +124,29 @@ foundation; a `sound_stream` synthesis stage (reading this register file + the
 waveform ROMs, which may be undumped) is the remaining work, gated behind getting
 the firmware's playback engine to actually emit voices (see the null-playback
 tests above).
+
+## Sound gap localized: playback is never triggered (tick zz+1)
+
+Probed the two firmware entry points that would produce sound -- **MainSoundAdd
+0x4848C043** (voice allocator) and **MainSeqRun 0x484948BC** (sequencer run) --
+across boot, a raw injected MIDI note, and a START/STOP double-press. **Neither
+ran even once.** So the tone-generator voice path is dormant not because of a
+hardware gate but because the higher-level playback is never *triggered*:
+
+- `MainDspCheck` (0x484A062A) is a stub that just returns 0 -- not a readiness
+  gate.
+- The TG is write-only (no status read to satisfy).
+- The boot-time voice writes (groups 0x04/0x0C, all channels) come from init, not
+  playback.
+
+The remaining work for audible notes is therefore **triggering playback**, which
+splits into: (a) routing an incoming MIDI note to a sounding part so the note
+handler calls MainSoundAdd -- gated by the default MIDI-receive configuration
+(the TMidiInput/MidiInputGrid widgets), and (b) starting the sequencer / a rhythm
+via the correct panel operation -- gated by the button-identity uncertainty
+(START/STOP navigates to the rhythm-select page here rather than starting play;
+see gui-toolkit-event-system.md on why button function names are widget-level).
+Only after playback is triggered and voices flow into the captured register file
+does the actual synthesis stage (and the possibly-undumped waveform ROMs) become
+the next problem. This redirects future sound work away from TG/DSP hardware
+modeling and toward the playback-trigger path.
