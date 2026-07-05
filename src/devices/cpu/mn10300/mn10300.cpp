@@ -59,7 +59,7 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	// external address map, so no internal address_map is supplied here.
 	, m_program_config("program", ENDIANNESS_LITTLE, 32, 32, 0)
 	, m_program(nullptr)
-	, m_pc(0), m_sp(0), m_mdr(0), m_psw(0), m_lir(0), m_lar(0)
+	, m_pc(0), m_sp(0), m_mdr(0), m_mdrq(0), m_mcrh(0), m_mcrl(0), m_mcvf(0), m_psw(0), m_lir(0), m_lar(0)
 	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
 {
@@ -88,6 +88,10 @@ void mn10300_device::device_start()
 	save_item(NAME(m_e));
 	save_item(NAME(m_sp));
 	save_item(NAME(m_mdr));
+	save_item(NAME(m_mdrq));
+	save_item(NAME(m_mcrh));
+	save_item(NAME(m_mcrl));
+	save_item(NAME(m_mcvf));
 	save_item(NAME(m_psw));
 	save_item(NAME(m_lir));
 	save_item(NAME(m_lar));
@@ -125,6 +129,7 @@ void mn10300_device::device_reset()
 	m_sp  = 0x50021CF8;   // initial SP established by the KN7000 firmware
 	m_psw = 0;
 	m_mdr = 0;
+	m_mdrq = m_mcrh = m_mcrl = m_mcvf = 0;
 	std::fill(std::begin(m_d), std::end(m_d), 0);
 	std::fill(std::begin(m_a), std::end(m_a), 0);
 	std::fill(std::begin(m_e), std::end(m_e), 0);
@@ -433,12 +438,40 @@ void mn10300_device::execute_run()
 			push32(ret);
 			store_regs(regs);
 			m_sp -= adj;
+			m_mdr = ret;           // AM33 caches the return address in MDR (for retf)
 			m_pc = start_pc + disp;
 			break;
 		}
 
-		// ---- ret / retf regs, imm8 ----
-		case 0xDE: // retf - TODO: retf uses an MDR-cached return address; approximated as ret
+		// ---- retf regs, imm8 : fast return via the MDR-cached address ----
+		// SP += imm8; PC = MDR; then restore registers from *below* the adjusted
+		// SP (offset walks down from -4), WITHOUT moving SP. Exact AM33 semantics
+		// from the GDB simulator (sim_mn10300.igen). MDR was set by the paired
+		// `call` (0xDD).
+		case 0xDE:
+		{
+			uint8_t regs = read_arg8(m_pc);
+			uint8_t adj  = read_arg8(m_pc + 1);
+			m_sp += adj;
+			const uint32_t sp = m_sp;
+			m_pc = m_mdr;
+			int32_t off = -4;
+			if (regs & 0x04) { m_e[2] = read_mem32(sp + off); off -= 4; m_e[3] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x02) { m_e[4] = read_mem32(sp + off); off -= 4; m_e[5] = read_mem32(sp + off); off -= 4;
+			                   m_e[6] = read_mem32(sp + off); off -= 4; m_e[7] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x01) { off -= 16; m_e[0] = read_mem32(sp + off); off -= 4; m_e[1] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x80) { m_d[2] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x40) { m_d[3] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x20) { m_a[2] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x10) { m_a[3] = read_mem32(sp + off); off -= 4; }
+			if (regs & 0x08) { m_d[0] = read_mem32(sp + off); off -= 4; m_d[1] = read_mem32(sp + off); off -= 4;
+			                   m_a[0] = read_mem32(sp + off); off -= 4; m_a[1] = read_mem32(sp + off); off -= 4;
+			                   m_mdr = read_mem32(sp + off); off -= 4; m_lir = read_mem32(sp + off); off -= 4;
+			                   m_lar = read_mem32(sp + off); off -= 4; }
+			break;
+		}
+
+		// ---- ret regs, imm8 : normal return (PC popped from the stack) ----
 		case 0xDF:
 		{
 			uint8_t regs = read_arg8(m_pc);
@@ -460,12 +493,14 @@ void mn10300_device::execute_run()
 		case 0xF2: execute_f2(); break;   // logical / mul / div / shift / special regs
 		case 0xF3: execute_f3(); break;   // 32-bit indexed load/store
 		case 0xF4: execute_f4(); break;   // byte/half indexed load/store
+		case 0xF5: execute_f5(); break;   // AM33 DSP puts (putx/putchclx)
+		case 0xF6: execute_f6(); break;   // AM33 DSP ops (mulq/getx/getchx/getclx/sat)
 		case 0xF8: execute_f8(); break;   // imm8 / disp8 forms (incl. add imm8,sp)
 		case 0xFA: execute_fa(); break;   // imm16 / disp16 forms
 		case 0xFC: execute_fc(); break;   // imm32 / disp32 forms (mov imm32,reg etc.)
 		case 0xFE: execute_fe(); break;   // bit ops on absolute address
 
-		// TODO(MN10300): 0xF5,0xF6 (udf/coprocessor), 0xF9,0xFB,0xFD (udf imm) --
+		// TODO(MN10300): 0xF9,0xFB,0xFD (udf imm) still unimplemented --
 		// these fall through to the length-correct skip below until needed.
 		default:
 			// Not implemented yet. Advance PC by the (validated) real length so
@@ -567,6 +602,54 @@ void mn10300_device::execute_fc()
 			break;
 	}
 	m_pc = start_pc + 6;
+}
+
+
+// 0xF5: AM33 DSP register writes (putx, putchclx). 2-byte, like F2. Semantics
+// from the GDB simulator (sim_mn10300.igen). Operand regs are op2 bits [1:0]=Dn,
+// [3:2]=Dm. (binutils also lists a colliding `mov Am,Rn` for F5xx, but the
+// KN7000 firmware's F5 uses are the DSP put-ops; see notes/interrupt-mechanism.md.)
+void mn10300_device::execute_f5()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+	switch (op2 >> 4)
+	{
+	case 0x0: m_mdrq = m_d[dst]; break;                       // putx     Dn   -> MDRQ
+	case 0x1: m_mcrh = m_d[src]; m_mcrl = m_d[dst]; break;    // putchclx Dm->MCRH, Dn->MCRL
+	default:  logerror("MN10300: unimplemented F5 %02X @ %08X\n", op2, start_pc); break;
+	}
+	m_pc = start_pc + 2;
+}
+
+// 0xF6: AM33 DSP ops (mulq/mulqu/sat16/sat24 and the MAC-register get-ops). The
+// interrupt handler uses getx/getchx/getclx to save the DSP accumulator that
+// movm cannot reach. Semantics from the GDB simulator; MAME's disassembler
+// mislabels this whole group as "udf".
+void mn10300_device::execute_f6()
+{
+	const uint32_t start_pc = m_pc - 1;
+	const uint8_t op2 = read_arg8(m_pc);
+	const int dst = op2 & 3, src = (op2 >> 2) & 3;
+	switch (op2 >> 4)
+	{
+	case 0x0: { int64_t t = (int64_t)(int32_t)m_d[dst] * (int32_t)m_d[src];   // mulq
+	            m_d[dst] = uint32_t(t); m_mdrq = uint32_t(uint64_t(t) >> 32);
+	            set_nz32(m_d[dst]); m_psw &= ~(FLAG_CF | FLAG_VF); } break;
+	case 0x1: { uint64_t t = (uint64_t)m_d[dst] * (uint64_t)m_d[src];         // mulqu
+	            m_d[dst] = uint32_t(t); m_mdrq = uint32_t(t >> 32);
+	            set_nz32(m_d[dst]); m_psw &= ~(FLAG_CF | FLAG_VF); } break;
+	case 0x4: { int32_t v = (int32_t)m_d[src];                               // sat16
+	            v = std::clamp(v, -0x8000, 0x7fff); m_d[dst] = uint32_t(v); } break;
+	case 0x5: { int32_t v = (int32_t)m_d[src];                               // sat24
+	            v = std::clamp(v, -0x800000, 0x7fffff); m_d[dst] = uint32_t(v); } break;
+	case 0xC: m_d[dst] = m_mcrh; break;                                      // getchx MCRH -> Dn
+	case 0xD: m_d[dst] = m_mcrl; break;                                      // getclx MCRL -> Dn
+	case 0xF: m_d[dst] = m_mdrq; set_nz32(m_mdrq); m_psw &= ~(FLAG_CF | FLAG_VF); break; // getx MDRQ -> Dn
+	default:  logerror("MN10300: unimplemented F6 %02X @ %08X\n", op2, start_pc); break;
+	}
+	m_pc = start_pc + 2;
 }
 
 
@@ -905,36 +988,40 @@ void mn10300_device::execute_fe()
 //
 // push order = bit 7 -> bit 0 (D2 ends at the highest address); load pops in the
 // exact reverse so SP and the saved values always round-trip.
+// movm regs,(sp) save. Register-per-mask-bit mapping and order are the exact
+// AM33 semantics from the GDB simulator (sim_mn10300.igen, opcode 0xCF):
+// the extended (E-register/DSP) groups are pushed first (highest addresses),
+// then D2/D3/A2/A3, then the {D0,D1,A0,A1,MDR,LIR,LAR}+dummy group last. The
+// dummy 4-byte slot from bit 3 is what an interrupt handler reuses to save the
+// DSP context (getx/getchx/getclx), which is why modelling it exactly matters.
 void mn10300_device::store_regs(uint8_t mask)  // push (regs -> stack, SP down)
 {
+	if (mask & 0x04) { push32(m_e[2]); push32(m_e[3]); }
+	if (mask & 0x02) { push32(m_e[4]); push32(m_e[5]); push32(m_e[6]); push32(m_e[7]); }
+	if (mask & 0x01) { push32(m_e[0]); push32(m_e[1]); m_sp -= 16; } // + MDRQ/MCRH/MCRL/MCVF gap
 	if (mask & 0x80) push32(m_d[2]);
 	if (mask & 0x40) push32(m_d[3]);
 	if (mask & 0x20) push32(m_a[2]);
 	if (mask & 0x10) push32(m_a[3]);
-	// AM33 extended-register groups. The exact register set per bit is
-	// PROVISIONAL (pending the AM33 spec); what matters for correctness here is
-	// that save/restore are symmetric and each group reserves the right frame
-	// slots, so an interrupt handler's writes to those slots don't clobber a3.
-	if (mask & 0x08) { push32(m_e[0]); push32(m_e[1]); push32(m_e[2]); push32(m_e[3]); } // other3
-	if (mask & 0x04) { push32(m_e[4]); push32(m_e[5]); push32(m_e[6]); push32(m_e[7]); } // other2
-	if (mask & 0x02) // {D0,D1,A0,A1,MDR,LIR,LAR}
+	if (mask & 0x08) // {D0,D1,A0,A1,MDR,LIR,LAR} + a 4-byte dummy slot
 	{
 		push32(m_d[0]); push32(m_d[1]); push32(m_a[0]); push32(m_a[1]);
-		push32(m_mdr);  push32(m_lir);  push32(m_lar);
+		push32(m_mdr);  push32(m_lir);  push32(m_lar);  m_sp -= 4;
 	}
-	if (mask & 0x01) logerror("MN10300: movm ext group bit0 (mask %02X) not modelled\n", mask);
 }
 void mn10300_device::load_regs(uint8_t mask)   // pop (stack -> regs, SP up); exact reverse
 {
-	if (mask & 0x02)
+	if (mask & 0x08) // {D0,D1,A0,A1,MDR,LIR,LAR} + dummy (reverse of store)
 	{
+		m_sp += 4;   // skip the dummy slot
 		m_lar = pop32(); m_lir = pop32(); m_mdr = pop32();
 		m_a[1] = pop32(); m_a[0] = pop32(); m_d[1] = pop32(); m_d[0] = pop32();
 	}
-	if (mask & 0x04) { m_e[7] = pop32(); m_e[6] = pop32(); m_e[5] = pop32(); m_e[4] = pop32(); } // other2
-	if (mask & 0x08) { m_e[3] = pop32(); m_e[2] = pop32(); m_e[1] = pop32(); m_e[0] = pop32(); } // other3
 	if (mask & 0x10) m_a[3] = pop32();
 	if (mask & 0x20) m_a[2] = pop32();
 	if (mask & 0x40) m_d[3] = pop32();
 	if (mask & 0x80) m_d[2] = pop32();
+	if (mask & 0x01) { m_sp += 16; m_e[1] = pop32(); m_e[0] = pop32(); } // MDRQ/... gap + E0/E1
+	if (mask & 0x02) { m_e[7] = pop32(); m_e[6] = pop32(); m_e[5] = pop32(); m_e[4] = pop32(); }
+	if (mask & 0x04) { m_e[3] = pop32(); m_e[2] = pop32(); }
 }

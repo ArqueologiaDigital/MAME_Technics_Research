@@ -90,6 +90,10 @@ private:
 	uint32_t m_e[8];  // AM33 extended data registers E0..E7 (saved by movm ext groups)
 	uint32_t m_sp;    // dedicated stack pointer (MN10200 reused A3 as the stack)
 	uint32_t m_mdr;   // multiply/divide register (32-bit on MN10300; 16-bit on MN10200)
+	uint32_t m_mdrq;  // AM33 extended multiply/quotient register (getx/putx)
+	uint32_t m_mcrh;  // AM33 MAC accumulator high (getchx / putchclx / mac)
+	uint32_t m_mcrl;  // AM33 MAC accumulator low  (getclx / putchclx / mac)
+	uint32_t m_mcvf;  // AM33 MAC overflow flag
 	uint16_t m_psw;   // processor status word
 	uint32_t m_lir;   // loop-instruction register (setlb) - modelled for movm completeness
 	uint32_t m_lar;   // loop-address register     (setlb)
@@ -143,6 +147,8 @@ private:
 	void execute_f2();   // 0xF2: logical / mul / div / shift / special-reg moves
 	void execute_f3();   // 0xF3: 32-bit indexed load/store (dI,aM)
 	void execute_f4();   // 0xF4: byte/half indexed load/store (dI,aM)
+	void execute_f5();   // 0xF5: AM33 DSP puts (putx/putchclx) etc.
+	void execute_f6();   // 0xF6: AM33 DSP ops (mulq/getx/getchx/getclx/sat...)
 	void execute_f8();   // 0xF8: imm8  / disp8  forms
 	void execute_fa();   // 0xFA: imm16 / disp16 forms
 	void execute_fc();   // 0xFC: imm32 / disp32 / abs32 forms
