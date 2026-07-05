@@ -84,5 +84,6 @@ fi
 # 6. Focused build (REGENIE picks up the cpu.lua / mame.lst edits).
 echo "==> building (log: $LOG) ..."
 cd "$BUILD_TREE"
-make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp REGENIE=1 -j"$JOBS" 2>&1 | tee "$LOG"
+# USE_QTDEBUG=0: build without the Qt debugger (no Qt 'moc' needed).
+make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE"/kn7000 2>/dev/null || echo "(no binary — check $LOG)"

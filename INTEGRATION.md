@@ -65,11 +65,17 @@ than read from the physical flash).
 ## 5. Build and run
 
 ```
-make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp   # focused build
-./kn7000 kn7000 -debug                                          # step the boot code
+make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp USE_QTDEBUG=0   # focused build
+./kn7000 kn7000                                     # boots the firmware (headless-safe)
+./kn7000 kn7000 -debug                              # step the boot code
+./kn7000 -validate kn7000                           # driver definition check (0 errors)
 ```
 
-Expect the CPU to start fetching at `0x48400000` (`jmp 0x4840FF7E`).
+(`USE_QTDEBUG=0` avoids needing Qt's `moc`. `build.sh` does all of this.) The CPU
+starts fetching at `0x48400000` (`jmp 0x4840FF7E`) and boots into the MILK kernel;
+the boot then reaches the undumped `0x4C000000` ROM (see §6). The driver ships a
+clickable front-panel layout (`src/mame/layout/kn7000.lay`, from
+`tools/gen_layout.py`): all 184 buttons and the board LED strips.
 
 ## 6. Current state of knowledge
 
