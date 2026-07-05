@@ -94,7 +94,10 @@ public:
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
 		, m_cpl_seg(*this, "CPL_SEG%u", 0U)
+		, m_cpc_seg(*this, "CPC_SEG%u", 0U)
+		, m_dial(*this, "DIAL")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
+		, m_cpc_leds(*this, "cpc_led%u", 0U)
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
@@ -108,11 +111,13 @@ private:
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint8_t> m_workram;
 
-	// Control panel: the CPL board's 8 scan-column button ports, and its LEDs.
-	// (CPC/CPR/CPSD to be added; the LED drive path awaits the panel serial HLE
-	// device -- for now these are declared/resolved but not yet written to.)
+	// Control panel button ports and LEDs (CPL = 8 cols, CPC = 5 cols; CPR + the
+	// serial HLE device that reads these / drives the LEDs are still to come).
 	required_ioport_array<8> m_cpl_seg;
+	required_ioport_array<5> m_cpc_seg;
+	required_ioport<uint8_t> m_dial;
 	output_finder<64> m_cpl_leds;
+	output_finder<64> m_cpc_leds;
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
@@ -319,10 +324,71 @@ static INPUT_PORTS_START(kn7000)
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
 
-	// ---- CPC / CPR / CPSD boards: TODO from schematics (pages 130-133) ----
-	// CPC (centre): sound-group buttons, part on/off, mixer.
-	// CPR (right):  the data dial area, tempo, and the numeric/entry keys.
-	// CPSD:         the fourth (slider/display) group.
+	// ---- CPC P.C.B. (SCHEMATIC DIAGRAM-16, page 130): the part mixer -----
+	// Sub-CPU scans columns SEG5,SEG8,SEG9,SEG10,SEG11 x SW0..SW7. The board is
+	// dominated by the 16 part MUTE UP/DOWN pairs plus display controls.
+	PORT_START("CPC_SEG0")   // schematic SEG5
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("OTHER PARTS/TG")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("HELP")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST UP")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST DOWN")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 1")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 1")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 2")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 2")
+
+	PORT_START("CPC_SEG1")   // schematic SEG8
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 3")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 3")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 4")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 4")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 5")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 6")
+
+	PORT_START("CPC_SEG2")   // schematic SEG9
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 7")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 7")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 8")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 8")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 9")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 9")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 10")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 10")
+
+	PORT_START("CPC_SEG3")   // schematic SEG10
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 11")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 11")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 12")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 12")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 13")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 13")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 14")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 14")
+
+	PORT_START("CPC_SEG4")   // schematic SEG11
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 15")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 15")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE UP 16")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUTE DOWN 16")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE UP")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE DOWN")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("DISPLAY HOLD")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("EXIT")
+
+	// ---- ROT P.C.B.: the data dial (rotary encoder SW1101, feeds CPR) ----
+	PORT_START("DIAL")
+	PORT_BIT(0xff, 0x00, IPT_DIAL) PORT_SENSITIVITY(30) PORT_KEYDELTA(1) PORT_NAME("DATA DIAL")
+
+	// ---- CPR P.C.B. (SCHEMATIC DIAGRAM-17, page 132): TODO -----------------
+	// Master panel sub-CPU IC1001 (C0BDB000023): the main CPU's serial link
+	// attaches here (SIM/SOUT/CLK/CNTR1) and CPR chains to CPL. Dense 10-column
+	// matrix (SEG0..SEG9 x SW0..SW7): the SOUND GROUP 1-8 + sound families
+	// (PIANO/GUITAR/BRASS/STRINGS & VOCAL/BASS/SYNTH/ORGAN & ACCORDION/DRUM KITS/
+	// WORLD/PAD/MALLET & ORCH PERC/TAB ORGAN/DIGITAL DRAWBAR), PART SELECT
+	// LEFT/RIGHT 1-2, CONDUCTOR, TRANSPOSE, LCDR 1-5 soft-keys, disk/SD, MEMORY,
+	// FAVORITES, VARIATION, REVERB/CHORUS/SUSTAIN/effects. To be transcribed.
 INPUT_PORTS_END
 
 
@@ -337,6 +403,7 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 void kn7000_state::machine_start()
 {
 	m_cpl_leds.resolve();
+	m_cpc_leds.resolve();
 }
 
 void kn7000_state::machine_reset()
