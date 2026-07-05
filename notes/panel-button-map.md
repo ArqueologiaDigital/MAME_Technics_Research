@@ -534,3 +534,34 @@ home screen, snapshot the RHYTHM title, and record arg->genre. Confirm the
 (arg+7) rule across ≥3 distinct genres, then apply names to SEG01/SEG02 (ports +
 .lay text). The arg per (seg,bit): SEG01 b0..b7 = 0F 07 0E 06 0D 05 0C 04;
 SEG02 b0..b7 = 0B 03 0A 02 09 01 08 00.
+
+## User-verified button->function calibration (2026-07-06)
+
+The user pressed buttons in the running emulator (which show the OLD folklore
+.lay labels) and reported the actual on-screen function. Correlating each press's
+SEG.bit to its firmware descriptor event gives GROUND-TRUTH event->function
+anchors -- the first real calibration of the CPC/CPR (sound-group) area:
+
+| folklore label | SEG.bit | descriptor event/arg | ACTUAL function |
+|---|---|---|---|
+| CONTRAST UP   | SEG0C.2 | 0x702040 arg01 | MALLET & ORCH PERC |
+| HELP          | SEG0C.1 | 0x702010 arg00 | GUITAR |
+| MUTE DOWN 3   | SEG0D.1 | 0x702009 arg00 | ORGAN & ACCORDION |
+| MUTE DOWN 7   | SEG0E.1 | 0x702009 arg01 | SYNTH |
+| MUTE UP 5     | SEG0D.4 | 0x702004 arg03 | ORGAN TABS |
+| BASS          | SEG11.5 | 0x702001 arg11 | BRASS |
+| SOUND GROUP 2 | SEG09.6 | 0x702001 arg09 | DEMONSTRATION |
+
+Key lesson: the sound-group / function names are NOT one flat event family --
+they are spread across SEVERAL event codes (0x702001, 0x702004, 0x702009,
+0x702010, 0x702040), each arg-indexed to a specific target. This matches the
+gui-toolkit-event-system.md finding that button function identity is a
+widget-level detail, not a single lookup table. So full auto-generalization from
+the descriptors alone is not possible; each event family needs its own arg->name
+table (in its handler) reversed, OR more user press->screen observations to
+anchor them empirically.
+
+These 7 are now correctly labelled in both the driver PORT_NAMEs and the .lay
+artwork (commit below). To iteratively unlock more: press a mislabelled button,
+note the screen, and add the (SEG.bit -> function) row here; the descriptor event
+is then known and its whole arg family can often be inferred.

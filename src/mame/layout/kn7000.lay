@@ -353,12 +353,12 @@
 	<element name="btn_SEG0C_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="HELP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="GUITAR"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG0C_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CONTRAST UP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="MALLET &amp; ORCH PERC"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG0C_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
@@ -393,7 +393,7 @@
 	<element name="btn_SEG0D_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="MUTE DOWN 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="ORGAN &amp; ACCORDION"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG0D_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
@@ -408,7 +408,7 @@
 	<element name="btn_SEG0D_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="MUTE UP 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="ORGAN TABS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG0D_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
@@ -433,7 +433,7 @@
 	<element name="btn_SEG0E_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="MUTE DOWN 7"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SYNTH"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG0E_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
@@ -573,7 +573,7 @@
 	<element name="btn_SEG11_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="BASS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="BRASS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG11_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
@@ -818,7 +818,7 @@
 	<element name="btn_SEG09_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="SOUND GROUP 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="DEMONSTRATION"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 	<element name="btn_SEG09_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
