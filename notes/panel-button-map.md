@@ -451,3 +451,40 @@ normSeg 1D -> 48614960
     bit0 maskFF: ev=00701020 arg=00 typ=2 gate=96
 ```
 
+
+## Driver-wiring audit vs the authoritative map (2026-07-05)
+
+Cross-checking the current kn7000.cpp panel_scan wiring against bank A:
+
+- **CPL_SEG0-7 -> normSeg 0x00-0x07: CORRECT.** START/STOP (00.b4), the 16
+  rhythm-style groups (0x702005 args 0-F across segs 01/02), variation/arranger
+  (03/04), pads (05), fade/tempo (06), and the seg-07 function keys all land on
+  their real events. Keep as-is.
+
+- **CPC_SEG0-4 -> normSeg 0x0C-0x10: MIS-ASSIGNED.** These normSegs are the
+  SOUND-GROUP / right-panel function events (0x702010 sound groups, 0x702004,
+  0x702081, 0x702008...). The driver labels them OTHER PARTS/TG, HELP, CONTRAST,
+  MUTE UP/DOWN -- wrong. (Empirically, pressing "HELP" = CPC_SEG0.b1 opened the
+  GUITAR sound page = 0x702010 arg0, confirming the mismatch.)
+
+- **CPR_SEG5-8 -> normSeg 0x08-0x0B: MIS-ASSIGNED.** These are the 16 mixer
+  MUTES: paired events 0x702001 (up) / 0x702000 (down), arg = part 0x02-0x18,
+  8 buttons/seg x 4 segs = 32 = MUTE UP/DOWN 1-16. The driver labels them LCD
+  Right / TRANSPOSE / CHORUS -- wrong. CPR_SEG9 (bank11 sub0xC) normalizes to
+  0xFF (invalid) and should not exist.
+
+CONCLUSION: the physical-board->wireADDR guess is right for CPL but wrong for
+CPC/CPR. Because the firmware only cares about normSeg, the robust fix is to
+STOP guessing physical boards and instead define the input ports BY normSeg
+(0x00-0x15 momentary + 0x16-0x20 continuous), naming each bit from its event
+code here, and have panel_scan emit the reverse-normalized wireADDR for each
+normSeg (bank11 subs 0-0xB -> segs 00-0B; bank00 subs 0-9 -> segs 0C-15). The
+artwork can group the named fields by real board cosmetically. This makes every
+button functionally correct by construction. (Next tick: the mechanical rewrite,
+verified by re-pressing START/STOP + a mute + a sound group.)
+
+### Reverse normalization (normSeg -> wire ADDR to emit)
+normSeg 0x00-0x0B: bank11 (ADDR = 0xC0 | (seg<=7? seg : 0x08|(seg-8... )));
+  precisely: sub = seg for seg 0-0xB; ADDR = 0xC0 | (sub&7) | (sub&8?0x08:0).
+normSeg 0x0C-0x15: bank00, sub = seg-0x0C; ADDR = (sub&7) | (sub&8?0x08:0).
+(type-1 encoding bit3 auto-applies for sub>=8, matching the wire rule.)
