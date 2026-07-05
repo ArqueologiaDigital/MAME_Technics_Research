@@ -110,3 +110,17 @@ voice traffic. The blocker stands: the sound engine needs either a modeled TG
 that reports ready, or a reliably-triggerable playback action (which is limited
 by the button-label uncertainty -- see gui-toolkit-event-system.md on why button
 function names are widget-level, not a flat table). Sound remains parked.
+
+## Driver now models the interface (tick yy+1)
+
+The MAME driver now implements the register-indirect write interface (io_w):
+address latch at base+0, data at base+2 -> a captured per-TG voice-register file
+`m_tg_reg[2][0x1000]` (group<<8|bank<<6|channel < 0x1000); the 0xFC0x system
+group and the 0x98040004/0x98040010 control writes are accepted without storing.
+This is behavior-neutral (the TG is write-only -- verified: every firmware ref to
+0x98040000/2/4/10 and 0x98050000/2 is a write; boot still reaches the home
+screen) and replaces the log-everything fallback. It is the state-capture
+foundation; a `sound_stream` synthesis stage (reading this register file + the
+waveform ROMs, which may be undumped) is the remaining work, gated behind getting
+the firmware's playback engine to actually emit voices (see the null-playback
+tests above).
