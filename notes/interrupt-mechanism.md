@@ -307,3 +307,32 @@ with the expected content/device, or make the panel handshake respond (the panel
 HLE + delivering panel RX via intc_assert). Only then does the boot enable
 interrupts and start the scheduler. (Everything up to here -- CPU incl. AM33 DSP
 ops, retf, movm, level-triggered interrupts -- is correct and committed.)
+
+## UPDATE (2026-07-05, cont.2): INTERRUPTS NOW FIRE; call/ret SP-convention is next
+
+Two coupled fixes (commit f2b6201) got the boot through the power-on self-test and
+into live interrupts:
+1. **0xCD (call disp16) now caches MDR** (return address), same as 0xDD already did
+   and as the GDB sim does for both. The self-test caller uses 0xCD to invoke the
+   RAM/checksum/panel subroutines, which return via `retf` (PC<-MDR). Without the
+   cache, retf used a stale MDR and returned *into the call instruction* -> the
+   self-test looped forever and IE was never set.
+2. **retf (0xDE) rewritten to unwind like `ret`** (this core's call/ret use
+   push/pop, frame = [return][regs][locals]); the previous version used the sim's
+   absolute-offset layout, which does not match this core's push-based call.
+
+With these, the self-test passes, PSW.IE is set, the timer IRQ fires, and the
+library dispatcher runs the real tick ISR at 0x4C02BB05. **First live interrupts.**
+
+### The remaining blocker: call/ret/calls/retf stack convention
+The tick ISR is entered via `calls` (simple call, pushes only PC) and returns via
+`ret [d2],0x14` (register-restoring). It reads a return PC of 0 and runs away,
+because this core moves SP by (4 + regs_bytes + imm8) on call and the inverse on
+ret, whereas the **hardware/sim move SP by imm8 ONLY**: `call` stores next_pc at
+[SP] (no predecrement), writes the saved regs *below* without touching SP, then
+`SP -= IMM8`; `ret`/`retf` do `SP += IMM8` and read PC at [SP] with regs at fixed
+negative offsets. This is invisible for matched call/ret pairs (they cancel) but
+corrupts `calls`<->`ret` and `retf` frames. FIX NEXT: reimplement call (0xCD/0xDD),
+calls (F0/FA/FC forms), ret (0xDF) and retf (0xDE) to the imm8-total convention
+(ref: sim_mn10300.igen call/ret/retf; IMM8 = 4(PC) + regs_bytes + locals). movm's
+own store_regs/load_regs stay push/pop (movm really does push/pop).
