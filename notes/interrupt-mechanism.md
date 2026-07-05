@@ -250,3 +250,36 @@ Findings that pin the implementation:
    `opcodes/mn10300-opc.c`, the sim `sim/mn10300/am33.igen`, GCC am33, or the AM33
    manual) — research is in flight. The `store_regs` group sizes are the first
    concrete thing to get from that source.
+
+## RESOLVED (2026-07-05): the "udf" ops are AM33 DSP instructions
+
+Two research agents + the user's local binutils-gdb clone (~/compartilhado/KN7000/
+binutils-gdb) settled it. MAME's disassembler mislabels the whole F5/F6 group as
+"udf". They are the AM33 DSP MAC-register ops (semantics from the GDB simulator
+sim/mn10300/{mn10300,am33}.igen, cross-checked to the Panasonic manual):
+- F6: mulq/mulqu (32x32->64, hi->MDRQ), sat16/sat24, getchx/getclx/getx (read
+  MCRH/MCRL/MDRQ). F5: putx (MDRQ<-Dn), putchclx (MCRH/MCRL<-Dm/Dn).
+- The interrupt handler saves the DSP accumulator {MDRQ,MCRH,MCRL} around the ISR
+  via these ops (movm can't reach them). Added those registers to the core.
+Also fixed alongside:
+- **retf (0xDE)** was wrongly approximated as ret. It returns via the MDR-cached
+  address (set by the paired `call`, which now caches it) and restores regs from
+  below SP. Implemented per the sim.
+- **movm groups** corrected to the exact sim layout (bit3 = {D0,D1,A0,A1,MDR,LIR,
+  LAR}+dummy; bits0-2 = E-regs). MAME's disassembler group labels were wrong.
+- **interrupt check made level-triggered** (was edge-only, so it missed the
+  pending line if IE was set afterwards).
+
+RESULT: the boot now runs STABLY with the tick timer enabled (was crashing into
+low memory). Commits 99ee133 (DSP+retf+movm), e1730a0 (level-trigger).
+
+### Remaining blocker (next)
+The tick still doesn't fire because **PSW.IE is never set**: with the corrected
+DSP/retf execution the boot now stays in the app-flash **panel-handshake init**
+(~0x484A4Fxx, toggling panel GPIO 0x36008004) and never reaches the interrupt-
+enable / scheduler start. Investigate whether that handshake needs the panel
+sub-CPU to respond (the panel RX is queued but not delivered -- sio_rx_push does
+not call intc_assert), or whether an unimplemented op/flow diverts it. Per the
+video-path agent, the faithful task-switching vector is 0x4C03DE26 (not the
+non-switching 0x4C03DDA0 currently used) with a 2-level INTC (0x34000200 +
+per-group bitmask) -- likely needed once the tick fires.
