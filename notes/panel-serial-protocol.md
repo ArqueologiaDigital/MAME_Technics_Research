@@ -553,3 +553,25 @@ NEXT SESSION, IN ORDER:
    real call graph. Tree reverted to last-good (caea343 lineage) again; the
    latch code is in this note + memory for reuse (core: standard_irq_callback in
    take_irq; driver: IRQ_CALLBACK_MEMBER irq_ack latching group+vector).
+
+## Handshake bring-up part 5 (2026-07-05, commit b64fd47)
+
+Committed three measurement-backed mechanisms: (1) IAGR latch-on-accept with
+atomic vector selection (the earlier "regression" was a sampling artifact -- the
+accept-log cap was eaten by timer ticks); (2) per-data-write transfer completion
+(bit15 is only the polled path's start/busy; the armed/pending model advanced
+one state per RETRY); (3) unserviced-completion re-delivery (the deferred
+completion was measured being w1c-wiped by the ISR exit ack 0x0101@0x484AC736).
+
+Wire format refined: state-3 transmits a 0x00 SYNC (0x484AC976) -- syncs
+interleave with payloads: [00][00][P1][00][P2]... The 0x11 ISR dispatch is
+unconditional. The kick only queues [cmd,arg] in the TX ring.
+
+STILL INCOMPLETE: attempt #1 dies (a state-2-exit ret 0,0xc pops 0 -> JLOW)
+and post-crash interrupt noise (accepts at state=02 with no TX) makes whole-run
+censuses misleading. NEXT SESSION: single-attempt forensics -- capture ONLY
+attempt #1: the first ~6 state dispatches (which handler, SP, [SP] at entry,
+and the ret target at exit), stopping at the crash. Suspect: the ISR/dispatcher
+frame around `calls (a0)` at 0x484AC720 vs the handler's `ret 0,0xc` -- verify
+the popped word is the calls-pushed return (0x484AC722) on EVERY dispatch, and
+find the dispatch where it is 0 instead (whose SP, whose stack).
