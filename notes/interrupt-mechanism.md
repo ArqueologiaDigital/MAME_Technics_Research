@@ -400,3 +400,40 @@ Scheduler ticks but the 640x240 framebuffer at 0x500D4080 stays zero -> the
 display/repaint task has not drawn. Investigate whether the display task is
 scheduled yet, waits on a device (panel/LCD init), or draws elsewhere. This is the
 last hop to pixels on the emulated LCD.
+
+## UPDATE (2026-07-05, cont.5): boot advances past init; interrupt-frame bug next
+
+Two driver fixes let the boot run much further after the scheduler tick went live:
+- **0x98050004 returns 0xFFFF** (commit): a read data-stream/FIFO port; the boot
+  reads it until 0xFFFF (empty). Returning 0 spun forever treating 0 as data.
+- **0x84000000 aliased to 0x44000000 RAM** (commit ea5219c): boot init copies a
+  43KB blob to 0x50180000 then 24-byte records to 0x84030FF8..; 0x84 is the
+  +0x40000000 window of 0x44 (same trick as the library 0x4c/0x8c). It was
+  unmapped so the record writes were dropped.
+
+With both, the byte-memcpy at library 0x4C003040 completes and the boot advances
+into new init code, THEN hits a new blocker ~14 s in (jiffy freezes at ~0x3677):
+
+### NEXT BLOCKER: interrupt return pops a corrupted PC
+`rti` at library **0x4C03DF13** pops PC = 0x48400058 (blank flash, 0xFF = the
+`break` opcode) and runs away. The handler EXIT is:
+```
+4c03df00 or d2,d3 ; 4c03df02 mov d3,psw            ; restore PSW
+4c03df04 mov (4,sp),d3 ; 4c03df06 mov (8,sp),d2 ; 4c03df08 udf21 d3,d2   ; MCRH/MCRL <-
+4c03df0a mov (0xc,sp),d3 ; 4c03df0c udf20 d3,d3                          ; MDRQ <-
+4c03df0e add 0xc,sp
+4c03df11 movm (sp),[d2,d3,a2,a3,other3]            ; pop regs (bit3 group incl. dummy)
+4c03df13 rti                                       ; pop PSW+PC
+```
+take_irq pushes PC then PSW (PSW@SP, PC@SP+4) and rti pops them (8-byte frame) --
+that pair is confirmed correct and worked for ~14k ticks. So the corruption is in
+the ENTRY-vs-EXIT symmetry once the interrupted code is using the AM33 MAC regs:
+the handler saves the DSP accumulator (getx/getchx/getclx = F6) + movm on entry and
+restores it (udf20/udf21 = F5 putx/putchclx) + movm on exit; if the saved word
+count or a movm mask differs by a word, SP is off at rti and PC is read from the
+wrong slot. AUDIT NEXT: disassemble the interrupt ENTRY at the vector 0x4C03DDA0
+(and the group-06 tick path) and compare its DSP-save + movm-save byte count to
+this exit; verify F5/F6 getx/putx/getchx/getclx and the movm bit0/bit3 (E-regs +
+16-byte MDRQ/MCRH/MCRL/MCVF gap, and the bit3 dummy word) round-trip exactly.
+0xFF (`break`) itself is just where the runaway lands (blank flash); implementing
+it as a trap would only mask the real bug.
