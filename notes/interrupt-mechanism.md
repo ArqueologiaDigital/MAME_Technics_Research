@@ -437,3 +437,35 @@ this exit; verify F5/F6 getx/putx/getchx/getclx and the movm bit0/bit3 (E-regs +
 16-byte MDRQ/MCRH/MCRL/MCVF gap, and the bit3 dummy word) round-trip exactly.
 0xFF (`break`) itself is just where the runaway lands (blank flash); implementing
 it as a trap would only mask the real bug.
+
+## UPDATE (2026-07-05, cont.6): the ~14s stall is a TASK SWITCH resuming a bad task
+
+Ran the corruption down empirically. Findings:
+- take_irq NEVER pushes a blank PC (interrupted PCs are always valid). And the
+  boot legitimately runs subroutines in low program flash (e.g. 0x48404E84,
+  0x48405D5E ARE valid code) -- not a runaway there.
+- The runaway PC 0x48400058 (blank flash) comes from an `rti` at library
+  0x4C03DF13 that reads a stale/foreign frame. No write_mem32 writes 0x48400058
+  to the stack, and take_irq didn't push it -> the frame `rti` reads is NOT the
+  one this interrupt pushed.
+- Fixed a real bug found en route: getx (F6 FF) was modifying flags; it must not
+  (commit 8b2bfb9) -- but that alone doesn't clear the stall.
+
+STRUCTURE (the key): there are TWO interrupt paths in the library:
+- **0x4C03DDA0** = the plain context-save/restore path (my set_irq_vector target);
+  saves [d2,d3,a2,a3,other3]+DSP, reads IAGR (0x34000100/104) + handler tables
+  (0x50380A6C/0x50380B64), dispatches the ISR, restores, `rti` (~0x4C03DE24).
+- **0x4C03DE26** = the TASK-SWITCH path: it `movm`-saves the current context then
+  loads a DIFFERENT stack and restores a DIFFERENT task's context (DSP via
+  udf20/udf21) and `rti` at 0x4C03DF13.
+The tick ISR (dispatched by 0x4C03DDA0) decides a task switch and transfers to
+0x4C03DE26, which switches SP (~+0x320 seen: entry sp 0x503910C4 -> rti sp
+0x503913E4) and resumes a task whose SAVED PC is 0x48400058 -> runaway.
+
+So the bug is in the TASK CONTEXT: a task's saved PC is 0x48400058 (blank). Either
+a task was created with a bad entry, or its context was saved wrong when it was
+suspended (the 0x4C03DE26 save side, or an earlier suspend). NEXT: instrument the
+0x4C03DE26 switch -- log the NEW sp it loads and the TCB/queue it reads (near
+0x50380xxx), then trace back how the task at that sp got PC=0x48400058. The 24-byte
+record arrays copied to 0x84030FF8.. (now landing via the 0x84 alias) may be the
+TCB/task table -- check whether an entry-point field there is being read wrong.
