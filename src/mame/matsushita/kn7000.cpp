@@ -201,6 +201,7 @@ private:
 	int  intc_pending_group() const;
 	uint16_t m_gxicr[0x20] = { };
 	uint16_t m_intc_280 = 0;                   // 0x34000280 latched control fields
+	uint16_t m_snd_500e = 0;                   // 0x9805000E readback latch (sound init spins on it)
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 
@@ -233,8 +234,10 @@ private:
 	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
 	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
 	bool    m_panel_tx_armed = false;      // cfg bit15 set; completes on the data write
+	bool    m_panel_tx_pending = false;    // data byte written; completes on the bit15 write
 	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
 	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
+	emu_timer *m_panel_txdone = nullptr;   // one-shot: sync-transfer complete -> group 0x11
 	emu_timer *m_panel_timer = nullptr;
 	uint8_t m_panel_tx_addr = 0;
 	bool    m_panel_tx_have_addr = false;
@@ -324,6 +327,11 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// 0x34000000 bank; this more-specific mapping overrides the logger above.
 	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
 	map(0x36008000, 0x360080ff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	// GPIO input port 0x36008084: bit 0 = panel-link ready/presence line, held
+	// HIGH by the panel sub-CPUs. The TX state machine's state-1 handler tests it
+	// (btst 0x01 at 0x484AC80C) and ABORTS the whole transaction back to state 0
+	// if clear -- with a 0 stub no handshake command could ever be transmitted.
+	map(0x36008084, 0x36008085).lr16(NAME([]() -> uint16_t { return 0x0001; }));
 	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
@@ -354,6 +362,11 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// (loop at program-flash 0x484480A2: movhu (0x98050004); cmp 0xffff; beq exit).
 	if (offset == 0x28002)
 		return 0xFFFF;
+	// 0x9805000E (offset 0x28007): sound-interface register; the init loop at
+	// 0x4854BC59 writes a value (d1|0x80) and spins until it READS BACK what it
+	// wrote (setlb/lne with a 2-tick timeout) -- a readback latch unblocks it.
+	if (offset == 0x28007)
+		return m_snd_500e;
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
@@ -362,6 +375,11 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 
 void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
+	if (offset == 0x28007)                        // 0x9805000E readback latch
+	{
+		COMBINE_DATA(&m_snd_500e);
+		return;
+	}
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
 		offset << 1, data, mem_mask);
 }
@@ -533,6 +551,15 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x8000))
 		{
 			m_sio_config[ch] &= 0x7fff;
+			// Both write orders occur: the sync sender arms (bit15) THEN writes
+			// data (0x484AC5E2/E9); the state-2 payload path writes data THEN
+			// sets bit15 (0x484AC8D3..). Complete on whichever comes second.
+			if (m_panel_tx_pending)
+			{
+				m_panel_tx_pending = false;
+				m_panel_txdone->adjust(attotime::from_usec(40), 3);
+			}
+			else
 			// Sync-transfer completion raises group 0x11 (ICR 0x34000144): its ISR
 			// (0x484AC70E, dispatch slot 0xA) is the protocol state machine -- a
 			// jump table at 0x48613034 indexed by the state byte 0x5006BDA0,
@@ -603,9 +630,14 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		// A data write triggers the armed sync transfer; completion -> group 0x11.
 		if (m_panel_tx_armed)
 		{
+			// DEFERRED: this TX write often runs inside the group-0x11 ISR itself
+			// (the state machine transmits the next byte from ISR context and acks
+			// its GxICR on exit, which would w1c-wipe a synchronous assert).
 			m_panel_tx_armed = false;
-			intc_assert(0x11);
+			m_panel_txdone->adjust(attotime::from_usec(40), 3);
 		}
+		else
+			m_panel_tx_pending = true;     // data first; the bit15 write completes it
 		// LED/command stream to the panel sub-CPUs: 2-byte [ADDR][DATA] frames.
 		if (!m_panel_tx_have_addr)
 		{
@@ -668,6 +700,8 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 {
 	if (param == 1)
 		intc_assert(0x1a);
+	else if (param == 3)
+		intc_assert(0x11);                 // sync-transfer complete
 	else if (param == 2 && m_panel_resp_pos < m_panel_resp_len)
 	{
 		sio_rx_push(SIO_PANEL, m_panel_resp[m_panel_resp_pos++]);
@@ -1023,6 +1057,7 @@ void kn7000_state::machine_start()
 	// continuously and report changes over the serial link).
 	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
 	m_panel_evt = timer_alloc(FUNC(kn7000_state::panel_event), this);
+	m_panel_txdone = timer_alloc(FUNC(kn7000_state::panel_event), this);
 
 	// The AM33 maskable interrupt vectors to the library-ROM low-level handler
 	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer
