@@ -575,3 +575,31 @@ and the ret target at exit), stopping at the crash. Suspect: the ISR/dispatcher
 frame around `calls (a0)` at 0x484AC720 vs the handler's `ret 0,0xc` -- verify
 the popped word is the calls-pushed return (0x484AC722) on EVERY dispatch, and
 find the dispatch where it is 0 instead (whose SP, whose stack).
+
+## Handshake bring-up part 6 (2026-07-05, commit 3420a6f): THE TX SIDE IS DONE
+
+**PSW.IM priority masking was the missing CPU feature.** check_irq now accepts a
+pending interrupt only when its level < IM (take_irq sets IM=level; rti restores).
+Without it, any handler that re-enabled IE mid-body (state-2 does, inside its
+GxICR[0x1A]-ack bracket) instantly re-accepted its own still-pending level-0
+interrupt: single-attempt forensics showed state-2 re-dispatched nested ~570
+deep (0x5C/frame) until SP left the task stack, crossed into the dispatch
+tables, and a ret popped 0. (The firmware runs at IM=7; a level-6 tick in
+service still lets levels 0-5 nest -- the intended design.)
+
+RESULT: states 1..6 dispatch/return cleanly at constant SP and the full framed
+init sequence transmits with interleaved syncs:
+  [00 00 1F 00 DA 00 00] [00 00 1F 00 1A 00 00] [00 00 1D 00 02 00 00] ...
+TX PCs per frame position: sender sync 0x484AC5E9; state-1 sync 0x484AC7FA;
+state-2 payload1 0x484AC8D3; state-3 sync 0x484AC977; state-4 payload2
+0x484AC9FF; state-5 sync 0x484ACA96; state-6 sync 0x484ACAEA. 7 bytes/frame.
+
+REMAINING (the reply side): the HLE's command detection still uses naive
+[ADDR][DATA] pairing, which misparses the interleaved frame ((1F,00) instead of
+1F DA at positions 2/4). FIX NEXT: count frame position (reset on the long gap /
+frame 7-byte boundary), extract P1/P2 at positions 2/4; on frame completion
+(position 6), if P1 is a handshake command (0x1F/0x1D/0x1E/0x20/0xE0/0x29/0xDD)
+queue the TYPE-3 reply and fire the ATN pulse (edge 1 timer; edge 2 on the EXTMD
+11b->10b flip -- both already implemented). Then the 0x1A ISR pass-2 sets
+state:=8 and the group-0x10 per-byte deliveries fill the RX ring -> head moves
+-> result nibble 9 -> handshake SUCCESS -> normal UI.
