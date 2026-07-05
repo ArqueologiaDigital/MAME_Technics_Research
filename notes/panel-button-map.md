@@ -565,3 +565,35 @@ These 7 are now correctly labelled in both the driver PORT_NAMEs and the .lay
 artwork (commit below). To iteratively unlock more: press a mislabelled button,
 note the screen, and add the (SEG.bit -> function) row here; the descriptor event
 is then known and its whole arg family can often be inferred.
+
+### Correction: the by-function relabel was reverted (introduced noise)
+
+Relabelling those 7 buttons *by the function they trigger* (commit f75bf78) was
+wrong for the LAYOUT: it created duplicate labels (GUITAR/BRASS/SYNTH/MALLET &
+ORCH PERC/ORGAN & ACCORDION each appeared twice) and drew sound-group names in
+the CPC-board region where they don't physically sit. Reverted (commit a1b5331);
+the run-copy no longer has the duplicates.
+
+Two distinct coordinate systems must be kept straight:
+
+1. **Functional input mapping** (which SEG.bit triggers which firmware event).
+   This is FIRMWARE-CORRECT in the driver: panel_scan emits each SEGnn's
+   reverse-normalized wire address, the firmware normalizes it, and the
+   descriptor gives the event. Verified by the buttons working AND by the user's
+   7 press->screen observations (the table above). This layer is sound.
+
+2. **Physical panel matrix / .lay artwork** (which button, with which
+   silk-screen label, sits at which board + physical SEG column + SW row, and
+   where it is drawn). The current .lay is KN5000-derived FOLKLORE -- wrong
+   labels and positions throughout the CPC/CPR area -- with bindings
+   behaviour-preservingly remapped onto the SEGnn ports. It does NOT match the
+   SX-KN7000 service manual and must be REBUILT from it, not patched by function.
+
+The authoritative source for (2) is the service-manual panel schematics
+(SCHEMATIC DIAGRAM-15..18: CPL p128, CPC p130, CPR p132/133): each board's switch
+matrix (SEG0..9 columns x SW rows, e.g. CPR SW1001,1009,... step 8) with the
+silk-screen labels drawn beside the switches in the schematic image. A correct
+.lay rebuild needs: physical (board, SEG, SW, label) from those pages, mapped
+through physical->wire->normSeg to the SEGnn ports, so drawn position + label +
+binding are all consistent. The user's press anchors are ground truth for the
+functional side and will validate the rebuild. This is a careful, separate task.
