@@ -143,6 +143,8 @@ public:
 		, m_maincpu(*this, "maincpu")
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
+		, m_vram(*this, "vram")
+		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_cpl_seg(*this, "CPL_SEG%u", 0U)
 		, m_cpc_seg(*this, "CPC_SEG%u", 0U)
@@ -163,6 +165,8 @@ private:
 	required_device<mn10300_device> m_maincpu;
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint32_t> m_workram;
+	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
+	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 
 	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
@@ -246,7 +250,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// placeholders so bring-up can proceed past them.
 	// TODO: identify the real devices (LCD V-RAM = IC104?).
 	map(0x8c000000, 0x8cffffff).ram();
-	map(0x90000000, 0x97ffffff).ram();
+	map(0x90000000, 0x97ffffff).ram().share("vram");
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
@@ -730,8 +734,30 @@ INPUT_PORTS_END
 
 uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	// TODO: Real LCD controller (V-RAM at IC104) is not emulated yet.
-	bitmap.fill(rgb_t::black(), cliprect);
+	// PROVISIONAL LCD readout. The 0x90000000 window is treated as an 8bpp
+	// palette-indexed framebuffer (320x240) resolved through the 256-entry CLUT
+	// held in the program flash at file offset 0x32573C (each entry 0x00BBGGRR,
+	// BGR order -- see the display-subsystem doc). Geometry, colour depth and the
+	// exact framebuffer base within the window are NOT yet confirmed; this exists
+	// so that whatever the firmware composes there becomes visible for study.
+	// TODO: confirm format/base from the boot trace; handle the 2-bit gray panel.
+	constexpr int WIDTH = 320, HEIGHT = 240;
+	constexpr offs_t CLUT = 0x32573C / 4;   // 32-bit-word index of the CLUT in the flash
+	auto pal = [&](uint8_t idx) -> rgb_t
+	{
+		const uint32_t v = m_progrom[CLUT + idx];   // 0x00BBGGRR
+		return rgb_t(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);   // R,G,B
+	};
+	auto fb = [&](offs_t off) -> uint8_t
+	{
+		return (m_vram[off >> 2] >> (8 * (off & 3))) & 0xff;   // little-endian byte
+	};
+	for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
+	{
+		uint32_t *const dst = &bitmap.pix(y);
+		for (int x = cliprect.left(); x <= cliprect.right(); x++)
+			dst[x] = (x < WIDTH && y < HEIGHT) ? uint32_t(pal(fb(y * WIDTH + x))) : 0;
+	}
 	return 0;
 }
 
@@ -785,8 +811,10 @@ void kn7000_state::kn7000(machine_config &config)
 	SCREEN(config, m_screen, SCREEN_TYPE_LCD);
 	m_screen->set_refresh_hz(60);
 	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
-	m_screen->set_size(640, 240);
-	m_screen->set_visarea(0, 640 - 1, 0, 240 - 1);
+	// Provisional geometry: 320x240 like the KN5000 LCD (the KN7000 panel is
+	// reported as 320x240 or 640x240 -- to be confirmed from the boot trace).
+	m_screen->set_size(320, 240);
+	m_screen->set_visarea(0, 320 - 1, 0, 240 - 1);
 	m_screen->set_screen_update(FUNC(kn7000_state::screen_update));
 
 	// Clickable front-panel artwork: buttons bound to the ioports, LEDs bound to
