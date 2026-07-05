@@ -93,6 +93,8 @@ public:
 		, m_maincpu(*this, "maincpu")
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
+		, m_cpl_seg(*this, "CPL_SEG%u", 0U)
+		, m_cpl_leds(*this, "cpl_led%u", 0U)
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
@@ -105,6 +107,12 @@ private:
 	required_device<mn10300_device> m_maincpu;
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint8_t> m_workram;
+
+	// Control panel: the CPL board's 8 scan-column button ports, and its LEDs.
+	// (CPC/CPR/CPSD to be added; the LED drive path awaits the panel serial HLE
+	// device -- for now these are declared/resolved but not yet written to.)
+	required_ioport_array<8> m_cpl_seg;
+	output_finder<64> m_cpl_leds;
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
@@ -199,11 +207,114 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 }
 
 
+// --- Control-panel buttons and LEDs -----------------------------------------
+// Like the KN5000, the KN7000 front panel is driven by dedicated panel sub-CPUs
+// -- one per panel PCB -- that scan the button matrices and drive the LEDs, and
+// talk to the main MN10300 over a synchronous serial link. Confirmed from the
+// service manual schematics (SX-KN7000, SCHEMATIC DIAGRAM-15..18):
+//
+//   * CPL P.C.B. (page 128, "CPL CIRCUIT"): sub-CPU IC1101 = C0BDB646823
+//     (8-bit microcomputer, xtal X1101). Scans an 8x8 switch matrix
+//     (strobes SW0..SW7 x columns SEG0..SEG7) and drives an LED matrix through
+//     IC1102 (HD74LS138 3-to-8 decoder) + transistor rows + buffers IC1103.
+//     Serial link pins: SIN, SOUT, CLK, RST, CNTR1 -> to the CPR board / main.
+//   * CPC (centre), CPR (right) and CPSD boards: same design (pages 130-133).
+//
+// On the main-CPU side the panel link lives in the 0x34000000 I/O bank at the
+// byte registers 0x34000800 / 0x34000808 / 0x34000818 / 0x34000828 (one group
+// per sub-CPU), heavily accessed by the firmware -- see notes/io-map.md.
+//
+// The button names below are transcribed from the CPL schematic; the exact
+// SW-row within each SEG column should be double-checked against the print. Only
+// CPL is filled in so far (pages 130-133 will populate CPC/CPR/CPSD). A proper
+// serial-protocol HLE device (as in kn5000_cpanel.cpp) is still to be written.
+
 static INPUT_PORTS_START(kn7000)
-	// TODO: The KN7000 front panel is driven by dedicated panel sub-CPUs
-	//       (CPL/CPC/CPR/CPSD) over a serial protocol, as on the KN5000.
-	//       Button/slider input ports will be added once that protocol and
-	//       the panel HLE device have been reverse-engineered.
+	// ---- CPL P.C.B. 8x8 switch matrix (SEGn column, bits = SW0..SW7) ----
+	PORT_START("CPL_SEG0")   // LCD soft-keys + transport (left)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCD Left 4")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCD Left 1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCD Left 5")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCD Left 2")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("START/STOP")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCD Left 3")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("INTRO & ENDING 2")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SYNCHRO & BREAK")
+
+	PORT_START("CPL_SEG1")   // rhythm / style group A
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MEMORY/LOAD")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SOUL & FUNK")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CUSTOM")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BALLAD")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("JAZZ COMBO")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ROCK & POP")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BIG BAND & SWING")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("R & B")
+
+	PORT_START("CPL_SEG2")   // rhythm / style group B
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MOVIE SHOW")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MARCH")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ENTERTAINER")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("COUNTRY")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LATIN & WORLD")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("GOSPEL & BLUES")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BALLROOM")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MODERN DANCE")
+
+	PORT_START("CPL_SEG3")   // fills / transport
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("INTRO & ENDING 1")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("FILL IN 2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("FADE OUT")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("FILL IN 1")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("FADE IN")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SPLIT POINT")
+
+	PORT_START("CPL_SEG4")   // variation / arranger
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("VARIATION & MSA 3")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("TAP TEMPO")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("VARIATION & MSA 2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUSIC STYLE ARRANGER")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("VARIATION & MSA 1")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("VARIATION & MSA 4")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	PORT_START("CPL_SEG5")   // performance pads
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD 5/SOLO")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ONE TOUCH PLAY")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD 4")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PERFORMANCE PADS BANK")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD 1")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD 3")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD 6/SOLO")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	PORT_START("CPL_SEG6")   // pads / global
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PERFORMANCE PADS STOP")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SOUND SET")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PLAY CHORD OFF/ON")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ARRANGER OFF/ON")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PERFORMANCE PADS AUTO")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("DEMO")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	PORT_START("CPL_SEG7")   // modes
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MUSIC STYLIST")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("AUTO MODE")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ONE TOUCH PLAY 2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	// ---- CPC / CPR / CPSD boards: TODO from schematics (pages 130-133) ----
+	// CPC (centre): sound-group buttons, part on/off, mixer.
+	// CPR (right):  the data dial area, tempo, and the numeric/entry keys.
+	// CPSD:         the fourth (slider/display) group.
 INPUT_PORTS_END
 
 
@@ -217,6 +328,7 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 
 void kn7000_state::machine_start()
 {
+	m_cpl_leds.resolve();
 }
 
 void kn7000_state::machine_reset()
