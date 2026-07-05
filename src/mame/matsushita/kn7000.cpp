@@ -754,29 +754,33 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 {
 	int seg = 0;
-	auto scan_board = [&](auto &ports, int count, uint8_t bank)
+	auto scan_board = [&](auto &ports, int first, int count, uint8_t bank, int sub_base)
 	{
 		for (int i = 0; i < count; i++, seg++)
 		{
-			const uint8_t cur = ports[i]->read();
+			const uint8_t cur = ports[first + i]->read();
 			if (cur != m_btn_prev[seg])
 			{
 				m_btn_prev[seg] = cur;
 				// TYPE-0/1 momentary switch report: 2 bytes [ADDR][DATA].
 				// ADDR = bank(bits7:6, wire rule bit7==bit6) | type(bits5:3, 0
-				// for segs 0-7, 1 with bit3 for segs 8-15) | subaddr; DATA = the
-				// full segment bitmask (bit=1 pressed). The main CPU XORs against
-				// its shadow to derive press/release edges. Delivery MUST use the
-				// ATN dance -- a bare fifo push never interrupts the firmware.
-				const uint8_t addr = bank | ((i & 0x08) ? 0x08 : 0x00) | (i & 0x07);
+				// for wire subs 0-7, 1 with bit3 for subs 8-15) | sub(bits2:0);
+				// DATA = the full segment bitmask (bit=1 pressed); the main CPU
+				// XORs against its shadow for press/release edges. Wire sub ->
+				// logical segment goes through the firmware's normalization
+				// table 0x486135A0: bank11 subs 0-0xB -> segs 0x00-0x0B, bank00
+				// subs 0-9 -> segs 0x0C-0x15. Delivery MUST use the ATN dance.
+				const int sub = sub_base + i;
+				const uint8_t addr = bank | ((sub & 0x08) ? 0x08 : 0x00) | (sub & 0x07);
 				const uint8_t pkt[2] = { addr, cur };
 				panel_queue(pkt, 2);
 			}
 		}
 	};
-	scan_board(m_cpl_seg, 8, 0xc0);   // CPL: bank 11 (matches the START/STOP anchor)
-	scan_board(m_cpc_seg, 5, 0x00);   // CPC/CPR bank assignment still provisional
-	scan_board(m_cpr_seg, 10, 0x00);
+	scan_board(m_cpl_seg, 0, 8, 0xc0, 0);  // CPL      -> bank11 subs 0-7  (segs 0x00-0x07)
+	scan_board(m_cpc_seg, 0, 5, 0x00, 0);  // CPC      -> bank00 subs 0-4  (segs 0x0C-0x10)
+	scan_board(m_cpr_seg, 0, 5, 0x00, 5);  // CPR left -> bank00 subs 5-9  (segs 0x11-0x15)
+	scan_board(m_cpr_seg, 5, 5, 0xc0, 8);  // CPR right-> bank11 subs 8-12 (segs 0x08-0x0B + invalid)
 }
 
 
