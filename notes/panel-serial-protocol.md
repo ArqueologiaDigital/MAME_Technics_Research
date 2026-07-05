@@ -481,3 +481,21 @@ STILL FAILING -- open questions for the next session:
     (d1|0x80). A readback latch at 0x9805000E unblocks the sound init.
 (d) GxICR[0x17] REQUEST poll after the probe at 0x48404D48 (presence flag
     0x500066CD) -- another device-presence gate to model eventually.
+
+## Handshake bring-up part 2 (2026-07-05, commit caea343)
+
+- **GPIO 0x36008084 bit0 = panel READY/presence line.** State-1 handler tests it
+  (btst 0x01 @0x484AC80C) right after incrementing the state; if clear it aborts
+  the whole transaction back to state 0 (state:=0, 0x5006BDA1:=0). This was THE
+  silent killer of every attempt. HLE: mapped high (lr16 -> 0x0001).
+- **Both TX write orders exist**: sync sender = arm(bit15) then data; state-2
+  payload = data then arm. HLE completes on whichever comes second, always via a
+  deferred one-shot (an ISR-context TX + synchronous assert = wiped by the exit
+  ack; confirmed empirically).
+- **Progress**: the wire now carries [00, 00, 1F] and the machine reaches state 3
+  (0x484AC923). It parks: state 3 does NOT transmit the second payload byte
+  (0xDA). OPEN: what advances state 3 -- disassemble 0x484AC923 (does it wait for
+  a completion my model doesn't generate, a GPIO edge, a timed gap, or does it
+  expect the 0x1A ATN mid-command?). Also verify state-2's bit15 write actually
+  arrived after the data write (the pending->complete path).
+- Sound: 0x9805000E readback latch added (init loop 0x4854BC59 unblocked).
