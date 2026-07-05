@@ -506,3 +506,43 @@ every SP-affecting op and the nesting-counter (0x50380D0C) gate -- confirm wheth
 0x4C03DE56 truly never runs (alignment!) and where the exit SP is set. (3) Widen the
 value-watch to write_mem16/8 for 0x0058/0x4840 halves into the stack. The bad PC is
 almost certainly a stale word the handler's exit SP lands on.
+
+## RESOLVED (2026-07-05): FIRST SCREEN DRAWN -- the tick needed the scheduler vector
+
+The stale-frame mystery is solved and the machine draws its UI (commit 6eedde0,
+screenshot notes/images/2026-07-05-first-screen-panel-diagnostic.png).
+
+Root cause chain, proven with TCB write-watches:
+1. The yield at 0x4C03B714 stored SP=0x503913A8 (the boot/system stack!) into TCB
+   0x50381470 whose own stack is 0x5038Dxxx -- the current task was running on the
+   WRONG stack.
+2. Why: the tick ISR's scheduler moves *0x5038002C (current TCB) and relies on the
+   SCHEDULER interrupt vector's entry/exit to save/reload each task's SP. With
+   everything vectored to the quick handler (0x4C03DDA0), nobody switched stacks:
+   the CPU kept running the old task while the bookkeeping said otherwise. The
+   next yield then wrote a foreign SP into the wrong TCB, and a later resume
+   popped a garbage PC (0x48400058) from a spot that never held a frame.
+3. THREE entries into the context machinery: 0x4C03DDA0 (quick, no switch),
+   0x4C03DE26 (scheduler: save SP to TCB, switch to *0x50380CBC, dispatch via the
+   0x34000200 group register, exit reloads SP from the new current TCB), and
+   0x4C03DEEB (software entry used by voluntary yields; resume tail rti at
+   0x4C03DF13).
+4. ICR LEVELs programmed by firmware: SIO panel/MIDI (0x12-0x15)=1, 0x0F/0x19=3,
+   grp7=4, tick grp6=6 (lowest). Only level 6 takes the scheduler vector.
+
+Driver fixes (commit 6eedde0): priority-based intc_pending_group (lowest LEVEL
+wins); per-level vector selection in intc_recompute (level 6 -> 0x4C03DE26);
+0x34000200 = group*4; intc_assert also sets DETECT bit0 (the 0x4C03DE72
+dispatcher scans DETECT bits 0-3 -- without it the tick was never acked and the
+boot spun with jiffy=0).
+
+RESULT: jiffy ticks indefinitely, no runaways, and at ~20 emulated seconds the
+firmware draws the complete panel-diagnostic screen (CPL/CPC/CPR button grids)
+with a red "ERROR in CPU data transmission" -- which is CORRECT: the panel
+sub-CPU HLE does not answer the main CPU's serial handshake yet.
+
+### NEXT FRONTIER: make the panel sub-CPU answer
+The firmware's panel link (SIO ch0 at 0x34000800 block + the 0x36008004 GPIO
+strobes) needs the HLE to complete the handshake so the boot proceeds past the
+diagnostic screen to the normal UI. Panel RX must also be delivered via
+intc_assert on its group (0x12-0x15 are the SIO groups, LEVEL=1 -> quick vector).
