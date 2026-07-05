@@ -637,7 +637,7 @@ void mn10300_device::execute_f6()
 	            v = std::clamp(v, -0x800000, 0x7fffff); m_d[dst] = uint32_t(v); } break;
 	case 0xC: m_d[dst] = m_mcrh; break;                                      // getchx MCRH -> Dn
 	case 0xD: m_d[dst] = m_mcrl; break;                                      // getclx MCRL -> Dn
-	case 0xF: m_d[dst] = m_mdrq; set_nz32(m_mdrq); m_psw &= ~(FLAG_CF | FLAG_VF); break; // getx MDRQ -> Dn
+	case 0xF: m_d[dst] = m_mdrq; break;                                     // getx MDRQ -> Dn (no flag change: the ISR context-save re-reads PSW after this, so it must not touch flags)
 	default:  logerror("MN10300: unimplemented F6 %02X @ %08X\n", op2, start_pc); break;
 	}
 	m_pc = start_pc + 2;
