@@ -905,7 +905,7 @@ void kn7000_state::machine_reset()
 	// (0x4C03DDA7/AB/AF) which the core still skips -> it corrupts the saved
 	// context and the PC runs away. Re-enable this one line once F6 is done.
 	// See notes/interrupt-mechanism.md ("F6 / udf extended ops").
-	//m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
+	//m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));  // HELD: needs AM33 udf ops (see notes)
 }
 
 void kn7000_state::kn7000(machine_config &config)

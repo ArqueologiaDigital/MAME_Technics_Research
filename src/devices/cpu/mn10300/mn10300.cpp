@@ -65,6 +65,7 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 {
 	std::fill(std::begin(m_d), std::end(m_d), 0);
 	std::fill(std::begin(m_a), std::end(m_a), 0);
+	std::fill(std::begin(m_e), std::end(m_e), 0);
 }
 
 device_memory_interface::space_config_vector mn10300_device::memory_space_config() const
@@ -84,6 +85,7 @@ void mn10300_device::device_start()
 	save_item(NAME(m_pc));
 	save_item(NAME(m_d));
 	save_item(NAME(m_a));
+	save_item(NAME(m_e));
 	save_item(NAME(m_sp));
 	save_item(NAME(m_mdr));
 	save_item(NAME(m_psw));
@@ -125,6 +127,7 @@ void mn10300_device::device_reset()
 	m_mdr = 0;
 	std::fill(std::begin(m_d), std::end(m_d), 0);
 	std::fill(std::begin(m_a), std::end(m_a), 0);
+	std::fill(std::begin(m_e), std::end(m_e), 0);
 }
 
 void mn10300_device::state_import(const device_state_entry &entry) { }
@@ -908,13 +911,18 @@ void mn10300_device::store_regs(uint8_t mask)  // push (regs -> stack, SP down)
 	if (mask & 0x40) push32(m_d[3]);
 	if (mask & 0x20) push32(m_a[2]);
 	if (mask & 0x10) push32(m_a[3]);
-	if (mask & 0x0C) logerror("MN10300: movm AM33 ext regs (mask %02X) not modelled\n", mask);
+	// AM33 extended-register groups. The exact register set per bit is
+	// PROVISIONAL (pending the AM33 spec); what matters for correctness here is
+	// that save/restore are symmetric and each group reserves the right frame
+	// slots, so an interrupt handler's writes to those slots don't clobber a3.
+	if (mask & 0x08) { push32(m_e[0]); push32(m_e[1]); push32(m_e[2]); push32(m_e[3]); } // other3
+	if (mask & 0x04) { push32(m_e[4]); push32(m_e[5]); push32(m_e[6]); push32(m_e[7]); } // other2
 	if (mask & 0x02) // {D0,D1,A0,A1,MDR,LIR,LAR}
 	{
 		push32(m_d[0]); push32(m_d[1]); push32(m_a[0]); push32(m_a[1]);
 		push32(m_mdr);  push32(m_lir);  push32(m_lar);
 	}
-	if (mask & 0x01) logerror("MN10300: movm AM33 ext regs (mask %02X) not modelled\n", mask);
+	if (mask & 0x01) logerror("MN10300: movm ext group bit0 (mask %02X) not modelled\n", mask);
 }
 void mn10300_device::load_regs(uint8_t mask)   // pop (stack -> regs, SP up); exact reverse
 {
@@ -923,6 +931,8 @@ void mn10300_device::load_regs(uint8_t mask)   // pop (stack -> regs, SP up); ex
 		m_lar = pop32(); m_lir = pop32(); m_mdr = pop32();
 		m_a[1] = pop32(); m_a[0] = pop32(); m_d[1] = pop32(); m_d[0] = pop32();
 	}
+	if (mask & 0x04) { m_e[7] = pop32(); m_e[6] = pop32(); m_e[5] = pop32(); m_e[4] = pop32(); } // other2
+	if (mask & 0x08) { m_e[3] = pop32(); m_e[2] = pop32(); m_e[1] = pop32(); m_e[0] = pop32(); } // other3
 	if (mask & 0x10) m_a[3] = pop32();
 	if (mask & 0x20) m_a[2] = pop32();
 	if (mask & 0x40) m_d[3] = pop32();

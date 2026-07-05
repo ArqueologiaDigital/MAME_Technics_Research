@@ -87,6 +87,7 @@ private:
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)
 	uint32_t m_d[4];  // data registers D0..D3 (full 32-bit)
 	uint32_t m_a[4];  // address registers A0..A3 (full 32-bit)
+	uint32_t m_e[8];  // AM33 extended data registers E0..E7 (saved by movm ext groups)
 	uint32_t m_sp;    // dedicated stack pointer (MN10200 reused A3 as the stack)
 	uint32_t m_mdr;   // multiply/divide register (32-bit on MN10300; 16-bit on MN10200)
 	uint16_t m_psw;   // processor status word
