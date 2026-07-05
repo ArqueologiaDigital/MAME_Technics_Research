@@ -369,3 +369,34 @@ sub-test's error result is non-zero, the self-test retries forever, and PSW.IE i
 delivering panel RX via intc_assert on the panel group), OR determine what
 0x484A4F06 checks and satisfy it. Then the self-test passes, IE is set, the tick
 ISR runs (now correctly), and the scheduler/display should follow.
+
+## UPDATE (2026-07-05, cont.4): SCHEDULER TICK IS LIVE (jiffy increments)
+
+The "panel handshake" blocker turned out to be a boot taking a wrong turn into a
+factory power-on diagnostic. Two coupled fixes (commits 48ae7a7, fcc06c6):
+1. **btst imm16 (0xFA EC) was unimplemented** -> it never set the Z flag, so the
+   strap test at program-flash 0x484A4FDA (`btst 0x8000,d0; beq 0x484A4FE3`) used a
+   stale flag and always branched into the diagnostic at 0x484A4FE3.
+2. **0x98070000 strap**: bit 15 selects normal boot (set) vs the diagnostic
+   (clear). io_r returned 0, so bit 15 was clear. Now returns 0x8000.
+Also implemented **lra (0xDA)** = branch to setlb loop top (was hitting 'default'
+74k times) and the **(d16,sp) store forms (0xFA 90/91/92/93 + reg)**.
+
+RESULT: the boot SKIPS the diagnostic, sets PSW.IE, the timer ISR at 0x4C02BB05
+runs, and the scheduler's jiffy counter at 0x500D3C58 increments at ~1 kHz. The
+RTOS heartbeat is alive; the boot runs library/scheduler code (0x4C00xxxx..) that
+it never reached before. No unimplemented opcodes on this path; -validate clean.
+
+### The factory diagnostic (0x484A4FE3), for reference
+Reached only when 0x98070000 bit15 is clear. Runs a battery of sub-tests
+(0x4849FFE3 RAM@0x50000000; 0x484A005A RAM@0x44000000 write/read 0x5A/0xA5 x256KB;
+0x4849FC54/FCDF/FCF4, 0x484A00AA, 0x484A5A45 ...), OR-ing each result and bit-
+banging the code out via 0x484A4F06 (strobes panel GPIO 0x36008004 bit5, LSB-first
+pulse widths, ~96M instructions per call due to software delays). All sub-tests
+PASS in emulation; it's just not the normal boot path.
+
+### Next: the framebuffer is still black
+Scheduler ticks but the 640x240 framebuffer at 0x500D4080 stays zero -> the
+display/repaint task has not drawn. Investigate whether the display task is
+scheduled yet, waits on a device (panel/LCD init), or draws elsewhere. This is the
+last hop to pixels on the emulated LCD.
