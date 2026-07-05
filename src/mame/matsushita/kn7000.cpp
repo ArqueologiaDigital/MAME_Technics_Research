@@ -337,6 +337,13 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
 	if (offset == 0x38000)
 		return 0x8000;
+	// 0x98050004 (offset 0x28002): a read data-stream / FIFO port. Boot init reads
+	// it in a loop until it yields 0xFFFF (the empty/end marker; 0xFFFF is also the
+	// natural floating-bus value for an absent source). Returning 0 made the loop
+	// treat 0 as valid data forever. Return 0xFFFF so the read loop terminates
+	// (loop at program-flash 0x484480A2: movhu (0x98050004); cmp 0xffff; beq exit).
+	if (offset == 0x28002)
+		return 0xFFFF;
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
