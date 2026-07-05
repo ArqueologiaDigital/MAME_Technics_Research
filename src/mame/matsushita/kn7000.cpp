@@ -129,6 +129,37 @@ private:
 	uint16_t io_r(offs_t offset, uint16_t mem_mask = ~0);
 	void io_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
+	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
+	// ch0 = control panel, ch1 = MIDI port 1, ch2 = MIDI port 2 (see
+	// notes/panel-serial-protocol.md). Per channel, at +0x10 stride:
+	//   +0 config(16) · +4 control(8) · +8 TX-data(8) · +9 RX-data(8) · +C status(16)
+	enum { SIO_PANEL = 0, SIO_MIDI1 = 1, SIO_MIDI2 = 2 };
+	uint16_t sio_r(offs_t offset, uint16_t mem_mask = ~0);
+	void sio_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void sio_tx_byte(int ch, uint8_t data);
+	void sio_rx_push(int ch, uint8_t data);
+	bool sio_rx_ready(int ch) const { return m_sio_rx_head[ch] != m_sio_rx_tail[ch]; }
+	uint8_t sio_rx_pop(int ch);
+
+	uint16_t m_sio_config[3] = { 0, 0, 0 };
+	uint8_t  m_sio_control[3] = { 0, 0, 0 };
+	uint8_t  m_sio_rx_fifo[3][64] = { };   // small ring buffer per channel
+	uint8_t  m_sio_rx_head[3] = { 0, 0, 0 };
+	uint8_t  m_sio_rx_tail[3] = { 0, 0, 0 };
+
+	// --- Control-panel HLE (the sub-CPU side of the panel serial link) ------
+	// LED command bytes arrive as 2-byte [ADDR][DATA] frames on the panel TX;
+	// each DATA bit is one LED of the register selected by ADDR. Buttons are
+	// scanned from the ioports and reported back as 2-byte [ADDR][DATA] frames
+	// on the panel RX (only delivered to the firmware once the MN10300 core
+	// takes SIO interrupts -- see notes/panel-serial-protocol.md).
+	TIMER_CALLBACK_MEMBER(panel_scan);
+	void panel_led_frame(uint8_t addr, uint8_t data);
+	emu_timer *m_panel_timer = nullptr;
+	uint8_t m_panel_tx_addr = 0;
+	bool    m_panel_tx_have_addr = false;
+	uint8_t m_btn_prev[23] = { };   // last scanned state, one per declared segment
+
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 };
 
@@ -187,6 +218,9 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x20000000, 0x2000ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
+	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
+	// 0x34000000 bank; this more-specific mapping overrides the logger above.
+	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
 	map(0x36008000, 0x360080ff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 
@@ -213,6 +247,154 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
 		offset << 1, data, mem_mask);
+}
+
+
+// ============================================================================
+//  SIO ASIC -- three USART channels (panel + two MIDI ports)
+// ============================================================================
+//
+// The handlers are 16-bit (as the whole 0x34000000 bank is); `offset` is the
+// 16-bit-word index within 0x34000800. Each channel spans 0x10 bytes = 8 words,
+// so channel = offset / 8 and the byte within the channel is (offset << 1) & 0xf.
+// Byte registers (control @+4, TX @+8, RX @+9) are reached with movbu, i.e. a
+// masked 16-bit access: TX is the low byte of word 4, RX the high byte.
+
+uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
+{
+	const int ch = offset / 8;
+	const int reg = (offset << 1) & 0x0f;
+	switch (reg)
+	{
+	case 0x0:                    // config
+		return m_sio_config[ch];
+	case 0x4:                    // control (byte @+4)
+		return m_sio_control[ch];
+	case 0x8:                    // +8 TX (write-only) / +9 RX (read, high byte)
+		if (ACCESSING_BITS_8_15)
+			return uint16_t(sio_rx_pop(ch)) << 8;
+		return 0;
+	case 0xc:                    // status: bit4 = RxRDY, bits0-2 = rx errors (none)
+		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
+	}
+	return 0;
+}
+
+void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	const int ch = offset / 8;
+	const int reg = (offset << 1) & 0x0f;
+	switch (reg)
+	{
+	case 0x0:                    // config
+		COMBINE_DATA(&m_sio_config[ch]);
+		break;
+	case 0x4:                    // control (byte @+4)
+		if (ACCESSING_BITS_0_7)
+			m_sio_control[ch] = data & 0xff;
+		break;
+	case 0x8:                    // TX data (byte @+8 = low byte)
+		if (ACCESSING_BITS_0_7)
+			sio_tx_byte(ch, data & 0xff);
+		break;
+	default:
+		break;
+	}
+}
+
+void kn7000_state::sio_rx_push(int ch, uint8_t data)
+{
+	const uint8_t next = (m_sio_rx_head[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
+	if (next == m_sio_rx_tail[ch])
+		return;                  // FIFO full -- drop (overrun)
+	m_sio_rx_fifo[ch][m_sio_rx_head[ch]] = data;
+	m_sio_rx_head[ch] = next;
+	// TODO: assert this channel's SIO receive interrupt (ICR 0x34000168 / 148 /
+	// 150 -> MN10300 IRQ). The MN10300 core does not yet take interrupts, so a
+	// queued byte is not yet delivered to the firmware's RX ISR.
+}
+
+uint8_t kn7000_state::sio_rx_pop(int ch)
+{
+	if (m_sio_rx_head[ch] == m_sio_rx_tail[ch])
+		return 0;
+	const uint8_t v = m_sio_rx_fifo[ch][m_sio_rx_tail[ch]];
+	if (!machine().side_effects_disabled())
+		m_sio_rx_tail[ch] = (m_sio_rx_tail[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
+	return v;
+}
+
+void kn7000_state::sio_tx_byte(int ch, uint8_t data)
+{
+	switch (ch)
+	{
+	case SIO_PANEL:
+		// LED/command stream to the panel sub-CPUs: 2-byte [ADDR][DATA] frames.
+		if (!m_panel_tx_have_addr)
+		{
+			m_panel_tx_addr = data;
+			m_panel_tx_have_addr = true;
+		}
+		else
+		{
+			m_panel_tx_have_addr = false;
+			panel_led_frame(m_panel_tx_addr, data);
+		}
+		break;
+	case SIO_MIDI1:
+	case SIO_MIDI2:
+		// TODO: forward to the MIDI OUT port (wired in the machine config).
+		logerror("%s: MIDI%d TX %02X\n", machine().describe_context(), ch, data);
+		break;
+	}
+}
+
+// One decoded LED-command frame: ADDR selects an 8-LED register on one of the
+// panel boards, DATA is that register's 8 LED bits. The board is chosen by the
+// bank field in ADDR bits 6-7; the register index is ADDR bits 0-5. This mirrors
+// the firmware's LED shadow layout (notes/panel-serial-protocol.md).
+// TODO: the exact ADDR->(board,physical LED) table still needs cross-checking
+// against the schematic silk-screen; the structural decode below is provisional.
+void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
+{
+	const int reg = addr & 0x3f;
+	for (int bit = 0; bit < 8; bit++)
+	{
+		const int led = reg * 8 + bit;
+		const int on = BIT(data, bit);
+		if (led < 64) m_cpl_leds[led] = on;   // provisional: all to CPL bank
+	}
+	logerror("%s: panel LED frame addr=%02X data=%02X\n",
+		machine().describe_context(), addr, data);
+}
+
+// Periodic button scan: read each declared segment ioport, and for any that
+// changed since last scan, queue a 2-byte [ADDR][DATA] switch-report frame onto
+// the panel RX. DATA bit = 1 means pressed (active-high on the wire); the frame
+// is the same format the real sub-CPUs emit (notes/panel-serial-protocol.md,
+// e.g. START/STOP press = C0 10). Delivery to the firmware awaits SIO interrupts.
+TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
+{
+	int seg = 0;
+	auto scan_board = [&](auto &ports, int count, uint8_t bank)
+	{
+		for (int i = 0; i < count; i++, seg++)
+		{
+			const uint8_t cur = ports[i]->read();
+			if (cur != m_btn_prev[seg])
+			{
+				m_btn_prev[seg] = cur;
+				// ADDR = bank(bits6-7, with bit7==bit6) | type0 | subaddr(i);
+				// only banks 00 and 11 are valid on the wire.
+				const uint8_t addr = bank | (i & 0x07);
+				sio_rx_push(SIO_PANEL, addr);
+				sio_rx_push(SIO_PANEL, cur);
+			}
+		}
+	};
+	scan_board(m_cpl_seg, 8, 0xc0);   // CPL: bank 11 (matches the START/STOP anchor)
+	scan_board(m_cpc_seg, 5, 0x00);   // CPC/CPR bank assignment still provisional
+	scan_board(m_cpr_seg, 10, 0x00);
 }
 
 
@@ -504,10 +686,34 @@ void kn7000_state::machine_start()
 {
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
 	// no explicit resolve() call is needed or available.
+
+	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
+	// continuously and report changes over the serial link).
+	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
+
+	save_item(NAME(m_sio_config));
+	save_item(NAME(m_sio_control));
+	save_item(NAME(m_sio_rx_fifo));
+	save_item(NAME(m_sio_rx_head));
+	save_item(NAME(m_sio_rx_tail));
+	save_item(NAME(m_panel_tx_addr));
+	save_item(NAME(m_panel_tx_have_addr));
+	save_item(NAME(m_btn_prev));
 }
 
 void kn7000_state::machine_reset()
 {
+	for (int ch = 0; ch < 3; ch++)
+	{
+		m_sio_config[ch] = 0;
+		m_sio_control[ch] = 0;
+		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
+	}
+	m_panel_tx_have_addr = false;
+	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
+
+	// Start scanning the panel at ~250 Hz.
+	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
 }
 
 void kn7000_state::kn7000(machine_config &config)
