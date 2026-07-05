@@ -220,9 +220,17 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 //     Serial link pins: SIN, SOUT, CLK, RST, CNTR1 -> to the CPR board / main.
 //   * CPC (centre), CPR (right) and CPSD boards: same design (pages 130-133).
 //
-// On the main-CPU side the panel link lives in the 0x34000000 I/O bank at the
-// byte registers 0x34000800 / 0x34000808 / 0x34000818 / 0x34000828 (one group
-// per sub-CPU), heavily accessed by the firmware -- see notes/io-map.md.
+// On the main-CPU side the link is ONE channel of a multi-channel USART/SIO ASIC
+// mapped at 0x34000800 (config 0x800, control 0x804, TX-data 0x808, RX-data 0x809,
+// status 0x80C; interrupt via ICR 0x34000168). It is INTERRUPT-DRIVEN, half-duplex:
+// the RX ISR (0x484ACC13) reads one byte from 0x34000809 into a 92-byte ring buffer
+// (0x5006BDB4), a frame decoder (0x484AD111) parses a header byte whose bits[5:3]
+// are a 3-bit message type, and a switch-byte dispatcher (0x484AD680) indexes a
+// 32-entry jump table (0x48613108) = the four panel groups CPL/CPC/CPR/CPSD. LED
+// bytes go OUT on the SAME channel (TX path 0x484ABF50 -> 0x34000808). GPIO lines
+// 0x36008004/24/64 strobe/select the sub-CPUs. NOTE: the sibling SIO channels at
+// 0x34000810 and 0x34000820 are the two MIDI ports, NOT panel. See notes/io-map.md
+// and the kn5000-docs Control Panel Protocol page.
 //
 // The button names below are transcribed from the CPL schematic; the exact
 // SW-row within each SEG column should be double-checked against the print. Only
