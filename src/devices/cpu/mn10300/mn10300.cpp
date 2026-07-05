@@ -422,8 +422,10 @@ void mn10300_device::execute_run()
 		case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9: // Lcc
 			if (test_cond(op & 0x0F)) m_pc = m_lar;
 			break;
-		// 0xDA (lra) is left to the default handler for now: its exact semantics
-		// (a loop-return-address variant) are unconfirmed and it is rare.
+		// lra: unconditional branch back to the loop top (the setlb hardware loop).
+		// The sim computes PC = LAR-4; this core stores the loop top directly in
+		// m_lar (= that value), so a plain jump is correct -- same as Lcc taken.
+		case 0xDA: m_pc = m_lar; break;
 
 		// ---- jmp disp32 (reset vector uses this) ----
 		case 0xDC:
@@ -916,10 +918,26 @@ void mn10300_device::execute_fa()
 			case 0xE0: m_d[dst] &= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // and imm16,dD (zx)
 			case 0xE4: m_d[dst] |= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // or
 			case 0xE8: m_d[dst] ^= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // xor
+			case 0xEC: m_psw = (m_psw & ~FLAG_ZF) | ((m_d[dst] & (uint32_t)imm16) ? 0 : FLAG_ZF); break; // btst imm16,dD (zx)
 			case 0xB0: m_a[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),aD
 			case 0xB4: m_d[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),dD
 			case 0xB8: m_d[dst] = read_mem8 (m_sp + imm16); break;                     // movbu (disp16,sp),dD
 			case 0xBC: m_d[dst] = read_mem16(m_sp + imm16); break;                     // movhu (disp16,sp),dD
+			// store reg -> (disp16,sp): op2 = 1001_rrtt, reg=bits[3:2], tt=bits[1:0]
+			// (0 mov aM / 1 mov dM / 2 movbu dM / 3 movhu dM). binutils 0xfa90..0xfa93.
+			case 0x90: case 0x94: case 0x98: case 0x9C:
+			{
+				const int reg = (op2 >> 2) & 3;
+				const uint32_t ea = m_sp + imm16;
+				switch (op2 & 3)
+				{
+					case 0: write_mem32(ea, m_a[reg]); break; // mov   aM,(disp16,sp)
+					case 1: write_mem32(ea, m_d[reg]); break; // mov   dM,(disp16,sp)
+					case 2: write_mem8 (ea, m_d[reg]); break; // movbu dM,(disp16,sp)
+					case 3: write_mem16(ea, m_d[reg]); break; // movhu dM,(disp16,sp)
+				}
+				break;
+			}
 			case 0xA0: m_a[dst] = read_mem32(imm16); break;                            // mov (abs16),aD
 			case 0xFC:
 				if (op2 == 0xFE)      { m_sp += (int32_t)(int16_t)imm16; }             // add imm16,sp
