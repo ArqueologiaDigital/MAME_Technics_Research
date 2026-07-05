@@ -112,3 +112,254 @@ Per channel (base + 0x10 stride), a `device_serial_interface` with:
 - **TX interrupt** fires when the transmit holding register empties and TX int is enabled. Firmware sends exactly one byte per interrupt and re-arms via the TX ICR; when its software queue is empty it disables the TX interrupt.
 
 **Wiring the two MIDI channels:** attach a MAME `midi_port` to each of MIDI-1 (0x34000810) and MIDI-2 (0x34000820): feed `midi_port` RX into RXD and raise the RX IRQ; send TXD to `midi_port` TX and raise the TX IRQ when ready; run 31250 bps 8N1. Because midi1 (cfg 0x0085) and midi2 (cfg 0x1181) are configured differently, verify against hardware whether MIDI-2 is a standard 31250 MIDI port or a differently-clocked host/serial port before hard-wiring its baud.
+## Switch-report frame (panel sub-CPU -> main CPU) — what the HLE EMITS
+
+I have fully traced the panel-switch wire protocol from the serial byte through to the button event. Here is the report.
+
+---
+
+# KN7000 Panel Sub-CPU → Main CPU: Switch-Report Frame Format
+
+All addresses verified in `kn7000_program.rom`. This is the format an HLE must **emit** on the panel serial link `0x34000800`; the main-CPU decoder `0x484AD111` is what consumes it.
+
+## 0. Frame skeleton (verified)
+
+The frame decoder `0x484AD111` (body `0x484AD116`) pulls bytes from the 92-byte RX ring at base `a3=0x5006BDB4`, tail `0x5006BDB0`, head `0x5006BDB2` (wrap at `0x5C`=92). Key finding:
+
+**The first byte is BOTH the header AND the first data byte (the switch ADDR byte).** At `0x484AD161-167` the decoder reads `ring[tail]` **without advancing tail**, validates it, extracts the type, then jumps to the per-type handler — which re-reads the *same* byte and only then advances. So there is no separate header byte.
+
+Decoder gate: needs ≥2 buffered bytes (`0x484AD15A cmp 2,d3`) before decoding — consistent with 2-byte frames.
+
+## (a) HEADER / first byte format + the 8 TYPEs
+
+First byte bit layout `[b7 b6 | b5 b4 b3 | b2 b1 b0]`:
+
+| bits | field | notes |
+|---|---|---|
+| 7,6 | **BANK / framing** | Validator `0x484ACFF9` requires `(b & 0xC0) ∈ {00, 11}`. `01`/`10` are rejected → error nibble `0x10` written to `0x5006BE91` and the frame aborted (`0x484AD175`). So there are **2 wire banks, not 4**. |
+| 5,4,3 | **TYPE (0–7)** | Extracted at `0x484AD18D`: `type = (byte & 0x38) >> 3`. |
+| 2,1,0 | low sub-address | segment/switch address bits |
+
+Type dispatch (`0x484AD18D`, verified):
+
+| TYPE | handler | bytes consumed | meaning |
+|---|---|---|---|
+| 0 `000` | `0x484AD1C6` | **2** `[ADDR, DATA]` | momentary switch scan, bank segments **0–7** |
+| 1 `001` | `0x484AD1C6` | **2** `[ADDR, DATA]` | momentary switch scan, bank segments **8–15** (bit3 of ADDR = high seg bit) |
+| 2 `010` | `0x484AD25F` | **2** `[ADDR, DATA]` | latched / rotary control update (data wheel, sliders, pedal) → dispatch `0x484AD680` |
+| 3 `011` | `0x484AD2EB` | **2** | status/handshake: skips 2 bytes, sets flag bit3 (`0x08`) at `0x5006BDA4` |
+| 4 `100` | `0x484AD2EB` | **2** | same as 3 |
+| 5 `101` | `0x484AD2EB` | **2** | same as 3 |
+| 6 `110` | `0x484AD331` | **variable** | length-checked multi-item batch; iterates dispatch `0x484AD680` + enqueue |
+| 7 `111` | `0x484AD331` | **variable** | same as 6 |
+| invalid | — | discards 1 byte, resyncs (`jmp 0x484AD11C`) | |
+
+Types 0 and 1 are the **momentary panel push-buttons** (START/STOP etc.). Note that TYPE is *embedded in the ADDR byte's bits 3–5*, so it also functions as the high part of the segment address (type0 = segs 0–7, type1 = segs 8–15).
+
+## (b) SWITCH data-byte bit layout + press/release
+
+A momentary-switch frame is exactly **2 bytes: `[ADDR, DATA]`**.
+
+**ADDR byte** (= the header byte). Handler `0x484AD1C6` uses it as:
+- shadow-table select: `(ADDR & 0xC0)==0 ? tbl@0x5006BE50 : tbl@0x5006BE80` (`0x484AD237`), i.e. bank bits 6–7.
+- shadow index: `ADDR & 0x0F` (`0x484AD244`) → per-segment slot (16 per bank).
+- For the downstream event queue, normalized at `0x484ADA1B`: `idx = ((ADDR&0xC0)>>1) | (ADDR&0x1F)` → lookup `0x486135A0` → logical segment (bit 5 is dropped).
+
+**DATA byte** = 8-bit switch bitmask, **bit N = switch N in that segment**. Polarity is **active-high on the wire: bit = 1 ⇒ pressed** (verified end-to-end, see below).
+
+**Edge detection** (`0x484AD249-24D`): main CPU keeps a per-(bank,segment) shadow byte; `CHANGED = DATA XOR old_shadow`; then `shadow = DATA`. The triplet `[ADDR, DATA, CHANGED]` is enqueued into cooked FIFO `0x5006BCF8` (enqueue `0x484AD519`). Raw bytes are also latched to `0x5006BDA6/DA7/DA8`.
+
+**Press/release resolution** (event generator `0x484A0CB5`, verified):
+- `switch# = normSeg*8 + firstSetBit(CHANGED)` (`0x484A0D1A`; bit-scan `0x484A0C99`).
+- class = `tbl@0x4860C9F4[switch#*2]`.
+- `pressed = (DATA & CHANGED) != 0` for that bit → emitter `0x484A0B3E(index, 1)`; the release branch `0x484A0DC4` (DATA bit now 0) calls `0x484A0B3E(index, 0)`. This is the ground truth for polarity: **DATA bit 1 = press, 0 = release.**
+
+Recommendation for the HLE: change **one switch per frame** (a single bit in DATA differing from the previous DATA for that segment). Multi-bit changes are only partially handled (the generator scans the lowest changed bit).
+
+## (c) The `0x484AD680` dispatch and its 32-entry table (TYPE 2 / continuous controls — NOT momentary keys)
+
+Dispatch `0x484AD680`: `index = ((byte1 & 0xC0)>>3) | (byte1 & 0x07)` where `byte1`=ADDR, `d0`=DATA passed to the handler. group = `(ADDR&0xC0)>>6` (only 0/3 valid), sub = `ADDR&7`.
+
+Table `0x48613108` (dumped, 32 × 4 bytes) is **sparse** — only 6 live entries, everything else = default `0x484AD7A7`:
+
+| idx | (group,sub) | handler | action |
+|---|---|---|---|
+| 0 | (0,0) | `0x484AD6B0` | latch DATA→`0x5006BEA0`, remap via `0x48613188`, diff vs `0x5006BEA9` |
+| 7 | (0,7) | `0x484AD6A0` | latch DATA→`0x5006BE9F` and `0x5006BEA8` |
+| 24 | (3,0) | `0x484AD740` | latch→`0x5006BEA3`, `asr 1`, remap `0x48613488`, diff vs `0x5006BEAC` |
+| 25 | (3,1) | `0x484AD6DE` | `not`+latch→`0x5006BEA1`, remap `0x48613288`, diff vs `0x5006BEAA` |
+| 26 | (3,2) | `0x484AD772` | `not`+latch→`0x5006BEA6` |
+| 27 | (3,3) | `0x484AD70F` | `not`+latch→`0x5006BEA2`, remap `0x48613388`, diff vs `0x5006BEAB` |
+
+These handlers latch a **value** and return `0xFFFF` when unchanged (no event) — they are for **continuously-valued controls** (data dial, sliders, pedal), not push-buttons. This corrects the working note that called `0x484AD680` "the switch dispatch": the momentary keys do **not** go through it; they go through the TYPE 0/1 shadow-XOR path in (b).
+
+## (d) Checksum / terminator
+
+**None.** No checksum byte, no terminator/sync byte, no length byte for types 0–5 (length is implicit from TYPE: 2 bytes). The only integrity check is the header framing rule `bit6 == bit7` (`0x484ACFF9`); a violation sets error nibble `0x10` at `0x5006BE91` and aborts the frame.
+
+## Physical (group, SEG, SW) → wire bytes, and the START/STOP example
+
+Wire ADDR ↔ logical segment (from normalization table `0x486135A0`, dumped):
+- bank `11` (bits6-7=11), subaddr 0–0x0B → logical segments `0x00–0x0B`; subaddr 0x10–0x13 → `0x16–0x19`.
+- bank `00`, subaddr 0–9 → logical segments `0x0C–0x15`; subaddr 0x10 → `0x1A`, 0x17 → `0x20`.
+
+Formula for a momentary key: `ADDR = (bank<<6, bit7=bit6) | subaddr`, `DATA = 1<<SW` when only that key is down.
+
+**START/STOP = CPL SEG0 SW4** → logical **normSeg 0, bit 4**. normSeg 0 is reached from table index `0x60` = bank `11`, subaddr `0`, so:
+
+```
+ADDR = 0b11 000 000 = 0xC0   (type=0, bank=11, seg=0)
+DATA (SW4 pressed)  = 0x10
+```
+
+- **Press START/STOP:  C0 10**
+- **Release START/STOP: C0 00**
+
+(2-byte frames, no checksum.)
+
+Support/confidence: the *mechanics* (2-byte frame, ADDR=header, `DATA bit=1⇒press`, XOR edge-detect) are fully verified. The literal `ADDR=0xC0` rests on `CPL SEG0` = logical **normSeg 0**, whose bit 4 carries switch-class `0xF0` in table `0x4860C9F4[0x04]` — the composite **rhythm-transport** handler `0x484A0D88` (emits the transport group events 3,4,5,6 on press / release), which is exactly what START/STOP drives. The one datum not in the main ROM is the physical-scanline→wire-ADDR translation, which lives in the CPL sub-CPU's own firmware / the schematic. If CPL instead maps to bank `00`, the same key would be `ADDR=0x00, DATA=0x10` (frames `00 10` / `00 00`); the DATA byte (`0x10`) is unaffected.
+
+## Reference addresses for the HLE
+
+- Decoder entry `0x484AD111` / body `0x484AD116`; header validator `0x484ACFF9`; type dispatch `0x484AD18D`.
+- Momentary handler (type0/1) `0x484AD1C6`; shadow tables `0x5006BE50` (bank00), `0x5006BE80` (bank11); XOR edge-detect `0x484AD249`.
+- Cooked FIFO `0x5006BCF8`; enqueue `0x484AD519`; dequeue `0x484AD53D`; consumer `0x484AD87F` / `0x484A0C4C`.
+- ADDR normalization `0x484ADA1B` + table `0x486135A0`; event records `0x5006BEB4` (count `0x5006BEF0`).
+- Event generator `0x484A0CB5`; bit-scan `0x484A0C99`; switch-class table `0x4860C9F4` (2 bytes/switch, `switch# = normSeg*8+bit`); emitter `0x484A0B3E` → `0x484B1780`.
+- Latched-control dispatch `0x484AD680` + table `0x48613108`.
+
+Service manual `/home/fsanches/compartilhado/KN7000/service_manual/technics_sx-kn7000_keyboard.pdf` confirms the physical PCBs **CPL / CPC / CPR** and the **SD panel** (CPSD) (§7.6, pp. ~555–606); it is print-only/copy-disabled so the per-segment scan matrix must be read from its schematic images (not text-extractable), or from each sub-CPU's firmware, to enumerate every button.
+## LED-command frame (main CPU -> panel sub-CPU) — what the HLE DECODES
+
+I have everything verified from the ROM. Here is the complete decode.
+
+---
+
+# KN7000 Panel LED Command Frame — Full Decode
+
+All addresses/values below are read directly from `kn7000_program.rom` (CPU base `0x48400000`). Nothing here is guessed unless explicitly marked *(inferred)*.
+
+## Overview of the path
+
+```
+SetHoldLed/SetDialLed/SetOtherPartLed/SetModeLed
+      │  d0 = LED-index (1..0x13)
+      ▼
+SetLedByIndex  ON=0x484B1BCB (table 0x4861518C)  /  OFF=0x484B1CA1 (table 0x486151D8)
+      │  jumps to per-LED fn, value d0 = 1(on)/0(off)
+      ▼
+per-LED fn (0x484B0C3F …)  →  bankA writer (0x484B0BFA…) or bankB writer (0x484B0C1B…)
+      │  sets/clears ONE bit in the LED shadow register array. Does NOT transmit.
+      ▼   (bank chosen by flag 0x5006BE94 via getter 0x484ABAFD)
+diff-flush task  0x484B165D (bankA) / 0x484B16A4 (bankB)
+      │  for reg=0..0x1F: if shadow[reg] != last_sent[reg] → send + update mirror
+      ▼
+frame builder 0x484B1780 → 0x484B170C (bankA) / 0x484B1746 (bankB)
+      │  pushes TWO bytes: [ ADDR_TABLE[reg] ][ shadow[reg] ]
+      ▼
+byte-FIFO 0x5006BD8C  (push prim 0x484AD52B → 0x484AD5B0)
+      ▼  drained into 60-byte SIO ring @0x5006BE14 (0x484AD45F)
+SIO TX ISR → 0x34000808  → panel sub-CPUs
+```
+
+Key point for the HLE: **the LED write and the serial transmit are decoupled.** The `SetLedByIndex` calls only flip bits in a RAM shadow; a periodic diff-flush compares the shadow to a "last transmitted" mirror and emits a 2-byte `[address][data]` frame only for registers whose value changed.
+
+---
+
+## (a) LED shadow buffer — address and layout
+
+The shadow lives at **`0x50150A3C`**. There are **two banks**, selected at runtime by flag byte **`0x5006BE94`** (0 → bank A, non-0 → bank B; getter `0x484ABAFD`). Each bank is a 32-byte *current* array immediately followed by a 32-byte *last-transmitted mirror*:
+
+| region | address | size | meaning |
+|---|---|---|---|
+| Bank A current | `0x50150A3C` | 32 B | live LED register values (reg 0..0x1F) |
+| Bank A mirror  | `0x50150A5C` | 32 B | last value transmitted (for diff) |
+| Bank B current | `0x50150A7C` | 32 B | live LED register values |
+| Bank B mirror  | `0x50150A9C` | 32 B | last value transmitted |
+
+`register_index = byte_address − 0x50150A3C` (bank A) / `− 0x50150A7C` (bank B). Bank B is bank A + `0x40`.
+
+Each `SetLedByIndex` index writes a fixed **(register, bit)**. Verified per-index (bank A addresses; bank B identical bit at +0x40):
+
+| LED idx | writer | shadow byte | reg | bit | named as |
+|---|---|---|---|---|---|
+| 1  | 0x484B0BFA | 0x50150A3C | 0  | 5 | **Hold** (SetHoldLed) |
+| 2  | 0x484B0C5F | 0x50150A3F | 3  | 4 | |
+| 3  | 0x484B1054 | 0x50150A41 | 5  | 4 | |
+| 4  | 0x484B0CC2 | 0x50150A4E | 18 | 1 | **Dial** (SetDialLed) |
+| 5  | 0x484B0D25 | 0x50150A3F | 3  | 5 | **OtherPart** (SetOtherPartLed) |
+| 6  | 0x484B0D8A | 0x50150A47 | 11 | 1 | |
+| 7  | 0x484B0DEB | 0x50150A47 | 11 | 0 | |
+| 8  | 0x484B0E49 | 0x50150A46 | 10 | 0 | |
+| 9  | 0x484B0EAB | 0x50150A40 | 4  | 4 | |
+| 10 | 0x484B0F0E | 0x50150A46 | 10 | 1 | |
+| 11 | 0x484B0FF3 | 0x50150A44 | 8  | 2 | |
+| 12 | 0x484B0F90 | 0x50150A45 | 9  | 4 | |
+| 13 | 0x484B10B9 | 0x50150A44 | 8  | 1 | |
+| 14 | 0x484B0F71 | 0x50150A45 | 9  | 1 | |
+| 19 | 0x484B111E | 0x50150A44 | 8  | 0 | |
+| 15 | — | *(none)* | — | — | direct GPIO `bset 0x40,(0x9CC00008)` — **not** panel serial |
+| 16 | — | *(none)* | — | — | direct GPIO `bset 0x80,(0x9CC00008)` — **not** panel serial |
+| 17,18 | — | — | — | — | **no-op** (table entry → bare `ret`) |
+
+The write idiom (e.g. Hold, 0x484B0BFA): `d2 = shadow[0x3C]; d2 &= ~(1<<5); d2 |= (value&1)<<5; shadow[0x3C]=d2`. So `SetLedByIndex(N, on)` = set that bit; `SetLedByIndex(N, off)` (entry 0x484B1CA1) = clear it. SetModeLed additionally maps its argument through table `0x4859E364`, storing the "currently lit" mode index at `0x50021FD4`, and turns the old one off before the new one on.
+
+Jump tables: ON `0x4861518C` (19 words), OFF `0x486151D8` (19 words), both indexed `(index−1)*4`, bounds `1..0x13`.
+
+---
+
+## (b) TX frame format — exact bytes on `0x34000808`
+
+The frame builder `0x484B170C` (bank A) does, for a changed register `reg` with value `val`:
+
+```
+if reg >= 0x15: drop
+addr = ADDR_TABLE_A[reg]          ; table @ 0x48615058
+if val == 0xFF: drop              ; 0xFF is a reserved sentinel, never a real value
+if reg <= 3: <protocol handshake 0x484ABB98>   ; regs with addr C0..C3 only
+push_byte(addr)                   ; → FIFO 0x5006BD8C (0x484AD52B)
+push_byte(val)
+```
+
+**On the wire, one LED update = exactly two bytes: `[ ADDR_TABLE[reg] ] [ register value ]`.**
+
+Address tables (raw bytes, indexed by register):
+
+```
+ADDR_TABLE_A @0x48615058 (21):  C0 C1 C2 C3 C4 C5 C6 C7 00 01 02 03 04 05 08 09 0A 0B 0C 0D FF
+ADDR_TABLE_B @0x48615070 (20):  C0 C1 C2 C3 C4 C8 C9 01 02 03 04 05 06 09 0A 0B 0C 0D 0E FF
+```
+
+The trailing `FF` and any register whose value is `0xFF` are suppressed (never transmitted).
+
+### Worked example — "Hold LED ON"
+- `SetHoldLed(1)` → `SetLedByIndex` ON index 1 → 0x484B0BFA sets **bit 5 of register 0** (`0x50150A3C`).
+- Register 0 now differs from its mirror → flush emits: `addr = ADDR_TABLE_A[0] = 0xC0`, `data = shadow[0]`.
+- If register 0 was otherwise 0: on-wire bytes = **`C0 20`** (0x20 = bit5). Hold LED OFF = **`C0 00`**.
+
+Because several LEDs share a register, the data byte carries **all** LED bits of that register, e.g. register 3 (`addr C3`) holds LED-idx2 at bit4 and OtherPart at bit5; register 8 (`addr 00`) holds idx19/13/11 at bits 0/1/2.
+
+There are also two transmit engines that emit these same logical bytes:
+- **Interrupt/ring path (runtime):** FIFO `0x5006BD8C` → 60-byte ring `0x5006BE14` (read idx `0x5006BE10`, write idx `0x5006BE12`, capacity `0x3C`) → SIO ISR to `0x34000808`.
+- **Synchronous bit-bang path (boot/handshake, `0x484ABEBF→0x484ABF50`):** sends the two bytes `0x5006BE14`/`0x5006BE15` directly to `0x34000808`, wrapped in GPIO board-select strobes `0x36008004/24/25/64`. Same 2-byte payload.
+
+For an HLE that only watches `0x34000808`, treat the stream as a sequence of `[address][data]` pairs where any byte with bit7-ish high value in the C0..C9 / 00..0E set is an **address**, and the following byte is the **8-bit LED latch value** for that register.
+
+---
+
+## (c) LED grouping per sub-CPU
+
+Registers split into two address groups (from the tables), which correspond to different panel sub-CPUs / boards:
+
+| address range | registers (bankA) | notes |
+|---|---|---|
+| **`0xC0`–`0xC7`** | reg 0–7 | high bits set; registers 0–3 additionally run the handshake `0x484ABB98` (0x484ACEA5/0x484AD011 — half-duplex turnaround/state, *inferred* board-select, not extra LED payload) |
+| **`0x00`–`0x0D`** | reg 8–19 | plain register writes |
+
+The two **banks** (flag `0x5006BE94`) are two different wiring maps of the *same* logical LEDs — the address tables differ (bank A uses `C5 C6 C7 … 00 08`, bank B uses `C8 C9 … 06 0E`). This is consistent with the shared KN5000/KN7000 codebase: the flag selects which hardware variant's LED-register→sub-CPU address mapping to use. Which physical sub-CPU (CPL/CPC/CPR/CPSD) owns the `0xCx` vs `0x0x` address space is *inferred* to be encoded in the address byte's upper bits (the panel RX decoder routes on `(b&0xC0)>>3 | (b&0x07)` per the established facts), but is not needed to reproduce correct LED lighting.
+
+### What the HLE must implement
+1. Maintain 32 register latches per active bank (base semantics = `0x50150A3C`).
+2. Parse the `0x34000808` byte stream as `[addr][data]` pairs; map `addr` back through `ADDR_TABLE_A/B` to a register index; store `data` as that register's 8 LED bits.
+3. Light physical LEDs from the (register,bit) map in table (a) — e.g. Hold = reg0/bit5 (addr `C0`), Dial = reg18/bit1 (addr `0C`), OtherPart = reg3/bit5 (addr `C3`).
+4. Ignore `addr == 0xFF` and `data == 0xFF`. LED indices 15/16 are display GPIO (`0x9CC00008`), not panel-serial, and 17/18 are unused.
