@@ -25,1117 +25,1117 @@
 		<text string="CPR board"><color red="0.8" green="0.8" blue="0.85"/></text>
 	</element>
 
-	<element name="btn_CPL_SEG0_01" defstate="0">
+	<element name="btn_SEG00_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Left 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_02" defstate="0">
+	<element name="btn_SEG00_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Left 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_04" defstate="0">
+	<element name="btn_SEG00_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Left 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_08" defstate="0">
+	<element name="btn_SEG00_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Left 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_10" defstate="0">
+	<element name="btn_SEG00_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="START/STOP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_20" defstate="0">
+	<element name="btn_SEG00_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Left 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_40" defstate="0">
+	<element name="btn_SEG00_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="INTRO &amp; ENDING 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG0_80" defstate="0">
+	<element name="btn_SEG00_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SYNCHRO &amp; BREAK"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_01" defstate="0">
+	<element name="btn_SEG01_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MEMORY/LOAD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_02" defstate="0">
+	<element name="btn_SEG01_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUL &amp; FUNK"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_04" defstate="0">
+	<element name="btn_SEG01_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CUSTOM"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_08" defstate="0">
+	<element name="btn_SEG01_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BALLAD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_10" defstate="0">
+	<element name="btn_SEG01_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="JAZZ COMBO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_20" defstate="0">
+	<element name="btn_SEG01_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ROCK &amp; POP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_40" defstate="0">
+	<element name="btn_SEG01_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BIG BAND &amp; SWING"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG1_80" defstate="0">
+	<element name="btn_SEG01_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="R &amp; B"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_01" defstate="0">
+	<element name="btn_SEG02_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MOVIE SHOW"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_02" defstate="0">
+	<element name="btn_SEG02_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MARCH"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_04" defstate="0">
+	<element name="btn_SEG02_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ENTERTAINER"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_08" defstate="0">
+	<element name="btn_SEG02_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="COUNTRY"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_10" defstate="0">
+	<element name="btn_SEG02_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LATIN &amp; WORLD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_20" defstate="0">
+	<element name="btn_SEG02_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="GOSPEL &amp; BLUES"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_40" defstate="0">
+	<element name="btn_SEG02_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BALLROOM"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG2_80" defstate="0">
+	<element name="btn_SEG02_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MODERN DANCE"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_01" defstate="0">
+	<element name="btn_SEG03_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="INTRO &amp; ENDING 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_02" defstate="0">
+	<element name="btn_SEG03_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG3.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG03.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_04" defstate="0">
+	<element name="btn_SEG03_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="FILL IN 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_08" defstate="0">
+	<element name="btn_SEG03_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="FADE OUT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_10" defstate="0">
+	<element name="btn_SEG03_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="FILL IN 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_20" defstate="0">
+	<element name="btn_SEG03_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="FADE IN"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_40" defstate="0">
+	<element name="btn_SEG03_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG3.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG03.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG3_80" defstate="0">
+	<element name="btn_SEG03_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SPLIT POINT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_01" defstate="0">
+	<element name="btn_SEG04_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="VARIATION &amp; MSA 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_02" defstate="0">
+	<element name="btn_SEG04_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TAP TEMPO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_04" defstate="0">
+	<element name="btn_SEG04_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="VARIATION &amp; MSA 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_08" defstate="0">
+	<element name="btn_SEG04_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUSIC STYLE ARRANGER"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_10" defstate="0">
+	<element name="btn_SEG04_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="VARIATION &amp; MSA 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_20" defstate="0">
+	<element name="btn_SEG04_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG4.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG04.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_40" defstate="0">
+	<element name="btn_SEG04_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="VARIATION &amp; MSA 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG4_80" defstate="0">
+	<element name="btn_SEG04_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG4.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG04.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_01" defstate="0">
+	<element name="btn_SEG05_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD 5/SOLO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_02" defstate="0">
+	<element name="btn_SEG05_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ONE TOUCH PLAY"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_04" defstate="0">
+	<element name="btn_SEG05_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_08" defstate="0">
+	<element name="btn_SEG05_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PERFORMANCE PADS BANK"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_10" defstate="0">
+	<element name="btn_SEG05_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_20" defstate="0">
+	<element name="btn_SEG05_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_40" defstate="0">
+	<element name="btn_SEG05_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD 6/SOLO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG5_80" defstate="0">
+	<element name="btn_SEG05_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG5.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG05.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_01" defstate="0">
+	<element name="btn_SEG06_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG6.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG06.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_02" defstate="0">
+	<element name="btn_SEG06_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PERFORMANCE PADS STOP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_04" defstate="0">
+	<element name="btn_SEG06_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND SET"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_08" defstate="0">
+	<element name="btn_SEG06_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PLAY CHORD OFF/ON"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_10" defstate="0">
+	<element name="btn_SEG06_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ARRANGER OFF/ON"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_20" defstate="0">
+	<element name="btn_SEG06_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PERFORMANCE PADS AUTO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_40" defstate="0">
+	<element name="btn_SEG06_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DEMO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG6_80" defstate="0">
+	<element name="btn_SEG06_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG6.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG06.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_01" defstate="0">
+	<element name="btn_SEG07_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUSIC STYLIST"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_02" defstate="0">
+	<element name="btn_SEG07_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="AUTO MODE"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_04" defstate="0">
+	<element name="btn_SEG07_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ONE TOUCH PLAY 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_08" defstate="0">
+	<element name="btn_SEG07_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG7.08"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG07.08"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_10" defstate="0">
+	<element name="btn_SEG07_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG7.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG07.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_20" defstate="0">
+	<element name="btn_SEG07_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG7.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG07.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_40" defstate="0">
+	<element name="btn_SEG07_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG7.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG07.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPL_SEG7_80" defstate="0">
+	<element name="btn_SEG07_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPL_SEG7.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG07.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_01" defstate="0">
+	<element name="btn_SEG0C_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="OTHER PARTS/TG"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_02" defstate="0">
+	<element name="btn_SEG0C_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="HELP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_04" defstate="0">
+	<element name="btn_SEG0C_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CONTRAST UP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_08" defstate="0">
+	<element name="btn_SEG0C_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CONTRAST DOWN"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_10" defstate="0">
+	<element name="btn_SEG0C_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_20" defstate="0">
+	<element name="btn_SEG0C_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_40" defstate="0">
+	<element name="btn_SEG0C_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG0_80" defstate="0">
+	<element name="btn_SEG0C_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_01" defstate="0">
+	<element name="btn_SEG0D_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_02" defstate="0">
+	<element name="btn_SEG0D_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_04" defstate="0">
+	<element name="btn_SEG0D_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_08" defstate="0">
+	<element name="btn_SEG0D_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_10" defstate="0">
+	<element name="btn_SEG0D_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_20" defstate="0">
+	<element name="btn_SEG0D_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_40" defstate="0">
+	<element name="btn_SEG0D_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 6"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG1_80" defstate="0">
+	<element name="btn_SEG0D_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 6"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_01" defstate="0">
+	<element name="btn_SEG0E_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 7"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_02" defstate="0">
+	<element name="btn_SEG0E_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 7"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_04" defstate="0">
+	<element name="btn_SEG0E_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 8"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_08" defstate="0">
+	<element name="btn_SEG0E_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 8"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_10" defstate="0">
+	<element name="btn_SEG0E_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 9"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_20" defstate="0">
+	<element name="btn_SEG0E_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 9"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_40" defstate="0">
+	<element name="btn_SEG0E_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG2_80" defstate="0">
+	<element name="btn_SEG0E_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_01" defstate="0">
+	<element name="btn_SEG0F_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 11"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_02" defstate="0">
+	<element name="btn_SEG0F_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 11"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_04" defstate="0">
+	<element name="btn_SEG0F_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 12"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_08" defstate="0">
+	<element name="btn_SEG0F_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 12"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_10" defstate="0">
+	<element name="btn_SEG0F_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 13"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_20" defstate="0">
+	<element name="btn_SEG0F_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 13"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_40" defstate="0">
+	<element name="btn_SEG0F_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 14"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG3_80" defstate="0">
+	<element name="btn_SEG0F_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 14"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_01" defstate="0">
+	<element name="btn_SEG10_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 15"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_02" defstate="0">
+	<element name="btn_SEG10_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 15"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_04" defstate="0">
+	<element name="btn_SEG10_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE UP 16"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_08" defstate="0">
+	<element name="btn_SEG10_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MUTE DOWN 16"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_10" defstate="0">
+	<element name="btn_SEG10_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAGE UP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_20" defstate="0">
+	<element name="btn_SEG10_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAGE DOWN"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_40" defstate="0">
+	<element name="btn_SEG10_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DISPLAY HOLD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPC_SEG4_80" defstate="0">
+	<element name="btn_SEG10_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="EXIT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_01" defstate="0">
+	<element name="btn_SEG11_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TECHNI-CHORD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_02" defstate="0">
+	<element name="btn_SEG11_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_04" defstate="0">
+	<element name="btn_SEG11_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PROGRAM MENUS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_08" defstate="0">
+	<element name="btn_SEG11_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DISK EASY REC"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_10" defstate="0">
+	<element name="btn_SEG11_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MALLET &amp; ORCH PERC"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_20" defstate="0">
+	<element name="btn_SEG11_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BASS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_40" defstate="0">
+	<element name="btn_SEG11_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CUSTOMIZE"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG0_80" defstate="0">
+	<element name="btn_SEG11_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SD CARD LOAD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_01" defstate="0">
+	<element name="btn_SEG12_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOLO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_02" defstate="0">
+	<element name="btn_SEG12_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PART SELECT RIGHT 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_04" defstate="0">
+	<element name="btn_SEG12_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DISK MENU LOAD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_08" defstate="0">
+	<element name="btn_SEG12_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="VARIATION"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_10" defstate="0">
+	<element name="btn_SEG12_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BRASS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_20" defstate="0">
+	<element name="btn_SEG12_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SYNTH"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_40" defstate="0">
+	<element name="btn_SEG12_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CUSTOM PANEL"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG1_80" defstate="0">
+	<element name="btn_SEG12_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG1.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG12.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_01" defstate="0">
+	<element name="btn_SEG13_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PART SELECT LEFT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_02" defstate="0">
+	<element name="btn_SEG13_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PART SELECT RIGHT 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_04" defstate="0">
+	<element name="btn_SEG13_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="EFFECT MIC"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_08" defstate="0">
+	<element name="btn_SEG13_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND DSP"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_10" defstate="0">
+	<element name="btn_SEG13_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="STRINGS &amp; VOCAL"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_20" defstate="0">
+	<element name="btn_SEG13_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PAD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_40" defstate="0">
+	<element name="btn_SEG13_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="FAVORITES"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG2_80" defstate="0">
+	<element name="btn_SEG13_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="NEXT BANK"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_01" defstate="0">
+	<element name="btn_SEG14_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TRANSPOSE R1 -"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_02" defstate="0">
+	<element name="btn_SEG14_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CONDUCTOR RIGHT 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_04" defstate="0">
+	<element name="btn_SEG14_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MULTI"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_08" defstate="0">
+	<element name="btn_SEG14_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DIGITAL EFFECT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_10" defstate="0">
+	<element name="btn_SEG14_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="GUITAR"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_20" defstate="0">
+	<element name="btn_SEG14_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TAB ORGAN"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_40" defstate="0">
+	<element name="btn_SEG14_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG3_80" defstate="0">
+	<element name="btn_SEG14_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="BANK VIEW"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_01" defstate="0">
+	<element name="btn_SEG15_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TRANSPOSE R1 +"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_02" defstate="0">
+	<element name="btn_SEG15_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CONDUCTOR LEFT"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_04" defstate="0">
+	<element name="btn_SEG15_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="REVERB"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_08" defstate="0">
+	<element name="btn_SEG15_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SUSTAIN"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_10" defstate="0">
+	<element name="btn_SEG15_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="PIANO"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_20" defstate="0">
+	<element name="btn_SEG15_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DIGITAL DRAWBAR"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_40" defstate="0">
+	<element name="btn_SEG15_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG4_80" defstate="0">
+	<element name="btn_SEG15_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 6"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_01" defstate="0">
+	<element name="btn_SEG08_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Right 5"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_02" defstate="0">
+	<element name="btn_SEG08_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TRANSPOSE R2 -"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_04" defstate="0">
+	<element name="btn_SEG08_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="CHORUS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_08" defstate="0">
+	<element name="btn_SEG08_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND EXPLORER"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_10" defstate="0">
+	<element name="btn_SEG08_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Right 1"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_20" defstate="0">
+	<element name="btn_SEG08_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Right 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_40" defstate="0">
+	<element name="btn_SEG08_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG5_80" defstate="0">
+	<element name="btn_SEG08_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 7"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_01" defstate="0">
+	<element name="btn_SEG09_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Right 4"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_02" defstate="0">
+	<element name="btn_SEG09_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="TRANSPOSE R2 +"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_04" defstate="0">
+	<element name="btn_SEG09_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="EW EXPANSION"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_08" defstate="0">
+	<element name="btn_SEG09_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SAX &amp; WOODWIND"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_10" defstate="0">
+	<element name="btn_SEG09_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG6.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG09.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_20" defstate="0">
+	<element name="btn_SEG09_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG6.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG09.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_40" defstate="0">
+	<element name="btn_SEG09_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 2"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG6_80" defstate="0">
+	<element name="btn_SEG09_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND GROUP 8"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_01" defstate="0">
+	<element name="btn_SEG0A_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="LCD Right 3"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_02" defstate="0">
+	<element name="btn_SEG0A_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG7.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0A.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_04" defstate="0">
+	<element name="btn_SEG0A_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="MEMORY"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_08" defstate="0">
+	<element name="btn_SEG0A_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ORGAN &amp; ACCORDION"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_10" defstate="0">
+	<element name="btn_SEG0A_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG7.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0A.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_20" defstate="0">
+	<element name="btn_SEG0A_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG7.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0A.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_40" defstate="0">
+	<element name="btn_SEG0A_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="SOUND SET"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG7_80" defstate="0">
+	<element name="btn_SEG0A_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG7.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0A.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_01" defstate="0">
+	<element name="btn_SEG0B_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_02" defstate="0">
+	<element name="btn_SEG0B_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_04" defstate="0">
+	<element name="btn_SEG0B_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="ACCORDION REGISTER"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_08" defstate="0">
+	<element name="btn_SEG0B_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.08"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.08"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_10" defstate="0">
+	<element name="btn_SEG0B_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_20" defstate="0">
+	<element name="btn_SEG0B_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_40" defstate="0">
+	<element name="btn_SEG0B_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG8_80" defstate="0">
+	<element name="btn_SEG0B_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG8.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0B.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_01" defstate="0">
+	<element name="btn_SEG0Cx_01" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.01"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_02" defstate="0">
+	<element name="btn_SEG0Cx_02" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.02"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_04" defstate="0">
+	<element name="btn_SEG0Cx_04" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="DRUM KITS"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_08" defstate="0">
+	<element name="btn_SEG0Cx_08" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
 		<text string="WORLD"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_10" defstate="0">
+	<element name="btn_SEG0Cx_10" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.10"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_20" defstate="0">
+	<element name="btn_SEG0Cx_20" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.20"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_40" defstate="0">
+	<element name="btn_SEG0Cx_40" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.40"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
-	<element name="btn_CPR_SEG9_80" defstate="0">
+	<element name="btn_SEG0Cx_80" defstate="0">
 		<rect state="0"><color red="0.20" green="0.20" blue="0.23"/></rect>
 		<rect state="1"><color red="0.65" green="0.55" blue="0.12"/></rect>
-		<text string="CPR_SEG9.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
+		<text string="SEG0Cx.80"><color red="0.92" green="0.92" blue="0.92"/><bounds x="0.03" y="0.18" width="0.94" height="0.64"/></text>
 	</element>
 
 	<view name="Control Panel">
 		<element ref="panel_bg"><bounds x="0" y="0" width="2304" height="650"/></element>
 		<screen index="0"><bounds x="832" y="30" width="640" height="240"/></screen>
 		<element ref="title_CPL"><bounds x="4" y="280" width="796" height="26"/></element>
-		<element ref="btn_CPL_SEG0_01" inputtag="CPL_SEG0" inputmask="0x01"><bounds x="4" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_02" inputtag="CPL_SEG0" inputmask="0x02"><bounds x="4" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_04" inputtag="CPL_SEG0" inputmask="0x04"><bounds x="4" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_08" inputtag="CPL_SEG0" inputmask="0x08"><bounds x="4" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_10" inputtag="CPL_SEG0" inputmask="0x10"><bounds x="4" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_20" inputtag="CPL_SEG0" inputmask="0x20"><bounds x="4" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_40" inputtag="CPL_SEG0" inputmask="0x40"><bounds x="4" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG0_80" inputtag="CPL_SEG0" inputmask="0x80"><bounds x="4" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_01" inputtag="CPL_SEG1" inputmask="0x01"><bounds x="104" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_02" inputtag="CPL_SEG1" inputmask="0x02"><bounds x="104" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_04" inputtag="CPL_SEG1" inputmask="0x04"><bounds x="104" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_08" inputtag="CPL_SEG1" inputmask="0x08"><bounds x="104" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_10" inputtag="CPL_SEG1" inputmask="0x10"><bounds x="104" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_20" inputtag="CPL_SEG1" inputmask="0x20"><bounds x="104" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_40" inputtag="CPL_SEG1" inputmask="0x40"><bounds x="104" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG1_80" inputtag="CPL_SEG1" inputmask="0x80"><bounds x="104" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_01" inputtag="CPL_SEG2" inputmask="0x01"><bounds x="204" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_02" inputtag="CPL_SEG2" inputmask="0x02"><bounds x="204" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_04" inputtag="CPL_SEG2" inputmask="0x04"><bounds x="204" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_08" inputtag="CPL_SEG2" inputmask="0x08"><bounds x="204" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_10" inputtag="CPL_SEG2" inputmask="0x10"><bounds x="204" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_20" inputtag="CPL_SEG2" inputmask="0x20"><bounds x="204" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_40" inputtag="CPL_SEG2" inputmask="0x40"><bounds x="204" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG2_80" inputtag="CPL_SEG2" inputmask="0x80"><bounds x="204" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_01" inputtag="CPL_SEG3" inputmask="0x01"><bounds x="304" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_02" inputtag="CPL_SEG3" inputmask="0x02"><bounds x="304" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_04" inputtag="CPL_SEG3" inputmask="0x04"><bounds x="304" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_08" inputtag="CPL_SEG3" inputmask="0x08"><bounds x="304" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_10" inputtag="CPL_SEG3" inputmask="0x10"><bounds x="304" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_20" inputtag="CPL_SEG3" inputmask="0x20"><bounds x="304" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_40" inputtag="CPL_SEG3" inputmask="0x40"><bounds x="304" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG3_80" inputtag="CPL_SEG3" inputmask="0x80"><bounds x="304" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_01" inputtag="CPL_SEG4" inputmask="0x01"><bounds x="404" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_02" inputtag="CPL_SEG4" inputmask="0x02"><bounds x="404" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_04" inputtag="CPL_SEG4" inputmask="0x04"><bounds x="404" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_08" inputtag="CPL_SEG4" inputmask="0x08"><bounds x="404" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_10" inputtag="CPL_SEG4" inputmask="0x10"><bounds x="404" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_20" inputtag="CPL_SEG4" inputmask="0x20"><bounds x="404" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_40" inputtag="CPL_SEG4" inputmask="0x40"><bounds x="404" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG4_80" inputtag="CPL_SEG4" inputmask="0x80"><bounds x="404" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_01" inputtag="CPL_SEG5" inputmask="0x01"><bounds x="504" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_02" inputtag="CPL_SEG5" inputmask="0x02"><bounds x="504" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_04" inputtag="CPL_SEG5" inputmask="0x04"><bounds x="504" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_08" inputtag="CPL_SEG5" inputmask="0x08"><bounds x="504" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_10" inputtag="CPL_SEG5" inputmask="0x10"><bounds x="504" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_20" inputtag="CPL_SEG5" inputmask="0x20"><bounds x="504" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_40" inputtag="CPL_SEG5" inputmask="0x40"><bounds x="504" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG5_80" inputtag="CPL_SEG5" inputmask="0x80"><bounds x="504" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_01" inputtag="CPL_SEG6" inputmask="0x01"><bounds x="604" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_02" inputtag="CPL_SEG6" inputmask="0x02"><bounds x="604" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_04" inputtag="CPL_SEG6" inputmask="0x04"><bounds x="604" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_08" inputtag="CPL_SEG6" inputmask="0x08"><bounds x="604" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_10" inputtag="CPL_SEG6" inputmask="0x10"><bounds x="604" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_20" inputtag="CPL_SEG6" inputmask="0x20"><bounds x="604" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_40" inputtag="CPL_SEG6" inputmask="0x40"><bounds x="604" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG6_80" inputtag="CPL_SEG6" inputmask="0x80"><bounds x="604" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_01" inputtag="CPL_SEG7" inputmask="0x01"><bounds x="704" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_02" inputtag="CPL_SEG7" inputmask="0x02"><bounds x="704" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_04" inputtag="CPL_SEG7" inputmask="0x04"><bounds x="704" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_08" inputtag="CPL_SEG7" inputmask="0x08"><bounds x="704" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_10" inputtag="CPL_SEG7" inputmask="0x10"><bounds x="704" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_20" inputtag="CPL_SEG7" inputmask="0x20"><bounds x="704" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_40" inputtag="CPL_SEG7" inputmask="0x40"><bounds x="704" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPL_SEG7_80" inputtag="CPL_SEG7" inputmask="0x80"><bounds x="704" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG00_01" inputtag="SEG00" inputmask="0x01"><bounds x="4" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG00_02" inputtag="SEG00" inputmask="0x02"><bounds x="4" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG00_04" inputtag="SEG00" inputmask="0x04"><bounds x="4" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG00_08" inputtag="SEG00" inputmask="0x08"><bounds x="4" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG00_10" inputtag="SEG00" inputmask="0x10"><bounds x="4" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG00_20" inputtag="SEG00" inputmask="0x20"><bounds x="4" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG00_40" inputtag="SEG00" inputmask="0x40"><bounds x="4" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG00_80" inputtag="SEG00" inputmask="0x80"><bounds x="4" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG01_01" inputtag="SEG01" inputmask="0x01"><bounds x="104" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG01_02" inputtag="SEG01" inputmask="0x02"><bounds x="104" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG01_04" inputtag="SEG01" inputmask="0x04"><bounds x="104" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG01_08" inputtag="SEG01" inputmask="0x08"><bounds x="104" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG01_10" inputtag="SEG01" inputmask="0x10"><bounds x="104" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG01_20" inputtag="SEG01" inputmask="0x20"><bounds x="104" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG01_40" inputtag="SEG01" inputmask="0x40"><bounds x="104" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG01_80" inputtag="SEG01" inputmask="0x80"><bounds x="104" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG02_01" inputtag="SEG02" inputmask="0x01"><bounds x="204" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG02_02" inputtag="SEG02" inputmask="0x02"><bounds x="204" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG02_04" inputtag="SEG02" inputmask="0x04"><bounds x="204" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG02_08" inputtag="SEG02" inputmask="0x08"><bounds x="204" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG02_10" inputtag="SEG02" inputmask="0x10"><bounds x="204" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG02_20" inputtag="SEG02" inputmask="0x20"><bounds x="204" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG02_40" inputtag="SEG02" inputmask="0x40"><bounds x="204" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG02_80" inputtag="SEG02" inputmask="0x80"><bounds x="204" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG03_01" inputtag="SEG03" inputmask="0x01"><bounds x="304" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG03_02" inputtag="SEG03" inputmask="0x02"><bounds x="304" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG03_04" inputtag="SEG03" inputmask="0x04"><bounds x="304" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG03_08" inputtag="SEG03" inputmask="0x08"><bounds x="304" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG03_10" inputtag="SEG03" inputmask="0x10"><bounds x="304" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG03_20" inputtag="SEG03" inputmask="0x20"><bounds x="304" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG03_40" inputtag="SEG03" inputmask="0x40"><bounds x="304" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG03_80" inputtag="SEG03" inputmask="0x80"><bounds x="304" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG04_01" inputtag="SEG04" inputmask="0x01"><bounds x="404" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG04_02" inputtag="SEG04" inputmask="0x02"><bounds x="404" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG04_04" inputtag="SEG04" inputmask="0x04"><bounds x="404" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG04_08" inputtag="SEG04" inputmask="0x08"><bounds x="404" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG04_10" inputtag="SEG04" inputmask="0x10"><bounds x="404" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG04_20" inputtag="SEG04" inputmask="0x20"><bounds x="404" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG04_40" inputtag="SEG04" inputmask="0x40"><bounds x="404" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG04_80" inputtag="SEG04" inputmask="0x80"><bounds x="404" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG05_01" inputtag="SEG05" inputmask="0x01"><bounds x="504" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG05_02" inputtag="SEG05" inputmask="0x02"><bounds x="504" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG05_04" inputtag="SEG05" inputmask="0x04"><bounds x="504" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG05_08" inputtag="SEG05" inputmask="0x08"><bounds x="504" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG05_10" inputtag="SEG05" inputmask="0x10"><bounds x="504" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG05_20" inputtag="SEG05" inputmask="0x20"><bounds x="504" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG05_40" inputtag="SEG05" inputmask="0x40"><bounds x="504" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG05_80" inputtag="SEG05" inputmask="0x80"><bounds x="504" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG06_01" inputtag="SEG06" inputmask="0x01"><bounds x="604" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG06_02" inputtag="SEG06" inputmask="0x02"><bounds x="604" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG06_04" inputtag="SEG06" inputmask="0x04"><bounds x="604" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG06_08" inputtag="SEG06" inputmask="0x08"><bounds x="604" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG06_10" inputtag="SEG06" inputmask="0x10"><bounds x="604" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG06_20" inputtag="SEG06" inputmask="0x20"><bounds x="604" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG06_40" inputtag="SEG06" inputmask="0x40"><bounds x="604" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG06_80" inputtag="SEG06" inputmask="0x80"><bounds x="604" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG07_01" inputtag="SEG07" inputmask="0x01"><bounds x="704" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG07_02" inputtag="SEG07" inputmask="0x02"><bounds x="704" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG07_04" inputtag="SEG07" inputmask="0x04"><bounds x="704" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG07_08" inputtag="SEG07" inputmask="0x08"><bounds x="704" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG07_10" inputtag="SEG07" inputmask="0x10"><bounds x="704" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG07_20" inputtag="SEG07" inputmask="0x20"><bounds x="704" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG07_40" inputtag="SEG07" inputmask="0x40"><bounds x="704" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG07_80" inputtag="SEG07" inputmask="0x80"><bounds x="704" y="530" width="96" height="26"/></element>
 		<element ref="title_CPC"><bounds x="804" y="280" width="496" height="26"/></element>
-		<element ref="btn_CPC_SEG0_01" inputtag="CPC_SEG0" inputmask="0x01"><bounds x="804" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_02" inputtag="CPC_SEG0" inputmask="0x02"><bounds x="804" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_04" inputtag="CPC_SEG0" inputmask="0x04"><bounds x="804" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_08" inputtag="CPC_SEG0" inputmask="0x08"><bounds x="804" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_10" inputtag="CPC_SEG0" inputmask="0x10"><bounds x="804" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_20" inputtag="CPC_SEG0" inputmask="0x20"><bounds x="804" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_40" inputtag="CPC_SEG0" inputmask="0x40"><bounds x="804" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG0_80" inputtag="CPC_SEG0" inputmask="0x80"><bounds x="804" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_01" inputtag="CPC_SEG1" inputmask="0x01"><bounds x="904" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_02" inputtag="CPC_SEG1" inputmask="0x02"><bounds x="904" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_04" inputtag="CPC_SEG1" inputmask="0x04"><bounds x="904" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_08" inputtag="CPC_SEG1" inputmask="0x08"><bounds x="904" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_10" inputtag="CPC_SEG1" inputmask="0x10"><bounds x="904" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_20" inputtag="CPC_SEG1" inputmask="0x20"><bounds x="904" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_40" inputtag="CPC_SEG1" inputmask="0x40"><bounds x="904" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG1_80" inputtag="CPC_SEG1" inputmask="0x80"><bounds x="904" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_01" inputtag="CPC_SEG2" inputmask="0x01"><bounds x="1004" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_02" inputtag="CPC_SEG2" inputmask="0x02"><bounds x="1004" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_04" inputtag="CPC_SEG2" inputmask="0x04"><bounds x="1004" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_08" inputtag="CPC_SEG2" inputmask="0x08"><bounds x="1004" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_10" inputtag="CPC_SEG2" inputmask="0x10"><bounds x="1004" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_20" inputtag="CPC_SEG2" inputmask="0x20"><bounds x="1004" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_40" inputtag="CPC_SEG2" inputmask="0x40"><bounds x="1004" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG2_80" inputtag="CPC_SEG2" inputmask="0x80"><bounds x="1004" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_01" inputtag="CPC_SEG3" inputmask="0x01"><bounds x="1104" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_02" inputtag="CPC_SEG3" inputmask="0x02"><bounds x="1104" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_04" inputtag="CPC_SEG3" inputmask="0x04"><bounds x="1104" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_08" inputtag="CPC_SEG3" inputmask="0x08"><bounds x="1104" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_10" inputtag="CPC_SEG3" inputmask="0x10"><bounds x="1104" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_20" inputtag="CPC_SEG3" inputmask="0x20"><bounds x="1104" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_40" inputtag="CPC_SEG3" inputmask="0x40"><bounds x="1104" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG3_80" inputtag="CPC_SEG3" inputmask="0x80"><bounds x="1104" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_01" inputtag="CPC_SEG4" inputmask="0x01"><bounds x="1204" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_02" inputtag="CPC_SEG4" inputmask="0x02"><bounds x="1204" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_04" inputtag="CPC_SEG4" inputmask="0x04"><bounds x="1204" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_08" inputtag="CPC_SEG4" inputmask="0x08"><bounds x="1204" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_10" inputtag="CPC_SEG4" inputmask="0x10"><bounds x="1204" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_20" inputtag="CPC_SEG4" inputmask="0x20"><bounds x="1204" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_40" inputtag="CPC_SEG4" inputmask="0x40"><bounds x="1204" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPC_SEG4_80" inputtag="CPC_SEG4" inputmask="0x80"><bounds x="1204" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_01" inputtag="SEG0C" inputmask="0x01"><bounds x="804" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_02" inputtag="SEG0C" inputmask="0x02"><bounds x="804" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_04" inputtag="SEG0C" inputmask="0x04"><bounds x="804" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_08" inputtag="SEG0C" inputmask="0x08"><bounds x="804" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_10" inputtag="SEG0C" inputmask="0x10"><bounds x="804" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_20" inputtag="SEG0C" inputmask="0x20"><bounds x="804" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_40" inputtag="SEG0C" inputmask="0x40"><bounds x="804" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0C_80" inputtag="SEG0C" inputmask="0x80"><bounds x="804" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_01" inputtag="SEG0D" inputmask="0x01"><bounds x="904" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_02" inputtag="SEG0D" inputmask="0x02"><bounds x="904" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_04" inputtag="SEG0D" inputmask="0x04"><bounds x="904" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_08" inputtag="SEG0D" inputmask="0x08"><bounds x="904" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_10" inputtag="SEG0D" inputmask="0x10"><bounds x="904" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_20" inputtag="SEG0D" inputmask="0x20"><bounds x="904" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_40" inputtag="SEG0D" inputmask="0x40"><bounds x="904" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0D_80" inputtag="SEG0D" inputmask="0x80"><bounds x="904" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_01" inputtag="SEG0E" inputmask="0x01"><bounds x="1004" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_02" inputtag="SEG0E" inputmask="0x02"><bounds x="1004" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_04" inputtag="SEG0E" inputmask="0x04"><bounds x="1004" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_08" inputtag="SEG0E" inputmask="0x08"><bounds x="1004" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_10" inputtag="SEG0E" inputmask="0x10"><bounds x="1004" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_20" inputtag="SEG0E" inputmask="0x20"><bounds x="1004" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_40" inputtag="SEG0E" inputmask="0x40"><bounds x="1004" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0E_80" inputtag="SEG0E" inputmask="0x80"><bounds x="1004" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_01" inputtag="SEG0F" inputmask="0x01"><bounds x="1104" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_02" inputtag="SEG0F" inputmask="0x02"><bounds x="1104" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_04" inputtag="SEG0F" inputmask="0x04"><bounds x="1104" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_08" inputtag="SEG0F" inputmask="0x08"><bounds x="1104" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_10" inputtag="SEG0F" inputmask="0x10"><bounds x="1104" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_20" inputtag="SEG0F" inputmask="0x20"><bounds x="1104" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_40" inputtag="SEG0F" inputmask="0x40"><bounds x="1104" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0F_80" inputtag="SEG0F" inputmask="0x80"><bounds x="1104" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG10_01" inputtag="SEG10" inputmask="0x01"><bounds x="1204" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG10_02" inputtag="SEG10" inputmask="0x02"><bounds x="1204" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG10_04" inputtag="SEG10" inputmask="0x04"><bounds x="1204" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG10_08" inputtag="SEG10" inputmask="0x08"><bounds x="1204" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG10_10" inputtag="SEG10" inputmask="0x10"><bounds x="1204" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG10_20" inputtag="SEG10" inputmask="0x20"><bounds x="1204" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG10_40" inputtag="SEG10" inputmask="0x40"><bounds x="1204" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG10_80" inputtag="SEG10" inputmask="0x80"><bounds x="1204" y="530" width="96" height="26"/></element>
 		<element ref="title_CPR"><bounds x="1304" y="280" width="996" height="26"/></element>
-		<element ref="btn_CPR_SEG0_01" inputtag="CPR_SEG0" inputmask="0x01"><bounds x="1304" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_02" inputtag="CPR_SEG0" inputmask="0x02"><bounds x="1304" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_04" inputtag="CPR_SEG0" inputmask="0x04"><bounds x="1304" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_08" inputtag="CPR_SEG0" inputmask="0x08"><bounds x="1304" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_10" inputtag="CPR_SEG0" inputmask="0x10"><bounds x="1304" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_20" inputtag="CPR_SEG0" inputmask="0x20"><bounds x="1304" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_40" inputtag="CPR_SEG0" inputmask="0x40"><bounds x="1304" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG0_80" inputtag="CPR_SEG0" inputmask="0x80"><bounds x="1304" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_01" inputtag="CPR_SEG1" inputmask="0x01"><bounds x="1404" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_02" inputtag="CPR_SEG1" inputmask="0x02"><bounds x="1404" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_04" inputtag="CPR_SEG1" inputmask="0x04"><bounds x="1404" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_08" inputtag="CPR_SEG1" inputmask="0x08"><bounds x="1404" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_10" inputtag="CPR_SEG1" inputmask="0x10"><bounds x="1404" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_20" inputtag="CPR_SEG1" inputmask="0x20"><bounds x="1404" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_40" inputtag="CPR_SEG1" inputmask="0x40"><bounds x="1404" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG1_80" inputtag="CPR_SEG1" inputmask="0x80"><bounds x="1404" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_01" inputtag="CPR_SEG2" inputmask="0x01"><bounds x="1504" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_02" inputtag="CPR_SEG2" inputmask="0x02"><bounds x="1504" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_04" inputtag="CPR_SEG2" inputmask="0x04"><bounds x="1504" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_08" inputtag="CPR_SEG2" inputmask="0x08"><bounds x="1504" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_10" inputtag="CPR_SEG2" inputmask="0x10"><bounds x="1504" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_20" inputtag="CPR_SEG2" inputmask="0x20"><bounds x="1504" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_40" inputtag="CPR_SEG2" inputmask="0x40"><bounds x="1504" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG2_80" inputtag="CPR_SEG2" inputmask="0x80"><bounds x="1504" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_01" inputtag="CPR_SEG3" inputmask="0x01"><bounds x="1604" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_02" inputtag="CPR_SEG3" inputmask="0x02"><bounds x="1604" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_04" inputtag="CPR_SEG3" inputmask="0x04"><bounds x="1604" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_08" inputtag="CPR_SEG3" inputmask="0x08"><bounds x="1604" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_10" inputtag="CPR_SEG3" inputmask="0x10"><bounds x="1604" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_20" inputtag="CPR_SEG3" inputmask="0x20"><bounds x="1604" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_40" inputtag="CPR_SEG3" inputmask="0x40"><bounds x="1604" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG3_80" inputtag="CPR_SEG3" inputmask="0x80"><bounds x="1604" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_01" inputtag="CPR_SEG4" inputmask="0x01"><bounds x="1704" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_02" inputtag="CPR_SEG4" inputmask="0x02"><bounds x="1704" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_04" inputtag="CPR_SEG4" inputmask="0x04"><bounds x="1704" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_08" inputtag="CPR_SEG4" inputmask="0x08"><bounds x="1704" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_10" inputtag="CPR_SEG4" inputmask="0x10"><bounds x="1704" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_20" inputtag="CPR_SEG4" inputmask="0x20"><bounds x="1704" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_40" inputtag="CPR_SEG4" inputmask="0x40"><bounds x="1704" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG4_80" inputtag="CPR_SEG4" inputmask="0x80"><bounds x="1704" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_01" inputtag="CPR_SEG5" inputmask="0x01"><bounds x="1804" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_02" inputtag="CPR_SEG5" inputmask="0x02"><bounds x="1804" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_04" inputtag="CPR_SEG5" inputmask="0x04"><bounds x="1804" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_08" inputtag="CPR_SEG5" inputmask="0x08"><bounds x="1804" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_10" inputtag="CPR_SEG5" inputmask="0x10"><bounds x="1804" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_20" inputtag="CPR_SEG5" inputmask="0x20"><bounds x="1804" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_40" inputtag="CPR_SEG5" inputmask="0x40"><bounds x="1804" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG5_80" inputtag="CPR_SEG5" inputmask="0x80"><bounds x="1804" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_01" inputtag="CPR_SEG6" inputmask="0x01"><bounds x="1904" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_02" inputtag="CPR_SEG6" inputmask="0x02"><bounds x="1904" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_04" inputtag="CPR_SEG6" inputmask="0x04"><bounds x="1904" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_08" inputtag="CPR_SEG6" inputmask="0x08"><bounds x="1904" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_10" inputtag="CPR_SEG6" inputmask="0x10"><bounds x="1904" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_20" inputtag="CPR_SEG6" inputmask="0x20"><bounds x="1904" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_40" inputtag="CPR_SEG6" inputmask="0x40"><bounds x="1904" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG6_80" inputtag="CPR_SEG6" inputmask="0x80"><bounds x="1904" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_01" inputtag="CPR_SEG7" inputmask="0x01"><bounds x="2004" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_02" inputtag="CPR_SEG7" inputmask="0x02"><bounds x="2004" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_04" inputtag="CPR_SEG7" inputmask="0x04"><bounds x="2004" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_08" inputtag="CPR_SEG7" inputmask="0x08"><bounds x="2004" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_10" inputtag="CPR_SEG7" inputmask="0x10"><bounds x="2004" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_20" inputtag="CPR_SEG7" inputmask="0x20"><bounds x="2004" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_40" inputtag="CPR_SEG7" inputmask="0x40"><bounds x="2004" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG7_80" inputtag="CPR_SEG7" inputmask="0x80"><bounds x="2004" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_01" inputtag="CPR_SEG8" inputmask="0x01"><bounds x="2104" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_02" inputtag="CPR_SEG8" inputmask="0x02"><bounds x="2104" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_04" inputtag="CPR_SEG8" inputmask="0x04"><bounds x="2104" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_08" inputtag="CPR_SEG8" inputmask="0x08"><bounds x="2104" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_10" inputtag="CPR_SEG8" inputmask="0x10"><bounds x="2104" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_20" inputtag="CPR_SEG8" inputmask="0x20"><bounds x="2104" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_40" inputtag="CPR_SEG8" inputmask="0x40"><bounds x="2104" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG8_80" inputtag="CPR_SEG8" inputmask="0x80"><bounds x="2104" y="530" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_01" inputtag="CPR_SEG9" inputmask="0x01"><bounds x="2204" y="320" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_02" inputtag="CPR_SEG9" inputmask="0x02"><bounds x="2204" y="350" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_04" inputtag="CPR_SEG9" inputmask="0x04"><bounds x="2204" y="380" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_08" inputtag="CPR_SEG9" inputmask="0x08"><bounds x="2204" y="410" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_10" inputtag="CPR_SEG9" inputmask="0x10"><bounds x="2204" y="440" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_20" inputtag="CPR_SEG9" inputmask="0x20"><bounds x="2204" y="470" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_40" inputtag="CPR_SEG9" inputmask="0x40"><bounds x="2204" y="500" width="96" height="26"/></element>
-		<element ref="btn_CPR_SEG9_80" inputtag="CPR_SEG9" inputmask="0x80"><bounds x="2204" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG11_01" inputtag="SEG11" inputmask="0x01"><bounds x="1304" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG11_02" inputtag="SEG11" inputmask="0x02"><bounds x="1304" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG11_04" inputtag="SEG11" inputmask="0x04"><bounds x="1304" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG11_08" inputtag="SEG11" inputmask="0x08"><bounds x="1304" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG11_10" inputtag="SEG11" inputmask="0x10"><bounds x="1304" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG11_20" inputtag="SEG11" inputmask="0x20"><bounds x="1304" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG11_40" inputtag="SEG11" inputmask="0x40"><bounds x="1304" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG11_80" inputtag="SEG11" inputmask="0x80"><bounds x="1304" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG12_01" inputtag="SEG12" inputmask="0x01"><bounds x="1404" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG12_02" inputtag="SEG12" inputmask="0x02"><bounds x="1404" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG12_04" inputtag="SEG12" inputmask="0x04"><bounds x="1404" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG12_08" inputtag="SEG12" inputmask="0x08"><bounds x="1404" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG12_10" inputtag="SEG12" inputmask="0x10"><bounds x="1404" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG12_20" inputtag="SEG12" inputmask="0x20"><bounds x="1404" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG12_40" inputtag="SEG12" inputmask="0x40"><bounds x="1404" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG12_80" inputtag="SEG12" inputmask="0x80"><bounds x="1404" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG13_01" inputtag="SEG13" inputmask="0x01"><bounds x="1504" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG13_02" inputtag="SEG13" inputmask="0x02"><bounds x="1504" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG13_04" inputtag="SEG13" inputmask="0x04"><bounds x="1504" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG13_08" inputtag="SEG13" inputmask="0x08"><bounds x="1504" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG13_10" inputtag="SEG13" inputmask="0x10"><bounds x="1504" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG13_20" inputtag="SEG13" inputmask="0x20"><bounds x="1504" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG13_40" inputtag="SEG13" inputmask="0x40"><bounds x="1504" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG13_80" inputtag="SEG13" inputmask="0x80"><bounds x="1504" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG14_01" inputtag="SEG14" inputmask="0x01"><bounds x="1604" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG14_02" inputtag="SEG14" inputmask="0x02"><bounds x="1604" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG14_04" inputtag="SEG14" inputmask="0x04"><bounds x="1604" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG14_08" inputtag="SEG14" inputmask="0x08"><bounds x="1604" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG14_10" inputtag="SEG14" inputmask="0x10"><bounds x="1604" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG14_20" inputtag="SEG14" inputmask="0x20"><bounds x="1604" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG14_40" inputtag="SEG14" inputmask="0x40"><bounds x="1604" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG14_80" inputtag="SEG14" inputmask="0x80"><bounds x="1604" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG15_01" inputtag="SEG15" inputmask="0x01"><bounds x="1704" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG15_02" inputtag="SEG15" inputmask="0x02"><bounds x="1704" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG15_04" inputtag="SEG15" inputmask="0x04"><bounds x="1704" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG15_08" inputtag="SEG15" inputmask="0x08"><bounds x="1704" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG15_10" inputtag="SEG15" inputmask="0x10"><bounds x="1704" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG15_20" inputtag="SEG15" inputmask="0x20"><bounds x="1704" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG15_40" inputtag="SEG15" inputmask="0x40"><bounds x="1704" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG15_80" inputtag="SEG15" inputmask="0x80"><bounds x="1704" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG08_01" inputtag="SEG08" inputmask="0x01"><bounds x="1804" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG08_02" inputtag="SEG08" inputmask="0x02"><bounds x="1804" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG08_04" inputtag="SEG08" inputmask="0x04"><bounds x="1804" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG08_08" inputtag="SEG08" inputmask="0x08"><bounds x="1804" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG08_10" inputtag="SEG08" inputmask="0x10"><bounds x="1804" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG08_20" inputtag="SEG08" inputmask="0x20"><bounds x="1804" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG08_40" inputtag="SEG08" inputmask="0x40"><bounds x="1804" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG08_80" inputtag="SEG08" inputmask="0x80"><bounds x="1804" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG09_01" inputtag="SEG09" inputmask="0x01"><bounds x="1904" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG09_02" inputtag="SEG09" inputmask="0x02"><bounds x="1904" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG09_04" inputtag="SEG09" inputmask="0x04"><bounds x="1904" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG09_08" inputtag="SEG09" inputmask="0x08"><bounds x="1904" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG09_10" inputtag="SEG09" inputmask="0x10"><bounds x="1904" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG09_20" inputtag="SEG09" inputmask="0x20"><bounds x="1904" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG09_40" inputtag="SEG09" inputmask="0x40"><bounds x="1904" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG09_80" inputtag="SEG09" inputmask="0x80"><bounds x="1904" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_01" inputtag="SEG0A" inputmask="0x01"><bounds x="2004" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_02" inputtag="SEG0A" inputmask="0x02"><bounds x="2004" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_04" inputtag="SEG0A" inputmask="0x04"><bounds x="2004" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_08" inputtag="SEG0A" inputmask="0x08"><bounds x="2004" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_10" inputtag="SEG0A" inputmask="0x10"><bounds x="2004" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_20" inputtag="SEG0A" inputmask="0x20"><bounds x="2004" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_40" inputtag="SEG0A" inputmask="0x40"><bounds x="2004" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0A_80" inputtag="SEG0A" inputmask="0x80"><bounds x="2004" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_01" inputtag="SEG0B" inputmask="0x01"><bounds x="2104" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_02" inputtag="SEG0B" inputmask="0x02"><bounds x="2104" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_04" inputtag="SEG0B" inputmask="0x04"><bounds x="2104" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_08" inputtag="SEG0B" inputmask="0x08"><bounds x="2104" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_10" inputtag="SEG0B" inputmask="0x10"><bounds x="2104" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_20" inputtag="SEG0B" inputmask="0x20"><bounds x="2104" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_40" inputtag="SEG0B" inputmask="0x40"><bounds x="2104" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0B_80" inputtag="SEG0B" inputmask="0x80"><bounds x="2104" y="530" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_01" inputtag="SEG0Cx" inputmask="0x01"><bounds x="2204" y="320" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_02" inputtag="SEG0Cx" inputmask="0x02"><bounds x="2204" y="350" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_04" inputtag="SEG0Cx" inputmask="0x04"><bounds x="2204" y="380" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_08" inputtag="SEG0Cx" inputmask="0x08"><bounds x="2204" y="410" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_10" inputtag="SEG0Cx" inputmask="0x10"><bounds x="2204" y="440" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_20" inputtag="SEG0Cx" inputmask="0x20"><bounds x="2204" y="470" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_40" inputtag="SEG0Cx" inputmask="0x40"><bounds x="2204" y="500" width="96" height="26"/></element>
+		<element ref="btn_SEG0Cx_80" inputtag="SEG0Cx" inputmask="0x80"><bounds x="2204" y="530" width="96" height="26"/></element>
 		<element name="cpl_led0" ref="grn_led"><bounds x="4" y="580" width="7" height="7"/></element>
 		<element name="cpl_led1" ref="grn_led"><bounds x="16" y="580" width="7" height="7"/></element>
 		<element name="cpl_led2" ref="grn_led"><bounds x="28" y="580" width="7" height="7"/></element>
