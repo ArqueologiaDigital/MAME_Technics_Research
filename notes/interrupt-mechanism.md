@@ -283,3 +283,27 @@ not call intc_assert), or whether an unimplemented op/flow diverts it. Per the
 video-path agent, the faithful task-switching vector is 0x4C03DE26 (not the
 non-switching 0x4C03DDA0 currently used) with a 2-level INTC (0x34000200 +
 per-group bitmask) -- likely needed once the tick fires.
+
+## UPDATE (2026-07-05, cont.): boot now runs a power-on SELF-TEST loop
+
+With the DSP/retf/interrupt fixes the boot executes correctly and now reaches (and
+loops in) the **power-on self-test** at ~0x484A4FEA, which never enables interrupts
+because a check fails and the whole test retries. Traced in detail:
+- `0x4849FFE3` = **RAM test of 0x50000000** (write 0x5A5A5A5A/0xA5A5A5A5, read back
+  via a scratch buffer, `setlb`/`lcs` loop of 0x80000 words = the full 4 MB work
+  RAM). **PASSES** (returns d1=0). Confirms setlb/Lcc, the DSP context save, and
+  the scratch round-trip all work.
+- `0x484A005A` = a **byte read/checksum of 0x44000000** (`movbu (a0),d0` sweep) --
+  0x44000000 is mapped as a plain RAM placeholder returning 0; if the test expects
+  specific data (a ROM/device signature) it FAILS.
+- `0x484A4F06` = a **panel handshake** (`bclr 0x20,(0x36008004)` + reads) -- the
+  panel sub-CPU HLE does not respond, so this likely FAILS.
+The caller (0x484A4FE3..) ORs the three results and, on non-zero, retries the whole
+sequence forever -> IE never set -> no tick -> no UI.
+
+NEXT: determine which of the two non-RAM checks fails (trace the combined error /
+disassemble each check's pass condition), then satisfy it -- either map 0x44000000
+with the expected content/device, or make the panel handshake respond (the panel
+HLE + delivering panel RX via intc_assert). Only then does the boot enable
+interrupts and start the scheduler. (Everything up to here -- CPU incl. AM33 DSP
+ops, retf, movm, level-triggered interrupts -- is correct and committed.)
