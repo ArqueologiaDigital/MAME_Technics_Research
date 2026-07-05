@@ -603,3 +603,27 @@ queue the TYPE-3 reply and fire the ATN pulse (edge 1 timer; edge 2 on the EXTMD
 11b->10b flip -- both already implemented). Then the 0x1A ISR pass-2 sets
 state:=8 and the group-0x10 per-byte deliveries fill the RX ring -> head moves
 -> result nibble 9 -> handshake SUCCESS -> normal UI.
+
+## HANDSHAKE COMPLETE (2026-07-05, commit 902caa5)
+
+The 7-byte frame parser was the final piece. The wire format is parsed by
+position (payloads at 2 and 4, syncs elsewhere); completed frames with a
+command payload ({1F,1D,1E,20,E0,29,DD}) trigger the TYPE-3 reply + ATN pulse;
+all other frames are LED-register updates (LED traffic uses the same framing --
+the two paths are unified).
+
+BOOT RESULT: the ping transaction receives its reply into the RX ring, the
+success test passes, and the transmission-error screen is REPLACED by an active
+green LCD with panel LEDs lit.
+
+The complete solution stack, in dependency order:
+ 1. GxICR w1c semantics scoped to mem_mask (control-byte writes preserve DETECT)
+ 2. EXTMD (0x34000280) modeled as a latch; bits7:6 = panel ATN pin mode
+ 3. IAGR latch-on-accept, group+vector atomic (standard_irq_callback -> irq_ack)
+ 4. PSW.IM priority-level masking in check_irq (the nesting-catastrophe fix)
+ 5. Per-data-write sync-transfer completion, always timer-deferred
+ 6. Unserviced-completion re-delivery after a wiping ack
+ 7. Panel presence line (GPIO 0x36008084 bit0 high)
+ 8. The ATN two-edge pulse (edge 1 on command completion, edge 2 on the EXTMD
+    11b->10b re-arm) + state-8 per-byte RX delivery (group 0x10)
+ 9. The 7-byte frame parser (this commit)
