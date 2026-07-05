@@ -505,3 +505,32 @@ position's true normSeg carries a sound event). To finish: relabel/reposition
 the CPC/CPR artwork from the event map, and decode the arg->genre (0x702005) and
 arg->sound-group (0x702010) / arg->part (0x702000/01) sub-tables to give the
 rhythm/sound/mute buttons their exact product names.
+
+## Rhythm-genre (0x702005) arg decode — table found, wiring deferred (2026-07-05)
+
+Located the rhythm-GROUP name table in program ROM at **0x48735EE4** (16 records,
+stride 0x18, each a 2-byte "[H" LCD-home prefix + centred name):
+  idx 0 8&16 BEAT     1 ROCK & POP    2 BALLAD        3 JAZZ & SWING
+  idx 4 BALLROOM      5 MOVIE & SHOW  6 ENTERTAINER   7 ORGANIST
+  idx 8 60s & 70s     9 MODERN DANCE  A SOUL & R&B    B COUNTRY&WESTERN
+  idx C MARCH & WALTZ D LATIN & WORLD E CUSTOM        F MEMORY
+
+The 0x702005 event's `arg` is NOT a direct index. A rotation table
+**[7,8,9,A,B,C,D,E,F,0,1,2,3,4,5,6]** appears 3x in ROM (e.g. 0x485B920F);
+i.e. **genre_index = (arg + 7) mod 16**. CONFIRMED for arg 0x04 -> idx 0x0B =
+COUNTRY&WESTERN by two independent clean single-press-from-home tests (SEG01
+bit7 opens the RHYTHM / COUNTRY&WESTERN select screen).
+
+NOT yet wired into PORT_NAMEs because a batch sweep of all 16 buttons was
+UNRELIABLE: the descriptor "gate" field mode-gates these keys -- from the home
+screen some presses act as PERFORMANCE PADS (e.g. arg0F -> "Church Bells", arg07
+-> "Cosmic Maj") instead of opening the genre list, and rapid sequential presses
+accumulate sub-mode state so later presses don't refresh the displayed genre.
+Only isolated single-press-from-a-clean-home-state reliably shows a genre.
+
+NEXT TICK METHOD (clean): for each of the 16 (seg,bit), do a SEPARATE run (or a
+long delay + return-to-home between presses) pressing ONE genre button from the
+home screen, snapshot the RHYTHM title, and record arg->genre. Confirm the
+(arg+7) rule across ≥3 distinct genres, then apply names to SEG01/SEG02 (ports +
+.lay text). The arg per (seg,bit): SEG01 b0..b7 = 0F 07 0E 06 0D 05 0C 04;
+SEG02 b0..b7 = 0B 03 0A 02 09 01 08 00.
