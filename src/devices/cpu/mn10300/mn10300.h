@@ -43,6 +43,11 @@ public:
 	// construction/destruction (single concrete, instantiable device)
 	mn10300_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
+	// The driver's interrupt controller tells the core where the AM33 maskable
+	// interrupt vector points (set once at machine start). Input line 0 is the
+	// single maskable interrupt.
+	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
+
 protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
@@ -56,11 +61,6 @@ protected:
 	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
-
-	// The driver's interrupt controller tells the core where the AM33 maskable
-	// interrupt vector points (set once at machine start). Input line 0 is the
-	// single maskable interrupt.
-	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
 	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks
 	// for its internal /2 divider. Only add those if the KN7000 MN10300 clocking
 	// requires it; otherwise the 1:1 base-class defaults are correct.
