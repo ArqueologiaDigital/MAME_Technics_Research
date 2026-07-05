@@ -201,6 +201,13 @@ private:
 	int m_iagr_latch = 0;
 	uint16_t m_intc_280 = 0;                   // 0x34000280 latched control fields
 	uint16_t m_snd_500e = 0;                   // 0x9805000E readback latch (sound init spins on it)
+	// Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
+	// write-only from the firmware. Address latched at base+0, data written at
+	// base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
+	// (< 0x1000); the 0xFC0x system-refresh group is accepted but not stored.
+	// See notes/tone-generator.md. (State capture; synthesis is future work.)
+	uint16_t m_tg_addr[2] = { 0, 0 };          // latched register address, [0]=main [1]=sub
+	uint16_t m_tg_reg[2][0x1000] = { };        // captured voice-register file
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 
@@ -376,6 +383,22 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	if (offset == 0x28007)                        // 0x9805000E readback latch
 	{
 		COMBINE_DATA(&m_snd_500e);
+		return;
+	}
+	// Tone-generator register-indirect write interface (write-only; see the
+	// member declaration and notes/tone-generator.md). Modeling it here captures
+	// the register file and keeps the constant TG traffic out of the io_w log.
+	switch (offset)
+	{
+	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
+	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
+		if (m_tg_addr[0] < 0x1000) m_tg_reg[0][m_tg_addr[0]] = data;
+		return;
+	case 0x28000: m_tg_addr[1] = data; return;                    // sub TG: address latch (0x98050000)
+	case 0x28001:                                                 // sub TG: data (0x98050002) -> reg[addr]
+		if (m_tg_addr[1] < 0x1000) m_tg_reg[1][m_tg_addr[1]] = data;
+		return;
+	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
 	}
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
@@ -1095,6 +1118,9 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_panel_p1));
 	save_item(NAME(m_panel_p2));
 	save_item(NAME(m_btn_prev));
+	save_item(NAME(m_snd_500e));
+	save_item(NAME(m_tg_addr));
+	save_item(NAME(m_tg_reg));
 }
 
 void kn7000_state::machine_reset()
