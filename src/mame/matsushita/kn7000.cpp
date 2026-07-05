@@ -80,7 +80,55 @@
 
 #include "cpu/mn10300/mn10300.h"
 
+#include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
+#include "bus/midi/midiinport.h"
+#include "bus/midi/midioutport.h"
+
 #include "screen.h"
+
+
+// ----------------------------------------------------------------------------
+//  KN7000 SIO UART -- byte<->bit bridge between a byte-oriented SIO channel and
+//  MAME's bit-serial midi_port. One instance per MIDI channel (31250 baud, 8N1).
+//  Modelled on src/mame/misc/vocalizer.cpp's UART.
+// ----------------------------------------------------------------------------
+class kn7000_sio_uart_device : public device_t, public device_serial_interface
+{
+public:
+	kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	auto tx_cb() { return m_tx_cb.bind(); }      // each TX bit -> midi_port write_txd
+	auto rx_cb() { return m_rx_cb.bind(); }      // each fully-received byte -> driver
+
+	void write(uint8_t data) { transmit_register_setup(data); }
+	bool tx_empty() const { return is_transmit_register_empty(); }
+
+protected:
+	virtual void device_start() override {}
+	virtual void device_reset() override ATTR_COLD;
+
+	virtual void tra_callback() override { m_tx_cb(transmit_register_get_data_bit()); }
+	virtual void rcv_complete() override { receive_register_extract(); m_rx_cb(get_received_char()); }
+
+	devcb_write_line m_tx_cb;
+	devcb_write8 m_rx_cb;
+};
+
+DEFINE_DEVICE_TYPE(KN7000_SIO_UART, kn7000_sio_uart_device, "kn7000_sio_uart", "KN7000 SIO MIDI UART")
+
+kn7000_sio_uart_device::kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+	device_t(mconfig, KN7000_SIO_UART, tag, owner, clock),
+	device_serial_interface(mconfig, *this),
+	m_tx_cb(*this),
+	m_rx_cb(*this)
+{
+}
+
+void kn7000_sio_uart_device::device_reset()
+{
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);   // MIDI: 8N1
+	set_rate(31250);                                  // MIDI baud
+}
 
 
 namespace {
@@ -93,6 +141,7 @@ public:
 		, m_maincpu(*this, "maincpu")
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
+		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_cpl_seg(*this, "CPL_SEG%u", 0U)
 		, m_cpc_seg(*this, "CPC_SEG%u", 0U)
 		, m_cpr_seg(*this, "CPR_SEG%u", 0U)
@@ -112,6 +161,9 @@ private:
 	required_device<mn10300_device> m_maincpu;
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint32_t> m_workram;
+	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
+
+	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
 
 	// Control panel button ports and LEDs (CPL = 8 cols, CPC = 5 cols; CPR + the
 	// serial HLE device that reads these / drives the LEDs are still to come).
@@ -343,8 +395,8 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
-		// TODO: forward to the MIDI OUT port (wired in the machine config).
-		logerror("%s: MIDI%d TX %02X\n", machine().describe_context(), ch, data);
+		// Serialize the byte out through the channel's UART to its MIDI OUT port.
+		m_midi_uart[ch - SIO_MIDI1]->write(data);
 		break;
 	}
 }
@@ -734,6 +786,23 @@ void kn7000_state::kn7000(machine_config &config)
 	m_screen->set_size(640, 240);
 	m_screen->set_visarea(0, 640 - 1, 0, 240 - 1);
 	m_screen->set_screen_update(FUNC(kn7000_state::screen_update));
+
+	// --- MIDI ports (SIO channels 1 & 2 at 0x34000810 / 0x34000820) ---------
+	// Each channel has a byte<->bit UART bridge feeding a standard MAME MIDI
+	// IN/OUT port pair. TX (firmware -> SIO -> UART -> MIDI OUT) works now;
+	// MIDI IN bytes are queued on the SIO RX FIFO but only reach the firmware
+	// once the MN10300 core takes SIO receive interrupts.
+	KN7000_SIO_UART(config, m_midi_uart[0], 0);
+	m_midi_uart[0]->tx_cb().set("mdout1", FUNC(midi_port_device::write_txd));
+	m_midi_uart[0]->rx_cb().set(FUNC(kn7000_state::midi_rx<SIO_MIDI1>));
+	MIDI_PORT(config, "mdin1", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[0], FUNC(kn7000_sio_uart_device::rx_w));
+	MIDI_PORT(config, "mdout1", midiout_slot, "midiout");
+
+	KN7000_SIO_UART(config, m_midi_uart[1], 0);
+	m_midi_uart[1]->tx_cb().set("mdout2", FUNC(midi_port_device::write_txd));
+	m_midi_uart[1]->rx_cb().set(FUNC(kn7000_state::midi_rx<SIO_MIDI2>));
+	MIDI_PORT(config, "mdin2", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[1], FUNC(kn7000_sio_uart_device::rx_w));
+	MIDI_PORT(config, "mdout2", midiout_slot, "midiout");
 
 	// TODO: sound hardware (dual tone generators + DSP IC306/IC307),
 	//       floppy disk controller (IC103), SD card and USB.
