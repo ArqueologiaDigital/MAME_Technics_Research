@@ -149,3 +149,30 @@ Sibling MN10200 core (`kn7000_mame_build/src/devices/cpu/mn10200/mn10200.cpp`):
    written to a modellable location, `take_irq` can jump straight to the observed
    handler entry (~`0x4C03DDxx`, resolve precisely) as a shim.
 2. **Timer tick rate** (input clock unknown) — start ~1 kHz and tune by feel.
+
+## IMPLEMENTATION STATUS (2026-07-05)
+
+Implemented and WORKING end-to-end (commits: mn10300 mechanics `da8ca77`, driver
+INTC+timer `97c0cda`):
+- CPU core: `PSW.IM`, `rti`, `take_irq` (push PC+PSW, clear IE, vector), `check_irq`,
+  `execute_set_input`, run-loop gate. `set_irq_vector()` public.
+- Driver INTC at `0x34000100` (GxICR array + IAGR read) + a ~1 kHz system-tick
+  `emu_timer`. CPU line 0 asserted while any ENABLE&REQUEST group exists.
+- **Empirical vector: `0x4C03DDA0`** (the library low-level handler entry; `movm`
+  context save → `udf12/13/15` → IAGR dispatch). Confirmed correct: interrupts
+  fire, the handler runs and RETURNS via `rti` to the interrupted PC (same PC/SP
+  every tick ⇒ context save/restore is symmetric even through the `udf*` ops).
+- **Empirical timer group: `0x06`** (GxICR `0x34000118`, the ONLY group the boot
+  enables before waiting; ENABLE=1, level 6). NOT `0x1D` as first guessed.
+
+Not yet working — the boot takes the tick but does not advance:
+- It parks calling a function at `0x4C03DCF3` (`clr d0 ; ret` — returns 0), i.e. a
+  wait loop polling "is a task ready?" that stays 0. The tick handler runs but does
+  not wake a task.
+- NEXT: trace what the handler does after `0x4C03DDA0` — does it reach the tick
+  service `ApTimer (0x484299F1)` and advance `0x5011FA8C[]`? Candidates for the gap:
+  (a) IAGR index encoding (I return `group<<1`; confirm the dispatcher's table
+  `0x50380A6C`/`0x50380B64` lands on the tick handler for group 0x06); (b) the
+  `udf12/13/15` AM33 ops are treated as unimplemented by the core and may corrupt
+  the handler's PSW-field extraction; (c) tick rate/behaviour. Implementing the
+  `udf*` (F6 extended) ops is the most likely missing piece.
