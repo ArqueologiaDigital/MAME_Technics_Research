@@ -234,7 +234,8 @@ private:
 	// takes SIO interrupts -- see notes/panel-serial-protocol.md).
 	TIMER_CALLBACK_MEMBER(panel_scan);
 	void panel_led_frame(uint8_t addr, uint8_t data);
-	uint8_t m_panel_resp[8] = { };         // pending panel->main response bytes
+	uint8_t m_panel_resp[64] = { };        // pending panel->main bytes (replies + button events)
+	void panel_queue(const uint8_t *bytes, int n);  // append + kick the ATN delivery
 	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
 	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
 	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
@@ -662,15 +663,14 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 			switch (m_panel_p1)
 			{
 			case 0x1f: case 0x1d: case 0x1e: case 0x20: case 0xe0: case 0x29: case 0xdd:
-				m_panel_resp[0] = 0x18; m_panel_resp[1] = 0x00;
-				m_panel_resp_len = 2; m_panel_resp_pos = 0;
-				// ATN edge 1, deferred past the ISR context (the state machine
-				// runs with IE clear; a synchronous assert would be consumed and
-				// acked in the wrong pass). Edge 2 is scheduled by the EXTMD
-				// 11b->10b re-arm write; the reply bytes deliver one per
-				// group-0x10 interrupt once the ISR's pass 2 sets RX enable.
-				m_panel_evt->adjust(attotime::from_usec(60), 1);
+			{
+				// TYPE-3 sync reply; delivery via the ATN pulse (edge 2 rides the
+				// EXTMD 11b->10b re-arm; bytes deliver one per group-0x10
+				// interrupt once the ISR's pass 2 sets RX enable).
+				static constexpr uint8_t sync_reply[2] = { 0x18, 0x00 };
+				panel_queue(sync_reply, 2);
 				break;
+			}
 			case 0x00:
 				break;                     // idle/padding frame
 			default:
@@ -704,6 +704,23 @@ void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
 	}
 	logerror("%s: panel LED frame addr=%02X data=%02X\n",
 		machine().describe_context(), addr, data);
+}
+
+// Queue panel->main bytes (a handshake reply or a button-event packet) and start
+// the delivery dance if idle: the panel pulses its ATN line (group 0x1A); the
+// firmware's ISR switches the link to RX and clocks the bytes in one group-0x10
+// interrupt at a time (state-8 handler -> the 92-byte ring -> the frame decoder).
+void kn7000_state::panel_queue(const uint8_t *bytes, int n)
+{
+	if (m_panel_resp_pos == m_panel_resp_len)
+		m_panel_resp_pos = m_panel_resp_len = 0;          // queue fully drained: reset
+	if (m_panel_resp_len + n > int(sizeof(m_panel_resp)))
+		return;                                           // overflow: drop (panel would too)
+	const bool was_idle = (m_panel_resp_pos == m_panel_resp_len);
+	for (int i = 0; i < n; i++)
+		m_panel_resp[m_panel_resp_len++] = bytes[i];
+	if (was_idle)
+		m_panel_evt->adjust(attotime::from_usec(60), 1);  // ATN edge 1
 }
 
 // Deferred panel events (one-shot; scheduled from ISR-context register writes so
@@ -745,11 +762,15 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 			if (cur != m_btn_prev[seg])
 			{
 				m_btn_prev[seg] = cur;
-				// ADDR = bank(bits6-7, with bit7==bit6) | type0 | subaddr(i);
-				// only banks 00 and 11 are valid on the wire.
-				const uint8_t addr = bank | (i & 0x07);
-				sio_rx_push(SIO_PANEL, addr);
-				sio_rx_push(SIO_PANEL, cur);
+				// TYPE-0/1 momentary switch report: 2 bytes [ADDR][DATA].
+				// ADDR = bank(bits7:6, wire rule bit7==bit6) | type(bits5:3, 0
+				// for segs 0-7, 1 with bit3 for segs 8-15) | subaddr; DATA = the
+				// full segment bitmask (bit=1 pressed). The main CPU XORs against
+				// its shadow to derive press/release edges. Delivery MUST use the
+				// ATN dance -- a bare fifo push never interrupts the firmware.
+				const uint8_t addr = bank | ((i & 0x08) ? 0x08 : 0x00) | (i & 0x07);
+				const uint8_t pkt[2] = { addr, cur };
+				panel_queue(pkt, 2);
 			}
 		}
 	};
