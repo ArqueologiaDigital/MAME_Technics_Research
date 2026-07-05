@@ -72,3 +72,28 @@ registers (a MIDI note-on writes roughly these, then a key-on strobe):
   latch the address/data pairs into a 64-voice x N-register state, and (later)
   synthesize from the waveform ROMs. Even a silent state-capturing device would
   let a note write be verified by its pitch/note-info registers.
+
+## Playback path is not driven in MAME (2026-07-05, tick ss+1)
+
+Modeled the register-indirect latch (address -> base+0, data -> base+2) as a
+temporary capture and logged every non-0xFC-group TG write, under two stimuli
+after boot: (a) an injected MIDI note-on, and (b) a scripted START/STOP press.
+
+- **Boot init DOES write voice-register groups**: at ~t=0.9 s the main TG gets
+  groups **0x04 and 0x0C written across all 64 channels (both banks), data 0** --
+  a clear/init pass. So the TG register-indirect path works and the firmware
+  drives it during initialization.
+- **No playback voice traffic**: neither the MIDI note nor the START/STOP press
+  produced ANY non-0xFC TG write. The only ongoing traffic is the 0xFC0x
+  system-refresh cycle. So the firmware's sound *playback* engine does not emit
+  voice writes (pitch/note-on/velocity) in MAME.
+
+Interpretation: sound playback is gated at the engine level. The most likely
+cause is a tone-generator readiness/handshake that never completes because the
+TG is unmodeled (the boot init runs, but the engine won't allocate/trigger
+voices for notes or rhythm until the TG reports ready). Getting audible sound is
+therefore a LARGE effort: (1) model the TG far enough that its readiness checks
+pass and it accepts voice writes, (2) then the engine will drive voices, (3)
+then synthesize from the waveform ROMs -- which may be undumped (the KN7000's
+wave ROMs are separate from the program/table flash we have). This is not a
+near-term win; parked with the register interface fully documented above.
