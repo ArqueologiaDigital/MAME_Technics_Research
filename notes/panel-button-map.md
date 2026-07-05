@@ -488,3 +488,20 @@ normSeg 0x00-0x0B: bank11 (ADDR = 0xC0 | (seg<=7? seg : 0x08|(seg-8... )));
   precisely: sub = seg for seg 0-0xB; ADDR = 0xC0 | (sub&7) | (sub&8?0x08:0).
 normSeg 0x0C-0x15: bank00, sub = seg-0x0C; ADDR = (sub&7) | (sub&8?0x08:0).
 (type-1 encoding bit3 auto-applies for sub>=8, matching the wire rule.)
+
+## Reorganization DONE (2026-07-05, commit 57d2193)
+
+The driver inputs are now one ioport per normalized segment (SEG00..SEG15);
+panel_scan emits the reverse-normalized wire address per segment, so every
+button reaches its intended firmware event by construction. Verified by scripted
+presses: SEG00.b4 = START/STOP -> rhythm; SEG0C.b1 = sound-group -> GUITAR page;
+SEG08.b0 = mixer -> scrolled the sound list. The .lay was remapped
+behavior-preservingly (old board button -> SEG port with the same normSeg).
+
+REMAINING (layout polish, not wiring): the artwork's on-screen LABELS + button
+POSITIONS still reflect the old physical-board transcription (e.g. the CPC cells
+say "MUTE UP 1" but now click a sound-select function, because that physical
+position's true normSeg carries a sound event). To finish: relabel/reposition
+the CPC/CPR artwork from the event map, and decode the arg->genre (0x702005) and
+arg->sound-group (0x702010) / arg->part (0x702000/01) sub-tables to give the
+rhythm/sound/mute buttons their exact product names.
