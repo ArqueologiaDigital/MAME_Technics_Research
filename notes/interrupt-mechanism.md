@@ -469,3 +469,40 @@ suspended (the 0x4C03DE26 save side, or an earlier suspend). NEXT: instrument th
 0x50380xxx), then trace back how the task at that sp got PC=0x48400058. The 24-byte
 record arrays copied to 0x84030FF8.. (now landing via the 0x84 alias) may be the
 TCB/task table -- check whether an entry-point field there is being read wrong.
+
+## UPDATE (2026-07-05, cont.7): the runaway is a stale rti frame, not a leak or a task-switch
+
+Deeper diagnosis of the ~14s rti->0x48400058 stall:
+- The SP switch at 0x4C03DE56 (`mov a1,sp`, loading the next task's SP from
+  0x50380CBC) is NEVER hit -> the corrupt rti is NOT a task switch after all.
+- JUMP-TO-BLANK probe (checks m_pc BEFORE check_irq): the boot's code NEVER sets
+  m_pc=0x48400058; the ONLY entry to 0x48400058 is the `rti` at 0x4C03DF13. So
+  take_irq never intercepts a jump there -> the bad PC comes purely from the rti's
+  stack frame.
+- No write_mem32 ever writes a 0x484000xx value into the stack region
+  [0x50380000,0x50400000), and take_irq (write_mem32 push) never pushes it.
+- => the rti reads a STALE stack slot: the handler's SP at rti differs from where
+  take_irq pushed this frame. (An SP-balance detector reported "no leak", but its
+  take_irq<->rti pairing is UNRELIABLE because task-start/first-run rtis have no
+  matching take_irq and shift the depth -- do not trust it.)
+
+HANDLER STRUCTURE (from disasm 0x4C03DDA0..0x4C03DF13):
+- 0x4C03DDA0 entry: movm save [d2,d3,a2,a3,other3] + `add -0xc` DSP area; saves
+  MDRQ/MCRH/MCRL/PSW to [sp+0xc/8/4/0]; INCREMENTS nesting counter 0x50380D0C.
+- dispatch: IAGR at 0x34000100 (else 0x34000104+8) -> index; a flags/word table at
+  0x50380A6C (movhu) and the 32-bit ISR-address table at 0x50380B64 (`mov (d3,a2),a2`)
+  -> `calls (a2)` the ISR (a2 is a VALID address, not 0x48400058).
+- after ISR: `and 0xf7ff,psw` (clear IE), DECREMENT 0x50380D0C.
+- NESTED path (counter != 0): restore DSP+PSW+movm, `rti` at ~0x4C03DE24.
+- OUTERMOST path (counter == 0): falls into the scheduler at 0x4C03DE26 (movm save
+  again, TCB save to *0x5038002C, would load *0x50380CBC into sp) and exits `rti`
+  at 0x4C03DF13. The valid 0x4C03DF13 rtis return to real task PCs (0x4C02BBCD,
+  0x484AC599); one returns to the stale 0x48400058.
+
+NEXT: (1) reliable SP check -- write a unique marker into each take_irq frame (keyed
+by a monotonic id, not depth) and verify at rti; find the interrupt whose rti SP !=
+its take_irq SP. (2) Fully trace the OUTERMOST path 0x4C03DE26..0x4C03DF13 incl.
+every SP-affecting op and the nesting-counter (0x50380D0C) gate -- confirm whether
+0x4C03DE56 truly never runs (alignment!) and where the exit SP is set. (3) Widen the
+value-watch to write_mem16/8 for 0x0058/0x4840 halves into the stack. The bad PC is
+almost certainly a stale word the handler's exit SP lands on.
