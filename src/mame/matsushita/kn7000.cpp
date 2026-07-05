@@ -44,8 +44,9 @@
         0x57800000  Picture flash (undumped; only lightly referenced)
         0x8C000000  device window / video path (boot copies ROM data here)
         0x90000000  framebuffer / LCD V-RAM window (IC104?)
-        0x98040000  main tone generator (IC203/204) - 16-bit register set
-        0x98050000  sub  tone generator (IC207/208) - parallel 16-bit set
+        0x98040000  tone generator (synth LSI IC205, C1BB00000709) - 16-bit register set
+        0x98050000  sub / second TG register set (parallel 16-bit)
+                     wave/sample data in undumped ROMs IC203/204/207/208 (C3CBQD00000x)
         0x98020000  sound control (byte regs); 0x98060000/0x98070000 more sound
 
     Notable work-RAM globals recovered from the disassembly (constants below):
@@ -1239,6 +1240,20 @@ ROM_START(kn7000)
 	// TODO: Picture flash at 0x57800000 - not dumped yet.
 	//ROM_REGION(0x800000, "picture", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_picture.rom", 0x000000, 0x800000, NO_DUMP)
+
+	// Tone-generator waveform / sample ROMs -- UNDUMPED. The synth LSI IC205
+	// (C1BB00000709, "TONE GENERATOR" in the service manual) plays PCM samples
+	// from four custom Panasonic mask ROMs on the sound board: IC203
+	// (C3CBQD000002), IC204 (C3CBQD000001), IC207 (C3CBQD000004), IC208
+	// (C3CBQD000003). These are physically separate chips, NOT part of the
+	// firmware update disks this driver's ROMs come from, so audible sound is
+	// impossible until they are dumped from the board (see the service manual
+	// "8.9 WAVE ROM test" / "8.10 SOUND SYSTEM test"; sizes below are placeholders).
+	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
+	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
+	//ROM_LOAD("kn7000_wave_ic204.rom", 0x400000, 0x400000, NO_DUMP)  // C3CBQD000001
+	//ROM_LOAD("kn7000_wave_ic207.rom", 0x800000, 0x400000, NO_DUMP)  // C3CBQD000004
+	//ROM_LOAD("kn7000_wave_ic208.rom", 0xc00000, 0x400000, NO_DUMP)  // C3CBQD000003
 ROM_END
 
 } // anonymous namespace
