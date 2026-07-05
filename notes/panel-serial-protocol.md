@@ -522,3 +522,34 @@ read time, and 0x34000104's real semantics need modeling. That change (latch the
 winning group in take_irq/assert path, expose it via IAGR until acked) is the
 prerequisite for re-applying the per-data-write completion model. Tree reverted
 to caea343 (last good: [00 00 1F] transmitted, state 3, error screen, NO crash).
+
+## Handshake bring-up part 4 (2026-07-05): the latch experiment and the REAL open question
+
+IAGR latch-on-accept was implemented two ways (group-only, then group+vector
+atomically in an irq_ack callback via the core's standard_irq_callback) -- BOTH
+caused runaways, and the diagnosis data reframed the problem:
+
+- With the latch in place, EVERY logged accept was the tick (g=06 lvl=6): group
+  0x11 never won arbitration in the first 40 accepts...
+- ...yet the state-2 handler EXECUTED anyway, and crashed at its exit
+  (JLOW to=00000000 from=0x484AC920) with **SP = 0x50380AD8, inside the
+  dispatch-table region**.
+
+=> The state machine is NOT (only) entered via group-0x11 interrupts: some call
+path runs the state handlers directly (most plausibly the kick 0x484AC523 calls
+state-1 synchronously from TASK context to start the chain; and/or the group-0x10
+ISR dispatches states via `calls (0x48613034 + state*4)` per the earlier trace).
+The exit convention also matters: state handlers end in rets/retf whose return
+target depends on how they were ENTERED (tail-jump from the 0x11 ISR vs. a direct
+calls) and on MDR clobbering by inner `call`s (ret [d2],N does NOT restore MDR;
+only masks with bit3 do).
+
+NEXT SESSION, IN ORDER:
+1. Probe state-1/2 ENTRY: log SP + the return-slot content + MDR at 0x484AC799 /
+   0x484AC84D, and the exact exit bytes at 0x484AC920 (rets? retf 0,0?). This
+   pins the entry path(s) and exit convention.
+2. Map the kick 0x484AC523 (does it call state-1 directly? on which stack?).
+3. Only THEN redesign the interrupt-side model (latch or otherwise) around the
+   real call graph. Tree reverted to last-good (caea343 lineage) again; the
+   latch code is in this note + memory for reuse (core: standard_irq_callback in
+   take_irq; driver: IRQ_CALLBACK_MEMBER irq_ack latching group+vector).
