@@ -111,7 +111,7 @@ protected:
 private:
 	required_device<mn10300_device> m_maincpu;
 	required_device<screen_device> m_screen;
-	required_shared_ptr<uint8_t> m_workram;
+	required_shared_ptr<uint32_t> m_workram;
 
 	// Control panel button ports and LEDs (CPL = 8 cols, CPC = 5 cols; CPR + the
 	// serial HLE device that reads these / drives the LEDs are still to come).
