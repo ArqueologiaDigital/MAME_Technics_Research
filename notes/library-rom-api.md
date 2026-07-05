@@ -1,4 +1,11 @@
-# Undumped library ROM API (`0x4C000000`)
+# Library ROM API (`0x4C000000`)
+
+> **CORRECTION (superseded):** this ROM is **not undumped**. The boot **loads it
+> at runtime from the program flash** into a RAM window aliased at `0x8C000000`
+> (`0x4C000000 + 0x40000000`) — see [`library-rom-loading.md`](library-rom-loading.md).
+> The used range is ~253 KB (298 entry points, max `0x4C03DE26`), all present in
+> `kn7000_program.rom`. The API catalogue below is still useful, but the premise
+> "separate undumped ROM, ≥ ~6 MiB, blocked on a hardware dump" is wrong.
 
 The application firmware (`kn7000_program.rom`, mapped at `0x48400000`) is only
 half of the code: it calls heavily into a **separate ROM at `0x4C000000`** that
