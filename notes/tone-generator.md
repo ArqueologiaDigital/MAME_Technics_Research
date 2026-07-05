@@ -150,3 +150,25 @@ Only after playback is triggered and voices flow into the captured register file
 does the actual synthesis stage (and the possibly-undumped waveform ROMs) become
 the next problem. This redirects future sound work away from TG/DSP hardware
 modeling and toward the playback-trigger path.
+
+## Definitive blocker: the wave/sample ROMs are undumped (tick zz+2)
+
+The strategic prerequisite for sound, resolved: **audible emulation is impossible
+with the current ROM set.** The synth LSI is IC205 (C1BB00000709, "TONE
+GENERATOR" in the service manual); it plays PCM samples from four custom
+Panasonic mask ROMs on the sound board -- **IC203/204/207/208
+(C3CBQD000002/1/4/3)** -- confirmed by the manual's "8.9 WAVE ROM test" and "8.10
+SOUND SYSTEM test". These are physically separate chips, NOT contained in the
+firmware update disks that supply this project's program.rom/table.rom. So even
+with a perfectly reversed playback trigger and a fully modeled TG, there are no
+waveform samples to synthesize.
+
+Consequence for planning: sound is blocked by **physical-chip dumping** (reading
+IC203/204/207/208 off a real KN7000 sound board), not by more reverse-
+engineering. Until those ROMs exist, further sound RE (the playback-trigger path,
+a sound_stream device) yields no audible result. The register-indirect capture
+already in the driver, and the trigger-path localization above, are the sensible
+stopping points. (Curiosity: the service SOUND SYSTEM test can emit pure sine
+waves per key -- a mode that needs no sample ROM -- so a diagnostic-only tone
+could in principle be produced, but that is not normal operation.) Wave-ROM
+NO_DUMP placeholders are recorded in the driver ROM_START.
