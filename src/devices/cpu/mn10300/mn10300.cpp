@@ -396,8 +396,9 @@ void mn10300_device::execute_run()
 			uint8_t adj  = read_arg8(m_pc + 3);
 			uint32_t ret = m_pc + 4;      // return past this 5-byte instruction
 			push32(ret);
-			store_regs(regs);             // TODO: confirm mask/order (see store_regs)
+			store_regs(regs);
 			m_sp -= adj;
+			m_mdr = ret;                  // AM33 caches the return address in MDR (for retf), same as 0xDD
 			m_pc = start_pc + disp;
 			break;
 		}
@@ -443,30 +444,20 @@ void mn10300_device::execute_run()
 		}
 
 		// ---- retf regs, imm8 : fast return via the MDR-cached address ----
-		// SP += imm8; PC = MDR; then restore registers from *below* the adjusted
-		// SP (offset walks down from -4), WITHOUT moving SP. Exact AM33 semantics
-		// from the GDB simulator (sim_mn10300.igen). MDR was set by the paired
-		// `call` (0xDD).
+		// Same stack unwind as `ret` (this core's call/ret use push/pop, so the
+		// frame is [return][regs][locals] top-to-bottom), but the return address
+		// comes from MDR (set by the paired call) instead of the stack, and the
+		// pushed return slot is discarded. MDR is read before load_regs, which may
+		// itself restore the caller's MDR.
 		case 0xDE:
 		{
 			uint8_t regs = read_arg8(m_pc);
 			uint8_t adj  = read_arg8(m_pc + 1);
-			m_sp += adj;
-			const uint32_t sp = m_sp;
-			m_pc = m_mdr;
-			int32_t off = -4;
-			if (regs & 0x04) { m_e[2] = read_mem32(sp + off); off -= 4; m_e[3] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x02) { m_e[4] = read_mem32(sp + off); off -= 4; m_e[5] = read_mem32(sp + off); off -= 4;
-			                   m_e[6] = read_mem32(sp + off); off -= 4; m_e[7] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x01) { off -= 16; m_e[0] = read_mem32(sp + off); off -= 4; m_e[1] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x80) { m_d[2] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x40) { m_d[3] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x20) { m_a[2] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x10) { m_a[3] = read_mem32(sp + off); off -= 4; }
-			if (regs & 0x08) { m_d[0] = read_mem32(sp + off); off -= 4; m_d[1] = read_mem32(sp + off); off -= 4;
-			                   m_a[0] = read_mem32(sp + off); off -= 4; m_a[1] = read_mem32(sp + off); off -= 4;
-			                   m_mdr = read_mem32(sp + off); off -= 4; m_lir = read_mem32(sp + off); off -= 4;
-			                   m_lar = read_mem32(sp + off); off -= 4; }
+			m_sp += adj;                 // discard locals
+			const uint32_t target = m_mdr;
+			load_regs(regs);             // restore the saved registers (same as ret)
+			m_sp += 4;                   // discard the pushed return-address slot
+			m_pc = target;
 			break;
 		}
 
