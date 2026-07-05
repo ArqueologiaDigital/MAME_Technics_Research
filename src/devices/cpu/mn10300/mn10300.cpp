@@ -37,8 +37,11 @@ enum mn10300_flag
 	FLAG_NF = 0x0002, // negative (result bit31)
 	FLAG_CF = 0x0004, // carry / borrow
 	FLAG_VF = 0x0008, // signed overflow
-	FLAG_IE = 0x0800  // interrupt enable (TODO: confirm)
+	FLAG_IM = 0x0700, // interrupt priority-level mask (EPSW_IM, bits 10:8)
+	FLAG_IE = 0x0800  // interrupt enable (EPSW_IE) - confirmed from firmware
 };
+
+static constexpr int IM_SHIFT = 8;
 
 
 DEFINE_DEVICE_TYPE(MN10300, mn10300_device, "mn10300", "Panasonic MN10300")
@@ -57,6 +60,7 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_program_config("program", ENDIANNESS_LITTLE, 32, 32, 0)
 	, m_program(nullptr)
 	, m_pc(0), m_sp(0), m_mdr(0), m_psw(0), m_lir(0), m_lar(0)
+	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
 {
 	std::fill(std::begin(m_d), std::end(m_d), 0);
@@ -85,6 +89,9 @@ void mn10300_device::device_start()
 	save_item(NAME(m_psw));
 	save_item(NAME(m_lir));
 	save_item(NAME(m_lar));
+	save_item(NAME(m_possible_irq));
+	save_item(NAME(m_irq_state));
+	save_item(NAME(m_irq_vector));
 
 	state_add(MN10300_PC,  "PC",  m_pc ).formatstr("%08X");
 	state_add(MN10300_SP,  "SP",  m_sp ).formatstr("%08X");
@@ -140,10 +147,37 @@ void mn10300_device::state_string_export(const device_state_entry &entry, std::s
 
 void mn10300_device::execute_set_input(int inputnum, int state)
 {
-	// TODO(MN10300): latch external IRQ line and flag pending for check_irq().
+	// Line 0 is the single maskable interrupt raised by the on-chip interrupt
+	// controller (modelled in the driver). Latch it; the run loop re-checks.
+	if (inputnum == 0)
+	{
+		m_irq_state = state;
+		if (state != CLEAR_LINE)
+			m_possible_irq = true;
+	}
 }
-void mn10300_device::take_irq(int level, int group) { /* TODO */ }
-void mn10300_device::check_irq() { /* TODO */ }
+
+// Accept a maskable interrupt: the AM33 pushes the return PC and PSW to the
+// stack and vectors to the handler; we clear IE so the handler runs without
+// immediate re-entry (it re-enables IE via rti after acking its source, or
+// explicitly once the source's REQUEST bit is cleared). level/group are recorded
+// for faithfulness; the actual source is resolved by the handler reading IAGR.
+void mn10300_device::take_irq(int level, int group)
+{
+	push32(m_pc);
+	push32(m_psw);
+	m_psw = ((m_psw & ~FLAG_IM) | (level << IM_SHIFT)) & ~FLAG_IE;
+	m_pc = m_irq_vector;
+	m_icount -= 7;
+}
+
+void mn10300_device::check_irq()
+{
+	if (!(m_psw & FLAG_IE))
+		return;
+	if (m_irq_state != CLEAR_LINE && m_irq_vector != 0)
+		take_irq(0, 0);
+}
 
 
 //**************************************************************************
@@ -226,6 +260,13 @@ void mn10300_device::execute_run()
 {
 	do
 	{
+		// Service a pending maskable interrupt before fetching the next opcode.
+		while (m_possible_irq)
+		{
+			m_possible_irq = false;
+			check_irq();
+		}
+
 		debugger_instruction_hook(m_pc);
 
 		const uint32_t start_pc = m_pc;   // PC-relative targets use the insn start
@@ -620,7 +661,8 @@ void mn10300_device::execute_f0()
 			if (op2 <= 0xF3)      { push32(start_pc + 2); m_pc = m_a[am]; return; } // calls (aM)
 			else if (op2 <= 0xF7) { m_pc = m_a[am]; return; }                       // jmp (aM)
 			else if (op2 == 0xFC) { m_pc = pop32(); return; }                       // rets
-			// TODO(MN10300): FD rti (pop PC+PSW), FE trap
+			else if (op2 == 0xFD) { m_psw = pop32(); m_pc = pop32(); m_possible_irq = true; return; } // rti
+			// TODO(MN10300): FE trap
 			else logerror("MN10300: unimplemented F0 %02X @ %08X\n", op2, start_pc);
 			break;
 		default:

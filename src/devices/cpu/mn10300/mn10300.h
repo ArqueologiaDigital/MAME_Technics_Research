@@ -56,6 +56,11 @@ protected:
 	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
+
+	// The driver's interrupt controller tells the core where the AM33 maskable
+	// interrupt vector points (set once at machine start). Input line 0 is the
+	// single maskable interrupt.
+	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
 	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks
 	// for its internal /2 divider. Only add those if the KN7000 MN10300 clocking
 	// requires it; otherwise the 1:1 base-class defaults are correct.
@@ -88,6 +93,16 @@ private:
 	uint32_t m_lir;   // loop-instruction register (setlb) - modelled for movm completeness
 	uint32_t m_lar;   // loop-address register     (setlb)
 	// TODO(MN10300/AM33): extended registers E0..E7, MDRQ, register banks.
+
+	// ---- interrupt state ---------------------------------------------------
+	// The on-chip interrupt controller is modelled in the driver (0x34000100
+	// block); it drives the single maskable IRQ input line here and supplies the
+	// address the AM33 maskable vector jumps to. On accept the core pushes PC+PSW
+	// and clears IE; the (self-loaded library-ROM) handler reads IAGR, dispatches,
+	// acks, and returns via rti. See notes/interrupt-mechanism.md.
+	bool     m_possible_irq; // an IRQ may be serviceable; re-checked at the loop top
+	int      m_irq_state;    // latched maskable IRQ line (execute_set_input)
+	uint32_t m_irq_vector;   // where the maskable interrupt vectors to
 
 	int m_icount;     // remaining cycles this timeslice (MN10200 named this m_cycles)
 
