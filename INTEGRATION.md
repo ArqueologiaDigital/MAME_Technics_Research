@@ -1,5 +1,11 @@
 # Integrating into a MAME tree
 
+> **Quick build:** run `./build.sh` (env: `MAME_SRC`, `BUILD_TREE`, `ROM_SRC`). It
+> assembles a disposable build tree, symlinks these overlay files into it, applies
+> the registration below, and compiles a focused `kn7000` MAME. The steps below
+> document what it does.
+
+
 These files are an overlay: each sits at the path it occupies inside MAME. To
 build them into a MAME checkout:
 
