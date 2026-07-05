@@ -948,7 +948,7 @@
 
 	<view name="Control Panel">
 		<element ref="panel_bg"><bounds x="0" y="0" width="2304" height="650"/></element>
-		<screen index="0"><bounds x="992" y="30" width="320" height="240"/></screen>
+		<screen index="0"><bounds x="832" y="30" width="640" height="240"/></screen>
 		<element ref="title_CPL"><bounds x="4" y="280" width="796" height="26"/></element>
 		<element ref="btn_CPL_SEG0_01" inputtag="CPL_SEG0" inputmask="0x01"><bounds x="4" y="320" width="96" height="26"/></element>
 		<element ref="btn_CPL_SEG0_02" inputtag="CPL_SEG0" inputmask="0x02"><bounds x="4" y="350" width="96" height="26"/></element>

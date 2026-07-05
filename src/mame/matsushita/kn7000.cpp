@@ -249,8 +249,24 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// are almost certainly the LCD V-RAM / video / wave-DMA windows. Mapped as RAM
 	// placeholders so bring-up can proceed past them.
 	// TODO: identify the real devices (LCD V-RAM = IC104?).
-	map(0x8c000000, 0x8cffffff).ram();
-	map(0x90000000, 0x97ffffff).ram().share("vram");
+	// KEY: the "library ROM" at 0x4C000000 is NOT a physical/undumped ROM. The
+	// boot LOADS it at runtime from the program flash: InitializeBlock27
+	// (0x484D7BBD) copies ~253 KB from program-ROM 0x487B8FD1.. into logical
+	// 0x4C000000, but its copy loop adds 0x40000000 so the bytes actually land at
+	// 0x8C000000 -- and the code later executes at the 0x4C000000 alias. Mapping
+	// BOTH ranges to the same RAM lets the firmware populate its own library ROM,
+	// so the boot runs real library code with no dump and no HLE. (Proven by
+	// tracing the boot in mn10300_sim; see notes/library-rom-loading.md.)
+	map(0x4c000000, 0x4cffffff).ram().share("libram");
+	map(0x8c000000, 0x8cffffff).ram().share("libram");
+	map(0x90000000, 0x97ffffff).ram().share("vram");   // LCD controller window (regs + trampolines)
+
+	// Further windows the boot reaches only AFTER the library ROM loads and runs
+	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
+	// (RAM/buffer); 0x9C000000 holds an unidentified peripheral at 0x9CC00000.
+	// Mapped as RAM placeholders so bring-up proceeds. TODO: identify these.
+	map(0x44000000, 0x44ffffff).ram();
+	map(0x9c000000, 0x9cffffff).ram();
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
@@ -734,29 +750,30 @@ INPUT_PORTS_END
 
 uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	// PROVISIONAL LCD readout. The 0x90000000 window is treated as an 8bpp
-	// palette-indexed framebuffer (320x240) resolved through the 256-entry CLUT
-	// held in the program flash at file offset 0x32573C (each entry 0x00BBGGRR,
-	// BGR order -- see the display-subsystem doc). Geometry, colour depth and the
-	// exact framebuffer base within the window are NOT yet confirmed; this exists
-	// so that whatever the firmware composes there becomes visible for study.
-	// TODO: confirm format/base from the boot trace; handle the 2-bit gray panel.
-	constexpr int WIDTH = 320, HEIGHT = 240;
-	constexpr offs_t CLUT = 0x32573C / 4;   // 32-bit-word index of the CLUT in the flash
+	// The LCD framebuffer is a linear 640x240 8bpp buffer in WORK RAM at
+	// 0x500D4080 (proven from the blitters: stride 0x280 = 640, height 0xF0 =
+	// 240; the boot clears exactly 640x240 bytes there). 0x90000000 is the LCD
+	// *controller* window, not the pixel buffer. Each pixel is a palette index
+	// resolved through the live 256-entry CLUT at work-RAM 0x50031490 (each entry
+	// 0x00BBGGRR, seeded at boot from program-ROM 0x32573C). See
+	// notes/library-rom-loading.md and the display-subsystem doc.
+	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578, table 0x50122CAC).
+	constexpr offs_t FB = 0x500D4080 - 0x50000000;             // byte offset into workram
+	constexpr offs_t CLUT = (0x50031490 - 0x50000000) / 4;     // word index into workram
+	auto wbyte = [&](offs_t byteoff) -> uint8_t
+	{
+		return (m_workram[byteoff >> 2] >> (8 * (byteoff & 3))) & 0xff;
+	};
 	auto pal = [&](uint8_t idx) -> rgb_t
 	{
-		const uint32_t v = m_progrom[CLUT + idx];   // 0x00BBGGRR
-		return rgb_t(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);   // R,G,B
-	};
-	auto fb = [&](offs_t off) -> uint8_t
-	{
-		return (m_vram[off >> 2] >> (8 * (off & 3))) & 0xff;   // little-endian byte
+		const uint32_t v = m_workram[CLUT + idx];              // 0x00BBGGRR
+		return rgb_t(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);
 	};
 	for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
 	{
 		uint32_t *const dst = &bitmap.pix(y);
 		for (int x = cliprect.left(); x <= cliprect.right(); x++)
-			dst[x] = (x < WIDTH && y < HEIGHT) ? uint32_t(pal(fb(y * WIDTH + x))) : 0;
+			dst[x] = uint32_t(pal(wbyte(FB + y * 640 + x)));
 	}
 	return 0;
 }
@@ -811,10 +828,9 @@ void kn7000_state::kn7000(machine_config &config)
 	SCREEN(config, m_screen, SCREEN_TYPE_LCD);
 	m_screen->set_refresh_hz(60);
 	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
-	// Provisional geometry: 320x240 like the KN5000 LCD (the KN7000 panel is
-	// reported as 320x240 or 640x240 -- to be confirmed from the boot trace).
-	m_screen->set_size(320, 240);
-	m_screen->set_visarea(0, 320 - 1, 0, 240 - 1);
+	// 640x240 8bpp LCD (proven from the blitter stride 0x280 and height 0xF0).
+	m_screen->set_size(640, 240);
+	m_screen->set_visarea(0, 640 - 1, 0, 240 - 1);
 	m_screen->set_screen_update(FUNC(kn7000_state::screen_update));
 
 	// Clickable front-panel artwork: buttons bound to the ioports, LEDs bound to

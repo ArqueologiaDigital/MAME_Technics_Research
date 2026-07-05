@@ -51,7 +51,7 @@ def esc(s):
 
 # ---- geometry ----
 CELL_W, CELL_H, GAP = 96, 26, 4
-SCREEN_W, SCREEN_H = 320, 240
+SCREEN_W, SCREEN_H = 640, 240
 BOARDS = [
     ("CPL", "cpl_led", [f"CPL_SEG{i}" for i in range(8)]),
     ("CPC", "cpc_led", [f"CPC_SEG{i}" for i in range(5)]),
