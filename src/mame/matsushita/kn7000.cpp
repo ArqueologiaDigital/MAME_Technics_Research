@@ -326,14 +326,15 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//       real code, not just data.
 	//map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
 
-	// FACTORY read-only data flashes (found by RE). The firmware reads u32-offset
-	// directory archives at these bases -- like the table ROM -- and parses them into RAM
-	// pointer tables (~0x5003A5xx) at boot (unmapped reads (0x4844A04C) from 0x56000000,
-	// (0x48449F33) from 0x57000000). UNDUMPED; the KN7000 analogs of the KN5000 rhythm/
-	// wave data ROMs. (NOTE: the WRITABLE *custom* flash programmed by the "Initial Data"
-	// disk idd7000 is a SEPARATE device at 0x96800000 -- AMD command window 0x9680AAAA --
-	// currently inside the 0x90000000 "vram" mapping; see notes/initial-data-disk-and-
-	// custom-flash.md.) Mapped read-as-0 placeholders until real dumps exist.
+	// Data-flash READ views (byte-verified RE, notes/initial-data-disk-and-custom-flash.md):
+	//   0x56000000 = the CUSTOM writable flash's read view (programmed by the "Initial Data"
+	//                disk idd7000; command/program aperture is a SEPARATE window at 0x96800000,
+	//                AMD unlocks 0x9680AAAA -- same 2MB 29LV160 chip). A u32-offset directory
+	//                archive lives at flash-offset 0x200. THIS is where the custom-flash image
+	//                must be ROM_LOADed once the AST install codec is reversed.
+	//   0x57000000 = FACTORY read-only rhythm/style flash (extends the table ROM).
+	// Both UNDUMPED; read-as-0 placeholders so boot-time pointer parsing is stable. Empty ->
+	// style names / Custom fall back to defaults (the "8 Beat 1" bug).
 	map(0x56000000, 0x577fffff).ram().share("dataflash");
 
 	// TODO: Picture flash (splash / bitmap graphics), separate device.

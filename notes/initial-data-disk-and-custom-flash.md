@@ -129,3 +129,44 @@ content, OR a ROM region preloaded with a dump/extractor output; then re-test.
    (how .AST/.MD/.FAV data maps to flash offsets; whether the body is decompressed).
 2. Extend extract_idd7000.py to emit a 0x96800000 (2MB) flash image; map it in kn7000.cpp
    (split it out of the vram range) and re-test Favorites/rhythm names.
+
+## AUTHORITATIVE install architecture (idd7000 workflow COMPLETED, 5/5 agents, byte-verified)
+The 2nd install-RE workflow did NOT die -- it was just slow (a ~50-min straggler scout);
+it completed with a byte-verified spec. This settles the addressing (I had flip-flopped):
+
+### The custom flash = ONE chip, two apertures
+- **0x56000000 = custom-flash READ view** (disk-programmed data; archive parser 0x4844A000,
+  u32-offset directory at flash-offset 0x200). THIS is the MAME ROM_LOAD base for the image.
+- **0x96800000 = custom-flash COMMAND/PROGRAM window** (the ONLY base with AMD unlock stores
+  0x9680AAAA/0x96805554). Driver routines: word-program 0x4847F721, sector-erase 0x4847F75A,
+  read-ID 0x4847F980, reset 0x4847F6C7, 128-word chunk-prog 0x4847F9F7, addr->sector
+  0x4847E7C0; each wrapped by a libROM critical section (~0x4C03DCFA / ~0x4C03D6BC).
+- **0x57000000 = FACTORY read-only** rhythm/style flash (extends table ROM 0x48000000).
+- Chip: AMD/Fujitsu x16, 2MB/16Mbit bottom-boot (MBM29LV160B / MX29LV160B / AT49BV16X4;
+  descriptor table 0x485CF9E0, sector map 0x485CF788: 16K/8K/8K/32K + 64K x N = 0x200000).
+
+### Only the AST installs to flash; it is COMPRESSED (codec = the blocker)
+Dispatch: LOAD dispatcher 0x4852CFE4 -> handler table 0x486642B0 -> AST("J K",type10)
+handler 0x4852CC9E. Install (0x4848594D..): validates internal type byte==0x17, bounds the
+declared size vs 0x1E0000, reads the file into SDRAM scratch **0x502B8000** (0xC0000 work
+size), then programs flash from there via libROM 0x4C003039. The AST payload [0x08..EOF] is
+**opaque/high-entropy (~7.998 b/byte)**; header[4:8]=0x001E0000 is the DECLARED (expanded)
+size (~6:1 vs the 320KB file). So the firmware DECOMPRESSES/decodes the AST and re-serializes
+it into the 0x56000000 directory-archive layout before programming. **That codec is NOT yet
+reversed** -- it is the one blocker to emitting the 2MB flash image. (The "embedded pointers"
+0x485A9C1D/0x5006ED88 I noted earlier are NOISE, not fields.)
+
+### FAV/MD/HMP -> battery SRAM (NOT flash) -- separately loadable NOW
+- 03FAVINI.FAV: 4x 100-byte records {name[16] + u32 lead + 10x(u32 param,u32 value)};
+  param 3=style/sound ID, 4=rhythm ID, 2=terminator. Install dest = SRAM favorites bank
+  directory **0x5008FDCA** (40x 34-byte {name[16], u16 items[9]}), block base 0x50083D72
+  magic "KN7000 SDDIR INF".
+- 02UMDINI.MD: 44x u32 style-IDs + 3x 144-byte units -> SRAM user-memory.
+- 04HPGINI.HMP: 64x 6-byte hotspot records + an embedded **BMP** (160x100 8bpp) at 0x18C.
+
+### Extractor status (extract_idd7000.py)
+CAN emit today (byte-exact): the FAV/MD SRAM images, the HMP hotspots + carved BMP, and the
+AST header + raw opaque payload. CANNOT yet: the 2MB custom-flash image (needs the AST codec).
+NEXT: (1) reverse the AST codec (trace 0x4C003039 / the SDRAM 0x502B8000 decode); (2) model
+0x56000000 as the custom flash + ROM_LOAD the image; (3) optionally load FAV/MD/HMP as a
+separate NVRAM to get Favorites working before the flash codec is cracked.
