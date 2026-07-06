@@ -228,15 +228,14 @@ LB.append('\t</group>')
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
 SGcols=[51,107,162,217,272,327,383,438,493]
-# SOUND GROUP = the 18 event-0x2004 category-select bits, arg = category index into
-# SoundGroupNameTable @0x48131570 (18x16). PROVED: exactly 18 0x2004 bits with args 0x00-0x11
-# match the 18-entry name table 1:1. The old binding (SEG0C.b0-b5, events 0x2086/2010/2040)
-# was wrong; the old probe-map misidentified these. Labels/positions stay in category order;
-# only the (seg,mask) bindings are corrected to the 0x2004 bits. See notes/panel-descriptor-map.md.
-SG=[("PIANO","SEG10","0x10"),("GUITAR","SEG0F","0x10"),("MALLET & ORCH PERC","SEG0E","0x10"),("WORLD","SEG0D","0x10"),
-    ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG15","0x08"),("SAX & WOODWIND","SEG14","0x08"),("ORGAN & ACCORDION","SEG13","0x08"),("SOUND EXPLORER","SEG12","0x08"),
-    ("DIGITAL DRAWBAR","SEG10","0x20"),("ORGAN TABS","SEG0F","0x20"),("ACCORDION REGISTER","SEG0E","0x20"),("PAD","SEG0D","0x20"),
-    ("SYNTH","SEG0C","0x20"),("BASS","SEG15","0x04"),("DRUM KITS","SEG14","0x04"),("MEMORY","SEG13","0x04"),("EW EXPANSION","SEG12","0x04")]
+# SOUND GROUP = the physical category buttons SEG0C.b0-b5 / SEG0D.b0-b5 / SEG0E.b0-b3 (mixed
+# events 0x2086/0x2010/0x2040/0x2004). SNAPSHOT-CONFIRMED: SEG0C.b0=PIANO, b1=GUITAR (the LCD
+# shows SOUND-RIGHT1-PIANO / -GUITAR). NB the earlier "0x2004 arg=category" rebind was WRONG --
+# 0x2004 is a separate per-part sound selector (SEG10.b4 -> SOUND-LEFT-PIANO), not these buttons.
+SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
+    ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
+    ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
+    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
 RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
