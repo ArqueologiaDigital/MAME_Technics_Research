@@ -108,3 +108,12 @@ LOAD & SEG02 MOVIE SHOW/MARCH/BALLROOM/MODERN DANCE. NEXT LED work: (a) sweep SO
 (0x2004 bits) + add to OPLED + wire the SG loop's green_led like the RG loop; (b) sweep the
 effect/mute/transport LEDs in context; (c) apply OPLED to the SG/mute/individual green_leds.
 Sweep tool: scratchpad/genreled.lua (frame-counter, captures LED ON+OFF for radio inference).
+
+### SOUND GROUP LED sweep (messy -- NOT bound yet)
+Sweeping the 18 0x2004 sound bits (scratchpad/soundled.lua) shows non-clean-radio behaviour:
+selecting a sound category lights the category LED PLUS part/bank indicators (PIANO->r18+r100+
+r106; DRAWBAR->r107+r41; others single). Candidate single category LEDs: MALLET=cpr16, ACCORD=
+cpr17, PIANO=cpr18(?), ORGAN&ACC=cpr23, WORLD=cpr34, PAD=cpr35, EXPLORER=cpr36, STRINGS=cpr40,
+SYNTH=cpr41, BASS=cpr113, EWEXP=cpr31; empties GUITAR/BRASS/SAX/DRUMKITS. To bind reliably,
+disambiguate the category LED from the part/bank indicators (sweep with a fixed part selected,
+or diff two categories). Left unbound this tick to avoid wrong bindings.
