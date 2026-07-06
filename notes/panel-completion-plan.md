@@ -1,0 +1,50 @@
+# KN7000 control-panel completion plan (ALL buttons + ALL LEDs)
+
+Living checklist for the autonomous panel work. Authoritative map = the ROM-extracted
+descriptor (`panel-descriptor-map.md`); scripts in scratchpad: `extract_desc.py` (descriptor),
+`compare.py` (vs driver), `audit_layout.py` (vs layout). Program flash @0x48400000, table
+flash @0x48000000. Regenerate layout: `python3 tools/gen_lay.py`. Always verify: valid XML,
+0 duplicate inputtag/inputmask, every binding resolves to a driver PORT_BIT.
+
+## Method
+An event family with N bits whose args are 0..N-1 is an N-entry-table selector; find its
+name table in the ROM (search strings in table/program flash). Single-bit events are one-off
+function buttons — name from context/probe. For a physical button, bind the layout element to
+the SEG.bit whose descriptor event matches its function.
+
+## BUTTONS — event families (bind label+position ↔ descriptor bit)
+- [x] 0x2005 (16) rhythm genres → RHYTHM GROUP SEG01/02 (RhythmGenreNameTable)
+- [x] 0x2004 (18) sound categories → SOUND GROUP (SoundGroupNameTable @0x48131570)
+- [x] 0x2000/0x2001 parts 0x10-0x14 → LCD-flanking part on/off (RIGHT1/RIGHT2/LEFT/ACCOMP1/2)
+- [x] 0x2000/0x2001 parts 0x00-0x0F → MUTE grid SEG05/08-0B (verify order)
+- [x] 0x2020 START/STOP, 0x2022 INTRO&ENDING (2), 0x2023 FILL IN (2), 0x2084 FADE (2)
+- [ ] 0x2010 (8) — "Sound Group N"? resolve (name table?) + bind
+- [ ] 0x2040 (11) — "Fn Toggle" — resolve (part-effect toggles? SUSTAIN/DSP/etc.) + bind
+- [ ] 0x2030 (12, args 0-5) — FILL/FADE/tempo family? resolve + bind
+- [ ] 0x2008 (3), 0x2009 (3) — Balance/Ctrl — resolve + bind
+- [ ] 0x2060-0x2069, 0x2081-0x2086, 0x20A0-0x20BD (single/few) — resolve one-offs + bind
+      (0x2083 x2 = TRANSPOSE? 0x2085 x4, 0x2081/0x2084 x2, 0x20A1-A9 = APC/variation/etc.)
+- [ ] 0x1000 (6, SEG1B), 0x1004/5/9,0x1010/11,0x1020 (SEG16-1A,20) — DIAL/DATA/special
+- [ ] 0x20B5-0x20BD (SEG1D-1F, 8) — OTHER PART/HELP/CONTRAST/PAGE/DISPLAY HOLD/EXIT
+- [ ] parts 0x15-0x1D (ACCOMP3-5/BASS/DRUM/CHORD) — verify mute coverage
+- [ ] Add missing SEG16-0x23 input ports to the driver (44 bits) so their buttons are bindable
+- [ ] Sweep gen_lay.py for remaining `tag=None` decorative buttons; bind each per descriptor
+
+## LEDs
+- [ ] Extract PanelSwitchClassTable @0x4860C9F4 (2 bytes/switch#=normSeg*8+bit) + LED reg-map
+      0x48615058 → per-button cpl_led/cpr_led index. Verify format vs known (SOUL&FUNK=SEG01.b1
+      lit cpl9 in an earlier probe).
+- [ ] Add a LEDMAP (SEG.bit → cpl_led/cpr_led index) to gen_lay.py; emit an LED element bound to
+      that output next to each button (name="cpl_ledN").
+- [ ] Named indicator LEDs (SetModeLed/SetHoldLed/SetDialLed dispatcher 0x484B1BCB) — bind.
+- [ ] Empirically confirm with the button-test harness (press → mapped LED lights).
+
+## VERIFY (per tick + at milestones)
+- Layout: valid XML, 0 conflicts, all bindings resolve.
+- Runtime (throttled -video none, frame-counter timing, Write-tool scripts): pressed buttons
+  produce screen/LED effects; mapped LEDs light.
+
+## STATUS LOG (newest first)
+- soft-keys: LCD-flanking part on/off bound (10); driver SEG00 relabelled; TRANSPOSE unbound.
+- SOUND GROUP resolved (0x2004) + rebound. RHYTHM GROUP resolved (0x2005) + rebound.
+- INTRO&ENDING/FADE fixes. 83 inputtags bound.
