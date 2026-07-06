@@ -171,3 +171,59 @@ navigated to GUITAR). So the .lay rebuild reduces mainly to re-binding each butt
 to the normSeg.bit whose function matches its label -- not redrawing everything.
 The binding for each is obtained from the empirical probe (normSeg.bit -> function)
 matched to these matrix labels.
+
+## Probe results SEG00-0B (rhythm / transport / mutes) — 2026-07-06
+
+Probed all 93 SEG00-0B buttons the same way. Two caveats surfaced:
+- **Mode-gating**: from the home screen, several buttons act as PERFORMANCE PADS
+  (play a phrase: Voice Welcome, Waves, Church Bells, Cosmic Maj/Min, Birdsong)
+  rather than their labelled function -- so the probe is ambiguous for those bits.
+- **No-screen buttons**: part mutes and arranger toggles (FILL/FADE/VARIATION/
+  INTRO-ENDING) change state without opening a titled screen -> show home. These
+  must be matched structurally (event family + physical label), not by screen.
+
+**Rhythm genres cleanly identified (RHYTHM screen title = RhythmGenreNameTable name):**
+
+| normSeg.bit | event | genre |
+|---|---|---|
+| SEG00.b2 | 2000/14 | 8&16 BEAT |
+| SEG00.b3 | 2000/11 | ROCK & POP |
+| SEG00.b4 | 2020/00 | BALLAD |
+| SEG00.b5 | 2000/12 | JAZZ & SWING |
+| SEG00.b6 | 2022/01 | BALLROOM |
+| SEG00.b7 | 2021/00 | MOVIE & SHOW |
+| SEG01.b2 | 2005/0E | ENTERTAINER |
+| SEG01.b3 | 2005/06 | ORGANIST |
+| SEG01.b4 | 2005/0D | 60s & 70s |
+| SEG01.b5 | 2005/05 | MODERN DANCE |
+| SEG01.b6 | 2005/0C | SOUL & R&B |
+| SEG01.b7 | 2005/04 | COUNTRY&WESTERN |
+| SEG02.b2 | 2005/0A | MARCH & WALTZ |
+| SEG02.b3 | 2005/02 | LATIN & WORLD |
+| SEG02.b4 | 2005/09 | CUSTOM |
+| SEG02.b5 | 2005/01 | MEMORY |
+
+(These internal names differ slightly from the CPL silk-screen wording, e.g.
+"MARCH & WALTZ"=silk "MARCH", "COUNTRY&WESTERN"=silk "COUNTRY", "JAZZ & SWING"=silk
+"JAZZ COMBO" -- match by nearest genre.)
+
+**Menu / function screens identified:**
+
+| normSeg.bit | event | function |
+|---|---|---|
+| SEG02.b6 | 2005/08 | SOUND ARRANGER |
+| SEG03.b1 | 20A1/00 | APC SELECT (Auto Play Chord) |
+
+**Not screen-identifiable (match structurally next):** part mutes SEG08-0B +
+SEG05 (0x2000/0x2001 arg = part; -> CPC MUTE UP/DOWN 1-16 via part-name table);
+arranger toggles SEG04/06 (0x2030 = FILL/FADE, 0x2084/0x2085 = VARIATION, 0x2023 =
+INTRO/ENDING); pad buttons (mode-gated).
+
+## Rebuild plan (next)
+
+The .lay rebuild is now data-gathering-complete for the screen buttons. Remaining
+before generation: (1) structurally match the no-screen buttons (mutes via
+part-name table + CPC MUTE positions; arranger toggles via event family + CPL
+labels); (2) generate the .lay -- keep the folklore geometry/labels (they match)
+and REWRITE each button's inputtag/inputmask to the correct normSeg.bit. Verify a
+sample of re-bound buttons with the probe before committing.
