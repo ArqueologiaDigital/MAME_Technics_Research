@@ -343,3 +343,20 @@ Notable confirmations vs the layout: "VARIATION & MSA" (not "VARIATION"), "FADE 
 "OTHER PARTS/TR", "DISPLAY HOLD", "LCD CONTRAST", "MULTI EFFECT", "MIC REVERB & EFFECT",
 "SOUND DSP VARIATION", "TRANSPOSE -/+", "R1/R2 OCTAVE -/+", "TECHNI-CHORD", "CONDUCTOR",
 "PART SELECT", "SOLO", "PANEL MEMORY (SET/NEXT BANK/BANK VIEW)", "TAB ORGAN", "SD CONTROL".
+
+## CORRECTION (tick 2026-07-07): 0x2004 is NOT the SOUND GROUP buttons
+The earlier "0x2004 arg=category => SOUND GROUP" claim was WRONG. Verified by LCD SNAPSHOT
+(manager.machine.video:snapshot() renders the full .lay + LCD, works with -video none):
+- SEG0C.b0 (event 0x2086) -> LCD "SOUND - RIGHT 1 / PIANO"
+- SEG0C.b1 (event 0x2010) -> "SOUND - RIGHT 1 / GUITAR"
+- SEG10.b4 (event 0x2004/a00) -> "SOUND - LEFT / PIANO"
+So the PHYSICAL SOUND GROUP buttons are SEG0C.b0-b5 / SEG0D.b0-b5 / SEG0E.b0-b3 (the old probe
+map, MIXED events 0x2086/0x2010/0x2040/0x2004), selecting the category for the current part
+(RIGHT1). 0x2004 (18 args = the 18 SoundGroupNameTable entries) is a SEPARATE per-part sound
+selector (SEG10.b4 = LEFT). The 18-args-match-18-names was a real relationship but of the
+name TABLE, not the physical buttons. Layout SG reverted to SEG0C/0D/0E. The SoundGroupNameTable
+@0x48131570 finding stands (it's the category name list either way).
+
+**Snapshot method (reusable):** run with -snapshot_directory <dir>, press a button via ioport,
+call manager.machine.video:snapshot(), then view snap/kn7000/NNNN.png -- reads button function
+straight off the LCD. Also: 0x2010 is mixed (a1/SEG12.b6 = PROGRAM MENUS, snapshot-confirmed).
