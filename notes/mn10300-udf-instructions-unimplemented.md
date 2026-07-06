@@ -112,3 +112,29 @@ not run through udf00. udf07 is the only remaining unimplemented op (an AM33 F6/
 unit variant; context `mov 0x10,d1 ; not d0 ; udf07 d0,d1 ; sub d1,d2(=15-d1)` looks
 like a bit-count / normalize). NEXT: RE udf07 across more usages, implement, and
 re-test the rhythm names; if still broken, the name bug is a separate (non-udf) issue.
+
+
+## udf07 characterized (normalize/bit-search) -- NOT implemented (too risky to guess)
+udf07 is a SINGLE hot site: 0x4840FBB9, hit 979K/boot, inside one function
+(0x4840FB9C). That function is a **fixed-point normalize**:
+```
+d0 = *(sp+0x10)          ; a value computed by call 0x4840FC3A
+not d0                   ; d0 = ~d0
+udf07 d0, d1(=16)        ; d1 = udf07(~d0, 16)  -- a bit-position (0..15)
+d2 = 15 - d1             ; exponent
+d3 = d2 ; asl 1,d3 ; movbu (d3,a2),d1   ; table lookup by exponent
+d2 += 0x11 ; asl d2,d0                    ; shift by the exponent
+```
+So udf07 returns a bit position (MSB/normalize count of ~d0 within a 16-bit field;
+the `16` in d1 is a field-width/start parameter) and the result drives a
+table-based normalize (log/reciprocal/sqrt-style). It belongs to the AM33 F6/MAC
+family (op2>>4==7, alongside mulq=0, mulqu=1, sat16=4, sat24=5, getMACregs=C/D/F).
+The exact bit-search semantics (inclusive/exclusive, the role of the 16) need the
+AM33 manual; a wrong guess would corrupt a 979K-hits/boot function, so it is left
+skipped for now (its result currently degenerates to d3 = 15-16 = -1).
+
+## Rhythm-name bug ("all 8 Beat 1") is NOT a udf bug
+Implementing udf00 did not change it, and udf07 is an isolated fixed-point-math
+function (unrelated to text/name lookup). So the rhythm-name-list bug is a SEPARATE
+issue (candidate: the style list is not populated from its source / a data-table or
+device gap), to be investigated independently of the udf work.
