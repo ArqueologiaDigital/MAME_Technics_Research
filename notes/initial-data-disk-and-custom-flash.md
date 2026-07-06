@@ -86,3 +86,46 @@ flash image: the install-to-flash transformation (which flash offset each file l
 whether the body is reformatted into the 0x56000000 directory-archive layout) — under RE
 via a workflow. Once known, the extractor emits kn7000_custom.rom for the driver ROM-set
 (map at 0x56000000, replacing the current read-as-0 placeholder).
+
+## CONFIRMED (workflow salvage + direct verify): the custom flash is 0x96800000
+The install-RE workflow died (2nd background workflow to die at a turn boundary) but its
+scout transcripts held verified leads, confirmed directly:
+
+### 0x96800000 = the ONE writable custom flash (AMD/Fujitsu command set)
+The firmware issues flash unlock/program sequences to **0x9680AAAA** (7 ROM refs) and
+**0x96805554** (4 refs) -- the classic AMD 0x555/0x2AA unlock addresses scaled for a
+16-bit part (matches the flash-ID strings MBM29LV160B/MX29LV160B/AT49BV16X4 = 16Mbit/2MB
+flashes). So **0x96800000-0x969FFFFF is the writable custom flash**, programmed by the
+"Initial Data" disk. The mid-level install routine **0x4849FD40** copies the data in
+0x80-byte blocks via **0x4847F9F7** (the same 0x96800000 helper found in tick 5) --
+confirming the tick-5 "0x96800000 is empty" observation was pointing at the RIGHT region:
+it is the custom flash, mis-modeled by the driver as blank RAM inside the 0x90000000-
+0x97ffffff "vram" mapping. Library flash primitives: 0x4C024003 / 0x4C024033 (called by
+SdcSetupFlashFunc with a section index).
+
+### CORRECTION to last tick
+0x56000000 / 0x57000000 are the FACTORY read-only data flashes (rhythm/wave data), NOT
+the custom flash. The writable custom flash the idd7000 disk programs is **0x96800000**.
+(My tick-6 driver map of 0x56000000 as "dataflash" is still an OK placeholder for those
+undumped read-only flashes, but the comment is corrected.)
+
+### Disk-file dispatch is by EXTENSION
+Table @0x48664438: extension strings "MD ","FAV","HMP","AST","SQF","SEQ","ACT" (4 bytes
+each) with a handler-pointer array at 0x48664454. So MD/FAV/HMP share the "JK " magic and
+are disambiguated by the file EXTENSION (.MD/.FAV/.HMP), while .AST uses the "J K" magic.
+The KN7000 disk data types are thus: MD (memory), FAV (favorites), HMP (home page), AST
+(custom/style), SQF/SEQ (sequencer), ACT (?).
+
+### The unified rhythm-name-bug picture
+Genre table 0x48735EE4 works -> style-IDs -> the style NAME/data is read from the custom
+flash at 0x96800000, which is EMPTY in emulation (mis-modeled as blank vram) -> every
+style name defaults to "8 Beat 1". The idd7000 disk (esp. 01CTMINI.AST, declared size
+0x1e0000 ~ 1.9MB) is the source that programs 0x96800000. FIX = model 0x96800000 as an
+AMD 29LV160-class flash device (MAME has intelflash/amd flash) with the installed
+content, OR a ROM region preloaded with a dump/extractor output; then re-test.
+
+### Next
+1. Trace 0x4849FD40's caller + source to learn the disk-file -> 0x96800000 flash layout
+   (how .AST/.MD/.FAV data maps to flash offsets; whether the body is decompressed).
+2. Extend extract_idd7000.py to emit a 0x96800000 (2MB) flash image; map it in kn7000.cpp
+   (split it out of the vram range) and re-test Favorites/rhythm names.

@@ -303,6 +303,11 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x4c000000, 0x4cffffff).ram().share("libram");
 	map(0x8c000000, 0x8cffffff).ram().share("libram");
 	map(0x90000000, 0x97ffffff).ram().share("vram");   // LCD controller window (regs + trampolines)
+	// NOTE: 0x96800000-0x969FFFFF within this range is actually the WRITABLE custom-data
+	// FLASH (AMD 29LV160-class; unlock cmds to 0x9680AAAA/0x96805554), programmed by the
+	// "Initial Data" disk (idd7000). Modeled here as blank RAM -> empty -> style names /
+	// Favorites / Custom default. TODO: split out as a real flash device + load the
+	// installed content. See notes/initial-data-disk-and-custom-flash.md.
 
 	// Further windows the boot reaches only AFTER the library ROM loads and runs
 	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
@@ -321,15 +326,14 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//       real code, not just data.
 	//map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
 
-	// Data-archive flashes (found by RE). The firmware reads u32-offset directory
-	// archives at these bases -- exactly like the table ROM at 0x48000000 -- and parses
-	// them into RAM pointer tables (~0x5003A5xx) during boot. UNDUMPED. These are the
-	// KN7000 analogs of the KN5000 rhythm_data / custom_data flashes; the CUSTOM portion
-	// is programmed by the "Initial Data" disk (idd7000). Runtime-confirmed unmapped
-	// reads: (0x4844A04C) from 0x56000000 and (0x48449F33) from 0x57000000. Empty here,
-	// so the built-in style-name/data lookups (and Custom Panel / Favorites / Music
-	// Stylist) fall back to defaults. Mapped read-as-0 placeholders (share so boot-time
-	// pointer parsing is stable) until real dumps / an initial-data install exist.
+	// FACTORY read-only data flashes (found by RE). The firmware reads u32-offset
+	// directory archives at these bases -- like the table ROM -- and parses them into RAM
+	// pointer tables (~0x5003A5xx) at boot (unmapped reads (0x4844A04C) from 0x56000000,
+	// (0x48449F33) from 0x57000000). UNDUMPED; the KN7000 analogs of the KN5000 rhythm/
+	// wave data ROMs. (NOTE: the WRITABLE *custom* flash programmed by the "Initial Data"
+	// disk idd7000 is a SEPARATE device at 0x96800000 -- AMD command window 0x9680AAAA --
+	// currently inside the 0x90000000 "vram" mapping; see notes/initial-data-disk-and-
+	// custom-flash.md.) Mapped read-as-0 placeholders until real dumps exist.
 	map(0x56000000, 0x577fffff).ram().share("dataflash");
 
 	// TODO: Picture flash (splash / bitmap graphics), separate device.
