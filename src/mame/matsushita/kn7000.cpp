@@ -149,6 +149,7 @@ public:
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
 		, m_vram(*this, "vram")
+		, m_lcdbuf(*this, "lcdbuf")
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_seg(*this, "SEG%02X", 0U)
@@ -170,6 +171,7 @@ private:
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint32_t> m_workram;
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
+	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 
@@ -320,7 +322,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// arrays to 0x84030FF8..; without the alias those writes were dropped.
 	map(0x44000000, 0x44ffffff).ram().share("ram44");
 	map(0x84000000, 0x84ffffff).ram().share("ram44");
-	map(0x9c000000, 0x9cffffff).ram();
+	map(0x9c000000, 0x9cffffff).ram().share("lcdbuf");   // firmware's composited LCD image (RGB565) lives at 0x9CE00000
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
@@ -1180,46 +1182,27 @@ INPUT_PORTS_END
 
 uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
-	// The LCD framebuffer is a linear 640x240 8bpp buffer in WORK RAM at
-	// 0x500D4080 (proven from the blitters: stride 0x280 = 640, height 0xF0 =
-	// 240; the boot clears exactly 640x240 bytes there). 0x90000000 is the LCD
-	// *controller* window, not the pixel buffer. Each pixel is a palette index
-	// resolved through the live 256-entry CLUT at work-RAM 0x50031490 (each entry
-	// 0x00BBGGRR, seeded at boot from program-ROM 0x32573C). See
-	// notes/library-rom-loading.md and the display-subsystem doc.
-	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578, table 0x50122CAC).
-	constexpr offs_t FB = 0x500D4080 - 0x50000000;             // byte offset into workram
-	constexpr offs_t FB2 = 0x500F9880 - 0x50000000;            // companion picture plane (0x25800 = 640*240 after FB)
-	constexpr offs_t CLUT = (0x50031490 - 0x50000000) / 4;     // word index into workram
-	auto wbyte = [&](offs_t byteoff) -> uint8_t
-	{
-		return (m_workram[byteoff >> 2] >> (8 * (byteoff & 3))) & 0xff;
-	};
-	// The display has two kinds of pixel. UI/text pixels are 8bpp palette indices
-	// resolved through the work-RAM CLUT. PICTURE pixels (JPEG/bitmap output) are NOT
-	// palettized: the decoder emits a 12-bit (4:4:4) direct colour split across two
-	// work-RAM byte-planes -- FB byte = 0xD0 | red4 (0xD_ high nibble tags a picture
-	// pixel, low nibble = 4-bit red), companion plane FB2 byte = (green4<<4)|blue4.
-	// The firmware's software compositor combines them; here we replicate that so
-	// pictures render in colour instead of hitting the (green-placeholder) CLUT.
-	// (Reverse-engineered: writer 0x484870C8 tags red at 0x48487144 `add 0xd0,d1`,
-	// stores FB at 0x48487193 and FB2 at 0x4848719D; compositor at ~0x48414D9A.)
-	auto pal = [&](offs_t off) -> rgb_t
-	{
-		const uint8_t idx = wbyte(FB + off);
-		if ((idx & 0xf0) == 0xd0)                             // picture: 12-bit direct colour
-		{
-			const uint8_t comp = wbyte(FB2 + off);
-			return rgb_t((idx & 0x0f) * 17, ((comp >> 4) & 0x0f) * 17, (comp & 0x0f) * 17);
-		}
-		const uint32_t v = m_workram[CLUT + idx];             // UI: 0x00BBGGRR
-		return rgb_t(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);
-	};
+	// Present the firmware's OWN composited image -- the exact bytes the real LCD
+	// controller scans. The firmware's software compositor blends the UI plane and the
+	// 12-bit direct-colour picture planes (see notes/display-dual-plane-direct-color.md)
+	// into a 640x240 RGB565 buffer at 0x9CE00000 (linear, top-to-bottom). Reading it
+	// directly gives a pixel-perfect display (gamma-correct UI colours, pictures
+	// composited by the machine itself) and supersedes reconstructing it from the work-
+	// RAM planes + CLUT. Runtime-verified against a dump: the home screen is pixel-exact.
+	// (The boot-splash JPEG still decodes to garbage -- a separate software-decoder bug
+	// -- so the splash reads as noise here too, faithfully.)
+	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578).
+	constexpr offs_t LCD = (0x9ce00000 - 0x9c000000) / 4;      // word offset of the RGB565 buffer in the 0x9c RAM
 	for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
 	{
 		uint32_t *const dst = &bitmap.pix(y);
 		for (int x = cliprect.left(); x <= cliprect.right(); x++)
-			dst[x] = uint32_t(pal(y * 640 + x));
+		{
+			const offs_t k = y * 640 + x;                     // linear pixel index
+			const uint32_t w = m_lcdbuf[LCD + (k >> 1)];
+			const uint16_t v = (k & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian RGB565
+			dst[x] = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
+		}
 	}
 	return 0;
 }
