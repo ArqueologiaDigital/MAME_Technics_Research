@@ -100,3 +100,41 @@ boot splash. Resolving "intended green vs missing splash" needs a reference for
 the real machine's power-on screen. Open: find the gate/config that would trigger
 a boot-picture palette load (search callers of 0x4842D9D7 / the picture-display
 entry and their enabling conditions).
+
+## CORRECTED / AUTHORITATIVE (runtime-verified): the splash animation is never played
+A deeper runtime trace supersedes the "picture blit works, only the CLUT is green"
+conclusion above. The 215-green CLUT placeholder (indices 0x1D..0xF3 = 0x0080FF80, seeded
+by `InitPaletteRGB` 0x4842D9AD from ROM table 0x4872573C) is GENUINE -- it is meant to be
+overwritten by a displayed picture's own palette. The real defect is upstream: **the boot-
+splash JPEG is never decoded at all**, so nothing ever overwrites the green.
+
+### The boot-splash display path
+- `OpeningFrameDraw` **0x4848A931** is the power-on "opening" screen's draw callback,
+  installed by `InitializeBlock04` 0x4848A4D8 (boot class table 0x487270BC; the install is
+  `0x4848A851: mov 0x4848a931,d0`). It renders the animation frames from the **seg05 JPEG
+  archive** (table-ROM directory entry [5] -> 0x4805667C, the music-notes/logo JFIFs) by
+  calling `DrawJpegFile` **0x48424EC2** at `0x4848A988`.
+- It is a timed sequencer over a 7-entry frame table `0x485E68B8` = {00,10,12,14,16,20,42,
+  FFFF}, using frame-index `0x5006B5A8` and a target counter `0x5006B5A4` that increments on
+  each redraw (0x4848A9A7).
+
+### Why green (evidence)
+- Read-taps: the splash JPEG bytes are **never read** (seg05 opening / seg09 "Welcome" /
+  seg14 mountains = 0 reads each; seg06 fonts = 207 reads, so taps work). The 0x90000000
+  V-RAM window is empty. So the decode is simply never invoked.
+- CLUT write-tap over [0x1D..0xF3]: 430 writes, **zero non-green** for the whole boot
+  (0x4842DB1E only ever writes the green placeholder there). screen_update presents the 8bpp
+  plane 0x500D4080 through that CLUT; at t=17 the box is idx 0xE0 -> green.
+- `OpeningFrameDraw` gates the JPEG draw at `0x4848A966: cmp d0,d1 / bne 0x4848A9A7`
+  (d0=frametbl[frame_index], d1=[0x5006B5A4]=target). The callback runs only **~once** (t~3s),
+  so the sequencer never steps target 0x00->0x42 and no frame ever matches -> DrawJpegFile
+  skipped.
+
+### The fix (a boot-timing/scheduling gap, NOT palette or blit)
+The opening animation exists to cover the multi-second hardware/resource init that the
+emulator finishes near-instantly, so the boot leaves the opening screen without holding on
+it and pumping its ~66 redraws. Fixing green = making the boot stay on the opening screen and
+redraw it during the init window (advancing 0x5006B5A4 0x00->0x42) so DrawJpegFile runs -- a
+display/task-scheduling issue. screen_update and the CLUT seed are both correct as-is.
+NOTE: boot splash = seg05 (music notes 0x480566E8 + KN7000 logo 0x48066517) ONLY; "Welcome"
+(seg09 0x48139EF0) is demo mode, mountains (seg14 0x48162C14) separate -- both 0 reads at boot.
