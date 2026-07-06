@@ -80,3 +80,47 @@ build keys on), but is no longer the leading explanation.
   segfaults (reentrant). Record offsets/counts only; print + `m:exit()` at a set time.
 - Press a genre to open the menu: set `SEG00` mask 0x10 (BALLAD) at t≈17.3, sample at
   t≈18.7.
+
+## Execution-trace results (PC-triggered register log in the CPU core)
+Added a temporary trace to mn10300.cpp's fetch loop (`switch(start_pc){case ...:
+logerror regs}`) for four candidate name functions, pressed BALLAD, captured -log.
+Findings (the trace hook has since been reverted):
+- **Only `AcRhythmNameProc` (0x4841F3A0) fired — 5×** with `a2=0x5000757C` (the live
+  UI object table) and `d1` = **distinct** IDs: 0x50001, 0x50002, 0x60021, 0x350002.
+- `MainGetRhythmName` (0x48416204), `AcStyleNameProc` (0x4847B221), and
+  `AcCtgStyleListBoxProc` (0x4847BCCA) did **NOT** fire during the menu at all.
+
+### AcRhythmNameProc is the CURRENT/FOCUSED-rhythm-name path, not the 10-slot list
+AcRhythmNameProc dispatches on the style ID (cmp 0x50001/0x50009/0x50014/0x6003a,
+else default 0x4841F447 → resolver **0x48429569** → **0x48414A4F**). Disassembling
+0x48414A4F: it **ignores the passed style ID** and instead returns the *current task's
+focused-object id*:
+```
+a2 = *0x50380004 (currently-running task handle)
+a1 = *0x5038002C (main task handle)
+idx = (a2==a1) ? *0x500D3C60 : *0x500D3C5C   ; main-task vs AP-task focused-object id
+```
+(all normal workram per the driver map/comments — not an unmodeled device). 0x48429569
+then indexes the UI object table `0x5000757C + idx*0x38` and reads the object's name.
+So this resolves the **focused/current** rhythm object's name (title/status area), and
+it fired only 5× with scattered IDs — **it is not the per-slot list drawer**.
+
+### Where the 10-slot list actually comes from (still open)
+Since neither the style list-box procs nor these name getters populate the 10 visible
+slots, the list is drawn by a different mechanism — most likely a **generic list
+widget** whose items were **populated once when the menu opened** (on the BALLAD key
+press), each item holding a pre-resolved name string/pointer. If population wrote the
+same default name into all 10 items, the per-frame draw faithfully shows 10×"8 Beat 1".
+
+### Next (concrete)
+1. Trace the **menu-open / populate** path: put the PC-trigger on the BALLAD-key
+   handler and on the list-item **add** routine (or on the text-render function with
+   its string-pointer arg) to catch all 10 slot names + their source addresses in one
+   pass. The population runs once, so trace from the key press (t≈17.3) with a short
+   window.
+2. Find the list-item store: search for writes into the list-widget's item array
+   (near 0x5000757C UI objects) right after the genre key press.
+Trace method that works (reuse): temporary `switch(start_pc){case TARGET: logerror(
+"...", m_d[0..3], m_a[0..2]);}` right after `start_pc = m_pc` in the fetch loop; build
+CPU only; run in background (>120s, the Bash tool's own limit kills a foreground run);
+NB the udf07 unimplemented log also writes ~420K lines/boot, so filter by "RNTRACE".
