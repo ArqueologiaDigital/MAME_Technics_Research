@@ -72,3 +72,31 @@ not the boot key-check), or (c) timing (the check ran before the injection).
 - Normal-mode dispatch: `PanelButtonDispatch` 0x484ADB59 uses descriptor tables
   0x48614978/0x486149FC; `PanelWireNormTable` 0x486135A0 maps wire→normSeg.
 - Matrices + verified bindings: notes/panel-matrix-service-manual.md.
+
+## UPDATE: the panel-test mode flag 0x5006BFB2 (found + runtime-tested)
+The panel-test button path is gated by RAM flag **0x5006BFB2** (checked in
+PanelButtonDispatch 0x484ADB59 at 0x484ADB22/0x484ADB74; also 0x484AE292). When
+`==1`, a button press routes to the panel-test handler (0x484A0CB0 → switch-class
+LED lookup) instead of the normal descriptor dispatch. **Runtime-confirmed:**
+writing `0x5006BFB2=1` via Lua then pressing GUITAR (SEG0C.b1) no longer opens the
+GUITAR sound screen — the dispatch is re-routed. (The full test *screen* still
+needs the proper service-menu entry; the flag alone only re-routes buttons.)
+
+## KEY CAVEAT — the emulator panel-test is CIRCULAR for .lay mapping
+Enabling the panel-test in the emulator does **not** help assign the remaining
+`.lay` buttons (LCD soft-keys, CPC screen buttons) to normSeg.bit. Reason: on real
+hardware the test maps *physical button → switch# → normSeg*. But in the emulator
+the `.lay` buttons already **drive normSeg ports directly** — there is no physical
+panel to press, so pressing a `.lay` button in the test just echoes the normSeg we
+assigned. The missing *physical → normSeg* half lives in the undumped panel
+sub-CPU and can only be recovered by:
+  1. the **real hardware** panel-test (hold C#3+D#3+C#4 at power-on → press each
+     physical button → read its switch#), or
+  2. a panel sub-CPU firmware dump, or
+  3. **empirical screen-probing in the emulator** — press each reachable
+     normSeg.bit, observe the on-screen effect, match to the expected button
+     function (the method that mapped the sound categories / genres / mutes). This
+     is the only fully-autonomous emulator path, and it works for buttons with a
+     visible effect (e.g. the RIGHT soft-keys show as part-select RIGHT1/RIGHT2).
+So the ~70 buttons wired by descriptor-function-matching are the confidently
+mappable set from static RE alone; the rest need (1) or (3).
