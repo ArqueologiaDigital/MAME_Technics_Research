@@ -676,6 +676,13 @@ void mn10300_device::execute_f6()
 	case 0xC: m_d[dst] = m_mcrh; break;                                      // getchx MCRH -> Dn
 	case 0xD: m_d[dst] = m_mcrl; break;                                      // getclx MCRL -> Dn
 	case 0xF: m_d[dst] = m_mdrq; break;                                     // getx MDRQ -> Dn (no flag change: the ISR context-save re-reads PSW after this, so it must not touch flags)
+	case 0x7: {  // udf07 Dm,Dn -- BSCH (bit search): Dn = position (0..15) of the most-significant
+		// set bit in Dm's low 16 bits (0 if none). RE-CONFIRMED: this is the sole unimplemented
+		// op in the software JPEG decoder (Huffman leading-run decode @0x4840FBB9); with it the
+		// boot splash decodes pixel-clean (music notes / KN7000 logo) instead of noise.
+		const uint32_t v = m_d[src] & 0xffff;
+		m_d[dst] = v ? uint32_t(31 - __builtin_clz(v)) : 0u;
+	} break;
 	default:  logerror("MN10300: unimplemented F6 %02X @ %08X\n", op2, start_pc); break;
 	}
 	m_pc = start_pc + 2;
