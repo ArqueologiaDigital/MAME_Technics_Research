@@ -1189,21 +1189,37 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	// notes/library-rom-loading.md and the display-subsystem doc.
 	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578, table 0x50122CAC).
 	constexpr offs_t FB = 0x500D4080 - 0x50000000;             // byte offset into workram
+	constexpr offs_t FB2 = 0x500F9880 - 0x50000000;            // companion picture plane (0x25800 = 640*240 after FB)
 	constexpr offs_t CLUT = (0x50031490 - 0x50000000) / 4;     // word index into workram
 	auto wbyte = [&](offs_t byteoff) -> uint8_t
 	{
 		return (m_workram[byteoff >> 2] >> (8 * (byteoff & 3))) & 0xff;
 	};
-	auto pal = [&](uint8_t idx) -> rgb_t
+	// The display has two kinds of pixel. UI/text pixels are 8bpp palette indices
+	// resolved through the work-RAM CLUT. PICTURE pixels (JPEG/bitmap output) are NOT
+	// palettized: the decoder emits a 12-bit (4:4:4) direct colour split across two
+	// work-RAM byte-planes -- FB byte = 0xD0 | red4 (0xD_ high nibble tags a picture
+	// pixel, low nibble = 4-bit red), companion plane FB2 byte = (green4<<4)|blue4.
+	// The firmware's software compositor combines them; here we replicate that so
+	// pictures render in colour instead of hitting the (green-placeholder) CLUT.
+	// (Reverse-engineered: writer 0x484870C8 tags red at 0x48487144 `add 0xd0,d1`,
+	// stores FB at 0x48487193 and FB2 at 0x4848719D; compositor at ~0x48414D9A.)
+	auto pal = [&](offs_t off) -> rgb_t
 	{
-		const uint32_t v = m_workram[CLUT + idx];              // 0x00BBGGRR
+		const uint8_t idx = wbyte(FB + off);
+		if ((idx & 0xf0) == 0xd0)                             // picture: 12-bit direct colour
+		{
+			const uint8_t comp = wbyte(FB2 + off);
+			return rgb_t((idx & 0x0f) * 17, ((comp >> 4) & 0x0f) * 17, (comp & 0x0f) * 17);
+		}
+		const uint32_t v = m_workram[CLUT + idx];             // UI: 0x00BBGGRR
 		return rgb_t(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);
 	};
 	for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
 	{
 		uint32_t *const dst = &bitmap.pix(y);
 		for (int x = cliprect.left(); x <= cliprect.right(); x++)
-			dst[x] = uint32_t(pal(wbyte(FB + y * 640 + x)));
+			dst[x] = uint32_t(pal(y * 640 + x));
 	}
 	return 0;
 }
