@@ -227,3 +227,19 @@ part-name table + CPC MUTE positions; arranger toggles via event family + CPL
 labels); (2) generate the .lay -- keep the folklore geometry/labels (they match)
 and REWRITE each button's inputtag/inputmask to the correct normSeg.bit. Verify a
 sample of re-bound buttons with the probe before committing.
+
+## Mute-mapping verification (2026-07-06): the simple assumption is WRONG
+
+Tested the hypothesis "CPC MUTE N ↔ event 0x2001/0x2000 arg (N-1)" by pressing
+claimed mute buttons and watching the home-screen mixer. Result: pressing
+SEG05.b5 (event 0x2000/01) clearly dropped the **ACP1** slider (105→60) -- a real
+(input → mixer part) effect, but NOT the clean "MUTE 1..16 in arg order" mapping
+assumed. Also confirmed the SEG00 "rhythm genre" probe hits are CONTAMINATED by
+mode-gating (those 0x2000/arg buttons are really mutes; from home they navigate
+to the RHYTHM screen). So the no-screen buttons (part mutes, arranger toggles)
+must be mapped by their OBSERVED STATE EFFECT (which mixer part / indicator
+changes), one at a time -- not by an arg-order assumption. This rules out baking
+the mutes into the .lay yet; only the screen-opening buttons (16 sound families +
+16 genres + menus) are currently verified. The .lay generation waits on this
+per-button state-effect mapping (a slow but reliable sweep), to avoid re-
+introducing wrong bindings.
