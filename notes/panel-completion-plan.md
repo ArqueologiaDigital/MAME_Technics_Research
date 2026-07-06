@@ -164,3 +164,16 @@ INTRO&ENDING2=cpl11, SYNCHRO&BREAK=cpl10, FADE IN=cpl32 from the earlier home sw
 individual green_led calls (not a loop), bind each by name=; (c) the 5 missing genres. NEXT BUTTON
 targets (snapshot-ID, screen-changing): SEQUENCER PLAY/EASY REC (decorative, near SEG12), PANEL
 MEMORY group, AUTO PLAY CHORD, PART SELECT/CONDUCTOR.
+
+## Button-ID campaign (tick 2026-07-07e): snapshot scope confirmed + 3 bound
+Snapshotted the toggle/mode candidates (MUSIC STYLIST, ARRANGER OFF/ON, PLAY CHORD OFF/ON, SOUND SET,
+AUTO MODE): they all show the HOME/CONDUCTOR view (PMEM: A-, parts DRM2/DRM1/ACP5-1/BASS/APC/PADS/LEFT/
+RIGHT2/RIGHT1 + sounds + TRANSPOSE:C), NOT distinct screens -- so like VARIATION they can't be
+snapshot-ID'd (they toggle a setting shown as an on-screen indicator). RULE: snapshot IDs only
+screen-OPENING buttons (sound/genre/menus); for toggles/modes trust SINGLE-BIT dedicated events
+(0x2031/2032/2033/20A8/2022/2023/2084 etc.), NOT mixed families (0x2000/2001/2004/2010/2030/2040).
+Bound this tick: PERFORMANCE PADS AUTO SETTING=SEG06.b5(0x2031), STOP=SEG06.b1(0x2033), AUTO PLAY
+CHORD OFF/ON=SEG06.b3(0x2032). 92 inputtags. Reliable-but-unbound single-bit: FILL IN 1/2 (0x2023
+SEG03.b4/b2 -- layout has no FILL button), INTRO&ENDING 2 (0x2022 SEG00.b6), FADE OUT (0x2084 SEG03.b3),
+AUTO MODE (0x20A8 SEG07.b1). Mislabelled driver bits found: SEG05 "PAD"/"PADS BANK" are 0x2000/2001
+part on/off; the real PERFORMANCE PADS BANK bit is unknown (BANK left decorative).
