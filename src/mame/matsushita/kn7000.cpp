@@ -854,7 +854,10 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 // changed since last scan, queue a 2-byte [ADDR][DATA] switch-report frame onto
 // the panel RX. DATA bit = 1 means pressed (active-high on the wire); the frame
 // is the same format the real sub-CPUs emit (notes/panel-serial-protocol.md,
-// e.g. START/STOP press = C0 10). Delivery to the firmware awaits SIO interrupts.
+// e.g. START/STOP press = C0 10). Delivery to the firmware WORKS via the ATN/SIO
+// handshake in panel_queue -- VERIFIED: a held DEMO (SEG06 0x40) press enters demo
+// mode. NB a press must be HELD across scans (>~1 frame); a single-frame Lua tap can
+// be cleared by the input frame-update before this 250 Hz scan samples it.
 TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 {
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
