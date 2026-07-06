@@ -68,3 +68,47 @@ SEG13  b0 TRANSPOSE down*  b1 TRANSPOSE up*  b2 OCTAVE-*  b3 OCTAVE+*  b6/b7 scr
   service-diagnostic-mode.md.
 - LED modeling: byte0/byte1 give the matrix cell per button; drive .lay LEDs from
   firmware LED state once a writer is traced (panel-leds.md).
+
+## SEG14–0x20 decode (extends the table above)
+Decoded directly from the descriptor arrays (ptr table 0x48614978, 12-byte entries):
+```
+SEG14  b2 0x2004/0F  b3 0x2004/06                       SOUND family (LEDgrp11.01 / 10.01)
+SEG15  b2 0x2004/0E  b3 0x2004/05                       SOUND family (LEDgrp11.02 / 10.02)
+SEG16  b0 maskFF 0x1005 type2   |  SEG17 b0 maskFF 0x1004 type4   (DIAL/DATA, no LED)
+SEG18  b0 maskFF 0x1009 type2   |  SEG19 b0 maskFF 0x1010 type2
+SEG1A  b0 maskFF 0x1011 type2   |  SEG20 b0 maskFF 0x1020 type2   (LEDgrp25.32)
+SEG1B  b0..b5 0x1000/arg 05..00 type3                    6-button group (no LED)
+SEG1C  (empty)
+SEG1D  b0..b5 0x20B5..0x20BA  gate 0xC8..0xCD  class f7   6-button group, SPECIAL multi-LED
+SEG1E  b0 0x20BB (LEDgrp00.00)  |  SEG1F b0 0x20BD (LEDgrp00.00)
+```
+
+### Interpretation
+- **maskFF normSegs (SEG16/17/18/19/1A/20)** are *analog data-entry* controls
+  (dispatch type 2/4 = "dial/data"), NOT push-buttons — these are the value
+  dials/faders/data-encoder (TEMPO/PROGRAM, data dial, the 4 volume faders, etc.).
+- **SEG14/15** are 4 more `0x2004` SOUND-family buttons.
+- **SEG1D** (6 sequential `0x20B5-0x20BA`, special multi-LED, `normSeg==0x1D` is the
+  one value the panel-test explicitly special-cases) structurally matches the 6-button
+  **PART SELECT / CONDUCTOR** cluster in the layout — strong candidate, not yet wired.
+- **SEG1B** (6× `0x1000` args 0-5) is a cursor/navigation-style group.
+
+### Why the LCD soft-keys & CPC screen buttons aren't wired here
+1. **Soft-keys are context-dependent.** LCDR1/LCDR2 fire `2001/10`,`2001/11`
+   (part-select RIGHT1/RIGHT2 = SEG11.b4/b5) *on the home screen* but different
+   events on other screens — there is no single static "function", and the exact
+   soft-key→bit assignment mixes with part-select/transpose entries (`0x2001` is a
+   multiplexed "part-control" event whose meaning depends on arg AND current mode).
+2. **CPC board (OTHER PARTS/HELP/CONTRAST±/PAGE±/DISPLAY HOLD/EXIT).** Per the
+   service matrix these share columns with MUTE 1-16, but the mute *events* live on
+   the CPL-sourced normSegs 0x05/0x08-0x0B; the CPC's own physical→ADDR scan
+   encoding is in the **undumped panel sub-CPU**, so their normSeg.bit is not
+   statically provable (only the ADDR→normSeg half is).
+
+### Conclusion / next step
+Static RE has now extracted every normSeg.bit→event in the main ROM (SEG00-0x20).
+The remaining unwired buttons (LCD soft-keys L/R, PART SELECT/CONDUCTOR cluster,
+OTHER PARTS/HELP/CONTRAST/PAGE/DISPLAY HOLD/EXIT) can only be confidently pinned to
+physical positions via the **dynamic service PANEL SW&LED test** (press each,
+observe switch#/LED) — that is now the highest-value remaining task
+(see service-diagnostic-mode.md for the entry hunt).
