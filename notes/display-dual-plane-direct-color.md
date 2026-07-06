@@ -71,3 +71,11 @@ display path is now correct, and the splash garble is a **JPEG-decoder bug** —
 next thing to chase for a clean splash: audit the AM33 extended-ALU ops the decoder uses
 (0x484870C8 area + the IDCT) for any the CPU core mis-runs. The dual-plane picture format
 above is still the ground truth for what the decoder *should* emit.
+
+## UPDATE: the JPEG-decoder bug is FIXED (udf07 = bit-search)
+The "splash garble is a JPEG-decoder bug" prediction above was correct AND is now fixed. The
+sole cause was one unimplemented AM33 op in the software JPEG decoder's Huffman step: udf07
+(F6 op2>>4=7) = BSCH bit-search. Implemented (mn10300.cpp execute_f6 case 0x7); the boot splash
+now decodes pixel-clean (music notes over Earth, then the KN7000 logo). See
+notes/mn10300-udf-instructions-unimplemented.md. So: display (0x9CE00000) correct + decoder
+fixed => the KN7000 now plays its real power-on splash animation. Green-screen saga fully done.

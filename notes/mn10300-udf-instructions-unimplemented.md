@@ -138,3 +138,24 @@ Implementing udf00 did not change it, and udf07 is an isolated fixed-point-math
 function (unrelated to text/name lookup). So the rhythm-name-list bug is a SEPARATE
 issue (candidate: the style list is not populated from its source / a data-table or
 device gap), to be investigated independently of the udf work.
+
+## SOLVED (2026-07-06): udf07 = BSCH (bit-search); fixes the boot-splash JPEG decode
+The software JPEG decoder produces the boot splash. It was decoding to pure noise. Diagnosis:
+- The splash frames ARE standard JPEGs in the table ROM (music-notes-over-Earth @0x480566E8,
+  KN7000 logo @0x48066517); a reference PIL decode shows the real images. So the decoder was
+  broken, not the data.
+- Captured the unimplemented ops hit during the splash decode (dedup'd fprintf(stderr) at the
+  core's skip sites, run WITHOUT -log to avoid the I/O-log flood that starves the emulation):
+  **exactly one** -- `F6 op2=71` = **udf07 d0,d1** @0x4840FBB9 (the Huffman leading-run step).
+- Traced the block: `not d0; udf07 d0,d1; d2=15-d1; W=table[a2+(15-d1)*2]; d0=(~x<<(32-d1))>>(32-W)`
+  -- a table-driven variable-length (Huffman) decode. Tried clz32, clz16, leading-ones (all
+  still noise), then **bit-search** -> the splash decodes PIXEL-CLEAN.
+
+**udf07 Dm,Dn = BSCH: Dn = bit position (0..15) of the most-significant set bit in Dm's low 16
+bits (0 if none).** Implemented in execute_f6 case 0x7 (mn10300.cpp). Verified: both splash
+frames render exactly like the reference JPEG decode. commit 457ec48.
+
+Lesson / method for the remaining udf ops: (1) dedup'd stderr capture finds WHICH op and WHERE;
+(2) disassemble the using-block to get the algorithm; (3) if a reference exists (here: PIL on
+the same JPEG), the visual/quantitative match confirms the semantics. The other udf variants
+(udf01..06, 08..35) are still unknown but can be RE'd the same way as they surface.
