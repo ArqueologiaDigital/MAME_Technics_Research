@@ -392,9 +392,9 @@
 		<element ref="t61"><bounds x="856" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide"><bounds x="856" y="355" width="105" height="28"/></element>
 		<element ref="t62"><bounds x="740" y="394" width="105" height="9"/></element>
-		<element ref="pill_wide"><bounds x="740" y="408" width="105" height="50"/></element>
+		<element ref="pill_wide" inputtag="SEG03" inputmask="0x10"><bounds x="740" y="408" width="105" height="50"/></element>
 		<element ref="t63"><bounds x="856" y="394" width="105" height="9"/></element>
-		<element ref="pill_greycyan"><bounds x="856" y="408" width="105" height="50"/></element>
+		<element ref="pill_greycyan" inputtag="SEG00" inputmask="0x10"><bounds x="856" y="408" width="105" height="50"/></element>
 	</group>
 
 	<group name="right_block">

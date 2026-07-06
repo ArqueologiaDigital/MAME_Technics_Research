@@ -138,8 +138,8 @@ for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32)); LB.append(L(("VARIATION " if i==0 else "")+str(i+1),cx-12,388,54,8))
 for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,None,None),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
-for nm,x,w,h,shp in [("INTRO & ENDING",740,105,50,"pill_wide"),("START/STOP",856,105,50,"pill_greycyan")]:
-    LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h))
+for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x10"),("START/STOP",856,105,50,"pill_greycyan","SEG00","0x10")]:
+    LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
