@@ -18,7 +18,16 @@ the SEG.bit whose descriptor event matches its function.
 - [x] 0x2000/0x2001 parts 0x10-0x14 → LCD-flanking part on/off (RIGHT1/RIGHT2/LEFT/ACCOMP1/2)
 - [x] 0x2000/0x2001 parts 0x00-0x0F → MUTE grid SEG05/08-0B (verify order)
 - [x] 0x2020 START/STOP, 0x2022 INTRO&ENDING (2), 0x2023 FILL IN (2), 0x2084 FADE (2)
-- [ ] 0x2010 (8) — "Sound Group N"? resolve (name table?) + bind
+- [~] 0x2010 (8) CONFIRMED = PART EFFECT + GLOBAL EFFECT buttons (empirical: right-panel LEDs
+      cpr49/73/74/75/91/100 + effect-menu screen changes on press). arg→effect order NOT yet
+      pinned (6/8 responded on home screen; a3/a4 context-dependent). To bind without mislabelling:
+      read the effect-menu title (LCD) per arg, or map the effect-LED positions. Layout has the 8
+      decorative buttons (PART EFFECT SUSTAIN/DIGITAL EFFECT/SOUND DSP/VARIATION; GLOBAL CHORUS/
+      MULTI EFFECT/REVERB/MIC REVERB & EFFECT). 0x2010 bits a0..a7 = SEG0C.b1,SEG12.b6,SEG11.b6,
+      SEG10.b6,SEG0F.b6,SEG11.b7,SEG12.b7,SEG13.b7.
+- Found HELP-text function-name pool @0x48394D06 (72 names) = the full label vocabulary; event→name
+  lookup is code-based (documented in panel-descriptor-map.md).
+
 - [ ] 0x2040 (11) — "Fn Toggle" — resolve (part-effect toggles? SUSTAIN/DSP/etc.) + bind
 - [ ] 0x2030 (12, args 0-5) — FILL/FADE/tempo family? resolve + bind
 - [ ] 0x2008 (3), 0x2009 (3) — Balance/Ctrl — resolve + bind
