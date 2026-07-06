@@ -197,7 +197,7 @@ for i,(shp,fx,fy) in enumerate(padspec):
     (x,w)=padcol[i%3]; (y,h)=padrow[i//3]
     LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
-for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,None,None),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,None,None)]:
+for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG04","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG03","0x80")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
@@ -205,11 +205,15 @@ LB.append(P("green_led",371,350,8,8))   # MUSIC STYLE ARRANGER LED
 # L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
 LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
+# VARIATION & MSA 1-4 = event 0x2085 args a00-a03 (SEG04.b4/b2/b0 + SEG03.b6). Descriptor-grounded
+# (driver labels SEG04.b4=VARIATION&MSA 1); these are rhythm modifiers with no distinct LCD, so
+# snapshot can't verify them. NB SEG04.b6 (driver "VARIATION & MSA 4") is a MISLABEL = 0x2030/a05.
+VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),("SEG03","0x40")]
 for i,cx in enumerate([366,426,486,546]):
-    LB.append(P("round_btn",cx,399,32,32)); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
+    LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
 # FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
 # (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,None,None),("SYNCHRO & BREAK",856,105,28,None,None)]:
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,"SEG00","0x80")]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
