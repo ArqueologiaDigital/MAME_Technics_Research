@@ -1,317 +1,174 @@
 #!/usr/bin/env python3
 # Generator for src/mame/layout/kn7000.lay -- KN5000-style SVG-snippet layout,
-# arranged to the KN7000 mockup. Three reusable blocks (groups) + two views.
-# KN7000 palette: dark charcoal/graphite panel, dark buttons, white text (no
-# KN5000 teal). Refined from real-unit appearance (black/graphite).
-import io
+# arranged pixel-perfectly to the mockup (4000x3000 = 2x the 2000x1500 layout;
+# all measured coords are the mockup's /2). Three reusable blocks + two views.
+import io, math
 
-# ---- palette (KN7000: darker/blacker than KN5000) -------------------------
-PANEL   = "#2a2a2c"   # main control panel
-PANEL2  = "#232325"   # raised/darker sub-panel
-BTN     = "#232323"   # dark button face (reused from KN5000)
-BTN_D   = "#1b1b1b"   # dark button pressed
-LBTN    = "#3a3a3c"   # lighter button
-LBTN_D  = "#2c2c2e"
-STROKE  = "#000"
-TXT     = '<color red="0.90" green="0.90" blue="0.90"/>'   # white-ish labels
-TXTH    = '<color red="0.72" green="0.72" blue="0.74"/>'   # dimmer section headers
-
-E = []   # element XML fragments
-
-def elem(name, body):
-    E.append(f'\t<element name="{name}">{body}</element>')
-
-def two_state_svg(name, w, h, shape0, shape1):
-    E.append(
-        f'\t<element name="{name}">\n'
-        f'\t\t<image state="0"><data><![CDATA[<svg width="{w}" height="{h}">{shape0}</svg>]]></data></image>\n'
-        f'\t\t<image state="1"><data><![CDATA[<svg width="{w}" height="{h}">{shape1}</svg>]]></data></image>\n'
-        f'\t</element>')
-
-def txt(name, s, color=TXT):
-    E.append(f'\t<element name="{name}"><text string="{s}">{color}</text></element>')
-
-# ---- element library -------------------------------------------------------
-# Panel backgrounds (one per block, plain filled rects; the block bounds set size)
-def panel_bg(name, w, h, fill):
-    elem(name, f'<image><data><![CDATA[<svg width="{w}" height="{h}">'
-               f'<rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
-
-# dark round button 29x29 (reused KN5000 shape)
-two_state_svg("round_btn", 29, 29,
-    f'<circle stroke="{STROKE}" stroke-width="1px" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',
-    f'<circle stroke="{STROKE}" stroke-width="1px" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
-# big round button 40x40
-two_state_svg("round_btn_big", 40, 40,
-    f'<circle stroke="{STROKE}" stroke-width="1px" fill="{BTN}" cx="20" cy="20" r="19.5"/>',
-    f'<circle stroke="{STROKE}" stroke-width="1px" fill="{BTN_D}" cx="20" cy="20" r="19.5"/>')
-# dark pill 37x21 (reused)
-two_state_svg("pill_btn", 37, 21,
-    f'<rect stroke="{STROKE}" stroke-width="1px" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10" ry="10"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1px" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10" ry="10"/>')
-# wide pill 60x22 (MUSIC STYLIST, SD, TAP TEMPO ...)
-two_state_svg("pill_wide", 60, 22,
-    f'<rect stroke="{STROKE}" stroke-width="1px" fill="{BTN}" x="0.5" y="0.5" width="59" height="21" rx="10.5" ry="10.5"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1px" fill="{BTN_D}" x="0.5" y="0.5" width="59" height="21" rx="10.5" ry="10.5"/>')
-# small round LEDs (reused)
-two_state_svg("red_led", 8, 8,
-    '<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>', '<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
-two_state_svg("green_led", 8, 8,
-    '<circle cx="4" cy="4" r="3.5" fill="#003a00"/>', '<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
-
-# --- KN7000-unique shapes ---
-# LCD soft-key: rectangle with a vertical divider line near the inner edge
-two_state_svg("lcd_soft_key", 120, 46,
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="118" height="44" rx="4"/>'
-    f'<line x1="30" y1="1" x2="30" y2="45" stroke="{STROKE}" stroke-width="1.5"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="118" height="44" rx="4"/>'
-    f'<line x1="30" y1="1" x2="30" y2="45" stroke="{STROKE}" stroke-width="1.5"/>')
-# mute half-buttons: top (UP) and bottom (DOWN) of a tall split rectangle 44x62 each
-two_state_svg("mute_up", 44, 62,
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="42" height="60" rx="4"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="42" height="60" rx="4"/>')
-two_state_svg("mute_down", 44, 62,
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="42" height="60" rx="4"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="42" height="60" rx="4"/>')
-# tall CONTRAST pill (capsule) with a knob line
-two_state_svg("contrast_pill", 40, 150,
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{PANEL2}" x="1" y="1" width="38" height="148" rx="19"/>'
-    f'<rect fill="{BTN}" x="10" y="60" width="20" height="30" rx="4" stroke="{STROKE}"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{PANEL2}" x="1" y="1" width="38" height="148" rx="19"/>'
-    f'<rect fill="{BTN_D}" x="10" y="66" width="20" height="30" rx="4" stroke="{STROKE}"/>')
-# tall PAGE pill (up/down capsule)
-two_state_svg("page_pill", 40, 150,
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="38" height="148" rx="19"/>',
-    f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="38" height="148" rx="19"/>')
-# vertical fader (volume slider): track + cap
-two_state_svg("fader", 34, 150,
-    f'<rect fill="{PANEL2}" stroke="{STROKE}" x="14" y="4" width="6" height="142"/>'
-    f'<rect fill="{LBTN}" stroke="{STROKE}" stroke-width="1.5" x="4" y="40" width="26" height="20" rx="3"/>'
-    f'<line x1="8" y1="50" x2="26" y2="50" stroke="{STROKE}"/>',
-    f'<rect fill="{PANEL2}" stroke="{STROKE}" x="14" y="4" width="6" height="142"/>'
-    f'<rect fill="{LBTN_D}" stroke="{STROKE}" stroke-width="1.5" x="4" y="46" width="26" height="20" rx="3"/>'
-    f'<line x1="8" y1="56" x2="26" y2="56" stroke="{STROKE}"/>')
-# TEMPO/PROGRAM encoder (big knurled knob)
-two_state_svg("tempo_knob", 110, 110,
-    f'<circle cx="55" cy="55" r="52" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/>'
-    f'<circle cx="55" cy="55" r="40" fill="{PANEL2}" stroke="{STROKE}"/>'
-    f'<circle cx="55" cy="30" r="6" fill="{LBTN}" stroke="{STROKE}"/>',
-    f'<circle cx="55" cy="55" r="52" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/>'
-    f'<circle cx="55" cy="55" r="40" fill="{PANEL2}" stroke="{STROKE}"/>'
-    f'<circle cx="55" cy="30" r="6" fill="{LBTN}" stroke="{STROKE}"/>')
-# PANEL MEMORY big segmented dial (bold ring, radial spokes, center SET)
-spokes = "".join(
-    f'<line x1="90" y1="90" x2="{90+80*__import__("math").cos(a)}" y2="{90+80*__import__("math").sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>'
-    for a in [i*3.14159/4 for i in range(8)])
-two_state_svg("panel_memory_dial", 180, 180,
-    f'<circle cx="90" cy="90" r="86" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>'
-    f'{spokes}'
-    f'<circle cx="90" cy="90" r="82" fill="none" stroke="{STROKE}" stroke-width="7"/>'
-    f'<circle cx="90" cy="90" r="34" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/>',
-    f'<circle cx="90" cy="90" r="86" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>'
-    f'{spokes}'
-    f'<circle cx="90" cy="90" r="82" fill="none" stroke="{STROKE}" stroke-width="7"/>'
-    f'<circle cx="90" cy="90" r="34" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/>')
-# performance pad (angled trapezoid pad)
-two_state_svg("perf_pad", 78, 52,
-    f'<path fill="{BTN}" stroke="{STROKE}" stroke-width="1.5" d="M4,6 L74,2 L74,50 L4,50 Z"/>',
-    f'<path fill="{BTN_D}" stroke="{STROKE}" stroke-width="1.5" d="M4,6 L74,2 L74,50 L4,50 Z"/>')
-# music note (DEMO)
-elem("music_note", '<image><data><![CDATA[<svg width="20" height="24">'
-     f'<circle cx="6" cy="19" r="5" fill="{TXT[19:26] if False else "#e0e0e0"}"/>'
-     '<rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/>'
-     '<path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image>')
-# screen border (frame around the LCD)
-elem("screen_border", '<image><data><![CDATA[<svg width="1320" height="520">'
-     f'<rect x="1" y="1" width="1318" height="518" fill="#050505" stroke="{STROKE}" stroke-width="2"/>'
-     '</svg>]]></data></image>')
-
-print(f"# {len(E)} elements defined; generator OK")
-open("/tmp/claude-1000/-home-fsanches-compartilhado-KN7000/74c7edc4-f16b-4349-97a0-39242e320cdb/scratchpad/lay_elements.xml","w").write("\n".join(E))
-
-# ============================ block / view builders =========================
-import math
-TXTS = {}   # label text -> element name (dedup)
-def xesc(s):
-    return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-def label(s, color=TXT):
-    key=(s,color)
-    if key not in TXTS:
-        n=f"t{len(TXTS)}"; TXTS[key]=n
+PANEL="#2a2a2c"; PANEL2="#232325"; BTN="#232323"; BTN_D="#1b1b1b"
+LBTN="#3a3a3c"; LBTN_D="#2c2c2e"; MSP="#5f6367"; MSP_D="#505860"; STROKE="#000"
+TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
+TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
+E=[]; TXTS={}
+def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
+def two(n,w,h,s0,s1):
+    E.append(f'\t<element name="{n}">\n\t\t<image state="0"><data><![CDATA[<svg width="{w}" height="{h}">{s0}</svg>]]></data></image>\n'
+             f'\t\t<image state="1"><data><![CDATA[<svg width="{w}" height="{h}">{s1}</svg>]]></data></image>\n\t</element>')
+def xesc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+def label(s,color=TXT):
+    k=(s,color)
+    if k not in TXTS:
+        n=f"t{len(TXTS)}"; TXTS[k]=n
         E.append(f'\t<element name="{n}"><text string="{xesc(s)}">{color}</text></element>')
-    return TXTS[key]
-
-def P(ref,x,y,w,h,flip=False):
+    return TXTS[k]
+def P(ref,x,y,w,h,flip=False,tag=None,mask=None):
     o='<orientation flipx="yes"/>' if flip else ''
-    return f'\t\t<element ref="{ref}">{o}<bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
-def L(s,x,y,w,h,color=TXT):
-    return f'\t\t<element ref="{label(s,color)}"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
+    b=f' inputtag="{tag}" inputmask="{mask}"' if tag else ''
+    return f'\t\t<element ref="{ref}"{b}>{o}<bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
+def L(s,x,y,w,h,color=TXT): return f'\t\t<element ref="{label(s,color)}"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
+def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
 
-# round button with a label above and a small LED (returns fragment list)
-def keybtn(x,y,name,led="green_led",r=29):
-    f=[P(name if name in ("round_btn","round_btn_big") else "round_btn",x,y,r,r)]
-    return f
+# ---- element library (reused kn5000 shapes + kn7000-unique) ----
+two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
+two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
+two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
+two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
+two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
+two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
+# LCD soft key: rect + inner vertical divider
+two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
+                          f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
+two("mute_up",55,77,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="75" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="75" rx="3"/>')
+two("mute_down",55,78,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="76" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="76" rx="3"/>')
+two("tall_pill",50,155,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="48" height="153" rx="24"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="48" height="153" rx="24"/>')
+two("fader",30,150,f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN}" stroke="{STROKE}" stroke-width="1.5" x="2" y="40" width="26" height="18" rx="3"/>',
+                    f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN_D}" stroke="{STROKE}" stroke-width="1.5" x="2" y="48" width="26" height="18" rx="3"/>')
+two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>',
+                         f'<circle cx="50" cy="50" r="48" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>')
+sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
+two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/>',
+                                f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/>')
+# reused KN5000 MSP performance-pad buttons (same shape on KN7000)
+two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
+two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
+two("msp_middle",61,40,f'<path stroke="{STROKE}" fill="{MSP}" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/>')
+elem("music_note",'<image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image>')
+elem("screen_frame",f'<image><data><![CDATA[<svg width="1404" height="581"><rect x="1" y="1" width="1402" height="579" fill="#050505" stroke="{STROKE}" stroke-width="2"/></svg>]]></data></image>')
+panel_bg("bg_top",2000,997,PANEL); panel_bg("bg_left",1000,503,PANEL); panel_bg("bg_right",1000,503,PANEL)
 
-# ------------------------------- SCREEN BLOCK -------------------------------
-S=[]
-S.append('\t<group name="screen_block">')
-S.append('\t\t<bounds x="0" y="0" width="2000" height="800"/>')
-S.append(P("bg_screen",0,0,2000,800))
-S.append(P("screen_border",340,100,1320,520))
-S.append('\t\t<screen index="0"><bounds x="360" y="120" width="1280" height="480"/></screen>')
-# LCD soft keys L/R (5 each)
-ys=[200,285,370,455,540]
-for i,yy in enumerate(ys):
-    S.append(P("lcd_soft_key",140,yy,120,46))
-    S.append(P("lcd_soft_key",1740,yy,120,46,flip=True))
-# OTHER PART&FR + HELP
-S.append(L("OTHER",118,612,84,16)); S.append(L("PART & FR",108,628,104,16))
-S.append(P("round_btn_big",150,648,40,40)); S.append(P("red_led",196,652,8,8))
-S.append(L("HELP",150,772,60,16)); S.append(P("round_btn_big",150,708,40,40))
-# CONTRAST pill
-S.append(L("CONTRAST",258,612,110,16)); S.append(P("contrast_pill",286,634,40,150))
-S.append(L("MUTE",336,700,50,14,TXTH))
-# MUTE 1..16 (decorative in v1; bindings are a separate pass)
+# =================== SCREEN BLOCK (top region, pixel-perfect) ===============
+# Measured (lay coords): LCD frame x298-1702,y104-685; divider y997.
+S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height="997"/>',
+   P("bg_top",0,0,2000,997), P("screen_frame",298,104,1404,581),
+   '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
+for yy in [205,294,383,472,561]:
+    S.append(P("lcd_soft_key",138,yy,123,34))
+    S.append(P("lcd_soft_key",1740,yy,123,34,flip=True))
+# OTHER PART & FR / HELP
+S += [L("OTHER PART & FR",90,712,150,15), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
+      P("round_btn_big",150,852,42,42), L("HELP",150,900,80,15)]
+# CONTRAST tall pill (x282-332)
+S += [L("CONTRAST",250,712,120,15), P("tall_pill",282,756,50,155), L("MUTE",340,825,42,13,TXTH)]
+# MUTE 1..16  (x=378+i*80.4, w55; up y756 h77, down y833 h78) -- decorative for now
 for i in range(16):
-    x=396+i*76
-    S.append(P("mute_up",x,634,44,62)); S.append(P("mute_down",x,700,44,62))
+    x=round(378+i*80.4)
+    S.append(P("mute_up",x,756,55,77)); S.append(P("mute_down",x,833,55,78))
 # PAGE / DISPLAY HOLD / EXIT
-S.append(L("PAGE",1636,612,60,16)); S.append(P("page_pill",1640,634,40,150))
-S.append(L("DISPLAY",1726,606,84,15)); S.append(L("HOLD",1740,622,60,15))
-S.append(P("round_btn_big",1748,648,40,40)); S.append(P("red_led",1794,652,8,8))
-S.append(L("EXIT",1750,772,60,16)); S.append(P("round_btn_big",1748,708,40,40))
+S += [L("PAGE",1636,712,60,15), P("tall_pill",1680,756,50,155),
+      L("DISPLAY HOLD",1745,706,110,15), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
+      P("round_btn_big",1790,852,42,42), L("EXIT",1790,900,60,15)]
 S.append('\t</group>')
 
-# ------------------------- helper: labelled round grid ----------------------
-def round_grid(out, x0, y0, cols, dx, dy, entries, header=None, big=False):
-    # entries: list of (row, col, label_lines)  ; label above button, led below-left
-    if header: out.append(L(header, x0, y0-22, dx*cols, 16, TXTH))
-    r = 40 if big else 29
-    for (row,col,lines) in entries:
-        x=x0+col*dx; y=y0+row*dy
-        for k,ln in enumerate(lines):
-            out.append(L(ln, x-6, y-14-(len(lines)-1-k)*13, dx-4, 12))
-        out.append(P("round_btn_big" if big else "round_btn", x, y, r, r))
-        out.append(P("green_led", x-10, y+r-8, 8, 8))
+# =================== helper: labelled round grid (with bindings) ============
+def wrap2(s):
+    w=s.split(' ')
+    if len(s)<=10 or len(w)==1: return [s]
+    h=(len(w)+1)//2; return [' '.join(w[:h]),' '.join(w[h:])]
+def grid(out,x0,y0,cols,dx,dy,entries,header=None):
+    if header: out.append(L(header,x0-8,y0-26,dx*cols,14,TXTH))
+    for i,(nm,tag,mask) in enumerate(entries):
+        row,col=i//cols,i%cols; x=x0+col*dx; y=y0+row*dy
+        for k,ln in enumerate(wrap2(nm)):
+            out.append(L(ln,x-(dx-29)//2-4,y-13-(len(wrap2(nm))-1-k)*10,dx-2,9))
+        out.append(P("round_btn",x,y,29,29,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8))
 
-# ------------------------------- LEFT BLOCK ---------------------------------
-LB=[]
-LB.append('\t<group name="left_block">')
-LB.append('\t\t<bounds x="0" y="0" width="1000" height="700"/>')
-LB.append(P("bg_left",0,0,1000,700))
-# faders
-for i,(nm) in enumerate(["MAIN","APC/SEQ","MIC","LINE IN"]):
-    x=30+i*54
-    LB.append(L(nm,x-14,14,60,12,TXTH)); LB.append(P("fader",x,36,34,150))
-# AUTO PLAY CHORD
-LB.append(L("AUTO PLAY CHORD",250,14,150,12,TXTH))
-for i,(nm) in enumerate(["MODE","OFF/ON"]):
-    LB.append(L(nm,250+i*70,34,60,12)); LB.append(P("round_btn",258+i*70,50,29,29))
-for i,(nm) in enumerate(["SET","OFF/ON"]):
-    LB.append(L(nm,250+i*70,96,60,12)); LB.append(P("round_btn",258+i*70,112,29,29))
-# RHYTHM GROUP grid (2 x 8)
-RG=["8 & 16 BEAT","ROCK & POP","BALLAD","JAZZ & SWING","BALLROOM","MOVIE & SHOW","ENTERTAINER","ORGANIST",
-    "60s & 70s","MODERN DANCE","SOUL & R&B","COUNTRY & WESTERN","MARCH & WALTZ","LATIN & WORLD","CUSTOM","MEMORY"]
-ent=[]
-for i,nm in enumerate(RG):
-    ent.append((i//8, i%8, [nm]))
-round_grid(LB, 430, 60, 8, 66, 66, ent, header="RHYTHM GROUP")
-# MUSIC STYLIST
-LB.append(L("MUSIC STYLIST",250,196,120,12)); LB.append(P("pill_wide",250,212,60,22))
+# =================== LEFT BLOCK (bottom-left region 1000x503) ================
+LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
+for i,nm in enumerate(["MAIN","APC/SEQ","MIC","LINE IN"]):
+    x=25+i*52; LB.append(L(nm,x-12,18,56,11,TXTH)); LB.append(P("fader",x,40,30,150))
+LB.append(L("AUTO PLAY CHORD",250,18,150,11,TXTH))
+for j,(nm,dy) in enumerate([("MODE",0),("OFF/ON",0),("SET",56),("OFF/ON",56)]):
+    x=252+(j%2)*66; y=40+(0 if j<2 else 56); LB.append(L(nm,x-2,y-14,58,10)); LB.append(P("round_btn",x,y,29,29))
+# RHYTHM GROUP grid 2x8 (verified genre bindings)
+RG=[("8 & 16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
+    ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
+    ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
+    ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
+grid(LB,430,58,8,63,66,RG,header="RHYTHM GROUP")
+LB.append(L("MUSIC STYLIST",250,150,120,11)); LB.append(P("pill_wide",250,166,60,22))
 # DEMO + performance pad triggers
-LB.append(P("music_note",30,250,20,24)); LB.append(L("DEMO",26,278,50,12))
-for i,(nm) in enumerate(["AUTO SETTING","BANK","STOP"]):
-    LB.append(L(nm,90+i*70,250,66,12)); LB.append(P("round_btn",100+i*70,266,29,29))
-LB.append(L("PERFORMANCE PADS",100,236,180,12,TXTH))
-# performance pads 1-6 (2x3)
-for i in range(6):
-    x=30+(i%3)*82; y=330+(i//3)*56
-    LB.append(P("perf_pad",x,y,78,52)); LB.append(L(str(i+1),x+6,y+34,20,14))
-# arranger pills row
-arr=["MUSIC STYLE ARRANGER","ONE TOUCH PLAY","SPLIT POINT"]
-for i,nm in enumerate(arr):
-    x=290+i*100; LB.append(L(nm,x,330,96,12)); LB.append(P("pill_wide",x,346,60,22))
+LB += [P("music_note",26,205,20,24), L("DEMO",22,232,50,11), L("PERFORMANCE PADS",95,200,170,11,TXTH)]
+for i,nm in enumerate(["AUTO SETTING","BANK","STOP"]):
+    x=95+i*66; LB.append(L(nm,x-4,214,64,10)); LB.append(P("round_btn",x+6,230,29,29))
+# performance pads 1-6 using MSP shapes (corner/middle)
+pads=[("msp_corner","1"),("msp_middle","2"),("msp_corner_r","3"),("msp_corner","4"),("msp_middle","5"),("msp_corner_r","6")]
+for i,(shape,num) in enumerate(pads):
+    x=25+(i%3)*66; y=290+(i//3)*46
+    LB.append(P(shape,x,y,63,40)); LB.append(L(num,x+6,y+22,18,12))
+# arranger pills
+for i,nm in enumerate(["MUSIC STYLE ARRANGER","ONE TOUCH PLAY","SPLIT POINT"]):
+    x=250+i*95; LB.append(L(nm,x,290,92,10)); LB.append(P("pill_wide",x,306,60,22))
 for i,nm in enumerate(["VARIATION 1","2","3","4"]):
-    x=290+i*70; LB.append(P("round_btn",x,400,29,29)); LB.append(L(nm,x-4,388,50,11))
+    x=250+i*66; LB.append(P("round_btn",x,360,29,29)); LB.append(L(nm,x-4,348,50,10))
 for i,nm in enumerate(["FADE IN/OUT","TAP TEMPO","SYNCHRO & BREAK","INTRO & ENDING","START/STOP"]):
-    x=580+i*80; LB.append(L(nm,x,330,76,12)); LB.append(P("pill_wide",x,346,60,22))
+    x=540+i*78; LB.append(L(nm,x,290,76,10)); LB.append(P("pill_wide",x,306,60,22))
 LB.append('\t</group>')
 
-# ------------------------------- RIGHT BLOCK --------------------------------
-RB=[]
-RB.append('\t<group name="right_block">')
-RB.append('\t\t<bounds x="0" y="0" width="1000" height="700"/>')
-RB.append(P("bg_right",0,0,1000,700))
-# SOUND GROUP grid (2 x 9)
-SG=["PIANO","GUITAR","MALLET & ORCH PERC","WORLD","STRINGS & VOCAL","BRASS","SAX & WOODWIND","ORGAN & ACCORDION","SOUND EXPLORER",
-    "DIGITAL DRAWBAR","ORGAN TABS","ACCORDION REGISTER","PAD","SYNTH","BASS","DRUM KITS","MEMORY","EW EXPANSION"]
-ent=[]
-for i,nm in enumerate(SG):
-    ent.append((i//9, i%9, [nm]))
-round_grid(RB, 40, 60, 9, 66, 66, ent, header="SOUND GROUP")
-# PART EFFECT
+# =================== RIGHT BLOCK (bottom-right region 1000x503) =============
+RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
+# SOUND GROUP grid 2x9 (verified sound-category bindings)
+SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
+    ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
+    ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
+    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
+grid(RB,40,58,9,64,66,SG,header="SOUND GROUP")
 for i,nm in enumerate(["SUSTAIN","DIGITAL EFFECT","SOUND DSP","VARIATION"]):
-    x=650+i*70; RB.append(L(nm,x-4,196,60,12)); RB.append(P("round_btn",x,212,29,29))
-RB.append(L("PART EFFECT",650,180,150,12,TXTH))
-# GLOBAL EFFECT
+    x=650+i*68; RB.append(L(nm,x-4,168,60,10)); RB.append(P("round_btn",x,184,29,29))
+RB.append(L("PART EFFECT",650,152,150,11,TXTH))
 for i,nm in enumerate(["CHORUS","MULTI","REVERB","MIC"]):
-    x=650+i*70; RB.append(L(nm,x-4,256,60,12)); RB.append(P("round_btn",x,272,29,29))
-RB.append(L("GLOBAL EFFECT",650,244,150,12,TXTH))
-# SEQUENCER
-RB.append(L("SEQUENCER",900,180,90,12,TXTH))
+    x=650+i*68; RB.append(L(nm,x-4,226,60,10)); RB.append(P("round_btn",x,242,29,29))
+RB.append(L("GLOBAL EFFECT",650,210,150,11,TXTH))
+RB.append(L("SEQUENCER",900,152,90,11,TXTH))
 for i,nm in enumerate(["PLAY","EASY REC","DISK","PROGRAM MENUS"]):
-    RB.append(L(nm,900,200+i*30,90,12)); RB.append(P("round_btn",960,196+i*30,29,29))
-# TEMPO/PROGRAM
-RB.append(L("TEMPO/PROGRAM",40,300,140,12,TXTH)); RB.append(P("tempo_knob",50,320,110,110))
-# TRANSPOSE
-RB.append(L("TRANSPOSE",210,300,100,12,TXTH))
-RB.append(P("pill_wide",210,320,60,22)); RB.append(P("pill_wide",210,350,60,22))
-# TECHNI-CHORD / PART SELECT / CONDUCTOR
+    RB.append(L(nm,905,168+i*28,90,10)); RB.append(P("round_btn",965,164+i*28,29,29))
+RB += [L("TEMPO/PROGRAM",40,296,140,11,TXTH), P("tempo_knob",55,316,100,100)]
+RB += [L("TRANSPOSE",200,296,100,11,TXTH), P("pill_wide",200,316,60,22), P("pill_wide",200,346,60,22)]
 for i,nm in enumerate(["TECHNI-CHORD","PART SELECT","CONDUCTOR"]):
-    x=320+i*90; RB.append(L(nm,x,300,86,12,TXTH)); RB.append(P("round_btn",x+20,320,29,29))
-# PANEL MEMORY dial
-RB.append(L("PANEL MEMORY",620,300,180,12,TXTH)); RB.append(P("panel_memory_dial",640,320,180,180))
-RB.append(L("SET",705,405,50,14))
-RB.append(L("BANK VIEW",620,300,90,12)); RB.append(L("NEXT BANK",740,300,90,12))
-# SD + CUSTOM PANEL / FAVORITES / CUSTOMIZE
-RB.append(L("SD",900,320,40,12,TXTH)); RB.append(P("pill_wide",900,336,60,22))
+    x=310+i*90; RB.append(L(nm,x,296,86,10,TXTH)); RB.append(P("round_btn",x+22,316,29,29))
+RB += [L("PANEL MEMORY",620,300,170,11,TXTH), P("panel_memory_dial",630,320,160,160), L("SET",690,394,50,13),
+       L("BANK VIEW",610,300,80,10), L("NEXT BANK",720,300,80,10)]
+RB += [L("SD",900,316,40,11,TXTH), P("pill_wide",900,332,60,22)]
 for i,nm in enumerate(["CUSTOM PANEL","FAVORITES","CUSTOMIZE"]):
-    x=850+i*50; RB.append(L(nm,x,520,60,11)); RB.append(P("round_btn",x+10,536,29,29))
+    x=830+i*54; RB.append(L(nm,x,430,60,10)); RB.append(P("round_btn",x+12,446,29,29))
 RB.append('\t</group>')
-
-# ------------------------- panel backgrounds + views ------------------------
-panel_bg("bg_screen",2000,800,PANEL)
-panel_bg("bg_left",1000,700,PANEL)
-panel_bg("bg_right",1000,700,PANEL)
 
 VIEWS='''
 	<view name="Compact">
 		<bounds x="0" y="0" width="2000" height="1500"/>
-		<group ref="screen_block"><bounds x="0" y="0" width="2000" height="800"/></group>
-		<group ref="left_block"><bounds x="0" y="800" width="1000" height="700"/></group>
-		<group ref="right_block"><bounds x="1000" y="800" width="1000" height="700"/></group>
+		<group ref="screen_block"><bounds x="0" y="0" width="2000" height="997"/></group>
+		<group ref="left_block"><bounds x="0" y="997" width="1000" height="503"/></group>
+		<group ref="right_block"><bounds x="1000" y="997" width="1000" height="503"/></group>
 	</view>
 
 	<view name="Full Unit">
-		<bounds x="0" y="0" width="4000" height="800"/>
-		<group ref="left_block"><bounds x="0" y="50" width="1000" height="700"/></group>
-		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="800"/></group>
-		<group ref="right_block"><bounds x="3000" y="50" width="1000" height="700"/></group>
+		<bounds x="0" y="0" width="4000" height="997"/>
+		<group ref="left_block"><bounds x="0" y="247" width="1000" height="503"/></group>
+		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="997"/></group>
+		<group ref="right_block"><bounds x="3000" y="247" width="1000" height="503"/></group>
 	</view>
 '''
-
-# ------------------------------- assemble -----------------------------------
-out=io.StringIO()
-out.write('<?xml version="1.0"?>\n')
-out.write('<!-- KN7000 control-panel layout. SVG-snippet style (after kn5000.lay);\n')
-out.write('     three reusable blocks (screen_block, left_block, right_block) +\n')
-out.write('     Compact and Full Unit views. Generated by tools/gen_lay.py. -->\n')
-out.write('<mamelayout version="2">\n\n')
-out.write("\n".join(E)); out.write("\n\n")
-out.write("\n".join(S)); out.write("\n\n")
-out.write("\n".join(LB)); out.write("\n\n")
-out.write("\n".join(RB)); out.write("\n")
-out.write(VIEWS)
-out.write('</mamelayout>\n')
-open("/home/fsanches/compartilhado/kn7000_mame/src/mame/layout/kn7000.lay","w").write(out.getvalue())
+o=io.StringIO()
+o.write('<?xml version="1.0"?>\n<!-- KN7000 control-panel layout, kn5000 SVG-snippet style, pixel-mapped to the\n')
+o.write('     mockup (4000x3000 = 2x). 3 reusable blocks + Compact & Full Unit views.\n     Generated by tools/gen_lay.py. -->\n<mamelayout version="2">\n\n')
+o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n"+VIEWS+'</mamelayout>\n')
+open("/home/fsanches/compartilhado/kn7000_mame/src/mame/layout/kn7000.lay","w").write(o.getvalue())
 print(f"WROTE kn7000.lay: {len(E)} elements, {len(TXTS)} labels")
