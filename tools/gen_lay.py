@@ -46,6 +46,12 @@ OPLED={
   ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
   ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
   ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
+  # SOUND GROUP category LEDs (swept sgled.lua; PIANO/GUITAR/EXPLORER omitted -- shared cpr48/49/100)
+  ("SEG0C","0x04"):"cpr_led50", ("SEG0C","0x08"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
+  ("SEG0C","0x20"):"cpr_led41", ("SEG0D","0x01"):"cpr_led42", ("SEG0D","0x02"):"cpr_led43",
+  ("SEG0D","0x08"):"cpr_led33", ("SEG0D","0x10"):"cpr_led34", ("SEG0D","0x20"):"cpr_led35",
+  ("SEG0E","0x01"):"cpr_led24", ("SEG0E","0x02"):"cpr_led25", ("SEG0E","0x04"):"cpr_led26",
+  ("SEG0E","0x08"):"cpr_led27",
 }
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
@@ -244,7 +250,7 @@ RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8))
+    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH)); RB += [P("hline",560,37,26,3), P("hline",684,37,26,3)]
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
