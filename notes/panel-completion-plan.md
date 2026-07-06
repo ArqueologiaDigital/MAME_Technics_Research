@@ -117,3 +117,16 @@ cpr17, PIANO=cpr18(?), ORGAN&ACC=cpr23, WORLD=cpr34, PAD=cpr35, EXPLORER=cpr36, 
 SYNTH=cpr41, BASS=cpr113, EWEXP=cpr31; empties GUITAR/BRASS/SAX/DRUMKITS. To bind reliably,
 disambiguate the category LED from the part/bank indicators (sweep with a fixed part selected,
 or diff two categories). Left unbound this tick to avoid wrong bindings.
+
+## BREAKTHROUGH: LCD-snapshot button identification (tick 2026-07-07)
+manager.machine.video:snapshot() renders the FULL layout + LCD to a PNG (works with -video
+none, -snapshot_directory <dir>). Press a button via ioport, snapshot, then VIEW the PNG --
+the LCD shows the button's function/screen directly. This is the definitive button-ID tool for
+ALL remaining unresolved buttons (scratchpad/effectsnap.lua, soundverify.lua are templates).
+
+Used it this tick to CORRECT a real error: "0x2004 = SOUND GROUP" was WRONG. Physical SOUND
+GROUP buttons = SEG0C/0D/0E.b0-b5 (mixed events; SEG0C.b0=PIANO, b1=GUITAR snapshot-confirmed);
+0x2004 = a separate per-part sound selector. Layout SG reverted. Also 0x2010 is MIXED (a1=
+PROGRAM MENUS), NOT the effects -- so the effect buttons (SUSTAIN/REVERB/etc.) are still
+unresolved. NEXT: snapshot-ID the remaining decorative buttons + event families (0x2040, 0x2030,
+0x2060-86, 0x20A0-BD, the effects) one by one, then bind each to the correct SEG.bit.
