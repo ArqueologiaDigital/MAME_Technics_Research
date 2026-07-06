@@ -265,6 +265,22 @@ VIEWS='''
 		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="997"/></group>
 		<group ref="right_block"><bounds x="3000" y="247" width="1000" height="503"/></group>
 	</view>
+
+	<!-- Zoomed single-block views (each fills the window) for detailed layout review -->
+	<view name="Screen Block">
+		<bounds x="0" y="0" width="2000" height="997"/>
+		<group ref="screen_block"><bounds x="0" y="0" width="2000" height="997"/></group>
+	</view>
+
+	<view name="Left Block">
+		<bounds x="0" y="0" width="1000" height="503"/>
+		<group ref="left_block"><bounds x="0" y="0" width="1000" height="503"/></group>
+	</view>
+
+	<view name="Right Block">
+		<bounds x="0" y="0" width="1000" height="503"/>
+		<group ref="right_block"><bounds x="0" y="0" width="1000" height="503"/></group>
+	</view>
 '''
 o=io.StringIO()
 o.write('<?xml version="1.0"?>\n<!-- KN7000 control-panel layout, kn5000 SVG-snippet style, pixel-mapped to the\n')
