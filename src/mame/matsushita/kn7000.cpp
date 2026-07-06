@@ -159,6 +159,7 @@ public:
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
+	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
@@ -206,6 +207,13 @@ private:
 	int m_iagr_latch = 0;
 	uint16_t m_intc_280 = 0;                   // 0x34000280 latched control fields
 	uint16_t m_snd_500e = 0;                   // 0x9805000E readback latch (sound init spins on it)
+	// Keyboard / voice-event FIFO (read at 0x98050004). The firmware polls it for
+	// note events from the key bed (KN5000-shared "keyboard input"; 16-bit word,
+	// low byte = note, high byte = velocity, velocity 0 = note-off; 0xFFFF = empty).
+	uint16_t m_kbd_fifo[16] = { };
+	uint8_t  m_kbd_head = 0, m_kbd_tail = 0;
+	void kbd_push(uint8_t note, uint8_t vel)
+	{ m_kbd_fifo[m_kbd_head & 15] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++; }
 	// Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
 	// write-only from the firmware. Address latched at base+0, data written at
 	// base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
@@ -372,9 +380,13 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// loop until it yields 0xFFFF (empty / end marker; also the floating-bus value).
 	// Returning 0 made the loop treat 0 as a valid note-0 event forever. Return 0xFFFF
 	// = empty so the loop terminates (loop at 0x484480A2: movhu (0x98050004); cmp
-	// 0xffff; beq exit). To make the key bed playable, push note/velocity words here.
+	// 0xffff; beq exit). Push note/velocity words via kbd_push() to play the key bed.
 	if (offset == 0x28002)
+	{
+		if (!machine().side_effects_disabled() && m_kbd_head != m_kbd_tail)
+			return m_kbd_fifo[m_kbd_tail++ & 15];
 		return 0xFFFF;
+	}
 	// 0x9805000E (offset 0x28007): sound-interface register; the init loop at
 	// 0x4854BC59 writes a value (d1|0x80) and spins until it READS BACK what it
 	// wrote (setlb/lne with a 2-tick timeout) -- a readback latch unblocks it.
@@ -557,6 +569,16 @@ void kn7000_state::intc_recompute()
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
 {
 	intc_assert(IRQGRP_TIMER);
+}
+
+// A PC-key note press/release: push a voice-event into the keyboard FIFO the
+// firmware polls at 0x98050004 (KN5000-shared format: low=note, high=velocity,
+// velocity 0 = note-off). param carries the MIDI note number; velocity is fixed
+// (PC keys are not velocity-sensitive). Confirmed end-to-end: the firmware reads
+// each pushed event exactly once from the FIFO.
+INPUT_CHANGED_MEMBER(kn7000_state::kbd_key)
+{
+	kbd_push(uint8_t(param), newval ? 0x64 : 0x00);
 }
 
 
@@ -1065,6 +1087,41 @@ static INPUT_PORTS_START(kn7000)
 
 	PORT_START("DIAL")
 	PORT_BIT(0xff, 0x00, IPT_DIAL) PORT_SENSITIVITY(30) PORT_KEYDELTA(1) PORT_NAME("DATA DIAL")
+
+	// Music key bed (subset: ~2 octaves on the PC keyboard, tracker-style layout).
+	// Each key pushes a note-on/off voice-event into the FIFO the firmware polls at
+	// 0x98050004 (see kbd_key / kbd_push). MIDI note numbers; C4 = 0x3C = 60.
+#define KN_KEY(mask, note, code, name) \
+	PORT_BIT(mask, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME(name) PORT_CODE(code) \
+	PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::kbd_key), note)
+	PORT_START("KEYS0")   // lower octave: Z S X D C V G B H N J M  (C4..B4)
+	KN_KEY(0x0001, 0x3C, KEYCODE_Z, "Key C4")
+	KN_KEY(0x0002, 0x3D, KEYCODE_S, "Key C#4")
+	KN_KEY(0x0004, 0x3E, KEYCODE_X, "Key D4")
+	KN_KEY(0x0008, 0x3F, KEYCODE_D, "Key D#4")
+	KN_KEY(0x0010, 0x40, KEYCODE_C, "Key E4")
+	KN_KEY(0x0020, 0x41, KEYCODE_V, "Key F4")
+	KN_KEY(0x0040, 0x42, KEYCODE_G, "Key F#4")
+	KN_KEY(0x0080, 0x43, KEYCODE_B, "Key G4")
+	KN_KEY(0x0100, 0x44, KEYCODE_H, "Key G#4")
+	KN_KEY(0x0200, 0x45, KEYCODE_N, "Key A4")
+	KN_KEY(0x0400, 0x46, KEYCODE_J, "Key A#4")
+	KN_KEY(0x0800, 0x47, KEYCODE_M, "Key B4")
+	PORT_START("KEYS1")   // upper octave: Q 2 W 3 E R 5 T 6 Y 7 U I  (C5..C6)
+	KN_KEY(0x0001, 0x48, KEYCODE_Q, "Key C5")
+	KN_KEY(0x0002, 0x49, KEYCODE_2, "Key C#5")
+	KN_KEY(0x0004, 0x4A, KEYCODE_W, "Key D5")
+	KN_KEY(0x0008, 0x4B, KEYCODE_3, "Key D#5")
+	KN_KEY(0x0010, 0x4C, KEYCODE_E, "Key E5")
+	KN_KEY(0x0020, 0x4D, KEYCODE_R, "Key F5")
+	KN_KEY(0x0040, 0x4E, KEYCODE_5, "Key F#5")
+	KN_KEY(0x0080, 0x4F, KEYCODE_T, "Key G5")
+	KN_KEY(0x0100, 0x50, KEYCODE_6, "Key G#5")
+	KN_KEY(0x0200, 0x51, KEYCODE_Y, "Key A5")
+	KN_KEY(0x0400, 0x52, KEYCODE_7, "Key A#5")
+	KN_KEY(0x0800, 0x53, KEYCODE_U, "Key B5")
+	KN_KEY(0x1000, 0x54, KEYCODE_I, "Key C6")
+#undef KN_KEY
 INPUT_PORTS_END
 
 

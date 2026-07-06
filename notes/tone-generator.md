@@ -202,3 +202,23 @@ SEGnn.bit -> physical-switch map for the .lay). Audible output still needs the
 undumped wave ROMs, but the note *path* would be complete. Requires reversing the
 exact KN7000 event word (on/off bit, channel/split) from the reader at
 0x484480A2 / the note handler it calls (0x4844812D).
+
+## The key bed is now PLAYABLE (tick yy+4)
+
+Implemented and verified the keyboard/voice-event FIFO in the driver:
+- `m_kbd_fifo` + `kbd_push(note, vel)`; io_r at 0x98050004 pops an event (or
+  returns 0xFFFF when empty).
+- **Confirmed end-to-end**: a temporary injection (note-on 0x643C, note-off
+  0x003C) showed the firmware polls 0x98050004 and reads each pushed event
+  exactly once, in the KN5000 format (low=note, high=velocity).
+- Wired a ~2-octave PC-keyboard note input (ports KEYS0/KEYS1, tracker layout
+  Z..M + Q..I, MIDI note numbers C4=0x3C) via PORT_CHANGED_MEMBER -> kbd_key ->
+  kbd_push. Boot still reaches the home screen with keys pressed.
+
+So the physical key bed's *input path* is complete: pressing a PC key delivers a
+note event to the firmware's own keyboard interface (parallel to MIDI-in).
+Audible output still needs the undumped wave ROMs, and the note may or may not be
+echoed to MIDI-out depending on config -- but the firmware now receives key
+presses. Velocity is fixed (PC keys aren't velocity-sensitive). Not-yet-done:
+map the exact KN key range/split, and confirm downstream processing (voice-slot
+update / MIDI-out).
