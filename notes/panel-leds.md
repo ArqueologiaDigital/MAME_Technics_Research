@@ -132,3 +132,32 @@ per run**, press at t~17.3, read outputs at t~18.3, `m:exit()`, capture with
 savestate flows stalled. Run one per sound-cat / genre / transport button, record
 the lit-set delta, then bind those exact outputs. (Blocked-ish: rhythm/sound menu
 emulation bug makes some selections unreliable, but SOUND-group selection worked.)
+
+## Empirical operation-LED survey (2026-07-07): method, obstacle, and a corrected assumption
+Now that panel buttons deliver to the firmware (held input; see notes + kn7000.cpp panel_scan),
+the operation LED map can be probed: press a button and read which `cpl_led`/`cpr_led` output
+turns on (Lua `manager.machine.output:get_value("cpr_led23")`, or a change-log `fprintf` in
+panel_led_frame). Findings:
+
+- **Single-button probe WORKS reliably.** E.g. pressing a SEG0D sound button changed cpr LEDs;
+  the LED outputs (output_finder<512> m_cpl_leds/m_cpr_leds) read fine from Lua. LED indices
+  span **0..511** (reg*8+bit), not just 0..150 -- scan the full range.
+- **Batch sweep is unreliable (timing obstacle).** `emu.register_frame_done` fires only ~every
+  3-4 EMULATED seconds here (regardless of -nothrottle/-window/throttle), so a fast per-button
+  sweep (0.6-0.7 s slots) samples the scan window for only ~15-20% of buttons; the rest are
+  skipped. A reliable batch would need slots >~4 s (very slow) or a different timing hook; the
+  practical route is **one press per short run** (the single-button probe) or the debugger.
+- **Operation LED behaviour is messy.** A get_value "currently-on" scan catches BLINKING/shared
+  indicators as noise -- `cpr36` recurred for 7 unrelated buttons (a blink/cursor, not a
+  per-button LED). Sound buttons behave as radio (previous LED off, new on).
+- **CORRECTED ASSUMPTION:** the confirmed clean mappings -- SEG00 INTRO&ENDING2->cpl2,
+  SEG01 SOUL&FUNK->cpl9, SEG01 JAZZ COMBO->cpl17, SEG02 ENTERTAINER->cpl26 -- have LED indices
+  that MATCH the PanelSwitchClassTable `LEDMAP` (gen_lay.py) for those segments. So that map is
+  likely **correct for the CPL (left = rhythm/style/transport) buttons**; the earlier "verified
+  wrong" case (GUITAR->cpr49 not cpr72) is on the **CPR (right = sound)** side. The panel-test
+  map is PARTIALLY right, not wholesale wrong.
+
+**Recommended path (next):** verify the `LEDMAP` per-button with single-button probes (one press
+per short run, read the LED delta over the full 0..511 range), APPLY the confirmed CPL portion to
+the layout, and re-derive only the CPR entries. The panel BUTTONS are complete + working
+(156 wired, delivery verified); the LED visual binding is this remaining refinement.
