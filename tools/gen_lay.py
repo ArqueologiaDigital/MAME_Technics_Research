@@ -176,8 +176,10 @@ LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
     LB.append(L(nm,cx-24,y-24,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-15,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
 LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
-for nm,cx,y in [("MODE",447,54),("OFF/ON",505,54),("SET",447,139),("OFF/ON",505,139)]:
-    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32)); LB.append(P("green_led",cx+18,y+2,8,8))
+# AUTO PLAY CHORD: top OFF/ON = PLAY CHORD OFF/ON = SEG06.b3 (0x2032). MODE/SET/bottom-OFF-ON left
+# decorative (events not yet confirmed).
+for nm,cx,y,tg,mk in [("MODE",447,54,None,None),("OFF/ON",505,54,"SEG06","0x08"),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
+    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 event-0x2005 genres, authoritative from the program-ROM
 # descriptor (SEG01.b0-b7 + SEG02.b0-b7) with driver/ROM-derived labels. The old
@@ -196,8 +198,10 @@ for i,(nm,tag,mask) in enumerate(RG):
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
-for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
-    LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32))
+# PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
+# BANK left decorative (its "PADS BANK" driver label is on a 0x2000 part-off bit = mislabel).
+for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG06","0x20"),("BANK",230,None,None),("STOP",305,"SEG06","0x02")]:
+    LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32,tag=tg,mask=mk))
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
 padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,42)]   # measured, abutting (no gaps)
