@@ -159,3 +159,14 @@ Lesson / method for the remaining udf ops: (1) dedup'd stderr capture finds WHIC
 (2) disassemble the using-block to get the algorithm; (3) if a reference exists (here: PIL on
 the same JPEG), the visual/quantitative match confirms the semantics. The other udf variants
 (udf01..06, 08..35) are still unknown but can be RE'd the same way as they surface.
+
+## Coverage survey (2026-07-06, after udf00 + udf07)
+Re-ran the dedup'd stderr capture (no -log flood) over **boot + home screen + ~10s idle +
+playing a few keyboard notes**: **zero** unimplemented ops. So with udf00 (signed multiply,
+imm + F6-reg `mulq`) and udf07 (BSCH bit-search) implemented, the whole main display path --
+boot, the JPEG splash decode, and the home screen -- is free of unimplemented instructions
+(which is why they now all render correctly). NOT yet exercised in the survey: rhythm/auto-
+accompaniment playback (the sequencer + any software DSP), demo mode, and the deeper menu
+screens (Sound/Rhythm select, Music Stylist, disk). Those are the remaining places a new udf
+variant could surface; survey them the same way (dedup'd stderr, no -log) if a bug appears
+there. The other udf opcodes (udf01-06, 08-35, and the udfu variants) stay unknown until hit.
