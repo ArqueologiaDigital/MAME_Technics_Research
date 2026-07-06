@@ -170,3 +170,6 @@ accompaniment playback (the sequencer + any software DSP), demo mode, and the de
 screens (Sound/Rhythm select, Music Stylist, disk). Those are the remaining places a new udf
 variant could surface; survey them the same way (dedup'd stderr, no -log) if a bug appears
 there. The other udf opcodes (udf01-06, 08-35, and the udfu variants) stay unknown until hit.
+
+
+**Extended survey (demo mode):** also pressed the DEMO button (SEG06 bit 0x40) via Lua ioport and ran ~6.5 s of demo mode (headless, `-video none`, since `-window` was hanging): still **zero** unimplemented ops. So boot + home + idle + keyboard notes + a demo-button press are all covered by udf00 + udf07. Rhythm/auto-accompaniment playback and the deeper menus remain the untested paths for a longer future survey.
