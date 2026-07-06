@@ -91,64 +91,81 @@ def grid(out,x0,y0,cols,dx,dy,entries,header=None):
             out.append(L(ln,x-(dx-29)//2-4,y-13-(len(wrap2(nm))-1-k)*10,dx-2,9))
         out.append(P("round_btn",x,y,29,29,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8))
 
-# =================== LEFT BLOCK (bottom-left region 1000x503) ================
+# =================== LEFT BLOCK (bottom-left; coords = mockup abs - (0,997)) =
 LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
-for i,nm in enumerate(["MAIN","APC/SEQ","MIC","LINE IN"]):
-    x=25+i*52; LB.append(L(nm,x-12,18,56,11,TXTH)); LB.append(P("fader",x,40,30,150))
-LB.append(L("AUTO PLAY CHORD",250,18,150,11,TXTH))
-for j,(nm,dy) in enumerate([("MODE",0),("OFF/ON",0),("SET",56),("OFF/ON",56)]):
-    x=252+(j%2)*66; y=40+(0 if j<2 else 56); LB.append(L(nm,x-2,y-14,58,10)); LB.append(P("round_btn",x,y,29,29))
-# RHYTHM GROUP grid 2x8 (verified genre bindings)
+for nm,cx,y,h in [("MAIN VOLUME",100,51,130),("APC/SEQ VOLUME",166,51,130),("MIC VOLUME",261,68,108),("LINE IN VOLUME",304,68,108)]:
+    LB.append(L(nm,cx-31,y-22,64,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
+LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
+for nm,cx,y in [("MODE",447,54),("OFF/ON",505,54),("SET",447,139),("OFF/ON",505,139)]:
+    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,29,29))
+RGcols=[580,635,690,746,801,856,911,967]
 RG=[("8 & 16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
     ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
     ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
     ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
-grid(LB,430,58,8,63,66,RG,header="RHYTHM GROUP")
-LB.append(L("MUSIC STYLIST",250,150,120,11)); LB.append(P("pill_wide",250,166,60,22))
-# DEMO + performance pad triggers
-LB += [P("music_note",26,205,20,24), L("DEMO",22,232,50,11), L("PERFORMANCE PADS",95,200,170,11,TXTH)]
-for i,nm in enumerate(["AUTO SETTING","BANK","STOP"]):
-    x=95+i*66; LB.append(L(nm,x-4,214,64,10)); LB.append(P("round_btn",x+6,230,29,29))
-# performance pads 1-6 using MSP shapes (corner/middle)
-pads=[("msp_corner","1"),("msp_middle","2"),("msp_corner_r","3"),("msp_corner","4"),("msp_middle","5"),("msp_corner_r","6")]
-for i,(shape,num) in enumerate(pads):
-    x=25+(i%3)*66; y=290+(i//3)*46
-    LB.append(P(shape,x,y,63,40)); LB.append(L(num,x+6,y+22,18,12))
-# arranger pills
-for i,nm in enumerate(["MUSIC STYLE ARRANGER","ONE TOUCH PLAY","SPLIT POINT"]):
-    x=250+i*95; LB.append(L(nm,x,290,92,10)); LB.append(P("pill_wide",x,306,60,22))
-for i,nm in enumerate(["VARIATION 1","2","3","4"]):
-    x=250+i*66; LB.append(P("round_btn",x,360,29,29)); LB.append(L(nm,x-4,348,50,10))
-for i,nm in enumerate(["FADE IN/OUT","TAP TEMPO","SYNCHRO & BREAK","INTRO & ENDING","START/STOP"]):
-    x=540+i*78; LB.append(L(nm,x,290,76,10)); LB.append(P("pill_wide",x,306,60,22))
+LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
+for i,(nm,tag,mask) in enumerate(RG):
+    cx=RGcols[i%8]; cy=71 if i<8 else 149; ls=wrap2(nm)
+    for k,ln in enumerate(ls): LB.append(L(ln,cx-27,cy-13-(len(ls)-1-k)*9,54,8))
+    LB.append(P("round_btn",cx-14,cy,29,29,tag=tag,mask=mask)); LB.append(P("green_led",cx-22,cy+22,8,8))
+LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_wide",441,228,65,22))
+LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS",98,258,172,10,TXTH)]
+for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
+    LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,29,29))
+pad=["msp_corner","msp_middle","msp_corner_r"]
+for i in range(6):
+    x=10+(i%3)*108; y=369 if i<3 else 421; LB.append(P(pad[i%3],x,y,105,48)); LB.append(L(str(i+1),x+8,y+22,20,12))
+for nm,cx,cy in [("MUSIC STYLE ARRANGER",375,360),("ONE TOUCH PLAY",490,350),("SPLIT POINT",555,350)]:
+    ls=wrap2(nm)
+    for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
+    LB.append(P("round_btn",cx-14,cy,29,29))
+for i,cx in enumerate([366,426,486,546]):
+    LB.append(P("round_btn",cx,399,29,29)); LB.append(L(("VARIATION " if i==0 else "")+str(i+1),cx-12,388,54,8))
+for nm,x,w in [("FADE IN/OUT",630,88),("TAP TEMPO",755,80),("SYNCHRO & BREAK",855,80)]:
+    LB.append(L(nm,x,335,w+12,9)); LB.append(P("pill_wide",x,352,w,24))
+for nm,x,w in [("INTRO & ENDING",720,88),("START/STOP",855,80)]:
+    LB.append(L(nm,x,412,w+12,9)); LB.append(P("pill_wide",x,427,w,24))
 LB.append('\t</group>')
 
-# =================== RIGHT BLOCK (bottom-right region 1000x503) =============
+# =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
-# SOUND GROUP grid 2x9 (verified sound-category bindings)
+SGcols=[51,107,162,217,272,327,383,438,493]
 SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
     ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
     ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
     ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
-grid(RB,40,58,9,64,66,SG,header="SOUND GROUP")
-for i,nm in enumerate(["SUSTAIN","DIGITAL EFFECT","SOUND DSP","VARIATION"]):
-    x=650+i*68; RB.append(L(nm,x-4,168,60,10)); RB.append(P("round_btn",x,184,29,29))
-RB.append(L("PART EFFECT",650,152,150,11,TXTH))
-for i,nm in enumerate(["CHORUS","MULTI","REVERB","MIC"]):
-    x=650+i*68; RB.append(L(nm,x-4,226,60,10)); RB.append(P("round_btn",x,242,29,29))
-RB.append(L("GLOBAL EFFECT",650,210,150,11,TXTH))
-RB.append(L("SEQUENCER",900,152,90,11,TXTH))
-for i,nm in enumerate(["PLAY","EASY REC","DISK","PROGRAM MENUS"]):
-    RB.append(L(nm,905,168+i*28,90,10)); RB.append(P("round_btn",965,164+i*28,29,29))
-RB += [L("TEMPO/PROGRAM",40,296,140,11,TXTH), P("tempo_knob",55,316,100,100)]
-RB += [L("TRANSPOSE",200,296,100,11,TXTH), P("pill_wide",200,316,60,22), P("pill_wide",200,346,60,22)]
-for i,nm in enumerate(["TECHNI-CHORD","PART SELECT","CONDUCTOR"]):
-    x=310+i*90; RB.append(L(nm,x,296,86,10,TXTH)); RB.append(P("round_btn",x+22,316,29,29))
-RB += [L("PANEL MEMORY",620,300,170,11,TXTH), P("panel_memory_dial",630,320,160,160), L("SET",690,394,50,13),
-       L("BANK VIEW",610,300,80,10), L("NEXT BANK",720,300,80,10)]
-RB += [L("SD",900,316,40,11,TXTH), P("pill_wide",900,332,60,22)]
-for i,nm in enumerate(["CUSTOM PANEL","FAVORITES","CUSTOMIZE"]):
-    x=830+i*54; RB.append(L(nm,x,430,60,10)); RB.append(P("round_btn",x+12,446,29,29))
+RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
+for i,(nm,tag,mask) in enumerate(SG):
+    cx=SGcols[i%9]; cy=71 if i<9 else 149; ls=wrap2(nm)
+    for k,ln in enumerate(ls): RB.append(L(ln,cx-27,cy-13-(len(ls)-1-k)*9,54,8))
+    if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
+    else: RB.append(P("round_btn",cx-14,cy,29,29,tag=tag,mask=mask)); RB.append(P("green_led",cx-22,cy+22,8,8))
+RB.append(L("PART EFFECT",560,32,150,10,TXTH))
+for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
+    ls=wrap2(nm)
+    for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
+    RB.append(P("round_btn",cx-14,71,29,29))
+RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH))
+for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
+    RB.append(L(nm,cx-26,150,52,8)); RB.append(P("round_btn",cx-14,163,29,29))
+RB.append(L("SEQUENCER",850,32,90,10,TXTH))
+for nm,cx,cy in [("PLAY",845,71),("EASY REC",915,71),("DISK",845,149),("PROGRAM MENUS",915,149)]:
+    ls=wrap2(nm)
+    for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
+    RB.append(P("round_btn",cx-14,cy,29,29))
+RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_wide",860,228,60,22))
+RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110))
+RB.append(L("TRANSPOSE",213,320,100,10,TXTH)); RB.append(P("pill_wide",213,335,75,24)); RB.append(P("pill_wide",213,405,75,24))
+RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB.append(P("round_btn",416,285,29,29)); RB.append(P("round_btn",476,285,29,29))
+RB.append(L("PART SELECT",348,322,92,9,TXTH))
+for cx in [360,425,485]: RB.append(P("round_btn",cx,345,29,29))
+for cx in [360,425,485]: RB.append(P("round_btn",cx,410,29,29))
+RB.append(L("CONDUCTOR",393,454,92,9,TXTH))
+RB += [L("BANK VIEW",593,232,82,9), L("NEXT BANK",700,232,82,9), L("PANEL MEMORY",608,255,172,10,TXTH),
+       P("panel_memory_dial",565,268,190,190), L("SET",638,354,44,12)]
+RB.append(L("CUSTOM PANEL",798,320,72,9)); RB.append(P("round_btn",816,335,29,29))
+RB.append(L("CUSTOMIZE",898,320,72,9)); RB.append(P("round_btn",906,335,29,29))
+RB.append(L("FAVORITES",843,454,72,9)); RB.append(P("round_btn",860,415,29,29))
 RB.append('\t</group>')
 
 VIEWS='''
