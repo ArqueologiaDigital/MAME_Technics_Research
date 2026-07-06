@@ -4,8 +4,8 @@
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
 import io, math
 
-PANEL="#38383a"; PANEL2="#232325"; BTN="#232323"; BTN_D="#585866"
-LBTN="#3a3a3c"; LBTN_D="#646470"; MSP="#5f6367"; MSP_D="#868e96"; STROKE="#000"
+PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
+LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
 E=[]; TXTS={}
@@ -35,9 +35,9 @@ two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
 two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
-two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#e8843a" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
-two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#728486" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
-two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#e04848" cx="14.5" cy="14.5" r="14"/>')
+two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#8a4310" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
+two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#33454a" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
+two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
 # LCD soft key: rect + inner vertical divider
