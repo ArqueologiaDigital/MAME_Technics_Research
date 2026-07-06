@@ -48,3 +48,43 @@ the SEG.bit whose descriptor event matches its function.
 - soft-keys: LCD-flanking part on/off bound (10); driver SEG00 relabelled; TRANSPOSE unbound.
 - SOUND GROUP resolved (0x2004) + rebound. RHYTHM GROUP resolved (0x2005) + rebound.
 - INTRO&ENDING/FADE fixes. 83 inputtags bound.
+
+
+## LED work: operation map is EMPIRICAL (PanelSwitchClassTable is panel-TEST only)
+Verified with the reliable frame-counter harness: pressing SEG01 genre buttons lights
+cpl8/16/17/18/19/9 — which do NOT match the PanelSwitchClassTable @0x4860C9F4 decode
+(cpl1/9/17/25/33/41/49/57). So that table is the panel-self-test map; the OPERATION LED
+map (what the .lay must bind) has to be swept empirically.
+
+Full-panel sweep (scratchpad/fullled.lua, throttled -video none, frame-counter, get_value
+per button) → only ~16 buttons light a clean single LED from the HOME screen; the rest are
+context-dependent (need a part active / a menu open) or have no LED, plus one shared/blinking
+indicator cpl5. So the LED map must be built with per-CONTEXT sweeps (rhythm playing, sound
+menu open, etc.), same as the button-effect limitation.
+
+### Clean operation LED map so far (SEG.bit → cpl/cpr LED index), home screen:
+| SEG | button | LED |
+|-----|--------|-----|
+| SEG00 | LCD Left 3 | cpl0 |
+| SEG00 | INTRO & ENDING 2 | cpl11 |
+| SEG00 | SYNCHRO & BREAK | cpl10 |
+| SEG00 | LCD Left 5 | cpl3 |
+| SEG00 | START/STOP | cpl1 |
+| SEG00 | LCD Left 2 | cpl2 |
+| SEG01 | BIG BAND & SWING | cpl17 |
+| SEG01 | JAZZ COMBO | cpl19 |
+| SEG01 | CUSTOM | cpl9 |
+| SEG01 | ROCK & POP | cpl18 |
+| SEG01 | BALLAD | cpl8 |
+| SEG01 | R & B | cpl16 |
+| SEG02 | MODERN DANCE | cpl34 |
+| SEG02 | GOSPEL & BLUES | cpr31 |
+| SEG03 | Fn Key 20A1 | cpl33 |
+| SEG03 | FADE IN | cpl32 |
+
+### To finish LEDs (cron ticks):
+1. Re-run fullled.lua in more contexts (start rhythm; open sound menu) to capture the
+   context-only LEDs; merge into the map.
+2. Add a `name="cpl_ledN"/"cpr_ledN"` to each button's LED element in gen_lay.py so MAME
+   drives it from the output (the green_led elements are currently decorative).
+3. Bind the named indicator LEDs via the dispatcher 0x484B1BCB.
