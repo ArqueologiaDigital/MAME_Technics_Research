@@ -108,165 +108,180 @@
 	<element name="bg_top"><image><data><![CDATA[<svg width="2000" height="997"><rect width="2000" height="997" fill="#38383a"/></svg>]]></data></image></element>
 	<element name="bg_left"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
 	<element name="bg_right"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
-	<element name="t0"><text string="OTHER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t1"><text string="PART &amp; FR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t2"><text string="HELP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t3"><text string="CONTRAST"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t4"><text string="MUTE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t5"><text string="PAGE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t6"><text string="DISPLAY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t7"><text string="HOLD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t8"><text string="EXIT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t9"><text string="MAIN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t10"><text string="VOLUME"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t11"><text string="APC/SEQ"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t12"><text string="MIC"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t13"><text string="LINE IN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t14"><text string="AUTO PLAY CHORD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t15"><text string="MODE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t16"><text string="OFF/ON"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t17"><text string="SET"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t18"><text string="RHYTHM GROUP"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t19"><text string="MEMORY/LOAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t20"><text string="SOUL &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t21"><text string="FUNK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t22"><text string="CUSTOM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t23"><text string="BALLAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t24"><text string="JAZZ COMBO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t25"><text string="ROCK &amp; POP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t26"><text string="BIG BAND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t27"><text string="&amp; SWING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t28"><text string="R &amp; B"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t29"><text string="MOVIE SHOW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t30"><text string="MARCH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t31"><text string="ENTERTAINER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t32"><text string="COUNTRY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t33"><text string="LATIN &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t34"><text string="WORLD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t35"><text string="GOSPEL &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t36"><text string="BLUES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t37"><text string="BALLROOM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t38"><text string="MODERN"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t39"><text string="DANCE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t40"><text string="MUSIC STYLIST"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t41"><text string="DEMO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t42"><text string="PERFORMANCE PADS"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t43"><text string="AUTO SETTING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t44"><text string="BANK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t45"><text string="STOP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t46"><text string="1"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t47"><text string="2"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t48"><text string="3"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t49"><text string="4"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t50"><text string="5"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t51"><text string="SOLO"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t52"><text string="6"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t53"><text string="MUSIC STYLE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t54"><text string="ARRANGER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t55"><text string="ONE TOUCH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t56"><text string="PLAY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t57"><text string="SPLIT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t58"><text string="POINT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t59"><text string="VARIATION"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t60"><text string="FADE IN/OUT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t61"><text string="TAP TEMPO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t62"><text string="SYNCHRO &amp; BREAK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t63"><text string="INTRO &amp; ENDING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t64"><text string="START/STOP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t65"><text string="SEQUENCER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t66"><text string="RESET"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t67"><text string="COUNT INTRO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t68"><text string="BEAT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t69"><text string="SOUND GROUP"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t70"><text string="PIANO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t71"><text string="GUITAR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t72"><text string="MALLET &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t73"><text string="ORCH PERC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t74"><text string="STRINGS &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t75"><text string="VOCAL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t76"><text string="BRASS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t77"><text string="SAX &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t78"><text string="WOODWIND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t79"><text string="ORGAN &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t80"><text string="ACCORDION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t81"><text string="SOUND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t82"><text string="EXPLORER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t83"><text string="DIGITAL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t84"><text string="DRAWBAR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t85"><text string="ORGAN TABS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t86"><text string="REGISTER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t87"><text string="PAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t88"><text string="SYNTH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t89"><text string="BASS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t90"><text string="DRUM KITS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t91"><text string="MEMORY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t92"><text string="EW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t93"><text string="EXPANSION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t94"><text string="PART EFFECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t95"><text string="SUSTAIN"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t96"><text string="EFFECT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t97"><text string="SOUND DSP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t98"><text string="VARIATION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t99"><text string="GLOBAL EFFECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t100"><text string="CHORUS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t101"><text string="MULTI"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t102"><text string="REVERB"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t103"><text string="MIC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t104"><text string="SEQUENCER"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t105"><text string="EASY REC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t106"><text string="DISK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t107"><text string="PROGRAM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t108"><text string="MENUS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t109"><text string="DISK"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t110"><text string="IN USE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t111"><text string="LOAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t112"><text string="SD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t113"><text string="TEMPO/PROGRAM"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t114"><text string="TRANSPOSE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t115"><text string="-"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t116"><text string="+"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t117"><text string="TECHNI-CHORD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t118"><text string="PART SELECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t119"><text string="CONDUCTOR"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t120"><text string="BANK VIEW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t121"><text string="NEXT BANK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t122"><text string="PANEL MEMORY"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t123"><text string="1"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t124"><text string="2"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t125"><text string="3"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t126"><text string="4"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t127"><text string="5"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t128"><text string="6"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t129"><text string="7"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t130"><text string="8"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t131"><text string="PANEL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t132"><text string="CUSTOMIZE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="t133"><text string="FAVORITES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t0"><text string="RIGHT1"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t1"><text string="RIGHT2"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t2"><text string="LEFT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t3"><text string="ACCOMP1"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t4"><text string="ACCOMP2"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t5"><text string="OTHER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t6"><text string="PART &amp; FR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t7"><text string="HELP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t8"><text string="CONTRAST"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t9"><text string="MUTE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t10"><text string="PAGE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t11"><text string="DISPLAY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t12"><text string="HOLD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t13"><text string="EXIT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t14"><text string="MAIN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t15"><text string="VOLUME"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t16"><text string="APC/SEQ"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t17"><text string="MIC"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t18"><text string="LINE IN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t19"><text string="AUTO PLAY CHORD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t20"><text string="MODE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t21"><text string="OFF/ON"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t22"><text string="SET"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t23"><text string="RHYTHM GROUP"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t24"><text string="MEMORY/LOAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t25"><text string="SOUL &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t26"><text string="FUNK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t27"><text string="CUSTOM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t28"><text string="BALLAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t29"><text string="JAZZ COMBO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t30"><text string="ROCK &amp; POP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t31"><text string="BIG BAND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t32"><text string="&amp; SWING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t33"><text string="R &amp; B"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t34"><text string="MOVIE SHOW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t35"><text string="MARCH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t36"><text string="ENTERTAINER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t37"><text string="COUNTRY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t38"><text string="LATIN &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t39"><text string="WORLD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t40"><text string="GOSPEL &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t41"><text string="BLUES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t42"><text string="BALLROOM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t43"><text string="MODERN"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t44"><text string="DANCE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t45"><text string="MUSIC STYLIST"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t46"><text string="DEMO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t47"><text string="PERFORMANCE PADS"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t48"><text string="AUTO SETTING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t49"><text string="BANK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t50"><text string="STOP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t51"><text string="1"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t52"><text string="2"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t53"><text string="3"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t54"><text string="4"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t55"><text string="5"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t56"><text string="SOLO"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t57"><text string="6"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t58"><text string="MUSIC STYLE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t59"><text string="ARRANGER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t60"><text string="ONE TOUCH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t61"><text string="PLAY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t62"><text string="SPLIT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t63"><text string="POINT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t64"><text string="VARIATION"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t65"><text string="FADE IN/OUT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t66"><text string="TAP TEMPO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t67"><text string="SYNCHRO &amp; BREAK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t68"><text string="INTRO &amp; ENDING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t69"><text string="START/STOP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t70"><text string="SEQUENCER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t71"><text string="RESET"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t72"><text string="COUNT INTRO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t73"><text string="BEAT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t74"><text string="SOUND GROUP"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t75"><text string="PIANO"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t76"><text string="GUITAR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t77"><text string="MALLET &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t78"><text string="ORCH PERC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t79"><text string="STRINGS &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t80"><text string="VOCAL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t81"><text string="BRASS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t82"><text string="SAX &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t83"><text string="WOODWIND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t84"><text string="ORGAN &amp;"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t85"><text string="ACCORDION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t86"><text string="SOUND"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t87"><text string="EXPLORER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t88"><text string="DIGITAL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t89"><text string="DRAWBAR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t90"><text string="ORGAN TABS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t91"><text string="REGISTER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t92"><text string="PAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t93"><text string="SYNTH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t94"><text string="BASS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t95"><text string="DRUM KITS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t96"><text string="MEMORY"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t97"><text string="EW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t98"><text string="EXPANSION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t99"><text string="PART EFFECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t100"><text string="SUSTAIN"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t101"><text string="EFFECT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t102"><text string="SOUND DSP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t103"><text string="VARIATION"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t104"><text string="GLOBAL EFFECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t105"><text string="CHORUS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t106"><text string="MULTI"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t107"><text string="REVERB"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t108"><text string="MIC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t109"><text string="SEQUENCER"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t110"><text string="EASY REC"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t111"><text string="DISK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t112"><text string="PROGRAM"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t113"><text string="MENUS"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t114"><text string="DISK"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t115"><text string="IN USE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t116"><text string="LOAD"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t117"><text string="SD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t118"><text string="TEMPO/PROGRAM"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t119"><text string="TRANSPOSE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t120"><text string="-"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t121"><text string="+"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t122"><text string="TECHNI-CHORD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t123"><text string="PART SELECT"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t124"><text string="CONDUCTOR"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t125"><text string="BANK VIEW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t126"><text string="NEXT BANK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t127"><text string="PANEL MEMORY"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t128"><text string="1"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t129"><text string="2"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t130"><text string="3"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t131"><text string="4"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t132"><text string="5"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t133"><text string="6"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t134"><text string="7"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t135"><text string="8"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t136"><text string="PANEL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t137"><text string="CUSTOMIZE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
+	<element name="t138"><text string="FAVORITES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 
 	<group name="screen_block">
 		<bounds x="0" y="0" width="2000" height="997"/>
 		<element ref="bg_top"><bounds x="0" y="0" width="2000" height="997"/></element>
 		<element ref="screen_frame"><bounds x="298" y="104" width="1404" height="581"/></element>
 		<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="205" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="205" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="294" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="294" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="383" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="383" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="472" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="472" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="561" width="123" height="34"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="561" width="123" height="34"/></element>
-		<element ref="t0"><bounds x="145" y="704" width="52" height="13"/></element>
-		<element ref="t1"><bounds x="131" y="717" width="80" height="13"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG00" inputmask="0x02"><orientation flipx="yes"/><bounds x="138" y="205" width="123" height="34"/></element>
+		<element ref="t0"><bounds x="168" y="217" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x10"><bounds x="1740" y="205" width="123" height="34"/></element>
+		<element ref="t0"><bounds x="1770" y="217" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG00" inputmask="0x08"><orientation flipx="yes"/><bounds x="138" y="294" width="123" height="34"/></element>
+		<element ref="t1"><bounds x="168" y="306" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x20"><bounds x="1740" y="294" width="123" height="34"/></element>
+		<element ref="t1"><bounds x="1770" y="306" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG00" inputmask="0x20"><orientation flipx="yes"/><bounds x="138" y="383" width="123" height="34"/></element>
+		<element ref="t2"><bounds x="168" y="395" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG13" inputmask="0x01"><bounds x="1740" y="383" width="123" height="34"/></element>
+		<element ref="t2"><bounds x="1770" y="395" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG00" inputmask="0x01"><orientation flipx="yes"/><bounds x="138" y="472" width="123" height="34"/></element>
+		<element ref="t3"><bounds x="168" y="484" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG12" inputmask="0x01"><bounds x="1740" y="472" width="123" height="34"/></element>
+		<element ref="t3"><bounds x="1770" y="484" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG00" inputmask="0x04"><orientation flipx="yes"/><bounds x="138" y="561" width="123" height="34"/></element>
+		<element ref="t4"><bounds x="168" y="573" width="90" height="10"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x01"><bounds x="1740" y="561" width="123" height="34"/></element>
+		<element ref="t4"><bounds x="1770" y="573" width="90" height="10"/></element>
+		<element ref="t5"><bounds x="145" y="704" width="52" height="13"/></element>
+		<element ref="t6"><bounds x="131" y="717" width="80" height="13"/></element>
 		<element ref="round_btn_big"><bounds x="150" y="748" width="42" height="42"/></element>
 		<element ref="red_led"><bounds x="196" y="752" width="8" height="8"/></element>
 		<element ref="round_btn_big"><bounds x="150" y="852" width="42" height="42"/></element>
-		<element ref="t2"><bounds x="149" y="838" width="44" height="13"/></element>
-		<element ref="t3"><bounds x="247" y="717" width="120" height="13"/></element>
+		<element ref="t7"><bounds x="149" y="838" width="44" height="13"/></element>
+		<element ref="t8"><bounds x="247" y="717" width="120" height="13"/></element>
 		<element ref="tall_pill"><bounds x="282" y="756" width="50" height="155"/></element>
-		<element ref="t4"><bounds x="342" y="825" width="42" height="13"/></element>
+		<element ref="t9"><bounds x="342" y="825" width="42" height="13"/></element>
 		<element ref="hline"><bounds x="344" y="818" width="32" height="3"/></element>
 		<element ref="vline"><bounds x="344" y="806" width="3" height="14"/></element>
 		<element ref="hline"><bounds x="344" y="843" width="32" height="3"/></element>
@@ -303,319 +318,319 @@
 		<element ref="mute_down" inputtag="SEG0B" inputmask="0x02"><bounds x="1504" y="833" width="55" height="78"/></element>
 		<element ref="mute_up" inputtag="SEG0B" inputmask="0x04"><bounds x="1584" y="756" width="55" height="77"/></element>
 		<element ref="mute_down" inputtag="SEG0B" inputmask="0x08"><bounds x="1584" y="833" width="55" height="78"/></element>
-		<element ref="t5"><bounds x="1679" y="717" width="52" height="13"/></element>
+		<element ref="t10"><bounds x="1679" y="717" width="52" height="13"/></element>
 		<element ref="page_up"><bounds x="1680" y="756" width="50" height="78"/></element>
 		<element ref="page_dn"><bounds x="1680" y="834" width="50" height="77"/></element>
-		<element ref="t6"><bounds x="1789" y="704" width="64" height="13"/></element>
-		<element ref="t7"><bounds x="1789" y="717" width="64" height="13"/></element>
+		<element ref="t11"><bounds x="1789" y="704" width="64" height="13"/></element>
+		<element ref="t12"><bounds x="1789" y="717" width="64" height="13"/></element>
 		<element ref="round_btn_big"><bounds x="1790" y="748" width="42" height="42"/></element>
 		<element ref="red_led"><bounds x="1836" y="752" width="8" height="8"/></element>
 		<element ref="round_btn_big"><bounds x="1790" y="852" width="42" height="42"/></element>
-		<element ref="t8"><bounds x="1789" y="838" width="44" height="13"/></element>
+		<element ref="t13"><bounds x="1789" y="838" width="44" height="13"/></element>
 	</group>
 
 	<group name="left_block">
 		<bounds x="0" y="0" width="1000" height="503"/>
 		<element ref="bg_left"><bounds x="0" y="0" width="1000" height="503"/></element>
-		<element ref="t9"><bounds x="76" y="27" width="48" height="9"/></element>
-		<element ref="t10"><bounds x="76" y="36" width="48" height="9"/></element>
+		<element ref="t14"><bounds x="76" y="27" width="48" height="9"/></element>
+		<element ref="t15"><bounds x="76" y="36" width="48" height="9"/></element>
 		<element ref="fader"><bounds x="85" y="51" width="30" height="130"/></element>
-		<element ref="t11"><bounds x="142" y="27" width="48" height="9"/></element>
-		<element ref="t10"><bounds x="142" y="36" width="48" height="9"/></element>
+		<element ref="t16"><bounds x="142" y="27" width="48" height="9"/></element>
+		<element ref="t15"><bounds x="142" y="36" width="48" height="9"/></element>
 		<element ref="fader"><bounds x="151" y="51" width="30" height="130"/></element>
-		<element ref="t12"><bounds x="237" y="44" width="48" height="9"/></element>
-		<element ref="t10"><bounds x="237" y="53" width="48" height="9"/></element>
+		<element ref="t17"><bounds x="237" y="44" width="48" height="9"/></element>
+		<element ref="t15"><bounds x="237" y="53" width="48" height="9"/></element>
 		<element ref="fader"><bounds x="246" y="68" width="30" height="108"/></element>
-		<element ref="t13"><bounds x="280" y="44" width="48" height="9"/></element>
-		<element ref="t10"><bounds x="280" y="53" width="48" height="9"/></element>
+		<element ref="t18"><bounds x="280" y="44" width="48" height="9"/></element>
+		<element ref="t15"><bounds x="280" y="53" width="48" height="9"/></element>
 		<element ref="fader"><bounds x="289" y="68" width="30" height="108"/></element>
-		<element ref="t14"><bounds x="418" y="26" width="150" height="10"/></element>
-		<element ref="t15"><bounds x="431" y="41" width="42" height="9"/></element>
+		<element ref="t19"><bounds x="418" y="26" width="150" height="10"/></element>
+		<element ref="t20"><bounds x="431" y="41" width="42" height="9"/></element>
 		<element ref="round_btn"><bounds x="433" y="54" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="465" y="56" width="8" height="8"/></element>
-		<element ref="t16"><bounds x="489" y="41" width="42" height="9"/></element>
+		<element ref="t21"><bounds x="489" y="41" width="42" height="9"/></element>
 		<element ref="round_btn"><bounds x="491" y="54" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="523" y="56" width="8" height="8"/></element>
-		<element ref="t17"><bounds x="431" y="126" width="42" height="9"/></element>
+		<element ref="t22"><bounds x="431" y="126" width="42" height="9"/></element>
 		<element ref="round_btn"><bounds x="433" y="139" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="465" y="141" width="8" height="8"/></element>
-		<element ref="t16"><bounds x="489" y="126" width="42" height="9"/></element>
+		<element ref="t21"><bounds x="489" y="126" width="42" height="9"/></element>
 		<element ref="round_btn"><bounds x="491" y="139" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="523" y="141" width="8" height="8"/></element>
-		<element ref="t18"><bounds x="700" y="32" width="180" height="11"/></element>
-		<element ref="t19"><bounds x="553" y="68" width="56" height="8"/></element>
+		<element ref="t23"><bounds x="700" y="32" width="180" height="11"/></element>
+		<element ref="t24"><bounds x="553" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x01"><bounds x="565" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="577" y="77" width="8" height="8"/></element>
-		<element ref="t20"><bounds x="608" y="59" width="56" height="8"/></element>
-		<element ref="t21"><bounds x="608" y="68" width="56" height="8"/></element>
+		<element ref="t25"><bounds x="608" y="59" width="56" height="8"/></element>
+		<element ref="t26"><bounds x="608" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x02"><bounds x="620" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="632" y="77" width="8" height="8"/></element>
-		<element ref="t22"><bounds x="663" y="68" width="56" height="8"/></element>
+		<element ref="t27"><bounds x="663" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x04"><bounds x="675" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="687" y="77" width="8" height="8"/></element>
-		<element ref="t23"><bounds x="718" y="68" width="56" height="8"/></element>
+		<element ref="t28"><bounds x="718" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x08"><bounds x="730" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="742" y="77" width="8" height="8"/></element>
-		<element ref="t24"><bounds x="774" y="68" width="56" height="8"/></element>
+		<element ref="t29"><bounds x="774" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x10"><bounds x="786" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="798" y="77" width="8" height="8"/></element>
-		<element ref="t25"><bounds x="829" y="68" width="56" height="8"/></element>
+		<element ref="t30"><bounds x="829" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x20"><bounds x="841" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="853" y="77" width="8" height="8"/></element>
-		<element ref="t26"><bounds x="884" y="59" width="56" height="8"/></element>
-		<element ref="t27"><bounds x="884" y="68" width="56" height="8"/></element>
+		<element ref="t31"><bounds x="884" y="59" width="56" height="8"/></element>
+		<element ref="t32"><bounds x="884" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x40"><bounds x="896" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="908" y="77" width="8" height="8"/></element>
-		<element ref="t28"><bounds x="939" y="68" width="56" height="8"/></element>
+		<element ref="t33"><bounds x="939" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG01" inputmask="0x80"><bounds x="951" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="963" y="77" width="8" height="8"/></element>
-		<element ref="t29"><bounds x="553" y="140" width="56" height="8"/></element>
+		<element ref="t34"><bounds x="553" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x01"><bounds x="565" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="577" y="149" width="8" height="8"/></element>
-		<element ref="t30"><bounds x="608" y="140" width="56" height="8"/></element>
+		<element ref="t35"><bounds x="608" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x02"><bounds x="620" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="632" y="149" width="8" height="8"/></element>
-		<element ref="t31"><bounds x="663" y="140" width="56" height="8"/></element>
+		<element ref="t36"><bounds x="663" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x04"><bounds x="675" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="687" y="149" width="8" height="8"/></element>
-		<element ref="t32"><bounds x="718" y="140" width="56" height="8"/></element>
+		<element ref="t37"><bounds x="718" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x08"><bounds x="730" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="742" y="149" width="8" height="8"/></element>
-		<element ref="t33"><bounds x="774" y="131" width="56" height="8"/></element>
-		<element ref="t34"><bounds x="774" y="140" width="56" height="8"/></element>
+		<element ref="t38"><bounds x="774" y="131" width="56" height="8"/></element>
+		<element ref="t39"><bounds x="774" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x10"><bounds x="786" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="798" y="149" width="8" height="8"/></element>
-		<element ref="t35"><bounds x="829" y="131" width="56" height="8"/></element>
-		<element ref="t36"><bounds x="829" y="140" width="56" height="8"/></element>
+		<element ref="t40"><bounds x="829" y="131" width="56" height="8"/></element>
+		<element ref="t41"><bounds x="829" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x20"><bounds x="841" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="853" y="149" width="8" height="8"/></element>
-		<element ref="t37"><bounds x="884" y="140" width="56" height="8"/></element>
+		<element ref="t42"><bounds x="884" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x40"><bounds x="896" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="908" y="149" width="8" height="8"/></element>
-		<element ref="t38"><bounds x="939" y="131" width="56" height="8"/></element>
-		<element ref="t39"><bounds x="939" y="140" width="56" height="8"/></element>
+		<element ref="t43"><bounds x="939" y="131" width="56" height="8"/></element>
+		<element ref="t44"><bounds x="939" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG02" inputmask="0x80"><bounds x="951" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="963" y="149" width="8" height="8"/></element>
-		<element ref="t40"><bounds x="418" y="214" width="120" height="10"/></element>
+		<element ref="t45"><bounds x="418" y="214" width="120" height="10"/></element>
 		<element ref="green_led"><bounds x="470" y="216" width="8" height="8"/></element>
 		<element ref="pill_orange"><bounds x="441" y="228" width="65" height="22"/></element>
-		<element ref="t41"><bounds x="18" y="258" width="44" height="10"/></element>
+		<element ref="t46"><bounds x="18" y="258" width="44" height="10"/></element>
 		<element ref="music_note"><bounds x="56" y="252" width="16" height="20"/></element>
 		<element ref="demo_btn" inputtag="SEG06" inputmask="0x40"><bounds x="26" y="274" width="42" height="42"/></element>
-		<element ref="t42"><bounds x="98" y="250" width="172" height="9"/></element>
+		<element ref="t47"><bounds x="98" y="250" width="172" height="9"/></element>
 		<element ref="hline"><bounds x="95" y="254" width="26" height="3"/></element>
 		<element ref="hline"><bounds x="247" y="254" width="26" height="3"/></element>
-		<element ref="t43"><bounds x="125" y="262" width="64" height="9"/></element>
+		<element ref="t48"><bounds x="125" y="262" width="64" height="9"/></element>
 		<element ref="round_btn"><bounds x="141" y="274" width="32" height="32"/></element>
-		<element ref="t44"><bounds x="200" y="262" width="64" height="9"/></element>
+		<element ref="t49"><bounds x="200" y="262" width="64" height="9"/></element>
 		<element ref="round_btn"><bounds x="216" y="274" width="32" height="32"/></element>
-		<element ref="t45"><bounds x="275" y="262" width="64" height="9"/></element>
+		<element ref="t50"><bounds x="275" y="262" width="64" height="9"/></element>
 		<element ref="round_btn"><bounds x="291" y="274" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="151" y="270" width="8" height="8"/></element>
 		<element ref="msp_corner"><bounds x="35" y="368" width="94" height="41"/></element>
-		<element ref="t46"><bounds x="72" y="380" width="20" height="12"/></element>
+		<element ref="t51"><bounds x="72" y="380" width="20" height="12"/></element>
 		<element ref="msp_middle"><bounds x="129" y="368" width="100" height="41"/></element>
-		<element ref="t47"><bounds x="169" y="380" width="20" height="12"/></element>
+		<element ref="t52"><bounds x="169" y="380" width="20" height="12"/></element>
 		<element ref="msp_corner"><orientation flipx="yes"/><bounds x="229" y="368" width="94" height="41"/></element>
-		<element ref="t48"><bounds x="266" y="380" width="20" height="12"/></element>
+		<element ref="t53"><bounds x="266" y="380" width="20" height="12"/></element>
 		<element ref="msp_corner"><orientation flipy="yes"/><bounds x="35" y="409" width="94" height="42"/></element>
-		<element ref="t49"><bounds x="72" y="422" width="20" height="12"/></element>
+		<element ref="t54"><bounds x="72" y="422" width="20" height="12"/></element>
 		<element ref="msp_middle"><orientation flipy="yes"/><bounds x="129" y="409" width="100" height="42"/></element>
-		<element ref="t50"><bounds x="169" y="422" width="20" height="12"/></element>
-		<element ref="t51"><bounds x="165" y="434" width="28" height="7"/></element>
+		<element ref="t55"><bounds x="169" y="422" width="20" height="12"/></element>
+		<element ref="t56"><bounds x="165" y="434" width="28" height="7"/></element>
 		<element ref="msp_corner"><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="42"/></element>
-		<element ref="t52"><bounds x="266" y="422" width="20" height="12"/></element>
-		<element ref="t51"><bounds x="262" y="434" width="28" height="7"/></element>
-		<element ref="t53"><bounds x="333" y="334" width="84" height="8"/></element>
-		<element ref="t54"><bounds x="333" y="343" width="84" height="8"/></element>
+		<element ref="t57"><bounds x="266" y="422" width="20" height="12"/></element>
+		<element ref="t56"><bounds x="262" y="434" width="28" height="7"/></element>
+		<element ref="t58"><bounds x="333" y="334" width="84" height="8"/></element>
+		<element ref="t59"><bounds x="333" y="343" width="84" height="8"/></element>
 		<element ref="round_btn"><bounds x="359" y="360" width="32" height="32"/></element>
-		<element ref="t55"><bounds x="448" y="324" width="84" height="8"/></element>
-		<element ref="t56"><bounds x="448" y="333" width="84" height="8"/></element>
+		<element ref="t60"><bounds x="448" y="324" width="84" height="8"/></element>
+		<element ref="t61"><bounds x="448" y="333" width="84" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG10" inputmask="0x01"><bounds x="474" y="350" width="32" height="32"/></element>
-		<element ref="t57"><bounds x="513" y="324" width="84" height="8"/></element>
-		<element ref="t58"><bounds x="513" y="333" width="84" height="8"/></element>
+		<element ref="t62"><bounds x="513" y="324" width="84" height="8"/></element>
+		<element ref="t63"><bounds x="513" y="333" width="84" height="8"/></element>
 		<element ref="round_btn"><bounds x="539" y="350" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="371" y="350" width="8" height="8"/></element>
 		<element ref="vline"><bounds x="348" y="356" width="3" height="58"/></element>
 		<element ref="hline"><bounds x="348" y="412" width="20" height="3"/></element>
-		<element ref="t59"><bounds x="430" y="378" width="90" height="8"/></element>
+		<element ref="t64"><bounds x="430" y="378" width="90" height="8"/></element>
 		<element ref="round_btn"><bounds x="366" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="364" y="388" width="8" height="8"/></element>
-		<element ref="t46"><bounds x="374" y="388" width="10" height="8"/></element>
+		<element ref="t51"><bounds x="374" y="388" width="10" height="8"/></element>
 		<element ref="round_btn"><bounds x="426" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="424" y="388" width="8" height="8"/></element>
-		<element ref="t47"><bounds x="434" y="388" width="10" height="8"/></element>
+		<element ref="t52"><bounds x="434" y="388" width="10" height="8"/></element>
 		<element ref="round_btn"><bounds x="486" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="484" y="388" width="8" height="8"/></element>
-		<element ref="t48"><bounds x="494" y="388" width="10" height="8"/></element>
+		<element ref="t53"><bounds x="494" y="388" width="10" height="8"/></element>
 		<element ref="round_btn"><bounds x="546" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="544" y="388" width="8" height="8"/></element>
-		<element ref="t49"><bounds x="554" y="388" width="10" height="8"/></element>
-		<element ref="t60"><bounds x="625" y="340" width="105" height="9"/></element>
+		<element ref="t54"><bounds x="554" y="388" width="10" height="8"/></element>
+		<element ref="t65"><bounds x="625" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG03" inputmask="0x20"><bounds x="625" y="355" width="105" height="28"/></element>
-		<element ref="t61"><bounds x="740" y="340" width="105" height="9"/></element>
+		<element ref="t66"><bounds x="740" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide"><bounds x="740" y="355" width="105" height="28"/></element>
-		<element ref="t62"><bounds x="856" y="340" width="105" height="9"/></element>
+		<element ref="t67"><bounds x="856" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide"><bounds x="856" y="355" width="105" height="28"/></element>
 		<element ref="green_led"><bounds x="645" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="697" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="904" y="364" width="8" height="8"/></element>
-		<element ref="t63"><bounds x="740" y="394" width="105" height="9"/></element>
+		<element ref="t68"><bounds x="740" y="394" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG03" inputmask="0x01"><bounds x="740" y="408" width="105" height="50"/></element>
-		<element ref="t64"><bounds x="856" y="394" width="105" height="9"/></element>
+		<element ref="t69"><bounds x="856" y="394" width="105" height="9"/></element>
 		<element ref="pill_greycyan" inputtag="SEG00" inputmask="0x10"><bounds x="856" y="408" width="105" height="50"/></element>
 		<element ref="green_led"><bounds x="763" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="800" y="414" width="8" height="8"/></element>
-		<element ref="t65"><bounds x="748" y="452" width="44" height="7"/></element>
-		<element ref="t66"><bounds x="752" y="459" width="36" height="7"/></element>
-		<element ref="t67"><bounds x="802" y="452" width="52" height="7"/></element>
+		<element ref="t70"><bounds x="748" y="452" width="44" height="7"/></element>
+		<element ref="t71"><bounds x="752" y="459" width="36" height="7"/></element>
+		<element ref="t72"><bounds x="802" y="452" width="52" height="7"/></element>
 		<element ref="green_led"><bounds x="867" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="876" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="885" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="894" y="414" width="8" height="8"/></element>
-		<element ref="t68"><bounds x="905" y="452" width="28" height="7"/></element>
+		<element ref="t73"><bounds x="905" y="452" width="28" height="7"/></element>
 	</group>
 
 	<group name="right_block">
 		<bounds x="0" y="0" width="1000" height="503"/>
 		<element ref="bg_right"><bounds x="0" y="0" width="1000" height="503"/></element>
-		<element ref="t69"><bounds x="240" y="32" width="180" height="11"/></element>
-		<element ref="t70"><bounds x="23" y="68" width="56" height="8"/></element>
+		<element ref="t74"><bounds x="240" y="32" width="180" height="11"/></element>
+		<element ref="t75"><bounds x="23" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG10" inputmask="0x10"><bounds x="35" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="47" y="77" width="8" height="8"/></element>
-		<element ref="t71"><bounds x="79" y="68" width="56" height="8"/></element>
+		<element ref="t76"><bounds x="79" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0F" inputmask="0x10"><bounds x="91" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="103" y="77" width="8" height="8"/></element>
-		<element ref="t72"><bounds x="134" y="59" width="56" height="8"/></element>
-		<element ref="t73"><bounds x="134" y="68" width="56" height="8"/></element>
+		<element ref="t77"><bounds x="134" y="59" width="56" height="8"/></element>
+		<element ref="t78"><bounds x="134" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0E" inputmask="0x10"><bounds x="146" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="158" y="77" width="8" height="8"/></element>
-		<element ref="t34"><bounds x="189" y="68" width="56" height="8"/></element>
+		<element ref="t39"><bounds x="189" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0D" inputmask="0x10"><bounds x="201" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="213" y="77" width="8" height="8"/></element>
-		<element ref="t74"><bounds x="244" y="59" width="56" height="8"/></element>
-		<element ref="t75"><bounds x="244" y="68" width="56" height="8"/></element>
+		<element ref="t79"><bounds x="244" y="59" width="56" height="8"/></element>
+		<element ref="t80"><bounds x="244" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0C" inputmask="0x10"><bounds x="256" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="268" y="77" width="8" height="8"/></element>
-		<element ref="t76"><bounds x="299" y="68" width="56" height="8"/></element>
+		<element ref="t81"><bounds x="299" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG15" inputmask="0x08"><bounds x="311" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="323" y="77" width="8" height="8"/></element>
-		<element ref="t77"><bounds x="355" y="59" width="56" height="8"/></element>
-		<element ref="t78"><bounds x="355" y="68" width="56" height="8"/></element>
+		<element ref="t82"><bounds x="355" y="59" width="56" height="8"/></element>
+		<element ref="t83"><bounds x="355" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG14" inputmask="0x08"><bounds x="367" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="379" y="77" width="8" height="8"/></element>
-		<element ref="t79"><bounds x="410" y="59" width="56" height="8"/></element>
-		<element ref="t80"><bounds x="410" y="68" width="56" height="8"/></element>
+		<element ref="t84"><bounds x="410" y="59" width="56" height="8"/></element>
+		<element ref="t85"><bounds x="410" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x08"><bounds x="422" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="434" y="77" width="8" height="8"/></element>
-		<element ref="t81"><bounds x="465" y="59" width="56" height="8"/></element>
-		<element ref="t82"><bounds x="465" y="68" width="56" height="8"/></element>
+		<element ref="t86"><bounds x="465" y="59" width="56" height="8"/></element>
+		<element ref="t87"><bounds x="465" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x08"><bounds x="477" y="90" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="489" y="77" width="8" height="8"/></element>
-		<element ref="t83"><bounds x="23" y="131" width="56" height="8"/></element>
-		<element ref="t84"><bounds x="23" y="140" width="56" height="8"/></element>
+		<element ref="t88"><bounds x="23" y="131" width="56" height="8"/></element>
+		<element ref="t89"><bounds x="23" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG10" inputmask="0x20"><bounds x="35" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="47" y="149" width="8" height="8"/></element>
 		<element ref="pill_ring"><bounds x="17" y="158" width="68" height="40"/></element>
-		<element ref="t85"><bounds x="79" y="140" width="56" height="8"/></element>
+		<element ref="t90"><bounds x="79" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0F" inputmask="0x20"><bounds x="91" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="103" y="149" width="8" height="8"/></element>
 		<element ref="pill_ring"><bounds x="73" y="158" width="68" height="40"/></element>
-		<element ref="t80"><bounds x="134" y="131" width="56" height="8"/></element>
-		<element ref="t86"><bounds x="134" y="140" width="56" height="8"/></element>
+		<element ref="t85"><bounds x="134" y="131" width="56" height="8"/></element>
+		<element ref="t91"><bounds x="134" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0E" inputmask="0x20"><bounds x="146" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="158" y="149" width="8" height="8"/></element>
-		<element ref="t87"><bounds x="189" y="140" width="56" height="8"/></element>
+		<element ref="t92"><bounds x="189" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0D" inputmask="0x20"><bounds x="201" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="213" y="149" width="8" height="8"/></element>
-		<element ref="t88"><bounds x="244" y="140" width="56" height="8"/></element>
+		<element ref="t93"><bounds x="244" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0C" inputmask="0x20"><bounds x="256" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="268" y="149" width="8" height="8"/></element>
-		<element ref="t89"><bounds x="299" y="140" width="56" height="8"/></element>
+		<element ref="t94"><bounds x="299" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG15" inputmask="0x04"><bounds x="311" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="323" y="149" width="8" height="8"/></element>
-		<element ref="t90"><bounds x="355" y="140" width="56" height="8"/></element>
+		<element ref="t95"><bounds x="355" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG14" inputmask="0x04"><bounds x="367" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="379" y="149" width="8" height="8"/></element>
-		<element ref="t91"><bounds x="410" y="140" width="56" height="8"/></element>
+		<element ref="t96"><bounds x="410" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x04"><bounds x="422" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="434" y="149" width="8" height="8"/></element>
-		<element ref="t92"><bounds x="465" y="131" width="56" height="8"/></element>
-		<element ref="t93"><bounds x="465" y="140" width="56" height="8"/></element>
+		<element ref="t97"><bounds x="465" y="131" width="56" height="8"/></element>
+		<element ref="t98"><bounds x="465" y="140" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x04"><bounds x="477" y="162" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="489" y="149" width="8" height="8"/></element>
-		<element ref="t94"><bounds x="560" y="32" width="150" height="10"/></element>
+		<element ref="t99"><bounds x="560" y="32" width="150" height="10"/></element>
 		<element ref="hline"><bounds x="560" y="37" width="26" height="3"/></element>
 		<element ref="hline"><bounds x="684" y="37" width="26" height="3"/></element>
-		<element ref="t95"><bounds x="539" y="58" width="52" height="8"/></element>
+		<element ref="t100"><bounds x="539" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="551" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="563" y="60" width="8" height="8"/></element>
-		<element ref="t83"><bounds x="594" y="49" width="52" height="8"/></element>
-		<element ref="t96"><bounds x="594" y="58" width="52" height="8"/></element>
+		<element ref="t88"><bounds x="594" y="49" width="52" height="8"/></element>
+		<element ref="t101"><bounds x="594" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="606" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="618" y="60" width="8" height="8"/></element>
-		<element ref="t97"><bounds x="649" y="58" width="52" height="8"/></element>
+		<element ref="t102"><bounds x="649" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="661" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="673" y="60" width="8" height="8"/></element>
-		<element ref="t98"><bounds x="704" y="58" width="52" height="8"/></element>
+		<element ref="t103"><bounds x="704" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="716" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="728" y="60" width="8" height="8"/></element>
-		<element ref="t99"><bounds x="560" y="128" width="150" height="10"/></element>
+		<element ref="t104"><bounds x="560" y="128" width="150" height="10"/></element>
 		<element ref="hline"><bounds x="558" y="133" width="24" height="3"/></element>
 		<element ref="hline"><bounds x="688" y="133" width="24" height="3"/></element>
-		<element ref="t100"><bounds x="539" y="152" width="52" height="8"/></element>
+		<element ref="t105"><bounds x="539" y="152" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="551" y="163" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="563" y="152" width="8" height="8"/></element>
-		<element ref="t101"><bounds x="594" y="152" width="52" height="8"/></element>
+		<element ref="t106"><bounds x="594" y="152" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="606" y="163" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="618" y="152" width="8" height="8"/></element>
-		<element ref="t102"><bounds x="649" y="152" width="52" height="8"/></element>
+		<element ref="t107"><bounds x="649" y="152" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="661" y="163" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="673" y="152" width="8" height="8"/></element>
-		<element ref="t103"><bounds x="704" y="152" width="52" height="8"/></element>
+		<element ref="t108"><bounds x="704" y="152" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="716" y="163" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="728" y="152" width="8" height="8"/></element>
-		<element ref="t104"><bounds x="850" y="32" width="90" height="10"/></element>
-		<element ref="t56"><bounds x="819" y="58" width="52" height="8"/></element>
+		<element ref="t109"><bounds x="850" y="32" width="90" height="10"/></element>
+		<element ref="t61"><bounds x="819" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="829" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="841" y="58" width="8" height="8"/></element>
-		<element ref="t105"><bounds x="889" y="58" width="52" height="8"/></element>
+		<element ref="t110"><bounds x="889" y="58" width="52" height="8"/></element>
 		<element ref="round_red"><bounds x="899" y="71" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="911" y="58" width="8" height="8"/></element>
-		<element ref="t106"><bounds x="819" y="136" width="52" height="8"/></element>
+		<element ref="t111"><bounds x="819" y="136" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x80"><bounds x="829" y="149" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="841" y="136" width="8" height="8"/></element>
-		<element ref="t107"><bounds x="889" y="127" width="52" height="8"/></element>
-		<element ref="t108"><bounds x="889" y="136" width="52" height="8"/></element>
+		<element ref="t112"><bounds x="889" y="127" width="52" height="8"/></element>
+		<element ref="t113"><bounds x="889" y="136" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x40"><bounds x="899" y="149" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="911" y="136" width="8" height="8"/></element>
-		<element ref="t109"><bounds x="798" y="138" width="32" height="8"/></element>
-		<element ref="t110"><bounds x="796" y="147" width="36" height="8"/></element>
+		<element ref="t114"><bounds x="798" y="138" width="32" height="8"/></element>
+		<element ref="t115"><bounds x="796" y="147" width="36" height="8"/></element>
 		<element ref="green_led"><bounds x="812" y="158" width="8" height="8"/></element>
 		<element ref="hline"><bounds x="822" y="162" width="20" height="3"/></element>
-		<element ref="t111"><bounds x="832" y="183" width="32" height="8"/></element>
-		<element ref="t112"><bounds x="882" y="214" width="40" height="10"/></element>
+		<element ref="t116"><bounds x="832" y="183" width="32" height="8"/></element>
+		<element ref="t117"><bounds x="882" y="214" width="40" height="10"/></element>
 		<element ref="pill_orange"><bounds x="860" y="228" width="60" height="22"/></element>
 		<element ref="green_led"><bounds x="886" y="216" width="8" height="8"/></element>
-		<element ref="t111"><bounds x="874" y="252" width="32" height="8"/></element>
-		<element ref="t113"><bounds x="38" y="300" width="140" height="10"/></element>
+		<element ref="t116"><bounds x="874" y="252" width="32" height="8"/></element>
+		<element ref="t118"><bounds x="38" y="300" width="140" height="10"/></element>
 		<element ref="tempo_knob"><bounds x="50" y="318" width="110" height="110"/></element>
 		<element ref="green_led"><bounds x="164" y="336" width="8" height="8"/></element>
-		<element ref="t114"><bounds x="213" y="320" width="100" height="10"/></element>
+		<element ref="t119"><bounds x="213" y="320" width="100" height="10"/></element>
 		<element ref="green_led"><bounds x="230" y="328" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="262" y="328" width="8" height="8"/></element>
-		<element ref="pill_wide" inputtag="SEG13" inputmask="0x02"><bounds x="213" y="335" width="75" height="24"/></element>
+		<element ref="pill_wide"><bounds x="213" y="335" width="75" height="24"/></element>
 		<element ref="green_led"><bounds x="230" y="398" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="262" y="398" width="8" height="8"/></element>
-		<element ref="t115"><bounds x="232" y="388" width="8" height="8"/></element>
-		<element ref="t116"><bounds x="264" y="388" width="8" height="8"/></element>
-		<element ref="pill_wide" inputtag="SEG13" inputmask="0x01"><bounds x="213" y="405" width="75" height="24"/></element>
-		<element ref="t117"><bounds x="403" y="258" width="92" height="9"/></element>
+		<element ref="t120"><bounds x="232" y="388" width="8" height="8"/></element>
+		<element ref="t121"><bounds x="264" y="388" width="8" height="8"/></element>
+		<element ref="pill_wide"><bounds x="213" y="405" width="75" height="24"/></element>
+		<element ref="t122"><bounds x="403" y="258" width="92" height="9"/></element>
 		<element ref="green_led"><bounds x="428" y="274" width="8" height="8"/></element>
 		<element ref="round_btn"><bounds x="416" y="285" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="488" y="274" width="8" height="8"/></element>
 		<element ref="round_btn"><bounds x="476" y="285" width="32" height="32"/></element>
-		<element ref="t118"><bounds x="348" y="322" width="92" height="9"/></element>
+		<element ref="t123"><bounds x="348" y="322" width="92" height="9"/></element>
 		<element ref="hline"><bounds x="348" y="327" width="22" height="3"/></element>
 		<element ref="hline"><bounds x="470" y="327" width="22" height="3"/></element>
 		<element ref="green_led"><bounds x="372" y="334" width="8" height="8"/></element>
@@ -630,34 +645,34 @@
 		<element ref="round_btn"><bounds x="425" y="410" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="497" y="399" width="8" height="8"/></element>
 		<element ref="round_btn"><bounds x="485" y="410" width="32" height="32"/></element>
-		<element ref="t119"><bounds x="393" y="454" width="92" height="9"/></element>
+		<element ref="t124"><bounds x="393" y="454" width="92" height="9"/></element>
 		<element ref="hline"><bounds x="360" y="458" width="26" height="3"/></element>
 		<element ref="hline"><bounds x="470" y="458" width="26" height="3"/></element>
-		<element ref="t120"><bounds x="583" y="220" width="72" height="8"/></element>
+		<element ref="t125"><bounds x="583" y="220" width="72" height="8"/></element>
 		<element ref="green_led"><bounds x="585" y="230" width="8" height="8"/></element>
 		<element ref="bank_wing"><bounds x="580" y="238" width="90" height="26"/></element>
-		<element ref="t121"><bounds x="690" y="220" width="72" height="8"/></element>
+		<element ref="t126"><bounds x="690" y="220" width="72" height="8"/></element>
 		<element ref="bank_wing"><bounds x="685" y="238" width="90" height="26"/></element>
-		<element ref="t122"><bounds x="608" y="255" width="172" height="10"/></element>
+		<element ref="t127"><bounds x="608" y="255" width="172" height="10"/></element>
 		<element ref="panel_memory_dial"><bounds x="565" y="268" width="190" height="190"/></element>
-		<element ref="t17"><bounds x="638" y="354" width="44" height="12"/></element>
-		<element ref="t123"><bounds x="626" y="441" width="8" height="8"/></element>
-		<element ref="t124"><bounds x="577" y="396" width="8" height="8"/></element>
-		<element ref="t125"><bounds x="574" y="329" width="8" height="8"/></element>
-		<element ref="t126"><bounds x="619" y="280" width="8" height="8"/></element>
-		<element ref="t127"><bounds x="686" y="277" width="8" height="8"/></element>
-		<element ref="t128"><bounds x="735" y="322" width="8" height="8"/></element>
-		<element ref="t129"><bounds x="738" y="389" width="8" height="8"/></element>
-		<element ref="t130"><bounds x="693" y="438" width="8" height="8"/></element>
+		<element ref="t22"><bounds x="638" y="354" width="44" height="12"/></element>
+		<element ref="t128"><bounds x="626" y="441" width="8" height="8"/></element>
+		<element ref="t129"><bounds x="577" y="396" width="8" height="8"/></element>
+		<element ref="t130"><bounds x="574" y="329" width="8" height="8"/></element>
+		<element ref="t131"><bounds x="619" y="280" width="8" height="8"/></element>
+		<element ref="t132"><bounds x="686" y="277" width="8" height="8"/></element>
+		<element ref="t133"><bounds x="735" y="322" width="8" height="8"/></element>
+		<element ref="t134"><bounds x="738" y="389" width="8" height="8"/></element>
+		<element ref="t135"><bounds x="693" y="438" width="8" height="8"/></element>
 		<element ref="big_ring"><bounds x="800" y="318" width="148" height="148"/></element>
-		<element ref="t22"><bounds x="804" y="318" width="52" height="8"/></element>
-		<element ref="t131"><bounds x="806" y="327" width="48" height="8"/></element>
+		<element ref="t27"><bounds x="804" y="318" width="52" height="8"/></element>
+		<element ref="t136"><bounds x="806" y="327" width="48" height="8"/></element>
 		<element ref="green_led"><bounds x="800" y="336" width="8" height="8"/></element>
 		<element ref="round_btn_big"><bounds x="812" y="344" width="42" height="42"/></element>
-		<element ref="t132"><bounds x="895" y="330" width="60" height="8"/></element>
+		<element ref="t137"><bounds x="895" y="330" width="60" height="8"/></element>
 		<element ref="green_led"><bounds x="946" y="340" width="8" height="8"/></element>
 		<element ref="round_btn_big"><bounds x="900" y="348" width="42" height="42"/></element>
-		<element ref="t133"><bounds x="840" y="436" width="72" height="8"/></element>
+		<element ref="t138"><bounds x="840" y="436" width="72" height="8"/></element>
 		<element ref="green_led"><bounds x="912" y="438" width="8" height="8"/></element>
 		<element ref="round_btn_big"><bounds x="858" y="398" width="42" height="42"/></element>
 	</group>

@@ -108,9 +108,16 @@ panel_bg("bg_top",2000,997,PANEL); panel_bg("bg_left",1000,503,PANEL); panel_bg(
 S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height="997"/>',
    P("bg_top",0,0,2000,997), P("screen_frame",298,104,1404,581),
    '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
-for yy in [205,294,383,472,561]:
-    S.append(P("lcd_soft_key",138,yy,123,34,flip=True))
-    S.append(P("lcd_soft_key",1740,yy,123,34))
+# LCD-flanking keyboard-part on/off buttons (descriptor 0x2000/0x2001 parts 0x10-0x14 =
+# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2): OFF column on SEG00 (left of LCD), ON column on
+# SEG11-13 (right). The driver's old "LCD Left N" labels were wrong. See notes/panel-descriptor-map.md.
+LCDPARTS=[("RIGHT1","SEG00","0x02","SEG11","0x10"),("RIGHT2","SEG00","0x08","SEG11","0x20"),
+          ("LEFT","SEG00","0x20","SEG13","0x01"),("ACCOMP1","SEG00","0x01","SEG12","0x01"),
+          ("ACCOMP2","SEG00","0x04","SEG11","0x01")]
+for i,yy in enumerate([205,294,383,472,561]):
+    nm,ls,lm,rs,rm=LCDPARTS[i]
+    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
+    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(nm,1770,yy+12,90,10))
 # OTHER PART & FR / HELP
 S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
       P("round_btn_big",150,852,42,42), L("HELP",149,838,44,13)]
@@ -245,8 +252,10 @@ RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led"
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24,tag="SEG13",mask="0x02")]
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24,tag="SEG13",mask="0x01")]
+# TRANSPOSE +/- : old SEG13 0x02/0x01 bindings were wrong (SEG13.b0 = LEFT part ON, b1 = event
+# 0x2083). Left decorative pending confirmation of the real TRANSPOSE bits. See panel-descriptor-map.md.
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24)]
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24)]
 RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB += [P("green_led",428,274,8,8), P("round_btn",416,285,32,32), P("green_led",488,274,8,8), P("round_btn",476,285,32,32)]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
 for cx in [360,425,485]: RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32)]
