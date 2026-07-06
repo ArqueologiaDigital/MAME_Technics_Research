@@ -114,3 +114,60 @@ ORGAN&ACCORDION, SYNTH, ORGAN TABS), BRASS was the mis-derived one.
 1-8 / mode buttons):** ~33 buttons across SEG0F, SEG10-15. These need matching to
 the CPR matrix labels via their events or a second-context probe. Next: CPL/CPC
 matrices + resolve these + rebuild the .lay.
+
+## CPC switch matrix (SCHEMATIC DIAGRAM-16, page 130) — the mixer board
+
+Columns are scan lines SEG5, SEG8, SEG9, SEG10, SEG11 (from CN1108); rows SW0-7.
+The CPC board has no own microcomputer (switch/LED matrix wired to the main
+scanner via CN1107/CN1108). Switch part = SW1155 + col*8 + SWrow.
+
+| SW row | SEG5 | SEG8 | SEG9 | SEG10 | SEG11 |
+|--------|------|------|------|-------|-------|
+| SW0 | OTHER PARTS/TG | MUTE UP 3 | MUTE UP 7 | MUTE UP 11 | MUTE UP 15 |
+| SW1 | HELP | MUTE DOWN 3 | MUTE DOWN 7 | MUTE DOWN 11 | MUTE DOWN 15 |
+| SW2 | CONTRAST UP | MUTE UP 4 | MUTE UP 8 | MUTE UP 12 | MUTE UP 16 |
+| SW3 | CONTRAST DOWN | MUTE DOWN 4 | MUTE DOWN 8 | MUTE DOWN 12 | MUTE DOWN 16 |
+| SW4 | MUTE UP 1 | MUTE UP 5 | MUTE UP 9 | MUTE UP 13 | PAGE UP |
+| SW5 | MUTE DOWN 1 | MUTE DOWN 5 | MUTE DOWN 9 | MUTE DOWN 13 | PAGE DOWN |
+| SW6 | MUTE UP 2 | MUTE UP 6 | MUTE UP 10 | MUTE UP 14 | DISPLAY HOLD |
+| SW7 | MUTE DOWN 2 | MUTE DOWN 6 | MUTE DOWN 10 | MUTE DOWN 14 | EXIT |
+
+So the CPC labels (HELP, CONTRAST UP/DOWN, MUTE UP/DOWN 1-16, PAGE UP/DOWN,
+DISPLAY HOLD, EXIT, OTHER PARTS/TG) actually MATCH the KN5000-folklore labels the
+current .lay uses -- for this board the labels/positions were roughly right; only
+the input BINDINGS were wrong (which is why pressing "HELP" navigated to GUITAR).
+The 16 MUTE UP/DOWN pairs are the part mixer (map to the 0x2001/0x2000 mute
+events; part index via the part-name table 0x485FDE70). LED matrix (CM rows):
+OTHER PARTS/TR, SPRIT 2, SPRIT 3, DISPLAY HOLD.
+
+## CPL switch matrix (SCHEMATIC DIAGRAM-15, page 128) — rhythm / arranger / pads
+
+Own sub-CPU IC1101 (C2BBDB000023); columns SEG0,1,2,3,4,6,7 (SEG5 belongs to
+CPC); rows SW0-7. Switch part = SW1102 + col-index*8 + SWrow. Some right-column
+cells (SEG4 SW4-7, SEG7 SW5-7) need a re-crop to confirm (marked ?).
+
+| SW row | SEG0 | SEG1 | SEG2 | SEG3 | SEG4 | SEG6 | SEG7 |
+|--------|------|------|------|------|------|------|------|
+| SW0 | LCDL 4 | MEMORY/LOAD | MOVIE SHOW | INTRO & ENDING 1 | VARIATION & MSA 3 | PAD 5/SOLO | MUSIC STYLIST |
+| SW1 | LCDL 1 | SOUL & FUNK | MARCH | TAP TEMPO | VARIATION & MSA 2 | PERFORMANCE PADS/STOP | AUTO MODE |
+| SW2 | LCDL 5 | CUSTOM | ENTERTAINER | FILL IN 2 | MUSIC STYLE ARRANGER | PAD 4 | SOUND SET |
+| SW3 | LCDL 2 | BALLAD | COUNTRY | FADE OUT | VARIATION & MSA 1 | PERFORMANCE PADS/BANK | PLAY CHORD OFF/ON |
+| SW4 | START/STOP | JAZZ COMBO | LATIN & WORLD | FILL IN 1 | ? | PAD 1 | ARRANGER OFF/ON |
+| SW5 | LCDL 3 | ROCK & POP | GOSPEL & BLUES | FADE IN | ? | PERFORMANCE PADS/AUTO | ? |
+| SW6 | INTRO & ENDING 2 | BIG BAND & SWING | BALLROOM | VARIATION & MSA 4 | ? | DEMO | ? |
+| SW7 | SYNCHRO & BREAK | R & B | MODERN DANCE | SPLIT POINT | PAD 6/SOLO ? | PAD 2 | ? |
+
+SEG1+SEG2 hold 16 rhythm-genre buttons (MEMORY/LOAD, SOUL&FUNK, CUSTOM, BALLAD,
+JAZZ COMBO, ROCK&POP, BIG BAND&SWING, R&B, MOVIE SHOW, MARCH, ENTERTAINER,
+COUNTRY, LATIN&WORLD, GOSPEL&BLUES, BALLROOM, MODERN DANCE) -> the 0x2005/arg
+rhythm-group events, named via RhythmGenreNameTable 0x48735EE4 (genre=(arg+7)%16).
+
+## Big picture: all 3 boards' labels match the folklore .lay; only BINDINGS are wrong
+
+The KN5000-derived folklore labels/positions the current .lay uses are (roughly)
+correct for all three boards -- the SX-KN7000 shares the KN5000 panel layout. What
+is wrong is the input BINDING of each drawn button (which is why clicking "HELP"
+navigated to GUITAR). So the .lay rebuild reduces mainly to re-binding each button
+to the normSeg.bit whose function matches its label -- not redrawing everything.
+The binding for each is obtained from the empirical probe (normSeg.bit -> function)
+matched to these matrix labels.
