@@ -52,16 +52,22 @@ keep the CLUT path. UI pixels are untouched, so the text UI is unaffected.
 - The `0xD0` tag means only 0x_D_ picture bytes are affected; if any non-picture use of
   0xD0..0xDF exists it would be miscoloured (none seen — UI uses 0x00..0x1C).
 
-## Future refinement: read the firmware's composited buffer 0x9CE00000 directly
-Confirmed at runtime: the firmware's compositor DOES run and writes the final RGB565 image
-to `0x9CE00000` (which the driver already maps: `map(0x9c000000,0x9cffffff).ram()`). At
-t=8s it is ~50% non-zero with real colours (e.g. 0x1400=green, 0x9000=red). Since
-`0x9CE00000` is what the real LCD controller scans, the most faithful `screen_update` would
-present it directly (RGB565 → rgb_t) instead of re-compositing the two planes — that would
-also pick up the firmware's gamma-corrected UI colours (`0x50122AAC`) for free. Caveats to
-resolve first: the compositor stores the image **flipped** (dest offset
-`((0xef-row)*0x280+(0x27f-col))*2`), so it must be read with the inverse transform; and the
-formula/flip must be verified against a STATIC screen (a plane-vs-0x9CE00000 comparison
-during the boot animation is confounded because the planes are being rewritten while
-0x9CE00000 holds the compositor's previous frame). The current two-plane `screen_update`
-composite is correct and simpler; 0x9CE00000 is the higher-fidelity option for later.
+## IMPLEMENTED: the driver presents 0x9CE00000 directly (supersedes the two-plane composite)
+The firmware's compositor writes the final 640x240 **RGB565** image to `0x9CE00000` (mapped
+`map(0x9c000000,0x9cffffff).ram().share("lcdbuf")`) — the exact bytes the LCD controller
+scans. `screen_update` now reads it directly (linear/top-to-bottom, little-endian RGB565 →
+`rgb_t`), which is pixel-perfect and gives the firmware's gamma-correct UI colours + machine-
+composited pictures for free. This **replaces** the two-plane reconstruction above.
+
+Verified by dumping 0x9CE00000 to a file and viewing it: the **home screen is pixel-exact**
+(every label crisp). Note the earlier "flip" claim was WRONG — the buffer is stored *linear*,
+so no inverse transform is needed (a 180°-rotated read renders it upside-down).
+
+**This split the green-screen problem cleanly** (answering "are we rendering an offscreen
+buffer?" — no): 0x9CE00000 shows a clean home screen but the SAME noisy boot splash. The home
+screen is drawn by UI routines; the splash is drawn by the software **JPEG decoder**. So the
+display path is now correct, and the splash garble is a **JPEG-decoder bug** — the decoder
+(YCbCr→RGB / IDCT, using AM33 DSP ops) produces garbage pixels, faithfully shown. That is the
+next thing to chase for a clean splash: audit the AM33 extended-ALU ops the decoder uses
+(0x484870C8 area + the IDCT) for any the CPU core mis-runs. The dual-plane picture format
+above is still the ground truth for what the decoder *should* emit.
