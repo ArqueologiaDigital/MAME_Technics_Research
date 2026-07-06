@@ -124,3 +124,24 @@ Trace method that works (reuse): temporary `switch(start_pc){case TARGET: logerr
 "...", m_d[0..3], m_a[0..2]);}` right after `start_pc = m_pc` in the fetch loop; build
 CPU only; run in background (>120s, the Bash tool's own limit kills a foreground run);
 NB the udf07 unimplemented log also writes ~420K lines/boot, so filter by "RNTRACE".
+
+## Render-trace attempt (tick 3): the menu text does NOT use DrawString/list-box procs
+Traced (PC-trigger in the fetch loop, since reverted) all six `DrawString*` variants
+(0x48425393/896/97A/9F3/ABF/B18) with the string ptr (a0) + string bytes, plus the
+generic list-box procs `AcListBoxProc` 0x48419E34 / `PsListBoxProc` 0x484198B4, over a
+full boot + BALLAD-menu render (snapshot confirms the menu shows "8 Beat 1"×10).
+**Result: ZERO calls to any of them.** `DrawString` also has **0 static call sites**
+(no `cd`/`dd` targets it). So the KN7000 renders on-screen text through a **different,
+lower-level path** — a char/glyph blit or a routine in the self-loaded library ROM
+(0x4C000000, whose PCs a program-ROM trace can't see), not these DrawString wrappers.
+The style list-box procs (AcCtgStyleListBoxProc etc.) never fire either.
+
+### Implication for the bug hunt
+The 10 slots are drawn by an unidentified renderer. The connection to the DATA side is
+now clearer from table-rom-format.md: the built-in styles + names live in the **TCMP
+chunk** (0x48035D08). The most promising next angle is DATA-side, not render-side:
+decode the TCMP per-style record layout (how a genre+index selects a name), then check
+whether the emulated read of that structure yields index 0 for every slot. A render
+trace would need to target the library-ROM glyph routine (find it by tracing writes to
+the LCD framebuffer / video device and resolving the writer PC — but note a read/write
+tap must NOT touch cpu.state in its callback: segfault).
