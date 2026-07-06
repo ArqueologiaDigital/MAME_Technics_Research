@@ -130,3 +130,15 @@ GROUP buttons = SEG0C/0D/0E.b0-b5 (mixed events; SEG0C.b0=PIANO, b1=GUITAR snaps
 PROGRAM MENUS), NOT the effects -- so the effect buttons (SUSTAIN/REVERB/etc.) are still
 unresolved. NEXT: snapshot-ID the remaining decorative buttons + event families (0x2040, 0x2030,
 0x2060-86, 0x20A0-BD, the effects) one by one, then bind each to the correct SEG.bit.
+
+## Snapshot-method scope + more bindings (tick 2026-07-07b)
+The LCD-snapshot ID method works for SCREEN-CHANGING buttons (sound-select, genre, menus) but
+NOT for LED/audio modifiers (VARIATION/MSA/TAP-TEMPO all show the same RHYTHM screen). For those,
+rely on the descriptor event families + the driver labels (which have some errors -- e.g. SEG04.b6
+was mislabelled "VARIATION & MSA 4"; it's really 0x2030/a05, and true VARIATION 4 = SEG03.b6 =
+0x2085/a03). Bound this tick (descriptor-grounded): VARIATION 1-4 = 0x2085 a00-a03 (SEG04.b4/b2/b0
++ SEG03.b6), MUSIC STYLE ARRANGER = SEG04.b3 (0x20A3), TAP TEMPO = SEG04.b1 (0x20A4), SPLIT POINT =
+SEG03.b7 (0x20A6), SYNCHRO & BREAK = SEG00.b7 (0x2021). 89 inputtags, 0 conflicts. Still decorative/
+unresolved: PART EFFECT + GLOBAL EFFECT (SUSTAIN/CHORUS/etc.), AUTO PLAY CHORD, performance pads,
+SEQUENCER PLAY/EASY REC, PANEL MEMORY, TRANSPOSE/OCTAVE, PART SELECT/CONDUCTOR. NEXT: snapshot-ID
+the screen-changing ones (sequencer, panel-memory, APC); for toggles use descriptor + LED sweeps.
