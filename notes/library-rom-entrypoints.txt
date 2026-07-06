@@ -1,4 +1,6 @@
-# KN7000 undumped library ROM (0x4C000000) entry points called by the firmware
+# KN7000 self-loaded library ROM (0x4C000000) entry points called by the firmware
+# NOTE: 0x4C000000 is NOT undumped -- the boot copies this code from the program
+# flash (0x487B8FD1..) into 0x8C000000, aliased to 0x4C000000. See library-rom-loading.md.
 # address     calls  distinct_call_sites
 0x4C000005     20  20
 0x4C0002B8     19  19
