@@ -1,12 +1,14 @@
 # Why the boot screen is solid green: a palette-load bug (not a missing image)
 
-> **STATUS — RESOLVED (read the `DEFINITIVE / RESOLVED` section at the very bottom first).**
-> Direct RAM polling confirms this IS a **palette-load failure**: the splash JPEG decodes fine
-> into framebuffer indices 0xD0–0xDC, but those CLUT slots hold the green placeholder, so it
-> renders green. The mid-file section "CORRECTED / AUTHORITATIVE: the splash animation is never
-> played" was **itself refuted** (the sequencer *does* run and the JPEG *is* decoded) — it is
-> kept below only as investigation history. Everything between the title and the bottom section
-> is superseded; trust the bottom.
+> **STATUS — RESOLVED & FIXED. It was a DUAL-PLANE DIRECT-COLOUR display, not a palette bug.**
+> The picture is NOT palettized: colour is split across two work-RAM byte-planes — framebuffer
+> `0x500D4080` = `0xD0|red4` (the `0xD` high nibble tags a picture pixel), companion plane
+> `0x500F9880` = `(green4<<4)|blue4`. The driver read only the first plane through the CLUT, so
+> picture bytes hit the green placeholder → green. FIXED by compositing both planes in
+> `screen_update` (commit b3ba4bb). **Full architecture: `notes/display-dual-plane-direct-color.md`.**
+> Everything below (this file's "palette-load", the "never decoded", and the "boot-sequencing"
+> sections) is superseded investigation history — the frame indices 0xD0–0xDC were red nibbles,
+> not palette indices.
 
 The KN7000 boot fills the LCD with bright green before the home screen appears,
 and the central "picture box" on normal screens is the same green. This traced
