@@ -79,6 +79,7 @@ elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" wid
 elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
 # pill-shaped highlight ring (no fill) to envelop DRAWBAR/ORGAN TABS round buttons
 two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>')
+two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>')
 # LCD soft key: rect + inner vertical divider
 two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
                           f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
@@ -112,7 +113,8 @@ for yy in [205,294,383,472,561]:
 S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
       P("round_btn_big",150,852,42,42), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",340,825,42,13,TXTH)]
+S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
+      P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART1..16 on/off pairs (workflow static-RE: 0x2001=on,0x2000=off; normSeg.bit=on/off pair)
 # up=part ON (unmute), down=part OFF (mute).  (seg, on_mask, off_mask)
 MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),
@@ -161,9 +163,11 @@ for i,(nm,tag,mask) in enumerate(RG):
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_orange",441,228,65,22))
-LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS",98,250,172,9,TXTH)]
+LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42),
+       L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32))
+LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
 padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,42)]   # measured, abutting (no gaps)
 for i,(shp,fx,fy) in enumerate(padspec):
@@ -173,12 +177,23 @@ for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,None,None),("ONE TOUCH PL
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
+LB.append(P("green_led",371,350,8,8))   # MUSIC STYLE ARRANGER LED
+# L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
+LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
+LB.append(L("VARIATION",430,378,90,8,TXTH))
 for i,cx in enumerate([366,426,486,546]):
-    LB.append(P("round_btn",cx,399,32,32)); LB.append(L(("VARIATION " if i==0 else "")+str(i+1),cx-12,388,54,8))
+    LB.append(P("round_btn",cx,399,32,32)); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
 for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,None,None),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
+# FADE in/out LEDs (two, one per half) + SYNCHRO LED
+LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
+LB.append(P("green_led",856+48,364,8,8))   # SYNCHRO & BREAK LED
 for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x10"),("START/STOP",856,105,50,"pill_greycyan","SEG00","0x10")]:
     LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
+# INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
+LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
+LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
+LB += [P("green_led",867+i*9,414,8,8) for i in range(4)] + [L("BEAT",905,452,28,7)]
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
