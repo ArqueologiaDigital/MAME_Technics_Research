@@ -93,3 +93,22 @@ Determine udf00/udf07 semantics (Panasonic MN103E/AM33 manual, or reverse-engine
 by tracing how the results are consumed / an emulator hypothesis-test), then
 implement the two ops in mn10300.cpp and regression-test the rhythm-name bug.
 The core's log now includes op2 (small diagnostic improvement, kept).
+
+
+## IMPLEMENTED: udf00 = signed multiply-by-immediate (F9/FB/FD)
+RE-confirmed and implemented. The F6 `op2>>4==0` form is the core's existing
+**mulq** (signed 64-bit multiply, low->Dn, high->MDRQ) -- so the imm forms
+(F9=imm8, FB=imm16, FD=imm32) with `op2>>4==0` are the same signed multiply with an
+immediate source. Confirmed by the firmware's fixed-point usage:
+`mov d3,d1 ; udf00 0x59ba,d1 ; add 0x2000,d1 ; asr 14,d1` = `(d3 * 0x59ba + 0x2000) >> 14`
+(Q14 coefficient-multiply; immediates are signed filter coeffs 0x59ba/0xe9fa/0xd24f).
+Implemented in mn10300.cpp's default case (Dn = low32(Dn*sx(imm)), MDRQ=high32, set
+NZ, clear CF/VF). Result: the 5.68M unimplemented-opcode executions/boot dropped to
+**979K (only udf07 F6-71 remains)**; boot + display unaffected.
+
+## STILL OPEN: udf07 (F6 op2>>4==7, 979K hits) + the rhythm-name bug
+Implementing udf00 did NOT fix the "all 8 Beat 1" rhythm-menu bug, so that bug does
+not run through udf00. udf07 is the only remaining unimplemented op (an AM33 F6/MAC-
+unit variant; context `mov 0x10,d1 ; not d0 ; udf07 d0,d1 ; sub d1,d2(=15-d1)` looks
+like a bit-count / normalize). NEXT: RE udf07 across more usages, implement, and
+re-test the rhythm names; if still broken, the name bug is a separate (non-udf) issue.

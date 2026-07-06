@@ -512,9 +512,32 @@ void mn10300_device::execute_run()
 			// trap -- correct results require the real implementation.
 			{
 				const uint8_t op2 = read_arg8(start_pc + 1);
-				m_pc = start_pc + mn10300_insn_length(op, op2);
-				logerror("MN10300: unimplemented opcode %02X op2=%02X @ PC=%08X (skipped %d bytes)\n",
-					op, op2, start_pc, (int)(m_pc - start_pc));
+				// AM33 udf00 immediate forms (F9=imm8, FB=imm16, FD=imm32): signed
+				// multiply-by-immediate, identical to the F6 op2>>4==0 "mulq" the core
+				// already implements (low 32 -> Dn, high 32 -> MDRQ). Verified by RE of
+				// the firmware's fixed-point coefficient-multiply usage
+				// (e.g. `udf00 0x59ba,d1 ; add 0x2000,d1 ; asr 14,d1`, coeffs signed).
+				// See notes/mn10300-udf-instructions-unimplemented.md.
+				if ((op == 0xF9 || op == 0xFB || op == 0xFD) && (op2 >> 4) == 0 && !BIT(op2, 2))
+				{
+					const int dn = op2 & 3;
+					int32_t s;
+					if (op == 0xF9)      s = (int32_t)(int8_t) read_arg8 (start_pc + 2);
+					else if (op == 0xFB) s = (int32_t)(int16_t)read_arg16(start_pc + 2);
+					else                 s = (int32_t)        read_arg32(start_pc + 2);
+					const int64_t t = (int64_t)(int32_t)m_d[dn] * (int64_t)s;
+					m_d[dn] = uint32_t(t);
+					m_mdrq  = uint32_t(uint64_t(t) >> 32);
+					set_nz32(m_d[dn]);
+					m_psw &= ~(FLAG_CF | FLAG_VF);
+					m_pc = start_pc + mn10300_insn_length(op, op2);
+				}
+				else
+				{
+					m_pc = start_pc + mn10300_insn_length(op, op2);
+					logerror("MN10300: unimplemented opcode %02X op2=%02X @ PC=%08X (skipped %d bytes)\n",
+						op, op2, start_pc, (int)(m_pc - start_pc));
+				}
 			}
 			break;
 		}
