@@ -510,9 +510,12 @@ void mn10300_device::execute_run()
 			// the fetch stream stays aligned and the machine remains steppable
 			// during bring-up. This treats the opcode as a no-op rather than a
 			// trap -- correct results require the real implementation.
-			m_pc = start_pc + mn10300_insn_length(op, read_arg8(start_pc + 1));
-			logerror("MN10300: unimplemented opcode %02X @ PC=%08X (skipped %d bytes)\n",
-				op, start_pc, (int)(m_pc - start_pc));
+			{
+				const uint8_t op2 = read_arg8(start_pc + 1);
+				m_pc = start_pc + mn10300_insn_length(op, op2);
+				logerror("MN10300: unimplemented opcode %02X op2=%02X @ PC=%08X (skipped %d bytes)\n",
+					op, op2, start_pc, (int)(m_pc - start_pc));
+			}
 			break;
 		}
 

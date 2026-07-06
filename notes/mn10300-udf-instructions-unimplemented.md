@@ -61,3 +61,35 @@ each `<op> <imm-or-reg-src>, Dn`.
    computation runs through udf, implementing it should make the names distinct.
    Note: some udf usage is inside audio-DSP loops (setlb), so not every hit relates
    to the name bug; confirm the name-lookup path uses udf before assuming a fix.
+
+## UPDATE: only TWO udf operations are actually used (udf00 + udf07)
+Added op2 to the core's unimplemented-opcode log and re-captured a 20s boot. The
+FB/F9/FD (imm) hits ALL have `op2>>4 == 0` → they are all **udf00**; the reg-reg
+(F6) hits are **udf07** (op2=0x71) and **udf00** (op2=0x08). Distinct executed ops:
+```
+FB op2=02 udf00 imm16,d2  1,792,985
+FB op2=01 udf00 imm16,d1  1,105,472
+FB op2=03 udf00 imm16,d3    761,816
+FB op2=00 udf00 imm16,d0    176,472
+F9 op2=03 udf00 imm8, d3    148,608
+F6 op2=71 udf07 d0,d1       617,844
+F6 op2=08 udf00 d2,d0       (seen at 0x4840FB90; fewer hits)
+```
+So implementing **just udf00 and udf07** covers all 5.68M skipped executions.
+
+### Context clues (semantics still TBD — need AM33 manual or deeper RE)
+- **udf00** (0x48486B18, a `setlb` loop over two byte streams):
+  `mov d3,d1 ; udf00 0x59ba,d1 ; add 0x2000,d1` — d1 (a signed byte) is combined
+  with the imm16, so udf00 is a **binary op Dn=f(Dn,imm)** (NOT a plain move; the
+  prior `mov d3,d1` would be dead otherwise). Looks arithmetic (multiply / fixed-
+  point-scale candidate; 0x59ba≈0.70 in Q15).
+- **udf07** (0x4840FBB9): `mov 0x10,d1 ; not d0 ; udf07 d0,d1 ; sub d1,d2 (d2=15-d1)`
+  — looks like a bit-count / normalize (clz/ffs candidate).
+- **udf00 reg-reg** (0x4840FB90): `udf00 d2,d0 ; mov d0,(d1,a3) ; cmp 0x40,d3 ; blt`
+  — a 64-iteration data-transform loop; Dn=f(Dn,Dm).
+
+### Next
+Determine udf00/udf07 semantics (Panasonic MN103E/AM33 manual, or reverse-engineer
+by tracing how the results are consumed / an emulator hypothesis-test), then
+implement the two ops in mn10300.cpp and regression-test the rhythm-name bug.
+The core's log now includes op2 (small diagnostic improvement, kept).
