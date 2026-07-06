@@ -202,3 +202,15 @@ the rhythm menu. Kept as a reference implementation of the same genre->list patt
    (PC-trigger), and what 0x4847F9F7/0x4847F980 do with a2=0x96800000 vs a1=section.
 2. If it's an aperture, add the mapping in kn7000.cpp; if it's a missed software copy,
    find why the path isn't reached. Then the BALLAD menu should list the 13 real styles.
+
+## REFRAME (tick 6, user insight): the missing CUSTOM-DATA FLASH (Initial Data disk)
+The user asked whether the empty style region is a flash ROM populated by the "Initial
+Data" floppy. Confirmed by the KN5000 shared codebase: `kn5000.cpp` maps a **custom_data
+FLASH @ IC19** and states it "was dumped from a system that had it already programmed by
+the initial data disk." The KN7000 ships the same concept — the **idd7000 Initial Data
+disk** (01CTMINI.AST = custom/style data w/ 1260 f5-records, 03FAVINI.FAV = favorites,
+...), all in the Technics "JK" block format. The KN7000 driver models only table+program
+flash, NOT this custom-data flash -> the custom/style working set is absent. This is a
+strong candidate for why 0x96800000 stays empty (the region may BE the custom flash, or
+the table->0x96800000 copy is gated on the initial data being installed). See
+notes/initial-data-disk-and-custom-flash.md.
