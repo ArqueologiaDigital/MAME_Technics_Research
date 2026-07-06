@@ -165,3 +165,40 @@ pointer, a scan that finds 0 records, or a count read as 0) rather than in the r
 data. NEXT: find the genre->style-list pointer/count the build uses (likely a table in
 the 0x48000000 config block or a program-ROM table indexed by genre) and check what it
 yields for BALLAD in emulation vs the real 13.
+
+## ROOT CAUSE FOUND (tick 5): genre styles are parsed from the EMPTY 0x96800000 "LCD window"
+A multi-agent workflow (6 scouts; orchestrator died between turns but the leads were
+salvaged from transcripts) + follow-up RE pinned the mechanism:
+
+### The genre->style-list pointer chain (answers the question)
+- `getDir4()` **0x4843D7B9**: `d1 = *0x48000010 (table-ROM directory entry [4] = 0x0004238C) + 0x48000000` = **0x4804238C** (the genre-style SECTION base; BALLAD's 13 f5-records at 0x4804AF61 live inside it).
+- Genre setup **0x484342BE** stores that base to **RAM global 0x50007760**.
+- The style-list build reads 0x50007760 and STAGES/parses the section through the window at **0x96800000**: reader **0x4847FB68** (`mov 0x96800000,a2 ; mov (0x50007760),a1 ; mov 0x10000,d0 ; call 0x4847F9F7`, looped 0x20x0x10000) and parser **0x4847F9F7** (`... sub 0x96800000,a2` = offset within the window).
+
+### The emulation bug (runtime-confirmed)
+With the BALLAD menu open: `*0x50007760 = 0x4804238C` (**correct**), but a dump of the
+window shows **0x96800000 = all zeros (0 f5-markers, 0 'Ball' in the first 256KB)**.
+So the pointer chain is right, but the **genre-style DATA never reaches 0x96800000**,
+which the parser reads from -> it enumerates 0 styles -> every slot falls back to the
+default "8 Beat 1". The driver maps `0x90000000-0x97ffffff .ram()` (comment: "LCD
+controller window (regs + trampolines)") as **inert RAM**; whatever populates that
+window on real hardware -- an aperture that maps/decompresses the table ROM, a DMA, or
+a software staging copy that isn't being reached in emulation -- is **missing**. That
+is the emulation defect behind the rhythm-name bug.
+
+### Music Stylist parallel (NOT the rhythm menu, for the record)
+Table **0x4873BEE8** (0x18-byte entries: [+0]list-ptr 0x4876xxxx, [+4]name-ptr
+0x485D10xx e.g. "Disco Hustling"/"Strummed Ballad", [+8]genre-id<<16, [+C]sub-idx,
+[+10/+14]counts), indexed by RAM category index **0x50001270**, getter **0x4847BD9F**
+(`index*0x18 + 0x4873BEE8`). This is the **Music Stylist** category system (near
+`MusicStylistJpgData` 0x4847B137), which is why `AcCtgStyleListBoxProc` never fired in
+the rhythm menu. Kept as a reference implementation of the same genre->list pattern.
+
+### Next (the fix path)
+1. Determine what populates 0x96800000 on real HW: is `0x90000000-0x97ffffff` an
+   aperture that mirrors/decompresses the table ROM (map it to the "table" region /
+   0x48000000 data), or is 0x4847FB68 a software copy that simply isn't being called
+   (find its caller + the gating condition)? Trace whether 0x4847FB68 executes at all
+   (PC-trigger), and what 0x4847F9F7/0x4847F980 do with a2=0x96800000 vs a1=section.
+2. If it's an aperture, add the mapping in kn7000.cpp; if it's a missed software copy,
+   find why the path isn't reached. Then the BALLAD menu should list the 13 real styles.
