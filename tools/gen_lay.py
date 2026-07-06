@@ -46,7 +46,9 @@ OPLED={
   ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
   ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
   ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
-  # SOUND GROUP category LEDs (swept sgled.lua; PIANO/GUITAR/EXPLORER omitted -- shared cpr48/49/100)
+  # SOUND GROUP category LEDs (swept sgled.lua/varled.lua). PIANO/GUITAR confirmed via BRASS->PIANO
+  # ->GUITAR radio chain; EXPLORER omitted (only hit shared cpr48). VARIATION has no per-button LED.
+  ("SEG0C","0x01"):"cpr_led48", ("SEG0C","0x02"):"cpr_led49",
   ("SEG0C","0x04"):"cpr_led50", ("SEG0C","0x08"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
   ("SEG0C","0x20"):"cpr_led41", ("SEG0D","0x01"):"cpr_led42", ("SEG0D","0x02"):"cpr_led43",
   ("SEG0D","0x08"):"cpr_led33", ("SEG0D","0x10"):"cpr_led34", ("SEG0D","0x20"):"cpr_led35",

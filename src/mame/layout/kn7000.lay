@@ -497,10 +497,10 @@
 		<element ref="t74"><bounds x="240" y="32" width="180" height="11"/></element>
 		<element ref="t75"><bounds x="23" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0C" inputmask="0x01"><bounds x="35" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="47" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led48"><bounds x="47" y="77" width="8" height="8"/></element>
 		<element ref="t76"><bounds x="79" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0C" inputmask="0x02"><bounds x="91" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="103" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led49"><bounds x="103" y="77" width="8" height="8"/></element>
 		<element ref="t77"><bounds x="134" y="59" width="56" height="8"/></element>
 		<element ref="t78"><bounds x="134" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0C" inputmask="0x04"><bounds x="146" y="90" width="32" height="32"/></element>
