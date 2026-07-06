@@ -1,5 +1,13 @@
 # Why the boot screen is solid green: a palette-load bug (not a missing image)
 
+> **STATUS — RESOLVED (read the `DEFINITIVE / RESOLVED` section at the very bottom first).**
+> Direct RAM polling confirms this IS a **palette-load failure**: the splash JPEG decodes fine
+> into framebuffer indices 0xD0–0xDC, but those CLUT slots hold the green placeholder, so it
+> renders green. The mid-file section "CORRECTED / AUTHORITATIVE: the splash animation is never
+> played" was **itself refuted** (the sequencer *does* run and the JPEG *is* decoded) — it is
+> kept below only as investigation history. Everything between the title and the bottom section
+> is superseded; trust the bottom.
+
 The KN7000 boot fills the LCD with bright green before the home screen appears,
 and the central "picture box" on normal screens is the same green. This traced
 to a **CLUT (palette) load failure**, NOT a missing or mis-addressed image.
@@ -167,3 +175,30 @@ held and animated for its full 0x00->0x42 run. NEXT: trace the opening-view life
 activates/deactivates it, and what would keep it active + redrawing through the init window)
 and identify what paints the persistent green after it. A UI-flow / boot-mode-sequencer
 question.
+
+## DEFINITIVE / RESOLVED (runtime-verified) -- it IS a palette-load failure after all
+Direct RAM polling (kn7000, autoboot Lua) settles this and supersedes BOTH the boot-splash
+agent's "JPEG never decoded / animation never played" AND my "boot-sequencing / redraw" theory
+above. All three of the following are measured facts:
+
+1. **The frame sequencer runs fully.** Polling OpeningFrameTarget 0x5006B5A4 / OpeningFrameIndex
+   0x5006B5A8 each frame: target climbs 0x00 -> 0x42 and index steps 0 -> 6 over t=4..13 s. So
+   OpeningFrameDraw is invoked ~66x and every frame is matched -> DrawJpegFile IS called. (The
+   agent's "callback ran ~once / sequencer never steps" was simply wrong.)
+2. **The JPEG is decoded into the framebuffer.** Histogram of the 8bpp plane 0x500D4080 at t=8:
+   13 distinct indices, ALL in the contiguous range 0xD0..0xDC (0xD0 ~40% = image background,
+   the rest = the notes) -- a real decoded image, not a flat fill. DrawJpegFile's decode guard
+   *0x5002a01c = 1 during the splash (not skipped).
+3. **The image palette is never loaded.** CLUT dump at t=8: entries [0xD0..0xDC] are ALL
+   0x0080FF80 (the green placeholder), whereas a UI entry CLUT[0x02]=0x00008000 (real). The
+   firmware fills the work-RAM CLUT (0x50031490) with the UI colors (0x00..0x1C) + the green
+   placeholder for 0x1D..0xF3, but the decoded splash image's own palette (the 13 colors for
+   0xD0..0xDC) is never written there.
+
+=> The splash renders as solid green because its pixels index CLUT slots 0xD0..0xDC that hold
+the green placeholder. The decode/blit/sequencer are all fine. THE FIX is the image-palette
+load: find where the JPEG's palette (for 0xD0..0xDC) should be written to the work-RAM CLUT at
+0x50031490+idx*4 and why it isn't -- either a gated work-RAM CLUT write, or (more likely) a
+HARDWARE image-palette the real LCD controller latches that the driver doesn't model/read (the
+driver presents everything through the single work-RAM CLUT). NEXT: trace the JPEG decoder
+0x48424F28's palette output + how a displayed picture's palette normally reaches the CLUT.
