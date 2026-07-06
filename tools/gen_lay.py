@@ -155,17 +155,22 @@ LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
 for nm,cx,y in [("MODE",447,54),("OFF/ON",505,54),("SET",447,139),("OFF/ON",505,139)]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
-RG=[("8 & 16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
-    ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
-    ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
-    ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
+# RHYTHM GROUP = the 16 event-0x2005 genres, authoritative from the program-ROM
+# descriptor (SEG01.b0-b7 + SEG02.b0-b7) with driver/ROM-derived labels. The old
+# binding pointed at SEG00 transport bits (BALLAD->SEG00 0x10 = START/STOP!) and was
+# wrong; see notes/panel-descriptor-map.md. Order is bit-order (~switch scan order);
+# exact physical placement is a fidelity refinement pending a panel photo.
+RG=[("MEMORY/LOAD","SEG01","0x01"),("SOUL & FUNK","SEG01","0x02"),("CUSTOM","SEG01","0x04"),("BALLAD","SEG01","0x08"),
+    ("JAZZ COMBO","SEG01","0x10"),("ROCK & POP","SEG01","0x20"),("BIG BAND & SWING","SEG01","0x40"),("R & B","SEG01","0x80"),
+    ("MOVIE SHOW","SEG02","0x01"),("MARCH","SEG02","0x02"),("ENTERTAINER","SEG02","0x04"),("COUNTRY","SEG02","0x08"),
+    ("LATIN & WORLD","SEG02","0x10"),("GOSPEL & BLUES","SEG02","0x20"),("BALLROOM","SEG02","0x40"),("MODERN DANCE","SEG02","0x80")]
 LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
-LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42),
+LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32))
