@@ -82,3 +82,27 @@ DISK MENU=cpr_led14, FADE OUT=cpr_led65, TRANSPOSE+=cpr_led38, OCTAVE±=cpr_led2
 - TODO: derive+bind the CPL (left-panel) LEDs (rhythm genres, arranger) and the
   status LEDs (boot-frame rows), and reconcile the boot-frame rows (0x06/0B/0D/0E/1C)
   to physical indicators.
+
+## VERIFICATION (this tick) + a caveat on the derivation
+Ran the driver + read outputs via Lua at idle: the **driver->output pipeline is
+confirmed working** — `cpr_led48=1`, `cpl_led3/12/14=1`, `cpr_led92/108/116=1`
+(exactly the boot frames), and the bound SOUND LEDs read 0 (correctly off, no sound
+active). Pressing a button changes the lit set, so LED state tracks firmware output.
+
+**Caveat on PanelSwitchClassTable-derived cells:** that table is the *panel-test*
+switch->LED map. Two findings:
+1. Buttons with class byte0>=0xF0 (e.g. BALLAD=SEG00.b4, class 0xF0) are **special
+   multi-LED** handlers — my derivation correctly SKIPS them (name=None/decorative).
+   Empirically BALLAD's active-genre LED is `cpl3` (a special-handler cell), not a
+   simple [row][bit].
+2. A single genre probe (press ENTERTAINER=SEG01.b2, derived `cpl_led41`) lit
+   `cpl_led9` instead — but that is confounded by the known rhythm-menu emulation
+   bug (genre selection is currently unreliable), so it is NOT conclusive evidence
+   the derivation is wrong.
+
+**Status:** the ~26 bound direct-LED cells (SOUND cats + genres, byte0<0xF0) are
+derived from the firmware's own table and are the best available; they are NOT yet
+independently confirmed in normal operation (blocked by the sound/rhythm menu
+emulation bugs). The driver plumbing is solid. Next: (a) fix/º understand the menu
+emulation bug, then re-probe each LED for clean confirmation; (b) map the special
+class-code (0xF0-0xF7) multi-LED handlers for BALLAD-type indicators + status LEDs.

@@ -8,6 +8,34 @@ PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
+# --- panel LED outputs (derived from firmware PanelSwitchClassTable; see notes/panel-leds.md) ---
+LEDMAP={
+  ("SEG00","0x40"):"cpl_led8", ("SEG00","0x80"):"cpl_led16", ("SEG01","0x01"):"cpl_led57", ("SEG01","0x02"):"cpl_led49",
+  ("SEG01","0x04"):"cpl_led41", ("SEG01","0x08"):"cpl_led33", ("SEG01","0x10"):"cpl_led25", ("SEG01","0x20"):"cpl_led17",
+  ("SEG01","0x40"):"cpl_led9", ("SEG01","0x80"):"cpl_led1", ("SEG02","0x01"):"cpl_led58", ("SEG02","0x02"):"cpl_led50",
+  ("SEG02","0x04"):"cpl_led42", ("SEG02","0x08"):"cpl_led34", ("SEG02","0x10"):"cpl_led26", ("SEG02","0x20"):"cpl_led18",
+  ("SEG02","0x40"):"cpl_led10", ("SEG02","0x80"):"cpl_led2", ("SEG03","0x01"):"cpl_led0", ("SEG03","0x04"):"cpl_led59",
+  ("SEG03","0x08"):"cpl_led51", ("SEG03","0x10"):"cpl_led43", ("SEG03","0x20"):"cpl_led35", ("SEG03","0x40"):"cpl_led27",
+  ("SEG04","0x01"):"cpl_led19", ("SEG04","0x04"):"cpl_led11", ("SEG04","0x08"):"cpl_led4", ("SEG04","0x10"):"cpl_led3",
+  ("SEG05","0x01"):"cpl_led29", ("SEG06","0x20"):"cpl_led12", ("SEG07","0x01"):"cpl_led28", ("SEG07","0x02"):"cpl_led36",
+  ("SEG07","0x04"):"cpl_led44", ("SEG07","0x08"):"cpl_led52", ("SEG07","0x10"):"cpl_led60", ("SEG0B","0x40"):"cpl_led5",
+  ("SEG0C","0x01"):"cpr_led32", ("SEG0C","0x02"):"cpr_led72", ("SEG0C","0x04"):"cpr_led24", ("SEG0C","0x08"):"cpr_led16",
+  ("SEG0C","0x10"):"cpr_led40", ("SEG0C","0x20"):"cpr_led45", ("SEG0C","0x40"):"cpr_led0", ("SEG0D","0x01"):"cpr_led33",
+  ("SEG0D","0x02"):"cpr_led34", ("SEG0D","0x04"):"cpr_led25", ("SEG0D","0x08"):"cpr_led17", ("SEG0D","0x10"):"cpr_led41",
+  ("SEG0D","0x20"):"cpr_led46", ("SEG0D","0x40"):"cpr_led1", ("SEG0D","0x80"):"cpr_led9", ("SEG0E","0x01"):"cpr_led36",
+  ("SEG0E","0x02"):"cpr_led35", ("SEG0E","0x04"):"cpr_led26", ("SEG0E","0x08"):"cpr_led18", ("SEG0E","0x10"):"cpr_led42",
+  ("SEG0E","0x20"):"cpr_led47", ("SEG0E","0x40"):"cpr_led2", ("SEG0F","0x01"):"cpr_led39", ("SEG0F","0x02"):"cpr_led7",
+  ("SEG0F","0x04"):"cpr_led27", ("SEG0F","0x08"):"cpr_led19", ("SEG0F","0x10"):"cpr_led43", ("SEG0F","0x20"):"cpr_led104",
+  ("SEG0F","0x40"):"cpr_led3", ("SEG10","0x01"):"cpr_led96", ("SEG10","0x02"):"cpr_led64", ("SEG10","0x04"):"cpr_led28",
+  ("SEG10","0x08"):"cpr_led20", ("SEG10","0x10"):"cpr_led44", ("SEG10","0x20"):"cpr_led105", ("SEG10","0x40"):"cpr_led4",
+  ("SEG10","0x80"):"cpr_led12", ("SEG11","0x02"):"cpr_led65", ("SEG11","0x04"):"cpr_led29", ("SEG11","0x08"):"cpr_led21",
+  ("SEG11","0x40"):"cpr_led5", ("SEG11","0x80"):"cpr_led13", ("SEG12","0x02"):"cpr_led37", ("SEG12","0x04"):"cpr_led30",
+  ("SEG12","0x08"):"cpr_led22", ("SEG12","0x40"):"cpr_led6", ("SEG12","0x80"):"cpr_led14", ("SEG13","0x02"):"cpr_led38",
+  ("SEG13","0x04"):"cpr_led31", ("SEG13","0x08"):"cpr_led23", ("SEG13","0x80"):"cpr_led15", ("SEG14","0x04"):"cpr_led88",
+  ("SEG14","0x08"):"cpr_led80", ("SEG15","0x04"):"cpr_led89", ("SEG15","0x08"):"cpr_led81", ("SEG1F","0x10"):"cpl_led31",
+  ("SEG1F","0x40"):"cpr_led77", ("SEG20","0x01"):"cpr_led77", ("SEG20","0x04"):"cpr_led77", ("SEG20","0x10"):"cpr_led77",
+  ("SEG20","0x40"):"cpr_led77",
+}
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
 def two(n,w,h,s0,s1):
@@ -103,7 +131,7 @@ def grid(out,x0,y0,cols,dx,dy,entries,header=None):
         row,col=i//cols,i%cols; x=x0+col*dx; y=y0+row*dy
         for k,ln in enumerate(wrap2(nm)):
             out.append(L(ln,x-(dx-29)//2-4,y-13-(len(wrap2(nm))-1-k)*10,dx-2,9))
-        out.append(P("round_btn",x,y,32,32,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8))
+        out.append(P("round_btn",x,y,32,32,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8,name=LEDMAP.get((tag,mask))))
 
 # =================== LEFT BLOCK (bottom-left; coords = mockup abs - (0,997)) =
 LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
@@ -121,7 +149,7 @@ LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-18,cy-12,8,8))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-18,cy-12,8,8,name=LEDMAP.get((tag,mask))))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_orange",441,228,65,22))
 LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS",98,250,172,9,TXTH)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
@@ -145,12 +173,6 @@ LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
-# --- panel LED outputs (derived from firmware PanelSwitchClassTable; see notes/panel-leds.md) ---
-SOUND_LEDS={("SEG0C","0x01"):"cpr_led32",("SEG0C","0x02"):"cpr_led72",("SEG0C","0x04"):"cpr_led24",
- ("SEG0C","0x08"):"cpr_led16",("SEG0C","0x10"):"cpr_led40",("SEG0C","0x20"):"cpr_led45",
- ("SEG0D","0x01"):"cpr_led33",("SEG0D","0x02"):"cpr_led34",("SEG0D","0x04"):"cpr_led25",
- ("SEG0D","0x08"):"cpr_led17",("SEG0D","0x10"):"cpr_led41",("SEG0D","0x20"):"cpr_led46",
- ("SEG0E","0x01"):"cpr_led36",("SEG0E","0x02"):"cpr_led35",("SEG0E","0x04"):"cpr_led26",("SEG0E","0x08"):"cpr_led18"}
 SGcols=[51,107,162,217,272,327,383,438,493]
 SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
     ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
@@ -161,7 +183,7 @@ for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
-    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8,name=SOUND_LEDS.get((tag,mask))))
+    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8,name=LEDMAP.get((tag,mask))))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH))
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm)
