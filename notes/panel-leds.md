@@ -106,3 +106,29 @@ independently confirmed in normal operation (blocked by the sound/rhythm menu
 emulation bugs). The driver plumbing is solid. Next: (a) fix/º understand the menu
 emulation bug, then re-probe each LED for clean confirmation; (b) map the special
 class-code (0xF0-0xF7) multi-LED handlers for BALLAD-type indicators + status LEDs.
+
+## CORRECTION (this tick): the PanelSwitchClassTable derivation is WRONG for operation LEDs
+Probed empirically (single-button, file-redirect capture): pressing **GUITAR**
+(SEG0C.b1) moves the sound-group indicator **cpr48 -> cpr49** (baseline cpr48 =
+current piano sound), NOT the derived `cpr_led72`. So `PanelSwitchClassTable` is the
+**panel-test** switch->LED map and does **not** match the normal-operation LED
+behaviour. The 26 derived `.lay` LED bindings from last tick were therefore WRONG
+and have been **reverted** (green LEDs are decorative again; the driver plumbing —
+which IS verified correct — is unchanged).
+
+### What is actually true (empirical)
+- Driver->output pipeline works (verified: outputs match the boot frames).
+- The **sound-group indicator is a single moving LED in reg 0x06** (cpr48..cpr55);
+  baseline (piano) = cpr48, GUITAR = cpr49. Hypothesis (needs confirming): the 16
+  SOUND buttons map consecutively cpr48..cpr63 (reg6 then reg7), but only 1 data
+  point is confirmed. A GUITAR press also toggled cpr100 (reg0x0C) + cpl4 — so
+  there are secondary indicators too; the delta is not a clean single bit.
+
+### To build the correct map (next focused effort)
+Empirical probe = the only reliable source. Probe method that WORKS: **one button
+per run**, press at t~17.3, read outputs at t~18.3, `m:exit()`, capture with
+`> file 2>&1` (NOT a pipe — pipes lose buffered output on SIGKILL), timeout >=140s
+(boot to t=18 takes ~90s real at -nothrottle). io.open is sandboxed; multi-button
+savestate flows stalled. Run one per sound-cat / genre / transport button, record
+the lit-set delta, then bind those exact outputs. (Blocked-ish: rhythm/sound menu
+emulation bug makes some selections unreliable, but SOUND-group selection worked.)

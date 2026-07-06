@@ -8,7 +8,9 @@ PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
-# --- panel LED outputs (derived from firmware PanelSwitchClassTable; see notes/panel-leds.md) ---
+# --- PanelSwitchClassTable-derived LED cells (PANEL-TEST map; does NOT match normal-operation
+# LED behaviour -- verified wrong by probe: GUITAR press lights cpr49 not cpr72. Kept for reference
+# only; NOT applied to the layout. Operation LED map must be built empirically. See notes/panel-leds.md ---
 LEDMAP={
   ("SEG00","0x40"):"cpl_led8", ("SEG00","0x80"):"cpl_led16", ("SEG01","0x01"):"cpl_led57", ("SEG01","0x02"):"cpl_led49",
   ("SEG01","0x04"):"cpl_led41", ("SEG01","0x08"):"cpl_led33", ("SEG01","0x10"):"cpl_led25", ("SEG01","0x20"):"cpl_led17",
@@ -131,7 +133,7 @@ def grid(out,x0,y0,cols,dx,dy,entries,header=None):
         row,col=i//cols,i%cols; x=x0+col*dx; y=y0+row*dy
         for k,ln in enumerate(wrap2(nm)):
             out.append(L(ln,x-(dx-29)//2-4,y-13-(len(wrap2(nm))-1-k)*10,dx-2,9))
-        out.append(P("round_btn",x,y,32,32,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8,name=LEDMAP.get((tag,mask))))
+        out.append(P("round_btn",x,y,32,32,tag=tag,mask=mask)); out.append(P("green_led",x-9,y+22,8,8))
 
 # =================== LEFT BLOCK (bottom-left; coords = mockup abs - (0,997)) =
 LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
@@ -149,7 +151,7 @@ LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-18,cy-12,8,8,name=LEDMAP.get((tag,mask))))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-18,cy-12,8,8))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_orange",441,228,65,22))
 LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS",98,250,172,9,TXTH)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
@@ -183,7 +185,7 @@ for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
-    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8,name=LEDMAP.get((tag,mask))))
+    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH))
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm)
