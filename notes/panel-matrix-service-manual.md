@@ -60,3 +60,57 @@ function. Options to obtain that mapping, in order of reliability:
 The matrix above is the authoritative half; the next tick should build the
 empirical SEGnn.bit → physical bridge, after which the `.lay` can be rebuilt with
 positions + labels + bindings all consistent.
+
+## Empirical probe results — SEGnn.bit -> function (2026-07-06)
+
+Built an efficient probe harness (tools/panel_probe.lua): boot once, save a home
+savestate, then for each button *load home -> press -> snapshot*. Requires
+`-skip_gameinfo` (skips the BAD_DUMP "known problems" warning). Buttons must be
+pressed from a fresh home state (they are context-dependent — pressing a category
+from within a sound sub-screen does NOT switch it). Snapshots montaged (LCD crop
++ label) and read. Probed all 62 CPR-region buttons (SEG0C-15).
+
+**Sound categories (open a titled SOUND screen; matched to the CPR matrix):**
+
+| normSeg.bit | event | function = CPR silk-screen label | CPR pos |
+|---|---|---|---|
+| SEG0C.b0 | 2086/00 | PIANO | SEG4.SW4 |
+| SEG0C.b1 | 2010/00 | GUITAR | SEG3.SW4 |
+| SEG0C.b2 | 2040/01 | MALLET & ORCH PERC | SEG0.SW4 |
+| SEG0C.b3 | 2040/03 | WORLD | SEG9.SW3 |
+| SEG0C.b4 | 2004/04 | STRINGS & VOCAL | SEG2.SW4 |
+| SEG0C.b5 | 2004/0D | BRASS | SEG1.SW4 |
+| SEG0D.b0 | 20A2/00 | SAX & WOODWIND | SEG7.SW3 |
+| SEG0D.b1 | 2009/00 | ORGAN & ACCORDION | SEG8.SW3 |
+| SEG0D.b2 | 2040/02 | SOUND EXPLORER | SEG6.SW3 |
+| SEG0D.b3 | 2040/07 | DIGITAL DRAWBAR | SEG4.SW5 |
+| SEG0D.b4 | 2004/03 | ORGAN TABS (silk "TAB ORGAN") | SEG3.SW5 |
+| SEG0D.b5 | 2004/0C | ACCORDION REGISTER | SEG8.SW2 |
+| SEG0E.b0 | 2009/02 | PAD | SEG2.SW5 |
+| SEG0E.b1 | 2009/01 | SYNTH | SEG1.SW5 |
+| SEG0E.b2 | 2063/00 | BASS | SEG0.SW5 |
+| SEG0E.b3 | 20AB/00 | DRUM KITS | SEG9.SW2 |
+
+**Other functions identified (open a titled screen or show an indicator):**
+
+| normSeg.bit | event | function |
+|---|---|---|
+| SEG10.b0 | 2081/00 | ONE TOUCH PLAY |
+| SEG11.b0 | 2001/14 | FADE IN |
+| SEG11.b1 | 2008/02 | FADE OUT |
+| SEG12.b6 | 2010/01 | PROGRAM MENUS |
+| SEG12.b7 | 2010/06 | DISK MENU |
+| SEG13.b0 | 2001/12 | TRANSPOSE (down) |
+| SEG13.b1 | 2083/00 | TRANSPOSE (up) |
+| SEG13.b2 | 2004/10 | R1/R2 OCTAVE - |
+| SEG13.b3 | 2004/07 | R1/R2 OCTAVE + |
+
+**Correction:** the earlier folklore-derived anchor "SEG11.b5 = BRASS" was WRONG
+(SEG11.b5 / 2001/11 shows home — a toggle). The direct probe supersedes the
+`.lay`-binding-based anchors; 5 of 6 probed anchors matched (GUITAR, MALLET,
+ORGAN&ACCORDION, SYNTH, ORGAN TABS), BRASS was the mis-derived one.
+
+**Still "home" (no titled screen from home — toggles / part on-off / SOUND GROUP
+1-8 / mode buttons):** ~33 buttons across SEG0F, SEG10-15. These need matching to
+the CPR matrix labels via their events or a second-context probe. Next: CPL/CPC
+matrices + resolve these + rebuild the .lay.
