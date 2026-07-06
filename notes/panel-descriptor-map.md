@@ -227,3 +227,32 @@ SEG10–13 are heavily 0x2001 **part-mute-up** (parts 10–14). To bind SOUND GR
 menu buttons correctly and confirm the SG probe, resolve these events to functions/names
 (trace the 0x00700000|event message handlers, or find the sound-category name table). Until
 then only resolved-label conflicts can be fixed safely.
+
+## SOUND GROUP resolved (tick 3): event 0x2004 arg = category index
+Found **SoundGroupNameTable @ 0x48131570** (table ROM, 18 × 16-byte names): PIANO, GUITAR,
+MALLET&ORCH PERC, WORLD, STRINGS & VOCAL, BRASS, SAX & WOODWIND, ORGAN&ACCORDION, SOUND
+EXPLORER, DIGITAL DRAWBAR, ORGAN TABS, ACCORD REGISTER, PAD, SYNTH, BASS, DRUM KITS, MEMORY,
+EW EXPANSION (indices 0–17).
+
+**PROOF that event 0x2004 = SOUND GROUP select:** the descriptor has *exactly 18* bits with
+event 0x2004, carrying args 0x00–0x11 — a 1:1 match with the 18-entry table. So 0x2004/arg
+selects category `arg`. The single 0x2086 bit (SEG0C.b0) and the 0x2010/0x2040 families are
+*different* functions — the old probe-map's "SEG0C.b0 = PIANO" was a misidentification.
+
+**Consequence:** the layout's SOUND GROUP was bound to the wrong bits (SEG0C.b0–b5). Corrected
+to the 0x2004 bits (category order → SEG.mask):
+
+| cat | name | bit | cat | name | bit |
+|-----|------|-----|-----|------|-----|
+| 0 PIANO | SEG10.b4 | | 9 DIGITAL DRAWBAR | SEG10.b5 |
+| 1 GUITAR | SEG0F.b4 | | 10 ORGAN TABS | SEG0F.b5 |
+| 2 MALLET&ORCH PERC | SEG0E.b4 | | 11 ACCORD REGISTER | SEG0E.b5 |
+| 3 WORLD | SEG0D.b4 | | 12 PAD | SEG0D.b5 |
+| 4 STRINGS & VOCAL | SEG0C.b4 | | 13 SYNTH | SEG0C.b5 |
+| 5 BRASS | SEG15.b3 | | 14 BASS | SEG15.b2 |
+| 6 SAX & WOODWIND | SEG14.b3 | | 15 DRUM KITS | SEG14.b2 |
+| 7 ORGAN&ACCORDION | SEG13.b3 | | 16 MEMORY | SEG13.b2 |
+| 8 SOUND EXPLORER | SEG12.b3 | | 17 EW EXPANSION | SEG12.b2 |
+
+The driver's SEG0C–15 "Sound Select NN" placeholders (NN = the 0x2004 arg) are now relabelled
+"SOUND GROUP: <name>". gen_lay.py SG list rebound + all 18 resolve, no conflicts.
