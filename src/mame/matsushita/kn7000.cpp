@@ -223,6 +223,8 @@ private:
 	uint16_t m_tg_reg[2][0x1000] = { };        // captured voice-register file
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
+	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
+	TIMER_CALLBACK_MEMBER(fav_preload);
 
 	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
 	// ch0 = control panel, ch1 = MIDI port 1, ch2 = MIDI port 2 (see
@@ -585,6 +587,36 @@ void kn7000_state::intc_recompute()
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
 {
 	intc_assert(IRQGRP_TIMER);
+}
+
+// One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
+// Favorites into battery-backed SRAM so the Favorites screen lists the 4 presets
+// without the (still-unreversed) custom-flash AST install. The firmware VALIDATES this
+// block against a 16-byte magic ("KN7000 SDDIR INF" @0x50083D72; check at 0x4855EC0B)
+// rather than clearing it, so once present the firmware keeps it. The Favorites LIST
+// only needs the 16-char names; the 9 u16 recall-items per record need flash-backed
+// reference resolution, so they stay 0 (a CUSTOM favorite can't be recalled until the
+// flash is modeled). Data = idd7000 03FAVINI.FAV; layout verified by RE (name-setter
+// 0x48561CDB, item-setter 0x48561D8E, format 0x4855EC34). STOPGAP for the unmodeled
+// battery SRAM; see notes/initial-data-disk-and-custom-flash.md.
+TIMER_CALLBACK_MEMBER(kn7000_state::fav_preload)
+{
+	auto poke8 = [&](offs_t cpu, uint8_t b)
+	{
+		const offs_t o = cpu - 0x50000000;                 // byte offset into workram
+		uint32_t &w = m_workram[o >> 2];
+		const unsigned sh = 8 * (o & 3);
+		w = (w & ~(0xffu << sh)) | (uint32_t(b) << sh);
+	};
+	static const char magic[16] =
+		{ 'K','N','7','0','0','0',' ','S','D','D','I','R',' ','I','N','F' };
+	for (int i = 0; i < 16; i++)
+		poke8(0x50083D72 + i, uint8_t(magic[i]));           // block magic @+0x00
+	static const char *const fav[4] = {                     // directory @0x5008FDCA, 34-byte records
+		"    Example     ", " Cool Sounds !  ", " Cool Rhythms ! ", "  Entertainer   " };
+	for (int r = 0; r < 4; r++)
+		for (int i = 0; i < 16; i++)
+			poke8(0x5008FDCA + r * 34 + i, uint8_t(fav[r][i]));  // name[16]; items[9] left 0
 }
 
 // A PC-key note press/release: push a voice-event into the keyboard FIFO the
@@ -1193,6 +1225,7 @@ void kn7000_state::machine_start()
 	// raises the periodic interrupt that drives the MILK scheduler.
 	m_maincpu->set_irq_vector(0x4C03DDA0);
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
+	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -1232,6 +1265,13 @@ void kn7000_state::machine_reset()
 	// context and the PC runs away. Re-enable this one line once F6 is done.
 	// See notes/interrupt-mechanism.md ("F6 / udf extended ops").
 	m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
+
+	// Pre-load the factory "Initial Data" Favorites into battery-backed SRAM. This
+	// must run AFTER the boot BSS-clear (which zeroes work RAM up to ~0x50180000) but
+	// before the Favorites screen is opened, so it is deferred to a one-shot timer
+	// (see fav_preload). Confirmed by RE: a machine_reset write is wiped by the clear;
+	// a t=3s write survives and the firmware keeps it.
+	m_fav_timer->adjust(attotime::from_seconds(3));
 }
 
 void kn7000_state::kn7000(machine_config &config)
