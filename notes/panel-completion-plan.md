@@ -153,3 +153,14 @@ pattern suggests PIANO=cpr48, GUITAR=cpr49 (continues cpr48-51=PIANO/GUITAR/MALL
 EXPLORER also hit cpr48 so verify with a targeted re-sweep (press BRASS then PIANO then GUITAR)
 before binding. NEXT LED: verify PIANO/GUITAR; sweep mute LEDs (SEG08-0B) + VARIATION LEDs (SEG04,
 rhythm playing) + effect LEDs; the 5 missing genres.
+
+## LED progress (tick 2026-07-07d): 26 LEDs bound
+PIANO=cpr48, GUITAR=cpr49 confirmed (BRASS->PIANO->GUITAR radio chain) + bound -> 15 sound-group +
+11 genre = 26 LED elements now driven from firmware. EXPLORER (SEG0D.b2) still only hits shared
+cpr48 -> unbound. VARIATION 1-4 (SEG04) light NO per-button LED even with rhythm playing (variation
+is LCD-only). NEXT LED targets: (a) mute LEDs SEG08-0B -- but the mute_up/mute_down layout elements
+have no green_led, so LED elements must be ADDED per part; (b) transport LEDs (START/STOP=cpl1,
+INTRO&ENDING2=cpl11, SYNCHRO&BREAK=cpl10, FADE IN=cpl32 from the earlier home sweep) -- these are
+individual green_led calls (not a loop), bind each by name=; (c) the 5 missing genres. NEXT BUTTON
+targets (snapshot-ID, screen-changing): SEQUENCER PLAY/EASY REC (decorative, near SEG12), PANEL
+MEMORY group, AUTO PLAY CHORD, PART SELECT/CONDUCTOR.
