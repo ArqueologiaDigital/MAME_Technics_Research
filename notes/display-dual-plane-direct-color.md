@@ -51,3 +51,17 @@ keep the CLUT path. UI pixels are untouched, so the text UI is unaffected.
   modelled) is a fidelity refinement, not a correctness issue.
 - The `0xD0` tag means only 0x_D_ picture bytes are affected; if any non-picture use of
   0xD0..0xDF exists it would be miscoloured (none seen — UI uses 0x00..0x1C).
+
+## Future refinement: read the firmware's composited buffer 0x9CE00000 directly
+Confirmed at runtime: the firmware's compositor DOES run and writes the final RGB565 image
+to `0x9CE00000` (which the driver already maps: `map(0x9c000000,0x9cffffff).ram()`). At
+t=8s it is ~50% non-zero with real colours (e.g. 0x1400=green, 0x9000=red). Since
+`0x9CE00000` is what the real LCD controller scans, the most faithful `screen_update` would
+present it directly (RGB565 → rgb_t) instead of re-compositing the two planes — that would
+also pick up the firmware's gamma-corrected UI colours (`0x50122AAC`) for free. Caveats to
+resolve first: the compositor stores the image **flipped** (dest offset
+`((0xef-row)*0x280+(0x27f-col))*2`), so it must be read with the inverse transform; and the
+formula/flip must be verified against a STATIC screen (a plane-vs-0x9CE00000 comparison
+during the boot animation is confounded because the planes are being rewritten while
+0x9CE00000 holds the compositor's previous frame). The current two-plane `screen_update`
+composite is correct and simpler; 0x9CE00000 is the higher-fidelity option for later.
