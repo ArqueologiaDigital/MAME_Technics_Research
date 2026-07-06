@@ -65,18 +65,26 @@ def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height
 two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
-two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
-two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#8a4310" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
-two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>',f'<rect stroke="{STROKE}" fill="#33454a" x="0.5" y="0.5" width="59" height="21" rx="10.5"/>')
+two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
+two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#8a4310" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
+two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#33454a" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
 two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
+# page up/down = two halves of a tall pill (rounded outer end, flat inner end)
+two("page_up",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
+two("page_dn",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
+# thin filled line (scaled to bounds) for bookends/brackets
+elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" width="100" height="1.4" fill="#9a9a9c"/></svg>]]></data></image>')
+elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
+# pill-shaped highlight ring (no fill) to envelop DRAWBAR/ORGAN TABS round buttons
+two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>')
 # LCD soft key: rect + inner vertical divider
 two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
                           f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
 two("mute_up",55,77,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="75" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="75" rx="3"/>')
 two("mute_down",55,78,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="76" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="76" rx="3"/>')
-two("tall_pill",50,155,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="48" height="153" rx="24"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="48" height="153" rx="24"/>')
+two("tall_pill",50,155,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="2" y="2" width="46" height="151" rx="23"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="2" y="2" width="46" height="151" rx="23"/>')
 two("fader",30,150,f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN}" stroke="{STROKE}" stroke-width="1.5" x="2" y="40" width="26" height="18" rx="3"/>',
                     f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN_D}" stroke="{STROKE}" stroke-width="1.5" x="2" y="48" width="26" height="18" rx="3"/>')
 two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>',
@@ -98,13 +106,13 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
    P("bg_top",0,0,2000,997), P("screen_frame",298,104,1404,581),
    '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
 for yy in [205,294,383,472,561]:
-    S.append(P("lcd_soft_key",138,yy,123,34))
-    S.append(P("lcd_soft_key",1740,yy,123,34,flip=True))
+    S.append(P("lcd_soft_key",138,yy,123,34,flip=True))
+    S.append(P("lcd_soft_key",1740,yy,123,34))
 # OTHER PART & FR / HELP
-S += [L("OTHER PART & FR",90,712,150,15), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
-      P("round_btn_big",150,852,42,42), L("HELP",150,900,80,15)]
+S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
+      P("round_btn_big",150,852,42,42), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-S += [L("CONTRAST",250,712,120,15), P("tall_pill",282,756,50,155), L("MUTE",340,825,42,13,TXTH)]
+S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",340,825,42,13,TXTH)]
 # MUTE 1..16 -> PART1..16 on/off pairs (workflow static-RE: 0x2001=on,0x2000=off; normSeg.bit=on/off pair)
 # up=part ON (unmute), down=part OFF (mute).  (seg, on_mask, off_mask)
 MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),
@@ -117,9 +125,9 @@ for i in range(16):
     S.append(P("mute_up",x,756,55,77,tag=seg,mask=f"0x{onm:02x}"))
     S.append(P("mute_down",x,833,55,78,tag=seg,mask=f"0x{offm:02x}"))
 # PAGE / DISPLAY HOLD / EXIT
-S += [L("PAGE",1636,712,60,15), P("tall_pill",1680,756,50,155),
-      L("DISPLAY HOLD",1745,706,110,15), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
-      P("round_btn_big",1790,852,42,42), L("EXIT",1790,900,60,15)]
+S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
+      L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
+      P("round_btn_big",1790,852,42,42), L("EXIT",1789,838,44,13)]
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============
@@ -151,7 +159,7 @@ LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-18,cy-12,8,8))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_orange",441,228,65,22))
 LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS",98,250,172,9,TXTH)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
@@ -185,7 +193,7 @@ for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
-    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8))
+    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH))
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm)
