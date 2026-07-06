@@ -170,3 +170,27 @@ AST header + raw opaque payload. CANNOT yet: the 2MB custom-flash image (needs t
 NEXT: (1) reverse the AST codec (trace 0x4C003039 / the SDRAM 0x502B8000 decode); (2) model
 0x56000000 as the custom flash + ROM_LOAD the image; (3) optionally load FAV/MD/HMP as a
 separate NVRAM to get Favorites working before the flash codec is cracked.
+
+## CORRECTION: the AST codec is ENTROPY-CODED (Huffman/LZH), NOT LZSS
+A deep agent RE overturns the "AST is LZSS/compressed ~6:1, decode+re-serialize on install"
+description above. PROOF: the AST payload's byte histogram is near-uniform (chi^2 vs uniform
+= 633; all 256 values present) -- the signature of Huffman/arithmetic coding. Genuine LZSS
+is strongly non-uniform (KN5000 SLIDE4K reference chi^2 = 213387, since LZSS keeps literals
+verbatim). The prior "pylzss gives structured output at 1.1MB" was a DECODE ARTIFACT (LZSS
+over entropy-coded input makes repetition/garbage). So:
+- ver byte @offset 3 (0x01) = the compressed flag (raw MD/FAV/HMP have 0x00).
+- u32 @offset 4 (0x1E0000) = the target flash-REGION size, NOT the decompressed size (the
+  raw .MD declares 0x100000 in 640 bytes). "~6:1 expansion" was a misread; real size unknown.
+- INSTALL does NO decompression: AstLoadHandler 0x4852CC9E -> header-ingest 0x4848594D
+  (buffer 0x502B8000) -> FAT read 0x485335FF -> flash program 0x4847F9F7 (AMD word-prog
+  0x4847F71C, sector-erase 0x4847F75A) via memcpy 0x4C003039. The compressed bank is written
+  VERBATIM to custom-flash offset 0x20000 (read view 0x56020000).
+- The archive parser (0x4844A000, reads 0x56000000, requires u32[0]==0x200) also does NO
+  decompression. So the Huffman decoder runs ON STYLE-LOAD from 0x56020000; it was NOT
+  isolated. Callers: CustomModeFunc 0x484A612C, AcCustomStyleListBoxProc 0x4847E7BC. It is a
+  bit-oriented Huffman/LZH decoder (look for an LHA make_table-shape code-length build).
+- KN5000 analog: FILETYPE_SIG_CMPCUSTOM ("CMPCUSTOMDATA") -- reversing it serves both.
+NEXT: instrument MAME to break when a CUSTOM style is recalled + watch reads from
+0x56020000, or trace 0x484A612C/0x4847E7BC down to the bit-reader. The AST codec is the
+remaining blocker to the custom-style data (rhythm names + custom styles); the Favorites
+(names-only, battery SRAM) already work without it.
