@@ -224,38 +224,38 @@
 		<element ref="t2"><bounds x="250" y="712" width="120" height="15"/></element>
 		<element ref="tall_pill"><bounds x="282" y="756" width="50" height="155"/></element>
 		<element ref="t3"><bounds x="340" y="825" width="42" height="13"/></element>
-		<element ref="mute_up"><bounds x="378" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="378" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="458" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="458" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="539" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="539" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="619" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="619" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="700" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="700" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="780" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="780" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="860" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="860" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="941" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="941" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1021" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1021" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1102" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1102" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1182" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1182" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1262" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1262" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1343" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1343" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1423" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1423" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1504" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1504" y="833" width="55" height="78"/></element>
-		<element ref="mute_up"><bounds x="1584" y="756" width="55" height="77"/></element>
-		<element ref="mute_down"><bounds x="1584" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG05" inputmask="0x10"><bounds x="378" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG05" inputmask="0x20"><bounds x="378" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG05" inputmask="0x40"><bounds x="458" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG05" inputmask="0x80"><bounds x="458" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG08" inputmask="0x01"><bounds x="539" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG08" inputmask="0x02"><bounds x="539" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG08" inputmask="0x04"><bounds x="619" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG08" inputmask="0x08"><bounds x="619" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG08" inputmask="0x10"><bounds x="700" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG08" inputmask="0x20"><bounds x="700" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG08" inputmask="0x40"><bounds x="780" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG08" inputmask="0x80"><bounds x="780" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG09" inputmask="0x01"><bounds x="860" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG09" inputmask="0x02"><bounds x="860" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG09" inputmask="0x04"><bounds x="941" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG09" inputmask="0x08"><bounds x="941" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG09" inputmask="0x10"><bounds x="1021" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG09" inputmask="0x20"><bounds x="1021" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG09" inputmask="0x40"><bounds x="1102" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG09" inputmask="0x80"><bounds x="1102" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0A" inputmask="0x01"><bounds x="1182" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0A" inputmask="0x02"><bounds x="1182" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0A" inputmask="0x04"><bounds x="1262" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0A" inputmask="0x08"><bounds x="1262" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0A" inputmask="0x10"><bounds x="1343" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0A" inputmask="0x20"><bounds x="1343" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0A" inputmask="0x40"><bounds x="1423" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0A" inputmask="0x80"><bounds x="1423" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0B" inputmask="0x01"><bounds x="1504" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0B" inputmask="0x02"><bounds x="1504" y="833" width="55" height="78"/></element>
+		<element ref="mute_up" inputtag="SEG0B" inputmask="0x04"><bounds x="1584" y="756" width="55" height="77"/></element>
+		<element ref="mute_down" inputtag="SEG0B" inputmask="0x08"><bounds x="1584" y="833" width="55" height="78"/></element>
 		<element ref="t4"><bounds x="1636" y="712" width="60" height="15"/></element>
 		<element ref="tall_pill"><bounds x="1680" y="756" width="50" height="155"/></element>
 		<element ref="t5"><bounds x="1745" y="706" width="110" height="15"/></element>

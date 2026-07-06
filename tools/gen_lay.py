@@ -74,10 +74,17 @@ S += [L("OTHER PART & FR",90,712,150,15), P("round_btn_big",150,748,42,42), P("r
       P("round_btn_big",150,852,42,42), L("HELP",150,900,80,15)]
 # CONTRAST tall pill (x282-332)
 S += [L("CONTRAST",250,712,120,15), P("tall_pill",282,756,50,155), L("MUTE",340,825,42,13,TXTH)]
-# MUTE 1..16  (x=378+i*80.4, w55; up y756 h77, down y833 h78) -- decorative for now
+# MUTE 1..16 -> PART1..16 on/off pairs (workflow static-RE: 0x2001=on,0x2000=off; normSeg.bit=on/off pair)
+# up=part ON (unmute), down=part OFF (mute).  (seg, on_mask, off_mask)
+MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),
+       ("SEG08",0x01,0x02),("SEG08",0x04,0x08),("SEG08",0x10,0x20),("SEG08",0x40,0x80),
+       ("SEG09",0x01,0x02),("SEG09",0x04,0x08),("SEG09",0x10,0x20),("SEG09",0x40,0x80),
+       ("SEG0A",0x01,0x02),("SEG0A",0x04,0x08),("SEG0A",0x10,0x20),("SEG0A",0x40,0x80),
+       ("SEG0B",0x01,0x02),("SEG0B",0x04,0x08)]
 for i in range(16):
-    x=round(378+i*80.4)
-    S.append(P("mute_up",x,756,55,77)); S.append(P("mute_down",x,833,55,78))
+    x=round(378+i*80.4); seg,onm,offm=MUTES[i]
+    S.append(P("mute_up",x,756,55,77,tag=seg,mask=f"0x{onm:02x}"))
+    S.append(P("mute_down",x,833,55,78,tag=seg,mask=f"0x{offm:02x}"))
 # PAGE / DISPLAY HOLD / EXIT
 S += [L("PAGE",1636,712,60,15), P("tall_pill",1680,756,50,155),
       L("DISPLAY HOLD",1745,706,110,15), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
