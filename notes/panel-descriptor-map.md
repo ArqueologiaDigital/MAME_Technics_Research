@@ -196,3 +196,34 @@ SEG.bits in driver but NOT in descriptor (extra/phantom): 0
 sound-family (0x20B5–0x20BD), 0x20 (0x1020), 0x21–0x23 duplicate rhythm/fill events
 (0x2005/0x2030 — likely a second wire path or the LCD-right soft keys). Decode fully
 before adding (see extract_desc.py output).
+
+## Layout binding audit (tick 2 — after the RHYTHM GROUP fix)
+Cross-checked every `gen_lay.py` binding against the descriptor event + the driver
+PORT_NAME (scratchpad/audit_layout.py). Categories:
+
+- **Confirmed CORRECT:** RHYTHM GROUP (SEG01/02, event 0x2005 genres — fixed last tick),
+  START/STOP (SEG00.b4=0x2020, verified), the part-mute grid on SEG08–0B.
+- **SOUND GROUP (SEG0C–0E):** the layout labels (PIANO…) mismatch the driver's *placeholder*
+  names (Fn 2086 / Sound Group 0 / Sound Select 04), but the BINDINGS match the older
+  probe-map and hit no *resolved* conflict, so they are probably correct — the driver names
+  are just unresolved (events 0x2086/0x2010/0x2040/0x2004 not yet named).
+- **Confirmed WRONG (resolved-label conflicts):**
+  - INTRO & ENDING → SEG03.b4 = **FILL IN 1** (0x2023). **FIXED → SEG03.b0** (0x2022).
+  - FADE IN/OUT → SEG11.b0 = **Part Mute Up p14** (0x2001). **FIXED → SEG03.b5 = FADE IN**
+    (0x2084). (FADE OUT is SEG03.b3; the single pill models only the IN half — split TODO.)
+  - TRANSPOSE → SEG13.b0/b1 = **Part Mute Up p12 / Fn 2083** — still WRONG; the real
+    TRANSPOSE bit is unknown (no resolved descriptor label), so not fixed. Needs event RE.
+
+### The older note `panel-button-normseg-map.md` has ERRORS — trust this descriptor
+That note put genres on SEG00 (actually transport/part) and TRANSPOSE/OCTAVE on SEG13
+(actually 0x2001 part-mutes / 0x2004 sound-selects). Its unprobed inferences are unreliable;
+the probe-verified (`*`) entries mostly hold. **The ROM descriptor extracted here is
+authoritative.**
+
+### Blocker for the rest of the layout fix: event resolution
+SEG0C–SEG13 mix many unresolved event families — 0x2004 (Sound Select, args a00–a11),
+0x2010 (Sound Group, a00–a07), 0x2040 (Fn Toggle), 0x2060–69, 0x2081–86, 0x20A0–BD — while
+SEG10–13 are heavily 0x2001 **part-mute-up** (parts 10–14). To bind SOUND GROUP / TRANSPOSE /
+menu buttons correctly and confirm the SG probe, resolve these events to functions/names
+(trace the 0x00700000|event message handlers, or find the sound-category name table). Until
+then only resolved-label conflicts can be fixed safely.

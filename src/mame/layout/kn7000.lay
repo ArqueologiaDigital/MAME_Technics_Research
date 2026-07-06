@@ -452,7 +452,7 @@
 		<element ref="green_led"><bounds x="544" y="388" width="8" height="8"/></element>
 		<element ref="t49"><bounds x="554" y="388" width="10" height="8"/></element>
 		<element ref="t60"><bounds x="625" y="340" width="105" height="9"/></element>
-		<element ref="pill_wide" inputtag="SEG11" inputmask="0x01"><bounds x="625" y="355" width="105" height="28"/></element>
+		<element ref="pill_wide" inputtag="SEG03" inputmask="0x20"><bounds x="625" y="355" width="105" height="28"/></element>
 		<element ref="t61"><bounds x="740" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide"><bounds x="740" y="355" width="105" height="28"/></element>
 		<element ref="t62"><bounds x="856" y="340" width="105" height="9"/></element>
@@ -461,7 +461,7 @@
 		<element ref="green_led"><bounds x="697" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="904" y="364" width="8" height="8"/></element>
 		<element ref="t63"><bounds x="740" y="394" width="105" height="9"/></element>
-		<element ref="pill_wide" inputtag="SEG03" inputmask="0x10"><bounds x="740" y="408" width="105" height="50"/></element>
+		<element ref="pill_wide" inputtag="SEG03" inputmask="0x01"><bounds x="740" y="408" width="105" height="50"/></element>
 		<element ref="t64"><bounds x="856" y="394" width="105" height="9"/></element>
 		<element ref="pill_greycyan" inputtag="SEG00" inputmask="0x10"><bounds x="856" y="408" width="105" height="50"/></element>
 		<element ref="green_led"><bounds x="763" y="414" width="8" height="8"/></element>

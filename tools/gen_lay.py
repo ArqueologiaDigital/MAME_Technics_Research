@@ -191,12 +191,17 @@ LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
 for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32)); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,None,None),("SYNCHRO & BREAK",856,105,28,None,None)]:
+# FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
+# (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,None,None),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
 LB.append(P("green_led",856+48,364,8,8))   # SYNCHRO & BREAK LED
-for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x10"),("START/STOP",856,105,50,"pill_greycyan","SEG00","0x10")]:
+# INTRO & ENDING was SEG03 0x10 = FILL IN 1 (descriptor 0x2023); correct bit is SEG03.b0
+# (0x2022 = INTRO & ENDING 1). START/STOP SEG00 0x10 = 0x2020 is correct (verified). See
+# notes/panel-descriptor-map.md.
+for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x01"),("START/STOP",856,105,50,"pill_greycyan","SEG00","0x10")]:
     LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
