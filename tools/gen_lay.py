@@ -4,7 +4,7 @@
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
 import io, math
 
-PANEL="#2a2a2c"; PANEL2="#232325"; BTN="#232323"; BTN_D="#1b1b1b"
+PANEL="#38383a"; PANEL2="#232325"; BTN="#232323"; BTN_D="#1b1b1b"
 LBTN="#3a3a3c"; LBTN_D="#2c2c2e"; MSP="#5f6367"; MSP_D="#505860"; STROKE="#000"
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
@@ -119,9 +119,10 @@ LB += [P("music_note",30,268,20,24), L("DEMO",20,300,52,10), L("PERFORMANCE PADS
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32))
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
+padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,42)]   # measured, abutting (no gaps)
 for i,(shp,fx,fy) in enumerate(padspec):
-    x=10+(i%3)*108; y=369 if i<3 else 421
-    LB.append(P(shp,x,y,105,48,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+8,y+(24 if i<3 else 12),20,12))
+    (x,w)=padcol[i%3]; (y,h)=padrow[i//3]
+    LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+w//2-10,y+h//2-6,20,12))
 for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,None,None),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,None,None)]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))

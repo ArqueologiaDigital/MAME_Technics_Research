@@ -82,9 +82,9 @@
 	</element>
 	<element name="music_note"><image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image></element>
 	<element name="screen_frame"><image><data><![CDATA[<svg width="1404" height="581"><rect x="1" y="1" width="1402" height="579" fill="#050505" stroke="#000" stroke-width="2"/></svg>]]></data></image></element>
-	<element name="bg_top"><image><data><![CDATA[<svg width="2000" height="997"><rect width="2000" height="997" fill="#2a2a2c"/></svg>]]></data></image></element>
-	<element name="bg_left"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#2a2a2c"/></svg>]]></data></image></element>
-	<element name="bg_right"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#2a2a2c"/></svg>]]></data></image></element>
+	<element name="bg_top"><image><data><![CDATA[<svg width="2000" height="997"><rect width="2000" height="997" fill="#38383a"/></svg>]]></data></image></element>
+	<element name="bg_left"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
+	<element name="bg_right"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
 	<element name="t0"><text string="OTHER PART &amp; FR"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t1"><text string="HELP"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t2"><text string="CONTRAST"><color red="0.90" green="0.90" blue="0.90"/></text></element>
@@ -356,18 +356,18 @@
 		<element ref="round_btn"><bounds x="216" y="274" width="32" height="32"/></element>
 		<element ref="t45"><bounds x="275" y="262" width="64" height="9"/></element>
 		<element ref="round_btn"><bounds x="291" y="274" width="32" height="32"/></element>
-		<element ref="msp_corner"><bounds x="10" y="369" width="105" height="48"/></element>
-		<element ref="t46"><bounds x="18" y="393" width="20" height="12"/></element>
-		<element ref="msp_middle"><bounds x="118" y="369" width="105" height="48"/></element>
-		<element ref="t47"><bounds x="126" y="393" width="20" height="12"/></element>
-		<element ref="msp_corner"><orientation flipx="yes"/><bounds x="226" y="369" width="105" height="48"/></element>
-		<element ref="t48"><bounds x="234" y="393" width="20" height="12"/></element>
-		<element ref="msp_corner"><orientation flipy="yes"/><bounds x="10" y="421" width="105" height="48"/></element>
-		<element ref="t49"><bounds x="18" y="433" width="20" height="12"/></element>
-		<element ref="msp_middle"><orientation flipy="yes"/><bounds x="118" y="421" width="105" height="48"/></element>
-		<element ref="t50"><bounds x="126" y="433" width="20" height="12"/></element>
-		<element ref="msp_corner"><orientation flipx="yes" flipy="yes"/><bounds x="226" y="421" width="105" height="48"/></element>
-		<element ref="t51"><bounds x="234" y="433" width="20" height="12"/></element>
+		<element ref="msp_corner"><bounds x="35" y="368" width="94" height="41"/></element>
+		<element ref="t46"><bounds x="72" y="382" width="20" height="12"/></element>
+		<element ref="msp_middle"><bounds x="129" y="368" width="100" height="41"/></element>
+		<element ref="t47"><bounds x="169" y="382" width="20" height="12"/></element>
+		<element ref="msp_corner"><orientation flipx="yes"/><bounds x="229" y="368" width="94" height="41"/></element>
+		<element ref="t48"><bounds x="266" y="382" width="20" height="12"/></element>
+		<element ref="msp_corner"><orientation flipy="yes"/><bounds x="35" y="409" width="94" height="42"/></element>
+		<element ref="t49"><bounds x="72" y="424" width="20" height="12"/></element>
+		<element ref="msp_middle"><orientation flipy="yes"/><bounds x="129" y="409" width="100" height="42"/></element>
+		<element ref="t50"><bounds x="169" y="424" width="20" height="12"/></element>
+		<element ref="msp_corner"><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="42"/></element>
+		<element ref="t51"><bounds x="266" y="424" width="20" height="12"/></element>
 		<element ref="t52"><bounds x="333" y="334" width="84" height="8"/></element>
 		<element ref="t53"><bounds x="333" y="343" width="84" height="8"/></element>
 		<element ref="round_btn"><bounds x="359" y="360" width="32" height="32"/></element>
