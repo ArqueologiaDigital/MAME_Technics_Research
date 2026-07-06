@@ -79,6 +79,8 @@ elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" wid
 elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
 # pill-shaped highlight ring (no fill) to envelop DRAWBAR/ORGAN TABS round buttons
 two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>')
+two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
+elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{STROKE}" stroke-width="1.5"/></svg>]]></data></image>')
 two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>')
 # LCD soft key: rect + inner vertical divider
 two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
@@ -151,7 +153,7 @@ for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),
     LB.append(L(nm,cx-24,y-24,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-15,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
 LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
 for nm,cx,y in [("MODE",447,54),("OFF/ON",505,54),("SET",447,139),("OFF/ON",505,139)]:
-    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32))
+    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
 RG=[("8 & 16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
     ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
@@ -162,7 +164,7 @@ for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8))
-LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("pill_orange",441,228,65,22))
+LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42),
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 for nm,cx in [("AUTO SETTING",155),("BANK",230),("STOP",305)]:
@@ -207,34 +209,46 @@ RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
-    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8))
-RB.append(L("PART EFFECT",560,32,150,10,TXTH))
+    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8))
+    if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
+RB.append(L("PART EFFECT",560,32,150,10,TXTH)); RB += [P("hline",560,37,26,3), P("hline",684,37,26,3)]
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
-    RB.append(P("round_btn",cx-14,71,32,32))
-RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH))
+    RB.append(P("round_btn",cx-14,71,32,32)); RB.append(P("green_led",cx-2,60,8,8))
+RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3), P("hline",688,133,24,3)]
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
-    RB.append(L(nm,cx-26,150,52,8)); RB.append(P("round_btn",cx-14,163,32,32))
+    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32)); RB.append(P("green_led",cx-2,152,8,8))
 RB.append(L("SEQUENCER",850,32,90,10,TXTH))
 for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG12","0x80"),("PROGRAM MENUS",915,149,"round_btn","SEG12","0x40")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
-    RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk))
-RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22))
-RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110))
-RB.append(L("TRANSPOSE",213,320,100,10,TXTH)); RB.append(P("pill_wide",213,335,75,24,tag="SEG13",mask="0x02")); RB.append(P("pill_wide",213,405,75,24,tag="SEG13",mask="0x01"))
-RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB.append(P("round_btn",416,285,32,32)); RB.append(P("round_btn",476,285,32,32))
-RB.append(L("PART SELECT",348,322,92,9,TXTH))
-for cx in [360,425,485]: RB.append(P("round_btn",cx,345,32,32))
-for cx in [360,425,485]: RB.append(P("round_btn",cx,410,32,32))
-RB.append(L("CONDUCTOR",393,454,92,9,TXTH))
-RB += [L("BANK VIEW",593,232,82,9), L("NEXT BANK",700,232,82,9), L("PANEL MEMORY",608,255,172,10,TXTH),
+    RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-4,cy-13,8,8))
+# DISK / IN USE indicator + line to DISK button
+RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led",812,158,8,8), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]
+RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
+RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
+RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24,tag="SEG13",mask="0x02")]
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24,tag="SEG13",mask="0x01")]
+RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB += [P("green_led",428,274,8,8), P("round_btn",416,285,32,32), P("green_led",488,274,8,8), P("round_btn",476,285,32,32)]
+RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
+for cx in [360,425,485]: RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32)]
+for cx in [360,425,485]: RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32)]
+RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
+RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26),
+       L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26), L("PANEL MEMORY",608,255,172,10,TXTH),
        P("panel_memory_dial",565,268,190,190), L("SET",638,354,44,12)]
-RB.append(L("CUSTOM PANEL",798,320,72,9)); RB.append(P("round_btn",816,335,32,32))
-RB.append(L("CUSTOMIZE",898,320,72,9)); RB.append(P("round_btn",906,335,32,32))
-RB.append(L("FAVORITES",843,454,72,9)); RB.append(P("round_btn",860,415,32,32))
+# PANEL MEMORY numbers 1-8 around the dial (center 660,363; r~95)
+import math as _m
+for _i,_lab in enumerate(["1","2","3","4","5","6","7","8"]):
+    _a=_m.radians(-90+ (_i)*45 +200)
+    _x=660+int(88*_m.cos(_a)); _y=363+int(88*_m.sin(_a))
+    RB.append(L(_lab,_x-4,_y-4,8,8,TXTH))
+RB.append(P("big_ring",800,318,148,148))
+RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",812,344,42,42)]
+RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",900,348,42,42)]
+RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",858,398,42,42)]
 RB.append('\t</group>')
 
 VIEWS='''
