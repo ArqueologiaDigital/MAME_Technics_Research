@@ -74,3 +74,15 @@ user-style area (0x4872AB44).
    RAM/flash image snapshot, which may map in with light transformation.
 3. Re-test: with the custom flash populated, the rhythm/Music-Stylist/Favorites screens
    should show real entries instead of defaults.
+
+## Extractor + dispatch table (tick: idd7000 extractor)
+Built `extract_idd7000.py` (committed in the sibling `kn7000_extraction` repo) — a first-
+pass inspector of the idd7000 files. It decoded: 4 favorites ("Example"/" Cool Sounds ! "/
+" Cool Rhythms ! "/"  Entertainer  ", each ~10 {type,value} settings referencing built-in
+AND 0x20xxxx CUSTOM style-IDs), 69 user style-IDs in 02UMDINI.MD, and 1260 0xF5-records in
+01CTMINI.AST. The firmware's **disk-file-type dispatch table is at program-ROM 0x48664090**
+(tags "JK "/"J K"/"TCMP"/"TPAD"/"KN7000 SOUND RAM"). Remaining for a MAME-loadable custom
+flash image: the install-to-flash transformation (which flash offset each file lands at;
+whether the body is reformatted into the 0x56000000 directory-archive layout) — under RE
+via a workflow. Once known, the extractor emits kn7000_custom.rom for the driver ROM-set
+(map at 0x56000000, replacing the current read-as-0 placeholder).
