@@ -214,3 +214,48 @@ flash, NOT this custom-data flash -> the custom/style working set is absent. Thi
 strong candidate for why 0x96800000 stays empty (the region may BE the custom flash, or
 the table->0x96800000 copy is gated on the initial data being installed). See
 notes/initial-data-disk-and-custom-flash.md.
+
+## CORRECTION + AUTHORITATIVE ANSWER (tick 7, verified multi-agent workflow)
+A 6-scout workflow (it completed, ~31 min; 2 scouts hit the schema retry cap but the
+rest + verify gave a byte-level-confirmed result) established the REAL genre->style-list
+mechanism and CORRECTS earlier premises here.
+
+### The genre->style-list table (VERIFIED, program ROM -- not the table ROM)
+- Table **0x48735EE4**: 16 records x 0x18 bytes = `{char name[16]@+0; u8 flag@+0x10;
+  u8 styleCount@+0x11; u16 pad@+0x12; u32 styleListPtr@+0x14}`. Genre count u16 @0x48736064 = 16.
+- The 16 names dump cleanly: "   8&16 BEAT    ","   ROCK & POP   ","     BALLAD     ",
+  "  JAZZ & SWING  ", ... ,"     CUSTOM     ","     MEMORY     ".
+- **BALLAD = genre[2]** @0x48735F14: styleCount=**16**, styleListPtr=**0x485B8A04** ->
+  16 contiguous u32 style-IDs (0x065B,0x066B,...,0x0762), all built-in (bits&0x00700000==0).
+- Current genre = RAM byte **0x50034C3C** (GetCurrentGenreIndex 0x48435A1B).
+- Accessors: GetGenreName 0x48435A9F (record+0, 16B memcpy via 0x4C003039),
+  GetGenreStyleCount 0x48435AD9 (record+0x11). Style-ID source bits: 0=built-in,
+  0x100000=MEMORY user, 0x200000=CUSTOM user. LUT 0x48734EE4 (2048 u16) maps num->bank/slot
+  (resolver 0x48435B33). Flat-ordinal builder 0x4843FB0D.
+
+### This table ENUMERATES CORRECTLY -> the bug is DOWNSTREAM
+BALLAD yields a valid count (16) and 16 valid built-in style-IDs, so "all 8 Beat 1" is
+**NOT** a wrong genre->style pointer. The failure is the style-ID -> NAME resolution:
+MainGetRhythmName 0x48416204 delegates to the self-loaded **library ROM** 0x4C014948
+(resource id 0xC000), which a program-ROM disassembly can't see. The built-in style
+NAME/DATA is fetched there and/or from the unmapped **0x56000000** data-flash (this tick).
+
+### CORRECTIONS to earlier notes in this file (superseded)
+1. The "BALLAD = 13 f5-records at 0x4804AF61 (Pop Ballad Piano)" premise is **WRONG**:
+   those f5-records are **Performance-Pad ("Technics Pads") phrases** in table-ROM section
+   [4] (0x4804238C), not rhythm-BALLAD styles. Authoritative BALLAD count is 16, and the
+   styles are program-ROM style-IDs (built-in), resolved via LUT 0x48734EE4.
+2. The tick-5 "ROOT CAUSE = styles parsed from empty 0x96800000" is **NOT confirmed** by
+   the workflow: the name fetch is in the library ROM (0x4C014948), and 0x4847FB68 /
+   0x96800000 was not shown to be the style-name parser (may be a graphics/other path).
+   Downgrade that from "root cause" to "an empty region of uncertain relevance."
+3. The 0x4873BEE8 table IS the Music Stylist subsystem (RAM idx 0x50001270), confirmed
+   -- not the front-panel rhythm menu.
+
+### Current best understanding of the bug
+Genre table works -> 16 BALLAD style-IDs -> resolve each ID to a NAME. The name/data
+source for built-in styles is unmodeled/empty in emulation: either the library-ROM
+resource fetch (0x4C014948, res 0xC000) fails, or it reads the style DB from the UNMAPPED
+0x56000000 data-flash (now mapped read-as-0 placeholder; still empty). NEXT: dump the
+library-ROM code path 0x4C014948 at runtime (it IS resident in libram) to see what
+address the style name is read from; if it's 0x56000000, the fix is that flash's contents.

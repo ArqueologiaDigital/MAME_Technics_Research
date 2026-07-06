@@ -321,6 +321,17 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//       real code, not just data.
 	//map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
 
+	// Data-archive flashes (found by RE). The firmware reads u32-offset directory
+	// archives at these bases -- exactly like the table ROM at 0x48000000 -- and parses
+	// them into RAM pointer tables (~0x5003A5xx) during boot. UNDUMPED. These are the
+	// KN7000 analogs of the KN5000 rhythm_data / custom_data flashes; the CUSTOM portion
+	// is programmed by the "Initial Data" disk (idd7000). Runtime-confirmed unmapped
+	// reads: (0x4844A04C) from 0x56000000 and (0x48449F33) from 0x57000000. Empty here,
+	// so the built-in style-name/data lookups (and Custom Panel / Favorites / Music
+	// Stylist) fall back to defaults. Mapped read-as-0 placeholders (share so boot-time
+	// pointer parsing is stable) until real dumps / an initial-data install exist.
+	map(0x56000000, 0x577fffff).ram().share("dataflash");
+
 	// TODO: Picture flash (splash / bitmap graphics), separate device.
 	//map(0x57800000, 0x57ffffff).rom().region("picture", 0);
 
