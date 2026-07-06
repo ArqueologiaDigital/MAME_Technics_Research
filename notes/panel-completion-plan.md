@@ -97,3 +97,14 @@ menu open, etc.), same as the button-effect limitation.
 2. Add a `name="cpl_ledN"/"cpr_ledN"` to each button's LED element in gen_lay.py so MAME
    drives it from the output (the green_led elements are currently decorative).
 3. Bind the named indicator LEDs via the dispatcher 0x484B1BCB.
+
+## LED binding — infrastructure live (extend OPLED)
+gen_lay.py now has an `OPLED` dict (SEG,mask)->cpl/cpr output name; the green_led elements bind
+to it via `name=OPLED.get((tag,mask))` so MAME lights them from firmware state. DONE: 11
+rhythm-group genre LEDs (SEG01 SOUL&FUNK=cpl3/CUSTOM=cpl9/BALLAD=cpl8/JAZZ=cpl19/ROCK=cpl18/
+BIGBAND=cpl17/R&B=cpl16; SEG02 ENTERTAINER=cpl27/COUNTRY=cpl26/LATIN=cpl25/GOSPEL=cpl24).
+TODO genres (empty in the home sweep -- need re-sweep with a primed radio state): SEG01 MEMORY/
+LOAD & SEG02 MOVIE SHOW/MARCH/BALLROOM/MODERN DANCE. NEXT LED work: (a) sweep SOUND GROUP LEDs
+(0x2004 bits) + add to OPLED + wire the SG loop's green_led like the RG loop; (b) sweep the
+effect/mute/transport LEDs in context; (c) apply OPLED to the SG/mute/individual green_leds.
+Sweep tool: scratchpad/genreled.lua (frame-counter, captures LED ON+OFF for radio inference).
