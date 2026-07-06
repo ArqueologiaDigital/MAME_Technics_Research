@@ -145,3 +145,23 @@ whether the emulated read of that structure yields index 0 for every slot. A ren
 trace would need to target the library-ROM glyph routine (find it by tracing writes to
 the LCD framebuffer / video device and resolving the writer PC — but note a read/write
 tap must NOT touch cpu.state in its callback: segfault).
+
+
+## DECISIVE (tick 4): the menu shows a program-ROM DEFAULT, not the table-ROM genre styles
+Cross-checking names settles it: the on-screen "8 Beat 1" is **not present anywhere in
+the table ROM** (0 hits), while the table ROM DOES contain the real genre styles as
+`f5`-marker records with descriptive names — BALLAD has 13 ("Pop Ballad Piano", "EP
+Ballad Maj", "Angel Ballad", ...), WALTZ 17, MARCH 11 (see table-rom-format.md). The
+only "8 Beat 1" string in any ROM is program-ROM 0x4872AB44 (the user-style area, also
+an `f5` record) — but a read-tap there showed 0 reads, so the displayed text is a **RAM
+copy of that default** (copied at init), shown for all 10 slots.
+
+**So the bug is: the genre-style-list build never populates from the table-ROM genre
+records — every slot falls back to the default current/user style "8 Beat 1".** The
+genre (BALLAD) is selected correctly (title is right) but its 13 table-ROM styles are
+not enumerated into the list. Since the build DOES read the table ROM 269K times, the
+failure is in **locating/enumerating the genre's f5-records** (a wrong genre->section
+pointer, a scan that finds 0 records, or a count read as 0) rather than in the raw
+data. NEXT: find the genre->style-list pointer/count the build uses (likely a table in
+the 0x48000000 config block or a program-ROM table indexed by genre) and check what it
+yields for BALLAD in emulation vs the real 13.

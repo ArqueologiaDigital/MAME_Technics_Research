@@ -63,3 +63,30 @@ extracted directly by SOI→EOI.
   count) would show how styles are indexed and may reveal why the list defaults.
 - The 119 JPEGs are trivially extractable for preservation (SOI/EOI carving).
 - Directory entries [5],[6],[7] (data/text) are not yet identified.
+
+
+## TCMP per-record layout (decoded)
+Header is 0x70 bytes (0x35D08..0x35D78); records follow at 0x35D78, stride **0x80**:
+```
+rec+0x00: name, 16 bytes (ASCII, space-padded, NUL-terminated)
+rec+0x10..0x4F: 4 alternate-name slots (16 bytes each; usually all-spaces / empty)
+rec+0x50..0x63: 20 pattern indices (consecutive globally: rec0=0x00..0x13, rec1=0x14..0x27, ...)
+rec+0x64..0x6F: zero
+rec+0x70..0x7F: params (clean records = 44 00 44 00 00.. )
+```
+Only the first **3 records have clean names**: `Easy 8 Beat`, `Easy 16 Beat`,
+`Easy Swing` — the "Easy"/one-touch preset styles. Records 3+ decode as non-text with
+the fixed 0x80 stride, so past record 2 the chunk holds the referenced **pattern data**
+(the 20-index arrays point into it). Header +0xC = 0x1B (27) — a count whose exact
+referent (patterns? sub-records?) is still open. Records end ~0x36AF8, well before TPAD
+(0x40674), so 0x36AF8..0x40674 is the Easy-style pattern pool.
+
+## Genre (rhythm-selection) styles = variable-length `f5`-marker records
+The *rhythm-menu* styles are NOT the TCMP "Easy" set. They live later in the archive
+(BALLAD genre: 13 records starting 0x4804AF62; WALTZ: 17; MARCH: 11) as
+**variable-length** records: `[0xF5 marker][name, NUL-terminated][params 03 03 00 00
+ff..][MIDI pattern data: 90 3c 43 ... note-on events]`. Example names: "Pop Ballad
+Piano", "EP Ballad Maj/Min", "Angel Ballad", "Ballad Backing". This is the **same
+record shape as the program-ROM user-style area** (0x4872AB44, also `f5`-marker). Their
+lengths vary (0xE7..0x5DAA apart) because the embedded MIDI pattern data varies. A
+list build must scan `f5` markers / use a pointer table to enumerate a genre's styles.
