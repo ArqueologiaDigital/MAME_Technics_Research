@@ -138,3 +138,26 @@ redraw it during the init window (advancing 0x5006B5A4 0x00->0x42) so DrawJpegFi
 display/task-scheduling issue. screen_update and the CLUT seed are both correct as-is.
 NOTE: boot splash = seg05 (music notes 0x480566E8 + KN7000 logo 0x48066517) ONLY; "Welcome"
 (seg09 0x48139EF0) is demo mode, mountains (seg14 0x48162C14) separate -- both 0 reads at boot.
+
+## Redraw mechanism (deeper trace) -- the fix is a periodic-redraw / scheduling gap
+Disassembling OpeningFrameDraw 0x4848A931 end-to-end:
+- Reads OpeningFrameIndex 0x5006B5A8; if 0xFFFF (done) -> skip.
+- d0 = OpeningFrameTable[index] (the target value for this frame).
+- Gate 0x4848A966: if OpeningFrameTable[index] == OpeningFrameTarget(0x5006B5A4) -> DrawJpegFile
+  0x48424EC2 for this frame, then OpeningFrameIndex++ (0x4848A999/A1).
+- Tail 0x4848A9A7: OpeningFrameTarget++ ; then `ret` (0x4848A9B5).
+So each invocation bumps the target by 1 and RETURNS -- it does NOT self-request another
+redraw. The animation (target 0x00->0x42, i.e. ~66 steps) therefore requires the FRAMEWORK to
+redraw the opening view ~66 times. The agent measured ~1 invocation, so the framework redraws
+it ~once.
+
+Where the redraws must come from: the driver models a 60 Hz screen (kn7000.cpp:1306) but
+generates **no vblank/display interrupt** to the CPU (IRQ groups are only TIMER 0x06 / PANEL
+0x1A / MIDI 0x12,0x14). So the opening view's periodic redraws have to be driven by the RTOS
+draw task on the **system tick** -- and the 1 kHz system tick (m_sys_timer, machine_reset
+~line 1267) is the one gated on the AM33 **F6 udf12/13/15** context-save ops (0x4C03DDA7/AB/AF)
+that the CPU core still skips. That is the prime suspect: if the periodic task that redraws the
+opening view isn't ticking (or the tick handler corrupts context), the splash never animates
+and the placeholder green is what you see. NEXT: confirm what drives OpeningFrameDraw redraws
+(trace its caller / the draw task), and check the F6-udf / system-tick state -- the green fix
+likely rides on the interrupt/RTOS-tick subsystem, not on anything in the graphics path.
