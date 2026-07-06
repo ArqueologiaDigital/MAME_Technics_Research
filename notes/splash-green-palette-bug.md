@@ -154,10 +154,16 @@ it ~once.
 Where the redraws must come from: the driver models a 60 Hz screen (kn7000.cpp:1306) but
 generates **no vblank/display interrupt** to the CPU (IRQ groups are only TIMER 0x06 / PANEL
 0x1A / MIDI 0x12,0x14). So the opening view's periodic redraws have to be driven by the RTOS
-draw task on the **system tick** -- and the 1 kHz system tick (m_sys_timer, machine_reset
-~line 1267) is the one gated on the AM33 **F6 udf12/13/15** context-save ops (0x4C03DDA7/AB/AF)
-that the CPU core still skips. That is the prime suspect: if the periodic task that redraws the
-opening view isn't ticking (or the tick handler corrupts context), the splash never animates
-and the placeholder green is what you see. NEXT: confirm what drives OpeningFrameDraw redraws
-(trace its caller / the draw task), and check the F6-udf / system-tick state -- the green fix
-likely rides on the interrupt/RTOS-tick subsystem, not on anything in the graphics path.
+draw task on the system tick.
+
+**Ruled out -- it is NOT a disabled-tick / F6 issue.** The AM33 F6 ops ARE now implemented
+(execute_f6, mn10300.cpp:500) and the 1 kHz system tick is active (m_sys_timer->adjust,
+machine_reset ~line 1267) -- so the driver's "HELD until F6" comment there is STALE. The RTOS
+ticks, yet the opening view is still drawn only ~once. That points to a **boot-SEQUENCING**
+issue, not the tick/graphics path: the opening (splash) view appears to be active only briefly
+(~t=3 s), after which the boot advances to a phase whose background is the placeholder green,
+and that green persists unrepainted until the home screen -- rather than the splash view being
+held and animated for its full 0x00->0x42 run. NEXT: trace the opening-view lifecycle (what
+activates/deactivates it, and what would keep it active + redrawing through the init window)
+and identify what paints the persistent green after it. A UI-flow / boot-mode-sequencer
+question.

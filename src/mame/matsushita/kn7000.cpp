@@ -1257,13 +1257,12 @@ void kn7000_state::machine_reset()
 	// Start scanning the panel at ~250 Hz.
 	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
 
-	// System tick ~1 kHz (real rate TBD -- input clock unknown; tune later).
-	// HELD until the AM33 F6 "udf" extended-ALU ops are implemented in the CPU
-	// core: the timer interrupt now dispatches (correctly, via IAGR=group<<3) to
-	// the real handler, but that handler's context save uses F6 udf12/13/15
-	// (0x4C03DDA7/AB/AF) which the core still skips -> it corrupts the saved
-	// context and the PC runs away. Re-enable this one line once F6 is done.
-	// See notes/interrupt-mechanism.md ("F6 / udf extended ops").
+	// System tick ~1 kHz (real rate TBD -- input clock unknown; tune later). The timer
+	// interrupt dispatches (via IAGR=group<<3) to the real RTOS handler, whose context
+	// save uses the AM33 F6 "udf"/DSP ops (getx etc.) -- now implemented in the core
+	// (execute_f6), so this is ACTIVE and the boot is stable. (Earlier this was HELD
+	// because those F6 ops were skipped and the saved context was corrupted; that is
+	// resolved.) See notes/interrupt-mechanism.md ("F6 / udf extended ops").
 	m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 
 	// Pre-load the factory "Initial Data" Favorites into battery-backed SRAM. This
