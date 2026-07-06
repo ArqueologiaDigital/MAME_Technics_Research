@@ -45,7 +45,11 @@
         0x8C000000  device window / video path (boot copies ROM data here)
         0x90000000  framebuffer / LCD V-RAM window (IC104?)
         0x98040000  tone generator (synth LSI IC205, C1BB00000709) - 16-bit register set
-        0x98050000  sub / second TG register set (parallel 16-bit)
+        0x98050000  2nd TG register set (parallel 16-bit)
+        0x9804/50004  VOICE-EVENT (keyboard) FIFO reads -- the KN5000-shared "keyboard
+                     input" interface (KN5000 0x110000: 16-bit, low byte = note, high
+                     byte = velocity; empty = 0xFFFF). This is how physical key presses
+                     reach the firmware (parallel to MIDI-in); see notes/tone-generator.md.
                      wave/sample data in undumped ROMs IC203/204/207/208 (C3CBQD00000x)
         0x98020000  sound control (byte regs); 0x98060000/0x98070000 more sound
 
@@ -361,11 +365,14 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
 	if (offset == 0x38000)
 		return 0x8000;
-	// 0x98050004 (offset 0x28002): a read data-stream / FIFO port. Boot init reads
-	// it in a loop until it yields 0xFFFF (the empty/end marker; 0xFFFF is also the
-	// natural floating-bus value for an absent source). Returning 0 made the loop
-	// treat 0 as valid data forever. Return 0xFFFF so the read loop terminates
-	// (loop at program-flash 0x484480A2: movhu (0x98050004); cmp 0xffff; beq exit).
+	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
+	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
+	// low byte = note, high byte = velocity). The firmware polls it for note on/off
+	// events from the physical key bed (parallel to MIDI-in). Boot init reads it in a
+	// loop until it yields 0xFFFF (empty / end marker; also the floating-bus value).
+	// Returning 0 made the loop treat 0 as a valid note-0 event forever. Return 0xFFFF
+	// = empty so the loop terminates (loop at 0x484480A2: movhu (0x98050004); cmp
+	// 0xffff; beq exit). To make the key bed playable, push note/velocity words here.
 	if (offset == 0x28002)
 		return 0xFFFF;
 	// 0x9805000E (offset 0x28007): sound-interface register; the init loop at

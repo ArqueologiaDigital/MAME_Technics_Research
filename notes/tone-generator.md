@@ -172,3 +172,33 @@ stopping points. (Curiosity: the service SOUND SYSTEM test can emit pure sine
 waves per key -- a mode that needs no sample ROM -- so a diagnostic-only tone
 could in principle be produced, but that is not normal operation.) Wave-ROM
 NO_DUMP placeholders are recorded in the driver ROM_START.
+
+## 0x98050004 is the keyboard / voice-event FIFO (KN5000-shared) -- tick yy+3
+
+Cross-referencing the KN5000 (shared codebase) audio-subsystem docs corrected a
+misunderstanding: the tone-generator block has TWO interfaces, exactly like the
+KN5000's single TG (IC303):
+
+- **register config** (write): KN5000 0x100000/0x100002  ==  KN7000 0x98040000/
+  0x98040002 (the register-indirect writes already modeled).
+- **keyboard / voice-event input** (read): KN5000 0x110000/0x110002 "keyboard
+  input -- read voice events (note on/off with velocity)"  ==  KN7000 the
+  **0x9804/50004 FIFO reads**. KN5000 format: 16-bit, **low byte = note, high
+  byte = velocity**; status bit0 = data-ready; empty = 0xFFFF.
+
+So 0x98050004 (and 0x98040004), which the boot polls in a `movhu; cmp 0xffff;
+beq` loop (0x484480A2, 0x487F11A8), is NOT a generic FIFO -- it is the path by
+which **physical key-bed presses reach the firmware** (in parallel to the MIDI-in
+path). The driver already returns 0xFFFF (= empty) so the poll terminates and no
+phantom note-0 events are injected.
+
+**Playable-keyboard opportunity.** To make the key bed playable, model these two
+ports as small FIFOs and push note/velocity event words when a MAME keyboard
+input fires (note-on and note-off, KN5000 low=note/high=velocity encoding). That
+would (a) let the on-screen/host keyboard drive the firmware's note engine, and
+(b) potentially enable the service diagnostic mode (entered by holding music keys
+C#3/D#3/C#4 at power-on -> the panel button-test, which would give a reliable
+SEGnn.bit -> physical-switch map for the .lay). Audible output still needs the
+undumped wave ROMs, but the note *path* would be complete. Requires reversing the
+exact KN7000 event word (on/off bit, channel/split) from the reader at
+0x484480A2 / the note handler it calls (0x4844812D).
