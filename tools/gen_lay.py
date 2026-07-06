@@ -20,13 +20,14 @@ def label(s,color=TXT):
         n=f"t{len(TXTS)}"; TXTS[k]=n
         E.append(f'\t<element name="{n}"><text string="{xesc(s)}">{color}</text></element>')
     return TXTS[k]
-def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None):
+def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
     fl=[]
     if flip: fl.append('flipx="yes"')
     if flipy: fl.append('flipy="yes"')
     o=f'<orientation {" ".join(fl)}/>' if fl else ''
     b=f' inputtag="{tag}" inputmask="{mask}"' if tag else ''
-    return f'\t\t<element ref="{ref}"{b}>{o}<bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
+    nm=f' name="{name}"' if name else ''
+    return f'\t\t<element ref="{ref}"{nm}{b}>{o}<bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
 def L(s,x,y,w,h,color=TXT): return f'\t\t<element ref="{label(s,color)}"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
 def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
 
@@ -144,6 +145,12 @@ LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
+# --- panel LED outputs (derived from firmware PanelSwitchClassTable; see notes/panel-leds.md) ---
+SOUND_LEDS={("SEG0C","0x01"):"cpr_led32",("SEG0C","0x02"):"cpr_led72",("SEG0C","0x04"):"cpr_led24",
+ ("SEG0C","0x08"):"cpr_led16",("SEG0C","0x10"):"cpr_led40",("SEG0C","0x20"):"cpr_led45",
+ ("SEG0D","0x01"):"cpr_led33",("SEG0D","0x02"):"cpr_led34",("SEG0D","0x04"):"cpr_led25",
+ ("SEG0D","0x08"):"cpr_led17",("SEG0D","0x10"):"cpr_led41",("SEG0D","0x20"):"cpr_led46",
+ ("SEG0E","0x01"):"cpr_led36",("SEG0E","0x02"):"cpr_led35",("SEG0E","0x04"):"cpr_led26",("SEG0E","0x08"):"cpr_led18"}
 SGcols=[51,107,162,217,272,327,383,438,493]
 SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
     ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
@@ -154,7 +161,7 @@ for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     if i in (9,10): RB.append(P("pill_wide",cx-24,cy+2,48,22,tag=tag,mask=mask))
-    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8))
+    else: RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-18,cy-12,8,8,name=SOUND_LEDS.get((tag,mask))))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH))
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm)

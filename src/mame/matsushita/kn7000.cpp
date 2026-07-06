@@ -179,9 +179,9 @@ private:
 	// serial HLE device that reads these / drives the LEDs are still to come).
 	required_ioport_array<0x16> m_seg;  // one per normalized segment 0x00-0x15
 	required_ioport m_dial;
-	output_finder<64> m_cpl_leds;
+	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
-	output_finder<80> m_cpr_leds;
+	output_finder<512> m_cpr_leds;
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
@@ -744,12 +744,17 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 // against the schematic silk-screen; the structural decode below is provisional.
 void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
 {
+	// addr = panel(bits 7:6; 0x00=right/CPR, 0xC0/0xE0=left/CPL) | reg(bits 5:0).
+	// Each data bit is one LED of register `reg`. Index reg*8+bit within the bank.
+	// (Provisional: reg<->physical-LED map is derived in notes/panel-leds.md but
+	// not yet bound in the layout; both banks are wired for when it is.)
 	const int reg = addr & 0x3f;
+	const bool left = (addr & 0xc0) != 0;
 	for (int bit = 0; bit < 8; bit++)
 	{
 		const int led = reg * 8 + bit;
 		const int on = BIT(data, bit);
-		if (led < 64) m_cpl_leds[led] = on;   // provisional: all to CPL bank
+		if (led < 512) { if (left) m_cpl_leds[led] = on; else m_cpr_leds[led] = on; }
 	}
 	logerror("%s: panel LED frame addr=%02X data=%02X\n",
 		machine().describe_context(), addr, data);
