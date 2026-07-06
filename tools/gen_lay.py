@@ -38,6 +38,15 @@ LEDMAP={
   ("SEG1F","0x40"):"cpr_led77", ("SEG20","0x01"):"cpr_led77", ("SEG20","0x04"):"cpr_led77", ("SEG20","0x10"):"cpr_led77",
   ("SEG20","0x40"):"cpr_led77",
 }
+# Operation LED map (empirically swept, throttled -video none frame-counter; scratchpad/
+# genreled.lua): (SEG,mask) -> cpl/cpr output name. The .lay green_led elements bind to these
+# so MAME lights them from firmware state. Extend as more contexts/buttons are swept.
+OPLED={
+  ("SEG01","0x02"):"cpl_led3",  ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
+  ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
+  ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
+  ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
+}
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
 def two(n,w,h,s0,s1):
@@ -175,7 +184,7 @@ LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
