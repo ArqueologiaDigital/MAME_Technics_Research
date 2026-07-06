@@ -142,3 +142,14 @@ SEG03.b7 (0x20A6), SYNCHRO & BREAK = SEG00.b7 (0x2021). 89 inputtags, 0 conflict
 unresolved: PART EFFECT + GLOBAL EFFECT (SUSTAIN/CHORUS/etc.), AUTO PLAY CHORD, performance pads,
 SEQUENCER PLAY/EASY REC, PANEL MEMORY, TRANSPOSE/OCTAVE, PART SELECT/CONDUCTOR. NEXT: snapshot-ID
 the screen-changing ones (sequencer, panel-memory, APC); for toggles use descriptor + LED sweeps.
+
+## SOUND GROUP LEDs bound (tick 2026-07-07c)
+Swept the CORRECT sound-group buttons (SEG0C/0D/0E, sgled.lua) -- clean radio behaviour. Bound 13
+category LEDs via OPLED: MALLET=cpr50, WORLD=cpr51, STRINGS=cpr40, BRASS=cpr41, SAX=cpr42,
+ORGAN&ACC=cpr43, DRAWBAR=cpr33, TABS=cpr34, ACCORD=cpr35, PAD=cpr24, SYNTH=cpr25, BASS=cpr26,
+DRUMKITS=cpr27. The SG loop's green_led now lights from firmware state. 24 LED elements bound total
+(11 genre + 13 sound). LEFT OUT (shared indicators cpr48/49/100): PIANO, GUITAR, EXPLORER --
+pattern suggests PIANO=cpr48, GUITAR=cpr49 (continues cpr48-51=PIANO/GUITAR/MALLET/WORLD) but
+EXPLORER also hit cpr48 so verify with a targeted re-sweep (press BRASS then PIANO then GUITAR)
+before binding. NEXT LED: verify PIANO/GUITAR; sweep mute LEDs (SEG08-0B) + VARIATION LEDs (SEG04,
+rhythm playing) + effect LEDs; the 5 missing genres.
