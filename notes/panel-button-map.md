@@ -66,3 +66,27 @@ Known: SEG05 = parts 7,8 (user). The part-level RAM byte was NOT found in 0x5003
 (not a simple 0-100 byte / not a toggle). NEXT approach: open the OTHER PARTS (PT1-16) mixer via
 SEG08 0x04, press each candidate mute-down bit, snapshot, read which PT's level dropped -> map bit
 -> part. Candidate segs: SEG05 (parts 7,8 + maybe 5,6 on b0-b3), SEG0A, SEG0B, and others TBD.
+
+## MUTE matrix — SOLVED 2026-07-07 (press-count encoding method)
+The 16 MUTE UP/DOWN buttons = per-part VOLUME up/down (one press = +/-1 on the PT1-16 mixer). Mapped
+by ENCODING each bit's identity in the PRESS COUNT: press bit #k exactly 5k times, then one mixer
+snapshot shows each affected part at a distinct level (part at 95 = the 5-press bit, 90 = 10-press,
+...). Decodes a whole segment per run. Result is perfectly regular:
+| seg | parts | up bits (unmute) | down bits (mute) |
+|-----|-------|------------------|------------------|
+| SEG04 | 1,2,3,4    | 0x01,0x04,0x10,0x40 | 0x02,0x08,0x20,0x80 |
+| SEG05 | 5,6,7,8    | 0x01,0x04,0x10,0x40 | 0x02,0x08,0x20,0x80 |
+| SEG06 | 9,10,11,12 | 0x01,0x04,0x10,0x40 | 0x02,0x08,0x20,0x80 |
+| SEG07 | 13,14,15,16| 0x01,0x04,0x10,0x40 | 0x02,0x08,0x20,0x80 |
+Within each seg: pair (0x01,0x02)=part A, (0x04,0x08)=A+1, (0x10,0x20)=A+2, (0x40,0x80)=A+3.
+Parts 1-15 confirmed on the mixer; part 16 (SEG07 0x40/0x80) inferred from the exact pattern (its
+mixer nudge didn't render). BUG CAUGHT: APC "OFF/ON" was guessed SEG06 0x08 from the dispatch table
+(normSeg06=APC), but layout SEG06 0x08 is really PART 10 mute -> the normSeg vs layout-SEG remap is
+NOT identity. Unbound APC OFF/ON. Scripts: scratchpad/mutemap.lua (edit SEQ = {seg,mask,count}).
+
+## LCD RIGHT soft-keys — still open
+LCD LEFT = SEG03 b3-b7 (user-confirmed). LCD RIGHT column bits unknown. Ruled out: SEG0A/SEG0B are
+NO-OPS from home (no screen change, no mixer change, no HELP info) -- not the LCD RIGHT keys. The
+LCD soft-keys are context-dependent (function changes per screen) so HELP-info + from-home probing
+miss them. NEXT: characterize-sweep all unmapped segs for bits that open/navigate a screen (DEMO×2
+reset between presses), or test on a screen whose right soft-keys are labelled; or ask the user.
