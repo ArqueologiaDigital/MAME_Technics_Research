@@ -130,9 +130,14 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 # LCD-flanking keyboard-part on/off buttons (descriptor 0x2000/0x2001 parts 0x10-0x14 =
 # RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2): OFF column on SEG00 (left of LCD), ON column on
 # SEG11-13 (right). The driver's old "LCD Left N" labels were wrong. See notes/panel-descriptor-map.md.
-LCDPARTS=[("RIGHT1","SEG00","0x02","SEG11","0x10"),("RIGHT2","SEG00","0x08","SEG11","0x20"),
-          ("LEFT","SEG00","0x20","SEG13","0x01"),("ACCOMP1","SEG00","0x01","SEG12","0x01"),
-          ("ACCOMP2","SEG00","0x04","SEG11","0x01")]
+# NOTE: the OFF (left) column was assumed to be SEG00 part-off bits, but real-machine
+# testing (2026-07-07) shows SEG00 b2..b7 are the RHYTHM genre-select bits -- so these
+# left soft-keys were spuriously opening genres (user: "LCD LEFT 2 => ROCK & POP" etc.).
+# Left column unbound (decorative) until the real LCD-soft-key bits are confirmed (likely
+# SEG03.b3-b7, inferred from the FADE/VAR4/SPLIT observations). Right (ON) column kept.
+LCDPARTS=[("RIGHT1",None,None,"SEG11","0x10"),("RIGHT2",None,None,"SEG11","0x20"),
+          ("LEFT",None,None,"SEG13","0x01"),("ACCOMP1",None,None,"SEG12","0x01"),
+          ("ACCOMP2",None,None,"SEG11","0x01")]
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
@@ -183,15 +188,17 @@ LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
 for nm,cx,y,tg,mk in [("MODE",447,54,None,None),("OFF/ON",505,54,"SEG06","0x08"),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
-# RHYTHM GROUP = the 16 event-0x2005 genres, authoritative from the program-ROM
-# descriptor (SEG01.b0-b7 + SEG02.b0-b7) with driver/ROM-derived labels. The old
-# binding pointed at SEG00 transport bits (BALLAD->SEG00 0x10 = START/STOP!) and was
-# wrong; see notes/panel-descriptor-map.md. Order is bit-order (~switch scan order);
-# exact physical placement is a fidelity refinement pending a panel photo.
-RG=[("MEMORY/LOAD","SEG01","0x01"),("SOUL & FUNK","SEG01","0x02"),("CUSTOM","SEG01","0x04"),("BALLAD","SEG01","0x08"),
-    ("JAZZ COMBO","SEG01","0x10"),("ROCK & POP","SEG01","0x20"),("BIG BAND & SWING","SEG01","0x40"),("R & B","SEG01","0x80"),
-    ("MOVIE SHOW","SEG02","0x01"),("MARCH","SEG02","0x02"),("ENTERTAINER","SEG02","0x04"),("COUNTRY","SEG02","0x08"),
-    ("LATIN & WORLD","SEG02","0x10"),("GOSPEL & BLUES","SEG02","0x20"),("BALLROOM","SEG02","0x40"),("MODERN DANCE","SEG02","0x80")]
+# RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
+# user real-machine testing): the genre-select bits are SEG00/SEG01/SEG02 bit b2..b7
+# -> genres 0..15 in order (SEG02 stops at b5). Snapshots confirm SEG00 0x04=8&16 BEAT,
+# 0x08=ROCK&POP, 0x10=BALLAD, 0x20=JAZZ&SWING, 0x40=BALLROOM, 0x80=MOVIE&SHOW; SEG01
+# 0x04..0x80=ENTERTAINER..COUNTRY&WESTERN; SEG02 0x04..0x20=MARCH&WALTZ..MEMORY. The old
+# binding (SEG01/SEG02 b0-b7) was off and collided with START/STOP (SEG00 0x10) etc.
+# Physical position i = genre i (2 rows x 8). See notes/panel-rhythm-group.md.
+RG=[("8&16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
+    ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
+    ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
+    ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
 LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
@@ -227,7 +234,10 @@ for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
 # FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
 # (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,"SEG00","0x80")]:
+# SYNCHRO & BREAK was SEG00 0x80 -- but that bit = RHYTHM genre 5 (MOVIE & SHOW), verified
+# on real hardware; unbound here (decorative) until its real bit is found. (FADE IN/OUT on
+# SEG03 0x20 is really the LCD LEFT 3 soft-key per user -- a separate fix, left for now.)
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
@@ -235,7 +245,9 @@ LB.append(P("green_led",856+48,364,8,8,name=OPLED.get(("SEG00","0x80"))))   # SY
 # INTRO & ENDING was SEG03 0x10 = FILL IN 1 (descriptor 0x2023); correct bit is SEG03.b0
 # (0x2022 = INTRO & ENDING 1). START/STOP SEG00 0x10 = 0x2020 is correct (verified). See
 # notes/panel-descriptor-map.md.
-for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x01"),("START/STOP",856,105,50,"pill_greycyan","SEG00","0x10")]:
+# START/STOP was SEG00 0x10 -- but that bit = RHYTHM genre 2 (BALLAD), verified on real
+# hardware (user: "START/STOP => BALLAD"); unbound (decorative) until its real bit is found.
+for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x01"),("START/STOP",856,105,50,"pill_greycyan",None,None)]:
     LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
