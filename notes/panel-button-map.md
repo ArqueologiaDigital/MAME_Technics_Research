@@ -90,3 +90,24 @@ NO-OPS from home (no screen change, no mixer change, no HELP info) -- not the LC
 LCD soft-keys are context-dependent (function changes per screen) so HELP-info + from-home probing
 miss them. NEXT: characterize-sweep all unmapped segs for bits that open/navigate a screen (DEMO×2
 reset between presses), or test on a screen whose right soft-keys are labelled; or ask the user.
+
+## LCD RIGHT soft-keys — method validated, keys NOT yet reachable (2026-07-07)
+User's method (great): open an instrument CATEGORY page (e.g. PIANO = SEG0C 0x01) and press an LCD
+soft-key -> the corresponding instrument highlights. VALIDATED the mechanism: on the PIANO page,
+SEG03 0x10 (LCD LEFT 2) highlights "Mellow Grand" (left col row 2). So the 5 LCD LEFT keys are
+SEG03 b3-b7 and they work in the emulator.
+BUT: swept EVERY wired ioport bit (SEG02,04-1A,20 + SEG0A/0B/03) on the PIANO page (reset highlight
+to a left row via SEG03 0x08, press candidate, detect a right-column row whose box-background mean
+brightness spikes) -> NO bit highlights a RIGHT-column instrument. All 8 bits/seg ARE declared
+(pressable), so this isn't a probe gap. Conclusion: the 5 LCD RIGHT keys are NOT reachable through
+any ADDR the driver currently emits -- consistent with the driver comment "only CPL is filled in
+so far (CPC/CPR/CPSD TODO)". PanelWireNormTable has ALTERNATE ADDR sets the driver never emits
+(0x80-0x8A -> nS0A-13, 0x97 -> nS1D) = the other boards. NEXT: identify the CPR board's LCD-RIGHT
+wire ADDR (schematic SCHEMATIC DIAGRAM-15..18 + those alt table entries), add its ioport, re-test.
+Scripts: scratchpad/pianopress.lua (open PIANO + press a bit + dump), lcdright3.lua (sweep+detect).
+
+## NOTE: driver PORT_NAMEs are stale (nS-identity), harmless but misleading
+The INPUT_PORTS PORT_NAMEs assume ioport SEGi == firmware nSi (e.g. SEG00 0x80="SYNCHRO & BREAK",
+SEG03 0x10="FILL IN 1"), which the empirical map disproves (SYNCHRO=SEG15 0x04; SEG03 0x10=LCD
+LEFT 2). Only labels -- the LAYOUT bindings (kn7000.lay) are the source of truth and are correct.
+Cleanup TODO: regenerate PORT_NAMEs from the empirical/HELP-info map.
