@@ -367,3 +367,31 @@ returns the RAM default "8 Beat 1" for every slot. NEXT: find the caller of 0x48
 and the code that turns (bank,slot) into the record address; identify the bank-base table and check if it
 lives in an uninit RAM / unmapped region in emulation. That table (populated at init on real HW, perhaps
 gated on the initial-data disk) is the likely fix point.
+
+## TICK 10 (CPU PC-trigger): CORRECTION -- the resolver is validation, the name path is the 0xC000 resource object
+Added a temporary PC-trigger in mn10300.cpp (start_pc==0x48435B33 -> fprintf d0/sp/stack; reverted after).
+Pressed BALLAD, captured the resolver's callers + args:
+- The resolver 0x48435B33 IS called with BALLAD style-IDs (d0=0x65B, the first BALLAD style-ID 0x065B),
+  from several sites: 0x4843FB04 (id->ordinal), 0x484AFBDE, 0x4849771F, and **~10x from 0x48497B19**
+  (with the UI object table 0x5000757C and the 10 list-item object ids 0x600059..0x600062 on the stack).
+
+### CORRECTION: 0x48435B33 is NOT the name-fetch -- it is style-ID <-> bank/slot validation
+Its sibling **0x48435B01** does the INVERSE: `(bank,slot) -> styleListPtr[slot]` = the style-ID at that
+slot (genre_record[bank].styleListPtr @+0x14, i.e. 0x485B8A04 for BALLAD). The list code 0x48497AE9 calls
+resolver(id)->(bank,slot) then 0x48435B01(bank,slot)->id and COMPARES -- a round-trip **match/validate**,
+not a name lookup. (So last tick's "resolver is the name path" was wrong; the LUT-16x reads were validation.)
+
+### The actual NAME-FETCH = the 0xC000 resource OBJECT (async)
+In the same list module: `0x48497ACB: mov 0x0000C000,d0 ; ... call 0x4841C37C`. **0x4841C37C** allocates a
+16-byte object (`*(obj)=0xC000` resource id, `*(obj+4)=item id`), then dispatches GUI messages via
+**0x4842AD45** (ids 0x30002/0x600C0, 0x30003/0x60023). The name is fetched + drawn by the OBJECT's message
+handlers -- the same 0xC000-resource path as MainGetRhythmName -> library **0x4C014948** (tick 8: trie
+0x4858B424, reads program ROM). So the name comes from the **0xC000-resource GUI-object system**,
+asynchronously (at draw), not inline in the populate.
+
+### Where the bug is now
+The 0xC000-resource object, given the built-in item id, must resolve to the style-name string -- but the
+read-tap shows the strings are never read, so that resolution defaults. NEXT: trace the 0xC000 object's
+draw/name handler -- the 0x4842AD45 message targets and the library 0x4C014948 processing of resource
+0xC000 *with the specific item id* -- to find where the built-in-style string lookup yields the default.
+The object id at *(obj+4) (a 0x600xx-style id) and how it maps to a name index is the key.
