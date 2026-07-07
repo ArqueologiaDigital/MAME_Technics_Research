@@ -340,3 +340,30 @@ SOLID: (a) genre->16 style-IDs works; (b) built-in name strings ARE in the progr
 (c) they are NEVER read during the menu -> resolution fails upstream, not a store defect, not missing
 data-flash. OPEN: the exact resolver + why it stops. Best next move: temporary PC-trigger in mn10300.cpp's
 fetch loop keyed on a read of 0x485D6260 or 0x500012CC (log PC+regs), press BALLAD, disassemble the PC.
+
+## TICK 9: narrowed to the NAME-FETCH from (bank,slot); the pipeline before it WORKS
+Read-taps during the BALLAD menu (genre held = SEG00 0x10) prove the whole index pipeline runs:
+- genre table **0x48735EE4 read 125x**, BALLAD style-ID list **0x485B8A04 read 23x** (16 IDs),
+  LUT **0x48734EE4 read 16x** (once per style). So genre->16 style-IDs->per-style LUT all execute.
+- Resolver **0x48435B33** (disassembled): masks the style-ID source bits (`&0x700000`; 0=built-in,
+  0x100000=MEMORY, 0x200000=CUSTOM), builds a packed index `((id&0xf00)>>1)|(id&0x7f)`, reads
+  `LUT[index]` @0x48734EE4 (with a 0x7FFF-invalid indirection), and writes **bank=id>>8 -> *(a0),
+  slot=id&0xff -> *(a2)**. MEMORY/CUSTOM branches validate slot against counts @0x4873606A/6E/70.
+  So (bank,slot) is produced correctly, 16x.
+
+### The failure is downstream: locating + reading the NAME record from (bank,slot)
+The built-in style names are **structured records** starting at **0x485CCF31**: a 16-byte space-padded
+name ("    8 Beat     ", "    16 Beat     ", "   Dance Pop    ", ...), then u16 params and a run of
+sub-pointers (0x485CCxxx). A **3-byte-entry index precedes them @0x485CCF00** (entries `0c 04 02`,
+`0c 04 03`, `0c 09 01`, ... terminated by `ff ff` @0x485CCF2A). The names are **NOT in a flat pointer
+table** (0 pointers to "8 Beat"/"16 Beat" anywhere in the ROM). So the name-fetch must locate the record
+by (bank,slot) -- via a bank->record-base mapping + the index -- and that step is what never reads the
+name records in emulation (read-tap: 0 reads at the name strings).
+
+### Strong suspect (ties tick-8c together)
+A **bank -> record-base table that is uninitialised in emulation** (cf. the RAM slot 0x500012CC = 0xffffffff
+seen tick-8c). If the base for the built-in bank is null/uninit, the fetch can't locate the record ->
+returns the RAM default "8 Beat 1" for every slot. NEXT: find the caller of 0x48435B33 (the build loop)
+and the code that turns (bank,slot) into the record address; identify the bank-base table and check if it
+lives in an uninit RAM / unmapped region in emulation. That table (populated at init on real HW, perhaps
+gated on the initial-data disk) is the likely fix point.
