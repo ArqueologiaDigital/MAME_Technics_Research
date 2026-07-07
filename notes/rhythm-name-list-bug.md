@@ -407,3 +407,26 @@ So the list's UI/name resolution goes through the library with **low resource id
 0xC000 rhythm-name resource (0xC000 is MainGetRhythmName's path, which doesn't fire in the menu -- tick 3).
 NEXT: instrument 0x4C014948 to capture the res-id + arg for the calls that actually feed the visible slot
 text, and follow res 0x03/0x04/0x08 with arg 0x6003A through the sub-handlers to the (defaulted) name.
+
+## TICK 2026-07-07: built-in name-table init CONFIRMED WORKING -- bug is downstream, NOT the init
+Traced the built-in style-name resolution end-to-end and DISPROVED the "init fails / globals=0 -> default"
+theory. Chain: `StyleListBoxDrawItem 0x4847C076` -> ... -> **`StyleNameCommit 0x484334A4`** (memcpy 13B
+from *(0x50034B8C) -> name buf) <- **`StyleNameSourceSet 0x48433400`** (per style-ID: source bits
+&0x700000; source 0 = builtin -> resolver **`0x48433AC4`**, which indexes the name-table *(0x50034B7C) by
+a style-index and calls 0x4844038B). The globals are set up by **`StyleBuiltinNameTableInit 0x48433300`**,
+which opens the library resource **"Technics Rhythms"** (name @0x4872980C via lib 0x4C00203C -> resource
+base d2) and reads sub-tables at base +0x18/+0x1B/+0x1E/+0x21.
+
+RUNTIME DUMP after boot (home screen) proves the init SUCCEEDS -- the globals are populated, not zero:
+- `0x50034B78 = 0x48729988` (resource base, program ROM)
+- `0x50034B7C = 0x483E82BF` (built-in name-table, **TABLE ROM**) -- non-zero, so the resolver takes the MAIN path (not the fallback)
+- `0x50034B80 = 0x4872A9BB` (non-zero)
+- `0x50034B88 = 0x4872AB42` (the "8 Beat 1" default ptr); `0x50034B8C = 0x4872AB42` (Commit's source = default)
+
+So the name-table IS correctly built from the "Technics Rhythms" resource -- this CORRECTS the earlier
+"boot-built RAM name-table / init fails" framing (the init is fine). The bug is DOWNSTREAM in per-style
+resolution. NOTE: `StyleNameSourceSet` writes 0x50034B94/98 (not 0x50034B8C, despite the kn7000.sym
+comment) -- an intermediate step sets 0x50034B8C and it stays at the 0x4872AB42 default. NEXT:
+(1) find who sets 0x50034B8C between SourceSet and Commit; (2) runtime-dump 0x50034B8C/94 WHILE the BALLAD
+style list is OPEN (navigate via the genre button) to catch the per-style resolution defaulting; (3) check
+the index StyleNameSourceSet computes for a real BALLAD style-ID (e.g. 0x065B) and what 0x4844038B returns.
