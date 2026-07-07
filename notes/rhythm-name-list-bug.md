@@ -450,3 +450,20 @@ through the library (res 0x03/0x04/0x08, per the tick-1 notes). NET this tick: R
 resolver as the bug + fully characterized it (symbols added: StyleBuiltinNameResolve, TechnicsRhythmsResource,
 StyleBuiltinNameTableInit). NEXT: disassemble 0x4843A484/0x4843A51C and the StyleListBoxMsgTable 0x485CF408
 populate handler to find the list's own name path, then runtime-dump it with the BALLAD list open.
+
+## TICK 2026-07-07 (c): the built-in style names EXIST as data -- the bug is a populate/display default
+Decoded `StyleListBoxMsgTable 0x485CF408` (16 {msg,handler}: init=msg1->0x4847BD9F, draw=msg0x10/0x12->
+0x4847C076, get-item=msg0x1003A->0x4847C1F8/0x4847C216, default->0x4847C202, ...). The handlers index a
+big style-record table **`StyleRecordTable 0x4873BEE8`** (>=400 24-byte records) by the RAM current-index
+**`CUR_STYLE_IDX 0x50001270`**. Each record: `+0x00` patternDataPtr (->0x487674xx, 160B/style MIDI-ish
+pattern), **`+0x04` namePtr -> a REAL style name** (program ROM 0x485D0000+: "Disco Hustling", "Love's
+Disco", "Orchestral Jazz", "Sax Garland", "Harry J's Swing", ...), `+0x08` u16, `+0x0C` u32 index, `+0x10/
+12/14` u16 params.
+
+So **every built-in style name is present in the program ROM** -- the "all 8 Beat 1" list is NOT a
+missing-data problem. The populate/display path emits the resolver DEFAULT (0x4872AB42 = " 8 Beat 1")
+instead of reading these `namePtr`s. This tightens the bug to the genre->record wiring: either the slot
+indices into StyleRecordTable are wrong (all resolve to a default/index-0 record) or the populate ignores
+`+0x04` and calls the (defaulting) resolver. NEXT (runtime, decisive): open the BALLAD list and watch (a)
+what CUR_STYLE_IDX / the per-slot indices are, and (b) whether the item text is set from record `+0x04`
+(real) or the resolver default. Symbols added: StyleRecordTable, CUR_STYLE_IDX.
