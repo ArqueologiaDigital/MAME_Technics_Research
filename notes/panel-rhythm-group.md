@@ -82,7 +82,17 @@ function is the one currently on `current_button`:
   (orange); APC MODE/SET/OFF-ON (lower); DISPLAY HOLD; EXIT; PAGE UP/DOWN.
   → these need their input bits found (many may be dedicated events, not in the scanned segs).
 
-## Genre LEDs (TODO)
-The RHYTHM GROUP LEDs use OPLED, but its entries were swept against the OLD (wrong) bit
-assumptions, and the SEG00 genres (0,1,3,4) have no entries. A fresh genre-LED sweep against
-the verified bits above is needed (press each genre bit, record which cpl_led lights).
+## Genre LEDs (RESOLVED 2026-07-07)
+Re-swept the genre-select LEDs on the corrected bits (scratchpad/genreled2.lua: press each
+genre bit, diff which `cpl_led` turns on — radio behaviour). Result: **genre G → cpl_led[3 +
+8*(G//4) - (G%4)]**:
+| genre | cpl | genre | cpl | genre | cpl | genre | cpl |
+|-------|-----|-------|-----|-------|-----|-------|-----|
+| 0 | 3  | 4 | 11 | 8  | 19 | 12 | 27 |
+| 1 | 2  | 5 | 10 | 9  | 18 | 13 | 26 |
+| 2 | 1  | 6 | 9  | 10 | 17 | 14 | 25 |
+| 3 | 0  | 7 | 8  | 11 | 16 | 15 | 24 |
+Bound via the `GENRE_LED` dict in gen_lay.py (the RHYTHM GROUP green_leds now use it, not OPLED).
+The SEG01/SEG02 values matched the old OPLED (already correct); the 4 SEG00 genres (0,1,3,4 =
+cpl3/2/0/11) were the ones previously dark. NB the sweep also shows cpl_led1/cpl_led10 (which the
+old OPLED labelled "START/STOP"/"SYNCHRO" transport LEDs) are really the genre-2 / genre-5 LEDs.

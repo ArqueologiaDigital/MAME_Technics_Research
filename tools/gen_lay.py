@@ -210,11 +210,17 @@ RG=[("8&16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00"
     ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
     ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
     ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
+# Genre-select LEDs, EMPIRICALLY RE-SWEPT on the corrected bits (2026-07-07, genreled2.lua):
+# genre G -> cpl_led[3 + 8*(G//4) - (G%4)]  (radio: selecting a genre lights its LED).
+GENRE_LED={("SEG00","0x04"):"cpl_led3",  ("SEG00","0x08"):"cpl_led2",  ("SEG00","0x10"):"cpl_led1",  ("SEG00","0x20"):"cpl_led0",
+           ("SEG00","0x40"):"cpl_led11", ("SEG00","0x80"):"cpl_led10", ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
+           ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17", ("SEG01","0x80"):"cpl_led16",
+           ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26", ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24"}
 LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG09",mask="0x40"),   # DEMO = SEG09 0x40 (snapshot: DEMONSTRATION; old SEG06 0x40 was a no-op)
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]

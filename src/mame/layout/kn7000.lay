@@ -360,20 +360,20 @@
 		<element ref="t23"><bounds x="700" y="32" width="180" height="11"/></element>
 		<element ref="t24"><bounds x="553" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x04"><bounds x="565" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="577" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led3"><bounds x="577" y="77" width="8" height="8"/></element>
 		<element ref="t25"><bounds x="608" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x08"><bounds x="620" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="632" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led2"><bounds x="632" y="77" width="8" height="8"/></element>
 		<element ref="t26"><bounds x="663" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x10"><bounds x="675" y="90" width="32" height="32"/></element>
 		<element ref="green_led" name="cpl_led1"><bounds x="687" y="77" width="8" height="8"/></element>
 		<element ref="t27"><bounds x="718" y="59" width="56" height="8"/></element>
 		<element ref="t28"><bounds x="718" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x20"><bounds x="730" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="742" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led0"><bounds x="742" y="77" width="8" height="8"/></element>
 		<element ref="t29"><bounds x="774" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x40"><bounds x="786" y="90" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="798" y="77" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led11"><bounds x="798" y="77" width="8" height="8"/></element>
 		<element ref="t30"><bounds x="829" y="59" width="56" height="8"/></element>
 		<element ref="t31"><bounds x="829" y="68" width="56" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG00" inputmask="0x80"><bounds x="841" y="90" width="32" height="32"/></element>
