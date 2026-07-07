@@ -158,22 +158,20 @@ S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",
 # CONTRAST tall pill (x282-332)
 S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
-# MUTE 1..16 -> PART1..16 on/off pairs (workflow static-RE: 0x2001=on,0x2000=off; normSeg.bit=on/off pair)
-# up=part ON (unmute), down=part OFF (mute).  (seg, on_mask, off_mask)
-# User feedback (2026-07-07b): "MUTE 1/2 => MUTE 7/8" -- the SEG05 cells are physically the
-# MUTE 7,8 (parts 7,8) buttons, not 1,2. So SEG05 lives at index 6,7 here; index 0,1 (MUTE 1,2)
-# get the old SEG09 cells (which FN_SEGS unbinds anyway -- real MUTE 1,2 bits still TBD).
-MUTES=[("SEG09",0x01,0x02),("SEG09",0x04,0x08),
-       ("SEG08",0x01,0x02),("SEG08",0x04,0x08),("SEG08",0x10,0x20),("SEG08",0x40,0x80),
-       ("SEG05",0x10,0x20),("SEG05",0x40,0x80),("SEG09",0x10,0x20),("SEG09",0x40,0x80),
-       ("SEG0A",0x01,0x02),("SEG0A",0x04,0x08),("SEG0A",0x10,0x20),("SEG0A",0x40,0x80),
-       ("SEG0B",0x01,0x02),("SEG0B",0x04,0x08)]
-# DISPROVEN (2026-07-07, user feedback + snapshot): several "mute" cells are actually
-# DEDICATED FUNCTION inputs -- SEG08 0x04=OTHER PARTS&FR, 0x08=HELP; SEG09 0x01=PADS BANK,
-# 0x08=MSA, 0x40=DEMO -- now bound to their real buttons. Unbind those 5 cells here to avoid
-# double-triggering. The whole part-mute matrix is suspect (real mute bits TBD; the buttons
-# the user tested opened functions, not part mutes). See notes/panel-rhythm-group.md.
-FN_SEGS={"SEG08","SEG09"}   # confirmed dedicated-function segments, NOT the part-mute matrix
+# MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
+# SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
+# PT1-16 mixer level drops by N; one snapshot decodes the whole map). The matrix is perfectly regular:
+# SEG04=parts 1-4, SEG05=parts 5-8, SEG06=parts 9-12, SEG07=parts 13-16; within each seg the four
+# up/down pairs are (0x01,0x02),(0x04,0x08),(0x10,0x20),(0x40,0x80) for the four consecutive parts.
+# (Parts 1-15 confirmed on the mixer; part 16 = SEG07 0x40/0x80 inferred from the exact pattern.)
+# The old SEG08/09/0A/0B guesses were all wrong -- SEG08/09 are function keys, SEG0A/0B move nothing.
+# NB: this is the layout-SEG vs firmware-normSeg remap in action -- normSeg06 is "APC/rhythm" in the
+# dispatch table, but layout SEG04-07 physically wire to the part-mute matrix.
+MUTES=[("SEG04",0x01,0x02),("SEG04",0x04,0x08),("SEG04",0x10,0x20),("SEG04",0x40,0x80),
+       ("SEG05",0x01,0x02),("SEG05",0x04,0x08),("SEG05",0x10,0x20),("SEG05",0x40,0x80),
+       ("SEG06",0x01,0x02),("SEG06",0x04,0x08),("SEG06",0x10,0x20),("SEG06",0x40,0x80),
+       ("SEG07",0x01,0x02),("SEG07",0x04,0x08),("SEG07",0x10,0x20),("SEG07",0x40,0x80)]
+FN_SEGS=set()   # (all 16 mute cells are real now; no function-seg overlaps left to unbind)
 for i in range(16):
     x=round(378+i*80.4); seg,onm,offm=MUTES[i]
     ut,um=(None,None) if seg in FN_SEGS else (seg,f"0x{onm:02x}")
@@ -208,10 +206,11 @@ LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
     LB.append(L(nm,cx-24,y-24,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-15,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
 LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
-# AUTO PLAY CHORD: top OFF/ON = PLAY CHORD OFF/ON = SEG06.b3 (0x2032). MODE = SEG03 0x02
-# (fresh-boot scr:pixel dump 2026-07-07: opens the "APC SELECT" screen BASIC/FINGERED/PIANIST;
-# was decorative -- a user "no visual feedback" button). SET/bottom-OFF-ON still decorative (TBD).
-for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,"SEG06","0x08"),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
+# AUTO PLAY CHORD: MODE = SEG03 0x02 (fresh-boot scr:pixel dump 2026-07-07: opens the "APC SELECT"
+# screen BASIC/FINGERED/PIANIST; was decorative). The top OFF/ON had been guessed SEG06 0x08 from the
+# dispatch table's normSeg06=APC, but SEG06 0x08 is empirically PART 10 mute-down (now in MUTES), so
+# OFF/ON is unbound again (its real bit is TBD; the normSeg->layout-SEG remap is not identity here).
+for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,None,None),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
