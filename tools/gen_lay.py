@@ -303,10 +303,11 @@ SGcols=[51,107,162,217,272,327,383,438,493]
 SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
     ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
     ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
-    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY","SEG0E","0x10"),("EW EXPANSION","SEG0E","0x20")]
-# MEMORY / EW EXPANSION are the SOUND GROUP b4/b5 (SEG0E 0x10/0x20) -- were unbound ("no visual
-# feedback" per user); found by LED sweep (extsweep.lua): they light cpr16/cpr17 with category
-# (radio) behaviour, continuing the SEG0E b0-b3 run PAD/SYNTH/BASS/DRUM KITS.
+    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
+# MEMORY / EW EXPANSION: DECORATIVE. An earlier LED sweep guessed SEG0E 0x10/0x20 for them, but the
+# HELP-info sweep (2026-07-07) proves those two bits are PART EFFECT **SUSTAIN / DIGITAL EFFECT**
+# (bound below). MEMORY / EW EXPANSION exist in SoundGroupNameTable but have no dedicated panel bit
+# here. See notes/panel-button-names.md.
 RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
@@ -314,19 +315,22 @@ for i,(nm,tag,mask) in enumerate(SG):
     RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH)); RB += [P("hline",560,37,26,3), P("hline",684,37,26,3)]
-# PART EFFECT: HELP-info (2026-07-07) SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02.
-# SUSTAIN/DIGITAL EFFECT bits not yet found (no HELP info on SEG0F 0x04/0x08) -- decorative.
-PE_BITS={"SOUND DSP":("SEG0F","0x01"),"VARIATION":("SEG0F","0x02")}
+# PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
+# SUSTAIN=SEG0E 0x10, DIGITAL EFFECT=SEG0E 0x20. (SUSTAIN/DIGITAL EFFECT were mis-labelled MEMORY/EW
+# EXPANSION in the SOUND GROUP list above; corrected here.)
+PE_BITS={"SOUND DSP":("SEG0F","0x01"),"VARIATION":("SEG0F","0x02"),"SUSTAIN":("SEG0E","0x10"),"DIGITAL EFFECT":("SEG0E","0x20")}
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm); tg,mk=PE_BITS.get(nm,(None,None))
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
-    RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,60,8,8))
+    RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,60,8,8,name=OPLED.get((tg,mk))))
 RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3), P("hline",688,133,24,3)]
-# GLOBAL EFFECT: HELP-info REVERB=SEG13 0x40, MIC(=MIC REVERB & EFFECT)=SEG13 0x80. CHORUS/MULTI TBD.
-GE_BITS={"REVERB":("SEG13","0x40"),"MIC":("SEG13","0x80")}
+# GLOBAL EFFECT (SEG13): REVERB=0x40, MIC(=MIC REVERB & EFFECT)=0x80 (HELP-info). CHORUS=0x10,
+# MULTI=0x20 -- event-inferred: they fire ev2062/ev2061 in this group but have no HELP page (verified
+# no-op in HELP mode); the 4 bits 0x10/0x20/0x40/0x80 map L->R to the 4 buttons. notes/panel-button-names.md
+GE_BITS={"CHORUS":("SEG13","0x10"),"MULTI":("SEG13","0x20"),"REVERB":("SEG13","0x40"),"MIC":("SEG13","0x80")}
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
     tg,mk=GE_BITS.get(nm,(None,None))
-    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8))
+    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))
 RB.append(L("SEQUENCER",850,32,90,10,TXTH))
 for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG12","0x80"),("PROGRAM MENUS",915,149,"round_btn","SEG12","0x40")]:
     ls=wrap2(nm)
