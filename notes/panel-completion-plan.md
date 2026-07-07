@@ -232,3 +232,10 @@ the 0x2004 lesson). No new reliable bindings this tick. CONCLUSION: the panel is
 OBSERVABLE LIMIT -- 98 buttons + 28 LEDs all verified; every remaining button/LED is a toggle/
 data-entry/effect with no snapshot-distinguishable identity and no LED-position reference. Further
 panel binding requires a REAL-MACHINE photo/reference. Recommend brief future panel ticks.
+
+## Tick 2026-07-07m: panel LED ROM tables ruled out (unidasm)
+Disassembled PanelSwitchClassTable (0x4860C9F4) + PanelLedRegMap (0x48615058) readers -- confirmed
+NEITHER is a button->LED shortcut (switch-matrix self-test scan + LED-register select, respectively).
+So the cron's "bind LEDs via PanelSwitchClassTable" step is a dead end. Panel LED binding stays
+empirical + is COMPLETE for all verified buttons (28 LEDs). The panel is at its observable limit;
+the high-value work is now the "8 Beat 1" trace (unidasm-enabled) in the GENERAL tick, not the panel.

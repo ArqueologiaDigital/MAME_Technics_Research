@@ -383,3 +383,16 @@ Swept the 0x2008(x3)+0x2009(x3) bits (effled.lua) + snapshot-classified:
   IDENTITY is UNVERIFIED (the 3-bits->3-buttons match is the 0x2004 trap; no LED-position ref).
   NOT bound. Verified button->LED for a future real-machine reference:
   SEG0F.b1->cpr19, SEG10.b1->cpr30, SEG11.b1->cpr55.
+
+## Panel LED ROM tables characterized via unidasm (tick 2026-07-07m) -- NO button->LED shortcut
+Disassembled the readers of the two tables the cron prompt suggested for LED binding:
+- **PanelSwitchClassTable 0x4860C9F4**: reader 0x484A0D23 indexes it by (row*8+col)*2 where row/col
+  are the SWITCH-MATRIX position (from a switch descriptor), NOT normSeg.bit. It is the panel
+  SELF-TEST scan map. A cross-check vs verified operation LEDs (START/STOP=cpl1, PIANO=cpr48, ...)
+  FAILED precisely because of this -- the table is not a normSeg.bit -> cpl/cpr map.
+- **PanelLedRegMap 0x48615058**: reader 0x484B1714, a 21-entry (0..0x14) LED-group-index -> register
+  byte used by LED driver 0x484B1707. It selects a register, not a per-button LED.
+CONCLUSION: neither ROM table yields a static button(normSeg.bit) -> LED(cpl/cpr) map. Operation
+button->LED bindings stay EMPIRICAL (press -> observe cpl/cpr; done for all verified buttons). The
+remaining toggle/effect buttons stay blocked on button IDENTITY (which layout position), which needs
+a real-machine reference -- now CONFIRMED via disassembly that no ROM shortcut exists.
