@@ -161,3 +161,29 @@ panel_led_frame). Findings:
 per short run, read the LED delta over the full 0..511 range), APPLY the confirmed CPL portion to
 the layout, and re-derive only the CPR entries. The panel BUTTONS are complete + working
 (156 wired, delivery verified); the LED visual binding is this remaining refinement.
+
+## Function-button LED map — empirical sweep (2026-07-07)
+scratchpad/ledsweep.lua: for each of the 108 bound buttons, EXIT->home, read the cpl/cpr LED
+outputs (via `manager.machine.output:get_value`), press the button, read again, record the
+newly-lit output. cpl_led4 = a home/EXIT indicator that any button re-lights -> filtered as noise.
+All 16 GENRE LEDs matched the existing GENRE_LED map (method validated). NEW function-button LEDs
+(now added to OPLED + wired to their green/red_led in gen_lay.py):
+| button | SEG.bit | LED |
+|--------|---------|-----|
+| APC / CHORD FINDER   | SEG03 0x02 | cpl_led33 |
+| DISPLAY HOLD         | SEG08 0x10 | cpl_led5  |
+| MUSIC STYLE ARRANGER | SEG09 0x08 | cpl_led13 |
+| SOUND DSP            | SEG0F 0x01 | cpr_led18 |
+| SOUND DSP VARIATION  | SEG0F 0x02 | cpr_led19 |
+| SPLIT POINT          | SEG10 0x02 | cpr_led30 |
+| TECHNI-CHORD         | SEG11 0x80 | cpr_led73 |
+| START/STOP           | SEG12 0x08 | cpr_led36 (rhythm-running; also lit by DEMO) |
+| PROGRAM MENU         | SEG12 0x40 | cpr_led74 |
+| DISK                 | SEG12 0x80 | cpr_led75 |
+| CHORUS               | SEG13 0x10 | cpr_led100 |
+| MULTI EFFECT         | SEG13 0x20 | cpr_led99 |
+| MIC REVERB & EFFECT  | SEG13 0x80 | cpr_led91 |
+| SYNCHRO & BREAK      | SEG15 0x04 | cpr_led113 |
+CORRECTED two mis-wired LEDs: SYNCHRO was cpl10 -> cpr_led113; START/STOP was cpl1 -> cpr_led36.
+TODO: REVERB (SEG13 0x40) LED is on-by-default (cpr_led92 at home?) so the press-sweep didn't catch
+it -- verify by toggling. ONE TOUCH PLAY (SEG10 0x01 -> cpl_led5?) shares with DISPLAY HOLD -- uncertain.

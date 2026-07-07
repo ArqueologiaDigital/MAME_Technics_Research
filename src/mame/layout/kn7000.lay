@@ -330,7 +330,7 @@
 		<element ref="t16"><bounds x="1789" y="704" width="64" height="13"/></element>
 		<element ref="t17"><bounds x="1789" y="717" width="64" height="13"/></element>
 		<element ref="round_btn_big" inputtag="SEG08" inputmask="0x10"><bounds x="1790" y="748" width="42" height="42"/></element>
-		<element ref="red_led"><bounds x="1836" y="752" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led5"><bounds x="1836" y="752" width="8" height="8"/></element>
 		<element ref="round_btn_big" inputtag="SEG08" inputmask="0x20"><bounds x="1790" y="852" width="42" height="42"/></element>
 		<element ref="t18"><bounds x="1789" y="838" width="44" height="13"/></element>
 	</group>
@@ -353,7 +353,7 @@
 		<element ref="t24"><bounds x="418" y="26" width="150" height="10"/></element>
 		<element ref="t25"><bounds x="431" y="41" width="42" height="9"/></element>
 		<element ref="round_btn" inputtag="SEG03" inputmask="0x02"><bounds x="433" y="54" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="465" y="56" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led33"><bounds x="465" y="56" width="8" height="8"/></element>
 		<element ref="t26"><bounds x="489" y="41" width="42" height="9"/></element>
 		<element ref="round_btn"><bounds x="491" y="54" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="523" y="56" width="8" height="8"/></element>
@@ -457,7 +457,8 @@
 		<element ref="t68"><bounds x="513" y="324" width="84" height="8"/></element>
 		<element ref="t69"><bounds x="513" y="333" width="84" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG10" inputmask="0x02"><bounds x="539" y="350" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="371" y="350" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led13"><bounds x="371" y="350" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led30"><bounds x="551" y="337" width="8" height="8"/></element>
 		<element ref="vline"><bounds x="348" y="356" width="3" height="58"/></element>
 		<element ref="hline"><bounds x="348" y="412" width="20" height="3"/></element>
 		<element ref="t70"><bounds x="430" y="378" width="90" height="8"/></element>
@@ -481,7 +482,7 @@
 		<element ref="pill_wide" inputtag="SEG15" inputmask="0x04"><bounds x="856" y="355" width="105" height="28"/></element>
 		<element ref="green_led"><bounds x="645" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="697" y="364" width="8" height="8"/></element>
-		<element ref="green_led" name="cpl_led10"><bounds x="904" y="364" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led113"><bounds x="904" y="364" width="8" height="8"/></element>
 		<element ref="t74"><bounds x="740" y="394" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG12" inputmask="0x01"><bounds x="740" y="408" width="105" height="50"/></element>
 		<element ref="t75"><bounds x="856" y="394" width="105" height="9"/></element>
@@ -491,7 +492,7 @@
 		<element ref="t76"><bounds x="748" y="452" width="44" height="7"/></element>
 		<element ref="t77"><bounds x="752" y="459" width="36" height="7"/></element>
 		<element ref="t78"><bounds x="802" y="452" width="52" height="7"/></element>
-		<element ref="green_led" name="cpl_led1"><bounds x="867" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led36"><bounds x="867" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="876" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="885" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="894" y="414" width="8" height="8"/></element>
@@ -578,25 +579,25 @@
 		<element ref="green_led" name="cpr_led17"><bounds x="618" y="60" width="8" height="8"/></element>
 		<element ref="t107"><bounds x="649" y="58" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0F" inputmask="0x01"><bounds x="661" y="71" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="673" y="60" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led18"><bounds x="673" y="60" width="8" height="8"/></element>
 		<element ref="t108"><bounds x="704" y="58" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG0F" inputmask="0x02"><bounds x="716" y="71" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="728" y="60" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led19"><bounds x="728" y="60" width="8" height="8"/></element>
 		<element ref="t109"><bounds x="560" y="128" width="150" height="10"/></element>
 		<element ref="hline"><bounds x="558" y="133" width="24" height="3"/></element>
 		<element ref="hline"><bounds x="688" y="133" width="24" height="3"/></element>
 		<element ref="t110"><bounds x="539" y="152" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x10"><bounds x="551" y="163" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="563" y="152" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led100"><bounds x="563" y="152" width="8" height="8"/></element>
 		<element ref="t111"><bounds x="594" y="152" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x20"><bounds x="606" y="163" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="618" y="152" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led99"><bounds x="618" y="152" width="8" height="8"/></element>
 		<element ref="t112"><bounds x="649" y="152" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x40"><bounds x="661" y="163" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="673" y="152" width="8" height="8"/></element>
 		<element ref="t113"><bounds x="704" y="152" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG13" inputmask="0x80"><bounds x="716" y="163" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="728" y="152" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led91"><bounds x="728" y="152" width="8" height="8"/></element>
 		<element ref="t114"><bounds x="850" y="32" width="90" height="10"/></element>
 		<element ref="t67"><bounds x="819" y="58" width="52" height="8"/></element>
 		<element ref="round_btn"><bounds x="829" y="71" width="32" height="32"/></element>
@@ -606,11 +607,11 @@
 		<element ref="green_led"><bounds x="911" y="58" width="8" height="8"/></element>
 		<element ref="t116"><bounds x="819" y="136" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x80"><bounds x="829" y="149" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="841" y="136" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led75"><bounds x="841" y="136" width="8" height="8"/></element>
 		<element ref="t117"><bounds x="889" y="127" width="52" height="8"/></element>
 		<element ref="t118"><bounds x="889" y="136" width="52" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG12" inputmask="0x40"><bounds x="899" y="149" width="32" height="32"/></element>
-		<element ref="green_led"><bounds x="911" y="136" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led74"><bounds x="911" y="136" width="8" height="8"/></element>
 		<element ref="t119"><bounds x="798" y="138" width="32" height="8"/></element>
 		<element ref="t120"><bounds x="796" y="147" width="36" height="8"/></element>
 		<element ref="green_led"><bounds x="812" y="158" width="8" height="8"/></element>
@@ -634,7 +635,7 @@
 		<element ref="t127"><bounds x="264" y="388" width="8" height="8"/></element>
 		<element ref="pill_wide" inputtag="SEG13" inputmask="0x04"><bounds x="213" y="405" width="75" height="24"/></element>
 		<element ref="t128"><bounds x="403" y="258" width="92" height="9"/></element>
-		<element ref="green_led"><bounds x="428" y="274" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led73"><bounds x="428" y="274" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG11" inputmask="0x80"><bounds x="416" y="285" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="488" y="274" width="8" height="8"/></element>
 		<element ref="round_btn"><bounds x="476" y="285" width="32" height="32"/></element>
