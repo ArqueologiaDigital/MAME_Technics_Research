@@ -167,10 +167,10 @@ for i,yy in enumerate([205,294,383,472,561]):
 # OTHER PART & FR / HELP
 # OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
 # FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
-S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
+S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
       P("round_btn_big",150,852,42,42,tag="SEG08",mask="0x08"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
+S += [L("CONTRAST",247,730,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -193,9 +193,9 @@ for i in range(16):
     S.append(P("mute_up",x,756,55,77,tag=ut,mask=um))
     S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
-S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
       # DISPLAY HOLD = SEG08 0x10 (confirmed via HELP-info: "HELP : DISPLAY HOLD"). Was decorative.
-      L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8,name=OPLED.get(("SEG08","0x10"))),
+      L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8,name=OPLED.get(("SEG08","0x10"))),
       # EXIT = SEG08 0x20 (confirmed: pressed in HELP mode it turns HELP off -> returns to the PMEM
       # home screen). Completes the SEG08 LCD-corner set: OTHER PARTS 0x04, HELP 0x08, DISPLAY HOLD
       # 0x10, EXIT 0x20. (The earlier SEG20 0x01 guess was wrong -- that's a tempo control.)
@@ -218,8 +218,8 @@ def grid(out,x0,y0,cols,dx,dy,entries,header=None):
 # =================== LEFT BLOCK (bottom-left; coords = mockup abs - (0,997)) =
 LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
-    LB.append(L(nm,cx-24,y-24,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-15,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
-LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
+    LB.append(L(nm,cx-24,y-14,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
+LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
 # AUTO PLAY CHORD: MODE = SEG03 0x02 (fresh-boot scr:pixel dump 2026-07-07: opens the "APC SELECT"
 # screen BASIC/FINGERED/PIANIST; was decorative). The top OFF/ON had been guessed SEG06 0x08 from the
 # dispatch table's normSeg06=APC, but SEG06 0x08 is empirically PART 10 mute-down (now in MUTES), so
@@ -244,7 +244,7 @@ GENRE_LED={("SEG00","0x04"):"cpl_led3",  ("SEG00","0x08"):"cpl_led2",  ("SEG00",
            ("SEG00","0x40"):"cpl_led11", ("SEG00","0x80"):"cpl_led10", ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
            ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17", ("SEG01","0x80"):"cpl_led16",
            ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26", ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24"}
-LB.append(L("RHYTHM GROUP",700,32,180,11,TXTH))
+LB.append(L("RHYTHM GROUP",700,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
@@ -325,13 +325,13 @@ SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SE
 # HELP-info sweep (2026-07-07) proves those two bits are PART EFFECT **SUSTAIN / DIGITAL EFFECT**
 # (bound below). MEMORY / EW EXPANSION exist in SoundGroupNameTable but have no dedicated panel bit
 # here. See notes/panel-button-names.md.
-RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
+RB.append(L("SOUND GROUP",240,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
-RB.append(L("PART EFFECT",560,32,150,10,TXTH)); RB += [P("hline",560,37,26,3), P("hline",684,37,26,3)]
+RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",560,47,26,3), P("hline",684,47,26,3)]
 # PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
 # SUSTAIN=SEG0E 0x10, DIGITAL EFFECT=SEG0E 0x20. (SUSTAIN/DIGITAL EFFECT were mis-labelled MEMORY/EW
 # EXPANSION in the SOUND GROUP list above; corrected here.)
@@ -348,7 +348,7 @@ GE_BITS={"CHORUS":("SEG13","0x10"),"MULTI":("SEG13","0x20"),"REVERB":("SEG13","0
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
     tg,mk=GE_BITS.get(nm,(None,None))
     RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))
-RB.append(L("SEQUENCER",850,32,90,10,TXTH))
+RB.append(L("SEQUENCER",850,42,90,10,TXTH))
 for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG12","0x80"),("PROGRAM MENUS",915,149,"round_btn","SEG12","0x40")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
