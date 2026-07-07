@@ -41,3 +41,28 @@ the SEG08 LCD-corner set (OTHER PARTS 0x04, HELP 0x08, DISPLAY HOLD 0x10, EXIT 0
 - Bind the 7 "TODO" rows to their drawn buttons (TECHNI-CHORD, TRANSPOSE +/-, R1/R2 OCTAVE, PART
   SELECT, SOLO, FILL IN, CONDUCTOR, VARIATION & MSA).
 - SUSTAIN, DIGITAL EFFECT, CHORUS, MULTI, SEQUENCER PLAY/EASY REC, SYNCHRO, SD LOAD still unfound.
+
+## Additional HELP-info sweep (SEG08/09/15) — 2026-07-07
+Clean sweep (body-brightness help-off detection, excluding HELP/EXIT) VERIFIED SEG09 (my earlier
+"contaminated" reading was a misread of a blended image):
+| bit | button | bound? |
+|-----|--------|--------|
+| SEG08 0x40| SOUND CONTROLLER MODE  | (no drawn button) |
+| SEG08 0x80| SOUND CONTROLLER RESET | (no drawn button) |
+| SEG09 0x01| PERFORMANCE PADS BANK  | yes |
+| SEG09 0x02| PERFORMANCE PADS STOP  | yes (was wrongly SEG06 0x02) |
+| SEG09 0x04| PERFORMANCE PADS AUTO SETTING | yes (was wrongly SEG06 0x20) |
+| SEG09 0x08| MUSIC STYLE ARRANGER   | yes |
+| SEG09 0x10| VARIATION & MSA (2nd)  | (VAR2; not distinctly bound) |
+| SEG09 0x40| DEMO                   | yes |
+| SEG15 0x04| SYNCHRO & BREAK        | yes |
+SEG04/06/07/14/16-1F produced NO HELP info (no buttons there, or non-informative).
+
+## MUTE UP/DOWN buttons — STILL OPEN (user-flagged 2026-07-07)
+The 16 MUTE UP/DOWN buttons do NOT show HELP info (swept SEG05/0A/0B in HELP mode -> 0 captures),
+so the HELP-name oracle can't map them. They are per-part VOLUME nudges: pressing the confirmed
+SEG05 0x20 (= MUTE DOWN 7) drops PART 7's mixer level 100->99 (a full press ramps to silence).
+Known: SEG05 = parts 7,8 (user). The part-level RAM byte was NOT found in 0x50030000-0x50048000
+(not a simple 0-100 byte / not a toggle). NEXT approach: open the OTHER PARTS (PT1-16) mixer via
+SEG08 0x04, press each candidate mute-down bit, snapshot, read which PT's level dropped -> map bit
+-> part. Candidate segs: SEG05 (parts 7,8 + maybe 5,6 on b0-b3), SEG0A, SEG0B, and others TBD.
