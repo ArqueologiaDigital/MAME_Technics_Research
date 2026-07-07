@@ -253,23 +253,23 @@
 		<element ref="bg_top"><bounds x="0" y="0" width="2000" height="997"/></element>
 		<element ref="screen_frame"><bounds x="298" y="104" width="1404" height="581"/></element>
 		<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="205" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x08"><orientation flipx="yes"/><bounds x="138" y="205" width="123" height="34"/></element>
 		<element ref="t0"><bounds x="168" y="217" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x10"><bounds x="1740" y="205" width="123" height="34"/></element>
 		<element ref="t0"><bounds x="1770" y="217" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="294" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x10"><orientation flipx="yes"/><bounds x="138" y="294" width="123" height="34"/></element>
 		<element ref="t1"><bounds x="168" y="306" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x20"><bounds x="1740" y="294" width="123" height="34"/></element>
 		<element ref="t1"><bounds x="1770" y="306" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="383" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x20"><orientation flipx="yes"/><bounds x="138" y="383" width="123" height="34"/></element>
 		<element ref="t2"><bounds x="168" y="395" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG13" inputmask="0x01"><bounds x="1740" y="383" width="123" height="34"/></element>
 		<element ref="t2"><bounds x="1770" y="395" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="472" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x40"><orientation flipx="yes"/><bounds x="138" y="472" width="123" height="34"/></element>
 		<element ref="t3"><bounds x="168" y="484" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG12" inputmask="0x01"><bounds x="1740" y="472" width="123" height="34"/></element>
 		<element ref="t3"><bounds x="1770" y="484" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><orientation flipx="yes"/><bounds x="138" y="561" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x80"><orientation flipx="yes"/><bounds x="138" y="561" width="123" height="34"/></element>
 		<element ref="t4"><bounds x="168" y="573" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG11" inputmask="0x01"><bounds x="1740" y="561" width="123" height="34"/></element>
 		<element ref="t4"><bounds x="1770" y="573" width="90" height="10"/></element>
@@ -450,7 +450,7 @@
 		<element ref="round_btn" inputtag="SEG10" inputmask="0x01"><bounds x="474" y="350" width="32" height="32"/></element>
 		<element ref="t63"><bounds x="513" y="324" width="84" height="8"/></element>
 		<element ref="t64"><bounds x="513" y="333" width="84" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG03" inputmask="0x80"><bounds x="539" y="350" width="32" height="32"/></element>
+		<element ref="round_btn"><bounds x="539" y="350" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="371" y="350" width="8" height="8"/></element>
 		<element ref="vline"><bounds x="348" y="356" width="3" height="58"/></element>
 		<element ref="hline"><bounds x="348" y="412" width="20" height="3"/></element>
@@ -464,11 +464,11 @@
 		<element ref="round_btn" inputtag="SEG04" inputmask="0x01"><bounds x="486" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="484" y="388" width="8" height="8"/></element>
 		<element ref="t54"><bounds x="494" y="388" width="10" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG03" inputmask="0x40"><bounds x="546" y="399" width="32" height="32"/></element>
+		<element ref="round_btn"><bounds x="546" y="399" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="544" y="388" width="8" height="8"/></element>
 		<element ref="t55"><bounds x="554" y="388" width="10" height="8"/></element>
 		<element ref="t66"><bounds x="625" y="340" width="105" height="9"/></element>
-		<element ref="pill_wide" inputtag="SEG03" inputmask="0x20"><bounds x="625" y="355" width="105" height="28"/></element>
+		<element ref="pill_wide"><bounds x="625" y="355" width="105" height="28"/></element>
 		<element ref="t67"><bounds x="740" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG04" inputmask="0x02"><bounds x="740" y="355" width="105" height="28"/></element>
 		<element ref="t68"><bounds x="856" y="340" width="105" height="9"/></element>

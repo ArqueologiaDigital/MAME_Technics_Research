@@ -50,11 +50,13 @@ spuriously opening genres. Unbound (made decorative) until their real bits are f
 ## REMAINING mis-bindings / TODO (from user feedback — follow-up ticks)
 `current_button (layout bit) => what it really triggers` — so the real bit for the *target*
 function is the one currently on `current_button`:
-- FADE IN/OUT (SEG03 0x20) => **LCD LEFT 3**  ⇒ LCD LEFT 3 soft-key = SEG03 0x20
-- VARIATION 4 (SEG03 0x40) => **LCD LEFT 4**  ⇒ LCD LEFT 4 = SEG03 0x40
-- SPLIT POINT (SEG03 0x80) => **LCD LEFT 5**  ⇒ LCD LEFT 5 = SEG03 0x80
-  → inferred: **LCD LEFT 1..5 = SEG03 b3..b7** (0x08/0x10/0x20/0x40/0x80). Rebinding the
-  left soft-keys there conflicts with FADE/VAR4/SPLIT, whose real bits are then unknown.
+- **RESOLVED (2026-07-07)** — the 5 LCD-LEFT soft-keys are wired to **SEG03 b3..b7**
+  (top->bottom = LCD LEFT 1..5): 0x08, 0x10, 0x20, 0x40, 0x80. Direct user evidence:
+  FADE(SEG03 0x20)=>LCD LEFT 3, VAR4(SEG03 0x40)=>LCD LEFT 4, SPLIT(SEG03 0x80)=>LCD LEFT 5;
+  LCD LEFT 1-2 (0x08/0x10) extrapolate the run. Bound the left soft-key column to these bits;
+  freed FADE IN/OUT (SEG03 0x20), VARIATION 4 (SEG03 0x40), SPLIT POINT (SEG03 0x80) — those
+  buttons' real bits are now TBD. NOTE: these are context-sensitive soft-keys (inactive on the
+  home screen), so they can't be snapshot-verified from home — user re-test to confirm.
 - **RESOLVED (2026-07-07)** — the MUTE-mislabel clues gave real bits for 5 functions,
   all snapshot-verified from a clean boot, now bound to their real buttons:
   | function            | real bit    | verified by            | layout change |

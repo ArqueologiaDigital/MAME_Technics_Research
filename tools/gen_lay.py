@@ -130,14 +130,15 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 # LCD-flanking keyboard-part on/off buttons (descriptor 0x2000/0x2001 parts 0x10-0x14 =
 # RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2): OFF column on SEG00 (left of LCD), ON column on
 # SEG11-13 (right). The driver's old "LCD Left N" labels were wrong. See notes/panel-descriptor-map.md.
-# NOTE: the OFF (left) column was assumed to be SEG00 part-off bits, but real-machine
-# testing (2026-07-07) shows SEG00 b2..b7 are the RHYTHM genre-select bits -- so these
-# left soft-keys were spuriously opening genres (user: "LCD LEFT 2 => ROCK & POP" etc.).
-# Left column unbound (decorative) until the real LCD-soft-key bits are confirmed (likely
-# SEG03.b3-b7, inferred from the FADE/VAR4/SPLIT observations). Right (ON) column kept.
-LCDPARTS=[("RIGHT1",None,None,"SEG11","0x10"),("RIGHT2",None,None,"SEG11","0x20"),
-          ("LEFT",None,None,"SEG13","0x01"),("ACCOMP1",None,None,"SEG12","0x01"),
-          ("ACCOMP2",None,None,"SEG11","0x01")]
+# LEFT column = the 5 LCD-LEFT soft-keys, wired to SEG03 b3..b7 (0x08/0x10/0x20/0x40/0x80),
+# top->bottom = LCD LEFT 1..5. Confirmed by the user: FADE(SEG03 0x20)=>LCD LEFT 3,
+# VAR4(SEG03 0x40)=>LCD LEFT 4, SPLIT(SEG03 0x80)=>LCD LEFT 5 give 3/5 directly; 1-2 (0x08/0x10)
+# extrapolate the b3-b7 run. (Context-sensitive soft-keys: inactive on the home screen, so not
+# snapshot-verifiable there.) FADE/VAR4/SPLIT are freed below (their real bits are TBD). Right
+# (ON) column left on SEG11-13 as before. See notes/panel-rhythm-group.md.
+LCDPARTS=[("RIGHT1","SEG03","0x08","SEG11","0x10"),("RIGHT2","SEG03","0x10","SEG11","0x20"),
+          ("LEFT","SEG03","0x20","SEG13","0x01"),("ACCOMP1","SEG03","0x40","SEG12","0x01"),
+          ("ACCOMP2","SEG03","0x80","SEG11","0x01")]
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
@@ -229,8 +230,8 @@ for i,(shp,fx,fy) in enumerate(padspec):
     LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
 # MUSIC STYLE ARRANGER = SEG09 0x08 (user: MUTE DOWN 8 => MSA; old SEG04 0x08 only moved a fader).
-# SPLIT POINT SEG03 0x80 is really the LCD LEFT 5 soft-key per user -- left for a later pass.
-for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG03","0x80")]:
+# SPLIT POINT was SEG03 0x80 = LCD LEFT 5 (now bound to the left soft-key); unbound until its real bit is found.
+for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,None,None)]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
@@ -238,18 +239,17 @@ LB.append(P("green_led",371,350,8,8))   # MUSIC STYLE ARRANGER LED
 # L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
 LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
-# VARIATION & MSA 1-4 = event 0x2085 args a00-a03 (SEG04.b4/b2/b0 + SEG03.b6). Descriptor-grounded
-# (driver labels SEG04.b4=VARIATION&MSA 1); these are rhythm modifiers with no distinct LCD, so
-# snapshot can't verify them. NB SEG04.b6 (driver "VARIATION & MSA 4") is a MISLABEL = 0x2030/a05.
-VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),("SEG03","0x40")]
+# VARIATION 1-3 = SEG04 b4/b2/b0; VARIATION 4 was SEG03 0x40 but the user shows that bit is
+# LCD LEFT 4 (now bound to the left soft-key), so VAR4 is freed (decorative; real bit TBD).
+# These are rhythm modifiers with no distinct LCD, so snapshot can't verify them.
+VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),(None,None)]
 for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
 # FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
 # (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
-# SYNCHRO & BREAK was SEG00 0x80 -- but that bit = RHYTHM genre 5 (MOVIE & SHOW), verified
-# on real hardware; unbound here (decorative) until its real bit is found. (FADE IN/OUT on
-# SEG03 0x20 is really the LCD LEFT 3 soft-key per user -- a separate fix, left for now.)
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,None,None)]:
+# FADE IN/OUT was SEG03 0x20 = LCD LEFT 3 (now bound to the left soft-key); SYNCHRO & BREAK was
+# SEG00 0x80 = RHYTHM genre 5. Both unbound (decorative) until their real bits are found.
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,None,None),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
