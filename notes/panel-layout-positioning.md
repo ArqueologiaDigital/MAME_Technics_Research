@@ -27,3 +27,18 @@ real rendered buttons. Automated mockup-circle detection is defeated by nearby l
 1. If the buttons should match the mockup size, bump round_btn draws 32->~37px keeping centers
    (P("round_btn",cx-16,cy,32,32) -> cx-18,cy-2,36,36) and re-verify no overlaps via render_lay.py.
 2. Resolve the PART/GLOBAL EFFECT cluster offset once a real artwork render is available.
+
+## RESOLUTION (2026-07-07, user provided a real emulator screenshot)
+The user supplied an actual emulator render (cached .../image-cache/<sess>/6.png, 1920x1080 with the
+2000x1500 Compact view letterboxed to x=240..1680). Aligning it to the mockup (crop+resize to 2000x1500,
+blend) gave a RELIABLE comparison:
+- **Content is positioned exactly on spec.** The RHYTHM active-style green LED in the render sits at the
+  .lay LED coordinate within dy=-0.6px. So the crop is accurate and the render faithfully reflects the .lay.
+- **Applied + validated the button-size fix**: round_btn 32 -> 37px (P() helper, centre preserved). The
+  render buttons now match the mockup circle diameter (36.6px measured).
+- Label positions differ from the mockup by only ~10px and INCONSISTENTLY in sign (OTHER PART render -13,
+  CONTRAST +25) -- automated text-row detection is unreliable (font differs MAME vs mockup, catches LED/
+  highlight rows). Treated as font-rendering + minor, NOT worth unverified global shifts. Iterate per-label
+  with the user's screenshots if they flag specific ones.
+Tooling for next time: scratchpad/blend.png = render+mockup 45% blend; render green-LED centroid vs .lay
+LED pos is the clean alignment probe (content, not labels).
