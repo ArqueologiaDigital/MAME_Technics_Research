@@ -346,7 +346,7 @@
 		<element ref="fader"><bounds x="289" y="68" width="30" height="108"/></element>
 		<element ref="t19"><bounds x="418" y="26" width="150" height="10"/></element>
 		<element ref="t20"><bounds x="431" y="41" width="42" height="9"/></element>
-		<element ref="round_btn"><bounds x="433" y="54" width="32" height="32"/></element>
+		<element ref="round_btn" inputtag="SEG03" inputmask="0x02"><bounds x="433" y="54" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="465" y="56" width="8" height="8"/></element>
 		<element ref="t21"><bounds x="489" y="41" width="42" height="9"/></element>
 		<element ref="round_btn" inputtag="SEG06" inputmask="0x08"><bounds x="491" y="54" width="32" height="32"/></element>

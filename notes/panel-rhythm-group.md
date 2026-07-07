@@ -85,7 +85,7 @@ function is the one currently on `current_button`:
 - **No visual feedback** (button not associated with any input, or no LED):
   all PART EFFECT + GLOBAL EFFECT; all BANK VIEW / NEXT BANK / PANEL
   MEMORY; all CUSTOM PANEL / CUSTOMIZE / FAVORITES; SEQUENCER PLAY & EASY REC; SD LOAD
-  (orange); APC MODE/SET/OFF-ON (lower); DISPLAY HOLD; EXIT; PAGE UP/DOWN.
+  (orange); APC SET/OFF-ON (lower) [MODE = SEG03 0x02, found]; DISPLAY HOLD; EXIT; PAGE UP/DOWN.
   → these need their input bits found (many may be dedicated events, not in the scanned segs).
 
 ## Genre LEDs (RESOLVED 2026-07-07)

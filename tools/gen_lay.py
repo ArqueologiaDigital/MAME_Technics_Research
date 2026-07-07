@@ -197,9 +197,10 @@ LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
     LB.append(L(nm,cx-24,y-24,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-15,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
 LB.append(L("AUTO PLAY CHORD",418,26,150,10,TXTH))
-# AUTO PLAY CHORD: top OFF/ON = PLAY CHORD OFF/ON = SEG06.b3 (0x2032). MODE/SET/bottom-OFF-ON left
-# decorative (events not yet confirmed).
-for nm,cx,y,tg,mk in [("MODE",447,54,None,None),("OFF/ON",505,54,"SEG06","0x08"),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
+# AUTO PLAY CHORD: top OFF/ON = PLAY CHORD OFF/ON = SEG06.b3 (0x2032). MODE = SEG03 0x02
+# (fresh-boot scr:pixel dump 2026-07-07: opens the "APC SELECT" screen BASIC/FINGERED/PIANIST;
+# was decorative -- a user "no visual feedback" button). SET/bottom-OFF-ON still decorative (TBD).
+for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,"SEG06","0x08"),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8))
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
