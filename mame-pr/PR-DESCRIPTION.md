@@ -32,6 +32,14 @@ mask-ROM dump but **unvalidated → BAD_DUMP** (needs a redump). Full SHA1s: see
 | kn6500 | prog even `d6cd26bb` / odd `1691c3d8`; table even `8c7f33a2` / odd `6953e094` |
 | kn7000 | prog even `529b87ce` / odd `a36e6222`; table even `005a6db2` / odd `7e1a312e` |
 
+## Licensing
+
+- **Drivers: GPL2+** (matching `kn5000.cpp`) — `kn7000.cpp` and the KN1500 block in
+  `kn5000.cpp`.
+- **CPU cores: BSD-3-Clause**, as with the other MAME cores — the MN10300 execution
+  core (submitted separately), the `mn10300` disassembler (already upstream, AJR),
+  and `TMP95C061` for the KN1500 (already upstream, Wilbert Pol).
+
 ## Notes
 
 - kn2600 is a clone of kn2400 (one firmware serves KN2400/KN2600/PR54 via a runtime
