@@ -169,6 +169,7 @@ public:
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
+	void kn6000(machine_config &config) ATTR_COLD;
 	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
 
 protected:
@@ -181,6 +182,7 @@ private:
 	required_shared_ptr<uint32_t> m_workram;
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
+	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 
@@ -1273,6 +1275,12 @@ void kn7000_state::machine_start()
 	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer
 	// raises the periodic interrupt that drives the MILK scheduler.
 	m_maincpu->set_irq_vector(0x4C03DDA0);
+
+	// KN6000/KN6500: unlike the KN7000 (which self-loads its library), the
+	// "library" at 0x4C000000/0x8C000000 is a bus mirror of the program ROM.
+	// Populate the aliased libram from the program ROM so the boot finds it.
+	if (m_lib_mirror)
+		memcpy(memshare("libram")->ptr(), memregion("maincpu")->base(), memregion("maincpu")->bytes());
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
 	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 
@@ -1384,6 +1392,14 @@ void kn7000_state::kn7000(machine_config &config)
 	//       floppy disk controller (IC103), SD card and USB.
 }
 
+// KN6000/KN6500 reuse the KN7000 machine, but their library ROM at 0x4C000000 is
+// a bus mirror of the program ROM (populated in machine_start), not self-loaded.
+void kn7000_state::kn6000(machine_config &config)
+{
+	kn7000(config);
+	m_lib_mirror = true;
+}
+
 
 ROM_START(kn7000)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC16/IC17 -> 0x48400000
@@ -1430,8 +1446,8 @@ ROM_END
 // ===================================================================
 ROM_START(kn6000)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IK1) -> 0x48400000
-	ROM_LOAD32_WORD("kn6000_program_even.rom", 0x000000, 0x200000, CRC(5baeae6d) SHA1(4c9eddf227565e0b0a1d92ff3e869a02b9133833))
-	ROM_LOAD32_WORD("kn6000_program_odd.rom",  0x000002, 0x200000, CRC(537471c0) SHA1(2464ce5a59416dd31c0215fb3a4ee900715df2fa))
+	ROM_LOAD32_WORD("kn6000_program_even.rom", 0x000000, 0x200000, CRC(56c2cfe3) SHA1(e15a4c73440f1dcdf06457f9956c96bf20d68b16))
+	ROM_LOAD32_WORD("kn6000_program_odd.rom",  0x000002, 0x200000, CRC(9d94da6c) SHA1(d73b4c8ebf0c67b6a2eeb5571d0273fc6efbfe4c))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IK2, 0x1F7A31)
 	ROM_LOAD32_WORD("kn6000_table_even.rom", 0x000000, 0x200000, CRC(fa5e4f93) SHA1(0426da99b1589c0362e6321466beab21b22b81b0))
 	ROM_LOAD32_WORD("kn6000_table_odd.rom",  0x000002, 0x200000, CRC(fd8e3bcd) SHA1(e1b63d45299b67e5258d5d08a949ea8e05c1b8e6))
@@ -1439,8 +1455,8 @@ ROM_END
 
 ROM_START(kn6500)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IKV1) -> 0x48400000
-	ROM_LOAD32_WORD("kn6500_program_even.rom", 0x000000, 0x200000, CRC(d6cd26bb) SHA1(76fd4c8a5793024da5b01956a15c9c4afe7c91d6))
-	ROM_LOAD32_WORD("kn6500_program_odd.rom",  0x000002, 0x200000, CRC(1691c3d8) SHA1(a6d95f51881a30b4e83352cee296b97d7b1ee222))
+	ROM_LOAD32_WORD("kn6500_program_even.rom", 0x000000, 0x200000, CRC(f42a2fcf) SHA1(7cebf73bf623fd714ca455ed50b80da1d2186414))
+	ROM_LOAD32_WORD("kn6500_program_odd.rom",  0x000002, 0x200000, CRC(ca2a733f) SHA1(2484d3b76b62b05ded39e4194cdc74fd3c01bcbe))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IKV2, 0x181691)
 	ROM_LOAD32_WORD("kn6500_table_even.rom", 0x000000, 0x200000, CRC(8c7f33a2) SHA1(d44fb4415cd6b571e11e57d4a7642226b0bf4edf))
 	ROM_LOAD32_WORD("kn6500_table_odd.rom",  0x000002, 0x200000, CRC(6953e094) SHA1(abf4c2252d40c71c761503d657593eb6e9c0eecc))
@@ -1481,8 +1497,8 @@ ROM_END
 SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
 
 // KN6000 / KN6500 -- draft drivers reusing the KN7000 machine config (same MN10300 CPU, same 0x48400000 base).
-SYST(2000, kn6000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
-SYST(2001, kn6500, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2000, kn6000, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2001, kn6500, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
 
 // KN2400 / KN2600 -- MN10300/MILK siblings sharing one firmware image (kn2600 = clone of kn2400).
 SYST(1998, kn2400, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
