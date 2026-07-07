@@ -106,3 +106,28 @@ NEXT: find where the rhythm style-ID is produced (the caller path that hands 0 t
 rhythm/style, vs 0x65A for sounds). The genre->style table is 0x48735EE4 (styleListPtr 0x485B8A04 for
 BALLAD); check whether that list yields 0s at runtime, or whether the style-load that should set the
 current style-ID never runs. Stack-unwind (tap a data read in the rhythm path + read the return chain).
+
+
+## REFRAMED (tick 2026-07-07q): the genre-style DATA is valid; the bug is in the LIST path
+Static dump of the genre-style table 0x48735EE4 (already symbol GenreStyleTable): **all 16 genres are
+fully populated + valid** -- 8&16 BEAT(10), ROCK & POP(16), BALLAD(16), JAZZ & SWING(20), ... each
+with a real name, style count, and styleListPtr. BALLAD's list (0x485B8A04) = **distinct valid u32
+style-IDs**: 0x65B, 0x66B, 0x662, 0x75B, 0xC63, 0x24E, 0x94B, 0x34A, ... (adjacent to the working
+sound-ID 0x65A). So the STYLE DATA IS PRESENT AND VALID.
+
+**This CORRECTS the roadmap's long-standing "empty style data / 0x96800000-empty -> 8 Beat 1" theory.**
+The '8 Beat 1' bug is NOT missing data.
+
+Runtime tap: during a genre-list build (press a RHYTHM GROUP button), there are **0 reads** of the
+static styleList region (0x485B8900-0x485B8DFF). So the list-box does not consult the static table at
+press time -- it reads a RAM copy / prior enumeration.
+
+Re-framing of what I traced: the path I mapped (StyleNameCommit 0x484334A4 <- StyleNameSourceSet
+0x48433400 <- StyleBuiltinNameLookup 0x48433AC4) is the **current-style / conductor** name path (home
+screen), where style-ID 0 -> "8 Beat 1" is probably the CORRECT power-on default (genre 0 = 8&16 BEAT,
+style 0). The **list** "all 8 Beat 1" bug is a SEPARATE path: **AcCtgStyleListBoxProc 0x4847BCCA**
+(from the roadmap) building the 10-slot list. That is the path to trace next.
+
+NEXT: trace AcCtgStyleListBoxProc 0x4847BCCA -- where it gets each slot's style-ID/name (a RAM copy,
+not the static table), and why every slot resolves to the default. The static data (0x485B8A04) is
+good, so the defect is in the list enumeration's read of it (boot-time copy, or the aperture).
