@@ -1,8 +1,13 @@
 Additions to src/mame/mame.lst
 ==============================
 
-Add a new group for the MN10300 keyboards (place after the kn5000.cpp group,
-keeping the file's source ordering):
+1) Add the KN1500 to the existing Toshiba/kn5000.cpp group:
+
+    @source:matsushita/kn5000.cpp
+   +kn1500
+    kn5000
+
+2) Add a new group for the MN10300 keyboards (after the kn5000.cpp group):
 
    +@source:matsushita/kn7000.cpp
    +kn2400
