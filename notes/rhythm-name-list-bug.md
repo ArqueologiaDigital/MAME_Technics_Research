@@ -322,3 +322,21 @@ a name -- and which step yields a null/default in emulation (a RAM global read a
 0, or a pointer through an unmapped region). The struct's RAM ptr **0x500012CC** is a prime suspect: if
 that workram holds a per-style name-pointer table that is uninitialised (0) in emulation, the resolver
 would default for every slot. Check 0x500012CC's contents during the menu (read-tap or dump).
+
+### TICK 8c (follow the struct's RAM pointer): 0x500012CC is UNINITIALISED (0xffffffff) in the menu
+Dumped RAM during the BALLAD menu. The descriptor struct @0x485D6260 (read 15x) has a field +0x24 =
+**0x500012CC** (a RAM address). Live contents:
+- **0x500012CC = 0xffffffff** (uninitialised). The whole surrounding config area 0x50001280-0x50001310
+  is largely 0xffffffff / 0x00000000, except a **region-base table @0x500012EC = 84000000 50000000
+  4c000000 48400000** (the RAM/workram/libram/program-flash bases).
+So the resolver's data chain from the ROM descriptor bottoms out at an **uninitialised RAM slot**
+(0xffffffff), a plausible reason it yields no name and defaults. CAVEAT: not yet proven that 0x485D6260
+IS the style-name resolver's descriptor (it is merely what was read in the name region during the menu);
+it could be a font/UI descriptor. Confirming requires the reader PC (PC-trigger, CPU-core rebuild) to tie
+the 0x485D6260 read + 0x500012CC deref to the style-list populate.
+
+### Status summary of this bug (for the next tick)
+SOLID: (a) genre->16 style-IDs works; (b) built-in name strings ARE in the program ROM (0x485CCF31 etc.);
+(c) they are NEVER read during the menu -> resolution fails upstream, not a store defect, not missing
+data-flash. OPEN: the exact resolver + why it stops. Best next move: temporary PC-trigger in mn10300.cpp's
+fetch loop keyed on a read of 0x485D6260 or 0x500012CC (log PC+regs), press BALLAD, disassemble the PC.
