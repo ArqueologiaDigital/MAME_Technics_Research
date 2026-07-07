@@ -95,13 +95,13 @@ def L(s,x,y,w,h,color=TXT): return f'\t\t<element ref="{label(s,color)}"><bounds
 def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
 
 # ---- element library (reused kn5000 shapes + kn7000-unique) ----
-two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
+two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
 two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
 two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#8a4310" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
 two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#33454a" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
-two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/>')
+two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
 # page up/down = two halves of a tall pill (rounded outer end, flat inner end)
@@ -260,7 +260,7 @@ for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG09","0x04"),("BANK",230,"SEG09","0x0
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32,tag=tg,mask=mk))
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
-padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,42)]   # measured, abutting (no gaps)
+padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,51)]   # measured vs mockup: bottom row reaches y~1457
 # PERFORMANCE PADS 1-6 = ev2030 (HELP-info 2026-07-07). pad index i (label i+1) -> its SEG.bit:
 PAD_BITS=[("SEG00","0x01"),("SEG01","0x01"),("SEG02","0x01"),("SEG00","0x02"),("SEG01","0x02"),("SEG02","0x02")]
 for i,(shp,fx,fy) in enumerate(padspec):
@@ -379,10 +379,10 @@ for _i,_lab in enumerate(["1","2","3","4","5","6","7","8"]):
     _a=_m.radians(-90+ (_i)*45 +200)
     _x=660+int(88*_m.cos(_a)); _y=363+int(88*_m.sin(_a))
     RB.append(L(_lab,_x-4,_y-4,8,8,TXTH))
-RB.append(P("big_ring",800,318,148,148))
-RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",812,344,42,42)]
-RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",900,348,42,42)]
-RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",858,398,42,42)]
+RB.append(P("big_ring",809,327,130,130))
+RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42)]
+RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",884,350,42,42)]
+RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",852,407,42,42)]
 RB.append('\t</group>')
 
 VIEWS='''

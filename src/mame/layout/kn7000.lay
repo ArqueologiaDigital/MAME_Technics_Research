@@ -5,8 +5,8 @@
 <mamelayout version="2">
 
 	<element name="round_btn">
-		<image state="0"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#54545c" cx="14.5" cy="14.5" r="14"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#262628" cx="14.5" cy="14.5" r="14"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#54545c" cx="14.5" cy="14.5" r="14"/><circle stroke="#000" fill="none" cx="14.5" cy="14.5" r="9.5"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#262628" cx="14.5" cy="14.5" r="14"/><circle stroke="#000" fill="none" cx="14.5" cy="14.5" r="9.5"/></svg>]]></data></image>
 	</element>
 	<element name="round_btn_big">
 		<image state="0"><data><![CDATA[<svg width="42" height="42"><circle stroke="#000" fill="#54545c" cx="21" cy="21" r="20.5"/></svg>]]></data></image>
@@ -29,8 +29,8 @@
 		<image state="1"><data><![CDATA[<svg width="60" height="22"><rect stroke="#000" fill="#33454a" x="1.5" y="1.5" width="57" height="19" rx="9.5"/></svg>]]></data></image>
 	</element>
 	<element name="round_red">
-		<image state="0"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#b02020" cx="14.5" cy="14.5" r="14"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#7c1414" cx="14.5" cy="14.5" r="14"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#b02020" cx="14.5" cy="14.5" r="14"/><circle stroke="#000" fill="none" cx="14.5" cy="14.5" r="9.5"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="29" height="29"><circle stroke="#000" fill="#7c1414" cx="14.5" cy="14.5" r="14"/><circle stroke="#000" fill="none" cx="14.5" cy="14.5" r="9.5"/></svg>]]></data></image>
 	</element>
 	<element name="red_led">
 		<image state="0"><data><![CDATA[<svg width="8" height="8"><circle cx="4" cy="4" r="3.5" fill="#3a0000"/></svg>]]></data></image>
@@ -435,14 +435,14 @@
 		<element ref="t53"><bounds x="169" y="380" width="20" height="12"/></element>
 		<element ref="msp_corner" inputtag="SEG02" inputmask="0x01"><orientation flipx="yes"/><bounds x="229" y="368" width="94" height="41"/></element>
 		<element ref="t54"><bounds x="266" y="380" width="20" height="12"/></element>
-		<element ref="msp_corner" inputtag="SEG00" inputmask="0x02"><orientation flipy="yes"/><bounds x="35" y="409" width="94" height="42"/></element>
-		<element ref="t55"><bounds x="72" y="422" width="20" height="12"/></element>
-		<element ref="msp_middle" inputtag="SEG01" inputmask="0x02"><orientation flipy="yes"/><bounds x="129" y="409" width="100" height="42"/></element>
-		<element ref="t56"><bounds x="169" y="422" width="20" height="12"/></element>
-		<element ref="t57"><bounds x="165" y="434" width="28" height="7"/></element>
-		<element ref="msp_corner" inputtag="SEG02" inputmask="0x02"><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="42"/></element>
-		<element ref="t58"><bounds x="266" y="422" width="20" height="12"/></element>
-		<element ref="t57"><bounds x="262" y="434" width="28" height="7"/></element>
+		<element ref="msp_corner" inputtag="SEG00" inputmask="0x02"><orientation flipy="yes"/><bounds x="35" y="409" width="94" height="51"/></element>
+		<element ref="t55"><bounds x="72" y="426" width="20" height="12"/></element>
+		<element ref="msp_middle" inputtag="SEG01" inputmask="0x02"><orientation flipy="yes"/><bounds x="129" y="409" width="100" height="51"/></element>
+		<element ref="t56"><bounds x="169" y="426" width="20" height="12"/></element>
+		<element ref="t57"><bounds x="165" y="438" width="28" height="7"/></element>
+		<element ref="msp_corner" inputtag="SEG02" inputmask="0x02"><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="51"/></element>
+		<element ref="t58"><bounds x="266" y="426" width="20" height="12"/></element>
+		<element ref="t57"><bounds x="262" y="438" width="28" height="7"/></element>
 		<element ref="t59"><bounds x="333" y="334" width="84" height="8"/></element>
 		<element ref="t60"><bounds x="333" y="343" width="84" height="8"/></element>
 		<element ref="round_btn" inputtag="SEG09" inputmask="0x08"><bounds x="357" y="358" width="37" height="37"/></element>
@@ -668,17 +668,17 @@
 		<element ref="t134"><bounds x="735" y="322" width="8" height="8"/></element>
 		<element ref="t135"><bounds x="738" y="389" width="8" height="8"/></element>
 		<element ref="t136"><bounds x="693" y="438" width="8" height="8"/></element>
-		<element ref="big_ring"><bounds x="800" y="318" width="148" height="148"/></element>
+		<element ref="big_ring"><bounds x="809" y="327" width="130" height="130"/></element>
 		<element ref="t44"><bounds x="804" y="318" width="52" height="8"/></element>
 		<element ref="t137"><bounds x="806" y="327" width="48" height="8"/></element>
 		<element ref="green_led"><bounds x="800" y="336" width="8" height="8"/></element>
-		<element ref="round_btn_big"><bounds x="812" y="344" width="42" height="42"/></element>
+		<element ref="round_btn_big"><bounds x="819" y="353" width="42" height="42"/></element>
 		<element ref="t138"><bounds x="895" y="330" width="60" height="8"/></element>
 		<element ref="green_led"><bounds x="946" y="340" width="8" height="8"/></element>
-		<element ref="round_btn_big"><bounds x="900" y="348" width="42" height="42"/></element>
+		<element ref="round_btn_big"><bounds x="884" y="350" width="42" height="42"/></element>
 		<element ref="t139"><bounds x="840" y="436" width="72" height="8"/></element>
 		<element ref="green_led"><bounds x="912" y="438" width="8" height="8"/></element>
-		<element ref="round_btn_big"><bounds x="858" y="398" width="42" height="42"/></element>
+		<element ref="round_btn_big"><bounds x="852" y="407" width="42" height="42"/></element>
 	</group>
 
 	<view name="Compact">
