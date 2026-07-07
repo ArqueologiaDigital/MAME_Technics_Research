@@ -139,9 +139,13 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 # extrapolate the b3-b7 run. (Context-sensitive soft-keys: inactive on the home screen, so not
 # snapshot-verifiable there.) FADE/VAR4/SPLIT are freed below (their real bits are TBD). Right
 # (ON) column left on SEG11-13 as before. See notes/panel-rhythm-group.md.
-LCDPARTS=[("RIGHT1","SEG03","0x08","SEG11","0x10"),("RIGHT2","SEG03","0x10","SEG11","0x20"),
-          ("LEFT","SEG03","0x20","SEG13","0x01"),("ACCOMP1","SEG03","0x40","SEG12","0x01"),
-          ("ACCOMP2","SEG03","0x80","SEG11","0x01")]
+# LEFT column = LCD LEFT 1-5 = SEG03 b3-b7 (user-CONFIRMED correct). RIGHT column was assumed to
+# be part-ON on SEG11-13, but HELP-info (2026-07-07) shows those bits are real function buttons
+# (SEG11 0x01=FADE, 0x10=CONDUCTOR, SEG12 0x01=INTRO&ENDING, SEG13 0x01=TRANSPOSE) now bound to
+# their own buttons -- so the RIGHT column is unbound here (decorative; real part-ON bits TBD).
+LCDPARTS=[("RIGHT1","SEG03","0x08",None,None),("RIGHT2","SEG03","0x10",None,None),
+          ("LEFT","SEG03","0x20",None,None),("ACCOMP1","SEG03","0x40",None,None),
+          ("ACCOMP2","SEG03","0x80",None,None)]
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
@@ -248,7 +252,7 @@ for i,(shp,fx,fy) in enumerate(padspec):
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
 # MUSIC STYLE ARRANGER = SEG09 0x08 (user: MUTE DOWN 8 => MSA; old SEG04 0x08 only moved a fader).
 # SPLIT POINT was SEG03 0x80 = LCD LEFT 5 (now bound to the left soft-key); unbound until its real bit is found.
-for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,None,None)]:
+for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG10","0x02")]:  # SPLIT POINT = SEG10 0x02 (HELP-info)
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
@@ -266,7 +270,9 @@ for i,cx in enumerate([366,426,486,546]):
 # (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
 # FADE IN/OUT was SEG03 0x20 = LCD LEFT 3 (now bound to the left soft-key); SYNCHRO & BREAK was
 # SEG00 0x80 = RHYTHM genre 5. Both unbound (decorative) until their real bits are found.
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,None,None),("TAP TEMPO",740,105,28,"SEG04","0x02"),("SYNCHRO & BREAK",856,105,28,None,None)]:
+# HELP-info (2026-07-07): FADE IN/OUT = SEG11 0x01, TAP TEMPO = SEG12 0x04 (old SEG04 0x02 wrong).
+# SYNCHRO & BREAK still unknown (decorative).
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,None,None)]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
@@ -276,7 +282,8 @@ LB.append(P("green_led",856+48,364,8,8,name=OPLED.get(("SEG00","0x80"))))   # SY
 # notes/panel-descriptor-map.md.
 # START/STOP was SEG00 0x10 -- but that bit = RHYTHM genre 2 (BALLAD), verified on real
 # hardware (user: "START/STOP => BALLAD"); unbound (decorative) until its real bit is found.
-for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x01"),("START/STOP",856,105,50,"pill_greycyan",None,None)]:
+# HELP-info (2026-07-07): INTRO & ENDING = SEG12 0x01, START/STOP = SEG12 0x08.
+for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG12","0x01"),("START/STOP",856,105,50,"pill_greycyan","SEG12","0x08")]:
     LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
@@ -306,13 +313,19 @@ for i,(nm,tag,mask) in enumerate(SG):
     RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
 RB.append(L("PART EFFECT",560,32,150,10,TXTH)); RB += [P("hline",560,37,26,3), P("hline",684,37,26,3)]
+# PART EFFECT: HELP-info (2026-07-07) SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02.
+# SUSTAIN/DIGITAL EFFECT bits not yet found (no HELP info on SEG0F 0x04/0x08) -- decorative.
+PE_BITS={"SOUND DSP":("SEG0F","0x01"),"VARIATION":("SEG0F","0x02")}
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
-    ls=wrap2(nm)
+    ls=wrap2(nm); tg,mk=PE_BITS.get(nm,(None,None))
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
-    RB.append(P("round_btn",cx-14,71,32,32)); RB.append(P("green_led",cx-2,60,8,8))
+    RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,60,8,8))
 RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3), P("hline",688,133,24,3)]
+# GLOBAL EFFECT: HELP-info REVERB=SEG13 0x40, MIC(=MIC REVERB & EFFECT)=SEG13 0x80. CHORUS/MULTI TBD.
+GE_BITS={"REVERB":("SEG13","0x40"),"MIC":("SEG13","0x80")}
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
-    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32)); RB.append(P("green_led",cx-2,152,8,8))
+    tg,mk=GE_BITS.get(nm,(None,None))
+    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8))
 RB.append(L("SEQUENCER",850,32,90,10,TXTH))
 for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG12","0x80"),("PROGRAM MENUS",915,149,"round_btn","SEG12","0x40")]:
     ls=wrap2(nm)
