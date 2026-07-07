@@ -360,3 +360,14 @@ name TABLE, not the physical buttons. Layout SG reverted to SEG0C/0D/0E. The Sou
 **Snapshot method (reusable):** run with -snapshot_directory <dir>, press a button via ioport,
 call manager.machine.video:snapshot(), then view snap/kn7000/NNNN.png -- reads button function
 straight off the LCD. Also: 0x2010 is mixed (a1/SEG12.b6 = PROGRAM MENUS, snapshot-confirmed).
+
+## SEG16-0x23 wire-address map (from PanelWireNormTable 0x486135A0)
+Read the full table (wireIndex = ((ADDR&0xC0)>>1)|(ADDR&0x1F) -> normSeg). The high normSegs:
+- SEG16->ADDR 0xD0, SEG17->0xD1, SEG18->0xD2, SEG19->0xD3, SEG1A->0x10, SEG20->0x17  (panel-serial).
+- **SEG1B, 1C, 1D, 1E, 1F, 21, 22, 23 have NO wire ADDR** -- they are NOT panel-serial buttons
+  (the 0x1000 6-way soft-keys, 0x20B5-BD single funcs, and 0x2005/0x2030 duplicates are triggered
+  by a different input path or are aliases, not the SW-matrix scan). So the earlier "44 missing
+  bits" is really only **6 addable panel buttons** (SEG16-1A, SEG20 = DIAL/DATA/special).
+DONE: added SEG16-SEG20 input ports to the driver + refactored panel_scan to a seg->ADDR lookup
+table; the 6 buttons deliver via the normal ATN dance. Names are placeholders (Fn 100x) pending
+snapshot ID (0x16=DIAL?, 0x17=DATA? per the old note). Driver builds + boots.
