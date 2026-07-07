@@ -239,3 +239,24 @@ NEITHER is a button->LED shortcut (switch-matrix self-test scan + LED-register s
 So the cron's "bind LEDs via PanelSwitchClassTable" step is a dead end. Panel LED binding stays
 empirical + is COMPLETE for all verified buttons (28 LEDs). The panel is at its observable limit;
 the high-value work is now the "8 Beat 1" trace (unidasm-enabled) in the GENERAL tick, not the panel.
+
+## Tick 2026-07-07o: PANEL WORK EXHAUSTED -- panel cron retired
+Tried 3 more unidasm-enabled approaches to resolve the remaining button events -> labels:
+(1) HELP name pool @0x48394D06 = garbage (that address is wrong);
+(2) button function-name strings exist in the ROM but SCATTERED (SUSTAIN 0x485E7638, Reverb 0x4864FB24,
+    Chorus 0x48591D38, ...) -- not a table;
+(3) the 0x485E7xxx labels (SUSTAIN / SUSTAIN LENGTH) are PARAMETER-MENU entries, not a button->label map.
+All dead ends -- consistent with the ~8 prior ticks (observation, snapshots, LED sweeps, descriptor
+analysis, ROM tables via unidasm). 
+
+FINAL STATUS: the panel is DEFINITIVELY at its observable limit -- **98 buttons + 28 LEDs verified-bound**.
+Every remaining button/LED is a toggle / data-entry / effect with (a) no snapshot-distinguishable
+identity, (b) no LED-position reference, and (c) no event->label reference in the dumped program ROM.
+Completing them REQUIRES a real-machine photo/silk-screen reference (the user's SVG-mockup domain), not
+more emulation or static RE.
+
+DECISION: retired the panel cron (206c9236) this tick. It was re-deriving the same "exhausted" conclusion
+each fire, spending tokens with no marginal gain. The GENERAL autonomous cron (59ece5f7) continues the
+full backlog -- including any panel work that becomes tractable if a real-machine reference appears -- and
+is currently converging on the high-value "8 Beat 1" style-name trace. Re-create a panel cron anytime if
+a real-machine reference becomes available.
