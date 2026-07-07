@@ -51,3 +51,33 @@ The default fill runs => the record parse produced no real names => the **record
 or wrong**. Since the names do NOT come from the custom flash, the records come from the table
 ROM (TCMP) or the library ROM. Trace **0x48440862** (the per-entry fetch in the build loop) and
 what pointer it hands to `StyleRecordToTemplate` — that pointer's origin is the bug.
+
+
+## RESOLVED CHAIN: the built-in style-name lookup (tick 2026-07-07n, via stack unwind)
+Read-taps don't catch instruction fetches, so I tapped the DEFAULT STRING (0x4872AB42) read and
+dumped the stack when the library memcpy (0x4C003043) read it -> caller = **0x484334BF**. From there:
+
+- **StyleNameCommit 0x484334A4**: `memcpy(dest=0x50034B9C, src=*(0x50034B8C), 13)` -- copies the
+  current style name. When `*(0x50034B8C)` is the default string 0x4872AB42, the slot shows "8 Beat 1".
+- **StyleNameSourceSet 0x48433400**: sets `*(0x50034B8C)` from the style-ID. Dispatches on the ID's
+  source bits `& 0x00700000`: 0=built-in -> call **0x48433AC4**; 0x100000=MEMORY -> 0x484355E2;
+  0x200000=CUSTOM -> 0x4848457D. The returned pointer becomes the name source.
+- **StyleBuiltinNameLookup 0x48433AC4**: indexes RAM directory `0x50034B7C` (stride 2) and
+  `0x50034B80` (stride 3, via 0x48440363), name base `0x50034B78`, threshold `0x50034B74`. Returns
+  the default 0x4872AB42 when the style-ID does not resolve.
+
+RUNTIME globals at boot (ramchk.lua):
+| global | value | meaning |
+|--------|-------|---------|
+| 0x50034B74 (u16) | 0x0001 | threshold/count |
+| 0x50034B78 | 0x48729988 | built-in name-string base (default 0x4872AB42 = base+0x11BA) |
+| 0x50034B7C | 0x483E82BF | style directory A (indexed by style-ID*2) |
+| 0x50034B80 | 0x4872A9BB | style directory B (indexed *3) |
+| 0x50034B88 | 0x4872AB42 | = the DEFAULT string |
+| 0x50034B8C | 0x4872AB42 | current name source = DEFAULT (this is why "8 Beat 1") |
+
+KEY: the directory pointers are NON-null, yet the lookup returns the default -> the **style-ID passed
+to 0x48433AC4 is invalid/0**, or the directory does not contain it. The style-ID comes from the
+style-ID arrays (0x50034C48/0x50035448) built by StyleIdArrayHandler 0x48435DD0 (tick 2026-07-07L).
+NEXT: data-tap the directory read in 0x48433AC4 and read d0 (the style-ID) -- if 0/invalid, the
+upstream style-ID enumeration (0x48435DD0) produced no styles, which is the true root.
