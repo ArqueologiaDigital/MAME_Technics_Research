@@ -143,8 +143,10 @@ for i,yy in enumerate([205,294,383,472,561]):
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
     S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(nm,1770,yy+12,90,10))
 # OTHER PART & FR / HELP
-S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42), P("red_led",196,752,8,8),
-      P("round_btn_big",150,852,42,42), L("HELP",149,838,44,13)]
+# OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
+# FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
+S += [L("OTHER",145,704,52,13), L("PART & FR",131,717,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
+      P("round_btn_big",150,852,42,42,tag="SEG08",mask="0x08"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
 S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
@@ -155,10 +157,18 @@ MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),
        ("SEG09",0x01,0x02),("SEG09",0x04,0x08),("SEG09",0x10,0x20),("SEG09",0x40,0x80),
        ("SEG0A",0x01,0x02),("SEG0A",0x04,0x08),("SEG0A",0x10,0x20),("SEG0A",0x40,0x80),
        ("SEG0B",0x01,0x02),("SEG0B",0x04,0x08)]
+# DISPROVEN (2026-07-07, user feedback + snapshot): several "mute" cells are actually
+# DEDICATED FUNCTION inputs -- SEG08 0x04=OTHER PARTS&FR, 0x08=HELP; SEG09 0x01=PADS BANK,
+# 0x08=MSA, 0x40=DEMO -- now bound to their real buttons. Unbind those 5 cells here to avoid
+# double-triggering. The whole part-mute matrix is suspect (real mute bits TBD; the buttons
+# the user tested opened functions, not part mutes). See notes/panel-rhythm-group.md.
+FN_SEGS={"SEG08","SEG09"}   # confirmed dedicated-function segments, NOT the part-mute matrix
 for i in range(16):
     x=round(378+i*80.4); seg,onm,offm=MUTES[i]
-    S.append(P("mute_up",x,756,55,77,tag=seg,mask=f"0x{onm:02x}"))
-    S.append(P("mute_down",x,833,55,78,tag=seg,mask=f"0x{offm:02x}"))
+    ut,um=(None,None) if seg in FN_SEGS else (seg,f"0x{onm:02x}")
+    dt,dm=(None,None) if seg in FN_SEGS else (seg,f"0x{offm:02x}")
+    S.append(P("mute_up",x,756,55,77,tag=ut,mask=um))
+    S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
 S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
       L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
@@ -205,11 +215,11 @@ for i,(nm,tag,mask) in enumerate(RG):
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
-LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),
+LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG09",mask="0x40"),   # DEMO = SEG09 0x40 (snapshot: DEMONSTRATION; old SEG06 0x40 was a no-op)
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 # PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
 # BANK left decorative (its "PADS BANK" driver label is on a 0x2000 part-off bit = mislabel).
-for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG06","0x20"),("BANK",230,None,None),("STOP",305,"SEG06","0x02")]:
+for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG06","0x20"),("BANK",230,"SEG09","0x01"),("STOP",305,"SEG06","0x02")]:  # BANK = SEG09 0x01 (snapshot: PADS BANK SELECT; was decorative)
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32,tag=tg,mask=mk))
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
@@ -218,7 +228,9 @@ for i,(shp,fx,fy) in enumerate(padspec):
     (x,w)=padcol[i%3]; (y,h)=padrow[i//3]
     LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
-for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG04","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG03","0x80")]:
+# MUSIC STYLE ARRANGER = SEG09 0x08 (user: MUTE DOWN 8 => MSA; old SEG04 0x08 only moved a fader).
+# SPLIT POINT SEG03 0x80 is really the LCD LEFT 5 soft-key per user -- left for a later pass.
+for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG03","0x80")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))

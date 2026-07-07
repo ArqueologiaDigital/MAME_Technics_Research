@@ -55,10 +55,19 @@ function is the one currently on `current_button`:
 - SPLIT POINT (SEG03 0x80) => **LCD LEFT 5**  ⇒ LCD LEFT 5 = SEG03 0x80
   → inferred: **LCD LEFT 1..5 = SEG03 b3..b7** (0x08/0x10/0x20/0x40/0x80). Rebinding the
   left soft-keys there conflicts with FADE/VAR4/SPLIT, whose real bits are then unknown.
-- MUTE UP 10 => DEMO ; MUTE UP 7 => PADS BANK SELECT (PERFORMANCE PADS BANK) ;
-  MUTE UP 4 => OTHER PARTS & FR ; MUTE DOWN 4 => HELP ; MUTE DOWN 8 => MUSIC STYLE ARRANGER
-  → the MUTES[] seg/bit table is partly wrong; these give real bits for DEMO/BANK/OTHER
-  PARTS/HELP/MSA.
+- **RESOLVED (2026-07-07)** — the MUTE-mislabel clues gave real bits for 5 functions,
+  all snapshot-verified from a clean boot, now bound to their real buttons:
+  | function            | real bit    | verified by            | layout change |
+  |---------------------|-------------|------------------------|---------------|
+  | DEMO                | SEG09 0x40  | snapshot: DEMONSTRATION | DEMO btn was SEG06 0x40 (no-op) → SEG09 0x40 |
+  | PADS BANK SELECT    | SEG09 0x01  | snapshot: PADS BANK SELECT | PADS "BANK" btn was decorative → SEG09 0x01 |
+  | OTHER PARTS & FR    | SEG08 0x04  | snapshot: PT1-16 mixer | was decorative → SEG08 0x04 |
+  | HELP                | SEG08 0x08  | snapshot: HELP FUNCTION | was decorative → SEG08 0x08 |
+  | MUSIC STYLE ARRANGER| SEG09 0x08  | user (mode toggle; MSA btn was SEG04 0x08 = fader) | → SEG09 0x08 |
+  **Finding**: SEG08 and SEG09 are DEDICATED-FUNCTION segments, NOT the part-mute matrix.
+  The MUTES[] table put "part mute up/down" on SEG08/SEG09 (MUTE 3-10) — all wrong. Those
+  8 mute buttons are now unbound (decorative). The REAL part-mute matrix is unknown (TBD);
+  MUTE 1-2 (SEG05) and 11-16 (SEG0A/0B) are left bound but unverified (likely also wrong).
 - LCD LEFT 2 => ROCK & POP, LCD LEFT 3 => JAZZ & SWING, LCD LEFT 5 => 8&16 BEAT
   (already resolved by the genre map + unbinding the left column).
 
