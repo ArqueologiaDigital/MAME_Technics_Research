@@ -4,13 +4,8 @@ All images are de-interleaved into physical even/odd 16-bit flash chips (ROM_LOA
 They are checksum-verified reconstructions from the firmware-update disks (good dumps),
 pending real chip reads. kn2600 reuses the kn2400 set. KN5000 is already upstream (kn5000.cpp).
 
-## kn1500  (SX-KN1500) — Toshiba TLCS-900 (TMP95C061); driver kn1500.cpp
-Real mask-ROM dump (IC15), UNVALIDATED -> BAD_DUMP (needs a redump). `ic15` = program, `ic15.rest` = rhythm.
-
-| ROM file | size | CRC32 | SHA1 |
-|----------|------|-------|------|
-| `technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15` | 2097152 | `0f78da9a` | `53d5c43d833fb005a7bd377583252b84b646253d` |
-| `technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15.rest` | 2097152 | `ce60897a` | `9b54f693f693488132b93e8bfed1927d7e741ae1` |
+> KN1500 (Toshiba TLCS-900) is **deferred** — its dump needs further investigation
+> (a redump) before inclusion. Hashes retained in `kn5000-docs/kn1500.md`.
 
 ## kn7000  (SX-KN7000)
 Provenance: even/odd of the decompressed JK1.SLD (program, kn7-16 update) and JK2.SLD (table, kn7-14 update).
