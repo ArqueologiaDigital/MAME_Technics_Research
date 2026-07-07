@@ -6,13 +6,15 @@ ROMs so the images are preserved in MAME. No emulation is implemented yet
 
 ## Files
 
-- `src/mame/matsushita/technics_kn.cpp` — the **Panasonic MN10300/AM33** family:
+- `src/mame/matsushita/kn7000.cpp` — new; the **Panasonic MN10300/AM33** family:
   **KN2400, KN2600, KN6000, KN6500, KN7000** (one MILK-framework source tree).
   Uses the `mn10300` CPU device as a minimal placeholder. **Depends on the separate
   MN10300 core submission.**
-- `src/mame/matsushita/kn1500.cpp` — the earlier **Toshiba TLCS-900** SX-KN1500
-  (`TMP95C061`, already in MAME). Same lineage as the SX-KN5000.
-- `src/mame/mame.lst` — add: `kn1500 kn2400 kn2600 kn6000 kn6500 kn7000`.
+- `src/mame/matsushita/kn5000.cpp` — modified to add the earlier **Toshiba TLCS-900
+  SX-KN1500** (`TMP95C061`, already in MAME; same lineage as the SX-KN5000). See
+  `kn5000-additions-kn1500.cpp` for the block to insert.
+- `src/mame/mame.lst` — add `kn1500` under `@source:matsushita/kn5000.cpp`, and
+  `kn2400 kn2600 kn6000 kn6500 kn7000` under `@source:matsushita/kn7000.cpp`.
 
 ## ROMs
 

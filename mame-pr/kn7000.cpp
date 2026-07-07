@@ -2,26 +2,21 @@
 // copyright-holders:Felipe Sanches
 /***************************************************************************
 
-    Technics MN10300-based keyboards - preservation skeletons
+    Technics MN10300 keyboards - preservation skeletons
 
     Skeleton drivers for the Panasonic MN10300/AM33-based Technics arranger
-    keyboards. Emulation is not implemented: these declare the main CPU and
-    the firmware ROMs so the images are preserved in MAME. The MN10300/AM33
-    execution core is supplied by a separate change; here the mn10300 device
-    stands in as a minimal CPU placeholder (cf. the pattern used by other
-    skeletons such as roland/roland_d50.cpp).
+    keyboards: SX-KN2400, SX-KN2600, SX-KN6000, SX-KN6500 and SX-KN7000. They
+    share the Panasonic "MILK" application framework and one evolving source
+    tree. Emulation is not implemented; these declare the CPU and the firmware
+    ROMs for preservation. The MN10300/AM33 execution core is supplied by a
+    separate change; the mn10300 device stands in as a minimal placeholder.
 
-    All of these models share the Panasonic "MILK" application framework and
-    descend from one evolving source tree (a great deal of code and the whole
-    resource/symbol namespace recur across them). The earlier Toshiba TLCS-900
-    keyboards - SX-KN1500 (kn1500.cpp) and SX-KN5000 (kn5000.cpp) - are a separate
-    lineage.
+    The earlier Toshiba TLCS-900 keyboards (SX-KN1500, SX-KN5000) live in
+    kn5000.cpp.
 
-    Firmware provenance: except for the KN1500 (a real mask-ROM dump, flagged
-    BAD_DUMP pending validation), the images are the decompressed .SLD
-    firmware-update payloads, de-interleaved into the physical even/odd 16-bit
-    flash chips. They are loaded as good dumps (the .SLD/.INF block checksums
-    verify the decompression); real chip reads would supersede them.
+    ROMs: de-interleaved into the physical even/odd 16-bit flash chips from the
+    checksum-verified .SLD firmware updates and loaded as good dumps (real chip
+    reads would supersede them).
 
 ***************************************************************************/
 
@@ -31,33 +26,33 @@
 
 namespace {
 
-class technics_kn_state : public driver_device
+class kn7000_state : public driver_device
 {
 public:
-	technics_kn_state(const machine_config &mconfig, device_type type, const char *tag)
+	kn7000_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag)
 		, m_maincpu(*this, "maincpu")
 	{ }
 
-	void technics_kn(machine_config &config) ATTR_COLD;
+	void kn7000(machine_config &config) ATTR_COLD;
 
 private:
 	void mem_map(address_map &map) ATTR_COLD;
 	required_device<mn10300_device> m_maincpu;
 };
 
-void technics_kn_state::mem_map(address_map &map)
+void kn7000_state::mem_map(address_map &map)
 {
 	map(0x48400000, 0x487fffff).rom().region("maincpu", 0);
 }
 
-static INPUT_PORTS_START( technics_kn )
+static INPUT_PORTS_START( kn7000 )
 INPUT_PORTS_END
 
-void technics_kn_state::technics_kn(machine_config &config)
+void kn7000_state::kn7000(machine_config &config)
 {
 	MN10300(config, m_maincpu, 32'000'000); // clock unverified
-	m_maincpu->set_addrmap(AS_PROGRAM, &technics_kn_state::mem_map);
+	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::mem_map);
 }
 
 
@@ -104,9 +99,9 @@ ROM_END
 } // anonymous namespace
 
 
-//    YEAR  NAME    PARENT  COMPAT  MACHINE      INPUT  CLASS              INIT        COMPANY     FULLNAME      FLAGS
-SYST( 1998, kn2400, 0,      0,      technics_kn, technics_kn, technics_kn_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
-SYST( 2000, kn2600, kn2400, 0,      technics_kn, technics_kn, technics_kn_state, empty_init, "Technics", "SX-KN2600", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
-SYST( 2000, kn6000, 0,      0,      technics_kn, technics_kn, technics_kn_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
-SYST( 2001, kn6500, 0,      0,      technics_kn, technics_kn, technics_kn_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
-SYST( 2002, kn7000, 0,      0,      technics_kn, technics_kn, technics_kn_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+//    YEAR  NAME    PARENT  COMPAT  MACHINE  INPUT   CLASS         INIT        COMPANY     FULLNAME      FLAGS
+SYST( 1998, kn2400, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+SYST( 2000, kn2600, kn2400, 0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2600", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+SYST( 2000, kn6000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+SYST( 2001, kn6500, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+SYST( 2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )

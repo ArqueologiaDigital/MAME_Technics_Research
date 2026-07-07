@@ -1,26 +1,13 @@
-// license:GPL2+
-// copyright-holders:Felipe Sanches
-/***************************************************************************
-
-    Technics SX-KN1500 - preservation skeleton
-
-    An early (1996) Technics arranger keyboard built around a Toshiba TLCS-900
-    (TMP95C061) - the same lineage as the later SX-KN5000 (kn5000.cpp), separate
-    from the Panasonic MN10300 keyboards (technics_kn.cpp). Emulation is not
-    implemented; this declares the CPU and the mask-ROM images for preservation.
-
-    The two images come from the mask ROM marked IC15 (QSIGT3C16079): ".ic15" is
-    the program ROM, ".ic15.rest" the rhythm ROM. Both are BAD_DUMP: the dump is
-    unvalidated and does not decode as coherent TLCS-900 (odd byte lanes read 0xFF
-    and the reset-vector region is empty), so a redump is needed.
-
-***************************************************************************/
-
-#include "emu.h"
-#include "cpu/tlcs900/tmp95c061.h"
-
-
-namespace {
+// ===========================================================================
+// KN1500 additions for src/mame/matsushita/kn5000.cpp
+// (SX-KN1500 shares the Toshiba TLCS-900 lineage with the SX-KN5000.)
+//
+// To integrate:
+//   1) Add near the other CPU includes at the top of kn5000.cpp:
+//          #include "cpu/tlcs900/tmp95c061.h"
+//   2) Add the class + input + machine config inside the anonymous namespace.
+//   3) Add the ROM_START inside the namespace and the SYST line after it.
+// ===========================================================================
 
 class kn1500_state : public driver_device
 {
@@ -53,6 +40,8 @@ void kn1500_state::kn1500(machine_config &config)
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn1500_state::mem_map);
 }
 
+// Program + rhythm ROMs from the IC15 mask ROM. Both BAD_DUMP: the dump is
+// unvalidated and does not decode as coherent TLCS-900 (needs a redump).
 ROM_START(kn1500)
 	ROM_REGION16_LE(0x200000, "prog", 0)
 	ROM_LOAD("technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15", 0x000000, 0x200000, BAD_DUMP CRC(0f78da9a) SHA1(53d5c43d833fb005a7bd377583252b84b646253d))
@@ -60,9 +49,6 @@ ROM_START(kn1500)
 	ROM_REGION16_LE(0x200000, "rhythm", 0)
 	ROM_LOAD("technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15.rest", 0x000000, 0x200000, BAD_DUMP CRC(ce60897a) SHA1(9b54f693f693488132b93e8bfed1927d7e741ae1))
 ROM_END
-
-} // anonymous namespace
-
 
 //    YEAR  NAME    PARENT  COMPAT  MACHINE  INPUT   CLASS         INIT        COMPANY     FULLNAME     FLAGS
 SYST( 1996, kn1500, 0,      0,      kn1500,  kn1500, kn1500_state, empty_init, "Technics", "SX-KN1500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
