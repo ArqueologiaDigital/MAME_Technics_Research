@@ -80,6 +80,10 @@ def label(s,color=TXT):
         E.append(f'\t<element name="{n}"><text string="{xesc(s)}">{color}</text></element>')
     return TXTS[k]
 def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
+    # Match the mockup's round-button size: the mockup draws them ~37px dia vs the layout's 32px
+    # (measured over the RHYTHM GROUP, centres already aligned). Grow round_btn 32->37, centre kept.
+    if ref=="round_btn" and w==32 and h==32:
+        x-=2; y-=2; w=37; h=37
     fl=[]
     if flip: fl.append('flipx="yes"')
     if flipy: fl.append('flipy="yes"')
