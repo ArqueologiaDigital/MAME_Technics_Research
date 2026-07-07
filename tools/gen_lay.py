@@ -146,13 +146,13 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 # extrapolate the b3-b7 run. (Context-sensitive soft-keys: inactive on the home screen, so not
 # snapshot-verifiable there.) FADE/VAR4/SPLIT are freed below (their real bits are TBD). Right
 # (ON) column left on SEG11-13 as before. See notes/panel-rhythm-group.md.
-# LEFT column = LCD LEFT 1-5 = SEG03 b3-b7 (user-CONFIRMED correct). RIGHT column was assumed to
-# be part-ON on SEG11-13, but HELP-info (2026-07-07) shows those bits are real function buttons
-# (SEG11 0x01=FADE, 0x10=CONDUCTOR, SEG12 0x01=INTRO&ENDING, SEG13 0x01=TRANSPOSE) now bound to
-# their own buttons -- so the RIGHT column is unbound here (decorative; real part-ON bits TBD).
-LCDPARTS=[("RIGHT1","SEG03","0x08",None,None),("RIGHT2","SEG03","0x10",None,None),
-          ("LEFT","SEG03","0x20",None,None),("ACCOMP1","SEG03","0x40",None,None),
-          ("ACCOMP2","SEG03","0x80",None,None)]
+# LEFT column = LCD LEFT 1-5 = SEG03 b3-b7 (parts 0x10-0x14 OFF). RIGHT column = LCD RIGHT 1-5 =
+# SEG0F 0x04/0x08/0x10/0x20/0x40 (parts 0x10-0x14 ON) -- FOUND + CONFIRMED 2026-07-07: on the PIANO
+# sound-select page, pressing SEG0F 0x08 highlights "Vintage E.P. 1" (right col row 2). So the two
+# columns are the OFF/ON pair for the 5 LCD-flanking parts (RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2).
+LCDPARTS=[("RIGHT1","SEG03","0x08","SEG0F","0x04"),("RIGHT2","SEG03","0x10","SEG0F","0x08"),
+          ("LEFT","SEG03","0x20","SEG0F","0x10"),("ACCOMP1","SEG03","0x40","SEG0F","0x20"),
+          ("ACCOMP2","SEG03","0x80","SEG0F","0x40")]
 # The LEFT soft-keys are the physical LCD LEFT 1-5 (user-confirmed). On the home screen they toggle
 # the RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 parts (the LCDPARTS[i][0] firmware identity), but the
 # button's OWN name is LCD LEFT 1-5. RIGHT column = LCD RIGHT 1-5 (still decorative; CPR bits unwired).

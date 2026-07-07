@@ -261,23 +261,23 @@
 		<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>
 		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x08"><orientation flipx="yes"/><bounds x="138" y="205" width="123" height="34"/></element>
 		<element ref="t0"><bounds x="168" y="217" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="205" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG0F" inputmask="0x04"><bounds x="1740" y="205" width="123" height="34"/></element>
 		<element ref="t1"><bounds x="1770" y="217" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x10"><orientation flipx="yes"/><bounds x="138" y="294" width="123" height="34"/></element>
 		<element ref="t2"><bounds x="168" y="306" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="294" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG0F" inputmask="0x08"><bounds x="1740" y="294" width="123" height="34"/></element>
 		<element ref="t3"><bounds x="1770" y="306" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x20"><orientation flipx="yes"/><bounds x="138" y="383" width="123" height="34"/></element>
 		<element ref="t4"><bounds x="168" y="395" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="383" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG0F" inputmask="0x10"><bounds x="1740" y="383" width="123" height="34"/></element>
 		<element ref="t5"><bounds x="1770" y="395" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x40"><orientation flipx="yes"/><bounds x="138" y="472" width="123" height="34"/></element>
 		<element ref="t6"><bounds x="168" y="484" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="472" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG0F" inputmask="0x20"><bounds x="1740" y="472" width="123" height="34"/></element>
 		<element ref="t7"><bounds x="1770" y="484" width="90" height="10"/></element>
 		<element ref="lcd_soft_key" inputtag="SEG03" inputmask="0x80"><orientation flipx="yes"/><bounds x="138" y="561" width="123" height="34"/></element>
 		<element ref="t8"><bounds x="168" y="573" width="90" height="10"/></element>
-		<element ref="lcd_soft_key"><bounds x="1740" y="561" width="123" height="34"/></element>
+		<element ref="lcd_soft_key" inputtag="SEG0F" inputmask="0x40"><bounds x="1740" y="561" width="123" height="34"/></element>
 		<element ref="t9"><bounds x="1770" y="573" width="90" height="10"/></element>
 		<element ref="t10"><bounds x="145" y="704" width="52" height="13"/></element>
 		<element ref="t11"><bounds x="131" y="717" width="80" height="13"/></element>
