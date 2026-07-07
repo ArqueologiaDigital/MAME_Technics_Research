@@ -201,3 +201,11 @@ sound-group). This tick's 3 probes all returned informative NEGATIVES:
 CONCLUSION: the easy/tractable panel bindings are essentially complete. Further gains need audio
 analysis, the SEG16-23 wire-addr RE, or a real panel photo. Good point to rebalance effort toward
 the other backlog (AST custom-flash codec for the "8 Beat 1" style names; disassembly growth).
+
+## SEG16-0x23 checklist item RESOLVED (tick 2026-07-07g)
+Added SEG16-SEG20 input ports (driver builds + boots). Wire-addr RE showed the "44 missing bits"
+is really only **6 addable panel-serial buttons** (SEG16-1A, SEG20 = DIAL/DATA/special, ADDR
+0xD0-D3/0x10/0x17); SEG1B-1F/21-23 are NOT panel-serial (no wire path). panel_scan now uses a
+seg->ADDR lookup table for all 0x21 segments. NEXT for these 6: snapshot-ID (press each -> read LCD;
+0x16=DIAL?, 0x17=DATA? per the old note, likely PAGE/DISPLAY-HOLD/EXIT among 0x1009/1010/1011/1020)
+then bind to the layout's DIAL/DATA/PAGE/DISPLAY HOLD/EXIT/OTHER PART buttons + relabel the driver.
