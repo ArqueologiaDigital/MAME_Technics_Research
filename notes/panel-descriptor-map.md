@@ -371,3 +371,15 @@ Read the full table (wireIndex = ((ADDR&0xC0)>>1)|(ADDR&0x1F) -> normSeg). The h
 DONE: added SEG16-SEG20 input ports to the driver + refactored panel_scan to a seg->ADDR lookup
 table; the 6 buttons deliver via the normal ATN dance. Names are placeholders (Fn 100x) pending
 snapshot ID (0x16=DIAL?, 0x17=DATA? per the old note). Driver builds + boots.
+
+## 0x2008/0x2009 event family resolved (tick 2026-07-07k)
+Swept the 0x2008(x3)+0x2009(x3) bits (effled.lua) + snapshot-classified:
+- **0x2009** (SEG0D.b1, SEG0E.b0, SEG0E.b1) = SOUND GROUP buttons -- re-lit cpr43/cpr24/cpr25,
+  matching (and VALIDATING) the existing OPLED sound-group bindings. So 0x2004 is NOT the only
+  sound-group event; 0x2009 is mixed in (as noted "mixed events").
+- **0x2008** (SEG0F.b1, SEG10.b1, SEG11.b1) = toggle buttons that light cpr19 / cpr30 / cpr55
+  (LED toggle VERIFIED) and do NOT change the LCD (snapshot = home). 3 bits, right panel, toggle
+  LEDs -> circumstantially the PART EFFECT cluster (SUSTAIN/DIGITAL EFFECT/SOUND DSP), but the
+  IDENTITY is UNVERIFIED (the 3-bits->3-buttons match is the 0x2004 trap; no LED-position ref).
+  NOT bound. Verified button->LED for a future real-machine reference:
+  SEG0F.b1->cpr19, SEG10.b1->cpr30, SEG11.b1->cpr55.

@@ -221,3 +221,14 @@ buttons. Bound 2 transport LEDs (transled.lua, rhythm playing, radio-confirmed):
 with no steady LED. 28 LEDs bound now. REMAINING LED: BEAT LEDs 2-4 (need a cycling-playback capture);
 effect-cluster LEDs. The panel is at its observable limit -- buttons+LEDs that produce no visible
 screen/LED change can't be verified in emulation without a real-machine reference.
+
+## Tick 2026-07-07k: BEAT LEDs + 0x2008/9 investigated (panel at observable limit)
+BEAT indicator LEDs do NOT cycle (no beat engine without wave ROMs) -- cpl1/cpl12/cpl14 light
+STEADY during playback (cpl1=START/STOP bound; cpl12/cpl14 unmapped, not bound -- physical LED
+position unverifiable). 0x2008/0x2009 family resolved (see panel-descriptor-map.md): 0x2009 =
+sound-group buttons (re-validated existing cpr43/24/25 bindings); 0x2008 = 3 right-panel toggle
+buttons with verified LEDs cpr19/30/55 but unverified identity (likely PART EFFECT; NOT bound per
+the 0x2004 lesson). No new reliable bindings this tick. CONCLUSION: the panel is genuinely at its
+OBSERVABLE LIMIT -- 98 buttons + 28 LEDs all verified; every remaining button/LED is a toggle/
+data-entry/effect with no snapshot-distinguishable identity and no LED-position reference. Further
+panel binding requires a REAL-MACHINE photo/reference. Recommend brief future panel ticks.
