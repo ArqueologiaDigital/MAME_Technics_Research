@@ -42,6 +42,8 @@ LEDMAP={
 # genreled.lua): (SEG,mask) -> cpl/cpr output name. The .lay green_led elements bind to these
 # so MAME lights them from firmware state. Extend as more contexts/buttons are swept.
 OPLED={
+  # transport LEDs (swept transled.lua, rhythm playing): START/STOP + SYNCHRO&BREAK radio-toggle
+  ("SEG00","0x10"):"cpl_led1",  ("SEG00","0x80"):"cpl_led10",
   ("SEG01","0x02"):"cpl_led3",  ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
   ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
   ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
@@ -229,7 +231,7 @@ for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG03","0x20"),("TAP TEMPO",74
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
-LB.append(P("green_led",856+48,364,8,8))   # SYNCHRO & BREAK LED
+LB.append(P("green_led",856+48,364,8,8,name=OPLED.get(("SEG00","0x80"))))   # SYNCHRO & BREAK LED (cpl10)
 # INTRO & ENDING was SEG03 0x10 = FILL IN 1 (descriptor 0x2023); correct bit is SEG03.b0
 # (0x2022 = INTRO & ENDING 1). START/STOP SEG00 0x10 = 0x2020 is correct (verified). See
 # notes/panel-descriptor-map.md.
@@ -238,7 +240,8 @@ for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG03","0x0
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
-LB += [P("green_led",867+i*9,414,8,8) for i in range(4)] + [L("BEAT",905,452,28,7)]
+# first BEAT LED = START/STOP indicator (cpl1, lit on rhythm start); beats 2-4 not yet swept
+LB += [P("green_led",867+i*9,414,8,8, name=(OPLED.get(("SEG00","0x10")) if i==0 else None)) for i in range(4)] + [L("BEAT",905,452,28,7)]
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===

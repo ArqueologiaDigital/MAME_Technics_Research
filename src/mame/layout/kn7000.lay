@@ -474,7 +474,7 @@
 		<element ref="pill_wide" inputtag="SEG00" inputmask="0x80"><bounds x="856" y="355" width="105" height="28"/></element>
 		<element ref="green_led"><bounds x="645" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="697" y="364" width="8" height="8"/></element>
-		<element ref="green_led"><bounds x="904" y="364" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led10"><bounds x="904" y="364" width="8" height="8"/></element>
 		<element ref="t68"><bounds x="740" y="394" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG03" inputmask="0x01"><bounds x="740" y="408" width="105" height="50"/></element>
 		<element ref="t69"><bounds x="856" y="394" width="105" height="9"/></element>
@@ -484,7 +484,7 @@
 		<element ref="t70"><bounds x="748" y="452" width="44" height="7"/></element>
 		<element ref="t71"><bounds x="752" y="459" width="36" height="7"/></element>
 		<element ref="t72"><bounds x="802" y="452" width="52" height="7"/></element>
-		<element ref="green_led"><bounds x="867" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led1"><bounds x="867" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="876" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="885" y="414" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="894" y="414" width="8" height="8"/></element>
