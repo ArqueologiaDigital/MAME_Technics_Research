@@ -49,13 +49,16 @@ OPLED={
   ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
   ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
   # SOUND GROUP category LEDs (swept sgled.lua/varled.lua). PIANO/GUITAR confirmed via BRASS->PIANO
-  # ->GUITAR radio chain; EXPLORER omitted (only hit shared cpr48). VARIATION has no per-button LED.
+  # ->GUITAR radio chain. SOUND EXPLORER (SEG0D 0x04) has NO own LED: the firmware lights
+  # cpr48+cpr26 = PIANO+BASS (matches the user report; faithful, not a layout bug). VAR has no LED.
   ("SEG0C","0x01"):"cpr_led48", ("SEG0C","0x02"):"cpr_led49",
   ("SEG0C","0x04"):"cpr_led50", ("SEG0C","0x08"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
   ("SEG0C","0x20"):"cpr_led41", ("SEG0D","0x01"):"cpr_led42", ("SEG0D","0x02"):"cpr_led43",
   ("SEG0D","0x08"):"cpr_led33", ("SEG0D","0x10"):"cpr_led34", ("SEG0D","0x20"):"cpr_led35",
   ("SEG0E","0x01"):"cpr_led24", ("SEG0E","0x02"):"cpr_led25", ("SEG0E","0x04"):"cpr_led26",
   ("SEG0E","0x08"):"cpr_led27",
+  # MEMORY / EW EXPANSION (SOUND GROUP b4/b5) -- swept extsweep.lua 2026-07-07.
+  ("SEG0E","0x10"):"cpr_led16", ("SEG0E","0x20"):"cpr_led17",
 }
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
@@ -277,14 +280,17 @@ LB.append('\t</group>')
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
 SGcols=[51,107,162,217,272,327,383,438,493]
-# SOUND GROUP = the physical category buttons SEG0C.b0-b5 / SEG0D.b0-b5 / SEG0E.b0-b3 (mixed
+# SOUND GROUP = the physical category buttons SEG0C.b0-b5 / SEG0D.b0-b5 / SEG0E.b0-b5 (mixed
 # events 0x2086/0x2010/0x2040/0x2004). SNAPSHOT-CONFIRMED: SEG0C.b0=PIANO, b1=GUITAR (the LCD
 # shows SOUND-RIGHT1-PIANO / -GUITAR). NB the earlier "0x2004 arg=category" rebind was WRONG --
 # 0x2004 is a separate per-part sound selector (SEG10.b4 -> SOUND-LEFT-PIANO), not these buttons.
 SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
     ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
     ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
-    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
+    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY","SEG0E","0x10"),("EW EXPANSION","SEG0E","0x20")]
+# MEMORY / EW EXPANSION are the SOUND GROUP b4/b5 (SEG0E 0x10/0x20) -- were unbound ("no visual
+# feedback" per user); found by LED sweep (extsweep.lua): they light cpr16/cpr17 with category
+# (radio) behaviour, continuing the SEG0E b0-b3 run PAD/SYNTH/BASS/DRUM KITS.
 RB.append(L("SOUND GROUP",240,32,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)

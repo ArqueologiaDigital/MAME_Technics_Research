@@ -74,10 +74,16 @@ function is the one currently on `current_button`:
   (already resolved by the genre map + unbinding the left column).
 
 ## Other observations (TODO)
-- **SOUND EXPLORER**: opens its screen but lights PIANO+BASS LEDs instead of its own
-  (LED map issue; EXPLORER only hit shared cpr48 in the sweep — see OPLED note).
-- **No visual feedback** (button not associated with any input, or no LED): SOUND GROUP
-  MEMORY & EW EXPANSION; all PART EFFECT + GLOBAL EFFECT; all BANK VIEW / NEXT BANK / PANEL
+- **SOUND EXPLORER (RESOLVED 2026-07-07)**: NOT a layout bug. LED sweep (soundsweep.lua) shows the
+  firmware itself lights cpr48 (PIANO) + cpr26 (BASS) when SEG0D 0x04 is pressed — SOUND EXPLORER is
+  a browser mode with no own category LED, so the emulator is faithful and the user's "lights
+  PIANO+BASS" is the real behaviour. Nothing to change (EXPLORER green_led stays dark). The 15 real
+  category LEDs all match OPLED (confirms "works perfectly").
+- **MEMORY / EW EXPANSION (RESOLVED 2026-07-07)**: were unbound. LED sweep (extsweep.lua):
+  **MEMORY = SEG0E 0x10 (cpr16), EW EXPANSION = SEG0E 0x20 (cpr17)** — SOUND GROUP b4/b5, category
+  (radio) behaviour continuing PAD/SYNTH/BASS/DRUM KITS. Now bound.
+- **No visual feedback** (button not associated with any input, or no LED):
+  all PART EFFECT + GLOBAL EFFECT; all BANK VIEW / NEXT BANK / PANEL
   MEMORY; all CUSTOM PANEL / CUSTOMIZE / FAVORITES; SEQUENCER PLAY & EASY REC; SD LOAD
   (orange); APC MODE/SET/OFF-ON (lower); DISPLAY HOLD; EXIT; PAGE UP/DOWN.
   → these need their input bits found (many may be dedicated events, not in the scanned segs).
