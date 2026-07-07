@@ -259,3 +259,42 @@ resource fetch (0x4C014948, res 0xC000) fails, or it reads the style DB from the
 0x56000000 data-flash (now mapped read-as-0 placeholder; still empty). NEXT: dump the
 library-ROM code path 0x4C014948 at runtime (it IS resident in libram) to see what
 address the style name is read from; if it's 0x56000000, the fix is that flash's contents.
+
+## TICK 8 (static library-resource trace): the name DATA is PRESENT -> bug is resolution, not missing flash
+Disassembled the library name path from full.bin (library 0x4C000000 <- prog-flash source 0x487B8FD1,
+so 0x4C0xxxxx = full.bin off 0x3B8FD1 + (addr-0x4C000000)). Findings:
+
+### The library resource system (what 0x4C014948 does)
+- **0x4C014948** = a resource DISPATCHER: `d0 &= 0xFFFFFF` (resource id, e.g. 0xC000) -> `call 0x4C01BB0C`
+  (lookup) -> record ptr in a0 -> reads `*(a0+4)` type (0 or 1) -> dispatches to name-handler
+  **0x4C015607** (type 0) or **0x4C015C4A** (type 1), passing a1=arg, d0=arg2.
+- **0x4C01BB0C/BB1C** = a **nibble-trie (radix) lookup** rooted at table **0x4858B424** (program ROM):
+  walks the id's nibbles (`(id>>shift)&0xF`, 8-byte records `[leafptr u32][flag u8]...`) to a leaf record
+  whose first u32 == the requested id.
+- **0x4C015607** reads a subtype `*(a0+6)` (0..0x24), `*4`, indexes a **jump table 0x4858C254** (program
+  ROM; entries 0x4C0156xx) and `jmp`s to the per-subtype sub-handler.
+
+### KEY: this resource system reads ENTIRELY from the PROGRAM/TABLE ROM -- not the data-flash
+Scanned the resource descriptors 0x4858A000-0x4858C000: **964 pointers, ALL 0x48xxxxxx** (prog/table ROM).
+**ZERO** point to the data-flash (0x56xxxxxx), libram (0x4Cxxxxxx), or the "LCD window" (0x90-97xxxxxx).
+So the built-in resource data these getters read is fully resident in the dumped ROMs.
+
+### KEY: the built-in style-name STRINGS are present in the program ROM
+`full.bin` (program flash) contains the real built-in names: **"8 Beat" @0x485CCF31, "16 Beat"
+@0x485CCF78, "Pop Ballad" @0x485D0105, "Easy 8 Beat" @0x486D38BC**. The displayed **"8 Beat 1"** is the
+**user-style default @0x4872AB44** (a RAM copy; a read-tap there showed 0 live reads, tick 4).
+
+### CONCLUSION -- corrects the tick-7 "missing data-flash 0x56000000" hypothesis
+The style-name DATA (built-in names + the resource system that fetches them) is **fully present in the
+dumped program ROM**. So "all 8 Beat 1" is **NOT** a missing-dump / missing-data-flash problem. It is a
+**resolution/logic failure**: the genre-style-list populate resolves the 16 BALLAD style-IDs but falls
+back to the RAM default "8 Beat 1" instead of the built-in names at 0x485Cxxxx.
+
+### NEXT (decisive, bounded)
+1. Read-tap **0x485C0000-0x485DFFFF** (the built-in-name region) during the BALLAD menu. If **0 reads**,
+   the populate never reaches the built-in names (the resolver returns/uses the default without reading
+   them) -> the defect is upstream in the style-ID->name resolver. If reads occur, the names ARE fetched
+   but not stored into the list items (a store/copy defect).
+2. Then find the resolver: MainGetRhythmName didn't fire in the menu (tick 3), so the list uses another
+   getter that (per this trace) still bottoms out in the 0x4C014948 resource system -> trace which
+   resource id / style-ID it passes per slot, and why it degenerates to the default.
