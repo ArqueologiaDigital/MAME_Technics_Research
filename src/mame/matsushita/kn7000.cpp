@@ -22,6 +22,15 @@
     CPU (peripherals, video, sound) is consequently guesswork and is marked with
     TODO where behavior is unknown.
 
+    Models: besides the KN7000, this file hosts its MN10300/MILK siblings as drafts
+    reusing this machine config - SX-KN6000, SX-KN6500, and the SX-KN2400/KN2600/PR54
+    family (one shared firmware, runtime model selector). KN5000 is separate (kn5000.cpp).
+
+    ROMs: each flash is modeled as its physical even/odd 16-bit chips, de-interleaved
+    from the checksum-verified .SLD firmware-update images and loaded as good dumps
+    (the .SLD/.INF block checksums verify the decompression); real chip dumps would
+    supersede them. Per-model details live on the kn5000-docs site.
+
     Memory layout (from firmware static analysis, the mn10300_sim boot trace,
     and the service-test IC map; see the kn5000-docs "Technics KN7000" pages and
     this repo's notes/io-map.md + notes/library-rom-api.md). 112 individual I/O
@@ -1377,25 +1386,12 @@ void kn7000_state::kn7000(machine_config &config)
 
 
 ROM_START(kn7000)
-	// ------------------------------------------------------------------
-	// Both images below are the *decompressed* .SLD payloads taken from the
-	// KN7000 system-update disks (Program update kn7-16 and Table update
-	// kn7-14), reconstructed and checksum-verified by the kn7000_extraction
-	// tool. They are the contents the updater writes into the on-board flash,
-	// so they stand in for the physical flash dumps. Flagged BAD_DUMP because
-	// they are derived from the update disks rather than read from the chips;
-	// the CRC/SHA1 below are of the reconstructed images.
-	// TODO: read IC16/IC17 (and the table ROMs) directly and, if the parts are
-	//       interleaved, split these regions accordingly.
-	// ------------------------------------------------------------------
-
-	// Program flash -> mapped at CPU 0x48400000. Decompressed size 0x3F6F01.
-	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn7000_program.rom", 0x000000, 0x3f6f01, BAD_DUMP CRC(d9399328) SHA1(cc1c364ce4fd8096eab4453825c0cc5e15009261))
-
-	// Table / rhythm flash -> mapped at CPU 0x48000000. Decompressed size 0x3E94D4.
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC16/IC17 -> 0x48400000
+	ROM_LOAD32_WORD("kn7000_program_even.rom", 0x000000, 0x200000, CRC(529b87ce) SHA1(f198fd9a9ea31a454acfe7be0eb935beca6771b1))
+	ROM_LOAD32_WORD("kn7000_program_odd.rom",  0x000002, 0x200000, CRC(a36e6222) SHA1(721d4469dc5f692f7a2c16c556b2e21115df19f6))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD("kn7000_table.rom", 0x000000, 0x3e94d4, BAD_DUMP CRC(eb3a0f01) SHA1(fcf5645a1a2300ff5e42e73b8f42ccd10a190d86))
+	ROM_LOAD32_WORD("kn7000_table_even.rom", 0x000000, 0x200000, CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6))
+	ROM_LOAD32_WORD("kn7000_table_odd.rom",  0x000002, 0x200000, CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5))
 
 	// TODO: Library / boot ROM at 0x4C000000 - currently undumped.
 	//ROM_REGION(0x100000, "library", ROMREGION_ERASEFF)
@@ -1433,23 +1429,21 @@ ROM_END
 // IC13/IC14 table mask ROM per the service manual).
 // ===================================================================
 ROM_START(kn6000)
-	// Program flash -> CPU 0x48400000. Decompressed IK1.SLD, size 0x200000.
-	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn6000_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(ea5d5d36) SHA1(0a5dc86522906bbe8f7b1012d4ac64eee12a9c26))
-
-	// Table / rhythm flash -> CPU 0x48000000. Decompressed IK2.SLD, size 0x1F7A31.
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD("kn6000_table.rom", 0x000000, 0x1f7a31, BAD_DUMP CRC(7e782d75) SHA1(a9ed0a9f4eecad40eb608f21a520d3eb14605b9d))
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IK1) -> 0x48400000
+	ROM_LOAD32_WORD("kn6000_program_even.rom", 0x000000, 0x200000, CRC(5baeae6d) SHA1(4c9eddf227565e0b0a1d92ff3e869a02b9133833))
+	ROM_LOAD32_WORD("kn6000_program_odd.rom",  0x000002, 0x200000, CRC(537471c0) SHA1(2464ce5a59416dd31c0215fb3a4ee900715df2fa))
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IK2, 0x1F7A31)
+	ROM_LOAD32_WORD("kn6000_table_even.rom", 0x000000, 0x200000, CRC(fa5e4f93) SHA1(0426da99b1589c0362e6321466beab21b22b81b0))
+	ROM_LOAD32_WORD("kn6000_table_odd.rom",  0x000002, 0x200000, CRC(fd8e3bcd) SHA1(e1b63d45299b67e5258d5d08a949ea8e05c1b8e6))
 ROM_END
 
 ROM_START(kn6500)
-	// Program flash -> CPU 0x48400000. Decompressed IKV1.SLD, size 0x200000.
-	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn6500_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(61616b29) SHA1(57d87f831f3ebcaacfaec989fafd50d3ab0a5afd))
-
-	// Table / rhythm flash -> CPU 0x48000000. Decompressed IKV2.SLD, size 0x181691.
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD("kn6500_table.rom", 0x000000, 0x181691, BAD_DUMP CRC(23d17bb5) SHA1(fb3ba0f348f6c3b8ca43f53605753b9b2eff2991))
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IKV1) -> 0x48400000
+	ROM_LOAD32_WORD("kn6500_program_even.rom", 0x000000, 0x200000, CRC(d6cd26bb) SHA1(76fd4c8a5793024da5b01956a15c9c4afe7c91d6))
+	ROM_LOAD32_WORD("kn6500_program_odd.rom",  0x000002, 0x200000, CRC(1691c3d8) SHA1(a6d95f51881a30b4e83352cee296b97d7b1ee222))
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IKV2, 0x181691)
+	ROM_LOAD32_WORD("kn6500_table_even.rom", 0x000000, 0x200000, CRC(8c7f33a2) SHA1(d44fb4415cd6b571e11e57d4a7642226b0bf4edf))
+	ROM_LOAD32_WORD("kn6500_table_odd.rom",  0x000002, 0x200000, CRC(6953e094) SHA1(abf4c2252d40c71c761503d657593eb6e9c0eecc))
 ROM_END
 
 
@@ -1464,25 +1458,19 @@ ROM_END
 // kn7000 machine config for now; memory map / peripherals to be tuned.
 // ===================================================================
 ROM_START(kn2400)
-	// Checksum-verified images decompressed from the KN2400/KN2600 update disk (LZSS
-	// .SLD; the .INF block checksums verify the decompression), so loaded as good dumps.
-	// The KN2000/2400/2600 program flash is LKG1 @0x48400000 + LKG2 @0x48600000 forming
-	// ONE contiguous image (== the update disk's KN24PRG.DAT). VERIFIED: the reset vector
-	// "jmp 0x48705bdf" lands in LKG2, which holds the MN10300 crt0 (writes 0xfe/0x02/0xbf
-	// to 0x360080xx, DRAM controller 0x497->0x32000040, stack setup). The style/name
-	// tables live inside LKG1 (program ROM) -- this model has no separate table flash at
-	// 0x48000000, so that region is left empty.
-	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_prog1.rom", 0x000000, 0x200000, CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))  // LKG1 -> 0x48400000
-	ROM_LOAD("kn2400_prog2.rom", 0x200000, 0x1965d3, CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))  // LKG2 -> 0x48600000
+	// KN2400/KN2600/PR54 share one firmware (runtime model selector): program =
+	// LKG1@0x48400000 + LKG2@0x48600000 (== KN24PRG.DAT); no separate table flash.
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program
+	ROM_LOAD32_WORD("kn2400_program_even.rom", 0x000000, 0x200000, CRC(b94fc8a8) SHA1(86d5d9916afdb90f82de78064b1d76fce3a21d7b))
+	ROM_LOAD32_WORD("kn2400_program_odd.rom",  0x000002, 0x200000, CRC(73781cbc) SHA1(d90a3560561efd94322dca1a6710f2d5d3837cd2))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)  // no separate table flash on this model
 ROM_END
 
 // KN2600 shares the KN2400 firmware image -> clone of kn2400 (ROMs resolve from the parent set).
 ROM_START(kn2600)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_prog1.rom", 0x000000, 0x200000, CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
-	ROM_LOAD("kn2400_prog2.rom", 0x200000, 0x1965d3, CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
+	ROM_LOAD32_WORD("kn2400_program_even.rom", 0x000000, 0x200000, CRC(b94fc8a8) SHA1(86d5d9916afdb90f82de78064b1d76fce3a21d7b))
+	ROM_LOAD32_WORD("kn2400_program_odd.rom",  0x000002, 0x200000, CRC(73781cbc) SHA1(d90a3560561efd94322dca1a6710f2d5d3837cd2))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
 ROM_END
 
