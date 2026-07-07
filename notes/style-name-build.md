@@ -81,3 +81,28 @@ to 0x48433AC4 is invalid/0**, or the directory does not contain it. The style-ID
 style-ID arrays (0x50034C48/0x50035448) built by StyleIdArrayHandler 0x48435DD0 (tick 2026-07-07L).
 NEXT: data-tap the directory read in 0x48433AC4 and read d0 (the style-ID) -- if 0/invalid, the
 upstream style-ID enumeration (0x48435DD0) produced no styles, which is the true root.
+
+
+## ROOT NARROWED (tick 2026-07-07p): "8 Beat 1" = rhythm STYLE-ID is 0; sounds are fine
+Tapped the directory-global read (0x50034B7C) in StyleBuiltinNameLookup 0x48433AC4 and read d0
+(the style-ID) at runtime (home screen, genre 0):
+- 1st lookup: **d0 = 0x00000000** -> the RHYTHM style -> returns the default 0x4872AB42 = "8 Beat 1".
+- later lookups: **d0 = 0x0000065A** (and 0x8000-flagged) -> the SOUNDS -> resolve to REAL names
+  (this is why the home snapshot shows correct "Concert Grand"/"Bigband Brass"/"Modern E.P." but
+  "8 Beat 1" for the rhythm). So the name-lookup + directories WORK; the SOUND path is fine.
+
+**The bug is that the rhythm STYLE-ID handed to the lookup is 0 (unset).** When a genre list is
+opened, every slot's style-ID is likewise 0 -> every slot shows "8 Beat 1" (matches the BALLAD-list
+snapshot). So the root is upstream of the name lookup: the **genre -> style-ID enumeration yields 0**.
+
+CORRECTIONS to earlier notes:
+- 0x5003A37C is NOT the displayed name-table -- its content at runtime is binary/param data, not
+  name strings. (The 0x48441CBF memcpy fills a param/template area, not the visible names.)
+- 0x50034C48/0x50035448 is a style-ID QUEUE (ring & 0x1FF): enqueue **0x48435DD0**, dequeue
+  **StyleIdQueueDequeue 0x48435E84** (write idx 0x50034C40, read idx 0x50034C42, count 0x50034C44);
+  it is DRAINED at t=15, so its residue is not the current list.
+
+NEXT: find where the rhythm style-ID is produced (the caller path that hands 0 to 0x48433400 for the
+rhythm/style, vs 0x65A for sounds). The genre->style table is 0x48735EE4 (styleListPtr 0x485B8A04 for
+BALLAD); check whether that list yields 0s at runtime, or whether the style-load that should set the
+current style-ID never runs. Stack-unwind (tap a data read in the rhythm path + read the return chain).
