@@ -177,3 +177,27 @@ CHORD OFF/ON=SEG06.b3(0x2032). 92 inputtags. Reliable-but-unbound single-bit: FI
 SEG03.b4/b2 -- layout has no FILL button), INTRO&ENDING 2 (0x2022 SEG00.b6), FADE OUT (0x2084 SEG03.b3),
 AUTO MODE (0x20A8 SEG07.b1). Mislabelled driver bits found: SEG05 "PAD"/"PADS BANK" are 0x2000/2001
 part on/off; the real PERFORMANCE PADS BANK bit is unknown (BANK left decorative).
+
+## PANEL STATUS CHECKPOINT (tick 2026-07-07f) -- tractable work largely done
+Bound: **92 buttons** (inputtags, all verified/descriptor-reliable) + **26 LEDs** (11 genre + 15
+sound-group). This tick's 3 probes all returned informative NEGATIVES:
+- MUTE buttons (SEG08-0B) have NO panel LEDs -- part on/off state is LCD-only (the conductor view).
+- 5 genres (MOVIE SHOW/MARCH/BALLROOM/MODERN DANCE/MEMORY, SEG02.b0/b1/b6/b7 + SEG01.b0) don't
+  select/light on the home screen -- a second genre bank or mode-gated.
+- Misc function buttons (0x2060-69, 0x2011-13 on SEG0F-13) all show the HOME/CONDUCTOR view when
+  pressed -- toggles/modes, not snapshot-identifiable.
+
+### What remains (all LOW-YIELD / hard):
+1. Toggle/mode buttons (ARRANGER, PLAY CHORD, TECHNI-CHORD, PART SELECT, CONDUCTOR, SOLO, PANEL
+   MEMORY, effects) -- show an on-screen INDICATOR, not a distinct screen; can't snapshot-ID. Bind
+   only from SINGLE-BIT dedicated events where a layout label clearly matches.
+2. SEQUENCER/COMPOSER etc. are PROGRAM-MENUS sub-items (accessed via SEG12.b6=PROGRAM MENUS), not
+   direct buttons.
+3. Missing SEG16-0x23 (44 bits: DIAL/DATA/LCD-soft-keys) -- need driver input ports + the high-
+   segment wire-addr encoding in panel_scan (only partially known: 0x16-19->0xD0-D3, 0x1A->0x10,
+   0x20->0x17).
+4. Context/audio-only buttons (variations, mutes, effects) -- no visible screen/LED effect.
+
+CONCLUSION: the easy/tractable panel bindings are essentially complete. Further gains need audio
+analysis, the SEG16-23 wire-addr RE, or a real panel photo. Good point to rebalance effort toward
+the other backlog (AST custom-flash codec for the "8 Beat 1" style names; disassembly growth).
