@@ -1,45 +1,59 @@
-# KN7000 firmware panel-button dispatch table (2026-07-07)
+# KN7000 firmware panel-button dispatch table (decoded 2026-07-07)
 
-Found while locating EXIT statically. This is the firmware's master map of every panel switch
-to its event — a huge lead for finishing the panel, but with an UNRESOLVED index-alignment
-caveat (below), so treat the raw table with care.
+The firmware's master map of every panel switch → its event. FULLY DECODED this pass (read live from
+the emulator ROM; raw dump in `panel-dispatch-dump.txt`). This resolves several earlier open items.
 
 ## PanelButtonDispatch 0x484ADB59
-Receives a 2-byte switch frame `[normSeg][bitmap]` (normSeg 0..0x20). Indexes a **per-SEG table
-at 0x48614978** (33 pointers, one per normSeg; alt table 0x486149FC when flag 0x5006BFB2==1):
+Receives a 2-byte switch frame `[ADDR][bitmap]`. The ADDR is normalized to a `normSeg` (0..0x20),
+then a **per-normSeg table at 0x48614978** (33 pointers) is indexed:
 ```
-a2 = *(0x48614978 + normSeg*4)   // per-SEG entry array
+a2 = *(0x48614978 + normSeg*4)   // per-normSeg entry array
 ```
-Each per-SEG array is 8 entries × 12 bytes `{ f0, mask, type }`, terminated by f0==-1:
-- **f0**: low 16 bits = the button EVENT (0x2xxx music / 0x1xxx system); high bits 0x0070.. = class.
-- **mask**: low byte = bit mask (0x01..0x80), byte1 = bit index; high 16 bits = arg (undecoded).
-- **type**: 0..4, selects the action handler (0x484adcd2 / 0x484add1b / 0x484add86 / ...).
+Each array is up to 8 entries × 12 bytes `{ f0, mask, type }`, terminated by f0==-1:
+- **f0**: low 16 = EVENT. 0x2xxx = music/panel, 0x1xxx = system/UI.
+- **mask**: byte0 = bit mask (0x01..0x80), byte1 = bit index, **high 16 = ARG**.
+- **type**: 0..4 → action handler.
 
-## Event grid (event = f0 & 0xFFFF; from dump_disp)
-- normSeg 01, 02 = **all 0x2005** (16 genres)
-- normSeg 05, 08, 09, 0A, 0B = **0x2001/0x2000 pairs** (part ON/OFF = mutes)
-- normSeg 00 = transport (0x2020 START/STOP, 0x2022/0x2021 INTRO&ENDING)
-- normSeg 03/04/06/07 = rhythm/APC/pads controls (0x2030-0x20B4, 0x2084/0x2085 fade/variation)
-- normSeg 0C-13 = sounds + effects (0x2086 category, 0x2004 selector, 0x2008-0x20BD)
-- **normSeg 16-1A, 20 = the 0x1xxx SYSTEM buttons** (0x1004,1005,1009,1010,1011,1020).
-  normSeg 1B-1F have NO wire path (not panel-serial buttons, per the driver).
+## Event classes (event = f0 & 0xFFFF)
+- **2000/2001 = part OFF/ON (mute pairs)** — arg high byte = firmware part id.
+- 2005 = genre select (arg = style id). 2004 = sound/tone selector. 2086 = sound category.
+- 2020 START/STOP, 2021/2022/2023 INTRO&ENDING/COUNT, 2030-2033 APC, 2084/2085 FADE/VARIATION,
+  2040 = a sound/bank selector (many), 2060-2069/208x/20Ax-20Bx = effects/DSP/pads/misc.
+- **1004,1005,1009,1010,1011,1020, 1000 = the SYSTEM buttons** (normSeg 16-1B, 20; type 2/3/4).
 
-## EXIT — NOT YET FOUND (earlier SEG20 0x01 claim was WRONG)
-The 0x1xxx class = system/nav buttons; the 6 candidates were normSeg 16-1A,20 bit0. An emulator
-test (open HELP modal, press each, watch the screen hash) showed **only SEG20 0x01 closes HELP** —
-SEEMED to close HELP -- but SEG20 0x01 is actually a TEMPO control; the HELP screen shows the tempo digit, so the hash changed without closing HELP. EXIT is NOT SEG20 0x01. (Also: the normSeg 0x1xxx candidates relied on the unresolved normSeg==layout-SEG assumption, which is false.) Find EXIT via the HELP-info method (the bit that turns HELP mode OFF). IvExitProc 0x4841EAE3 is the *screen*
-handler it ultimately reaches (references the "EXIT" string 0x4859F234 on GUI msg 0x6003a).
+## RESOLVED: the mute matrix, cross-validated
+The 2001/2000 pairs decode to clean firmware part ids in `arg`'s high byte:
+```
+nS08: parts 02,03,04,05   nS09: parts 06,07,08,09
+nS0A: parts 0A,0B,0C,0D   nS0B: parts 0E,0F,18,17 (+ 20A0)   nS05: 19,1D08,00,01 (messy/other)
+```
+This MATCHES the empirically-mapped mute matrix (press-count method, see panel-button-map.md):
+ioport **SEG04→nS08, SEG05→nS09, SEG06→nS0A, SEG07→nS0B**, same bit positions, and
+**mixer part N = firmware part (N+1)**. The firmware table independently confirms all 16 part mutes.
 
-## UNRESOLVED: normSeg vs layout-SEG alignment
-The driver assumes m_seg[i] == firmware normSeg i (seg_to_addr is the inverse of PanelWireNormTable
-0x486135A0). But EMPIRICAL findings contradict the raw table at some segs:
-- layout SEG09 0x01 → PADS BANK (snapshot), but the table's normSeg09 0x01 = 0x2001 (a mute).
-- layout SEG00 b2-b7 → genres (snapshot), but normSeg00 = transport.
-Yet SEG05 mutes DO line up (user: layout SEG05 = parts 7,8; table normSeg05 = mute pairs).
-So there is a partial remap between layout-SEG and firmware-normSeg that is NOT yet pinned. Also
-PanelWireNormTable[0xC0..0xCB] = 0xFF (the grp3 addresses the driver emits for SEG00-0B don't
-reverse-normalize to 0-0x0B) — so either that table isn't the whole story or grp3 is normalized
-elsewhere. **Next tick**: pin the remap (disassemble the panel-serial receiver that builds the
-[normSeg][bitmap] frame, or read PanelWireNormTable's real structure) — once aligned, this table
-maps EVERY remaining panel button in one shot. Until then, verify each binding empirically.
-EXIT stands on the empirical HELP-close test, independent of this caveat.
+## CAUTION: the ioport→normSeg map is NOT PanelWireNormTable (disproven this pass)
+`PanelWireNormTable` at **0x486135A0** (read live) maps wire ADDR → normSeg:
+```
+ADDR 0x00-0x09 -> nS0C-15   0x10 -> nS1A   0x17 -> nS20
+ADDR 0x60-0x6B -> nS00-0B   0x70-0x73 -> nS16-19    0x80-0x8A -> nS0A-13(alt)   0x97 -> nS1D
+```
+Combined with the driver's `seg_to_addr[]` this SUGGESTS SEG0C-15/1A/20 are identity (ioport SEGi→nSi)
+and SEG00-0B/16-19 go through a board-decode. **But an empirical cross-check DISPROVES the identity
+half**: ioport **SEG15 0x04 = SYNCHRO & BREAK** (HELP-info, re-confirmed) whereas dispatch **nS15 0x04
+= ev 2004 (a sound selector)**. So ioport SEG15 does NOT hit nS15 — PanelWireNormTable is not the
+operative wire path for the CPL-group ioports the driver actually emits (0xC0-0xCB etc.). The real
+routing is the 4-board frame decoder (0x484AD111 → 32-entry jump table 0x48613108 = CPL/CPC/CPR/CPSD),
+still un-pinned. **Do NOT name ioport buttons from this table until the board-decode is traced** —
+the empirical HELP-info / press-count maps remain ground truth.
+
+## What IS solid
+- The full per-normSeg event+arg decode (firmware-internal view) — see `panel-dispatch-dump.txt`.
+- The mute part-id structure: nS08-0B carry firmware parts 02..0F as clean 2001/2000 on/off pairs.
+  The empirical mute matrix (ioport SEG04-07 = mixer parts 1-16) matches this part-for-part
+  (mixer part N ↔ fw part N+1) — a strong, specific 16-part correspondence, though NOT a proof of
+  the general ioport→normSeg map (see the SEG15 counterexample above).
+- EXIT = SEG08 0x20 (empirical; unchanged).
+
+## Still open
+- **Pin the board-decode** (disassemble 0x484AD111 + jump table 0x48613108). Only then can the
+  dispatch table safely name grp3 buttons (incl. the LCD RIGHT soft-keys). Until then: empirical.

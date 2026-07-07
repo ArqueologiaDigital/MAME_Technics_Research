@@ -1,0 +1,41 @@
+# KN7000 firmware panel dispatch table 0x48614978 -- FULL DECODE (read from emulator ROM 2026-07-07)
+# Per normSeg: [bitmask#bitidx ev=EVENT arg=ARG type]. ev&0xFFFF=event; mute pairs ev=2001(on)/2000(off), arg high byte = firmware part id.
+
+nS00 ptr=486136A0: [bm01#0 ev=2000 arg=1300 t=0] [bm02#1 ev=2000 arg=1000 t=0] [bm04#2 ev=2000 arg=1400 t=0] [bm08#3 ev=2000 arg=1100 t=0] [bm10#4 ev=2020 arg=0004 t=1] [bm20#5 ev=2000 arg=1200 t=0] [bm40#6 ev=2022 arg=0105 t=0] [bm80#7 ev=2021 arg=00C0 t=0]
+nS01 ptr=4861370C: [bm01#0 ev=2005 arg=0F51 t=0] [bm02#1 ev=2005 arg=075F t=0] [bm04#2 ev=2005 arg=0E50 t=0] [bm08#3 ev=2005 arg=065F t=0] [bm10#4 ev=2005 arg=0D5F t=0] [bm20#5 ev=2005 arg=055F t=0] [bm40#6 ev=2005 arg=0C5F t=0] [bm80#7 ev=2005 arg=045F t=0]
+nS02 ptr=48613778: [bm01#0 ev=2005 arg=0B5F t=0] [bm02#1 ev=2005 arg=035F t=0] [bm04#2 ev=2005 arg=0A5F t=0] [bm08#3 ev=2005 arg=025F t=0] [bm10#4 ev=2005 arg=095F t=0] [bm20#5 ev=2005 arg=015F t=0] [bm40#6 ev=2005 arg=085F t=0] [bm80#7 ev=2005 arg=005F t=0]
+nS03 ptr=486137E4: [bm01#0 ev=2022 arg=0005 t=0] [bm02#1 ev=20A1 arg=0020 t=0] [bm04#2 ev=2023 arg=0105 t=0] [bm08#3 ev=2084 arg=0115 t=0] [bm10#4 ev=2023 arg=0005 t=0] [bm20#5 ev=2084 arg=0015 t=0] [bm40#6 ev=2085 arg=0316 t=0] [bm80#7 ev=20A6 arg=0025 t=0]
+nS04 ptr=48613850: [bm01#0 ev=2085 arg=0216 t=0] [bm02#1 ev=20A4 arg=0023 t=0] [bm04#2 ev=2085 arg=0116 t=0] [bm08#3 ev=20A3 arg=0022 t=0] [bm10#4 ev=2085 arg=0016 t=0] [bm20#5 ev=2030 arg=0206 t=0] [bm40#6 ev=2030 arg=0506 t=0] [bm80#7 ev=2030 arg=0106 t=0]
+nS05 ptr=486138BC: [bm01#0 ev=2000 arg=1900 t=0] [bm02#1 ev=2040 arg=0464 t=0] [bm04#2 ev=2001 arg=1D08 t=0] [bm08#3 ev=2000 arg=1D08 t=0] [bm10#4 ev=2001 arg=0000 t=0] [bm20#5 ev=2000 arg=0000 t=0] [bm40#6 ev=2001 arg=0100 t=0] [bm80#7 ev=2000 arg=0100 t=0]
+nS06 ptr=48613928: [bm01#0 ev=2030 arg=0406 t=0] [bm02#1 ev=2033 arg=0006 t=0] [bm04#2 ev=2030 arg=0306 t=0] [bm08#3 ev=2032 arg=0006 t=0] [bm10#4 ev=2030 arg=0006 t=0] [bm20#5 ev=2031 arg=0006 t=0] [bm40#6 ev=2040 arg=0060 t=0] [bm80#7 ev=20B4 arg=0000 t=0]
+nS07 ptr=48613994: [bm01#0 ev=2040 arg=0666 t=0] [bm02#1 ev=20A8 arg=0027 t=0] [bm04#2 ev=2040 arg=0565 t=0] [bm08#3 ev=20A9 arg=0027 t=0] [bm10#4 ev=20A7 arg=0026 t=0]
+nS08 ptr=486139DC: [bm01#0 ev=2001 arg=0200 t=0] [bm02#1 ev=2000 arg=0200 t=0] [bm04#2 ev=2001 arg=0300 t=0] [bm08#3 ev=2000 arg=0300 t=0] [bm10#4 ev=2001 arg=0400 t=0] [bm20#5 ev=2000 arg=0400 t=0] [bm40#6 ev=2001 arg=0500 t=0] [bm80#7 ev=2000 arg=0500 t=0]
+nS09 ptr=48613A48: [bm01#0 ev=2001 arg=0600 t=0] [bm02#1 ev=2000 arg=0600 t=0] [bm04#2 ev=2001 arg=0700 t=0] [bm08#3 ev=2000 arg=0700 t=0] [bm10#4 ev=2001 arg=0800 t=0] [bm20#5 ev=2000 arg=0800 t=0] [bm40#6 ev=2001 arg=0900 t=0] [bm80#7 ev=2000 arg=0900 t=0]
+nS0A ptr=48613AB4: [bm01#0 ev=2001 arg=0A00 t=0] [bm02#1 ev=2000 arg=0A00 t=0] [bm04#2 ev=2001 arg=0B00 t=0] [bm08#3 ev=2000 arg=0B00 t=0] [bm10#4 ev=2001 arg=0C00 t=0] [bm20#5 ev=2000 arg=0C00 t=0] [bm40#6 ev=2001 arg=0D00 t=0] [bm80#7 ev=2000 arg=0D00 t=0]
+nS0B ptr=48613B20: [bm01#0 ev=2001 arg=0E00 t=0] [bm02#1 ev=2000 arg=0E00 t=0] [bm04#2 ev=2001 arg=0F00 t=0] [bm08#3 ev=2000 arg=0F00 t=0] [bm10#4 ev=2001 arg=1800 t=0] [bm20#5 ev=2000 arg=1800 t=0] [bm40#6 ev=20A0 arg=0017 t=0] [bm80#7 ev=2001 arg=1700 t=0]
+nS0C ptr=48613B8C: [bm01#0 ev=2086 arg=0034 t=0] [bm02#1 ev=2010 arg=0003 t=0] [bm04#2 ev=2040 arg=0161 t=0] [bm08#3 ev=2040 arg=0363 t=0] [bm10#4 ev=2004 arg=0443 t=0] [bm20#5 ev=2004 arg=0D4F t=0] [bm40#6 ev=2040 arg=0B6B t=0]
+nS0D ptr=48613BEC: [bm01#0 ev=20A2 arg=0021 t=0] [bm02#1 ev=2009 arg=0002 t=0] [bm04#2 ev=2040 arg=0262 t=0] [bm08#3 ev=2040 arg=0767 t=0] [bm10#4 ev=2004 arg=034F t=0] [bm20#5 ev=2004 arg=0C4F t=0] [bm40#6 ev=2016 arg=0003 t=0] [bm80#7 ev=2040 arg=0A6A t=0]
+nS0E ptr=48613C58: [bm01#0 ev=2009 arg=0202 t=0] [bm02#1 ev=2009 arg=0102 t=0] [bm04#2 ev=2063 arg=0012 t=0] [bm08#3 ev=20AB arg=0031 t=0] [bm10#4 ev=2004 arg=024F t=0] [bm20#5 ev=2004 arg=0B4F t=0] [bm40#6 ev=20AE arg=0033 t=0]
+nS0F ptr=48613CB8: [bm01#0 ev=2081 arg=0113 t=0] [bm02#1 ev=2008 arg=0001 t=0] [bm04#2 ev=2060 arg=0007 t=0] [bm08#3 ev=20AA arg=0031 t=0] [bm10#4 ev=2004 arg=014F t=0] [bm20#5 ev=2004 arg=0A41 t=0] [bm40#6 ev=2010 arg=0403 t=0] [bm80#7 ev=2012 arg=0003 t=0]
+nS10 ptr=48613D24: [bm01#0 ev=2081 arg=0013 t=0] [bm02#1 ev=2008 arg=0101 t=0] [bm04#2 ev=2061 arg=0032 t=0] [bm08#3 ev=2069 arg=0030 t=0] [bm10#4 ev=2004 arg=004F t=0] [bm20#5 ev=2004 arg=0941 t=0] [bm40#6 ev=2010 arg=0303 t=0] [bm80#7 ev=2013 arg=0003 t=0]
+nS11 ptr=48613D90: [bm01#0 ev=2001 arg=1400 t=0] [bm02#1 ev=2008 arg=0201 t=0] [bm04#2 ev=2062 arg=0010 t=0] [bm08#3 ev=2068 arg=0011 t=0] [bm10#4 ev=2001 arg=1000 t=0] [bm20#5 ev=2001 arg=1100 t=0] [bm40#6 ev=2010 arg=0203 t=0] [bm80#7 ev=2010 arg=0503 t=0]
+nS12 ptr=48613DFC: [bm01#0 ev=2001 arg=1300 t=0] [bm02#1 ev=2083 arg=0114 t=0] [bm04#2 ev=2004 arg=1144 t=0] [bm08#3 ev=2004 arg=0843 t=0] [bm40#6 ev=2010 arg=0103 t=0] [bm80#7 ev=2010 arg=0603 t=0]
+nS13 ptr=48613E50: [bm01#0 ev=2001 arg=1200 t=0] [bm02#1 ev=2083 arg=0014 t=0] [bm04#2 ev=2004 arg=1042 t=0] [bm08#3 ev=2004 arg=074F t=0] [bm40#6 ev=2011 arg=000C t=0] [bm80#7 ev=2010 arg=0703 t=0]
+nS14 ptr=48613EA4: [bm04#2 ev=2004 arg=0F40 t=0] [bm08#3 ev=2004 arg=064F t=0]
+nS15 ptr=48613EC8: [bm04#2 ev=2004 arg=0E4F t=0] [bm08#3 ev=2004 arg=054F t=0]
+nS16 ptr=48613EEC: [bmFF#0 ev=1005 arg=0092 t=2]
+nS17 ptr=48613F04: [bmFF#0 ev=1004 arg=0091 t=4]
+nS18 ptr=48613F1C: [bmFF#0 ev=1009 arg=0094 t=2]
+nS19 ptr=48613F34: [bmFF#0 ev=1010 arg=0081 t=2]
+nS1A ptr=48613F4C: [bmFF#0 ev=1011 arg=0090 t=2]
+nS1B ptr=48613F64: [bm01#0 ev=1000 arg=0580 t=3] [bm02#1 ev=1000 arg=0480 t=3] [bm04#2 ev=1000 arg=0380 t=3] [bm08#3 ev=1000 arg=0280 t=3] [bm10#4 ev=1000 arg=0180 t=3] [bm20#5 ev=1000 arg=0080 t=3]
+nS1C ptr=48613FB8:
+nS1D ptr=48613FC4: [bm01#0 ev=20B5 arg=00C8 t=0] [bm02#1 ev=20B6 arg=00C9 t=0] [bm04#2 ev=20B7 arg=00CA t=0] [bm08#3 ev=20B8 arg=00CB t=0] [bm10#4 ev=20B9 arg=00CC t=0] [bm20#5 ev=20BA arg=00CD t=0]
+nS1E ptr=48614018: [bm01#0 ev=20BB arg=0000 t=0]
+nS1F ptr=48614030: [bm01#0 ev=20BD arg=0000 t=0]
+nS20 ptr=48614048: [bmFF#0 ev=1020 arg=0096 t=2]
+
+# PanelWireNormTable 0x486135A0 (ADDR -> normSeg):
+00->0C 01->0D 02->0E 03->0F 04->10 05->11 06->12 07->13 08->14 09->15 10->1A 17->20 60->00 
+61->01 62->02 63->03 64->04 65->05 66->06 67->07 68->08 69->09 6A->0A 6B->0B 70->16 71->17 
+72->18 73->19 80->0A 81->0B 82->0C 83->0D 84->0E 85->0F 86->10 87->11 89->12 8A->13 97->1D 
