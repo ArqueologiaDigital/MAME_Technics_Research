@@ -1464,21 +1464,26 @@ ROM_END
 // kn7000 machine config for now; memory map / peripherals to be tuned.
 // ===================================================================
 ROM_START(kn2400)
-	// Program flash -> CPU 0x48400000. Decompressed LKG1.SLD, size 0x200000.
+	// Checksum-verified images decompressed from the KN2400/KN2600 update disk (LZSS
+	// .SLD; the .INF block checksums verify the decompression), so loaded as good dumps.
+	// The KN2000/2400/2600 program flash is LKG1 @0x48400000 + LKG2 @0x48600000 forming
+	// ONE contiguous image (== the update disk's KN24PRG.DAT). VERIFIED: the reset vector
+	// "jmp 0x48705bdf" lands in LKG2, which holds the MN10300 crt0 (writes 0xfe/0x02/0xbf
+	// to 0x360080xx, DRAM controller 0x497->0x32000040, stack setup). The style/name
+	// tables live inside LKG1 (program ROM) -- this model has no separate table flash at
+	// 0x48000000, so that region is left empty.
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
-
-	// Table / rhythm flash -> CPU 0x48000000. Decompressed LKG2.SLD, size 0x1965D3.
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_table.rom", 0x000000, 0x1965d3, BAD_DUMP CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
+	ROM_LOAD("kn2400_prog1.rom", 0x000000, 0x200000, CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))  // LKG1 -> 0x48400000
+	ROM_LOAD("kn2400_prog2.rom", 0x200000, 0x1965d3, CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))  // LKG2 -> 0x48600000
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)  // no separate table flash on this model
 ROM_END
 
 // KN2600 shares the KN2400 firmware image -> clone of kn2400 (ROMs resolve from the parent set).
 ROM_START(kn2600)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
+	ROM_LOAD("kn2400_prog1.rom", 0x000000, 0x200000, CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
+	ROM_LOAD("kn2400_prog2.rom", 0x200000, 0x1965d3, CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD("kn2400_table.rom", 0x000000, 0x1965d3, BAD_DUMP CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
 ROM_END
 
 } // anonymous namespace
