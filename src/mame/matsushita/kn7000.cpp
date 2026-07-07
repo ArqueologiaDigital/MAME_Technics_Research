@@ -179,7 +179,7 @@ private:
 
 	// Control panel button ports and LEDs (CPL = 8 cols, CPC = 5 cols; CPR + the
 	// serial HLE device that reads these / drives the LEDs are still to come).
-	required_ioport_array<0x16> m_seg;  // one per normalized segment 0x00-0x15
+	required_ioport_array<0x21> m_seg;  // one per normalized segment 0x00-0x20
 	required_ioport m_dial;
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
@@ -263,7 +263,7 @@ private:
 	emu_timer *m_panel_timer = nullptr;
 	int     m_panel_pos = 0;               // position within the 7-byte TX frame
 	uint8_t m_panel_p1 = 0, m_panel_p2 = 0; // frame payload bytes (positions 2 and 4)
-	uint8_t m_btn_prev[0x16] = { }; // last scanned state, one per normSeg 0x00-0x15
+	uint8_t m_btn_prev[0x21] = { }; // last scanned state, one per normSeg 0x00-0x20
 
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 };
@@ -864,20 +864,25 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 	// identity the firmware's button dispatcher (0x484ADB59) uses. For a changed
 	// segment we emit its 2-byte [ADDR][DATA] switch frame, computing the wire
 	// ADDR by REVERSE-normalizing (the inverse of table 0x486135A0):
-	//   normSeg 0x00-0x0B -> bank 11 (0xC0), sub = seg
-	//   normSeg 0x0C-0x15 -> bank 00 (0x00), sub = seg - 0x0C
-	// ADDR = bank | type(bit3 for sub>=8) | sub(bits2:0). DATA = segment bitmask
-	// (bit=1 pressed); the main CPU XORs vs its shadow for press/release edges.
+	//   normSeg 0x00-0x0B -> ADDR 0xC0-0xCB (grp3), 0x0C-0x15 -> 0x00-0x09 (grp0),
+	//   0x16-0x19 -> 0xD0-0xD3, 0x1A -> 0x10, 0x20 -> 0x17. normSeg 0x1B-0x1F have NO
+	//   wire path (not panel-serial buttons). DATA = segment bitmask (bit=1 pressed);
+	//   the main CPU XORs vs its shadow for press/release edges.
 	// Delivery rides the ATN dance via panel_queue (a bare fifo push never IRQs).
-	for (int seg = 0; seg < 0x16; seg++)
+	static const uint8_t seg_to_addr[0x21] = {
+		0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb, // normSeg 0x00-0x0B
+		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,           // normSeg 0x0C-0x15
+		0xd0,0xd1,0xd2,0xd3,0x10,0xff,0xff,0xff,0xff,0xff,0x17,       // normSeg 0x16-0x20
+	};
+	for (int seg = 0; seg < 0x21; seg++)
 	{
+		const uint8_t addr = seg_to_addr[seg];
+		if (addr == 0xff)   // normSeg 0x1B-0x1F: no wire path
+			continue;
 		const uint8_t cur = m_seg[seg]->read();
 		if (cur == m_btn_prev[seg])
 			continue;
 		m_btn_prev[seg] = cur;
-		const int sub = (seg < 0x0c) ? seg : (seg - 0x0c);
-		const uint8_t bank = (seg < 0x0c) ? 0xc0 : 0x00;
-		const uint8_t addr = bank | ((sub & 0x08) ? 0x08 : 0x00) | (sub & 0x07);
 		const uint8_t pkt[2] = { addr, cur };
 		panel_queue(pkt, 2);
 	}
@@ -1142,6 +1147,39 @@ static INPUT_PORTS_START(kn7000)
 	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	// SEG16-SEG20: DIAL/DATA/special panel-serial buttons (wire ADDR 0xD0-0xD3, 0x10, 0x17 from
+	// PanelWireNormTable 0x486135A0). normSeg 0x1B-0x1F (0x1000 soft-keys, 0x20B5-BD, 0x2005/2030
+	// dup events) have NO wire path and are not panel-serial; defined empty for the array. Names
+	// are placeholders (event codes) pending snapshot ID; see notes/panel-descriptor-map.md.
+	PORT_START("SEG16")   // normSeg 0x16 -- wire ADDR 0xD0
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1005 (DIAL?)")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG17")   // normSeg 0x17 -- wire ADDR 0xD1
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1004 (DATA?)")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG18")   // normSeg 0x18 -- wire ADDR 0xD2
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1009")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG19")   // normSeg 0x19 -- wire ADDR 0xD3
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1010")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1A")   // normSeg 0x1A -- wire ADDR 0x10
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1011")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1B")   // normSeg 0x1B -- no wire path
+	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1C")   // normSeg 0x1C -- no wire path
+	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1D")   // normSeg 0x1D -- no wire path
+	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1E")   // normSeg 0x1E -- no wire path
+	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG1F")   // normSeg 0x1F -- no wire path
+	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_START("SEG20")   // normSeg 0x20 -- wire ADDR 0x17
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1020")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 
 	PORT_START("DIAL")
 	PORT_BIT(0xff, 0x00, IPT_DIAL) PORT_SENSITIVITY(30) PORT_KEYDELTA(1) PORT_NAME("DATA DIAL")
