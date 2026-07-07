@@ -71,8 +71,8 @@ if '\nkn7000\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
     s = s.replace(anchor, anchor + '\n@source:matsushita/kn7000.cpp\nkn7000\n', 1)
     changed = True
-# KN6000 / KN6500 draft drivers live in the same source file as kn7000.
-for drv in ('kn6000', 'kn6500'):
+# KN6000 / KN6500 / KN2400 / KN2600 draft drivers live in the same source file as kn7000.
+for drv in ('kn6000', 'kn6500', 'kn2400', 'kn2600'):
     if '\n' + drv + '\n' not in s:
         s = s.replace('@source:matsushita/kn7000.cpp\nkn7000\n',
                       '@source:matsushita/kn7000.cpp\nkn7000\n' + drv + '\n', 1)

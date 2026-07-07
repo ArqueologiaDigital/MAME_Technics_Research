@@ -1452,6 +1452,35 @@ ROM_START(kn6500)
 	ROM_LOAD("kn6500_table.rom", 0x000000, 0x181691, BAD_DUMP CRC(23d17bb5) SHA1(fb3ba0f348f6c3b8ca43f53605753b9b2eff2991))
 ROM_END
 
+
+// ===================================================================
+// KN2400 / KN2600 -- also MN10300/MILK siblings (DRAFT drivers). The
+// SX-KN2000/KN2400/KN2600 family shares ONE firmware image: the update
+// disk's KN24PRG.DAT is byte-identical to LKG1.SLD + LKG2.SLD, and the
+// image carries "KN2000"/"KN2400"/"KN2600" model strings (it branches on
+// model at runtime). Verified MN10300: reset vector at 0x48400000 is
+// "jmp 0x48705bdf"; MILK toolkit present (MT_GetProcedureSp, ...). So
+// kn2600 is a clone of kn2400 (same ROMs). Reuses kn7000_state / the
+// kn7000 machine config for now; memory map / peripherals to be tuned.
+// ===================================================================
+ROM_START(kn2400)
+	// Program flash -> CPU 0x48400000. Decompressed LKG1.SLD, size 0x200000.
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
+	ROM_LOAD("kn2400_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
+
+	// Table / rhythm flash -> CPU 0x48000000. Decompressed LKG2.SLD, size 0x1965D3.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD("kn2400_table.rom", 0x000000, 0x1965d3, BAD_DUMP CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
+ROM_END
+
+// KN2600 shares the KN2400 firmware image -> clone of kn2400 (ROMs resolve from the parent set).
+ROM_START(kn2600)
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
+	ROM_LOAD("kn2400_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(b83a1b5b) SHA1(1ff370cdc2fe2b1c077148ff2ab83e3056376aff))
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD("kn2400_table.rom", 0x000000, 0x1965d3, BAD_DUMP CRC(30f4cf58) SHA1(8c5bec8745d2d273ec9f6a9e82a418d4fb1ee26f))
+ROM_END
+
 } // anonymous namespace
 
 
@@ -1461,3 +1490,7 @@ SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "T
 // KN6000 / KN6500 -- draft drivers reusing the KN7000 machine config (same MN10300 CPU, same 0x48400000 base).
 SYST(2000, kn6000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
 SYST(2001, kn6500, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+
+// KN2400 / KN2600 -- MN10300/MILK siblings sharing one firmware image (kn2600 = clone of kn2400).
+SYST(1998, kn2400, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2000, kn2600, kn2400, 0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2600", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
