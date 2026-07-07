@@ -372,6 +372,11 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x34000000, 0x3400ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	// On-chip interrupt controller (GxICR array + IAGR) -- more-specific override.
 	map(0x34000100, 0x340002ff).rw(FUNC(kn7000_state::intc_r), FUNC(kn7000_state::intc_w)); // GxICR block + the 0x34000200 scheduler-level group reg
+	// KN6000/KN6500: the firmware polls the on-chip 16-bit timer counters (TMnBC at
+	// 0x340010a0+) as busy-wait delays. Return an advancing (down-counting) value so
+	// those loops progress. The KN7000 keeps the generic 0x34000000 handler.
+	if (m_lib_mirror)
+		map(0x340010a0, 0x340010af).lr16(NAME([this](offs_t o) { return uint16_t(-(m_maincpu->total_cycles() >> 4)); }));
 	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
 	// 0x34000000 bank; this more-specific mapping overrides the logger above.
 	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
