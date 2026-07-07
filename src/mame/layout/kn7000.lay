@@ -423,11 +423,11 @@
 		<element ref="hline"><bounds x="95" y="254" width="26" height="3"/></element>
 		<element ref="hline"><bounds x="247" y="254" width="26" height="3"/></element>
 		<element ref="t49"><bounds x="125" y="262" width="64" height="9"/></element>
-		<element ref="round_btn" inputtag="SEG06" inputmask="0x20"><bounds x="141" y="274" width="32" height="32"/></element>
+		<element ref="round_btn" inputtag="SEG09" inputmask="0x04"><bounds x="141" y="274" width="32" height="32"/></element>
 		<element ref="t50"><bounds x="200" y="262" width="64" height="9"/></element>
 		<element ref="round_btn" inputtag="SEG09" inputmask="0x01"><bounds x="216" y="274" width="32" height="32"/></element>
 		<element ref="t51"><bounds x="275" y="262" width="64" height="9"/></element>
-		<element ref="round_btn" inputtag="SEG06" inputmask="0x02"><bounds x="291" y="274" width="32" height="32"/></element>
+		<element ref="round_btn" inputtag="SEG09" inputmask="0x02"><bounds x="291" y="274" width="32" height="32"/></element>
 		<element ref="green_led"><bounds x="151" y="270" width="8" height="8"/></element>
 		<element ref="msp_corner"><bounds x="35" y="368" width="94" height="41"/></element>
 		<element ref="t52"><bounds x="72" y="380" width="20" height="12"/></element>
@@ -473,7 +473,7 @@
 		<element ref="t67"><bounds x="740" y="340" width="105" height="9"/></element>
 		<element ref="pill_wide" inputtag="SEG12" inputmask="0x04"><bounds x="740" y="355" width="105" height="28"/></element>
 		<element ref="t68"><bounds x="856" y="340" width="105" height="9"/></element>
-		<element ref="pill_wide"><bounds x="856" y="355" width="105" height="28"/></element>
+		<element ref="pill_wide" inputtag="SEG15" inputmask="0x04"><bounds x="856" y="355" width="105" height="28"/></element>
 		<element ref="green_led"><bounds x="645" y="364" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="697" y="364" width="8" height="8"/></element>
 		<element ref="green_led" name="cpl_led10"><bounds x="904" y="364" width="8" height="8"/></element>

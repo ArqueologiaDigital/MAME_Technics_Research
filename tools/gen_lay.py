@@ -241,7 +241,9 @@ LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 # PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
 # BANK left decorative (its "PADS BANK" driver label is on a 0x2000 part-off bit = mislabel).
-for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG06","0x20"),("BANK",230,"SEG09","0x01"),("STOP",305,"SEG06","0x02")]:  # BANK = SEG09 0x01 (snapshot: PADS BANK SELECT; was decorative)
+# PERFORMANCE PADS (HELP-info 2026-07-07): AUTO SETTING=SEG09 0x04, BANK=SEG09 0x01, STOP=SEG09 0x02.
+# (AUTO SETTING/STOP were wrongly on SEG06; the whole PADS row is SEG09 0x01/0x02/0x04.)
+for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG09","0x04"),("BANK",230,"SEG09","0x01"),("STOP",305,"SEG09","0x02")]:
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32,tag=tg,mask=mk))
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
@@ -271,8 +273,8 @@ for i,cx in enumerate([366,426,486,546]):
 # FADE IN/OUT was SEG03 0x20 = LCD LEFT 3 (now bound to the left soft-key); SYNCHRO & BREAK was
 # SEG00 0x80 = RHYTHM genre 5. Both unbound (decorative) until their real bits are found.
 # HELP-info (2026-07-07): FADE IN/OUT = SEG11 0x01, TAP TEMPO = SEG12 0x04 (old SEG04 0x02 wrong).
-# SYNCHRO & BREAK still unknown (decorative).
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,None,None)]:
+# SYNCHRO & BREAK = SEG15 0x04 (HELP-info 2026-07-07).
+for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,"SEG15","0x04")]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
