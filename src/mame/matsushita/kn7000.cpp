@@ -1320,7 +1320,14 @@ void kn7000_state::machine_reset()
 	// (execute_f6), so this is ACTIVE and the boot is stable. (Earlier this was HELD
 	// because those F6 ops were skipped and the saved context was corrupted; that is
 	// resolved.) See notes/interrupt-mechanism.md ("F6 / udf extended ops").
-	m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
+	if (m_lib_mirror)
+		// KN6000/KN6500: delay the tick past the single-threaded boot so the scheduler
+		// does not preempt RTOS object creation (which derailed on an uncreated object).
+		// Partial: the boot then waits on an unmodeled on-chip timer (0x34001080-92) that
+		// drives a KN6000-specific ms counter. See notes/kn6000-kn6500-boot.md.
+		m_sys_timer->adjust(attotime::from_seconds(2), 0, attotime::from_hz(1000));
+	else
+		m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 
 	// Pre-load the factory "Initial Data" Favorites into battery-backed SRAM. This
 	// must run AFTER the boot BSS-clear (which zeroes work RAM up to ~0x50180000) but
