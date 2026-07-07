@@ -1420,8 +1420,44 @@ ROM_START(kn7000)
 	//ROM_LOAD("kn7000_wave_ic208.rom", 0xc00000, 0x400000, NO_DUMP)  // C3CBQD000003
 ROM_END
 
+
+// ===================================================================
+// KN6000 / KN6500 -- MN10300 siblings of the KN7000 (DRAFT drivers).
+// Same CPU family and same 0x48400000 program base as the KN7000
+// (verified: KN6000 reset vector at 0x48400000 is "jmp 0x484002e3"),
+// so for now they reuse kn7000_state and the kn7000 machine config;
+// per-model memory map / peripheral wiring is still to be tuned.
+// The images are the decompressed IK*.SLD (KN6000) / IKV*.SLD (KN6500)
+// firmware-update payloads -- BAD_DUMP because they are derived from
+// the update disks, not read from the chips (IC11/IC12 program flash,
+// IC13/IC14 table mask ROM per the service manual).
+// ===================================================================
+ROM_START(kn6000)
+	// Program flash -> CPU 0x48400000. Decompressed IK1.SLD, size 0x200000.
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
+	ROM_LOAD("kn6000_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(ea5d5d36) SHA1(0a5dc86522906bbe8f7b1012d4ac64eee12a9c26))
+
+	// Table / rhythm flash -> CPU 0x48000000. Decompressed IK2.SLD, size 0x1F7A31.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD("kn6000_table.rom", 0x000000, 0x1f7a31, BAD_DUMP CRC(7e782d75) SHA1(a9ed0a9f4eecad40eb608f21a520d3eb14605b9d))
+ROM_END
+
+ROM_START(kn6500)
+	// Program flash -> CPU 0x48400000. Decompressed IKV1.SLD, size 0x200000.
+	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)
+	ROM_LOAD("kn6500_program.rom", 0x000000, 0x200000, BAD_DUMP CRC(61616b29) SHA1(57d87f831f3ebcaacfaec989fafd50d3ab0a5afd))
+
+	// Table / rhythm flash -> CPU 0x48000000. Decompressed IKV2.SLD, size 0x181691.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD("kn6500_table.rom", 0x000000, 0x181691, BAD_DUMP CRC(23d17bb5) SHA1(fb3ba0f348f6c3b8ca43f53605753b9b2eff2991))
+ROM_END
+
 } // anonymous namespace
 
 
 //   YEAR  NAME    PARENT  COMPAT  MACHINE  INPUT   CLASS         INIT        COMPANY     FULLNAME      FLAGS
 SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+
+// KN6000 / KN6500 -- draft drivers reusing the KN7000 machine config (same MN10300 CPU, same 0x48400000 base).
+SYST(2000, kn6000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2001, kn6500, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)

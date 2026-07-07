@@ -66,10 +66,20 @@ PY
 python3 - "$BUILD_TREE/src/mame/mame.lst" <<'PY'
 import sys
 p = sys.argv[1]; s = open(p).read()
+changed = False
 if '\nkn7000\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
-    open(p, 'w').write(s.replace(anchor, anchor + '\n@source:matsushita/kn7000.cpp\nkn7000\n', 1))
-    print("mame.lst: kn7000 added")
+    s = s.replace(anchor, anchor + '\n@source:matsushita/kn7000.cpp\nkn7000\n', 1)
+    changed = True
+# KN6000 / KN6500 draft drivers live in the same source file as kn7000.
+for drv in ('kn6000', 'kn6500'):
+    if '\n' + drv + '\n' not in s:
+        s = s.replace('@source:matsushita/kn7000.cpp\nkn7000\n',
+                      '@source:matsushita/kn7000.cpp\nkn7000\n' + drv + '\n', 1)
+        changed = True
+if changed:
+    open(p, 'w').write(s)
+    print("mame.lst: kn7000/kn6000/kn6500 registered")
 else:
     print("mame.lst: already registered")
 PY
