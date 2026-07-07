@@ -184,10 +184,10 @@ for i in range(16):
 S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
       # DISPLAY HOLD = SEG08 0x10 (confirmed via HELP-info: "HELP : DISPLAY HOLD"). Was decorative.
       L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8),
-      # EXIT: my earlier SEG20 0x01 guess was WRONG -- that bit is a TEMPO control (120->121), not
-      # EXIT; the HELP-close test was fooled by the tempo digit shown on the HELP screen. EXIT's
-      # real bit is not yet known -- decorative for now (use HELP-info method to find it).
-      P("round_btn_big",1790,852,42,42), L("EXIT",1789,838,44,13)]
+      # EXIT = SEG08 0x20 (confirmed: pressed in HELP mode it turns HELP off -> returns to the PMEM
+      # home screen). Completes the SEG08 LCD-corner set: OTHER PARTS 0x04, HELP 0x08, DISPLAY HOLD
+      # 0x10, EXIT 0x20. (The earlier SEG20 0x01 guess was wrong -- that's a tempo control.)
+      P("round_btn_big",1790,852,42,42,tag="SEG08",mask="0x20"), L("EXIT",1789,838,44,13)]
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============
@@ -263,7 +263,7 @@ LB.append(L("VARIATION",430,378,90,8,TXTH))
 # VARIATION 1-3 = SEG04 b4/b2/b0; VARIATION 4 was SEG03 0x40 but the user shows that bit is
 # LCD LEFT 4 (now bound to the left soft-key), so VAR4 is freed (decorative; real bit TBD).
 # These are rhythm modifiers with no distinct LCD, so snapshot can't verify them.
-VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),(None,None)]
+VARBITS=[("SEG10","0x04"),(None,None),(None,None),(None,None)]  # VAR1&MSA = SEG10 0x04 (HELP-info); the old SEG04 guesses were wrong; VAR2-4 bits TBD
 for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
 # FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
@@ -336,14 +336,17 @@ RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led"
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
-# TRANSPOSE +/- : old SEG13 0x02/0x01 bindings were wrong (SEG13.b0 = LEFT part ON, b1 = event
-# 0x2083). Left decorative pending confirmation of the real TRANSPOSE bits. See panel-descriptor-map.md.
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24)]
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24)]
-RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB += [P("green_led",428,274,8,8), P("round_btn",416,285,32,32), P("green_led",488,274,8,8), P("round_btn",476,285,32,32)]
+# HELP-info (2026-07-07): TRANSPOSE -/+ = SEG13 0x01 (upper pill); R1/R2 OCTAVE -/+ = SEG13 0x04 (lower).
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24,tag="SEG13",mask="0x01")]
+RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24,tag="SEG13",mask="0x04")]
+# HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
+# These are button GROUPS (all members share the same HELP name); the found bit is bound to the
+# FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
+RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB += [P("green_led",428,274,8,8), P("round_btn",416,285,32,32,tag="SEG11",mask="0x80"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32)]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
-for cx in [360,425,485]: RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32)]
-for cx in [360,425,485]: RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32)]
+for j,cx in enumerate([360,425,485]): tg,mk=(("SEG10","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
+for j,cx in enumerate([360,425,485]): tg,mk=(("SEG11","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26),
        L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26), L("PANEL MEMORY",608,255,172,10,TXTH),
