@@ -298,3 +298,27 @@ back to the RAM default "8 Beat 1" instead of the built-in names at 0x485Cxxxx.
 2. Then find the resolver: MainGetRhythmName didn't fire in the menu (tick 3), so the list uses another
    getter that (per this trace) still bottoms out in the 0x4C014948 resource system -> trace which
    resource id / style-ID it passes per slot, and why it degenerates to the default.
+
+## TICK 8b (runtime read-tap): the built-in name strings are NEVER read -> resolution fails upstream
+Read-tap on **0x485C0000-0x485DFFFF** (the built-in style-name region) with BALLAD held to open the menu
+(SEG00 0x10 = "RHYTHM BALLAD"), addresses logged:
+- **15 reads total, ALL clustered in 0x485D6260-0x485D62B0** (a small descriptor struct: little u16/u8
+  IDs/indices 0x26/0x27/0x28/0x2a..., a self-near ptr 0x485D6254, and a RAM ptr 0x500012CC -- NO pointers
+  into the name-string area).
+- **ZERO reads at the actual name strings** (0x485CCF31 "8 Beat", 0x485CCF78 "16 Beat", 0x485D0105
+  "Pop Ballad", etc.).
+
+### Conclusion (decisive)
+The genre-style-list populate **never reads the built-in style-name strings**, even though they are
+present in the program ROM. So it is NOT "names fetched but not stored" -- the names are simply never
+fetched; the resolution fails **before** reaching the strings, and every slot falls back to the RAM
+default "8 Beat 1". The only 0x485Dxxxx data it touches is the descriptor struct @0x485D6260, which in
+emulation does not lead on to the name strings.
+
+### NEXT (needs a PC-trigger, i.e. a CPU-core rebuild)
+Put a PC/read trigger on the reads of **0x485D6260** (or on the style-list populate loop) to capture the
+reader PC, then disassemble that code to see the indirection it follows from the 0x485D6260 descriptor to
+a name -- and which step yields a null/default in emulation (a RAM global read as 0, an index computed as
+0, or a pointer through an unmapped region). The struct's RAM ptr **0x500012CC** is a prime suspect: if
+that workram holds a per-style name-pointer table that is uninitialised (0) in emulation, the resolver
+would default for every slot. Check 0x500012CC's contents during the menu (read-tap or dump).
