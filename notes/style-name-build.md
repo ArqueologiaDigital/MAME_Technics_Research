@@ -131,3 +131,27 @@ style 0). The **list** "all 8 Beat 1" bug is a SEPARATE path: **AcCtgStyleListBo
 NEXT: trace AcCtgStyleListBoxProc 0x4847BCCA -- where it gets each slot's style-ID/name (a RAM copy,
 not the static table), and why every slot resolves to the default. The static data (0x485B8A04) is
 good, so the defect is in the list enumeration's read of it (boot-time copy, or the aperture).
+
+
+## LIST PATH mapped -> GUI toolkit (tick 2026-07-07r); PAUSING the trace
+The style list-box **AcCtgStyleListBoxProc 0x4847BCCA** is a GUI-toolkit WIDGET: it dispatches
+messages via a table at **0x485CF408** (16 x {msg-ID, handler}; decoded -- msgs 0x01/0x0F/0x10/0x11/
+0x12/0xA3/0xB3/0xB4/0x3A/0x1500000/0x1500001). The item-draw handler (**0x4847C076**, msg 0x10/0x12)
+fetches each slot's TEXT via the GUI PROPERTY system (0x4842938D get-property-by-ID, 0x48417740). So a
+list slot's name is an ITEM-TEXT PROPERTY set during list POPULATE -- NOT read from the style data at
+draw time. Runtime confirms: during a list build, 0 reads of the default string 0x4872AB42 AND 0 reads
+of the static styleList 0x485B8A04.
+
+CAMPAIGN STATE ("8 Beat 1", ~6 ticks -- all documented + symbolized):
+- genre-style DATA is valid (0x485B8A04 has real IDs 0x65B...);
+- the current-style/conductor name path (0x484334A4/0x48433400/0x48433AC4) WORKS; style-ID 0 ->
+  "8 Beat 1" is the likely-correct home default;
+- SOUNDS resolve (0x65A -> real names);
+- the LIST path is the GUI widget 0x4847BCCA -> property system.
+REMAINING: the list POPULATE (item-text set from style-ID), likely the create/populate handlers
+msg 0x01 -> 0x4847BD9F or msg 0x01500000 -> 0x4847BD66.
+
+PAUSE: "8 Beat 1" is a deep GUI-toolkit subsystem (populate -> property -> draw). After ~6 ticks of
+mapping, pausing to rebalance to bounded backlog (disasm growth / TCMP decode / KN5000 docs). Clean
+resume point: disassemble the populate handler 0x4847BD9F to find where item-text is set from the
+style-ID (compare with the working sound path).
