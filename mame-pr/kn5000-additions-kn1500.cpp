@@ -50,8 +50,9 @@ void kn1500_state::kn1500(machine_config &config)
 	screen.set_visarea_full();
 }
 
-// IC15 mask ROM -> program + rhythm (both BAD_DUMP: unvalidated, does not decode as
-// coherent TLCS-900, needs a redump). The LCD SVG is a preserved artwork ROM asset.
+// IC15 mask ROM -> program + rhythm. BAD_DUMP is a conservative "unvalidated" marker
+// (the program does boot coherently: reset 0xffff00 -> 0xfffee0 jp 0xfe5f4f, a valid
+// TMP95C061 crt0), pending a confirming redump. The LCD SVG is a preserved ROM asset.
 ROM_START(kn1500)
 	ROM_REGION16_LE(0x200000, "prog", 0)
 	ROM_LOAD("technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15", 0x000000, 0x200000, BAD_DUMP CRC(0f78da9a) SHA1(53d5c43d833fb005a7bd377583252b84b646253d))
