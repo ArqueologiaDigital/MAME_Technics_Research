@@ -90,3 +90,56 @@ Piano", "EP Ballad Maj/Min", "Angel Ballad", "Ballad Backing". This is the **sam
 record shape as the program-ROM user-style area** (0x4872AB44, also `f5`-marker). Their
 lengths vary (0xE7..0x5DAA apart) because the embedded MIDI pattern data varies. A
 list build must scan `f5` markers / use a pointer table to enumerate a genre's styles.
+
+
+## Rhythm-style PATTERN event format (DECODED + verified, 2026-07-07)
+The pattern data inside each variable-length style record (both the table-ROM genre styles
+and the program-ROM user-style area 0x4872AB44) is a **self-delimiting, status-driven MIDI-like
+byte stream** -- one interleaved multi-channel track per style. (The roadmap's guessed "24-byte
+event records" was wrong; events are variable-size.) Decoded via a parallel workflow and
+**independently re-verified**: my parser walked 8 consecutive BALLAD records with zero garbage
+(each stream ends exactly on 0xF5 followed by the next 16-char name), and the three linchpin
+firmware routines were disassembled and match byte-for-byte.
+
+### Style record layout
+```
+[16-byte name, NUL-padded][1 byte index/variation][03 nn 00 00 ff header][per-part setup]
+[0xF4  <event stream>  0xF5]
+```
+The next record's name begins at the byte right after 0xF5.
+
+### Event stream grammar (read tokens until 0xF5; dispatch on the byte)
+| byte        | meaning | size |
+|-------------|---------|------|
+| `0x00-0x7F` | TIMING: absolute play position (0-95 ticks) in the current 96-tick beat-segment. Omitted when the next event shares the position (chords/stacked notes). | 1 |
+| `0xF4`      | beat-segment (bar) delimiter; position resets to 0. 4 segments = one 4/4 bar. | 1 |
+| `0xF5`      | end-of-pattern / record separator | 1 |
+| `0xF0 ll …` | SysEx; total length = `ll+2` | ll+2 |
+| `0x9n note vel gl gh rt` | NOTE-ON: n=channel/part(0-15); note(0-127); vel(0-127, 0=>skip); **gate_ticks = gl + (gh<<7)** (14-bit; note-off is implicit -- there are NO 0x8n note-offs); rt=per-part routing tag | 6 |
+| `0xBn cc vv` | control change | 3 |
+| `0xCn p1 p2 p3` | program/voice change | 4 |
+| `0xDn xx` | channel pressure | 2 |
+| `0xEn lsb msb` | pitch bend | 3 |
+| other `0x8n/0xAn/status` | (unused in data) | 1 |
+Channel = low nibble of the status byte. **No running status** (each event carries its status).
+Timing is ABSOLUTE position, not a delta (the player *stores* it, not adds). 96 ticks/beat
+(the TCMP header carries `00 60`=96; observed positions 0-95).
+
+### Firmware (program ROM, base 0x48400000) -- disassembled & verified
+- **RhyEventLenByStatus 0x484403D5**: status nibble -> 0x9n=6, 0xBn=3, 0xCn=4, 0xDn=2, 0xEn=3,
+  else=1. (VERIFIED via unidasm.)
+- **RhySysexLen 0x484403CD**: `movbu (1,a0),d0; add 2` = data[1]+2. (VERIFIED.)
+- **RhyNoteOnVoice 0x4843DC7C**: vel@+2 (0=>ret), note@+1, ch=byte0&0x0F, gate=byte3+(byte4<<7)
+  @0x4843DCE2-EB, routing@+5. (VERIFIED.)
+- **RhyPatternScan 0x4843890E**: stream scanner/validator (uses the two length routines above).
+- **RhyPatternPlayer 0x4843982D**: real-time player/seek; a timing byte does `movhu d0,(a3)`
+  (position := value, proving ABSOLUTE); at 0xF4/0xF5 sets position=0x60(=96).
+- **MainRhyRun 0x48494797**: the rhythm task that drives the player -- resolved via the firmware's
+  OWN embedded symbol table (name strings "MainPadRun"/"MainRhyRun"/"MainSeqRun" ~0x485F1Axx, addr
+  table at prog file offset ~0x344440). *(This embedded symbol table is a high-value lead: it may
+  name many firmware functions -- worth mining in a future tick.)*
+
+### Verification data (BALLAD genre)
+Parsed cleanly: "Pop Ballad Piano"(4 segs)->"Fifties Vocals"(8)->"Dreamy Ballad"(8)->"EP Ballad
+Maj"(32)->"EP Ballad Min"(32)->"4/4 Arpeggio"(4)->"Angel Ballad"(16)->"Ballad Backing"(8)->...
+Status census over 16 records: 0x90 x3257, 0xB0 x157, 0xC0 x110, 0xE0 x179, **zero 0x80**.
