@@ -1,0 +1,39 @@
+# KN7000 ACTIVE panel dispatch table 0x486149FC (flag 0x5006BE94==1) -- read live 2026-07-07
+# This is the REAL KN7000 map. The 0x48614978 table (in panel-dispatch-dump.txt) is the flag==0
+# variant (KN5000/other model of the shared codebase) and must NOT be used for KN7000 buttons.
+# ev&0xFFFF=event; 2001/2000=part ON/OFF (arg hi=part id); 2005=genre; 2004=sound sel; 1xxx=system.
+
+flag 0x5006BE94 = 1 ; flag 0x5006BFB2 = 0
+altS00 ptr=48614060: [bm01 ev=2030 arg=0006] [bm02 ev=2030 arg=0306] [bm04 ev=2005 arg=005F] [bm08 ev=2005 arg=015F] [bm10 ev=2005 arg=025F] [bm20 ev=2005 arg=035F] [bm40 ev=2005 arg=045F] [bm80 ev=2005 arg=055F]
+altS01 ptr=486140CC: [bm01 ev=2030 arg=0106] [bm02 ev=2030 arg=0406] [bm04 ev=2005 arg=065F] [bm08 ev=2005 arg=075F] [bm10 ev=2005 arg=085F] [bm20 ev=2005 arg=095F] [bm40 ev=2005 arg=0A5F] [bm80 ev=2005 arg=0B5F]
+altS02 ptr=48614138: [bm01 ev=2030 arg=0206] [bm02 ev=2030 arg=0506] [bm04 ev=2005 arg=0C5F] [bm08 ev=2005 arg=0D5F] [bm10 ev=2005 arg=0E5F] [bm20 ev=2005 arg=0F5F] [bm40 ev=2040 arg=0565] [bm80 ev=20A7 arg=0026]
+altS03 ptr=486141A4: [bm02 ev=20A8 arg=0027] [bm04 ev=20A9 arg=0027] [bm08 ev=2000 arg=1000] [bm10 ev=2000 arg=1100] [bm20 ev=2000 arg=1200] [bm40 ev=2000 arg=1300] [bm80 ev=2000 arg=1400]
+altS04 ptr=48614204: [bm01 ev=2001 arg=0000] [bm02 ev=2000 arg=0000] [bm04 ev=2001 arg=0100] [bm08 ev=2000 arg=0100] [bm10 ev=2001 arg=0200] [bm20 ev=2000 arg=0200] [bm40 ev=2001 arg=0300] [bm80 ev=2000 arg=0300]
+altS05 ptr=48614270: [bm01 ev=2001 arg=0400] [bm02 ev=2000 arg=0400] [bm04 ev=2001 arg=0500] [bm08 ev=2000 arg=0500] [bm10 ev=2001 arg=0600] [bm20 ev=2000 arg=0600] [bm40 ev=2001 arg=0700] [bm80 ev=2000 arg=0700]
+altS06 ptr=486142DC: [bm01 ev=2001 arg=0800] [bm02 ev=2000 arg=0800] [bm04 ev=2001 arg=0900] [bm08 ev=2000 arg=0900] [bm10 ev=2001 arg=0A00] [bm20 ev=2000 arg=0A00] [bm40 ev=2001 arg=0B00] [bm80 ev=2000 arg=0B00]
+altS07 ptr=48614348: [bm01 ev=2001 arg=0C00] [bm02 ev=2000 arg=0C00] [bm04 ev=2001 arg=0D00] [bm08 ev=2000 arg=0D00] [bm10 ev=2001 arg=0E00] [bm20 ev=2000 arg=0E00] [bm40 ev=2001 arg=0F00] [bm80 ev=2000 arg=0F00]
+altS08 ptr=486143B4: [bm01 ev=2001 arg=1800] [bm02 ev=2000 arg=1800] [bm04 ev=2000 arg=1900] [bm08 ev=2040 arg=0464] [bm10 ev=20A0 arg=0017] [bm20 ev=2001 arg=1700] [bm40 ev=20AD arg=0037] [bm80 ev=20AC arg=0037]
+altS09 ptr=48614420: [bm01 ev=2032 arg=0006] [bm02 ev=2033 arg=0006] [bm04 ev=2031 arg=0006] [bm08 ev=20A3 arg=0022] [bm10 ev=2085 arg=0016] [bm20 ev=2085 arg=0116] [bm40 ev=2040 arg=0060]
+altS0A ptr=48614480: [bm01 ev=2004 arg=004F] [bm02 ev=2004 arg=014F] [bm04 ev=2004 arg=024F] [bm08 ev=2004 arg=034F] [bm10 ev=2004 arg=044F] [bm20 ev=2004 arg=0543]
+altS0B ptr=486144D4: [bm01 ev=2004 arg=064F] [bm02 ev=2004 arg=074F] [bm04 ev=2004 arg=084F] [bm08 ev=2004 arg=094F] [bm10 ev=2004 arg=0A40] [bm20 ev=2004 arg=0B42]
+altS0C ptr=48614528: [bm01 ev=2004 arg=0C4F] [bm02 ev=2004 arg=0D4F] [bm04 ev=2004 arg=0E4F] [bm08 ev=2004 arg=0F4F] [bm10 ev=2068 arg=0011] [bm20 ev=2069 arg=0030]
+altS0D ptr=4861457C: [bm01 ev=20AA arg=0031] [bm02 ev=20AB arg=0031] [bm04 ev=2001 arg=1000] [bm08 ev=2001 arg=1100] [bm10 ev=2001 arg=1200] [bm20 ev=2001 arg=1300] [bm40 ev=2001 arg=1400]
+altS0E ptr=486145DC: [bm01 ev=20A4 arg=0023] [bm02 ev=20A6 arg=0025] [bm04 ev=2085 arg=0216] [bm08 ev=2085 arg=0316] [bm10 ev=2009 arg=0202] [bm20 ev=2009 arg=0102] [bm40 ev=2009 arg=0002] [bm80 ev=2086 arg=0034]
+altS0F ptr=48614648: [bm01 ev=2084 arg=0015] [bm02 ev=2084 arg=0115] [bm04 ev=2023 arg=0005] [bm08 ev=2023 arg=0105] [bm10 ev=2008 arg=0201] [bm20 ev=2008 arg=0101] [bm40 ev=2008 arg=0001] [bm80 ev=20A2 arg=0021]
+altS10 ptr=486146B4: [bm01 ev=2022 arg=0005] [bm02 ev=2022 arg=0105] [bm04 ev=20A1 arg=0020] [bm08 ev=2020 arg=0004] [bm10 ev=2040 arg=0767] [bm20 ev=2040 arg=0363] [bm40 ev=2040 arg=0161] [bm80 ev=2040 arg=0262]
+altS11 ptr=48614720: [bm01 ev=2081 arg=0013] [bm02 ev=2081 arg=0113] [bm04 ev=2083 arg=0014] [bm08 ev=2083 arg=0114] [bm10 ev=2062 arg=0010] [bm20 ev=2061 arg=0032] [bm40 ev=2060 arg=0007] [bm80 ev=2063 arg=0012]
+altS12 ptr=4861478C: [bm01 ev=2040 arg=0666] [bm02 ev=20AE arg=0033] [bm04 ev=2021 arg=00C0] [bm10 ev=2011 arg=000C] [bm20 ev=2012 arg=0003] [bm40 ev=2013 arg=0003] [bm80 ev=2016 arg=0003]
+altS13 ptr=486147EC: [bm01 ev=2010 arg=0003] [bm02 ev=2010 arg=0103] [bm04 ev=2010 arg=0203] [bm08 ev=2010 arg=0303] [bm10 ev=2010 arg=0403] [bm20 ev=2010 arg=0503] [bm40 ev=2010 arg=0603] [bm80 ev=2010 arg=0703]
+altS14 ptr=48614858: [bmFF ev=1011 arg=0090]
+altS15 ptr=48614870: [bmFF ev=1004 arg=0091]
+altS16 ptr=48614888: [bmFF ev=1010 arg=0081]
+altS17 ptr=486148A0: [bmFF ev=1005 arg=0092]
+altS18 ptr=486148B8: [bmFF ev=1012 arg=0095]
+altS19 ptr=486148D0: [bmFF ev=1012 arg=0095]
+altS1A ptr=486148E8: [bmFF ev=1009 arg=0094]
+altS1B ptr=48614900: [bm01 ev=1000 arg=0080] [bm02 ev=1000 arg=0080] [bm04 ev=1000 arg=0080] [bm08 ev=1000 arg=0080] [bm10 ev=1000 arg=0080] [bm20 ev=1000 arg=0080]
+altS1C ptr=48614954:
+altS1D ptr=48614960: [bmFF ev=1020 arg=0096]
+altS1E ptr=00702068:
+altS1F ptr=00000011:
+altS20 ptr=00702020:

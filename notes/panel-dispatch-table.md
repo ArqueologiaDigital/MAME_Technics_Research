@@ -1,5 +1,12 @@
 # KN7000 firmware panel-button dispatch table (decoded 2026-07-07)
 
+> **SUPERSEDED for the ACTIVE map — see `panel-board-decode.md`.** This page decoded table
+> **0x48614978**, which is the flag(0x5006BE94)==0 variant (the *other* model of the shared
+> codebase). The KN7000 runs flag==1 → dispatch **0x486149FC** (`panel-dispatch-active.txt`) +
+> normalize table2 0x48613620. The board-decode formula and ioport→normSeg map are now pinned in
+> `panel-board-decode.md`. The event-class notes below are still valid; the per-normSeg contents
+> here are the inactive table's.
+
 The firmware's master map of every panel switch → its event. FULLY DECODED this pass (read live from
 the emulator ROM; raw dump in `panel-dispatch-dump.txt`). This resolves several earlier open items.
 
