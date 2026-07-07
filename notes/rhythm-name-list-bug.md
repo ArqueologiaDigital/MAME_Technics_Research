@@ -395,3 +395,15 @@ read-tap shows the strings are never read, so that resolution defaults. NEXT: tr
 draw/name handler -- the 0x4842AD45 message targets and the library 0x4C014948 processing of resource
 0xC000 *with the specific item id* -- to find where the built-in-style string lookup yields the default.
 The object id at *(obj+4) (a 0x600xx-style id) and how it maps to a name index is the key.
+
+## TICK 11 (trace 0xC000 path): the 0xC000-object path does NOT fire -> hypothesis corrected AGAIN
+Instrumented 0x4841C37C (0xC000-object creator), 0x4C014948 (library resolver, log res id+args), and its
+not-found path; held BALLAD. Results:
+- **0x4841C37C: ZERO calls** during the menu. The 0x48497ACB `call 0x4841C37C` site is a NOT-TAKEN branch
+  for the built-in-genre list -> the 0xC000-object is not how the list gets names. (Tick-10 hypothesis wrong.)
+- **0x4C014948: 100,309 calls**, but for resource ids **0x03 / 0x04 / 0x08** (arg d1 frequently 0x0006003A,
+  an object id 0x60000+0x3A), and **NEVER 0xC000**. LIB-NOTFOUND = 0 (every trie lookup succeeds).
+So the list's UI/name resolution goes through the library with **low resource ids 0x03/0x04/0x08**, not the
+0xC000 rhythm-name resource (0xC000 is MainGetRhythmName's path, which doesn't fire in the menu -- tick 3).
+NEXT: instrument 0x4C014948 to capture the res-id + arg for the calls that actually feed the visible slot
+text, and follow res 0x03/0x04/0x08 with arg 0x6003A through the sub-handlers to the (defaulted) name.
