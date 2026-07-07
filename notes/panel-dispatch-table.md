@@ -24,10 +24,10 @@ Each per-SEG array is 8 entries × 12 bytes `{ f0, mask, type }`, terminated by 
 - **normSeg 16-1A, 20 = the 0x1xxx SYSTEM buttons** (0x1004,1005,1009,1010,1011,1020).
   normSeg 1B-1F have NO wire path (not panel-serial buttons, per the driver).
 
-## EXIT = SEG20 0x01 (event 0x1020) — CONFIRMED
+## EXIT — NOT YET FOUND (earlier SEG20 0x01 claim was WRONG)
 The 0x1xxx class = system/nav buttons; the 6 candidates were normSeg 16-1A,20 bit0. An emulator
 test (open HELP modal, press each, watch the screen hash) showed **only SEG20 0x01 closes HELP** —
-that is EXIT. (scratchpad/findexit2.lua). Bound in the layout. IvExitProc 0x4841EAE3 is the *screen*
+SEEMED to close HELP -- but SEG20 0x01 is actually a TEMPO control; the HELP screen shows the tempo digit, so the hash changed without closing HELP. EXIT is NOT SEG20 0x01. (Also: the normSeg 0x1xxx candidates relied on the unresolved normSeg==layout-SEG assumption, which is false.) Find EXIT via the HELP-info method (the bit that turns HELP mode OFF). IvExitProc 0x4841EAE3 is the *screen*
 handler it ultimately reaches (references the "EXIT" string 0x4859F234 on GUI msg 0x6003a).
 
 ## UNRESOLVED: normSeg vs layout-SEG alignment
