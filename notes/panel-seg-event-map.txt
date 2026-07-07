@@ -1,0 +1,225 @@
+# ioport SEG.bit -> normSeg -> firmware event+arg (KN7000 active mode, board-decode)
+SEG00  0x01  nS00  ev2030  arg0006
+SEG00  0x02  nS00  ev2030  arg0306
+SEG00  0x04  nS00  ev2005  arg005F
+SEG00  0x08  nS00  ev2005  arg015F
+SEG00  0x10  nS00  ev2005  arg025F
+SEG00  0x20  nS00  ev2005  arg035F
+SEG00  0x40  nS00  ev2005  arg045F
+SEG00  0x80  nS00  ev2005  arg055F
+SEG01  0x01  nS01  ev2030  arg0106
+SEG01  0x02  nS01  ev2030  arg0406
+SEG01  0x04  nS01  ev2005  arg065F
+SEG01  0x08  nS01  ev2005  arg075F
+SEG01  0x10  nS01  ev2005  arg085F
+SEG01  0x20  nS01  ev2005  arg095F
+SEG01  0x40  nS01  ev2005  arg0A5F
+SEG01  0x80  nS01  ev2005  arg0B5F
+SEG02  0x01  nS02  ev2030  arg0206
+SEG02  0x02  nS02  ev2030  arg0506
+SEG02  0x04  nS02  ev2005  arg0C5F
+SEG02  0x08  nS02  ev2005  arg0D5F
+SEG02  0x10  nS02  ev2005  arg0E5F
+SEG02  0x20  nS02  ev2005  arg0F5F
+SEG02  0x40  nS02  ev2040  arg0565
+SEG02  0x80  nS02  ev20A7  arg0026
+SEG03  0x01  nS03  (unused)  
+SEG03  0x02  nS03  ev20A8  arg0027
+SEG03  0x04  nS03  ev20A9  arg0027
+SEG03  0x08  nS03  ev2000  arg1000
+SEG03  0x10  nS03  ev2000  arg1100
+SEG03  0x20  nS03  ev2000  arg1200
+SEG03  0x40  nS03  ev2000  arg1300
+SEG03  0x80  nS03  ev2000  arg1400
+SEG04  0x01  nS04  ev2001  arg0000
+SEG04  0x02  nS04  ev2000  arg0000
+SEG04  0x04  nS04  ev2001  arg0100
+SEG04  0x08  nS04  ev2000  arg0100
+SEG04  0x10  nS04  ev2001  arg0200
+SEG04  0x20  nS04  ev2000  arg0200
+SEG04  0x40  nS04  ev2001  arg0300
+SEG04  0x80  nS04  ev2000  arg0300
+SEG05  0x01  nS05  ev2001  arg0400
+SEG05  0x02  nS05  ev2000  arg0400
+SEG05  0x04  nS05  ev2001  arg0500
+SEG05  0x08  nS05  ev2000  arg0500
+SEG05  0x10  nS05  ev2001  arg0600
+SEG05  0x20  nS05  ev2000  arg0600
+SEG05  0x40  nS05  ev2001  arg0700
+SEG05  0x80  nS05  ev2000  arg0700
+SEG06  0x01  nS06  ev2001  arg0800
+SEG06  0x02  nS06  ev2000  arg0800
+SEG06  0x04  nS06  ev2001  arg0900
+SEG06  0x08  nS06  ev2000  arg0900
+SEG06  0x10  nS06  ev2001  arg0A00
+SEG06  0x20  nS06  ev2000  arg0A00
+SEG06  0x40  nS06  ev2001  arg0B00
+SEG06  0x80  nS06  ev2000  arg0B00
+SEG07  0x01  nS07  ev2001  arg0C00
+SEG07  0x02  nS07  ev2000  arg0C00
+SEG07  0x04  nS07  ev2001  arg0D00
+SEG07  0x08  nS07  ev2000  arg0D00
+SEG07  0x10  nS07  ev2001  arg0E00
+SEG07  0x20  nS07  ev2000  arg0E00
+SEG07  0x40  nS07  ev2001  arg0F00
+SEG07  0x80  nS07  ev2000  arg0F00
+SEG08  0x01  nS08  ev2001  arg1800
+SEG08  0x02  nS08  ev2000  arg1800
+SEG08  0x04  nS08  ev2000  arg1900
+SEG08  0x08  nS08  ev2040  arg0464
+SEG08  0x10  nS08  ev20A0  arg0017
+SEG08  0x20  nS08  ev2001  arg1700
+SEG08  0x40  nS08  ev20AD  arg0037
+SEG08  0x80  nS08  ev20AC  arg0037
+SEG09  0x01  nS09  ev2032  arg0006
+SEG09  0x02  nS09  ev2033  arg0006
+SEG09  0x04  nS09  ev2031  arg0006
+SEG09  0x08  nS09  ev20A3  arg0022
+SEG09  0x10  nS09  ev2085  arg0016
+SEG09  0x20  nS09  ev2085  arg0116
+SEG09  0x40  nS09  ev2040  arg0060
+SEG09  0x80  nS09  (unused)  
+SEG0A  0x01  INVALID    (firmware no-op)
+SEG0A  0x02  INVALID    (firmware no-op)
+SEG0A  0x04  INVALID    (firmware no-op)
+SEG0A  0x08  INVALID    (firmware no-op)
+SEG0A  0x10  INVALID    (firmware no-op)
+SEG0A  0x20  INVALID    (firmware no-op)
+SEG0A  0x40  INVALID    (firmware no-op)
+SEG0A  0x80  INVALID    (firmware no-op)
+SEG0B  0x01  INVALID    (firmware no-op)
+SEG0B  0x02  INVALID    (firmware no-op)
+SEG0B  0x04  INVALID    (firmware no-op)
+SEG0B  0x08  INVALID    (firmware no-op)
+SEG0B  0x10  INVALID    (firmware no-op)
+SEG0B  0x20  INVALID    (firmware no-op)
+SEG0B  0x40  INVALID    (firmware no-op)
+SEG0B  0x80  INVALID    (firmware no-op)
+SEG0C  0x01  nS0A  ev2004  arg004F
+SEG0C  0x02  nS0A  ev2004  arg014F
+SEG0C  0x04  nS0A  ev2004  arg024F
+SEG0C  0x08  nS0A  ev2004  arg034F
+SEG0C  0x10  nS0A  ev2004  arg044F
+SEG0C  0x20  nS0A  ev2004  arg0543
+SEG0C  0x40  nS0A  (unused)  
+SEG0C  0x80  nS0A  (unused)  
+SEG0D  0x01  nS0B  ev2004  arg064F
+SEG0D  0x02  nS0B  ev2004  arg074F
+SEG0D  0x04  nS0B  ev2004  arg084F
+SEG0D  0x08  nS0B  ev2004  arg094F
+SEG0D  0x10  nS0B  ev2004  arg0A40
+SEG0D  0x20  nS0B  ev2004  arg0B42
+SEG0D  0x40  nS0B  (unused)  
+SEG0D  0x80  nS0B  (unused)  
+SEG0E  0x01  nS0C  ev2004  arg0C4F
+SEG0E  0x02  nS0C  ev2004  arg0D4F
+SEG0E  0x04  nS0C  ev2004  arg0E4F
+SEG0E  0x08  nS0C  ev2004  arg0F4F
+SEG0E  0x10  nS0C  ev2068  arg0011
+SEG0E  0x20  nS0C  ev2069  arg0030
+SEG0E  0x40  nS0C  (unused)  
+SEG0E  0x80  nS0C  (unused)  
+SEG0F  0x01  nS0D  ev20AA  arg0031
+SEG0F  0x02  nS0D  ev20AB  arg0031
+SEG0F  0x04  nS0D  ev2001  arg1000
+SEG0F  0x08  nS0D  ev2001  arg1100
+SEG0F  0x10  nS0D  ev2001  arg1200
+SEG0F  0x20  nS0D  ev2001  arg1300
+SEG0F  0x40  nS0D  ev2001  arg1400
+SEG0F  0x80  nS0D  (unused)  
+SEG10  0x01  nS0E  ev20A4  arg0023
+SEG10  0x02  nS0E  ev20A6  arg0025
+SEG10  0x04  nS0E  ev2085  arg0216
+SEG10  0x08  nS0E  ev2085  arg0316
+SEG10  0x10  nS0E  ev2009  arg0202
+SEG10  0x20  nS0E  ev2009  arg0102
+SEG10  0x40  nS0E  ev2009  arg0002
+SEG10  0x80  nS0E  ev2086  arg0034
+SEG11  0x01  nS0F  ev2084  arg0015
+SEG11  0x02  nS0F  ev2084  arg0115
+SEG11  0x04  nS0F  ev2023  arg0005
+SEG11  0x08  nS0F  ev2023  arg0105
+SEG11  0x10  nS0F  ev2008  arg0201
+SEG11  0x20  nS0F  ev2008  arg0101
+SEG11  0x40  nS0F  ev2008  arg0001
+SEG11  0x80  nS0F  ev20A2  arg0021
+SEG12  0x01  nS10  ev2022  arg0005
+SEG12  0x02  nS10  ev2022  arg0105
+SEG12  0x04  nS10  ev20A1  arg0020
+SEG12  0x08  nS10  ev2020  arg0004
+SEG12  0x10  nS10  ev2040  arg0767
+SEG12  0x20  nS10  ev2040  arg0363
+SEG12  0x40  nS10  ev2040  arg0161
+SEG12  0x80  nS10  ev2040  arg0262
+SEG13  0x01  nS11  ev2081  arg0013
+SEG13  0x02  nS11  ev2081  arg0113
+SEG13  0x04  nS11  ev2083  arg0014
+SEG13  0x08  nS11  ev2083  arg0114
+SEG13  0x10  nS11  ev2062  arg0010
+SEG13  0x20  nS11  ev2061  arg0032
+SEG13  0x40  nS11  ev2060  arg0007
+SEG13  0x80  nS11  ev2063  arg0012
+SEG14  0x01  INVALID    (firmware no-op)
+SEG14  0x02  INVALID    (firmware no-op)
+SEG14  0x04  INVALID    (firmware no-op)
+SEG14  0x08  INVALID    (firmware no-op)
+SEG14  0x10  INVALID    (firmware no-op)
+SEG14  0x20  INVALID    (firmware no-op)
+SEG14  0x40  INVALID    (firmware no-op)
+SEG14  0x80  INVALID    (firmware no-op)
+SEG15  0x01  nS12  ev2040  arg0666
+SEG15  0x02  nS12  ev20AE  arg0033
+SEG15  0x04  nS12  ev2021  arg00C0
+SEG15  0x08  nS12  (unused)  
+SEG15  0x10  nS12  ev2011  arg000C
+SEG15  0x20  nS12  ev2012  arg0003
+SEG15  0x40  nS12  ev2013  arg0003
+SEG15  0x80  nS12  ev2016  arg0003
+SEG16  0x01  nS14  (unused)  
+SEG16  0x02  nS14  (unused)  
+SEG16  0x04  nS14  (unused)  
+SEG16  0x08  nS14  (unused)  
+SEG16  0x10  nS14  (unused)  
+SEG16  0x20  nS14  (unused)  
+SEG16  0x40  nS14  (unused)  
+SEG16  0x80  nS14  (unused)  
+SEG17  0x01  nS15  (unused)  
+SEG17  0x02  nS15  (unused)  
+SEG17  0x04  nS15  (unused)  
+SEG17  0x08  nS15  (unused)  
+SEG17  0x10  nS15  (unused)  
+SEG17  0x20  nS15  (unused)  
+SEG17  0x40  nS15  (unused)  
+SEG17  0x80  nS15  (unused)  
+SEG18  0x01  nS16  (unused)  
+SEG18  0x02  nS16  (unused)  
+SEG18  0x04  nS16  (unused)  
+SEG18  0x08  nS16  (unused)  
+SEG18  0x10  nS16  (unused)  
+SEG18  0x20  nS16  (unused)  
+SEG18  0x40  nS16  (unused)  
+SEG18  0x80  nS16  (unused)  
+SEG19  0x01  nS17  (unused)  
+SEG19  0x02  nS17  (unused)  
+SEG19  0x04  nS17  (unused)  
+SEG19  0x08  nS17  (unused)  
+SEG19  0x10  nS17  (unused)  
+SEG19  0x20  nS17  (unused)  
+SEG19  0x40  nS17  (unused)  
+SEG19  0x80  nS17  (unused)  
+SEG1A  0x01  INVALID    (firmware no-op)
+SEG1A  0x02  INVALID    (firmware no-op)
+SEG1A  0x04  INVALID    (firmware no-op)
+SEG1A  0x08  INVALID    (firmware no-op)
+SEG1A  0x10  INVALID    (firmware no-op)
+SEG1A  0x20  INVALID    (firmware no-op)
+SEG1A  0x40  INVALID    (firmware no-op)
+SEG1A  0x80  INVALID    (firmware no-op)
+SEG20  0x01  nS1D  (unused)  
+SEG20  0x02  nS1D  (unused)  
+SEG20  0x04  nS1D  (unused)  
+SEG20  0x08  nS1D  (unused)  
+SEG20  0x10  nS1D  (unused)  
+SEG20  0x20  nS1D  (unused)  
+SEG20  0x40  nS1D  (unused)  
+SEG20  0x80  nS1D  (unused)  
