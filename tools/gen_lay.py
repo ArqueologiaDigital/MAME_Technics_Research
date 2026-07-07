@@ -153,13 +153,13 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 LCDPARTS=[("RIGHT1","SEG03","0x08","SEG0F","0x04"),("RIGHT2","SEG03","0x10","SEG0F","0x08"),
           ("LEFT","SEG03","0x20","SEG0F","0x10"),("ACCOMP1","SEG03","0x40","SEG0F","0x20"),
           ("ACCOMP2","SEG03","0x80","SEG0F","0x40")]
-# The LEFT soft-keys are the physical LCD LEFT 1-5 (user-confirmed). On the home screen they toggle
-# the RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 parts (the LCDPARTS[i][0] firmware identity), but the
-# button's OWN name is LCD LEFT 1-5. RIGHT column = LCD RIGHT 1-5 (still decorative; CPR bits unwired).
+# Silkscreen label = the part name RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 on BOTH columns (per the user's
+# mockup). Functionally these are the LCD soft-keys: LEFT column = SEG03 b3-b7 (part OFF / "LCD LEFT
+# 1-5"), RIGHT column = SEG0F 0x04-0x40 (part ON / "LCD RIGHT 1-5"), context-dependent on-screen.
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
-    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(f"LCD LEFT {i+1}",168,yy+12,90,10))
-    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(f"LCD RIGHT {i+1}",1770,yy+12,90,10))
+    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
+    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(nm,1770,yy+12,90,10))
 # OTHER PART & FR / HELP
 # OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
 # FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
