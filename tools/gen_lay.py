@@ -156,9 +156,12 @@ S += [L("CONTRAST",247,717,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART1..16 on/off pairs (workflow static-RE: 0x2001=on,0x2000=off; normSeg.bit=on/off pair)
 # up=part ON (unmute), down=part OFF (mute).  (seg, on_mask, off_mask)
-MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),
+# User feedback (2026-07-07b): "MUTE 1/2 => MUTE 7/8" -- the SEG05 cells are physically the
+# MUTE 7,8 (parts 7,8) buttons, not 1,2. So SEG05 lives at index 6,7 here; index 0,1 (MUTE 1,2)
+# get the old SEG09 cells (which FN_SEGS unbinds anyway -- real MUTE 1,2 bits still TBD).
+MUTES=[("SEG09",0x01,0x02),("SEG09",0x04,0x08),
        ("SEG08",0x01,0x02),("SEG08",0x04,0x08),("SEG08",0x10,0x20),("SEG08",0x40,0x80),
-       ("SEG09",0x01,0x02),("SEG09",0x04,0x08),("SEG09",0x10,0x20),("SEG09",0x40,0x80),
+       ("SEG05",0x10,0x20),("SEG05",0x40,0x80),("SEG09",0x10,0x20),("SEG09",0x40,0x80),
        ("SEG0A",0x01,0x02),("SEG0A",0x04,0x08),("SEG0A",0x10,0x20),("SEG0A",0x40,0x80),
        ("SEG0B",0x01,0x02),("SEG0B",0x04,0x08)]
 # DISPROVEN (2026-07-07, user feedback + snapshot): several "mute" cells are actually
@@ -176,7 +179,7 @@ for i in range(16):
 # PAGE / DISPLAY HOLD / EXIT
 S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
       L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
-      P("round_btn_big",1790,852,42,42), L("EXIT",1789,838,44,13)]
+      P("round_btn_big",1790,852,42,42,tag="SEG20",mask="0x01"), L("EXIT",1789,838,44,13)]   # EXIT = SEG20 0x01 (firmware event 0x1020; found via disasm-narrowed HELP-close test)
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============

@@ -49,5 +49,5 @@ no-ops from home — e.g. SEG10 0x02 flagged in the sweep but is a no-op from ho
 ## Still to find (user "no visual feedback"; open screens => findable by fresh-boot dump)
 APC SET + lower OFF/ON; PART EFFECT + GLOBAL EFFECT; BANK VIEW / NEXT BANK / PANEL MEMORY;
 CUSTOM PANEL / CUSTOMIZE / FAVORITES; SEQUENCER PLAY / EASY REC; SD LOAD; DISPLAY HOLD; EXIT;
-PAGE UP/DOWN. (EXIT is especially useful — it would enable clean single-boot sweeps.)
+PAGE UP/DOWN. **EXIT = SEG20 0x01 (FOUND — see panel-dispatch-table.md)** — now enables clean single-boot sweeps: press EXIT between candidates to reset to home.
 Likely in SEG04-SEG07 / SEG0F (masked in the sweep by the SEG03 0x04 contamination).

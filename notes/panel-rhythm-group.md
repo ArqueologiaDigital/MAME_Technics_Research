@@ -42,6 +42,8 @@ spuriously opening genres. Unbound (made decorative) until their real bits are f
   0x01/0x02) → unbound
 
 ## Confirmed WORKING (do NOT change — user)
+- **LCD LEFT 1-5** (SEG03 b3-b7) — user confirmed correct (feedback 2026-07-07b).
+- **EXIT = SEG20 0x01** (found via disasm + HELP-close test). **MUTE 7,8 = SEG05** (user: layout MUTE 1,2 => 7,8).
 - DISK, PROGRAM MENUS (buttons).
 - Whole SOUND GROUP button+LED: PIANO, GUITAR, MALLET & ORCH PERC, WORLD, STRINGS & VOCAL,
   BRASS, SAX & WOODWIND, ORGAN & ACCORDION, DIGITAL DRAWBAR, ORGAN TABS, ACCORDION REGISTER,
@@ -85,7 +87,7 @@ function is the one currently on `current_button`:
 - **No visual feedback** (button not associated with any input, or no LED):
   all PART EFFECT + GLOBAL EFFECT; all BANK VIEW / NEXT BANK / PANEL
   MEMORY; all CUSTOM PANEL / CUSTOMIZE / FAVORITES; SEQUENCER PLAY & EASY REC; SD LOAD
-  (orange); APC SET/OFF-ON (lower) [MODE = SEG03 0x02, found]; DISPLAY HOLD; EXIT; PAGE UP/DOWN.
+  (orange); APC SET/OFF-ON (lower) [MODE = SEG03 0x02]; DISPLAY HOLD; PAGE UP/DOWN. [EXIT = SEG20 0x01, FOUND]
   → these need their input bits found (many may be dedicated events, not in the scanned segs).
 
 ## Genre LEDs (RESOLVED 2026-07-07)
