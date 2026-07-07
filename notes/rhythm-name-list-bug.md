@@ -430,3 +430,23 @@ comment) -- an intermediate step sets 0x50034B8C and it stays at the 0x4872AB42 
 (1) find who sets 0x50034B8C between SourceSet and Commit; (2) runtime-dump 0x50034B8C/94 WHILE the BALLAD
 style list is OPEN (navigate via the genre button) to catch the per-style resolution defaulting; (3) check
 the index StyleNameSourceSet computes for a real BALLAD style-ID (e.g. 0x065B) and what 0x4844038B returns.
+
+## TICK 2026-07-07 (b): the 0x48433xxx resolver is the CURRENT-RHYTHM path (works), not the list
+Traced the resolver fully. `StyleNameSourceSet 0x48433400` (per style-ID) -> **`StyleBuiltinNameResolve
+0x48433AC4`** (10 call sites) -> name ptr in a0 -> written at 0x48433497 to *(0x50034B8C) -> `StyleNameCommit
+0x484334A4` copies 13B to the committed-name buf 0x50034B9C. The resolver maps a style-index via: name-table
+*(0x50034B7C) (**table ROM** 0x483E82BF, u16 entries) with count-gate *(0x50034B74)=1 + a 0x8000-flag
+indirection, then a 3-byte-offset sub-table *(0x50034B80)=0x4872A9BB into the **"Technics Rhythms" resource**
+*(0x50034B78)=0x48729988 (which embeds its own name string; e.g. resource-offset +0x11BA = " 8 Beat 1").
+Fallback (null tables) = *(0x50034B88) = 0x4872AB42 = " 8 Beat 1".
+
+**SCOPE (important):** this subsystem WORKS -- at the home screen it correctly resolves the *current* rhythm
+to " 8 Beat 1" (the legit default). The built-in name DATA and resolver are all present and correct. Two
+scans place it OFF the list path: the committed buffer 0x50034B9C is consumed only inside 0x48433xxx (NOT the
+list-box 0x4847xxxx), and StyleNameSourceSet/Commit have no direct dd/cd callers from the list region. So the
+"all 8 Beat 1" LIST bug is a SEPARATE consumer -- either (a) one of the resolver's other 9 callers
+(0x48433C42 / 0x48433DD9 / 0x48433E90 / 0x4843A484 / 0x4843A51C) is the list-populate, or (b) the list goes
+through the library (res 0x03/0x04/0x08, per the tick-1 notes). NET this tick: RULED OUT the current-rhythm
+resolver as the bug + fully characterized it (symbols added: StyleBuiltinNameResolve, TechnicsRhythmsResource,
+StyleBuiltinNameTableInit). NEXT: disassemble 0x4843A484/0x4843A51C and the StyleListBoxMsgTable 0x485CF408
+populate handler to find the list's own name path, then runtime-dump it with the BALLAD list open.
