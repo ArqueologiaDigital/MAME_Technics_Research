@@ -209,3 +209,15 @@ is really only **6 addable panel-serial buttons** (SEG16-1A, SEG20 = DIAL/DATA/s
 seg->ADDR lookup table for all 0x21 segments. NEXT for these 6: snapshot-ID (press each -> read LCD;
 0x16=DIAL?, 0x17=DATA? per the old note, likely PAGE/DISPLAY-HOLD/EXIT among 0x1009/1010/1011/1020)
 then bind to the layout's DIAL/DATA/PAGE/DISPLAY HOLD/EXIT/OTHER PART buttons + relabel the driver.
+
+## Tick 2026-07-07i: SEG16-20 verified + 2 transport LEDs bound (28 total)
+Snapshot-tested the 6 new SEG16-20 buttons IN A MENU CONTEXT (opened PROGRAM MENUS via SEG12.b6,
+then pressed each): all 6 DELIVER (no port/field errors, menu stayed responsive) but NONE change
+the screen -- they are data-entry (0x1005 DIAL rotary, 0x1004 DATA +/-, 0x1009/1010/1011/1020), not
+PAGE/EXIT (those must be the non-panel-serial SEG1D-1F, 0x20B5-BD, which have no wire path). So the
+SEG16-20 buttons are confirmed-working but not snapshot-ID-able and not cleanly bindable to layout
+buttons. Bound 2 transport LEDs (transled.lua, rhythm playing, radio-confirmed): START/STOP=cpl1
+(first BEAT LED), SYNCHRO&BREAK=cpl10 (its green_led). INTRO&ENDING/FADE/TAP are momentary triggers
+with no steady LED. 28 LEDs bound now. REMAINING LED: BEAT LEDs 2-4 (need a cycling-playback capture);
+effect-cluster LEDs. The panel is at its observable limit -- buttons+LEDs that produce no visible
+screen/LED change can't be verified in emulation without a real-machine reference.
