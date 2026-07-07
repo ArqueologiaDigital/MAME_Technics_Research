@@ -146,10 +146,13 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 LCDPARTS=[("RIGHT1","SEG03","0x08",None,None),("RIGHT2","SEG03","0x10",None,None),
           ("LEFT","SEG03","0x20",None,None),("ACCOMP1","SEG03","0x40",None,None),
           ("ACCOMP2","SEG03","0x80",None,None)]
+# The LEFT soft-keys are the physical LCD LEFT 1-5 (user-confirmed). On the home screen they toggle
+# the RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 parts (the LCDPARTS[i][0] firmware identity), but the
+# button's OWN name is LCD LEFT 1-5. RIGHT column = LCD RIGHT 1-5 (still decorative; CPR bits unwired).
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
-    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
-    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(nm,1770,yy+12,90,10))
+    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(f"LCD LEFT {i+1}",168,yy+12,90,10))
+    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(f"LCD RIGHT {i+1}",1770,yy+12,90,10))
 # OTHER PART & FR / HELP
 # OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
 # FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
@@ -247,9 +250,11 @@ for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG09","0x04"),("BANK",230,"SEG09","0x0
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
 padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,42)]   # measured, abutting (no gaps)
+# PERFORMANCE PADS 1-6 = ev2030 (HELP-info 2026-07-07). pad index i (label i+1) -> its SEG.bit:
+PAD_BITS=[("SEG00","0x01"),("SEG01","0x01"),("SEG02","0x01"),("SEG00","0x02"),("SEG01","0x02"),("SEG02","0x02")]
 for i,(shp,fx,fy) in enumerate(padspec):
-    (x,w)=padcol[i%3]; (y,h)=padrow[i//3]
-    LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy))); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
+    (x,w)=padcol[i%3]; (y,h)=padrow[i//3]; ptg,pmk=PAD_BITS[i]
+    LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy),tag=ptg,mask=pmk)); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
 # MUSIC STYLE ARRANGER = SEG09 0x08 (user: MUTE DOWN 8 => MSA; old SEG04 0x08 only moved a fader).
 # SPLIT POINT was SEG03 0x80 = LCD LEFT 5 (now bound to the left soft-key); unbound until its real bit is found.
