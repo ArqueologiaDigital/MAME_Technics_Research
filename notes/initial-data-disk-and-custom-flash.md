@@ -194,3 +194,24 @@ NEXT: instrument MAME to break when a CUSTOM style is recalled + watch reads fro
 0x56020000, or trace 0x484A612C/0x4847E7BC down to the bit-reader. The AST codec is the
 remaining blocker to the custom-style data (rhythm names + custom styles); the Favorites
 (names-only, battery SRAM) already work without it.
+
+## FINAL CORRECTION (2026-07-07): the AST codec is zlib / raw DEFLATE — CRACKED, no blocker
+Both theories above (LZSS, then Huffman/LZH) are WRONG. `01CTMINI.AST`'s payload is **raw
+DEFLATE**. Confirmed: `extract_idd7000.py`'s `parse_ast()` does `zlib.decompressobj(-15)
+.decompress(payload)` and decodes cleanly to **0x1E0000 bytes** (= the declared u32 @off 4),
+and the output **carries the real style names** — e.g. "Swing And Jive", "Ballroom Jive",
+"Calypso Dance". The firmware's own inflate is near 0x485CD20C (its zlib 1.0.4 error strings).
+So the decoded custom-flash content (`01CTMINI.flash.bin`, 0x1E0000) is available NOW; there is
+no codec work left. (The earlier "near-uniform histogram => Huffman" note is consistent with
+DEFLATE, whose Huffman-coded output is also near-uniform — it just isn't a *bespoke* codec.)
+
+Remaining to USE it in the driver:
+1. Reconstruct the **0x56000000-0x56020000 directory window** — the archive the parser
+   0x4844A000 reads (needs u32[0]==0x200). It is NOT in the AST (which fills only 0x56020000+),
+   so either RE the on-install directory write or dump it from a real machine. The KN5000 IC19
+   (a good dump of the analogous custom flash) is the reference for the directory format.
+2. Assemble the 2 MB image (directory @0x00000 + `01CTMINI.flash.bin` @0x20000) and ROM_LOAD it
+   at 0x56000000 (change the map from `.ram` to `.rom`) so the CUSTOM style list shows real names.
+NOTE: this fixes CUSTOM styles. The built-in-genre "8 Beat 1" rhythm-list default is a SEPARATE
+issue — those styles are enumerated from the program/table ROM, not this flash (0x484420CB is
+unrelated bit-manip code, not the template site; "8 Beat 1" = built-in style "8 Beat" + variation).
