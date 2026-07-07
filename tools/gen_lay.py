@@ -178,8 +178,12 @@ for i in range(16):
     S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
 S += [L("PAGE",1679,717,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
-      L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42), P("red_led",1836,752,8,8),
-      P("round_btn_big",1790,852,42,42,tag="SEG20",mask="0x01"), L("EXIT",1789,838,44,13)]   # EXIT = SEG20 0x01 (firmware event 0x1020; found via disasm-narrowed HELP-close test)
+      # DISPLAY HOLD = SEG08 0x10 (confirmed via HELP-info: "HELP : DISPLAY HOLD"). Was decorative.
+      L("DISPLAY",1789,704,64,13), L("HOLD",1789,717,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8),
+      # EXIT: my earlier SEG20 0x01 guess was WRONG -- that bit is a TEMPO control (120->121), not
+      # EXIT; the HELP-close test was fooled by the tempo digit shown on the HELP screen. EXIT's
+      # real bit is not yet known -- decorative for now (use HELP-info method to find it).
+      P("round_btn_big",1790,852,42,42), L("EXIT",1789,838,44,13)]
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============

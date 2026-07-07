@@ -51,3 +51,30 @@ APC SET + lower OFF/ON; PART EFFECT + GLOBAL EFFECT; BANK VIEW / NEXT BANK / PAN
 CUSTOM PANEL / CUSTOMIZE / FAVORITES; SEQUENCER PLAY / EASY REC; SD LOAD; DISPLAY HOLD; EXIT;
 PAGE UP/DOWN. **EXIT = SEG20 0x01 (FOUND — see panel-dispatch-table.md)** — now enables clean single-boot sweeps: press EXIT between candidates to reset to home.
 Likely in SEG04-SEG07 / SEG0F (masked in the sweep by the SEG03 0x04 contamination).
+
+## BREAKTHROUGH (user tips, 2026-07-07): HELP-info naming + DEMO×2 reset
+Two user-provided tricks make button ID reliable + fast:
+1. **HELP mode names every button**: press HELP (SEG08 0x08) to enter help mode, then press any
+   button -> the LCD title shows **"HELP : <BUTTON NAME>"** (an info screen for that button).
+   So pressing a candidate bit in help mode IDENTIFIES it by name. (EXIT turns help OFF instead.)
+2. **DEMO×2 = home**: pressing DEMO (SEG09 0x40) twice returns to the home screen -- a reliable
+   reset (better than EXIT, whose bit is still unknown).
+
+### Efficient capture: title-strip stacking (scratchpad/helpid2.lua)
+Enter help mode once, press each bit (hold ~14 frames so it registers -- 1-frame presses are
+MISSED), and copy just the LCD title strip (y 2..25) into a growing buffer; write one tall PPM at
+the end and read all names in a single image. GOTCHA: if a bit is a no-op in help mode, the
+PREVIOUS info screen PERSISTS -> ambiguous. To disambiguate, reset help between bits (HELP off+on,
+or DEMO×2 then HELP) so a no-op shows the plain "HELP FUNCTION" screen. Hold every press ~14 frames.
+
+### Findings so far (HELP-info)
+- **SEG08 0x10 = DISPLAY HOLD** (bound).  **SEG0F 0x01 = SOUND DSP**.  **SEG13 0x04 = TRANSPOSE -/+**.
+- **SEG11 0x01 = SPLIT POINT** -- but the layout binds SEG11 0x01 to LCDPART "ACCOMP2" (ON), so the
+  LCDPARTS RIGHT (SEG11-13) column is ALSO likely mis-bound. Resolve carefully before binding.
+
+## CORRECTION: EXIT is NOT SEG20 0x01
+The previous tick bound EXIT = SEG20 0x01, but that bit is a **TEMPO control** (press -> ♩120->121).
+The HELP-close test that "found" it was FOOLED: the HELP screen shows the tempo digit, so pressing
+a tempo bit changed the screen hash without closing HELP. **EXIT's real bit is unknown again** --
+find it with the HELP-info method (the bit that, in help mode, turns help OFF -> returns to home,
+rather than showing a "HELP : ..." info screen). EXIT is unbound in the layout.

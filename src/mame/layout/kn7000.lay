@@ -323,9 +323,9 @@
 		<element ref="page_dn"><bounds x="1680" y="834" width="50" height="77"/></element>
 		<element ref="t11"><bounds x="1789" y="704" width="64" height="13"/></element>
 		<element ref="t12"><bounds x="1789" y="717" width="64" height="13"/></element>
-		<element ref="round_btn_big"><bounds x="1790" y="748" width="42" height="42"/></element>
+		<element ref="round_btn_big" inputtag="SEG08" inputmask="0x10"><bounds x="1790" y="748" width="42" height="42"/></element>
 		<element ref="red_led"><bounds x="1836" y="752" width="8" height="8"/></element>
-		<element ref="round_btn_big" inputtag="SEG20" inputmask="0x01"><bounds x="1790" y="852" width="42" height="42"/></element>
+		<element ref="round_btn_big"><bounds x="1790" y="852" width="42" height="42"/></element>
 		<element ref="t13"><bounds x="1789" y="838" width="44" height="13"/></element>
 	</group>
 
