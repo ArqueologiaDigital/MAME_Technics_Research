@@ -241,10 +241,13 @@ private:
 	TIMER_CALLBACK_MEMBER(fav_preload);
 
 	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
-	// ch0 = control panel, ch1 = MIDI port 1, ch2 = MIDI port 2 (see
-	// notes/panel-serial-protocol.md). Per channel, at +0x10 stride:
+	// ch0 = control panel, ch1 = MIDI port 1, ch2 = the SD sub-CPU "CPSD"
+	// (MN102H60) -- NOT MIDI-2 as first assumed: the SD firmware polls ch2 status
+	// (0x3400082c bit7) ~370k times while an SD screen waits and never touches it
+	// on non-SD screens (RE 2026-07-08, notes/sd-card-emulation-plan.md). Per
+	// channel, at +0x10 stride:
 	//   +0 config(16) · +4 control(8) · +8 TX-data(8) · +9 RX-data(8) · +C status(16)
-	enum { SIO_PANEL = 0, SIO_MIDI1 = 1, SIO_MIDI2 = 2 };
+	enum { SIO_PANEL = 0, SIO_MIDI1 = 1, SIO_MIDI2 = 2, SIO_SD = 2 };
 	uint16_t sio_r(offs_t offset, uint16_t mem_mask = ~0);
 	void sio_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 	void sio_tx_byte(int ch, uint8_t data);
@@ -272,6 +275,23 @@ private:
 	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
 	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
 	emu_timer *m_panel_txdone = nullptr;   // one-shot: sync-transfer complete -> group 0x11
+
+	// --- CPSD (SD sub-CPU MN102H60) HLE on SIO channel 2 --------------------
+	// The SD card is reached over SIO ch2. Delivery model (RE 2026-07-08): the
+	// firmware polls status 0x3400082c bit7 ("CPSD has a frame"), enables the ch2
+	// RX interrupt (group 0x14), then reads the bytes from +9 (0x34000829) in its
+	// ISR. So we expose bit7 while a frame is queued and clock the frame out one
+	// byte per group-0x14 interrupt via sio_rx_push(SIO_SD,...). Frames are
+	// MIDI-SysEx style (0xf0..0xf7). The frame CONTENT/semantics are still being
+	// reversed; for now we send one PROBE frame the first time the firmware polls
+	// ch2 (see sio_r) purely to validate that the RX-interrupt delivery path
+	// reaches the firmware's ISR. Real SD status/command frames plug into here.
+	void cpsd_queue(const uint8_t *bytes, int n);   // queue a CPSD->main frame
+	TIMER_CALLBACK_MEMBER(cpsd_event);              // clock out one queued RX byte
+	emu_timer *m_cpsd_evt = nullptr;
+	uint8_t m_cpsd_resp[128] = { };
+	int     m_cpsd_resp_len = 0, m_cpsd_resp_pos = 0;
+	bool    m_cpsd_probed = false;         // one-shot: probe frame sent on first ch2 poll
 	emu_timer *m_panel_timer = nullptr;
 	int     m_panel_pos = 0;               // position within the 7-byte TX frame
 	uint8_t m_panel_p1 = 0, m_panel_p2 = 0; // frame payload bytes (positions 2 and 4)
@@ -689,7 +709,21 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 		if (ACCESSING_BITS_8_15)
 			return uint16_t(sio_rx_pop(ch)) << 8;
 		return 0;
-	case 0xc:                    // status: bit4 = RxRDY, bits0-2 = rx errors (none)
+	case 0xc:                    // status: bit4 = RxRDY (ch0/1); bit7 = CPSD-frame-ready (ch2/SD)
+		if (ch == SIO_SD)
+		{
+			// The SD firmware polls 0x3400082c bit7 (btst 0x07 @0x484b204c) waiting
+			// for CPSD to have a frame. Send one probe frame on the first poll to
+			// validate the ch2 RX-interrupt delivery path end-to-end.
+			if (!m_cpsd_probed && !machine().side_effects_disabled())
+			{
+				m_cpsd_probed = true;
+				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
+				cpsd_queue(probe, sizeof(probe));
+			}
+			if (m_cpsd_resp_pos < m_cpsd_resp_len)
+				return 0x0080;
+		}
 		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
 	}
 	return 0;
@@ -880,6 +914,31 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 		intc_assert(0x10);
 		if (m_panel_resp_pos < m_panel_resp_len)
 			m_panel_evt->adjust(attotime::from_usec(120), 2);   // next byte
+	}
+}
+
+// CPSD (SD sub-CPU) frame delivery on SIO ch2. Simpler than the panel path: the
+// firmware has already seen bit7 of the status set (cpsd_queue makes it read set)
+// and enabled the ch2 RX interrupt; each timer tick clocks one byte into the ch2
+// RX FIFO and fires group 0x14, which the firmware's ISR reads from +9.
+void kn7000_state::cpsd_queue(const uint8_t *bytes, int n)
+{
+	if (m_cpsd_resp_pos == m_cpsd_resp_len)
+		m_cpsd_resp_pos = m_cpsd_resp_len = 0;              // drained: reset
+	if (m_cpsd_resp_len + n > int(sizeof(m_cpsd_resp)))
+		return;                                             // overflow: drop
+	for (int i = 0; i < n; i++)
+		m_cpsd_resp[m_cpsd_resp_len++] = bytes[i];
+	m_cpsd_evt->adjust(attotime::from_usec(80));            // start clocking it out
+}
+
+TIMER_CALLBACK_MEMBER(kn7000_state::cpsd_event)
+{
+	if (m_cpsd_resp_pos < m_cpsd_resp_len)
+	{
+		sio_rx_push(SIO_SD, m_cpsd_resp[m_cpsd_resp_pos++]);   // -> ch2 FIFO + asserts group 0x14
+		if (m_cpsd_resp_pos < m_cpsd_resp_len)
+			m_cpsd_evt->adjust(attotime::from_usec(120));      // next byte
 	}
 }
 
@@ -1306,6 +1365,7 @@ void kn7000_state::machine_start()
 	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
 	m_panel_evt = timer_alloc(FUNC(kn7000_state::panel_event), this);
 	m_panel_txdone = timer_alloc(FUNC(kn7000_state::panel_event), this);
+	m_cpsd_evt = timer_alloc(FUNC(kn7000_state::cpsd_event), this);
 
 	// The AM33 maskable interrupt vectors to the library-ROM low-level handler
 	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer

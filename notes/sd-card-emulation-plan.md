@@ -132,3 +132,23 @@ firmware's reaction at the RX site (`0x484b21f2`), or RE the RX frame parser aro
    the exact lid-status read; document the byte/bit.
 2. Stand up a minimal CPSD HLE that answers "card present + lid closed" so the SD menu opens (Phase 0).
 3. Then grow the directory/file protocol against a host FAT image (Phase 2).
+
+## Driver implementation status (2026-07-08) — CPSD transport scaffold stood up
+Added to src/mame/matsushita/kn7000.cpp:
+- **ch2 relabelled** SIO_MIDI2 -> also `SIO_SD` (the SD/CPSD link, per RE).
+- **ch2 status bit7**: `sio_r` reg 0xc now returns 0x80 for ch2 while a CPSD frame is queued (the bit the
+  SD firmware polls at `btst 0x07,(0x3400082c)`).
+- **CPSD delivery path**: `cpsd_queue()` + `cpsd_event` timer + `m_cpsd_resp[]`, mirroring the panel RX
+  path; each timer tick does `sio_rx_push(SIO_SD, byte)` (-> ch2 FIFO + asserts group 0x14, the ch2 RX IRQ).
+- **Probe**: on the first ch2 poll, one placeholder SysEx frame `f0 12 34 56 f7` is sent to validate the
+  end-to-end delivery.
+
+**Result of the probe test:** the firmware now SEES bit7 and takes its RX branch (the "PLEASE WAIT" dialog
+changes vs the dead hang), BUT it does **not read the RX bytes** yet (`0x34000829` read count = 0). So the
+transport is wired but the **bit7 -> byte-read handoff is not landing**. Open questions for the next pass:
+- Is the RX byte read POLLED or via the group-0x14 ISR? (The hot 0x82c poll does NOT read 0x829, so the
+  read happens in the bit7-set branch `0x484b2057` -> `0x4854d18f`, or in the ch2 RX ISR.)
+- Does bit7 mean "frame pending" or "one byte ready" (i.e. should it mirror `sio_rx_ready`)?
+- Is group 0x14 actually enabled when we assert it? (RE `0x4854d18f` and the `0x34000150` bit0 write.)
+Next: disassemble `0x4854d18f` and the group-0x14 ISR to find exactly where/when `0x34000829` is read, then
+align `cpsd_event` delivery + the bit7 semantics to it.
