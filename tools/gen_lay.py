@@ -123,7 +123,8 @@ def pair_h(seg,ma,mb,x,y,w,h,la="",lb=""):
     if lb: r.append(L(lb,x+3*w//4-14,y+h//2-6,28,12))
     return r
 def pair_v(seg,ma,mb,x,y,w,h,la="",lb=""):
-    r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=seg,mask=mb)]
+    if seg: r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=seg,mask=mb)]
+    else:   r=[P("half_t",x,y,w,h//2),P("half_b",x,y+h-h//2,w,h//2)]   # seg=None -> unbound (bits unknown)
     if la: r.append(L(la,x+w//2-14,y+h//4-6,28,12))
     if lb: r.append(L(lb,x+w//2-14,y+3*h//4-6,28,12))
     return r
@@ -199,9 +200,10 @@ for i,yy in enumerate([205,294,383,472,561]):
 S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
       P("round_btn_big",150,852,42,42,tag="SEG08",mask="0x08"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-# CONTRAST split up/down (CPC-board pair per service-manual matrix). BITS UNVERIFIED -- best-guess
-# SEG08 0x40 (up) / 0x80 (down); no HELP screen exists for CONTRAST. *** FLAG FOR REVIEW ***
-S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG08","0x40","0x80",282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
+# CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the
+# 2026-07-08 HELP-info sweep -- those are SOUND CONTROLLER MODE/RESET. CONTRAST has no HELP screen, so its
+# real bits are still unidentified.)
+S += [L("CONTRAST",247,730,120,13)] + pair_v(None,None,None,282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -265,7 +267,9 @@ LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
 # screen BASIC/FINGERED/PIANIST; was decorative). The top OFF/ON had been guessed SEG06 0x08 from the
 # dispatch table's normSeg06=APC, but SEG06 0x08 is empirically PART 10 mute-down (now in MUTES), so
 # OFF/ON is unbound again (its real bit is TBD; the normSeg->layout-SEG remap is not identity here).
-for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,None,None),("SET",447,139,None,None),("OFF/ON",505,139,None,None)]:
+# AUTO PLAY CHORD (MODE/OFF-ON) + SOUND ARRANGER (SET/OFF-ON). Bits verified via HELP-info sweep 2026-07-08:
+# APC MODE=SEG03 0x02, APC OFF/ON=SEG03 0x04, SOUND ARRANGER SET=SEG02 0x40, SOUND ARRANGER OFF/ON=SEG02 0x80.
+for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,"SEG03","0x04"),("SET",447,139,"SEG02","0x40"),("OFF/ON",505,139,"SEG02","0x80")]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8,name=OPLED.get((tg,mk))))  # APC MODE=cpl_led33
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
@@ -418,8 +422,11 @@ RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,
 # SOLO = SEG10 0x80 (verified in the panel button-map; free bit; was drawn but unbound).
 RB += [P("green_led",428,274,8,8,name=OPLED.get(("SEG11","0x80"))), P("round_btn",416,285,32,32,tag="SEG11",mask="0x80"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG10",mask="0x80")]  # TECHNI-CHORD LED = cpr_led73
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
-for j,cx in enumerate([360,425,485]): tg,mk=(("SEG10","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
-for j,cx in enumerate([360,425,485]): tg,mk=(("SEG11","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
+# PART SELECT group (3 buttons): 1st = SEG10 0x10 (known) + 3rd = SEG10 0x40 (verified HELP-info sweep
+# 2026-07-08). Middle button's bit still unverified -> unbound. (Member<->bit order is a best guess.)
+for j,cx in enumerate([360,425,485]): tg,mk=(("SEG10","0x10") if j==0 else ("SEG10","0x40") if j==2 else (None,None)); RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
+# CONDUCTOR group (LEFT/RIGHT2/RIGHT1): 1st = SEG11 0x10 (known) + 3rd = SEG11 0x40 (verified sweep). Middle unbound.
+for j,cx in enumerate([360,425,485]): tg,mk=(("SEG11","0x10") if j==0 else ("SEG11","0x40") if j==2 else (None,None)); RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26),
        L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26), L("PANEL MEMORY",608,255,172,10,TXTH),
