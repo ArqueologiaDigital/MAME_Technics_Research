@@ -83,6 +83,24 @@ diagnosis (earlier "XWA0 is set wrong" theory was mistaken):
 regions against a fresh read of the physical chip, or determine IC15's true byte organization from the chip
 datasheet/markings. LCD work (HD44780 device on Port 7 → SVG) stays gated on the boot clearing this table.
 
+## CONFIRMED (patch experiment): the dump is pervasively bad in the 8-bit regions
+Injected a valid descriptor into the loaded ROM image at boot (MAME lua:
+`regions[":prog"]:write_u32(0x138b24,0)` [base=0] + `write_u32(0x138b28,0x1000)` [tiny count]) and re-ran:
+- **The boot PROCEEDS past the RAM test** — the PC leaves the `0xfa047f` marching loop. So the `0xf38b24`
+  descriptor genuinely was the stall, exactly as diagnosed.
+- **…then it immediately derails to `PC=0x000003`** (running garbage in low RAM). The crt0 keeps reading more
+  tables/jump-vectors from the same 8-bit-data regions (`0xe00000-e7ffff`, `0xf00000-f7ffff` — ~half the
+  program ROM), and they are ALL `{byte,0xff}` garbage, so the next computed jump target is garbage.
+
+**Conclusion:** the SX-KN1500 cannot boot in emulation because **~half of IC15's program ROM (the 8-bit-data
+regions) is unusable in this dump** — every 16-bit word reads as `{data_byte, 0xff}`, so any table/pointer
+the firmware reads as a word/long is garbage. On real hardware those reads must return real data (the machine
+works), so the dump ≠ the chip. This is a **BAD_DUMP that needs a verified physical re-read of IC15**
+(`technics_qsigt3c16079…9649eai.ic15`), NOT a driver/emulation fix. (`ic15.rest` is the separate rhythm ROM
+and shows the same `{byte,0xff}` pattern, so it is not IC15's missing high-byte lane.) Everything else is
+ready: memory map correct, LCD path fully specified (HD44780 on CN7, Port-7 control → MAME `hd44780` device →
+SVG). **Recommend: obtain a fresh IC15 dump; then the boot + LCD should come up with the work already done.**
+
 ## LCD interface pins (2026-07 — user schematic snippet)
 The LCD/DSP control signals are the alternate functions of **CPU Port 7 (P70-P77, "PG" group)**, i.e. the
 CPU **bit-bangs Port 7** to drive them (they are NOT MSAR/MAMR chip-selects):
