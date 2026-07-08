@@ -12,12 +12,13 @@ set -euo pipefail
 
 BUILD=/home/fsanches/compartilhado/kn7000_mame_build
 BIN="$BUILD/kn7000"
-ROMS="$BUILD/roms/kn7000"
 DEST=/home/fsanches/compartilhado/kn7000-emulator
+# Models that reach a display and are worth shipping (each ships a roms/<model>/ subfolder).
+MODELS="kn7000 kn6000 kn6500"
 
 [ -x "$BIN" ] || { echo "error: binary not built at $BIN (build the driver first)"; exit 1; }
 
-mkdir -p "$DEST/roms/kn7000"
+mkdir -p "$DEST/roms"
 
 # 1) The binary -- the only thing that changes each build. Atomic replace so a running
 #    instance on the host is never left half-copied.
@@ -25,19 +26,26 @@ cp -f "$BIN" "$DEST/.kn7000.tmp"
 chmod +x "$DEST/.kn7000.tmp"
 mv -f "$DEST/.kn7000.tmp" "$DEST/kn7000"
 
-# 2) The ROMs (static; copy only if missing or newer).
-cp -u "$ROMS/kn7000_program.rom" "$DEST/roms/kn7000/"
-cp -u "$ROMS/kn7000_table.rom"   "$DEST/roms/kn7000/"
+# 2) The ROMs, per model (even/odd flash images). Copy each shipped model's set.
+for m in $MODELS; do
+  [ -d "$BUILD/roms/$m" ] || { echo "warning: no ROMs for $m at $BUILD/roms/$m -- skipping"; continue; }
+  mkdir -p "$DEST/roms/$m"
+  cp -u "$BUILD/roms/$m"/*.rom "$DEST/roms/$m/"
+done
 
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
-# Launch the KN7000 emulator. Extra args are passed through to MAME.
-#   ./run.sh                 # fullscreen
-#   ./run.sh -window         # windowed
-#   ./run.sh -window -nomax  # windowed, not maximized
+# Launch a Technics keyboard emulator. An optional first argument selects the model
+# (kn7000 / kn6000 / kn6500; default kn7000); everything else passes through to MAME.
+#   ./run.sh                  # KN7000, fullscreen
+#   ./run.sh -window          # KN7000, windowed
+#   ./run.sh kn6000 -window   # KN6000, windowed (boots to its play screen)
+#   ./run.sh kn6500 -window   # KN6500, windowed
 cd "$(dirname "$(readlink -f "$0")")"
-exec ./kn7000 kn7000 -rompath ./roms "$@"
+MODEL=kn7000
+if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
+exec ./kn7000 "$MODEL" -rompath ./roms "$@"
 SH
 chmod +x "$DEST/run.sh"
 
@@ -50,13 +58,13 @@ anywhere on your machine and run it.
 
 ## Run
 ```
-./run.sh              # fullscreen
-./run.sh -window      # windowed (recommended while developing)
+./run.sh                 # KN7000, fullscreen
+./run.sh -window         # KN7000, windowed (recommended while developing)
+./run.sh kn6000 -window  # KN6000, windowed (boots to its main play screen)
+./run.sh kn6500 -window  # KN6500, windowed
 ```
-or directly:
-```
-./kn7000 kn7000 -rompath ./roms -window
-```
+The first argument may be a model name (`kn7000` / `kn6000` / `kn6500`); anything else is
+passed straight through to MAME. Or run directly, e.g. `./kn7000 kn6000 -rompath ./roms -window`.
 The front panel is clickable artwork. Cycle layout views with the **Tab** menu →
 *Video Options*, or press the view-select keys. Quit with the MAME menu (Tab) or `Esc`.
 
@@ -75,8 +83,11 @@ older than the build machine — ask for a **self-contained bundled-libs build**
 be produced (binary + its own copies of the libraries + loader).
 
 ## What works so far
-Boots to the home screen; the front panel (buttons + LEDs) is wired; MIDI-in works.
-Audio needs the (undumped) wave ROMs, so there is no sound yet. See the project notes.
+- **KN7000** boots to its home screen; the front panel (buttons + LEDs) is wired; MIDI-in works.
+- **KN6000 / KN6500** boot to their main play screen (tone/sound-group icon row, menus, status bar).
+
+Audio needs the (undumped) wave ROMs, so there is no sound on any model yet, and a few built-in
+mask ROMs (icon graphics) are still undumped, so some icons use placeholders. See the project notes.
 
 ## ROMs
 `roms/kn7000/` holds the two dumped flash images. MAME flags them "NEEDS REDUMP" (a hash
