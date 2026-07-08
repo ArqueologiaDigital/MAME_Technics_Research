@@ -22,7 +22,7 @@ Head of the directory:
 [  6] 0x4806EA98  text?
 [  7] 0x48139EE8  data (a JPEG group header: "84\nZZZ\nZZZ\n" then JFIF)
 [  9..] 0x48139EF0 …            57 JPEG images referenced directly
-[ 83] 0x483E828C  "Technics Pads" (second pad bank)
+[ 83] 0x483E828C  "Technics Rhythms" (rhythm resource; verified bytes 2026-07-08)
 ```
 
 ## `TCMP` chunk @0x48035D08 (rhythm/composer style data)
