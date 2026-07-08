@@ -36,9 +36,16 @@ private:
 
 void kn1500_state::mem_map(address_map &map)
 {
-	map(0x000000, 0x77ffff).ram();
-	map(0xc00000, 0xdfffff).rom().region("rhythm", 0);
-	map(0xe00000, 0xffffff).rom().region("prog", 0);
+	// Memory map from the SX-KN1500 service manual + the crt0's TMP95C061 chip-select
+	// setup (MSAR/MAMR at 0x3c-0x3f, 0x5c-0x5f): CS3=RAM @0x000000 (MAMR3=0x0f -> ~1MB
+	// window), CS1=rhythm ROM @0xc00000, CS2=program ROM @0xe00000, CS0 @0x780000.
+	// Work RAM is IC21 (M5M4417, 4 Mbit = 512 KB DRAM), mirrored in the 1 MB CS3 window.
+	// (The previous 0x000000-0x77ffff / 7.5 MB map was a placeholder and is wrong.)
+	map(0x000000, 0x07ffff).ram().mirror(0x080000);
+	map(0xc00000, 0xdfffff).rom().region("rhythm", 0);   // IC17 rhythm/accomp data ROM
+	map(0xe00000, 0xffffff).rom().region("prog", 0);      // IC15 program mask ROM
+	// TODO: CS0 @0x780000 (IC18/IC19 EPROMs?) and the LCD graphic controller
+	// (LCDCS/DSPCS, D80-D87 8-bit + command/data select) are not yet mapped.
 }
 
 static INPUT_PORTS_START( kn1500 )
