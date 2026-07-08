@@ -467,3 +467,24 @@ indices into StyleRecordTable are wrong (all resolve to a default/index-0 record
 `+0x04` and calls the (defaulting) resolver. NEXT (runtime, decisive): open the BALLAD list and watch (a)
 what CUR_STYLE_IDX / the per-slot indices are, and (b) whether the item text is set from record `+0x04`
 (real) or the resolver default. Symbols added: StyleRecordTable, CUR_STYLE_IDX.
+
+## 2026-07-08 — the style-list DATA hierarchy is intact; msg 0x1003A is numeric, not the name
+Mapped the real data structure the style list-box uses (KN7000):
+- **GenreTable `0x4873ACC0`** — 8-byte entries: `+0` = genre-name ptr (16-byte space-padded strings at
+  `0x485d0f38`: "Rock & Pop", "Easy Listening", "Soul & Gospel", "Dance Pop", "Latin & World", …); `+4` =
+  ptr to that genre's **style sub-table**.
+- **Style sub-table** (e.g. genre 0 → `0x4873A3F8`) — 8-byte entries: `+0` = the **REAL style name**
+  (16-byte padded: "Disco Orchestra", "60s Blues Rock", "60s PopOrchestra", "Mersey Ballad", "Pacific Pop",
+  "Spiritual Pop", …); `+4` = ptr to a per-style **numeric** table (`0x4873996c`, small u16s).
+
+So the specific style names ARE present and reachable — this **corrects the old "list needs record+0x04"
+theory**: the list's name lives at `sub-table[styleIdx].+0`, indexed via GenreTable.
+
+The **get-item handler `0x4847C216`** (msg `0x1003A`) indexes `StyleRecordTable 0x4873BEE8` by
+`CUR_STYLE_IDX (0x50001270)`, reads `record+0x08` (genre) + `record+0x0a`, walks GenreTable→sub-table, then
+reads `sub-table[styleIdx].+4` (the numeric table) and builds a **4-field `|`-separated NUMERIC string** via
+`0x4847b191`. So msg `0x1003A` is a numeric descriptor/key, **not** the display name.
+
+NEXT (decisive): disassemble the **DRAW handler `0x4847C076`** (msg `0x10`/`0x12`) — it renders the visible
+row text. Check whether it reads `sub-table[styleIdx].+0` (the real name) or emits the "8 Beat 1"
+style-type default. That is where the visible bug is produced. (Genre/style tables above are the map to use.)
