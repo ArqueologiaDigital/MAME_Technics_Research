@@ -497,10 +497,12 @@ IRQ_CALLBACK_MEMBER(kn7000_state::irq_ack)
 		if (g == 0x11)
 			m_c11_unserviced = false;
 		const int level = (m_gxicr[g] >> 12) & 7;
-		// KN7000: hardcoded firmware handlers. KN6000/KN6500: vector to the firmware-built
-		// trampoline at 0x90000000 (slot0=scheduler/lvl6, slot1=quick) so each model's own
-		// handler runs -- the KN6000's tick handler differs from the KN7000's. See notes.
-		m_maincpu->set_irq_vector(m_lib_mirror ? (level == 6 ? 0x90000000 : 0x90000006)
+		// KN7000: hardcoded firmware handlers. KN6000/KN6500: ALL maskable IRQs vector to the
+		// firmware trampoline slot 0 (0x90000000 -> the general handler, which reads the latched
+		// group at 0x34000200 and dispatches). Slot 1 (0x90000006 -> 0x4847b19d) is the KN6000's
+		// EXCEPTION/fault handler (disables IRQs + halts), NOT an IRQ dispatch -- routing IRQs
+		// there halts the boot (was the 0x4847b238 hang). See notes/kn6000-kn6500-boot.md.
+		m_maincpu->set_irq_vector(m_lib_mirror ? 0x90000000
 		                                       : (level == 6 ? 0x4C03DE26 : 0x4C03DDA0));
 		m_maincpu->set_irq_level(level);
 	}
@@ -600,10 +602,12 @@ void kn7000_state::intc_recompute()
 	if (g)
 	{
 		const int level = (m_gxicr[g] >> 12) & 7;
-		// KN7000: hardcoded firmware handlers. KN6000/KN6500: vector to the firmware-built
-		// trampoline at 0x90000000 (slot0=scheduler/lvl6, slot1=quick) so each model's own
-		// handler runs -- the KN6000's tick handler differs from the KN7000's. See notes.
-		m_maincpu->set_irq_vector(m_lib_mirror ? (level == 6 ? 0x90000000 : 0x90000006)
+		// KN7000: hardcoded firmware handlers. KN6000/KN6500: ALL maskable IRQs vector to the
+		// firmware trampoline slot 0 (0x90000000 -> the general handler, which reads the latched
+		// group at 0x34000200 and dispatches). Slot 1 (0x90000006 -> 0x4847b19d) is the KN6000's
+		// EXCEPTION/fault handler (disables IRQs + halts), NOT an IRQ dispatch -- routing IRQs
+		// there halts the boot (was the 0x4847b238 hang). See notes/kn6000-kn6500-boot.md.
+		m_maincpu->set_irq_vector(m_lib_mirror ? 0x90000000
 		                                       : (level == 6 ? 0x4C03DE26 : 0x4C03DDA0));
 		m_maincpu->set_irq_level(level);
 	}
