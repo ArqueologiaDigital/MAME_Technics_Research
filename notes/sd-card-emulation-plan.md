@@ -152,3 +152,26 @@ transport is wired but the **bit7 -> byte-read handoff is not landing**. Open qu
 - Is group 0x14 actually enabled when we assert it? (RE `0x4854d18f` and the `0x34000150` bit0 write.)
 Next: disassemble `0x4854d18f` and the group-0x14 ISR to find exactly where/when `0x34000829` is read, then
 align `cpsd_event` delivery + the bit7 semantics to it.
+
+## Driver status update #2 (2026-07-08) — transport corrected; blocker = ch2 RX interrupt disabled
+Refined the ch2 model and traced the delivery to a hard blocker:
+- **Corrected the status bits**: the per-byte RX reads gate on **bit4** (`btst 0x10,(0x3400082c)` @0x484b2122,
+  a timeout-counter poll), NOT bit7. bit7 (`btst 0x07 @0x484b204c`) is a *select the firmware branches on
+  AFTER reading the byte* (bit7 set -> the 0x484b2057 DETECT/sound path; clear -> normal 0x484b2096 parse).
+  Forcing bit7 DIVERTED the firmware, so the driver now leaves bit7 alone and drives only bit4 (RxRDY) from
+  the ch2 FIFO. `cpsd_queue()` pushes the whole frame into the FIFO at once.
+- **The RX handler is `0x484b2037`**, registered (SD init table @0x484b26f0) for **group 0x14** with ICR
+  `0x34000150`. It reads +9 (0x34000829) at entry.
+- **BLOCKER (hard data):** during the entire SD access `0x34000150` = `0x1011` -> **ENABLE(bit8)=0**,
+  LEVEL=1, DETECT=1; and there are **ZERO writes** to `0x34000150` while the SD screen waits. So group 0x14
+  is initialised DISABLED and never enabled -> the CPU never takes the ch2 RX interrupt, so `0x484b2037`
+  never runs, so 0x34000829 is never read (RX reads = 0), regardless of FIFO/bit4/REQUEST. `intc_assert(0x14)`
+  does set REQUEST(bit4) but ENABLE gates it.
+- **Interpretation:** the SD RX is NOT delivered through the enabled interrupt in this scenario. Either the
+  firmware only enables group 0x14 after an earlier handshake step CPSD must satisfy first (so we're stuck
+  before that step), or the read is driven by a poll site we haven't pinned (PC-sampling the WAIT was spread
+  out, no single hot loop -- the firmware is busy in 0x4854d18f sound-refresh + 0x484b28xx SD-SIO).
+- **Next:** pin the EXACT hot `0x3400082c` poll site (targeted PC breakpoint / count per-ref) and read what
+  condition advances it; and RE the SD-SIO init (0x484b27xx: builds the ISR table, calls 0x484b2615 /
+  0x484b2691) to find where/whether group 0x14 ENABLE gets set and what gates it. That determines whether to
+  drive the RX via a modelled interrupt-enable or a pure status-poll response.
