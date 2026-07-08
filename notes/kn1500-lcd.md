@@ -68,3 +68,12 @@ issue (tmp95c061 register-bank / addressing mode) or a missing early setup step.
 of the RAM-test function to see where `XWA0` is (mis)computed; compare against the KN5000 (tmp94c241) which
 shares the core. Once the boot clears the test, wire the LCD (HD44780 device at the LCDCS address — likely a
 sub-decode near CS0 `0x780000`) and map its output to the SVG icons + pixel grid.
+
+## LCD interface pins (2026-07 — user schematic snippet)
+The LCD/DSP control signals are the alternate functions of **CPU Port 7 (P70-P77, "PG" group)**, i.e. the
+CPU **bit-bangs Port 7** to drive them (they are NOT MSAR/MAMR chip-selects):
+`DSPCS, LCDCS, DSPC0, DSPWR, DSPRD, DSP0/CDR (=RS command/data), DSPRST, DSPRST2` on P70..P77.
+So the LCD is an **HD44780-style parallel interface, port-driven**: `LCDCS` (chip-select/E), `DSPWR`/`DSPRD`
+(write/read strobe), `DSP0/CDR` (RS), with the byte on the `D80-D87` data lines. Emulation plan: watch the
+Port-7 writes (on-chip port register) + the data path, decode E/RS/RW into an `hd44780`-style controller,
+then render its DDRAM/CGRAM + the custom icons onto the SVG. (Still gated on the RAM-test boot blocker.)
