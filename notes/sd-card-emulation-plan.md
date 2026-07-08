@@ -201,3 +201,27 @@ correct and ready, but it is premature until the init runs.
 task table / scheduler registrations and the boot-time system-init list for the SD entry, and find the
 gate (likely a "SD hardware present" probe of the `0x90200000` bank or a ch2 status handshake that must
 succeed BEFORE the init proceeds). Only once the init runs will the group-0x14 enable + RX handshake matter.
+
+## Driver status update #4 (2026-07-08) — SD-init dispatch + the SD-present strap gate
+Went after the SD-init dispatch; corrected an earlier wrong conclusion and found the gate:
+- **The SD/SIO init `0x484b26ca` DOES run at early boot** (my earlier "never runs" was a tap-timing
+  artifact -- taps installed from a frame callback miss the pre-t=1 boot window). Proof: `0x5006bfd2`
+  reads `0x06` during the WAIT, and bit1 = `!strap_bit12` is written by `0x484b2615` -- so that code ran.
+- **SD-present gate = strap `0x98070000` bit 12.** `0x484b2615` does `d0 = strap>>12 & 1`, inverts it, and
+  stores it as **`0x5006bfd2` bit 1** (an "SD absent" flag, checked at 0x484b24d2/24e6/258f/... and the
+  SD init). The driver hardcodes the strap to `0x8000` (bit12=0) -> bit1=1 -> firmware treats SD as absent.
+- **But bit 12 is NOT a clean SD-present toggle.** Strapping it on (`0x9000`) DID clear the flag
+  (`0x5006bfd2` 0x06->0x04, bit1=0) BUT **broke the boot**: blank LCD, hang BEFORE any ch2 SIO activity
+  (0 config/TX/RX/status-polls). So bit12 is entangled with other early-boot config; SD-present can't just
+  be strapped on. Reverted to `0x8000`.
+- Even with bit1 cleared, the SD **state machine still never ran** (state stays 0) -> there are further
+  gates (e.g. `0x5006bfd2` bit2 stays set). The bring-up is multiply gated.
+- **REGRESSION FIXED:** last session's `bit6=TxRDY` on the ch2 status (commit 54de957) actually **broke the
+  boot** (blank LCD -- ch2 is also MIDI-2, and the poll helper 0x484b288f read garbage). Removed it; boot
+  renders again (verified 61k non-black LCD pixels). *(That build had been published broken.)*
+
+**Where this leaves SD:** the subsystem is gated off by design when the strap says "no SD", and the strap
+bit that would say "SD present" also drives other early-boot config we don't model, so flipping it hangs
+the boot. Cracking SD now means (a) finding the FULL set of what bit12/SD-present enables at boot and
+modelling the missing hardware so the boot survives it, then (b) the ch2 CPSD transport (already built)
+carries the traffic. This is a substantial multi-part effort, not a one-line fix.

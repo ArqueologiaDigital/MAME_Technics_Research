@@ -425,6 +425,11 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// path). On real hardware bit 15 is set, so the diagnostic is skipped. Model
 	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
 	if (offset == 0x38000)
+		// bit15 = skip the factory power-on diagnostic (see above). NB bit12 also feeds
+		// the SD subsystem: 0x484b2615 stores !bit12 into 0x5006bfd2 bit1 (an "SD absent"
+		// gate). But naively SETTING bit12 (0x9000) to claim SD-present breaks the boot
+		// (blank LCD, hang BEFORE any ch2 activity) -- bit12 is entangled with other
+		// early-boot config, so SD-present can't just be strapped on here (RE 2026-07-08).
 		return 0x8000;
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
@@ -716,11 +721,9 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
 				cpsd_queue(probe, sizeof(probe));
 			}
-			// The SD-SIO poll helper (0x484b288f) waits for bit6 (0x40) | bit4 (0x10).
-			// bit4 = RxRDY (from the FIFO). bit6 = TxRDY (TX buffer empty) -- a UART
-			// always-empty-in-HLE bit the firmware needs set to proceed to SEND its
-			// command; the driver never modelled it, deadlocking the SD link. Set it.
-			return 0x0040 | (sio_rx_ready(ch) ? 0x0010 : 0x0000);
+			// (bit6=TxRDY was tried here but always-setting it on ch2 breaks the boot --
+			// ch2 is also MIDI-2, and the poll helper 0x484b288f then reads garbage.)
+			// Fall through to bit4-only RxRDY.
 		}
 		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
 	}
