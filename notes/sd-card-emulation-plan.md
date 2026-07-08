@@ -92,6 +92,35 @@ serial link:
 - The **CPSD** panel-serial theory still likely governs the **SD-panel BUTTONS** (LOAD/transport) and
   possibly card-detect notification, but the **data/status path is the memory-mapped `0x90200000` bank**.
 
+## SD communication protocol — FULLY TRACED (2026-07-08, dynamic + static)
+Reproduced the whole SD access path live and traced it to the exact hardware hook:
+
+**UI flow (reproducible):** boot → **DISK** button (SEG12 0x80) opens the *DISK MENU* → left soft-key 5
+**SD MENU** (SEG03 0x80) → right soft-key 4 **SD-AUDIO PLAY** (SEG0F 0x20) → the screen shows a
+**"WAIT!......."** dialog and **hangs there indefinitely** (does not even reach ERROR 93 on this path).
+(Soft-keys: LEFT col = SEG03 b3–b7, RIGHT col = SEG0F b2–b6.)
+
+**The link = SIO channel 2 (`0x34000820`)** — NOT "MIDI-2" as the notes label it; it is the **SD/CPSD**
+channel. During WAIT the firmware reads **`0x3400082c` ~372,820×** (a tight poll). The poll is
+`btst 0x07,(0x3400082c); bne proceed` @0x484b204c → **bit 7 of `0x3400082c` = RX-ready**.
+- `0x34000820` — TX/CONFIG (send: `movhu` data, read-back, `or 0x8000` start-bit, write). @0x484b2820.
+- `0x34000828` — RX data byte (`movbu (0x34000828),d0`). @0x484b21f2.
+- `0x3400082c` — status; **bit 7 (0x80) = RX-ready**.
+- SD-SIO init/config code lives at ~`0x484b27xx`; TX at `0x484b28xx`; RX at `0x484b21xx`.
+
+**It is RX-DRIVEN.** During the WAIT there are **zero TX writes** to `0x34000820` — the firmware is not
+sending a command, it is **waiting to receive**. So CPSD (the MN102H60) is expected to **stream status
+frames to the main CPU** on channel 2, exactly like CPL/CPC/CPR stream button/LED frames on channel 0
+(`0x34000800`), which the driver already HLEs. The firmware polls `0x3400082c` bit 7 and reads frames from
+`0x34000828`; with no CPSD streaming, it hangs on "WAIT!".
+
+**=> Revised implementation (Phase 0/1 merged):** extend the driver's SIO HLE to model **channel 2 as CPSD**
+— periodically raise `0x3400082c` bit 7 and feed the SD status frames the firmware expects at `0x34000828`
+(card-present, lid-closed, ready). Reuse the panel-serial frame machinery (`notes/panel-serial-protocol.md`).
+The `0x90200000` bank is the later bulk-data path (not touched until the channel-2 handshake advances).
+Next concrete RE step: learn the CPSD frame format — either force bit 7 + feed trial bytes and watch the
+firmware's reaction at the RX site (`0x484b21f2`), or RE the RX frame parser around `0x484b21e8`.
+
 ## Risks / unknowns
 - The **CPSD serial protocol is un-RE'd** — a real effort (comparable to the panel-button protocol RE).
 - **MN102H60 firmware undumped** — rules out LLE; a physical dump would later enable full chip-level
