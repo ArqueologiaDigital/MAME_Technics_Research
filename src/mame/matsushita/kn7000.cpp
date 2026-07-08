@@ -183,6 +183,7 @@ private:
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
+	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 
@@ -1265,16 +1266,22 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	// (The boot-splash JPEG still decodes to garbage -- a separate software-decoder bug
 	// -- so the splash reads as noise here too, faithfully.)
 	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578).
-	constexpr offs_t LCD = (0x9ce00000 - 0x9c000000) / 4;      // word offset of the RGB565 buffer in the 0x9c RAM
+	constexpr offs_t LCD = (0x9ce00000 - 0x9c000000) / 4;      // word offset of the framebuffer in the 0x9c RAM
+	// KN7000: 640x240 RGB565, scanned top-to-bottom. KN6000/KN6500: the same composited buffer,
+	// but the panel is RGB555 and physically mounted rotated 180 degrees -- so read it reversed
+	// (bottom-right to top-left) and decode 5-5-5. (Decoding a 555 gray as 565 tinted it blue.)
+	const bool kn6 = m_lcd_kn6;
 	for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
 	{
 		uint32_t *const dst = &bitmap.pix(y);
 		for (int x = cliprect.left(); x <= cliprect.right(); x++)
 		{
-			const offs_t k = y * 640 + x;                     // linear pixel index
+			const offs_t k = kn6 ? offs_t(239 - y) * 640 + (639 - x) : offs_t(y) * 640 + x;   // linear pixel index
 			const uint32_t w = m_lcdbuf[LCD + (k >> 1)];
-			const uint16_t v = (k & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian RGB565
-			dst[x] = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
+			const uint16_t v = (k & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian
+			dst[x] = kn6
+				? rgb_t(((v >> 10) & 0x1f) << 3, ((v >> 5) & 0x1f) << 3, (v & 0x1f) << 3)    // RGB555
+				: rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);   // RGB565
 		}
 	}
 	return 0;
@@ -1426,6 +1433,7 @@ void kn7000_state::kn6000(machine_config &config)
 {
 	kn7000(config);
 	m_lib_mirror = true;
+	m_lcd_kn6 = true;
 }
 
 
