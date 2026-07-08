@@ -488,3 +488,22 @@ reads `sub-table[styleIdx].+4` (the numeric table) and builds a **4-field `|`-se
 NEXT (decisive): disassemble the **DRAW handler `0x4847C076`** (msg `0x10`/`0x12`) — it renders the visible
 row text. Check whether it reads `sub-table[styleIdx].+0` (the real name) or emits the "8 Beat 1"
 style-type default. That is where the visible bug is produced. (Genre/style tables above are the map to use.)
+
+## 2026-07-08 (b) — draw handler confirmed property-based; bug is in the item NAME property. PARKED.
+Disassembled the draw handler `0x4847C076` (already named `StyleListBoxDrawItem` in kn7000.sym): it renders
+each row through the **MILK GUI property system** — `0x4842938D` (a reflection accessor wrapping
+`0x48414a4f`+`0x48428555`) queried with numeric layout IDs (`0x0006004d`/`0x00060084`/`0x00050012`…), plus
+setters `0x48417740`/`0x484176d8`/`0x484176f7`. The item **name is not loaded directly here** — it's
+delegated through the object/property framework. The get-item handler `0x4847C216` (msg `0x1003A`) builds a
+numeric key, not the name.
+
+So: the **data is fine** (real names in `StyleGenreTable 0x4873ACC0` → sub-tables), and the visible "8 Beat 1"
+is produced when the **item object's NAME property resolves to the style-type default** instead of the real
+name. Cracking the exact spot means either tracing the MILK object/property resolution deeper (the populate
+handler `0x4847BD9F` = msg 1 sets up the item objects) or — more decisively — a **runtime approach**: open
+the style list (panel navigation / injected input) and tap the name resolution live.
+
+**PARKED** for now — this is a single cosmetic bug in an otherwise-working KN7000, and static tracing keeps
+peeling MILK-framework layers (diminishing ROI). Re-enter via the runtime route or the populate handler
+`0x4847BD9F`. All data-structure symbols are now in the disassembly (`StyleGenreTable`, `StyleListBoxGetItem`,
+`StyleRecordTable`, `StyleListBoxMsgTable`, `StyleListBoxDrawItem`).
