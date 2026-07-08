@@ -69,3 +69,19 @@ is gated on something unmodeled and skipped.
    copy that targets `0x8c000000` / `0x50180000`, or the block-descriptor holding the overlay's ROM source
    (the KN7000's is `src=0x48035d08,len=0xa96c` → the KN2400's src is relocated but the `dest=0x50180000`
    and structure should match). Then see why it doesn't run before `0x48728300`.
+
+## Update — the object-init is reached LEGITIMATELY; overlay-load is a missing EARLIER step
+Trapped the first entry into the `0x48728xxx` region: PC `0x48728167` (the function entry), reached via a
+clean call chain **`0x485e4258` → `0x48728590` → `0x48728165`** with a valid SP (`0x503813e8`) — **not a
+wild derail**. The entry (`0x48728167`) only builds RAM tables (`0x50380000`/`0x50380030`/`0x503807xx` set
+to `-1`); it does **not** self-load the library or copy the overlay. So the library self-load + overlay copy
+are **separate, earlier boot steps that the KN2400 skips** before it legitimately reaches this object-init
+and calls the (unloaded) overlay method `0x5018ccf4`.
+
+Ruled out: the **mirror won't help** — the overlay copy is never *called* (0 non-zero writes to
+`0x50180000`, 0 libram reads), so providing the library via a mirror changes nothing pre-derail.
+
+NEXT (fresh dedicated tick): trace the boot from the crt0 forward — where is the KN2400's self-load /
+overlay-copy step, and why is it skipped/reordered? Start from the top of the caller chain (`0x485e4258` and
+its callers) and find the KN7000-analogous "load blocks" pass. Slower than the KN6000 because every address
+is relocated; budget it as its own investigation rather than interleaving.
