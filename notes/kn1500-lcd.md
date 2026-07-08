@@ -77,3 +77,11 @@ So the LCD is an **HD44780-style parallel interface, port-driven**: `LCDCS` (chi
 (write/read strobe), `DSP0/CDR` (RS), with the byte on the `D80-D87` data lines. Emulation plan: watch the
 Port-7 writes (on-chip port register) + the data path, decode E/RS/RW into an `hd44780`-style controller,
 then render its DDRAM/CGRAM + the custom icons onto the SVG. (Still gated on the RAM-test boot blocker.)
+
+## LCD connector CN7 pinout (2026-07 — user schematic) — HD44780 CONFIRMED
+CN7 is a standard **HD44780 parallel-LCD header** (14 pins): `1=E, 2=+5V, 3=VO (contrast, via Q12/R133),
+4=RS, 5=R/W, 6=CS, 7..14=DB0..DB7`. Control lines are driven by the Port-7 DSP/LCD signals
+(`LCDCS`, `DSPWR`, `DSPRD`, `DSP0/CDR`=RS/enable), and `DB0-DB7` come from a data latch (`Q0-Q7`). So the
+first-attempt emulation is clear: instantiate MAME's **`hd44780` device**, feed it RS/E/R/W decoded from the
+Port-7 writes and the data byte from the latch, and render its output onto the SVG (character/pixel area +
+the custom icons). Blocked only by the RAM-test boot issue above.
