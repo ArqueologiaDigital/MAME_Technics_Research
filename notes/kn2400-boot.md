@@ -85,3 +85,30 @@ NEXT (fresh dedicated tick): trace the boot from the crt0 forward — where is t
 overlay-copy step, and why is it skipped/reordered? Start from the top of the caller chain (`0x485e4258` and
 its callers) and find the KN7000-analogous "load blocks" pass. Slower than the KN6000 because every address
 is relocated; budget it as its own investigation rather than interleaving.
+
+## Update 2026-07-09 — ruled out interrupts; robust tooling; object-init is main-boot at t≈0
+**Tooling fix** (last tick's traces hung): use `-seconds_to_run N` (MAME's clean built-in exit) and have
+the lua **write findings to a file** instead of `manager.machine:exit()` + `timeout` (which failed to kill
+MAME). Also avoid tapping the `0x90000000` LCD-window (expensive). This combination runs reliably.
+
+**Ruled out — interrupt hypotheses:**
+- The driver vectors KN2400 IRQs to the KN7000 library handlers `0x4C03DE26`/`0x4C03DDA0`, but a tap on
+  `0x4C03DD00-0x4C03DEFF` shows the CPU **never fetches there** in 3 emulated seconds → no IRQ-into-empty-
+  library.
+- The object-init `0x48728165` (which calls the un-loaded overlay) is entered at **t≈0.0000 with a FRESH
+  ZEROED STACK** (SP=`0x503813e8`, `*(SP..SP+0x44)`=all 0) → reached by the **main boot via jumps from the
+  crt0**, NOT an interrupt preemption.
+
+**So:** the library self-load + overlay-copy that the KN7000 performs *before* its object-init are simply
+**absent/skipped from the KN2400's early boot path** — not preempted, not mis-timed.
+
+**New lead — empty table ROM:** the KN2400 driver leaves the `table` region (`0x48000000`) `ROMREGION_ERASEFF`
+(no dump), yet the firmware references `0x48000000-0x483fffff` ~**1951 times** with round bank addresses
+(`0x48080000`, `0x48100000`, `0x481f0000`, …). The KN2400 may need a separate table/mask ROM that is
+**undumped** (memory's "no separate table flash" may be wrong), or map resources differently. Its
+`TCMP`/`Technics` resources ARE present in the *program* ROM (`0x484c6853`, `0x4852bc20`, …).
+
+**NEXT:** trace the KN2400 crt0's jmp target (boot2) forward to `0x48728165` and find where the KN7000 does
+its `InitializeBlock27` self-load + overlay-copy — the KN2400's relocated boot2 either omits or short-
+circuits it. (The KN2400 crt0 jmp target differs from the KN7000's `0x487f7793`, which is padding for the
+smaller KN2400 image.) Also decide the table-ROM question: is a mask/table ROM undumped, or unused?
