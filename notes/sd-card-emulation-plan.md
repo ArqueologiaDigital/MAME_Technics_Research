@@ -62,6 +62,36 @@ file**. This slots into the mechanism already built for the panel sub-CPUs.
   gated by the broader no-audio situation (undumped wave ROMs / TG), but **file access, lists, lyrics,
   timers and the whole UI are independent of audio** and can be fully driven.
 
+## RE findings (2026-07-08 session) — CORRECTION to the architecture above
+Static RE of the SD driver shows the SD hardware is **memory-mapped**, not (only) reached over the panel
+serial link:
+- **SD I/O register bank @ `0x90200000`** — the driver reads `0x9020005c`, `0x9020005d`, `0x9020005f`
+  (and `0x90008020`) as SD hardware registers, via a register HAL at `0x48566760` (loads the address as an
+  immediate, reads indirect). **These are almost certainly the MN67737 (SD host controller) registers.**
+- **The driver currently maps `0x90000000–0x97ffffff` as plain RAM** (`map(...).ram().share("vram")` —
+  "LCD controller window (regs + trampolines)"), so `0x9020005x` reads back as **zeros** → firmware
+  concludes *no card / lid open* → **ERROR 93**. Phase 0 = carve out the SD register sub-range and return
+  *lid-closed + card-present* values.
+- **SD state RAM** (main-CPU side, updated by the SD driver from the registers):
+  - `0x50083cd8` — SD state byte (`SD_GetState`=0x4855e80c, `SD_SetState`=0x4855e803; values 3/4/…).
+  - `0x50083bc2` — card-ready status (`SDCardInfoFunc` requires `==1`).
+  - `0x50083bc3` — error-flags byte (`bset 0x01/0x02/0x04` per failed hardware check).
+  - `0x50083bb8–0x50083bcc` — a dense SD state struct (every byte heavily referenced).
+  - Low-level SD command dispatch: `0x4856242e` (→ a deep card/FAT stack: `0x48562264`, `0x48562302`,
+    `0x48560fed`, `0x48565d87`, `0x4855f2f7`, …).
+- **Revised Phase 0**: add a read/write handler for the SD register bank at `0x90200000` (within the big
+  0x90 block) that returns the "card present + lid closed" status the firmware wants; find the exact
+  register/bit by dynamically tapping `0x9020005x` reads while the firmware polls, then model it.
+- **Card-detect / lid physical read** = `0x3400016c` **bit 0x10 (bit 4)**, in the card reader `0x4854bce0`
+  (writes 1 to strobe, reads back, `btst 0x10`): **clear => card present / lid closed**, set => no card.
+  A software override sits at `0x50005204` (if `(int16)>=0`, that value wins over the hardware read);
+  debounce state at `0x5000520c/0x50005210/0x50151bfc`. IMPORTANT: in the emulator `0x3400016c` already
+  reads 0 (bit4=0 => "present"), so ERROR 93 is NOT the card-detect -- it is raised deeper in the ACCESS
+  path (the `0x90200000` register/command protocol returning zeros). Card-check wrappers: `0x4854b597`,
+  `0x4854b5c5` -> debounce `0x4854bd39` -> raw `0x4854bce0`.
+- The **CPSD** panel-serial theory still likely governs the **SD-panel BUTTONS** (LOAD/transport) and
+  possibly card-detect notification, but the **data/status path is the memory-mapped `0x90200000` bank**.
+
 ## Risks / unknowns
 - The **CPSD serial protocol is un-RE'd** — a real effort (comparable to the panel-button protocol RE).
 - **MN102H60 firmware undumped** — rules out LLE; a physical dump would later enable full chip-level
