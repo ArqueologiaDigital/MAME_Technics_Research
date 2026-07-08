@@ -175,3 +175,29 @@ Refined the ch2 model and traced the delivery to a hard blocker:
   condition advances it; and RE the SD-SIO init (0x484b27xx: builds the ISR table, calls 0x484b2615 /
   0x484b2691) to find where/whether group 0x14 ENABLE gets set and what gates it. That determines whether to
   drive the RX via a modelled interrupt-enable or a pure status-poll response.
+
+## Driver status update #3 (2026-07-08) — ROOT CAUSE: the SD subsystem never initialises
+Chased the RX-trigger handshake down through every layer and hit the real blocker, which is UPSTREAM of
+the RX path:
+- Added the correct **bit6 = TxRDY** to the ch2 status (a UART always-empty-in-HLE bit the SD-SIO poll
+  helper 0x484b288f waits on: `btst 0x40|0x10, (0x3400082c)`). bit4=RxRDY, bit6=TxRDY both now modelled.
+- **The SD state machine (0x48551f80) NEVER RUNS**: during the whole boot + an SD access there are ZERO
+  writes to the SD state (`0x50083cd8`, `0x50083bc2`, `0x50083bc1`), and the entire state block
+  `0x50083bb8-0x50083bcf` stays 0x00. So the subsystem is completely uninitialised.
+- **The SD-SIO init function `0x484b26ca` NEVER RUNS**: ZERO writes to the ch2 config `0x34000820` or
+  control `0x34000824` across the entire boot. This is the function that would configure ch2, build the
+  ISR table (0x484b26f0: group 0x13->0x484b1f29, group 0x14->0x484b2037) and enable the group-0x14 RX IRQ.
+  Because it never runs, group 0x14 stays disabled (ICR 0x34000150 ENABLE bit8=0), the state machine never
+  runs, and every SD access hangs on "PLEASE WAIT".
+- `0x484b26ca` has **no traceable callers** (no direct call, no absolute/aliased pointer in the image) ->
+  it is dispatched indirectly (a MILK task / scheduler entry, or a computed jump) or is gated on a
+  hardware-presence / config condition that the emulator never satisfies.
+
+**Reframed problem:** SD emulation is NOT primarily an RX-frame-protocol job -- it is first a matter of
+getting the SD subsystem to INITIALISE. The ch2 transport model (status bits + cpsd_queue delivery) is
+correct and ready, but it is premature until the init runs.
+
+**Next RE step:** find how `0x484b26ca` (or the SD task that owns it) is dispatched -- inspect the MILK
+task table / scheduler registrations and the boot-time system-init list for the SD entry, and find the
+gate (likely a "SD hardware present" probe of the `0x90200000` bank or a ch2 status handshake that must
+succeed BEFORE the init proceeds). Only once the init runs will the group-0x14 enable + RX handshake matter.

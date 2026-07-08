@@ -716,10 +716,11 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
 				cpsd_queue(probe, sizeof(probe));
 			}
-			// The RX byte reads gate on bit4 (btst 0x10 @0x484b2122, a timeout poll);
-			// bit7 is a separate select the firmware branches on AFTER reading the
-			// byte (0x484b204c) -- forcing it diverts the read path, so leave it and
-			// fall through to the shared bit4 RX-ready below.
+			// The SD-SIO poll helper (0x484b288f) waits for bit6 (0x40) | bit4 (0x10).
+			// bit4 = RxRDY (from the FIFO). bit6 = TxRDY (TX buffer empty) -- a UART
+			// always-empty-in-HLE bit the firmware needs set to proceed to SEND its
+			// command; the driver never modelled it, deadlocking the SD link. Set it.
+			return 0x0040 | (sio_rx_ready(ch) ? 0x0010 : 0x0000);
 		}
 		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
 	}
