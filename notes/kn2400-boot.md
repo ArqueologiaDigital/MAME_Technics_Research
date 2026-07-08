@@ -112,3 +112,28 @@ MAME). Also avoid tapping the `0x90000000` LCD-window (expensive). This combinat
 its `InitializeBlock27` self-load + overlay-copy — the KN2400's relocated boot2 either omits or short-
 circuits it. (The KN2400 crt0 jmp target differs from the KN7000's `0x487f7793`, which is padding for the
 smaller KN2400 image.) Also decide the table-ROM question: is a mask/table ROM undumped, or unused?
+
+## Correction 2026-07-09 — the table ROM is NOT read at boot; no table-data disk exists
+A read-tap over the ENTIRE table region (`0x48000000-0x483fffff`) shows the KN2400 reads **nothing** from it
+in 3 emulated seconds of boot. So:
+- The "empty table ROM" lead above is **refuted** — it is not the derail cause. The ~1951 static references
+  to that range are later-feature resources (sound/graphics banks, `0x48080000`/`0x48100000`/…) never
+  reached before the derail, or non-pointer data — not boot-critical.
+- The derail remains a **program-ROM boot-flow** issue: the missing library self-load + overlay-copy before
+  the object-init (`0x48728165`, reached by the main boot at t≈0 with a fresh stack).
+
+### Answer to "table-data disk vs KN7000 ROM reuse" (user question, 2026-07-09)
+- **No initial-data / table-data disk ships** for the KN2400/KN2600. `kn24-11.zip` = `kn24_11a.exe` +
+  `kn24_11b.exe` (the two program halves → `KN24PRG.DAT`) + install.pdf; `kn26-11.zip` = `KN24PRG.DAT` +
+  install.pdf; `KN2600_CD-Rom.zip` is just **PC MIDI drivers** (`mamidi.sys`, `.inf`, installers), not data.
+- **The KN2400 boot does not read any table ROM** (its own or the KN7000's), so the boot does not depend on
+  cross-model ROM reuse. The derail is entirely within the program ROM.
+
+### Cross-model ROM reuse — INTEGRITY POLICY (per the user, 2026-07-09)
+If, for *later* features (sound/graphics), we ever fill the KN2400's undumped WAVE / table mask ROMs by
+reusing another model's ROM (e.g. the KN7000's), that must be **documented explicitly as an unverified
+emulation hack UNTIL proven a technical fact** — verified from the **service manual / physical chip part
+numbers** showing the KN2400 and KN7000 use the same mask ROM part. We must NOT silently present a
+cross-model substitution as if it were the device's real ROM, to avoid misrepresenting these keyboards'
+technical history. (Known real sharing: KN2400/KN2600/PR54 share ONE program firmware — that IS a fact.
+KN2400↔KN7000 chip sharing is currently UNVERIFIED and would need the service manual.)
