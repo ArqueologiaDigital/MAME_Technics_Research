@@ -225,3 +225,16 @@ bit that would say "SD present" also drives other early-boot config we don't mod
 the boot. Cracking SD now means (a) finding the FULL set of what bit12/SD-present enables at boot and
 modelling the missing hardware so the boot survives it, then (b) the ch2 CPSD transport (already built)
 carries the traffic. This is a substantial multi-part effort, not a one-line fix.
+
+## CORRECTION (2026-07-08, later) — strap bit12 is the BASS-PEDAL SWITCH, not SD-present
+Update #3/#4 above concluded that strap `0x98070000` bit12 gates the SD subsystem ("SD board present").
+**That was WRONG.** bit12 (= data-bus D28) is the rear-panel **MIDI IN / BASS PEDAL selector SW701**:
+`BassPedalSw` (0x484A2CB1) -> `0x484b2615` reads bit12 and stores `!bit12` into the MIDI-in mode flag
+`0x5006bfd2` bit1. It has nothing to do with SD. (Now driven by the `REARSW` input port; commit 6846f94.)
+Consequences:
+- Setting bit12 (strap 0x9000) does NOT break the boot -- the blank-LCD hang seen during the SD dig was the
+  separate `bit6=TxRDY` ch2 regression, which was reverted. With bit6 gone, 0x9000 boots fine.
+- **The SD subsystem's dormancy root cause is therefore UNKNOWN again.** The valid SD findings still stand
+  (link = SIO ch2; status bit4=RxRDY; RX handler 0x484b2037 for group 0x14; the group-0x14 IRQ is disabled;
+  the SD state machine never runs; state block all-zero). But WHY it never initialises is NOT the strap.
+  Re-open the "what triggers the SD init/state-machine" question without the strap red herring.
