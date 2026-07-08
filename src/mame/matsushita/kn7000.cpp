@@ -1217,6 +1217,14 @@ static INPUT_PORTS_START(kn7000)
 	PORT_START("DIAL")
 	PORT_BIT(0xff, 0x00, IPT_DIAL) PORT_SENSITIVITY(30) PORT_KEYDELTA(1) PORT_NAME("DATA DIAL")
 
+	// Front-panel volume sliders -- draggable placeholders (the ESQ1-style slider script in
+	// kn7000.lay binds these). NOT yet wired to any audio/volume path; control targets are TBD
+	// (needs schematic + disassembly RE). PORT_ADJUSTER gives a 0-100 value the layout knob animates.
+	PORT_START("VOL_MAIN")   PORT_ADJUSTER(80, "Main Volume")
+	PORT_START("VOL_APCSEQ") PORT_ADJUSTER(80, "APC / SEQ Volume")
+	PORT_START("VOL_MIC")    PORT_ADJUSTER(50, "Mic Volume")
+	PORT_START("VOL_LINEIN") PORT_ADJUSTER(50, "Line-In Volume")
+
 	// Music key bed (subset: ~2 octaves on the PC keyboard, tracker-style layout).
 	// Each key pushes a note-on/off voice-event into the FIFO the firmware polls at
 	// 0x98050004 (see kbd_key / kbd_push). MIDI note numbers; C4 = 0x3C = 60.

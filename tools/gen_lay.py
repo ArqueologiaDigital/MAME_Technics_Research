@@ -146,6 +146,10 @@ two("mute_down",55,78,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" 
 two("tall_pill",50,155,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="2" y="2" width="46" height="151" rx="23"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="2" y="2" width="46" height="151" rx="23"/>')
 two("fader",30,150,f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN}" stroke="{STROKE}" stroke-width="1.5" x="2" y="40" width="26" height="18" rx="3"/>',
                     f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN_D}" stroke="{STROKE}" stroke-width="1.5" x="2" y="48" width="26" height="18" rx="3"/>')
+# ESQ1-style draggable slider parts: transparent click-area, rail track, and the moving knob.
+elem("inv_rect",'<rect><color red="0" green="0" blue="0" alpha="0"/></rect>')
+elem("fader_rail",'<rect><color red="0.13" green="0.13" blue="0.14"/></rect>')
+elem("slider_knob",f'<rect><bounds x="0" y="0" width="30" height="18"/><color red="0.34" green="0.34" blue="0.37"/></rect><rect><bounds x="2" y="8" width="26" height="2.5"/><color red="0.9" green="0.9" blue="0.92"/></rect>')
 two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>',
                          f'<circle cx="50" cy="50" r="48" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>')
 sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
@@ -246,8 +250,16 @@ def grid(out,x0,y0,cols,dx,dy,entries,header=None):
 
 # =================== LEFT BLOCK (bottom-left; coords = mockup abs - (0,997)) =
 LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_left",0,0,1000,503)]
+# 4 volume sliders -- ESQ1-style DRAGGABLE placeholders (control targets TBD, per user). Each = rail
+# + transparent click-area (id, the drag region) + animated knob (id, <animate> maps the PORT_ADJUSTER
+# value to the knob's Y position). The <script> at the bottom wires the drag via the ESQ1 slider library.
+SLPORT={"MAIN":"VOL_MAIN","APC/SEQ":"VOL_APCSEQ","MIC":"VOL_MIC","LINE IN":"VOL_LINEIN"}
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
-    LB.append(L(nm,cx-24,y-14,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH)); LB.append(P("fader",cx-15,y,30,h))
+    LB.append(L(nm,cx-24,y-14,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH))
+    port=SLPORT[nm]; sid=port.lower(); x=cx-15; w=30; kh=18
+    LB.append(P("fader_rail",cx-3,y+kh//2,6,h-kh))
+    LB.append(f'\t\t<element id="{sid}_click" ref="inv_rect"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>')
+    LB.append(f'\t\t<element id="{sid}_knob" ref="slider_knob"><animate inputtag="{port}" inputmask="0xffff"/><bounds state="100" x="{x}" y="{y}" width="{w}" height="{kh}"/><bounds state="0" x="{x}" y="{y+h-kh}" width="{w}" height="{kh}"/></element>')
 LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
 # AUTO PLAY CHORD: MODE = SEG03 0x02 (fresh-boot scr:pixel dump 2026-07-07: opens the "APC SELECT"
 # screen BASIC/FINGERED/PIANIST; was decorative). The top OFF/ON had been guessed SEG06 0x08 from the
@@ -402,7 +414,9 @@ RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG13",
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
-RB.append(L("TECHNI-CHORD",403,258,92,9,TXTH)); RB += [P("green_led",428,274,8,8,name=OPLED.get(("SEG11","0x80"))), P("round_btn",416,285,32,32,tag="SEG11",mask="0x80"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32)]  # TECHNI-CHORD LED = cpr_led73
+RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,TXTH))
+# SOLO = SEG10 0x80 (verified in the panel button-map; free bit; was drawn but unbound).
+RB += [P("green_led",428,274,8,8,name=OPLED.get(("SEG11","0x80"))), P("round_btn",416,285,32,32,tag="SEG11",mask="0x80"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG10",mask="0x80")]  # TECHNI-CHORD LED = cpr_led73
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
 for j,cx in enumerate([360,425,485]): tg,mk=(("SEG10","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
 for j,cx in enumerate([360,425,485]): tg,mk=(("SEG11","0x10") if j==0 else (None,None)); RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
@@ -477,6 +491,22 @@ VIEWS='''
 o=io.StringIO()
 o.write('<?xml version="1.0"?>\n<!-- KN7000 control-panel layout, kn5000 SVG-snippet style, pixel-mapped to the\n')
 o.write('     mockup (4000x3000 = 2x). 3 reusable blocks + Compact & Full Unit views.\n     Generated by tools/gen_lay.py. -->\n<mamelayout version="2">\n\n')
-o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n\n"+"\n".join(SDB)+"\n"+VIEWS+'</mamelayout>\n')
+# ESQ1-style slider drag support: the shared slider library (tools/slider_lib.lua) + registration of
+# the 4 volume faders for the Compact view. (Sliders are visible in all views but draggable in Compact.)
+_lib=open("/home/fsanches/compartilhado/kn7000_mame/tools/slider_lib.lua").read()
+SCRIPT=('\t<script><![CDATA[\n'+_lib+'\n'
+        '\t\t-- KN7000 volume sliders: wire the 4 faders for dragging in the Compact view.\n'
+        '\t\tfile:set_resolve_tags_callback(function()\n'
+        '\t\t\tlocal view = file.views["Compact"]\n'
+        '\t\t\tif view then\n'
+        '\t\t\t\tadd_vertical_slider(view, "vol_main_click", "vol_main_knob", "VOL_MAIN")\n'
+        '\t\t\t\tadd_vertical_slider(view, "vol_apcseq_click", "vol_apcseq_knob", "VOL_APCSEQ")\n'
+        '\t\t\t\tadd_vertical_slider(view, "vol_mic_click", "vol_mic_knob", "VOL_MIC")\n'
+        '\t\t\t\tadd_vertical_slider(view, "vol_linein_click", "vol_linein_knob", "VOL_LINEIN")\n'
+        '\t\t\t\tinstall_slider_callbacks(view)\n'
+        '\t\t\tend\n'
+        '\t\tend)\n'
+        '\t]]></script>\n')
+o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n\n"+"\n".join(SDB)+"\n"+VIEWS+SCRIPT+'</mamelayout>\n')
 open("/home/fsanches/compartilhado/kn7000_mame/src/mame/layout/kn7000.lay","w").write(o.getvalue())
 print(f"WROTE kn7000.lay: {len(E)} elements, {len(TXTS)} labels")
