@@ -104,6 +104,29 @@ two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="1.5" y="1.
 two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
+# ---- split-pill halves: two clickable halves form one divided pill (KN5000 pattern). Scale to bounds. ----
+# horizontal (-/+ , in/out, 1/2): left half rounded-left + flat-right, right half mirrored.
+two("half_l",40,22,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
+two("half_r",40,22,f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
+# vertical (CONTRAST up/down): top half rounded-top + flat-bottom, bottom half mirrored.
+two("half_t",22,40,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>')
+two("half_b",22,40,f'<path transform="translate(0,40) scale(1,-1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>',f'<path transform="translate(0,40) scale(1,-1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>')
+# ---- SD-card transport buttons (48x30, icon baked in) ----
+two("sd_stop",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
+two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
+two("sd_skipb",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
+two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
+# pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
+def pair_h(seg,ma,mb,x,y,w,h,la="",lb=""):
+    r=[P("half_l",x,y,w//2,h,tag=seg,mask=ma),P("half_r",x+w-w//2,y,w//2,h,tag=seg,mask=mb)]
+    if la: r.append(L(la,x+w//4-14,y+h//2-6,28,12))
+    if lb: r.append(L(lb,x+3*w//4-14,y+h//2-6,28,12))
+    return r
+def pair_v(seg,ma,mb,x,y,w,h,la="",lb=""):
+    r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=seg,mask=mb)]
+    if la: r.append(L(la,x+w//2-14,y+h//4-6,28,12))
+    if lb: r.append(L(lb,x+w//2-14,y+3*h//4-6,28,12))
+    return r
 # page up/down = two halves of a tall pill (rounded outer end, flat inner end)
 two("page_up",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
 two("page_dn",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
@@ -172,7 +195,9 @@ for i,yy in enumerate([205,294,383,472,561]):
 S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
       P("round_btn_big",150,852,42,42,tag="SEG08",mask="0x08"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-S += [L("CONTRAST",247,730,120,13), P("tall_pill",282,756,50,155), L("MUTE",342,825,42,13,TXTH),
+# CONTRAST split up/down (CPC-board pair per service-manual matrix). BITS UNVERIFIED -- best-guess
+# SEG08 0x40 (up) / 0x80 (down); no HELP screen exists for CONTRAST. *** FLAG FOR REVIEW ***
+S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG08","0x40","0x80",282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -195,7 +220,9 @@ for i in range(16):
     S.append(P("mute_up",x,756,55,77,tag=ut,mask=um))
     S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
-S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
+# PAGE up/down (CPC-board pair). BITS UNVERIFIED -- best-guess SEG08 0x01 (up) / 0x02 (down); no HELP
+# screen for PAGE. *** FLAG FOR REVIEW ***
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG08",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG08",mask="0x02"),
       # DISPLAY HOLD = SEG08 0x10 (confirmed via HELP-info: "HELP : DISPLAY HOLD"). Was decorative.
       L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8,name=OPLED.get(("SEG08","0x10"))),
       # EXIT = SEG08 0x20 (confirmed: pressed in HELP mode it turns HELP off -> returns to the PMEM
@@ -292,7 +319,9 @@ for i,cx in enumerate([366,426,486,546]):
 # SEG00 0x80 = RHYTHM genre 5. Both unbound (decorative) until their real bits are found.
 # HELP-info (2026-07-07): FADE IN/OUT = SEG11 0x01, TAP TEMPO = SEG12 0x04 (old SEG04 0x02 wrong).
 # SYNCHRO & BREAK = SEG15 0x04 (HELP-info 2026-07-07).
-for nm,x,w,h,tg,mk in [("FADE IN/OUT",625,105,28,"SEG11","0x01"),("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,"SEG15","0x04")]:
+# FADE IN/OUT split: IN = SEG11 0x01 / OUT = SEG11 0x02 (event map ev2084 arg0015/0115).
+LB.append(L("FADE",625,340,105,9)); LB += pair_h("SEG11","0x01","0x02",625,355,105,28,"IN","OUT")
+for nm,x,w,h,tg,mk in [("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,"SEG15","0x04")]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
@@ -303,8 +332,12 @@ LB.append(P("green_led",856+48,364,8,8,name=OPLED.get(("SEG15","0x04"))))   # SY
 # START/STOP was SEG00 0x10 -- but that bit = RHYTHM genre 2 (BALLAD), verified on real
 # hardware (user: "START/STOP => BALLAD"); unbound (decorative) until its real bit is found.
 # HELP-info (2026-07-07): INTRO & ENDING = SEG12 0x01, START/STOP = SEG12 0x08.
-for nm,x,w,h,shp,tg,mk in [("INTRO & ENDING",740,105,50,"pill_wide","SEG12","0x01"),("START/STOP",856,105,50,"pill_greycyan","SEG12","0x08")]:
-    LB.append(L(nm,x,394,w,9)); LB.append(P(shp,x,408,w,h,tag=tg,mask=mk))
+# INTRO & ENDING split: 1 = SEG12 0x01 / 2 = SEG12 0x02 (event map ev2022 arg0005/0105).
+LB.append(L("INTRO & ENDING",740,394,105,9)); LB += pair_h("SEG12","0x01","0x02",740,408,105,50,"1","2")
+# FILL IN split (ADDED -- was not drawn before): 1 = SEG11 0x04 / 2 = SEG11 0x08 (event map ev2023 arg0005/0105).
+LB.append(L("FILL IN",625,394,105,9)); LB += pair_h("SEG11","0x04","0x08",625,408,105,50,"1","2")
+# START/STOP stays a single greycyan pill.
+LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,105,50,tag="SEG12",mask="0x08"))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
@@ -360,10 +393,12 @@ RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led"
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
-# HELP-info (2026-07-07): TRANSPOSE -/+ = SEG13 0x01 (upper pill); R1/R2 OCTAVE -/+ = SEG13 0x04 (lower).
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8), P("pill_wide",213,335,75,24,tag="SEG13",mask="0x01")]
+# SPLIT PAIRS (verified via panel-seg-event-map.txt + service-manual matrix):
+#   TRANSPOSE  - = SEG13 0x01 (b0 down) / + = SEG13 0x02 (b1 up)
+#   R1/R2 OCT  - = SEG13 0x04 (b2)      / + = SEG13 0x08 (b3)
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG13","0x01","0x02",213,335,75,24,"-","+")
 RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8), L("-",232,388,8,8), L("+",264,388,8,8), P("pill_wide",213,405,75,24,tag="SEG13",mask="0x04")]
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG13","0x04","0x08",213,405,75,24,"-","+")
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
@@ -387,12 +422,27 @@ RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big
 RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",852,407,42,42)]
 RB.append('\t</group>')
 
+# ---- SD-card transport block (its own group, referenced by the views) ----
+# Order per the two photos: SD VOLUME -/+ , SKIP/SEARCH <<//>> , STOP , PLAY/PAUSE , SD IN USE LED.
+# The SD LOAD orange pill is placed separately near PANEL MEMORY. These buttons are VISUAL ONLY and
+# UNBOUND: the SD transport is not in the panel button matrix and no SD subsystem is modelled yet.
+# *** TODO: bind once an SD subsystem exists. ***
+SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70"/>',
+     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30), P("half_r",54,18,42,30), L("-",28,28,12,12), L("+",70,28,12,12),
+     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30), P("sd_skipf",172,18,48,30),
+     L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30),
+     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30),
+     L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8)]
+SDB.append('\t</group>')
+
 VIEWS='''
 	<view name="Compact">
 		<bounds x="0" y="0" width="2000" height="1500"/>
 		<group ref="screen_block"><bounds x="0" y="0" width="2000" height="997"/></group>
 		<group ref="left_block"><bounds x="0" y="997" width="1000" height="503"/></group>
 		<group ref="right_block"><bounds x="1000" y="997" width="1000" height="503"/></group>
+		<!-- SD-card transport: centered below the MUTE row (compact view); overall dims unchanged -->
+		<group ref="sd_block"><bounds x="750" y="915" width="500" height="70"/></group>
 	</view>
 
 	<view name="Full Unit">
@@ -400,6 +450,7 @@ VIEWS='''
 		<group ref="left_block"><bounds x="0" y="247" width="1000" height="503"/></group>
 		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="997"/></group>
 		<group ref="right_block"><bounds x="3000" y="247" width="1000" height="503"/></group>
+		<group ref="sd_block"><bounds x="1750" y="915" width="500" height="70"/></group>
 	</view>
 
 	<!-- Zoomed single-block views (each fills the window) for detailed layout review -->
@@ -417,10 +468,15 @@ VIEWS='''
 		<bounds x="0" y="0" width="1000" height="503"/>
 		<group ref="right_block"><bounds x="0" y="0" width="1000" height="503"/></group>
 	</view>
+
+	<view name="SD Block">
+		<bounds x="0" y="0" width="500" height="70"/>
+		<group ref="sd_block"><bounds x="0" y="0" width="500" height="70"/></group>
+	</view>
 '''
 o=io.StringIO()
 o.write('<?xml version="1.0"?>\n<!-- KN7000 control-panel layout, kn5000 SVG-snippet style, pixel-mapped to the\n')
 o.write('     mockup (4000x3000 = 2x). 3 reusable blocks + Compact & Full Unit views.\n     Generated by tools/gen_lay.py. -->\n<mamelayout version="2">\n\n')
-o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n"+VIEWS+'</mamelayout>\n')
+o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n\n"+"\n".join(SDB)+"\n"+VIEWS+'</mamelayout>\n')
 open("/home/fsanches/compartilhado/kn7000_mame/src/mame/layout/kn7000.lay","w").write(o.getvalue())
 print(f"WROTE kn7000.lay: {len(E)} elements, {len(TXTS)} labels")
