@@ -613,6 +613,10 @@ void kn7000_state::intc_recompute()
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
 {
 	intc_assert(IRQGRP_TIMER);
+	// KN6000/KN6500: also fire the on-chip ms-timer (group 7, level 4). Its ISR
+	// increments the software ms-counter 0x50276e48 the boot busy-waits on.
+	if (m_lib_mirror)
+		intc_assert(0x07);
 }
 
 // One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
