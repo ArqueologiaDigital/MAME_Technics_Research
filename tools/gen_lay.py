@@ -157,13 +157,15 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 LCDPARTS=[("RIGHT1","SEG03","0x08","SEG0F","0x04"),("RIGHT2","SEG03","0x10","SEG0F","0x08"),
           ("LEFT","SEG03","0x20","SEG0F","0x10"),("ACCOMP1","SEG03","0x40","SEG0F","0x20"),
           ("ACCOMP2","SEG03","0x80","SEG0F","0x40")]
-# Silkscreen label = the part name RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 on BOTH columns (per the user's
-# mockup). Functionally these are the LCD soft-keys: LEFT column = SEG03 b3-b7 (part OFF / "LCD LEFT
-# 1-5"), RIGHT column = SEG0F 0x04-0x40 (part ON / "LCD RIGHT 1-5"), context-dependent on-screen.
+# NO silkscreen labels: the real KN7000 unit prints NO text next to the LCD-flanking soft-keys --
+# their function is shown ON-SCREEN (context-dependent), so the panel is blank there. The
+# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 labels (from the mockup) were REMOVED per the user (2026-07-08).
+# Functionally these remain the LCD soft-keys: LEFT column = SEG03 b3-b7 (part OFF / "LCD LEFT 1-5"),
+# RIGHT column = SEG0F 0x04-0x40 (part ON / "LCD RIGHT 1-5"). Buttons stay clickable; only text is gone.
 for i,yy in enumerate([205,294,383,472,561]):
     nm,ls,lm,rs,rm=LCDPARTS[i]
-    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm)); S.append(L(nm,168,yy+12,90,10))
-    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm)); S.append(L(nm,1770,yy+12,90,10))
+    S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm))
+    S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm))
 # OTHER PART & FR / HELP
 # OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
 # FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
