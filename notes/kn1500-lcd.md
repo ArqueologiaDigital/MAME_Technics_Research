@@ -59,15 +59,29 @@ Authoritative hardware map (block diagram II-3 + MAIN(A) schematic II-9 + crt0 c
 **Driver fix (committed):** RAM map corrected to `map(0x000000,0x07ffff).ram().mirror(0x080000)` (512 KB in
 the 1 MB CS3 window) + ROM comments. CS0/LCD still TODO.
 
-## Remaining blocker: RAM-test runaway is NOT a size issue
-Even with the correct 512 KB RAM, the boot still spins forever in the marching-pattern loop `0xfa047f`. The
-test reads its descriptor via `XWA0` (`ld XIX,(XWA); ld XBC,(XWA+4)`), but `XWA0`=`0xf38b24` points at a
-**table of small negative 16-bit values (`0xffXX`, every odd byte 0xff)** — not a `{base,count}` — so
-base=`0xffdefff2`, count huge → runaway. So `XWA0` is set WRONG before the test. Likely a TLCS-900 CPU-core
-issue (tmp95c061 register-bank / addressing mode) or a missing early setup step. **NEXT:** trace the caller
-of the RAM-test function to see where `XWA0` is (mis)computed; compare against the KN5000 (tmp94c241) which
-shares the core. Once the boot clears the test, wire the LCD (HD44780 device at the LCDCS address — likely a
-sub-decode near CS0 `0x780000`) and map its output to the SVG icons + pixel grid.
+## Remaining blocker: RAM-region descriptor table reads as garbage (8-bit-data ROM region)
+Even with the correct 512 KB RAM, the boot spins forever in the marching-pattern loop `0xfa047f`. Corrected
+diagnosis (earlier "XWA0 is set wrong" theory was mistaken):
+- This is **early crt0 RAM-init code**, reached at **t=0 with SP=0 via a jump** from the crt0 — NOT a called
+  service-mode self-test (so the CN12/held-keys input theory is out too).
+- The pointer is computed **correctly**: `0xfa0460` does `A=E(region#); WA=E*0x0a; lda XBC,0xf38b24;
+  XWA=exts(WA)+XBC; base=*(XWA); count=*(XWA+4)` — a table at **`0xf38b24`, stride 0x0a/entry**.
+- The real problem is the **ROM data** there. The prog ROM (IC15) has a clear region split:
+  - **8-bit-data** `0xe00000-0xe7ffff` + `0xf00000-0xf7ffff`: every ODD byte is `0xff` (8-bit values padded
+    to 16-bit with `0xff`).
+  - **16-bit code/data** `0xe80000-0xefffff` + `0xf80000-0xffffff` (the crt0 lives here): both lanes real.
+  The descriptor table `0xf38b24` sits in an **8-bit region**, so a long read yields `base=0xffdefff2,
+  count=0xfff2ff00` → the test walks off into unmapped space forever.
+- On real hardware a long read there would ALSO pick up `0xff` high bytes — so either **(a) the ROM dump is
+  wrong** for these 8-bit regions (the ICs are `BAD_DUMP`; the descriptor's high bytes should be real data),
+  or **(b)** IC15 is physically a byte-organized/dual-die part that the raw `ROM_REGION16_LE` de-interleaves
+  wrongly. (`ic15.rest` also shows `{byte,0xff}` here — `01 ff 00 ff…` — but it is the separate rhythm ROM,
+  not IC15's high-byte lane. Note bus width does NOT explain it: a long read is 4 consecutive byte fetches
+  either way.)
+
+**NEXT:** this is a **dump / ROM-organization question**, not a RAM-size or pointer bug. Verify IC15's 8-bit
+regions against a fresh read of the physical chip, or determine IC15's true byte organization from the chip
+datasheet/markings. LCD work (HD44780 device on Port 7 → SVG) stays gated on the boot clearing this table.
 
 ## LCD interface pins (2026-07 — user schematic snippet)
 The LCD/DSP control signals are the alternate functions of **CPU Port 7 (P70-P77, "PG" group)**, i.e. the
