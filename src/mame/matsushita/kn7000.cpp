@@ -163,6 +163,7 @@ public:
 		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
+		, m_rearsw(*this, "REARSW")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -193,6 +194,7 @@ private:
 	// serial HLE device that reads these / drives the LEDs are still to come).
 	required_ioport_array<0x21> m_seg;  // one per normalized segment 0x00-0x20
 	required_ioport m_dial;
+	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -425,12 +427,12 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// path). On real hardware bit 15 is set, so the diagnostic is skipped. Model
 	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
 	if (offset == 0x38000)
-		// bit15 = skip the factory power-on diagnostic (see above). NB bit12 also feeds
-		// the SD subsystem: 0x484b2615 stores !bit12 into 0x5006bfd2 bit1 (an "SD absent"
-		// gate). But naively SETTING bit12 (0x9000) to claim SD-present breaks the boot
-		// (blank LCD, hang BEFORE any ch2 activity) -- bit12 is entangled with other
-		// early-boot config, so SD-present can't just be strapped on here (RE 2026-07-08).
-		return 0x8000;
+		// Rear-panel config strap (16-bit, on the upper half of the data bus). bit15 =
+		// skip the factory power-on diagnostic (see above). bit12 (= data-bus D28, gated
+		// by the EXP-port output-enable) = the rear-panel MIDI IN / BASS PEDAL selector
+		// SW701: BassPedalSw (0x484A2CB1) -> 0x484b2615 reads bit12 and stores !bit12 into
+		// the MIDI-in mode flag 0x5006bfd2 bit1. bit12 SET = MIDI IN, clear = Bass Pedals.
+		return 0x8000 | (m_rearsw->read() & 0x1000);
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
 	// low byte = note, high byte = velocity). The firmware polls it for note on/off
@@ -1274,6 +1276,16 @@ static INPUT_PORTS_START(kn7000)
 	PORT_START("VOL_APCSEQ") PORT_ADJUSTER(80, "APC / SEQ Volume")
 	PORT_START("VOL_MIC")    PORT_ADJUSTER(50, "Mic Volume")
 	PORT_START("VOL_LINEIN") PORT_ADJUSTER(50, "Line-In Volume")
+
+	// Rear-panel MIDI IN / BASS PEDAL selector switch (SW701 on the JACK board). The
+	// firmware reads it as bit12 (data-bus D28) of the config strap 0x98070000 via the
+	// EXP-port output-enable. Set to BASS PEDAL and the firmware routes MIDI-in to the
+	// bass-pedal part and disables normal MIDI input (the "ATTENTION! -1 / Midi is not
+	// working ... set the switch ... to Midi" warning). Default MIDI IN so MIDI works.
+	PORT_START("REARSW")
+	PORT_CONFNAME(0x1000, 0x1000, "Rear panel: MIDI IN / BASS PEDAL selector (SW701)")
+	PORT_CONFSETTING(0x1000, "MIDI IN")
+	PORT_CONFSETTING(0x0000, "Bass Pedals")
 
 	// Music key bed (subset: ~2 octaves on the PC keyboard, tracker-style layout).
 	// Each key pushes a note-on/off voice-event into the FIFO the firmware polls at
