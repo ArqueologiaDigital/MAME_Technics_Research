@@ -43,6 +43,7 @@ ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.h"             "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.h"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_insn_length.h"
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
 mkdir -p "$BUILD_TREE/src/mame/layout"
 ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
 echo "==> overlay files symlinked"
@@ -77,9 +78,13 @@ for drv in ('kn6000', 'kn6500', 'kn2400', 'kn2600'):
         s = s.replace('@source:matsushita/kn7000.cpp\nkn7000\n',
                       '@source:matsushita/kn7000.cpp\nkn7000\n' + drv + '\n', 1)
         changed = True
+if '\nkn1500\n' not in s:
+    anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
+    s = s.replace(anchor, anchor + '\n@source:matsushita/kn1500.cpp\nkn1500\n', 1)
+    changed = True
 if changed:
     open(p, 'w').write(s)
-    print("mame.lst: kn7000/kn6000/kn6500 registered")
+    print("mame.lst: kn7000 family + kn1500 registered")
 else:
     print("mame.lst: already registered")
 PY
@@ -95,5 +100,5 @@ fi
 echo "==> building (log: $LOG) ..."
 cd "$BUILD_TREE"
 # USE_QTDEBUG=0: build without the Qt debugger (no Qt 'moc' needed).
-make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
+make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn1500.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE"/kn7000 2>/dev/null || echo "(no binary — check $LOG)"
