@@ -41,3 +41,31 @@ Find why the KN2400 skips the library self-load + overlay copy that the KN7000 d
   conditional on an unmodeled peripheral/flag (like the KN6000's tick-order derail), or does it copy to a
   different address? Compare the KN7000's caller of the `0x4c00304x` memcpy that first fills `0x50180000`.
 Both drivers stay `MACHINE_NOT_WORKING` until the overlay is resident.
+
+## Update — the KN7000 mechanism is nailed down; the KN2400 is heavily relocated
+Traced the KN7000's two prerequisite copies concretely (write-taps + caller rings):
+- **Library self-load.** A copy loop at `~0x484d7b90` (the KN7000's `InitializeBlock27` region) copies
+  program ROM **`0x487b8fd0`–`0x487f6ee6`** (~253 KB) → **`0x8c000000`** (the libram). This makes the
+  library functions (e.g. `LibMemCopy 0x4c003039`) executable.
+- **Overlay populate.** A block-copy helper at `~0x4843b1a0` calls `LibMemCopy(dest=0x50180000,
+  src=program-ROM 0x48035d08, len=0xa96c)` — the ~43 KB RAM overlay's *content lives in the program ROM*;
+  the copy just needs the library loaded first. So the KN7000 order is **self-load library → copy overlay →
+  use overlay**.
+
+**The KN2400 is heavily relocated**, so KN7000 addresses do NOT transfer: at file offset `0x484d7b60` the
+KN2400 is only **7/112 bytes** identical to the KN7000 (it's INTC/GxICR init code there, not the block
+loader). So the KN2400's self-loader and overlay-copy are at unknown, relocated addresses — this is why the
+KN2400 dig is slower than the KN6000 (which reused `kn7000_state` at the same offsets).
+
+Confirmed: by the derail the KN2400 has done **neither** copy — 0 non-zero writes to `0x50180000`, 0 libram
+reads/writes — yet it reaches the overlay *use* (`call 0x5018ccf4` at `0x4872833f`). So either its boot
+takes a wrong/early path into `0x48728300` (a derail, like the KN6000's SP=0), or the self-load/overlay copy
+is gated on something unmodeled and skipped.
+
+## NEXT (fresh dedicated tick)
+1. Find the **caller** of the KN2400 function containing `0x48728300` — is it reached legitimately or via an
+   early derail? (Trap its entry; the table-build loop swamped a 40-deep ring last time — trap earlier.)
+2. Locate the KN2400's **relocated self-loader + overlay-copy** by *content*, not address: search for the
+   copy that targets `0x8c000000` / `0x50180000`, or the block-descriptor holding the overlay's ROM source
+   (the KN7000's is `src=0x48035d08,len=0xa96c` → the KN2400's src is relocated but the `dest=0x50180000`
+   and structure should match). Then see why it doesn't run before `0x48728300`.
