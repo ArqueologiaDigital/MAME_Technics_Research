@@ -80,8 +80,9 @@
     Hardware blocks named in the service-test IC map (not yet emulated):
         - Program ROMs IC16 / IC17
         - Table / rhythm ROMs
-        - Dual tone generators (main TG IC203/IC204, sub TG IC207/IC208)
-        - DSP IC306 / IC307
+        - Dual tone generators: master TG IC201, sub TG IC205 (both C1BB00000709)
+        - Wave/sample ROMs IC203/IC204 (master) + IC207/IC208 (sub), undumped
+        - Effects DSP IC306 (ADSP-21065L SHARC) + its SDRAM IC307/IC308
         - Floppy Disk Controller IC103
         - LCD V-RAM IC104
         - Panel sub-CPUs: CPL / CPC / CPR / CPSD
@@ -408,7 +409,8 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
-	//       (IC104), FDC (IC103), tone generators, DSP IC306/307, panel sub-CPUs
+	//       (IC104), FDC (IC103), tone generators (IC201/IC205), effects DSP
+	//       IC306 (ADSP-21065L) + SDRAM IC307/IC308, panel sub-CPUs
 	//       (CPL/CPC/CPR/CPSD), SD card and USB blocks.
 }
 
@@ -1493,7 +1495,7 @@ void kn7000_state::kn7000(machine_config &config)
 	MIDI_PORT(config, "mdin2", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[1], FUNC(kn7000_sio_uart_device::rx_w));
 	MIDI_PORT(config, "mdout2", midiout_slot, "midiout");
 
-	// TODO: sound hardware (dual tone generators + DSP IC306/IC307),
+	// TODO: sound hardware (tone generators IC201/IC205 + effects DSP IC306/SDRAM IC307/8),
 	//       floppy disk controller (IC103), SD card and USB.
 }
 

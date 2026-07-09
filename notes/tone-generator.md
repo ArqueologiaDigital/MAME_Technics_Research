@@ -1,7 +1,15 @@
 # KN7000 tone generators — register interface (decode in progress)
 
-The KN7000 has two tone-generator LSIs on the MN10300 bus: the **main TG at
-0x98040000** (IC203/204) and the **sub TG at 0x98050000** (IC207/208). This note
+> **CORRECTION (2026-07-09):** the tone-generator LSIs are **IC201 (master)** and
+> **IC205 (sub)**, both part `C1BB00000709` — *not* IC203/204/207/208. Those four
+> are the **wave/sample ROMs** (`C3CBQD00000x`) on the TGs' private buses. See
+> [sound-hw-architecture.md](sound-hw-architecture.md) and
+> [sound-subsystem-plan.md](sound-subsystem-plan.md). The register-interface
+> facts below stand; only the IC labels were wrong. (The main↔0x9804 /
+> sub↔0x9805 port assignment is still provisional — see the plan's §0.)
+
+The KN7000 has two tone-generator LSIs on the MN10300 bus: the **master TG at
+0x98040000** (IC201) and the **sub TG at 0x98050000** (IC205). This note
 records the hardware register interface decoded from the firmware TG driver; it
 is the groundwork for eventually modeling sound (the current driver just logs
 these writes). Audible MIDI notes are blocked on this (see midi-rx.md).

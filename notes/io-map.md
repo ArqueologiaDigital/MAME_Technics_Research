@@ -129,7 +129,7 @@ Full per-register list below.
 | `0x36008065` | bit | bclr×2, movbu×1 |
 | `0x36008084` | bit | btst×3 |
 
-## `0x98000000` — SOUND subsystem, several sub-blocks: 0x98040000 & 0x98050000 are PARALLEL 16-bit register sets (0x00..0x10) = the dual tone generators (main TG IC203/204 + sub TG IC207/208); 0x98020000 byte regs; 0x98070000; 0x98010000/0x98060000 byte control
+## `0x98000000` — SOUND subsystem, several sub-blocks: 0x98040000 & 0x98050000 are PARALLEL 16-bit register sets (0x00..0x10) = the dual tone generators (master TG **IC201** + sub TG **IC205**; IC203/204/207/208 are the wave ROMs); 0x98020000 byte regs; 0x98070000 = read-only status/strap (all 14 sites are READS); 0x98010000/0x98060000 byte control. **NB:** the effects-DSP host port also uses this area — index `0x98000000` + data `0x9C000000` (the 0x9C bank is missed by this static scan; see dsp-host-interface.md).
 
 | register | width | access sites |
 |----------|-------|--------------|
