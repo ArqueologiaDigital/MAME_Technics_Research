@@ -158,14 +158,39 @@ public:
 	void note_on(uint8_t note)  { if (note < 128) { m_stream->update(); m_on[note] = 1; } }
 	void note_off(uint8_t note) { if (note < 128) { m_stream->update(); m_on[note] = 0; } }
 
+	// Stage 2 groundwork: the REAL tone-generator register writes are routed here
+	// from io_w (both TGs). The firmware emits per-voice writes only when it
+	// actually plays a note; the prior "playback dormant" finding used a capture
+	// that DROPPED these (the <0x1000 gate). This is currently a DIAGNOSTIC: it
+	// logs the voice writes so a run reveals whether the firmware drives the TG,
+	// and captures the pitch/note registers per voice for the coming audible
+	// synthesis (pending calibration of the pitch/key-on encoding -- see
+	// notes/tg-voice-register-semantics.md). addr = [group:6][channel:6][index:4].
+	void tg_write(int tg, uint16_t addr, uint16_t data)
+	{
+		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle refresh -- ignore
+		const int ch  = (addr >> 4) & 0x3F;               // voice 0..63 within this TG
+		const int v   = (tg << 6) | ch;                   // 0..127
+		const uint16_t cls = addr & 0xFC0F;               // register class (group+index), channel removed
+		if (cls == 0x2000 || cls == 0x3000) m_tg_pitch[v] = data;   // pitch (13-bit, from note)
+		m_tgwrites++;
+		if (m_tgwrites <= 256 || (m_tgwrites & 0x0FFF) == 0)
+			logerror("TG%d voice-write #%u: reg=%04X class=%04X ch=%02X data=%04X\n",
+					 tg, m_tgwrites, addr, cls, ch, data);
+	}
+	uint32_t tg_write_count() const { return m_tgwrites; }
+
 protected:
 	virtual void device_start() override
 	{
 		m_stream = stream_alloc(0, 2, 44100);
 		std::fill(std::begin(m_on), std::end(m_on), 0);
 		std::fill(std::begin(m_phase), std::end(m_phase), 0.0);
+		std::fill(std::begin(m_tg_pitch), std::end(m_tg_pitch), 0);
 		save_item(NAME(m_on));
 		save_item(NAME(m_phase));
+		save_item(NAME(m_tg_pitch));
+		save_item(NAME(m_tgwrites));
 	}
 
 	virtual void sound_stream_update(sound_stream &stream) override
@@ -191,8 +216,10 @@ protected:
 
 private:
 	sound_stream *m_stream = nullptr;
-	uint8_t m_on[128] = { };
-	double  m_phase[128] = { };
+	uint8_t  m_on[128] = { };        // Stage 0: key-bed-triggered sine voices
+	double   m_phase[128] = { };
+	uint16_t m_tg_pitch[128] = { };  // Stage 2: captured per-voice pitch register (firmware-driven)
+	uint32_t m_tgwrites = 0;         // count of real TG voice writes seen (0 = engine dormant)
 };
 
 DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (first-cut sine synth)")
@@ -305,7 +332,9 @@ private:
 	// (< 0x1000); the 0xFC0x system-refresh group is accepted but not stored.
 	// See notes/tone-generator.md. (State capture; synthesis is future work.)
 	uint16_t m_tg_addr[2] = { 0, 0 };          // latched register address, [0]=main [1]=sub
-	uint16_t m_tg_reg[2][0x1000] = { };        // captured voice-register file
+	uint16_t m_tg_reg[2][0x10000] = { };       // captured voice-register file (FULL 16-bit address
+	                                           // space -- the old [0x1000] + <0x1000 gate silently
+	                                           // dropped the per-voice pitch/key-on writes at 0x2000+)
 
 	// --- Effects DSP (IC306 ADSP-21065L) host port -------------------------
 	// The CPU host-boots the SHARC through an index register at 0x98000000 and a
@@ -568,11 +597,13 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x00000: m_dsp_index = data; return;                     // 0x98000000: effects-DSP host register index
 	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
 	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
-		if (m_tg_addr[0] < 0x1000) m_tg_reg[0][m_tg_addr[0]] = data;
+		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
+		m_tonegen->tg_write(0, m_tg_addr[0], data);               // Stage 2: feed the real TG voice engine
 		return;
 	case 0x28000: m_tg_addr[1] = data; return;                    // sub TG: address latch (0x98050000)
 	case 0x28001:                                                 // sub TG: data (0x98050002) -> reg[addr]
-		if (m_tg_addr[1] < 0x1000) m_tg_reg[1][m_tg_addr[1]] = data;
+		m_tg_reg[1][m_tg_addr[1]] = data;
+		m_tonegen->tg_write(1, m_tg_addr[1], data);
 		return;
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
