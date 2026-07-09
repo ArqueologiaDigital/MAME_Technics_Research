@@ -238,6 +238,26 @@ private:
 	// See notes/tone-generator.md. (State capture; synthesis is future work.)
 	uint16_t m_tg_addr[2] = { 0, 0 };          // latched register address, [0]=main [1]=sub
 	uint16_t m_tg_reg[2][0x1000] = { };        // captured voice-register file
+
+	// --- Effects DSP (IC306 ADSP-21065L) host port -------------------------
+	// The CPU host-boots the SHARC through an index register at 0x98000000 and a
+	// data register at 0x9C000000 (the 0x9C bank the driver otherwise treats as
+	// LCD RAM). At boot the firmware probes DSP register 0 expecting 0x20; if it
+	// reads anything else it sets a "DSP dead" flag (work-RAM 0x500066CC) and
+	// SUPPRESSES the whole effect engine (see notes/dsp-host-interface.md +
+	// notes/dsp-effect-catalog.md). Because the driver backs 0x9C000000 with
+	// stale RAM, the probe currently fails and effects never run.
+	//
+	// This stub answers the probe and captures the download stream so the effect
+	// engine can be studied. It is GATED (research switch env KN7000_DSP=1) so the
+	// default boot is byte-unchanged -- the effect download path is new firmware
+	// behavior with an as-yet-unmodeled completion handshake, so it stays opt-in
+	// until verified not to regress the boot-to-home-screen state.
+	uint16_t dsp_data_r(offs_t offset, uint16_t mem_mask);
+	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
+	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
+	bool     m_dsp_enable = false;             // research switch (env KN7000_DSP)
+	uint32_t m_dsp_dl_words = 0;               // count of captured download words
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
@@ -354,6 +374,10 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x44000000, 0x44ffffff).ram().share("ram44");
 	map(0x84000000, 0x84ffffff).ram().share("ram44");
 	map(0x9c000000, 0x9cffffff).ram().share("lcdbuf");   // firmware's composited LCD image (RGB565) lives at 0x9CE00000
+	// Override the low 4 bytes: 0x9C000000 is the effects-DSP host DATA port
+	// (paired with the index at 0x98000000), NOT LCD RAM. The framebuffer at
+	// 0x9CE00000 and the rest of the bank stay RAM (this narrower entry wins).
+	map(0x9c000000, 0x9c000003).rw(FUNC(kn7000_state::dsp_data_r), FUNC(kn7000_state::dsp_data_w));
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
@@ -472,6 +496,7 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	// the register file and keeps the constant TG traffic out of the io_w log.
 	switch (offset)
 	{
+	case 0x00000: m_dsp_index = data; return;                     // 0x98000000: effects-DSP host register index
 	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
 	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
 		if (m_tg_addr[0] < 0x1000) m_tg_reg[0][m_tg_addr[0]] = data;
@@ -485,6 +510,38 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	}
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
 		offset << 1, data, mem_mask);
+}
+
+// Effects-DSP host DATA port at 0x9C000000 (paired with the index at 0x98000000).
+uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
+{
+	if (!m_dsp_enable)
+		return 0;   // gated off: behaves like the unwritten RAM it replaces (probe reads !=0x20 -> DSP marked dead, current behavior)
+	// Answer the host register read selected by the latched index. The boot probe
+	// (fw 0x48405028) reads register 0 and requires 0x20 to consider the DSP alive.
+	switch (m_dsp_index)
+	{
+	case 0x00: return 0x0020;    // probe: "DSP present / ready"
+	case 0x0B: return 0x1065;    // ID/version readback (plausible 21065L id; exact value TBD)
+	case 0x37: return 0x0000;    // status: busy (bit7) clear
+	default:   return 0x0000;
+	}
+}
+
+void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (!m_dsp_enable)
+		return;
+	// Capture the host-boot download stream (kernel + effect microprograms). The
+	// firmware streams PM (48-bit) / DM words here after writing an index/command
+	// to 0x98000000. Log the first words so a run can be checked against the ROM
+	// record pool (0x486BCEC4..); full modelling is future work.
+	m_dsp_dl_words++;
+	if (m_dsp_dl_words <= 48)
+		logerror("%s: DSP dl[%u] idx=%04X <= %04X\n", machine().describe_context(),
+			m_dsp_dl_words, m_dsp_index, data);
+	else if ((m_dsp_dl_words % 4096) == 0)
+		logerror("DSP download: %u words so far\n", m_dsp_dl_words);
 }
 
 
@@ -1364,6 +1421,16 @@ void kn7000_state::machine_start()
 {
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
 	// no explicit resolve() call is needed or available.
+
+	// Effects-DSP host stub research switch (default OFF = current boot behavior).
+	// Set env KN7000_DSP=1 to answer the boot probe and capture the effect-program
+	// download stream (see the dsp_data_r/dsp_data_w handlers). Off by default
+	// because the un-gated download path is new, still-unverified firmware behavior.
+	m_dsp_enable = (getenv("KN7000_DSP") != nullptr);
+	if (m_dsp_enable)
+		logerror("kn7000: effects-DSP host stub ENABLED (KN7000_DSP set)\n");
+	save_item(NAME(m_dsp_index));
+	save_item(NAME(m_dsp_dl_words));
 
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
 	// continuously and report changes over the serial link).
