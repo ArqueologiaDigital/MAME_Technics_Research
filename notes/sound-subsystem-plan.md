@@ -14,19 +14,28 @@ Execution log (2026-07-09):
   byte-diffed. **KN6000==KN6500 (80/80); vs KN7000 DM 80/80 identical, PM 3/80**
   (KN7000 = a code revision over identical effect tuning). Listings in
   `kn7000_disassembly/dsp/cross-model/`.
-- **Phase A** (un-gate DSP in MAME) — CODED, gated behind `KN7000_DSP` env
-  switch (default off), compiles+links, **but runtime-UNVERIFIED**: the sandbox
-  could not sustain the ~13 s boot-through runs for the boot-to-home regression
-  check (virtiofs mount instability). Parked on branch `phase-a-dsp-stub` (NOT
-  main) with the exact verify/capture commands; main's driver stays known-good.
+- **Phase A** (un-gate DSP in MAME) — DONE & VERIFIED, merged to main
+  (`48a570c`). The 0x9C bank is split (0x9C000000 = DSP host data port); a stub
+  answers the boot probe (reg0=0x20) and captures the effect-program download.
+  Gated behind the **"Effects DSP host stub" machine-configuration switch**
+  (PORT_CONFNAME, default OFF — the getenv env-var gate was replaced per review).
+  Verified in MAME 0.288: OFF and ON both boot to the home screen with the
+  *identical* framebuffer hash (438f4451) = zero regression; ON triggers the
+  ~37k-word effect-program download that OFF never emits (the DSP was previously
+  marked dead). Run `tools/dsp_verify_fbhash.lua` / `dsp_verify_enable.lua`.
+  (Aside: every earlier "verification failed" was a wrong Lua API in the check
+  scripts — `machine:add_notifier` → `emu.add_machine_frame_notifier` — masked
+  by the virtiofs mount instability; neither getenv nor the stub was at fault.)
 - **Phase E** (Programming Guide) — delivered as the public docs pages
   ([sound-subsystem](https://arqueologiadigital.github.io/KN5000-docs/kn7000-sound-subsystem/),
   [effects-dsp](https://arqueologiadigital.github.io/KN5000-docs/kn7000-effects-dsp/))
   + `notes/dsp-effect-catalog.md`.
 - **Stretch** (GUI flow-chart) — DONE for the sound cluster (docs-site
   `kn7000-sound-gui-map`).
-- **Phases C, D** (Chord Finder trigger, GUI probing) — BLOCKED on Phase A being
-  runtime-verified + a stable emulator; not started.
+- **Phases C, D** (Chord Finder trigger, GUI probing) — now UNBLOCKED (Phase A
+  verified + stable emulator post-reboot); not started. Next up: with the DSP
+  stub ON, capture the effect-parameter traffic driven by the Reverb/DSP/EQ
+  screens, and route Chord Finder to a note-on.
 - **Phase F** (TG/DSP LLE devices) — large multi-session build; not started.
 - **Phases G / H hardware** — need the physical KN7000 (not yet owned); the
   software packager (H) rides on a working DSP model; not started.
