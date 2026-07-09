@@ -185,6 +185,14 @@ rec64=rec65** (4 tone presets of one overdrive/distortion); **rec75=rec76**.
 Note rec16 shares the 74-word *size* of the chorus family but its code differs —
 it is a distinct variant, not a preset.
 
+> **"Diffusion" here is the audio-DSP term.** An *allpass* filter passes every
+> frequency at equal level but delays it; a cascade of allpass sections is a
+> *diffuser* that smears a single sharp echo into a dense, smooth tail. It is the
+> classic reverb-construction technique (the Schroeder/Moorer reverberator
+> designs of the 1960s–70s): comb filters set the decay time and the allpass
+> diffusers fill in the echo density so the result sounds like a room rather than
+> a series of distinct repeats.
+
 ### An honest tension: DSP structure vs GUI unit
 
 Two groups read, at the opcode level, as **comb+allpass diffusion networks** (a
