@@ -1,0 +1,42 @@
+{
+  "synthetic": true,
+  "description": "SYNTHETIC placeholder wave ROMs for the KN7000 tone generators \u2014 NOT hardware dumps. Delete when real IC203/204/207/208 dumps exist.",
+  "generator": "kn7000_disassembly/tools/make_placeholder_waveroms.py",
+  "gitrev": "8f9322e",
+  "chip_size_bytes": 16777216,
+  "mapping_note": "even/odd<->AWAX/AWAY and IC<->TG-port are PROVISIONAL; a MAME WAVE ROM test run disambiguates them.",
+  "files": {
+    "kn7000_wave_ic204_placeholder.bin": {
+      "ic": "IC204",
+      "tg": "MASTER",
+      "parity": "even",
+      "bytes": 16777216,
+      "sha1": "e44d596dee5fdba5c4647f35dd57ade95187bf98",
+      "synthetic": true
+    },
+    "kn7000_wave_ic203_placeholder.bin": {
+      "ic": "IC203",
+      "tg": "MASTER",
+      "parity": "odd",
+      "bytes": 16777216,
+      "sha1": "0aa53e990f7962de9654fba770779b2a355737a5",
+      "synthetic": true
+    },
+    "kn7000_wave_ic208_placeholder.bin": {
+      "ic": "IC208",
+      "tg": "SUB",
+      "parity": "even",
+      "bytes": 16777216,
+      "sha1": "7572f20edbebc7c0552802e6e0fbbf7494128b14",
+      "synthetic": true
+    },
+    "kn7000_wave_ic207_placeholder.bin": {
+      "ic": "IC207",
+      "tg": "SUB",
+      "parity": "odd",
+      "bytes": 16777216,
+      "sha1": "6091a9a3745aae2b0252bedf36e48f9117a4f683",
+      "synthetic": true
+    }
+  }
+}
