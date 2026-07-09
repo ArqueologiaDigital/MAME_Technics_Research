@@ -46,15 +46,43 @@ cron tick.
 - virtiofsd root cause fixed (--inode-file-handles=prefer).
 - Website: kn7000 sound-subsystem / effects-dsp / gui-map pages added.
 
-## IN PROGRESS — Stage 2 gating question
-Does the FIRMWARE emit TG voice writes when a keybed note is played?
-- Diagnostic (retained taps, time-based key press) result: keybed press fired,
-  but **0 non-FC voice writes** during the press window (only ~1816 idle 0xFC0x
-  refreshes). Need to disambiguate false-negative vs truly-dormant.
-- Next diagnostic (ready at /tmp/ktd.lua, read-tap now fixed to 4-byte align):
-  tap the FIFO READ at 0x98050004-7 to count polls + notes CONSUMED by firmware,
-  plus -wavwrite to confirm the bring-up sine sounds (proves set_value fired
-  kbd_key). RE-RUN IT.
+## IN PROGRESS — Stage 2 gating question (SIGNIFICANT PROGRESS 2026-07-09)
+Does the FIRMWARE emit TG voice writes when a keybed note is played? Answer so
+far: **NO — the note is fully received but never becomes a voice.** Established
+by a series of Lua tap diagnostics (all runs WITH video):
+
+CONFIRMED end-to-end input path:
+- `field:set_value()` on `:KEYS0` DOES fire `kbd_key` (bring-up sine audible in
+  -wavwrite at the press times; peaks ~4100-4265).
+- The firmware CONSUMES every note-on/off from the FIFO at 0x98050004: PC
+  0x484480A3 read note 60/64/67 vel 100 then 0 (C4/E4/G4). 6/6 consumed.
+- FIFO poll histogram: ONLY the program.asm reader 0x484480A2/B7 polls at runtime
+  (~67k polls each); region2's own reader at 0x487f11a6 does NOT poll during play.
+  => the "double-reader steals the note" hypothesis is DISPROVED.
+
+CONFIRMED the play->TG path never fires:
+- During the press window: **0** TG writes of ANY non-idle class. The only
+  non-idle TG writes in the whole run are BOOT-TIME:
+  * groups 0x04/0x0C (channel-config sweep, data 0) from 0x4C037023/0x4C03702F
+  * group 0x8000 params (idx 8/A, e.g. a=8008 d=0300, a=800A d=7F00) 426x at t=0
+    from 0x4C036FBA  -- boot voice/param init, NOT note voicing.
+  * 0xFC08..0xFC0B idle refresh (~390x each) continuously.
+- My earlier assumed pitch class 0x2000/0x3000 and key-on 0x4014 NEVER appear at
+  runtime. The low-level TG driver lives in the **0x4C region** (0x4C036xxx-
+  0x4C037xxx, self-loaded lib ROM); region2 (0x487eff80) is a second TG writer.
+
+DATA FLOW so far: keybed FIFO -> 0x484480A2 -> 0x4844812D (note->pitch via tables
+0x48731534 / 0x487314F4/F6/F8, div-by-12; writes a per-key struct via a0; does
+NOT touch TG). Then region2 flush 0x487eff80 emits ONLY idle. So the missing link
+is the VOICE ALLOCATOR: something must assign the note to a free TG channel, load
+the current sound's waveform/params, set pitch+key-on. That never runs / is gated.
+
+LEADING HYPOTHESES for the gate (to resolve): (a) no playable Sound assigned to
+the keyboard part in the emulated boot state (cf. known 8-Beat-1 / .AST / style
+templating bugs); (b) a "sound-engine active / part-enabled / local-control"
+flag never set; (c) play path waits on a stubbed subsystem (DSP / sound handshake).
+A background subagent is statically mapping region2's flush + the gate (RAM
+addresses + test instruction). Await it, then target the specific flag/struct.
 
 ## NEXT (in order)
 1. Re-run /tmp/ktd.lua diagnostic WITH VIDEO; read RESULT + FIFO consumed count.
