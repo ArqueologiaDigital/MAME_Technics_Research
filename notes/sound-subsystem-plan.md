@@ -49,8 +49,10 @@ The recon changed the problem substantially. Headlines:
    traffic for study. This is the highest-value single change available.
 
 3. **Audible *notes* remain blocked by physics, not knowledge**: the PCM samples
-   live in four undumped 128-Mbit mask ROMs (IC203/IC204/IC207/IC208, 64 MB
-   total) on private TG buses. Correction to an older note: even the service
+   live in four undumped mask ROMs (IC203/IC204/IC207/IC208) on private TG buses
+   — the service manual calls them "128M ROM" (128 Mbit = 16 MB each; ≈64 MB
+   total, and placeholder-wave-rom-spec.md §1.2 independently derives 16 MB/chip
+   from the WAVE ROM test's checksum sweep). Correction to an older note: even the service
    sine-wave test plays sine *samples from the wave ROMs*, so it is not a
    ROM-free audio path. Dumping those chips is a physical-hardware campaign
    (§Phase G) and gates only the final synthesis step — every other deliverable
@@ -62,11 +64,15 @@ The recon changed the problem substantially. Headlines:
    no rhythm engine and no keybed involvement. Which part sounds it is
    undocumented — we'll learn it from the register capture.
 
-Chip identities (service manual, now settled):
+Chip **identities** are settled from the service manual; the **which-TG-is-on-
+which-port** mapping below is provisional — placeholder-wave-rom-spec.md §1.2
+flags that IC203/204 may actually belong to the `0x98050000` TG (a widget test
+pair hits 0x9805 first), so treat main↔0x9804 / sub↔0x9805 as a working label to
+be disambiguated by the first captured note-on / WAVE ROM test run:
 
 | IC | Part | Role |
 |---|---|---|
-| IC201 | C1BB00000709 | MASTER TONE GENERATOR LSI, reg port `0x98040000/2` (key FIFO at `0x98040004` is a symmetry inference — only the sub-TG FIFO is firmware-verified) |
+| IC201 | C1BB00000709 | MASTER TONE GENERATOR LSI, reg port `0x98040000/2` (provisional; key FIFO at `0x98040004` is a symmetry inference — only the sub-TG FIFO is firmware-verified) |
 | IC205 | C1BB00000709 | SUB TONE GENERATOR LSI, reg port `0x98050000/2`, key FIFO `0x98050004` (verified) |
 | IC306 | S21065LKS240 = **ADSP-21065L SHARC** | Effects DSP, host-booted by the CPU (no boot ROM on its bus) |
 | IC307/IC308 | KM416S1120DT ×2 | **DSP SDRAM** (4 MB, 32-bit) — *not* tone generators, *not* a second DSP |
@@ -81,19 +87,23 @@ labels; the driver's "DSP IC306/IC307" comment) get corrected in Phase 0.
 ### Revision-2 headlines (the follow-up requests)
 
 5. **We can dump the real ROMs — including the "undumped" wave ROMs — from the
-   instrument, reversibly.** The official firmware-update disk format is fully
-   decoded (`.SLD` = LZSS with a `JKPRG4K` header; `.INF` = a 32-bit total +
-   16 block checksums; no model/version guard beyond the file signatures). A
-   *modified PROGRAM update disk* that adds a small backup routine into the
-   image's ~71 KB of slack, triggered by repointing one service-menu function
-   pointer, can read every ROM and write it to SD — and is fully reversible by
-   re-flashing the pristine disks. The **wave-ROM readback window yields raw
+   instrument.** The official firmware-update disk format is fully decoded
+   (`.SLD` = LZSS with a `JKPRG4K` header; `.INF` = a 32-bit total + 16 block
+   checksums; no model/version guard beyond the file signatures). A *modified
+   PROGRAM update disk* that adds a small backup routine into the image's ~71 KB
+   of slack, triggered by repointing one service-menu function pointer, can read
+   every ROM and write it to SD. The **wave-ROM readback window yields raw
    sample words** (the service test only *checksums* them), so all four wave
    ROMs are software-dumpable. This is the "trojan" — a homebrew ROM-backup
    utility for Felipe's own instrument, in the console-homebrew tradition. See
-   Phase H. (Bonus preservation finding: our current `kn7000_program.rom` is the
-   *update payload*, missing the top ~37 KB resident updater that only a real
-   IC16/IC17 readback recovers.)
+   Phase H. **Reversibility is real but not absolute**: restore is by re-flashing
+   the pristine disks, and the risk is bounded to the level of a normal firmware
+   update — but the modified image *does* reprogram the boot sectors, the flash
+   step can't be rehearsed in MAME (the resident updater that performs it isn't
+   in our dump), so a residual brick risk exists and the hardware step is
+   explicitly Felipe's call. (Bonus preservation finding: our current
+   `kn7000_program.rom` is the *update payload*, missing the top ~37 KB resident
+   updater that only a real IC16/IC17 readback recovers.)
 
 6. **SD can't run code or flash firmware today — but the backup utility can use
    SD as its output sink**, and once one FDD-delivered custom image is installed
@@ -110,10 +120,12 @@ labels; the driver's "DSP IC306/IC307" comment) get corrected in Phase 0.
 
 8. **The DSP subsystem is a cross-model win.** The ADSP-21065L is the *identical
    part* in KN6000, KN6500 and KN7000; the KN6000 and KN6500 ship a
-   **byte-identical** 80-record microprogram pool, and its parameter (DM) blocks
-   are identical to the KN7000's — only the SHARC code (PM) is a newer revision
-   on the KN7000. One SHARC device model and one effect-RE effort serve all
-   three. The KN5000 is different (two fixed-function effect ASICs, undumped
+   **byte-identical** 80-record microprogram pool. In the *kernel* record, all
+   four DM (parameter/table) blocks are byte-identical to the KN7000's while the
+   PM (code) blocks differ (KN7000 = newer build), and 3 of 80 records match the
+   KN7000 outright — pool-wide DM identity is likely but not yet verified for all
+   80 records. One SHARC device model and one effect-RE effort serve all three.
+   The KN5000 is different (two fixed-function effect ASICs, undumped
    internal ROM) but its *tone-generator interface* conventions transfer as
    hypotheses. See Phase J.
 
@@ -272,9 +284,11 @@ capture a complete note-on → TG register sequence.
      read-taps + CURPC, the reusable harness prior work never preserved).
 2. **Navigate**: Lua macro — press APC `MODE` (panel button; SEG map known:
    SEG03 0x02) → on APC SELECT press `CHORD FINDER` — per your instructions
-   that is **LCD RIGHT 5**, and the driver already has an "LCD RIGHT 5" port
-   (kn7000.cpp:1173); reconcile that with the manual's "bottom-right soft
-   button" reading before scripting — *within the auto-return window* (or pin
+   that is the **LCD RIGHT 5** soft button, which exists as a port at
+   kn7000.cpp:1173 (its *home-screen* function is labeled "ACCOMP2 part ON" —
+   soft-button function is screen-dependent, so that label neither confirms nor
+   contradicts CHORD FINDER on the APC SELECT screen; confirm by the on-screen
+   result before trusting the mapping) — *within the auto-return window* (or pin
    with DISPLAY HOLD) → on CHORD FINDER press the rightmost bottom soft button
    (ear icon). All presses held ≥14 frames (established requirement). Confirm
    each screen with the pixel hash / PPM dump tooling.
@@ -391,9 +405,11 @@ utility), because the recon confirmed a clean software dump path:
   confirmation that internal-ROM traffic is visible there).
 - Also inventory: SY-EW01..04 expansion boards (separately dumpable wave sets),
   and the KN6000/KN6500 `QSIGX3C640xx` wave ROMs (same window, Phase J).
-- Exact per-ROM capacity (16 MB vs 32 MB per chip) is unresolved in the manual;
-  the window addresses far more than either, so the dumper isn't constrained by
-  it — it walks until the data mirrors or goes empty.
+- Per-chip capacity is 16 MB (128 Mbit, from the manual's "128M ROM" and the
+  checksum sweep); the 32 MB figure some code constants show is per-TG-*pair*
+  (two chips). The readback window addresses far more than either, so the dumper
+  isn't constrained — it walks until the data mirrors or goes empty and records
+  the real extent.
 
 ### Phase H — ROM-backup utility ("trojan") + SD channel (needs the real unit)
 
@@ -406,32 +422,60 @@ console-homebrew tradition; full detail in rom-backup-and-update-format.md.
 Everything up to "insert the disk" is developed and tested **in MAME** first, so
 the real-hardware step is a single well-rehearsed action.
 
-1. **Update-disk packager** (`kn7000_extraction` already has the inverse of every
-   step): an LZSS *compressor* + `.INF` emitter that repackages a modified linear
-   program image into `JK1.SLD`/`JK2.SLD` + `SMCKPR*.INF` + verbatim
-   `TECHNICS.PR*` + `DUMMY.2`, split at the 0x200000 boundary. Round-trip test:
-   repack the *unmodified* image and confirm it's byte-identical to the shipped
-   `kn7-16` disks — proves the packager before any patch.
+1. **Update-disk packager** (`kn7000_extraction` already has the *decompressor*;
+   the compressor + `.INF` emitter are new): repackage a modified linear program
+   image into `JK1.SLD`/`JK2.SLD` + `SMCKPR*.INF` + verbatim `TECHNICS.PR*` +
+   `DUMMY.2`, split at the 0x200000 boundary. **Acceptance gate = round-trip on
+   the *decompressed* image, not byte-identity of the `.SLD`**: LZSS is
+   non-canonical, so our compressor may emit a different-but-valid stream. The
+   updater checksums the *decompressed* bytes against the `.INF`, so the correct
+   proof is "our `.SLD` decompresses to the exact original image AND our `.INF`
+   equals the shipped `.INF`" — test that on the unmodified image before any
+   patch. (If we later want byte-identical disks, match the original encoder's
+   parse; not required for correctness.)
 2. **Backup routine** (MN10300 asm, placed in the image's ~71 KB of `0xFF`
    slack): dumps the directly-mapped ROMs by copy loop and the wave ROMs by the
    readback window (Phase G), writing to SD via the firmware's SD-save API (SD =
    the only practical sink for ~64 MB), with a MIDI-SysEx fallback for the small
    ROMs. Reuse real entry points (SD status `0x4855D901`, FAT I/O `0x485335FF`,
    library memcpy `0x4C003051`).
+   - **Reconcile the readback addressing before coding**: the two rev-2 reports
+     disagree — placeholder-wave-rom-spec.md §1.1 uses *word* units and steps by
+     parity so each sweep reads one chip of the pair, while the rom-backup §6.1
+     sketch uses *byte* units (`a+=2`, `ofs=a&0x7FFE`), which as written reads
+     only even word-offsets = one chip, silently missing its pair-mate
+     (IC204/IC208). The dumper must iterate *both* parities (or read all 15-bit
+     offsets) so all four ROMs are captured. Verify against the live WAVE ROM
+     test's own address walk before trusting either.
 3. **Trigger**: repoint ONE service-menu function pointer
    (`0x4874AD34–0x4874AFF0`, e.g. the WAVE ROM test slot) to the backup routine.
    Leave the reset vector, boot (`0x4840FF7E`), kernel-init (`0x484D7111`) and
    the panel-combo→updater path **byte-identical** — this bounds the risk to the
    level of an official firmware update.
-4. **Validate in emulation**: once Phase A/I make the driver model the wave
-   window, run the repackaged image in MAME and confirm the backup routine reads
-   the (placeholder) wave data and produces well-formed output files — end to
-   end, before touching hardware.
-5. **On real hardware** (Felipe's call, clearly flagged): install via PANEL
-   MEMORY 1-2-3-4; run the backup; **restore by re-flashing the pristine
-   `kn7-16` disks**. The resident updater (top ~37 KB) is never erased. A full
-   IC16/IC17 readback additionally recovers that missing resident block — a
-   preservation bonus (our current program.rom is only the update payload).
+4. **Validate in emulation — the wave-read half only.** Once Phase A/I make the
+   driver model the readback window, run the repackaged image in MAME and confirm
+   the backup routine reads the (placeholder) wave data and forms well-formed
+   dump buffers. **The SD-write half can't be rehearsed in MAME today** — SD
+   emulation is paused (root cause unknown); on real hardware the SD stack works,
+   but in MAME the routine's output must be validated by capturing the buffers
+   via a memory tap or the MIDI-SysEx fallback instead of an actual SD write.
+   (Fixing SD emulation would let the whole path be rehearsed — worth it, but not
+   a blocker.) The *flash/install* step itself is **not rehearsable in MAME at
+   all**: the resident updater that performs the erase+program isn't in our dump.
+5. **On real hardware** (Felipe's call, clearly flagged): trigger the backup —
+   note the trigger via the service-menu pointer needs diagnostic-mode entry,
+   whose power-on combo is uncracked (Q5), so an alternate on-hardware trigger
+   (e.g. hooking a normally-reachable menu action, or the update flow itself)
+   must be settled during design; install via PANEL MEMORY 1-2-3-4; run the
+   backup; **restore by re-flashing the pristine `kn7-16` disks**.
+   **Reversibility caveat**: this is bounded to the risk level of a normal
+   firmware update, *not* zero. The modified image reprograms the boot sectors
+   (byte-identical *content*, but they are erased+rewritten), and the claim that
+   the resident updater (top ~37 KB) is never touched rests on inference from its
+   behavior, which isn't directly observable (that code isn't in our dump). A
+   power-loss or corrupted-boot-path mid-flash is a genuine brick risk,
+   recoverable only by chip replacement/JTAG. A full IC16/IC17 readback
+   additionally recovers that missing resident block — a preservation bonus.
 6. **SD as an update/code channel (request 4)**: today SD can't flash firmware
    or run code (main↔SD is SIO ch2 to the CPSD sub-CPU; SD surface is
    file/content only). Deliverable is (a) documenting that clearly, and (b) the
@@ -453,7 +497,8 @@ before the real dumps. Spec in placeholder-wave-rom-spec.md.
 
 1. `tools/make_placeholder_waveroms.py` (numpy int16): build a per-TG 16 M-word
    master tiled with single-cycle waveforms — a full-amplitude 256-sample sine
-   in bank 0 (the diagnostic's target), distinct timbres per bank (saw, pulse,
+   in bank 0 (the sine's *real* ROM address is unknown until the WAVE ROM test
+   capture; tiling makes that moot), distinct timbres per bank (saw, pulse,
    harmonic mixes) so any captured-but-unmapped address is audibly identifiable,
    a decaying-noise "drum" bank, plus an embedded KN5000-style directory at
    offset 0 as insurance. Split each master into even/odd → four
@@ -488,8 +533,9 @@ sound-cross-model-kn5000.md.
   same host protocol (index `0x98000000` / data `0x9C000000`, ids `0x9C0/2/4`,
   dead-flag guard — dead-flag is `0x50005D98` on KN6xxx vs `0x500066CC` on
   KN7000), same 80-record embedded pool. The KN6000 and KN6500 pools are
-  **byte-identical**; their DM (parameter) blocks match the KN7000's, only the
-  PM (code) differs (KN7000 = newer build). Actions:
+  **byte-identical to each other**; vs the KN7000, the kernel record's DM blocks
+  match and its PM code differs, and 3/80 records match outright (full-pool DM
+  identity to be confirmed by the diff below). Actions:
   - Everything built for the KN7000 SHARC (host-port stub, `adsp21065l_device`,
     the disasm tree, the effect catalogue) is parameterized to also serve
     KN6000/KN6500 — `gen_dsp_records.py` already takes pool bounds as CLI args.
@@ -548,9 +594,12 @@ the existing per-screen snapshot tooling.
 - Presenting placeholder waves, IK2-mirror table ROMs, or cross-model reuse as
   real device data — integrity policy; everything synthetic/borrowed stays
   labeled, and cross-model facts are hypotheses until natively confirmed.
-- Any irreversible hardware step. The backup utility (Phase H) is designed so
-  every patch is reversible by re-flashing the pristine disks, and is fully
-  rehearsed in MAME before the real unit is touched.
+- Any avoidable hardware risk. The backup utility (Phase H) confines edits to
+  slack + one pointer so the risk stays at normal-firmware-update level; the
+  software/wave-read half is rehearsed in MAME first. But the flash step carries
+  a residual brick risk that cannot be rehearsed (the resident updater isn't in
+  our dump), so it waits for Felipe's explicit go — it is not presented as
+  risk-free.
 
 ## 4. Risks & open questions
 
@@ -563,9 +612,10 @@ the existing per-screen snapshot tooling.
 | Q5 | Service-mode entry combo still uncracked (limits acceptance tests) | Independent puzzle; force-call `TestModeFunc 0x484A497B` via Lua/RAM as a workaround; do not block phases on it |
 | Q6 | Wave-ROM readback window: raw reads are firmware-verified, but bank coverage (all 4 ROMs × 16 banks?) and non-diag-mode availability are unknown; any real-hardware dumper implies patched firmware = reflash risk | Characterize in disassembly first (zero risk); hardware decision is Felipe's |
 | Q7 | 21065L SPORT emulation effort unknown | Sized after kernel RE (Phase B.2); HLE-params alternative exists |
-| Q8 | **Brick risk of the backup custom-firmware (Phase H)** if the boot/updater path is altered | Keep reset vector + boot + kernel-init + panel-combo→updater byte-identical; confine edits to `0xFF` slack + one menu pointer; rehearse fully in MAME; restore = re-flash pristine `kn7-16` disks (resident updater never erased) |
-| Q9 | **Update-disk packager correctness** (a bad `.SLD`/`.INF` could produce an `ILLEGAL DISK` or, worse, a bad flash) | Round-trip the *unmodified* image first and byte-compare to shipped disks before any patch; reproduce the exact `.INF` checksums |
-| Q10 | **Wave-ROM per-chip size unknown** (16 vs 32 MB) — affects placeholder size and dump length | Window addresses far more than either; dumper walks until data mirrors/empties; placeholders use the service-test's 32 MB-per-TG constant |
+| Q8 | **Residual brick risk of the backup custom-firmware (Phase H)**: the modified image reprograms the boot sectors, and the flash step can't be rehearsed in MAME (resident updater not in the dump) | Confine edits to `0xFF` slack + one menu pointer, boot/kernel-init content unchanged; rehearse the wave-read half in MAME; restore = re-flash pristine `kn7-16` disks (resident updater *inferred* never-erased); accept it's not zero-risk and gate on Felipe's go |
+| Q8b | **On-hardware trigger** for the backup routine needs diagnostic-mode entry (uncracked, Q5) | Settle an alternate trigger during design (hook a normally-reachable action or the update flow), don't rely on the MAME-only `TestModeFunc` force-call |
+| Q9 | **Update-disk packager correctness** (a bad `.SLD`/`.INF` → `ILLEGAL DISK` or worse) | Gate on the *decompressed* round-trip (our `.SLD` decompresses to the exact image) + `.INF` equality, NOT `.SLD` byte-identity (LZSS is non-canonical); test on the unmodified image first |
+| Q10 | **Wave-ROM per-chip size** — 16 MB/chip (128 Mbit) from the manual + checksum sweep; the "32 MB" seen in code is per-TG-*pair* (2 chips). Residual: whether a chip is fully populated | Window over-addresses either way; dumper walks until data mirrors/empties and records the real extent; placeholders are 16 MiB/chip |
 | Q11 | KN5000 register-map / voice-constant transfer may not hold (reworked sound-init layer) | Treated strictly as hypotheses; confirmed against KN7000 capture (Phase C) before entering any spec |
 | Q12 | Committed DSP `.asm` listings could churn if `unidasm` output drifts across MAME versions | Deterministic generator (no timestamps/abs paths); a unidasm-format change is one mechanical commit, separated from annotation commits |
 
