@@ -46,6 +46,38 @@ cron tick.
 - virtiofsd root cause fixed (--inode-file-handles=prefer).
 - Website: kn7000 sound-subsystem / effects-dsp / gui-map pages added.
 
+## ★★ MILESTONE COMPLETE 2026-07-10 — KN7000 makes firmware-driven sound
+
+The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
+voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
+
+What shipped:
+1. TG gate opened: io_r(0x98070000) now sets strap bits 1,2 (TG present) ->
+   gate flag 0x500ce380 = 0x40 -> firmware programs voices on every note.
+2. CPSD placeholder probe DISABLED so boot no longer auto-opens the SD Card menu
+   (the probe frame was read as a real SD event once boot progressed past the gate).
+3. kn7000_tonegen_device synthesizes from the firmware's TG writes:
+   - pitch from class 0x2401: note = 60 + (data - 0xC838)/1024  (+0x400/semitone,
+     C4=0xC838=MIDI60). VALIDATED spectrally: C4/E4/G4/C5 fundamentals = 262/330/
+     392/523 Hz (dominant), no clipping.
+   - note-on = 0x2401 write; note-off = 0x0001=0xC000 mute; per-voice attack/decay
+     envelope (self-limiting since this sound rings until stolen).
+   - placeholder SINE timbre (wave ROMs undumped).
+
+### REMAINING / NEXT (refinements, not blockers)
+1. VERIFY on video that boot lands on the home/play screen (SD menu gone). Felipe
+   saw the SD menu with the probe ON; the probe is now OFF — confirm.
+2. Timbre: real PCM needs the undumped wave ROMs (IC203/4/7/8). Placeholder wave
+   ROM generator exists (kn7000_disassembly/tools/make_placeholder_waveroms.py) —
+   could wire a labelled synthetic wave region for a richer-than-sine timbre.
+3. Dual-layer: the default sound programs a main layer + a weaker sub-octave layer;
+   both render. The single pitch reference (0xC838) is exact for the main layer; the
+   secondary layer's multisample base may differ (undumped-ROM dependent). Fine for
+   first cut.
+4. Envelope/filter/pan: currently a generic AD envelope; the firmware programs full
+   per-voice envelopes (classes 0x0001-0x000D) + filter — decode for accuracy later.
+5. Update website sound page + memory (gate fix applied) + a dev blog post.
+
 ## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
 
 **Root cause of "no sound": a TG-enable gate flag `0x500ce380` in library RAM
