@@ -32,10 +32,24 @@ Execution log (2026-07-09):
   + `notes/dsp-effect-catalog.md`.
 - **Stretch** (GUI flow-chart) — DONE for the sound cluster (docs-site
   `kn7000-sound-gui-map`).
-- **Phases C, D** (Chord Finder trigger, GUI probing) — now UNBLOCKED (Phase A
-  verified + stable emulator post-reboot); not started. Next up: with the DSP
-  stub ON, capture the effect-parameter traffic driven by the Reverb/DSP/EQ
-  screens, and route Chord Finder to a note-on.
+- **Audio output — the KN7000 emulator now MAKES SOUND** (merged to main,
+  `e9e2ed1`). First-cut `kn7000_tonegen_device`: a polyphonic sine synth
+  (device_sound_interface, stereo 44.1kHz) keyed by the PC key-bed →
+  MACHINE_IMPERFECT_SOUND. **Verified audible (clean tone) on real host
+  hardware.** Recon in notes/audio-output-implementation-plan.md +
+  tg-voice-register-semantics.md (KN7000 register layout ≠ KN5000; pitch
+  0x2000/0x3000, key-on 0x4014; the m_tg_reg[2][0x1000] <0x1000 gate drops
+  pitch/key-on — bug to fix for Stage 2).
+  - **Stage 0 DONE** (above): audio path proven, keybed→sine. NOT the real TG.
+  - **Stage 1 TODO**: read placeholder-wave bank-0 samples instead of a
+    synthesized sine.
+  - **Stage 2 TODO**: fix the capture gate + drive the synth from the firmware's
+    tone-generator voice writes.
+- **Phase C proper** (Chord Finder firmware trigger) + **Phase D** (GUI probing)
+  — recon done (tools/chord_finder_probe.lua ready). Runtime experiment blocked
+  by the recurring virtiofs mount instability under I/O load (drop-caches +
+  local /tmp help; a reboot fully clears it). Next: capture the real note-on TG
+  writes (Stage 2), and effect-param traffic with the DSP stub ON.
 - **Phase F** (TG/DSP LLE devices) — large multi-session build; not started.
 - **Phases G / H hardware** — need the physical KN7000 (not yet owned); the
   software packager (H) rides on a working DSP model; not started.
