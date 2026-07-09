@@ -84,10 +84,14 @@ be produced (binary + its own copies of the libraries + loader).
 
 ## What works so far
 - **KN7000** boots to its home screen; the front panel (buttons + LEDs) is wired; MIDI-in works.
+  **It now makes sound**: the real firmware voice engine drives the tone generators, and
+  the emulator synthesizes the notes it plays (correct pitch and polyphony from the firmware).
+  Play notes with the PC keyboard (Z S X D C… = C4 up; Q 2 W 3 E… = C5 up).
 - **KN6000 / KN6500** boot to their main play screen (tone/sound-group icon row, menus, status bar).
 
-Audio needs the (undumped) wave ROMs, so there is no sound on any model yet, and a few built-in
-mask ROMs (icon graphics) are still undumped, so some icons use placeholders. See the project notes.
+The four PCM **wave ROMs are undumped**, so the timbre is a placeholder sine rather than the real
+samples — but pitch, note timing and polyphony are the firmware's own. A few built-in mask ROMs
+(icon graphics) are also still undumped, so some icons use placeholders. See the project notes.
 
 ## ROMs
 `roms/kn7000/` holds the two dumped flash images. MAME flags them "NEEDS REDUMP" (a hash
