@@ -1,7 +1,37 @@
 # KN7000 Sound Subsystem — Research & Emulation Plan
 
-**Status: DRAFT rev 2 for Felipe's review (2026-07-09). No implementation work
-has started — Felipe reviews before anything begins.**
+**Status: APPROVED; execution in progress (2026-07-09).**
+
+Execution log (2026-07-09):
+- **Phase 0** — DONE. Doc/IC-label corrections; `mn10300_sim` valid_io extended
+  to the 0x9C bank; `region2` disasm rule; Lua probes rescued; `kn7000_run`
+  ROMs refreshed to even/odd.
+- **Phase B** (SHARC RE) — DONE earlier: full disassembly + catalogue of all 80
+  DSP records, committed tree in `kn7000_disassembly/dsp/`.
+- **Phase I** (placeholder wave ROMs) — DONE: `make_placeholder_waveroms.py` +
+  4×16 MiB synthetic images + manifest.
+- **Phase J** (cross-model) — DONE: KN6000/KN6500 DSP pool extracted +
+  byte-diffed. **KN6000==KN6500 (80/80); vs KN7000 DM 80/80 identical, PM 3/80**
+  (KN7000 = a code revision over identical effect tuning). Listings in
+  `kn7000_disassembly/dsp/cross-model/`.
+- **Phase A** (un-gate DSP in MAME) — CODED, gated behind `KN7000_DSP` env
+  switch (default off), compiles+links, **but runtime-UNVERIFIED**: the sandbox
+  could not sustain the ~13 s boot-through runs for the boot-to-home regression
+  check (virtiofs mount instability). Parked on branch `phase-a-dsp-stub` (NOT
+  main) with the exact verify/capture commands; main's driver stays known-good.
+- **Phase E** (Programming Guide) — delivered as the public docs pages
+  ([sound-subsystem](https://arqueologiadigital.github.io/KN5000-docs/kn7000-sound-subsystem/),
+  [effects-dsp](https://arqueologiadigital.github.io/KN5000-docs/kn7000-effects-dsp/))
+  + `notes/dsp-effect-catalog.md`.
+- **Stretch** (GUI flow-chart) — DONE for the sound cluster (docs-site
+  `kn7000-sound-gui-map`).
+- **Phases C, D** (Chord Finder trigger, GUI probing) — BLOCKED on Phase A being
+  runtime-verified + a stable emulator; not started.
+- **Phase F** (TG/DSP LLE devices) — large multi-session build; not started.
+- **Phases G / H hardware** — need the physical KN7000 (not yet owned); the
+  software packager (H) rides on a working DSP model; not started.
+
+Original review note preserved below.
 
 Rev 1 answered `~/compartilhado/KN7000/sound-subsystem-research.txt`. Rev 2 folds
 in the seven follow-up requests captured verbatim in
