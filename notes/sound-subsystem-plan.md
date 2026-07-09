@@ -1,9 +1,17 @@
 # KN7000 Sound Subsystem — Research & Emulation Plan
 
-**Status: DRAFT for Felipe's review (2026-07-09). No implementation work has started.**
+**Status: DRAFT rev 2 for Felipe's review (2026-07-09). No implementation work
+has started — Felipe reviews before anything begins.**
 
-Written in response to `~/compartilhado/KN7000/sound-subsystem-research.txt`. Grounded
-in a five-agent recon sweep whose full reports live beside this file:
+Rev 1 answered `~/compartilhado/KN7000/sound-subsystem-research.txt`. Rev 2 folds
+in the seven follow-up requests captured verbatim in
+[sound-subsystem-plan-rev2-request.txt](sound-subsystem-plan-rev2-request.txt):
+frequent commits; a ROM-dumping "trojan" (custom-firmware ROM-backup utility);
+SD as an update / code-execution channel; fabricated placeholder wave ROMs;
+extending sound RE to KN5000/KN6000/KN6500; and a git-versioned commented
+disassembly tree of the DSP programs inside the existing disasm repos.
+
+Grounded in two recon sweeps (ten agents). Full reports live beside this file:
 
 | Report | Contents |
 |---|---|
@@ -12,6 +20,11 @@ in a five-agent recon sweep whose full reports live beside this file:
 | [dsp-host-interface.md](dsp-host-interface.md) | Firmware static RE: DSP host port found, **embedded SHARC program found**, register protocol |
 | [sound-probing-infrastructure.md](sound-probing-infrastructure.md) | What's already solved, current driver surface, Lua probing infra, known dead ends |
 | [sharc-lle-assessment.md](sharc-lle-assessment.md) | MAME SHARC core gap analysis for an eventual ADSP-21065L LLE device |
+| [rom-backup-and-update-format.md](rom-backup-and-update-format.md) | **rev2** — official `.SLD`/`.INF` update-disk format decoded; reversible ROM-backup custom-firmware path; wave readback window dumps raw samples |
+| [sound-cross-model-kn6000-kn6500.md](sound-cross-model-kn6000-kn6500.md) | **rev2** — same ADSP-21065L across KN6000/6500/7000; DSP pool byte-identical KN6000↔KN6500; register map |
+| [sound-cross-model-kn5000.md](sound-cross-model-kn5000.md) | **rev2** — KN5000 TG/DSP RE state; what transfers as hypotheses vs known divergences |
+| [placeholder-wave-rom-spec.md](placeholder-wave-rom-spec.md) | **rev2** — fabricatable synthetic wave-ROM spec + generator design |
+| [dsp-disasm-tree-layout.md](dsp-disasm-tree-layout.md) | **rev2** — where/how the committed SHARC disasm tree lives in kn7000_disassembly |
 
 ---
 
@@ -64,6 +77,50 @@ Chip identities (service manual, now settled):
 Signal flow: `sub TG → master TG → (serial audio, 44.1 kHz world) ↔ SHARC DSP → DAC IC311 → analog`.
 Old notes that contradict this (tone-generator.md's early "main TG IC203/204"
 labels; the driver's "DSP IC306/IC307" comment) get corrected in Phase 0.
+
+### Revision-2 headlines (the follow-up requests)
+
+5. **We can dump the real ROMs — including the "undumped" wave ROMs — from the
+   instrument, reversibly.** The official firmware-update disk format is fully
+   decoded (`.SLD` = LZSS with a `JKPRG4K` header; `.INF` = a 32-bit total +
+   16 block checksums; no model/version guard beyond the file signatures). A
+   *modified PROGRAM update disk* that adds a small backup routine into the
+   image's ~71 KB of slack, triggered by repointing one service-menu function
+   pointer, can read every ROM and write it to SD — and is fully reversible by
+   re-flashing the pristine disks. The **wave-ROM readback window yields raw
+   sample words** (the service test only *checksums* them), so all four wave
+   ROMs are software-dumpable. This is the "trojan" — a homebrew ROM-backup
+   utility for Felipe's own instrument, in the console-homebrew tradition. See
+   Phase H. (Bonus preservation finding: our current `kn7000_program.rom` is the
+   *update payload*, missing the top ~37 KB resident updater that only a real
+   IC16/IC17 readback recovers.)
+
+6. **SD can't run code or flash firmware today — but the backup utility can use
+   SD as its output sink**, and once one FDD-delivered custom image is installed
+   it can bootstrap an SD update/loader path. The main↔SD link is SIO ch2 to the
+   CPSD sub-CPU; the firmware's SD surface is file/content only. Phase H covers
+   the fallback ("run payloads from SD") and what the minimum enabling change is.
+
+7. **Placeholder wave ROMs are fabricatable now.** A generator can tile the wave
+   space with single-cycle timbres (sine at the diagnostic's banks, distinct
+   timbres per bank) so the tone generator produces *something* from any address
+   before the real dumps exist — clearly labeled synthetic, never mistaken for a
+   dump. Lets us exercise the future TG `sound_stream` and the readback-window
+   model end-to-end. See Phase I.
+
+8. **The DSP subsystem is a cross-model win.** The ADSP-21065L is the *identical
+   part* in KN6000, KN6500 and KN7000; the KN6000 and KN6500 ship a
+   **byte-identical** 80-record microprogram pool, and its parameter (DM) blocks
+   are identical to the KN7000's — only the SHARC code (PM) is a newer revision
+   on the KN7000. One SHARC device model and one effect-RE effort serve all
+   three. The KN5000 is different (two fixed-function effect ASICs, undumped
+   internal ROM) but its *tone-generator interface* conventions transfer as
+   hypotheses. See Phase J.
+
+9. **The extracted DSP programs become a committed, commented disassembly tree**
+   inside the existing `kn7000_disassembly` repo (not a new repo), following its
+   generated-and-tracked-listings precedent. Folded into Phase B; layout in
+   dsp-disasm-tree-layout.md.
 
 ---
 
@@ -159,10 +216,26 @@ verified protocol spec; driver merged with the stub behind a debug switch.
 Goal: know what each of the ~75 effect microprograms does; name the effect
 algorithms; produce the DSP-side half of the programming spec.
 
-1. Productize extraction (Phase 0.2), extract all 80 records → per-record
-   `.bin` + repacked 8-byte-LE `.d64` + `unidasm -arch sharc` listings, checked
-   into `kn7000_disassembly/dsp/` with a manifest (offset, size, PM/DM blocks,
-   target addresses).
+1. Productize extraction (Phase 0.2) and **stand up the committed DSP
+   disassembly tree** (request 7) inside `kn7000_disassembly` — no new repo.
+   Per dsp-disasm-tree-layout.md, following the repo's own generated-and-tracked
+   precedent (`disasm/table_directory.asm`):
+   - `tools/gen_dsp_records.py` — pool walker (pool bounds/ROM/base as CLI args
+     so the *same* tool serves KN6000/KN6500 later): parse the 80 records from
+     `baserom/kn7000_program.rom`, repack PM (3×BE u16 → 64-bit LE slot), drive
+     `unidasm -arch sharc -basepc <PM target>`, dump DM blocks as typed word
+     tables, merge labels/comments.
+   - `dsp/` (hand-curated, committed): `README.md` (format + provenance),
+     `records.tsv` (manifest: idx, rom_off, cpu_addr, size, blocks, role, name),
+     `sym/*.sym` (per-record SHARC symbols+comments — DSP addresses can't go in
+     `kn7000.sym` because its consumer skips addrs <0x48400000).
+   - `disasm/dsp/*.asm` — generated **and committed** listings (≈<1 MB total),
+     so annotation progress shows up as reviewable diffs; `build/dsp/*.bin`
+     raw extracts stay git-ignored.
+   - `Makefile` `disasm-dsp:` rule wired into the existing `disasm` target;
+     `make disasm-dsp && git diff --exit-code disasm/dsp` doubles as a drift
+     check. Add the interpreter/downloader functions to `kn7000_manual.sym`
+     under a "Effects DSP (ADSP-21065L host port)" section.
 2. Annotate the resident kernel (258-word PM @`0x8000` + ISR blocks): host
    command loop, download handler, effect-slot scheduler, SPORT/DMA setup —
    this reveals the runtime architecture (how 5 effect slots share the chip;
@@ -182,7 +255,9 @@ algorithms; produce the DSP-side half of the programming spec.
 
 Deliverable: `notes/dsp-effect-catalog.md` (record ↔ effect name ↔ algorithm
 sketch ↔ parameter map) + named symbols for the whole DSP driver module
-(`0x48404D10–0x48408000`) in `kn7000_manual.sym`.
+(`0x48404D10–0x48408000`) in `kn7000_manual.sym` + the committed
+`kn7000_disassembly/disasm/dsp/` tree with per-record function headers and
+semantic labels growing over the phase (request 7 satisfied incrementally).
 
 ### Phase C — Trigger playback: Chord Finder (≈2–4 ticks)
 
@@ -296,30 +371,154 @@ Two tracks, decided when the specs exist:
   An intermediate HLE option: interpret captured effect parameters directly
   (skip the SHARC) — decide with data.
 
-### Phase G — Wave-ROM dumping campaign (physical; your hardware, parallel to all)
+### Phase G — Wave-ROM dumping (physical; folded into the Phase H backup utility)
 
-- **A software dump path likely EXISTS**: the wave-ROM *readback window*
-  (`0x9804/50006/8/A`: `+6` ← `0x8000|page`, `+8` ← `0x8000|word-offset`,
-  `+A` = **raw data read**) is how the service WAVE ROM test reads words — the
-  checksum is computed by the *firmware*, in software, from raw data. So the
-  CPU can read wave words; the real open questions are whether the window
-  reaches all four ROMs / all 16 banks, and whether it works outside diagnostic
-  mode. First tick of this phase: characterize the window in the disassembly,
-  then design the dump vehicle. Note the honest cost: running a dumper on the
-  real instrument means either driving it over an existing I/O channel (MIDI
-  bulk dump? floppy/SD write?) from patched firmware — and **reflashing
-  IC16/IC17 on your KN7000 is not risk-free** — this decision is explicitly
-  yours.
-- Targets: IC203 (AWAY, C3CBQD000002), IC204 (AWAX, …001), IC207 (BWAY, …004),
-  IC208 (BWAX, …003) — 128 Mbit each, on private TG buses.
-- If readback-window dumping fails: desolder-and-read campaign (TSOP mask
-  ROMs), or possibly an interposer capture on the wave **expansion connectors**
-  during the WAVE ROM test — but note this path is *unproven*: the connectors
-  carry EXAWD/EXBWD nets and *separate* chip enables (internal ROMs = banks
-  0–15, expansions above), so whether the internal ROMs' traffic is visible
-  there needs schematic confirmation first. The KN5000 waveform-ROM format doc
-  gives the expected data shape either way.
-- Also inventory: SY-EW01..04 expansion boards (separately dumpable wave sets).
+Rev 2 collapses most of the old Phase G into **Phase H** (the ROM-backup
+utility), because the recon confirmed a clean software dump path:
+
+- **The wave-ROM readback window yields RAW sample words** (`0x9804/50006/8/A`:
+  `+6` ← `0x8000|page`, `+8` ← `0x8000|word-offset`, `+A` = raw 16-bit read).
+  The service WAVE ROM test walks all banks of both TGs through it and only
+  *checksums* the data (routine `0x4848399E–0x48483B0A`, dispatcher
+  `0x484A2E3A`), so the same addressing dumps the full ~64 MB. No desolder
+  needed if the backup utility runs.
+- Targets: IC203 (C3CBQD000002), IC204 (…001), IC207 (…004), IC208 (…003),
+  128 Mbit each, on the private TG buses (never CPU-visible except through the
+  window).
+- **Fallback only if the utility route is rejected**: desolder-and-read (TSOP
+  mask ROMs) or an interposer capture on the wave **expansion connectors**
+  during the WAVE ROM test — unproven (separate chip enables; needs schematic
+  confirmation that internal-ROM traffic is visible there).
+- Also inventory: SY-EW01..04 expansion boards (separately dumpable wave sets),
+  and the KN6000/KN6500 `QSIGX3C640xx` wave ROMs (same window, Phase J).
+- Exact per-ROM capacity (16 MB vs 32 MB per chip) is unresolved in the manual;
+  the window addresses far more than either, so the dumper isn't constrained by
+  it — it walks until the data mirrors or goes empty.
+
+### Phase H — ROM-backup utility ("trojan") + SD channel (needs the real unit)
+
+Goal (request 3 & 4): when Felipe has a KN7000, back up **all** its ROMs —
+program/table/rhythm/picture/custom **and the four wave ROMs** — to SD card,
+reversibly, using a custom-firmware backup routine delivered through the
+instrument's own update mechanism. This is homebrew for hardware he owns, in the
+console-homebrew tradition; full detail in rom-backup-and-update-format.md.
+
+Everything up to "insert the disk" is developed and tested **in MAME** first, so
+the real-hardware step is a single well-rehearsed action.
+
+1. **Update-disk packager** (`kn7000_extraction` already has the inverse of every
+   step): an LZSS *compressor* + `.INF` emitter that repackages a modified linear
+   program image into `JK1.SLD`/`JK2.SLD` + `SMCKPR*.INF` + verbatim
+   `TECHNICS.PR*` + `DUMMY.2`, split at the 0x200000 boundary. Round-trip test:
+   repack the *unmodified* image and confirm it's byte-identical to the shipped
+   `kn7-16` disks — proves the packager before any patch.
+2. **Backup routine** (MN10300 asm, placed in the image's ~71 KB of `0xFF`
+   slack): dumps the directly-mapped ROMs by copy loop and the wave ROMs by the
+   readback window (Phase G), writing to SD via the firmware's SD-save API (SD =
+   the only practical sink for ~64 MB), with a MIDI-SysEx fallback for the small
+   ROMs. Reuse real entry points (SD status `0x4855D901`, FAT I/O `0x485335FF`,
+   library memcpy `0x4C003051`).
+3. **Trigger**: repoint ONE service-menu function pointer
+   (`0x4874AD34–0x4874AFF0`, e.g. the WAVE ROM test slot) to the backup routine.
+   Leave the reset vector, boot (`0x4840FF7E`), kernel-init (`0x484D7111`) and
+   the panel-combo→updater path **byte-identical** — this bounds the risk to the
+   level of an official firmware update.
+4. **Validate in emulation**: once Phase A/I make the driver model the wave
+   window, run the repackaged image in MAME and confirm the backup routine reads
+   the (placeholder) wave data and produces well-formed output files — end to
+   end, before touching hardware.
+5. **On real hardware** (Felipe's call, clearly flagged): install via PANEL
+   MEMORY 1-2-3-4; run the backup; **restore by re-flashing the pristine
+   `kn7-16` disks**. The resident updater (top ~37 KB) is never erased. A full
+   IC16/IC17 readback additionally recovers that missing resident block — a
+   preservation bonus (our current program.rom is only the update payload).
+6. **SD as an update/code channel (request 4)**: today SD can't flash firmware
+   or run code (main↔SD is SIO ch2 to the CPSD sub-CPU; SD surface is
+   file/content only). Deliverable is (a) documenting that clearly, and (b) the
+   minimum enabler — a custom image (installed via step 3) that adds a loader
+   reading a `.SLD`/payload from an SD file through the existing SD-file API and
+   feeding it to the install logic. So "system updates from SD" and "run
+   payloads from SD" both become possible *after* one FDD-delivered bootstrap;
+   spec them, build if Felipe wants the convenience.
+
+Deliverables: `tools/` packager + backup-routine source (assembled/tested in
+MAME), `notes/rom-backup-and-update-format.md` upgraded to a build/run/restore
+runbook, and — once run on the real unit — the real wave-ROM and
+resident-updater dumps entering the ROM set (replacing placeholders).
+
+### Phase I — Placeholder wave ROMs (≈1–2 ticks; unblocks TG audio testing early)
+
+Goal (request 5): synthesize stand-in wave ROMs so TG emulation can be exercised
+before the real dumps. Spec in placeholder-wave-rom-spec.md.
+
+1. `tools/make_placeholder_waveroms.py` (numpy int16): build a per-TG 16 M-word
+   master tiled with single-cycle waveforms — a full-amplitude 256-sample sine
+   in bank 0 (the diagnostic's target), distinct timbres per bank (saw, pulse,
+   harmonic mixes) so any captured-but-unmapped address is audibly identifiable,
+   a decaying-noise "drum" bank, plus an embedded KN5000-style directory at
+   offset 0 as insurance. Split each master into even/odd → four
+   `kn7000_wave_ic{203,204,207,208}_placeholder.bin`, exactly 16 MiB each.
+2. **Address-agnostic by design**: because we don't yet know the real
+   start/loop/pitch registers, tiling makes any {start,loop} the TG lands on
+   yield a clean tone — so both the diagnostic sine test and "the home patch
+   makes *something*" work without knowing the descriptor format.
+3. **Two modes**: default leaves the checksums intentionally wrong (WAVE ROM
+   test honestly reports NG); `--match-checksums` solves ballast words so all
+   four report OK — used only to exercise the readback-window model end to end.
+4. **Kept unmistakably synthetic** (integrity policy): `_placeholder` filenames,
+   `BAD_DUMP` + `// SYNTHETIC` in ROM_START, ASCII provenance embedded in every
+   bank, a `manifest.json` with sha1s mirrored into `notes/`; deleted from the
+   ROM set the moment real dumps arrive. Never presented under the bare
+   `C3CBQD00000x` part numbers.
+5. MAME wiring: fix the placeholder ROM_START (current sizes are wrong — KN5000
+   values; real chips are 128 Mbit) and add the readback-window handler so
+   `region16[(page<<15)|offset]` answers `+A` reads.
+
+Deliverable: the generator + four placeholder images + manifest, and a driver
+that loads and pages them — the substrate for Phase F's TG `sound_stream` and a
+concrete way to validate the Phase H dumper in emulation.
+
+### Phase J — Cross-model sound RE: KN5000 / KN6000 / KN6500 (≈3–5 ticks; huge DSP reuse)
+
+Goal (request 6): extend the sound RE to the siblings, documenting similarities
+*and* differences. Reports: sound-cross-model-kn6000-kn6500.md,
+sound-cross-model-kn5000.md.
+
+- **KN6000 / KN6500 — near-total DSP reuse.** Same ADSP-21065L (`S21065LKS240`),
+  same host protocol (index `0x98000000` / data `0x9C000000`, ids `0x9C0/2/4`,
+  dead-flag guard — dead-flag is `0x50005D98` on KN6xxx vs `0x500066CC` on
+  KN7000), same 80-record embedded pool. The KN6000 and KN6500 pools are
+  **byte-identical**; their DM (parameter) blocks match the KN7000's, only the
+  PM (code) differs (KN7000 = newer build). Actions:
+  - Everything built for the KN7000 SHARC (host-port stub, `adsp21065l_device`,
+    the disasm tree, the effect catalogue) is parameterized to also serve
+    KN6000/KN6500 — `gen_dsp_records.py` already takes pool bounds as CLI args.
+  - **Diff the PM blobs** KN6xxx↔KN7000 to isolate exactly what the KN7000's
+    effect-code revision changed — a cheap, high-signal RE shortcut.
+  - Create the KN6000/KN6500 committed DSP disasm trees in *their* disasm repos
+    when those exist (none today — clone the kn7000_disassembly layout).
+- **KN6000/KN6500 tone generator** = one `D82398GD001` (64-voice) at
+  `0x98050000/2`, with the *same* keybed FIFO (`+4`) and wave-readback window
+  (`+6/8/A`) conventions as the KN7000 — so the readback dump path and the TG
+  interface transfer; the chip and its init sequence differ (no `0x98050010`
+  init-strobe pattern). Wave ROMs = 4×64 Mbit (KN6000) / 6×64 Mbit (KN6500)
+  `QSIGX3C640xx`, undumped — same software dump path (Phase H/J). KN6500 is a
+  superset of KN6000 (one KN6500 dump covers KN6000's four chips). Also
+  undumped: the IC13/IC14 table mask ROMs (the current MAME "table" ROMs are an
+  IK2-mirror placeholder) — likely where the TG sample maps live.
+- **KN5000 — interface transfers, backend does not.** Its TG (`TC183C230002`,
+  64-voice, register-indirect at `0x100000/2`) has a fully documented per-voice
+  register map, note-on write grammar, and voice-control constants
+  (`0x8100`/`0x7E00`/`0x1200`) — the working *hypotheses* for decoding the
+  KN7000 TG (verify natively; the KN7000 sound-init layer was reworked, `SwbtWr`
+  is absent). But KN5000 effects are **two fixed-function ASICs**
+  (DS3613GF-3BA + MN19413) with undumped internal ROM — architecturally unlike
+  the KN7000's host-booted SHARC, so the KN5000 DSP does *not* transfer. Its
+  `kn5000_tonegen.cpp` (branch device) is the proven `sound_stream` scaffold to
+  port for the KN7000 TG (Phase F).
+- Deliverable: `notes/sound-cross-model.md` — the similarity/difference matrix
+  as living doc, and cross-model reuse wired into Phases A/B/F so the KN7000
+  work lands on all applicable models.
 
 ### Stretch — GUI flow-chart (sound cluster ≈1–2 ticks; full system larger)
 
@@ -343,8 +542,15 @@ the existing per-screen snapshot tooling.
 - Modeling TG/DSP hardware "to unblock playback" — disproven theory; playback
   is trigger-gated, not hardware-gated.
 - Synthesis code before specs and wave ROMs — yields nothing audible and the
-  spec would churn under it.
-- Re-deriving anything in the five recon reports or the manuals — cite instead.
+  spec would churn under it. (Placeholder wave ROMs, Phase I, are the exception:
+  they let TG plumbing be tested, and are explicitly labeled synthetic.)
+- Re-deriving anything in the ten recon reports or the manuals — cite instead.
+- Presenting placeholder waves, IK2-mirror table ROMs, or cross-model reuse as
+  real device data — integrity policy; everything synthetic/borrowed stays
+  labeled, and cross-model facts are hypotheses until natively confirmed.
+- Any irreversible hardware step. The backup utility (Phase H) is designed so
+  every patch is reversible by re-flashing the pristine disks, and is fully
+  rehearsed in MAME before the real unit is touched.
 
 ## 4. Risks & open questions
 
@@ -357,20 +563,43 @@ the existing per-screen snapshot tooling.
 | Q5 | Service-mode entry combo still uncracked (limits acceptance tests) | Independent puzzle; force-call `TestModeFunc 0x484A497B` via Lua/RAM as a workaround; do not block phases on it |
 | Q6 | Wave-ROM readback window: raw reads are firmware-verified, but bank coverage (all 4 ROMs × 16 banks?) and non-diag-mode availability are unknown; any real-hardware dumper implies patched firmware = reflash risk | Characterize in disassembly first (zero risk); hardware decision is Felipe's |
 | Q7 | 21065L SPORT emulation effort unknown | Sized after kernel RE (Phase B.2); HLE-params alternative exists |
+| Q8 | **Brick risk of the backup custom-firmware (Phase H)** if the boot/updater path is altered | Keep reset vector + boot + kernel-init + panel-combo→updater byte-identical; confine edits to `0xFF` slack + one menu pointer; rehearse fully in MAME; restore = re-flash pristine `kn7-16` disks (resident updater never erased) |
+| Q9 | **Update-disk packager correctness** (a bad `.SLD`/`.INF` could produce an `ILLEGAL DISK` or, worse, a bad flash) | Round-trip the *unmodified* image first and byte-compare to shipped disks before any patch; reproduce the exact `.INF` checksums |
+| Q10 | **Wave-ROM per-chip size unknown** (16 vs 32 MB) — affects placeholder size and dump length | Window addresses far more than either; dumper walks until data mirrors/empties; placeholders use the service-test's 32 MB-per-TG constant |
+| Q11 | KN5000 register-map / voice-constant transfer may not hold (reworked sound-init layer) | Treated strictly as hypotheses; confirmed against KN7000 capture (Phase C) before entering any spec |
+| Q12 | Committed DSP `.asm` listings could churn if `unidasm` output drifts across MAME versions | Deterministic generator (no timestamps/abs paths); a unidasm-format change is one mechanical commit, separated from annotation commits |
 
 ## 5. Suggested cadence & first moves
 
-Same cron-tick pattern as the panel plan. Proposed order once you approve:
+Same cron-tick pattern as the panel plan. Commit notes/plans/tools every tick
+(your standing instruction — already in effect for these docs). Proposed order
+once you approve:
 
-1. Phase 0 (one tick, mechanical).
-2. Phase A ticks until the DSP download capture matches the ROM records.
-3. Phase B in parallel ticks (static, no emulator needed).
-4. Phase C (Chord Finder) — the marquee experiment.
-5. D → E consolidation; blog posts at the milestones (DSP-found post can go
-   out immediately after Phase A verifies the protocol — it's a great story).
-6. F/G decision gates with you.
+1. Phase 0 (one tick, mechanical) — housekeeping + corrections.
+2. Phase A ticks until the DSP download capture matches the ROM records
+   (highest value/cost: un-gates the whole effect engine).
+3. Phase B in parallel ticks (static, no emulator) — builds the committed DSP
+   disasm tree (request 7) as it goes.
+4. Phase I (placeholder waves) early — small, unblocks TG audio + Phase H
+   validation in MAME.
+5. Phase C (Chord Finder) — the marquee note-trigger experiment.
+6. Phase J (cross-model) interleaved — mostly free reuse on the DSP side; the
+   PM-blob diff (KN6xxx↔KN7000) is a cheap early win.
+7. D → E consolidation; blog posts at milestones (the "DSP program was inside
+   the firmware — and it's the same across four models" post can go out right
+   after Phase A verifies the protocol).
+8. **Phase H** software/packager work proceeds in MAME anytime; the
+   **real-hardware** dump waits for the unit and an explicit go from you.
+9. F/G decision gates with you.
+
+Independence for parallel ticks: Phase 0, A, B, I have no ordering constraint
+among them beyond A needing 0.1's bank-split groundwork; J's DSP half rides on
+B; H's software half rides on the packager + I; only H's hardware step and G's
+fallback need the physical unit.
 
 **Nothing starts — including Phase 0 — until you've reviewed this plan.**
 Corrections, re-prioritizations, and "don't touch that" notes welcome —
-especially on the 0x9C bank split (Q2) and the wave-ROM campaign options
-(Phase G), which involve your hardware.
+especially on: the 0x9C bank split (Q2); the backup custom-firmware safety
+envelope (Q8/Q9) since it touches your instrument; the cross-model scope
+(how far to push KN5000/6000/6500 now vs later); and whether you want the SD
+update/loader convenience (Phase H.6) built or just specified.
