@@ -46,6 +46,49 @@ cron tick.
 - virtiofsd root cause fixed (--inode-file-handles=prefer).
 - Website: kn7000 sound-subsystem / effects-dsp / gui-map pages added.
 
+## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
+
+**Root cause of "no sound": a TG-enable gate flag `0x500ce380` in library RAM
+(0x7F = disabled, 0x40 = enabled), tested by ~30 library wrappers that suppress
+every per-voice write when it is 0x7F.** It is set from a **probe of the hardware
+strap word `0x98070000`** at firmware `0x484d7713`: it tests bit1 (0x02) and bit2
+(0x04). If bit1 is CLEAR the probe returns 3 = "no TG" and the gate stays 0x7F.
+
+The MAME driver's io_r returns `0x8000 | (rearsw & 0x1000)` for `0x98070000`
+(kn7000.cpp ~line 559) → bits 1,2 are zero → probe = 3 → **gate closed forever**.
+The real KN7000 HAS tone generators, so those strap bits must be set.
+
+VALIDATED live (Lua read-tap forcing `data | 0x0006` on 0x98070000):
+- gate flag `0x500ce380` becomes **0x0040 (ENABLED)**.
+- On a key press the firmware now WRITES TG voice registers: **class 0x3000 =
+  13-bit pitch** (C4→0x0BE8, E4→0x0E52…), classes 0x0001/0x0002 = per-voice
+  level/env, from PC 0x4C036FDD. TWO voices allocated per note (dual-layer sound).
+  Previously: zero. This is "the firmware driving the notes."
+
+CONSEQUENCE (observed by Felipe on video): with the gate open, boot progresses
+further and lands on the **SD Card menu** instead of the home screen. Bits 1,2 are
+read ONLY by the TG probe (all 14 strap readers mapped), so the SD menu is NOT a
+strap-bit side effect — it is the known-flaky SD subsystem now being reached
+because sound-init completes. Must handle so boot reaches the play screen.
+
+Subagent full map saved (region2 == 0x4C library image; runtime = flash+0x0384702F).
+Key RAM: per-voice HW shadow `0x500ca0b0` stride 0x84 (+0x54 = pitch dword, low 13
+bits → class 0x3000); voice state `0x500af940` stride 0xB4; gate `0x500ce380`;
+voice-active bitmap `0x500d288c`. TG write primitive: voice<0x40→SUB(0x98050000),
+≥0x40→MAIN(0x98040000); reg addr = (voice<<4)|classIndex.
+
+### NEXT (revised, in priority order)
+1. Apply the strap fix in the driver (set the TG-present bit(s) on 0x98070000).
+   Decide bit1-only (probe=2) vs bits1,2 (probe=1) — both open the gate; pick the
+   hardware-accurate one. Rebuild, verify voice writes appear WITHOUT the Lua patch.
+2. Keep boot on the play/home screen despite the gate being open: investigate why
+   the SD Card menu auto-opens (likely SD card-detect / CPSD); make boot land on
+   the play screen (e.g. SD card absent by default). See memory kn7000-sd-strap-gate.
+3. Wire the tonegen to SYNTHESIZE from the real TG voice writes: decode class
+   0x3000 pitch (map 13-bit code→Hz), key-on/level (0x0001/0x0002), gate voices.
+   Replace the Stage-0 kbd_key sine with firmware-driven voices. Publish binary.
+4. Calibrate the pitch code→Hz map from several notes; handle the 2-voices-per-note.
+
 ## IN PROGRESS — Stage 2 gating question (SIGNIFICANT PROGRESS 2026-07-09)
 Does the FIRMWARE emit TG voice writes when a keybed note is played? Answer so
 far: **NO — the note is fully received but never becomes a voice.** Established
