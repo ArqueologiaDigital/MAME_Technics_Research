@@ -137,15 +137,16 @@ DEFINE_DEVICE_TYPE(KN7000_SIO_UART, kn7000_sio_uart_device, "kn7000_sio_uart", "
 DECLARE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device)
 
 // ---------------------------------------------------------------------------
-// kn7000_tonegen_device -- FIRST-CUT audio output (Phase C, Stage 0).
+// kn7000_tonegen_device -- FIRMWARE-DRIVEN audio output (Phase C, Stage 2).
 //
-// The real tone generators (IC201/IC205) play PCM from undumped wave ROMs and are
-// driven by the firmware's (still dormant) voice engine. As a bring-up milestone
-// this device is a simple polyphonic SINE synth keyed directly by note_on/note_off
-// -- wired to the PC-keyboard key-bed input -- so the audio path (stream, speakers,
-// DAC) is proven and notes are audible before the firmware-driven TG synthesis
-// (Stage 2) exists. It is NOT the real TG: it ignores the wave ROMs and the TG
-// register file. Honest bring-up scaffold; machine is MACHINE_IMPERFECT_SOUND.
+// The real tone generators (IC201/IC205) play PCM from the four undumped wave ROMs.
+// This device does not have those samples, but it IS driven by the real firmware
+// voice engine: every tone-generator register write is routed to tg_write(), and we
+// render a placeholder sine per voice using the firmware's own pitch (class 0x2401)
+// and note-on/off gating (0x2401 write / 0x0001=0xC000 mute). So pitch, polyphony,
+// timing and note events are authentic; only the timbre is a stand-in until the wave
+// ROMs are dumped. The path (stream, speakers, DAC) is proven; the machine is
+// MACHINE_IMPERFECT_SOUND. See notes/tg-voice-register-semantics.md.
 // ---------------------------------------------------------------------------
 class kn7000_tonegen_device : public device_t, public device_sound_interface
 {
@@ -155,28 +156,44 @@ public:
 		, device_sound_interface(mconfig, *this)
 	{ }
 
-	void note_on(uint8_t note)  { if (note < 128) { m_stream->update(); m_on[note] = 1; } }
-	void note_off(uint8_t note) { if (note < 128) { m_stream->update(); m_on[note] = 0; } }
+	// Kept for the key-bed input hook (kn7000_state::kbd_key). No longer synthesizes
+	// directly: with the TG-enable gate open the FIRMWARE drives every voice through
+	// tg_write() below, so keying a second sine here would double the notes.
+	void note_on(uint8_t)  { }
+	void note_off(uint8_t) { }
 
-	// Stage 2 groundwork: the REAL tone-generator register writes are routed here
-	// from io_w (both TGs). The firmware emits per-voice writes only when it
-	// actually plays a note; the prior "playback dormant" finding used a capture
-	// that DROPPED these (the <0x1000 gate). This is currently a DIAGNOSTIC: it
-	// logs the voice writes so a run reveals whether the firmware drives the TG,
-	// and captures the pitch/note registers per voice for the coming audible
-	// synthesis (pending calibration of the pitch/key-on encoding -- see
-	// notes/tg-voice-register-semantics.md). addr = [group:6][channel:6][index:4].
+	// Stage 2 -- FIRMWARE-DRIVEN synthesis. Every tone-generator register write (both
+	// TGs) is routed here from io_w. Once the TG-enable gate is open (see the
+	// 0x98070000 strap in io_r) the firmware programs a full per-voice block on each
+	// note and we render audio from two of those registers:
+	//   * class 0x2401 = the main pitch register. Empirically +0x400 per semitone and
+	//     doubling per octave; C#4 (MIDI 61) = 0x9E24. -> note = 61 + (d-0x9E24)/0x400.
+	//     A write here also (re)gates the voice ON (attack / retrigger).
+	//   * class 0x0001 = 0xC000 = the voice mute the firmware writes on note-off /
+	//     voice-steal -> gate the voice OFF (release).
+	// Timbre is a placeholder sine: the real PCM wave ROMs (IC203/4/7/8) are undumped,
+	// so authentic samples are not yet possible. addr = [group:6][channel:6][index:4].
 	void tg_write(int tg, uint16_t addr, uint16_t data)
 	{
-		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle refresh -- ignore
-		const int ch  = (addr >> 4) & 0x3F;               // voice 0..63 within this TG
-		const int v   = (tg << 6) | ch;                   // 0..127
-		const uint16_t cls = addr & 0xFC0F;               // register class (group+index), channel removed
-		if (cls == 0x2000 || cls == 0x3000) m_tg_pitch[v] = data;   // pitch (13-bit, from note)
-		m_tgwrites++;
-		if (m_tgwrites <= 256 || (m_tgwrites & 0x0FFF) == 0)
-			logerror("TG%d voice-write #%u: reg=%04X class=%04X ch=%02X data=%04X\n",
-					 tg, m_tgwrites, addr, cls, ch, data);
+		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
+		const int v = (tg << 6) | ((addr >> 4) & 0x3F);   // voice 0..127 (0..63 sub, 64..127 master)
+		switch (addr & 0xFC0F)                            // register class (channel masked out)
+		{
+		case 0x2401:                                      // main pitch -> frequency + note-on
+		{
+			m_stream->update();
+			const double note = 60.0 + (double(data) - double(0xC838)) / 1024.0;
+			m_freq[v]  = 440.0 * pow(2.0, (note - 69.0) / 12.0);
+			m_gate[v]  = 1;       // held
+			m_atk[v]   = 1;       // (re)start the attack
+			m_phase[v] = 0.0;     // clean attack transient
+			m_tgwrites++;
+			break;
+		}
+		case 0x0001:                                      // 0xC000 = voice mute -> note-off
+			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; }
+			break;
+		}
 	}
 	uint32_t tg_write_count() const { return m_tgwrites; }
 
@@ -184,31 +201,44 @@ protected:
 	virtual void device_start() override
 	{
 		m_stream = stream_alloc(0, 2, 44100);
-		std::fill(std::begin(m_on), std::end(m_on), 0);
 		std::fill(std::begin(m_phase), std::end(m_phase), 0.0);
-		std::fill(std::begin(m_tg_pitch), std::end(m_tg_pitch), 0);
-		save_item(NAME(m_on));
+		std::fill(std::begin(m_freq),  std::end(m_freq),  0.0);
+		std::fill(std::begin(m_env),   std::end(m_env),   0.0);
+		std::fill(std::begin(m_gate),  std::end(m_gate),  0);
+		std::fill(std::begin(m_atk),   std::end(m_atk),   0);
 		save_item(NAME(m_phase));
-		save_item(NAME(m_tg_pitch));
+		save_item(NAME(m_freq));
+		save_item(NAME(m_env));
+		save_item(NAME(m_gate));
+		save_item(NAME(m_atk));
 		save_item(NAME(m_tgwrites));
 	}
 
+	// Simple per-voice envelope. The firmware programs the real hardware envelopes,
+	// but this sound holds a voice until it is stolen (no explicit note-off write on
+	// key release), so a plain gate would let voices pile up and clip. Instead each
+	// voice does a fast attack, then decays toward silence while held (a pluck) and
+	// releases faster once the firmware mutes it -- self-limiting and click-free.
 	virtual void sound_stream_update(sound_stream &stream) override
 	{
 		constexpr double FS = 44100.0;
 		constexpr double TWO_PI = 6.28318530717958647692;
+		const double atk = 1.0 / (0.005 * FS);   // ~5 ms attack
+		const double dec = 1.0 / (1.400 * FS);   // ~1.4 s decay while held
+		const double rel = 1.0 / (0.120 * FS);   // ~120 ms release after mute
 		for (int s = 0; s < stream.samples(); s++)
 		{
 			double acc = 0.0;
-			for (int n = 0; n < 128; n++)
+			for (int v = 0; v < 128; v++)
 			{
-				if (!m_on[n]) continue;
-				const double f = 440.0 * pow(2.0, (n - 69) / 12.0);
-				acc += sin(m_phase[n]);
-				m_phase[n] += TWO_PI * f / FS;
-				if (m_phase[n] >= TWO_PI) m_phase[n] -= TWO_PI;
+				if (m_atk[v]) { m_env[v] += atk; if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; } }
+				else          { m_env[v] -= (m_gate[v] ? dec : rel); if (m_env[v] < 0.0) m_env[v] = 0.0; }
+				if (m_env[v] <= 0.0) continue;
+				acc += sin(m_phase[v]) * m_env[v];
+				m_phase[v] += TWO_PI * m_freq[v] / FS;
+				if (m_phase[v] >= TWO_PI) m_phase[v] -= TWO_PI;
 			}
-			float smp = std::clamp(float(acc / 8.0), -1.0f, 1.0f);  // headroom for polyphony
+			float smp = std::clamp(float(acc * 0.11), -1.0f, 1.0f);  // headroom for polyphony
 			stream.put(0, s, smp);
 			stream.put(1, s, smp);
 		}
@@ -216,13 +246,15 @@ protected:
 
 private:
 	sound_stream *m_stream = nullptr;
-	uint8_t  m_on[128] = { };        // Stage 0: key-bed-triggered sine voices
-	double   m_phase[128] = { };
-	uint16_t m_tg_pitch[128] = { };  // Stage 2: captured per-voice pitch register (firmware-driven)
-	uint32_t m_tgwrites = 0;         // count of real TG voice writes seen (0 = engine dormant)
+	double   m_phase[128] = { };     // per-voice oscillator phase
+	double   m_freq[128]  = { };     // per-voice frequency (Hz), from the 0x2401 pitch register
+	double   m_env[128]   = { };     // per-voice envelope level
+	uint8_t  m_gate[128]  = { };     // per-voice gate: 1 = firmware note held, 0 = muted/released
+	uint8_t  m_atk[128]   = { };     // per-voice attack-in-progress flag
+	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 };
 
-DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (first-cut sine synth)")
+DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (firmware-driven, placeholder timbre)")
 
 kn7000_sio_uart_device::kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, KN7000_SIO_UART, tag, owner, clock),
@@ -556,7 +588,15 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		// by the EXP-port output-enable) = the rear-panel MIDI IN / BASS PEDAL selector
 		// SW701: BassPedalSw (0x484A2CB1) -> 0x484b2615 reads bit12 and stores !bit12 into
 		// the MIDI-in mode flag 0x5006bfd2 bit1. bit12 SET = MIDI IN, clear = Bass Pedals.
-		return 0x8000 | (m_rearsw->read() & 0x1000);
+		//
+		// bits 1..2 = the tone-generator-present strap read by the TG probe at
+		// 0x484d7713: bit1 CLEAR makes the probe return "3 = no TG", which leaves the
+		// sound library's TG-enable gate (RAM 0x500ce380) at 0x7F and SUPPRESSES every
+		// per-voice register write forever (the instrument stays silent). The real
+		// KN7000 has both tone generators (IC201/IC205), so report them present:
+		// bit1|bit2 set -> probe returns 1 -> gate opens (0x40) and the firmware drives
+		// the TGs on key-bed / MIDI notes (class 0x3000 pitch, 0x0001/2 level, etc.).
+		return 0x8000 | 0x0006 | (m_rearsw->read() & 0x1000);
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
 	// low byte = note, high byte = velocity). The firmware polls it for note on/off
@@ -880,9 +920,14 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 	case 0xc:                    // status: bit4 = RxRDY; bit7 (ch2/SD) = CPSD-frame-avail
 		if (ch == SIO_SD)
 		{
-			// Probe: on the first ch2 poll, queue one placeholder frame to validate
-			// the delivery path end-to-end (real SD frames plug into cpsd_queue).
-			if (!m_cpsd_probed && !machine().side_effects_disabled())
+			// (Historically a placeholder CPSD frame was auto-queued here on the first
+			// ch2 poll to validate the delivery path. It is DISABLED now: once the TG
+			// gate is open (see the 0x98070000 strap above) boot progresses far enough
+			// to actually poll ch2, and the firmware reads that placeholder frame as a
+			// real SD event and auto-opens the SD Card menu instead of staying on the
+			// play screen. SD stays dormant until the CPSD HLE is resumed with real
+			// status/command frames plugged into cpsd_queue().)
+			if (false && !m_cpsd_probed && !machine().side_effects_disabled())
 			{
 				m_cpsd_probed = true;
 				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
