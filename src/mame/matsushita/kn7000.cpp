@@ -165,6 +165,7 @@ public:
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
+		, m_config(*this, "CONFIG")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -196,6 +197,7 @@ private:
 	required_ioport_array<0x21> m_seg;  // one per normalized segment 0x00-0x20
 	required_ioport m_dial;
 	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
+	optional_ioport m_config;           // machine-configuration DIP: bit0 = enable the effects-DSP host stub
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -249,14 +251,15 @@ private:
 	// stale RAM, the probe currently fails and effects never run.
 	//
 	// This stub answers the probe and captures the download stream so the effect
-	// engine can be studied. It is GATED (research switch env KN7000_DSP=1) so the
-	// default boot is byte-unchanged -- the effect download path is new firmware
-	// behavior with an as-yet-unmodeled completion handshake, so it stays opt-in
-	// until verified not to regress the boot-to-home-screen state.
+	// engine can be studied. It is GATED behind the "Effects DSP host stub"
+	// machine-configuration switch (Tab menu / -cfg), default OFF, so the default
+	// boot is byte-unchanged -- the effect download path is new firmware behavior
+	// with an as-yet-unmodeled completion handshake, so it stays opt-in until
+	// verified not to regress the boot-to-home-screen state.
 	uint16_t dsp_data_r(offs_t offset, uint16_t mem_mask);
 	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
+	bool     dsp_stub_enabled() { return (m_config.read_safe(0) & 1) != 0; }
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
-	bool     m_dsp_enable = false;             // research switch (env KN7000_DSP)
 	uint32_t m_dsp_dl_words = 0;               // count of captured download words
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
@@ -515,7 +518,7 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 // Effects-DSP host DATA port at 0x9C000000 (paired with the index at 0x98000000).
 uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 {
-	if (!m_dsp_enable)
+	if (!dsp_stub_enabled())
 		return 0;   // gated off: behaves like the unwritten RAM it replaces (probe reads !=0x20 -> DSP marked dead, current behavior)
 	// Answer the host register read selected by the latched index. The boot probe
 	// (fw 0x48405028) reads register 0 and requires 0x20 to consider the DSP alive.
@@ -530,7 +533,7 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 
 void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
-	if (!m_dsp_enable)
+	if (!dsp_stub_enabled())
 		return;
 	// Capture the host-boot download stream (kernel + effect microprograms). The
 	// firmware streams PM (48-bit) / DM words here after writing an index/command
@@ -1064,6 +1067,15 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 // serial-protocol HLE device (as in kn5000_cpanel.cpp) is still to be written.
 
 static INPUT_PORTS_START(kn7000)
+	// Machine configuration. The effects-DSP (ADSP-21065L) host stub answers the
+	// firmware's boot probe and captures the effect-program download stream. It is
+	// OFF by default (the un-gated download path is still-unverified firmware
+	// behavior); toggle it in the Tab "Machine Configuration" menu or via -cfg.
+	PORT_START("CONFIG")
+	PORT_CONFNAME(0x01, 0x00, "Effects DSP host stub (experimental)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, DEF_STR(On))
+
 	// Panel buttons organized by NORMALIZED SEGMENT (normSeg), the identity the
 	// firmware's button dispatcher (0x484ADB59) actually uses. panel_scan emits
 	// each segment's reverse-normalized wire address (bank11 subs 0-0xB -> segs
@@ -1422,13 +1434,9 @@ void kn7000_state::machine_start()
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
 	// no explicit resolve() call is needed or available.
 
-	// Effects-DSP host stub research switch (default OFF = current boot behavior).
-	// Set env KN7000_DSP=1 to answer the boot probe and capture the effect-program
-	// download stream (see the dsp_data_r/dsp_data_w handlers). Off by default
-	// because the un-gated download path is new, still-unverified firmware behavior.
-	m_dsp_enable = (getenv("KN7000_DSP") != nullptr);
-	if (m_dsp_enable)
-		logerror("kn7000: effects-DSP host stub ENABLED (KN7000_DSP set)\n");
+	// The effects-DSP host stub is gated by the "Effects DSP host stub" machine-
+	// configuration switch (dsp_stub_enabled(), default OFF), read live in the
+	// data-port handlers -- no environment variable involved.
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
 
