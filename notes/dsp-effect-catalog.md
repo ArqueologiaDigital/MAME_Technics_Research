@@ -250,7 +250,9 @@ the plan's Phase A must answer). They contain no audio DSP.
 ## 8. Cross-model note
 
 The KN6000/KN6500 carry the same ADSP-21065L and a **byte-identical** record
-pool to each other; vs the KN7000 the kernel's DM tables match and the PM code
-is an older build (see `sound-cross-model-kn6000-kn6500.md`). `gen_dsp_records.py`
-takes pool bounds as CLI args, so this whole tree + catalog regenerates for those
-models once their disassembly repos exist.
+pool to each other (80/80). Vs the KN7000, **all 80 records' DM (coefficient)
+blocks are byte-identical but the PM (code) was revised — only 3/80 PM match**
+(byte-verified; `kn7000_disassembly/dsp/cross-model/`). So this catalogue and its
+DM-level facts transfer directly to the KN6xxx; only the code differs.
+`gen_dsp_records.py` takes pool bounds as CLI args — the KN6000 listings are
+already generated at `dsp/cross-model/kn6000/` (== KN6500).
