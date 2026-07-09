@@ -100,6 +100,7 @@
 #include "bus/midi/midioutport.h"
 
 #include "screen.h"
+#include "speaker.h"          // first-cut audio output
 
 #include "kn7000.lh"
 
@@ -133,6 +134,69 @@ protected:
 
 DEFINE_DEVICE_TYPE(KN7000_SIO_UART, kn7000_sio_uart_device, "kn7000_sio_uart", "KN7000 SIO MIDI UART")
 
+DECLARE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device)
+
+// ---------------------------------------------------------------------------
+// kn7000_tonegen_device -- FIRST-CUT audio output (Phase C, Stage 0).
+//
+// The real tone generators (IC201/IC205) play PCM from undumped wave ROMs and are
+// driven by the firmware's (still dormant) voice engine. As a bring-up milestone
+// this device is a simple polyphonic SINE synth keyed directly by note_on/note_off
+// -- wired to the PC-keyboard key-bed input -- so the audio path (stream, speakers,
+// DAC) is proven and notes are audible before the firmware-driven TG synthesis
+// (Stage 2) exists. It is NOT the real TG: it ignores the wave ROMs and the TG
+// register file. Honest bring-up scaffold; machine is MACHINE_IMPERFECT_SOUND.
+// ---------------------------------------------------------------------------
+class kn7000_tonegen_device : public device_t, public device_sound_interface
+{
+public:
+	kn7000_tonegen_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0)
+		: device_t(mconfig, KN7000_TONEGEN, tag, owner, clock)
+		, device_sound_interface(mconfig, *this)
+	{ }
+
+	void note_on(uint8_t note)  { if (note < 128) { m_stream->update(); m_on[note] = 1; } }
+	void note_off(uint8_t note) { if (note < 128) { m_stream->update(); m_on[note] = 0; } }
+
+protected:
+	virtual void device_start() override
+	{
+		m_stream = stream_alloc(0, 2, 44100);
+		std::fill(std::begin(m_on), std::end(m_on), 0);
+		std::fill(std::begin(m_phase), std::end(m_phase), 0.0);
+		save_item(NAME(m_on));
+		save_item(NAME(m_phase));
+	}
+
+	virtual void sound_stream_update(sound_stream &stream) override
+	{
+		constexpr double FS = 44100.0;
+		constexpr double TWO_PI = 6.28318530717958647692;
+		for (int s = 0; s < stream.samples(); s++)
+		{
+			double acc = 0.0;
+			for (int n = 0; n < 128; n++)
+			{
+				if (!m_on[n]) continue;
+				const double f = 440.0 * pow(2.0, (n - 69) / 12.0);
+				acc += sin(m_phase[n]);
+				m_phase[n] += TWO_PI * f / FS;
+				if (m_phase[n] >= TWO_PI) m_phase[n] -= TWO_PI;
+			}
+			float smp = std::clamp(float(acc / 8.0), -1.0f, 1.0f);  // headroom for polyphony
+			stream.put(0, s, smp);
+			stream.put(1, s, smp);
+		}
+	}
+
+private:
+	sound_stream *m_stream = nullptr;
+	uint8_t m_on[128] = { };
+	double  m_phase[128] = { };
+};
+
+DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (first-cut sine synth)")
+
 kn7000_sio_uart_device::kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, KN7000_SIO_UART, tag, owner, clock),
 	device_serial_interface(mconfig, *this),
@@ -162,6 +226,7 @@ public:
 		, m_lcdbuf(*this, "lcdbuf")
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
+		, m_tonegen(*this, "tonegen")
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
@@ -189,6 +254,7 @@ private:
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
+	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
 
 	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
 
@@ -747,6 +813,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::fav_preload)
 INPUT_CHANGED_MEMBER(kn7000_state::kbd_key)
 {
 	kbd_push(uint8_t(param), newval ? 0x64 : 0x00);
+	// First-cut audio: also key the bring-up sine synth directly, so a PC key is
+	// audible now (independent of the firmware's dormant voice engine). This is a
+	// monitor tap of the key bed, NOT the real TG path (Stage 2 will drive the
+	// synth from the firmware's tone-generator voice writes instead).
+	if (newval) m_tonegen->note_on(uint8_t(param));
+	else        m_tonegen->note_off(uint8_t(param));
 }
 
 
@@ -1570,7 +1642,17 @@ void kn7000_state::kn7000(machine_config &config)
 	MIDI_PORT(config, "mdin2", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[1], FUNC(kn7000_sio_uart_device::rx_w));
 	MIDI_PORT(config, "mdout2", midiout_slot, "midiout");
 
-	// TODO: sound hardware (tone generators IC201/IC205 + effects DSP IC306/SDRAM IC307/8),
+	// --- Sound (first cut): a bring-up sine synth keyed by the PC key bed, so
+	//     notes are audible now. Real dual-TG PCM synthesis + effects DSP is future
+	//     work (see notes/audio-output-implementation-plan.md). Shared by all the
+	//     models that reuse this config; only kn7000 drops MACHINE_NO_SOUND for now.
+	SPEAKER(config, "lspeaker").front_left();
+	SPEAKER(config, "rspeaker").front_right();
+	KN7000_TONEGEN(config, m_tonegen, 0);
+	m_tonegen->add_route(0, "lspeaker", 1.0);
+	m_tonegen->add_route(1, "rspeaker", 1.0);
+
+	// TODO: real tone generators IC201/IC205 + effects DSP IC306/SDRAM IC307/8,
 	//       floppy disk controller (IC103), SD card and USB.
 }
 
@@ -1677,7 +1759,7 @@ ROM_END
 
 
 //   YEAR  NAME    PARENT  COMPAT  MACHINE  INPUT   CLASS         INIT        COMPANY     FULLNAME      FLAGS
-SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_IMPERFECT_SOUND)
 
 // KN6000 / KN6500 -- draft drivers reusing the KN7000 machine config (same MN10300 CPU, same 0x48400000 base).
 SYST(2000, kn6000, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
