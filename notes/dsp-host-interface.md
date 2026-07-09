@@ -1,0 +1,88 @@
+> Recon report produced 2026-07-09 by the sound-subsystem planning sweep (5 parallel research agents).
+> Companion to notes/sound-subsystem-plan.md. Verify page/line citations before building on them.
+
+# KN7000 firmware static recon — ADSP-21065L (SOUND DSP) host interface, boot upload, and tooling
+
+**Bottom line:** The SHARC host interface is **not** the byte-port block the io-map suggested. It is a 16-bit **register-indirect pair: address/index port `0x98000000` + data port `0x9C000000`** (a bank the io-map misses entirely, and which the MAME driver currently backs with plain RAM as the LCD buffer). The firmware **does host-boot the DSP**: an embedded pool of **80 download records at ROM `0x486BCEC4..0x486CE68D` (offset `0x2BCEC4..0x2CE68D`, 71,625 bytes)** contains genuine **ADSP-2106x program-memory code (48-bit words, verified by `unidasm -arch sharc`)** — a resident kernel record plus per-effect microprograms. Details, evidence, and per-register data below.
+
+---
+
+## 0. Where things are
+
+- ROM images: `/home/fsanches/compartilhado/kn7000_disassembly/baserom/kn7000_program.rom` (0x3F6F01 bytes, CPU `0x48400000`) and `kn7000_table.rom` (CPU `0x48000000`). Other copies in `kn7000_scratchpad_snapshot/`.
+- Full linear disassembly of **code region 1 only** (`0x48400080–0x48586000`): `/home/fsanches/compartilhado/kn7000_disassembly/disasm/program.asm` (~30 MB, regenerable via `make disasm`). **Code region 2 (`0x487B8D00–0x487F6F01`) is NOT in that file**; I generated it at `/tmp/claude-1000/-home-fsanches-compartilhado-KN7000/c6cf97f4-b4f1-4ba1-adc0-85474706b167/scratchpad/region2.asm` with `unidasm ... -arch mn10300 -basepc 0x487B8D00 -skip 0x3B8D00 -count 0x3E201` (worth committing a Makefile rule for this).
+- Symbols: `kn7000_disassembly/kn7000.sym` (2,302 auto-recovered names) + `kn7000_manual.sym` (hand-reversed). **None of the DSP-module functions below are named yet** — the whole `0x48400084–0x48408xxx` block is a naming gap (nearest symbol = `PROGRAM_ROM_BASE`).
+
+## 1. DSP HOST INTERFACE — per-register findings
+
+Sites verified exhaustively against both code regions; counts match `kn7000_mame/notes/io-map.md:134-159` except where noted. **Two separate devices** share the sound block, plus TG/misc registers:
+
+### Device B — the ADSP-21065L host port: `0x98000000` (addr) + `0x9C000000` (data)
+
+Driver module ~`0x48404D10–0x48408000` (program.asm lines ~5900–10700).
+
+- `0x98000000` (16-bit, **1 write site @0x48404EB3**): written only inside accessor `0x48404E8D` when caller passes logical id `0x9C2`. Wrapper pair: guarded write `0x48404EF8` / read `0x48404F1C` (guard flag `0x500066CC` = "DSP dead"). `0x48405086` = `DspAddrWrite(idx)`.
+- `0x9C000000` (16-bit; write @0x48404EDC, read @0x48404E6B — **absent from io-map.md**): the data port, logical id `0x9C4`. Accesses bracketed by bus-timing change `0x32000026=0x924` (0x48404E62/0x48404ED0). Data streamed with auto-increment (address written once, then data hammered — why 0x98000000 has only one write site).
+- Access primitives: `0x484050B8` writes **3×16-bit** to the data port (= one **48-bit PM word**); `0x4840511A` writes 2×16 (DM word); `0x484052E0` = write "register" (idx via 0x98000000, 32-bit value via 2×16); `0x484052FC`/`0x4840531E`/`0x48405229` = register reads (2×16 or 4×8).
+- Protocol registers (indices written to 0x98000000): **reg 0 read expecting `0x20`** in the 10-retry boot probe `0x48405028–0x48405080` (failure sets dead-flag `0x500066CC=0xFF`); **reg 0x0B** = ID/version readback (`0x48405460`); **reg 0x37 bit7** = busy, polled at `0x48407AF7`; **regs 0x40/0x41/0x42** = download address/flag/length header (`0x48407AAB`); **reg 0x1C** = command strobe: `0xA1` (PM commit, `0x48407A86`), `0x41` (DM commit, `0x48407A99`), `0xA0` (end/sync, `0x48407ADF`); regs `0x1D`, `0x43`, `0x4B`, `0xA0` also written during re-init `0x4840603B–0x48406129`.
+- Completion IRQ: wait on INTC `0x3400015C` bit4 with countdown `0x3FFFF` (`0x48404D2A–0x48404D6E`).
+- **This is the 21065L host port.** Evidence: 48-bit PM / 5-byte DM word sizes (unique SHARC widths), PM target addresses `0x8000/0x8300/0x8400/0x8D00` = 21065L internal block-0 normal-word space, and the SPC-board glue in the service manual — IC302/IC304 (TC74VHC245 transceivers) + IC303 (TC74VHC574 latch) + IC301 OR-gate around IC306 (S21065LKS240), with **no boot EPROM** near it (parts list, sm.txt lines 5093–5163) ⇒ host boot.
+
+### Device A — byte-port mailbox + DMA channel: `0x98010000` + `0x98020004/8/A/E`
+
+Driver module `0x48400084–0x48402700` (**copy A**) with a byte-identical **copy B at `0x4840278D–0x48404CA0`** (different state vars); copy selected by sound-board type from `0x484D7713` (type 3 → copy B, see `0x484025E4`, `0x48402688`).
+
+- `0x98020004` (8-bit, 10 sites): command/handshake byte. Dispatcher `0x48400084` (copy B `0x4840278D`) handles device-originated commands `0x80–0x84`: `0x83`=read byte & ACK `0x1C` (@0x484000B5), `0x84`=echo saved byte (@0x484000CB), `0x81`=ACK `0x1C`+state=1, `0x80`/`0x82`= keep-alive countdown (0xFA) ending in write `0x0C` (@0x48400139). State vars copy A: `0x50000010/0x50007F44/0x50007F46`; copy B: `0x50000020/0x50007F48/0x50007F4A`.
+- `0x98020008` (8-bit, 5 sites): status/data port. Read helper `0x48400145` (copy B `0x4840284E`); write with previous-value shadow `0x48400164` (shadow `0x5009E934/35`; copy B `0x48402879`, shadow `0x50008024/25`). Status fields polled with 500 ms timeouts (tick `0x50151BFC`): `&0x1F==0` (`0x48400191`), `&0x90==0x90` (`0x484001F1`), `&0x80` (`0x4840024F`), `&0xEF==0xC0` (`0x48400B74`), `0xFF`=dead (`0x48400543`).
+- `0x9802000A` (8-bit, 4 sites): data byte read `0x4840015B`/write `0x48400185` (copy B `0x48402864`/`0x4840289A`).
+- `0x9802000E` (8-bit, 13 sites): **7 writes are constants 2 or 0** from a 6-way mode switch (`0x5009E8CF&0x0F` = modes 0–5) at `0x48400451/0x48400470/0x4840048E/0x484004AB/0x484004C8/0x484004E5/0x48400501`; **6 reads** at `0x48402623/0x48402698/0x484026D7` (copy A) and `0x48404BD1/0x48404C30/0x48404C6F` (copy B) — **bit7 = device present/attention**, full byte cached to `0x50000018`/`0x50000030`.
+- `0x98010000` (8-bit + register-indirect base): **bulk data endpoint of a DMA controller at `0x32000800`**. `0x484009BE` programs device→RAM (src `0x32000804=0x98010000`, dst `0x32000808`=buffer ptr `0x5009E8A4`, count `0x3200080C`=len−2 from `0x5009E860`); `0x48400A98` = RAM→device (operands swapped, direction bits `|0x200|0x400`). Direction chosen from command byte `0x5009E872` at `0x48400950`: reads = `0xC6,0xCC,0x42,0x4A,0xD1,0xD9,0xDD`; writes = `0xC5,0xC9,0x4D`. Final odd byte moved by IRQ handler `0x48402109` (acks ICR `0x34000160` = group 0x18, toggles GPIO `0x36008004` bit4). Direct PIO fallbacks read/write `0x98010000` at `0x4840215E/0x4840217A` (copy B analogues around `0x48403068/0x484030FE/0x484031E4`).
+- Handshake ISR `0x484025A1` acks ICR `0x34000178` (group 0x1E; registered by init `0x484024E2` copy A / `0x48404AAB` copy B via lib `0x4C03DB26`, handlers `0x4840259B`/`0x48404B64`); init then sends query command `0xD3` (`0x484026BA`, `0x48404C52`). On presence change the firmware calls lib `0x4C014A56(0x10708000, on/off)` (`0x48402758/0x4840277C`, `0x48404CDB/0x48404CFF`).
+- Command executor `0x48400E36` (commands incl. `0x13, 8, 3, 4, 7, 0xF, 0x4A, 0x4D`); payload packer `0x48401AA0` builds byte-triplet streams into staging buffer `0x5009E8D0` (all transfers found are **small, RAM-staged** — no bulk ROM upload through this device).
+- **Identity: NOT the SHARC.** It is a separate presence-detectable device whose status byte appears in the service SOUND-page collector `0x484AD8E3` (result of check `0x484025E0` XOR 0xFF stored at `0x5006BEDA`). Hypothesis (unproven): the Sound-Explorer/expansion-card interface or a sound-board MCU mailbox. The service manual's "SOUND DSP TYPE" display draws from this collector, so it may equally be a DSP-adjacent supervisor. **Open question.**
+
+### Tone-generator / misc registers (for completeness)
+
+- `0x98040006/8/A` + `0x98050006/8/A`: **wave-ROM readback window** used by the service WAVE-ROM checksum `0x4848399E–0x48483B0A`: `+6` ← `0x8000|page` (32K pages), `+8` ← `0x8000|word-offset`, `+A` = data read; checksum accumulates byte-halves. (Also single writes during TG init.)
+- `0x98040010`/`0x98050010` (3 writes each, all in region 2): TG init strobes — value 1 written **three times consecutively** at `0x487F1331/37/3D` and `0x487F1192/98/9E`, followed by `0x...0004` ← 3 (×3) at `0x487F1345/4B/51`, `0x487F11A6/AC/B2` (FIFO enable/reset), then bulk TG register tables from ROM `0x486D11D4/0x486D11E4/0x486D11F4/0x486D1208` are written via `0x487F103A/0x487F0F2B/0x487F10D7/0x487F0F91`. Skipped when board type==3.
+- **`0x9804000C`/`0x9804000E`: zero references anywhere** (asymmetric: only the sub TG has the `0x0C/0x0E` pair used).
+- `0x9805000C` (6 sites, `0x4854BF73` etc.): pulse/count port — writes value then waits INTC `0x34000170` bit4 per unit (`0x4854BF4D`).
+- `0x9805000E` (3 sites): **audio-routing mode register with echo-handshake**: `0x4854BB89` writes mode and re-reads until the device echoes `mode|0x80` (modes 2,3,0xA,0xB,0xC,0xD; the MAME driver already fakes this latch, kn7000.cpp:225,463).
+- `0x98050004` written `0xFFFF` = FIFO flush when board revision==4 (`0x4854BB64`); reads at `0x484480A2/B6` are the known key-bed FIFO poll.
+- `0x98060000` (6 write sites): byte GPIO latch, RAM shadow `0x50005214`; set/clear/write helpers `0x4854D076/0x4854D0A8/0x4854D0DC` (+IRQ-unsafe variants `0x4854D168/0x4854D18F`); **bit-banged serial** to a codec via bits `0x08`=CS, `0x10`=CLK, `0x20`=DATA (`0x4854D0F9`; `0x4854D152` sends words `0x1220`, `0x1380` — plausibly PCM69/PCM1800 config). Boot writes `0xFF` (idle) at `0x484D7266`.
+- `0x98070000`: **all 14 sites are READS** (the task premise "14 write sites" is wrong) — it is a read-only sound-board status/strap word: bits1–2 = board type (`0x484D7713` → 3/2/1), bit0 (`0x484D773A`), bits10–11 = revision (`0x484D774E`; type-3 boards read revision from `0x9CC00021` bits2–3 instead), bit3 = debounced status (`0x48405534`, `0x48405537/4D`), bits4–7 & 8–9 = diagnostic fields (`0x484AD8E8/901/926`), **bit12 = REARSW SW701** (`0x484AD98B`, `0x484B2615` — consistent with commit 6846f94), bit15 = warm-boot/skip-init flag (`0x484A4FBF`, called first from boot at `0x484D7272`).
+- Additional unmapped sound-board banks found: **`0x9CC00001/05/08/09/21`** (byte GPIO/status, bset/bclr, e.g. `0x4854BCA8`, `0x484AD961`) and **`0x9CE00000`** base pointer (`0x4854D1BD`). None are in io-map.md.
+
+## 2. SHARC PROGRAM BLOB — FOUND (embedded record pool, host-download format)
+
+**(a) Copy loops**: no multi-KB tight loop writes a `0x98xxxxxx` port; the download goes through the record interpreter below. **(c) ADI signatures**: none — no "ADSP"/"SHARC"/"seg_"/".ldr" strings in either ROM (checked with `strings`); "SOUND DSP"/"MULTI DSP" are UI effect names only. **(b) SHARC disassembly: positive.**
+
+- **Record pool: program ROM offsets `0x2BCEC4–0x2CE68D` (CPU `0x486BCEC4–0x486CE68D`), 80 consecutive records, 71,625 bytes; total 6,499 48-bit PM words + 5,775 DM entries.**
+- **Record format** (parsed from interpreter `0x48407BD8`, stream read **big-endian** u16 via `0x48407BAC`): sequence of blocks `{u16 id (always 0x2004), u8 mode (0x80=PM, 0x00=DM), u8 flag, u16 A, u16 B=target address, u16 C, u16 payload_len_bytes, payload}` terminated by a block with len==0. PM payload = 6-byte entries (three BE u16 = one 48-bit word; written to the data port LSW-first via `0x484050B8`); DM payload = 5-byte entries (len/5 via lib divide `0x4C0019D5(len,5)` at `0x48407C99`; the 5th byte is not visibly written — 32-of-40-bit). DM targets `0x9800`/`0xC000` get per-effect-unit strides `0x50`/`0x4D` words (`0x48407CCB/0x48407CDD`).
+- **The resident kernel = record @`0x486BD9A8`** (0x1201 bytes; blocks: DM `0x9800`(0x190), DM `0x9C40`(0x64), DM `0xC000`(0x181), DM `0xC302`(0x2F8), **PM `0x8000` (0x60C = 258 words)**, PM `0x8300`(64 w), PM `0x8400`(7 w), PM `0x8D00`(147 w)). The 258-word PM block at `0x8000` matches the 21065L's 256-word host-boot kernel size. `unidasm -arch sharc` on it (48-bit words packed MSW-first from the stream into 64-bit LE slots) yields a textbook 2106x vector table: `IDLE` at 0x8004, `JUMP 0x8071` at 0x8005, RTI-filled vectors, and a real ISR `RTI (DB); R13=0x1; BIT SET MODE2 0x40` at 0x8020–0x8022. **This is genuine SHARC code.**
+- Four **variant/probe records** `0x486BCEC4/0x486BD17D/0x486BD436/0x486BD6EF` (0x2B9 each; DM `0xC000` + PM `0x8400`) are tried in order at boot `0x48405470–0x4840552E` with an ID readback (reg `0x0B`, `0x48405460`) after each until one matches, then the kernel record is downloaded and flag `0x500066CD` set (`0x48404D10`).
+- The remaining ~75 pool records = per-effect microprograms (typical ~0x3DA–0x437 bytes, PM ~90–115 words @`0x8400` + DM). Runtime keeps a **146-entry pointer table `0x500066E0`** (loop bound 0x91 at `0x48406117`); it is populated at runtime (no ROM pointer array exists — verified by scanning for LE pointer arrays into the pool), with a full re-download path at `0x4840603B–0x48406129`. Single-word PM/DM pokes exist too (`0x48407B1E`/`0x48407B65`).
+- **Extraction tooling**: my parser/repacker scripts live in the scratchpad (`sharc_pm8000.bin` etc.); the pool walk + PM extraction is ~30 lines of Python and should be productized into `kn7000_disassembly/tools/`.
+- **MAME conflict to fix**: `kn7000_mame/src/mame/matsushitakn7000.cpp:355` maps the whole `0x9C000000–0x9CFFFFFF` bank as RAM (`lcdbuf`, framebuffer at 0x9CE00000). The DSP data port (0x9C000000), and the board GPIO/rev registers (0x9CC000xx) therefore read back stale RAM — the DSP boot probe (`0x48405028`, expects reg0==0x20) currently fails silently ⇒ dead-flag `0x500066CC` set ⇒ all effect traffic suppressed. Splitting the bank (DSP port at +0, GPIO at +0xC00000, LCD at +0xE00000) is a prerequisite for any DSP modelling.
+
+## 3. EFFECT/EQ PARAMETER PATH (corrected premises)
+
+- The "`0x98070000` 14 write sites" do not exist (all reads, see §1). The "`0x9802000E` 13 sites" are 7 constant-writes (2 or 0; interface mode set) + 6 presence reads — Device A, not a parameter path.
+- The real parameter path is **Device B register writes via `0x484052E0(idx, value32)` and PM/DM word pokes**: dozens of callers at `0x48406062–0x48406900+` (program.asm lines 7849–8700) pass small constant register indices (`0x1C/0x1D/0x40–0x4B/0xA0/0xA1`) and values computed from a RAM effect-parameter structure (0x120-byte per-effect entries with 0xC-byte sub-records, walker `0x4840585D`; struct lazily allocated via lib `0x4C03CA58` at `0x484057A9`). Effect select = `0x48405815(bank, prog)`; manager task init `0x48405D4F` (RTOS objects via lib calls, then full DSP re-init `0x48404FF6` + state machine `0x4840537D`). The 146-entry table (§2) maps effect-type → download record.
+
+## 4. TOOLING INVENTORY
+
+`kn7000_disassembly/` (Makefile targets: `all/verify`, `baserom`, `program-src`, `disasm`, `symbols`, `clean/distclean`):
+- `tools/mn10300_sim.py` — MN10300 interpreter (MAME-core instruction subset, not cycle-accurate): full RAM/ROM model, scratch-backed device windows `0x8C000000`/`0x90000000–0x98000000`, **I/O access log** (`io_log`), `--steps`, `--hle-lib` (stubs `0x4C...` library calls, logs them). Runs boot ~4.59 M instructions to the library-call frontier (io-map.md:170-203). **Gap: `valid_io()` (line ~26) excludes bank `0x9C`** — would raise Unmapped on the DSP data port; extend it before simulating the DSP boot path.
+- `tools/mn10300_asm.py` (encoder, 99.9 % round-trip) + `tools/kn7asm.py` (assembler/linker with `.incbin_range`) + `tools/validate_asm.{py,sh}` — byte-exact rebuild chain (`make verify` = 100 %).
+- `tools/gen_symbols.py` (reflection-table name recovery → `kn7000.sym`/`src/symbols.inc`), `tools/disasm_functions.py` (named per-function listing → `disasm/program_named.asm`, regenerable), `tools/gen_program_s.py` (+ `CONVERT` set), `tools/gen_constants.py`, `tools/dump_table_dir.py` (table-ROM directory → `disasm/table_directory.asm`).
+- `kn7000_mame/tools/`: `gen_layout.py`, `gen_lay.py`, `render_lay.py` (panel .lay), `panel_probe.lua`, `slider_lib.lua` (in-emulator Lua probes — reusable to script DSP-port pokes), `publish-binary.sh`.
+- `unidasm` (`/home/fsanches/compartilhado/mame-sony-video/unidasm`) supports `-arch sharc`; note it consumes **8 bytes per 48-bit opcode** (64-bit LE slots), so PM streams must be repacked as done above.
+
+## 5. Open questions / next steps
+
+1. Identity of **Device A** (0x98010000/0x9802000x): candidates = expansion-card interface vs. sound-board supervisor MCU. Needs schematic reading (service manual SPC/CPR pages) or emulation probing.
+2. Who populates the 146-entry pointer table `0x500066E0` (runtime writer not found by absolute-operand grep — computed store; trace with mn10300_sim once bank 0x9C is modeled).
+3. Exact 21065L glue semantics: whether reg indices at 0x98000000 address DSP IOP/EPB space directly or a latch protocol (IC303/IC302/IC304); the boot probe's expected `0x20` at reg 0 pins the first observable.
+4. Extract + fully disassemble all 80 records (script exists in scratchpad; commit to tools/), name the DSP-module functions in `kn7000_manual.sym`, and add a `region2.asm` Makefile rule.
+5. Fix `kn7000.cpp` 0x9C-bank split (§2) — prerequisite for the SHARC device model; a capture-only DSP stub that answers the reg-0 probe with 0x20 would un-gate the entire effect engine for study.
