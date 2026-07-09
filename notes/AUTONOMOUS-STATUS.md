@@ -84,6 +84,35 @@ flag never set; (c) play path waits on a stubbed subsystem (DSP / sound handshak
 A background subagent is statically mapping region2's flush + the gate (RAM
 addresses + test instruction). Await it, then target the specific flag/struct.
 
+MORE STATIC DETAIL (2026-07-10):
+- The 0x4C-region TG driver == program_region2.asm ROM image. Mapping:
+  lib X == program ROM 0x487B8FD1 + (X - 0x4C000000). So runtime 0x4C036F80 ==
+  ROM 0x487EFF80. The block 0x487eff69..0x487f0078 is a set of low-level TG
+  register-WRITE PRIMITIVES: channel<0x40 -> SUB(0x98050000), >=0x40 ->
+  MAIN(0x98040000); reg value built as (chan<<20)|hi|lo. Idle refresh & boot init
+  just call these leaves. The voice-flush LOOP/ALLOCATOR is their CALLER (subagent
+  is finding it).
+- Keybed task 0x48448015 (RTOS-scheduled, no direct callers) reads FIFO via
+  0x4844807c/0x484480a2, decodes each note with 0x4844812d into a STACK-LOCAL
+  struct (sp+0xc), gathers up to 16 notes into a stack array (sp+0x12), and
+  RETURNS without voicing. Flag 0x50007768 and latch 0x501496a2 are internal
+  hold/sustain state (self-consumed). 0x50007764 = a pending-count gate: when
+  nonzero it calls 0x48448206 instead of reading the FIFO. => this path drains
+  keybed events; the actual note->voice allocation is a DIFFERENT task that is not
+  emitting -> strongly consistent with hypothesis (a)/(b): no playable performance
+  loaded at boot, so the voicer allocates nothing.
+
+DECISION: do NOT rabbit-hole further on the boot-performance gate in parallel
+with the subagent (it overlaps the known .AST/style/8-Beat-1 boot bugs, a large
+separate effort). Two productive tracks that are UNBLOCKED by the gate:
+  T1 (this session): build+verify the tonegen's TG voice-register -> audio
+     synthesis engine, driven by INJECTED voice writes (Lua simulating what the
+     firmware would write), so the synth path is proven end-to-end and ready.
+     Requires reconstructing the TG register map from the DRIVER CODE (subagent
+     result), not runtime observation.
+  T2: Stage 1 — load placeholder wave-ROM bank-0 samples into the tonegen so it
+     plays a wavetable timbre instead of a pure sine (independent, committable).
+
 ## NEXT (in order)
 1. Re-run /tmp/ktd.lua diagnostic WITH VIDEO; read RESULT + FIFO consumed count.
 2. If firmware consumes the note but writes no voice regs → the sound engine is
