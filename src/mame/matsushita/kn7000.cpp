@@ -661,6 +661,7 @@ private:
 	// reversed; a placeholder PROBE frame is sent on the first ch2 poll (see sio_r)
 	// to validate delivery. Real SD status/command frames plug into cpsd_queue().
 	void cpsd_queue(const uint8_t *bytes, int n);   // deliver a CPSD->main frame into the ch2 RX FIFO
+	void cpsd_rx_byte(uint8_t data);                // CPSD HLE: consume a main->CPSD command byte
 	bool    m_cpsd_probed = false;         // one-shot: probe frame sent on first ch2 poll
 	emu_timer *m_panel_timer = nullptr;
 	int     m_panel_pos = 0;               // position within the 7-byte TX frame
@@ -1307,25 +1308,18 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 		if (ACCESSING_BITS_8_15)
 			return uint16_t(sio_rx_pop(ch)) << 8;
 		return 0;
-	case 0xc:                    // status: bit4 = RxRDY; bit7 (ch2/SD) = CPSD-frame-avail
-		if (ch == SIO_SD)
+	case 0xc:                    // status: bit4 = RxRDY; ch2 adds bit6/bit7 (see below)
+		if (ch == SIO_SD && !m_lib_mirror)
 		{
-			// Probe: on the first ch2 poll, queue one placeholder frame to validate
-			// the delivery path end-to-end (real SD frames plug into cpsd_queue).
-			// NOTE: once the TG-enable gate is open (see the 0x98070000 strap above)
-			// boot advances into the SD subsystem and lands on the SD Card menu rather
-			// than the home screen. That is a property of the still-paused SD/CPSD HLE
-			// (notes/sd-card-emulation-plan.md), independent of this probe -- sound and
-			// the key bed work regardless of which screen is shown.
-			if (!m_cpsd_probed && !machine().side_effects_disabled())
-			{
-				m_cpsd_probed = true;
-				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
-				cpsd_queue(probe, sizeof(probe));
-			}
-			// (bit6=TxRDY was tried here but always-setting it on ch2 breaks the boot --
-			// ch2 is also MIDI-2, and the poll helper 0x484b288f then reads garbage.)
-			// Fall through to bit4-only RxRDY.
+			// ch2/CPSD status semantics (RE 2026-07-10; link classifier 0x484b28ee +
+			// ready-check helper 0x484b2889 which polls bit6|bit4):
+			//   bit6 = TxRDY (HLE UART: always ready)
+			//   bit4 = RxRDY (a CPSD byte is queued)
+			//   bit7 = RX EMPTY -- the classifier reads the RX byte at +9
+			//   unconditionally and treats bit7-set as "no byte" (its read burst
+			//   ends and the SD link task yields). The earlier "bit7 diverts the
+			//   firmware" observation was this empty marker, not a frame flag.
+			return 0x0040 | (sio_rx_ready(ch) ? 0x0010 : 0x0080);
 		}
 		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
 	}
@@ -1450,9 +1444,35 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
+		// KN7000: ch2 is the SD/CPSD link, not MIDI-2 (notes/sd-card-emulation-plan.md).
+		// Route its TX to the CPSD HLE. KN6000/KN6500 keep the MIDI passthrough.
+		if (ch == SIO_SD && !m_lib_mirror)
+		{
+			cpsd_rx_byte(data);
+			break;
+		}
 		// Serialize the byte out through the channel's UART to its MIDI OUT port.
 		m_midi_uart[ch - SIO_MIDI1]->write(data);
 		break;
+	}
+}
+
+// CPSD (SD sub-CPU) HLE: consume one command byte from the main CPU on SIO ch2
+// and produce the sub-CPU's response into the ch2 RX FIFO. Protocol under RE.
+// First handshake element (captured live): the SD link task pings with 0xFE
+// (active-sense-style keep-alive on the shared UART framing) and waits for a
+// reply before advancing its link state machine (0x484b28ee states, link-up
+// flag 0x50150ade).
+void kn7000_state::cpsd_rx_byte(uint8_t data)
+{
+	logerror("CPSD TX->HLE: %02X\n", data);
+	if (data == 0xFE)
+	{
+		// Trial response while the frame format is under RE: a keep-alive plus a
+		// minimal framed status (0xF0 <payload> 0xF7 per the classifier's
+		// SysEx-like classes at 0x484b28ee).
+		static const uint8_t pong[] = { 0xFE, 0xF0, 0x00, 0xF7 };
+		cpsd_queue(pong, sizeof(pong));
 	}
 }
 
