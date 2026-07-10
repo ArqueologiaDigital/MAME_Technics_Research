@@ -80,6 +80,18 @@ CPC control column (SEG16-20/1B) want a bank-A runtime snapshot probe; a full em
 function-button LED re-sweep is polish (genre+sound-group LEDs already re-keyed by state identity).
 The SD/DISK navigation re-RE stays under the USER-PAUSED SD subsystem (do not pursue autonomously).
 
+## ★ STUCK-NOTES FIXED 2026-07-10 (commit 09870dc) — key-bed make/break is bit7, not velocity 0
+Felipe: the key bed emitted key-on but never key-off (stuck notes, seen as CHORD FINDER
+rectangles staying drawn; both MIDI + PC keys). ROOT CAUSE (firmware RE, unambiguous): the
+voice-event FIFO word (0x98050004) encodes MAKE/BREAK in **bit 7 of the key byte**, not the
+velocity — firmware btst 0x80 at 0x484480e5 (routes on/off) + 0x48448151 (decoder: bit7=0 ->
+compute pitch/gate ON, bit7=1 -> clear gate). The driver sent releases as (key, velocity 0) =
+bit7 CLEAR -> read as ANOTHER note-on -> stuck. FIX: releases push (key | 0x80) velocity 0xFF
+(0xFF also skips the sustain/hold re-latch at 0x484480fa -> 0x501496a2). Both kbd_key (PC) and
+kbd_midi_rx (MIDI). Verified: FIFO tap press=0x6418/release=0xFF98(bit7=1); disasm; and CHORD
+FINDER held-key dots MOVE F->G (don't accumulate) on release. Published. notes/keybed-fifo-makebreak.md.
+(Bonus: confirmed the STAGE-2 bank-A LCD soft-key SEG11 0x01 toggles CHORD FINDER on APC SELECT.)
+
 ## Cron-tick verification (2026-07-10, post panel bank-A STAGE 2)
 Re-verified the PUBLISHED deliverable (kn7000-emulator/, run as Felipe will) after the layout
 rebuild + republish. DEFAULT boot (empty cfg -> driver defaults, TG-sound bit1 ON) reaches the
