@@ -42,6 +42,10 @@ fi
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.cpp"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.h"             "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.h"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_insn_length.h"
+# Effects-DSP LLE (Phase F): the SHARC core is forked here to add the adsp21065l_device variant
+# (KN7000 IC306). Only sharc.h/sharc.cpp are overlaid; the rest of the SHARC core is stock.
+ln -sf "$HERE/src/devices/cpu/sharc/sharc.h"                 "$BUILD_TREE/src/devices/cpu/sharc/sharc.h"
+ln -sf "$HERE/src/devices/cpu/sharc/sharc.cpp"               "$BUILD_TREE/src/devices/cpu/sharc/sharc.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
 mkdir -p "$BUILD_TREE/src/mame/layout"

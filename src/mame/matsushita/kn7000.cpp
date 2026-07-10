@@ -327,7 +327,7 @@ private:
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
-	required_device<adsp21062_device> m_dsp;            // IC306 effects DSP (SHARC; F.1 = 21062 core, host-boot idle)
+	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
 
 	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
 
@@ -1758,8 +1758,8 @@ void kn7000_state::kn7000(machine_config &config)
 	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
 	// come next; for now this proves the core integrates and the KN7000 still boots.
 	// See notes/sharc-lle-assessment.md.
-	ADSP21062(config, m_dsp, 60'000'000);
-	m_dsp->set_boot_mode(adsp21062_device::BOOT_MODE_HOST);
+	ADSP21065L(config, m_dsp, 60'000'000);
+	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);
 
 	// TODO: real tone generators IC201/IC205; DSP SDRAM IC307/8, SPORT audio path;
 	//       floppy disk controller (IC103), SD card and USB.
