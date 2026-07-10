@@ -51,6 +51,52 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★ MILESTONE COMPLETE 2026-07-10 — DSP effects kernel BOOTS & RUNS (F.1 + F.2)
+
+Felipe greenlit the DSP LLE ("go build it", "go ahead with F.2"). The recovered
+ADSP-21065L (IC306) effects kernel now host-boots and runs to its IRQ0-driven main
+loop inside MAME — no faults. Committed kn7000_mame `3aca274`, published.
+
+- **F.1** (earlier): `adsp21065l_device` SHARC variant added (fork of MAME's 2106x
+  core: sharc.h/.cpp overlaid, symlinked by build.sh; internal PM 0x8000-0x8fff,
+  DM 0x8000-0xffff + IOP stub). KN7000 boots with it present (halted).
+- **F.2 upload**: `dsp_data_w` decodes the host-boot stream — 8 blocks / 805 words
+  (4 DM: 9800/9C40/C000/C302, 4 PM: 8000/8300/8400/8D00), framed reg-0x40 addr /
+  reg-0x1C block cmd (0xA1 PM-commit, 0x41 DM-commit, 0xA0 end) / index-0x04 stream
+  (48-bit PM = 3x16 LSW-first → wbuf[2]:[1]:[0]; 32-bit DM = 2x16 low-first).
+  Uploaded words match the disasm EXACTLY (PM 0x8005/0x807a/0x8300). **RELEASE point
+  = the final _bare_ 0xA0** (block-open flag: 0xA1/0x41 opens, 0xA0 closes; a 0xA0
+  with no open block and words>0 is the "go"). The FIRST 0xA0 is a 0-word reset
+  handshake — releasing there ran the DSP into garbage (the earlier bug).
+- **F.2 SHARC-core fixes** (sharcops.hxx now also overlaid): `irq_vector_base()`
+  virtual = 0x8000 for the 21065L (taken IRQ vectors to base+which*4; IRQ0=0x8020);
+  `reset_pc()` = 0x8004 (MAME primes daddr=pc+1 and executes daddr first → first-exec
+  0x8005 = JUMP init, skipping the boot-wait IDLE at 0x8004, which our glue has
+  already satisfied). Implemented the missing fixed-point **multiplier/MAC ops** the
+  kernel's biquad-seed routine uses: single-function MRF/MRB = Rx*Ry and MR ± Rx*Ry
+  (signed/unsigned, integer/fractional, MR select, round); multi-function parallel
+  MAC+ALU multiop 0x06, 0x08-0x16, 0x20-0x2f. (These were genuine gaps in MAME's
+  SHARC interpreter — general, not 21065L-specific.)
+- **F.2 driver tick**: `dsp_audio_tick` (emu_timer) pulses the SHARC's IRQ0 at a
+  provisional **44.1 kHz** (`DSP_FRAME_HZ`) once the kernel is released. Only ASSERT
+  is needed (the core auto-clears the pending bit when it TAKES the interrupt). This
+  stands in for the SPORT/codec frame sync until F.3.
+- **Validated**: with CONFIG bit0 "Effects DSP host stub" ON, the DSP reaches its
+  main loop — distinct PCs 0x8021 (IRQ0 ISR: R13=1 "frame arrived"), 0x807b/0x80f8
+  (mainloop), no faults over 12 s. Default boot (stub OFF, DSP halted) still reaches
+  the home screen unchanged (screenshot verified).
+- **Perf caveat**: the SHARC runs on MAME's INTERPRETER at ~5% realtime with the
+  44.1 kHz tick. So the stub stays **opt-in / default OFF**. Speeding it up (SHARC
+  DRC — needs my mult ops + vector-base/reset_pc ported to sharcdrc.cpp; and/or a
+  lower real IRQ0 rate once the SPORT block size is known) is a follow-up.
+
+### NEXT — F.3 SPORT audio (make the effect actually process the audio stream)
+Model the SHARC's serial ports (SPORT) so audio flows TG output → DSP → DAC, and
+replace the synthetic 44.1 kHz IRQ0 tick with the real SPORT/codec frame sync that
+paces the kernel. Kernel refs: init 0x8D00 sets up SPORTs/SDRAM/DMA; IRQ0 ISR 0x8020
+sets R13=1; mainloop 0x807a consumes a frame. See notes/sound-subsystem-plan.md (F.3)
+and the DSP disasm (kn7000_disassembly/disasm/dsp/rec04_kernel_*.asm).
+
 What shipped:
 0. Sound is an OPT-IN machine-config switch: CONFIG bit1 "Tone generators /
    firmware sound (experimental)", DEFAULT OFF. OFF = known-good home-screen boot,
