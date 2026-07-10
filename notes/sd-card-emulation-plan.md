@@ -434,10 +434,16 @@ host image (sdtest.hd). Test image: 64MB FAT16 raw, `-harddisk sdtest.hd`.
 - [x] Data transport = SD SPI over the 0x9805000C mailbox (spi_sdcard).
 - [x] Chip-select (GPIO 0x36008004 bit1) + CSD CRC16 (patched spi_sdcard).
 - [x] Card-detect / cover switch (open=ERROR 93, close=insert).
-- [ ] **Card-init completion** (THE blocker): CMD9 read primitive 0x4854c3ab errors before
-      CSD parse -> initflag 0x5016064c stays 0 -> mount ends state 4. Trace 0x4854c3ab
-      post-data (btst 0x0400/0x1200) + response-scan 0x4854c136 for CMD9; align spi_sdcard.
-- [ ] Mount success -> SD menus open (state 3); write-protect (0x9cc00009 bit4) toggle.
+- [x] **Card-init completion** (bf0c9a2): the blocker was the DATA-BLOCK CRC16 -- SD uses
+      init 0x0000 (firmware CRC 0x4854c919), MAME's util::crc16 uses 0xFFFF, so every CSD
+      read failed CRC. Patched spi_sdcard's sd_data_crc16() (init 0). **THE CARD MOUNTS:
+      state 3, card-ready=1, initflag=1** (verified) -- reaching state 3 read the boot
+      sector + FAT from the host image, so cmd-3 sector reads work.
+- [ ] SD menus open ON SCREEN: the sound-present panel descriptor bank (A, 0x48614978)
+      REMAPPED the soft-keys/DISK button vs the old (sound-absent) bank -- the previous
+      DISK(SEG12 0x80)->SD MENU(SEG03 0x80)->SD-AUDIO(SEG0F 0x20) path now lands on PMEM/
+      SOUND screens. Re-RE the disk/SD navigation under bank A (panel-descriptor-map.md).
+- [ ] write-protect (0x9cc00009 bit4) toggle.
 - [ ] cmd-3/cmd-4 read/write FAT sectors from the host image; directory listing.
 - [ ] SD-Song (SMF) playback via the sequencer; SD-Audio; lyrics; the 6 SD panel buttons
       (already wired) driving transport; the SD IN USE LED (0x9cc00008 bit6).
