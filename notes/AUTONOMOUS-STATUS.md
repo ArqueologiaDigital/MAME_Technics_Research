@@ -51,6 +51,18 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## Cron-tick verification (2026-07-10, post-F.2)
+Published binary re-verified: `kn7000-emulator/kn7000` is byte-identical (md5
+e50d8ac2…) to the validated build-tree binary; a fresh default-config run boots
+cleanly to the home screen (PMEM A-, no faults). Artifact healthy. NOTE: the cron
+prompt's "awaits Felipe's greenlight / plateau" context is STALE — Felipe greenlit
+the DSP LLE and F.1+F.2 are DONE (below). F.3 (SPORT audio) is next but has an
+external dependency (the ADSP-21065L Hardware Reference is NOT in the repo — only
+the 14-page EP datasheet) needed to pin the SPORT-DMA memory map, so it is NOT a
+safe unattended start (guessing the map would risk wrong audio). Leave F.3 for a
+focused session / Felipe's input on scope + the ~5% perf tradeoff. See the F.3 plan
++ open question in notes/sound-subsystem-plan.md.
+
 ## ★★ MILESTONE COMPLETE 2026-07-10 — DSP effects kernel BOOTS & RUNS (F.1 + F.2)
 
 Felipe greenlit the DSP LLE ("go build it", "go ahead with F.2"). The recovered
