@@ -66,9 +66,22 @@ boot instead -- voices then sound ON THE PLAY SCREEN with NO SD menu. Verified: 
    makes the instrument PLAYABLE with sound on the normal screen. Root SD cause still open
    (kn7000-sd-strap-gate).
  - CHORD FINDER now usable: HOME -> APC MODE (SEG03 0x02) -> CHORD FINDER (SEG0F 0x40) ->
-   the CF screen; the EAR = "MUTE PART 15 ON" = SEG07 0x10 (Felipe's tip), fires a chord
-   (voice writes + audio). Its pitch renders low (a tonegen decode quirk for the CF's
-   0x2401 data range vs the keybed's -- separate, minor).
+   the CF screen; the EAR = "MUTE PART 15 ON" = SEG07 0x10 (Felipe's tip), fires a chord.
+
+CHORD-FINDER PITCH RESOLVED (as a DIAGNOSIS, not a code fix) 2026-07-10 -- see
+chord-finder-navigation.md UPDATE (b): the tonegen decode is CORRECT (keybed verified exact
+over an octave; keybed+CF share the pitch writer PC 0x4C036FBA). The CF's wrong pitch is the
+FIRMWARE computing GARBAGE voicing (root-change test: C-Maj vs E-Maj give different non-
+musical intervals; note-offs present; 2nd press not ignored). It's the accompaniment/voicing
+data+state gap, NOT a decode/already-playing/note-off bug. NEXT = trace the pitch source
+above 0x4C036FBA; do NOT fake a transpose.
+
+DEMO OVERTURE 2026-07-10 -- see UPDATE (c): DEMO (SEG09 0x40, held) -> DEMONSTRATION menu ->
+LCD LEFT 1 (SEG03 0x08) = OVERTURE -> "Welcome to SX-KN7000" splash. Intro note plays a
+clean IN-TUNE F2 (sound engine renders sequenced data correctly), but playback then STALLS
+(splash frozen 90 s, no audio after ~t24; CPU runs varied code = higher-level wait, not a
+spin). Pre-existing (stalls without the gate-poke too). Open thread: demo/sequencer won't
+advance past the first event.
 
 REVERB (still open, now more tractable): the play screen did NOT auto-run DspEffectSelect
 -- *(0x500A01E0) stays -1, so the per-unit param path isn't active; the effects that DO

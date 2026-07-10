@@ -1,5 +1,50 @@
 > Phase C / first-cut-audio recon (2026-07-09). Companion to sound-subsystem-plan.md.
 
+## UPDATE 2026-07-10 (b) — PITCH INVESTIGATED: chord finder plays GARBAGE voicing (not a decode bug)
+
+With the post-boot gate (CONFIG bit2) the chord finder is playable and the "ear" (MUTE
+PART 15 ON = SEG07 0x10) fires a chord. Felipe: "fix the pitch." Full RE done; conclusion:
+the tonegen decode is CORRECT and the wrong pitch is the FIRMWARE computing a bad voicing.
+
+Evidence (temp TGCAP/PITCHPC instrumentation in tg_write/io_w, since reverted):
+- **Keybed pitch decode VERIFIED exact** over an octave: C4=0xC838, E4=0xD838, G4=0xE438,
+  C5=0xF838 -- all exactly `0xC838 + (note-60)*0x400`, integer notes. class 0x2401 is the
+  pitch; 0x2801/0x2C04 are sample-zone/filter params (0x2801 shifts C4->E4 at a sample
+  split, NOT octave), 0x3000 is a constant patch param on the keybed. So decode is right.
+- **Keybed and chord finder write pitch from the SAME routine**: maincpu PC **0x4C036FBA**
+  (in the self-loaded 0x4C lib ROM). The pitch VALUE is computed upstream and passed in.
+- **Chord finder C-Maj ear** -> 0x2401 = 0x1374/0x3304/0x37B0 = notes 14.8/22.7/23.9
+  (non-integer, sub-bass; pitch-classes ~D/A#/B, NOT C/E/G). Two voices per note (dual
+  layer), same 0x2401.
+- **Felipe's "already playing" hypothesis TESTED & RULED OUT**: 2nd ear press replays the
+  SAME chord on fresh voices (not ignored). Note-offs ARE present: each voice does
+  `0x0001=0xC000` (mute) then the `0x2401` pitch write -- proper note-off->note-on.
+- **DECISIVE root-change test**: changed ROOT C->E (SEG04 0x40 = ROOT-up, auto-repeats;
+  screenshot-confirmed). E-Maj played 0x0690/0x1290/0x37B0. Both are MAJOR triads so a sane
+  voicing would give IDENTICAL intervals; instead C-Maj={7.9,1.2} vs E-Maj={3.0,9.3}
+  semitones -- totally different, non-musical, and raising the root made notes go DOWN. One
+  value (0x37B0) identical in both, like a stuck slot. => GARBAGE.
+
+CONCLUSION: the APC chord-voicing computation reads bad/uninitialized data in this boot
+state, so it emits non-musical 0x2401 values. NOT fixable in the tonegen (decode is right),
+NOT "already playing", NOT a missing note-off. It's the accompaniment/voicing data+state
+gap (same family as the "8 Beat 1" style-data issue, kn7000-ast-codec-zlib). NEXT to make
+it correct: trace the pitch source above 0x4C036FBA (which RAM/table the voicing reads) and
+fix that state/data -- do NOT fake a transpose (would misrepresent the device).
+
+## UPDATE 2026-07-10 (c) — DEMO Overture: enters + intro note IN TUNE, but playback STALLS
+
+Per Felipe: DEMO (SEG09 0x40, held; the code comment saying SEG06 is stale) -> DEMONSTRATION
+menu -> LCD LEFT 1 (SEG03 0x08) = OVERTURE -> "Welcome to SX-KN7000" splash (screenshot).
+With the gate open it plays ONE intro note = a clean, in-tune **F2 (88.6 Hz)** -- proving
+the sound engine renders SEQUENCED note data at CORRECT pitch (keybed AND demo agree). BUT
+playback then STALLS: over 90 s the splash LCD is byte-identical (t=20/50/85) and there is
+NO audio after ~t=24. The maincpu keeps running VARIED code (no single spin-PC), so it's a
+higher-level playback state machine waiting on a condition we don't satisfy (timer/DMA/
+decode/sequencer tick), not a trivial missing-IRQ spin. **Pre-existing: the stall happens
+WITHOUT the gate-poke too**, so it's independent of the gate and of the pitch issue. Open
+thread: why the demo/sequencer doesn't advance past the first event.
+
 ## UPDATE 2026-07-10 — navigation CONFIRMED by screenshot; blocked by the same gate/SD-menu conflict
 
 Attempted per Felipe's request. Findings (visible-video runs, screenshots):
