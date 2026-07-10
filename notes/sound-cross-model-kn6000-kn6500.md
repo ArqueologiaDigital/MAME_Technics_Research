@@ -127,4 +127,42 @@ video on; taps on 0x98040000/0x98050000 write + 0x98050004 read, key presses on
   and 0x0000/0x4000 for gate/level. (3) Flip kn6000/kn6500 to MACHINE_IMPERFECT_SOUND
   (likely no CONFIG switch needed — no SD side effect). Reuse tools/stage2_tg_diagnostic.lua.
 
+### Follow-up (2026-07-10, second tick) — 0x5800 is NOT the clean chromatic pitch
+Tried to nail KN6000's pitch from class 0x5800 across a chromatic scale (C4–B4, one
+playable octave). It does NOT cleanly encode the note, even channel-locked to a single
+voice: white-key 0x5800 values came out `C4=0x0C00 D4=0x0E2C E4=F4=G4=A4=0x0E16 B4=0x0E00`
+— several distinct notes share a value and the sequence is non-monotonic. So 0x5800 is a
+**fine-pitch / detune / multisample-fine field** (same role/value-range as the KN7000's
+0x3000 within-octave field), NOT the absolute chromatic pitch. Dead-ends recorded so the
+next tick skips them:
+  - The KN6000 default keyboard part looks MELODIC (rightmost mixer icon is a piano-type
+    voice), so pitch SHOULD be chromatic — i.e. there is a clean chromatic register we
+    have not found yet (the KN7000's analog was class 0x2401, absent from KN6000's map).
+  - In the C4/E4/A4 full-block capture ALL registers except 0x5800 were constant — but
+    that is only 3 notes and voice-attribution is unreliable (each note allocates several
+    voices/layers on cycling channels), so the real chromatic register may sit on a voice
+    channel the auto-detect missed.
+  - The KN6000 boot screen's info area is UNRENDERED (solid placeholder bar, like the
+    KN7000's early green-screen bug) so the default sound name can't be read from a shot.
+  - KN6000 :KEYS1 (C5+) still produces no voice writes → can't get cross-octave data.
+NEXT-TICK PLAN (more surgical): capture the FULL note-on block for TWO notes a large
+interval apart (C4 vs B4) with a HARD channel lock (lock the voice on the FIRST write of
+the note's burst, of ANY class, not just pitch-group), diff EVERY class, and find the one
+register that moves ~monotonically with pitch. If none does within an octave, the pitch is
+genuinely multisample (region-per-note) and needs the undumped KN6000 wave/table ROMs —
+in which case defer KN6000 audio and note it as ROM-blocked (like the KN7000 timbre).
+
+RESULT of that surgical C4→B4 capture: the first-write channel lock caught KN6000's
+**group-0x00 voice-parameter registers** (a SEPARATE channel space from the pitch-group
+0x2000+ writes — KN6000 writes both). These DO move with pitch: `0x0000` 0xA8→0x60,
+`0x0004` 0x2E→0x8E over C4→B4 (11 semitones). Not cleanly linear (≈6–9/semitone), but this
+is where KN6000 encodes note info — the analog of the KN7000's group-0x04 note-key struct.
+CONCLUSION: KN6000's absolute pitch is not extractable by simple register-diffing (multi-
+voice + multisample + a note→param computation in firmware). To crack it, the efficient
+path is **static RE of the KN6000 note→pitch routine** (the analog of the KN7000's
+0x4844812D, which used tuning tables + ÷12) via unidasm on kn6000_program, OR waiting for
+the undumped IC13/IC14 table + wave ROMs that hold the sample/pitch maps. **DECISION: KN6000
+audio is deferred as needing that deeper RE; the KN7000 (already singing) remains the
+primary sound target.** Do NOT enable kn6000/kn6500 sound with a wrong-pitch guess.
+
 Not found: any KN6000/KN6500 wave-ROM, table-ROM, or panel-MCU dumps anywhere under `/home/fsanches/compartilhado/`; any KN6xxx disassembly workspace; any KN6xxx-specific sound notes in `kn7000_mame/notes/`.
