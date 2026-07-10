@@ -54,8 +54,13 @@ voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 What shipped:
 1. TG gate opened: io_r(0x98070000) now sets strap bits 1,2 (TG present) ->
    gate flag 0x500ce380 = 0x40 -> firmware programs voices on every note.
-2. CPSD placeholder probe DISABLED so boot no longer auto-opens the SD Card menu
-   (the probe frame was read as a real SD event once boot progressed past the gate).
+2. SD Card menu at boot: opening the TG gate advances boot into the SD subsystem,
+   which is separately PAUSED (notes/sd-card-emulation-plan.md), so it lands on the
+   SD Card menu instead of the home screen. NOT caused by the CPSD probe (verified:
+   menu shows with the probe both on and off) and NOT by card-detect ("no card"
+   forced -> still SD menu). This is a known SD-HLE gap, tracked separately. Sound
+   and the key bed WORK regardless of the displayed screen (melody renders correct
+   pitches from the SD-menu boot state).
 3. kn7000_tonegen_device synthesizes from the firmware's TG writes:
    - pitch from class 0x2401: note = 60 + (data - 0xC838)/1024  (+0x400/semitone,
      C4=0xC838=MIDI60). VALIDATED spectrally: C4/E4/G4/C5 fundamentals = 262/330/
