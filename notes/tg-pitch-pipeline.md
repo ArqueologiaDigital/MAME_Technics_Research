@@ -76,3 +76,60 @@ part/slot field offsets, write order vs first TG write, steal lifecycle); (2) ex
 pitch formula + inverse validated on the anchors; (3) note path event-ring -> record
 (transposes) + the demo setup blob's track->part->program map + whether per-tone
 octave offsets are musically intended (bass sounds an octave down NORMALLY).
+
+---
+
+## Appendix: the FULL pitch/tone architecture (formula finder, adversarially CONFIRMED)
+
+All three pitch-workflow investigations were independently re-derived and CONFIRMED
+(wf_a8b4db86-02c). The shipped fix reads the firmware's own result (notePitch16), so
+it does not depend on this formula — but this is the reference for (a) a future
+descriptor-based implementation, (b) REAL-SAMPLE synthesis once the wave ROMs are
+dumped (the tables below map each voice to its wave sample number + per-sample pitch
+correction), and (c) tuning features (master tune, scale tuning, portamento).
+
+### Forward formula (init 0x4C030FB9; runtime adds modulation via 0x4C031127)
+- note16 = (rec[8]&0x7F)<<8 + 0x80 + partBase   [stored at rec+0x0C = what the fix reads]
+- partBase (0x500AD5A8+part*0x10C, writer 0x4C02BF40) = partTranspose(sbyte
+  part_rec+0x1A)<<8 + masterTune(h 0x500C075E) [+ per-pitch-class table
+  part_rec+0x4A[(note%12)*2] when part flag bit14] [+ per-note scale-stretch via
+  0x48449CB2 when part flag bit15 && zone+0xF != 0xFF]
+- melodic: pitch16 = ((note16 - (zone[0xB]<<8 + 0x80)) asr exp) + 0x4280, where
+  exp = (descriptorHW0>>11)&7 (key-follow divisor; 7 = fixed pitch from zone+0xC)
+  + coarse(desc+7)<<8 + 2*fine(desc+8) + tone-edit coarse/fine (toneblock
+  +elem*0x34+0x8E/0x8F) + multisample corr (subrec+6, modal 2756) + part offset
+  (part_rec+0x18) + mod matrix (part_rec+0x64) + LFO + portamento; clamp 0..0x7FFF
+- bus value: pitch18 = ((pitch16+0x1800)<<2)&0x3FFFF, register class
+  0x2400|(pitch18>>16), data16 = pitch18&0xFFFF. 1 semitone = 0x400 in pitch18 /
+  0x100 in pitch16; neutral 0x4280 (pitch18 0x1E200) = zone center at native rate.
+
+### The tone/zone/sample data (all in the DUMPED table ROM, bank 0)
+- bank pointers (RAM): 0x5003A554[5] data base (bank0 = 0x4806EA98),
+  0x5003A5A4[5] header (bank0 = 0x48120CD8); banks 1-4 = the 0x56/0x57 flashes.
+- zone records: 16 bytes @ 0x48131DF0, 864 entries: +9/+0xA low/high key,
+  +0xB centerKey (66 internal in 851/864 zones), +0xC fixed pitch16 for exp==7,
+  +0xF scale-tune idx; +0 -> tableA (multisample remap), +4 -> subrec table.
+- multisample: tableB = per-semitone byte map (128 entries indexed by
+  basePitch>>8) -> remap -> subrec {+2 SAMPLE NUMBER, +6 sh16 per-sample pitch
+  correction} — the future wave-ROM playback path.
+- wave-key hash (bank0): 891 buckets, entry {next, key, zoneIdx|bit15-invalid};
+  keys from descriptor bytes +4/+5/+6 (b1 gets a per-part wave offset 0x4C0109E5).
+- part pitch struct +0x46 h = current/target note16 -> TG class 0x2000
+  (&0x1FFF|0x4000, |0x8000 when multisample) — the "within-octave companion"
+  register from the old notes, now explained (portamento/multisample tracking).
+
+### Nuance: the internal note scale (flagged, not load-bearing)
+The formula finder's offsets line says "internal note = MIDI+24 on keybed"; the
+shipped fix treats internal == MIDI (keybed FIFO = key index, internal = index+36).
+The bed-range argument favors the latter: 61 keys -> internal 36..96 = C2..C7 =
+exactly the real KN7000's compass; the demo blob's notes (internal scale) then read
+as standard MIDI and the music lands in sensible registers; the chord finder's
+C-Maj sounds around middle C matching its screen. If an absolute-pitch reference
+for real hardware ever disagrees (e.g. a recording of the real Overture), revisit
+the global anchor by a constant offset — a one-line change in tg_pitch_resolve().
+
+Verifier corrections recorded: scale-tune byte range is wider than first claimed
+(PIANO stretch spans about -88..+86); demo setup-blob full per-part records start
+at +0x154 (not +0x140) and are interleaved with compact records; several cited
+addresses are movm-prologue addresses (call targets are entry+prologue) — none
+load-bearing.
