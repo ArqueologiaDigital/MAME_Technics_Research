@@ -151,3 +151,21 @@ the DSP would process the placeholder SINE (wave ROMs undumped) → a reverb/cho
 until the ROMs are dumped. The real value of F.1/F.2 is proving the recovered DSP programs
 actually RUN on MAME's SHARC core (validates the Phase-B disassembly). A good point for Felipe
 to weigh in on committing the effort; prerequisites are now fully worked out so it starts fast.
+
+### F.2 foundation VALIDATED (2026-07-10, cron tick #6) — runtime upload confirms the map
+Enabled the Phase-A DSP host stub (CONFIG bit0) so the boot probe passes and the firmware
+host-boots the DSP, then tapped the index port (0x98000000) + data port (0x9C000000) in Lua and
+decoded the block protocol live (reg 0x40 = target address, reg 0x1C = 0xA1 PM-commit / 0x41
+DM-commit). Result: **258 download blocks over boot**, whose target addresses match the
+statically-derived §5 map EXACTLY and from a fully independent source (the runtime bus, not the
+ROM pool):
+- **DM targets: 0x9800, 0x9C40, 0xC000, 0xC302** ; **PM targets: 0x8000, 0x8300, 0x8400, 0x8D00.**
+- Boot order confirms the effects-DSP runtime model: blocks 1–8 load the **resident kernel**
+  (all four DM + all four PM regions once), then blocks 9+ repeatedly load an **effect on top**
+  (PM @0x8400 + its DM state @0x9800 & @0xC000) — exactly the "10-slot engine, effects at 0x8400"
+  structure documented in kn7000-effects-dsp.
+This cross-validates (a) the §5 internal memory map, (b) the host-upload protocol (reg 0x40/0x1C),
+and (c) the Phase-A stub captures correctly. So F.2's driver-side boot glue is well-understood:
+on reg-0x40 write latch the DMA target address; on reg-0x1C 0xA1/0x41 start a PM/DM DMA into the
+SHARC's internal memory (ext-port DMA ch 8/9); stream the data words. Diagnostic:
+capture via a tap like /tmp/dspup.lua (retain _keep; 4-byte-aligned taps; CONFIG bit0 on).
