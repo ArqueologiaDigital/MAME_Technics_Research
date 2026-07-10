@@ -238,3 +238,46 @@ Consequences:
   (link = SIO ch2; status bit4=RxRDY; RX handler 0x484b2037 for group 0x14; the group-0x14 IRQ is disabled;
   the SD state machine never runs; state block all-zero). But WHY it never initialises is NOT the strap.
   Re-open the "what triggers the SD init/state-machine" question without the strap red herring.
+
+## BREAKTHROUGH (2026-07-10) — the dormancy was OUR status bits; the link is now ALIVE
+
+Felipe un-paused the SD work. Root cause of the "SD subsystem never initialises"
+mystery: **it was never dormant at all.** An SD link task runs from boot, calling the
+link-ready helper 0x484b2889 (~65k calls/s, measured) which polls status 0x3400082C
+for bit6|bit4 ten times and yields (kernel semaphore 0x4C03D6BC), forever — because
+our ch2 HLE never set TxRDY. Every earlier "the state machine never runs" observation
+was downstream of this one missing bit.
+
+Corrections to earlier findings (all verified live and/or adversarially):
+- **bit7 of 0x3400082C = RX EMPTY**, not a frame flag: the classifier 0x484b28ee
+  reads the RX byte at +9 UNCONDITIONALLY, then treats bit7-set as "no byte" (burst
+  ends, task yields). "bit7 diverts the firmware" (update #2) = this empty marker.
+- **"bit6 breaks the boot" (update #4) does NOT reproduce** — with bit6 set the boot
+  is fine; the old blank-LCD was some other transient. Fear removed.
+- **The 0x90200000 "SD host controller bank" was a MISREAD** (adversarially
+  CONFIRMED): 0x9020005c/5d/5f etc. are 24-bit sound-parameter database IDs
+  (namespace tag 9) fed to the library parameter engine at 0x48566760 — not SD
+  registers. The CPSD serial link is the ENTIRE SD path.
+
+The live link (captured):
+- Boot t=1.37: firmware configures ch2 (config 0x1181 -> 0x5181 -> 0xD181, control
+  0x00, a status-side write 0x3F to +0xD) and transmits its first byte: **0xFE**
+  (keep-alive ping, MIDI-active-sense style on the shared UART framing).
+- RX byte classes (classifier 0x484b28ee): >=0xF8 keep-alive (handler 0x484b2454),
+  0xF0 frame START (in-frame flag 0x50150ade:=1), 0xF7 frame END (flag:=0), 0x80-
+  0xF6 and data bytes -> frame parser 0x484b251d. The link task's state dispatch
+  (0x484b29c5) counts frames with 30-cycle timeouts.
+- Trial HLE response FE F0 00 F7 to the ping: ALL 4 BYTES consumed (popped at
+  t=3.4) and classified. **Transport proven end-to-end.** The conversation now
+  stalls only on CONTENT: what the real CPSD status frame payload must carry
+  (card-present/lid/etc.) to advance the SD init + state machine (0x48551f80).
+
+Driver (commit 0f00f9a): ch2 status = 0x40 | (rx?0x10:0x80) for KN7000; ch2 TX
+rerouted from the MIDI-2 UART to cpsd_rx_byte() (first version answers the ping);
+placeholder probe removed. KN6000/6500 untouched.
+
+IN FLIGHT: 4-way static-RE workflow (wf_d6998fbd-c86) on (1) who dispatches the SD
+state machine 0x48551f80 + gates, (2) the TG-strap boot-to-SD-menu wait condition,
+(3) the full ch2 frame format + handshake (the critical one), (4) the 0x90200000
+non-bank (DONE: misread confirmed). Next: implement the real CPSD status frames per
+(3), then the card/directory/file protocol against a host FAT image (plan Phase 2).
