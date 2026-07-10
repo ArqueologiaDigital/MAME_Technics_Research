@@ -79,3 +79,48 @@ Whichever the real hardware does — MN10300 pushing the image through the 0x980
 5. **Driver-side boot glue** in `kn7000.cpp`: copy `model2.cpp` `copro_ctl1_w`/`copro_fifo_w`/`external_dma_write` (host upload) or the konppc shared-RAM + `INPUT_LINE_RESET` EPROM-boot pattern, per what step 1 reveals.
 
 Part-marking note: "S21065LKS240" reads as ADSP-21065L**KS**-240 (KS = 208-lead MQFP package; -240 speed grade = 60 MHz core, 240 MFLOPS peak) — consistent with the service-manual identification given as established fact.
+
+---
+
+## 5. F.1 progress (2026-07-10) — 21065L internal memory map DERIVED FROM THE PROGRAM
+
+The `ADSP-21065L-EP.pdf` in the repo is only the **-EP summary** (14 pp): it gives the
+high-level facts but explicitly defers the detailed internal-memory / IOP-register map to
+the full ADSP-21065L datasheet (which we do NOT have). Rather than block on that, the map
+was derived **empirically from the recovered download records** (their block load
+addresses, from `kn7000_disassembly/disasm/dsp/*.asm` headers `DM@xxxx PM@yyyy`):
+
+**21065L internal SRAM layout the program actually uses (for the subclass pgm/data maps):**
+- **PM (48-bit program/instruction words):** base addresses **0x8000, 0x8300, 0x8400, 0x8D00**
+  → a PM region ~**0x8000–0x8Dxx**. (0x8400 is the main per-effect code area; 0x8000/0x8300/
+  0x8D00 are the resident kernel + larger effects.)
+- **DM (data words):** base addresses **0x9800, 0x9C40** and **0xC000, 0xC028, 0xC302**
+  → two DM regions ~**0x9800–0x9Cxx** (coeffs/small buffers) and ~**0xC000–0xC3xx** (main
+  data + delay buffers; 0xC000 holds the shared kernel constants — e.g. Const_PosFull
+  0x7FFFFFFF at 0xC006).
+- These are the two dual-ported SRAM blocks (Block 0 / Block 1). NOTE this is completely
+  different from the 21062 family convention the base core hardcodes (PM @0x20000, short-word
+  @0x40000) — confirming a subclass with its own `pgm_*`/`data_*` maps IS required, and giving
+  the concrete addresses to put in them.
+- IOP registers are still assumed at the family-convention DM 0x0000–0x00FF (host-boot
+  DMA + the 21062 core both use that); the -EP datasheet doesn't contradict it.
+
+**Facts extracted from the -EP datasheet (concrete subclass details):**
+- 544K bits on-chip SRAM, **two independent dual-ported blocks** (Block 0, Block 1),
+  configurable 16/32/48-bit words.
+- **External-port DMA channels are 8 and 9** (DMAR1/DMAG1 = ch 9, DMAR2/DMAG2 = ch 8) —
+  NOT 6/7 like the 21062. The host-upload boot DMA path must use ch 8/9.
+- **Two SPORTs** (SPORT0, SPORT1), I2S, up to 8 TX + 8 RX channels — the audio path.
+- Host port: host can directly read/write the IOP registers (HBW SYSCON bit selects host bus
+  width) — matches the MN10300 host-upload model (0x98000000 index / 0x9C000000 data).
+- Boot: BSEL/BMS strap picks EPROM vs host-processor boot; the KN7000 uses **host boot**.
+
+**F.1 STILL NEEDS (next tick):** the IOP register OFFSETS the program actually touches
+(SPORT/SDRAM/DMA control regs) — the 21062 core `fatalerror`s on unknown IOP offsets, so the
+subclass must stub exactly those. Get them by **disassembling the resident-kernel PM record**
+(`build/dsp/rec*_pm_8400.bin` via `unidasm -arch sharc`, repacked 6→8-byte words) and finding
+its IOP (`dm(0x00xx)`) accesses in the init code. Then: write `adsp21065l_device` (pgm map
+0x8000–0x8Dxx, data map 0x9800–0x9Cxx + 0xC000–0xC3xx + IOP 0x00–0xFF + external SDRAM as
+plain RAM), replace the two `fatalerror` defaults (sharc.cpp:367/443) with logged stubs for
+the offsets found, instantiate it in kn7000() gated off, build (SUBTARGET=kn7000), verify
+KN7000 still boots.
