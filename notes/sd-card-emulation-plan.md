@@ -418,3 +418,26 @@ response-scan 0x4854c136 for CMD9; align spi_sdcard's CMD9 R1/token/trailer to w
 primitive expects. Once initflag 0x5016064c=1, the mount worker's card-check passes ->
 card-init -> FAT mount -> state 3 -> the SD menus open + cmd-3 reads FAT sectors from the
 host image (sdtest.hd). Test image: 64MB FAT16 raw, `-harddisk sdtest.hd`.
+
+## SD cover switch + MIDI-to-keybed (2026-07-10, commit 47b7cbb)
+- SD slot COVER = a latching machine-config switch (SDCOVER, default Closed). Card-detect
+  "present" = cover CLOSED and an image attached. Open -> card-detect bit4=1 -> ERROR 93 /
+  no mount; Close+card -> bit4=0 -> insert edge -> mount. Live toggle via sd_cover_changed
+  -> sd_update_carddetect. Verified: OPEN detect=1 state=0; CLOSED+card detect=0 state=4.
+- MIDI-to-KEYBED bridge (separate from the rear MIDI jacks): media "kbdmidi" (-midiin2);
+  a running-status parser routes note-on/off to kbd_push(note-36, velocity) -> the
+  0x98050004 voice FIFO. So a controller plays the internal key bed WITH velocity (self-
+  tests that watch the key bed see the presses). Verified vel 40 vs 127 -> louder note.
+  NB MAME 0.288 PORT_GM_NOTE only names a field (no MIDI wiring) -- this bridge is needed.
+
+## Toward 100% SD (checklist)
+- [x] Data transport = SD SPI over the 0x9805000C mailbox (spi_sdcard).
+- [x] Chip-select (GPIO 0x36008004 bit1) + CSD CRC16 (patched spi_sdcard).
+- [x] Card-detect / cover switch (open=ERROR 93, close=insert).
+- [ ] **Card-init completion** (THE blocker): CMD9 read primitive 0x4854c3ab errors before
+      CSD parse -> initflag 0x5016064c stays 0 -> mount ends state 4. Trace 0x4854c3ab
+      post-data (btst 0x0400/0x1200) + response-scan 0x4854c136 for CMD9; align spi_sdcard.
+- [ ] Mount success -> SD menus open (state 3); write-protect (0x9cc00009 bit4) toggle.
+- [ ] cmd-3/cmd-4 read/write FAT sectors from the host image; directory listing.
+- [ ] SD-Song (SMF) playback via the sequencer; SD-Audio; lyrics; the 6 SD panel buttons
+      (already wired) driving transport; the SD IN USE LED (0x9cc00008 bit6).
