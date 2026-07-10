@@ -138,8 +138,17 @@ Felipe's explicit go-ahead. **When Felipe returns: decide whether to commit to t
 Safe SMALL items a cron tick CAN do autonomously without that decision (pick one if
 resuming): ~~validate the host-upload path~~ DONE (tick #6 — runtime upload cross-validates
 the §5 memory map + the F.2 protocol; see sharc-lle-assessment.md + tools/dsp_upload_capture.lua);
-cross-model KN5000 sound check; minor doc/website polish; re-verify the published binary.
+~~cross-model KN5000 sound check~~ DONE (tick #7 — §6 of sound-cross-model-kn5000.md resolves
+the KN5000 hypotheses against the working KN7000; cross-model sound docs KN5000/6000/6500 now
+complete); minor doc/website polish; re-verify the published binary.
 Avoid: risky shared-core changes, the user-paused SD subsystem, wrong-pitch guesses.
+
+NOTE (tick #7): the safe-small-item menu is nearly exhausted and the sound subsystem is at a
+strong, complete, well-documented plateau. The remaining substantial work (effects-DSP LLE)
+needs Felipe's greenlight on the shared-core effort. Future autonomous ticks: prefer
+re-verifying the published binary / minor polish over inventing marginal work; do NOT start
+the shared-core SHARC build unattended. The KN7000-sings milestone + all RE/validation is
+committed and published; everything is ready for Felipe's DSP decision.
 
 ### NEXT MAJOR EFFORT (pending greenlight) = the EFFECTS DSP (Phase F, LLE) — in the cron goal.
 Feasibility CONFIRMED this tick: MAME has a 2106x SHARC core (ADSP21062/21060, same ISA as
