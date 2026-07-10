@@ -67,3 +67,20 @@ functions. Event families (all from the bank-A dump 0x48614978):
   CONTRAST/PAGE/DISPLAY HOLD/EXIT/MUTE/SD.
 Workflow wf (decode each event->function name) feeds the rewrite; anchors above are
 runtime-verified.
+
+## Which model is bank B? (2026-07-10)
+
+The bank is chosen by the model/TG strap 0x98070000 via probe 0x484D7713: it returns 3
+when bit1 is CLEAR, 2 when bit1 set/bit2 clear, 1 when both set; the bank selector treats
+"==3" as bank B, "1 or 2" as bank A. So on real KN7000 hardware (TG present, bit1 set) the
+panel is ALWAYS bank A; bank B is the strap's "no-TG / other-variant" state and is never
+selected on a real KN7000.
+
+Checked Felipe's guess (KN6000/KN6500): interleaved the KN6000 program ROM and searched
+for bank B's exact SEG0C descriptor (ev2004/arg0C4F, bytes 0420 70 00 01 4f 0c) -> **0
+matches**, so bank B is NOT the KN6000's panel. (Note: the KN6000 firmware DOES contain
+0x20B5-family bytes, so the KN6000/6500 likely have their own card slot -- SD isn't
+KN7000-exclusive after all; bank A = KN7000 still stands, anchored by the TG-present strap
++ the screenshot-confirmed SAX@SEG14.b3.) Conclusion: bank B is a no-TG service/variant
+panel baked into the shared codebase, not a specific sibling we can name from the KN7000
+firmware alone.
