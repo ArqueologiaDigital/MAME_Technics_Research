@@ -533,6 +533,26 @@ private:
 	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
 	TIMER_CALLBACK_MEMBER(fav_preload);
 
+	// --- On-chip 16-bit TEMPO timer (mode 0x34001082 / base 0x34001092 / count 0x340010A2)
+	// The clock behind ALL sequenced playback. The firmware registers ISR
+	// 0x48447084 -- a 96-PPQN tick counter (increments a mod-0x60 beat phase at
+	// 0x50149664 and drives five sub-tick consumers) -- on INTC group 7 (GxICR
+	// 0x3400011C, level 4, registration at 0x4844780C), and programs this timer's
+	// reload to the current tempo (start sequence at 0x484477D3: write mode ->
+	// write base -> bset/bclr 0x40 [load] -> bset 0x80 [count enable]; tempo
+	// changes rewrite the base at 0x48447888 while running). With the timer
+	// unmodeled the tick never fired: rhythm accompaniment never started, demo
+	// songs played only their first (synchronously fired) event then stalled,
+	// and the ApTimer software-timer layer never ran. IOCLK = 16 MHz (from the
+	// firmware's own MIDI-baud math: IOCLK/8/(TM3BR+1) = 31250 => 16 MHz).
+	uint8_t  m_tmr7_mode = 0;              // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
+	uint16_t m_tmr7_base = 0;              // 16-bit reload (underflow period)
+	emu_timer *m_tempo_timer = nullptr;
+	TIMER_CALLBACK_MEMBER(tempo_tick);
+	void tmr7_mode_w(uint8_t data);
+	void tmr7_base_w(uint16_t data);
+	void tmr7_rearm(bool restart_phase);
+
 	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
 	// ch0 = control panel, ch1 = MIDI port 1, ch2 = the SD sub-CPU "CPSD"
 	// (MN102H60) -- NOT MIDI-2 as first assumed: the SD firmware polls ch2 status
@@ -691,6 +711,29 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// those loops progress. The KN7000 keeps the generic 0x34000000 handler.
 	if (m_lib_mirror)
 		map(0x340010a0, 0x340010af).lr16(NAME([this](offs_t o) { return uint16_t(-(m_maincpu->total_cycles() >> 4)); }));
+	// KN7000: the on-chip 16-bit TEMPO timer (see the member declarations for the
+	// full RE). mode byte @0x34001082, 16-bit reload @0x34001092, counter
+	// @0x340010A2; underflow asserts INTC group 7 = the firmware's 96-PPQN
+	// sequencer tick. The sibling registers (0x1080/0x1090/0x10A0, another timer
+	// touched only by early boot) keep the previous behaviour: log + read 0.
+	if (!m_lib_mirror)
+	{
+		map(0x34001080, 0x34001083).lrw16(
+			NAME([this](offs_t o) -> uint16_t { return o ? m_tmr7_mode : 0; }),
+			NAME([this](offs_t o, uint16_t data, uint16_t mem_mask) { if (o && ACCESSING_BITS_0_7) tmr7_mode_w(data & 0xff); }));
+		map(0x34001090, 0x34001093).lrw16(
+			NAME([this](offs_t o) -> uint16_t { return o ? m_tmr7_base : 0; }),
+			NAME([this](offs_t o, uint16_t data, uint16_t mem_mask) { if (o) tmr7_base_w(data); }));
+		map(0x340010a0, 0x340010a3).lr16(
+			NAME([this](offs_t o) -> uint16_t
+			{
+				if (!o || !(m_tmr7_mode & 0x80)) return 0;
+				// live down-count derived from the emu_timer phase
+				const attotime period = m_tempo_timer->period();
+				if (period.is_never() || period.is_zero()) return 0;
+				return uint16_t(uint64_t(m_tmr7_base + 1) * m_tempo_timer->remaining().as_attoseconds() / period.as_attoseconds());
+			}));
+	}
 	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
 	// 0x34000000 bank; this more-specific mapping overrides the logger above.
 	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
@@ -1079,6 +1122,55 @@ TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
 	// increments the software ms-counter 0x50276e48 the boot busy-waits on.
 	if (m_lib_mirror)
 		intc_assert(0x07);
+}
+
+// --- The KN7000 tempo timer (see the member declarations for the full RE) -----
+// Semantics modeled from the firmware's own driver code:
+//   start   (0x484477D3): write mode -> write base -> bset 0x40 (load counter
+//            from base) -> bclr 0x40 -> bset 0x80 (count enable)
+//   restart (0x484478C8): bclr 0x80 -> bset/bclr 0x40 -> bset 0x80
+//   tempo   (0x48447888): movhu newbase, (0x34001092) while running -- takes
+//            effect on the next underflow (hardware auto-reload semantics).
+// Prescale: low mode bits select the source clock. Observed mode value logged at
+// runtime; PRESCALE is fixed from the 96-PPQN math (see tmr7_rearm).
+
+void kn7000_state::tmr7_mode_w(uint8_t data)
+{
+	const uint8_t rising = data & ~m_tmr7_mode;
+	m_tmr7_mode = data;
+	logerror("tmr7: mode=%02X base=%04X\n", data, m_tmr7_base);
+	if (!(data & 0x80))
+		m_tempo_timer->adjust(attotime::never);        // count disabled
+	else if (rising & (0x80 | 0x40))
+		tmr7_rearm(true);                              // enabled, or load pulse while enabled
+}
+
+void kn7000_state::tmr7_base_w(uint16_t data)
+{
+	m_tmr7_base = data;
+	logerror("tmr7: base=%04X (mode=%02X)\n", data, m_tmr7_mode);
+	// While running, the new reload takes effect at the next underflow: keep the
+	// current countdown, change only the periodic reload.
+	if ((m_tmr7_mode & 0x80) && !m_tempo_timer->remaining().is_never())
+		tmr7_rearm(false);
+}
+
+void kn7000_state::tmr7_rearm(bool restart_phase)
+{
+	// IOCLK = 16 MHz (from the firmware's MIDI-baud derivation). PRESCALE: the
+	// tick ISR counts 96 PPQN, so at the boot default of q=120 the rate must be
+	// 192 Hz; the observed reload confirms the divider (logged above).
+	static constexpr unsigned PRESCALE = 8;
+	const attotime period = attotime::from_ticks(uint64_t(m_tmr7_base + 1) * PRESCALE, 16'000'000);
+	if (restart_phase)
+		m_tempo_timer->adjust(period, 0, period);
+	else
+		m_tempo_timer->adjust(m_tempo_timer->remaining(), 0, period);
+}
+
+TIMER_CALLBACK_MEMBER(kn7000_state::tempo_tick)
+{
+	intc_assert(0x07);      // GxICR 0x3400011C -> the 96-PPQN sequencer tick ISR 0x48447084
 }
 
 // One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
@@ -1856,6 +1948,7 @@ void kn7000_state::machine_start()
 	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_tg_gate_timer = timer_alloc(FUNC(kn7000_state::tg_gate_poke), this);
+	m_tempo_timer = timer_alloc(FUNC(kn7000_state::tempo_tick), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -1869,6 +1962,8 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_btn_prev));
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
+	save_item(NAME(m_tmr7_mode));
+	save_item(NAME(m_tmr7_base));
 	save_item(NAME(m_tg_reg));
 }
 
@@ -1929,6 +2024,9 @@ void kn7000_state::machine_reset()
 		m_tg_gate_timer->adjust(attotime::from_seconds(10), 0, attotime::from_seconds(1));
 	else
 		m_tg_gate_timer->adjust(attotime::never);
+	m_tmr7_mode = 0;
+	m_tmr7_base = 0;
+	m_tempo_timer->adjust(attotime::never);
 }
 
 void kn7000_state::kn7000(machine_config &config)
