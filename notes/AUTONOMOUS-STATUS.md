@@ -51,6 +51,18 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## SD TRANSPORT IDENTIFIED 2026-07-10 (autonomous tick; notes commit 1f0667a)
+
+Traced VFS device 'C' fops (@0x500079D8) -> command poster 0x4847030e -> disk-worker
+msg type 3 -> handler 0x4854afee (cmd switch: 3=read/4=write/8,A,B,C=control) ->
+transfer primitive 0x4854c3ab (0x200-byte sectors, cmd block @0x50007ee4). **The
+hardware = a strobed 16-bit mailbox: register 0x9805000C (sound-bank io window) +
+handshake via ICR 0x34000170 (ext-int group 0x1C), shadow @0x50005200.** This is the
+register PC 0x4854BF74 already writes 20k times at boot (the probe idling against our
+zero stub). NEXT: live-capture the strobe/data protocol during boot-probe + a mount
+attempt (fire the plumbed insert edge), RE wait helpers 0x4854bb89/bc8f/c94d/c1d5,
+then HLE the mailbox against a host FAT image so card-init 0x485630de succeeds.
+
 ## SD PANEL SWITCHES LIVE + 61-KEY MIDI BED 2026-07-10 (commit f673b74)
 
 Felipe asked for the SD-panel inputs + host-key/MIDI keybed. DONE + verified:
