@@ -51,6 +51,20 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## SD SPI TRANSPORT WORKING 2026-07-10 (Felipe: implement the transport; commits 9279ba0/3457304)
+
+DONE what Felipe asked: captured the mailbox protocol + implemented the SD transport HLE.
+The "mailbox" at 0x9805000C is a byte-wide SPI MASTER (handshake ICR 0x34000170 grp 0x1C);
+the firmware speaks STOCK SD SPI (10x 0xFF, CMD0 40..95, CMD1, CMD9 CSD). Driver clocks
+each 0x9805000C write's 8 bits through MAME's spi_sdcard (m_sdcard; -harddisk file.hd) +
+asserts grp 0x1C. VERIFIED: CMD0->0x01, CMD1->0x00, CMD9->CSD answered correctly. Card
+presence = edge-driven (insert edge at t=6 if image attached; else ERROR 93). Both boot
+paths reach the home screen. NEXT (mount completion): the worker card-check 0x4854b597
+needs initflag 0x5016064c!=0, set indirectly by a disk-worker init sub-command (0x4854afee,
+addr @0x4854b0ae/b11a) -- chicken-egg with card-init; the in-flight command-layer finder
+(wf_6a5ed26e-8d4, 1/6 in) is resolving which sub-command runs the full CSD-parse init.
+Details: notes/sd-card-emulation-plan.md Phase 2 section. Test image: sdtest.hd (64MB FAT16).
+
 ## SD TRANSPORT IDENTIFIED 2026-07-10 (autonomous tick; notes commit 1f0667a)
 
 Traced VFS device 'C' fops (@0x500079D8) -> command poster 0x4847030e -> disk-worker
