@@ -51,6 +51,26 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★ PANEL BANK DISCOVERY 2026-07-10 — the driver's panel was mapped to the WRONG model
+
+Re-RE'ing the disk/SD navigation exposed a bigger issue. The firmware has TWO panel
+button-descriptor tables selected by the model/TG strap (dispatch 0x484ADB59 ->
+0x484ABAFD=*(0x5006BE94); ==0 -> bank A 0x48614978, !=0 -> bank B 0x486149FC; flag from
+strap 0x98070000 bit1 via probe 0x484D7713). **Bank A = the KN7000** (has the SD switches
+SEG1D=0x20B5..BA; TG present = real hw). Bank B = a no-TG variant (NOT the KN6000 --
+its firmware doesn't contain bank B's layout). The driver's panel PORT_NAMEs + layout +
+navigation were all built against bank B (when the driver falsely reported TG absent), so
+now that sound is default-on (TG present -> bank A, correct) the buttons are mislabelled
+-- SOUND buttons misbehave, DISK moved to SEG0D.b6, "Fn 2016" placeholders exposed.
+RUNTIME-CONFIRMED: SEG14.b3 -> "SOUND-RIGHT1 SAX & WOODWIND" screen. Full bank-A SOUND
+GROUP + DISK positions in notes/panel-bank-A-is-the-kn7000.md.
+
+IN PROGRESS: workflow wf_bdf3b275-55c decodes every bank-A event->function name (3
+families + adversarial verify). NEXT: rewrite the driver's SEG ports (PORT_NAME) + the
+kn7000.lay inputtag/inputmask bindings + the SD/DISK navigation to bank A, from the
+workflow's verified table. This is a substantial systematic cleanup (~200 buttons). The
+SOUND GROUP + DISK are already derived + anchored; do the rest from the workflow output.
+
 ## ★★★★★★ SD CARD MOUNTS 2026-07-10 (commit bf0c9a2) — the SD data path is COMPLETE
 
 The last mount blocker is SOLVED: the DATA-BLOCK CRC16. The firmware verifies the CSD's
