@@ -124,3 +124,30 @@ its IOP (`dm(0x00xx)`) accesses in the init code. Then: write `adsp21065l_device
 plain RAM), replace the two `fatalerror` defaults (sharc.cpp:367/443) with logged stubs for
 the offsets found, instantiate it in kn7000() gated off, build (SUBTARGET=kn7000), verify
 KN7000 still boots.
+
+### F.1 IOP stub set — DONE (2026-07-10), inventoried from ALL 80 PM records
+Disassembled every `build/dsp/*_pm_*.bin` (6→8-byte MSW-first repack + `unidasm -arch sharc`)
+and collected every IOP-range access (`DM(0x0000..00FF)`). The exact offsets the DSP programs
+touch — what the subclass MUST model/stub so the base 21062 core does not `fatalerror`:
+- **0x02** WAIT; **0x20** — already handled by the base core.
+- **0x08–0x0F** message registers — HEAVILY used (0x0A ×9, 0x0B ×21): the host↔DSP handshake /
+  mailbox (resident kernel ↔ MN10300). Base core ignores writes / returns 0 on reads.
+- **NEW — base core `fatalerror`s on these; subclass adds logged stubs:**
+  0x28–0x2F (block — SPORT0 or a DMA-param block); 0x33; 0x38–0x3C (block — SPORT1/DMA);
+  0x53; 0x58–0x5C; 0x63; 0x6B; 0x73; 0x7B (the 21065L's 10 DMA channels' ctrl/param regs);
+  0xE0,0xE1,0xE8–0xEC; 0xF0,0xF1,0xF8–0xFC (high block — SDRAM controller + SPORT config).
+- System regs **IMASK, IRPTL** touched (modeled by the core). External **SDRAM** delay memory
+  at ext addr **0x00080000+** (rec00 POST writes 0xAAAAAAAA to 0x80000/0x88000/0x90000/0x98000)
+  → map external data as plain `.ram()`.
+
+**F.1 NOW UNBLOCKED — both prerequisites derived from the program (no full datasheet needed):**
+(1) internal memory map [§5] + (2) this IOP stub set. NEXT TICK: write `adsp21065l_device`
+(adsp21060 pattern) with these maps + an IOP handler stubbing the offsets above, instantiate in
+kn7000() gated off, build under SUBTARGET=kn7000, verify KN7000 still boots. Then F.2 (host
+upload via 0x98000000/0x9C000000, DMA ch 8/9) and F.3 (SPORT audio).
+
+CAVEAT to weigh before the big build: F.3 (SPORT audio, from scratch) is the largest piece and
+the DSP would process the placeholder SINE (wave ROMs undumped) → a reverb/chorus on a sine
+until the ROMs are dumped. The real value of F.1/F.2 is proving the recovered DSP programs
+actually RUN on MAME's SHARC core (validates the Phase-B disassembly). A good point for Felipe
+to weigh in on committing the effort; prerequisites are now fully worked out so it starts fast.
