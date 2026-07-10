@@ -51,6 +51,31 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★★ SD-MENU BLOCKER SOLVED 2026-07-10 — playable sound on the PLAY SCREEN (commit dbe0786)
+
+The long-standing conflict is broken. Reporting the TG-present strap AT BOOT opens the
+gate BUT advances boot into the paused SD subsystem (-> SD menu). FIX: leave the strap
+CLEAR (normal boot to the PMEM home/play screen) and force the TG-enable gate open AFTER
+boot instead -- voices then sound ON THE PLAY SCREEN with NO SD menu. Verified: C4 ->
+262 Hz on the home screen (screenshot).
+ - New CONFIG bit2 (default OFF): "Tone generators / firmware sound (play screen, no SD
+   menu)". A timer forces RAM 0x500ce380 = 0x40 ~10 s post-boot and holds it (via the
+   maincpu bus). Prefer bit2 over bit1 for playable sound. cfg: one <port mask="4"
+   value="4">. Combine with bit0 (DSP) for TG->DSP->speaker on the play screen.
+ - This is a workaround for the paused SD subsystem, not real-hardware behaviour -- but it
+   makes the instrument PLAYABLE with sound on the normal screen. Root SD cause still open
+   (kn7000-sd-strap-gate).
+ - CHORD FINDER now usable: HOME -> APC MODE (SEG03 0x02) -> CHORD FINDER (SEG0F 0x40) ->
+   the CF screen; the EAR = "MUTE PART 15 ON" = SEG07 0x10 (Felipe's tip), fires a chord
+   (voice writes + audio). Its pitch renders low (a tonegen decode quirk for the CF's
+   0x2401 data range vs the keybed's -- separate, minor).
+
+REVERB (still open, now more tractable): the play screen did NOT auto-run DspEffectSelect
+-- *(0x500A01E0) stays -1, so the per-unit param path isn't active; the effects that DO
+load come from the lower path (maincpu 0x48404EDD). NEXT: with the play screen reachable,
+try the panel effect-selection buttons (SOUND DSP / DIGITAL EFFECT) to make the firmware
+select a reverb, then the active upload path loads it. See notes/f3-effect-loading.md.
+
 ## ★★ F.3 AUDIO ROUTING WORKS 2026-07-10 — TG audio flows THROUGH the effects DSP (audible)
 
 The tone-generator audio now runs through the ADSP-21065L and out to the speakers.
