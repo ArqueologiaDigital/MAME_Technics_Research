@@ -359,3 +359,31 @@ NEXT (the concrete HLE): capture the exact strobe/data sequence live (log 0x9805
 r/w + 0x34000170 during boot-probe and during a mount attempt with the insert edge
 fired), RE the wait helpers 0x4854bb89/0x4854bc8f/0x4854c94d/0x4854c1d5, then answer
 the probe so card-init 0x485630de succeeds against a host FAT image.
+
+## Phase 2 — TRANSPORT DONE, mount completion in progress (2026-07-10, commits 9279ba0/3457304)
+
+**The SD data transport is a byte-wide SPI master and it WORKS.** Register 0x9805000C =
+one full-duplex SPI shift register to the SD slot; handshake via ICR 0x34000170 (group
+0x1C, polled bit4). Send-byte primitive 0x4854bf4d: W1C DETECT bit0, write byte, poll
+bit4. The firmware speaks STOCK SD SPI: 10x 0xFF wake-up, CMD0 (40 00 00 00 00 95),
+CMD1, CMD9 (SEND_CSD). DRIVER: each 0x9805000C write clocks 8 bits (MSB-first) through
+MAME's spi_sdcard (m_sdcard, prefer SD, MISO via callback -> m_sdmbx_out) + asserts
+group 0x1C; card permanently SS-selected; attach with `-harddisk file.hd`. VERIFIED:
+CMD0->R1 0x01, CMD1->0x00, CMD9->CSD, all answered correctly by spi_sdcard.
+
+CARD PRESENCE (commit 3457304): edge-driven. Boot "no card" (bit4=1); if an image is
+attached, m_sd_insert_timer fires the 1->0 edge at t=6 (insert msg 0x107020bb -> mount)
+and leaves bit4=0 for the debounce (0x4854bd39 <- raw read 0x4854bce0: btst bit4,
+clear=present; software override 0x50005204 >=0 -> low byte). No image -> ERROR 93.
+
+MOUNT COMPLETION BLOCKER (the remaining work): mount worker 0x48551f8d requires card
+check 0x4854b597 != 0, which returns non-zero ONLY if the "card-initialised" flag
+0x5016064c != 0. That flag is set INDIRECTLY by a separate disk-worker init sub-command
+(handler 0x4854afee; store-address loaded at 0x4854b0ae/0x4854b11a). The boot-time SPI
+init (CMD0/1/9) runs but does NOT set 0x5016064c -> chicken-and-egg. NEXT: from the
+in-flight command-layer finder (wf_6a5ed26e-8d4), identify the worker sub-command that
+runs the FULL card-init (through CMD9 CSD parse -> capacity -> sets 0x5016064c + the
+multiplier 0x50160668 / limit 0x50160664 cmd-3 uses) and what response it needs; ensure
+that init is actually invoked in the mount path (it may need a prior "identify" message
+the file ops post). Then cmd-3 (read) will pull FAT sectors from the host image.
+Host image: raw FAT16 superfloppy, mount as -harddisk (a 64MB test image = sdtest.hd).
