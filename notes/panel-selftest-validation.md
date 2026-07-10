@@ -87,6 +87,18 @@ RAN IT and it CONFIRMED the PANEL_LED map: pressing each button lights exactly i
   BRASS cpr81, SAX cpr80, PM1 cpr72, PM8 cpr15 -- the rows I was unsure of, now confirmed). The 3
   misses were leakage on that long automated run.
 
+WHY THE HYBRID/LEAKAGE (confirmed by disassembly, not just inferred): PanelButtonDispatch 0x484ADB59
+reads the flag at 0x484ADB72; if ==1 it calls the InOut test handler 0x484A11E1 (which lights the
+switch's LED) at 0x484ADB7C -- then UNCONDITIONALLY falls through to 0x484ADB85 and runs the normal
+dispatch (0x484ABAFD -> post the button event). So with the flag forced ON, a press does BOTH the
+LED test AND its normal function; the event is still posted and consumed by whatever screen is
+focused. In the real test APP the focused test window treats the event as a no-op (clean isolation);
+on the HOME screen the home window runs the real function (the "leakage"). This is INHERENT -- it
+cannot be cleaned by forcing the flag harder (the firmware also clears the flag block via the panel
+init routine 0x484ADB14, but that's a boot/reset block-clear, not a per-press race). The only clean
+path is being IN the test screen. The LED validation is unaffected: 0x484A11E1 lights the correct
+switch-class LED regardless (that is what the sweep measured).
+
 LIMITATION (honest): we cannot enter the test SCREEN (no "ALL DEVICE OK" text, no clean isolation).
 The boot key-combo is read by the panel/key SUB-CPU, which the emulator does not model at power-on
 (subagent-verified: injecting the keys into the note FIFO does nothing). And forcing the flag on the

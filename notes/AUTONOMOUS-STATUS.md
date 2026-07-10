@@ -124,6 +124,13 @@ on the HOME screen is a hybrid (home screen also processes the button -> leakage
 the map (switch-class LED == normal-op LED, separately proven). Full screen would need modeling the
 sub-CPU power-on key report OR forcing the MILK test-window create (0x4849F8F0 -> 0x4842a717) -- a
 larger focused effort. Detail: notes/panel-selftest-validation.md.
+CRON TICK 2026-07-11: diagnosed the leakage ROOT CAUSE (disassembly-confirmed): dispatch 0x484ADB59
+reads the flag @0x484ADB72, calls the test handler 0x484A11E1 (lights the LED) @0x484ADB7C, then
+FALLS THROUGH @0x484ADB85 to the normal dispatch -> the button event is ALWAYS posted + consumed by
+the focused screen. So flag-forcing on the home screen is INHERENTLY hybrid (LED test + real
+function); the only clean self-test needs the test SCREEN. LED validation unaffected (0x484A11E1
+lights the correct switch-class LED). Documented. Awaiting Felipe's steer on whether to model the
+sub-CPU power-on key report (offered) to enter the full screen -- do NOT start that deep RE unattended.
 
 ## Cron-tick verification (2026-07-10, post panel buttons/LEDs)
 Re-verified the PUBLISHED deliverable after the panel button/LED work + republish: binary md5-identical
