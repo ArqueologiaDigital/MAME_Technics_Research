@@ -51,6 +51,19 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## SD SPI STACK COMPLETE THROUGH CSD 2026-07-10 (commits 9279ba0/3457304/b8bd72c)
+
+Transport DONE + proven. Full mailbox RE (wf_6a5ed26e-8d4, 6/6 confirmed): bone-stock SD
+SPI master, no CPSD protocol. Driver: 0x9805000C = SPI byte latch -> MAME spi_sdcard;
+CHIP SELECT = GPIO 0x36008004 bit1 (active-low); patched spi_sdcard (overlay) appends
+CRC16 to the CMD9 CSD block. The firmware's card-init 0x4854b691 now runs the whole SD
+init correctly framed: CMD0->01, CMD1->00, CMD59 self-test x3, CMD9 -> VALID CSD read
+back. Card presence edge-driven (-harddisk file.hd; sdtest.hd=64MB FAT16). LAST BLOCKER:
+CMD9 read primitive 0x4854c3ab errors before CSD parse 0x4854c6f3 (cmd9-site 3x, parse
+0x) -- a post-data check (btst 0x0400/0x1200) or CSD field. Once initflag 0x5016064c=1,
+mount completes -> SD menus open. Details: notes/sd-card-emulation-plan.md Phase 2 #2.
+Boot unchanged (85% home screen, no card).
+
 ## SD SPI TRANSPORT WORKING 2026-07-10 (Felipe: implement the transport; commits 9279ba0/3457304)
 
 DONE what Felipe asked: captured the mailbox protocol + implemented the SD transport HLE.
