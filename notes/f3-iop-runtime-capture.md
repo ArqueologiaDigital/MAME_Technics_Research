@@ -56,3 +56,21 @@ SPORT0 (0xE0-0xEF) and SPORT1 (0xF0-0xFF):
   width), DMA-enable (SDEN), TX/RX enable, clock/frame-sync source.
 - Which DMA channels (from 0x33/0x53/0x5B/0x63/0x6B/0x73/0x7B/0x3B) are the SPORT RX/TX
   channels, and the II/buffer address each TCB points to = the audio in/out buffers.
+
+## KN7000 hardware audio path (from the SERVICE MANUAL, service_manual/*.pdf)
+
+- **IC306 = S21065LKS240** = the ADSP-21065L effects DSP (confirmed part number).
+- **IC307 / IC308 = 1M FAST SRAM x16 each** (labelled "2M SRAM"): the DSP's EXTERNAL
+  memory (the 0x20000+ region; delay lines for reverb/echo). NOTE: it's static RAM, not
+  SDRAM — but the kernel still writes an "SDRAM control" IOP reg (0x2E) to configure the
+  external-memory interface. Map as plain RAM (already done, 0x20000-0xFFFFF).
+- **DAC = PCM1716ET** (TI stereo audio DAC, up to 96 kHz): the DSP's SPORT TX output feeds
+  this -> analog out. So the SHARC SPORT TX is the WET/processed audio to the speakers.
+- Oscillators on the board: 50 MHz (likely the SHARC input clock — driver currently uses
+  60 MHz; the 21065L PLLs up, so exact input matters only for SPORT/timer timing, not the
+  DRC), plus 17.73 / 24 / 14.32 / 4 MHz. No oscillator label is an unambiguous audio master
+  clock; sample rate is most likely 44.1 or 48 kHz (PCM1716 supports both) but is NOT pinned
+  by the manual text extraction — a "FSYNC" signal exists (frame sync). Keep the 44.1 kHz
+  IRQ0 assumption; revisit if the wave-ROM/service-mode audio spec pins it.
+- Implication for MAME routing: TG (IC201/IC205) digital audio -> SHARC SPORT RX (dry in);
+  SHARC SPORT TX -> PCM1716 DAC -> speakers (wet out). This matches the F.3 topology.
