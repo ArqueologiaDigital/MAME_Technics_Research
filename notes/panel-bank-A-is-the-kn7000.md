@@ -99,9 +99,25 @@ snapshot probe): the ev2010/2011/2012/2013 menu-tab family (SEG0C.b1, SEG0F.b6/b
 SEG10.b6/b7, SEG11.b6/b7, SEG12.b6/b7, SEG13.b6/b7), five ev2040 apps (0x0B/0C/0D/10/18),
 ev20AE, ev20B4, and the CPC control column SEG16-20/1B (CONTRAST/PAGE etc.).
 
-STAGE 2 TODO: rebuild the clickable LAYOUT for bank A. tools/gen_lay.py maps
-(SEG,mask)->artwork element/LED using the OLD bank-B positions, so mouse clicks on the
-artwork trigger the wrong function (input-menu/key mapping is already correct after
-STAGE 1). Re-derive the artwork position <-> (SEG,bit) binding from bank A + the physical
-panel silk-screen, regenerate kn7000.lay, and re-verify by clicking. Also: the SD panel
-navigation (DISK MENU = SEG0D.b6) + the ev2010 menu family want a runtime snapshot pass.
+STAGE 2 DONE: the clickable LAYOUT (tools/gen_lay.py -> src/mame/layout/kn7000.lay) is
+rebound to bank A. Every physical silk-screen button keeps its position + label; only its
+inputtag/inputmask (and the state-driven LED name=) changed from the bank-B guesses to the
+bank-A descriptor bits. The full mapping (SOUND GROUP, RHYTHM genres, 16-part MUTE matrix,
+LCD part on/off soft-keys, transport, effects, APC/SA, TRANSPOSE/OCTAVE split pairs that now
+straddle two SEGs, PART SELECT + CONDUCTOR groups -- all three members now known, etc.) is in
+notes/panel-layout-bankA-bindings.md. pair_h() was generalised with a seg2= arg for the
+cross-SEG split pairs (INTRO&ENDING, TRANSPOSE, R1/R2 OCT). MEMORY / EW EXPANSION are now bound
+(SEG13 0x04 / SEG12 0x04 -- were decorative in bank B). PAGE / CONTRAST + SEQUENCER PLAY/EASY REC
+left unbound (no statically-verified bank-A bit).
+
+Verified: (a) XML valid, no duplicate (SEG,mask), all 132 bound bits are real bank-A descriptor
+bits (no phantoms); (b) MAME boots + renders the full panel with no layout/artwork/port errors;
+(c) END-TO-END -- pulsing the exact bit the PIANO artwork binds to (SEG10 0x10) opens
+"SOUND - RIGHT 1: PIANO"; pulsing the 8&16 BEAT genre bit (SEG02 0x80) opens "RHYTHM: 8&16 BEAT".
+
+LED follow-up: GENRE + SOUND GROUP LEDs re-keyed by state identity (bank-independent); a few
+verified individual LEDs hardcoded (SYNCHRO cpr_led113, START/STOP cpr_led36, MSA cpl_led13,
+SPLIT POINT cpr_led30, TECHNI-CHORD cpr_led73, DISPLAY HOLD cpl_led5). A full empirical bank-A
+function-button LED re-sweep is the remaining polish item (dark LED beats a wrong-lit one).
+Still open (unchanged from STAGE 1): the ev2010 menu-tab family + the 5 unnamed ev2040 apps +
+the CPC control column (SEG16-20/1B) want a bank-A runtime snapshot probe.

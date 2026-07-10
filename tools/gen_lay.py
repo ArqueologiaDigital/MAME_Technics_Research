@@ -48,24 +48,21 @@ OPLED={
   ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
   ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
   ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
-  # SOUND GROUP category LEDs (swept sgled.lua/varled.lua). PIANO/GUITAR confirmed via BRASS->PIANO
-  # ->GUITAR radio chain. SOUND EXPLORER (SEG0D 0x04) has NO own LED: the firmware lights
-  # cpr48+cpr26 = PIANO+BASS (matches the user report; faithful, not a layout bug). VAR has no LED.
-  ("SEG0C","0x01"):"cpr_led48", ("SEG0C","0x02"):"cpr_led49",
-  ("SEG0C","0x04"):"cpr_led50", ("SEG0C","0x08"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
-  ("SEG0C","0x20"):"cpr_led41", ("SEG0D","0x01"):"cpr_led42", ("SEG0D","0x02"):"cpr_led43",
-  ("SEG0D","0x08"):"cpr_led33", ("SEG0D","0x10"):"cpr_led34", ("SEG0D","0x20"):"cpr_led35",
-  ("SEG0E","0x01"):"cpr_led24", ("SEG0E","0x02"):"cpr_led25", ("SEG0E","0x04"):"cpr_led26",
-  ("SEG0E","0x08"):"cpr_led27",
-  # MEMORY / EW EXPANSION (SOUND GROUP b4/b5) -- swept extsweep.lua 2026-07-07.
-  ("SEG0E","0x10"):"cpr_led16", ("SEG0E","0x20"):"cpr_led17",
-  # Function-button LEDs (comprehensive empirical sweep 2026-07-07, scratchpad/ledsweep.lua: press
-  # from home, read the newly-lit cpl/cpr output; cpl_led4 = EXIT/home-indicator noise, filtered).
-  ("SEG03","0x02"):"cpl_led33",  ("SEG08","0x10"):"cpl_led5",   ("SEG09","0x08"):"cpl_led13",
-  ("SEG0F","0x01"):"cpr_led18",  ("SEG0F","0x02"):"cpr_led19",  ("SEG10","0x02"):"cpr_led30",
-  ("SEG11","0x80"):"cpr_led73",  ("SEG12","0x08"):"cpr_led36",  ("SEG12","0x40"):"cpr_led74",
-  ("SEG12","0x80"):"cpr_led75",  ("SEG13","0x10"):"cpr_led100", ("SEG13","0x20"):"cpr_led99",
-  ("SEG13","0x80"):"cpr_led91",  ("SEG15","0x04"):"cpr_led113",
+  # SOUND GROUP category LEDs (swept sgled.lua/varled.lua in bank B; re-keyed to bank-A button bits
+  # by category IDENTITY -- the LED reflects the selected-category STATE, which is bank-independent).
+  # SOUND EXPLORER (bank A SEG12 0x08) has no own LED. Full empirical bank-A re-sweep is a follow-up.
+  ("SEG10","0x10"):"cpr_led48", ("SEG0F","0x10"):"cpr_led49",
+  ("SEG0E","0x10"):"cpr_led50", ("SEG0D","0x10"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
+  ("SEG15","0x08"):"cpr_led41", ("SEG14","0x08"):"cpr_led42", ("SEG13","0x08"):"cpr_led43",
+  ("SEG10","0x20"):"cpr_led33", ("SEG0F","0x20"):"cpr_led34", ("SEG0E","0x20"):"cpr_led35",
+  ("SEG0D","0x20"):"cpr_led24", ("SEG0C","0x20"):"cpr_led25", ("SEG15","0x04"):"cpr_led26",
+  ("SEG14","0x04"):"cpr_led27",
+  # MEMORY / EW EXPANSION (bank A SEG13 0x04 / SEG12 0x04).
+  ("SEG13","0x04"):"cpr_led16", ("SEG12","0x04"):"cpr_led17",
+  # (The bank-B "function-button LED" sweep block was removed: its keys are bank-B button bits, now
+  # either dormant or COLLIDING with bank-A SOUND GROUP bits -- e.g. SEG12 0x08 = SOUND EXPLORER,
+  # SEG15 0x04 = BASS. The few still-valid LEDs are hardcoded by state identity at their call sites.
+  # A full empirical bank-A function-button LED sweep is the documented follow-up.)
 }
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
@@ -117,8 +114,9 @@ two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x=
 two("sd_skipb",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
 two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
-def pair_h(seg,ma,mb,x,y,w,h,la="",lb=""):
-    r=[P("half_l",x,y,w//2,h,tag=seg,mask=ma),P("half_r",x+w-w//2,y,w//2,h,tag=seg,mask=mb)]
+def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
+    sb=seg2 or seg   # bank A: some split pairs (INTRO&ENDING, TRANSPOSE, R1/R2 OCT) straddle two SEGs
+    r=[P("half_l",x,y,w//2,h,tag=seg,mask=ma),P("half_r",x+w-w//2,y,w//2,h,tag=sb,mask=mb)]
     if la: r.append(L(la,x+w//4-14,y+h//2-6,28,12))
     if lb: r.append(L(lb,x+3*w//4-14,y+h//2-6,28,12))
     return r
@@ -182,9 +180,11 @@ S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height=
 # SEG0F 0x04/0x08/0x10/0x20/0x40 (parts 0x10-0x14 ON) -- FOUND + CONFIRMED 2026-07-07: on the PIANO
 # sound-select page, pressing SEG0F 0x08 highlights "Vintage E.P. 1" (right col row 2). So the two
 # columns are the OFF/ON pair for the 5 LCD-flanking parts (RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2).
-LCDPARTS=[("RIGHT1","SEG03","0x08","SEG0F","0x04"),("RIGHT2","SEG03","0x10","SEG0F","0x08"),
-          ("LEFT","SEG03","0x20","SEG0F","0x10"),("ACCOMP1","SEG03","0x40","SEG0F","0x20"),
-          ("ACCOMP2","SEG03","0x80","SEG0F","0x40")]
+# bank A: left column = part OFF (ev2000), right column = part ON (ev2001), for the 5 keyboard parts
+# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 (part ids 0x10-0x14). See notes/panel-layout-bankA-bindings.md.
+LCDPARTS=[("RIGHT1","SEG00","0x02","SEG11","0x10"),("RIGHT2","SEG00","0x08","SEG11","0x20"),
+          ("LEFT","SEG00","0x20","SEG13","0x01"),("ACCOMP1","SEG00","0x01","SEG12","0x01"),
+          ("ACCOMP2","SEG00","0x04","SEG11","0x01")]
 # NO silkscreen labels: the real KN7000 unit prints NO text next to the LCD-flanking soft-keys --
 # their function is shown ON-SCREEN (context-dependent), so the panel is blank there. The
 # RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 labels (from the mockup) were REMOVED per the user (2026-07-08).
@@ -195,10 +195,10 @@ for i,yy in enumerate([205,294,383,472,561]):
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm))
     S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm))
 # OTHER PART & FR / HELP
-# OTHER PARTS & FR = SEG08 0x04 (snapshot: PT1-16 mixer), HELP = SEG08 0x08 (snapshot: HELP
-# FUNCTION) -- real bits from user feedback (MUTE UP 4 / MUTE DOWN 4 mislabels); were decorative.
-S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG08",mask="0x04"), P("red_led",196,752,8,8),
-      P("round_btn_big",150,852,42,42,tag="SEG08",mask="0x08"), L("HELP",149,838,44,13)]
+# bank A (HELP-info verified, panel_family_2.txt): OTHER PART & FR = SEG05 0x01, HELP = SEG05 0x02
+# (HELP cross-confirmed by the STAGE-1 INPUT_PORTS auto-namer).
+S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG05",mask="0x01"), P("red_led",196,752,8,8),
+      P("round_btn_big",150,852,42,42,tag="SEG05",mask="0x02"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
 # CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the
 # 2026-07-08 HELP-info sweep -- those are SOUND CONTROLLER MODE/RESET. CONTRAST has no HELP screen, so its
@@ -214,10 +214,12 @@ S += [L("CONTRAST",247,730,120,13)] + pair_v(None,None,None,282,756,50,155,"+","
 # The old SEG08/09/0A/0B guesses were all wrong -- SEG08/09 are function keys, SEG0A/0B move nothing.
 # NB: this is the layout-SEG vs firmware-normSeg remap in action -- normSeg06 is "APC/rhythm" in the
 # dispatch table, but layout SEG04-07 physically wire to the part-mute matrix.
-MUTES=[("SEG04",0x01,0x02),("SEG04",0x04,0x08),("SEG04",0x10,0x20),("SEG04",0x40,0x80),
-       ("SEG05",0x01,0x02),("SEG05",0x04,0x08),("SEG05",0x10,0x20),("SEG05",0x40,0x80),
-       ("SEG06",0x01,0x02),("SEG06",0x04,0x08),("SEG06",0x10,0x20),("SEG06",0x40,0x80),
-       ("SEG07",0x01,0x02),("SEG07",0x04,0x08),("SEG07",0x10,0x20),("SEG07",0x40,0x80)]
+# bank A: 16 parts, up=part ON (ev2001) / down=part OFF (ev2000). Parts 1-2=SEG05 hi nibble,
+# 3-6=SEG08, 7-10=SEG09, 11-14=SEG0A, 15-16=SEG0B. (seg, on_mask, off_mask) per part.
+MUTES=[("SEG05",0x10,0x20),("SEG05",0x40,0x80),("SEG08",0x01,0x02),("SEG08",0x04,0x08),
+       ("SEG08",0x10,0x20),("SEG08",0x40,0x80),("SEG09",0x01,0x02),("SEG09",0x04,0x08),
+       ("SEG09",0x10,0x20),("SEG09",0x40,0x80),("SEG0A",0x01,0x02),("SEG0A",0x04,0x08),
+       ("SEG0A",0x10,0x20),("SEG0A",0x40,0x80),("SEG0B",0x01,0x02),("SEG0B",0x04,0x08)]
 FN_SEGS=set()   # (all 16 mute cells are real now; no function-seg overlaps left to unbind)
 for i in range(16):
     x=round(378+i*80.4); seg,onm,offm=MUTES[i]
@@ -228,13 +230,12 @@ for i in range(16):
 # PAGE / DISPLAY HOLD / EXIT
 # PAGE up/down (CPC-board pair). BITS UNVERIFIED -- best-guess SEG08 0x01 (up) / 0x02 (down); no HELP
 # screen for PAGE. *** FLAG FOR REVIEW ***
-S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG08",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG08",mask="0x02"),
-      # DISPLAY HOLD = SEG08 0x10 (confirmed via HELP-info: "HELP : DISPLAY HOLD"). Was decorative.
-      L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG08",mask="0x10"), P("red_led",1836,752,8,8,name=OPLED.get(("SEG08","0x10"))),
-      # EXIT = SEG08 0x20 (confirmed: pressed in HELP mode it turns HELP off -> returns to the PMEM
-      # home screen). Completes the SEG08 LCD-corner set: OTHER PARTS 0x04, HELP 0x08, DISPLAY HOLD
-      # 0x10, EXIT 0x20. (The earlier SEG20 0x01 guess was wrong -- that's a tempo control.)
-      P("round_btn_big",1790,852,42,42,tag="SEG08",mask="0x20"), L("EXIT",1789,838,44,13)]
+# PAGE up/down = the CPC control column (SEG16-20), context-routed with no verified bank-A bit -> UNBOUND.
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
+      # bank A: DISPLAY HOLD = SEG0B 0x40 (HELP-info + STAGE-1 cross-confirmed). LED cpl_led5 (state identity).
+      L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name="cpl_led5"),
+      # bank A: EXIT = SEG0B 0x80 (HELP-info verified, panel_family_2.txt).
+      P("round_btn_big",1790,852,42,42,tag="SEG0B",mask="0x80"), L("EXIT",1789,838,44,13)]
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============
@@ -267,9 +268,10 @@ LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
 # screen BASIC/FINGERED/PIANIST; was decorative). The top OFF/ON had been guessed SEG06 0x08 from the
 # dispatch table's normSeg06=APC, but SEG06 0x08 is empirically PART 10 mute-down (now in MUTES), so
 # OFF/ON is unbound again (its real bit is TBD; the normSeg->layout-SEG remap is not identity here).
-# AUTO PLAY CHORD (MODE/OFF-ON) + SOUND ARRANGER (SET/OFF-ON). Bits verified via HELP-info sweep 2026-07-08:
-# APC MODE=SEG03 0x02, APC OFF/ON=SEG03 0x04, SOUND ARRANGER SET=SEG02 0x40, SOUND ARRANGER OFF/ON=SEG02 0x80.
-for nm,cx,y,tg,mk in [("MODE",447,54,"SEG03","0x02"),("OFF/ON",505,54,"SEG03","0x04"),("SET",447,139,"SEG02","0x40"),("OFF/ON",505,139,"SEG02","0x80")]:
+# AUTO PLAY CHORD (MODE/OFF-ON) + SOUND ARRANGER (SET/OFF-ON) -- bank A (from /tmp/bankA_dump.txt SEG07):
+# APC MODE=SEG07 0x02 (APC/CHORD FINDER), APC OFF/ON=SEG07 0x08, SOUND ARRANGER SET=SEG07 0x04 (app-open),
+# SOUND ARRANGER OFF/ON=SEG07 0x10.
+for nm,cx,y,tg,mk in [("MODE",447,54,"SEG07","0x02"),("OFF/ON",505,54,"SEG07","0x08"),("SET",447,139,"SEG07","0x04"),("OFF/ON",505,139,"SEG07","0x10")]:
     LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8,name=OPLED.get((tg,mk))))  # APC MODE=cpl_led33
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
@@ -279,103 +281,91 @@ RGcols=[581,636,691,746,802,857,912,967]
 # 0x04..0x80=ENTERTAINER..COUNTRY&WESTERN; SEG02 0x04..0x20=MARCH&WALTZ..MEMORY. The old
 # binding (SEG01/SEG02 b0-b7) was off and collided with START/STOP (SEG00 0x10) etc.
 # Physical position i = genre i (2 rows x 8). See notes/panel-rhythm-group.md.
-RG=[("8&16 BEAT","SEG00","0x04"),("ROCK & POP","SEG00","0x08"),("BALLAD","SEG00","0x10"),("JAZZ & SWING","SEG00","0x20"),
-    ("BALLROOM","SEG00","0x40"),("MOVIE & SHOW","SEG00","0x80"),("ENTERTAINER","SEG01","0x04"),("ORGANIST","SEG01","0x08"),
-    ("60s & 70s","SEG01","0x10"),("MODERN DANCE","SEG01","0x20"),("SOUL & R&B","SEG01","0x40"),("COUNTRY & WESTERN","SEG01","0x80"),
-    ("MARCH & WALTZ","SEG02","0x04"),("LATIN & WORLD","SEG02","0x08"),("CUSTOM","SEG02","0x10"),("MEMORY","SEG02","0x20")]
+# bank A (ev2005, position i = genre i; arg-mid = genre index -> re-derived bits). See notes/panel-layout-bankA-bindings.md.
+RG=[("8&16 BEAT","SEG02","0x80"),("ROCK & POP","SEG02","0x20"),("BALLAD","SEG02","0x08"),("JAZZ & SWING","SEG02","0x02"),
+    ("BALLROOM","SEG01","0x80"),("MOVIE & SHOW","SEG01","0x20"),("ENTERTAINER","SEG01","0x08"),("ORGANIST","SEG01","0x02"),
+    ("60s & 70s","SEG02","0x40"),("MODERN DANCE","SEG02","0x10"),("SOUL & R&B","SEG02","0x04"),("COUNTRY & WESTERN","SEG02","0x01"),
+    ("MARCH & WALTZ","SEG01","0x40"),("LATIN & WORLD","SEG01","0x10"),("CUSTOM","SEG01","0x04"),("MEMORY","SEG01","0x01")]
 # Genre-select LEDs, EMPIRICALLY RE-SWEPT on the corrected bits (2026-07-07, genreled2.lua):
 # genre G -> cpl_led[3 + 8*(G//4) - (G%4)]  (radio: selecting a genre lights its LED).
-GENRE_LED={("SEG00","0x04"):"cpl_led3",  ("SEG00","0x08"):"cpl_led2",  ("SEG00","0x10"):"cpl_led1",  ("SEG00","0x20"):"cpl_led0",
-           ("SEG00","0x40"):"cpl_led11", ("SEG00","0x80"):"cpl_led10", ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
-           ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17", ("SEG01","0x80"):"cpl_led16",
-           ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26", ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24"}
+# bank A: re-keyed by genre index (LED reflects selected-genre state, bank-independent).
+GENRE_LED={("SEG02","0x80"):"cpl_led3",  ("SEG02","0x20"):"cpl_led2",  ("SEG02","0x08"):"cpl_led1",  ("SEG02","0x02"):"cpl_led0",
+           ("SEG01","0x80"):"cpl_led11", ("SEG01","0x20"):"cpl_led10", ("SEG01","0x08"):"cpl_led9",  ("SEG01","0x02"):"cpl_led8",
+           ("SEG02","0x40"):"cpl_led19", ("SEG02","0x10"):"cpl_led18", ("SEG02","0x04"):"cpl_led17", ("SEG02","0x01"):"cpl_led16",
+           ("SEG01","0x40"):"cpl_led27", ("SEG01","0x10"):"cpl_led26", ("SEG01","0x04"):"cpl_led25", ("SEG01","0x01"):"cpl_led24"}
 LB.append(L("RHYTHM GROUP",700,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
-LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG09",mask="0x40"),   # DEMO = SEG09 0x40 (snapshot: DEMONSTRATION; old SEG06 0x40 was a no-op)
+LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),   # bank A: DEMO = SEG06 0x40 (ev2040 app-open DEMO)
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 # PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
 # BANK left decorative (its "PADS BANK" driver label is on a 0x2000 part-off bit = mislabel).
 # PERFORMANCE PADS (HELP-info 2026-07-07): AUTO SETTING=SEG09 0x04, BANK=SEG09 0x01, STOP=SEG09 0x02.
 # (AUTO SETTING/STOP were wrongly on SEG06; the whole PADS row is SEG09 0x01/0x02/0x04.)
-for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG09","0x04"),("BANK",230,"SEG09","0x01"),("STOP",305,"SEG09","0x02")]:
+for nm,cx,tg,mk in [("AUTO SETTING",155,"SEG06","0x20"),("BANK",230,"SEG06","0x08"),("STOP",305,"SEG06","0x02")]:  # bank A pad-control row (ev2031/2032/2033)
     LB.append(L(nm,cx-30,262,64,9)); LB.append(P("round_btn",cx-14,274,32,32,tag=tg,mask=mk))
 LB.append(P("green_led",151,270,8,8))   # AUTO SETTING LED
 padspec=[("msp_corner",0,0),("msp_middle",0,0),("msp_corner",1,0),("msp_corner",0,1),("msp_middle",0,1),("msp_corner",1,1)]
 padcol=[(35,94),(129,100),(229,94)]; padrow=[(368,41),(409,51)]   # measured vs mockup: bottom row reaches y~1457
 # PERFORMANCE PADS 1-6 = ev2030 (HELP-info 2026-07-07). pad index i (label i+1) -> its SEG.bit:
-PAD_BITS=[("SEG00","0x01"),("SEG01","0x01"),("SEG02","0x01"),("SEG00","0x02"),("SEG01","0x02"),("SEG02","0x02")]
+# bank A (ev2030, arg-mid = pad index 0..5): pads 1-6.
+PAD_BITS=[("SEG06","0x10"),("SEG04","0x80"),("SEG04","0x20"),("SEG06","0x04"),("SEG06","0x01"),("SEG04","0x40")]
 for i,(shp,fx,fy) in enumerate(padspec):
     (x,w)=padcol[i%3]; (y,h)=padrow[i//3]; ptg,pmk=PAD_BITS[i]
     LB.append(P(shp,x,y,w,h,flip=bool(fx),flipy=bool(fy),tag=ptg,mask=pmk)); LB.append(L(str(i+1),x+w//2-10,y+h//2-8,20,12))
     if i in (4,5): LB.append(L("SOLO",x+w//2-14,y+h//2+4,28,7,TXTH))
 # MUSIC STYLE ARRANGER = SEG09 0x08 (user: MUTE DOWN 8 => MSA; old SEG04 0x08 only moved a fader).
 # SPLIT POINT was SEG03 0x80 = LCD LEFT 5 (now bound to the left soft-key); unbound until its real bit is found.
-for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG09","0x08"),("ONE TOUCH PLAY",490,350,"SEG10","0x01"),("SPLIT POINT",555,350,"SEG10","0x02")]:  # SPLIT POINT = SEG10 0x02 (HELP-info)
+for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG04","0x08"),("ONE TOUCH PLAY",490,350,"SEG04","0x02"),("SPLIT POINT",555,350,"SEG03","0x80")]:  # bank A
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
-LB.append(P("green_led",371,350,8,8,name=OPLED.get(("SEG09","0x08"))))   # MUSIC STYLE ARRANGER LED = cpl_led13
-LB.append(P("green_led",551,337,8,8,name=OPLED.get(("SEG10","0x02"))))   # SPLIT POINT LED = cpr_led30 (empirical sweep)
+LB.append(P("green_led",371,350,8,8,name="cpl_led13"))   # MUSIC STYLE ARRANGER LED (state identity)
+LB.append(P("green_led",551,337,8,8,name="cpr_led30"))   # SPLIT POINT LED (state identity)
 # L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
 LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
 # VARIATION 1-3 = SEG04 b4/b2/b0; VARIATION 4 was SEG03 0x40 but the user shows that bit is
 # LCD LEFT 4 (now bound to the left soft-key), so VAR4 is freed (decorative; real bit TBD).
 # These are rhythm modifiers with no distinct LCD, so snapshot can't verify them.
-VARBITS=[("SEG10","0x04"),(None,None),(None,None),(None,None)]  # VAR1&MSA = SEG10 0x04 (HELP-info); the old SEG04 guesses were wrong; VAR2-4 bits TBD
+VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),("SEG03","0x40")]  # bank A VAR&MSA 1-4 (ev2085 arg-mid 0..3) -- all four now bound
 for i,cx in enumerate([366,426,486,546]):
     LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
-# FADE was SEG11 0x01 = Part Mute Up p14 (descriptor 0x2001); correct is SEG03.b5 = FADE IN
-# (0x2084/a00). (FADE OUT is SEG03.b3; this single pill models the IN half — split TODO.)
-# FADE IN/OUT was SEG03 0x20 = LCD LEFT 3 (now bound to the left soft-key); SYNCHRO & BREAK was
-# SEG00 0x80 = RHYTHM genre 5. Both unbound (decorative) until their real bits are found.
-# HELP-info (2026-07-07): FADE IN/OUT = SEG11 0x01, TAP TEMPO = SEG12 0x04 (old SEG04 0x02 wrong).
-# SYNCHRO & BREAK = SEG15 0x04 (HELP-info 2026-07-07).
-# FADE IN/OUT split: IN = SEG11 0x01 / OUT = SEG11 0x02 (event map ev2084 arg0015/0115).
-LB.append(L("FADE",625,340,105,9)); LB += pair_h("SEG11","0x01","0x02",625,355,105,28,"IN","OUT")
-for nm,x,w,h,tg,mk in [("TAP TEMPO",740,105,28,"SEG12","0x04"),("SYNCHRO & BREAK",856,105,28,"SEG15","0x04")]:
+# bank A (ev2084, arg-mid 0=IN,1=OUT): FADE IN = SEG03 0x20 / OUT = SEG03 0x08.
+# TAP TEMPO = SEG03 0x02 (ev20A1). SYNCHRO & BREAK = SEG00 0x80 (ev2021).
+LB.append(L("FADE",625,340,105,9)); LB += pair_h("SEG03","0x20","0x08",625,355,105,28,"IN","OUT")
+for nm,x,w,h,tg,mk in [("TAP TEMPO",740,105,28,"SEG03","0x02"),("SYNCHRO & BREAK",856,105,28,"SEG00","0x80")]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
-LB.append(P("green_led",856+48,364,8,8,name=OPLED.get(("SEG15","0x04"))))   # SYNCHRO & BREAK LED = cpr_led113 (empirical sweep; was mis-wired to cpl10)
-# INTRO & ENDING was SEG03 0x10 = FILL IN 1 (descriptor 0x2023); correct bit is SEG03.b0
-# (0x2022 = INTRO & ENDING 1). START/STOP SEG00 0x10 = 0x2020 is correct (verified). See
-# notes/panel-descriptor-map.md.
-# START/STOP was SEG00 0x10 -- but that bit = RHYTHM genre 2 (BALLAD), verified on real
-# hardware (user: "START/STOP => BALLAD"); unbound (decorative) until its real bit is found.
-# HELP-info (2026-07-07): INTRO & ENDING = SEG12 0x01, START/STOP = SEG12 0x08.
-# INTRO & ENDING split: 1 = SEG12 0x01 / 2 = SEG12 0x02 (event map ev2022 arg0005/0105).
-LB.append(L("INTRO & ENDING",740,394,105,9)); LB += pair_h("SEG12","0x01","0x02",740,408,105,50,"1","2")
-# FILL IN split (ADDED -- was not drawn before): 1 = SEG11 0x04 / 2 = SEG11 0x08 (event map ev2023 arg0005/0105).
-LB.append(L("FILL IN",625,394,105,9)); LB += pair_h("SEG11","0x04","0x08",625,408,105,50,"1","2")
+LB.append(P("green_led",856+48,364,8,8,name="cpr_led113"))   # SYNCHRO & BREAK LED (state identity)
+# bank A (ev2022, arg-mid 0/1): INTRO & ENDING 1 = SEG03 0x01 / 2 = SEG00 0x40 (straddles two SEGs).
+# ev2023 (arg-mid 0/1): FILL IN 1 = SEG03 0x10 / 2 = SEG03 0x04. START/STOP = SEG00 0x10 (ev2020).
+LB.append(L("INTRO & ENDING",740,394,105,9)); LB += pair_h("SEG03","0x01","0x40",740,408,105,50,"1","2",seg2="SEG00")
+LB.append(L("FILL IN",625,394,105,9)); LB += pair_h("SEG03","0x10","0x04",625,408,105,50,"1","2")
 # START/STOP stays a single greycyan pill.
-LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,105,50,tag="SEG12",mask="0x08"))
+LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,105,50,tag="SEG00",mask="0x10"))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
 # first BEAT LED = START/STOP indicator (cpl1, lit on rhythm start); beats 2-4 not yet swept
-LB += [P("green_led",867+i*9,414,8,8, name=(OPLED.get(("SEG12","0x08")) if i==0 else None)) for i in range(4)] + [L("BEAT",905,452,28,7)]  # START/STOP LED = cpr_led36 (empirical; was cpl1)
+LB += [P("green_led",867+i*9,414,8,8, name=("cpr_led36" if i==0 else None)) for i in range(4)] + [L("BEAT",905,452,28,7)]  # START/STOP LED (state identity)
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
 RB=['\t<group name="right_block">','\t\t<bounds x="0" y="0" width="1000" height="503"/>',P("bg_right",0,0,1000,503)]
 SGcols=[51,107,162,217,272,327,383,438,493]
-# SOUND GROUP = the physical category buttons SEG0C.b0-b5 / SEG0D.b0-b5 / SEG0E.b0-b5 (mixed
-# events 0x2086/0x2010/0x2040/0x2004). SNAPSHOT-CONFIRMED: SEG0C.b0=PIANO, b1=GUITAR (the LCD
-# shows SOUND-RIGHT1-PIANO / -GUITAR). NB the earlier "0x2004 arg=category" rebind was WRONG --
-# 0x2004 is a separate per-part sound selector (SEG10.b4 -> SOUND-LEFT-PIANO), not these buttons.
-SG=[("PIANO","SEG0C","0x01"),("GUITAR","SEG0C","0x02"),("MALLET & ORCH PERC","SEG0C","0x04"),("WORLD","SEG0C","0x08"),
-    ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG0C","0x20"),("SAX & WOODWIND","SEG0D","0x01"),("ORGAN & ACCORDION","SEG0D","0x02"),("SOUND EXPLORER","SEG0D","0x04"),
-    ("DIGITAL DRAWBAR","SEG0D","0x08"),("ORGAN TABS","SEG0D","0x10"),("ACCORDION REGISTER","SEG0D","0x20"),("PAD","SEG0E","0x01"),
-    ("SYNTH","SEG0E","0x02"),("BASS","SEG0E","0x04"),("DRUM KITS","SEG0E","0x08"),("MEMORY",None,None),("EW EXPANSION",None,None)]
-# MEMORY / EW EXPANSION: DECORATIVE. An earlier LED sweep guessed SEG0E 0x10/0x20 for them, but the
-# HELP-info sweep (2026-07-07) proves those two bits are PART EFFECT **SUSTAIN / DIGITAL EFFECT**
-# (bound below). MEMORY / EW EXPANSION exist in SoundGroupNameTable but have no dedicated panel bit
-# here. See notes/panel-button-names.md.
+# SOUND GROUP = the 18 physical category buttons (bank A, event 0x2004; arg-hi = category index into
+# SoundGroupNameTable @0x48131570). Position i = category i (verified: SEG10.b4->PIANO, SEG14.b3->SAX
+# screenshot-confirmed). The bits span SEG0C-15 -- see notes/panel-layout-bankA-bindings.md.
+SG=[("PIANO","SEG10","0x10"),("GUITAR","SEG0F","0x10"),("MALLET & ORCH PERC","SEG0E","0x10"),("WORLD","SEG0D","0x10"),
+    ("STRINGS & VOCAL","SEG0C","0x10"),("BRASS","SEG15","0x08"),("SAX & WOODWIND","SEG14","0x08"),("ORGAN & ACCORDION","SEG13","0x08"),("SOUND EXPLORER","SEG12","0x08"),
+    ("DIGITAL DRAWBAR","SEG10","0x20"),("ORGAN TABS","SEG0F","0x20"),("ACCORDION REGISTER","SEG0E","0x20"),("PAD","SEG0D","0x20"),
+    ("SYNTH","SEG0C","0x20"),("BASS","SEG15","0x04"),("DRUM KITS","SEG14","0x04"),("MEMORY","SEG13","0x04"),("EW EXPANSION","SEG12","0x04")]
+# MEMORY (SEG13 0x04) / EW EXPANSION (SEG12 0x04) ARE bound in bank A (were decorative-only in bank B).
 RB.append(L("SOUND GROUP",240,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
@@ -386,7 +376,8 @@ RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",560,47,26,3), P
 # PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
 # SUSTAIN=SEG0E 0x10, DIGITAL EFFECT=SEG0E 0x20. (SUSTAIN/DIGITAL EFFECT were mis-labelled MEMORY/EW
 # EXPANSION in the SOUND GROUP list above; corrected here.)
-PE_BITS={"SOUND DSP":("SEG0F","0x01"),"VARIATION":("SEG0F","0x02"),"SUSTAIN":("SEG0E","0x10"),"DIGITAL EFFECT":("SEG0E","0x20")}
+# bank A: PART EFFECT row = SEG0E-11 bit 0x08 (SOUND DSP VARIATION..SUSTAIN). See notes/panel-layout-bankA-bindings.md.
+PE_BITS={"SOUND DSP":("SEG0F","0x08"),"VARIATION":("SEG0E","0x08"),"SUSTAIN":("SEG11","0x08"),"DIGITAL EFFECT":("SEG10","0x08")}
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm); tg,mk=PE_BITS.get(nm,(None,None))
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
@@ -395,12 +386,15 @@ RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3
 # GLOBAL EFFECT (SEG13): REVERB=0x40, MIC(=MIC REVERB & EFFECT)=0x80 (HELP-info). CHORUS=0x10,
 # MULTI=0x20 -- event-inferred: they fire ev2062/ev2061 in this group but have no HELP page (verified
 # no-op in HELP mode); the 4 bits 0x10/0x20/0x40/0x80 map L->R to the 4 buttons. notes/panel-button-names.md
-GE_BITS={"CHORUS":("SEG13","0x10"),"MULTI":("SEG13","0x20"),"REVERB":("SEG13","0x40"),"MIC":("SEG13","0x80")}
+# bank A: GLOBAL EFFECT row = SEG0E-11 bit 0x04 (MIC REVERB&EFFECT..CHORUS).
+GE_BITS={"CHORUS":("SEG11","0x04"),"MULTI":("SEG10","0x04"),"REVERB":("SEG0F","0x04"),"MIC":("SEG0E","0x04")}
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
     tg,mk=GE_BITS.get(nm,(None,None))
     RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))
 RB.append(L("SEQUENCER",850,42,90,10,TXTH))
-for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG12","0x80"),("PROGRAM MENUS",915,149,"round_btn","SEG12","0x40")]:
+# bank A: DISK = SEG0D 0x04 (ev2040 app-open DISK), PROGRAM MENUS = SEG0C 0x04 (ev2040 app-open PROGRAM MENUS).
+# PLAY / EASY REC have no statically-resolvable bank-A bit -> left unbound (decorative).
+for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG0D","0x04"),("PROGRAM MENUS",915,149,"round_btn","SEG0C","0x04")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
     RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tg,mk))))  # DISK=cpr_led75, PROGRAM MENUS=cpr_led74
@@ -409,24 +403,25 @@ RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led"
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
-# SPLIT PAIRS (verified via panel-seg-event-map.txt + service-manual matrix):
-#   TRANSPOSE  - = SEG13 0x01 (b0 down) / + = SEG13 0x02 (b1 up)
-#   R1/R2 OCT  - = SEG13 0x04 (b2)      / + = SEG13 0x08 (b3)
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG13","0x01","0x02",213,335,75,24,"-","+")
+# SPLIT PAIRS (bank A -- each half on a different SEG; arg-mid 1=-,0=+ inferred):
+#   TRANSPOSE  - = SEG0F 0x01 (ev2081) / + = SEG10 0x01
+#   R1/R2 OCT  - = SEG12 0x02 (ev2083) / + = SEG13 0x02
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG0F","0x01","0x01",213,335,75,24,"-","+",seg2="SEG10")
 RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG13","0x04","0x08",213,405,75,24,"-","+")
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG12","0x02","0x02",213,405,75,24,"-","+",seg2="SEG13")
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
 RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,TXTH))
-# SOLO = SEG10 0x80 (verified in the panel button-map; free bit; was drawn but unbound).
-RB += [P("green_led",428,274,8,8,name=OPLED.get(("SEG11","0x80"))), P("round_btn",416,285,32,32,tag="SEG11",mask="0x80"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG10",mask="0x80")]  # TECHNI-CHORD LED = cpr_led73
+# bank A: TECHNI-CHORD = SEG0D 0x01 (ev20A2), SOLO = SEG0C 0x01 (ev2086). TECHNI-CHORD LED cpr_led73 (state identity).
+RB += [P("green_led",428,274,8,8,name="cpr_led73"), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
-# PART SELECT group (3 buttons): 1st = SEG10 0x10 (known) + 3rd = SEG10 0x40 (verified HELP-info sweep
-# 2026-07-08). Middle button's bit still unverified -> unbound. (Member<->bit order is a best guess.)
-for j,cx in enumerate([360,425,485]): tg,mk=(("SEG10","0x10") if j==0 else ("SEG10","0x40") if j==2 else (None,None)); RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
-# CONDUCTOR group (LEFT/RIGHT2/RIGHT1): 1st = SEG11 0x10 (known) + 3rd = SEG11 0x40 (verified sweep). Middle unbound.
-for j,cx in enumerate([360,425,485]): tg,mk=(("SEG11","0x10") if j==0 else ("SEG11","0x40") if j==2 else (None,None)); RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
+# bank A PART SELECT group (ev2009, arg-mid 0/1/2) -- all three members now known.
+PARTSEL=[("SEG0D","0x02"),("SEG0E","0x02"),("SEG0E","0x01")]
+for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
+# bank A CONDUCTOR group (ev2008, arg-mid 0/1/2) -- all three members now known.
+CONDUCT=[("SEG0F","0x02"),("SEG10","0x02"),("SEG11","0x02")]
+for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26),
        L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26), L("PANEL MEMORY",608,255,172,10,TXTH),
