@@ -387,3 +387,34 @@ multiplier 0x50160668 / limit 0x50160664 cmd-3 uses) and what response it needs;
 that init is actually invoked in the mount path (it may need a prior "identify" message
 the file ops post). Then cmd-3 (read) will pull FAT sectors from the host image.
 Host image: raw FAT16 superfloppy, mount as -harddisk (a 64MB test image = sdtest.hd).
+
+## Phase 2 update #2 (2026-07-10) — SPI stack COMPLETE through CSD; mount ~1 step away
+
+Workflow wf_6a5ed26e-8d4 (all 6 agents CONFIRMED): the transport is a bone-stock SD SPI
+master, NO CPSD protocol. Key correction to my first cut: CHIP SELECT = GPIO 0x36008004
+bit1 (active-low; assert 0x4854bc8f/bclr, release 0x4854bc85/bset); the >=74 init clocks
+run with CS RELEASED. Also: 0x9805000E = clock-rate latch (0x81/82/83), write-protect =
+0x9cc00009 bit4, card-mounted LED = 0x9cc00008 bit6, SD power = 0x98060000 (shadow
+0x50005214) bit2. Sector addressing BYTE-based (mult 0x200, SDSC). The full command set:
+CMD0/1/59/9/16/10/17/24, CRC7 frames (table 0x4875896c), R1/R2/R1b, 0xFE tokens, CRC16
+data (poly 0x1021). Full init 0x4854b691: 10x FF, CMD0(->01), CMD1(->00 loop), CMD59
+good+bad-CRC self-test x3 (non-fatal), CMD9 CSD parse (0x4854c6f3 -> capacity 0x50160664,
+mult 0x50160668, sets initflag 0x5016064c=1), CMD16(0x200), CMD10 CID.
+
+DRIVER now (commit b8bd72c): CS driven from 0x36008004 bit1 -> spi_ss_w; patched
+spi_sdcard (overlay) appends CRC16 to the CMD9 CSD block (was missing; CMD10 already had
+it). The init now runs the whole handshake correctly framed: CMD0->01, CMD1->00, CMD59
+self-test x3, CMD9 -> valid CSD bytes read back (00 26 00 32 5B 59 80 3F FE FB BF BF 06
+40 00 01 = spi_sdcard's 64MB SD v1 CSD, byte4=CCC 0x5B / byte5=READ_BL 0x59 aligned).
+
+REMAINING BLOCKER (the LAST step): the CMD9 read primitive 0x4854c3ab returns an ERROR
+before the CSD parse 0x4854c6f3 runs (bp: cmd9-site 0x4854b83e hits 3x, parse 0 hits,
+mult-store 0x4854b8bc 0 hits). CS + CRC16 are correct and the CSD bytes are valid, so
+the failure is in the read primitive's POST-DATA handling -- its two btst checks (0x0400,
+0x1200 on the accumulated status word) or a CSD field/capacity the firmware rejects.
+NEXT: disassemble 0x4854c3ab fully (esp. after the 16-byte + CRC receive: what sets the
+0x0400/0x1200 status bits and how the CMD9 caller 0x4854b83e-b8bc treats them) and the
+response-scan 0x4854c136 for CMD9; align spi_sdcard's CMD9 R1/token/trailer to what the
+primitive expects. Once initflag 0x5016064c=1, the mount worker's card-check passes ->
+card-init -> FAT mount -> state 3 -> the SD menus open + cmd-3 reads FAT sectors from the
+host image (sdtest.hd). Test image: 64MB FAT16 raw, `-harddisk sdtest.hd`.
