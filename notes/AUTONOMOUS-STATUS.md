@@ -75,13 +75,17 @@ What shipped:
    - placeholder SINE timbre (wave ROMs undumped).
 
 ### REMAINING / NEXT (refinements, not blockers) — for the cron loop to continue
-DONE this session: gate fix, firmware-driven synth, pitch decode, opt-in switch
-(home-screen boot preserved + verified), publish, website sound page, blog Part 10,
-memory. Remaining, roughly in value order:
-1. Envelope/level/pan accuracy: decode the full per-voice register block the firmware
-   writes at note-on (classes 0x0000-0x000D level/env, 0x2801/0x2C04, filter 0x40xx)
-   so voices have the firmware's real dynamics instead of a generic AD envelope.
-   Capture with tools/stage2_tg_diagnostic.lua-style taps.
+DONE: gate fix, firmware-driven synth, pitch decode, opt-in switch (home-screen boot
+preserved + verified), publish, website sound page, blog Part 10, memory. DONE (cron
+tick 2026-07-10): exponential voice decay (natural, verified); corrected
+notes/tg-voice-register-semantics.md with the dynamic capture (pitch=0x2401,
+note-off=0x0001=0xC000 -- superseded the wrong static guesses). Remaining, in value order:
+1. Quantitative envelope/level decode: the per-voice group-0x00 registers (0x0000-
+   0x000D, key-scaled: 0x0001 C4=5400/C5=6300; 0x0004-0x000A = AE00/2C00/9900/35E8/
+   25B0; 0x2009=5FFF level) encode the firmware's real attack/decay/sustain rates +
+   level. Decode the rate/level encoding (cross-ref kn5000-docs tone-generator.md
+   ToneGen_WriteVoiceParams ~L411-444) and drive the synth envelope from them instead
+   of the fixed exponential. Also velocity (kbd_push high byte -> level).
 2. Velocity: the firmware passes velocity (kbd_push high byte); map it to level.
 3. Effects DSP: Phase A host stub verified; next is running/emulating the SHARC
    effect on the audio stream (reverb/chorus) — large; see notes/sound-subsystem-plan.md.
