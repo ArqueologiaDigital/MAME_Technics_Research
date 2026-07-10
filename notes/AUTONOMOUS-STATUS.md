@@ -131,6 +131,17 @@ personality + SPORT audio have no MAME precedent), so tackle it in phases across
         21065L internal PM/DM maps, IOP regs as LOGGED stubs (replace the fatalerror
         defaults at sharc.cpp:367/443). Wire it into the kn7000 SUBTARGET build; verify it
         BUILDS and the KN7000 still boots (device present, unused). SAFE, additive.
+        >>> PREREQUISITES DONE (cron tick 2026-07-10 #4), both derived from the recovered
+        program (no full datasheet needed) — see notes/sharc-lle-assessment.md §5 + IOP set:
+        - Internal memory map: PM (48-bit) 0x8000-0x8Dxx (effects @0x8400); DM 0x9800-0x9Cxx
+          + 0xC000-0xC3xx; IOP 0x00-0xFF; external SDRAM (plain .ram) at 0x80000+.
+        - IOP stub set (offsets the program touches; base core fatalerrors on the NEW ones):
+          handled: 0x02,0x08-0x0F(host mailbox, heavy),0x20; NEW stubs: 0x28-0x3C, 0x53-0x7B,
+          0xE0-0xFC; system IMASK/IRPTL modeled by core. Ext-port DMA = ch 8/9 (not 6/7).
+        So the SUBCLASS CAN BE WRITTEN DIRECTLY next tick. NOTE the caveat recorded in the
+        assessment (F.3 SPORT audio is large; DSP processes the placeholder sine until wave
+        ROMs are dumped) — a good point for Felipe to confirm committing the effort; but F.1
+        itself is safe/additive and proves the recovered DSP programs run on MAME's SHARC.
   F.2 — driver boot glue: host-upload the recovered DSP program via the 0x98000000(index)/
         0x9C000000(data) port (model2.cpp copro_ctl1_w/external_dma_write pattern). Verify
         the SHARC loads the kernel record and runs (PC advances, no fatalerror).
