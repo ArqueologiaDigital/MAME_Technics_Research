@@ -51,6 +51,28 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★★★ TEMPO TIMER MODELED 2026-07-10 — DEMOS & RHYTHM ACCOMPANIMENT PLAY (commit 60d5392)
+
+THE DEMO STALL IS FIXED. Root cause: ALL sequenced playback is clocked by on-chip 16-bit
+timer TM5 (mode 0x34001082 / reload 0x34001092 / count 0x340010A2, underflow -> INTC
+group 7 = 96-PPQN tick ISR 0x48447084; reload = 1,250,000/BPM on 2 MHz) — previously
+unmodeled, so demos played 1 note then froze and rhythm START/STOP did nothing. Now: the
+DEMO Overture plays continuously (screens advance) and rhythm accompaniment plays on
+START/STOP. Verified live (base=0x28B0=1,250,000/120 at q=120 exactly as disassembled).
+
+THREE SYMPTOMS, TWO ROOT CAUSES (full study + research plan:
+notes/sequenced-playback-and-style-data-rootcause.md):
+ - demo stall = TM5 (FIXED);
+ - "8 Beat 1" list + chord-finder garbage pitch = SHARED missing style/custom-flash
+   data: name resource probed at unmapped windows (0x40010000/0x40610000/0x40810000/
+   0x54E00000/0x54E10000) -> count=1 stub -> every name falls back; chord-finder part
+   0x21 tone block (0x500D0B34) left at NULL boot default -> garbage pitch math
+   (root-invariant 0x37B0 = descriptor exponent 7 = note-independent). Chord finder
+   retested post-timer-fix: still garbage, as predicted (data, not clock).
+NEXT per the plan: service-manual chip-select map for the probe windows; hunt the
+"Technics Rhythms" resource in idd7000/.AST payloads; real-HW flash dump via the
+ROM-backup route; labeled-synthetic placeholders as interim.
+
 ## ★★★ SD-MENU BLOCKER SOLVED 2026-07-10 — playable sound on the PLAY SCREEN (commit dbe0786)
 
 The long-standing conflict is broken. Reporting the TG-present strap AT BOOT opens the
