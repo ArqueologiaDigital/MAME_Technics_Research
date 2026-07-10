@@ -84,3 +84,24 @@ KN7000-exclusive after all; bank A = KN7000 still stands, anchored by the TG-pre
 + the screenshot-confirmed SAX@SEG14.b3.) Conclusion: bank B is a no-TG service/variant
 panel baked into the shared codebase, not a specific sibling we can name from the KN7000
 firmware alone.
+
+## Rewrite progress (2026-07-10)
+
+STAGE 1 DONE (commit 913636b): SEG00-SEG15 INPUT_PORTS regenerated from the bank-A
+descriptor table (tools /tmp/gen_ports.py logic) with functions decoded + adversarially
+verified by workflow wf_bdf3b275-55c. SDSW names fixed to SEG1D order. Verified live:
+SEG10.b4=PIANO, SEG14.b3=SAX both open the right SOUND screen. The full bank-A
+(SEG,bit)->name map: SOUND GROUP (18, ev2004), RHYTHM GROUP (16, ev2005, SEG01-02),
+PART ON/OFF (ev2000/2001), transport (ev2020-2033), effects (ev2060-2069/2081-2086/
+20A0-20AB), apps (ev2040: 0=DEMO 1=PROGRAM MENUS 2=DISK 4=HELP 5=SOUND ARRANGER),
+DISK MENU (ev2016=SEG0D.b6). Unresolved (honest placeholders, need a bank-A runtime
+snapshot probe): the ev2010/2011/2012/2013 menu-tab family (SEG0C.b1, SEG0F.b6/b7,
+SEG10.b6/b7, SEG11.b6/b7, SEG12.b6/b7, SEG13.b6/b7), five ev2040 apps (0x0B/0C/0D/10/18),
+ev20AE, ev20B4, and the CPC control column SEG16-20/1B (CONTRAST/PAGE etc.).
+
+STAGE 2 TODO: rebuild the clickable LAYOUT for bank A. tools/gen_lay.py maps
+(SEG,mask)->artwork element/LED using the OLD bank-B positions, so mouse clicks on the
+artwork trigger the wrong function (input-menu/key mapping is already correct after
+STAGE 1). Re-derive the artwork position <-> (SEG,bit) binding from bank A + the physical
+panel silk-screen, regenerate kn7000.lay, and re-verify by clicking. Also: the SD panel
+navigation (DISK MENU = SEG0D.b6) + the ev2010 menu family want a runtime snapshot pass.
