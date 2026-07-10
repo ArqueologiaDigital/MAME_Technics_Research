@@ -51,6 +51,29 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★★★★ SD/CPSD LINK ALIVE 2026-07-10 (Felipe UN-PAUSED SD; commits 0f00f9a, 4882ec8)
+
+Felipe: "let's work on the SD card interface!" -- the pause is lifted. ROOT CAUSE of the
+SD dormancy found in hours: it was never dormant -- an SD link task spins from boot on a
+link-ready check (helper 0x484b2889 polls ch2 status bit6|bit4, ~65k calls/s) and our HLE
+never set TxRDY. Fixed status semantics (bit6=TxRDY, bit4=RxRDY, bit7=RX EMPTY), captured
+the firmware's first CPSD TX (0xFE ping at boot t=1.37), and stood up a CPSD HLE
+(cpsd_rx_byte + periodic 0xFE keep-alive): the firmware now marks CPSD ALIVE
+(0x50150f55 bit6 set, watchdog parked). CH2 SPEAKS MIDI FRAMING (real-time dispatcher
+0x484b2454: F8 Clock->tempo, FA/FB/FC transport, FE alive; F0..F7 SysEx -> lib MIDI
+engine 0x4C024A1F) -- CPSD streams SD-Song MIDI + SysEx-wrapped control/status.
+Corrections: "bit6 breaks boot" does NOT reproduce; the 0x90200000 "SD register bank"
+(2026-07-08) was a MISREAD (sound-parameter DB IDs; adversarially confirmed) -- the
+serial link is the ENTIRE SD path. Perf note: boot ~61% (SD task now runs; expect to
+improve when the handshake completes and the task stops retrying).
+
+OPEN (workflow wf_d6998fbd-c86 in flight, 2/8 results in): (1) what dispatches/gates the
+SD state machine 0x48551f80 (still never runs; state block zero); (2) the TG-strap
+boot-to-SD-menu wait condition; (3) the SysEx status/command frame payloads (the real
+protocol). NEXT on workflow completion: implement the status frames, aim for the SD
+menus opening (plan Phase 0/1), then host-FAT-image backing (Phase 2). See
+notes/sd-card-emulation-plan.md BREAKTHROUGH section.
+
 ## ★★★★★ CORRECT MUSICAL PITCH 2026-07-10 — demo/chord-finder/keybed all in tune (commit de4fc88)
 
 Felipe asked for correct DEMO pitches; root cause found + fixed. TG pitch class
