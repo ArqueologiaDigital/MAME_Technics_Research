@@ -105,14 +105,40 @@ note-off=0x0001=0xC000 -- superseded the wrong static guesses). Remaining, in va
    wrong-pitch guess. Full notes: sound-cross-model-kn6000-kn6500.md. KN5000/KN2400
    still unchecked.
 
-TOP NEXT (achievable without the SD unblock): item 1 — quantitatively decode the KN7000
-DEFAULT sound's envelope. I already have its group-0x00 register block captured
-(0x0001=5400 key-scaled, 0x0004..000A = AE00/2C00/9900/35E8/25B0, 0x2009=5FFF level).
-Cross-ref kn5000-docs/tone-generator.md (ToneGen_WriteVoiceParams / EG rate encoding) to
-turn those into attack/decay/sustain rates + sustain level, and drive the synth envelope
-from them (replacing the fixed exponential). This refines the WORKING KN7000 sound and
-needs no sound-selection (one default patch is enough to validate a correct decay curve
-vs the captured register values). Static decode first, then apply + rebuild + verify.
+DONE (cron tick 2026-07-10 #3): honor the firmware's per-voice LEVEL (class 0x2009) in
+the synth (normalized so the default 0x5FFF = unity → current sound unchanged, verified;
+softer/louder levels now flow through). Groundwork for velocity/voice-balance.
+
+### PLATEAU NOTE — the KN7000 sound is in a strong, complete state; remaining work is
+### either large multi-session or blocked. Honest triage:
+- **Envelope RATES (attack/decay/sustain): BLOCKED.** The KN5000 doc confirms the
+  hardware EG rate→time law is UNDOCUMENTED (its own emulation punts to a linear fade).
+  Decoding it needs hardware observation or deep RE we can't do from the register values
+  alone. Current exponential decay is a reasonable honest placeholder. Do not guess rates.
+- **KN6000/KN6500 audio: DEFERRED** — pitch needs static RE of its note→pitch routine
+  (see sound-cross-model-kn6000-kn6500.md). KN5000/KN2400/KN2600 unchecked.
+- **SD subsystem: USER-PAUSED** (memory kn7000-sd-strap-gate). Fixing it would let KN7000
+  boot to the home screen WITH sound (removing the opt-in switch) and unblock sound-
+  selection — but respect the pause; do not sink ticks into it autonomously.
+- **Real timbre: ROM-BLOCKED** — the 4 PCM wave ROMs are undumped.
+
+### NEXT MAJOR EFFORT = the EFFECTS DSP (Phase F, LLE) — explicitly in the cron goal.
+Feasibility CONFIRMED this tick: MAME has a 2106x SHARC core (ADSP21062/21060, same ISA as
+the 21065L); the 80 DSP programs are recovered+disassembled. Full analysis in
+notes/sharc-lle-assessment.md. It is a LARGE multi-session build (the 21065L I/O
+personality + SPORT audio have no MAME precedent), so tackle it in phases across ticks:
+  F.1 — add an `adsp21065l_device` subclass in src/devices/cpu/sharc/ (adsp21060 pattern):
+        21065L internal PM/DM maps, IOP regs as LOGGED stubs (replace the fatalerror
+        defaults at sharc.cpp:367/443). Wire it into the kn7000 SUBTARGET build; verify it
+        BUILDS and the KN7000 still boots (device present, unused). SAFE, additive.
+  F.2 — driver boot glue: host-upload the recovered DSP program via the 0x98000000(index)/
+        0x9C000000(data) port (model2.cpp copro_ctl1_w/external_dma_write pattern). Verify
+        the SHARC loads the kernel record and runs (PC advances, no fatalerror).
+  F.3 — SPORT audio: stream TG output → DSP → DAC through the (new) serial-port model.
+        Verify the effect processes audio. This is the genuinely new, biggest piece.
+Each phase is one-or-more ticks; commit + verify build/boot at each step; never break the
+working KN7000 driver. If a tick can't safely complete a phase, do a bounded sub-step and
+record where it stands.
 
 ## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
 
