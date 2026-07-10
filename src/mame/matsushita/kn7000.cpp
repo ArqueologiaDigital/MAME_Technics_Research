@@ -402,7 +402,23 @@ private:
 	bool     dsp_stub_enabled() { return (m_config.read_safe(0) & 1) != 0; }
 	bool     tg_sound_enabled() { return (m_config.read_safe(0) & 2) != 0; }  // CONFIG bit1: TG-present strap -> firmware sound
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
-	uint32_t m_dsp_dl_words = 0;               // count of captured download words
+	uint32_t m_dsp_dl_words = 0;               // count of download words written to the SHARC
+	// F.2 host-boot upload state (see dsp_data_w): the firmware sets a target address (reg
+	// 0x40), commits a PM/DM block (reg 0x1C = 0xA1/0x41), then streams words to the DMA
+	// buffer (index 0x04, 3x16 per 48-bit PM word / 2x16 per 32-bit DM word).
+	uint32_t m_dsp_dl_addr = 0;                // reg 0x40: download target address (2x16, low then high)
+	uint32_t m_dsp_cur = 0;                    // current auto-incrementing write address in the active block
+	uint8_t  m_dsp_mode = 0;                   // active block: 1 = PM (0xA1), 2 = DM (0x41)
+	uint16_t m_dsp_wbuf[3] = { };              // streamed-word accumulator
+	uint8_t  m_dsp_wcnt = 0;
+	bool     m_dsp_block_open = false;         // a PM/DM block is open (0xA1/0x41 seen, awaiting its 0xA0)
+	bool     m_dsp_running = false;            // released from host-boot to run (set at first end/sync)
+	// Provisional effects-DSP audio frame rate: drives the IRQ0 tick that steps the SHARC
+	// kernel's main loop one frame per edge. Stands in for the SPORT/codec frame sync until
+	// F.3 models the real serial audio path; value is a plausible placeholder, not measured.
+	static constexpr int DSP_FRAME_HZ = 44100;
+	emu_timer *m_dsp_irq_timer = nullptr;      // periodic: pulse the SHARC's IRQ0 (audio frame tick)
+	TIMER_CALLBACK_MEMBER(dsp_audio_tick);
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
@@ -689,16 +705,66 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
 	if (!dsp_stub_enabled())
 		return;
-	// Capture the host-boot download stream (kernel + effect microprograms). The
-	// firmware streams PM (48-bit) / DM words here after writing an index/command
-	// to 0x98000000. Log the first words so a run can be checked against the ROM
-	// record pool (0x486BCEC4..); full modelling is future work.
-	m_dsp_dl_words++;
-	if (m_dsp_dl_words <= 48)
-		logerror("%s: DSP dl[%u] idx=%04X <= %04X\n", machine().describe_context(),
-			m_dsp_dl_words, m_dsp_index, data);
-	else if ((m_dsp_dl_words % 4096) == 0)
-		logerror("DSP download: %u words so far\n", m_dsp_dl_words);
+	// F.2 host-boot: decode the upload protocol and write the streamed program/data into
+	// the SHARC's internal memory. Register writes to 0x9C000000 carry their reg number as
+	// the index (32-bit value = 2x16, low then high); the actual program/data streams via
+	// index 0x04 (the external-port DMA buffer), 3x16 per 48-bit PM word / 2x16 per 32-bit
+	// DM word, auto-incrementing from the reg-0x40 target. See notes/sharc-lle-assessment.md.
+	switch (m_dsp_index)
+	{
+	case 0x40:  // download target address (low then high)
+		m_dsp_dl_addr = (m_dsp_dl_addr >> 16) | (uint32_t(data) << 16);
+		return;
+	case 0x1c:  // block command strobe (low half = command)
+		// Upload framing: 0xA1/0x41 opens a PM/DM block (target = reg-0x40 addr), words stream
+		// via index 0x04, then 0xA0 closes the block. The whole download is bracketed by two
+		// "bare" 0xA0s (no block open): the first (before any block) is a reset handshake; the
+		// last (after the final block) is the "go". Release the SHARC on that final bare 0xA0.
+		if (data == 0xa1)      { m_dsp_mode = 1; m_dsp_cur = m_dsp_dl_addr; m_dsp_wcnt = 0; m_dsp_block_open = true; }  // PM commit
+		else if (data == 0x41) { m_dsp_mode = 2; m_dsp_cur = m_dsp_dl_addr; m_dsp_wcnt = 0; m_dsp_block_open = true; }  // DM commit
+		else if (data == 0xa0)                                                                 // end / sync
+		{
+			if (m_dsp_block_open)
+				m_dsp_block_open = false;                         // closes the current block
+			else if (!m_dsp_running && m_dsp_dl_words > 0)        // bare 0xA0 after the last block = "go"
+			{
+				m_dsp_running = true;
+				logerror("DSP: kernel loaded (%u words); releasing SHARC (entry 0x8005)\n", m_dsp_dl_words);
+				m_dsp->set_input_line(INPUT_LINE_HALT, CLEAR_LINE);   // reset_pc()=0x8004 -> first-executed 0x8005 (JUMP init)
+				// Start the audio frame tick: the kernel's reset handler enables IRQ0 and then
+				// IDLEs (PM 0x8076) waiting for the first IRQ0, which drives its main loop one
+				// audio frame per edge. On real hardware IRQ0 comes from the SPORT/codec frame
+				// sync; here a periodic pulse stands in until F.3 models the serial audio path.
+				// Provisional rate -- see notes/sound-subsystem-plan.md (F.3).
+				m_dsp_irq_timer->adjust(attotime::from_hz(DSP_FRAME_HZ), 0, attotime::from_hz(DSP_FRAME_HZ));
+			}
+		}
+		return;
+	case 0x04:  // streamed program/data words -> SHARC internal memory
+		if (m_dsp_mode == 1)        // 48-bit PM word (3x16, MSW first)
+		{
+			m_dsp_wbuf[m_dsp_wcnt++] = data;
+			if (m_dsp_wcnt == 3)
+			{
+				// The firmware streams the 3 halfwords LSW-first, so the 48-bit PM word is
+				// wbuf[2]:wbuf[1]:wbuf[0] (verified: puts the opcode field in the high bits).
+				const uint64_t w = (uint64_t(m_dsp_wbuf[2]) << 32) | (uint64_t(m_dsp_wbuf[1]) << 16) | m_dsp_wbuf[0];
+				m_dsp->space(AS_PROGRAM).write_qword(m_dsp_cur++, w);
+				m_dsp_wcnt = 0; m_dsp_dl_words++;
+			}
+		}
+		else if (m_dsp_mode == 2)   // 32-bit DM word (2x16, low first)
+		{
+			m_dsp_wbuf[m_dsp_wcnt++] = data;
+			if (m_dsp_wcnt == 2)
+			{
+				const uint32_t w = (uint32_t(m_dsp_wbuf[1]) << 16) | m_dsp_wbuf[0];
+				m_dsp->space(AS_DATA).write_dword(m_dsp_cur++, w);
+				m_dsp_wcnt = 0; m_dsp_dl_words++;
+			}
+		}
+		return;
+	}
 }
 
 
@@ -852,6 +918,16 @@ void kn7000_state::intc_recompute()
 		m_maincpu->set_irq_level(level);
 	}
 	m_maincpu->set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
+}
+
+TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
+{
+	// Audio frame tick: pulse the effects DSP's IRQ0 (the kernel's frame interrupt). We only
+	// ASSERT: the SHARC core clears the pending bit when it *takes* the interrupt, so one edge
+	// is delivered per tick without a matching CLEAR. IRQ0 is edge-configured by the kernel
+	// (MODE2 0x18011) and its ISR (PM 0x8020) sets R13=1 to hand a frame to the main loop.
+	if (m_dsp_running)
+		m_dsp->set_input_line(0, ASSERT_LINE);
 }
 
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
@@ -1629,6 +1705,7 @@ void kn7000_state::machine_start()
 		memcpy(memshare("libram")->ptr(), memregion("maincpu")->base(), memregion("maincpu")->bytes());
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
 	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
+	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -1656,6 +1733,16 @@ void kn7000_state::machine_reset()
 	m_panel_pos = 0;
 	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
+
+	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
+	// streams its program into internal memory and releases it (INPUT_LINE_HALT clear + PC
+	// = entry) when the resident kernel is fully loaded. Until then it must not run (its
+	// memory is empty). With the DSP stub off, no upload happens and it stays halted.
+	m_dsp->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
+	m_dsp_running = false;
+	m_dsp_dl_words = 0; m_dsp_mode = 0; m_dsp_wcnt = 0; m_dsp_cur = 0; m_dsp_dl_addr = 0;
+	m_dsp_block_open = false;
+	m_dsp_irq_timer->adjust(attotime::never);   // audio frame tick starts only once the kernel is loaded
 
 	// Start scanning the panel at ~250 Hz.
 	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));

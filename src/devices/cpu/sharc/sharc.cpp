@@ -1012,7 +1012,7 @@ void adsp21062_device::device_reset()
 			throw emu_fatalerror("SHARC: Unimplemented boot mode %d\n", m_boot_mode);
 	}
 
-	m_core->pc = 0x20004;
+	m_core->pc = reset_pc();
 	m_core->extdma_shift = 0;
 	m_core->daddr = m_core->pc + 1;
 	m_core->faddr = m_core->daddr + 1;
@@ -1264,7 +1264,7 @@ void adsp21062_device::check_interrupts()
 		if (which >= 6 && which <= 8)
 			PUSH_STATUS_STACK();
 
-		CHANGE_PC(0x20000 + (which * 0x4));
+		CHANGE_PC(irq_vector_base() + (which * 0x4));
 
 		/* TODO: alter IMASKP */
 

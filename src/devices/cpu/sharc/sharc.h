@@ -97,6 +97,16 @@ protected:
 			address_map_constructor internal_pgm,
 			address_map_constructor internal_data);
 
+	// Reset PC (boot entry). The 2106x reset vector is at internal-RAM-base + 4
+	// (0x20004 for the 2M/4M parts); the 21065L variant overrides this for its own
+	// internal-RAM layout.
+	virtual uint32_t reset_pc() const { return 0x20004; }
+
+	// Base address of the interrupt vector table (internal-RAM base). check_interrupts()
+	// vectors a taken interrupt N to irq_vector_base() + N*4. 0x20000 for the 2M/4M parts;
+	// the 21065L overrides this to 0x8000 to match its smaller internal-RAM layout.
+	virtual uint32_t irq_vector_base() const { return 0x20000; }
+
 	// device_t implementation
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
@@ -564,6 +574,20 @@ public:
 	// construction/destruction
 	adsp21065l_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 	virtual ~adsp21065l_device() override;
+
+protected:
+	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
+	// (vector N at 0x8000 + N*4; e.g. IRQ0 = vector 8 = 0x8020).
+	virtual uint32_t irq_vector_base() const override { return 0x8000; }
+
+	// RSTI (reset) is vector 1 at 0x8004, whose slot holds "IDLE ; JUMP init". The IDLE is the
+	// host-boot download-wait; our host-boot glue only releases the DSP once the full program
+	// has been uploaded, so that wait is already satisfied and we want to enter at the JUMP
+	// (0x8005). MAME primes the fetch pipeline with daddr = reset_pc + 1 and the execute loop
+	// runs the instruction at daddr first, so the effective first instruction is reset_pc + 1.
+	// Setting reset_pc = 0x8004 therefore begins execution at 0x8005 (JUMP init), skipping the
+	// IDLE at 0x8004 -- exactly the post-download-wait entry we want.
+	virtual uint32_t reset_pc() const override { return 0x8004; }
 
 private:
 	void pgm_65l(address_map &map) ATTR_COLD;
