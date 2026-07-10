@@ -193,6 +193,14 @@ public:
 		case 0x0001:                                      // 0xC000 = voice mute -> note-off
 			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; }
 			break;
+		case 0x2009:                                      // per-voice level (best-effort)
+			// The firmware writes this once at note-on; in the default full-velocity
+			// patch it is 0x5FFF, so normalising by 0x5FFF keeps that voice at unity
+			// (no change to the current sound) while honouring softer/louder values
+			// the firmware would emit for MIDI velocity or the mixer's part volumes.
+			m_stream->update();
+			m_level[v] = std::clamp(double(data) / double(0x5FFF), 0.0, 1.4);
+			break;
 		}
 	}
 	uint32_t tg_write_count() const { return m_tgwrites; }
@@ -206,11 +214,13 @@ protected:
 		std::fill(std::begin(m_env),   std::end(m_env),   0.0);
 		std::fill(std::begin(m_gate),  std::end(m_gate),  0);
 		std::fill(std::begin(m_atk),   std::end(m_atk),   0);
+		std::fill(std::begin(m_level), std::end(m_level), 1.0);
 		save_item(NAME(m_phase));
 		save_item(NAME(m_freq));
 		save_item(NAME(m_env));
 		save_item(NAME(m_gate));
 		save_item(NAME(m_atk));
+		save_item(NAME(m_level));
 		save_item(NAME(m_tgwrites));
 	}
 
@@ -234,7 +244,7 @@ protected:
 				if (m_atk[v]) { m_env[v] += atk; if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; } }
 				else          { m_env[v] *= (m_gate[v] ? dhld : drel); if (m_env[v] < 0.0005) m_env[v] = 0.0; }
 				if (m_env[v] <= 0.0) continue;
-				acc += sin(m_phase[v]) * m_env[v];
+				acc += sin(m_phase[v]) * m_env[v] * m_level[v];
 				m_phase[v] += TWO_PI * m_freq[v] / FS;
 				if (m_phase[v] >= TWO_PI) m_phase[v] -= TWO_PI;
 			}
@@ -251,6 +261,7 @@ private:
 	double   m_env[128]   = { };     // per-voice envelope level
 	uint8_t  m_gate[128]  = { };     // per-voice gate: 1 = firmware note held, 0 = muted/released
 	uint8_t  m_atk[128]   = { };     // per-voice attack-in-progress flag
+	double   m_level[128] = { };     // per-voice level (firmware class 0x2009; 1.0 = default full)
 	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 };
 
