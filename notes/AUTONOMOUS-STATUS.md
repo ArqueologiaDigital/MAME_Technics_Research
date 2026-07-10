@@ -51,7 +51,28 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
-## ★★★★★ SD/CPSD LINK ALIVE 2026-07-10 (Felipe UN-PAUSED SD; commits 0f00f9a, 4882ec8)
+## ★★★★★★ SOUND ON BY DEFAULT 2026-07-10 — SD-menu boot solved (PHANTOM BUTTONS; commit d53539d)
+
+THE MILESTONE: a stock boot now reaches the PMEM home screen WITH WORKING SOUND (C4 =
+262 Hz, no cfg). The "TG-present boot lands on the SD menu" mystery = SIX PHANTOM BUTTON
+PRESSES: the SD front-panel switch register (byte 0x9CC00008, ACTIVE-LOW) read 0x00 as
+plain RAM = all pressed -> UI takeover. Fixed (idle switches); TG sound switch now
+DEFAULTS ON; the bit2 gate-poke is OBSOLETE. Also: black-LCD regression from the ch2
+keep-alive was found by the workflow and FIXED (2d6590a) -- **ch2 = MIDI-2, NOT CPSD**
+(the whole ch2-CPSD theory is retired; injected bytes wedge the boot).
+
+SD state (workflow wf_d6998fbd-c86, 8/8 CONFIRMED, full detail in
+notes/sd-card-emulation-plan.md RESOLUTION): state machine is DEMAND-driven (entry
+0x485519b7, called at post-prologue 0x485519bc); DiskInit runs at boot; triggers =
+card-detect TRANSITION (group-0x1B ICR 0x3400016C bit4 1->0) -> insert msg 0x107020bb,
+then a user SD action. Driver models the EMPTY slot (faithful) + a plumbed insert
+timer. NEXT (SD Phase 2): RE what card-init 0x485630de touches = the real card data
+transport (behind VFS device-'d' fops, table 0x500079f8, SD = drive "C:"); HLE it
+against a host FAT image; then wire the insert action + the 6 SD-panel switches
+(events 0x7020B5..BA) as input ports. Tooling lessons in the notes (d@ vs dword@;
+post-prologue callers).
+
+## ★★★★★ SD/CPSD LINK ALIVE 2026-07-10 (SUPERSEDED by the section above — ch2=MIDI-2) (Felipe UN-PAUSED SD; commits 0f00f9a, 4882ec8)
 
 Felipe: "let's work on the SD card interface!" -- the pause is lifted. ROOT CAUSE of the
 SD dormancy found in hours: it was never dormant -- an SD link task spins from boot on a
