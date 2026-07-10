@@ -88,4 +88,43 @@ Conclusion: the KN6000/KN6500 DSP is **the same host-booted ADSP-21065L subsyste
 
 **Bottom line:** cross-model RE is clearly worth it on the DSP side (same chip, same protocol, near-same program — anything built for the KN7000 SHARC works on all three) and on the TG *interface* side (FIFO + readback windows identical). The genuinely new work for KN6xxx sound is (a) the D82398GD001 TG's register semantics/init, (b) dumping 4–6 `QSIGX3C640xx` wave ROMs (hardware or via the service readback window), and (c) dumping the real IC13/IC14 table mask ROMs, without which even a perfect TG model would lack sample maps.
 
+---
+
+## ★ DYNAMIC CAPTURE (2026-07-10) — KN6000 already drives its tone generators live
+
+Ran the KN7000 Lua TG-tap methodology against the **kn6000** machine (live in MAME,
+video on; taps on 0x98040000/0x98050000 write + 0x98050004 read, key presses on
+:KEYS0). Findings:
+
+- **KN6000's TG voice engine is ALREADY running on key-bed notes — no gate fix
+  needed.** A 3-note press (C4/E4/G4 on+off) gave `fifoPolls=2006, consumed=6` (the
+  firmware reads the 0x98050004 key FIFO and consumes exactly the 6 events) and a
+  rich burst of per-voice TG writes. Unlike the KN7000, the strap-probe TG-enable
+  gate is open by default here (the CONFIG bit1 fix is a KN7000-only thing).
+- **It boots to its play screen (no SD subsystem)** → KN6000/KN6500 are a *cleaner*
+  sound bring-up platform than the KN7000 (which is stuck on the SD menu when its
+  gate is opened). Sound could be default-on for the KN6xxx with no screen trade-off.
+- **The tonegen device + speakers are already wired** (shared kn7000() config); the
+  machines are just flagged MACHINE_NO_SOUND and the tonegen currently only decodes
+  the KN7000 pitch class (0x2401), so it produces nothing for KN6000 yet.
+- **KN6000 per-voice register layout DIFFERS from the KN7000** (captured, first voice,
+  C4/E4/A4 all in one octave so only the fine-pitch field moved):
+  | class | data | note |
+  |---|---|---|
+  | **0x5800** | C4=0x0C00, E4=0x0BF4, A4=0x0BE8 | **fine pitch (within-octave)** — decreases ~2.7/semitone; same value range as the KN7000's 0x3000 field |
+  | 0x0000 | 0x8000 | key-on / gate flag candidate |
+  | 0x4000 | 0x3FFF | voice LEVEL (near-max; KN7000 analog 0x2009=0x5FFF) |
+  | 0x4400 | 0x6000 | ? |
+  | 0x2800 | 0x0200 | flag |
+  | 0x2C02 / 0x2C03 | 0xC800 | ? (index varies by voice) |
+  | 0x5C07 | 0xFFFF | ? |
+  | **0x800B/0x8400/0x8804/0x8C0F** | D546/38AF/2AB9/C750 | sample/waveform params — **identical DATA to the KN7000's 0x400B/0x4400/0x4804/0x4C0F quartet** (same default patch), just group 0x80 not 0x40 |
+
+- **NEXT to make KN6000 sing:** (1) find the octave/coarse pitch register — needs notes
+  in DIFFERENT octaves, but KN6000's :KEYS1 (C5+) produced NO writes in this test, so
+  first check the KN6000 key-bed→note mapping (KEYS1 wiring / octave offset). (2) Add a
+  KN6000 branch to `kn7000_tonegen_device::tg_write` decoding 0x5800(+octave) for pitch
+  and 0x0000/0x4000 for gate/level. (3) Flip kn6000/kn6500 to MACHINE_IMPERFECT_SOUND
+  (likely no CONFIG switch needed — no SD side effect). Reuse tools/stage2_tg_diagnostic.lua.
+
 Not found: any KN6000/KN6500 wave-ROM, table-ROM, or panel-MCU dumps anywhere under `/home/fsanches/compartilhado/`; any KN6xxx disassembly workspace; any KN6xxx-specific sound notes in `kn7000_mame/notes/`.
