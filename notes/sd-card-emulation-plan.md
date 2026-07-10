@@ -306,3 +306,34 @@ alternate/task variant?), and the SD tick's true dispatcher is still unidentifie
 Remaining workflow finders (sd-boot-menu, cpsd-protocol/dispatch) may resolve; else
 next: find the RUNNING engine loop (PC-sample the engine task, or trace who calls
 0x484574AF live, which demonstrably pumps the demo).
+
+## RESOLUTION (2026-07-10, workflow wf_d6998fbd-c86 complete, all 8 agents CONFIRMED)
+
+**The SD-menu boot mystery: six phantom button presses.** TG-present boots enable the
+SD-panel scan; the SD front-panel switch register (byte **0x9CC00008**, ACTIVE-LOW,
+bits0-5 = the six CPSD-side transport switches; events 0x7020B5..BA per descriptor
+table 0x48613fc4) read 0x00 as plain RAM = all pressed -> deliberate UI takeover to
+the SD screen. Fixed: reads return idle (commit d53539d) -> **TG-present boots reach
+the PMEM home screen with sound; sound is now ON BY DEFAULT** (the opt-in existed only
+because of this). Gate-poke (bit2) obsolete.
+
+**The SD state machine is demand-driven** (true entry 0x485519b7, called at 0x485519bc
+-- MN10300 callers target POST-PROLOGUE addresses; the old 0x48551f80 was mid-insn):
+DiskInit DOES run at boot (state=0 is normal); triggers = (a) card-insert message
+0x107020bb (from the card-detect TRANSITION: polled group-0x1B ICR 0x3400016C bit4
+1->0, debounce 0x4854bd39; a statically-present line never edges) then (b) a user SD
+action (SD-audio pump 0x48578e6f or the Sdc screens' sync poster 0x4855216b). State-0
+UI kick also needs GetProperty(0x0210033F,0x60047) != -1.
+
+**Driver now models the empty slot** (bit4=1 default; insert timer plumbed). Mount
+chain once triggered: card checks -> **card-init 0x485630de = the FIRST unmodeled
+hardware touch (the real SD data transport, behind VFS device-'d' fops)** -> FAT chain
+-> state 3 + card-ready. NEXT (Phase 2): RE 0x485630de's hardware accesses to identify
+and HLE the transport, back it with a host FAT image, then wire the insert action +
+the 6 SD-panel switches as input ports.
+
+**Tooling lessons (important):** (1) MN10300 `call` performs the callee's register-save
+-- callers target entry+prologue; scan for BOTH addresses. (2) MAME debugger actions
+must use `d@(addr)` -- `dword@` makes bpset fail SILENTLY (caused false "never runs"
+negatives). (3) The ch2 experiments (phantom bytes) wedged the boot -> black LCD; ch2
+is MIDI-2, leave it plain.
