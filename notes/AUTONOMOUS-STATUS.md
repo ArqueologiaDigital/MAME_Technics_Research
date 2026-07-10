@@ -122,7 +122,45 @@ softer/louder levels now flow through). Groundwork for velocity/voice-balance.
   selection — but respect the pause; do not sink ticks into it autonomously.
 - **Real timbre: ROM-BLOCKED** — the 4 PCM wave ROMs are undumped.
 
-### DECISION POINT FOR FELIPE (reached 2026-07-10, cron tick #5)
+## ★★★ EFFECTS-DSP LLE GREENLIT BY FELIPE (2026-07-10) — BUILDING IT (Phase F)
+
+Felipe said "greenlight the DSP LLE — go build it." Phased build; verify build+boot at each
+step; never break the working KN7000. Key facts (all validated, see sharc-lle-assessment.md):
+MAME has the 2106x SHARC core (ADSP21062/21060); 21065L internal map PM 0x8000-0x8Dxx / DM
+0x9800-0x9Cxx + 0xC000-0xC3xx / SDRAM 0x80000+; IOP stub set 0x08-0x0F,0x28-0x3C,0x53-0x7B,
+0xE0-0xFC; host-upload protocol reg0x40=addr, 0x1C=0xA1 PM/0x41 DM (validated live, 258 blocks);
+ext-port DMA ch 8/9. CRITICAL CORE FINDING: adsp21062_device::m_blocks is PRIVATE and pm_r/pm_w
+use a block-interleave scheme hardcoded to the 21062 geometry -> the 21065L variant CANNOT live
+in kn7000.cpp; it needs the SHARC core FORKED into the repo (MN10300 precedent:
+kn7000_mame/src/devices/cpu/<core>/ symlinked into kn7000_mame_build/src/...).
+
+PROGRESS:
+- F.1-STEP-0 ✅ DONE + committed (kn7000.cpp) + PUBLISHED: instantiated ADSP21062 in kn7000()
+  (host-boot mode, idle). KN7000 boots to the home screen, no fatalerror, SHARC compiled+linked.
+  BUILD LEARNINGS (important, in build.sh now / cpu.lua):
+    * Adding the SHARC needs REGENIE=1 + USE_QTDEBUG=0 (REGENIE else fails on Qt 'moc').
+    * LATENT MAME BUG fixed: cpu.lua DRC_CPUS names the SHARC "ADSP21062" but its flag is
+      "ADSP2106X" -> SHARC-only builds fail to link drcuml. build.sh now idempotently adds
+      "ADSP2106X" to DRC_CPUS.
+    * Canonical build = kn7000_mame/build.sh (SOURCES=kn7000.cpp,kn1500.cpp; registers both in
+      mame.lst). After REGENIE churn, a STALE libmame_kn7000.a (only kn7000.o, missing kn1500.o)
+      caused 'undefined driver_kn1500' -> fix = delete build/.../bin/.../mame_kn7000/libmame_kn7000.a
+      + generated .../drivlist.o, rebuild WITHOUT REGENIE. So: REGENIE once to add a device, then
+      rm the stale mame archive, then plain make.
+- F.1-STEP-1 (NEXT): fork sharc.h+sharc.cpp into kn7000_mame/src/devices/cpu/sharc/ + symlink
+  (build.sh registration like MN10300). Add adsp21065l_device: PLAIN-RAM 21065L maps (PM
+  0x8000-0x8FFF 64-bit .ram; DM 0x9800-0x9FFF + 0xC000-0xCFFF 32-bit .ram; IOP 0x00-0xFF via base
+  iop_r/iop_w). NOTE: m_blocks is required_shared_ptr_array + PRIVATE, and pm_r/pm_w use a
+  21062-specific block-interleave -> DON'T reuse them; change m_blocks to optional_shared_ptr_array
+  so plain-RAM maps don't need to populate it. Swap m_dsp to adsp21065l_device. Build + verify boot.
+  Then:
+- F.1-STEP-1: fork sharc.h+sharc.cpp into the repo, add adsp21065l_device (21065L PM/DM maps +
+  IOP stubs), swap m_dsp to it.
+- F.2: driver host-boot glue (latch reg0x40 addr; on 0x1C 0xA1/0x41 DMA the streamed words into
+  the SHARC internal PM/DM; release it). Verify the kernel runs (PC advances, no fatalerror).
+- F.3: SPORT audio (TG output -> DSP -> DAC). The big new piece.
+
+### DECISION POINT FOR FELIPE (reached 2026-07-10, cron tick #5) [SUPERSEDED — greenlit above]
 The sound subsystem is at a strong, complete plateau: the KN7000 makes firmware-driven,
 correctly-pitched sound (opt-in switch; home-screen boot preserved), fully documented
 (website + blog Part 10). The ONE remaining big piece — the effects-DSP LLE — is now
