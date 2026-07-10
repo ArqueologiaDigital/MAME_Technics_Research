@@ -77,12 +77,24 @@ CFG GOTCHA (cost hours): the CONFIG bits are SEPARATE PORT_CONFNAME fields -> th
 needs one <port> line PER bit with its own mask: bit0 (DSP) = mask "1" value "1", bit1
 (TG sound) = mask "2" value "2". A single mask="3" value="2" line does NOT set bit1.
 
+RESOLVED (commit f83a6a1): the "different sound" was a ring-MISALIGNMENT artifact, now
+fixed. Root cause: without the modelled SPORT DMA advancing the autobuffer index, the
+kernel writes its output frame to a FIXED position each IRQ0 (tapped: always 0xC350/
+0xC351) and reads input 0x20 below (0xC370/0xC371) -- NOT a cycling ring. The tick
+walked pos 0..7 so only 1/8 hit the real slot (~0.125 == the measured 0.126 attenuation)
+-> the rest stale -> attenuation + clicks. FIX = fixed addresses TX0+0xE (out) / RX0+0xE
+(in). Now spectrally VERIFIED CLEAN: DSP-on == DSP-off tone within 1% (RMS + fundamental
+ratio 1.01), no added HF -- a faithful dry passthrough through the DSP. Bridge sync also
+hardened (bounded rings, prime+hold-last, no bypass/DSP mixing). How to A/B compare:
+capture off = CONFIG bit1 only, on = bit0+bit1, both press "Key C4" at t>=16, -wavwrite,
+Goertzel at 262 Hz (see the /tmp analysis this session).
+
 NEXT / open:
- - Characterize the "different sound": is an effect actually loaded (wet reverb/chorus)
-   or are there dry-path artifacts (ring-sync/latency)? Load a known effect preset and
-   compare; FFT the output. The default slot is a dry copy, so audible effect needs the
-   firmware to SELECT/upload an effect microprogram (rec05-76) to PM 0x8400.
- - Ring-sync robustness (small latency buffer) if the effect sounds glitchy.
+ - AUDIBLE EFFECT: the default slot (PM 0x8400) is a dry copy, so off==on. To hear
+   reverb/chorus the firmware must SELECT/upload an effect microprogram (rec05-76) to
+   PM 0x8400. Investigate: does selecting an effect / a sound-with-reverb trigger the
+   host to upload it (dsp_data_w PM 0x8400 writes)? Then the +0xE output offset may move
+   (it's the passthrough's I4 offset) -- re-derive per effect.
  - SD-card menu still shows when the TG gate is opened (known: kn7000-sd-strap-gate) --
    separate issue, sound works regardless of screen.
  - Dry/wet mix + SPORT1 role: only if the output is 100% wet (hardware may sum a dry
