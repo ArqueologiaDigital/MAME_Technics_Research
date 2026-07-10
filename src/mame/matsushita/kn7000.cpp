@@ -641,6 +641,7 @@ private:
 	// m_sdmbx_out) and asserts group 0x1C. Reads return the MISO byte -- i.e.
 	// the register behaves as the usual full-duplex SPI data latch.
 	uint16_t m_sdmbx_out = 0xFF;               // last MISO byte (mailbox read value)
+	uint16_t m_gpio8004 = 0xFFFF;              // GPIO latch 0x36008004 (bit1 = SD SPI CS, active-low)
 	uint8_t  m_sdmbx_miso = 0;                 // MISO bit collector (spi_miso callback)
 	void cpsd_mbx_write(uint16_t data);
 	void sd_miso_w(int state) { m_sdmbx_miso = uint8_t(m_sdmbx_miso << 1) | (state & 1); }
@@ -855,6 +856,22 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// (btst 0x01 at 0x484AC80C) and ABORTS the whole transaction back to state 0
 	// if clear -- with a 0 stub no handshake command could ever be transmitted.
 	map(0x36008084, 0x36008085).lr16(NAME([]() -> uint16_t { return 0x0001; }));
+	// GPIO output latch 0x36008004: bit1 = the SD card's SPI CHIP SELECT
+	// (active-low: bclr = assert/select, bset = release/deselect). The firmware
+	// brackets every SD SPI transaction with it (assert 0x4854bc8f / release
+	// 0x4854bc85), and the >= 74 init clocks are issued with CS RELEASED. Drive
+	// MAME's spi_sdcard select from it (the device resets its SPI state on the
+	// CS rising edge, so correct framing is required for card-init to complete).
+	// Other bits are plain GPIO -- keep a shadow so bset/bclr RMW is preserved.
+	if (!m_lib_mirror)
+		map(0x36008004, 0x36008005).lrw16(
+			NAME([this](offs_t) -> uint16_t { return m_gpio8004; }),
+			NAME([this](offs_t, uint16_t data, uint16_t mem_mask)
+			{
+				COMBINE_DATA(&m_gpio8004);
+				if (m_sdcard)
+					m_sdcard->spi_ss_w((m_gpio8004 & 0x0002) ? 0 : 1);   // active-low CS
+			}));
 	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
@@ -2234,8 +2251,9 @@ void kn7000_state::machine_reset()
 			m_sd_insert_timer->adjust(attotime::from_seconds(6));
 		else
 			m_sd_insert_timer->adjust(attotime::never);
+		m_gpio8004 = 0xFFFF;                            // CS released (bit1=1) at reset
 		if (m_sdcard)
-			m_sdcard->spi_ss_w(1);                      // card permanently selected (single-slave bus)
+			m_sdcard->spi_ss_w(0);                      // deselected until the firmware asserts CS (0x36008004 bit1)
 	}
 }
 
