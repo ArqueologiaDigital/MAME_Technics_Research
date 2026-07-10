@@ -51,6 +51,25 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★★★★★ SD CARD MOUNTS 2026-07-10 (commit bf0c9a2) — the SD data path is COMPLETE
+
+The last mount blocker is SOLVED: the DATA-BLOCK CRC16. The firmware verifies the CSD's
+CRC16 (routine 0x4854c919: init d1=0 then the 0x1021 MSB-first loop = SD-spec init 0x0000),
+but MAME's util::crc16_creator inits to 0xFFFF -> every CSD read failed CRC (traced: read
+primitive 0x4854c3ab reached the CRC compare 3x, mismatch 3x) -> initflag 0x5016064c never
+set -> mount state 4. FIX: patched spi_sdcard (overlay) sd_data_crc16() with init 0x0000
+for CSD/CID/data reads. RESULT (verified, -harddisk sdtest.hd + cover closed): full init
+CMD0/1/59/9/16/10, mount worker completes -> **SD state 3 (MOUNTED), card-ready
+0x50083bc2=1, initflag=1** -- reaching state 3 read the boot sector + FAT from the host
+image, so cmd-3 sector reads work end-to-end. Default boot unchanged (no card = home).
+
+NEXT: SD menus ON SCREEN. The sound-present panel descriptor bank (A, 0x48614978) remapped
+the soft-keys + the DISK button vs the old sound-absent bank -- the previous DISK(SEG12
+0x80)/SD MENU(SEG03 0x80)/SD-AUDIO(SEG0F 0x20) path now lands on PMEM/SOUND screens (DISK
+now selects a panel-memory preset). Re-RE the disk/SD navigation under bank A, then
+directory listing / file browse / SD-Song(SMF) + SD-Audio playback, and the SD IN USE LED.
+Checklist: notes/sd-card-emulation-plan.md.
+
 ## SD SPI STACK COMPLETE THROUGH CSD 2026-07-10 (commits 9279ba0/3457304/b8bd72c)
 
 Transport DONE + proven. Full mailbox RE (wf_6a5ed26e-8d4, 6/6 confirmed): bone-stock SD
