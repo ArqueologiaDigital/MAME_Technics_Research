@@ -74,19 +74,24 @@ What shipped:
      envelope (self-limiting since this sound rings until stolen).
    - placeholder SINE timbre (wave ROMs undumped).
 
-### REMAINING / NEXT (refinements, not blockers)
-1. VERIFY on video that boot lands on the home/play screen (SD menu gone). Felipe
-   saw the SD menu with the probe ON; the probe is now OFF — confirm.
-2. Timbre: real PCM needs the undumped wave ROMs (IC203/4/7/8). Placeholder wave
-   ROM generator exists (kn7000_disassembly/tools/make_placeholder_waveroms.py) —
-   could wire a labelled synthetic wave region for a richer-than-sine timbre.
-3. Dual-layer: the default sound programs a main layer + a weaker sub-octave layer;
-   both render. The single pitch reference (0xC838) is exact for the main layer; the
-   secondary layer's multisample base may differ (undumped-ROM dependent). Fine for
-   first cut.
-4. Envelope/filter/pan: currently a generic AD envelope; the firmware programs full
-   per-voice envelopes (classes 0x0001-0x000D) + filter — decode for accuracy later.
-5. Update website sound page + memory (gate fix applied) + a dev blog post.
+### REMAINING / NEXT (refinements, not blockers) — for the cron loop to continue
+DONE this session: gate fix, firmware-driven synth, pitch decode, opt-in switch
+(home-screen boot preserved + verified), publish, website sound page, blog Part 10,
+memory. Remaining, roughly in value order:
+1. Envelope/level/pan accuracy: decode the full per-voice register block the firmware
+   writes at note-on (classes 0x0000-0x000D level/env, 0x2801/0x2C04, filter 0x40xx)
+   so voices have the firmware's real dynamics instead of a generic AD envelope.
+   Capture with tools/stage2_tg_diagnostic.lua-style taps.
+2. Velocity: the firmware passes velocity (kbd_push high byte); map it to level.
+3. Effects DSP: Phase A host stub verified; next is running/emulating the SHARC
+   effect on the audio stream (reverb/chorus) — large; see notes/sound-subsystem-plan.md.
+4. Placeholder wave ROMs for a richer-than-sine timbre (kn7000_disassembly/tools/
+   make_placeholder_waveroms.py) — but the tonegen would need to honour the firmware's
+   sample-select writes to be meaningful; low priority vs the honest sine.
+5. SD subsystem (separate, PAUSED): finishing it would let boot reach the home screen
+   WITH sound enabled (removing the opt-in trade-off). See notes/sd-card-emulation-plan.md.
+6. Cross-model sound RE: check whether KN5000/KN6000/KN6500 share the TG gate + 0x2401
+   pitch encoding (user request; add to their disasm/docs).
 
 ## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
 
