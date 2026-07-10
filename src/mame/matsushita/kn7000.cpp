@@ -435,6 +435,7 @@ public:
 		, m_lcdbuf(*this, "lcdbuf")
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
+		, m_kbd_midi_uart(*this, "kbdmidi_uart")
 		, m_tonegen(*this, "tonegen")
 		, m_dspbridge(*this, "dspbridge")
 		, m_dsp(*this, "dsp")
@@ -443,6 +444,7 @@ public:
 		, m_rearsw(*this, "REARSW")
 		, m_sdsw(*this, "SDSW")
 		, m_sdcard(*this, "sdcard")
+		, m_sdcover(*this, "SDCOVER")
 		, m_config(*this, "CONFIG")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
@@ -452,6 +454,7 @@ public:
 	void kn7000(machine_config &config) ATTR_COLD;
 	void kn6000(machine_config &config) ATTR_COLD;
 	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
+	DECLARE_INPUT_CHANGED_MEMBER(sd_cover_changed);   // SD slot cover toggle (public: PORT_CHANGED_MEMBER)
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
@@ -467,6 +470,7 @@ private:
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
+	required_device<kn7000_sio_uart_device> m_kbd_midi_uart;  // MIDI -> internal key bed (velocity)
 	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
 	required_device<kn7000_dsp_bridge_device> m_dspbridge;  // F.3: routes TG audio through the effects DSP
 	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
@@ -480,6 +484,7 @@ private:
 	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
 	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
+	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	optional_ioport m_config;           // machine-configuration DIP: bit0 = enable the effects-DSP host stub
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
@@ -516,6 +521,38 @@ private:
 	uint8_t  m_kbd_head = 0, m_kbd_tail = 0;
 	void kbd_push(uint8_t note, uint8_t vel)
 	{ m_kbd_fifo[m_kbd_head & 15] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++; }
+
+	// --- MIDI -> internal KEY BED bridge (velocity-sensitive) ------------------
+	// A MIDI controller wired here plays the machine's OWN key bed (the voice-
+	// event FIFO the firmware polls at 0x98050004), NOT the rear MIDI IN jacks:
+	// note-on/off become key-bed events with the MIDI velocity, so the firmware
+	// treats them exactly like physical key presses (self-tests that watch the
+	// key bed see them, and dynamics/velocity are honoured). The key bed's FIFO
+	// value is the KEY INDEX (internal note = index + 36 = MIDI note); MIDI note
+	// n maps to index n-36, i.e. the 61-key compass C2(36)..C7(96). Notes outside
+	// are clamped into range. Connect a host controller with -kbdmidi <port>.
+	uint8_t m_kbd_midi_status = 0;             // MIDI running-status byte
+	uint8_t m_kbd_midi_d1 = 0;                  // first data byte (note)
+	bool    m_kbd_midi_have_d1 = false;
+	void kbd_midi_rx(uint8_t b)
+	{
+		if (b & 0x80)                          // status byte
+		{
+			if (b >= 0xF8) return;             // real-time messages: ignore
+			m_kbd_midi_status = (b < 0xF0) ? b : 0;   // system-common clears running status
+			m_kbd_midi_have_d1 = false;
+			return;
+		}
+		const uint8_t cmd = m_kbd_midi_status & 0xF0;
+		if (cmd != 0x90 && cmd != 0x80) return;       // only note-on / note-off
+		if (!m_kbd_midi_have_d1) { m_kbd_midi_d1 = b; m_kbd_midi_have_d1 = true; return; }
+		const uint8_t note = m_kbd_midi_d1, vel = b;
+		m_kbd_midi_have_d1 = false;            // ready for the next note in running status
+		if (note < 36 || note > 96) return;    // outside the 61-key bed
+		const uint8_t idx = note - 36;
+		const bool on = (cmd == 0x90) && (vel != 0);
+		kbd_push(idx, on ? vel : 0);           // velocity straight through (0 = release)
+	}
 	// Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
 	// write-only from the firmware. Address latched at base+0, data written at
 	// base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
@@ -630,6 +667,24 @@ private:
 	// bit0 only, so bit1 survives and keeps REQUEST/bit4 set through strobes).
 	emu_timer *m_sd_insert_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sd_insert);
+
+	// The SD slot has a hinged COVER; the firmware reads the cover switch as the
+	// card-detect line (cover closed + card in = accessible; cover open => the
+	// firmware refuses access with "ERROR 93: SD lid is open"). Model it as a
+	// user switch (SDCOVER, default CLOSED) plus the attached image: card-detect
+	// "present" = cover CLOSED and an image is mounted. Toggling the cover live
+	// produces the debounced edge -- closing (with a card) fires the insert /
+	// mount, opening triggers the removal + the ERROR 93 gate.
+	void sd_update_carddetect()
+	{
+		if (m_lib_mirror) return;
+		const bool cover_open = (m_sdcover->read() & 1) != 0;
+		const bool card = m_sdcard && m_sdcard->get_card_present();
+		if (!cover_open && card)
+			m_gxicr[0x1B] &= ~0x001F;                  // bit4=0: present (closed + card)
+		else
+			m_gxicr[0x1B] |= 0x0012;                   // bit4=1: no card / lid open
+	}
 
 	// --- SD mailbox (register 0x9805000C + ICR group 0x1C handshake) ----------
 	// The firmware speaks the STANDARD SD-card SPI protocol through this byte
@@ -1333,7 +1388,15 @@ TIMER_CALLBACK_MEMBER(kn7000_state::sd_insert)
 	// The card appears: clear the group-0x1B DETECT/REQUEST bits -> the polled
 	// reader sees bit4 drop, the debounce runs, and the firmware posts the
 	// card-insert message (see the member declaration for the chain).
-	m_gxicr[0x1B] &= ~0x001F;
+	sd_update_carddetect();
+}
+
+INPUT_CHANGED_MEMBER(kn7000_state::sd_cover_changed)
+{
+	// The user opened or closed the SD slot cover: update the card-detect line.
+	// Closing with a card in produces the insert edge (mount); opening drops
+	// access so the firmware shows "ERROR 93: SD lid is open" on the SD screens.
+	sd_update_carddetect();
 }
 
 // One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
@@ -2010,6 +2073,16 @@ static INPUT_PORTS_START(kn7000)
 	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD STOP")
 	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD PLAY/PAUSE")
 
+	// SD slot COVER switch. The KN7000's SD slot has a hinged cover; the firmware
+	// reads it as the card-detect line and refuses SD access with "ERROR 93: SD
+	// lid is open" while it is open. A latching toggle (default CLOSED): open it
+	// to eject / see ERROR 93, close it (with an image attached via -harddisk) to
+	// insert + mount. Toggling fires the debounced card-detect edge.
+	PORT_START("SDCOVER")
+	PORT_CONFNAME(0x01, 0x00, "SD slot cover") PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::sd_cover_changed), 0)
+	PORT_CONFSETTING(   0x00, "Closed")
+	PORT_CONFSETTING(   0x01, "Open")
+
 	// Music key bed: the FULL 61 keys (C2..C7). The FIFO value is the KEY INDEX
 	// (0 = bottom C2; firmware maps internal note = index + 36 = MIDI). Every key
 	// carries PORT_GM_NOTE musical-note markup, so a USB-MIDI controller mapped
@@ -2242,12 +2315,15 @@ void kn7000_state::machine_reset()
 		// 1 = no card / 0 = card present (raw read 0x4854bce0: btst bit4). The
 		// SD state machine is edge-driven -- a static level never fires the
 		// card-insert message -- so we always boot "no card" (bit4=1) and, if a
-		// card image is attached, produce the 1->0 INSERT EDGE a few seconds
-		// after boot: that both fires the firmware's insert message (0x107020bb
-		// -> mount) and leaves bit4=0 so the card-check debounce (0x4854bd39)
-		// then reads present. No image -> stays "no card" (ERROR 93 on access).
+		// card image is attached AND the cover is closed, produce the 1->0 INSERT
+		// EDGE a few seconds after boot: that both fires the firmware's insert
+		// message (0x107020bb -> mount) and leaves bit4=0 so the card-check
+		// debounce (0x4854bd39) reads present. Cover open, or no image -> stays
+		// "no card / lid open" (ERROR 93 on SD access). The user can open/close
+		// the cover live (SDCOVER) to remove/insert afterwards.
 		m_gxicr[0x1B] |= 0x0012;
-		if (m_sdcard && m_sdcard->get_card_present())
+		const bool cover_open = (m_sdcover->read() & 1) != 0;
+		if (!cover_open && m_sdcard && m_sdcard->get_card_present())
 			m_sd_insert_timer->adjust(attotime::from_seconds(6));
 		else
 			m_sd_insert_timer->adjust(attotime::never);
@@ -2308,6 +2384,12 @@ void kn7000_state::kn7000(machine_config &config)
 	m_midi_uart[0]->rx_cb().set(FUNC(kn7000_state::midi_rx<SIO_MIDI1>));
 	MIDI_PORT(config, "mdin1", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[0], FUNC(kn7000_sio_uart_device::rx_w));
 	MIDI_PORT(config, "mdout1", midiout_slot, "midiout");
+
+	// MIDI -> internal key bed (velocity). A dedicated IN port so a controller
+	// plays the key bed itself, distinct from the two rear MIDI IN jacks.
+	KN7000_SIO_UART(config, m_kbd_midi_uart, 0);
+	m_kbd_midi_uart->rx_cb().set(FUNC(kn7000_state::kbd_midi_rx));
+	MIDI_PORT(config, "kbdmidi", midiin_slot, "midiin").rxd_handler().set(m_kbd_midi_uart, FUNC(kn7000_sio_uart_device::rx_w));
 
 	KN7000_SIO_UART(config, m_midi_uart[1], 0);
 	m_midi_uart[1]->tx_cb().set("mdout2", FUNC(midi_port_device::write_txd));
