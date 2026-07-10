@@ -440,6 +440,7 @@ public:
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
+		, m_sdsw(*this, "SDSW")
 		, m_config(*this, "CONFIG")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
@@ -475,6 +476,7 @@ private:
 	required_ioport_array<0x21> m_seg;  // one per normalized segment 0x00-0x20
 	required_ioport m_dial;
 	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
+	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
 	optional_ioport m_config;           // machine-configuration DIP: bit0 = enable the effects-DSP host stub
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
@@ -755,7 +757,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	if (!m_lib_mirror)
 		map(0x9cc00008, 0x9cc0000b).lr32(NAME([this](offs_t) -> uint32_t
 		{
-			return (m_lcdbuf[0x00C00008 >> 2] & 0xFFFFFF00) | 0x3F;
+			return (m_lcdbuf[0x00C00008 >> 2] & 0xFFFFFF00) | (~m_sdsw->read() & 0x3F);
 		}));
 	// Override the low 4 bytes: 0x9C000000 is the effects-DSP host DATA port
 	// (paired with the index at 0x98000000), NOT LCD RAM. The framebuffer at
@@ -1938,45 +1940,96 @@ static INPUT_PORTS_START(kn7000)
 	PORT_CONFSETTING(0x1000, "MIDI IN")
 	PORT_CONFSETTING(0x0000, "Bass Pedals")
 
-	// Music key bed (subset: ~2 octaves on the PC keyboard, tracker-style layout).
-	// Each key pushes a note-on/off voice-event into the FIFO the firmware polls at
-	// 0x98050004 (see kbd_key / kbd_push). The FIFO value is the KEY INDEX, not a
-	// MIDI note: the firmware maps it to internal note = index + 36 (runtime-
-	// verified via the lib voice records, notes/tg-pitch-pipeline.md) -- index 0 =
-	// the 61-key bed's lowest key C2 (MIDI 36), so C4 (MIDI 60) = index 0x18. The
-	// old 0x3C..0x54 codes made these keys sound three octaves high once musical
-	// pitch was resolved correctly (they were masked by the legacy absolute decode).
-#define KN_KEY(mask, note, code, name) \
-	PORT_BIT(mask, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME(name) PORT_CODE(code) \
-	PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::kbd_key), note)
-	PORT_START("KEYS0")   // lower octave: Z S X D C V G B H N J M  (C4..B4)
-	KN_KEY(0x0001, 0x18, KEYCODE_Z, "Key C4")
-	KN_KEY(0x0002, 0x19, KEYCODE_S, "Key C#4")
-	KN_KEY(0x0004, 0x1A, KEYCODE_X, "Key D4")
-	KN_KEY(0x0008, 0x1B, KEYCODE_D, "Key D#4")
-	KN_KEY(0x0010, 0x1C, KEYCODE_C, "Key E4")
-	KN_KEY(0x0020, 0x1D, KEYCODE_V, "Key F4")
-	KN_KEY(0x0040, 0x1E, KEYCODE_G, "Key F#4")
-	KN_KEY(0x0080, 0x1F, KEYCODE_B, "Key G4")
-	KN_KEY(0x0100, 0x20, KEYCODE_H, "Key G#4")
-	KN_KEY(0x0200, 0x21, KEYCODE_N, "Key A4")
-	KN_KEY(0x0400, 0x22, KEYCODE_J, "Key A#4")
-	KN_KEY(0x0800, 0x23, KEYCODE_M, "Key B4")
-	PORT_START("KEYS1")   // upper octave: Q 2 W 3 E R 5 T 6 Y 7 U I  (C5..C6)
-	KN_KEY(0x0001, 0x24, KEYCODE_Q, "Key C5")
-	KN_KEY(0x0002, 0x25, KEYCODE_2, "Key C#5")
-	KN_KEY(0x0004, 0x26, KEYCODE_W, "Key D5")
-	KN_KEY(0x0008, 0x27, KEYCODE_3, "Key D#5")
-	KN_KEY(0x0010, 0x28, KEYCODE_E, "Key E5")
-	KN_KEY(0x0020, 0x29, KEYCODE_R, "Key F5")
-	KN_KEY(0x0040, 0x2A, KEYCODE_5, "Key F#5")
-	KN_KEY(0x0080, 0x2B, KEYCODE_T, "Key G5")
-	KN_KEY(0x0100, 0x2C, KEYCODE_6, "Key G#5")
-	KN_KEY(0x0200, 0x2D, KEYCODE_Y, "Key A5")
-	KN_KEY(0x0400, 0x2E, KEYCODE_7, "Key A#5")
-	KN_KEY(0x0800, 0x2F, KEYCODE_U, "Key B5")
-	KN_KEY(0x1000, 0x30, KEYCODE_I, "Key C6")
-#undef KN_KEY
+	// SD front-panel switches (CPSD-side matrix, byte 0x9CC00008 ACTIVE-LOW,
+	// bits 0-5 -> panel events 0x20B5..0x20BA per descriptor SEG1D @0x48613fc4;
+	// physical order per the panel silk: VOLUME - / + , SKIP/SEARCH back/fwd,
+	// STOP, PLAY/PAUSE). Clickable in the layout artwork (kn7000.lay sd_block).
+	PORT_START("SDSW")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME -")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME +")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH <<")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH >>")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD STOP")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD PLAY/PAUSE")
+
+	// Music key bed: the FULL 61 keys (C2..C7). The FIFO value is the KEY INDEX
+	// (0 = bottom C2; firmware maps internal note = index + 36 = MIDI). Every key
+	// carries PORT_GM_NOTE musical-note markup, so a USB-MIDI controller mapped
+	// via MAME's midi input provider plays the whole bed; the middle two octaves
+	// (C4..C6) additionally keep the PC tracker-style key bindings.
+#define KN_KEYM(mask, idx, gm, name) \
+	PORT_BIT(mask, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME(name) PORT_GM_NOTE(gm) \
+	PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::kbd_key), idx)
+#define KN_KEYPC(mask, idx, gm, code, name) \
+	PORT_BIT(mask, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME(name) PORT_CODE(code) PORT_GM_NOTE(gm) \
+	PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::kbd_key), idx)
+	PORT_START("KEYS0")
+	KN_KEYM(0x0001, 0x00, 36, "Key C2")
+	KN_KEYM(0x0002, 0x01, 37, "Key C#2")
+	KN_KEYM(0x0004, 0x02, 38, "Key D2")
+	KN_KEYM(0x0008, 0x03, 39, "Key D#2")
+	KN_KEYM(0x0010, 0x04, 40, "Key E2")
+	KN_KEYM(0x0020, 0x05, 41, "Key F2")
+	KN_KEYM(0x0040, 0x06, 42, "Key F#2")
+	KN_KEYM(0x0080, 0x07, 43, "Key G2")
+	KN_KEYM(0x0100, 0x08, 44, "Key G#2")
+	KN_KEYM(0x0200, 0x09, 45, "Key A2")
+	KN_KEYM(0x0400, 0x0A, 46, "Key A#2")
+	KN_KEYM(0x0800, 0x0B, 47, "Key B2")
+	KN_KEYM(0x1000, 0x0C, 48, "Key C3")
+	KN_KEYM(0x2000, 0x0D, 49, "Key C#3")
+	KN_KEYM(0x4000, 0x0E, 50, "Key D3")
+	KN_KEYM(0x8000, 0x0F, 51, "Key D#3")
+	PORT_START("KEYS1")
+	KN_KEYM(0x0001, 0x10, 52, "Key E3")
+	KN_KEYM(0x0002, 0x11, 53, "Key F3")
+	KN_KEYM(0x0004, 0x12, 54, "Key F#3")
+	KN_KEYM(0x0008, 0x13, 55, "Key G3")
+	KN_KEYM(0x0010, 0x14, 56, "Key G#3")
+	KN_KEYM(0x0020, 0x15, 57, "Key A3")
+	KN_KEYM(0x0040, 0x16, 58, "Key A#3")
+	KN_KEYM(0x0080, 0x17, 59, "Key B3")
+	KN_KEYPC(0x0100, 0x18, 60, KEYCODE_Z, "Key C4")
+	KN_KEYPC(0x0200, 0x19, 61, KEYCODE_S, "Key C#4")
+	KN_KEYPC(0x0400, 0x1A, 62, KEYCODE_X, "Key D4")
+	KN_KEYPC(0x0800, 0x1B, 63, KEYCODE_D, "Key D#4")
+	KN_KEYPC(0x1000, 0x1C, 64, KEYCODE_C, "Key E4")
+	KN_KEYPC(0x2000, 0x1D, 65, KEYCODE_V, "Key F4")
+	KN_KEYPC(0x4000, 0x1E, 66, KEYCODE_G, "Key F#4")
+	KN_KEYPC(0x8000, 0x1F, 67, KEYCODE_B, "Key G4")
+	PORT_START("KEYS2")
+	KN_KEYPC(0x0001, 0x20, 68, KEYCODE_H, "Key G#4")
+	KN_KEYPC(0x0002, 0x21, 69, KEYCODE_N, "Key A4")
+	KN_KEYPC(0x0004, 0x22, 70, KEYCODE_J, "Key A#4")
+	KN_KEYPC(0x0008, 0x23, 71, KEYCODE_M, "Key B4")
+	KN_KEYPC(0x0010, 0x24, 72, KEYCODE_Q, "Key C5")
+	KN_KEYPC(0x0020, 0x25, 73, KEYCODE_2, "Key C#5")
+	KN_KEYPC(0x0040, 0x26, 74, KEYCODE_W, "Key D5")
+	KN_KEYPC(0x0080, 0x27, 75, KEYCODE_3, "Key D#5")
+	KN_KEYPC(0x0100, 0x28, 76, KEYCODE_E, "Key E5")
+	KN_KEYPC(0x0200, 0x29, 77, KEYCODE_R, "Key F5")
+	KN_KEYPC(0x0400, 0x2A, 78, KEYCODE_5, "Key F#5")
+	KN_KEYPC(0x0800, 0x2B, 79, KEYCODE_T, "Key G5")
+	KN_KEYPC(0x1000, 0x2C, 80, KEYCODE_6, "Key G#5")
+	KN_KEYPC(0x2000, 0x2D, 81, KEYCODE_Y, "Key A5")
+	KN_KEYPC(0x4000, 0x2E, 82, KEYCODE_7, "Key A#5")
+	KN_KEYPC(0x8000, 0x2F, 83, KEYCODE_U, "Key B5")
+	PORT_START("KEYS3")
+	KN_KEYPC(0x0001, 0x30, 84, KEYCODE_I, "Key C6")
+	KN_KEYM(0x0002, 0x31, 85, "Key C#6")
+	KN_KEYM(0x0004, 0x32, 86, "Key D6")
+	KN_KEYM(0x0008, 0x33, 87, "Key D#6")
+	KN_KEYM(0x0010, 0x34, 88, "Key E6")
+	KN_KEYM(0x0020, 0x35, 89, "Key F6")
+	KN_KEYM(0x0040, 0x36, 90, "Key F#6")
+	KN_KEYM(0x0080, 0x37, 91, "Key G6")
+	KN_KEYM(0x0100, 0x38, 92, "Key G#6")
+	KN_KEYM(0x0200, 0x39, 93, "Key A6")
+	KN_KEYM(0x0400, 0x3A, 94, "Key A#6")
+	KN_KEYM(0x0800, 0x3B, 95, "Key B6")
+	KN_KEYM(0x1000, 0x3C, 96, "Key C7")
+#undef KN_KEYM
+#undef KN_KEYPC
 INPUT_PORTS_END
 
 
