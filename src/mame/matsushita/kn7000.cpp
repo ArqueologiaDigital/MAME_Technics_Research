@@ -1047,10 +1047,13 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	if (rx && tx)
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
-		const uint32_t obuf = tx + 0xE;   // 0xC350: the kernel's stereo output (L,R)
+		const uint32_t obuf = tx + 0xE;   // 0xC350: the kernel writes 4 output words each frame,
 		const uint32_t ibuf = rx + 0xE;   // 0xC370: the kernel's stereo input  (L,R)
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
-		m_dspbridge->push_output(sx24(dm.read_dword(obuf)), sx24(dm.read_dword(obuf + 1)));
+		// 0xC350/1 and 0xC352/3 are the two output sends (dry + wet); sum them for the DAC mix.
+		const int32_t oL = sx24(dm.read_dword(obuf))     + sx24(dm.read_dword(obuf + 2));
+		const int32_t oR = sx24(dm.read_dword(obuf + 1)) + sx24(dm.read_dword(obuf + 3));
+		m_dspbridge->push_output(oL, oR);
 		int32_t il = 0, ir = 0;
 		m_dspbridge->pop_input(il, ir);
 		dm.write_dword(ibuf,     uint32_t(il) & 0xffffff);
