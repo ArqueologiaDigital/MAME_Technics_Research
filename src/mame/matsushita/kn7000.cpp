@@ -166,42 +166,71 @@ public:
 	// Stage 2 -- FIRMWARE-DRIVEN synthesis. Every tone-generator register write (both
 	// TGs) is routed here from io_w. Once the TG-enable gate is open (see the
 	// 0x98070000 strap in io_r) the firmware programs a full per-voice block on each
-	// note and we render audio from two of those registers:
-	//   * class 0x2401 = the main pitch register. Empirically +0x400 per semitone and
-	//     doubling per octave; C#4 (MIDI 61) = 0x9E24. -> note = 61 + (d-0x9E24)/0x400.
-	//     A write here also (re)gates the voice ON (attack / retrigger).
+	// note and we render audio from these registers:
+	//   * class 0x2400/0x2401 = the pitch register: an 18-bit SAMPLE-ZONE-RELATIVE
+	//     log-pitch, pitch18 = ((class bit0)<<16) | data, at 0x400/semitone. It is
+	//     NOT absolute musical pitch: the firmware bakes each tone's element-
+	//     descriptor tuning (zone center key, key-scale exponent, coarse/fine) into
+	//     the value (lib pitch pipeline: init 0x4C030FB9, runtime 0x4C031127,
+	//     transform ((pitch16+0x1800)<<2)&0x3FFFF, write primitive 0x4C036F98), so
+	//     each tone sits at a different offset and unpitched drums use a constant.
+	//     The MUSICAL pitch therefore comes from the caller (io_w) which resolves it
+	//     from the library's voice record (notePitch16, see tg_pitch_resolve()); the
+	//     raw pitch18 is kept as the per-note reference so later rewrites on a held
+	//     voice apply as RELATIVE bends (vibrato/portamento/pitch bend).
+	//     A pitch write on an idle voice gates it ON (attack); on a held voice it is
+	//     a bend, not a retrigger (new notes are always preceded by the mute).
 	//   * class 0x0001 = 0xC000 = the voice mute the firmware writes on note-off /
 	//     voice-steal -> gate the voice OFF (release).
 	// Timbre is a placeholder sine: the real PCM wave ROMs (IC203/4/7/8) are undumped,
 	// so authentic samples are not yet possible. addr = [group:6][channel:6][index:4].
-	void tg_write(int tg, uint16_t addr, uint16_t data)
+	// note_x256: musical pitch in 1/256-semitone units resolved from the firmware's
+	// voice record by the caller, or -1 if unavailable (fall back to the legacy
+	// keybed-anchored absolute decode of pitch18).
+	void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1)
 	{
 		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
 		const int v = (tg << 6) | ((addr >> 4) & 0x3F);   // voice 0..127 (0..63 sub, 64..127 master)
-		switch (addr & 0xFC0F)                            // register class (channel masked out)
+		const uint16_t cls = addr & 0xFC0F;               // register class (channel masked out)
+		if ((cls & 0xFC0E) == 0x2400)                     // pitch (bit0 = pitch18 bit16)
 		{
-		case 0x2401:                                      // main pitch -> frequency + note-on
-		{
+			const uint32_t p18 = (uint32_t(cls & 1) << 16) | data;
 			m_stream->update();
-			const double note = 60.0 + (double(data) - double(0xC838)) / 1024.0;
-			m_freq[v]  = 440.0 * pow(2.0, (note - 69.0) / 12.0);
-			m_gate[v]  = 1;       // held
-			m_atk[v]   = 1;       // (re)start the attack
-			m_phase[v] = 0.0;     // clean attack transient
+			if (!m_gate[v])
+			{
+				// note-on: musical pitch from the resolved voice-record notePitch16
+				// when available; else the legacy absolute decode (anchored where
+				// pitch18 0x1C838 = MIDI 96, the keybed top-C reference).
+				const double note = (note_x256 >= 0) ? double(note_x256) / 256.0
+				                                     : 96.0 + (double(p18) - double(0x1C838)) / 1024.0;
+				m_note[v]   = note;
+				m_p18ref[v] = p18;
+				m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
+				m_gate[v]   = 1;      // held
+				m_atk[v]    = 1;      // start the attack
+				m_phase[v]  = 0.0;    // clean attack transient
+			}
+			else
+			{
+				// held voice: RELATIVE pitch update (bend/vibrato/portamento) around
+				// the note-on reference, 0x400 pitch18 units per semitone.
+				const double note = m_note[v] + (double(p18) - double(m_p18ref[v])) / 1024.0;
+				m_freq[v] = 440.0 * pow(2.0, (note - 69.0) / 12.0);
+			}
 			m_tgwrites++;
-			break;
 		}
-		case 0x0001:                                      // 0xC000 = voice mute -> note-off
+		else if (cls == 0x0001)                           // 0xC000 = voice mute -> note-off
+		{
 			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; }
-			break;
-		case 0x2009:                                      // per-voice level (best-effort)
+		}
+		else if (cls == 0x2009)                           // per-voice level (best-effort)
+		{
 			// The firmware writes this once at note-on; in the default full-velocity
 			// patch it is 0x5FFF, so normalising by 0x5FFF keeps that voice at unity
 			// (no change to the current sound) while honouring softer/louder values
 			// the firmware would emit for MIDI velocity or the mixer's part volumes.
 			m_stream->update();
 			m_level[v] = std::clamp(double(data) / double(0x5FFF), 0.0, 1.4);
-			break;
 		}
 	}
 	uint32_t tg_write_count() const { return m_tgwrites; }
@@ -218,6 +247,8 @@ protected:
 		std::fill(std::begin(m_level), std::end(m_level), 1.0);
 		save_item(NAME(m_phase));
 		save_item(NAME(m_freq));
+		save_item(NAME(m_note));
+		save_item(NAME(m_p18ref));
 		save_item(NAME(m_env));
 		save_item(NAME(m_gate));
 		save_item(NAME(m_atk));
@@ -258,7 +289,9 @@ protected:
 private:
 	sound_stream *m_stream = nullptr;
 	double   m_phase[128] = { };     // per-voice oscillator phase
-	double   m_freq[128]  = { };     // per-voice frequency (Hz), from the 0x2401 pitch register
+	double   m_freq[128]  = { };     // per-voice frequency (Hz)
+	double   m_note[128]  = { };     // per-voice musical note at note-on (bend reference)
+	uint32_t m_p18ref[128] = { };    // per-voice pitch18 at note-on (bend reference)
 	double   m_env[128]   = { };     // per-voice envelope level
 	uint8_t  m_gate[128]  = { };     // per-voice gate: 1 = firmware note held, 0 = muted/released
 	uint8_t  m_atk[128]   = { };     // per-voice attack-in-progress flag
@@ -510,6 +543,34 @@ private:
 	bool     tg_gate_postboot() { return (m_config.read_safe(0) & 4) != 0; }  // CONFIG bit2: open the TG gate AFTER boot (no SD menu)
 	emu_timer *m_tg_gate_timer = nullptr;      // periodic: force the TG-enable gate open post-boot
 	TIMER_CALLBACK_MEMBER(tg_gate_poke);
+
+	// Resolve the MUSICAL pitch for a TG pitch write from the library's per-slot
+	// voice record. The record array is 0x500AF940 + slot*0xB4 (128 slots; slots
+	// 0x00-0x3F drive 0x98050000 = our tg index 1, 0x40-0x7F drive 0x98040000 =
+	// tg index 0, per the lib write primitive 0x4C036F98), and is fully populated
+	// BEFORE the first pitch write of a note reaches the TG (race-free by
+	// construction). Fields (RE + runtime-verified, notes/tg-pitch-pipeline.md):
+	//   +0x08 byte: bit7 = record active, bits 0-6 = internal note
+	//   +0x0C u16:  notePitch16 = (note<<8) + 0x80 + part transpose + master tune
+	//               + scale stretch = the MUSICAL pitch in 1/256-semitone units --
+	//               exactly what our placeholder-sine synthesis should sound.
+	// The exp-7 (key-scale-off) case -- unpitched drums -- leaves notePitch16 at
+	// the formula constant 0x4280; return -1 there (and for inactive records) so
+	// the tonegen keeps its raw-pitch18 decode for those voices.
+	int32_t tg_pitch_resolve(int tg, uint16_t tgaddr)
+	{
+		if ((tgaddr & 0xFC0E) != 0x2400)
+			return -1;                                       // not a pitch write
+		const int slot = ((tgaddr >> 4) & 0x3F) | (tg == 0 ? 0x40 : 0x00);
+		auto &sp = m_maincpu->space(AS_PROGRAM);
+		const offs_t rec = 0x500AF940 + slot * 0xB4;
+		if (!(sp.read_byte(rec + 0x08) & 0x80))
+			return -1;                                       // record not active
+		const uint16_t np16 = sp.read_word(rec + 0x0C);
+		if (np16 == 0x4280 || np16 == 0 || np16 > 0x7FFF)
+			return -1;                                       // unpitched (exp-7 constant) / implausible
+		return int32_t(np16) - 0x80;                         // 1/256-semitone units
+	}
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
 	uint32_t m_dsp_dl_words = 0;               // count of download words written to the SHARC
 	// F.2 host-boot upload state (see dsp_data_w): the firmware sets a target address (reg
@@ -823,12 +884,14 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
 	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
-		m_tonegen->tg_write(0, m_tg_addr[0], data);               // Stage 2: feed the real TG voice engine
+		m_tonegen->tg_write(0, m_tg_addr[0], data,                // Stage 2: feed the real TG voice engine
+			tg_pitch_resolve(0, m_tg_addr[0]));
 		return;
 	case 0x28000: m_tg_addr[1] = data; return;                    // sub TG: address latch (0x98050000)
 	case 0x28001:                                                 // sub TG: data (0x98050002) -> reg[addr]
 		m_tg_reg[1][m_tg_addr[1]] = data;
-		m_tonegen->tg_write(1, m_tg_addr[1], data);
+		m_tonegen->tg_write(1, m_tg_addr[1], data,
+			tg_pitch_resolve(1, m_tg_addr[1]));
 		return;
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
@@ -1848,37 +1911,42 @@ static INPUT_PORTS_START(kn7000)
 
 	// Music key bed (subset: ~2 octaves on the PC keyboard, tracker-style layout).
 	// Each key pushes a note-on/off voice-event into the FIFO the firmware polls at
-	// 0x98050004 (see kbd_key / kbd_push). MIDI note numbers; C4 = 0x3C = 60.
+	// 0x98050004 (see kbd_key / kbd_push). The FIFO value is the KEY INDEX, not a
+	// MIDI note: the firmware maps it to internal note = index + 36 (runtime-
+	// verified via the lib voice records, notes/tg-pitch-pipeline.md) -- index 0 =
+	// the 61-key bed's lowest key C2 (MIDI 36), so C4 (MIDI 60) = index 0x18. The
+	// old 0x3C..0x54 codes made these keys sound three octaves high once musical
+	// pitch was resolved correctly (they were masked by the legacy absolute decode).
 #define KN_KEY(mask, note, code, name) \
 	PORT_BIT(mask, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME(name) PORT_CODE(code) \
 	PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::kbd_key), note)
 	PORT_START("KEYS0")   // lower octave: Z S X D C V G B H N J M  (C4..B4)
-	KN_KEY(0x0001, 0x3C, KEYCODE_Z, "Key C4")
-	KN_KEY(0x0002, 0x3D, KEYCODE_S, "Key C#4")
-	KN_KEY(0x0004, 0x3E, KEYCODE_X, "Key D4")
-	KN_KEY(0x0008, 0x3F, KEYCODE_D, "Key D#4")
-	KN_KEY(0x0010, 0x40, KEYCODE_C, "Key E4")
-	KN_KEY(0x0020, 0x41, KEYCODE_V, "Key F4")
-	KN_KEY(0x0040, 0x42, KEYCODE_G, "Key F#4")
-	KN_KEY(0x0080, 0x43, KEYCODE_B, "Key G4")
-	KN_KEY(0x0100, 0x44, KEYCODE_H, "Key G#4")
-	KN_KEY(0x0200, 0x45, KEYCODE_N, "Key A4")
-	KN_KEY(0x0400, 0x46, KEYCODE_J, "Key A#4")
-	KN_KEY(0x0800, 0x47, KEYCODE_M, "Key B4")
+	KN_KEY(0x0001, 0x18, KEYCODE_Z, "Key C4")
+	KN_KEY(0x0002, 0x19, KEYCODE_S, "Key C#4")
+	KN_KEY(0x0004, 0x1A, KEYCODE_X, "Key D4")
+	KN_KEY(0x0008, 0x1B, KEYCODE_D, "Key D#4")
+	KN_KEY(0x0010, 0x1C, KEYCODE_C, "Key E4")
+	KN_KEY(0x0020, 0x1D, KEYCODE_V, "Key F4")
+	KN_KEY(0x0040, 0x1E, KEYCODE_G, "Key F#4")
+	KN_KEY(0x0080, 0x1F, KEYCODE_B, "Key G4")
+	KN_KEY(0x0100, 0x20, KEYCODE_H, "Key G#4")
+	KN_KEY(0x0200, 0x21, KEYCODE_N, "Key A4")
+	KN_KEY(0x0400, 0x22, KEYCODE_J, "Key A#4")
+	KN_KEY(0x0800, 0x23, KEYCODE_M, "Key B4")
 	PORT_START("KEYS1")   // upper octave: Q 2 W 3 E R 5 T 6 Y 7 U I  (C5..C6)
-	KN_KEY(0x0001, 0x48, KEYCODE_Q, "Key C5")
-	KN_KEY(0x0002, 0x49, KEYCODE_2, "Key C#5")
-	KN_KEY(0x0004, 0x4A, KEYCODE_W, "Key D5")
-	KN_KEY(0x0008, 0x4B, KEYCODE_3, "Key D#5")
-	KN_KEY(0x0010, 0x4C, KEYCODE_E, "Key E5")
-	KN_KEY(0x0020, 0x4D, KEYCODE_R, "Key F5")
-	KN_KEY(0x0040, 0x4E, KEYCODE_5, "Key F#5")
-	KN_KEY(0x0080, 0x4F, KEYCODE_T, "Key G5")
-	KN_KEY(0x0100, 0x50, KEYCODE_6, "Key G#5")
-	KN_KEY(0x0200, 0x51, KEYCODE_Y, "Key A5")
-	KN_KEY(0x0400, 0x52, KEYCODE_7, "Key A#5")
-	KN_KEY(0x0800, 0x53, KEYCODE_U, "Key B5")
-	KN_KEY(0x1000, 0x54, KEYCODE_I, "Key C6")
+	KN_KEY(0x0001, 0x24, KEYCODE_Q, "Key C5")
+	KN_KEY(0x0002, 0x25, KEYCODE_2, "Key C#5")
+	KN_KEY(0x0004, 0x26, KEYCODE_W, "Key D5")
+	KN_KEY(0x0008, 0x27, KEYCODE_3, "Key D#5")
+	KN_KEY(0x0010, 0x28, KEYCODE_E, "Key E5")
+	KN_KEY(0x0020, 0x29, KEYCODE_R, "Key F5")
+	KN_KEY(0x0040, 0x2A, KEYCODE_5, "Key F#5")
+	KN_KEY(0x0080, 0x2B, KEYCODE_T, "Key G5")
+	KN_KEY(0x0100, 0x2C, KEYCODE_6, "Key G#5")
+	KN_KEY(0x0200, 0x2D, KEYCODE_Y, "Key A5")
+	KN_KEY(0x0400, 0x2E, KEYCODE_7, "Key A#5")
+	KN_KEY(0x0800, 0x2F, KEYCODE_U, "Key B5")
+	KN_KEY(0x1000, 0x30, KEYCODE_I, "Key C6")
 #undef KN_KEY
 INPUT_PORTS_END
 
