@@ -94,8 +94,17 @@ note-off=0x0001=0xC000 -- superseded the wrong static guesses). Remaining, in va
    sample-select writes to be meaningful; low priority vs the honest sine.
 5. SD subsystem (separate, PAUSED): finishing it would let boot reach the home screen
    WITH sound enabled (removing the opt-in trade-off). See notes/sd-card-emulation-plan.md.
-6. Cross-model sound RE: check whether KN5000/KN6000/KN6500 share the TG gate + 0x2401
-   pitch encoding (user request; add to their disasm/docs).
+6. Cross-model sound RE: PARTIALLY DONE (cron tick 2026-07-10) — KN6000 ALREADY
+   drives its TGs live on key-bed notes (no strap gate; boots to play screen, no SD
+   block — a cleaner platform than KN7000). Register layout DIFFERS: fine pitch =
+   class 0x5800, level 0x4000=0x3FFF, sample params group 0x80. See
+   notes/sound-cross-model-kn6000-kn6500.md (dynamic-capture section). TO MAKE KN6000
+   SING (high value, next): (a) find its octave/coarse pitch register — needs
+   multi-octave notes, but KN6000 :KEYS1 (C5+) gave NO writes, so first check the
+   KN6000 key-bed→note mapping / KEYS1 wiring; (b) add a KN6000 branch to
+   kn7000_tonegen_device::tg_write (pitch from 0x5800+octave, gate/level from
+   0x0000/0x4000); (c) flip kn6000/kn6500 to MACHINE_IMPERFECT_SOUND (likely no CONFIG
+   switch needed). KN5000/KN2400/KN2600 still unchecked.
 
 ## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
 
