@@ -8,6 +8,55 @@ Disassembly method: `../mame-sony-video/unidasm build/kn7000_program.rom -arch m
 
 ---
 
+## ★ DYNAMIC CAPTURE RESULTS (2026-07-10) — supersedes the static inferences below
+
+Once the TG-enable gate was opened (strap 0x98070000 bits 1,2 → probe 0x484d7713 →
+gate flag RAM 0x500ce380 = 0x40; see memory `kn7000-tg-enable-gate` and
+AUTONOMOUS-STATUS.md), the firmware DOES drive the tone generators on every key-bed
+note, and the traffic was captured live with Lua write-taps on 0x98040000/0x98050000
+(retain tap handles in _G; taps span aligned 4-byte units). These live results
+**override** the static guesses in §1–§4 where they conflict:
+
+- **PITCH is register class `0x2401`, NOT 0x2000/0x3000.** It steps exactly **+0x400
+  per semitone** and doubles per octave; middle C (MIDI 60) = **0x0000C838**. So
+  `note = 60 + (data − 0xC838) / 1024`, `Hz = 440·2^((note−69)/12)`. VERIFIED
+  spectrally: C4/E4/G4/C5 render at 262/330/392/523 Hz. (Class `0x3000` is a
+  WITHIN-octave value — identical for C4/C5/C6, varies by semitone within an octave —
+  i.e. a companion/fine field, not the absolute pitch. The static "0x2000/0x3000 =
+  pitch" was reading a different, octave-folded field.)
+- **NOTE-ON = the `0x2401` pitch write** (it both sets pitch and gates the voice on).
+  **No `0x4014`/`0xc014` key-on strobe is emitted** for the default sound — the static
+  "key-on = 0x4014 strobe" inference did not appear in any captured note-on.
+- **NOTE-OFF / voice mute = class `0x0001` data `0xC000`** (plus the envelope regs
+  0x0004–0x000A zeroed, and 0x0002=0xC000). This is what the firmware writes when it
+  releases or steals a voice. (This sound holds a voice until stolen — no explicit
+  mute on key-release — so the emulator uses a self-limiting decay envelope.)
+- **Dual-layer:** each note programs **two voices** whose 0x2401 values sit ~1 octave
+  apart (a main layer + a weaker sub-octave layer). A single 0xC838 reference decodes
+  both to sensible absolute pitches; whether the sub-octave is intended or a
+  multisample-base artifact can't be settled until the wave ROMs are dumped.
+- **Full note-on register block, in emission order** (one voice; captured for C4):
+  `3000=4000` (pitch preset) · `0000=D27F` · `0001` `0002` (key-scaled: C4 5400/5600,
+  C5 6300/5B00 — envelope/level) · `0004..000A` (envelope: AE00 AE00 AE00 2C00 9900
+  35E8 25B0) · `000B=0000 000C=7F00 000D=0F10` · `2801` (key-scaled E300/E400) ·
+  `2C04=5A00` · `0401/0405/0409/040D/0402/0406=0` · `3400 3800 3C00 1000 1400=0` ·
+  `1800=0200` · `1C02` (per-layer) · `2009=5FFF` (level, near-max) · **`2401`=pitch** ·
+  `400B=D546 4400=38AF 4804=2AB9 4C0F=C750` (group-0x40: constant across notes =
+  sound/waveform/sample params, NOT per-note) · `5004=0000` · `8000..8006` · then the
+  real **`2401`=pitch** value · `0003=8000`.
+- **Envelope/level = the group-0x00 registers** (0x0000–0x000D), key-scaled. Class
+  `0x2009=0x5FFF` is the near-max voice level. These are NOT yet quantitatively
+  decoded — that is the next synthesis refinement (velocity + real dynamics). The
+  group-0x40 quartet (400B/4400/4804/4C0F) is constant per sound (waveform/sample
+  select + level/pan), consistent with §3's "index, not raw address" finding.
+
+Implemented in `kn7000_tonegen_device` (kn7000.cpp): pitch from 0x2401, gate from
+0x2401(on)/0x0001=0xC000(off), placeholder sine + AD envelope. Gated behind the
+CONFIG bit1 "firmware sound" switch (default OFF; ON also advances boot into the
+paused SD subsystem → SD menu).
+
+---
+
 ## 0. The single most important correction first (KN7000 address layout is NOT the KN5000 layout)
 
 The prior note (`kn7000_mame/notes/tone-generator.md:51-67`) assumed the KN7000 reuses the KN5000 address encoding `group<<8 | bank<<6 | channel`. **The disassembly disproves this.** The KN7000 low-level write helper (0x487EFF69, the sub/main dispatcher; bodies at 0x487EFF70 sub / 0x487EFF92 main) builds the 32-bit word as:

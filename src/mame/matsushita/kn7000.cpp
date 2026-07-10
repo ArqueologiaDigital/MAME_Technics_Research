@@ -223,16 +223,16 @@ protected:
 	{
 		constexpr double FS = 44100.0;
 		constexpr double TWO_PI = 6.28318530717958647692;
-		const double atk = 1.0 / (0.005 * FS);   // ~5 ms attack
-		const double dec = 1.0 / (1.400 * FS);   // ~1.4 s decay while held
-		const double rel = 1.0 / (0.120 * FS);   // ~120 ms release after mute
+		const double atk  = 1.0 / (0.005 * FS);        // linear ~5 ms attack (click-free)
+		const double dhld = exp(-1.0 / (1.800 * FS));  // exponential ~1.8 s decay while held
+		const double drel = exp(-1.0 / (0.100 * FS));  // exponential ~100 ms release after mute
 		for (int s = 0; s < stream.samples(); s++)
 		{
 			double acc = 0.0;
 			for (int v = 0; v < 128; v++)
 			{
 				if (m_atk[v]) { m_env[v] += atk; if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; } }
-				else          { m_env[v] -= (m_gate[v] ? dec : rel); if (m_env[v] < 0.0) m_env[v] = 0.0; }
+				else          { m_env[v] *= (m_gate[v] ? dhld : drel); if (m_env[v] < 0.0005) m_env[v] = 0.0; }
 				if (m_env[v] <= 0.0) continue;
 				acc += sin(m_phase[v]) * m_env[v];
 				m_phase[v] += TWO_PI * m_freq[v] / FS;
