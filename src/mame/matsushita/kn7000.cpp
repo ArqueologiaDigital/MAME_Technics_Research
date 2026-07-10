@@ -2221,12 +2221,19 @@ void kn7000_state::machine_reset()
 	m_tempo_timer->adjust(attotime::never);
 	if (!m_lib_mirror)
 	{
-		// Empty SD slot (bit4 of the polled group-0x1B ICR reads 1 = no card):
-		// the faithful default until the card data transport is modeled. A
-		// future "insert card" action arms m_sd_insert_timer for the 1->0 edge
-		// that fires the firmware's card-insert message (0x107020bb).
+		// SD card-detect: the polled group-0x1B ICR (0x3400016C) bit4 reads
+		// 1 = no card / 0 = card present (raw read 0x4854bce0: btst bit4). The
+		// SD state machine is edge-driven -- a static level never fires the
+		// card-insert message -- so we always boot "no card" (bit4=1) and, if a
+		// card image is attached, produce the 1->0 INSERT EDGE a few seconds
+		// after boot: that both fires the firmware's insert message (0x107020bb
+		// -> mount) and leaves bit4=0 so the card-check debounce (0x4854bd39)
+		// then reads present. No image -> stays "no card" (ERROR 93 on access).
 		m_gxicr[0x1B] |= 0x0012;
-		m_sd_insert_timer->adjust(attotime::never);
+		if (m_sdcard && m_sdcard->get_card_present())
+			m_sd_insert_timer->adjust(attotime::from_seconds(6));
+		else
+			m_sd_insert_timer->adjust(attotime::never);
 		if (m_sdcard)
 			m_sdcard->spi_ss_w(1);                      // card permanently selected (single-slave bus)
 	}
