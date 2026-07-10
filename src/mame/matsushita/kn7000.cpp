@@ -386,6 +386,7 @@ private:
 	uint16_t dsp_data_r(offs_t offset, uint16_t mem_mask);
 	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
 	bool     dsp_stub_enabled() { return (m_config.read_safe(0) & 1) != 0; }
+	bool     tg_sound_enabled() { return (m_config.read_safe(0) & 2) != 0; }  // CONFIG bit1: TG-present strap -> firmware sound
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
 	uint32_t m_dsp_dl_words = 0;               // count of captured download words
 	emu_timer *m_sys_timer = nullptr;
@@ -593,10 +594,12 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		// 0x484d7713: bit1 CLEAR makes the probe return "3 = no TG", which leaves the
 		// sound library's TG-enable gate (RAM 0x500ce380) at 0x7F and SUPPRESSES every
 		// per-voice register write forever (the instrument stays silent). The real
-		// KN7000 has both tone generators (IC201/IC205), so report them present:
-		// bit1|bit2 set -> probe returns 1 -> gate opens (0x40) and the firmware drives
-		// the TGs on key-bed / MIDI notes (class 0x3000 pitch, 0x0001/2 level, etc.).
-		return 0x8000 | 0x0006 | (m_rearsw->read() & 0x1000);
+		// KN7000 has both tone generators (IC201/IC205); reporting them present
+		// (bit1|bit2) opens the gate and the firmware drives the TGs on every note.
+		// Gated behind a machine-config switch (default OFF) because opening it also
+		// lets boot advance into the still-paused SD subsystem, which then rests on the
+		// SD Card menu instead of the home screen -- so sound is opt-in for now.
+		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
 	// low byte = note, high byte = velocity). The firmware polls it for note on/off
@@ -1223,6 +1226,12 @@ static INPUT_PORTS_START(kn7000)
 	PORT_CONFNAME(0x01, 0x00, "Effects DSP host stub (experimental)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x01, DEF_STR(On))
+	// Reports the tone generators present so the firmware voices notes (audible sound).
+	// OFF keeps the known-good home-screen boot; ON enables firmware-driven sound but
+	// boot then rests on the SD Card menu (the paused SD subsystem). Default OFF.
+	PORT_CONFNAME(0x02, 0x00, "Tone generators / firmware sound (experimental)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x02, DEF_STR(On))
 
 	// Panel buttons organized by NORMALIZED SEGMENT (normSeg), the identity the
 	// firmware's button dispatcher (0x484ADB59) actually uses. panel_scan emits
