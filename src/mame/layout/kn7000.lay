@@ -270,14 +270,14 @@
 	<element name="t124"><text string="BANK VIEW"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t125"><text string="NEXT BANK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t126"><text string="PANEL MEMORY"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t127"><text string="1"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t128"><text string="2"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t129"><text string="3"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t130"><text string="4"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t131"><text string="5"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t132"><text string="6"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t133"><text string="7"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t134"><text string="8"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t127"><text string="2"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t128"><text string="1"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t129"><text string="8"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t130"><text string="7"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t131"><text string="6"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t132"><text string="5"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t133"><text string="4"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t134"><text string="3"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="t135"><text string="PANEL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t136"><text string="CUSTOMIZE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t137"><text string="FAVORITES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
@@ -716,21 +716,29 @@
 		<element ref="panel_memory_dial"><bounds x="565" y="268" width="190" height="190"/></element>
 		<element ref="t19"><bounds x="638" y="354" width="44" height="12"/></element>
 		<element ref="t127"><bounds x="626" y="441" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG0C" inputmask="0x02"><bounds x="621" y="403" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG12" inputmask="0x40"><bounds x="623" y="399" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led6"><bounds x="629" y="434" width="8" height="8"/></element>
 		<element ref="t128"><bounds x="577" y="396" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG12" inputmask="0x40"><bounds x="586" y="371" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG0C" inputmask="0x02"><bounds x="590" y="369" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led72"><bounds x="584" y="392" width="8" height="8"/></element>
 		<element ref="t129"><bounds x="574" y="329" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG11" inputmask="0x40"><bounds x="584" y="324" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG13" inputmask="0x80"><bounds x="588" y="326" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led15"><bounds x="581" y="332" width="8" height="8"/></element>
 		<element ref="t130"><bounds x="619" y="280" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG10" inputmask="0x40"><bounds x="616" y="289" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG12" inputmask="0x80"><bounds x="618" y="293" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led14"><bounds x="623" y="287" width="8" height="8"/></element>
 		<element ref="t131"><bounds x="686" y="277" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG0F" inputmask="0x40"><bounds x="663" y="287" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG11" inputmask="0x80"><bounds x="661" y="291" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led13"><bounds x="683" y="284" width="8" height="8"/></element>
 		<element ref="t132"><bounds x="735" y="322" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG11" inputmask="0x80"><bounds x="698" y="319" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG0F" inputmask="0x40"><bounds x="694" y="321" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led3"><bounds x="728" y="326" width="8" height="8"/></element>
 		<element ref="t133"><bounds x="738" y="389" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG12" inputmask="0x80"><bounds x="700" y="366" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG10" inputmask="0x40"><bounds x="696" y="364" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led4"><bounds x="731" y="386" width="8" height="8"/></element>
 		<element ref="t134"><bounds x="693" y="438" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="SEG13" inputmask="0x80"><bounds x="668" y="401" width="37" height="37"/></element>
+		<element ref="round_btn" inputtag="SEG11" inputmask="0x40"><bounds x="666" y="397" width="37" height="37"/></element>
+		<element ref="green_led" name="cpr_led5"><bounds x="689" y="431" width="8" height="8"/></element>
 		<element ref="big_ring"><bounds x="809" y="327" width="130" height="130"/></element>
 		<element ref="t41"><bounds x="804" y="318" width="52" height="8"/></element>
 		<element ref="t135"><bounds x="806" y="327" width="48" height="8"/></element>

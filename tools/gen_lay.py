@@ -421,14 +421,21 @@ RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",58
 # recalls a registration -- bank A ev2010 arg-mid = PM number - 1 (empirically confirmed: pressing
 # each opens "PMEM x-N"). Draw the number labels (r=88) + a clickable round button per slice (r=62).
 import math as _m
-PM_EVT=[("SEG0C","0x02"),("SEG12","0x40"),("SEG11","0x40"),("SEG10","0x40"),
-        ("SEG0F","0x40"),("SEG11","0x80"),("SEG12","0x80"),("SEG13","0x80")]   # PM 1..8
-for _i,_lab in enumerate(["1","2","3","4","5","6","7","8"]):
+# PM number -> its ev2010 recall bit (arg-mid = PM# - 1; verified: SEG0C 0x02 recalls PMEM A-1).
+PM_BY_NUM={1:("SEG0C","0x02"),2:("SEG12","0x40"),3:("SEG11","0x40"),4:("SEG10","0x40"),
+           5:("SEG0F","0x40"),6:("SEG11","0x80"),7:("SEG12","0x80"),8:("SEG13","0x80")}
+# Physical slice order corrected per Felipe (2026-07-10; my earlier angular order was scrambled):
+# angular slot i shows PM_ORDER[i], recalls that registration, and lights its own LED.
+PM_ORDER=[2,1,8,7,6,5,4,3]
+for _i,_num in enumerate(PM_ORDER):
     _a=_m.radians(-90+ (_i)*45 +200)
-    _x=660+int(88*_m.cos(_a)); _y=363+int(88*_m.sin(_a))
-    RB.append(L(_lab,_x-4,_y-4,8,8,TXTH))
-    _bx=660+int(62*_m.cos(_a)); _by=363+int(62*_m.sin(_a))
-    RB.append(P("round_btn",_bx-16,_by-16,32,32,tag=PM_EVT[_i][0],mask=PM_EVT[_i][1]))
+    _lx=660+int(88*_m.cos(_a)); _ly=363+int(88*_m.sin(_a))
+    RB.append(L(str(_num),_lx-4,_ly-4,8,8,TXTH))
+    _bx=660+int(58*_m.cos(_a)); _by=363+int(58*_m.sin(_a))
+    _tg,_mk=PM_BY_NUM[_num]
+    RB.append(P("round_btn",_bx-16,_by-16,32,32,tag=_tg,mask=_mk))
+    _ex=660+int(80*_m.cos(_a)); _ey=363+int(80*_m.sin(_a))
+    RB.append(P("green_led",_ex-4,_ey-4,8,8,name=PANEL_LED.get((_tg,_mk))))
 RB.append(P("big_ring",809,327,130,130))
 RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42)]
 # CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES

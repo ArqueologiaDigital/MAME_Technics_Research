@@ -46,7 +46,30 @@ switch identity, so driving a normalized `SEGnn.bit` port in this mode reveals
 `SEGnn.bit -> switch# -> LED -> (service-manual matrix) -> button name`, i.e. the
 exact `.lay` binding for every button.
 
-## Entry (STILL TO CRACK)
+## Entry — RESOLVED as a DEAD END for key injection (2026-07-10, verified)
+The boot key-combo (C#3+D#3+C#4) is NOT read via the note FIFO. Verified empirically: injecting
+the correct INTERNAL key indices 0x0D/0x0F/0x19 (words 0x640D/0x640F/0x6419) held from power-on
+still boots to the normal PMEM home screen. The 3 FIFO code sites are only note-play / clear / TG
+init -- no early-boot combo read. (The earlier failed attempt ALSO used MIDI numbers 0x31/0x33/0x3D
+as FIFO codes, doubly wrong: internal note = index+0x24, and the FIFO isn't the path.) The power-on
+held-key state is sensed by the panel/key SUB-CPU and reported to the main CPU -- the emulator models
+panel BUTTONS over the serial link but NOT key-bed key state at power-on, so no main-CPU register can
+be written to satisfy the check. **Do not re-attempt key/FIFO injection.**
+
+To actually draw the test screen you must open the test app's window OBJECT (create event 0x50009 via
+the MILK object system: ObjectProc 0x4842A208 / RegisterObject 0x4842A737), NOT a ChangeMode/Title
+(those with test ids 0x101-0x10A fall back to the demo splash). Panel-test flag 0x5006BFB2=1 routes
+button presses to the InOut handler 0x484A0CB0 but does not draw the screen. Test app: ids 0x101-0x10A
+(InitializeBlock16 0x4849F860); window-proc table 0x4874AE58 (InOutTestWindowProc 0x484A1AFE,
+StestWindowProc 0x484A4A2B); flag set by SetPanelTestFlag 0x484AE290 when the test menu page == 5.
+
+**BUT THIS IS MOOT for the .lay:** the self-test's DATA (PanelSwitchClassTable 0x4860C9F4 + the LED
+row-remap 0x48615058) was used STATICALLY and validated live -- see notes/panel-selftest-validation.md
+(switch#=normSeg*8+bit; led=(remap[row]&0x3f)*8+col_index). That gave the authoritative button+LED
+map without the test screen, which is circular for .lay mapping anyway. The window-create route is
+only worth cracking if a future task wants the on-screen "ALL DEVICE OK" end-to-end confirmation.
+
+## (historical) Entry (STILL TO CRACK)
 Service manual: *hold C#3 + D#3 + C#4, then power on*. Attempt this tick:
 injected note-ons 0x31/0x33/0x3D (C#3/D#3/C#4 at C4=60) into the modeled voice
 FIFO (0x98050004) early in boot (t=10..900 ticks, held / no note-off) → still

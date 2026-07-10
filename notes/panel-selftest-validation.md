@@ -36,7 +36,10 @@ buttons that were merely decorative in the layout. Confirmed:
 PANEL MEMORY 1..8 (ev2010, arg-mid = PM# - 1; cross-checked vs the descriptor dump):
 PM1 SEG0C 0x02, PM2 SEG12 0x40, PM3 SEG11 0x40, PM4 SEG10 0x40, PM5 SEG0F 0x40, PM6 SEG11 0x80,
 PM7 SEG12 0x80, PM8 SEG13 0x80. The physical dial is an 8-way pie-slice ring + central SET; the
-layout now draws a clickable round button per slice (verified: clicking PM1 recalls "PMEM A-1").
+layout draws a clickable round button per slice + its LED. **Slice order corrected per Felipe
+(PM_ORDER=[2,1,8,7,6,5,4,3] round the ring -- my first angular order was scrambled).** Each PM
+LED is from PANEL_LED (PM1 -> cpr_led72, verified live: recalling PM1 lights it -- which also
+confirms the rows-14-19 LED formula). Verified: recalling PM1 (SEG0C 0x02) opens "PMEM A-1".
 
 All the above are now bound in the layout (tools/gen_lay.py) + named in INPUT_PORTS.
 
