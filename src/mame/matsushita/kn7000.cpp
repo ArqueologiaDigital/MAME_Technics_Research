@@ -294,12 +294,14 @@ public:
 	void pop_input(int32_t &l, int32_t &r)
 	{
 		if (m_rx_rd != m_rx_wr) { l = m_rx[m_rx_rd][0]; r = m_rx[m_rx_rd][1]; m_rx_rd = (m_rx_rd + 1) % RING; }
-		else { l = r = 0; }   // underflow: DSP ran ahead of the stream
+		else { l = r = 0; }   // underflow: DSP consumed ahead of the stream (brief; harmless)
 	}
 	void push_output(int32_t l, int32_t r)
 	{
-		const int nw = (m_tx_wr + 1) % RING;
-		if (nw != m_tx_rd) { m_tx[m_tx_wr][0] = l; m_tx[m_tx_wr][1] = r; m_tx_wr = nw; }  // else overflow: drop
+		if (!m_dsp_active) { m_dsp_active = true; m_rx_rd = m_rx_wr; }   // first output: flush stale pre-DSP input
+		m_tx[m_tx_wr][0] = l; m_tx[m_tx_wr][1] = r;
+		m_tx_wr = (m_tx_wr + 1) % RING;
+		if (m_tx_wr == m_tx_rd) m_tx_rd = (m_tx_rd + 1) % RING;   // overflow: drop oldest (bound latency)
 	}
 
 protected:
@@ -309,6 +311,14 @@ protected:
 		save_item(NAME(m_rx));   save_item(NAME(m_tx));
 		save_item(NAME(m_rx_rd)); save_item(NAME(m_rx_wr));
 		save_item(NAME(m_tx_rd)); save_item(NAME(m_tx_wr));
+		save_item(NAME(m_dsp_active)); save_item(NAME(m_tx_primed)); save_item(NAME(m_tx_last));
+	}
+
+	virtual void device_reset() override
+	{
+		m_rx_rd = m_rx_wr = m_tx_rd = m_tx_wr = 0;
+		m_dsp_active = false; m_tx_primed = false;
+		m_tx_last[0] = m_tx_last[1] = 0;
 	}
 
 	virtual void sound_stream_update(sound_stream &stream) override
@@ -316,16 +326,33 @@ protected:
 		constexpr float SCALE = 8388607.0f;   // 2^23 - 1
 		for (int s = 0; s < stream.samples(); s++)
 		{
-			// push this TG input frame into the DSP's input ring (float -> 24-bit signed)
+			// push this TG input frame into the DSP's input ring (float -> 24-bit signed),
+			// dropping the oldest if full so the DSP always sees recent input (low latency).
 			const int32_t il = int32_t(std::clamp(stream.get(0, s), -1.0f, 1.0f) * SCALE);
 			const int32_t ir = int32_t(std::clamp(stream.get(1, s), -1.0f, 1.0f) * SCALE);
-			const int nw = (m_rx_wr + 1) % RING;
-			if (nw != m_rx_rd) { m_rx[m_rx_wr][0] = il; m_rx[m_rx_wr][1] = ir; m_rx_wr = nw; }
-			// pop the DSP's processed output; if the DSP isn't running (tx empty), pass the TG
-			// through so the bridge is transparent with the effects DSP off.
+			m_rx[m_rx_wr][0] = il; m_rx[m_rx_wr][1] = ir;
+			m_rx_wr = (m_rx_wr + 1) % RING;
+			if (m_rx_wr == m_rx_rd) m_rx_rd = (m_rx_rd + 1) % RING;
+
 			int32_t ol, orr;
-			if (m_tx_rd != m_tx_wr) { ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1]; m_tx_rd = (m_tx_rd + 1) % RING; }
-			else { ol = il; orr = ir; }
+			if (!m_dsp_active)
+			{
+				ol = il; orr = ir;   // effects DSP off -> transparent passthrough
+			}
+			else
+			{
+				// Consume the DSP's output only once a small latency buffer has built up, then
+				// hold the last sample on underflow. NEVER fall back to the TG here: mixing the
+				// (latent) DSP output with the immediate TG phase-cancels and clicks.
+				const uint32_t fill = (m_tx_wr - m_tx_rd + RING) % RING;
+				if (!m_tx_primed && fill >= PRIME) m_tx_primed = true;
+				if (m_tx_primed && m_tx_rd != m_tx_wr)
+				{
+					ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1]; m_tx_rd = (m_tx_rd + 1) % RING;
+					m_tx_last[0] = ol; m_tx_last[1] = orr;
+				}
+				else { ol = m_tx_last[0]; orr = m_tx_last[1]; }
+			}
 			stream.put(0, s, float(ol) / SCALE);
 			stream.put(1, s, float(orr) / SCALE);
 		}
@@ -333,10 +360,14 @@ protected:
 
 private:
 	static constexpr int RING = 2048;
+	static constexpr uint32_t PRIME = 128;   // ~2.9 ms latency buffer before consuming DSP output
 	sound_stream *m_stream = nullptr;
 	int32_t m_rx[RING][2] = { };   // TG -> DSP input
 	int32_t m_tx[RING][2] = { };   // DSP output -> speakers
 	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
+	bool m_dsp_active = false;     // the DSP has started producing output
+	bool m_tx_primed = false;      // the output latency buffer has filled
+	int32_t m_tx_last[2] = { };    // last DSP output (held on underflow)
 };
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
@@ -494,7 +525,6 @@ private:
 	static constexpr int DSP_FRAME_HZ = 44100;
 	emu_timer *m_dsp_irq_timer = nullptr;      // periodic: pulse the SHARC's IRQ0 (audio frame tick)
 	TIMER_CALLBACK_MEMBER(dsp_audio_tick);
-	uint8_t  m_dsp_ring_pos = 0;               // F.3: position in the 8-frame SPORT audio ring
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
@@ -1005,28 +1035,26 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	if (!m_dsp_running)
 		return;
 
-	// F.3 audio path: the effect kernel processes one stereo frame per IRQ0 (verified: ~2 output
-	// words written per interrupt). Its input/output live in contiguous 8-frame rings in internal
-	// SRAM -- input at RX0A (0xC362), output at TX0A (0xC342), the two 0x20 apart -- which the
-	// SPORT DMA would normally fill/drain from the codec. We stand in for that DMA directly: hand
-	// the DSP one input frame from the TG (via the bridge's rx ring) and take back the previous
-	// frame's processed output (to the bridge's tx ring -> speakers). m_dsp_ring_pos walks the
-	// 8-frame ring in lockstep with the kernel; a constant phase offset is only latency.
-	const uint32_t rx = m_dsp->sport_rx_buffer(0, 0);   // 0xC362, start of the 16-word input ring
-	const uint32_t tx = m_dsp->sport_tx_buffer(0, 0);   // 0xC342, start of the 16-word output ring
+	// F.3 audio path: the effect kernel processes one stereo frame per IRQ0. Without the
+	// (unmodelled) SPORT DMA advancing the autobuffer index, the kernel writes its output frame
+	// to a FIXED position each interrupt and reads its input 0x20 below that -- runtime-observed
+	// at TX0+0xE (0xC350 = L,R) and RX0+0xE (0xC370 = L,R), the passthrough's I4 offset into the
+	// buffers. We stand in for the codec DMA directly: hand the DSP one TG input frame (from the
+	// bridge's rx ring) and take back the previous frame's processed output (to the bridge's tx
+	// ring -> speakers).
+	const uint32_t rx = m_dsp->sport_rx_buffer(0, 0);
+	const uint32_t tx = m_dsp->sport_tx_buffer(0, 0);
 	if (rx && tx)
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
-		const uint32_t w = m_dsp_ring_pos * 2;           // 2 words (L,R) per stereo frame
-		// take the processed output for this ring slot -> speakers
+		const uint32_t obuf = tx + 0xE;   // 0xC350: the kernel's stereo output (L,R)
+		const uint32_t ibuf = rx + 0xE;   // 0xC370: the kernel's stereo input  (L,R)
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
-		m_dspbridge->push_output(sx24(dm.read_dword(tx + w)), sx24(dm.read_dword(tx + w + 1)));
-		// feed the TG's next frame into this ring slot (24-bit, right-justified)
+		m_dspbridge->push_output(sx24(dm.read_dword(obuf)), sx24(dm.read_dword(obuf + 1)));
 		int32_t il = 0, ir = 0;
 		m_dspbridge->pop_input(il, ir);
-		dm.write_dword(rx + w,     uint32_t(il) & 0xffffff);
-		dm.write_dword(rx + w + 1, uint32_t(ir) & 0xffffff);
-		m_dsp_ring_pos = (m_dsp_ring_pos + 1) & 7;
+		dm.write_dword(ibuf,     uint32_t(il) & 0xffffff);
+		dm.write_dword(ibuf + 1, uint32_t(ir) & 0xffffff);
 	}
 	m_dsp->set_input_line(0, ASSERT_LINE);
 }
