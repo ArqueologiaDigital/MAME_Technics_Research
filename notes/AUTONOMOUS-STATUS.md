@@ -143,6 +143,12 @@ the KN5000 hypotheses against the working KN7000; cross-model sound docs KN5000/
 complete); minor doc/website polish; re-verify the published binary.
 Avoid: risky shared-core changes, the user-paused SD subsystem, wrong-pitch guesses.
 
+CRON CADENCE (tick #8): slowed the autonomous cron from every-20-min to **every 2 hours**
+(job c0d0df57) during the plateau — the safe-small-item menu is nearly exhausted and the big
+item awaits Felipe. The 2h prompt says: do at most ONE genuinely-useful safe item per tick, or
+nothing. Felipe can ask for a faster cadence anytime; his return is a normal message that
+resumes work immediately regardless of cron timing.
+
 DONE (tick #8): brought the persistent memory current — the kn7000-sound-subsystem memory
 still said "awaiting Felipe's review / run the TG diagnostic" (badly outdated) and cited the
 wrong pitch class (0x3000); corrected to "KN7000 sings, pitch=0x2401, DSP LLE awaits greenlight",
