@@ -143,6 +143,12 @@ the KN5000 hypotheses against the working KN7000; cross-model sound docs KN5000/
 complete); minor doc/website polish; re-verify the published binary.
 Avoid: risky shared-core changes, the user-paused SD subsystem, wrong-pitch guesses.
 
+DONE (tick #9, 2h cron): FINAL QA of the PUBLISHED deliverable (kn7000-emulator/, run as
+Felipe will). Default boot = home screen, gate 0x7F silent (no regression); switch ON (CONFIG
+bit1) = correct-pitch sound C4/G4/C5 = 262/392/523 Hz, no clipping. Confirmed the publish
+packaging (binary+roms+run.sh) works end-to-end; no leftover cfg (default stays OFF). Nothing
+else to do this tick — plateau holds.
+
 CRON CADENCE (tick #8): slowed the autonomous cron from every-20-min to **every 2 hours**
 (job c0d0df57) during the plateau — the safe-small-item menu is nearly exhausted and the big
 item awaits Felipe. The 2h prompt says: do at most ONE genuinely-useful safe item per tick, or
