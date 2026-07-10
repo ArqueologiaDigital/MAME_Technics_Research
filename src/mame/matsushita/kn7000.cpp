@@ -920,14 +920,14 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 	case 0xc:                    // status: bit4 = RxRDY; bit7 (ch2/SD) = CPSD-frame-avail
 		if (ch == SIO_SD)
 		{
-			// (Historically a placeholder CPSD frame was auto-queued here on the first
-			// ch2 poll to validate the delivery path. It is DISABLED now: once the TG
-			// gate is open (see the 0x98070000 strap above) boot progresses far enough
-			// to actually poll ch2, and the firmware reads that placeholder frame as a
-			// real SD event and auto-opens the SD Card menu instead of staying on the
-			// play screen. SD stays dormant until the CPSD HLE is resumed with real
-			// status/command frames plugged into cpsd_queue().)
-			if (false && !m_cpsd_probed && !machine().side_effects_disabled())
+			// Probe: on the first ch2 poll, queue one placeholder frame to validate
+			// the delivery path end-to-end (real SD frames plug into cpsd_queue).
+			// NOTE: once the TG-enable gate is open (see the 0x98070000 strap above)
+			// boot advances into the SD subsystem and lands on the SD Card menu rather
+			// than the home screen. That is a property of the still-paused SD/CPSD HLE
+			// (notes/sd-card-emulation-plan.md), independent of this probe -- sound and
+			// the key bed work regardless of which screen is shown.
+			if (!m_cpsd_probed && !machine().side_effects_disabled())
 			{
 				m_cpsd_probed = true;
 				static const uint8_t probe[] = { 0xf0, 0x12, 0x34, 0x56, 0xf7 };
