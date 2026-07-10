@@ -107,6 +107,13 @@ protected:
 	// the 21065L overrides this to 0x8000 to match its smaller internal-RAM layout.
 	virtual uint32_t irq_vector_base() const { return 0x20000; }
 
+	// Lowest address the DRC memory accessors treat as internal-SRAM (served from m_blocks,
+	// the block-interleaved fast path). The 2M/4M parts put internal SRAM at 0x20000-0x3FFFF;
+	// the 21065L has a different layout and does not populate m_blocks, so it overrides this to
+	// an out-of-range value, forcing every access through the address map (space_access) which
+	// serves its plain-RAM internal SRAM (0x8000-0x1FFFF) and external SDRAM (0x20000+).
+	virtual uint32_t drc_sram_base() const { return 0x20000; }
+
 	// device_t implementation
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
@@ -579,6 +586,11 @@ protected:
 	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
 	// (vector N at 0x8000 + N*4; e.g. IRQ0 = vector 8 = 0x8020).
 	virtual uint32_t irq_vector_base() const override { return 0x8000; }
+
+	// The 21065L does not populate m_blocks; route all DRC memory accesses through the address
+	// map by making no address qualify for the internal-SRAM fast path (0x01000000 > any
+	// 24-bit SHARC address). See pgm_65l/data_65l for the actual internal/external RAM.
+	virtual uint32_t drc_sram_base() const override { return 0x01000000; }
 
 	// RSTI (reset) is vector 1 at 0x8004, whose slot holds "IDLE ; JUMP init". The IDLE is the
 	// host-boot download-wait; our host-boot glue only releases the DSP once the full program

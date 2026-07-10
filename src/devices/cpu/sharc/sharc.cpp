@@ -163,7 +163,10 @@ adsp21065l_device::~adsp21065l_device()
 // block-interleaved pm_r/pm_w (those assume the 2M/4M 0x20000 geometry).
 void adsp21065l_device::pgm_65l(address_map &map)
 {
-	map(0x08000, 0x08fff).ram();
+	// Internal SRAM (0x8000-0x1FFFF): the kernel's code sits at 0x8000-0x8Dxx and it also
+	// addresses filter state through the PM bus (e.g. PM(I8) with I8 = 0x9800). External
+	// memory begins at 0x20000 (per the 21065L Technical Reference).
+	map(0x08000, 0x1ffff).ram();
 }
 
 // Internal data memory + IOP registers. Records target DM 0x9800/0x9C40/0xC000/0xC302; cover
@@ -172,7 +175,11 @@ void adsp21065l_device::pgm_65l(address_map &map)
 void adsp21065l_device::data_65l(address_map &map)
 {
 	map(0x00000, 0x000ff).rw(FUNC(adsp21065l_device::iop65l_r), FUNC(adsp21065l_device::iop65l_w));
-	map(0x08000, 0x0ffff).ram();
+	map(0x08000, 0x1ffff).ram();                       // internal SRAM
+	// External SDRAM (IC307/IC308): the effect kernel's boot-init clears delay-line buffers
+	// here (e.g. B6 = 0x20000, ~0x456F0 words) and the reverb/echo effects use them. The
+	// 21065L Technical Reference puts external memory at 0x20000+. Map generously.
+	map(0x20000, 0xfffff).ram();
 }
 
 // 21065L IOP register bank -- stubbed for F.1. The base 2106x core fatalerrors on the

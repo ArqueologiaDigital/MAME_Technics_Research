@@ -1846,6 +1846,8 @@ void kn7000_state::kn7000(machine_config &config)
 	// come next; for now this proves the core integrates and the KN7000 still boots.
 	// See notes/sharc-lle-assessment.md.
 	ADSP21065L(config, m_dsp, 60'000'000);
+	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
+	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);
 
 	// TODO: real tone generators IC201/IC205; DSP SDRAM IC307/8, SPORT audio path;

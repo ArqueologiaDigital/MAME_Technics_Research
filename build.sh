@@ -47,6 +47,8 @@ ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/sharc/sharc.h"                 "$BUILD_TREE/src/devices/cpu/sharc/sharc.h"
 ln -sf "$HERE/src/devices/cpu/sharc/sharc.cpp"               "$BUILD_TREE/src/devices/cpu/sharc/sharc.cpp"
 ln -sf "$HERE/src/devices/cpu/sharc/sharcops.hxx"            "$BUILD_TREE/src/devices/cpu/sharc/sharcops.hxx"
+ln -sf "$HERE/src/devices/cpu/sharc/sharcdrc.cpp"            "$BUILD_TREE/src/devices/cpu/sharc/sharcdrc.cpp"
+ln -sf "$HERE/src/devices/cpu/sharc/sharcfe.cpp"             "$BUILD_TREE/src/devices/cpu/sharc/sharcfe.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
 mkdir -p "$BUILD_TREE/src/mame/layout"
