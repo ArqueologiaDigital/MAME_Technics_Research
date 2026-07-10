@@ -281,3 +281,28 @@ state machine 0x48551f80 + gates, (2) the TG-strap boot-to-SD-menu wait conditio
 (3) the full ch2 frame format + handshake (the critical one), (4) the 0x90200000
 non-bank (DONE: misread confirmed). Next: implement the real CPSD status frames per
 (3), then the card/directory/file protocol against a host FAT image (plan Phase 2).
+
+## Status update (2026-07-10, later) — ch2 was MIDI-2 all along; the REAL gate is a MILK property
+Workflow findings (adversarially confirmed): **ch2 is the MIDI-2 UART, not CPSD** (ISR
+0x484B2037 = Midi2RxIsr; the 372k polls during SD WAIT are the engine loop's idle MIDI
+pump; group-0x14 RX IRQ is disabled BY DESIGN — RX is drained by polling). The keep-alive
+we injected was feeding a phantom MIDI device — to be retired. The ch2 status-bit fixes
+(TxRDY/RxRDY/RX-empty) remain correct as MIDI-2 UART modeling.
+
+The REAL SD architecture: state machine tick 0x485519bc (state byte 0x50083cd8), state 0
+gated on **GetProperty(object 0x0210033F, property 0x00060047) != -1** (checked in
+0x485521a1); once un-gated it posts a mount job to the disk worker task 0x4854ad90
+(created by DiskInit 0x4854aced; ctrl block *(0x50082918)); mount = card-detect ->
+card init 0x485630de -> VFS: SD = device 'd' mounted as "C:" (DOS-like fops in RAM device
+table 0x500079f8) -> FAT mount -> state 3 + card-ready 0x50083bc2=1. The PHYSICAL SD
+transport hides behind the device-'d' fops (still to be enumerated at runtime).
+
+OPEN PUZZLE: forcing the gate had no effect because the tick itself never runs — bp
+counters show 0 hits on 0x485519bc AND on the engine-loop tail that calls it
+(0x4c02bdfe) AND even on the claimed loop head 0x4c02bbe8 — yet lib bps demonstrably
+work (the 1 kHz ISR 0x4C02BB05 counted 18000 earlier) and DiskInit never ran
+(*(0x50082918)==0). So the "engine loop 0x4C02BBE8" is NOT the running loop (an
+alternate/task variant?), and the SD tick's true dispatcher is still unidentified.
+Remaining workflow finders (sd-boot-menu, cpsd-protocol/dispatch) may resolve; else
+next: find the RUNNING engine loop (PC-sample the engine task, or trace who calls
+0x484574AF live, which demonstrably pumps the demo).
