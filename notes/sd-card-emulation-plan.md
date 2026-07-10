@@ -337,3 +337,25 @@ the 6 SD-panel switches as input ports.
 must use `d@(addr)` -- `dword@` makes bpset fail SILENTLY (caused false "never runs"
 negatives). (3) The ch2 experiments (phantom bytes) wedged the boot -> black LCD; ch2
 is MIDI-2, leave it plain.
+
+## Phase 2 progress (2026-07-10, autonomous tick) — THE SD DATA TRANSPORT IS IDENTIFIED
+
+Followed the VFS device-'C' fops to the metal (runtime dump + disasm):
+- VFS device table @0x500079f8 (0x28-byte entries, name ptr +0x1C): dev0='A' (floppy,
+  fops @0x500079B8), **dev1='C' (SD, fops @0x500079D8: 0x48470328/33E/343/33A/4BB/59F/
+  683/689)**, shared FS ops @0x50007990 (0x4846F195..).
+- The fops funnel into command poster 0x4847030e -> disk-worker message TYPE 3 (FDC =
+  type 2) -> worker handler 0x4854afee -> command switch (3=read, 4=write, 8/A/B/C
+  control) -> e.g. cmd-3 builds a command block @0x50007ee4 (sector# LE @+4) and calls
+  the transfer primitive **0x4854c3ab** (block size 0x200 = SD sector).
+- **THE HARDWARE: the primitives (0x4854bfa2 etc.) strobe ICR 0x34000170 (external-
+  interrupt group 0x1C) and read/write the 16-bit register 0x9805000C** (sound-bank
+  window; io_w offset +05000C -- the register PC 0x4854BF74 already writes 20,000x at
+  boot = the SD probe idling against our zero-returning stub). Shadow word @0x50005200.
+  So the CPSD data link = a strobed 16-bit mailbox on the sound bus with a group-0x1C
+  handshake -- NOT a UART, NOT the panel link, NOT MMIO at 0x902xxxxx.
+
+NEXT (the concrete HLE): capture the exact strobe/data sequence live (log 0x9805000C
+r/w + 0x34000170 during boot-probe and during a mount attempt with the insert edge
+fired), RE the wait helpers 0x4854bb89/0x4854bc8f/0x4854c94d/0x4854c1d5, then answer
+the probe so card-init 0x485630de succeeds against a host FAT image.
