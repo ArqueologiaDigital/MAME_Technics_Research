@@ -601,11 +601,28 @@ protected:
 	// IDLE at 0x8004 -- exactly the post-download-wait entry we want.
 	virtual uint32_t reset_pc() const override { return 0x8004; }
 
+	virtual void device_start() override ATTR_COLD;
+
 private:
 	void pgm_65l(address_map &map) ATTR_COLD;
 	void data_65l(address_map &map) ATTR_COLD;
 	uint32_t iop65l_r(offs_t offset);
 	void iop65l_w(offs_t offset, uint32_t data);
+
+	// Internal-SRAM data region (0x9000-0x1FFFF), shared between the PM and DM buses so a value
+	// written via DM(addr) is readable via PM(addr) -- the SHARC's unified internal memory. The
+	// recovered kernel loads filter coefficients/state to DM 0x9800/0x9C40 (host boot) and reads
+	// them via the PM bus (R3 = PM(I8), I8 = 0x9800). The code region (0x8000-0x8FFF, 48-bit
+	// instructions) is PM-only and kept as separate .ram(); nothing lives in 0x8D93-0x97FF.
+	static constexpr offs_t DATA_SRAM_BASE = 0x09000;
+	static constexpr offs_t DATA_SRAM_WORDS = 0x1ffff - 0x09000 + 1;   // 0x17000
+	std::unique_ptr<uint32_t[]> m_data_sram;
+	uint32_t dm_data_r(offs_t offset)              { return m_data_sram[offset]; }
+	void     dm_data_w(offs_t offset, uint32_t data) { m_data_sram[offset] = data; }
+	// PM data accesses land in 64-bit program slots; the core's pm_read32/pm_write32 use the top
+	// 32 of the 48-bit word (read_qword >> 16 / data << 16), so mirror that convention here.
+	uint64_t pm_data_r(offs_t offset)              { return uint64_t(m_data_sram[offset]) << 16; }
+	void     pm_data_w(offs_t offset, uint64_t data) { m_data_sram[offset] = uint32_t(data >> 16); }
 };
 
 
