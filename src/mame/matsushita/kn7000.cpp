@@ -56,8 +56,8 @@
         0x98040000  tone generator (synth LSI IC205, C1BB00000709) - 16-bit register set
         0x98050000  2nd TG register set (parallel 16-bit)
         0x9804/50004  VOICE-EVENT (keyboard) FIFO reads -- the KN5000-shared "keyboard
-                     input" interface (KN5000 0x110000: 16-bit, low byte = note, high
-                     byte = velocity; empty = 0xFFFF). This is how physical key presses
+                     input" interface (KN5000 0x110000: 16-bit, low byte = key code with
+                     bit7 = make/break, high byte = velocity; empty = 0xFFFF). This is how physical key presses
                      reach the firmware (parallel to MIDI-in); see notes/tone-generator.md.
                      wave/sample data in undumped ROMs IC203/204/207/208 (C3CBQD00000x)
         0x98020000  sound control (byte regs); 0x98060000/0x98070000 more sound
@@ -516,7 +516,14 @@ private:
 	uint16_t m_snd_500e = 0;                   // 0x9805000E readback latch (sound init spins on it)
 	// Keyboard / voice-event FIFO (read at 0x98050004). The firmware polls it for
 	// note events from the key bed (KN5000-shared "keyboard input"; 16-bit word,
-	// low byte = note, high byte = velocity, velocity 0 = note-off; 0xFFFF = empty).
+	// low byte = KEY code, high byte = velocity; 0xFFFF = empty). MAKE/BREAK is
+	// encoded in BIT 7 of the key byte, NOT in the velocity: the firmware decoder
+	// does btst 0x80 on the key byte (0x484480e5 routes the event; 0x48448151 gates
+	// the voice: bit7=0 -> compute pitch / gate ON, bit7=1 -> clear gate / key up).
+	// So a release must set bit 7 (key | 0x80); a bit7=0 word with velocity 0 is
+	// still a NOTE-ON (that was the "stuck notes" bug). A release velocity of 0xFF is
+	// the clean key-up: it bypasses the sustain/hold re-latch at 0x484480fa (cmp 0xff
+	// -> skip the 0x501496a2 held-key store that would otherwise re-gate the note).
 	uint16_t m_kbd_fifo[16] = { };
 	uint8_t  m_kbd_head = 0, m_kbd_tail = 0;
 	void kbd_push(uint8_t note, uint8_t vel)
@@ -551,7 +558,10 @@ private:
 		if (note < 36 || note > 96) return;    // outside the 61-key bed
 		const uint8_t idx = note - 36;
 		const bool on = (cmd == 0x90) && (vel != 0);
-		kbd_push(idx, on ? vel : 0);           // velocity straight through (0 = release)
+		// make/break = bit 7 of the key byte (see the FIFO note above). A release
+		// (MIDI note-off, or note-on velocity 0) sets bit 7; velocity 0xFF = clean
+		// key-up. A note-on passes the MIDI velocity straight through.
+		kbd_push(on ? idx : uint8_t(idx | 0x80), on ? vel : 0xff);
 	}
 	// Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
 	// write-only from the firmware. Address latched at base+0, data written at
@@ -968,8 +978,9 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
-	// low byte = note, high byte = velocity). The firmware polls it for note on/off
-	// events from the physical key bed (parallel to MIDI-in). Boot init reads it in a
+	// low byte = KEY code with bit 7 = make/break flag, high byte = velocity). The
+	// firmware polls it for note on/off from the physical key bed (parallel to
+	// MIDI-in); bit7=0 -> note-on, bit7=1 -> note-off (see kbd_push). Boot init reads it in a
 	// loop until it yields 0xFFFF (empty / end marker; also the floating-bus value).
 	// Returning 0 made the loop treat 0 as a valid note-0 event forever. Return 0xFFFF
 	// = empty so the loop terminates (loop at 0x484480A2: movhu (0x98050004); cmp
@@ -1430,13 +1441,14 @@ TIMER_CALLBACK_MEMBER(kn7000_state::fav_preload)
 }
 
 // A PC-key note press/release: push a voice-event into the keyboard FIFO the
-// firmware polls at 0x98050004 (KN5000-shared format: low=note, high=velocity,
-// velocity 0 = note-off). param carries the MIDI note number; velocity is fixed
-// (PC keys are not velocity-sensitive). Confirmed end-to-end: the firmware reads
-// each pushed event exactly once from the FIFO.
+// firmware polls at 0x98050004. param carries the KEY index; velocity is fixed
+// (PC keys are not velocity-sensitive). Make/break = BIT 7 of the key byte (see the
+// FIFO note in the header): a release sets bit 7 (key | 0x80) with velocity 0xFF for
+// a clean key-up -- NOT velocity 0, which the firmware reads as a NOTE-ON (the old
+// "stuck notes" bug). Confirmed end-to-end: the firmware reads each event once.
 INPUT_CHANGED_MEMBER(kn7000_state::kbd_key)
 {
-	kbd_push(uint8_t(param), newval ? 0x64 : 0x00);
+	kbd_push(newval ? uint8_t(param) : uint8_t(param | 0x80), newval ? 0x64 : 0xff);
 	// First-cut audio: also key the bring-up sine synth directly, so a PC key is
 	// audible now (independent of the firmware's dormant voice engine). This is a
 	// monitor tap of the key bed, NOT the real TG path (Stage 2 will drive the
