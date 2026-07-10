@@ -1,5 +1,10 @@
 # F.3 — loading a reverb effect (investigation, 2026-07-10)
 
+>>> PARKED 2026-07-10 (Felipe's call): saved for later. Do NOT auto-pursue routes A-D
+below unattended. The findings/mechanism are recorded here for when it resumes. Felipe
+is instead pursuing note-event triggering via the CHORD FINDER screen (see
+chord-finder-navigation.md) -- which may also be an alternate route to effect selection.
+
 Goal (Felipe): make the effects DSP audibly apply a REVERB. Status: the DSP already
 applies its DEFAULT effect audibly (dry+wet sum, commit a988ecf); loading a REVERB
 specifically is blocked by the SD-menu boot state. Full findings below.
