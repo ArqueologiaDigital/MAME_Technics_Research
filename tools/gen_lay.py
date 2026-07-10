@@ -298,7 +298,8 @@ for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
-LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22))
+# MUSIC STYLIST = SEG07 0x01 (ev2040 app-open MUSIC STYLIST, empirically confirmed).
+LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22,tag="SEG07",mask="0x01"))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),   # bank A: DEMO = SEG06 0x40 (ev2040 app-open DEMO)
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 # PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
@@ -392,15 +393,16 @@ for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
     tg,mk=GE_BITS.get(nm,(None,None))
     RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))
 RB.append(L("SEQUENCER",850,42,90,10,TXTH))
-# bank A: DISK = SEG0D 0x04 (ev2040 app-open DISK), PROGRAM MENUS = SEG0C 0x04 (ev2040 app-open PROGRAM MENUS).
-# PLAY / EASY REC have no statically-resolvable bank-A bit -> left unbound (decorative).
-for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn",None,None),("EASY REC",915,71,"round_red",None,None),("DISK",845,149,"round_btn","SEG0D","0x04"),("PROGRAM MENUS",915,149,"round_btn","SEG0C","0x04")]:
+# bank A (empirical app-open screen sweep 2026-07-10): DISK = SEG0D 0x04, PROGRAM MENUS = SEG0C 0x04,
+# PLAY = SEG0D 0x08 (opens SEQUENCER PLAY), EASY REC = SEG0C 0x08 (opens EASY RECORD).
+for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn","SEG0D","0x08"),("EASY REC",915,71,"round_red","SEG0C","0x08"),("DISK",845,149,"round_btn","SEG0D","0x04"),("PROGRAM MENUS",915,149,"round_btn","SEG0C","0x04")]:
     ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
     RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tg,mk))))  # DISK=cpr_led75, PROGRAM MENUS=cpr_led74
 # DISK / IN USE indicator + line to DISK button
 RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led",812,158,8,8), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]
-RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22)); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
+# SD (LOAD) pill = SEG0D 0x80 (ev2040 app-open SD MENU, empirically confirmed).
+RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22,tag="SEG0D",mask="0x80")); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
 # SPLIT PAIRS (bank A -- each half on a different SEG; arg-mid 1=-,0=+ inferred):
@@ -423,19 +425,29 @@ for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("green_led",cx+
 CONDUCT=[("SEG0F","0x02"),("SEG10","0x02"),("SEG11","0x02")]
 for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
-RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26),
-       L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26), L("PANEL MEMORY",608,255,172,10,TXTH),
+# bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK
+# SELECT screen); NEXT BANK = SEG0F 0x80 (ev2012, advances the bank).
+RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26,tag="SEG10",mask="0x80"),
+       L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26,tag="SEG0F",mask="0x80"), L("PANEL MEMORY",608,255,172,10,TXTH),
        P("panel_memory_dial",565,268,190,190), L("SET",638,354,44,12)]
-# PANEL MEMORY numbers 1-8 around the dial (center 660,363; r~95)
+# PANEL MEMORY = an 8-way pie-slice dial (center 660,363) with a central SET. Each numbered slice
+# recalls a registration -- bank A ev2010 arg-mid = PM number - 1 (empirically confirmed: pressing
+# each opens "PMEM x-N"). Draw the number labels (r=88) + a clickable round button per slice (r=62).
 import math as _m
+PM_EVT=[("SEG0C","0x02"),("SEG12","0x40"),("SEG11","0x40"),("SEG10","0x40"),
+        ("SEG0F","0x40"),("SEG11","0x80"),("SEG12","0x80"),("SEG13","0x80")]   # PM 1..8
 for _i,_lab in enumerate(["1","2","3","4","5","6","7","8"]):
     _a=_m.radians(-90+ (_i)*45 +200)
     _x=660+int(88*_m.cos(_a)); _y=363+int(88*_m.sin(_a))
     RB.append(L(_lab,_x-4,_y-4,8,8,TXTH))
+    _bx=660+int(62*_m.cos(_a)); _by=363+int(62*_m.sin(_a))
+    RB.append(P("round_btn",_bx-16,_by-16,32,32,tag=PM_EVT[_i][0],mask=PM_EVT[_i][1]))
 RB.append(P("big_ring",809,327,130,130))
 RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42)]
-RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",884,350,42,42)]
-RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",852,407,42,42)]
+# CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES
+# screen) -- both empirically confirmed. CUSTOM PANEL's bit is not yet resolved -> left unbound.
+RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",884,350,42,42,tag="SEG0C",mask="0x40")]
+RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8), P("round_btn_big",852,407,42,42,tag="SEG0E",mask="0x40")]
 RB.append('\t</group>')
 
 # ---- SD-card transport block (its own group, referenced by the views) ----
