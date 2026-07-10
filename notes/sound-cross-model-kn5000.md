@@ -127,3 +127,32 @@ All items below are **hypotheses to be verified against KN7000 firmware/hardware
 - **Wave ROMs**: 4×32Mbit shared-address-space (16MB) vs 4×128Mbit (64MB) on private TG buses; KN5000 has no documented CPU-side wave-ROM readback window (SubCPU never reads wave data), whereas KN7000 has one — so KN7000 wave-ROM dumping via the readback window has no KN5000 precedent to copy.
 - **`SwbtWr` absent in KN7000** (technics-shared-codebase.md:157): the sound-init/event-dispatch layer was rewritten; don't search KN7000 for SwbtWr-shaped bank tables — find the reworked equivalent instead.
 - Doc hygiene: when citing the KN5000 DSPs, use **DSP1=IC311 DS3613GF-3BA / DSP2=IC310 MN19413** (swbwr-tone-init.md:158 has the chips swapped — a typo).
+
+---
+
+## 6. KN7000 VERIFICATION RESULTS (2026-07-10) — §5 hypotheses resolved against the now-working KN7000
+
+The §5 items were hypotheses written before the KN7000 sound worked. The KN7000 tone generator
+now runs firmware-driven in MAME and its per-voice register map + DSP upload have been RE'd, so
+here is what actually transferred from the KN5000 and what did NOT (integrity policy: these are
+now KN7000-verified facts, not KN5000 inferences). Sources: kn7000-tg-enable-gate memory,
+notes/tg-voice-register-semantics.md, sharc-lle-assessment.md.
+
+| §5 hypothesis (from KN5000) | KN7000 reality | verdict |
+|---|---|---|
+| Register-indirect address/data port pair | YES — MAIN 0x98040000/2, SUB 0x98050000/2, latch addr then data | **CONFIRMED (shape)** |
+| Address encoding `[group:8][bank:2][channel:6]` (KN5000) | KN7000 is `[group:6 (b15:10)][channel:6 (b9:4, stride 0x10)][index:4 (b3:0)]` | **DIFFERENT encoding** |
+| bit-15 latch-strobe SET/CLEAR on mode regs; key-on = 0x4014↔0xc014 strobe | NOT seen at runtime for the default sound; KN7000 note-on = the **class-0x2401 pitch write itself**; no 0x4014 strobe | **DISPROVED for KN7000** |
+| Voice constants 0x8100 (key-on), 0x7E00 (idle), 0x1200 (decay) | KN7000 note-OFF/mute = **class 0x0001 = 0xC000** (+ 0x0002=0xC000, envelope regs 0x0004-0x000A → 0). No 0x8100/0x7E00/0x1200 | **DISPROVED (different constants)** |
+| Inverted volume, 0xFF80 = mute | **Present** — class 0x0000 = 0xFF80 appears in the KN7000 note-on/reset block (KN5000-style inverted level survived) | **CONFIRMED** |
+| Pitch: ratio 0x8000 = 1.0, octave from a 12-entry semitone table | KN7000 pitch = **class 0x2401, +0x400/semitone, C4=0xC838** (linear-in-semitone code, not a 0x8000-ratio); note→pitch computed by fw 0x4844812D via tuning tables + ÷12 | **DIFFERENT encoding (same ÷12 spirit)** |
+| Effect-slot model: 5 EFF slots, word[0]=algorithm ID | KN7000 DSP = **10-slot** engine; effects load as SHARC microprograms at PM 0x8400 on top of a resident kernel (runtime upload confirmed) | **DIFFERENT (10 slots, microprograms)** |
+| Effects backend: KN5000 fixed-function ASICs (undumped) vs KN7000 host-booted SHARC (emulatable) | **Exactly right** — KN7000's 80 SHARC records recovered + the host-upload path validated at runtime; KN5000's ASIC ROMs remain unrecoverable | **CONFIRMED (the key difference)** |
+| MAME recipe: register-file + sound_stream HLE; make status lines return "ready" | KN7000 tonegen IS a register-file + sound_stream HLE; and the "return ready" lesson applied — the KN7000 needed the **TG-present strap** open (gate 0x500ce380) + the 0x9805000E sound-init readback latch to proceed | **CONFIRMED (recipe worked)** |
+
+**Bottom line:** the KN5000 gave the right *shapes* (register-indirect pairs, inverted-volume
+convention, ÷12 pitch spirit, HLE-with-ready-status recipe, and — decisively — the correct read
+that the KN7000's SHARC effects are emulatable while the KN5000's ASICs are not), but the KN7000's
+exact *encodings* (address bitfield, pitch code, note-on/off constants, slot count) are its own and
+had to be measured directly. Cross-model value was real but at the level of method, not literal
+register values — consistent with "shared codebase, reworked sound-init layer."
