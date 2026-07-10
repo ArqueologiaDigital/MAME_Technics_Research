@@ -97,6 +97,7 @@
 #include "cpu/sharc/sharc.h"        // IC306 effects DSP (ADSP-21065L; F.1 uses the 21062 core)
 
 #include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
+#include "machine/spi_sdcard.h"     // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
 
@@ -441,6 +442,7 @@ public:
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
 		, m_sdsw(*this, "SDSW")
+		, m_sdcard(*this, "sdcard")
 		, m_config(*this, "CONFIG")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
@@ -477,6 +479,7 @@ private:
 	required_ioport m_dial;
 	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
 	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
+	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	optional_ioport m_config;           // machine-configuration DIP: bit0 = enable the effects-DSP host stub
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
@@ -627,6 +630,20 @@ private:
 	// bit0 only, so bit1 survives and keeps REQUEST/bit4 set through strobes).
 	emu_timer *m_sd_insert_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sd_insert);
+
+	// --- SD mailbox (register 0x9805000C + ICR group 0x1C handshake) ----------
+	// The firmware speaks the STANDARD SD-card SPI protocol through this byte
+	// mailbox (captured live: 10x 0xFF wake-up clocks, then CMD0 = 40 00 00 00
+	// 00 95, then R1 response reads). Send-byte primitive 0x4854bf4d: W1C-clear
+	// DETECT bit0 of ICR 0x34000170, write the byte to 0x9805000C, poll bit4
+	// (REQUEST) for the transfer-complete ack. Each mailbox write clocks the
+	// byte through MAME's spi_sdcard device (8 bits, MISO collected into
+	// m_sdmbx_out) and asserts group 0x1C. Reads return the MISO byte -- i.e.
+	// the register behaves as the usual full-duplex SPI data latch.
+	uint16_t m_sdmbx_out = 0xFF;               // last MISO byte (mailbox read value)
+	uint8_t  m_sdmbx_miso = 0;                 // MISO bit collector (spi_miso callback)
+	void cpsd_mbx_write(uint16_t data);
+	void sd_miso_w(int state) { m_sdmbx_miso = uint8_t(m_sdmbx_miso << 1) | (state & 1); }
 	void tmr7_mode_w(uint8_t data);
 	void tmr7_base_w(uint16_t data);
 	void tmr7_rearm(bool restart_phase);
@@ -894,6 +911,8 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// 0x9805000E (offset 0x28007): sound-interface register; the init loop at
 	// 0x4854BC59 writes a value (d1|0x80) and spins until it READS BACK what it
 	// wrote (setlb/lne with a 2-tick timeout) -- a readback latch unblocks it.
+	if (offset == 0x28006)                            // 0x9805000C: SD mailbox data latch
+		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
 	if (!machine().side_effects_disabled())
@@ -914,6 +933,9 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	// the register file and keeps the constant TG traffic out of the io_w log.
 	switch (offset)
 	{
+	case 0x28006:                                                 // 0x9805000C: SD mailbox data latch
+		cpsd_mbx_write(data);
+		return;
 	case 0x00000: m_dsp_index = data; return;                     // 0x98000000: effects-DSP host register index
 	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
 	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
@@ -1268,6 +1290,25 @@ void kn7000_state::tmr7_rearm(bool restart_phase)
 TIMER_CALLBACK_MEMBER(kn7000_state::tempo_tick)
 {
 	intc_assert(0x07);      // GxICR 0x3400011C -> the 96-PPQN sequencer tick ISR 0x48447084
+}
+
+void kn7000_state::cpsd_mbx_write(uint16_t data)
+{
+	// Full-duplex SPI byte transfer: shift the 8 bits through the card (MSB
+	// first), collecting MISO into m_sdmbx_out; then raise the ack (group 0x1C
+	// DETECT/REQUEST -- polled, not interrupt-driven).
+	if (m_sdcard)
+	{
+		m_sdmbx_miso = 0;
+		for (uint8_t bit = 0x80; bit; bit >>= 1)
+		{
+			m_sdcard->spi_clock_w(CLEAR_LINE);
+			m_sdcard->spi_mosi_w((data & bit) ? 1 : 0);
+			m_sdcard->spi_clock_w(ASSERT_LINE);
+		}
+		m_sdmbx_out = m_sdmbx_miso;
+	}
+	intc_assert(0x1C);
 }
 
 TIMER_CALLBACK_MEMBER(kn7000_state::sd_insert)
@@ -2186,6 +2227,8 @@ void kn7000_state::machine_reset()
 		// that fires the firmware's card-insert message (0x107020bb).
 		m_gxicr[0x1B] |= 0x0012;
 		m_sd_insert_timer->adjust(attotime::never);
+		if (m_sdcard)
+			m_sdcard->spi_ss_w(1);                      // card permanently selected (single-slave bus)
 	}
 }
 
@@ -2253,6 +2296,10 @@ void kn7000_state::kn7000(machine_config &config)
 	//     models that reuse this config; only kn7000 drops MACHINE_NO_SOUND for now.
 	SPEAKER(config, "lspeaker").front_left();
 	SPEAKER(config, "rspeaker").front_right();
+	SPI_SDCARD(config, m_sdcard, 0);
+	m_sdcard->set_prefer_sd();
+	m_sdcard->spi_miso_callback().set(FUNC(kn7000_state::sd_miso_w));
+
 	KN7000_TONEGEN(config, m_tonegen, 0);
 	// F.3: route the tone-generator audio through the effects-DSP bridge, then to the speakers.
 	// The bridge is transparent (passes the TG through) unless the effects DSP is running, so
