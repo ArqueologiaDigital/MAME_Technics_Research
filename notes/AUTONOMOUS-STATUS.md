@@ -147,13 +147,37 @@ PROGRESS:
       caused 'undefined driver_kn1500' -> fix = delete build/.../bin/.../mame_kn7000/libmame_kn7000.a
       + generated .../drivlist.o, rebuild WITHOUT REGENIE. So: REGENIE once to add a device, then
       rm the stale mame archive, then plain make.
-- F.1-STEP-1 (NEXT): fork sharc.h+sharc.cpp into kn7000_mame/src/devices/cpu/sharc/ + symlink
-  (build.sh registration like MN10300). Add adsp21065l_device: PLAIN-RAM 21065L maps (PM
-  0x8000-0x8FFF 64-bit .ram; DM 0x9800-0x9FFF + 0xC000-0xCFFF 32-bit .ram; IOP 0x00-0xFF via base
-  iop_r/iop_w). NOTE: m_blocks is required_shared_ptr_array + PRIVATE, and pm_r/pm_w use a
-  21062-specific block-interleave -> DON'T reuse them; change m_blocks to optional_shared_ptr_array
-  so plain-RAM maps don't need to populate it. Swap m_dsp to adsp21065l_device. Build + verify boot.
-  Then:
+- F.1-STEP-1 ✅ DONE + committed + PUBLISHED: forked sharc.h/.cpp into the overlay
+  (kn7000_mame/src/devices/cpu/sharc/, symlinked by build.sh). Added **adsp21065l_device**:
+  plain-RAM 21065L maps (PM map(0x8000,0x8fff).ram(); DM map(0x8000,0xffff).ram() covering
+  0x9800/0xC000; IOP 0x00-0xFF -> iop65l_r/w stubs returning 0/accepting). Changed m_blocks
+  required_->optional_shared_ptr_array. Driver now instantiates ADSP21065L (host-boot, idle).
+  VERIFIED: KN7000 boots to home screen, no fatalerror. **F.1 IS COMPLETE — the SHARC variant
+  exists in MAME and integrates.** (No REGENIE needed for STEP-1 — new device type in an
+  existing source file; just symlink + plain make.)
+
+  === F.2 (NEXT) — driver host-boot glue: actually load + run the DSP program ===
+  The firmware host-boots via 0x98000000(index)/0x9C000000(data): reg 0x40=target addr,
+  reg 0x1C=0xA1(PM commit)/0x41(DM commit)/0xA0(end), then streams words (3x16 per 48-bit PM
+  word via fw 0x484050B8; 2x16 per DM word via 0x4840511A). PLAN for kn7000.cpp dsp_data_w /
+  io_w (extend the existing Phase-A stub):
+    1. Track the DSP index writes: reg 0x40 -> latch m_dsp_dl_addr (2x16); reg 0x1C -> m_dsp_dl_mode
+       (0xA1 PM / 0x41 DM / 0xA0 end).
+    2. On data-port writes while mode=PM: accumulate 3x16 -> one 48-bit word -> write to the SHARC
+       PM at m_dsp_dl_addr via m_dsp->space(AS_PROGRAM).write_qword(addr<<?,word) [addr in words;
+       program space is -3 granularity -> check the byte/word addressing]; addr++. Mode=DM:
+       accumulate 2x16 -> 32-bit -> m_dsp->space(AS_DATA).write_dword; addr++.
+    3. On reg 0x1C=0xA0 (end/sync): the kernel record is fully loaded -> RELEASE the SHARC from
+       host-boot so it runs. Check how BOOT_MODE_HOST releases (model2.cpp copro_boot clears
+       INPUT_LINE_HALT; sharc.cpp device_reset host path). May need set_input_line(INPUT_LINE_HALT,
+       CLEAR) or the sharc host-boot-done path. Kernel entry = reset vector (SDRAM POST first).
+    4. VERIFY: tap the SHARC PC (m_dsp->state) advancing through 0x8xxx; no iop fatalerror (the
+       iop65l stubs handle it); ideally the SDRAM POST reg 0x0B readback. Gate all this behind the
+       existing CONFIG bit0 "Effects DSP host stub" switch (default OFF) so it's opt-in until F.3.
+  CAUTION: the driver's 0x9C bank currently maps dsp_data_r/w only for 0x9c000000-3 (the rest is
+  lcdbuf RAM). The program-space write granularity (-3) means PM addresses may be byte vs word --
+  verify with a small test (write one known word, read it back via m_dsp->space).
+  === F.3 (after F.2) — SPORT audio: TG output -> DSP -> DAC (the big new piece) ===
 - F.1-STEP-1: fork sharc.h+sharc.cpp into the repo, add adsp21065l_device (21065L PM/DM maps +
   IOP stubs), swap m_dsp to it.
 - F.2: driver host-boot glue (latch reg0x40 addr; on 0x1C 0xA1/0x41 DMA the streamed words into
