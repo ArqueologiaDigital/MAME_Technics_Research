@@ -94,6 +94,7 @@
 #include "emu.h"
 
 #include "cpu/mn10300/mn10300.h"
+#include "cpu/sharc/sharc.h"        // IC306 effects DSP (ADSP-21065L; F.1 uses the 21062 core)
 
 #include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
 #include "bus/midi/midiinport.h"
@@ -297,6 +298,7 @@ public:
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_tonegen(*this, "tonegen")
+		, m_dsp(*this, "dsp")
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
@@ -325,6 +327,7 @@ private:
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
+	required_device<adsp21062_device> m_dsp;            // IC306 effects DSP (SHARC; F.1 = 21062 core, host-boot idle)
 
 	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
 
@@ -1748,7 +1751,17 @@ void kn7000_state::kn7000(machine_config &config)
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
-	// TODO: real tone generators IC201/IC205 + effects DSP IC306/SDRAM IC307/8,
+	// IC306 effects DSP -- Analog Devices ADSP-21065L SHARC (part S21065LKS240, ~60 MHz),
+	// host-booted by the MN10300 over the 0x98000000 (index) / 0x9C000000 (data) port.
+	// Phase F.1: instantiate MAME's 2106x SHARC core (the 21065L shares the ISA) in
+	// HOST boot mode so it sits idle until the firmware uploads its program (F.2). The
+	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
+	// come next; for now this proves the core integrates and the KN7000 still boots.
+	// See notes/sharc-lle-assessment.md.
+	ADSP21062(config, m_dsp, 60'000'000);
+	m_dsp->set_boot_mode(adsp21062_device::BOOT_MODE_HOST);
+
+	// TODO: real tone generators IC201/IC205; DSP SDRAM IC307/8, SPORT audio path;
 	//       floppy disk controller (IC103), SD card and USB.
 }
 
