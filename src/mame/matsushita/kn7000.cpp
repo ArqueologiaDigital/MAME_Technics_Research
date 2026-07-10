@@ -507,6 +507,9 @@ private:
 	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
 	bool     dsp_stub_enabled() { return (m_config.read_safe(0) & 1) != 0; }
 	bool     tg_sound_enabled() { return (m_config.read_safe(0) & 2) != 0; }  // CONFIG bit1: TG-present strap -> firmware sound
+	bool     tg_gate_postboot() { return (m_config.read_safe(0) & 4) != 0; }  // CONFIG bit2: open the TG gate AFTER boot (no SD menu)
+	emu_timer *m_tg_gate_timer = nullptr;      // periodic: force the TG-enable gate open post-boot
+	TIMER_CALLBACK_MEMBER(tg_gate_poke);
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
 	uint32_t m_dsp_dl_words = 0;               // count of download words written to the SHARC
 	// F.2 host-boot upload state (see dsp_data_w): the firmware sets a target address (reg
@@ -1026,6 +1029,13 @@ void kn7000_state::intc_recompute()
 	m_maincpu->set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
 }
 
+TIMER_CALLBACK_MEMBER(kn7000_state::tg_gate_poke)
+{
+	// Force the sound library's TG-enable gate (RAM 0x500ce380) open so the firmware programs
+	// voices. Done post-boot (not via the boot strap) to avoid the SD subsystem / SD menu.
+	m_maincpu->space(AS_PROGRAM).write_byte(0x500ce380, 0x40);
+}
+
 TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 {
 	// Audio frame tick: pulse the effects DSP's IRQ0 (the kernel's frame interrupt). We only
@@ -1455,6 +1465,13 @@ static INPUT_PORTS_START(kn7000)
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x02, DEF_STR(On))
 
+	// As above, but opens the TG-enable gate AFTER boot (via a timer forcing RAM 0x500ce380
+	// open) instead of via the boot strap -- so voices sound on the HOME/play screen with NO
+	// SD menu. Prefer this over the strap switch for playable sound. Default OFF.
+	PORT_CONFNAME(0x04, 0x00, "Tone generators / firmware sound (play screen, no SD menu)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x04, DEF_STR(On))
+
 	// Panel buttons organized by NORMALIZED SEGMENT (normSeg), the identity the
 	// firmware's button dispatcher (0x484ADB59) actually uses. panel_scan emits
 	// each segment's reverse-normalized wire address (bank11 subs 0-0xB -> segs
@@ -1838,6 +1855,7 @@ void kn7000_state::machine_start()
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
 	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
+	m_tg_gate_timer = timer_alloc(FUNC(kn7000_state::tg_gate_poke), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -1900,6 +1918,17 @@ void kn7000_state::machine_reset()
 	// (see fav_preload). Confirmed by RE: a machine_reset write is wiped by the clear;
 	// a t=3s write survives and the firmware keeps it.
 	m_fav_timer->adjust(attotime::from_seconds(3));
+
+	// Post-boot TG-enable path (CONFIG bit2): the TG-present strap is left CLEAR so boot takes
+	// the normal path to the home screen (reporting it present at boot instead advances into
+	// the still-paused SD subsystem -> SD menu). Once boot has settled we force the firmware's
+	// TG-enable gate (RAM 0x500ce380) open, so voices sound ON THE PLAY SCREEN with no SD menu.
+	// Periodic to hold it open across firmware re-checks. This is a workaround for the paused
+	// SD subsystem; see notes/kn7000-sd-strap-gate + the runtime-poke discovery.
+	if (tg_gate_postboot())
+		m_tg_gate_timer->adjust(attotime::from_seconds(10), 0, attotime::from_seconds(1));
+	else
+		m_tg_gate_timer->adjust(attotime::never);
 }
 
 void kn7000_state::kn7000(machine_config &config)
