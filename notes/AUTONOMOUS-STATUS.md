@@ -90,11 +90,16 @@ capture off = CONFIG bit1 only, on = bit0+bit1, both press "Key C4" at t>=16, -w
 Goertzel at 262 Hz (see the /tmp analysis this session).
 
 NEXT / open:
- - AUDIBLE EFFECT: the default slot (PM 0x8400) is a dry copy, so off==on. To hear
-   reverb/chorus the firmware must SELECT/upload an effect microprogram (rec05-76) to
-   PM 0x8400. Investigate: does selecting an effect / a sound-with-reverb trigger the
-   host to upload it (dsp_data_w PM 0x8400 writes)? Then the +0xE output offset may move
-   (it's the passthrough's I4 offset) -- re-derive per effect.
+ - AUDIBLE EFFECT: the default slot (PM 0x8400) is a dry copy, so off==on. FINDING
+   (tapped PM 0x8400-0x8420 writes over a boot+note): ZERO writes -- the firmware does
+   NOT upload any effect microprogram by default, so the DSP runs the dry passthrough
+   (correct, matches off==on). To hear reverb/chorus the firmware must be driven to
+   SELECT an effect (host DspEffectSelect -> uploads rec05-76 to PM 0x8400). NEXT:
+   figure out the trigger -- likely a panel/effect selection, and it may be gated by the
+   SD-menu boot state (the TG gate lands on the SD menu, not the play screen, where
+   effect selection normally happens). When an effect IS loaded, re-derive the +0xE
+   output offset (it's the passthrough's I4 landing; a real effect may write elsewhere --
+   tap the TX0 region write address as done this session).
  - SD-card menu still shows when the TG gate is opened (known: kn7000-sd-strap-gate) --
    separate issue, sound works regardless of screen.
  - Dry/wet mix + SPORT1 role: only if the output is 100% wet (hardware may sum a dry
