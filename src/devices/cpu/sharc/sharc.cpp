@@ -191,6 +191,8 @@ void adsp21065l_device::device_start()
 	adsp21062_device::device_start();
 	m_data_sram = std::make_unique<uint32_t[]>(DATA_SRAM_WORDS);   // value-initialised to 0
 	save_pointer(NAME(m_data_sram), DATA_SRAM_WORDS);
+	save_item(NAME(m_sport_tx));
+	save_item(NAME(m_sport_rx));
 }
 
 // 21065L IOP register bank -- stubbed for F.1. The base 2106x core fatalerrors on the
@@ -204,6 +206,29 @@ uint32_t adsp21065l_device::iop65l_r(offs_t offset)
 
 void adsp21065l_device::iop65l_w(offs_t offset, uint32_t data)
 {
+	// F.3: the kernel programs the SPORT-DMA chain-pointer (CP) registers with a value CP; the
+	// transfer-control block lives at internal address 0x8000 + (CP & 0x1FFFF), whose II
+	// (internal index) field is the audio buffer base. Derive and cache those bases so the audio
+	// in/out addresses are taken from the firmware's own descriptors, not assumed. Register map
+	// (runtime-confirmed): 0x73/0x53 = SPORT0 TX A/B, 0x7B/0x5B = SPORT1 TX A/B, 0x63/0x33 =
+	// SPORT0 RX A/B, 0x6B/0x3B = SPORT1 RX A/B.
+	auto tcb_ii = [&](uint32_t cp) -> uint32_t {
+		const offs_t tcb = 0x8000 + (cp & 0x1ffff);          // the II word of the TCB
+		const offs_t i = tcb - DATA_SRAM_BASE;
+		return (m_data_sram && i < DATA_SRAM_WORDS) ? m_data_sram[i] : 0;
+	};
+	switch (offset)
+	{
+	case 0x73: m_sport_tx[0][0] = tcb_ii(data); break;
+	case 0x53: m_sport_tx[0][1] = tcb_ii(data); break;
+	case 0x7b: m_sport_tx[1][0] = tcb_ii(data); break;
+	case 0x5b: m_sport_tx[1][1] = tcb_ii(data); break;
+	case 0x63: m_sport_rx[0][0] = tcb_ii(data); break;
+	case 0x33: m_sport_rx[0][1] = tcb_ii(data); break;
+	case 0x6b: m_sport_rx[1][0] = tcb_ii(data); break;
+	case 0x3b: m_sport_rx[1][1] = tcb_ii(data); break;
+	default: break;
+	}
 }
 
 adsp21062_device::adsp21062_device(

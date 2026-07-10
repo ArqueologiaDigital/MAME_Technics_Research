@@ -268,6 +268,79 @@ private:
 
 DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (firmware-driven, placeholder timbre)")
 
+DECLARE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device)
+
+// ---------------------------------------------------------------------------
+// kn7000_dsp_bridge_device -- routes the tone-generator audio through the effects
+// DSP (F.3). It sits between the TG and the speakers with 2 inputs and 2 outputs.
+// The audio-thread stream and the CPU-timeline IRQ0 tick (kn7000_state::dsp_audio_tick)
+// exchange samples through two rings: the stream pushes each TG frame into rx (the DSP's
+// input) and pops the DSP's processed frame from tx (to the speakers); the tick consumes
+// rx (writing the SPORT input buffer) and produces tx (reading the SPORT output buffer).
+// Both run at ~44.1 kHz, so the rings stay balanced; when the DSP is not running (tx
+// empty) the bridge simply passes the TG through, so it is transparent with the DSP off.
+// Samples in the rings are 24-bit signed (the SPORT word format).
+// ---------------------------------------------------------------------------
+class kn7000_dsp_bridge_device : public device_t, public device_sound_interface
+{
+public:
+	kn7000_dsp_bridge_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0)
+		: device_t(mconfig, KN7000_DSP_BRIDGE, tag, owner, clock)
+		, device_sound_interface(mconfig, *this)
+	{ }
+
+	// Called from the DSP IRQ0 tick (CPU timeline): take one TG input frame, hand back one
+	// processed output frame. 24-bit signed samples.
+	void pop_input(int32_t &l, int32_t &r)
+	{
+		if (m_rx_rd != m_rx_wr) { l = m_rx[m_rx_rd][0]; r = m_rx[m_rx_rd][1]; m_rx_rd = (m_rx_rd + 1) % RING; }
+		else { l = r = 0; }   // underflow: DSP ran ahead of the stream
+	}
+	void push_output(int32_t l, int32_t r)
+	{
+		const int nw = (m_tx_wr + 1) % RING;
+		if (nw != m_tx_rd) { m_tx[m_tx_wr][0] = l; m_tx[m_tx_wr][1] = r; m_tx_wr = nw; }  // else overflow: drop
+	}
+
+protected:
+	virtual void device_start() override
+	{
+		m_stream = stream_alloc(2, 2, 44100);
+		save_item(NAME(m_rx));   save_item(NAME(m_tx));
+		save_item(NAME(m_rx_rd)); save_item(NAME(m_rx_wr));
+		save_item(NAME(m_tx_rd)); save_item(NAME(m_tx_wr));
+	}
+
+	virtual void sound_stream_update(sound_stream &stream) override
+	{
+		constexpr float SCALE = 8388607.0f;   // 2^23 - 1
+		for (int s = 0; s < stream.samples(); s++)
+		{
+			// push this TG input frame into the DSP's input ring (float -> 24-bit signed)
+			const int32_t il = int32_t(std::clamp(stream.get(0, s), -1.0f, 1.0f) * SCALE);
+			const int32_t ir = int32_t(std::clamp(stream.get(1, s), -1.0f, 1.0f) * SCALE);
+			const int nw = (m_rx_wr + 1) % RING;
+			if (nw != m_rx_rd) { m_rx[m_rx_wr][0] = il; m_rx[m_rx_wr][1] = ir; m_rx_wr = nw; }
+			// pop the DSP's processed output; if the DSP isn't running (tx empty), pass the TG
+			// through so the bridge is transparent with the effects DSP off.
+			int32_t ol, orr;
+			if (m_tx_rd != m_tx_wr) { ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1]; m_tx_rd = (m_tx_rd + 1) % RING; }
+			else { ol = il; orr = ir; }
+			stream.put(0, s, float(ol) / SCALE);
+			stream.put(1, s, float(orr) / SCALE);
+		}
+	}
+
+private:
+	static constexpr int RING = 2048;
+	sound_stream *m_stream = nullptr;
+	int32_t m_rx[RING][2] = { };   // TG -> DSP input
+	int32_t m_tx[RING][2] = { };   // DSP output -> speakers
+	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
+};
+
+DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
+
 kn7000_sio_uart_device::kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, KN7000_SIO_UART, tag, owner, clock),
 	device_serial_interface(mconfig, *this),
@@ -298,6 +371,7 @@ public:
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
 		, m_tonegen(*this, "tonegen")
+		, m_dspbridge(*this, "dspbridge")
 		, m_dsp(*this, "dsp")
 		, m_seg(*this, "SEG%02X", 0U)
 		, m_dial(*this, "DIAL")
@@ -327,6 +401,7 @@ private:
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
+	required_device<kn7000_dsp_bridge_device> m_dspbridge;  // F.3: routes TG audio through the effects DSP
 	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
 
 	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
@@ -419,6 +494,7 @@ private:
 	static constexpr int DSP_FRAME_HZ = 44100;
 	emu_timer *m_dsp_irq_timer = nullptr;      // periodic: pulse the SHARC's IRQ0 (audio frame tick)
 	TIMER_CALLBACK_MEMBER(dsp_audio_tick);
+	uint8_t  m_dsp_ring_pos = 0;               // F.3: position in the 8-frame SPORT audio ring
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
 	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
@@ -926,8 +1002,33 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	// ASSERT: the SHARC core clears the pending bit when it *takes* the interrupt, so one edge
 	// is delivered per tick without a matching CLEAR. IRQ0 is edge-configured by the kernel
 	// (MODE2 0x18011) and its ISR (PM 0x8020) sets R13=1 to hand a frame to the main loop.
-	if (m_dsp_running)
-		m_dsp->set_input_line(0, ASSERT_LINE);
+	if (!m_dsp_running)
+		return;
+
+	// F.3 audio path: the effect kernel processes one stereo frame per IRQ0 (verified: ~2 output
+	// words written per interrupt). Its input/output live in contiguous 8-frame rings in internal
+	// SRAM -- input at RX0A (0xC362), output at TX0A (0xC342), the two 0x20 apart -- which the
+	// SPORT DMA would normally fill/drain from the codec. We stand in for that DMA directly: hand
+	// the DSP one input frame from the TG (via the bridge's rx ring) and take back the previous
+	// frame's processed output (to the bridge's tx ring -> speakers). m_dsp_ring_pos walks the
+	// 8-frame ring in lockstep with the kernel; a constant phase offset is only latency.
+	const uint32_t rx = m_dsp->sport_rx_buffer(0, 0);   // 0xC362, start of the 16-word input ring
+	const uint32_t tx = m_dsp->sport_tx_buffer(0, 0);   // 0xC342, start of the 16-word output ring
+	if (rx && tx)
+	{
+		address_space &dm = m_dsp->space(AS_DATA);
+		const uint32_t w = m_dsp_ring_pos * 2;           // 2 words (L,R) per stereo frame
+		// take the processed output for this ring slot -> speakers
+		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
+		m_dspbridge->push_output(sx24(dm.read_dword(tx + w)), sx24(dm.read_dword(tx + w + 1)));
+		// feed the TG's next frame into this ring slot (24-bit, right-justified)
+		int32_t il = 0, ir = 0;
+		m_dspbridge->pop_input(il, ir);
+		dm.write_dword(rx + w,     uint32_t(il) & 0xffffff);
+		dm.write_dword(rx + w + 1, uint32_t(ir) & 0xffffff);
+		m_dsp_ring_pos = (m_dsp_ring_pos + 1) & 7;
+	}
+	m_dsp->set_input_line(0, ASSERT_LINE);
 }
 
 TIMER_CALLBACK_MEMBER(kn7000_state::sys_tick)
@@ -1835,8 +1936,14 @@ void kn7000_state::kn7000(machine_config &config)
 	SPEAKER(config, "lspeaker").front_left();
 	SPEAKER(config, "rspeaker").front_right();
 	KN7000_TONEGEN(config, m_tonegen, 0);
-	m_tonegen->add_route(0, "lspeaker", 1.0);
-	m_tonegen->add_route(1, "rspeaker", 1.0);
+	// F.3: route the tone-generator audio through the effects-DSP bridge, then to the speakers.
+	// The bridge is transparent (passes the TG through) unless the effects DSP is running, so
+	// this does not change the DSP-off behaviour.
+	KN7000_DSP_BRIDGE(config, m_dspbridge, 0);
+	m_tonegen->add_route(0, *m_dspbridge, 1.0, 0);
+	m_tonegen->add_route(1, *m_dspbridge, 1.0, 1);
+	m_dspbridge->add_route(0, "lspeaker", 1.0);
+	m_dspbridge->add_route(1, "rspeaker", 1.0);
 
 	// IC306 effects DSP -- Analog Devices ADSP-21065L SHARC (part S21065LKS240, ~60 MHz),
 	// host-booted by the MN10300 over the 0x98000000 (index) / 0x9C000000 (data) port.

@@ -582,6 +582,12 @@ public:
 	adsp21065l_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 	virtual ~adsp21065l_device() override;
 
+	// F.3 SPORT audio: the base addresses of the kernel's serial-audio DMA autobuffers, derived
+	// at runtime from its DMA transfer-control blocks (see iop65l_w). [sport 0/1][A=0 / B=1].
+	// TX = the SHARC's processed output (-> DAC); RX = its input (TG -> SHARC). 0 until set up.
+	uint32_t sport_tx_buffer(int sport, int ab) const { return m_sport_tx[sport & 1][ab & 1]; }
+	uint32_t sport_rx_buffer(int sport, int ab) const { return m_sport_rx[sport & 1][ab & 1]; }
+
 protected:
 	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
 	// (vector N at 0x8000 + N*4; e.g. IRQ0 = vector 8 = 0x8020).
@@ -608,6 +614,10 @@ private:
 	void data_65l(address_map &map) ATTR_COLD;
 	uint32_t iop65l_r(offs_t offset);
 	void iop65l_w(offs_t offset, uint32_t data);
+
+	// F.3 SPORT audio DMA autobuffer bases (see sport_tx_buffer/sport_rx_buffer).
+	uint32_t m_sport_tx[2][2] = { };
+	uint32_t m_sport_rx[2][2] = { };
 
 	// Internal-SRAM data region (0x9000-0x1FFFF), shared between the PM and DM buses so a value
 	// written via DM(addr) is readable via PM(addr) -- the SHARC's unified internal memory. The
