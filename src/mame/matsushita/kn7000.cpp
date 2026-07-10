@@ -610,6 +610,21 @@ private:
 	uint16_t m_tmr7_base = 0;              // 16-bit reload (underflow period)
 	emu_timer *m_tempo_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(tempo_tick);
+
+	// --- SD card-detect (GxICR group 0x1B pin, register 0x3400016C) ------------
+	// The card/lid switch is an external-interrupt pin whose ICR the firmware
+	// POLLS (strobe: write 1 to clear DETECT, read back, btst bit4/REQUEST):
+	// bit4 SET = no card / lid open, CLEAR = card present (reader 0x4854bce0,
+	// debounce 0x4854bd39). The SD state machine is DEMAND-DRIVEN off the detect
+	// TRANSITION: the debounced 1->0 edge fires the SdCover widget path -> insert
+	// message 0x107020bb arg=1 -> SD state 1 (handler 0x48551920). A line that is
+	// statically "present" from power-on never edges, so no event ever fires --
+	// model the card as ABSENT at power-on and INSERT it a few seconds after
+	// boot. (RE: workflow wf_d6998fbd-c86, notes/sd-card-emulation-plan.md.)
+	// The absent state is held via DETECT bit1 (the firmware's strobe w1c-clears
+	// bit0 only, so bit1 survives and keeps REQUEST/bit4 set through strobes).
+	emu_timer *m_sd_insert_timer = nullptr;
+	TIMER_CALLBACK_MEMBER(sd_insert);
 	void tmr7_mode_w(uint8_t data);
 	void tmr7_base_w(uint16_t data);
 	void tmr7_rearm(bool restart_phase);
@@ -727,6 +742,21 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x44000000, 0x44ffffff).ram().share("ram44");
 	map(0x84000000, 0x84ffffff).ram().share("ram44");
 	map(0x9c000000, 0x9cffffff).ram().share("lcdbuf");   // firmware's composited LCD image (RGB565) lives at 0x9CE00000
+	// SD front-panel switch register (byte 0x9CC00008, ACTIVE-LOW: bits0-5 = the
+	// six CPSD-side transport switches, 1 = released). The firmware's SD-panel
+	// scan reads it on TG-present boots (scan-enable write 0x9cc00004=0xC0 is
+	// TG-gated); left as plain RAM it reads 0x00 = ALL SWITCHES PRESSED, which
+	// fires six phantom SD-button events and makes the boot take over the UI
+	// with the SD screen -- the long-standing "TG-present boot lands on the SD
+	// menu" mystery (RE + live-verified, wf_d6998fbd-c86: with idle switches the
+	// TG-present boot reaches the PMEM home screen). Reads return idle bits0-5;
+	// bytes 1-3 of the dword (incl. the 0x9cc00009 control byte the card-detect
+	// strobe RMWs) stay RAM-backed. Writes fall through to the RAM share.
+	if (!m_lib_mirror)
+		map(0x9cc00008, 0x9cc0000b).lr32(NAME([this](offs_t) -> uint32_t
+		{
+			return (m_lcdbuf[0x00C00008 >> 2] & 0xFFFFFF00) | 0x3F;
+		}));
 	// Override the low 4 bytes: 0x9C000000 is the effects-DSP host DATA port
 	// (paired with the index at 0x98000000), NOT LCD RAM. The framebuffer at
 	// 0x9CE00000 and the rest of the bank stay RAM (this narrower entry wins).
@@ -1238,6 +1268,14 @@ TIMER_CALLBACK_MEMBER(kn7000_state::tempo_tick)
 	intc_assert(0x07);      // GxICR 0x3400011C -> the 96-PPQN sequencer tick ISR 0x48447084
 }
 
+TIMER_CALLBACK_MEMBER(kn7000_state::sd_insert)
+{
+	// The card appears: clear the group-0x1B DETECT/REQUEST bits -> the polled
+	// reader sees bit4 drop, the debounce runs, and the firmware posts the
+	// card-insert message (see the member declaration for the chain).
+	m_gxicr[0x1B] &= ~0x001F;
+}
+
 // One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
 // Favorites into battery-backed SRAM so the Favorites screen lists the 4 presets
 // without the (still-unreversed) custom-flash AST install. The firmware VALIDATES this
@@ -1607,7 +1645,7 @@ static INPUT_PORTS_START(kn7000)
 	// Reports the tone generators present so the firmware voices notes (audible sound).
 	// OFF keeps the known-good home-screen boot; ON enables firmware-driven sound but
 	// boot then rests on the SD Card menu (the paused SD subsystem). Default OFF.
-	PORT_CONFNAME(0x02, 0x00, "Tone generators / firmware sound (experimental)")
+	PORT_CONFNAME(0x02, 0x02, "Tone generators / firmware sound")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x02, DEF_STR(On))
 
@@ -2008,6 +2046,7 @@ void kn7000_state::machine_start()
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_tg_gate_timer = timer_alloc(FUNC(kn7000_state::tg_gate_poke), this);
 	m_tempo_timer = timer_alloc(FUNC(kn7000_state::tempo_tick), this);
+	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -2086,6 +2125,15 @@ void kn7000_state::machine_reset()
 	m_tmr7_mode = 0;
 	m_tmr7_base = 0;
 	m_tempo_timer->adjust(attotime::never);
+	if (!m_lib_mirror)
+	{
+		// Empty SD slot (bit4 of the polled group-0x1B ICR reads 1 = no card):
+		// the faithful default until the card data transport is modeled. A
+		// future "insert card" action arms m_sd_insert_timer for the 1->0 edge
+		// that fires the firmware's card-insert message (0x107020bb).
+		m_gxicr[0x1B] |= 0x0012;
+		m_sd_insert_timer->adjust(attotime::never);
+	}
 }
 
 void kn7000_state::kn7000(machine_config &config)
