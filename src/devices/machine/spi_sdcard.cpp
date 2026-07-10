@@ -41,6 +41,22 @@
 
 #include "logmacro.h"
 
+// SD data-block CRC16: CCITT (poly 0x1021, MSB-first) with init ZERO -- the SD
+// specification value. MAME's util::crc16_creator uses init 0xFFFF, which a
+// host that keeps CRC enabled (e.g. Technics KN7000) rejects. Local helper so
+// the data/CSD/CID blocks below carry the spec-correct CRC.
+static uint16_t sd_data_crc16(const uint8_t *data, uint32_t length)
+{
+	uint16_t crc = 0;
+	for (uint32_t i = 0; i < length; i++)
+	{
+		crc ^= uint16_t(data[i]) << 8;
+		for (int b = 0; b < 8; b++)
+			crc = (crc & 0x8000) ? uint16_t((crc << 1) ^ 0x1021) : uint16_t(crc << 1);
+	}
+	return crc;
+}
+
 
 namespace {
 
@@ -429,7 +445,7 @@ void spi_sdcard_device::latch_in()
 					// FIXME: support multi-block read when transfer size is smaller than block size
 					m_data[0] = 0xfe; // data token
 					m_image->read(m_blknext++, &m_data[1]);
-					util::crc16_t crc16 = util::crc16_creator::simple(&m_data[1], m_blksize);
+					uint16_t crc16 = sd_data_crc16(&m_data[1], m_blksize);
 					put_u16be(&m_data[m_blksize + 1], crc16);
 					LOG("reading LBA %x: [0] %02x %02x .. [%d] %02x %02x [crc16] %04x\n", m_blknext - 1, m_data[1], m_data[2], m_blksize - 2, m_data[m_blksize - 1], m_data[m_blksize], crc16);
 					send_data(1 + m_blksize + 2, SD_STATE_DATA_MULTI);
@@ -511,7 +527,7 @@ void spi_sdcard_device::do_command()
 			// The CSD register read is a data block and carries a CRC16 (SD spec),
 			// exactly like CMD10/SEND_CID below. Without it, hosts that keep CRC
 			// enabled reject the CSD (e.g. the Technics KN7000, which verifies it).
-			put_u16be(&m_data[3 + std::size(m_csd)], util::crc16_creator::simple(&m_data[3], std::size(m_csd)));
+			put_u16be(&m_data[3 + std::size(m_csd)], sd_data_crc16(&m_data[3], std::size(m_csd)));
 			send_data(3 + std::size(m_csd) + 2, SD_STATE_STBY);
 			break;
 
@@ -536,7 +552,7 @@ void spi_sdcard_device::do_command()
 			m_data[17] = 0x59; // 0x15 9 = 2021, September
 			m_data[18] = 0x00; // CRC7, bit 0 is always 0
 			{
-				util::crc16_t crc16 = util::crc16_creator::simple(&m_data[3], 16);
+				uint16_t crc16 = sd_data_crc16(&m_data[3], 16);
 				put_u16be(&m_data[19], crc16);
 			}
 			send_data(3 + 16 + 2, SD_STATE_STBY);
@@ -597,7 +613,7 @@ void spi_sdcard_device::do_command()
 						blk /= m_blksize;
 					}
 					m_image->read(blk, &m_data[3]);
-					util::crc16_t crc16 = util::crc16_creator::simple(&m_data[3], m_xferblk);
+					uint16_t crc16 = sd_data_crc16(&m_data[3], m_xferblk);
 					put_u16be(&m_data[m_xferblk + 3], crc16);
 					LOG("reading LBA %x: [0] %02x %02x .. [%d] %02x %02x [crc16] %04x\n", blk, m_data[3], m_data[4], m_xferblk - 2, m_data[m_xferblk + 1], m_data[m_xferblk + 2], crc16);
 					send_data(3 + m_xferblk + 2, SD_STATE_DATA);
@@ -607,7 +623,7 @@ void spi_sdcard_device::do_command()
 					assert(m_type == SD_TYPE_V2);
 					m_image->read(blk / m_blksize, &m_sectorbuf[0]);
 					std::copy_n(&m_sectorbuf[blk % m_blksize], m_xferblk, &m_data[3]);
-					util::crc16_t crc16 = util::crc16_creator::simple(&m_data[3], m_xferblk);
+					uint16_t crc16 = sd_data_crc16(&m_data[3], m_xferblk);
 					put_u16be(&m_data[m_xferblk + 3], crc16);
 					LOG("reading LBA %x+%x: [0] %02x %02x .. [%d] %02x %02x [crc16] %04x\n", blk / m_blksize, blk % m_blksize, m_data[3], m_data[4], m_xferblk - 2, m_data[m_xferblk + 1], m_data[m_xferblk + 2], crc16);
 					send_data(3 + m_xferblk + 2, SD_STATE_DATA);
