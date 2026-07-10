@@ -1,5 +1,34 @@
 > Phase C / first-cut-audio recon (2026-07-09). Companion to sound-subsystem-plan.md.
 
+## UPDATE 2026-07-10 — navigation CONFIRMED by screenshot; blocked by the same gate/SD-menu conflict
+
+Attempted per Felipe's request. Findings (visible-video runs, screenshots):
+- **The CHORD FINDER screen IS reachable and navigable, with the TG gate OFF**:
+  HOME -> APC MODE (`SEG03 0x02`) -> **APC SELECT** screen -> CHORD FINDER soft-key
+  (`SEG0F 0x40`, the LCD-RIGHT-5 position, labelled "CHORD FINDER" on APC SELECT) ->
+  **CHORD FINDER** screen. Confirmed by screenshot: ROOT:C TYPE:Maj, a chord-type grid,
+  ROOT/TYPE/INVERSION soft-keys, a mini-keyboard showing the chord, and an EAR icon at
+  the bottom-right (LCD-RIGHT-5 = `SEG0F 0x40`). So step-2's SEG0F 0x40 guess was RIGHT;
+  the "APC SELECT hash unchanged" earlier was the sparse LCD sample missing it.
+- **The gate/SD-menu conflict blocks it, same as the keybed**: sound needs the TG gate ON
+  (CONFIG bit1), but the gate ON lands boot on the SD MENU (screenshot), and APC MODE does
+  NOT leave the SD menu (shot before==after). With the gate OFF you can navigate to the
+  chord finder, but pressing the ear (`SEG0F 0x40` on the CF screen) produced NO TG voice
+  writes and NO sound -- the voice path is gated off. So the chord finder does NOT bypass
+  the gate issue.
+- The old probe's "SEG10 0x02 fired" was a FALSE POSITIVE: it wrote a TG GROUP-1 register
+  (reg 0x0400), not a note PITCH (group 9), and produced no audio. Ignore that candidate.
+- Whether the ear fires the note EVENT (MainSoundAdd) under the gate is inconclusive here
+  (debug-core printf output routing with -debugger none didn't surface). But it doesn't
+  matter for audibility: the gate suppresses the voices either way.
+
+CONCLUSION: the chord finder is a confirmed, navigable UI path, but it is subject to the
+SAME recurring blocker as everything else -- the TG gate opens the SD menu (memory
+kn7000-sd-strap-gate). Resolving that boot state is the real unlock (for the keybed, the
+chord finder, AND effect selection / reverb). That is the recommended next target.
+
+--- (original 2026-07-09 recon below) ---
+
 # CHORD FINDER "ear" navigation + note-on detection plan
 
 Scripts saved at:
