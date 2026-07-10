@@ -52,8 +52,13 @@ The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmw
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
 What shipped:
-1. TG gate opened: io_r(0x98070000) now sets strap bits 1,2 (TG present) ->
-   gate flag 0x500ce380 = 0x40 -> firmware programs voices on every note.
+0. Sound is an OPT-IN machine-config switch: CONFIG bit1 "Tone generators /
+   firmware sound (experimental)", DEFAULT OFF. OFF = known-good home-screen boot,
+   silent (gate 0x7F) — NO regression, verified. ON = gate open + sound, but boot
+   then rests on the SD menu (paused SD subsystem). Enable via Tab -> Machine
+   Configuration, or cfg CONFIG value=2. (Same pattern as the DSP host-stub switch.)
+1. TG gate opened (when the switch is ON): io_r(0x98070000) sets strap bits 1,2
+   (TG present) -> gate flag 0x500ce380 = 0x40 -> firmware programs voices per note.
 2. SD Card menu at boot: opening the TG gate advances boot into the SD subsystem,
    which is separately PAUSED (notes/sd-card-emulation-plan.md), so it lands on the
    SD Card menu instead of the home screen. NOT caused by the CPSD probe (verified:
