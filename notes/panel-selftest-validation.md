@@ -45,8 +45,26 @@ All the above are now bound in the layout (tools/gen_lay.py) + named in INPUT_PO
   (SET is likely a context action inside the PM store screen; CUSTOM PANEL bit unresolved). Left unbound.
 - PAGE / CONTRAST: the CPC value-encoder column (SEG16-20, ev1004-1020) -- value controls, not LED
   buttons; a driver value-input model, not a simple bind. Left unbound.
-- LED bindings: PanelSwitchClassTable gives every button's LED (row, col); the driver's
-  panel_led_frame maps a serial LED write (addr,data) -> cpl/cpr_led[reg*8+bit]. The exact
-  (row,col)->(addr,data) firmware conversion (0x484a0b3e -> 0x484b1780 -> serial) still needs
-  pinning, OR an empirical panel-test sweep (boot combo C#3+D#3+C#4 entry being cracked). Until
-  then the layout keeps the state-identity genre/sound-group LEDs + dark elsewhere (honest).
+## LED map SOLVED + APPLIED (authoritative, firmware-derived)
+The (row,col)->output conversion was pinned: the LED shadow write (0x484a0b3e -> 0x484b1780 ->
+0x484b170c) indexes a **row-remap table @0x48615058** whose value IS the panel_led_frame ADDR:
+rows 0-7 -> 0xC0..C7 (CPL reg 0-7), rows 8-13 -> 0x00..05 (CPR reg 0-5), rows 14-19 -> 0x08..0D
+(CPR reg 8-13). So:
+
+    led index = (remap[row] & 0x3f) * 8 + col_index      (col_index = log2(col-reg one-hot))
+    board     = cpl if (remap[row] & 0xc0) else cpr
+
+VALIDATED LIVE against normal operation (not just the panel-test): genre0 (8&16 BEAT) -> cpl_led2;
+selecting ROCK & POP -> cpl_led2 goes OFF, cpl_led18 comes ON (exactly as predicted); PIANO
+(RIGHT1) -> cpr_led44. This DISPROVES the old panel-leds.md claim that the switch-class map "does
+not match normal operation" -- that was a bank-B measurement.
+
+APPLIED: tools/gen_lay.py now computes `PANEL_LED[(SEG,mask)]` for all 91 button LEDs from this
+formula (replacing the old bank-B `LEDMAP`, the re-keyed `OPLED`/`GENRE_LED`, and the hardcoded
+state-identity names). Every bound button's green_led lights from the correct firmware output.
+(Special-class buttons F0-F7 -- part on/off, START/STOP, SD switches -- have no standard indicator
+LED, so they stay dark, which is correct.) Rows 0-13 are live-validated; rows 14-19 (SEG12-15
+upper bits) are derived from the same clean remap but not yet individually spot-checked.
+
+Full empirical confirmation via the real Panel SW & LED test still wants the boot-combo entry
+(C#3+D#3+C#4) -- being cracked -- but the formula is already firmware-authoritative + validated.

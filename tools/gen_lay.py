@@ -8,62 +8,49 @@ PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
-# --- PanelSwitchClassTable-derived LED cells (PANEL-TEST map; does NOT match normal-operation
-# LED behaviour -- verified wrong by probe: GUITAR press lights cpr49 not cpr72. Kept for reference
-# only; NOT applied to the layout. Operation LED map must be built empirically. See notes/panel-leds.md ---
-LEDMAP={
-  ("SEG00","0x40"):"cpl_led8", ("SEG00","0x80"):"cpl_led16", ("SEG01","0x01"):"cpl_led57", ("SEG01","0x02"):"cpl_led49",
-  ("SEG01","0x04"):"cpl_led41", ("SEG01","0x08"):"cpl_led33", ("SEG01","0x10"):"cpl_led25", ("SEG01","0x20"):"cpl_led17",
-  ("SEG01","0x40"):"cpl_led9", ("SEG01","0x80"):"cpl_led1", ("SEG02","0x01"):"cpl_led58", ("SEG02","0x02"):"cpl_led50",
-  ("SEG02","0x04"):"cpl_led42", ("SEG02","0x08"):"cpl_led34", ("SEG02","0x10"):"cpl_led26", ("SEG02","0x20"):"cpl_led18",
-  ("SEG02","0x40"):"cpl_led10", ("SEG02","0x80"):"cpl_led2", ("SEG03","0x01"):"cpl_led0", ("SEG03","0x04"):"cpl_led59",
-  ("SEG03","0x08"):"cpl_led51", ("SEG03","0x10"):"cpl_led43", ("SEG03","0x20"):"cpl_led35", ("SEG03","0x40"):"cpl_led27",
-  ("SEG04","0x01"):"cpl_led19", ("SEG04","0x04"):"cpl_led11", ("SEG04","0x08"):"cpl_led4", ("SEG04","0x10"):"cpl_led3",
-  ("SEG05","0x01"):"cpl_led29", ("SEG06","0x20"):"cpl_led12", ("SEG07","0x01"):"cpl_led28", ("SEG07","0x02"):"cpl_led36",
-  ("SEG07","0x04"):"cpl_led44", ("SEG07","0x08"):"cpl_led52", ("SEG07","0x10"):"cpl_led60", ("SEG0B","0x40"):"cpl_led5",
-  ("SEG0C","0x01"):"cpr_led32", ("SEG0C","0x02"):"cpr_led72", ("SEG0C","0x04"):"cpr_led24", ("SEG0C","0x08"):"cpr_led16",
-  ("SEG0C","0x10"):"cpr_led40", ("SEG0C","0x20"):"cpr_led45", ("SEG0C","0x40"):"cpr_led0", ("SEG0D","0x01"):"cpr_led33",
-  ("SEG0D","0x02"):"cpr_led34", ("SEG0D","0x04"):"cpr_led25", ("SEG0D","0x08"):"cpr_led17", ("SEG0D","0x10"):"cpr_led41",
-  ("SEG0D","0x20"):"cpr_led46", ("SEG0D","0x40"):"cpr_led1", ("SEG0D","0x80"):"cpr_led9", ("SEG0E","0x01"):"cpr_led36",
-  ("SEG0E","0x02"):"cpr_led35", ("SEG0E","0x04"):"cpr_led26", ("SEG0E","0x08"):"cpr_led18", ("SEG0E","0x10"):"cpr_led42",
-  ("SEG0E","0x20"):"cpr_led47", ("SEG0E","0x40"):"cpr_led2", ("SEG0F","0x01"):"cpr_led39", ("SEG0F","0x02"):"cpr_led7",
-  ("SEG0F","0x04"):"cpr_led27", ("SEG0F","0x08"):"cpr_led19", ("SEG0F","0x10"):"cpr_led43", ("SEG0F","0x20"):"cpr_led104",
-  ("SEG0F","0x40"):"cpr_led3", ("SEG10","0x01"):"cpr_led96", ("SEG10","0x02"):"cpr_led64", ("SEG10","0x04"):"cpr_led28",
-  ("SEG10","0x08"):"cpr_led20", ("SEG10","0x10"):"cpr_led44", ("SEG10","0x20"):"cpr_led105", ("SEG10","0x40"):"cpr_led4",
-  ("SEG10","0x80"):"cpr_led12", ("SEG11","0x02"):"cpr_led65", ("SEG11","0x04"):"cpr_led29", ("SEG11","0x08"):"cpr_led21",
-  ("SEG11","0x40"):"cpr_led5", ("SEG11","0x80"):"cpr_led13", ("SEG12","0x02"):"cpr_led37", ("SEG12","0x04"):"cpr_led30",
-  ("SEG12","0x08"):"cpr_led22", ("SEG12","0x40"):"cpr_led6", ("SEG12","0x80"):"cpr_led14", ("SEG13","0x02"):"cpr_led38",
-  ("SEG13","0x04"):"cpr_led31", ("SEG13","0x08"):"cpr_led23", ("SEG13","0x80"):"cpr_led15", ("SEG14","0x04"):"cpr_led88",
-  ("SEG14","0x08"):"cpr_led80", ("SEG15","0x04"):"cpr_led89", ("SEG15","0x08"):"cpr_led81", ("SEG1F","0x10"):"cpl_led31",
-  ("SEG1F","0x40"):"cpr_led77", ("SEG20","0x01"):"cpr_led77", ("SEG20","0x04"):"cpr_led77", ("SEG20","0x10"):"cpr_led77",
-  ("SEG20","0x40"):"cpr_led77",
+# PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
+# PanelSwitchClassTable (0x4860C9F4; switch#=normSeg*8+bit -> [LED row, col reg]) + the LED
+# row-remap table (0x48615058 -> panel_led_frame addr) => led = (remap[row]&0x3f)*8 + col_index,
+# board = cpl if remap[row]&0xc0 else cpr. VALIDATED live: genre0->cpl_led2, ROCK&POP->cpl_led18,
+# PIANO->cpr_led44 (all exact). rows 14-19 (SEG12-15 upper bits) are derived, spot-check pending.
+PANEL_LED={
+  ("SEG00","0x40"):"cpl_led8", ("SEG00","0x80"):"cpl_led16", ("SEG01","0x01"):"cpl_led57",
+  ("SEG01","0x02"):"cpl_led49", ("SEG01","0x04"):"cpl_led41", ("SEG01","0x08"):"cpl_led33",
+  ("SEG01","0x10"):"cpl_led25", ("SEG01","0x20"):"cpl_led17", ("SEG01","0x40"):"cpl_led9",
+  ("SEG01","0x80"):"cpl_led1", ("SEG02","0x01"):"cpl_led58", ("SEG02","0x02"):"cpl_led50",
+  ("SEG02","0x04"):"cpl_led42", ("SEG02","0x08"):"cpl_led34", ("SEG02","0x10"):"cpl_led26",
+  ("SEG02","0x20"):"cpl_led18", ("SEG02","0x40"):"cpl_led10", ("SEG02","0x80"):"cpl_led2",
+  ("SEG03","0x01"):"cpl_led0", ("SEG03","0x04"):"cpl_led59", ("SEG03","0x08"):"cpl_led51",
+  ("SEG03","0x10"):"cpl_led43", ("SEG03","0x20"):"cpl_led35", ("SEG03","0x40"):"cpl_led27",
+  ("SEG04","0x01"):"cpl_led19", ("SEG04","0x04"):"cpl_led11", ("SEG04","0x08"):"cpl_led4",
+  ("SEG04","0x10"):"cpl_led3", ("SEG05","0x01"):"cpl_led29", ("SEG06","0x20"):"cpl_led12",
+  ("SEG07","0x01"):"cpl_led28", ("SEG07","0x02"):"cpl_led36", ("SEG07","0x04"):"cpl_led44",
+  ("SEG07","0x08"):"cpl_led52", ("SEG07","0x10"):"cpl_led60", ("SEG0B","0x40"):"cpl_led5",
+  ("SEG0C","0x01"):"cpr_led32", ("SEG0C","0x02"):"cpr_led72", ("SEG0C","0x04"):"cpr_led24",
+  ("SEG0C","0x08"):"cpr_led16", ("SEG0C","0x10"):"cpr_led40", ("SEG0C","0x20"):"cpr_led45",
+  ("SEG0C","0x40"):"cpr_led0", ("SEG0D","0x01"):"cpr_led33", ("SEG0D","0x02"):"cpr_led34",
+  ("SEG0D","0x04"):"cpr_led25", ("SEG0D","0x08"):"cpr_led17", ("SEG0D","0x10"):"cpr_led41",
+  ("SEG0D","0x20"):"cpr_led46", ("SEG0D","0x40"):"cpr_led1", ("SEG0D","0x80"):"cpr_led9",
+  ("SEG0E","0x01"):"cpr_led36", ("SEG0E","0x02"):"cpr_led35", ("SEG0E","0x04"):"cpr_led26",
+  ("SEG0E","0x08"):"cpr_led18", ("SEG0E","0x10"):"cpr_led42", ("SEG0E","0x20"):"cpr_led47",
+  ("SEG0E","0x40"):"cpr_led2", ("SEG0F","0x01"):"cpr_led39", ("SEG0F","0x02"):"cpr_led7",
+  ("SEG0F","0x04"):"cpr_led27", ("SEG0F","0x08"):"cpr_led19", ("SEG0F","0x10"):"cpr_led43",
+  ("SEG0F","0x20"):"cpr_led104", ("SEG0F","0x40"):"cpr_led3", ("SEG10","0x01"):"cpr_led96",
+  ("SEG10","0x02"):"cpr_led64", ("SEG10","0x04"):"cpr_led28", ("SEG10","0x08"):"cpr_led20",
+  ("SEG10","0x10"):"cpr_led44", ("SEG10","0x20"):"cpr_led105", ("SEG10","0x40"):"cpr_led4",
+  ("SEG10","0x80"):"cpr_led12", ("SEG11","0x02"):"cpr_led65", ("SEG11","0x04"):"cpr_led29",
+  ("SEG11","0x08"):"cpr_led21", ("SEG11","0x40"):"cpr_led5", ("SEG11","0x80"):"cpr_led13",
+  ("SEG12","0x02"):"cpr_led37", ("SEG12","0x04"):"cpr_led30", ("SEG12","0x08"):"cpr_led22",
+  ("SEG12","0x40"):"cpr_led6", ("SEG12","0x80"):"cpr_led14", ("SEG13","0x02"):"cpr_led38",
+  ("SEG13","0x04"):"cpr_led31", ("SEG13","0x08"):"cpr_led23", ("SEG13","0x80"):"cpr_led15",
+  ("SEG14","0x04"):"cpr_led88", ("SEG14","0x08"):"cpr_led80", ("SEG15","0x04"):"cpr_led89",
+  ("SEG15","0x08"):"cpr_led81",
 }
-# Operation LED map (empirically swept, throttled -video none frame-counter; scratchpad/
-# genreled.lua): (SEG,mask) -> cpl/cpr output name. The .lay green_led elements bind to these
-# so MAME lights them from firmware state. Extend as more contexts/buttons are swept.
-OPLED={
-  # transport LEDs (swept transled.lua, rhythm playing): START/STOP + SYNCHRO&BREAK radio-toggle
-  ("SEG00","0x10"):"cpl_led1",  ("SEG00","0x80"):"cpl_led10",
-  ("SEG01","0x02"):"cpl_led3",  ("SEG01","0x04"):"cpl_led9",  ("SEG01","0x08"):"cpl_led8",
-  ("SEG01","0x10"):"cpl_led19", ("SEG01","0x20"):"cpl_led18", ("SEG01","0x40"):"cpl_led17",
-  ("SEG01","0x80"):"cpl_led16", ("SEG02","0x04"):"cpl_led27", ("SEG02","0x08"):"cpl_led26",
-  ("SEG02","0x10"):"cpl_led25", ("SEG02","0x20"):"cpl_led24",
-  # SOUND GROUP category LEDs (swept sgled.lua/varled.lua in bank B; re-keyed to bank-A button bits
-  # by category IDENTITY -- the LED reflects the selected-category STATE, which is bank-independent).
-  # SOUND EXPLORER (bank A SEG12 0x08) has no own LED. Full empirical bank-A re-sweep is a follow-up.
-  ("SEG10","0x10"):"cpr_led48", ("SEG0F","0x10"):"cpr_led49",
-  ("SEG0E","0x10"):"cpr_led50", ("SEG0D","0x10"):"cpr_led51", ("SEG0C","0x10"):"cpr_led40",
-  ("SEG15","0x08"):"cpr_led41", ("SEG14","0x08"):"cpr_led42", ("SEG13","0x08"):"cpr_led43",
-  ("SEG10","0x20"):"cpr_led33", ("SEG0F","0x20"):"cpr_led34", ("SEG0E","0x20"):"cpr_led35",
-  ("SEG0D","0x20"):"cpr_led24", ("SEG0C","0x20"):"cpr_led25", ("SEG15","0x04"):"cpr_led26",
-  ("SEG14","0x04"):"cpr_led27",
-  # MEMORY / EW EXPANSION (bank A SEG13 0x04 / SEG12 0x04).
-  ("SEG13","0x04"):"cpr_led16", ("SEG12","0x04"):"cpr_led17",
-  # (The bank-B "function-button LED" sweep block was removed: its keys are bank-B button bits, now
-  # either dormant or COLLIDING with bank-A SOUND GROUP bits -- e.g. SEG12 0x08 = SOUND EXPLORER,
-  # SEG15 0x04 = BASS. The few still-valid LEDs are hardcoded by state identity at their call sites.
-  # A full empirical bank-A function-button LED sweep is the documented follow-up.)
-}
+# The genre / sound-group / effect / sequencer loops below look up their indicator LED from
+# this same authoritative map (aliased), replacing the old empirical/bank-B guesses.
+GENRE_LED = PANEL_LED
+OPLED = PANEL_LED
+
 E=[]; TXTS={}
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
 def two(n,w,h,s0,s1):
@@ -233,7 +220,7 @@ for i in range(16):
 # PAGE up/down = the CPC control column (SEG16-20), context-routed with no verified bank-A bit -> UNBOUND.
 S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
       # bank A: DISPLAY HOLD = SEG0B 0x40 (HELP-info + STAGE-1 cross-confirmed). LED cpl_led5 (state identity).
-      L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name="cpl_led5"),
+      L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name=PANEL_LED.get(("SEG0B","0x40"))),
       # bank A: EXIT = SEG0B 0x80 (HELP-info verified, panel_family_2.txt).
       P("round_btn_big",1790,852,42,42,tag="SEG0B",mask="0x80"), L("EXIT",1789,838,44,13)]
 S.append('\t</group>')
@@ -324,8 +311,8 @@ for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG04","0x08"),("ONE TOU
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
-LB.append(P("green_led",371,350,8,8,name="cpl_led13"))   # MUSIC STYLE ARRANGER LED (state identity)
-LB.append(P("green_led",551,337,8,8,name="cpr_led30"))   # SPLIT POINT LED (state identity)
+LB.append(P("green_led",371,350,8,8,name=PANEL_LED.get(("SEG04","0x08"))))   # MUSIC STYLE ARRANGER LED (state identity)
+LB.append(P("green_led",551,337,8,8,name=None))   # SPLIT POINT = SEG03 0x80 special-class (no indicator LED) LED (state identity)
 # L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
 LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
@@ -342,7 +329,7 @@ for nm,x,w,h,tg,mk in [("TAP TEMPO",740,105,28,"SEG03","0x02"),("SYNCHRO & BREAK
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
 # FADE in/out LEDs (two, one per half) + SYNCHRO LED
 LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
-LB.append(P("green_led",856+48,364,8,8,name="cpr_led113"))   # SYNCHRO & BREAK LED (state identity)
+LB.append(P("green_led",856+48,364,8,8,name=PANEL_LED.get(("SEG00","0x80"))))   # SYNCHRO & BREAK LED (state identity)
 # bank A (ev2022, arg-mid 0/1): INTRO & ENDING 1 = SEG03 0x01 / 2 = SEG00 0x40 (straddles two SEGs).
 # ev2023 (arg-mid 0/1): FILL IN 1 = SEG03 0x10 / 2 = SEG03 0x04. START/STOP = SEG00 0x10 (ev2020).
 LB.append(L("INTRO & ENDING",740,394,105,9)); LB += pair_h("SEG03","0x01","0x40",740,408,105,50,"1","2",seg2="SEG00")
@@ -353,7 +340,7 @@ LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,10
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
 # first BEAT LED = START/STOP indicator (cpl1, lit on rhythm start); beats 2-4 not yet swept
-LB += [P("green_led",867+i*9,414,8,8, name=("cpr_led36" if i==0 else None)) for i in range(4)] + [L("BEAT",905,452,28,7)]  # START/STOP LED (state identity)
+LB += [P("green_led",867+i*9,414,8,8, name=None) for i in range(4)] + [L("BEAT",905,452,28,7)]  # START/STOP LED (state identity)
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
@@ -416,7 +403,7 @@ RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG12",
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
 RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,TXTH))
 # bank A: TECHNI-CHORD = SEG0D 0x01 (ev20A2), SOLO = SEG0C 0x01 (ev2086). TECHNI-CHORD LED cpr_led73 (state identity).
-RB += [P("green_led",428,274,8,8,name="cpr_led73"), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
+RB += [P("green_led",428,274,8,8,name=PANEL_LED.get(("SEG0D","0x01"))), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
 # bank A PART SELECT group (ev2009, arg-mid 0/1/2) -- all three members now known.
 PARTSEL=[("SEG0D","0x02"),("SEG0E","0x02"),("SEG0E","0x01")]
