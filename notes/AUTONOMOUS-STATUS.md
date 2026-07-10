@@ -94,17 +94,25 @@ note-off=0x0001=0xC000 -- superseded the wrong static guesses). Remaining, in va
    sample-select writes to be meaningful; low priority vs the honest sine.
 5. SD subsystem (separate, PAUSED): finishing it would let boot reach the home screen
    WITH sound enabled (removing the opt-in trade-off). See notes/sd-card-emulation-plan.md.
-6. Cross-model sound RE: PARTIALLY DONE (cron tick 2026-07-10) — KN6000 ALREADY
-   drives its TGs live on key-bed notes (no strap gate; boots to play screen, no SD
-   block — a cleaner platform than KN7000). Register layout DIFFERS: fine pitch =
-   class 0x5800, level 0x4000=0x3FFF, sample params group 0x80. See
-   notes/sound-cross-model-kn6000-kn6500.md (dynamic-capture section). TO MAKE KN6000
-   SING (high value, next): (a) find its octave/coarse pitch register — needs
-   multi-octave notes, but KN6000 :KEYS1 (C5+) gave NO writes, so first check the
-   KN6000 key-bed→note mapping / KEYS1 wiring; (b) add a KN6000 branch to
-   kn7000_tonegen_device::tg_write (pitch from 0x5800+octave, gate/level from
-   0x0000/0x4000); (c) flip kn6000/kn6500 to MACHINE_IMPERFECT_SOUND (likely no CONFIG
-   switch needed). KN5000/KN2400/KN2600 still unchecked.
+6. Cross-model sound RE: INVESTIGATED, KN6000 audio DEFERRED (2 cron ticks 2026-07-10).
+   KN6000 DOES drive its TGs live on key-bed notes (no strap gate; boots to play screen,
+   no SD block). BUT its pitch is NOT extractable by register-diffing: class 0x5800 is a
+   fine/detune field (clusters, non-monotonic), and the pitch-varying info is in the
+   group-0x00 voice-param registers (0x0000/0x0004 move ~6-9/semitone, not clean) — a
+   separate channel space + multisample. Cracking it needs STATIC RE of the KN6000
+   note→pitch routine (unidasm on kn6000_program; analog of KN7000's 0x4844812D) or the
+   undumped IC13/IC14 table + wave ROMs. Do NOT enable kn6000/kn6500 sound with a
+   wrong-pitch guess. Full notes: sound-cross-model-kn6000-kn6500.md. KN5000/KN2400
+   still unchecked.
+
+TOP NEXT (achievable without the SD unblock): item 1 — quantitatively decode the KN7000
+DEFAULT sound's envelope. I already have its group-0x00 register block captured
+(0x0001=5400 key-scaled, 0x0004..000A = AE00/2C00/9900/35E8/25B0, 0x2009=5FFF level).
+Cross-ref kn5000-docs/tone-generator.md (ToneGen_WriteVoiceParams / EG rate encoding) to
+turn those into attack/decay/sustain rates + sustain level, and drive the synth envelope
+from them (replacing the fixed exponential). This refines the WORKING KN7000 sound and
+needs no sound-selection (one default patch is enough to validate a correct decay curve
+vs the captured register values). Static decode first, then apply + rebuild + verify.
 
 ## ★ BREAKTHROUGH 2026-07-10 — the TG gate is found and validated
 
