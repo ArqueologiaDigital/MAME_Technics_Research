@@ -480,14 +480,12 @@ Implementation steps:
  3. Validate offline first (headless `-wavwrite`, since the interpreter is ~5%
     real time): feed a known tone, enable one effect (e.g. reverb, rec09/kernel
     unit 9), confirm the effect in the output (reverb tail / comb spectrum).
- 4. Performance (prerequisite for real-time): port the added multiplier/MAC ops
-    + `reset_pc`/`irq_vector_base` to the SHARC DRC (`sharcdrc.cpp`) and enable it,
-    or lower the IRQ0 rate to the measured block rate. Track as its own step.
-    (Confirmed the DRC generates inline UML per compute op and hard-faults on
-    unimplemented ones — `generate_unimplemented_compute` → `unimplemented_compute`,
-    no interpreter fallback — so every op I added to sharcops.hxx must be re-added
-    to sharcdrc.cpp before the DRC can run this kernel. The SHARC currently runs on
-    the interpreter.)
+ 4. Performance — DONE (2026-07-10, kn7000_mame 3fa7e3a). The SHARC DRC is now
+    enabled for the 21065L; DSP-on runs at ~72% (≈ DSP-off), up from ~36-48% on the
+    interpreter. Required porting the 21065L memory map into the DRC/front-end
+    (interrupt vector base, loop map, m_blocks fast-path bypass + real internal/
+    external RAM maps) and a COMPUTE() fallback for the fixed-point multiplier/MAC
+    ops + a BIT TOGGLE ASTAT implementation. See AUTONOMOUS-STATUS.md for details.
 
 Open question — where are the SPORT DMA audio buffers? The kernel writes DMA
 pointers 0x4309..0x4341 (→ DM 0x33..0x7B). 0x4300 sits below the internal-SRAM

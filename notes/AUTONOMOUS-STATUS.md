@@ -51,6 +51,39 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★ DSP DRC ENABLED 2026-07-10 (Felipe: "port the ops to sharcdrc.cpp — yes let's do it!")
+
+The SHARC now runs on MAME's recompiler, not the interpreter: DSP-on went from
+~36-48% to ~72% real time — essentially the DSP-off speed (the machine is now
+MN10300-interpreter-bound, the SHARC is near-free). Committed kn7000_mame 3fa7e3a,
+published. Felipe also provided the ADSP-21065L Technical Reference PDF (in the repo
+root) — used it to confirm the 21065L memory map (internal SRAM 0x8000-0x1FFFF,
+external memory 0x20000+, IVT at 0x8000).
+
+What the DRC needed (MAME's SHARC DRC was 2106x-only; sharcdrc.cpp + sharcfe.cpp now
+overlaid too, symlinked by build.sh):
+ - `m_dsp->enable_recompiler()` in the driver (the DRC is opt-in per driver).
+ - Interrupt vectoring: hardcoded 0x20000 -> `irq_vector_base()` (0x8000).
+ - Front-end loop map: `l2 == 1` assert -> device internal-memory base (so the
+   kernel's DO..UNTIL loops compile).
+ - Internal-SRAM fast path (m_blocks, unpopulated on the 21065L): keyed off new
+   `drc_sram_base()`; 21065L returns out-of-range so all accesses go through the
+   address map. THE SEGFAULT was the kernel clearing an external delay buffer at
+   0x20000, which the 2106x path treated as internal SRAM -> null m_blocks store.
+ - Mapped the 21065L's real memory: internal SRAM 0x8000-0x1FFFF + external SDRAM
+   0x20000-0xFFFFF (delay lines; also needed for F.3 audio).
+ - Fixed-point multiplier/MAC ops (single + multi function): the DRC stubbed them
+   to abort; `generate_unimplemented_compute` now falls back to the interpreter's
+   COMPUTE() for the one instruction (fast-ireg flush + astat pack/unpack around
+   the C-call). Blocks compile instead of forcing whole-device interpretation.
+ - `BIT TOGGLE ASTAT` (main-loop ping-pong flag): implemented (was abort).
+Perf caveat is RESOLVED. Remaining SHARC-DRC follow-ups (not blocking): self-
+modifying-PM invalidation is disabled for the 21065L (fine — effect programs are
+host-uploaded, not SHARC-written; but effect-SWITCHING may need block invalidation
+on the host PM write); PM/DM internal-SRAM aliasing not modelled (filter state read
+via PM 0x9800 currently reads its own PM RAM, not the uploaded DM coefficients) --
+matters for correct AUDIO (F.3), not for running.
+
 ## Cron-tick verification (2026-07-10, post-F.2)
 Published binary re-verified: `kn7000-emulator/kn7000` is byte-identical (md5
 e50d8ac2…) to the validated build-tree binary; a fresh default-config run boots
