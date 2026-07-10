@@ -438,6 +438,52 @@ Two tracks, decided when the specs exist:
   An intermediate HLE option: interpret captured effect parameters directly
   (skip the SHARC) — decide with data.
 
+#### F.1 + F.2 — DONE (2026-07-10, kn7000_mame 3aca274, validated)
+
+`adsp21065l_device` added; host-boot upload decoded (`dsp_data_w`) and the
+recovered kernel now boots and runs to its IRQ0-driven main loop with no faults
+(opt-in behind CONFIG bit0, default OFF). See `AUTONOMOUS-STATUS.md` for the full
+write-up (upload framing, release-on-final-bare-0xA0, reset_pc=0x8004 → entry
+0x8005, irq_vector_base=0x8000, the added fixed-point multiplier/MAC ops, and the
+provisional 44.1 kHz IRQ0 tick). Blog: kn7000 Part 11.
+
+#### F.3 — SPORT serial-audio (NEXT) — concrete plan from the kernel RE
+
+The kernel is a per-frame engine paced by **IRQ0** (external codec frame sync;
+the SPORT RX/TX interrupt vectors are deliberately RTI stubs). Its main loop
+(PM 0x807a): wait on R13 (frame flag set by the IRQ0 ISR at 0x8020) → set up the
+DM cursors (I1=0xC004 params, I8=0x9800 state, I4=0xC342 coeffs) → `CALL 0x80F7`
+once per effect unit (~10 units) → read the hardware input pin (`IF FLAG3_IN`,
+0x8098) → toggle the ping-pong bank bit (ASTAT 0x100000) → ack the ISR handshake
+(`BIT CLEAR MODE2 0x40`, 0x809c) → loop. It does **not** block on any SPORT/DMA
+status, so audio must arrive/leave via the **SPORT DMA autonomously**.
+
+Boot-init (PM 0x8D00) programs the interface (all confirmed in the disasm):
+ - SPORT control (IOP DM 0xE0/0xF0 = 0x013CB173, 0xE1/0xF1 = 0x013C3173) — the
+   two serial ports (one RX from the codec, one TX to the DAC).
+ - SPORT DMA chain pointers (DM 0x33..0x7B ← 0x4309..0x4341) — 8 descriptors at
+   DM 0x4300+ (in the uploaded DM data); their count field = the audio block size
+   (⇒ the real IRQ0 rate = sample_rate / block; measure it to replace the 44.1 kHz
+   guess and cut the interrupt overhead).
+ - SDRAM timing/control (DM 0x02=0x200D0001, 0x2E=0x8852A05B) + a full zero of the
+   external delay RAM (SDRAM 0x80000+, the reverb/echo delay lines).
+
+Implementation steps:
+ 1. Model the two SPORTs + their DMA on `adsp21065l_device` (the "genuinely new"
+    MAME piece): honor the SPCTL/DMA IOP registers so an RX DMA fills a DM input
+    buffer each frame and a TX DMA drains a DM output buffer. Identify the in/out
+    buffer DM addresses (follow the DMA descriptors at DM 0x4300+ and the cursors
+    the unit dispatch reads/writes).
+ 2. Route audio: TG output (`kn7000_tonegen_device`) → SPORT0 RX input; SPORT1 TX
+    output → the speaker `sound_stream`. Replace the synthetic `dsp_audio_tick`
+    with the SPORT/codec frame sync driving IRQ0 at the true rate.
+ 3. Validate offline first (headless `-wavwrite`, since the interpreter is ~5%
+    real time): feed a known tone, enable one effect (e.g. reverb, rec09/kernel
+    unit 9), confirm the effect in the output (reverb tail / comb spectrum).
+ 4. Performance (prerequisite for real-time): port the added multiplier/MAC ops
+    + `reset_pc`/`irq_vector_base` to the SHARC DRC (`sharcdrc.cpp`) and enable it,
+    or lower the IRQ0 rate to the measured block rate. Track as its own step.
+
 ### Phase G — Wave-ROM dumping (physical; folded into the Phase H backup utility)
 
 Rev 2 collapses most of the old Phase G into **Phase H** (the ROM-backup
