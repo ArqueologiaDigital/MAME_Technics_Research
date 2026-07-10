@@ -143,6 +143,11 @@ the KN5000 hypotheses against the working KN7000; cross-model sound docs KN5000/
 complete); minor doc/website polish; re-verify the published binary.
 Avoid: risky shared-core changes, the user-paused SD subsystem, wrong-pitch guesses.
 
+DONE (tick #8): brought the persistent memory current — the kn7000-sound-subsystem memory
+still said "awaiting Felipe's review / run the TG diagnostic" (badly outdated) and cited the
+wrong pitch class (0x3000); corrected to "KN7000 sings, pitch=0x2401, DSP LLE awaits greenlight",
+and fixed the MEMORY.md index lines. (Memory persists via the filesystem; no git needed.)
+
 NOTE (tick #7): the safe-small-item menu is nearly exhausted and the sound subsystem is at a
 strong, complete, well-documented plateau. The remaining substantial work (effects-DSP LLE)
 needs Felipe's greenlight on the shared-core effort. Future autonomous ticks: prefer
