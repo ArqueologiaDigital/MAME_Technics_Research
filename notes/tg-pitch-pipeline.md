@@ -1,7 +1,21 @@
-# TG pitch pipeline — toward CORRECT demo/style pitch (investigation, 2026-07-10)
+# TG pitch pipeline — CORRECT demo/style pitch (SOLVED, 2026-07-10)
 
 Felipe's ask: properly compute the correct pitches of the DEMO note events, then fix.
-Status: investigation in progress (static RE fanned out; empirical anchors below).
+**STATUS: FIXED (commit de4fc88).** Musical pitch is resolved from the library's
+per-slot VOICE RECORD at 0x500AF940 + slot*0xB4 (128 slots; 0x00-0x3F = 0x98050000,
+0x40-0x7F = 0x98040000): field **+0x0C notePitch16 = (note<<8)+0x80+partTranspose+
+masterTune+scaleStretch** = the intended musical pitch in 1/256-semitone units,
+populated race-free BEFORE the note's first TG pitch write. Other key fields: +0x08
+byte = active(bit7)|internal note(0-6); +0x07 part; +0x10 velocity; +0x0A base
+pitch16; +0x3C/40/44 element descriptor ptrs. Unpitched exp-7 drums leave
+notePitch16 at the constant 0x4280 -> legacy fallback. Held-voice pitch rewrites =
+RELATIVE bends (dPitch18/0x400 semitones). Class 0x2400 writes (pitch18 bit16=0,
+previously DROPPED note-ons) now handled. KEYBED FIFO is a KEY INDEX (internal note
+= index+36; low key = C2 = MIDI 36) -> KN_KEY codes shifted -36 (C4 = 0x18).
+Validated: keybed C4/C5 exact; demo bass line == sequence blob verbatim;
+**CHORD FINDER FIXED as a side effect (C-Maj ear -> G3+C4+E4 exact)** — its notes
+were always right, and the record resolve bypasses the NULL-descriptor pitch math.
+RE chain adversarially verified (voice-record + note-sources agents CONFIRMED).
 
 ## The core discovery: 0x2401 is NOT absolute pitch
 

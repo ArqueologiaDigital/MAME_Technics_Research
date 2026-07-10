@@ -51,6 +51,21 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★★★★ CORRECT MUSICAL PITCH 2026-07-10 — demo/chord-finder/keybed all in tune (commit de4fc88)
+
+Felipe asked for correct DEMO pitches; root cause found + fixed. TG pitch class
+0x2401 is NOT absolute pitch: pitch18 = ((class bit0)<<16)|data is SAMPLE-ZONE-
+RELATIVE (descriptor tuning baked in). Fix = resolve musical pitch from the lib
+voice record (0x500AF940 + slot*0xB4, +0x0C notePitch16 = musical pitch in 1/256
+semis incl. all transposes; race-free before the TG write; drums=0x4280 const ->
+legacy fallback; held-voice rewrites = relative bends; class-0x2400 note-ons no
+longer dropped; keybed FIFO = key INDEX -> KN_KEY codes -36). Validated: keybed
+C4=261.6Hz exact; demo bass == sequence blob; **CHORD FINDER NOW PLAYS TRUE C-E-G**
+(the old "garbage voicing" = NULL-descriptor pitch math, bypassed by the resolve).
+Full RE: notes/tg-pitch-pipeline.md (workflow-verified). NOTE: pitch-formula
+finder/verify results may still land in wf_a8b4db86-02c journal — harvest for the
+descriptor-inversion appendix (documentation-only; implementation already shipped).
+
 ## ★★★★ TEMPO TIMER MODELED 2026-07-10 — DEMOS & RHYTHM ACCOMPANIMENT PLAY (commit 60d5392)
 
 THE DEMO STALL IS FIXED. Root cause: ALL sequenced playback is clocked by on-chip 16-bit
