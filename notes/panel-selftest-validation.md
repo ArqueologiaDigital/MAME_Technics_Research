@@ -71,3 +71,29 @@ upper bits) are derived from the same clean remap but not yet individually spot-
 
 Full empirical confirmation via the real Panel SW & LED test still wants the boot-combo entry
 (C#3+D#3+C#4) -- being cracked -- but the formula is already firmware-authoritative + validated.
+
+## USING the self-test mode (2026-07-10) -- flag 0x5006BFB2, + validation via it
+Felipe: "use the LED & Button self-test mode." The service Panel SW & LED test (manual 8.5) is
+gated by RAM flag 0x5006BFB2 -- when the panel dispatcher (0x484ADB59 @0x484ADB72) reads it as 1,
+a button press routes to the InOut test handler 0x484A0CB0, which lights that switch's LED from
+PanelSwitchClassTable. Behaviour (observed): the LED lights ~1 s after the press and ACCUMULATES
+(matches the manual's "press all buttons -> ALL DEVICE OK"). Enabler: tools/panel_selftest.lua
+(holds the flag = 1 every frame).
+
+RAN IT and it CONFIRMED the PANEL_LED map: pressing each button lights exactly its formula LED.
+- delta sweep (13 buttons across all row ranges): 10/13 lit exactly the formula LED; the 3 "misses"
+  were LEDs already lit (home state / prior accumulation), not errors.
+- membership sweep (27 buttons): 24/27 have their formula LED lit after pressing (incl. rows 14-19:
+  BRASS cpr81, SAX cpr80, PM1 cpr72, PM8 cpr15 -- the rows I was unsure of, now confirmed). The 3
+  misses were leakage on that long automated run.
+
+LIMITATION (honest): we cannot enter the test SCREEN (no "ALL DEVICE OK" text, no clean isolation).
+The boot key-combo is read by the panel/key SUB-CPU, which the emulator does not model at power-on
+(subagent-verified: injecting the keys into the note FIFO does nothing). And forcing the flag on the
+HOME screen is a HYBRID -- the test handler lights the LED but the home screen ALSO processes the
+button (e.g. a genre press changes the displayed rhythm), so LEDs leak/drift over long sweeps. This
+does NOT weaken the LED validation: the switch-class (test) LED EQUALS the normal-operation LED
+(separately proven: genre0->cpl2, ROCK&POP->cpl18 in normal mode), so the map is right either way.
+tools/panel_selftest.lua works best one-button-at-a-time (a quick "does button X light LED Y?" check).
+To get the full interactive test screen would need modeling the sub-CPU power-on key report OR forcing
+the MILK test-window object create (StestWindowProc 0x484A4A2B / 0x50009) -- both larger efforts.

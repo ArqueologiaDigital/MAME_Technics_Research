@@ -92,6 +92,31 @@ kbd_midi_rx (MIDI). Verified: FIFO tap press=0x6418/release=0xFF98(bit7=1); disa
 FINDER held-key dots MOVE F->G (don't accumulate) on release. Published. notes/keybed-fifo-makebreak.md.
 (Bonus: confirmed the STAGE-2 bank-A LCD soft-key SEG11 0x01 toggles CHORD FINDER on APC SELECT.)
 
+## ★ PANEL BUTTONS + LEDs VALIDATED/FIXED 2026-07-10 (Felipe: use the SW&LED self-test; map all buttons)
+Used the firmware's OWN self-test data as the authoritative source (commits faa9aa4 / cdf64f5 / 82d520a):
+- BUTTON VALIDATION: PanelSwitchClassTable @0x4860C9F4 (switch#=normSeg*8+bit -> [LED row,col] or
+  special class). Cross-checked vs the bank-A INPUT_PORTS -> the real-button set MATCHES, no phantoms
+  (SEG16-1B/20 correctly have no LED = CPC value column; SEG1D = SD switches; UNUSED bits = empty slots).
+- DECORATIVE BUTTONS MAPPED (empirical app/screen sweep) + bound in the layout + named in INPUT_PORTS:
+  PANEL MEMORY 1-8 (ev2010 arg 0-7 recall; clickable pie-slice buttons on the dial, slice order per
+  Felipe = [2,1,8,7,6,5,4,3]), BANK VIEW (ev2013), NEXT BANK (ev2012), FAVORITES (ev20AE), MUSIC
+  STYLIST / CUSTOMIZE / SD MENU / SEQUENCER PLAY / EASY RECORD (ev2040 apps). Verified live (PM1->PMEM A-1).
+- LED MAP SOLVED + APPLIED (firmware-authoritative, live-validated): led=(remap[row]&0x3f)*8+col_index,
+  board=cpl if remap[row]&0xc0 (row-remap table @0x48615058; row/col from PanelSwitchClassTable). Validated
+  live: genre0->cpl_led2, ROCK&POP->cpl_led18, PIANO->cpr_led44, PM1->cpr_led72 (all exact). gen_lay.py now
+  computes PANEL_LED[(SEG,mask)] for all 91 button LEDs, replacing the old bank-B/state-identity guesses.
+  Full detail: notes/panel-selftest-validation.md. Diagnostic-mode boot entry = dead end for key injection
+  (sub-CPU reads the combo, not the note FIFO -- verified); static-table approach supersedes it.
+STILL OPEN (minor): CUSTOM PANEL / PANEL MEMORY SET (no distinct event found), PAGE / CONTRAST (CPC
+value-encoder column -- a value-input model, not a simple bind). Also earlier this session: KEYBED
+STUCK-NOTES fix (make/break = bit7; commit 09870dc).
+
+## Cron-tick verification (2026-07-10, post panel buttons/LEDs)
+Re-verified the PUBLISHED deliverable after the panel button/LED work + republish: binary md5-identical
+to the build tree; DEFAULT boot reaches the PMEM home/play screen with the full new layout (RHYTHM/SOUND
+LEDs lit, PANEL MEMORY dial with its 8 clickable buttons + LEDs) and no fault; sound intact (C4 = 262 Hz,
+RMS 2685). The layout changes are input/display artwork only and cannot touch the sound engine -- confirmed.
+
 ## Cron-tick verification (2026-07-10, post panel bank-A STAGE 2)
 Re-verified the PUBLISHED deliverable (kn7000-emulator/, run as Felipe will) after the layout
 rebuild + republish. DEFAULT boot (empty cfg -> driver defaults, TG-sound bit1 ON) reaches the
