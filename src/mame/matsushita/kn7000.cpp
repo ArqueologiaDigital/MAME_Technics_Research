@@ -662,11 +662,8 @@ private:
 	// as real-time Start/Stop. cpsd_queue() pushes CPSD->main bytes into the ch2
 	// RX FIFO (status bits in sio_r reflect it); cpsd_rx_byte() consumes
 	// main->CPSD bytes. Frame payload semantics still under RE.
-	void cpsd_queue(const uint8_t *bytes, int n);   // deliver a CPSD->main frame into the ch2 RX FIFO
-	void cpsd_rx_byte(uint8_t data);                // CPSD HLE: consume a main->CPSD command byte
-	emu_timer *m_cpsd_alive_timer = nullptr;        // periodic CPSD->main 0xFE keep-alive
-	TIMER_CALLBACK_MEMBER(cpsd_alive_tick);
-	bool    m_cpsd_probed = false;         // one-shot: probe frame sent on first ch2 poll
+	void cpsd_queue(const uint8_t *bytes, int n);   // (unused since the ch2=MIDI-2 finding; kept for a future SD transport)
+	bool    m_cpsd_probed = false;         // (retired with the ch2 probe)
 	emu_timer *m_panel_timer = nullptr;
 	int     m_panel_pos = 0;               // position within the 7-byte TX frame
 	uint8_t m_panel_p1 = 0, m_panel_p2 = 0; // frame payload bytes (positions 2 and 4)
@@ -1312,19 +1309,13 @@ uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
 		if (ACCESSING_BITS_8_15)
 			return uint16_t(sio_rx_pop(ch)) << 8;
 		return 0;
-	case 0xc:                    // status: bit4 = RxRDY; ch2 adds bit6/bit7 (see below)
-		if (ch == SIO_SD && !m_lib_mirror)
-		{
-			// ch2/CPSD status semantics (RE 2026-07-10; link classifier 0x484b28ee +
-			// ready-check helper 0x484b2889 which polls bit6|bit4):
-			//   bit6 = TxRDY (HLE UART: always ready)
-			//   bit4 = RxRDY (a CPSD byte is queued)
-			//   bit7 = RX EMPTY -- the classifier reads the RX byte at +9
-			//   unconditionally and treats bit7-set as "no byte" (its read burst
-			//   ends and the SD link task yields). The earlier "bit7 diverts the
-			//   firmware" observation was this empty marker, not a frame flag.
-			return 0x0040 | (sio_rx_ready(ch) ? 0x0010 : 0x0080);
-		}
+	case 0xc:                    // status: bit4 = RxRDY
+		// ch2 is the MIDI-2 UART (adversarially verified RE 2026-07-10; earlier
+		// "CPSD/SD link" attribution was wrong -- see notes/sd-card-emulation-plan.md).
+		// Its RX classifier 0x484b28ee treats bit7 as RX-empty and its TX path
+		// polls bit6 as TxRDY, but modeling those bits changes boot-time MIDI-2
+		// behaviour and wedged the boot (black LCD) -- keep the historical
+		// RxRDY-only status until MIDI-2 OUT modeling is actually wanted.
 		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
 	}
 	return 0;
@@ -1448,44 +1439,12 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
-		// KN7000: ch2 is the SD/CPSD link, not MIDI-2 (notes/sd-card-emulation-plan.md).
-		// Route its TX to the CPSD HLE. KN6000/KN6500 keep the MIDI passthrough.
-		if (ch == SIO_SD && !m_lib_mirror)
-		{
-			cpsd_rx_byte(data);
-			break;
-		}
 		// Serialize the byte out through the channel's UART to its MIDI OUT port.
+		// (ch2 = MIDI-2, verified 2026-07-10; the interim CPSD hook + keep-alive
+		// injected phantom MIDI bytes and wedged the boot -- removed.)
 		m_midi_uart[ch - SIO_MIDI1]->write(data);
 		break;
 	}
-}
-
-// CPSD (SD sub-CPU) HLE: consume one command byte from the main CPU on SIO ch2
-// and produce the sub-CPU's response into the ch2 RX FIFO. Protocol under RE.
-// First handshake element (captured live): the SD link task pings with 0xFE
-// (active-sense-style keep-alive on the shared UART framing) and waits for a
-// reply before advancing its link state machine (0x484b28ee states, link-up
-// flag 0x50150ade).
-void kn7000_state::cpsd_rx_byte(uint8_t data)
-{
-	logerror("CPSD TX->HLE: %02X\n", data);
-	if (data == 0xFE)
-	{
-		// Main pinged us (its own active sense). Answer immediately and start
-		// the periodic keep-alive: the firmware's RX-0xFE handler sets alive
-		// bit6 @0x50150f55 and a watchdog counts to ~0x87 ticks between pings.
-		static const uint8_t pong[] = { 0xFE };
-		cpsd_queue(pong, sizeof(pong));
-		if (m_cpsd_alive_timer->remaining().is_never())
-			m_cpsd_alive_timer->adjust(attotime::from_msec(200), 0, attotime::from_msec(200));
-	}
-}
-
-TIMER_CALLBACK_MEMBER(kn7000_state::cpsd_alive_tick)
-{
-	static const uint8_t ka[] = { 0xFE };
-	cpsd_queue(ka, sizeof(ka));
 }
 
 // One decoded LED-command frame: ADDR selects an 8-LED register on one of the
@@ -1556,7 +1515,7 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 // firmware has already seen bit7 of the status set (cpsd_queue makes it read set)
 // and enabled the ch2 RX interrupt; each timer tick clocks one byte into the ch2
 // RX FIFO and fires group 0x14, which the firmware's ISR reads from +9.
-void kn7000_state::cpsd_queue(const uint8_t *bytes, int n)
+[[maybe_unused]] void kn7000_state::cpsd_queue(const uint8_t *bytes, int n)
 {
 	// Deliver the whole frame into the ch2 RX FIFO at once; the status bits (bit7 +
 	// bit4, both from sio_rx_ready) then reflect it and the firmware clocks the
@@ -2049,7 +2008,6 @@ void kn7000_state::machine_start()
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_tg_gate_timer = timer_alloc(FUNC(kn7000_state::tg_gate_poke), this);
 	m_tempo_timer = timer_alloc(FUNC(kn7000_state::tempo_tick), this);
-	m_cpsd_alive_timer = timer_alloc(FUNC(kn7000_state::cpsd_alive_tick), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
@@ -2128,7 +2086,6 @@ void kn7000_state::machine_reset()
 	m_tmr7_mode = 0;
 	m_tmr7_base = 0;
 	m_tempo_timer->adjust(attotime::never);
-	m_cpsd_alive_timer->adjust(attotime::never);
 }
 
 void kn7000_state::kn7000(machine_config &config)
