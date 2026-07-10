@@ -90,13 +90,40 @@ reference architecture (custom_data IC19 programmed by the Initial Data disk;
 rhythm_data IC14; table_data IC1/IC3). Deliverable: window -> chip table in
 notes/table-rom-structure.md.
 
-Phase B — hunt the "Technics Rhythms" resource in data we already have. Search
-(1) the DEFLATE payload of 01CTMINI.AST + the other idd7000 files, (2) the kn7-16
-update-disk payloads, (3) the KN7000 CD-ROM downloads, for the resource signature
-(the 16-byte "Technics Rhythms" header + count~221 + u24BE offset tables, format
-known from the stub at 0x48729988). If found: install at a probed window, boot,
-expect the style list to show real names. Also check the KN5000/KN6000 dumps for a
-sibling resource to learn the full format.
+Phase B — hunt the "Technics Rhythms" resource in data we already have.
+**DONE 2026-07-10 — EXHAUSTIVE NEGATIVE.** Searched: (1) 01CTMINI.AST DEFLATE payload
+(0x1E0000 bytes) + all idd7000 files; (2) the kn7-14 TABLE update disks JKT1/JKT2.SLD
+(LZSS-decompressed: full image = 0x3E94D4 bytes = BYTE-SIZE-IDENTICAL to our dumped
+table ROM, same truncated copy at +0x3E828C only) and the kn7-16 program disks;
+(3) the KN7000 CD-ROM (PC software only), scd7000 (style converters), cb7-update.
+NO full resource anywhere, incl. raw-DEFLATE scans of every >10KB binary. The
+update-disk catalog (TECHNICS.PR*) lists KN7KR1/2 RHYTHM and KN7KCT CUSTOM-DATA disk
+types, but none were ever distributed on the archive sites we have -- the factory
+rhythm/style flash is factory-programmed only. => Phase C (real-HW dump) is the ONLY
+faithful source; Phase D (labeled synthetic) is the only interim.
+
+### Appendix: probe/resource mechanics (for Phase C/D implementation)
+- Prober 0x4843D6DC: strncmp "Technics Rhythms" at 0x48010000, 0x40610000,
+  0x40010000, 0x54E10000, 0x40810000, then UNCONDITIONALLY returns 0x54E00000 as the
+  last resort. Selector 0x4843385E inits the winner; a strncmp mismatch (ret -3)
+  falls back to the prog-ROM stub 0x48729988. So **0x54E00000 is the natural install
+  window** (no strncmp gate ahead of it; driver has no map conflicts there).
+- Resource format (byte-verified on the stub + the truncated table copy): base+0 =
+  "Technics Rhythms" (16B); u24BE@base+0x18 -> header block whose +2 u16BE = COUNT
+  (*0x50034B74; stub=1, real=0xDD=221); u24BE@base+0x1E -> subtable of u24BE
+  name-record offsets (x3 bytes); u24BE@base+0x1B (via the table-ROM directory
+  dirbase u32@0x4800014C) -> nametable of 0x800 u16BE entries (*0x50034B7C).
+  Entry semantics in resolver 0x48433AC4: plain entry < count -> name =
+  base + u24BE(subtable + entry*3), 13-byte records; entry&0xC000==0x4000 ->
+  secondary subtable *(0x50034B90) (= table ROM 0x48244F78, INTACT in our dump);
+  entry&0xC000==0x8000 -> one indirection through the nametable then as plain.
+- The real resource is LARGE: the truncated copy's subtable has offsets up to
+  +0x22B434 (~2.3 MB of records) -- the full flash image is multi-MB, reinforcing
+  that it lives on the big undumped rhythm/style flash chip.
+- A Phase-D synthetic needs only: header + count=0xDD + a self-consistent subtable +
+  221 x 13-byte name records built from the REAL names in prog-ROM StyleGenreTable
+  0x4873ACC0 / StyleRecordTable 0x4873BEE8 (+ the intact 0x48244F78 records), a few
+  KB total, installed at 0x54E00000. Label SYNTHETIC per the integrity policy.
 
 Phase C — real-hardware dump (the definitive fix). Felipe's KN7000 can dump the
 missing flash itself: the ROM-backup route in notes/rom-backup-and-update-format.md
@@ -130,4 +157,10 @@ real reload-programmed tempo timer) and KN2400/2600 once their drivers mature.
   uniformly 0x845A; sub[0] -> "  8 Beat 1" at 0x32AB42).
 - Chord chain: root/type tables verified as valid data; part-block arithmetic and
   NULL default confirmed; pitch formula matches all observed values including the
-  root-invariant slot. (Independent verification pass pending completion.)
+  root-invariant slot. Independent verification pass: CONFIRMED (12 evidence items
+  re-derived, incl. the lib default-assign 0x4C00C233 keyboard-part gate).
+- Demo engine (independent 4th investigation): demo data = 10 songs, zlib-compressed
+  setup+sequence+sound blobs, ENTIRELY in the dumped program ROM, loads correctly --
+  the stall was purely the clock chain, matching the fix. Useful state addrs: RUN
+  gate 0x5014966E bit15, stop 0x50149656, count-in 0x50149696 bits15&7, clock-source
+  byte 0x50149662 (internal vs MIDI-clock).

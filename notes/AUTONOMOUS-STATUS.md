@@ -69,9 +69,15 @@ notes/sequenced-playback-and-style-data-rootcause.md):
    0x21 tone block (0x500D0B34) left at NULL boot default -> garbage pitch math
    (root-invariant 0x37B0 = descriptor exponent 7 = note-independent). Chord finder
    retested post-timer-fix: still garbage, as predicted (data, not clock).
-NEXT per the plan: service-manual chip-select map for the probe windows; hunt the
-"Technics Rhythms" resource in idd7000/.AST payloads; real-HW flash dump via the
-ROM-backup route; labeled-synthetic placeholders as interim.
+Phase B (resource hunt in distributed data) DONE 2026-07-10: EXHAUSTIVE NEGATIVE — not
+in the .AST payload, not in the kn7-14 TABLE update disks (their decompressed image ==
+our dump byte-size, same truncation), not in kn7-16/CD-ROM/scd7000/cb7-update. The
+factory rhythm/style flash was never distributed. NEXT per the plan: Phase A
+(service-manual chip-select map for windows 0x40xxxxxx/0x54Exxxxx), Phase C (real-HW
+flash dump via the ROM-backup route — needs Felipe), Phase D (labeled-synthetic name
+resource at 0x54E00000, ~3KB, full recipe + probe mechanics in the appendix of
+notes/sequenced-playback-and-style-data-rootcause.md — a clean, well-scoped item but a
+DESIGN CALL (synthetic data policy) — get Felipe's nod first).
 
 ## ★★★ SD-MENU BLOCKER SOLVED 2026-07-10 — playable sound on the PLAY SCREEN (commit dbe0786)
 
