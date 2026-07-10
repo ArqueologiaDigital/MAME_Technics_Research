@@ -51,6 +51,43 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## ★★ F.3 AUDIO ROUTING WORKS 2026-07-10 — TG audio flows THROUGH the effects DSP (audible)
+
+The tone-generator audio now runs through the ADSP-21065L and out to the speakers.
+Felipe confirmed AUDIBLE: DSP off = TG passes through unchanged; DSP on = the output
+sounds DIFFERENT (the DSP is processing the sound). Committed kn7000_mame 4514170,
+published, blog pending. Built on the verified F.3 research (notes/f3-implementation-
+plan.md) + runtime probes (notes/f3-iop-runtime-capture.md).
+
+What shipped:
+ - Step 1 (aliasing, commit 61556c3): 21065L internal SRAM 0x9000-0x1FFFF now shared
+   across the PM and DM buses (address-map handlers with the core's <<16/>>16 48-bit
+   convention, DRC-safe) so the biquad reads the host-loaded coefficients (verified
+   PM(0x9800)==DM(0x9800)) instead of zeros.
+ - Step 2 (commit 4514170): iop65l_w walks the kernel's DMA transfer-control blocks to
+   derive the 8 SPORT autobuffer bases at runtime (TX0=0xC342, RX0=0xC362, etc.).
+ - Verified the audio contract by probe: 1 stereo frame per IRQ0 (2 out words/int ->
+   44.1kHz/sample, tick rate is right), in/out are contiguous 8-frame rings 0x20 apart,
+   default passthrough copies in->out. SPORTs externally clocked; audio via DMA not PIO.
+ - Step 3 (routing): kn7000_dsp_bridge_device between TG and speakers; its stream and the
+   dsp_audio_tick swap frames through two rings (feed TG->DSP input, take DSP output->
+   speakers). Transparent when the DSP is off (no regression, verified).
+
+CFG GOTCHA (cost hours): the CONFIG bits are SEPARATE PORT_CONFNAME fields -> the cfg
+needs one <port> line PER bit with its own mask: bit0 (DSP) = mask "1" value "1", bit1
+(TG sound) = mask "2" value "2". A single mask="3" value="2" line does NOT set bit1.
+
+NEXT / open:
+ - Characterize the "different sound": is an effect actually loaded (wet reverb/chorus)
+   or are there dry-path artifacts (ring-sync/latency)? Load a known effect preset and
+   compare; FFT the output. The default slot is a dry copy, so audible effect needs the
+   firmware to SELECT/upload an effect microprogram (rec05-76) to PM 0x8400.
+ - Ring-sync robustness (small latency buffer) if the effect sounds glitchy.
+ - SD-card menu still shows when the TG gate is opened (known: kn7000-sd-strap-gate) --
+   separate issue, sound works regardless of screen.
+ - Dry/wet mix + SPORT1 role: only if the output is 100% wet (hardware may sum a dry
+   bypass). PM/DM 40-bit data path unmodelled (fine unless an effect enables it).
+
 ## ★★ DSP DRC ENABLED 2026-07-10 (Felipe: "port the ops to sharcdrc.cpp — yes let's do it!")
 
 The SHARC now runs on MAME's recompiler, not the interpreter: DSP-on went from
