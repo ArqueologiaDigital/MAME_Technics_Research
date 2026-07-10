@@ -483,6 +483,23 @@ Implementation steps:
  4. Performance (prerequisite for real-time): port the added multiplier/MAC ops
     + `reset_pc`/`irq_vector_base` to the SHARC DRC (`sharcdrc.cpp`) and enable it,
     or lower the IRQ0 rate to the measured block rate. Track as its own step.
+    (Confirmed the DRC generates inline UML per compute op and hard-faults on
+    unimplemented ones — `generate_unimplemented_compute` → `unimplemented_compute`,
+    no interpreter fallback — so every op I added to sharcops.hxx must be re-added
+    to sharcdrc.cpp before the DRC can run this kernel. The SHARC currently runs on
+    the interpreter.)
+
+Open question — where are the SPORT DMA audio buffers? The kernel writes DMA
+pointers 0x4309..0x4341 (→ DM 0x33..0x7B). 0x4300 sits below the internal-SRAM
+code/data (Block 0 ≈ 0x8000+, Block 1 = 0xC000+; IOP = 0x0-0xFF) in the normal
+map, so it is most likely a **short-word (16-bit) alias** of internal SRAM — the
+codec moves 16-bit samples, and SHARC internal memory is triple-mapped (normal /
+short / long word). HYPOTHESIS, not yet verified: the ADSP-21065L-EP datasheet in
+the repo is the 14-page short (electrical/pinout) datasheet and lacks the
+short-word address table — need the ADSP-21065L SHARC Hardware Reference for the
+exact aliasing. F.3 must model that aliasing (or place the DMA'd samples where the
+effect units read them) for audio to flow. Don't state the map as fact until the
+HW Reference (or a runtime cross-check of what the unit dispatch reads) confirms it.
 
 ### Phase G — Wave-ROM dumping (physical; folded into the Phase H backup utility)
 
