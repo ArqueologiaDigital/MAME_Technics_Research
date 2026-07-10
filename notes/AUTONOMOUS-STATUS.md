@@ -51,6 +51,19 @@ cron tick.
 The KN7000 now produces AUDIBLE, correctly-pitched notes driven by its own firmware
 voice engine. Committed (96c702c) + published (kn7000-emulator/ binary @ 00:57).
 
+## SD PANEL SWITCHES LIVE + 61-KEY MIDI BED 2026-07-10 (commit f673b74)
+
+Felipe asked for the SD-panel inputs + host-key/MIDI keybed. DONE + verified:
+ - SDSW port (VOL-/+, SKIP<</>>, STOP, PLAY/PAUSE) -> active-low byte 0x9CC00008
+   bits0-5 -> events 0x20B5..BA; layout sd_block elements clickable. Pressing
+   SD VOLUME+ on a stock boot yields the FAITHFUL "ERROR 93! SD lid is open"
+   (empty slot) -- the SD panel input path works end-to-end.
+ - Key bed = full 61 keys (C2..C7), every key with PORT_GM_NOTE markup (USB-MIDI
+   via MAME's midi input provider plays the whole bed); PC tracker keys kept on
+   C4..C6. Verified C2=65.4Hz, C7=2093Hz.
+NEXT for SD: the card data transport behind card-init 0x485630de (VFS device 'd'
+= "C:"), host FAT image, insert-card action (m_sd_insert_timer plumbed).
+
 ## ★★★★★★ SOUND ON BY DEFAULT 2026-07-10 — SD-menu boot solved (PHANTOM BUTTONS; commit d53539d)
 
 THE MILESTONE: a stock boot now reaches the PMEM home screen WITH WORKING SOUND (C4 =
