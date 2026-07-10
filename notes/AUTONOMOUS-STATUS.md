@@ -136,7 +136,8 @@ Felipe's explicit go-ahead. **When Felipe returns: decide whether to commit to t
 + IOP set).
 
 Safe SMALL items a cron tick CAN do autonomously without that decision (pick one if
-resuming): validate the host-upload path (capture 0x9C000000 stream vs the recovered pool);
+resuming): ~~validate the host-upload path~~ DONE (tick #6 — runtime upload cross-validates
+the §5 memory map + the F.2 protocol; see sharc-lle-assessment.md + tools/dsp_upload_capture.lua);
 cross-model KN5000 sound check; minor doc/website polish; re-verify the published binary.
 Avoid: risky shared-core changes, the user-paused SD subsystem, wrong-pitch guesses.
 
