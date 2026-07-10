@@ -65,11 +65,30 @@ now that sound is default-on (TG present -> bank A, correct) the buttons are mis
 RUNTIME-CONFIRMED: SEG14.b3 -> "SOUND-RIGHT1 SAX & WOODWIND" screen. Full bank-A SOUND
 GROUP + DISK positions in notes/panel-bank-A-is-the-kn7000.md.
 
-IN PROGRESS: workflow wf_bdf3b275-55c decodes every bank-A event->function name (3
-families + adversarial verify). NEXT: rewrite the driver's SEG ports (PORT_NAME) + the
-kn7000.lay inputtag/inputmask bindings + the SD/DISK navigation to bank A, from the
-workflow's verified table. This is a substantial systematic cleanup (~200 buttons). The
-SOUND GROUP + DISK are already derived + anchored; do the rest from the workflow output.
+✅ PANEL BANK-A REBUILD COMPLETE (2026-07-10):
+- STAGE 1 (commit 913636b/9f0bbf8 lineage): the driver's SEG ports (PORT_NAME) rewritten to
+  bank A from the workflow-verified table (wf_bdf3b275-55c, 3 families + adversarial verify).
+- STAGE 2 (commit 9f0bbf8): the clickable kn7000.lay inputtag/inputmask bindings + state-driven
+  LEDs rebound to bank A. Every physical button keeps its position+label; only its bit changed.
+  pair_h() generalised (seg2=) for cross-SEG split pairs; MEMORY/EW EXPANSION now bound; PART
+  SELECT + CONDUCTOR groups fully bound. Full map: notes/panel-layout-bankA-bindings.md.
+  VERIFIED: no dup/phantom bindings (all 132 bits real), MAME renders with no layout errors,
+  and END-TO-END -- pulsing the PIANO artwork bit (SEG10 0x10) opens SOUND-RIGHT1-PIANO; the
+  8&16 BEAT genre bit (SEG02 0x80) opens RHYTHM-8&16 BEAT.
+REMAINING (unchanged, not blocking): the ev2010 menu-tab family + 5 unnamed ev2040 apps + the
+CPC control column (SEG16-20/1B) want a bank-A runtime snapshot probe; a full empirical bank-A
+function-button LED re-sweep is polish (genre+sound-group LEDs already re-keyed by state identity).
+The SD/DISK navigation re-RE stays under the USER-PAUSED SD subsystem (do not pursue autonomously).
+
+## Cron-tick verification (2026-07-10, post panel bank-A STAGE 2)
+Re-verified the PUBLISHED deliverable (kn7000-emulator/, run as Felipe will) after the layout
+rebuild + republish. DEFAULT boot (empty cfg -> driver defaults, TG-sound bit1 ON) reaches the
+PMEM home/play screen (PMEM A-, RHYTHM 8 Beat 1, RIGHT1 Concert Grand, full mixer) with the
+NEW bank-A panel -- no SD menu, no fault. Sound intact: pressing C4 yields a clean 262 Hz
+fundamental (RMS 2685 vs 0.0 silence; the layout change is input-binding artwork only and cannot
+touch the sound engine -- confirmed). Also cleaned a dirty cfg my in-session test runs had left in
+the published dir (a stale forced CONFIG bit2 + stray key remaps) back to the minimal default.
+Lua gotcha logged: PORT_GM_NOTE renames the keybed field to "C4" (not "Key C4") -- match on "C4".
 
 ## ★★★★★★ SD CARD MOUNTS 2026-07-10 (commit bf0c9a2) — the SD data path is COMPLETE
 
