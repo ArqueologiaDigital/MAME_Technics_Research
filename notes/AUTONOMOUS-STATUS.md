@@ -111,6 +111,20 @@ STILL OPEN (minor): CUSTOM PANEL / PANEL MEMORY SET (no distinct event found), P
 value-encoder column -- a value-input model, not a simple bind). Also earlier this session: KEYBED
 STUCK-NOTES fix (make/break = bit7; commit 09870dc).
 
+★ USED THE SELF-TEST (Felipe: "use the LED & Button self-test mode"; commit bd53933). Enabler
+tools/panel_selftest.lua holds flag 0x5006BFB2=1 -> button presses route to the firmware's InOut
+test handler 0x484A0CB0, which lights each switch's LED from PanelSwitchClassTable (LED appears
+~1s after press, ACCUMULATES, per the manual). RAN it: pressing each button lights EXACTLY its
+PANEL_LED formula LED -- 24/27 in a membership sweep across all row ranges (incl. rows 14-19: BRASS
+cpr81/SAX cpr80/PM1 cpr72/PM8 cpr15 -- the ones I was unsure of, now firmware-confirmed). So the
+firmware's OWN self-test validates the button->LED map. LIMITATION (honest): the full test SCREEN
+("ALL DEVICE OK") can't be entered -- the boot key-combo C#3+D#3+C#4 is read by the panel/key
+SUB-CPU, NOT modeled at power-on (verified: FIFO key injection does nothing); and forcing the flag
+on the HOME screen is a hybrid (home screen also processes the button -> leakage). Doesn't weaken
+the map (switch-class LED == normal-op LED, separately proven). Full screen would need modeling the
+sub-CPU power-on key report OR forcing the MILK test-window create (0x4849F8F0 -> 0x4842a717) -- a
+larger focused effort. Detail: notes/panel-selftest-validation.md.
+
 ## Cron-tick verification (2026-07-10, post panel buttons/LEDs)
 Re-verified the PUBLISHED deliverable after the panel button/LED work + republish: binary md5-identical
 to the build tree; DEFAULT boot reaches the PMEM home/play screen with the full new layout (RHYTHM/SOUND
