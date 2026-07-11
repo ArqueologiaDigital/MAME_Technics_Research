@@ -2177,8 +2177,13 @@ static INPUT_PORTS_START(kn7000)
 	PORT_START("SEG05")   // normSeg 0x05 (bank A = KN7000)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("DRUM 1 OFF")
 	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("HELP")
-	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PADS ON")
-	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PADS OFF")
+	// CONTRAST rocker = pseudo-part 0x1D (dispatch table nS05: bit2 ev 0x2001 arg 0x1D = +,
+	// bit3 ev 0x2000 arg 0x1D = -; contrast-edit filter 0x4854E693 accepts only arg-hi 0x1D,
+	// matching the manual "Contrast Up/Down buttons or Tempo/Program wheel"). RE-verified from
+	// the dispatch table (same pseudo-part family as the LIVE-verified PAGE rocker); the LCD
+	// contrast value itself is not modelled visually, so this drives the firmware setting only.
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST +")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST -")
 	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 1 ON")
 	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 1 OFF")
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 2 ON")
@@ -2239,8 +2244,12 @@ static INPUT_PORTS_START(kn7000)
 	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 15 OFF")
 	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 16 ON")
 	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART 16 OFF")
-	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BASS ON")
-	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BASS OFF")
+	// PAGE rocker = pseudo-part 0x18 (dispatch table 0x48614978 nS0B: bit4 ev 0x2001 arg 0x18 =
+	// page+1, bit5 ev 0x2000 arg 0x18 = page-1; PsPageBoxProc 0x4841DF23 accepts key 0x18).
+	// LIVE-VERIFIED: on MULTI EFFECT this steps "PAGE 6/8"->"7/8" (up) and back (down). The old
+	// "BASS ON/OFF" name was a KN5000-folklore guess; there is no such part here.
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE UP")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE DOWN")
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("DISPLAY HOLD")
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ACCOMP 5 ON")
 
@@ -2349,19 +2358,19 @@ static INPUT_PORTS_START(kn7000)
 	// dup events) have NO wire path and are not panel-serial; defined empty for the array. Names
 	// are placeholders (event codes) pending snapshot ID; see notes/panel-descriptor-map.md.
 	PORT_START("SEG16")   // normSeg 0x16 -- wire ADDR 0xD0
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE UP (guess2)")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_UNUSED)   // (was a wrong PAGE/CONTRAST guess; this normSeg is a VALUATOR wire -- DATA dial / pitchbend / TEMPO-PROGRAM, needs analog plumbing not a button bit)
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_START("SEG17")   // normSeg 0x17 -- wire ADDR 0xD1
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAGE DOWN (guess2)")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_UNUSED)   // (was a wrong PAGE/CONTRAST guess; this normSeg is a VALUATOR wire -- DATA dial / pitchbend / TEMPO-PROGRAM, needs analog plumbing not a button bit)
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_START("SEG18")   // normSeg 0x18 -- wire ADDR 0xD2
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Fn 1009 (CPC)")
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_START("SEG19")   // normSeg 0x19 -- wire ADDR 0xD3
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST + (guess2)")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_UNUSED)   // (was a wrong PAGE/CONTRAST guess; this normSeg is a VALUATOR wire -- DATA dial / pitchbend / TEMPO-PROGRAM, needs analog plumbing not a button bit)
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_START("SEG1A")   // normSeg 0x1A -- wire ADDR 0x10
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CONTRAST - (guess2)")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_UNUSED)   // (was a wrong PAGE/CONTRAST guess; this normSeg is a VALUATOR wire -- DATA dial / pitchbend / TEMPO-PROGRAM, needs analog plumbing not a button bit)
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 	PORT_START("SEG1B")   // normSeg 0x1B -- no wire path
 	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_UNUSED)
