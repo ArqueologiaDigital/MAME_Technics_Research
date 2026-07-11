@@ -14,6 +14,17 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★ FELIPE IS BACK (2026-07-11) — cron loop STOPPED; new directed task
+Felipe returned, cron b9660922 cancelled. His report from hands-on testing of the published binary:
+(1) a single MIDI-controller note sounds FOREVER; (2) turning reverb off makes NO difference. He wants
+the effect enable/disable mechanism checked and a genuinely DRY sound path to validate the ADSR
+envelope by ear. Investigation running (workflow wf_1cc23600-247): live repro matrix (KEYS1 vs MIDI
+file, wash measurement, REVERB-OFF probing) + firmware OFF-path static RE + driver audit. Prime
+suspects: the BOOT-DEFAULT DSP effect washes forever like Dark2 (so any note -> everlasting output),
+and/or effect-OFF never reaches the DSP. Note: kbd_midi_rx parsing verified correct by inspection
+(handles running status + vel-0 note-offs; though its 'clamped into range' comment lies -- out-of-range
+notes are DROPPED).
+
 ## ★ SESSION 2026-07-11p-s — reverb: all components verified; it's a ~1% loop-gain problem (PARKED)
 More reverb diagnosis (no rebuilds -- Lua PM-patching + disasm). Key results:
 - CORRECTED the "6.4s delay" lead: the reverb builds up in ~0.4s, so its delays are SHORT (~60ms); the
