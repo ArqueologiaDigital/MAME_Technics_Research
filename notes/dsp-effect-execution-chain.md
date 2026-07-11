@@ -212,3 +212,41 @@ Re-ran the output-slot tap with -nodrc (SHARC interpreter):
   clamps to +full-scale. PRIME next step: tap F1 (pre-FIX float) in the running reverb microprogram --
   if F1 is sane (<1.0) but the fixed output rails, it's the FIX/scaling; if F1 itself grows unbounded,
   it's the feedback multiply (delay x coeff) -- check MAME's SHARC float mul/MAC vs the ADSP-21065L TRM.
+
+### SMOKING GUN 2026-07-11f: the reverb FLOAT filter feedback is >= 1.0 (it diverges)
+Dumped the running reverb microprogram (DSP PM 0x8000-0x8DFF via Lua read_u64 -> unidasm -arch sharc,
+saved analysis below). The output path is unambiguous:
+  0x8464  F1 = F15 + F13            ; F1 = reverb output (float)
+  0x8465  R8 = FIX F1               ; float -> fixed
+  0x8466  R8 = R8 * R2              ; R2 = output-scale coeff (DM(I0,M2))
+  0x8467  R8 = CLIP R8 BY R1        ; clamp to +/-|R1|  <-- output rails here
+  0x8468  DM(M2,I4) = R8            ; commit word 0   (I4 pre-mod by M2)
+  0x8469..0x846d  same for word 1, then DM(I4,M1)=R8 (I4 POST-mod by M1 -> the ring advances)
+Because the committed output sits at CLIP's rail (0x7FFFFF) constantly, |FIX(F1)*R2| >= |R1| always,
+i.e. the reverb output float F1 has DIVERGED (grown unbounded). F1 is produced by the float allpass/
+comb chain at 0x847c-0x8483:
+  F12 = F3 * F7 ;  F3 = F11 + F12 ;  F7 = F3 * F7 ;  F11 = F7 + F12   (coeffs F7/F3 from DM(I0,M2))
+A feedback of >= 1.0 in that chain makes F3/F11/F1 blow up. So the ring/saturation = the reverb float
+FEEDBACK COEFFICIENT is >= 1.0. Systematic across all reverb types == the coefficient is at its default
+for ALL types because the depth/time path that would lower it (DspEffectSelect, *(0x500A01E0)=-1) is
+dead. This RECONCILES the earlier "systematic rules out depth" worry: the depth path being dead for
+EVERY type produces an identical default (>=1.0) feedback for every type.
+
+Also seen in this microprogram (confirms my added ops ARE exercised by the reverb and matter):
+  0x847a  R8 = (R8 + R10)/2         ; ALU op 0x09 (my compute_avg) -- in the OUTPUT mix, not feedback
+  0x8474  R10 = FDEP R10 BY 15:16   ; shift-imm FDEP (my DRC fallback path)
+  0x8477  R10 = MRF + (R10 * R7)    ; multifunction MAC -- the MAC is core to the filter
+=> op 0x09 is in the output averaging (correct impl verified), so it's NOT the divergence source.
+
+### The fix, now precisely scoped
+Root cause = reverb float feedback coefficient defaults to >= 1.0 (no damping) because the per-effect
+depth/time is never applied. Two ways in, in priority order:
+1. Determine the feedback coeff's DM source and value: trace I0 at 0x847c (which DM address F7/F3 come
+   from), read that float after loading Dark2. If it's ~1.0 -> confirmed unapplied depth; find the
+   maincpu routine that SHOULD write the damped coeff (the +783-word active upload table, caller of
+   0x48404EF5) and why it ships 1.0 / where depth would scale it.
+2. Make the DspEffectSelect path run so per-effect params (incl. depth->feedback) apply
+   (*(0x500A01E0) allocates lazily inside setter 0x484057d6; the setter is just never called in this
+   boot state -- find its caller + gate; same family as the old TG-gate force).
+Output capture (SPORT TX ring at 0x846d, I4 post-mod by M1) is a SEPARATE, secondary fix; moot until
+F1 stops diverging.
