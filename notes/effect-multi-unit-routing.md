@@ -181,3 +181,29 @@ reverb. So making the FLAG3-gated effects audible needs the FULL FLAG3 PROTOCOL:
 drives the pin to, WHEN (per-frame? tied to the ping-pong ASTAT toggle at 0x8099 `BIT TOGGLE ASTAT
 0x100000`?), and how the CPU controls it -- not a one-line force. Experiment reverted; reverb
 bit-identical again. The FLAG3 gate is identified; its protocol is the remaining decode.
+
+## 2026-07-11 ★★★ CORRECTION: FLAG3 was OVERSTATED — chorus units DO output when fed (multi-unit tractable)
+Re-examination found errors in the FLAG3 conclusion above. THE ACCURATE PICTURE:
+- Only **4 of 72** effect records gate on FLAG3: rec58 (pitch-shift/detune) + rec59/60/61 (reverbs).
+  The reverb/enhancer AND the CHORUS records (rec06 etc.) do NOT gate on FLAG3. So FLAG3 is NOT why
+  the general effects are silent -- it only affects those 4 specific records.
+- Last tick I fed UNIT 7 (= rec58, FLAG3-gated) and saw no output -> wrongly generalized to "FLAG3
+  disables the effects." WRONG UNIT: the boot-default CHORUS is **rec06 on units 4 and 6**.
+- ★ DECISIVE TEST (no rebuild; Lua copies the TG send 0xC362 into units 4/6 inputs each frame):
+  **unit4 (chorus rec06) OUT = 664328, unit6 OUT = 664328** -- they PROCESS AND OUTPUT CLEANLY when
+  fed (no rail). So the non-FLAG3-gated effect units are NOT dormant; they were just never fed.
+- CORRECTED I4 walk (each unit writes 2 slots, M2=1, +2/unit; +0x0A hop at 0x8092, -0x0A at 0x8096):
+  u0 out C342/in C362; u1 C344/C364; u2 C346/C366; u3 C348/C368; **u4 C34A/in C36A (rec06 CHORUS)**;
+  u5 C34C/C36C; **u6 C358/in C378 (rec06 CHORUS, post +0x0A hop)**; u7 C350/in C370 (rec58, FLAG3);
+  u8 C352/C372 (EQ); u9 C356/C376. (Last tick's u7=C370 feed was rec58 -> the FLAG3 false lead.)
+
+### REVISED conclusion: multi-unit IS implementable by feeding the right units
+The gate for the COMMON effects (chorus/EQ/etc.) is simply that our bridge feeds ONLY unit-0's input;
+the other units' SPORT input slots are never filled, so they output 0. Feed a non-FLAG3-gated unit's
+correct input slot and it outputs. So a multi-unit send/return model is tractable:
+  1. When an effect's send is nonzero, feed its unit's input slot (u4/u6 chorus <- 0xC36A/0xC378 =
+     TG send x chorus level 0x8198), 2. sum that unit's output slot into the DAC, 3. gated so
+     effect-off leaves the reverb bit-identical. FLAG3 only matters for rec58-61 (pitch-shift/extra
+     reverbs) -- a later concern.
+REMAINING to pin before shipping: which of u4/u6 is the RIGHT1 chorus send-return (or both = stereo/
+dual), and the correct return level into the DAC (send matrix regA/depth). The mechanism is proven.
