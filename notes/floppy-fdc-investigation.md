@@ -37,3 +37,11 @@ in the service-test IC map; not yet mapped in the driver).
 ## Assessment
 A genuine multi-tick task (FDC model + disk format + wiring the abstracted driver layer). Not startable
 to completion in one tick. Groundwork above; deprioritised in favour of completable work.
+
+## UPDATE: the device config @0x4866476c = "A:\" (drive-letter FS descriptor)
+The 128-byte config the disk init (0x48532643) feeds to the device-create (0x4846d800) is
+mostly zero with +0x00 = 0x005c3a41 = the ASCII string "A:\\". So 0x4846d800 creates a FAT/FS
+DEVICE (drive "A:"), and 0x4846da31's block reads sit BELOW it on a block device whose FDC
+register base is a runtime pointer. The FDC hardware address is therefore a further layer down
+(FS -> block device -> FDC). Confirmed: locating it needs a live disk op (drive DISK MENU with a
+floppy image) + a breakpoint on 0x4846da39, not static tracing. Deferred to a dedicated tick.
