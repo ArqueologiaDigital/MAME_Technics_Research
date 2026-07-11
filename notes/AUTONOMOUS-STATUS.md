@@ -14,6 +14,25 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★ SESSION 2026-07-11j — deep SHARC core-instrumentation of the reverb divergence (READ notes/dsp-effect-execution-chain.md tail)
+Spent this session localizing the reverb divergence with temporary SHARC-interpreter instrumentation
+(all reverted; tree clean; binary republished). RESULT = big elimination, root cause still open:
+- CONFIRMED: the reverb output float F1 grows from the input to +/-2e7 (>2x full-scale), rails, and
+  NEVER decays (still +/-1-3e7 17 s after note-off) => effective feedback ~1.0. Same interp & DRC.
+- RULED OUT: the DM coefficients (all damped -0.618/0.458/-0.280/0.853; forcing ALL near-unity DM
+  coeffs 0xC000-0xC300 to 0.9 still rails), the float multiplies (exact), the allpass structure
+  (correct Dattorro/Gardner, g=-0.618), compute_fmul_fadd (no hazard), FLOAT/FIX (stock verified),
+  op 0x09, and the circular-buffer off-by-one (real nit `> B+L` should be `>= B+L`, fixed+tested,
+  NOT causal, reverted).
+- REMAINING SUSPECTS (next tick): (1) the reverb also reads PM via I8 (`R3 = PM(I8,M8)`) -- the
+  tank-decay feedback may live in PM, or DM coeffs are reloaded from PM each frame (why the DM override
+  did nothing); dump/override the PM data. (2) 32-bit host float vs the 21065L 40-bit extended + MODE1
+  rounding on a near-unity tank feedback. Full trace + the exact instrumentation recipe are in
+  notes/dsp-effect-execution-chain.md sections 2026-07-11h/i/j.
+- No shipped change this session (all diagnostic). Effects remain audible-but-not-faithful; DRY
+  passthrough is correct. Consider whether the next tick continues this (PM dump) or pivots to a
+  completable item (MIDI port declaration, volume-slider ADC, panel punch-list) for visible progress.
+
 ## ★★★ CORRECTION 2026-07-11d — the effects RUN but the reverb RINGS (not "working well" yet)
 The 2026-07-11 update below over-claimed. Careful A/B measurement (now possible thanks to the TG
 release envelope) shows the active reverb does NOT decay:
