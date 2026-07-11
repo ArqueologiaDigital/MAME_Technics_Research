@@ -40,6 +40,21 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★ TICK 2026-07-11 ~23:55 — FIRST AUDIBLE NON-REVERB EFFECT: chorus works!
+Caught + corrected a prior error (FLAG3 was overstated: only 4/72 records gate on it; chorus is
+non-gated). DECISIVE TEST proved chorus units (4/6 = rec06) OUTPUT when fed. IMPLEMENTED audible
+chorus (9a3c392): tonegen captures chorus send 0x8198; tick feeds unit-4 input (0xC36A = raw TG x
+send) + sums unit-4 return (0xC34A) into the DAC; gated on send>0 so REVERB BIT-IDENTICAL off
+(A/B 0/2.11M). VERIFIED enabled: send=63, unit-4 out 250282 (0 rail/clip), DAC shows chorus LFO
+MODULATION (69% depth ~1Hz) = a real chorus. Reverb pristine. Opt-in (only when user enables chorus).
+FIRST-CUT approximations (documented): whole-mix feed (not per-part); chorus return summed BEFORE the
+reverb crossfade -> level couples to reverb depth/wet (decouple next); single unit u4 (u6 is a twin).
+MECHANISM GENERALIZES: EQ (unit8, 0xC352/0xC372), multi, sound-DSP = feed their units the same way.
+REMAINING (refinements, next ticks): (1) decouple chorus level from the reverb crossfade (sum as an
+independent wet post-crossfade); (2) calibrate the chorus level + pick u4 vs u6 vs both from the send
+matrix; (3) extend to EQ/multi/sound-DSP; (4) handle the 4 FLAG3-gated records (pitch-shift + extra
+reverbs) via the FLAG3/ping-pong frame model (the genuinely deep part). Blog-worthy milestone.
+
 ## TICK 2026-07-11 ~23:25 — multi-unit effects: investigation CONCLUDED with implementation roadmap
 Completed the FLAG3/kernel-routing decode and consolidated the whole multi-unit investigation into an
 actionable IMPLEMENTATION ROADMAP (top of notes/effect-multi-unit-routing.md). FINAL PICTURE:
