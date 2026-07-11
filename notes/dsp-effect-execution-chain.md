@@ -130,3 +130,13 @@ Default boot reaches the home screen with sound and no -cfg needed.
 - Effect code PM 0x8400; external delay memory word range ~0x11372..0x656F0.
 - SHARC core: sharcops.hxx (COMPUTE + compute_avg), sharcdrc.cpp (compute_fallback/shiftimm_fallback),
   sharc.cpp (notify_pm_written), data_65l map in sharc.cpp.
+
+## Final verification (2026-07-11)
+- STABILITY: a held Dark2 note keeps a steady clean output (peak ~7%, no clipping/blow-up over 10s
+  in the actual WAV) -- the reverb feedback is stable, not runaway. (Reading DM[I4] from Lua shows
+  0x7FFFFF scratch values mid-frame; ignore those -- the WAV is the ground truth.)
+- DISTINCT EFFECTS: selecting different reverb types loads different DSP processing (checksums of
+  effect PM 0x8400-0x8470 + coeff DM 0xC000-0xC029): Room1 PM=0x6368387A/DM=0x23378650, Dark2
+  PM=0x63682168/DM=0x02A2EE91, Concert PM=0x63682168/DM=0x02A2424D. Room1 vs Dark2 differ in BOTH
+  code and coefficients; Dark2 vs Concert share the microprogram but differ in coefficients. So the
+  full effect-selection path works, not just one effect.
