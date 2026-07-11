@@ -2,8 +2,8 @@
 
 Felipe: effects processing should work well — selecting a reverb/chorus in the sound menus
 should audibly change the sound. It didn't. This note traces the ENTIRE dependency chain,
-which turned out to be five stacked problems. Four are now fixed; the fifth (effect output = 0)
-is the remaining blocker.
+which turned out to be five stacked problems. **ALL FIVE ARE NOW FIXED** -- the effects DSP
+processes audio end-to-end and selecting an effect is audible (see "Final verification" at the end).
 
 ## Symptom
 Selecting a reverb (e.g. REVERB screen -> Dark2) did nothing audible. The panel/UI worked
