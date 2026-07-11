@@ -272,3 +272,15 @@ I0=0xC2D5, I1=0xC004, M2=1):
   If it's a damped value (<1) yet the state still diverges -> SHARC arithmetic bug: unit-test the fixed
   MAC (sharcops.hxx multiop grp 3, line 806: `Rm=(MRF+p)>>32`, p=(Rxm*Rym)<<1) and FLOAT/FIX against
   the ADSP-21065L TRM. This is the crux and it's now a bounded, concrete task either way.
+
+### 2026-07-11g cont.: 1.161 is a CONSTANT coefficient (a feedforward gain, most likely)
+Read 0xC2C4/0xC2CF across before-note / note / after-off: 1.1612 is CONSTANT (unchanged) => it is a
+COEFFICIENT, not diverging filter state. In the repeated 6-tuple {0.931, -0.931, 1.000, 0.245, -0.406,
+1.161} the small terms 0.245/-0.406 look like the recursive (a1/a2) coefficients (|a2|=0.406 < 1 =>
+STABLE biquad), which makes 1.161 a feedforward/gain term, not a runaway feedback. Combined with the
+textbook-damped 0xC000 block, the weight of evidence now favours a **SHARC arithmetic bug** (a fixed
+MAC / mul / FLOAT-FIX op the reverb uses and the passthrough does not) over a bad coefficient. NOT
+proven -- the decisive step is to single-step the divergent float recursion (0x847c-0x8483) and watch
+F3/F11 grow with damped coefficients, or to unit-test the fixed MAC (multiop grp 3) + FLOAT/FIX round
+trip against the ADSP-21065L TRM. Deferred to a fresh, methodical tick (this one has already corrected
+itself twice; the arithmetic check deserves careful isolation, not a rushed poke).
