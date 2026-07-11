@@ -40,6 +40,24 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~21:35 — robustness PASS; nav complete; circular-wrap verified-but-held
+- LOUD-INPUT RAIL RECHECK (priority 4): PASS. 18-note cluster slammed + held 3s w/ reverb ON ->
+  0 near-rail DSP writes / 617,400 (0.00%), DAC peak 2085, 0 clipped samples, clean tail. Reverb is
+  production-robust under dense/loud play (not just single notes).
+- NAVIGATION COMPLETE: the PAGE rocker fix (SEG0B, last tick) IS the within-group TYPE page control
+  (live-verified: MULTI EFFECT PAGE walks a group's type pages, Cross Delay -> Shallow1-16/Normal
+  1-16). Sweep's "unfound type-page control" was wrong-button. Group cursor SEG09 + PAGE rocker SEG0B
+  = ALL effect types reachable. Both open items closed in notes/effects-sweep-results.md.
+- CIRCULAR-WRAP FIX (priority 5): applied to both engines, built, A/B'd -> changes reverb by 2
+  samples/2.11M (delay lines DO hit the boundary; RE's "unchanged" was wrong). TRM-correct but
+  modifies the user-praised reverb -> REVERTED, held for Felipe's OK (rule g). Ready to re-apply
+  (catalogue C.1). Reverb binary unchanged (bit-identical to reference).
+REMAINING QUEUE: multi-unit send/return model (makes chorus/EQ/DSP audible -- BIG win, needs per-bus
+TG output + multi-send bridge; multi-day); loudness ON/OFF calibration (needs Felipe's ear ref);
+0x8238 decode; circular-wrap re-apply (awaiting OK); upstream submission.
+QUESTION FOR FELIPE: OK to apply the TRM-correct circular-buffer wrap fix? It's a 2-sample
+(inaudible) change to the reverb but the spec-correct behavior.
+
 ## TICK 2026-07-11 ~21:25 — chorus triaged (single-path limit); native DRC MAC shipped (bit-identical)
 PRIORITY 1 (chorus SUSPECT) RESOLVED as EXPLAINED not a bug: live taps prove only unit 0 gets
 signal; chorus(u7)/EQ(u8)/u9 get ZERO input even with CHORUS toggled ON. Our bridge models ONE
