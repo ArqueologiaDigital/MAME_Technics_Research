@@ -537,10 +537,10 @@
 		<element ref="t71"><bounds x="748" y="452" width="44" height="7"/></element>
 		<element ref="t72"><bounds x="752" y="459" width="36" height="7"/></element>
 		<element ref="t73"><bounds x="802" y="452" width="52" height="7"/></element>
-		<element ref="green_led" name="cpl_led40"><bounds x="867" y="414" width="8" height="8"/></element>
-		<element ref="green_led" name="cpl_led48"><bounds x="876" y="414" width="8" height="8"/></element>
-		<element ref="green_led" name="cpl_led24"><bounds x="885" y="414" width="8" height="8"/></element>
-		<element ref="green_led" name="cpl_led32"><bounds x="894" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led24"><bounds x="867" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led32"><bounds x="876" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led40"><bounds x="885" y="414" width="8" height="8"/></element>
+		<element ref="green_led" name="cpl_led48"><bounds x="894" y="414" width="8" height="8"/></element>
 		<element ref="t74"><bounds x="905" y="452" width="28" height="7"/></element>
 	</group>
 
