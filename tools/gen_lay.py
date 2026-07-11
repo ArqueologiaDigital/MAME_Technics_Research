@@ -107,8 +107,9 @@ def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
     if la: r.append(L(la,x+w//4-14,y+h//2-6,28,12))
     if lb: r.append(L(lb,x+3*w//4-14,y+h//2-6,28,12))
     return r
-def pair_v(seg,ma,mb,x,y,w,h,la="",lb=""):
-    if seg: r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=seg,mask=mb)]
+def pair_v(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
+    sb=seg2 or seg   # top/bottom halves may straddle two SEGs (e.g. CONTRAST +/-)
+    if seg: r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=sb,mask=mb)]
     else:   r=[P("half_t",x,y,w,h//2),P("half_b",x,y+h-h//2,w,h//2)]   # seg=None -> unbound (bits unknown)
     if la: r.append(L(la,x+w//2-14,y+h//4-6,28,12))
     if lb: r.append(L(lb,x+w//2-14,y+3*h//4-6,28,12))
@@ -190,7 +191,9 @@ S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",
 # CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the
 # 2026-07-08 HELP-info sweep -- those are SOUND CONTROLLER MODE/RESET. CONTRAST has no HELP screen, so its
 # real bits are still unidentified.)
-S += [L("CONTRAST",247,730,120,13)] + pair_v(None,None,None,282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
+# CONTRAST +/- : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). The CPC value-encoder column,
+# LCD-adjacent group (wire ADDR 0xD0/0xD1): + = SEG16 0x01 (ev1005), - = SEG17 0x01 (ev1004).
+S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG16","0x01","0x01",282,756,50,155,"+","-",seg2="SEG17") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -217,8 +220,9 @@ for i in range(16):
 # PAGE / DISPLAY HOLD / EXIT
 # PAGE up/down (CPC-board pair). BITS UNVERIFIED -- best-guess SEG08 0x01 (up) / 0x02 (down); no HELP
 # screen for PAGE. *** FLAG FOR REVIEW ***
-# PAGE up/down = the CPC control column (SEG16-20), context-routed with no verified bank-A bit -> UNBOUND.
-S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78), P("page_dn",1680,834,50,77),
+# PAGE up/down : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). CPC value column, LCD-adjacent
+# group (wire ADDR 0xD2/0xD3): up = SEG18 0x01 (ev1009), down = SEG19 0x01 (ev1010).
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG18",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG19",mask="0x01"),
       # bank A: DISPLAY HOLD = SEG0B 0x40 (HELP-info + STAGE-1 cross-confirmed). LED cpl_led5 (state identity).
       L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name=PANEL_LED.get(("SEG0B","0x40"))),
       # bank A: EXIT = SEG0B 0x80 (HELP-info verified, panel_family_2.txt).
@@ -416,7 +420,11 @@ RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("
 # SELECT screen); NEXT BANK = SEG0F 0x80 (ev2012, advances the bank).
 RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8), P("bank_wing",580,238,90,26,tag="SEG10",mask="0x80"),
        L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26,tag="SEG0F",mask="0x80"), L("PANEL MEMORY",608,255,172,10,TXTH),
-       P("panel_memory_dial",565,268,190,190), L("SET",638,354,44,12)]
+       P("panel_memory_dial",565,268,190,190),
+       # PANEL MEMORY SET : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG13 0x40 (ev2011 --
+       # fits the ev2010 recall / ev2011 SET / ev2012 NEXT BANK / ev2013 BANK VIEW pattern; a store test
+       # was inconclusive, maybe blocked by DATA PROTECTION). Transparent clickable over the dial centre.
+       P("inv_rect",639,342,42,42,tag="SEG13",mask="0x40"), L("SET",638,354,44,12)]
 # PANEL MEMORY = an 8-way pie-slice dial (center 660,363) with a central SET. Each numbered slice
 # recalls a registration -- bank A ev2010 arg-mid = PM number - 1 (empirically confirmed: pressing
 # each opens "PMEM x-N"). Draw the number labels (r=88) + a clickable round button per slice (r=62).
@@ -437,7 +445,9 @@ for _i,_num in enumerate(PM_ORDER):
     _ex=660+int(80*_m.cos(_a)); _ey=363+int(80*_m.sin(_a))
     RB.append(P("green_led",_ex-4,_ey-4,8,8,name=PANEL_LED.get((_tg,_mk))))
 RB.append(P("big_ring",809,327,130,130))
-RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42)]
+# CUSTOM PANEL : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG06 0x80 (ev20B4 -- sets a
+# mode/status latch 0x5006bfc8 bit0x10; plausible custom-panel mode toggle).
+RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42,tag="SEG06",mask="0x80")]
 # CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES
 # screen) -- both empirically confirmed. CUSTOM PANEL's bit is not yet resolved -> left unbound.
 RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8), P("round_btn_big",884,350,42,42,tag="SEG0C",mask="0x40")]

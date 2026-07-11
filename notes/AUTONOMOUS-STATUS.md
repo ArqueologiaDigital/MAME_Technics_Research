@@ -5,6 +5,15 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ★★★ FULL GREEN-LIGHT MANDATE 2026-07-11 (Felipe, away many hours)
+"Keep improving the driver autonomously. Assume my answer is 'yes, let's do it!' for everything.
+Use cron jobs so you don't stop." Priority: (1) finish panel LEDs/buttons, (2) MAIN GOAL = effects
+DSP processing working well (notes/dsp-effects-improvement-plan.md; DSP LLE is GREENLIT, SD-menu
+blocker gone), (3) keep improving: rest of SD-card features, declare MIDI in/out ports, emulate the
+floppy drive, hook the 4 volume sliders to what they control (some digitally set sound levels ->
+sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
+said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
+
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
   is available (DISPLAY=:0, wayland-0). Run with visible video.
