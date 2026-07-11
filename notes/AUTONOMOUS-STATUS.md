@@ -40,6 +40,23 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~22:55 — multi-unit routing: send matrix DECODED, kernel-routing blocker found
+Pursued the BIG win (audible chorus/EQ/DSP) via wf_ff73662f-062. RESULT: decoded the effect-send
+matrix fully (CHORUS send = 0x8198, low byte = per-part depth; enable recipe live-verified incl. the
+SOUND-DSP-forces-block-refresh firmware quirk) and implemented a SAFE unit-7 feed. A/B guard PASSED
+(reverb bit-identical with chorus off, 0/2.11M). BUT hit the real blocker: feeding unit-7's input
+slot makes its input nonzero (306484) yet the unit produces NO output -- a scan of ALL return slots
+showed ONLY unit 0 (reverb) outputs. So the kernel's per-frame routing is NOT a fixed slot map; the
+firmware configures which unit is wired into the audio path internally, and only unit 0 is live.
+Multi-unit audibility needs the KERNEL-ROUTING decode (how the firmware programs each unit's I/O
+pointers + what makes unit 7 join the active chain), not just an input feed. REVERTED the incomplete
+audible path (dead DSP writes, no benefit); reverb pristine (bit-identical, republished). Full decode
++ blocker in notes/effect-multi-unit-routing.md.
+STATUS: all of priorities 1-5 done or Felipe-blocked. Big win is 50% done (send matrix) with the
+kernel-routing half scoped as the next (deeper, best-supervised) step. Tree clean, binary published.
+QUESTIONS FOR FELIPE (both pending): (1) OK to apply the TRM-correct circular-wrap fix (2-sample
+inaudible reverb change)? (2) real-HW reverb ON/OFF loudness ratio for calibration?
+
 ## TICK 2026-07-11 ~22:05 — pursuing the BIG win: multi-unit routing (audible chorus/EQ/DSP)
 Mandate = keep improving, don't wait for approval. Attacking the last substantive gap SAFELY (reverb
 path stays untouched; any new unit path must leave the reverb WAV BIT-IDENTICAL with its effect off).
