@@ -140,3 +140,22 @@ Default boot reaches the home screen with sound and no -cfg needed.
   PM=0x63682168/DM=0x02A2EE91, Concert PM=0x63682168/DM=0x02A2424D. Room1 vs Dark2 differ in BOTH
   code and coefficients; Dark2 vs Concert share the microprogram but differ in coefficients. So the
   full effect-selection path works, not just one effect.
+
+## Reverb CORRECTNESS gap (2026-07-11d): the reverb rings, it does not decay
+Now that the TG envelope stops notes on key-release, the reverb's decay is testable -- and it FAILS:
+- Held Dark2 note, then note-off. The TG input stops (~0.2 s), but the final DAC output holds a
+  CONSTANT amplitude oscillation for 3.5 s+ (RMS ~1960 flat, not decaying), with a large positive DC
+  offset (samples ride ~+1150 instead of centred on 0). It rings, it doesn't decay.
+- The reverb DOES read AND write its SDRAM delay lines (1.68M reads / 1.23M writes to word range
+  0x36E55-0x643AB per note), so it's not stale-delay -- the feedback GAIN is ~1.0 (RT60 ~= infinite),
+  and a ~1.0 feedback integrates the small DC input into the growing DC offset seen.
+- ROOT CAUSE (most likely): the reverb loads its microprogram + a default coefficient set via the
+  ACTIVE path, but its DEPTH/TIME parameters are NEVER applied -- the clean DspEffectSelect path
+  (*(0x500A01E0) param block) never runs (still -1), and the on-screen DEPTH control doesn't trigger a
+  host re-upload (checked: DATA DIAL + CPC value-encoder do nothing). So the reverb runs at its default
+  (unity-feedback / infinite-time) coefficients instead of the 80% depth the screen shows.
+- => "effects are AUDIBLE + type-selectable" stands, but "effects work WELL" needs the DEPTH/TIME
+  parameters actually reaching the DSP (decaying feedback). Next: find the depth->coefficient path
+  (does changing DEPTH write a DM coefficient? trace the reverb-screen DEPTH handler), or make the
+  DspEffectSelect param-block path run so parameters apply. This supersedes the "stable + clean" note
+  in blog Part 13 (stable = doesn't blow up; but it does NOT decay).
