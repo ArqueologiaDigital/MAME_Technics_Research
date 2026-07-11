@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~21:25 — chorus triaged (single-path limit); native DRC MAC shipped (bit-identical)
+PRIORITY 1 (chorus SUSPECT) RESOLVED as EXPLAINED not a bug: live taps prove only unit 0 gets
+signal; chorus(u7)/EQ(u8)/u9 get ZERO input even with CHORUS toggled ON. Our bridge models ONE
+send (TG->u0 input 0xC362) + ONE return (u0 0xC342); real HW routes per-part sends to multiple
+units via the TG group-0x20 matrix (fully captured, 64ch x 0x10) and sums all returns. Making
+chorus/EQ/DSP audible = scoped multi-unit send/return model (notes/effect-multi-unit-routing.md;
+deferred, multi-day). Reverb (unit 0) is faithful. Sweep CHORUS/EQ/DSP reclassified EXPLAINED.
+PRIORITY 3 (DRC MAC-native) DONE: implemented native UML for the fixed MAC family (multiop
+0x06/0x08-0x16 = MRF+-Rx*Ry SSF/SSFR + parallel add/sub/avg), removing the per-op interpreter
+fallback in the effect hot path. **BIT-IDENTICAL reverb WAV (md5 match, 0/2.11M samples differ)** —
+proven equal to the interpreter. Flags gated on liveness; ALUSAT baked. -str ~75% (30s); host too
+noisy (58-81% same binary) to quantify the gain. Upstream catalogue D marked DONE.
+REMAINING QUEUE: multi-unit send/return model (makes chorus/EQ/DSP audible — the big effect win);
+within-group TYPE page-flip control (unfound); complete MULTI/SOUND-DSP batch health tests;
+loudness calibration + 0x8238; apply the safe circular-wrap fix (catalogue C.1) with A/B; upstream.
+
 ## ★ TICK 2026-07-11 ~21:05 — PAGE/CONTRAST FIXED + VERIFIED; effects-sweep triaged
 PAGE Up/Down and CONTRAST Up/Down SOLVED (wf_86ccde00-860 RE + live verify) and shipped (f614862):
 they are pseudo-part events in the ordinary 0x2000/0x2001 family, NOT the SEG16/17 valuator wires
