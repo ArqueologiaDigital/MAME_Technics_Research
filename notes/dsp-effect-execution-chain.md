@@ -439,3 +439,23 @@ unity-DC loop -- capture ALL writes (incl. immediate-modify DM(-k,I0) writes, a 
 the post-modify one instrumented so far) to the read region 0x34exx-0x351xx, and identify the tap whose
 write value = (a delayed read) + input with NO attenuation. Fix that tap's addressing (or the M/L that
 sets its delay). This is a bounded trace of one region's writers.
+
+## 2026-07-11n: FULL-FRAME TRACE -> the fast feedback is via PM(I8), NOT the DM(I6) SDRAM delay
+Captured the complete DM(I6) delay-buffer access sequence for a diverged frame (armed on first |v|>1e7,
+then logged all accesses). Findings:
+- The access pattern per line is `WRITE at X` then `READ at X-1` (M3=-1 between), then a big M7 jump to
+  the next line. Frame entry: 0x8401 saves I6 to DM[I1-1]; 0x8403 does MODIFY(I6, +0x10747); the frame
+  walks I6 DOWN ~0x10747; 0x846e restores I6 from DM[I1-1]. Across frames the base decrements by 1
+  (the buffer scrolls 1/frame). So each DM(I6) line's delay is ~L6 = the FULL buffer = ~6.4 s.
+- **The DM(I6) reads return 0 at the moment divergence arms (~0.4 s in)** -- because their delay is
+  ~6.4 s, so they're still returning PRE-NOTE SILENCE while the registers are already at 1e7. => the
+  DM(I6) SDRAM buffer is a LONG (~6.4 s) delay and is NOT the fast-feedback path.
+- Registers are NOT cross-frame accumulators: frame entry re-inits F0/F1 = FLOAT(input) and F11 = F1*F4.
+- **=> the fast divergence feedback must flow through the OTHER state store: PM(I8).** The reverb reads
+  `R3 = PM(I8,M8)` and writes `PM(I8,M9)=R11 / PM(I8,M11)=R3 / PM(I8,M8)=R3` every frame -- a SECOND
+  delay/state buffer in PROGRAM memory (via DAG2 index I8), never traced. Its delays are presumably
+  SHORT (the actual comb/allpass state), so THAT is where the unity-DC-gain accumulator lives.
+NEXT (sharp): instrument the PM accesses (PM_REG_I(i) in the PM branch of the SAME post-modify handler,
++ the pm immediate-modify handlers) gated on PC 0x8400-0x8470; capture one frame; find the PM(I8) line
+whose write-back = read + input with no attenuation (the accumulator). Also read I8/L8/B8/M8..M14 (DAG2)
+to get the PM buffer geometry. This is the real target; the DM(I6) work above rules out the SDRAM path.
