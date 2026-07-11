@@ -241,6 +241,15 @@ public:
 				// world) are all-00 there. Lets a held Concert Grand fade out like a real
 				// piano instead of freezing at its SUS1 level.
 				m_dies[v] = (m_mode[v] == 2) || (((m_envreg[v][5] | m_envreg[v][6]) & 0x00FF) != 0);
+				// Sample select: (bank,zone) from the aux word -> donor wave (sine if unmapped).
+				{
+					const int bank = (m_aux[v] >> 12) & 3, zone = m_aux[v] & 0xFF;
+					m_wsel[v] = -1;
+					for (size_t i = 0; i < m_wentries.size(); i++)
+						if (m_wentries[i].bank == bank && zone >= m_wentries[i].zlo && zone <= m_wentries[i].zhi)
+							{ m_wsel[v] = int16_t(i); break; }
+					m_wpos[v] = 0.0;
+				}
 				m_atk[v]    = 1;      // start the attack
 				m_phase[v]  = 0.0;    // clean attack transient
 				// Resolve this voice's amplitude envelope from the firmware's EG registers.
@@ -356,6 +365,33 @@ protected:
 		std::fill(std::begin(m_dcyc),  std::end(m_dcyc),  0.0);
 		std::fill(std::begin(m_rlsc),  std::end(m_rlsc),  0.0);
 		std::fill(std::begin(m_srckey), std::end(m_srckey), 0xFF);
+		std::fill(std::begin(m_wsel), std::end(m_wsel), int16_t(-1));
+		// Parse the optional synthetic wave pack (magic KN7WVSY2; tools/make_wave_pack.py).
+		if (memory_region *wr = machine().root_device().memregion("wavepack"))
+		{
+			const uint8_t *p = wr->base();
+			if (wr->bytes() >= 0x110 && !memcmp(p, "KN7WVSY2", 8))
+			{
+				const uint32_t n = p[8] | (p[9] << 8) | (p[10] << 16) | (uint32_t(p[11]) << 24);
+				auto rd32 = [&](uint32_t o) { return p[o] | (p[o+1] << 8) | (p[o+2] << 16) | (uint32_t(p[o+3]) << 24); };
+				for (uint32_t i = 0; i < n && i < 256; i++)
+				{
+					const uint32_t e = 0x110 + i * 32;
+					wentry w;
+					w.bank = p[e]; w.zlo = p[e+1]; w.zhi = p[e+2];
+					const uint32_t off = rd32(e+4);
+					w.len = rd32(e+8); w.lstart = rd32(e+12); w.llen = rd32(e+16);
+					w.root_hz = double(rd32(e+20)) / 1000.0;
+					if (off + w.len * 2 <= wr->bytes() && w.len && w.root_hz > 1.0
+						&& w.lstart + w.llen <= w.len && w.llen)
+					{
+						w.pcm = reinterpret_cast<const int16_t *>(p + off);
+						m_wentries.push_back(w);
+					}
+				}
+				osd_printf_info("kn7000 tonegen: synthetic wave pack loaded (%d zone maps)\n", int(m_wentries.size()));
+			}
+		}
 		save_item(NAME(m_phase));
 		save_item(NAME(m_freq));
 		save_item(NAME(m_note));
@@ -372,6 +408,8 @@ protected:
 		save_item(NAME(m_aux));
 		save_item(NAME(m_mode));
 		save_item(NAME(m_dies));
+		save_item(NAME(m_wsel));
+		save_item(NAME(m_wpos));
 		save_item(NAME(m_srckey));
 		save_item(NAME(m_ctx_key));
 		save_item(NAME(m_ctx_time));
@@ -414,9 +452,27 @@ protected:
 					if (m_env[v] < 0.0005) m_env[v] = 0.0;
 				}
 				if (m_env[v] <= 0.0) continue;
-				acc += sin(m_phase[v]) * m_env[v] * m_level[v];
-				m_phase[v] += TWO_PI * m_freq[v] / FS;
-				if (m_phase[v] >= TWO_PI) m_phase[v] -= TWO_PI;
+				if (m_wsel[v] >= 0)
+				{
+					// Donor-sample playback (synthetic wave pack): linear interpolation, tail
+					// loop (seam crossfaded at build time), stepped by musical pitch / root.
+					const wentry &we = m_wentries[m_wsel[v]];
+					double pos = m_wpos[v];
+					const uint32_t i0 = uint32_t(pos);
+					const double fr = pos - double(i0);
+					const uint32_t i1 = (i0 + 1 < we.len) ? i0 + 1 : we.lstart;
+					const double smp = double(we.pcm[i0]) * (1.0 - fr) + double(we.pcm[i1]) * fr;
+					acc += (smp / 32768.0) * m_env[v] * m_level[v];
+					pos += m_freq[v] / we.root_hz;
+					while (pos >= double(we.lstart + we.llen)) pos -= double(we.llen);
+					m_wpos[v] = pos;
+				}
+				else
+				{
+					acc += sin(m_phase[v]) * m_env[v] * m_level[v];
+					m_phase[v] += TWO_PI * m_freq[v] / FS;
+					if (m_phase[v] >= TWO_PI) m_phase[v] -= TWO_PI;
+				}
 			}
 			float smp = std::clamp(float(acc * 0.11), -1.0f, 1.0f);  // headroom for polyphony
 			stream.put(0, s, smp);
@@ -431,6 +487,12 @@ private:
 	uint16_t m_aux[128]   = { };     // per-voice aux/mode word (latch class 0x1C02; bit15 = gate-follow)
 	uint8_t  m_mode[128]  = { };     // 0=MANAGED (firmware key-up burst) 1=GATE_FOLLOW 2=ONESHOT
 	uint8_t  m_dies[128]  = { };     // held envelope continues to 0 (natural-decay tone shape)
+	// SYNTHETIC wave-pack playback (kn7000_waves_synthetic.rom, optional). Entries map the
+	// runtime sample select -- aux word bank (bits13:12) + zone (bits7:0) -- to donor PCM.
+	struct wentry { uint8_t bank, zlo, zhi; const int16_t *pcm; uint32_t len, lstart, llen; double root_hz; };
+	std::vector<wentry> m_wentries;
+	int16_t  m_wsel[128];            // wave-pack entry per voice (-1 = sine fallback)
+	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
 	double   m_ctx_time = -1.0;      // ...and when it was pushed
@@ -2689,6 +2751,13 @@ ROM_START(kn7000)
 	// firmware update disks this driver's ROMs come from, so audible sound is
 	// impossible until they are dumped from the board (see the service manual
 	// "8.9 WAVE ROM test" / "8.10 SOUND SYSTEM test"; sizes below are placeholders).
+	// SYNTHETIC wave pack (optional): donor samples from the GENUINE KN5000 IC307 dump,
+	// keyed by the runtime (bank,zone) sample select -- built by tools/make_wave_pack.py,
+	// clearly labeled NOT-A-DUMP (embedded provenance block). When absent the tone
+	// generator falls back to the sine placeholder. Rebuild + update hashes with the tool.
+	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
+	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(2705fe27) SHA1(9d0948b31d6a946fddb33ac0c57806040351b67f))
+
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
 	//ROM_LOAD("kn7000_wave_ic204.rom", 0x400000, 0x400000, NO_DUMP)  // C3CBQD000001

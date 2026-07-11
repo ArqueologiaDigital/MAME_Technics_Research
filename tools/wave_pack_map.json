@@ -1,0 +1,20 @@
+{
+  "_provenance": "SYNTHETIC placeholder mapping for the undumped KN7000 wave ROMs. Keys the runtime aux-word sample select (bank bits13:12, zone bits7:0 -- notes/wave-select-decode-and-donor-plan.md) to donor waves extracted from the GENUINE KN5000 IC307 dump (tools/extract_kn5000_waves.py). Zone ranges generalize the live-captured anchors with margins; unmapped zones fall back to the sine placeholder. NOT a KN7000 dump.",
+  "donor_dir": "kn5000_waves",
+  "entries": [
+    { "bank": 2, "zone_lo": "0x00", "zone_hi": "0x1F", "wave": 183, "label": "PianoL1", "anchor": "piano L1 zones 09-17 (C2..C7 chromatic)" },
+    { "bank": 0, "zone_lo": "0x11", "zone_hi": "0x30", "wave": 184, "label": "PianoL2", "anchor": "piano L2 zones 1D-2B + 23" },
+    { "bank": 0, "zone_lo": "0x00", "zone_hi": "0x10", "wave": 134, "label": "World", "anchor": "world zone 04 (plucked/koto-ish donor)" },
+    { "bank": 0, "zone_lo": "0x31", "zone_hi": "0x45", "wave": 47,  "label": "Synth", "anchor": "synth zone 38" },
+    { "bank": 0, "zone_lo": "0x70", "zone_hi": "0x7A", "wave": 75,  "label": "Strings", "anchor": "strings zones 72-77" },
+    { "bank": 0, "zone_lo": "0x7B", "zone_hi": "0x8F", "wave": 76,  "label": "Pad", "anchor": "pad zone 7E" },
+    { "bank": 1, "zone_lo": "0x00", "zone_hi": "0x30", "wave": 42,  "label": "Brass", "anchor": "brass zones 0C-22 (sax 16 interleaved -- wind donor)" },
+    { "bank": 1, "zone_lo": "0x31", "zone_hi": "0x5A", "wave": 116, "label": "Guitar", "anchor": "guitar zones 31-52" },
+    { "bank": 1, "zone_lo": "0x5B", "zone_hi": "0x6F", "wave": 83,  "label": "Sax", "anchor": "sax zone 61" },
+    { "bank": 3, "zone_lo": "0x00", "zone_hi": "0x0C", "wave": 84,  "label": "SaxWind", "anchor": "sax zone 00" },
+    { "bank": 3, "zone_lo": "0x0D", "zone_hi": "0x0F", "wave": 22,  "label": "Organ", "anchor": "organ zones 0D-0F" },
+    { "bank": 3, "zone_lo": "0x10", "zone_hi": "0x1F", "wave": 165, "label": "Bass", "anchor": "bass zones 16/18" },
+    { "bank": 3, "zone_lo": "0x30", "zone_hi": "0x45", "wave": 74,  "label": "Mallet", "anchor": "mallet zone 39" },
+    { "bank": 3, "zone_lo": "0x60", "zone_hi": "0x6F", "wave": 77,  "label": "Pad2", "anchor": "pad zone 66" }
+  ]
+}
