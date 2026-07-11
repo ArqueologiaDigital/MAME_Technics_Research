@@ -566,3 +566,36 @@ error. RECOMMENDATION for the effects goal: this specific reverb divergence is p
 reference-diff harness; the DRY passthrough is correct and is the safe default. Future effects work
 should either build that harness or focus on verifying OTHER effect types (chorus/EQ/delay) that may not
 have the near-unity-loop sensitivity.
+
+## 2026-07-11 PHASE 1 of the divergence fix (wf_c6d2e140-eec): upload EXONERATED; the real unit map
+**Class A (corrupted upload) ELIMINATED**: all 49,269 live host-port writes captured + replayed
+through an exact dsp_data_w model: every PM word (kernel rec04 + all effect records, 471 blocks,
+15,772 words) matches the ROM record pool bit-for-bit; DM = 2x16 low-first assembling the TOP 32 of
+each 40-bit record entry (proven 152/152 on kernel block C302; halfword-swap + low-32 hypotheses
+excluded); live memory at t=17 == upload except 32 DM addresses that are all provably kernel runtime
+state / consumed mailbox (host mailbox DM 0x9C40-0x9C49 = delay-length words, consumed+zeroed).
+**STRUCTURAL CORRECTION (invalidates parts of earlier single-step sessions): the kernel chains 10
+units via CALL slots at PM 0x8080-0x80A0 patched to relocated programs at 0x8400+unit*0x100.**
+Boot default: unit0@0x8400=rec56 ENHANCER (everything we single-stepped at 0x84xx was the enhancer!),
+unit1@0x8500=rec15, unit2@0x8600=rec08, unit3@0x8700=rec11, unit4@0x8800=rec06, unit5@0x8900=rec10,
+unit6@0x8A00=rec06, unit7@0x8B00=rec58 CHORUS, unit8@0x8C00=rec34 EQ, **unit9@0x8D00=rec49 REVERB
+(type 0x52)**. Per-unit DM: 0x9800+u*0x50 and 0xC000+u*0x4D (unit9: 0x9AD0+/0xC2B5+).
+**Idle-boot finding: near-full-scale state (0x7FFF4836/0x80005EDE = +-0.99997 Q31 pair) sits in
+unit-9 DM with NO note ever played** -- either a designed unity-amplitude LFO pair or the divergence
+seeding itself from nothing (Phase 2 discriminates).
+
+## TRM conformance review (same workflow): the ONE systemic nonconformance = the PRECISION MODEL
+Real TRM found: /home/fsanches/compartilhado/KN7000/ADSP-21065L_SHARC_DSP_Technical_Reference.pdf
+(508pp; the repo-root -EP.pdf is a 14-page datasheet). MAME ops are conformant AT 32-BIT PRECISION;
+but hardware runs 40-bit extended float registers (32-bit significand; MODE1 RND32=0 default -- the
+firmware only ever sets IRPTEN|NESTM), FLOAT Rx exact for all int32, and every 32-bit DM store
+TRUNCATES the low 8 fraction bits toward zero (systematic micro-damping MAME lacks). MAME = 24-bit
+host float everywhere. Ranked as the prime suspect (with the honest caveat that a linear system with
+all gains <1 cannot sustain from ULP noise -- UNLESS the recursion is marginally stable BY DESIGN,
+e.g. a coupled quadrature LFO: runtime state contains 0x5A82799A = sin(pi/4) Q31). Real-but-not-causal
+bugs catalogued for upstreaming: circular-wrap off-by-one (both engines), pre-modify never wraps
+circular buffers, fixed AVG truncates vs round-to-nearest (TRM B-10), SSFR forms never round
+(B-51/52), FIX overflow UB, fmul_fix_scaled TRUNC direction, MR 64-bit vs 80-bit accumulator.
+Phase 2 (wf_08fbdf6e-df9, running): empirical first-energy hunt (any nonzero SDRAM delay write on an
+idle zero-input boot is illegitimate; PC names the instruction) + rec49 algorithm model in
+float64/float32/40-bit A/B.
