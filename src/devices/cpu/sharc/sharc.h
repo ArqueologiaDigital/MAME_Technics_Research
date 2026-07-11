@@ -550,6 +550,7 @@ private:
 	void save_fast_iregs(drcuml_block &block);
 	void update_az_an_fixed(drcuml_block &block, const opcode_desc *desc);
 	void update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub);
+	void generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags);
 	void generate_sequence_instruction(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, bool last_delayslot);
 	void generate_update_cycles(drcuml_block &block, compiler_state &compiler, uml::parameter param, bool allow_exception);
 	bool generate_opcode(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);

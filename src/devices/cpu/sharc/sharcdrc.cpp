@@ -279,6 +279,30 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
 	if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
 }
 
+// MODE1 ALUSAT tail for fixed-point ALU results (TRM B-6): expects the WRAPPED result
+// in I6 and the captured overflow flag (0/1) in I7; writes dst, then clamps it to
+// 0x7FFFFFFF / 0x80000000 when saturation mode is on and the op overflowed. The KN7000
+// effects kernel runs with ALUSAT set; every interpreter compute_* fixed ALU op
+// saturates, so every native DRC emission must too (asymmetry here is what turned the
+// effect LFO reflect logic into full-scale rail bounces).
+void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
+{
+	UML_MOV(block, dst, I6);
+	uml::code_label const no_sat = compiler.labelnum++;
+	UML_TEST(block, MODE1, MODE1_ALUSAT);
+	UML_JMPc(block, uml::COND_Z, no_sat);
+	UML_TEST(block, I7, 1);
+	UML_JMPc(block, uml::COND_Z, no_sat);
+	UML_SAR(block, I6, I6, 31);
+	UML_XOR(block, dst, I6, 0x80000000);                       // wrapped<0 -> 0x7FFFFFFF else 0x80000000
+	if (fix_flags)
+	{
+		if (AN_CALC_REQUIRED) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);   // AN = sign of the SATURATED value
+		if (AZ_CALC_REQUIRED) UML_MOV(block, ASTAT_AZ, 0);             // a saturated value is never zero
+	}
+	UML_LABEL(block, no_sat);
+}
+
 void adsp21062_device::update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub)
 {
 	// expects Z, V, S and C flags to be set appropriately
@@ -4454,46 +4478,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 					case 0x01:      // Rn = Rx + Ry
 					case 0x02:      // Rn = Rx - Ry
 					{
-						// MODE1 ALUSAT: the hardware CLAMPS fixed-point ALU results on overflow
-						// (TRM B-6: +ve -> 0x7FFFFFFF, -ve -> 0x80000000) and the KN7000 effects
-						// kernel runs with ALUSAT set (BIT SET MODE1 0x3000 at PM 0x8074). The
-						// rec49-family triangle LFOs depend on saturate+IF-AV-reflect; with a
-						// plain wrapping add they degenerate into a permanent +-2^31 two-sample
-						// rail bounce -- the source of the never-decaying effect-chain garbage.
-						// (The interpreter's compute_add/compute_sub already saturate.)
+						// See generate_fixed_alusat_tail: hardware saturates in ALUSAT mode.
 						const bool is_sub = (operation == 0x02);
 						if (is_sub)
 							UML_SUB(block, I6, REG(rx), REG(ry));
 						else
 							UML_ADD(block, I6, REG(rx), REG(ry));
 						UML_MOV(block, I7, 0);
-						UML_SETc(block, uml::COND_V, I7);              // capture overflow while flags are live
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, is_sub);
-						UML_MOV(block, REG(rn), I6);
-						uml::code_label const no_sat = compiler.labelnum++;
-						UML_TEST(block, MODE1, MODE1_ALUSAT);
-						UML_JMPc(block, uml::COND_Z, no_sat);
-						UML_TEST(block, I7, 1);
-						UML_JMPc(block, uml::COND_Z, no_sat);
-						UML_SAR(block, I6, I6, 31);
-						UML_XOR(block, REG(rn), I6, 0x80000000);       // wrapped<0 -> 0x7FFFFFFF else 0x80000000
-						if (AN_CALC_REQUIRED) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);   // AN = sign of the SATURATED value
-						if (AZ_CALC_REQUIRED) UML_MOV(block, ASTAT_AZ, 0);             // a saturated value is never zero
-						UML_LABEL(block, no_sat);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 					}
 
 					case 0x05:      // Rn = Rx + Ry + CI
 						UML_CARRY(block, ASTAT_AC, 0);
-						UML_ADDC(block, REG(rn), REG(rx), REG(ry));
+						UML_ADDC(block, I6, REG(rx), REG(ry));
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, false);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x06:      // Rn = Rx - Ry + CI - 1
 						UML_XOR(block, I0, ASTAT_AC, 0xffffffff);
 						UML_CARRY(block, I0, 0);
-						UML_SUBB(block, REG(rn), REG(rx), REG(ry));
+						UML_SUBB(block, I6, REG(rx), REG(ry));
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, true);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x0a:      // COMP(Rx, Ry)
@@ -4531,29 +4545,44 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 						return;
 
 					case 0x22:      // Rn = -Rx
-						UML_SUB(block, REG(rn), 0, REG(rx));
+						UML_SUB(block, I6, 0, REG(rx));
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, true);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x25:      // Rn = Rx + CI
-						UML_ADD(block, REG(rn), REG(rx), ASTAT_AC);
+						UML_ADD(block, I6, REG(rx), ASTAT_AC);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, false);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x26:      // Rn = Rx + CI - 1
 						UML_XOR(block, I0, ASTAT_AC, 1);
-						UML_SUB(block, REG(rn), REG(rx), I0);
+						UML_SUB(block, I6, REG(rx), I0);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, true);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x29:      // Rn = Rx + 1
-						UML_ADD(block, REG(rn), REG(rx), 1);
+						UML_ADD(block, I6, REG(rx), 1);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, false);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x2a:      // Rn = Rx - 1
-						UML_SUB(block, REG(rn), REG(rx), 1);
+						UML_SUB(block, I6, REG(rx), 1);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, true);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
 						return;
 
 					case 0x40:      // Rn = Rx AND Ry
@@ -4617,12 +4646,21 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 
 					case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
 					case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7e: case 0x7f:
-						// Fixed-point Dual Add/Subtract
+						// Fixed-point Dual Add/Subtract (both halves saturate under ALUSAT;
+						// flags are OR-merged across the two results as before -- the
+						// saturated-value AN/AZ micro-corrections are skipped here since the
+						// merged flags cannot express per-half fixes; matches interpreter
+						// behavior closely enough for the flag consumers seen in the wild).
 						UML_MOV(block, I0, REG(rx));
 						UML_MOV(block, I1, REG(ry));
-						UML_ADD(block, REG(ra), I0, I1);
+						UML_ADD(block, I6, I0, I1);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						update_az_av_an_ac_fixed(block, desc, false);
-						UML_SUB(block, REG(rs), I0, I1);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(ra), false);
+						UML_SUB(block, I6, I0, I1);
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);
 						if (AZ_CALC_REQUIRED) UML_SETc(block, COND_Z, I0);
 						if (AV_CALC_REQUIRED) UML_SETc(block, COND_V, I1);
 						if (AN_CALC_REQUIRED) UML_SETc(block, COND_S, I2);
@@ -4631,6 +4669,7 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 						if (AV_CALC_REQUIRED) UML_OR(block, ASTAT_AV, ASTAT_AV, I1);
 						if (AN_CALC_REQUIRED) UML_OR(block, ASTAT_AN, ASTAT_AN, I2);
 						if (AC_CALC_REQUIRED) UML_OR(block, ASTAT_AC, ASTAT_AC, I3);
+						generate_fixed_alusat_tail(block, compiler, desc, REG(rs), false);
 						return;
 
 					case 0x81:      // Fn = Fx + Fy
