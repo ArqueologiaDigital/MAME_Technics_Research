@@ -88,3 +88,41 @@ configures which SPORT/slot each unit reads+writes when an effect is enabled (th
 the per-unit input/output pointer programming), and what makes unit 7 join the active chain. Only
 then can the driver route audio to it. The send-matrix half is DONE (above); the kernel-routing half
 is the remaining gate. Reverb (unit 0) remains complete and untouched.
+
+## 2026-07-11 ★★ ROOT CAUSE of ALL silent effects: the unmodeled DSP FLAG3 input pin
+Continuing the kernel-routing decode (static, from the dsp listings). The real gate is NOT the send
+matrix and NOT the input slot -- it is a **SHARC FLAG3 hardware input pin**.
+
+### Evidence
+- Kernel (rec04): all 10 unit CALL slots are patched to real programs at boot (0x8400..0x8D00) and
+  RUN every frame -- confirmed live (PM 0x8080-0x80A0 read: unit0=0x8400 ... unit7=0x8B00 chorus ...
+  unit9=0x8D00; identical with chorus off/on). So every unit executes; dormancy is INSIDE the unit.
+- Chorus program rec58 (relocated to 0x8B00), FIRST instruction:
+    8400: IF NOT FLAG3_IN, JUMP 0x8432    <- skips the read/process/write when FLAG3 is LOW
+    8401: R0 = DM(0x20, I4)               <- input = DM(I4+0x20); 8410/8419: DM(I4,M2)=R0 output
+  FIVE effect programs gate on FLAG3_IN; the audible ones (rec49 reverb, rec56 enhancer) do NOT --
+  they always run. That is exactly why reverb is audible and chorus/multi/etc. are silent.
+- Kernel reset: `8071: BIT SET MODE2 0x18011` = FLAG0/FLAG1 as OUTPUTS; **FLAG3 stays an INPUT**
+  (MODE2_FLG3O 0x40000 not set). Mainloop `8098: IF FLAG3_IN, MODIFY(I3,M3)` reads the pin.
+- MAME models it: m_core->flag[3] (sharcops.hxx:1374/1390 FLAG3 / NOT FLAG3), set_flag_input(n,state)
+  (sharc.cpp:1204). **But the KN7000 driver NEVER calls set_flag_input for the DSP** -> flag[3] stays
+  0 forever -> every FLAG3-gated effect permanently takes the skip branch.
+
+### So there are TWO gates for a non-reverb effect to be audible (both currently unmodelled):
+1. **FLAG3 input pin must be driven high** when a FLAG3-gated effect is active. On the real board this
+   DSP pin is driven by the CPU/control logic; the driver must model it (set_flag_input(3, ...)).
+   Currently never set -> the units skip regardless of anything else. THE PRIMARY GATE.
+2. The unit's SPORT input slot must be fed (the send-matrix half, decoded above: chorus send 0x8198
+   -> unit-7 input). Only meaningful once FLAG3 lets the unit run.
+
+### Concrete next steps (supervised / next tick)
+a. Find what drives the DSP FLAG3 pin: RE the firmware for the CPU write (GPIO / control register bit)
+   that goes high when chorus/multi/DSP effects are enabled -- likely near the effect-enable/apply
+   code (0x4C0092B3 dispatcher, or a GPIO around 0x9807xxxx / 0x36008xxx). Wire it in the driver via
+   m_dsp->set_flag_input(3, state).
+b. THEN combine with the send feed (revert-kept design: feed unit-7 input 0xC370 = raw TG x chorus
+   send, sum unit-7 return). Verify each FLAG3-gated effect runs cleanly (no rail) and reverb stays
+   bit-identical (reverb doesn't gate on FLAG3, so driving FLAG3 must NOT change it -- easy A/B).
+c. Note: FLAG3 gates 5 effects together (not per-unit), so it is a global "FLAG3-effects active"
+   enable; per-unit activity is then the send levels + the unit's own params.
+This is the missing keystone: the effects aren't mis-routed, they are HELD DISABLED at the DSP flag.
