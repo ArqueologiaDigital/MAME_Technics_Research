@@ -288,9 +288,13 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
 void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
 {
 	UML_MOV(block, dst, I6);
+	// TRANSLATION-TIME SPECIALIZATION: MODE1.ALUSAT changes exactly once in this firmware
+	// (boot BIT SET). The mode1-write generators below flush the cache whenever the bit
+	// could change, so compiled code may safely bake the current state in -- zero overhead
+	// when saturation is off, and no per-op MODE1 load when it is on.
+	if (!(m_core->mode1 & MODE1_ALUSAT))
+		return;
 	uml::code_label const no_sat = compiler.labelnum++;
-	UML_TEST(block, MODE1, MODE1_ALUSAT);
-	UML_JMPc(block, uml::COND_Z, no_sat);
 	UML_TEST(block, I7, 1);
 	UML_JMPc(block, uml::COND_Z, no_sat);
 	UML_SAR(block, I6, I6, 31);
@@ -1631,6 +1635,11 @@ void adsp21062_device::generate_update_cycles(drcuml_block &block, compiler_stat
 
 void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
 {
+	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
+	// write could change the bit relative to the compiled assumption, flush the cache so
+	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
+	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
+		UML_MOV(block, mem(&m_core->cache_dirty), 1);
 	// TODO: swap effects
 	if (data & MODE1_BR8)
 		fatalerror("generate_write_mode1_imm: tried to enable I8 bit reversing");
@@ -1677,6 +1686,11 @@ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_st
 
 void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
 {
+	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
+	// write could change the bit relative to the compiled assumption, flush the cache so
+	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
+	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
+		UML_MOV(block, mem(&m_core->cache_dirty), 1);
 	if (data & 0x1)
 		fatalerror("generate_set_mode1_imm: tried to enable I8 bit reversing");
 	if (data & 0x2)
@@ -1719,6 +1733,11 @@ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_stat
 
 void adsp21062_device::generate_clear_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
 {
+	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
+	// write could change the bit relative to the compiled assumption, flush the cache so
+	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
+	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
+		UML_MOV(block, mem(&m_core->cache_dirty), 1);
 	if (data & 0x1)
 		fatalerror("generate_clear_mode1_imm: tried to disable I8 bit reversing");
 	if (data & 0x2)

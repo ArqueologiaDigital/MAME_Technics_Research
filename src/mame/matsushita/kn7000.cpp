@@ -2747,7 +2747,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
 	// come next; for now this proves the core integrates and the KN7000 still boots.
 	// See notes/sharc-lle-assessment.md.
-	ADSP21065L(config, m_dsp, 60'000'000);
+	ADSP21065L(config, m_dsp, 66'000'000);   // IC306 rated/run at 66 MHz (was 60 -- faithful correction)
 	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
 	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);
