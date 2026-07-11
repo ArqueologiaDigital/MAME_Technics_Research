@@ -1,5 +1,46 @@
 # Effect multi-unit routing — why only REVERB is audible (2026-07-11)
 
+## ★ IMPLEMENTATION ROADMAP (consolidated 2026-07-11) — read this first
+
+GOAL: make the non-reverb effects (chorus / multi / sound-DSP / EQ) audible. Reverb is complete.
+
+WHAT'S DECODED (done):
+- **Send matrix** (sub-TG group-0x20, emitter lib 0x4C036FBA): each effect = a fixed bus CHANNEL,
+  reg8=SEND (low byte = per-part depth), regA=WET/DRY, plane0x83=DEPTH. CHORUS send = **0x8198**
+  (live-verified, low byte tracks CHORUS DEPTH). Reverb 0x80B8; SOUND DSP 0x8098/0x80C8; MULTI 0x8298.
+  Enable recipe live-verified (PART SETTING p2; SOUND DSP forces the block refresh).
+- **Unit dispatch**: all 10 unit programs are patched into CALL slots (PM 0x8080-0x80A0 -> 0x8400..
+  0x8D00) and run every frame. unit0=reverb path (audible), unit7=chorus rec58@0x8B00, unit8=EQ, etc.
+- **The gate**: FLAG3-gated effect programs (chorus + 4 others) open with `IF NOT FLAG3_IN, JUMP skip`.
+  Reverb/enhancer (rec49/56) DON'T gate on FLAG3 -> always run. Unit I/O is I4-relative: input =
+  DM(I4+0x20), output = DM(I4) (I4 walks 0xC342, +2 per unit; a +0x0A/-0x0A hop mid-loop).
+
+THE BLOCKER (why simply feeding/enabling doesn't work):
+- FLAG3 is a SHARC **input pin the driver never drives** (stays 0 -> gated effects skip). BUT it is
+  ALSO read by the kernel mainloop (`8098: IF FLAG3_IN, MODIFY(I3, M3=-1)`) + a per-frame ASTAT
+  ping-pong toggle (8099) -> FLAG3 is a GLOBAL double-buffer/handshake signal, NOT a per-effect enable.
+  Experiment: forcing FLAG3=1 constant CHANGED the reverb (via the I3 shift). So FLAG3=0 is what makes
+  our SIMPLIFIED one-frame-per-IRQ0 bridge produce the correct reverb; the gated effects live on the
+  OTHER ping-pong phase our model never runs.
+- ROOT ARCHITECTURE ISSUE: our F.3 bridge feeds ONE frame to unit-0 input per IRQ0 and reads unit-0
+  return. The real DSP runs a double-buffered SPORT-DMA frame loop where FLAG3/ping-pong sequences the
+  units and the TG's per-part SPORT sends feed each unit. The gated effects need that faithful frame
+  model, not a patch.
+
+IMPLEMENTATION PATH (large; best supervised):
+1. Decode what physically drives DSP FLAG3 (service-manual IC306 schematic + firmware): is it the
+   codec/SPORT frame-sync, a divided clock, or a CPU line? Determine its per-frame sequence.
+2. Model the DSP's SPORT-DMA double-buffer frame loop faithfully (drive FLAG3 + the ping-pong so I3/I4
+   sequence as on hardware), so ALL units run on the correct phase -- verifying the reverb stays
+   correct throughout (bit-identical is unlikely once ping-pong is real; use spectral equivalence).
+3. Feed each effect unit's SPORT input from the TG per its send (send matrix above): chorus <- 0x8198,
+   etc. (needs per-part/per-bus TG output, or the labelled whole-mix approximation).
+4. Sum the unit returns into the DAC (the TG SDIE mix).
+COST: multi-day, touches the working reverb's frame model -> supervised. Until then, reverb is the one
+faithful effect and the others are HELD DISABLED at the (unmodeled) FLAG3/ping-pong frame gate.
+
+---
+
 Triage of the effects-sweep "CHORUS = no audible effect" SUSPECT. **Verdict: NOT a bug — an
 architectural limitation of the current single-path DSP bridge.** Documented so the fix is scoped.
 
