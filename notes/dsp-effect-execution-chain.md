@@ -316,3 +316,37 @@ attenuation, not unity. Prime suspects: SHARC DAG circular-buffer (modulo L) add
 external-SDRAM delay lines, or the reverb storing input+delayed (unity) where it should store
 input+coeff*delayed. Tooling: dump reverb PM (Lua read_u64 0x8000-0x8DFF -> unidasm -arch sharc);
 instrument compute_fmul / the DM write path in sharcops.hxx gated on PC 0x8408-0x8465.
+
+## 2026-07-11i: DEEP core-instrumentation session — divergence localized to the TANK feedback (~1.0)
+Exhaustive SHARC-interpreter instrumentation (all temporary, reverted). Established with certainty and
+RULED OUT a large space:
+- **F1 (reverb output float, PM 0x8465) DIVERGES and NEVER decays**: 0 pre-note; at note-on -> input
+  level (~1.8e5); grows to +/-2e7 (>2x full-scale) in ~0.4 s; still +/-1-3e7 **11-17 s AFTER note-off**.
+  So effective feedback is EXACTLY ~1.0 (self-sustaining), not <1. Same in interpreter and DRC.
+- **NOT the coefficients**: instrumented the executing comb/allpass taps (0x840a-0x845c) -- coefficients
+  are damped (-0.618, +0.458, -0.280, +0.853) and the F4 inter-section scale at 0x842f is exactly 1.0.
+- **NOT the float ops**: every FMUL result matches Frx*Fry exactly; compute_fmul_fadd reads both
+  operands before writing (no hazard); FLOAT/FIX are the stock "verified" impls.
+- **Structure is a correct nested-allpass (Dattorro/Gardner) reverb**: e.g. section 0x8425-0x842e is a
+  textbook allpass w=x-g*w_delayed / y=w_delayed+g*w with g=-0.618 (stable). Delay lines = a CIRCULAR
+  buffer in external SDRAM: B6=0x20000, L6=0x456F0 (284,400 words), pointer DECREMENTS (M3=-1).
+- **Circular-buffer off-by-one FOUND but not causal**: UPDATE_CIRCULAR_BUFFER_{DM,PM} uses
+  `if (I > B+L)` where SHARC semantics want `if (I >= B+L)` (buffer is [B,B+L), so landing on B+L must
+  wrap). Fixed it and re-tested -> F1 STILL diverges identically. Reverted (keep core matching upstream;
+  it's a real correctness nit worth upstreaming separately, just not this bug).
+- **NOT the 0xC011/0xC012 1.0 coefficients**: overrode every exactly-1.0 float in 0xC000-0xC050 to 0.9
+  live -> F1 still diverges. So the unity feedback is not those.
+
+### Where it must be (precise next step)
+The reverb is a correct allpass tank with damped section coefficients, yet the GLOBAL loop gain is ~1.0
+and it never decays. => the **TANK DECAY gain** (the long feedback that recirculates the whole tank,
+set by the reverb TIME/DEPTH parameter) is 1.0 instead of <1. This is consistent with the DEPTH path
+being dead (DspEffectSelect *(0x500A01E0)=-1): the tank-decay coefficient defaults to unity because the
+depth was never applied. It is NOT the 0xC011/0xC012 1.0s -- it is somewhere in the coefficient stream
+I0 walks (0xC004 up to ~0xC2xx). NEXT: (a) instrument the DM READ at the tank's decay-multiply (find the
+FMUL whose STATE operand is the largest/longest-delayed value and whose coeff is ~1.0), OR (b) dump the
+FULL coefficient stream in execution order (log DM(I0,M2) address+value across one frame) and find the
+~1.0 that is the tank decay; then trace back to the maincpu upload (caller of gated host-write
+0x48404EF5) to see where DEPTH should scale it <1. Fixing the DspEffectSelect depth path (setter
+0x484057d6 never called) likely applies it. Tooling proven: instrument compute_fmul (case 0x30, 5-tab
+indent) / compute_fix (case 0xc9) gated on PC, -nodrc, fprintf(stderr); reverb PM dump via Lua read_u64.
