@@ -224,3 +224,13 @@ Units 1-3,5,7 hold rec15/08/11/10/58 (the boot-default chain); unit 7 = rec58 is
 pitch-shifter (the red-herring I mis-fed earlier). Matching signatures used: rec56 word 8401=
 0000716f80000000; rec06 8402=0000a80b00000021; rec34 8C00=000006be0400831b; rec49 8D04=0000209a31801111.
 This map unblocks extending audibility to EQ (u8) and the other send effects -- feed the right unit.
+
+## 2026-07-12: rec06 chorus is WET-ONLY -> the chorus mix has no dry-doubling
+Traced rec06 (unit 4): 8401 reads input R0 = DM(I4+0x20); 8403-8406 pushes it into the circular
+delay line; 8408-8410 reads the delay back at LFO-modulated offsets with interpolation (MRF MAC);
+8433 `R8 = CLIP R8; DM(I4,M2) = R8` writes the output. The dry input (R0) is NOT added to the output
+-- rec06 emits the WET (modulated-delay) signal only. So summing the chorus return with the main
+(unit-0 output, which carries the dry-through) is CORRECT: total = dry+reverb (unit0) + chorus wet
+(unit4), no dry doubling. The chorus mix is structurally sound; only the CHORUS_WET makeup level
+(currently 0.60) needs calibration against real hardware (Felipe's ear) -- the ~69% DAC modulation
+suggests it may be a touch high. Confirms the shipped chorus is faithful in structure.
