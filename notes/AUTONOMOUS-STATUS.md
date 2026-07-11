@@ -20,6 +20,26 @@ divergence (step 3) is fixed: a fresh boot follows the firmware default (reverb 
 note rails until REVERB is pressed OFF. This is the faithful routing; the divergence remains the
 one open reverb item (reference-diff harness). Verified on fresh cfg: identical toggle behavior.
 
+## 2026-07-11i: LOUD-DISTORTION HUNT (Felipe's report) — 3 workflows of eliminations; ROOT STILL OPEN
+ELIMINATED with evidence (wf_64813f74-f36 + wf_e3d8b476-79b): dropped host level writes (the "index"
+is the literal SHARC IOP register address -- stock host-DMA protocol; nothing load-bearing dropped);
+input word alignment (kernel SPORT SLEN=23, 24-bit right-justified = our format); blocked boot
+compile (REFUTED -- all 10 unit queues fill+drain at t=1.87-2.5s with compiled levels wet=0.101/
+dry=1.0; the 0x50000038 stage byte is a red herring). LEARNED + SHIPPED: TOTAL DEPTH is TG-side
+(sub-TG 0x8338=0x8500|depth per step; up=:SEG0B 0x04 / down=:SEG0B 0x08 on the reverb screen) -- now
+honored in the bridge (DSP return x depth/127). Panel reverb TYPE select = queue-unit 0 (PM 0x8400,
+Dark2=:SEG12 0x01 works, full 27-transaction reload verified). 0x8238=0x0800 written per depth step
+(meaning unknown).
+★ ROOT CAUSE STILL OPEN: the chain SELF-SATURATES on excitation, INPUT-INDEPENDENT (railed at
+0x7FFFFF even with input trimmed -18dB; identical peak at depth 80 vs 0 pre-fix). Tail = rail for
+~1.2s post-release then HARD CUT (timed mechanism?). PRIME SUSPECT: the ALUSAT fix (2d308c7) covered
+DRC single-function ADD/SUB only -- ADDC/SUBB (cases 0x05/0x06) and the DUAL add/sub compute forms
+still WRAP in the DRC; any effect using those in reflect/feedback logic re-creates the rec49-class
+rail. NEXT: (1) extend ALUSAT to ALL DRC integer ALU forms (0x05/0x06, dual add/sub, multifunction
+natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -nodrc SOUNDS CLEAN,
+that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
+still needed. The 1.2s hard-cut = investigate after saturation is gone.
+
 ## ★★★★ 2026-07-11h: THE EFFECT-CHAIN DIVERGENCE IS FIXED (2d308c7) — MODE1 ALUSAT in the DRC
 Root cause of the 6-session reverb-wash saga: kernel sets MODE1 ALUSAT (BIT SET 0x3000 @PM 0x8074;
 old listing mis-read it as NESTM — NESTM is 0x800). rec49-family triangle LFOs = saturating add +
