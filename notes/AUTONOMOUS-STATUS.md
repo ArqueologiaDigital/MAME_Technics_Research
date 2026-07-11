@@ -70,6 +70,21 @@ DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWA
   genuine slow-attack sound to pin); SUS2/DCY2 (r9/r8) as a true 2-stage decay. Measurement caveat:
   the dry TG envelope is masked by the reverb tail in the final WAV. Full trace: notes/tg-envelope-*.
 
+## NEXT-TICK CANDIDATES (pick highest value; sound subsystem is now mature)
+- FLOPPY DRIVE (Felipe's list): the KN7000 has a 3.5" FDD (service manual Part VI Disk Drive p122-137;
+  DISK MENU = Load/Save/DIRECT PLAY/Medley/Tools). UI-level symbols found (DiskInfoProc, FormatDisk,
+  TestDiskFunc 0x484A0A32 [a msg dispatcher, NOT the FDC], DiskAttention 0x4851719F). The LOW-LEVEL
+  FDC I/O is in the library/disk task -- NOT yet located; find it (trace the FAT-read 0x485335FF back
+  to the sector read, or the disk-driver task) before modelling an FDC device + floppy image. Big task.
+- TG envelope ATTACK (the one remaining ADSR piece): r4/r5/r6 are CONSTANT across all 5 sounds tried
+  (fast attack) -- likely the base sounds all have a fixed attack and the amp-edit ATTACK TIME edit is
+  what varies it (r0-r3 vary per-sound but read as level/key-scale). Needs a genuine slow-attack patch
+  (blocked on menu navigation) or the chip datasheet. Low urgency; current fixed ~6ms is fine for the
+  base sounds.
+- DSP effects DEPTH / DIGITAL EFFECT on-off (Felipe's "hear a parameter change"): types verified to
+  load distinct microprograms; depth/on-off still to verify -- hard to A/B by ear (reverb masks, and
+  placeholder TG), so measure via DSP coefficient changes.
+
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
   is available (DISPLAY=:0, wayland-0). Run with visible video.
