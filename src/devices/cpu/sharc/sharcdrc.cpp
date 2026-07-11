@@ -4092,23 +4092,107 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 				return;
 			}
 
-			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry
-			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy
-			case 0x06:          // Rm = R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
-			case 0x08:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
-			case 0x09:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
-			case 0x0a:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
-			case 0x0c:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
-			case 0x0d:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
-			case 0x0e:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
-			case 0x10:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
-			case 0x11:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
-			case 0x12:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
-			case 0x14:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
-			case 0x15:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
-			case 0x16:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
+			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry   (fixed dual add/sub, not a MAC)
+			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy   (float dual add/sub, not a MAC)
 				generate_unimplemented_compute(block, compiler, desc);
 				return;
+
+			// Fixed-point multiply / multiply-accumulate in parallel with an ALU add/sub/avg.
+			// multiop groups as grp=(multiop>>2): 1=Rm=Rxm*Rym, 2=MRF+=Rxm*Rym, 3=Rm=MRF+Rxm*Rym,
+			// 4=MRF-=Rxm*Rym, 5=Rm=MRF-Rxm*Rym; alu=(multiop&3): 0=add, 1=sub, 2=average. Native
+			// emission (previously an interpreter fallback -- save/restore + C call per op -- in the
+			// effect kernel's per-frame hot path; the reverb's coupled-form sine oscillators live
+			// here). Mirrors the interpreter compute_* exactly; verified by a bit-identical reverb
+			// WAV A/B (DRC-with-fallback == DRC-native). Product aligned 1.63 (<<1); Rm = MR1 (63:32).
+			case 0x06:          // Rm = Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
+			case 0x08:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa + Rya
+			case 0x09:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa - Rya
+			case 0x0a:          // MRF = MRF + Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
+			case 0x0c:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa + Rya
+			case 0x0d:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa - Rya
+			case 0x0e:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
+			case 0x10:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa + Rya
+			case 0x11:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa - Rya
+			case 0x12:          // MRF = MRF - Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
+			case 0x14:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa + Rya
+			case 0x15:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa - Rya
+			case 0x16:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
+			{
+				const int grp = multiop >> 2;
+				const int alu = multiop & 3;
+				// p = (Rxm * Rym) << 1   (64-bit signed product, in I0)
+				UML_DSEXT(block, I0, REG(fxm), SIZE_DWORD);
+				UML_DSEXT(block, I1, REG(fym), SIZE_DWORD);
+				UML_DMULS(block, I0, I0, I0, I1);
+				UML_DSHL(block, I0, I0, 1);
+				// MR accumulate / register result
+				switch (grp)
+				{
+					case 1: UML_DSHR(block, I2, I0, 32); UML_MOV(block, REG(fm), I2); break;
+					case 2: UML_DADD(block, MRF, MRF, I0); break;
+					case 3: UML_DADD(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
+					case 4: UML_DSUB(block, MRF, MRF, I0); break;
+					case 5: UML_DSUB(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
+				}
+				// Multiplier flags: interpreter clears MN/MV/MU/MI and sets MN from Rm for the
+				// register-destination groups (1,3,5); MRF-only groups (2,4) leave MN clear.
+				// Gate each write on its liveness (as the rest of the DRC does) so dead flags cost
+				// nothing -- the bit-identical WAV A/B holds because a non-required flag is unread.
+				if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
+				if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
+				if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
+				if (MN_CALC_REQUIRED)
+				{
+					if (grp == 1 || grp == 3 || grp == 5)
+					{
+						UML_TEST(block, REG(fm), REG(fm));
+						UML_SETc(block, uml::COND_S, ASTAT_MN);
+					}
+					else
+						UML_MOV(block, ASTAT_MN, 0);
+				}
+				// Parallel ALU
+				if (alu == 2)   // signed average (Rxa+Rya)/2, overflow-free: (a>>1)+(b>>1)+(a&b&1)
+				{
+					UML_SAR(block, I3, REG(fxa), 1);
+					UML_SAR(block, I4, REG(fya), 1);
+					UML_ADD(block, I3, I3, I4);
+					UML_AND(block, I4, REG(fxa), REG(fya));
+					UML_AND(block, I4, I4, 1);
+					UML_ADD(block, REG(fa), I3, I4);
+				}
+				else
+				{
+					if (alu == 0) UML_ADD(block, I6, REG(fxa), REG(fya));
+					else          UML_SUB(block, I6, REG(fxa), REG(fya));
+					UML_MOV(block, I7, 0);
+					UML_SETc(block, uml::COND_V, I7);      // overflow, for ALUSAT
+					UML_MOV(block, REG(fa), I6);
+					if (m_core->mode1 & MODE1_ALUSAT)      // baked at translation time (cache flushes on ALUSAT change)
+					{
+						uml::code_label const nsat = compiler.labelnum++;
+						UML_TEST(block, I7, 1);
+						UML_JMPc(block, uml::COND_Z, nsat);
+						UML_SAR(block, I6, I6, 31);
+						UML_XOR(block, REG(fa), I6, 0x80000000);   // wrapped<0 -> 0x7FFFFFFF else 0x80000000
+						UML_LABEL(block, nsat);
+					}
+				}
+				// ALU flags: interpreter clears all ALU flags then sets AN/AZ from the final Ra.
+				// Gated on liveness (dead flags unread -> WAV stays bit-identical).
+				if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
+				if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
+				if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
+				if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
+				if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
+				if (AZ_CALC_REQUIRED || AN_CALC_REQUIRED)
+				{
+					UML_TEST(block, REG(fa), REG(fa));
+					if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
+					if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
+				}
+				return;
+			}
 
 			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
 			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
