@@ -14,6 +14,26 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★ SESSION 2026-07-11k — reverb paradox pinned + blog Part 15 (honest correction of Part 13)
+- Instrumented the global TANK recirculation gain (`F10 = F10 * F9`, PM 0x844a): F9 = -0.280 CONSTANT
+  (damped). So EVERY gain in the reverb is |<1| (allpass -0.618, tank -0.28, all coeffs damped), the
+  float ops are exact, the structure is a correct Dattorro/Gardner nested all-pass -- yet F1 diverges.
+  A linear system of sub-unity gains is UNCONDITIONALLY STABLE, so the energy must come from the
+  DELAY-LINE management (reads landing on wrong slots in the single shared 284,400-word circular SDRAM
+  buffer). That is now the sole remaining hypothesis; the definitive next step is a full-frame trace of
+  every DM(I6) read/write ADDRESS, checking each read returns the sample written the right # of steps
+  earlier. Details: notes/dsp-effect-execution-chain.md section 2026-07-11k.
+- INTEGRITY: blog Part 13 over-claimed ("the reverb is audible... stable, not a runaway"). Wrote
+  mame-blog Part 15 ("The reverb that wouldn't decay") honestly correcting it -- the reverb DIVERGES;
+  the "stable tail" was the I4-following bridge reading a moving ring slot, not the railed real output.
+  The 4 core fixes in Part 13 stand. (mame-blog is a static JS blog: edit posts/kn7000/*.md + posts.json,
+  NO build needed; it is SEPARATE from the kn5000-docs Jekyll site.)
+- Confirmed this tick: MIDI in/out fully wired already (done); the 3 unwired volume sliders control
+  external audio the emulator doesn't model (MIC/LINE-IN via IC309 ADC) or need accompaniment-voice
+  classification (APC/SEQ) -- not cleanly wireable, correctly left as placeholders. Panel-LED next steps
+  need the layout generator's cpr_led range extended past 80 + physical placement.
+- Binary rebuilt clean (instrumentation reverted) + republished; boots to PMEM home, no regression.
+
 ## ★ SESSION 2026-07-11j — deep SHARC core-instrumentation of the reverb divergence (READ notes/dsp-effect-execution-chain.md tail)
 Spent this session localizing the reverb divergence with temporary SHARC-interpreter instrumentation
 (all reverted; tree clean; binary republished). RESULT = big elimination, root cause still open:
