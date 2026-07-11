@@ -284,3 +284,35 @@ proven -- the decisive step is to single-step the divergent float recursion (0x8
 F3/F11 grow with damped coefficients, or to unit-test the fixed MAC (multiop grp 3) + FLOAT/FIX round
 trip against the ADSP-21065L TRM. Deferred to a fresh, methodical tick (this one has already corrected
 itself twice; the arithmetic check deserves careful isolation, not a rushed poke).
+
+## 2026-07-11h: CORE-INSTRUMENTED — the reverb output float DIVERGES (definitive, quantified)
+Added temporary fprintf instrumentation to the SHARC interpreter (sharcops.hxx, reverted after) and ran
+Dark2 with -nodrc. Findings (this supersedes the "coefficient >=1.0" and the arithmetic-op guesses):
+- **F1 (reverb output float, at PM 0x8465 `R8 = FIX F1`) diverges**: 0 before the note; at note-on it
+  starts at the input level (~1.8e5) and within ~0.4 s grows to +/-2e7 (>2x full-scale 8.4e6) and
+  LIMIT-CYCLES there. Run extended to 17 s AFTER note-off: F1 STILL oscillates +/-1-4e7 -- it never
+  decays. So the effective feedback is ~1.0 (a self-sustaining limit cycle at the excited amplitude),
+  NOT a long-but-stable reverb. Confirmed in the INTERPRETER (rules out the DRC).
+- **The coefficients are correctly DAMPED and the float multiplies are CORRECT.** Instrumenting the
+  executing comb/allpass taps (PM 0x840a-0x845c, all single-func FMUL `compute_fmul`) shows the tap
+  coefficients are -0.618, +0.458, -0.280, +0.853 (all <1) and an input gain +/-3.2; every product
+  matches Frx*Fry exactly (e.g. 3.98e7 * -0.618 = -2.46e7). So it is NOT the coefficient data and NOT
+  the float multiply.
+- The EXECUTING reverb path (0x840a-0x846f, ends in RTS at 0x846f) is PURE FLOAT: FMUL + FADD + DM
+  store/load of float bit patterns. The fixed MAC / op-0x09-avg / 0x847c recursion I chased earlier
+  (0x8470+) is a SEPARATE routine that does NOT execute for this effect -- so those ops are NOT the cause.
+- Verified the stock float ops are correct: compute_fmul_fadd reads both operands before writing (no
+  register hazard); compute_float/compute_fix are the stock "verified" impls; FMUL/FADD are stock.
+
+### Where the unity feedback must be (next dedicated tick)
+With damped tap coeffs + correct multiplies + no decay, the ~1.0 loop gain must be in the DELAY-LINE
+handling: what value is STORED to the delay line vs read back. The taps look like
+`F13 = F2 * F6,  DM(I6, M3) = R6` -- i.e. the OUTPUT accumulator gets the ATTENUATED tap (F2*F6) but
+the value STORED to the delay (DM(I6,M3)=R6) is R6 (=F6), which if it is the UN-attenuated
+input+delayed sum would give feedback ~1.0. NEXT: instrument the delay-line WRITEs (address + value at
+DM(I6,M3)/DM(I0,M2) stores in 0x840a-0x846f) and the corresponding READ addresses to confirm (a) the
+delay lengths (DAG I/M/L for I0/I6) are right and (b) the stored feedback value carries the tap
+attenuation, not unity. Prime suspects: SHARC DAG circular-buffer (modulo L) addressing for the
+external-SDRAM delay lines, or the reverb storing input+delayed (unity) where it should store
+input+coeff*delayed. Tooling: dump reverb PM (Lua read_u64 0x8000-0x8DFF -> unidasm -arch sharc);
+instrument compute_fmul / the DM write path in sharcops.hxx gated on PC 0x8408-0x8465.
