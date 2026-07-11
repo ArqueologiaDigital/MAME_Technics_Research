@@ -40,6 +40,32 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~23:25 — multi-unit effects: investigation CONCLUDED with implementation roadmap
+Completed the FLAG3/kernel-routing decode and consolidated the whole multi-unit investigation into an
+actionable IMPLEMENTATION ROADMAP (top of notes/effect-multi-unit-routing.md). FINAL PICTURE:
+- The non-reverb effects are HELD DISABLED by the DSP FLAG3 input, which is a GLOBAL double-buffer
+  handshake (kernel `8098: IF FLAG3_IN, MODIFY(I3,M3=-1)` + ASTAT ping-pong toggle 8099), NOT a
+  per-effect enable. Our simplified one-frame-per-IRQ0 bridge is correct for the FLAG3-INDEPENDENT
+  reverb but structurally can't run the gated effects (they live on the ping-pong phase we never run).
+- Making them audible needs a FAITHFUL SPORT-DMA double-buffered frame model (drive FLAG3/ping-pong
+  so all units run on the right phase) + per-effect send feeds (send matrix decoded) + return summing.
+  Large, touches the working reverb's frame model -> SUPERVISED. Roadmap step 1 = decode what drives
+  the FLAG3 pin (IC306 schematic + firmware).
+- Reverb pristine (bit-identical), binary published, tree clean.
+
+## ★ PROJECT STATE SUMMARY (2026-07-11 late)
+Priorities 1-5 are DONE or blocked; the driver is in an excellent, stable state:
+- Reverb: clean, robust (dense-input tested), all 8 types PASS, native-MAC DRC, bit-identical guard.
+- Navigation: PAGE/CONTRAST fixed+verified; all effect types reachable.
+- Effects sweep triaged; envelopes, wave pack, sound all shipped earlier.
+- Docs + blog (Parts 1-18) current.
+TWO ITEMS NEED FELIPE (both asked, pending): (1) OK to apply the TRM-correct circular-wrap fix
+(2-sample inaudible reverb change, catalogue C.1, ready)? (2) real-HW reverb ON/OFF loudness ratio.
+ONE BIG FEATURE scoped for a supervised session: audible chorus/EQ/multi/sound-DSP (the FLAG3/SPORT
+frame model, roadmap above).
+Remaining autonomous-safe polish if future ticks want work: upstream-submit the SHARC catalogue;
+per-model doc passes; minor verification. No further risky/unsupervised changes to the DSP audio path.
+
 ## TICK 2026-07-11 ~23:10 — multi-unit routing: FLAG3-gate root cause found (kernel-routing decode)
 Advanced the kernel-routing half of the multi-unit puzzle (static decode + live/experiment). FINDINGS:
 - All 10 unit CALL slots ARE patched + run every frame (confirmed live PM 0x8080-0x80A0); units aren't
