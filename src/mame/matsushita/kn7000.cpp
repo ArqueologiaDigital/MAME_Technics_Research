@@ -106,6 +106,8 @@
 
 #include "kn7000.lh"
 
+#include <atomic>
+
 
 // ----------------------------------------------------------------------------
 //  KN7000 SIO UART -- byte<->bit bridge between a byte-oriented SIO channel and
@@ -338,6 +340,9 @@ public:
 		if (m_tx_wr == m_tx_rd) m_tx_rd = (m_tx_rd + 1) % RING;   // overflow: drop oldest (bound latency)
 	}
 
+	// Master output gain (0..1), set from the front-panel MAIN VOLUME slider by the driver.
+	void set_master_gain(float g) { m_master_gain = g; }
+
 protected:
 	virtual void device_start() override
 	{
@@ -387,8 +392,12 @@ protected:
 				}
 				else { ol = m_tx_last[0]; orr = m_tx_last[1]; }
 			}
-			stream.put(0, s, float(ol) / SCALE);
-			stream.put(1, s, float(orr) / SCALE);
+			// Front-panel MAIN VOLUME slider: a master output attenuation on the final mix
+			// (modelled as a post-DAC analog-style gain; the driver pushes the taper via
+			// set_master_gain from the VOL_MAIN adjuster). 1.0 = unity.
+			const float g = m_master_gain;
+			stream.put(0, s, (float(ol) / SCALE) * g);
+			stream.put(1, s, (float(orr) / SCALE) * g);
 		}
 	}
 
@@ -402,6 +411,7 @@ private:
 	bool m_dsp_active = false;     // the DSP has started producing output
 	bool m_tx_primed = false;      // the output latency buffer has filled
 	int32_t m_tx_last[2] = { };    // last DSP output (held on underflow)
+	std::atomic<float> m_master_gain{ 1.0f };   // MAIN VOLUME slider (audio thread reads, driver writes)
 };
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
@@ -445,6 +455,7 @@ public:
 		, m_sdsw(*this, "SDSW")
 		, m_sdcard(*this, "sdcard")
 		, m_sdcover(*this, "SDCOVER")
+		, m_volmain(*this, "VOL_MAIN")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -484,6 +495,7 @@ private:
 	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
+	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -1728,6 +1740,14 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 // be cleared by the input frame-update before this 250 Hz scan samples it.
 TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 {
+	// Front-panel MAIN VOLUME slider -> master output gain on the final mix. A squared
+	// taper approximates a natural volume law (the exact analog-slider taper is unknown);
+	// 100 = unity, 0 = silent. Polled here (250 Hz) -- cheap and always current.
+	{
+		const float v = float(m_volmain->read()) / 100.0f;
+		m_dspbridge->set_master_gain(v * v);
+	}
+
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
 	// identity the firmware's button dispatcher (0x484ADB59) uses. For a changed
 	// segment we emit its 2-byte [ADDR][DATA] switch frame, computing the wire
