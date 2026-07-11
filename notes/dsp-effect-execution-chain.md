@@ -522,3 +522,25 @@ values and compare each intermediate to MAME's. Either pinpoints the first wrong
 open as an interaction candidate: the SPORT autobuffer DMA / I4 audio-buffer management (the bridge
 follows live I4 but does not model the full double-buffered SPORT DMA) -- worth ruling in/out in the
 differential pass. Pausing incremental core-tracing here to invest ticks in completable shippable work.
+
+## 2026-07-11r: CORRECTION -- the delays are SHORT (~60ms), the "6.4s" reasoning was wrong
+Timing check: F1 builds from the input level to ~2e7 over ~0.4 s (17640 reverb frames at 44 kHz). A
+feedback reverb whose loop closed only at 6.4 s could NOT build in 0.4 s. Buildup time ~= D/(1-g), so
+0.4 s with g~0.85 => D ~= 60 ms -- a NORMAL reverb delay. And the ~20x buildup (input 1e6 -> 2e7) is
+just resonant gain (input-gain 3.2 x Q~6.7 for g=0.85). So:
+- The delays are SHORT (~tens of ms), correct-looking. The "every tap = 6.4s full-buffer" conclusion
+  from 2026-07-11o was WRONG (my cross-frame address geometry was mis-reasoned; the 10 sections each
+  own a region and read short M-offsets within it).
+- The build-to-2e7 is NORMAL resonant buildup, not divergence.
+- THE ACTUAL BUG is narrow and specific: the reverb DOES NOT DECAY after note-off (sustains 17s+),
+  i.e. the closed-LOOP gain is >= 1 even though every measured COEFFICIENT is < 1 (allpass g=-0.618,
+  tank F9=-0.28). With all per-instruction components verified correct (ops, FLOAT/FIX, MODIFY, wrap,
+  DB timing), a loop gain >=1 from <1 coefficients must come from the LOOP TOPOLOGY as executed:
+  either (a) a parallel sum of the 10 sections' feedbacks exceeding 1, or (b) a specific feedback path
+  whose effective gain is 1 (e.g. an all-pass whose DC/loop gain is unity by design + no net tank
+  attenuation on that path), or (c) the SPORT/I4 output-buffer interaction feeding a tiny amount back.
+NEXT (focused, tractable): measure the actual RT60 / loop gain per section by muting sections. Concretely
+-- via Lua, after loading the reverb, zero the microprogram of sections 0x8500..0x8D00 one at a time
+(or NOP their CALLs at 0x8083..0x80a0) and see which section's removal makes the reverb DECAY. That
+isolates the section carrying the >=1 loop gain WITHOUT needing a reference SHARC. THAT is the next step
+(cheap: patch PM via Lua, no rebuild). Supersedes the 6.4s-delay framing.
