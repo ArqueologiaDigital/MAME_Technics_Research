@@ -1073,7 +1073,22 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		else if (data == 0xa0)                                                                 // end / sync
 		{
 			if (m_dsp_block_open)
+			{
 				m_dsp_block_open = false;                         // closes the current block
+				// A RUNTIME upload (SHARC already running, e.g. selecting a reverb) that lands in
+				// PROGRAM memory (mode 1) changes live code behind the DRC's back -- its self-modify
+				// detection only fires for PM writes issued by the SHARC itself, so notify_pm_written()
+				// would flush the recompiled cache and let the newly-uploaded effect run. That IS the
+				// correct behaviour and it DOES make the effect execute -- but the currently-modelled
+				// effect pipeline then emits SILENCE (the running microprogram reads its input and its
+				// SDRAM delay lines yet writes 0 to the output slot 0xC350; likely an unset wet/dry mix
+				// coefficient or an output routed to a TX slot the bridge doesn't read). Until that is
+				// resolved, leaving the cache stale keeps the (audible) boot passthrough rather than
+				// regressing to silence. Re-enable once the effect output is non-zero.
+				// See notes/dsp-effect-execution-chain.md.
+				//if (m_dsp_running && m_dsp_mode == 1)
+				//	m_dsp->notify_pm_written();
+			}
 			else if (!m_dsp_running && m_dsp_dl_words > 0)        // bare 0xA0 after the last block = "go"
 			{
 				m_dsp_running = true;

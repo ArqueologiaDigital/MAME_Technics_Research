@@ -167,6 +167,22 @@ struct adsp21062_device::cfuncs
 		core->astat_drc.unpack(core->astat);
 	}
 
+	// Same idea as compute_fallback, but for immediate-shift ops the DRC has no inline generator
+	// for (e.g. the field-deposit/extract SE variants used by the KN7000 effects kernel): run the
+	// interpreter's SHIFT_OPERATION_IMM() for this one instruction, round-tripping the flags.
+	static void shiftimm_fallback(adsp21062_device &sharc)
+	{
+		auto *core = sharc.m_core;
+		uint32_t const opcode  = uint32_t(core->arg64);
+		int const data    = ((opcode >> 8) & 0xff) | ((opcode >> 19) & 0xf00);
+		int const shiftop = (opcode >> 16) & 0x3f;
+		int const rn      = (opcode >> 4) & 0xf;
+		int const rx      = (opcode & 0xf);
+		core->astat = (core->astat & (FLG0 | FLG1 | FLG2 | FLG3)) | core->astat_drc.pack();
+		sharc.SHIFT_OPERATION_IMM(shiftop, data, rn, rx);
+		core->astat_drc.unpack(core->astat);
+	}
+
 	[[noreturn]] static void unimplemented_shiftimm(adsp21062_device &sharc) ATTR_COLD
 	{
 		throw emu_fatalerror("%s: PC=%08X: Unimplemented shiftimm %012X: %s",
@@ -3933,6 +3949,17 @@ void adsp21062_device::generate_unimplemented_compute(drcuml_block &block, compi
 	load_fast_iregs(block);
 }
 
+void adsp21062_device::generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
+{
+	// As generate_unimplemented_compute, but for immediate-shift ops with no inline generator:
+	// run this one op through the interpreter's SHIFT_OPERATION_IMM() instead of aborting.
+	UML_MOV(block, mem(&m_core->pc), desc->pc);
+	UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+	save_fast_iregs(block);
+	UML_CALLC(block, cfuncs::shiftimm_fallback, this);
+	load_fast_iregs(block);
+}
+
 void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
 {
 	uint64_t const opcode = desc->opptr;
@@ -5736,9 +5763,7 @@ void adsp21062_device::generate_shift_imm(drcuml_block &block, compiler_state &c
 	{
 		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
 		case 0x1b:      // Rn = Rn OR FDEP Rx BY <bit6>:<len6> (SE)
-			UML_MOV(block, mem(&m_core->pc), desc->pc);
-			UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
-			UML_CALLC(block, cfuncs::unimplemented_shiftimm, this);
+			generate_unimplemented_shiftimm(block, compiler, desc);
 			break;
 
 		case 0x00:      // LSHIFT Rx BY <data8>

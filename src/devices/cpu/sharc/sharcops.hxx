@@ -727,6 +727,28 @@ void adsp21062_device::SHIFT_OPERATION_IMM(int shiftop, int data, int rn, int rx
 
 #include "compute.hxx"
 
+/* Rn = (Rx + Ry) / 2   -- fixed-point average (ALU single-function op 0x09).
+   This is the fixed-point twin of the floating-point FAVG (op 0x89) and is used
+   heavily by the ADSP-21065L effect microprograms (reverb/filter interpolation),
+   so leaving it unimplemented makes those effects compute nothing. Modelled as a
+   signed 33-bit add shifted right one bit (so it cannot overflow -> AV always 0);
+   the carry-out of the 32-bit adder sets AC, matching the hardware adder. */
+void adsp21062_device::compute_avg(int rn, int rx, int ry)
+{
+	int64_t const sum   = (int64_t)(int32_t)REG(rx) + (int64_t)(int32_t)REG(ry);
+	uint32_t const radd = REG(rx) + REG(ry);          // 32-bit adder result (for the carry flag)
+	uint32_t const r    = (uint32_t)(sum >> 1);       // (Rx + Ry) / 2, arithmetic (signed) shift
+
+	CLEAR_ALU_FLAGS();
+	SET_FLAG_AC_ADD(radd, REG(rx), REG(ry));           // AC = carry out of the add
+	// AV stays clear: an average can never overflow the destination.
+	SET_FLAG_AN(r);
+	SET_FLAG_AZ(r);
+
+	REG(rn) = r;
+	m_core->astat &= ~AF;
+}
+
 void adsp21062_device::COMPUTE(uint32_t opcode)
 {
 	int const op = (opcode >> 12) & 0xff;
@@ -881,6 +903,7 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
 				{
 					case 0x01:      compute_add(rn, rx, ry); break;
 					case 0x02:      compute_sub(rn, rx, ry); break;
+					case 0x09:      compute_avg(rn, rx, ry); break;
 					case 0x05:      compute_add_ci(rn, rx, ry); break;
 					case 0x06:      compute_sub_ci(rn, rx, ry); break;
 					case 0x0a:      compute_comp(rx, ry); break;

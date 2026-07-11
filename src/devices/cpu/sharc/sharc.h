@@ -35,6 +35,14 @@ public:
 	void set_boot_mode(const sharc_boot_mode boot_mode) { m_boot_mode = boot_mode; }
 	void enable_recompiler();
 
+	// Host code-upload notification: when something OUTSIDE the SHARC (e.g. a host
+	// port DMA writing a new microprogram into internal PM) modifies the program
+	// memory, the DRC's self-modify detection (which only fires for PM writes issued
+	// by the SHARC's own pm_write handlers) is bypassed and the recompiled cache goes
+	// stale. Call this after such a write to force a full cache flush on the next
+	// timeslice so the new code actually runs.
+	void notify_pm_written();
+
 	void external_iop_write(uint32_t address, uint32_t data);
 	void external_dma_write(uint32_t address, uint64_t data);
 
@@ -424,6 +432,7 @@ private:
 	// ALU fixed-point
 	inline void compute_add(int rn, int rx, int ry);
 	inline void compute_sub(int rn, int rx, int ry);
+	inline void compute_avg(int rn, int rx, int ry);   // op 0x09: Rn = (Rx + Ry) / 2
 	inline void compute_add_ci(int rn, int rx, int ry);
 	inline void compute_sub_ci(int rn, int rx, int ry);
 	inline void compute_comp(int rx, int ry);
@@ -540,6 +549,7 @@ private:
 	void generate_update_cycles(drcuml_block &block, compiler_state &compiler, uml::parameter param, bool allow_exception);
 	bool generate_opcode(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
 	void generate_unimplemented_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+	void generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
 	void generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
 	void generate_if_condition(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int condition, int skip_label);
 	void generate_shift_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int data, int shiftop, int rn, int rx);

@@ -334,6 +334,15 @@ void adsp21062_device::enable_recompiler()
 	m_enable_drc = allow_drc();
 }
 
+void adsp21062_device::notify_pm_written()
+{
+	// A host-side agent modified program memory behind the DRC's back; mark the
+	// recompiled cache dirty so execute_run_drc() flushes and recompiles from the
+	// updated PM on its next timeslice. Harmless in interpreter mode.
+	if (m_core)
+		m_core->cache_dirty = 1;
+}
+
 
 void adsp21062_device::CHANGE_PC(uint32_t newpc)
 {
