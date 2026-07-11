@@ -43,6 +43,25 @@ confirms the rows-14-19 LED formula). Verified: recalling PM1 (SEG0C 0x02) opens
 
 All the above are now bound in the layout (tools/gen_lay.py) + named in INPUT_PORTS.
 
+## Felipe punch-list 2026-07-11 (progress)
+DONE (commit 78b4bbd): TRANSPOSE +/- and R1/R2 OCTAVE +/- were swapped -> corrected (TRANSPOSE - =
+SEG10 0x01 / + = SEG0F 0x01; OCT - = SEG13 0x02 / + = SEG12 0x02). The 6 SD CARD buttons were drawn
+but unbound -> wired to the SDSW port (VOL -/+ 0x10/0x20, SKIP <</>> 0x01/0x02, STOP 0x04, PLAY/PAUSE 0x08).
+RHYTHM GROUP LEDs: RE-VERIFIED all 16 genre LEDs light EXACTLY their PANEL_LED output on selection
+(empirical, normal operation) and the genre button/LED order matches the mockup -- so the genres are
+correct; could not reproduce a wrong genre LED. (If Felipe still sees a wrong one, need the specific label.)
+STILL UNRESOLVED (investigated, NOT guessing):
+- PANEL MEMORY SET: ev2011 (SEG13 0x40) DISPROVEN by a functional store test (SET+PM5 did NOT overwrite
+  PM5). SET has no confirmed descriptor event -- likely a CPC-board / context action.
+- CUSTOM PANEL: ev20B4 (SEG06 0x80) only sets a generic status latch 0x5006bfc8 bit0x10 (handler
+  0x484B1B48) -> NOT confirmed CUSTOM PANEL. Its LED-bearing switch isn't obviously adjacent to
+  CUSTOMIZE(SEG0C 0x40)/FAVORITES(SEG0E 0x40) in the LED matrix.
+- PAGE UP/DOWN, CONTRAST UP/DOWN: the CPC value-encoder column (SEG16-20). Empirically SEG20 (ev1020)
+  = TEMPO up (120->123); SEG16-1A showed no visible PAGE/contrast change on the tested screens. These
+  are context-dependent value controls, so a fixed PAGE/CONTRAST bit isn't cleanly determinable.
+All four need the CPC-board switch matrix (service manual DIAGRAM-16, not transcribed) or the sub-CPU
+physical->normSeg map, OR more targeted functional RE. Left unbound rather than mis-bound.
+
 ## Still open
 - CUSTOM PANEL and PANEL MEMORY SET: no distinct descriptor event found by the app/screen sweep
   (SET is likely a context action inside the PM store screen; CUSTOM PANEL bit unresolved). Left unbound.
