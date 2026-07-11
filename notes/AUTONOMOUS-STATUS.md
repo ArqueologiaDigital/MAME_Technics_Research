@@ -40,6 +40,25 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★★ 2026-07-11m: REVERB IS CLEAN — sign-extension poison + true send/return wiring (SHIPPED)
+The 'reverb-ON noise' saga is RESOLVED (wf_b58b1fda-df3 + this commit):
+1. THE POISON: dsp_audio_tick wrote TG input zero-filled (&0xffffff) but the kernel programs SPORTs
+   DTYPE=01 = SIGN-EXTENDED (SPCTL 0x013CB173, TRM ch9) → every negative sample = +2×FS rectified
+   pedestal → every unit's own output CLIP railed (u6 chorus ×2 makeup first, PC 0x8A4E). Explains
+   ALL 'input-independent rail' history. Fix: write sign-extended words. 400,415 rails → 0.
+2. THE WIRING: no TX slot feeds a DAC — all 4 SPORT TX pins loop into the TG (SDIE0-3); the TG mixes
+   direct + returns (our 0x803A/0x8338 crossfade model was structurally right!) into its own DAC
+   out. TX frame = per-unit I/O map: u0 C342/43 (in C362/63), u1 C344/45, u2 C346/47, u3 C348/49,
+   u4 C34A/4B, u5 C34C/4D, u6 C358/59, u7 C350/51, u8 C352/53, u9 C356/57. TG send → u0 input;
+   crossfade return = u0 return. I4-following heuristic RETIRED (it parked on u6 = fed the chorus,
+   listened to the chorus).
+VERIFIED: rev ON = clean pitched audio (harmonic/noise 22.8×), idle silent, smooth tail → digital 0,
+no clip; dry + toggle unchanged. FOLLOW-UPS: (a) kernel frame overrun ~21.4k/44.1k frames (pace IRQ0
+to kernel completion or raise SHARC clock — wet path currently effectively half-rate); (b) ON/OFF
+loudness calibration (ON ≈ −5dB vs dry at depth 0x50; needs real-HW reference — Felipe's ear);
+(c) loud-input rail re-check post-rewire; (d) DRC ALUSAT perf reclaim (translation-time
+specialization); (e) upstream the SHARC fix catalogue.
+
 ## ★ 2026-07-11l: "STILL NOISY" (Felipe) — ROOT SHARPENED: unit6 (rec06 @0x8A00) rails the TDM bus
 CORRECTION to the 11k optimism: the ALUSAT completion made DRC == interpreter, but BOTH still emit
 clipped garbage when reverb is ON: the audible signal = the RAILED [I4] slot x depth x master (14.8k
