@@ -4452,14 +4452,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 						return;
 
 					case 0x01:      // Rn = Rx + Ry
-						UML_ADD(block, REG(rn), REG(rx), REG(ry));
-						update_az_av_an_ac_fixed(block, desc, false);
-						return;
-
 					case 0x02:      // Rn = Rx - Ry
-						UML_SUB(block, REG(rn), REG(rx), REG(ry));
-						update_az_av_an_ac_fixed(block, desc, true);
+					{
+						// MODE1 ALUSAT: the hardware CLAMPS fixed-point ALU results on overflow
+						// (TRM B-6: +ve -> 0x7FFFFFFF, -ve -> 0x80000000) and the KN7000 effects
+						// kernel runs with ALUSAT set (BIT SET MODE1 0x3000 at PM 0x8074). The
+						// rec49-family triangle LFOs depend on saturate+IF-AV-reflect; with a
+						// plain wrapping add they degenerate into a permanent +-2^31 two-sample
+						// rail bounce -- the source of the never-decaying effect-chain garbage.
+						// (The interpreter's compute_add/compute_sub already saturate.)
+						const bool is_sub = (operation == 0x02);
+						if (is_sub)
+							UML_SUB(block, I6, REG(rx), REG(ry));
+						else
+							UML_ADD(block, I6, REG(rx), REG(ry));
+						UML_MOV(block, I7, 0);
+						UML_SETc(block, uml::COND_V, I7);              // capture overflow while flags are live
+						update_az_av_an_ac_fixed(block, desc, is_sub);
+						UML_MOV(block, REG(rn), I6);
+						uml::code_label const no_sat = compiler.labelnum++;
+						UML_TEST(block, MODE1, MODE1_ALUSAT);
+						UML_JMPc(block, uml::COND_Z, no_sat);
+						UML_TEST(block, I7, 1);
+						UML_JMPc(block, uml::COND_Z, no_sat);
+						UML_SAR(block, I6, I6, 31);
+						UML_XOR(block, REG(rn), I6, 0x80000000);       // wrapped<0 -> 0x7FFFFFFF else 0x80000000
+						if (AN_CALC_REQUIRED) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);   // AN = sign of the SATURATED value
+						if (AZ_CALC_REQUIRED) UML_MOV(block, ASTAT_AZ, 0);             // a saturated value is never zero
+						UML_LABEL(block, no_sat);
 						return;
+					}
 
 					case 0x05:      // Rn = Rx + Ry + CI
 						UML_CARRY(block, ASTAT_AC, 0);

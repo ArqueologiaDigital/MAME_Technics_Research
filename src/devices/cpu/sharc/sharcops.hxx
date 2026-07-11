@@ -811,9 +811,22 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
 					SET_FLAG_MN(REG(fm));
 
 				uint32_t r_alu;
-				if (alu == 0)      r_alu = REG(fxa) + REG(fya);
-				else if (alu == 1) r_alu = REG(fxa) - REG(fya);
+				bool alu_ov = false;
+				if (alu == 0)
+				{
+					r_alu = REG(fxa) + REG(fya);
+					alu_ov = (~(REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
+				}
+				else if (alu == 1)
+				{
+					r_alu = REG(fxa) - REG(fya);
+					alu_ov = ((REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
+				}
 				else               r_alu = uint32_t((int64_t(int32_t(REG(fxa))) + int64_t(int32_t(REG(fya)))) >> 1);
+				// MODE1 ALUSAT: clamp on overflow (matches compute_add/compute_sub; the KN7000
+				// effects kernel runs with saturation enabled).
+				if (alu_ov && (m_core->mode1 & MODE1_ALUSAT))
+					r_alu = (int32_t(r_alu) < 0) ? 0x7FFFFFFF : 0x80000000;
 				REG(fa) = r_alu;
 
 				CLEAR_ALU_FLAGS();
