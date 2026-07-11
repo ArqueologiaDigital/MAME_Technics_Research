@@ -212,6 +212,18 @@ public:
 				m_gate[v]   = 1;      // held
 				m_atk[v]    = 1;      // start the attack
 				m_phase[v]  = 0.0;    // clean attack transient
+				// Resolve this voice's amplitude envelope from the firmware's EG registers.
+				// CONFIRMED by live capture (piano vs organ/strings): SUS1 (r7) is the sustain
+				// level -- 0x2C (~35%) for the decaying Concert Grand, 0x7F (max) for sustaining
+				// organ/strings -- so a held note now decays or sustains per the sound. The decay
+				// time is scaled from DCY2 (r8) and calibrated so the Concert Grand's ~1.8 s decay
+				// is preserved; the exact chip rate curve + release (rA) are still provisional.
+				constexpr double FS = 44100.0;
+				const double sus  = std::clamp(double(m_envreg[v][3] >> 8) / 127.0, 0.0, 1.0);      // SUS1
+				const double dcyT = std::clamp(1.8 * pow(2.0, (0x99 - double(m_envreg[v][4] >> 8)) / 10.0), 0.03, 8.0); // from DCY2
+				m_sus[v]  = sus;
+				m_dcyc[v] = exp(-1.0 / (dcyT * FS));
+				m_rlsc[v] = exp(-1.0 / (0.12 * FS));   // ~120 ms release (provisional; rA curve TBD)
 			}
 			else
 			{
@@ -235,6 +247,13 @@ public:
 			m_stream->update();
 			m_level[v] = std::clamp(double(data) / double(0x5FFF), 0.0, 1.4);
 		}
+		else if (cls >= 0x0004 && cls <= 0x000A)          // amplitude-envelope params r4..rA
+		{
+			// The firmware writes the sound's per-voice amplitude EG (7 halfwords, ATK PEAK
+			// DCY1 SUS1 DCY2 SUS2 RLS) just before the note-on pitch write. Cache them; the
+			// note-on resolves them into a decay/sustain/release. (See notes/tg-envelope-*.)
+			m_envreg[v][cls - 0x0004] = data;
+		}
 	}
 	uint32_t tg_write_count() const { return m_tgwrites; }
 
@@ -248,6 +267,9 @@ protected:
 		std::fill(std::begin(m_gate),  std::end(m_gate),  0);
 		std::fill(std::begin(m_atk),   std::end(m_atk),   0);
 		std::fill(std::begin(m_level), std::end(m_level), 1.0);
+		std::fill(std::begin(m_sus),   std::end(m_sus),   0.0);
+		std::fill(std::begin(m_dcyc),  std::end(m_dcyc),  0.0);
+		std::fill(std::begin(m_rlsc),  std::end(m_rlsc),  0.0);
 		save_item(NAME(m_phase));
 		save_item(NAME(m_freq));
 		save_item(NAME(m_note));
@@ -256,28 +278,43 @@ protected:
 		save_item(NAME(m_gate));
 		save_item(NAME(m_atk));
 		save_item(NAME(m_level));
+		save_item(NAME(m_envreg));
+		save_item(NAME(m_sus));
+		save_item(NAME(m_dcyc));
+		save_item(NAME(m_rlsc));
 		save_item(NAME(m_tgwrites));
 	}
 
-	// Simple per-voice envelope. The firmware programs the real hardware envelopes,
-	// but this sound holds a voice until it is stolen (no explicit note-off write on
-	// key release), so a plain gate would let voices pile up and clip. Instead each
-	// voice does a fast attack, then decays toward silence while held (a pluck) and
-	// releases faster once the firmware mutes it -- self-limiting and click-free.
+	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S EG registers (resolved at note-on
+	// into m_sus / m_dcyc / m_rlsc, see tg_write). Each voice: fast attack to peak, exponential
+	// decay toward the sound's SUSTAIN level, hold there while the firmware keeps the voice gated,
+	// then exponential release once it is muted. A decaying sound (piano, low sustain) fades toward
+	// its low sustain; a sustaining sound (organ/strings, sustain = max) holds -- the audible
+	// difference the old fixed "always decay to silence" envelope threw away.
 	virtual void sound_stream_update(sound_stream &stream) override
 	{
 		constexpr double FS = 44100.0;
 		constexpr double TWO_PI = 6.28318530717958647692;
-		const double atk  = 1.0 / (0.005 * FS);        // linear ~5 ms attack (click-free)
-		const double dhld = exp(-1.0 / (1.800 * FS));  // exponential ~1.8 s decay while held
-		const double drel = exp(-1.0 / (0.100 * FS));  // exponential ~100 ms release after mute
+		const double atk = 1.0 / (0.006 * FS);         // linear ~6 ms attack (click-free)
 		for (int s = 0; s < stream.samples(); s++)
 		{
 			double acc = 0.0;
 			for (int v = 0; v < 128; v++)
 			{
-				if (m_atk[v]) { m_env[v] += atk; if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; } }
-				else          { m_env[v] *= (m_gate[v] ? dhld : drel); if (m_env[v] < 0.0005) m_env[v] = 0.0; }
+				if (m_atk[v])                                  // attack: ramp to peak
+				{
+					m_env[v] += atk;
+					if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; }
+				}
+				else if (m_gate[v])                            // held: decay toward the sustain level
+				{
+					m_env[v] = m_sus[v] + (m_env[v] - m_sus[v]) * m_dcyc[v];
+				}
+				else                                           // released: decay to silence
+				{
+					m_env[v] *= m_rlsc[v];
+					if (m_env[v] < 0.0005) m_env[v] = 0.0;
+				}
 				if (m_env[v] <= 0.0) continue;
 				acc += sin(m_phase[v]) * m_env[v] * m_level[v];
 				m_phase[v] += TWO_PI * m_freq[v] / FS;
@@ -299,6 +336,14 @@ private:
 	uint8_t  m_gate[128]  = { };     // per-voice gate: 1 = firmware note held, 0 = muted/released
 	uint8_t  m_atk[128]   = { };     // per-voice attack-in-progress flag
 	double   m_level[128] = { };     // per-voice level (firmware class 0x2009; 1.0 = default full)
+	// Per-voice AMPLITUDE ENVELOPE, driven by the firmware's own EG registers (group-0 regs
+	// 0x04-0x0A = ATK,PEAK,DCY1,SUS1,DCY2,SUS2,RLS; see notes/tg-envelope-implementation-plan.md).
+	// Captured live: sustaining sounds (organ/strings) write a HIGH SUS1 (r7=0x7F), decaying
+	// sounds (piano) write a LOW SUS1 (r7=0x2C) -- so the note now sustains or decays per the sound.
+	uint16_t m_envreg[128][7] = { };  // raw r4..rA per voice (index 0..6)
+	double   m_sus[128]  = { };       // resolved sustain level 0..1 (from SUS1)
+	double   m_dcyc[128] = { };       // per-sample decay coefficient (toward sustain)
+	double   m_rlsc[128] = { };       // per-sample release coefficient (toward 0)
 	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 };
 

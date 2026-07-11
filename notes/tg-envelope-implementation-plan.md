@@ -45,9 +45,31 @@ G. Verify: piano note decays, organ note sustains until release, editing attack 
   group-0 envelope regs are index 0x4..0xA. Sub TG = 0x98050000.
 - Note-OFF / voice-clear zeroes r4..rA and writes 0x0001/0x0002 = 0xC000.
 
-### Still to decode (next steps)
-- Which register = which stage (order), and the RATE encoding (register value -> time constant) and
-  LEVEL encoding. Routes: (1) capture r4..rA for a CONTRASTING sound (sustained organ vs decaying
-  piano) -- rate regs will differ predictably; (2) disassemble the note-on envelope-programming code
-  / the AMPLITUDE-EDIT param->register conversion; (3) sweep ATTACK/DECAY/RELEASE TIME on a reachable
-  screen (EASY EDIT p165 / PART SETTING p116 pg4 / EDIT MIXER) and watch which reg moves + how.
+### DECODED via piano-vs-organ contrast (2026-07-11) + IMPLEMENTED
+Register-write mechanism (disassembled, library 0x4C03741A): the note-on copies r4..rA DIRECTLY from
+the voice's tone-data structure at a2 (reg0x04=*(a2+0xC), 0x05=+0x10, 0x06=+0x14, 0x07=+0x16,
+0x08=+0x18, 0x09=+0x1C, ...). So r4..rA ARE the raw EG params; only the chip's rate/level scale is
+unknown. Live contrast, same C4 note:
+```
+        r4    r5    r6    r7    r8    r9    rA
+PIANO   AE00  AE00  AE00  2C00  9900  35E8  25B0     (Concert Grand -- DECAYS)
+ORGAN   AE00  AE00  AE00  7F00  AE00  AE00  AE00     (JazzOrganSoloist -- SUSTAINS)
+STRINGS AE00  AE00  AE00  7F00  AE00  AE00  AE00     (also a sustaining sound)
+```
+=> r4/r5/r6 are CONSTANT across sounds (fast attack / peak / decay1). The sound-specific fields are
+r7..rA, and **r7 = SUS1 (the sustain LEVEL): 0x2C (~35%) for the decaying piano, 0x7F (max) for the
+sustaining organ/strings.** r8=DCY2 rate, r9=SUS2, rA=RLS (rise together for sustaining sounds).
+Mapping to the AMPLITUDE-EDIT 7-param EG: r4=ATK r5=PEAK r6=DCY1 r7=SUS1 r8=DCY2 r9=SUS2 rA=RLS.
+
+### IMPLEMENTED (kn7000_tonegen_device): a firmware-driven amplitude envelope
+tg_write caches r4..rA (group-0 regs 0x04-0x0A) per voice; the note-on resolves them into: attack
+(~6 ms) -> exponential decay toward SUS1 (r7, normalised /127) -> hold at that sustain while gated ->
+exponential release on mute. The decay time is scaled from DCY2 (r8) and calibrated so the Concert
+Grand keeps its ~1.8 s decay. VERIFIED by tapping the TG output (DSP input 0xC378) directly (the
+reverb tail masks it in the final mix): PIANO held decays 1.09M -> 837k -> 671k; ORGAN held ramps up
+and HOLDS 522k -> 1.10M -> 1.11M. So pianos decay and organs/strings sustain, per the sound.
+PROVISIONAL / still to refine (labelled in code): the exact chip RATE curve (register->time) and the
+RELEASE (rA) encoding are calibrated/estimated, not datasheet-exact; SUS2/DCY2 (r9/r8) are only used
+for the decay time, not a full 2-stage decay. Next refinement = the amp-edit ATTACK/DECAY/RELEASE
+sweep (blocked: the SOUND-EDIT menu soft-keys fall through to the part on/off + FADE globals, so deep
+menu navigation via emulated presses is unreliable) or the chip datasheet.
