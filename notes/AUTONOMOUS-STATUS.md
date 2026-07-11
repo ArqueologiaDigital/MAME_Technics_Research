@@ -70,6 +70,19 @@ DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWA
   genuine slow-attack sound to pin); SUS2/DCY2 (r9/r8) as a true 2-stage decay. Measurement caveat:
   the dry TG envelope is masked by the reverb tail in the final WAV. Full trace: notes/tg-envelope-*.
 
+## ★ SESSION UPDATE 2026-07-11c (research tick: floppy groundwork + effect-control probe)
+- FLOPPY (IC103) investigation: notes/floppy-fdc-investigation.md. The disk stack is deeply layered
+  (FAT read 0x485335FF -> disk-type dispatcher 0x48532468 -> 3-driver table @0x486646f0 [floppy/SD/USB]
+  -> FS-device create 0x4846d800 with an "A:\" drive-letter config -> block read 0x4846da31 whose FDC
+  register base is a RUNTIME pointer). FDC NOT touched at boot. Locating it needs a live disk op (drive
+  DISK MENU + floppy image) + a breakpoint on 0x4846da39, so it's a dedicated multi-tick task. Deferred.
+- EFFECT CONTROLLABILITY: reverb TYPE selection is confirmed controllable (distinct microprograms per
+  type, verified earlier). The DEPTH control was NOT re-locatable: neither the DATA DIAL nor the CPC
+  value-encoder guesses (SEG16-1A) trigger a DSP host re-upload on the REVERB screen. Depth is likely
+  applied as an in-DSP DM coefficient (not a host re-upload) and/or its on-screen control is one of the
+  still-unconfirmed value buttons; hard to A/B by ear (placeholder TG + reverb tail masking). Left as a
+  future refinement -- the MAIN effects goal (audible + type-selectable) is already met.
+
 ## NEXT-TICK CANDIDATES (pick highest value; sound subsystem is now mature)
 - FLOPPY DRIVE (Felipe's list): the KN7000 has a 3.5" FDD (service manual Part VI Disk Drive p122-137;
   DISK MENU = Load/Save/DIRECT PLAY/Medley/Tools). UI-level symbols found (DiskInfoProc, FormatDisk,
