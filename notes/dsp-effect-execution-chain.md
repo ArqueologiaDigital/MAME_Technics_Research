@@ -375,3 +375,22 @@ Two possibilities remain, both un-checked:
   tank. This is a hard, well-scoped bug; the effects are audible-but-not-faithful until it's resolved.
 - Minor real find (reverted, worth upstreaming separately): UPDATE_CIRCULAR_BUFFER_{DM,PM} `> B+L`
   should be `>= B+L`.
+
+## 2026-07-11k: the PARADOX — every gain is damped (<1) yet it diverges => delay-line management
+Instrumented the global TANK recirculation multiply `F10 = F10 * F9` (PM 0x844a/0x8454): F9 = -0.280473
+CONSTANT (damped). So the tank decay gain is <1, like the allpass g=-0.618 and all DM coefficients.
+=> EVERY gain in the reverb loop is |<1|, the float ops are exact, and the circular-buffer wrap is
+correct -- yet F1 diverges and never decays. A linear system with all |loop gains| < 1 is UNCONDITIONALLY
+stable, so the divergence cannot come from the gains/coeffs/arithmetic I've checked. It must be one of:
+  (a) DELAY-LINE MANAGEMENT: the read at DM(I6,M7) does not return the value written D samples earlier
+      -- the reverb packs MULTIPLE delay lines into ONE circular buffer (B6=0x20000, L6=0x456F0, ptr
+      decrements M3=-1, reads use per-tap inline M7 offsets). If MAME's post-modify+wrap sequencing
+      makes a read land on the wrong slot (another line's data, or stale/uninitialised), energy is
+      injected each pass -> sustains/grows even with damped gains. This is the LEADING hypothesis.
+  (b) a PARALLEL feedback path whose SUM > 1 that I haven't instrumented (less likely -- HW works).
+Resolving this needs a FULL single-frame execution trace: log every DM(I6) read/write ADDRESS+value in
+0x840a-0x846e for one frame, and verify each read address equals the write address from the correct
+number of samples earlier. That is the definitive next step (a big but bounded trace-and-diff).
+NOTE: earlier I proved this is NOT the DM coefficients, NOT the float ops, NOT the allpass structure,
+NOT the circular-wrap off-by-one, NOT a 32-vs-40-bit float issue (a >=1.0 non-decay is too coarse for
+float precision). The remaining cause is squarely in how the shared circular delay buffer is addressed.
