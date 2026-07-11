@@ -14,6 +14,17 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★★ 2026-07-11b: ENVELOPE LIFE-CYCLE CLASSES SHIPPED (2089290) — Felipe's requested refinement
+All 11 sound families now have correct note life-cycles (WAV-verified). Three classes at note-on:
+GATE_FOLLOW (aux 0x1C02-word bit15; brass/sax/organ — the sub TG hosts the keybed FIFO and key-gates
+them itself; driver couples kbd_push make/break → tonegen key_context/key_break), MANAGED (firmware
+record type rec+0x02&0x7C in {04,08,10,20,40} → hold at SUS1 until the firmware's computed 6-write
+burst), ONESHOT (pluck classes → held decay continues to 0). Plus dies-shape (nonzero r9/rA lows,
+24/24 sweep-validated): held piano/bass fade like real instruments. Grounded by workflow
+wf_c8e2bf8d-0c1 (11-family sweep 2x + key-off RE: emitter lib 0x4C0376E3, values computed from tone
+data *(rec+0x3C) via curves 0x486D2649/13; skip = type dispatch 0x4C004295/0x4C036D3F). Details:
+notes/tg-envelope-implementation-plan.md tail.
+
 ## ★★★ RESOLVED 2026-07-11: the forever-note + no-dry-sound (Felipe's report) — SHIPPED (a53fdcb)
 Root causes (all proven + fixed; full detail notes/tg-envelope-implementation-plan.md tail):
 1. **TG release NEVER fired**: the firmware does NOT write 0x0001=0xC000 at key release (boot/steal
