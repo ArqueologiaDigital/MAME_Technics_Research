@@ -14,6 +14,32 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★★ CORRECTION 2026-07-11d — the effects RUN but the reverb RINGS (not "working well" yet)
+The 2026-07-11 update below over-claimed. Careful A/B measurement (now possible thanks to the TG
+release envelope) shows the active reverb does NOT decay:
+- Single fresh Dark2 note, note-off at t: the TG input stops (~0.2 s) but the DAC output holds a
+  CONSTANT-amplitude oscillation for 3.5 s+ (no decay), plus a growing DC offset. Tested 3 reverb
+  types -- ALL ring identically (decay ratio +2.8s/+0.3s ~= 1.0). So it's SYSTEMATIC, not per-type.
+- The reverb DOES process each note (reads input at DM[I4+0x20]=1.3M peak, reads+WRITES its SDRAM
+  delay lines 1.68M/1.23M per note over word range 0x36E55-0x643AB). It builds up a wet signal --
+  but with feedback ~= 1.0 it never decays and ACCUMULATES across notes (so a later "silence" window
+  still shows the ring from earlier notes; that earlier looked like "input-independent garbage" but
+  it's the undecayed tail).
+- ROOT CAUSE: the effect CODE loads + runs (via the active path maincpu 0x48404EDD -> HAL 0x48404E8D),
+  but its DEPTH/TIME PARAMETERS -- which set the feedback < 1.0 -- are NEVER applied. The clean
+  DspEffectSelect path (param block *(0x500A01E0)+unit*0x120, unit9=Reverb) never runs: *(0x500A01E0)
+  stays -1. So the reverb runs at default (unity-feedback / infinite-RT60) coefficients instead of the
+  "TOTAL DEPTH: 80" the screen shows. The on-screen DATA DIAL / value-encoder do NOT trigger a host
+  re-upload either.
+- Honest status: DSP AUDIO PIPELINE works (TG->DSP->speaker; the DRY passthrough is clean, off==on
+  within 1%, verified Part 12). Active effects LOAD + EXECUTE. But the reverb is NOT a faithful/usable
+  reverb yet -- it rings. "Effects audible + type-selectable" is true; "effects work WELL" is NOT yet.
+- NEXT (dedicated, multi-tick): make the DspEffectSelect parameter path run so depth/time reach the
+  DSP (find where *(0x500A01E0) is allocated + why it's -1 -- same boot-state family as the old TG-gate
+  force). Needs the decompressed program image dumped for static tracing (w.bin in the scratchpad is
+  only a 128-byte fragment; dump region 0x48400000 via the debugger `save` or a Lua chunked read).
+  Full analysis: notes/dsp-effect-execution-chain.md (section "Reverb CORRECTNESS gap").
+
 ## ★ SESSION UPDATE 2026-07-11 (DSP effect-execution chain + config cleanup) — READ notes/dsp-effect-execution-chain.md
 DONE + committed (87a2964, 630c68d, e859261):
 - **Config switches REMOVED per Felipe** ("Effects DSP host stub" + the two "Tone generators"):
