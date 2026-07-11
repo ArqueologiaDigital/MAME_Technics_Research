@@ -68,8 +68,25 @@ exponential release on mute. The decay time is scaled from DCY2 (r8) and calibra
 Grand keeps its ~1.8 s decay. VERIFIED by tapping the TG output (DSP input 0xC378) directly (the
 reverb tail masks it in the final mix): PIANO held decays 1.09M -> 837k -> 671k; ORGAN held ramps up
 and HOLDS 522k -> 1.10M -> 1.11M. So pianos decay and organs/strings sustain, per the sound.
-PROVISIONAL / still to refine (labelled in code): the exact chip RATE curve (register->time) and the
-RELEASE (rA) encoding are calibrated/estimated, not datasheet-exact; SUS2/DCY2 (r9/r8) are only used
-for the decay time, not a full 2-stage decay. Next refinement = the amp-edit ATTACK/DECAY/RELEASE
-sweep (blocked: the SOUND-EDIT menu soft-keys fall through to the part on/off + FADE globals, so deep
-menu navigation via emulated presses is unreliable) or the chip datasheet.
+### REFINEMENT (2026-07-11): rA = release rate (a 3rd sound confirms it)
+Adding a SOUND PAD capture (SEG0D 0x20) to the piano/organ set:
+```
+        r4  r5  r6  r7    r8  r9    rA
+PIANO   AE  AE  AE  2C00  99  35E8  25B0   decays, medium release
+ORGAN   AE  AE  AE  7F00  AE  AE00  AE00   sustains, FAST release (organ stops on key-up)
+PAD     AE  AE  AE  7F00  AC  0400  0400   sustains, SLOW release (long fade on key-up)
+```
+=> r4/r5/r6 are CONSTANT for every sound tried (piano/organ/strings/pad) -- NOT the per-sound attack;
+they are a fixed attack/peak/decay1 preset (so attack stays a fixed ~6 ms in code). **rA = RELEASE
+rate: HIGHER = faster** (organ 0xAE -> fast; pad 0x04 -> slow ~1.5 s fade; piano 0x25 -> ~0.15 s).
+Confirmed the firmware DOES write the TG voice mute (reg 0x01/0x02 = 0xC000) on key release, so the
+release phase triggers. IMPLEMENTED: release coefficient from rA, `rlsT = 0.15 * 2^((0x25 - (rA>>8))/10)`
+clamped [0.02, 5] s -- calibrated to piano=0x25 -> 0.15 s. So organs stop, pads fade slowly, per sound.
+MEASUREMENT LIMIT: the dry TG envelope can only be read on the DSP-input tap during a held note; the
+final WAV is dominated by the reverb tail (rings ~steady) so it can't show the release fade, and the
+DSP-input address moves with the effect's I4 so post-mute buckets are sparse. The held decay + sustain
+(piano decays, organ/strings/pad sustain) is cleanly verified; the release rate itself is evidence-
+based (per-sound rA) + code-correct rather than re-measured through the reverb.
+STILL PROVISIONAL (labelled): exact chip rate CURVE (register->time), and SUS2/DCY2 (r9/r8) as a true
+2-stage decay (only r8 feeds the single decay time today). Amp-edit sweep blocked on menu soft-key
+routing; chip datasheet unknown.

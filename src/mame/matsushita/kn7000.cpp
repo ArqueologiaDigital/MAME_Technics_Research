@@ -219,11 +219,14 @@ public:
 				// time is scaled from DCY2 (r8) and calibrated so the Concert Grand's ~1.8 s decay
 				// is preserved; the exact chip rate curve + release (rA) are still provisional.
 				constexpr double FS = 44100.0;
-				const double sus  = std::clamp(double(m_envreg[v][3] >> 8) / 127.0, 0.0, 1.0);      // SUS1
-				const double dcyT = std::clamp(1.8 * pow(2.0, (0x99 - double(m_envreg[v][4] >> 8)) / 10.0), 0.03, 8.0); // from DCY2
+				const double sus  = std::clamp(double(m_envreg[v][3] >> 8) / 127.0, 0.0, 1.0);      // SUS1 = sustain level
+				const double dcyT = std::clamp(1.8 * pow(2.0, (0x99 - double(m_envreg[v][4] >> 8)) / 10.0), 0.03, 8.0); // DCY2 rate
+				// RLS (rA) is the release rate: HIGHER = faster (organ rA=0xAE stops quickly; a pad
+				// rA=0x04 fades slowly; piano rA=0x25 is in between). Calibrated to piano=0x25 -> 0.15 s.
+				const double rlsT = std::clamp(0.15 * pow(2.0, (0x25 - double(m_envreg[v][6] >> 8)) / 10.0), 0.02, 5.0);
 				m_sus[v]  = sus;
 				m_dcyc[v] = exp(-1.0 / (dcyT * FS));
-				m_rlsc[v] = exp(-1.0 / (0.12 * FS));   // ~120 ms release (provisional; rA curve TBD)
+				m_rlsc[v] = exp(-1.0 / (rlsT * FS));
 			}
 			else
 			{
