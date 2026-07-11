@@ -588,10 +588,11 @@ public:
 		}
 		else { l = r = rawl = rawr = 0; }   // underflow: DSP consumed ahead of the stream (brief; harmless)
 	}
-	void push_output(int32_t l, int32_t r)
+	void push_output(int32_t l, int32_t r, int32_t cl = 0, int32_t cr = 0)
 	{
 		if (!m_dsp_active) { m_dsp_active = true; m_rx_rd = m_rx_wr; }   // first output: flush stale pre-DSP input
 		m_tx[m_tx_wr][0] = l; m_tx[m_tx_wr][1] = r;
+		m_tx[m_tx_wr][2] = cl; m_tx[m_tx_wr][3] = cr;   // chorus return (0 when chorus off -> no effect)
 		m_tx_wr = (m_tx_wr + 1) % RING;
 		if (m_tx_wr == m_tx_rd) m_tx_rd = (m_tx_rd + 1) % RING;   // overflow: drop oldest (bound latency)
 	}
@@ -655,12 +656,15 @@ protected:
 				// (latent) DSP output with the immediate TG phase-cancels and clicks.
 				const uint32_t fill = (m_tx_wr - m_tx_rd + RING) % RING;
 				if (!m_tx_primed && fill >= PRIME) m_tx_primed = true;
+				int32_t chl, chr;
 				if (m_tx_primed && m_tx_rd != m_tx_wr)
 				{
-					ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1]; m_tx_rd = (m_tx_rd + 1) % RING;
-					m_tx_last[0] = ol; m_tx_last[1] = orr;
+					ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1];
+					chl = m_tx[m_tx_rd][2]; chr = m_tx[m_tx_rd][3];
+					m_tx_rd = (m_tx_rd + 1) % RING;
+					m_tx_last[0] = ol; m_tx_last[1] = orr; m_tx_last[2] = chl; m_tx_last[3] = chr;
 				}
-				else { ol = m_tx_last[0]; orr = m_tx_last[1]; }
+				else { ol = m_tx_last[0]; orr = m_tx_last[1]; chl = m_tx_last[2]; chr = m_tx_last[3]; }
 				// DAC-side crossfade (reverb toggle): DSP return vs TG direct. With reverb ON
 				// the pair is {direct 0, return 7F}; OFF is {direct 7F, return 0} -- so OFF
 				// also mutes the (currently diverging) reverb tank at the DAC, exactly as the
@@ -669,6 +673,12 @@ protected:
 				// live-verified against the on-screen value; default 0x50/127 ~ 0.63).
 				ol = int32_t(double(ol) * gret * gdepth + double(il) * gdir);
 				orr = int32_t(double(orr) * gret * gdepth + double(ir) * gdir);
+				// Chorus (unit 4) return: an INDEPENDENT wet, added post-crossfade at its own
+				// makeup level so it does NOT couple to the reverb TOTAL DEPTH. Follows gret (the
+				// global DSP wet/dry) so it mutes with the DSP path. 0 when chorus off (bit-exact).
+				constexpr double CHORUS_WET = 0.60;
+				ol  += int32_t(double(chl) * gret * CHORUS_WET);
+				orr += int32_t(double(chr) * gret * CHORUS_WET);
 			}
 			// Front-panel MAIN VOLUME slider: a master output attenuation on the final mix
 			// (modelled as a post-DAC analog-style gain; the driver pushes the taper via
@@ -685,11 +695,11 @@ private:
 	sound_stream *m_stream = nullptr;
 	int32_t m_rx[RING][2] = { };   // TG -> DSP input
 	int32_t m_rxraw[RING][2] = { };// raw (un-send-scaled) TG mix, parallel to m_rx (chorus feed)
-	int32_t m_tx[RING][2] = { };   // DSP output -> speakers
+	int32_t m_tx[RING][4] = { };   // DSP output ring: [0/1]=reverb(unit0) L/R, [2/3]=chorus(unit4) L/R
 	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
 	bool m_dsp_active = false;     // the DSP has started producing output
 	bool m_tx_primed = false;      // the output latency buffer has filled
-	int32_t m_tx_last[2] = { };    // last DSP output (held on underflow)
+	int32_t m_tx_last[4] = { };    // last DSP output (held on underflow): reverb L/R + chorus L/R
 	std::atomic<float> m_master_gain{ 1.0f };   // MAIN VOLUME slider (audio thread reads, driver writes)
 	std::atomic<float> m_gain_send{ 0.80f };    // TG -> DSP send level (reverb toggle)
 	std::atomic<float> m_gain_direct{ 0.0f };   // DAC: TG direct (reverb-OFF side)
@@ -1665,7 +1675,7 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 			cL = sx24(dm.read_dword(0xC34A));   // chorus (unit 4) return from last frame
 			cR = sx24(dm.read_dword(0xC34B));
 		}
-		m_dspbridge->push_output(oL + cL, oR + cR);
+		m_dspbridge->push_output(oL, oR, cL, cR);   // reverb + chorus carried separately (decoupled mix)
 		int32_t il = 0, ir = 0, rawl = 0, rawr = 0;
 		m_dspbridge->pop_input(il, ir, rawl, rawr);
 		// The kernel programs the SPORTs with DTYPE=01 (SPCTL 0x013CB173/0x013C3173,
