@@ -40,6 +40,26 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★ 2026-07-11l: "STILL NOISY" (Felipe) — ROOT SHARPENED: unit6 (rec06 @0x8A00) rails the TDM bus
+CORRECTION to the 11k optimism: the ALUSAT completion made DRC == interpreter, but BOTH still emit
+clipped garbage when reverb is ON: the audible signal = the RAILED [I4] slot x depth x master (14.8k
+= 8388607x0.63x0.64x32767/8388607-ish); the "smooth tail" was the CLIP DUTY CYCLE decaying, not
+clean audio. Probes (all -nodrc, taps + PC capture):
+- The SPORT TX frame 0xC342-0xC359 is a MULTICHANNEL TDM frame (every slot written once/frame by a
+  kernel copy loop); nearly every slot rails during a note. The RX/staging region 0xC362-0xC379
+  carries SANE note-correlated decaying levels (27k-924k) -> input side is fine.
+- 0xC350/1 always zero; 0xC344/5 never rail but don't silence post-note; 0xC34B sane during note.
+- ★ FIRST RAILED WRITER (unanimous, 30/30 samples): **PC 0x8A4E = UNIT 6 = rec06 relocated to PM
+  0x8A00, writing slot 0xC359** -- rails from note start. Unit4 is also rec06 (0x8800). One unit
+  poisons the bus; the chain inherits.
+NEXT SESSION (precise): (1) disassemble rec06 at offset ~0x4E (listing rec06_*.asm, base-relative)
++ dump unit6's compiled DM params (0xC000+6*0x4D=0xC1CE.., 0x9800+6*0x50=0x99E0..) -- why does its
+output stage rail at sane input? (compiled param wrong/missing for THIS unit? a code op still
+misbehaving? which bus slot does it READ -- maybe a railed slot from C342/3?). (2) Decode the
+kernel's SPORT0 TX MULTICHANNEL config (boot-init IOP writes incl. the 0xA000-0xA008/0xB000-0xB00E
+global block) to learn WHICH TX slot pair feeds the real main DAC -- then repoint the bridge from
+I4-following to the true DAC slots permanently. (3) After unit6 is understood, re-judge levels.
+
 ## ★★★★★ 2026-07-11k: ALUSAT COMPLETE — REAL REVERB AT FULL DRC SPEED (shipped)
 Extended the ALUSAT clamp to EVERY native DRC integer ALU form (ADDC/SUBB 0x05/06, NEG 0x22, CI
 forms 0x25/26, INC/DEC 0x29/2a, dual add/sub 0x78-7F both halves) via shared helper
