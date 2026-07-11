@@ -33,11 +33,25 @@ def load_wav(path):
     w = wave.open(str(path), "rb")
     assert w.getnchannels() == 1 and w.getsampwidth() == 2
     data = w.readframes(w.getnframes())
-    smp = list(struct.unpack("<%dh" % (len(data) // 2), data))
-    # normalize to a common peak so donor levels are balanced across families
+    return list(struct.unpack("<%dh" % (len(data) // 2), data))
+
+def normalize(smp):
+    """Balance donor levels: common peak, applied AFTER carving (a segment cut out
+    of a large multisample blob must be normalized by ITS OWN peak)."""
     peak = max(1, max(abs(x) for x in smp))
     g = 28000.0 / peak
     return [max(-32768, min(32767, int(round(x * g)))) for x in smp]
+
+def crossfade_seam(smp, loop_start, loop_len, period):
+    """Blend the loop head with the material just past the loop end (click-free wrap)."""
+    xf = min(int(period), loop_len // 4)
+    for i in range(max(0, xf)):
+        a = loop_start + i                       # head
+        b = loop_start + loop_len + i            # just past the loop end
+        if b >= len(smp):
+            break
+        t = i / xf
+        smp[a] = int(smp[a] * t + smp[b] * (1.0 - t))
 
 def pick_loop(smp, period):
     """Choose a loop region near the tail: >= ~2000 samples, whole periods."""
@@ -47,15 +61,6 @@ def pick_loop(smp, period):
     pad = period // 2
     loop_start = max(0, len(smp) - loop_len - pad)
     loop_len = min(loop_len, len(smp) - loop_start - 1)
-    # crossfade the seam: blend the loop tail into the loop head region
-    xf = min(period, loop_len // 4)
-    for i in range(xf):
-        a = loop_start + i                       # head
-        b = loop_start + loop_len + i            # just past the loop end
-        if b >= len(smp):
-            break
-        t = i / xf
-        smp[a] = int(smp[a] * t + smp[b] * (1.0 - t))
     return loop_start, loop_len
 
 def main():
@@ -77,11 +82,29 @@ def main():
     for e in spec["entries"]:
         w = wrec[e["wave"]]
         smp = load_wav(waves_dir / "ic307" / Path(w["wav"]).name)
+        # optional carve: [start, end] sample range (for concatenated multisample blobs)
+        if e.get("segment"):
+            a, b = int(e["segment"][0]), int(e["segment"][1])
+            smp = smp[max(0, a):min(len(smp), b)]
+        smp = normalize(smp)
         period = w.get("period_samples") or 64
-        root_hz = w.get("pitch_hz_at_rate") or (44100.0 / period)
-        if w.get("pitch_confidence", 1.0) < 0.3:
-            root_hz = 44100.0 / period
-        loop_start, loop_len = pick_loop(smp, period)
+        # root pitch: explicit override in the map wins (audition/name-grounded),
+        # else the manifest estimate, else the period
+        if "root_hz" in e:
+            root_hz = float(e["root_hz"])
+        else:
+            root_hz = w.get("pitch_hz_at_rate") or (44100.0 / period)
+            if w.get("pitch_confidence", 1.0) < 0.3:
+                root_hz = 44100.0 / period
+        period = 44100.0 / root_hz
+        # explicit loop [start, len] (relative to the carved segment) wins
+        if "loop" in e:
+            loop_start, loop_len = int(e["loop"][0]), int(e["loop"][1])
+            loop_start = max(0, min(loop_start, len(smp) - 2))
+            loop_len = max(16, min(loop_len, len(smp) - loop_start - 1))
+        else:
+            loop_start, loop_len = pick_loop(smp, period)
+        crossfade_seam(smp, loop_start, loop_len, period)
         off = pcm_base + len(pool)
         pool += struct.pack("<%dh" % len(smp), *smp)
         entries.append(struct.pack("<BBBBIIIII8s",

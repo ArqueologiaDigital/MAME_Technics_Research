@@ -1,20 +1,228 @@
 {
-  "_provenance": "SYNTHETIC placeholder mapping for the undumped KN7000 wave ROMs. Keys the runtime aux-word sample select (bank bits13:12, zone bits7:0 -- notes/wave-select-decode-and-donor-plan.md) to donor waves extracted from the GENUINE KN5000 IC307 dump (tools/extract_kn5000_waves.py). Zone ranges generalize the live-captured anchors with margins; unmapped zones fall back to the sine placeholder. NOT a KN7000 dump.",
-  "donor_dir": "kn5000_waves",
-  "entries": [
-    { "bank": 2, "zone_lo": "0x00", "zone_hi": "0x1F", "wave": 183, "label": "PianoL1", "anchor": "piano L1 zones 09-17 (C2..C7 chromatic)" },
-    { "bank": 0, "zone_lo": "0x11", "zone_hi": "0x30", "wave": 184, "label": "PianoL2", "anchor": "piano L2 zones 1D-2B + 23" },
-    { "bank": 0, "zone_lo": "0x00", "zone_hi": "0x10", "wave": 134, "label": "World", "anchor": "world zone 04 (plucked/koto-ish donor)" },
-    { "bank": 0, "zone_lo": "0x31", "zone_hi": "0x45", "wave": 47,  "label": "Synth", "anchor": "synth zone 38" },
-    { "bank": 0, "zone_lo": "0x70", "zone_hi": "0x7A", "wave": 75,  "label": "Strings", "anchor": "strings zones 72-77" },
-    { "bank": 0, "zone_lo": "0x7B", "zone_hi": "0x8F", "wave": 76,  "label": "Pad", "anchor": "pad zone 7E" },
-    { "bank": 1, "zone_lo": "0x00", "zone_hi": "0x30", "wave": 42,  "label": "Brass", "anchor": "brass zones 0C-22 (sax 16 interleaved -- wind donor)" },
-    { "bank": 1, "zone_lo": "0x31", "zone_hi": "0x5A", "wave": 116, "label": "Guitar", "anchor": "guitar zones 31-52" },
-    { "bank": 1, "zone_lo": "0x5B", "zone_hi": "0x6F", "wave": 83,  "label": "Sax", "anchor": "sax zone 61" },
-    { "bank": 3, "zone_lo": "0x00", "zone_hi": "0x0C", "wave": 84,  "label": "SaxWind", "anchor": "sax zone 00" },
-    { "bank": 3, "zone_lo": "0x0D", "zone_hi": "0x0F", "wave": 22,  "label": "Organ", "anchor": "organ zones 0D-0F" },
-    { "bank": 3, "zone_lo": "0x10", "zone_hi": "0x1F", "wave": 165, "label": "Bass", "anchor": "bass zones 16/18" },
-    { "bank": 3, "zone_lo": "0x30", "zone_hi": "0x45", "wave": 74,  "label": "Mallet", "anchor": "mallet zone 39" },
-    { "bank": 3, "zone_lo": "0x60", "zone_hi": "0x6F", "wave": 77,  "label": "Pad2", "anchor": "pad zone 66" }
-  ]
+ "_provenance": "SYNTHETIC placeholder mapping v2 -- donors NAME/AUDITION-GROUNDED (workflow wf_3b896d76-475): KN5000 tone-table parse proved IC307 holds brass/reed/flute/bass/synth only (no piano/strings/guitar on this chip); real multisample segments carved from the w185 packed blob per the audition analysis (framewise pitch tracks, octave-checked roots, verified loop regions). Zone ranges = live-captured KN7000 anchors. NOT a KN7000 dump.",
+ "donor_dir": "kn5000_waves",
+ "entries": [
+  {
+   "bank": 2,
+   "zone_lo": "0x00",
+   "zone_hi": "0x1F",
+   "wave": 185,
+   "label": "PianoL1",
+   "root_hz": 333.61,
+   "loop": [
+    441,
+    17330
+   ],
+   "anchor": "audition w185/seg109 (stab 0.974, decaying)",
+   "segment": [
+    1354188,
+    1372184
+   ]
+  },
+  {
+   "bank": 0,
+   "zone_lo": "0x11",
+   "zone_hi": "0x30",
+   "wave": 185,
+   "label": "PianoL2",
+   "root_hz": 333.38,
+   "loop": [
+    882,
+    17246
+   ],
+   "anchor": "audition w185/seg96 (stab 1.0, decaying)",
+   "segment": [
+    1099648,
+    1118304
+   ]
+  },
+  {
+   "bank": 0,
+   "zone_lo": "0x00",
+   "zone_hi": "0x10",
+   "wave": 185,
+   "label": "World",
+   "root_hz": 610.84,
+   "loop": [
+    441,
+    9080
+   ],
+   "anchor": "audition w185/seg74 (stab 1.0, decaying)",
+   "segment": [
+    656524,
+    666424
+   ]
+  },
+  {
+   "bank": 0,
+   "zone_lo": "0x31",
+   "zone_hi": "0x45",
+   "wave": 64,
+   "label": "Synth",
+   "root_hz": 479.53,
+   "loop": [
+    0,
+    22337
+   ],
+   "anchor": "audition w064 (stab 1.0, sustained)"
+  },
+  {
+   "bank": 0,
+   "zone_lo": "0x70",
+   "zone_hi": "0x7A",
+   "wave": 185,
+   "label": "Strings",
+   "root_hz": 285.46,
+   "loop": [
+    1764,
+    22093
+   ],
+   "anchor": "audition w185/seg78 (stab 0.943, sustained) | root verified: goertzel h(262) dominates 4:1 at this root; ensemble sample has strong 2nd harmonic (a coarse peak-scan falsely flagged octave-high once)",
+   "segment": [
+    747384,
+    771716
+   ]
+  },
+  {
+   "bank": 0,
+   "zone_lo": "0x7B",
+   "zone_hi": "0x8F",
+   "wave": 183,
+   "label": "Pad",
+   "root_hz": 344.6,
+   "loop": [
+    441,
+    3711
+   ],
+   "anchor": "audition w183 (stab 1.0, sustained)"
+  },
+  {
+   "bank": 1,
+   "zone_lo": "0x00",
+   "zone_hi": "0x30",
+   "wave": 185,
+   "label": "Brass",
+   "root_hz": 429.59,
+   "loop": [
+    5292,
+    5803
+   ],
+   "anchor": "audition w185/seg80 (stab 1.0, sustained)",
+   "segment": [
+    782936,
+    794244
+   ]
+  },
+  {
+   "bank": 1,
+   "zone_lo": "0x31",
+   "zone_hi": "0x5A",
+   "wave": 185,
+   "label": "Guitar",
+   "root_hz": 371.05,
+   "loop": [
+    4851,
+    11600
+   ],
+   "anchor": "audition w185/seg84 (stab 1.0, decaying)",
+   "segment": [
+    887744,
+    908732
+   ]
+  },
+  {
+   "bank": 1,
+   "zone_lo": "0x5B",
+   "zone_hi": "0x6F",
+   "wave": 185,
+   "label": "Sax",
+   "root_hz": 185.88,
+   "loop": [
+    1323,
+    10522
+   ],
+   "anchor": "audition w185/seg82 (stab 1.0, sustained)",
+   "segment": [
+    839520,
+    863632
+   ]
+  },
+  {
+   "bank": 3,
+   "zone_lo": "0x00",
+   "zone_hi": "0x0C",
+   "wave": 185,
+   "label": "SaxWind",
+   "root_hz": 185.88,
+   "loop": [
+    1323,
+    10522
+   ],
+   "anchor": "audition w185/seg82 (stab 1.0, sustained)",
+   "segment": [
+    839520,
+    863632
+   ]
+  },
+  {
+   "bank": 3,
+   "zone_lo": "0x0D",
+   "zone_hi": "0x0F",
+   "wave": 69,
+   "label": "Organ",
+   "root_hz": 688.59,
+   "loop": [
+    0,
+    7265
+   ],
+   "anchor": "audition w069/seg0 (stab 1.0, sustained)",
+   "segment": [
+    44,
+    7700
+   ]
+  },
+  {
+   "bank": 3,
+   "zone_lo": "0x10",
+   "zone_hi": "0x1F",
+   "wave": 77,
+   "label": "Bass",
+   "root_hz": 170.26,
+   "loop": [
+    0,
+    4673
+   ],
+   "anchor": "audition w077 (stab 1.0, sustained)"
+  },
+  {
+   "bank": 3,
+   "zone_lo": "0x30",
+   "zone_hi": "0x45",
+   "wave": 185,
+   "label": "Mallet",
+   "root_hz": 2439.78,
+   "loop": [
+    882,
+    10374
+   ],
+   "anchor": "audition w185/seg102 (stab 1.0, decaying)",
+   "segment": [
+    1257564,
+    1269048
+   ]
+  },
+  {
+   "bank": 3,
+   "zone_lo": "0x60",
+   "zone_hi": "0x6F",
+   "wave": 103,
+   "label": "Pad2",
+   "root_hz": 689.08,
+   "loop": [
+    0,
+    1280
+   ],
+   "anchor": "audition w103 (stab 1.0, sustained)"
+  }
+ ]
 }

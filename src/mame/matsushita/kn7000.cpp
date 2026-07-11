@@ -2756,7 +2756,7 @@ ROM_START(kn7000)
 	// clearly labeled NOT-A-DUMP (embedded provenance block). When absent the tone
 	// generator falls back to the sine placeholder. Rebuild + update hashes with the tool.
 	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
-	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(2705fe27) SHA1(9d0948b31d6a946fddb33ac0c57806040351b67f))
+	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(fcaf76ad) SHA1(c4268b2b385dd1a6fe80bd7eeb662aea55da7caf))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
