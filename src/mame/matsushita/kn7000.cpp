@@ -584,13 +584,6 @@ public:
 	// Master output gain (0..1), set from the front-panel MAIN VOLUME slider by the driver.
 	void set_master_gain(float g) { m_master_gain = g; }
 
-	// Final audio routing: true = speakers hear the DSP output (TG -> DSP -> DAC, the real
-	// signal path), false = speakers hear the dry TG directly. The DSP itself still boots,
-	// receives uploads and runs either way -- ONLY the listening tap moves. Default is DRY
-	// because the boot-default effect's feedback tank currently DIVERGES in emulation (the
-	// parked SHARC loop-gain bug): with the DSP in-path, any single note leaves an
-	// everlasting full-scale wash. Flip via the "Effects DSP audio path" machine config.
-	void set_dsp_route(bool r) { m_route_dsp = r; }
 
 	// TG output-bus routing (the REVERB toggle's hardware action; see the tonegen's
 	// group-0x20 capture): send = what the DSP receives; direct/return = the DAC-side
@@ -633,9 +626,9 @@ protected:
 			if (m_rx_wr == m_rx_rd) m_rx_rd = (m_rx_rd + 1) % RING;
 
 			int32_t ol, orr;
-			if (!m_route_dsp || !m_dsp_active)
+			if (!m_dsp_active)
 			{
-				ol = il; orr = ir;   // DSP not routed (or not yet talking) -> dry TG passthrough
+				ol = il; orr = ir;   // DSP not talking yet (early boot) -> dry TG passthrough
 			}
 			else
 			{
@@ -677,7 +670,6 @@ private:
 	bool m_tx_primed = false;      // the output latency buffer has filled
 	int32_t m_tx_last[2] = { };    // last DSP output (held on underflow)
 	std::atomic<float> m_master_gain{ 1.0f };   // MAIN VOLUME slider (audio thread reads, driver writes)
-	std::atomic<bool>  m_route_dsp{ false };    // final routing: DSP output vs dry TG (see set_dsp_route)
 	std::atomic<float> m_gain_send{ 0.80f };    // TG -> DSP send level (reverb toggle)
 	std::atomic<float> m_gain_direct{ 0.0f };   // DAC: TG direct (reverb-OFF side)
 	std::atomic<float> m_gain_return{ 1.0f };   // DAC: DSP return (reverb-ON side)
@@ -725,7 +717,6 @@ public:
 		, m_sdcard(*this, "sdcard")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
-		, m_dspaudio(*this, "DSPAUDIO")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -766,7 +757,6 @@ private:
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
-	required_ioport m_dspaudio;           // "Effects DSP audio path" machine-config switch
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -2047,7 +2037,6 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 	{
 		const float v = float(m_volmain->read()) / 100.0f;
 		m_dspbridge->set_master_gain(v * v);
-		m_dspbridge->set_dsp_route(m_dspaudio->read() & 1);
 		m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return());
 	}
 
@@ -2382,17 +2371,6 @@ static INPUT_PORTS_START(kn7000)
 	// Front-panel volume sliders -- draggable placeholders (the ESQ1-style slider script in
 	// kn7000.lay binds these). NOT yet wired to any audio/volume path; control targets are TBD
 	// (needs schematic + disassembly RE). PORT_ADJUSTER gives a 0-100 value the layout knob animates.
-	// Final audio routing. The effects DSP (IC306) always boots and runs; this selects
-	// whether the SPEAKERS hear its output or the dry tone generator. Default = DRY:
-	// the boot-default effect's feedback tank diverges in emulation (parked SHARC
-	// loop-gain bug, notes/dsp-effect-execution-chain.md), so with the DSP routed any
-	// single note leaves an everlasting full-scale wash. Flip the default back once
-	// the divergence is fixed.
-	PORT_START("DSPAUDIO")
-	PORT_CONFNAME(0x01, 0x00, "Effects DSP audio path (EXPERIMENTAL)")
-	PORT_CONFSETTING(0x00, "Bypassed (dry tone generator)")
-	PORT_CONFSETTING(0x01, "Through DSP (diverges: everlasting wash)")
-
 	PORT_START("VOL_MAIN")   PORT_ADJUSTER(80, "Main Volume")
 	PORT_START("VOL_APCSEQ") PORT_ADJUSTER(80, "APC / SEQ Volume")
 	PORT_START("VOL_MIC")    PORT_ADJUSTER(50, "Mic Volume")
