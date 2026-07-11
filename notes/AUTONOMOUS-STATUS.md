@@ -20,6 +20,24 @@ divergence (step 3) is fixed: a fresh boot follows the firmware default (reverb 
 note rails until REVERB is pressed OFF. This is the faithful routing; the divergence remains the
 one open reverb item (reference-diff harness). Verified on fresh cfg: identical toggle behavior.
 
+## ★★★★ 2026-07-11h: THE EFFECT-CHAIN DIVERGENCE IS FIXED (2d308c7) — MODE1 ALUSAT in the DRC
+Root cause of the 6-session reverb-wash saga: kernel sets MODE1 ALUSAT (BIT SET 0x3000 @PM 0x8074;
+old listing mis-read it as NESTM — NESTM is 0x800). rec49-family triangle LFOs = saturating add +
+IF-AV reflect; MAME's DRC did wrapping UML_ADD/SUB with zero ALUSAT support → each LFO became a
+permanent ±2^31 two-sample rail bounce (onsets 0.216/0.648/1.080s, free-running, input-independent)
+thrashing the delay taps at fs/2 = the never-decaying garbage. Interpreter was already correct
+(hence idle-clean interp observations); fixed the DRC add/sub (temp + COND_V capture + clamp
+SAR^0x80000000 + AN/AZ correction) and the fork's MAC-block parallel adds. ELIMINATED en route:
+corrupted uploads (49,269 writes replayed bit-exact — wf_c6d2e140-eec), 40-bit-precision hypothesis
+(all recursions float32-stable — wf_08fbdf6e-df9), idle LFO drift (stable ±0.64%/272k ticks).
+VERIFIED: idle boot silent forever; reverb-ON tails decay to digital zero (+2s); toggle + dry
+unchanged; DRC ~76%. REMAINING POLISH (new, smaller): (1) gain staging hot → clips during held
+notes (suspect: dropped host mixer indices 0x43/0x4B 'level triplets' = wet/return levels never
+reach the kernel?); (2) tail ends in a HARD CUT ~1.2s post-release, not exponential (suspect: a
+dynamics/gate unit in the chain, or the unit0 frame countdown 0x34AE8; investigate). Upstream-worthy
+catalogue: this ALUSAT fix + circ-wrap off-by-one + premod-no-wrap + AVG/SSFR rounding + FIX
+overflow UB (notes/dsp-effect-execution-chain.md).
+
 ## ★★★ 2026-07-11f: REVERB TOGGLE WORKS AUDIBLY (TG bus routing modeled)
 Felipe's reverb-toggle request: inspection (wf_870ba134-582) proved the toggle was NEVER broken in
 firmware/UI/LED (flag 0x500C0758 bit9, cpr_led27, hold->REVERB screen all work); the missing piece
