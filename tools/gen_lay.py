@@ -393,11 +393,11 @@ RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22,t
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
 RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
 # SPLIT PAIRS (bank A -- each half on a different SEG; arg-mid 1=-,0=+ inferred):
-#   TRANSPOSE  - = SEG0F 0x01 (ev2081) / + = SEG10 0x01
-#   R1/R2 OCT  - = SEG12 0x02 (ev2083) / + = SEG13 0x02
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG0F","0x01","0x01",213,335,75,24,"-","+",seg2="SEG10")
+#   TRANSPOSE  - = SEG10 0x01 / + = SEG0F 0x01 (ev2081; +/- corrected per Felipe 2026-07-11)
+#   R1/R2 OCT  - = SEG13 0x02 / + = SEG12 0x02 (ev2083; +/- corrected per Felipe)
+RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG10","0x01","0x01",213,335,75,24,"-","+",seg2="SEG0F")
 RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG12","0x02","0x02",213,405,75,24,"-","+",seg2="SEG13")
+RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG13","0x02","0x02",213,405,75,24,"-","+",seg2="SEG12")
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
@@ -446,14 +446,14 @@ RB.append('\t</group>')
 
 # ---- SD-card transport block (its own group, referenced by the views) ----
 # Order per the two photos: SD VOLUME -/+ , SKIP/SEARCH <<//>> , STOP , PLAY/PAUSE , SD IN USE LED.
-# The SD LOAD orange pill is placed separately near PANEL MEMORY. These buttons are VISUAL ONLY and
-# UNBOUND: the SD transport is not in the panel button matrix and no SD subsystem is modelled yet.
-# *** TODO: bind once an SD subsystem exists. ***
+# Bound to the SDSW input port (the 6 SD front-panel switches, byte 0x9CC00008 active-low ->
+# descriptor SEG1D events 0x20B5..BA): VOL- 0x10, VOL+ 0x20, SKIP<< 0x01, SKIP>> 0x02, STOP 0x04,
+# PLAY/PAUSE 0x08. (Silk order per Felipe: these are the "6 SD CARD buttons".)
 SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70"/>',
-     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30), P("half_r",54,18,42,30), L("-",28,28,12,12), L("+",70,28,12,12),
-     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30), P("sd_skipf",172,18,48,30),
-     L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30),
-     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30),
+     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x10"), P("half_r",54,18,42,30,tag="SDSW",mask="0x20"), L("-",28,28,12,12), L("+",70,28,12,12),
+     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x01"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x02"),
+     L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
+     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"),
      L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8)]
 SDB.append('\t</group>')
 

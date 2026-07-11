@@ -672,15 +672,15 @@
 		<element ref="t119"><bounds x="213" y="320" width="100" height="10"/></element>
 		<element ref="green_led"><bounds x="230" y="328" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="262" y="328" width="8" height="8"/></element>
-		<element ref="half_l" inputtag="SEG0F" inputmask="0x01"><bounds x="213" y="335" width="37" height="24"/></element>
-		<element ref="half_r" inputtag="SEG10" inputmask="0x01"><bounds x="251" y="335" width="37" height="24"/></element>
+		<element ref="half_l" inputtag="SEG10" inputmask="0x01"><bounds x="213" y="335" width="37" height="24"/></element>
+		<element ref="half_r" inputtag="SEG0F" inputmask="0x01"><bounds x="251" y="335" width="37" height="24"/></element>
 		<element ref="t5"><bounds x="217" y="341" width="28" height="12"/></element>
 		<element ref="t4"><bounds x="255" y="341" width="28" height="12"/></element>
 		<element ref="t120"><bounds x="210" y="378" width="96" height="8"/></element>
 		<element ref="green_led"><bounds x="230" y="398" width="8" height="8"/></element>
 		<element ref="green_led"><bounds x="262" y="398" width="8" height="8"/></element>
-		<element ref="half_l" inputtag="SEG12" inputmask="0x02"><bounds x="213" y="405" width="37" height="24"/></element>
-		<element ref="half_r" inputtag="SEG13" inputmask="0x02"><bounds x="251" y="405" width="37" height="24"/></element>
+		<element ref="half_l" inputtag="SEG13" inputmask="0x02"><bounds x="213" y="405" width="37" height="24"/></element>
+		<element ref="half_r" inputtag="SEG12" inputmask="0x02"><bounds x="251" y="405" width="37" height="24"/></element>
 		<element ref="t5"><bounds x="217" y="411" width="28" height="12"/></element>
 		<element ref="t4"><bounds x="255" y="411" width="28" height="12"/></element>
 		<element ref="t121"><bounds x="403" y="258" width="68" height="9"/></element>
@@ -755,17 +755,17 @@
 	<group name="sd_block">
 		<bounds x="0" y="0" width="500" height="70"/>
 		<element ref="t138"><bounds x="8" y="52" width="96" height="10"/></element>
-		<element ref="half_l"><bounds x="12" y="18" width="42" height="30"/></element>
-		<element ref="half_r"><bounds x="54" y="18" width="42" height="30"/></element>
+		<element ref="half_l" inputtag="SDSW" inputmask="0x10"><bounds x="12" y="18" width="42" height="30"/></element>
+		<element ref="half_r" inputtag="SDSW" inputmask="0x20"><bounds x="54" y="18" width="42" height="30"/></element>
 		<element ref="t5"><bounds x="28" y="28" width="12" height="12"/></element>
 		<element ref="t4"><bounds x="70" y="28" width="12" height="12"/></element>
 		<element ref="t139"><bounds x="116" y="52" width="104" height="10"/></element>
-		<element ref="sd_skipb"><bounds x="120" y="18" width="48" height="30"/></element>
-		<element ref="sd_skipf"><bounds x="172" y="18" width="48" height="30"/></element>
+		<element ref="sd_skipb" inputtag="SDSW" inputmask="0x01"><bounds x="120" y="18" width="48" height="30"/></element>
+		<element ref="sd_skipf" inputtag="SDSW" inputmask="0x02"><bounds x="172" y="18" width="48" height="30"/></element>
 		<element ref="t140"><bounds x="243" y="52" width="52" height="10"/></element>
-		<element ref="sd_stop"><bounds x="245" y="18" width="48" height="30"/></element>
+		<element ref="sd_stop" inputtag="SDSW" inputmask="0x04"><bounds x="245" y="18" width="48" height="30"/></element>
 		<element ref="t141"><bounds x="306" y="52" width="76" height="10"/></element>
-		<element ref="sd_play"><bounds x="320" y="18" width="48" height="30"/></element>
+		<element ref="sd_play" inputtag="SDSW" inputmask="0x08"><bounds x="320" y="18" width="48" height="30"/></element>
 		<element ref="t142"><bounds x="406" y="42" width="72" height="10"/></element>
 		<element ref="red_led"><bounds x="438" y="28" width="8" height="8"/></element>
 	</group>
