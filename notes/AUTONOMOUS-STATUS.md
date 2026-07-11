@@ -14,6 +14,27 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★ SESSION UPDATE 2026-07-11 (DSP effect-execution chain + config cleanup) — READ notes/dsp-effect-execution-chain.md
+DONE + committed (87a2964, 630c68d, e859261):
+- **Config switches REMOVED per Felipe** ("Effects DSP host stub" + the two "Tone generators"):
+  the KN7000 always has the TGs (IC201/IC205) + effects DSP (IC306), so both are now unconditional.
+  TG-enable gate (0x500ce380=0x40) opens naturally at boot from the TG-present strap; the post-boot
+  gate-force hack (old CONFIG bit2) is gone. Default boot = home screen (PMEM A-) + audible, no -cfg.
+- **DSP-present handshake FIXED**: firmware self-test (fw 0x48404d25) software-triggers INTC group
+  0x17 (GxICR 0x3400015c) + polls bit4; emulator never ack'd -> 0x500066CC=0xFF -> runtime DSP-write
+  gate (0x48404ef5) slammed shut -> effect selection never reached the DSP. intc_w now latches
+  group-0x17 REQUEST when the DSP is present. 0x500066CC stays 0; selecting Dark2 uploads +783 words.
+- **SHARC core**: implemented ALU op 0x09 (fixed-point average) + shift-imm DRC fallback (FDEP-SE);
+  added notify_pm_written() (host PM-write -> cache_dirty) so runtime uploads aren't run stale.
+- SD slot cover: explained (only observable with -harddisk image on an SD screen; not a bug).
+NEXT (the ONE remaining blocker for AUDIBLE effects): **model the ADSP-21065L SPORT autobuffer DMA.**
+  With cache-invalidation ON the effect genuinely EXECUTES (reads input 0xC370 + 1.76M SDRAM delay
+  reads/note) but writes its output to a RELOCATED TX slot (seen at 0xC2BD/0xC2BE), NOT the bridge's
+  fixed TX0+0xE=0xC350 -> silence. So the notify_pm_written() call in dsp_data_w is COMMENTED OUT
+  (keeps the audible passthrough instead of regressing to silence). Re-enable it once the SPORT DMA
+  is modelled (or the bridge tracks the live SPORT TX pointer per frame). Full trace + IOP buffer-
+  pointer regs in notes/dsp-effect-execution-chain.md.
+
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
   is available (DISPLAY=:0, wayland-0). Run with visible video.
