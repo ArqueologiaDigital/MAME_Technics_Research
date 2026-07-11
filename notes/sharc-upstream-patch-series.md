@@ -57,14 +57,13 @@ Apply + A/B a reverb WAV (the reverb exercises circular delay buffers and MACs h
    **`compute_fmul_fix_scaled` TRUNC direction** truncates toward zero where B-39 specifies toward
    −Infinity (standalone `compute_fix` uses floorf correctly — the pair is inconsistent).
 
-## D. Performance opportunity (not a correctness issue)
+## D. Performance (DONE) — native fixed MAC family
 - **Native UML for the multifunction fixed MAC block** (multiop 0x06, 0x08-0x12, 0x14-0x16 =
-  `MRF ± Rx*Ry (SSF/SSFR)` with a parallel add/sub half). These currently fall back to
-  `generate_unimplemented_compute` (a per-instruction interpreter call) and sit in the effect
-  kernel's per-frame hot path (the reverb's sine oscillators + delay interpolation). Native emission
-  would remove the fallback call overhead. Correctness-critical (MR alignment, SSF vs SSFR rounding
-  per C.4 above, the parallel-half flags) — implement against the interpreter as reference and A/B a
-  reverb WAV bit-for-bit. Tracked as an open perf item.
+  `MRF ± Rx*Ry (SSF/SSFR)` + parallel add/sub/avg). IMPLEMENTED: removes the per-op interpreter
+  fallback in the effect kernel's hot path. Verified BIT-IDENTICAL vs the interpreter (reverb WAV
+  md5 match, 0/2.11M samples differ). Flags gated on liveness; ALUSAT baked at translation time.
+  0x07/0x0f (dual add/sub) remain fallback. Strong upstream candidate (the SHARC DRC never had this
+  family).
 
 ## Upstreaming plan
 B.1 (ALUSAT) is the headline and cleanest submission (a demonstrable DRC-vs-interpreter divergence).
