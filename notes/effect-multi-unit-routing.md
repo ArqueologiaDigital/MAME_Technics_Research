@@ -234,3 +234,9 @@ delay line; 8408-8410 reads the delay back at LFO-modulated offsets with interpo
 (unit4), no dry doubling. The chorus mix is structurally sound; only the CHORUS_WET makeup level
 (currently 0.60) needs calibration against real hardware (Felipe's ear) -- the ~69% DAC modulation
 suggests it may be a touch high. Confirms the shipped chorus is faithful in structure.
+
+## 2026-07-12: chorus robustness under dense input -- PASS
+Enabled chorus + slammed an 18-note cluster (held): DAC peak 2186, **0 clipped samples** (vs
+reverb-only cluster ~2085). The chorus unit (rec06) CLIPs its own output so it self-limits; combined
+with the bounded feed (TG x send) the chorus path cannot rail/clip beyond the DAC clamp. The shipped
+chorus is production-robust like the reverb.

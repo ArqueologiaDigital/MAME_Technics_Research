@@ -1,0 +1,95 @@
+From b1028bd5b3082b341646b9b58f4711391f7ff21c Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sat, 11 Jul 2026 19:46:13 +0100
+Subject: [PATCH] sharc drc perf: translation-time ALUSAT specialization +
+ faithful 66MHz clock -- frame overrun ELIMINATED
+
+MODE1.ALUSAT is baked into compiled fixed-ALU code at translation time (zero
+overhead with saturation off; no per-op MODE1 load when on); the three
+mode1-imm write generators emit a cache_dirty flush whenever the bit could
+change (rare: once at boot), so correctness is preserved via recompile. DSP
+clock corrected 60 -> 66 MHz (IC306's rating). RESULT: the effect kernel now
+completes exactly 44,100 frames/s (was ~21.4k -- the wet path ran at half rate);
+reverb regression bit-identical; -str speed 65% vs 56% while doing 2x the DSP
+frames. Remaining perf lever (noted): native UML for the multifunction MRF-MAC
+block (multiop 0x06/0x08-0x16) which still round-trips through the interpreter
+fallback in the per-frame hot path.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcdrc.cpp | 23 +++++++++++++++++++++--
+ src/mame/matsushita/kn7000.cpp     |  2 +-
+ 2 files changed, 22 insertions(+), 3 deletions(-)
+
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index d1fde7a..ae3cd4a 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -288,9 +288,13 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
+ void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
+ {
+ 	UML_MOV(block, dst, I6);
++	// TRANSLATION-TIME SPECIALIZATION: MODE1.ALUSAT changes exactly once in this firmware
++	// (boot BIT SET). The mode1-write generators below flush the cache whenever the bit
++	// could change, so compiled code may safely bake the current state in -- zero overhead
++	// when saturation is off, and no per-op MODE1 load when it is on.
++	if (!(m_core->mode1 & MODE1_ALUSAT))
++		return;
+ 	uml::code_label const no_sat = compiler.labelnum++;
+-	UML_TEST(block, MODE1, MODE1_ALUSAT);
+-	UML_JMPc(block, uml::COND_Z, no_sat);
+ 	UML_TEST(block, I7, 1);
+ 	UML_JMPc(block, uml::COND_Z, no_sat);
+ 	UML_SAR(block, I6, I6, 31);
+@@ -1631,6 +1635,11 @@ void adsp21062_device::generate_update_cycles(drcuml_block &block, compiler_stat
+ 
+ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	// TODO: swap effects
+ 	if (data & MODE1_BR8)
+ 		fatalerror("generate_write_mode1_imm: tried to enable I8 bit reversing");
+@@ -1677,6 +1686,11 @@ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_st
+ 
+ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	if (data & 0x1)
+ 		fatalerror("generate_set_mode1_imm: tried to enable I8 bit reversing");
+ 	if (data & 0x2)
+@@ -1719,6 +1733,11 @@ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_stat
+ 
+ void adsp21062_device::generate_clear_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	if (data & 0x1)
+ 		fatalerror("generate_clear_mode1_imm: tried to disable I8 bit reversing");
+ 	if (data & 0x2)
+diff --git a/src/mame/matsushita/kn7000.cpp b/src/mame/matsushita/kn7000.cpp
+index 087dc2d..a72d569 100644
+--- a/src/mame/matsushita/kn7000.cpp
++++ b/src/mame/matsushita/kn7000.cpp
+@@ -2747,7 +2747,7 @@ void kn7000_state::kn7000(machine_config &config)
+ 	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
+ 	// come next; for now this proves the core integrates and the KN7000 still boots.
+ 	// See notes/sharc-lle-assessment.md.
+-	ADSP21065L(config, m_dsp, 60'000'000);
++	ADSP21065L(config, m_dsp, 66'000'000);   // IC306 rated/run at 66 MHz (was 60 -- faithful correction)
+ 	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
+ 	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
+ 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);
+-- 
+2.47.3
+
