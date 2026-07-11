@@ -45,3 +45,28 @@ tools/make_wave_pack.py + tools/wave_pack_map.json: (bank,zone-range)->donor ent
 loops, provenance block). Driver: optional ROM region "wavepack"; kn7000_tonegen looks up (bank,zone)
 from m_aux at note-on and plays the donor sample (linear interp, loop, step=freq/root) instead of
 sin(); sine fallback for unmapped zones / missing pack. Envelope/life-cycle machinery unchanged on top.
+
+
+## 5. v2 CORRECTION (Felipe: "samples sound borked" -- he was right)
+Workflow wf_3b896d76-475 ground-truthed the donors:
+- KN5000 tone tables PARSED (kn5000_table_data.rom): zone keymap @0x70A4C (1462 entries, global dense
+  zone space 0..959 = the four chips' index tables concatenated, TG wave word = 0x6070+zone), TWO
+  named wave tables (@0x72C90: 333x16B; @0x75172: 339x16B incl. velocity-layer names; grp byte =
+  instrument category), 16 drum-kit key maps @0x74161. IC307 = the TAIL of the zone space
+  (0x300-0x3BF primary; 6-local ambiguity documented in kn5000_wave_names.json).
+- ★ IC307 contains NO piano/strings/guitar/mallet/drums (those live on undumped IC304-306): locals
+  0-62 brass/sax/reed/accordion, 63-87 flutes, 88-142 basses, 143-191 synth/pads/bells. v1's donor
+  guesses were structurally impossible; every "borked" symptom explained (w22 organ = fall/growl
+  sample, w75 strings = brass stabs, w83 = whistle family, w64/69 piano = flutes).
+- The w185 3.15MB packed bank contains REAL multisample families; the audition pass
+  (kn5000_audition.json + kn5000_donor_recs.json) carved verified segments: piano L1/L2 = the two
+  velocity layers of a chromatic decaying-keyboard family (roots 333.6/333.4 Hz, stab 1.00), brass
+  seg80, sax seg82, strings seg78 (true slow-swell), guitar seg84, mallet seg102 (bell 2440 Hz),
+  world seg74; organ = w69 seg0 (odd-dominant hollow pipe), bass = w77, synth = w64, pads = w183/w103.
+- Verified post-fix: piano/organ/brass/guitar/strings all play C4 with a 262 Hz fundamental and
+  stable timbres. MEASUREMENT LESSON: use goertzel harmonic RATIOS, not a coarse peak scan -- the
+  strings ensemble's strong 2nd harmonic briefly caused a false octave "fix" (reverted).
+- Remaining honest limits: donor identity is KN5000-family-grounded but per-wave names are LOW
+  confidence (positional); piano donor is a KN5000 keyboard-family instrument (possibly E.Piano/
+  harpsi-adjacent), not a grand piano recording; one donor per family (no multisample splits yet --
+  the per-zone data to do it properly is all in kn5000_zone_tuning.json + the KN7000 zone anchors).
