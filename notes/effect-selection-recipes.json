@@ -1,0 +1,11161 @@
+[
+ {
+  "name": "Reverb/Room1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Room2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Plate1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Plate2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Concert1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Concert2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Reverb/Dark1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "R3 key not snapshot-verified on THIS screen but triple-verified on CHORUS/MULTI/SOUND DSP; prior session also confirmed Dark1=:SEG13 0x01 live"
+ },
+ {
+  "name": "Reverb/Dark2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/Chorus1",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/Chorus2",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/Chorus3",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/Chorus4",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/GM Chorus1",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/GM Chorus2",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/GM Chorus3",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Chorus/GM Chorus4",
+  "open": [
+   [
+    "hold",
+    ":SEG11",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow5",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow6",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow7",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/CrossDelay/Shallow8",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 6,
+  "page_label": "6/8",
+  "verified": true
+ },
+ {
+  "name": "Multi/DualDelay/Deep1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep5",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep6",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep7",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/DualDelay/Deep8",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/8",
+  "verified": false
+ },
+ {
+  "name": "Multi/SlowAttacker/Slow Attacker1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/SlowAttacker/Slow Attacker2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/SlowAttacker/Slow Attacker3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/SlowAttacker/Slow Attacker4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Compressor/Comp.1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Compressor/Comp.2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Compressor/Comp.3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Compressor/Comp.4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Limiter/Limiter1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Limiter/Limiter2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Limiter/Limiter3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Limiter/Limiter4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Loud1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Loud2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Loud3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Loud4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Normal1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Normal2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Normal3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/DistortedAmp/Normal4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false
+ },
+ {
+  "name": "Multi/Fuzz/Normal",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Fuzz/Hard Compress",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Normal",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Mild",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Hard",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Bright",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Fat",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Overdrive/Hard Compress",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Normal",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Mild",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Hard",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Bright",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Fat",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/Distortion/Hard Compress",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 2Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 2Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 3Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 3Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 4Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOFilter/For 4Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah5",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah6",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah7",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/ReverseWah/Wah8",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 2Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 2Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 3Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 3Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 4Beat 1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/LFOWah/For 4Beat 2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/PedalWah/Wah1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/PedalWah/Wah2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/PedalWah/Wah3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi4",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi5",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi6",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi7",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/MultiTapDelay/Multi8",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Delay+Chorus",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Delay+Flanger",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Delay+Vibrato",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Delay+Phaser",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Autowah+Delay",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Comp+Dst+Delay",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/DelayComplex/Comp+Ovd+Delay",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Vocal Harmonizer",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Voice Changer1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Voice Changer2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Brass simulator1",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Brass simulator2",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "Multi/VocalEffect/Brass simulator3",
+  "open": [
+   [
+    "hold",
+    ":SEG10",
+    4,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Enhancer/Enhancer6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": true,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Make Up",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Middle Cut",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Radio",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Treble Boost",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Treble Cut",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/No Hi Hat",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Bass Cut",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ParametricEQ/Too Bright",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Mixup/Mixup1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Mixup/Mixup2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Mixup/Mixup3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Mixup/Mixup4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RingModulator/Ring Mod.1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RingModulator/Ring Mod.2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RingModulator/Ring Mod.3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RingModulator/Ring Mod.4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Vibrato/Vibrato8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoPan/Auto Pan7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Tremolo/Tremolo8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Standard",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Single Rotor",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Distorted",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Bright Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Mellow Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RockRotary/Brilliant Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Standard",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Single Rotor",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Distorted",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Bright Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Normal Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Mellow Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/RotarySpeaker/Brilliant Twin",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/FlangerDryWet/Dry/Wet 8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Flanger/Deep8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/PhaserDryWet/Dry/Wet 8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Phaser/Deep8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/5",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/ModCeleste/Mod. Cel.8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG00",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste6",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste7",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG13",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Celeste/Celeste8",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG09",
+    4
+   ],
+   [
+    "press",
+    ":SEG12",
+    1
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/2",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Exciter/Exciter1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Exciter/Exciter2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/Exciter/Exciter3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoWah/Wah1",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    2
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoWah/Wah2",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    8
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoWah/Wah3",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG00",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoWah/Wah4",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    16
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ },
+ {
+  "name": "SoundDSP/AutoWah/Wah5",
+  "open": [
+   [
+    "hold",
+    ":SEG0F",
+    8,
+    2.5
+   ]
+  ],
+  "select": [
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG09",
+    8
+   ],
+   [
+    "press",
+    ":SEG11",
+    32
+   ]
+  ],
+  "page": 1,
+  "page_label": "1/1",
+  "verified": false,
+  "notes": "SOUND DSP applies to the part shown (default RIGHT1)"
+ }
+]
