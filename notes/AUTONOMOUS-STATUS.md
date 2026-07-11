@@ -40,6 +40,15 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~00:15 — chorus milestone documented (blog + docs)
+Chorus wet decoupled from reverb depth (prior chunk). Published blog Part 19 "A second voice" (the
+first audible non-reverb effect + the honest FLAG3 red-herring correction). Updated the docs site
+kn7000-effects-dsp.md emulation-status (chorus audible via unit-4 send/return; multi/sound-DSP/EQ are
+follow-ups; FLAG3 gates only 4/72 records). Jekyll rebuilt. posts.json=21.
+NEXT (effects, future ticks): identify + feed the SOUND DSP unit (send 0x8098/0x80C8) and MULTI unit
+(send 0x8298) the same way chorus was done; EQ (unit 8) is a master/insert (different integration);
+calibrate CHORUS_WET + resolve dry-doubling (unit-4 out = dry+wet or wet-only) -- needs Felipe's ear.
+
 ## TICK 2026-07-12 ~00:05 — chorus wet DECOUPLED from reverb depth (refinement)
 Fixed the shipped chorus's level coupling: the chorus return is now an INDEPENDENT wet added
 post-crossfade (own CHORUS_WET level, follows gret but not gdepth), carried separately in the DSP
