@@ -40,6 +40,18 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~00:35 — definitive unit map + chorus mix validated
+- DEFINITIVE unit->record map (live PM signature match): u0=rec56 (audible panel-reverb slot),
+  u4/u6=rec06 CHORUS (validates my chorus target), u8=rec34 EQ, u9=rec49. Resolves the long-standing
+  unit0 confusion; the chorus feed is confirmed correct.
+- rec06 chorus is WET-ONLY (traced: input->delay->modulated read->output, dry not re-added), so
+  summing the chorus return with the main is structurally CORRECT -- no dry-doubling. Only CHORUS_WET
+  (0.60) needs ear calibration (~69% modulation may be slightly high; Felipe's call).
+NEXT effects (now that units are mapped): EQ (u8, rec34) is a master/insert (0dB flat by default,
+needs the series-insert integration + user gains); SOUND DSP/MULTI need their send-channel->unit
+mapping (0x8098/0x8298) which is not yet pinned -- do NOT guess-feed a unit (the unit-7 lesson).
+Chorus is the solid, faithful, shipped non-reverb effect; reverb pristine; tree clean.
+
 ## TICK 2026-07-12 ~00:15 — chorus milestone documented (blog + docs)
 Chorus wet decoupled from reverb depth (prior chunk). Published blog Part 19 "A second voice" (the
 first audible non-reverb effect + the honest FLAG3 red-herring correction). Updated the docs site
