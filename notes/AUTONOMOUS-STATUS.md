@@ -34,11 +34,23 @@ release envelope) shows the active reverb does NOT decay:
 - Honest status: DSP AUDIO PIPELINE works (TG->DSP->speaker; the DRY passthrough is clean, off==on
   within 1%, verified Part 12). Active effects LOAD + EXECUTE. But the reverb is NOT a faithful/usable
   reverb yet -- it rings. "Effects audible + type-selectable" is true; "effects work WELL" is NOT yet.
-- NEXT (dedicated, multi-tick): make the DspEffectSelect parameter path run so depth/time reach the
-  DSP (find where *(0x500A01E0) is allocated + why it's -1 -- same boot-state family as the old TG-gate
-  force). Needs the decompressed program image dumped for static tracing (w.bin in the scratchpad is
-  only a 128-byte fragment; dump region 0x48400000 via the debugger `save` or a Lua chunked read).
-  Full analysis: notes/dsp-effect-execution-chain.md (section "Reverb CORRECTNESS gap").
+- UPDATE 2026-07-11g (SUPERSEDES the "depth not applied" framing below): deeper diagnosis shows the
+  reverb output SATURATES to the rail (0x7FFFFF at slot 0xC358, in BOTH interpreter and DRC), i.e. the
+  float recursion DIVERGES; and the "audible effect" was a BRIDGE ARTIFACT (I4-following reads a moving
+  SPORT-ring slot, not the railed commit). Dumped the running reverb's coefficients: 0xC000 block =
+  textbook-DAMPED (0.85/0.70/0.64/..), and the one >unity value (1.161 at 0xC2C4) is a CONSTANT
+  feedforward gain (the recursive a1/a2 terms 0.245/-0.406 are stable). So the leading hypothesis is
+  now a **SHARC ARITHMETIC BUG** in an op the reverb uses but the passthrough doesn't (fixed MAC
+  `Rm=MRF+Rxm*Rym` sharcops.hxx multiop grp3 line 806, mul, or FLOAT/FIX round-trip -- added during the
+  LLE), NOT the depth. NEXT (fresh methodical tick): single-step the divergent float recursion
+  0x847c-0x8483 (watch F3/F11 grow with the damped coeffs) OR unit-test the fixed MAC + FLOAT/FIX vs
+  the ADSP-21065L TRM (repo root). The DspEffectSelect depth path IS dead (*(0x500A01E0)=-1, setter
+  0x484057d6 never called) but that is NOT what makes it diverge. Tooling: decompressed program image
+  at ../kn7000_scratchpad_snapshot/kn7000_program_decompressed.bin; reverb PM dumps via Lua read_u64 ->
+  unidasm -arch sharc. Full chain: notes/dsp-effect-execution-chain.md (sections CORRECTNESS gap ->
+  DECISIVE -> SMOKING GUN -> CORRECTION -> 1.161-constant). The default boot sound is the clean DRY
+  passthrough (verified off==on); divergence only manifests if a user actively SELECTS a reverb, so no
+  shipped-default change was made.
 
 ## ★ SESSION UPDATE 2026-07-11 (DSP effect-execution chain + config cleanup) — READ notes/dsp-effect-execution-chain.md
 DONE + committed (87a2964, 630c68d, e859261):
