@@ -40,6 +40,24 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★ TICK 2026-07-11 ~21:05 — PAGE/CONTRAST FIXED + VERIFIED; effects-sweep triaged
+PAGE Up/Down and CONTRAST Up/Down SOLVED (wf_86ccde00-860 RE + live verify) and shipped (f614862):
+they are pseudo-part events in the ordinary 0x2000/0x2001 family, NOT the SEG16/17 valuator wires
+the guesses used. **PAGE = SEG0B 0x10 (up) / 0x20 (down)** (was mislabeled BASS ON/OFF);
+**CONTRAST = SEG05 0x04 (+) / 0x08 (-)** (was PADS ON/OFF). LIVE-VERIFIED: MULTI EFFECT walks
+6/8->7->8->7->6->5, both directions, title unchanged. Layout artwork repointed; wrong SEG16/17/19/1A
+guess bits -> IPT_UNUSED (valuator wires). My earlier brute-force MISSED this because it skipped
+SEG00-0x0B. (A synchronous RE agent wrongly concluded "undumped scanner, unmappable" -- it used the
+wrong dispatch table; the workflow agent's concrete dispatch-row evidence was right and verified.)
+EFFECTS SWEEP (wf_46aaaf77-352) triaged -> notes/effects-sweep-results.md + notes/
+effect-selection-recipes.json (224 recipes): ALL 8 REVERB TYPES PASS (distinct tails, 0 clip, 0 rail,
+decay to zero). CHORUS = no audible effect (SUSPECT: likely RIGHT1 chorus send=0 by default OR
+return unwired -- investigate). MULTI/SOUND-DSP batch tests incomplete (OOM); re-run needed.
+REMAINING QUEUE: chorus send/return check; within-group TYPE page-flip control (unfound); complete
+MULTI/SOUND-DSP batch health tests; DRC MAC-native perf; loudness calibration; upstream prep.
+LESSON: background workflows DO survive across cron-tick turns (both orphaned workflows completed
+detached) -- check journals on each tick before re-running.
+
 ## TICK 2026-07-11 ~20:35 — PAGE/CONTRAST: guesses DISPROVEN live; shared up/down pair; RE in progress
 EMPIRICAL (live probe, MULTI EFFECT screen stuck at PAGE 6/8, 128-candidate brute-force w/ PNG
 page-digit diff): the current driver guesses (SEG16 0x01 PAGE UP, SEG17 0x01 PAGE DOWN) DO NOT page
