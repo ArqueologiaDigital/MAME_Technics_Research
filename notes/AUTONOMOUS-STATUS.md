@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~21:50 — documentation milestone + 0x8238 decode
+- 0x8238 DECODED (priority 4 item CLOSED): it's a CONSTANT (0x0800), not a depth control -- stepping
+  TOTAL DEPTH moves only 0x8338's low byte (0x8550<->854D); 0x8238 is the reverb-send channel's fixed
+  output-bus base, co-written but invariant. Depth model (0x8338 -> m_gain_depth) is complete.
+- BLOG Part 18 "The buttons that lied" published (PAGE/CONTRAST were mislabeled pseudo-part rockers;
+  the detective story + live proof). posts.json = 20 entries.
+- DOCS site updated + rebuilt (Jekyll OK): kn7000-control-panel.md gets the PAGE/CONTRAST emulation
+  mapping table (pseudo-part 0x18/0x1D -> SEG0B/SEG05); kn7000-effects-dsp.md gets the audible-effects
+  status (single send+return path -> only reverb audible; multi-unit model scoped).
+REMAINING QUEUE (for next ticks): multi-unit send/return model (the BIG win: audible chorus/EQ/DSP;
+needs per-bus TG output + multi-send bridge; multi-day, best supervised given risk to the working
+reverb); loudness ON/OFF calibration (needs Felipe's real-HW ear ref); circular-wrap re-apply
+(awaiting Felipe's OK -- 2-sample reverb change); upstream submission of the SHARC catalogue.
+STATE: reverb clean+robust; navigation complete; native MAC bit-identical; all priorities 1-5 either
+done or blocked on Felipe (loudness ear-ref, circular-wrap OK). Tree clean, binary published.
+
 ## TICK 2026-07-11 ~21:35 — robustness PASS; nav complete; circular-wrap verified-but-held
 - LOUD-INPUT RAIL RECHECK (priority 4): PASS. 18-note cluster slammed + held 3s w/ reverb ON ->
   0 near-rail DSP writes / 617,400 (0.00%), DAC peak 2085, 0 clipped samples, clean tail. Reverb is
