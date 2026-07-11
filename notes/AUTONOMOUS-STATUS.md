@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ 2026-07-11k: ALUSAT COMPLETE — REAL REVERB AT FULL DRC SPEED (shipped)
+Extended the ALUSAT clamp to EVERY native DRC integer ALU form (ADDC/SUBB 0x05/06, NEG 0x22, CI
+forms 0x25/26, INC/DEC 0x29/2a, dual add/sub 0x78-7F both halves) via shared helper
+generate_fixed_alusat_tail (I6=wrapped, I7=V captured live, clamp SAR^0x80000000, AN/AZ fixed;
+dual form skips per-half flag micro-corrections). DRC now matches the interpreter reverb
+sample-for-sample through the audible tail; smooth exponential decay; no rail; no hard cut; dry
+1731 untouched; toggle clean. Felipe's loud-distortion report RESOLVED. FOLLOW-UPS: (1) DRC perf
+dropped 76%->56% in -str boot metric (per-add MODE1 test) -- optimize by specializing ALUSAT at
+translation time + cache flush on MODE1 change (machinery exists: cache_dirty); (2) absolute level
+judgment: reverb-ON note = ~8.6x dry (14.8k vs 1731) -- determine the real hardware ON/OFF loudness
+ratio (0x803A/0x8338/0x8238 semantics; 0x8238=0x0800 per depth step still undecoded); (3) upstream
+the SHARC fixes (ALUSAT family, circ-wrap off-by-one, premod wrap, AVG/SSFR rounding, FIX UB).
+
 ## ★★ 2026-07-11j DISCRIMINATOR RESULT: -nodrc = REAL REVERB (smooth exponential tail!) — DRC-gap theory PROVEN
 Interpreter run (reverb ON default, C4 1s): pre-note 0; note 14901 (not DAC-railed); tail rms
 5420→5058→5542→3164→180→3 over 3.5s = a genuine smooth reverb decay, NO hard cut. The remaining
