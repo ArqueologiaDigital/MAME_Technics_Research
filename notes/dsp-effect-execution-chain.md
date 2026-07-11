@@ -250,3 +250,25 @@ depth/time is never applied. Two ways in, in priority order:
    boot state -- find its caller + gate; same family as the old TG-gate force).
 Output capture (SPORT TX ring at 0x846d, I4 post-mod by M1) is a SEPARATE, secondary fix; moot until
 F1 stops diverging.
+
+### CORRECTION to the SMOKING GUN (2026-07-11g): coefficients are mostly DAMPED — cause is ambiguous
+Dumped the actual reverb coefficients the diverging filter reads (live DAG regs after loading Dark2:
+I0=0xC2D5, I1=0xC004, M2=1):
+- Coefficient block at 0xC000 (I1 base) = TEXTBOOK DAMPED reverb values: 0.853, -0.300, 0.223, 0.112,
+  0.640, 0.702, 0.458, 0.271, 0.561, 0.853 (classic Schroeder/Moorer comb/allpass feedback ~0.7-0.85,
+  all < 1.0). These are CORRECT, well-damped coefficients -- a reverb with them should DECAY, not blow up.
+- State/coeff block at ~0xC2Bx (I0 base) = a repeated 6-tuple {0.931, -0.931, 1.000, 0.245, -0.406,
+  1.161}. The 1.161 is >unity; IF it is an allpass FEEDBACK coeff it would diverge, but it may be a
+  feedforward gain (fine). Ambiguous without the filter topology.
+=> My "feedback coeff >= 1.0 because depth not applied" was OVER-CONFIDENT. The 0xC000 coeffs are
+   properly damped, which argues the divergence is a **SHARC ARITHMETIC bug** in an op the reverb uses
+   but the passthrough does NOT (fixed-point MAC `Rm=MRF+Rxm*Rym`, mul, FLOAT/FIX round-trip, or the
+   64-bit MR modelling vs the hardware 80-bit MR) -- several of these were added during the LLE work,
+   and the passthrough (pure copy) exercises none of them, which is exactly why it stays clean.
+   The ALTERNATIVE (the 0xC2Bx 1.161 IS the bad feedback coeff) is not ruled out.
+- DISTINGUISHING TEST for next tick: trace which DM address the divergent multiply at 0x847c-0x847e
+  (F12=F3*F7; F7=F3*F7; F11=F7+F12) actually pulls F7/F3 from (single-step I0/I1 at those PCs), read
+  that exact float. If it's the 1.161 -> coefficient bug (why is it 1.16? is it depth-scaled wrong?).
+  If it's a damped value (<1) yet the state still diverges -> SHARC arithmetic bug: unit-test the fixed
+  MAC (sharcops.hxx multiop grp 3, line 806: `Rm=(MRF+p)>>32`, p=(Rxm*Rym)<<1) and FLOAT/FIX against
+  the ADSP-21065L TRM. This is the crux and it's now a bounded, concrete task either way.
