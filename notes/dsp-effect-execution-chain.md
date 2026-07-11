@@ -501,3 +501,24 @@ audit MAME's CALL(DB)/RTS + the 2-cycle delay-slot execution vs the ADSP-2106x (
 instruction's I6 write land before the callee sees I6? does RTS return past both delay slots?).
 Direct confirmation would be an address-delay measurement (instrument: per delay-buffer address, log
 write-frame vs read-frame; delay = read_frame - write_frame) but the DB audit is cheaper first.
+
+## 2026-07-11q: DB timing is CORRECT too -> all addressing components verified; needs a reference-diff
+Audited MAME's delayed-branch execution: CHANGE_PC_DELAYED sets nfaddr=target; the pipeline
+`pc=daddr; daddr=faddr; faddr=nfaddr; nfaddr++` executes BOTH delay slots (the MODIFY(I6,...) after
+each CALL) BEFORE the branch target runs, and the delayed CALL pushes pcstk=nfaddr (return past the 2
+slots). So each reverb section IS entered with I6 correctly advanced by its delay-slot MODIFY. The DB
+hypothesis is RULED OUT.
+=> Across 5 sessions I have now verified as CORRECT: the float ops, the coefficients (damped), op 0x09,
+the fixed MAC scaling, FLOAT/FIX, the all-pass structure, the circular-buffer wrap (off-by-one fixed,
+not causal), the MODIFY instruction, the M registers, and the CALL(DB)/delay-slot/RTS timing. Every
+component of the reverb's execution checks out individually, yet the output diverges. This is the
+signature of a bug that emerges from an INTERACTION or a subtle spec mismatch that component-by-
+component inspection cannot catch.
+CONCLUSION: incremental inspection/instrumentation is EXHAUSTED. The only reliable way forward is a
+DIFFERENTIAL trace: (a) obtain/build a second known-good ADSP-2106x execution of the SAME reverb
+microprogram+inputs and diff register/memory state frame-by-frame until they diverge, OR (b) hand-
+execute one frame of a single all-pass section from the disassembly with the real coefficient/delay
+values and compare each intermediate to MAME's. Either pinpoints the first wrong value. Also still
+open as an interaction candidate: the SPORT autobuffer DMA / I4 audio-buffer management (the bridge
+follows live I4 but does not model the full double-buffered SPORT DMA) -- worth ruling in/out in the
+differential pass. Pausing incremental core-tracing here to invest ticks in completable shippable work.
