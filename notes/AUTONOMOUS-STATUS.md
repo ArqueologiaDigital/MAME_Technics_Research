@@ -40,6 +40,18 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★ 2026-07-11j DISCRIMINATOR RESULT: -nodrc = REAL REVERB (smooth exponential tail!) — DRC-gap theory PROVEN
+Interpreter run (reverb ON default, C4 1s): pre-note 0; note 14901 (not DAC-railed); tail rms
+5420→5058→5542→3164→180→3 over 3.5s = a genuine smooth reverb decay, NO hard cut. The remaining
+loud-distortion + rail + 1.2s hard-cut are DRC-ONLY: the un-saturated DRC integer forms. EXACT FIX
+LIST for next session (mechanical): extend the ALUSAT clamp (pattern from 2d308c7) to DRC cases
+0x05 (ADDC) / 0x06 (SUBB), the dual add/sub compute form, and audit any other native DRC integer
+ALU emissions (grep UML_ADD/UML_SUB in generate_compute) — interpreter is the reference (fully
+saturating). THEN re-measure levels: interpreter note is still ~8.6x dry (14901 vs 1731) — decide
+whether that's the correct hardware ratio (return 0.63 x chain makeup) or needs the TG-return
+semantics refined (0x803A pair vs 0x8338 vs 0x8238 roles). WORKAROUND available today: -nodrc plays
+real reverb at ~36-50% speed.
+
 ## ★★★★ 2026-07-11h: THE EFFECT-CHAIN DIVERGENCE IS FIXED (2d308c7) — MODE1 ALUSAT in the DRC
 Root cause of the 6-session reverb-wash saga: kernel sets MODE1 ALUSAT (BIT SET 0x3000 @PM 0x8074;
 old listing mis-read it as NESTM — NESTM is 0x800). rec49-family triangle LFOs = saturating add +
