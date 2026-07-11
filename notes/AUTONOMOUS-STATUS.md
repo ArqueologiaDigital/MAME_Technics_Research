@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~20:35 — PAGE/CONTRAST: guesses DISPROVEN live; shared up/down pair; RE in progress
+EMPIRICAL (live probe, MULTI EFFECT screen stuck at PAGE 6/8, 128-candidate brute-force w/ PNG
+page-digit diff): the current driver guesses (SEG16 0x01 PAGE UP, SEG17 0x01 PAGE DOWN) DO NOT page
+-- proven wrong. No tested normSeg (0x0C-0x1A,0x20 × all 8 bits) pages while staying on MULTI EFFECT.
+KEY INSIGHT: the HELP button-name legend (table 0x48394d06, null-sep, indexed by button id) has
+"LCD CONTRAST" (idx 62) but NO "PAGE UP/DOWN" entry -> PAGE Up/Down and Contrast Up/Down are the SAME
+physical up/down pair (manual: "use the Contrast Up/Down buttons or Tempo/Program wheel"); pressing
+LCD CONTRAST re-purposes them. So find ONE up/down pair. Candidates nS16(ev1005)/nS17(ev1004,t=4
+auto-repeat) via wire 0xD0/0xD1 may be DIAL/ENCODER deltas not bit presses (my bit-press didn't
+page). NEXT: RE the "PAGE %d/%d" render var + its writer + the DATA/DIAL wire protocol (wires
+0xD0-0xD3) to name the true button/event; then live-verify + fix driver + layout. Do NOT ship a new
+guess (rule g). MULTI screen open recipe VERIFIED: hold :SEG10 0x04 ~2.5s.
+
 ## TICK 2026-07-11 ~20:10 — PAGE/CONTRAST investigation launched; upstream catalogue banked
 - Effects sweep wf_46aaaf77-352 did NOT complete (died with prior session; journal shows only
   'started', no recipes). Deferred: re-run AFTER PAGE nav is fixed (MULTI's 8 pages need it).
