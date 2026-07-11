@@ -92,6 +92,18 @@ kbd_midi_rx (MIDI). Verified: FIFO tap press=0x6418/release=0xFF98(bit7=1); disa
 FINDER held-key dots MOVE F->G (don't accumulate) on release. Published. notes/keybed-fifo-makebreak.md.
 (Bonus: confirmed the STAGE-2 bank-A LCD soft-key SEG11 0x01 toggles CHORD FINDER on APC SELECT.)
 
+## Felipe punch-list + DSP plan 2026-07-11 (commits 78b4bbd / 96bb5e8)
+Panel: TRANSPOSE/OCTAVE +/- swap fixed + the 6 SD CARD buttons wired to SDSW (done). Genre LEDs
+re-verified correct (all 16 light their PANEL_LED output on selection). PANEL MEMORY SET, CUSTOM
+PANEL, PAGE/CONTRAST: investigated, NOT reliably determinable (SET!=ev2011 disproven; CUSTOM PANEL
+ev20B4=generic latch; PAGE/CONTRAST=CPC value column, SEG20=tempo) -> left unbound, not guessed
+(need the CPC switch matrix). Detail: notes/panel-selftest-validation.md.
+★ NEW MAJOR EFFORT (Felipe): make the effects DSP audibly process effects. Thorough phased plan in
+notes/dsp-effects-improvement-plan.md -- exploits the now-working panel to drive effect selection +
+instrument the DSP uploads. 4 hypotheses (selection/execution/mix/parameters); the SD-menu blocker
+that parked f3-effect-loading.md is GONE (play screen reachable + effect buttons mapped). First step
+= one instrumented Phase A+B run (tap 0x9C000000 + *(0x500A01E0), drive REVERB via the panel).
+
 ## ★ PANEL BUTTONS + LEDs VALIDATED/FIXED 2026-07-10 (Felipe: use the SW&LED self-test; map all buttons)
 Used the firmware's OWN self-test data as the authoritative source (commits faa9aa4 / cdf64f5 / 82d520a):
 - BUTTON VALIDATION: PanelSwitchClassTable @0x4860C9F4 (switch#=normSeg*8+bit -> [LED row,col] or
