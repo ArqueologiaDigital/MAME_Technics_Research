@@ -459,3 +459,28 @@ NEXT (sharp): instrument the PM accesses (PM_REG_I(i) in the PM branch of the SA
 + the pm immediate-modify handlers) gated on PC 0x8400-0x8470; capture one frame; find the PM(I8) line
 whose write-back = read + input with no attenuation (the accumulator). Also read I8/L8/B8/M8..M14 (DAG2)
 to get the PM buffer geometry. This is the real target; the DM(I6) work above rules out the SDRAM path.
+
+## 2026-07-11o: the SDRAM delays are ~6.4s (full-buffer) for EVERY tap -> likely the addressing bug
+Cleared the other stores: PM(I8)@0x9800 holds COEFFICIENTS (3.2/-3.2/0.13/0.21 in bits[47:16] of the
+48-bit PM word), not delay state; DM 0xC100-0xC300 is a structured DESCRIPTOR table (huge non-float
+values like 1.8e16/9.8e32 that are CONSTANT 5s after note-off), not audio state. So the audio delay
+state lives only in the DM(I6) SDRAM buffer.
+From the full-frame trace geometry: each tap does WRITE at X then READ at X-1 (M3=-1), and X-1 is the
+slot that same tap will OVERWRITE next frame -> so at read time it holds the value from the previous
+time the pointer passed = ONE FULL BUFFER CYCLE ago = L6/rate ~= 6.4 s. This holds for ALL taps. A
+reverb needs millisecond delays; ~6.4 s delays for every comb/all-pass would make a frozen, non-decaying
+wash -- which is exactly the symptom (builds to input x Q ~= 2e7, then sustains ~forever).
+=> LEADING ROOT CAUSE (revised): MAME's I6 addressing yields the WRONG (full-buffer) delay length for
+the reverb taps -- the read lands one slot from the write instead of `write + intended_delay`. The
+intended short delay is set by the frame-start `MODIFY(I6, +0x10747)` and the per-tap M/base layout; if
+MAME's MODIFY-with-circular-wrap (or the I6 save/restore at 0x8401/0x8402/0x846c/0x846e via DM[I1-1])
+differs from the ADSP-21065L by even a little, every read lands at the full-cycle slot.
+DEFINITIVE NEXT STEP: audit MAME's MODIFY (immediate `MODIFY(In, <data>)`) + the DAG circular-wrap for
+LARGE modifiers (0x10747 with L6=0x456F0) vs the ADSP-21065L manual -- verify I6 after 0x8403 lands
+where the SHORT-delay reads need it. Also reconcile the buildup paradox: registers+delay-reads are ~0
+in the first 0.4 s yet F1 grows -- most likely the growth to 2e7 is RESONANT BUILDUP to input x Q (not
+exponential divergence), and the non-decay is the ~6.4s-delay near-unity loop. This SUPERSEDES the
+"DC pole" framing: it's wrong (huge) delay lengths, not a DC accumulator per se.
+HONEST NOTE: 4 sessions of incremental core-instrumentation have characterized this thoroughly but not
+fixed it. The efficient path now is either (a) the MODIFY/DAG-wrap audit above, or (b) a reference
+ADSP-2106x execution to diff MAME's I6 trajectory against, frame by frame.
