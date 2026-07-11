@@ -43,6 +43,11 @@ public:
 	// timeslice so the new code actually runs.
 	void notify_pm_written();
 
+	// Live DM-bus index register In (I0..I7 = dag1). The effects kernel keeps its audio
+	// in/out pointer in I4 (output frame at I4, input frame at I4+0x20); reading it lets the
+	// audio bridge follow whichever SPORT autobuffer the running microprogram actually uses.
+	uint32_t dm_index_reg(int n) const;
+
 	void external_iop_write(uint32_t address, uint32_t data);
 	void external_dma_write(uint32_t address, uint64_t data);
 

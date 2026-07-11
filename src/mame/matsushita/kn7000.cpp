@@ -1098,8 +1098,8 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 				// resolved, leaving the cache stale keeps the (audible) boot passthrough rather than
 				// regressing to silence. Re-enable once the effect output is non-zero.
 				// See notes/dsp-effect-execution-chain.md.
-				//if (m_dsp_running && m_dsp_mode == 1)
-				//	m_dsp->notify_pm_written();
+				if (m_dsp_running && m_dsp_mode == 1)
+					m_dsp->notify_pm_written();
 			}
 			else if (!m_dsp_running && m_dsp_dl_words > 0)        // bare 0xA0 after the last block = "go"
 			{
@@ -1328,17 +1328,22 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	// buffers. We stand in for the codec DMA directly: hand the DSP one TG input frame (from the
 	// bridge's rx ring) and take back the previous frame's processed output (to the bridge's tx
 	// ring -> speakers).
-	const uint32_t rx = m_dsp->sport_rx_buffer(0, 0);
-	const uint32_t tx = m_dsp->sport_tx_buffer(0, 0);
-	if (rx && tx)
+	// Follow the effect kernel's LIVE audio pointer instead of a fixed SPORT buffer. The kernel
+	// keeps its per-frame audio frame in the DM index register I4: it writes the stereo output at
+	// [I4],[I4+1] and reads the stereo input at [I4+0x20],[I4+0x21] (verified by disassembling the
+	// running microprograms -- the passthrough parks I4 at 0xC350, but a real effect such as Dark2
+	// reverb parks it at the SPORT0 TX-B buffer 0xC358, which the old fixed TX0+0xE=0xC350 read
+	// missed -> silence). Reading I4 makes the bridge track whichever SPORT autobuffer the loaded
+	// effect actually uses, without a full SPORT-DMA model.
+	const uint32_t i4 = m_dsp->dm_index_reg(4);
+	if (i4 >= 0xC000 && i4 < 0x10000)
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
-		const uint32_t obuf = tx + 0xE;   // 0xC350: the kernel writes 4 output words each frame,
-		const uint32_t ibuf = rx + 0xE;   // 0xC370: the kernel's stereo input  (L,R)
+		const uint32_t obuf = i4;          // kernel's output frame (L,R)
+		const uint32_t ibuf = i4 + 0x20;   // kernel's input frame  (L,R)
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
-		// 0xC350/1 and 0xC352/3 are the two output sends (dry + wet); sum them for the DAC mix.
-		const int32_t oL = sx24(dm.read_dword(obuf))     + sx24(dm.read_dword(obuf + 2));
-		const int32_t oR = sx24(dm.read_dword(obuf + 1)) + sx24(dm.read_dword(obuf + 3));
+		const int32_t oL = sx24(dm.read_dword(obuf));
+		const int32_t oR = sx24(dm.read_dword(obuf + 1));
 		m_dspbridge->push_output(oL, oR);
 		int32_t il = 0, ir = 0;
 		m_dspbridge->pop_input(il, ir);

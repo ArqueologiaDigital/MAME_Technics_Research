@@ -204,6 +204,11 @@ uint32_t adsp21065l_device::iop65l_r(offs_t offset)
 	return 0;
 }
 
+uint32_t adsp21062_device::dm_index_reg(int n) const
+{
+	return m_core->dag1.i[n & 7];
+}
+
 void adsp21065l_device::iop65l_w(offs_t offset, uint32_t data)
 {
 	// F.3: the kernel programs the SPORT-DMA chain-pointer (CP) registers with a value CP; the
