@@ -39,8 +39,14 @@ Apply + A/B a reverb WAV (the reverb exercises circular delay buffers and MACs h
    (sharcops.hxx:37/52) and the DRC (`generate_update_circular_buffer`, COND_LE at sharcdrc.cpp)
    wrap only when `I > B+L`, but the buffer is `[B, B+L-1]`, so `I == B+L` must also wrap. One
    foreign-word access whenever the post-modified pointer lands exactly on the boundary. Fix: `>` →
-   `>=` (interp) and `COND_LE` → `COND_L` at the wrap test (DRC). The RE notes record that this fix
-   leaves the reverb output unchanged (the delay lines rarely hit the exact boundary), so it is safe.
+   `>=` (interp) and `COND_LE` → `COND_L` at the wrap test (DRC).
+   ★ VERIFIED + APPLIED-then-REVERTED 2026-07-11: the fix builds clean on both engines and the reverb
+   WAV changes by exactly **2 samples / 2,112,002** (a single note) -- so the KN7000 reverb delay
+   lines DO hit the exact boundary (the earlier "unchanged" belief was WRONG). The change is
+   TRM-correct and inaudible on this test, but it MODIFIES the user-praised reverb, and denser/longer
+   tails could differ by more, so it was reverted pending Felipe's OK rather than shipped unsupervised
+   (rule g). READY TO RE-APPLY in one edit (both files, identical `>=`/`COND_L` change) when approved
+   -- it is a genuine correctness fix. Both engines must be changed together to keep DRC==interpreter.
 2. **Pre-modify addressing never applies circular wrap** (sharcops.hxx pre-modify DM/PM paths).
    MAME wraps only post-modify. Whether HW wraps a pre-modified circular address is specified in the
    User's Manual §4-9 (not in this TRM volume); in the KN7000 all circular delay traffic is
