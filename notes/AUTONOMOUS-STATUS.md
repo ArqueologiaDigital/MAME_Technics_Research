@@ -14,6 +14,25 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★ SESSION 2026-07-11p-s — reverb: all components verified; it's a ~1% loop-gain problem (PARKED)
+More reverb diagnosis (no rebuilds -- Lua PM-patching + disasm). Key results:
+- CORRECTED the "6.4s delay" lead: the reverb builds up in ~0.4s, so its delays are SHORT (~60ms); the
+  build-to-2e7 is normal resonant gain (input x Q). The real bug is narrow: it DOESN'T DECAY after
+  note-off (loop gain >= 1 despite every coefficient < 1).
+- Verified MORE components correct: the 10-section CALL(DB) chain + delay-slot MODIFY(I6) timing, and
+  MAME's delayed-branch pipeline. So ALL per-instruction components are now verified correct.
+- SECTION-MUTING (Lua NOP of section CALLs): muting ANY section stops the rail but SILENCES the reverb
+  (series chain) -> the divergence is a GLOBAL TANK LOOP through all 10 sections with gain ~= 1.0, not
+  one bad section.
+- CONCLUSION: this is a "loop gain 0.99 vs 1.0" problem (a long "Dark2" reverb MAME tips over unity). It
+  needs a DIFFERENTIAL REFERENCE (a 2nd known-good ADSP-2106x running the same code+inputs) to see the
+  ~1% per-frame drift. Single-CPU instrumentation is exhausted. **The reverb divergence is now PARKED.**
+- RECOMMENDATION (next effects work): (a) test OTHER effect types (chorus/EQ/distortion/delay) that
+  lack the near-unity feedback loop -- if those process correctly + stably, the effects DSP is largely
+  functional and only long reverbs are affected (a big partial win); or (b) build the reference-diff
+  harness. Full detail: notes/dsp-effect-execution-chain.md sections 2026-07-11p..s.
+- No shipped change (all diagnostic). DRY passthrough correct; default boot clean.
+
 ## ★ SESSION 2026-07-11l-o — reverb characterized to the limit of incremental instrumentation
 Deep core-instrumentation session (all reverted; tree clean; binary republished). Progress on the reverb:
 - The "divergence" is a large signal (~2e7 = input x Q) that SUSTAINS (doesn't decay), NOT exponential.
