@@ -14,6 +14,17 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★★ 2026-07-11f: REVERB TOGGLE WORKS AUDIBLY (TG bus routing modeled)
+Felipe's reverb-toggle request: inspection (wf_870ba134-582) proved the toggle was NEVER broken in
+firmware/UI/LED (flag 0x500C0758 bit9, cpr_led27, hold->REVERB screen all work); the missing piece
+was the TG OUTPUT-BUS/EFFECT-SEND hardware model (toggle = 7 sub-TG group-0x20 writes: ch3 regA
+007F<->7F00 [direct|dsp-return] DAC pair, chB reg8 send 0x66<->0; NOT a DSP host-port op). ALSO
+CORRECTED: *(0x500A01E0)=-1 is NORMAL idle; the DspEffectSelect pipeline RUNS today (74 index +158
+data writes on sound select). SHIPPED: tonegen group-0x20 capture + routing gains; bridge send-scale
++ DAC crossfade. VERIFIED (DSPAUDIO=On): toggle OFF instantly mutes the wash + notes play clean dry
+direct; ON returns through the DSP. Set DSPAUDIO=On (Machine Configuration) to hear it; default
+stays Bypassed until the parked SHARC divergence is fixed (then flip default).
+
 ## ★★★ 2026-07-11c: DONOR-SAMPLE WAVE PACK SHIPPED — real timbres replace the sine
 Felipe's request (better placeholder wave ROM) DONE end-to-end (workflow wf_44d926b3-dd3 + commit):
 - RESEARCH: (1) runtime sample select DECODED = aux word bank(13:12)+zone(7:0), pitch is zone-relative
