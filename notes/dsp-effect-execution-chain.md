@@ -350,3 +350,28 @@ FULL coefficient stream in execution order (log DM(I0,M2) address+value across o
 0x48404EF5) to see where DEPTH should scale it <1. Fixing the DspEffectSelect depth path (setter
 0x484057d6 never called) likely applies it. Tooling proven: instrument compute_fmul (case 0x30, 5-tab
 indent) / compute_fix (case 0xc9) gated on PC, -nodrc, fprintf(stderr); reverb PM dump via Lua read_u64.
+
+## 2026-07-11j: it is NOT a DM coefficient value -> structural / PM-data / precision
+Decisive live test: forced EVERY near-unity float (|f| in [0.95,1.25]) across the WHOLE DM coeff block
+0xC000-0xC300 to 0.9, each video frame, while tapping the kernel output slot 0xC358. Result: 0xC358
+STILL rails (rail-count 217811, max 0x7FFFFF). So NO DM coefficient value is the runaway feedback --
+this RULES OUT the "unapplied DEPTH leaves a tank-decay coeff at 1.0" theory (at least for DM coeffs).
+Two possibilities remain, both un-checked:
+1. **The reverb also reads PM (program memory) via I8** (`R3 = PM(I8, M8)`, `PM(I8,M9)=R11`, etc.). The
+   tank-decay / feedback value may live in PM, not DM -- OR the DM coeffs are reloaded from PM each frame
+   (which would make the DM override futile, consistent with "no effect"). NEXT: dump/inspect the PM
+   data region I8 walks; override PM near-unity values the same way.
+2. **40-bit vs 32-bit float**: MAME's SHARC uses host 32-bit float (union{int32;float}); the ADSP-21065L
+   has 40-bit extended internally. A tank feedback DESIGNED at ~0.9999 (long RT60) plus a rounding-mode
+   difference could round to >=1.0 in 32-bit -> never decays. (Earlier I argued the ~1.0 was "too far
+   from 0.9999" -- but a non-decaying output only proves gain>=1.0, which 0.9999->1.0000 rounding gives.)
+   Hard to fix (would need 40-bit float or a MODE1 RND emulation audit).
+
+### Net state of the effects DSP (honest)
+- DRY passthrough: correct/clean (verified). Active effects load+run.
+- Active REVERB: DIVERGES (output float F1 -> +/-2e7, rails, never decays in 17s). Confirmed NOT the
+  coefficients (DM), NOT the float multiplies, NOT the allpass structure, NOT the circular-buffer
+  off-by-one. Remaining: PM-resident feedback data, or 32-vs-40-bit float / rounding on a near-unity
+  tank. This is a hard, well-scoped bug; the effects are audible-but-not-faithful until it's resolved.
+- Minor real find (reverted, worth upstreaming separately): UPDATE_CIRCULAR_BUFFER_{DM,PM} `> B+L`
+  should be `>= B+L`.
