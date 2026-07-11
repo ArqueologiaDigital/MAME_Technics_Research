@@ -126,3 +126,17 @@ b. THEN combine with the send feed (revert-kept design: feed unit-7 input 0xC370
 c. Note: FLAG3 gates 5 effects together (not per-unit), so it is a global "FLAG3-effects active"
    enable; per-unit activity is then the send levels + the unit's own params.
 This is the missing keystone: the effects aren't mis-routed, they are HELD DISABLED at the DSP flag.
+
+## 2026-07-11 experiment: forcing FLAG3=1 is NOT a clean enable (it perturbs the reverb)
+Injected `m_dsp->set_flag_input(3, 1)` in the DSP tick and measured:
+- The REVERB WAV CHANGED (md5 differs) -- even though rec49/rec56 don't gate on FLAG3. Cause: the
+  KERNEL mainloop itself reads FLAG3 (`8098: IF FLAG3_IN, MODIFY(I3, M3)`), so FLAG3 shifts I3 (a
+  buffer/descriptor cursor) and alters the WHOLE frame's processing, not just the FLAG3-gated units.
+- Non-unit-0 output slots STILL 0 (units need their input fed too; forcing FLAG3 alone processes
+  their zero input).
+REFINED CONCLUSION: FLAG3 is a GLOBAL frame-processing signal (drives the kernel's I3 cursor + the
+effect-unit skip), not a simple per-effect enable. Driving it to a wrong/constant value corrupts the
+reverb. So making the FLAG3-gated effects audible needs the FULL FLAG3 PROTOCOL: what the hardware
+drives the pin to, WHEN (per-frame? tied to the ping-pong ASTAT toggle at 0x8099 `BIT TOGGLE ASTAT
+0x100000`?), and how the CPU controls it -- not a one-line force. Experiment reverted; reverb
+bit-identical again. The FLAG3 gate is identified; its protocol is the remaining decode.
