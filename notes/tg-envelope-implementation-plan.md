@@ -87,6 +87,19 @@ final WAV is dominated by the reverb tail (rings ~steady) so it can't show the r
 DSP-input address moves with the effect's I4 so post-mute buckets are sparse. The held decay + sustain
 (piano decays, organ/strings/pad sustain) is cleanly verified; the release rate itself is evidence-
 based (per-sound rA) + code-correct rather than re-measured through the reverb.
-STILL PROVISIONAL (labelled): exact chip rate CURVE (register->time), and SUS2/DCY2 (r9/r8) as a true
-2-stage decay (only r8 feeds the single decay time today). Amp-edit sweep blocked on menu soft-key
-routing; chip datasheet unknown.
+A 5th sound (MALLET & ORCH PERC, SEG0E 0x10, percussive) confirms the model end-to-end. Full group-0
+block PIANO vs MALLET:
+```
+       r0    r1   r2   r3   r4 r5 r6 r7   r8 r9   rA   rC   rD
+PIANO  D27F 3900 4500 8000 AE AE AE 2C00 99 35E8 25B0 7F7F 0F10
+MALLET E07F 2374 3700 F000 AE AE AE 2C00 AE 44F1 44EC 6628 1010
+```
+Both have r7=2C (low sustain -> DECAY, correct for a struck vibe/piano). The mallet differs in r8
+(DCY2 = AE, FASTER decay -> 0.42 s vs the piano's 1.8 s) and rA (faster release) -- so the envelope
+correctly makes a mallet decay faster than a piano to the same low sustain. r4/r5/r6 are STILL AE
+(fixed attack); r0-r3 DO vary per sound (D27F/3900/4500/8000 vs E07F/2374/3700/F000) so a per-sound
+ATTACK likely lives there, but pinning it needs a genuinely slow-attack sound (all 5 tried have fast
+attacks) or the chip datasheet -- left as the one remaining envelope refinement.
+STILL PROVISIONAL (labelled): exact chip rate CURVE (register->time), the SUS2/DCY2 (r9/r8) 2-stage
+decay (only r8 feeds one decay time today), and the ATTACK (fixed ~6 ms). Amp-edit sweep blocked on
+menu soft-key routing; chip datasheet unknown. The sustain/decay/release ARE firmware-driven + validated.
