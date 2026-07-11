@@ -32,6 +32,20 @@ groups, 114 SoundDSP across 17 groups).
   key gotcha: MAME needs -seconds_to_run or it sits on the BAD_DUMP wavepack warning screen).
 
 ## Open items
-1. Chorus-no-effect: send-vs-return investigation (above).
-2. Within-group TYPE page-flip control (Flanger 1/5 etc.) unfound.
-3. Complete the MULTI/SOUND-DSP batch health tests.
+1. Chorus-no-effect: RESOLVED as EXPLAINED (single-path bridge limitation, not a bug) --
+   notes/effect-multi-unit-routing.md. Making chorus/EQ/DSP audible = scoped multi-unit send/return
+   model (deferred).
+2. Within-group TYPE page-flip control: RESOLVED. The PAGE rocker fix (SEG0B 0x10 up / 0x20 down,
+   commit f614862) IS the type-page control -- live-verified walking the MULTI EFFECT "PAGE n/8"
+   through a group's type pages (Cross Delay group: Shallow1-16 / Normal1-16 across pages 1-8). The
+   sweep's "unfound" was wrong-button (it tested the SEG16/17 valuator guesses). So navigation is
+   complete: GROUP cursor (SEG09 0x04/0x08) selects the group, PAGE rocker (SEG0B) walks its type
+   pages -- ALL effect types reachable.
+3. Complete the MULTI/SOUND-DSP batch health tests -- low value until multi-unit routing lands
+   (they'd all read "no audible effect" for the single-path reason).
+
+## Robustness (2026-07-11 loud-input recheck)
+An 18-note cluster (low octave + mid + high) SLAMMED on and held 3s with reverb ON: **0 near-rail
+DSP writes out of 617,400 (0.00%)**, DAC output peak 2085, **0 clipped samples**, tail decays to 0.
+The ALUSAT + sign-extension + TDM-wiring fixes are robust under dense/loud playing, not just single
+notes -- the reverb is production-quality.
