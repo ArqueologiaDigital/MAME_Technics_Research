@@ -335,6 +335,8 @@ public:
 			}
 			if (tg == 1 && ch == 0x0B && reg == 0x08)
 				m_gain_send = float(data & 0x7F) / 127.0f;
+			if (tg == 1 && ch == 0x33 && reg == 0x08)
+				m_gain_depth = float(data & 0x7F) / 127.0f;   // TOTAL DEPTH (live-verified: 0x8500|depth)
 		}
 		else if (cls == 0x1C02)                           // per-voice aux/mode word
 		{
@@ -354,6 +356,7 @@ public:
 	float gain_direct() const { return m_gain_direct; }
 	float gain_return() const { return m_gain_return; }
 	float gain_send()   const { return m_gain_send; }
+	float gain_depth()  const { return m_gain_depth; }
 
 	// Keybed coupling for GATE-FOLLOW voices. The SUB TG chip itself hosts the key-bed
 	// event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
@@ -521,6 +524,7 @@ private:
 	std::atomic<float> m_gain_direct{ 0.0f };  // DAC crossfade: TG direct (reverb OFF side)
 	std::atomic<float> m_gain_return{ 1.0f };  // DAC crossfade: DSP return (reverb ON side)
 	std::atomic<float> m_gain_send{ 0.80f };   // TG -> DSP send level (boot default 0x66/0x7F)
+	std::atomic<float> m_gain_depth{ float(0x50) / 127.0f };  // REVERB TOTAL DEPTH (0x8338 low7, default 0x50)
 	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
@@ -589,8 +593,8 @@ public:
 	// group-0x20 capture): send = what the DSP receives; direct/return = the DAC-side
 	// crossfade between the raw TG and the DSP output. Only meaningful when the audio
 	// path is routed through the DSP; the Bypassed debug path stays plain dry.
-	void set_bus_gains(float send, float direct, float ret)
-	{ m_gain_send = send; m_gain_direct = direct; m_gain_return = ret; }
+	void set_bus_gains(float send, float direct, float ret, float depth)
+	{ m_gain_send = send; m_gain_direct = direct; m_gain_return = ret; m_gain_depth = depth; }
 
 protected:
 	virtual void device_start() override
@@ -620,6 +624,7 @@ protected:
 			const int32_t ir = int32_t(std::clamp(stream.get(1, s), -1.0f, 1.0f) * SCALE);
 			// TG bus routing (reverb toggle): the DSP receives the SEND bus, not the raw mix.
 			const float gsend = m_gain_send, gdir = m_gain_direct, gret = m_gain_return;
+			const float gdepth = m_gain_depth;
 			m_rx[m_rx_wr][0] = int32_t(double(il) * gsend);
 			m_rx[m_rx_wr][1] = int32_t(double(ir) * gsend);
 			m_rx_wr = (m_rx_wr + 1) % RING;
@@ -647,8 +652,10 @@ protected:
 				// the pair is {direct 0, return 7F}; OFF is {direct 7F, return 0} -- so OFF
 				// also mutes the (currently diverging) reverb tank at the DAC, exactly as the
 				// captured hardware routing dictates.
-				ol = int32_t(double(ol) * gret + double(il) * gdir);
-				orr = int32_t(double(orr) * gret + double(ir) * gdir);
+				// DSP return scaled by the TG return level and TOTAL DEPTH (0x8338 low7,
+				// live-verified against the on-screen value; default 0x50/127 ~ 0.63).
+				ol = int32_t(double(ol) * gret * gdepth + double(il) * gdir);
+				orr = int32_t(double(orr) * gret * gdepth + double(ir) * gdir);
 			}
 			// Front-panel MAIN VOLUME slider: a master output attenuation on the final mix
 			// (modelled as a post-DAC analog-style gain; the driver pushes the taper via
@@ -673,6 +680,7 @@ private:
 	std::atomic<float> m_gain_send{ 0.80f };    // TG -> DSP send level (reverb toggle)
 	std::atomic<float> m_gain_direct{ 0.0f };   // DAC: TG direct (reverb-OFF side)
 	std::atomic<float> m_gain_return{ 1.0f };   // DAC: DSP return (reverb-ON side)
+	std::atomic<float> m_gain_depth{ float(0x50) / 127.0f };  // TOTAL DEPTH -> DSP-return scale
 };
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
@@ -2037,7 +2045,7 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 	{
 		const float v = float(m_volmain->read()) / 100.0f;
 		m_dspbridge->set_master_gain(v * v);
-		m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return());
+		m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return(), m_tonegen->gain_depth());
 	}
 
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
