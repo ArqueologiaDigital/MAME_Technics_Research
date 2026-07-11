@@ -40,6 +40,23 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~23:10 — multi-unit routing: FLAG3-gate root cause found (kernel-routing decode)
+Advanced the kernel-routing half of the multi-unit puzzle (static decode + live/experiment). FINDINGS:
+- All 10 unit CALL slots ARE patched + run every frame (confirmed live PM 0x8080-0x80A0); units aren't
+  dormant at the CALL level.
+- ★ ROOT CAUSE of silent effects: the chorus program (rec58) and 4 others open with
+  'IF NOT FLAG3_IN, JUMP skip' -- they gate on the SHARC FLAG3 INPUT pin. rec49 reverb / rec56
+  enhancer do NOT, so they always run (why reverb is audible). MAME models flag[3]+set_flag_input()
+  but the driver NEVER drives DSP FLAG3 -> stays 0 -> gated effects permanently skip -> silent.
+- Experiment (forcing FLAG3=1) REFINED it: FLAG3 also feeds the kernel mainloop
+  (8098: IF FLAG3_IN, MODIFY(I3,M3)) so forcing it constant CHANGED the reverb WAV. FLAG3 is a GLOBAL
+  per-frame signal, not a clean per-effect enable. Reverted; reverb bit-identical.
+NET: the effects aren't mis-routed -- they're HELD DISABLED at the DSP FLAG3 gate, which is unmodeled
+AND globally woven into the frame loop. NEXT (deeper, supervised): decode the full FLAG3 protocol
+(what drives the pin, when -- likely tied to the ping-pong ASTAT toggle 0x8099 -- and the CPU control
+source), then drive set_flag_input(3,...) faithfully + feed the unit sends. Full decode in
+notes/effect-multi-unit-routing.md. Reverb pristine, binary published.
+
 ## TICK 2026-07-11 ~22:55 — multi-unit routing: send matrix DECODED, kernel-routing blocker found
 Pursued the BIG win (audible chorus/EQ/DSP) via wf_ff73662f-062. RESULT: decoded the effect-send
 matrix fully (CHORUS send = 0x8198, low byte = per-part depth; enable recipe live-verified incl. the
