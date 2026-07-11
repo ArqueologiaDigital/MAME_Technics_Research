@@ -445,7 +445,6 @@ public:
 		, m_sdsw(*this, "SDSW")
 		, m_sdcard(*this, "sdcard")
 		, m_sdcover(*this, "SDCOVER")
-		, m_config(*this, "CONFIG")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -485,7 +484,6 @@ private:
 	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
-	optional_ioport m_config;           // machine-configuration DIP: bit0 = enable the effects-DSP host stub
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -582,19 +580,15 @@ private:
 	// notes/dsp-effect-catalog.md). Because the driver backs 0x9C000000 with
 	// stale RAM, the probe currently fails and effects never run.
 	//
-	// This stub answers the probe and captures the download stream so the effect
-	// engine can be studied. It is GATED behind the "Effects DSP host stub"
-	// machine-configuration switch (Tab menu / -cfg), default OFF, so the default
-	// boot is byte-unchanged -- the effect download path is new firmware behavior
-	// with an as-yet-unmodeled completion handshake, so it stays opt-in until
-	// verified not to regress the boot-to-home-screen state.
+	// This host interface answers the DSP probe + self-test handshake and captures the
+	// download stream, driving the real ADSP-21065L (IC306). The KN7000 ALWAYS has this
+	// DSP, so it is unconditionally present -- with the self-test completion handshake now
+	// modeled (group 0x17, see intc_w), the firmware keeps 0x500066CC="present" and the
+	// runtime effect-upload gate stays open, so selecting a reverb/chorus reaches the DSP.
 	uint16_t dsp_data_r(offs_t offset, uint16_t mem_mask);
 	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
-	bool     dsp_stub_enabled() { return (m_config.read_safe(0) & 1) != 0; }
-	bool     tg_sound_enabled() { return (m_config.read_safe(0) & 2) != 0; }  // CONFIG bit1: TG-present strap -> firmware sound
-	bool     tg_gate_postboot() { return (m_config.read_safe(0) & 4) != 0; }  // CONFIG bit2: open the TG gate AFTER boot (no SD menu)
-	emu_timer *m_tg_gate_timer = nullptr;      // periodic: force the TG-enable gate open post-boot
-	TIMER_CALLBACK_MEMBER(tg_gate_poke);
+	bool     dsp_present() { return true; }        // IC306 ADSP-21065L is always fitted
+	bool     tg_sound_enabled() { return true; }   // IC201/IC205 tone generators are always fitted
 
 	// Resolve the MUSICAL pitch for a TG pitch write from the library's per-slot
 	// voice record. The record array is 0x500AF940 + slot*0xB4 (128 slots; slots
@@ -1042,8 +1036,8 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 // Effects-DSP host DATA port at 0x9C000000 (paired with the index at 0x98000000).
 uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 {
-	if (!dsp_stub_enabled())
-		return 0;   // gated off: behaves like the unwritten RAM it replaces (probe reads !=0x20 -> DSP marked dead, current behavior)
+	if (!dsp_present())
+		return 0;
 	// Answer the host register read selected by the latched index. The boot probe
 	// (fw 0x48405028) reads register 0 and requires 0x20 to consider the DSP alive.
 	switch (m_dsp_index)
@@ -1057,7 +1051,7 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 
 void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
-	if (!dsp_stub_enabled())
+	if (!dsp_present())
 		return;
 	// F.2 host-boot: decode the upload protocol and write the streamed program/data into
 	// the SHARC's internal memory. Register writes to 0x9C000000 carry their reg number as
@@ -1216,6 +1210,23 @@ void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	const int group = reg >> 2;
 	if (group >= 0x20)
 		return;
+	// Effects-DSP self-test handshake (group 0x17 == GxICR 0x3400015c). During init the
+	// firmware SOFTWARE-TRIGGERS this interrupt (writes bit0) then spin-polls bit4 (REQUEST)
+	// to confirm the ADSP-21065L answered its power-on self-test (fw 0x48404d25). On the
+	// 0x3ffff-count timeout it marks the DSP ABSENT (stores 0x500066CC=0xFF), which slams
+	// shut the runtime effect-upload gate (fw 0x48404ef5 checks 0x500066CC==0) -- so after
+	// that, selecting a reverb/chorus in the sound menus never reaches the DSP and "the
+	// sound doesn't change". The real DSP asserts group 0x17 on self-test completion; the
+	// booted SHARC in the emulator is present, so model the ack: latch REQUEST here so the
+	// poll succeeds and 0x500066CC stays "present". The firmware's write is 0x0001, so the
+	// ENABLE byte stays 0 -> no spurious dispatch. Group 0x17 has no other user (no ISR is
+	// registered against it; its only refs are this handshake + the INTC bulk-clear).
+	if (group == 0x17 && (data & mem_mask & 0x000f) && dsp_present())
+	{
+		m_gxicr[0x17] = uint16_t((data & mem_mask & 0xff00) | 0x0011);   // DETECT+REQUEST; ENABLE as written
+		intc_recompute();
+		return;
+	}
 	// GxICR write semantics (matches the on-chip INTC, and required for correct
 	// delivery): the high byte (ENABLE + LEVEL) is stored as written; the DETECT
 	// flags (bits 0-3) are WRITE-1-TO-CLEAR; REQUEST (0x10) is hardware status
@@ -1272,13 +1283,6 @@ void kn7000_state::intc_recompute()
 		m_maincpu->set_irq_level(level);
 	}
 	m_maincpu->set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
-}
-
-TIMER_CALLBACK_MEMBER(kn7000_state::tg_gate_poke)
-{
-	// Force the sound library's TG-enable gate (RAM 0x500ce380) open so the firmware programs
-	// voices. Done post-boot (not via the boot strap) to avoid the SD subsystem / SD menu.
-	m_maincpu->space(AS_PROGRAM).write_byte(0x500ce380, 0x40);
 }
 
 TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
@@ -1769,27 +1773,9 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 // serial-protocol HLE device (as in kn5000_cpanel.cpp) is still to be written.
 
 static INPUT_PORTS_START(kn7000)
-	// Machine configuration. The effects-DSP (ADSP-21065L) host stub answers the
-	// firmware's boot probe and captures the effect-program download stream. It is
-	// OFF by default (the un-gated download path is still-unverified firmware
-	// behavior); toggle it in the Tab "Machine Configuration" menu or via -cfg.
-	PORT_START("CONFIG")
-	PORT_CONFNAME(0x01, 0x00, "Effects DSP host stub (experimental)")
-	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x01, DEF_STR(On))
-	// Reports the tone generators present so the firmware voices notes (audible sound).
-	// OFF keeps the known-good home-screen boot; ON enables firmware-driven sound but
-	// boot then rests on the SD Card menu (the paused SD subsystem). Default OFF.
-	PORT_CONFNAME(0x02, 0x02, "Tone generators / firmware sound")
-	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x02, DEF_STR(On))
-
-	// As above, but opens the TG-enable gate AFTER boot (via a timer forcing RAM 0x500ce380
-	// open) instead of via the boot strap -- so voices sound on the HOME/play screen with NO
-	// SD menu. Prefer this over the strap switch for playable sound. Default OFF.
-	PORT_CONFNAME(0x04, 0x00, "Tone generators / firmware sound (play screen, no SD menu)")
-	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x04, DEF_STR(On))
+	// The tone generators (IC201/IC205) and the effects DSP (IC306, ADSP-21065L) are
+	// always fitted on the KN7000, so the firmware voices notes and processes effects
+	// unconditionally -- there are no machine-configuration switches for them.
 
 	// Panel buttons organized by NORMALIZED SEGMENT (normSeg), the identity the
 	// firmware's button dispatcher (0x484ADB59) actually uses. panel_scan emits
@@ -2215,9 +2201,6 @@ void kn7000_state::machine_start()
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
 	// no explicit resolve() call is needed or available.
 
-	// The effects-DSP host stub is gated by the "Effects DSP host stub" machine-
-	// configuration switch (dsp_stub_enabled(), default OFF), read live in the
-	// data-port handlers -- no environment variable involved.
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
 
@@ -2240,7 +2223,6 @@ void kn7000_state::machine_start()
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
 	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
-	m_tg_gate_timer = timer_alloc(FUNC(kn7000_state::tg_gate_poke), this);
 	m_tempo_timer = timer_alloc(FUNC(kn7000_state::tempo_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 
@@ -2276,7 +2258,7 @@ void kn7000_state::machine_reset()
 	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
 	// streams its program into internal memory and releases it (INPUT_LINE_HALT clear + PC
 	// = entry) when the resident kernel is fully loaded. Until then it must not run (its
-	// memory is empty). With the DSP stub off, no upload happens and it stays halted.
+	// memory is empty). It is released only once the firmware finishes the host-boot upload.
 	m_dsp->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
 	m_dsp_running = false;
 	m_dsp_dl_words = 0; m_dsp_mode = 0; m_dsp_wcnt = 0; m_dsp_cur = 0; m_dsp_dl_addr = 0;
@@ -2308,16 +2290,6 @@ void kn7000_state::machine_reset()
 	// a t=3s write survives and the firmware keeps it.
 	m_fav_timer->adjust(attotime::from_seconds(3));
 
-	// Post-boot TG-enable path (CONFIG bit2): the TG-present strap is left CLEAR so boot takes
-	// the normal path to the home screen (reporting it present at boot instead advances into
-	// the still-paused SD subsystem -> SD menu). Once boot has settled we force the firmware's
-	// TG-enable gate (RAM 0x500ce380) open, so voices sound ON THE PLAY SCREEN with no SD menu.
-	// Periodic to hold it open across firmware re-checks. This is a workaround for the paused
-	// SD subsystem; see notes/kn7000-sd-strap-gate + the runtime-poke discovery.
-	if (tg_gate_postboot())
-		m_tg_gate_timer->adjust(attotime::from_seconds(10), 0, attotime::from_seconds(1));
-	else
-		m_tg_gate_timer->adjust(attotime::never);
 	m_tmr7_mode = 0;
 	m_tmr7_base = 0;
 	m_tempo_timer->adjust(attotime::never);
