@@ -60,9 +60,15 @@ DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWA
   rA=RLS. kn7000_tonegen_device now caches r4..rA and runs a per-voice attack->decay-to-sustain->
   hold->release envelope (decay time from r8, calibrated to the Concert Grand's ~1.8s). VERIFIED on
   the raw TG output (DSP input 0xC378): held PIANO decays 1.09M->671k, held ORGAN holds ~1.11M.
-- PROVISIONAL (labelled): exact chip rate curve + release (rA) encoding; SUS2/DCY2 as a full 2nd
-  decay stage. Refinement blocked on unreliable SOUND-EDIT menu navigation (soft-keys fall through to
-  part on/off + FADE) or the chip datasheet. Full trace: notes/tg-envelope-implementation-plan.md.
+- REFINED (commit e05efe9): rA = RELEASE rate (a SOUND PAD capture pinned it -- pad rA=0x04 fades
+  slowly, organ rA=0xAE stops fast, piano rA=0x25 medium; firmware DOES mute the TG on key release so
+  it fires). Release coef now from rA, calibrated to piano 0x25 -> 0.15s. VALIDATED across 5 sounds
+  (piano/organ/strings/pad/mallet): sustain (r7), decay time (r8), release (rA) all firmware-driven --
+  e.g. a mallet decays faster (r8=AE -> 0.42s) than a piano (r8=99 -> 1.8s) to the same low sustain.
+- STILL PROVISIONAL (labelled in code): exact chip RATE curve; the ATTACK (r4/r5/r6 constant across
+  all 5 sounds so fixed ~6ms -- a per-sound attack likely lives in r0-r3 which DO vary, but needs a
+  genuine slow-attack sound to pin); SUS2/DCY2 (r9/r8) as a true 2-stage decay. Measurement caveat:
+  the dry TG envelope is masked by the reverb tail in the final WAV. Full trace: notes/tg-envelope-*.
 
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
