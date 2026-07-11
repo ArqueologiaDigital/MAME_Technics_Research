@@ -484,3 +484,20 @@ exponential divergence), and the non-decay is the ~6.4s-delay near-unity loop. T
 HONEST NOTE: 4 sessions of incremental core-instrumentation have characterized this thoroughly but not
 fixed it. The efficient path now is either (a) the MODIFY/DAG-wrap audit above, or (b) a reference
 ADSP-2106x execution to diff MAME's I6 trajectory against, frame by frame.
+
+## 2026-07-11p: the reverb is 10 SECTIONS chained via CALL(DB) with delay-slot MODIFY(I6, big)
+Disassembled the reverb's outer loop (0x8080-0x80a0): it CALLs 10 sections 0x8400/0x8500/.../0x8D00,
+each a `CALL (DB)` (delayed branch) whose DELAY SLOT is a `MODIFY(I6, <big>)` (0x7917, 0x10748, 0x7918
+x6...). The sum of these ~= L6 (0x456F0), so I6 walks the WHOLE 284,400-word buffer once per frame,
+one region per section; each section (0x8400 etc.) saves/restores I6 around its own local processing
+(+0x10747 at entry, restore at 0x846e). So the delay geometry is: per-frame I6 sweeps the buffer via
+the delay-slot MODIFYs, and each section reads/writes its region with small M offsets.
+NEW SHARP HYPOTHESIS: **MAME's delayed-branch (DB) timing for `CALL (DB)` with an I6-modifying delay
+slot.** If MAME executes the delay-slot MODIFY(I6) at the wrong point relative to the CALL transfer or
+the matching RTS return, every section is positioned at the wrong I6 -> wrong delays/overlapping
+regions -> the divergence. This is exactly the kind of edge case that only a DSP with I6-modify delay
+slots around calls would exercise, and MAME's SHARC has mostly run Sega 3D code that doesn't. NEXT:
+audit MAME's CALL(DB)/RTS + the 2-cycle delay-slot execution vs the ADSP-2106x (does the delay-slot
+instruction's I6 write land before the callee sees I6? does RTS return past both delay slots?).
+Direct confirmation would be an address-delay measurement (instrument: per delay-buffer address, log
+write-frame vs read-frame; delay = read_frame - write_frame) but the DB audit is cheaper first.
