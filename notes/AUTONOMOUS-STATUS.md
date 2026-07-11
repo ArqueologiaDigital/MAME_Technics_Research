@@ -40,6 +40,21 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~20:10 — PAGE/CONTRAST investigation launched; upstream catalogue banked
+- Effects sweep wf_46aaaf77-352 did NOT complete (died with prior session; journal shows only
+  'started', no recipes). Deferred: re-run AFTER PAGE nav is fixed (MULTI's 8 pages need it).
+- ★ PAGE/CONTRAST: launched wf_86ccde00-860 (RE agent finds true events from panel-function
+  descriptor table 0x48603758 + string pool -> normSeg.bit; live agent verifies by watching the
+  "PAGE n/m" indicator on snapshots). Current driver has GUESSES: SEG16/17 PAGE, SEG19/1A CONTRAST.
+  When it returns: fix the driver ports (faithful, no guesses), rebuild, publish, commit.
+- Priority 5 (upstream prep): wrote notes/sharc-upstream-patch-series.md — ALUSAT (applied, HIGH),
+  circular-wrap off-by-one + premod + AVG/SSFR rounding + FIX UB (identified, need MAME A/B), MAC
+  multiop perf. NOT applying the circular-wrap fix yet (touches reverb delay lines -> needs a MAME
+  A/B, which would contend with the running workflow's MAME phase; do it in a dedicated tick).
+- DRC MAC-native (priority 3): confirmed the fixed-MAC multiop cases 0x06/0x08-0x12/0x14-0x16 fall
+  back to generate_unimplemented_compute (interpreter call) in the frame hot path; the reverb's sine
+  oscillators use them. Deferred (correctness-critical; needs interpreter-A/B), do in a focused tick.
+
 ## ★★★ AUTONOMOUS MANDATE 2026-07-11 EVENING (Felipe away many hours; cron 529b597d every 23min)
 GREEN LIGHT standing. Queue (in order):
 1. EFFECTS SWEEP TRIAGE: workflow wf_46aaaf77-352 (running at handoff) = navigator recipes +
