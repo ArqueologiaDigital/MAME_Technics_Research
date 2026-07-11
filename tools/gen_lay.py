@@ -191,9 +191,9 @@ S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",
 # CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the
 # 2026-07-08 HELP-info sweep -- those are SOUND CONTROLLER MODE/RESET. CONTRAST has no HELP screen, so its
 # real bits are still unidentified.)
-# CONTRAST +/- : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). The CPC value-encoder column,
-# LCD-adjacent group (wire ADDR 0xD0/0xD1): + = SEG16 0x01 (ev1005), - = SEG17 0x01 (ev1004).
-S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG16","0x01","0x01",282,756,50,155,"+","-",seg2="SEG17") + [L("MUTE",342,825,42,13,TXTH),
+# CONTRAST +/- : GUESS #2 (Felipe: guess #1 SEG16/17 was wrong). Use the OTHER complete remap pair
+# (ev1010,ev1011): + = SEG19 0x01 (ev1010), - = SEG1A 0x01 (ev1011). remap table 0x48589150.
+S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG19","0x01","0x01",282,756,50,155,"+","-",seg2="SEG1A") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -220,9 +220,9 @@ for i in range(16):
 # PAGE / DISPLAY HOLD / EXIT
 # PAGE up/down (CPC-board pair). BITS UNVERIFIED -- best-guess SEG08 0x01 (up) / 0x02 (down); no HELP
 # screen for PAGE. *** FLAG FOR REVIEW ***
-# PAGE up/down : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). CPC value column, LCD-adjacent
-# group (wire ADDR 0xD2/0xD3): up = SEG18 0x01 (ev1009), down = SEG19 0x01 (ev1010).
-S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG18",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG19",mask="0x01"),
+# PAGE up/down : GUESS #2 (Felipe: guess #1 SEG18/19 was wrong). Use the complete remap pair
+# (ev1004,ev1005): up = SEG16 0x01 (ev1005), down = SEG17 0x01 (ev1004). remap table 0x48589150.
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG16",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG17",mask="0x01"),
       # bank A: DISPLAY HOLD = SEG0B 0x40 (HELP-info + STAGE-1 cross-confirmed). LED cpl_led5 (state identity).
       L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name=PANEL_LED.get(("SEG0B","0x40"))),
       # bank A: EXIT = SEG0B 0x80 (HELP-info verified, panel_family_2.txt).
