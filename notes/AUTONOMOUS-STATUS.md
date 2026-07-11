@@ -14,6 +14,12 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## 2026-07-11g: DSPAUDIO CONFIG SWITCH REMOVED (Felipe) — native REVERB button is the only control
+The bridge always follows the TG bus crossfade now; no config needed. CONSEQUENCE until the SHARC
+divergence (step 3) is fixed: a fresh boot follows the firmware default (reverb ON) -> the first
+note rails until REVERB is pressed OFF. This is the faithful routing; the divergence remains the
+one open reverb item (reference-diff harness). Verified on fresh cfg: identical toggle behavior.
+
 ## ★★★ 2026-07-11f: REVERB TOGGLE WORKS AUDIBLY (TG bus routing modeled)
 Felipe's reverb-toggle request: inspection (wf_870ba134-582) proved the toggle was NEVER broken in
 firmware/UI/LED (flag 0x500C0758 bit9, cpr_led27, hold->REVERB screen all work); the missing piece
