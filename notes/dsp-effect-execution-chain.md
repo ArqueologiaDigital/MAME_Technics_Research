@@ -60,11 +60,22 @@ collapses to silence.
 Because that's worse UX than the (buggy-but-audible) stale passthrough, the #2 call is gated OFF
 for now -- with it off, 0xC350 = 16777205 again (audible instrument, effects don't change).
 
-Leading hypotheses for the zero output (next session):
-  a. **Output routing**: the effect may write its result to a different SPORT TX slot than the
-     passthrough's fixed TX0+0xE = 0xC350 that `kn7000_dsp_bridge` reads. Re-derive the TX target
-     by tapping ALL DM writes the running effect makes near the SPORT TX buffers (not just
-     0xC340-0xC37F) and compare to the passthrough.
+**ROOT CAUSE IDENTIFIED (2026-07-11): the unmodelled SPORT autobuffer DMA.** Scanning ALL DM
+writes in 0xC000-0xFFFF while a Dark2 reverb ran showed the effect DOES write output -- to
+**0xC2BD/0xC2BE** (a small L/R pair, 132248/132239) plus float processing state at 0xC058-0xC1D2 --
+but it writes NOTHING to **0xC350**, where `dsp_audio_tick` reads (`obuf = sport_tx_buffer(0,0)+0xE`).
+The bridge's "kernel writes to a FIXED position each IRQ0" assumption only holds for the passthrough;
+a real effect relocates its output because the SPORT TX autobuffer DMA index (which the emulator
+does NOT advance -- see the dsp_audio_tick comment) determines the write position. So:
+  THE FIX = model the ADSP-21065L SPORT0/1 transmit+receive AUTOBUFFER DMA so the kernel's per-frame
+  output lands at a position the bridge tracks (or read back the live SPORT DMA pointer each frame
+  instead of the fixed TX0+0xE). IOP regs for the buffer pointers: 0x73/0x53 = SPORT0 TX A/B,
+  0x7B/0x5B = SPORT1 TX A/B, 0x63/0x33 = SPORT0 RX A/B, 0x6B/0x3B = SPORT1 RX A/B (sharc.cpp
+  iop65l_r/w). This is the same "runtime-derived SPORT buffers" stopgap the memory notes mention;
+  it needs to become a real autobuffer model for effects to be audible. Substantial, own sub-project.
+
+Other hypotheses now demoted (the SPORT-DMA one above is primary):
+  a. (was output routing -- CONFIRMED as the SPORT-DMA issue above)
   b. **Unset mix/level parameter**: the effect's wet/dry-mix or output-gain coefficient (a DM
      control word) may be 0 because the parameter block wasn't uploaded/applied. Trace the DM
      param commits (index 0x40/0x41/0x42 addressing DM 0x9800/0xC000/0xC01x during selection) and
