@@ -14,6 +14,25 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★★ 2026-07-11c: DONOR-SAMPLE WAVE PACK SHIPPED — real timbres replace the sine
+Felipe's request (better placeholder wave ROM) DONE end-to-end (workflow wf_44d926b3-dd3 + commit):
+- RESEARCH: (1) runtime sample select DECODED = aux word bank(13:12)+zone(7:0), pitch is zone-relative
+  0x400/semi, NO addresses cross the bus (TG has an in-ROM directory, format unknown, not needed for
+  MAME); 0x80xx quad = mixer record (refuted as address); channel decode = 64 ch x 0x10. (2) JK tone
+  tables fully mapped: 1139 named sounds, layer wave selector {group,sub} at layer+0x04, 856 NAMED
+  physical waves @JK+0x1B8EF. (3) KN5000 donors: ONLY IC307 is genuine (ic304-6 in kn5000_original_roms
+  are the KN5000 project's own synthetic banks -- provenance flag raised); 186 waves extracted
+  (tools/extract_kn5000_waves.py) with pitch/loop manifest.
+- SHIPPED: tools/make_wave_pack.py + wave_pack_map.json -> kn7000_waves_synthetic.rom (16MB, magic
+  KN7WVSY2, provenance block, normalized donors, crossfaded tail loops; in kn7000-emulator/roms/kn7000/).
+  Driver: optional ROM region "wavepack" (BAD_DUMP hashes; update via tool output); tonegen resolves
+  (bank,zone) at note-on -> donor PCM, linear interp, loop, step=freq/root; sine fallback.
+- VERIFIED: piano/organ/guitar real harmonic spectra at correct pitch; envelopes/life-cycles unchanged.
+- LIMITS (honest): 14 zone ranges = the captured family anchors; other sounds -> sine fallback. One
+  donor per family stretched across the keybed (no multisample). Root pitches are autocorrelation
+  estimates (possible octave errors, e.g. mallet w74 -- fix by editing wave_pack_map.json + rebuild).
+  Drums unmapped. Full notes: notes/wave-select-decode-and-donor-plan.md.
+
 ## ★★★ 2026-07-11b: ENVELOPE LIFE-CYCLE CLASSES SHIPPED (2089290) — Felipe's requested refinement
 All 11 sound families now have correct note life-cycles (WAV-verified). Three classes at note-on:
 GATE_FOLLOW (aux 0x1C02-word bit15; brass/sax/organ — the sub TG hosts the keybed FIFO and key-gates
