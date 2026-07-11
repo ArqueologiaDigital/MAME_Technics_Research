@@ -159,3 +159,41 @@ Now that the TG envelope stops notes on key-release, the reverb's decay is testa
   (does changing DEPTH write a DM coefficient? trace the reverb-screen DEPTH handler), or make the
   DspEffectSelect param-block path run so parameters apply. This supersedes the "stable + clean" note
   in blog Part 13 (stable = doesn't blow up; but it does NOT decay).
+
+## DECISIVE 2026-07-11e: the reverb output SATURATES and the bridge misreads it
+Tapped the kernel's writes to the candidate output slots (0xC350/0xC352 = TX0A, 0xC358/0xC35A = TX0B)
+during a Dark2 note + note-off:
+- **Slot 0xC358 is written with 0x7FFFFF (= +full-scale 24-bit, RAILED)** at note-on and STILL railed
+  +3 s after note-off (0xC350/0xC352/0xC35A get 0). So the kernel's reverb output SATURATES to the
+  positive rail and stays there -- the feedback loop is unstable (grows until it clips), it does not
+  "ring cleanly", it blows up to the rail.
+- Meanwhile the BRIDGE (dsp_audio_tick follows live I4, reads DM[I4]) yields only a ~7% oscillation in
+  the final WAV -- a DIFFERENT, much smaller value than the railed 0xC358. So the I4-following bridge
+  is NOT reading the kernel's committed output slot; it reads some lower-amplitude DM state that
+  happens to track note-on (rises during the note) but never decays. **=> the "Dark2 RMS 1863,
+  effect audible" result (Part 13 / commit 38a3f4a) is a BRIDGE ARTIFACT of an unstable computation,
+  not a faithful reverb.** All three reverb types behave identically (railed 0xC358, ~7% bridge), so
+  it's SYSTEMATIC, not a per-type depth/coefficient problem -- which also rules OUT the earlier
+  "depth/params not applied via DspEffectSelect" hypothesis as the primary cause (that path IS dead --
+  *(0x500A01E0) stays 0xFFFFFFFF even after selecting Dark2 -- but it's not what makes it ring).
+
+### Corrected honest state of the effects DSP
+- DRY passthrough (default, no active effect): VERIFIED CORRECT (off==on within 1%, Part 12). The DSP
+  audio PIPELINE (TG->DSP->DAC) is real and clean.
+- ACTIVE effect (reverb): microprogram loads + executes + reads/writes its SDRAM delay lines, BUT its
+  output slot saturates to the rail and the bridge reads the wrong DM location. NOT a faithful reverb.
+
+### Two independent root causes to fix (both needed), for the next dedicated effort
+1. **Output capture**: the effect output must be read the way the SPORT0 TX autobuffer DMA reads it
+   (advance through the TX ring at the DAC sample rate), NOT via DM[I4] at an arbitrary tick phase.
+   Model the SPORT0 TX autobuffer DMA (tx0A=0xC342.., tx0B=0xC34A.. runtime-derived) so the committed
+   output frames flow to the DAC. This is the "still-open polish (b)" from #5 above -- now shown to be
+   load-bearing, not cosmetic.
+2. **Reverb saturation**: 0xC358 hitting +full-scale means the feedback path grows unbounded. Suspect
+   a systematic DSP-core arithmetic error (affects all types equally): re-check the ops the effect
+   uses against the ADSP-21065L Technical Reference (repo root) -- ALU op 0x09 (fixed avg), the
+   shift-imm fallback (FDEP-SE 0x13/0x1b), and MAME's float mul/add rounding/saturation -- and whether
+   fixed vs float mode / the MR accumulator scaling is right for the delay-line feedback multiply.
+   (Tooling now ready: full decompressed program image dumped to
+   ../kn7000_scratchpad_snapshot/kn7000_program_decompressed.bin via a Lua chunked read; the DSP PM
+   microprogram dumps to unidasm -arch sharc as before.)
