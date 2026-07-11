@@ -27,7 +27,18 @@ DONE + committed (87a2964, 630c68d, e859261):
 - **SHARC core**: implemented ALU op 0x09 (fixed-point average) + shift-imm DRC fallback (FDEP-SE);
   added notify_pm_written() (host PM-write -> cache_dirty) so runtime uploads aren't run stale.
 - SD slot cover: explained (only observable with -harddisk image on an SD screen; not a bug).
-★★ EFFECTS ARE NOW AUDIBLE (commit 38a3f4a) ★★ The last blocker is SOLVED. By disassembling the
+★★ EFFECTS ARE NOW AUDIBLE + VERIFIED STABLE (commits 38a3f4a, 82633cc) ★★ The last blocker is SOLVED.
+  Verified: a held Dark2 note holds a CLEAN steady output (peak ~7%, no clipping/blow-up over 10s) --
+  reverb feedback is stable, not runaway. Default effect stays audible; boot reaches PMEM home; no
+  crashes. Also done this session: MAIN VOLUME slider wired (commit 959c1a6), 3 dev config switches
+  removed (commit 87a2964), blog Part 13 published (mame-blog 0b3d46a). CAVEAT for judging effects by
+  EAR: the tone generator is still a synthetic placeholder (sine + short envelope) because the 4 PCM
+  wave ROMs are undumped -- effect character A/B needs a real voice. NEXT POLISH (optional, not
+  blockers): wire DIGITAL EFFECT on/off + per-effect DEPTH so menu param changes are audible; verify
+  different reverb TYPES load distinct microprograms; a richer placeholder timbre would make effects
+  easier to judge by ear (label clearly as placeholder). Details below.
+
+(historical, now solved) The last blocker was SOLVED. By disassembling the
   running reverb (dump DSP PM via Lua read_u64 -> unidasm -arch sharc), the kernel keeps its per-frame
   audio in DM index reg I4: output=[I4], input=[I4+0x20]. The passthrough parks I4 at 0xC350 but a real
   effect parks it at the SPORT0 TX-B autobuffer 0xC358 -- the old fixed TX0+0xE=0xC350 read missed it.
