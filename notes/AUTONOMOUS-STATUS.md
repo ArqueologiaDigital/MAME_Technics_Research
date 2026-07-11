@@ -50,6 +50,20 @@ DONE + committed (87a2964, 630c68d, e859261):
   or a better TG; (b) wire DIGITAL EFFECT on/off + per-effect DEPTH so menu param changes are audible;
   (c) SPORT A/B double-buffer alternation unmodelled (fine for now). See dsp-effect-execution-chain.md.
 
+## ★ SESSION UPDATE 2026-07-11b (TG amplitude envelope — Felipe's task) — commit 6a90e62
+DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWARE's per-sound EG.
+- The firmware writes a 7-halfword amplitude EG per voice (group-0 regs 0x04-0x0A = ATK PEAK DCY1
+  SUS1 DCY2 SUS2 RLS) before each note-on; tg_write used to drop them. Disassembly (lib 0x4C03741A)
+  shows r4..rA are copied straight from the voice tone-data.
+- Decoded via live piano-vs-organ/strings capture: r4/r5/r6 constant (fast attack); **r7 = SUS1 the
+  sustain LEVEL** (piano 0x2C ~35% -> decays; organ/strings 0x7F max -> sustains). r8=DCY2 r9=SUS2
+  rA=RLS. kn7000_tonegen_device now caches r4..rA and runs a per-voice attack->decay-to-sustain->
+  hold->release envelope (decay time from r8, calibrated to the Concert Grand's ~1.8s). VERIFIED on
+  the raw TG output (DSP input 0xC378): held PIANO decays 1.09M->671k, held ORGAN holds ~1.11M.
+- PROVISIONAL (labelled): exact chip rate curve + release (rA) encoding; SUS2/DCY2 as a full 2nd
+  decay stage. Refinement blocked on unreliable SOUND-EDIT menu navigation (soft-keys fall through to
+  part on/off + FADE) or the chip datasheet. Full trace: notes/tg-envelope-implementation-plan.md.
+
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
   is available (DISPLAY=:0, wayland-0). Run with visible video.
