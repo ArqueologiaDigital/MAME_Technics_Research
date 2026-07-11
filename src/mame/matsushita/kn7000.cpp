@@ -1615,34 +1615,38 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	if (!m_dsp_running)
 		return;
 
-	// F.3 audio path: the effect kernel processes one stereo frame per IRQ0. Without the
-	// (unmodelled) SPORT DMA advancing the autobuffer index, the kernel writes its output frame
-	// to a FIXED position each interrupt and reads its input 0x20 below that -- runtime-observed
-	// at TX0+0xE (0xC350 = L,R) and RX0+0xE (0xC370 = L,R), the passthrough's I4 offset into the
-	// buffers. We stand in for the codec DMA directly: hand the DSP one TG input frame (from the
-	// bridge's rx ring) and take back the previous frame's processed output (to the bridge's tx
-	// ring -> speakers).
-	// Follow the effect kernel's LIVE audio pointer instead of a fixed SPORT buffer. The kernel
-	// keeps its per-frame audio frame in the DM index register I4: it writes the stereo output at
-	// [I4],[I4+1] and reads the stereo input at [I4+0x20],[I4+0x21] (verified by disassembling the
-	// running microprograms -- the passthrough parks I4 at 0xC350, but a real effect such as Dark2
-	// reverb parks it at the SPORT0 TX-B buffer 0xC358, which the old fixed TX0+0xE=0xC350 read
-	// missed -> silence). Reading I4 makes the bridge track whichever SPORT autobuffer the loaded
-	// effect actually uses, without a full SPORT-DMA model.
-	const uint32_t i4 = m_dsp->dm_index_reg(4);
-	if (i4 >= 0xC000 && i4 < 0x10000)
+	// F.3 audio path -- REAL TOPOLOGY (SPORT DMA-chain RE, workflow wf_b58b1fda-df3):
+	// none of the DSP's TX slots feeds a DAC directly. All four SPORT TX pins loop back
+	// into the TONE GENERATOR (DT0A/DT0B/DT1A/DT1B -> TG SDIE0-3); the TG mixes its
+	// direct sound with the effect RETURNS (the 0x803A crossfade + 0x8338 depth we model
+	// in the bridge) and drives the main DAC from its own serial out. The TX frame is a
+	// per-unit I/O map: unit k's stereo return = its TX pair, its input = the same +0x20:
+	//   u0 C342/43 (in C362/63)  u1 C344/45  u2 C346/47  u3 C348/49  u4 C34A/4B
+	//   u5 C34C/4D  u6 C358/59   u7 C350/51  u8 C352/53  u9 C356/57
+	// The TG's effect SEND enters at UNIT 0's input (C362/63) and the return the TG's
+	// DAC-channel crossfade takes is UNIT 0's return (C342/43) -- the panel REVERB unit.
+	// (The old I4-following heuristic parked on unit 6's slots: it fed the TG into the
+	// chorus unit's input and listened to the chorus output -- one cause of the
+	// reverb-ON noise, alongside the sign-extension bug fixed below.)
+	constexpr uint32_t obuf = 0xC342;   // unit-0 effect RETURN (L,R) -> TG -> DAC
+	constexpr uint32_t ibuf = 0xC362;   // unit-0 effect SEND input (L,R) <- TG
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
-		const uint32_t obuf = i4;          // kernel's output frame (L,R)
-		const uint32_t ibuf = i4 + 0x20;   // kernel's input frame  (L,R)
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
 		const int32_t oL = sx24(dm.read_dword(obuf));
 		const int32_t oR = sx24(dm.read_dword(obuf + 1));
 		m_dspbridge->push_output(oL, oR);
 		int32_t il = 0, ir = 0;
 		m_dspbridge->pop_input(il, ir);
-		dm.write_dword(ibuf,     uint32_t(il) & 0xffffff);
-		dm.write_dword(ibuf + 1, uint32_t(ir) & 0xffffff);
+		// The kernel programs the SPORTs with DTYPE=01 (SPCTL 0x013CB173/0x013C3173,
+		// bits 2:1 = 01 = "right-justify; sign-extend MSBs", TRM ch.9): 24-bit samples
+		// arrive SIGN-EXTENDED to 32 bits. Masking with 0xffffff (zero-fill = DTYPE 00)
+		// turned every negative sample into a huge positive word (up to +2x full scale),
+		// which railed every effect unit's output clip (the "reverb-ON clipped noise"
+		// root cause -- first railed writer u6/rec06 @PC 0x8A4E was amplifying our own
+		// poisoned input at 0xC378/79, not diverging).
+		dm.write_dword(ibuf,     uint32_t(il));
+		dm.write_dword(ibuf + 1, uint32_t(ir));
 	}
 	m_dsp->set_input_line(0, ASSERT_LINE);
 }
