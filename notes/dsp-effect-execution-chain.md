@@ -47,7 +47,27 @@ interpreter implements it (SHIFT_OPERATION_IMM case 0x13) but the DRC's `generat
 `unimplemented_shiftimm` for 0x13/0x1b instead of falling back. Added `shiftimm_fallback` +
 `generate_unimplemented_shiftimm` (mirrors the compute fallback) so those route to the interpreter.
 
-### 5. The effect executes but OUTPUTS ZERO — the remaining blocker (OPEN)
+### 5. The effect output never reached the bridge — RESOLVED (commit 38a3f4a): follow the kernel's live I4
+**FIXED.** By dumping the running reverb microprogram from DSP PM (Lua read_u64 0x8000-0x8DFF ->
+unidasm -arch sharc) the output/input convention is now known exactly: the effect keeps its per-frame
+stereo audio in the DM index register **I4** -- it writes the output frame with `DM(I4)=R8` /
+`DM(M2,I4)=R8` (0x8468/0x846d) and reads the input with `DM(0x20,I4)` (0x8404). So output = [I4],[I4+1]
+and input = [I4+0x20],[I4+0x21]. The passthrough parks I4 at 0xC350 (SPORT0 TX-A+0xE) -- which is why
+the old fixed `sport_tx_buffer(0,0)+0xE` read worked for it -- but a real effect (Dark2 reverb) parks
+I4 at the SPORT0 TX-**B** autobuffer 0xC358, so the fixed 0xC350 read got only zeros => silence, even
+though the effect ran and its coefficients (dumped from DM 0x9800/0xC000 -- all valid reverb floats)
+and output-level (R2!=0) were correct. The bridge (`dsp_audio_tick`) now reads the SHARC's live I4
+(`adsp21062::dm_index_reg(4)`) and uses output=[I4], input=[I4+0x20]; this follows whichever SPORT
+autobuffer the loaded effect uses WITHOUT a full SPORT-DMA model. With I4-following the runtime
+cache-invalidation (notify_pm_written) is enabled, so selecting a reverb loads+runs it and its output
+is audible: Dark2 note RMS 1863 vs 0 before; the default effect stays audible (no silence regression).
+CAVEATS / still-open polish: (a) the tone generator is still a synthetic placeholder (no PCM samples,
+no note release), so A/B effect *character* can't be judged by ear yet -- reverb TAIL tests are
+confounded by the TG not decaying; (b) SPORT double-buffer A/B alternation isn't modelled (I4 is
+stuck on one buffer, which is fine here); (c) wire the DIGITAL EFFECT on/off + per-effect depth so
+menu changes are reflected. But the effects DSP now processes audio end-to-end.
+
+### (historical) The effect executes but OUTPUTS ZERO — was the remaining blocker
 With #1–#4 in place and the #2 cache-invalidation call ACTIVE, the effect microprogram runs
 correctly enough to:
 - read its input (DM 0xC370 = 16777205, the TG audio arrives), and

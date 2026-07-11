@@ -27,13 +27,17 @@ DONE + committed (87a2964, 630c68d, e859261):
 - **SHARC core**: implemented ALU op 0x09 (fixed-point average) + shift-imm DRC fallback (FDEP-SE);
   added notify_pm_written() (host PM-write -> cache_dirty) so runtime uploads aren't run stale.
 - SD slot cover: explained (only observable with -harddisk image on an SD screen; not a bug).
-NEXT (the ONE remaining blocker for AUDIBLE effects): **model the ADSP-21065L SPORT autobuffer DMA.**
-  With cache-invalidation ON the effect genuinely EXECUTES (reads input 0xC370 + 1.76M SDRAM delay
-  reads/note) but writes its output to a RELOCATED TX slot (seen at 0xC2BD/0xC2BE), NOT the bridge's
-  fixed TX0+0xE=0xC350 -> silence. So the notify_pm_written() call in dsp_data_w is COMMENTED OUT
-  (keeps the audible passthrough instead of regressing to silence). Re-enable it once the SPORT DMA
-  is modelled (or the bridge tracks the live SPORT TX pointer per frame). Full trace + IOP buffer-
-  pointer regs in notes/dsp-effect-execution-chain.md.
+★★ EFFECTS ARE NOW AUDIBLE (commit 38a3f4a) ★★ The last blocker is SOLVED. By disassembling the
+  running reverb (dump DSP PM via Lua read_u64 -> unidasm -arch sharc), the kernel keeps its per-frame
+  audio in DM index reg I4: output=[I4], input=[I4+0x20]. The passthrough parks I4 at 0xC350 but a real
+  effect parks it at the SPORT0 TX-B autobuffer 0xC358 -- the old fixed TX0+0xE=0xC350 read missed it.
+  Fix: adsp21062::dm_index_reg(4) exposes live I4; dsp_audio_tick now follows it (no full SPORT-DMA
+  model needed). notify_pm_written() cache-invalidation is ENABLED, so selecting a reverb runs it and
+  its output reaches the DAC (Dark2 RMS 1863 vs 0). Default effect stays audible; boot still reaches
+  PMEM home. REMAINING POLISH (not blockers): (a) tone generator is a synthetic placeholder (no PCM
+  samples / no note release) so effect *character* can't be judged by ear yet -- needs the wave ROMs
+  or a better TG; (b) wire DIGITAL EFFECT on/off + per-effect DEPTH so menu param changes are audible;
+  (c) SPORT A/B double-buffer alternation unmodelled (fine for now). See dsp-effect-execution-chain.md.
 
 ## Hard rules (do not violate)
 - **NEVER run MAME with `-video none`** (see memory `never-video-none`). Display
