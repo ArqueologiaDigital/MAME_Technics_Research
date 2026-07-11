@@ -197,3 +197,18 @@ during a Dark2 note + note-off:
    (Tooling now ready: full decompressed program image dumped to
    ../kn7000_scratchpad_snapshot/kn7000_program_decompressed.bin via a Lua chunked read; the DSP PM
    microprogram dumps to unidasm -arch sharc as before.)
+
+### interpreter vs DRC (2026-07-11e cont.): saturation is in the ALGORITHM, not the DRC
+Re-ran the output-slot tap with -nodrc (SHARC interpreter):
+- 0xC358 rails to 0x7FFFFF in BOTH interpreter and DRC => the reverb output saturation is
+  fundamental to the effect computation (coefficient / output scaling / float->fixed FIX
+  conversion), NOT caused by my DRC additions (op 0x09 avg matches MAME's own dasm line 200
+  "R = (Rx+Ry)/2"; shift-imm 0x13/0x1b fallback routes to the interpreter).
+- Minor discrepancy: 0xC352 ALSO rails in the interpreter but is 0 under DRC. So there IS a
+  DRC/interpreter divergence on a second output word -- a separate, lower-priority correctness bug
+  in the SHARC DRC (a multifunction/parallel op or a flag) worth chasing after the saturation.
+- The notes' "Reverb output = FIX(reverb_float F1) x R2" means the rail is most likely the float->fixed
+  FIX conversion saturating: the internal reverb float exceeds unity (or R2 is too large) and FIX()
+  clamps to +full-scale. PRIME next step: tap F1 (pre-FIX float) in the running reverb microprogram --
+  if F1 is sane (<1.0) but the fixed output rails, it's the FIX/scaling; if F1 itself grows unbounded,
+  it's the feedback multiply (delay x coeff) -- check MAME's SHARC float mul/MAC vs the ADSP-21065L TRM.
