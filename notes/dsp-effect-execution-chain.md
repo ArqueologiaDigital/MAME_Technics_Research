@@ -394,3 +394,29 @@ number of samples earlier. That is the definitive next step (a big but bounded t
 NOTE: earlier I proved this is NOT the DM coefficients, NOT the float ops, NOT the allpass structure,
 NOT the circular-wrap off-by-one, NOT a 32-vs-40-bit float issue (a >=1.0 non-decay is too coarse for
 float precision). The remaining cause is squarely in how the shared circular delay buffer is addressed.
+
+## 2026-07-11l: it's a DC BUILDUP stuck at ~2^24 (the 32-bit float limit), not a classic AC blow-up
+Instrumented the DM(I6) delay-buffer reads/writes (post-modify handler, gated PC 0x8400-0x8470, addr in
+the SDRAM buffer, |float|>5e6; reverted). Trace of the diverged state:
+- **Reads at PM 0x8423 return QUASI-CONSTANT ~+2e7, ALL POSITIVE** (449 reads / 642 addresses, ~3
+  distinct rounded values) -- a delay line holding a DC block, not a varying delayed waveform.
+- Reads at 0x8429 carry both signs (AC). Writes at 0x8418 vary -8e6..-1.08e7.
+- Magnitude is roughly BOUNDED (~1.0-1.2e7 avg, first50==last50) sitting at ~2^24 (16.7M), NOT growing
+  exponentially. => a LIMIT CYCLE pinned at the 32-bit-float mantissa limit.
+REFRAME: the reverb builds a large INTERNALLY-GENERATED DC OFFSET (the TG input is a DC-free sine) that
+sustains after note-off and exceeds full-scale, railing the output. It is a DC-accumulation bug, not the
+AC feedback blow-up I assumed. The output's known large DC offset (measured back in July-11e) is this.
+Why DC should NOT survive: an all-pass has DC gain exactly 1.0 (verified: w=x-g*w_d, y=w_d+g*w => Y/X=1),
+and the tank recirculation gain is -0.28, so the DC LOOP gain should be <1 and DC should decay fast. It
+doesn't. Two candidate mechanisms:
+  (1) **32-bit vs 40-bit float at the operating magnitude.** The reverb works in an "integer-float"
+      domain around 2^24; MAME's SHARC uses host 32-bit float (24-bit mantissa) where the ADSP-21065L
+      has 40-bit (32-bit mantissa). At ~2^24 the float LSB is ~1-2, and a per-loop decay applied as many
+      small steps can fall BELOW the representable step and round away -- the decay is lost, DC sticks.
+      This also explains the pin at exactly ~2^24. TEST: does a QUIETER / shorter note (operating well
+      below 2^24) DECAY normally? If yes -> precision-at-magnitude confirmed (hard fix: 40-bit float).
+  (2) delay-line addressing still (a read landing on a wrong slot) making the DC path gain >=1.
+NEXT: (a) the quiet-note test above (cheap, decisive between (1) and (2)); (b) if (1), scope a 40-bit /
+double-precision path for the SHARC float ops, or a targeted higher-precision accumulate in the tank.
+This supersedes "all gains <1 => must be delay-line mgmt": the mechanism is more likely float precision
+at the ~2^24 operating point (a real, documented limitation of MAME's 32-bit SHARC float).
