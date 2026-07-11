@@ -40,6 +40,23 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-11 ~22:05 — pursuing the BIG win: multi-unit routing (audible chorus/EQ/DSP)
+Mandate = keep improving, don't wait for approval. Attacking the last substantive gap SAFELY (reverb
+path stays untouched; any new unit path must leave the reverb WAV BIT-IDENTICAL with its effect off).
+- Launched wf_ff73662f-062 (RE + live) to decode: which group-0x20 register is the chorus/DSP SEND
+  (vs the known reverb send 0x80B8 / depth 0x8338 / wet-dry 0x803A), how a channel routes to a unit,
+  and the PANEL recipe that makes a nonzero chorus send (unit 7 currently gets ZERO input in all
+  states reached so far).
+- Integration point confirmed: dsp_audio_tick (kn7000.cpp) feeds unit-0 in (0xC362) + reads unit-0
+  return (0xC342). A chorus path = additionally feed unit-7 in (0xC370) + sum unit-7 return (0xC350).
+  BLOCKER to resolve: the tonegen produces ONE mixed stream (no per-part/per-bus separation), so
+  feeding unit 7 faithfully needs either the send-matrix decode (per-channel chorus send) or a
+  clearly-labeled whole-stream approximation.
+- A/B GUARD READY: reverb-isolation baseline /tmp/ab_before.wav (md5 0787b60c...) still matches the
+  published binary. Rule: implement multi-unit ONLY if the reverb WAV stays bit-identical with the
+  new effect off; else revert + document the decode.
+Next: on workflow return, implement if clean+safe, else bank the decode for a supervised session.
+
 ## TICK 2026-07-11 ~21:50 — documentation milestone + 0x8238 decode
 - 0x8238 DECODED (priority 4 item CLOSED): it's a CONSTANT (0x0800), not a depth control -- stepping
   TOTAL DEPTH moves only 0x8338's low byte (0x8550<->854D); 0x8238 is the reverb-send channel's fixed
