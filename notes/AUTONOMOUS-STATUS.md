@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~00:50 — chorus robustness PASS + SHARC upstream patches packaged
+- CHORUS ROBUSTNESS (dense input): PASS. Chorus + 18-note cluster held -> DAC peak 2186, 0 clipped
+  (chorus unit rec06 self-CLIPs; feed is bounded). Production-robust like the reverb.
+- PRIORITY 5 DONE (packaging): notes/upstream-patches/ = 4 SHARC-core patch files (ALUSAT add/sub,
+  full family, specialization, native MAC) + PR-ready README (apply order, headline = real
+  DRC-vs-interpreter divergence, verification = DRC==interpreter/reverb WAV A/B, caveat that patch
+  #3 bundles the KN7000 66MHz clock change to split out). Canonical source = fork git history.
+STATE: all priorities 1-5 done or Felipe-blocked. Chorus = shipped/validated/robust/documented 2nd
+effect; reverb pristine. Remaining big work = the other send effects (blocked on the SPORT
+channel->unit decode -- do NOT guess-feed) + the FLAG3/ping-pong frame model for the 4 gated records.
+Two ear/HW items await Felipe (chorus CHORUS_WET level; reverb ON/OFF loudness) + the circular-wrap
+OK. Tree clean, binary published.
+
 ## TICK 2026-07-12 ~00:35 — definitive unit map + chorus mix validated
 - DEFINITIVE unit->record map (live PM signature match): u0=rec56 (audible panel-reverb slot),
   u4/u6=rec06 CHORUS (validates my chorus target), u8=rec34 EQ, u9=rec49. Resolves the long-standing
