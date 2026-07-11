@@ -51,3 +51,40 @@ multi-unit routing lands — they exercise units other than 0. Their TYPE-SELECT
 program onto its unit) does work and is verified; only the audible return is missing. So the sweep's
 value right now is (a) confirming type selection reprograms each unit without crashing/railing, and
 (b) the recipe catalogue — not audible-effect verdicts.
+
+## 2026-07-11: effect-send matrix DECODED + kernel-routing blocker found (workflow wf_ff73662f-062)
+
+### The effect-send register map (group-0x20, sub-TG @0x98050000) — CONFIRMED live
+Emitter lib 0x4C036FBA/0x4C036F9A: latch = plane<<8 | channel<<4 | reg; reg 8 = SEND, reg A =
+WET/DRY, plane 0x83 = DEPTH. Each effect = a fixed bus CHANNEL (distinguished by channel number):
+| Effect | SEND reg | WET/DRY | DEPTH | default OFF | live-verified |
+|---|---|---|---|---|---|
+| REVERB | 0x80B8 (ch0B) | 0x803A (ch03) | 0x8338 | send 0x0366 ON | ✓ (audible on unit 0) |
+| CHORUS | **0x8198 (ch19, BANK1)** | 0x809A? | 0x8378 | 0x0B00 (send 0) | ✓ low byte == per-part CHORUS DEPTH (60->63 tracked 0x3C->0x3F) |
+| SOUND DSP | 0x8098 (ch09) / 0x80C8 (chC) | — | — | | |
+| MULTI | 0x8298 (ch29, bank2) | | | | |
+The 4 banks (0x80/81/82/83xx) plausibly map to the 4 SPORT returns / unit groups.
+
+### Enable recipe (per-part chorus, RIGHT1) -- LIVE-VERIFIED
+PROGRAM MENUS (SEG0C 0x04) -> SOUND (SEG00 0x02) -> PART SETTING (SEG00 0x02) -> PAGE UP (SEG0B 0x10)
+to page 2/5. Column p2: SOUND DSP ON=SEG08 0x40, SOUND DSP DEPTH=SEG09 0x01, CHORUS ON=SEG09 0x04,
+CHORUS DEPTH=SEG09 0x10. ★ FIRMWARE QUIRK: 0x8198 is only (re)written when the effect-bus block is
+"active" -- CHORUS ON + depth alone leaves 0x8198=0x0B00; enabling SOUND DSP (or its depth) forces
+the block refresh, then 0x8198 = 0x0B00|depth appears. (Verified: with SOUND DSP on + chorus depth
+63, 0x8198 = 0x0B3F.)
+
+### ★ THE BLOCKER (why chorus is still silent, even with a driver feed)
+Implemented a SAFE multi-unit feed (reverted, commit not kept): tonegen captures 0x8198 -> chorus
+send gain; the tick feeds unit-7 input (0xC370 = raw TG x chorus_send) and sums unit-7 return
+(0xC350); gated on send>0 so REVERB stays BIT-IDENTICAL when chorus off (A/B verified 0/2.11M diff).
+RESULT: with chorus enabled, unit-7 INPUT went nonzero (306484, my feed works) BUT unit-7 RETURN
+(0xC350) stayed 0 -- and a scan of ALL return slots 0xC342-0xC359 showed ONLY unit 0 (reverb, C342/3)
+produces output; every other unit outputs 0. So **feeding a unit's input slot does NOT make it run**:
+the kernel's per-frame routing (which unit reads/writes which slot) is configured internally by the
+firmware's effect setup, NOT a fixed slot map. The 10-unit CALL chain executes, but only unit 0 is
+wired into the live audio path; the others are dormant regardless of their input slot contents.
+NEXT (supervised / deeper RE): decode the kernel's per-frame routing setup -- how the firmware
+configures which SPORT/slot each unit reads+writes when an effect is enabled (the I4-cursor walk +
+the per-unit input/output pointer programming), and what makes unit 7 join the active chain. Only
+then can the driver route audio to it. The send-matrix half is DONE (above); the kernel-routing half
+is the remaining gate. Reverb (unit 0) remains complete and untouched.
