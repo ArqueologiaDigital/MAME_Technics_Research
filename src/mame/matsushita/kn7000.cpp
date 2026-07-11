@@ -190,7 +190,7 @@ public:
 	// note_x256: musical pitch in 1/256-semitone units resolved from the firmware's
 	// voice record by the caller, or -1 if unavailable (fall back to the legacy
 	// keybed-anchored absolute decode of pitch18).
-	void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1)
+	void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1)
 	{
 		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
 		const int v = (tg << 6) | ((addr >> 4) & 0x3F);   // voice 0..127 (0..63 sub, 64..127 master)
@@ -218,6 +218,29 @@ public:
 				m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
 				m_gate[v]   = 1;      // held
 				m_ton[v]    = machine().time().as_double();   // for release detection (reg0 rule)
+				// Voice life-cycle class (workflow RE + 11-family sweep, 2026-07-11):
+				//  - GATE_FOLLOW: aux bit15 (brass/sax/organ) -- no firmware key-up write; the
+				//    TG (which hosts the key-bed FIFO) gates them off itself on key release.
+				//  - MANAGED: firmware voice-record type (rec+0x02 & 0x7C) in {04,08,10,20,40}
+				//    -- the firmware sends the 6-write release ramp at key-up (piano, strings,
+				//    pad, synth, bass, world). Hold at SUS1 until it arrives.
+				//  - ONESHOT: everything else (plucked guitar/mallet classes) -- no key-up
+				//    event at all; the sample rings its own envelope, so the held decay
+				//    continues past SUS1 to silence at the r8 rate.
+				const bool managed_type = (rec_type == 0x04 || rec_type == 0x08 || rec_type == 0x10
+				                        || rec_type == 0x20 || rec_type == 0x40);
+				if (m_aux[v] & 0x8000)      m_mode[v] = 1;             // gate-follow
+				else if (managed_type)      m_mode[v] = 0;             // firmware-managed release
+				else if (rec_type >= 0)     m_mode[v] = 2;             // one-shot (pluck classes)
+				else                        m_mode[v] = 0;             // unknown record: safest = managed
+				const double nowt = machine().time().as_double();
+				m_srckey[v] = (m_ctx_time >= 0.0 && (nowt - m_ctx_time) < 0.060) ? m_ctx_key : 0xFF;
+				// Natural-decay tone shape (sweep-validated, 24/24 blocks over 11 families):
+				// nonzero LOW bytes in r9/rA mark tones that die out even while held (piano,
+				// guitar, mallet, synth, bass); pure sustainers (strings/pad/organ/brass/sax/
+				// world) are all-00 there. Lets a held Concert Grand fade out like a real
+				// piano instead of freezing at its SUS1 level.
+				m_dies[v] = (m_mode[v] == 2) || (((m_envreg[v][5] | m_envreg[v][6]) & 0x00FF) != 0);
 				m_atk[v]    = 1;      // start the attack
 				m_phase[v]  = 0.0;    // clean attack transient
 				// Resolve this voice's amplitude envelope from the firmware's EG registers.
@@ -284,6 +307,11 @@ public:
 			m_stream->update();
 			m_level[v] = std::clamp(double(data) / double(0x5FFF), 0.0, 1.4);
 		}
+		else if (cls == 0x1C02)                           // per-voice aux/mode word
+		{
+			// bit15 marks the gate-follow voice classes (see key_context/key_break above).
+			m_aux[v] = data;
+		}
 		else if (cls >= 0x0004 && cls <= 0x000A)          // amplitude-envelope params r4..rA
 		{
 			// The firmware writes the sound's per-voice amplitude EG (7 halfwords, ATK PEAK
@@ -293,6 +321,26 @@ public:
 		}
 	}
 	uint32_t tg_write_count() const { return m_tgwrites; }
+
+	// Keybed coupling for GATE-FOLLOW voices. The SUB TG chip itself hosts the key-bed
+	// event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
+	// hardware plausibly key-gates certain voice classes with NO CPU write: the sound
+	// sweep found aux word (latch 0x1C02+blk*0x10) bit15 set for exactly the sustaining
+	// families that receive no key-up TG writes (brass/sax/organ; 8/8 blocks, no false
+	// positives). Model: tag each voice with the key that caused it (the most recent MAKE
+	// within 60 ms), and on that key's BREAK release the gate-follow voices it started.
+	// (Chord edge case: keys pressed near-simultaneously could mis-tag; acceptable for
+	// the placeholder.)
+	void key_context(uint8_t key) { m_ctx_key = key; m_ctx_time = machine().time().as_double(); }
+	void key_break(uint8_t key)
+	{
+		for (int v = 0; v < 128; v++)
+			if (m_gate[v] && m_mode[v] == 1 && m_srckey[v] == key)
+			{
+				m_stream->update();
+				m_gate[v] = 0;                       // release at the voice's own rA rate
+			}
+	}
 
 protected:
 	virtual void device_start() override
@@ -307,6 +355,7 @@ protected:
 		std::fill(std::begin(m_sus),   std::end(m_sus),   0.0);
 		std::fill(std::begin(m_dcyc),  std::end(m_dcyc),  0.0);
 		std::fill(std::begin(m_rlsc),  std::end(m_rlsc),  0.0);
+		std::fill(std::begin(m_srckey), std::end(m_srckey), 0xFF);
 		save_item(NAME(m_phase));
 		save_item(NAME(m_freq));
 		save_item(NAME(m_note));
@@ -320,6 +369,12 @@ protected:
 		save_item(NAME(m_dcyc));
 		save_item(NAME(m_rlsc));
 		save_item(NAME(m_ton));
+		save_item(NAME(m_aux));
+		save_item(NAME(m_mode));
+		save_item(NAME(m_dies));
+		save_item(NAME(m_srckey));
+		save_item(NAME(m_ctx_key));
+		save_item(NAME(m_ctx_time));
 		save_item(NAME(m_tgwrites));
 	}
 
@@ -344,9 +399,14 @@ protected:
 					m_env[v] += atk;
 					if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; }
 				}
-				else if (m_gate[v])                            // held: decay toward the sustain level
+				else if (m_gate[v])                            // held
 				{
-					m_env[v] = m_sus[v] + (m_env[v] - m_sus[v]) * m_dcyc[v];
+					if (m_dies[v])
+						m_env[v] *= m_dcyc[v];                     // ONESHOT: SUS1 is a waypoint, not a
+						                                           // floor -- pluck/piano-class samples
+						                                           // die out at the r8 rate while held
+					else
+						m_env[v] = m_sus[v] + (m_env[v] - m_sus[v]) * m_dcyc[v];   // hold at SUS1
 				}
 				else                                           // released: decay to silence
 				{
@@ -368,6 +428,12 @@ private:
 	sound_stream *m_stream = nullptr;
 	double   m_phase[128] = { };     // per-voice oscillator phase
 	double   m_ton[128]   = { };     // note-on machine time (s) -- release detection
+	uint16_t m_aux[128]   = { };     // per-voice aux/mode word (latch class 0x1C02; bit15 = gate-follow)
+	uint8_t  m_mode[128]  = { };     // 0=MANAGED (firmware key-up burst) 1=GATE_FOLLOW 2=ONESHOT
+	uint8_t  m_dies[128]  = { };     // held envelope continues to 0 (natural-decay tone shape)
+	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
+	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
+	double   m_ctx_time = -1.0;      // ...and when it was pushed
 	double   m_freq[128]  = { };     // per-voice frequency (Hz)
 	double   m_note[128]  = { };     // per-voice musical note at note-on (bend reference)
 	uint32_t m_p18ref[128] = { };    // per-voice pitch18 at note-on (bend reference)
@@ -635,7 +701,14 @@ private:
 	uint16_t m_kbd_fifo[64] = { };
 	uint8_t  m_kbd_head = 0, m_kbd_tail = 0;
 	void kbd_push(uint8_t note, uint8_t vel)
-	{ m_kbd_fifo[m_kbd_head & 63] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++; }
+	{
+		m_kbd_fifo[m_kbd_head & 63] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++;
+		// Keybed coupling for the tone generator's GATE-FOLLOW voices (brass/sax/organ
+		// classes): tell it which key is being made/broken -- the real sub TG hosts this
+		// FIFO itself, so it sees these events natively. See key_context()/key_break().
+		if (note & 0x80) m_tonegen->key_break(note & 0x7F);
+		else             m_tonegen->key_context(note);
+	}
 
 	// --- MIDI -> internal KEY BED bridge (velocity-sensitive) ------------------
 	// A MIDI controller wired here plays the machine's OWN key bed (the voice-
@@ -714,6 +787,23 @@ private:
 	// The exp-7 (key-scale-off) case -- unpitched drums -- leaves notePitch16 at
 	// the formula constant 0x4280; return -1 there (and for inactive records) so
 	// the tonegen keeps its raw-pitch18 decode for those voices.
+	// Resolve the firmware voice-record TYPE for a note-on (voice record +0x02 & 0x7C):
+	// the library's key-off dispatchers (lib 0x4C004295 / 0x4C036D3F) switch on it --
+	// types {04,08,10,20,40} receive the computed 6-write release ramp at key-up, any
+	// other synthesis class gets NO key-up TG writes (plucked classes ring their own
+	// envelope). Same record array and binding window as tg_pitch_resolve below.
+	int tg_type_resolve(int tg, uint16_t tgaddr)
+	{
+		if ((tgaddr & 0xFC0E) != 0x2400)
+			return -1;
+		const int slot = ((tgaddr >> 4) & 0x3F) | (tg == 0 ? 0x40 : 0x00);
+		auto &sp = m_maincpu->space(AS_PROGRAM);
+		const offs_t rec = 0x500AF940 + slot * 0xB4;
+		if (!(sp.read_byte(rec + 0x08) & 0x80))
+			return -1;                                       // record not bound
+		return sp.read_word(rec + 0x02) & 0x7C;
+	}
+
 	int32_t tg_pitch_resolve(int tg, uint16_t tgaddr)
 	{
 		if ((tgaddr & 0xFC0E) != 0x2400)
@@ -1129,13 +1219,13 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
 		m_tonegen->tg_write(0, m_tg_addr[0], data,                // Stage 2: feed the real TG voice engine
-			tg_pitch_resolve(0, m_tg_addr[0]));
+			tg_pitch_resolve(0, m_tg_addr[0]), tg_type_resolve(0, m_tg_addr[0]));
 		return;
 	case 0x28000: m_tg_addr[1] = data; return;                    // sub TG: address latch (0x98050000)
 	case 0x28001:                                                 // sub TG: data (0x98050002) -> reg[addr]
 		m_tg_reg[1][m_tg_addr[1]] = data;
 		m_tonegen->tg_write(1, m_tg_addr[1], data,
-			tg_pitch_resolve(1, m_tg_addr[1]));
+			tg_pitch_resolve(1, m_tg_addr[1]), tg_type_resolve(1, m_tg_addr[1]));
 		return;
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;

@@ -129,3 +129,33 @@ rings its natural multi-stage envelope. Our placeholder holds their sustaining l
 the session logs; next RE step = the full 7-stage chain semantics.
 ALSO: Lua gotcha found -- manager.machine.time.seconds is the INTEGER seconds attribute; use
 seconds + attoseconds/1e18 for sub-second scheduling (this masqueraded as a phantom 1 s WAV offset).
+
+## 2026-07-11b: VOICE LIFE-CYCLE CLASSES IMPLEMENTED (the "next envelope refinement") — all 11 families correct
+Grounded by a 2-agent workflow (11-family panel sweep, twice-replicated + firmware key-off RE):
+SWEEP: key-up release writes go to PIANO/STRINGS/PAD/SYNTH/BASS/WORLD only; GUITAR/MALLET/BRASS/SAX/
+ORGAN get ZERO key-up TG writes. Surprise: brass/sax/organ are TRUE SUSTAINERS with no key-up write --
+under the previous model they'd ring forever. Their exact marker: aux word (latch 0x1C02+blk*0x10)
+bit15 (8/8 blocks, no false positives). The r9/rA low-byte idea FAILED as key-up predictor but is a
+perfect SHAPE classifier (24/24 blocks): nonzero lows = natural-decay tone (piano/guitar/mallet/synth/
+bass), all-00 = pure sustainer. Key-up burst pattern generalized: reg0=XX80 reg1=XX00 (XX per-sound),
+reg4/5=AE00 always, reg8/9=per-sound damp rate.
+RE (lib self-load = file off 0x3B8FD1+N): release emitter = lib 0x4C0376E3 from TG shadow
+0x500CA0B0+slot*0x84, values COMPUTED at key-up (h1 0x4C031949 levels, h2 0x4C031F07, h3 0x4C032490
+rates) from tone data (*(rec+0x3C)) + curve tables 0x486D2649/0x486D2713. THE SKIP: key-off
+dispatchers 0x4C004295/0x4C036D3F switch on voice-record(0x500AF940+i*0xB4)+0x02 & 0x7C; only types
+{04,08,10,20,40} emit the writes; other classes (plucks) fall through silently.
+DRIVER MODEL (shipped): at note-on classify each voice:
+  1. aux bit15 -> GATE_FOLLOW: the sub TG hosts the keybed FIFO itself (0x98050004 is ITS +4 reg), so
+     these classes key-off from the physical break with no CPU write. Driver: kbd_push tags the
+     tonegen with the make key (key_context) and releases matching gate-follow voices on break
+     (key_break); voices are tagged with the causing key (60ms window; near-simultaneous-chord
+     mis-tag = accepted placeholder edge).
+  2. record type (tg_type_resolve, rec+0x02 & 0x7C) in {04,08,10,20,40} -> MANAGED: hold at SUS1,
+     released by the firmware's 6-write burst (existing reg0 rule).
+  3. else -> ONESHOT: held decay continues past SUS1 to 0 at the r8 rate (pluck dies naturally).
+  Plus dies-shape: MANAGED voices with nonzero r9/rA low bytes also decay to 0 while held (a held
+  Concert Grand now fades out over ~12s RT60 like a real piano; strings/pad/world hold).
+VERIFIED (WAV): organ+brass hold steady, stop <0.25s at key-up (gate-follow -- the new fix); guitar
+rings through release, fades to silence ~12s (one-shot); piano decays held + damps at release;
+strings hold rock-steady + stop at key-up (their own burst rates ARE 0xAE00 fast-damp). Sweep data:
+/tmp/sweep_writes.txt (+run2); full agent reports in the session workflow journal wf_c8e2bf8d-0c1.
