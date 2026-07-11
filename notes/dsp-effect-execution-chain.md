@@ -544,3 +544,25 @@ NEXT (focused, tractable): measure the actual RT60 / loop gain per section by mu
 (or NOP their CALLs at 0x8083..0x80a0) and see which section's removal makes the reverb DECAY. That
 isolates the section carrying the >=1 loop gain WITHOUT needing a reference SHARC. THAT is the next step
 (cheap: patch PM via Lua, no rebuild). Supersedes the 6.4s-delay framing.
+
+## 2026-07-11s: SECTION-MUTING -> the divergence is a GLOBAL tank loop (all 10 sections), gain ~=1
+Patched the reverb's section CALLs to NOP via Lua (no rebuild) to bisect:
+- Baseline (all sections): 0xC358 rails ~12-14k times/s BOTH during the note AND after note-off (steady
+  rail rate -> sustains at the rail, a marginally-stable limit cycle, loop gain ~= 1.0).
+- Mute 0x8900-0x8D00 (keep 0x8400-0x8800): no rail; but the WAV is SILENT during the note (AC=0) with a
+  tiny AC~50 tail after. So muting doesn't FIX it -- it BREAKS the chain (the output stage lives in the
+  later sections; the tank is a SERIES loop, so removing any section kills downstream signal).
+- Mute 0x8500-0x8800: also no rail (same reason).
+=> The divergence requires the FULL 10-section chain -- it is a GLOBAL TANK LOOP, not one bad section.
+The loop gain is ~= 1.0 (sustains at rail forever). Every per-instruction component is verified correct
+and every coefficient is < 1, so the loop gain of ~1.0 is either (a) the reverb's DESIGN (a long/dark
+"Dark2" reverb genuinely has loop gain ~0.99, RT60 many seconds) which MAME's tiny cumulative float
+rounding tips to >= 1.0 (sustain instead of slow decay), or (b) a still-unfound interaction in how the
+sections chain (I6 save/restore across the 10 CALL/RTS pairs, or the SPORT/I4 output buffer).
+HONEST STATUS: this is now a "loop gain 0.99-vs-1.0" problem -- the hardest kind, because it needs a
+DIFFERENTIAL reference (a second known-good ADSP-2106x running the same code+inputs) to see the tiny
+per-frame drift that accumulates. Incremental single-CPU instrumentation cannot resolve a ~1% loop-gain
+error. RECOMMENDATION for the effects goal: this specific reverb divergence is parked pending a
+reference-diff harness; the DRY passthrough is correct and is the safe default. Future effects work
+should either build that harness or focus on verifying OTHER effect types (chorus/EQ/delay) that may not
+have the near-unity-loop sensitivity.
