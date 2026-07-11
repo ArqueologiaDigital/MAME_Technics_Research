@@ -50,3 +50,14 @@ HARDWARE CONSEQUENCE MODEL: the TG's effect-send bus.** It is NOT a DSP host-por
 4. DSPAUDIO default flips to "through DSP" once (3) lands.
 Until (3), the faithful-behavior increment available: honor the toggle in the TG (send muted when
 off), so ON/OFF audibly changes the send feed — but the wet path itself stays parked.
+
+## 2026-07-11: 0x8238 decoded -- it is a CONSTANT, not a control
+Stepping TOTAL DEPTH down x3 then up x3 while tapping the sub-TG bus:
+- **0x8338** low byte = the actual depth value: 0x8550 -> 854F -> 854E -> 854D (down), back to 0x8550
+  (up). Base 0x85, low byte = depth. This is the reverb-return level -- already modelled as
+  m_gain_depth (bridge scales the DSP return by depth/127).
+- **0x8238 = 0x0800 CONSTANT** -- unchanged across every depth step; co-written on each refresh but
+  invariant. It is the reverb-send channel's fixed output-bus base (0x0800 = the standard reg-8 level
+  seen on many channels in the group-0x20 dump), NOT a depth/mystery control.
+- 0x803A = 0x007F constant (wet/dry pair, reverb ON).
+VERDICT: the depth control is entirely 0x8338; 0x8238 needs no modelling. "0x8238 undecoded" item CLOSED.
