@@ -40,6 +40,26 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★ AUTONOMOUS MANDATE 2026-07-11 EVENING (Felipe away many hours; cron 529b597d every 23min)
+GREEN LIGHT standing. Queue (in order):
+1. EFFECTS SWEEP TRIAGE: workflow wf_46aaaf77-352 (running at handoff) = navigator recipes +
+   batched health tests over many effect types (REVERB 8 types, CHORUS 4, MULTI pages, SOUND DSP 8).
+   Read results from the session workflow journal; fix every FAIL/SUSPECT; re-verify; publish.
+2. ★ PAGE UP/DOWN buttons WRONGLY MAPPED (Felipe: some nav screens inaccessible). Find real bank-A
+   events; live-verify on a paged screen (MULTI EFFECT "PAGE n/8" indicator on snapshots). Then
+   CONTRAST Up/Down (events unknown; old guesses in the driver were never confirmed — panel notes
+   0x20B5-0x20BD cluster SEG1D-1F). Fix driver ports + layout; commit.
+3. DRC PERF: native UML for the multifunction MRF-MAC block (multiop 0x06/0x08-0x16) — the
+   remaining interpreter-fallback in the frame hot path. A/B a reverb WAV vs interpreter for
+   correctness; measure speed. (ALUSAT specialization + 66MHz landed: kernel = 44100 frames/s.)
+4. Reverb ON/OFF loudness question (~-5dB at depth 0x50 — needs real-HW ear ref, ask Felipe when
+   back), 0x8238 decode, loud-input rail recheck.
+5. Upstream-prep SHARC patch series (ALUSAT both commits, circ-wrap, premod wrap, AVG/SSFR
+   rounding, FIX UB).
+DONE THIS EVENING: reverb CLEAN end-to-end (sign-extension + TDM wiring); TOTAL DEPTH wired; DRC
+ALUSAT complete + specialized; 66MHz; kernel 44100 fps; blog Part 17; docs site updated (Jekyll
+gotcha: use JEKYLL_NO_BUNDLER_REQUIRE=true).
+
 ## ★★★★★★ 2026-07-11m: REVERB IS CLEAN — sign-extension poison + true send/return wiring (SHIPPED)
 The 'reverb-ON noise' saga is RESOLVED (wf_b58b1fda-df3 + this commit):
 1. THE POISON: dsp_audio_tick wrote TG input zero-filled (&0xffffff) but the kernel programs SPORTs
