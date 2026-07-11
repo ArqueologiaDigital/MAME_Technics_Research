@@ -420,3 +420,22 @@ NEXT: (a) the quiet-note test above (cheap, decisive between (1) and (2)); (b) i
 double-precision path for the SHARC float ops, or a targeted higher-precision accumulate in the tank.
 This supersedes "all gains <1 => must be delay-line mgmt": the mechanism is more likely float precision
 at the ~2^24 operating point (a real, documented limitation of MAME's 32-bit SHARC float).
+
+## 2026-07-11m: BLIP TEST -> it's a DC POLE at ~1.0 (an accumulator), NOT precision, NOT magnitude
+Played a 50 ms blip (vs the usual 2 s note) and measured the reverb output tail: DC ~1700 / AC ~700,
+SUSTAINED for 6.5 s+ -- IDENTICAL to a long note. So the sustained DC is INDEPENDENT of input magnitude
+and of how long the note is held. Consequences:
+- RULES OUT the 32-vs-40-bit precision-at-2^24 idea (a blip operates far below 2^24 yet sticks the same).
+- RULES OUT resonant buildup (a blip barely excites the tank, yet gets the full DC).
+- => the emulated reverb has a **DC feedback pole at ~= 1.0 (an integrator/accumulator)**: ANY excitation,
+  even a tiny impulse, is integrated into a fixed sustained DC that never decays. (The -0.28 tank decay
+  is NOT in this DC path -- consistent with the -0.28 being "too big to lose to precision" reasoning.)
+Real hardware cannot have this pole (its reverb would rail on any note), so the EMULATION introduces it
+-- almost certainly the delay-line addressing forming an unintended unity-DC-gain loop (a read landing
+on a slot that makes write = read + input, i.e. an accumulator). The "constant ~2e7 DC block" the reads
+at 0x8423 return (2026-07-11l) is that accumulator's output filling the buffer.
+DEFINITIVE NEXT STEP (unchanged, now with a sharp target): find the read/write pair that forms the
+unity-DC loop -- capture ALL writes (incl. immediate-modify DM(-k,I0) writes, a DIFFERENT handler than
+the post-modify one instrumented so far) to the read region 0x34exx-0x351xx, and identify the tap whose
+write value = (a delayed read) + input with NO attenuation. Fix that tap's addressing (or the M/L that
+sets its delay). This is a bounded trace of one region's writers.
