@@ -337,6 +337,9 @@ public:
 				m_gain_send = float(data & 0x7F) / 127.0f;
 			if (tg == 1 && ch == 0x33 && reg == 0x08)
 				m_gain_depth = float(data & 0x7F) / 127.0f;   // TOTAL DEPTH (live-verified: 0x8500|depth)
+			if (tg == 1 && ch == 0x19 && reg == 0x08)
+				m_gain_chorus = float(data & 0x7F) / 127.0f;  // CHORUS send (0x8198 low7 = per-part depth;
+				                                              // 0x0B00 off -> 0; routes to chorus unit 4)
 		}
 		else if (cls == 0x1C02)                           // per-voice aux/mode word
 		{
@@ -357,6 +360,7 @@ public:
 	float gain_return() const { return m_gain_return; }
 	float gain_send()   const { return m_gain_send; }
 	float gain_depth()  const { return m_gain_depth; }
+	float gain_chorus() const { return m_gain_chorus; }
 
 	// Keybed coupling for GATE-FOLLOW voices. The SUB TG chip itself hosts the key-bed
 	// event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
@@ -525,6 +529,7 @@ private:
 	std::atomic<float> m_gain_return{ 1.0f };  // DAC crossfade: DSP return (reverb ON side)
 	std::atomic<float> m_gain_send{ 0.80f };   // TG -> DSP send level (boot default 0x66/0x7F)
 	std::atomic<float> m_gain_depth{ float(0x50) / 127.0f };  // REVERB TOTAL DEPTH (0x8338 low7, default 0x50)
+	std::atomic<float> m_gain_chorus{ 0.0f };   // CHORUS send (0x8198 low7); 0 = chorus off (default)
 	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
@@ -572,10 +577,16 @@ public:
 
 	// Called from the DSP IRQ0 tick (CPU timeline): take one TG input frame, hand back one
 	// processed output frame. 24-bit signed samples.
-	void pop_input(int32_t &l, int32_t &r)
+	// rawl/rawr = the un-send-scaled TG mix (for parallel effect sends such as chorus).
+	void pop_input(int32_t &l, int32_t &r, int32_t &rawl, int32_t &rawr)
 	{
-		if (m_rx_rd != m_rx_wr) { l = m_rx[m_rx_rd][0]; r = m_rx[m_rx_rd][1]; m_rx_rd = (m_rx_rd + 1) % RING; }
-		else { l = r = 0; }   // underflow: DSP consumed ahead of the stream (brief; harmless)
+		if (m_rx_rd != m_rx_wr)
+		{
+			l = m_rx[m_rx_rd][0]; r = m_rx[m_rx_rd][1];
+			rawl = m_rxraw[m_rx_rd][0]; rawr = m_rxraw[m_rx_rd][1];
+			m_rx_rd = (m_rx_rd + 1) % RING;
+		}
+		else { l = r = rawl = rawr = 0; }   // underflow: DSP consumed ahead of the stream (brief; harmless)
 	}
 	void push_output(int32_t l, int32_t r)
 	{
@@ -600,7 +611,7 @@ protected:
 	virtual void device_start() override
 	{
 		m_stream = stream_alloc(2, 2, 44100);
-		save_item(NAME(m_rx));   save_item(NAME(m_tx));
+		save_item(NAME(m_rx));   save_item(NAME(m_rxraw));   save_item(NAME(m_tx));
 		save_item(NAME(m_rx_rd)); save_item(NAME(m_rx_wr));
 		save_item(NAME(m_tx_rd)); save_item(NAME(m_tx_wr));
 		save_item(NAME(m_dsp_active)); save_item(NAME(m_tx_primed)); save_item(NAME(m_tx_last));
@@ -627,6 +638,8 @@ protected:
 			const float gdepth = m_gain_depth;
 			m_rx[m_rx_wr][0] = int32_t(double(il) * gsend);
 			m_rx[m_rx_wr][1] = int32_t(double(ir) * gsend);
+			m_rxraw[m_rx_wr][0] = il;   // un-send-scaled TG mix, for the chorus send bus
+			m_rxraw[m_rx_wr][1] = ir;
 			m_rx_wr = (m_rx_wr + 1) % RING;
 			if (m_rx_wr == m_rx_rd) m_rx_rd = (m_rx_rd + 1) % RING;
 
@@ -671,6 +684,7 @@ private:
 	static constexpr uint32_t PRIME = 128;   // ~2.9 ms latency buffer before consuming DSP output
 	sound_stream *m_stream = nullptr;
 	int32_t m_rx[RING][2] = { };   // TG -> DSP input
+	int32_t m_rxraw[RING][2] = { };// raw (un-send-scaled) TG mix, parallel to m_rx (chorus feed)
 	int32_t m_tx[RING][2] = { };   // DSP output -> speakers
 	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
 	bool m_dsp_active = false;     // the DSP has started producing output
@@ -1633,11 +1647,27 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
+		// Multi-unit routing: unit 0 = the audible REVERB path (wired, verified). CHORUS runs on
+		// unit 4 (rec06 modulated-delay; input 0xC36A, output 0xC34A per the kernel I4 walk) -- a
+		// non-FLAG3-gated effect that PROCESSES AND OUTPUTS when fed (proven: 664328, no rail); it
+		// was simply never fed. Feed it the TG send scaled by the per-part CHORUS send/depth (low
+		// byte of sub-TG reg 0x8198 = gain_chorus, 0 when chorus off) and sum its return into the
+		// DAC. GATED on chsend > 0 so with chorus OFF this is byte-for-byte the old unit-0-only path
+		// -> reverb output provably unchanged (A/B bit-identical). APPROXIMATION (labelled): the
+		// whole TG mix feeds the chorus bus at the send level (per-part separation needs per-bus TG
+		// output); correct for the common single-part case.
+		const float chsend = m_tonegen->gain_chorus();
 		const int32_t oL = sx24(dm.read_dword(obuf));
 		const int32_t oR = sx24(dm.read_dword(obuf + 1));
-		m_dspbridge->push_output(oL, oR);
-		int32_t il = 0, ir = 0;
-		m_dspbridge->pop_input(il, ir);
+		int32_t cL = 0, cR = 0;
+		if (chsend > 0.0f)
+		{
+			cL = sx24(dm.read_dword(0xC34A));   // chorus (unit 4) return from last frame
+			cR = sx24(dm.read_dword(0xC34B));
+		}
+		m_dspbridge->push_output(oL + cL, oR + cR);
+		int32_t il = 0, ir = 0, rawl = 0, rawr = 0;
+		m_dspbridge->pop_input(il, ir, rawl, rawr);
 		// The kernel programs the SPORTs with DTYPE=01 (SPCTL 0x013CB173/0x013C3173,
 		// bits 2:1 = 01 = "right-justify; sign-extend MSBs", TRM ch.9): 24-bit samples
 		// arrive SIGN-EXTENDED to 32 bits. Masking with 0xffffff (zero-fill = DTYPE 00)
@@ -1647,6 +1677,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		// poisoned input at 0xC378/79, not diverging).
 		dm.write_dword(ibuf,     uint32_t(il));
 		dm.write_dword(ibuf + 1, uint32_t(ir));
+		if (chsend > 0.0f)
+		{
+			// feed the chorus unit (4) its send: raw TG mix scaled by the chorus send level.
+			dm.write_dword(0xC36A, uint32_t(int32_t(double(rawl) * chsend)));
+			dm.write_dword(0xC36B, uint32_t(int32_t(double(rawr) * chsend)));
+		}
 	}
 	m_dsp->set_input_line(0, ASSERT_LINE);
 }
