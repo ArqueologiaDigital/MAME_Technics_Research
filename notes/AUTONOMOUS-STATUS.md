@@ -14,6 +14,33 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★★★ RESOLVED 2026-07-11: the forever-note + no-dry-sound (Felipe's report) — SHIPPED (a53fdcb)
+Root causes (all proven + fixed; full detail notes/tg-envelope-implementation-plan.md tail):
+1. **TG release NEVER fired**: the firmware does NOT write 0x0001=0xC000 at key release (boot/steal
+   only -- FALSIFIES the Part-14 claim). Real release = 6-write ramp rewrite to the note's ODD
+   companion block (+0x10=0x9180 +0x11=0x9100 +0x14/15=0xAE00 +0x18/19=0x22B0), targeted at the odd
+   block even for single-voice notes. FIX: reg0 rewrite (hi<0xFF) releases gated pair members gated
+   >20ms. Notes now decay-to-sustain and release to true silence on PC-key AND MIDI paths (verified).
+2. **No dry path existed**: speakers heard ONLY the DSP, whose boot-default effect diverges (rails)
+   after any note; no panel button reaches the DSP (effect OFF = DspEffectSelect(unit,0) THROUGH
+   record via the DEAD 0x500A01E0/mailbox/task-7 path -- firmware-RE confirmed). FIX: new machine
+   config "Effects DSP audio path (EXPERIMENTAL)", default BYPASSED (dry TG) -- flip to route through
+   the DSP (the old wash behavior, verified both ways). DSP still boots/runs regardless.
+3. Extras: note-on now requires a programmed EG (kills boot-sweep junk voices audible on the dry
+   path); keybed FIFO 16->64; comment lies fixed. Blog Part 14 erratum published (mame-blog).
+KNOWN LIMITATION: plucked sounds (guitar family) get NO key-up write from the firmware (natural-decay
+samples); placeholder holds their sustaining layer at SUS1 forever. NEXT RE: the 7-stage chain
+(DCY2->SUS2 continuation; guitar layer B r7=7F00 SUS2=3FF1 data captured).
+LUA GOTCHA (add to every future script): manager.machine.time.seconds is INTEGER seconds; use
+seconds + attoseconds/1e18. This masqueraded as a phantom "+1s WAV offset" all session.
+Firmware-RE bonus (workflow agent, static): full DSP-driver module map -- UI setters fill param block
+*(0x500A01E0) (lazy-alloc from RTOS mailbox 5), commit 0x48405B27 -> mailbox 6 -> RTOS task 7
+(0x48405B97) does ALL host-port writes via HAL 0x48404E8D call sites 0x48404F11/0x48404F5E; effect
+records live in RAM table 0x500066E0 (ROM 0x487B7248 is its .data init image; explains zero code refs);
+"OFF" = type 0 = a real 60-byte THROUGH record (ROM 0x486BEBA9). The whole effect-select UI depends on
+the dead param path => reverb on/off CANNOT work in the current boot state (separate from the parked
+divergence bug).
+
 ## ★★ FELIPE IS BACK (2026-07-11) — cron loop STOPPED; new directed task
 Felipe returned, cron b9660922 cancelled. His report from hands-on testing of the published binary:
 (1) a single MIDI-controller note sounds FOREVER; (2) turning reverb off makes NO difference. He wants
