@@ -207,3 +207,20 @@ correct input slot and it outputs. So a multi-unit send/return model is tractabl
      reverbs) -- a later concern.
 REMAINING to pin before shipping: which of u4/u6 is the RIGHT1 chorus send-return (or both = stereo/
 dual), and the correct return level into the DAC (send matrix regA/depth). The mechanism is proven.
+
+## 2026-07-12 ★ DEFINITIVE unit -> record map (live PM signature match at 0x8N00)
+Resolved the long-standing unit/record confusion by matching live DSP PM words to record signatures:
+| unit | PM slot | record | effect | status in MAME |
+|---|---|---|---|---|
+| 0 | 0x8400 | **rec56** (comb+allpass) | the panel-REVERB-controlled AUDIBLE slot (fed by the bridge) | AUDIBLE |
+| 4 | 0x8800 | **rec06** modulated-delay | CHORUS | AUDIBLE (fed, this session) |
+| 6 | 0x8A00 | rec06 modulated-delay | CHORUS (twin of u4) | not fed |
+| 8 | 0x8C00 | **rec34** | EQ (FIR + biquad; CALLs helper 0x831B) | not fed (master/insert) |
+| 9 | 0x8D00 | **rec49** | reverb/phaser (separate program) | not fed / silent |
+NOTES: unit 0 = rec56 is what we've been calling "the reverb" -- functionally it IS the
+panel-reverb-controlled audible slot (toggle/type/depth all move its output); the record is rec56
+(comb+allpass), distinct from rec49 at unit 9. My CHORUS feed (unit 4 = rec06) is confirmed correct.
+Units 1-3,5,7 hold rec15/08/11/10/58 (the boot-default chain); unit 7 = rec58 is the FLAG3-gated
+pitch-shifter (the red-herring I mis-fed earlier). Matching signatures used: rec56 word 8401=
+0000716f80000000; rec06 8402=0000a80b00000021; rec34 8C00=000006be0400831b; rec49 8D04=0000209a31801111.
+This map unblocks extending audibility to EQ (u8) and the other send effects -- feed the right unit.
