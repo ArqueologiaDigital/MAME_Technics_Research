@@ -103,3 +103,29 @@ attacks) or the chip datasheet -- left as the one remaining envelope refinement.
 STILL PROVISIONAL (labelled): exact chip rate CURVE (register->time), the SUS2/DCY2 (r9/r8) 2-stage
 decay (only r8 feeds one decay time today), and the ATTACK (fixed ~6 ms). Amp-edit sweep blocked on
 menu soft-key routing; chip datasheet unknown. The sustain/decay/release ARE firmware-driven + validated.
+
+## 2026-07-11: THE RELEASE NEVER WORKED — root cause found + fixed (Felipe's stuck-MIDI-note report)
+Felipe reported a MIDI note sounding forever. Investigation (workflow: live repro + firmware RE +
+driver audit) FALSIFIED a Part-14 claim: **the firmware does NOT write the 0x0001=0xC000 mute on key
+release** (that mute is only boot-init and voice-steal), so the driver's release NEVER fired -- every
+note sustained forever at its SUS1 level, on every input path (PC keys + MIDI). Part 14's held-decay
+findings (SUS1/DCY2 semantics) stand; its release verification was wrong.
+THE REAL KEY-RELEASE (live captures, piano/default): 6 writes to the note's ODD companion block:
++0x10=0x9180 +0x11=0x9100 +0x14/15=0xAE00 +0x18/19=0x22B0, ~0.2 ms after the key-up FIFO pop.
+Structure: a note-on programs a PAIR of 0x10-blocks (even = sounding voice; odd = companion, with its
+own pitch 0x24x1 write and, for layered sounds, its own EG -- pan-style values 0x7F00/0x7F7F). The
+key-up rewrite targets the ODD block EVEN WHEN ONLY THE EVEN BLOCK SOUNDS (verified: single-voice note
+got the same 001x rewrite).
+DRIVER FIX (kn7000.cpp): (1) release = reg0 (cls 0x0000) rewrite with data hi-byte < 0xFF on either
+block of a pair -> release every gated voice of {v&~1, v|1} gated >20 ms (the timed guard skips the
+note-on's own reg0/companion programming ~1 ms after gating). (2) note-on requires a PROGRAMMED EG
+(any of r4..rA nonzero) -- kills boot-sweep junk voices (audible once the dry path became default).
+(3) 0xC000 mute kept (boot/steal). VERIFIED (WAV, fresh cfg): PC-key piano decays-to-sustain then
+releases to true silence; single-block variant releases; MIDI-file note (Felipe's path) rings 4 s
+decaying to its 35% sustain then releases clean.
+KNOWN LIMITATION: plucked sounds (SOUND GUITAR default) write NOTHING at key-up -- the real sample
+rings its natural multi-stage envelope. Our placeholder holds their sustaining layer at SUS1 forever
+(guitar layer B: r7=0x7F00, SUS2=0x3FF1 suggests a DCY2->SUS2 chain to model next). Captured data in
+the session logs; next RE step = the full 7-stage chain semantics.
+ALSO: Lua gotcha found -- manager.machine.time.seconds is the INTEGER seconds attribute; use
+seconds + attoseconds/1e18 for sub-second scheduling (this masqueraded as a phantom 1 s WAV offset).

@@ -199,7 +199,14 @@ public:
 		{
 			const uint32_t p18 = (uint32_t(cls & 1) << 16) | data;
 			m_stream->update();
-			if (!m_gate[v])
+			// A REAL note-on always programs the 7-halfword amplitude EG (r4..rA) for the
+			// voice immediately before this pitch write (live capture). Boot/init sweeps
+			// also hit pitch registers but leave the EG all-zero -- gating those produced
+			// faint junk voices ringing for ~20 s after boot (audible now that the dry TG
+			// is the default listening tap). Require a programmed EG to key a voice on.
+			bool eg_programmed = false;
+			for (int k = 0; k < 7; k++) if (m_envreg[v][k] != 0) { eg_programmed = true; break; }
+			if (!m_gate[v] && eg_programmed)
 			{
 				// note-on: musical pitch from the resolved voice-record notePitch16
 				// when available; else the legacy absolute decode (anchored where
@@ -210,6 +217,7 @@ public:
 				m_p18ref[v] = p18;
 				m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
 				m_gate[v]   = 1;      // held
+				m_ton[v]    = machine().time().as_double();   // for release detection (reg0 rule)
 				m_atk[v]    = 1;      // start the attack
 				m_phase[v]  = 0.0;    // clean attack transient
 				// Resolve this voice's amplitude envelope from the firmware's EG registers.
@@ -237,8 +245,34 @@ public:
 			}
 			m_tgwrites++;
 		}
-		else if (cls == 0x0001)                           // 0xC000 = voice mute -> note-off
+		else if (cls == 0x0000)                           // reg0 = per-voice level target
 		{
+			// THE KEY-RELEASE IS NOT A 0x0001=0xC000 MUTE (that is only boot init and voice-
+			// steal). Live captures 2026-07-11: on key/MIDI release the firmware rewrites regs
+			// 0,1,4,5,8,9 of the note's ODD companion block with a ramp-down target + rates
+			// (reg0: 0x9180; vs 0xFF80/0xD27F/0xE77F during note-on programming) -- and it
+			// aims at the companion even when only the even block is sounding (single-voice
+			// notes get the same 001x-style rewrite). So: a reg0 rewrite below full scale on
+			// EITHER block of a pair releases every gated voice of the pair {v&~1, v|1} that
+			// has been gated >20 ms (the note-on's own reg0/companion programming happens
+			// within ~1 ms of the gate, so the timed guard skips it; a mid-note expression
+			// rewrite would false-trigger -- acceptable for the placeholder).
+			// NOTE: some sounds (plucked guitar family) write NOTHING at key-up -- their
+			// samples ring their natural multi-stage envelope; our placeholder holds them at
+			// SUS1 instead (known limitation, see notes/tg-envelope-implementation-plan.md).
+			if (data != 0 && (data >> 8) < 0xFF)
+			{
+				const double now = machine().time().as_double();
+				for (int y = (v & ~1); y <= (v | 1); y++)
+					if (m_gate[y] && (now - m_ton[y]) > 0.020)
+					{
+						m_stream->update();
+						m_gate[y] = 0;
+					}
+			}
+		}
+		else if (cls == 0x0001)                           // 0xC000 = voice mute (boot init /
+		{                                                 // voice-steal; NOT the key release)
 			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; }
 		}
 		else if (cls == 0x2009)                           // per-voice level (best-effort)
@@ -285,6 +319,7 @@ protected:
 		save_item(NAME(m_sus));
 		save_item(NAME(m_dcyc));
 		save_item(NAME(m_rlsc));
+		save_item(NAME(m_ton));
 		save_item(NAME(m_tgwrites));
 	}
 
@@ -332,6 +367,7 @@ protected:
 private:
 	sound_stream *m_stream = nullptr;
 	double   m_phase[128] = { };     // per-voice oscillator phase
+	double   m_ton[128]   = { };     // note-on machine time (s) -- release detection
 	double   m_freq[128]  = { };     // per-voice frequency (Hz)
 	double   m_note[128]  = { };     // per-voice musical note at note-on (bend reference)
 	uint32_t m_p18ref[128] = { };    // per-voice pitch18 at note-on (bend reference)
@@ -391,6 +427,14 @@ public:
 	// Master output gain (0..1), set from the front-panel MAIN VOLUME slider by the driver.
 	void set_master_gain(float g) { m_master_gain = g; }
 
+	// Final audio routing: true = speakers hear the DSP output (TG -> DSP -> DAC, the real
+	// signal path), false = speakers hear the dry TG directly. The DSP itself still boots,
+	// receives uploads and runs either way -- ONLY the listening tap moves. Default is DRY
+	// because the boot-default effect's feedback tank currently DIVERGES in emulation (the
+	// parked SHARC loop-gain bug): with the DSP in-path, any single note leaves an
+	// everlasting full-scale wash. Flip via the "Effects DSP audio path" machine config.
+	void set_dsp_route(bool r) { m_route_dsp = r; }
+
 protected:
 	virtual void device_start() override
 	{
@@ -422,9 +466,9 @@ protected:
 			if (m_rx_wr == m_rx_rd) m_rx_rd = (m_rx_rd + 1) % RING;
 
 			int32_t ol, orr;
-			if (!m_dsp_active)
+			if (!m_route_dsp || !m_dsp_active)
 			{
-				ol = il; orr = ir;   // effects DSP off -> transparent passthrough
+				ol = il; orr = ir;   // DSP not routed (or not yet talking) -> dry TG passthrough
 			}
 			else
 			{
@@ -460,6 +504,7 @@ private:
 	bool m_tx_primed = false;      // the output latency buffer has filled
 	int32_t m_tx_last[2] = { };    // last DSP output (held on underflow)
 	std::atomic<float> m_master_gain{ 1.0f };   // MAIN VOLUME slider (audio thread reads, driver writes)
+	std::atomic<bool>  m_route_dsp{ false };    // final routing: DSP output vs dry TG (see set_dsp_route)
 };
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
@@ -504,6 +549,7 @@ public:
 		, m_sdcard(*this, "sdcard")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
+		, m_dspaudio(*this, "DSPAUDIO")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -544,6 +590,7 @@ private:
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
+	required_ioport m_dspaudio;           // "Effects DSP audio path" machine-config switch
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -582,10 +629,13 @@ private:
 	// still a NOTE-ON (that was the "stuck notes" bug). A release velocity of 0xFF is
 	// the clean key-up: it bypasses the sustain/hold re-latch at 0x484480fa (cmp 0xff
 	// -> skip the 0x501496a2 held-key store that would otherwise re-gate the note).
-	uint16_t m_kbd_fifo[16] = { };
+	// 64-deep: a burst of key events between firmware polls must not overwrite unread
+	// entries -- losing a RELEASE sticks a sustaining note forever (16 was overflowable
+	// by a large chord/glissando released at once).
+	uint16_t m_kbd_fifo[64] = { };
 	uint8_t  m_kbd_head = 0, m_kbd_tail = 0;
 	void kbd_push(uint8_t note, uint8_t vel)
-	{ m_kbd_fifo[m_kbd_head & 15] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++; }
+	{ m_kbd_fifo[m_kbd_head & 63] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++; }
 
 	// --- MIDI -> internal KEY BED bridge (velocity-sensitive) ------------------
 	// A MIDI controller wired here plays the machine's OWN key bed (the voice-
@@ -595,7 +645,8 @@ private:
 	// key bed see them, and dynamics/velocity are honoured). The key bed's FIFO
 	// value is the KEY INDEX (internal note = index + 36 = MIDI note); MIDI note
 	// n maps to index n-36, i.e. the 61-key compass C2(36)..C7(96). Notes outside
-	// are clamped into range. Connect a host controller with -kbdmidi <port>.
+	// the compass are DROPPED (there is no honest pitch to clamp them to; note that a
+	// controller octave-shifted mid-note can thus lose a release). Connect a host controller with -kbdmidi <port>.
 	uint8_t m_kbd_midi_status = 0;             // MIDI running-status byte
 	uint8_t m_kbd_midi_d1 = 0;                  // first data byte (note)
 	bool    m_kbd_midi_have_d1 = false;
@@ -1042,7 +1093,7 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	if (offset == 0x28002)
 	{
 		if (!machine().side_effects_disabled() && m_kbd_head != m_kbd_tail)
-			return m_kbd_fifo[m_kbd_tail++ & 15];
+			return m_kbd_fifo[m_kbd_tail++ & 63];
 		return 0xFFFF;
 	}
 	// 0x9805000E (offset 0x28007): sound-interface register; the init loop at
@@ -1137,15 +1188,12 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 				m_dsp_block_open = false;                         // closes the current block
 				// A RUNTIME upload (SHARC already running, e.g. selecting a reverb) that lands in
 				// PROGRAM memory (mode 1) changes live code behind the DRC's back -- its self-modify
-				// detection only fires for PM writes issued by the SHARC itself, so notify_pm_written()
-				// would flush the recompiled cache and let the newly-uploaded effect run. That IS the
-				// correct behaviour and it DOES make the effect execute -- but the currently-modelled
-				// effect pipeline then emits SILENCE (the running microprogram reads its input and its
-				// SDRAM delay lines yet writes 0 to the output slot 0xC350; likely an unset wet/dry mix
-				// coefficient or an output routed to a TX slot the bridge doesn't read). Until that is
-				// resolved, leaving the cache stale keeps the (audible) boot passthrough rather than
-				// regressing to silence. Re-enable once the effect output is non-zero.
-				// See notes/dsp-effect-execution-chain.md.
+				// detection only fires for PM writes issued by the SHARC itself, so tell the core:
+				// notify_pm_written() flushes the recompiled cache and the newly-uploaded effect runs.
+				// (This call IS live -- an earlier revision of this comment said it was disabled.)
+				// Caveats (see notes/dsp-effect-execution-chain.md): a re-upload does NOT reset the
+				// SHARC or clear its DM/SDRAM state, so a diverged effect tank keeps ringing across
+				// program swaps; and host index writes other than 0x40/0x1C/0x04 are ignored.
 				if (m_dsp_running && m_dsp_mode == 1)
 					m_dsp->notify_pm_written();
 			}
@@ -1799,6 +1847,7 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 	{
 		const float v = float(m_volmain->read()) / 100.0f;
 		m_dspbridge->set_master_gain(v * v);
+		m_dspbridge->set_dsp_route(m_dspaudio->read() & 1);
 	}
 
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
@@ -2132,6 +2181,17 @@ static INPUT_PORTS_START(kn7000)
 	// Front-panel volume sliders -- draggable placeholders (the ESQ1-style slider script in
 	// kn7000.lay binds these). NOT yet wired to any audio/volume path; control targets are TBD
 	// (needs schematic + disassembly RE). PORT_ADJUSTER gives a 0-100 value the layout knob animates.
+	// Final audio routing. The effects DSP (IC306) always boots and runs; this selects
+	// whether the SPEAKERS hear its output or the dry tone generator. Default = DRY:
+	// the boot-default effect's feedback tank diverges in emulation (parked SHARC
+	// loop-gain bug, notes/dsp-effect-execution-chain.md), so with the DSP routed any
+	// single note leaves an everlasting full-scale wash. Flip the default back once
+	// the divergence is fixed.
+	PORT_START("DSPAUDIO")
+	PORT_CONFNAME(0x01, 0x00, "Effects DSP audio path (EXPERIMENTAL)")
+	PORT_CONFSETTING(0x00, "Bypassed (dry tone generator)")
+	PORT_CONFSETTING(0x01, "Through DSP (diverges: everlasting wash)")
+
 	PORT_START("VOL_MAIN")   PORT_ADJUSTER(80, "Main Volume")
 	PORT_START("VOL_APCSEQ") PORT_ADJUSTER(80, "APC / SEQ Volume")
 	PORT_START("VOL_MIC")    PORT_ADJUSTER(50, "Mic Volume")
