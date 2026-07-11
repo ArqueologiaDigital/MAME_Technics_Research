@@ -344,7 +344,9 @@ LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,10
 LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
 # first BEAT LED = START/STOP indicator (cpl1, lit on rhythm start); beats 2-4 not yet swept
-LB += [P("green_led",867+i*9,414,8,8, name=None) for i in range(4)] + [L("BEAT",905,452,28,7)]  # START/STOP LED (state identity)
+# BEAT 1-4 indicators: empirically swept while the rhythm plays -- they light in sequence per beat.
+_beatled=["cpl_led40","cpl_led48","cpl_led24","cpl_led32"]
+LB += [P("green_led",867+i*9,414,8,8, name=_beatled[i]) for i in range(4)] + [L("BEAT",905,452,28,7)]
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
