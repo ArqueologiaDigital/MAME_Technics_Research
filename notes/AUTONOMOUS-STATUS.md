@@ -14,6 +14,28 @@ floppy drive, hook the 4 volume sliders to what they control (some digitally set
 sound subsystem) + make them draggable via the Lua slider lib. For PAGE/CONTRAST buttons Felipe
 said: make an EDUCATED GUESS, he'll test + we refine. Cron: b9660922 (every 23 min).
 
+## ★ SESSION 2026-07-11l-o — reverb characterized to the limit of incremental instrumentation
+Deep core-instrumentation session (all reverted; tree clean; binary republished). Progress on the reverb:
+- The "divergence" is a large signal (~2e7 = input x Q) that SUSTAINS (doesn't decay), NOT exponential.
+  Magnitude-INDEPENDENT (a 50 ms blip sustains the same DC as a 2 s note) -> RULES OUT float precision.
+- CLEARED as the accumulator: DM coefficients (all damped), the float ops (exact), PM(I8)@0x9800 (holds
+  COEFFICIENTS not state), DM 0xC1xx (a descriptor TABLE), the circular-wrap off-by-one, the MODIFY
+  instruction (audited -- correct).
+- FULL-FRAME DM(I6) TRACE: every SDRAM tap does WRITE at X then READ at X-1, and X-1 is overwritten next
+  frame -> each tap's delay is ~L6/rate = **~6.4 s (the full buffer)**. A reverb needs ms delays; ~6.4 s
+  for every tap = a frozen, non-decaying wash = EXACTLY the symptom. So the LEADING root cause is now:
+  MAME produces the WRONG (full-buffer) delay length for the reverb taps. The buffer SCROLL (1/frame) is
+  managed by the DSP kernel's OUTER loop (the reverb subroutine saves/restores I6 at 0x8401/0x8402/
+  0x846c/0x846e); MODIFY(I6,+0x10747) at frame entry is correct. So if the delays are wrong it's in the
+  outer-loop I6 management or a DAG subtlety MAME runs differently than the ADSP-21065L.
+- HONEST ASSESSMENT: 4 sessions of incremental instrumentation have CHARACTERIZED this thoroughly but
+  not fixed it. The efficient path forward is a REFERENCE-DIFF: run the same reverb microprogram on a
+  known-good ADSP-2106x model (or hand-simulate one frame) and diff MAME's I6 trajectory / the delayed
+  values frame-by-frame -- that pinpoints the exact addressing divergence. Incremental core-tracing has
+  hit diminishing returns. Full detail: notes/dsp-effect-execution-chain.md sections 2026-07-11l..o.
+- Effects remain audible-but-not-faithful; the DRY passthrough is correct; default boot is the clean dry
+  sound (divergence only if a user selects a reverb). No shipped change (all diagnostic).
+
 ## ★ SESSION 2026-07-11k — reverb paradox pinned + blog Part 15 (honest correction of Part 13)
 - Instrumented the global TANK recirculation gain (`F10 = F10 * F9`, PM 0x844a): F9 = -0.280 CONSTANT
   (damped). So EVERY gain in the reverb is |<1| (allpass -0.618, tank -0.28, all coeffs damped), the
