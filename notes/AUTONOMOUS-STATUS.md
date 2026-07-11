@@ -40,6 +40,16 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~00:05 — chorus wet DECOUPLED from reverb depth (refinement)
+Fixed the shipped chorus's level coupling: the chorus return is now an INDEPENDENT wet added
+post-crossfade (own CHORUS_WET level, follows gret but not gdepth), carried separately in the DSP
+output ring. Reverb bit-identical off (A/B 0/2.11M); chorus-on re-verified (unit-4 250282, 69% LFO
+modulation), now independent of reverb depth. REMAINING chorus refinements: calibrate CHORUS_WET vs
+real balance (needs Felipe's ear); pick u4 vs u6 vs both from the send matrix; handle the dry-doubling
+question (unit-4 output = dry+wet or wet-only?). NEXT effects to make audible (same feed mechanism):
+identify SOUND DSP unit (send 0x8098/0x80C8) + MULTI unit (send 0x8298) + EQ (unit 8, master) and
+feed them. FLAG3-gated 4 records = the deep ping-pong part.
+
 ## ★★★★ TICK 2026-07-11 ~23:55 — FIRST AUDIBLE NON-REVERB EFFECT: chorus works!
 Caught + corrected a prior error (FLAG3 was overstated: only 4/72 records gate on it; chorus is
 non-gated). DECISIVE TEST proved chorus units (4/6 = rec06) OUTPUT when fed. IMPLEMENTED audible
