@@ -5,6 +5,25 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(11) — SELF-TEST (Felipe "resume"): dispatcher found; combo NOT via FIFO; FDC OK at boot
+Resumed the FD SAVE/LOAD self-test. Progress:
+- Ruled out the keybed FIFO (0x98050004) as the B3+B4 combo source: FIFO read-tap injection (cycling ->
+  runtime TRANSPOSE; single hold -> nothing) never enters the test, and a FULL BOOT TRACE (from reset)
+  shows 0x98050004 is read ONLY by the runtime drain 0x484480A2 (25 reads) -- no boot combo check there.
+  Also: Lua set_value can't fire the music-key PORT_CHANGED. So the combo is read via a RAW/panel source.
+- Found the service-test menu builder **0x4849F860** (boot-init 0x4842A59E; registers the FD SAVE/LOAD +
+  EV_TEST menu from tables 0x4874ACD4/ADC4/AF1C/AF90/AFF8 + handlers 0x4842A802/CB02 via register fn
+  0x4842A717). Menu is always REGISTERED; only ENTRY is combo-gated.
+- ★ The boot trace independently CONFIRMS the FDC model: the boot FDC init drives MSR 0x98020008 (read 51x)
+  + FIFO 0x9802000A -- the FDC @0x98020000 model is correctly exercised at boot. (Reinforces that the
+  format's failure is the RTOS-dispatch Heisenbug, not the FDC.)
+NEXT: the combo source is the panel/CP protocol (sub-CPU SIO 0x34000800 -> ring 0x5006bdb0) or an early raw
+keybed scan -- analyse how the power-on key/panel state is formed + where B3+B4 is tested, then model/inject
+it. Since the self-test's STOP/START are PANEL positions (MUTE UP 8/10), also try panel-button (SEG)
+injection at boot (B3+B4 may be panel matrix positions, not music keys). Then run w/ floptest_fat12.img,
+watch OK/NG -> validates the FDC end-to-end via the DIRECT FdTest path. Full: side-quests/findings/ +
+fdc-architecture.md addenda 25-27.
+
 ## TICK 2026-07-12 ~night(10) — SIDE-QUEST: floppy SAVE/LOAD self-test (Felipe) -- direct-FDC path, entry narrowed
 Felipe's side-quest (side-quests/floppy_disk_save_and_load_self_test.txt): boot holding music keys B3+B4 ->
 a floppy SAVE/LOAD FACTORY test that reads/writes real data and counts OK/NG. ★ HIGH VALUE: this test uses
