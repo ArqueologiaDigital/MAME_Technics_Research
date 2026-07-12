@@ -45,7 +45,9 @@ cat > "$DEST/run.sh" <<'SH'
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
-exec ./kn7000 "$MODEL" -rompath ./roms "$@"
+# -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
+# warnings screen, so the emulator boots straight in without needing a click to dismiss it.
+exec ./kn7000 "$MODEL" -rompath ./roms -skip_gameinfo "$@"
 SH
 chmod +x "$DEST/run.sh"
 

@@ -110,6 +110,27 @@ else:
     print("mame.lst: already registered")
 PY
 
+# 4b. Make -skip_gameinfo also skip the startup WARNINGS screen (idempotent).
+# The Technics drivers are MACHINE_NOT_WORKING and use a BAD_DUMP synthetic wave ROM, so MAME's
+# red "There are known problems with this system" screen shows on every launch and blocks until a
+# keypress. Stock MAME's -skip_gameinfo only gates the game-info screen, not the warnings screen
+# (ui.cpp: `bool show_warnings = true;`). This patch ties show_warnings to skip_gameinfo so our
+# launcher (run.sh passes -skip_gameinfo) boots straight into the instrument. Anyone running the
+# raw binary without -skip_gameinfo still sees the honest warning.
+python3 - "$BUILD_TREE/src/frontend/mame/ui/ui.cpp" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = '\tbool show_warnings = true;'
+new = '\tbool show_warnings = !machine().options().skip_gameinfo(); // KN7000: -skip_gameinfo also skips warnings'
+if old in s:
+    open(p, 'w').write(s.replace(old, new, 1))
+    print("ui.cpp: show_warnings tied to skip_gameinfo")
+elif 'KN7000: -skip_gameinfo also skips warnings' in s:
+    print("ui.cpp: already patched")
+else:
+    print("ui.cpp: WARNING anchor not found (upstream changed?) -- warnings screen not suppressed")
+PY
+
 # 5. Stage ROMs for a run test, if provided.
 if [ -n "$ROM_SRC" ] && [ -f "$ROM_SRC/kn7000_program.rom" ]; then
 	mkdir -p "$BUILD_TREE/roms/kn7000"
