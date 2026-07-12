@@ -104,3 +104,20 @@ stack: FS -> block device -> FDC). NEXT: disassemble 0x4842b30c and 0x4849fbd8 t
 would then reach the FDC stub and reveal its exact register offsets. The uPD765 stub scaffold is in place
 (0x98010000/0x98030000, audio-harmless, bit-identical reverb). This is the concrete next step for the
 floppy -- a bounded multi-step trace, no longer a mystery.
+
+## 2026-07-12 (4): FDC address NARROWED to 0x98010000 (0x98030000 eliminated)
+Firmware literal search (kn7000_program_decompressed.bin):
+- **0x98030000: 0 references** -> the FDC is NOT at 0x98030000 (removed from the stub).
+- **0x98010000: referenced as a chip-select BASE** in the boot bus-controller setup
+  (0x484009D0: `mov 0x98010000,d0; mov d0,(0x32000804)` -- programs the 0x32000000 bus/CS controller).
+  So 0x98010000 is a valid CS region; combined with the free-slot analysis (+0=DSP, +2/+6=sound ctrl,
+  +4/+5=TG, +7=strap) it is the STRONG FDC candidate. But it is NOT accessed at boot or during normal
+  operation (0 hits on the stub) -- the FDC is only touched on an actual disk op, which the device-gated
+  DISK menu doesn't reach. So 0x98010000 stays a strong-but-unverified candidate.
+- device struct 0x50071254 (holds the FDC-base runtime pointer) is set up entirely in the disk driver
+  region 0x4853xxxx (16 refs) -- but the FDC base there is computed at runtime, not a code literal, so a
+  literal search can't extract it.
+STATE: FDC = uPD765-family @ ~0x98010000 (best candidate), stub scaffold in place, DISK menu deeply
+device-gated. The remaining work (open the DISK menu by satisfying the layered drive-present/device gate,
+then confirm the FDC slot + register offsets, then wire upd765 + floppy_image + disk format) is a
+dedicated multi-tick effort. Groundwork is thorough; the mystery is gone.
