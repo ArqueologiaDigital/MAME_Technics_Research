@@ -40,6 +40,24 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★ TICK 2026-07-12 ~12:10 — SD LOAD FILE BROWSER WORKS + PAGE buttons validated on a real paged screen
+Two demonstrable validations this tick (SD image sdtest.hd = FAT16 "KN7000 TEST", 64MB, attached via
+-harddisk):
+1. **SD LOAD file browser is FULLY FUNCTIONAL**: SD MENU (SEG0D 0x80) -> LOAD (R1 = SEG11 0x10) opens
+   "SD LOAD, PAGE 1/3, SD-SOUND, 65,268KB free (0% used)" with FOLDER/SONG columns + FOLDER/ALPHABET/
+   NUMBER sort + PREV/NEXT. The card is DETECTED, the 64MB FAT16 MOUNTS, free space is correct. The
+   earlier "ERROR 93: SD lid is open" was correctly just NO CARD attached (SDCOVER default closed, but
+   card-present=false). So SD file-ops work end-to-end with a card. (Confirms the SD subsystem is more
+   complete than 'just mounts' -- the browser UI works.)
+2. **PAGE Up/Down VALIDATED on a real multi-page screen** (the exact priority-2 scenario): SD LOAD is
+   PAGE 1/3; PAGE UP (SEG0B 0x10) -> 2/3 (data-type load categories: CURRENT PANEL/PANEL MEMORY/SEQ/
+   EFFECT MEMORY/FAVORITES/ALL CUSTOM STYLE...) -> 3/3; PAGE DOWN (SEG0B 0x20) -> 2/3 (md5-identical to
+   the first 2/3). So PAGE Up/Down work correctly (1<->2<->3). Priority-2 PAGE fix re-confirmed on live
+   paged content, not just MULTI EFFECT.
+No code change (validation of existing functionality). SD LOAD note: it uses the SD-SPI path directly
+(device struct 0x50071254 stays zero -- the disk-driver/FDC abstraction is floppy-only, as established).
+Useful for the floppy: an SD image attaches via `-harddisk sdtest.hd`.
+
 ## TICK 2026-07-12 ~11:35 — FLOPPY fully mapped: disk path inits only on a FILE OP (SD menu bypasses via SPI)
 Decisive RAM evidence: 0x98010000 appears NOWHERE in RAM; the disk device struct 0x50071250 is ALL ZEROS
 (disk-driver abstraction not initialized); device table 0x5000097c = UI-object descriptors, not HW types.
