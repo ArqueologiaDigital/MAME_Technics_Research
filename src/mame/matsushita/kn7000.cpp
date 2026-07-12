@@ -802,6 +802,7 @@ public:
 		, m_sdcard(*this, "sdcard")
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
+		, m_fdcexp(*this, "FDCEXP")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
@@ -844,8 +845,11 @@ private:
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	optional_device<upd72067_device> m_fdc;        // IC103 floppy disk controller (uPD765-family)
 	optional_device<floppy_connector> m_floppy;    // the 3.5" floppy drive
-	uint8_t fdc_r(offs_t reg);                     // EXPERIMENTAL: FDC register access at 0x98010000
-	void    fdc_w(offs_t reg, uint8_t data);
+	uint8_t fdc_r(offs_t off);                     // EXPERIMENTAL: uPD765 access at 0x9CC00000 (opt-in)
+	void    fdc_w(offs_t off, uint8_t data);
+	void    fdc_irq_w(int state);                  // EXPERIMENTAL: FDC INTRQ (logging stub)
+	void    fdc_drq_w(int state);                  // EXPERIMENTAL: FDC DRQ (logging stub)
+	required_ioport m_fdcexp;              // EXPERIMENTAL floppy-FDC opt-in switch (default OFF)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	output_finder<512> m_cpl_leds;
@@ -1232,6 +1236,12 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// (paired with the index at 0x98000000), NOT LCD RAM. The framebuffer at
 	// 0x9CE00000 and the rest of the bank stay RAM (this narrower entry wins).
 	map(0x9c000000, 0x9c000003).rw(FUNC(kn7000_state::dsp_data_r), FUNC(kn7000_state::dsp_data_w));
+	// EXPERIMENTAL floppy FDC (uPD765 best-guess): MSR@0x9CC00000, Data FIFO@0x9CC00001. Only these TWO
+	// bytes are carved out (this narrower entry wins over the RAM) -- deliberately NOT the SD scan-enable
+	// byte at 0x9CC00004 nor the SD switches at 0x9CC00008, which stay RAM-backed. INERT unless the
+	// "Experimental floppy (FDC)" config switch is on: fdc_r/fdc_w gate on it at runtime and, when off,
+	// fall through to the LCD-RAM backing so nothing changes. Best-guess address/registers (rule g).
+	map(0x9cc00000, 0x9cc00001).rw(FUNC(kn7000_state::fdc_r), FUNC(kn7000_state::fdc_w));
 
 	// --- Stubs for regions whose behavior is still unknown --------------
 	// TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
@@ -1384,16 +1394,9 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
-	// IC103 floppy disk controller (uPD765-family). 0x98010000 is an UNCONFIRMED candidate: the boot
-	// bus-controller programs it as a chip-select base (0x484009D0: mov 0x98010000,d0; mov d0,(0x32000804))
-	// and no other peripheral claims that 0x98 sub-slot (TG=0x98040000, DSP=0x98000000, snd=0x98020000/
-	// 60000). It is NOT yet confirmed by a live access: at boot the FDC is untouched, and a live FORMAT
-	// aborts at a pre-FDC software gate before any FDC access (notes/fdc-architecture.md + floppy-fdc-
-	// investigation.md 2026-07-12) -- so no code path in the emulator has exercised the FDC to prove/refute
-	// the slot. This routing is harmless (0 accesses) and MAY be correct; keeps the UPD72067 + floppy slot
-	// present (images mount) until a live FDC access confirms the register layout.
-	if (offset >= 0x8000 && offset < 0x10000)
-		return fdc_r(offset - 0x8000);
+	// (The EXPERIMENTAL floppy FDC formerly probed here at 0x98010000 has moved to 0x9CC00000 and is now
+	// opt-in via the "Experimental floppy (FDC)" config switch; see fdc_r + machine_start. This 0x98 slot
+	// is no longer routed to it -- 0x98010000 was only a chip-select base, never touched by a live disk op.)
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
@@ -1431,12 +1434,7 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
 	}
-	// IC103 floppy disk controller (see io_r) -- UNCONFIRMED 0x98010000 candidate, harmless (0 accesses).
-	if (offset >= 0x8000 && offset < 0x10000)
-	{
-		fdc_w(offset - 0x8000, data & 0xff);
-		return;
-	}
+	// (EXPERIMENTAL floppy FDC moved from this 0x98 slot to 0x9CC00000, opt-in -- see io_r note + fdc_w.)
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
 		offset << 1, data, mem_mask);
 }
@@ -2575,6 +2573,16 @@ static INPUT_PORTS_START(kn7000)
 	PORT_CONFSETTING(   0x00, "Closed")
 	PORT_CONFSETTING(   0x01, "Open")
 
+	// EXPERIMENTAL floppy FDC. Default OFF: memory-maps a best-guess uPD765 (UPD72067) over
+	// 0x9CC00000..0x9CC00007 (MSR@+0, FIFO@+1) so a real disk op could reach it. UNCONFIRMED address +
+	// registers -- the firmware never reaches the FDC in emulation, and 0x9CC00000 shares its chip with
+	// the SD phantom buttons, so enabling this MAY perturb the (working) SD/boot and likely does not make
+	// the floppy work. Read at machine_start(); toggling needs a reset (it (re)installs the handler).
+	PORT_START("FDCEXP")
+	PORT_CONFNAME(0x01, 0x00, "Experimental floppy (FDC) at 0x9CC00000 [best-guess, may break SD]")
+	PORT_CONFSETTING(   0x00, "Off (default)")
+	PORT_CONFSETTING(   0x01, "On (experimental)")
+
 	// Music key bed: the FULL 61 keys (C2..C7). The FIFO value is the KEY INDEX
 	// (0 = bottom C2; firmware maps internal note = index + 36 = MIDI). Every key
 	// carries PORT_GM_NOTE musical-note markup, so a USB-MIDI controller mapped
@@ -2811,33 +2819,69 @@ void kn7000_state::machine_reset()
 	}
 }
 
-// EXPERIMENTAL FDC register access (IC103, uPD765-family @ 0x98010000 candidate). Routed from
-// io_r/io_w so the exact register offsets the firmware uses can be observed + refined. The 0x98010000
-// window is 16-bit; 'reg' is the word offset within it. LABELLED HACK -- unverified (rule g).
-uint8_t kn7000_state::fdc_r(offs_t reg)
+// ================= EXPERIMENTAL FDC (IC103, uPD765-family) at 0x9CC00000 =====================
+// *** EXPERIMENTAL / BEST-GUESS -- OFF by default, opt-in via the "Experimental floppy (FDC)"
+// *** machine-config switch. It very likely does NOT make the floppy work and may need reverting.
+// Rationale + caveats (full RE in notes/fdc-architecture.md):
+//  - The floppy FDC is IC103 (custom uPD765-family, DMA-driven). Its true bus address is UNCONFIRMED:
+//    the firmware never reaches the FDC in emulation (the FORMAT and every disk op stall in software
+//    before any hardware access -- the format polls a disk-command completion byte 0x5006BC19 that a
+//    disk task never sets). So the register layout below (uPD765 MSR@+0, Data FIFO@+1) is a GUESS.
+//  - 0x9CC00000 is the strongest disk-hardware candidate (the disk code at 0x4854Dxxx reads/writes
+//    0x9CC00000/+9/+1B/+1FC), BUT that region looks more like a control latch and it SHARES the chip
+//    with the SD phantom-button register at 0x9CC00008 -- so enabling this can perturb the (working)
+//    SD/boot. Hence config-gated + default OFF, and mapped only over 0x9CC00000..0x9CC00007 (the SD
+//    byte at +8 and the LCD framebuffer at 0x9CE00000 are untouched).
+// fdc_r/fdc_w are installed over 0x9CC00000..07 in machine_start() ONLY when the switch is on.
+uint8_t kn7000_state::fdc_r(offs_t off)
 {
-	if (!m_fdc) return 0x80;
-	uint8_t v;
-	switch (reg)
+	if (!(m_fdcexp->read() & 1))            // switch OFF: behave exactly like the LCD-RAM this map replaced
 	{
-	case 0: v = m_fdc->msr_r();  break;   // guess: Main Status Register at 0x98010000
-	case 2: v = m_fdc->fifo_r(); break;   // guess: Data FIFO at 0x98010004
-	default: v = 0x00; break;
+		uint32_t w = m_lcdbuf[(0x00C00000 + off) >> 2];
+		return (w >> (8 * (off & 3))) & 0xff;
+	}
+	if (!m_fdc) return 0xff;
+	uint8_t v;
+	switch (off & 7)
+	{
+	case 0: v = m_fdc->msr_r();  break;   // uPD765 Main Status Register (guess: +0)
+	case 1: v = m_fdc->fifo_r(); break;   // uPD765 Data FIFO             (guess: +1)
+	default: v = 0xff; break;
 	}
 	if (!machine().side_effects_disabled())
-		logerror("%s: FDC_R  0x%08X (reg %d) = %02X\n", machine().describe_context(), 0x98010000u + (reg << 1), reg, v);
+		logerror("%s: expFDC_R 0x%08X = %02X\n", machine().describe_context(), 0x9CC00000u + off, v);
 	return v;
 }
 
-void kn7000_state::fdc_w(offs_t reg, uint8_t data)
+void kn7000_state::fdc_w(offs_t off, uint8_t data)
 {
-	logerror("%s: FDC_W  0x%08X (reg %d) = %02X\n", machine().describe_context(), 0x98010000u + (reg << 1), reg, data);
-	if (!m_fdc) return;
-	switch (reg)
+	if (!(m_fdcexp->read() & 1))            // switch OFF: write through to the LCD-RAM backing
 	{
-	case 2: m_fdc->fifo_w(data); break;   // guess: Data FIFO
+		int sh = 8 * (off & 3);
+		uint32_t &w = m_lcdbuf[(0x00C00000 + off) >> 2];
+		w = (w & ~(0xffu << sh)) | (uint32_t(data) << sh);
+		return;
+	}
+	logerror("%s: expFDC_W 0x%08X = %02X\n", machine().describe_context(), 0x9CC00000u + off, data);
+	if (!m_fdc) return;
+	switch (off & 7)
+	{
+	case 0: m_fdc->dsr_w(data);  break;   // uPD765 Data-rate Select Reg (guess: +0 on write)
+	case 1: m_fdc->fifo_w(data); break;   // uPD765 Data FIFO            (guess: +1)
 	default: break;
 	}
+}
+
+// FDC interrupt / DMA request lines. EXPERIMENTAL: routed to logging stubs, NOT to a maincpu IRQ line
+// (the MN10300 IRQ the FDC.INT connects to is unknown; wiring a wrong line would inject spurious IRQs).
+// Once a live FDC access is observed these can be connected to the right interrupt.
+void kn7000_state::fdc_irq_w(int state)
+{
+	logerror("%s: expFDC INTRQ = %d\n", machine().describe_context(), state);
+}
+void kn7000_state::fdc_drq_w(int state)
+{
+	logerror("%s: expFDC DRQ = %d\n", machine().describe_context(), state);
 }
 
 static void kn7000_floppies(device_slot_interface &device)
@@ -2924,14 +2968,15 @@ void kn7000_state::kn7000(machine_config &config)
 	m_sdcard->spi_miso_callback().set(FUNC(kn7000_state::sd_miso_w));
 
 	// IC103 floppy disk controller (uPD765-family, custom C1DB00000607) + 3.5" drive.
-	// The device exists so floppy images mount and the DISK menu / FORMAT tool are exercisable
-	// (full nav reversed: DISK=SEG0D 0x04 -> FORMAT=SEG11 0x10 -> confirm=PAGE UP -> YES=SEG13 0x01;
-	// the format EXECUTES). The 0x98010000 bus address is an UNCONFIRMED candidate (a chip-select base
-	// programmed by the boot bus-controller, no other 0x98 peripheral claims it) -- not yet exercised by
-	// a live FDC access: boot leaves the FDC untouched and the FORMAT aborts at a pre-FDC software gate
-	// (notes/fdc-architecture.md). So formats/saves don't yet write the image. IRQ/DMA not wired. Clock
-	// matches the KN5000 sibling's UPD72068 (unverified here).
+	// The device always exists so floppy images mount and the DISK menu / FORMAT tool are exercisable
+	// (full nav reversed: DISK=SEG0D 0x04 -> FORMAT=SEG11 0x10 -> confirm=PAGE UP -> YES=SEG13 0x01).
+	// EXPERIMENTAL: it is only MEMORY-MAPPED (at 0x9CC00000) when the "Experimental floppy (FDC)" config
+	// switch is on -- see machine_start(). Its bus address/registers are UNCONFIRMED (the firmware never
+	// reaches the FDC in emulation; notes/fdc-architecture.md), so this is a labelled best-guess that may
+	// not work. Clock matches the KN5000 sibling's UPD72068 (unverified here).
 	UPD72067(config, m_fdc, 32'000'000);
+	m_fdc->intrq_wr_callback().set(FUNC(kn7000_state::fdc_irq_w));   // EXPERIMENTAL: logging stub (see fdc_irq_w)
+	m_fdc->drq_wr_callback().set(FUNC(kn7000_state::fdc_drq_w));     // EXPERIMENTAL: logging stub
 	// PC floppy formats: KN7000 disks are FAT12 and "interchangeable with a PC" (standard IBM-PC MFM),
 	// so use default_pc_floppy_formats -- it adds FLOPPY_PC_FORMAT (raw .img round-trip) on top of the
 	// MFM containers, unlike the KN5000's default_mfm_floppy_formats which cannot load a raw PC image.

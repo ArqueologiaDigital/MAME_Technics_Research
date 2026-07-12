@@ -227,3 +227,21 @@ never raises. IMPLEMENTATION requires: locate the disk task's create + message l
 lib 0x4C03D0C8), confirm it runs, see how it dispatches to 0x484A50xx, and what it waits on before
 issuing the FDC command -- THEN model the FDC/disk controller (0x9CC00000 region) + its IRQ so the
 handler completes. This is a multi-tick RTOS+HW effort; the exact wait/dispatch is the crux, all mapped.
+
+## 2026-07-12 (addendum 8): EXPERIMENTAL FDC IMPLEMENTED at 0x9CC00000 (opt-in, Felipe-authorized)
+Per Felipe ("implement a clearly-labeled experimental FDC at the 0x9CC00000/uPD765 best-guess, accepting
+it may not work and may need reverting"), shipped an OPT-IN experimental FDC:
+- New config switch **"Experimental floppy (FDC) at 0x9CC00000"** (PORT "FDCEXP"), DEFAULT OFF.
+- When ON, `fdc_r`/`fdc_w` memory-map the UPD72067 over **0x9CC00000 (MSR) + 0x9CC00001 (FIFO)** only --
+  deliberately NOT the SD scan-enable byte 0x9CC00004 nor the SD switches 0x9CC00008 (those stay RAM).
+- Runtime-gated (NOT machine_start -- the cfg isn't applied yet there): fdc_r/fdc_w check FDCEXP each
+  access; when OFF they fall through to the LCD-RAM backing so behaviour is byte-identical to before.
+- INTRQ/DRQ -> logging stubs (fdc_irq_w/fdc_drq_w), NOT wired to a maincpu IRQ (the MN10300 line is
+  unknown; a wrong line would inject spurious IRQs). The floppy drive + PC formats stay wired so images
+  mount regardless of the switch.
+VERIFIED: OFF = zero regression (boots to PMEM home, note plays, SD path intact). ON = boots to PMEM home
+too, and the FDC ENGAGES -- the boot disk-init read of 0x9CC00000 (pc 0x4854D725) now hits `msr_r()`
+instead of RAM. As expected it does NOT make the floppy work: the FORMAT still stalls upstream (the disk
+task never services the command, so 0x9CC00000 is never accessed during a format -- addenda 6-7). So this
+is a faithful, clearly-labelled best-guess device model, ready for when the disk-command-dispatch blocker
+is resolved; it can be reverted by leaving the switch OFF (its default) or removing the FDCEXP map.
