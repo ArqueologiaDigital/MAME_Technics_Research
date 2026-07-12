@@ -45,3 +45,23 @@ DEVICE (drive "A:"), and 0x4846da31's block reads sit BELOW it on a block device
 register base is a runtime pointer. The FDC hardware address is therefore a further layer down
 (FS -> block device -> FDC). Confirmed: locating it needs a live disk op (drive DISK MENU with a
 floppy image) + a breakpoint on 0x4846da39, not static tracing. Deferred to a dedicated tick.
+
+## 2026-07-12: exploration with the new register-read-at-tap capability -- FDC still not reached
+Tried to reach the FDC via the DISK MENU using the new tracing capability (read cpu.state A0-A3/PC at a
+data-access tap; scratchpad/retcap/fdchunt.lua). Findings:
+- Pressing SEG0D 0x40 ("DISK MENU") did NOT open a disk menu -- the LCD stayed on the HOME/PMEM screen.
+  So either that bit isn't the DISK-MENU event in this context, or the menu needs more.
+- It DID trigger a heavy copy from **0x84000000** (via lib PC 0x4C0234E2 / 0x4C01F23B into RAM 0x50014Bxx,
+  660k+ reads). FALSE LEAD: 0x84000000 is MODELED RAM (alias of 0x44000000, driver `map(0x84000000,
+  0x84ffffff).ram().share("ram44")`) -- NOT the FDC. Disasm at 0x4C01F220 confirms it's RAM offset math
+  (`sub 0x84000000,d1; movbu (a1)...`), a RAM read/modify, not device I/O.
+- Candidate external-bus regions (0x30/0x32/0x38-0x3F/0x42-0x47/0x60-0x8F/0xA0-0xBF) showed only a boot
+  peripheral-controller config at **0x32000000** (0x32000010-0x44, PCs 0x4840FFxx/0x484D71xx -- a
+  bus/DRAM/chip-select controller, NOT the FDC) and a boot upload at 0x8C000000. None disk-triggered.
+CONCLUSION: the FDC (IC103) is still NOT reached -- it only appears on an actual disk Load/dir op deep in
+the DISK menu, which I could not open with SEG0D 0x40 alone. Confirms this is a genuine multi-tick task
+(open the DISK menu reliably -> trigger a disk op -> catch the FDC base via the register-read tap ->
+identify the chip -> model FDC + disk format + wire the 3 driver slots). The register-read-at-tap
+capability IS the right tool for the FDC-base step once a disk op runs; the blocker now is UI navigation
+into a working DISK menu + likely a floppy image. Deferred; groundwork saved so the next attempt skips
+the 0x84000000 false lead.
