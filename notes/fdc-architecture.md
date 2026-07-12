@@ -443,3 +443,23 @@ DMA/TC via 0x98010000, IRQ via the FDC's INT; insert a floppy image so DSKCHG/IN
 This supersedes addenda 8-14's "FDC not locatable / dead code" -- the dead 0x484A4FBA/0x9CC00000 path was
 a red herring; the LIVE FDC is 0x98020000 and the firmware DOES drive it. NEXT: trace the full 0x9802000x
 sequence (boot init + format) to pin the exact register semantics, then implement.
+
+## 2026-07-12 (addendum 16): format REACHES the FDC + busy-polls MSR (needs command completion + DMA)
+Debugger trace of the format-execute (fx2.tr, 38.7M lines, correct nav): the format DOES drive the FDC.
+- FDC micro-op dispatcher **0x48400084** runs 14x (command codes 0x80-0x84 = timed DOR reset/restore
+  primitives, sequenced by the state machine 0x50000010/0x50000020). Format FDC code 0x484027xx runs.
+- Then it **busy-polls MSR (0x98020008) 230,052x at PC 0x48400145** (read MSR -> helper) waiting for the
+  FDC command to complete. DOR was written 0x1C (bit3 = DMA gate SET) -> the FORMAT TRACK command is in
+  DMA mode. **No DMA happens** (0x98010000 = FDC.DACK is NOT accessed = 0; no 0x34000 DMAC access either)
+  -> the FDC's FORMAT TRACK never gets its sector-ID data -> stays in execution phase -> MSR never reaches
+  the state the firmware waits for -> busy-poll forever -> (eventual timeout ->) ERROR 08.
+- So the REMAINING blocker is FDC command completion: (1) the FORMAT TRACK data phase needs DMA -- either
+  the MN10300 internal DMAC (FDC.DRQ->DACK->TC) driving RAM<->FDC, or a software-DMA path; the firmware
+  reads 0x98010000 (DACK) elsewhere (0x48403068) so map 0x98010000 -> m_fdc->dma_r()/dma_w(); (2) assert
+  TC (terminal count) at the byte count to end the command; (3) verify my N82077AA model executes FORMAT
+  TRACK and sets MSR/INT correctly. NEXT: disassemble the MSR-poll helper at 0x48400145's callee to see
+  EXACTLY which MSR bit(s) the firmware waits for, then make the FDC reach that state.
+- CAVEAT (investigate): a memory-tap run (fdcstep.lua, no debugger) showed 0 FDC accesses and the format
+  returned to the DISK menu quickly, while the debugger-trace run showed 230k MSR polls -- the FDC-reset
+  state machine uses timing delays (0x50000010/20) so the path may be timing-sensitive / the tap run
+  diverged. Re-verify the FDC IS reliably reached (tap the MSR poll PC 0x48400145 without the debugger).
