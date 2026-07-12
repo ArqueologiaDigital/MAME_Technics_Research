@@ -209,3 +209,21 @@ buttons). IMPLEMENTATION PATH: (1) confirm 0x9CC00000 is the FDC/disk controller
 boot access + what it reads; (2) find why the format's disk command isn't serviced (the completion writer
 never runs); (3) model the disk controller at 0x9CC00000 so the command completes. bpset is unusable
 (addendum 5) -- use taps + stack-walk + `trace`.
+
+## 2026-07-12 (addendum 7): the completion-writer is 0x4849FBC8, called by disk-task handlers that never run
+The setter of status byte 0x5006BC19 (+0x1F9) is **0x4849FBC8** = `SetCompletion(d0)` (store `movbu d2,
+(0x1f9,a0)` at 0x4849FBCE, a0=struct base). Its callers pass the completion codes:
+- **0x484A50A9**: `mov 0xFB,d0 ; call 0x4849FBC8` -- disk-task ERROR-completion path (0x484A5090 block,
+  after calls 0x484A0B6D / 0x484ABB98; also posts 0xFB via 0x4842B3F4 and calls 0x484D791D).
+- **0x484A519F**: `mov 0xF6,d0 ; call 0x4849FBC8` -- another completion.
+So the completion codes the format waits for (0xFB/0xFC/0xF6) are written by the DISK-TASK command
+handlers (0x484A50xx). Those handlers NEVER RUN during the format (0x5006BC19 stays 0x00) -> the disk
+task is not servicing the posted command. Since the disk task would ACCESS the FDC hardware inside those
+handlers, and NO hardware is touched (0x00-0xBF all clean), the disk task never even starts the command.
+ROOT CAUSE (best reliable understanding): the format posts a disk command and blocks on its completion,
+but the disk task's command handler (0x484A50xx) is not dispatched -- either the task isn't scheduled,
+the command isn't enqueued to it, or it blocks on a hardware event (an FDC IRQ) that the unmodelled FDC
+never raises. IMPLEMENTATION requires: locate the disk task's create + message loop (RTOS task-create
+lib 0x4C03D0C8), confirm it runs, see how it dispatches to 0x484A50xx, and what it waits on before
+issuing the FDC command -- THEN model the FDC/disk controller (0x9CC00000 region) + its IRQ so the
+handler completes. This is a multi-tick RTOS+HW effort; the exact wait/dispatch is the crux, all mapped.
