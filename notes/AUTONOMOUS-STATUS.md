@@ -40,6 +40,24 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~08:40 — chorus-depth DEFINITIVELY mapped (addr 0x500CE342) + 2 corrections; thread CLOSED (minor)
+Used the register-read-at-tap capability to finish mapping the chorus-depth mechanism (and correct two of
+my own earlier errors): the per-effect DEPTH array is **0x500CE340** (sound-dsp @+0, CHORUS depth @+2 =
+0x500CE342). It is WRITTEN on EVERY effect toggle by PC 0x4C037DA8 -- value 0 in the cold-chorus context,
+0x3C in the sound-dsp context. CORRECTS my prior "depth is STORED not computed" (I'd tapped 0x500Bxxxx and
+missed 0x500Cxxxx) -- it's COMPUTED per toggle. The value differs by the per-part iteration context (A1
+part-settings pointer 0x500BA862 cold vs 0x500BA800 sound-dsp + the bit2 gate from func 0x4C005000). Full
+map: emitter 0x4C036FBA <- wrapper 0x4C037DB9 <- send-writer 0x4C005000 (bit2-gated depth read) -> depth
+store 0x4C037DA8 -> 0x500CE342. CLOSING this thread: thoroughly mapped, MINOR (chorus audible via its
+screen; only the quick home toggle leaves depth 0), diminishing returns. Reusable stack-walk +
+register-read-at-tap capability is the durable win (also unblocks the floppy FDC trace). No code change
+(rule g). Full detail: notes/per-part-effect-application.md.
+HONEST STATE: all 5 priorities done/ear-blocked; driver in excellent shape. Remaining threads: floppy
+(valuable, BIG multi-tick, needs a disk image + format RE + the FDC model), volume sliders (need per-part
+separation), reverb/wet loudness cal (ear-blocked), chorus-depth (mapped, minor, deferred). The productive
+autonomous scope is essentially complete; the biggest remaining lever (per-part effect model / floppy) is
+a multi-tick effort best scoped with Felipe.
+
 ## TICK 2026-07-12 ~08:00 — REUSABLE stack-walk capability + chorus depth-read logic traced
 Unblocked the caller-tracing wall. MAME has NO Lua debug/bp interface without -debug, BUT cpu.state
 exposes PC/SP/A0-A3/D0-D3/MDR -> at a DATA-access write-tap, read SP and walk the stack for lib return
