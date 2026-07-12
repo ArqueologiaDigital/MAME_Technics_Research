@@ -522,3 +522,28 @@ THE FIX (concrete, in the driver -- the INTC is already modelled: intc_assert(gr
    count-based; check the ISR's end path (bclr 0x36008004 bit4 + 0x34000160 read).
 Once wired, FORMAT TRACK should complete and write a valid FAT12 layout. This is the last piece; everything
 up to it (FDC @0x98020000 N82077AA, command issue, MSR poll) is proven correct.
+
+## 2026-07-12 (addendum 19): FDC fully wired, but format doesn't RELIABLY reach it (timing/race)
+Wired the software-DMA (commit: drq/intrq -> intc_assert(0x18); 0x98010000 -> dma_r/dma_w). Boot: no
+regression, no interrupt storm. BUT testing exposed a deeper, pre-existing issue:
+- With the DEBUGGER (-debug -debugger none), the format-execute DOES reach the FDC (fx2.tr: dispatcher
+  0x48400084, FORMAT TRACK issued, MSR busy-poll 230k).
+- WITHOUT the debugger (plain tap runs, incl. before the DMA wiring), the format touches the FDC **0
+  times** (DACK=0, FIFO=0 through +18s), shows ERROR 08, and returns to the DISK menu -- i.e. it errors in
+  the class-5 disk-task SOFTWARE dispatch BEFORE any FDC access (matches the earlier night/night(2)
+  analysis: the disk task errors without hardware I/O).
+=> The format's reaching-the-FDC is TIMING/RACE sensitive. Real hardware formats disks, so the no-debugger
+   "errors before the FDC" behaviour is an EMULATION bug -- likely a race in the RTOS disk-task dispatch
+   (timers/interrupts/the audio+DSP threads) that makes the class-5 disk op fail early. The debugger's
+   different scheduling masks it. (Note MAME emulates in emulated-time, so a pure CPU-vs-timer ratio
+   shouldn't change with the debugger -- this points to a genuine race / non-determinism, possibly the
+   DSP-bridge audio thread or an interrupt-delivery ordering.)
+STATE: the FDC is now correctly located (0x98020000), modelled (N82077AA), and wired (INTC grp 0x18 + DACK
+0x98010000) -- all faithful + committed + no regression. The remaining blocker is NOT the FDC; it is the
+class-5 disk-task early-error that stops the format from reaching the FDC in normal (no-debugger) runs.
+NEXT: (1) reproduce the divergence deterministically -- run the format WITHOUT the debugger but capture via
+memory taps where the class-5 disk task errors (the ERROR-08 decision point 0x484ADxxx / the completion
+byte / the disk-op result), and compare against the debugger run's path to find the diverging branch;
+(2) suspect the FDC RESET path -- the format's FDC init resets the FDC (DOR pulse) which with intrq wired
+now fires intc_assert(0x18); check whether that reset-interrupt (or its absence) is what flips the branch;
+(3) once the format reaches the FDC reliably, the DMA wiring should carry it through FORMAT TRACK.
