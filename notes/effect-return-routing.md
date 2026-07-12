@@ -81,3 +81,27 @@ DSP (SEG0F 0x08) and REVERB (SEG0F 0x04) engage reliably. Chorus/multi AUDIO out
 validated via the divergence sweep's screen-navigation (R1B chorus 8 types, M1-M5 multi). This is a
 panel-mapping loose end (relates to priority 2), NOT a return-routing bug -- the send=0 is upstream of
 the mix fix.
+
+## 2026-07-12 (later): the chorus/multi "toggle" finding CHARACTERIZED — context-dependent, likely faithful
+Followed up last note's "chorus/multi toggles don't engage" flag with a proper characterization
+(scratchpad/retcap/chartog*.lua, flagcheck.lua). Reading the SEND LOW BYTE (the actual level; high byte
+is a separate field I initially misread):
+- Fresh home screen: pressing CHORUS (SEG11 0x04) x3 -> send stays 0x0B00 (low 0 = off). No engage.
+- After a SOUND DSP (SEG0F 0x08) toggle: CHORUS press -> 0x0B00->0x0B3C (low 0x3C = ON), press again ->
+  off; MULTI press -> 0x0800->0x0650 (low 0x50 = ON). BOTH engage.
+- After a REVERB toggle (only): CHORUS still does NOT engage; MULTI's high byte moves but low byte stays
+  0 (still off). PART SELECT alone also does not enable CHORUS.
+So chorus/multi on/off are REPRODUCIBLY CONTEXT-DEPENDENT: they engage in certain panel contexts
+(observed: after a SOUND DSP interaction) but not from a cold home screen. REVERB and SOUND DSP toggles
+engage standalone.
+INTERPRETATION: the driver runs the REAL firmware, so the button->event->send chain is all firmware
+logic -- this context-dependence is almost certainly FAITHFUL behavior (CHORUS/MULTI are GLOBAL-effect
+buttons whose on/off the firmware gates on a per-part / effect-edit context; see panel-completion-plan's
+note that the 0x2010 effect-button family is context-dependent), NOT an emulation bug. CORRECTION to the
+prior note: it is wrong to call this a "panel loose end that doesn't engage" -- chorus/multi DO engage
+and toggle correctly in the right context; the earlier test simply pressed them from a cold home screen.
+Whether the panel HLE delivers the event in EVERY context is unverified (would need firmware event/LED
+tracing), but there is no evidence of a delivery bug -- REVERB/SOUND DSP prove the HLE path works, and
+the gating is on the firmware side. NOT changing anything (rule g: nothing is clearly broken). Deeper
+resolution (the exact firmware gating condition) belongs to the per-part effect model, which is future
+work and not required for the effects to be controllable.
