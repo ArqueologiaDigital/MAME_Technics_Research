@@ -86,3 +86,32 @@ format has its own low-level format-track routine gated on a "disk present/ready
   disk-present flag is set, so it is NOT an independent shortcut.
 - Static alternative: resolve the floppy entry in the device table 0x500079F8 registration (its read fn
   = the FDC method) -- the registration writer wasn't found via the 0x50007A48 literal (only reads there).
+
+## 2026-07-12 (addendum): format = poll-for-task-completion; factory diag hits 0x9C/0x9E hardware
+Live tap of the disk-state struct 0x5006BA20 during the format (SEG13 0x01 YES) shows the format is a
+**poll-for-completion** loop: it spins reading three status bytes -- +0x1F9 (0x5006BC19, via 0x4849FBD8),
++0x203 (0x5006BC23, via getter 0x484A4F9C), +0x204 (0x5006BC24, via getter 0x484A4FAB) -- ~2700 reads
+total, then times out and returns to the DISK menu. Those bytes are set by the DISK TASK on completion;
+the format posts a command (0x484298A0 -> dispatcher 0x484285E4 -> task table 0x5000757C) and waits. The
+task never completes (its FDC I/O never finishes) -> timeout -> abort. So the format itself never touches
+the FDC; the FDC access is in the disk task, which stalls.
+
+**Factory power-on diagnostic path (bit-15 gated) reveals candidate FDC hardware in the 0x9C/0x9E region.**
+0x484A4FBA reads the strap 0x98070000 and `btst 0x8000` (bit 15): CLEAR -> run the diagnostic ops
+(0x484A4FE3+ = 0x4854D835, 0x4849FFE3, 0x484A005A...), SET -> skip. The driver deliberately sets bit 15
+(io_r 0x38000) to skip this diagnostic. Disassembly of the gated ops shows real device I/O:
+- 0x484A005A: `movbu (a0),d0` / `movbu d0,(a0)` FIFO-style poll on a register, plus writes to
+  **0x9CC001FC**, **0x9CE00000 / 0x9CE00004 / 0x9CE00008** (16-bit data words), with a delay call
+  (0x484A4EE4) between -- classic FDC command/data + status-poll, OR an external-device test.
+- 0x4854D835 path: `bclr 0x08,(0x9CC00009)` / `bset 0x08,(0x9CC00009)` -- a control-register bit toggle.
+- 0x484A4F60: writes **0x90C00000** (d1 = 0x10200048/0x10200000) and **0x90008020** -- another device.
+NOTE the 0x9CC00000 region also holds the phantom buttons (0x9CC00008) [[kn7000-sd-strap-gate]]; the FDC
+may be a sibling sub-slot (0x9CC001FC / 0x9CE00000). VERIFIED the format does NOT call these (breakpoints
+fire zero times during a normal format) -- they are the factory-diagnostic path.
+
+**Strong new hypothesis: the FDC is in the 0x9C/0x9E region (0x9CE00000 data + 0x9CC00009 control), NOT
+0x98010000.** The factory diagnostic tests it there; the normal disk-task FDC I/O likely uses the same
+hardware via a different code path. CONCRETE NEXT EXPERIMENT: add a config to CLEAR strap bit 15, run,
+and tap 0x90000000-0x9FFFFFFF -- watch the diagnostic exercise 0x9CE00000/0x9CC00009/0x90C00000 (confirms
+the device map). Then find the disk task's handler (breakpoint 0x484285E4 dispatch during the format to
+get the task index/handler) and its FDC I/O to nail the normal-mode FDC base + register layout.
