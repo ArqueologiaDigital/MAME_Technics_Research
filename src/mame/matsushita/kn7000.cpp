@@ -343,6 +343,9 @@ public:
 			if (tg == 1 && ch == 0x09 && reg == 0x08)
 				m_gain_dsp = float(data & 0x7F) / 127.0f;     // SOUND DSP send (0x8098 low7 = per-part depth;
 				                                              // routes to SOUND-DSP unit 9, rec49)
+			if (tg == 1 && ch == 0x29 && reg == 0x08)
+				m_gain_multi = float(data & 0x7F) / 127.0f;   // MULTI send (0x8298 low7 = per-part MULTI DEPTH;
+				                                              // routes to MULTI unit 1, rec15 -- type-diff confirmed)
 		}
 		else if (cls == 0x1C02)                           // per-voice aux/mode word
 		{
@@ -365,6 +368,7 @@ public:
 	float gain_depth()  const { return m_gain_depth; }
 	float gain_chorus() const { return m_gain_chorus; }
 	float gain_dsp()    const { return m_gain_dsp; }
+	float gain_multi()  const { return m_gain_multi; }
 
 	// Keybed coupling for GATE-FOLLOW voices. The SUB TG chip itself hosts the key-bed
 	// event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
@@ -535,6 +539,7 @@ private:
 	std::atomic<float> m_gain_depth{ float(0x50) / 127.0f };  // REVERB TOTAL DEPTH (0x8338 low7, default 0x50)
 	std::atomic<float> m_gain_chorus{ 0.0f };   // CHORUS send (0x8198 low7); 0 = chorus off (default)
 	std::atomic<float> m_gain_dsp{ 0.0f };      // SOUND DSP send (0x8098 low7); 0 = off (default)
+	std::atomic<float> m_gain_multi{ 0.0f };    // MULTI send (0x8298 low7); 0 = off (default)
 	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
@@ -593,12 +598,13 @@ public:
 		}
 		else { l = r = rawl = rawr = 0; }   // underflow: DSP consumed ahead of the stream (brief; harmless)
 	}
-	void push_output(int32_t l, int32_t r, int32_t cl = 0, int32_t cr = 0, int32_t dl = 0, int32_t dr = 0)
+	void push_output(int32_t l, int32_t r, int32_t cl = 0, int32_t cr = 0, int32_t dl = 0, int32_t dr = 0, int32_t ml = 0, int32_t mr = 0)
 	{
 		if (!m_dsp_active) { m_dsp_active = true; m_rx_rd = m_rx_wr; }   // first output: flush stale pre-DSP input
 		m_tx[m_tx_wr][0] = l; m_tx[m_tx_wr][1] = r;
 		m_tx[m_tx_wr][2] = cl; m_tx[m_tx_wr][3] = cr;   // chorus return (0 when chorus off -> no effect)
 		m_tx[m_tx_wr][4] = dl; m_tx[m_tx_wr][5] = dr;   // sound-dsp return (0 when off -> no effect)
+		m_tx[m_tx_wr][6] = ml; m_tx[m_tx_wr][7] = mr;   // multi return (0 when off -> no effect)
 		m_tx_wr = (m_tx_wr + 1) % RING;
 		if (m_tx_wr == m_tx_rd) m_tx_rd = (m_tx_rd + 1) % RING;   // overflow: drop oldest (bound latency)
 	}
@@ -662,18 +668,19 @@ protected:
 				// (latent) DSP output with the immediate TG phase-cancels and clicks.
 				const uint32_t fill = (m_tx_wr - m_tx_rd + RING) % RING;
 				if (!m_tx_primed && fill >= PRIME) m_tx_primed = true;
-				int32_t chl, chr, ddl, ddr;
+				int32_t chl, chr, ddl, ddr, mml, mmr;
 				if (m_tx_primed && m_tx_rd != m_tx_wr)
 				{
 					ol = m_tx[m_tx_rd][0]; orr = m_tx[m_tx_rd][1];
 					chl = m_tx[m_tx_rd][2]; chr = m_tx[m_tx_rd][3];
 					ddl = m_tx[m_tx_rd][4]; ddr = m_tx[m_tx_rd][5];
+					mml = m_tx[m_tx_rd][6]; mmr = m_tx[m_tx_rd][7];
 					m_tx_rd = (m_tx_rd + 1) % RING;
 					m_tx_last[0] = ol; m_tx_last[1] = orr; m_tx_last[2] = chl; m_tx_last[3] = chr;
-					m_tx_last[4] = ddl; m_tx_last[5] = ddr;
+					m_tx_last[4] = ddl; m_tx_last[5] = ddr; m_tx_last[6] = mml; m_tx_last[7] = mmr;
 				}
 				else { ol = m_tx_last[0]; orr = m_tx_last[1]; chl = m_tx_last[2]; chr = m_tx_last[3];
-				       ddl = m_tx_last[4]; ddr = m_tx_last[5]; }
+				       ddl = m_tx_last[4]; ddr = m_tx_last[5]; mml = m_tx_last[6]; mmr = m_tx_last[7]; }
 				// DAC-side crossfade (reverb toggle): DSP return vs TG direct. With reverb ON
 				// the pair is {direct 0, return 7F}; OFF is {direct 7F, return 0} -- so OFF
 				// also mutes the (currently diverging) reverb tank at the DAC, exactly as the
@@ -692,6 +699,10 @@ protected:
 				constexpr double DSP_WET = 0.60;
 				ol  += int32_t(double(ddl) * gret * DSP_WET);
 				orr += int32_t(double(ddr) * gret * DSP_WET);
+				// MULTI (unit 1) return: another independent wet, same treatment.
+				constexpr double MULTI_WET = 0.60;
+				ol  += int32_t(double(mml) * gret * MULTI_WET);
+				orr += int32_t(double(mmr) * gret * MULTI_WET);
 			}
 			// Front-panel MAIN VOLUME slider: a master output attenuation on the final mix
 			// (modelled as a post-DAC analog-style gain; the driver pushes the taper via
@@ -708,11 +719,11 @@ private:
 	sound_stream *m_stream = nullptr;
 	int32_t m_rx[RING][2] = { };   // TG -> DSP input
 	int32_t m_rxraw[RING][2] = { };// raw (un-send-scaled) TG mix, parallel to m_rx (chorus feed)
-	int32_t m_tx[RING][6] = { };   // DSP output ring: [0/1]=reverb(u0) [2/3]=chorus(u4) [4/5]=sound-dsp(u9)
+	int32_t m_tx[RING][8] = { };   // DSP output ring: [0/1]=reverb(u0) [2/3]=chorus(u4) [4/5]=sound-dsp(u9) [6/7]=multi(u1)
 	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
 	bool m_dsp_active = false;     // the DSP has started producing output
 	bool m_tx_primed = false;      // the output latency buffer has filled
-	int32_t m_tx_last[6] = { };    // last DSP output (held on underflow): reverb + chorus + sound-dsp
+	int32_t m_tx_last[8] = { };    // last DSP output (held on underflow): reverb + chorus + sound-dsp + multi
 	std::atomic<float> m_master_gain{ 1.0f };   // MAIN VOLUME slider (audio thread reads, driver writes)
 	std::atomic<float> m_gain_send{ 0.80f };    // TG -> DSP send level (reverb toggle)
 	std::atomic<float> m_gain_direct{ 0.0f };   // DAC: TG direct (reverb-OFF side)
@@ -1681,9 +1692,10 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		// output); correct for the common single-part case.
 		const float chsend = m_tonegen->gain_chorus();
 		const float dspsend = m_tonegen->gain_dsp();   // SOUND DSP send (unit 9), same feed pattern
+		const float mulsend = m_tonegen->gain_multi(); // MULTI send (unit 1), same feed pattern
 		const int32_t oL = sx24(dm.read_dword(obuf));
 		const int32_t oR = sx24(dm.read_dword(obuf + 1));
-		int32_t cL = 0, cR = 0, dL = 0, dR = 0;
+		int32_t cL = 0, cR = 0, dL = 0, dR = 0, mL = 0, mR = 0;
 		if (chsend > 0.0f)
 		{
 			cL = sx24(dm.read_dword(0xC34A));   // chorus (unit 4) return from last frame
@@ -1694,7 +1706,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 			dL = sx24(dm.read_dword(0xC356));   // SOUND DSP (unit 9) return from last frame
 			dR = sx24(dm.read_dword(0xC357));
 		}
-		m_dspbridge->push_output(oL, oR, cL, cR, dL, dR);   // reverb + chorus + sound-dsp, separate wets
+		if (mulsend > 0.0f)
+		{
+			mL = sx24(dm.read_dword(0xC344));   // MULTI (unit 1) return from last frame
+			mR = sx24(dm.read_dword(0xC345));
+		}
+		m_dspbridge->push_output(oL, oR, cL, cR, dL, dR, mL, mR);   // reverb + chorus + sound-dsp + multi
 		int32_t il = 0, ir = 0, rawl = 0, rawr = 0;
 		m_dspbridge->pop_input(il, ir, rawl, rawr);
 		// The kernel programs the SPORTs with DTYPE=01 (SPCTL 0x013CB173/0x013C3173,
@@ -1717,6 +1734,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 			// feed the SOUND DSP unit (9): raw TG mix scaled by its send level.
 			dm.write_dword(0xC376, uint32_t(int32_t(double(rawl) * dspsend)));
 			dm.write_dword(0xC377, uint32_t(int32_t(double(rawr) * dspsend)));
+		}
+		if (mulsend > 0.0f)
+		{
+			// feed the MULTI unit (1): raw TG mix scaled by its send level.
+			dm.write_dword(0xC364, uint32_t(int32_t(double(rawl) * mulsend)));
+			dm.write_dword(0xC365, uint32_t(int32_t(double(rawr) * mulsend)));
 		}
 	}
 	m_dsp->set_input_line(0, ASSERT_LINE);
