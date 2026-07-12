@@ -5,6 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(5) — FDC fully modelled + wired (0x98020000 + DMA); blocker is now a timing/race
+Completed the FDC hardware model + wiring (all committed, faithful, NO boot regression):
+- FDC = N82077AA @ **0x98020000** (schematic decoder IC1 Y2 + firmware PC/AT regs). ✓
+- Software-DMA WIRED: FDC.DRQ/INTRQ -> **intc_assert(0x18)** (GxICR 0x34000160, the FDC ISR 0x48402140's
+  group); FDC.DACK slot **0x98010000** -> m_fdc->dma_r()/dma_w(). So a DRQ raises the interrupt whose ISR
+  moves one byte via 0x98010000 <-> the RAM buffer -- the mechanism a real FORMAT TRACK uses. ✓
+- Decoded the firmware's MSR busy-poll (0x48400190): waits for (MSR & 0x1F)==0 = command-complete, 500-tick
+  timeout. FORMAT TRACK = 6 FIFO bytes, DMA mode (DOR 0x1C).
+★ NEW BLOCKER (deeper, pre-existing, NOT the FDC): the format reaches the FDC **only under the debugger**.
+  -debug -debugger none: format issues FORMAT TRACK + busy-polls MSR (fx2.tr, 230k). Plain runs (memory
+  taps, incl. before any FDC change): the format touches the FDC **0 times**, shows ERROR 08, returns to
+  the DISK menu -- it errors in the class-5 disk-task SOFTWARE dispatch BEFORE any FDC access. Real HW
+  formats disks, so this is an EMULATION race in the RTOS disk-task dispatch (the debugger's scheduling
+  masks it; MAME emulates in emulated-time so a pure CPU/timer ratio shouldn't shift -> genuine race,
+  suspect interrupt-ordering or the DSP-bridge audio thread). fdc-architecture.md addenda 16-19.
+NEXT (the real fix now): find why the class-5 disk task errors before the FDC in a NORMAL run -- memory-tap
+the ERROR-08 decision (0x484ADxxx / completion byte / disk-op result) in a no-debugger run and diff the
+branch vs the debugger run. Once the format reaches the FDC reliably, the DMA wiring should carry FORMAT
+TRACK to completion (writes a FAT12 disk). The FDC itself is DONE + correct.
+
 ## TICK 2026-07-12 ~night(4) — CORRECTION: "ERROR 08 gone" was FALSE (Felipe's manual nav); FDC still not reached
 RETRACTION (integrity): the "ERROR 08 gone" in tick night(3) was a MISREAD. That test used fast nav timing
 that pressed buttons before screens loaded, so my presses didn't register -- Felipe had manually navigated
