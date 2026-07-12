@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~02:15 — MULTI unit unconfirmed (rule g, held); milestone documented
+SPORT decode attempt: the DSP-side RX-DMA layout is readable (unit inputs scattered: u0=0xC362,
+u4=0xC36A, u8=0xC372, u9=0xC376, u6=0xC378 -- no simple channel->slot pattern), but the TG->slot
+channel routing lives in the MAIN firmware (TG SPORT config), not the DSP kernel -- a deeper untraced
+RE. Combined with u5=rec10(phaser) mismatching MULTI's Cross-Delay default, MULTI's unit is NOT
+confirmed -> NOT shipped (rule g). Documented the exact remaining piece (TG SPORT channel->slot map).
+Published blog Part 20 "A repeatable recipe" (the coeff-diff unit-ID method + SOUND DSP as 3rd voice +
+where the recipe stops at MULTI). posts.json=22.
+STATE: 3 audible effects (reverb+chorus+SOUND-DSP), validated coexisting, reverb pristine. MULTI =
+send-confirmed, unit blocked on the TG-SPORT channel-map decode (main firmware). EQ = master/insert.
+FLAG3 4 records = deep frame model. PAGE/CONTRAST user-confirmed. All priorities 1-5 done/Felipe-
+blocked. Ear/HW items pending Felipe: wet levels, reverb loudness, circular-wrap OK.
+
 ## TICK 2026-07-12 ~01:55 — MULTI send confirmed (0x8298), unit pending SPORT decode
 Followed the MULTI plan: fixed the navigation (proven timing), enabled MULTI WITH SOUND DSP active to
 force the refresh -> MULTI send 0x8298 low byte = 127 = on-screen MULTI DEPTH (snapshot-verified MULTI
