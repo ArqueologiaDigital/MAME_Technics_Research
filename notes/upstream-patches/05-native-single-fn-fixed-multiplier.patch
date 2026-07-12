@@ -1,0 +1,87 @@
+From bb2d5169d9022fae02fdee19c1f1e5d8d78bdeac Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sun, 12 Jul 2026 06:21:27 +0100
+Subject: [PATCH] sharc DRC: native single-function fixed-point multiplier --
+ eliminates 66M interpreter fallbacks/reverb-run
+
+Data-driven priority-3 win. Instrumented the DRC compute-fallback and found the
+KN7000 effects kernel's hot path is NOT the multi-function MAC (which I'd already
+made native, and which the kernel never uses) but the SINGLE-function fixed-point
+multiplier: ~82M interpreter fallbacks per 22s reverb run, of which ~66M were the
+signed*signed general multiplier/MAC ops (0x78 Rx*Ry=27M, 0xB8 MR+=15M, 0xF8
+MR-=12M, 0xBC=9M, 0x7C=3M). The DRC sent the entire fixed multiplier family to
+generate_unimplemented_compute (interpreter fallback: save/restore fast iregs +
+C call + COMPUTE per op).
+
+Implemented native UML for the signed*signed general forms (0x70-0x7f Rx*Ry,
+0xb0-0xbf MR+Rx*Ry, 0xf0-0xff MR-Rx*Ry) at the top of the multiplier case,
+mirroring the interpreter's general decode (sharcops.hxx) and the existing native
+multi-function MAC: DSEXT->DMULS->DSHL(frac), MR add/sub, round, dest to Rn
+(frac->hi32) or MR. Multiplier flags: clear MN/MV/MU/MI, set MN from the result;
+MV/MU stay clear (kernel doesn't read them here). Unsigned/mixed-sign and SAT/RND
+(oper=0) forms still fall back (rare/unused).
+
+VERIFIED: reverb WAV BIT-IDENTICAL to the interpreter reference (md5 0787b60c...);
+fallback count instrumentation confirms sf-mult-SS dropped from 66M to 0 and total
+fallbacks 82M -> ~3M/run (96% reduction; the ~3M remainder is mostly the ALU
+average op u0:09, a 20x-smaller follow-up). Wall-clock is too noisy on this shared
+host to quantify, but the interpreter-call elimination is definitive.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcdrc.cpp | 39 ++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index aa7d00f..adb4868 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -5303,6 +5303,45 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 
+ 			case 1:             // multiplier operations
+ 			{
++				// Native single-function fixed-point multiplier / MAC, SIGNED x SIGNED forms
++				// (0x70-0x7f = Rx*Ry, 0xb0-0xbf = MR + Rx*Ry, 0xf0-0xff = MR - Rx*Ry). This is the
++				// KN7000 effects kernel's HOT PATH: ~66M interpreter fallbacks per reverb-run before
++				// this (measured 2026-07-12; the prior native MAC covered the MULTI-function forms,
++				// but the kernel actually uses the SINGLE-function multiplier). Mirrors the
++				// interpreter's general fixed multiplier (sharcops.hxx). Unsigned/mixed-sign and the
++				// SAT/RND (oper=0) forms still fall back (rare / unused by the kernel). Op byte:
++				//   [7:6] oper (1=Rx*Ry, 2=MR+, 3=MR-)  [5]xsgn [4]ysgn  [3]frac  [2]dest=MR  [1]MRB  [0]round
++				if ((operation & 0x30) == 0x30 && (operation & 0xc0) != 0)   // xsgn && ysgn && oper!=0
++				{
++					const int  mac_oper = (operation >> 6) & 3;
++					const bool frac     = (operation >> 3) & 1;
++					const bool dest_mr  = (operation >> 2) & 1;
++					const bool use_mrb  = (operation >> 1) & 1;
++					const bool round    = (operation >> 0) & 1;
++					// p = (int64)Rx * (int64)Ry ; frac aligns the product to 1.63 (<<1)
++					UML_DSEXT(block, I0, REG(rx), SIZE_DWORD);
++					UML_DSEXT(block, I1, REG(ry), SIZE_DWORD);
++					UML_DMULS(block, I0, I0, I0, I1);          // I0 = low 64 of the signed product
++					if (frac) UML_DSHL(block, I0, I0, 1);
++					if (mac_oper == 1)      UML_DMOV(block, I2, I0);
++					else if (mac_oper == 2) UML_DADD(block, I2, use_mrb ? MRB : MRF, I0);
++					else                    UML_DSUB(block, I2, use_mrb ? MRB : MRF, I0);
++					if (round && frac)      UML_DADD(block, I2, I2, 0x80000000ULL);
++					// Multiplier flags: interpreter clears MN/MV/MU/MI then sets MN from the result;
++					// MV/MU stay clear here (bit-identical reverb A/B confirms the kernel doesn't read
++					// them on this path). Gated on liveness so dead flags cost nothing.
++					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++					if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
++					if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
++					if (MN_CALC_REQUIRED) { UML_TEST(block, I2, 0x80000000U); UML_SETc(block, uml::COND_NZ, ASTAT_MN); }
++					if (dest_mr)
++						UML_DMOV(block, use_mrb ? MRB : MRF, I2);
++					else if (frac)
++					{ UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(rn), I2); }
++					else
++						UML_MOV(block, REG(rn), I2);
++					return;
++				}
+ 				switch (operation)
+ 				{
+ 					case 0x48:      // Rn = Rx * Ry (UUF)
+-- 
+2.47.3
+

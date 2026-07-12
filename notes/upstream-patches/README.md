@@ -18,6 +18,13 @@ general ADSP-2106x fixes (not KN7000-specific). Full technical rationale: ../sha
    0x06/0x08-0x16 = MRF±Rx*Ry SSF/SSFR + parallel add/sub/avg), which the SHARC DRC never
    implemented (was interpreter fallback). Verified BIT-IDENTICAL vs the interpreter.
 
+5. **05-native-single-fn-fixed-multiplier.patch** — native UML for the SINGLE-function fixed-point
+   multiplier (signed*signed general forms 0x70-0x7f/0xb0-0xbf/0xf0-0xff = Rx*Ry / MR+Rx*Ry / MR-Rx*Ry).
+   The DRC sent the ENTIRE fixed multiplier family to the interpreter; this is a real hot path (measured
+   ~66M interpreter fallbacks per second of SHARC audio DSP -- the single-function multiplier, distinct
+   from #4's multi-function MAC). Verified BIT-IDENTICAL vs the interpreter. Unsigned/mixed-sign + SAT/RND
+   forms still fall back (can be added later). sharcdrc.cpp only; upstream-clean.
+
 ## Verification standard
 Every fix restores DRC == interpreter (or interpreter == TRM). The reverb WAV A/B (bit-identical
 before/after) is the oracle used throughout the KN7000 work.
