@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(12j) — built apply_svg.py; PROVED the current adjusted SVG can't be safely auto-applied
+Built tools/apply_svg.py (pipeline gen_lay.py -> base .lay -> apply_svg.py adjusted.svg -> patched .lay;
+matches each placement to the SVG, rewrites <bounds>, keeps bindings; DRY BY DEFAULT, --apply to patch).
+Dry-ran it on Felipe's kn7000_layout_adjusted.svg: it is NOT safely auto-applicable. His Inkscape edit
+FLATTENED the groups and dropped our stable IDs, so matching falls back to fuzzy string/nearest-centre ->
+(a) duplicate short labels (+, -, VOLUME, 1) mismatch to far instances (d up to 542px), (b) deleted elements
+match wildly, (c) animated slider knobs match the wrong state, (d) 250+ shapes fail to match at all within
+radius. Even radius-guarded, applying it would misalign labels from their (unmoved) shapes -> would violate
+rule g. So I did NOT apply it. RELIABLE PATH = the ID-tagged export (lay_to_svg stamps group.index.ref,
+Inkscape preserves it): Felipe's NEXT edit on the re-exported ID SVG matches EXACTLY. NEXT: implement+test
+the ID-matching branch in apply_svg.py against a real ID-tagged round (the no-op self-test: run it on my own
+ID SVG -> 0 changes). For the current round, the clear correctness fix (APC/SEQUENCER) is already applied;
+specific individual changes can be applied manually on request.
+
 ## TICK 2026-07-13 ~night(12i) — Felipe's adjusted layout SVG (fine_tuning loop) + docs + workflow fix
 Felipe returned side-quests/kn7000_layout_adjusted.svg (his Inkscape edit of the B&W layout SVG). Diffed it
 vs my export: his changes are FINE COSMETIC refinements (~30 small label/position nudges; renders near-
