@@ -583,3 +583,28 @@ memory-tap the exact class-5 error-decision branch (0x484ADxxx / the disk-op res
 compare to the trace run to find the diverging value; (2) investigate the DSP-bridge host audio thread as
 the race source (does disabling it / making it synchronous fix the format?); (3) if it's a genuine RTOS
 timing the emulation can't meet, that may be a deeper CPU-timing-accuracy issue.
+
+## 2026-07-12 (addendum 22): ★★ the format failure is an OBSERVATION-SENSITIVE emulation Heisenbug
+bp-counter diagnostic (6 RAM-increment breakpoints, under -debug -debugger none, NO trace): the format
+REACHES the FDC -- FDCdisp(0x48400084)=27793, cmdproc(0x484AD018)=811, present(0x484D7751)=3099,
+post5(0x48414C9B)=6, poll(0x484A5945)=6, router(0x48582CF0)=6. So the BREAKPOINTS also mask the bug, just
+like the trace. Definitive pattern:
+  - pure memory TAPS (no per-instruction overhead)  -> format errors before the FDC (0 accesses)  [BUG]
+  - trace OR breakpoints (per-instruction overhead)  -> format reaches the FDC (thousands of accesses) [OK]
+=> It is a HEISENBUG: any instruction-level observation slows the maincpu just enough to change the outcome.
+The disk-task dispatch waits for an event that, in the fast normal run, is "too late" -> error/ERROR 08;
+slowing the maincpu (by the observation overhead) lets it arrive in time. Ruled out as the cause: SHARC DRC
+(-nodrc), -debug itself, and set_perfect_quantum (fine emulated-time interleave) -- none reproduces the
+"reaches FDC" behaviour in a normal run, so it is NOT simple maincpu<->SHARC emulated-time interleave.
+IMPLICATION: the RE is CORRECT and COMPLETE (FDC @0x98020000 N82077AA, PC/AT regs, INTC grp 0x18 software-
+DMA via 0x98010000 -- all committed + faithful + exercised by the boot init). The floppy FORMAT failure is
+an EMULATION TIMING bug, not a firmware/RE gap: the disk-task dispatch loses a timing-sensitive event race
+under the normal (fast) run. This is a genuine emulation-engine boundary that resists diagnosis (the
+observer effect masks it) and would need deep MAME scheduler/timing work -- e.g. identifying the exact
+event the dispatch waits on (an RTOS scheduler tick / an interrupt) and why its emulated delivery is a hair
+too late, then correcting that device's timing. NOT a productive grind at instruction level (unobservable).
+PRACTICAL NOTE for a future tick: try to identify the awaited event by memory-tapping (no masking) the
+RTOS scheduler tick + the interrupt-controller GxICR writes during the format, and correlate the failing
+vs succeeding (tapped-but-heavy) runs' RAM state at the divergence. Or accept the floppy FORMAT as blocked
+on this engine-timing Heisenbug and move the effort elsewhere; the FDC hardware modelling stands as the
+milestone.
