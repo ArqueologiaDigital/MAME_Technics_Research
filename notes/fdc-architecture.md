@@ -184,3 +184,28 @@ So the reliable picture is unchanged (format stalls pre-hardware waiting on stat
 call-graph attributions were tool-artifacts. USE: memory taps + cpu.state (SP/PC/A0-A3/D0-D3 all readable)
 + stack-walk for call chains; the `trace` command works and writes a file (but is huge ~450MB/8s even with
 noloop). For code-execution facts, prefer taps/traces over bpset-action-printf.
+
+## 2026-07-12 (addendum 6): the format's WAIT condition, found via stack-walk (RELIABLE)
+Using a memory-tap stack-walk (arm the read-tap on the disk-state struct BEFORE the YES press, read
+cpu.state SP/PC and walk the stack for 0x48xxxxxx return addresses -- this WORKS, unlike bpset):
+- The format's poll of status byte 0x5006BC19 (+0x1F9) is done by **0x484A593E**:
+    call 0x4849FBD8 (get +0x1F9) ; cmp 0xFB -> h ; cmp 0xFC -> h ; cmp 0xF6 -> h ; else return -1.
+  So **the format waits for 0x5006BC19 to become a disk-command COMPLETION CODE (0xFB / 0xFC / 0xF6)**.
+  It stays 0x00 (no command ever completes) -> the dispatch returns -1 (not done) -> the format spins,
+  then times out to the DISK menu. (0xFB/0xFC are the "error" codes seen earlier; 0xF6 another result.)
+- Call chain (stack return addrs) for that poll: 0x484A594A(=0x484A593E) <- 0x48582CFF <- 0x4842954F(RTOS)
+  <- **0x4854D185**. The 0x4854Dxxx region is the DISK command/hardware code -- it references the disk
+  hardware latch **0x9CC00000 / 0x9CC001FC** (0x4854D1CC/0x4854D726/...). So the format-execute was
+  invoked from 0x4854Dxxx, and the disk hardware is very likely the **0x9CC00000 latch** (phantom buttons
+  live at 0x9CC00008 in the same chip; disk control/status at +9/+1FC).
+- A parallel poll (0x484B165D) waits on status +0x204 (0x484A4FAE getter) gated by 0x5006BFCF bit0.
+
+ROOT-CAUSE (reliable): the disk COMMAND never sets a completion code because its hardware handler never
+runs (0 hardware hits 0x00-0xBF during the format). So the disk-command dispatch/servicing is the gap --
+NOT the FDC register modeling per se. The setter of 0x5006BC19 (the completion writer) is what must run;
+find it (search writes to struct+0x1F9 via the disk task) + why it doesn't fire. The disk hardware is
+almost certainly at 0x9CC00000 (accessed by 0x4854Dxxx at boot; a multi-reg latch shared with phantom
+buttons). IMPLEMENTATION PATH: (1) confirm 0x9CC00000 is the FDC/disk controller by tracing 0x4854Dxxx's
+boot access + what it reads; (2) find why the format's disk command isn't serviced (the completion writer
+never runs); (3) model the disk controller at 0x9CC00000 so the command completes. bpset is unusable
+(addendum 5) -- use taps + stack-walk + `trace`.
