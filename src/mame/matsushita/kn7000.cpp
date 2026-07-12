@@ -804,6 +804,7 @@ public:
 		, m_floppy(*this, "fdc:0")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
+		, m_volapcseq(*this, "VOL_APCSEQ")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
 		, m_cpc_leds(*this, "cpc_led%u", 0U)
 		, m_cpr_leds(*this, "cpr_led%u", 0U)
@@ -852,6 +853,9 @@ private:
 	void    fdc_drq_w(int state);                  // FDC DRQ  -> INTC group 0x18 (per-byte software-DMA)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
+	required_ioport m_volapcseq;           // front-panel APC/SEQ VOLUME slider (0-100 adjuster)
+	uint8_t m_vol_apcseq_prev = 0;         // last DATA byte for the APC/SEQ pot
+	bool    m_vol_apcseq_synced = false;   // false until the first scan records the pot (no startup frame)
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -2200,6 +2204,34 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 		m_dspbridge->set_effect_returns(m_tonegen->gain_dsp_ret(), m_tonegen->gain_multi_ret());
 	}
 
+	// Front-panel APC/SEQ VOLUME slider -> the firmware's own accompaniment/sequencer volume,
+	// delivered the way the real hardware does it: the panel sub-CPU digitises the pot and sends a
+	// CP-protocol TYPE 2 "latched control" frame [ADDR, DATA]. ADDR 0xD2 (bank11/type2/sub2) = APC/SEQ
+	// VOLUME -- VERIFIED empirically (its RAM write-set overlaps MUTE UP 9's, which edits the same
+	// setting, far more than 0xD0/D1/D3 do) and consistent with the service-manual ADC map (VR1102 = AD2).
+	// The 0xD2 handler (0x484AD772) does DATA -> NOT -> latch 0x5006BEA6 -> >>1 -> remap table 0x48613508
+	// (a monotonic 0..127 ramp), so a LOUDER setting needs a LOWER DATA byte. Map the 0..100 adjuster
+	// accordingly and emit only on change. (MAIN uses a post-DAC gain above; MIC/LINE-IN pots -- ADDRs
+	// 0xD0/D1/D3 -- are not yet identified individually, so they stay unbound for now.)
+	{
+		const uint8_t data = uint8_t(255 - (m_volapcseq->read() * 255 + 50) / 100);
+		if (!m_vol_apcseq_synced)
+		{
+			// first scan: just record the initial pot position. Do NOT emit a frame during early boot --
+			// the firmware isn't servicing the panel handshake yet, so an undelivered frame would sit in
+			// the response queue and block all later ATN kicks (buttons included). The slider takes over
+			// on the first real move (matching the hardware's soft-takeover behaviour).
+			m_vol_apcseq_prev = data;
+			m_vol_apcseq_synced = true;
+		}
+		else if (data != m_vol_apcseq_prev)
+		{
+			m_vol_apcseq_prev = data;
+			const uint8_t pkt[2] = { 0xd2, data };
+			panel_queue(pkt, 2);
+		}
+	}
+
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
 	// identity the firmware's button dispatcher (0x484ADB59) uses. For a changed
 	// segment we emit its 2-byte [ADDR][DATA] switch frame, computing the wire
@@ -2732,6 +2764,8 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_panel_p1));
 	save_item(NAME(m_panel_p2));
 	save_item(NAME(m_btn_prev));
+	save_item(NAME(m_vol_apcseq_prev));
+	save_item(NAME(m_vol_apcseq_synced));
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tmr7_mode));
@@ -2749,6 +2783,7 @@ void kn7000_state::machine_reset()
 	}
 	m_panel_pos = 0;
 	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
+	m_vol_apcseq_synced = false;   // re-record the pot on the first post-reset scan (no frame)
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
 	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
