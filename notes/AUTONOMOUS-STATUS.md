@@ -5,7 +5,27 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
-## TICK 2026-07-12 ~night(5) — FDC fully modelled + wired (0x98020000 + DMA); blocker is now a timing/race
+## TICK 2026-07-12 ~night(6) — CORRECTION: "format reaches FDC" was a TRACE ARTIFACT; real blocker = dispatch race
+Integrity correction to night(5): the "format issues FORMAT TRACK + busy-polls MSR" (fx2.tr, 230k) was an
+OBSERVER ARTIFACT of `dbg:command("trace")`. Ruled out every emulated-time cause -- SHARC DRC (-nodrc),
+-debug itself (-debug -debugger none, no trace), and set_perfect_quantum(maincpu) ALL still show the format
+touching the FDC **0 times** and erroring (ERROR 08) before any FDC access. ONLY the trace command masks it.
+So the real behaviour = the format errors in the class-5 disk-task SOFTWARE dispatch BEFORE the FDC (exactly
+the night/night(2) finding), and it is timing/async-sensitive (the trace's heavy per-instruction wall-clock
+overhead is the only thing that changes it -> likely a host-audio-thread race, not emulated-time).
+NET STATE (honest, all committed, no regression):
+- ★ FDC correctly LOCATED (0x98020000), MODELLED (N82077AA), and WIRED (INTC group 0x18 + DACK 0x98010000
+  software-DMA) -- schematic + firmware proven, faithful, and exercised by the BOOT FDC init. Major win:
+  the core "where is the FDC" mystery (~12 prior ticks) is SOLVED.
+- ✗ The FORMAT still fails: it errors in the class-5 dispatch before reaching the FDC, so the DMA wiring
+  isn't exercised by a format yet. This dispatch race is the true remaining blocker (deep; perf-quantum
+  and DRC ruled out). fdc-architecture.md addenda 15-21.
+NEXT (fresh budget): memory-tap the class-5 error-decision (0x484ADxxx / disk-op result) in a NORMAL run vs
+the trace run to find the diverging branch; investigate the DSP-bridge host audio thread as the race source
+(does bypassing/synchronising it let the format reach the FDC?). Once the format reaches the FDC reliably,
+the shipped DMA wiring should carry FORMAT TRACK to completion (write a FAT12 disk).
+
+## TICK 2026-07-12 ~night(5) — FDC fully modelled + wired (0x98020000 + DMA); [see night(6) correction above]
 Completed the FDC hardware model + wiring (all committed, faithful, NO boot regression):
 - FDC = N82077AA @ **0x98020000** (schematic decoder IC1 Y2 + firmware PC/AT regs). ✓
 - Software-DMA WIRED: FDC.DRQ/INTRQ -> **intc_assert(0x18)** (GxICR 0x34000160, the FDC ISR 0x48402140's
