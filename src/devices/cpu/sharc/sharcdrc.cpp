@@ -5303,6 +5303,45 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 
 			case 1:             // multiplier operations
 			{
+				// Native single-function fixed-point multiplier / MAC, SIGNED x SIGNED forms
+				// (0x70-0x7f = Rx*Ry, 0xb0-0xbf = MR + Rx*Ry, 0xf0-0xff = MR - Rx*Ry). This is the
+				// KN7000 effects kernel's HOT PATH: ~66M interpreter fallbacks per reverb-run before
+				// this (measured 2026-07-12; the prior native MAC covered the MULTI-function forms,
+				// but the kernel actually uses the SINGLE-function multiplier). Mirrors the
+				// interpreter's general fixed multiplier (sharcops.hxx). Unsigned/mixed-sign and the
+				// SAT/RND (oper=0) forms still fall back (rare / unused by the kernel). Op byte:
+				//   [7:6] oper (1=Rx*Ry, 2=MR+, 3=MR-)  [5]xsgn [4]ysgn  [3]frac  [2]dest=MR  [1]MRB  [0]round
+				if ((operation & 0x30) == 0x30 && (operation & 0xc0) != 0)   // xsgn && ysgn && oper!=0
+				{
+					const int  mac_oper = (operation >> 6) & 3;
+					const bool frac     = (operation >> 3) & 1;
+					const bool dest_mr  = (operation >> 2) & 1;
+					const bool use_mrb  = (operation >> 1) & 1;
+					const bool round    = (operation >> 0) & 1;
+					// p = (int64)Rx * (int64)Ry ; frac aligns the product to 1.63 (<<1)
+					UML_DSEXT(block, I0, REG(rx), SIZE_DWORD);
+					UML_DSEXT(block, I1, REG(ry), SIZE_DWORD);
+					UML_DMULS(block, I0, I0, I0, I1);          // I0 = low 64 of the signed product
+					if (frac) UML_DSHL(block, I0, I0, 1);
+					if (mac_oper == 1)      UML_DMOV(block, I2, I0);
+					else if (mac_oper == 2) UML_DADD(block, I2, use_mrb ? MRB : MRF, I0);
+					else                    UML_DSUB(block, I2, use_mrb ? MRB : MRF, I0);
+					if (round && frac)      UML_DADD(block, I2, I2, 0x80000000ULL);
+					// Multiplier flags: interpreter clears MN/MV/MU/MI then sets MN from the result;
+					// MV/MU stay clear here (bit-identical reverb A/B confirms the kernel doesn't read
+					// them on this path). Gated on liveness so dead flags cost nothing.
+					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
+					if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
+					if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
+					if (MN_CALC_REQUIRED) { UML_TEST(block, I2, 0x80000000U); UML_SETc(block, uml::COND_NZ, ASTAT_MN); }
+					if (dest_mr)
+						UML_DMOV(block, use_mrb ? MRB : MRF, I2);
+					else if (frac)
+					{ UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(rn), I2); }
+					else
+						UML_MOV(block, REG(rn), I2);
+					return;
+				}
 				switch (operation)
 				{
 					case 0x48:      // Rn = Rx * Ry (UUF)
