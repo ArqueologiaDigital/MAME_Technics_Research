@@ -846,8 +846,10 @@ private:
 	optional_device<floppy_connector> m_floppy;    // the 3.5" floppy drive
 	uint8_t fdc_r(offs_t off);                     // FDC (IC103) PC/AT registers at 0x98020000 (schematic-confirmed)
 	void    fdc_w(offs_t off, uint8_t data);
-	void    fdc_irq_w(int state);                  // FDC INTRQ (currently a logging stub -- firmware polls MSR)
-	void    fdc_drq_w(int state);                  // FDC DRQ  (currently a logging stub -- DMA not yet modelled)
+	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (software-DMA transfer)
+	void    fdc_dma_w(offs_t off, uint8_t data);
+	void    fdc_irq_w(int state);                  // FDC INTRQ -> INTC group 0x18
+	void    fdc_drq_w(int state);                  // FDC DRQ  -> INTC group 0x18 (per-byte software-DMA)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	output_finder<512> m_cpl_leds;
@@ -1335,6 +1337,9 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// The io window returned 0 here (the region was mislabelled "sound control"; sound is TG 0x98040000 /
 	// snd 0x98060000). See notes/fdc-architecture.md addendum 15.
 	map(0x98020000, 0x9802000f).rw(FUNC(kn7000_state::fdc_r), FUNC(kn7000_state::fdc_w));
+	// FDC.DACK byte slot at 0x98010000 (decoder Y1). The software-DMA ISR (0x48402140), invoked per FDC.DRQ
+	// (INTC group 0x18), reads/writes one FIFO byte here to feed/drain the FDC during read/write/format.
+	map(0x98010000, 0x98010003).rw(FUNC(kn7000_state::fdc_dma_r), FUNC(kn7000_state::fdc_dma_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
 	//       (IC104), FDC (IC103), tone generators (IC201/IC205), effects DSP
@@ -2846,17 +2851,32 @@ void kn7000_state::fdc_w(offs_t off, uint8_t data)
 	}
 }
 
-// FDC interrupt / DMA-request lines. Currently logging stubs: the firmware drives the FDC command and
-// result phases by POLLING MSR (0x98020008), so the INTRQ line is not required to reach ERROR-08-clear /
-// media detection. The sector-data phase (read/write/format) uses DMA (FDC.DRQ/FDC.DACK/FDC.TC via the
-// MN10300 DMA controller) which is not yet modelled -- wire these once the DMA path is added.
+// FDC interrupt / DMA-request lines -> MN10300 on-chip INTC group 0x18 (GxICR at 0x34000160, which the
+// FDC interrupt ISR 0x48402109 acknowledges). The FDC sector-data phase is SOFTWARE-DMA: the FDC asserts
+// DRQ per byte -> this raises the group-0x18 interrupt -> the ISR (0x48402140) transfers one byte between
+// the RAM buffer and the FDC.DACK slot at 0x98010000 (mapped to m_fdc->dma_r()/dma_w()). INTRQ (command
+// complete) shares the group; the ISR dispatches by the current op. (Rising edge asserts; the ISR clears
+// the GxICR REQUEST bit via its 0x34000160 write.) See notes/fdc-architecture.md addendum 18.
 void kn7000_state::fdc_irq_w(int state)
 {
-	logerror("%s: FDC INTRQ = %d\n", machine().describe_context(), state);
+	if (state)
+		intc_assert(0x18);
 }
 void kn7000_state::fdc_drq_w(int state)
 {
-	logerror("%s: FDC DRQ = %d\n", machine().describe_context(), state);
+	if (state)
+		intc_assert(0x18);
+}
+// FDC.DACK byte slot at 0x98010000 (decoder Y1). A read/write here transfers one FIFO byte to/from the
+// FDC in the current DMA operation (asserts DACK); the software-DMA ISR uses it per FDC.DRQ.
+uint8_t kn7000_state::fdc_dma_r(offs_t)
+{
+	return m_fdc ? m_fdc->dma_r() : 0xff;
+}
+void kn7000_state::fdc_dma_w(offs_t, uint8_t data)
+{
+	if (m_fdc)
+		m_fdc->dma_w(data);
 }
 
 static void kn7000_floppies(device_slot_interface &device)
