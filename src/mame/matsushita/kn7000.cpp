@@ -856,6 +856,8 @@ private:
 	required_ioport m_volapcseq;           // front-panel APC/SEQ VOLUME slider (0-100 adjuster)
 	uint8_t m_vol_apcseq_prev = 0;         // last DATA byte for the APC/SEQ pot
 	bool    m_vol_apcseq_synced = false;   // false until the first scan records the pot (no startup frame)
+	uint8_t m_dial_prev = 0;               // last IPT_DIAL position delivered for the DATA dial (wire 0x10)
+	bool    m_dial_synced = false;         // false until the first scan records the dial (no startup frame)
 	output_finder<512> m_cpl_leds;
 	output_finder<64> m_cpc_leds;
 	output_finder<512> m_cpr_leds;
@@ -2232,19 +2234,44 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 		}
 	}
 
+	// Front-panel DATA dial (the big value wheel with the central SET button) -> CP-protocol TYPE 2
+	// "latched control" frame [0x10, POSITION]. The wheel is a rotary ENCODER: the panel sub-CPU keeps
+	// an 8-bit position counter and ships it on the CP link, and the main-CPU handler (0x484AD6B0, wire
+	// ADDR 0x10 = bank00/type2/sub0) DIFFS successive positions to derive the turn direction/amount
+	// (EV_DIALUP/DOWN), which the UI applies to whatever field is focused (scroll a list, edit a value).
+	// MAME's IPT_DIAL is precisely this kind of relative accumulator (0..255, wraps), so we forward its
+	// value verbatim: the firmware's signed 8-bit diff turns a 0xFF->0x00 wrap into +1 exactly as the
+	// real 8-bit counter does. Emit only on change, recording the initial position silently on the first
+	// scan (same panel-handshake-poison guard as the APC/SEQ pot -- an undelivered boot frame would wedge
+	// ALL later ATN delivery). This is the analog plumbing the SEG1A valuator placeholder was waiting for.
+	{
+		const uint8_t pos = m_dial->read();
+		if (!m_dial_synced)
+		{
+			m_dial_prev = pos;
+			m_dial_synced = true;
+		}
+		else if (pos != m_dial_prev)
+		{
+			m_dial_prev = pos;
+			const uint8_t pkt[2] = { 0x10, pos };
+			panel_queue(pkt, 2);
+		}
+	}
+
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
 	// identity the firmware's button dispatcher (0x484ADB59) uses. For a changed
 	// segment we emit its 2-byte [ADDR][DATA] switch frame, computing the wire
 	// ADDR by REVERSE-normalizing (the inverse of table 0x486135A0):
 	//   normSeg 0x00-0x0B -> ADDR 0xC0-0xCB (grp3), 0x0C-0x15 -> 0x00-0x09 (grp0),
-	//   0x16-0x19 -> 0xD0-0xD3, 0x1A -> 0x10, 0x20 -> 0x17. normSeg 0x1B-0x1F have NO
-	//   wire path (not panel-serial buttons). DATA = segment bitmask (bit=1 pressed);
-	//   the main CPU XORs vs its shadow for press/release edges.
+	//   0x16-0x19 -> 0xD0-0xD3, 0x20 -> 0x17. normSeg 0x1A (wire 0x10 = DATA dial) is a
+	//   VALUATOR, emitted by the dial block above, NOT here; 0x1B-0x1F have NO wire path.
+	//   DATA = segment bitmask (bit=1 pressed); the main CPU XORs vs its shadow for edges.
 	// Delivery rides the ATN dance via panel_queue (a bare fifo push never IRQs).
 	static const uint8_t seg_to_addr[0x21] = {
 		0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb, // normSeg 0x00-0x0B
 		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,           // normSeg 0x0C-0x15
-		0xd0,0xd1,0xd2,0xd3,0x10,0xff,0xff,0xff,0xff,0xff,0x17,       // normSeg 0x16-0x20
+		0xd0,0xd1,0xd2,0xd3,0xff,0xff,0xff,0xff,0xff,0xff,0x17,       // normSeg 0x16-0x20 (0x1A=dial, own path)
 	};
 	for (int seg = 0; seg < 0x21; seg++)
 	{
@@ -2766,6 +2793,8 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_btn_prev));
 	save_item(NAME(m_vol_apcseq_prev));
 	save_item(NAME(m_vol_apcseq_synced));
+	save_item(NAME(m_dial_prev));
+	save_item(NAME(m_dial_synced));
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tmr7_mode));
@@ -2784,6 +2813,7 @@ void kn7000_state::machine_reset()
 	m_panel_pos = 0;
 	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
 	m_vol_apcseq_synced = false;   // re-record the pot on the first post-reset scan (no frame)
+	m_dial_synced = false;         // re-record the DATA dial on the first post-reset scan (no frame)
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
 	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
