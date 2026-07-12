@@ -5,6 +5,23 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12b) — SIDE-QUEST DONE: B&W SVG export of the panel layout (fine_tuning)
+Felipe's "fine_tuning_the_layout" side-quest: produce a black-and-white SVG of the current layout so he
+can edit positions/dimensions/labels and I apply them back. DELIVERED:
+- New tool `tools/lay_to_svg.py`: flattens one view of kn7000.lay (default "Compact", groups compose at
+  1:1 translate) into a single standalone B&W SVG — every button/slider/LED/dial as white-fill/black-
+  outline shape at exact panel position, labels as black text (468 placements). Committed.
+- Output `../KN7000/side-quests/kn7000_layout.svg` (+ kn7000_layout_preview.png). Verified FAITHFUL via
+  chromium headless (matches the panel exactly). ImageMagick can't render `<g transform>` — use chromium.
+- Bugs fixed en route: self-closing-tag stroke insertion; nested-<svg> → `<g transform>` (renderability);
+  double-escaped `&amp;` labels.
+- Collaboration loop + the SVG(absolute)→gen_lay.py(group-local) coord mapping documented in
+  side-quests/findings/layout_svg_export_findings.md. NEXT (when Felipe returns his edited SVG): diff and
+  apply position/dimension/label changes to tools/gen_lay.py (subtract group offsets: left_block +(0,997),
+  right_block +(1000,997), screen_block +(0,0), sd_block +(750,915)), regenerate, rebuild, publish.
+Other open layout side-quests (not yet started): LEDs_in_the_layout.txt (add/remove/recolor a checklist of
+LEDs), sliders.txt (APC/SEQ Volume LED + draggable sliders + bind APC slider to input).
+
 ## TICK 2026-07-12 ~night(12) — ★ SELF-TEST: AUTHORITATIVE combo found in the SERVICE MANUAL (C#3+D#3+C#4)
 Read the service manual §8: the diagnostic entry is EXPLICIT — "Press and hold the **C#3, D#3, C#4** keys,
 then turn on the power" (release after the service screen shows). So Felipe's remembered "B3+B4" was WRONG:
