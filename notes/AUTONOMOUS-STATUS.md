@@ -40,6 +40,20 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~09:40 — DISK/SD MENU buttons live-verified (priority-2 check): SD works, DISK floppy-gated
+Bounded priority-2 check triggered by last tick's "DISK MENU didn't open": is the DISK MENU button
+mislabeled (like PAGE/CONTRAST were)? Live probe (menuprobe.lua + diskclean.lua) settles it:
+- **SD MENU (SEG0D 0x80) VERIFIED WORKING** -- opens the full SD MENU (SD TOOLS/PREFERENCES/FAVORITE
+  SONGS/CUSTOM STYLE/LOAD/SAVE/SONG MEDLEY/SD-AUDIO/SD-SOUND PLAY). Driver mapping CORRECT.
+- **DISK MENU (SEG0D 0x40) does NOTHING from HOME** (md5-identical) = FLOPPY-DEVICE-GATED (adjacent SD
+  MENU works + SD is modeled; the floppy/FDC IC103 is not). Will open once the floppy is modeled. No
+  mislabel; SEG0D 0x40 label plausibly correct (ROM descriptor SEG0D.6 = event 0x2016).
+- The "SEG12 b7 = DISK MENU" service-manual note CONFLICTS with the ROM descriptor (SEG12.7 = 0x2010
+  context-dependent Sound Group) and the live SD menu -> corrected/disregarded in panel notes.
+So NO button fix warranted; the DISK menu's only blocker is the unmodeled floppy (confirms the floppy is
+the real gate, not a mapping). Corrected a misleading note (rule g). No code change. This RESOLVES the
+open "DISK MENU didn't open" question from the floppy exploration: it's device-gating, not a button bug.
+
 ## TICK 2026-07-12 ~08:45 — DRC perf changes REGRESSION-VALIDATED across the effect suite (clean)
 Bounded, high-certainty verification of the shipped native single-fn multiplier + ALU average (the most
 recent code changes; previously only reverb-A/B'd). Re-ran the multiplier/average-heavy divergence sweep
