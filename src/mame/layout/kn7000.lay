@@ -963,15 +963,16 @@
 		-----------------------------------------------------------------------
 		-- Slider and knob library ends.
 
-		-- KN7000 volume sliders: wire the 4 faders for dragging in the Compact view.
+		-- KN7000 volume sliders: make the 4 faders draggable in every view that contains them.
 		file:set_resolve_tags_callback(function()
-			local view = file.views["Compact"]
-			if view then
-				add_vertical_slider(view, "vol_main_click", "vol_main_knob", "VOL_MAIN")
-				add_vertical_slider(view, "vol_apcseq_click", "vol_apcseq_knob", "VOL_APCSEQ")
-				add_vertical_slider(view, "vol_mic_click", "vol_mic_knob", "VOL_MIC")
-				add_vertical_slider(view, "vol_linein_click", "vol_linein_knob", "VOL_LINEIN")
-				install_slider_callbacks(view)
+			for vname, view in pairs(file.views) do
+				if view.items["vol_main_click"] ~= nil then
+					add_vertical_slider(view, "vol_main_click", "vol_main_knob", "VOL_MAIN")
+					add_vertical_slider(view, "vol_apcseq_click", "vol_apcseq_knob", "VOL_APCSEQ")
+					add_vertical_slider(view, "vol_mic_click", "vol_mic_knob", "VOL_MIC")
+					add_vertical_slider(view, "vol_linein_click", "vol_linein_knob", "VOL_LINEIN")
+					install_slider_callbacks(view)
+				end
 			end
 		end)
 	]]></script>
