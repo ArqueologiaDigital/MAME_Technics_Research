@@ -655,3 +655,15 @@ Findings (full: side-quests/findings/floppy_self_test_findings.md):
   enter the self-test -> the self-test entry reads the held keys via a SEPARATE, earlier power-on path (a
   raw keybed-matrix scan), not the runtime FIFO. NEXT: find that raw-matrix held-key detect in the early
   boot + inject/model it (a read-tap on that address, or poke the detected-mode var), then run the test.
+
+## 2026-07-12 (addendum 26): self-test entry -- found the dispatcher; combo source is NOT the keybed FIFO
+Resuming Felipe's self-test side-quest. Definitively ruled out the keybed FIFO (0x98050004) as the B3+B4
+combo source: read-tap injection there triggers only a runtime TRANSPOSE display (cycling) or nothing
+(single hold), never the test; the only 0x98050004 readers are the runtime drain 0x484480A2/B6. Lua
+set_value also can't fire the music-key PORT_CHANGED. So the power-on combo is read via an UNMODELLED source
+(raw keybed-matrix scan or the keybed sub-CPU's power-on report). Found the service-test dispatcher/menu-
+builder **0x4849F860** (boot-init caller 0x4842A59E; builds the FD SAVE/LOAD + EV_TEST menu from tables
+0x4874ACD4/ADC4/AF1C/AF90/AFF8 + handlers 0x4842A802/CB02 via register fn 0x4842A717). The menu is always
+REGISTERED; only ENTRY is combo-gated. NEXT: boot-trace/broad-tap to find the combo-detection read + model
+it (return KEYS matrix: B3=KEYS1 0x0080, B4=KEYS2 0x0008), or force-navigate to the registered service-menu
+screen ID. Full: side-quests/findings/floppy_self_test_findings.md.
