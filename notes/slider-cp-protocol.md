@@ -56,3 +56,13 @@ NEXT is now purely: (a) ID which of 0xD0-D3 is APC/SEQ (press MUTE UP 9 = SEG09 
 it moves, then inject each 0xDx and see which moves the same byte); (b) implement in the driver: on
 VOL_APCSEQ change, emit `[0xDx, scaled_value]` through panel_queue (or, minimally, the same RX-ring write).
 The probe already proves (b) will work.
+
+### Identification attempt 1 (2026-07-12, /tmp/idprobe.lua) — CONFOUNDED by the demo screensaver
+Injected each of 0xD0-D3 (low+high swing) on the "home" screen and snapshotted. But the KN7000 auto-starts
+its DEMO slideshow after a few seconds of no input, so by t=9 the LCD already showed demo graphics (not the
+PMEM home screen), and all snapshots diff against that moving demo -> unreadable. Consecutive-diff signals
+were noisy (D0 large, D2 small localized @ (505,218)-(537,268), D1/D3 lo->hi = 0) but not trustworthy under
+the demo. FIX for the next attempt: keep the machine active (tap EXIT / a harmless button every ~1 s to
+suppress the demo) OR navigate to a stable settings screen, THEN inject; better still, use the RAM
+correlation (MUTE UP 9 finds the APC/Seq setting byte; inject each 0xDx to see which moves it) which is
+demo-immune. Injection itself is proven (ring-probe PASS above).
