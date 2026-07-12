@@ -95,3 +95,28 @@ in the home/demo state -- the firmware likely only runs the slider-vs-value comp
 volume/settings screen (or the indicator is hardware-only). apcseq_vol_led stays added-but-dark for now.
 NEXT if pursued: repeat the probe on the accompaniment-volume settings screen, or model it driver-side
 (compare VOL_APCSEQ's emitted value to the firmware's current setting -- needs the setting RAM address).
+
+## ★ TEMPO/PROGRAM knob = 0x17 (RELATIVE encoder); DATA dial = 0x10 (2026-07-13, /tmp/tempoknob.lua)
+Identified the two bank-00 rotary controls by injecting on the **home screen** and reading the on-screen
+tempo (crotchet = NNN). KEY TIMING NOTE: the "musical-notes-over-Earth" image at t=8-11 is the **boot
+splash**, NOT the inactivity demo -- the PMEM home screen appears at **t≈13**. Inject after t=13.
+
+- **0x17 = TEMPO/PROGRAM knob** (the small center knob, not the big right-hand DATA dial). Injecting 0x17
+  changed the tempo; injecting 0x10 (sweep 0x10..0xF0) left the tempo at 120 (unchanged).
+- **0x17 is a RELATIVE (incremental) encoder, NOT an absolute pot.** Injecting distinct ABSOLUTE values
+  gave non-monotonic tempos: 0x40→184, 0x80→56, 0x20→88, 0xF0→72, 0x10→88 (0x20 and 0x10 both →88; 0x40
+  gives a HIGHER tempo than 0x80). The tempo moves by the DIFF between consecutive positions (with apparent
+  velocity/acceleration -- big diffs jump further), exactly like a physical detented encoder. So its raw
+  handler (0x484AD6A0, no remap, latch 0x5006BE9F/0x5006BEA8) feeds a downstream diff.
+- **0x10 = the big DATA dial** (navigates / edits the focused field; no tempo effect on the home screen).
+  Its handler 0x484AD6B0 diffs vs shadow 0x5006BEA9 -> EV_DIALUP/DOWN, consistent with a nav encoder.
+
+### DO NOT wire either as an absolute PORT_ADJUSTER -- it would be a wrong-mapping guess (erratic tempo).
+Correct wiring for the relative encoder (future task): a draggable knob whose adjuster DELTA (adj_now -
+adj_prev) is accumulated into a driver-side uint8 position that wraps, emitting `[0x17, position&0xFF]` each
+time it changes. The firmware diffs consecutive positions -> rotation = the delta, so dragging up = tempo up,
+down = tempo down, continuously (the bounded 0..100 adjuster is fine because only deltas matter). Emit only
+SMALL deltas per scan (scale≈1) to avoid the velocity jump. Same handshake gotcha as the APC/SEQ slider
+(record the first scan without emitting). This needs a draggable KNOB element (vertical-drag hit area over
+tempo_knob, like the volume sliders) + the delta-accumulator in panel_scan. Left unshipped deliberately:
+a half-modelled relative encoder is worse than none, and faithful-first forbids the erratic absolute mapping.

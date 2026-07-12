@@ -5,6 +5,21 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(13) — TEMPO/PROGRAM knob & DATA dial IDENTIFIED (0x17 relative encoder / 0x10 nav dial)
+Pursued making the data dial / tempo knob functional (the last two unmodelled rotary controls). Identified
+both by live CP-frame injection on the HOME screen + reading the on-screen tempo (crotchet=NNN):
+- **0x17 = the TEMPO/PROGRAM knob** (center). Injecting it changes the tempo; 0x10 does not.
+- **0x17 is a RELATIVE encoder**, not an absolute pot: distinct absolute injects gave non-monotonic tempos
+  (0x40→184, 0x80→56, 0x20→88, 0xF0→72, 0x10→88). The tempo moves by the DIFF of consecutive positions.
+- **0x10 = the big DATA dial** (navigates/edits the focused field; no home-screen tempo effect).
+- TIMING FINDING (useful for all future visual probes): the musical-notes image at t=8-11 is the BOOT
+  SPLASH; the PMEM home screen appears at **t≈13**. Probe after t=13, not t=8.
+DELIBERATELY NOT SHIPPED: wiring either as an absolute PORT_ADJUSTER would be a wrong-mapping guess (erratic
+tempo) -> violates faithful-first. Correct future wiring (documented in notes/slider-cp-protocol.md): a
+draggable knob whose adjuster DELTA accumulates into a wrapping uint8 position emitted as [0x17, pos&0xFF];
+the firmware diffs -> smooth relative tempo control. Needs a draggable-knob element + delta-accumulator in
+panel_scan; a focused next task, not rushed at session tail. Full data + method in slider-cp-protocol.md.
+
 ## TICK 2026-07-13 ~night(12k) — apply_svg.py ID-matching branch DONE + verified (layout collaboration loop complete)
 Implemented + tested the RELIABLE ID-matching branch of tools/apply_svg.py. When the adjusted SVG keeps our
 stable ids (group.index.ref, stamped by lay_to_svg; Inkscape preserves them), each element maps EXACTLY to
