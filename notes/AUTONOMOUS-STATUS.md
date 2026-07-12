@@ -40,6 +40,20 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~04:00 — PRIORITY 1 divergence sweep RE-RUN on the current four-effect binary
+The Jul-11 sweep (wf_46aaaf77) predated the four-effect wiring (only reverb reached audio then), so its
+"chorus SUSPECT/no-change" is stale/resolved. RE-RUNNING the full 227-segment sweep (R1B chorus + M1-M5
+multi + S1-S5 sounddsp) against the CURRENT binary (kn7000 built 02:52), memory-safe (FX_TAP=false frame
+sampler). New divergence-focused reporter: scratchpad/fxtest/divergence_report.py (FAIL=rail/clip,
+SUSPECT>=50%FS, calibrated vs R1 reverb healthy band 4-12% FS; rail thr 0x7FFF00=94%FS).
+RESULTS SO FAR (all PASS, 0 rails, 0 clips): R1 reverb 8/8, R1B chorus 8/8 (uploads confirmed 282-647),
+M1 multi delay/attacker 21/21 (uploads 90-471). Chain grinding through M2-S5 (distortion/fuzz/modulation
+= the stress cases) in the bg; waiter bwzs7g623 will report. Also: priority 3 (native MAC 0x06/0x08-0x16)
+CONFIRMED done+bit-identical; priority 4 0x8238 CONFIRMED decoded (constant, closed); priority 5
+catalogue in good shape (03/04 in sync, 01/02 layered). CODE REVIEW of the four-effect mix: correct;
+one OPEN faithfulness Q logged (chorus/multi/sounddsp wets scaled by gret -> reverb-off mutes them;
+shared-vs-per-effect DSP return unresolved, rule g, flagged for Felipe).
+
 ## TICK 2026-07-12 ~03:30 — EQ feasibility confirmed (insert model works; active-detection pending)
 Tested EQ (unit 8) insert: feeding it unit-0's output -> near-identical peak (254056 vs 254059, flat
 EQ passes level) = it IS a functional master INSERT. But avg per-frame diff ~39806 even flat (biquad
