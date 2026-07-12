@@ -4567,7 +4567,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 			{
 				switch (operation)
 				{
-					case 0x09:      // Rn = (Rx + Ry) / 2
+					case 0x09:      // Rn = (Rx + Ry) / 2  -- fixed-point signed average
+					{
+						// The last hot single-function op the DRC left to the interpreter (the
+						// 21065L effect microprograms use it for reverb/filter interpolation).
+						// Mirrors compute_avg (sharcops.hxx): value = (Rx>>1)+(Ry>>1)+(Rx&Ry&1)
+						// (overflow-free signed average == uint32((int64)(Rx+Ry) >> 1)); flags =
+						// clear all, AC = carry-out of the 32-bit Rx+Ry, AV = 0 (an average cannot
+						// overflow), AN/AZ from the result, AF/AS/AI cleared. Gated on liveness.
+						// AC first (captured before the value adds clobber the host carry):
+						if (AC_CALC_REQUIRED)
+						{
+							UML_ADD(block, I2, REG(rx), REG(ry));
+							UML_SETc(block, uml::COND_C, ASTAT_AC);
+						}
+						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
+						if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
+						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
+						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
+						UML_SAR(block, I0, REG(rx), 1);
+						UML_SAR(block, I1, REG(ry), 1);
+						UML_ADD(block, I0, I0, I1);
+						UML_AND(block, I2, REG(rx), REG(ry));
+						UML_AND(block, I2, I2, 1);
+						UML_ADD(block, I0, I0, I2);      // I0 = result; host Z/S reflect it
+						if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
+						if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
+						UML_MOV(block, REG(rn), I0);
+						return;
+					}
+
 					case 0x92:      // Fn = ABS(Fx - Fy)
 					case 0xdd:      // Rn = TRUNC Fx BY Ry
 					case 0xe0:      // Fn = Fx COPYSIGN Fy
