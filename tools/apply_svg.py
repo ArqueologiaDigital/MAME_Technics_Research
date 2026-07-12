@@ -75,39 +75,67 @@ def main():
     for s, x, y in stexts: by_str.setdefault(s, []).append((x, y))
 
     changes = {}   # (group, index) -> (new_x, new_y)  in group-local coords
-    stats = {'text_moved': 0, 'text_nomatch': 0, 'shape_moved': 0, 'shape_nomatch': 0, 'unchanged': 0}
+    stats = {'id_seen': 0, 'id_moved': 0, 'text_moved': 0, 'text_nomatch': 0, 'shape_moved': 0, 'shape_nomatch': 0, 'unchanged': 0}
     report = []
-    for gref, ox, oy, gw, gh in placements:
-        for gi, (ref, x, y, w, h, is_screen) in enumerate(groups.get(gref, [])):
-            if is_screen or ref in SKIP_REFS: continue
-            e = els.get(ref)
-            if e and e[0] == 'text':
-                # base label centre in SVG coords (matches lay_to_svg: x+w/2, y+h*0.78)
-                bx, by = x + ox + w/2, y + oy + h*0.78
-                cand = by_str.get(e[1], [])
-                if not cand: stats['text_nomatch'] += 1; continue
-                fx, fy = min(cand, key=lambda p: (p[0]-bx)**2 + (p[1]-by)**2)
-                if math.hypot(fx-bx, fy-by) > LABEL_RADIUS: stats['text_nomatch'] += 1; continue
-                nx, ny = fx - ox - w/2, fy - oy - h*0.78
-                d = math.hypot(nx - x, ny - y)
-                if d > 1.5:
-                    changes[(gref, gi)] = (round(nx, 1), round(ny, 1)); stats['text_moved'] += 1
-                    report.append(f"  txt {e[1]!r:28.28} ({x:.0f},{y:.0f})->({nx:.0f},{ny:.0f}) d={d:.0f}")
-                else: stats['unchanged'] += 1
-            else:
-                # shape: base centre in SVG coords, match nearest SVG shape centre
-                bx, by = x + ox + w/2, y + oy + h/2
-                if not sshapes: continue
-                fx, fy = min(sshapes, key=lambda p: (p[0]-bx)**2 + (p[1]-by)**2)
-                if math.hypot(fx-bx, fy-by) > RADIUS: stats['shape_nomatch'] += 1; continue
-                nx, ny = fx - ox - w/2, fy - oy - h/2
-                d = math.hypot(nx - x, ny - y)
-                if d > 1.5:
-                    changes[(gref, gi)] = (round(nx, 1), round(ny, 1)); stats['shape_moved'] += 1
-                    report.append(f"  shp {ref:16.16} ({x:.0f},{y:.0f})->({nx:.0f},{ny:.0f}) d={d:.0f}")
-                else: stats['unchanged'] += 1
 
-    print(f"=== apply_svg {os.path.basename(svg)}: {stats} ===")
+    # ---- RELIABLE: match by our stable element ids "group.index.ref" (Inkscape preserves them) ----
+    pmap = {(gref, gi): (pl, ox, oy)
+            for gref, ox, oy, gw, gh in placements
+            for gi, pl in enumerate(groups.get(gref, []))}
+    for el in ET.parse(svg).getroot().iter():
+        m = re.match(r'^([A-Za-z_]+)\.(\d+)\.', el.get('id', '') or '')
+        if not m or (m.group(1), int(m.group(2))) not in pmap: continue
+        key = (m.group(1), int(m.group(2)))
+        stats['id_seen'] += 1
+        (ref, x, y, w, h, is_screen), ox, oy = pmap[key]
+        if is_screen or ref in SKIP_REFS: continue
+        dx, dy = _tf(el); tag = el.tag.replace(NS, ''); e = els.get(ref)
+        if tag == 'text' or (e and e[0] == 'text'):
+            nx, ny = float(el.get('x', 0)) + dx - ox - w/2, float(el.get('y', 0)) + dy - oy - h*0.78
+        elif tag == 'g':
+            nx, ny = dx - ox, dy - oy               # our <g> uses translate(ax,ay) = element top-left
+        elif tag == 'circle':
+            nx, ny = float(el.get('cx', 0)) + dx - ox - w/2, float(el.get('cy', 0)) + dy - oy - h/2
+        elif tag == 'rect':
+            nx, ny = float(el.get('x', 0)) + dx - ox, float(el.get('y', 0)) + dy - oy
+        else:
+            continue
+        if abs(nx - x) > 1.5 or abs(ny - y) > 1.5:
+            changes[key] = (round(nx, 1), round(ny, 1)); stats['id_moved'] += 1
+            report.append(f"  id  {key[0]}.{key[1]}.{ref:18.18} ({x:.0f},{y:.0f})->({nx:.0f},{ny:.0f})")
+
+    if not stats['id_seen']:
+        # ---- FALLBACK: fuzzy string/nearest match (UNRELIABLE for id-less / editor-flattened SVGs) ----
+        for gref, ox, oy, gw, gh in placements:
+            for gi, (ref, x, y, w, h, is_screen) in enumerate(groups.get(gref, [])):
+                if is_screen or ref in SKIP_REFS: continue
+                e = els.get(ref)
+                if e and e[0] == 'text':
+                    bx, by = x + ox + w/2, y + oy + h*0.78     # matches lay_to_svg text baseline
+                    cand = by_str.get(e[1], [])
+                    if not cand: stats['text_nomatch'] += 1; continue
+                    fx, fy = min(cand, key=lambda p: (p[0]-bx)**2 + (p[1]-by)**2)
+                    if math.hypot(fx-bx, fy-by) > LABEL_RADIUS: stats['text_nomatch'] += 1; continue
+                    nx, ny = fx - ox - w/2, fy - oy - h*0.78
+                    d = math.hypot(nx - x, ny - y)
+                    if d > 1.5:
+                        changes[(gref, gi)] = (round(nx, 1), round(ny, 1)); stats['text_moved'] += 1
+                        report.append(f"  txt {e[1]!r:28.28} ({x:.0f},{y:.0f})->({nx:.0f},{ny:.0f}) d={d:.0f}")
+                    else: stats['unchanged'] += 1
+                else:
+                    bx, by = x + ox + w/2, y + oy + h/2
+                    if not sshapes: continue
+                    fx, fy = min(sshapes, key=lambda p: (p[0]-bx)**2 + (p[1]-by)**2)
+                    if math.hypot(fx-bx, fy-by) > RADIUS: stats['shape_nomatch'] += 1; continue
+                    nx, ny = fx - ox - w/2, fy - oy - h/2
+                    d = math.hypot(nx - x, ny - y)
+                    if d > 1.5:
+                        changes[(gref, gi)] = (round(nx, 1), round(ny, 1)); stats['shape_moved'] += 1
+                        report.append(f"  shp {ref:16.16} ({x:.0f},{y:.0f})->({nx:.0f},{ny:.0f}) d={d:.0f}")
+                    else: stats['unchanged'] += 1
+
+    mode = f"ID-MATCH reliable ({stats['id_seen']} ids)" if stats['id_seen'] else "FUZZY unreliable -- use an ID-tagged export"
+    print(f"=== apply_svg {os.path.basename(svg)} [{mode}]: {stats} ===")
     for r in report[:200]: print(r)
     if dry:
         print(f"(dry run -- {len(changes)} placements would move)")
