@@ -115,3 +115,25 @@ hardware via a different code path. CONCRETE NEXT EXPERIMENT: add a config to CL
 and tap 0x90000000-0x9FFFFFFF -- watch the diagnostic exercise 0x9CE00000/0x9CC00009/0x90C00000 (confirms
 the device map). Then find the disk task's handler (breakpoint 0x484285E4 dispatch during the format to
 get the task index/handler) and its FDC I/O to nail the normal-mode FDC base + register layout.
+
+## 2026-07-12 (addendum 2): disk-task region + hardware register map (address-reference analysis)
+Cross-referencing the candidate device addresses against the firmware narrows the map:
+- **The disk TASK code lives around 0x484A5xxx** (the status setters 0x484A51D5/E0 that the format polls,
+  plus 0x484A50C9/0x484A5362). It writes hardware via a **library register-helper `0x4C014A56(addr, data)`**
+  (d0=addr, d1=data) -- e.g. `mov 0x90008020,d0 ; clr d1 ; call 0x4C014A56` at 0x484A50C7 (a control/reset
+  write during a completion/cleanup branch, right after setting disk-state +0x1FA=2).
+- **0x9CE00000** (15 refs, MOSTLY in the early display-init cluster 0x48414D66..0x48415C31) is almost
+  certainly the **LCD controller IC104** (C0HBA0000117), NOT the FDC -- it uses a control write at
+  0x9CC001FC then 16-bit data words at 0x9CE00000/04/08 (a display command/data pattern). Refine the FDC
+  search to EXCLUDE 0x9CE00000.
+- **0x9CC00000 region** = a control/status latch: +8 = the six phantom buttons (active-low, SD-related,
+  [[kn7000-sd-strap-gate]]); +9 (bit toggle at 0x4854D726/A5/E7) and +0x1FC = disk/SD control bits.
+- **0x90008020 / 0x90C00000** = disk control/reset registers (written via 0x4C014A56 from the disk task
+  0x484A50C9/5362 and the factory diag 0x484A4F60/88).
+- **The uPD765 FDC command/status/data registers themselves are still not isolated** -- they are among the
+  addresses passed to the register-helper(s) from the disk task's command/poll path (not the cleanup write
+  to 0x90008020). NEXT: disassemble the disk task's command-issue + status-read path (trace from the
+  message the format posts, class 5/6, into the 0x484A5xxx handler) and note every `0x4C014A56(addr,...)` /
+  register-read-helper `addr` -- the MSR (polled) + FIFO (command/result) addresses are the FDC. The
+  0x90008020 / 0x9CC00xxx / 0x90C00000 cluster is the disk hardware block; the FDC data/status is one of
+  its sub-registers.
