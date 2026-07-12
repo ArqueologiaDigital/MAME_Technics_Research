@@ -5,6 +5,21 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(8) — consolidated the FDC milestone (blog + docs); -sound none also ruled out
+Floppy Heisenbug: added `-sound none` to the rule-out list (still 0 FDC -> not the sound subsystem;
+fdc-architecture.md addendum 23). With SHARC-DRC / -debug / perfect_quantum / sound all ruled out and the
+bug un-observable at instruction level, the floppy FORMAT stays parked at the engine-timing boundary.
+CONSOLIDATED the genuine milestone (FDC located + modelled) into deliverables:
+- **Blog: KN7000 part 24 "The disk controller was in the manual"** (mame-blog, committed) -- the RE story:
+  two wrong FDC addresses, then the service-manual schematic (decoder IC1 -> Y2 = FDC.CS = 0x98020000),
+  firmware confirmation (PC/AT regs, N82077AA), software-DMA via the 0x98010000 DACK, and the honest
+  Heisenbug edge (nearly published "it formats now" on a trace -- caught it, a 3rd wrong answer avoided).
+- **Docs: kn5000-docs kn7000.md corrected** (committed, Jekyll rebuilt clean) -- 0x98020000 was mislabelled
+  "sound-subsystem control"; now documented as FDC IC103 (N82077AA) with the register layout + CS decode.
+So this multi-tick floppy effort's shippable outcome = the FDC HARDWARE is correctly located/modelled/wired
+(committed, faithful, no regression, driven at boot) + documented (blog + docs). The FORMAT feature remains
+blocked on the emulation-timing Heisenbug (a future/fresh-angle problem, not a firmware/RE gap).
+
 ## TICK 2026-07-12 ~night(7) — ★★ floppy FORMAT blocked on an OBSERVATION-SENSITIVE emulation HEISENBUG
 Decisive characterization (bp-counter diagnostic under -debug -debugger none, 6 RAM-increment breakpoints):
 with the breakpoints the format REACHES the FDC (FDCdisp 0x48400084 = 27793 hits). So breakpoints -- like
