@@ -66,3 +66,23 @@ the demo. FIX for the next attempt: keep the machine active (tap EXIT / a harmle
 suppress the demo) OR navigate to a stable settings screen, THEN inject; better still, use the RAM
 correlation (MUTE UP 9 finds the APC/Seq setting byte; inject each 0xDx to see which moves it) which is
 demo-immune. Injection itself is proven (ring-probe PASS above).
+
+## ★★ IMPLEMENTED & VERIFIED (2026-07-12) — APC/SEQ slider is functional
+Identified 0xD2 = APC/SEQ by RAM write-correlation: its write-set overlaps MUTE UP 9's (SEG09 0x10, which
+edits the same setting) by 44 addresses vs exactly 20 for 0xD0/D1/D3 (the 20 = shared CP-processing path).
+Driver: panel_scan emits [0xD2, DATA] via panel_queue on VOL_APCSEQ change; DATA = 255 - adjuster*2.55
+(handler 0x484AD772 inverts + remaps through the monotonic ramp 0x48613508, so lower DATA = louder).
+Verified: the 0xD2 latch 0x5006BEA6 tracks the slider (vol 100->0xFF, 0->0x00, 50->0x80).
+
+### ★ GOTCHA (cost a debugging cycle) — do NOT emit a panel frame before the firmware services the panel
+The panel_queue delivery is a handshake: panel_queue kicks an ATN edge (group 0x1A) ONLY when the response
+queue was_idle (fully drained). If you emit a frame during early boot (before the firmware runs the panel
+handshake), it sits undelivered forever, so was_idle stays false and NO later ATN kicks fire -> ALL panel
+delivery stalls (buttons included). Fix: a 'synced' flag records the pot's initial value on the first scan
+WITHOUT emitting; only emit on a real change. Applies to any future sub-CPU-frame emission from the driver.
+
+### NEXT (optional refinements)
+- LED soft-takeover: light apcseq_vol_led when the slider position matches the current value; off when MUTE 9
+  diverges it (needs an output finder + tracking the firmware value vs the last-emitted slider value).
+- MIC / LINE-IN / MAIN pots: identify 0xD0/D1/D3 individually (same MUTE-correlation method against their
+  MUTE partners, or a demo-suppressed display probe) and bind them the same way.
