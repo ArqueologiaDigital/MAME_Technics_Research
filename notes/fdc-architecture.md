@@ -493,3 +493,32 @@ IMPLEMENTATION PLAN (next tick -- clear path to a WORKING format):
    subsequent SAVE/LOAD round-trips. Then it's a real user-facing win.
 Everything up to the FDC command is now correct + faithful (schematic-proven 0x98020000 N82077AA); only the
 DMA data phase remains. This is standard MAME FDC-DMA wiring.
+
+## 2026-07-12 (addendum 18): ★ THE FIX MECHANISM -- FDC data phase = software-DMA via the FDC.DRQ interrupt
+Found the actual data-transfer path. The KN7000 FDC transfer is NOT a hardware DMAC autonomously moving
+bytes -- it is **software-DMA driven by the FDC.DRQ interrupt**:
+- The per-byte transfer fn **0x48402140** (the FDC.DRQ ISR body): for each byte it either reads
+  **0x98010000 (FDC.DACK)** -> RAM buffer (read op, at 0x48402168 for cmd 5/0xd) or RAM buffer ->
+  0x98010000 (write op, e.g. FORMAT/WRITE, at 0x4840217a). Buffer ptr = *(0x5009e8a4), running index =
+  *(0x5009e860). It then `bclr 0x10,(0x36008004)` (GPIO handshake) and reads 0x34000160.
+- So FORMAT TRACK works like: firmware issues the command (DMA mode, DOR bit3), the FDC asserts DRQ per
+  byte -> FDC.DRQ IRQ -> ISR 0x48402140 feeds one C/H/R/N byte via 0x98010000 -> repeat -> FDC.TC ends it
+  -> MSR CB clears -> the firmware's MSR poll (0x48400190) exits -> format completes.
+WHY IT STALLS NOW: (a) FDC.DRQ (drq_cb) is a LOGGING STUB -- it never raises an MN10300 interrupt, so the
+ISR never runs; (b) 0x98010000 is UNMAPPED (io_r returns 0), so even if the ISR ran it couldn't move bytes.
+=> The FDC hangs waiting for its data, MSR CB stays set, the poll times out -> ERROR 08. (Confirmed by the
+trace: 0x98010000 = 0 accesses during the format.)
+
+THE FIX (concrete, in the driver -- the INTC is already modelled: intc_assert(group)):
+1. Map **0x98010000 -> m_fdc->dma_r()/dma_w()** (byte-wide, the FDC.DACK slot). [easy, schematic-proven Y1]
+2. Wire **m_fdc->drq_wr_callback() -> intc_assert(<FDC-DRQ group>)** so a DRQ raises the interrupt that runs
+   the ISR 0x48402140. Also wire **intrq (command-complete) -> intc_assert(<FDC-IRQ group>)** (the firmware
+   mostly polls MSR, but INTRQ may be needed for the result phase / other commands).
+3. The FDC connects to the MN103002A external interrupts IRQ1-IRQ7 (pins 41-48; schematic has FDC.DRQ,
+   FDC.TC nets). REMAINING UNKNOWN = which IRQn / INTC group FDC.DRQ + FDC.IRQ use -- find via the schematic
+   (trace FDC.DRQ/FDC.IRQ nets to the CPU IRQn pins) or the firmware (the ISR-registration / GxICR the DRQ
+   ISR 0x48402140 is installed on). Then wire drq/intrq to those groups.
+4. Also assert FDC.TC at the transfer end (m_fdc->tc_w) -- the firmware may drive TC via GPIO/0x34000160 or
+   count-based; check the ISR's end path (bclr 0x36008004 bit4 + 0x34000160 read).
+Once wired, FORMAT TRACK should complete and write a valid FAT12 layout. This is the last piece; everything
+up to it (FDC @0x98020000 N82077AA, command issue, MSR poll) is proven correct.
