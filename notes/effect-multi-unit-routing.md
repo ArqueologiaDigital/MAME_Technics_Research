@@ -240,3 +240,19 @@ Enabled chorus + slammed an 18-note cluster (held): DAC peak 2186, **0 clipped s
 reverb-only cluster ~2085). The chorus unit (rec06) CLIPs its own output so it self-limits; combined
 with the bounded feed (TG x send) the chorus path cannot rail/clip beyond the DAC clamp. The shipped
 chorus is production-robust like the reverb.
+
+## 2026-07-12: unit-0 confusion RESOLVED -- unit 0 = the REVERB (rec56), stable, type = coefficients
+Decisive test: read unit-0 PM signature before/after selecting REVERB Dark2 -> UNCHANGED (still
+rec56: 8401=0000716f, 8402=0000a300); unit 9 also unchanged (rec49). CONCLUSION:
+- unit 0 = rec56 IS the panel REVERB. Reverb TYPES (Room/Plate/Concert/Dark) load different
+  COEFFICIENTS into the same rec56 program (the effects sweep's "8 distinct tails"), NOT different
+  programs. rec56 is a comb+allpass reverb algorithm; the "enhancer" tag in records.tsv was heuristic.
+  We have been correctly calling unit 0 "the reverb" throughout.
+- Effect enable / type-select does NOT re-patch the CALL chain (verified stable across reverb-type,
+  chorus-enable, and sound-DSP-enable); all effects run on already-loaded units and only their
+  DM coefficients change.
+So the definitive current picture: u0=REVERB(rec56, coeff-swapped by type), u4/u6=CHORUS(rec06),
+u8=EQ(rec34), u9=rec49(separate, silent), u1/2/3/5/7=rec15/08/11/10/58. SOUND-DSP/MULTI run on some
+of the loaded units (no re-patch) but their exact unit isn't pinned (the default SOUND-DSP Enhancer
+= rec56 coincides with u0's algorithm) -- pin via the SPORT channel->unit map (send 0x8098/0x8298)
+or an enabling-time DM-coefficient diff. Chorus (the shipped 2nd effect) is fully validated by this.
