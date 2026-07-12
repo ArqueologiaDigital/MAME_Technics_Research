@@ -250,14 +250,16 @@ LB=['\t<group name="left_block">','\t\t<bounds x="0" y="0" width="1000" height="
 # + transparent click-area (id, the drag region) + animated knob (id, <animate> maps the PORT_ADJUSTER
 # value to the knob's Y position). The <script> at the bottom wires the drag via the ESQ1 slider library.
 SLPORT={"MAIN":"VOL_MAIN","APC/SEQ":"VOL_APCSEQ","MIC":"VOL_MIC","LINE IN":"VOL_LINEIN"}
+SLDISP={"APC/SEQ":"APC/SEQUENCER"}   # display name (Felipe: real panel spells it out); key stays "APC/SEQ"
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
-    LB.append(L(nm,cx-24,y-14,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH))
+    disp=SLDISP.get(nm,nm); lw=76 if len(disp)>8 else 48
+    LB.append(L(disp,cx-lw//2,y-14,lw,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH))
     port=SLPORT[nm]; sid=port.lower(); x=cx-15; w=30; kh=18
     LB.append(P("fader_rail",cx-3,y+kh//2,6,h-kh))
     # APC/SEQUENCER VOLUME indicator LED (Felipe, GREEN): lit when the slider position matches the current
     # APC/Seq volume value; turns off when the value is changed via MUTE UP/DOWN 9. id set for the driver
     # to drive later (the value/edit path is TBD -- see sliders.txt). Placed by the slider label.
-    if nm=="APC/SEQ": LB.append('\t\t<element name="apcseq_vol_led" ref="green_led"><bounds x="%d" y="%d" width="8" height="8"/></element>' % (cx+20, y-14))
+    if nm=="APC/SEQ": LB.append('\t\t<element name="apcseq_vol_led" ref="green_led"><bounds x="%d" y="%d" width="8" height="8"/></element>' % (cx+18, y+2))
     LB.append(f'\t\t<element id="{sid}_click" ref="inv_rect"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>')
     LB.append(f'\t\t<element id="{sid}_knob" ref="slider_knob"><animate inputtag="{port}" inputmask="0xffff"/><bounds state="100" x="{x}" y="{y}" width="{w}" height="{kh}"/><bounds state="0" x="{x}" y="{y+h-kh}" width="{w}" height="{kh}"/></element>')
 LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))

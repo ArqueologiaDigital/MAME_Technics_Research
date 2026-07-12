@@ -157,7 +157,7 @@
 	<element name="t10"><text string="EXIT"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="t11"><text string="MAIN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="t12"><text string="VOLUME"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="t13"><text string="APC/SEQ"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="t13"><text string="APC/SEQUENCER"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="t14"><text string="MIC"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="t15"><text string="LINE IN"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="t16"><text string="AUTO PLAY CHORD"><color red="0.72" green="0.72" blue="0.74"/></text></element>
@@ -370,10 +370,10 @@
 		<element ref="fader_rail"><bounds x="97" y="60" width="6" height="112"/></element>
 		<element id="vol_main_click" ref="inv_rect"><bounds x="85" y="51" width="30" height="130"/></element>
 		<element id="vol_main_knob" ref="slider_knob"><animate inputtag="VOL_MAIN" inputmask="0xffff"/><bounds state="100" x="85" y="51" width="30" height="18"/><bounds state="0" x="85" y="163" width="30" height="18"/></element>
-		<element ref="t13"><bounds x="142" y="37" width="48" height="9"/></element>
+		<element ref="t13"><bounds x="128" y="37" width="76" height="9"/></element>
 		<element ref="t12"><bounds x="142" y="46" width="48" height="9"/></element>
 		<element ref="fader_rail"><bounds x="163" y="60" width="6" height="112"/></element>
-		<element name="apcseq_vol_led" ref="green_led"><bounds x="186" y="37" width="8" height="8"/></element>
+		<element name="apcseq_vol_led" ref="green_led"><bounds x="184" y="53" width="8" height="8"/></element>
 		<element id="vol_apcseq_click" ref="inv_rect"><bounds x="151" y="51" width="30" height="130"/></element>
 		<element id="vol_apcseq_knob" ref="slider_knob"><animate inputtag="VOL_APCSEQ" inputmask="0xffff"/><bounds state="100" x="151" y="51" width="30" height="18"/><bounds state="0" x="151" y="163" width="30" height="18"/></element>
 		<element ref="t14"><bounds x="237" y="54" width="48" height="9"/></element>
