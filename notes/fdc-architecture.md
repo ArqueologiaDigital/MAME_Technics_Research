@@ -685,10 +685,13 @@ and where it tests for the B3+B4 service combo (then model/inject that source). 
 START are PANEL positions (MUTE UP 8/10), the B3+B4 combo may likewise be read through the panel matrix, not
 the music-keybed FIFO -- worth trying panel-button (SEG) injection at boot too.
 
-## 2026-07-12 (addendum 28): ★ SERVICE-MANUAL combo = C#3+D#3+C#4 (not B3+B4); FIFO ruled out
-The service manual §8 gives the entry EXPLICITLY: "Press and hold the C#3, D#3, C#4 keys, then turn on the
-power" (release after the service screen shows). So the self-test combo is THREE keys C#3+D#3+C#4 -- NOT
-Felipe's remembered "B3+B4". §8.4: SAVE/LOAD test = insert formatted floppy, press START (MUTE UP 10),
+## 2026-07-12 (addendum 28): TWO service entries (B3+B4 = floppy test only; C#3+D#3+C#4 = full menu); FIFO ruled out
+CORRECTION (per Felipe, both verified on REAL hardware): there are TWO power-on combos --
+  * B3+B4 (2 keys) -> loads the Floppy SAVE/LOAD test DIRECTLY (that test only) -- the more direct FDC path;
+  * C#3+D#3+C#4 (3 keys) -> loads the full Service Diagnostic MENU, per service manual §8 ("hold C#3,D#3,
+    C#4, turn on power; release after the service screen shows").
+(My earlier "B3+B4 was a misremembering" was WRONG -- it is a real alternative shortcut. Retracted.)
+§8.4: SAVE/LOAD test = insert formatted floppy, press START (MUTE UP 10),
 repeats save/load/compare, counts OK/NG on LCD, STOP (MUTE UP 8) to interrupt.
 Key indices (idx=MIDI-36, C4=0x18): C#3=0x0D, D#3=0x0F, C#4=0x19; note-on = idx|(vel<<8), bit7=0.
 Tested BOTH flooding and gentle-periodic FIFO injection (0x98050004) with the CORRECT three keys

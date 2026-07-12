@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12d) — sliders ADC investigation + blog Part 25 + B3+B4 correction
+- CORRECTION (Felipe): B3+B4 is a REAL entry (floppy test directly), NOT a misremembering; C#3+D#3+C#4
+  loads the full menu. Fixed the record in findings, fdc-architecture addendum 28, memory, status(12).
+- SLIDERS side-quest investigated: sliders already draggable + APC/SEQ LED added (done); the FUNCTIONAL
+  binding needs the slider ADC read path. Found (service manual): VR1102=APC/SEQ VOLUME on the main-CPU
+  ADC (AD2); VR1103=MAIN/VR1104=MIC/VR1105=LINE-IN on AD0/1/3. mn10300 core has NO ADC model, but the
+  MN103002A peripherals are driver-mapped (0x34000000 via io_r), so the ADC is interceptable IF its
+  address is found -- and it ISN'T yet (io-map.md shows no ADC block; 0x340 reads are all INTC/SIO/timer).
+  NEXT: live-probe the APC/Seq-volume screen to find the register that tracks the slider, then return
+  VOL_APCSEQ there. Full: side-quests/findings/sliders_findings.md.
+- BLOG Part 25 "The colour the firmware cannot know" (mame-blog): the panel LEDs -- firmware knows WHICH
+  lamp (PanelSwitchClassTable, validated) but not its COLOUR (physical); Felipe's green/red spec + the
+  lay_to_svg color-verify + B&W collaboration tool. Committed + posts.json entry added.
+
 ## TICK 2026-07-12 ~night(12c) — SIDE-QUEST DONE: LEDs checklist (colours + adds/removes)
 Implemented Felipe's LEDs_in_the_layout.txt in tools/gen_lay.py; regenerated kn7000.lay, REBUILT the
 driver (SUBTARGET=kn7000, layout recompiled), PUBLISHED, md5-matched. Verified via tools/lay_to_svg.py
@@ -41,10 +55,11 @@ can edit positions/dimensions/labels and I apply them back. DELIVERED:
 Other open layout side-quests (not yet started): LEDs_in_the_layout.txt (add/remove/recolor a checklist of
 LEDs), sliders.txt (APC/SEQ Volume LED + draggable sliders + bind APC slider to input).
 
-## TICK 2026-07-12 ~night(12) — ★ SELF-TEST: AUTHORITATIVE combo found in the SERVICE MANUAL (C#3+D#3+C#4)
-Read the service manual §8: the diagnostic entry is EXPLICIT — "Press and hold the **C#3, D#3, C#4** keys,
-then turn on the power" (release after the service screen shows). So Felipe's remembered "B3+B4" was WRONG:
-the combo is THREE keys C#3+D#3+C#4. §8.4 SAVE/LOAD: insert formatted floppy, press START (MUTE UP 10),
+## TICK 2026-07-12 ~night(12) — ★ SELF-TEST: TWO real entries (B3+B4 = floppy test only; C#3+D#3+C#4 = full menu)
+CORRECTION (per Felipe, both verified on REAL hardware): B3+B4 (2 keys) loads the Floppy SAVE/LOAD test
+DIRECTLY (that test only -- the MORE DIRECT FDC path); C#3+D#3+C#4 (3 keys) loads the full Service
+Diagnostic MENU (service manual §8: "hold C#3,D#3,C#4, turn on power; release after the service screen").
+My earlier "B3+B4 was a misremembering" was WRONG -- it is a real alternative shortcut. Retracted. §8.4 SAVE/LOAD: insert formatted floppy, press START (MUTE UP 10),
 repeats save/load/compare, counts OK/NG on LCD, STOP (MUTE UP 8) interrupts.
 - Retested FIFO injection (0x98050004) with the CORRECT three keys (idx C#3=0x0D,D#3=0x0F,C#4=0x19) BOTH
   flooding (->black LCD, boot starved) and gentle-periodic (->NORMAL home screen). => the keybed FIFO is
