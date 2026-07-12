@@ -40,6 +40,20 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~11:10 — FLOPPY: FDC address narrowed to 0x98010000 (0x98030000 eliminated); stub narrowed
+Continued Felipe's floppy thread. Firmware literal search resolved the FDC address candidates:
+0x98030000 = ZERO firmware refs -> FDC NOT there (removed from stub). 0x98010000 = programmed as a
+chip-select BASE by the boot bus-controller (mov 0x98010000,d0 -> (0x32000804) @0x484009D0), so it's a
+valid CS region + the strong FDC candidate (free slot vs +0=DSP/+2,6=sound/+4,5=TG/+7=strap). Narrowed
+the uPD765 stub to 0x98010000 only; reverb A/B BIT-IDENTICAL; rebuilt+published. FDC still not accessed
+(0 hits) -- only touched on a real disk op, which the deeply device-gated DISK menu doesn't reach (last
+tick: gate is a layered device-descriptor/UI check, FDC base is a runtime pointer in struct 0x50071254
+set up by disk driver 0x4853xxxx). STATE: FDC = uPD765-family @ ~0x98010000 (best candidate); stub
+scaffold in place; the mystery is GONE. Remaining floppy work = dedicated multi-tick: satisfy the
+drive-present/device gate to open the DISK menu -> confirm the FDC slot + register offsets from the live
+op -> wire MAME upd765 + floppy_image + KN7000 disk format + the 3 driver slots. Full detail:
+notes/floppy-fdc-investigation.md. (All other priorities remain done/ear-blocked.)
+
 ## TICK 2026-07-12 ~10:40 — Felipe's request: stubbed uPD765 @0x98010000 -> DISK menu does NOT open (gate is deeper)
 Per Felipe "stub the uPD765 at 0x98010000 and see if the disk menu opens": DONE (committed, labelled
 HACK; also stubbed 0x98030000). RESULT: the DISK MENU (SEG0D 0x40) still does NOT open, and the FDC stub
