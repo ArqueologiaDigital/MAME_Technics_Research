@@ -638,3 +638,20 @@ CONCLUSION for the floppy this session: the FDC hardware is fully + correctly mo
 (un-instrumented) operation. A future fix needs a fundamentally different angle -- e.g. bisecting the
 emulation's clock/timer rates (which peripheral event the dispatch waits on and whether its emulated period
 is wrong), or comparing the class-5 dispatch's RTOS scheduling against SD's working worker-task path. Parked.
+
+## 2026-07-12 (addendum 25): side-quest -- the FD SAVE/LOAD self-test (direct-FDC path, entry narrowed)
+Felipe's side-quest (side-quests/floppy_disk_save_and_load_self_test.txt): boot holding B3+B4 -> a floppy
+SAVE/LOAD factory test (START=MUTE UP 10, STOP=MUTE UP 8), needs a formatted disk, loops save/load/compare,
+counts OK/NG. KEY VALUE: this test uses the SERVICE-TEST reflection path (FdTestRunFunc 0x484A14B6 /
+FdIoFunc 0x484A1766) that drives the FDC DIRECTLY -- it should BYPASS the RTOS class-5 dispatch Heisenbug
+that blocks the normal FORMAT, so it's the way to VALIDATE the FDC @0x98020000 end-to-end.
+Findings (full: side-quests/findings/floppy_self_test_findings.md):
+- Test strings at VA ~0x48607000-0x4860B000 ("FD SAVE/LOAD TEST" 0x4860925C, "FLOPPY DISK SAVE&LOAD"
+  0x4860B168, "DISK EV_TEST" 0x4860763C, OK/NG). Accessed via computed-dispatch reflection (no direct ptrs).
+- B3 = key idx 0x17 (KEYS1 0x0080, GM59); B4 = idx 0x23 (KEYS2 0x0008, GM71).
+- ENTRY BLOCKER: Lua field:set_value() does NOT fire the music-key PORT_CHANGED->kbd_push (verified: 0 FIFO
+  events even on the play screen) -- so the SEG-button set_value trick can't inject music keys. A read-tap
+  on the FIFO 0x98050004 returning B3/B4 DID reach the runtime keybed (it set "TRANSPOSE: C") but did NOT
+  enter the self-test -> the self-test entry reads the held keys via a SEPARATE, earlier power-on path (a
+  raw keybed-matrix scan), not the runtime FIFO. NEXT: find that raw-matrix held-key detect in the early
+  boot + inject/model it (a read-tap on that address, or poke the detected-mode var), then run the test.
