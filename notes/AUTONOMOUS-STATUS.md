@@ -40,6 +40,20 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~10:40 — Felipe's request: stubbed uPD765 @0x98010000 -> DISK menu does NOT open (gate is deeper)
+Per Felipe "stub the uPD765 at 0x98010000 and see if the disk menu opens": DONE (committed, labelled
+HACK; also stubbed 0x98030000). RESULT: the DISK MENU (SEG0D 0x40) still does NOT open, and the FDC stub
+is NEVER accessed (0 hits). The DISK-MENU handler BAILS at an earlier DRIVE-PRESENT gate before reaching
+the FDC. Traced 3-4 levels: disk driver 0x48582CF0 checks a device-type/status (must be 0x11, else bail);
+0x484A593E checks 0xfb/0xfc error codes; the 0x11 comes from 0x4842b30c -> 0x48414a4f -> a device-
+descriptor TABLE at **0x5000097c** (index*4). So the gate is embedded in the layered disk stack (FS ->
+block device -> FDC), matching the original "heavily abstracted" finding. Reverb A/B BIT-IDENTICAL (stub
+audio-harmless); published. NEXT (multi-step, no longer a mystery): trace how the device-descriptor at
+0x5000097c gets its type (a drive-detect GPIO / FDC probe?), satisfy the drive-present gate so the menu
+opens -> then the FDC stub is reached and its exact register offsets appear -> confirm 0x98010000 vs
+0x98030000 -> wire MAME upd765 + floppy_image + disk format + the 3 driver slots. The uPD765 scaffold is
+in place. Full trace: notes/floppy-fdc-investigation.md.
+
 ## TICK 2026-07-12 ~10:15 — FLOPPY groundwork: FDC = uPD765-family, address NARROWED to 0x98010000/0x98030000
 Advanced the highest-value remaining feature (floppy) with bounded static-RE (service manual) + live
 elimination. FINDINGS: IC103 = FDC, custom part C1DB00000607; signal set FDC.CS/DACK/TC/DRQ = a
