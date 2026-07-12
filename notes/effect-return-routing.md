@@ -56,3 +56,28 @@ send-driven with a fixed makeup.
   separate subsystem (no TG-bus write) — both left as-is, documented.
 - The *_WET=0.60 makeup constants are still uncalibrated (need Felipe's ear); this fix is about the
   reverb-independence (correctness), not the absolute wet level.
+
+## 2026-07-12: stress validation of the fix + a panel-toggle observation
+STRESS TEST (scratchpad/retcap/excite*.lua): each effect isolated (reverb off for the non-reverb ones),
+slammed with an 8-key cluster (C4..G4 held) = the loudest realistic input, watching each effect's own
+DSP output slot for rails + the DAC for clips.
+- SOUND DSP isolated (reverb OFF) + 8-key cluster: own slot 0xC356 peak 488644 (5.8% FS), 0 railed
+  frames -> the per-effect-return fix is AUDIBLE IN ISOLATION and STABLE under heavy drive (reproduces
+  last tick's 231293 single-note result, now under an 8-note cluster). Before the fix this was muted
+  (xgret=0 with reverb off).
+- REVERB + 8-key cluster: own slot 0xC342 peak 1338464 (16.0% FS), 0 rails -> stable; even the loudest
+  path stays >5x below the 94% rail line.
+- DAC across the whole 8-key-cluster stress run: peak 10591, ZERO clipped samples.
+=> The excitation-dependent caveat from the divergence sweep is substantially CLOSED: the loudest
+   realistic input drives the effects to at most ~16% FS, nowhere near the rail, and the divergence
+   sweep already covered every effect TYPE for self-excitation.
+
+PANEL OBSERVATION (not a fix issue, flagged for the panel work): the CHORUS (SEG11 0x04) and MULTI
+(SEG10 0x04) on/off toggles did NOT engage their SEND (ch19.r8 / ch29.r8 stayed 0) when pressed via a
+scripted short press from the home screen -- yet the isolated per-effect-toggle capture (cap3) DID see
+ch19.r8 change on a chorus press. So these two effect-toggle bits appear CONTEXT-DEPENDENT (consistent
+with panel-completion-plan.md's note that some 0x2010 effect-button args are context-dependent). SOUND
+DSP (SEG0F 0x08) and REVERB (SEG0F 0x04) engage reliably. Chorus/multi AUDIO output itself is already
+validated via the divergence sweep's screen-navigation (R1B chorus 8 types, M1-M5 multi). This is a
+panel-mapping loose end (relates to priority 2), NOT a return-routing bug -- the send=0 is upstream of
+the mix fix.
