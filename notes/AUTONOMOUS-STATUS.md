@@ -40,6 +40,21 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~07:00 — mapped the per-part effect application system (chorus-depth RE, no fix yet)
+Pursued the chorus-depth-on-cold-toggle question (user-facing: press CHORUS -> LED on but depth 0 =
+inaudible until a sound-dsp/part-effect interaction applies stored depth 0x3C). Static RE (unidasm) +
+live PC/RAM capture established: (1) chorus send ALWAYS written by emitter 0x4C036FBA (cold=depth0,
+sounddsp=depth0x3C); (2) depth 0x3C is STORED, not computed on the toggle (0 writes of 0x3C to
+0x500B0000-FFFF during a sound-dsp toggle); (3) effect ENABLE flags = 0x500C0758 (reverb=bit9, setters
+0x4C00908F+ that ONLY set the flag, no send write); (4) apparent per-part apply loop 0x4C009000 (parts
+0..0x22) -> send-writer 0x4C03A660 keyed off part-descriptor array 0x500CE404 (stride 0x130, type byte
+@+0x10). MODEL: global enable toggle sets a flag+LED; a SEPARATE per-part apply pass writes the sends
+with stored depths. Faithful-vs-gap precisely scoped: does the CHORUS-enable handler trigger the apply
+loop (gap if yes-on-HW-not-emu; faithful if it relies on a later recompute)? NEXT = trace callers of
+0x4C009000 + disasm the chorus-enable handler. No code change (rule g -- don't fake the apply). Durable:
+advances the per-part effect model (deferred enabler for chorus-depth + APC/SEQ volume + per-effect
+sends). Full map: notes/per-part-effect-application.md. ALL 5 PRIORITIES remain done/ear-blocked.
+
 ## ★★★★★ TICK 2026-07-12 ~06:33 — DRC hot path COMPLETE: native ALU average too; 82M -> <500k fallbacks (>99%)
 Finished priority 3. After last tick's native single-fn multiplier (66M fallbacks gone), the biggest
 remaining fallback was the fixed-point ALU AVERAGE (op 0x09, Rn=(Rx+Ry)/2, ~3M/reverb -- the 21065L
