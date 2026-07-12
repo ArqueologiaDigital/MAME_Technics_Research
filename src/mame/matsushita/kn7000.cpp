@@ -1376,6 +1376,19 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
+	// EXPERIMENTAL uPD765 FDC stub (2026-07-12): the floppy controller IC103 (uPD765-family,
+	// CS/DACK/TC/DRQ) is a CS-decoder sibling of the TG/DSP in the 0x98xxxxxx window; service
+	// manual + live elimination narrowed it to 0x98010000 (offset 0x8000) or 0x98030000
+	// (offset 0x18000). Return a "ready for command" Main Status Register so FDC polling
+	// doesn't hang, and log accesses to learn the register layout + whether the DISK menu
+	// actually reaches the FDC. LABELLED HACK -- not a modelled device (see notes/floppy-*).
+	if ((offset >= 0x8000 && offset < 0x10000) || (offset >= 0x18000 && offset < 0x20000))
+	{
+		if (!machine().side_effects_disabled())
+			logerror("%s: FDC_R  0x%08X mask %04X\n", machine().describe_context(),
+				0x98000000u + (offset << 1), mem_mask);
+		return 0x0080;   // uPD765 MSR: RQM=1 (ready), DIO=0 (host->FDC), not busy
+	}
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
@@ -1411,6 +1424,14 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			tg_pitch_resolve(1, m_tg_addr[1]), tg_type_resolve(1, m_tg_addr[1]));
 		return;
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
+		return;
+	}
+	// EXPERIMENTAL uPD765 FDC stub write log (2026-07-12): see io_r. Captures FDC command
+	// bytes so the register layout can be RE'd. LABELLED HACK.
+	if ((offset >= 0x8000 && offset < 0x10000) || (offset >= 0x18000 && offset < 0x20000))
+	{
+		logerror("%s: FDC_W  0x%08X = %04X mask %04X\n", machine().describe_context(),
+			0x98000000u + (offset << 1), data, mem_mask);
 		return;
 	}
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
