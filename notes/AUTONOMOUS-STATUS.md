@@ -5,6 +5,24 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12e) — ★ FIXED: volume sliders now draggable on all views (Felipe bug)
+Felipe: sliders not draggable by clicking the layout (only the MAME analog menu worked); LinnDrum's are.
+ROOT CAUSE: the slider <script> (gen_lay.py) installed the pointer-drag callbacks on ONLY the "Compact"
+view. The 4 faders live in the left_block group, which also appears in "Full Unit" and "Left Block" views;
+MAME remembers the selected view per system in .cfg, so on any non-Compact view (e.g. Full Unit) the faders
+had no set_pointer_updated_callback -> not draggable. FIX (committed, rebuilt, published): loop all views,
+wire every one containing the sliders (all-views pattern, same as MAME esq1/linndrum/mpc60). Now Compact,
+Full Unit, Left Block are all wired.
+RED HERRING corrected: an early grep of kn7000_mame/src/emu (the fork's STALE source tree) suggested the
+engine lacked set_resolve_tags_callback / the pointer API -> WRONG. The binary builds from
+kn7000_mame_build/src, whose src/emu is an UPSTREAM RSYNC that HAS the full pointer API. Always grep the
+BUILD tree (kn7000_mame_build/src), not kn7000_mame/src, for engine questions.
+Verification limit: layout scripts run in a sandbox (no _G) in a SEPARATE Lua state from autoboot, and the
+recomputed callback fires at init (input ports unreadable) -> couldn't headlessly simulate a real mouse
+drag. Drag math verified structurally (library byte-identical to esq1's; clickarea bounds span the knob
+travel exactly). Felipe to confirm the drag works. Full: side-quests/findings/sliders_findings.md.
+GOTCHA for future ticks: `_G` is NIL in layout <script> sandboxes -- never reference it there.
+
 ## TICK 2026-07-12 ~night(12d) — sliders ADC investigation + blog Part 25 + B3+B4 correction
 - CORRECTION (Felipe): B3+B4 is a REAL entry (floppy test directly), NOT a misremembering; C#3+D#3+C#4
   loads the full menu. Fixed the record in findings, fdc-architecture addendum 28, memory, status(12).
