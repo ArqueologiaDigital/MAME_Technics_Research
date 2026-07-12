@@ -5,6 +5,16 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(9) — floppy dispatch localized (disk-task never runs); pivot to SHARC DRC remainder
+Non-masking tap diagnostic (Heisenbug preserved): during a normal format, 0 writes to the disk-task's
+cmd/FDC-path markers (0x5006be91, 0x50000010-23, 0x5006BC19, packet) -- vs 811/27793 in the masked run. So
+the async disk-task dispatch (class-5 handler) NEVER RUNS in the fast run; the format posts its command but
+the task isn't scheduled in time -> ERROR 08. Divergence = the RTOS dispatch, not the FDC. Non-masking taps
+have reached their limit (can show it didn't run, not why -- the timing is exactly what masks the bug).
+fdc-architecture.md addendum 24. FLOPPY PARKED at this refined boundary; FDC hardware = the shipped
+milestone. Pivoting to a concrete DRC-coverage improvement (part 23's documented remainder: the last SHARC
+interpreter-fallback, an ALU averaging op) since the floppy is at a fundamental engine-timing wall.
+
 ## TICK 2026-07-12 ~night(8) — consolidated the FDC milestone (blog + docs); -sound none also ruled out
 Floppy Heisenbug: added `-sound none` to the rule-out list (still 0 FDC -> not the sound subsystem;
 fdc-architecture.md addendum 23). With SHARC-DRC / -debug / perfect_quantum / sound all ruled out and the
