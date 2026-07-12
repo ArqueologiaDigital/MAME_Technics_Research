@@ -40,6 +40,28 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~11:35 — FLOPPY fully mapped: disk path inits only on a FILE OP (SD menu bypasses via SPI)
+Decisive RAM evidence: 0x98010000 appears NOWHERE in RAM; the disk device struct 0x50071250 is ALL ZEROS
+(disk-driver abstraction not initialized); device table 0x5000097c = UI-object descriptors, not HW types.
+KEY INSIGHT: the SD MENU works because it drives the SD card via the SD-SPI transport (0x9805000C)
+DIRECTLY, bypassing the disk-driver/FDC abstraction. The FLOPPY path (driver[0] 0x4853282e -> block-read
+0x4846da31 -> FDC(a1)) only runs on a Load/Save FILE OP selecting drive A:. So the FDC base isn't stored
+until a file op runs -> confirming the FDC (0x98010000 candidate) + its register offsets needs a live
+file op = deep menu nav + a modelled floppy drive.
+FLOPPY GROUNDWORK NOW COMPLETE (RE phase): chip = uPD765-family (IC103 C1DB00000607, CS/DACK/TC/DRQ);
+address = 0x98010000 (strong candidate; 0x98030000/0x98020000/0x98060000 eliminated); path = file-op ->
+disk-init 0x4846d800 -> device struct 0x50071254 -> block-read 0x4846da31 -> FDC(a1); uPD765 stub scaffold
+committed (labelled). The MODELING phase (wire MAME upd765 + floppy_image_device @0x98010000, drive the
+file-op path, RE the KN7000 disk format, wire the 3 driver slots) is a DEDICATED multi-tick effort best
+done WITH Felipe: he can insert a real floppy image + test menu navigation interactively. Full detail:
+notes/floppy-fdc-investigation.md.
+
+★ OVERALL STATE: all 5 priorities done/ear-blocked; effects excellent + suite-validated; DRC hot path
+native (>99% fewer fallbacks); per-effect returns fixed; panels verified; chorus-depth + per-part model
++ floppy all thoroughly MAPPED. The remaining big items (floppy MODELING, per-part effect refactor,
+reverb/wet loudness) each need Felipe (disk image / interactive test / his ear) or a dedicated multi-tick
+push. Autonomous RE groundwork is essentially exhausted; recommend scoping the modeling work with Felipe.
+
 ## TICK 2026-07-12 ~11:10 — FLOPPY: FDC address narrowed to 0x98010000 (0x98030000 eliminated); stub narrowed
 Continued Felipe's floppy thread. Firmware literal search resolved the FDC address candidates:
 0x98030000 = ZERO firmware refs -> FDC NOT there (removed from stub). 0x98010000 = programmed as a
