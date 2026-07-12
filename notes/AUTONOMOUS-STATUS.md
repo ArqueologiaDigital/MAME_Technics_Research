@@ -40,6 +40,23 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~08:00 — REUSABLE stack-walk capability + chorus depth-read logic traced
+Unblocked the caller-tracing wall. MAME has NO Lua debug/bp interface without -debug, BUT cpu.state
+exposes PC/SP/A0-A3/D0-D3/MDR -> at a DATA-access write-tap, read SP and walk the stack for lib return
+addresses (0x4C0xxxxx) = the CALLER CHAIN. REUSABLE (also unblocks the deferred floppy FDC-base trace).
+Applied to the chorus send: recovered caller chains (cold vs sound-dsp), both through send-writer func
+0x4C005000 + emitter wrapper 0x4C037DB9. Disasm of 0x4C005000 = the DEPTH-READ LOGIC:
+  depth = (bit2 of *(a0) set) ? *(a0+0x15) : 0   ; a0=*(0x20,sp); +0x15=chorus depth byte
+Cold path -> 0 (gate bit2 clear); sound-dsp path -> 0x3C. So the stored depth (0x3C confirmed) is gated
+by an 'apply' bit2 of *(a0); the cold chorus-toggle context has it clear. FAITHFUL-vs-GAP now narrowed:
+does the cold chorus-toggle context legitimately leave bit2 clear (faithful lazy apply) or should it be
+set (gap)? NEXT = find where bit2 of *(a0) gets set (the apply trigger; the 0x4C03B301 layer only in the
+sound-dsp chain is the part-effect recompute that satisfies it). No code change (rule g). Durable:
+reusable stack-walk technique + the chorus depth structure (a0->+0x00 bit2 apply gate, +0x15 depth).
+Full trace: notes/per-part-effect-application.md. CORRECTS+SUPERSEDES the prior deferral ('needs
+debugger-level tracing') -- the stack walk IS the tool, and the trace advanced substantially. Still a
+minor user-facing issue (chorus audible via screen); all 5 priorities remain done/ear-blocked.
+
 ## TICK 2026-07-12 ~07:25 — chorus-depth trace: CORRECTED a wrong inference; deferring (tooling limit)
 Continued the chorus-depth trace. Empirical data-read tap on the descriptor array 0x500CE404: it is
 read once on REVERB toggle, ZERO on chorus/sound-dsp toggles. So last tick's INFERENCE that the
