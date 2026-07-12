@@ -608,3 +608,13 @@ RTOS scheduler tick + the interrupt-controller GxICR writes during the format, a
 vs succeeding (tapped-but-heavy) runs' RAM state at the divergence. Or accept the floppy FORMAT as blocked
 on this engine-timing Heisenbug and move the effort elsewhere; the FDC hardware modelling stands as the
 milestone.
+
+## 2026-07-12 (addendum 23): -sound none ALSO ruled out -- Heisenbug is not the sound subsystem
+Tested the format with `-sound none` (memory taps, no instruction-level masking): still 0 FDC accesses
+(+2s/+8s/+18s all DACK=0/FIFO=0) -> same failure. So the wall-time-coupled sound path (audio-thread stream
++ atomics + host audio buffer) is NOT the race source. Cumulative rule-outs for the format Heisenbug:
+SHARC DRC (-nodrc), -debug, set_perfect_quantum, and -sound none -- none reproduces "format reaches FDC" in
+a normal (untraced) run; only per-instruction observation (trace/breakpoints) does. The awaited event's
+mechanism remains unidentified. Floppy FORMAT parked at this boundary; FDC hardware modelling is the
+milestone. (A future fresh angle: single-step-equivalent memory-tap correlation of the disk-task RAM state
+at the divergence, or bisecting the emulation timing sources one at a time.)
