@@ -120,3 +120,14 @@ SMALL deltas per scan (scale≈1) to avoid the velocity jump. Same handshake got
 (record the first scan without emitting). This needs a draggable KNOB element (vertical-drag hit area over
 tempo_knob, like the volume sliders) + the delta-accumulator in panel_scan. Left unshipped deliberately:
 a half-modelled relative encoder is worse than none, and faithful-first forbids the erratic absolute mapping.
+
+### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
+From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
+184 → 252 → **300 (max)** in TWO steps and then saturated. So a single detent (+4) ≈ +68 BPM here, i.e. the
+encoder is strongly velocity/acceleration-sensitive (consecutive same-direction events accelerate). CONSEQUENCE
+for wiring: a delta-accumulator driven at frame rate (~60 Hz) would fire a burst of same-direction events →
+instant acceleration → the tempo slams to the 300 rail on the smallest drag. To feel right the driver must
+RATE-LIMIT emitted encoder events (e.g. ≤1 per N ms) AND scale the adjuster delta down hard (many adjuster
+units per emitted +1), then tune visually. That tuning is the bulk of the work and why this is a focused
+future task, not a tail-of-session rush. (The acceleration itself is faithful to a real detented TEMPO knob —
+turn slow = fine, turn fast = coarse; the challenge is only mapping a mouse DRAG onto that without a burst.)
