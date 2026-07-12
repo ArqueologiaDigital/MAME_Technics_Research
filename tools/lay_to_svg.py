@@ -129,18 +129,22 @@ def main():
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
          f'viewBox="0 0 {W} {H}" font-family="sans-serif">',
          f'<rect x="0" y="0" width="{W}" height="{H}" fill="#ffffff"/>']
+    # Each element gets a STABLE id encoding (group, index-in-group, ref) so an edited copy of this SVG can
+    # be matched back to the exact .lay placement even after an editor (Inkscape) rewrites the markup --
+    # this is how Felipe's adjusted SVG rounds are applied faithfully instead of by fuzzy text/position.
     for gref, ox, oy, gw, gh in placements:
-        for ref, x, y, w, h, is_screen in groups.get(gref, []):
+        for gi, (ref, x, y, w, h, is_screen) in enumerate(groups.get(gref, [])):
             ax, ay = ox + x, oy + y
+            eid = f"{gref}.{gi}.{ref}"
             if is_screen:
-                o.append(f'<rect x="{ax}" y="{ay}" width="{w}" height="{h}" '
+                o.append(f'<rect id="{eid}" x="{ax}" y="{ay}" width="{w}" height="{h}" '
                          f'fill="#ffffff" stroke="#000000" stroke-width="2"/>')
-                o.append(f'<text x="{ax+w/2}" y="{ay+h/2}" text-anchor="middle" '
+                o.append(f'<text id="{eid}.t" x="{ax+w/2}" y="{ay+h/2}" text-anchor="middle" '
                          f'font-size="24" fill="#000000">LCD SCREEN</text>')
                 continue
             if color_leds and ref in ("red_led", "green_led"):
                 col = "#ff2020" if ref == "red_led" else "#20d020"
-                o.append(f'<circle cx="{ax+w/2}" cy="{ay+h/2}" r="{max(w,h)/2:.1f}" '
+                o.append(f'<circle id="{eid}" cx="{ax+w/2}" cy="{ay+h/2}" r="{max(w,h)/2:.1f}" '
                          f'fill="{col}" stroke="#000000" stroke-width="0.5"/>')
                 continue
             e = els.get(ref)
@@ -150,15 +154,15 @@ def main():
                 _, content, ow, oh = e
                 sx = w / ow if ow else 1
                 sy = h / oh if oh else 1
-                o.append(f'<g transform="translate({ax},{ay}) scale({sx:.4f},{sy:.4f})">'
+                o.append(f'<g id="{eid}" transform="translate({ax},{ay}) scale({sx:.4f},{sy:.4f})">'
                          f'{bw(content)}</g>')
             elif e[0] == 'text':
                 fs = min(h * 0.9, 13)
                 # e[1] is already XML-escaped (extracted verbatim from the .lay) -- do not re-escape
-                o.append(f'<text x="{ax+w/2}" y="{ay+h*0.78}" text-anchor="middle" '
+                o.append(f'<text id="{eid}" x="{ax+w/2}" y="{ay+h*0.78}" text-anchor="middle" '
                          f'font-size="{fs:.1f}" fill="#000000">{e[1]}</text>')
             elif e[0] == 'rect':
-                o.append(f'<rect x="{ax}" y="{ay}" width="{w}" height="{h}" '
+                o.append(f'<rect id="{eid}" x="{ax}" y="{ay}" width="{w}" height="{h}" '
                          f'fill="none" stroke="#000000" stroke-width="0.5"/>')
     o.append('</svg>')
     with open(out, "w") as f:
