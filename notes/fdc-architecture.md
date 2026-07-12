@@ -418,3 +418,28 @@ service_manual/technics_sx-kn7000_keyboard.pdf (160pp) pages 54/79/104. **IC103 
   (INDEX pulsing, DSKCHG clear) and the media check may pass.
 NEXT: (1) find the FDC CS base from the MN10300 bus-controller region setup (boot 0x484009D0 -> 0x32000xxx);
 (2) map upd72067 there on the D16-23 lane; (3) insert floppy image; (4) re-test format past ERROR 08.
+
+## 2026-07-12 (addendum 15): ★★★★ THE FDC IS AT 0x98020000 (schematic decoder + firmware confirm)
+CPU = **IC4 MN103002A**. Chip-select decoder **IC1 = TC74VHC138F (3-to-8)**, page 101: address inputs
+A0<-A(16), A1<-A(17), A2<-A(18); it sub-decodes the **0x98000000 CS region** into 0x10000 slots. Outputs:
+  Y0 0x98000000 (DSP)   Y1 0x98010000 = **FDC.DACK** (DMA-ack strobe, NOT the regs)
+  Y2 0x98020000 = **FDC.CS**  <-- the FDC register base
+  Y3 0x98030000 NC      Y4 0x98040000 = TGCS2 (TG)   Y5 0x98050000 = TGCS (SD/snd)
+  Y6 0x98060000 (snd)   Y7 0x98070000 (strap)
+(Y4=TG@0x98040000 fixes the CS base at 0x98000000; the old "FDC @0x98010000" guess was the DACK slot,
+one below the real reg base -- that's why it looked "close but never accessed as regs".)
+
+FIRMWARE CONFIRMS (fp.tr format trace + disasm): byte accesses (movbu, data on lane D16-D23) to
+  **0x98020004** (reg 2) read+write at boot PC 0x484000B5/C3/D1 -- a classic FDC DOR reset sequence
+  **0x9802000E** (reg 7) read at 0x48402623 -- the DISK-CHANGE / media check (DIR bit7 = DSKCHG)
+Register R = (byteoffset>>1)&7 (A0-A2 <- sysA1-A3), so regs at offsets {0,2,4,6,8,A,C,E}. PC/AT-style map
+fits: reg2=DOR(offset4), reg4=MSR/DSR(offset8), reg5=FIFO(offsetA), reg7=DIR/CCR(offsetE).
+
+ROOT CAUSE of ERROR 08 (finally, and FIXABLE): the driver currently backs 0x98020000 with the sound-
+control io_r/io_w (the old memory mislabelled 0x98020000 "snd"; the schematic proves it's FDC.CS). So the
+firmware's DOR reset + disk-change read return garbage -> media check fails -> ERROR 08. FIX = model a
+uPD765-family FDC (MAME upd72067) at 0x98020000 on the D16-D23 byte lane, offsets {0..E}=regs{0..7},
+DMA/TC via 0x98010000, IRQ via the FDC's INT; insert a floppy image so DSKCHG/INDEX/MSR read sane.
+This supersedes addenda 8-14's "FDC not locatable / dead code" -- the dead 0x484A4FBA/0x9CC00000 path was
+a red herring; the LIVE FDC is 0x98020000 and the firmware DOES drive it. NEXT: trace the full 0x9802000x
+sequence (boot init + format) to pin the exact register semantics, then implement.
