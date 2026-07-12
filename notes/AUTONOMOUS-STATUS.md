@@ -5,6 +5,29 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(3) — ★★★★ FLOPPY BREAKTHROUGH: FDC found at 0x98020000, ERROR 08 GONE
+The "new information" the floppy needed was in the repo all along: **service_manual/technics_sx-kn7000_
+keyboard.pdf** (160pp). RE of the schematic + firmware CRACKED the floppy:
+- **The FDC (IC103, C1DB00000607) is at 0x98020000.** Chip-select decoder IC1 (TC74VHC138F, MAIN 1/5 pg
+  101) sub-decodes the 0x98000000 CS region by A16-A18: Y2 = FDC.CS = 0x98020000 (Y4=0x98040000 TG fixes
+  the base; Y1=0x98010000 = FDC.DACK -- that's why the old "FDC@0x98010000" guess never saw regs). It is
+  an **N82077AA / PC-AT-compatible** part (full DOR/DIR set), NOT upd72067, NOT 0x9CC00000 (dead-code red
+  herring). CPU = MN103002A.
+- Firmware drives PC/AT registers there (movbu, D16-D23 byte lane): **+4=DOR** (boot /RESET pulse
+  @0x484000B5), **+8=MSR/DSR**, **+A=data FIFO**, **+E=DIR/CCR** (disk-change/DSKCHG @0x48402623). Register
+  = (offset>>1)&7. The driver had this region mislabelled "sound control" (io_r returned 0) -> the
+  disk-change read returned garbage -> media check failed -> ERROR 08.
+- **FIX SHIPPED (commit 7a30aaf):** replaced the default-OFF experimental upd72067@0x9CC00000 with a real,
+  always-on **N82077AA @ 0x98020000** (per-offset PC/AT handlers fdc_r/fdc_w, carved out of the io window
+  AFTER it so it wins; removed the FDCEXP switch). Boot: NO regression (reaches play screen). **FORMAT with
+  a floppy inserted: the disk-change check now PASSES -- ERROR 08 is GONE, the format enters the real
+  operation (shows PLEASE WAIT) instead of "disk may be faulty".** ★ Verified by snapshot.
+- REMAINING: the format now stalls in the command/data phase -- the FDC INTRQ + DMA (FDC.DRQ/DACK/TC via
+  the MN10300 DMA controller) are still logging stubs. Tracing the FDC command sequence (which
+  commands/how it polls) to wire IRQ + DMA -> full format. notes/fdc-architecture.md addenda 14-15.
+- NAV TIMING (Felipe's note): press the format-nav buttons SLOWER -- wait for each screen to fully load
+  before the next press (PAGE UP was being pressed before the FLOPPY DISK FORMAT screen finished loading).
+
 ## TICK 2026-07-12 ~night(2) — priorities re-confirmed DONE; floppy at a boundary (SD-worker vs class-5 split)
 Cron tick handed the 2026-07-11 priority list. RE-VERIFIED all five are already complete (earlier ticks):
 - **P1 effects sweep = CLEAN.** Re-read wf_46aaaf77-352 + the completed re-run: 241 segments / 12 runs,
