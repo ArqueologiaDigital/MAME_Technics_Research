@@ -152,3 +152,19 @@ target task index + confirm the post succeeds, and search for a floppy disk-task
 lib 0x4C03D0C8, as used by the SD DiskInit). If no floppy task exists, THAT is the fix point (create/model
 it); if it exists, trace its early-return. Only past that does the FDC hardware get touched + its address
 revealed. The FDC register isolation is downstream of fixing the task stall.
+
+## 2026-07-12 (addendum 4): CORRECTION -- the format posts NO class-5/6 disk-task command
+Breakpoint on the message poster 0x484298A0 with a class-5/6 filter, armed through a live format: ZERO
+class-5/6 posts fire. So the earlier inference "the format posts a command to a disk task (class 5/6) and
+polls for completion" is WRONG -- the format does NOT drive the disk task via 0x484298A0. What IS verified:
+the format (YES=SEG13 0x01) shows "ERASE WAIT!..", spins ~2700x reading disk-state status bytes
+0x5006BC19/BC23/BC24 (getters 0x4849FBD8 / 0x484A4F9C / 0x484A4FAB), reaches NO disk/FDC hardware anywhere
+0x30-0x9B, then times out back to the DISK menu. So the format's own handler polls those status bytes and
+aborts, but WHO the format expects to set them (and via what path) is NOT yet the class-5/6 disk task.
+HONEST STATE: the format-execute handler itself (the code YES dispatches to) has NOT been located; it is
+reached through the MILK GUI screen dispatch, not a simple event. The right next tool is a CPU instruction
+TRACE across the YES press (or catching the GUI screen's registered YES handler) to see the handler's
+actual logic + abort branch -- the previous static inferences (disk-task post; strap-bit-15 gate on the
+format path -- both shown to NOT be on the format path via zero breakpoint hits) over-reached. The solid,
+verified facts remain: full nav to the format; format executes+aborts; zero FDC hardware reached; FDC
+architecture (VFS/block/test-mode layers, addresses) as documented above; 0x9CE00000=LCD not FDC.
