@@ -40,6 +40,27 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~09:15 — floppy exploration (FDC not reached; 0x84000000 false lead ruled out); honest completion
+Applied the new register-read-at-tap capability to the highest-value remaining feature (floppy). Result:
+FDC still not reached. SEG0D 0x40 ("DISK MENU") did NOT open a disk menu (LCD stayed HOME); the heavy
+0x84000000 reads it triggered are MODELED RAM (alias of 0x44000000), NOT the FDC (false lead now ruled
+out). Boot-only external-bus hits: 0x32000000 (bus/chip-select controller) + 0x8C000000 (upload). The FDC
+(IC103) only appears on a real disk Load/dir op deep in the DISK menu, which needs reliable menu
+navigation + likely a floppy image -- a genuine multi-tick task. Groundwork saved in
+notes/floppy-fdc-investigation.md so the next attempt skips the dead end. No code change.
+
+★ HONEST COMPLETION ASSESSMENT: the productive autonomous scope is COMPLETE. All 5 priorities done or
+ear-blocked; driver in excellent shape. This session shipped: clean reverb (ALUSAT+sign-ext+TDM), FOUR
+audible effects with correct per-effect returns, 241-effect divergence sweep (0 rails/clips), SHARC DRC
+hot path native (82M->500k fallbacks, >99%, bit-identical), PAGE/CONTRAST buttons, upstream SHARC
+catalogue (consolidated + split patches), blog Parts 16-23, docs. Deep RE mapped: per-part effect model,
+chorus-depth mechanism (0x500CE342), + a reusable stack-walk/register-read tracing capability.
+REMAINING threads ALL need Felipe or are big multi-tick: floppy (big; needs disk image + FDC model +
+format RE), volume sliders (need per-part audio separation), reverb/wet loudness cal (ear-blocked),
+chorus-depth apply (mapped, minor, deferred). Recommend: further large work be scoped WITH Felipe on
+return. Autonomous ticks will continue only where genuinely bounded value exists (no manufactured rabbit
+holes).
+
 ## TICK 2026-07-12 ~08:40 — chorus-depth DEFINITIVELY mapped (addr 0x500CE342) + 2 corrections; thread CLOSED (minor)
 Used the register-read-at-tap capability to finish mapping the chorus-depth mechanism (and correct two of
 my own earlier errors): the per-effect DEPTH array is **0x500CE340** (sound-dsp @+0, CHORUS depth @+2 =
