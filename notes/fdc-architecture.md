@@ -396,3 +396,25 @@ compare an SD op's device-method dispatch (which IS wired) against the floppy's 
 hardware-present strap/register at BOOT would cause the floppy device (and its methods) to register. If the
 floppy device simply isn't in this firmware's device table, the format cannot be completed without the real
 FDC hardware behaviour that populates it -- a genuine firmware/hardware-modelling boundary to report.
+
+## 2026-07-12 (addendum 14): ★★★ SERVICE MANUAL FOUND -- IC103 FDC fully characterized (schematic)
+service_manual/technics_sx-kn7000_keyboard.pdf (160pp) pages 54/79/104. **IC103 = C1DB00000607 = FDC
+(FLOPPY DISC CONTROLLER)**, MAIN 2/5 schematic (page 104). Pinout (CPU side):
+- **A0(pin44) <- system A(1), A1(43) <- A(2), A2(42) <- A(3)** -- 3 register-select lines (8 registers),
+  stride = system addr bit1 (=2 bytes). NOT A0-connected.
+- **CS(45), IOR(46), IOW(47), ORQ(48 = DMA request), IRQ, RESET(38)**.
+- **Data bus = system D16-D23** (byte lane 2 of the 32-bit bus) via 47R nets Z109/Z110 -> FDC D0-D7.
+- FDD side: MEDIA IO0/1, DENSEL, DRVDEN0/1, RDATA, DSKCNG(disk-change), WRYPRY(write-protect), INDEX,
+  TRXO(TRK00), WDATA, WGATE, HDSEL, STEP, DIR, MTRO(motor), -> CN101 "TO FDD".
+=> This is a **uPD765-family / PC-style FDC** (8 regs via A0-A2, IOR/IOW strobes, IRQ + DMA), i.e. exactly
+   MAME's upd72067 -- the FDCEXP experiment used the RIGHT device but the WRONG address/width (0x9CC00000,
+   only 2 regs). CORRECTION to addendum 8-13: the dead 0x4854D835 (touching 0x9CC00009 / 0x9CC001FC) is
+   NOT this FDC -- those offsets aren't on the D16-23 lane and don't fit an 8-reg FDC; it's a different
+   device (likely IC104 LCD-ctrl or SD). The real IC103 FDC is at its own CS base (TBD from the bus
+   controller), byte-wide on D16-23, 8 regs at system offsets {0,2,4,6,8,A,C,E}.
+- disk-change (DSKCNG) + write-protect (WRYPRY) + INDEX + TRK00 are FDC status bits -> the "media inserted"
+  the format's device-selection needs likely comes from the FDC, NOT strap 0x98070000 (which is DRIVE-unit
+  present, bits10/11). This is why forcing the strap didn't clear ERROR 08. Model the FDC w/ a disk inserted
+  (INDEX pulsing, DSKCHG clear) and the media check may pass.
+NEXT: (1) find the FDC CS base from the MN10300 bus-controller region setup (boot 0x484009D0 -> 0x32000xxx);
+(2) map upd72067 there on the D16-23 lane; (3) insert floppy image; (4) re-test format past ERROR 08.
