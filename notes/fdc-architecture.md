@@ -288,3 +288,45 @@ THE FIX (two coupled parts, both behind the FDCEXP switch, default OFF):
     0x90008020/0x90C00000; + the FDC status/FIFO the init polls) so the init COMPLETES instead of
     busy-waiting, and the servicing loop can do real disk I/O.
 Full agent findings + register map: this file (addenda 8-10) + the disk-controller map from the workflow.
+
+## 2026-07-12 (addendum 11): ★★★ CORRECTION — addendum 10 was WRONG. 0x484A4FBA is DEAD CODE; bit15 is moot.
+Addendum 10 claimed clearing strap 0x98070000 bit15 would enable the floppy by letting the FDC engine
+0x484A4FBA run. **That is false.** Proven by static + live RE:
+- **Static (unidasm full-image disasm + pointer scan):** 0x484A4FBA has *zero* callers of any kind --
+  no `call`/`jmp`/`bra`/`calls` targets it, no absolute 32-bit pointer to it exists anywhere in the 4MB
+  image, it is in no task descriptor, and the instruction immediately before it (0x484A4FB7) is `ret 0,8`
+  so it cannot be reached by fall-through either. The FDC init 0x4854D835 (the only toucher of the
+  0x9CC00000 gate-array control regs) has *exactly one* caller: 0x484A4FE3, **inside** the dead engine.
+  So the whole parallel-FDC path (0x484A4FBA / 0x4854D835 / 0x484A506B / format handler 0x484A5075) is
+  unreachable. bit15 gates a function that is never entered -> its value is moot.
+- **Live (fp.tr, the format trace, 557k lines):** during the format NONE of these run:
+  0x484A4FBA=0, bit15-test 0x484A4FDA=0, 0x4854D835=0, 0x9805000C=0, 0x34000170(exact)=0,
+  command builder 0x4854BB52=0, command reg 0x50005200=0, handler 0x484A5075=0. The only disk code that
+  runs is the disk-present probe 0x484D7751 (x2). No disk I/O of any kind occurs -- the firmware just
+  polls completion byte 0x5006BC19 (via 0x484A593E) which nothing writes -> timeout.
+
+### THE REAL FLOPPY PATH (workflow agent a62b1297, the useful lead)
+The production floppy transport is NOT the parallel 0x9CC00000 engine. It is a **serial disk transport**:
+- Command builder **0x4854BB52** writes a command byte to RAM reg **0x50005200** (+params at 0x50005208/09).
+- Transport **0x4854BF60 / 0x4854BF9D / 0x4854C013 / 0x4854C06F**, reached as *runtime driver-method
+  pointers* (`mov (0x14,a0),a1 ; mov (4,a1),a2 ; calls (a2)` -- 0 static callers, which is exactly why
+  no bp/pointer scan finds them). Each pushes a byte to data port **0x9805000C** (the SAME serial engine
+  the SD path uses) then busy-polls handshake **0x34000170 bit4** (`movhu (0x34000170),d0 ; btst 0x10,d0`)
+  inside a `setlb..lne` loop, IRQ-masked (`or 0x0800,psw` / `and 0xF7FF,psw`), bounded by a retry count.
+- If bit4 never asserts, every byte transfer exhausts its retries -> command never completes -> the
+  format's completion poll (0x5006BC19) times out.
+- Disk-present probe **0x484D7751**: if 0x484D7713==3 (strap 0x98070000 bit1 clear) reads 0x9CC00021[3:2]
+  for type; else uses 0x98070000 bits10/11. Returns "present" in the emulated state, so the format is NOT
+  gated off -- it shows ERASE/WAIT then times out (matches observed behaviour).
+
+### THE REAL FIX HYPOTHESIS (unverified -- needs a multi-second post-YES trace to confirm the transport runs)
+1. Model the byte handshake: assert **0x34000170 bit4** when the modelled disk device has a byte
+   ready/consumed at **0x9805000C**, so the transport's per-byte busy-poll succeeds.
+2. Back the disk-present/type read (0x9CC00021[3:2] or strap bits10/11) with a plausible "disk present".
+3. NOT needed: the 0x9CC00000 uPD765 device and the bit15 strap change (both target the dead engine) --
+   revert them.
+OPEN: my fp.tr window was only 6 frames after YES; the transport (if it runs at all) may start later in
+the multi-second ERASE/WAIT. Must capture a ~3s post-YES trace to confirm 0x4854BF60/0x9805000C/0x34000170
+actually execute before committing to the handshake fix. (Tooling: virtiofs fd-exhaustion wedges the shell
+after each MAME launch -- run `sudo -n /usr/local/sbin/drop-caches` between launches; trace via
+`mach.debugger:command("trace ...")`, NOT `-debug` which pauses.)

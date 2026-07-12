@@ -1350,27 +1350,25 @@ void kn7000_state::maincpu_mem(address_map &map)
 uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 {
 	// 0x98070000 (offset 0x38000 within the 0x98000000 window): a status/strap word.
-	// *** bit15 GATES THE FLOPPY FDC POWER-ON INIT + SERVICING LOOP *** (0x484A4FBA: movhu
-	// (0x98070000),d0 ; btst 0x8000,d0 ; beq 0x484A4FE3 -> run FDC init + the disk-command
-	// servicing loop 0x484A506B; bit15 SET -> ret immediately, skipping the whole floppy
-	// subsystem). The earlier "factory power-on diagnostic" reading of this branch was WRONG
-	// (RE 2026-07-12, notes/fdc-architecture.md): the multi-second GPIO bit-banging seen there
-	// is that FDC init BUSY-WAITING on FDC status the driver doesn't answer. With bit15 SET the
-	// floppy never initialises -> the format's disk command is never serviced (the servicing
-	// loop that writes completion 0x5006BC19 = 0xFB/0xF6 never runs) -> "ERASE WAIT!.." times out.
-	// So the floppy only works with bit15 CLEAR *and* the FDC/disk-controller modelled -- both
-	// gated behind the experimental "Experimental floppy (FDC)" switch (default OFF). SD is
-	// unaffected (its worker task 0x4854AD90 is created unconditionally, independent of this bit).
+	// NOTE on bit15: it is btst-tested at 0x484A4FDA inside 0x484A4FBA (the parallel-FDC engine
+	// body: movhu (0x98070000),d0 ; btst 0x8000,d0 ; ...). An earlier tick believed clearing bit15
+	// would enable the floppy. That was FALSITY -- proven wrong by static + live RE (2026-07-12,
+	// notes/fdc-architecture.md addendum 11): *0x484A4FBA is unreachable DEAD CODE* -- it has zero
+	// callers of any kind (no call/jmp/bra target it, no absolute pointer, no task descriptor) and
+	// the instruction right before it is `ret`, so it cannot be entered by fall-through either. The
+	// FDC init 0x4854D835 is called ONLY from inside this dead engine (unidasm: its sole caller is
+	// 0x484A4FE3). So bit15 gates nothing observable and its value is moot. The REAL floppy path is
+	// the serial disk transport (0x4854BF60/BF9D via runtime driver-method pointers -> data port
+	// 0x9805000C shared with SD, busy-polling handshake 0x34000170 bit4); that is what needs
+	// modelling, NOT bit15 and NOT the 0x9CC00000 gate-array. Keep bit15 SET (shipped default; SD is
+	// unaffected either way -- its worker task 0x4854AD90 is created unconditionally).
 	if (offset == 0x38000)
 	{
 		// bit12 (= data-bus D28) = rear-panel MIDI IN / BASS PEDAL selector SW701 (0x484A2CB1 ->
 		// 0x484b2615 reads bit12 -> MIDI-in mode flag 0x5006bfd2 bit1). bits1..2 = the TG-present
 		// strap (0x484d7713): bit1 clear -> "no TG" leaves the TG-enable gate closed (silent),
-		// so report the TGs present (bit1|bit2).
-		uint16_t strap = (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
-		if (!(m_fdcexp->read() & 1))
-			strap |= 0x8000;   // default: skip the floppy FDC init (controller not fully modelled yet)
-		return strap;          // FDCEXP on: bit15 CLEAR -> run the floppy FDC init + servicing loop
+		// so report the TGs present (bit1|bit2). bit15 = moot (gates dead code, see above).
+		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
 	}
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
