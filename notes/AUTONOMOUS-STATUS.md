@@ -38,6 +38,12 @@ bit-identical) but inactive; comments updated to say so (rule g). NEXT: resolve 
 image. Full detail + tools: notes/floppy-fdc-investigation.md 2026-07-12 (6)-(8). Runner gotchas: use
 register_frame_done (NOT add_machine_frame_notifier) + integer mach.time.seconds; never -log (floods);
 save-state (m:save/m:load) makes soft-key sweeps clean; -skip_gameinfo mandatory for scripted runs.
+**FDC ARCHITECTURE fully reversed from disassembly (Felipe's ask): notes/fdc-architecture.md** -- the
+VFS/device-table layering (drive A: -> table 0x500079F8 -> registered driver method = the FDC I/O), block
+read/write (0x4846DA31 `calls (a2)` = the FDC method, a runtime ptr cached via 0x50071254), the test-mode
+RTOS path (FdIoFunc 0x484A1766 etc. post class-5/6 msgs to a disk task), and the separate FORMAT path
+that aborts at a pre-FDC gate. Open question = the FDC's PHYSICAL address (runtime ptr; NOT in 0x98);
+capture it by a live VFS file-op (dir/LOAD) that populates 0x50071254, then read a2 at 0x4846DA31's calls.
 
 ## ★★★ FULL GREEN-LIGHT MANDATE 2026-07-11 (Felipe, away many hours)
 "Keep improving the driver autonomously. Assume my answer is 'yes, let's do it!' for everything.
