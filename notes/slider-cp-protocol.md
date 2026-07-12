@@ -121,6 +121,36 @@ SMALL deltas per scan (scale≈1) to avoid the velocity jump. Same handshake got
 tempo_knob, like the volume sliders) + the delta-accumulator in panel_scan. Left unshipped deliberately:
 a half-modelled relative encoder is worse than none, and faithful-first forbids the erratic absolute mapping.
 
+## ★★ DATA dial WIRED & event-generation CONFIRMED (2026-07-13, commit 14ed7cb)
+The panel already declared an `IPT_DIAL` port ("DATA DIAL") and `seg_to_addr[0x1A]=0x10` labelled
+"VALUATOR wire -- DATA dial", but nothing read `m_dial` -> the big value wheel was dead. panel_scan now
+forwards the IPT_DIAL accumulator as a CP TYPE-2 frame **[0x10, POSITION]** on change (handshake-poison
+guard: record the initial position silently, emit only on a real move). MAME's IPT_DIAL is a relative
+accumulator (0..255, wraps) = exactly what wire 0x10's handler expects (it diffs successive positions).
+
+**Identification is conclusive (not a guess):**
+- Handler 0x484AD6B0 does a RELATIVE diff: remap DATA through 0x48613188, compare vs shadow 0x5006BEA9,
+  return **0xFFFF when unchanged** else the new value (and update the shadow). A relative ENCODER -- which
+  RULES OUT an absolute pitch-bender (pitch bend sends absolute values, no diff).
+- On a real change, the dispatch caller (0x484AD2CD, after `call 0x484AD680`) stores the value to
+  0x5006BDA8 and **emits a [control_id, value, 0xFF] event** via the enqueue routine 0x484AD519 (three
+  calls: id, value, 0xFF terminator). So turning 0x10 generates a genuine panel event; the consumer routes
+  it by control-id/focus.
+- Schematic CN1102 ROTA/ROTB -> AD0/AD1 = a rotary encoder (the data wheel); by elimination the other
+  bank-00 rotary 0x17 = TEMPO/PROGRAM (confirmed) and 0xD0-D3 = the four volume pots.
+
+**Verified live (driver path, NO ring injection):** driving the IPT_DIAL field from Lua
+(`dialf:set_value(3,6,..30)`) makes the firmware's 0x10 latch 0x5006BEA0 track it exactly (00,03,..1E,
+one-scan lag) -- so panel_scan reads m_dial and emits [0x10,pos] itself. Buttons still deliver (DISK MENU
+still opens; no panel regression). seg_to_addr[0x1A] neutralised to 0xff so the dial solely owns wire 0x10.
+
+**Honest scope:** the on-screen navigation effect depends on a FOCUSED value-edit field. On the home screen
+and the DISK MENU (soft-key-navigated), turning the dial shows no visible change -- faithful (the home
+screen has no dial-focus). A headless snapshot demo of the dial scrolling a list wasn't captured because the
+seg->function button map is unreliable for reaching the sound-select screen; the event-generation proof
+above (0x484AD2CD -> 0x484AD519) is the substitute. NEXT (optional): an interactive check on a value-edit
+screen, or trace the 0x484AD519 event consumer to see the EV_DIALUP/DOWN -> UI focus routing.
+
 ### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
 From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
 184 → 252 → **300 (max)** in TWO steps and then saturated. So a single detent (+4) ≈ +68 BPM here, i.e. the

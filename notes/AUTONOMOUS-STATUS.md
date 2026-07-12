@@ -5,6 +5,25 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(14) — ★ DATA dial WIRED & shipped (IPT_DIAL -> CP wire 0x10); event-gen disasm-confirmed
+Made the big DATA value-wheel FUNCTIONAL (commit 14ed7cb, built+published). The driver already had a dead
+`IPT_DIAL` "DATA DIAL" port + a `seg_to_addr[0x1A]=0x10` "VALUATOR wire" placeholder that nothing read;
+panel_scan now forwards the IPT_DIAL accumulator as a CP TYPE-2 frame [0x10, POSITION] on change (same
+handshake-poison guard as the APC/SEQ pot). MAME's IPT_DIAL is a relative accumulator = exactly what wire
+0x10's handler wants (it diffs successive positions).
+IDENTIFICATION CONCLUSIVE (disasm, not a guess): handler 0x484AD6B0 does a RELATIVE diff (returns 0xFFFF
+unchanged / value on change) -> a relative ENCODER, rules out absolute pitch-bend; and on a change the
+caller 0x484AD2CD emits a [id, value, 0xFF] event via enqueue 0x484AD519 -> a genuine panel event. Plus
+schematic ROTA/ROTB encoder + elimination (0x17=tempo confirmed, 0xD0-D3=pots).
+VERIFIED (driver path, no injection): setting the IPT_DIAL field from Lua makes the firmware's 0x10 latch
+0x5006BEA0 track it exactly (set 3,6,..30 -> latch 00,03,..1E); buttons still deliver (DISK MENU still opens).
+HONEST SCOPE: on-screen nav needs a FOCUSED value-edit field; home/DISK-MENU (soft-key) screens show no
+visible change when turned = faithful. A headless "dial scrolls a list" screenshot wasn't captured (the
+seg->function map is unreliable for reaching sound-select); the event-gen disasm is the substitute proof.
+KEY TIMING (all future visual probes): the musical-notes image at t=8-11 is the BOOT SPLASH; the PMEM home
+screen appears at t~=13. Full detail: notes/slider-cp-protocol.md. NEXT (optional): interactive visible
+confirm on a value-edit screen, or trace the 0x484AD519 consumer for the EV_DIALUP/DOWN focus routing.
+
 ## TICK 2026-07-13 ~night(13) — TEMPO/PROGRAM knob & DATA dial IDENTIFIED (0x17 relative encoder / 0x10 nav dial)
 Pursued making the data dial / tempo knob functional (the last two unmodelled rotary controls). Identified
 both by live CP-frame injection on the HOME screen + reading the on-screen tempo (crotchet=NNN):
