@@ -5,6 +5,25 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12) — ★ SELF-TEST: AUTHORITATIVE combo found in the SERVICE MANUAL (C#3+D#3+C#4)
+Read the service manual §8: the diagnostic entry is EXPLICIT — "Press and hold the **C#3, D#3, C#4** keys,
+then turn on the power" (release after the service screen shows). So Felipe's remembered "B3+B4" was WRONG:
+the combo is THREE keys C#3+D#3+C#4. §8.4 SAVE/LOAD: insert formatted floppy, press START (MUTE UP 10),
+repeats save/load/compare, counts OK/NG on LCD, STOP (MUTE UP 8) interrupts.
+- Retested FIFO injection (0x98050004) with the CORRECT three keys (idx C#3=0x0D,D#3=0x0F,C#4=0x19) BOTH
+  flooding (->black LCD, boot starved) and gentle-periodic (->NORMAL home screen). => the keybed FIFO is
+  DEFINITIVELY NOT the power-on combo source (now proven with authoritative keys, not just tentatively).
+  The combo is a RAW keybed-matrix scan and/or panel/CP SIO read at power-on — unmodeled by the driver.
+- Mapped the SCREEN MANAGER for force-navigation: register fn 0x4842A717 copies each screen struct
+  {config@0,handler@4,count@8,dataTable@0xc} into SCREEN TABLE **0x5011FAAC + tableIndexID*16**. Service
+  screens: idx 0x104->cfg 0x00040004/0x4842A802; 0x105->0x00040009/0x4842CB02; 0x106->0x0004000A/0x4842CB4A.
+  Lookup-by-ID = 0x484294A6; sub-entry (0x18-byte items) lookup = 0x484295A4; context var 0x5000757C.
+  (0x4842A802 is a GENERIC screen handler, not service-specific.)
+NEXT (two paths, in side-quests/findings/floppy_self_test_findings.md + fdc-architecture.md add.28):
+  A) FAITHFUL — find+model the raw boot combo read (candidates: 0x9CC00000 GPIO / panel SIO 0x34000809->
+     ring 0x5006BDB0); B) HACK (clearly-labelled) — pin the screen-manager "goto screen ID"/current-screen
+     var, poke to idx 0x104, map START (MUTE UP 10)/STOP (MUTE UP 8) panel buttons, run w/ floptest_fat12.img.
+
 ## TICK 2026-07-12 ~night(11) — SELF-TEST (Felipe "resume"): dispatcher found; combo NOT via FIFO; FDC OK at boot
 Resumed the FD SAVE/LOAD self-test. Progress:
 - Ruled out the keybed FIFO (0x98050004) as the B3+B4 combo source: FIFO read-tap injection (cycling ->
