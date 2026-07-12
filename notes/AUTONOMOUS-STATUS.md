@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★ TICK 2026-07-12 ~01:10 — THIRD audible effect: SOUND DSP (unit 9)
+Big tick: (1) RESOLVED unit-0 = the reverb (rec56, stable; type=coefficients, no re-patch). (2)
+IDENTIFIED SOUND DSP = unit 9 (rec49) via enabling-time DM-coefficient diff; verified unit 9 outputs
+938389 when fed. (3) SHIPPED SOUND DSP audibility (660ad59): tonegen captures send 0x8098 (verified
+low byte == on-screen SOUND DSP DEPTH), tick feeds unit-9 (0xC376) + sums return (0xC356) as an
+independent wet; DSP output ring widened to 6 (reverb/chorus/sound-dsp). VERIFIED: reverb bit-identical
+all-off (A/B 0/2.11M), SOUND DSP enabled -> send=40, unit-9 out 266447, DAC 0 clip/rail. Docs updated.
+THREE audible effects now: REVERB (u0) + CHORUS (u4) + SOUND DSP (u9). Same first-cut approximations
+(whole-mix feed; CHORUS_WET/DSP_WET=0.60 need ear calibration). NEXT: MULTI (send 0x8298, same
+mechanism -- identify its unit via coeff-diff + feed); EQ (u8 master/insert, different); FLAG3 4
+records (deep). The effect-audibility mechanism (identify unit via coeff-diff -> feed input -> sum
+return, gated) is now proven+repeatable.
+
 ## TICK 2026-07-12 ~00:50 — chorus robustness PASS + SHARC upstream patches packaged
 - CHORUS ROBUSTNESS (dense input): PASS. Chorus + 18-note cluster held -> DAC peak 2186, 0 clipped
   (chorus unit rec06 self-CLIPs; feed is bounded). Production-robust like the reverb.
