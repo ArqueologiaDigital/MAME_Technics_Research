@@ -65,3 +65,25 @@ identify the chip -> model FDC + disk format + wire the 3 driver slots). The reg
 capability IS the right tool for the FDC-base step once a disk op runs; the blocker now is UI navigation
 into a working DISK menu + likely a floppy image. Deferred; groundwork saved so the next attempt skips
 the 0x84000000 false lead.
+
+## 2026-07-12 (2): FDC chip + address region NARROWED from the service manual + live elimination
+Service manual (technics_sx-kn7000_keyboard.pdf, 160pp) findings:
+- **IC103 = FDC**, custom part **C1DB00000607**. Signal set = **FDC.CS / FDC.DACK / FDC.TC / FDC.DRQ**
+  = a classic **uPD765-family** DMA-driven floppy controller (MAME `upd765` / `upd72065`). (IC104 =
+  C0HBA0000117 = LCD controller, for reference.)
+- FDC.CS is a decoder output SIBLING of **TGCS/TGCS2** (tone gen 0x98040000/0x98050000) and **ADSPAB**
+  (DSP 0x98000000) -- the A16-A18 chip-select decoder for the 0x98xxxxxx window. So the **FDC is in
+  0x98000000-0x9807ffff** (the driver's io_r/io_w catch-all), at one of the CS-decoder slots.
+LIVE ELIMINATION (fdcaddr.lua, tapping the unassigned 0x98 slots): **0x98060000 = SOUND CONTROL** (a
+periodic 0xEA write from PC 0x4854D1A8; matches the driver's "0x98060000 more sound control" comment) --
+RULED OUT as the FDC. 0x98010000 and 0x98030000 showed NO periodic access -> the FDC is most likely one
+of those two (only touched on a disk op). Known 0x98 slots: +0=DSP(ADSPAB), +2=sound ctrl, +4/+5=TG
+(TGCS/TGCS2), +6=sound ctrl, +7=strap. Free slots for FDC: **+1 (0x98010000) or +3 (0x98030000)**.
+CHICKEN-AND-EGG confirmed: pressing DISK MENU (SEG0D 0x40) does NOT reach the FDC -- it bails at an early
+"drive present/ready" gate (last tick: only a 0x84000000 RAM copy, screen stays HOME). So a live disk op
+can't reveal the exact FDC slot until that gate is satisfied. To finish (dedicated effort): either (a)
+model a STUB uPD765 at 0x98010000 AND 0x98030000, watch which the firmware polls + how, then satisfy the
+drive-present gate (a status bit / GPIO) so the DISK menu opens; or (b) read the main-board CS-decoder
+schematic page to pin FDC.CS's exact A16-18 code. Then wire MAME's upd765 + a floppy_image_device +
+model the KN7000 disk format + the 3 driver slots (floppy=0x4853282e). BIG multi-tick, but now: chip
+family known (uPD765), address narrowed to 0x98010000/0x98030000, gate identified.
