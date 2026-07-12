@@ -87,3 +87,20 @@ drive-present gate (a status bit / GPIO) so the DISK menu opens; or (b) read the
 schematic page to pin FDC.CS's exact A16-18 code. Then wire MAME's upd765 + a floppy_image_device +
 model the KN7000 disk format + the 3 driver slots (floppy=0x4853282e). BIG multi-tick, but now: chip
 family known (uPD765), address narrowed to 0x98010000/0x98030000, gate identified.
+
+## 2026-07-12 (3): uPD765 STUB experiment -- menu doesn't open; the gate is deeper than the FDC
+Per Felipe: stubbed a uPD765 MSR (RQM ready) at 0x98010000 AND 0x98030000 in io_r/io_w + logging.
+RESULT: DISK MENU (SEG0D 0x40) still does NOT open, and the FDC stub is NEVER accessed (0 hits). So the
+DISK-MENU handler BAILS at an earlier "drive present" gate BEFORE reaching the FDC. Traced the handler:
+- DISK press -> disk driver at 0x48582CF0: calls 0x4842b30c, checks `cmp 0x11,d0` -> if !=0x11 jmp
+  0x485831b5 (bail). 0x11 = an expected device-type/status code.
+- higher frame 0x484A593E: calls 0x4849fbd8, checks `cmp 0xfb,d0` / `cmp 0xfc,d0` (0xfb/0xfc = error
+  status codes, e.g. no-disk/no-drive).
+- (The GPIO reads 0x36008024/0x36008064 I first suspected are PANEL-SCAN bset/bclr RMW outputs gated on
+  RAM 0x5006bda1 -- NOT the disk gate.)
+So the drive-present gate is a STATUS returned by 0x4842b30c / 0x4849fbd8 (deeper in the layered disk
+stack: FS -> block device -> FDC). NEXT: disassemble 0x4842b30c and 0x4849fbd8 to find what they read
+(a drive-detect GPIO bit or a device-struct status) and return; satisfy it so the DISK menu opens, which
+would then reach the FDC stub and reveal its exact register offsets. The uPD765 stub scaffold is in place
+(0x98010000/0x98030000, audio-harmless, bit-identical reverb). This is the concrete next step for the
+floppy -- a bounded multi-step trace, no longer a mystery.
