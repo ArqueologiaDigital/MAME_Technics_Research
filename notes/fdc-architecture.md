@@ -168,3 +168,19 @@ actual logic + abort branch -- the previous static inferences (disk-task post; s
 format path -- both shown to NOT be on the format path via zero breakpoint hits) over-reached. The solid,
 verified facts remain: full nav to the format; format executes+aborts; zero FDC hardware reached; FDC
 architecture (VFS/block/test-mode layers, addresses) as documented above; 0x9CE00000=LCD not FDC.
+
+## 2026-07-12 (addendum 5): TOOLING CAVEAT -- cpu.debug:bpset actions are UNRELIABLE with -debugger none
+Verified: `cpu.debug:bpset(addr,"",'printf...;g')` returns a valid handle but its ACTION does NOT produce
+captured output under `-debug -debugger none` in this build (a bp on the continuously-running engine loop
+0x485519BC fired 0 times; a bp on the disk-struct getter 0x4849FB5F likewise). So EVERY earlier
+"breakpoint fired zero times" conclusion is UNRELIABLE and must be re-verified with memory taps:
+- "format bypasses the block/VFS layer" / "disk-driver funcs fire zero times" (fdctrace2) -- UNRELIABLE.
+- "format posts NO class-5/6 command" (postbp) -- UNRELIABLE.
+- "format does not call the strap-bit-15 gate / 0x9C-0x9E ops" (gatebp) -- UNRELIABLE.
+RELIABLE facts stand (Lua memory taps + reads, which DO work): the format polls disk-state status bytes
+0x5006BC19/BC23/BC24; it reaches NO hardware in the tapped 0x30-0x9B; and the disk device struct
+0x50071254 stays 0 (a plain Lua read) so the VFS disk-open/device-create never runs during the format.
+So the reliable picture is unchanged (format stalls pre-hardware waiting on status bytes) but the specific
+call-graph attributions were tool-artifacts. USE: memory taps + cpu.state (SP/PC/A0-A3/D0-D3 all readable)
++ stack-walk for call chains; the `trace` command works and writes a file (but is huge ~450MB/8s even with
+noloop). For code-execution facts, prefer taps/traces over bpset-action-printf.
