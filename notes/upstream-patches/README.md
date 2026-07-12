@@ -23,7 +23,7 @@ general ADSP-2106x fixes (not KN7000-specific). Full technical rationale: ../sha
    The DRC sent the ENTIRE fixed multiplier family to the interpreter; this is a real hot path (measured
    ~66M interpreter fallbacks per second of SHARC audio DSP -- the single-function multiplier, distinct
    from #4's multi-function MAC). Verified BIT-IDENTICAL vs the interpreter. Unsigned/mixed-sign + SAT/RND
-   forms still fall back (can be added later). sharcdrc.cpp only; upstream-clean.
+   forms still fall back (can be added later). Also includes the fixed-point ALU AVERAGE (op 0x09, another heavily-used effect-kernel op the DRC left to the interpreter). Together these take the KN7000 DSP hot path from ~82M interpreter fallbacks per reverb run to <500k (>99%). sharcdrc.cpp only; upstream-clean.
 
 ## Verification standard
 Every fix restores DRC == interpreter (or interpreter == TRM). The reverb WAV A/B (bit-identical

@@ -40,6 +40,20 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ TICK 2026-07-12 ~06:33 — DRC hot path COMPLETE: native ALU average too; 82M -> <500k fallbacks (>99%)
+Finished priority 3. After last tick's native single-fn multiplier (66M fallbacks gone), the biggest
+remaining fallback was the fixed-point ALU AVERAGE (op 0x09, Rn=(Rx+Ry)/2, ~3M/reverb -- the 21065L
+effect microprograms use it for reverb/filter interpolation). Implemented native UML (commit e487bb7):
+overflow-free signed average + exact flags (AC=carry of the 32-bit Rx+Ry, AV=0, AN/AZ from result, rest
+cleared, gated on liveness). VERIFIED reverb BIT-IDENTICAL (md5 0787b60c; the AC carry is exact).
+Instrumented confirm: total DSP fallbacks now UNDER 500k/22s-reverb (counter at 500k threshold never
+fired) -- down from 82M originally (>99% reduction; the DSP DRC hot path is now essentially fully
+native). Built + published (06:33), clean-build A/B bit-identical. Wall-clock still host-noise-bound.
+Both patches (single-fn multiplier + ALU average) belong in the upstream SHARC catalogue. ALL PRIORITIES
+DONE: P1 sweep clean, P2 PAGE/CONTRAST done, P3 DRC hot path native (this), P4 0x8238/loudness done/ear-
+blocked, P5 catalogue current. Remaining open threads are deep/ear-blocked: chorus-depth-on-cold-toggle
+(per-part effect-depth static RE), per-part effect model refactor, reverb/wet loudness cal (Felipe's ear).
+
 ## ★★★★★ TICK 2026-07-12 ~06:20 — PRIORITY 3 (real hot path): native SINGLE-function fixed multiplier, 66M fallbacks GONE
 Data-driven. Instrumented the SHARC DRC compute-fallback and found the effects kernel's hot path is NOT
 the multi-function MAC (which I made native earlier -- and which the kernel NEVER uses; 0 multiop

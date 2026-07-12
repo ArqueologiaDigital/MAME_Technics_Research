@@ -1,8 +1,8 @@
 From bb2d5169d9022fae02fdee19c1f1e5d8d78bdeac Mon Sep 17 00:00:00 2001
 From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
 Date: Sun, 12 Jul 2026 06:21:27 +0100
-Subject: [PATCH] sharc DRC: native single-function fixed-point multiplier --
- eliminates 66M interpreter fallbacks/reverb-run
+Subject: [PATCH 1/2] sharc DRC: native single-function fixed-point multiplier
+ -- eliminates 66M interpreter fallbacks/reverb-run
 
 Data-driven priority-3 win. Instrumented the DRC compute-fallback and found the
 KN7000 effects kernel's hot path is NOT the multi-function MAC (which I'd already
@@ -82,6 +82,71 @@ index aa7d00f..adb4868 100644
  				switch (operation)
  				{
  					case 0x48:      // Rn = Rx * Ry (UUF)
+-- 
+2.47.3
+
+
+From e487bb71e87c552f9f3d389f1700576264285694 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sun, 12 Jul 2026 06:31:12 +0100
+Subject: [PATCH 2/2] sharc DRC: native fixed-point ALU average (Rn=(Rx+Ry)/2)
+ -- the last hot fallback op
+
+Follows the native single-fn multiplier: op 0x09 was the biggest remaining
+interpreter fallback (~3M/reverb-run; the 21065L effect microprograms use the
+average for reverb/filter interpolation). Native UML mirrors compute_avg:
+overflow-free signed average (Rx>>1)+(Ry>>1)+(Rx&Ry&1); flags cleared then AC =
+carry-out of the 32-bit Rx+Ry, AV=0, AN/AZ from the result, AF/AS/AI cleared, all
+gated on liveness. Verified reverb WAV BIT-IDENTICAL to the interpreter (the AC
+carry flag is exact). Drives the DSP hot path to near-zero interpreter fallbacks.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcdrc.cpp | 31 +++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index adb4868..bd6367c 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -4567,7 +4567,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 			{
+ 				switch (operation)
+ 				{
+-					case 0x09:      // Rn = (Rx + Ry) / 2
++					case 0x09:      // Rn = (Rx + Ry) / 2  -- fixed-point signed average
++					{
++						// The last hot single-function op the DRC left to the interpreter (the
++						// 21065L effect microprograms use it for reverb/filter interpolation).
++						// Mirrors compute_avg (sharcops.hxx): value = (Rx>>1)+(Ry>>1)+(Rx&Ry&1)
++						// (overflow-free signed average == uint32((int64)(Rx+Ry) >> 1)); flags =
++						// clear all, AC = carry-out of the 32-bit Rx+Ry, AV = 0 (an average cannot
++						// overflow), AN/AZ from the result, AF/AS/AI cleared. Gated on liveness.
++						// AC first (captured before the value adds clobber the host carry):
++						if (AC_CALC_REQUIRED)
++						{
++							UML_ADD(block, I2, REG(rx), REG(ry));
++							UML_SETc(block, uml::COND_C, ASTAT_AC);
++						}
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++						if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
++						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++						UML_SAR(block, I0, REG(rx), 1);
++						UML_SAR(block, I1, REG(ry), 1);
++						UML_ADD(block, I0, I0, I1);
++						UML_AND(block, I2, REG(rx), REG(ry));
++						UML_AND(block, I2, I2, 1);
++						UML_ADD(block, I0, I0, I2);      // I0 = result; host Z/S reflect it
++						if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++						if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
++						UML_MOV(block, REG(rn), I0);
++						return;
++					}
++
+ 					case 0x92:      // Fn = ABS(Fx - Fy)
+ 					case 0xdd:      // Rn = TRUNC Fx BY Ry
+ 					case 0xe0:      // Fn = Fx COPYSIGN Fy
 -- 
 2.47.3
 
