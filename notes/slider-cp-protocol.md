@@ -86,3 +86,12 @@ WITHOUT emitting; only emit on a real change. Applies to any future sub-CPU-fram
   diverges it (needs an output finder + tracking the firmware value vs the last-emitted slider value).
 - MIC / LINE-IN / MAIN pots: identify 0xD0/D1/D3 individually (same MUTE-correlation method against their
   MUTE partners, or a demo-suppressed display probe) and bind them the same way.
+
+### LED soft-takeover probe (2026-07-13) — NOT firmware-driven via the panel LED shadow (in home/demo state)
+Tapped the panel LED shadow (bank A 0x50150A3C, bank B 0x50150A7C) while moving VOL_APCSEQ and pressing MUTE
+UP 9 (/tmp/ledprobe.lua). Moving the slider wrote only LED register 0 (0x50150A3C) = 0x00 (nothing lit);
+MUTE 9 wrote nothing. So the apcseq_vol_led soft-takeover is NOT driven through the normal panel LED frames
+in the home/demo state -- the firmware likely only runs the slider-vs-value comparison on a specific
+volume/settings screen (or the indicator is hardware-only). apcseq_vol_led stays added-but-dark for now.
+NEXT if pursued: repeat the probe on the accompaniment-volume settings screen, or model it driver-side
+(compare VOL_APCSEQ's emitted value to the firmware's current setting -- needs the setting RAM address).
