@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~06:15 — chorus/multi toggle RESOLVED: buttons WORK (not a panel bug); it's an effect-DEPTH detail
+Investigated last tick's chorus/multi "toggle doesn't engage" flag. DECISIVE via (1) the USER MANUAL
+(p~2518: "Press the CHORUS/REVERB/MULTI button to turn it on. These effects are applied to all the
+sounds") = they are DIRECT global toggles; (2) LED OUTPUT DIFF (scratchpad/retcap/ledcheck.lua): a COLD
+CHORUS press toggles cpr_led29 0->1, cold MULTI -> cpr_led28, REVERB=cpr_led27 (matches prior RE),
+SOUND DSP=cpr_led19. So the FIRMWARE PROCESSES the cold chorus/multi press and the panel HLE delivers it
+-- THE BUTTONS WORK. NO panel-button-mapping bug. My last two ticks' "context-dependent / doesn't engage"
+framing was WRONG -- I watched the SEND (lagging) instead of the LED (immediate). CORRECTED in notes.
+REAL REMAINING (subtler, effect-depth, NOT panel): a cold chorus toggle -> LED on but SEND (0x8198 low =
+per-part chorus DEPTH) stays 0 even after playing (clincher.lua) = on-but-inaudible; after a SOUND DSP
+toggle the same press writes send=0x3C (audible). So depth application is gated on an effect-bus refresh
+that the part-effect (sound-dsp) path triggers, not the cold global toggle. Likely default per-part chorus
+depth=0; unresolved whether faithful (need a depth set on the CHORUS screen) or a depth-apply gap. Belongs
+to the per-part effect-depth model (future RE). NOT changing anything (rule g). No code change this tick
+(pure RE/correction). Also: manual text extracted to /tmp/kn7000_manual.txt (useful reference).
+
 ## TICK 2026-07-12 ~05:45 — stress-validated the per-effect return fix; ruled out sliders; flagged a panel loose end
 Surveyed the breadth mandate: MIDI in AND out are DONE (TX->mdout1/mdout2 wired, line 2833+), SD done.
 Volume sliders: MAIN=post-DAC master gain (analog model, faithful); APC/SEQ needs per-part accompaniment
