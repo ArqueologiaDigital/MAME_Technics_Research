@@ -40,6 +40,11 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★ 2026-07-12 USER-CONFIRMED: PAGE Up/Down + CONTRAST Up/Down are correctly mapped (Felipe)
+Felipe confirmed directly: "contrast up/down and page up/down are all correctly mapped now." Priority
+2 CLOSED and user-validated. Mapping (shipped f614862): PAGE = pseudo-part 0x18 (SEG0B 0x10 up /
+0x20 down); CONTRAST = pseudo-part 0x1D (SEG05 0x04 + / 0x08 -). No further work needed here.
+
 ## TICK 2026-07-12 ~01:30 — three effects validated coexisting; MULTI blocked on enable
 Combined test PASS: reverb + chorus(u4 250282) + SOUND DSP(u9 290906) all audible at once, 0 rails,
 DAC 0 clipped -- multi-wet summing robust. MULTI extension BLOCKED: its send 0x8298 stayed 0 with the
