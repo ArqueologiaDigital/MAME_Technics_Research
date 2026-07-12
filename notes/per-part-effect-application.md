@@ -106,3 +106,39 @@ frame), and find where bit2 of *(a0) gets set (the "apply" trigger). The 0x4C03B
 sound-dsp chain) is the part-effect recompute that satisfies the gate. Structure: a0->+0x00 halfword
 (bit2=apply gate), +0x15 byte (chorus depth). Still not changing anything (rule g). The stack-walk
 capability is REUSABLE for the deferred floppy FDC-base trace too.
+
+## 2026-07-12 (later 3): DEFINITIVE + corrects two earlier errors -- depth addr 0x500CE342, computed on toggle
+Register dumps at the emitter store + a write-tap on the effect-depth array pinned it:
+- The per-effect DEPTH array is at **0x500CE340**: sound-dsp depth @+0 (0x500CE340), CHORUS depth @+2
+  (0x500CE342), etc. (byte per effect). At the emitter store A0 points into this array.
+- **CORRECTION to "depth 0x3C is STORED, not computed":** WRONG -- I had tapped 0x500B0000-0x500BFFFF
+  and missed 0x500Cxxxx. The chorus depth at 0x500CE342 is WRITTEN on EVERY effect toggle by PC
+  **0x4C037DA8** (a 16-bit store of 0x0Bxx to 0x500CE342): 0x0B00 (depth 0) in the cold-chorus context,
+  0x0B3C (depth 0x3C) in the sound-dsp context. So the depth is COMPUTED per toggle, not pre-stored.
+- The computed value differs because of the CONTEXT: A1 (a part-settings pointer) = 0x500BA862 in the
+  cold path vs 0x500BA800 (part-16 base) in the sound-dsp path; and the depth-read is gated by bit2 of
+  *(a0) (a0=*(0x20,sp) in func 0x4C005000, from the earlier trace). Cold context -> gated to 0;
+  sound-dsp context -> reads the real 0x3C from the part settings.
+So the model is: an effect toggle runs func 0x4C005000 which computes the per-part effect depth
+(bit2-gated read of the part settings), stores it to 0x500CE340+effect, and emits the sub-TG send from
+there. The chorus-toggle CONTEXT (which part / gate state it iterates) yields depth 0; the sound-dsp
+(part-effect) context yields 0x3C.
+
+## CONCLUSION (chorus-depth thread) -- thoroughly understood, DEFERRED as minor
+The faithful-vs-gap question ultimately hinges on the per-part iteration CONTEXT of the chorus-enable
+toggle (which part-settings pointer / gate bit it uses) vs the part-effect recompute -- deep per-part
+logic. This is a MINOR user-facing issue: chorus/multi ARE audible through their normal screens (the
+divergence sweep drove chorus across 8 types with real output); only the quick home-screen on/off toggle
+leaves the depth at 0 until a part-effect interaction. Across several ticks this has been mapped
+thoroughly (emitter 0x4C036FBA; send-writer 0x4C005000 with the bit2-gated depth read; depth store
+0x4C037DA8 -> 0x500CE342; reverb's separate per-part loop 0x4C009000 -> 0x500CE404). DEFERRING further
+resolution -- diminishing returns for a minor issue; the map here is enough for a future dedicated pass
+(or Felipe) to finish. NOT changing anything (rule g). Durable byproduct: the reusable stack-walk +
+register-read-at-tap tracing capability (callchain.lua / gate.lua patterns), reusable for the floppy work.
+
+## Addresses (durable, updated)
+- Effect ENABLE flags: 0x500C0758 (bit9=reverb, bit10/11=others). Setters 0x4C00908F+.
+- **Per-effect DEPTH array: 0x500CE340** (sound-dsp @+0, CHORUS @+2, ...). Written by 0x4C037DA8.
+- CHORUS send-writer (bit2-gated depth read): func 0x4C005000; emitter wrapper 0x4C037DB9;
+  sub-TG emitter primitive 0x4C036FBA.
+- REVERB per-part apply loop 0x4C009000 -> send-writer 0x4C03A660 -> descriptor array 0x500CE404.
