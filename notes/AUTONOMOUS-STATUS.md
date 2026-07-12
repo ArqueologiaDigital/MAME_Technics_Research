@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12g) — ★★ DONE: APC/SEQ VOLUME slider is now FUNCTIONAL (drives the firmware)
+Completed the sliders functional binding (Felipe's sliders.txt core ask). Identified **0xD2 = APC/SEQ** by
+RAM write-correlation (its write-set overlaps MUTE UP 9's -- which edits the same setting -- by 44 addresses
+vs exactly 20 for 0xD0/D1/D3; matches service-manual VR1102=AD2). Driver: panel_scan emits the CP TYPE 2
+frame [0xD2, DATA] via panel_queue on VOL_APCSEQ change, DATA = 255-adjuster*2.55 (handler 0x484AD772 inverts
++ remaps through monotonic ramp 0x48613508 -> louder when dragged up). ★ VERIFIED: the 0xD2 latch 0x5006BEA6
+tracks the slider (vol 100->0xFF, 0->0x00, 50->0x80); buttons still reach the ring (no panel regression).
+Rebuilt + published (md5-matched).
+★ GOTCHA found+documented: do NOT emit a panel frame before the firmware services the panel handshake -- an
+undelivered frame sits in the response queue and blocks ALL later ATN kicks (buttons included), because
+panel_queue only kicks the ATN when the queue was_idle. Fix = a 'synced' flag records the pot on the first
+scan without emitting; emit only on a real move (hardware soft-takeover). Full: notes/slider-cp-protocol.md.
+OPEN refinements: (a) apcseq_vol_led soft-takeover; (b) bind MAIN/MIC/LINE-IN (0xD0/D1/D3, same method).
+
 ## TICK 2026-07-12 ~night(12f) — ★ sliders read path SOLVED (CP protocol, not ADC); injection confirmed live
 Pursued the sliders FUNCTIONAL binding (make the APC/Seq slider change the firmware value). KEY FINDING
 (supersedes the raw-ADC hypothesis): the 4 volume pots + data wheel/pitch-mod/pedal are digitised by a panel
