@@ -329,3 +329,20 @@ default) + this complication -> EQ is a documented, lower-priority refinement, N
 STATE: FOUR audible effects (reverb+chorus+SOUND-DSP+MULTI) is the strong, validated, robust stopping
 point. EQ = master insert, model confirmed, active-detection pending. FLAG3 4 records = deep frame
 model. Both are lower-value/harder than the shipped four.
+
+## 2026-07-12: code-review of the four-effect mix -- one OPEN faithfulness question
+Reviewed the bridge output mix (kn7000.cpp sound_stream_update ~L690-705) and the tick feed
+(~L1696-1743). Both are correct for the divergence sweep and well-documented:
+- tick reads unit outputs sign-extended (sx24), gated on each send>0, feeds unit inputs = raw TG x send
+  (chorus u4 in 0xC36A/out 0xC34A; sounddsp u9 in 0xC376/out 0xC356; multi u1 in 0xC364/out 0xC344).
+- 1-frame latency (outputs read at tick start, before the DSP IRQ assert) -- intended, commented.
+OPEN QUESTION (faithfulness, NOT a divergence bug): the chorus/sounddsp/multi wets are each scaled by
+`gret` (the master DSP return level, = reg-0xA WET/DRY low byte, which the REVERB button flips 0<->0x7F).
+So toggling REVERB off (gret->0) ALSO mutes chorus/multi/sounddsp. This is faithful IFF the KN7000's DSP
+has a SINGLE shared return bus (all effects share the master DSP wet/dry -- plausible since all effects
+live in IC306 and the reverb is the "global" ambient effect). It is UNFAITHFUL if each effect has its
+own return level (then chorus should stay audible with reverb off). The send matrix has separate SEND
+channels per effect (reverb 0x80B8/chorus 0x8198/sounddsp 0x8098/multi 0x8298), but whether the RETURN
+is shared or per-effect is UNRESOLVED -- needs RE of the TG DSP-return (SDIE0-3) mixing. Per rule (g)
+NOT changed (would be a guess). Flag for Felipe / a future RE tick. Practical impact: to hear chorus etc.
+today you need reverb ON (gret=1) + that effect's depth>0; that is the current documented model.
