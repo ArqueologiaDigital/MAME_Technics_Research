@@ -40,6 +40,16 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~03:30 — EQ feasibility confirmed (insert model works; active-detection pending)
+Tested EQ (unit 8) insert: feeding it unit-0's output -> near-identical peak (254056 vs 254059, flat
+EQ passes level) = it IS a functional master INSERT. But avg per-frame diff ~39806 even flat (biquad
+phase/delay) -> always-inserting would break the bit-identical reverb guard. Faithful EQ must be
+CONDITIONAL (insert only when gains nonzero); remaining piece = EQ-active detection (DSP-coeff-vs-flat
+or main-CPU EQ-gain RAM). Lower value (flat default) + complication -> EQ documented as a
+lower-priority refinement, not forced. FOUR audible effects (reverb+chorus+SOUND-DSP+MULTI) is the
+strong validated stopping point for the effects work; EQ (insert, active-detect pending) + FLAG3 4
+records (deep frame model) remain the harder/lower-value items. All priorities done/Felipe-blocked.
+
 ## TICK 2026-07-12 ~03:10 — four effects validated robust; EQ deferral documented
 FOUR-EFFECT ROBUSTNESS: all part-effects (chorus+SOUND-DSP+MULTI) + reverb, 18-note cluster held ->
 DAC 0 clipped (peak 2443 > reverb-only 2085 = effects contribute; summing robust under stress). EQ
