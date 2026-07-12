@@ -40,6 +40,19 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ TICK 2026-07-12 ~02:50 — FOURTH audible effect: MULTI (unit 1)
+Cracked MULTI's unit with a SHARPER method: diff the DM coeff blocks between two MULTI TYPES (delay
+vs distortion) so the constant effect-bus refresh cancels -> UNIT 1 rewrote 43 words (rec15, comb+
+delay -- matches MULTI's Cross-Delay default), unambiguous vs 1-5 noise (earlier u5 candidate was
+noise). Feeding u1 outputs cleanly (112264). SHIPPED (669a66a): tonegen captures MULTI send 0x8298
+(verified low byte==on-screen MULTI DEPTH, 82), tick feeds u1 in 0xC364 + sums u1 return 0xC344 as
+independent wet; DSP output ring now 8-wide (reverb/chorus/sound-dsp/multi). VERIFIED: reverb
+bit-identical all-off (A/B 0/2.11M), MULTI on -> send 82, u1 out 89650, DAC 0 clip/rail. Docs + blog
+Part 20 amended (the recipe's 'edge' crossed by a sharper measurement, not a guess).
+FOUR audible effects: REVERB(u0)+CHORUS(u4,0x8198)+SOUND DSP(u9,0x8098)+MULTI(u1,0x8298). Only EQ
+(u8, master/insert) + the 4 FLAG3 records remain. The coeff-TYPE-diff is the definitive unit-ID method
+now. Same first-cut approximations (whole-mix feed; *_WET=0.60 need ear cal).
+
 ## TICK 2026-07-12 ~02:15 — MULTI unit unconfirmed (rule g, held); milestone documented
 SPORT decode attempt: the DSP-side RX-DMA layout is readable (unit inputs scattered: u0=0xC362,
 u4=0xC36A, u8=0xC372, u9=0xC376, u6=0xC378 -- no simple channel->slot pattern), but the TG->slot
