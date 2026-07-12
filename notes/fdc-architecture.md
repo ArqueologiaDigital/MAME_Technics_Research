@@ -71,12 +71,18 @@ format has its own low-level format-track routine gated on a "disk present/ready
   save-state sweep found none -- and disk-open would fail "device not ready" anyway without the FDC
   responding). Earlier "the FDC is NOT in 0x98 / 0x98010000 disproven" was too strong: the format never
   reaches ANY FDC address, so its 0x98-write trace (only TG/sound/DSP/SD) says nothing about 0x98010000.
-- To CONFIRM: make a live FDC access happen. Either (a) find/model the "disk present + drive ready" state
-  the FORMAT's pre-gate checks so the format proceeds to the FDC, or (b) reach a real dir/LOAD file-op
-  (needs the LOAD browser nav + a responding FDC). Then read a2 at 0x4846DA31's `calls` (the device method
-  = the FDC base) and/or watch which 0x98 sub-slot the FDC commands hit. Chicken-and-egg: the drive-ready
-  path likely needs the FDC (at 0x98010000?) to answer a SENSE DRIVE STATUS / poll -- so wiring the
-  UPD72067's status correctly at 0x98010000 and re-testing the format's pre-gate is the concrete next
-  experiment (if the gate then advances to the FDC, 0x98010000 is confirmed).
+- To CONFIRM: make a live FDC access happen. The FORMAT's pre-gate reads NO device during its abort (the
+  live trace shows only GPIO panel-scan + boot bus/phantom reads -- crucially NO 0x98010000 read even
+  periodically), so it checks a SOFTWARE "disk present/ready" FLAG, not the FDC directly. That flag is set
+  elsewhere -- most likely on a disk-CHANGE/insert EVENT (an IRQ or the FDC disk-change bit), which MAME
+  never raises because the floppy image is simply present from boot (no post-boot "insert"). So the CONCRETE
+  next step is: **trace the FORMAT-execute handler** (triggered by YES = SEG13 0x01 on the ATTENTION screen;
+  find it via the "Using DISK FORMAT" strings 0x48661F48/0x48662037 or by breakpointing the ATTENTION-YES
+  event) to its abort branch, read which RAM flag/state it tests, then find what SETS that flag (a
+  disk-change ISR? a boot-time FDC probe?). That reveals whether we must (i) model a floppy disk-change/
+  insert event, (ii) make the FDC answer a probe at 0x98010000, or (iii) both. Only then does the format
+  reach the FDC and confirm the address (read a2 at 0x4846DA31's `calls` = the device method = FDC base).
+- The alt file-op route (dir/LOAD) is blocked the same way (disk-open returns "device not ready") until the
+  disk-present flag is set, so it is NOT an independent shortcut.
 - Static alternative: resolve the floppy entry in the device table 0x500079F8 registration (its read fn
   = the FDC method) -- the registration writer wasn't found via the 0x50007A48 literal (only reads there).
