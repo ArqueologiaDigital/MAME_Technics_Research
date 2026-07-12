@@ -245,3 +245,17 @@ instead of RAM. As expected it does NOT make the floppy work: the FORMAT still s
 task never services the command, so 0x9CC00000 is never accessed during a format -- addenda 6-7). So this
 is a faithful, clearly-labelled best-guess device model, ready for when the disk-command-dispatch blocker
 is resolved; it can be reverted by leaving the switch OFF (its default) or removing the FDCEXP map.
+
+## 2026-07-12 (addendum 9): end-to-end verification of the experimental FDC (ON) -- confirms scaffold
+Ran DISK->FORMAT->ATTENTION->YES with FDCEXP ON + a tap on 0x9CC00000..0F:
+- The FDC (0x9CC00000..01) is accessed EXACTLY TWICE, both at BOOT: read 0x9CC00000 (pc 0x4854D725 ->
+  now msr_r) + write 0x9CC00000=0x00 (pc 0x4854D1C5 -> dsr_w). (The ~1782 boot + ~1836 "format" tap hits
+  in the 0..0F window are almost all the continuous SD-switch scan at 0x9CC00008, which is correctly
+  RAM-backed, NOT the FDC.)
+- During the FORMAT itself the FDC is NOT accessed, and **status@0x5006BC19 stays 0x00** -> the format
+  still times out. So the experimental FDC does NOT unblock the floppy, exactly as predicted: the format
+  stalls upstream (disk task never services the command; addenda 6-7) and never reaches 0x9CC00000.
+CONCLUSION: the opt-in FDC is a faithful, verified device SCAFFOLD -- it engages when 0x9CC00000 is
+accessed (boot disk-init) and does not regress anything (OFF byte-identical; ON still boots to home + note
+plays). Making the floppy actually WORK still requires resolving the disk-command-dispatch blocker (find
+why the disk task doesn't service the format's command), which is the documented multi-tick next step.
