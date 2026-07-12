@@ -1377,12 +1377,13 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	if (offset == 0x28007)
 		return m_snd_500e;
 	// EXPERIMENTAL uPD765 FDC stub (2026-07-12): the floppy controller IC103 (uPD765-family,
-	// CS/DACK/TC/DRQ) is a CS-decoder sibling of the TG/DSP in the 0x98xxxxxx window; service
-	// manual + live elimination narrowed it to 0x98010000 (offset 0x8000) or 0x98030000
-	// (offset 0x18000). Return a "ready for command" Main Status Register so FDC polling
-	// doesn't hang, and log accesses to learn the register layout + whether the DISK menu
-	// actually reaches the FDC. LABELLED HACK -- not a modelled device (see notes/floppy-*).
-	if ((offset >= 0x8000 && offset < 0x10000) || (offset >= 0x18000 && offset < 0x20000))
+	// CS/DACK/TC/DRQ) is a CS-decoder sibling of the TG/DSP in the 0x98xxxxxx window. Narrowed
+	// to 0x98010000 (offset 0x8000): the boot bus-controller setup programs it as a chip-select
+	// base (mov 0x98010000,d0; mov d0,(0x32000804) @0x484009D0), and 0x98030000 has ZERO firmware
+	// references (eliminated). Return a "ready for command" MSR so FDC polling doesn't hang, and
+	// log accesses to learn the register layout. LABELLED HACK -- unverified, not a modelled
+	// device (see notes/floppy-fdc-investigation.md).
+	if (offset >= 0x8000 && offset < 0x10000)
 	{
 		if (!machine().side_effects_disabled())
 			logerror("%s: FDC_R  0x%08X mask %04X\n", machine().describe_context(),
@@ -1427,8 +1428,8 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		return;
 	}
 	// EXPERIMENTAL uPD765 FDC stub write log (2026-07-12): see io_r. Captures FDC command
-	// bytes so the register layout can be RE'd. LABELLED HACK.
-	if ((offset >= 0x8000 && offset < 0x10000) || (offset >= 0x18000 && offset < 0x20000))
+	// bytes so the register layout can be RE'd. LABELLED HACK (0x98010000 only).
+	if (offset >= 0x8000 && offset < 0x10000)
 	{
 		logerror("%s: FDC_W  0x%08X = %04X mask %04X\n", machine().describe_context(),
 			0x98000000u + (offset << 1), data, mem_mask);
