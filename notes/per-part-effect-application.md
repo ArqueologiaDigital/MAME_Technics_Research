@@ -48,9 +48,28 @@ and disassemble the CHORUS-enable handler to see if it calls the apply loop. NOT
 g -- do not fake the depth-apply). This maps a big chunk of the per-part effect model (the deferred
 enabler for chorus-depth, APC/SEQ volume, and faithful per-effect sends).
 
+## 2026-07-12 (later): CORRECTION — 0x4C009000/0x500CE404 is REVERB's per-part apply, NOT chorus's
+Empirical test (data-read tap on the descriptor pointer slot 0x500CE404, scratchpad/retcap/desc.lua):
+- REVERB toggle -> 0x500CE404 read **once** (the 0x4C009000 loop runs; reverb IS applied per-part
+  through this descriptor path).
+- COLD CHORUS toggle -> **0** reads. SOUND DSP toggle -> **0** reads.
+So the inference in finding #4 above (that 0x4C009000 is the chorus/sound-dsp apply) is FALSIFIED: that
+loop is the REVERB per-part apply. The CHORUS/SOUND-DSP/MULTI sends are applied by a DIFFERENT path that
+does NOT walk 0x500CE404 -- and the SOUND DSP toggle's chorus-depth application (0x0B3C) goes through
+that other, still-untraced path. (Instruction-fetch read-taps do NOT fire on the MN10300 in MAME, so
+loop-execution can only be detected via a DATA access the routine makes -- hence the 0x500CE404 read
+probe; the emitter-PC and depth-source facts above stand.)
+NET: reverb uses the 0x4C009000 per-part descriptor loop; the other effects use a separate apply path.
+The chorus-depth faithful-vs-gap question is UNRESOLVED and now needs debugger-level tracing of the
+sound-dsp handler's chorus-send path (the read-tap tooling has hit its limit). This deep thread has
+reached diminishing returns for a minor user-facing issue (chorus is audible via its screen; only the
+quick home-screen toggle leaves depth 0) -- deferring further trace.
+
 ## Addresses (durable)
 - Effect enable flags: **0x500C0758** (bit9=reverb; bit10,11=other effects). Setters at 0x4C00908F+.
-- Per-part effect-apply loop: **0x4C009000** (parts 0..0x22).
-- Per-part send-writer: **0x4C03A660**; part-descriptor pointer array **0x500CE404** (stride 0x130);
-  part type/mode byte at descriptor **+0x10** (mask 0xCF; 0x80-0x83 kinds).
-- Sub-TG bus emitter primitive: **0x4C036FBA**.
+- **REVERB** per-part effect-apply loop: **0x4C009000** (parts 0..0x22) — confirmed by the 0x500CE404
+  read on reverb toggle only. (NOT the chorus/sound-dsp apply — see correction above.)
+- REVERB per-part send-writer: **0x4C03A660**; part-descriptor pointer array **0x500CE404** (stride
+  0x130); part type/mode byte at descriptor **+0x10** (mask 0xCF; 0x80-0x83 kinds).
+- Sub-TG bus emitter primitive (all effects): **0x4C036FBA**.
+- CHORUS/SOUND-DSP/MULTI apply path: DIFFERENT, untraced (does not walk 0x500CE404).
