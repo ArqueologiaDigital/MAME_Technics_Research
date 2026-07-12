@@ -5,6 +5,24 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(10) — SIDE-QUEST: floppy SAVE/LOAD self-test (Felipe) -- direct-FDC path, entry narrowed
+Felipe's side-quest (side-quests/floppy_disk_save_and_load_self_test.txt): boot holding music keys B3+B4 ->
+a floppy SAVE/LOAD FACTORY test that reads/writes real data and counts OK/NG. ★ HIGH VALUE: this test uses
+the SERVICE-TEST reflection path (FdTestRunFunc 0x484A14B6 / FdIoFunc 0x484A1766) that drives the FDC
+DIRECTLY -- it should BYPASS the RTOS class-5 dispatch HEISENBUG that blocks the normal FORMAT, so it is the
+way to VALIDATE the FDC @0x98020000 end-to-end (and confirm the format's failure is purely the emulation
+timing bug, not the FDC). Findings (full: side-quests/findings/floppy_self_test_findings.md; fdc-
+architecture.md addendum 25):
+- Test located (strings VA ~0x48607000-0x4860B000: "FD SAVE/LOAD TEST", "FLOPPY DISK SAVE&LOAD", "DISK
+  EV_TEST", OK/NG). B3 = key idx 0x17 (KEYS1 0x0080, GM59); B4 = idx 0x23 (KEYS2 0x0008, GM71).
+- ENTRY BLOCKER: Lua field:set_value() does NOT fire the music-key PORT_CHANGED->kbd_push (verified: 0 FIFO
+  events even on the play screen). A read-tap on the FIFO 0x98050004 returning B3/B4 DID reach the runtime
+  keybed (set "TRANSPOSE: C") but did NOT enter the self-test -> the entry uses a SEPARATE power-on
+  raw-keybed-matrix scan (likely via the sub-CPU / an early boot read), not the runtime FIFO.
+- NEXT: find that power-on held-key detect in the early boot + inject/model it (read-tap on the matrix
+  address, or poke the detected-mode var); insert floptest_fat12.img; map START (MUTE UP 10) / STOP (MUTE
+  UP 8); run + watch OK/NG. If the direct-FDC save/load runs to OK, the FDC modelling is validated e2e.
+
 ## TICK 2026-07-12 ~night(9) — floppy dispatch localized (disk-task never runs); pivot to SHARC DRC remainder
 Non-masking tap diagnostic (Heisenbug preserved): during a normal format, 0 writes to the disk-task's
 cmd/FDC-path markers (0x5006be91, 0x50000010-23, 0x5006BC19, packet) -- vs 811/27793 in the masked run. So
