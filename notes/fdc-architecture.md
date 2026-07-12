@@ -330,3 +330,35 @@ the multi-second ERASE/WAIT. Must capture a ~3s post-YES trace to confirm 0x4854
 actually execute before committing to the handshake fix. (Tooling: virtiofs fd-exhaustion wedges the shell
 after each MAME launch -- run `sudo -n /usr/local/sbin/drop-caches` between launches; trace via
 `mach.debugger:command("trace ...")`, NOT `-debug` which pauses.)
+
+## 2026-07-12 (addendum 12): ★ THE FORMAT SHOWS "ERROR 08", it does NOT hang -- and the trigger chain
+Live snapshot of the format after YES: snap0 = ATTENTION + PLEASE WAIT; snap1 (t+2s) = **"ERROR 08! An
+error has occurred while the disk was formatting. The disk that you are using may be faulty. Please try
+formatting another disk."** So the format actively runs, fails fast, and reports a specific error -- NOT a
+silent hang. (The earlier "poll times out at 0x00" picture was the pre-experiment state / a too-short
+window; with a floppy image mounted + current build the format-execute reaches the ERROR-08 path.)
+
+WHAT THE FORMAT-EXECUTE ACTUALLY DOES (trace fx.tr = 7.5M lines, trace ON at YES; active work is only the
+first ~602k lines = ~0.13s, then idle with the dialog up):
+- Disk-present check **0x484D7751** -> calls 0x484D7713 (strap 0x98070000 bits1/2 -> 1, since driver sets
+  the TG-present bits) -> since !=3, decode strap **bits 11/10**: `{00->5 nodisk, 01->1, 10->2, 11->3}`
+  (disasm 0x484D778B-0x484D77BA). Driver returns bits10/11=0 -> **type 5 (no disk)**. Caller 0x4854BCE7:
+  `cmp 4,d0` (type 4 special) else continue.
+- A brief handshake on **0x3400016c** (NOT 0x34000170): `mov 1,(0x3400016c); movhu (0x3400016c),d0;
+  or 0x0800,psw; movhu (0x3400016c),d0; btst 0x10,d0; beq...` -- reads bit4 of 0x3400016c (driver returns
+  0 -> bit4 clear). Then 0x4854BD3E processes RAM 0x5000520c/0x50005210, returns.
+- The disk-command **PROCESSOR 0x484ADxxx** builds a command packet at RAM **0x5006bee2** with an XOR
+  checksum (loop 0x484AD9B0..0x484AD9E0, byte index 0x5006bef0 while <7), gated by status flag
+  btst 0x0f,(0x5006be91). It RETURNS without transmitting -- data port **0x9805000C is never written**.
+- ERROR 08 follows. So: the floppy command PACKET is BUILT but NEVER TRANSMITTED/serviced.
+
+KEY: forcing the disk-present type to 3 (read-tap OR-ing strap bits10/11) does NOT clear ERROR 08 -> the
+"no disk" type is not the sole gate; the failure is in the command processor / the missing transmit.
+
+WORKING HYPOTHESIS (matches a74728a8): SD works because its worker task 0x4854AD90 is created
+unconditionally and transmits over 0x9805000C; the **floppy has no equivalent worker/transmit path** in
+this firmware image (dispatch gap), so the built packet is never sent and the op errors out. If instead a
+floppy driver-init exists but is gated on a HW-present check, satisfying that gate (a real strap/register)
+could wire it up. NEXT RE: (1) 0x484ADxxx command processor -- where exactly is the ERROR-08 result set
+(immediate bail vs transmit-timeout)? (2) driver vtable 0x4867B948 [0-5] inits -- is one the floppy driver,
+and is it gated? (3) 0x3400016c bit4 + the 0x5006bee2 packet consumer.

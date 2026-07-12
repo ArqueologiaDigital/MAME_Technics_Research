@@ -5,6 +5,41 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night — ★ FLOPPY FORMAT: it's NOT a hang, it's ERROR 08; parallel-FDC path DISPROVEN
+Felipe: "we should be able to create+mount a floppy image, format it via the KN7000 screen; investigate
+and fix." ultracode ON -> 5-agent workflow + live RE. RESULTS (all reliable):
+- **RETRACTED the bit15 "root cause" (git f556ba4).** Proven by full-image unidasm + pointer scan: the
+  parallel-FDC engine **0x484A4FBA is DEAD CODE** -- zero callers (no call/jmp/bra target, no pointer, no
+  task descriptor), preceded by `ret` so no fall-through. FDC init 0x4854D835's ONLY caller is 0x484A4FE3
+  *inside* the dead engine. So the 0x9CC00000 uPD765 experiment AND the strap bit15 change target dead
+  code. io_r 0x38000 now returns bit15 unconditionally set (moot, honest). Rule (g).
+- **★★ THE FORMAT DOES NOT HANG -- it runs, fails, and shows "ERROR 08! An error has occurred while the
+  disk was formatting... may be faulty" within ~2s** (snapshot-verified). Far more tractable than a hang.
+- **The format-execute touches ZERO disk hardware** (taps: 0x9CC000xx=0, 0x9805000C=0, 0x34000160-17f=0
+  except a brief 0x3400016c handshake, command reg 0x50005200 no observed write). The error is decided in
+  firmware BEFORE any real I/O.
+- **Disk-present check 0x484D7751 returns 5 = "NO DISK"**: 0x484D7713 returns 1 (my TG-present strap sets
+  0x98070000 bits1,2), so it uses strap bits 11/10 -> type map {00->5(nodisk),01->1,10->2,11->3}; my strap
+  has bits10/11=0 -> type 5. BUT forcing bits10/11 (type 3 via read-tap) does NOT clear ERROR 08 -> the
+  disk-present type is not the (sole) gate.
+- **The format-execute runs the disk-command PROCESSOR 0x484ADxxx** (ends ~0.13s after YES, then idle): it
+  builds a command packet at RAM 0x5006bee2 with an XOR checksum (loop 0x484AD9B0, indexed by 0x5006bef0
+  cmp 7), via the 0x4854BCxx disk fns + the 0x3400016c handshake. The packet is built but **no worker
+  transmits it** (0x9805000C never written) -> ERROR 08. Consistent with a74728a8: SD has a worker task
+  (0x4854AD90, created unconditionally) but **there is no floppy worker** -- the floppy command is built
+  and never serviced/transmitted.
+- LIKELY TRUE ROOT CAUSE: **firmware floppy-worker/dispatch gap** (no task transmits the built packet), OR
+  a floppy driver-init gated on a hardware-present check that fails. NEXT: (a) disassemble the 0x484ADxxx
+  command processor + find where the ERROR-08 result is set (is it a timeout on a transmit, or an immediate
+  bail?); (b) check the driver vtable 0x4867B948 [0-5] inits for a floppy driver gated on a HW check I can
+  satisfy; (c) find who (if anyone) is meant to consume the 0x5006bee2 packet + the 0x3400016c handshake
+  semantics. fdc-architecture.md addendum 11-12.
+- TOOLING (important, saves hours next tick): **single-line Bash commands work; multi-line compound
+  commands wedge the virtiofs mount** (fd exhaustion -> `sudo -n /usr/local/sbin/drop-caches`). Trace via
+  **`-debug -debugger none`** (debugger available, machine NOT paused) + `mach.debugger:command("trace f")`.
+  Memory taps work but **ranges must be 4-byte aligned** (end low bits set, e.g. 0x..03/0x..0f/0x..ff).
+  `register_frame_done` reliable; PC sampling via `cpu.state["PC"].value`. Snapshots via `mach.video:snapshot()`.
+
 ## TICK 2026-07-12 ~evening(2) — EXPERIMENTAL opt-in FDC SHIPPED at 0x9CC00000 (Felipe-authorized)
 Felipe: "implement a clearly-labeled experimental FDC at 0x9CC00000/uPD765 best-guess, accepting it may
 not work / may need reverting." DONE (commit 526c270):
