@@ -5,6 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~evening — FDC: format WAIT mechanism found (stack-walk); disk cmd never serviced
+Felipe: "use your knowledge of the FDC to implement it properly." Investigated toward that; the honest
+blocker is now precisely located but a faithful implementation is NOT yet possible (would be a guess).
+KEY RELIABLE FINDINGS (memory-tap stack-walk; bpset is UNUSABLE -- addendum 5):
+- The format's execute handler polls status byte **0x5006BC19** at **0x484A593E** and waits for it to
+  become a disk-command COMPLETION CODE **0xFB / 0xFC / 0xF6**. It stays **0x00** forever -> times out.
+  So the disk command is posted but NEVER completes (not even an error) -> the servicing handler that
+  does the FDC I/O + writes the completion code never runs.
+- The format reaches **ZERO hardware anywhere 0x00-0xBF** (comprehensive tap) -- the disk command stalls
+  in software before any device access.
+- The disk hardware is the **0x9CC00000 latch** (disk code 0x4854Dxxx reads/writes 0x9CC00000/+9/+1B/+1FC;
+  phantom buttons share the chip at 0x9CC00008). BUT the driver currently backs all of 0x9C000000-
+  0x9CFFFFFF with **dumb RAM** (`map(...).ram().share("lcdbuf")`), so any disk-controller behavior is
+  absent. Even so, the format never reaches 0x9CC00000 -> the servicing gap is upstream.
+IMPLEMENTATION PATH (next ticks, each needs more RE): (1) find the SETTER of 0x5006BC19 (the completion
+writer in the disk task) + why it doesn't run -- is the disk task created/scheduled? (2) determine the
+0x9CC00000 disk-controller register semantics from 0x4854Dxxx (drive-select/motor/status + the uPD765
+data/status) WITHOUT breaking the SD/phantom-button sharing; (3) model it so the command completes. Not
+shipping a speculative FDC (rule g). Full detail: notes/fdc-architecture.md addenda 5-6.
+
 ## TICK 2026-07-12 ~late — FDC ARCHITECTURE fully reversed (Felipe's disasm ask); FDC=0x9C/0x9E candidate
 Per Felipe "inspect the disassembly to understand how the FDC works" -> **notes/fdc-architecture.md**
 (comprehensive). Key new findings this tick:
