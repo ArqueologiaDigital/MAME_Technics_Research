@@ -73,3 +73,36 @@ quick home-screen toggle leaves depth 0) -- deferring further trace.
   0x130); part type/mode byte at descriptor **+0x10** (mask 0xCF; 0x80-0x83 kinds).
 - Sub-TG bus emitter primitive (all effects): **0x4C036FBA**.
 - CHORUS/SOUND-DSP/MULTI apply path: DIFFERENT, untraced (does not walk 0x500CE404).
+
+## 2026-07-12 (later 2): call-chain traced -- the chorus DEPTH-read logic + a reusable capability
+NEW CAPABILITY (unblocks caller-tracing without -debug): MAME has no Lua debug/bp interface without
+-debug, BUT cpu.state exposes PC/SP/A0-A3/D0-D3/MDR. At a DATA-access write-tap, read SP and walk the
+stack (prog:read_u32(SP+i*4)) collecting lib return addresses (0x4C0xxxxx) = the CALLER CHAIN. This
+recovers who called a shared primitive. (scratchpad/retcap/callchain.lua)
+
+CHORUS-SEND CALLER CHAINS (at the emitter store, latch 0x8198):
+- COLD chorus toggle (send=0x0B00, depth 0): emitter <- wrapper 0x4C037DB9 <- func@0x4C0050A3(=0x4C005000)
+  <- 0x4C01013A <- 0x4C02F077 <- 0x4C03DDF5.  A1=0x500BA862.
+- SOUND DSP toggle  (send=0x0B3C, depth 0x3C): emitter <- wrapper 0x4C037DB9 <- 0x4C03B301 <- func@
+  0x4C005043(=0x4C005000) <- 0x4C01013A <- 0x4C02F10F <- 0x4C03DDF5.  A1=0x500BA800.
+Both go through the SAME send-writer func **0x4C005000** and the SAME emitter wrapper 0x4C037DB9; the
+depth differs because of the structure it reads.
+
+THE DEPTH-READ LOGIC (disasm of 0x4C005000):
+  a0 = *(0x20,sp)                         ; a part/effect structure pointer
+  d1 = movhu (a0)                         ; *(a0) halfword
+  d2 = movbu (0x15,a0)                    ; depth byte at a0+0x15
+  if (d1 & 0x04)==0  -> d2 = 0            ; bit2 of *(a0) = "apply this depth" gate
+  ...emit send = base(0x0B00) | d2
+So the CHORUS DEPTH = (bit2 of *(a0) set) ? *(a0+0x15) : 0. Cold path -> 0 (bit2 clear OR +0x15==0);
+sound-dsp path -> 0x3C. The depth 0x3C IS stored (confirmed earlier); the gate bit2 of *(a0) decides
+whether it is applied.
+
+FAITHFUL-vs-GAP now narrowed to: in the cold chorus-toggle context, does *(a0)&0x04 come out clear
+(depth forced 0) because the real firmware genuinely defers depth-apply to the part-effect recompute
+(faithful), or because the emulator hasn't populated a state the real chorus-toggle path would have set
+(gap)? NEXT = capture a0 (=*(0x20,sp)) + *(a0) + *(a0+0x15) in the COLD vs sound-dsp context (walk the
+frame), and find where bit2 of *(a0) gets set (the "apply" trigger). The 0x4C03B301 layer (only in the
+sound-dsp chain) is the part-effect recompute that satisfies the gate. Structure: a0->+0x00 halfword
+(bit2=apply gate), +0x15 byte (chorus depth). Still not changing anything (rule g). The stack-walk
+capability is REUSABLE for the deferred floppy FDC-base trace too.
