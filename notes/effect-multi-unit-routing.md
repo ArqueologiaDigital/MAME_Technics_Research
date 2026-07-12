@@ -292,3 +292,21 @@ MULTI (unit unidentified) -- BLOCKED on the enable mechanism:
   refresh-noisy coeff-diff. THEN the same feed-and-sum recipe applies. Do NOT guess-feed a unit.
 STATE: 3 audible effects (reverb+chorus+SOUND-DSP) validated coexisting; MULTI send confirmed, unit
 pending the SPORT decode; EQ = master/insert (separate); FLAG3 4 records = deep frame model.
+
+## 2026-07-12: FOUR effects robust under dense input + EQ deferral rationale
+- FOUR-EFFECT ROBUSTNESS: all part-effects (chorus+SOUND-DSP+MULTI) enabled on RIGHT1 + reverb,
+  18-note cluster held -> DAC peak 2443, 0 clipped (vs reverb-only cluster 2085 -> the effects
+  contribute; the independent-wet summing stays clean under stress). The 4-effect state is robust.
+- EQ (unit 8, rec34) DEFERRED -- it is a fundamentally different, harder integration:
+  * NO send channel (the send matrix confirmed EQ doesn't use a group-0x20 send) -- it is a
+    master/INSERT, not a parallel send. The feed-and-sum-wet recipe does NOT apply.
+  * FLAT (0 dB) by default -> does nothing until the user sets nonzero LOW/HI gains. Low default value.
+  * INSERT integration would put unit 8 IN the main path (feed it the main mix, read its output ->
+    DAC), which changes the reverb's output path -- and a flat biquad/FIR EQ is unlikely to be a
+    bit-identical passthrough, so it would BREAK the bit-identical reverb guard even when flat.
+  * A faithful EQ needs: detect "EQ active" (nonzero gains, from the TG/DSP params), and ONLY then
+    insert unit 8 in the master path (so EQ-off stays bit-identical). More involved than the sends;
+    lower value (flat default). Deferred as a separate, harder task.
+STATE: 4 audible effects (reverb+chorus+SOUND-DSP+MULTI), validated robust + coexisting. EQ = master
+insert (deferred, documented). FLAG3 4 records (pitch-shift + specialty reverbs) = the deep frame
+model. The coeff-TYPE-diff is the definitive unit-ID method for any future send effect.
