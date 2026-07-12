@@ -667,3 +667,20 @@ builder **0x4849F860** (boot-init caller 0x4842A59E; builds the FD SAVE/LOAD + E
 REGISTERED; only ENTRY is combo-gated. NEXT: boot-trace/broad-tap to find the combo-detection read + model
 it (return KEYS matrix: B3=KEYS1 0x0080, B4=KEYS2 0x0008), or force-navigate to the registered service-menu
 screen ID. Full: side-quests/findings/floppy_self_test_findings.md.
+
+## 2026-07-12 (addendum 27): boot trace -- combo is NOT via the FIFO; FDC model IS exercised at boot
+Full boot trace from reset (0x48400000 -> t=3, 33M lines):
+- The keybed FIFO (0x98050004) is read ONLY by the runtime drain 0x484480A2/B6 (all 25 reads; PCs
+  0x48448085/0x484480A2/B4/B6). There is NO separate boot combo-check reading the FIFO. => the B3+B4
+  self-test combo is detected via a RAW/panel source, not the keybed FIFO -- confirming why FIFO injection
+  can't enter the test.
+- The BOOT FDC INIT runs and drives the modelled FDC: MSR 0x98020008 read 51x, FIFO 0x9802000A read 9x (+
+  DOR writes). So the FDC @0x98020000 model is correctly exercised at boot (independent confirmation the
+  address/model are right). Also one 0x9CC00000 read (the dead path) and panel SIO reads (0x34000809 x18 ->
+  ring buffer 0x5006bdb0-b4).
+- Service-test menu registration 0x4849F860 runs at ~29% into boot (unconditional).
+NEXT for the entry: the combo source is the panel/CP protocol (sub-CPU SIO, 0x34000800 region -> the
+0x5006bdb0 ring) OR an early raw keybed scan -- analyse how the firmware forms the power-on key/panel state
+and where it tests for the B3+B4 service combo (then model/inject that source). Given the self-test's STOP/
+START are PANEL positions (MUTE UP 8/10), the B3+B4 combo may likewise be read through the panel matrix, not
+the music-keybed FIFO -- worth trying panel-button (SEG) injection at boot too.
