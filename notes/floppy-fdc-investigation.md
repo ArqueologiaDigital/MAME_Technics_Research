@@ -121,3 +121,23 @@ STATE: FDC = uPD765-family @ ~0x98010000 (best candidate), stub scaffold in plac
 device-gated. The remaining work (open the DISK menu by satisfying the layered drive-present/device gate,
 then confirm the FDC slot + register offsets, then wire upd765 + floppy_image + disk format) is a
 dedicated multi-tick effort. Groundwork is thorough; the mystery is gone.
+
+## 2026-07-12 (5): the disk-driver/FDC path is only initialized on a FILE OP (SD menu bypasses it via SPI)
+Decisive RAM evidence (fdcram.lua, after opening SD MENU + pressing DISK MENU):
+- 0x98010000 appears NOWHERE in RAM (scanned 0x50000000-0x50010000, 0x5006B000-0x5007C000,
+  0x500A0000-0x500E0000, 0x50070000-0x50080000). The FDC base is NOT stored yet.
+- The disk device struct **0x50071250 is ALL ZEROS** -> the disk-driver abstraction (FS->block device
+  ->FDC, device-create 0x4846d800) is NOT initialized. It only runs on an actual FILE operation.
+- The device table 0x5000097c = UI-OBJECT descriptors (0x000E0000/0x000E0018/0x000E0001...), NOT
+  hardware device types -- the earlier "type==0x11" check is a UI focused-object check, unrelated to the
+  drive.
+- KEY: the **SD MENU works because it drives the SD card via the SD-SPI transport (0x9805000C) DIRECTLY**,
+  bypassing the disk-driver/FDC abstraction. The FLOPPY path (driver[0]=0x4853282e -> block-read
+  0x4846da31 -> FDC) is only entered on a Load/Save file op that selects drive A:.
+CONCLUSION: to reach/confirm the FDC (and its exact register offsets at 0x98010000), a FILE OP on the
+floppy must run -- deep menu navigation (open a Load/Save screen, pick drive A:) + a modelled floppy
+drive. The RE groundwork is now thorough: chip=uPD765-family, address candidate=0x98010000 (0x98030000
+eliminated), path = file-op -> disk-init 0x4846d800 -> device struct 0x50071254 -> block-read 0x4846da31
+-> FDC(a1). The MODELING phase (wire MAME upd765 + a floppy_image_device at 0x98010000, drive the file-op
+path, RE the KN7000 disk format) is a dedicated multi-tick effort -- best done with a real floppy image
+to insert + interactive nav testing. The uPD765 stub scaffold is in place.
