@@ -5,6 +5,34 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(2) — priorities re-confirmed DONE; floppy at a boundary (SD-worker vs class-5 split)
+Cron tick handed the 2026-07-11 priority list. RE-VERIFIED all five are already complete (earlier ticks):
+- **P1 effects sweep = CLEAN.** Re-read wf_46aaaf77-352 + the completed re-run: 241 segments / 12 runs,
+  **FAIL=0 SUSPECT=0 PASS=241**; divergence report 79/79 PASS; the old Chorus SUSPECT resolved in the R1B
+  rerun (uploads reach the DSP, e.g. GM Chorus3 = 594). Nothing to fix.
+- **P2 PAGE/CONTRAST = DONE + USER-CONFIRMED** (commits f614862, e414769; PAGE validated on SD LOAD 1/3-3/3).
+- **P3 DRC MAC-native UML = DONE** (e487bb7, bit-identical, 82M->500k fallbacks). **P4 0x8238 = decoded
+  constant 0x0800, loud-input covered by sweep. P5 SHARC catalogue = packaged** (notes/upstream-patches/,
+  4 files). NB upstream SUBMISSION (opening a MAME PR) is outward-facing -> needs Felipe's explicit OK,
+  not auto-done.
+So the only genuinely-open thread is the FLOPPY (Felipe's freshest request). New findings this tick (RE):
+- The SD path works via the disk WORKER 0x4854AD90 which blocks on **RTOS receive object 9** (0x4C03D36D)
+  and dispatches command types 2/3 to **device methods via `calls (a1)`** (a1 = method ptr from the cmd/
+  device ctx; type2 -> 0x4854B330 lookup, type3 -> 0x4854AFEE). The FORMAT instead posts a **class-5
+  message (id 0x00050006) to task table 0x5000757C** -- a DIFFERENT mechanism that never reaches the
+  worker (worker 0x4854AD90 ran 0x across the 1.6s format trace). 0x484D7930 (heavily executed) is a
+  PERIODIC TIMER (wrapping counters 0x50150f47/48 via 0x484B3179), not the command handler -- earlier
+  "state machine gated on 0x5006cc81" was that timer, not the op.
+- Combined with addenda 11-13: parallel engine 0x484A4FBA = dead; transport 0x4854BF60 + kickoff
+  0x484D7490 = 0 static callers (runtime method ptrs, never invoked for floppy); format touches ZERO
+  hardware; result = ERROR 08. The floppy command path is INCOMPLETELY WIRED vs SD in this firmware image.
+- HONEST ASSESSMENT: ~12 ticks have disproven every obvious FDC address (0x9CC00000/0x98010000/bit15 all
+  dead) and shown the floppy op never drives hardware. Progress now needs NEW INFORMATION: the service
+  manual's FDC (IC103) schematic/bus decode, or a logic-analyzer capture of a real KN7000 formatting a
+  disk, to locate the true FDC interface. This is a diminishing-returns boundary; recommend PAUSING the
+  floppy deep-dive pending that, rather than a 13th speculative tick. Nav + format-executes-to-ERROR-08 +
+  the full RE are preserved (fdc-architecture.md addenda 8-13, memory [[kn7000-floppy-fdc]]).
+
 ## TICK 2026-07-12 ~night — ★ FLOPPY FORMAT: it's NOT a hang, it's ERROR 08; parallel-FDC path DISPROVEN
 Felipe: "we should be able to create+mount a floppy image, format it via the KN7000 screen; investigate
 and fix." ultracode ON -> 5-agent workflow + live RE. RESULTS (all reliable):
