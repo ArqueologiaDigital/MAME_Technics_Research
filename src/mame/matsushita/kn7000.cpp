@@ -346,6 +346,18 @@ public:
 			if (tg == 1 && ch == 0x29 && reg == 0x08)
 				m_gain_multi = float(data & 0x7F) / 127.0f;   // MULTI send (0x8298 low7 = per-part MULTI DEPTH;
 				                                              // routes to MULTI unit 1, rec15 -- type-diff confirmed)
+			// PER-EFFECT RETURN levels (reg 0xA low byte = DSP-return level for THIS effect's own
+			// bus). Live-captured per-effect toggle map (2026-07-12, notes/effect-return-routing.md):
+			// each effect owns a distinct return register -- REVERB=ch03.rA (m_gain_return above),
+			// SOUND DSP=ch09.rA, MULTI=ch06.rA -- and toggling one effect changes ONLY its own
+			// register. The old model scaled chorus/sound-dsp/multi by the REVERB return (gret), so
+			// turning reverb off wrongly muted them; using each effect's own return decouples them.
+			// (CHORUS toggling changes ONLY its send ch19.r8 -- it has no separate return register --
+			// so the chorus wet is send-driven with a fixed makeup, still decoupled from reverb.)
+			if (tg == 1 && ch == 0x09 && reg == 0x0A)
+				m_gain_dsp_ret = float(data & 0x7F) / 127.0f;   // SOUND DSP return (0x809A low7)
+			if (tg == 1 && ch == 0x06 && reg == 0x0A)
+				m_gain_multi_ret = float(data & 0x7F) / 127.0f; // MULTI return (0x806A low7)
 		}
 		else if (cls == 0x1C02)                           // per-voice aux/mode word
 		{
@@ -369,6 +381,8 @@ public:
 	float gain_chorus() const { return m_gain_chorus; }
 	float gain_dsp()    const { return m_gain_dsp; }
 	float gain_multi()  const { return m_gain_multi; }
+	float gain_dsp_ret()   const { return m_gain_dsp_ret; }    // SOUND DSP own return (ch09.rA)
+	float gain_multi_ret() const { return m_gain_multi_ret; }  // MULTI own return (ch06.rA)
 
 	// Keybed coupling for GATE-FOLLOW voices. The SUB TG chip itself hosts the key-bed
 	// event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
@@ -540,6 +554,8 @@ private:
 	std::atomic<float> m_gain_chorus{ 0.0f };   // CHORUS send (0x8198 low7); 0 = chorus off (default)
 	std::atomic<float> m_gain_dsp{ 0.0f };      // SOUND DSP send (0x8098 low7); 0 = off (default)
 	std::atomic<float> m_gain_multi{ 0.0f };    // MULTI send (0x8298 low7); 0 = off (default)
+	std::atomic<float> m_gain_dsp_ret{ 0.0f };  // SOUND DSP own return (0x809A low7); 0 = off
+	std::atomic<float> m_gain_multi_ret{ 0.0f };// MULTI own return (0x806A low7); 0 = off
 	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
@@ -619,6 +635,11 @@ public:
 	// path is routed through the DSP; the Bypassed debug path stays plain dry.
 	void set_bus_gains(float send, float direct, float ret, float depth)
 	{ m_gain_send = send; m_gain_direct = direct; m_gain_return = ret; m_gain_depth = depth; }
+	// Per-effect DSP returns (each effect has its OWN return level; the reverb toggle only moves
+	// the reverb's -- see the tonegen capture). SOUND DSP and MULTI scale their wet by these
+	// instead of the reverb return, so reverb on/off no longer mutes them.
+	void set_effect_returns(float dsp_ret, float multi_ret)
+	{ m_gain_dsp_ret = dsp_ret; m_gain_multi_ret = multi_ret; }
 
 protected:
 	virtual void device_start() override
@@ -689,20 +710,24 @@ protected:
 				// live-verified against the on-screen value; default 0x50/127 ~ 0.63).
 				ol = int32_t(double(ol) * gret * gdepth + double(il) * gdir);
 				orr = int32_t(double(orr) * gret * gdepth + double(ir) * gdir);
-				// Chorus (unit 4) return: an INDEPENDENT wet, added post-crossfade at its own
-				// makeup level so it does NOT couple to the reverb TOTAL DEPTH. Follows gret (the
-				// global DSP wet/dry) so it mutes with the DSP path. 0 when chorus off (bit-exact).
+				// Chorus/SOUND-DSP/MULTI returns: each is an INDEPENDENT wet, added post-crossfade
+				// at its own makeup so it does NOT couple to the reverb TOTAL DEPTH. Live capture
+				// (notes/effect-return-routing.md) proved each effect owns a distinct RETURN register
+				// and the reverb toggle moves ONLY the reverb's -- so these must NOT follow the reverb
+				// return (gret). Previously they did, which wrongly muted them whenever reverb was off.
+				// - CHORUS has no return register (toggling it moves only its send) -> send-driven wet
+				//   with a fixed makeup (the chsend>0 gate already keeps it 0 when off; bit-exact).
+				// - SOUND DSP scales by its own return (ch09.rA = gdsp_ret); MULTI by ch06.rA.
+				const float gdsp_ret = m_gain_dsp_ret, gmul_ret = m_gain_multi_ret;
 				constexpr double CHORUS_WET = 0.60;
-				ol  += int32_t(double(chl) * gret * CHORUS_WET);
-				orr += int32_t(double(chr) * gret * CHORUS_WET);
-				// SOUND DSP (unit 9) return: another independent wet, same treatment.
+				ol  += int32_t(double(chl) * CHORUS_WET);
+				orr += int32_t(double(chr) * CHORUS_WET);
 				constexpr double DSP_WET = 0.60;
-				ol  += int32_t(double(ddl) * gret * DSP_WET);
-				orr += int32_t(double(ddr) * gret * DSP_WET);
-				// MULTI (unit 1) return: another independent wet, same treatment.
+				ol  += int32_t(double(ddl) * gdsp_ret * DSP_WET);
+				orr += int32_t(double(ddr) * gdsp_ret * DSP_WET);
 				constexpr double MULTI_WET = 0.60;
-				ol  += int32_t(double(mml) * gret * MULTI_WET);
-				orr += int32_t(double(mmr) * gret * MULTI_WET);
+				ol  += int32_t(double(mml) * gmul_ret * MULTI_WET);
+				orr += int32_t(double(mmr) * gmul_ret * MULTI_WET);
 			}
 			// Front-panel MAIN VOLUME slider: a master output attenuation on the final mix
 			// (modelled as a post-DAC analog-style gain; the driver pushes the taper via
@@ -729,6 +754,8 @@ private:
 	std::atomic<float> m_gain_direct{ 0.0f };   // DAC: TG direct (reverb-OFF side)
 	std::atomic<float> m_gain_return{ 1.0f };   // DAC: DSP return (reverb-ON side)
 	std::atomic<float> m_gain_depth{ float(0x50) / 127.0f };  // TOTAL DEPTH -> DSP-return scale
+	std::atomic<float> m_gain_dsp_ret{ 0.0f };    // SOUND DSP own return (independent of reverb)
+	std::atomic<float> m_gain_multi_ret{ 0.0f };  // MULTI own return (independent of reverb)
 };
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
@@ -2144,6 +2171,7 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
 		const float v = float(m_volmain->read()) / 100.0f;
 		m_dspbridge->set_master_gain(v * v);
 		m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return(), m_tonegen->gain_depth());
+		m_dspbridge->set_effect_returns(m_tonegen->gain_dsp_ret(), m_tonegen->gain_multi_ret());
 	}
 
 	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
