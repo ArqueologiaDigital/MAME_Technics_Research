@@ -40,6 +40,23 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~05:45 — stress-validated the per-effect return fix; ruled out sliders; flagged a panel loose end
+Surveyed the breadth mandate: MIDI in AND out are DONE (TX->mdout1/mdout2 wired, line 2833+), SD done.
+Volume sliders: MAIN=post-DAC master gain (analog model, faithful); APC/SEQ needs per-part accompaniment
+separation (the big refactor) and MIC/LINE-IN have NO input source in the sim + no firmware ADC read path
+-> NOT a clean win, deferred with reasoning.
+STRESS-VALIDATED last tick's per-effect return fix (scratchpad/retcap/excite*.lua): each effect isolated
++ 8-key cluster (loudest realistic input): SOUND DSP isolated (reverb OFF) -> own slot 0xC356 peak 488644
+(5.8%FS), 0 rails (fix AUDIBLE in isolation + STABLE under load; before fix = muted); REVERB -> 16.0%FS,
+0 rails; DAC across the run = 0 clips. Excitation-dependent caveat from the divergence sweep substantially
+CLOSED (loudest input hits <=16%FS, far from the 94% rail; sweep already covered all TYPES).
+NEW PANEL FINDING (flag for priority-2 panel work): CHORUS (SEG11 0x04) + MULTI (SEG10 0x04) on/off
+toggles did NOT engage their send (ch19.r8/ch29.r8 stayed 0) via scripted home-screen press, though cap3's
+isolated per-button diff DID see ch19.r8 move -> these two effect-toggle bits look CONTEXT-DEPENDENT
+(matches panel-completion-plan's note on context-dependent 0x2010 args). SOUND DSP + REVERB toggles engage
+reliably. Chorus/multi AUDIO already validated via the sweep's screen-nav. Loose end, NOT a fix bug.
+No code change this tick (validation only) -> no rebuild/publish. Full writeup: notes/effect-return-routing.md.
+
 ## ★★★★★ TICK 2026-07-12 ~05:15 — PER-EFFECT DSP RETURNS: reverb-off no longer mutes other effects
 Resolved+FIXED the open faithfulness question (chorus/multi/sounddsp were scaled by the reverb return
 gret -> reverb-off wrongly muted them). Live sub-TG bus capture (scratchpad/retcap, per-effect isolated
