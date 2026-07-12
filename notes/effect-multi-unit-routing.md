@@ -346,3 +346,10 @@ channels per effect (reverb 0x80B8/chorus 0x8198/sounddsp 0x8098/multi 0x8298), 
 is shared or per-effect is UNRESOLVED -- needs RE of the TG DSP-return (SDIE0-3) mixing. Per rule (g)
 NOT changed (would be a guess). Flag for Felipe / a future RE tick. Practical impact: to hear chorus etc.
 today you need reverb ON (gret=1) + that effect's depth>0; that is the current documented model.
+
+## 2026-07-12: the OPEN faithfulness question is RESOLVED + FIXED (commit fa06930)
+The "shared vs per-effect DSP return" question below is answered: RETURNS ARE PER-EFFECT. Live capture
+(per-effect isolated toggle diff) pinned REVERB=ch03.rA, SOUND DSP=ch09.rA, MULTI=ch06.rA, CHORUS=send-
+only (no return reg). Toggling REVERB moves ONLY ch03.rA. Fixed: each effect scales its wet by its own
+return, so reverb-off no longer mutes the others. Reverb-only stays bit-identical. Full writeup:
+notes/effect-return-routing.md.
