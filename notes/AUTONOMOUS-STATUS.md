@@ -5,6 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(7) — ★★ floppy FORMAT blocked on an OBSERVATION-SENSITIVE emulation HEISENBUG
+Decisive characterization (bp-counter diagnostic under -debug -debugger none, 6 RAM-increment breakpoints):
+with the breakpoints the format REACHES the FDC (FDCdisp 0x48400084 = 27793 hits). So breakpoints -- like
+the debugger trace -- MASK the bug. The pattern is unambiguous:
+  memory TAPS (no per-instruction overhead) -> format errors before the FDC (0 accesses)   [BUG present]
+  trace OR breakpoints (per-instruction overhead) -> format reaches the FDC (thousands)      [BUG masked]
+=> It's a HEISENBUG: instruction-level observation slows the maincpu just enough to win a timing-sensitive
+event race that the fast normal run loses (-> the disk-task dispatch errors -> ERROR 08 before the FDC).
+Ruled out: SHARC DRC (-nodrc), -debug itself, set_perfect_quantum (all still fail in a normal run).
+NET (honest): the RE is CORRECT + COMPLETE and the FDC HARDWARE MODELLING IS THE MILESTONE of this
+multi-tick effort -- FDC @ 0x98020000 (N82077AA, schematic+firmware proven), PC/AT regs, INTC group 0x18
+software-DMA via 0x98010000, all committed, faithful, no regression, and exercised by the BOOT FDC init.
+The FORMAT does not complete because of an EMULATION-ENGINE timing bug (a lost event race in the RTOS
+disk-task dispatch), NOT a firmware/RE gap. It resists diagnosis (observer effect). fdc-architecture.md
+addenda 14-22.
+NEXT (if pursued): memory-tap (no masking) the RTOS scheduler tick + INTC GxICR writes during a normal
+format and correlate RAM state at the divergence to identify the awaited event and why its emulated
+delivery is a hair too late; then fix that device's timing. OTHERWISE the floppy FORMAT is reasonably
+parked here (FDC hardware done) and effort can move elsewhere -- all of Felipe's P1-P5 priorities are done.
+
 ## TICK 2026-07-12 ~night(6) — CORRECTION: "format reaches FDC" was a TRACE ARTIFACT; real blocker = dispatch race
 Integrity correction to night(5): the "format issues FORMAT TRACK + busy-polls MSR" (fx2.tr, 230k) was an
 OBSERVER ARTIFACT of `dbg:command("trace")`. Ruled out every emulated-time cause -- SHARC DRC (-nodrc),
