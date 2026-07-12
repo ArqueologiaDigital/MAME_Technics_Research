@@ -5,6 +5,31 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~afternoon — FLOPPY MODELED + DISK MENU OPENS + FORMAT TOOL REACHED; red dialog fixed
+Session deliverables (all committed):
+1. **FDC + 3.5" HD floppy WIRED** (a936d5a): real `upd72067_device` + `floppy_connector` at the
+   0x98010000 CS candidate (io_r/io_w 0x8000-0xffff -> fdc_r/fdc_w). Drive = FLOPPY_35_HD (KN7000
+   formats 1.44M 2HD, reads 720K 2DD — KN5000's 35dd corrected). Formats = default_pc_floppy_formats
+   (raw .img round-trip; KN5000's mfm set can't). Build-link fix: genie listed upd765.o but `make`
+   won't re-archive liboptional.a when the member LIST changes only — delete the stale archive to force
+   a full re-archive (documented in floppy notes). Blank test imgs in kn7000_mame_build/floptest_*.img.
+2. **★ DISK MENU OPENS: SEG0D 0x04 ("DISK"), NOT SEG0D 0x40** — prior "floppy-device-gated" conclusion
+   RETRACTED (wrong button). From the DISK menu, SEG11 0x10 reaches the **FLOPPY DISK FORMAT** tool
+   (1.44M 2HD / 720K 2DD). Felipe's format tool is REACHABLE.
+3. **Red "known problems" startup dialog SUPPRESSED** (12639a3, Felipe's explicit ask): build.sh patches
+   ui.cpp `show_warnings = !skip_gameinfo()`; run.sh passes -skip_gameinfo. Memory saved
+   (kn7000-skip-startup-warning). GOTCHA for scripted runs: ALWAYS pass -skip_gameinfo or the autoboot
+   never loads (the warning blocks emulation before frame 1).
+4. Audio UNCHANGED (rule g): 0 FDC-region accesses during boot/idle/menu/audio -> io_r/io_w FDC change is
+   inert for the reverb/audio path (bit-identical).
+
+**IN PROGRESS / NEXT (floppy):** execute the format -> needs the LCD-right soft-key normSeg (2HD/2DD
+options), which is the hard full-scramble panel mapping (panel-completion-plan; empirical sweep w/ EXIT
+recovery). FDC still 0 hits at 0x98010000 AND 0x98030000 (no disk op has run yet) -> address UNCONFIRMED
+until a real op executes. Then confirm register offsets, then LOAD/dir/SAVE panel-memory to floppy + SD.
+Full detail + tool list: notes/floppy-fdc-investigation.md 2026-07-12 (6). Runner gotchas: use
+register_frame_done (NOT add_machine_frame_notifier) + integer mach.time.seconds; never -log (floods).
+
 ## ★★★ FULL GREEN-LIGHT MANDATE 2026-07-11 (Felipe, away many hours)
 "Keep improving the driver autonomously. Assume my answer is 'yes, let's do it!' for everything.
 Use cron jobs so you don't stop." Priority: (1) finish panel LEDs/buttons, (2) MAIN GOAL = effects

@@ -127,3 +127,12 @@ Live probe (scratchpad/retcap/menuprobe.lua + diskclean.lua) settles the DISK/SD
   descriptor (panel-descriptor-map: SEG12.7 = 0x2010 a6 = the CONTEXT-DEPENDENT Sound-Group/effect
   family) and with the live-confirmed SD MENU at SEG0D 0x80. DISREGARD it for disk-menu access; the
   confirmed path is SEG0D 0x80 (SD) / SEG0D 0x40 (DISK, floppy-gated). rule g: nothing changed.
+
+## 2026-07-12 (2) CORRECTION — the DISK MENU opener is SEG0D 0x04 ("DISK"), NOT SEG0D 0x40
+Live-verified with the floppy now modeled: **SEG0D 0x04 ("DISK") OPENS the DISK MENU** (snapshot: DISK
+TOOLS/PREFERENCES/STYLE CONVERT/CUSTOM STYLE ; LOAD/SAVE/DIRECT PLAY/SONG MEDLEY). The 2026-07-12 (1)
+conclusion above -- "DISK MENU = SEG0D 0x40, floppy-device-gated" -- is WRONG: that tick pressed 0x40
+("DISK MENU"), which does nothing from HOME, and mis-attributed the no-op to a device gate. The menu is
+NOT gated; it opens via 0x04. (SEG0D 0x40's true function is still unclear -- it may be a bank-B/context
+alias; left labeled "DISK MENU" in the driver pending an empirical panel sweep. rule g: documented, not
+guessed.) See floppy-fdc-investigation.md 2026-07-12 (6) for the full floppy state.

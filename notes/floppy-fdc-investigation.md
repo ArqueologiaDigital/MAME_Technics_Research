@@ -141,3 +141,54 @@ eliminated), path = file-op -> disk-init 0x4846d800 -> device struct 0x50071254 
 -> FDC(a1). The MODELING phase (wire MAME upd765 + a floppy_image_device at 0x98010000, drive the file-op
 path, RE the KN7000 disk format) is a dedicated multi-tick effort -- best done with a real floppy image
 to insert + interactive nav testing. The uPD765 stub scaffold is in place.
+
+## 2026-07-12 (6): FDC + HD floppy MODELED; DISK menu OPENS (button was mislabeled); format tool reached
+Big session. The floppy is now WIRED and the DISK menu + FLOPPY DISK FORMAT tool are REACHABLE.
+
+**Modeling shipped (commit a936d5a + follow-ups):**
+- Real `upd72067_device` (m_fdc) + `floppy_connector` at the 0x98010000 CS candidate (io_r/io_w
+  offset 0x8000-0xffff -> fdc_r/fdc_w; reg0->msr_r, reg2->fifo_r/fifo_w). GUESSED offsets, unverified.
+- Drive = **FLOPPY_35_HD** (not the KN5000's 35dd): firmware has "1.44M Byte format : 2HD" @0x25D160
+  and reads 720K 2DD too, so the KN5000's 35dd is CORRECTED to 35hd here. FDC clock 32MHz (matches
+  KN5000 sibling; unverified for the custom C1DB00000607).
+- Formats = **default_pc_floppy_formats** (adds FLOPPY_PC_FORMAT: raw .img/.ima round-trip) -- the
+  KN5000's default_mfm_floppy_formats can't load a raw PC image. KN7000 disks are FAT12/PC-interchangeable.
+- Blank test images: /home/fsanches/compartilhado/kn7000_mame_build/floptest_blank.img (1.44MB zeros)
+  and floptest_fat12.img. Media slot = `-floppydisk` (accepts .img now).
+
+**KEY CORRECTION (rule g): the DISK MENU button was MISLABELED.**
+- **SEG0D 0x04 ("DISK") OPENS the DISK MENU** (DISK TOOLS/PREFERENCES/STYLE CONVERT/CUSTOM STYLE ;
+  LOAD/SAVE/DIRECT PLAY/SONG MEDLEY). Verified live (snapshot).
+- SEG0D 0x40 ("DISK MENU") does NOTHING from HOME -- the earlier ticks pressed THIS wrong bit and
+  wrongly concluded "the DISK menu is floppy-device-gated." It is NOT gated: the menu opens fine via
+  0x04. The prior "chicken-and-egg / drive-present gate" conclusion is RETRACTED -- it was a wrong button.
+- The disk-state struct 0x5006ba20 (0x205 bytes, base from 0x4849fb5f) is zero-inited at boot (initA=1);
+  its status byte @+0x1f9=0x5006bc19 reads 0x00 (passes the 0xfb/0xfc error gate). Not the blocker.
+
+**From the DISK MENU, SEG11 0x10 reaches the FLOPPY DISK FORMAT screen** ("Select the FORMAT type:
+1.44M Byte 2HD / 720K Byte 2DD", PAGE 2/2). So Felipe's "disk menu floppy formatting tool" IS reachable.
+
+**REMAINING BLOCKER = the LCD-right soft-keys (2HD/2DD, marked with the on-screen right arrows) are
+UNMAPPED.** Their normSeg.bit is the hard "full-scramble" panel problem (panel-matrix-service-manual.md:
+physical SEG.SW -> normSeg is a scramble in the undumped sub-CPU, only derivable by empirical sweep).
+Swept SEG11/SEG0C/SEG0E/SEG10/SEG0B bits from the format screen: none select a format type (SEG0C 0x10 =
+STRINGS&VOCAL sound-group jump; SEG11 0x40 = tempo/PANEL MEMORY 3; SEG0D 0x80 = SD MENU jump). So the
+format-execute soft-key is elsewhere.
+
+**FDC still shows 0 accesses at 0x98010000 AND 0x98030000** across boot/idle/DISK-menu/FORMAT-screen/
+audio. So the FDC address remains UNCONFIRMED -- no disk op has executed yet (no format/dir/save ran,
+because the soft-key to trigger it isn't mapped). Widened taps on both free CS slots: still 0.
+
+**NEXT (well-scoped):**
+1. Find the LCD-right soft-key normSegs by a FULL empirical sweep (drive every SEGnn.bit from the format
+   screen, EXIT-recover between presses, watch for the screen changing to "formatting/confirm"). This is
+   the panel-completion-plan method. Once the 2HD soft-key is found -> format executes -> FDC accesses
+   appear -> CONFIRM the 0x98010000 slot + the real register offsets (correct reg0/reg2 guesses).
+2. If format executes but STILL 0 FDC hits, the FDC is at neither candidate OR disk-present is gated on a
+   separate drive-status GPIO (disk-in/ready/wpt) the firmware reads before issuing FDC commands -- trace
+   where 0x5006bc19 (status byte) is SET from.
+3. Then: dir/LOAD (read), SAVE panel memory to floppy, and the same on SD.
+Tools: tools/floppy_diskmenu_probe.lua, floppy_gate_probe.lua, floppy_load_probe.lua, floppy_format_probe.lua.
+GOTCHA: register_frame_done fires reliably; add_machine_frame_notifier did NOT in these runs. Use integer
+mach.time.seconds (attoseconds threw). -log floods error.log (every io_r/io_w) and stalls the emulator --
+use Lua taps + stdout instead. Narrow taps (16 bytes) are cheap; do NOT tap the hot TG/sound io ranges.
