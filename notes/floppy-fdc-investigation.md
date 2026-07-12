@@ -237,3 +237,20 @@ with these name strings) and disassemble it for the FDC register base literal; O
 handler (find it via the "Using DISK FORMAT" strings 0x48661F48/0x48662037 and the ATTENTION-YES event)
 and single-step to the first device access. That base is where the UPD72067 must be re-mapped; then wire
 IRQ/DMA + drive-status so the format/save actually writes the mounted image.
+
+## 2026-07-12 (9): the format ABORTS at a software/state check -- it never touches any FDC hardware
+Exhaustive live tap of the executing format (SEG13 0x01 = YES):
+- WRITE tap over ext-bus 0x30-0x33 / 0x38-0x3F / 0x40-0x47: only boot-time 0x32000xxx bus-controller
+  writes; NOTHING during the format.
+- READ tap over 0x30-0x33 / 0x38-0x47 / 0x36-0x37(GPIO) / 0x9C-0x9F(phantom btns): during the format,
+  only the NORMAL panel-scan GPIO (0x36008004/24/44/64/84) + boot bus-controller + 0x9CC00000 phantom
+  buttons. NO unusual/FDC-looking address is read or written.
+CONCLUSION: the FLOPPY FORMAT path **aborts at an early SOFTWARE/state check and never reaches the FDC
+at all** (consistent with: "ERASE WAIT!.." shows briefly, then it returns cleanly to the DISK menu with
+the image unchanged). So there is no live FDC access to trace yet -- the blocker is the pre-FDC gate
+(likely a "disk present / drive ready" software flag that is never set because no disk-change/insert
+event is modelled). To finish the floppy: find the FORMAT-execute handler (via the ATTENTION-YES event
+or the "Using DISK FORMAT" strings 0x48661F48/0x48662037), single-step from YES to the abort branch,
+identify the state/flag it checks, and model whatever sets "disk inserted + drive ready" (a drive-status
+signal). Only then does the format reach the FDC and reveal its address. This is a dedicated multi-tick
+RE task; the full UI nav to reach + trigger the format is now known and reproducible.
