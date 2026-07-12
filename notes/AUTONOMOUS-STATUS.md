@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12f) — ★ sliders read path SOLVED (CP protocol, not ADC); injection confirmed live
+Pursued the sliders FUNCTIONAL binding (make the APC/Seq slider change the firmware value). KEY FINDING
+(supersedes the raw-ADC hypothesis): the 4 volume pots + data wheel/pitch-mod/pedal are digitised by a panel
+sub-CPU and delivered as **TYPE 2 CP-protocol frames [ADDR,DATA]** (dispatch 0x484AD680, table 0x48613108) --
+which the driver ALREADY models. Enumerated the 6 controls; the 4 volume pots are wire ADDRs **0xD0-0xD3**
+(latch RAM 0x5006BEA1/2/3/6, per-control invert/÷2 + remap taper). ★ CONFIRMED LIVE, no rebuild
+(/tmp probe): injecting [0xD0,0xAA] into the CP RX ring (0x5006BDB4, head@0x5006BDB2) latched 0x5006BEA3=0xAA
+-- the handler ran, sliders are injectable end-to-end. So functional sliders = emit the right 0xDx frame on
+VOL_APCSEQ change (panel_queue or the RX-ring write). OPEN: (a) ID which 0xDx = APC/SEQ -- attempt 1 via
+display was CONFOUNDED by the demo screensaver (auto-starts on inactivity); use RAM correlation vs MUTE UP 9
+(demo-immune) or suppress the demo; (b) then wire the driver. Full: notes/slider-cp-protocol.md.
+
 ## TICK 2026-07-12 ~night(12e) — ★ FIXED: volume sliders now draggable on all views (Felipe bug)
 Felipe: sliders not draggable by clicking the layout (only the MAME analog menu worked); LinnDrum's are.
 ROOT CAUSE: the slider <script> (gen_lay.py) installed the pointer-drag callbacks on ONLY the "Compact"
