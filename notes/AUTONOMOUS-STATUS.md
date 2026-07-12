@@ -23,12 +23,21 @@ Session deliverables (all committed):
 4. Audio UNCHANGED (rule g): 0 FDC-region accesses during boot/idle/menu/audio -> io_r/io_w FDC change is
    inert for the reverb/audio path (bit-identical).
 
-**IN PROGRESS / NEXT (floppy):** execute the format -> needs the LCD-right soft-key normSeg (2HD/2DD
-options), which is the hard full-scramble panel mapping (panel-completion-plan; empirical sweep w/ EXIT
-recovery). FDC still 0 hits at 0x98010000 AND 0x98030000 (no disk op has run yet) -> address UNCONFIRMED
-until a real op executes. Then confirm register offsets, then LOAD/dir/SAVE panel-memory to floppy + SD.
-Full detail + tool list: notes/floppy-fdc-investigation.md 2026-07-12 (6). Runner gotchas: use
-register_frame_done (NOT add_machine_frame_notifier) + integer mach.time.seconds; never -log (floods).
+**★ FLOPPY NAV FULLY MAPPED + FORMAT EXECUTES (save-state soft-key sweeps, floppy_softkey_sweep.lua /
+floppy_yes_sweep.lua):** DISK menu = SEG0D 0x04; FLOPPY DISK FORMAT (2/2, type select) = SEG11 0x10;
+ATTENTION confirm (1/2, "Are You Sure? YES/NO") = PAGE UP SEG0B 0x10; **YES = SEG13 0x01** -> the format
+EXECUTES ("ERASE WAIT!..") and returns to the DISK menu. (NO/back = SEG12 0x01.) The LCD soft-keys are a
+scramble; these bits act as soft-keys only in this menu context.
+**KEY: the FDC is NOT in the 0x98 window and the format BYPASSES the block-device/FAT layer.** During a
+live format, a whole-0x98 unique-write tracker shows only normal TG/sound/DSP/SD traffic (NO 0x98010000/
+0x98030000), the image is unchanged, and debugger breakpoints on ALL disk-driver/FAT/block funcs
+(0x4853282e/0x485328b5/0x4846da31/0x485335ff/0x48532468/0x48532643/0x4846d800) fire ZERO times. So the
+UPD72067 wired at 0x98010000 is at the WRONG (now DISPROVEN) address -- harmless (0 accesses, audio
+bit-identical) but inactive; comments updated to say so (rule g). NEXT: resolve **FdIoFunc @0x48607900**
+(symbol) -> FDC register base -> re-map UPD72067 there + IRQ/DMA + drive-status, so format/save write the
+image. Full detail + tools: notes/floppy-fdc-investigation.md 2026-07-12 (6)-(8). Runner gotchas: use
+register_frame_done (NOT add_machine_frame_notifier) + integer mach.time.seconds; never -log (floods);
+save-state (m:save/m:load) makes soft-key sweeps clean; -skip_gameinfo mandatory for scripted runs.
 
 ## ★★★ FULL GREEN-LIGHT MANDATE 2026-07-11 (Felipe, away many hours)
 "Keep improving the driver autonomously. Assume my answer is 'yes, let's do it!' for everything.

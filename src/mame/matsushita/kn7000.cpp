@@ -1384,8 +1384,12 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
-	// IC103 floppy disk controller (uPD765-family @ 0x98010000 candidate, offset 0x8000-0xFFFF).
-	// EXPERIMENTAL -- routed to the real UPD72067 device via fdc_r; see fdc_r + the machine config.
+	// IC103 floppy disk controller (uPD765-family). 0x98010000 was a CANDIDATE but is now DISPROVEN:
+	// a 2026-07-12 trace of a live disk FORMAT (which executes fine -- see notes/floppy-fdc-investigation.md)
+	// shows the FDC is NOT in the 0x98 window and the format bypasses the block-device layer entirely.
+	// This routing is a harmless INACTIVE scaffold (0 accesses confirmed); the real FDC base is TBD
+	// (lead: the FdIoFunc / test-mode FDC functions in the symbol table). Kept so the UPD72067 + floppy
+	// slot exist (images mount) until the address is found.
 	if (offset >= 0x8000 && offset < 0x10000)
 		return fdc_r(offset - 0x8000);
 	if (!machine().side_effects_disabled())
@@ -1425,7 +1429,7 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
 	}
-	// IC103 floppy disk controller (see io_r) -- route writes to the UPD72067.
+	// IC103 floppy disk controller (see io_r) -- DISPROVEN 0x98010000 candidate, harmless inactive scaffold.
 	if (offset >= 0x8000 && offset < 0x10000)
 	{
 		fdc_w(offset - 0x8000, data & 0xff);
@@ -2918,12 +2922,18 @@ void kn7000_state::kn7000(machine_config &config)
 	m_sdcard->spi_miso_callback().set(FUNC(kn7000_state::sd_miso_w));
 
 	// IC103 floppy disk controller (uPD765-family, custom C1DB00000607) + 3.5" drive.
-	// EXPERIMENTAL bring-up at the 0x98010000 chip-select candidate (see io_r/io_w routing +
-	// notes/floppy-fdc-investigation.md). Mount a blank disk via -flop1 to test the DISK menu /
-	// format / save. IRQ/DMA not yet wired (add once the register offsets are confirmed live).
-	// Clock unverified for the KN7000's custom C1DB00000607; matches the KN5000 sibling's UPD72068.
+	// The device exists so floppy images mount and the DISK menu / FORMAT tool are exercisable
+	// (full nav reversed: DISK=SEG0D 0x04 -> FORMAT=SEG11 0x10 -> confirm=PAGE UP -> YES=SEG13 0x01;
+	// the format EXECUTES). But its BUS ADDRESS is NOT YET LOCATED: the 0x98010000 candidate is
+	// DISPROVEN (a live-format trace shows the FDC is not in the 0x98 window and format bypasses the
+	// block-device layer -- notes/floppy-fdc-investigation.md 2026-07-12). So the FDC is present but
+	// effectively unmapped; formats/saves won't touch the image until the real base is found (lead:
+	// FdIoFunc). IRQ/DMA not yet wired. Clock matches the KN5000 sibling's UPD72068 (unverified here).
 	UPD72067(config, m_fdc, 32'000'000);
-	FLOPPY_CONNECTOR(config, "fdc:0", kn7000_floppies, "35hd", floppy_image_device::default_mfm_floppy_formats).enable_sound(true);
+	// PC floppy formats: KN7000 disks are FAT12 and "interchangeable with a PC" (standard IBM-PC MFM),
+	// so use default_pc_floppy_formats -- it adds FLOPPY_PC_FORMAT (raw .img round-trip) on top of the
+	// MFM containers, unlike the KN5000's default_mfm_floppy_formats which cannot load a raw PC image.
+	FLOPPY_CONNECTOR(config, "fdc:0", kn7000_floppies, "35hd", floppy_image_device::default_pc_floppy_formats).enable_sound(true);
 
 	KN7000_TONEGEN(config, m_tonegen, 0);
 	// F.3: route the tone-generator audio through the effects-DSP bridge, then to the speakers.

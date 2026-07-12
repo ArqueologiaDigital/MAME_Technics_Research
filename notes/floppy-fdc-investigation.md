@@ -192,3 +192,48 @@ Tools: tools/floppy_diskmenu_probe.lua, floppy_gate_probe.lua, floppy_load_probe
 GOTCHA: register_frame_done fires reliably; add_machine_frame_notifier did NOT in these runs. Use integer
 mach.time.seconds (attoseconds threw). -log floods error.log (every io_r/io_w) and stalls the emulator --
 use Lua taps + stdout instead. Narrow taps (16 bytes) are cheap; do NOT tap the hot TG/sound io ranges.
+
+## 2026-07-12 (7): FORMAT EXECUTES (full nav mapped) but FDC is NOT in the 0x98 window
+Save-state soft-key sweeps (tools/floppy_softkey_sweep.lua, floppy_yes_sweep.lua) cracked the nav:
+- **DISK menu**  = SEG0D 0x04.
+- **FLOPPY DISK FORMAT** (page 2/2, "Select FORMAT type: 1.44M 2HD / 720K 2DD") = SEG11 0x10 from the
+  DISK menu.
+- **ATTENTION confirm** (page 1/2, "Using DISK FORMAT will erase any current data. Are You Sure? YES/NO")
+  = PAGE UP (SEG0B 0x10) from the format screen (it is a 2-page screen; page 1 = confirm, page 2 = type).
+- **YES = SEG13 0x01** on the ATTENTION screen -> the format EXECUTES: the screen shows "ERASE WAIT!.."
+  (found by md5/orange-cluster analysis of the 155-button save-state sweep from the ATTENTION screen).
+  (NO / cancel / page-back = SEG12 0x01.)
+The LCD soft-keys are a SCRAMBLE (panel-matrix-service-manual.md) -- these bits (SEG11 0x10, SEG12 0x01,
+SEG13 0x01, SEG0B 0x10) act as menu soft-keys in this context, unrelated to their bank-A names.
+
+**KEY NEGATIVE RESULT: the FDC is NOT in 0x98000000-0x9807ffff.** During the executing format ("ERASE
+WAIT!"), a unique-write-address tracker over the entire 0x98 window (tools -> /tmp/fdcfind.lua) logged
+ONLY the normal peripherals: 98000000 (DSP), 98020004/08 (sound), 98040000/04/10 + 98050000/04/0C/10
+(TG + SD-SPI), 98060000 (sound ctrl). NO writes to 0x98010000 or 0x98030000 (the old FDC candidates) --
+those were WRONG. And the floppy image md5 is UNCHANGED after "ERASE WAIT", i.e. the format never writes
+real disk data. So the disk-format path talks to the FDC at an address OUTSIDE 0x98 (or the format hangs
+polling an FDC status read that returns garbage because the FDC isn't modeled there).
+
+IMPLICATION: the UPD72067 wired at 0x98010000 (io_r/io_w 0x8000-0xffff -> fdc_r/fdc_w) is at the WRONG
+address and is never hit -- it is harmless (0 accesses, audio verified identical) but does nothing. The
+real FDC base must be found by tracing the disk-driver's `calls (a2)` chain (block-read 0x4846da31 ->
+[struct+0x14]+4) during a live format, OR by a broad READ tap (the format likely spins polling the FDC
+MSR). NEXT: debugger breakpoints on the disk driver funcs during the SEG13-0x01 format (/tmp/fdctrace2.lua)
+to dump the FDC register base, then re-map the UPD72067 there + wire IRQ/DMA + drive-status so the format
+actually writes the image. The full nav to reach/execute format is now known and reproducible.
+
+## 2026-07-12 (8): format COMPLETES (returns to DISK menu); FDC path bypasses the block device
+Debugger trace of the real format (SEG13 0x01 = YES) with breakpoints on every disk-driver/FAT/block
+function (0x4853282e flpRd, 0x485328b5 flpWr, 0x4846da31 blockRd, 0x485335ff fatRd, 0x48532468 diskDisp,
+0x48532643 diskInit, 0x4846d800 fopen): **ZERO of them fire.** So the FLOPPY FORMAT does NOT use the
+FAT/block-device abstraction at all -- it is a low-level format-track path straight to the FDC. After
+"ERASE WAIT!.." the screen returns cleanly to the DISK MENU (does NOT hang), yet the image is unchanged
+and no device outside the normal TG/sound set is written -> the format's FDC writes land on an
+unmodelled address (silently discarded) and the firmware does not verify.
+NEXT LEAD (symbol table): **FdIoFunc @0x48607900** (name string; the low-level Floppy-Disk I/O function),
+plus TestDiskFunc @0x48607A90, FDCstopBitmapCheck @0x486079B5 -- all in the service/test-mode symbol
+block 0x486079xx-0x48607Axx. Resolve FdIoFunc's code address (via the reflection address table paired
+with these name strings) and disassemble it for the FDC register base literal; OR breakpoint the format
+handler (find it via the "Using DISK FORMAT" strings 0x48661F48/0x48662037 and the ATTENTION-YES event)
+and single-step to the first device access. That base is where the UPD72067 must be re-mapped; then wire
+IRQ/DMA + drive-status so the format/save actually writes the mounted image.
