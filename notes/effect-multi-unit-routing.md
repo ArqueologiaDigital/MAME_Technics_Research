@@ -274,3 +274,21 @@ MULTI (unit unidentified) -- BLOCKED on the enable mechanism:
 - TO DO for MULTI: pin the p2 MULTI ON/DEPTH masks (snapshot-verify), enable it WITH another effect
   active to force the 0x8298 refresh, confirm the send tracks MULTI DEPTH, then coeff-diff/feed-test
   the real unit (likely u5). Then the same feed-and-sum recipe applies.
+
+## 2026-07-12: MULTI send CONFIRMED (0x8298), unit still ambiguous
+- MULTI send = **0x8298** (channel 0x29). Snapshot-verified: with the proven nav + SOUND DSP active
+  (forcing the effect-bus refresh), enabling MULTI (PART SETTING p2: MULTI ON=SEG09 0x40, DEPTH=
+  SEG0A 0x01) set 0x8298 low byte to 127 = the on-screen MULTI DEPTH. So 0x8298 IS the MULTI send.
+- NO re-patch: enabling SOUND DSP + MULTI leaves all 10 CALL slots identical to boot -> MULTI runs on
+  an already-loaded unit (like chorus/SOUND-DSP), not a re-patched one.
+- BUT the unit is NOT cleanly identifiable: the coeff-diff is noise-dominated (unit 9's 5-word change
+  = SOUND-DSP block refresh; unit 5's 2 words = weak MULTI candidate) AND unit 5 = rec10 (phaser)
+  does NOT match MULTI's default type "Cross Delay" (a delay). So the coeff-diff candidate is
+  unreliable for MULTI. Effect->unit so far: reverb=u0(0x80B8), chorus=u4/6(0x8198), SOUND-DSP=u9
+  (0x8098), EQ=u8; MULTI(0x8298)=? among the unused u1(rec15)/u2(rec08)/u3(rec11)/u5(rec10).
+- DECISIVE next method needed: the SPORT channel->unit map. The DSP kernel's SPORT multichannel RX
+  DMA maps each TG send channel (0x09/0x19/0x29) to a DM slot = a unit input. Decode the kernel
+  SPORT RX config (rec04) to get channel 0x29 -> unit input slot definitively, rather than the
+  refresh-noisy coeff-diff. THEN the same feed-and-sum recipe applies. Do NOT guess-feed a unit.
+STATE: 3 audible effects (reverb+chorus+SOUND-DSP) validated coexisting; MULTI send confirmed, unit
+pending the SPORT decode; EQ = master/insert (separate); FLAG3 4 records = deep frame model.
