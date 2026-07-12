@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~10:15 — FLOPPY groundwork: FDC = uPD765-family, address NARROWED to 0x98010000/0x98030000
+Advanced the highest-value remaining feature (floppy) with bounded static-RE (service manual) + live
+elimination. FINDINGS: IC103 = FDC, custom part C1DB00000607; signal set FDC.CS/DACK/TC/DRQ = a
+uPD765-family DMA floppy controller (MAME has upd765). FDC.CS is a CS-decoder SIBLING of TGCS(TG
+0x98040000)/ADSPAB(DSP 0x98000000) -> the FDC is in the 0x98000000-0x9807ffff window (driver io_r/io_w
+catch-all). Live elimination (fdcaddr.lua): 0x98060000 = SOUND CONTROL (0xEA periodic write, PC
+0x4854D1A8) RULED OUT; the free CS slots 0x98010000 / 0x98030000 are the FDC candidates. CHICKEN-AND-EGG:
+DISK MENU (SEG0D 0x40) bails at an early drive-present gate before touching the FDC, so a live disk op
+can't pin the exact slot until that gate is satisfied. NEXT (dedicated floppy effort, now well-scoped):
+stub uPD765 at the candidates + satisfy the drive-present gate to open the DISK menu, OR read the
+main-board CS-decoder schematic to pin FDC.CS; then wire upd765 + floppy_image_device + KN7000 disk
+format + the 3 driver slots (floppy=0x4853282e). No code change (rule g -- don't guess the exact slot).
+Durable: chip family (uPD765), address region (0x98010000/0x98030000), and the gate are now KNOWN --
+this converts the floppy from "runtime-pointer mystery" to a scoped modeling task. Full detail:
+notes/floppy-fdc-investigation.md.
+
 ## TICK 2026-07-12 ~09:40 — DISK/SD MENU buttons live-verified (priority-2 check): SD works, DISK floppy-gated
 Bounded priority-2 check triggered by last tick's "DISK MENU didn't open": is the DISK MENU button
 mislabeled (like PAGE/CONTRAST were)? Live probe (menuprobe.lua + diskclean.lua) settles it:
