@@ -259,3 +259,32 @@ CONCLUSION: the opt-in FDC is a faithful, verified device SCAFFOLD -- it engages
 accessed (boot disk-init) and does not regress anything (OFF byte-identical; ON still boots to home + note
 plays). Making the floppy actually WORK still requires resolving the disk-command-dispatch blocker (find
 why the disk task doesn't service the format's command), which is the documented multi-tick next step.
+
+## 2026-07-12 (addendum 10): ★★★ ROOT CAUSE FOUND — strap 0x98070000 bit15 gates the FLOPPY FDC init
+A 5-agent parallel RE workflow found it. The floppy FORMAT stalls because the WHOLE floppy FDC power-on
+init + disk-command SERVICING loop is gated behind **strap 0x98070000 bit 15**, and the driver forced that
+bit SET:
+- **0x484A4FBA**: `movhu (0x98070000),d0 ; btst 0x8000,d0 ; beq 0x484A4FE3` -> bit15 CLEAR runs the FDC
+  init (0x4854D835 / 0x4849FFE3 / 0x484A005A ...) then the disk-command servicing loop 0x484A506B (which
+  drives real FDC I/O and, via the class-0x106 handlers 0x484A0657 etc., writes completion 0x5006BC19 =
+  0xFB/0xF6). bit15 SET -> `ret` immediately, skipping the entire floppy subsystem.
+- The MAME driver hardcoded bit15 SET (io_r offset 0x38000: `return 0x8000 | ...`). I did this in an
+  earlier tick, MISREADING the bit-15-clear branch as an unwanted "factory power-on diagnostic". It is NOT
+  a diagnostic -- it is the floppy subsystem's required init; the "multi-second GPIO bit-banging" seen there
+  is that init BUSY-WAITING on FDC status the driver doesn't answer. CORRECTED (rule g).
+- SD works because its worker task 0x4854AD90 is created UNCONDITIONALLY (SD DiskInit 0x4854ACED, no strap
+  gate) and uses the SPI transport 0x9805000C. The floppy's servicing is the ONLY thing gated by bit15.
+This reconciles EVERY thread: with bit15 set, the servicing loop never runs -> the format's posted disk
+command is never serviced -> completion 0x5006BC19 stays 0 -> the poll 0x484A593E times out. (The
+0x484A5075/0x484A50A9 completion writers I chased earlier are DEAD CODE -- unreferenced; the LIVE completion
+writers are 0x484A0657 (msg id 0x1060002) / 0x484A3A62, doing SetCompletion(GetOpResult 0x4842C985 =
+*(0x5000099C+id*4)). The 0x34000170-bit4 / 0x9805000C serial-transport handshake is the low-level FDC I/O
+that only runs once the servicing loop is active.)
+
+THE FIX (two coupled parts, both behind the FDCEXP switch, default OFF):
+(a) Return strap bit15 CLEAR (done: io_r 0x38000 now clears 0x8000 when FDCEXP on) so 0x484A4FBA runs.
+(b) Model the FDC/disk-controller (0x9CC00000 register file: presence 0x9CC00000=0x1C, self-test
+    0x9CC00010/11/12=0x5A/0xA5/0x0A, status 0x9CC00009 bit0=media, config regs; + control regs
+    0x90008020/0x90C00000; + the FDC status/FIFO the init polls) so the init COMPLETES instead of
+    busy-waiting, and the servicing loop can do real disk I/O.
+Full agent findings + register map: this file (addenda 8-10) + the disk-controller map from the workflow.

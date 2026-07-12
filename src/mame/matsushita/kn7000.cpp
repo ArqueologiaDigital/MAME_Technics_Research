@@ -1350,28 +1350,28 @@ void kn7000_state::maincpu_mem(address_map &map)
 uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 {
 	// 0x98070000 (offset 0x38000 within the 0x98000000 window): a status/strap word.
-	// Boot init reads it and, if bit 15 is CLEAR, branches into a lengthy factory
-	// power-on diagnostic (a battery of RAM/HW tests whose results are bit-banged
-	// out on a panel GPIO with multi-second software delays -- not the normal boot
-	// path). On real hardware bit 15 is set, so the diagnostic is skipped. Model
-	// that here (guard at program-flash 0x484A4FDA: btst 0x8000,d0 / beq 0x484A4FE3).
+	// *** bit15 GATES THE FLOPPY FDC POWER-ON INIT + SERVICING LOOP *** (0x484A4FBA: movhu
+	// (0x98070000),d0 ; btst 0x8000,d0 ; beq 0x484A4FE3 -> run FDC init + the disk-command
+	// servicing loop 0x484A506B; bit15 SET -> ret immediately, skipping the whole floppy
+	// subsystem). The earlier "factory power-on diagnostic" reading of this branch was WRONG
+	// (RE 2026-07-12, notes/fdc-architecture.md): the multi-second GPIO bit-banging seen there
+	// is that FDC init BUSY-WAITING on FDC status the driver doesn't answer. With bit15 SET the
+	// floppy never initialises -> the format's disk command is never serviced (the servicing
+	// loop that writes completion 0x5006BC19 = 0xFB/0xF6 never runs) -> "ERASE WAIT!.." times out.
+	// So the floppy only works with bit15 CLEAR *and* the FDC/disk-controller modelled -- both
+	// gated behind the experimental "Experimental floppy (FDC)" switch (default OFF). SD is
+	// unaffected (its worker task 0x4854AD90 is created unconditionally, independent of this bit).
 	if (offset == 0x38000)
-		// Rear-panel config strap (16-bit, on the upper half of the data bus). bit15 =
-		// skip the factory power-on diagnostic (see above). bit12 (= data-bus D28, gated
-		// by the EXP-port output-enable) = the rear-panel MIDI IN / BASS PEDAL selector
-		// SW701: BassPedalSw (0x484A2CB1) -> 0x484b2615 reads bit12 and stores !bit12 into
-		// the MIDI-in mode flag 0x5006bfd2 bit1. bit12 SET = MIDI IN, clear = Bass Pedals.
-		//
-		// bits 1..2 = the tone-generator-present strap read by the TG probe at
-		// 0x484d7713: bit1 CLEAR makes the probe return "3 = no TG", which leaves the
-		// sound library's TG-enable gate (RAM 0x500ce380) at 0x7F and SUPPRESSES every
-		// per-voice register write forever (the instrument stays silent). The real
-		// KN7000 has both tone generators (IC201/IC205); reporting them present
-		// (bit1|bit2) opens the gate and the firmware drives the TGs on every note.
-		// Gated behind a machine-config switch (default OFF) because opening it also
-		// lets boot advance into the still-paused SD subsystem, which then rests on the
-		// SD Card menu instead of the home screen -- so sound is opt-in for now.
-		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
+	{
+		// bit12 (= data-bus D28) = rear-panel MIDI IN / BASS PEDAL selector SW701 (0x484A2CB1 ->
+		// 0x484b2615 reads bit12 -> MIDI-in mode flag 0x5006bfd2 bit1). bits1..2 = the TG-present
+		// strap (0x484d7713): bit1 clear -> "no TG" leaves the TG-enable gate closed (silent),
+		// so report the TGs present (bit1|bit2).
+		uint16_t strap = (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
+		if (!(m_fdcexp->read() & 1))
+			strap |= 0x8000;   // default: skip the floppy FDC init (controller not fully modelled yet)
+		return strap;          // FDCEXP on: bit15 CLEAR -> run the floppy FDC init + servicing loop
+	}
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
 	// low byte = KEY code with bit 7 = make/break flag, high byte = velocity). The
