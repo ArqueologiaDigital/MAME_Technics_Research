@@ -310,3 +310,22 @@ pending the SPORT decode; EQ = master/insert (separate); FLAG3 4 records = deep 
 STATE: 4 audible effects (reverb+chorus+SOUND-DSP+MULTI), validated robust + coexisting. EQ = master
 insert (deferred, documented). FLAG3 4 records (pitch-shift + specialty reverbs) = the deep frame
 model. The coeff-TYPE-diff is the definitive unit-ID method for any future send effect.
+
+## 2026-07-12: EQ insert model CONFIRMED tractable; blocker = active-detection (for the guard)
+Feasibility test -- fed unit 8 (EQ) with unit-0's output (the reverb'd main) and compared:
+- unit8(EQ) out max = 254056 vs unit0 out max = 254059 -> nearly identical LEVEL (flat 0dB EQ passes
+  the level through). So unit 8 IS a functional master INSERT: feed it the main mix, read its output,
+  and it EQs it. At nonzero gains it would shape the spectrum.
+- BUT avg|per-frame diff| = 39806 (~15% of peak) even at flat -- the biquad/FIR EQ has a phase/delay
+  response, so unit-8-out is NOT sample-identical to unit-0-out even when flat.
+IMPLICATION: always-inserting EQ (unit0 -> unit8 -> DAC) would phase-shift the reverb -> BREAKS the
+bit-identical reverb guard (Felipe-praised; the guard is a promise, don't break it even inaudibly).
+So a faithful EQ must be CONDITIONAL: insert unit 8 ONLY when EQ is active (nonzero LOW/HI gains),
+leaving the flat/default case on the current unit0->DAC path (bit-identical).
+REMAINING PIECE = EQ-active detection. Two options: (a) compare unit-8 DM coefficients to the boot
+(flat) baseline each frame -- risks false-positives from block refresh; (b) find the main-CPU RAM
+EQ-gain setting and gate on gain!=0dB -- cleaner but needs the RAM address RE. Lower value (flat
+default) + this complication -> EQ is a documented, lower-priority refinement, NOT forced.
+STATE: FOUR audible effects (reverb+chorus+SOUND-DSP+MULTI) is the strong, validated, robust stopping
+point. EQ = master insert, model confirmed, active-detection pending. FLAG3 4 records = deep frame
+model. Both are lower-value/harder than the shipped four.
