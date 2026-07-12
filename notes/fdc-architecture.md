@@ -362,3 +362,37 @@ floppy driver-init exists but is gated on a HW-present check, satisfying that ga
 could wire it up. NEXT RE: (1) 0x484ADxxx command processor -- where exactly is the ERROR-08 result set
 (immediate bail vs transmit-timeout)? (2) driver vtable 0x4867B948 [0-5] inits -- is one the floppy driver,
 and is it gated? (3) 0x3400016c bit4 + the 0x5006bee2 packet consumer.
+
+## 2026-07-12 (addendum 13): the class-5 disk command IS posted + serviced, but the device kickoff is unwired
+Corrected view of the format-execute (live trace fx.tr, reliable):
+- The format DOES post a **class-5 disk command (msg id 0x00050006)**: command processor 0x484ADxxx builds a
+  packet at 0x5006bee2 (XOR checksum) then 0x48414C9B -> 0x48429906 -> 0x484288B1 (task table 0x5000757C,
+  0x38-byte entries) -> 0x4C03C5AF (RTOS task wake). So the earlier "no class-5 post fires" claim (from the
+  unreliable bpset) was WRONG -- the post is real. (The completion byte 0x5006BC19 is NOT the mechanism for
+  this path: it gets 0 writes during the format.)
+- The class-5 disk task THEN RUNS (trace 602k+: heavy 0x484D79x/0x484D767x/0x484B31x/0x484AC7x) -- a
+  software STATE MACHINE **0x484D7930**: increments 0x50151bfc, advances state 0x500031f0 (0..5) via a jump
+  table, sets event bits in 0x50151c00/c01, and at state 2 gates on **0x5006cc81 == 0x80** (-> call
+  0x4C003F37). It does ZERO hardware I/O.
+- **The gate 0x5006cc81 has exactly ONE writer -- the disk-op KICKOFF 0x484D7490** (bit-bangs GPIO
+  0x36008004 bits5/2, calls 0x484D765F + 0x48448206, then `mov 0x80,d0; movbu d0,(0x5006cc81)`). That
+  kickoff **ran 0x during the format AND has no static callers and no pointer refs anywhere** -- i.e. it is
+  reached (if ever) only via a runtime driver-method pointer (`calls (a2)`), exactly like the serial
+  transport 0x4854BF60. It is NOT wired for the floppy path in this run.
+
+PATTERN (now clear across addenda 11-13): every disk *hardware-facing* function -- the parallel engine
+0x484A4FBA (dead), the serial transport 0x4854BF60 (0 static callers), the kickoff 0x484D7490 (0 callers/
+0 pointers) -- is invoked only through runtime device-driver method pointers. SD works because its device's
+methods are installed + called (SD init 0x4854ACED builds the device table at 0x50082738 stride 0x30 and
+creates the worker). For the FLOPPY, the device's methods (kickoff/transport) are never installed/invoked,
+so the class-5 op runs the generic state machine, does no real I/O, and errors -> ERROR 08.
+
+=> ROOT CAUSE (best current understanding): a **floppy device-registration / driver-method-install gap**.
+The format posts + the disk task services, but the floppy device's method table (containing 0x484D7490-class
+kickoff + the 0x4854BF60 transport) is not populated, so no FDC hardware is ever driven. This is NOT
+fixable by mapping a uPD765 at a guessed address (there is no code to drive it). NEXT RE (next tick):
+compare an SD op's device-method dispatch (which IS wired) against the floppy's -- find the device table
+0x50082738 entry for the floppy, why its method pointers are null / why it isn't registered, and whether a
+hardware-present strap/register at BOOT would cause the floppy device (and its methods) to register. If the
+floppy device simply isn't in this firmware's device table, the format cannot be completed without the real
+FDC hardware behaviour that populates it -- a genuine firmware/hardware-modelling boundary to report.
