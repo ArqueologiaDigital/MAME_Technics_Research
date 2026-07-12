@@ -463,3 +463,33 @@ Debugger trace of the format-execute (fx2.tr, 38.7M lines, correct nav): the for
   returned to the DISK menu quickly, while the debugger-trace run showed 230k MSR polls -- the FDC-reset
   state machine uses timing delays (0x50000010/20) so the path may be timing-sensitive / the tap run
   diverged. Re-verify the FDC IS reliably reached (tap the MSR poll PC 0x48400145 without the debugger).
+
+## 2026-07-12 (addendum 17): the MSR poll = wait for command-complete; FORMAT TRACK needs its DMA data
+Decoded the busy-poll (fn 0x48400190, loop @0x484001A8): it reads MSR (0x98020008) via 0x48400142 and waits
+for **(MSR & 0x1F) == 0** = FDC not-busy (CB bit4 clear) + no drive seeking (bits0-3). 500-tick timeout
+(counter 0x50151bfc, cmp 0x1F4). The format:
+- issues **FORMAT TRACK** = 6 FIFO bytes via the command primitive 0x48400185/0x48400188 (0x9802000a),
+  wrapped by the command-send fn ~0x48400CEx/0x48400D0x; DOR set 0x1C (bit3 DMA gate + bit4 motor0 on).
+- then busy-polls MSR for CB=0. My N82077AA keeps CB set because FORMAT TRACK never completes.
+WHY it never completes (MAME upd765 format_track_continue): HEAD_LOAD -> WAIT_INDEX (needs a floppy index
+pulse) -> WRITE_TRACK live state machine, which requests the per-sector C/H/R/N via **DRQ -> dma_w()** and
+ends on **TC**. Neither is wired: the FDC's drq_cb/tc are logging stubs and no DMA feeds the data. So the
+FDC hangs in the write phase (or at WAIT_INDEX) with CB=1 -> the firmware poll times out -> ERROR 08.
+The DMA is the MN10300 (MN103002A) on-chip DMAC: it transfers the firmware's format-data buffer -> the FDC
+via the **0x98010000 (FDC.DACK)** slot (decoder Y1). No 0xd4/dedicated DMAC access shows in the trace, so
+the DMAC regs are on-chip (find them). get_ready() with ready_connected=false returns true (drive ready OK);
+wpt (write-protect) must be clear (image not read-only).
+
+IMPLEMENTATION PLAN (next tick -- clear path to a WORKING format):
+1. Diagnose the exact stall point: add low-volume logging to fdc_r/fdc_w (log FIFO cmd bytes + DOR + the
+   FDC main_state), rebuild, run the format -> confirm WAIT_INDEX vs write-phase-DMA. (Motor is on via DOR
+   bit4; verify MAME's floppy generates index pulses -- if not, that's the stall.)
+2. Wire the FORMAT TRACK data phase: connect m_fdc->drq_cb to a handler that, on DRQ, supplies the next
+   format byte via m_fdc->dma_w() and asserts m_fdc->tc_w() at the byte count. Source the bytes from the
+   MN10300 DMAC's programmed buffer (model the on-chip DMAC minimally: src/count, feed on FDC.DACK
+   0x98010000), OR (labelled hack, rule g) synthesise C=cyl/H=head/R=1..SC/N from the FORMAT TRACK command
+   bytes (SC, N) captured from the FIFO.
+3. Verify: format completes (MSR CB clears, poll exits), the disk image gets a valid FAT12 layout, and a
+   subsequent SAVE/LOAD round-trips. Then it's a real user-facing win.
+Everything up to the FDC command is now correct + faithful (schematic-proven 0x98020000 N82077AA); only the
+DMA data phase remains. This is standard MAME FDC-DMA wiring.
