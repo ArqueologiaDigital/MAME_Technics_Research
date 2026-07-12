@@ -40,6 +40,15 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~01:55 — MULTI send confirmed (0x8298), unit pending SPORT decode
+Followed the MULTI plan: fixed the navigation (proven timing), enabled MULTI WITH SOUND DSP active to
+force the refresh -> MULTI send 0x8298 low byte = 127 = on-screen MULTI DEPTH (snapshot-verified MULTI
+ON). No CALL re-patch (MULTI runs on a loaded unit). BUT its unit isn't cleanly identifiable: coeff-
+diff is refresh-noise-dominated and the weak candidate (u5=rec10 phaser) mismatches MULTI's Cross-
+Delay default. Per rule (g), NOT guess-feeding. The clean path = decode the kernel SPORT RX DMA
+channel->unit map (channel 0x29 -> unit input slot) -- a deeper RE, deferred. 3 audible effects
+(reverb+chorus+SOUND-DSP) remain the solid validated state; MULTI is send-confirmed + unit-pending.
+
 ## ★ 2026-07-12 USER-CONFIRMED: PAGE Up/Down + CONTRAST Up/Down are correctly mapped (Felipe)
 Felipe confirmed directly: "contrast up/down and page up/down are all correctly mapped now." Priority
 2 CLOSED and user-validated. Mapping (shipped f614862): PAGE = pseudo-part 0x18 (SEG0B 0x10 up /
