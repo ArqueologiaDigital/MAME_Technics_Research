@@ -40,6 +40,15 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~03:10 — four effects validated robust; EQ deferral documented
+FOUR-EFFECT ROBUSTNESS: all part-effects (chorus+SOUND-DSP+MULTI) + reverb, 18-note cluster held ->
+DAC 0 clipped (peak 2443 > reverb-only 2085 = effects contribute; summing robust under stress). EQ
+(u8) DEFERRED with rationale: it's a master/INSERT (no send channel), flat 0dB default, and inserting
+it would break the bit-identical reverb guard even flat -> needs active-detection + conditional insert
+(harder, lower value than the sends). 4 audible effects (reverb+chorus+SOUND-DSP+MULTI) is the solid
+validated state; EQ + the 4 FLAG3 records remain (both harder/different). All priorities done/Felipe-
+blocked; PAGE/CONTRAST user-confirmed. Ear/HW pending: wet levels, reverb loudness, circular-wrap OK.
+
 ## ★★★★★ TICK 2026-07-12 ~02:50 — FOURTH audible effect: MULTI (unit 1)
 Cracked MULTI's unit with a SHARPER method: diff the DM coeff blocks between two MULTI TYPES (delay
 vs distortion) so the constant effect-bus refresh cancels -> UNIT 1 rewrote 43 words (rec15, comb+
