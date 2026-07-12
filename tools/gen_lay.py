@@ -88,6 +88,8 @@ two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="1.5" y="1.
 two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
+# tiny down-pointing triangle for the 3 keyboard split-point indicators (Felipe)
+elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M 1,1 L 11,1 L 6,9 Z" fill="#54545c" stroke="#000"/></svg>]]></data></image>')
 # ---- split-pill halves: two clickable halves form one divided pill (KN5000 pattern). Scale to bounds. ----
 # horizontal (-/+ , in/out, 1/2): left half rounded-left + flat-right, right half mirrored.
 two("half_l",40,22,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
@@ -252,6 +254,10 @@ for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),
     LB.append(L(nm,cx-24,y-14,48,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH))
     port=SLPORT[nm]; sid=port.lower(); x=cx-15; w=30; kh=18
     LB.append(P("fader_rail",cx-3,y+kh//2,6,h-kh))
+    # APC/SEQUENCER VOLUME indicator LED (Felipe, GREEN): lit when the slider position matches the current
+    # APC/Seq volume value; turns off when the value is changed via MUTE UP/DOWN 9. id set for the driver
+    # to drive later (the value/edit path is TBD -- see sliders.txt). Placed by the slider label.
+    if nm=="APC/SEQ": LB.append('\t\t<element name="apcseq_vol_led" ref="green_led"><bounds x="%d" y="%d" width="8" height="8"/></element>' % (cx+20, y-14))
     LB.append(f'\t\t<element id="{sid}_click" ref="inv_rect"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>')
     LB.append(f'\t\t<element id="{sid}_knob" ref="slider_knob"><animate inputtag="{port}" inputmask="0xffff"/><bounds state="100" x="{x}" y="{y}" width="{w}" height="{kh}"/><bounds state="0" x="{x}" y="{y+h-kh}" width="{w}" height="{kh}"/></element>')
 LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
@@ -263,7 +269,9 @@ LB.append(L("AUTO PLAY CHORD",418,36,150,10,TXTH))
 # APC MODE=SEG07 0x02 (APC/CHORD FINDER), APC OFF/ON=SEG07 0x08, SOUND ARRANGER SET=SEG07 0x04 (app-open),
 # SOUND ARRANGER OFF/ON=SEG07 0x10.
 for nm,cx,y,tg,mk in [("MODE",447,54,"SEG07","0x02"),("OFF/ON",505,54,"SEG07","0x08"),("SET",447,139,"SEG07","0x04"),("OFF/ON",505,139,"SEG07","0x10")]:
-    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk)); LB.append(P("green_led",cx+18,y+2,8,8,name=OPLED.get((tg,mk))))  # APC MODE=cpl_led33
+    LB.append(L(nm,cx-16,y-13,42,9)); LB.append(P("round_btn",cx-14,y,32,32,tag=tg,mask=mk))
+    # LED colours (Felipe): GREEN = APC MODE(0x02), Sound Arranger SET(0x04)+OFF/ON(0x10); RED = APC OFF/ON(0x08)
+    LB.append(P("green_led" if mk in ("0x02","0x04","0x10") else "red_led",cx+18,y+2,8,8,name=OPLED.get((tg,mk))))
 RGcols=[581,636,691,746,802,857,912,967]
 # RHYTHM GROUP = the 16 genres. EMPIRICALLY VERIFIED (2026-07-07, snapshot probe +
 # user real-machine testing): the genre-select bits are SEG00/SEG01/SEG02 bit b2..b7
@@ -288,7 +296,9 @@ LB.append(L("RHYTHM GROUP",700,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); LB.append(P("green_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
+    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask))
+    # LED colour (Felipe): RHYTHM GROUP genres are RED except CUSTOM & MEMORY (GREEN)
+    LB.append(P("green_led" if nm in ("CUSTOM","MEMORY") else "red_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
 # MUSIC STYLIST = SEG07 0x01 (ev2040 app-open MUSIC STYLIST, empirically confirmed).
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8)); LB.append(P("pill_orange",441,228,65,22,tag="SEG07",mask="0x01"))
 LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),   # bank A: DEMO = SEG06 0x40 (ev2040 app-open DEMO)
@@ -315,8 +325,8 @@ for nm,cx,cy,tg,mk in [("MUSIC STYLE ARRANGER",375,360,"SEG04","0x08"),("ONE TOU
     ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-42,cy-26+k*9,84,8))
     LB.append(P("round_btn",cx-16,cy,32,32,tag=tg,mask=mk))
-LB.append(P("green_led",371,350,8,8,name=PANEL_LED.get(("SEG04","0x08"))))   # MUSIC STYLE ARRANGER LED (state identity)
-LB.append(P("green_led",551,337,8,8,name=None))   # SPLIT POINT = SEG03 0x80 special-class (no indicator LED) LED (state identity)
+LB.append(P("red_led",371,350,8,8,name=PANEL_LED.get(("SEG04","0x08"))))   # MUSIC STYLE ARRANGER LED RED (Felipe)
+# SPLIT POINT button has NO indicator LED (Felipe: removed)
 # L-bracket linking MUSIC STYLE ARRANGER down to VARIATION 1
 LB += [P("vline",348,356,3,58), P("hline",348,412,20,3)]
 LB.append(L("VARIATION",430,378,90,8,TXTH))
@@ -325,15 +335,15 @@ LB.append(L("VARIATION",430,378,90,8,TXTH))
 # These are rhythm modifiers with no distinct LCD, so snapshot can't verify them.
 VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),("SEG03","0x40")]  # bank A VAR&MSA 1-4 (ev2085 arg-mid 0..3) -- all four now bound
 for i,cx in enumerate([366,426,486,546]):
-    LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("green_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))
+    LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("red_led",cx-2,388,8,8)); LB.append(L(str(i+1),cx+8,388,10,8))   # VARIATION LEDs RED (Felipe)
 # bank A (ev2084, arg-mid 0=IN,1=OUT): FADE IN = SEG03 0x20 / OUT = SEG03 0x08.
 # TAP TEMPO = SEG03 0x02 (ev20A1). SYNCHRO & BREAK = SEG00 0x80 (ev2021).
 LB.append(L("FADE",625,340,105,9)); LB += pair_h("SEG03","0x20","0x08",625,355,105,28,"IN","OUT")
 for nm,x,w,h,tg,mk in [("TAP TEMPO",740,105,28,"SEG03","0x02"),("SYNCHRO & BREAK",856,105,28,"SEG00","0x80")]:
     LB.append(L(nm,x,340,w,9)); LB.append(P("pill_wide",x,355,w,h,tag=tg,mask=mk))
-# FADE in/out LEDs (two, one per half) + SYNCHRO LED
-LB += [P("green_led",x+20,364,8,8) for x in [625]] + [P("green_led",625+72,364,8,8)]
-LB.append(P("green_led",856+48,364,8,8,name=PANEL_LED.get(("SEG00","0x80"))))   # SYNCHRO & BREAK LED (state identity)
+# FADE in/out LEDs (two, one per half) + SYNCHRO LED -- all RED (Felipe)
+LB += [P("red_led",x+20,364,8,8) for x in [625]] + [P("red_led",625+72,364,8,8)]
+LB.append(P("red_led",856+48,364,8,8,name=PANEL_LED.get(("SEG00","0x80"))))   # SYNCHRO & BREAK LED RED (Felipe)
 # bank A (ev2022, arg-mid 0/1): INTRO & ENDING 1 = SEG03 0x01 / 2 = SEG00 0x40 (straddles two SEGs).
 # ev2023 (arg-mid 0/1): FILL IN 1 = SEG03 0x10 / 2 = SEG03 0x04. START/STOP = SEG00 0x10 (ev2020).
 LB.append(L("INTRO & ENDING",740,394,105,9)); LB += pair_h("SEG03","0x01","0x40",740,408,105,50,"1","2",seg2="SEG00")
@@ -341,13 +351,21 @@ LB.append(L("FILL IN",625,394,105,9)); LB += pair_h("SEG03","0x10","0x04",625,40
 # START/STOP stays a single greycyan pill.
 LB.append(L("START/STOP",856,394,105,9)); LB.append(P("pill_greycyan",856,408,105,50,tag="SEG00",mask="0x10"))
 # INTRO&ENDING 1/2 LEDs + SEQ RESET/COUNT INTRO labels ; START/STOP 1-4 LEDs
-LB += [P("green_led",763,414,8,8), P("green_led",800,414,8,8)]
+LB += [P("red_led",763,414,8,8), P("red_led",800,414,8,8)]   # INTRO & ENDING 1/2 LEDs RED (Felipe)
+# FILL IN 1/2 LEDs -- were MISSING; added over the FILL IN pill halves (x=625,w=105). RED (Felipe).
+LB += [P("red_led",648,414,8,8), P("red_led",685,414,8,8)]
 LB += [L("SEQUENCER",748,452,44,7), L("RESET",752,459,36,7), L("COUNT INTRO",802,452,52,7)]
 # first BEAT LED = START/STOP indicator (cpl1, lit on rhythm start); beats 2-4 not yet swept
 # BEAT 1-4 indicators: light in sequence per beat. Order corrected per Felipe (my first sweep
 # started mid-measure): beat1=cpl24, beat2=cpl32, beat3=cpl40, beat4=cpl48 (left-to-right = 1-2-3-4).
 _beatled=["cpl_led24","cpl_led32","cpl_led40","cpl_led48"]
-LB += [P("green_led",867+i*9,414,8,8, name=_beatled[i]) for i in range(4)] + [L("BEAT",905,452,28,7)]
+# BEAT LEDs: beat 1 RED, beats 2-4 GREEN (Felipe)
+LB += [P("green_led" if i>0 else "red_led",867+i*9,414,8,8, name=_beatled[i]) for i in range(4)] + [L("BEAT",905,452,28,7)]
+# 3 SPLIT-POINT indicators at the very bottom of the layout (Felipe): a tiny down-arrow + RED LED per
+# keyboard split point. Exact key positions are TBD -- placeholders spread along the bottom edge;
+# Felipe will reposition them to the real split keys via the SVG-editing loop.
+for _sx in (200,500,800):
+    LB.append(P("red_led",_sx+2,478,8,8)); LB.append(P("split_arrow",_sx,489,12,10))
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
@@ -365,7 +383,9 @@ RB.append(L("SOUND GROUP",240,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
+    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask))
+    # LED colour (Felipe): SOUND GROUP buttons are RED except MEMORY (GREEN)
+    RB.append(P("green_led" if nm=="MEMORY" else "red_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
 RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",560,47,26,3), P("hline",684,47,26,3)]
 # PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
@@ -376,7 +396,7 @@ PE_BITS={"SOUND DSP":("SEG0F","0x08"),"VARIATION":("SEG0E","0x08"),"SUSTAIN":("S
 for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATION",730)]:
     ls=wrap2(nm); tg,mk=PE_BITS.get(nm,(None,None))
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
-    RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,60,8,8,name=OPLED.get((tg,mk))))
+    RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("red_led",cx-2,60,8,8,name=OPLED.get((tg,mk))))   # PART EFFECT LEDs RED (Felipe)
 RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3), P("hline",688,133,24,3)]
 # GLOBAL EFFECT (SEG13): REVERB=0x40, MIC(=MIC REVERB & EFFECT)=0x80 (HELP-info). CHORUS=0x10,
 # MULTI=0x20 -- event-inferred: they fire ev2062/ev2061 in this group but have no HELP page (verified
@@ -385,7 +405,7 @@ RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3
 GE_BITS={"CHORUS":("SEG11","0x04"),"MULTI":("SEG10","0x04"),"REVERB":("SEG0F","0x04"),"MIC":("SEG0E","0x04")}
 for nm,cx in [("CHORUS",565),("MULTI",620),("REVERB",675),("MIC",730)]:
     tg,mk=GE_BITS.get(nm,(None,None))
-    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))
+    RB.append(L(nm,cx-26,152,52,8)); RB.append(P("round_btn",cx-14,163,32,32,tag=tg,mask=mk)); RB.append(P("red_led",cx-2,152,8,8,name=OPLED.get((tg,mk))))   # GLOBAL EFFECT LEDs RED (Felipe)
 RB.append(L("SEQUENCER",850,42,90,10,TXTH))
 # bank A (empirical app-open screen sweep 2026-07-10): DISK = SEG0D 0x04, PROGRAM MENUS = SEG0C 0x04,
 # PLAY = SEG0D 0x08 (opens SEQUENCER PLAY), EASY REC = SEG0C 0x08 (opens EASY RECORD).
@@ -394,7 +414,7 @@ for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn","SEG0D","0x08"),("EASY REC
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
     RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tg,mk))))  # DISK=cpr_led75, PROGRAM MENUS=cpr_led74
 # DISK / IN USE indicator + line to DISK button
-RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("green_led",812,158,8,8), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]
+RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("red_led",812,158,8,8), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]   # DISK IN USE LED RED (Felipe)
 # SD (LOAD) pill = SEG0D 0x80 (ev2040 app-open SD MENU, empirically confirmed).
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22,tag="SEG0D",mask="0x80")); RB.append(P("green_led",886,216,8,8)); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
@@ -402,22 +422,23 @@ RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
 # SPLIT PAIRS (bank A -- each half on a different SEG; arg-mid 1=-,0=+ inferred):
 #   TRANSPOSE  - = SEG10 0x01 / + = SEG0F 0x01 (ev2081; +/- corrected per Felipe 2026-07-11)
 #   R1/R2 OCT  - = SEG13 0x02 / + = SEG12 0x02 (ev2083; +/- corrected per Felipe)
-RB += [P("green_led",230,328,8,8), P("green_led",262,328,8,8)] + pair_h("SEG10","0x01","0x01",213,335,75,24,"-","+",seg2="SEG0F")
+RB += [P("red_led",230,328,8,8), P("red_led",262,328,8,8)] + pair_h("SEG10","0x01","0x01",213,335,75,24,"-","+",seg2="SEG0F")   # TRANSPOSE LEDs RED (Felipe)
 RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
-RB += [P("green_led",230,398,8,8), P("green_led",262,398,8,8)] + pair_h("SEG13","0x02","0x02",213,405,75,24,"-","+",seg2="SEG12")
+RB += [P("red_led",230,398,8,8), P("red_led",262,398,8,8)] + pair_h("SEG13","0x02","0x02",213,405,75,24,"-","+",seg2="SEG12")   # R1/R2 OCTAVE LEDs RED (Felipe)
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
 RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,TXTH))
 # bank A: TECHNI-CHORD = SEG0D 0x01 (ev20A2), SOLO = SEG0C 0x01 (ev2086). TECHNI-CHORD LED cpr_led73 (state identity).
-RB += [P("green_led",428,274,8,8,name=PANEL_LED.get(("SEG0D","0x01"))), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("green_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
+# TECHNI-CHORD & SOLO LEDs RED (Felipe)
+RB += [P("red_led",428,274,8,8,name=PANEL_LED.get(("SEG0D","0x01"))), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("red_led",488,274,8,8), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
 # bank A PART SELECT group (ev2009, arg-mid 0/1/2) -- all three members now known.
 PARTSEL=[("SEG0D","0x02"),("SEG0E","0x02"),("SEG0E","0x01")]
-for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("green_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]
+for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("red_led",cx+12,334,8,8), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]   # PART SELECT LEDs RED (Felipe)
 # bank A CONDUCTOR group (ev2008, arg-mid 0/1/2) -- all three members now known.
 CONDUCT=[("SEG0F","0x02"),("SEG10","0x02"),("SEG11","0x02")]
-for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("green_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]
+for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12,399,8,8), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]   # CONDUCTOR LEDs RED (Felipe)
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 # bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK
 # SELECT screen); NEXT BANK = SEG0F 0x80 (ev2012, advances the bank).
@@ -466,7 +487,7 @@ SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70
      L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x10"), P("half_r",54,18,42,30,tag="SDSW",mask="0x20"), L("-",28,28,12,12), L("+",70,28,12,12),
      L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x01"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x02"),
      L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
-     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"),
+     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8),   # SD CARD PLAY/PAUSE LED (Felipe: green)
      L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8)]
 SDB.append('\t</group>')
 

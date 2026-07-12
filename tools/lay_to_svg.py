@@ -112,8 +112,10 @@ def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def main():
-    view = sys.argv[1] if len(sys.argv) > 1 else "Compact"
-    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
+    argv = [a for a in sys.argv[1:] if a != "--leds"]
+    color_leds = "--leds" in sys.argv   # render red_led/green_led in their lit colours (LED-colour check)
+    view = argv[0] if len(argv) > 0 else "Compact"
+    out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(__file__), "..", "..", "KN7000", "side-quests", "kn7000_layout.svg")
     text = open(LAY).read()
     els = parse_elements(text)
@@ -135,6 +137,11 @@ def main():
                          f'fill="#ffffff" stroke="#000000" stroke-width="2"/>')
                 o.append(f'<text x="{ax+w/2}" y="{ay+h/2}" text-anchor="middle" '
                          f'font-size="24" fill="#000000">LCD SCREEN</text>')
+                continue
+            if color_leds and ref in ("red_led", "green_led"):
+                col = "#ff2020" if ref == "red_led" else "#20d020"
+                o.append(f'<circle cx="{ax+w/2}" cy="{ay+h/2}" r="{max(w,h)/2:.1f}" '
+                         f'fill="{col}" stroke="#000000" stroke-width="0.5"/>')
                 continue
             e = els.get(ref)
             if not e:
