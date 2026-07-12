@@ -618,3 +618,23 @@ a normal (untraced) run; only per-instruction observation (trace/breakpoints) do
 mechanism remains unidentified. Floppy FORMAT parked at this boundary; FDC hardware modelling is the
 milestone. (A future fresh angle: single-step-equivalent memory-tap correlation of the disk-task RAM state
 at the divergence, or bisecting the emulation timing sources one at a time.)
+
+## 2026-07-12 (addendum 24): non-masking localization -- the disk-task command path never runs (normal run)
+Diagnostic (memory taps only, NO -debug/trace/bpset -> Heisenbug preserved; the format failed as expected):
+during the format (armed at YES) there were **0 writes** to any disk-task progression marker --
+cmd-processor state 0x5006be91, the FDC-reset state machine 0x50000010-0x50000023 (written by the FDC
+dispatcher 0x48400084), the completion byte 0x5006BC19, and the command packet 0x5006bee2. Compare the
+MASKED (working) run's bp-counters: cmdproc 0x484AD018 = 811, FDCdisp 0x48400084 = 27793. So in the normal
+(fast) run the disk-task's command/FDC processing **never executes** -- the format-execute posts its class-5
+disk command but the disk task's handling doesn't happen before the poll times out -> ERROR 08.
+=> The divergence is the ASYNC DISK-TASK DISPATCH (the class-5 handler being scheduled/run), NOT the FDC and
+   NOT the command building. The disk task is simply not run in time in the fast run; observation slows the
+   maincpu enough for it to run. WHY the async dispatch is a hair too late is the un-observable timing bug.
+   (SD works via a different mechanism -- a worker task blocked on RTOS object 9 -- which is why SD isn't
+   affected.) Non-masking taps have now taken this as far as they can: they can show the disk task DIDN'T
+   run, but not WHY (the scheduling/interrupt timing that would reveal it is exactly what masks the bug).
+CONCLUSION for the floppy this session: the FDC hardware is fully + correctly modelled/wired/documented
+(the milestone); the FORMAT is blocked on the async disk-task dispatch losing a timing race in normal
+(un-instrumented) operation. A future fix needs a fundamentally different angle -- e.g. bisecting the
+emulation's clock/timer rates (which peripheral event the dispatch waits on and whether its emulated period
+is wrong), or comparing the class-5 dispatch's RTOS scheduling against SD's working worker-task path. Parked.
