@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ TICK 2026-07-12 ~06:20 — PRIORITY 3 (real hot path): native SINGLE-function fixed multiplier, 66M fallbacks GONE
+Data-driven. Instrumented the SHARC DRC compute-fallback and found the effects kernel's hot path is NOT
+the multi-function MAC (which I made native earlier -- and which the kernel NEVER uses; 0 multiop
+fallbacks) but the SINGLE-function fixed-point multiplier: ~82M interpreter fallbacks per 22s reverb,
+~66M of them signed*signed general mult/MAC (0x78 Rx*Ry=27M, 0xB8 MR+=15M, 0xF8 MR-=12M, 0xBC=9M,
+0x7C=3M). The DRC sent the WHOLE fixed multiplier family to generate_unimplemented_compute (interpreter
+fallback). IMPLEMENTED native UML for the SS general forms (0x70-7f/0xb0-bf/0xf0-ff) mirroring the
+interpreter + the existing native multi-fn MAC. VERIFIED: reverb WAV BIT-IDENTICAL (md5 0787b60c...);
+fallbacks 82M->~3M/run (96% down), sf-mult-SS 66M->0. Wall-clock too noisy on this host to quantify
+(64-69% both before/after) but the interpreter-call elimination is definitive. Built+published (06:20).
+Commit bb2d516. Remaining ~3M fallbacks = mostly ALU average u0:09 (20x smaller, easy follow-up) +
+non-SS/SAT-RND multiplier (rare). This CORRECTS priority 3's premise (the multiop MAC wasn't the hot
+path; the single-fn multiplier was). NEXT: (optional) native ALU average u0:09; add this to the upstream
+SHARC catalogue (priority 5); blog. Also from earlier this tick: chorus/multi buttons WORK (LED evidence,
+manual); chorus-depth-on-cold-toggle is a per-part effect-depth detail (static RE, deferred).
+
 ## TICK 2026-07-12 ~06:15 — chorus/multi toggle RESOLVED: buttons WORK (not a panel bug); it's an effect-DEPTH detail
 Investigated last tick's chorus/multi "toggle doesn't engage" flag. DECISIVE via (1) the USER MANUAL
 (p~2518: "Press the CHORUS/REVERB/MULTI button to turn it on. These effects are applied to all the
