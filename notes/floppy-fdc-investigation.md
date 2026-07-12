@@ -254,3 +254,17 @@ or the "Using DISK FORMAT" strings 0x48661F48/0x48662037), single-step from YES 
 identify the state/flag it checks, and model whatever sets "disk inserted + drive ready" (a drive-status
 signal). Only then does the format reach the FDC and reveal its address. This is a dedicated multi-tick
 RE task; the full UI nav to reach + trigger the format is now known and reproducible.
+
+## 2026-07-12 (10): CORRECTION -- 0x98010000 is UNCONFIRMED, not disproven; format aborts pre-FDC
+Earlier entries (6)-(9) said "the FDC is NOT in 0x98 / 0x98010000 disproven" based on the live FORMAT not
+writing 0x98010000. That was TOO STRONG: the FORMAT aborts at a pre-FDC software gate and never reaches
+ANY FDC address, so its 0x98-write trace is silent about 0x98010000. Re-examination of the boot
+bus-controller (0x484009D0) shows **0x32000804 = 0x98010000 is a chip-select BASE**, and no other 0x98
+peripheral claims that sub-slot -- so 0x98010000 remains the STRONGEST FDC candidate, just unconfirmed by
+a live access (boot: 0 hits; format: aborts early; dir/LOAD: unreachable + would fail device-not-ready).
+Driver comments + fdc-architecture.md corrected to "unconfirmed candidate". CONCRETE NEXT EXPERIMENT: the
+format's pre-gate likely polls a "disk present / drive ready" status that (on real HW) the FDC answers via
+SENSE DRIVE STATUS. Model the UPD72067 status correctly at 0x98010000 (ready + disk-in) and re-test the
+format: if the pre-gate then advances to a real FDC access, 0x98010000 is CONFIRMED and the register
+layout is revealed. This breaks the chicken-and-egg (can't capture the runtime FDC ptr live until the FDC
+answers the ready poll).

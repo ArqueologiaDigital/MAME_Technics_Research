@@ -60,11 +60,23 @@ without touching any FDC hardware** (exhaustive read+write taps over 0x30-0x47/0
 the format show only normal TG/sound/DSP/SD + panel-scan traffic; the floppy image is unchanged). So the
 format has its own low-level format-track routine gated on a "disk present/ready" state that is never set.
 
-## The open question: the FDC's physical I/O address
-- **NOT in the 0x98 window** (disproven live) and **not reached via the block layer during FORMAT**.
-- It is the runtime pointer inside the registered device method (a2 at 0x4846DA31's `calls`). To capture
-  it, a live VFS file-op must run (dir/LOAD/SAVE) so 0x50071254 is populated and the method is called --
-  then read a2 / the method's FDC base. The UI LOAD button on the DISK menu has not yet been found (SEG11
-  0x10 goes to FORMAT, not file-LOAD); a save-state sweep for the device-create button is the way in.
+## The open question: the FDC's physical I/O address (UNCONFIRMED, not disproven)
+- **0x98010000 is the strongest candidate and is NOT disproven.** The boot bus-controller programs it as
+  a chip-select base (0x484009D0: `mov 0x98010000,d0 ; mov d0,(0x32000804)`), and no other 0x98 peripheral
+  claims that sub-slot (TG=0x98040000, DSP=0x98000000, snd=0x98020000/60000, strap=0x98070000). The
+  UPD72067 is wired there.
+- BUT no code path in the emulator has EXERCISED the FDC, so the slot can't be confirmed: at boot the FDC
+  is untouched (0 accesses), the live FORMAT aborts at a pre-FDC software gate before any FDC access, and
+  the block/VFS dir-read path is not reachable (no DISK-menu button triggers device-create; a 155-button
+  save-state sweep found none -- and disk-open would fail "device not ready" anyway without the FDC
+  responding). Earlier "the FDC is NOT in 0x98 / 0x98010000 disproven" was too strong: the format never
+  reaches ANY FDC address, so its 0x98-write trace (only TG/sound/DSP/SD) says nothing about 0x98010000.
+- To CONFIRM: make a live FDC access happen. Either (a) find/model the "disk present + drive ready" state
+  the FORMAT's pre-gate checks so the format proceeds to the FDC, or (b) reach a real dir/LOAD file-op
+  (needs the LOAD browser nav + a responding FDC). Then read a2 at 0x4846DA31's `calls` (the device method
+  = the FDC base) and/or watch which 0x98 sub-slot the FDC commands hit. Chicken-and-egg: the drive-ready
+  path likely needs the FDC (at 0x98010000?) to answer a SENSE DRIVE STATUS / poll -- so wiring the
+  UPD72067's status correctly at 0x98010000 and re-testing the format's pre-gate is the concrete next
+  experiment (if the gate then advances to the FDC, 0x98010000 is confirmed).
 - Static alternative: resolve the floppy entry in the device table 0x500079F8 registration (its read fn
   = the FDC method) -- the registration writer wasn't found via the 0x50007A48 literal (only reads there).

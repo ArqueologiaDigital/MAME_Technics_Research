@@ -28,14 +28,17 @@ floppy_yes_sweep.lua):** DISK menu = SEG0D 0x04; FLOPPY DISK FORMAT (2/2, type s
 ATTENTION confirm (1/2, "Are You Sure? YES/NO") = PAGE UP SEG0B 0x10; **YES = SEG13 0x01** -> the format
 EXECUTES ("ERASE WAIT!..") and returns to the DISK menu. (NO/back = SEG12 0x01.) The LCD soft-keys are a
 scramble; these bits act as soft-keys only in this menu context.
-**KEY: the FDC is NOT in the 0x98 window and the format BYPASSES the block-device/FAT layer.** During a
-live format, a whole-0x98 unique-write tracker shows only normal TG/sound/DSP/SD traffic (NO 0x98010000/
-0x98030000), the image is unchanged, and debugger breakpoints on ALL disk-driver/FAT/block funcs
-(0x4853282e/0x485328b5/0x4846da31/0x485335ff/0x48532468/0x48532643/0x4846d800) fire ZERO times. So the
-UPD72067 wired at 0x98010000 is at the WRONG (now DISPROVEN) address -- harmless (0 accesses, audio
-bit-identical) but inactive; comments updated to say so (rule g). NEXT: resolve **FdIoFunc @0x48607900**
-(symbol) -> FDC register base -> re-map UPD72067 there + IRQ/DMA + drive-status, so format/save write the
-image. Full detail + tools: notes/floppy-fdc-investigation.md 2026-07-12 (6)-(8). Runner gotchas: use
+**KEY: the format EXECUTES but ABORTS at a pre-FDC software gate (never touches ANY FDC hardware).**
+Debugger breakpoints on ALL disk-driver/FAT/block funcs (0x4853282e/0x485328b5/0x4846da31/0x485335ff/
+0x48532468/0x48532643/0x4846d800) fire ZERO times during the format; exhaustive read+write taps show only
+normal TG/sound/DSP/SD + GPIO panel-scan traffic; the image is unchanged. **0x98010000 is UNCONFIRMED, NOT
+disproven** (correction): it IS a chip-select base (boot 0x484009D0 -> 0x32000804=0x98010000) with no other
+0x98 claimant, but no code path exercises the FDC (boot: 0 hits; format: aborts early; dir/LOAD: unreachable
++ device-not-ready). The UPD72067 there is harmless (0 accesses, audio bit-identical) and MAY be correct;
+comments corrected to "unconfirmed" (rule g). NEXT EXPERIMENT: model the UPD72067 drive-ready/disk-present
+status at 0x98010000 and re-test the format -- if its pre-gate then advances to a real FDC access,
+0x98010000 is CONFIRMED. Full detail + tools: notes/fdc-architecture.md + floppy-fdc-investigation.md
+2026-07-12 (6)-(10). Runner gotchas: use
 register_frame_done (NOT add_machine_frame_notifier) + integer mach.time.seconds; never -log (floods);
 save-state (m:save/m:load) makes soft-key sweeps clean; -skip_gameinfo mandatory for scripted runs.
 **FDC ARCHITECTURE fully reversed from disassembly (Felipe's ask): notes/fdc-architecture.md** -- the
