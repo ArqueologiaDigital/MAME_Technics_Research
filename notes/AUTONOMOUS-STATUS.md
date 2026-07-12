@@ -18,10 +18,15 @@ Per Felipe "inspect the disassembly to understand how the FDC works" -> **notes/
   The format does NOT call these (verified 0 breakpoint hits) -- they're the factory path -- but the disk
   task's real FDC I/O likely uses the same 0x9C/0x9E hardware. 0x98010000 stays a weaker unconfirmed
   candidate (a CS base only).
-- NEXT: (a) find the disk task's handler (breakpoint 0x484285E4 during the format for the task index) +
-  its FDC I/O, and/or (b) clear strap bit15 + tap 0x90-0x9F to map the 0x9C/0x9E device region. Then model
-  the FDC there + drive-status/disk-change + IRQ/DMA so the disk task completes and format/save write the
-  image. Full detail: notes/fdc-architecture.md + floppy-fdc-investigation.md.
+- EXHAUSTIVELY CONFIRMED: the format reaches ZERO disk/FDC hardware (tapped 0x30-0x9B, all clean) and posts
+  NO class-5/6 disk-task command (0x484298A0 breakpoint: 0 hits) -- so the earlier "format posts to a disk
+  task" inference was WRONG (corrected in fdc-architecture.md addendum 4, rule g). The format's own handler
+  polls status bytes 0x5006BC19/23/24 and times out, but that handler has NOT been located (reached via
+  MILK GUI screen dispatch, not a simple event). NEXT: a CPU INSTRUCTION TRACE across the YES press
+  (SEG13 0x01 on the ATTENTION screen) to find the format-execute handler + its abort branch + what it
+  waits on -- THEN the FDC hardware path (the getter-caller bpset via d@sp was too slow at 1345 fires/format
+  + syntax-fiddly; use `trace` to a file gated to the YES window instead). Full detail + verified facts:
+  notes/fdc-architecture.md (10 dated sections) + floppy-fdc-investigation.md.
 
 ## TICK 2026-07-12 ~afternoon — FLOPPY MODELED + DISK MENU OPENS + FORMAT TOOL REACHED; red dialog fixed
 Session deliverables (all committed):
