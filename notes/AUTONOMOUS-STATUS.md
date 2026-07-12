@@ -40,6 +40,16 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~08:45 — DRC perf changes REGRESSION-VALIDATED across the effect suite (clean)
+Bounded, high-certainty verification of the shipped native single-fn multiplier + ALU average (the most
+recent code changes; previously only reverb-A/B'd). Re-ran the multiplier/average-heavy divergence sweep
+runs on the CURRENT binary (native ops): R1 reverb + M3 (LFO filter/wah) + M4 (distortion complex/vocal)
++ S4 (flanger/phaser) = 79 segments. RESULT: FAIL=0, SUSPECT=0, ZERO rails, ZERO clips. Stronger: R1
+fpeak values are IDENTICAL to the pre-DRC-change 241-effect sweep (Concert2=11.6%FS, Dark1=8.6%,
+Plate2=8.1% -- exact match) -> the native ops produce BIT-IDENTICAL audio across the effect families,
+not just the reverb. So the DRC hot-path work (82M->500k fallbacks, >99%) is confirmed robust suite-wide.
+No code change (verification only). Closes the DRC perf work with suite-wide confidence.
+
 ## TICK 2026-07-12 ~09:15 — floppy exploration (FDC not reached; 0x84000000 false lead ruled out); honest completion
 Applied the new register-read-at-tap capability to the highest-value remaining feature (floppy). Result:
 FDC still not reached. SEG0D 0x40 ("DISK MENU") did NOT open a disk menu (LCD stayed HOME); the heavy
