@@ -5,6 +5,24 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~late — FDC ARCHITECTURE fully reversed (Felipe's disasm ask); FDC=0x9C/0x9E candidate
+Per Felipe "inspect the disassembly to understand how the FDC works" -> **notes/fdc-architecture.md**
+(comprehensive). Key new findings this tick:
+- **The FORMAT is a poll-for-completion loop**: after YES (SEG13 0x01) it spins ~2700x reading disk-state
+  status bytes 0x5006BC19/BC23/BC24 (getters 0x4849FBD8/0x484A4F9C/0x484A4FAB), waiting for the DISK TASK
+  to set them; the task never completes (its FDC I/O stalls) -> timeout -> back to DISK menu. The format
+  posts its command via 0x484298A0 -> dispatcher 0x484285E4 -> task table 0x5000757C.
+- **Candidate FDC hardware is in the 0x9C/0x9E region, NOT 0x98**: the bit-15-gated factory diagnostic
+  (0x484A4FBA reads strap 0x98070000, `btst 0x8000`) exercises 0x9CE00000/04/08 (data), 0x9CC00009 (ctrl
+  bit), 0x9CC001FC, 0x90C00000, 0x90008020. Driver deliberately sets strap bit15 to skip this diagnostic.
+  The format does NOT call these (verified 0 breakpoint hits) -- they're the factory path -- but the disk
+  task's real FDC I/O likely uses the same 0x9C/0x9E hardware. 0x98010000 stays a weaker unconfirmed
+  candidate (a CS base only).
+- NEXT: (a) find the disk task's handler (breakpoint 0x484285E4 during the format for the task index) +
+  its FDC I/O, and/or (b) clear strap bit15 + tap 0x90-0x9F to map the 0x9C/0x9E device region. Then model
+  the FDC there + drive-status/disk-change + IRQ/DMA so the disk task completes and format/save write the
+  image. Full detail: notes/fdc-architecture.md + floppy-fdc-investigation.md.
+
 ## TICK 2026-07-12 ~afternoon — FLOPPY MODELED + DISK MENU OPENS + FORMAT TOOL REACHED; red dialog fixed
 Session deliverables (all committed):
 1. **FDC + 3.5" HD floppy WIRED** (a936d5a): real `upd72067_device` + `floppy_connector` at the
