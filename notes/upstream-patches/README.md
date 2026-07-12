@@ -1,5 +1,22 @@
 # SHARC core fixes — upstream (MAME) submission patches
 
+## ★ Submit-ready consolidated diff (2026-07-12)
+**00-consolidated-vs-upstream-base.patch** is the authoritative artifact: the COMPLETE SHARC-core diff of
+this fork against a pristine upstream MAME checkout (../mame; verified to lack every change here). It
+applies cleanly with `patch -p1` (dry-run validated) and covers two concerns:
+1. **General ADSP-2106x DRC/interpreter fixes** (sharcdrc.cpp + sharcops.hxx): MODE1 ALUSAT across the
+   fixed-point ALU family, native UML for the single-function fixed multiplier + MAC + the fixed-point
+   average (op 0x09) -- the DRC previously punted the whole fixed multiplier family to the interpreter
+   (~82M fallbacks/reverb-run -> <500k, >99%). All verified BIT-IDENTICAL vs the interpreter.
+2. **New device variant: ADSP-21065L** (sharc.h + sharc.cpp): vector base, host boot, memory map, IOP
+   register set -- a genuinely new SHARC personality (the KN7000/KN6000/KN6500 effects DSP), currently
+   absent from upstream.
+For a real PR, split concern 1 (pure bugfix/perf, low-risk, broadly applicable) from concern 2 (new
+device). The individual patches 01-05 below are the historical fork-order slices of concern 1; the
+consolidated diff is the clean whole against upstream. Canonical source remains the fork git history
+(3fa7e3a..HEAD on src/devices/cpu/sharc/).
+
+
 Generated from the KN7000 fork. These target MAME's shared `src/devices/cpu/sharc/` core and are
 general ADSP-2106x fixes (not KN7000-specific). Full technical rationale: ../sharc-upstream-patch-series.md.
 

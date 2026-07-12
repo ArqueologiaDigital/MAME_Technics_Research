@@ -1,0 +1,1087 @@
+--- a/src/devices/cpu/sharc/sharc.h
++++ b/src/devices/cpu/sharc/sharc.h
+@@ -35,6 +35,19 @@
+ 	void set_boot_mode(const sharc_boot_mode boot_mode) { m_boot_mode = boot_mode; }
+ 	void enable_recompiler();
+ 
++	// Host code-upload notification: when something OUTSIDE the SHARC (e.g. a host
++	// port DMA writing a new microprogram into internal PM) modifies the program
++	// memory, the DRC's self-modify detection (which only fires for PM writes issued
++	// by the SHARC's own pm_write handlers) is bypassed and the recompiled cache goes
++	// stale. Call this after such a write to force a full cache flush on the next
++	// timeslice so the new code actually runs.
++	void notify_pm_written();
++
++	// Live DM-bus index register In (I0..I7 = dag1). The effects kernel keeps its audio
++	// in/out pointer in I4 (output frame at I4, input frame at I4+0x20); reading it lets the
++	// audio bridge follow whichever SPORT autobuffer the running microprogram actually uses.
++	uint32_t dm_index_reg(int n) const;
++
+ 	void external_iop_write(uint32_t address, uint32_t data);
+ 	void external_dma_write(uint32_t address, uint64_t data);
+ 
+@@ -97,6 +110,23 @@
+ 			address_map_constructor internal_pgm,
+ 			address_map_constructor internal_data);
+ 
++	// Reset PC (boot entry). The 2106x reset vector is at internal-RAM-base + 4
++	// (0x20004 for the 2M/4M parts); the 21065L variant overrides this for its own
++	// internal-RAM layout.
++	virtual uint32_t reset_pc() const { return 0x20004; }
++
++	// Base address of the interrupt vector table (internal-RAM base). check_interrupts()
++	// vectors a taken interrupt N to irq_vector_base() + N*4. 0x20000 for the 2M/4M parts;
++	// the 21065L overrides this to 0x8000 to match its smaller internal-RAM layout.
++	virtual uint32_t irq_vector_base() const { return 0x20000; }
++
++	// Lowest address the DRC memory accessors treat as internal-SRAM (served from m_blocks,
++	// the block-interleaved fast path). The 2M/4M parts put internal SRAM at 0x20000-0x3FFFF;
++	// the 21065L has a different layout and does not populate m_blocks, so it overrides this to
++	// an out-of-range value, forcing every access through the address map (space_access) which
++	// serves its plain-RAM internal SRAM (0x8000-0x1FFFF) and external SDRAM (0x20000+).
++	virtual uint32_t drc_sram_base() const { return 0x20000; }
++
+ 	// device_t implementation
+ 	virtual void device_start() override ATTR_COLD;
+ 	virtual void device_reset() override ATTR_COLD;
+@@ -297,7 +327,7 @@
+ 
+ 	devcb_write8::array<4> m_flag_out_cb;
+ 
+-	required_shared_ptr_array<uint32_t, 2> m_blocks;
++	optional_shared_ptr_array<uint32_t, 2> m_blocks;   // 21062/21060 populate these; the 21065L variant uses plain-RAM maps instead
+ 
+ 	opcode_func m_sharc_op[512];
+ 
+@@ -407,6 +437,7 @@
+ 	// ALU fixed-point
+ 	inline void compute_add(int rn, int rx, int ry);
+ 	inline void compute_sub(int rn, int rx, int ry);
++	inline void compute_avg(int rn, int rx, int ry);   // op 0x09: Rn = (Rx + Ry) / 2
+ 	inline void compute_add_ci(int rn, int rx, int ry);
+ 	inline void compute_sub_ci(int rn, int rx, int ry);
+ 	inline void compute_comp(int rx, int ry);
+@@ -519,10 +550,12 @@
+ 	void save_fast_iregs(drcuml_block &block);
+ 	void update_az_an_fixed(drcuml_block &block, const opcode_desc *desc);
+ 	void update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub);
++	void generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags);
+ 	void generate_sequence_instruction(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, bool last_delayslot);
+ 	void generate_update_cycles(drcuml_block &block, compiler_state &compiler, uml::parameter param, bool allow_exception);
+ 	bool generate_opcode(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_unimplemented_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
++	void generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_if_condition(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int condition, int skip_label);
+ 	void generate_shift_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int data, int shiftop, int rn, int rx);
+@@ -550,7 +583,77 @@
+ };
+ 
+ 
++// ADSP-21065L -- the low-cost SHARC variant used as the Technics KN7000's effects DSP
++// (IC306). Same 2106x instruction set as the base, but a smaller, differently-organised
++// on-chip SRAM and a different I/O-register personality. That personality is derived from
++// the recovered firmware program (see the KN7000 driver / notes/sharc-lle-assessment.md):
++// program code at PM 0x8000-0x8Dxx, data at DM 0x9800/0x9C40/0xC000/0xC302, external SDRAM
++// delay memory at 0x80000+, and an IOP register set the base core does not model. Modelled
++// here with plain-RAM internal memory (the base's block-interleaved pm_r/pm_w assume the
++// 2M/4M geometry) and stubbed IOP registers.
++class adsp21065l_device : public adsp21062_device
++{
++public:
++	// construction/destruction
++	adsp21065l_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
++	virtual ~adsp21065l_device() override;
++
++	// F.3 SPORT audio: the base addresses of the kernel's serial-audio DMA autobuffers, derived
++	// at runtime from its DMA transfer-control blocks (see iop65l_w). [sport 0/1][A=0 / B=1].
++	// TX = the SHARC's processed output (-> DAC); RX = its input (TG -> SHARC). 0 until set up.
++	uint32_t sport_tx_buffer(int sport, int ab) const { return m_sport_tx[sport & 1][ab & 1]; }
++	uint32_t sport_rx_buffer(int sport, int ab) const { return m_sport_rx[sport & 1][ab & 1]; }
++
++protected:
++	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
++	// (vector N at 0x8000 + N*4; e.g. IRQ0 = vector 8 = 0x8020).
++	virtual uint32_t irq_vector_base() const override { return 0x8000; }
++
++	// The 21065L does not populate m_blocks; route all DRC memory accesses through the address
++	// map by making no address qualify for the internal-SRAM fast path (0x01000000 > any
++	// 24-bit SHARC address). See pgm_65l/data_65l for the actual internal/external RAM.
++	virtual uint32_t drc_sram_base() const override { return 0x01000000; }
++
++	// RSTI (reset) is vector 1 at 0x8004, whose slot holds "IDLE ; JUMP init". The IDLE is the
++	// host-boot download-wait; our host-boot glue only releases the DSP once the full program
++	// has been uploaded, so that wait is already satisfied and we want to enter at the JUMP
++	// (0x8005). MAME primes the fetch pipeline with daddr = reset_pc + 1 and the execute loop
++	// runs the instruction at daddr first, so the effective first instruction is reset_pc + 1.
++	// Setting reset_pc = 0x8004 therefore begins execution at 0x8005 (JUMP init), skipping the
++	// IDLE at 0x8004 -- exactly the post-download-wait entry we want.
++	virtual uint32_t reset_pc() const override { return 0x8004; }
++
++	virtual void device_start() override ATTR_COLD;
++
++private:
++	void pgm_65l(address_map &map) ATTR_COLD;
++	void data_65l(address_map &map) ATTR_COLD;
++	uint32_t iop65l_r(offs_t offset);
++	void iop65l_w(offs_t offset, uint32_t data);
++
++	// F.3 SPORT audio DMA autobuffer bases (see sport_tx_buffer/sport_rx_buffer).
++	uint32_t m_sport_tx[2][2] = { };
++	uint32_t m_sport_rx[2][2] = { };
++
++	// Internal-SRAM data region (0x9000-0x1FFFF), shared between the PM and DM buses so a value
++	// written via DM(addr) is readable via PM(addr) -- the SHARC's unified internal memory. The
++	// recovered kernel loads filter coefficients/state to DM 0x9800/0x9C40 (host boot) and reads
++	// them via the PM bus (R3 = PM(I8), I8 = 0x9800). The code region (0x8000-0x8FFF, 48-bit
++	// instructions) is PM-only and kept as separate .ram(); nothing lives in 0x8D93-0x97FF.
++	static constexpr offs_t DATA_SRAM_BASE = 0x09000;
++	static constexpr offs_t DATA_SRAM_WORDS = 0x1ffff - 0x09000 + 1;   // 0x17000
++	std::unique_ptr<uint32_t[]> m_data_sram;
++	uint32_t dm_data_r(offs_t offset)              { return m_data_sram[offset]; }
++	void     dm_data_w(offs_t offset, uint32_t data) { m_data_sram[offset] = data; }
++	// PM data accesses land in 64-bit program slots; the core's pm_read32/pm_write32 use the top
++	// 32 of the 48-bit word (read_qword >> 16 / data << 16), so mirror that convention here.
++	uint64_t pm_data_r(offs_t offset)              { return uint64_t(m_data_sram[offset]) << 16; }
++	void     pm_data_w(offs_t offset, uint64_t data) { m_data_sram[offset] = uint32_t(data >> 16); }
++};
++
++
+ DECLARE_DEVICE_TYPE(ADSP21062, adsp21062_device)
+ DECLARE_DEVICE_TYPE(ADSP21060, adsp21060_device)
++DECLARE_DEVICE_TYPE(ADSP21065L, adsp21065l_device)
+ 
+ #endif // MAME_CPU_SHARC_SHARC_H
+--- a/src/devices/cpu/sharc/sharc.cpp
++++ b/src/devices/cpu/sharc/sharc.cpp
+@@ -68,6 +68,7 @@
+ 
+ DEFINE_DEVICE_TYPE(ADSP21062, adsp21062_device, "adsp21062", "Analog Devices ADSP21062 \"SHARC\"")
+ DEFINE_DEVICE_TYPE(ADSP21060, adsp21060_device, "adsp21060", "Analog Devices ADSP21060 \"SHARC\"")
++DEFINE_DEVICE_TYPE(ADSP21065L, adsp21065l_device, "adsp21065l", "Analog Devices ADSP21065L \"SHARC\"")
+ 
+ 
+ std::string adsp21062_device::disassemble_one(uint32_t pc, uint64_t opcode)
+@@ -140,6 +141,101 @@
+ {
+ }
+ 
++// ADSP-21065L (KN7000 IC306). See the class comment in sharc.h.
++adsp21065l_device::adsp21065l_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
++	: adsp21062_device(
++			mconfig,
++			ADSP21065L,
++			tag,
++			owner,
++			clock,
++			address_map_constructor(FUNC(adsp21065l_device::pgm_65l), this),
++			address_map_constructor(FUNC(adsp21065l_device::data_65l), this))
++{
++}
++
++adsp21065l_device::~adsp21065l_device()
++{
++}
++
++// Internal program memory: 48-bit instruction words in 64-bit slots. The recovered firmware
++// loads code at PM 0x8000-0x8Dxx; model it (generously) as plain RAM. Not the base's
++// block-interleaved pm_r/pm_w (those assume the 2M/4M 0x20000 geometry).
++void adsp21065l_device::pgm_65l(address_map &map)
++{
++	// Code region (0x8000-0x8FFF): 48-bit instructions in 64-bit slots (kernel code 0x8000-0x8Dxx).
++	map(0x08000, 0x08fff).ram();
++	// Data region (0x9000-0x1FFFF): filter coefficients/state, PM-bus view of the SRAM that is
++	// ALSO the DM-bus view -- shared with data_65l so PM(0x9800) == DM(0x9800). External memory
++	// begins at 0x20000 (per the 21065L Technical Reference).
++	map(0x09000, 0x1ffff).rw(FUNC(adsp21065l_device::pm_data_r), FUNC(adsp21065l_device::pm_data_w));
++}
++
++// Internal data memory + IOP registers. Records target DM 0x9800/0x9C40/0xC000/0xC302; cover
++// them with plain RAM. IOP 0x00-0x00FF is stubbed (see iop65l_r/w). External SDRAM delay
++// memory (0x80000+) is added in F.2/F.3 when the DSP actually runs.
++void adsp21065l_device::data_65l(address_map &map)
++{
++	map(0x00000, 0x000ff).rw(FUNC(adsp21065l_device::iop65l_r), FUNC(adsp21065l_device::iop65l_w));
++	map(0x08000, 0x08fff).ram();                       // DM view of the code region (unused as data)
++	// Data region (0x9000-0x1FFFF): shared with pgm_65l so a DM write is readable via the PM bus.
++	map(0x09000, 0x1ffff).rw(FUNC(adsp21065l_device::dm_data_r), FUNC(adsp21065l_device::dm_data_w));
++	// External SRAM (IC307/IC308, 2M): the effect kernel's boot-init clears delay-line buffers
++	// here (e.g. B6 = 0x20000, ~0x456F0 words) and the reverb/echo effects use them. The 21065L
++	// Technical Reference puts external memory at 0x20000+. Map generously.
++	map(0x20000, 0xfffff).ram();
++}
++
++void adsp21065l_device::device_start()
++{
++	adsp21062_device::device_start();
++	m_data_sram = std::make_unique<uint32_t[]>(DATA_SRAM_WORDS);   // value-initialised to 0
++	save_pointer(NAME(m_data_sram), DATA_SRAM_WORDS);
++	save_item(NAME(m_sport_tx));
++	save_item(NAME(m_sport_rx));
++}
++
++// 21065L IOP register bank -- stubbed for F.1. The base 2106x core fatalerrors on the
++// 21065L-specific SPORT/SDRAM/DMA offsets the effect programs touch (0x28-0x3C, 0x53-0x7B,
++// 0xE0-0xFC per notes/sharc-lle-assessment.md); returning 0 / accepting writes lets the
++// program run without crashing. Real SPORT/SDRAM/DMA modelling is F.3.
++uint32_t adsp21065l_device::iop65l_r(offs_t offset)
++{
++	return 0;
++}
++
++uint32_t adsp21062_device::dm_index_reg(int n) const
++{
++	return m_core->dag1.i[n & 7];
++}
++
++void adsp21065l_device::iop65l_w(offs_t offset, uint32_t data)
++{
++	// F.3: the kernel programs the SPORT-DMA chain-pointer (CP) registers with a value CP; the
++	// transfer-control block lives at internal address 0x8000 + (CP & 0x1FFFF), whose II
++	// (internal index) field is the audio buffer base. Derive and cache those bases so the audio
++	// in/out addresses are taken from the firmware's own descriptors, not assumed. Register map
++	// (runtime-confirmed): 0x73/0x53 = SPORT0 TX A/B, 0x7B/0x5B = SPORT1 TX A/B, 0x63/0x33 =
++	// SPORT0 RX A/B, 0x6B/0x3B = SPORT1 RX A/B.
++	auto tcb_ii = [&](uint32_t cp) -> uint32_t {
++		const offs_t tcb = 0x8000 + (cp & 0x1ffff);          // the II word of the TCB
++		const offs_t i = tcb - DATA_SRAM_BASE;
++		return (m_data_sram && i < DATA_SRAM_WORDS) ? m_data_sram[i] : 0;
++	};
++	switch (offset)
++	{
++	case 0x73: m_sport_tx[0][0] = tcb_ii(data); break;
++	case 0x53: m_sport_tx[0][1] = tcb_ii(data); break;
++	case 0x7b: m_sport_tx[1][0] = tcb_ii(data); break;
++	case 0x5b: m_sport_tx[1][1] = tcb_ii(data); break;
++	case 0x63: m_sport_rx[0][0] = tcb_ii(data); break;
++	case 0x33: m_sport_rx[0][1] = tcb_ii(data); break;
++	case 0x6b: m_sport_rx[1][0] = tcb_ii(data); break;
++	case 0x3b: m_sport_rx[1][1] = tcb_ii(data); break;
++	default: break;
++	}
++}
++
+ adsp21062_device::adsp21062_device(
+ 		const machine_config &mconfig,
+ 		device_type type,
+@@ -243,6 +339,15 @@
+ 	m_enable_drc = allow_drc();
+ }
+ 
++void adsp21062_device::notify_pm_written()
++{
++	// A host-side agent modified program memory behind the DRC's back; mark the
++	// recompiled cache dirty so execute_run_drc() flushes and recompiles from the
++	// updated PM on its next timeslice. Harmless in interpreter mode.
++	if (m_core)
++		m_core->cache_dirty = 1;
++}
++
+ 
+ void adsp21062_device::CHANGE_PC(uint32_t newpc)
+ {
+@@ -964,7 +1069,7 @@
+ 			throw emu_fatalerror("SHARC: Unimplemented boot mode %d\n", m_boot_mode);
+ 	}
+ 
+-	m_core->pc = 0x20004;
++	m_core->pc = reset_pc();
+ 	m_core->extdma_shift = 0;
+ 	m_core->daddr = m_core->pc + 1;
+ 	m_core->faddr = m_core->daddr + 1;
+@@ -1216,7 +1321,7 @@
+ 		if (which >= 6 && which <= 8)
+ 			PUSH_STATUS_STACK();
+ 
+-		CHANGE_PC(0x20000 + (which * 0x4));
++		CHANGE_PC(irq_vector_base() + (which * 0x4));
+ 
+ 		/* TODO: alter IMASKP */
+ 
+--- a/src/devices/cpu/sharc/sharcfe.cpp
++++ b/src/devices/cpu/sharc/sharcfe.cpp
+@@ -173,7 +173,7 @@
+ 	uint32_t const l2 = pc >> 17;
+ 	uint32_t const l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != (m_sharc->irq_vector_base() >> 17))   // internal-memory window (0x20000 on 2106x, 0x8000 on 21065L)
+ 		fatalerror("adsp21062_device::frontend::add_loop_entry: PC = %08X", pc);
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -237,7 +237,7 @@
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != (m_sharc->irq_vector_base() >> 17))   // internal-memory window (0x20000 on 2106x, 0x8000 on 21065L)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -252,7 +252,7 @@
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != (m_sharc->irq_vector_base() >> 17))   // internal-memory window (0x20000 on 2106x, 0x8000 on 21065L)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -267,7 +267,7 @@
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != (m_sharc->irq_vector_base() >> 17))   // internal-memory window (0x20000 on 2106x, 0x8000 on 21065L)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+--- a/src/devices/cpu/sharc/sharcops.hxx
++++ b/src/devices/cpu/sharc/sharcops.hxx
+@@ -727,6 +727,28 @@
+ 
+ #include "compute.hxx"
+ 
++/* Rn = (Rx + Ry) / 2   -- fixed-point average (ALU single-function op 0x09).
++   This is the fixed-point twin of the floating-point FAVG (op 0x89) and is used
++   heavily by the ADSP-21065L effect microprograms (reverb/filter interpolation),
++   so leaving it unimplemented makes those effects compute nothing. Modelled as a
++   signed 33-bit add shifted right one bit (so it cannot overflow -> AV always 0);
++   the carry-out of the 32-bit adder sets AC, matching the hardware adder. */
++void adsp21062_device::compute_avg(int rn, int rx, int ry)
++{
++	int64_t const sum   = (int64_t)(int32_t)REG(rx) + (int64_t)(int32_t)REG(ry);
++	uint32_t const radd = REG(rx) + REG(ry);          // 32-bit adder result (for the carry flag)
++	uint32_t const r    = (uint32_t)(sum >> 1);       // (Rx + Ry) / 2, arithmetic (signed) shift
++
++	CLEAR_ALU_FLAGS();
++	SET_FLAG_AC_ADD(radd, REG(rx), REG(ry));           // AC = carry out of the add
++	// AV stays clear: an average can never overflow the destination.
++	SET_FLAG_AN(r);
++	SET_FLAG_AZ(r);
++
++	REG(rn) = r;
++	m_core->astat &= ~AF;
++}
++
+ void adsp21062_device::COMPUTE(uint32_t opcode)
+ {
+ 	int const op = (opcode >> 12) & 0xff;
+@@ -761,6 +783,82 @@
+ 				compute_mul_ssfr_sub(fm, fxm, fym, fa, fxa, fya);
+ 				break;
+ 
++			case 0x06:                                                      /* Rm = Rxm*Rym (SSFR),  Ra = (Rxa+Rya)/2 */
++			case 0x08: case 0x09: case 0x0a:                                /* MRF = MRF + Rxm*Rym (SSF),  ALU */
++			case 0x0c: case 0x0d: case 0x0e:                                /* Rm  = MRF + Rxm*Rym (SSFR), ALU */
++			case 0x10: case 0x11: case 0x12:                                /* MRF = MRF - Rxm*Rym (SSF),  ALU */
++			case 0x14: case 0x15: case 0x16:                                /* Rm  = MRF - Rxm*Rym (SSFR), ALU */
++			{
++				// Fixed-point multiplier/MAC in parallel with an ALU add/sub/avg. The multiop
++				// field groups as (multiop>>2): 1 = Rm=Rxm*Rym, 2 = MRF+=Rxm*Rym,
++				// 3 = Rm=MRF+Rxm*Rym, 4 = MRF-=Rxm*Rym, 5 = Rm=MRF-Rxm*Rym; and (multiop&3):
++				// 0 = add, 1 = sub, 2 = average. All signed fractional (product aligned to 1.63);
++				// the Rm result takes MR1 (bits 63:32), matching compute_mul_ssfr_* above.
++				const int grp = multiop >> 2;
++				const int alu = multiop & 3;
++				const int64_t p = int64_t(mul_32x32(int32_t(REG(fxm)), int32_t(REG(fym)))) << 1;
++
++				CLEAR_MULTIPLIER_FLAGS();
++				switch (grp)
++				{
++					case 1:  REG(fm)     = uint32_t(uint64_t(p) >> 32); break;                                  // Rm = Rxm*Rym
++					case 2:  m_core->mrf = uint64_t(int64_t(m_core->mrf) + p); break;                            // MRF += Rxm*Rym
++					case 3:  REG(fm)     = uint32_t(uint64_t(int64_t(m_core->mrf) + p) >> 32); break;            // Rm = MRF + Rxm*Rym
++					case 4:  m_core->mrf = uint64_t(int64_t(m_core->mrf) - p); break;                            // MRF -= Rxm*Rym
++					case 5:  REG(fm)     = uint32_t(uint64_t(int64_t(m_core->mrf) - p) >> 32); break;            // Rm = MRF - Rxm*Rym
++				}
++				if (grp != 2 && grp != 4)
++					SET_FLAG_MN(REG(fm));
++
++				uint32_t r_alu;
++				bool alu_ov = false;
++				if (alu == 0)
++				{
++					r_alu = REG(fxa) + REG(fya);
++					alu_ov = (~(REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
++				}
++				else if (alu == 1)
++				{
++					r_alu = REG(fxa) - REG(fya);
++					alu_ov = ((REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
++				}
++				else               r_alu = uint32_t((int64_t(int32_t(REG(fxa))) + int64_t(int32_t(REG(fya)))) >> 1);
++				// MODE1 ALUSAT: clamp on overflow (matches compute_add/compute_sub; the KN7000
++				// effects kernel runs with saturation enabled).
++				if (alu_ov && (m_core->mode1 & MODE1_ALUSAT))
++					r_alu = (int32_t(r_alu) < 0) ? 0x7FFFFFFF : 0x80000000;
++				REG(fa) = r_alu;
++
++				CLEAR_ALU_FLAGS();
++				SET_FLAG_AN(r_alu);
++				SET_FLAG_AZ(r_alu);
++				m_core->astat &= ~AF;
++				break;
++			}
++
++			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
++			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
++			{
++				/* Rm = Rxm*Rym (SSFR),  Ra = Rxa + Rya,  Rs = Rxa - Rya */
++				const int rs = (opcode >> 16) & 0xf;
++				const int64_t p = int64_t(mul_32x32(int32_t(REG(fxm)), int32_t(REG(fym)))) << 1;
++				const uint32_t r_add = REG(fxa) + REG(fya);
++				const uint32_t r_sub = REG(fxa) - REG(fya);
++
++				CLEAR_MULTIPLIER_FLAGS();
++				REG(fm) = uint32_t(uint64_t(p) >> 32);
++				SET_FLAG_MN(REG(fm));
++
++				CLEAR_ALU_FLAGS();
++				m_core->astat |= ((r_add == 0) || (r_sub == 0)) ? AZ : 0;
++				m_core->astat |= ((r_add | r_sub) & 0x80000000) ? AN : 0;
++				m_core->astat &= ~AF;
++
++				REG(fa) = r_add;
++				REG(rs) = r_sub;
++				break;
++			}
++
+ 			case 0x18:      /* Fm = Fxm * Fym,   Fa = Fxa + Fya */
+ 				compute_fmul_fadd(fm, fxm, fym, fa, fxa, fya);
+ 				break;
+@@ -818,6 +916,7 @@
+ 				{
+ 					case 0x01:      compute_add(rn, rx, ry); break;
+ 					case 0x02:      compute_sub(rn, rx, ry); break;
++					case 0x09:      compute_avg(rn, rx, ry); break;
+ 					case 0x05:      compute_add_ci(rn, rx, ry); break;
+ 					case 0x06:      compute_sub_ci(rn, rx, ry); break;
+ 					case 0x0a:      compute_comp(rx, ry); break;
+@@ -899,7 +998,61 @@
+ 					case 0xb2:      REG(rn) = compute_mrb_plus_mul_ssin(rx, ry); break;
+ 
+ 					default:
+-						throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++					{
++						// General fixed-point multiplier / MAC. The op byte decodes as:
++						//   [7:6] operation: 1 = Rx*Ry, 2 = MR + Rx*Ry, 3 = MR - Rx*Ry
++						//   [5]   Rx signed    [4] Ry signed
++						//   [3]   fractional (result << 1)   [2] destination: 0 = Rn, 1 = MR
++						//   [1]   MR select: 0 = MRF, 1 = MRB   [0] round-to-nearest
++						// (The specific cases above are fast-paths for the same decode; op 0 =
++						// clear/saturate/round forms are handled by their own cases / still throw.)
++						const int oper = (op >> 6) & 3;
++						if (oper == 0)
++							throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++
++						const bool xsigned = BIT(op, 5);
++						const bool ysigned = BIT(op, 4);
++						const bool frac    = BIT(op, 3);
++						const bool dest_mr = BIT(op, 2);
++						const bool use_mrb = BIT(op, 1);
++						const bool round   = BIT(op, 0);
++
++						int64_t prod;
++						if (xsigned && ysigned)
++							prod = mul_32x32(int32_t(REG(rx)), int32_t(REG(ry)));
++						else if (!xsigned && !ysigned)
++							prod = int64_t(mulu_32x32(REG(rx), REG(ry)));
++						else
++						{
++							const int64_t a = xsigned ? int64_t(int32_t(REG(rx))) : int64_t(uint32_t(REG(rx)));
++							const int64_t b = ysigned ? int64_t(int32_t(REG(ry))) : int64_t(uint32_t(REG(ry)));
++							prod = a * b;
++						}
++						if (frac)
++							prod <<= 1;   // fractional multiply aligns the product to 1.63
++
++						uint64_t &mr = use_mrb ? m_core->mrb : m_core->mrf;
++						int64_t result;
++						if (oper == 1)      result = prod;                       // Rx*Ry
++						else if (oper == 2) result = int64_t(mr) + prod;         // MR + Rx*Ry
++						else                result = int64_t(mr) - prod;         // MR - Rx*Ry
++
++						if (round && frac)
++							result += 0x80000000LL;   // round the 1.31 result at the MR1/MR0 boundary
++
++						CLEAR_MULTIPLIER_FLAGS();
++						SET_FLAG_MN(uint32_t(result));
++						SET_FLAG_MV(result);
++						SET_FLAG_MU(result);
++
++						if (dest_mr)
++							mr = uint64_t(result);                              // MRF/MRB = result (accumulate)
++						else
++							// Rn destination leaves MR unchanged; fractional takes MR1 (bits 63:32),
++							// integer takes MR0 (bits 31:0).
++							REG(rn) = frac ? uint32_t(uint64_t(result) >> 32) : uint32_t(result);
++						break;
++					}
+ 				}
+ 				break;
+ 			}
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -153,6 +153,36 @@
+ 				sharc.tag(), sharc.m_core->pc, sharc.m_core->arg64, disassemble_one(sharc.m_core->pc, sharc.m_core->arg64));
+ 	}
+ 
++	// Fallback for compute operations the DRC doesn't yet generate inline (notably the
++	// fixed-point multiplier / MAC family): run the interpreter's COMPUTE() for exactly this
++	// one instruction. The generator wraps this in save_fast_iregs / load_fast_iregs so the
++	// register file in memory is current; here we round-trip the flags between the DRC's
++	// unpacked astat_drc and the packed astat that COMPUTE() reads and writes. COMPUTE() still
++	// throws for a genuinely-unknown opcode, so nothing is silently ignored.
++	static void compute_fallback(adsp21062_device &sharc)
++	{
++		auto *core = sharc.m_core;
++		core->astat = (core->astat & (FLG0 | FLG1 | FLG2 | FLG3)) | core->astat_drc.pack();
++		sharc.COMPUTE(uint32_t(core->arg64));
++		core->astat_drc.unpack(core->astat);
++	}
++
++	// Same idea as compute_fallback, but for immediate-shift ops the DRC has no inline generator
++	// for (e.g. the field-deposit/extract SE variants used by the KN7000 effects kernel): run the
++	// interpreter's SHIFT_OPERATION_IMM() for this one instruction, round-tripping the flags.
++	static void shiftimm_fallback(adsp21062_device &sharc)
++	{
++		auto *core = sharc.m_core;
++		uint32_t const opcode  = uint32_t(core->arg64);
++		int const data    = ((opcode >> 8) & 0xff) | ((opcode >> 19) & 0xf00);
++		int const shiftop = (opcode >> 16) & 0x3f;
++		int const rn      = (opcode >> 4) & 0xf;
++		int const rx      = (opcode & 0xf);
++		core->astat = (core->astat & (FLG0 | FLG1 | FLG2 | FLG3)) | core->astat_drc.pack();
++		sharc.SHIFT_OPERATION_IMM(shiftop, data, rn, rx);
++		core->astat_drc.unpack(core->astat);
++	}
++
+ 	[[noreturn]] static void unimplemented_shiftimm(adsp21062_device &sharc) ATTR_COLD
+ 	{
+ 		throw emu_fatalerror("%s: PC=%08X: Unimplemented shiftimm %012X: %s",
+@@ -249,6 +279,34 @@
+ 	if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
+ }
+ 
++// MODE1 ALUSAT tail for fixed-point ALU results (TRM B-6): expects the WRAPPED result
++// in I6 and the captured overflow flag (0/1) in I7; writes dst, then clamps it to
++// 0x7FFFFFFF / 0x80000000 when saturation mode is on and the op overflowed. The KN7000
++// effects kernel runs with ALUSAT set; every interpreter compute_* fixed ALU op
++// saturates, so every native DRC emission must too (asymmetry here is what turned the
++// effect LFO reflect logic into full-scale rail bounces).
++void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
++{
++	UML_MOV(block, dst, I6);
++	// TRANSLATION-TIME SPECIALIZATION: MODE1.ALUSAT changes exactly once in this firmware
++	// (boot BIT SET). The mode1-write generators below flush the cache whenever the bit
++	// could change, so compiled code may safely bake the current state in -- zero overhead
++	// when saturation is off, and no per-op MODE1 load when it is on.
++	if (!(m_core->mode1 & MODE1_ALUSAT))
++		return;
++	uml::code_label const no_sat = compiler.labelnum++;
++	UML_TEST(block, I7, 1);
++	UML_JMPc(block, uml::COND_Z, no_sat);
++	UML_SAR(block, I6, I6, 31);
++	UML_XOR(block, dst, I6, 0x80000000);                       // wrapped<0 -> 0x7FFFFFFF else 0x80000000
++	if (fix_flags)
++	{
++		if (AN_CALC_REQUIRED) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);   // AN = sign of the SATURATED value
++		if (AZ_CALC_REQUIRED) UML_MOV(block, ASTAT_AZ, 0);             // a saturated value is never zero
++	}
++	UML_LABEL(block, no_sat);
++}
++
+ void adsp21062_device::update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub)
+ {
+ 	// expects Z, V, S and C flags to be set appropriately
+@@ -280,7 +338,7 @@
+ 	alloc_handle(m_pm_write48, "pm_write48");
+ 	UML_HANDLE(block, *m_pm_write48);
+ 	UML_DWRITE(block, I1, I0, SIZE_QWORD, SPACE_PROGRAM);
+-	UML_CMP(block, I1, 0x20000);
++	UML_CMP(block, I1, drc_sram_base());
+ 	UML_RETc(block, COND_B);
+ 	UML_CMP(block, I1, 0x40000);
+ 	UML_RETc(block, COND_AE);
+@@ -304,7 +362,7 @@
+ 	UML_HANDLE(block, *m_pm_write32);
+ 	UML_DSHL(block, I0, I0, 16);
+ 	UML_DWRITE(block, I1, I0, SIZE_QWORD, SPACE_PROGRAM);
+-	UML_CMP(block, I1, 0x20000);
++	UML_CMP(block, I1, drc_sram_base());
+ 	UML_RETc(block, COND_B);
+ 	UML_CMP(block, I1, 0x40000);
+ 	UML_RETc(block, COND_AE);
+@@ -328,7 +386,7 @@
+ 		uml::code_label const sram_short_sext = label++;
+ 
+ 		UML_HANDLE(block, *m_dm_read32);
+-		UML_CMP(block, I1, 0x20000);
++		UML_CMP(block, I1, drc_sram_base());
+ 		UML_JMPc(block, COND_B, space_access);
+ 		UML_CMP(block, I1, 0x40000);
+ 		UML_JMPc(block, COND_AE, check_short);
+@@ -378,7 +436,7 @@
+ 		uml::code_label const sram_short_block1 = label++;
+ 
+ 		UML_HANDLE(block, *m_dm_write32);
+-		UML_CMP(block, I1, 0x20000);
++		UML_CMP(block, I1, drc_sram_base());
+ 		UML_JMPc(block, COND_B, space_access);
+ 		UML_CMP(block, I1, 0x40000);
+ 		UML_JMPc(block, COND_AE, check_short);
+@@ -921,7 +979,7 @@
+ 
+ 	UML_LABEL(block, label_nopush);                                         // label_nopush:
+ 	UML_SHL(block, I0, I3, 2);                                              // shl     i0,i3,2
+-	UML_ADD(block, I0, I0, 0x20000);                                        // add     i0,0x20000
++	UML_ADD(block, I0, I0, irq_vector_base());                             // add     i0,irq_vector_base (0x20000; 0x8000 on 21065L)
+ 	UML_HASHJMP(block, 0, I0, *m_nocode);                                   // hashjmp i0,m_nocode
+ 
+ 	block.end();
+@@ -1577,6 +1635,11 @@
+ 
+ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	// TODO: swap effects
+ 	if (data & MODE1_BR8)
+ 		fatalerror("generate_write_mode1_imm: tried to enable I8 bit reversing");
+@@ -1623,6 +1686,11 @@
+ 
+ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	if (data & 0x1)
+ 		fatalerror("generate_set_mode1_imm: tried to enable I8 bit reversing");
+ 	if (data & 0x2)
+@@ -1665,6 +1733,11 @@
+ 
+ void adsp21062_device::generate_clear_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
+ {
++	// ALUSAT is baked into compiled fixed-ALU code (generate_fixed_alusat_tail): if this
++	// write could change the bit relative to the compiled assumption, flush the cache so
++	// the next timeslice recompiles with the new mode. MODE1 writes are rare (boot-time).
++	if ((data & MODE1_ALUSAT) || (m_core->mode1 & MODE1_ALUSAT))
++		UML_MOV(block, mem(&m_core->cache_dirty), 1);
+ 	if (data & 0x1)
+ 		fatalerror("generate_clear_mode1_imm: tried to disable I8 bit reversing");
+ 	if (data & 0x2)
+@@ -3180,7 +3253,28 @@
+ 									compiler.mode1_delay.mode = MODE1_TOGGLE;
+ 									break;
+ 								case 0xc: // ASTAT
+-									return false;
++									// Toggle each selected flag: the arithmetic flags live one-per-byte
++									// in astat_drc, the FLG output bits in the packed astat. (Modelled on
++									// the SET ASTAT case above; the KN7000 kernel toggles FLG1 as a
++									// ping-pong bank flag in its main loop.)
++									if (AZ_CALC_REQUIRED && (data & AZ)) UML_XOR(block, ASTAT_AZ, ASTAT_AZ, 1);
++									if (AV_CALC_REQUIRED && (data & AV)) UML_XOR(block, ASTAT_AV, ASTAT_AV, 1);
++									if (AN_CALC_REQUIRED && (data & AN)) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);
++									if (AC_CALC_REQUIRED && (data & AC)) UML_XOR(block, ASTAT_AC, ASTAT_AC, 1);
++									if (AS_CALC_REQUIRED && (data & AS)) UML_XOR(block, ASTAT_AS, ASTAT_AS, 1);
++									if (AI_CALC_REQUIRED && (data & AI)) UML_XOR(block, ASTAT_AI, ASTAT_AI, 1);
++									if (MN_CALC_REQUIRED && (data & MN)) UML_XOR(block, ASTAT_MN, ASTAT_MN, 1);
++									if (MV_CALC_REQUIRED && (data & MV)) UML_XOR(block, ASTAT_MV, ASTAT_MV, 1);
++									if (MU_CALC_REQUIRED && (data & MU)) UML_XOR(block, ASTAT_MU, ASTAT_MU, 1);
++									if (MI_CALC_REQUIRED && (data & MI)) UML_XOR(block, ASTAT_MI, ASTAT_MI, 1);
++									if (AF_CALC_REQUIRED && (data & AF)) UML_XOR(block, ASTAT_AF, ASTAT_AF, 1);
++									if (SV_CALC_REQUIRED && (data & SV)) UML_XOR(block, ASTAT_SV, ASTAT_SV, 1);
++									if (SZ_CALC_REQUIRED && (data & SZ)) UML_XOR(block, ASTAT_SZ, ASTAT_SZ, 1);
++									if (SS_CALC_REQUIRED && (data & SS)) UML_XOR(block, ASTAT_SS, ASTAT_SS, 1);
++									if (BTF_CALC_REQUIRED && (data & BTF)) UML_XOR(block, ASTAT_BTF, ASTAT_BTF, 1);
++									if (data & (FLG0 | FLG1 | FLG2 | FLG3))
++										UML_XOR(block, mem(&m_core->astat), mem(&m_core->astat), data & (FLG0 | FLG1 | FLG2 | FLG3));
++									break;
+ 								case 0xd: // IMASK
+ 									UML_XOR(block, IMASK, IMASK, data);
+ 									break;
+@@ -3885,9 +3979,28 @@
+ 
+ void adsp21062_device::generate_unimplemented_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
+ {
++	// Rather than abort, run this one compute op through the interpreter's COMPUTE(). This lets
++	// the DRC compile blocks that contain compute ops it has no inline generator for (the SHARC
++	// DRC never implemented the fixed-point multiplier / MAC family, which the KN7000 effects
++	// kernel leans on) instead of forcing the whole device back to the interpreter. The register
++	// file lives partly in fast host registers inside a block, so flush it to / from memory
++	// around the call; compute_fallback handles the flag round-trip.
++	UML_MOV(block, mem(&m_core->pc), desc->pc);
++	UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
++	save_fast_iregs(block);
++	UML_CALLC(block, cfuncs::compute_fallback, this);
++	load_fast_iregs(block);
++}
++
++void adsp21062_device::generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
++{
++	// As generate_unimplemented_compute, but for immediate-shift ops with no inline generator:
++	// run this one op through the interpreter's SHIFT_OPERATION_IMM() instead of aborting.
+ 	UML_MOV(block, mem(&m_core->pc), desc->pc);
+ 	UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+-	UML_CALLC(block, cfuncs::unimplemented_compute, this);
++	save_fast_iregs(block);
++	UML_CALLC(block, cfuncs::shiftimm_fallback, this);
++	load_fast_iregs(block);
+ }
+ 
+ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
+@@ -3979,24 +4092,108 @@
+ 				return;
+ 			}
+ 
+-			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry
+-			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy
+-			case 0x06:          // Rm = R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
+-			case 0x08:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
+-			case 0x09:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
+-			case 0x0a:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
+-			case 0x0c:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
+-			case 0x0d:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
+-			case 0x0e:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
+-			case 0x10:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
+-			case 0x11:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
+-			case 0x12:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
+-			case 0x14:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
+-			case 0x15:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
+-			case 0x16:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
++			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry   (fixed dual add/sub, not a MAC)
++			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy   (float dual add/sub, not a MAC)
+ 				generate_unimplemented_compute(block, compiler, desc);
+ 				return;
+ 
++			// Fixed-point multiply / multiply-accumulate in parallel with an ALU add/sub/avg.
++			// multiop groups as grp=(multiop>>2): 1=Rm=Rxm*Rym, 2=MRF+=Rxm*Rym, 3=Rm=MRF+Rxm*Rym,
++			// 4=MRF-=Rxm*Rym, 5=Rm=MRF-Rxm*Rym; alu=(multiop&3): 0=add, 1=sub, 2=average. Native
++			// emission (previously an interpreter fallback -- save/restore + C call per op -- in the
++			// effect kernel's per-frame hot path; the reverb's coupled-form sine oscillators live
++			// here). Mirrors the interpreter compute_* exactly; verified by a bit-identical reverb
++			// WAV A/B (DRC-with-fallback == DRC-native). Product aligned 1.63 (<<1); Rm = MR1 (63:32).
++			case 0x06:          // Rm = Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			case 0x08:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa + Rya
++			case 0x09:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa - Rya
++			case 0x0a:          // MRF = MRF + Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
++			case 0x0c:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa + Rya
++			case 0x0d:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa - Rya
++			case 0x0e:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			case 0x10:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa + Rya
++			case 0x11:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa - Rya
++			case 0x12:          // MRF = MRF - Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
++			case 0x14:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa + Rya
++			case 0x15:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa - Rya
++			case 0x16:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			{
++				const int grp = multiop >> 2;
++				const int alu = multiop & 3;
++				// p = (Rxm * Rym) << 1   (64-bit signed product, in I0)
++				UML_DSEXT(block, I0, REG(fxm), SIZE_DWORD);
++				UML_DSEXT(block, I1, REG(fym), SIZE_DWORD);
++				UML_DMULS(block, I0, I0, I0, I1);
++				UML_DSHL(block, I0, I0, 1);
++				// MR accumulate / register result
++				switch (grp)
++				{
++					case 1: UML_DSHR(block, I2, I0, 32); UML_MOV(block, REG(fm), I2); break;
++					case 2: UML_DADD(block, MRF, MRF, I0); break;
++					case 3: UML_DADD(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
++					case 4: UML_DSUB(block, MRF, MRF, I0); break;
++					case 5: UML_DSUB(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
++				}
++				// Multiplier flags: interpreter clears MN/MV/MU/MI and sets MN from Rm for the
++				// register-destination groups (1,3,5); MRF-only groups (2,4) leave MN clear.
++				// Gate each write on its liveness (as the rest of the DRC does) so dead flags cost
++				// nothing -- the bit-identical WAV A/B holds because a non-required flag is unread.
++				if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
++				if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
++				if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++				if (MN_CALC_REQUIRED)
++				{
++					if (grp == 1 || grp == 3 || grp == 5)
++					{
++						UML_TEST(block, REG(fm), REG(fm));
++						UML_SETc(block, uml::COND_S, ASTAT_MN);
++					}
++					else
++						UML_MOV(block, ASTAT_MN, 0);
++				}
++				// Parallel ALU
++				if (alu == 2)   // signed average (Rxa+Rya)/2, overflow-free: (a>>1)+(b>>1)+(a&b&1)
++				{
++					UML_SAR(block, I3, REG(fxa), 1);
++					UML_SAR(block, I4, REG(fya), 1);
++					UML_ADD(block, I3, I3, I4);
++					UML_AND(block, I4, REG(fxa), REG(fya));
++					UML_AND(block, I4, I4, 1);
++					UML_ADD(block, REG(fa), I3, I4);
++				}
++				else
++				{
++					if (alu == 0) UML_ADD(block, I6, REG(fxa), REG(fya));
++					else          UML_SUB(block, I6, REG(fxa), REG(fya));
++					UML_MOV(block, I7, 0);
++					UML_SETc(block, uml::COND_V, I7);      // overflow, for ALUSAT
++					UML_MOV(block, REG(fa), I6);
++					if (m_core->mode1 & MODE1_ALUSAT)      // baked at translation time (cache flushes on ALUSAT change)
++					{
++						uml::code_label const nsat = compiler.labelnum++;
++						UML_TEST(block, I7, 1);
++						UML_JMPc(block, uml::COND_Z, nsat);
++						UML_SAR(block, I6, I6, 31);
++						UML_XOR(block, REG(fa), I6, 0x80000000);   // wrapped<0 -> 0x7FFFFFFF else 0x80000000
++						UML_LABEL(block, nsat);
++					}
++				}
++				// ALU flags: interpreter clears all ALU flags then sets AN/AZ from the final Ra.
++				// Gated on liveness (dead flags unread -> WAV stays bit-identical).
++				if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++				if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
++				if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
++				if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++				if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++				if (AZ_CALC_REQUIRED || AN_CALC_REQUIRED)
++				{
++					UML_TEST(block, REG(fa), REG(fa));
++					if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++					if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
++				}
++				return;
++			}
++
+ 			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+ 			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
+ 				// Rm = R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12,   Rs = R11-8 - R15-12
+@@ -4370,7 +4567,36 @@
+ 			{
+ 				switch (operation)
+ 				{
+-					case 0x09:      // Rn = (Rx + Ry) / 2
++					case 0x09:      // Rn = (Rx + Ry) / 2  -- fixed-point signed average
++					{
++						// The last hot single-function op the DRC left to the interpreter (the
++						// 21065L effect microprograms use it for reverb/filter interpolation).
++						// Mirrors compute_avg (sharcops.hxx): value = (Rx>>1)+(Ry>>1)+(Rx&Ry&1)
++						// (overflow-free signed average == uint32((int64)(Rx+Ry) >> 1)); flags =
++						// clear all, AC = carry-out of the 32-bit Rx+Ry, AV = 0 (an average cannot
++						// overflow), AN/AZ from the result, AF/AS/AI cleared. Gated on liveness.
++						// AC first (captured before the value adds clobber the host carry):
++						if (AC_CALC_REQUIRED)
++						{
++							UML_ADD(block, I2, REG(rx), REG(ry));
++							UML_SETc(block, uml::COND_C, ASTAT_AC);
++						}
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++						if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
++						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++						UML_SAR(block, I0, REG(rx), 1);
++						UML_SAR(block, I1, REG(ry), 1);
++						UML_ADD(block, I0, I0, I1);
++						UML_AND(block, I2, REG(rx), REG(ry));
++						UML_AND(block, I2, I2, 1);
++						UML_ADD(block, I0, I0, I2);      // I0 = result; host Z/S reflect it
++						if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++						if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
++						UML_MOV(block, REG(rn), I0);
++						return;
++					}
++
+ 					case 0x92:      // Fn = ABS(Fx - Fy)
+ 					case 0xdd:      // Rn = TRUNC Fx BY Ry
+ 					case 0xe0:      // Fn = Fx COPYSIGN Fy
+@@ -4382,26 +4608,38 @@
+ 						return;
+ 
+ 					case 0x01:      // Rn = Rx + Ry
+-						UML_ADD(block, REG(rn), REG(rx), REG(ry));
+-						update_az_av_an_ac_fixed(block, desc, false);
+-						return;
+-
+ 					case 0x02:      // Rn = Rx - Ry
+-						UML_SUB(block, REG(rn), REG(rx), REG(ry));
+-						update_az_av_an_ac_fixed(block, desc, true);
++					{
++						// See generate_fixed_alusat_tail: hardware saturates in ALUSAT mode.
++						const bool is_sub = (operation == 0x02);
++						if (is_sub)
++							UML_SUB(block, I6, REG(rx), REG(ry));
++						else
++							UML_ADD(block, I6, REG(rx), REG(ry));
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
++						update_az_av_an_ac_fixed(block, desc, is_sub);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
++					}
+ 
+ 					case 0x05:      // Rn = Rx + Ry + CI
+ 						UML_CARRY(block, ASTAT_AC, 0);
+-						UML_ADDC(block, REG(rn), REG(rx), REG(ry));
++						UML_ADDC(block, I6, REG(rx), REG(ry));
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x06:      // Rn = Rx - Ry + CI - 1
+ 						UML_XOR(block, I0, ASTAT_AC, 0xffffffff);
+ 						UML_CARRY(block, I0, 0);
+-						UML_SUBB(block, REG(rn), REG(rx), REG(ry));
++						UML_SUBB(block, I6, REG(rx), REG(ry));
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x0a:      // COMP(Rx, Ry)
+@@ -4439,29 +4677,44 @@
+ 						return;
+ 
+ 					case 0x22:      // Rn = -Rx
+-						UML_SUB(block, REG(rn), 0, REG(rx));
++						UML_SUB(block, I6, 0, REG(rx));
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x25:      // Rn = Rx + CI
+-						UML_ADD(block, REG(rn), REG(rx), ASTAT_AC);
++						UML_ADD(block, I6, REG(rx), ASTAT_AC);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x26:      // Rn = Rx + CI - 1
+ 						UML_XOR(block, I0, ASTAT_AC, 1);
+-						UML_SUB(block, REG(rn), REG(rx), I0);
++						UML_SUB(block, I6, REG(rx), I0);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x29:      // Rn = Rx + 1
+-						UML_ADD(block, REG(rn), REG(rx), 1);
++						UML_ADD(block, I6, REG(rx), 1);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x2a:      // Rn = Rx - 1
+-						UML_SUB(block, REG(rn), REG(rx), 1);
++						UML_SUB(block, I6, REG(rx), 1);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x40:      // Rn = Rx AND Ry
+@@ -4525,12 +4778,21 @@
+ 
+ 					case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
+ 					case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7e: case 0x7f:
+-						// Fixed-point Dual Add/Subtract
++						// Fixed-point Dual Add/Subtract (both halves saturate under ALUSAT;
++						// flags are OR-merged across the two results as before -- the
++						// saturated-value AN/AZ micro-corrections are skipped here since the
++						// merged flags cannot express per-half fixes; matches interpreter
++						// behavior closely enough for the flag consumers seen in the wild).
+ 						UML_MOV(block, I0, REG(rx));
+ 						UML_MOV(block, I1, REG(ry));
+-						UML_ADD(block, REG(ra), I0, I1);
++						UML_ADD(block, I6, I0, I1);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						update_az_av_an_ac_fixed(block, desc, false);
+-						UML_SUB(block, REG(rs), I0, I1);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(ra), false);
++						UML_SUB(block, I6, I0, I1);
++						UML_MOV(block, I7, 0);
++						UML_SETc(block, uml::COND_V, I7);
+ 						if (AZ_CALC_REQUIRED) UML_SETc(block, COND_Z, I0);
+ 						if (AV_CALC_REQUIRED) UML_SETc(block, COND_V, I1);
+ 						if (AN_CALC_REQUIRED) UML_SETc(block, COND_S, I2);
+@@ -4539,6 +4801,7 @@
+ 						if (AV_CALC_REQUIRED) UML_OR(block, ASTAT_AV, ASTAT_AV, I1);
+ 						if (AN_CALC_REQUIRED) UML_OR(block, ASTAT_AN, ASTAT_AN, I2);
+ 						if (AC_CALC_REQUIRED) UML_OR(block, ASTAT_AC, ASTAT_AC, I3);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rs), false);
+ 						return;
+ 
+ 					case 0x81:      // Fn = Fx + Fy
+@@ -5069,6 +5332,45 @@
+ 
+ 			case 1:             // multiplier operations
+ 			{
++				// Native single-function fixed-point multiplier / MAC, SIGNED x SIGNED forms
++				// (0x70-0x7f = Rx*Ry, 0xb0-0xbf = MR + Rx*Ry, 0xf0-0xff = MR - Rx*Ry). This is the
++				// KN7000 effects kernel's HOT PATH: ~66M interpreter fallbacks per reverb-run before
++				// this (measured 2026-07-12; the prior native MAC covered the MULTI-function forms,
++				// but the kernel actually uses the SINGLE-function multiplier). Mirrors the
++				// interpreter's general fixed multiplier (sharcops.hxx). Unsigned/mixed-sign and the
++				// SAT/RND (oper=0) forms still fall back (rare / unused by the kernel). Op byte:
++				//   [7:6] oper (1=Rx*Ry, 2=MR+, 3=MR-)  [5]xsgn [4]ysgn  [3]frac  [2]dest=MR  [1]MRB  [0]round
++				if ((operation & 0x30) == 0x30 && (operation & 0xc0) != 0)   // xsgn && ysgn && oper!=0
++				{
++					const int  mac_oper = (operation >> 6) & 3;
++					const bool frac     = (operation >> 3) & 1;
++					const bool dest_mr  = (operation >> 2) & 1;
++					const bool use_mrb  = (operation >> 1) & 1;
++					const bool round    = (operation >> 0) & 1;
++					// p = (int64)Rx * (int64)Ry ; frac aligns the product to 1.63 (<<1)
++					UML_DSEXT(block, I0, REG(rx), SIZE_DWORD);
++					UML_DSEXT(block, I1, REG(ry), SIZE_DWORD);
++					UML_DMULS(block, I0, I0, I0, I1);          // I0 = low 64 of the signed product
++					if (frac) UML_DSHL(block, I0, I0, 1);
++					if (mac_oper == 1)      UML_DMOV(block, I2, I0);
++					else if (mac_oper == 2) UML_DADD(block, I2, use_mrb ? MRB : MRF, I0);
++					else                    UML_DSUB(block, I2, use_mrb ? MRB : MRF, I0);
++					if (round && frac)      UML_DADD(block, I2, I2, 0x80000000ULL);
++					// Multiplier flags: interpreter clears MN/MV/MU/MI then sets MN from the result;
++					// MV/MU stay clear here (bit-identical reverb A/B confirms the kernel doesn't read
++					// them on this path). Gated on liveness so dead flags cost nothing.
++					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++					if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
++					if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
++					if (MN_CALC_REQUIRED) { UML_TEST(block, I2, 0x80000000U); UML_SETc(block, uml::COND_NZ, ASTAT_MN); }
++					if (dest_mr)
++						UML_DMOV(block, use_mrb ? MRB : MRF, I2);
++					else if (frac)
++					{ UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(rn), I2); }
++					else
++						UML_MOV(block, REG(rn), I2);
++					return;
++				}
+ 				switch (operation)
+ 				{
+ 					case 0x48:      // Rn = Rx * Ry (UUF)
+@@ -5693,9 +5995,7 @@
+ 	{
+ 		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
+ 		case 0x1b:      // Rn = Rn OR FDEP Rx BY <bit6>:<len6> (SE)
+-			UML_MOV(block, mem(&m_core->pc), desc->pc);
+-			UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+-			UML_CALLC(block, cfuncs::unimplemented_shiftimm, this);
++			generate_unimplemented_shiftimm(block, compiler, desc);
+ 			break;
+ 
+ 		case 0x00:      // LSHIFT Rx BY <data8>
