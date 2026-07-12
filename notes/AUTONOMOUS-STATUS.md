@@ -40,6 +40,15 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~01:30 — three effects validated coexisting; MULTI blocked on enable
+Combined test PASS: reverb + chorus(u4 250282) + SOUND DSP(u9 290906) all audible at once, 0 rails,
+DAC 0 clipped -- multi-wet summing robust. MULTI extension BLOCKED: its send 0x8298 stayed 0 with the
+tried enable recipe (block-refresh quirk + unverified p2 MULTI masks); coeff-diff confounded by the
+block refresh. MULTI's unit is elsewhere (u5 rec10 leading, NOT u9=SOUND DSP -- they're independent
+effects). TO DO: verify p2 MULTI masks via snapshot, force the 0x8298 refresh (another effect active),
+confirm send tracks MULTI DEPTH, then feed-test u5. THREE audible effects remain the solid state
+(reverb+chorus+SOUND DSP); reverb bit-identical guard holds; tree clean, binary published.
+
 ## ★★★★ TICK 2026-07-12 ~01:10 — THIRD audible effect: SOUND DSP (unit 9)
 Big tick: (1) RESOLVED unit-0 = the reverb (rec56, stable; type=coefficients, no re-patch). (2)
 IDENTIFIED SOUND DSP = unit 9 (rec49) via enabling-time DM-coefficient diff; verified unit 9 outputs
