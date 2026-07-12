@@ -137,3 +137,18 @@ Cross-referencing the candidate device addresses against the firmware narrows th
   register-read-helper `addr` -- the MSR (polled) + FIFO (command/result) addresses are the FDC. The
   0x90008020 / 0x9CC00xxx / 0x90C00000 cluster is the disk hardware block; the FDC data/status is one of
   its sub-registers.
+
+## 2026-07-12 (addendum 3): CONFIRMED -- the format reaches ZERO disk/FDC hardware (task stalls pre-I/O)
+Closed the last tap gap: tapped **0x90000000-0x9BFFFFFF** (which includes the disk-control regs
+0x90008020/0x90C00000 the disk task references, and was NOT covered by the earlier 0x30-0x47/0x36/0x98/0x9C
+taps) during a live format -- ZERO accesses after YES. Combined with the earlier taps, the format touches
+NO disk/FDC hardware at ANY address 0x30-0x9B. So the disk TASK stalls BEFORE it ever issues an FDC
+command: the format posts its command + polls the completion status bytes ~2700x, but the task never runs
+its hardware I/O. Root cause is therefore upstream of the FDC registers -- either (i) the floppy disk task
+is never created at boot (no floppy DiskInit ran; cf. the SD DiskInit 0x4854ACED which DOES create the SD
+worker), or (ii) the task runs but a software "disk present/ready" check returns not-ready and it errors
+out before the FDC. NEXT: breakpoint the format's command post (0x484298A0) during the format to read the
+target task index + confirm the post succeeds, and search for a floppy disk-task creation (RTOS task-create
+lib 0x4C03D0C8, as used by the SD DiskInit). If no floppy task exists, THAT is the fix point (create/model
+it); if it exists, trace its early-return. Only past that does the FDC hardware get touched + its address
+revealed. The FDC register isolation is downstream of fixing the task stall.
