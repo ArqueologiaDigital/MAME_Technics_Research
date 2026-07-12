@@ -684,3 +684,22 @@ NEXT for the entry: the combo source is the panel/CP protocol (sub-CPU SIO, 0x34
 and where it tests for the B3+B4 service combo (then model/inject that source). Given the self-test's STOP/
 START are PANEL positions (MUTE UP 8/10), the B3+B4 combo may likewise be read through the panel matrix, not
 the music-keybed FIFO -- worth trying panel-button (SEG) injection at boot too.
+
+## 2026-07-12 (addendum 28): ★ SERVICE-MANUAL combo = C#3+D#3+C#4 (not B3+B4); FIFO ruled out
+The service manual §8 gives the entry EXPLICITLY: "Press and hold the C#3, D#3, C#4 keys, then turn on the
+power" (release after the service screen shows). So the self-test combo is THREE keys C#3+D#3+C#4 -- NOT
+Felipe's remembered "B3+B4". §8.4: SAVE/LOAD test = insert formatted floppy, press START (MUTE UP 10),
+repeats save/load/compare, counts OK/NG on LCD, STOP (MUTE UP 8) to interrupt.
+Key indices (idx=MIDI-36, C4=0x18): C#3=0x0D, D#3=0x0F, C#4=0x19; note-on = idx|(vel<<8), bit7=0.
+Tested BOTH flooding and gentle-periodic FIFO injection (0x98050004) with the CORRECT three keys
+(/tmp/svctest.lua): flooding -> black LCD (boot starved); gentle -> NORMAL home screen. => the keybed FIFO
+is DEFINITIVELY NOT the power-on combo source (proven with the authoritative keys). The combo is a RAW
+keybed-matrix scan and/or panel/CP SIO read at power-on, unmodeled by the driver.
+Screen-manager map for force-nav: register fn 0x4842A717 copies each screen struct {config,handler,count,
+dataTable} into the SCREEN TABLE 0x5011FAAC + tableIndexID*16. Service screens: idx 0x104->cfg 0x00040004/
+handler 0x4842A802/9/0x4874ACD4; 0x105->0x00040009/0x4842CB02/3/0x4874ADC4; 0x106->0x0004000A/0x4842CB4A.
+Table read across 0x48429xxx-0x4842Bxxx (34 refs) = the screen manager. Full detail + next steps in
+side-quests/findings/floppy_self_test_findings.md.
+NEXT: (A faithful) find+model the raw boot combo read (candidates 0x9CC00000 GPIO / panel SIO 0x34000809->
+0x5006BDB0); (B pragmatic hack) pin the "goto screen ID" var in the screen manager, poke to idx 0x104, map
+START/STOP panel buttons.
