@@ -19,10 +19,19 @@ times during the entire nav + format-execute** (tap armed from t=0). So:
   the same class-5-dispatch blocker found earlier (night/night(2)): the format posts a class-5 disk
   command, the disk task errors without hardware I/O -> ERROR 08. Media-present uses strap 0x98070000
   bits10/11 (0x484D7751), NOT the FDC's DSKCHG, and forcing it didn't help.
-NEXT: capture the BOOT FDC init (soft-reset-after-tap, since it runs pre-autoboot) to see what floppy state
-boot establishes with the FDC now modelled; then re-trace the format's class-5 path to find why it errors
-before the FDC command code. The service-manual schematic (FDC=N82077AA@0x98020000, DMA via 0x98010000
-DACK reads) is the key new asset for finishing this once the software path is unblocked.
+UPDATE (same tick): a DEBUGGER TRACE of the format-execute (correct nav) shows the format DOES reach and
+drive the FDC after all -- FDC micro-op dispatcher 0x48400084 (14x, DOR reset primitives) + format code
+0x484027xx, then it **busy-polls MSR (0x98020008) 230,052x at PC 0x48400145** waiting for the FORMAT TRACK
+command (DMA mode, DOR bit3 set) to complete. It hangs because NO DMA occurs (0x98010000 DACK + the MN10300
+DMAC are untouched) so the command never finishes. So ERROR 08 = FDC-command-timeout, and the FDC IS the
+right hardware -- the fix is FDC COMMAND COMPLETION, not a different address. (The earlier no-debugger tap
+run showing 0 FDC accesses is a timing-sensitive divergence of the FDC-reset state machine 0x50000010/20 --
+re-verify by tapping PC 0x48400145 without the debugger.) fdc-architecture.md addendum 16.
+NEXT (clear path to a working format): (1) disassemble the MSR-poll helper at 0x48400145's callee -> which
+MSR bit the firmware waits for; (2) map 0x98010000 (FDC.DACK) -> m_fdc->dma_r()/dma_w() so the FORMAT-TRACK
+data phase transfers; (3) assert FDC TC (terminal count) at the byte count to end the command; (4) confirm
+the N82077AA executes FORMAT TRACK + sets MSR/INT so the poll exits. The service-manual schematic
+(FDC=N82077AA@0x98020000, DMA=0x98010000, IRQ/DRQ/TC pins) is the asset for all of this.
 
 ## TICK 2026-07-12 ~night(3) — ★★★ FLOPPY: FDC found at 0x98020000 (service manual) + modelled (correct HW)
 The "new information" the floppy needed was in the repo all along: **service_manual/technics_sx-kn7000_
