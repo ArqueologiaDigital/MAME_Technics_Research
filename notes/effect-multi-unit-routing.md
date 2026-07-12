@@ -256,3 +256,21 @@ u8=EQ(rec34), u9=rec49(separate, silent), u1/2/3/5/7=rec15/08/11/10/58. SOUND-DS
 of the loaded units (no re-patch) but their exact unit isn't pinned (the default SOUND-DSP Enhancer
 = rec56 coincides with u0's algorithm) -- pin via the SPORT channel->unit map (send 0x8098/0x8298)
 or an enabling-time DM-coefficient diff. Chorus (the shipped 2nd effect) is fully validated by this.
+
+## 2026-07-12: three effects coexist cleanly + MULTI status
+COMBINED TEST (reverb + chorus + SOUND DSP all enabled on RIGHT1, note held): chorus(u4) OUT=250282
+AND sound-dsp(u9) OUT=290906 SIMULTANEOUSLY, rails=0/113, DAC peak 749, 0 clipped. The multi-wet
+summing (independent chorus + sound-dsp wets over the reverb) is robust -- three effects audible at
+once, no interaction/railing. Validates the extended bridge.
+
+MULTI (unit unidentified) -- BLOCKED on the enable mechanism:
+- Full-block coeff-diff on MULTI-enable was confounded by the effect-bus block refresh (unit 9
+  changed most = the SOUND-DSP-on-u9 registers refreshing; unit 5 = 2 words was the next candidate).
+- Attempted MULTI enable (PART SETTING p2: MULTI ON=SEG09 0x40, MULTI DEPTH=SEG0A 0x01) left the
+  MULTI send 0x8298 low byte at 0 (0x0600 = off) -- the send never went nonzero, so MULTI was not
+  actually engaged (block-refresh quirk needs another active effect, OR the p2 button masks for MULTI
+  differ from the transcribed map). SOUND DSP/MULTI are independent part-effects so they cannot share
+  unit 9; MULTI's real unit is elsewhere (u5 rec10 is the leading candidate).
+- TO DO for MULTI: pin the p2 MULTI ON/DEPTH masks (snapshot-verify), enable it WITH another effect
+  active to force the 0x8298 refresh, confirm the send tracks MULTI DEPTH, then coeff-diff/feed-test
+  the real unit (likely u5). Then the same feed-and-sum recipe applies.
