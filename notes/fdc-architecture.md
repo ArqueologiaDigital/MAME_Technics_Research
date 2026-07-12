@@ -547,3 +547,19 @@ byte / the disk-op result), and compare against the debugger run's path to find 
 (2) suspect the FDC RESET path -- the format's FDC init resets the FDC (DOR pulse) which with intrq wired
 now fires intc_assert(0x18); check whether that reset-interrupt (or its absence) is what flips the branch;
 (3) once the format reaches the FDC reliably, the DMA wiring should carry it through FORMAT TRACK.
+
+## 2026-07-12 (addendum 20): ★ CORRECTION -- "format reaches the FDC" was a TRACE observer-artifact
+Ruled out both the SHARC DRC (-nodrc: still 0 FDC accesses) AND -debug itself (-debug -debugger none WITHOUT
+the trace command: still 0 FDC). The ONLY run where the format reached the FDC (fx2.tr, 230k MSR polls) used
+`dbg:command("trace")`, which forces cross-device scheduler synchronisation to order the trace output. So
+addenda 16-17's "format issues FORMAT TRACK + busy-polls MSR" was an OBSERVER ARTIFACT of the trace.
+REAL behaviour (normal, -nodrc, and -debug-no-trace all agree): the format touches the FDC 0 times, errors
+in the class-5 disk-task SOFTWARE dispatch BEFORE any FDC access, shows ERROR 08 -> DISK menu. Same blocker
+as the night/night(2) analysis (disk task errors without hardware I/O); it is TIMING/INTERLEAVE sensitive
+(the trace's fine sync let the dispatch proceed).
+=> The FDC model + DMA wiring (addenda 15-18) remain CORRECT + faithful (boot init drives the FDC; the
+   format WOULD reach it once the dispatch race is fixed) but are NOT exercised by the format yet.
+NEXT: the driver sets NO CPU quantum -> maincpu(MN10300)+SHARC interleave coarsely. Test
+`config.set_perfect_quantum(m_maincpu)` (fine interleave) with a NORMAL run: if the format then reaches the
+FDC (and, with the DMA wiring, completes), coarse interleave was the bug. Else the race is elsewhere
+(memory-tap the class-5 error decision 0x484ADxxx in a normal run).
