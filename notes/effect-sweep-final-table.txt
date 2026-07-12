@@ -1,0 +1,244 @@
+=== 241 segments across 12 runs ===
+verdicts: FAIL=0  SUSPECT=0  WATCH=0  PASS=241
+verdict  run  effect                                   fpeak%FS  clip frail  DACpk  upl  why
+PASS     R1   Reverb/Concert2                              11.6     0     0   1663    0  
+PASS     R1   Reverb/Dark1                                  8.6     0     0   1256    0  
+PASS     R1   Reverb/Plate2                                 8.1     0     0   1223    0  
+PASS     R1   Reverb/Room1                                  6.8     0     0   1060    0  
+PASS     R1   Chorus/GM Chorus1                             6.6     0     0   1135    0  
+PASS     R1   Reverb/Room2                                  6.5     0     0   1055    0  
+PASS     R1   Chorus/Chorus3                                6.5     0     0   1132    0  
+PASS     R1   Chorus/Chorus1                                6.1     0     0   1135    0  
+PASS     R1   Chorus/Chorus2                                5.7     0     0   1135    0  
+PASS     R1   Reverb/Dark2                                  5.3     0     0   1135    0  
+PASS     M1   Multi/DualDelay/Deep6                         5.2     0     0    899  178  
+PASS     S1   SoundDSP/ParametricEQ/Too Bright              5.2     0     0    945  306  
+PASS     R1B  Chorus/GM Chorus3                             5.2     0     0    964  594  
+PASS     M1   Multi/CrossDelay/Shallow7                     5.2     0     0    964  178  
+PASS     M1   Multi/DualDelay/Deep5                         5.2     0     0    964  178  
+PASS     M1   Multi/SlowAttacker/Slow Attacker1             5.2     0     0    964  300  
+PASS     M2   Multi/Limiter/Limiter2                        5.2     0     0    964  114  
+PASS     M2   Multi/Limiter/Limiter3                        5.2     0     0    964  114  
+PASS     M2   Multi/DistortedAmp/Loud3                      5.2     0     0    964  633  
+PASS     M2   Multi/Fuzz/Normal                             5.2     0     0    964  543  
+PASS     M3   Multi/LFOFilter/For 4Beat 2                   5.2     0     0    964  210  
+PASS     M4   Multi/ReverseWah/Wah3                         5.2     0     0    964  102  
+PASS     M5   Multi/MultiTapDelay/Multi4                    5.2     0     0    964  286  
+PASS     M5   Multi/DelayComplex/Delay+Chorus               5.2     0     0    964  728  
+PASS     M5   Multi/VocalEffect/Brass simulator3            5.2     0     0    964  540  
+PASS     S1   SoundDSP/ParametricEQ/Bass Cut                5.2     0     0    959  306  
+PASS     S1   SoundDSP/Mixup/Mixup3                         5.2     0     0    998  210  
+PASS     S1   SoundDSP/RingModulator/Ring Mod.3             5.2     0     0    968  186  
+PASS     S2   SoundDSP/Vibrato/Vibrato7                     5.2     0     0   1012  198  
+PASS     S2   SoundDSP/AutoPan/Auto Pan3                    5.2     0     0    990  210  
+PASS     S2   SoundDSP/Tremolo/Tremolo3                     5.2     0     0   1078  186  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 5              5.2     0     0    968  248  
+PASS     S4   SoundDSP/Flanger/Deep3                        5.2     0     0   1000  248  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 7               5.2     0     0   1035  222  
+PASS     S4   SoundDSP/Phaser/Deep4                         5.2     0     0    986  222  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.5                5.2     0     0    930  186  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.6                5.2     0     0   1143  186  
+PASS     S5   SoundDSP/Celeste/Celeste2                     5.2     0     0    993  162  
+PASS     S5   SoundDSP/Exciter/Exciter1                     5.2     0     0   1000  528  
+PASS     S5   SoundDSP/AutoWah/Wah3                         5.2     0     0   1081  102  
+PASS     S2   SoundDSP/Tremolo/Tremolo5                     5.2     0     0   1016  186  
+PASS     M1   Multi/CrossDelay/Shallow5                     5.2     0     0    957  178  
+PASS     M1   Multi/DualDelay/Deep1                         5.2     0     0    957  471  
+PASS     M3   Multi/Overdrive/Hard Compress                 5.2     0     0    957  628  
+PASS     M3   Multi/Distortion/Hard Compress                5.2     0     0    957  543  
+PASS     M4   Multi/ReverseWah/Wah2                         5.2     0     0    957  102  
+PASS     M5   Multi/MultiTapDelay/Multi3                    5.2     0     0    957  286  
+PASS     S1   SoundDSP/Enhancer/Enhancer4                   5.2     0     0   1070  158  
+PASS     S1   SoundDSP/ParametricEQ/Treble Boost            5.2     0     0   1082  306  
+PASS     S1   SoundDSP/RingModulator/Ring Mod.1             5.2     0     0   1037  509  
+PASS     S2   SoundDSP/Vibrato/Vibrato5                     5.2     0     0   1080  198  
+PASS     S2   SoundDSP/Tremolo/Tremolo1                     5.2     0     0   1066  540  
+PASS     S3   SoundDSP/RotarySpeaker/Mellow Twin            5.2     0     0    935  604  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 3              5.2     0     0   1036  248  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 4              5.2     0     0    999  248  
+PASS     S4   SoundDSP/Flanger/Deep1                        5.2     0     0    926  691  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 6               5.2     0     0   1094  222  
+PASS     S4   SoundDSP/Phaser/Deep2                         5.2     0     0    938  222  
+PASS     S4   SoundDSP/Phaser/Deep8                         5.2     0     0    911  222  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.4                5.2     0     0   1083  186  
+PASS     S5   SoundDSP/Celeste/Celeste1                     5.2     0     0    958  594  
+PASS     R1   Reverb/Plate1                                 5.2     0     0   1194    0  
+PASS     M2   Multi/DistortedAmp/Loud2                      5.1     0     0    898  633  
+PASS     M4   Multi/LFOWah/For 4Beat 2                      5.1     0     0    898  210  
+PASS     M5   Multi/MultiTapDelay/Multi1                    5.1     0     0    898  606  
+PASS     M5   Multi/VocalEffect/Brass simulator2            5.1     0     0    898  439  
+PASS     R1B  Chorus/GM Chorus2                             5.1     0     0    956  647  
+PASS     M1   Multi/CrossDelay/Shallow4                     5.1     0     0    956  178  
+PASS     M3   Multi/LFOFilter/For 3Beat 2                   5.1     0     0    956  210  
+PASS     M4   Multi/ReverseWah/Wah1                         5.1     0     0    956  418  
+PASS     M5   Multi/VocalEffect/Brass simulator1            5.1     0     0    956  564  
+PASS     S1   SoundDSP/ParametricEQ/Treble Cut              5.1     0     0    907  306  
+PASS     S1   SoundDSP/ParametricEQ/No Hi Hat               5.1     0     0   1081  306  
+PASS     S2   SoundDSP/AutoPan/Auto Pan2                    5.1     0     0   1065  210  
+PASS     S2   SoundDSP/Tremolo/Tremolo2                     5.1     0     0    945  186  
+PASS     S3   SoundDSP/RotarySpeaker/Brilliant Twin         5.1     0     0   1010  604  
+PASS     M3   Multi/LFOFilter/For 4Beat 1                   5.1     0     0    960  210  
+PASS     M4   Multi/PedalWah/Wah3                           5.1     0     0    960  114  
+PASS     M5   Multi/MultiTapDelay/Multi2                    5.1     0     0    960  286  
+PASS     S1   SoundDSP/Enhancer/Enhancer5                   5.1     0     0    926  158  
+PASS     S2   SoundDSP/Vibrato/Vibrato4                     5.1     0     0    926  198  
+PASS     S2   SoundDSP/Tremolo/Tremolo8                     5.1     0     0   1013  186  
+PASS     S4   SoundDSP/Flanger/Deep8                        5.1     0     0   1067  248  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 5               5.1     0     0   1065  222  
+PASS     S4   SoundDSP/Phaser/Deep1                         5.1     0     0    975  728  
+PASS     S4   SoundDSP/Phaser/Deep3                         5.1     0     0   1108  222  
+PASS     S5   SoundDSP/AutoWah/Wah1                         5.1     0     0   1019  390  
+PASS     R1B  Chorus/GM Chorus4                             5.0     0     0    961  647  
+PASS     M1   Multi/CrossDelay/Shallow2                     5.0     0     0    961  178  
+PASS     M1   Multi/SlowAttacker/Slow Attacker3             5.0     0     0    961   90  
+PASS     M2   Multi/DistortedAmp/Normal1                    5.0     0     0    961  633  
+PASS     M3   Multi/Overdrive/Bright                        5.0     0     0    961  667  
+PASS     M3   Multi/LFOFilter/For 2Beat 2                   5.0     0     0    961  210  
+PASS     M4   Multi/LFOWah/For 2Beat 2                      5.0     0     0    961  210  
+PASS     S2   SoundDSP/AutoPan/Auto Pan4                    5.0     0     0   1034  210  
+PASS     S2   SoundDSP/Tremolo/Tremolo4                     5.0     0     0   1060  186  
+PASS     S3   SoundDSP/RockRotary/Standard                  5.0     0     0   1088  598  
+PASS     S3   SoundDSP/RockRotary/Single Rotor              5.0     0     0    924  192  
+PASS     S3   SoundDSP/RockRotary/Distorted                 5.0     0     0   1010  192  
+PASS     S3   SoundDSP/RockRotary/Bright Twin               5.0     0     0    943  604  
+PASS     S3   SoundDSP/RotarySpeaker/Distorted              5.0     0     0   1063  192  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 2               5.0     0     0   1019  222  
+PASS     S5   SoundDSP/Celeste/Celeste4                     5.0     0     0   1036  162  
+PASS     S2   SoundDSP/AutoPan/Auto Pan6                    4.9     0     0   1083  210  
+PASS     R1B  Chorus/GM Chorus1                             4.9     0     0    963  594  
+PASS     M1   Multi/DualDelay/Deep2                         4.9     0     0    961  178  
+PASS     M1   Multi/DualDelay/Deep4                         4.9     0     0    961  178  
+PASS     M2   Multi/Limiter/Limiter1                        4.9     0     0    961  361  
+PASS     S1   SoundDSP/Mixup/Mixup2                         4.9     0     0   1045  210  
+PASS     S1   SoundDSP/RingModulator/Ring Mod.2             4.9     0     0    994  186  
+PASS     S5   SoundDSP/AutoWah/Wah2                         4.9     0     0    952  102  
+PASS     R1B  Chorus/Chorus4                                4.9     0     0    900  282  
+PASS     M1   Multi/CrossDelay/Shallow6                     4.9     0     0    900  178  
+PASS     S2   SoundDSP/Vibrato/Vibrato2                     4.8     0     0   1050  198  
+PASS     M1   Multi/DualDelay/Deep3                         4.7     0     0    959  178  
+PASS     M4   Multi/LFOWah/For 4Beat 1                      4.7     0     0    959  210  
+PASS     S1   SoundDSP/ParametricEQ/Radio                   4.7     0     0    899  306  
+PASS     S3   SoundDSP/RockRotary/Brilliant Twin            4.7     0     0    897  604  
+PASS     S4   SoundDSP/Flanger/Deep2                        4.7     0     0   1059  248  
+PASS     S5   SoundDSP/Celeste/Celeste7                     4.7     0     0   1037  162  
+PASS     M5   Multi/DelayComplex/Comp+Ovd+Delay             4.7     0     0    897  688  
+PASS     S2   SoundDSP/Vibrato/Vibrato6                     4.7     0     0    933  198  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.3                4.7     0     0    891  186  
+PASS     M4   Multi/ReverseWah/Wah8                         4.7     0     0    962  102  
+PASS     M5   Multi/DelayComplex/Comp+Dst+Delay             4.7     0     0    962  688  
+PASS     S1   SoundDSP/Enhancer/Enhancer6                   4.7     0     0    966  158  
+PASS     S1   SoundDSP/Mixup/Mixup1                         4.7     0     0    932  670  
+PASS     S2   SoundDSP/Vibrato/Vibrato3                     4.7     0     0    999  198  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.2                4.7     0     0   1113  186  
+PASS     M1   Multi/CrossDelay/Shallow1                     4.7     0     0    959    0  
+PASS     M2   Multi/Limiter/Limiter4                        4.7     0     0    959  114  
+PASS     M3   Multi/LFOFilter/For 2Beat 1                   4.7     0     0    959  693  
+PASS     M4   Multi/ReverseWah/Wah6                         4.7     0     0    959  102  
+PASS     M5   Multi/MultiTapDelay/Multi5                    4.7     0     0    959  286  
+PASS     M5   Multi/MultiTapDelay/Multi6                    4.7     0     0    959  286  
+PASS     M5   Multi/MultiTapDelay/Multi7                    4.7     0     0    959  286  
+PASS     M5   Multi/DelayComplex/Delay+Vibrato              4.7     0     0    959  700  
+PASS     S1   SoundDSP/Enhancer/Enhancer1                   4.7     0     0    969  158  
+PASS     S1   SoundDSP/ParametricEQ/Make Up                 4.7     0     0    942  691  
+PASS     S1   SoundDSP/RingModulator/Ring Mod.4             4.7     0     0   1018  186  
+PASS     S2   SoundDSP/Vibrato/Vibrato8                     4.7     0     0    937  198  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 7              4.7     0     0   1072  248  
+PASS     S4   SoundDSP/Flanger/Deep6                        4.7     0     0   1079  248  
+PASS     S4   SoundDSP/Phaser/Deep6                         4.7     0     0    936  222  
+PASS     R1   Chorus/Chorus4                                4.6     0     0   1134    0  
+PASS     R1   Reverb/Concert1                               4.6     0     0    902    0  
+PASS     M2   Multi/DistortedAmp/Loud1                      4.6     0     0    895  633  
+PASS     M5   Multi/VocalEffect/Voice Changer2              4.6     0     0    895   78  
+PASS     S2   SoundDSP/AutoPan/Auto Pan1                    4.6     0     0    897  561  
+PASS     S5   SoundDSP/Celeste/Celeste8                     4.6     0     0    990  162  
+PASS     M2   Multi/DistortedAmp/Loud4                      4.5     0     0    962  633  
+PASS     M3   Multi/Overdrive/Hard                          4.5     0     0    962  138  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.8                4.5     0     0   1023  186  
+PASS     S4   SoundDSP/Flanger/Deep5                        4.4     0     0    935  248  
+PASS     S1   SoundDSP/ParametricEQ/Middle Cut              4.4     0     0   1100  306  
+PASS     S3   SoundDSP/RockRotary/Mellow Twin               4.4     0     0   1101  604  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 1              4.4     0     0   1065  691  
+PASS     S1   SoundDSP/Enhancer/Enhancer2                   4.4     0     0    973  158  
+PASS     S1   SoundDSP/Mixup/Mixup4                         4.3     0     0   1055  210  
+PASS     M4   Multi/LFOWah/For 2Beat 1                      4.3     0     0    900  606  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 1               4.3     0     0   1041  728  
+PASS     S4   SoundDSP/Phaser/Deep7                         4.3     0     0   1103  222  
+PASS     M2   Multi/Compressor/Comp.4                       4.3     0     0    964  114  
+PASS     S5   SoundDSP/Exciter/Exciter2                     4.3     0     0   1098  126  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 3               4.2     0     0   1083  222  
+PASS     R1   BASELINE                                      4.1     0     0    957    0  
+PASS     R1B  BASELINE                                      4.1     0     0    957    0  
+PASS     R1B  Chorus/Chorus2                                4.1     0     0    957  282  
+PASS     M1   BASELINE                                      4.1     0     0    957    0  
+PASS     M2   BASELINE                                      4.1     0     0    957    0  
+PASS     M2   Multi/DistortedAmp/Normal3                    4.1     0     0    957  633  
+PASS     M3   BASELINE                                      4.1     0     0    957    0  
+PASS     M3   Multi/Overdrive/Mild                          4.1     0     0    957  138  
+PASS     M3   Multi/Distortion/Mild                         4.1     0     0    957  138  
+PASS     M4   BASELINE                                      4.1     0     0    957    0  
+PASS     M4   Multi/PedalWah/Wah1                           4.1     0     0    957  418  
+PASS     M5   BASELINE                                      4.1     0     0    957    0  
+PASS     S1   BASELINE                                      4.1     0     0    957    0  
+PASS     S2   BASELINE                                      4.1     0     0    957    0  
+PASS     S2   SoundDSP/Vibrato/Vibrato1                     4.1     0     0    993  590  
+PASS     S3   BASELINE                                      4.1     0     0    957    0  
+PASS     S3   SoundDSP/RotarySpeaker/Standard               4.1     0     0   1080  604  
+PASS     S3   SoundDSP/RotarySpeaker/Single Rotor           4.1     0     0    956  192  
+PASS     S4   BASELINE                                      4.1     0     0    957    0  
+PASS     S4   SoundDSP/Phaser/Deep5                         4.1     0     0   1012  222  
+PASS     S5   BASELINE                                      4.1     0     0    957    0  
+PASS     S5   SoundDSP/Celeste/Celeste3                     4.1     0     0   1048  162  
+PASS     R1B  Chorus/Chorus1                                4.1     0     0    956    0  
+PASS     M1   Multi/DualDelay/Deep7                         4.1     0     0    956  178  
+PASS     M3   Multi/Distortion/Normal                       4.1     0     0    956  543  
+PASS     M3   Multi/Distortion/Hard                         4.1     0     0    956  138  
+PASS     M3   Multi/Distortion/Bright                       4.1     0     0    956  632  
+PASS     M4   Multi/ReverseWah/Wah4                         4.1     0     0    956  102  
+PASS     S2   SoundDSP/AutoPan/Auto Pan5                    4.1     0     0   1015  210  
+PASS     S2   SoundDSP/Tremolo/Tremolo6                     4.1     0     0    949  186  
+PASS     S3   SoundDSP/RotarySpeaker/Bright Twin            4.1     0     0    966  604  
+PASS     S4   SoundDSP/Flanger/Deep4                        4.1     0     0    969  248  
+PASS     S5   SoundDSP/AutoWah/Wah5                         4.1     0     0   1099  102  
+PASS     M2   Multi/Fuzz/Hard Compress                      4.1     0     0    964  138  
+PASS     M3   Multi/Distortion/Fat                          4.1     0     0    964  632  
+PASS     M3   Multi/LFOFilter/For 3Beat 1                   4.1     0     0    964  210  
+PASS     M5   Multi/DelayComplex/Autowah+Delay              4.1     0     0    964  536  
+PASS     S3   SoundDSP/RotarySpeaker/Normal Twin            4.1     0     0   1095  604  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 8              4.1     0     0   1006  248  
+PASS     S5   SoundDSP/Celeste/Celeste6                     4.1     0     0   1030  162  
+PASS     M1   Multi/SlowAttacker/Slow Attacker2             4.1     0     0    898   90  
+PASS     S5   SoundDSP/Exciter/Exciter3                     4.1     0     0    907  126  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 8               4.0     0     0    998  222  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.7                4.0     0     0    960  186  
+PASS     M1   Multi/CrossDelay/Shallow8                     4.0     0     0    959  178  
+PASS     M2   Multi/Compressor/Comp.1                       4.0     0     0    959  373  
+PASS     M2   Multi/Compressor/Comp.2                       4.0     0     0    959  114  
+PASS     M3   Multi/Overdrive/Normal                        4.0     0     0    959  640  
+PASS     M4   Multi/PedalWah/Wah2                           4.0     0     0    959  114  
+PASS     M5   Multi/VocalEffect/Vocal Harmonizer            4.0     0     0    959 3157  
+PASS     M5   Multi/VocalEffect/Voice Changer1              4.0     0     0    959  599  
+PASS     S2   SoundDSP/AutoPan/Auto Pan7                    4.0     0     0   1001  210  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 6              4.0     0     0   1020  248  
+PASS     S4   SoundDSP/Flanger/Deep7                        4.0     0     0    969  248  
+PASS     S5   SoundDSP/Celeste/Celeste5                     4.0     0     0    911  162  
+PASS     S5   SoundDSP/AutoWah/Wah4                         4.0     0     0    960  102  
+PASS     M1   Multi/CrossDelay/Shallow3                     4.0     0     0    963  178  
+PASS     M2   Multi/Compressor/Comp.3                       4.0     0     0    963  114  
+PASS     M2   Multi/DistortedAmp/Normal4                    4.0     0     0    963  633  
+PASS     M5   Multi/MultiTapDelay/Multi8                    4.0     0     0    963  286  
+PASS     S3   SoundDSP/FlangerDryWet/Dry/Wet 2              4.0     0     0   1092  248  
+PASS     S2   SoundDSP/Tremolo/Tremolo7                     4.0     0     0   1042  186  
+PASS     M1   Multi/DualDelay/Deep8                         3.9     0     0    962  178  
+PASS     M4   Multi/ReverseWah/Wah5                         3.9     0     0    962  102  
+PASS     M4   Multi/LFOWah/For 3Beat 2                      3.9     0     0    962  210  
+PASS     S4   SoundDSP/PhaserDryWet/Dry/Wet 4               3.9     0     0    930  222  
+PASS     M5   Multi/DelayComplex/Delay+Flanger              3.9     0     0    897  775  
+PASS     M5   Multi/DelayComplex/Delay+Phaser               3.8     0     0    895  755  
+PASS     M1   Multi/SlowAttacker/Slow Attacker4             3.8     0     0    961   90  
+PASS     M2   Multi/DistortedAmp/Normal2                    3.8     0     0    961  633  
+PASS     M3   Multi/Overdrive/Fat                           3.8     0     0    961  667  
+PASS     M4   Multi/ReverseWah/Wah7                         3.8     0     0    961  102  
+PASS     M4   Multi/LFOWah/For 3Beat 1                      3.8     0     0    961  210  
+PASS     S1   SoundDSP/Enhancer/Enhancer3                   3.8     0     0   1028  158  
+PASS     S5   SoundDSP/ModCeleste/Mod. Cel.1                3.8     0     0    939  647  
+PASS     R1B  Chorus/Chorus3                                3.7     0     0    897  282  

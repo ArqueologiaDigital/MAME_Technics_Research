@@ -40,6 +40,27 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ TICK 2026-07-12 ~04:35 — PRIORITY 1 CLOSED: divergence sweep = 241 selections, ZERO rails/clips
+Re-ran the full effect-type sweep on the CURRENT four-effect binary (the Jul-11 sweep predated the
+four-effect wiring). 241 selections across ALL four effect screens: Reverb 8, Chorus 8, Multi 14
+families (incl. distortion bench: DistortedAmp/Distortion/Fuzz/Overdrive), Sound-DSP bank (enhancer,
+paramEQ, ringmod, vibrato, autopan, tremolo, 2 rotaries, flanger, phaser, celeste, exciter, autowah).
+TWO independent signals: (1) 60Hz frame sampler on DSP out-slots 0xC342-0xC359 (rail=0x7FFF00=94%FS,
+catches self-excitation even over silence); (2) DAC int16 clip check from the WAV. RESULT: FAIL=0
+SUSPECT=0, max fpeak 11.6%FS (Concert2), 0 railed frames, 0 clips over 241 segs. Uploads confirmed the
+DSP was reprogrammed (up_sel>0 on 170/196 non-baseline). LOAD-BEARING: flanger/phaser/rotary (same
+clip-and-fold triangle-LFO arithmetic that sank the reverb) all pass at ~5%FS -> the ALUSAT+MAC fix
+GENERALIZES to the whole class, not just the reverb. Scope caveat: non-reverb units mostly ran over
+near-silence (sends~0 until depth set) -> proves no program SELF-excites (the input-independent failure
+that actually bit us); excitation-dependent heavy-drive artifacts = separate lower-risk follow-up.
+DELIVERABLES: notes/effect-sweep-divergence-result.md, notes/effect-sweep-verdicts.json (241 PASS),
+notes/divergence_report.py, notes/effect-sweep-final-table.txt. PUBLISHED: blog Part 21 "Every effect,
+no rails" (posts.json=23), docs kn7000-effects-dsp.md (sweep paragraph), Jekyll rebuilt OK.
+ALL PRIORITIES NOW DONE/BLOCKED: P1 CLOSED (this). P2 PAGE/CONTRAST done+user-confirmed. P3 native MAC
+0x06/0x08-0x16 done+bit-identical. P4 0x8238 decoded(closed)+loud-input effectively covered by sweep;
+loudness-cal ear-blocked. P5 catalogue in good shape. OPEN faithfulness Q logged (shared-vs-per-effect
+DSP return; rule g, needs Felipe/RE). No unblocked priority work remains this tick.
+
 ## TICK 2026-07-12 ~04:00 — PRIORITY 1 divergence sweep RE-RUN on the current four-effect binary
 The Jul-11 sweep (wf_46aaaf77) predated the four-effect wiring (only reverb reached audio then), so its
 "chorus SUSPECT/no-change" is stale/resolved. RE-RUNNING the full 227-segment sweep (R1B chorus + M1-M5
