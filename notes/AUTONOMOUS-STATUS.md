@@ -5,6 +5,25 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~night(12c) — SIDE-QUEST DONE: LEDs checklist (colours + adds/removes)
+Implemented Felipe's LEDs_in_the_layout.txt in tools/gen_lay.py; regenerated kn7000.lay, REBUILT the
+driver (SUBTARGET=kn7000, layout recompiled), PUBLISHED, md5-matched. Verified via tools/lay_to_svg.py
+--leds (renders LEDs in lit colours) — chromium-checked against the list.
+- Recolour: every panel LED RED except the 31 GREEN ones Felipe listed (APC MODE / Sound-Arranger SET+
+  OFF-ON, RHYTHM CUSTOM+MEMORY, MUSIC STYLIST, AUTO SETTING, beats 2-4, SOUND-GROUP MEMORY, all 4
+  SEQUENCER, SD, TEMPO, BANK VIEW, PANEL MEMORY 1-8, CUSTOM PANEL/CUSTOMIZE/FAVORITES, + the 2 new).
+  Green placements = exactly 31 (one-for-one with the list). Flipped ~40 LEDs green->red.
+- Added: APC/SEQ VOLUME LED (green, id apcseq_vol_led -- driver can drive it once the value path is
+  wired, see sliders.txt), SD CARD PLAY/PAUSE LED (green), FILL IN 1&2 LEDs (were missing, red), 3
+  keyboard split-point indicators (red + down-arrow `split_arrow` element; positions placeholder, Felipe
+  refines via the SVG loop). Removed the SPLIT POINT button LED.
+- Rebuilt binary boots to home screen, panel intact (no regression). Refreshed the fine_tuning SVG
+  (477 placements). Full: side-quests/findings/leds_in_the_layout_findings.md.
+Remaining layout side-quest: sliders.txt -- sliders ALREADY draggable (slider_lib.lua + add_vertical_
+slider for all 4 faders in Compact); the APC/SEQ VOLUME LED is now added; still open = the FUNCTIONAL
+binding (APC/Seq slider actually changing the firmware APC volume + LED reflecting slider==value) which
+needs RE of the APC-volume control target.
+
 ## TICK 2026-07-12 ~night(12b) — SIDE-QUEST DONE: B&W SVG export of the panel layout (fine_tuning)
 Felipe's "fine_tuning_the_layout" side-quest: produce a black-and-white SVG of the current layout so he
 can edit positions/dimensions/labels and I apply them back. DELIVERED:
