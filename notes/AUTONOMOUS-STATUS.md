@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(12k) — apply_svg.py ID-matching branch DONE + verified (layout collaboration loop complete)
+Implemented + tested the RELIABLE ID-matching branch of tools/apply_svg.py. When the adjusted SVG keeps our
+stable ids (group.index.ref, stamped by lay_to_svg; Inkscape preserves them), each element maps EXACTLY to
+its .lay placement and its <bounds> is rewritten from the SVG position; fuzzy only if no ids. VERIFIED 3
+ways: (1) no-op self-test -- apply the unedited ID-tagged export -> 0 changes / 478 ids seen (SVG-pos <->
+.lay-bounds round-trip is exact); (2) synthetic +40,+25 move of the HELP text -> detected as exactly 1
+change; (3) --apply patches HELP bounds 149,838 -> 189,863 then restored via gen_lay.py. So the layout
+collaboration loop is COMPLETE: THE WORKFLOW = (a) `python3 tools/lay_to_svg.py` exports the ID-tagged B&W
+SVG; (b) Felipe edits it in Inkscape; (c) `python3 tools/apply_svg.py that.svg --apply` merges his positions
+back onto the .lay; (d) rebuild + publish. Felipe's CURRENT (id-less) adjusted SVG still reports FUZZY and
+won't auto-apply -- his APC/SEQUENCER text fix is in; the rest await an ID-tagged round OR manual per-item.
+
 ## TICK 2026-07-13 ~night(12j) — built apply_svg.py; PROVED the current adjusted SVG can't be safely auto-applied
 Built tools/apply_svg.py (pipeline gen_lay.py -> base .lay -> apply_svg.py adjusted.svg -> patched .lay;
 matches each placement to the SVG, rewrites <bounds>, keeps bindings; DRY BY DEFAULT, --apply to patch).
