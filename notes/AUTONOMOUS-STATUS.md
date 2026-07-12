@@ -5,6 +5,19 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-12 ~evening(2) — EXPERIMENTAL opt-in FDC SHIPPED at 0x9CC00000 (Felipe-authorized)
+Felipe: "implement a clearly-labeled experimental FDC at 0x9CC00000/uPD765 best-guess, accepting it may
+not work / may need reverting." DONE (commit 526c270):
+- New config switch **"Experimental floppy (FDC) at 0x9CC00000"**, DEFAULT OFF. When ON, maps UPD72067
+  MSR@0x9CC00000 + FIFO@0x9CC00001 (only 2 bytes -- SD scan-enable 0x9CC00004 + SD switches 0x9CC00008
+  stay RAM). Runtime-gated in fdc_r/fdc_w (cfg isn't applied at machine_start); OFF falls through to
+  LCD-RAM so it's byte-identical to before. INTRQ/DRQ -> logging stubs (MN10300 IRQ line unknown).
+- VERIFIED: OFF = zero regression (boots to PMEM home + note plays); ON = boots to home AND the FDC
+  engages (boot disk-init read of 0x9CC00000 pc 0x4854D725 now hits msr_r()). Does NOT make the floppy
+  work: the FORMAT stalls upstream (disk task never services the command -> 0x9CC00000 never accessed
+  during a format). Faithful labelled best-guess, revert = leave switch OFF. Detail: fdc-architecture.md
+  addendum 8. TO TEST ON: cfg `<port tag=":FDCEXP" type="CONFIG" mask="1" defvalue="0" value="1"/>`.
+
 ## TICK 2026-07-12 ~evening — FDC: format WAIT mechanism found (stack-walk); disk cmd never serviced
 Felipe: "use your knowledge of the FDC to implement it properly." Investigated toward that; the honest
 blocker is now precisely located but a faithful implementation is NOT yet possible (would be a guess).
