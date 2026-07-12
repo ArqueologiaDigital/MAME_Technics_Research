@@ -98,6 +98,8 @@
 
 #include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
 #include "machine/spi_sdcard.h"     // the SD card (SPI protocol via the 0x9805000C byte mailbox)
+#include "imagedev/floppy.h"        // IC103 floppy drive
+#include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
 
@@ -798,6 +800,8 @@ public:
 		, m_rearsw(*this, "REARSW")
 		, m_sdsw(*this, "SDSW")
 		, m_sdcard(*this, "sdcard")
+		, m_fdc(*this, "fdc")
+		, m_floppy(*this, "fdc:0")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
 		, m_cpl_leds(*this, "cpl_led%u", 0U)
@@ -838,6 +842,10 @@ private:
 	required_ioport m_rearsw;           // rear-panel MIDI IN / BASS PEDAL selector SW701 (strap bit12 = data-bus D28)
 	required_ioport m_sdsw;               // SD front-panel switches (byte 0x9CC00008, active-low)
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
+	optional_device<upd72067_device> m_fdc;        // IC103 floppy disk controller (uPD765-family)
+	optional_device<floppy_connector> m_floppy;    // the 3.5" floppy drive
+	uint8_t fdc_r(offs_t reg);                     // EXPERIMENTAL: FDC register access at 0x98010000
+	void    fdc_w(offs_t reg, uint8_t data);
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	output_finder<512> m_cpl_leds;
@@ -1376,20 +1384,10 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
-	// EXPERIMENTAL uPD765 FDC stub (2026-07-12): the floppy controller IC103 (uPD765-family,
-	// CS/DACK/TC/DRQ) is a CS-decoder sibling of the TG/DSP in the 0x98xxxxxx window. Narrowed
-	// to 0x98010000 (offset 0x8000): the boot bus-controller setup programs it as a chip-select
-	// base (mov 0x98010000,d0; mov d0,(0x32000804) @0x484009D0), and 0x98030000 has ZERO firmware
-	// references (eliminated). Return a "ready for command" MSR so FDC polling doesn't hang, and
-	// log accesses to learn the register layout. LABELLED HACK -- unverified, not a modelled
-	// device (see notes/floppy-fdc-investigation.md).
+	// IC103 floppy disk controller (uPD765-family @ 0x98010000 candidate, offset 0x8000-0xFFFF).
+	// EXPERIMENTAL -- routed to the real UPD72067 device via fdc_r; see fdc_r + the machine config.
 	if (offset >= 0x8000 && offset < 0x10000)
-	{
-		if (!machine().side_effects_disabled())
-			logerror("%s: FDC_R  0x%08X mask %04X\n", machine().describe_context(),
-				0x98000000u + (offset << 1), mem_mask);
-		return 0x0080;   // uPD765 MSR: RQM=1 (ready), DIO=0 (host->FDC), not busy
-	}
+		return fdc_r(offset - 0x8000);
 	if (!machine().side_effects_disabled())
 		logerror("%s: io_r  +%06X mask %04X\n", machine().describe_context(),
 			offset << 1, mem_mask);
@@ -1427,12 +1425,10 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
 	}
-	// EXPERIMENTAL uPD765 FDC stub write log (2026-07-12): see io_r. Captures FDC command
-	// bytes so the register layout can be RE'd. LABELLED HACK (0x98010000 only).
+	// IC103 floppy disk controller (see io_r) -- route writes to the UPD72067.
 	if (offset >= 0x8000 && offset < 0x10000)
 	{
-		logerror("%s: FDC_W  0x%08X = %04X mask %04X\n", machine().describe_context(),
-			0x98000000u + (offset << 1), data, mem_mask);
+		fdc_w(offset - 0x8000, data & 0xff);
 		return;
 	}
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
@@ -2809,6 +2805,44 @@ void kn7000_state::machine_reset()
 	}
 }
 
+// EXPERIMENTAL FDC register access (IC103, uPD765-family @ 0x98010000 candidate). Routed from
+// io_r/io_w so the exact register offsets the firmware uses can be observed + refined. The 0x98010000
+// window is 16-bit; 'reg' is the word offset within it. LABELLED HACK -- unverified (rule g).
+uint8_t kn7000_state::fdc_r(offs_t reg)
+{
+	if (!m_fdc) return 0x80;
+	uint8_t v;
+	switch (reg)
+	{
+	case 0: v = m_fdc->msr_r();  break;   // guess: Main Status Register at 0x98010000
+	case 2: v = m_fdc->fifo_r(); break;   // guess: Data FIFO at 0x98010004
+	default: v = 0x00; break;
+	}
+	if (!machine().side_effects_disabled())
+		logerror("%s: FDC_R  0x%08X (reg %d) = %02X\n", machine().describe_context(), 0x98010000u + (reg << 1), reg, v);
+	return v;
+}
+
+void kn7000_state::fdc_w(offs_t reg, uint8_t data)
+{
+	logerror("%s: FDC_W  0x%08X (reg %d) = %02X\n", machine().describe_context(), 0x98010000u + (reg << 1), reg, data);
+	if (!m_fdc) return;
+	switch (reg)
+	{
+	case 2: m_fdc->fifo_w(data); break;   // guess: Data FIFO
+	default: break;
+	}
+}
+
+static void kn7000_floppies(device_slot_interface &device)
+{
+	// The KN7000 formats 1.44 MB "2HD" disks (firmware string "1.44M Byte format : 2HD" @0x25D160)
+	// and also accepts 720 KB "2DD" media (firmware: '…"2HD". It can be used only "2DD" type in this
+	// mode'). A 3.5" HD drive reads/writes both, so default to 35hd and offer 35dd as an option.
+	device.option_add("35hd", FLOPPY_35_HD);   // 3.5" high-density (1.44 MB, the KN7000 default)
+	device.option_add("35dd", FLOPPY_35_DD);   // 3.5" double-density (720 KB, 2DD media)
+}
+
 void kn7000_state::kn7000(machine_config &config)
 {
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
@@ -2882,6 +2916,14 @@ void kn7000_state::kn7000(machine_config &config)
 	SPI_SDCARD(config, m_sdcard, 0);
 	m_sdcard->set_prefer_sd();
 	m_sdcard->spi_miso_callback().set(FUNC(kn7000_state::sd_miso_w));
+
+	// IC103 floppy disk controller (uPD765-family, custom C1DB00000607) + 3.5" drive.
+	// EXPERIMENTAL bring-up at the 0x98010000 chip-select candidate (see io_r/io_w routing +
+	// notes/floppy-fdc-investigation.md). Mount a blank disk via -flop1 to test the DISK menu /
+	// format / save. IRQ/DMA not yet wired (add once the register offsets are confirmed live).
+	// Clock unverified for the KN7000's custom C1DB00000607; matches the KN5000 sibling's UPD72068.
+	UPD72067(config, m_fdc, 32'000'000);
+	FLOPPY_CONNECTOR(config, "fdc:0", kn7000_floppies, "35hd", floppy_image_device::default_mfm_floppy_formats).enable_sound(true);
 
 	KN7000_TONEGEN(config, m_tonegen, 0);
 	// F.3: route the tone-generator audio through the effects-DSP bridge, then to the speakers.
