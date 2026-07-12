@@ -5,7 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
-## TICK 2026-07-12 ~night(3) — ★★★★ FLOPPY BREAKTHROUGH: FDC found at 0x98020000, ERROR 08 GONE
+## TICK 2026-07-12 ~night(4) — CORRECTION: "ERROR 08 gone" was FALSE (Felipe's manual nav); FDC still not reached
+RETRACTION (integrity): the "ERROR 08 gone" in tick night(3) was a MISREAD. That test used fast nav timing
+that pressed buttons before screens loaded, so my presses didn't register -- Felipe had manually navigated
+the format (he told me: "I pressed some buttons for you"), and I mistook his PLEASE-WAIT screen for my fix
+working. A clean, properly-paced, snapshot-verified run (nav confirmed: DISK menu -> FORMAT-type page 2/2
+-> PAGE UP -> ATTENTION -> YES) shows **ERROR 08 STILL happens, and the FDC at 0x98020000 is touched 0
+times during the entire nav + format-execute** (tap armed from t=0). So:
+- The FDC-at-0x98020000 model (commit 7a30aaf) is CORRECT HARDWARE (schematic-proven, and the firmware's
+  boot init at 0x484000B5 does drive it -- that runs before the autoboot tap installs, so it isn't in the
+  0-count). It stays as faithful emulation. But it does NOT fix the FORMAT.
+- The FORMAT still errors in the SOFTWARE path BEFORE reaching any FDC command code (0x484027xx). This is
+  the same class-5-dispatch blocker found earlier (night/night(2)): the format posts a class-5 disk
+  command, the disk task errors without hardware I/O -> ERROR 08. Media-present uses strap 0x98070000
+  bits10/11 (0x484D7751), NOT the FDC's DSKCHG, and forcing it didn't help.
+NEXT: capture the BOOT FDC init (soft-reset-after-tap, since it runs pre-autoboot) to see what floppy state
+boot establishes with the FDC now modelled; then re-trace the format's class-5 path to find why it errors
+before the FDC command code. The service-manual schematic (FDC=N82077AA@0x98020000, DMA via 0x98010000
+DACK reads) is the key new asset for finishing this once the software path is unblocked.
+
+## TICK 2026-07-12 ~night(3) — ★★★ FLOPPY: FDC found at 0x98020000 (service manual) + modelled (correct HW)
 The "new information" the floppy needed was in the repo all along: **service_manual/technics_sx-kn7000_
 keyboard.pdf** (160pp). RE of the schematic + firmware CRACKED the floppy:
 - **The FDC (IC103, C1DB00000607) is at 0x98020000.** Chip-select decoder IC1 (TC74VHC138F, MAIN 1/5 pg
@@ -17,16 +36,15 @@ keyboard.pdf** (160pp). RE of the schematic + firmware CRACKED the floppy:
   @0x484000B5), **+8=MSR/DSR**, **+A=data FIFO**, **+E=DIR/CCR** (disk-change/DSKCHG @0x48402623). Register
   = (offset>>1)&7. The driver had this region mislabelled "sound control" (io_r returned 0) -> the
   disk-change read returned garbage -> media check failed -> ERROR 08.
-- **FIX SHIPPED (commit 7a30aaf):** replaced the default-OFF experimental upd72067@0x9CC00000 with a real,
-  always-on **N82077AA @ 0x98020000** (per-offset PC/AT handlers fdc_r/fdc_w, carved out of the io window
-  AFTER it so it wins; removed the FDCEXP switch). Boot: NO regression (reaches play screen). **FORMAT with
-  a floppy inserted: the disk-change check now PASSES -- ERROR 08 is GONE, the format enters the real
-  operation (shows PLEASE WAIT) instead of "disk may be faulty".** ★ Verified by snapshot.
-- REMAINING: the format now stalls in the command/data phase -- the FDC INTRQ + DMA (FDC.DRQ/DACK/TC via
-  the MN10300 DMA controller) are still logging stubs. Tracing the FDC command sequence (which
-  commands/how it polls) to wire IRQ + DMA -> full format. notes/fdc-architecture.md addenda 14-15.
+- **HARDWARE MODEL SHIPPED (commit 7a30aaf):** replaced the default-OFF experimental upd72067@0x9CC00000
+  with a real, always-on **N82077AA @ 0x98020000** (per-offset PC/AT handlers fdc_r/fdc_w, carved out of
+  the io window AFTER it so it wins; removed the FDCEXP switch). Boot: NO regression (reaches play screen).
+  This is faithful hardware (schematic-proven) and the boot init drives it. [NOTE: the "ERROR 08 gone"
+  first claimed here was FALSE -- see tick night(4) retraction. The format still fails; the FDC is not
+  reached by the format-execute.]
 - NAV TIMING (Felipe's note): press the format-nav buttons SLOWER -- wait for each screen to fully load
   before the next press (PAGE UP was being pressed before the FLOPPY DISK FORMAT screen finished loading).
+  Verified working timing: ~7s (420 frames) settle per step.
 
 ## TICK 2026-07-12 ~night(2) — priorities re-confirmed DONE; floppy at a boundary (SD-worker vs class-5 split)
 Cron tick handed the 2026-07-11 priority list. RE-VERIFIED all five are already complete (earlier ticks):
