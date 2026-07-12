@@ -40,6 +40,21 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## ★★★★★ TICK 2026-07-12 ~05:15 — PER-EFFECT DSP RETURNS: reverb-off no longer mutes other effects
+Resolved+FIXED the open faithfulness question (chorus/multi/sounddsp were scaled by the reverb return
+gret -> reverb-off wrongly muted them). Live sub-TG bus capture (scratchpad/retcap, per-effect isolated
+toggle diff; GOTCHA: latch=low-half mask 0xFFFF / data=high-half mask 0xFFFF0000, both at off 0x98050000)
+proved each effect owns a DISTINCT return and the REVERB button moves ONLY the reverb's:
+REVERB=ch03.rA(0x803A), SOUND DSP=ch09.rA(0x809A), MULTI=ch06.rA(0x806A), CHORUS=send-only(no return
+register), DIGITAL EFFECT=separate subsystem(no TG-bus write). FIX (fa06930): tonegen captures ch09.rA->
+m_gain_dsp_ret + ch06.rA->m_gain_multi_ret; bridge scales SOUND DSP by gdsp_ret, MULTI by gmul_ret,
+CHORUS drops gret (fixed makeup); panel_scan polls them. VERIFIED: (1) reverb-only BIT-IDENTICAL
+(money.lua md5 0787b60c... unchanged -- reverb-on => gret==per-effect returns so no change; effects-off
+=> gated); (2) reverb OFF + SOUND DSP ON: unit-9 slot 0xC356 peak 231293 (2.8%FS) now reaches DAC via
+ch09.rA (was xgret=0 muted). No divergence regression (reverb-on path unchanged; effects already swept
+clean). Built+published. RE: notes/effect-return-routing.md + notes/retcap-harness/. NEXT: docs+blog;
+chorus makeup + *_WET=0.60 still ear-cal (Felipe).
+
 ## ★★★★★ TICK 2026-07-12 ~04:35 — PRIORITY 1 CLOSED: divergence sweep = 241 selections, ZERO rails/clips
 Re-ran the full effect-type sweep on the CURRENT four-effect binary (the Jul-11 sweep predated the
 four-effect wiring). 241 selections across ALL four effect screens: Reverb 8, Chorus 8, Multi 14
