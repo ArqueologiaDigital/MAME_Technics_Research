@@ -105,3 +105,28 @@ tracing), but there is no evidence of a delivery bug -- REVERB/SOUND DSP prove t
 the gating is on the firmware side. NOT changing anything (rule g: nothing is clearly broken). Deeper
 resolution (the exact firmware gating condition) belongs to the per-part effect model, which is future
 work and not required for the effects to be controllable.
+
+## 2026-07-12 (final): RESOLVED via LEDs + the manual -- the buttons WORK; it's an effect-DEPTH detail
+Two decisive checks settled it:
+1. MANUAL (kn7000_users_manual.pdf p.~2518): "Press the CHORUS button to turn it on / REVERB ... / MULTI
+   ... These effects are applied to all the sounds of the instrument." So CHORUS/MULTI/REVERB are DIRECT
+   global toggles -- pressing the button should turn the effect on.
+2. LED OUTPUT DIFF across a COLD press (scratchpad/retcap/ledcheck.lua): a cold CHORUS press toggles
+   cpr_led29 0->1; cold MULTI toggles cpr_led28 0->1; REVERB=cpr_led27 (matches reverb-toggle-findings),
+   SOUND DSP=cpr_led19. So the FIRMWARE PROCESSES the cold chorus/multi press and turns the effect ON --
+   the BUTTONS WORK. The panel HLE delivers the event correctly. There is NO panel-button-mapping bug.
+   This DEFINITIVELY refutes the "chorus/multi toggles don't engage / context-dependent" framing of the
+   last two notes -- I was watching the SEND (a lagging signal), not the LED (the immediate effect state).
+
+THE ACTUAL REMAINING QUESTION (subtler, effect-depth, not panel): after a cold chorus toggle the LED is
+ON but the chorus SEND (0x8198 low byte = per-part CHORUS DEPTH) is written as 0 -- and stays 0 even after
+playing an 8-key cluster (clincher.lua) -- so chorus is on-but-INAUDIBLE. Yet after a SOUND DSP toggle,
+the same chorus press writes send=0x3C (audible). So the send/DEPTH application is gated on some effect
+interaction (a full effect-bus refresh that SOUND DSP triggers) rather than applied immediately on the
+cold global-effect toggle. LIKELY the default per-part chorus DEPTH is 0 and something in the sound-dsp
+(part-effect) path recomputes/applies the part depths; the cold global toggle sets the enable flag+LED
+but leaves depth 0. Whether that's faithful (chorus on at depth 0 = silent by design, needs a depth set
+on the CHORUS screen) or an emulation gap in the depth-application path is UNRESOLVED -- it belongs to the
+per-part effect-depth model, not the panel. NOT a bug in the buttons; NOT changing anything (rule g).
+NEXT: trace where the per-part chorus/multi DEPTH default comes from and what the sound-dsp path does to
+apply it (RE), OR confirm on real HW whether cold CHORUS is audible without setting a depth.
