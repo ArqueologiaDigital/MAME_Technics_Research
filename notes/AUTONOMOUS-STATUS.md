@@ -5,6 +5,23 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(12i) — Felipe's adjusted layout SVG (fine_tuning loop) + docs + workflow fix
+Felipe returned side-quests/kn7000_layout_adjusted.svg (his Inkscape edit of the B&W layout SVG). Diffed it
+vs my export: his changes are FINE COSMETIC refinements (~30 small label/position nudges; renders near-
+identical), not a re-layout. Applied the ONE clear CORRECTNESS fix: APC/SEQ -> APC/SEQUENCER (real-panel
+spelling; display name decoupled from the VOL_APCSEQ key; wider bound; moved apcseq_vol_led clear). Rebuilt
++ published (md5-matched). The remaining ~30 nudges are cosmetic + intricate to apply to the PROCEDURAL
+gen_lay.py (the LED overlap illustrated the fiddliness) and my SVG uses fixed-font text vs MAME's scale-to-
+bounds (positions map, font sizes differ). WORKFLOW FIX: added STABLE per-element IDs (group.index.ref) to
+tools/lay_to_svg.py + re-exported -- Inkscape preserves IDs, so the NEXT round matches back to the exact
+.lay element trivially (a merge tool can then apply positions reliably). NEXT: build tools/apply_svg.py
+(gen_lay.py -> base.lay -> apply Felipe's SVG positions by ID -> final.lay) to apply his positional edits
+faithfully and survive regeneration; then push the current round's meaningful moves (SEQUENCER RESET/COUNT
+INTRO labels, slider-label y, SOUND/PART/GLOBAL group headers).
+Also: kn5000-docs kn7000-control-panel.md -- corrected 0x484AD680 (it's the latched/continuous-control
+dispatch, NOT switches) + added the Continuous-controls/volume-fader section (type-2 frames, 0xD0-D3,
+APC/SEQ=0xD2 driven in MAME). Jekyll rebuilt.
+
 ## TICK 2026-07-13 ~night(12h) — BLOG Part 26 (the slider journey) landed
 Wrote mame-blog Part 26 "The slider that jammed the panel" -- the full slider arc as an honest RE story:
 non-draggable -> wrong-tree red herring -> all-views fix -> the raw-ADC wrong turn -> CP-protocol discovery
