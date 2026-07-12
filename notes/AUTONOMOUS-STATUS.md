@@ -40,6 +40,22 @@ natives if any); (2) re-test with -nodrc (interpreter fully saturates) -- IF -no
 that alone proves the remaining-DRC-ops theory and the fix list; (3) then re-calibrate levels if
 still needed. The 1.2s hard-cut = investigate after saturation is gone.
 
+## TICK 2026-07-12 ~07:25 — chorus-depth trace: CORRECTED a wrong inference; deferring (tooling limit)
+Continued the chorus-depth trace. Empirical data-read tap on the descriptor array 0x500CE404: it is
+read once on REVERB toggle, ZERO on chorus/sound-dsp toggles. So last tick's INFERENCE that the
+0x4C009000 per-part loop is the chorus-apply is FALSIFIED -- it's the REVERB per-part apply. The
+chorus/sound-dsp/multi sends use a DIFFERENT, untraced apply path (the sound-dsp chorus-depth 0x0B3C
+goes through it). Corrected notes/per-part-effect-application.md (rule g -- the prior inference was
+hedged; now falsified + fixed). TOOLING LIMIT: MN10300 instruction fetches don't fire read-taps, so
+loop execution is only detectable via a data access the routine makes -- further trace of the chorus
+apply needs debugger-level (bpset) tracing. DEFERRING this deep thread: it's a minor user-facing issue
+(chorus IS audible via its screen; only the quick home-screen toggle leaves depth 0), and it has hit
+diminishing returns across several ticks. DURABLE from the trace: effect enable flags @0x500C0758;
+reverb per-part apply loop 0x4C009000 -> 0x4C03A660 -> descriptor array 0x500CE404 (stride 0x130, type
+@+0x10); emitter 0x4C036FBA. All 5 priorities remain done/ear-blocked; driver in excellent shape.
+Honest status: the productive autonomous scope is largely complete; remaining threads are deep RE
+(chorus-apply path, per-part model) or ear-blocked (reverb/wet loudness cal).
+
 ## TICK 2026-07-12 ~07:00 — mapped the per-part effect application system (chorus-depth RE, no fix yet)
 Pursued the chorus-depth-on-cold-toggle question (user-facing: press CHORUS -> LED on but depth 0 =
 inaudible until a sound-dsp/part-effect interaction applies stored depth 0x3C). Static RE (unidasm) +
