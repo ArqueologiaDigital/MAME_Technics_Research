@@ -112,3 +112,18 @@ OTHER PARTS/HELP/CONTRAST/PAGE/DISPLAY HOLD/EXIT) can only be confidently pinned
 physical positions via the **dynamic service PANEL SW&LED test** (press each,
 observe switch#/LED) — that is now the highest-value remaining task
 (see service-diagnostic-mode.md for the entry hunt).
+
+## 2026-07-12 clarification — DISK/SD MENU buttons LIVE-VERIFIED (SD works; DISK is floppy-gated)
+Live probe (scratchpad/retcap/menuprobe.lua + diskclean.lua) settles the DISK/SD MENU question:
+- **SD MENU = SEG0D 0x80: VERIFIED WORKING** -- pressing it from HOME opens the full SD MENU screen
+  (SD TOOLS / SD PREFERENCES / FAVORITE SONGS / CUSTOM STYLE LOAD-SAVE / LOAD / SAVE / SD SONG MEDLEY /
+  SD-AUDIO PLAY / SD-SOUND PLAY). The driver's SEG0D 0x80 mapping is CORRECT.
+- **DISK MENU = SEG0D 0x40: does NOTHING from HOME** (screen unchanged, md5-identical). Since the
+  adjacent SD MENU (SEG0D 0x80) is confirmed correct and the SD subsystem is modeled, the DISK menu is
+  almost certainly FLOPPY-DEVICE-GATED -- the firmware bails with no FDC/drive modeled. It should open
+  once the floppy (IC103) is modeled. No mislabel fix is warranted; the SEG0D 0x40 label is plausibly
+  correct (ROM descriptor SEG0D.6 = event 0x2016).
+- The "SEG12 b7 = DISK MENU" line above (from the service-manual matrix) CONFLICTS with the ROM
+  descriptor (panel-descriptor-map: SEG12.7 = 0x2010 a6 = the CONTEXT-DEPENDENT Sound-Group/effect
+  family) and with the live-confirmed SD MENU at SEG0D 0x80. DISREGARD it for disk-menu access; the
+  confirmed path is SEG0D 0x80 (SD) / SEG0D 0x40 (DISK, floppy-gated). rule g: nothing changed.
