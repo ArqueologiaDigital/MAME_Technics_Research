@@ -130,3 +130,21 @@ on the CHORUS screen) or an emulation gap in the depth-application path is UNRES
 per-part effect-depth model, not the panel. NOT a bug in the buttons; NOT changing anything (rule g).
 NEXT: trace where the per-part chorus/multi DEPTH default comes from and what the sound-dsp path does to
 apply it (RE), OR confirm on real HW whether cold CHORUS is audible without setting a depth.
+
+## 2026-07-12: chorus-send-application trigger hunt -- narrow impact, needs static RE (pivoting)
+Tried to find what applies the chorus send/depth after a cold toggle (scratchpad/retcap/trig.lua):
+NONE of these wrote the depth (send stayed 0x0B00 low=0): open the CHORUS screen (press-hold), select a
+SOUND (PIANO), PART SELECT, RIGHT1 on/off, or playing an 8-key cluster (clincher.lua). The ONLY thing that
+made a chorus press write depth 0x3C was having SOUND DSP toggled ON first (chartog.lua). So the chorus
+depth application appears LINKED to the SOUND-DSP / part-effect state -- a firmware code-logic condition,
+not crackable by more empirical button-probing.
+IMPACT IS NARROW: chorus/multi ARE audible through their normal screen workflow (the divergence sweep
+drove chorus R1B across 8 types via screen-nav with real output). Only the QUICK home-screen on/off toggle
+leaves the depth at 0 (on-but-inaudible until you use the screen). So this is a minor usability gap, not
+"chorus is broken." The buttons work (LEDs), effects work (screens); only the cold-toggle depth-apply is
+incomplete.
+NEXT STEP (the RIGHT tool = STATIC RE, not empirical): disassemble the routine that writes sub-TG ch19
+(0x8198) with the per-part chorus DEPTH and find the condition that gates writing 0x3C vs 0x00 -- and how
+the SOUND-DSP (part-effect) path satisfies it. Emitter lib 0x4C036FBA (prog offset 0x3B8FD1+N); the
+depth-read + gate is in a caller. This connects to the per-part effect-depth model (the broader deferred
+refactor). PIVOTING this tick to a cleaner concrete task rather than deeper empirical probing.
