@@ -5,6 +5,15 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(12h) — BLOG Part 26 (the slider journey) landed
+Wrote mame-blog Part 26 "The slider that jammed the panel" -- the full slider arc as an honest RE story:
+non-draggable -> wrong-tree red herring -> all-views fix -> the raw-ADC wrong turn -> CP-protocol discovery
+(TYPE 2 frames) -> live ring-injection validation -> 0xD2=APC/SEQ via MUTE-9 write-correlation -> the
+queue-poison bug (a premature boot frame wedged ALL panel delivery, buttons included) -> working. Committed
++ posts.json entry (28 entries). No Jekyll build needed (mame-blog is app.js/posts.json driven, not the
+kn5000-docs Jekyll site). OPEN slider refinements still: apcseq_vol_led soft-takeover; bind MAIN/MIC/LINE-IN
+(0xD0/D1/D3, same MUTE-correlation method).
+
 ## TICK 2026-07-12 ~night(12g) — ★★ DONE: APC/SEQ VOLUME slider is now FUNCTIONAL (drives the firmware)
 Completed the sliders functional binding (Felipe's sliders.txt core ask). Identified **0xD2 = APC/SEQ** by
 RAM write-correlation (its write-set overlaps MUTE UP 9's -- which edits the same setting -- by 44 addresses
