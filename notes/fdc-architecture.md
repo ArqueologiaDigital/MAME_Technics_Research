@@ -563,3 +563,23 @@ NEXT: the driver sets NO CPU quantum -> maincpu(MN10300)+SHARC interleave coarse
 `config.set_perfect_quantum(m_maincpu)` (fine interleave) with a NORMAL run: if the format then reaches the
 FDC (and, with the DMA wiring, completes), coarse interleave was the bug. Else the race is elsewhere
 (memory-tap the class-5 error decision 0x484ADxxx in a normal run).
+
+## 2026-07-12 (addendum 21): perfect_quantum RULED OUT -- dispatch race is not CPU-interleave
+Tested `config.set_perfect_quantum(m_maincpu)` (finest maincpu<->SHARC interleave) with a NORMAL run:
+format still touches the FDC 0 times (+2s/+8s/+18s all DACK=0/FIFO=0) -> same failure. So the coarse
+CPU-interleave quantum is NOT what the trace changes; reverted (it also tanks perf badly -- boot ~5x
+slower). Summary of what does NOT reproduce the trace's "format reaches the FDC": the SHARC DRC (-nodrc),
+-debug itself (-debug -debugger none), and perfect_quantum. Only `dbg:command("trace")` does.
+=> The trace's effect is likely a WALL-TIME / async interaction, not emulated-time: the driver runs the
+   effects-DSP audio on a HOST thread (kn7000_dsp_bridge + the audio-stream/IRQ0 tick), and the trace's
+   heavy per-instruction overhead changes the maincpu's wall-clock rate relative to that host thread ->
+   a host-thread race in the disk-task dispatch resolves differently. This is hard to fix/diagnose and is
+   the true remaining floppy blocker.
+STATE (honest): FDC = correctly located (0x98020000), modelled (N82077AA), wired (INTC grp 0x18 + DACK
+0x98010000 software-DMA) -- all faithful, committed, no regression, and exercised by the BOOT FDC init. The
+FORMAT does not reach the FDC in normal runs due to the class-5 dispatch race (only a trace masks it), so
+the DMA wiring can't yet carry a format to completion. NEXT (for a future tick with fresh budget): (1)
+memory-tap the exact class-5 error-decision branch (0x484ADxxx / the disk-op result) in a NORMAL run and
+compare to the trace run to find the diverging value; (2) investigate the DSP-bridge host audio thread as
+the race source (does disabling it / making it synchronous fix the format?); (3) if it's a genuine RTOS
+timing the emulation can't meet, that may be a deeper CPU-timing-accuracy issue.
