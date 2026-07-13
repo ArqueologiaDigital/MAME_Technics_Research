@@ -5,6 +5,24 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(21) — CHORUS/MULTI root cause FOUND: they need an effect-TYPE selected (algorithm upload), not just a send
+Cracked why chorus/multi never activate. Added a temporary [FXSEND] logerror in the tonegen group-0x20 decode,
+ran with `-log`, and pressed the effect toggles. FINDINGS: (1) the KN7000 effect model is PER-PART -- the
+firmware writes sends (0x03xx family) + depths (0x85xx family) on MANY channels (0x06/0x07/0x09/0x0B/0x29/0x2C
++ the whole 0x30-0x3B depth bank), and the driver only decodes a handful (reverb 0x0B, multi 0x29, sdsp 0x09,
++ returns) -- a partial decode, but it does NOT block chorus/multi. (2) MULTI (SEG10 0x04) DOES set its send
+(ch 0x29 -> m_gain_multi=0.63) AND dsp_audio_tick DOES feed unit 1 -- yet output 0xC344 stays 0. ROOT CAUSE:
+the multi DSP ALGORITHM isn't loaded. MULTI/CHORUS are TYPE-selectable effects; the send+feed is correct but
+the kernel needs an effect TYPE selected (the "MULTI EFFECT PAGE n/8" screen) to upload the unit microprogram.
+Without a type, the unit runs null -> 0. REVERB works (algorithm always loaded); SOUND DSP works (SEG0F 0x08
+loads a default type); MULTI/CHORUS have no default type. (3) CHORUS toggle SEG11 0x04 writes NO ch 0x19 --
+so it's not the chorus send toggle; real chorus enable is elsewhere. NET: this is NOT a driver bug -- the
+send/feed path is modelled correctly; the missing piece is USER-side effect-TYPE selection (a panel flow).
+So the "chorus/multi blocked" story is now understood: reach the MULTI EFFECT / CHORUS TYPE select screen,
+pick a type -> the DSP uploads the algorithm -> the existing send+feed produces output. Debug log was
+temporary (added+removed, net-zero code; rebuilt+published clean). Full: notes/per-part-effect-model.md.
+The per-part send/depth DECODE GAP (0x30-0x3B etc.) is a separate, larger, lower-priority future task.
+
 ## TICK 2026-07-13 ~night(20b) — ★ DATA-DIAL RESOLVED toward FAITHFUL: 0x10 is PROCESSED (not inert), visible-consumer question isolated
 Broad RAM diff (0x50060000-70000, u32) while driving 0x10 full-range on the idle home screen: 45 words
 changed, FAR beyond the latch -- the dial's events are actively CONSUMED. The event queue buffer fills
