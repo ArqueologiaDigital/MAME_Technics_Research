@@ -5,6 +5,22 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(24) — P5 advanced: 3 SHARC perf fixes verified UPSTREAM-READY; ALUSAT dependency+order pinned
+Did the one clean, non-gated, non-blocked task from the state summary: audited the SHARC fixes for upstream
+submission. FINDINGS (notes/sharc-upstream-patch-series.md "EXTRACTION" section): the fixes are already
+CLEAN, SHARC-only logical COMMITS (not the "39 entangled hunks" the catalogue feared) -- directly
+`git format-patch`-able. APPLY-TESTED each against a clean upstream MAME (../mame @ 446413a7510):
+- **cd8c720 (native MAC), bb2d516 (native single-fn multiplier), e487bb7 (native DRC ALU average): APPLY
+  CLEANLY to upstream as-is -- IMMEDIATELY submittable.** (Three perf patches, ready today.)
+- ALUSAT (2d308c7/b942366/b1028bd): sharcdrc.cpp hunks apply but the sharcops.hxx interpreter hunk fails at
+  L811 -- it DEPENDS on commit 630c68d's parallel-op op-0x09 AVERAGE line. Submission order for the
+  correctness series: extract 630c68d's sharcops.hxx op-0x09 hunk first (630c68d is mixed: 4 sharc + 2
+  kn7000 files), THEN 2d308c7 -> b942366 -> b1028bd (or rebase the three onto upstream).
+So P5 autonomous prep is now MAXIMAL: 3 patches verified upstream-ready, the ALUSAT dependency/order pinned;
+the rebase + per-patch reverb-WAV A/B + actual submission are the human-supervised finish (Felipe's
+authorship). No code change (analysis + doc). The commits are all clean SHARC-only except b1028bd (1 clock
+line in kn7000.cpp -- drop that hunk) and 630c68d (mixed -- extract its op-0x09 hunk).
+
 ## TICK 2026-07-13 ~night(23) — CORRECTION: effects are LARGELY DONE (4 audible); my recent chorus/multi work was re-discovery
 Finally read the AUTHORITATIVE effects note **notes/effect-multi-unit-routing.md** (should have been first).
 It establishes (2026-07-12): FOUR effects routed + validated audible -- reverb (u0 rec56, production-quality)

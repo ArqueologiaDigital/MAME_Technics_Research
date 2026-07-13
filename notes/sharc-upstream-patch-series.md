@@ -103,3 +103,36 @@ Ordering note: B.1 and D.1 are logically independent (correctness vs perf) and t
 is mechanical but hunk-by-hunk (sharcdrc.cpp has 39 hunks mixing ALUSAT/MAC/multiplier); a submission pass
 should build+A/B each patch in isolation (reverb WAV md5) before sending. NOT done here (submission is
 Felipe's, under his authorship); this catalogue is the complete map.
+
+## ★ EXTRACTION — the patch series ALREADY EXISTS as clean per-fix commits (2026-07-13 audit)
+The "hunk-by-hunk" worry above is OUTDATED: each B/D fix was committed as its own logical, **SHARC-only**
+commit (verified: 0 non-SHARC files touched), so they are directly `git format-patch`-able -- no manual hunk
+splitting needed. In THIS overlay repo (kn7000_mame):
+| Fix | commit(s) | files | non-SHARC files |
+|---|---|---|---|
+| B.1 ALUSAT (add/sub -> whole fixed-ALU family) | **2d308c7**, then **b942366** | sharcdrc.cpp, sharc.h | 0 |
+| B.1 ALUSAT translation-time specialization (+66MHz clock) | **b1028bd** | sharcdrc.cpp (+1 kn7000.cpp: the clock line -- drop that hunk) | 1 (clock only) |
+| D.1 native single-function fixed multiplier (66M fallbacks) | **bb2d516** | sharcdrc.cpp | 0 |
+| D.2 native multifunction fixed MAC family | **cd8c720** | sharcdrc.cpp | 0 |
+| B.2 native fixed-point ALU average (op 0x09) | **e487bb7** | sharcdrc.cpp | 0 |
+Extract with e.g. `git format-patch -1 2d308c7`. All target the BASE `adsp21062_device`, so they apply to any
+2106x SHARC in mainline.
+
+### APPLY-TEST vs a clean upstream MAME checkout (../mame @ 446413a7510, `git apply --check`, 2026-07-13)
+- **cd8c720 (native MAC family), bb2d516 (native multiplier), e487bb7 (native DRC ALU average): APPLY
+  CLEANLY to upstream as-is** -- these three PERF patches are IMMEDIATELY submittable (`git format-patch -1
+  <hash>` -> send). They touch only the multiplier/MAC/average DECODE regions of sharcdrc.cpp, which
+  upstream has unmodified.
+- **2d308c7 / b942366 / b1028bd (ALUSAT): do NOT apply cleanly** -- the sharcdrc.cpp hunks apply (offset), but
+  the **sharcops.hxx interpreter hunk fails at line 811**: 2d308c7 adds ALUSAT to the interpreter's
+  parallel-op ALU (COMPUTE add/sub), and its context includes the `>> 1` AVERAGE line that commit **630c68d**
+  added there first. So the ALUSAT patch DEPENDS on 630c68d's interpreter op-0x09 average. SUBMISSION ORDER
+  for the correctness series: first the interpreter fixed-point AVERAGE from 630c68d (630c68d is MIXED --
+  4 sharc + 2 kn7000 cache-hook files -- so extract just its sharcops.hxx op-0x09 hunk), THEN 2d308c7 ->
+  b942366 -> b1028bd. Or rebase the three ALUSAT commits onto upstream to regenerate their context.
+REMAINING for a real submission (Felipe's, deferred): build + reverb-WAV-A/B each patch in isolation on
+upstream; rewrite commit messages with TRM citations + "restores DRC==interpreter" framing (they already
+carry the essence); handle the ALUSAT/average dependency per the order above. The adsp21065l variant (A) and
+the C-group correctness fixes go in their own later series. **P5 = as complete as autonomous prep can make
+it: 3 perf patches are verified upstream-ready TODAY; the ALUSAT correctness series' dependency + order are
+pinned; the rebase/A/B/submit finish is human-supervised (his authorship).**
