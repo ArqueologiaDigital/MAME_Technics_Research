@@ -1,0 +1,1313 @@
+{
+ "proposed_ports": [
+  {
+   "port_name": "CPL_SEG0",
+   "board": "CPL",
+   "seg_col": 0,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "LCDL 4",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "LCDL 1",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "LCDL 5",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "LCDL 2",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "START/STOP",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "LCDL 3",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "INTRO & ENDING 2",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SYNCHRO & BREAK",
+     "driver_seg": "SEG00",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG1",
+   "board": "CPL",
+   "seg_col": 1,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MEMORY/LOAD",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "SOUL & FUNK",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "CUSTOM",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "BALLAD",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "JAZZ COMBO",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "ROCK & POP",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "BIG BAND & SWING",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "8 & 16 BEAT",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG2",
+   "board": "CPL",
+   "seg_col": 2,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MOVIE SHOW",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "MARCH",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "ENTERTAINER",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "COUNTRY",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "LATIN & WORLD",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "GOSPEL & BLUES",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "BALLROOM",
+     "driver_seg": "SEG01",
+     "driver_mask": "0x80"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "MODERN DANCE",
+     "driver_seg": "SEG02",
+     "driver_mask": "0x10"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG3",
+   "board": "CPL",
+   "seg_col": 3,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "INTRO & ENDING 1",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "TAP TEMPO",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "FILL IN 2",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "FADE OUT",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "FILL IN 1",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "FADE IN",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "VARIATION & MSA 4",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SPLIT POINT",
+     "driver_seg": "SEG03",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG4",
+   "board": "CPL",
+   "seg_col": 4,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "VARIATION & MSA 3",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "ONE TOUCH PLAY",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "VARIATION & MSA 2",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "MUSIC STYLE ARRANGER",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "VARIATION & MSA 1",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "PAD 3",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "PAD 6/SOLO",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "PAD 2",
+     "driver_seg": "SEG04",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG6",
+   "board": "CPL",
+   "seg_col": 6,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "PAD 5/SOLO",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "PERFORMANCE PADS/STOP",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "PAD 4",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "PERFORMANCE PADS/BANK",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "PAD 1",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "PERFORMANCE PADS/AUTO",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "DEMO",
+     "driver_seg": "SEG06",
+     "driver_mask": "0x40"
+    }
+   ]
+  },
+  {
+   "port_name": "CPL_SEG7",
+   "board": "CPL",
+   "seg_col": 7,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MUSIC STYLIST",
+     "driver_seg": "SEG07",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "AUTO MODE",
+     "driver_seg": "SEG07",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "SOUND SET",
+     "driver_seg": "SEG07",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "PLAY CHORD OFF/ON",
+     "driver_seg": "SEG07",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "ARRANGER OFF/ON",
+     "driver_seg": "SEG07",
+     "driver_mask": "0x10"
+    }
+   ]
+  },
+  {
+   "port_name": "CPC_SEG5",
+   "board": "CPC",
+   "seg_col": 5,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "OTHER PARTS/TG",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "HELP",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "CONTRAST UP",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "CONTRAST DOWN",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "MUTE UP 1 (PART 1 ON)",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "MUTE DOWN 1 (PART 1 OFF)",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "MUTE UP 2 (PART 2 ON)",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "MUTE DOWN 2 (PART 2 OFF)",
+     "driver_seg": "SEG05",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPC_SEG8",
+   "board": "CPC",
+   "seg_col": 8,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MUTE UP 3 (PART 3 ON)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "MUTE DOWN 3 (PART 3 OFF)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MUTE UP 4 (PART 4 ON)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "MUTE DOWN 4 (PART 4 OFF)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "MUTE UP 5 (PART 5 ON)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "MUTE DOWN 5 (PART 5 OFF)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "MUTE UP 6 (PART 6 ON)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "MUTE DOWN 6 (PART 6 OFF)",
+     "driver_seg": "SEG08",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPC_SEG9",
+   "board": "CPC",
+   "seg_col": 9,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MUTE UP 7 (PART 7 ON)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "MUTE DOWN 7 (PART 7 OFF)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MUTE UP 8 (PART 8 ON)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "MUTE DOWN 8 (PART 8 OFF)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "MUTE UP 9 (PART 9 ON)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "MUTE DOWN 9 (PART 9 OFF)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "MUTE UP 10 (PART 10 ON)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "MUTE DOWN 10 (PART 10 OFF)",
+     "driver_seg": "SEG09",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPC_SEG10",
+   "board": "CPC",
+   "seg_col": 10,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MUTE UP 11 (PART 11 ON)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "MUTE DOWN 11 (PART 11 OFF)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MUTE UP 12 (PART 12 ON)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "MUTE DOWN 12 (PART 12 OFF)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "MUTE UP 13 (PART 13 ON)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "MUTE DOWN 13 (PART 13 OFF)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "MUTE UP 14 (PART 14 ON)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "MUTE DOWN 14 (PART 14 OFF)",
+     "driver_seg": "SEG0A",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPC_SEG11",
+   "board": "CPC",
+   "seg_col": 11,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "MUTE UP 15 (PART 15 ON)",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "MUTE DOWN 15 (PART 15 OFF)",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MUTE UP 16 (PART 16 ON)",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "MUTE DOWN 16 (PART 16 OFF)",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "PAGE UP",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "PAGE DOWN",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "DISPLAY HOLD",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "EXIT",
+     "driver_seg": "SEG0B",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG0",
+   "board": "CPR",
+   "seg_col": 0,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "TECHNI-CHORD",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "SOUND GROUP 1 (PANEL MEMORY 1)",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "PROGRAM MENUS",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "DISK EASY REC",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "MALLET & ORCH PERC",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "BASS",
+     "driver_seg": "SEG15",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "CUSTOMIZE",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x40"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG1",
+   "board": "CPR",
+   "seg_col": 1,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "SOLO",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "PART SELECT RIGHT 2",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "DISK MENU LOAD",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "DISK PLAY",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "BRASS",
+     "driver_seg": "SEG15",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "SYNTH",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "CUSTOM PANEL",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SD CARD LOAD",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG2",
+   "board": "CPR",
+   "seg_col": 2,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "PART SELECT LEFT",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "PART SELECT RIGHT 1",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "EFFECT MIC",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "VARIATION",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "STRINGS & VOCAL",
+     "driver_seg": "SEG0C",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "PAD",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "FAVORITES",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x40"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG3",
+   "board": "CPR",
+   "seg_col": 3,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "TRANSPOSE R1 (+)",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "CONDUCTOR RIGHT 2",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MULTI",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "SOUND DSP",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "GUITAR",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "TAB ORGAN",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "SOUND GROUP 5 (PANEL MEMORY 5)",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "NEXT BANK",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG4",
+   "board": "CPR",
+   "seg_col": 4,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "TRANSPOSE R1 (-)",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "CONDUCTOR RIGHT 1",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "REVERB",
+     "driver_seg": "SEG0F",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "DIGITAL EFFECT",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "PIANO",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "DIGITAL DRAWBAR",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "SOUND GROUP 4 (PANEL MEMORY 4)",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "BANK VIEW (PANEL MEMORY BANK SELECT)",
+     "driver_seg": "SEG10",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG5",
+   "board": "CPR",
+   "seg_col": 5,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "LCDR 5",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "CONDUCTOR LEFT",
+     "driver_seg": "SEG11",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "CHORUS",
+     "driver_seg": "SEG11",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "SUSTAIN",
+     "driver_seg": "SEG11",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "LCDR 1",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "LCDR 2",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "SOUND GROUP 3 (PANEL MEMORY 3)",
+     "driver_seg": "SEG11",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SOUND GROUP 6 (PANEL MEMORY 6)",
+     "driver_seg": "SEG11",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG6",
+   "board": "CPR",
+   "seg_col": 6,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "LCDR 4",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "TRANSPOSE R2 (+)",
+     "driver_seg": "SEG12",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "EW EXPANSION",
+     "driver_seg": "SEG12",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "SOUND EXPLORER",
+     "driver_seg": "SEG12",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "SOUND GROUP 2 (PANEL MEMORY 2)",
+     "driver_seg": "SEG12",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SOUND GROUP 7 (PANEL MEMORY 7)",
+     "driver_seg": "SEG12",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG7",
+   "board": "CPR",
+   "seg_col": 7,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "LCDR 3",
+     "driver_seg": "UNBRIDGED",
+     "driver_mask": ""
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "TRANSPOSE R2 (-)",
+     "driver_seg": "SEG13",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "MEMORY",
+     "driver_seg": "SEG13",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "SAX & WOODWIND",
+     "driver_seg": "SEG14",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 6,
+     "bit_mask": "0x40",
+     "silk": "SOUND SET (PANEL MEMORY SET)",
+     "driver_seg": "SEG13",
+     "driver_mask": "0x40"
+    },
+    {
+     "sw": 7,
+     "bit_mask": "0x80",
+     "silk": "SOUND GROUP 8 (PANEL MEMORY 8)",
+     "driver_seg": "SEG13",
+     "driver_mask": "0x80"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG8",
+   "board": "CPR",
+   "seg_col": 8,
+   "bits": [
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "ACCORDION REGISTER",
+     "driver_seg": "SEG0E",
+     "driver_mask": "0x20"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "ORGAN & ACCORDION",
+     "driver_seg": "SEG13",
+     "driver_mask": "0x08"
+    }
+   ]
+  },
+  {
+   "port_name": "CPR_SEG9",
+   "board": "CPR",
+   "seg_col": 9,
+   "bits": [
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "DRUM KITS",
+     "driver_seg": "SEG14",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "WORLD",
+     "driver_seg": "SEG0D",
+     "driver_mask": "0x10"
+    }
+   ]
+  },
+  {
+   "port_name": "CPSD_SDSW",
+   "board": "CPSD",
+   "seg_col": 29,
+   "bits": [
+    {
+     "sw": 0,
+     "bit_mask": "0x01",
+     "silk": "SW903 REV (SKIP/SEARCH <<)",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x01"
+    },
+    {
+     "sw": 1,
+     "bit_mask": "0x02",
+     "silk": "SW904 FF (SKIP/SEARCH >>)",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x02"
+    },
+    {
+     "sw": 2,
+     "bit_mask": "0x04",
+     "silk": "SW905 STOP",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x04"
+    },
+    {
+     "sw": 3,
+     "bit_mask": "0x08",
+     "silk": "SW906 PLAY/PAUSE",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x08"
+    },
+    {
+     "sw": 4,
+     "bit_mask": "0x10",
+     "silk": "SW901 VOLUME -",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x10"
+    },
+    {
+     "sw": 5,
+     "bit_mask": "0x20",
+     "silk": "SW902 VOLUME +",
+     "driver_seg": "SDSW",
+     "driver_mask": "0x20"
+    }
+   ]
+  }
+ ],
+ "unbridged": [
+  "CPL SEG1/SW6 (bit 0x40) BIG BAND & SWING -- no driver genre bit (likely fires driver SEG01 0x02 RHYTHM ORGANIST, unproven)",
+  "CPL SEG2/SW5 (bit 0x20) GOSPEL & BLUES -- no driver genre bit (likely fires driver SEG02 0x40 RHYTHM 60s & 70s, unproven)",
+  "CPR SEG1/SW6 (bit 0x40) CUSTOM PANEL -- no matching driver port",
+  "CPR SEG5/SW0 (bit 0x01) LCDR 5 -- LCD-RIGHT soft key, no driver binding",
+  "CPR SEG5/SW4 (bit 0x10) LCDR 1 -- LCD-RIGHT soft key, no driver binding",
+  "CPR SEG5/SW5 (bit 0x20) LCDR 2 -- LCD-RIGHT soft key, no driver binding",
+  "CPR SEG6/SW0 (bit 0x01) LCDR 4 -- LCD-RIGHT soft key, no driver binding",
+  "CPR SEG7/SW0 (bit 0x01) LCDR 3 -- LCD-RIGHT soft key, no driver binding"
+ ],
+ "orphan_driver_buttons": [
+  "SEG01 0x02 \"RHYTHM ORGANIST\" -- no CPL silk cell (candidate landing spot for BIG BAND & SWING)",
+  "SEG02 0x40 \"RHYTHM 60s & 70s\" -- no CPL silk cell (candidate landing spot for GOSPEL & BLUES)",
+  "SEG06 0x80 \"CUSTOM PANEL (guess)\" -- guesses at CPL SEG6/SW7, which is an UNPOPULATED matrix slot (diode D1188, no switch); no physical CPL button",
+  "SEG0D 0x40 \"DISK MENU\" -- no populated CPR cell (extra event, likely other-board/duplicate)",
+  "SEG11 0x01 \"ACCOMP 2 ON\" -- no populated CPR cell (mixer/part-toggle event, not a CPR switch)",
+  "SEG11 0x10 \"RIGHT 1 ON\" -- no populated CPR cell (part-toggle; alt candidate for a PART SELECT press)",
+  "SEG11 0x20 \"RIGHT 2 ON\" -- no populated CPR cell (part-toggle; alt candidate for a PART SELECT press)",
+  "SEG12 0x01 \"ACCOMP 1 ON\" -- no populated CPR cell (mixer/part-toggle event)",
+  "SEG13 0x01 \"LEFT ON\" -- no populated CPR cell (part-toggle; alt candidate for a PART SELECT press)",
+  "SEG18 0x01 \"Fn 1009 (CPC)\" -- valuator/system placeholder (wire ADDR 0xD2), not a board switch cell",
+  "SEG20 0x01 \"Fn 1020\" -- system placeholder (wire ADDR 0x17), not a board switch cell",
+  "SEG16/SEG17/SEG19/SEG1A -- VALUATOR wire ports (DATA dial / pitchbend / TEMPO-PROGRAM encoder, ADDR 0xD0/0xD1/0xD3/0x10); analog inputs to the sub-CPUs, not SEGxSW switch cells (map to driver DIAL / TEMPO_KNOB, not a button bit)",
+  "SEG1B/SEG1C/SEG1E/SEG1F -- no-wire IPT_UNUSED placeholder ports (no panel-serial path)",
+  "SEG1D -- no-wire placeholder = the descriptor slot (normSeg 0x1D) that the CPSD transport switches normalize onto; the actual buttons live on the driver SDSW port (GPIO 0x9CC00008), not here",
+  "DIAL / TEMPO_KNOB / VOL_MAIN / VOL_APCSEQ / VOL_MIC / VOL_LINEIN / REARSW -- analog/config controls (CPR rotary encoder + CPL ADC pots + JACK-board rear switch), not part of any SEGxSW switch matrix"
+ ],
+ "concerns": "SCRAMBLE STATUS PER BOARD (drives how much to trust each bit): CPL and CPC bridge by POSITION -- physical SEGn -> wire ADDR 0xC0+n -> normSeg n -> driver SEGn, and DATA bit = 1<<SW, so within CPL_SEGn/CPC_SEGn the port bit ALREADY equals the driver mask for SEG00/03/04/05/06/07/08/09/0A/0B (identity, confirmed cell-for-cell). CPR is a FULL firmware scramble: within a CPR_SEGn port the bit_mask (1<<SW) does NOT equal the driver mask -- each physical column repacks buttons across several driver normSegs (e.g. CPR_SEG0 spans driver SEG0C/0D/0E/15). Every CPR bridge is by function/label, never by position, and I have preserved the driver_seg/driver_mask so the rename keeps each button firing the same event.\n\nCPL genre columns (CPL_SEG1/CPL_SEG2) are the weakest area: the driver's SEG01/SEG02 genre bit-order came from event-arg probing that notes/panel-matrix-service-manual.md flagged as CONTAMINATED by mode-gating, so I bridged by genre NAME (crossing between driver SEG01 and SEG02). Exact-name matches (MEMORY, CUSTOM, ENTERTAINER, MOVIE&SHOW, MARCH, LATIN&WORLD, BALLROOM, COUNTRY, MODERN DANCE, ROCK&POP, BALLAD) are solid; approximate ones -- SOUL & FUNK~\"SOUL & R&B\" (SEG02 0x04), JAZZ COMBO~\"JAZZ & SWING\" (SEG02 0x02), 8 & 16 BEAT (SEG02 0x80, silk also readable as \"R & B\") -- are medium/low and a live per-bit probe on the RHYTHM screen would confirm the order. BIG BAND & SWING and GOSPEL & BLUES have no driver bit; the two orphan driver genres (ORGANIST, 60s&70s) are their natural home but there is no name basis to assert it -- left UNBRIDGED both ways.\n\nDRIVER NAMES THAT SHOULD BE RENAMED (wire binding is correct, PORT_NAME is wrong): CPL_SEG0 LCDL 1-5 soft-keys currently sit on driver part-OFF names (ACCOMP 1/2 OFF, RIGHT 1/2 OFF, LEFT OFF) -- low confidence, the LCDL-to-part mapping is not clean. CPL_SEG7/SW1 AUTO MODE = driver \"APC / CHORD FINDER\"; CPL_SEG7/SW2 SOUND SET = driver \"SOUND ARRANGER\". CPC OTHER PARTS/TG (SEG05 0x01) = driver \"DRUM 1 OFF\" (KN5000 folklore); CPC EXIT (SEG0B 0x80) = driver \"ACCOMP 5 ON\". Renaming these is safe -- only the label changes.\n\nMUTE MATRIX caveat: CPC MUTE UP/DOWN N bridge to driver PART N ON/OFF (up=ON/even bit, down=OFF/odd bit); the wire binding is identity-solid, but notes/panel-matrix-service-manual.md found the firmware PART INDEX each mute actually drives is not a clean 1..16 order, so the driver's PART-NUMBER labeling (not the bind) may need firmware re-verification.\n\nCPR AMBIGUOUS GROUPS (LOW): the three PART SELECT cells (LEFT/RIGHT1/RIGHT2) and three CONDUCTOR cells (LEFT/RIGHT1/RIGHT2) map onto the driver's three undifferentiated PART SELECT bits (SEG0D 0x02, SEG0E 0x01/0x02) and three CONDUCTOR bits (SEG0F/SEG10/SEG11 0x02); the specific L/R1/R2->bit assignment shown is ARBITRARY. PART SELECT presses may instead fire the part-toggle orphans (LEFT ON SEG13 0x01 / RIGHT 1 ON SEG11 0x10 / RIGHT 2 ON SEG11 0x20). TRANSPOSE: R1(+/-) -> driver TRANSPOSE -/+ (medium); R2(+/-) -> driver R1/R2 OCTAVE -/+ (LOW -- the R2-rocker=OCTAVE-rocker equivalence and the +/- polarity within each pair are unverified). SOUND GROUP 1-8 -> PANEL MEMORY 1-8 bridged by NUMBER (small permutation risk); SOUND SET -> PANEL MEMORY SET; BANK VIEW -> PANEL MEMORY BANK SELECT.\n\nCPSD IS NOT A SCAN MATRIX: the SD panel has no sub-CPU and no SEGxSW matrix -- six discrete tactile switches read as a main-CPU GPIO byte (0x9CC00008, active-low, bits 0-5). The CPSD_SDSW port above is a REPURPOSING to fit the schema: seg_col=29 is the firmware descriptor segment 0x1D these switches normalize onto, and sw = the GPIO/descriptor bit (= event 0x20B5..0x20BA). These are already correctly bound in the driver to the dedicated SDSW port (masks 0x01-0x20), NOT to any SEGxx port; the driver's SEG1D placeholder is deliberately empty. The SD-slot cover detect SW921 is on the separate SD I/F block -> driver SDCOVER config (open => ERROR 93), not a matrix cell.\n\nDRIVER SEG NAME != physical column: because CPR is scrambled, a future rename must NOT simply relabel driver SEGnn ports to CP*_SEGn -- CPR_SEGn is a NEW port whose bits gather buttons from multiple driver normSegs. The cleanest implementation keeps the physical CP{board}_SEG{col} ports as the user-facing input, each bit forwarding to the existing normSeg/wire path (driver_seg/driver_mask) so panel_scan/seg_to_addr still emit the same [ADDR,DATA] frame."
+}

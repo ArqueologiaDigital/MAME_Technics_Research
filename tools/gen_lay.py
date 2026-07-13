@@ -605,3 +605,29 @@ if _os.path.exists(_nud):
     else:
         print(f"WARNING: {_st['refmismatch']} nudge ref-mismatches -- NOT applied (indexing drifted):")
         for _g,_i,_e,_a in _mism[:10]: print(f"  {_g}.{_i}: expected '{_e}' got '{_a}'")
+
+# --- Adopt the physical CP{board}_SEG{col} port names (KN5000 style): rewrite each clickable
+#     button's inputtag/inputmask from the driver's (SEGxx, mask) to its physical (board SEG-column,
+#     SW-row) per the schematic-derived map notes/panel-physical-scan-map.json. Binding is preserved.
+import json as _json, re as _re
+_MAP_PATH=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),"..","notes","panel-physical-scan-map.json")
+if _os.path.exists(_MAP_PATH):
+    _pm=_json.load(open(_MAP_PATH)); _rl={}
+    for _p in _pm["proposed_ports"]:
+        if _p["board"] not in ("CPL","CPC","CPR"): continue
+        for _b in _p["bits"]:
+            _ds=(_b.get("driver_seg") or "").upper(); _dm=_b.get("driver_mask") or ""
+            if _ds.startswith("SEG") and _dm:
+                _rl[(_ds,int(_dm,16))]=(_p["port_name"],int(_b["bit_mask"],16))
+    _lay=open(_LAY_PATH).read(); _cnt=[0,0]
+    def _sub(m):
+        _k=(m.group(1).upper(),int(m.group(2),16))
+        if _k in _rl:
+            _pn,_bit=_rl[_k]; _cnt[0]+=1
+            return f'inputtag="{_pn}" inputmask="0x{_bit:02x}"'
+        _cnt[1]+=1
+        return ""  # dead port after the rename (orphan/unbridged/valuator) -> make element decorative
+    _lay=_re.sub(r'inputtag="(SEG[0-9A-Fa-f]{2})" inputmask="(0x[0-9a-fA-F]+)"',_sub,_lay)
+    _lay=_re.sub(r' ?inputtag="\{port_name\}"( inputmask="[^"]*")?',"",_lay)  # strip unfilled template artifact
+    open(_LAY_PATH,"w").write(_lay)
+    print(f"RELABELED {_cnt[0]} layout buttons to CP{{board}}_SEG{{col}} physical ports ({_cnt[1]} left un-mapped)")

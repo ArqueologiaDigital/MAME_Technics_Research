@@ -30,7 +30,7 @@ public:
 	kn7000_cpanel_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	// Button + analog input ports (set by the main driver; referenced by tag).
-	template <typename T> void set_seg_port(unsigned n, T &&tag) { m_seg[n].set_tag(std::forward<T>(tag)); }
+	template <typename T> void set_phys_port(unsigned n, T &&tag) { m_phys[n].set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_dial_port(T &&tag) { m_dial.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_volapcseq_port(T &&tag) { m_volapcseq.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_tempoknob_port(T &&tag) { m_tempoknob.set_tag(std::forward<T>(tag)); }
@@ -85,7 +85,7 @@ private:
 	devcb_write8     m_rxd_cb;
 
 	// Input ports (set by the main driver via the set_*_port() helpers above).
-	optional_ioport_array<0x21> m_seg;     // one per normalized segment 0x00-0x20
+	optional_ioport_array<22> m_phys;      // one per physical board SEG column (CP{board}_SEG{col})
 	optional_ioport m_dial;                // DATA dial (rotary encoder, wire 0x10)
 	optional_ioport m_volapcseq;           // APC/SEQ VOLUME slider (wire 0xD2)
 	optional_ioport m_tempoknob;           // TEMPO/PROGRAM knob (relative encoder, wire 0x17)
