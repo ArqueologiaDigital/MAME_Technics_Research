@@ -33,6 +33,18 @@ for m in $MODELS; do
   cp -u "$BUILD/roms/$m"/*.rom "$DEST/roms/$m/"
 done
 
+# 2b) MAME plugins. The "layout" plugin registers the cb_layout callback that EXECUTES a
+#     layout's <script> block -- without it, layout scripts silently never run. The KN7000
+#     volume faders are made draggable by such a script (tools/slider_lib.lua), so the
+#     emulator MUST ship the plugins dir or the sliders can't be dragged. Bundle them all
+#     (small, ~1 MB) so the folder stays self-contained; run.sh points -pluginspath here.
+if [ -d "$BUILD/plugins" ]; then
+  rm -rf "$DEST/plugins"
+  cp -r "$BUILD/plugins" "$DEST/plugins"
+else
+  echo "warning: no plugins dir at $BUILD/plugins -- layout <script> (draggable sliders) will NOT work"
+fi
+
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
@@ -47,7 +59,9 @@ MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
 # warnings screen, so the emulator boots straight in without needing a click to dismiss it.
-exec ./kn7000 "$MODEL" -rompath ./roms -skip_gameinfo "$@"
+# -pluginspath ./plugins ensures MAME finds the bundled "layout" plugin, which runs the
+# layout <script> that makes the volume faders draggable with the mouse.
+exec ./kn7000 "$MODEL" -rompath ./roms -pluginspath ./plugins -skip_gameinfo "$@"
 SH
 chmod +x "$DEST/run.sh"
 
@@ -86,6 +100,9 @@ be produced (binary + its own copies of the libraries + loader).
 
 ## What works so far
 - **KN7000** boots to its home screen; the front panel (buttons + LEDs) is wired; MIDI-in works.
+  The four **volume faders** (MAIN / APC-SEQ / MIC / LINE-IN) are draggable with the mouse — click
+  and drag a knob, or click anywhere on its track. (This needs the bundled `plugins/` folder, which
+  `run.sh` points at via `-pluginspath`; running the binary without it disables the drag script.)
 - **KN7000 can now make sound**, driven by the real firmware voice engine. It is an opt-in
   switch because turning it on also lets boot advance into the (still unfinished) SD subsystem,
   so the machine then rests on the SD menu instead of the home screen:

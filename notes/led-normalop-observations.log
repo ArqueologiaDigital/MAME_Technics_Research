@@ -1,0 +1,9 @@
+/tmp/cust.log:CUST CUSTOMIZE -> (nothing lit)
+/tmp/cust.log:CUST DISK-MENU -> (nothing lit)
+/tmp/cust.log:CUST CUSTOMIZE-hold2 -> (nothing lit)
+/tmp/cust.log:CUST COMPLETE
+/tmp/obs.log:OBS CUSTOMIZE (SEG0C.40) -> {}
+/tmp/obs.log:OBS FAVORITES (SEG0E.40) -> {cpr_led97}
+/tmp/obs.log:OBS CONDUCTOR-1 (SEG0F.02) -> {}
+/tmp/obs.log:OBS CONDUCTOR-2 (SEG10.02) -> {cpr_led35,cpr_led64,cpr_led81}
+/tmp/obs.log:OBS CONDUCTOR-3 (SEG11.02) -> {cpr_led65}

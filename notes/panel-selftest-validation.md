@@ -128,3 +128,24 @@ does NOT weaken the LED validation: the switch-class (test) LED EQUALS the norma
 tools/panel_selftest.lua works best one-button-at-a-time (a quick "does button X light LED Y?" check).
 To get the full interactive test screen would need modeling the sub-CPU power-on key report OR forcing
 the MILK test-window object create (StestWindowProc 0x484A4A2B / 0x50009) -- both larger efforts.
+
+## ★★ 2026-07-13 — FULL panel-LED mapping review (index only, colours untouched per Felipe)
+Live Panel SW&LED self-test sweep (press each button, read the cpl/cpr LED it lights) + PANEL_LED + the
+CPL/CPC/CPR schematics. Applied to gen_lay.py:
+- **ALL 16 RHYTHM GROUP genre LEDs were mis-bound** by a STALE local GENRE_LED dict (the old genreled2.lua
+  values cpl_led0-3/8-11/16-19/25-27). The live sweep lights EXACTLY PANEL_LED[(SEG,mask)] on each genre:
+  8&16 BEAT=cpl_led2, ROCK&POP=cpl_led18, BALLAD=cpl_led34, JAZZ&SWING=cpl_led50, BALLROOM=cpl_led1,
+  MOVIE&SHOW=cpl_led17, ENTERTAINER=cpl_led33, ORGANIST=cpl_led49, 60s&70s=cpl_led10, MODERN DANCE=cpl_led26,
+  SOUL&R&B=cpl_led42, COUNTRY&WESTERN=cpl_led58, MARCH&WALTZ=cpl_led9, LATIN&WORLD=cpl_led25, CUSTOM=cpl_led41,
+  MEMORY=cpl_led57. FIX: deleted the local GENRE_LED dict so GENRE_LED=PANEL_LED. (MEMORY=cpl_led57 does NOT
+  collide with beat-1 cpl_led24 -> the earlier "leave MEMORY dark" workaround is retracted.)
+- **~20 unbound button LEDs bound** to PANEL_LED[(SEG,mask)]: CPL - MUSIC STYLIST cpl_led28, AUTO SETTING
+  cpl_led12, VARIATION 1-4 cpl_led3/11/19/27, FADE IN/OUT cpl_led35/51, INTRO&ENDING 1/2 cpl_led0/8, FILL IN
+  1/2 cpl_led43/59; CPR - SOLO cpr_led32, PART SELECT 1-3 cpr_led34/35/36, CONDUCTOR 1-3 cpr_led7/64/65,
+  TRANSPOSE -/+ cpr_led96/39, OCTAVE -/+ cpr_led38/37, BANK VIEW cpr_led12, CUSTOMIZE cpr_led0, FAVORITES
+  cpr_led2, SD LOAD cpr_led9.
+- LEFT UNBOUND (no firmware LED / uncertain): DISK IN USE (status), TEMPO/PROGRAM knob LED (no signal),
+  CUSTOM PANEL (SEG06 0x80 not in PANEL_LED), the 3 split-point placeholders (one is likely cpl_led3).
+Distinct bound LED outputs 13 -> 94, no duplicates. CONFIDENCE: genre + CPL = sweep-verified (high); CPR =
+PANEL_LED (validated map; the sweep stalled before reaching CPR, so hardware-validate via F3+F4). Colours
+were NOT changed. Supersedes the genreled2.lua genre-LED map entirely.

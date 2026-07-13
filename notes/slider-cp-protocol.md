@@ -225,3 +225,56 @@ RATE-LIMIT emitted encoder events (e.g. ≤1 per N ms) AND scale the adjuster de
 units per emitted +1), then tune visually. That tuning is the bulk of the work and why this is a focused
 future task, not a tail-of-session rush. (The acceleration itself is faithful to a real detented TEMPO knob —
 turn slow = fine, turn fast = coarse; the challenge is only mapping a mouse DRAG onto that without a burst.)
+
+## ★★ RESOLVED 2026-07-13 — APC/SEQ null LED (driver-side) + TEMPO/PROGRAM knob draggable (shipped)
+Workflow RE (dispatch/handler traces, adversarially re-verified, both HIGH confidence):
+
+**APC/SEQ VOLUME "null"/soft-takeover LED — now BOUND driver-side.** The main CPU NEVER emits a frame
+for it: byte-grep of the whole image shows the slider latch 0x5006BEA6 has exactly ONE reference (the
+0xD2 handler's own write @0x484ad779) and NO reader — the firmware literally cannot compare slider-vs-
+value; the real panel sub-CPU does it in hardware. Faithful driver model (kn7000.cpp panel_scan):
+`led = ( remap[(RAM 0x5006BEA6 >>1)&0x7F] == RAM 0x5006BEAD )`, remap = ROM ramp 0x48613508 (identity
+0..125, then 127,127). The 0xD2 handler forces setting 0x5006BEAD = remap[slider>>1] on every slider
+move (LED on); MUTE UP/DOWN 9 edit 0x5006BEAD via ptr-table 0x48613098[22] WITHOUT moving the slider
+(LED off). VERIFIED live: after driving VOL_APCSEQ, setting=0x20==remap=0x20 and output apcseq_vol_led=1.
+(The 4 pots: MAIN=0xD0 latch 0x5006BEA3 remap 0x48613488, MIC=0xD1 latch 0x5006BEA1 remap 0x48613288,
+APC/SEQ=0xD2 latch 0x5006BEA6 remap 0x48613508 setting 0x5006BEAD, LINE-IN=0xD3 latch 0x5006BEA2 remap
+0x48613388; only 0xD2's setting addr is confirmed — MAIN/MIC/LINE-IN null LEDs would need their setting
+bytes traced.)
+
+**TEMPO/PROGRAM knob 0x17 — now DRAGGABLE.** Handler 0x484AD6A0 (dispatch tbl 0x48613108[7]) latches the
+raw wire uint8 verbatim to 0x5006BE9F + control-record 0x5006BEA8 (ptr tbl 0x48613088[7]); NO remap/scale;
+a downstream tempo routine DIFFS consecutive positions (bigger diff = accel). Driver: PORT_ADJUSTER
+"TEMPO_KNOB" + layout clickarea "tempo_click" (appended LAST in right_block so it doesn't shift nudge
+indices) registered via add_simplecounter_knob; panel_scan slews the adjuster into [0x17, pos&0xFF] at
+±1 PER SCAN (stays in the linear region — a big single diff rails the tempo). VERIFIED live: driving
+TEMPO_KNOB 50→95 stepped 0x5006BE9F 0x00→0x2C (44 clean +1 steps) → tempo moves. Same first-scan-silent
+handshake guard as the sliders. Tunable: raise the per-scan step cap or add_simplecounter_knob scale for
+faster response; widen the adjuster range for more continuous rotation.
+
+**TEMPO/PROGRAM knob LED — LEFT UNBOUND (undetermined).** RE found NO firmware signal dedicated to the
+knob's green_led (164,336 in the layout). The tempo-STATE indicators are the already-bound 4 BEAT LEDs
+(cpl_led24/32/40/48); SetDialLed(idx4)=cpr_led97 is a distinct "Dial" LED of unconfirmed physical
+identity — binding it to the knob would be a guess. Left dark per "better dark than wrong". NEXT if
+pursued: live LED-shadow probe while interacting with the knob, or the service-manual PANEL SW&LED list.
+
+## ★★ CORRECTION 2026-07-13 — APC/SEQ VOLUME LED is a REAL matrix LED = cpl_led20 (RAM-probe hack removed)
+The earlier "synthesize it driver-side from RAM 0x5006BEA6/BEAD" approach was a hack (Felipe rejected it).
+The LED is a genuine CPL matrix LED with a definite (reg,bit), found from the service-manual CPL schematic
+(DIAGRAM-15, p128): **LED D1179 "APC/SEQENCER"**, GREEN (LNJ382GKGX02), in the **SEG4 column, reg2 row** ->
+**cpl_led20** (reg2*8 + bit4). Calibration: the reg2 row is D1115/D1131/D1147/D1163/D1179 = SEG0..4;
+SYNCHRO & BREAK = D1115 = cpl_led16 (firmware-validated), so the row = cpl_led16..20. EMPIRICALLY confirmed
+in the Panel SW&LED self-test (flag 0x5006BFB2=1): pressing ROCK&POP (SEG02 0x20) lights **cpl_led18** (reg2
+bit2, its button LED) while cpl_led20 stays dark -> cpl_led20 is the NON-button LED in that row = APC/SEQ.
+It is one of only two non-button CPL LEDs (the other is a split-point LED, D1157 "SPLIT POINT" = reg0 bit3 =
+cpl_led3); per the manual §8.5, only DEMO (all-CPL) lights the non-button ones in the test.
+FIX: layout binds the APC/SEQ green_led to name="cpl_led20"; panel_led_frame drives it the normal way. The
+driver-side RAM synthesis + m_apcseq_led output are DELETED. LED-test handler = 0x484A0CB0 (per-switch LED
+from PanelSwitchClassTable), special classes 0xF0-0xF7 for multi-LED buttons (0xF0 = the 4 START/STOP LEDs =
+reg3-6 bit0 = the "no dedicated LED" fallback). Disasm helper: tools/dis.sh.
+LIMITATION (honest): in the emulator's reachable states the MAIN CPU never commands cpl_led20 (the RE showed
+the slider latch 0x5006BEA6 has no reader -> the soft-takeover "does the slider match the value" compare is
+done by the panel SUB-CPU, which we model only at the protocol level, not its internal LED logic). So the LED
+stays dark in normal use for now -- but the binding is faithful (it lights whenever cpl_led20 is driven, e.g.
+a real unit's DEMO-lights-all-CPL). Restoring the *visible* soft-takeover faithfully would need modelling the
+sub-CPU's pot-vs-target comparison, not a main-CPU RAM peek.

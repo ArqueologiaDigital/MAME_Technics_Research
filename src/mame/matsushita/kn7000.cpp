@@ -102,6 +102,7 @@
 #include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
+#include "kn7000_cpanel.h"        // control-panel HLE (buttons, LEDs, analog controls)
 
 #include "screen.h"
 #include "speaker.h"          // first-cut audio output
@@ -805,9 +806,8 @@ public:
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
 		, m_volapcseq(*this, "VOL_APCSEQ")
-		, m_cpl_leds(*this, "cpl_led%u", 0U)
-		, m_cpc_leds(*this, "cpc_led%u", 0U)
-		, m_cpr_leds(*this, "cpr_led%u", 0U)
+		, m_tempoknob(*this, "TEMPO_KNOB")
+		, m_cpanel(*this, "cpanel")
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
@@ -854,13 +854,8 @@ private:
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	required_ioport m_volapcseq;           // front-panel APC/SEQ VOLUME slider (0-100 adjuster)
-	uint8_t m_vol_apcseq_prev = 0;         // last DATA byte for the APC/SEQ pot
-	bool    m_vol_apcseq_synced = false;   // false until the first scan records the pot (no startup frame)
-	uint8_t m_dial_prev = 0;               // last IPT_DIAL position delivered for the DATA dial (wire 0x10)
-	bool    m_dial_synced = false;         // false until the first scan records the dial (no startup frame)
-	output_finder<512> m_cpl_leds;
-	output_finder<64> m_cpc_leds;
-	output_finder<512> m_cpr_leds;
+	required_ioport m_tempoknob;           // front-panel TEMPO/PROGRAM knob (0-100 adjuster; a RELATIVE encoder)
+	required_device<kn7000_cpanel_device> m_cpanel;   // control-panel HLE (buttons, LEDs, analog controls)
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
@@ -1137,14 +1132,13 @@ private:
 	// scanned from the ioports and reported back as 2-byte [ADDR][DATA] frames
 	// on the panel RX (only delivered to the firmware once the MN10300 core
 	// takes SIO interrupts -- see notes/panel-serial-protocol.md).
-	TIMER_CALLBACK_MEMBER(panel_scan);
-	void panel_led_frame(uint8_t addr, uint8_t data);
-	uint8_t m_panel_resp[64] = { };        // pending panel->main bytes (replies + button events)
-	void panel_queue(const uint8_t *bytes, int n);  // append + kick the ATN delivery
-	int     m_panel_resp_len = 0, m_panel_resp_pos = 0;
-	TIMER_CALLBACK_MEMBER(panel_event);    // deferred ATN edges / RX-byte delivery
-	emu_timer *m_panel_evt = nullptr;      // one-shot; param: 1=ATN edge, 2=deliver RX byte
-	emu_timer *m_panel_txdone = nullptr;   // one-shot: sync-transfer complete -> group 0x11
+	// The panel-HLE frame parse / LED decode / button+analog scan now lives in
+	// kn7000_cpanel_device; the driver keeps only the main-CPU SIO-transfer
+	// completion (group 0x11) and the MAIN VOLUME -> DSP master-gain poll.
+	TIMER_CALLBACK_MEMBER(panel_txdone_cb); // one-shot: SIO ch0 sync-transfer complete -> group 0x11
+	emu_timer *m_panel_txdone = nullptr;
+	TIMER_CALLBACK_MEMBER(volume_scan);     // periodic MAIN VOLUME slider -> DSP master gain
+	emu_timer *m_vol_timer = nullptr;
 
 	// --- CPSD (SD sub-CPU MN102H60) HLE on SIO channel 2 --------------------
 	// The SD card is reached over SIO ch2. Delivery model (RE 2026-07-08): the
@@ -1160,10 +1154,6 @@ private:
 	// main->CPSD bytes. Frame payload semantics still under RE.
 	void cpsd_queue(const uint8_t *bytes, int n);   // (unused since the ch2=MIDI-2 finding; kept for a future SD transport)
 	bool    m_cpsd_probed = false;         // (retired with the ch2 probe)
-	emu_timer *m_panel_timer = nullptr;
-	int     m_panel_pos = 0;               // position within the 7-byte TX frame
-	uint8_t m_panel_p1 = 0, m_panel_p2 = 0; // frame payload bytes (positions 2 and 4)
-	uint8_t m_btn_prev[0x21] = { }; // last scanned state, one per normSeg 0x00-0x20
 
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 };
@@ -1630,7 +1620,7 @@ void kn7000_state::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		// Deferred via timer: pass 1 runs with IE clear and acks its DETECT on
 		// exit, so a synchronous assert here would be wiped.
 		if (((prev & 0x00c0) == 0x00c0) && ((m_intc_280 & 0x00c0) == 0x0080))
-			m_panel_evt->adjust(attotime::from_usec(60), 1);
+			m_cpanel->atn_rearm();
 		return;
 	}
 	if (reg < 0x08)
@@ -2009,8 +1999,8 @@ void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		// low3=7 and state:=8): the panel now sends its queued reply, one byte per
 		// group-0x10 interrupt (the state-8 handler reads 0x34000809 into the ring
 		// at 0x5006BDB4 and bumps the head that the handshake success test checks).
-		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x4000) && m_panel_resp_pos < m_panel_resp_len)
-			m_panel_evt->adjust(attotime::from_usec(60), 2);
+		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x4000))
+			m_cpanel->rx_enable();
 		break;
 	case 0x4:                    // control (byte @+4)
 		if (ACCESSING_BITS_0_7)
@@ -2061,41 +2051,9 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 		// ALWAYS deferred (an ISR-context write + synchronous assert is wiped by
 		// the exit ack). Safe with IAGR latched at accept.
 		m_panel_txdone->adjust(attotime::from_usec(40), 3);
-		// The main CPU transmits 7-byte FRAMES with interleaved line syncs:
-		//   pos 0 sync, 1 sync, 2 PAYLOAD1, 3 sync, 4 PAYLOAD2, 5 sync, 6 sync
-		// (TX sites: sender 0x484AC5E9; states 1..6 at 0x484AC7FA / 0x484AC8D3 /
-		// 0x484AC977 / 0x484AC9FF / 0x484ACA96 / 0x484ACAEA). Parse by position.
-		switch (m_panel_pos)
-		{
-		case 2: m_panel_p1 = data; break;
-		case 4: m_panel_p2 = data; break;
-		}
-		if (++m_panel_pos >= 7)
-		{
-			m_panel_pos = 0;
-			// Frame complete. Handshake commands (payload1 = 0x1F/0x1D/0x1E init,
-			// 0x20/0xE0 ping CPL/CPR, 0x29/0xDD -- the boot's observed sequence)
-			// are answered with a TYPE-3 sync packet and an ATN pulse on the
-			// panel's external-interrupt pin (group 0x1A, EXTMD bits 7:6). All
-			// other frames carry LED-register updates [addr][data].
-			switch (m_panel_p1)
-			{
-			case 0x1f: case 0x1d: case 0x1e: case 0x20: case 0xe0: case 0x29: case 0xdd:
-			{
-				// TYPE-3 sync reply; delivery via the ATN pulse (edge 2 rides the
-				// EXTMD 11b->10b re-arm; bytes deliver one per group-0x10
-				// interrupt once the ISR's pass 2 sets RX enable).
-				static constexpr uint8_t sync_reply[2] = { 0x18, 0x00 };
-				panel_queue(sync_reply, 2);
-				break;
-			}
-			case 0x00:
-				break;                     // idle/padding frame
-			default:
-				panel_led_frame(m_panel_p1, m_panel_p2);
-				break;
-			}
-		}
+		// The main CPU transmits 7-byte frames with interleaved line syncs; the
+		// panel HLE parses them, decodes LED writes, and queues replies.
+		m_cpanel->tx_byte(data);
 		break;
 	case SIO_MIDI1:
 	case SIO_MIDI2:
@@ -2107,68 +2065,18 @@ void kn7000_state::sio_tx_byte(int ch, uint8_t data)
 	}
 }
 
-// One decoded LED-command frame: ADDR selects an 8-LED register on one of the
-// panel boards, DATA is that register's 8 LED bits. The board is chosen by the
-// bank field in ADDR bits 6-7; the register index is ADDR bits 0-5. This mirrors
-// the firmware's LED shadow layout (notes/panel-serial-protocol.md).
-// TODO: the exact ADDR->(board,physical LED) table still needs cross-checking
-// against the schematic silk-screen; the structural decode below is provisional.
-void kn7000_state::panel_led_frame(uint8_t addr, uint8_t data)
-{
-	// addr = panel(bits 7:6; 0x00=right/CPR, 0xC0/0xE0=left/CPL) | reg(bits 5:0).
-	// Each data bit is one LED of register `reg`. Index reg*8+bit within the bank.
-	// (Provisional: reg<->physical-LED map is derived in notes/panel-leds.md but
-	// not yet bound in the layout; both banks are wired for when it is.)
-	const int reg = addr & 0x3f;
-	const bool left = (addr & 0xc0) != 0;
-	for (int bit = 0; bit < 8; bit++)
-	{
-		const int led = reg * 8 + bit;
-		const int on = BIT(data, bit);
-		if (led < 512) { if (left) m_cpl_leds[led] = on; else m_cpr_leds[led] = on; }
-	}
-	logerror("%s: panel LED frame addr=%02X data=%02X\n",
-		machine().describe_context(), addr, data);
-}
 
-// Queue panel->main bytes (a handshake reply or a button-event packet) and start
-// the delivery dance if idle: the panel pulses its ATN line (group 0x1A); the
-// firmware's ISR switches the link to RX and clocks the bytes in one group-0x10
-// interrupt at a time (state-8 handler -> the 92-byte ring -> the frame decoder).
-void kn7000_state::panel_queue(const uint8_t *bytes, int n)
-{
-	if (m_panel_resp_pos == m_panel_resp_len)
-		m_panel_resp_pos = m_panel_resp_len = 0;          // queue fully drained: reset
-	if (m_panel_resp_len + n > int(sizeof(m_panel_resp)))
-		return;                                           // overflow: drop (panel would too)
-	const bool was_idle = (m_panel_resp_pos == m_panel_resp_len);
-	for (int i = 0; i < n; i++)
-		m_panel_resp[m_panel_resp_len++] = bytes[i];
-	if (was_idle)
-		m_panel_evt->adjust(attotime::from_usec(60), 1);  // ATN edge 1
-}
 
-// Deferred panel events (one-shot; scheduled from ISR-context register writes so
-// the interrupt lands after the firmware's current handler returns):
-//  param 1: ATN edge on the panel's external-interrupt pin -> group 0x1A.
-//  param 2: the panel places its next reply byte on SIO0 -> group 0x10; the
-//           state-8 handler reads it from +9 and stores it into the RX ring.
-TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
+
+
+// The main-CPU SIO channel-0 sync-transfer completion (group 0x11). Deferred
+// (an ISR-context write + synchronous assert is wiped by the exit ack). It is
+// level-like until serviced: m_c11_unserviced clears when the group is accepted
+// (irq_ack) and is re-delivered from intc_w if the ack raced ahead of it.
+TIMER_CALLBACK_MEMBER(kn7000_state::panel_txdone_cb)
 {
-	if (param == 1)
-		intc_assert(0x1a);
-	else if (param == 3)
-	{
-		m_c11_unserviced = true;
-		intc_assert(0x11);                 // sync-transfer complete
-	}
-	else if (param == 2 && m_panel_resp_pos < m_panel_resp_len)
-	{
-		sio_rx_push(SIO_PANEL, m_panel_resp[m_panel_resp_pos++]);
-		intc_assert(0x10);
-		if (m_panel_resp_pos < m_panel_resp_len)
-			m_panel_evt->adjust(attotime::from_usec(120), 2);   // next byte
-	}
+	m_c11_unserviced = true;
+	intc_assert(0x11);
 }
 
 // CPSD (SD sub-CPU) frame delivery on SIO ch2. Simpler than the panel path: the
@@ -2186,105 +2094,18 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_event)
 		sio_rx_push(SIO_SD, bytes[i]);
 }
 
-// Periodic button scan: read each declared segment ioport, and for any that
-// changed since last scan, queue a 2-byte [ADDR][DATA] switch-report frame onto
-// the panel RX. DATA bit = 1 means pressed (active-high on the wire); the frame
-// is the same format the real sub-CPUs emit (notes/panel-serial-protocol.md,
-// e.g. START/STOP press = C0 10). Delivery to the firmware WORKS via the ATN/SIO
-// handshake in panel_queue -- VERIFIED: a held DEMO (SEG06 0x40) press enters demo
-// mode. NB a press must be HELD across scans (>~1 frame); a single-frame Lua tap can
-// be cleared by the input frame-update before this 250 Hz scan samples it.
-TIMER_CALLBACK_MEMBER(kn7000_state::panel_scan)
+// Front-panel MAIN VOLUME slider -> master output gain on the final mix. A squared
+// taper approximates a natural volume law (the exact analog-slider taper is unknown);
+// 100 = unity, 0 = silent. Polled at 250 Hz. This is an audio-mixer control, not part
+// of the CP serial protocol, so it stays in the driver; the CP-protocol analog controls
+// (APC/SEQ pot, DATA dial, TEMPO knob) and all the panel buttons + LEDs are handled by
+// kn7000_cpanel_device.
+TIMER_CALLBACK_MEMBER(kn7000_state::volume_scan)
 {
-	// Front-panel MAIN VOLUME slider -> master output gain on the final mix. A squared
-	// taper approximates a natural volume law (the exact analog-slider taper is unknown);
-	// 100 = unity, 0 = silent. Polled here (250 Hz) -- cheap and always current.
-	{
-		const float v = float(m_volmain->read()) / 100.0f;
-		m_dspbridge->set_master_gain(v * v);
-		m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return(), m_tonegen->gain_depth());
-		m_dspbridge->set_effect_returns(m_tonegen->gain_dsp_ret(), m_tonegen->gain_multi_ret());
-	}
-
-	// Front-panel APC/SEQ VOLUME slider -> the firmware's own accompaniment/sequencer volume,
-	// delivered the way the real hardware does it: the panel sub-CPU digitises the pot and sends a
-	// CP-protocol TYPE 2 "latched control" frame [ADDR, DATA]. ADDR 0xD2 (bank11/type2/sub2) = APC/SEQ
-	// VOLUME -- VERIFIED empirically (its RAM write-set overlaps MUTE UP 9's, which edits the same
-	// setting, far more than 0xD0/D1/D3 do) and consistent with the service-manual ADC map (VR1102 = AD2).
-	// The 0xD2 handler (0x484AD772) does DATA -> NOT -> latch 0x5006BEA6 -> >>1 -> remap table 0x48613508
-	// (a monotonic 0..127 ramp), so a LOUDER setting needs a LOWER DATA byte. Map the 0..100 adjuster
-	// accordingly and emit only on change. (MAIN uses a post-DAC gain above; MIC/LINE-IN pots -- ADDRs
-	// 0xD0/D1/D3 -- are not yet identified individually, so they stay unbound for now.)
-	{
-		const uint8_t data = uint8_t(255 - (m_volapcseq->read() * 255 + 50) / 100);
-		if (!m_vol_apcseq_synced)
-		{
-			// first scan: just record the initial pot position. Do NOT emit a frame during early boot --
-			// the firmware isn't servicing the panel handshake yet, so an undelivered frame would sit in
-			// the response queue and block all later ATN kicks (buttons included). The slider takes over
-			// on the first real move (matching the hardware's soft-takeover behaviour).
-			m_vol_apcseq_prev = data;
-			m_vol_apcseq_synced = true;
-		}
-		else if (data != m_vol_apcseq_prev)
-		{
-			m_vol_apcseq_prev = data;
-			const uint8_t pkt[2] = { 0xd2, data };
-			panel_queue(pkt, 2);
-		}
-	}
-
-	// Front-panel DATA dial (the big value wheel with the central SET button) -> CP-protocol TYPE 2
-	// "latched control" frame [0x10, POSITION]. The wheel is a rotary ENCODER: the panel sub-CPU keeps
-	// an 8-bit position counter and ships it on the CP link, and the main-CPU handler (0x484AD6B0, wire
-	// ADDR 0x10 = bank00/type2/sub0) DIFFS successive positions to derive the turn direction/amount
-	// (EV_DIALUP/DOWN), which the UI applies to whatever field is focused (scroll a list, edit a value).
-	// MAME's IPT_DIAL is precisely this kind of relative accumulator (0..255, wraps), so we forward its
-	// value verbatim: the firmware's signed 8-bit diff turns a 0xFF->0x00 wrap into +1 exactly as the
-	// real 8-bit counter does. Emit only on change, recording the initial position silently on the first
-	// scan (same panel-handshake-poison guard as the APC/SEQ pot -- an undelivered boot frame would wedge
-	// ALL later ATN delivery). This is the analog plumbing the SEG1A valuator placeholder was waiting for.
-	{
-		const uint8_t pos = m_dial->read();
-		if (!m_dial_synced)
-		{
-			m_dial_prev = pos;
-			m_dial_synced = true;
-		}
-		else if (pos != m_dial_prev)
-		{
-			m_dial_prev = pos;
-			const uint8_t pkt[2] = { 0x10, pos };
-			panel_queue(pkt, 2);
-		}
-	}
-
-	// Inputs are declared one ioport per NORMALIZED SEGMENT (SEG00..SEG15), the
-	// identity the firmware's button dispatcher (0x484ADB59) uses. For a changed
-	// segment we emit its 2-byte [ADDR][DATA] switch frame, computing the wire
-	// ADDR by REVERSE-normalizing (the inverse of table 0x486135A0):
-	//   normSeg 0x00-0x0B -> ADDR 0xC0-0xCB (grp3), 0x0C-0x15 -> 0x00-0x09 (grp0),
-	//   0x16-0x19 -> 0xD0-0xD3, 0x20 -> 0x17. normSeg 0x1A (wire 0x10 = DATA dial) is a
-	//   VALUATOR, emitted by the dial block above, NOT here; 0x1B-0x1F have NO wire path.
-	//   DATA = segment bitmask (bit=1 pressed); the main CPU XORs vs its shadow for edges.
-	// Delivery rides the ATN dance via panel_queue (a bare fifo push never IRQs).
-	static const uint8_t seg_to_addr[0x21] = {
-		0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb, // normSeg 0x00-0x0B
-		0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,           // normSeg 0x0C-0x15
-		0xd0,0xd1,0xd2,0xd3,0xff,0xff,0xff,0xff,0xff,0xff,0x17,       // normSeg 0x16-0x20 (0x1A=dial, own path)
-	};
-	for (int seg = 0; seg < 0x21; seg++)
-	{
-		const uint8_t addr = seg_to_addr[seg];
-		if (addr == 0xff)   // normSeg 0x1B-0x1F: no wire path
-			continue;
-		const uint8_t cur = m_seg[seg]->read();
-		if (cur == m_btn_prev[seg])
-			continue;
-		m_btn_prev[seg] = cur;
-		const uint8_t pkt[2] = { addr, cur };
-		panel_queue(pkt, 2);
-	}
+	const float v = float(m_volmain->read()) / 100.0f;
+	m_dspbridge->set_master_gain(v * v);
+	m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return(), m_tonegen->gain_depth());
+	m_dspbridge->set_effect_returns(m_tonegen->gain_dsp_ret(), m_tonegen->gain_multi_ret());
 }
 
 
@@ -2324,8 +2145,9 @@ static INPUT_PORTS_START(kn7000)
 	// unconditionally -- there are no machine-configuration switches for them.
 
 	// Panel buttons organized by NORMALIZED SEGMENT (normSeg), the identity the
-	// firmware's button dispatcher (0x484ADB59) actually uses. panel_scan emits
-	// each segment's reverse-normalized wire address (bank11 subs 0-0xB -> segs
+	// firmware's button dispatcher (0x484ADB59) actually uses. The control-panel
+	// device (kn7000_cpanel) scans these and emits each segment's reverse-normalized
+	// wire address (bank11 subs 0-0xB -> segs
 	// 0x00-0x0B; bank00 subs 0-9 -> segs 0x0C-0x15). Names for segs 0x00-0x07 are
 	// the transcribed CPL panel labels (verified: START/STOP etc.); names for
 	// 0x08-0x15 are derived from each button's firmware event code + arg (see
@@ -2603,6 +2425,10 @@ static INPUT_PORTS_START(kn7000)
 	PORT_START("VOL_APCSEQ") PORT_ADJUSTER(80, "APC / SEQ Volume")
 	PORT_START("VOL_MIC")    PORT_ADJUSTER(50, "Mic Volume")
 	PORT_START("VOL_LINEIN") PORT_ADJUSTER(50, "Line-In Volume")
+	// TEMPO/PROGRAM knob: a RELATIVE encoder (wire 0x17). The adjuster value itself is meaningless to the
+	// firmware -- the control-panel device (kn7000_cpanel) converts its CHANGES into [0x17, position] encoder steps. Dragging
+	// the layout knob up raises the tempo, down lowers it. Centre start so there is room to drag both ways.
+	PORT_START("TEMPO_KNOB") PORT_ADJUSTER(50, "Tempo / Program Knob")
 
 	// Rear-panel MIDI IN / BASS PEDAL selector switch (SW701 on the JACK board). The
 	// firmware reads it as bit12 (data-bus D28) of the config strap 0x98070000 via the
@@ -2761,9 +2587,8 @@ void kn7000_state::machine_start()
 
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
 	// continuously and report changes over the serial link).
-	m_panel_timer = timer_alloc(FUNC(kn7000_state::panel_scan), this);
-	m_panel_evt = timer_alloc(FUNC(kn7000_state::panel_event), this);
-	m_panel_txdone = timer_alloc(FUNC(kn7000_state::panel_event), this);
+	m_panel_txdone = timer_alloc(FUNC(kn7000_state::panel_txdone_cb), this);
+	m_vol_timer = timer_alloc(FUNC(kn7000_state::volume_scan), this);
 
 	// The AM33 maskable interrupt vectors to the library-ROM low-level handler
 	// (self-loaded; context-save entry at 0x4C03DDA0). The system-tick timer
@@ -2787,14 +2612,6 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_sio_rx_fifo));
 	save_item(NAME(m_sio_rx_head));
 	save_item(NAME(m_sio_rx_tail));
-	save_item(NAME(m_panel_pos));
-	save_item(NAME(m_panel_p1));
-	save_item(NAME(m_panel_p2));
-	save_item(NAME(m_btn_prev));
-	save_item(NAME(m_vol_apcseq_prev));
-	save_item(NAME(m_vol_apcseq_synced));
-	save_item(NAME(m_dial_prev));
-	save_item(NAME(m_dial_synced));
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tmr7_mode));
@@ -2810,10 +2627,6 @@ void kn7000_state::machine_reset()
 		m_sio_control[ch] = 0;
 		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
 	}
-	m_panel_pos = 0;
-	std::fill(std::begin(m_btn_prev), std::end(m_btn_prev), 0);
-	m_vol_apcseq_synced = false;   // re-record the pot on the first post-reset scan (no frame)
-	m_dial_synced = false;         // re-record the DATA dial on the first post-reset scan (no frame)
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
 	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
@@ -2826,8 +2639,8 @@ void kn7000_state::machine_reset()
 	m_dsp_block_open = false;
 	m_dsp_irq_timer->adjust(attotime::never);   // audio frame tick starts only once the kernel is loaded
 
-	// Start scanning the panel at ~250 Hz.
-	m_panel_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
+	// Poll the MAIN VOLUME slider -> DSP master gain at ~250 Hz.
+	m_vol_timer->adjust(attotime::from_hz(250), 0, attotime::from_hz(250));
 
 	// System tick ~1 kHz (real rate TBD -- input clock unknown; tune later). The timer
 	// interrupt dispatches (via IAGR=group<<3) to the real RTOS handler, whose context
@@ -3016,6 +2829,18 @@ void kn7000_state::kn7000(machine_config &config)
 	m_midi_uart[1]->rx_cb().set(FUNC(kn7000_state::midi_rx<SIO_MIDI2>));
 	MIDI_PORT(config, "mdin2", midiin_slot, "midiin").rxd_handler().set(m_midi_uart[1], FUNC(kn7000_sio_uart_device::rx_w));
 	MIDI_PORT(config, "mdout2", midiout_slot, "midiout");
+
+	// Control panel HLE (buttons, LEDs, analog controls) on SIO channel 0. The
+	// device queues replies + button/analog events; the driver bridges its ATN
+	// pulse and reply bytes to the main CPU's interrupt controller and SIO0 RX.
+	KN7000_CPANEL(config, m_cpanel);
+	m_cpanel->atn().set([this](int state) { if (state) intc_assert(0x1a); });
+	m_cpanel->rxd().set([this](uint8_t data) { sio_rx_push(SIO_PANEL, data); intc_assert(0x10); });
+	for (int i = 0; i < 0x21; i++)
+		m_cpanel->set_seg_port(i, m_seg[i]);
+	m_cpanel->set_dial_port(m_dial);
+	m_cpanel->set_volapcseq_port(m_volapcseq);
+	m_cpanel->set_tempoknob_port(m_tempoknob);
 
 	// --- Sound (first cut): a bring-up sine synth keyed by the PC key bed, so
 	//     notes are audible now. Real dual-TG PCM synthesis + effects DSP is future

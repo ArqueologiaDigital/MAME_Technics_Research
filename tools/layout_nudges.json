@@ -1,0 +1,890 @@
+{
+ "left_block.29.t19": [
+  -5.2,
+  10.0
+ ],
+ "right_block.169.t19": [
+  4.5,
+  -2.0
+ ],
+ "right_block.196.t135": [
+  -29.0,
+  10.3
+ ],
+ "right_block.167.panel_memory_dial": [
+  4.5,
+  -2.0
+ ],
+ "left_block.90.t43": [
+  -3.6,
+  -7.6
+ ],
+ "left_block.141.t51": [
+  12.8,
+  6.7
+ ],
+ "right_block.191.t134": [
+  9.1,
+  14.6
+ ],
+ "right_block.164.t125": [
+  -7.6,
+  4.8
+ ],
+ "left_block.174.t72": [
+  -115.0,
+  12.4
+ ],
+ "left_block.144.t52": [
+  13.2,
+  6.7
+ ],
+ "right_block.188.t133": [
+  18.3,
+  7.5
+ ],
+ "right_block.130.t120": [
+  9.2,
+  2.7
+ ],
+ "right_block.91.t107": [
+  15.2,
+  -15.5
+ ],
+ "left_block.148.t64": [
+  -1.2,
+  -36.7
+ ],
+ "right_block.108.t113": [
+  -13.2,
+  1.6
+ ],
+ "left_block.24.round_btn": [
+  -2.9,
+  33.4
+ ],
+ "left_block.27.round_btn": [
+  -5.2,
+  33.4
+ ],
+ "left_block.30.round_btn": [
+  -2.1,
+  19.7
+ ],
+ "left_block.33.round_btn": [
+  -4.9,
+  19.7
+ ],
+ "left_block.100.round_btn": [
+  10.5,
+  11.1
+ ],
+ "left_block.102.round_btn": [
+  2.2,
+  11.1
+ ],
+ "left_block.104.round_btn": [
+  -6.0,
+  10.4
+ ],
+ "left_block.122.round_btn": [
+  3.0,
+  -11.2
+ ],
+ "left_block.125.round_btn": [
+  10.6,
+  0.3
+ ],
+ "left_block.128.round_btn": [
+  6.0,
+  0.3
+ ],
+ "left_block.133.round_btn": [
+  -3.3,
+  15.6
+ ],
+ "left_block.136.round_btn": [
+  -2.4,
+  15.6
+ ],
+ "left_block.139.round_btn": [
+  -1.4,
+  15.6
+ ],
+ "left_block.142.round_btn": [
+  -0.4,
+  15.6
+ ],
+ "right_block.70.round_btn": [
+  11.2,
+  16.4
+ ],
+ "right_block.74.round_btn": [
+  11.5,
+  16.4
+ ],
+ "right_block.77.round_btn": [
+  11.8,
+  16.4
+ ],
+ "right_block.80.round_btn": [
+  12.0,
+  15.8
+ ],
+ "right_block.86.round_btn": [
+  10.5,
+  -4.7
+ ],
+ "right_block.89.round_btn": [
+  11.2,
+  -4.7
+ ],
+ "right_block.92.round_btn": [
+  12.0,
+  -4.7
+ ],
+ "right_block.95.round_btn": [
+  12.7,
+  -4.0
+ ],
+ "right_block.99.round_btn": [
+  1.4,
+  16.5
+ ],
+ "right_block.102.round_red": [
+  -13.0,
+  16.0
+ ],
+ "right_block.105.round_btn": [
+  1.4,
+  11.0
+ ],
+ "right_block.109.round_btn": [
+  -13.8,
+  10.3
+ ],
+ "right_block.140.round_btn": [
+  -1.4,
+  -6.1
+ ],
+ "right_block.142.round_btn": [
+  1.7,
+  -6.9
+ ],
+ "right_block.147.round_btn": [
+  -4.9,
+  -4.9
+ ],
+ "right_block.149.round_btn": [
+  -8.7,
+  -4.9
+ ],
+ "right_block.151.round_btn": [
+  -7.5,
+  -4.9
+ ],
+ "right_block.153.round_btn": [
+  -5.0,
+  -5.2
+ ],
+ "right_block.155.round_btn": [
+  -9.2,
+  -6.0
+ ],
+ "right_block.157.round_btn": [
+  -8.3,
+  -6.0
+ ],
+ "right_block.171.round_btn": [
+  -1.2,
+  5.1
+ ],
+ "right_block.174.round_btn": [
+  -4.0,
+  -2.1
+ ],
+ "right_block.177.round_btn": [
+  -2.9,
+  -8.6
+ ],
+ "right_block.180.round_btn": [
+  4.3,
+  -10.2
+ ],
+ "right_block.183.round_btn": [
+  10.5,
+  -9.0
+ ],
+ "right_block.186.round_btn": [
+  12.7,
+  -2.5
+ ],
+ "right_block.189.round_btn": [
+  9.7,
+  3.1
+ ],
+ "right_block.192.round_btn": [
+  4.4,
+  5.9
+ ],
+ "screen_block.69.t10": [
+  -8.6,
+  -2.9
+ ],
+ "left_block.126.t60": [
+  6.7,
+  -1.3
+ ],
+ "left_block.162.t69": [
+  0.0,
+  -6.0
+ ],
+ "right_block.69.t100": [
+  16.4,
+  5.9
+ ],
+ "left_block.35.t20": [
+  -13.9,
+  -1.9
+ ],
+ "right_block.185.t132": [
+  21.3,
+  -10.4
+ ],
+ "left_block.157.t68": [
+  -0.3,
+  -9.3
+ ],
+ "left_block.6.t13": [
+  -2.5,
+  7.3
+ ],
+ "left_block.173.t71": [
+  -124.3,
+  11.0
+ ],
+ "right_block.97.t109": [
+  -20.0,
+  -0.4
+ ],
+ "screen_block.19.t3": [
+  -1.4,
+  4.1
+ ],
+ "left_block.123.t58": [
+  10.7,
+  -1.5
+ ],
+ "left_block.124.t59": [
+  10.3,
+  -3.2
+ ],
+ "right_block.98.t59": [
+  2.2,
+  6.0
+ ],
+ "right_block.161.t124": [
+  -8.6,
+  4.8
+ ],
+ "right_block.121.tempo_knob": [
+  4.3,
+  13.6
+ ],
+ "left_block.138.t50": [
+  12.1,
+  6.7
+ ],
+ "left_block.161.t50": [
+  10.5,
+  -33.7
+ ],
+ "left_block.166.t50": [
+  10.1,
+  -33.4
+ ],
+ "right_block.170.t127": [
+  -4.9,
+  12.2
+ ],
+ "right_block.73.t101": [
+  15.2,
+  6.6
+ ],
+ "right_block.101.t110": [
+  -12.9,
+  6.2
+ ],
+ "screen_block.13.t0": [
+  23.2,
+  3.8
+ ],
+ "screen_block.16.red_led": [
+  37.0,
+  4.5
+ ],
+ "screen_block.67.red_led": [
+  -83.3,
+  3.4
+ ],
+ "left_block.9.green_led": [
+  -42.4,
+  10.7
+ ],
+ "left_block.25.green_led": [
+  -22.4,
+  18.8
+ ],
+ "left_block.28.red_led": [
+  -24.3,
+  18.8
+ ],
+ "left_block.31.green_led": [
+  -21.8,
+  6.1
+ ],
+ "left_block.34.green_led": [
+  -24.6,
+  6.1
+ ],
+ "left_block.91.green_led": [
+  0.0,
+  3.3
+ ],
+ "left_block.105.green_led": [
+  13.5,
+  1.4
+ ],
+ "left_block.129.red_led": [
+  3.8,
+  -10.0
+ ],
+ "left_block.134.red_led": [
+  10.7,
+  6.5
+ ],
+ "left_block.137.red_led": [
+  12.1,
+  6.7
+ ],
+ "left_block.140.red_led": [
+  12.8,
+  6.7
+ ],
+ "left_block.143.red_led": [
+  13.2,
+  6.7
+ ],
+ "left_block.154.red_led": [
+  0.5,
+  -23.8
+ ],
+ "left_block.155.red_led": [
+  2.4,
+  -23.8
+ ],
+ "left_block.156.red_led": [
+  0.2,
+  -24.5
+ ],
+ "left_block.169.red_led": [
+  -1.4,
+  -19.1
+ ],
+ "left_block.170.red_led": [
+  15.5,
+  -18.7
+ ],
+ "left_block.171.red_led": [
+  -2.6,
+  -19.2
+ ],
+ "left_block.172.red_led": [
+  14.4,
+  -19.0
+ ],
+ "right_block.71.red_led": [
+  12.0,
+  15.7
+ ],
+ "right_block.75.red_led": [
+  11.8,
+  14.7
+ ],
+ "right_block.78.red_led": [
+  12.0,
+  15.5
+ ],
+ "right_block.81.red_led": [
+  12.8,
+  15.0
+ ],
+ "right_block.87.red_led": [
+  11.5,
+  -4.2
+ ],
+ "right_block.90.red_led": [
+  12.0,
+  -4.4
+ ],
+ "right_block.93.red_led": [
+  12.5,
+  -5.4
+ ],
+ "right_block.96.red_led": [
+  12.8,
+  -4.2
+ ],
+ "right_block.100.green_led": [
+  1.3,
+  16.6
+ ],
+ "right_block.103.green_led": [
+  -13.2,
+  17.0
+ ],
+ "right_block.106.green_led": [
+  1.4,
+  11.0
+ ],
+ "right_block.110.green_led": [
+  -12.7,
+  11.3
+ ],
+ "right_block.113.red_led": [
+  -18.6,
+  13.7
+ ],
+ "right_block.118.green_led": [
+  -16.6,
+  3.9
+ ],
+ "right_block.122.green_led": [
+  -7.4,
+  -16.3
+ ],
+ "right_block.124.red_led": [
+  6.8,
+  2.6
+ ],
+ "right_block.131.red_led": [
+  6.8,
+  -2.2
+ ],
+ "right_block.139.red_led": [
+  -1.2,
+  -5.5
+ ],
+ "right_block.141.red_led": [
+  2.0,
+  -4.7
+ ],
+ "right_block.146.red_led": [
+  -4.7,
+  -2.7
+ ],
+ "right_block.148.red_led": [
+  -9.8,
+  -3.5
+ ],
+ "right_block.150.red_led": [
+  -6.7,
+  -3.1
+ ],
+ "right_block.152.red_led": [
+  -4.3,
+  -12.9
+ ],
+ "right_block.154.red_led": [
+  -7.8,
+  -12.9
+ ],
+ "right_block.156.red_led": [
+  -7.8,
+  -12.9
+ ],
+ "right_block.162.green_led": [
+  6.7,
+  6.4
+ ],
+ "right_block.172.green_led": [
+  20.3,
+  -48.3
+ ],
+ "right_block.175.green_led": [
+  48.0,
+  -24.6
+ ],
+ "right_block.178.green_led": [
+  50.5,
+  12.6
+ ],
+ "right_block.181.green_led": [
+  26.1,
+  40.9
+ ],
+ "right_block.184.green_led": [
+  -11.7,
+  44.6
+ ],
+ "right_block.187.green_led": [
+  -38.8,
+  20.2
+ ],
+ "right_block.190.green_led": [
+  -40.9,
+  -18.5
+ ],
+ "right_block.193.green_led": [
+  -15.5,
+  -46.2
+ ],
+ "right_block.197.green_led": [
+  -1.8,
+  10.3
+ ],
+ "right_block.200.green_led": [
+  -7.6,
+  7.1
+ ],
+ "right_block.203.green_led": [
+  -41.1,
+  30.5
+ ],
+ "sd_block.12.green_led": [
+  -36.4,
+  -22.0
+ ],
+ "left_block.132.t62": [
+  -2.0,
+  6.9
+ ],
+ "right_block.79.t103": [
+  15.9,
+  6.1
+ ],
+ "right_block.112.t115": [
+  -15.7,
+  12.3
+ ],
+ "right_block.88.t106": [
+  15.0,
+  -16.2
+ ],
+ "right_block.166.t126": [
+  -28.6,
+  -3.8
+ ],
+ "screen_block.65.t9": [
+  -7.7,
+  1.0
+ ],
+ "screen_block.24.t6": [
+  -6.2,
+  3.1
+ ],
+ "left_block.135.t49": [
+  10.7,
+  6.5
+ ],
+ "left_block.160.t49": [
+  7.6,
+  -33.8
+ ],
+ "left_block.165.t49": [
+  6.7,
+  -33.7
+ ],
+ "right_block.173.t128": [
+  -11.1,
+  3.1
+ ],
+ "right_block.199.t136": [
+  31.0,
+  6.0
+ ],
+ "right_block.116.t117": [
+  -28.6,
+  -4.7
+ ],
+ "right_block.123.t119": [
+  3.1,
+  -7.0
+ ],
+ "right_block.179.t130": [
+  0.3,
+  -18.5
+ ],
+ "right_block.128.t5": [
+  9.5,
+  -21.9
+ ],
+ "right_block.135.t5": [
+  9.8,
+  -26.4
+ ],
+ "left_block.92.pill_orange": [
+  0.0,
+  8.2
+ ],
+ "left_block.151.pill_wide": [
+  -0.1,
+  -2.4
+ ],
+ "left_block.153.pill_wide": [
+  -0.2,
+  -2.6
+ ],
+ "left_block.168.pill_greycyan": [
+  0.6,
+  -2.5
+ ],
+ "right_block.117.pill_orange": [
+  -16.1,
+  8.7
+ ],
+ "left_block.121.t57": [
+  4.3,
+  -13.3
+ ],
+ "left_block.12.t14": [
+  -3.1,
+  22.0
+ ],
+ "right_block.94.t108": [
+  14.7,
+  -15.0
+ ],
+ "screen_block.26.vline": [
+  19.4,
+  -40.3
+ ],
+ "screen_block.28.vline": [
+  19.4,
+  49.1
+ ],
+ "right_block.195.t41": [
+  -29.0,
+  10.3
+ ],
+ "left_block.127.t61": [
+  6.6,
+  -3.1
+ ],
+ "left_block.26.t18": [
+  -7.6,
+  21.8
+ ],
+ "left_block.32.t18": [
+  -8.2,
+  10.0
+ ],
+ "left_block.101.t47": [
+  2.4,
+  -1.0
+ ],
+ "screen_block.64.t8": [
+  -7.7,
+  1.0
+ ],
+ "right_block.143.t122": [
+  38.0,
+  -7.0
+ ],
+ "left_block.1.t11": [
+  -2.3,
+  6.9
+ ],
+ "left_block.145.t63": [
+  -2.2,
+  -18.0
+ ],
+ "right_block.158.t123": [
+  -5.9,
+  -2.0
+ ],
+ "left_block.2.t12": [
+  -2.4,
+  6.2
+ ],
+ "left_block.7.t12": [
+  -1.6,
+  6.4
+ ],
+ "left_block.13.t12": [
+  -3.1,
+  22.0
+ ],
+ "left_block.18.t12": [
+  5.1,
+  22.5
+ ],
+ "left_block.23.t17": [
+  -5.5,
+  21.5
+ ],
+ "left_block.93.t44": [
+  40.4,
+  4.1
+ ],
+ "right_block.107.t112": [
+  -13.2,
+  1.6
+ ],
+ "right_block.182.t131": [
+  16.5,
+  -16.6
+ ],
+ "right_block.115.t116": [
+  -0.7,
+  11.0
+ ],
+ "right_block.119.t116": [
+  -16.5,
+  13.5
+ ],
+ "right_block.72.t89": [
+  14.0,
+  7.1
+ ],
+ "left_block.149.t65": [
+  0.6,
+  -36.3
+ ],
+ "right_block.129.t4": [
+  25.9,
+  -21.6
+ ],
+ "right_block.136.t4": [
+  25.4,
+  -25.6
+ ],
+ "right_block.202.t137": [
+  -31.0,
+  32.3
+ ],
+ "left_block.103.t48": [
+  -5.3,
+  -0.6
+ ],
+ "left_block.120.t56": [
+  4.1,
+  -11.3
+ ],
+ "right_block.120.t118": [
+  2.0,
+  12.9
+ ],
+ "right_block.1.t75": [
+  -57.6,
+  -1.5
+ ],
+ "right_block.66.t99": [
+  27.7,
+  -0.7
+ ],
+ "left_block.167.t70": [
+  0.5,
+  -9.4
+ ],
+ "left_block.22.t16": [
+  -19.1,
+  14.6
+ ],
+ "right_block.85.t105": [
+  15.0,
+  -15.9
+ ],
+ "left_block.180.t74": [
+  51.7,
+  -56.0
+ ],
+ "screen_block.18.t2": [
+  18.7,
+  0.0
+ ],
+ "left_block.97.hline": [
+  60.0,
+  -1.4
+ ],
+ "left_block.98.hline": [
+  36.8,
+  -1.4
+ ],
+ "right_block.114.hline": [
+  -16.2,
+  12.5
+ ],
+ "right_block.144.hline": [
+  12.5,
+  -10.4
+ ],
+ "right_block.159.hline": [
+  -1.8,
+  -3.1
+ ],
+ "right_block.160.hline": [
+  15.9,
+  -2.7
+ ],
+ "left_block.96.t45": [
+  49.4,
+  -0.3
+ ],
+ "screen_block.14.t1": [
+  23.2,
+  3.8
+ ],
+ "screen_block.15.round_btn_big": [
+  19.4,
+  13.4
+ ],
+ "screen_block.17.round_btn_big": [
+  19.4,
+  11.9
+ ],
+ "screen_block.66.round_btn_big": [
+  -8.1,
+  11.8
+ ],
+ "screen_block.68.round_btn_big": [
+  -7.7,
+  10.7
+ ],
+ "left_block.95.demo_btn": [
+  38.2,
+  6.4
+ ],
+ "right_block.198.round_btn_big": [
+  -1.0,
+  -1.2
+ ],
+ "right_block.201.round_btn_big": [
+  0.7,
+  -1.3
+ ],
+ "left_block.99.t46": [
+  12.4,
+  -1.0
+ ],
+ "right_block.82.t104": [
+  28.5,
+  -5.6
+ ],
+ "right_block.194.big_ring": [
+  -0.1,
+  -0.8
+ ],
+ "right_block.176.t129": [
+  -9.0,
+  -13.2
+ ],
+ "right_block.111.t114": [
+  -15.7,
+  12.3
+ ],
+ "left_block.17.t15": [
+  5.1,
+  22.5
+ ]
+}
