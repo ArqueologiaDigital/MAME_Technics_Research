@@ -5,6 +5,30 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(18) — P2 PAGE re-validated on the sound-select; data-dial conclusion firmed; chorus/multi still blocked
+All P1-P5 already addressed, so this tick firmed up loose ends via reliable soft-key navigation (using the
+LAYOUT bindings, gen_lay.py -- NOT the stale panel-button-names.md, which mislabels e.g. PIANO as SEG0C 0x01
+when it is actually SEG10 0x10). Concrete outcomes:
+1. **P2 PAGE re-validated on a FRESH paged screen** (the PIANO sound-select, PAGE 1/3): PAGE UP (SEG0B 0x10)
+   1/3->2/3->3/3, PAGE DOWN (SEG0B 0x20) back to 2/3 -- read straight off the yellow n/3 badge. P2 (which
+   was first confirmed on SD LOAD) generalises. Solid.
+2. **DATA DIAL conclusion FIRMED (5 screens now tested):** home, DISK MENU, R1/R2 OCTAVE, DEMO menu, and now
+   the SOUND-SELECT -- NONE respond to the dial (latch 0x5006BEA0 follows every time = events generated, but
+   0 px visible change). The KN7000 UI is entirely SOFT-KEY + PAGE driven (◄► arrows -> side keys; PAGE
+   badge -> PAGE up/down). So the dial is FAITHFULLY inert on these screens; its events are consumed only in
+   a specific value-entry/SEQUENCER context not yet reached. The earlier "sound-select is the dial's
+   consumer" hypothesis is DISPROVEN (sound-select = soft-keys). Dial wiring stays correct (generates events
+   to the same live queue as the working APC/SEQ pot); a visible demo needs the sequencer.
+3. **CHORUS/MULTI still blocked:** tried global toggles (SEG11/SEG10 0x04), the OVERTURE demo, a factory
+   E.P. sound preset (Vintage E.P.1, confirmed selected), and the DIGITAL EFFECT button (SEG10 0x08) -- NONE
+   light the chorus (0xC34A) or multi (0xC344) output slots. They are per-part effects gated on a per-part
+   depth (0x8198/0x8298) that no default/preset/toggle sets; confirming them needs an explicit multi-step
+   effect-depth edit (a settings-screen flow not yet cracked). Reverb + SOUND DSP remain the 2/4 confirmed.
+NAVIGATION AID for future ticks: **gen_lay.py is the authoritative button->binding source** (layout is
+correct; panel-button-names.md has stale/wrong labels). Confirmed bindings this session: DEMO=SEG06 0x40,
+demo OVERTURE=SEG00 0x02, PIANO sound group=SEG10 0x10, sound-select right-col row2=SEG11 0x20, PAGE
+up/down=SEG0B 0x10/0x20, REVERB=SEG0F 0x04, SOUND DSP=SEG0F 0x08. No code change (investigation tick).
+
 ## TICK 2026-07-13 ~night(17b) — P5 catalogue COMPLETED (added the single-fn multiplier, the real hot-path fix)
 Audited the SHARC upstream catalogue (notes/sharc-upstream-patch-series.md) against the ACTUAL fork-vs-
 upstream diff (mame/ vs kn7000_mame_build/, sharc/: sharcdrc.cpp 384 lines/39 hunks, sharcops.hxx 155,

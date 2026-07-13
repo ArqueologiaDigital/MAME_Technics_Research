@@ -156,13 +156,23 @@ reachable screens; NONE visibly responds to the dial, each for a faithful reason
 - DISK MENU -- navigated by the side SOFT-KEYS (the on-screen ◄► arrows), not the dial (0 px change).
 - R1/R2 OCTAVE value-edit screen (reached via SEG13 0x02) -- the "OCTAVE : -2" value is edited by its ˅
   soft-key; the dial left it unchanged across a +2..+12 sweep while the screen stayed open.
-So the dial's actual consumer screen (sound/style select, or a value-entry mode) was NOT reached. The
+So the dial's actual consumer screen (a value-entry / SEQUENCER mode) was NOT reached. The
 seg->function button map is unreliable (SEG13 0x02 opened OCTAVE, which the map calls "TRANSPOSE"), so
-guessing the path to the sound-select is unproductive headlessly. The event-generation proof
+guessing the path is unproductive headlessly. The event-generation proof
 (0x484AD2CD -> 0x484AD519 emits [0x10,value,0xFF]) + the relative-encoder handler are the substitute
-evidence; the wiring is grounded + additive (was a dead port) with no regression. NEXT (optional): an
-INTERACTIVE turn of the dial on a sound/style-select screen (Felipe, or a reliable menu path), or trace the
-0x484AD519 event consumer to map EV_DIALUP/DOWN -> which screens' focus actually consume it.
+evidence; the wiring is grounded + additive (was a dead port) with no regression.
+
+### UPDATE 2026-07-13 night(18): SOUND-SELECT hypothesis DISPROVEN; 5 screens tested; UI is soft-key/PAGE driven
+Reached the PIANO sound-select correctly (SOUND GROUP PIANO = SEG10 0x10 per the LAYOUT, not the stale
+notes' SEG0C 0x01) and drove the IPT_DIAL there: the 0x10 latch followed (00->0x28->0x50 = events fired) but
+0 px changed on screen. The sound-select selects sounds via the LCD-flanking SOFT-KEYS (◄► arrows, e.g.
+Vintage E.P.1 = SEG11 0x20) and pages via the PAGE badge (PAGE 1/3, SEG0B 0x10/0x20), NOT the dial. So the
+"sound/style-select is the dial's consumer" guess is WRONG. Across FIVE screens now -- home, DISK MENU, R1/R2
+OCTAVE, DEMO menu, SOUND-SELECT -- the data dial is FAITHFULLY INERT: the KN7000 UI is entirely soft-key +
+PAGE driven. The dial's events are consumed only in a specific value-entry/SEQUENCER context. CONCLUSION:
+the wiring is correct and the inertness is FAITHFUL; a visible demo requires the SEQUENCER (the remaining
+untested consumer) -- reach it via the SEQUENCER section buttons, then turn the dial while a numeric field
+(measure/step/value) is focused. Not a defect; just an unreached demo context.
 
 ### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
 From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
