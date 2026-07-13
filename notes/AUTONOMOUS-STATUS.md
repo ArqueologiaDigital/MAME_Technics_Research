@@ -5,6 +5,24 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(16) — SOUND DSP effect confirmed audible+toggleable; P4 reverb-loudness RESOLVED (faithful)
+Two clean outcomes, no code change (measurement + reasoning tick):
+1. **P4 loudness question ANSWERED:** reverb ON being ~2x quieter than OFF is FAITHFUL to the decoded
+   registers -- OFF = full dry direct; ON = the DSP return only (crossfade mutes direct), which is the DSP's
+   dry+wet scaled by send 0.80 * TOTAL-DEPTH 0.63 ~= 0.5. The "keep dry full" fix would need a wet-only
+   return + separate dry path, but the captured crossfade MUTES the direct when reverb is on, so the fix
+   CONTRADICTS the RE. Verdict: do NOT change it (rule g); only Felipe's ear on real HW could show the
+   capture's interpretation is subtly wrong. At MAX depth ON ~= OFF. (Full reasoning: reverb-toggle-findings.)
+2. **SOUND DSP = 2nd effect unit confirmed audible + toggleable.** Default: only the reverb unit is active at
+   boot (chorus/multi/sound-dsp slots = 0). SEG0F 0x08 (which the layout's gen_lay PE_BITS ALREADY binds as
+   SOUND DSP -- so the layout is right; panel-button-names.md's "RIGHT2 ON" is the stale outlier) enables it:
+   slot 0xC356 0->1.8M, DAC chord RMS 1953->2414 (+24%), toggles back off on 2nd press. The SEG0F row is the
+   DIGITAL-EFFECT row (0x04=REVERB, 0x08=SOUND DSP), it does NOT touch the part indicators.
+REUSABLE METHOD: keybed chord (KEYS1 0x0100/0x1000/0x8000) + sample DSP output slots
+mach.devices[":dsp"].spaces["data"]:read_u32(0xC342 rev / 0xC344 multi / 0xC34A chorus / 0xC356 sdsp).
+NEXT (follow-up): find the CHORUS + MULTI enable buttons (not in SEG0F) and confirm those two units audible;
+reconcile panel-button-names.md's SEG0F row with the (correct) layout bindings.
+
 ## TICK 2026-07-13 ~night(15) — ★★★ REVERB CONFIRMED AUDIBLE + ON/OFF TOGGLE WORKS (Felipe's explicit ask, RESOLVED)
 Measured the crown-jewel reverb end-to-end now that its last blocker (SHARC divergence) is fixed. Objective
 probe (no ear needed): play a keybed C chord, sample the DSP reverb output 0xC342 + send input 0xC362 as a

@@ -89,3 +89,28 @@ the perceived level ~half. Whether that matches the real KN7000 (where reverb us
 halving the dry) is the open P4 calibration question -- still needs Felipe's ear, but now with a number.
 Candidate fix if he confirms it's too quiet: raise the return*depth makeup (or include a dry component in
 the ON crossfade) so ON ~= OFF loudness. NOT changed unsupervised (rule g -- it alters the praised reverb).
+
+### P4 loudness -- RESOLUTION (2026-07-13): the ON<OFF loudness is FAITHFUL to the decoded registers
+Reasoned through the signal chain: OFF = full dry direct (crossfade direct 0x7F / return 0). ON = the DSP
+RETURN only (crossfade direct 0 / return 0x7F), and that return is the DSP's dry-passthrough + wet, scaled
+by the send (0x80B8 = 0.80 into the DSP) and the TG return-LEVEL = TOTAL DEPTH (0x8338 = 0x50/127 = 0.63).
+Net ON gain ~= 0.80*0.63 ~= 0.5 of the dry. So ON is ~2x quieter -- a direct CONSEQUENCE of the decoded
+registers, NOT a modelling error. The candidate "keep dry at full" fix would require the DSP return to be
+WET-ONLY with a separate full-dry path, but the captured crossfade MUTES the direct when reverb is on
+(direct=0), so on real hardware the dry MUST arrive via the (depth-scaled) return too -- i.e. the fix
+CONTRADICTS the RE. Verdict: current behaviour is faithful to the register capture; do NOT change it on a
+guess (rule g). Only Felipe's ear on real hardware could show the capture's interpretation is subtly wrong
+(e.g. depth scales only the wet); until then, ON<OFF at depth 80 stands. At MAX depth (127) ON would ~= OFF.
+
+## ★★ 2026-07-13 — SOUND DSP effect ALSO confirmed audible + toggleable (2nd effect unit after reverb)
+Extended the effects-audibility check beyond the reverb. Default state: of the four DSP effect units, ONLY
+the reverb (0xC342) is active at boot; chorus/multi/sound-dsp output slots are 0 (their per-part sends
+default to 0). Enabling **SOUND DSP = SEG0F 0x08** (which the layout's gen_lay PE_BITS already binds
+correctly, contradicting panel-button-names.md's stale "RIGHT2 ON" label) makes its output slot 0xC356 go
+0 -> ~1.8M, and it REACHES THE DAC: a keybed chord's speaker RMS rises baseline 1953 -> sound-dsp-ON 2414
+(+24%) -> OFF 2013. Pressing SEG0F 0x08 again toggles it back off. The SEG0F row does NOT change the home
+screen's RIGHT1/2/LEFT part indicators, so it is the DIGITAL-EFFECT row (0x04=REVERB flag-confirmed,
+0x08=SOUND DSP slot-confirmed), NOT the part on/off row the button-names notes claim. Method (reusable):
+keybed chord + sample DSP output slots via mach.devices[":dsp"].spaces["data"]:read_u32(addr) --
+reverb 0xC342, multi 0xC344, chorus 0xC34A, sound-dsp 0xC356. CHORUS + MULTI enable-buttons were NOT in the
+SEG0F row (a different SEG / need the DIGITAL EFFECT menu) -- their audibility confirmation is a follow-up.
