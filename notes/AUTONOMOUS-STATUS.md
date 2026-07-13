@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(25) — BLOG Part 29: "The recompiler that forgot to saturate" (the SHARC/MAME contribution story)
+Durable deliverable (rule h) building on last tick's P5 audit: wrote mame-blog Part 29 -- the story of the
+SHARC bugs the KN7000 surfaced in MAME's SHARED core (not KN7000-specific): the MODE1 ALUSAT
+recompiler-vs-interpreter divergence (DRC wrapped fixed-ALU add/sub where the interpreter clamped -> the
+reverb feedback railed) + the never-implemented native fixed multiplier family (~82M interpreter fall-backs
+/22s reverb -> <500k, >99%, bit-identical). Framed as "preservation gives back to the shared toolchain":
+these live on the base 2106x SHARC device, so fixing them for the KN7000 fixes them for every SHARC system
+in MAME; 3 perf patches verified apply-clean to upstream, ALUSAT series needs the documented small rebase,
+submission is Felipe's. Committed (mame-blog 31 kn7000 posts; posts.json-driven, no Jekyll build). No code
+change. NOTE: recent ticks are polish/consolidation/docs (the driver is mature; see the night(23)
+STATE-OF-THE-EMULATOR summary) -- productive autonomous fodder is genuinely low.
+
 ## TICK 2026-07-13 ~night(24) — P5 advanced: 3 SHARC perf fixes verified UPSTREAM-READY; ALUSAT dependency+order pinned
 Did the one clean, non-gated, non-blocked task from the state summary: audited the SHARC fixes for upstream
 submission. FINDINGS (notes/sharc-upstream-patch-series.md "EXTRACTION" section): the fixes are already
