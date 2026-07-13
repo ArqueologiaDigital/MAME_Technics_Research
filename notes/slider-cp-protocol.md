@@ -133,9 +133,15 @@ accumulator (0..255, wraps) = exactly what wire 0x10's handler expects (it diffs
   return **0xFFFF when unchanged** else the new value (and update the shadow). A relative ENCODER -- which
   RULES OUT an absolute pitch-bender (pitch bend sends absolute values, no diff).
 - On a real change, the dispatch caller (0x484AD2CD, after `call 0x484AD680`) stores the value to
-  0x5006BDA8 and **emits a [control_id, value, 0xFF] event** via the enqueue routine 0x484AD519 (three
-  calls: id, value, 0xFF terminator). So turning 0x10 generates a genuine panel event; the consumer routes
-  it by control-id/focus.
+  0x5006BDA8 and **emits a [control_id, value, 0xFF] event** via the enqueue routine 0x484AD519, which
+  pushes each byte into the event queue **0x5006bcf8** (push helper 0x484AD5B0; queue initialised from
+  template 0x48613060). So turning 0x10 generates a genuine panel event; the consumer routes it by
+  control-id/focus.
+- ★ PROOF THE QUEUE IS LIVE: the APC/SEQ volume pot (0xD2) reaches this SAME queue via this SAME
+  0x484AD2CD -> 0x484AD519 path, and that slider is already VERIFIED to drive the firmware's accompaniment
+  volume (tick night(12g)). So the continuous-control event queue 0x5006bcf8 is proven-functional; the data
+  dial rides the identical delivery path -- only the consumer's per-id ACTION differs (0xD2 -> volume set,
+  0x10 -> data-dial EV_DIALUP/DOWN navigation). The dial is therefore delivered to a real, working consumer.
 - Schematic CN1102 ROTA/ROTB -> AD0/AD1 = a rotary encoder (the data wheel); by elimination the other
   bank-00 rotary 0x17 = TEMPO/PROGRAM (confirmed) and 0xD0-D3 = the four volume pots.
 
