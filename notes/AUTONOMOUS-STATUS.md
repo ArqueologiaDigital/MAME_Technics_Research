@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(17b) — P5 catalogue COMPLETED (added the single-fn multiplier, the real hot-path fix)
+Audited the SHARC upstream catalogue (notes/sharc-upstream-patch-series.md) against the ACTUAL fork-vs-
+upstream diff (mame/ vs kn7000_mame_build/, sharc/: sharcdrc.cpp 384 lines/39 hunks, sharcops.hxx 155,
+sharc.cpp 109, sharc.h 105). Found a GAP: the catalogue's perf section D only listed the MULTIFUNCTION MAC
+block (which the KN7000 kernel never uses -- 0 multiop fallbacks), but the ACTUAL hot-path fix -- the native
+SINGLE-FUNCTION fixed multiplier (SS forms 0x70-7f/0xb0-bf/0xf0-ff, commit bb2d516, 66M fallbacks gone) --
+was undocumented. Added it as D.1 (the highest-impact perf patch) and rewrote the upstreaming plan around
+TWO headline series: B.1 ALUSAT (correctness) + D.1 single-fn multiplier (perf), both on the base
+adsp21062_device (benefit every 2106x SHARC in MAME), logically independent, mostly-disjoint code. Catalogue
+is now the COMPLETE map. Actual git-patch extraction NOT done (submission is Felipe's under his authorship;
+39 mixed hunks need hunk-by-hunk split + per-patch A/B -- a submission-time task, not a prep gap).
+So P5 prep = as complete as it can be pre-submission. **All P1-P5 now addressed** (P1 sweep clean, P2
+PAGE/CONTRAST done, P3 DRC native, P4 fully resolved night16/17, P5 catalogue complete). No code change.
+
 ## TICK 2026-07-13 ~night(17) — P4 loud-input rail RE-CHECK = CLEAN (P4 now fully addressed); demo playback robust
 Re-checked P4's "loud-input rail" under a genuinely loud full mix (not just a single note): played the
 firmware's OVERTURE DEMO (DEMO=SEG06 0x40 -> menu -> OVERTURE=SEG00 0x02) and characterized the reverb

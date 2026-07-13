@@ -63,18 +63,43 @@ Apply + A/B a reverb WAV (the reverb exercises circular delay buffers and MACs h
    **`compute_fmul_fix_scaled` TRUNC direction** truncates toward zero where B-39 specifies toward
    −Infinity (standalone `compute_fix` uses floorf correctly — the pair is inconsistent).
 
-## D. Performance (DONE) — native fixed MAC family
-- **Native UML for the multifunction fixed MAC block** (multiop 0x06, 0x08-0x12, 0x14-0x16 =
-  `MRF ± Rx*Ry (SSF/SSFR)` + parallel add/sub/avg). IMPLEMENTED: removes the per-op interpreter
-  fallback in the effect kernel's hot path. Verified BIT-IDENTICAL vs the interpreter (reverb WAV
-  md5 match, 0/2.11M samples differ). Flags gated on liveness; ALUSAT baked at translation time.
-  0x07/0x0f (dual add/sub) remain fallback. Strong upstream candidate (the SHARC DRC never had this
-  family).
+## D. Performance (DONE) — native fixed multiply/MAC in the DRC
+The SHARC DRC sent the entire fixed-point multiplier/MAC family to `generate_unimplemented_compute`
+(interpreter fallback). Two distinct patches close it; BOTH are strong upstream candidates (a general
+recompiler gap, not KN7000-specific) and each was verified BIT-IDENTICAL vs the interpreter (reverb WAV
+md5 match, 0/2.11M samples differ), flags gated on liveness, ALUSAT baked at translation time:
+
+1. **Native SINGLE-function fixed multiplier / MAC, signed×signed** (commit bb2d516) — the SS general
+   forms **0x70-0x7f = Rx*Ry, 0xb0-0xbf = MR+Rx*Ry, 0xf0-0xff = MR-Rx*Ry**. This is the ACTUAL effects-
+   kernel HOT PATH: instrumentation showed ~82M interpreter fallbacks / 22 s reverb, ~66M of them these
+   SS multiplies (0x78 Rx*Ry=27M, 0xB8 MR+=15M, 0xF8 MR-=12M, 0xBC=9M, 0x7C=3M). Making them native cut
+   fallbacks 82M→~3M (96%), sf-mult-SS 66M→0. Mirrors the interpreter's general fixed multiplier
+   (sharcops.hxx). Unsigned/mixed-sign and SAT/RND-destination forms still fall back (rare). ★ This is the
+   single highest-impact perf patch — the DRC never implemented it and every 21065L effect leans on it.
+2. **Native MULTIFUNCTION fixed MAC block** (multiop 0x06, 0x08-0x12, 0x14-0x16 = `MRF ± Rx*Ry (SSF/SSFR)`
+   + parallel add/sub/avg). Implemented earlier; NOTE the KN7000 kernel does NOT use this block (0 multiop
+   fallbacks measured) — so its perf value is for OTHER SHARC titles, not the KN7000. 0x07/0x0f (dual
+   add/sub) remain fallback.
+- Plus the **fixed-point AVG (op 0x09)** native emission (commit 630c68d, listed in B.2) — the largest
+  remaining single-function fallback after the multiplier (~3M/run), overflow-free signed average with
+  exact AC carry.
 
 ## Upstreaming plan
-B.1 (ALUSAT) is the headline and cleanest submission (a demonstrable DRC-vs-interpreter divergence).
-Package as: (1) ALUSAT across the DRC fixed ALU family + the translation-time specialization; (2) the
-C-group correctness fixes as a follow-up, each with its TRM citation. The `adsp21065l_device` variant
-(A) can go separately once its memory map is datasheet-confirmed. Keep the interpreter as the
-conformance oracle in the commit messages — every fix here restores DRC==interpreter or
-interpreter==TRM.
+Two independent headline submissions, both demonstrable DRC-vs-interpreter issues in mainline MAME:
+- **B.1 (MODE1 ALUSAT)** — the CORRECTNESS headline (the recompiler silently diverged from the interpreter
+  on any SHARC program with ALUSAT set). Package: ALUSAT across the DRC fixed-ALU family + the
+  translation-time specialization.
+- **D.1 (native single-function fixed multiplier)** — the PERFORMANCE headline (the DRC punted the entire
+  fixed multiply/MAC family to the interpreter; ~66M fallbacks/run gone). Package: the SS general forms
+  0x70-7f/0xb0-bf/0xf0-ff; then D.2 (multifunction MAC) + B.2 (AVG) as follow-ons.
+Then (3) the C-group correctness fixes, each with its TRM citation (these change effect output → each wants
+a maintainer A/B). The `adsp21065l_device` variant (A) goes separately once its memory map is datasheet-
+confirmed. Keep the interpreter as the conformance oracle in the commit messages — every fix restores
+DRC==interpreter or interpreter==TRM.
+
+Ordering note: B.1 and D.1 are logically independent (correctness vs perf) and touch mostly different code
+(fixed-ALU tail vs the multiplier decode), so they can be split into two clean series. Both live on the base
+`adsp21062_device` (NOT the 21065L subclass), so they benefit every 2106x SHARC system in MAME. Extraction
+is mechanical but hunk-by-hunk (sharcdrc.cpp has 39 hunks mixing ALUSAT/MAC/multiplier); a submission pass
+should build+A/B each patch in isolation (reverb WAV md5) before sending. NOT done here (submission is
+Felipe's, under his authorship); this catalogue is the complete map.
