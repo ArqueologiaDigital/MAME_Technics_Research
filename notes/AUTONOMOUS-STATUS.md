@@ -5,6 +5,22 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(20) — DATA-DIAL: 0x10 affects NEITHER screen NOR sound; KN5000 data-wheel doc cross-referenced
+Decisive narrowing of the data-dial question. Sound test (/tmp/dial_tg.lua): sustained note settled, drove
+0x10 full-range, counted TG writes 0x98050000-0f settled-vs-driving = 42 vs 42 (no spike, no reverb change).
+So **0x10 does NOT modulate the sound -- it is NOT a MIDI-CC controller** (modwheel/pitch/etc.). Combined with
+7 screens of no visible navigation, 0x10 generates events (latch follows, queued like the working APC/SEQ pot)
+that affect NEITHER screen NOR sound in any tested context.
+KEY REFERENCE FOUND: **kn5000-docs/data-wheel-investigation.md** -- the SISTER product's data-wheel forensics.
+It shows (KN5000, TLCS-900): the data wheel is a NAVIGATION control that posts UI event 0x1C0001F; its
+transport is SEGMENT-0x0B BUTTON PACKETS (bit7=CW/bit6=CCW); and TYPE-2 encoder packets were explicitly the
+WRONG system (firmware treated them as MIDI CC). Different CPU so code doesn't port, but the DESIGN reframes
+the KN7000 question. Two live possibilities: (a) 0x10 IS the wheel but its nav-event consumer isn't acted on
+by any reachable screen (faithful); (b) the real nav wheel is BUTTON-STYLE CW/CCW and 0x10 is vestigial.
+DECISIVE NEXT (KN5000 doc's own method, ported): MAME debugger -- drive 0x10, watch the input-queue consumer /
+UI-nav-event write; nav event fires => (a); nothing => hunt a button-style wheel. Wiring stays (schematic-
+grounded ROTA/ROTB->AD0=0x10, harmless, no regression). No code change. Full: notes/slider-cp-protocol.md.
+
 ## TICK 2026-07-13 ~night(19) — DATA-DIAL thoroughly explored (7 screens + panel-memory angle): visible consumer NOT found
 Tested the last two untested dial-consumer contexts: SEQUENCER PLAY (SEG0D 0x08) and EASY RECORD
 (SEG0C 0x08). The dial is INERT in both (latch 0x5006BEA0 follows = events fire, 0 px visible). That is

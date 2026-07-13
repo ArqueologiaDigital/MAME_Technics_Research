@@ -174,6 +174,31 @@ the wiring is correct and the inertness is FAITHFUL; a visible demo requires the
 untested consumer) -- reach it via the SEQUENCER section buttons, then turn the dial while a numeric field
 (measure/step/value) is focused. Not a defect; just an unreached demo context.
 
+### UPDATE 2026-07-13 night(19): SEQUENCER tested too (inert); 0x10 affects NEITHER screen NOR sound; KN5000 cross-ref
+Tested SEQUENCER PLAY (SEG0D 0x08) and EASY RECORD (SEG0C 0x08): dial inert there too (7 screens total).
+Then the DECISIVE sound test (/tmp/dial_tg.lua): played a sustained note, let the envelope settle, drove
+0x10 across its full range, and counted TG register writes (0x98050000-0f) settled-vs-driving = **42 vs 42**
+(no spike) with no reverb-output change. So **0x10 modulates the SOUND either -- it is NOT a MIDI-CC
+controller (modwheel/pitch/etc.).** Net: 0x10 generates events (latch follows; queued to 0x5006bcf8, same as
+the working APC/SEQ pot) that affect NEITHER the screen NOR the sound in any tested context.
+
+**KN5000 CROSS-REFERENCE (kn5000-docs/data-wheel-investigation.md) -- the sister product's design pattern:**
+the KN5000's data wheel is a NAVIGATION control that ends up posting a UI event (0x1C0001F); crucially, its
+transport is SEGMENT-0x0B BUTTON PACKETS (bit7=CW, bit6=CCW), and that doc's "Previous Approaches (Failed)"
+explicitly records that TYPE-2 encoder packets were the WRONG system there (the firmware treated them as MIDI
+CC). The KN5000 is TLCS-900 (different CPU/addresses), so its code doesn't port directly, BUT the DESIGN is
+instructive: (1) a data wheel posts a UI-navigation event when it works; (2) in this product family Type-2 is
+for MIDI CC, and the nav wheel may be button-style. For the KN7000 the schematic says the wheel's ROTA/ROTB
+-> AD0/AD1 -> the panel digitises it, and 0x10 = bank00 sub0 = AD0, so 0x10 IS plausibly the wheel's
+transport -- but my exhaustive tests show it drives nothing observable. TWO live possibilities remain:
+ (a) 0x10 IS the wheel, its consumer posts a nav event, but no reachable screen's focus acts on it (faithful);
+ (b) the KN7000's real nav wheel is a BUTTON-STYLE CW/CCW mechanism (like the KN5000) on some segment, and
+     0x10 is a vestigial/unused Type-2 line.
+DECISIVE NEXT (the KN5000 doc's own method, ported): in the MAME debugger, drive 0x10 and watch the input
+event queue's consumer / the UI-navigation event write -- if a nav event fires, it's (a); if nothing, hunt a
+button-style CW/CCW wheel. The wiring stays (schematic-grounded, harmless, no regression) pending that or
+real-hardware confirmation. This is now a well-scoped deep-RE task, not a headless screen-guessing chase.
+
 ### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
 From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
 184 → 252 → **300 (max)** in TWO steps and then saturated. So a single detent (+4) ≈ +68 BPM here, i.e. the
