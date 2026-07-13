@@ -121,3 +121,24 @@ multi don't.) So confirming those two audible needs setting a per-part effect DE
 the effect-settings screen (dial/soft-key edited), the same panel-reachability that blocks other probes.
 Follow-up: set a chorus/multi depth (e.g. via the settings screen) then re-run the slot probe. Reverb +
 SOUND DSP are the two units confirmed audible+toggleable end-to-end so far.
+
+## ★★ 2026-07-13 — P4 loud-input rail RE-CHECK: NON-ISSUE (reverb handles a loud full-mix song cleanly)
+The effect-divergence sweep validated the reverb on a single keybed note (peak 11.6% FS). To re-check the
+"loud-input rail" question (P4) under a genuinely LOUD full-orchestral mix, I played the firmware's own
+OVERTURE DEMO (DEMO = SEG06 0x40 -> demonstration menu -> OVERTURE = left soft-key row1 = SEG00 0x02) and
+characterized the reverb output 0xC342 across the whole song:
+- **871 frames sampled, only 2 at/near full scale (|v| >= 0x7FFF00) = 0.23%** -- rare brief transients, not
+  sustained clipping. maxv touched 0x7FFFFF (2^23-1) on those 2 frames = the DSP's own ALUSAT saturation
+  (faithful; the real 21065L saturates too).
+- **The DAC output NEVER clips:** clean speaker WAV over the whole demo peaks at 13296/32767 = **41% FS**,
+  0 samples >= 32000. The reverb slot's rare full-scale transient is scaled by the bridge (gret*gdepth ~0.63)
+  and averaged in the 48 kHz stream, so it never reaches the DAC rail.
+VERDICT: **no loud-input rail problem.** The reverb tank saturates only on rare loud transients (the faithful
+DSP behaviour) and the audible output stays well below clipping even on a loud full mix. P4 loud-input rail
+re-check = CLEAN. (Combined with the P4 loudness resolution above + the earlier 0x8238 decode, **P4 is now
+fully addressed.**)
+BONUS finding: even the OVERTURE demo drives ONLY the reverb unit (chorus/multi/sound-dsp slots stay 0 for
+the whole song) -- confirming those three are per-part effects not present in the default factory mix, so
+the reverb is the machine's primary/always-on effect. Demo playback itself works (reverb 325K->8.4M as the
+orchestral arrangement builds), a nice robustness confirmation of the tempo-timer + accompaniment + reverb
+chain under a real multi-voice song.

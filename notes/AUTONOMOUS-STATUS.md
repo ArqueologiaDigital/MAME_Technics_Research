@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(17) — P4 loud-input rail RE-CHECK = CLEAN (P4 now fully addressed); demo playback robust
+Re-checked P4's "loud-input rail" under a genuinely loud full mix (not just a single note): played the
+firmware's OVERTURE DEMO (DEMO=SEG06 0x40 -> menu -> OVERTURE=SEG00 0x02) and characterized the reverb
+output 0xC342 across the whole song. RESULT: only 2/871 frames touch full scale (0.23% = rare brief
+transients = the DSP's faithful ALUSAT saturation), and the **DAC output NEVER clips** (clean-cfg speaker
+WAV peaks at 41% FS, 0 samples >= 32000). So NO loud-input rail problem -- the reverb handles a loud
+full-orchestral song cleanly. **P4 is now fully addressed** (0x8238 decoded earlier + loudness resolved as
+faithful night(16) + loud-input rail clean this tick).
+BONUS: even the OVERTURE demo drives ONLY the reverb (chorus/multi/sdsp slots stay 0 the whole song) ->
+confirms those three are per-part effects absent from the default factory mix; reverb is the always-on
+primary effect. Demo playback works (reverb builds 325K->8.4M with the arrangement) = robustness confirm of
+the tempo-timer + accompaniment + reverb chain under a real multi-voice song. No code change (measurement
+tick). Reusable: DEMO song = SEG06 0x40 then OVERTURE = SEG00 0x02 (left soft-key row 1). Full: reverb-toggle-findings.
+
 ## TICK 2026-07-13 ~night(16) — SOUND DSP effect confirmed audible+toggleable; P4 reverb-loudness RESOLVED (faithful)
 Two clean outcomes, no code change (measurement + reasoning tick):
 1. **P4 loudness question ANSWERED:** reverb ON being ~2x quieter than OFF is FAITHFUL to the decoded
