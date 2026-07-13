@@ -5,6 +5,23 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(19) — DATA-DIAL thoroughly explored (7 screens + panel-memory angle): visible consumer NOT found
+Tested the last two untested dial-consumer contexts: SEQUENCER PLAY (SEG0D 0x08) and EASY RECORD
+(SEG0C 0x08). The dial is INERT in both (latch 0x5006BEA0 follows = events fire, 0 px visible). That is
+SEVEN screens now (home, DISK MENU, R1/R2 OCTAVE, DEMO menu, sound-select, SEQ PLAY, EASY RECORD) with no
+visible dial navigation on any. Also found in the LAYOUT: the big right-hand wheel is `panel_memory_dial`
+(gen_lay 725) but it is DECORATIVE (no inputtag), and PANEL MEMORY SET is a separate button (SEG13 0x40) --
+so the wheel is (per the author) associated with PANEL-MEMORY/registration recall, and the IPT_DIAL "DATA
+DIAL" port I wired to 0x10 is not bound to any clickable layout element (it responds to MAME's keyboard/mouse
+dial mapping only). CONCLUSION (honest): 0x10 is a relative encoder that GENERATES firmware events correctly
+(verified: latch follows; [0x10,val,0xFF] -> the same live input queue 0x5006bcf8 the working APC/SEQ pot
+uses), but its VISIBLE effect could not be triggered on any reachable screen. Two possibilities remain and
+need REAL-HARDWARE confirmation to decide: (a) FAITHFUL -- the KN7000 UI is soft-key/PAGE driven and the
+wheel's role is a narrow panel-memory/value-entry context I never cornered; or (b) a delivery GAP -- the
+events reach the queue but a consumer step that would move a cursor is missing. The wiring stays (correct +
+additive, no regression); this is now a documented open question for Felipe, not a chase to continue
+headlessly. No code change. Full: notes/slider-cp-protocol.md.
+
 ## TICK 2026-07-13 ~night(18) — P2 PAGE re-validated on the sound-select; data-dial conclusion firmed; chorus/multi still blocked
 All P1-P5 already addressed, so this tick firmed up loose ends via reliable soft-key navigation (using the
 LAYOUT bindings, gen_lay.py -- NOT the stale panel-button-names.md, which mislabels e.g. PIANO as SEG0C 0x01
