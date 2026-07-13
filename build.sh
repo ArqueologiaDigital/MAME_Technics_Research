@@ -78,7 +78,10 @@ else:
 # flag is "ADSP2106X" -- so in a SHARC-only focused build CPU_INCLUDE_DRC stays false and
 # drcuml fails to link. Add the correct flag so the DRC backend is pulled in (idempotent).
 s2 = open(p).read()
-if '"ADSP2106X"' not in s2 and 'DRC_CPUS = {' in s2:
+# NB: check the DRC_CPUS LIST specifically -- "ADSP2106X" always appears elsewhere in cpu.lua
+# as the SHARC's CPU token (CPUS["ADSP2106X"]), so a bare `'"ADSP2106X"' not in s2` check is
+# always false and the patch never fires (the DRC backend then fails to link).
+if 'DRC_CPUS = { "ADSP2106X"' not in s2 and 'DRC_CPUS = { "ADSP21062"' in s2:
     s2 = s2.replace('DRC_CPUS = { "ADSP21062"', 'DRC_CPUS = { "ADSP2106X", "ADSP21062"', 1)
     open(p, 'w').write(s2)
     print("cpu.lua: DRC_CPUS += ADSP2106X (SHARC DRC linkage)")
