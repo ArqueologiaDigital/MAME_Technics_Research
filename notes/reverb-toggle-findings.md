@@ -112,5 +112,12 @@ correctly, contradicting panel-button-names.md's stale "RIGHT2 ON" label) makes 
 screen's RIGHT1/2/LEFT part indicators, so it is the DIGITAL-EFFECT row (0x04=REVERB flag-confirmed,
 0x08=SOUND DSP slot-confirmed), NOT the part on/off row the button-names notes claim. Method (reusable):
 keybed chord + sample DSP output slots via mach.devices[":dsp"].spaces["data"]:read_u32(addr) --
-reverb 0xC342, multi 0xC344, chorus 0xC34A, sound-dsp 0xC356. CHORUS + MULTI enable-buttons were NOT in the
-SEG0F row (a different SEG / need the DIGITAL EFFECT menu) -- their audibility confirmation is a follow-up.
+reverb 0xC342, multi 0xC344, chorus 0xC34A, sound-dsp 0xC356. CHORUS + MULTI are PER-PART effects, not
+global toggles: the layout binds CHORUS=SEG11 0x04 / MULTI=SEG10 0x04 (GLOBAL EFFECT row, bank A GE_BITS),
+but pressing them did NOT light their output slots (0xC34A/0xC344 stayed 0) -- because their feed is a
+PER-PART send/DEPTH (chorus 0x8198, multi 0x8298) that defaults to 0, so no part reaches the unit until a
+depth is set. (Reverb has a global send 0.80 default; SOUND DSP's SEG0F 0x08 set its send directly; chorus/
+multi don't.) So confirming those two audible needs setting a per-part effect DEPTH first -- which lives on
+the effect-settings screen (dial/soft-key edited), the same panel-reachability that blocks other probes.
+Follow-up: set a chorus/multi depth (e.g. via the settings screen) then re-run the slot probe. Reverb +
+SOUND DSP are the two units confirmed audible+toggleable end-to-end so far.
