@@ -43,6 +43,25 @@ A normal boot + sound-select writes NO group-0x20 sends during selection -- the 
 driver's DEFAULT m_gain_send=0.80, not a per-sound write. The per-part sends/depths above are written at BOOT
 and by the effect TOGGLES, not by choosing a sound. So sounds don't carry chorus in this model.
 
+## ★ CROSS-REFERENCE (2026-07-13 night 22): this is a KNOWN, PARTLY-DEFERRED issue -- read these FIRST
+`notes/effects-sweep-results.md` (P1 sweep wf_46aaaf77-352) already established:
+- **Effect-type navigation is COMPLETE**: press-and-HOLD ~2.5s opens the type screen (REVERB SEG0F 0x04,
+  CHORUS SEG11 0x04, MULTI SEG10 0x04, SOUND DSP SEG0F 0x08); the **GROUP cursor SEG09 0x04 up / 0x08 down**
+  switches effect groups ("instant type-set switch"); the **PAGE rocker SEG0B 0x10/0x20** walks type-pages
+  within a group; side soft-keys (L1-4 = SEG00 0x02/08/20/01, R1-4 = SEG11 0x10/20, SEG13 0x01, SEG12 0x01)
+  pick presets. EXIT = SEG0B 0x80; do NOT press SEG00 0x04 (DETAIL EDIT). Confirmed this tick: press-and-hold
+  MULTI opens "MULTI EFFECT PAGE 6/8" and the side soft-keys move the highlight (Shallow1->Shallow5).
+- **REVERB type-select WORKS + is audible** (8 types, distinct tails) -- proves type-selection DOES reprogram
+  the DSP. **CHORUS/MULTI/SOUND-DSP = "no audible effect"**, explicitly DEFERRED as the "multi-unit
+  send/return audibility model" (notes/effect-multi-unit-routing.md), NOT a navigation problem.
+So my night(21) "they need a type selected" was INCOMPLETE: the type IS selectable and DOES reprogram the
+unit, but the output still doesn't reach the DAC audibly for multi/chorus. The GENUINELY-NEW detail from my
+[FXSEND] probe that those older notes lack: (1) the PER-PART DEPTH channels 0x30-0x3B (+ per-part sends
+0x06/0x07) are written by the firmware but NOT decoded by the driver; (2) the MULTI global send ch 0x29 IS
+set (m_gain_multi=0.63) and dsp_audio_tick DOES feed unit 1 -- yet 0xC344 stays exactly 0, so the multi
+unit's own DSP output is null (its microprogram isn't producing), which points at the DSP-side effect model
+(the deferred multi-unit routing/upload), not the driver send/feed.
+
 ## Verdict / next
 This is a real DECODE GAP (per-part effect model incompletely modeled), NOT "effects unused". Fixing it is a
 sizeable but high-value task: (a) map channels 0x30-0x3B (per-part depths) + 0x06/0x07 (per-part sends) to

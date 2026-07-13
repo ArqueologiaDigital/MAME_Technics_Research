@@ -5,6 +5,25 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(22) — reached the MULTI EFFECT screen (P2 scenario); chorus/multi audibility is a KNOWN DEFERRED issue
+Pursued the night(21) lead (select an effect type to make MULTI audible). REACHED the MULTI EFFECT type
+screen (press-and-hold MULTI = SEG10 0x04 -> "MULTI EFFECT PAGE 6/8": center type list Overdrive..Cross
+Delay, side Shallow1-8 presets) -- this IS Felipe's P2 "MULTI EFFECT PAGE n/8" screen, now reachable (PAGE
+works). Side soft-keys move the highlight (selected Shallow1->Shallow5, confirmed by snapshot). BUT multi
+slot 0xC344 stayed 0 through every selection + a MULTI toggle. The DATA DIAL does NOT scroll the type list
+either (8th screen with no visible dial effect; the list uses the ˅ soft-key / GROUP cursor).
+★ KEY: this is ALREADY DOCUMENTED. notes/effects-sweep-results.md (P1 sweep) established that effect-type
+NAVIGATION is COMPLETE (press-and-hold open; GROUP cursor SEG09 0x04/0x08; PAGE rocker SEG0B 0x10/0x20;
+side soft-keys; EXIT SEG0B 0x80) and that REVERB types are audible but CHORUS/MULTI/SOUND-DSP give "no
+audible effect" -- DEFERRED as the multi-unit send/return audibility model (notes/effect-multi-unit-routing.md).
+So I was partly re-discovering known ground; should have read effects-sweep-results.md first. GENUINELY-NEW
+detail added to notes/per-part-effect-model.md: the per-part DEPTH channels 0x30-0x3B (+ sends 0x06/0x07)
+are written but NOT decoded; and MULTI's global send ch 0x29 IS set + unit 1 IS fed, yet 0xC344 is exactly 0
+=> the multi microprogram itself isn't producing (DSP-side model), not a driver send/feed bug.
+NET this tick: confirmed the P2 MULTI EFFECT screen is reachable + navigable; chorus/multi audibility remains
+the known deferred multi-unit routing task (larger, lower priority; reverb -- the important effect -- works).
+No code change (the earlier debug log was net-zero, already reverted+rebuilt+published last tick).
+
 ## TICK 2026-07-13 ~night(21) — CHORUS/MULTI root cause FOUND: they need an effect-TYPE selected (algorithm upload), not just a send
 Cracked why chorus/multi never activate. Added a temporary [FXSEND] logerror in the tonegen group-0x20 decode,
 ran with `-log`, and pressed the effect toggles. FINDINGS: (1) the KN7000 effect model is PER-PART -- the
