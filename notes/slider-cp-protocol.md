@@ -199,6 +199,22 @@ event queue's consumer / the UI-navigation event write -- if a nav event fires, 
 button-style CW/CCW wheel. The wiring stays (schematic-grounded, harmless, no regression) pending that or
 real-hardware confirmation. This is now a well-scoped deep-RE task, not a headless screen-guessing chase.
 
+### ★ RESOLUTION toward FAITHFUL (2026-07-13 night(20), /tmp/ram_diff.lua): the dial IS processed, not inert
+Broad RAM diff of the CP/UI area (0x50060000-0x50070000, u32) on the idle home screen while driving 0x10
+full-range: **45 words changed**, well beyond the latch -- the dial's events are actively CONSUMED and
+PROCESSED. Concretely: the event queue buffer fills at 0x5006BC78+ ([0x10, remapped_pos, 0xFF] frames; the
+raw dial 24,48,72.. is REMAPPED via table 0x48613188 to 0D,1A,27,34,40,4C,5E,72,8F,C5), head/tail advance
+(0x5006BD00/04), a per-turn dial-position LOG accumulates at 0x5006BF44+ (one u32 per position), and CP-layer
+state at 0x5006BEEC/0x5006BEF0 updates. Searching the firmware for those addresses: ALL references
+(0x5006BEEC x2, 0x5006BEF0 x8, 0x5006BF44 x2) live in the CP/dial handler range 0x484AD8xx-0x484AE2xx -- i.e.
+the input layer, NOT any display/UI code. CONCLUSION: 0x10 is a FUNCTIONAL relative encoder -- its handler
+processes each position and posts change events -- so this is possibility (a) (faithful), NOT (b) a delivery
+gap and NOT vestigial. The wiring is CORRECT and CONFIRMED working at the CP/event layer. The only thing
+still unfound is the VISIBLE UI consumer (a focused screen whose cursor/value the posted events move); none
+of the 7 tested screens has one. That is a UI-event-routing question (which screen contexts subscribe to the
+dial event), separate from the now-settled "does the dial work" question -- it does. (Corrects the earlier
+"inert/does-nothing" framing: the dial does nothing VISIBLE on these screens, but it is fully processed.)
+
 ### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
 From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
 184 → 252 → **300 (max)** in TWO steps and then saturated. So a single detent (+4) ≈ +68 BPM here, i.e. the

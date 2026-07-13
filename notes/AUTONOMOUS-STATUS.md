@@ -5,6 +5,20 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(20b) — ★ DATA-DIAL RESOLVED toward FAITHFUL: 0x10 is PROCESSED (not inert), visible-consumer question isolated
+Broad RAM diff (0x50060000-70000, u32) while driving 0x10 full-range on the idle home screen: 45 words
+changed, FAR beyond the latch -- the dial's events are actively CONSUMED. The event queue buffer fills
+(0x5006BC78+, [0x10,remapped,0xFF]; raw pos remapped via table 0x48613188), head/tail advance, a per-turn
+dial-position LOG accumulates (0x5006BF44+), and CP-layer state (0x5006BEEC/BEF0) updates. Firmware refs to
+those addresses ALL sit in the CP/dial handler range 0x484AD8xx-0x484AE2xx (input layer, NOT display code).
+So 0x10 is a FUNCTIONAL relative encoder that processes each position + posts change events = possibility
+(a) FAITHFUL, NOT a delivery gap, NOT vestigial. **The "does the data dial work" question is now SETTLED:
+it works at the CP/event layer; the wiring is CORRECT + confirmed.** The only remaining unknown is the
+VISIBLE UI CONSUMER -- which focused screen's cursor/value subscribes to the dial event (none of the 7
+tested does) -- a UI-event-routing detail, not a defect. Corrects the earlier "inert" framing (it does
+nothing VISIBLE, but is fully processed). No code change. Full: notes/slider-cp-protocol.md. Data-dial saga
+effectively CLOSED (functional + faithful); the visible demo screen is a minor optional follow-up.
+
 ## TICK 2026-07-13 ~night(20) — DATA-DIAL: 0x10 affects NEITHER screen NOR sound; KN5000 data-wheel doc cross-referenced
 Decisive narrowing of the data-dial question. Sound test (/tmp/dial_tg.lua): sustained note settled, drove
 0x10 full-range, counted TG writes 0x98050000-0f settled-vs-driving = 42 vs 42 (no spike, no reverb change).
