@@ -61,3 +61,31 @@ Stepping TOTAL DEPTH down x3 then up x3 while tapping the sub-TG bus:
   seen on many channels in the group-0x20 dump), NOT a depth/mystery control.
 - 0x803A = 0x007F constant (wet/dry pair, reverb ON).
 VERDICT: the depth control is entirely 0x8338; 0x8238 needs no modelling. "0x8238 undecoded" item CLOSED.
+
+## ★★★ 2026-07-13 — REVERB CONFIRMED AUDIBLE + TOGGLE WORKS END-TO-END (the whole chain is live)
+The four dependencies this note listed in 2026-07-11 are now all satisfied (send bus modelled in the
+tonegen; bridge wiring; SHARC divergence FIXED 2026-07-12 via ALUSAT+native-MAC; DSP path default-on), so I
+measured the actual result. OBJECTIVE probe (/tmp/reverb_probe.lua + reverb_toggle.lua): play a C-major
+chord on the keybed, sample the DSP reverb output slot 0xC342 (unit-0 return) and its send input 0xC362 as a
+windowed-peak envelope, and separately capture the CLEAN speaker WAV (custom cfg with NO MAME host
+audio_effects -- the shipped cfg adds a host "Reverb" that would confound the test).
+- **REVERB ON (flag 0x500C0758 bit9 = true, the default):** after note-off the send input 0xC362 decays to
+  0 within ~1.5 s (the note's own release), but the reverb OUTPUT 0xC342 keeps ringing and decaying
+  exponentially for ~1 s AFTER the input is gone (14732 -> 9353 -> 3831 -> 974 -> 385) = a genuine reverb
+  TAIL. Healthy level (~24% FS peak), no rail, no clip. In the speaker WAV the RMS decay after note-off is
+  slow (1303 -> 775 -> 309 -> 82 over ~1 s).
+- **TOGGLE:** pressing SEG0F 0x04 flips the reverb flag bit9 true->false (CONFIRMS SEG0F 0x04 = the REVERB
+  button, matching this note's chain -- NOT "RIGHT1 ON" as panel-button-names.md mislabels it). With reverb
+  OFF the send 0xC362 = 0 (send muted) and there is no tail; the speaker WAV decays fast (2406 -> 333 -> 42
+  over ~0.5 s = dry). So ON = wet tail, OFF = dry. **This directly resolves Felipe's complaint "I cannot
+  toggle reverb on/off in the emulator as I can on the real KN7000" -- it now audibly toggles.**
+- Demo for Felipe's ear: KN7000/reverb_toggle_demo.wav (6 s: reverb-ON chord+tail, toggle, reverb-OFF dry).
+
+### P4 loudness datapoint (was ear-blocked -- now quantified)
+During the sustained note, reverb ON is ~2.4x QUIETER than reverb OFF (speaker RMS 1780 vs 4205). Cause: the
+reverb-ON crossfade routes the DAC to the DSP RETURN only (direct 0 / return 0x7F) scaled by
+send 0.80 * return 1.0 * depth 0.63 ~= 0.5, whereas OFF is the full dry direct. So turning reverb on drops
+the perceived level ~half. Whether that matches the real KN7000 (where reverb usually ADDS a tail without
+halving the dry) is the open P4 calibration question -- still needs Felipe's ear, but now with a number.
+Candidate fix if he confirms it's too quiet: raise the return*depth makeup (or include a dry component in
+the ON crossfade) so ON ~= OFF loudness. NOT changed unsupervised (rule g -- it alters the praised reverb).

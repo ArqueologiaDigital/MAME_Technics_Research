@@ -5,6 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(15) — ★★★ REVERB CONFIRMED AUDIBLE + ON/OFF TOGGLE WORKS (Felipe's explicit ask, RESOLVED)
+Measured the crown-jewel reverb end-to-end now that its last blocker (SHARC divergence) is fixed. Objective
+probe (no ear needed): play a keybed C chord, sample the DSP reverb output 0xC342 + send input 0xC362 as a
+peak envelope, AND capture a CLEAN speaker WAV (custom cfg, NO MAME host audio_effects -- the shipped cfg's
+host "Reverb" would confound).
+RESULT: **REVERB WORKS.** Reverb ON (default, flag 0x500C0758 bit9=true): after note-off the reverb OUTPUT
+keeps ringing ~1 s AFTER the send input has gone to 0 (14732->9353->3831->974->385) = a genuine exponential
+TAIL, ~24% FS, no rail/clip. **TOGGLE WORKS:** SEG0F 0x04 flips the reverb flag true->false (confirms it IS
+the REVERB button, NOT "RIGHT1 ON" as the button-names map claims); with reverb OFF the send=0 (muted) and
+there's no tail (speaker WAV decays fast, dry). So ON=wet tail, OFF=dry. **This RESOLVES Felipe's complaint
+"I cannot toggle reverb on/off in the emulator as I can on the real KN7000."**
+Demo WAV for his ear: KN7000/reverb_toggle_demo.wav (6 s A/B). No code change this tick -- it was a
+confirmation that the prior fixes (divergence + send-bus model + bridge) combine to a working audible reverb.
+P4 LOUDNESS (was ear-blocked -> now quantified): reverb ON is ~2.4x quieter than OFF during the note
+(RMS 1780 vs 4205) because ON routes the DAC to the DSP return only (send0.80*ret1.0*depth0.63~=0.5) vs the
+full dry when OFF. Candidate makeup-gain fix documented but NOT applied unsupervised (rule g -- alters the
+praised reverb); needs Felipe's ear to confirm the balance. Full detail: notes/reverb-toggle-findings.md.
+KEYBED note-trigger recipe (reusable): set KEYS1 fields 0x0100/0x1000/0x8000 = C4/E4/G4 chord; DSP reverb
+output read = mach.devices[":dsp"].spaces["data"]:read_u32(0xC342), sign-extend 24-bit.
+
 ## TICK 2026-07-13 ~night(14) — ★ DATA dial WIRED & shipped (IPT_DIAL -> CP wire 0x10); event-gen disasm-confirmed
 Made the big DATA value-wheel FUNCTIONAL (commit 14ed7cb, built+published). The driver already had a dead
 `IPT_DIAL` "DATA DIAL" port + a `seg_to_addr[0x1A]=0x10` "VALUATOR wire" placeholder that nothing read;
