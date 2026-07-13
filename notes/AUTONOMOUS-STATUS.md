@@ -17,9 +17,14 @@ caller 0x484AD2CD emits a [id, value, 0xFF] event via enqueue 0x484AD519 -> a ge
 schematic ROTA/ROTB encoder + elimination (0x17=tempo confirmed, 0xD0-D3=pots).
 VERIFIED (driver path, no injection): setting the IPT_DIAL field from Lua makes the firmware's 0x10 latch
 0x5006BEA0 track it exactly (set 3,6,..30 -> latch 00,03,..1E); buttons still deliver (DISK MENU still opens).
-HONEST SCOPE: on-screen nav needs a FOCUSED value-edit field; home/DISK-MENU (soft-key) screens show no
-visible change when turned = faithful. A headless "dial scrolls a list" screenshot wasn't captured (the
-seg->function map is unreliable for reaching sound-select); the event-gen disasm is the substitute proof.
+HONEST SCOPE: on-screen nav needs a FOCUSED value-edit field; the 3 reachable screens (home=no focus,
+DISK MENU + R1/R2 OCTAVE = soft-key-edited) show no visible change when the dial is turned = FAITHFUL. A
+headless "dial scrolls a list" screenshot wasn't captured (the seg->function map is unreliable -- SEG13 0x02
+opened OCTAVE, which the map calls TRANSPOSE -- so reaching sound/style-select is unproductive headlessly).
+★ QUEUE-LIVENESS PROOF (removes most of the doubt): the 0x484AD2CD->0x484AD519 change path pushes the
+[0x10,value,0xFF] event into queue 0x5006bcf8 -- the SAME queue the VERIFIED-WORKING APC/SEQ pot (0xD2) uses
+via the SAME path. So the delivery is proven live; only the per-id consumer ACTION differs. The dial reaches
+a real working consumer. Visible confirmation still wants an interactive turn on a sound/style-select screen.
 KEY TIMING (all future visual probes): the musical-notes image at t=8-11 is the BOOT SPLASH; the PMEM home
 screen appears at t~=13. Full detail: notes/slider-cp-protocol.md. NEXT (optional): interactive visible
 confirm on a value-edit screen, or trace the 0x484AD519 consumer for the EV_DIALUP/DOWN focus routing.
