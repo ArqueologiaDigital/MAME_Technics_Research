@@ -1,5 +1,20 @@
 # KN7000 per-part effect model — the group-0x20 send/depth decode is INCOMPLETE (2026-07-13, night 21)
 
+## ⚠️ SUPERSEDED-IN-PART / READ notes/effect-multi-unit-routing.md FIRST (night 22 correction)
+The authoritative effects reference is **notes/effect-multi-unit-routing.md**. It already established
+(2026-07-12) that FOUR effects are routed + validated audible (reverb + chorus + SOUND-DSP + MULTI; DAC
+peak 2443, 0 clipped, effects contribute) with PER-EFFECT returns fixed (commit fa06930). My night(21-22)
+"chorus/multi don't activate / produce 0" was a RE-DISCOVERY artifact of the wrong method:
+ - I enabled MULTI with the GLOBAL toggle (SEG10 0x04) instead of the real per-part enable
+   **PART SETTING p2: MULTI ON=SEG09 0x40, DEPTH=SEG0A 0x01, with another effect active to force the
+   0x8298 send refresh** (effect-multi-unit-routing.md line ~280).
+ - I measured unit-1's slot 0xC344, but MULTI's exact UNIT is unresolved (u1 fed, but u5/rec10 is the
+   candidate) -- so a 0 there does NOT mean "multi silent".
+Still-genuinely-open per that note (all deep/deferred/supervised): pin MULTI's unit via the kernel SPORT
+RX channel->unit decode (rec04; channel 0x29 -> input slot); EQ = master insert (active-detect guard);
+FLAG3 4 records (pitch-shift + specialty reverbs) = full frame model. The reverb is production-quality.
+Below is my [FXSEND] channel data (still useful raw evidence for the per-part matrix), kept for reference.
+
 ## How this was found
 Added a temporary `logerror("[FXSEND] ch=%02X reg=%X data=%04X")` in the tonegen's group-0x20 decode
 (`(addr & 0xFC00) == 0x8000`, kn7000.cpp ~line 331) firing on every tg1 reg-0x08 (SEND) / reg-0x0A (RETURN)

@@ -5,6 +5,32 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-13 ~night(23) — CORRECTION: effects are LARGELY DONE (4 audible); my recent chorus/multi work was re-discovery
+Finally read the AUTHORITATIVE effects note **notes/effect-multi-unit-routing.md** (should have been first).
+It establishes (2026-07-12): FOUR effects routed + validated audible -- reverb (u0 rec56, production-quality)
++ chorus (u4 rec06) + SOUND-DSP (u9) + MULTI -- coexisting robustly (DAC peak 2443, 0 clipped), with
+PER-EFFECT returns fixed (commit fa06930). So the "chorus/multi blocked" I chased across night(20-22) was a
+METHOD artifact: (1) I enabled MULTI with the GLOBAL toggle SEG10 0x04 instead of the real per-part enable
+**PART SETTING p2 (MULTI ON=SEG09 0x40, DEPTH=SEG0A 0x01, with another effect active to force the 0x8298
+refresh)**; (2) I measured unit-1 slot 0xC344, but MULTI's exact UNIT is unresolved (u5/rec10 candidate) so
+0 there is not "silent". Corrected notes/per-part-effect-model.md to point at the authoritative note.
+GENUINELY-OPEN effect refinements (all DEEP + flagged SUPERVISED in that note, because they touch the
+working reverb or need heavy DSP-kernel RE): (a) pin MULTI's unit via the kernel SPORT RX channel->unit
+decode (rec04; ch 0x29 -> input slot); (b) EQ (u8 rec34) master-insert with an active-detect guard; (c)
+FLAG3 4 records (pitch-shift + specialty reverbs) full frame model.
+
+### ★ HONEST STATE-OF-THE-EMULATOR (for future ticks -- avoid re-spinning)
+The KN7000 driver is MATURE. DONE: boots, panel (buttons/sliders/data-dial-faithful), sound plays,
+reverb+chorus+sound-dsp+multi routed/audible, DSP LLE+DRC, SD mounts, MIDI, tempo/demo/accompaniment, all
+P1-P5. Recent autonomous ticks (data dial x5, chorus/multi x4) hit DIMINISHING RETURNS -- largely
+confirming/ re-discovering already-documented facts. The REMAINING high-value work is NOT good autonomous
+fodder: it is either SUPERVISED (the effect refinements above touch the Felipe-praised reverb; C-group SHARC
+TRM fixes change reverb output -- both need his ear/OK), BLOCKED on external inputs (real PCM = undumped
+wave ROMs; floppy FORMAT = RTOS Heisenbug; reverb loudness/EQ makeup = his ear), or already COMPLETE. So the
+best next moves are: ship the P5 SHARC patch series upstream (catalogue is complete + submission is his
+call), OR wait for Felipe to direct the supervised effect/reverb work, OR small durable polish (docs/blog).
+Flagging this so a tick doesn't burn effort re-deriving settled results.
+
 ## TICK 2026-07-13 ~night(22) — reached the MULTI EFFECT screen (P2 scenario); chorus/multi audibility is a KNOWN DEFERRED issue
 Pursued the night(21) lead (select an effect type to make MULTI audible). REACHED the MULTI EFFECT type
 screen (press-and-hold MULTI = SEG10 0x04 -> "MULTI EFFECT PAGE 6/8": center type list Overdrive..Cross
