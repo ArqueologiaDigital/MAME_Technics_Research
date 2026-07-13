@@ -144,12 +144,19 @@ accumulator (0..255, wraps) = exactly what wire 0x10's handler expects (it diffs
 one-scan lag) -- so panel_scan reads m_dial and emits [0x10,pos] itself. Buttons still deliver (DISK MENU
 still opens; no panel regression). seg_to_addr[0x1A] neutralised to 0xff so the dial solely owns wire 0x10.
 
-**Honest scope:** the on-screen navigation effect depends on a FOCUSED value-edit field. On the home screen
-and the DISK MENU (soft-key-navigated), turning the dial shows no visible change -- faithful (the home
-screen has no dial-focus). A headless snapshot demo of the dial scrolling a list wasn't captured because the
-seg->function button map is unreliable for reaching the sound-select screen; the event-generation proof
-above (0x484AD2CD -> 0x484AD519) is the substitute. NEXT (optional): an interactive check on a value-edit
-screen, or trace the 0x484AD519 event consumer to see the EV_DIALUP/DOWN -> UI focus routing.
+**Honest scope:** the on-screen navigation effect depends on a FOCUSED value-edit field. Tried three
+reachable screens; NONE visibly responds to the dial, each for a faithful reason:
+- HOME (PMEM) -- no dial-focus by default -> dial does nothing (correct).
+- DISK MENU -- navigated by the side SOFT-KEYS (the on-screen ◄► arrows), not the dial (0 px change).
+- R1/R2 OCTAVE value-edit screen (reached via SEG13 0x02) -- the "OCTAVE : -2" value is edited by its ˅
+  soft-key; the dial left it unchanged across a +2..+12 sweep while the screen stayed open.
+So the dial's actual consumer screen (sound/style select, or a value-entry mode) was NOT reached. The
+seg->function button map is unreliable (SEG13 0x02 opened OCTAVE, which the map calls "TRANSPOSE"), so
+guessing the path to the sound-select is unproductive headlessly. The event-generation proof
+(0x484AD2CD -> 0x484AD519 emits [0x10,value,0xFF]) + the relative-encoder handler are the substitute
+evidence; the wiring is grounded + additive (was a dead port) with no regression. NEXT (optional): an
+INTERACTIVE turn of the dial on a sound/style-select screen (Felipe, or a reliable menu path), or trace the
+0x484AD519 event consumer to map EV_DIALUP/DOWN -> which screens' focus actually consume it.
 
 ### De-risk (2026-07-13, /tmp/temposmall.lua) — HIGH GAIN / ACCELERATION, so naive wiring would rail instantly
 From a settled 0x40 (tempo 184), stepping the position by only **+4 per event at ~4 Hz** ran the tempo
