@@ -793,12 +793,9 @@ def _cpkey(_seg, _mask): return (_ns2cp[int(_seg[3:], 16)], "0x%02x" % int(_mask
 BTN_FALLBACK = {}
 for _gnm, _gsg, _gmk in RG:                                   # orphan genres (bound ones resolve via BTN_CP)
     BTN_FALLBACK.setdefault(_cpkey(_gsg, _gmk), _gnm)
-# Right-of-display LCD soft-keys, numbered top-to-bottom to mirror the driver's LCDL 1-5 on the left --
-# the user-confirmed PHYSICAL naming (commit 6a67eda). These work; only LCD_SOFTKEYS' row ORDER is
-# used here (top row = LCDR 1), never any fixed-function/part interpretation.
-for _i, (_ls, _lm, _rs, _rm) in enumerate(LCD_SOFTKEYS):
-    BTN_FALLBACK.setdefault(_cpkey(_rs, _rm), "LCDR %d" % (_i + 1))
-# (CUSTOM PANEL is now a real driver-bound button at CPR_SEG1 0x40 -> resolves via BTN_CP, no fallback.)
+# (LCDR 1-5 and CUSTOM PANEL are now real driver-bound buttons -- per Felipe's SW map, LCDR are at
+# CPR_SEG5 SW0/SW4/SW5 = 5/1/2, CPR_SEG6 SW0 = 4, CPR_SEG7 SW0 = 3 -- so they resolve via BTN_CP, no
+# fallback needed. Only the two orphan RHYTHM genres (ORGANIST, 60s & 70s) remain layout-sourced.)
 _btn = [0, 0, 0]
 def _annotate_btn(_m):
     if "<!--" in _m.group(0):                # already carries a comment -> leave it
