@@ -49,7 +49,10 @@ per-wire-ADDR bytes via a PHYS_MAP table, emitting the identical frames.
    probe. The rename follows the CURRENT driver+layout.
 2. CPC MUTE 11-16 + PAGE + DISPLAY HOLD + EXIT ride driver SEG0A/SEG0B, which some notes mark as
    firmware no-ops (possibly dead). Unresolved -- verify the events reach the firmware.
-3. 8 physical buttons are UNBRIDGED (no confident driver binding): CPL BIG BAND & SWING, GOSPEL & BLUES;
+3. 8 physical buttons are UNBRIDGED (no confident driver binding): CPL ORGANIST, 60s & 70s
+   (RETRACTED per Felipe: earlier transcribed here as "BIG BAND & SWING, GOSPEL & BLUES" -- those two
+   genre buttons are NOT on the KN7000 panel; the two orphan CPL RHYTHM-GROUP genre cells are really
+   ORGANIST = driver SEG01/CPL_SEG1 and 60s & 70s = driver SEG02/CPL_SEG2);
    CPR CUSTOM PANEL; CPR LCDR 1-5 (LCD-right soft-keys). Included as named IPT_KEYBOARD "[unbound]" bits.
 4. PART SELECT (L/R1/R2) + CONDUCTOR (L/R1/R2) + TRANSPOSE R2 +/- : driver bits undifferentiated, so
    the L/R1/R2 and +/- assignment within each is a best-effort guess.

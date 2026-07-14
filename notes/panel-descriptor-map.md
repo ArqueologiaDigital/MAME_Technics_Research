@@ -46,14 +46,14 @@ SEG01.2  2005/a0E    CUSTOM                           NAME?
 SEG01.3  2005/a06    BALLAD                           NAME?
 SEG01.4  2005/a0D    JAZZ COMBO                       NAME?
 SEG01.5  2005/a05    ROCK & POP                       NAME?
-SEG01.6  2005/a0C    BIG BAND & SWING                 NAME?
+SEG01.6  2005/a0C    BIG BAND & SWING  [RETRACTED: NOT a KN7000 panel button per Felipe -- mis-read; the real orphan RHYTHM-GROUP genre cell here is ORGANIST]
 SEG01.7  2005/a04    R & B                            NAME?
 SEG02.0  2005/a0B    MOVIE SHOW                       NAME?
 SEG02.1  2005/a03    MARCH                            NAME?
 SEG02.2  2005/a0A    ENTERTAINER                      NAME?
 SEG02.3  2005/a02    COUNTRY                          NAME?
 SEG02.4  2005/a09    LATIN & WORLD                    NAME?
-SEG02.5  2005/a01    GOSPEL & BLUES                   NAME?
+SEG02.5  2005/a01    GOSPEL & BLUES  [RETRACTED: NOT a KN7000 panel button per Felipe -- mis-read; the real orphan RHYTHM-GROUP genre cell here is 60s & 70s]
 SEG02.6  2005/a08    BALLROOM                         NAME?
 SEG02.7  2005/a00    MODERN DANCE                     NAME?
 SEG03.0  2022/a00    INTRO & ENDING 1                 NAME?

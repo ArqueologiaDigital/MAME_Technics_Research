@@ -153,14 +153,22 @@ cells (SEG4 SW4-7, SEG7 SW5-7) need a re-crop to confirm (marked ?).
 | SW2 | LCDL 5 | CUSTOM | ENTERTAINER | FILL IN 2 | MUSIC STYLE ARRANGER | PAD 4 | SOUND SET |
 | SW3 | LCDL 2 | BALLAD | COUNTRY | FADE OUT | VARIATION & MSA 1 | PERFORMANCE PADS/BANK | PLAY CHORD OFF/ON |
 | SW4 | START/STOP | JAZZ COMBO | LATIN & WORLD | FILL IN 1 | ? | PAD 1 | ARRANGER OFF/ON |
-| SW5 | LCDL 3 | ROCK & POP | GOSPEL & BLUES | FADE IN | ? | PERFORMANCE PADS/AUTO | ? |
-| SW6 | INTRO & ENDING 2 | BIG BAND & SWING | BALLROOM | VARIATION & MSA 4 | ? | DEMO | ? |
+| SW5 | LCDL 3 | ROCK & POP | 60s & 70s [was mis-read "GOSPEL & BLUES"] | FADE IN | ? | PERFORMANCE PADS/AUTO | ? |
+| SW6 | INTRO & ENDING 2 | ORGANIST [was mis-read "BIG BAND & SWING"] | BALLROOM | VARIATION & MSA 4 | ? | DEMO | ? |
 | SW7 | SYNCHRO & BREAK | R & B | MODERN DANCE | SPLIT POINT | PAD 6/SOLO ? | PAD 2 | ? |
 
 SEG1+SEG2 hold 16 rhythm-genre buttons (MEMORY/LOAD, SOUL&FUNK, CUSTOM, BALLAD,
-JAZZ COMBO, ROCK&POP, BIG BAND&SWING, R&B, MOVIE SHOW, MARCH, ENTERTAINER,
-COUNTRY, LATIN&WORLD, GOSPEL&BLUES, BALLROOM, MODERN DANCE) -> the 0x2005/arg
+JAZZ COMBO, ROCK&POP, ORGANIST, R&B, MOVIE SHOW, MARCH, ENTERTAINER,
+COUNTRY, LATIN&WORLD, 60s & 70s, BALLROOM, MODERN DANCE) -> the 0x2005/arg
 rhythm-group events, named via RhythmGenreNameTable 0x48735EE4 (genre=(arg+7)%16).
+
+**Correction (per Felipe, who owns the KN7000):** there is NO "BIG BAND & SWING"
+and NO "GOSPEL & BLUES" button on the KN7000 panel — those two silk labels were
+mis-read here (or belong to a different model). The two orphan RHYTHM-GROUP genre
+cells are really **ORGANIST** (CPL SEG1 column; driver event 2005/06 = SEG01.b3)
+and **60s & 70s** (CPL SEG2 column; driver event 2005/0D = SEG01.b4), already
+identified in the SEG00-0B probe table below; they replace the mis-read labels in
+the matrix and button list above.
 
 ## Big picture: all 3 boards' labels match the folklore .lay; only BINDINGS are wrong
 

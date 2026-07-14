@@ -80,14 +80,14 @@ menu open, etc.), same as the button-effect limitation.
 | SEG00 | LCD Left 5 | cpl3 |
 | SEG00 | START/STOP | cpl1 |
 | SEG00 | LCD Left 2 | cpl2 |
-| SEG01 | BIG BAND & SWING | cpl17 |
+| SEG01 | BIG BAND & SWING -- NOT on KN7000 panel per Felipe (SEG01 orphan cell) | cpl17 |
 | SEG01 | JAZZ COMBO | cpl19 |
 | SEG01 | CUSTOM | cpl9 |
 | SEG01 | ROCK & POP | cpl18 |
 | SEG01 | BALLAD | cpl8 |
 | SEG01 | R & B | cpl16 |
 | SEG02 | MODERN DANCE | cpl34 |
-| SEG02 | GOSPEL & BLUES | cpr31 |
+| SEG02 | GOSPEL & BLUES -- NOT on KN7000 panel per Felipe (SEG02 orphan cell) | cpr31 |
 | SEG03 | Fn Key 20A1 | cpl33 |
 | SEG03 | FADE IN | cpl32 |
 
@@ -102,7 +102,7 @@ menu open, etc.), same as the button-effect limitation.
 gen_lay.py now has an `OPLED` dict (SEG,mask)->cpl/cpr output name; the green_led elements bind
 to it via `name=OPLED.get((tag,mask))` so MAME lights them from firmware state. DONE: 11
 rhythm-group genre LEDs (SEG01 SOUL&FUNK=cpl3/CUSTOM=cpl9/BALLAD=cpl8/JAZZ=cpl19/ROCK=cpl18/
-BIGBAND=cpl17/R&B=cpl16; SEG02 ENTERTAINER=cpl27/COUNTRY=cpl26/LATIN=cpl25/GOSPEL=cpl24).
+BIGBAND[NOT on KN7000 panel per Felipe; SEG01 orphan cell]=cpl17/R&B=cpl16; SEG02 ENTERTAINER=cpl27/COUNTRY=cpl26/LATIN=cpl25/GOSPEL[NOT on KN7000 panel per Felipe; SEG02 orphan cell]=cpl24).
 TODO genres (empty in the home sweep -- need re-sweep with a primed radio state): SEG01 MEMORY/
 LOAD & SEG02 MOVIE SHOW/MARCH/BALLROOM/MODERN DANCE. NEXT LED work: (a) sweep SOUND GROUP LEDs
 (0x2004 bits) + add to OPLED + wire the SG loop's green_led like the RG loop; (b) sweep the
