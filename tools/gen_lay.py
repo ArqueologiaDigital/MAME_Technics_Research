@@ -497,15 +497,20 @@ RB.append(L("TECHNI-CHORD",403,258,68,9,TXTH)); RB.append(L("SOLO",474,258,40,9,
 RB += [P("red_led",428,274,8,8,name=PANEL_LED.get(("SEG0D","0x01"))), P("round_btn",416,285,32,32,tag="SEG0D",mask="0x01"), P("red_led",488,274,8,8,name=PANEL_LED.get(("SEG0C","0x01"))), P("round_btn",476,285,32,32,tag="SEG0C",mask="0x01")]
 RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P("hline",470,327,22,3)]
 # bank A PART SELECT group (ev2009, arg-mid 0/1/2) -- all three members now known.
-PARTSEL=[("SEG0D","0x02"),("SEG0E","0x02"),("SEG0E","0x01")]
+# Panel silk order left->right = LEFT, RIGHT 2 (centre), RIGHT 1 (Felipe 2026-07-14): the layout had the
+# outer pair horizontally mirrored, so LEFT/RIGHT 1 (SEG0E.01=cpr_led36 / SEG0D.02=cpr_led34) are swapped;
+# centre RIGHT 2 kept. (The service-manual schematic mislabels these -- its D1069/D1055 LEFT/RIGHT 1 are the
+# reverse of the panel silk; driver PORT_NAMEs corrected to match the silk.)
+PARTSEL=[("SEG0E","0x01"),("SEG0E","0x02"),("SEG0D","0x02")]
 for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("red_led",cx+12,334,8,8,name=PANEL_LED.get((tg,mk))), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]   # PART SELECT LEDs RED (Felipe); cpr_led34/35/36
 # bank A CONDUCTOR group (ev2008, arg-mid 0/1/2) -- all three members now known.
-CONDUCT=[("SEG0F","0x02"),("SEG10","0x02"),("SEG11","0x02")]
-# 3 CONDUCTOR LEDs (Felipe: each of the 3 buttons has its own LED; schematic D1107/D1114/D1120).
-# The group SEG0F/10/11 0x02 maps contiguously to cpr_led63/64/65 (same bit, +1 per SEG column -- verified
-# by SEG10.02->64, SEG11.02->65). CONDUCTOR-1 (SEG0F.02, j=0) = cpr_led63: it's a mode/state LED so the
-# press-based LED-test doesn't light it, but 63 is the free, contiguous slot below the confirmed 64/65.
-CONDUCT_LED=["cpr_led63", PANEL_LED.get(("SEG10","0x02")), PANEL_LED.get(("SEG11","0x02"))]
+# Panel silk order left->right = LEFT, RIGHT 2 (centre), RIGHT 1 (Felipe 2026-07-14): same horizontal-mirror
+# fix as PART SELECT -- the outer pair (SEG11.02=cpr_led65 LEFT / SEG0F.02=cpr_led63 RIGHT 1) is swapped;
+# centre SEG10.02=cpr_led64 (RIGHT 2) kept. Each button has its own LED; the group SEG0F/10/11 0x02 maps
+# contiguously to cpr_led63/64/65 (schematic D1107/D1114/D1120, but its RIGHT 1/RIGHT 2 labels are the
+# reverse of the panel silk -- driver PORT_NAMEs corrected to match).
+CONDUCT=[("SEG11","0x02"),("SEG10","0x02"),("SEG0F","0x02")]
+CONDUCT_LED=[PANEL_LED.get(("SEG11","0x02")), PANEL_LED.get(("SEG10","0x02")), "cpr_led63"]
 for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12,399,8,8,name=CONDUCT_LED[j]), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]   # CONDUCTOR LEDs RED (Felipe)
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 # bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK

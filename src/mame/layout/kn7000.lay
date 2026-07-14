@@ -854,8 +854,8 @@
 		<element ref="round_btn_big" inputtag="CPR_SEG1" inputmask="0x40"><!-- CUSTOM PANEL --><bounds x="818.0" y="351.8" width="42" height="42"/></element>
 
 		<element ref="hline"><bounds x="360.5" y="316.6" width="22" height="3"/></element>
-		<element ref="red_led" name="cpr_led34"><!-- PART SELECT LEFT --><bounds x="367.3" y="331.3" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="CPR_SEG1" inputmask="0x02"><!-- PART SELECT LEFT --><bounds x="353.1" y="338.1" width="37" height="37"/></element>
+		<element ref="red_led" name="cpr_led36"><!-- PART SELECT LEFT --><bounds x="367.3" y="331.3" width="8" height="8"/></element>
+		<element ref="round_btn" inputtag="CPR_SEG2" inputmask="0x01"><!-- PART SELECT LEFT --><bounds x="353.1" y="338.1" width="37" height="37"/></element>
 
 		<element ref="big_ring"><bounds x="808.9" y="326.2" width="130" height="130"/></element>
 		<element ref="favorites_text"><bounds x="809.0" y="468.3" width="72" height="8"/></element>
@@ -867,8 +867,8 @@
 		<element ref="red_led" name="cpr_led35"><!-- PART SELECT RIGHT 2 --><bounds x="427.2" y="330.5" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="CPR_SEG2" inputmask="0x02"><!-- PART SELECT RIGHT 2 --><bounds x="414.3" y="338.1" width="37" height="37"/></element>
 
-		<element ref="red_led" name="cpr_led36"><!-- PART SELECT RIGHT 1 --><bounds x="490.3" y="330.9" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="CPR_SEG2" inputmask="0x01"><!-- PART SELECT RIGHT 1 --><bounds x="475.5" y="338.1" width="37" height="37"/></element>
+		<element ref="red_led" name="cpr_led34"><!-- PART SELECT RIGHT 1 --><bounds x="490.3" y="330.9" width="8" height="8"/></element>
+		<element ref="round_btn" inputtag="CPR_SEG1" inputmask="0x02"><!-- PART SELECT RIGHT 1 --><bounds x="475.5" y="338.1" width="37" height="37"/></element>
 
 		<element ref="green_led" name="cpr_led1"><!-- CUSTOM PANEL --><bounds x="798.2" y="346.3" width="8" height="8"/></element>
 
@@ -881,16 +881,16 @@
 		<element ref="minus_text"><bounds x="226.8" y="384.6" width="28" height="12"/></element>
 		<element ref="plus_text"><bounds x="280.4" y="385.4" width="28" height="12"/></element>
 
-		<element ref="red_led" name="cpr_led63"><!-- CONDUCTOR RIGHT 2 --><bounds x="367.7" y="386.1" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="CPR_SEG3" inputmask="0x02"><!-- CONDUCTOR RIGHT 2 --><bounds x="353.0" y="402.8" width="37" height="37"/></element>
+		<element ref="red_led" name="cpr_led65"><!-- CONDUCTOR LEFT --><bounds x="367.7" y="386.1" width="8" height="8"/></element>
+		<element ref="round_btn" inputtag="CPR_SEG5" inputmask="0x02"><!-- CONDUCTOR LEFT --><bounds x="353.0" y="402.8" width="37" height="37"/></element>
 		<element ref="hline"><bounds x="358.2" y="454.9" width="26" height="3"/></element>
 
-		<element ref="red_led" name="cpr_led64"><!-- CONDUCTOR RIGHT 1 --><bounds x="429.2" y="386.1" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="CPR_SEG4" inputmask="0x02"><!-- CONDUCTOR RIGHT 1 --><bounds x="413.8" y="402.0" width="37" height="37"/></element>
+		<element ref="red_led" name="cpr_led64"><!-- CONDUCTOR RIGHT 2 --><bounds x="429.2" y="386.1" width="8" height="8"/></element>
+		<element ref="round_btn" inputtag="CPR_SEG4" inputmask="0x02"><!-- CONDUCTOR RIGHT 2 --><bounds x="413.8" y="402.0" width="37" height="37"/></element>
 		<element ref="conductor_text"><bounds x="387.1" y="452.0" width="92" height="9"/></element>
 
-		<element ref="red_led" name="cpr_led65"><!-- CONDUCTOR LEFT --><bounds x="489.2" y="386.1" width="8" height="8"/></element>
-		<element ref="round_btn" inputtag="CPR_SEG5" inputmask="0x02"><!-- CONDUCTOR LEFT --><bounds x="474.7" y="402.0" width="37" height="37"/></element>
+		<element ref="red_led" name="cpr_led63"><!-- CONDUCTOR RIGHT 1 --><bounds x="489.2" y="386.1" width="8" height="8"/></element>
+		<element ref="round_btn" inputtag="CPR_SEG3" inputmask="0x02"><!-- CONDUCTOR RIGHT 1 --><bounds x="474.7" y="402.0" width="37" height="37"/></element>
 		<element ref="hline"><bounds x="485.9" y="455.3" width="26" height="3"/></element>
 
 		<element ref="green_led" name="cpr_led97"><!-- FAVORITES --><bounds x="870.9" y="468.5" width="8" height="8"/></element>

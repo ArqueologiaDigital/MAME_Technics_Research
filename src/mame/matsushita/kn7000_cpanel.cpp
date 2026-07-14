@@ -208,9 +208,9 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 		case 0x04:
 			m_cpr_leds[32] = BIT(data, 0);   // D1027 SOLO (red)
 			m_cpr_leds[33] = BIT(data, 1);   // D1013 TECHNI-CHORD (red)
-			m_cpr_leds[34] = BIT(data, 2);   // D1069 PART SELECT LEFT (red)
+			m_cpr_leds[34] = BIT(data, 2);   // D1069 PART SELECT RIGHT 1 (red)   [schematic labels D1069 LEFT; panel silk = RIGHT 1]
 			m_cpr_leds[35] = BIT(data, 3);   // D1041 PART SELECT RIGHT 2 (red)
-			m_cpr_leds[36] = BIT(data, 4);   // D1055 PART SELECT RIGHT 1 (red)
+			m_cpr_leds[36] = BIT(data, 4);   // D1055 PART SELECT LEFT (red)   [schematic labels D1055 RIGHT 1; panel silk = LEFT]
 			m_cpr_leds[37] = BIT(data, 5);   // D1083 TRANSPOSE R2 (+) (red)
 			m_cpr_leds[38] = BIT(data, 6);   // D1097 TRANSPOSE R2 (-) (red)
 			m_cpr_leds[39] = BIT(data, 7);   // D1111 TRANSPOSE R1 (+) (green)
@@ -233,10 +233,10 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpr_leds[60] = BIT(data, 4);   // (unmapped)
 			m_cpr_leds[61] = BIT(data, 5);   // (unmapped)
 			m_cpr_leds[62] = BIT(data, 6);   // (unmapped)
-			m_cpr_leds[63] = BIT(data, 7);   // D1107 CONDUCTOR RIGHT 2 (red)
+			m_cpr_leds[63] = BIT(data, 7);   // D1107 CONDUCTOR RIGHT 1 (red)   [schematic labels D1107 RIGHT 2; panel silk = RIGHT 1]
 			break;
 		case 0x08:
-			m_cpr_leds[64] = BIT(data, 0);   // D1114 CONDUCTOR RIGHT 1 (red)
+			m_cpr_leds[64] = BIT(data, 0);   // D1114 CONDUCTOR RIGHT 2 (red)   [schematic labels D1114 RIGHT 1; panel silk = RIGHT 2]
 			m_cpr_leds[65] = BIT(data, 1);   // D1120 CONDUCTOR LEFT (red)
 			m_cpr_leds[66] = BIT(data, 2);   // (unmapped)
 			m_cpr_leds[67] = BIT(data, 3);   // (unmapped)
