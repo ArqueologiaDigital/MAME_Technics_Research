@@ -606,28 +606,27 @@ if _os.path.exists(_nud):
         print(f"WARNING: {_st['refmismatch']} nudge ref-mismatches -- NOT applied (indexing drifted):")
         for _g,_i,_e,_a in _mism[:10]: print(f"  {_g}.{_i}: expected '{_e}' got '{_a}'")
 
-# --- Adopt the physical CP{board}_SEG{col} port names (KN5000 style): rewrite each clickable
-#     button's inputtag/inputmask from the driver's (SEGxx, mask) to its physical (board SEG-column,
-#     SW-row) per the schematic-derived map notes/panel-physical-scan-map.json. Binding is preserved.
-import json as _json, re as _re
-_MAP_PATH=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),"..","notes","panel-physical-scan-map.json")
-if _os.path.exists(_MAP_PATH):
-    _pm=_json.load(open(_MAP_PATH)); _rl={}
-    for _p in _pm["proposed_ports"]:
-        if _p["board"] not in ("CPL","CPC","CPR"): continue
-        for _b in _p["bits"]:
-            _ds=(_b.get("driver_seg") or "").upper(); _dm=_b.get("driver_mask") or ""
-            if _ds.startswith("SEG") and _dm:
-                _rl[(_ds,int(_dm,16))]=(_p["port_name"],int(_b["bit_mask"],16))
-    _lay=open(_LAY_PATH).read(); _cnt=[0,0]
-    def _sub(m):
-        _k=(m.group(1).upper(),int(m.group(2),16))
-        if _k in _rl:
-            _pn,_bit=_rl[_k]; _cnt[0]+=1
-            return f'inputtag="{_pn}" inputmask="0x{_bit:02x}"'
-        _cnt[1]+=1
-        return ""  # dead port after the rename (orphan/unbridged/valuator) -> make element decorative
-    _lay=_re.sub(r'inputtag="(SEG[0-9A-Fa-f]{2})" inputmask="(0x[0-9a-fA-F]+)"',_sub,_lay)
-    _lay=_re.sub(r' ?inputtag="\{port_name\}"( inputmask="[^"]*")?',"",_lay)  # strip unfilled template artifact
-    open(_LAY_PATH,"w").write(_lay)
-    print(f"RELABELED {_cnt[0]} layout buttons to CP{{board}}_SEG{{col}} physical ports ({_cnt[1]} left un-mapped)")
+# --- Adopt CP{board}_SEG{col} scan-matrix port names (KN5000 style). The layout binds each button
+#     to its firmware normalized segment (SEGxx); rename that 1:1 to the sub-CPU scan column
+#     CP{board}_SEG{col} at the SAME bit (= same SW sense line). normSeg IS the scan address (one
+#     wire ADDR per column, no per-bit repacking), so this is a pure relabel -- no permutation, no
+#     translation table. Segments outside 0x00-0x15 (valuators / SD GPIO / undecoded) carry no
+#     button binding and are left decorative.
+import re as _re
+_NS2CP={0x00:"CPL_SEG0",0x01:"CPL_SEG1",0x02:"CPL_SEG2",0x03:"CPL_SEG3",0x04:"CPL_SEG4",
+        0x05:"CPC_SEG5",0x06:"CPL_SEG6",0x07:"CPL_SEG7",0x08:"CPC_SEG8",0x09:"CPC_SEG9",
+        0x0a:"CPC_SEG10",0x0b:"CPC_SEG11",0x0c:"CPR_SEG0",0x0d:"CPR_SEG1",0x0e:"CPR_SEG2",
+        0x0f:"CPR_SEG3",0x10:"CPR_SEG4",0x11:"CPR_SEG5",0x12:"CPR_SEG6",0x13:"CPR_SEG7",
+        0x14:"CPR_SEG8",0x15:"CPR_SEG9"}
+_lay=open(_LAY_PATH).read(); _cnt=[0,0]
+def _sub(m):
+    _seg=int(m.group(1),16); _mask=m.group(2)
+    if _seg in _NS2CP:
+        _cnt[0]+=1
+        return f'inputtag="{_NS2CP[_seg]}" inputmask="{_mask}"'
+    _cnt[1]+=1
+    return ""  # non-button segment (valuator / SD / undecoded) -> decorative
+_lay=_re.sub(r'inputtag="SEG([0-9A-Fa-f]{2})" inputmask="(0x[0-9a-fA-F]+)"',_sub,_lay)
+_lay=_re.sub(r' ?inputtag="\{port_name\}"( inputmask="[^"]*")?',"",_lay)  # strip unfilled template artifact
+open(_LAY_PATH,"w").write(_lay)
+print(f"RELABELED {_cnt[0]} layout buttons SEGxx->CP{{board}}_SEG{{col}} (scan-matrix identity; {_cnt[1]} non-button left decorative)")
