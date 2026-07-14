@@ -98,6 +98,7 @@ LED_PURPOSE.update({
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
     "cpr_led11": "DISK IN USE",          # Felipe 2026-07-14 (live LED reg/data log); status LED, no button
     "cpl_led29": "OTHER PART & FR",      # Felipe 2026-07-14 (F3+F4 LED test): the OTHER PARTS/TG button's LED
+    "cpr_led97": "TEMPO/PROGRAM",        # Felipe 2026-07-14 (F3+F4 LED test): only unnamed CPR LED lit by PANEL MEMORY SET
     # 3 keyboard split-point indicators (manual p39; verified 2026-07-14 by cycling the SPLIT POINT button):
     "cpl_led56": "SPLIT POINT G2", "cpl_led21": "SPLIT POINT C3", "cpl_led13": "SPLIT POINT G3",
 })
@@ -485,7 +486,7 @@ for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn","SEG0D","0x08"),("EASY REC
 RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("red_led",812,158,8,8,name="cpr_led11"), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]   # DISK IN USE LED = cpr_led11 RED (Felipe 2026-07-14, live LED log)
 # SD (LOAD) pill = SEG0D 0x80 (ev2040 app-open SD MENU, empirically confirmed).
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22,tag="SEG0D",mask="0x80")); RB.append(P("green_led",886,216,8,8,name=PANEL_LED.get(("SEG0D","0x80")))); RB.append(L("LOAD",874,252,32,8))
-RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
+RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8,name="cpr_led97"))   # TEMPO/PROGRAM LED = cpr_led97 (Felipe/F3+F4 LED test 2026-07-14: the only unnamed CPR LED lit by PANEL MEMORY SET's bank lamp-test)
 # TEMPO/PROGRAM knob is DRAGGABLE (relative encoder): a transparent click-area over the knob, wired in the
 # <script> below via add_simplecounter_knob -> PORT_ADJUSTER "TEMPO_KNOB". Vertical drag = tempo up/down.
 # The click-area element itself is APPENDED AT THE END of right_block (see below) so it does not shift the

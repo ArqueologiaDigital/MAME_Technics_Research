@@ -277,7 +277,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			break;
 		case 0x0c:
 			m_cpr_leds[96] = BIT(data, 0);   // D1118 TRANSPOSE R1 (-) (red)
-			m_cpr_leds[97] = BIT(data, 1);   // (unmapped)   [was FAVORITES/D1037; corrected to cpr_led2 per Felipe's live LED log 2026-07-14]
+			m_cpr_leds[97] = BIT(data, 1);   // TEMPO/PROGRAM   [Felipe 2026-07-14 F3+F4 LED test: the tempo/program knob LED, only unnamed CPR LED lit by PANEL MEMORY SET; NB this was the old wrong FAVORITES guess -- FAVORITES is cpr_led2]
 			m_cpr_leds[98] = BIT(data, 2);   // (unmapped)
 			m_cpr_leds[99] = BIT(data, 3);   // (unmapped)
 			m_cpr_leds[100]= BIT(data, 4);   // (unmapped)
