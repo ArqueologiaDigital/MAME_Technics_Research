@@ -965,6 +965,7 @@
 		-----------------------------------------------------------------------
 		local widgets = {}   -- Stores slider and knob information.
 		local pointers = {}  -- Tracks pointer state.
+		local hover_x, hover_y = -1, -1   -- last pointer position (for wheel-over-widget hit testing)
 
 		-- The knob's Y position must be animated using <animate>.
 		-- The click area's vertical size must exactly span the range of the
@@ -1069,7 +1070,57 @@
 			return math.atan((x - cx) / (b.x1 - b.x0), (cy - y) / (b.y1 - b.y0))
 		end
 
+		-- Mouse-WHEEL editing for rotary knobs. MAME's layout pointer API does NOT deliver wheel events,
+		-- so we read the mouse device's relative Z axis directly each frame (the sandbox exposes `machine`,
+		-- hence machine.input). One detent = 120 * RELATIVE_PER_PIXEL(512) = 61440 accumulator units
+		-- (SDL osd: m_v += wheel.y * 120 * RELATIVE_PER_PIXEL). Each notch nudges the finger and the encoder
+		-- exactly like a click of a drag, but only while the cursor hovers over the wheel.
+		local WHEEL_PER_NOTCH = 120 * 512
+		local wheel_item, wheel_probed, wheel_accum = nil, false, 0
+		local function find_wheel_item()
+			local input = machine.input
+			if input == nil then return nil end
+			local classes = input.device_classes
+			if classes == nil then return nil end
+			local mouse = classes["mouse"]
+			if mouse == nil then return nil end
+			for _, mdev in pairs(mouse.devices) do
+				for _, it in pairs(mdev.items) do
+					if it.token == "ZAXIS" then return it end   -- first mouse's wheel axis
+				end
+			end
+			return nil
+		end
+		function poll_rotary_wheels()
+			if not wheel_probed then wheel_item = find_wheel_item(); wheel_probed = true end
+			if wheel_item == nil then return end
+			local dv = machine.input:code_value(wheel_item.code)
+			if dv == 0 then return end
+			-- find a rotary widget under the cursor's last-known position
+			local target = nil
+			for i = 1, #widgets do
+				if widgets[i].is_rotary and widgets[i].clickarea.bounds:includes(hover_x, hover_y) then
+					target = widgets[i]; break
+				end
+			end
+			if target == nil then wheel_accum = 0; return end
+			wheel_accum = wheel_accum + dv
+			local step = 2 * math.pi / ROTARY_STEPS_PER_REV
+			while wheel_accum >= WHEEL_PER_NOTCH do
+				wheel_accum = wheel_accum - WHEEL_PER_NOTCH
+				target.angle = target.angle + step   -- scroll up: turn clockwise / increase
+				rotary_emit(target)
+			end
+			while wheel_accum <= -WHEEL_PER_NOTCH do
+				wheel_accum = wheel_accum + WHEEL_PER_NOTCH
+				target.angle = target.angle - step
+				rotary_emit(target)
+			end
+		end
+
 		local function pointer_updated(type, id, dev, x, y, btn, dn, up, cnt)
+			hover_x, hover_y = x, y   -- remember where the cursor is, so the wheel poll can hit-test it
+
 			-- If a button is not pressed, reset the state of the current pointer.
 			if btn & 1 == 0 then
 				pointers[id] = nil
@@ -1197,5 +1248,8 @@
 				if any then install_slider_callbacks(view) end
 			end
 		end)
+		-- The layout plugin invokes the returned table's frame() every video frame; use it to poll
+		-- the mouse wheel for the rotary TEMPO/PROGRAM knob (the pointer API has no wheel event).
+		return { frame = poll_rotary_wheels }
 	]]></script>
 </mamelayout>

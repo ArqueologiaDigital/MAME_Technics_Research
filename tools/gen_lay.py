@@ -657,6 +657,9 @@ SCRIPT=('\t<script><![CDATA[\n'+_lib+'\n'
         '\t\t\t\tif any then install_slider_callbacks(view) end\n'
         '\t\t\tend\n'
         '\t\tend)\n'
+        '\t\t-- The layout plugin invokes the returned table\'s frame() every video frame; use it to poll\n'
+        '\t\t-- the mouse wheel for the rotary TEMPO/PROGRAM knob (the pointer API has no wheel event).\n'
+        '\t\treturn { frame = poll_rotary_wheels }\n'
         '\t]]></script>\n')
 # ---- READABILITY: cluster each group's placements into correlated on-screen controls, blank-line
 #      separated, so related declarations (a button + its label(s) + its LED(s)) sit together.
