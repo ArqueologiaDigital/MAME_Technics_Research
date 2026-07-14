@@ -95,19 +95,21 @@ context-dependent LCD soft-keys, not part selectors. The old driver names in col
 | SEG0D.0x04 | SOUND SOUND EXPLORER | SOUND EXPLORER (drop the doubled "SOUND") |
 | SEG12.0x40 | PROGRAM MENU | PROGRAM MENUS |
 
-## E. Confidence caveat (name OK, add soft-key note)
+## E. LCD RIGHT soft-keys (part-ON reading retracted; rename to soft-key note)
 
-The driver's firmware-part name is acceptable but these bits are the ON-mirror of the SEG03
-LCD-LEFT column and are actually the context-dependent LCD-RIGHT soft-keys (verify_3 downgraded
-them HIGH→MED). No rename strictly required — add an "LCD RIGHT soft-key (unresolved)" comment.
+These bits are the ON-mirror of the SEG03 LCD-LEFT column and are actually the context-dependent
+LCD-RIGHT 1-5 soft-keys (no fixed function; verify_3 downgraded them HIGH→MED). The old driver
+names (RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 "ON") read these soft-keys as a keyboard-part on/off
+toggle — that reading is RETRACTED; they are not part selectors. Rename to an "LCD RIGHT soft-key
+(unresolved)" comment.
 
 | SEG.bit | current PORT_NAME | correct NAME |
 |---------|-------------------|--------------|
 | SEG0F.0x04 | RIGHT1 ON | LCD RIGHT soft-key (unresolved bit) |
 | SEG0F.0x08 | RIGHT2 ON | LCD RIGHT soft-key (unresolved bit) |
 | SEG0F.0x10 | LEFT ON | LCD RIGHT soft-key (unresolved bit) |
-| SEG0F.0x20 | ACCOMP1 ON | ACCOMP1 part-ON (physical: LCD RIGHT soft-key, unresolved) |
-| SEG0F.0x40 | ACCOMP2 ON | ACCOMP2 part-ON (physical: LCD RIGHT soft-key, unresolved) |
+| SEG0F.0x20 | ACCOMP1 ON | LCD RIGHT soft-key (unresolved bit) (part-ON reading retracted) |
+| SEG0F.0x40 | ACCOMP2 ON | LCD RIGHT soft-key (unresolved bit) (part-ON reading retracted) |
 
 ## Not applicable / verified consistent (no fix)
 

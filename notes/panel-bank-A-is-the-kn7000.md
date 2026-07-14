@@ -103,7 +103,7 @@ STAGE 2 DONE: the clickable LAYOUT (tools/gen_lay.py -> src/mame/layout/kn7000.l
 rebound to bank A. Every physical silk-screen button keeps its position + label; only its
 inputtag/inputmask (and the state-driven LED name=) changed from the bank-B guesses to the
 bank-A descriptor bits. The full mapping (SOUND GROUP, RHYTHM genres, 16-part MUTE matrix,
-LCD part on/off soft-keys, transport, effects, APC/SA, TRANSPOSE/OCTAVE split pairs that now
+LCD LEFT/RIGHT 1-5 soft-keys (context-dependent, no fixed function; part on/off reading retracted -- not a part selector), transport, effects, APC/SA, TRANSPOSE/OCTAVE split pairs that now
 straddle two SEGs, PART SELECT + CONDUCTOR groups -- all three members now known, etc.) is in
 notes/panel-layout-bankA-bindings.md. pair_h() was generalised with a seg2= arg for the
 cross-SEG split pairs (INTRO&ENDING, TRANSPOSE, R1/R2 OCT). MEMORY / EW EXPANSION are now bound

@@ -69,8 +69,10 @@ or DEMO×2 then HELP) so a no-op shows the plain "HELP FUNCTION" screen. Hold ev
 
 ### Findings so far (HELP-info)
 - **SEG08 0x10 = DISPLAY HOLD** (bound).  **SEG0F 0x01 = SOUND DSP**.  **SEG13 0x04 = TRANSPOSE -/+**.
-- **SEG11 0x01 = SPLIT POINT** -- but the layout binds SEG11 0x01 to LCDPART "ACCOMP2" (ON), so the
-  LCDPARTS RIGHT (SEG11-13) column is ALSO likely mis-bound. Resolve carefully before binding.
+- **SEG11 0x01 = SPLIT POINT** -- but the layout previously bound SEG11 0x01 (and the whole SEG11-13
+  column) as LCD RIGHT 1-5 soft-keys that toggle a keyboard part on/off (part on/off reading
+  retracted -- these are context-dependent LCD RIGHT soft-keys with no fixed function, not part
+  selectors), so the SEG11-13 column is mis-bound. Resolve carefully before binding.
 
 ## CORRECTION: EXIT is NOT SEG20 0x01
 The previous tick bound EXIT = SEG20 0x01, but that bit is a **TEMPO control** (press -> ♩120->121).

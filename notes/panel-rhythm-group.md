@@ -38,7 +38,8 @@ Because SEG00 b2..b7 are the genre bits, buttons the layout wrongly put on those
 spuriously opening genres. Unbound (made decorative) until their real bits are found:
 - **START/STOP** (was SEG00 0x10 = BALLAD) → unbound
 - **SYNCHRO & BREAK** (was SEG00 0x80 = MOVIE & SHOW) → unbound
-- **LCD-LEFT soft-keys** (LCDPARTS OFF column, was SEG00 0x04/0x08/0x20 = genres 0/1/3, plus
+- **LCD-LEFT soft-keys** (context-dependent LCD LEFT soft-keys — part on/off reading
+  retracted, not a part selector; was SEG00 0x04/0x08/0x20 = genres 0/1/3, plus
   0x01/0x02) → unbound
 
 ## Confirmed WORKING (do NOT change — user)

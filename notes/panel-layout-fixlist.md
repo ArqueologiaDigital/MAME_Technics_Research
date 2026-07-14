@@ -29,15 +29,16 @@ buttons. gen_lay.py binds them the wrong way in **three** places:
 
 Net effect: SEG0E 0x10/0x20 move from the SOUND GROUP block to the PART EFFECT block.
 
-## 2. MED — SEG03 b3–b7 left soft-keys are labelled with the firmware part names
+## 2. MED — SEG03 b3–b7 left soft-keys are mislabelled with keyboard-part names
 
 `LCDPARTS`, L146–148: the left LCD soft-key column (bound to `SEG03 0x08/0x10/0x20/0x40/0x80`,
 correct bits) is drawn with the visible labels `RIGHT1 / RIGHT2 / LEFT / ACCOMP1 / ACCOMP2`
-(`L(nm,168,…)`, L151). Authoritative **physical** name of these keys is `LCD LEFT 1 … LCD LEFT 5`
-(the RIGHT1..ACCOMP2 identity is the firmware part-toggle, a CONFLICT). **Fix:** relabel the left
-column `LCD LEFT 1…5` (optionally keep RIGHT1.. as a sub-caption). The right (currently unbound)
-column mirror is the ON side = `SEG0F 0x04–0x40` (MED, LCD-RIGHT soft-keys, unresolved) — it may be
-bound there, but keep MED.
+(`L(nm,168,…)`, L151). These are context-dependent LCD soft-keys with NO fixed function; their
+authoritative **physical** name is `LCD LEFT 1 … LCD LEFT 5` (the real unit prints no silkscreen
+text beside them, and what each key does depends on the current screen). **Fix:** relabel the left
+column `LCD LEFT 1…5`. The right column mirror is `SEG0F 0x04–0x40` (MED, LCD RIGHT 1…5 soft-keys,
+currently unbound) — it may be bound there, but keep MED.
+(part on/off reading retracted — these soft-keys are not a RIGHT1/RIGHT2/LEFT/ACCOMP part selector.)
 
 ## 3. MED — the six PERFORMANCE PADS are drawn unbound
 

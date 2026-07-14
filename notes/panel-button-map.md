@@ -29,9 +29,11 @@ user confirmed they work -> the map is trustworthy.
 | SEG13 0x80| MIC REVERB & EFFECT | yes (GLOBAL EFFECT "MIC") |
 
 ## Applied this pass
-Bound the 10 "yes" rows; **unbound the LCDPARTS RIGHT column** (SEG11-13) which had been assumed
-to be part-ON but is really FADE/CONDUCTOR/INTRO&ENDING/TRANSPOSE. (LCD LEFT = SEG03 b3-b7 left
-column stays -- user-confirmed.) No double-bound bits.
+Bound the 10 "yes" rows; **unbound the SEG11-13 RIGHT column** which had been assumed to be
+LCD-RIGHT soft-keys firing keyboard parts (that "part on/off" reading is RETRACTED -- the
+LCD-flanking soft-keys are context-dependent and are NOT part selectors) but is really
+FADE/CONDUCTOR/INTRO&ENDING/TRANSPOSE. (LCD LEFT = SEG03 b3-b7 = the context-dependent LCD LEFT
+1-5 soft-keys, no fixed function -- user-confirmed.) No double-bound bits.
 
 ## EXIT = SEG08 0x20 (FOUND 2026-07-07)
 Confirmed: pressed in HELP mode it turns HELP off -> returns to the PMEM home screen. Completes

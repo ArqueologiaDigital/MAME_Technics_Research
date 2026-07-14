@@ -94,11 +94,11 @@ SEG1E  b0 0x20BB (LEDgrp00.00)  |  SEG1F b0 0x20BD (LEDgrp00.00)
 - **SEG1B** (6× `0x1000` args 0-5) is a cursor/navigation-style group.
 
 ### Why the LCD soft-keys & CPC screen buttons aren't wired here
-1. **Soft-keys are context-dependent.** LCDR1/LCDR2 fire `2001/10`,`2001/11`
-   (part-select RIGHT1/RIGHT2 = SEG11.b4/b5) *on the home screen* but different
-   events on other screens — there is no single static "function", and the exact
-   soft-key→bit assignment mixes with part-select/transpose entries (`0x2001` is a
-   multiplexed "part-control" event whose meaning depends on arg AND current mode).
+1. **Soft-keys are context-dependent.** The LCD LEFT/RIGHT 1-5 soft-keys have no
+   fixed function — their meaning is whatever the current screen shows, so there is
+   no single static "function" to bind; the same physical soft-key posts different
+   events on different screens. (Part on/off reading retracted — these LCD-flanking
+   soft-keys are NOT selectors for the keyboard parts RIGHT1/RIGHT2/LEFT/ACCOMP.)
 2. **CPC board (OTHER PARTS/HELP/CONTRAST±/PAGE±/DISPLAY HOLD/EXIT).** Per the
    service matrix these share columns with MUTE 1-16, but the mute *events* live on
    the CPL-sourced normSegs 0x05/0x08-0x0B; the CPC's own physical→ADDR scan

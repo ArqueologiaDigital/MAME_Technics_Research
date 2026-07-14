@@ -338,10 +338,11 @@ capture a complete note-on → TG register sequence.
 2. **Navigate**: Lua macro — press APC `MODE` (panel button; SEG map known:
    SEG03 0x02) → on APC SELECT press `CHORD FINDER` — per your instructions
    that is the **LCD RIGHT 5** soft button, which exists as a port at
-   kn7000.cpp:1173 (its *home-screen* function is labeled "ACCOMP2 part ON" —
-   soft-button function is screen-dependent, so that label neither confirms nor
-   contradicts CHORD FINDER on the APC SELECT screen; confirm by the on-screen
-   result before trusting the mapping) — *within the auto-return window* (or pin
+   kn7000.cpp:1173 (the LCD LEFT/RIGHT 1-5 keys are context-dependent soft-keys
+   with NO fixed function — the old "ACCOMP2 part ON" reading is retracted, these
+   soft-keys are not part on/off selectors — so the button's meaning is whatever
+   the current screen shows; confirm CHORD FINDER by the on-screen result before
+   trusting the mapping) — *within the auto-return window* (or pin
    with DISPLAY HOLD) → on CHORD FINDER press the rightmost bottom soft button
    (ear icon). All presses held ≥14 frames (established requirement). Confirm
    each screen with the pixel hash / PPM dump tooling.

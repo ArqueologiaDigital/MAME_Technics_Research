@@ -32,11 +32,11 @@ Sources: HELP-info (keyboard names itself, top confidence), ROM tables (genres G
 | SEG03.0x01 | nS03 |  | (no panel event) | unused |
 | SEG03.0x02 | nS03 | ev20A8 arg0027 | APC / CHORD FINDER | HELP-info |
 | SEG03.0x04 | nS03 | ev20A9 arg0027 | AUTO PLAY CHORD OFF/ON | HELP-info |
-| SEG03.0x08 | nS03 | ev2000 arg1000 | RIGHT1 OFF | part |
-| SEG03.0x10 | nS03 | ev2000 arg1100 | RIGHT2 OFF | part |
-| SEG03.0x20 | nS03 | ev2000 arg1200 | LEFT OFF | part |
-| SEG03.0x40 | nS03 | ev2000 arg1300 | ACCOMP1 OFF | part |
-| SEG03.0x80 | nS03 | ev2000 arg1400 | ACCOMP2 OFF | part |
+| SEG03.0x08 | nS03 | ev2000 arg1000 | LCD LEFT 1 | soft-key |
+| SEG03.0x10 | nS03 | ev2000 arg1100 | LCD LEFT 2 | soft-key |
+| SEG03.0x20 | nS03 | ev2000 arg1200 | LCD LEFT 3 | soft-key |
+| SEG03.0x40 | nS03 | ev2000 arg1300 | LCD LEFT 4 | soft-key |
+| SEG03.0x80 | nS03 | ev2000 arg1400 | LCD LEFT 5 | soft-key |
 | SEG04.0x01 | nS04 | ev2001 arg0000 | MUTE PART 1 ON | part |
 | SEG04.0x02 | nS04 | ev2000 arg0000 | MUTE PART 1 OFF | part |
 | SEG04.0x04 | nS04 | ev2001 arg0100 | MUTE PART 2 ON | part |
@@ -127,11 +127,11 @@ Sources: HELP-info (keyboard names itself, top confidence), ROM tables (genres G
 | SEG0E.0x80 | nS0C |  | (no panel event) | unused |
 | SEG0F.0x01 | nS0D | ev20AA arg0031 | SOUND DSP | HELP-info |
 | SEG0F.0x02 | nS0D | ev20AB arg0031 | SOUND DSP VARIATION | HELP-info |
-| SEG0F.0x04 | nS0D | ev2001 arg1000 | RIGHT1 ON | part |
-| SEG0F.0x08 | nS0D | ev2001 arg1100 | RIGHT2 ON | part |
-| SEG0F.0x10 | nS0D | ev2001 arg1200 | LEFT ON | part |
-| SEG0F.0x20 | nS0D | ev2001 arg1300 | ACCOMP1 ON | part |
-| SEG0F.0x40 | nS0D | ev2001 arg1400 | ACCOMP2 ON | part |
+| SEG0F.0x04 | nS0D | ev2001 arg1000 | LCD RIGHT 1 | soft-key |
+| SEG0F.0x08 | nS0D | ev2001 arg1100 | LCD RIGHT 2 | soft-key |
+| SEG0F.0x10 | nS0D | ev2001 arg1200 | LCD RIGHT 3 | soft-key |
+| SEG0F.0x20 | nS0D | ev2001 arg1300 | LCD RIGHT 4 | soft-key |
+| SEG0F.0x40 | nS0D | ev2001 arg1400 | LCD RIGHT 5 | soft-key |
 | SEG0F.0x80 | nS0D |  | (no panel event) | unused |
 | SEG10.0x01 | nS0E | ev20A4 arg0023 | ONE TOUCH PLAY | HELP-info |
 | SEG10.0x02 | nS0E | ev20A6 arg0025 | SPLIT POINT | HELP-info |
@@ -229,3 +229,14 @@ Sources: HELP-info (keyboard names itself, top confidence), ROM tables (genres G
 | SEG20.0x20 | nS1D |  | (no panel event) | unused |
 | SEG20.0x40 | nS1D |  | (no panel event) | unused |
 | SEG20.0x80 | nS1D |  | (no panel event) | unused |
+
+**LCD soft-key retraction (2026-07-14):** SEG03.0x08–0x80 (LCD LEFT 1–5) and SEG0F.0x04–0x40
+(LCD RIGHT 1–5) are the ten context-dependent soft-keys flanking the LCD — their function follows
+whatever the current screen shows and the real unit prints no silkscreen text beside them. The
+earlier reading that these soft-keys ARE / SELECT the keyboard parts
+RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 as a part on/off pair (part ids 0x10–0x14, descriptor
+0x2000/0x2001) is **retracted — these are NOT part selectors.** The physical SEG.bit bindings and
+the observed ev2000/ev2001 dispatch args are kept as-is; only the "part on/off toggle"
+interpretation is wrong. The actual part-select buttons are the ev2009 rows at
+SEG10.0x10/0x20/0x40, and per-part MUTE on/off lives in the SEG04–SEG07 grid — both unaffected by
+this retraction. (The L/R edge assignment SEG03=left, SEG0F=right is provisional.)
