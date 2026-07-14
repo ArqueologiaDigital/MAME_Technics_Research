@@ -575,7 +575,7 @@ SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70
      L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x10"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x20"),
      L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
      L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8),   # SD CARD PLAY/PAUSE LED (Felipe: green)
-     L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8)]
+     L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8,name="sd_led0")]   # SD IN USE = sd_led0, driver-lit from SPI card activity (2026-07-14)
 SDB.append('\t</group>')
 
 VIEWS='''

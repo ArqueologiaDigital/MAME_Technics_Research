@@ -807,6 +807,7 @@ public:
 		, m_volapcseq(*this, "VOL_APCSEQ")
 		, m_tempoknob(*this, "TEMPO_KNOB")
 		, m_cpanel(*this, "cpanel")
+		, m_sd_leds(*this, "sd_led%u", 0U)
 	{ }
 
 	void kn7000(machine_config &config) ATTR_COLD;
@@ -1066,6 +1067,14 @@ private:
 	// bit0 only, so bit1 survives and keeps REQUEST/bit4 set through strobes).
 	emu_timer *m_sd_insert_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sd_insert);
+
+	// SD "in use" indicator (driver HLE approximation): the CPSD board's front-panel LEDs are NOT main-CPU
+	// outputs (no LED write on the panel/SD I/O -- verified 2026-07-14), so we synthesise the "SD in use"
+	// lamp from real card activity: each SPI byte transfer (cpsd_mbx_write) retriggers a one-shot, so the
+	// LED is lit while the firmware is streaming to/from the card and drops ~250 ms after the last byte.
+	output_finder<2> m_sd_leds;              // sd_led0 = SD in use; sd_led1 reserved for SD play/pause (TODO)
+	emu_timer *m_sd_inuse_off = nullptr;     // one-shot: clear SD-in-use after the last SPI byte
+	TIMER_CALLBACK_MEMBER(sd_inuse_off);
 
 	// The SD slot has a hinged COVER; the firmware reads the cover switch as the
 	// card-detect line (cover closed + card in = accessible; cover open => the
@@ -1852,6 +1861,11 @@ TIMER_CALLBACK_MEMBER(kn7000_state::tempo_tick)
 
 void kn7000_state::cpsd_mbx_write(uint16_t data)
 {
+	// SD "in use" lamp: every mailbox byte is a live SPI transfer, so the card is being accessed. Light
+	// the LED and (re)arm the one-shot; a burst of bytes keeps it steady, and it drops ~250 ms after the last.
+	m_sd_leds[0] = 1;
+	m_sd_inuse_off->adjust(attotime::from_msec(250));
+
 	// Full-duplex SPI byte transfer: shift the 8 bits through the card (MSB
 	// first), collecting MISO into m_sdmbx_out; then raise the ack (group 0x1C
 	// DETECT/REQUEST -- polled, not interrupt-driven).
@@ -1875,6 +1889,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::sd_insert)
 	// reader sees bit4 drop, the debounce runs, and the firmware posts the
 	// card-insert message (see the member declaration for the chain).
 	sd_update_carddetect();
+}
+
+// SD "in use" one-shot expiry: no SPI byte for ~250 ms -> the card is idle, clear the lamp.
+TIMER_CALLBACK_MEMBER(kn7000_state::sd_inuse_off)
+{
+	m_sd_leds[0] = 0;
 }
 
 INPUT_CHANGED_MEMBER(kn7000_state::sd_cover_changed)
@@ -2545,6 +2565,7 @@ void kn7000_state::machine_start()
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_tempo_timer = timer_alloc(FUNC(kn7000_state::tempo_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
+	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
 
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_sio_config));
