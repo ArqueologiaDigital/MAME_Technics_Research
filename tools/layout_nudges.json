@@ -1,13 +1,13 @@
 {
- "left_block.29.t19": [
+ "left_block.29.set_text": [
   -5.2,
   10.0
  ],
- "right_block.169.t19": [
+ "right_block.169.set_text": [
   4.5,
   -2.0
  ],
- "right_block.196.t135": [
+ "right_block.196.panel_text": [
   -29.0,
   10.3
  ],
@@ -15,47 +15,47 @@
   4.5,
   -2.0
  ],
- "left_block.90.t43": [
+ "left_block.90.music_stylist_text": [
   -3.6,
   -7.6
  ],
- "left_block.141.t51": [
+ "left_block.141.3_text": [
   12.8,
   6.7
  ],
- "right_block.191.t134": [
+ "right_block.191.3_2_text": [
   9.1,
   14.6
  ],
- "right_block.164.t125": [
+ "right_block.164.next_bank_text": [
   -7.6,
   4.8
  ],
- "left_block.174.t72": [
+ "left_block.174.reset_text": [
   -115.0,
   12.4
  ],
- "left_block.144.t52": [
+ "left_block.144.4_text": [
   13.2,
   6.7
  ],
- "right_block.188.t133": [
+ "right_block.188.4_2_text": [
   18.3,
   7.5
  ],
- "right_block.130.t120": [
+ "right_block.130.r1_r2_octave_text": [
   9.2,
   2.7
  ],
- "right_block.91.t107": [
+ "right_block.91.reverb_text": [
   15.2,
   -15.5
  ],
- "left_block.148.t64": [
+ "left_block.148.in_text": [
   -1.2,
   -36.7
  ],
- "right_block.108.t113": [
+ "right_block.108.menus_text": [
   -13.2,
   1.6
  ],
@@ -227,63 +227,63 @@
   4.4,
   5.9
  ],
- "screen_block.69.t10": [
+ "screen_block.69.exit_text": [
   -8.6,
   -2.9
  ],
- "left_block.126.t60": [
+ "left_block.126.split_text": [
   6.7,
   -1.3
  ],
- "left_block.162.t69": [
+ "left_block.162.fill_in_text": [
   0.0,
   -6.0
  ],
- "right_block.69.t100": [
+ "right_block.69.sustain_text": [
   16.4,
   5.9
  ],
- "left_block.35.t20": [
+ "left_block.35.rhythm_group_text": [
   -13.9,
   -1.9
  ],
- "right_block.185.t132": [
+ "right_block.185.5_2_text": [
   21.3,
   -10.4
  ],
- "left_block.157.t68": [
+ "left_block.157.intro_and_ending_text": [
   -0.3,
   -9.3
  ],
- "left_block.6.t13": [
+ "left_block.6.apc_sequencer_text": [
   -2.5,
   7.3
  ],
- "left_block.173.t71": [
+ "left_block.173.sequencer_text": [
   -124.3,
   11.0
  ],
- "right_block.97.t109": [
+ "right_block.97.sequencer_2_text": [
   -20.0,
   -0.4
  ],
- "screen_block.19.t3": [
+ "screen_block.19.contrast_text": [
   -1.4,
   4.1
  ],
- "left_block.123.t58": [
+ "left_block.123.one_touch_text": [
   10.7,
   -1.5
  ],
- "left_block.124.t59": [
+ "left_block.124.play_text": [
   10.3,
   -3.2
  ],
- "right_block.98.t59": [
+ "right_block.98.play_text": [
   2.2,
   6.0
  ],
- "right_block.161.t124": [
+ "right_block.161.bank_view_text": [
   -8.6,
   4.8
  ],
@@ -291,31 +291,31 @@
   4.3,
   13.6
  ],
- "left_block.138.t50": [
+ "left_block.138.2_text": [
   12.1,
   6.7
  ],
- "left_block.161.t50": [
+ "left_block.161.2_text": [
   10.5,
   -33.7
  ],
- "left_block.166.t50": [
+ "left_block.166.2_text": [
   10.1,
   -33.4
  ],
- "right_block.170.t127": [
+ "right_block.170.2_2_text": [
   -4.9,
   12.2
  ],
- "right_block.73.t101": [
+ "right_block.73.effect_text": [
   15.2,
   6.6
  ],
- "right_block.101.t110": [
+ "right_block.101.easy_rec_text": [
   -12.9,
   6.2
  ],
- "screen_block.13.t0": [
+ "screen_block.13.other_text": [
   23.2,
   3.8
  ],
@@ -555,71 +555,71 @@
   -36.4,
   -22.0
  ],
- "left_block.132.t62": [
+ "left_block.132.variation_text": [
   -2.0,
   6.9
  ],
- "right_block.79.t103": [
+ "right_block.79.variation_2_text": [
   15.9,
   6.1
  ],
- "right_block.112.t115": [
+ "right_block.112.in_use_text": [
   -15.7,
   12.3
  ],
- "right_block.88.t106": [
+ "right_block.88.multi_text": [
   15.0,
   -16.2
  ],
- "right_block.166.t126": [
+ "right_block.166.panel_memory_text": [
   -28.6,
   -3.8
  ],
- "screen_block.65.t9": [
+ "screen_block.65.hold_text": [
   -7.7,
   1.0
  ],
- "screen_block.24.t6": [
+ "screen_block.24.mute_text": [
   -6.2,
   3.1
  ],
- "left_block.135.t49": [
+ "left_block.135.1_text": [
   10.7,
   6.5
  ],
- "left_block.160.t49": [
+ "left_block.160.1_text": [
   7.6,
   -33.8
  ],
- "left_block.165.t49": [
+ "left_block.165.1_text": [
   6.7,
   -33.7
  ],
- "right_block.173.t128": [
+ "right_block.173.1_2_text": [
   -11.1,
   3.1
  ],
- "right_block.199.t136": [
+ "right_block.199.customize_text": [
   31.0,
   6.0
  ],
- "right_block.116.t117": [
+ "right_block.116.sd_text": [
   -28.6,
   -4.7
  ],
- "right_block.123.t119": [
+ "right_block.123.transpose_text": [
   3.1,
   -7.0
  ],
- "right_block.179.t130": [
+ "right_block.179.7_text": [
   0.3,
   -18.5
  ],
- "right_block.128.t5": [
+ "right_block.128.minus_text": [
   9.5,
   -21.9
  ],
- "right_block.135.t5": [
+ "right_block.135.minus_text": [
   9.8,
   -26.4
  ],
@@ -643,15 +643,15 @@
   -16.1,
   8.7
  ],
- "left_block.121.t57": [
+ "left_block.121.arranger_text": [
   4.3,
   -13.3
  ],
- "left_block.12.t14": [
+ "left_block.12.mic_text": [
   -3.1,
   22.0
  ],
- "right_block.94.t108": [
+ "right_block.94.mic_2_text": [
   14.7,
   -15.0
  ],
@@ -663,143 +663,143 @@
   19.4,
   49.1
  ],
- "right_block.195.t41": [
+ "right_block.195.custom_text": [
   -29.0,
   10.3
  ],
- "left_block.127.t61": [
+ "left_block.127.point_text": [
   6.6,
   -3.1
  ],
- "left_block.26.t18": [
+ "left_block.26.off_on_text": [
   -7.6,
   21.8
  ],
- "left_block.32.t18": [
+ "left_block.32.off_on_text": [
   -8.2,
   10.0
  ],
- "left_block.101.t47": [
+ "left_block.101.bank_text": [
   2.4,
   -1.0
  ],
- "screen_block.64.t8": [
+ "screen_block.64.display_text": [
   -7.7,
   1.0
  ],
- "right_block.143.t122": [
+ "right_block.143.part_select_text": [
   38.0,
   -7.0
  ],
- "left_block.1.t11": [
+ "left_block.1.main_text": [
   -2.3,
   6.9
  ],
- "left_block.145.t63": [
+ "left_block.145.fade_text": [
   -2.2,
   -18.0
  ],
- "right_block.158.t123": [
+ "right_block.158.conductor_text": [
   -5.9,
   -2.0
  ],
- "left_block.2.t12": [
+ "left_block.2.volume_text": [
   -2.4,
   6.2
  ],
- "left_block.7.t12": [
+ "left_block.7.volume_text": [
   -1.6,
   6.4
  ],
- "left_block.13.t12": [
+ "left_block.13.volume_text": [
   -3.1,
   22.0
  ],
- "left_block.18.t12": [
+ "left_block.18.volume_text": [
   5.1,
   22.5
  ],
- "left_block.23.t17": [
+ "left_block.23.mode_text": [
   -5.5,
   21.5
  ],
- "left_block.93.t44": [
+ "left_block.93.demo_text": [
   40.4,
   4.1
  ],
- "right_block.107.t112": [
+ "right_block.107.program_text": [
   -13.2,
   1.6
  ],
- "right_block.182.t131": [
+ "right_block.182.6_2_text": [
   16.5,
   -16.6
  ],
- "right_block.115.t116": [
+ "right_block.115.load_text": [
   -0.7,
   11.0
  ],
- "right_block.119.t116": [
+ "right_block.119.load_text": [
   -16.5,
   13.5
  ],
- "right_block.72.t89": [
+ "right_block.72.digital_text": [
   14.0,
   7.1
  ],
- "left_block.149.t65": [
+ "left_block.149.out_text": [
   0.6,
   -36.3
  ],
- "right_block.129.t4": [
+ "right_block.129.plus_text": [
   25.9,
   -21.6
  ],
- "right_block.136.t4": [
+ "right_block.136.plus_text": [
   25.4,
   -25.6
  ],
- "right_block.202.t137": [
+ "right_block.202.favorites_text": [
   -31.0,
   32.3
  ],
- "left_block.103.t48": [
+ "left_block.103.stop_text": [
   -5.3,
   -0.6
  ],
- "left_block.120.t56": [
+ "left_block.120.music_style_text": [
   4.1,
   -11.3
  ],
- "right_block.120.t118": [
+ "right_block.120.tempo_program_text": [
   2.0,
   12.9
  ],
- "right_block.1.t75": [
+ "right_block.1.sound_group_text": [
   -57.6,
   -1.5
  ],
- "right_block.66.t99": [
+ "right_block.66.part_effect_text": [
   27.7,
   -0.7
  ],
- "left_block.167.t70": [
+ "left_block.167.start_stop_text": [
   0.5,
   -9.4
  ],
- "left_block.22.t16": [
+ "left_block.22.auto_play_chord_text": [
   -19.1,
   14.6
  ],
- "right_block.85.t105": [
+ "right_block.85.chorus_text": [
   15.0,
   -15.9
  ],
- "left_block.180.t74": [
+ "left_block.180.beat_text": [
   51.7,
   -56.0
  ],
- "screen_block.18.t2": [
+ "screen_block.18.help_text": [
   18.7,
   0.0
  ],
@@ -827,11 +827,11 @@
   15.9,
   -2.7
  ],
- "left_block.96.t45": [
+ "left_block.96.performance_pads_text": [
   49.4,
   -0.3
  ],
- "screen_block.14.t1": [
+ "screen_block.14.part_and_fr_text": [
   23.2,
   3.8
  ],
@@ -863,11 +863,11 @@
   0.7,
   -1.3
  ],
- "left_block.99.t46": [
+ "left_block.99.auto_setting_text": [
   12.4,
   -1.0
  ],
- "right_block.82.t104": [
+ "right_block.82.global_effect_text": [
   28.5,
   -5.6
  ],
@@ -875,15 +875,15 @@
   -0.1,
   -0.8
  ],
- "right_block.176.t129": [
+ "right_block.176.8_text": [
   -9.0,
   -13.2
  ],
- "right_block.111.t114": [
+ "right_block.111.disk_2_text": [
   -15.7,
   12.3
  ],
- "left_block.17.t15": [
+ "left_block.17.line_in_text": [
   5.1,
   22.5
  ]

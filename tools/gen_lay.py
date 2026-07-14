@@ -2,7 +2,7 @@
 # Generator for src/mame/layout/kn7000.lay -- KN5000-style SVG-snippet layout,
 # arranged pixel-perfectly to the mockup (4000x3000 = 2x the 2000x1500 layout;
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
-import io, math
+import io, math, re
 
 PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
@@ -51,16 +51,28 @@ PANEL_LED={
 GENRE_LED = PANEL_LED
 OPLED = PANEL_LED
 
-E=[]; TXTS={}
+E=[]; TXTS={}; _TXT_NAMES=set()
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
 def two(n,w,h,s0,s1):
     E.append(f'\t<element name="{n}">\n\t\t<image state="0"><data><![CDATA[<svg width="{w}" height="{h}">{s0}</svg>]]></data></image>\n'
              f'\t\t<image state="1"><data><![CDATA[<svg width="{w}" height="{h}">{s1}</svg>]]></data></image>\n\t</element>')
 def xesc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+def _txt_slug(s):
+    # Semantic element name derived from the label text, e.g. "FILL IN" -> "fill_in_text",
+    # "PART & FR" -> "part_and_fr_text", "+" -> "plus_text".
+    t=s.strip()
+    if   t=="+": t="plus"
+    elif t=="-": t="minus"
+    else:        t=t.replace("&"," and ")
+    t=re.sub(r'[^0-9a-z]+','_',t.lower()).strip('_')
+    return (t or "sym")+"_text"
 def label(s,color=TXT):
     k=(s,color)
     if k not in TXTS:
-        n=f"t{len(TXTS)}"; TXTS[k]=n
+        base=_txt_slug(s); n=base; i=2
+        while n in _TXT_NAMES:                 # disambiguate same-slug labels (e.g. differing color)
+            n=f"{base[:-5]}_{i}_text"; i+=1
+        _TXT_NAMES.add(n); TXTS[k]=n
         E.append(f'\t<element name="{n}"><text string="{xesc(s)}">{color}</text></element>')
     return TXTS[k]
 def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
