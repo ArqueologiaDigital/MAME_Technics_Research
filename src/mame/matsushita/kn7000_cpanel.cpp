@@ -300,6 +300,20 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			break;
 		}
 	}
+	else if ((addr & 0xe0) == 0xe0)
+	{
+		// CPC board (centre panel: OTHER PARTS/TG, the 16-part MUTE grid, ...). One sub-CPU drives both
+		// CPL and CPC LEDs and selects the board with ADDR bit 5: 0xC0-0xDF = CPL, 0xE0-0xFF = CPC
+		// (empirically CPC LED frames appear only as ADDR 0xE0-0xFF; register = ADDR bits 4:0). Bits not
+		// yet tied to a panel function are still driven, so the layout can name cpc_led# once identified.
+		const int creg = addr & 0x1f;
+		for (int bit = 0; bit < 8; bit++)
+		{
+			const int led = creg * 8 + bit;
+			if (led < 512)
+				m_cpc_leds[led] = BIT(data, bit);
+		}
+	}
 	else
 	{
 		switch (reg)
