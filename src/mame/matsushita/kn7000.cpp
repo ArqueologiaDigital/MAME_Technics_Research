@@ -2124,6 +2124,14 @@ TIMER_CALLBACK_MEMBER(kn7000_state::volume_scan)
 	m_dspbridge->set_master_gain(v * v);
 	m_dspbridge->set_bus_gains(m_tonegen->gain_send(), m_tonegen->gain_direct(), m_tonegen->gain_return(), m_tonegen->gain_depth());
 	m_dspbridge->set_effect_returns(m_tonegen->gain_dsp_ret(), m_tonegen->gain_multi_ret());
+
+	// SD PLAY/PAUSE lamp (sd_led1): lit while SD-Audio or SD-Song playback is engaged. The play-state
+	// getters GetSDAudPlay_PLAYPAUSEFunc (0x48575084) / GetSDSndPlay_PLAYPAUSEFunc (0x485756E7) read these
+	// state bytes via 0x485793b8 / 0x4857b33f: 1 = playing, 2 = paused, 0 = stopped. Light on play or pause.
+	address_space &prg = m_maincpu->space(AS_PROGRAM);
+	const uint8_t sd_aud = prg.read_byte(0x500063e6);
+	const uint8_t sd_snd = prg.read_byte(0x500063d9);
+	m_sd_leds[1] = (sd_aud == 1 || sd_aud == 2 || sd_snd == 1 || sd_snd == 2) ? 1 : 0;
 }
 
 

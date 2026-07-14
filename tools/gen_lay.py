@@ -574,7 +574,7 @@ SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70
      L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x01"), P("half_r",54,18,42,30,tag="SDSW",mask="0x02"), L("-",28,28,12,12), L("+",70,28,12,12),
      L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x10"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x20"),
      L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
-     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8),   # SD CARD PLAY/PAUSE LED (Felipe: green)
+     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8,name="sd_led1"),   # SD PLAY/PAUSE = sd_led1, driver-lit from the SD-Audio/SD-Song play-state flag (2026-07-14)
      L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8,name="sd_led0")]   # SD IN USE = sd_led0, driver-lit from SPI card activity (2026-07-14)
 SDB.append('\t</group>')
 

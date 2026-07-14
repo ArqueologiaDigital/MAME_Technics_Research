@@ -914,7 +914,7 @@
 
 		<element ref="play_pause_text"><bounds x="306" y="52" width="76" height="10"/></element>
 		<element ref="sd_play" inputtag="SDSW" inputmask="0x08"><bounds x="320" y="18" width="48" height="30"/></element>
-		<element ref="green_led"><bounds x="339.6" y="8.0" width="8" height="8"/></element>
+		<element ref="green_led" name="sd_led1"><bounds x="339.6" y="8.0" width="8" height="8"/></element>
 
 		<element ref="sd_in_use_text"><bounds x="406" y="42" width="72" height="10"/></element>
 		<element ref="red_led" name="sd_led0"><bounds x="438" y="28" width="8" height="8"/></element>
