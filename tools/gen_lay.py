@@ -564,13 +564,13 @@ RB.append('\t\t<element id="tempo_click" ref="inv_rect"><bounds x="50" y="318" w
 RB.append('\t</group>')
 
 # ---- SD-card transport block (its own group, referenced by the views) ----
-# Order per the two photos: SD VOLUME -/+ , SKIP/SEARCH <<//>> , STOP , PLAY/PAUSE , SD IN USE LED.
-# Bound to the SDSW input port (the 6 SD front-panel switches, byte 0x9CC00008 active-low ->
-# descriptor SEG1D events 0x20B5..BA): VOL- 0x10, VOL+ 0x20, SKIP<< 0x01, SKIP>> 0x02, STOP 0x04,
-# PLAY/PAUSE 0x08. (Silk order per Felipe: these are the "6 SD CARD buttons".)
+# Graphic order left->right per the two photos: SD VOLUME -/+ , SKIP/SEARCH <<//>> , STOP , PLAY/PAUSE.
+# bit->function corrected from firmware RE (dispatch 0x48577ee2; see kn7000.cpp CPSD_SDSW): the byte
+# 0x9CC00008 bits are VOL- 0x01, VOL+ 0x02, STOP 0x04, PLAY/PAUSE 0x08, SKIP/SEARCH<< 0x10, SKIP>> 0x20.
+# (An earlier guess had VOLUME and SKIP/SEARCH swapped; the fwd/rew hold-timer proves bit4/5 = SKIP.)
 SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70"/>',
-     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x10"), P("half_r",54,18,42,30,tag="SDSW",mask="0x20"), L("-",28,28,12,12), L("+",70,28,12,12),
-     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x01"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x02"),
+     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x01"), P("half_r",54,18,42,30,tag="SDSW",mask="0x02"), L("-",28,28,12,12), L("+",70,28,12,12),
+     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x10"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x20"),
      L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
      L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8),   # SD CARD PLAY/PAUSE LED (Felipe: green)
      L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8)]

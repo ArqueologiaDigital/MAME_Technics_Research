@@ -2378,16 +2378,19 @@ static INPUT_PORTS_START(kn7000)
 	PORT_CONFSETTING(0x0000, "Bass Pedals")
 
 	// SD front-panel switches (CPSD-side matrix, byte 0x9CC00008 ACTIVE-LOW,
-	// bits 0-5 -> panel events 0x20B5..0x20BA per descriptor SEG1D @0x48613fc4;
-	// physical order per the panel silk: VOLUME - / + , SKIP/SEARCH back/fwd,
-	// STOP, PLAY/PAUSE). Clickable in the layout artwork (kn7000.lay sd_block).
+	// bits 0-5 -> panel events 0x7020B5..0x7020BA per descriptor SEG1D @0x48613fc4).
+	// bit->function from firmware RE (dispatch 0x48577ee2): bit0/1 = a plain property
+	// step (VOLUME), bit2/3 = STOP/PLAY, bit4/5 drive the fwd/rew hold-timer 0x48578d3e
+	// (= SKIP/SEARCH). This CORRECTS an earlier photo-based guess that had VOLUME and
+	// SKIP/SEARCH swapped. Within-pair order (-/+ , <</>>, STOP/PLAY) is the best guess
+	// and not yet panel-verified. Clickable in the layout artwork (kn7000.lay sd_block).
 	PORT_START("CPSD_SDSW")   // SD play/vol board -- GPIO 0x9CC00008, not on the CP serial link
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH <<")
-	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH >>")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME -")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME +")
 	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD STOP")
 	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD PLAY/PAUSE")
-	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME -")
-	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD VOLUME +")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH <<")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD SKIP/SEARCH >>")
 
 	// SD slot COVER switch. The KN7000's SD slot has a hinged cover; the firmware
 	// reads it as the card-detect line and refuses SD access with "ERROR 93: SD

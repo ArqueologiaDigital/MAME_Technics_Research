@@ -900,14 +900,14 @@
 		<bounds x="0" y="0" width="500" height="70"/>
 
 		<element ref="sd_volume_text"><bounds x="8" y="52" width="96" height="10"/></element>
-		<element ref="half_l" inputtag="SDSW" inputmask="0x10"><bounds x="12" y="18" width="42" height="30"/></element>
-		<element ref="half_r" inputtag="SDSW" inputmask="0x20"><bounds x="54" y="18" width="42" height="30"/></element>
+		<element ref="half_l" inputtag="SDSW" inputmask="0x01"><bounds x="12" y="18" width="42" height="30"/></element>
+		<element ref="half_r" inputtag="SDSW" inputmask="0x02"><bounds x="54" y="18" width="42" height="30"/></element>
 		<element ref="minus_text"><bounds x="28" y="28" width="12" height="12"/></element>
 		<element ref="plus_text"><bounds x="70" y="28" width="12" height="12"/></element>
 
 		<element ref="skip_search_text"><bounds x="116" y="52" width="104" height="10"/></element>
-		<element ref="sd_skipb" inputtag="SDSW" inputmask="0x01"><bounds x="120" y="18" width="48" height="30"/></element>
-		<element ref="sd_skipf" inputtag="SDSW" inputmask="0x02"><bounds x="172" y="18" width="48" height="30"/></element>
+		<element ref="sd_skipb" inputtag="SDSW" inputmask="0x10"><bounds x="120" y="18" width="48" height="30"/></element>
+		<element ref="sd_skipf" inputtag="SDSW" inputmask="0x20"><bounds x="172" y="18" width="48" height="30"/></element>
 
 		<element ref="stop_2_text"><bounds x="243" y="52" width="52" height="10"/></element>
 		<element ref="sd_stop" inputtag="SDSW" inputmask="0x04"><bounds x="245" y="18" width="48" height="30"/></element>
