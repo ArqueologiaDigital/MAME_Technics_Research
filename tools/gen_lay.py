@@ -89,11 +89,15 @@ for _k, _led in PANEL_LED.items():                            # the 91 LEDs boun
 # LEDs whose placement binds a LITERAL name (empirically corrected or state/beat indicators, i.e. not
 # reachable through PANEL_LED). Where the LED indicates a real button, derive from BTN_NAME so it still
 # tracks a rename; otherwise use a static description.
-LED_PURPOSE.setdefault("cpr_led97", BTN_NAME.get(("SEG0E", "0x40"), "FAVORITES"))   # real FAVORITES LED (PANEL_LED's cpr_led2 is dead)
+# FAVORITES = cpr_led2 (SEG0E.40, via PANEL_LED). Felipe 2026-07-14 (live LED reg/data log): the firmware
+# drives reg0 bit2 = cpr_led2; the earlier cpr_led97 override was WRONG (it lit nothing, and cpr_led2 was
+# landing on a stray auto-placed element far from the button). cpr_led2's purpose comes from PANEL_LED above.
 LED_PURPOSE.setdefault("cpr_led63", BTN_NAME.get(("SEG0F", "0x02"), "CONDUCTOR"))   # CONDUCTOR (SEG0F.02); cpr_led64/65 come via PANEL_LED
 LED_PURPOSE.update({
     "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
+    "cpr_led11": "DISK IN USE",          # Felipe 2026-07-14 (live LED reg/data log); status LED, no button
+    "cpl_led56": "SPLIT POINT 1",        # Felipe 2026-07-14 (live LED reg/data log); 1st of 3 keyboard split-point LEDs
 })
 def _mk_comment(text):
     # XML comments may not contain "--" nor end with "-".
@@ -422,8 +426,9 @@ LB += [P("green_led" if i>0 else "red_led",_beatx[i],395,8,8, name=_beatled[i]) 
 # 3 SPLIT-POINT indicators at the very bottom of the layout (Felipe): a tiny down-arrow + RED LED per
 # keyboard split point. Exact key positions are TBD -- placeholders spread along the bottom edge;
 # Felipe will reposition them to the real split keys via the SVG-editing loop.
-for _sx in (200,500,800):
-    LB.append(P("red_led",_sx+2,478,8,8)); LB.append(P("split_arrow",_sx,489,12,10))
+_splitled=("cpl_led56", None, None)   # 1st split-point LED = cpl_led56 (Felipe 2026-07-14, live LED log); 2nd/3rd TBD
+for _i,_sx in enumerate((200,500,800)):
+    LB.append(P("red_led",_sx+2,478,8,8,name=_splitled[_i])); LB.append(P("split_arrow",_sx,489,12,10))
 LB.append('\t</group>')
 
 # =================== RIGHT BLOCK (bottom-right; coords = abs - (1000,997)) ===
@@ -472,7 +477,7 @@ for nm,cx,cy,shp,tg,mk in [("PLAY",845,71,"round_btn","SEG0D","0x08"),("EASY REC
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,cy-13-(len(ls)-1-k)*9,52,8))
     RB.append(P(shp,cx-16,cy,32,32,tag=tg,mask=mk)); RB.append(P("green_led",cx-4,cy-13,8,8,name=OPLED.get((tg,mk))))  # DISK=cpr_led75, PROGRAM MENUS=cpr_led74
 # DISK / IN USE indicator + line to DISK button
-RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("red_led",812,158,8,8), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]   # DISK IN USE LED RED (Felipe)
+RB += [L("DISK",798,138,32,8,TXTH), L("IN USE",796,147,36,8,TXTH), P("red_led",812,158,8,8,name="cpr_led11"), P("hline",822,162,20,3), L("LOAD",832,183,32,8)]   # DISK IN USE LED = cpr_led11 RED (Felipe 2026-07-14, live LED log)
 # SD (LOAD) pill = SEG0D 0x80 (ev2040 app-open SD MENU, empirically confirmed).
 RB.append(L("SD",882,214,40,10,TXTH)); RB.append(P("pill_orange",860,228,60,22,tag="SEG0D",mask="0x80")); RB.append(P("green_led",886,216,8,8,name=PANEL_LED.get(("SEG0D","0x80")))); RB.append(L("LOAD",874,252,32,8))
 RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,318,110,110)); RB.append(P("green_led",164,336,8,8))
@@ -548,7 +553,7 @@ RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,
 # CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES
 # screen) -- both empirically confirmed.
 RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8,name=PANEL_LED.get(("SEG0C","0x40"))), P("round_btn_big",884,350,42,42,tag="SEG0C",mask="0x40")]
-RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name="cpr_led97"), P("round_btn_big",852,407,42,42,tag="SEG0E",mask="0x40")]   # FAVORITES LED = cpr_led97 (observed live in normal op; PANEL_LED's cpr_led2 was wrong/dead)
+RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name=PANEL_LED.get(("SEG0E","0x40"))), P("round_btn_big",852,407,42,42,tag="SEG0E",mask="0x40")]   # FAVORITES LED = cpr_led2 (Felipe 2026-07-14, live LED log reg0 bit2; supersedes cpr_led97). Placing it here also stops the completeness pass emitting a stray cpr_led2.
 # Draggable TEMPO/PROGRAM knob click-area -- appended LAST in right_block so it never shifts the indices
 # that layout_nudges.json references (a mid-group insert would invalidate every later nudge's ref-check).
 RB.append('\t\t<element id="tempo_click" ref="inv_rect"><bounds x="50" y="318" width="110" height="110"/></element>')

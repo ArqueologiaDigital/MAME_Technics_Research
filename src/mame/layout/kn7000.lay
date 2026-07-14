@@ -584,7 +584,7 @@
 		<element ref="msp_corner" inputtag="CPL_SEG4" inputmask="0x40"><!-- PAD 6/SOLO --><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="51"/></element>
 		<element ref="6_text"><bounds x="266" y="426" width="20" height="12"/></element>
 		<element ref="solo_text"><bounds x="262" y="438" width="28" height="7"/></element>
-		<element ref="red_led"><bounds x="202" y="478" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led56"><!-- SPLIT POINT 1 --><bounds x="202" y="478" width="8" height="8"/></element>
 		<element ref="split_arrow"><bounds x="200" y="489" width="12" height="10"/></element>
 
 		<element ref="round_btn" inputtag="CPL_SEG4" inputmask="0x04"><!-- VARIATION & MSA 2 --><bounds x="421.6" y="412.6" width="37" height="37"/></element>
@@ -733,7 +733,7 @@
 		<element ref="green_led" name="cpr_led25"><!-- DISK MENU LOAD --><bounds x="842.4" y="147.0" width="8" height="8"/></element>
 		<element ref="disk_2_text"><bounds x="782.3" y="150.3" width="32" height="8"/></element>
 		<element ref="in_use_text"><bounds x="780.3" y="159.3" width="36" height="8"/></element>
-		<element ref="red_led"><bounds x="793.4" y="171.7" width="8" height="8"/></element>
+		<element ref="red_led" name="cpr_led11"><!-- DISK IN USE --><bounds x="793.4" y="171.7" width="8" height="8"/></element>
 		<element ref="hline"><bounds x="805.8" y="174.5" width="20" height="3"/></element>
 		<element ref="load_text"><bounds x="831.3" y="194.0" width="32" height="8"/></element>
 
@@ -893,7 +893,7 @@
 		<element ref="round_btn" inputtag="CPR_SEG3" inputmask="0x02"><!-- CONDUCTOR RIGHT 1 --><bounds x="474.7" y="402.0" width="37" height="37"/></element>
 		<element ref="hline"><bounds x="485.9" y="455.3" width="26" height="3"/></element>
 
-		<element ref="green_led" name="cpr_led97"><!-- FAVORITES --><bounds x="870.9" y="468.5" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led2"><!-- FAVORITES --><bounds x="870.9" y="468.5" width="8" height="8"/></element>
 	</group>
 
 	<group name="sd_block">
