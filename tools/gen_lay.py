@@ -92,7 +92,7 @@ for _k, _led in PANEL_LED.items():                            # the 91 LEDs boun
 # FAVORITES = cpr_led2 (SEG0E.40, via PANEL_LED). Felipe 2026-07-14 (live LED reg/data log): the firmware
 # drives reg0 bit2 = cpr_led2; the earlier cpr_led97 override was WRONG (it lit nothing, and cpr_led2 was
 # landing on a stray auto-placed element far from the button). cpr_led2's purpose comes from PANEL_LED above.
-LED_PURPOSE.setdefault("cpr_led63", BTN_NAME.get(("SEG0F", "0x02"), "CONDUCTOR"))   # CONDUCTOR (SEG0F.02); cpr_led64/65 come via PANEL_LED
+LED_PURPOSE.setdefault("cpr_led7", BTN_NAME.get(("SEG0F", "0x02"), "CONDUCTOR"))   # CONDUCTOR RIGHT 1 = cpr_led7 (empirically verified 2026-07-14; lights iff R1 conductor-active -- the inferred cpr_led63 never lights). cpr_led64/65 = R2/LEFT via PANEL_LED
 LED_PURPOSE.update({
     "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
@@ -513,13 +513,13 @@ RB.append(L("PART SELECT",348,322,92,9,TXTH)); RB += [P("hline",348,327,22,3), P
 PARTSEL=[("SEG0E","0x01"),("SEG0E","0x02"),("SEG0D","0x02")]
 for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("red_led",cx+12,334,8,8,name=PANEL_LED.get((tg,mk))), P("round_btn",cx,345,32,32,tag=tg,mask=mk)]   # PART SELECT LEDs RED (Felipe); cpr_led34/35/36
 # bank A CONDUCTOR group (ev2008, arg-mid 0/1/2) -- all three members now known.
-# Panel silk order left->right = LEFT, RIGHT 2 (centre), RIGHT 1 (Felipe 2026-07-14): same horizontal-mirror
-# fix as PART SELECT -- the outer pair (SEG11.02=cpr_led65 LEFT / SEG0F.02=cpr_led63 RIGHT 1) is swapped;
-# centre SEG10.02=cpr_led64 (RIGHT 2) kept. Each button has its own LED; the group SEG0F/10/11 0x02 maps
-# contiguously to cpr_led63/64/65 (schematic D1107/D1114/D1120, but its RIGHT 1/RIGHT 2 labels are the
-# reverse of the panel silk -- driver PORT_NAMEs corrected to match).
+# Panel silk order left->right = LEFT, RIGHT 2 (centre), RIGHT 1. CONDUCTOR indicator LEDs (verified
+# 2026-07-14 by cycling the parts in-emulator and reading which cpr_led tracks each part being conductor-
+# active): LEFT = cpr_led65, RIGHT 2 = cpr_led64, RIGHT 1 = cpr_led7. NB RIGHT 1 is NOT the contiguous
+# cpr_led63 that was earlier INFERRED (63 never lights); cpr_led7 is the real R1 indicator (it lights iff
+# RIGHT 1 is conductor-active, symmetric with cpr_led64=RIGHT 2). cpr_led64/65 come via PANEL_LED.
 CONDUCT=[("SEG11","0x02"),("SEG10","0x02"),("SEG0F","0x02")]
-CONDUCT_LED=[PANEL_LED.get(("SEG11","0x02")), PANEL_LED.get(("SEG10","0x02")), "cpr_led63"]
+CONDUCT_LED=[PANEL_LED.get(("SEG11","0x02")), PANEL_LED.get(("SEG10","0x02")), "cpr_led7"]
 for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12,399,8,8,name=CONDUCT_LED[j]), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]   # CONDUCTOR LEDs RED (Felipe)
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 # bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK

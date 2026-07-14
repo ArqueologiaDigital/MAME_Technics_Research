@@ -889,7 +889,7 @@
 		<element ref="round_btn" inputtag="CPR_SEG4" inputmask="0x02"><!-- CONDUCTOR RIGHT 2 --><bounds x="413.8" y="402.0" width="37" height="37"/></element>
 		<element ref="conductor_text"><bounds x="387.1" y="452.0" width="92" height="9"/></element>
 
-		<element ref="red_led" name="cpr_led63"><!-- CONDUCTOR RIGHT 1 --><bounds x="489.2" y="386.1" width="8" height="8"/></element>
+		<element ref="red_led" name="cpr_led7"><!-- CONDUCTOR RIGHT 1 --><bounds x="489.2" y="386.1" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="CPR_SEG3" inputmask="0x02"><!-- CONDUCTOR RIGHT 1 --><bounds x="474.7" y="402.0" width="37" height="37"/></element>
 		<element ref="hline"><bounds x="485.9" y="455.3" width="26" height="3"/></element>
 

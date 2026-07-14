@@ -173,7 +173,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpr_leds[4]  = BIT(data, 4);   // D1065 SOUND GROUP 4 (PANEL MEMORY 4) (amber)
 			m_cpr_leds[5]  = BIT(data, 5);   // D1079 SOUND GROUP 3 (PANEL MEMORY 3) (amber)
 			m_cpr_leds[6]  = BIT(data, 6);   // D1093 SOUND GROUP 2 (PANEL MEMORY 2) (amber)
-			m_cpr_leds[7]  = BIT(data, 7);   // (unmapped)
+			m_cpr_leds[7]  = BIT(data, 7);   // D1107 CONDUCTOR RIGHT 1 (red)   [empirically verified 2026-07-14: lights iff RIGHT 1 conductor-active; this is the real R1 indicator, not the inferred cpr_led63]
 			break;
 		case 0x01:
 			m_cpr_leds[8]  = BIT(data, 0);   // (unmapped)
@@ -233,7 +233,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpr_leds[60] = BIT(data, 4);   // (unmapped)
 			m_cpr_leds[61] = BIT(data, 5);   // (unmapped)
 			m_cpr_leds[62] = BIT(data, 6);   // (unmapped)
-			m_cpr_leds[63] = BIT(data, 7);   // D1107 CONDUCTOR RIGHT 1 (red)   [schematic labels D1107 RIGHT 2; panel silk = RIGHT 1]
+			m_cpr_leds[63] = BIT(data, 7);   // (unmapped)   [was inferred CONDUCTOR RIGHT 1 but never lights; the real R1 indicator is cpr_led7 -- verified 2026-07-14]
 			break;
 		case 0x08:
 			m_cpr_leds[64] = BIT(data, 0);   // D1114 CONDUCTOR RIGHT 2 (red)   [schematic labels D1114 RIGHT 1; panel silk = RIGHT 2]
