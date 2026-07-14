@@ -1,3 +1,19 @@
+> **CORRECTION (2026-07-14) — "CPR FULL firmware scramble" below is WRONG; PHYS_MAP eliminated.**
+> The claim that CPR's physical columns repack across normSegs (needing a 2-D PHYS_MAP) does not
+> hold. The firmware's ADDR->normSeg is a **whole-column rename** (the driver emits one [ADDR,DATA]
+> frame per normSeg via the 1:1 `seg_to_addr` table), so each normSeg IS exactly one sub-CPU scan
+> column (CPR wire ADDR 0x00-0x09). A single scan column cannot scatter its bits across four
+> normSegs — so the `CPR_SEG0..9` "physical" grouping (bridged by function/label, never by schematic
+> position) was the artifact, not the firmware. `PHYS_MAP[22][8]` was in fact a **pure permutation**
+> (116 identity + 30 cells in small within-board cycles), i.e. a relabeling. It has been **removed**
+> (commit "eliminate PHYS_MAP"): INPUT_PORTS are now organized directly by normSeg (= the scan
+> matrix the KN5000 style documents), the device uses a 1-D `PORT_SEG` identity, and the layout
+> relabel is a trivial `SEGxx->CP{board}_SEG{col}` at the same bit. Behavior is identical (verified
+> live). The physical-column transcription below is retained only as schematic provenance; the
+> `panel-physical-scan-map.json` map is no longer consumed by the build.
+> Still-wrong bindings to chase separately (NOT fixed by this refactor): conductor L/R1/R2, the SD
+> transport keys (unbound in layout), CUSTOM PANEL (unbound), FAVORITES (dubious).
+
 # KN7000 physical panel scan matrix -> CP{board}_SEG{col} port rename (2026-07-13)
 
 Adopts the KN5000 naming: each ioport = a physical (board, SEG-column) of that board sub-CPU's
