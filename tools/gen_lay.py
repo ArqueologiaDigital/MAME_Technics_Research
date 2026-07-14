@@ -632,6 +632,85 @@ SCRIPT=('\t<script><![CDATA[\n'+_lib+'\n'
         '\t\t\tend\n'
         '\t\tend)\n'
         '\t]]></script>\n')
+# ---- READABILITY: cluster each group's placements into correlated on-screen controls, blank-line
+#      separated, so related declarations (a button + its label(s) + its LED(s)) sit together.
+#      Button-anchored: interactive elements are the anchors (touching pairs like a split pill merge),
+#      each label/LED attaches to its nearest anchor; backgrounds pin to the front. WITHIN a cluster the
+#      ORIGINAL relative order is preserved, so draw order (z-order) is unchanged and the render is
+#      pixel-identical. Runs before the nudge pass so the nudge (group,index) keys stay consistent.
+#      The reorder is DETERMINISTIC, so the order is stable across regenerations. The placement
+#      permutation is written to /tmp/reorder_perms.json {group:{old_idx:new_idx}} -- it was used once
+#      to migrate layout_nudges.json's keys when this pass was introduced, and would be reused to
+#      re-migrate if the clustering ever changes (map old key group.i.ref -> group.perm[i].ref).
+def _reorder_group(lines, GW, GH, MERGE=6, ORPHAN=30):
+    from collections import defaultdict
+    header, footer = lines[0], lines[-1]
+    mid = lines[1:-1]
+    struct = [l for l in mid if l.strip() and '<element' not in l and '<screen' not in l]
+    plac   = [l for l in mid if ('<element' in l) or ('<screen' in l)]
+    def pbox(l):
+        mb=re.search(r'<bounds\b[^>]*?x="([-\d.]+)"[^>]*?y="([-\d.]+)"[^>]*?width="([-\d.]+)"[^>]*?height="([-\d.]+)"', l)
+        return tuple(map(float,mb.groups())) if mb else None
+    info=[]
+    for oi,l in enumerate(plac):
+        b=pbox(l)
+        anchor=('inputtag=' in l) or bool(re.search(r'id="\w+_(?:click|knob)"',l)) or ('<screen' in l)
+        isbg=(b is None) or ('bg_' in l) or (b is not None and b[2]*b[3]>0.25*GW*GH and not anchor)
+        info.append({'oi':oi,'l':l,'b':b,'anchor':anchor,'bg':isbg})
+    bgs=[e for e in info if e['bg']]
+    anchors=[e for e in info if (not e['bg']) and e['anchor']]
+    nons=[e for e in info if (not e['bg']) and (not e['anchor'])]
+    def gap(b1,b2):
+        x1,y1,w1,h1=b1;x2,y2,w2,h2=b2
+        dx=max(0.0,max(x1,x2)-min(x1+w1,x2+w2));dy=max(0.0,max(y1,y2)-min(y1+h1,y2+h2));return (dx*dx+dy*dy)**0.5
+    n=len(anchors);par=list(range(n))
+    def find(a):
+        while par[a]!=a: par[a]=par[par[a]];a=par[a]
+        return a
+    for i in range(n):
+        for j in range(i+1,n):
+            if anchors[i]['b'] and anchors[j]['b'] and gap(anchors[i]['b'],anchors[j]['b'])<=MERGE: par[find(i)]=find(j)
+    ac=defaultdict(list)
+    for k in range(n): ac[find(k)].append(anchors[k])
+    clusters=list(ac.values())
+    def cbox(es):
+        bs=[e['b'] for e in es if e['b']]
+        xs=[b[0] for b in bs];ys=[b[1] for b in bs];xe=[b[0]+b[2] for b in bs];ye=[b[1]+b[3] for b in bs]
+        return (min(xs),min(ys),max(xe)-min(xs),max(ye)-min(ys))
+    boxes=[cbox(cl) for cl in clusters]
+    def adist(b,box):
+        x,y,w,h=b;bx,by,bw,bh=box;xc=x+w/2.0
+        dy=max(0.0,max(y,by)-min(y+h,by+bh));dx=max(0.0,max(x,bx)-min(x+w,bx+bw))
+        hmis=0.0 if bx<=xc<=bx+bw else min(abs(xc-bx),abs(xc-(bx+bw)))
+        return dy+2.5*dx+0.3*hmis
+    for e in nons:
+        if e['b'] is None or not clusters:
+            clusters.append([e]); boxes.append(e['b'] or (0,0,0,0)); continue
+        d,i=min((adist(e['b'],boxes[k]),k) for k in range(len(clusters)))
+        if d<=ORPHAN: clusters[i].append(e)
+        else: clusters.append([e]); boxes.append(e['b'])
+    def ckey(cl):
+        ys=[e['b'][1] for e in cl if e['b']];xs=[e['b'][0] for e in cl if e['b']]
+        return (round(min(ys)/8.0) if ys else 0.0, min(xs) if xs else 0.0)
+    clusters.sort(key=ckey)
+    order=[]; out=[header]+struct
+    for e in sorted(bgs,key=lambda e:e['oi']):
+        out.append(e['l']); order.append(e)
+    for cl in clusters:
+        out.append('')
+        for e in sorted(cl,key=lambda e:e['oi']):
+            out.append(e['l']); order.append(e)
+    out.append(footer)
+    return out, {e['oi']:ni for ni,e in enumerate(order)}
+_GDIM={'screen_block':(2000,997),'left_block':(1000,503),'right_block':(1000,503),'sd_block':(500,70)}
+_perms={}
+S,   _perms['screen_block'] = _reorder_group(S,   *_GDIM['screen_block'])
+LB,  _perms['left_block']   = _reorder_group(LB,  *_GDIM['left_block'])
+RB,  _perms['right_block']  = _reorder_group(RB,  *_GDIM['right_block'])
+SDB, _perms['sd_block']     = _reorder_group(SDB, *_GDIM['sd_block'])
+import json as _json_perm
+open('/tmp/reorder_perms.json','w').write(_json_perm.dumps(_perms))
+
 o.write("\n".join(E)+"\n\n"+"\n".join(S)+"\n\n"+"\n".join(LB)+"\n\n"+"\n".join(RB)+"\n\n"+"\n".join(SDB)+"\n"+VIEWS+SCRIPT+'</mamelayout>\n')
 _LAY_PATH="/home/fsanches/compartilhado/kn7000_mame/src/mame/layout/kn7000.lay"
 open(_LAY_PATH,"w").write(o.getvalue())
