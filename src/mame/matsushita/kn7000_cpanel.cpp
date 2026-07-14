@@ -157,7 +157,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 	// reg*8 + bit within that board's bank (cpr_led#/cpl_led#), and the comment names the panel
 	// function/mode that LED indicates (KN5000 style). This map is kept in sync with -- and generated
 	// from -- the layout's LED bindings (tools/gen_lay.py LED_PURPOSE), which carry the empirically
-	// verified assignments (e.g. FAVORITES = cpr_led97, not the stale PANEL_LED cpr_led2). Bits marked
+	// verified assignments (e.g. FAVORITES = cpr_led2 via PANEL_LED, corrected 2026-07-14 from cpr_led97). Bits marked
 	// (unmapped) are real firmware LEDs whose panel function is not yet identified; the default arm
 	// keeps any register not enumerated here working too.
 	const int reg = addr & 0x3f;
@@ -168,7 +168,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 		case 0x00:
 			m_cpr_leds[0]  = BIT(data, 0);   // D1009 CUSTOMIZE (green)
 			m_cpr_leds[1]  = BIT(data, 1);   // D1023 CUSTOM PANEL (green)
-			m_cpr_leds[2]  = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[2]  = BIT(data, 2);   // D1037 FAVORITES (green)   [Felipe 2026-07-14 live LED log: the real FAVORITES LED; supersedes the earlier cpr_led97 assignment]
 			m_cpr_leds[3]  = BIT(data, 3);   // D1051 SOUND GROUP 5 (PANEL MEMORY 5) (amber)
 			m_cpr_leds[4]  = BIT(data, 4);   // D1065 SOUND GROUP 4 (PANEL MEMORY 4) (amber)
 			m_cpr_leds[5]  = BIT(data, 5);   // D1079 SOUND GROUP 3 (PANEL MEMORY 3) (amber)
@@ -179,7 +179,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpr_leds[8]  = BIT(data, 0);   // (unmapped)
 			m_cpr_leds[9]  = BIT(data, 1);   // D1024 SD CARD LOAD (green)
 			m_cpr_leds[10] = BIT(data, 2);   // (unmapped)
-			m_cpr_leds[11] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[11] = BIT(data, 3);   // D1052 DISK IN USE (red)   [Felipe 2026-07-14 live LED log]
 			m_cpr_leds[12] = BIT(data, 4);   // D1066 BANK VIEW (PANEL MEMORY BANK SELECT) (green)
 			m_cpr_leds[13] = BIT(data, 5);   // D1080 SOUND GROUP 6 (PANEL MEMORY 6) (amber)
 			m_cpr_leds[14] = BIT(data, 6);   // D1094 SOUND GROUP 7 (PANEL MEMORY 7) (amber)
@@ -277,7 +277,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			break;
 		case 0x0c:
 			m_cpr_leds[96] = BIT(data, 0);   // D1118 TRANSPOSE R1 (-) (red)
-			m_cpr_leds[97] = BIT(data, 1);   // D1037 FAVORITES (green)
+			m_cpr_leds[97] = BIT(data, 1);   // (unmapped)   [was FAVORITES/D1037; corrected to cpr_led2 per Felipe's live LED log 2026-07-14]
 			m_cpr_leds[98] = BIT(data, 2);   // (unmapped)
 			m_cpr_leds[99] = BIT(data, 3);   // (unmapped)
 			m_cpr_leds[100]= BIT(data, 4);   // (unmapped)
@@ -375,7 +375,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpl_leds[55] = BIT(data, 7);   // (unmapped)
 			break;
 		case 0x07:
-			m_cpl_leds[56] = BIT(data, 0);   // (unmapped)
+			m_cpl_leds[56] = BIT(data, 0);   // SPLIT POINT 1   [Felipe 2026-07-14 live LED log; 1st of 3 keyboard split-point LEDs]
 			m_cpl_leds[57] = BIT(data, 1);   // D1125 MEMORY/LOAD (green)
 			m_cpl_leds[58] = BIT(data, 2);   // D1144 COUNTRY (red)
 			m_cpl_leds[59] = BIT(data, 3);   // D1157 FILL IN 2 (red)
