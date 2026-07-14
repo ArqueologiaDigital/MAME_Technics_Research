@@ -97,6 +97,7 @@ LED_PURPOSE.update({
     "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
     "cpr_led11": "DISK IN USE",          # Felipe 2026-07-14 (live LED reg/data log); status LED, no button
+    "cpl_led29": "OTHER PART & FR",      # Felipe 2026-07-14 (F3+F4 LED test): the OTHER PARTS/TG button's LED
     # 3 keyboard split-point indicators (manual p39; verified 2026-07-14 by cycling the SPLIT POINT button):
     "cpl_led56": "SPLIT POINT G2", "cpl_led21": "SPLIT POINT C3", "cpl_led13": "SPLIT POINT G3",
 })
@@ -237,7 +238,7 @@ for yy,(ls,lm,rs,rm) in zip([205,294,383,472,561], LCD_SOFTKEYS):
 # OTHER PART & FR / HELP
 # bank A (HELP-info verified, panel_family_2.txt): OTHER PART & FR = SEG05 0x01, HELP = SEG05 0x02
 # (HELP cross-confirmed by the STAGE-1 INPUT_PORTS auto-namer).
-S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG05",mask="0x01"), P("red_led",196,752,8,8),
+S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG05",mask="0x01"), P("red_led",196,752,8,8,name="cpl_led29"),   # OTHER PART & FR LED = cpl_led29 (Felipe's F3+F4 LED test 2026-07-14: OTHER PARTS/TG lights it)
       P("round_btn_big",150,852,42,42,tag="SEG05",mask="0x02"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
 # CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the

@@ -354,7 +354,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpl_leds[26] = BIT(data, 2);   // D1148 MODERN DANCE (red)
 			m_cpl_leds[27] = BIT(data, 3);   // D1161 VARIATION & MSA 4 (red)
 			m_cpl_leds[28] = BIT(data, 4);   // D1177 MUSIC STYLIST (green)
-			m_cpl_leds[29] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[29] = BIT(data, 5);   // OTHER PART & FR   [Felipe 2026-07-14 F3+F4 LED test: the OTHER PARTS/TG (CPC_SEG5.01) button's indicator, on the CPL board]
 			m_cpl_leds[30] = BIT(data, 6);   // (unmapped)
 			m_cpl_leds[31] = BIT(data, 7);   // (unmapped)
 			break;

@@ -318,7 +318,7 @@
 		<element ref="other_text"><bounds x="168.2" y="720.8" width="52" height="13"/></element>
 		<element ref="part_and_fr_text"><bounds x="154.2" y="733.8" width="80" height="13"/></element>
 		<element ref="round_btn_big" inputtag="CPC_SEG5" inputmask="0x01"><!-- OTHER PARTS/TG --><bounds x="169.4" y="761.4" width="42" height="42"/></element>
-		<element ref="red_led"><bounds x="233.0" y="756.5" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led29"><!-- OTHER PART & FR --><bounds x="233.0" y="756.5" width="8" height="8"/></element>
 
 		<element ref="display_text"><bounds x="1769.3" y="718.0" width="64" height="13"/></element>
 		<element ref="hold_text"><bounds x="1769.3" y="731.0" width="64" height="13"/></element>
