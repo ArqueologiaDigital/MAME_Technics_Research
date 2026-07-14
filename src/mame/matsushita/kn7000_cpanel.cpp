@@ -150,21 +150,244 @@ void kn7000_cpanel_device::tx_byte(uint8_t data)
 	}
 }
 
-// One decoded LED-command frame: ADDR selects an 8-LED register on one of the
-// panel boards, DATA is that register's 8 LED bits. The board is chosen by the
-// bank field in ADDR bits 6-7; the register index is ADDR bits 0-5. This mirrors
-// the firmware's LED shadow layout (notes/panel-serial-protocol.md).
 void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 {
-	// addr = panel(bits 7:6; 0x00=right/CPR, 0xC0/0xE0=left/CPL) | reg(bits 5:0).
-	// Each data bit is one LED of register `reg`. Index reg*8+bit within the bank.
+	// One decoded LED-command frame. ADDR = board (bits 7:6; 0x00 = CPR / right panel, 0xC0/0xE0 =
+	// CPL / left panel) | LED register (bits 5:0). Each DATA bit is one LED; its output index is
+	// reg*8 + bit within that board's bank (cpr_led#/cpl_led#), and the comment names the panel
+	// function/mode that LED indicates (KN5000 style). This map is kept in sync with -- and generated
+	// from -- the layout's LED bindings (tools/gen_lay.py LED_PURPOSE), which carry the empirically
+	// verified assignments (e.g. FAVORITES = cpr_led97, not the stale PANEL_LED cpr_led2). Bits marked
+	// (unmapped) are real firmware LEDs whose panel function is not yet identified; the default arm
+	// keeps any register not enumerated here working too.
 	const int reg = addr & 0x3f;
-	const bool left = (addr & 0xc0) != 0;
-	for (int bit = 0; bit < 8; bit++)
+	if ((addr & 0xc0) == 0)
 	{
-		const int led = reg * 8 + bit;
-		const int on = BIT(data, bit);
-		if (led < 512) { if (left) m_cpl_leds[led] = on; else m_cpr_leds[led] = on; }
+		switch (reg)
+		{
+		case 0x00:
+			m_cpr_leds[0]  = BIT(data, 0);   // CUSTOMIZE
+			m_cpr_leds[1]  = BIT(data, 1);   // CUSTOM PANEL
+			m_cpr_leds[2]  = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[3]  = BIT(data, 3);   // SOUND GROUP 5 (PANEL MEMORY 5)
+			m_cpr_leds[4]  = BIT(data, 4);   // SOUND GROUP 4 (PANEL MEMORY 4)
+			m_cpr_leds[5]  = BIT(data, 5);   // SOUND GROUP 3 (PANEL MEMORY 3)
+			m_cpr_leds[6]  = BIT(data, 6);   // SOUND GROUP 2 (PANEL MEMORY 2)
+			m_cpr_leds[7]  = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x01:
+			m_cpr_leds[8]  = BIT(data, 0);   // (unmapped)
+			m_cpr_leds[9]  = BIT(data, 1);   // SD CARD LOAD
+			m_cpr_leds[10] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[11] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[12] = BIT(data, 4);   // BANK VIEW (PANEL MEMORY BANK SELECT)
+			m_cpr_leds[13] = BIT(data, 5);   // SOUND GROUP 6 (PANEL MEMORY 6)
+			m_cpr_leds[14] = BIT(data, 6);   // SOUND GROUP 7 (PANEL MEMORY 7)
+			m_cpr_leds[15] = BIT(data, 7);   // SOUND GROUP 8 (PANEL MEMORY 8)
+			break;
+		case 0x02:
+			m_cpr_leds[16] = BIT(data, 0);   // DISK EASY REC
+			m_cpr_leds[17] = BIT(data, 1);   // DISK PLAY
+			m_cpr_leds[18] = BIT(data, 2);   // VARIATION
+			m_cpr_leds[19] = BIT(data, 3);   // SOUND DSP
+			m_cpr_leds[20] = BIT(data, 4);   // DIGITAL EFFECT
+			m_cpr_leds[21] = BIT(data, 5);   // SUSTAIN
+			m_cpr_leds[22] = BIT(data, 6);   // SOUND EXPLORER
+			m_cpr_leds[23] = BIT(data, 7);   // ORGAN & ACCORDION
+			break;
+		case 0x03:
+			m_cpr_leds[24] = BIT(data, 0);   // PROGRAM MENUS
+			m_cpr_leds[25] = BIT(data, 1);   // DISK MENU LOAD
+			m_cpr_leds[26] = BIT(data, 2);   // EFFECT MIC
+			m_cpr_leds[27] = BIT(data, 3);   // REVERB
+			m_cpr_leds[28] = BIT(data, 4);   // MULTI
+			m_cpr_leds[29] = BIT(data, 5);   // CHORUS
+			m_cpr_leds[30] = BIT(data, 6);   // EW EXPANSION
+			m_cpr_leds[31] = BIT(data, 7);   // MEMORY
+			break;
+		case 0x04:
+			m_cpr_leds[32] = BIT(data, 0);   // SOLO
+			m_cpr_leds[33] = BIT(data, 1);   // TECHNI-CHORD
+			m_cpr_leds[34] = BIT(data, 2);   // PART SELECT LEFT
+			m_cpr_leds[35] = BIT(data, 3);   // PART SELECT RIGHT 2
+			m_cpr_leds[36] = BIT(data, 4);   // PART SELECT RIGHT 1
+			m_cpr_leds[37] = BIT(data, 5);   // TRANSPOSE R2 (+)
+			m_cpr_leds[38] = BIT(data, 6);   // TRANSPOSE R2 (-)
+			m_cpr_leds[39] = BIT(data, 7);   // TRANSPOSE R1 (+)
+			break;
+		case 0x05:
+			m_cpr_leds[40] = BIT(data, 0);   // STRINGS & VOCAL
+			m_cpr_leds[41] = BIT(data, 1);   // WORLD
+			m_cpr_leds[42] = BIT(data, 2);   // MALLET & ORCH PERC
+			m_cpr_leds[43] = BIT(data, 3);   // GUITAR
+			m_cpr_leds[44] = BIT(data, 4);   // PIANO
+			m_cpr_leds[45] = BIT(data, 5);   // SYNTH
+			m_cpr_leds[46] = BIT(data, 6);   // PAD
+			m_cpr_leds[47] = BIT(data, 7);   // ACCORDION REGISTER
+			break;
+		case 0x07:
+			m_cpr_leds[56] = BIT(data, 0);   // (unmapped)
+			m_cpr_leds[57] = BIT(data, 1);   // (unmapped)
+			m_cpr_leds[58] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[59] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[60] = BIT(data, 4);   // (unmapped)
+			m_cpr_leds[61] = BIT(data, 5);   // (unmapped)
+			m_cpr_leds[62] = BIT(data, 6);   // (unmapped)
+			m_cpr_leds[63] = BIT(data, 7);   // CONDUCTOR RIGHT 2
+			break;
+		case 0x08:
+			m_cpr_leds[64] = BIT(data, 0);   // CONDUCTOR RIGHT 1
+			m_cpr_leds[65] = BIT(data, 1);   // CONDUCTOR LEFT
+			m_cpr_leds[66] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[67] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[68] = BIT(data, 4);   // (unmapped)
+			m_cpr_leds[69] = BIT(data, 5);   // (unmapped)
+			m_cpr_leds[70] = BIT(data, 6);   // (unmapped)
+			m_cpr_leds[71] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x09:
+			m_cpr_leds[72] = BIT(data, 0);   // SOUND GROUP 1 (PANEL MEMORY 1)
+			m_cpr_leds[73] = BIT(data, 1);   // (unmapped)
+			m_cpr_leds[74] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[75] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[76] = BIT(data, 4);   // (unmapped)
+			m_cpr_leds[77] = BIT(data, 5);   // (unmapped)
+			m_cpr_leds[78] = BIT(data, 6);   // (unmapped)
+			m_cpr_leds[79] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x0a:
+			m_cpr_leds[80] = BIT(data, 0);   // SAX & WOODWIND
+			m_cpr_leds[81] = BIT(data, 1);   // BRASS
+			m_cpr_leds[82] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[83] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[84] = BIT(data, 4);   // (unmapped)
+			m_cpr_leds[85] = BIT(data, 5);   // (unmapped)
+			m_cpr_leds[86] = BIT(data, 6);   // (unmapped)
+			m_cpr_leds[87] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x0b:
+			m_cpr_leds[88] = BIT(data, 0);   // DRUM KITS
+			m_cpr_leds[89] = BIT(data, 1);   // BASS
+			m_cpr_leds[90] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[91] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[92] = BIT(data, 4);   // (unmapped)
+			m_cpr_leds[93] = BIT(data, 5);   // (unmapped)
+			m_cpr_leds[94] = BIT(data, 6);   // (unmapped)
+			m_cpr_leds[95] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x0c:
+			m_cpr_leds[96] = BIT(data, 0);   // TRANSPOSE R1 (-)
+			m_cpr_leds[97] = BIT(data, 1);   // FAVORITES
+			m_cpr_leds[98] = BIT(data, 2);   // (unmapped)
+			m_cpr_leds[99] = BIT(data, 3);   // (unmapped)
+			m_cpr_leds[100]= BIT(data, 4);   // (unmapped)
+			m_cpr_leds[101]= BIT(data, 5);   // (unmapped)
+			m_cpr_leds[102]= BIT(data, 6);   // (unmapped)
+			m_cpr_leds[103]= BIT(data, 7);   // (unmapped)
+			break;
+		case 0x0d:
+			m_cpr_leds[104]= BIT(data, 0);   // TAB ORGAN
+			m_cpr_leds[105]= BIT(data, 1);   // DIGITAL DRAWBAR
+			m_cpr_leds[106]= BIT(data, 2);   // (unmapped)
+			m_cpr_leds[107]= BIT(data, 3);   // (unmapped)
+			m_cpr_leds[108]= BIT(data, 4);   // (unmapped)
+			m_cpr_leds[109]= BIT(data, 5);   // (unmapped)
+			m_cpr_leds[110]= BIT(data, 6);   // (unmapped)
+			m_cpr_leds[111]= BIT(data, 7);   // (unmapped)
+			break;
+		default:
+			for (int bit = 0; bit < 8; bit++) { const int led = reg * 8 + bit; if (led < 512) m_cpr_leds[led] = BIT(data, bit); }
+			break;
+		}
+	}
+	else
+	{
+		switch (reg)
+		{
+		case 0x00:
+			m_cpl_leds[0]  = BIT(data, 0);   // INTRO & ENDING 1
+			m_cpl_leds[1]  = BIT(data, 1);   // BALLROOM
+			m_cpl_leds[2]  = BIT(data, 2);   // 8 & 16 BEAT
+			m_cpl_leds[3]  = BIT(data, 3);   // VARIATION & MSA 1
+			m_cpl_leds[4]  = BIT(data, 4);   // MUSIC STYLE ARRANGER
+			m_cpl_leds[5]  = BIT(data, 5);   // DISPLAY HOLD
+			m_cpl_leds[6]  = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[7]  = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x01:
+			m_cpl_leds[8]  = BIT(data, 0);   // INTRO & ENDING 2
+			m_cpl_leds[9]  = BIT(data, 1);   // MARCH
+			m_cpl_leds[10] = BIT(data, 2);   // 60s & 70s
+			m_cpl_leds[11] = BIT(data, 3);   // VARIATION & MSA 2
+			m_cpl_leds[12] = BIT(data, 4);   // PERFORMANCE PADS/AUTO
+			m_cpl_leds[13] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[14] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[15] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x02:
+			m_cpl_leds[16] = BIT(data, 0);   // SYNCHRO & BREAK
+			m_cpl_leds[17] = BIT(data, 1);   // MOVIE SHOW
+			m_cpl_leds[18] = BIT(data, 2);   // ROCK & POP
+			m_cpl_leds[19] = BIT(data, 3);   // VARIATION & MSA 3
+			m_cpl_leds[20] = BIT(data, 4);   // APC/SEQ VOLUME (state LED, no button)
+			m_cpl_leds[21] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[22] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[23] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x03:
+			m_cpl_leds[24] = BIT(data, 0);   // BEAT 1
+			m_cpl_leds[25] = BIT(data, 1);   // LATIN & WORLD
+			m_cpl_leds[26] = BIT(data, 2);   // MODERN DANCE
+			m_cpl_leds[27] = BIT(data, 3);   // VARIATION & MSA 4
+			m_cpl_leds[28] = BIT(data, 4);   // MUSIC STYLIST
+			m_cpl_leds[29] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[30] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[31] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x04:
+			m_cpl_leds[32] = BIT(data, 0);   // BEAT 2
+			m_cpl_leds[33] = BIT(data, 1);   // ENTERTAINER
+			m_cpl_leds[34] = BIT(data, 2);   // BALLAD
+			m_cpl_leds[35] = BIT(data, 3);   // FADE IN
+			m_cpl_leds[36] = BIT(data, 4);   // AUTO MODE
+			m_cpl_leds[37] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[38] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[39] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x05:
+			m_cpl_leds[40] = BIT(data, 0);   // BEAT 3
+			m_cpl_leds[41] = BIT(data, 1);   // CUSTOM
+			m_cpl_leds[42] = BIT(data, 2);   // SOUL & FUNK
+			m_cpl_leds[43] = BIT(data, 3);   // FILL IN 1
+			m_cpl_leds[44] = BIT(data, 4);   // SOUND SET
+			m_cpl_leds[45] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[46] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[47] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x06:
+			m_cpl_leds[48] = BIT(data, 0);   // BEAT 4
+			m_cpl_leds[49] = BIT(data, 1);   // ORGANIST
+			m_cpl_leds[50] = BIT(data, 2);   // JAZZ COMBO
+			m_cpl_leds[51] = BIT(data, 3);   // FADE OUT
+			m_cpl_leds[52] = BIT(data, 4);   // PLAY CHORD OFF/ON
+			m_cpl_leds[53] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[54] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[55] = BIT(data, 7);   // (unmapped)
+			break;
+		case 0x07:
+			m_cpl_leds[56] = BIT(data, 0);   // (unmapped)
+			m_cpl_leds[57] = BIT(data, 1);   // MEMORY/LOAD
+			m_cpl_leds[58] = BIT(data, 2);   // COUNTRY
+			m_cpl_leds[59] = BIT(data, 3);   // FILL IN 2
+			m_cpl_leds[60] = BIT(data, 4);   // ARRANGER OFF/ON
+			m_cpl_leds[61] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[62] = BIT(data, 6);   // (unmapped)
+			m_cpl_leds[63] = BIT(data, 7);   // (unmapped)
+			break;
+		default:
+			for (int bit = 0; bit < 8; bit++) { const int led = reg * 8 + bit; if (led < 512) m_cpl_leds[led] = BIT(data, bit); }
+			break;
+		}
 	}
 	LOGMASKED(LOG_LEDS, "panel LED frame addr=%02X data=%02X\n", addr, data);
 }
