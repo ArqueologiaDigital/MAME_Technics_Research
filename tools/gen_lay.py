@@ -60,25 +60,29 @@ OPLED = PANEL_LED
 # emitted from one key. Regenerating the layout re-derives all comments; a button rename or LED remap
 # updates the comment automatically. See the annotate pass at the tail of this file.
 def _load_btn_names():
+    # Parse the driver INPUT_PORTS for every panel button's silk name, keyed BOTH ways:
+    #   BTN_CP  = {(CP-port tag, "0xNN"): name}    -- matches the layout's final inputtag/inputmask
+    #   BTN_SEG = {("SEGxx" normSeg, "0xNN"): name} -- matches the PANEL_LED (SEGxx,mask) LED keys
     kncpp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "mame", "matsushita", "kn7000.cpp")
     cp2ns = {"CPL_SEG0":0x00,"CPL_SEG1":0x01,"CPL_SEG2":0x02,"CPL_SEG3":0x03,"CPL_SEG4":0x04,
              "CPL_SEG6":0x06,"CPL_SEG7":0x07,"CPC_SEG5":0x05,"CPC_SEG8":0x08,"CPC_SEG9":0x09,
              "CPC_SEG10":0x0a,"CPC_SEG11":0x0b,"CPR_SEG0":0x0c,"CPR_SEG1":0x0d,"CPR_SEG2":0x0e,
              "CPR_SEG3":0x0f,"CPR_SEG4":0x10,"CPR_SEG5":0x11,"CPR_SEG6":0x12,"CPR_SEG7":0x13,
              "CPR_SEG8":0x14,"CPR_SEG9":0x15}
-    names = {}; cur = None
+    by_cp = {}; by_seg = {}; cp = None
     for ln in open(kncpp).read().splitlines():
         m = re.search(r'PORT_START\("(CP[LCR]_SEG\d+)"\)', ln)
-        if m: cur = cp2ns.get(m.group(1)); continue
-        if "PORT_START" in ln: cur = None; continue          # left the CP scan-matrix ports
-        if cur is None: continue
+        if m: cp = m.group(1); continue
+        if "PORT_START" in ln: cp = None; continue           # left the CP scan-matrix ports
+        if cp is None: continue
         mb = re.search(r'PORT_BIT\(\s*(0x[0-9a-fA-F]+).*?PORT_NAME\("([^"]*)"\)', ln)
         if mb:
-            mask = int(mb.group(1), 16)
+            mask = "0x%02x" % int(mb.group(1), 16)
             nm = re.sub(r'\s*\(SW\d+\)\s*$', '', mb.group(2)).strip()
-            names[("SEG%02X" % cur, "0x%02x" % mask)] = nm
-    return names
-BTN_NAME = _load_btn_names()
+            by_cp[(cp, mask)] = nm
+            by_seg[("SEG%02X" % cp2ns[cp], mask)] = nm
+    return by_cp, by_seg
+BTN_CP, BTN_NAME = _load_btn_names()
 LED_PURPOSE = {}
 for _k, _led in PANEL_LED.items():                            # the 91 LEDs bound via PANEL_LED
     if BTN_NAME.get(_k): LED_PURPOSE[_led] = BTN_NAME[_k]
@@ -91,9 +95,9 @@ LED_PURPOSE.update({
     "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
 })
-def _led_comment(purpose):
+def _mk_comment(text):
     # XML comments may not contain "--" nor end with "-".
-    return "<!-- %s -->" % purpose.replace("--", "-").rstrip("-").strip()
+    return "<!-- %s -->" % text.replace("--", "-").rstrip("-").strip()
 
 E=[]; TXTS={}; _TXT_NAMES=set()
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
@@ -213,31 +217,16 @@ panel_bg("bg_top",2000,997,PANEL); panel_bg("bg_left",1000,503,PANEL); panel_bg(
 S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height="997"/>',
    P("bg_top",0,0,2000,997), P("screen_frame",298,104,1404,581),
    '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
-# LCD-flanking keyboard-part on/off buttons (descriptor 0x2000/0x2001 parts 0x10-0x14 =
-# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2): OFF column on SEG00 (left of LCD), ON column on
-# SEG11-13 (right). The driver's old "LCD Left N" labels were wrong. See notes/panel-descriptor-map.md.
-# LEFT column = the 5 LCD-LEFT soft-keys, wired to SEG03 b3..b7 (0x08/0x10/0x20/0x40/0x80),
-# top->bottom = LCD LEFT 1..5. Confirmed by the user: FADE(SEG03 0x20)=>LCD LEFT 3,
-# VAR4(SEG03 0x40)=>LCD LEFT 4, SPLIT(SEG03 0x80)=>LCD LEFT 5 give 3/5 directly; 1-2 (0x08/0x10)
-# extrapolate the b3-b7 run. (Context-sensitive soft-keys: inactive on the home screen, so not
-# snapshot-verifiable there.) FADE/VAR4/SPLIT are freed below (their real bits are TBD). Right
-# (ON) column left on SEG11-13 as before. See notes/panel-rhythm-group.md.
-# LEFT column = LCD LEFT 1-5 = SEG03 b3-b7 (parts 0x10-0x14 OFF). RIGHT column = LCD RIGHT 1-5 =
-# SEG0F 0x04/0x08/0x10/0x20/0x40 (parts 0x10-0x14 ON) -- FOUND + CONFIRMED 2026-07-07: on the PIANO
-# sound-select page, pressing SEG0F 0x08 highlights "Vintage E.P. 1" (right col row 2). So the two
-# columns are the OFF/ON pair for the 5 LCD-flanking parts (RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2).
-# bank A: left column = part OFF (ev2000), right column = part ON (ev2001), for the 5 keyboard parts
-# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 (part ids 0x10-0x14). See notes/panel-layout-bankA-bindings.md.
-LCDPARTS=[("RIGHT1","SEG00","0x02","SEG11","0x10"),("RIGHT2","SEG00","0x08","SEG11","0x20"),
-          ("LEFT","SEG00","0x20","SEG13","0x01"),("ACCOMP1","SEG00","0x01","SEG12","0x01"),
-          ("ACCOMP2","SEG00","0x04","SEG11","0x01")]
-# NO silkscreen labels: the real KN7000 unit prints NO text next to the LCD-flanking soft-keys --
-# their function is shown ON-SCREEN (context-dependent), so the panel is blank there. The
-# RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2 labels (from the mockup) were REMOVED per the user (2026-07-08).
-# Functionally these remain the LCD soft-keys: LEFT column = SEG03 b3-b7 (part OFF / "LCD LEFT 1-5"),
-# RIGHT column = SEG0F 0x04-0x40 (part ON / "LCD RIGHT 1-5"). Buttons stay clickable; only text is gone.
-for i,yy in enumerate([205,294,383,472,561]):
-    nm,ls,lm,rs,rm=LCDPARTS[i]
+# LCD-flanking soft-keys: 5 rows down each side of the display, listed top->bottom as
+# (left-SEG, left-mask, right-SEG, right-mask). These are CONTEXT-DEPENDENT keys -- the real unit
+# prints NO silkscreen text beside them (their function is whatever the current screen shows), so the
+# panel is blank there. Left column wires to SEG00 (-> the driver's LCDL 1-5); right column to
+# SEG11-13. Both columns are bound and clickable and work in the driver. These are the physical
+# "LCD LEFT/RIGHT 1-5" soft-keys -- context-dependent, NOT any fixed-function / keyboard-part button.
+LCD_SOFTKEYS=[("SEG00","0x02","SEG11","0x10"),("SEG00","0x08","SEG11","0x20"),
+              ("SEG00","0x20","SEG13","0x01"),("SEG00","0x01","SEG12","0x01"),
+              ("SEG00","0x04","SEG11","0x01")]
+for yy,(ls,lm,rs,rm) in zip([205,294,383,472,561], LCD_SOFTKEYS):
     S.append(P("lcd_soft_key",138,yy,123,34,flip=True,tag=ls,mask=lm))
     S.append(P("lcd_soft_key",1740,yy,123,34,tag=rs,mask=rm))
 # OTHER PART & FR / HELP
@@ -706,7 +695,48 @@ def _annotate_led(_m):
         _ann[1] += 1
         return _m.group(0)               # no known purpose -> leave uncommented
     _ann[0] += 1
-    return f'<element {_attrs}>{_led_comment(_p)}'
+    return f'<element {_attrs}>{_mk_comment(_p)}'
 _lay = re.sub(r'<element ([^>]*\bname="(cp[lcr]_led\d+)"[^>]*)>', _annotate_led, _lay)
+
+# --- Annotate every panel BUTTON placement with its silk name (KN5000 style: <!-- name --> right after
+#     the opening <element> tag). Keyed by the button's ACTUAL binding (inputtag=CP{board}_SEG{col},
+#     inputmask), looked up in BTN_CP (parsed from the driver INPUT_PORTS), so the comment cannot drift.
+#     Runs after the relabel pass, so inputtag is already the final CP scan-column port.
+# A few placements bind cells the driver leaves IPT_UNUSED (the LCDR soft-keys, the orphan genres
+# ORGANIST/60s&70s, and the speculative CUSTOM PANEL). Their identity comes from the LAYOUT's own
+# placement data (RG genre list / LCD_SOFTKEYS row order / the CUSTOM label) via BTN_FALLBACK. If the
+# driver later names such a cell, BTN_CP wins automatically (checked first).
+_ns2cp = {0x00:"CPL_SEG0",0x01:"CPL_SEG1",0x02:"CPL_SEG2",0x03:"CPL_SEG3",0x04:"CPL_SEG4",0x05:"CPC_SEG5",
+          0x06:"CPL_SEG6",0x07:"CPL_SEG7",0x08:"CPC_SEG8",0x09:"CPC_SEG9",0x0a:"CPC_SEG10",0x0b:"CPC_SEG11",
+          0x0c:"CPR_SEG0",0x0d:"CPR_SEG1",0x0e:"CPR_SEG2",0x0f:"CPR_SEG3",0x10:"CPR_SEG4",0x11:"CPR_SEG5",
+          0x12:"CPR_SEG6",0x13:"CPR_SEG7",0x14:"CPR_SEG8",0x15:"CPR_SEG9"}
+def _cpkey(_seg, _mask): return (_ns2cp[int(_seg[3:], 16)], "0x%02x" % int(_mask, 16))
+BTN_FALLBACK = {}
+for _gnm, _gsg, _gmk in RG:                                   # orphan genres (bound ones resolve via BTN_CP)
+    BTN_FALLBACK.setdefault(_cpkey(_gsg, _gmk), _gnm)
+# Right-of-display LCD soft-keys, numbered top-to-bottom to mirror the driver's LCDL 1-5 on the left --
+# the user-confirmed PHYSICAL naming (commit 6a67eda). These work; only LCD_SOFTKEYS' row ORDER is
+# used here (top row = LCDR 1), never any fixed-function/part interpretation.
+for _i, (_ls, _lm, _rs, _rm) in enumerate(LCD_SOFTKEYS):
+    BTN_FALLBACK.setdefault(_cpkey(_rs, _rm), "LCDR %d" % (_i + 1))
+BTN_FALLBACK.setdefault(_cpkey("SEG06", "0x80"), "CUSTOM PANEL (unverified)")   # educated-guess placement (ev20B4)
+_btn = [0, 0, 0]
+def _annotate_btn(_m):
+    if "<!--" in _m.group(0):                # already carries a comment -> leave it
+        return _m.group(0)
+    _key = (_m.group(2), _m.group(3))
+    _nm = BTN_CP.get(_key)
+    if _nm:
+        _btn[0] += 1
+        return f'<element {_m.group(1)}>{_mk_comment(_nm)}'
+    _fb = BTN_FALLBACK.get(_key)
+    if _fb:
+        _btn[1] += 1
+        return f'<element {_m.group(1)}>{_mk_comment(_fb)}'   # layout-sourced label (driver cell unnamed)
+    _btn[2] += 1
+    return _m.group(0)                       # genuinely unknown -> uncommented
+_lay = re.sub(r'<element ([^>]*\binputtag="(CP[LCR]_SEG\d+)" inputmask="(0x[0-9a-fA-F]+)"[^>]*)>', _annotate_btn, _lay)
+
 open(_LAY_PATH, "w").write(_lay)
 print(f"ANNOTATED {_ann[0]} LED elements with purpose comments ({_ann[1]} placed LEDs had no known purpose)")
+print(f"ANNOTATED {_btn[0]} BUTTON elements from the driver + {_btn[1]} from layout data (driver cell unnamed); {_btn[2]} unknown")

@@ -15,7 +15,7 @@ the SEG.bit whose descriptor event matches its function.
 ## BUTTONS — event families (bind label+position ↔ descriptor bit)
 - [x] 0x2005 (16) rhythm genres → RHYTHM GROUP SEG01/02 (RhythmGenreNameTable)
 - [x] 0x2004 (18) sound categories → SOUND GROUP (SoundGroupNameTable @0x48131570)
-- [x] 0x2000/0x2001 parts 0x10-0x14 → LCD-flanking part on/off (RIGHT1/RIGHT2/LEFT/ACCOMP1/2)
+- [x] LCD-flanking soft-keys bound (LCDL 1-5 left / LCDR 1-5 right) -- context-dependent keys, NOT a keyboard-part on/off toggle (that reading was retracted)
 - [x] 0x2000/0x2001 parts 0x00-0x0F → MUTE grid SEG05/08-0B (verify order)
 - [x] 0x2020 START/STOP, 0x2022 INTRO&ENDING (2), 0x2023 FILL IN (2), 0x2084 FADE (2)
 - [~] 0x2010 (8) CONFIRMED = PART EFFECT + GLOBAL EFFECT buttons (empirical: right-panel LEDs
@@ -54,7 +54,7 @@ the SEG.bit whose descriptor event matches its function.
   produce screen/LED effects; mapped LEDs light.
 
 ## STATUS LOG (newest first)
-- soft-keys: LCD-flanking part on/off bound (10); driver SEG00 relabelled; TRANSPOSE unbound.
+- soft-keys: LCD-flanking soft-keys bound (10, LCDL/LCDR 1-5); driver SEG00 relabelled; TRANSPOSE unbound. (NOT part on/off -- that reading retracted.)
 - SOUND GROUP resolved (0x2004) + rebound. RHYTHM GROUP resolved (0x2005) + rebound.
 - INTRO&ENDING/FADE fixes. 83 inputtags bound.
 

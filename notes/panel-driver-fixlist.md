@@ -19,11 +19,13 @@ SEG03 0x04 (AUTO PLAY CHORD OFF/ON), and the SEG04–07 mute matrix up through P
 | SEG.bit | current PORT_NAME | correct NAME |
 |---------|-------------------|--------------|
 | SEG03.0x02 | APC / CHORD FINDER | APC MODE (AUTO PLAY CHORD MODE) |
-| SEG03.0x08 | RIGHT1 OFF | LCD LEFT 1 (soft-key) — firmware fires RIGHT1 part-OFF |
-| SEG03.0x10 | RIGHT2 OFF | LCD LEFT 2 (soft-key) — firmware fires RIGHT2 part-OFF |
-| SEG03.0x20 | LEFT OFF | LCD LEFT 3 (soft-key) — firmware fires LEFT part-OFF |
-| SEG03.0x40 | ACCOMP1 OFF | LCD LEFT 4 (soft-key) — firmware fires ACCOMP1 part-OFF |
-| SEG03.0x80 | ACCOMP2 OFF | LCD LEFT 5 (soft-key) — firmware fires ACCOMP2 part-OFF |
+| SEG03.0x08 | RIGHT1 OFF | LCD LEFT 1 (soft-key) |
+| SEG03.0x10 | RIGHT2 OFF | LCD LEFT 2 (soft-key) |
+| SEG03.0x20 | LEFT OFF | LCD LEFT 3 (soft-key) |
+| SEG03.0x40 | ACCOMP1 OFF | LCD LEFT 4 (soft-key) |
+| SEG03.0x80 | ACCOMP2 OFF | LCD LEFT 5 (soft-key) |
+(NOTE: the "part on/off" reading of these soft-keys was a mockup guess and is retracted -- they are
+context-dependent LCD soft-keys, not part selectors. The old driver names in col 2 are pre-rename.)
 | SEG08.0x01 | part18 ON | BASS — part ON (unmute) |
 | SEG08.0x02 | part18 OFF | BASS — part OFF (mute) |
 | SEG08.0x04 | OTHER PARTS & FR | OTHER PARTS/TR |
@@ -101,9 +103,9 @@ them HIGH→MED). No rename strictly required — add an "LCD RIGHT soft-key (un
 
 | SEG.bit | current PORT_NAME | correct NAME |
 |---------|-------------------|--------------|
-| SEG0F.0x04 | RIGHT1 ON | RIGHT1 part-ON (physical: LCD RIGHT soft-key, unresolved) |
-| SEG0F.0x08 | RIGHT2 ON | RIGHT2 part-ON (physical: LCD RIGHT soft-key, unresolved) |
-| SEG0F.0x10 | LEFT ON | LEFT part-ON (physical: LCD RIGHT soft-key, unresolved) |
+| SEG0F.0x04 | RIGHT1 ON | LCD RIGHT soft-key (unresolved bit) |
+| SEG0F.0x08 | RIGHT2 ON | LCD RIGHT soft-key (unresolved bit) |
+| SEG0F.0x10 | LEFT ON | LCD RIGHT soft-key (unresolved bit) |
 | SEG0F.0x20 | ACCOMP1 ON | ACCOMP1 part-ON (physical: LCD RIGHT soft-key, unresolved) |
 | SEG0F.0x40 | ACCOMP2 ON | ACCOMP2 part-ON (physical: LCD RIGHT soft-key, unresolved) |
 

@@ -6,14 +6,19 @@ bank-A descriptor bits (source: /tmp/bankA_dump.txt + the STAGE-1 INPUT_PORTS).
 
 ## Click bindings (physical function -> bank-A SEG.bit)
 
-### LCD-flanking part on/off soft-keys (5 rows, left=OFF / right=ON)
-| part    | OFF (left)   | ON (right)   |
-|---------|--------------|--------------|
-| RIGHT1  | SEG00 0x02   | SEG11 0x10   |
-| RIGHT2  | SEG00 0x08   | SEG11 0x20   |
-| LEFT    | SEG00 0x20   | SEG13 0x01   |
-| ACCOMP1 | SEG00 0x01   | SEG12 0x01   |
-| ACCOMP2 | SEG00 0x04   | SEG11 0x01   |
+### LCD-flanking soft-keys (5 rows down each side of the display)
+Context-dependent keys with NO silkscreen label -- their function is whatever the current screen
+shows. Left column -> the driver's LCDL 1-5; right column bound as below (LCDR 1-5). Both columns
+work. **RETRACTED:** an earlier reading of these rows as keyboard-**part on/off** toggles
+(RIGHT1/RIGHT2/LEFT/ACCOMP1/ACCOMP2, part ids 0x10-0x14) was a mockup guess -- these are NOT fixed
+part selectors; only the row order and the SEG.bit are real.
+| row (top->bottom) | left (LCDL)  | right (LCDR)  |
+|-------------------|--------------|---------------|
+| 1                 | SEG00 0x02   | SEG11 0x10    |
+| 2                 | SEG00 0x08   | SEG11 0x20    |
+| 3                 | SEG00 0x20   | SEG13 0x01    |
+| 4                 | SEG00 0x01   | SEG12 0x01    |
+| 5                 | SEG00 0x04   | SEG11 0x01    |
 
 ### LCD-corner control buttons (HELP-info verified, panel_family_2.txt)
 - OTHER PART & FR = SEG05 0x01, HELP = SEG05 0x02 (HELP cross-confirmed by STAGE-1)

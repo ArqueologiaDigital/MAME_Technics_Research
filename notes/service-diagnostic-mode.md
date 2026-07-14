@@ -120,6 +120,6 @@ sub-CPU and can only be recovered by:
      normSeg.bit, observe the on-screen effect, match to the expected button
      function (the method that mapped the sound categories / genres / mutes). This
      is the only fully-autonomous emulator path, and it works for buttons with a
-     visible effect (e.g. the RIGHT soft-keys show as part-select RIGHT1/RIGHT2).
+     visible effect (e.g. a SOUND GROUP press opening its sound-category page).
 So the ~70 buttons wired by descriptor-function-matching are the confidently
 mappable set from static RE alone; the rest need (1) or (3).
