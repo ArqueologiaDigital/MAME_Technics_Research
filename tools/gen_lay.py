@@ -537,11 +537,11 @@ for _i,_num in enumerate(PM_ORDER):
     _ex=660+int(80*_m.cos(_a)); _ey=363+int(80*_m.sin(_a))
     RB.append(P("green_led",_ex-4,_ey-4,8,8,name=PANEL_LED.get((_tg,_mk))))
 RB.append(P("big_ring",809,327,130,130))
-# CUSTOM PANEL : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG06 0x80 (ev20B4 -- sets a
-# mode/status latch 0x5006bfc8 bit0x10; plausible custom-panel mode toggle).
-RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8), P("round_btn_big",819,353,42,42,tag="SEG06",mask="0x80")]
+# CUSTOM PANEL = SEG0D 0x40 (CPR_SEG1 SW6, ev2016) -- physical position confirmed by Felipe 2026-07-14
+# (the driver bit that panel-driver-fixlist.md had flagged "Fn 2016 unused"). LED = cpr_led1.
+RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8,name=PANEL_LED.get(("SEG0D","0x40"))), P("round_btn_big",819,353,42,42,tag="SEG0D",mask="0x40")]
 # CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES
-# screen) -- both empirically confirmed. CUSTOM PANEL's bit is not yet resolved -> left unbound.
+# screen) -- both empirically confirmed.
 RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8,name=PANEL_LED.get(("SEG0C","0x40"))), P("round_btn_big",884,350,42,42,tag="SEG0C",mask="0x40")]
 RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name="cpr_led97"), P("round_btn_big",852,407,42,42,tag="SEG0E",mask="0x40")]   # FAVORITES LED = cpr_led97 (observed live in normal op; PANEL_LED's cpr_led2 was wrong/dead)
 # Draggable TEMPO/PROGRAM knob click-area -- appended LAST in right_block so it never shifts the indices
@@ -798,7 +798,7 @@ for _gnm, _gsg, _gmk in RG:                                   # orphan genres (b
 # used here (top row = LCDR 1), never any fixed-function/part interpretation.
 for _i, (_ls, _lm, _rs, _rm) in enumerate(LCD_SOFTKEYS):
     BTN_FALLBACK.setdefault(_cpkey(_rs, _rm), "LCDR %d" % (_i + 1))
-BTN_FALLBACK.setdefault(_cpkey("SEG06", "0x80"), "CUSTOM PANEL (unverified)")   # educated-guess placement (ev20B4)
+# (CUSTOM PANEL is now a real driver-bound button at CPR_SEG1 0x40 -> resolves via BTN_CP, no fallback.)
 _btn = [0, 0, 0]
 def _annotate_btn(_m):
     if "<!--" in _m.group(0):                # already carries a comment -> leave it

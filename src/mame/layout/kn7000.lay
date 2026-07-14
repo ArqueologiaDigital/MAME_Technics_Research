@@ -851,7 +851,7 @@
 
 		<element ref="custom_text"><bounds x="775.0" y="328.3" width="52" height="8"/></element>
 		<element ref="panel_text"><bounds x="777.0" y="337.3" width="48" height="8"/></element>
-		<element ref="round_btn_big" inputtag="CPL_SEG6" inputmask="0x80"><!-- CUSTOM PANEL (unverified) --><bounds x="818.0" y="351.8" width="42" height="42"/></element>
+		<element ref="round_btn_big" inputtag="CPR_SEG1" inputmask="0x40"><!-- CUSTOM PANEL --><bounds x="818.0" y="351.8" width="42" height="42"/></element>
 
 		<element ref="hline"><bounds x="360.5" y="316.6" width="22" height="3"/></element>
 		<element ref="red_led" name="cpr_led34"><!-- PART SELECT LEFT --><bounds x="367.3" y="331.3" width="8" height="8"/></element>
@@ -870,7 +870,7 @@
 		<element ref="red_led" name="cpr_led36"><!-- PART SELECT RIGHT 1 --><bounds x="490.3" y="330.9" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="CPR_SEG2" inputmask="0x01"><!-- PART SELECT RIGHT 1 --><bounds x="475.5" y="338.1" width="37" height="37"/></element>
 
-		<element ref="green_led"><bounds x="798.2" y="346.3" width="8" height="8"/></element>
+		<element ref="green_led" name="cpr_led1"><!-- CUSTOM PANEL --><bounds x="798.2" y="346.3" width="8" height="8"/></element>
 
 		<element ref="green_led" name="cpr_led0"><!-- CUSTOMIZE --><bounds x="938.4" y="347.1" width="8" height="8"/></element>
 

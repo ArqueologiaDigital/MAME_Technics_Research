@@ -2150,9 +2150,9 @@ static INPUT_PORTS_START(kn7000)
 	// 0x00-0x0B; CPR bank00 subs 0x00-0x09 -> segs 0x0C-0x15). Because each scan column maps to a
 	// single wire ADDR (no per-bit repacking), naming the ports by scan column is a pure identity --
 	// there is no translation table. Button-to-column assignments come from each button's firmware
-	// event code + arg (notes/panel-button-map.md); [unbound] physical keys whose firmware event is
-	// not yet decoded (BIG BAND, GOSPEL, CUSTOM PANEL, LCDR/LCDL soft-keys) are drawn as decorative
-	// artwork only. LEDs are driven independently on the same normSeg keys (see tools/gen_lay.py).
+	// event code + arg (notes/panel-button-map.md). LEDs are driven independently on the same normSeg
+	// keys (see tools/gen_lay.py). The two orphan RHYTHM-GROUP genre cells with no decoded driver event
+	// (ORGANIST, 60s & 70s) are drawn from the layout only.
 	PORT_START("CPL_SEG0")   // CPL scan seg 0x00  (wire ADDR 0xC0)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCDL 4 (SW0)")
 	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LCDL 1 (SW1)")
@@ -2277,7 +2277,7 @@ static INPUT_PORTS_START(kn7000)
 	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("DISK PLAY (SW3)")
 	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("WORLD (SW4)")
 	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PAD (SW5)")
-	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CUSTOM PANEL (SW6)")
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SD CARD LOAD (SW7)")
 	PORT_START("CPR_SEG2")   // CPR scan seg 0x0e  (wire ADDR 0x02)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("PART SELECT RIGHT 1 (SW0)")
