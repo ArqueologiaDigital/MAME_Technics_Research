@@ -2,7 +2,7 @@
 # Generator for src/mame/layout/kn7000.lay -- KN5000-style SVG-snippet layout,
 # arranged pixel-perfectly to the mockup (4000x3000 = 2x the 2000x1500 layout;
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
-import io, math, re
+import io, math, os, re
 
 PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
@@ -50,6 +50,50 @@ PANEL_LED={
 # this same authoritative map (aliased), replacing the old empirical/bank-B guesses.
 GENRE_LED = PANEL_LED
 OPLED = PANEL_LED
+
+# --- LED purpose comments (KN5000 style), GENERATED so they can never drift from the binding -------
+# Each panel LED indicates one button/function. Rather than hand-writing <!-- comments --> in the .lay
+# (which would rot the moment a binding changes), we derive the purpose of every LED from the SINGLE
+# source of truth -- the driver's INPUT_PORTS (which (normSeg,bit) is which button) -- composed with
+# the very same PANEL_LED[(normSeg,mask)] -> led-name map that forms the layout binding. The comment
+# is looked up by the LED's OUTPUT NAME (the thing MAME actually drives), so comment and binding are
+# emitted from one key. Regenerating the layout re-derives all comments; a button rename or LED remap
+# updates the comment automatically. See the annotate pass at the tail of this file.
+def _load_btn_names():
+    kncpp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "mame", "matsushita", "kn7000.cpp")
+    cp2ns = {"CPL_SEG0":0x00,"CPL_SEG1":0x01,"CPL_SEG2":0x02,"CPL_SEG3":0x03,"CPL_SEG4":0x04,
+             "CPL_SEG6":0x06,"CPL_SEG7":0x07,"CPC_SEG5":0x05,"CPC_SEG8":0x08,"CPC_SEG9":0x09,
+             "CPC_SEG10":0x0a,"CPC_SEG11":0x0b,"CPR_SEG0":0x0c,"CPR_SEG1":0x0d,"CPR_SEG2":0x0e,
+             "CPR_SEG3":0x0f,"CPR_SEG4":0x10,"CPR_SEG5":0x11,"CPR_SEG6":0x12,"CPR_SEG7":0x13,
+             "CPR_SEG8":0x14,"CPR_SEG9":0x15}
+    names = {}; cur = None
+    for ln in open(kncpp).read().splitlines():
+        m = re.search(r'PORT_START\("(CP[LCR]_SEG\d+)"\)', ln)
+        if m: cur = cp2ns.get(m.group(1)); continue
+        if "PORT_START" in ln: cur = None; continue          # left the CP scan-matrix ports
+        if cur is None: continue
+        mb = re.search(r'PORT_BIT\(\s*(0x[0-9a-fA-F]+).*?PORT_NAME\("([^"]*)"\)', ln)
+        if mb:
+            mask = int(mb.group(1), 16)
+            nm = re.sub(r'\s*\(SW\d+\)\s*$', '', mb.group(2)).strip()
+            names[("SEG%02X" % cur, "0x%02x" % mask)] = nm
+    return names
+BTN_NAME = _load_btn_names()
+LED_PURPOSE = {}
+for _k, _led in PANEL_LED.items():                            # the 91 LEDs bound via PANEL_LED
+    if BTN_NAME.get(_k): LED_PURPOSE[_led] = BTN_NAME[_k]
+# LEDs whose placement binds a LITERAL name (empirically corrected or state/beat indicators, i.e. not
+# reachable through PANEL_LED). Where the LED indicates a real button, derive from BTN_NAME so it still
+# tracks a rename; otherwise use a static description.
+LED_PURPOSE.setdefault("cpr_led97", BTN_NAME.get(("SEG0E", "0x40"), "FAVORITES"))   # real FAVORITES LED (PANEL_LED's cpr_led2 is dead)
+LED_PURPOSE.setdefault("cpr_led63", BTN_NAME.get(("SEG0F", "0x02"), "CONDUCTOR"))   # CONDUCTOR (SEG0F.02); cpr_led64/65 come via PANEL_LED
+LED_PURPOSE.update({
+    "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
+    "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
+})
+def _led_comment(purpose):
+    # XML comments may not contain "--" nor end with "-".
+    return "<!-- %s -->" % purpose.replace("--", "-").rstrip("-").strip()
 
 E=[]; TXTS={}; _TXT_NAMES=set()
 def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
@@ -302,6 +346,11 @@ RG=[("8&16 BEAT","SEG02","0x80"),("ROCK & POP","SEG02","0x20"),("BALLAD","SEG02"
     ("BALLROOM","SEG01","0x80"),("MOVIE & SHOW","SEG01","0x20"),("ENTERTAINER","SEG01","0x08"),("ORGANIST","SEG01","0x02"),
     ("60s & 70s","SEG02","0x40"),("MODERN DANCE","SEG02","0x10"),("SOUL & R&B","SEG02","0x04"),("COUNTRY & WESTERN","SEG02","0x01"),
     ("MARCH & WALTZ","SEG01","0x40"),("LATIN & WORLD","SEG01","0x10"),("CUSTOM","SEG01","0x04"),("MEMORY","SEG01","0x01")]
+# LED-purpose fallback for genre cells with no bound driver button (orphan genres ORGANIST / 60s&70s):
+# take the name from the RG list. setdefault keeps BTN_NAME (the driver) as authority where a button exists.
+for _gnm,_gsg,_gmk in RG:
+    _gled = GENRE_LED.get((_gsg, _gmk))
+    if _gled: LED_PURPOSE.setdefault(_gled, _gnm)
 # Genre-select LEDs: driven by the firmware-authoritative PANEL_LED map (GENRE_LED = PANEL_LED, above).
 # The old local GENRE_LED dict here (genreled2.lua, 2026-07-07) was WRONG for ALL 16 genres. The live
 # Panel SW&LED self-test sweep (2026-07-13) lights EXACTLY PANEL_LED[(SEG,mask)] on each genre press --
@@ -642,3 +691,22 @@ _lay=_re.sub(r'inputtag="SEG([0-9A-Fa-f]{2})" inputmask="(0x[0-9a-fA-F]+)"',_sub
 _lay=_re.sub(r' ?inputtag="\{port_name\}"( inputmask="[^"]*")?',"",_lay)  # strip unfilled template artifact
 open(_LAY_PATH,"w").write(_lay)
 print(f"RELABELED {_cnt[0]} layout buttons SEGxx->CP{{board}}_SEG{{col}} (scan-matrix identity; {_cnt[1]} non-button left decorative)")
+
+# --- Annotate every panel LED placement with its purpose (KN5000 style: <!-- FUNCTION --> right after
+#     the opening <element> tag). Generated from LED_PURPOSE (built at the top from the driver bindings),
+#     so the comment can never drift. Runs LAST so it cannot disturb the nudge/relabel passes above.
+_lay = open(_LAY_PATH).read()
+_ann = [0, 0]
+def _annotate_led(_m):
+    _attrs, _name = _m.group(1), _m.group(2)
+    if "<!--" in _m.group(0):            # already annotated (defensive; regen writes fresh anyway)
+        return _m.group(0)
+    _p = LED_PURPOSE.get(_name)
+    if not _p:
+        _ann[1] += 1
+        return _m.group(0)               # no known purpose -> leave uncommented
+    _ann[0] += 1
+    return f'<element {_attrs}>{_led_comment(_p)}'
+_lay = re.sub(r'<element ([^>]*\bname="(cp[lcr]_led\d+)"[^>]*)>', _annotate_led, _lay)
+open(_LAY_PATH, "w").write(_lay)
+print(f"ANNOTATED {_ann[0]} LED elements with purpose comments ({_ann[1]} placed LEDs had no known purpose)")
