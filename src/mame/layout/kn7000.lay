@@ -584,7 +584,7 @@
 		<element ref="msp_corner" inputtag="CPL_SEG4" inputmask="0x40"><!-- PAD 6/SOLO --><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="51"/></element>
 		<element ref="6_text"><bounds x="266" y="426" width="20" height="12"/></element>
 		<element ref="solo_text"><bounds x="262" y="438" width="28" height="7"/></element>
-		<element ref="red_led" name="cpl_led56"><!-- SPLIT POINT 1 --><bounds x="202" y="478" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led56"><!-- SPLIT POINT G2 --><bounds x="202" y="478" width="8" height="8"/></element>
 		<element ref="split_arrow"><bounds x="200" y="489" width="12" height="10"/></element>
 
 		<element ref="round_btn" inputtag="CPL_SEG4" inputmask="0x04"><!-- VARIATION & MSA 2 --><bounds x="421.6" y="412.6" width="37" height="37"/></element>
@@ -617,7 +617,7 @@
 		<element ref="sequencer_text"><bounds x="623.7" y="463.0" width="44" height="7"/></element>
 		<element ref="reset_text"><bounds x="637.0" y="471.4" width="36" height="7"/></element>
 		<element ref="count_intro_text"><bounds x="802" y="452" width="52" height="7"/></element>
-		<element ref="red_led"><bounds x="802" y="478" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led13"><!-- SPLIT POINT G3 --><bounds x="802" y="478" width="8" height="8"/></element>
 
 		<element ref="start_stop_text"><bounds x="856.5" y="384.6" width="105" height="9"/></element>
 		<element ref="pill_greycyan" inputtag="CPL_SEG0" inputmask="0x10"><!-- START/STOP --><bounds x="856.6" y="405.5" width="105" height="50"/></element>
@@ -627,7 +627,7 @@
 		<element ref="green_led" name="cpl_led48"><!-- BEAT 4 --><bounds x="943" y="395" width="8" height="8"/></element>
 		<element ref="beat_text"><bounds x="956.7" y="396.0" width="28" height="7"/></element>
 
-		<element ref="red_led"><bounds x="502" y="478" width="8" height="8"/></element>
+		<element ref="red_led" name="cpl_led21"><!-- SPLIT POINT C3 --><bounds x="502" y="478" width="8" height="8"/></element>
 		<element ref="split_arrow"><bounds x="500" y="489" width="12" height="10"/></element>
 
 		<element ref="split_arrow"><bounds x="800" y="489" width="12" height="10"/></element>

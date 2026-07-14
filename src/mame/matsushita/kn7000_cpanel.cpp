@@ -320,7 +320,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpl_leds[10] = BIT(data, 2);   // 60s & 70s
 			m_cpl_leds[11] = BIT(data, 3);   // D1163 VARIATION & MSA 2 (red)
 			m_cpl_leds[12] = BIT(data, 4);   // D1179 PERFORMANCE PADS/AUTO (green)
-			m_cpl_leds[13] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[13] = BIT(data, 5);   // SPLIT POINT G3   [keyboard split-point indicator; verified 2026-07-14]
 			m_cpl_leds[14] = BIT(data, 6);   // (unmapped)
 			m_cpl_leds[15] = BIT(data, 7);   // (unmapped)
 			break;
@@ -330,7 +330,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpl_leds[18] = BIT(data, 2);   // D1130 ROCK & POP (red)
 			m_cpl_leds[19] = BIT(data, 3);   // D1162 VARIATION & MSA 3 (red)
 			m_cpl_leds[20] = BIT(data, 4);   // D1178 APC/SEQ VOLUME (state LED, no button) (green)
-			m_cpl_leds[21] = BIT(data, 5);   // (unmapped)
+			m_cpl_leds[21] = BIT(data, 5);   // SPLIT POINT C3   [keyboard split-point indicator; verified 2026-07-14]
 			m_cpl_leds[22] = BIT(data, 6);   // (unmapped)
 			m_cpl_leds[23] = BIT(data, 7);   // (unmapped)
 			break;
@@ -375,7 +375,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpl_leds[55] = BIT(data, 7);   // (unmapped)
 			break;
 		case 0x07:
-			m_cpl_leds[56] = BIT(data, 0);   // SPLIT POINT 1   [Felipe 2026-07-14 live LED log; 1st of 3 keyboard split-point LEDs]
+			m_cpl_leds[56] = BIT(data, 0);   // SPLIT POINT G2   [keyboard split-point indicator; manual p39 SPLIT POINT cycles G2->C3->G3->off; verified 2026-07-14]
 			m_cpl_leds[57] = BIT(data, 1);   // D1125 MEMORY/LOAD (green)
 			m_cpl_leds[58] = BIT(data, 2);   // D1144 COUNTRY (red)
 			m_cpl_leds[59] = BIT(data, 3);   // D1157 FILL IN 2 (red)

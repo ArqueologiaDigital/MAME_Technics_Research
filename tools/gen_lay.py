@@ -97,7 +97,8 @@ LED_PURPOSE.update({
     "cpl_led20": "APC/SEQ VOLUME (state LED, no button)",
     "cpl_led24": "BEAT 1", "cpl_led32": "BEAT 2", "cpl_led40": "BEAT 3", "cpl_led48": "BEAT 4",
     "cpr_led11": "DISK IN USE",          # Felipe 2026-07-14 (live LED reg/data log); status LED, no button
-    "cpl_led56": "SPLIT POINT 1",        # Felipe 2026-07-14 (live LED reg/data log); 1st of 3 keyboard split-point LEDs
+    # 3 keyboard split-point indicators (manual p39; verified 2026-07-14 by cycling the SPLIT POINT button):
+    "cpl_led56": "SPLIT POINT G2", "cpl_led21": "SPLIT POINT C3", "cpl_led13": "SPLIT POINT G3",
 })
 def _mk_comment(text):
     # XML comments may not contain "--" nor end with "-".
@@ -426,7 +427,10 @@ LB += [P("green_led" if i>0 else "red_led",_beatx[i],395,8,8, name=_beatled[i]) 
 # 3 SPLIT-POINT indicators at the very bottom of the layout (Felipe): a tiny down-arrow + RED LED per
 # keyboard split point. Exact key positions are TBD -- placeholders spread along the bottom edge;
 # Felipe will reposition them to the real split keys via the SVG-editing loop.
-_splitled=("cpl_led56", None, None)   # 1st split-point LED = cpl_led56 (Felipe 2026-07-14, live LED log); 2nd/3rd TBD
+# split-point indicators, left->right = G2 / C3 / G3 (manual p39: the SPLIT POINT button cycles the
+# location G2 -> C3 -> G3 -> customised/off). Verified 2026-07-14 by cycling the button in-emulator and
+# reading the cpl_leds: G2=cpl_led56, C3=cpl_led21, G3=cpl_led13.
+_splitled=("cpl_led56", "cpl_led21", "cpl_led13")
 for _i,_sx in enumerate((200,500,800)):
     LB.append(P("red_led",_sx+2,478,8,8,name=_splitled[_i])); LB.append(P("split_arrow",_sx,489,12,10))
 LB.append('\t</group>')
