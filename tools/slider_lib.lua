@@ -25,6 +25,39 @@
 				scale     = scale })
 		end
 
+		-- An INFINITE rotary knob (e.g. the TEMPO/PROGRAM wheel). A circular drag rotates the `finger_id`
+		-- element around the knob centre and steps the attached relative encoder (an IPT_ADJUSTER the driver
+		-- diffs wrap-aware). `finger_id` is repositioned every frame via set_bounds_callback; the running
+		-- angle accumulates without limit, so the finger just keeps going round and round.
+		function add_rotary_knob(view, clickarea_id, finger_id, port_name)
+			local w = {
+				clickarea = get_layout_item(view, clickarea_id),
+				finger    = get_layout_item(view, finger_id),
+				field     = get_port_field(port_name),
+				is_rotary = true,
+				angle     = 0.0,   -- running finger angle (radians), unbounded
+				notch     = 0 }    -- last encoder notch emitted (for stepping the adjuster)
+			table.insert(widgets, w)
+			-- The finger orbits the knob centre at the current angle (0 = 12 o'clock, clockwise positive).
+			-- item.bounds is normalised PER-AXIS (x by view width, y by view height), so a screen-circular
+			-- orbit needs the x offset scaled by the click area's normalised WIDTH and the y offset by its
+			-- normalised HEIGHT (the click area is square in view units, so these encode the pixel aspect).
+			-- Ratios are KN5000's: 27px orbit offset / 91px wheel = 0.296; 27px finger / 2 / 91 = 0.148.
+			w.finger:set_bounds_callback(function()
+				local b = w.clickarea.bounds
+				local cx = (b.x0 + b.x1) / 2
+				local cy = (b.y0 + b.y1) / 2
+				local wd = b.x1 - b.x0
+				local ht = b.y1 - b.y0
+				local fx = cx + wd * 0.296 * math.sin(w.angle)
+				local fy = cy - ht * 0.296 * math.cos(w.angle)
+				local fhx = wd * 0.148
+				local fhy = ht * 0.148
+				return emu.render_bounds(fx - fhx, fy - fhy, fx + fhx, fy + fhy)
+			end)
+			return w
+		end
+
 		function get_layout_item(view, item_id)
 			local item = view.items[item_id]
 			if item == nil then
@@ -51,6 +84,29 @@
 			return field
 		end
 
+		-- Step the rotary encoder: map the accumulated angle to notches and nudge the adjuster by the
+		-- notch delta (wrapping 0..100). The driver diffs the adjuster wrap-aware into [0x17] encoder steps.
+		local ROTARY_STEPS_PER_REV = 24
+		local function rotary_emit(w)
+			local target = math.floor(w.angle * ROTARY_STEPS_PER_REV / (2 * math.pi) + 0.5)
+			if target ~= w.notch then
+				local v = (w.field.user_value + (target - w.notch)) % 101
+				if v < 0 then v = v + 101 end
+				w.field.user_value = v
+				w.notch = target
+			end
+		end
+
+		-- Pointer angle around a widget's knob centre (0 = 12 o'clock, clockwise positive). Per-axis
+		-- normalisation (÷ width, ÷ height) matches the finger's aspect-corrected orbit, so the finger
+		-- tracks the cursor faithfully all the way round instead of leading/lagging near the sides.
+		local function knob_angle(w, x, y)
+			local b = w.clickarea.bounds
+			local cx = (b.x0 + b.x1) / 2
+			local cy = (b.y0 + b.y1) / 2
+			return math.atan((x - cx) / (b.x1 - b.x0), (cy - y) / (b.y1 - b.y0))
+		end
+
 		local function pointer_updated(type, id, dev, x, y, btn, dn, up, cnt)
 			-- If a button is not pressed, reset the state of the current pointer.
 			if btn & 1 == 0 then
@@ -75,6 +131,9 @@
 							relative = relative,
 							start_y = y,
 							start_value = widgets[i].field.user_value }
+						if widgets[i].is_rotary then
+							pointers[id].last_pa = knob_angle(widgets[i], x, y)
+						end
 						break
 					end
 				end
@@ -90,6 +149,18 @@
 
 			local pointer = pointers[id]
 			local widget = widgets[pointer.selected_widget]
+
+			-- Rotary knob: rotate the finger by the pointer's angular motion and step the encoder. The angle
+			-- accumulates without limit, so it can be spun round and round (24 encoder steps per revolution).
+			if widget.is_rotary then
+				local pa = knob_angle(widget, x, y)
+				local d = pa - pointer.last_pa
+				if d > math.pi then d = d - 2 * math.pi elseif d < -math.pi then d = d + 2 * math.pi end
+				widget.angle = widget.angle + d
+				pointer.last_pa = pa
+				rotary_emit(widget)
+				return
+			end
 
 			local min_value = widget.field.minvalue
 			local max_value = widget.field.maxvalue

@@ -120,9 +120,10 @@
 	<element name="fader_rail"><rect><color red="0.13" green="0.13" blue="0.14"/></rect></element>
 	<element name="slider_knob"><rect><bounds x="0" y="0" width="30" height="18"/><color red="0.34" green="0.34" blue="0.37"/></rect><rect><bounds x="2" y="8" width="26" height="2.5"/><color red="0.9" green="0.9" blue="0.92"/></rect></element>
 	<element name="tempo_knob">
-		<image state="0"><data><![CDATA[<svg width="100" height="100"><circle cx="50" cy="50" r="48" fill="#54545c" stroke="#000" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="#232325" stroke="#000"/><circle cx="50" cy="26" r="6" fill="#626268" stroke="#000"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="100" height="100"><circle cx="50" cy="50" r="48" fill="#262628" stroke="#000" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="#232325" stroke="#000"/><circle cx="50" cy="26" r="6" fill="#626268" stroke="#000"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="100" height="100"><circle cx="50" cy="50" r="48" fill="#c6c6ca" stroke="#000" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="#a9a9b0" stroke="#9a9aa0"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="100" height="100"><circle cx="50" cy="50" r="48" fill="#a9a9b0" stroke="#000" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="#a9a9b0" stroke="#9a9aa0"/></svg>]]></data></image>
 	</element>
+	<element name="tempo_finger"><image><data><![CDATA[<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#6e6e76" stroke="#000" stroke-width="1"/></svg>]]></data></image></element>
 	<element name="panel_memory_dial">
 		<image state="0"><data><![CDATA[<svg width="160" height="160"><circle cx="80" cy="80" r="77" fill="#232325" stroke="#000" stroke-width="2"/><line x1="80" y1="80" x2="152.0" y2="80.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="130.91168824543144" y2="130.91168824543144" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="80.0" y2="152.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="29.08831175456858" y2="130.91168824543144" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="8.0" y2="80.00000000000001" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="29.088311754568565" y2="29.08831175456858" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="79.99999999999999" y2="8.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="130.9116882454314" y2="29.088311754568565" stroke="#000" stroke-width="1.5"/><circle cx="80" cy="80" r="73" fill="none" stroke="#000" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#54545c" stroke="#000" stroke-width="2"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="160" height="160"><circle cx="80" cy="80" r="77" fill="#232325" stroke="#000" stroke-width="2"/><line x1="80" y1="80" x2="152.0" y2="80.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="130.91168824543144" y2="130.91168824543144" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="80.0" y2="152.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="29.08831175456858" y2="130.91168824543144" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="8.0" y2="80.00000000000001" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="29.088311754568565" y2="29.08831175456858" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="79.99999999999999" y2="8.0" stroke="#000" stroke-width="1.5"/><line x1="80" y1="80" x2="130.9116882454314" y2="29.088311754568565" stroke="#000" stroke-width="1.5"/><circle cx="80" cy="80" r="73" fill="none" stroke="#000" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#262628" stroke="#000" stroke-width="2"/></svg>]]></data></image>
@@ -894,6 +895,7 @@
 		<element ref="hline"><bounds x="485.9" y="455.3" width="26" height="3"/></element>
 
 		<element ref="green_led" name="cpr_led2"><!-- FAVORITES --><bounds x="870.9" y="468.5" width="8" height="8"/></element>
+		<element id="tempo_finger" ref="tempo_finger"><bounds x="89" y="324" width="32" height="32"/></element>
 	</group>
 
 	<group name="sd_block">
@@ -985,6 +987,39 @@
 				scale     = scale })
 		end
 
+		-- An INFINITE rotary knob (e.g. the TEMPO/PROGRAM wheel). A circular drag rotates the `finger_id`
+		-- element around the knob centre and steps the attached relative encoder (an IPT_ADJUSTER the driver
+		-- diffs wrap-aware). `finger_id` is repositioned every frame via set_bounds_callback; the running
+		-- angle accumulates without limit, so the finger just keeps going round and round.
+		function add_rotary_knob(view, clickarea_id, finger_id, port_name)
+			local w = {
+				clickarea = get_layout_item(view, clickarea_id),
+				finger    = get_layout_item(view, finger_id),
+				field     = get_port_field(port_name),
+				is_rotary = true,
+				angle     = 0.0,   -- running finger angle (radians), unbounded
+				notch     = 0 }    -- last encoder notch emitted (for stepping the adjuster)
+			table.insert(widgets, w)
+			-- The finger orbits the knob centre at the current angle (0 = 12 o'clock, clockwise positive).
+			-- item.bounds is normalised PER-AXIS (x by view width, y by view height), so a screen-circular
+			-- orbit needs the x offset scaled by the click area's normalised WIDTH and the y offset by its
+			-- normalised HEIGHT (the click area is square in view units, so these encode the pixel aspect).
+			-- Ratios are KN5000's: 27px orbit offset / 91px wheel = 0.296; 27px finger / 2 / 91 = 0.148.
+			w.finger:set_bounds_callback(function()
+				local b = w.clickarea.bounds
+				local cx = (b.x0 + b.x1) / 2
+				local cy = (b.y0 + b.y1) / 2
+				local wd = b.x1 - b.x0
+				local ht = b.y1 - b.y0
+				local fx = cx + wd * 0.296 * math.sin(w.angle)
+				local fy = cy - ht * 0.296 * math.cos(w.angle)
+				local fhx = wd * 0.148
+				local fhy = ht * 0.148
+				return emu.render_bounds(fx - fhx, fy - fhy, fx + fhx, fy + fhy)
+			end)
+			return w
+		end
+
 		function get_layout_item(view, item_id)
 			local item = view.items[item_id]
 			if item == nil then
@@ -1011,6 +1046,29 @@
 			return field
 		end
 
+		-- Step the rotary encoder: map the accumulated angle to notches and nudge the adjuster by the
+		-- notch delta (wrapping 0..100). The driver diffs the adjuster wrap-aware into [0x17] encoder steps.
+		local ROTARY_STEPS_PER_REV = 24
+		local function rotary_emit(w)
+			local target = math.floor(w.angle * ROTARY_STEPS_PER_REV / (2 * math.pi) + 0.5)
+			if target ~= w.notch then
+				local v = (w.field.user_value + (target - w.notch)) % 101
+				if v < 0 then v = v + 101 end
+				w.field.user_value = v
+				w.notch = target
+			end
+		end
+
+		-- Pointer angle around a widget's knob centre (0 = 12 o'clock, clockwise positive). Per-axis
+		-- normalisation (÷ width, ÷ height) matches the finger's aspect-corrected orbit, so the finger
+		-- tracks the cursor faithfully all the way round instead of leading/lagging near the sides.
+		local function knob_angle(w, x, y)
+			local b = w.clickarea.bounds
+			local cx = (b.x0 + b.x1) / 2
+			local cy = (b.y0 + b.y1) / 2
+			return math.atan((x - cx) / (b.x1 - b.x0), (cy - y) / (b.y1 - b.y0))
+		end
+
 		local function pointer_updated(type, id, dev, x, y, btn, dn, up, cnt)
 			-- If a button is not pressed, reset the state of the current pointer.
 			if btn & 1 == 0 then
@@ -1035,6 +1093,9 @@
 							relative = relative,
 							start_y = y,
 							start_value = widgets[i].field.user_value }
+						if widgets[i].is_rotary then
+							pointers[id].last_pa = knob_angle(widgets[i], x, y)
+						end
 						break
 					end
 				end
@@ -1050,6 +1111,18 @@
 
 			local pointer = pointers[id]
 			local widget = widgets[pointer.selected_widget]
+
+			-- Rotary knob: rotate the finger by the pointer's angular motion and step the encoder. The angle
+			-- accumulates without limit, so it can be spun round and round (24 encoder steps per revolution).
+			if widget.is_rotary then
+				local pa = knob_angle(widget, x, y)
+				local d = pa - pointer.last_pa
+				if d > math.pi then d = d - 2 * math.pi elseif d < -math.pi then d = d + 2 * math.pi end
+				widget.angle = widget.angle + d
+				pointer.last_pa = pa
+				rotary_emit(widget)
+				return
+			end
 
 			local min_value = widget.field.minvalue
 			local max_value = widget.field.maxvalue
@@ -1114,10 +1187,11 @@
 					add_vertical_slider(view, "vol_linein_click", "vol_linein_knob", "VOL_LINEIN")
 					any = true
 				end
-				if view.items["tempo_click"] ~= nil then
-					-- relative encoder: a vertical drag over the knob accumulates into the TEMPO_KNOB
-					-- adjuster; the driver diffs it into [0x17, pos] steps. scale 1.5 = ~1.5*height per sweep.
-					add_simplecounter_knob(view, "tempo_click", "TEMPO_KNOB", 1.5)
+				if view.items["tempo_click"] ~= nil and view.items["tempo_finger"] ~= nil then
+					-- infinite rotary encoder: a CIRCULAR drag spins the finger around the wheel and steps
+					-- the TEMPO_KNOB adjuster (24 notches/rev), which the driver diffs wrap-aware into
+					-- [0x17, pos] encoder steps. The finger is repositioned each frame by set_bounds_callback.
+					add_rotary_knob(view, "tempo_click", "tempo_finger", "TEMPO_KNOB")
 					any = true
 				end
 				if any then install_slider_callbacks(view) end

@@ -6,6 +6,7 @@ import io, math, os, re
 
 PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
+SILVER="#c6c6ca"; SILVER_D="#a9a9b0"   # TEMPO/PROGRAM wheel (metallic silver) + inner bevel
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
 # PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
@@ -206,8 +207,13 @@ two("fader",30,150,f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width=
 elem("inv_rect",'<rect><color red="0" green="0" blue="0" alpha="0"/></rect>')
 elem("fader_rail",'<rect><color red="0.13" green="0.13" blue="0.14"/></rect>')
 elem("slider_knob",f'<rect><bounds x="0" y="0" width="30" height="18"/><color red="0.34" green="0.34" blue="0.37"/></rect><rect><bounds x="2" y="8" width="26" height="2.5"/><color red="0.9" green="0.9" blue="0.92"/></rect>')
-two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>',
-                         f'<circle cx="50" cy="50" r="48" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="36" fill="{PANEL2}" stroke="{STROKE}"/><circle cx="50" cy="26" r="6" fill="{LBTN}" stroke="{STROKE}"/>')
+# The TEMPO/PROGRAM wheel is a metallic SILVER disc (with a subtle darker inner bevel).
+two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#9a9aa0"/>',
+                         f'<circle cx="50" cy="50" r="48" fill="{SILVER_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#9a9aa0"/>')
+# tempo_finger: the wheel's finger, split out of the knob graphic so the layout <script> (add_rotary_knob)
+# can orbit it around the knob centre -- it moves in a circle as the wheel is turned. Darker so it reads on
+# the silver disc. KN5000 dimensions (27px finger / 91px wheel).
+elem("tempo_finger", f'<image><data><![CDATA[<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#6e6e76" stroke="{STROKE}" stroke-width="1"/></svg>]]></data></image>')
 sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
 two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/>',
                                 f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/>')
@@ -563,6 +569,9 @@ RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name=PANEL_LED.get
 # Draggable TEMPO/PROGRAM knob click-area -- appended LAST in right_block so it never shifts the indices
 # that layout_nudges.json references (a mid-group insert would invalidate every later nudge's ref-check).
 RB.append('\t\t<element id="tempo_click" ref="inv_rect"><bounds x="50" y="318" width="110" height="110"/></element>')
+# The wheel's finger -- an on-top element the <script> orbits around the knob centre (initial bounds are a
+# placeholder; add_rotary_knob's set_bounds_callback overrides them every frame). Size = KN5000 proportions.
+RB.append('\t\t<element id="tempo_finger" ref="tempo_finger"><bounds x="89" y="324" width="32" height="32"/></element>')
 RB.append('\t</group>')
 
 # ---- SD-card transport block (its own group, referenced by the views) ----
@@ -638,10 +647,11 @@ SCRIPT=('\t<script><![CDATA[\n'+_lib+'\n'
         '\t\t\t\t\tadd_vertical_slider(view, "vol_linein_click", "vol_linein_knob", "VOL_LINEIN")\n'
         '\t\t\t\t\tany = true\n'
         '\t\t\t\tend\n'
-        '\t\t\t\tif view.items["tempo_click"] ~= nil then\n'
-        '\t\t\t\t\t-- relative encoder: a vertical drag over the knob accumulates into the TEMPO_KNOB\n'
-        '\t\t\t\t\t-- adjuster; the driver diffs it into [0x17, pos] steps. scale 1.5 = ~1.5*height per sweep.\n'
-        '\t\t\t\t\tadd_simplecounter_knob(view, "tempo_click", "TEMPO_KNOB", 1.5)\n'
+        '\t\t\t\tif view.items["tempo_click"] ~= nil and view.items["tempo_finger"] ~= nil then\n'
+        '\t\t\t\t\t-- infinite rotary encoder: a CIRCULAR drag spins the finger around the wheel and steps\n'
+        '\t\t\t\t\t-- the TEMPO_KNOB adjuster (24 notches/rev), which the driver diffs wrap-aware into\n'
+        '\t\t\t\t\t-- [0x17, pos] encoder steps. The finger is repositioned each frame by set_bounds_callback.\n'
+        '\t\t\t\t\tadd_rotary_knob(view, "tempo_click", "tempo_finger", "TEMPO_KNOB")\n'
         '\t\t\t\t\tany = true\n'
         '\t\t\t\tend\n'
         '\t\t\t\tif any then install_slider_callbacks(view) end\n'
@@ -722,7 +732,14 @@ _GDIM={'screen_block':(2000,997),'left_block':(1000,503),'right_block':(1000,503
 _perms={}
 S,   _perms['screen_block'] = _reorder_group(S,   *_GDIM['screen_block'])
 LB,  _perms['left_block']   = _reorder_group(LB,  *_GDIM['left_block'])
+# Pin the script-positioned tempo_finger OUT of the reorder and onto the very end of right_block:
+# its bounds are driven every frame by add_rotary_knob's set_bounds_callback, so its declared slot is
+# cosmetic -- but keeping it as the LAST element means it (a) draws on top of the wheel and (b) never
+# perturbs the element indices that layout_nudges.json ref-checks (a mid-group cluster would drift them).
+_finger = [l for l in RB if 'id="tempo_finger"' in l]
+RB = [l for l in RB if 'id="tempo_finger"' not in l]
 RB,  _perms['right_block']  = _reorder_group(RB,  *_GDIM['right_block'])
+RB = RB[:-1] + _finger + [RB[-1]]   # insert before the closing </group> footer
 SDB, _perms['sd_block']     = _reorder_group(SDB, *_GDIM['sd_block'])
 import json as _json_perm
 open('/tmp/reorder_perms.json','w').write(_json_perm.dumps(_perms))

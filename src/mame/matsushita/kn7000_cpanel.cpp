@@ -530,9 +530,15 @@ TIMER_CALLBACK_MEMBER(kn7000_cpanel_device::panel_scan)
 		}
 		else if (adj != m_tempoknob_prev)
 		{
-			const int step = (adj > m_tempoknob_prev) ? 1 : -1;
-			m_tempoknob_prev = uint8_t(m_tempoknob_prev + step);   // slew one step toward the drag target
-			m_tempoknob_pos  = uint8_t(m_tempoknob_pos + step);    // wrapping 8-bit encoder position
+			// The layout knob is an INFINITE rotary encoder: a full-circle drag wraps the 0..100 adjuster
+			// past its ends. Take the direction the SHORT way round (a jump of >50 = a wrap), so rotating
+			// through the 100->0 (or 0->100) seam keeps stepping instead of slamming 100 steps the other way.
+			int delta = int(adj) - int(m_tempoknob_prev);
+			if (delta > 50) delta -= 101;
+			else if (delta < -50) delta += 101;
+			const int step = (delta > 0) ? 1 : -1;
+			m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);   // slew one step, wrap-aware
+			m_tempoknob_pos  = uint8_t(m_tempoknob_pos + step);    // wrapping 8-bit encoder position -> firmware
 			const uint8_t pkt[2] = { 0x17, m_tempoknob_pos };
 			panel_queue(pkt, 2);
 		}
