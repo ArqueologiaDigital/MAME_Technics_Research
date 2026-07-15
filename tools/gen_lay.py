@@ -538,13 +538,19 @@ RB.append(L("TEMPO/PROGRAM",38,300,140,10,TXTH)); RB.append(P("tempo_knob",50,31
 # The click-area element itself is APPENDED AT THE END of right_block (see below) so it does not shift the
 # element indices that layout_nudges.json keys on. (The green_led at 164,336 is the knob's indicator LED --
 # left UNBOUND: RE found no firmware signal that drives it, so binding it would be a guess; see notes.)
-RB.append(L("TRANSPOSE",213,320,100,10,TXTH))
-# SPLIT PAIRS (bank A -- each half on a different SEG; arg-mid 1=-,0=+ inferred):
-#   TRANSPOSE  - = SEG10 0x01 / + = SEG0F 0x01 (ev2081; +/- corrected per Felipe 2026-07-11)
-#   R1/R2 OCT  - = SEG13 0x02 / + = SEG12 0x02 (ev2083; +/- corrected per Felipe)
-RB += [P("red_led",230,328,8,8,name=PANEL_LED.get(("SEG10","0x01"))), P("red_led",262,328,8,8,name=PANEL_LED.get(("SEG0F","0x01")))] + pair_h("SEG10","0x01","0x01",213,335,75,24,"-","+",seg2="SEG0F")   # TRANSPOSE LEDs RED (Felipe); -=cpr_led96/+=cpr_led39
-RB.append(L("R1/R2 OCTAVE",210,378,96,8,TXTH))
-RB += [P("red_led",230,398,8,8,name=PANEL_LED.get(("SEG13","0x02"))), P("red_led",262,398,8,8,name=PANEL_LED.get(("SEG12","0x02")))] + pair_h("SEG13","0x02","0x02",213,405,75,24,"-","+",seg2="SEG12")   # R1/R2 OCTAVE LEDs RED (Felipe); -=cpr_led38/+=cpr_led37
+# TRANSPOSE / R1-R2 OCTAVE: small split pills, SAME SIZE as FADE (105x28) with FADE-CONSISTENT layout
+# (main label above-centre at py-33, -/+ half-labels at py-29 and LEDs at py-15, all centred on each half --
+# the exact relative offsets measured off FADE). TRANSPOSE aligns with the other small pills (centre_y 368);
+# R1/R2 OCTAVE sits a bit lower, centred with the large FILL IN / INTRO&ENDING pills (centre_y 433).
+# SPLIT PAIRS (bank A): TRANSPOSE - = SEG10 0x01 / + = SEG0F 0x01 (ev2081); R1/R2 OCT - = SEG13 0x02 / + = SEG12 0x02 (ev2083).
+def _smallsplit(seg,ma,mb,seg2,px,py,mainlabel,ledL,ledR):   # element order [main, ledL, ledR, hhL, hhR, "-", "+"]
+    out=[L(mainlabel,px-2,py-33,105,9,TXTH),
+         P("red_led",px+20,py-15,8,8,name=ledL), P("red_led",px+74,py-15,8,8,name=ledR)]
+    out+=pair_h(seg,ma,mb,px,py,105,28,seg2=seg2)       # halves only; -/+ added FADE-style ABOVE the pill:
+    out+=[L("-",px+10,py-29,28,12), L("+",px+66,py-29,28,12)]
+    return out
+RB += _smallsplit("SEG10","0x01","0x01","SEG0F",213,354,"TRANSPOSE",PANEL_LED.get(("SEG10","0x01")),PANEL_LED.get(("SEG0F","0x01")))       # -=cpr_led96/+=cpr_led39
+RB += _smallsplit("SEG13","0x02","0x02","SEG12",213,419,"R1/R2 OCTAVE",PANEL_LED.get(("SEG13","0x02")),PANEL_LED.get(("SEG12","0x02")))   # -=cpr_led38/+=cpr_led37
 # HELP-info (2026-07-07): TECHNI-CHORD=SEG11 0x80, PART SELECT=SEG10 0x10, CONDUCTOR=SEG11 0x10.
 # These are button GROUPS (all members share the same HELP name); the found bit is bound to the
 # FIRST member of each group -- exact per-position bits within a group aren't distinguishable by HELP.
