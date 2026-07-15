@@ -195,18 +195,17 @@ elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M
 # weight, rounded ends and centre separator render IDENTICALLY at every pill size (a fixed-size SVG scaled
 # to bounds made small pills thin/round and large ones thick/oval, and varied the separator width).
 _PILLN=[0]
-def _hhalf(w,h,side,fill,fd,gap=0):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge.
-    # gap>0 (left halves only): the SVG canvas widens by `gap` and a filled rectangle bridges the centre gap
-    # to the (touching) right half, so the split pill renders as ONE continuous pill divided by a thin seam
-    # (Felipe: the gap between the halves must be DRAWN, not left showing the bare panel background).
+def _hhalf(w,h,side,fill,fd):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge.
     _PILLN[0]+=1; nm=f"hh{_PILLN[0]}"; sw=1.5; r=h/2.0; ra=(h-sw)/2.0; i=sw/2.0
     d=f'M {w-i:.2f},{i:.2f} L {r:.2f},{i:.2f} A {ra:.2f} {ra:.2f} 0 0 0 {r:.2f},{h-i:.2f} L {w-i:.2f},{h-i:.2f} Z'
     tf='' if side=='l' else f'transform="translate({w},0) scale(-1,1)" '
-    def b(f):
-        s=f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
-        if gap>0: s+=f'<rect x="{w-i:.2f}" y="{i:.2f}" width="{gap+i:.2f}" height="{h-sw:.2f}" fill="{f}"/>'
-        return s
-    two(nm,w+gap,h,b(fill),b(fd)); return nm
+    b=lambda f:f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
+    two(nm,w,h,b(fill),b(fd)); return nm
+_SEAMN=[0]
+def _gapseam(w,h,fill):   # the split-pill centre divider: a NON-clickable rect (no inputtag) with a BLACK
+    _SEAMN[0]+=1; nm=f"seam{_SEAMN[0]}"; sw=1.0; i=sw/2.0   # outline + silver fill (Felipe).
+    b=f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{fill}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}"/>'
+    two(nm,w,h,b,b); return nm
 def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) -> perfectly round ends at any w
     sw=1.5; r=(h-sw)/2.0; i=sw/2.0
     b=lambda f:f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{f}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}" rx="{r:.2f}"/>'
@@ -224,9 +223,10 @@ two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
     sb=seg2 or seg; fill=fill or SILVER; fd=fd or SILVER_D   # split pills are SILVER (Felipe)
-    GAP=4; hw=(w-GAP)//2; lw=w-hw        # left half spans EXACTLY to the right half (fills the whole centre
-    nl=_hhalf(hw,h,'l',fill,fd,gap=lw-hw); nr=_hhalf(hw,h,'r',fill,fd)   # gap -> no 1px seam from //2 rounding)
-    r=[P(nl,x,y,lw,h,tag=seg,mask=ma),P(nr,x+lw,y,hw,h,tag=sb,mask=mb)]
+    GAP=4; hw=(w-GAP)//2; gw=w-2*hw      # gw = centre divider width (the two halves each stay hw wide)
+    nl=_hhalf(hw,h,'l',fill,fd); nr=_hhalf(hw,h,'r',fill,fd)
+    r=[P(nl,x,y,hw,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb),
+       P(_gapseam(gw,h,fill),x+hw,y,gw,h)]   # NON-clickable divider (no tag) w/ black outline, fills the gap
     if la: r.append(L(la,x+hw//2-14,y+h//2-6,28,12))
     if lb: r.append(L(lb,x+w-hw//2-14,y+h//2-6,28,12))
     return r
@@ -242,12 +242,13 @@ two("page_up",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}"
 two("page_dn",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # thin filled line (scaled to bounds) for bookends/brackets
 elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" width="100" height="1.4" fill="#9a9a9c"/></svg>]]></data></image>')
+elem("ghline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" width="100" height="1.4" fill="#9a9a9c"/></svg>]]></data></image>')   # group-header bracket line (distinct ref from hline)
 elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
 # pill-shaped highlight ring (no fill) to envelop DRAWBAR/ORGAN TABS round buttons
 two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>')
-# pill_ring_pair: ONE stadium ring enclosing the DIGITAL DRAWBAR + ORGAN TABS pair (Felipe: a single pill
-# around both, not one per button). Drawn at placement size so the ends stay round.
-two("pill_ring_pair",124,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>')
+# pill_ring_pair: ONE stadium ring enclosing the DIGITAL DRAWBAR + ORGAN TABS pair. Width = outer-circle
+# diameter (37) + centre-to-centre distance (56) = 93 (Felipe), so each rounded end hugs one button.
+two("pill_ring_pair",93,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>')
 two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
 elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{SILVER}" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
 # DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
@@ -367,7 +368,8 @@ SLPORT={"MAIN":"VOL_MAIN","APC/SEQ":"VOL_APCSEQ","MIC":"VOL_MIC","LINE IN":"VOL_
 SLDISP={"APC/SEQ":"APC/SEQUENCER"}   # display name (Felipe: real panel spells it out); key stays "APC/SEQ"
 for nm,cx,y,h in [("MAIN",100,51,130),("APC/SEQ",166,51,130),("MIC",261,68,108),("LINE IN",304,68,108)]:
     disp=SLDISP.get(nm,nm); lw=76 if len(disp)>8 else 48
-    LB.append(L(disp,cx-lw//2,y-14,lw,9,TXTH)); LB.append(L("VOLUME",cx-24,y-5,48,9,TXTH))
+    loff=14 if nm in ("MAIN","APC/SEQ") else 26   # MIC/LINE IN sliders sit lower -> raise their labels clear of the knob
+    LB.append(L(disp,cx-lw//2,y-loff,lw,9,TXTH)); LB.append(L("VOLUME",cx-24,y-loff+9,48,9,TXTH))
     port=SLPORT[nm]; sid=port.lower(); x=cx-15; w=30; kh=18
     LB.append(P("fader_rail",cx-3,y+kh//2,6,h-kh))
     # APC/SEQUENCER VOLUME indicator LED (GREEN) = the firmware's own matrix LED cpl_led20 (CPL reg2, SEG4
@@ -417,6 +419,7 @@ for _gnm,_gsg,_gmk in RG:
 # real LED cpl_led57 does NOT collide with BEAT-1's cpl_led24, so the earlier "leave MEMORY dark" note is
 # retracted.) Colours unchanged (RED except CUSTOM/MEMORY green).
 LB.append(L("RHYTHM GROUP",700,42,180,11,TXTH))
+LB += [P("ghline",563,43.9,157,3), P("ghline",832,43.9,154,3)]   # bookend lines spanning the rhythm-group buttons (Felipe)
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
@@ -511,6 +514,7 @@ SG=[("PIANO","SEG10","0x10"),("GUITAR","SEG0F","0x10"),("MALLET & ORCH PERC","SE
     ("SYNTH","SEG0C","0x20"),("BASS","SEG15","0x04"),("DRUM KITS","SEG14","0x04"),("MEMORY","SEG13","0x04"),("EW EXPANSION","SEG12","0x04")]
 # MEMORY (SEG13 0x04) / EW EXPANSION (SEG12 0x04) ARE bound in bank A (were decorative-only in bank B).
 RB.append(L("SOUND GROUP",240,42,180,11,TXTH))
+RB += [P("ghline",33,44.3,187,3), P("ghline",324,44.3,133,3)]   # bookend lines over cols 0-7 only (NOT SOUND EXPLORER / EW EXPANSION)
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
@@ -518,8 +522,10 @@ for i,(nm,tag,mask) in enumerate(SG):
     RB.append(P("round_btn2" if nm in ("SOUND EXPLORER","EW EXPANSION") else "metal_btn",cx-16,cy,32,32,tag=tag,mask=mask))
     # LED colour (Felipe): SOUND GROUP buttons are RED except MEMORY (GREEN)
     RB.append(P("green_led" if nm=="MEMORY" else "red_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
-    if i==9: RB.append(P("pill_ring_pair",17,cy-4,124,40))   # single ring around the DRAWBAR+ORGAN TABS pair
-RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",560,47,26,3), P("hline",684,47,26,3)]
+    if i==9: RB.append(P("pill_ring_pair",33,cy-4,93,40))   # single ring hugging the DRAWBAR+ORGAN TABS pair (span 33..126)
+# header bracket lines: left from the group's left edge to the text, right from the text to the group's
+# right edge (covering VARIATION), both vertically centred on the label text (Felipe).
+RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",549,44.6,63,3), P("hline",713,44.6,38,3)]
 # PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
 # SUSTAIN=SEG0E 0x10, DIGITAL EFFECT=SEG0E 0x20. (SUSTAIN/DIGITAL EFFECT were mis-labelled MEMORY/EW
 # EXPANSION in the SOUND GROUP list above; corrected here.)
@@ -529,7 +535,7 @@ for nm,cx in [("SUSTAIN",565),("DIGITAL EFFECT",620),("SOUND DSP",675),("VARIATI
     ls=wrap2(nm); tg,mk=PE_BITS.get(nm,(None,None))
     for k,ln in enumerate(ls): RB.append(L(ln,cx-26,58-(len(ls)-1-k)*9,52,8))
     RB.append(P("round_btn",cx-14,71,32,32,tag=tg,mask=mk)); RB.append(P("red_led",cx-2,60,8,8,name=OPLED.get((tg,mk))))   # PART EFFECT LEDs RED (Felipe)
-RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",558,133,24,3), P("hline",688,133,24,3)]
+RB.append(L("GLOBAL EFFECT",560,128,150,10,TXTH)); RB += [P("hline",549,125.7,62,3), P("hline",714,125.7,37,3)]   # right line extended to cover MIC
 # GLOBAL EFFECT (SEG13): REVERB=0x40, MIC(=MIC REVERB & EFFECT)=0x80 (HELP-info). CHORUS=0x10,
 # MULTI=0x20 -- event-inferred: they fire ev2062/ev2061 in this group but have no HELP page (verified
 # no-op in HELP mode); the 4 bits 0x10/0x20/0x40/0x80 map L->R to the 4 buttons. notes/panel-button-names.md

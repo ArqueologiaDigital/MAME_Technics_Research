@@ -1,57 +1,57 @@
 {
- "left_block.60.set_text": [
+ "left_block.62.set_text": [
   -5.2,
   10.0
  ],
- "right_block.175.panel_text": [
+ "right_block.178.panel_text": [
   -29.0,
   10.3
  ],
- "right_block.133.panel_memory_dial": [
+ "right_block.135.panel_memory_dial": [
   4.5,
   -2.0
  ],
- "left_block.90.music_stylist_text": [
+ "left_block.92.music_stylist_text": [
   -3.6,
   -7.6
  ],
- "left_block.155.3_text": [
+ "left_block.158.3_text": [
   12.8,
   6.7
  ],
- "right_block.157.3_2_text": [
+ "right_block.159.3_2_text": [
   9.1,
   14.6
  ],
- "right_block.122.next_bank_text": [
+ "right_block.124.next_bank_text": [
   -7.6,
   4.8
  ],
- "left_block.174.reset_text": [
+ "left_block.179.reset_text": [
   -115.0,
   12.4
  ],
- "left_block.158.4_text": [
+ "left_block.161.4_text": [
   13.2,
   6.7
  ],
- "right_block.154.4_2_text": [
+ "right_block.156.4_2_text": [
   18.3,
   7.5
  ],
- "right_block.70.reverb_text": [
+ "right_block.111.reverb_text": [
   15.2,
   -15.5
  ],
- "left_block.125.in_text": [
+ "left_block.128.in_text": [
   -1.2,
   -36.7
  ],
- "right_block.62.menus_text": [
+ "right_block.66.menus_text": [
   -13.2,
   1.6
  ],
- "left_block.17.round_btn": [
+ "left_block.27.round_btn": [
   -2.9,
   33.4
  ],
@@ -59,83 +59,83 @@
   -5.2,
   33.4
  ],
- "left_block.61.round_btn": [
+ "left_block.63.round_btn": [
   -2.1,
   19.7
  ],
- "left_block.64.round_btn": [
+ "left_block.66.round_btn": [
   -4.9,
   19.7
  ],
- "left_block.95.round_btn": [
+ "left_block.97.round_btn": [
   10.5,
-  11.1
- ],
- "left_block.103.round_btn": [
-  2.2,
   11.1
  ],
  "left_block.105.round_btn": [
+  2.2,
+  11.1
+ ],
+ "left_block.107.round_btn": [
   -6.0,
   10.4
  ],
- "left_block.115.round_btn": [
+ "left_block.117.round_btn": [
   3.0,
   -11.2
  ],
- "left_block.108.round_btn": [
+ "left_block.110.round_btn": [
   10.6,
   0.3
  ],
- "left_block.112.round_btn": [
+ "left_block.114.round_btn": [
   6.0,
   0.3
  ],
- "left_block.119.round_btn": [
+ "left_block.121.round_btn": [
   -3.3,
   15.6
  ],
- "left_block.150.round_btn": [
+ "left_block.153.round_btn": [
   -2.4,
   15.6
  ],
- "left_block.153.round_btn": [
+ "left_block.156.round_btn": [
   -1.4,
   15.6
  ],
- "left_block.156.round_btn": [
+ "left_block.159.round_btn": [
   -0.4,
   15.6
  ],
- "right_block.17.round_btn": [
+ "right_block.20.round_btn": [
   11.2,
   16.4
  ],
- "right_block.8.round_btn": [
+ "right_block.9.round_btn": [
   11.5,
   16.4
  ],
- "right_block.21.round_btn": [
+ "right_block.34.round_btn": [
   11.8,
   16.4
  ],
- "right_block.34.round_btn": [
+ "right_block.25.round_btn": [
   12.0,
   15.8
  ],
- "right_block.67.round_btn": [
+ "right_block.106.round_btn": [
   10.5,
   -4.7
  ],
- "right_block.110.round_btn": [
+ "right_block.109.round_btn": [
   11.2,
   -4.7
  ],
- "right_block.71.round_btn": [
+ "right_block.112.round_btn": [
   12.0,
   -4.7
  ],
- "right_block.113.round_btn": [
+ "right_block.115.round_btn": [
   12.7,
   -4.0
  ],
@@ -143,79 +143,79 @@
   1.4,
   16.5
  ],
- "right_block.13.round_red": [
+ "right_block.14.round_red": [
   -13.0,
   16.0
  ],
- "right_block.74.round_btn": [
+ "right_block.70.round_btn": [
   1.4,
   11.0
  ],
- "right_block.63.round_btn": [
+ "right_block.67.round_btn": [
   -13.8,
   10.3
  ],
- "right_block.127.round_btn": [
+ "right_block.129.round_btn": [
   -1.4,
   -6.1
  ],
- "right_block.131.round_btn": [
+ "right_block.133.round_btn": [
   1.7,
   -6.9
  ],
- "right_block.179.round_btn": [
+ "right_block.182.round_btn": [
   -4.9,
   -4.9
  ],
- "right_block.186.round_btn": [
+ "right_block.189.round_btn": [
   -8.7,
   -4.9
  ],
- "right_block.188.round_btn": [
+ "right_block.191.round_btn": [
   -7.5,
   -4.9
  ],
- "right_block.196.round_btn": [
+ "right_block.200.round_btn": [
   -5.0,
   -5.2
  ],
- "right_block.199.round_btn": [
+ "right_block.203.round_btn": [
   -9.2,
   -6.0
  ],
- "right_block.202.round_btn": [
+ "right_block.206.round_btn": [
   -8.3,
   -6.0
  ],
- "right_block.137.round_btn_silver": [
+ "right_block.139.round_btn_silver": [
   -1.2,
   5.1
  ],
- "right_block.140.round_btn_silver": [
+ "right_block.142.round_btn_silver": [
   -4.0,
   -2.1
  ],
- "right_block.143.round_btn_silver": [
+ "right_block.145.round_btn_silver": [
   -2.9,
   -8.6
  ],
- "right_block.146.round_btn_silver": [
+ "right_block.148.round_btn_silver": [
   4.3,
   -10.2
  ],
- "right_block.149.round_btn_silver": [
+ "right_block.151.round_btn_silver": [
   10.5,
   -9.0
  ],
- "right_block.152.round_btn_silver": [
+ "right_block.154.round_btn_silver": [
   12.7,
   -2.5
  ],
- "right_block.155.round_btn_silver": [
+ "right_block.157.round_btn_silver": [
   9.7,
   3.1
  ],
- "right_block.158.round_btn_silver": [
+ "right_block.160.round_btn_silver": [
   4.4,
   5.9
  ],
@@ -223,27 +223,27 @@
   -8.6,
   -2.9
  ],
- "left_block.110.split_text": [
+ "left_block.112.split_text": [
   6.7,
   -1.3
  ],
- "left_block.159.fill_in_text": [
+ "left_block.162.fill_in_text": [
   0.0,
   -6.0
  ],
- "right_block.16.sustain_text": [
+ "right_block.19.sustain_text": [
   16.4,
   5.9
  ],
- "left_block.19.rhythm_group_text": [
+ "left_block.29.rhythm_group_text": [
   -13.9,
   -1.9
  ],
- "right_block.151.5_2_text": [
+ "right_block.153.5_2_text": [
   21.3,
   -10.4
  ],
- "left_block.166.intro_and_ending_text": [
+ "left_block.170.intro_and_ending_text": [
   -0.3,
   -9.3
  ],
@@ -251,11 +251,11 @@
   -2.5,
   7.3
  ],
- "left_block.173.sequencer_text": [
+ "left_block.178.sequencer_text": [
   -124.3,
   11.0
  ],
- "right_block.11.sequencer_2_text": [
+ "right_block.12.sequencer_2_text": [
   -20.0,
   -0.4
  ],
@@ -263,11 +263,11 @@
   -1.4,
   4.1
  ],
- "left_block.106.one_touch_text": [
+ "left_block.108.one_touch_text": [
   10.7,
   -1.5
  ],
- "left_block.107.play_text": [
+ "left_block.109.play_text": [
   10.3,
   -3.2
  ],
@@ -275,35 +275,35 @@
   2.2,
   6.0
  ],
- "right_block.119.bank_view_text": [
+ "right_block.121.bank_view_text": [
   -8.6,
   4.8
  ],
- "right_block.161.tempo_knob": [
+ "right_block.163.tempo_knob": [
   4.3,
   13.6
  ],
- "left_block.152.2_text": [
+ "left_block.155.2_text": [
   12.1,
   6.7
  ],
- "left_block.170.2_text": [
+ "left_block.175.2_text": [
   10.5,
   -33.7
  ],
- "left_block.163.2_text": [
+ "left_block.167.2_text": [
   10.1,
   -33.4
  ],
- "right_block.136.2_2_text": [
+ "right_block.138.2_2_text": [
   -4.9,
   12.2
  ],
- "right_block.7.effect_text": [
+ "right_block.8.effect_text": [
   15.2,
   6.6
  ],
- "right_block.12.easy_rec_text": [
+ "right_block.13.easy_rec_text": [
   -12.9,
   6.2
  ],
@@ -323,7 +323,7 @@
   -42.4,
   10.7
  ],
- "left_block.18.green_led": [
+ "left_block.28.green_led": [
   -22.4,
   18.8
  ],
@@ -331,99 +331,99 @@
   -24.3,
   18.8
  ],
- "left_block.62.green_led": [
+ "left_block.64.green_led": [
   -21.8,
   6.1
  ],
- "left_block.65.green_led": [
+ "left_block.67.green_led": [
   -24.6,
   6.1
  ],
- "left_block.91.green_led": [
+ "left_block.93.green_led": [
   0.0,
   3.3
  ],
- "left_block.96.green_led": [
+ "left_block.98.green_led": [
   13.5,
   1.4
  ],
- "left_block.116.red_led": [
+ "left_block.118.red_led": [
   3.8,
   -10.0
  ],
- "left_block.120.red_led": [
+ "left_block.122.red_led": [
   10.7,
   6.5
  ],
- "left_block.151.red_led": [
+ "left_block.154.red_led": [
   12.1,
   6.7
  ],
- "left_block.154.red_led": [
+ "left_block.157.red_led": [
   12.8,
   6.7
  ],
- "left_block.157.red_led": [
+ "left_block.160.red_led": [
   13.2,
   6.7
  ],
- "left_block.127.red_led": [
+ "left_block.130.red_led": [
   0.5,
   -23.8
  ],
- "left_block.128.red_led": [
+ "left_block.131.red_led": [
   2.4,
   -23.8
  ],
- "left_block.133.red_led": [
+ "left_block.136.red_led": [
   0.2,
   -37.0
  ],
- "left_block.171.red_led": [
+ "left_block.176.red_led": [
   -1.4,
   -19.1
  ],
- "left_block.172.red_led": [
+ "left_block.177.red_led": [
   15.5,
   -18.7
  ],
- "left_block.164.red_led": [
+ "left_block.168.red_led": [
   -2.6,
   -19.2
  ],
- "left_block.165.red_led": [
+ "left_block.169.red_led": [
   14.4,
   -19.0
  ],
- "right_block.18.red_led": [
+ "right_block.21.red_led": [
   12.0,
   15.7
  ],
- "right_block.9.red_led": [
+ "right_block.10.red_led": [
   11.8,
   14.7
  ],
- "right_block.22.red_led": [
+ "right_block.35.red_led": [
   12.0,
   15.5
  ],
- "right_block.35.red_led": [
+ "right_block.26.red_led": [
   12.8,
   15.0
  ],
- "right_block.68.red_led": [
+ "right_block.107.red_led": [
   11.5,
   -4.2
  ],
- "right_block.111.red_led": [
+ "right_block.110.red_led": [
   12.0,
   -4.4
  ],
- "right_block.72.red_led": [
+ "right_block.113.red_led": [
   12.5,
   -5.4
  ],
- "right_block.114.red_led": [
+ "right_block.116.red_led": [
   12.8,
   -4.2
  ],
@@ -431,131 +431,131 @@
   1.3,
   16.6
  ],
- "right_block.14.green_led": [
+ "right_block.15.green_led": [
   -13.2,
   17.0
  ],
- "right_block.75.green_led": [
+ "right_block.71.green_led": [
   1.4,
   11.0
  ],
- "right_block.64.green_led": [
+ "right_block.68.green_led": [
   -12.7,
   11.3
  ],
- "right_block.78.red_led": [
+ "right_block.74.red_led": [
   -18.6,
   13.7
  ],
- "right_block.117.green_led": [
+ "right_block.119.green_led": [
   -16.6,
   3.9
  ],
- "right_block.162.green_led": [
+ "right_block.164.green_led": [
   -7.4,
   -16.3
  ],
- "right_block.126.red_led": [
+ "right_block.128.red_led": [
   -1.2,
   -5.5
  ],
- "right_block.130.red_led": [
+ "right_block.132.red_led": [
   2.0,
   -4.7
  ],
- "right_block.178.red_led": [
+ "right_block.181.red_led": [
   -4.7,
   -2.7
  ],
- "right_block.185.red_led": [
+ "right_block.188.red_led": [
   -9.8,
   -3.5
  ],
- "right_block.187.red_led": [
+ "right_block.190.red_led": [
   -6.7,
   -3.1
  ],
- "right_block.195.red_led": [
+ "right_block.199.red_led": [
   -4.3,
   -12.9
  ],
- "right_block.198.red_led": [
+ "right_block.202.red_led": [
   -7.8,
   -12.9
  ],
- "right_block.201.red_led": [
+ "right_block.205.red_led": [
   -7.8,
   -12.9
  ],
- "right_block.120.green_led": [
+ "right_block.122.green_led": [
   6.7,
   6.4
  ],
- "right_block.138.green_led": [
+ "right_block.140.green_led": [
   20.3,
   -48.3
  ],
- "right_block.141.green_led": [
+ "right_block.143.green_led": [
   48.0,
   -24.6
  ],
- "right_block.144.green_led": [
+ "right_block.146.green_led": [
   50.5,
   12.6
  ],
- "right_block.147.green_led": [
+ "right_block.149.green_led": [
   26.1,
   40.9
  ],
- "right_block.150.green_led": [
+ "right_block.152.green_led": [
   -11.7,
   44.6
  ],
- "right_block.153.green_led": [
+ "right_block.155.green_led": [
   -38.8,
   20.2
  ],
- "right_block.156.green_led": [
+ "right_block.158.green_led": [
   -40.9,
   -18.5
  ],
- "right_block.159.green_led": [
+ "right_block.161.green_led": [
   -15.5,
   -46.2
  ],
- "right_block.189.green_led": [
+ "right_block.192.green_led": [
   -1.8,
   10.3
  ],
- "right_block.190.green_led": [
+ "right_block.193.green_led": [
   -7.6,
   7.1
  ],
- "right_block.204.green_led": [
+ "right_block.208.green_led": [
   -41.1,
   30.5
  ],
- "sd_block.12.green_led": [
+ "sd_block.13.green_led": [
   -36.4,
   -22.0
  ],
- "left_block.109.variation_text": [
+ "left_block.111.variation_text": [
   -2.0,
   6.9
  ],
- "right_block.33.variation_2_text": [
+ "right_block.24.variation_2_text": [
   15.9,
   6.1
  ],
- "right_block.77.in_use_text": [
+ "right_block.73.in_use_text": [
   -15.7,
   12.3
  ],
- "right_block.109.multi_text": [
+ "right_block.108.multi_text": [
   15.0,
   -16.2
  ],
- "right_block.124.panel_memory_text": [
+ "right_block.126.panel_memory_text": [
   -28.6,
   -3.8
  ],
@@ -567,63 +567,63 @@
   -6.2,
   3.1
  ],
- "left_block.121.1_text": [
+ "left_block.123.1_text": [
   10.7,
   6.5
  ],
- "left_block.169.1_text": [
+ "left_block.174.1_text": [
   7.6,
   -33.8
  ],
- "left_block.162.1_text": [
+ "left_block.166.1_text": [
   6.7,
   -33.7
  ],
- "right_block.139.1_2_text": [
+ "right_block.141.1_2_text": [
   -11.1,
   3.1
  ],
- "right_block.183.customize_text": [
+ "right_block.186.customize_text": [
   31.0,
   6.0
  ],
- "right_block.115.sd_text": [
+ "right_block.117.sd_text": [
   -28.6,
   -4.7
  ],
- "right_block.145.7_text": [
+ "right_block.147.7_text": [
   0.3,
   -18.5
  ],
- "left_block.92.pill_orange": [
+ "left_block.94.pill_orange": [
   0.0,
   8.2
  ],
- "left_block.130.pill_wide": [
+ "left_block.133.pill_wide": [
   -0.1,
   -2.4
  ],
- "left_block.132.pill_wide": [
+ "left_block.135.pill_wide": [
   -0.2,
   -2.6
  ],
- "left_block.178.pill_greycyan": [
+ "left_block.183.pill_greycyan": [
   0.6,
   -2.5
  ],
- "right_block.116.pill_orange": [
+ "right_block.118.pill_orange": [
   -16.1,
   8.7
  ],
- "left_block.114.arranger_text": [
+ "left_block.116.arranger_text": [
   4.3,
   -13.3
  ],
- "left_block.22.mic_text": [
+ "left_block.16.mic_text": [
   -3.1,
-  22.0
+  0.0
  ],
- "right_block.112.mic_2_text": [
+ "right_block.114.mic_2_text": [
   14.7,
   -15.0
  ],
@@ -635,11 +635,11 @@
   19.4,
   49.1
  ],
- "right_block.174.custom_text": [
+ "right_block.177.custom_text": [
   -29.0,
   10.3
  ],
- "left_block.111.point_text": [
+ "left_block.113.point_text": [
   6.6,
   -3.1
  ],
@@ -647,11 +647,11 @@
   -7.6,
   21.8
  ],
- "left_block.63.off_on_text": [
+ "left_block.65.off_on_text": [
   -8.2,
   10.0
  ],
- "left_block.102.bank_text": [
+ "left_block.104.bank_text": [
   2.4,
   -1.0
  ],
@@ -659,7 +659,7 @@
   -7.7,
   1.0
  ],
- "right_block.128.part_select_text": [
+ "right_block.130.part_select_text": [
   38.0,
   -7.0
  ],
@@ -667,11 +667,11 @@
   -2.3,
   6.9
  ],
- "left_block.122.fade_text": [
+ "left_block.124.fade_text": [
   -2.2,
   -18.0
  ],
- "right_block.200.conductor_text": [
+ "right_block.204.conductor_text": [
   -5.9,
   -2.0
  ],
@@ -683,59 +683,59 @@
   -1.6,
   6.4
  ],
- "left_block.23.volume_text": [
+ "left_block.17.volume_text": [
   -3.1,
-  22.0
+  0.0
  ],
- "left_block.28.volume_text": [
+ "left_block.22.volume_text": [
   5.1,
-  22.5
+  0.0
  ],
- "left_block.16.mode_text": [
+ "left_block.26.mode_text": [
   -5.5,
   21.5
  ],
- "left_block.97.demo_text": [
+ "left_block.99.demo_text": [
   48.4,
   4.1
  ],
- "right_block.61.program_text": [
+ "right_block.65.program_text": [
   -13.2,
   1.6
  ],
- "right_block.148.6_2_text": [
+ "right_block.150.6_2_text": [
   16.5,
   -16.6
  ],
- "right_block.80.load_text": [
+ "right_block.76.load_text": [
   -0.7,
   11.0
  ],
- "right_block.118.load_text": [
+ "right_block.120.load_text": [
   -16.5,
   13.5
  ],
- "right_block.6.digital_text": [
+ "right_block.7.digital_text": [
   14.0,
   7.1
  ],
- "left_block.126.out_text": [
+ "left_block.129.out_text": [
   0.6,
   -36.3
  ],
- "right_block.181.favorites_text": [
+ "right_block.184.favorites_text": [
   -31.0,
   32.3
  ],
- "left_block.104.stop_text": [
+ "left_block.106.stop_text": [
   -5.3,
   -0.6
  ],
- "left_block.113.music_style_text": [
+ "left_block.115.music_style_text": [
   4.1,
   -11.3
  ],
- "right_block.160.tempo_program_text": [
+ "right_block.162.tempo_program_text": [
   2.0,
   12.9
  ],
@@ -743,11 +743,11 @@
   -57.6,
   -1.5
  ],
- "right_block.5.part_effect_text": [
+ "right_block.6.part_effect_text": [
   27.7,
   -0.7
  ],
- "left_block.177.start_stop_text": [
+ "left_block.182.start_stop_text": [
   0.5,
   -9.4
  ],
@@ -755,11 +755,11 @@
   -19.1,
   14.6
  ],
- "right_block.66.chorus_text": [
+ "right_block.105.chorus_text": [
   15.0,
   -15.9
  ],
- "left_block.183.beat_text": [
+ "left_block.188.beat_text": [
   51.7,
   -56.0
  ],
@@ -767,31 +767,31 @@
   18.7,
   0.0
  ],
- "left_block.100.hline": [
+ "left_block.102.hline": [
   60.0,
   -1.4
  ],
- "left_block.101.hline": [
+ "left_block.103.hline": [
   36.8,
   -1.4
  ],
- "right_block.79.hline": [
+ "right_block.75.hline": [
   -16.2,
   12.5
  ],
- "right_block.177.hline": [
+ "right_block.180.hline": [
   12.5,
   -10.4
  ],
- "right_block.197.hline": [
+ "right_block.201.hline": [
   -1.8,
   -3.1
  ],
- "right_block.203.hline": [
+ "right_block.207.hline": [
   15.9,
   -2.7
  ],
- "left_block.93.performance_pads_text": [
+ "left_block.95.performance_pads_text": [
   49.4,
   -0.3
  ],
@@ -815,55 +815,55 @@
   -7.7,
   10.7
  ],
- "right_block.176.round_btn_big_silver": [
+ "right_block.179.round_btn_big_silver": [
   -1.0,
   -1.2
  ],
- "right_block.184.round_btn_big_silver": [
+ "right_block.187.round_btn_big_silver": [
   0.7,
   -1.3
  ],
- "left_block.94.auto_setting_text": [
+ "left_block.96.auto_setting_text": [
   12.4,
   -1.0
  ],
- "right_block.10.global_effect_text": [
+ "right_block.11.global_effect_text": [
   28.5,
   -5.6
  ],
- "right_block.180.big_ring": [
+ "right_block.183.big_ring": [
   -0.1,
   -0.8
  ],
- "right_block.142.8_text": [
+ "right_block.144.8_text": [
   -9.0,
   -13.2
  ],
- "right_block.76.disk_2_text": [
+ "right_block.72.disk_2_text": [
   -15.7,
   12.3
  ],
- "left_block.27.line_in_text": [
+ "left_block.21.line_in_text": [
   5.1,
-  22.5
+  0.0
  ],
- "left_block.98.demo_btn": [
+ "left_block.100.demo_btn": [
   38.2,
   6.4
  ],
- "right_block.135.set_2_text": [
+ "right_block.137.set_2_text": [
   4.5,
   -2.0
  ],
- "left_block.99.sym_2_text": [
+ "left_block.101.sym_2_text": [
   8.0,
   0.0
  ],
- "right_block.132.hline": [
+ "right_block.134.hline": [
   0.0,
   -10.4
  ],
- "left_block.175.count_intro_text": [
+ "left_block.180.count_intro_text": [
   -123.0,
   11.0
  ]
