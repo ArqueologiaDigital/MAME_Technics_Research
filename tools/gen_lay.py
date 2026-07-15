@@ -150,18 +150,32 @@ def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height
 two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
-two("pill_wide",60,22,f'<rect stroke="{STROKE}" fill="{BTN}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
-two("pill_orange",60,22,f'<rect stroke="{STROKE}" fill="#c8641e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#8a4310" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
-two("pill_greycyan",60,22,f'<rect stroke="{STROKE}" fill="#4a5c5e" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>',f'<rect stroke="{STROKE}" fill="#33454a" x="1.5" y="1.5" width="57" height="19" rx="9.5"/>')
-two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#b02020" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#7c1414" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
+# pill_wide (TAP TEMPO / SYNCHRO & BREAK) + pill_greycyan (START/STOP): drawn at their PLACEMENT size
+# (105x28 / 105x50) so their ends are perfectly round and the stroke matches every other pill (was a
+# 60x22 SVG scaled up ~1.75x, giving an oval outline with a heavy contour).
+two("pill_wide",105,28,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>')
+two("pill_orange",60,22,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#b0561a" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#6f360c" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>')
+two("pill_greycyan",105,50,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#4a5c5e" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#33454a" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>')
+two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#98202e" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#641a28" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
 # tiny down-pointing triangle for the 3 keyboard split-point indicators (Felipe)
 elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M 1,1 L 11,1 L 6,9 Z" fill="#54545c" stroke="#000"/></svg>]]></data></image>')
 # ---- split-pill halves: two clickable halves form one divided pill (KN5000 pattern). Scale to bounds. ----
-# horizontal (-/+ , in/out, 1/2): left half rounded-left + flat-right, right half mirrored.
-two("half_l",40,22,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
-two("half_r",40,22,f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
+# horizontal split pills (-/+, in/out, 1/2): generated at PLACEMENT size by _hhalf() below, so the stroke
+# weight, rounded ends and centre separator render IDENTICALLY at every pill size (a fixed-size SVG scaled
+# to bounds made small pills thin/round and large ones thick/oval, and varied the separator width).
+_PILLN=[0]
+def _hhalf(w,h,side,fill,fd):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge
+    _PILLN[0]+=1; nm=f"hh{_PILLN[0]}"; sw=1.5; r=h/2.0; ra=(h-sw)/2.0; i=sw/2.0
+    d=f'M {w-i:.2f},{i:.2f} L {r:.2f},{i:.2f} A {ra:.2f} {ra:.2f} 0 0 0 {r:.2f},{h-i:.2f} L {w-i:.2f},{h-i:.2f} Z'
+    tf='' if side=='l' else f'transform="translate({w},0) scale(-1,1)" '
+    b=lambda f:f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
+    two(nm,w,h,b(fill),b(fd)); return nm
+def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) -> perfectly round ends at any w
+    sw=1.5; r=(h-sw)/2.0; i=sw/2.0
+    b=lambda f:f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{f}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}" rx="{r:.2f}"/>'
+    return b(fill),b(fd)
 # vertical (CONTRAST up/down): top half rounded-top + flat-bottom, bottom half mirrored. The SVG is sized
 # 50x78 to match the placement (each half of the 50x155 pill), so its 1.5px stroke renders the SAME weight
 # as every other button (a smaller SVG scaled up here made the contour look too thick).
@@ -173,11 +187,13 @@ two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x=
 two("sd_skipb",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
 two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
-def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
-    sb=seg2 or seg   # bank A: some split pairs (INTRO&ENDING, TRANSPOSE, R1/R2 OCT) straddle two SEGs
-    r=[P("half_l",x,y,w//2,h,tag=seg,mask=ma),P("half_r",x+w-w//2,y,w//2,h,tag=sb,mask=mb)]
-    if la: r.append(L(la,x+w//4-14,y+h//2-6,28,12))
-    if lb: r.append(L(lb,x+3*w//4-14,y+h//2-6,28,12))
+def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
+    sb=seg2 or seg; fill=fill or BTN; fd=fd or BTN_D
+    GAP=4; hw=(w-GAP)//2                 # fixed centre separator -> identical thickness on every split pill
+    nl=_hhalf(hw,h,'l',fill,fd); nr=_hhalf(hw,h,'r',fill,fd)
+    r=[P(nl,x,y,hw,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb)]
+    if la: r.append(L(la,x+hw//2-14,y+h//2-6,28,12))
+    if lb: r.append(L(lb,x+w-hw//2-14,y+h//2-6,28,12))
     return r
 def pair_v(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
     sb=seg2 or seg   # top/bottom halves may straddle two SEGs (e.g. CONTRAST +/-)
@@ -217,8 +233,8 @@ two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke
 # the silver disc. KN5000 dimensions (27px finger / 91px wheel).
 elem("tempo_finger", f'<image><data><![CDATA[<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#6e6e76" stroke="{STROKE}" stroke-width="1"/></svg>]]></data></image>')
 sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
-two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN}" stroke="{STROKE}" stroke-width="2"/>',
-                                f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="{BTN_D}" stroke="{STROKE}" stroke-width="2"/>')
+two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#4a5c5e" stroke="{STROKE}" stroke-width="2"/>',
+                                f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#33454a" stroke="{STROKE}" stroke-width="2"/>')
 # reused KN5000 MSP performance-pad buttons (same shape on KN7000)
 two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
 two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
@@ -253,7 +269,7 @@ S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",
 # CONTRAST +/- = CPC_SEG5 0x04 (up) / 0x08 (down) -- the physical scan matrix (driver ioport names, commit
 # 76fa4eb): SEG05 is the left-of-screen column OTHER PARTS(0x01) / HELP(0x02) / CONTRAST+(0x04) /
 # CONTRAST-(0x08) / MUTE1-2. (The old SEG16-1A guesses were the analog-pot addresses -- no button path.)
-S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG05","0x04","0x08",282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
+S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG05","0x04","0x08",282,756,50,155," "," ") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -368,7 +384,7 @@ for i,(nm,tag,mask) in enumerate(RG):
     LB.append(P("green_led" if nm in ("CUSTOM","MEMORY") else "red_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
 # MUSIC STYLIST = SEG07 0x01 (ev2040 app-open MUSIC STYLIST, empirically confirmed).
 LB.append(L("MUSIC STYLIST",418,214,120,10)); LB.append(P("green_led",470,216,8,8,name=PANEL_LED.get(("SEG07","0x01")))); LB.append(P("pill_orange",441,228,65,22,tag="SEG07",mask="0x01"))
-LB += [L("DEMO",18,258,44,10), P("music_note",56,252,16,20), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"),   # bank A: DEMO = SEG06 0x40 (ev2040 app-open DEMO)
+LB += [L("DEMO",14,258,40,10), P("demo_btn",26,274,42,42,tag="SEG06",mask="0x40"), L("♪",97,257,16,18),   # note listed AFTER demo_btn so it doesn't shift the button's nudge index. Unicode U+266A, right of DEMO. bank A: DEMO = SEG06 0x40 (ev2040 app-open DEMO)
        L("PERFORMANCE PADS",98,250,172,9,TXTH), P("hline",95,254,26,3), P("hline",247,254,26,3)]
 # PERFORMANCE PADS: AUTO SETTING=0x2031, STOP=0x2033 (single-bit dedicated events, pool-matched);
 # BANK left decorative (its "PADS BANK" driver label is on a 0x2000 part-off bit = mislabel).
@@ -579,7 +595,7 @@ RB.append('\t</group>')
 # 0x9CC00008 bits are VOL- 0x01, VOL+ 0x02, STOP 0x04, PLAY/PAUSE 0x08, SKIP/SEARCH<< 0x10, SKIP>> 0x20.
 # (An earlier guess had VOLUME and SKIP/SEARCH swapped; the fwd/rew hold-timer proves bit4/5 = SKIP.)
 SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70"/>',
-     L("SD VOLUME",8,52,96,10,TXTH), P("half_l",12,18,42,30,tag="SDSW",mask="0x01"), P("half_r",54,18,42,30,tag="SDSW",mask="0x02"), L("-",28,28,12,12), L("+",70,28,12,12),
+     L("SD VOLUME",8,52,96,10,TXTH)] + pair_h("SDSW","0x01","0x02",12,18,84,30,"-","+") + [
      L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x10"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x20"),
      L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
      L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8,name="sd_led1"),   # SD PLAY/PAUSE = sd_led1, driver-lit from the SD-Audio/SD-Song play-state flag (2026-07-14)
