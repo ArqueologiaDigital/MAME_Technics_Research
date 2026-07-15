@@ -164,8 +164,12 @@ reads as "same family as the hero buttons, but a secondary member" — a precise
   halves are typically the *same moulded part mirrored* (§2, orientation), so draw them as mirror images. The
   divider is decorative (a seam), carries no input, and is drawn as a bordered strip — honest affordance
   (principle 8).
-- **Enclosure rings hug their contents exactly:** a ring grouping N buttons has width = *button diameter* +
-  *centre-to-centre span of the end buttons*, so each rounded end sits over an end button. One ring per group.
+- **Enclosure rings / zones hug their contents exactly:** a ring grouping N buttons has width = *button
+  diameter* + *centre-to-centre span of the end buttons*, so each rounded end sits over an end button. One
+  ring per group. The ring may be a thin outline or a **filled zone** — a filled region (in a family colour)
+  behind a cluster reads as "these controls live in one moulded well", another way to make grouping visible
+  (§1.6). A subsystem may also earn its own *colour* treatment (e.g. media/transport buttons in near-black) to
+  set it apart from the surrounding controls.
 - **Stroke discipline:** outlines thin, uniform, and dark; contours crisp, never heavy. Heaviness usually
   betrays a scaled-up master (see pills).
 
@@ -231,10 +235,16 @@ tone").
 | Tier (§5) | KN7000 members |
 |-----------|----------------|
 | Metallic mirror (primary selectors) | the 16 RHYTHM GROUP + 16 SOUND GROUP buttons |
-| Silver family (performance/recall) | TEMPO/PROGRAM wheel; all pill buttons (FADE, FILL IN, INTRO & ENDING, TAP TEMPO, SYNCHRO & BREAK, TRANSPOSE, R1/R2 OCTAVE, SD VOLUME, CONTRAST/MUTE, PAGE); MSP pads; the 8 PANEL MEMORY buttons; CUSTOM PANEL / FAVORITES / CUSTOMIZE + their enclosing ring |
-| Plain grey function | PART EFFECT, GLOBAL EFFECT, PART SELECT, CONDUCTOR, VARIATION, APC controls, SEQUENCER, pad-control (AUTO SETTING/BANK/STOP), OTHER PART/HELP/DISPLAY HOLD/EXIT, the 16 MUTE part-buttons |
+| Silver family (performance/recall) | TEMPO/PROGRAM wheel; all pill buttons (FADE, FILL IN, INTRO & ENDING, TAP TEMPO, SYNCHRO & BREAK, TRANSPOSE, R1/R2 OCTAVE, SD VOLUME, CONTRAST, PAGE); the 16 MUTE UP/DOWN part-buttons; the LCD left/right soft-keys; MSP pads; the 8 PANEL MEMORY buttons; CUSTOM PANEL / FAVORITES / CUSTOMIZE **sitting in a filled silver zone** (the enclosing `big_ring` is a silver disc with a dark-grey outline) |
+| Plain grey function | PART EFFECT, GLOBAL EFFECT, PART SELECT, CONDUCTOR, VARIATION, APC controls, SEQUENCER, pad-control (AUTO SETTING/BANK/STOP), OTHER PART/HELP/DISPLAY HOLD/EXIT |
 | Matte exception (hero shape, grey body) | **DEMO, SOUND EXPLORER, EW EXPANSION** — recessed ring `#2c2c32` + grey `BTN` body: the **same moulded shape as the metallic hero buttons, different finish** (Part I §2/§5). "Related to the metallic buttons but secondary." |
+| Media / SD subsystem | SD-card transport buttons (skip/stop/play): near-black `#0e0e10` fill + dark-grey `#4a4a52` border, light icons — a distinct dark treatment marking the media subsystem apart (Part I §6, subsystem colour). |
 | Accent pills | orange = MUSIC STYLIST, SD LOAD; teal = START/STOP + PANEL MEMORY SET hub; red = EASY REC |
+
+Note: the silver family spans **several shapes** — a round wheel, pills, round PANEL MEMORY buttons, and the
+*rounded-rectangle* MUTE and LCD soft-keys. This confirms the family is defined by **function** (the surface
+you perform/operate on), not by a single shape (Part I §5). The finish (silver) is applied over whatever
+moulded shape the control uses.
 
 ## 12. The element library = the parts kit; concrete geometry
 
@@ -277,9 +287,11 @@ controls should reuse these; a bespoke shape means a "new mould" and should be r
 - **Label-centred vs. group-centred headers.** If the section label isn't at the geometric centre of its
   group, the flanking bracket lines come out asymmetric. Re-centre the label, or let the brackets bend around
   it? Unresolved.
-- **"Pill" vs. "rounded rectangle."** Where is the boundary (how round is a pill)? A judgement call today — it
-  decided that the KN7000 MUTE buttons stay grey rather than joining the silver pills. In parts-kit terms:
-  are they the *same mould* as the pills or a *different* one?
+- **Shape does not gate family membership (resolved).** An early open question was whether the rounded-
+  rectangle MUTE buttons "count as pills" and so belong to the silver family. Resolved in favour of
+  **function over shape**: the MUTE and LCD soft-keys joined the silver family despite being rounded
+  rectangles, because they're part of the performance/operate surface. So a family (a finish) is applied by
+  *role*, across whatever moulded shapes those controls happen to use — a useful clarification of Part I §5.
 - **When does a group earn a header bracket?** Some groups have them, some don't; no rule yet.
 - **Pressed-state feedback for continuous controls** (wheels/faders) isn't standardised.
 - **How small should the parts kit be?** §2 says "small", but the exact target count of distinct shapes is a
