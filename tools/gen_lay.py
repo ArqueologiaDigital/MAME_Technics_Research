@@ -151,21 +151,24 @@ def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height
 # most non-metallic buttons are now a single disc). round_btn2 keeps the double circle (SOUND EXPLORER / EW
 # EXPANSION); DEMO keeps its own demo_btn double circle.
 two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
-two("round_btn2",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
-# metal_btn: mirrored/metallic chrome dome for the RHYTHM GROUP + SOUND GROUP category buttons (Felipe:
-# a lighter metallic grey, DISTINCT from the flat SILVER tempo wheel by being a mirror gradient, not a flat
-# tone). A dark recess ring + a vertical mirror gradient dome (bright horizon band) + a specular highlight.
+# round_btn2 (SOUND EXPLORER / EW EXPANSION): grey body with the SAME dark recess ring as the metallic
+# buttons (Felipe: the external circle uses the metal_btn recess fill #2c2c32), just a matte grey dome.
+two("round_btn2",29,29,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="14.5" cy="14.5" r="14"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="14.5" cy="14.5" r="11"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="14.5" cy="14.5" r="14"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="14.5" cy="14.5" r="11"/>')
+# metal_btn: mirrored/metallic dome for the RHYTHM GROUP + SOUND GROUP category buttons (Felipe: a metallic
+# grey, DISTINCT from the flat SILVER tempo wheel by being a mirror gradient, not a flat tone). Dark recess
+# ring + a vertical mirror gradient dome (bright horizon band) + specular highlight. Tone: NORMAL = the medium
+# mirror (Felipe wanted the old 'pressed' tone as the resting look); PRESSED = a bit darker still.
 _MGRAD=('<linearGradient id="mb" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#dcdce2"/><stop offset="0.40" stop-color="#f2f2f6"/>'
-        '<stop offset="0.53" stop-color="#a0a0aa"/><stop offset="0.76" stop-color="#8c8c96"/>'
-        '<stop offset="1" stop-color="#c6c6cd"/></linearGradient>')
+        '<stop offset="0" stop-color="#9c9ca2"/><stop offset="0.40" stop-color="#b6b6bc"/>'
+        '<stop offset="0.53" stop-color="#74747e"/><stop offset="0.76" stop-color="#646470"/>'
+        '<stop offset="1" stop-color="#8c8c94"/></linearGradient>')
 _MGRADP=('<linearGradient id="mb" x1="0" y1="0" x2="0" y2="1">'
-         '<stop offset="0" stop-color="#9c9ca2"/><stop offset="0.40" stop-color="#b6b6bc"/>'
-         '<stop offset="0.53" stop-color="#74747e"/><stop offset="0.76" stop-color="#646470"/>'
-         '<stop offset="1" stop-color="#8c8c94"/></linearGradient>')
+         '<stop offset="0" stop-color="#828288"/><stop offset="0.40" stop-color="#9c9ca2"/>'
+         '<stop offset="0.53" stop-color="#5c5c66"/><stop offset="0.76" stop-color="#4c4c58"/>'
+         '<stop offset="1" stop-color="#727278"/></linearGradient>')
 two("metal_btn",29,29,
-    f'<defs>{_MGRAD}</defs><circle cx="14.5" cy="14.5" r="14" fill="#2c2c32" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#4a4a50" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4.6" ry="2.6" fill="#ffffff" opacity="0.5"/>',
-    f'<defs>{_MGRADP}</defs><circle cx="14.5" cy="14.5" r="14" fill="#232327" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#3a3a40" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4" ry="2.2" fill="#ffffff" opacity="0.32"/>')
+    f'<defs>{_MGRAD}</defs><circle cx="14.5" cy="14.5" r="14" fill="#2c2c32" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#4a4a50" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4.4" ry="2.5" fill="#ffffff" opacity="0.4"/>',
+    f'<defs>{_MGRADP}</defs><circle cx="14.5" cy="14.5" r="14" fill="#1e1e23" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#34343a" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4" ry="2.2" fill="#ffffff" opacity="0.26"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
 # pill_wide (TAP TEMPO / SYNCHRO & BREAK) + pill_greycyan (START/STOP): drawn at their PLACEMENT size
@@ -234,9 +237,13 @@ elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" wid
 elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
 # pill-shaped highlight ring (no fill) to envelop DRAWBAR/ORGAN TABS round buttons
 two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="2" y="2" width="66" height="36" rx="18"/>')
+# pill_ring_pair: ONE stadium ring enclosing the DIGITAL DRAWBAR + ORGAN TABS pair (Felipe: a single pill
+# around both, not one per button). Drawn at placement size so the ends stay round.
+two("pill_ring_pair",124,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>')
 two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
 elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{STROKE}" stroke-width="1.5"/></svg>]]></data></image>')
-two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/><circle stroke="{STROKE}" fill="none" cx="21" cy="21" r="15.5"/>')
+# DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
+two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="21" cy="21" r="16"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="21" cy="21" r="16"/>')
 # LCD soft key: rect + inner vertical divider
 two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
                           f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
@@ -442,7 +449,7 @@ LB.append(L("VARIATION",430,378,90,8,TXTH))
 # These are rhythm modifiers with no distinct LCD, so snapshot can't verify them.
 VARBITS=[("SEG04","0x10"),("SEG04","0x04"),("SEG04","0x01"),("SEG03","0x40")]  # bank A VAR&MSA 1-4 (ev2085 arg-mid 0..3) -- all four now bound
 for i,cx in enumerate([366,426,486,546]):
-    LB.append(P("round_btn",cx,399,32,32,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("red_led",cx-2,388,8,8,name=PANEL_LED.get((VARBITS[i][0],VARBITS[i][1])))); LB.append(L(str(i+1),cx+8,388,10,8))   # VARIATION LEDs RED (Felipe); cpl_led3/11/19/27
+    LB.append(P("round_btn",cx-4.5,394.5,42,42,tag=VARBITS[i][0],mask=VARBITS[i][1])); LB.append(P("red_led",cx-2,388,8,8,name=PANEL_LED.get((VARBITS[i][0],VARBITS[i][1])))); LB.append(L(str(i+1),cx+8,388,10,8))   # VARIATION buttons LARGER (42, Felipe); LEDs RED; cpl_led3/11/19/27
 # bank A (ev2084, arg-mid 0=IN,1=OUT): FADE IN = SEG03 0x20 / OUT = SEG03 0x08.
 # TAP TEMPO = SEG03 0x02 (ev20A1). SYNCHRO & BREAK = SEG00 0x80 (ev2021).
 LB.append(L("FADE",625,340,105,9)); LB += pair_h("SEG03","0x20","0x08",625,355,105,28,"IN","OUT")
@@ -501,7 +508,7 @@ for i,(nm,tag,mask) in enumerate(SG):
     RB.append(P("round_btn2" if nm in ("SOUND EXPLORER","EW EXPANSION") else "metal_btn",cx-16,cy,32,32,tag=tag,mask=mask))
     # LED colour (Felipe): SOUND GROUP buttons are RED except MEMORY (GREEN)
     RB.append(P("green_led" if nm=="MEMORY" else "red_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
-    if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
+    if i==9: RB.append(P("pill_ring_pair",17,cy-4,124,40))   # single ring around the DRAWBAR+ORGAN TABS pair
 RB.append(L("PART EFFECT",560,42,150,10,TXTH)); RB += [P("hline",560,47,26,3), P("hline",684,47,26,3)]
 # PART EFFECT (HELP-info 2026-07-07): SOUND DSP=SEG0F 0x01, VARIATION(=SOUND DSP VARIATION)=SEG0F 0x02,
 # SUSTAIN=SEG0E 0x10, DIGITAL EFFECT=SEG0E 0x20. (SUSTAIN/DIGITAL EFFECT were mis-labelled MEMORY/EW
@@ -574,7 +581,7 @@ for j,cx in enumerate([360,425,485]): tg,mk=PARTSEL[j]; RB += [P("red_led",cx+12
 # RIGHT 1 is conductor-active, symmetric with cpr_led64=RIGHT 2). cpr_led64/65 come via PANEL_LED.
 CONDUCT=[("SEG11","0x02"),("SEG10","0x02"),("SEG0F","0x02")]
 CONDUCT_LED=[PANEL_LED.get(("SEG11","0x02")), PANEL_LED.get(("SEG10","0x02")), "cpr_led7"]
-for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12,399,8,8,name=CONDUCT_LED[j]), P("round_btn",cx,410,32,32,tag=tg,mask=mk)]   # CONDUCTOR LEDs RED (Felipe)
+for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12,399,8,8,name=CONDUCT_LED[j]), P("round_btn",cx-4.5,405.5,42,42,tag=tg,mask=mk)]   # CONDUCTOR buttons LARGER (42, Felipe); LEDs RED
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 # bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK
 # SELECT screen); NEXT BANK = SEG0F 0x80 (ev2012, advances the bank).
