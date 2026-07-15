@@ -250,7 +250,7 @@ two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x
 # diameter (37) + centre-to-centre distance (56) = 93 (Felipe), so each rounded end hugs one button.
 two("pill_ring_pair",93,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>')
 two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
-elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="{SILVER}" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
+elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="{SILVER_D}" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
 # DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
 two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="21" cy="21" r="16"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="21" cy="21" r="16"/>')
 # LCD soft key: rect + inner vertical divider

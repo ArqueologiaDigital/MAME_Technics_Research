@@ -104,7 +104,7 @@
 		<image state="0"><data><![CDATA[<svg width="90" height="26"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="90" height="26"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/></svg>]]></data></image>
 	</element>
-	<element name="big_ring"><image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="#909097" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image></element>
+	<element name="big_ring"><image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="#7a7a82" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image></element>
 	<element name="demo_btn">
 		<image state="0"><data><![CDATA[<svg width="42" height="42"><circle stroke="#000" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="#54545c" cx="21" cy="21" r="16"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="42" height="42"><circle stroke="#000" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="#262628" cx="21" cy="21" r="16"/></svg>]]></data></image>
