@@ -216,10 +216,10 @@ def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) ->
 two("half_t",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
 two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # ---- SD-card transport buttons (48x30, icon baked in) ----
-two("sd_stop",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
-two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
-two("sd_skipb",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
-two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
+two("sd_stop",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
+two("sd_play",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
+two("sd_skipb",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
+two("sd_skipf",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
     sb=seg2 or seg; fill=fill or SILVER; fd=fd or SILVER_D   # split pills are SILVER (Felipe)
@@ -250,14 +250,14 @@ two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x
 # diameter (37) + centre-to-centre distance (56) = 93 (Felipe), so each rounded end hugs one button.
 two("pill_ring_pair",93,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>')
 two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
-elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{SILVER}" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
+elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="{SILVER}" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
 # DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
 two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="21" cy="21" r="16"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="21" cy="21" r="16"/>')
 # LCD soft key: rect + inner vertical divider
-two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
-                          f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
-two("mute_up",55,77,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="75" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="75" rx="3"/>')
-two("mute_down",55,78,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="53" height="76" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="53" height="76" rx="3"/>')
+two("lcd_soft_key",123,34,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>',
+                          f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="{STROKE}" stroke-width="1.5"/>')
+two("mute_up",55,77,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" x="1" y="1" width="53" height="75" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" x="1" y="1" width="53" height="75" rx="3"/>')
+two("mute_down",55,78,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" x="1" y="1" width="53" height="76" rx="3"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" x="1" y="1" width="53" height="76" rx="3"/>')
 two("tall_pill",50,155,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="2" y="2" width="46" height="151" rx="23"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="2" y="2" width="46" height="151" rx="23"/>')
 two("fader",30,150,f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN}" stroke="{STROKE}" stroke-width="1.5" x="2" y="40" width="26" height="18" rx="3"/>',
                     f'<rect fill="{PANEL2}" stroke="{STROKE}" x="12" y="4" width="6" height="142"/><rect fill="{LBTN_D}" stroke="{STROKE}" stroke-width="1.5" x="2" y="48" width="26" height="18" rx="3"/>')
@@ -282,13 +282,13 @@ two("msp_middle",61,40,f'<path stroke="{STROKE}" fill="{MSP}" d="M 30.1,0.5 C 20
 elem("music_note",'<image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image>')
 # LCD bezel: black border + a thin SILVER frame around it (Felipe). Canvas grown 5px each side; the black
 # rect stays at the same placement (inset 6 -> lands at the old 299,105) so the display alignment is unchanged.
-elem("screen_frame",f'<image><data><![CDATA[<svg width="1414" height="591"><rect x="1.5" y="1.5" width="1411" height="588" fill="none" stroke="{SILVER}" stroke-width="3"/><rect x="6" y="6" width="1402" height="579" fill="#050505" stroke="{STROKE}" stroke-width="2"/></svg>]]></data></image>')
+elem("screen_frame",f'<image><data><![CDATA[<svg width="1418" height="595"><rect x="3.5" y="3.5" width="1411" height="588" fill="none" stroke="{SILVER}" stroke-width="5"/><rect x="8" y="8" width="1402" height="579" fill="#050505" stroke="{STROKE}" stroke-width="2"/></svg>]]></data></image>')
 panel_bg("bg_top",2000,997,PANEL); panel_bg("bg_left",1000,503,PANEL); panel_bg("bg_right",1000,503,PANEL)
 
 # =================== SCREEN BLOCK (top region, pixel-perfect) ===============
 # Measured (lay coords): LCD frame x298-1702,y104-685; divider y997.
 S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height="997"/>',
-   P("bg_top",0,0,2000,997), P("screen_frame",293,99,1414,591),
+   P("bg_top",0,0,2000,997), P("screen_frame",291,97,1418,595),
    '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
 # LCD-flanking soft-keys: 5 rows down each side of the display, listed top->bottom as
 # (left-SEG, left-mask, right-SEG, right-mask). These are CONTEXT-DEPENDENT keys -- the real unit
@@ -333,8 +333,8 @@ for i in range(16):
     x=round(378+i*80.4); seg,onm,offm=MUTES[i]
     ut,um=(None,None) if seg in FN_SEGS else (seg,f"0x{onm:02x}")
     dt,dm=(None,None) if seg in FN_SEGS else (seg,f"0x{offm:02x}")
-    S.append(P("mute_up",x+2.5,756,50,77,tag=ut,mask=um))
-    S.append(P("mute_down",x+2.5,833,50,78,tag=dt,mask=dm))
+    S.append(P("mute_up",x+4.5,756,46,77,tag=ut,mask=um))
+    S.append(P("mute_down",x+4.5,833,46,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
 # PAGE up/down = CPC_SEG11 0x10 (up) / 0x20 (down) -- the physical scan matrix (driver ioport names, commit
 # 76fa4eb): SEG0B is the right-of-screen column PAGE UP(0x10) / PAGE DOWN(0x20) / DISPLAY HOLD(0x40) /

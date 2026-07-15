@@ -66,20 +66,20 @@
 		<image state="1"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/></svg>]]></data></image>
 	</element>
 	<element name="sd_stop">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
 	</element>
 	<element name="sd_play">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
 	</element>
 	<element name="sd_skipb">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
 	</element>
 	<element name="sd_skipf">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
 	</element>
 	<element name="page_up">
 		<image state="0"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#909097" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/></svg>]]></data></image>
@@ -104,22 +104,22 @@
 		<image state="0"><data><![CDATA[<svg width="90" height="26"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="90" height="26"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/></svg>]]></data></image>
 	</element>
-	<element name="big_ring"><image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="#909097" stroke-width="1.5"/></svg>]]></data></image></element>
+	<element name="big_ring"><image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="#909097" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image></element>
 	<element name="demo_btn">
 		<image state="0"><data><![CDATA[<svg width="42" height="42"><circle stroke="#000" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="#54545c" cx="21" cy="21" r="16"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="42" height="42"><circle stroke="#000" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="#262628" cx="21" cy="21" r="16"/></svg>]]></data></image>
 	</element>
 	<element name="lcd_soft_key">
-		<image state="0"><data><![CDATA[<svg width="123" height="34"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="#000" stroke-width="1.5"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="123" height="34"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="#000" stroke-width="1.5"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="123" height="34"><rect stroke="#000" stroke-width="1.5" fill="#909097" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="#000" stroke-width="1.5"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="123" height="34"><rect stroke="#000" stroke-width="1.5" fill="#7a7a82" x="1" y="1" width="121" height="32" rx="3"/><line x1="28" y1="1" x2="28" y2="33" stroke="#000" stroke-width="1.5"/></svg>]]></data></image>
 	</element>
 	<element name="mute_up">
-		<image state="0"><data><![CDATA[<svg width="55" height="77"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="53" height="75" rx="3"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="55" height="77"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="53" height="75" rx="3"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="77"><rect stroke="#000" stroke-width="1.5" fill="#909097" x="1" y="1" width="53" height="75" rx="3"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="77"><rect stroke="#000" stroke-width="1.5" fill="#7a7a82" x="1" y="1" width="53" height="75" rx="3"/></svg>]]></data></image>
 	</element>
 	<element name="mute_down">
-		<image state="0"><data><![CDATA[<svg width="55" height="78"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="1" y="1" width="53" height="76" rx="3"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="55" height="78"><rect stroke="#000" stroke-width="1.5" fill="#262628" x="1" y="1" width="53" height="76" rx="3"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="78"><rect stroke="#000" stroke-width="1.5" fill="#909097" x="1" y="1" width="53" height="76" rx="3"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="78"><rect stroke="#000" stroke-width="1.5" fill="#7a7a82" x="1" y="1" width="53" height="76" rx="3"/></svg>]]></data></image>
 	</element>
 	<element name="tall_pill">
 		<image state="0"><data><![CDATA[<svg width="50" height="155"><rect stroke="#000" stroke-width="1.5" fill="#54545c" x="2" y="2" width="46" height="151" rx="23"/></svg>]]></data></image>
@@ -154,7 +154,7 @@
 		<image state="1"><data><![CDATA[<svg width="61" height="40"><path stroke="#000" fill="#7a7a82" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/></svg>]]></data></image>
 	</element>
 	<element name="music_note"><image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image></element>
-	<element name="screen_frame"><image><data><![CDATA[<svg width="1414" height="591"><rect x="1.5" y="1.5" width="1411" height="588" fill="none" stroke="#909097" stroke-width="3"/><rect x="6" y="6" width="1402" height="579" fill="#050505" stroke="#000" stroke-width="2"/></svg>]]></data></image></element>
+	<element name="screen_frame"><image><data><![CDATA[<svg width="1418" height="595"><rect x="3.5" y="3.5" width="1411" height="588" fill="none" stroke="#909097" stroke-width="5"/><rect x="8" y="8" width="1402" height="579" fill="#050505" stroke="#000" stroke-width="2"/></svg>]]></data></image></element>
 	<element name="bg_top"><image><data><![CDATA[<svg width="2000" height="997"><rect width="2000" height="997" fill="#38383a"/></svg>]]></data></image></element>
 	<element name="bg_left"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
 	<element name="bg_right"><image><data><![CDATA[<svg width="1000" height="503"><rect width="1000" height="503" fill="#38383a"/></svg>]]></data></image></element>
@@ -380,7 +380,7 @@
 	<group name="screen_block">
 		<bounds x="0" y="0" width="2000" height="997"/>
 		<element ref="bg_top"><bounds x="0" y="0" width="2000" height="997"/></element>
-		<element ref="screen_frame"><bounds x="293" y="99" width="1414" height="591"/></element>
+		<element ref="screen_frame"><bounds x="291" y="97" width="1418" height="595"/></element>
 
 		<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>
 
@@ -427,53 +427,53 @@
 		<element ref="mute_text"><bounds x="335.8" y="828.1" width="42" height="13"/></element>
 		<element ref="hline"><bounds x="344" y="818" width="32" height="3"/></element>
 		<element ref="hline"><bounds x="344" y="843" width="32" height="3"/></element>
-		<element ref="mute_up" inputtag="CPC_SEG5" inputmask="0x10"><!-- MUTE UP 1 (PART 1 ON) --><bounds x="380.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG5" inputmask="0x20"><!-- MUTE DOWN 1 (PART 1 OFF) --><bounds x="380.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG5" inputmask="0x10"><!-- MUTE UP 1 (PART 1 ON) --><bounds x="382.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG5" inputmask="0x20"><!-- MUTE DOWN 1 (PART 1 OFF) --><bounds x="382.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG5" inputmask="0x40"><!-- MUTE UP 2 (PART 2 ON) --><bounds x="460.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG5" inputmask="0x80"><!-- MUTE DOWN 2 (PART 2 OFF) --><bounds x="460.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG5" inputmask="0x40"><!-- MUTE UP 2 (PART 2 ON) --><bounds x="462.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG5" inputmask="0x80"><!-- MUTE DOWN 2 (PART 2 OFF) --><bounds x="462.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x01"><!-- MUTE UP 3 (PART 3 ON) --><bounds x="541.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x02"><!-- MUTE DOWN 3 (PART 3 OFF) --><bounds x="541.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x01"><!-- MUTE UP 3 (PART 3 ON) --><bounds x="543.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x02"><!-- MUTE DOWN 3 (PART 3 OFF) --><bounds x="543.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x04"><!-- MUTE UP 4 (PART 4 ON) --><bounds x="621.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x08"><!-- MUTE DOWN 4 (PART 4 OFF) --><bounds x="621.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x04"><!-- MUTE UP 4 (PART 4 ON) --><bounds x="623.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x08"><!-- MUTE DOWN 4 (PART 4 OFF) --><bounds x="623.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x10"><!-- MUTE UP 5 (PART 5 ON) --><bounds x="702.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x20"><!-- MUTE DOWN 5 (PART 5 OFF) --><bounds x="702.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x10"><!-- MUTE UP 5 (PART 5 ON) --><bounds x="704.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x20"><!-- MUTE DOWN 5 (PART 5 OFF) --><bounds x="704.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x40"><!-- MUTE UP 6 (PART 6 ON) --><bounds x="782.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x80"><!-- MUTE DOWN 6 (PART 6 OFF) --><bounds x="782.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG8" inputmask="0x40"><!-- MUTE UP 6 (PART 6 ON) --><bounds x="784.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG8" inputmask="0x80"><!-- MUTE DOWN 6 (PART 6 OFF) --><bounds x="784.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x01"><!-- MUTE UP 7 (PART 7 ON) --><bounds x="862.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x02"><!-- MUTE DOWN 7 (PART 7 OFF) --><bounds x="862.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x01"><!-- MUTE UP 7 (PART 7 ON) --><bounds x="864.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x02"><!-- MUTE DOWN 7 (PART 7 OFF) --><bounds x="864.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x04"><!-- MUTE UP 8 (PART 8 ON) --><bounds x="943.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x08"><!-- MUTE DOWN 8 (PART 8 OFF) --><bounds x="943.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x04"><!-- MUTE UP 8 (PART 8 ON) --><bounds x="945.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x08"><!-- MUTE DOWN 8 (PART 8 OFF) --><bounds x="945.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x10"><!-- MUTE UP 9 (PART 9 ON) --><bounds x="1023.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x20"><!-- MUTE DOWN 9 (PART 9 OFF) --><bounds x="1023.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x10"><!-- MUTE UP 9 (PART 9 ON) --><bounds x="1025.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x20"><!-- MUTE DOWN 9 (PART 9 OFF) --><bounds x="1025.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x40"><!-- MUTE UP 10 (PART 10 ON) --><bounds x="1104.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x80"><!-- MUTE DOWN 10 (PART 10 OFF) --><bounds x="1104.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG9" inputmask="0x40"><!-- MUTE UP 10 (PART 10 ON) --><bounds x="1106.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG9" inputmask="0x80"><!-- MUTE DOWN 10 (PART 10 OFF) --><bounds x="1106.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x01"><!-- MUTE UP 11 (PART 11 ON) --><bounds x="1184.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x02"><!-- MUTE DOWN 11 (PART 11 OFF) --><bounds x="1184.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x01"><!-- MUTE UP 11 (PART 11 ON) --><bounds x="1186.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x02"><!-- MUTE DOWN 11 (PART 11 OFF) --><bounds x="1186.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x04"><!-- MUTE UP 12 (PART 12 ON) --><bounds x="1264.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x08"><!-- MUTE DOWN 12 (PART 12 OFF) --><bounds x="1264.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x04"><!-- MUTE UP 12 (PART 12 ON) --><bounds x="1266.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x08"><!-- MUTE DOWN 12 (PART 12 OFF) --><bounds x="1266.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x10"><!-- MUTE UP 13 (PART 13 ON) --><bounds x="1345.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x20"><!-- MUTE DOWN 13 (PART 13 OFF) --><bounds x="1345.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x10"><!-- MUTE UP 13 (PART 13 ON) --><bounds x="1347.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x20"><!-- MUTE DOWN 13 (PART 13 OFF) --><bounds x="1347.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x40"><!-- MUTE UP 14 (PART 14 ON) --><bounds x="1425.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x80"><!-- MUTE DOWN 14 (PART 14 OFF) --><bounds x="1425.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG10" inputmask="0x40"><!-- MUTE UP 14 (PART 14 ON) --><bounds x="1427.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG10" inputmask="0x80"><!-- MUTE DOWN 14 (PART 14 OFF) --><bounds x="1427.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG11" inputmask="0x01"><!-- MUTE UP 15 (PART 15 ON) --><bounds x="1506.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG11" inputmask="0x02"><!-- MUTE DOWN 15 (PART 15 OFF) --><bounds x="1506.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG11" inputmask="0x01"><!-- MUTE UP 15 (PART 15 ON) --><bounds x="1508.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG11" inputmask="0x02"><!-- MUTE DOWN 15 (PART 15 OFF) --><bounds x="1508.5" y="833" width="46" height="78"/></element>
 
-		<element ref="mute_up" inputtag="CPC_SEG11" inputmask="0x04"><!-- MUTE UP 16 (PART 16 ON) --><bounds x="1586.5" y="756" width="50" height="77"/></element>
-		<element ref="mute_down" inputtag="CPC_SEG11" inputmask="0x08"><!-- MUTE DOWN 16 (PART 16 OFF) --><bounds x="1586.5" y="833" width="50" height="78"/></element>
+		<element ref="mute_up" inputtag="CPC_SEG11" inputmask="0x04"><!-- MUTE UP 16 (PART 16 ON) --><bounds x="1588.5" y="756" width="46" height="77"/></element>
+		<element ref="mute_down" inputtag="CPC_SEG11" inputmask="0x08"><!-- MUTE DOWN 16 (PART 16 OFF) --><bounds x="1588.5" y="833" width="46" height="78"/></element>
 
 		<element ref="vline"><bounds x="363.4" y="765.7" width="3" height="14"/></element>
 		<element ref="vline"><bounds x="363.4" y="892.1" width="3" height="14"/></element>
