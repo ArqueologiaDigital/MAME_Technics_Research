@@ -3,10 +3,6 @@
   -5.2,
   10.0
  ],
- "right_block.136.set_text": [
-  4.5,
-  -2.0
- ],
  "right_block.174.panel_text": [
   -29.0,
   10.3
@@ -910,5 +906,9 @@
  "right_block.193.hh10": [
   0.0,
   16.0
+ ],
+ "right_block.136.set_2_text": [
+  4.5,
+  -2.0
  ]
 }

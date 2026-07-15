@@ -251,8 +251,8 @@ two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke
 # the silver disc. KN5000 dimensions (27px finger / 91px wheel).
 elem("tempo_finger", f'<image><data><![CDATA[<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#6e6e76" stroke="{STROKE}" stroke-width="1"/></svg>]]></data></image>')
 sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
-two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#4a5c5e" stroke="{STROKE}" stroke-width="2"/>',
-                                f'<circle cx="80" cy="80" r="77" fill="{PANEL2}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="30" fill="#33454a" stroke="{STROKE}" stroke-width="2"/>')
+two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="24" fill="#4a5c5e" stroke="{STROKE}" stroke-width="2"/>',
+                                f'<circle cx="80" cy="80" r="77" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="24" fill="#33454a" stroke="{STROKE}" stroke-width="2"/>')
 # reused KN5000 MSP performance-pad buttons (same shape on KN7000)
 two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
 two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
@@ -572,7 +572,7 @@ RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8,name=PANEL_LED.get
        # PANEL MEMORY SET : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG13 0x40 (ev2011 --
        # fits the ev2010 recall / ev2011 SET / ev2012 NEXT BANK / ev2013 BANK VIEW pattern; a store test
        # was inconclusive, maybe blocked by DATA PROTECTION). Transparent clickable over the dial centre.
-       P("inv_rect",639,342,42,42,tag="SEG13",mask="0x40"), L("SET",638,354,44,12)]
+       P("inv_rect",639,342,42,42,tag="SEG13",mask="0x40"), L("SET",638,354,44,12,'<color red="0" green="0" blue="0"/>')]
 # PANEL MEMORY = an 8-way pie-slice dial (center 660,363) with a central SET. Each numbered slice
 # recalls a registration -- bank A ev2010 arg-mid = PM number - 1 (empirically confirmed: pressing
 # each opens "PMEM x-N"). Draw the number labels (r=88) + a clickable round button per slice (r=62).
