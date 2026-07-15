@@ -6,7 +6,7 @@ import io, math, os, re
 
 PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
 LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
-SILVER="#c6c6ca"; SILVER_D="#a9a9b0"   # TEMPO/PROGRAM wheel (metallic silver) + inner bevel
+SILVER="#a3a3a9"; SILVER_D="#91919b"   # TEMPO/PROGRAM wheel body + inner bevel (darkened toward the finger #6e6e76)
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
 # PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
@@ -208,8 +208,8 @@ elem("inv_rect",'<rect><color red="0" green="0" blue="0" alpha="0"/></rect>')
 elem("fader_rail",'<rect><color red="0.13" green="0.13" blue="0.14"/></rect>')
 elem("slider_knob",f'<rect><bounds x="0" y="0" width="30" height="18"/><color red="0.34" green="0.34" blue="0.37"/></rect><rect><bounds x="2" y="8" width="26" height="2.5"/><color red="0.9" green="0.9" blue="0.92"/></rect>')
 # The TEMPO/PROGRAM wheel is a metallic SILVER disc (with a subtle darker inner bevel).
-two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#9a9aa0"/>',
-                         f'<circle cx="50" cy="50" r="48" fill="{SILVER_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#9a9aa0"/>')
+two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#828289"/>',
+                         f'<circle cx="50" cy="50" r="48" fill="{SILVER_D}" stroke="{STROKE}" stroke-width="2"/><circle cx="50" cy="50" r="37" fill="{SILVER_D}" stroke="#828289"/>')
 # tempo_finger: the wheel's finger, split out of the knob graphic so the layout <script> (add_rotary_knob)
 # can orbit it around the knob centre -- it moves in a circle as the wheel is turned. Darker so it reads on
 # the silver disc. KN5000 dimensions (27px finger / 91px wheel).
@@ -852,3 +852,21 @@ _lay = re.sub(r'<element ([^>]*\binputtag="(CP[LCR]_SEG\d+)" inputmask="(0x[0-9a
 open(_LAY_PATH, "w").write(_lay)
 print(f"ANNOTATED {_ann[0]} LED elements with purpose comments ({_ann[1]} placed LEDs had no known purpose)")
 print(f"ANNOTATED {_btn[0]} BUTTON elements from the driver + {_btn[1]} from layout data (driver cell unnamed); {_btn[2]} unknown")
+
+# --- Sync the TEMPO/PROGRAM click-area + finger placeholder to the (possibly nudged) wheel graphic.
+#     add_rotary_knob orbits the finger around the tempo_click centre AND hit-tests the drag against it,
+#     so tempo_click MUST coincide with the visible tempo_knob wheel. Felipe's Inkscape nudges move the
+#     wheel but not the SVG-invisible click area, which would put the rotation centre off the wheel; so
+#     after all nudging/annotation, re-place tempo_click (and the finger's static fallback) onto the
+#     wheel's FINAL bounds. Runs last so it reads the wheel's post-nudge position.
+_lay = open(_LAY_PATH).read()
+_km = re.search(r'ref="tempo_knob"><bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"', _lay)
+if _km:
+    _kx, _ky, _kw, _kh = map(float, _km.groups())
+    _lay = re.sub(r'(id="tempo_click" ref="inv_rect"><bounds )x="[-\d.]+" y="[-\d.]+" width="[-\d.]+" height="[-\d.]+"',
+                  rf'\g<1>x="{_kx:g}" y="{_ky:g}" width="{_kw:g}" height="{_kh:g}"', _lay)
+    _fx, _fy = _kx + _kw / 2 - 16, _ky + _kh / 2 - 16   # centred placeholder (the live callback orbits it)
+    _lay = re.sub(r'(id="tempo_finger" ref="tempo_finger"><bounds )x="[-\d.]+" y="[-\d.]+" width="[-\d.]+" height="[-\d.]+"',
+                  rf'\g<1>x="{_fx:.1f}" y="{_fy:.1f}" width="32" height="32"', _lay)
+    open(_LAY_PATH, "w").write(_lay)
+    print(f"SYNCED tempo_click/finger to wheel bounds ({_kx:g},{_ky:g},{_kw:g},{_kh:g})")

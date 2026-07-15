@@ -54,6 +54,7 @@ kn7000_cpanel_device::kn7000_cpanel_device(const machine_config &mconfig, const 
 	m_dial_prev(0),
 	m_dial_synced(false),
 	m_tempoknob_prev(0),
+	m_tempoknob_frac(0),
 	m_tempoknob_synced(false),
 	m_tempoknob_field(nullptr),
 	m_atn_cb(*this),
@@ -87,6 +88,7 @@ void kn7000_cpanel_device::device_start()
 	save_item(NAME(m_dial_prev));
 	save_item(NAME(m_dial_synced));
 	save_item(NAME(m_tempoknob_prev));
+	save_item(NAME(m_tempoknob_frac));
 	save_item(NAME(m_tempoknob_synced));
 }
 
@@ -516,11 +518,12 @@ TIMER_CALLBACK_MEMBER(kn7000_cpanel_device::panel_scan)
 	// 0x484AD6A0 latches the wire byte (0x5006BE9F/0x5006BEA8), but the tempo routine ADDS it as a SIGNED
 	// 8-bit step every frame -- tempo += (int8_t)wire -- it does NOT diff an absolute position (verified:
 	// nothing ever reads those latches, and the displayed BPM tracks the running sum). So we forward a
-	// clean SIGNED +/-TEMPO_STEP per scan, slewing m_tempoknob_prev toward the adjuster one detent at a
-	// time: one turn direction sends +TEMPO_STEP, the other -TEMPO_STEP, and the firmware accumulates them.
+	// clean SIGNED step, slewing m_tempoknob_prev toward the adjuster one detent per scan.
 	//   - Sending a growing ABSOLUTE position made the firmware keep adding large positive values -> the
 	//     tempo raced to the 300-BPM rail regardless of turn direction (the "only up, too fast" bug).
-	// First scan records the position silently (panel-handshake guard).
+	//   - The firmware's tempo accumulator IGNORES a +/-1 step and moves ~2 BPM for a +/-2 step (a hard
+	//     threshold, nothing in between), so for ~1 BPM per detent we accumulate detents and emit a +/-2
+	//     step every SECOND one (m_tempoknob_frac). First scan records the position silently.
 	{
 		// Read the RAW adjuster setting (field live value), NOT m_tempoknob.read_safe() -- the analog PORT
 		// read runs the value through interpolation/sensitivity, whose per-scan wobble injects spurious
@@ -545,12 +548,14 @@ TIMER_CALLBACK_MEMBER(kn7000_cpanel_device::panel_scan)
 			else if (delta < -50) delta += 101;
 			const int step = (delta > 0) ? 1 : -1;                          // one detent toward the adjuster
 			m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);
-			// The firmware's tempo accumulator barely moves for a +/-1 step (its accel curve near-ignores
-			// tiny steps), so one wheel revolution would shift the BPM by ~1. Send a larger fixed magnitude
-			// per detent for a usable feel; TEMPO_STEP is the tuning knob (bigger = more BPM per revolution).
-			static constexpr int TEMPO_STEP = 2;
-			const uint8_t pkt[2] = { 0x17, uint8_t(int8_t(step * TEMPO_STEP)) };   // signed; firmware ADDS it
-			panel_queue(pkt, 2);
+			m_tempoknob_frac += step;                                       // accumulate detents
+			if (m_tempoknob_frac >= 2 || m_tempoknob_frac <= -2)            // every 2nd detent -> one +/-2 step
+			{
+				const int8_t wire = (m_tempoknob_frac > 0) ? 2 : -2;        // ~1 BPM per detent (2 BPM / 2 detents)
+				m_tempoknob_frac = int8_t(m_tempoknob_frac - wire);
+				const uint8_t pkt[2] = { 0x17, uint8_t(wire) };            // signed; firmware ADDS it to the tempo
+				panel_queue(pkt, 2);
+			}
 		}
 	}
 

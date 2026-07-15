@@ -77,6 +77,7 @@ private:
 	uint8_t m_dial_prev;                   // last IPT_DIAL position delivered for the DATA dial (wire 0x10)
 	bool    m_dial_synced;                 // false until the first scan records the dial (no startup frame)
 	uint8_t m_tempoknob_prev;              // last adjuster value seen (for the signed per-scan delta, wire 0x17)
+	int8_t  m_tempoknob_frac;              // detent accumulator: emit a +/-2 tempo step every 2nd detent (~1 BPM each)
 	bool    m_tempoknob_synced;            // false until the first scan records the knob (no startup frame)
 	ioport_field *m_tempoknob_field;       // the TEMPO_KNOB adjuster field (read RAW, bypassing analog interp)
 
