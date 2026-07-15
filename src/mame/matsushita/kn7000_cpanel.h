@@ -76,9 +76,9 @@ private:
 	bool    m_vol_apcseq_synced;           // false until the first scan records the pot (no startup frame)
 	uint8_t m_dial_prev;                   // last IPT_DIAL position delivered for the DATA dial (wire 0x10)
 	bool    m_dial_synced;                 // false until the first scan records the dial (no startup frame)
-	uint8_t m_tempoknob_pos;               // wrapping 8-bit encoder position sent to firmware (wire 0x17)
-	uint8_t m_tempoknob_prev;              // adjuster value slewed toward (for the +/-1-per-scan step limiter)
+	uint8_t m_tempoknob_prev;              // last adjuster value seen (for the signed per-scan delta, wire 0x17)
 	bool    m_tempoknob_synced;            // false until the first scan records the knob (no startup frame)
+	ioport_field *m_tempoknob_field;       // the TEMPO_KNOB adjuster field (read RAW, bypassing analog interp)
 
 	// Callbacks to the main CPU.
 	devcb_write_line m_atn_cb;

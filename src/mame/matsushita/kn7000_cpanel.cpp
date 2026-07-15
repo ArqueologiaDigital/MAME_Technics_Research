@@ -53,9 +53,9 @@ kn7000_cpanel_device::kn7000_cpanel_device(const machine_config &mconfig, const 
 	m_vol_apcseq_synced(false),
 	m_dial_prev(0),
 	m_dial_synced(false),
-	m_tempoknob_pos(0),
 	m_tempoknob_prev(0),
 	m_tempoknob_synced(false),
+	m_tempoknob_field(nullptr),
 	m_atn_cb(*this),
 	m_rxd_cb(*this),
 	m_phys(*this, finder_base::DUMMY_TAG, 0U),
@@ -86,7 +86,6 @@ void kn7000_cpanel_device::device_start()
 	save_item(NAME(m_vol_apcseq_synced));
 	save_item(NAME(m_dial_prev));
 	save_item(NAME(m_dial_synced));
-	save_item(NAME(m_tempoknob_pos));
 	save_item(NAME(m_tempoknob_prev));
 	save_item(NAME(m_tempoknob_synced));
 }
@@ -513,16 +512,24 @@ TIMER_CALLBACK_MEMBER(kn7000_cpanel_device::panel_scan)
 		}
 	}
 
-	// Front-panel TEMPO/PROGRAM knob -> CP-protocol RELATIVE encoder [0x17, POSITION]. Its main-CPU handler
-	// 0x484AD6A0 latches the raw wire byte verbatim (snapshot 0x5006BE9F + control-record 0x5006BEA8; NO
-	// remap, NO scale, plain uint8), and a downstream tempo routine DIFFS successive positions -- bigger
-	// diff = faster/accelerated change. A mouse drag on the layout knob moves the TEMPO_KNOB adjuster; we
-	// convert its motion into the encoder position, but STEP AT MOST +/-1 PER SCAN (slewing toward the
-	// adjuster target) so the firmware stays in its linear region -- a large single diff trips the velocity
-	// curve and slams the tempo to a rail. First scan records the position silently (same panel-handshake
-	// guard as the sliders/dial: emitting before the firmware services the panel wedges all later delivery).
+	// Front-panel TEMPO/PROGRAM knob -> CP-protocol RELATIVE encoder [0x17, STEP]. The main-CPU handler
+	// 0x484AD6A0 latches the wire byte (0x5006BE9F/0x5006BEA8), but the tempo routine ADDS it as a SIGNED
+	// 8-bit step every frame -- tempo += (int8_t)wire -- it does NOT diff an absolute position (verified:
+	// nothing ever reads those latches, and the displayed BPM tracks the running sum). So we forward a
+	// clean SIGNED +/-TEMPO_STEP per scan, slewing m_tempoknob_prev toward the adjuster one detent at a
+	// time: one turn direction sends +TEMPO_STEP, the other -TEMPO_STEP, and the firmware accumulates them.
+	//   - Sending a growing ABSOLUTE position made the firmware keep adding large positive values -> the
+	//     tempo raced to the 300-BPM rail regardless of turn direction (the "only up, too fast" bug).
+	// First scan records the position silently (panel-handshake guard).
 	{
-		const uint8_t adj = m_tempoknob.read_safe(0);
+		// Read the RAW adjuster setting (field live value), NOT m_tempoknob.read_safe() -- the analog PORT
+		// read runs the value through interpolation/sensitivity, whose per-scan wobble injects spurious
+		// mixed-sign steps that cancel the relative-encoder motion (the wheel felt dead/erratic). The field
+		// live value is the exact 0..100 the layout drag wrote. Locate the field once, lazily.
+		if (m_tempoknob_field == nullptr && m_tempoknob.found())
+			for (ioport_field &f : m_tempoknob->fields())
+				if (f.type() == IPT_ADJUSTER) { m_tempoknob_field = &f; break; }
+		const uint8_t adj = m_tempoknob_field ? uint8_t(m_tempoknob_field->live().value) : m_tempoknob.read_safe(0);
 		if (!m_tempoknob_synced)
 		{
 			m_tempoknob_prev = adj;
@@ -532,14 +539,17 @@ TIMER_CALLBACK_MEMBER(kn7000_cpanel_device::panel_scan)
 		{
 			// The layout knob is an INFINITE rotary encoder: a full-circle drag wraps the 0..100 adjuster
 			// past its ends. Take the direction the SHORT way round (a jump of >50 = a wrap), so rotating
-			// through the 100->0 (or 0->100) seam keeps stepping instead of slamming 100 steps the other way.
+			// through the 100->0 (or 0->100) seam steps the right way instead of reversing.
 			int delta = int(adj) - int(m_tempoknob_prev);
 			if (delta > 50) delta -= 101;
 			else if (delta < -50) delta += 101;
-			const int step = (delta > 0) ? 1 : -1;
-			m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);   // slew one step, wrap-aware
-			m_tempoknob_pos  = uint8_t(m_tempoknob_pos + step);    // wrapping 8-bit encoder position -> firmware
-			const uint8_t pkt[2] = { 0x17, m_tempoknob_pos };
+			const int step = (delta > 0) ? 1 : -1;                          // one detent toward the adjuster
+			m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);
+			// The firmware's tempo accumulator barely moves for a +/-1 step (its accel curve near-ignores
+			// tiny steps), so one wheel revolution would shift the BPM by ~1. Send a larger fixed magnitude
+			// per detent for a usable feel; TEMPO_STEP is the tuning knob (bigger = more BPM per revolution).
+			static constexpr int TEMPO_STEP = 2;
+			const uint8_t pkt[2] = { 0x17, uint8_t(int8_t(step * TEMPO_STEP)) };   // signed; firmware ADDS it
 			panel_queue(pkt, 2);
 		}
 	}
