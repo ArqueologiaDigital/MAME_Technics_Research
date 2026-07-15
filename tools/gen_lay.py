@@ -213,9 +213,9 @@ two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
     sb=seg2 or seg; fill=fill or BTN; fd=fd or BTN_D
-    GAP=4; hw=(w-GAP)//2                 # fixed centre separator -> identical thickness on every split pill
-    nl=_hhalf(hw,h,'l',fill,fd,gap=GAP); nr=_hhalf(hw,h,'r',fill,fd)   # left half absorbs+fills the gap
-    r=[P(nl,x,y,hw+GAP,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb)]
+    GAP=4; hw=(w-GAP)//2; lw=w-hw        # left half spans EXACTLY to the right half (fills the whole centre
+    nl=_hhalf(hw,h,'l',fill,fd,gap=lw-hw); nr=_hhalf(hw,h,'r',fill,fd)   # gap -> no 1px seam from //2 rounding)
+    r=[P(nl,x,y,lw,h,tag=seg,mask=ma),P(nr,x+lw,y,hw,h,tag=sb,mask=mb)]
     if la: r.append(L(la,x+hw//2-14,y+h//2-6,28,12))
     if lb: r.append(L(lb,x+w-hw//2-14,y+h//2-6,28,12))
     return r

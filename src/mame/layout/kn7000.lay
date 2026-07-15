@@ -210,8 +210,8 @@
 	<element name="variation_text"><text string="VARIATION"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="fade_text"><text string="FADE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="hh1">
-		<image state="0"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#262628"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#262628"/></svg>]]></data></image>
 	</element>
 	<element name="hh2">
 		<image state="0"><data><![CDATA[<svg width="50" height="28"><path transform="translate(50,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/></svg>]]></data></image>
@@ -223,8 +223,8 @@
 	<element name="synchro_and_break_text"><text string="SYNCHRO &amp; BREAK"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="intro_and_ending_text"><text string="INTRO &amp; ENDING"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="hh3">
-		<image state="0"><data><![CDATA[<svg width="54" height="50"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="48.50" fill="#54545c"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="54" height="50"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="48.50" fill="#262628"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="50"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="48.50" fill="#54545c"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="50"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="48.50" fill="#262628"/></svg>]]></data></image>
 	</element>
 	<element name="hh4">
 		<image state="0"><data><![CDATA[<svg width="50" height="50"><path transform="translate(50,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/></svg>]]></data></image>
@@ -232,8 +232,8 @@
 	</element>
 	<element name="fill_in_text"><text string="FILL IN"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="hh5">
-		<image state="0"><data><![CDATA[<svg width="54" height="50"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="48.50" fill="#54545c"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="54" height="50"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="48.50" fill="#262628"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="50"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="48.50" fill="#54545c"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="50"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="48.50" fill="#262628"/></svg>]]></data></image>
 	</element>
 	<element name="hh6">
 		<image state="0"><data><![CDATA[<svg width="50" height="50"><path transform="translate(50,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 25.00,0.75 A 24.25 24.25 0 0 0 25.00,49.25 L 49.25,49.25 Z"/></svg>]]></data></image>
@@ -290,8 +290,8 @@
 	<element name="tempo_program_text"><text string="TEMPO/PROGRAM"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="transpose_text"><text string="TRANSPOSE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="hh7">
-		<image state="0"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#262628"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#262628"/></svg>]]></data></image>
 	</element>
 	<element name="hh8">
 		<image state="0"><data><![CDATA[<svg width="50" height="28"><path transform="translate(50,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/></svg>]]></data></image>
@@ -301,8 +301,8 @@
 	<element name="plus_text"><text string="+"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="r1_r2_octave_text"><text string="R1/R2 OCTAVE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
 	<element name="hh9">
-		<image state="0"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="54" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="4.75" height="26.50" fill="#262628"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#54545c"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="55" height="28"><path stroke="#000" stroke-width="1.5" fill="#262628" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/><rect x="49.25" y="0.75" width="5.75" height="26.50" fill="#262628"/></svg>]]></data></image>
 	</element>
 	<element name="hh10">
 		<image state="0"><data><![CDATA[<svg width="50" height="28"><path transform="translate(50,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#54545c" d="M 49.25,0.75 L 14.00,0.75 A 13.25 13.25 0 0 0 14.00,27.25 L 49.25,27.25 Z"/></svg>]]></data></image>
@@ -608,7 +608,7 @@
 		<element ref="1_text"><bounds x="384.7" y="394.5" width="10" height="8"/></element>
 
 		<element ref="fade_text"><bounds x="622.8" y="322.0" width="105" height="9"/></element>
-		<element ref="hh1" inputtag="CPL_SEG3" inputmask="0x20"><!-- FADE IN --><bounds x="625" y="355" width="54" height="28"/></element>
+		<element ref="hh1" inputtag="CPL_SEG3" inputmask="0x20"><!-- FADE IN --><bounds x="625" y="355" width="55" height="28"/></element>
 		<element ref="hh2" inputtag="CPL_SEG3" inputmask="0x08"><!-- FADE OUT --><bounds x="680" y="355" width="50" height="28"/></element>
 		<element ref="in_text"><bounds x="634.8" y="326.3" width="28" height="12"/></element>
 		<element ref="out_text"><bounds x="691.6" y="326.7" width="28" height="12"/></element>
@@ -652,7 +652,7 @@
 		<element ref="4_text"><bounds x="567.2" y="394.7" width="10" height="8"/></element>
 
 		<element ref="fill_in_text"><bounds x="625.0" y="388.0" width="105" height="9"/></element>
-		<element ref="hh5" inputtag="CPL_SEG3" inputmask="0x10"><!-- FILL IN 1 --><bounds x="625" y="408" width="54" height="50"/></element>
+		<element ref="hh5" inputtag="CPL_SEG3" inputmask="0x10"><!-- FILL IN 1 --><bounds x="625" y="408" width="55" height="50"/></element>
 		<element ref="hh6" inputtag="CPL_SEG3" inputmask="0x04"><!-- FILL IN 2 --><bounds x="680" y="408" width="50" height="50"/></element>
 		<element ref="1_text"><bounds x="642.7" y="393.3" width="28" height="12"/></element>
 		<element ref="2_text"><bounds x="701.1" y="393.6" width="28" height="12"/></element>
@@ -660,7 +660,7 @@
 		<element ref="red_led" name="cpl_led59"><!-- FILL IN 2 --><bounds x="699.4" y="395.0" width="8" height="8"/></element>
 
 		<element ref="intro_and_ending_text"><bounds x="739.7" y="384.7" width="105" height="9"/></element>
-		<element ref="hh3" inputtag="CPL_SEG3" inputmask="0x01"><!-- INTRO & ENDING 1 --><bounds x="740" y="408" width="54" height="50"/></element>
+		<element ref="hh3" inputtag="CPL_SEG3" inputmask="0x01"><!-- INTRO & ENDING 1 --><bounds x="740" y="408" width="55" height="50"/></element>
 		<element ref="hh4" inputtag="CPL_SEG0" inputmask="0x40"><!-- INTRO & ENDING 2 --><bounds x="795" y="408" width="50" height="50"/></element>
 		<element ref="1_text"><bounds x="758.6" y="393.2" width="28" height="12"/></element>
 		<element ref="2_text"><bounds x="816.5" y="393.3" width="28" height="12"/></element>
@@ -895,7 +895,7 @@
 		<element ref="transpose_text"><bounds x="211" y="321" width="105" height="9"/></element>
 		<element ref="red_led" name="cpr_led96"><!-- TRANSPOSE R1 (-) --><bounds x="233" y="339" width="8" height="8"/></element>
 		<element ref="red_led" name="cpr_led39"><!-- TRANSPOSE R1 (+) --><bounds x="287" y="339" width="8" height="8"/></element>
-		<element ref="hh7" inputtag="CPR_SEG4" inputmask="0x01"><!-- TRANSPOSE R1 (-) --><bounds x="213" y="354" width="54" height="28"/></element>
+		<element ref="hh7" inputtag="CPR_SEG4" inputmask="0x01"><!-- TRANSPOSE R1 (-) --><bounds x="213" y="354" width="55" height="28"/></element>
 		<element ref="hh8" inputtag="CPR_SEG3" inputmask="0x01"><!-- TRANSPOSE R1 (+) --><bounds x="268" y="354" width="50" height="28"/></element>
 		<element ref="minus_text"><bounds x="223" y="325" width="28" height="12"/></element>
 		<element ref="plus_text"><bounds x="279" y="325" width="28" height="12"/></element>
@@ -930,7 +930,7 @@
 
 		<element ref="red_led" name="cpr_led38"><!-- TRANSPOSE R2 (-) --><bounds x="233" y="404" width="8" height="8"/></element>
 		<element ref="red_led" name="cpr_led37"><!-- TRANSPOSE R2 (+) --><bounds x="287" y="404" width="8" height="8"/></element>
-		<element ref="hh9" inputtag="CPR_SEG7" inputmask="0x02"><!-- TRANSPOSE R2 (-) --><bounds x="213" y="419" width="54" height="28"/></element>
+		<element ref="hh9" inputtag="CPR_SEG7" inputmask="0x02"><!-- TRANSPOSE R2 (-) --><bounds x="213" y="419" width="55" height="28"/></element>
 		<element ref="hh10" inputtag="CPR_SEG6" inputmask="0x02"><!-- TRANSPOSE R2 (+) --><bounds x="268" y="419" width="50" height="28"/></element>
 
 		<element ref="red_led" name="cpr_led65"><!-- CONDUCTOR LEFT --><bounds x="367.7" y="386.1" width="8" height="8"/></element>
