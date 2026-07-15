@@ -5,8 +5,12 @@
 import io, math, os, re
 
 PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
-LBTN="#626268"; LBTN_D="#2c2c2e"; MSP="#70747a"; MSP_D="#3c4044"; STROKE="#000"
-SILVER="#a3a3a9"; SILVER_D="#91919b"   # TEMPO/PROGRAM wheel body + inner bevel (darkened toward the finger #6e6e76)
+LBTN="#626268"; LBTN_D="#2c2c2e"; STROKE="#000"
+# Unified "silver" (Felipe): the shared metallic-grey used by the TEMPO/PROGRAM wheel body, MSP pads, the
+# pill-shaped buttons (not the orange/START-STOP ones), the PANEL MEMORY buttons + the encircled buttons.
+# Made a bit darker than the old wheel body #a3a3a9, still lighter than the grey buttons BTN #54545c.
+SILVER="#909097"; SILVER_D="#7a7a82"   # normal / pressed(+bevel)
+MSP=SILVER; MSP_D=SILVER_D             # MSP performance pads share the silver
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
 # PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
@@ -134,7 +138,7 @@ def label(s,color=TXT):
 def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
     # Match the mockup's round-button size: the mockup draws them ~37px dia vs the layout's 32px
     # (measured over the RHYTHM GROUP, centres already aligned). Grow round_btn 32->37, centre kept.
-    if ref in ("round_btn","round_btn2","metal_btn") and w==32 and h==32:
+    if ref in ("round_btn","round_btn2","metal_btn","round_btn_silver") and w==32 and h==32:
         x-=2; y-=2; w=37; h=37
     fl=[]
     if flip: fl.append('flipx="yes"')
@@ -170,11 +174,15 @@ two("metal_btn",29,29,
     f'<defs>{_MGRAD}</defs><circle cx="14.5" cy="14.5" r="14" fill="#2c2c32" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#4a4a50" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4.4" ry="2.5" fill="#ffffff" opacity="0.4"/>',
     f'<defs>{_MGRADP}</defs><circle cx="14.5" cy="14.5" r="14" fill="#1e1e23" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#34343a" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4" ry="2.2" fill="#ffffff" opacity="0.26"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
+# SILVER button variants: PANEL MEMORY slice buttons (round_btn_silver) + the encircled CUSTOM PANEL /
+# FAVORITES / CUSTOMIZE buttons (round_btn_big_silver). Same shapes as round_btn / round_btn_big, silver fill.
+two("round_btn_silver",29,29,f'<circle stroke="{STROKE}" fill="{SILVER}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{SILVER_D}" cx="14.5" cy="14.5" r="14"/>')
+two("round_btn_big_silver",42,42,f'<circle stroke="{STROKE}" fill="{SILVER}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{SILVER_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
 # pill_wide (TAP TEMPO / SYNCHRO & BREAK) + pill_greycyan (START/STOP): drawn at their PLACEMENT size
 # (105x28 / 105x50) so their ends are perfectly round and the stroke matches every other pill (was a
 # 60x22 SVG scaled up ~1.75x, giving an oval outline with a heavy contour).
-two("pill_wide",105,28,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>')
+two("pill_wide",105,28,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>')
 two("pill_orange",60,22,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#b0561a" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#6f360c" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>')
 two("pill_greycyan",105,50,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#4a5c5e" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#33454a" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>')
 two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#98202e" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#641a28" cx="14.5" cy="14.5" r="14"/>')
@@ -206,8 +214,8 @@ def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) ->
 # vertical (CONTRAST up/down): top half rounded-top + flat-bottom, bottom half mirrored. The SVG is sized
 # 50x78 to match the placement (each half of the 50x155 pill), so its 1.5px stroke renders the SAME weight
 # as every other button (a smaller SVG scaled up here made the contour look too thick).
-two("half_t",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
-two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
+two("half_t",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
+two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # ---- SD-card transport buttons (48x30, icon baked in) ----
 two("sd_stop",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
 two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
@@ -215,7 +223,7 @@ two("sd_skipb",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x
 two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
-    sb=seg2 or seg; fill=fill or BTN; fd=fd or BTN_D
+    sb=seg2 or seg; fill=fill or SILVER; fd=fd or SILVER_D   # split pills are SILVER (Felipe)
     GAP=4; hw=(w-GAP)//2; lw=w-hw        # left half spans EXACTLY to the right half (fills the whole centre
     nl=_hhalf(hw,h,'l',fill,fd,gap=lw-hw); nr=_hhalf(hw,h,'r',fill,fd)   # gap -> no 1px seam from //2 rounding)
     r=[P(nl,x,y,lw,h,tag=seg,mask=ma),P(nr,x+lw,y,hw,h,tag=sb,mask=mb)]
@@ -230,8 +238,8 @@ def pair_v(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
     if lb: r.append(L(lb,x+w//2-14,y+3*h//4-6,28,12))
     return r
 # page up/down = two halves of a tall pill (rounded outer end, flat inner end)
-two("page_up",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
-two("page_dn",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
+two("page_up",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
+two("page_dn",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # thin filled line (scaled to bounds) for bookends/brackets
 elem("hline",f'<image><data><![CDATA[<svg width="100" height="3"><rect y="1" width="100" height="1.4" fill="#9a9a9c"/></svg>]]></data></image>')
 elem("vline",f'<image><data><![CDATA[<svg width="3" height="100"><rect x="1" width="1.4" height="100" fill="#9a9a9c"/></svg>]]></data></image>')
@@ -241,7 +249,7 @@ two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x
 # around both, not one per button). Drawn at placement size so the ends stay round.
 two("pill_ring_pair",124,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="122.5" height="38.5" rx="19.25"/>')
 two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
-elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{STROKE}" stroke-width="1.5"/></svg>]]></data></image>')
+elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="none" stroke="{SILVER}" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
 # DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
 two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="21" cy="21" r="16"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="21" cy="21" r="16"/>')
 # LCD soft key: rect + inner vertical divider
@@ -271,13 +279,15 @@ two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40
 two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
 two("msp_middle",61,40,f'<path stroke="{STROKE}" fill="{MSP}" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/>')
 elem("music_note",'<image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image>')
-elem("screen_frame",f'<image><data><![CDATA[<svg width="1404" height="581"><rect x="1" y="1" width="1402" height="579" fill="#050505" stroke="{STROKE}" stroke-width="2"/></svg>]]></data></image>')
+# LCD bezel: black border + a thin SILVER frame around it (Felipe). Canvas grown 5px each side; the black
+# rect stays at the same placement (inset 6 -> lands at the old 299,105) so the display alignment is unchanged.
+elem("screen_frame",f'<image><data><![CDATA[<svg width="1414" height="591"><rect x="1.5" y="1.5" width="1411" height="588" fill="none" stroke="{SILVER}" stroke-width="3"/><rect x="6" y="6" width="1402" height="579" fill="#050505" stroke="{STROKE}" stroke-width="2"/></svg>]]></data></image>')
 panel_bg("bg_top",2000,997,PANEL); panel_bg("bg_left",1000,503,PANEL); panel_bg("bg_right",1000,503,PANEL)
 
 # =================== SCREEN BLOCK (top region, pixel-perfect) ===============
 # Measured (lay coords): LCD frame x298-1702,y104-685; divider y997.
 S=['\t<group name="screen_block">','\t\t<bounds x="0" y="0" width="2000" height="997"/>',
-   P("bg_top",0,0,2000,997), P("screen_frame",298,104,1404,581),
+   P("bg_top",0,0,2000,997), P("screen_frame",293,99,1414,591),
    '\t\t<screen index="0"><bounds x="360" y="154" width="1280" height="480"/></screen>']
 # LCD-flanking soft-keys: 5 rows down each side of the display, listed top->bottom as
 # (left-SEG, left-mask, right-SEG, right-mask). These are CONTEXT-DEPENDENT keys -- the real unit
@@ -322,8 +332,8 @@ for i in range(16):
     x=round(378+i*80.4); seg,onm,offm=MUTES[i]
     ut,um=(None,None) if seg in FN_SEGS else (seg,f"0x{onm:02x}")
     dt,dm=(None,None) if seg in FN_SEGS else (seg,f"0x{offm:02x}")
-    S.append(P("mute_up",x,756,55,77,tag=ut,mask=um))
-    S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
+    S.append(P("mute_up",x+2.5,756,50,77,tag=ut,mask=um))
+    S.append(P("mute_down",x+2.5,833,50,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
 # PAGE up/down = CPC_SEG11 0x10 (up) / 0x20 (down) -- the physical scan matrix (driver ioport names, commit
 # 76fa4eb): SEG0B is the right-of-screen column PAGE UP(0x10) / PAGE DOWN(0x20) / DISPLAY HOLD(0x40) /
@@ -608,17 +618,17 @@ for _i,_num in enumerate(PM_ORDER):
     RB.append(L(str(_num),_lx-4,_ly-4,8,8,TXTH))
     _bx=660+int(58*_m.cos(_a)); _by=363+int(58*_m.sin(_a))
     _tg,_mk=PM_BY_NUM[_num]
-    RB.append(P("round_btn",_bx-16,_by-16,32,32,tag=_tg,mask=_mk))
+    RB.append(P("round_btn_silver",_bx-16,_by-16,32,32,tag=_tg,mask=_mk))   # PANEL MEMORY buttons = silver (Felipe)
     _ex=660+int(80*_m.cos(_a)); _ey=363+int(80*_m.sin(_a))
     RB.append(P("green_led",_ex-4,_ey-4,8,8,name=PANEL_LED.get((_tg,_mk))))
 RB.append(P("big_ring",809,327,130,130))
 # CUSTOM PANEL = SEG0D 0x40 (CPR_SEG1 SW6, ev2016) -- physical position confirmed by Felipe 2026-07-14
 # (the driver bit that panel-driver-fixlist.md had flagged "Fn 2016 unused"). LED = cpr_led1.
-RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8,name=PANEL_LED.get(("SEG0D","0x40"))), P("round_btn_big",819,353,42,42,tag="SEG0D",mask="0x40")]
+RB += [L("CUSTOM",804,318,52,8), L("PANEL",806,327,48,8), P("green_led",800,336,8,8,name=PANEL_LED.get(("SEG0D","0x40"))), P("round_btn_big_silver",819,353,42,42,tag="SEG0D",mask="0x40")]
 # CUSTOMIZE = SEG0C 0x40 (ev2040 app-open CUSTOMIZE MENU); FAVORITES = SEG0E 0x40 (ev20AE, FAVORITES
 # screen) -- both empirically confirmed.
-RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8,name=PANEL_LED.get(("SEG0C","0x40"))), P("round_btn_big",884,350,42,42,tag="SEG0C",mask="0x40")]
-RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name=PANEL_LED.get(("SEG0E","0x40"))), P("round_btn_big",852,407,42,42,tag="SEG0E",mask="0x40")]   # FAVORITES LED = cpr_led2 (Felipe 2026-07-14, live LED log reg0 bit2; supersedes cpr_led97). Placing it here also stops the completeness pass emitting a stray cpr_led2.
+RB += [L("CUSTOMIZE",895,330,60,8), P("green_led",946,340,8,8,name=PANEL_LED.get(("SEG0C","0x40"))), P("round_btn_big_silver",884,350,42,42,tag="SEG0C",mask="0x40")]
+RB += [L("FAVORITES",840,436,72,8), P("green_led",912,438,8,8,name=PANEL_LED.get(("SEG0E","0x40"))), P("round_btn_big_silver",852,407,42,42,tag="SEG0E",mask="0x40")]   # FAVORITES LED = cpr_led2 (Felipe 2026-07-14, live LED log reg0 bit2; supersedes cpr_led97). Placing it here also stops the completeness pass emitting a stray cpr_led2.
 # Draggable TEMPO/PROGRAM knob click-area -- appended LAST in right_block so it never shifts the indices
 # that layout_nudges.json references (a mid-group insert would invalidate every later nudge's ref-check).
 RB.append('\t\t<element id="tempo_click" ref="inv_rect"><bounds x="50" y="318" width="110" height="110"/></element>')
