@@ -162,9 +162,11 @@ elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M
 # horizontal (-/+ , in/out, 1/2): left half rounded-left + flat-right, right half mirrored.
 two("half_l",40,22,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
 two("half_r",40,22,f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>',f'<path transform="translate(40,0) scale(-1,1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 40,1 L 11,1 A 10 10 0 0 0 11,21 L 40,21 Z"/>')
-# vertical (CONTRAST up/down): top half rounded-top + flat-bottom, bottom half mirrored.
-two("half_t",22,40,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>')
-two("half_b",22,40,f'<path transform="translate(0,40) scale(1,-1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>',f'<path transform="translate(0,40) scale(1,-1)" stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 1,40 L 1,11 A 10 10 0 0 1 21,11 L 21,40 Z"/>')
+# vertical (CONTRAST up/down): top half rounded-top + flat-bottom, bottom half mirrored. The SVG is sized
+# 50x78 to match the placement (each half of the 50x155 pill), so its 1.5px stroke renders the SAME weight
+# as every other button (a smaller SVG scaled up here made the contour look too thick).
+two("half_t",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
+two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # ---- SD-card transport buttons (48x30, icon baked in) ----
 two("sd_stop",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
 two("sd_play",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
@@ -248,12 +250,10 @@ for yy,(ls,lm,rs,rm) in zip([205,294,383,472,561], LCD_SOFTKEYS):
 S += [L("OTHER",145,717,52,13), L("PART & FR",131,730,80,13), P("round_btn_big",150,748,42,42,tag="SEG05",mask="0x01"), P("red_led",196,752,8,8,name="cpl_led29"),   # OTHER PART & FR LED = cpl_led29 (Felipe's F3+F4 LED test 2026-07-14: OTHER PARTS/TG lights it)
       P("round_btn_big",150,852,42,42,tag="SEG05",mask="0x02"), L("HELP",149,838,44,13)]
 # CONTRAST tall pill (x282-332)
-# CONTRAST up/down: bits UNKNOWN, left UNBOUND. (The earlier SEG08 0x40/0x80 guess was proven WRONG by the
-# 2026-07-08 HELP-info sweep -- those are SOUND CONTROLLER MODE/RESET. CONTRAST has no HELP screen, so its
-# real bits are still unidentified.)
-# CONTRAST +/- : GUESS #2 (Felipe: guess #1 SEG16/17 was wrong). Use the OTHER complete remap pair
-# (ev1010,ev1011): + = SEG19 0x01 (ev1010), - = SEG1A 0x01 (ev1011). remap table 0x48589150.
-S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG19","0x01","0x01",282,756,50,155,"+","-",seg2="SEG1A") + [L("MUTE",342,825,42,13,TXTH),
+# CONTRAST +/- = CPC_SEG5 0x04 (up) / 0x08 (down) -- the physical scan matrix (driver ioport names, commit
+# 76fa4eb): SEG05 is the left-of-screen column OTHER PARTS(0x01) / HELP(0x02) / CONTRAST+(0x04) /
+# CONTRAST-(0x08) / MUTE1-2. (The old SEG16-1A guesses were the analog-pot addresses -- no button path.)
+S += [L("CONTRAST",247,730,120,13)] + pair_v("SEG05","0x04","0x08",282,756,50,155,"+","-") + [L("MUTE",342,825,42,13,TXTH),
       P("hline",344,818,32,3), P("vline",344,806,3,14), P("hline",344,843,32,3), P("vline",344,843,3,14)]
 # MUTE 1..16 -> PART 1..16 on/off pairs. up=part ON (unmute)=on_mask, down=part OFF (mute)=off_mask.
 # SOLVED 2026-07-07 by the emulator "press-count encoding" method (press bit N times -> its part's
@@ -278,11 +278,10 @@ for i in range(16):
     S.append(P("mute_up",x,756,55,77,tag=ut,mask=um))
     S.append(P("mute_down",x,833,55,78,tag=dt,mask=dm))
 # PAGE / DISPLAY HOLD / EXIT
-# PAGE up/down (CPC-board pair). BITS UNVERIFIED -- best-guess SEG08 0x01 (up) / 0x02 (down); no HELP
-# screen for PAGE. *** FLAG FOR REVIEW ***
-# PAGE up/down : GUESS #2 (Felipe: guess #1 SEG18/19 was wrong). Use the complete remap pair
-# (ev1004,ev1005): up = SEG16 0x01 (ev1005), down = SEG17 0x01 (ev1004). remap table 0x48589150.
-S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG16",mask="0x01"), P("page_dn",1680,834,50,77,tag="SEG17",mask="0x01"),
+# PAGE up/down = CPC_SEG11 0x10 (up) / 0x20 (down) -- the physical scan matrix (driver ioport names, commit
+# 76fa4eb): SEG0B is the right-of-screen column PAGE UP(0x10) / PAGE DOWN(0x20) / DISPLAY HOLD(0x40) /
+# EXIT(0x80). DISPLAY HOLD on this same column already works, confirming the column.
+S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG0B",mask="0x10"), P("page_dn",1680,834,50,77,tag="SEG0B",mask="0x20"),
       # bank A: DISPLAY HOLD = SEG0B 0x40 (HELP-info + STAGE-1 cross-confirmed). LED cpl_led5 (state identity).
       L("DISPLAY",1777,717,64,13), L("HOLD",1777,730,64,13), P("round_btn_big",1790,748,42,42,tag="SEG0B",mask="0x40"), P("red_led",1836,752,8,8,name=PANEL_LED.get(("SEG0B","0x40"))),
       # bank A: EXIT = SEG0B 0x80 (HELP-info verified, panel_family_2.txt).
