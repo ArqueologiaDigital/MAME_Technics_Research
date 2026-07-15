@@ -134,7 +134,7 @@ def label(s,color=TXT):
 def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
     # Match the mockup's round-button size: the mockup draws them ~37px dia vs the layout's 32px
     # (measured over the RHYTHM GROUP, centres already aligned). Grow round_btn 32->37, centre kept.
-    if ref=="round_btn" and w==32 and h==32:
+    if ref in ("round_btn","round_btn2","metal_btn") and w==32 and h==32:
         x-=2; y-=2; w=37; h=37
     fl=[]
     if flip: fl.append('flipx="yes"')
@@ -147,7 +147,25 @@ def L(s,x,y,w,h,color=TXT): return f'\t\t<element ref="{label(s,color)}"><bounds
 def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
 
 # ---- element library (reused kn5000 shapes + kn7000-unique) ----
-two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
+# round_btn: plain single-circle grey button (the "second/external" concentric ring was REMOVED per Felipe --
+# most non-metallic buttons are now a single disc). round_btn2 keeps the double circle (SOUND EXPLORER / EW
+# EXPANSION); DEMO keeps its own demo_btn double circle.
+two("round_btn",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/>')
+two("round_btn2",29,29,f'<circle stroke="{STROKE}" fill="{BTN}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
+# metal_btn: mirrored/metallic chrome dome for the RHYTHM GROUP + SOUND GROUP category buttons (Felipe:
+# a lighter metallic grey, DISTINCT from the flat SILVER tempo wheel by being a mirror gradient, not a flat
+# tone). A dark recess ring + a vertical mirror gradient dome (bright horizon band) + a specular highlight.
+_MGRAD=('<linearGradient id="mb" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#dcdce2"/><stop offset="0.40" stop-color="#f2f2f6"/>'
+        '<stop offset="0.53" stop-color="#a0a0aa"/><stop offset="0.76" stop-color="#8c8c96"/>'
+        '<stop offset="1" stop-color="#c6c6cd"/></linearGradient>')
+_MGRADP=('<linearGradient id="mb" x1="0" y1="0" x2="0" y2="1">'
+         '<stop offset="0" stop-color="#9c9ca2"/><stop offset="0.40" stop-color="#b6b6bc"/>'
+         '<stop offset="0.53" stop-color="#74747e"/><stop offset="0.76" stop-color="#646470"/>'
+         '<stop offset="1" stop-color="#8c8c94"/></linearGradient>')
+two("metal_btn",29,29,
+    f'<defs>{_MGRAD}</defs><circle cx="14.5" cy="14.5" r="14" fill="#2c2c32" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#4a4a50" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4.6" ry="2.6" fill="#ffffff" opacity="0.5"/>',
+    f'<defs>{_MGRADP}</defs><circle cx="14.5" cy="14.5" r="14" fill="#232327" stroke="{STROKE}"/><circle cx="14.5" cy="14.5" r="11" fill="url(#mb)" stroke="#3a3a40" stroke-width="0.5"/><ellipse cx="10.6" cy="9" rx="4" ry="2.2" fill="#ffffff" opacity="0.32"/>')
 two("round_btn_big",42,42,f'<circle stroke="{STROKE}" fill="{BTN}" cx="21" cy="21" r="20.5"/>',f'<circle stroke="{STROKE}" fill="{BTN_D}" cx="21" cy="21" r="20.5"/>')
 two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" width="36" height="20" rx="10"/>',f'<rect stroke="{STROKE}" fill="{BTN_D}" x="0.5" y="0.5" width="36" height="20" rx="10"/>')
 # pill_wide (TAP TEMPO / SYNCHRO & BREAK) + pill_greycyan (START/STOP): drawn at their PLACEMENT size
@@ -156,7 +174,7 @@ two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" widt
 two("pill_wide",105,28,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>')
 two("pill_orange",60,22,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#b0561a" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#6f360c" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>')
 two("pill_greycyan",105,50,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#4a5c5e" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#33454a" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>')
-two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#98202e" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>',f'<circle stroke="{STROKE}" fill="#641a28" cx="14.5" cy="14.5" r="14"/><circle stroke="{STROKE}" fill="none" cx="14.5" cy="14.5" r="9.5"/>')
+two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#98202e" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#641a28" cx="14.5" cy="14.5" r="14"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
 # tiny down-pointing triangle for the 3 keyboard split-point indicators (Felipe)
@@ -379,7 +397,7 @@ LB.append(L("RHYTHM GROUP",700,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(RG):
     cx=RGcols[i%8]; cy=90 if i<8 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): LB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    LB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask))
+    LB.append(P("metal_btn",cx-16,cy,32,32,tag=tag,mask=mask))   # RHYTHM GROUP = metallic (Felipe)
     # LED colour (Felipe): RHYTHM GROUP genres are RED except CUSTOM & MEMORY (GREEN)
     LB.append(P("green_led" if nm in ("CUSTOM","MEMORY") else "red_led",cx-4,cy-13,8,8,name=GENRE_LED.get((tag,mask))))
 # MUSIC STYLIST = SEG07 0x01 (ev2040 app-open MUSIC STYLIST, empirically confirmed).
@@ -473,7 +491,8 @@ RB.append(L("SOUND GROUP",240,42,180,11,TXTH))
 for i,(nm,tag,mask) in enumerate(SG):
     cx=SGcols[i%9]; cy=90 if i<9 else 162; ls=wrap2(nm)
     for k,ln in enumerate(ls): RB.append(L(ln,cx-28,cy-22-(len(ls)-1-k)*9,56,8))
-    RB.append(P("round_btn",cx-16,cy,32,32,tag=tag,mask=mask))
+    # SOUND GROUP = metallic (Felipe), EXCEPT SOUND EXPLORER / EW EXPANSION (normal grey, keep double circle)
+    RB.append(P("round_btn2" if nm in ("SOUND EXPLORER","EW EXPANSION") else "metal_btn",cx-16,cy,32,32,tag=tag,mask=mask))
     # LED colour (Felipe): SOUND GROUP buttons are RED except MEMORY (GREEN)
     RB.append(P("green_led" if nm=="MEMORY" else "red_led",cx-4,cy-13,8,8,name=OPLED.get((tag,mask))))
     if i in (9,10): RB.append(P("pill_ring",cx-34,cy-4,68,40))
