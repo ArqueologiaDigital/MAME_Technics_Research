@@ -45,7 +45,7 @@
  ],
  "right_block.172.r1_r2_octave_text": [
   9.2,
-  2.7
+  18.7
  ],
  "right_block.70.reverb_text": [
   15.2,
@@ -465,11 +465,11 @@
  ],
  "right_block.166.red_led": [
   6.8,
-  2.6
+  23.6
  ],
  "right_block.190.red_led": [
   6.8,
-  -2.2
+  13.8
  ],
  "right_block.127.red_led": [
   -1.2,
@@ -609,7 +609,7 @@
  ],
  "right_block.165.transpose_text": [
   3.1,
-  -7.0
+  14.0
  ],
  "right_block.146.7_text": [
   0.3,
@@ -617,11 +617,11 @@
  ],
  "right_block.170.minus_text": [
   9.5,
-  -21.9
+  -0.9
  ],
  "right_block.194.minus_text": [
   9.8,
-  -26.4
+  -10.4
  ],
  "left_block.92.pill_orange": [
   0.0,
@@ -753,11 +753,11 @@
  ],
  "right_block.171.plus_text": [
   25.9,
-  -21.6
+  -0.6
  ],
  "right_block.195.plus_text": [
   25.4,
-  -25.6
+  -9.6
  ],
  "right_block.180.favorites_text": [
   -31.0,
@@ -886,5 +886,29 @@
  "left_block.98.demo_btn": [
   38.2,
   6.4
+ ],
+ "right_block.167.red_led": [
+  0.0,
+  21.0
+ ],
+ "right_block.168.hh7": [
+  0.0,
+  21.0
+ ],
+ "right_block.169.hh8": [
+  0.0,
+  21.0
+ ],
+ "right_block.191.red_led": [
+  0.0,
+  16.0
+ ],
+ "right_block.192.hh9": [
+  0.0,
+  16.0
+ ],
+ "right_block.193.hh10": [
+  0.0,
+  16.0
  ]
 }
