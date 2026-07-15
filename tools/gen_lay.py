@@ -184,12 +184,18 @@ elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M
 # weight, rounded ends and centre separator render IDENTICALLY at every pill size (a fixed-size SVG scaled
 # to bounds made small pills thin/round and large ones thick/oval, and varied the separator width).
 _PILLN=[0]
-def _hhalf(w,h,side,fill,fd):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge
+def _hhalf(w,h,side,fill,fd,gap=0):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge.
+    # gap>0 (left halves only): the SVG canvas widens by `gap` and a filled rectangle bridges the centre gap
+    # to the (touching) right half, so the split pill renders as ONE continuous pill divided by a thin seam
+    # (Felipe: the gap between the halves must be DRAWN, not left showing the bare panel background).
     _PILLN[0]+=1; nm=f"hh{_PILLN[0]}"; sw=1.5; r=h/2.0; ra=(h-sw)/2.0; i=sw/2.0
     d=f'M {w-i:.2f},{i:.2f} L {r:.2f},{i:.2f} A {ra:.2f} {ra:.2f} 0 0 0 {r:.2f},{h-i:.2f} L {w-i:.2f},{h-i:.2f} Z'
     tf='' if side=='l' else f'transform="translate({w},0) scale(-1,1)" '
-    b=lambda f:f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
-    two(nm,w,h,b(fill),b(fd)); return nm
+    def b(f):
+        s=f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
+        if gap>0: s+=f'<rect x="{w-i:.2f}" y="{i:.2f}" width="{gap+i:.2f}" height="{h-sw:.2f}" fill="{f}"/>'
+        return s
+    two(nm,w+gap,h,b(fill),b(fd)); return nm
 def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) -> perfectly round ends at any w
     sw=1.5; r=(h-sw)/2.0; i=sw/2.0
     b=lambda f:f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{f}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}" rx="{r:.2f}"/>'
@@ -208,8 +214,8 @@ two("sd_skipf",48,30,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" x
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
     sb=seg2 or seg; fill=fill or BTN; fd=fd or BTN_D
     GAP=4; hw=(w-GAP)//2                 # fixed centre separator -> identical thickness on every split pill
-    nl=_hhalf(hw,h,'l',fill,fd); nr=_hhalf(hw,h,'r',fill,fd)
-    r=[P(nl,x,y,hw,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb)]
+    nl=_hhalf(hw,h,'l',fill,fd,gap=GAP); nr=_hhalf(hw,h,'r',fill,fd)   # left half absorbs+fills the gap
+    r=[P(nl,x,y,hw+GAP,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb)]
     if la: r.append(L(la,x+hw//2-14,y+h//2-6,28,12))
     if lb: r.append(L(lb,x+w-hw//2-14,y+h//2-6,28,12))
     return r
