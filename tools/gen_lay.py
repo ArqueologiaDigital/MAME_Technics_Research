@@ -219,10 +219,8 @@ two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" 
 # ---- SD-card transport buttons (48x30, icon baked in) ----
 # SD-card transport block: RECTANGULAR black buttons (icons drawn ABOVE, outside the buttons), a touching
 # SD-VOLUME -/+ pair inside one enclosing outline, and a metallic backing plate (Felipe).
-two("sd_btn",46,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="44.5" height="26.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="0.75" y="0.75" width="44.5" height="26.5"/>')
-# SD VOLUME: one black rectangle with a dark-grey enclosing outline + a centre divider; the two touching
-# clickable halves (-/+) are transparent inv_rect overlays placed on top.
-two("sd_vol_body",80,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/>')
+# SD buttons: DARK GREY at rest, FULL BLACK when pressed (visible press feedback, Felipe). Dark-grey border.
+two("sd_btn",46,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#3a3a40" x="0.75" y="0.75" width="44.5" height="26.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#070708" x="0.75" y="0.75" width="44.5" height="26.5"/>')
 # transport icons (light grey), drawn ABOVE their buttons:
 elem("sd_ic_rew",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 11,1 L 11,13 L 3,7 Z M 22,1 L 22,13 L 14,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
 elem("sd_ic_ff",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 10,7 Z M 13,1 L 13,13 L 21,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
@@ -662,10 +660,10 @@ RB.append('\t</group>')
 # one enclosing outline; the 4 transport buttons equally spaced; PLAY LED just left of its icon (Felipe).
 SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="80"/>',
      P("sd_bg",2,2,496,76),
-     # SD VOLUME -/+ : one outlined black body + centre divider, two transparent click halves that touch:
-     P("sd_vol_body",12,28,80,28),
+     # SD VOLUME -/+ : two VISIBLE clickable half-buttons that touch (their borders form the enclosing outline
+     # + centre divider); icons -/+ above; press feedback via the sd_btn dark-grey->black states.
      L("-",26,10,12,12,TXTD), L("+",66,10,12,12,TXTD),
-     P("inv_rect",12,28,40,28,tag="SDSW",mask="0x01"), P("inv_rect",52,28,40,28,tag="SDSW",mask="0x02"),
+     P("sd_btn",12,28,40,28,tag="SDSW",mask="0x01"), P("sd_btn",52,28,40,28,tag="SDSW",mask="0x02"),
      L("SD VOLUME",12,60,80,10,TXTD),
      # 4 transport buttons at equal centre spacing (148/223/298/373), icons above:
      P("sd_btn",125,28,46,28,tag="SDSW",mask="0x10"), P("sd_ic_rew",136,10,24,14),
