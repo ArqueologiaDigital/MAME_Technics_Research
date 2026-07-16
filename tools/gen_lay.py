@@ -220,7 +220,7 @@ two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" 
 # SD-card transport block: RECTANGULAR black buttons (icons drawn ABOVE, outside the buttons), a touching
 # SD-VOLUME -/+ pair inside one enclosing outline, and a metallic backing plate (Felipe).
 # SD buttons: DARK GREY at rest, FULL BLACK when pressed (visible press feedback, Felipe). Dark-grey border.
-two("sd_btn",46,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#3a3a40" x="0.75" y="0.75" width="44.5" height="26.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#070708" x="0.75" y="0.75" width="44.5" height="26.5"/>')
+two("sd_btn",46,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#303036" x="0.75" y="0.75" width="44.5" height="26.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#070708" x="0.75" y="0.75" width="44.5" height="26.5"/>')
 # transport icons (light grey), drawn ABOVE their buttons:
 elem("sd_ic_rew",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 11,1 L 11,13 L 3,7 Z M 22,1 L 22,13 L 14,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
 elem("sd_ic_ff",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 10,7 Z M 13,1 L 13,13 L 21,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
@@ -663,15 +663,15 @@ SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="80
      # SD VOLUME -/+ : two VISIBLE clickable half-buttons that touch (their borders form the enclosing outline
      # + centre divider); icons -/+ above; press feedback via the sd_btn dark-grey->black states.
      L("-",26,10,12,12,TXTD), L("+",66,10,12,12,TXTD),
-     P("sd_btn",12,28,40,28,tag="SDSW",mask="0x01"), P("sd_btn",52,28,40,28,tag="SDSW",mask="0x02"),
+     P("sd_btn",12,28,40,28,tag="CPSD_SDSW",mask="0x01"), P("sd_btn",52,28,40,28,tag="CPSD_SDSW",mask="0x02"),
      L("SD VOLUME",12,60,80,10,TXTD),
      # 4 transport buttons at equal centre spacing (148/223/298/373), icons above:
-     P("sd_btn",125,28,46,28,tag="SDSW",mask="0x10"), P("sd_ic_rew",136,10,24,14),
-     P("sd_btn",200,28,46,28,tag="SDSW",mask="0x20"), P("sd_ic_ff",211,10,24,14),
+     P("sd_btn",125,28,46,28,tag="CPSD_SDSW",mask="0x10"), P("sd_ic_rew",136,10,24,14),
+     P("sd_btn",200,28,46,28,tag="CPSD_SDSW",mask="0x20"), P("sd_ic_ff",211,10,24,14),
      L("SKIP / SEARCH",133,60,104,10,TXTD),
-     P("sd_btn",275,28,46,28,tag="SDSW",mask="0x04"), P("sd_ic_stop",291,10,14,14),
+     P("sd_btn",275,28,46,28,tag="CPSD_SDSW",mask="0x04"), P("sd_ic_stop",291,10,14,14),
      L("STOP",272,60,52,10,TXTD),
-     P("sd_btn",350,28,46,28,tag="SDSW",mask="0x08"), P("sd_ic_play",361,10,24,14), P("green_led",351,12,8,8,name="sd_led1"),   # LED just left of the play icon
+     P("sd_btn",350,28,46,28,tag="CPSD_SDSW",mask="0x08"), P("sd_ic_play",361,10,24,14), P("green_led",351,12,8,8,name="sd_led1"),   # LED just left of the play icon
      L("PLAY / PAUSE",335,60,76,10,TXTD),
      # SD IN USE status (top-right of the plate)
      L("SD IN USE",406,11,72,9,TXTD), P("red_led",481,11,8,8,name="sd_led0")]

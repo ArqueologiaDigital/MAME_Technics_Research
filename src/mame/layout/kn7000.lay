@@ -66,7 +66,7 @@
 		<image state="1"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/></svg>]]></data></image>
 	</element>
 	<element name="sd_btn">
-		<image state="0"><data><![CDATA[<svg width="46" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#3a3a40" x="0.75" y="0.75" width="44.5" height="26.5"/></svg>]]></data></image>
+		<image state="0"><data><![CDATA[<svg width="46" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#303036" x="0.75" y="0.75" width="44.5" height="26.5"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="46" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#070708" x="0.75" y="0.75" width="44.5" height="26.5"/></svg>]]></data></image>
 	</element>
 	<element name="sd_ic_rew"><image><data><![CDATA[<svg width="24" height="14"><path d="M 11,1 L 11,13 L 3,7 Z M 22,1 L 22,13 L 14,7 Z" fill="#2a2a30"/></svg>]]></data></image></element>
@@ -984,22 +984,22 @@
 
 		<element ref="minus_2_text"><bounds x="26" y="10" width="12" height="12"/></element>
 		<element ref="plus_2_text"><bounds x="66" y="10" width="12" height="12"/></element>
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x01"><bounds x="12" y="28" width="40" height="28"/></element>
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x02"><bounds x="52" y="28" width="40" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x01"><bounds x="12" y="28" width="40" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x02"><bounds x="52" y="28" width="40" height="28"/></element>
 		<element ref="sd_volume_text"><bounds x="12" y="60" width="80" height="10"/></element>
 
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x10"><bounds x="125" y="28" width="46" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x10"><bounds x="125" y="28" width="46" height="28"/></element>
 		<element ref="sd_ic_rew"><bounds x="136" y="10" width="24" height="14"/></element>
 		<element ref="skip_search_text"><bounds x="133" y="60" width="104" height="10"/></element>
 
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x20"><bounds x="200" y="28" width="46" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x20"><bounds x="200" y="28" width="46" height="28"/></element>
 		<element ref="sd_ic_ff"><bounds x="211" y="10" width="24" height="14"/></element>
 
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x04"><bounds x="275" y="28" width="46" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x04"><bounds x="275" y="28" width="46" height="28"/></element>
 		<element ref="sd_ic_stop"><bounds x="291" y="10" width="14" height="14"/></element>
 		<element ref="stop_2_text"><bounds x="272" y="60" width="52" height="10"/></element>
 
-		<element ref="sd_btn" inputtag="SDSW" inputmask="0x08"><bounds x="350" y="28" width="46" height="28"/></element>
+		<element ref="sd_btn" inputtag="CPSD_SDSW" inputmask="0x08"><bounds x="350" y="28" width="46" height="28"/></element>
 		<element ref="sd_ic_play"><bounds x="361" y="10" width="24" height="14"/></element>
 		<element ref="green_led" name="sd_led1"><bounds x="351" y="12" width="8" height="8"/></element>
 		<element ref="play_pause_text"><bounds x="335" y="60" width="76" height="10"/></element>
