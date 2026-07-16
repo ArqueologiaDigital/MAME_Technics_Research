@@ -730,6 +730,7 @@
 	<group name="right_block">
 		<bounds x="0" y="0" width="1000" height="503"/>
 		<element ref="bg_right"><bounds x="0" y="0" width="1000" height="503"/></element>
+		<element ref="big_ring"><bounds x="808.9" y="326.2" width="130" height="130"/></element>
 
 		<element ref="sound_group_text"><bounds x="182.4" y="40.5" width="180" height="11"/></element>
 		<element ref="ghline"><bounds x="324" y="44.3" width="133" height="3"/></element>
@@ -956,10 +957,6 @@
 		<element ref="red_led" name="cpr_led36"><!-- PART SELECT LEFT --><bounds x="367.3" y="331.3" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="CPR_SEG2" inputmask="0x01"><!-- PART SELECT LEFT --><bounds x="353.1" y="338.1" width="37" height="37"/></element>
 
-		<element ref="big_ring"><bounds x="808.9" y="326.2" width="130" height="130"/></element>
-		<element ref="favorites_text"><bounds x="809.0" y="468.3" width="72" height="8"/></element>
-		<element ref="round_btn_big_silver" inputtag="CPR_SEG2" inputmask="0x40"><!-- FAVORITES --><bounds x="852" y="407" width="42" height="42"/></element>
-
 		<element ref="customize_text"><bounds x="926.0" y="336.0" width="60" height="8"/></element>
 		<element ref="round_btn_big_silver" inputtag="CPR_SEG0" inputmask="0x40"><!-- CUSTOMIZE --><bounds x="884.7" y="348.7" width="42" height="42"/></element>
 
@@ -990,6 +987,9 @@
 		<element ref="red_led" name="cpr_led7"><!-- CONDUCTOR RIGHT 1 --><bounds x="489.2" y="386.1" width="8" height="8"/></element>
 		<element ref="round_btn" inputtag="CPR_SEG3" inputmask="0x02"><!-- CONDUCTOR RIGHT 1 --><bounds x="472.2" y="399.5" width="42" height="42"/></element>
 		<element ref="hline"><bounds x="485.9" y="455.3" width="26" height="3"/></element>
+
+		<element ref="favorites_text"><bounds x="809.0" y="468.3" width="72" height="8"/></element>
+		<element ref="round_btn_big_silver" inputtag="CPR_SEG2" inputmask="0x40"><!-- FAVORITES --><bounds x="852" y="407" width="42" height="42"/></element>
 
 		<element ref="green_led" name="cpr_led2"><!-- FAVORITES --><bounds x="870.9" y="468.5" width="8" height="8"/></element>
 		<element id="tempo_finger" ref="tempo_finger"><bounds x="93.3" y="370.6" width="32" height="32"/></element>

@@ -753,7 +753,9 @@ def _reorder_group(lines, GW, GH, MERGE=6, ORPHAN=30):
     for oi,l in enumerate(plac):
         b=pbox(l)
         anchor=('inputtag=' in l) or bool(re.search(r'id="\w+_(?:click|knob)"',l)) or ('<screen' in l)
-        isbg=(b is None) or ('bg_' in l) or (b is not None and b[2]*b[3]>0.25*GW*GH and not anchor)
+        # 'big_ring' is a FILLED backing zone (the silver disc behind CUSTOM PANEL/FAVORITES/CUSTOMIZE): it
+        # must draw UNDER its buttons, so treat it as a background even though it isn't huge.
+        isbg=(b is None) or ('bg_' in l) or ('ref="big_ring"' in l) or (b is not None and b[2]*b[3]>0.25*GW*GH and not anchor)
         info.append({'oi':oi,'l':l,'b':b,'anchor':anchor,'bg':isbg})
     bgs=[e for e in info if e['bg']]
     anchors=[e for e in info if (not e['bg']) and e['anchor']]
