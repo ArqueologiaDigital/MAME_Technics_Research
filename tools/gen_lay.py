@@ -13,6 +13,7 @@ SILVER="#909097"; SILVER_D="#7a7a82"   # normal / pressed(+bevel)
 MSP=SILVER; MSP_D=SILVER_D             # MSP performance pads share the silver
 TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
 TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
+TXTD='<color red="0.13" green="0.13" blue="0.15"/>'   # dark legend colour (for the metallic SD plate)
 # PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
 # PanelSwitchClassTable (0x4860C9F4; switch#=normSeg*8+bit -> [LED row, col reg]) + the LED
 # row-remap table (0x48615058 -> panel_led_frame addr) => led = (remap[row]&0x3f)*8 + col_index,
@@ -216,10 +217,19 @@ def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) ->
 two("half_t",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/>')
 two("half_b",50,78,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/>')
 # ---- SD-card transport buttons (48x30, icon baked in) ----
-two("sd_stop",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/>')
-two("sd_play",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/>')
-two("sd_skipb",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/>')
-two("sd_skipf",48,30,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/>')
+# SD-card transport block: RECTANGULAR black buttons (icons drawn ABOVE, outside the buttons), a touching
+# SD-VOLUME -/+ pair inside one enclosing outline, and a metallic backing plate (Felipe).
+two("sd_btn",46,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="44.5" height="26.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="0.75" y="0.75" width="44.5" height="26.5"/>')
+# SD VOLUME: one black rectangle with a dark-grey enclosing outline + a centre divider; the two touching
+# clickable halves (-/+) are transparent inv_rect overlays placed on top.
+two("sd_vol_body",80,28,f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/>',f'<rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/>')
+# transport icons (light grey), drawn ABOVE their buttons:
+elem("sd_ic_rew",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 11,1 L 11,13 L 3,7 Z M 22,1 L 22,13 L 14,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
+elem("sd_ic_ff",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 10,7 Z M 13,1 L 13,13 L 21,7 Z" fill="#2a2a30"/></svg>]]></data></image>')
+elem("sd_ic_stop",'<image><data><![CDATA[<svg width="14" height="14"><rect x="2" y="2" width="10" height="10" fill="#2a2a30"/></svg>]]></data></image>')
+elem("sd_ic_play",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 11,7 Z" fill="#2a2a30"/><rect x="14" y="1" width="3" height="12" fill="#2a2a30"/><rect x="19" y="1" width="3" height="12" fill="#2a2a30"/></svg>]]></data></image>')
+# metallic backing plate for the whole SD block
+elem("sd_bg",'<image><data><![CDATA[<svg width="496" height="74"><defs><linearGradient id="sdbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a4a4aa"/><stop offset="0.5" stop-color="#8a8a91"/><stop offset="1" stop-color="#7c7c84"/></linearGradient></defs><rect x="1" y="1" width="494" height="72" rx="5" fill="url(#sdbg)" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
 def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
     sb=seg2 or seg; fill=fill or SILVER; fd=fd or SILVER_D   # split pills are SILVER (Felipe)
@@ -648,12 +658,25 @@ RB.append('\t</group>')
 # bit->function corrected from firmware RE (dispatch 0x48577ee2; see kn7000.cpp CPSD_SDSW): the byte
 # 0x9CC00008 bits are VOL- 0x01, VOL+ 0x02, STOP 0x04, PLAY/PAUSE 0x08, SKIP/SEARCH<< 0x10, SKIP>> 0x20.
 # (An earlier guess had VOLUME and SKIP/SEARCH swapped; the fwd/rew hold-timer proves bit4/5 = SKIP.)
-SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="70"/>',
-     L("SD VOLUME",8,52,96,10,TXTH)] + pair_h("SDSW","0x01","0x02",12,18,84,30,"-","+") + [
-     L("SKIP / SEARCH",116,52,104,10,TXTH), P("sd_skipb",120,18,48,30,tag="SDSW",mask="0x10"), P("sd_skipf",172,18,48,30,tag="SDSW",mask="0x20"),
-     L("STOP",243,52,52,10,TXTH), P("sd_stop",245,18,48,30,tag="SDSW",mask="0x04"),
-     L("PLAY / PAUSE",306,52,76,10,TXTH), P("sd_play",320,18,48,30,tag="SDSW",mask="0x08"), P("green_led",376,30,8,8,name="sd_led1"),   # SD PLAY/PAUSE = sd_led1, driver-lit from the SD-Audio/SD-Song play-state flag (2026-07-14)
-     L("SD IN USE",406,42,72,10,TXTH), P("red_led",438,28,8,8,name="sd_led0")]   # SD IN USE = sd_led0, driver-lit from SPI card activity (2026-07-14)
+# Metallic plate + RECTANGULAR black buttons; icons drawn ABOVE each button; SD VOLUME = touching -/+ pair in
+# one enclosing outline; the 4 transport buttons equally spaced; PLAY LED just left of its icon (Felipe).
+SDB=['\t<group name="sd_block">','\t\t<bounds x="0" y="0" width="500" height="80"/>',
+     P("sd_bg",2,2,496,76),
+     # SD VOLUME -/+ : one outlined black body + centre divider, two transparent click halves that touch:
+     P("sd_vol_body",12,28,80,28),
+     L("-",26,10,12,12,TXTD), L("+",66,10,12,12,TXTD),
+     P("inv_rect",12,28,40,28,tag="SDSW",mask="0x01"), P("inv_rect",52,28,40,28,tag="SDSW",mask="0x02"),
+     L("SD VOLUME",12,60,80,10,TXTD),
+     # 4 transport buttons at equal centre spacing (148/223/298/373), icons above:
+     P("sd_btn",125,28,46,28,tag="SDSW",mask="0x10"), P("sd_ic_rew",136,10,24,14),
+     P("sd_btn",200,28,46,28,tag="SDSW",mask="0x20"), P("sd_ic_ff",211,10,24,14),
+     L("SKIP / SEARCH",133,60,104,10,TXTD),
+     P("sd_btn",275,28,46,28,tag="SDSW",mask="0x04"), P("sd_ic_stop",291,10,14,14),
+     L("STOP",272,60,52,10,TXTD),
+     P("sd_btn",350,28,46,28,tag="SDSW",mask="0x08"), P("sd_ic_play",361,10,24,14), P("green_led",351,12,8,8,name="sd_led1"),   # LED just left of the play icon
+     L("PLAY / PAUSE",335,60,76,10,TXTD),
+     # SD IN USE status (top-right of the plate)
+     L("SD IN USE",406,11,72,9,TXTD), P("red_led",481,11,8,8,name="sd_led0")]
 SDB.append('\t</group>')
 
 VIEWS='''
@@ -663,7 +686,7 @@ VIEWS='''
 		<group ref="left_block"><bounds x="0" y="997" width="1000" height="503"/></group>
 		<group ref="right_block"><bounds x="1000" y="997" width="1000" height="503"/></group>
 		<!-- SD-card transport: centered below the MUTE row (compact view); overall dims unchanged -->
-		<group ref="sd_block"><bounds x="750" y="915" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="750" y="916" width="500" height="80"/></group>
 	</view>
 
 	<view name="Full Unit">
@@ -671,7 +694,7 @@ VIEWS='''
 		<group ref="left_block"><bounds x="0" y="247" width="1000" height="503"/></group>
 		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="997"/></group>
 		<group ref="right_block"><bounds x="3000" y="247" width="1000" height="503"/></group>
-		<group ref="sd_block"><bounds x="1750" y="915" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="1750" y="916" width="500" height="80"/></group>
 	</view>
 
 	<!-- Zoomed single-block views (each fills the window) for detailed layout review -->
@@ -692,7 +715,7 @@ VIEWS='''
 
 	<view name="SD Block">
 		<bounds x="0" y="0" width="500" height="70"/>
-		<group ref="sd_block"><bounds x="0" y="0" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="0" y="0" width="500" height="80"/></group>
 	</view>
 '''
 o=io.StringIO()

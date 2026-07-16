@@ -65,22 +65,19 @@
 		<image state="0"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#909097" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 2,1 V 52 A 24 24 0 0 0 26 76 A 24 24 0 0 0 48 52 V 1 Z"/></svg>]]></data></image>
 	</element>
-	<element name="sd_stop">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><rect x="19" y="10" width="10" height="10" fill="#d8d8d8"/></svg>]]></data></image>
+	<element name="sd_btn">
+		<image state="0"><data><![CDATA[<svg width="46" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="44.5" height="26.5"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="46" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="0.75" y="0.75" width="44.5" height="26.5"/></svg>]]></data></image>
 	</element>
-	<element name="sd_play">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 15,9 L 15,21 L 24,15 Z" fill="#d8d8d8"/><rect x="28" y="9" width="3" height="12" fill="#d8d8d8"/><rect x="33" y="9" width="3" height="12" fill="#d8d8d8"/></svg>]]></data></image>
+	<element name="sd_vol_body">
+		<image state="0"><data><![CDATA[<svg width="80" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="80" height="28"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="0.75" y="0.75" width="78.5" height="26.5"/><line x1="40" y1="1" x2="40" y2="27" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>
 	</element>
-	<element name="sd_skipb">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 22,9 L 22,21 L 14,15 Z M 32,9 L 32,21 L 24,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-	</element>
-	<element name="sd_skipf">
-		<image state="0"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#0e0e10" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="48" height="30"><rect stroke="#4a4a52" stroke-width="1.5" fill="#060608" x="1" y="1" width="46" height="28" rx="4"/><path d="M 16,9 L 16,21 L 24,15 Z M 26,9 L 26,21 L 34,15 Z" fill="#d8d8d8"/></svg>]]></data></image>
-	</element>
+	<element name="sd_ic_rew"><image><data><![CDATA[<svg width="24" height="14"><path d="M 11,1 L 11,13 L 3,7 Z M 22,1 L 22,13 L 14,7 Z" fill="#2a2a30"/></svg>]]></data></image></element>
+	<element name="sd_ic_ff"><image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 10,7 Z M 13,1 L 13,13 L 21,7 Z" fill="#2a2a30"/></svg>]]></data></image></element>
+	<element name="sd_ic_stop"><image><data><![CDATA[<svg width="14" height="14"><rect x="2" y="2" width="10" height="10" fill="#2a2a30"/></svg>]]></data></image></element>
+	<element name="sd_ic_play"><image><data><![CDATA[<svg width="24" height="14"><path d="M 2,1 L 2,13 L 11,7 Z" fill="#2a2a30"/><rect x="14" y="1" width="3" height="12" fill="#2a2a30"/><rect x="19" y="1" width="3" height="12" fill="#2a2a30"/></svg>]]></data></image></element>
+	<element name="sd_bg"><image><data><![CDATA[<svg width="496" height="74"><defs><linearGradient id="sdbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a4a4aa"/><stop offset="0.5" stop-color="#8a8a91"/><stop offset="1" stop-color="#7c7c84"/></linearGradient></defs><rect x="1" y="1" width="494" height="72" rx="5" fill="url(#sdbg)" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image></element>
 	<element name="page_up">
 		<image state="0"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#909097" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="50" height="78"><path stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 2,77 V 26 A 24 24 0 0 1 26 2 A 24 24 0 0 1 48 26 V 77 Z"/></svg>]]></data></image>
@@ -359,23 +356,13 @@
 	<element name="panel_text"><text string="PANEL"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="customize_text"><text string="CUSTOMIZE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="favorites_text"><text string="FAVORITES"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="sd_volume_text"><text string="SD VOLUME"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="hh11">
-		<image state="0"><data><![CDATA[<svg width="40" height="30"><path stroke="#000" stroke-width="1.5" fill="#909097" d="M 39.25,0.75 L 15.00,0.75 A 14.25 14.25 0 0 0 15.00,29.25 L 39.25,29.25 Z"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="40" height="30"><path stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 39.25,0.75 L 15.00,0.75 A 14.25 14.25 0 0 0 15.00,29.25 L 39.25,29.25 Z"/></svg>]]></data></image>
-	</element>
-	<element name="hh12">
-		<image state="0"><data><![CDATA[<svg width="40" height="30"><path transform="translate(40,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#909097" d="M 39.25,0.75 L 15.00,0.75 A 14.25 14.25 0 0 0 15.00,29.25 L 39.25,29.25 Z"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="40" height="30"><path transform="translate(40,0) scale(-1,1)" stroke="#000" stroke-width="1.5" fill="#7a7a82" d="M 39.25,0.75 L 15.00,0.75 A 14.25 14.25 0 0 0 15.00,29.25 L 39.25,29.25 Z"/></svg>]]></data></image>
-	</element>
-	<element name="seam6">
-		<image state="0"><data><![CDATA[<svg width="4" height="30"><rect stroke="#000" stroke-width="1.0" fill="#909097" x="0.50" y="0.50" width="3.00" height="29.00"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="4" height="30"><rect stroke="#000" stroke-width="1.0" fill="#909097" x="0.50" y="0.50" width="3.00" height="29.00"/></svg>]]></data></image>
-	</element>
-	<element name="skip_search_text"><text string="SKIP / SEARCH"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="stop_2_text"><text string="STOP"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="play_pause_text"><text string="PLAY / PAUSE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="sd_in_use_text"><text string="SD IN USE"><color red="0.72" green="0.72" blue="0.74"/></text></element>
+	<element name="minus_2_text"><text string="-"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="plus_2_text"><text string="+"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="sd_volume_text"><text string="SD VOLUME"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="skip_search_text"><text string="SKIP / SEARCH"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="stop_2_text"><text string="STOP"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="play_pause_text"><text string="PLAY / PAUSE"><color red="0.13" green="0.13" blue="0.15"/></text></element>
+	<element name="sd_in_use_text"><text string="SD IN USE"><color red="0.13" green="0.13" blue="0.15"/></text></element>
 
 	<group name="screen_block">
 		<bounds x="0" y="0" width="2000" height="997"/>
@@ -996,28 +983,34 @@
 	</group>
 
 	<group name="sd_block">
-		<bounds x="0" y="0" width="500" height="70"/>
+		<bounds x="0" y="0" width="500" height="80"/>
+		<element ref="sd_bg"><bounds x="2" y="2" width="496" height="76"/></element>
 
-		<element ref="sd_volume_text"><bounds x="8" y="52" width="96" height="10"/></element>
-		<element ref="hh11" inputtag="SDSW" inputmask="0x01"><bounds x="12" y="18" width="40" height="30"/></element>
-		<element ref="hh12" inputtag="SDSW" inputmask="0x02"><bounds x="56" y="18" width="40" height="30"/></element>
-		<element ref="seam6"><bounds x="52" y="18" width="4" height="30"/></element>
-		<element ref="minus_text"><bounds x="18" y="27" width="28" height="12"/></element>
-		<element ref="plus_text"><bounds x="62" y="27" width="28" height="12"/></element>
+		<element ref="sd_vol_body"><bounds x="12" y="28" width="80" height="28"/></element>
+		<element ref="minus_2_text"><bounds x="26" y="10" width="12" height="12"/></element>
+		<element ref="plus_2_text"><bounds x="66" y="10" width="12" height="12"/></element>
+		<element ref="inv_rect" inputtag="SDSW" inputmask="0x01"><bounds x="12" y="28" width="40" height="28"/></element>
+		<element ref="inv_rect" inputtag="SDSW" inputmask="0x02"><bounds x="52" y="28" width="40" height="28"/></element>
+		<element ref="sd_volume_text"><bounds x="12" y="60" width="80" height="10"/></element>
 
-		<element ref="skip_search_text"><bounds x="116" y="52" width="104" height="10"/></element>
-		<element ref="sd_skipb" inputtag="SDSW" inputmask="0x10"><bounds x="120" y="18" width="48" height="30"/></element>
-		<element ref="sd_skipf" inputtag="SDSW" inputmask="0x20"><bounds x="172" y="18" width="48" height="30"/></element>
+		<element ref="sd_btn" inputtag="SDSW" inputmask="0x10"><bounds x="125" y="28" width="46" height="28"/></element>
+		<element ref="sd_ic_rew"><bounds x="136" y="10" width="24" height="14"/></element>
+		<element ref="skip_search_text"><bounds x="133" y="60" width="104" height="10"/></element>
 
-		<element ref="stop_2_text"><bounds x="243" y="52" width="52" height="10"/></element>
-		<element ref="sd_stop" inputtag="SDSW" inputmask="0x04"><bounds x="245" y="18" width="48" height="30"/></element>
+		<element ref="sd_btn" inputtag="SDSW" inputmask="0x20"><bounds x="200" y="28" width="46" height="28"/></element>
+		<element ref="sd_ic_ff"><bounds x="211" y="10" width="24" height="14"/></element>
 
-		<element ref="play_pause_text"><bounds x="306" y="52" width="76" height="10"/></element>
-		<element ref="sd_play" inputtag="SDSW" inputmask="0x08"><bounds x="320" y="18" width="48" height="30"/></element>
-		<element ref="green_led" name="sd_led1"><bounds x="339.6" y="8.0" width="8" height="8"/></element>
+		<element ref="sd_btn" inputtag="SDSW" inputmask="0x04"><bounds x="275" y="28" width="46" height="28"/></element>
+		<element ref="sd_ic_stop"><bounds x="291" y="10" width="14" height="14"/></element>
+		<element ref="stop_2_text"><bounds x="272" y="60" width="52" height="10"/></element>
 
-		<element ref="sd_in_use_text"><bounds x="406" y="42" width="72" height="10"/></element>
-		<element ref="red_led" name="sd_led0"><bounds x="438" y="28" width="8" height="8"/></element>
+		<element ref="sd_btn" inputtag="SDSW" inputmask="0x08"><bounds x="350" y="28" width="46" height="28"/></element>
+		<element ref="sd_ic_play"><bounds x="361" y="10" width="24" height="14"/></element>
+		<element ref="green_led" name="sd_led1"><bounds x="351" y="12" width="8" height="8"/></element>
+		<element ref="play_pause_text"><bounds x="335" y="60" width="76" height="10"/></element>
+
+		<element ref="sd_in_use_text"><bounds x="406" y="11" width="72" height="9"/></element>
+		<element ref="red_led" name="sd_led0"><bounds x="481" y="11" width="8" height="8"/></element>
 	</group>
 
 	<view name="Compact">
@@ -1026,7 +1019,7 @@
 		<group ref="left_block"><bounds x="0" y="997" width="1000" height="503"/></group>
 		<group ref="right_block"><bounds x="1000" y="997" width="1000" height="503"/></group>
 		<!-- SD-card transport: centered below the MUTE row (compact view); overall dims unchanged -->
-		<group ref="sd_block"><bounds x="750" y="915" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="750" y="916" width="500" height="80"/></group>
 	</view>
 
 	<view name="Full Unit">
@@ -1034,7 +1027,7 @@
 		<group ref="left_block"><bounds x="0" y="247" width="1000" height="503"/></group>
 		<group ref="screen_block"><bounds x="1000" y="0" width="2000" height="997"/></group>
 		<group ref="right_block"><bounds x="3000" y="247" width="1000" height="503"/></group>
-		<group ref="sd_block"><bounds x="1750" y="915" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="1750" y="916" width="500" height="80"/></group>
 	</view>
 
 	<!-- Zoomed single-block views (each fills the window) for detailed layout review -->
@@ -1055,7 +1048,7 @@
 
 	<view name="SD Block">
 		<bounds x="0" y="0" width="500" height="70"/>
-		<group ref="sd_block"><bounds x="0" y="0" width="500" height="70"/></group>
+		<group ref="sd_block"><bounds x="0" y="0" width="500" height="80"/></group>
 	</view>
 	<script><![CDATA[
 		-- Slider and knob library starts.
