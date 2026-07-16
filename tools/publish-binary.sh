@@ -57,11 +57,23 @@ cat > "$DEST/run.sh" <<'SH'
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
+# The KN7000 has an SD-card slot. Attach the bundled real-card image by default: without a
+# card the firmware reports "ERROR 93: SD lid is open" REGARDLESS of the SD-slot-cover switch,
+# because its card-detect line reads "no card" the same as "lid open" -- so the cover switch
+# only has a visible effect when a card is actually present. (Only kn7000 has this slot.)
+# Pass your own "-harddisk <img>" to use a different card, or "-harddisk \"\"" for an empty slot.
+EXTRA=()
+if [ "$MODEL" = kn7000 ] && [ -f sdcard_from_real_kn7000.img ]; then
+	case " $* " in
+		*" -harddisk "*) ;;   # caller already chose (or cleared) the SD image
+		*) EXTRA=(-harddisk sdcard_from_real_kn7000.img) ;;
+	esac
+fi
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
 # warnings screen, so the emulator boots straight in without needing a click to dismiss it.
 # -pluginspath ./plugins ensures MAME finds the bundled "layout" plugin, which runs the
 # layout <script> that makes the volume faders draggable with the mouse.
-exec ./kn7000 "$MODEL" -rompath ./roms -pluginspath ./plugins -skip_gameinfo "$@"
+exec ./kn7000 "$MODEL" -rompath ./roms -pluginspath ./plugins -skip_gameinfo "${EXTRA[@]}" "$@"
 SH
 chmod +x "$DEST/run.sh"
 
