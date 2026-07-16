@@ -1,15 +1,27 @@
 		-- Slider and knob library starts.
 		-- Can be copied as-is to other layouts.
 		-----------------------------------------------------------------------
-		local widgets = {}   -- Stores slider and knob information.
-		local pointers = {}  -- Tracks pointer state.
+		-- Widgets are stored PER VIEW. A single shared list is WRONG when the same control is registered in
+		-- more than one view (e.g. a Compact view plus a single-block view): each view has its own coordinate
+		-- normalisation, so a pointer hit-test in view A against a widget's bounds registered for view B gives
+		-- false matches (symptom: clicking near one control in one view drags a slider that "lives" in another
+		-- view whose normalised bounds happen to overlap). Keying the widget list by view fixes that.
+		local view_widgets = {}   -- view (userdata) -> list of its widgets
+		local active_wl = nil     -- widget list of the view whose pointer last moved (for the frame wheel poll)
+		local pointers = {}       -- Tracks pointer state (keyed by pointer id).
 		local hover_x, hover_y = -1, -1   -- last pointer position (for wheel-over-widget hit testing)
+
+		local function widget_list(view)
+			local wl = view_widgets[view]
+			if wl == nil then wl = {}; view_widgets[view] = wl end
+			return wl
+		end
 
 		-- The knob's Y position must be animated using <animate inputtag="{port_name}">.
 		-- The click area's vertical size must exactly span the range of the
 		-- knob's movement.
 		function add_vertical_slider(view, clickarea_id, knob_id, port_name)
-			table.insert(widgets, {
+			table.insert(widget_list(view), {
 				clickarea   = get_layout_item(view, clickarea_id),
 				slider_knob = get_layout_item(view, knob_id),
 				field       = get_port_field(port_name),
@@ -19,7 +31,7 @@
 		-- A sweep between the attached field's min and max values requires
 		-- moving the pointer by `scale * clickarea.height` pixes.
 		function add_simplecounter_knob(view, clickarea_id, port_name, scale)
-			table.insert(widgets, {
+			table.insert(widget_list(view), {
 				clickarea = get_layout_item(view, clickarea_id),
 				field     = get_port_field(port_name),
 				is_knob   = true,
@@ -38,7 +50,7 @@
 				is_rotary = true,
 				angle     = 0.0,   -- running finger angle (radians), unbounded
 				notch     = 0 }    -- last encoder notch emitted (for stepping the adjuster)
-			table.insert(widgets, w)
+			table.insert(widget_list(view), w)
 			-- The finger orbits the knob centre at the current angle (0 = 12 o'clock, clockwise positive).
 			-- item.bounds is normalised PER-AXIS (x by view width, y by view height), so a screen-circular
 			-- orbit needs the x offset scaled by the click area's normalised WIDTH and the y offset by its
@@ -132,14 +144,14 @@
 		end
 		function poll_rotary_wheels()
 			if not wheel_probed then wheel_item = find_wheel_item(); wheel_probed = true end
-			if wheel_item == nil then return end
+			if wheel_item == nil or active_wl == nil then return end
 			local dv = machine.input:code_value(wheel_item.code)
 			if dv == 0 then return end
-			-- find a rotary widget under the cursor's last-known position
+			-- find a rotary widget (in the ACTIVE view) under the cursor's last-known position
 			local target = nil
-			for i = 1, #widgets do
-				if widgets[i].is_rotary and widgets[i].clickarea.bounds:includes(hover_x, hover_y) then
-					target = widgets[i]; break
+			for i = 1, #active_wl do
+				if active_wl[i].is_rotary and active_wl[i].clickarea.bounds:includes(hover_x, hover_y) then
+					target = active_wl[i]; break
 				end
 			end
 			if target == nil then wheel_accum = 0; return end
@@ -157,8 +169,11 @@
 			end
 		end
 
-		local function pointer_updated(type, id, dev, x, y, btn, dn, up, cnt)
+		-- `wl` is the widget list of the view this callback was installed on (see install_slider_callbacks).
+		-- Only widgets belonging to THIS view are hit-tested, so a click never matches another view's control.
+		local function pointer_updated(wl, type, id, dev, x, y, btn, dn, up, cnt)
 			hover_x, hover_y = x, y   -- remember where the cursor is, so the wheel poll can hit-test it
+			active_wl = wl            -- this is the view the user is interacting with
 
 			-- If a button is not pressed, reset the state of the current pointer.
 			if btn & 1 == 0 then
@@ -168,23 +183,24 @@
 
 			-- If a button was just pressed, find the affected widget, if any.
 			if dn & 1 ~= 0 then
-				for i = 1, #widgets do
+				for i = 1, #wl do
 					local found, relative
-					if widgets[i].slider_knob and widgets[i].slider_knob.bounds:includes(x, y) then
+					if wl[i].slider_knob and wl[i].slider_knob.bounds:includes(x, y) then
 						found = true
 						relative = true
-					elseif widgets[i].clickarea.bounds:includes(x, y) then
+					elseif wl[i].clickarea.bounds:includes(x, y) then
 						found = true
 						relative = false
 					end
 					if found then
 						pointers[id] = {
+							selected_wl = wl,
 							selected_widget = i,
 							relative = relative,
 							start_y = y,
-							start_value = widgets[i].field.user_value }
-						if widgets[i].is_rotary then
-							pointers[id].last_pa = knob_angle(widgets[i], x, y)
+							start_value = wl[i].field.user_value }
+						if wl[i].is_rotary then
+							pointers[id].last_pa = knob_angle(wl[i], x, y)
 						end
 						break
 					end
@@ -200,7 +216,7 @@
 			-- position. It is assumed the attached IO field is an IPT_ADJUSTER.
 
 			local pointer = pointers[id]
-			local widget = widgets[pointer.selected_widget]
+			local widget = pointer.selected_wl[pointer.selected_widget]
 
 			-- Rotary knob: rotate the finger by the pointer's angular motion and step the encoder. The angle
 			-- accumulates without limit, so it can be spun round and round (24 encoder steps per revolution).
@@ -257,7 +273,10 @@
 		end
 
 		function install_slider_callbacks(view)
-			view:set_pointer_updated_callback(pointer_updated)
+			local wl = widget_list(view)
+			view:set_pointer_updated_callback(function(type, id, dev, x, y, btn, dn, up, cnt)
+				pointer_updated(wl, type, id, dev, x, y, btn, dn, up, cnt)
+			end)
 			view:set_pointer_left_callback(pointer_left)
 			view:set_pointer_aborted_callback(pointer_aborted)
 			view:set_forget_pointers_callback(forget_pointers)
