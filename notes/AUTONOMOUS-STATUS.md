@@ -43,8 +43,15 @@ records (SD MENU @0x486809B9 title 0x104 mode 0x18, selectors right 0x10-0x14 le
 tags/titles incl. LOAD sel 0x10 -> title 0x105), the full dispatch chain (PanelButtonDispatch
 0x484ADB59 -> pump 0x484145FF -> resolver 0x4841473A -> ApPostEvent 0x50005/0x50006 -> PsMenuBoxProc
 0x4841CCC8 hit-test view+0x28 -> AcTitleMenuProc 0x4841D0EC actions), mode/title vars 0x5000097C/
-0x5000099C, SD-state getter 0x4855E80C. NEXT: drive the SD LOAD browser to COMPLETE a load
-(folder/song select + LOAD soft key), then SD-SOUND play on a NON-EMPTY file.
+0x5000099C, SD-state getter 0x4855E80C. FOLLOW-UP (sdload_deep.lua, this tick): browser confirmed
+live — "KN7000_MAME" volume, 123,552KB free, FOLDER+SONG lists render but the slots are EMPTY
+("0% used" = the bundled card image holds almost no content); the browser's LOAD key fired ~96k SPI
+data-port reads (real card traffic) and returned home; ERROR 83 on play paths = empty first file,
+consistent. **The entire SD UI chain works; the gap is card CONTENT.** NEXT (SD): a SAVE->LOAD
+ROUND-TRIP entirely in-emulator — SD MENU -> LCDR2 (SD SAVE MENU: TECHNICS FORMAT / SD-SOUND (SMF)
+FORMAT) -> save CURRENT PANEL to a slot (watch for a naming dialog), verify FAT writes reach the
+host image (spi_sdcard write path + image mtime/content), then LOAD it back and confirm. That
+validates the write path AND creates content for the load/play demos.
 
 ## TICK 2026-07-18 ~22:4x — ★ PHASE A LANDED (probe windows -> physical ICs); PHASE B (synthetic resource) LAUNCHED
 Phase A committed (4e77f57, notes/table-rom-structure.md): **0x54E00000 is a SOFTWARE last-resort
