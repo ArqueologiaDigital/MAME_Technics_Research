@@ -5,6 +5,41 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## SESSION 2026-07-18 AUTONOMOUS PLAN (Felipe away a few hours, standing green light)
+
+DONE this session (all committed):
+- run.sh attaches the bundled SD card by default (kn7000_mame 8a7d8b2) — fixes "ERROR 93 regardless of cover".
+- cpanel-input refactor BOTH drivers: 22 CP{board}_SEG{col} button ioports moved into the cpanel DEVICE
+  (device_input_ports()); layout tags now "cpanel:CP…". KN7000 df73be3 (verified: build+validate+listxml+boot,
+  published); KN5000 efc8d90 in ../mame (compiles clean; link blocked only by pre-existing genie/Qt env issue).
+- TECHNI-CHORD ANSWERED: pure software (harmony engine 0x48472EBA, style jump table 0x485BC3B4, interval
+  tables 0x485BC390, ZERO TG-register writes; params 0x8080/81/82). Nothing extra to emulate.
+- SIO-in-CPU-core analysed: mn10300 core models NO on-chip peripherals; the mn10200 parent core is the
+  template (on-chip serial/timers modelled in-core). Identified NEXT-step refactor serving all MN10300 models.
+- Docs site FULLY REFRESHED + committed (kn5000-docs 13cece5): roadmap (new "Architecture & code
+  organization" section = the 3 items above), NEW kn7000-technichord.md, NEW kn7000-design-language.md,
+  control-panel/sound/effects/storage pages refreshed, nav+index wired, Jekyll builds clean.
+
+IN PROGRESS (check before duplicating):
+- Blog workflow drafting Parts 30-34 (w0qccw226 / wf_e88ef57c-c97): 30 design language, 31 tempo wheel,
+  32 LED map vs real machine, 33 SD lid bug, 34 "where does a thing belong" (3 architecture items).
+  When it lands: write posts/kn7000/*.md + append posts.json entries ({file,title,date,summary},
+  summary ~1100-1500 chars starting "Part N."), REVIEW for accuracy/voice, commit mame-blog.
+
+NEXT (in order; pick the first unfinished):
+1. Finish + commit the blog posts (above).
+2. SD end-to-end: boot with the default card, navigate SD MENU (SEG0D 0x80) -> LOAD (SEG11 0x10),
+   select a file, verify a LOAD completes (bytes flow via 0x9805000C); then try SD-Song playback.
+3. "8 Beat 1" Phase A (ungated groundwork): map name-resource probe windows 0x40010000/0x40610000/
+   0x40810000/0x54E00000/0x54E10000/0x57000000 to physical ICs from service_manual/; append a
+   window->chip table to notes/table-rom-structure.md.
+4. tools/dis_sharc.sh: SHARC companion to dis.sh (dump PM + unidasm -arch sharc at basepc, dd-offset fix).
+5. Notes reconciliation: retire stale "shared root cause" framing in
+   notes/sequenced-playback-and-style-data-rootcause.md (chord-finder pitch RESOLVED by de4fc88; only
+   the "8 Beat 1" name resource remains); update panel-completion-plan.md to the current 154/101 state.
+6. SIO->mn10300-core refactor (bigger; only start if time allows; design in the roadmap Architecture section).
+Rules: commit as you go; publish-binary.sh after driver rebuilds; -skip_gameinfo; visible video only.
+
 ## TICK 2026-07-13 ~night(25) — BLOG Part 29: "The recompiler that forgot to saturate" (the SHARC/MAME contribution story)
 Durable deliverable (rule h) building on last tick's P5 audit: wrote mame-blog Part 29 -- the story of the
 SHARC bugs the KN7000 surfaced in MAME's SHARED core (not KN7000-specific): the MODE1 ALUSAT
