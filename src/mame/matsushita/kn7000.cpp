@@ -1246,6 +1246,12 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//       real code, not just data.
 	//map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
 
+	// SYNTHETIC "Technics Rhythms" name resource: the "rhythms" region (kn7000 set
+	// only) is installed at 0x54E00000 from machine_start(), NOT here -- this map is
+	// shared with the KN6000/6500 sets which lack the region, and memregion() must
+	// not run during the validity check (no machine yet -> crash). See machine_start
+	// for the full rationale.
+
 	// Data-flash READ views (byte-verified RE, notes/initial-data-disk-and-custom-flash.md):
 	//   0x56000000 = the CUSTOM writable flash's read view (programmed by the "Initial Data"
 	//                disk idd7000; command/program aperture is a SEPARATE window at 0x96800000,
@@ -2357,6 +2363,23 @@ void kn7000_state::machine_start()
 	// raises the periodic interrupt that drives the MILK scheduler.
 	m_maincpu->set_irq_vector(0x4C03DDA0);
 
+	// SYNTHETIC "Technics Rhythms" name resource (kn7000 set only; the KN6000/6500
+	// sets have no "rhythms" region, so nothing is installed for them -- runtime
+	// install rather than a maincpu_mem entry because the map is shared and is also
+	// constructed during the validity check, where regions don't exist).
+	// 0x54E00000 is the firmware's LAST-RESORT software probe window for the rhythm
+	// name resource (prober 0x4843D6DC, selector 0x4843385E). Per the Phase A
+	// hardware survey (notes/table-rom-structure.md) it is NOT a real KN7000 chip
+	// select -- the real resource lives on the undumped data flash -- so serving the
+	// clearly-labeled synthetic container here is the honest emulator fix for the
+	// "every style row says 8 Beat 1" fallback. The prober strncmps 0x54E10000
+	// BEFORE 0x54E00000; that first probe lands mid-resource (image offset 0x10000
+	// holds record payload, no magic -- verified), so the match lands at 0x54E00000
+	// and all directory offsets resolve from the right base. Region tail beyond the
+	// 0x3EB07F image is ERASEFF (reads as erased flash).
+	if (memory_region *rr = memregion("rhythms"))
+		m_maincpu->space(AS_PROGRAM).install_rom(0x54e00000, 0x54e00000 + rr->bytes() - 1, rr->base());
+
 	// KN6000/KN6500: unlike the KN7000 (which self-loads its library), the
 	// "library" at 0x4C000000/0x8C000000 is a bus mirror of the program ROM.
 	// Populate the aliased libram from the program ROM so the boot finds it.
@@ -2694,6 +2717,23 @@ ROM_START(kn7000)
 	// generator falls back to the sine placeholder. Rebuild + update hashes with the tool.
 	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
 	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(fcaf76ad) SHA1(c4268b2b385dd1a6fe80bd7eeb662aea55da7caf))
+
+	// SYNTHETIC "Technics Rhythms" style-name resource (optional) -- built by
+	// tools/gen_technics_rhythms.py, NOT a dump (hence BAD_DUMP). The real ~4.1MB
+	// rhythm-data flash (IC21 factory flash / IC18+IC20 custom flash per
+	// notes/table-rom-structure.md) is UNDUMPED; without a resource the firmware's
+	// name resolver falls back to its count=1 program-ROM stub and every style row
+	// renders as "8 Beat 1". This container is deterministic from the two dumped
+	// ROMs: the REAL intact directory prefix (a born-truncated copy survives in the
+	// table flash at 0x483E828C), the REAL 8 aux records + record-0 payload from the
+	// program-ROM stub, and REAL names for the 52 styles resolved via the intact
+	// secondary catalog (table flash 0x48244F78). The remaining 168 factory display
+	// names existed only on the undumped flash and are UNRECOVERABLE until it is
+	// dumped: they are emitted as self-announcing placeholders ("BALLAD 04 ?" --
+	// genre/slot from the byte-verified reverse map at 0x48734EE4). Mapped at the
+	// firmware's last-resort probe window 0x54E00000 (see maincpu_mem).
+	ROM_REGION32_LE(0x400000, "rhythms", ROMREGION_ERASEFF)
+	ROM_LOAD_OPTIONAL("kn7000_rhythms_synthetic.rom", 0x000000, 0x3eb07f, BAD_DUMP CRC(1fff54c5) SHA1(c6c9615c40745096b436ec98e9c61d83295b7ebb))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
