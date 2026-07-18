@@ -26,6 +26,27 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-19 ~02:4x (local 07-18 23:4x) — ★★ PHASE B INSTALLED & VERIFIED: THE "8 BEAT 1" BUG IS FIXED (style lists show per-slot names)
+The synthetic "Technics Rhythms" resource is INSTALLED in the driver and LIVE-VERIFIED (kn7000_mame
+09fc7e5, built + published). Install: new optional ROM_REGION32_LE(0x400000, "rhythms") in
+ROM_START(kn7000) loading kn7000_rhythms_synthetic.rom (0x3EB07F bytes, BAD_DUMP CRC 1fff54c5
+SHA1 c6c9615c40745096b436ec98e9c61d83295b7ebb; regenerated bit-identical to the Phase B binary by
+tools/gen_technics_rhythms.py, staged in kn7000_mame_build/roms/kn7000 + kn7000-emulator/roms/kn7000).
+Mapped at the last-resort probe window 0x54E00000 — from machine_start() via install_rom, NOT a
+maincpu_mem entry: ★ GOTCHA (found via segfault) — the map is shared with KN6000/6500 (no "rhythms"
+region) AND is constructed during the validity check, where memregion() has no machine and CRASHES;
+runtime install sidesteps both. -validate clean. EVIDENCE (ballad_verify.lua / latin_verify.lua in
+kn7000-emulator, snap/kn7000/): 0007=home (boot clean; home rhythm name now "8&16BT 01 ?"),
+0008=BALLAD list = "BALLAD 01 ?".."BALLAD 10 ?" PAGE 1/2 (distinct placeholders, matches the
+generator's --verify prediction exactly), 0011=LATIN & WORLD list = REAL factory names ("Bossanova 1",
+"Bossanova 2", "Beguine", "Rhumba", "Bolero", "Cha Cha", "Samba", "Samba Rock", "Salsa",
+"Tango Argent") PAGE 1/3. Lua-probed live: magic "Technics Rhythms" reads at 0x54E00000; the
+earlier-probed 0x54E10000 lands mid-resource (0x17 0x00 0x10 f4..., no magic) so the selector inits
+from the right base. Honest labeling everywhere: placeholders end in " ?"; the 168 factory names stay
+unrecoverable until the Phase C hardware dump (then: dump IC21/IC18+IC20, replace the synthetic ROM
+with the real image + real map base). REMAINS: nothing for Phase B; Felipe-facing note = lists now show
+52 real + 168 " ?" names.
+
 ## TICK 2026-07-19 ~00:2x (cron) — ★ PHASE B COMPLETE (synth resource built); SD SAVE probe stalled (uninvestigated)
 PHASE B (wf_b672d391-0c8) LANDED, tool committed a012fdd (tools/gen_technics_rhythms.py), binary at
 scratchpad/technics_rhythms_synth.bin. DECISIVE FACTS: (1) the table-ROM copy @0x483E828C is an INTACT
