@@ -20,14 +20,13 @@ DONE this session (all committed):
   organization" section = the 3 items above), NEW kn7000-technichord.md, NEW kn7000-design-language.md,
   control-panel/sound/effects/storage pages refreshed, nav+index wired, Jekyll builds clean.
 
-IN PROGRESS (check before duplicating):
-- Blog workflow drafting Parts 30-34 (w0qccw226 / wf_e88ef57c-c97): 30 design language, 31 tempo wheel,
-  32 LED map vs real machine, 33 SD lid bug, 34 "where does a thing belong" (3 architecture items).
-  When it lands: write posts/kn7000/*.md + append posts.json entries ({file,title,date,summary},
-  summary ~1100-1500 chars starting "Part N."), REVIEW for accuracy/voice, commit mame-blog.
+MORE DONE (this session, continued):
+- BLOG PARTS 30-34 PUBLISHED (mame-blog c9d77c8): all 5 posts written in-series-voice, every cited
+  commit/address verified against the tree first; posts.json appended in original format (36 entries).
+- tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
+  (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
 NEXT (in order; pick the first unfinished):
-1. Finish + commit the blog posts (above).
 2. SD end-to-end: boot with the default card, navigate SD MENU (SEG0D 0x80) -> LOAD (SEG11 0x10),
    select a file, verify a LOAD completes (bytes flow via 0x9805000C); then try SD-Song playback.
 3. "8 Beat 1" Phase A (ungated groundwork): map name-resource probe windows 0x40010000/0x40610000/

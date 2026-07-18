@@ -1,5 +1,24 @@
 # Demo stall / chord-finder garbage / "8 Beat 1" — root causes + research plan (2026-07-10)
 
+> **STATUS UPDATE 2026-07-18: 2 of the 3 symptoms are FIXED; only 2a remains open.**
+> - Root cause 1 (demo stall / TM5 tempo timer): FIXED, commit 60d5392.
+> - Root cause **2b (chord-finder garbage pitch): RESOLVED as a side effect of the
+>   pitch-pipeline fix (commit de4fc88)** — the TG pitch is now resolved from the lib
+>   voice record's notePitch16 (0x500AF940 + slot*0xB4 +0x0C), BYPASSING the NULL
+>   part-0x21 tone-block descriptor math entirely. The chord finder plays true
+>   C-E-G today. The "shared root cause" framing below is therefore only
+>   PARTIALLY live: the missing flash data no longer causes any audible defect
+>   in the chord finder.
+> - Root cause **2a ("8 Beat 1" style names): still OPEN**, and its precise
+>   mechanism is now pinned: the "Technics Rhythms" name resource resolves to the
+>   **count=1 STUB at 0x48729988** (header u16BE count=0x0001) because all probe
+>   windows fail in emulation (0x48010000 = 0xF7 fill; 0x40010000/0x40610000/
+>   0x40810000/0x54E00000/0x54E10000 unmapped), so selector 0x4843385E falls back
+>   to the stub and resolver 0x48433AC4 gates every entry out of range -> every
+>   list row renders "  8 Beat 1  ". (This supersedes the older "templated at
+>   boot @0x484420CB" and "0x96800000 empty" theories.) Next step = Phase A
+>   below (map the probe windows to physical ICs from the service manual).
+
 Felipe asked: dig into the demo playback stall via disassembly; could it (and the chord
 finder glitches) be related to the "8 Beat" problem? Answer, after a combined runtime +
 4-way disassembly investigation (each finding adversarially re-derived by an independent
@@ -61,7 +80,7 @@ Two independently-verified chains end at the same class of missing data:
   0x4873ACC0 / StyleRecordTable 0x4873BEE8 name ptrs) — but this GUI path resolves
   through the flash resource, not those tables.
 
-### 2b. Chord-finder garbage pitch
+### 2b. Chord-finder garbage pitch — RESOLVED 2026-07-11 (de4fc88), see status box at top
 - The chord finder itself is CORRECT: root/type interval tables at prog-ROM
   0x48763794/0x48763888 produce the right MIDI notes, queued at 0x50092600 and posted
   as note-ons on **part 0x21 (CHORDFINDER)** through the same library event ring the

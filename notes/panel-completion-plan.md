@@ -1,5 +1,22 @@
 # KN7000 control-panel completion plan (ALL buttons + ALL LEDs)
 
+> **STATUS BANNER 2026-07-18 — the checklist below is LARGELY HISTORICAL; current state:**
+> - **154 buttons + 101 LED outputs bound** on physical scan-matrix tags, all clickable in the
+>   layout; 0 dark press-lit LEDs; the LED map is graded against Felipe's real-machine F3+F4
+>   lamp test (79 press-lit confirmed; see notes/led-mapping-second-review.md).
+> - The panel is a DEVICE (`kn7000_cpanel_device`), and since commit df73be3 the 22
+>   `CP{board}_SEG{col}` button ioports live IN the device (`device_input_ports()`); the layout
+>   references them as **`cpanel:CP{board}_SEG{col}`** (gen_lay.py qualifies the tags in a
+>   final pass). "Every binding resolves to a driver PORT_BIT" below is outdated — bindings
+>   resolve to the DEVICE's ports now (verify via `-listxml`, ports under `:cpanel:`).
+> - GENUINELY REMAINING panel work: (1) the ~68 firmware-driven `(unmapped)` LED shadow bits in
+>   `panel_led_frame()` — cross-reference notes/panel-led-dnumbers.json / service-manual
+>   DIAGRAM-15/17; (2) functional verification of elimination-only soft bindings (e.g.
+>   cpr_led97 tempo-knob vs SetDialLed); (3) the named-indicator (mode) LEDs idx 6-18 from
+>   notes/led-mapping-second-review.md not yet tied to their modes; (4) Felipe-gated ambiguous
+>   bits (SEQUENCER PLAY/EASY REC unbound; GLOBAL CHORUS vs MULTI ordering,
+>   notes/panel-layout-bankA-bindings.md).
+
 Living checklist for the autonomous panel work. Authoritative map = the ROM-extracted
 descriptor (`panel-descriptor-map.md`); scripts in scratchpad: `extract_desc.py` (descriptor),
 `compare.py` (vs driver), `audit_layout.py` (vs layout). Program flash @0x48400000, table
