@@ -26,6 +26,40 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-19 ~03:4x (local 00:4x) — ★★★ SD SAVE->LOAD ROUND-TRIP COMPLETE: THE SD WRITE PATH WORKS END-TO-END
+GOAL met in full (save validated + load-back validated + distinguishable-state proof). WHY THE OLD
+PROBE STALLED (snapshot review, criterion 0): in the SD SAVE MENU "TECHNICS FORMAT" is on soft-key
+ROW 2 and "SD-SOUND (SMF) FORMAT" on ROW 4 — ROW 1 IS BLANK; sdsave1.lua pressed LCDR1 into the
+empty row (snaps 0002-0006 byte-identical). SECOND latent blocker found: sdcard_from_real_kn7000.img
+is root-owned mode 644 — MAME as fsanches can NEVER write it; all write tests ran on a writable
+working copy (sdcard_work.img). Backup of the pristine dump made FIRST at
+kn7000_scratchpad_snapshot/sdcard_backup_pre_save.img (md5 c3bcea2346cb3bb7d803e8c48aebce78 = original,
+verified unchanged after all runs). THE FLOW (all soft keys now mapped): home -> SD CARD LOAD toggle
+-> SD MENU -> LCDR2 (SAVE MENU) -> LCDR2 (TECHNICS FORMAT) -> SD SAVE browser (PAGE 1/3: SAVE AS SONG
+naming field; FOLDER/SONG lists w/ 01 preselected; content list CURRENT PANEL/PANEL MEMORY/SEQUENCER/
+COMPOSER/SOUND MEMORY/PERFORMANCE PADS/EFFECT MEMORY; SAVE=LCDR1, SONG NAMING=LCDR2, FOLDER
+RENAME=LCDR5) -> LCDR1 -> ATTENTION "file already exists...Are You Sure?" (YES=LCDR3=CPR_SEG7 0x01,
+NO=LCDR4=CPR_SEG6 0x01) -> LCDR3 -> ~15 s of card writes -> "COMPLETED!". EVIDENCE: (1) image md5
+CHANGED c3bcea23->68cf2667 (first save) ->c1c33830 (BALLAD save); (2) 154 sectors rewritten in a
+textbook FAT pattern — FAT@98/129, dirs@256/288, data clusters 372-437/512+; dir decode: the real
+card ALREADY HELD a TECHNICS structure (TFLD001/01001KN7.{EFC,TM,LSW,PMT,MSP,CMP,SQT,ACT} +
+KN7000MN.{INF,BAK} — hence the overwrite dialog; the "empty" browser slots are BLANK NAMES, not
+absent files, likely also the ERROR-83 story); save rewrote KN7000MN.BAK + the song's .TM/.PMT/.SQT;
+(3) browser free space dropped 123,552KB->123,488KB. ROUND-TRIP PROOF (strongest): run D pressed
+RHYTHM GROUP BALLAD (CPL_SEG2 0x08, home rhythm -> "BALLAD 01 ?") before saving; run E on a FRESH
+BOOT (default rhythm "8&16BT 01 ?") did SD MENU -> LCDR1 -> LOAD browser (LOAD=LCDR1) -> LOAD
+(~95k SPI reads) -> home now shows **RHYTHM "BALLAD 01 ?"** — the saved panel state came back off
+the card. spi_sdcard write path: CMD24 handler writes straight to the image, ignores incoming data
+CRC (no init-value trap on writes; reads needed the init-0 fix, writes don't). SHIPPED: run.sh now
+attaches a WRITABLE WORKING COPY by default (sdcard_work.img auto-created from the pristine dump on
+first run; delete it to factory-reset; pristine dump stays read-only) — publish-binary.sh heredoc +
+live kn7000-emulator/run.sh + README bullet ("The SD card works, including saving"). Scripts
+archived: tools/sd_roundtrip_save.lua / tools/sd_roundtrip_load.lua (full key map in headers);
+throwaway probes sdsave2-5/sdload_rt.lua + snaps left in kn7000-emulator. NEXT (SD): SONG NAMING
+dialog (LCDR2 in the save browser) for named saves; SD-SOUND (SMF) FORMAT save leg (SAVE MENU row 4);
+give folder01/song01 a visible name so the load/play demos show a titled song; blank-name files vs
+ERROR 83 hypothesis test.
+
 ## TICK 2026-07-19 ~02:4x (local 07-18 23:4x) — ★★ PHASE B INSTALLED & VERIFIED: THE "8 BEAT 1" BUG IS FIXED (style lists show per-slot names)
 The synthetic "Technics Rhythms" resource is INSTALLED in the driver and LIVE-VERIFIED (kn7000_mame
 09fc7e5, built + published). Install: new optional ROM_REGION32_LE(0x400000, "rhythms") in

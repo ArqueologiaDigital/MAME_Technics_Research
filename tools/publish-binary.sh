@@ -57,16 +57,29 @@ cat > "$DEST/run.sh" <<'SH'
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
-# The KN7000 has an SD-card slot. Attach the bundled real-card image by default: without a
-# card the firmware reports "ERROR 93: SD lid is open" REGARDLESS of the SD-slot-cover switch,
+# The KN7000 has an SD-card slot. Attach an SD image by default: without a card the
+# firmware reports "ERROR 93: SD lid is open" REGARDLESS of the SD-slot-cover switch,
 # because its card-detect line reads "no card" the same as "lid open" -- so the cover switch
 # only has a visible effect when a card is actually present. (Only kn7000 has this slot.)
-# Pass your own "-harddisk <img>" to use a different card, or "-harddisk \"\"" for an empty slot.
+# In-emulator SD SAVE works, so we attach a WRITABLE WORKING COPY (sdcard_work.img,
+# auto-created from the pristine real-card dump on first run) -- your saves persist there
+# while sdcard_from_real_kn7000.img stays untouched. Delete sdcard_work.img to reset the
+# card to the factory dump. Pass your own "-harddisk <img>" to use a different card, or
+# "-harddisk \"\"" for an empty slot.
 EXTRA=()
-if [ "$MODEL" = kn7000 ] && [ -f sdcard_from_real_kn7000.img ]; then
+if [ "$MODEL" = kn7000 ]; then
 	case " $* " in
 		*" -harddisk "*) ;;   # caller already chose (or cleared) the SD image
-		*) EXTRA=(-harddisk sdcard_from_real_kn7000.img) ;;
+		*)
+			if [ ! -f sdcard_work.img ] && [ -f sdcard_from_real_kn7000.img ]; then
+				cp sdcard_from_real_kn7000.img sdcard_work.img && chmod u+w sdcard_work.img
+			fi
+			if [ -f sdcard_work.img ]; then
+				EXTRA=(-harddisk sdcard_work.img)
+			elif [ -f sdcard_from_real_kn7000.img ]; then
+				EXTRA=(-harddisk sdcard_from_real_kn7000.img)
+			fi
+			;;
 	esac
 fi
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
@@ -122,6 +135,11 @@ be produced (binary + its own copies of the libraries + loader).
       *"Tone generators / firmware sound (experimental)"* to **On**, then reset (Tab → Reset, or F3).
     - Play notes with the PC keyboard: **Z S X D C V G B H N J M** = C4…B4, **Q 2 W 3 E R…** = C5 up.
     - Pitch and polyphony are the firmware's own; the timbre is a placeholder sine (see below).
+- **The SD card works, including saving**: a real-card image is attached by default and the
+  full SD UI runs — LOAD/SAVE browsers, SD TOOLS, play paths. A TECHNICS FORMAT panel save
+  and load-back round-trip has been verified end-to-end (FAT writes reach the card image).
+  Your saves persist in `sdcard_work.img` (auto-created working copy); delete that file to
+  reset the card to the pristine dump.
 - **KN6000 / KN6500** boot to their main play screen (tone/sound-group icon row, menus, status bar).
 
 The four PCM **wave ROMs are undumped**, so the sound uses a placeholder sine rather than the real
