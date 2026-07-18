@@ -26,6 +26,41 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-18 ~23:0x — ★★ RETRACTION + RESOLUTION: SD MENU SOFT KEYS ALL WORK (my sweep was a stale-state artifact)
+The wf_194ce2c2-824 empirical digger FALSIFIED the 21:5x tick's conclusion. **SD CARD LOAD
+(:cpanel:CPR_SEG1 0x80) is a TOGGLE** (home->SD MENU, SD MENU/any-sub-screen->home, even dismisses
+ERROR dialogs) — my un-state-verified sweep pressed LCDR keys against the WRONG screen. With a
+pixel-probe-verified menu pre-state: **ALL 9 SD MENU items open via their soft keys** — LCDR1 ->
+**SD LOAD BROWSER READING THE REAL CARD** (volume KN7000_MAME, PAGE 1/3, FOLDER+SONG lists,
+123,552KB free), LCDR2 SD SAVE MENU, LCDR3 SD SONG MEDLEY, LCDR4/5 SD-AUDIO/SD-SOUND PLAY (ERROR 83
+"file empty" = the real card's FIRST FILE IS EMPTY; the play path itself runs), LCDL1-4 SD TOOLS/
+PREFERENCES/FAVORITE SONGS/CUSTOM STYLE. DIAL/PAGE = no-op on this screen; EXIT works. No patch
+needed. Scripted recipe: from home press CPR_SEG1 0x80, wait ~2s, VERIFY the menu, then the soft key
+(0.4s press). Digger scripts: kn7000-emulator/sdnav_*.lua. LESSON (recorded): always verify the
+pre-state screen before attributing a press result; SD CARD LOAD toggles. The static digger's gate
+speculation ("boot paints menu w/o mode entry") is MOOT, but its MILK RE is durable gold: screen
+records (SD MENU @0x486809B9 title 0x104 mode 0x18, selectors right 0x10-0x14 left 0x90-0x93 ->
+tags/titles incl. LOAD sel 0x10 -> title 0x105), the full dispatch chain (PanelButtonDispatch
+0x484ADB59 -> pump 0x484145FF -> resolver 0x4841473A -> ApPostEvent 0x50005/0x50006 -> PsMenuBoxProc
+0x4841CCC8 hit-test view+0x28 -> AcTitleMenuProc 0x4841D0EC actions), mode/title vars 0x5000097C/
+0x5000099C, SD-state getter 0x4855E80C. NEXT: drive the SD LOAD browser to COMPLETE a load
+(folder/song select + LOAD soft key), then SD-SOUND play on a NON-EMPTY file.
+
+## TICK 2026-07-18 ~22:4x — ★ PHASE A LANDED (probe windows -> physical ICs); PHASE B (synthetic resource) LAUNCHED
+Phase A committed (4e77f57, notes/table-rom-structure.md): **0x54E00000 is a SOFTWARE last-resort
+constant, not a real KN7000 aperture** (every data chip is 4/8MB on aligned selects; the 74VHC139
+quadrant for 0x548xxxxx is drawn N.C.) -> the labeled-SYNTHETIC install at 0x54E00000 is the honest
+emulator fix; the REAL "Technics Rhythms" home is IC21 @0x57000000 (32Mbit factory flash, size-twin
+of KN5000 rhythm_data IC14) or the factory-set part of the custom flash IC18/IC20 @0x56000000
+(+0x96800000 = its +0x40000000 uncached AMD-cmd mirror; custom CE ignores A23). 0x40010000/0x40610000/
+0x40810000 = nothing (sibling-model windows). Phase C (hardware dump w/ Felipe) should read 0x56000000/
+0x57000000/0x57800000 + live-probe 0x54E00000. BONUS: a TRUNCATED copy of the real resource exists in
+the DUMPED table ROM at 0x483E828C (directory entry [83], magic verified; deep records cut off).
+**Phase B workflow wf_b672d391-0c8 LAUNCHED**: decode the truncated copy + build style-ID->name
+correlation -> gen_technics_rhythms.py + synthetic binary + resolver self-check. When it lands: add the
+ROM_REGION + map at 0x54E00000 in kn7000.cpp (label SYNTHETIC), build, publish (ONLY once the SD
+workflow frees the display), verify the BALLAD list shows real names.
+
 ## TICK 2026-07-18 ~22:2x (cron) — blog/docs polish while both background tasks run
 Both investigations still in flight (SD-nav workflow wf_194ce2c2-824 0/3 done, its MAME runs own the
 display -- do NOT rebuild/publish or run MAME until it lands; Phase A agent mid-work, has already
