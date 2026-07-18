@@ -26,6 +26,21 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-18 ~21:5x — SD nav: LCDR soft keys DEAD on the sound-present SD MENU (root-cause workflow running)
+Empirical sweep (sdload1-4.lua in the session scratchpad): the machine boots INTO the SD MENU (Felipe's
+cfg = sound-present strap); the card MOUNTS (spi reads ~89k by t=30). Pressing the LCDR soft keys
+(post-refactor tags :cpanel:CPR_SEG5 0x10/0x20, CPR_SEG7 0x01, CPR_SEG6 0x01, CPR_SEG5 0x01):
+LCDR1/3/5 -> fall back to the HOME/play screen (the events act as PART RIGHT1/LEFT/? ON), LCDR2/4 ->
+nothing. ZERO SPI delta (no transient screen; rapid 0.6s snapshots). SD CARD LOAD (:cpanel:CPR_SEG1
+0x80, ev2040/arg0A6A) from home DOES reopen the SD MENU. KEY FACT: bank A and the old bank map the
+LCD soft keys to the SAME events (ev2000/ev2001 args 0x10xx-0x14xx; bankA_dump.txt vs
+panel-button-names.md) -- at TICK 07-12 12:10 (sound-absent) ev2001/arg1000 opened LOAD; now the same
+event is consumed by the part framework -> the SCREEN INTERCEPTION is what changed, not the mapping.
+Lead: AcIntTitleMenuSDProc @0x485736B7. Root-cause workflow wf_194ce2c2-824 running (2 static-RE
+diggers: screen-record/soft-key table + ev2001 dispatch-chain gating; 1 empirical sweep: LCDL keys,
+DATA dial, PAGE, EXIT, CPSD switches). NOTE for future Lua: anchor install_*_tap results in _G or
+they get GC'd and stop counting.
+
 NEXT (in order; pick the first unfinished):
 2. SD end-to-end: boot with the default card, navigate SD MENU (SEG0D 0x80) -> LOAD (SEG11 0x10),
    select a file, verify a LOAD completes (bytes flow via 0x9805000C); then try SD-Song playback.
