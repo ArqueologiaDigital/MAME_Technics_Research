@@ -26,6 +26,16 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-18 ~22:2x (cron) — blog/docs polish while both background tasks run
+Both investigations still in flight (SD-nav workflow wf_194ce2c2-824 0/3 done, its MAME runs own the
+display -- do NOT rebuild/publish or run MAME until it lands; Phase A agent mid-work, has already
+committed table-ROM findings incl. ★ entry [83] 0x483E828C = 'Technics Rhythms' in the DUMPED table
+flash, previously mislabeled 'Technics Pads' -- potentially the real name resource, await its final
+report). Done this tick: mame-blog kn7000 device blurb brought current (c97311c, blurb-only diff);
+kn5000-docs mame-branch-review.md gained the SHARC-core contribution series section (941cdcd, site
+rebuilt clean). NEXT unchanged; when the SD workflow lands, act on its answer (that is the SD
+end-to-end blocker); when Phase A lands, evaluate whether 0x483E828C obviates the synthetic install.
+
 ## TICK 2026-07-18 ~21:5x — SD nav: LCDR soft keys DEAD on the sound-present SD MENU (root-cause workflow running)
 Empirical sweep (sdload1-4.lua in the session scratchpad): the machine boots INTO the SD MENU (Felipe's
 cfg = sound-present strap); the card MOUNTS (spi reads ~89k by t=30). Pressing the LCDR soft keys
