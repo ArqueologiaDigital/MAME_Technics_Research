@@ -26,6 +26,29 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-19 ~00:2x (cron) — ★ PHASE B COMPLETE (synth resource built); SD SAVE probe stalled (uninvestigated)
+PHASE B (wf_b672d391-0c8) LANDED, tool committed a012fdd (tools/gen_technics_rhythms.py), binary at
+scratchpad/technics_rhythms_synth.bin. DECISIVE FACTS: (1) the table-ROM copy @0x483E828C is an INTACT
+DIRECTORY (count=0xDD=221, full 0x800 nametable, all 169 local + 8 aux offsets) with ZERO record
+payload — BORN truncated at 0x1248 bytes (tail cleanly erased, not a bad dump). (2) ★ the 931
+previously-decoded names are MUSIC STYLIST names, NOT rhythm names (StyleRecordTable 0x4873BEE8 =
+stylist table; rhythm resolution never touches it). (3) REAL index formula idx=((id&0xF00)>>1)|(id&0x7F);
+prog-ROM reverse map 0x48734EE4 (idx -> genre<<8|slot) VERIFIED 220/220. (4) the 168 plain-entry
+display names exist ONLY on the undumped ~4.1MB rhythm flash (exhaustive negative search: all sibling
+firmwares = count-1 stubs, KN5000 ROMs, .AST, manual, web archives — none have them). (5) 52 secondary
+names DO decode from intact 0x48244F78 ("Country Rock".."70s Orchestra"). Synth strategy: verbatim
+intact directory + stub aux records (byte-justified) + 169 local records cloned from stub record 0
+(real 0x530A-byte "8 Beat 1" record; name field rewritten per-slot; 60 slots size-truncated safely).
+NEXT (Phase B install): add ROM_REGION + map at 0x54E00000 in kn7000.cpp loading the generated binary
+(label SYNTHETIC; real names where known, genre+slot-derived names otherwise), build, publish, verify
+BALLAD list (SEG00 0x10... use the RHYTHM GROUP BALLAD button + snapshot) shows per-slot names not 10x
+"8 Beat 1". Note Felipe-facing: the 168 factory names are UNRECOVERABLE without the Phase C hardware
+dump — the synthetic list will show honest placeholders + 52 real names.
+SD SAVE probe (sdsave1.lua, this tick): reached SD SAVE MENU -> pressed LCDR1 (TECHNICS FORMAT
+candidate) -> ZERO new SPI R/W, image md5 unchanged — the save flow did not engage; snapshots
+0000-0006 in kn7000-emulator/snap/kn7000 UNREVIEWED (do that first next tick; maybe the SAVE MENU's
+keys differ or a dialog needs another key).
+
 ## TICK 2026-07-18 ~23:0x — ★★ RETRACTION + RESOLUTION: SD MENU SOFT KEYS ALL WORK (my sweep was a stale-state artifact)
 The wf_194ce2c2-824 empirical digger FALSIFIED the 21:5x tick's conclusion. **SD CARD LOAD
 (:cpanel:CPR_SEG1 0x80) is a TOGGLE** (home->SD MENU, SD MENU/any-sub-screen->home, even dismisses
