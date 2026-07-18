@@ -69,14 +69,19 @@ def _load_btn_names():
     # Parse the driver INPUT_PORTS for every panel button's silk name, keyed BOTH ways:
     #   BTN_CP  = {(CP-port tag, "0xNN"): name}    -- matches the layout's final inputtag/inputmask
     #   BTN_SEG = {("SEGxx" normSeg, "0xNN"): name} -- matches the PANEL_LED (SEGxx,mask) LED keys
-    kncpp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "mame", "matsushita", "kn7000.cpp")
+    # The CP{board}_SEG{col} button ports live in the control-panel DEVICE now
+    # (kn7000_cpanel.cpp device_input_ports()); read both it and the driver so the
+    # silk-name map is found wherever the PORT_START blocks sit.
+    _src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "mame", "matsushita")
+    kncpp = os.path.join(_src_dir, "kn7000_cpanel.cpp")
     cp2ns = {"CPL_SEG0":0x00,"CPL_SEG1":0x01,"CPL_SEG2":0x02,"CPL_SEG3":0x03,"CPL_SEG4":0x04,
              "CPL_SEG6":0x06,"CPL_SEG7":0x07,"CPC_SEG5":0x05,"CPC_SEG8":0x08,"CPC_SEG9":0x09,
              "CPC_SEG10":0x0a,"CPC_SEG11":0x0b,"CPR_SEG0":0x0c,"CPR_SEG1":0x0d,"CPR_SEG2":0x0e,
              "CPR_SEG3":0x0f,"CPR_SEG4":0x10,"CPR_SEG5":0x11,"CPR_SEG6":0x12,"CPR_SEG7":0x13,
              "CPR_SEG8":0x14,"CPR_SEG9":0x15}
     by_cp = {}; by_seg = {}; cp = None
-    for ln in open(kncpp).read().splitlines():
+    _lines = open(kncpp).read().splitlines() + open(os.path.join(_src_dir, "kn7000.cpp")).read().splitlines()
+    for ln in _lines:
         m = re.search(r'PORT_START\("(CP[LCR]_SEG\d+)"\)', ln)
         if m: cp = m.group(1); continue
         if "PORT_START" in ln: cp = None; continue           # left the CP scan-matrix ports
@@ -962,3 +967,13 @@ if _km:
                   rf'\g<1>x="{_fx:.1f}" y="{_fy:.1f}" width="32" height="32"', _lay)
     open(_LAY_PATH, "w").write(_lay)
     print(f"SYNCED tempo_click/finger to wheel bounds ({_kx:g},{_ky:g},{_kw:g},{_kh:g})")
+
+# --- The panel BUTTON scan-matrix ports now live in the kn7000_cpanel DEVICE (its
+#     device_input_ports()), not the driver's INPUT_PORTS, so their layout inputtags must be
+#     qualified with the device path. Prefix every CP{board}_SEG{col} inputtag with "cpanel:"
+#     (leaves CPSD_SDSW -- an SD-board GPIO still owned by the driver -- and the VOL_*/analog
+#     tags untouched). Runs LAST so it also covers tags emitted by the annotation passes above.
+_lay = open(_LAY_PATH).read()
+_lay, _pfx = re.subn(r'inputtag="(CP[LCR]_SEG\d+)"', r'inputtag="cpanel:\1"', _lay)
+open(_LAY_PATH, "w").write(_lay)
+print(f"QUALIFIED {_pfx} button inputtags with the cpanel: device path")

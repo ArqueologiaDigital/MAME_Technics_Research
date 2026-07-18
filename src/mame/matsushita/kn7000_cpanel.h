@@ -29,8 +29,11 @@ class kn7000_cpanel_device : public device_t
 public:
 	kn7000_cpanel_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
-	// Button + analog input ports (set by the main driver; referenced by tag).
-	template <typename T> void set_phys_port(unsigned n, T &&tag) { m_phys[n].set_tag(std::forward<T>(tag)); }
+	// The button scan-matrix ports (CP{board}_SEG{col}) are OWNED by this device --
+	// declared in device_input_ports() and bound by tag in the constructor (see the
+	// .cpp). The shared front-panel analog controls the panel also scans stay in the
+	// driver's INPUT_PORTS (the layout faders / audio path reference them too) and are
+	// handed to this device by tag via the setters below.
 	template <typename T> void set_dial_port(T &&tag) { m_dial.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_volapcseq_port(T &&tag) { m_volapcseq.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_tempoknob_port(T &&tag) { m_tempoknob.set_tag(std::forward<T>(tag)); }
@@ -48,6 +51,7 @@ protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;   // the CP{board}_SEG{col} button matrix
 
 	TIMER_CALLBACK_MEMBER(panel_event);   // deferred ATN edge / RX-byte delivery
 	TIMER_CALLBACK_MEMBER(panel_scan);    // periodic button + analog scan
@@ -84,8 +88,10 @@ private:
 	devcb_write_line m_atn_cb;
 	devcb_write8     m_rxd_cb;
 
-	// Input ports (set by the main driver via the set_*_port() helpers above).
-	optional_ioport_array<22> m_phys;      // one per physical board SEG column (CP{board}_SEG{col})
+	// Button scan-matrix ports -- OWNED by this device (declared in device_input_ports(),
+	// bound by tag in the constructor). One per physical board SEG column.
+	optional_ioport_array<22> m_phys;      // CP{board}_SEG{col}
+	// Shared analog panel controls (set by the main driver via the set_*_port() helpers above).
 	optional_ioport m_dial;                // DATA dial (rotary encoder, wire 0x10)
 	optional_ioport m_volapcseq;           // APC/SEQ VOLUME slider (wire 0xD2)
 	optional_ioport m_tempoknob;           // TEMPO/PROGRAM knob (relative encoder, wire 0x17)
