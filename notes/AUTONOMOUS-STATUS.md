@@ -3190,3 +3190,35 @@ already named in kn7000_manual.sym and fully RE'd in
 notes/panel-serial-protocol.md; boundaries now emitted by the generator),
 or the SD state machine (notes in kn7000-sd-strap-gate memory + disk
 worker RE).
+
+## 2026-07-19 — disassembly CONVERT track: panel serial protocol + button dispatch (maincpu)
+DONE (kn7000_disassembly d6028b6 / 2a81fa5 / 3ab87fd):
+- CONVERT set 84 -> 111, byte-match held at 100% throughout. Converted the
+  COMPLETE control-panel chain: PanelTransaction/PanelSignOnRequest/
+  PanelStatusPoll/PanelWaitLinkIdle/PanelTxKick, the 3 ISRs (Atn/TxDone/Rx),
+  transfer states PanelTxState1-6 + PanelRxState8-9 + idle/rearm, PanelTxPump,
+  PanelErrorRecovery, PanelHeaderValidate, both decode pumps, PanelFrameDecode
+  and PanelButtonDispatch -- each with a FUNC_DOC header citing
+  panel-serial-protocol.md. ~70 new kn7000_manual.sym names cover the whole
+  pipeline (FIFO primitives, latched-control handlers, GPIO switch scan incl.
+  the 0x9CC00008 phantom-button source, event records, the 5 descriptor action
+  types, PanelEventPost) + LibIntcEnable/Disable (0x4C03DCC8/0x4C03DD3F).
+- DISCOVERIES this pass: (1) the state table 0x48613034 has 11 slots -- a
+  previously undocumented RX state 9 (0x484ACCF6, reply-countdown/turnaround),
+  idle slots 0/7/10 -> 0x484ACE38, and an unreferenced link-rearm 0x484ACE42;
+  (2) two-entry-ABI corrections: PanelTransaction/PanelTxKick/
+  PanelButtonDispatch canonical movm starts are at -3/-5/-5 bytes from their
+  documented call entries (0x484AC2A5/0x484AC51E/0x484ADB54); (3) mode-B has
+  its own wire-normalization table 0x48613620 (twin of 0x486135A0); (4) the
+  runtime poll/dispatch entries PanelPollTick 0x484AD801 +
+  PanelSwEventDispatchAll 0x484ADB29 have NO static caller/pointer anywhere in
+  either ROM image -- runtime-registered.
+- TOOLING: encoder gained and/or imm16,psw (FA FC/FD); the generator now
+  repairs unidasm's F4-page LENGTH BUG (movbu register-indexed printed as one
+  byte + phantom re-decode) from the ROM bytes. Converted source now has ZERO
+  .byte escapes outside the annotated boot header (was 42) -- also cleaned the
+  Techni-Chord matrix reads retroactively.
+NEXT maincpu convert target suggestion: the SD state machine (disk worker
+0x48551F8D + the 0x4854xxxx service cluster; notes in kn7000-sd-strap-gate
+memory) or the tempo/TM5 chain (ISR 0x48447084, TM5 regs 0x340010x2, the
+96-PPQN dispatch -- notes/tg-pitch-pipeline.md + sound-subsystem memory).
