@@ -834,7 +834,7 @@ private:
 	required_device<kn7000_dsp_bridge_device> m_dspbridge;  // F.3: routes TG audio through the effects DSP
 	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
 
-	template <int Ch> void midi_rx(uint8_t data) { sio_rx_push(Ch, data); }
+	template <int Ch> void midi_rx(uint8_t data) { m_maincpu->sio_rx_push(Ch, data); }
 
 	// Control panel button ports and LEDs (CPL = 8 cols, CPC = 5 cols; CPR + the
 	// serial HLE device that reads these / drives the LEDs are still to come).
@@ -1112,26 +1112,16 @@ private:
 	void tmr7_base_w(uint16_t data);
 	void tmr7_rearm(bool restart_phase);
 
-	// --- SIO ASIC: three USART channels at 0x34000800 / 0x810 / 0x820 -------
-	// ch0 = control panel, ch1 = MIDI port 1, ch2 = the SD sub-CPU "CPSD"
-	// (MN102H60) -- NOT MIDI-2 as first assumed: the SD firmware polls ch2 status
-	// (0x3400082c bit7) ~370k times while an SD screen waits and never touches it
-	// on non-SD screens (RE 2026-07-08, notes/sd-card-emulation-plan.md). Per
-	// channel, at +0x10 stride:
-	//   +0 config(16) · +4 control(8) · +8 TX-data(8) · +9 RX-data(8) · +C status(16)
+	// --- SIO: three on-chip USART channels at 0x34000800 / 0x810 / 0x820 ----
+	// ch0 = control panel, ch1 = MIDI port 1, ch2 = MIDI port 2 (adversarially
+	// verified RE 2026-07-10; the earlier "SD sub-CPU CPSD" attribution was
+	// wrong -- see notes/sd-card-emulation-plan.md). The register model
+	// (config/control/TX/RX/status, sync-START instant completion, 64-byte RX
+	// rings) now lives in the MN10300 CPU core (src/devices/cpu/mn10300/,
+	// internal map on the core's AS_PROGRAM); the driver keeps only the
+	// channel endpoints (panel HLE, MIDI UART bridges) and the INTC routing,
+	// wired through the core's sio_* callbacks in kn7000(machine_config).
 	enum { SIO_PANEL = 0, SIO_MIDI1 = 1, SIO_MIDI2 = 2, SIO_SD = 2 };
-	uint16_t sio_r(offs_t offset, uint16_t mem_mask = ~0);
-	void sio_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	void sio_tx_byte(int ch, uint8_t data);
-	void sio_rx_push(int ch, uint8_t data);
-	bool sio_rx_ready(int ch) const { return m_sio_rx_head[ch] != m_sio_rx_tail[ch]; }
-	uint8_t sio_rx_pop(int ch);
-
-	uint16_t m_sio_config[3] = { 0, 0, 0 };
-	uint8_t  m_sio_control[3] = { 0, 0, 0 };
-	uint8_t  m_sio_rx_fifo[3][64] = { };   // small ring buffer per channel
-	uint8_t  m_sio_rx_head[3] = { 0, 0, 0 };
-	uint8_t  m_sio_rx_tail[3] = { 0, 0, 0 };
 
 	// --- Control-panel HLE (the sub-CPU side of the panel serial link) ------
 	// LED command bytes arrive as 2-byte [ADDR][DATA] frames on the panel TX;
@@ -1311,9 +1301,11 @@ void kn7000_state::maincpu_mem(address_map &map)
 				return uint16_t(uint64_t(m_tmr7_base + 1) * m_tempo_timer->remaining().as_attoseconds() / period.as_attoseconds());
 			}));
 	}
-	// The SIO ASIC (panel + two MIDI channels) is a decoded sub-block of the
-	// 0x34000000 bank; this more-specific mapping overrides the logger above.
-	map(0x34000800, 0x3400082f).rw(FUNC(kn7000_state::sio_r), FUNC(kn7000_state::sio_w));
+	// The on-chip SIO (panel + two MIDI channels, 0x34000800-0x3400082f) is
+	// modeled inside the MN10300 core: the core's internal address map is
+	// appended AFTER this driver map (addrmap.cpp: "construct the internal
+	// device map (last so it takes priority)"), so its window overrides the
+	// 0x34000000-wide logger above -- nothing to map here.
 	map(0x36008000, 0x360080ff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	// GPIO input port 0x36008084: bit 0 = panel-link ready/presence line, held
 	// HIGH by the panel sub-CPUs. The TX state machine's state-1 handler tests it
@@ -1960,137 +1952,16 @@ INPUT_CHANGED_MEMBER(kn7000_state::kbd_key)
 
 
 // ============================================================================
-//  SIO ASIC -- three USART channels (panel + two MIDI ports)
+//  SIO -- three on-chip USART channels (panel + two MIDI ports)
 // ============================================================================
 //
-// The handlers are 16-bit (as the whole 0x34000000 bank is); `offset` is the
-// 16-bit-word index within 0x34000800. Each channel spans 0x10 bytes = 8 words,
-// so channel = offset / 8 and the byte within the channel is (offset << 1) & 0xf.
-// Byte registers (control @+4, TX @+8, RX @+9) are reached with movbu, i.e. a
-// masked 16-bit access: TX is the low byte of word 4, RX the high byte.
-
-uint16_t kn7000_state::sio_r(offs_t offset, uint16_t mem_mask)
-{
-	const int ch = offset / 8;
-	const int reg = (offset << 1) & 0x0f;
-	switch (reg)
-	{
-	case 0x0:                    // config
-		return m_sio_config[ch];
-	case 0x4:                    // control (byte @+4)
-		return m_sio_control[ch];
-	case 0x8:                    // +8 TX (write-only) / +9 RX (read, high byte)
-		if (ACCESSING_BITS_8_15)
-			return uint16_t(sio_rx_pop(ch)) << 8;
-		return 0;
-	case 0xc:                    // status: bit4 = RxRDY
-		// ch2 is the MIDI-2 UART (adversarially verified RE 2026-07-10; earlier
-		// "CPSD/SD link" attribution was wrong -- see notes/sd-card-emulation-plan.md).
-		// Its RX classifier 0x484b28ee treats bit7 as RX-empty and its TX path
-		// polls bit6 as TxRDY, but modeling those bits changes boot-time MIDI-2
-		// behaviour and wedged the boot (black LCD) -- keep the historical
-		// RxRDY-only status until MIDI-2 OUT modeling is actually wanted.
-		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
-	}
-	return 0;
-}
-
-void kn7000_state::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
-{
-	const int ch = offset / 8;
-	const int reg = (offset << 1) & 0x0f;
-	switch (reg)
-	{
-	case 0x0:                    // config
-		COMBINE_DATA(&m_sio_config[ch]);
-		// Bit 15 = transfer START on the synchronous panel link: the firmware
-		// sets it to clock one byte and then polls the register until the
-		// hardware self-clears it on completion. The HLE completes transfers
-		// instantly. In the RX direction (mode field low3 = 7) the panel
-		// sub-CPU supplies the next response byte of its pending reply.
-		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x8000))
-		{
-			m_sio_config[ch] &= 0x7fff;
-			// Bit15 = start/busy for the boot's POLLED bit-bang path only; it just
-			// self-clears here. The per-byte transfer trigger is the DATA write
-			// itself: state-2 (0x484AC8D2) and later payload states write data with
-			// NO bit15 write at all -- an armed/pending model makes each such
-			// transfer complete only on the NEXT retry's arm, advancing the state
-			// machine one step per retry (the observed parking). Completion is
-			// modeled per data write in sio_tx_byte.
-		}
-		// RX enable (bit14, set by the group-0x1A ISR's pass 2 together with mode
-		// low3=7 and state:=8): the panel now sends its queued reply, one byte per
-		// group-0x10 interrupt (the state-8 handler reads 0x34000809 into the ring
-		// at 0x5006BDB4 and bumps the head that the handshake success test checks).
-		if (ch == SIO_PANEL && (m_sio_config[ch] & 0x4000))
-			m_cpanel->rx_enable();
-		break;
-	case 0x4:                    // control (byte @+4)
-		if (ACCESSING_BITS_0_7)
-			m_sio_control[ch] = data & 0xff;
-		break;
-	case 0x8:                    // TX data (byte @+8 = low byte)
-		if (ACCESSING_BITS_0_7)
-			sio_tx_byte(ch, data & 0xff);
-		break;
-	default:
-		break;
-	}
-}
-
-void kn7000_state::sio_rx_push(int ch, uint8_t data)
-{
-	const uint8_t next = (m_sio_rx_head[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
-	if (next == m_sio_rx_tail[ch])
-		return;                  // FIFO full -- drop (overrun)
-	m_sio_rx_fifo[ch][m_sio_rx_head[ch]] = data;
-	m_sio_rx_head[ch] = next;
-	// Deliver the byte: assert the channel's RX interrupt group (ICRs: panel RX
-	// 0x34000168 -> group 0x1A, MIDI-1 RX 0x34000148 -> 0x12, MIDI-2 RX
-	// 0x34000150 -> 0x14; see notes/panel-serial-protocol.md #6). The firmware's
-	// RX ISR reads +0x09 and acks its GxICR; polling paths see RxRDY regardless.
-	static constexpr int rx_group[3] = { 0x1a, 0x12, 0x14 };
-	if (ch != SIO_PANEL)                          // panel: the sync-transfer-complete
-		intc_assert(rx_group[ch]);                // assert in sio_w covers group 0x1A
-
-}
-
-uint8_t kn7000_state::sio_rx_pop(int ch)
-{
-	if (m_sio_rx_head[ch] == m_sio_rx_tail[ch])
-		return 0;
-	const uint8_t v = m_sio_rx_fifo[ch][m_sio_rx_tail[ch]];
-	if (!machine().side_effects_disabled())
-		m_sio_rx_tail[ch] = (m_sio_rx_tail[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
-	return v;
-}
-
-void kn7000_state::sio_tx_byte(int ch, uint8_t data)
-{
-	switch (ch)
-	{
-	case SIO_PANEL:
-		// Every data write clocks one sync transfer. Completion -> group 0x11 --
-		// ALWAYS deferred (an ISR-context write + synchronous assert is wiped by
-		// the exit ack). Safe with IAGR latched at accept.
-		m_panel_txdone->adjust(attotime::from_usec(40), 3);
-		// The main CPU transmits 7-byte frames with interleaved line syncs; the
-		// panel HLE parses them, decodes LED writes, and queues replies.
-		m_cpanel->tx_byte(data);
-		break;
-	case SIO_MIDI1:
-	case SIO_MIDI2:
-		// Serialize the byte out through the channel's UART to its MIDI OUT port.
-		// (ch2 = MIDI-2, verified 2026-07-10; the interim CPSD hook + keep-alive
-		// injected phantom MIDI bytes and wedged the boot -- removed.)
-		m_midi_uart[ch - SIO_MIDI1]->write(data);
-		break;
-	}
-}
-
-
-
+// The register model moved into the MN10300 CPU core (src/devices/cpu/mn10300/
+// mn10300.cpp, byte-exact port of the HLE that lived here). The driver keeps
+// the channel endpoints and the INTC: the core's sio_* callbacks (bound in
+// kn7000(machine_config)) route TX bytes to the panel HLE / MIDI UART bridges
+// and RX-ready / TX-done events to intc_assert. RX interrupt groups (ICRs:
+// panel RX 0x34000168 -> group 0x10, MIDI-1 RX 0x34000148 -> 0x12, MIDI-2 RX
+// 0x34000150 -> 0x14; see notes/panel-serial-protocol.md #6).
 
 
 // The main-CPU SIO channel-0 sync-transfer completion (group 0x11). Deferred
@@ -2110,12 +1981,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::panel_txdone_cb)
 [[maybe_unused]] void kn7000_state::cpsd_queue(const uint8_t *bytes, int n)
 {
 	// Deliver the whole frame into the ch2 RX FIFO at once; the status bits (bit7 +
-	// bit4, both from sio_rx_ready) then reflect it and the firmware clocks the
-	// bytes out via its bit4-gated reads of +9 (0x34000829). sio_rx_push also
-	// asserts the ch2 RX interrupt (group 0x14) per byte, matching the DETECT the
-	// firmware sets at 0x484b206f.
+	// bit4, both from the core's RxRDY) then reflect it and the firmware clocks the
+	// bytes out via its bit4-gated reads of +9 (0x34000829). The core fires the ch2
+	// rx-rdy callback (-> group 0x14) per byte, matching the DETECT the firmware
+	// sets at 0x484b206f.
 	for (int i = 0; i < n; i++)
-		sio_rx_push(SIO_SD, bytes[i]);
+		m_maincpu->sio_rx_push(SIO_SD, bytes[i]);
 }
 
 // Front-panel MAIN VOLUME slider -> master output gain on the final mix. A squared
@@ -2393,11 +2264,7 @@ void kn7000_state::machine_start()
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
 
 	save_item(NAME(m_gxicr));
-	save_item(NAME(m_sio_config));
-	save_item(NAME(m_sio_control));
-	save_item(NAME(m_sio_rx_fifo));
-	save_item(NAME(m_sio_rx_head));
-	save_item(NAME(m_sio_rx_tail));
+	// (SIO channel state is save_item'd by the MN10300 core now.)
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tmr7_mode));
@@ -2407,12 +2274,7 @@ void kn7000_state::machine_start()
 
 void kn7000_state::machine_reset()
 {
-	for (int ch = 0; ch < 3; ch++)
-	{
-		m_sio_config[ch] = 0;
-		m_sio_control[ch] = 0;
-		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
-	}
+	// (SIO channel state is cleared by the MN10300 core's device_reset now.)
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 
 	// Effects DSP (F.2): hold the SHARC halted. The firmware host-boots it -- dsp_data_w
@@ -2576,6 +2438,34 @@ void kn7000_state::kn7000(machine_config &config)
 	m_maincpu->set_irq_acknowledge_callback(FUNC(kn7000_state::irq_ack));
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
 
+	// On-chip SIO routing (the register model lives in the core; the INTC is
+	// still driver-side HLE at 0x34000100, so IRQ events come OUT of the core
+	// through these callbacks). ch0 = control panel (synchronous link):
+	m_maincpu->sio_tx_done_cb<0>().set([this](int state) {
+		// Sync-transfer completion -> group 0x11 -- ALWAYS deferred (an
+		// ISR-context write + synchronous assert is wiped by the exit ack).
+		// The core fires this before the TX-byte callback, preserving the
+		// old schedule-then-tx_byte order. The level-like re-delivery
+		// (m_c11_unserviced, intc_w) is unchanged driver-side.
+		m_panel_txdone->adjust(attotime::from_usec(40), 3);
+	});
+	// The main CPU transmits 7-byte frames with interleaved line syncs; the
+	// panel HLE parses them, decodes LED writes, and queues replies.
+	m_maincpu->sio_tx_cb<0>().set([this](uint8_t data) { m_cpanel->tx_byte(data); });
+	// One group-0x10 interrupt per reply byte the panel delivers into the ch0
+	// RX ring (the state-8 handler reads 0x34000809 per interrupt).
+	m_maincpu->sio_rx_rdy_cb<0>().set([this](int state) { intc_assert(0x10); });
+	// Config bit14 written set (group-0x1A ISR pass 2): the panel may now send
+	// its queued reply.
+	m_maincpu->sio_rx_enable_cb<0>().set([this](int state) { m_cpanel->rx_enable(); });
+	// ch1/ch2 = MIDI 1 / MIDI 2: TX bytes serialize out through the UART
+	// bridges below; each received byte raises the channel's RX group
+	// (MIDI-1 0x12, MIDI-2 0x14 -- see notes/panel-serial-protocol.md #6).
+	m_maincpu->sio_tx_cb<1>().set(m_midi_uart[0], FUNC(kn7000_sio_uart_device::write));
+	m_maincpu->sio_rx_rdy_cb<1>().set([this](int state) { intc_assert(0x12); });
+	m_maincpu->sio_tx_cb<2>().set(m_midi_uart[1], FUNC(kn7000_sio_uart_device::write));
+	m_maincpu->sio_rx_rdy_cb<2>().set([this](int state) { intc_assert(0x14); });
+
 	/* video hardware */
 	// LCD panel. Exact geometry is uncertain: the KN7000 front-panel LCD is
 	// reported as either 320x240 or 640x240. Using 640x240 as a placeholder.
@@ -2595,9 +2485,9 @@ void kn7000_state::kn7000(machine_config &config)
 
 	// --- MIDI ports (SIO channels 1 & 2 at 0x34000810 / 0x34000820) ---------
 	// Each channel has a byte<->bit UART bridge feeding a standard MAME MIDI
-	// IN/OUT port pair. TX (firmware -> SIO -> UART -> MIDI OUT) works now;
-	// MIDI IN bytes are queued on the SIO RX FIFO but only reach the firmware
-	// once the MN10300 core takes SIO receive interrupts.
+	// IN/OUT port pair. TX = firmware -> core SIO -> tx_cb -> UART -> MIDI OUT;
+	// RX = MIDI IN -> UART -> midi_rx -> core sio_rx_push (rx-rdy raises the
+	// channel's INTC group, bound above).
 	KN7000_SIO_UART(config, m_midi_uart[0], 0);
 	m_midi_uart[0]->tx_cb().set("mdout1", FUNC(midi_port_device::write_txd));
 	m_midi_uart[0]->rx_cb().set(FUNC(kn7000_state::midi_rx<SIO_MIDI1>));
@@ -2621,7 +2511,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// pulse and reply bytes to the main CPU's interrupt controller and SIO0 RX.
 	KN7000_CPANEL(config, m_cpanel);
 	m_cpanel->atn().set([this](int state) { if (state) intc_assert(0x1a); });
-	m_cpanel->rxd().set([this](uint8_t data) { sio_rx_push(SIO_PANEL, data); intc_assert(0x10); });
+	m_cpanel->rxd().set([this](uint8_t data) { m_maincpu->sio_rx_push(SIO_PANEL, data); });
 	// The panel scan-matrix button ports (CP{board}_SEG{col}) are declared by the control-panel
 	// device itself now (kn7000_cpanel_device::device_input_ports()); no wiring needed here. The
 	// shared front-panel analog controls stay in the driver's INPUT_PORTS and are handed over by tag:
