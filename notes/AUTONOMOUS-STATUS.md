@@ -3222,3 +3222,39 @@ NEXT maincpu convert target suggestion: the SD state machine (disk worker
 0x48551F8D + the 0x4854xxxx service cluster; notes in kn7000-sd-strap-gate
 memory) or the tempo/TM5 chain (ISR 0x48447084, TM5 regs 0x340010x2, the
 96-PPQN dispatch -- notes/tg-pitch-pipeline.md + sound-subsystem memory).
+
+## 2026-07-19 — disassembly CONVERT track: the SD-card subsystem (maincpu)
+DONE (kn7000_disassembly 14c72e1 / aca8abd):
+- CONVERT set 111 -> 185 (+74), byte-match held at 100% throughout (incl.
+  the clean-rebuild check); still ZERO .byte escapes outside the boot
+  header. Converted the COMPLETE SD path: disk worker (DiskInit/
+  DiskWorkerTask/blocking+async posters/SdWorkerCmdHandler), the card-init
+  chain (SdCardInitFull CMD0/1/59/9/16/10 ladder + SdCardIdentify CSD
+  parse), the whole SPI transport on 0x9805000C (send/recv, response/
+  token/busy scanners, SdCommandSend, read/write block incl. CRC16 verify,
+  SdDataCrc16 init-0, SdCmdCrc7), the slot GPIO/power layer, and the
+  UI-side mount state machine (SdStateMachineTick states 0..4,
+  SdCardInsertMsgHandler 0x107020BB, SdMountWorker/SdMountDone,
+  SD_Get/SetState, mount gates). ~115 new kn7000_manual.sym names.
+- DISCOVERIES this pass (upgrading the sd-card-emulation-plan notes):
+  (1) SdCardInitFull retries with a THREE-RATE SPI clock fallback ladder
+  (SdSpiClockSet modes 0xC/0xB/0xA = rate 1/2/3 + inter-byte gap 4/0xE/
+  0x1C -> latch 0x9805000E = rate|0x80; per-rate gap count 0x50005200 is
+  the spin bound in SdSpiSendByte); (2) the "wait helpers" guessed in the
+  notes are really: 0x4854bb89 = clock-rate set, 0x4854c94d = CRC7,
+  0x4854c1d5 = slot-sense busy wait (0x9cc00009 bit0), 0x4854bc8f = CS
+  assert; (3) command frames carry {clockMode,respType,cmd[6]} — the
+  clockMode field doubles as the SdSpiClockSet arg (CMD0/CMD1 run forced
+  slow); (4) the boot-time 20,000-write storm on 0x9805000C =
+  SdSlotDischarge's 0x00 flush train (rails off, presence latched into
+  the 0x50005204 override); (5) hardware subtype (PanelSubTypeGet,
+  0x484d7751): subtype 4 has NO slot GPIO bank (detect forced present,
+  WP/sense 0) — MAME runs subtype 5 (strap 0x98070000 bits11:10=00),
+  which is why the ICR-0x3400016c detect modeling works; (6) drive-letter
+  class table: 'A'/'J'/'K' = floppy-class, rest = SD-class; (7) verified
+  lib kernel helpers: LibDiv32 0x4C0019D5, LibTickSleep 0x4C03DD74 (lib
+  tick 0x500d3c58), LibMsgSend/Receive 0x4C03D219/0x4C03D36D.
+NEXT maincpu convert target suggestion: the tempo/TM5 chain (96-PPQN ISR
+0x48447084, TM5 regs 0x340010x2 — notes/tg-pitch-pipeline.md + the
+sound-subsystem memory) or the TG note path (note-on/release writers RE'd
+in the forever-note fix, tg-pitch-pipeline.md).
