@@ -128,6 +128,35 @@ types 0x2C/0x2D/0x0B in the units1-6 whitelist): Celeste / Mod. Cel. / Flanger. 
 delay line" published (mame-blog 852a5fd). NEXT record family: the Multi/Sound-DSP inserts (start
 w/ the big =rec30 chorus family or the phasers) or the resident kernel rec04 itself.
 
+## TICK 2026-07-19 — ★★★ RESIDENT KERNEL (rec04) FULLY DOCUMENTED + MULTI-UNIT ANSWERED (u6) + blog Part 40
+The DSP-doc directive's centerpiece: dsp/kernel-architecture.md in kn7000_disassembly (commit
+85525e2), every claim PM/DM-quoted, register decodes pinned vs the ADSP-21065L TRM (PDF in repo
+root). BIG DECODES: (1) the host protocol IS the 21065L host interface — "reg" indices = the
+chip's own IOP registers: reg0 probe 0x20 = SYSCON reset value (HBW=16), 0x0B = MSGR3 (probe
+verdicts), 0x40/41/42 = IIEP0/IMEP0/CEP0, 0x1C = DMAC0 (0xA1 = 16<->48 PM commit / 0x41 = 16<->32
+DM / 0xA0 = park), data port = the EPB0 FIFO (why index-once-then-hammer works). No checksums.
+(2) audio fabric TRM-PINNED: 8 SELF-CHAINING SPORT DMA TCBs (DM 0xC306+, CP+0x8000 = own TCB) ->
+8 words/line/sample: TX0A=0xC342 TX0B=0xC34A TX1A=0xC352 RX0A=0xC362 RX0B=0xC36A RX1A=0xC372 (+2
+armed-but-unused spares); std mode 24-bit external clock/FS (TG = timing master). (3) mainloop:
+10 host-patched CALL slots (slot9 recycles the 0x8D00 boot-init PM); ISR sets MODE2 0x40 = BUSLK
+(bus LOCK, corrects "handshake flag") -> host coeff bursts land race-free in the frame tail =
+the mid-note hot-patch mechanism; DM(0x2F) = IOSTAT driving the FLAG4 PIN (hw frame-busy strobe);
+DM(0x20)=0x3A2 = SDRDIV refresh (corrects "input default"). (4) delay manager: per-slot window
+tables (u0 = 0x10748 = 1.53s SDRAM = reverb; u1-u5 0x7918; {u6,u7} & {u8,u9} share) + 6 overlapped
+arena-SCRUB stubs (0x80A6+, countdown table 0x9C40) = zero-fill a slot before a new effect.
+★ MULTI QUESTION (which slot serves TG send 0x8298) ANSWERED-PROVISIONAL: 3 send banks <-> 3 read
+RX lines (4th line readerless, no 4th bank); anchors reverb=u0 (bank0=RX0A) + Chorus-whitelist
+u7 on RX0B (bank1) => MULTI bank2 -> RX1A {u8 EQ-locked, u9 wrong whitelist, u6} => **u6** (in
+0xC378/9 out 0xC358/9, the slot the +0x0A I4 hop serves). Prior candidates u1/u2/u3/u5 EXCLUDED;
+"u6 chorus twin" = the MULTI slot's boot default (rec06 via insert alias 0x2C); SOUND DSP really
+lives among u1-u5 (MAME bridge's u9 feed = placeholder). Decisive live test = watch RX1A go
+nonzero with MULTI depth>0. rec04.sym enriched to FULL coverage (vector table per TRM E-5, call
+slots, scrub stubs, TCB/ring labels; 4 corrections: BUSLK/IOSTAT-FLAG4/SDRDIV/CAFRZ); records.tsv
++ README updated; listings regenerated (drift-clean). Blog Part 40 "A four-kilobyte operating
+system" published (mame-blog e7de85e). NEXT (directive): remaining record families — the Multi/
+Sound-DSP inserts (=rec30 chorus family, phasers, waveshapers), the unit-7 chorus rec58-61
+(FLAG3-gated), EQ rec34, unit-0 reverb-family aliases; then per-record docs are complete.
+
 ## TICK 2026-07-19 ~05:3x — rhythm-names workflow CLOSED (acted on the no-bug verdict; docs+verifier committed)
 Acting stage for the tick below: since the verdict is "faithful split, no off-by-one", NO change to
 tools/gen_technics_rhythms.py, the installed kn7000_rhythms_synthetic.rom, or the driver — no
