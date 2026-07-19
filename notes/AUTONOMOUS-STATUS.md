@@ -110,6 +110,24 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-19 ~02:3x (UTC, next day) — DSP CHORUS FAMILY DOCUMENTED (rec06/07/09) + blog Part 39
+Standing directive (document every DSP program) continued past the reverb: full algorithm doc
+dsp/chorus-family-algorithms.md in kn7000_disassembly (commit e1a668b) for the three mislabeled
+unit-9 "Reverb"-whitelist records — rec06 = quadrature two-voice ensemble/celeste chorus (250+-64
+smp taps, antiphase stereo), rec07 = same engine + 0.15 cross-mixed second LFO (template 7.15 Hz),
+rec09 = stereo resonant flanger (300+-64 smp FLOAT taps, 0.70 float regen, indep per-channel LFOs).
+Shared design language pinned: internal I2 ring only (kernel grants 0x400-word arenas, PM
+0x8085/0x8088..), f = fs*incr/2^31 sine LFOs, 16.16 fractional taps, wet-only; the c028..c040 sine
+table = the slot data records rec77-79 (sine/tri/square) overwrite -> LIVE LFO waveform morphing.
+TWO CORRECTIONS to committed annotation: rec09 LFO phase template 0x20000000 = 90deg (not 45deg;
+2^31 wrap, 4/16 steps); kernel MODE1 0x3000 = IRPTEN+ALUSAT (bit13), NOT NESTM -> rec07's +-1.15
+modulator sum saturates at +-1.0, swing stays +-64 smp. fs/256 templates quantified absurd (+-157%
+pitch dev) -> host-rewrite near-certain, still PROVISIONAL. GUI candidates (PROVISIONAL, via alias
+types 0x2C/0x2D/0x0B in the units1-6 whitelist): Celeste / Mod. Cel. / Flanger. Syms enriched
+(rec04/06/07/09), records.tsv updated, listings regenerated. Blog Part 39 "Three ways to wobble a
+delay line" published (mame-blog 852a5fd). NEXT record family: the Multi/Sound-DSP inserts (start
+w/ the big =rec30 chorus family or the phasers) or the resident kernel rec04 itself.
+
 ## TICK 2026-07-19 ~05:3x — rhythm-names workflow CLOSED (acted on the no-bug verdict; docs+verifier committed)
 Acting stage for the tick below: since the verdict is "faithful split, no off-by-one", NO change to
 tools/gen_technics_rhythms.py, the installed kn7000_rhythms_synthetic.rom, or the driver — no
