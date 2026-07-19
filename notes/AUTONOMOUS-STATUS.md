@@ -19,6 +19,20 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★ REVERB FULLY DOCUMENTED + BLOG PART 38 PUBLISHED (DSP-doc directive, item 1 done)
+The reverb annotation is COMPLETE (kn7000_disassembly 2888f7f: dsp/reverb-algorithm.md + deep syms
+rec51-56 + records.tsv relabels): rec51-56 = ONE Moorer-style reverberator (2 damped combs 368/328 ms,
+tank decay -0.2435 -> RT60(DC) ~1.8 s, matches the live tail) with Dattorro-style 4-allpass input
+diffusion (k=0.618), absorbing AP 118.8 ms, 258-word stereo-decorrelation line — all delay lengths
+exact from the -1/sample cursor address arithmetic; rec51=54=55=56 byte-identical PM, rec52/53 differ
+only in 4 early-tap immediates; rec53's integer-ms early taps pin fs=44.1 kHz; the unit-9 "Reverb"
+whitelist records rec06/07/09 are actually choruses + a flanger (tail-incapable) — the real reverb sat
+under the "Enhancer" label. Open (doc §7): GUI-name<->preset + unit-role mapping; decisive experiment =
+breakpoint DspEffectSelect 0x48405815 while switching Room1->Dark2. Blog Part 38 "The reverb was filed
+under Enhancer" published (mame-blog cb17200). NEXT per the records.tsv sweep: the chorus family
+rec06/07/09 (already partially decoded by this pass — quadrature 2-tap engine traced, LFO-rate
+templates still PROVISIONAL) then the multi/SOUND-DSP inserts.
+
 ## TICK 2026-07-19 — ★★ SHARC UPSTREAM SERIES SUBMISSION-READY (prep agent complete)
 The upstream patch series is REGENERATED, REBASED and VERIFIED against the current base (kn7000-base
 @957e9dec1b4). notes/upstream-patches/ now holds a 9-file `git am`-able series (old 01-05 replaced;
