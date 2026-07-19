@@ -6,10 +6,8 @@ chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
 ## TICK 2026-07-19 (Felipe back, interactive) — TWO WORKFLOWS IN FLIGHT, do not duplicate
-1. wf_5774e9e1-d0b "rhythm-names-offbyone": Felipe observed C&W slot 1 = placeholder while 60s&70s
-   slot 1 = real-looking name; Latin&World + March&Waltz perfect. Hypothesis: 26+12+14=52 exactly ->
-   an off-by-one in the synthetic container shifted the 52-name window. Diagnose (ground truth from
-   the intact nametable) -> fix generator -> reinstall -> on-screen verify.
+1. wf_5774e9e1-d0b "rhythm-names-offbyone": **COMPLETE 2026-07-19 (see the two ~05:xx ticks below)**
+   — hypothesis falsified, split is faithful, no code change; bug note CLOSED, verifier committed.
 2. wf_920ebe24-bf2 "sio-into-mn10300-core" (FELIPE REQUESTED): implement the on-chip serial in the
    mn10300 core (MN10200-style; devcb IRQ callbacks out to the driver INTC), then rewire kn7000.cpp,
    build, publish, live-verify panel+SD+kn6000. Its Integrate stage WAITS for a free build tree
@@ -37,6 +35,18 @@ MORE DONE (this session, continued):
   commit/address verified against the tree first; posts.json appended in original format (36 entries).
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
+
+## TICK 2026-07-19 ~05:3x — rhythm-names workflow CLOSED (acted on the no-bug verdict; docs+verifier committed)
+Acting stage for the tick below: since the verdict is "faithful split, no off-by-one", NO change to
+tools/gen_technics_rhythms.py, the installed kn7000_rhythms_synthetic.rom, or the driver — no
+rebuild/republish needed (nothing on disk changed; both staged ROM copies remain valid). Durable
+documentation instead (commit 1566cb0): notes/rhythm-name-list-bug.md gained a CLOSED section (the
+full faithful-split story + decisive bytes); the byte-exact verifier is now tools/genre_truth.py
+(portable argparse version, output reproduced line-for-line vs the diagnosis run); full evidence
+report committed as notes/genre-name-ground-truth.txt (per-slot tables for all 16 genres + final
+verdict). Re-run any time: `python3 tools/genre_truth.py` (defaults = published emulator ROMs +
+decompressed program image). Felipe-facing summary: the screen is telling the truth — C&W slot 1
+and the other 167 placeholder names await the Phase C hardware dump of the ~4.1MB rhythm flash.
 
 ## TICK 2026-07-19 ~05:0x — Phase B follow-up: Felipe's genre-list split VERIFIED FAITHFUL (no off-by-one)
 Felipe observed (published build): Latin&World + March&Waltz all-real, C&W all-real EXCEPT slot 1
