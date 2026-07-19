@@ -49,6 +49,54 @@ public:
 	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
 	void set_irq_level(int l) { m_irq_level = l; }
 
+	// ---- on-chip serial (SIO): three channels @ 0x34000800/0x810/0x820 -----
+	//
+	// Modeled in the core, following the MN10200 core's precedent (its on-chip
+	// serial lives in mn10200_device::m_serial[] behind an internal address
+	// map). The register semantics are a byte-exact port of the KN7000 driver's
+	// proven HLE (kn7000.cpp sio_r/sio_w before the SIO-in-core refactor); the
+	// behavior they encode was reverse-engineered from the KN7000 firmware --
+	// see notes/panel-serial-protocol.md and notes/sd-card-emulation-plan.md in
+	// the kn7000_mame overlay repo.
+	//
+	// Channel map (KN7000): ch0 = control-panel sync link, ch1 = MIDI 1,
+	// ch2 = MIDI 2. Register layout per channel (stride 0x10, 16-bit regs):
+	//   +0  config   bit15 = sync-transfer START (ch0; self-clears instantly in
+	//                        this HLE -- the polled boot path only)
+	//                bit14 = RX enable (ch0: panel may send its queued reply)
+	//   +4  control  (byte)
+	//   +8  TX data  (byte, write; the data write itself clocks one transfer)
+	//   +9  RX data  (byte, read; pops the 64-byte RX FIFO)
+	//   +C  status   bit4 = RxRDY only. ch2's bit7 (RX-empty) / bit6 (TxRDY)
+	//                are deliberately NOT modeled (doing so wedged boot).
+	//
+	// The interrupt controller is NOT on this device (the KN7000 driver models
+	// it at 0x34000100), so interrupt-worthy events are routed OUT through
+	// per-channel callbacks and the driver forwards them to its INTC:
+	//   sio_tx_cb        (write8): byte written to the TX data register
+	//   sio_tx_done_cb   (write_line, called with 1 per event): the transfer of
+	//        that byte completed (instant-completion HLE). Invoked BEFORE
+	//        sio_tx_cb, mirroring the driver HLE's order (it scheduled its
+	//        deferred group-0x11 completion before handing the byte to the
+	//        panel). The KN7000 driver defers this ~40us before asserting INTC
+	//        group 0x11 (ch0) -- that deferral + the "level-like until
+	//        serviced" re-delivery is INTC policy and stays driver-side.
+	//   sio_rx_rdy_cb    (write_line, called with 1 per byte): a byte was
+	//        pushed into the RX FIFO (KN7000 INTC groups: ch0 -> 0x10,
+	//        ch1 -> 0x12, ch2 -> 0x14)
+	//   sio_rx_enable_cb (write_line, called with 1): config bit14 written set
+	//        -- ch0 only (the panel sub-CPU may now send its queued reply)
+	// Unbound callbacks are no-ops, so a machine may wire only what it needs.
+	template <unsigned Ch> auto sio_tx_cb() { return m_sio_tx_cb[Ch].bind(); }
+	template <unsigned Ch> auto sio_tx_done_cb() { return m_sio_tx_done_cb[Ch].bind(); }
+	template <unsigned Ch> auto sio_rx_rdy_cb() { return m_sio_rx_rdy_cb[Ch].bind(); }
+	template <unsigned Ch> auto sio_rx_enable_cb() { return m_sio_rx_enable_cb[Ch].bind(); }
+
+	// Endpoint devices (panel HLE, MIDI UART bridges) deliver received bytes
+	// here; each successful push fires sio_rx_rdy_cb for that channel.
+	void sio_rx_push(int ch, uint8_t data);
+	bool sio_rx_ready(int ch) const { return m_sio_rx_head[ch] != m_sio_rx_tail[ch]; }
+
 protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
@@ -78,11 +126,35 @@ protected:
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
 
 private:
+	static constexpr unsigned NUM_SIO = 3;
+
 	// ---- address space -----------------------------------------------------
-	// TODO(MN10300): flat 32-bit little-endian space with a 32-bit data bus,
-	// vs. MN10200's (ENDIANNESS_LITTLE, 16-bit data, 24-bit address).
+	// Flat 32-bit little-endian space with a 32-bit data bus. The internal map
+	// decodes ONLY the on-chip SIO window (0x34000800-0x3400082F); the rest of
+	// the machine (including the neighboring 0x34xxxxxx I/O: INTC, timers, ...)
+	// is mapped by the driver. MAME appends a device's internal map AFTER the
+	// driver's map ("last so it takes priority" -- src/emu/addrmap.cpp), so
+	// this window layers cleanly over any driver-side entries.
+	void internal_map(address_map &map) ATTR_COLD;
 	address_space_config m_program_config;
 	address_space *m_program;
+
+	// ---- on-chip SIO state (see the public section for the register model) --
+	uint16_t sio_r(offs_t offset, uint16_t mem_mask = ~0);
+	void sio_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void sio_tx_byte(int ch, uint8_t data);
+	uint8_t sio_rx_pop(int ch);
+
+	devcb_write8::array<NUM_SIO>     m_sio_tx_cb;
+	devcb_write_line::array<NUM_SIO> m_sio_tx_done_cb;
+	devcb_write_line::array<NUM_SIO> m_sio_rx_rdy_cb;
+	devcb_write_line::array<NUM_SIO> m_sio_rx_enable_cb;
+
+	uint16_t m_sio_config[NUM_SIO];
+	uint8_t  m_sio_control[NUM_SIO];
+	uint8_t  m_sio_rx_fifo[NUM_SIO][64];   // small RX ring buffer per channel
+	uint8_t  m_sio_rx_head[NUM_SIO];
+	uint8_t  m_sio_rx_tail[NUM_SIO];
 
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)

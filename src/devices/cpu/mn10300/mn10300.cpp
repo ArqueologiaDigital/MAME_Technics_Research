@@ -56,9 +56,16 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	// Flat 32-bit little-endian space, 32-bit data bus. The KN7000 peripherals
 	// (program flash @0x48400000, table flash @0x48000000, work RAM @0x50000000,
 	// picture flash @0x57800000, I/O banks) are decoded by the machine driver's
-	// external address map, so no internal address_map is supplied here.
-	, m_program_config("program", ENDIANNESS_LITTLE, 32, 32, 0)
+	// external address map. The internal map supplied here decodes ONLY the
+	// on-chip SIO window (0x34000800-0x3400082F); MAME appends it after the
+	// driver's map, so it takes priority over any overlapping driver entry
+	// while leaving the surrounding 0x34xxxxxx driver mappings intact.
+	, m_program_config("program", ENDIANNESS_LITTLE, 32, 32, 0, address_map_constructor(FUNC(mn10300_device::internal_map), this))
 	, m_program(nullptr)
+	, m_sio_tx_cb(*this)
+	, m_sio_tx_done_cb(*this)
+	, m_sio_rx_rdy_cb(*this)
+	, m_sio_rx_enable_cb(*this)
 	, m_pc(0), m_sp(0), m_mdr(0), m_mdrq(0), m_mcrh(0), m_mcrl(0), m_mcvf(0), m_psw(0), m_lir(0), m_lar(0)
 	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
@@ -66,6 +73,21 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	std::fill(std::begin(m_d), std::end(m_d), 0);
 	std::fill(std::begin(m_a), std::end(m_a), 0);
 	std::fill(std::begin(m_e), std::end(m_e), 0);
+	std::fill(std::begin(m_sio_config), std::end(m_sio_config), 0);
+	std::fill(std::begin(m_sio_control), std::end(m_sio_control), 0);
+	for (auto &fifo : m_sio_rx_fifo)
+		std::fill(std::begin(fifo), std::end(fifo), 0);
+	std::fill(std::begin(m_sio_rx_head), std::end(m_sio_rx_head), 0);
+	std::fill(std::begin(m_sio_rx_tail), std::end(m_sio_rx_tail), 0);
+}
+
+// Internal address map: the on-chip SIO block only. Precedent: the MN10200
+// core (mn1020012a_internal_map) hangs its on-chip peripherals off the same
+// mechanism; here everything except the SIO stays in the driver, so this map
+// is deliberately a single window.
+void mn10300_device::internal_map(address_map &map)
+{
+	map(0x34000800, 0x3400082f).rw(FUNC(mn10300_device::sio_r), FUNC(mn10300_device::sio_w));
 }
 
 device_memory_interface::space_config_vector mn10300_device::memory_space_config() const
@@ -98,6 +120,11 @@ void mn10300_device::device_start()
 	save_item(NAME(m_possible_irq));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_irq_vector));
+	save_item(NAME(m_sio_config));
+	save_item(NAME(m_sio_control));
+	save_item(NAME(m_sio_rx_fifo));
+	save_item(NAME(m_sio_rx_head));
+	save_item(NAME(m_sio_rx_tail));
 
 	state_add(MN10300_PC,  "PC",  m_pc ).formatstr("%08X");
 	state_add(MN10300_SP,  "SP",  m_sp ).formatstr("%08X");
@@ -133,6 +160,15 @@ void mn10300_device::device_reset()
 	std::fill(std::begin(m_d), std::end(m_d), 0);
 	std::fill(std::begin(m_a), std::end(m_a), 0);
 	std::fill(std::begin(m_e), std::end(m_e), 0);
+
+	// On-chip SIO: same reset the KN7000 driver's machine_reset applied to its
+	// HLE state (config/control cleared, RX rings emptied by head=tail).
+	for (unsigned ch = 0; ch < NUM_SIO; ch++)
+	{
+		m_sio_config[ch] = 0;
+		m_sio_control[ch] = 0;
+		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
+	}
 }
 
 void mn10300_device::state_import(const device_state_entry &entry) { }
@@ -197,6 +233,124 @@ void mn10300_device::check_irq()
 	const int im = (m_psw & FLAG_IM) >> IM_SHIFT;
 	if (m_irq_state != CLEAR_LINE && m_irq_vector != 0 && m_irq_level < im)
 		take_irq(m_irq_level, 0);
+}
+
+
+//**************************************************************************
+//  on-chip SIO -- three serial channels @ 0x34000800/0x810/0x820
+//**************************************************************************
+//
+// Byte-exact port of the KN7000 driver's HLE (kn7000.cpp sio_r/sio_w); the
+// register model and its deliberate omissions are documented in mn10300.h and
+// in the kn7000_mame overlay's notes/panel-serial-protocol.md. Precedent for
+// on-chip serial living in the CPU core: the MN10200 (m_serial[] block).
+//
+// The handlers are 16-bit; `offset` is the 16-bit-word index within
+// 0x34000800. Each channel spans 0x10 bytes = 8 words, so channel = offset / 8
+// and the byte within the channel is (offset << 1) & 0xf. Byte registers
+// (control @+4, TX @+8, RX @+9) are reached with movbu, i.e. a masked 16-bit
+// access: TX is the low byte of word 4, RX the high byte.
+
+uint16_t mn10300_device::sio_r(offs_t offset, uint16_t mem_mask)
+{
+	const int ch = offset / 8;
+	const int reg = (offset << 1) & 0x0f;
+	switch (reg)
+	{
+	case 0x0:                    // config
+		return m_sio_config[ch];
+	case 0x4:                    // control (byte @+4)
+		return m_sio_control[ch];
+	case 0x8:                    // +8 TX (write-only) / +9 RX (read, high byte)
+		if (ACCESSING_BITS_8_15)
+			return uint16_t(sio_rx_pop(ch)) << 8;
+		return 0;
+	case 0xc:                    // status: bit4 = RxRDY
+		// KN7000 ch2 is the MIDI-2 UART (adversarially verified RE 2026-07-10;
+		// an earlier "CPSD/SD link" attribution was wrong). Its RX classifier
+		// 0x484b28ee treats bit7 as RX-empty and its TX path polls bit6 as
+		// TxRDY, but modeling those bits changes boot-time MIDI-2 behaviour and
+		// wedged the boot (black LCD) -- keep the historical RxRDY-only status
+		// until MIDI-2 OUT modeling is actually wanted.
+		return sio_rx_ready(ch) ? 0x0010 : 0x0000;
+	}
+	return 0;
+}
+
+void mn10300_device::sio_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	const int ch = offset / 8;
+	const int reg = (offset << 1) & 0x0f;
+	switch (reg)
+	{
+	case 0x0:                    // config
+		COMBINE_DATA(&m_sio_config[ch]);
+		// Bit 15 = transfer START on the synchronous panel link (ch0): the
+		// firmware sets it to clock one byte and then polls the register until
+		// the hardware self-clears it on completion. The HLE completes
+		// transfers instantly. Bit15 is the start/busy for the boot's POLLED
+		// bit-bang path only; it just self-clears here. The per-byte transfer
+		// trigger is the DATA write itself: the KN7000 TX state machine's
+		// state-2 (0x484AC8D2) and later payload states write data with NO
+		// bit15 write at all -- an armed/pending model makes each such transfer
+		// complete only on the NEXT retry's arm, advancing the state machine
+		// one step per retry (observed as parking). Completion is signaled per
+		// data write in sio_tx_byte.
+		if (ch == 0 && (m_sio_config[ch] & 0x8000))
+			m_sio_config[ch] &= 0x7fff;
+		// RX enable (bit14, set by the KN7000's group-0x1A ISR pass 2 together
+		// with mode low3=7 and state:=8): notify the endpoint (the panel now
+		// sends its queued reply, one byte per RX interrupt).
+		if (ch == 0 && (m_sio_config[ch] & 0x4000))
+			m_sio_rx_enable_cb[ch](1);
+		break;
+	case 0x4:                    // control (byte @+4)
+		if (ACCESSING_BITS_0_7)
+			m_sio_control[ch] = data & 0xff;
+		break;
+	case 0x8:                    // TX data (byte @+8 = low byte)
+		if (ACCESSING_BITS_0_7)
+			sio_tx_byte(ch, data & 0xff);
+		break;
+	default:
+		break;
+	}
+}
+
+// Every data write clocks one (instantly completed) transfer. The completion
+// event is raised BEFORE the byte is handed to the endpoint, mirroring the
+// driver HLE's order (it scheduled its deferred group-0x11 INTC assert before
+// calling the panel's tx_byte). The receiving driver is expected to defer the
+// completion before asserting its INTC (an ISR-context synchronous assert is
+// wiped by the exit ack -- see the KN7000's panel_txdone_cb / c11_unserviced).
+void mn10300_device::sio_tx_byte(int ch, uint8_t data)
+{
+	m_sio_tx_done_cb[ch](1);
+	m_sio_tx_cb[ch](data);
+}
+
+// Endpoint -> RX FIFO. Each successfully-pushed byte fires the channel's
+// RX-ready callback (KN7000 INTC groups: ch0 -> 0x10, ch1 -> 0x12,
+// ch2 -> 0x14; the firmware's RX ISR reads +0x09 and acks its GxICR; polling
+// paths see RxRDY regardless).
+void mn10300_device::sio_rx_push(int ch, uint8_t data)
+{
+	const uint8_t next = (m_sio_rx_head[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
+	if (next == m_sio_rx_tail[ch])
+		return;                  // FIFO full -- drop (overrun)
+	m_sio_rx_fifo[ch][m_sio_rx_head[ch]] = data;
+	m_sio_rx_head[ch] = next;
+	m_sio_rx_rdy_cb[ch](1);
+}
+
+uint8_t mn10300_device::sio_rx_pop(int ch)
+{
+	if (m_sio_rx_head[ch] == m_sio_rx_tail[ch])
+		return 0;
+	const uint8_t v = m_sio_rx_fifo[ch][m_sio_rx_tail[ch]];
+	if (!machine().side_effects_disabled())
+		m_sio_rx_tail[ch] = (m_sio_rx_tail[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
+	return v;
 }
 
 
