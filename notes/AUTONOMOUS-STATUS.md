@@ -19,6 +19,44 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★★ MODULATION/PITCH CLUSTER + GUI GROUP TABLE FULLY DECODED (DSP-doc directive)
+Batch rec11/27/28/29/32/33/49/50/57 documented (kn7000_disassembly ce32444, NEW
+dsp/modulation-pitch-family.md); blog Part 45 (mame-blog); catalog addendum §7.6 in THIS repo.
+Findings:
+- ★ GUI GROUP TABLE true layout = {u16 count, char name[16], u16 0, u32 list_ptr} (24B) — the
+  §7.5 bank-byte pairings put some names on the NEIGHBOR's list. Complete name->type->record walk
+  (both copies) now in modulation-pitch-family.md §1. Renames: rec13=DUAL DELAY, rec47=REVERSE
+  WAH, rec48=LFO Wah, rec46=LFO Filter, rec62-65=DISTORTED AMP, rec17/37/38=DISTORTION group,
+  rec18/39/40=OVERDRIVE, rec19=FUZZ, rec06 also = Sound-DSP Chorus (0x01), rec33=menu group SPACE.
+- rec28/29 suspicion RESOLVED: rec28 = AUTO WAH (Wah1-5, 0x34) = rec74's wah standalone
+  (IDENTICAL polynomial: a1=1.99594-1.28e^2, a2=-(1-0.1e+0.02e^2), g=0.05e-0.01e^2; parked
+  447 Hz at r=1/g=0, sweeps to 6.4 kHz at the 0.8 cap, y=4g(w-w2)); rec29 = PEDAL WAH (Wah1-3,
+  0x33) = same resonator but the audio detector is DEAD CODE — sweep source = host cell c004
+  (pedal), fixed-point smoother then 5.8/46 ms glide. Fork fossil like rec24's dead LFO.
+- rec11 = GUI ENSEMBLE (0x06/0x0E): hexaphase 3-voice chorus (one LFO re-read at +0/67.5/135 deg;
+  R depths NEGATIVE 0xFFC00000 = antiphase in data; 6 phases cover the cycle). M13=+0x50 idiom.
+- rec27 = VIBRATO: wet-only single tap, NO dry, MONO source, 1.35 Hz quadrature pair, ~21 cents.
+- rec32 = MIXUP: burst vibrato — modulators are PRODUCTS sin(1.35 Hz)*sin(21.5 Hz quad pair) =
+  beating 20.2/22.9 Hz; bursts swell/null 2.7x/s, to +-3.1 semitones at template peaks, mono src.
+- rec33 = SPREADER (group Space, 2 params): stereo widener = 16 float FIR coeffs IN PM STATE
+  (two channel-swapped 8-sample decorrelation FIRs) + identical +8.2 dB @349 Hz bells (unity
+  DC/Nyq) + antiphase UNITY mono Haas echoes 12.3/18.1 ms (rec08's 800-smp constant doubled).
+- rec49 (CHORUS-screen Chorus1-4, unit9) / rec50 (TRIO CHORUS, insert): THIRD LFO idiom —
+  overflow-reflect TRIANGLE oscs (IF AV inc=-inc; signed inc in PM state; 0.386 Hz) + magic-circle
+  sine 7.72 Hz; taps/ch {tri, -tri, sine} = 2 contrary CONSTANT-SLOPE detunes (+-7.8 / +-14.5
+  cents) + shimmer; rec49 adds mirror-flat tone slot + exact +2.0 dB Nyquist shelf; template
+  stereo degenerate (host phases decorrelate — osc2 exists for R).
+- rec57 = VOICE CHANGER (0x78, Vocal Effect): dual wrapped-saw granular detune; windows=|phase|
+  antiphase triangles (sum==0.5, each ZERO at the other tap's wrap = jump-free equal-gain
+  crossfade); grain 0.743 s; L -12.7 / R +12.7 cents. ★ R input reads DM(0x1F,I4) = the PREVIOUS
+  slot's R input — in KN7000 AND KN6000 builds (fact; bug-vs-intent open). Distinct from rec66's
+  reflected-ramp engine (no gate/AGC/telemetry).
+records.tsv: 9 rows re-identified conf high + 17 group-name corrections; syms rewritten x9;
+addenda in 5 docs; listings regenerated.
+REMAINING undocumented queue (updated): rec58-61 mic reverbs (unit-7 'Chorus'), rec67-69 BRASS
+SIM, rec70/71/72 combi back-ends, rec75/76 COMP+X+DELAY; unit-role live capture + u8 DM dump
+still open.
+
 ## TICK 2026-07-19 — ★★ EXCITER + DYNAMICS + EQs + DISTORTION MAP (DSP-doc directive)
 Tone-shaping batch rec20/21/25/22/23/34 + rec17/18/19/38/39/40 documented (kn7000_disassembly
 634ba34, NEW dsp/dynamics-eq-exciter.md); blog Part 44 "The exciter was real too" (mame-blog

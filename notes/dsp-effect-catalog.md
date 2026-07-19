@@ -286,6 +286,34 @@ The §5 algorithm column remains the 2026-07-09 pass; where it disagrees with
 `kn7000_disassembly/dsp/records.tsv` (regularly, after the reverb/chorus/
 insert/rotary annotation passes), **records.tsv is authoritative**.
 
+## 7.6 ★ 2026-07-19 UPDATE 2 — the GUI GROUP table decoded (name -> type -> record, complete)
+
+The *group* tables (SOUND DSP list ~`0x4870FDF6`, REVERB & EFFECT MENU list
+~`0x48714A56`) are now fully decoded — true entry layout is 24 bytes:
+`{u16 count, char name[16], u16 0, u32 preset_list_ptr}` (the §7.5 pass had
+paired some names with the neighboring entry's list; those "descriptor bank
+0xNN" attributions are superseded). Full walk + per-record consequences:
+`kn7000_disassembly/dsp/modulation-pitch-family.md` §1. Highlights:
+
+- **Auto Wah (Wah1–5) = type 0x34 = rec28** (envelope-driven) vs
+  **Pedal Wah (Wah1–3) = 0x33 = rec29** (host/pedal-driven — its audio
+  detector is dead code); **Reverse Wah (Wah1–8) = 0x90 = rec47** (the ROM
+  name confirms the down-sweep); **LFO Wah = 0x91 = rec48**;
+  **LFO Filter = 0x8C = rec46**.
+- **Ensemble (D/N/S 1–13) = 0x06 = rec11** (+ Ensemble D/W = 0x0E);
+  **Trio Chorus (D/N/S 1–8) = 0x53 = rec50**; the Sound-DSP **Chorus**
+  group (0x01) is rec06 (in addition to Celeste = 0x2C);
+  **Modulated Chorus = 0x02 = rec07** (+ D/W 0x07).
+- **Dual Delay (D/N/S 1–20) = 0x09 = rec13**; Cross Delay = 0x0C = rec15;
+  Multi Tap Delay = 0x0A = rec14; Delay Complex = the 0x40–0x51 combis.
+- **Distortion = 0x20/0x82/0x83 = rec17/37/38**, **Overdrive =
+  0x21/0x84/0x85 = rec18/39/40**, **Fuzz = 0x22 = rec19**,
+  **Distorted Amp (Loud/Normal/Soft 1–4) = 0x64–0x67 = rec62–65** — the GUI
+  taxonomy matches the two-engine split of dynamics-eq-exciter.md §6 1:1.
+- **Vocal Effect** = Voice Changer1/2 (0x78 = rec57), Brass simulator1–3
+  (0x79–0x7B = rec67–69), Vocal Harmonizer (0x7C = rec66); menu-only group
+  **Space** = Spreader (0x39 = rec33).
+
 ## 8. Cross-model note
 
 The KN6000/KN6500 carry the same ADSP-21065L and a **byte-identical** record
