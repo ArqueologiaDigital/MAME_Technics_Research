@@ -38,6 +38,21 @@ MORE DONE (this session, continued):
 - tools/dis_sharc.sh committed (9908572): one-liner SHARC PM disasm from 8-byte-LE-slot images
   (live Lua dumps + kn7000_disassembly/build/dsp extracts); verified vs the known kernel vector table.
 
+## TICK 2026-07-19 ~05:0x — Phase B follow-up: Felipe's genre-list split VERIFIED FAITHFUL (no off-by-one)
+Felipe observed (published build): Latin&World + March&Waltz all-real, C&W all-real EXCEPT slot 1
+("COUNTRY 01 ?"), 60s&70s slot 1 real-looking, everything else placeholders. Offline byte-precise
+ground-truth analysis (scratchpad genre_truth.py/.txt) CONFIRMS this is exactly the firmware's own
+data, NOT a generator bug: the 52 secondary (0x4000-class) nametable entries are 0x4000..0x4033 in
+panel order = C&W slots 2-14 (13, "Country Rock".."Cajun Country") + March&Waltz 1-12 (12) +
+Latin&World 1-26 (26) + 60s&70s slot 1 (1, 0x4033 = "70s Orchestra", table 0x376B56 — REAL, not a
+coincidence). C&W slot 1 (ID 0x000514 -> idx 0x294 -> entry @file 0x3E87E7 = 0x00A8) is plain LOCAL
+record 168 whose name lived only on the undumped rhythm flash -> honest placeholder. Synthetic ROM's
+nametable+subtable byte-IDENTICAL to the intact copy; simulated resolver (0x48433AC4) returns the
+same class+index for all 220 factory IDs on both images, zero divergences, no 0x8000-indirects in
+any factory list. 168 LOCAL + 52 SECONDARY = 220. NOTHING TO FIX; the "52 = Latin26+March12+C&W14"
+guess was wrong (C&W contributes 13, 60s&70s 1). Felipe-facing: the split he sees is the honest
+truth; C&W slot 1 + the other 167 names await the Phase C hardware dump.
+
 ## TICK 2026-07-19 ~03:4x (local 00:4x) — ★★★ SD SAVE->LOAD ROUND-TRIP COMPLETE: THE SD WRITE PATH WORKS END-TO-END
 GOAL met in full (save validated + load-back validated + distinguishable-state proof). WHY THE OLD
 PROBE STALLED (snapshot review, criterion 0): in the SD SAVE MENU "TECHNICS FORMAT" is on soft-key
