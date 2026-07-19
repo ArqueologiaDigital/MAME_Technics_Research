@@ -19,6 +19,35 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★ ENHANCER DECODED + TRUE PHASERS + GATE REVERB (DSP-doc directive)
+Batch rec08/10/47/73/12 documented (kn7000_disassembly a8526d0, NEW dsp/phaser-enhancer-gate.md);
+blog Part 43 "What the Enhancer enhances" published (mame-blog b2928cc). Findings:
+- rec08 (0x03, GUI Enhancer1-6): the Technics ENHANCER is NOT an exciter — zero nonlinearity. It is
+  a PHASE-ROTATION loudness/width processor: 4x 1st-order allpass k=0.876 (1-smp states in the DM
+  param cells, -360deg midband) -> complementary unity-gain LP 400 Hz + HP 2.04 kHz, per-band Q31
+  gains, sum ADDED to dry (+6 dB extremes, mid scoop) + ch0 delayed 800 smp (18.1 ms) vs ch1 delay 0
+  = Haas widener. No feedback (old "comb+allpass reverb" reading dead). Exciter = rec20 separately.
+- rec10 (0x05/0x0D): the pool's TRUE PHASER — the LFO output IS the allpass coefficient (k=0.876
+  +-0.12 Q31, f90 28 Hz-1.9 kHz, no bilinear/Newton needed for 1st-order), 5+5 stages, LFOs in
+  permanent quadrature (+90deg phase template), float cascade feedback c008, wet-only x2 — notches
+  form at the TG send mix. rec73 (0x44 DELAY+PHASER) = rec13's echo (8000/10000 smp, 0.6) in FLOAT
+  undamped -> 3-stage same cascade (mono LFO, 0.6 fb) w/ INTERNAL 50/50 dry/wet.
+- rec47 (0x90, GUI Wah1-8 bank 0x3A): NOT a phaser — the FOURTH WAH: rec46/48 bilinear+Newton engine
+  (q=0.125, Q=8 BP) swept by an ENVELOPE (attack 1/256 / release 1/2048 as floats) DOWNWARD:
+  4.27 kHz at silence closing to 197 Hz loud (opposite law to rec74).
+- rec12 (0x08, REVERB-screen Short/Medium/Long Gate): the GATE REVERB — mono tank of 3 Schroeder APs
+  849/1422/1498 smp (k .6/.6/.4; k12 lives in PM state 9801) in a -0.5 loop through a unity-DC damp
+  (loop 85.5 ms, RT60(DC)~0.85 s) + out-of-loop AP 2002 decorrelator; gate OUTSIDE the loop (tank
+  rings while shut): thr 0.2 (~-56 dBFS), attack tau 22.7 ms, HOLD counter (gate time = 0x7FFFFFFF -
+  PM9804, preset-set), release x0.999/smp (157 ms), 4-instruction retrigger debounce that works ONLY
+  because ALUSAT saturates -1+-1. records.tsv 5 rows -> conf high; syms rewritten x5 (rec10 "5/6
+  stages" was a miscount: 5+5); insert-effects doc follow-up note; listings regenerated drift-clean.
+REMAINING undocumented queue (updated): rec11 (0x06/0x0E chorus), rec17-19 distortion variants,
+rec20 EXCITER, rec21/25+22 comp/limiter/slow-attacker, rec23/34 EQs, rec27 VIBRATO, rec28/29 (bank-
+0x38 wahs), rec32 MIXUP, rec33 SPREADER, rec38-40 distortion detail, rec49/50 choruses, rec57 VOICE
+CHANGER, rec58-61 mic reverbs, rec67-69 BRASS SIM, rec70/71/72 chorus combis, rec75/76 COMP+X+DELAY;
+unit-role live capture still open.
+
 ## TICK 2026-07-19 — ★★★ ROTARY SPEAKER FOUND + GUI DESCRIPTOR TABLE DECODED (DSP-doc directive)
 The rotary question is SETTLED (kn7000_disassembly e35a563, dsp/tremolo-rotary-family.md): the GUI
 ROTARY SPEAKER / ROCK ROTARY is the 8-preset identical-PM family rec30/35/36/41-45 + rec16 ("modulated-
