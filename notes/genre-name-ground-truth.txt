@@ -1,0 +1,410 @@
+[sanity] table_full.bin == kn7000_table.rom at copy+secondary  OK
+[geometry] ORIGINAL copy @table+0x3E828C: hdr=+0x27 count=0xdd nt=+0x33 sub=+0x1033
+[geometry] SYNTHETIC ROM @0x0: hdr=+0x27 count=0xdd nt=+0x33 sub=+0x1033
+[nametable] original vs synthetic verbatim: IDENTICAL
+[subtable]  original vs synthetic verbatim: IDENTICAL
+
+== SECONDARY catalog (table ROM 0x244F78, INTACT) ==
+  sec[0x00] = 'Country Rock '
+  sec[0x01] = 'Country Blues'
+  sec[0x02] = ' Country Pop '
+  sec[0x03] = 'Country Folk '
+  sec[0x04] = 'Country 2Step'
+  sec[0x05] = 'CountryShffle'
+  sec[0x06] = 'CountryPiano '
+  sec[0x07] = 'CountryBallad'
+  sec[0x08] = 'Country Waltz'
+  sec[0x09] = 'PianoShowtime'
+  sec[0x0a] = 'Mod.Bluegrass'
+  sec[0x0b] = 'Square Dance '
+  sec[0x0c] = 'Cajun Country'
+  sec[0x0d] = 'USA March 2/4'
+  sec[0x0e] = 'USA March 6/8'
+  sec[0x0f] = 'German March '
+  sec[0x10] = '  Polka 2/4  '
+  sec[0x11] = 'BavarianPolka'
+  sec[0x12] = '    Waltz    '
+  sec[0x13] = 'Waltz Ballad '
+  sec[0x14] = 'Swingy Waltz '
+  sec[0x15] = 'Musette Waltz'
+  sec[0x16] = 'German Waltz '
+  sec[0x17] = 'ChansonWaltz '
+  sec[0x18] = 'ClassicVienna'
+  sec[0x19] = ' Bossanova 1 '
+  sec[0x1a] = ' Bossanova 2 '
+  sec[0x1b] = '   Beguine   '
+  sec[0x1c] = '   Rhumba    '
+  sec[0x1d] = '   Bolero    '
+  sec[0x1e] = '   Cha Cha   '
+  sec[0x1f] = '    Samba    '
+  sec[0x20] = ' Samba Rock  '
+  sec[0x21] = '    Salsa    '
+  sec[0x22] = 'Tango Argent '
+  sec[0x23] = 'HawaiiShuffle'
+  sec[0x24] = '  Mariachi   '
+  sec[0x25] = ' Gypsy Dance '
+  sec[0x26] = ' Tarantella  '
+  sec[0x27] = '  Irish Jig  '
+  sec[0x28] = '  Hawaiian   '
+  sec[0x29] = '  Merengue   '
+  sec[0x2a] = 'Swingy Reggae'
+  sec[0x2b] = '   Sirtaki   '
+  sec[0x2c] = 'Scottish Reel'
+  sec[0x2d] = '   Cumbia    '
+  sec[0x2e] = '  Bossa 2/2  '
+  sec[0x2f] = '  Talempong  '
+  sec[0x30] = 'ItaliaRomance'
+  sec[0x31] = '   Dangdut   '
+  sec[0x32] = '  Keroncong  '
+  sec[0x33] = '70s Orchestra'
+
+====================================================================================================
+PER-GENRE TABLES: (1) ORIGINAL intact nametable ground truth  vs  (2) SYNTHETIC ROM resolution
+class key: LOCAL n = plain local record n (name lives in undumped rhythm flash ->
+           placeholder in synthetic)   SECONDARY n = secondary catalog index n (REAL name)
+====================================================================================================
+
+-- 8&16 BEAT (10 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000C5A  065a       0000  LOCAL     0                             | LOCAL     0    '8&16BT 01 ?  '
+   2    0x00085A  045a       0001  LOCAL     1                             | LOCAL     1    '8&16BT 02 ?  '
+   3    0x000658  0358       0002  LOCAL     2                             | LOCAL     2    '8&16BT 03 ?  '
+   4    0x000648  0348       0003  LOCAL     3                             | LOCAL     3    '8&16BT 04 ?  '
+   5    0x000748  03c8       0004  LOCAL     4                             | LOCAL     4    '8&16BT 05 ?  '
+   6    0x000160  00e0       0005  LOCAL     5                             | LOCAL     5    '8&16BT 06 ?  '
+   7    0x000060  0060       0006  LOCAL     6                             | LOCAL     6    '8&16BT 07 ?  '
+   8    0x000461  0261       0007  LOCAL     7                             | LOCAL     7    '8&16BT 08 ?  '
+   9    0x000365  01e5       0008  LOCAL     8                             | LOCAL     8    '8&16BT 09 ?  '
+   10   0x00026C  016c       0009  LOCAL     9                             | LOCAL     9    '8&16BT 10 ?  '
+
+-- ROCK & POP (16 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000150  00d0       000a  LOCAL     10                            | LOCAL     10   'ROCKPOP 01 ? '
+   2    0x000252  0152       000b  LOCAL     11                            | LOCAL     11   'ROCKPOP 02 ? '
+   3    0x00054C  02cc       000c  LOCAL     12                            | LOCAL     12   'ROCKPOP 03 ? '
+   4    0x00044C  024c       000d  LOCAL     13                            | LOCAL     13   'ROCKPOP 04 ? '
+   5    0x000E4C  074c       000e  LOCAL     14                            | LOCAL     14   'ROCKPOP 05 ? '
+   6    0x000553  02d3       000f  LOCAL     15                            | LOCAL     15   'ROCKPOP 06 ? '
+   7    0x000368  01e8       0010  LOCAL     16                            | LOCAL     16   'ROCKPOP 07 ? '
+   8    0x000754  03d4       0011  LOCAL     17                            | LOCAL     17   'ROCKPOP 08 ? '
+   9    0x00055C  02dc       0012  LOCAL     18                            | LOCAL     18   'ROCKPOP 09 ? '
+   10   0x00034F  01cf       0013  LOCAL     19                            | LOCAL     19   'ROCKPOP 10 ? '
+   11   0x000E54  0754       0014  LOCAL     20                            | LOCAL     20   'ROCKPOP 11 ? '
+   12   0x000468  0268       0015  LOCAL     21                            | LOCAL     21   'ROCKPOP 12 ? '
+   13   0x000334  01b4       0016  LOCAL     22                            | LOCAL     22   'ROCKPOP 13 ? '
+   14   0x000050  0050       0017  LOCAL     23                            | LOCAL     23   'ROCKPOP 14 ? '
+   15   0x000140  00c0       0018  LOCAL     24                            | LOCAL     24   'ROCKPOP 15 ? '
+   16   0x00046E  026e       0019  LOCAL     25                            | LOCAL     25   'ROCKPOP 16 ? '
+
+-- BALLAD (16 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x00065B  035b       001a  LOCAL     26                            | LOCAL     26   'BALLAD 01 ?  '
+   2    0x00066B  036b       001b  LOCAL     27                            | LOCAL     27   'BALLAD 02 ?  '
+   3    0x000662  0362       001c  LOCAL     28                            | LOCAL     28   'BALLAD 03 ?  '
+   4    0x00075B  03db       001d  LOCAL     29                            | LOCAL     29   'BALLAD 04 ?  '
+   5    0x000C63  0663       001e  LOCAL     30                            | LOCAL     30   'BALLAD 05 ?  '
+   6    0x00024E  014e       001f  LOCAL     31                            | LOCAL     31   'BALLAD 06 ?  '
+   7    0x00094B  04cb       0020  LOCAL     32                            | LOCAL     32   'BALLAD 07 ?  '
+   8    0x00034A  01ca       0021  LOCAL     33                            | LOCAL     33   'BALLAD 08 ?  '
+   9    0x000D4A  06ca       0022  LOCAL     34                            | LOCAL     34   'BALLAD 09 ?  '
+   10   0x000A63  0563       0023  LOCAL     35                            | LOCAL     35   'BALLAD 10 ?  '
+   11   0x000467  0267       0024  LOCAL     36                            | LOCAL     36   'BALLAD 11 ?  '
+   12   0x000562  02e2       0025  LOCAL     37                            | LOCAL     37   'BALLAD 12 ?  '
+   13   0x00095B  04db       0026  LOCAL     38                            | LOCAL     38   'BALLAD 13 ?  '
+   14   0x000C4B  064b       0027  LOCAL     39                            | LOCAL     39   'BALLAD 14 ?  '
+   15   0x000B63  05e3       0028  LOCAL     40                            | LOCAL     40   'BALLAD 15 ?  '
+   16   0x000762  03e2       0029  LOCAL     41                            | LOCAL     41   'BALLAD 16 ?  '
+
+-- JAZZ & SWING (20 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000720  03a0       002a  LOCAL     42                            | LOCAL     42   'JAZZSWG 01 ? '
+   2    0x00012D  00ad       002b  LOCAL     43                            | LOCAL     43   'JAZZSWG 02 ? '
+   3    0x000628  0328       002c  LOCAL     44                            | LOCAL     44   'JAZZSWG 03 ? '
+   4    0x00022D  012d       002d  LOCAL     45                            | LOCAL     45   'JAZZSWG 04 ? '
+   5    0x000820  0420       002e  LOCAL     46                            | LOCAL     46   'JAZZSWG 05 ? '
+   6    0x000524  02a4       002f  LOCAL     47                            | LOCAL     47   'JAZZSWG 06 ? '
+   7    0x000826  0426       0030  LOCAL     48                            | LOCAL     48   'JAZZSWG 07 ? '
+   8    0x000726  03a6       0031  LOCAL     49                            | LOCAL     49   'JAZZSWG 08 ? '
+   9    0x00051D  029d       0032  LOCAL     50                            | LOCAL     50   'JAZZSWG 09 ? '
+   10   0x000427  0227       0033  LOCAL     51                            | LOCAL     51   'JAZZSWG 10 ? '
+   11   0x000325  01a5       0034  LOCAL     52                            | LOCAL     52   'JAZZSWG 11 ? '
+   12   0x000021  0021       0035  LOCAL     53                            | LOCAL     53   'JAZZSWG 12 ? '
+   13   0x00011F  009f       0036  LOCAL     54                            | LOCAL     54   'JAZZSWG 13 ? '
+   14   0x000B22  05a2       0037  LOCAL     55                            | LOCAL     55   'JAZZSWG 14 ? '
+   15   0x00002A  002a       0038  LOCAL     56                            | LOCAL     56   'JAZZSWG 15 ? '
+   16   0x000B26  05a6       0039  LOCAL     57                            | LOCAL     57   'JAZZSWG 16 ? '
+   17   0x000527  02a7       003a  LOCAL     58                            | LOCAL     58   'JAZZSWG 17 ? '
+   18   0x000523  02a3       003b  LOCAL     59                            | LOCAL     59   'JAZZSWG 18 ? '
+   19   0x000218  0118       003c  LOCAL     60                            | LOCAL     60   'JAZZSWG 19 ? '
+   20   0x00024B  014b       003d  LOCAL     61                            | LOCAL     61   'JAZZSWG 20 ? '
+
+-- BALLROOM (16 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000F1D  079d       003e  LOCAL     62                            | LOCAL     62   'BALLRM 01 ?  '
+   2    0x000C1D  061d       003f  LOCAL     63                            | LOCAL     63   'BALLRM 02 ?  '
+   3    0x00021D  011d       0040  LOCAL     64                            | LOCAL     64   'BALLRM 03 ?  '
+   4    0x00041E  021e       0041  LOCAL     65                            | LOCAL     65   'BALLRM 04 ?  '
+   5    0x00031C  019c       0042  LOCAL     66                            | LOCAL     66   'BALLRM 05 ?  '
+   6    0x000A4C  054c       0043  LOCAL     67                            | LOCAL     67   'BALLRM 06 ?  '
+   7    0x00093A  04ba       0044  LOCAL     68                            | LOCAL     68   'BALLRM 07 ?  '
+   8    0x00043B  023b       0045  LOCAL     69                            | LOCAL     69   'BALLRM 08 ?  '
+   9    0x000B33  05b3       0046  LOCAL     70                            | LOCAL     70   'BALLRM 09 ?  '
+   10   0x00050D  028d       0047  LOCAL     71                            | LOCAL     71   'BALLRM 10 ?  '
+   11   0x00081D  041d       0048  LOCAL     72                            | LOCAL     72   'BALLRM 11 ?  '
+   12   0x000835  0435       0049  LOCAL     73                            | LOCAL     73   'BALLRM 12 ?  '
+   13   0x000245  0145       004a  LOCAL     74                            | LOCAL     74   'BALLRM 13 ?  '
+   14   0x000708  0388       004b  LOCAL     75                            | LOCAL     75   'BALLRM 14 ?  '
+   15   0x000309  0189       004c  LOCAL     76                            | LOCAL     76   'BALLRM 15 ?  '
+   16   0x000739  03b9       004d  LOCAL     77                            | LOCAL     77   'BALLRM 16 ?  '
+
+-- MOVIE & SHOW (20 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000862  0462       004e  LOCAL     78                            | LOCAL     78   'MOVSHOW 01 ? '
+   2    0x000E4A  074a       004f  LOCAL     79                            | LOCAL     79   'MOVSHOW 02 ? '
+   3    0x000462  0262       0050  LOCAL     80                            | LOCAL     80   'MOVSHOW 03 ? '
+   4    0x000162  00e2       0051  LOCAL     81                            | LOCAL     81   'MOVSHOW 04 ? '
+   5    0x00040F  020f       0052  LOCAL     82                            | LOCAL     82   'MOVSHOW 05 ? '
+   6    0x000525  02a5       0053  LOCAL     83                            | LOCAL     83   'MOVSHOW 06 ? '
+   7    0x000625  0325       0054  LOCAL     84                            | LOCAL     84   'MOVSHOW 07 ? '
+   8    0x000E1D  071d       0055  LOCAL     85                            | LOCAL     85   'MOVSHOW 08 ? '
+   9    0x00040D  020d       0056  LOCAL     86                            | LOCAL     86   'MOVSHOW 09 ? '
+   10   0x00076B  03eb       0057  LOCAL     87                            | LOCAL     87   'MOVSHOW 10 ? '
+   11   0x00051E  029e       0058  LOCAL     88                            | LOCAL     88   'MOVSHOW 11 ? '
+   12   0x00042C  022c       0059  LOCAL     89                            | LOCAL     89   'MOVSHOW 12 ? '
+   13   0x000962  04e2       005a  LOCAL     90                            | LOCAL     90   'MOVSHOW 13 ? '
+   14   0x00090F  048f       005b  LOCAL     91                            | LOCAL     91   'MOVSHOW 14 ? '
+   15   0x00097C  04fc       005c  LOCAL     92                            | LOCAL     92   'MOVSHOW 15 ? '
+   16   0x000D63  06e3       005d  LOCAL     93                            | LOCAL     93   'MOVSHOW 16 ? '
+   17   0x000262  0162       005e  LOCAL     94                            | LOCAL     94   'MOVSHOW 17 ? '
+   18   0x000A62  0562       005f  LOCAL     95                            | LOCAL     95   'MOVSHOW 18 ? '
+   19   0x00000F  000f       0060  LOCAL     96                            | LOCAL     96   'MOVSHOW 19 ? '
+   20   0x000502  0282       0061  LOCAL     97                            | LOCAL     97   'MOVSHOW 20 ? '
+
+-- ENTERTAINER (14 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000758  03d8       0062  LOCAL     98                            | LOCAL     98   'ENTRTNR 01 ? '
+   2    0x000453  0253       0063  LOCAL     99                            | LOCAL     99   'ENTRTNR 02 ? '
+   3    0x000465  0265       0064  LOCAL     100                           | LOCAL     100  'ENTRTNR 03 ? '
+   4    0x00044F  024f       0065  LOCAL     101                           | LOCAL     101  'ENTRTNR 04 ? '
+   5    0x000A04  0504       0066  LOCAL     102                           | LOCAL     102  'ENTRTNR 05 ? '
+   6    0x000561  02e1       0067  LOCAL     103                           | LOCAL     103  'ENTRTNR 06 ? '
+   7    0x000578  02f8       0068  LOCAL     104                           | LOCAL     104  'ENTRTNR 07 ? '
+   8    0x000E04  0704       0069  LOCAL     105                           | LOCAL     105  'ENTRTNR 08 ? '
+   9    0x000A4A  054a       006a  LOCAL     106                           | LOCAL     106  'ENTRTNR 09 ? '
+   10   0x000268  0168       006b  LOCAL     107                           | LOCAL     107  'ENTRTNR 10 ? '
+   11   0x00004A  004a       006c  LOCAL     108                           | LOCAL     108  'ENTRTNR 11 ? '
+   12   0x000750  03d0       006d  LOCAL     109                           | LOCAL     109  'ENTRTNR 12 ? '
+   13   0x000704  0384       006e  LOCAL     110                           | LOCAL     110  'ENTRTNR 13 ? '
+   14   0x000478  0278       006f  LOCAL     111                           | LOCAL     111  'ENTRTNR 14 ? '
+
+-- ORGANIST (10 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000567  02e7       0070  LOCAL     112                           | LOCAL     112  'ORGANST 01 ? '
+   2    0x000A58  0558       0071  LOCAL     113                           | LOCAL     113  'ORGANST 02 ? '
+   3    0x00043F  023f       0072  LOCAL     114                           | LOCAL     114  'ORGANST 03 ? '
+   4    0x00053B  02bb       0073  LOCAL     115                           | LOCAL     115  'ORGANST 04 ? '
+   5    0x000C33  0633       0074  LOCAL     116                           | LOCAL     116  'ORGANST 05 ? '
+   6    0x000A0F  050f       0075  LOCAL     117                           | LOCAL     117  'ORGANST 06 ? '
+   7    0x00052C  02ac       0076  LOCAL     118                           | LOCAL     118  'ORGANST 07 ? '
+   8    0x000A1D  051d       0077  LOCAL     119                           | LOCAL     119  'ORGANST 08 ? '
+   9    0x000908  0488       0078  LOCAL     120                           | LOCAL     120  'ORGANST 09 ? '
+   10   0x000900  0480       0079  LOCAL     121                           | LOCAL     121  'ORGANST 10 ? '
+
+-- 60s & 70s (13 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000565  02e5       4033  SECONDARY 51           70s Orchestra    | SECONDARY 51   '70s Orchestra'
+   2    0x000B50  05d0       007b  LOCAL     123                           | LOCAL     123  '60s70s 02 ?  '
+   3    0x000556  02d6       007c  LOCAL     124                           | LOCAL     124  '60s70s 03 ?  '
+   4    0x000958  04d8       007d  LOCAL     125                           | LOCAL     125  '60s70s 04 ?  '
+   5    0x000653  0353       007e  LOCAL     126                           | LOCAL     126  '60s70s 05 ?  '
+   6    0x00054F  02cf       007f  LOCAL     127                           | LOCAL     127  '60s70s 06 ?  '
+   7    0x000858  0458       0080  LOCAL     128                           | LOCAL     128  '60s70s 07 ?  '
+   8    0x000A5B  055b       0081  LOCAL     129                           | LOCAL     129  '60s70s 08 ?  '
+   9    0x000568  02e8       0082  LOCAL     130                           | LOCAL     130  '60s70s 09 ?  '
+   10   0x000656  0356       0083  LOCAL     131                           | LOCAL     131  '60s70s 10 ?  '
+   11   0x00085B  045b       0084  LOCAL     132                           | LOCAL     132  '60s70s 11 ?  '
+   12   0x00036F  01ef       0085  LOCAL     133                           | LOCAL     133  '60s70s 12 ?  '
+   13   0x000654  0354       0086  LOCAL     134                           | LOCAL     134  '60s70s 13 ?  '
+
+-- MODERN DANCE (14 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x00087E  047e       0087  LOCAL     135                           | LOCAL     135  'MODDANCE 01 ?'
+   2    0x000B7C  05fc       0088  LOCAL     136                           | LOCAL     136  'MODDANCE 02 ?'
+   3    0x000379  01f9       0089  LOCAL     137                           | LOCAL     137  'MODDANCE 03 ?'
+   4    0x000E7F  077f       008a  LOCAL     138                           | LOCAL     138  'MODDANCE 04 ?'
+   5    0x00097E  04fe       008b  LOCAL     139                           | LOCAL     139  'MODDANCE 05 ?'
+   6    0x00057D  02fd       008c  LOCAL     140                           | LOCAL     140  'MODDANCE 06 ?'
+   7    0x000279  0179       008d  LOCAL     141                           | LOCAL     141  'MODDANCE 07 ?'
+   8    0x000A7E  057e       008e  LOCAL     142                           | LOCAL     142  'MODDANCE 08 ?'
+   9    0x00087C  047c       008f  LOCAL     143                           | LOCAL     143  'MODDANCE 09 ?'
+   10   0x000C7F  067f       0090  LOCAL     144                           | LOCAL     144  'MODDANCE 10 ?'
+   11   0x00027A  017a       0091  LOCAL     145                           | LOCAL     145  'MODDANCE 11 ?'
+   12   0x000234  0134       0092  LOCAL     146                           | LOCAL     146  'MODDANCE 12 ?'
+   13   0x00037F  01ff       0093  LOCAL     147                           | LOCAL     147  'MODDANCE 13 ?'
+   14   0x000647  0347       0094  LOCAL     148                           | LOCAL     148  'MODDANCE 14 ?'
+
+-- SOUL & R&B (19 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000357  01d7       0095  LOCAL     149                           | LOCAL     149  'SOULRB 01 ?  '
+   2    0x000367  01e7       0096  LOCAL     150                           | LOCAL     150  'SOULRB 02 ?  '
+   3    0x000D4D  06cd       0097  LOCAL     151                           | LOCAL     151  'SOULRB 03 ?  '
+   4    0x000457  0257       0098  LOCAL     152                           | LOCAL     152  'SOULRB 04 ?  '
+   5    0x000472  0272       0099  LOCAL     153                           | LOCAL     153  'SOULRB 05 ?  '
+   6    0x000A4D  054d       009a  LOCAL     154                           | LOCAL     154  'SOULRB 06 ?  '
+   7    0x00004D  004d       009b  LOCAL     155                           | LOCAL     155  'SOULRB 07 ?  '
+   8    0x00074D  03cd       009c  LOCAL     156                           | LOCAL     156  'SOULRB 08 ?  '
+   9    0x00094D  04cd       009d  LOCAL     157                           | LOCAL     157  'SOULRB 09 ?  '
+   10   0x000C4D  064d       009e  LOCAL     158                           | LOCAL     158  'SOULRB 10 ?  '
+   11   0x00056E  02ee       009f  LOCAL     159                           | LOCAL     159  'SOULRB 11 ?  '
+   12   0x00066E  036e       00a0  LOCAL     160                           | LOCAL     160  'SOULRB 12 ?  '
+   13   0x000470  0270       00a1  LOCAL     161                           | LOCAL     161  'SOULRB 13 ?  '
+   14   0x000F7F  07ff       00a2  LOCAL     162                           | LOCAL     162  'SOULRB 14 ?  '
+   15   0x000423  0223       00a3  LOCAL     163                           | LOCAL     163  'SOULRB 15 ?  '
+   16   0x000441  0241       00a4  LOCAL     164                           | LOCAL     164  'SOULRB 16 ?  '
+   17   0x000066  0066       00a5  LOCAL     165                           | LOCAL     165  'SOULRB 17 ?  '
+   18   0x000771  03f1       00a6  LOCAL     166                           | LOCAL     166  'SOULRB 18 ?  '
+   19   0x000113  0093       00a7  LOCAL     167                           | LOCAL     167  'SOULRB 19 ?  '
+
+-- COUNTRY&WESTERN (14 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000514  0294       00a8  LOCAL     168                           | LOCAL     168  'COUNTRY 01 ? '
+   2    0x000755  03d5       4000  SECONDARY 0            Country Rock     | SECONDARY 0    'Country Rock '
+   3    0x000611  0311       4001  SECONDARY 1            Country Blues    | SECONDARY 1    'Country Blues'
+   4    0x000112  0092       4002  SECONDARY 2             Country Pop     | SECONDARY 2    ' Country Pop '
+   5    0x000A5A  055a       4003  SECONDARY 3            Country Folk     | SECONDARY 3    'Country Folk '
+   6    0x000011  0011       4004  SECONDARY 4            Country 2Step    | SECONDARY 4    'Country 2Step'
+   7    0x000911  0491       4005  SECONDARY 5            CountryShffle    | SECONDARY 5    'CountryShffle'
+   8    0x00034B  01cb       4006  SECONDARY 6            CountryPiano     | SECONDARY 6    'CountryPiano '
+   9    0x000412  0212       4007  SECONDARY 7            CountryBallad    | SECONDARY 7    'CountryBallad'
+   10   0x000013  0013       4008  SECONDARY 8            Country Waltz    | SECONDARY 8    'Country Waltz'
+   11   0x00021C  011c       4009  SECONDARY 9            PianoShowtime    | SECONDARY 9    'PianoShowtime'
+   12   0x000414  0214       400a  SECONDARY 10           Mod.Bluegrass    | SECONDARY 10   'Mod.Bluegrass'
+   13   0x000118  0098       400b  SECONDARY 11           Square Dance     | SECONDARY 11   'Square Dance '
+   14   0x000855  0455       400c  SECONDARY 12           Cajun Country    | SECONDARY 12   'Cajun Country'
+
+-- MARCH & WALTZ (12 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x000600  0300       400d  SECONDARY 13           USA March 2/4    | SECONDARY 13   'USA March 2/4'
+   2    0x000402  0202       400e  SECONDARY 14           USA March 6/8    | SECONDARY 14   'USA March 6/8'
+   3    0x000401  0201       400f  SECONDARY 15           German March     | SECONDARY 15   'German March '
+   4    0x000004  0004       4010  SECONDARY 16             Polka 2/4      | SECONDARY 16   '  Polka 2/4  '
+   5    0x000104  0084       4011  SECONDARY 17           BavarianPolka    | SECONDARY 17   'BavarianPolka'
+   6    0x00020D  010d       4012  SECONDARY 18               Waltz        | SECONDARY 18   '    Waltz    '
+   7    0x00040C  020c       4013  SECONDARY 19           Waltz Ballad     | SECONDARY 19   'Waltz Ballad '
+   8    0x00072E  03ae       4014  SECONDARY 20           Swingy Waltz     | SECONDARY 20   'Swingy Waltz '
+   9    0x00030B  018b       4015  SECONDARY 21           Musette Waltz    | SECONDARY 21   'Musette Waltz'
+   10   0x000008  0008       4016  SECONDARY 22           German Waltz     | SECONDARY 22   'German Waltz '
+   11   0x00040B  020b       4017  SECONDARY 23           ChansonWaltz     | SECONDARY 23   'ChansonWaltz '
+   12   0x000409  0209       4018  SECONDARY 24           ClassicVienna    | SECONDARY 24   'ClassicVienna'
+
+-- LATIN & WORLD (26 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x00013F  00bf       4019  SECONDARY 25            Bossanova 1     | SECONDARY 25   ' Bossanova 1 '
+   2    0x00023F  013f       401a  SECONDARY 26            Bossanova 2     | SECONDARY 26   ' Bossanova 2 '
+   3    0x00033B  01bb       401b  SECONDARY 27              Beguine       | SECONDARY 27   '   Beguine   '
+   4    0x000D3A  06ba       401c  SECONDARY 28              Rhumba        | SECONDARY 28   '   Rhumba    '
+   5    0x00063A  033a       401d  SECONDARY 29              Bolero        | SECONDARY 29   '   Bolero    '
+   6    0x000639  0339       401e  SECONDARY 30              Cha Cha       | SECONDARY 30   '   Cha Cha   '
+   7    0x000A33  0533       401f  SECONDARY 31               Samba        | SECONDARY 31   '    Samba    '
+   8    0x000474  0274       4020  SECONDARY 32            Samba Rock      | SECONDARY 32   ' Samba Rock  '
+   9    0x000644  0344       4021  SECONDARY 33               Salsa        | SECONDARY 33   '    Salsa    '
+   10   0x000735  03b5       4022  SECONDARY 34           Tango Argent     | SECONDARY 34   'Tango Argent '
+   11   0x000216  0116       4023  SECONDARY 35           HawaiiShuffle    | SECONDARY 35   'HawaiiShuffle'
+   12   0x000243  0143       4024  SECONDARY 36             Mariachi       | SECONDARY 36   '  Mariachi   '
+   13   0x00013D  00bd       4025  SECONDARY 37            Gypsy Dance     | SECONDARY 37   ' Gypsy Dance '
+   14   0x000305  0185       4026  SECONDARY 38            Tarantella      | SECONDARY 38   ' Tarantella  '
+   15   0x000405  0205       4027  SECONDARY 39             Irish Jig      | SECONDARY 39   '  Irish Jig  '
+   16   0x000416  0216       4028  SECONDARY 40             Hawaiian       | SECONDARY 40   '  Hawaiian   '
+   17   0x000143  00c3       4029  SECONDARY 41             Merengue       | SECONDARY 41   '  Merengue   '
+   18   0x000547  02c7       402a  SECONDARY 42           Swingy Reggae    | SECONDARY 42   'Swingy Reggae'
+   19   0x00033C  01bc       402b  SECONDARY 43              Sirtaki       | SECONDARY 43   '   Sirtaki   '
+   20   0x00041A  021a       402c  SECONDARY 44           Scottish Reel    | SECONDARY 44   'Scottish Reel'
+   21   0x000343  01c3       402d  SECONDARY 45              Cumbia        | SECONDARY 45   '   Cumbia    '
+   22   0x000030  0030       402e  SECONDARY 46             Bossa 2/2      | SECONDARY 46   '  Bossa 2/2  '
+   23   0x00023C  013c       402f  SECONDARY 47             Talempong      | SECONDARY 47   '  Talempong  '
+   24   0x00050B  028b       4030  SECONDARY 48           ItaliaRomance    | SECONDARY 48   'ItaliaRomance'
+   25   0x00043C  023c       4031  SECONDARY 49              Dangdut       | SECONDARY 49   '   Dangdut   '
+   26   0x00053C  02bc       4032  SECONDARY 50             Keroncong      | SECONDARY 50   '  Keroncong  '
+
+-- CUSTOM (20 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x200000  (CUSTOM/MEMORY: RAM path, not in this resource)
+   2    0x200001  (CUSTOM/MEMORY: RAM path, not in this resource)
+   3    0x200002  (CUSTOM/MEMORY: RAM path, not in this resource)
+   4    0x200003  (CUSTOM/MEMORY: RAM path, not in this resource)
+   5    0x200004  (CUSTOM/MEMORY: RAM path, not in this resource)
+   6    0x200005  (CUSTOM/MEMORY: RAM path, not in this resource)
+   7    0x200006  (CUSTOM/MEMORY: RAM path, not in this resource)
+   8    0x200007  (CUSTOM/MEMORY: RAM path, not in this resource)
+   9    0x200008  (CUSTOM/MEMORY: RAM path, not in this resource)
+   10   0x200009  (CUSTOM/MEMORY: RAM path, not in this resource)
+   11   0x20000A  (CUSTOM/MEMORY: RAM path, not in this resource)
+   12   0x20000B  (CUSTOM/MEMORY: RAM path, not in this resource)
+   13   0x20000C  (CUSTOM/MEMORY: RAM path, not in this resource)
+   14   0x20000D  (CUSTOM/MEMORY: RAM path, not in this resource)
+   15   0x20000E  (CUSTOM/MEMORY: RAM path, not in this resource)
+   16   0x20000F  (CUSTOM/MEMORY: RAM path, not in this resource)
+   17   0x200010  (CUSTOM/MEMORY: RAM path, not in this resource)
+   18   0x200011  (CUSTOM/MEMORY: RAM path, not in this resource)
+   19   0x200012  (CUSTOM/MEMORY: RAM path, not in this resource)
+   20   0x200013  (CUSTOM/MEMORY: RAM path, not in this resource)
+
+-- MEMORY (3 slots) --
+   slot  styleID   idx  entry  ORIGINAL class         orig name (if real) | SYNTH resolves to
+   1    0x100000  (CUSTOM/MEMORY: RAM path, not in this resource)
+   2    0x100001  (CUSTOM/MEMORY: RAM path, not in this resource)
+   3    0x100002  (CUSTOM/MEMORY: RAM path, not in this resource)
+
+== SUMMARY ==
+totals over factory (non-RAM) IDs: SECONDARY=52  LOCAL=168  other=0
+secondary (REAL-name) slots per genre:
+   60s & 70s          1
+   COUNTRY&WESTERN    13
+   MARCH & WALTZ      12
+   LATIN & WORLD      26
+
+ORIGINAL vs SYNTHETIC: class+index IDENTICAL for every slot (no shift, no off-by-one).
+
+== VERDICT vs Felipe's observation ==
+   LATIN&WORLD secondary count: [26]
+   MARCH&WALTZ secondary count: [12]
+   COUNTRY&W   secondary count: [13]
+   60s&70s     secondary count: [1]
+
+================================ FINAL VERDICT ================================
+HYPOTHESIS A (off-by-one in the synthetic container) is FALSIFIED.
+HYPOTHESIS B (the observed split is faithful to the firmware's own data) is
+CONFIRMED, byte-precisely:
+
+1. The 52 secondary (0x4000-class) entries in the ORIGINAL intact nametable are
+   assigned 0x4000..0x4033 in exact panel order:
+     COUNTRY&WESTERN slots 2-14  -> 0x4000..0x400C (13)  "Country Rock".."Cajun Country"
+     MARCH & WALTZ   slots 1-12  -> 0x400D..0x4018 (12)  "USA March 2/4".."ClassicVienna"
+     LATIN & WORLD   slots 1-26  -> 0x4019..0x4032 (26)  "Bossanova 1".."Keroncong"
+     60s & 70s       slot  1     -> 0x4033        (1)   "70s Orchestra"
+   26+12+13+1 = 52. The hypothesis's "C&W(14)" was wrong: C&W slot 1 is NOT
+   secondary in the firmware's own data.
+
+2. Decisive bytes (dumped table ROM, copy dir @0x3E828C, nt=+0x33):
+   - C&W slot 1: styleID 0x000514 -> idx 0x294 -> u16BE @ file 0x3E87E7 = 0x00A8
+     = plain LOCAL record 168 (its real name lived only on the undumped rhythm
+     flash) -> synthetic placeholder "COUNTRY 01 ? " (name written at synth
+     +0x3E5D75, subtable u24BE @ +0x122B = 3E 5D 75, identical bytes in the
+     copy @ 0x3E94B7).
+   - 60s&70s slot 1: styleID 0x000565 -> idx 0x2E5 -> u16BE @ file 0x3E8889 =
+     0x4033 = SECONDARY 51 -> table ROM 0x244F78 + u24BE@0x245011 (=0x131BDE)
+     -> name @ file 0x376B56 = "70s Orchestra" (REAL, not a coincidence).
+
+3. The synthetic container is NOT shifted anywhere: nametable (0x800 u16BE) and
+   subtable (169+8 u24BE) are byte-IDENTICAL between the original copy and
+   kn7000_rhythms_synthetic.rom, and the simulated resolver (0x48433AC4
+   semantics) returns the SAME class+index for all 220 factory IDs on both
+   images. Zero divergences. No 0x8000-indirect entries occur in any factory
+   genre list (all chains are single-hop).
+
+4. Felipe's observation therefore matches ground truth EXACTLY:
+   LATIN&WORLD 26/26 real, MARCH&WALTZ 12/12 real, C&W 13/14 real (slot 1 =
+   honest placeholder "COUNTRY 01 ?"), 60s&70s 1/13 real ("70s Orchestra"),
+   all other genres 100% placeholders (LOCAL-only). 168 LOCAL + 52 SECONDARY
+   = 220. Nothing to fix in gen_technics_rhythms.py; the remaining 168 names
+   (incl. C&W slot 1) await the Phase C hardware dump.

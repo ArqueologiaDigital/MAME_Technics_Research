@@ -507,3 +507,35 @@ the style list (panel navigation / injected input) and tap the name resolution l
 peeling MILK-framework layers (diminishing ROI). Re-enter via the runtime route or the populate handler
 `0x4847BD9F`. All data-structure symbols are now in the disassembly (`StyleGenreTable`, `StyleListBoxGetItem`,
 `StyleRecordTable`, `StyleListBoxMsgTable`, `StyleListBoxDrawItem`).
+
+## 2026-07-19 — CLOSED: post-fix genre-list split VERIFIED FAITHFUL (no off-by-one anywhere)
+The synthetic "Technics Rhythms" resource (tools/gen_technics_rhythms.py, installed at 0x54E00000,
+commit 09fc7e5) fixed the original "all 8 Beat 1" symptom. Felipe then observed on the published
+build: LATIN & WORLD 26/26 real names, MARCH & WALTZ 12/12 real, COUNTRY & WESTERN real EXCEPT
+slot 1 ("COUNTRY 01 ?"), 60s & 70s ONLY slot 1 real, every other genre all placeholders. The
+suspicion was an off-by-one in the synthetic container shifting the 52-name window
+(52 = Latin 26 + March&Waltz 12 + C&W 14?).
+
+**Byte-precise offline verdict (tools/genre_truth.py, full report =
+notes/genre-name-ground-truth.txt): the split is the firmware's OWN data — there is no bug.**
+
+- The 52 secondary (0x4000-class) entries in the ORIGINAL intact nametable (truncated resource
+  copy in the dumped table ROM @file 0x3E828C, nt=+0x33) are 0x4000..0x4033 in exact panel order:
+  C&W slots 2-14 (13, "Country Rock".."Cajun Country") + March&Waltz slots 1-12 (12) +
+  Latin&World slots 1-26 (26) + 60s&70s slot 1 (1, "70s Orchestra"). 13+12+26+1 = 52.
+  The "C&W contributes 14" arithmetic was wrong.
+- Decisive bytes: C&W slot 1 = styleID 0x000514 -> idx 0x294 -> u16BE @file 0x3E87E7 = 0x00A8 =
+  plain LOCAL record 168 (real name only on the undumped ~4.1MB rhythm flash -> honest
+  placeholder). 60s&70s slot 1 = styleID 0x000565 -> idx 0x2E5 -> u16BE @file 0x3E8889 = 0x4033 =
+  SECONDARY 51 -> intact secondary subtable 0x244F78 -> name @file 0x376B56 = "70s Orchestra"
+  (a REAL factory name, not a plausible-looking artifact).
+- Synthetic-container integrity: nametable (0x800 u16BE) and subtable (169+8 u24BE) are
+  byte-IDENTICAL between the intact copy and kn7000_rhythms_synthetic.rom; the simulated resolver
+  (0x48433AC4 semantics) returns the SAME class+index for all 220 factory IDs on both images —
+  zero divergences, and no 0x8000-indirect entries occur in any factory genre list.
+- Totals: 168 LOCAL + 52 SECONDARY = 220. Felipe's observation matches ground truth line-for-line.
+
+**Nothing to fix.** gen_technics_rhythms.py and the installed ROM are correct; the 168 placeholder
+names (including C&W slot 1) are honest and await the Phase C hardware dump of the rhythm flash.
+Re-run the verifier any time with `python3 tools/genre_truth.py` (defaults point at the published
+emulator ROMs + the decompressed program image; see --help).
