@@ -1,31 +1,26 @@
-From b1028bd5b3082b341646b9b58f4711391f7ff21c Mon Sep 17 00:00:00 2001
+From 3c512b3e67cfd0ce79f192d0ac80bcbbbcead4bd Mon Sep 17 00:00:00 2001
 From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
-Date: Sat, 11 Jul 2026 19:46:13 +0100
-Subject: [PATCH] sharc drc perf: translation-time ALUSAT specialization +
- faithful 66MHz clock -- frame overrun ELIMINATED
+Date: Sun, 19 Jul 2026 02:41:30 +0100
+Subject: [PATCH 6/9] sharc drc: specialize MODE1 ALUSAT at translation time
 
-MODE1.ALUSAT is baked into compiled fixed-ALU code at translation time (zero
-overhead with saturation off; no per-op MODE1 load when on); the three
-mode1-imm write generators emit a cache_dirty flush whenever the bit could
-change (rare: once at boot), so correctness is preserved via recompile. DSP
-clock corrected 60 -> 66 MHz (IC306's rating). RESULT: the effect kernel now
-completes exactly 44,100 frames/s (was ~21.4k -- the wet path ran at half rate);
-reverb regression bit-identical; -str speed 65% vs 56% while doing 2x the DSP
-frames. Remaining perf lever (noted): native UML for the multifunction MRF-MAC
-block (multiop 0x06/0x08-0x16) which still round-trips through the interpreter
-fallback in the per-frame hot path.
+Bake MODE1.ALUSAT into compiled fixed-point ALU code at translation time:
+zero overhead when saturation is off (the common case for existing SHARC
+systems -- the emitted code is identical to the pre-ALUSAT-fix code), and no
+per-op MODE1 load when it is on. The three mode1-imm write generators
+(generate_write_mode1_imm / generate_set_mode1_imm / generate_toggle_mode1_imm)
+emit a cache_dirty flush whenever the ALUSAT bit could change (rare: typically
+once at boot), so correctness is preserved via recompile.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ---
  src/devices/cpu/sharc/sharcdrc.cpp | 23 +++++++++++++++++++++--
- src/mame/matsushita/kn7000.cpp     |  2 +-
- 2 files changed, 22 insertions(+), 3 deletions(-)
+ 1 file changed, 21 insertions(+), 2 deletions(-)
 
 diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
-index d1fde7a..ae3cd4a 100644
+index f3f869fc806..a521535627c 100644
 --- a/src/devices/cpu/sharc/sharcdrc.cpp
 +++ b/src/devices/cpu/sharc/sharcdrc.cpp
-@@ -288,9 +288,13 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
+@@ -258,9 +258,13 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
  void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
  {
  	UML_MOV(block, dst, I6);
@@ -41,7 +36,7 @@ index d1fde7a..ae3cd4a 100644
  	UML_TEST(block, I7, 1);
  	UML_JMPc(block, uml::COND_Z, no_sat);
  	UML_SAR(block, I6, I6, 31);
-@@ -1631,6 +1635,11 @@ void adsp21062_device::generate_update_cycles(drcuml_block &block, compiler_stat
+@@ -1601,6 +1605,11 @@ void adsp21062_device::generate_update_cycles(drcuml_block &block, compiler_stat
  
  void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
  {
@@ -53,7 +48,7 @@ index d1fde7a..ae3cd4a 100644
  	// TODO: swap effects
  	if (data & MODE1_BR8)
  		fatalerror("generate_write_mode1_imm: tried to enable I8 bit reversing");
-@@ -1677,6 +1686,11 @@ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_st
+@@ -1647,6 +1656,11 @@ void adsp21062_device::generate_write_mode1_imm(drcuml_block &block, compiler_st
  
  void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
  {
@@ -65,7 +60,7 @@ index d1fde7a..ae3cd4a 100644
  	if (data & 0x1)
  		fatalerror("generate_set_mode1_imm: tried to enable I8 bit reversing");
  	if (data & 0x2)
-@@ -1719,6 +1733,11 @@ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_stat
+@@ -1689,6 +1703,11 @@ void adsp21062_device::generate_set_mode1_imm(drcuml_block &block, compiler_stat
  
  void adsp21062_device::generate_clear_mode1_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uint32_t data)
  {
@@ -77,19 +72,3 @@ index d1fde7a..ae3cd4a 100644
  	if (data & 0x1)
  		fatalerror("generate_clear_mode1_imm: tried to disable I8 bit reversing");
  	if (data & 0x2)
-diff --git a/src/mame/matsushita/kn7000.cpp b/src/mame/matsushita/kn7000.cpp
-index 087dc2d..a72d569 100644
---- a/src/mame/matsushita/kn7000.cpp
-+++ b/src/mame/matsushita/kn7000.cpp
-@@ -2747,7 +2747,7 @@ void kn7000_state::kn7000(machine_config &config)
- 	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
- 	// come next; for now this proves the core integrates and the KN7000 still boots.
- 	// See notes/sharc-lle-assessment.md.
--	ADSP21065L(config, m_dsp, 60'000'000);
-+	ADSP21065L(config, m_dsp, 66'000'000);   // IC306 rated/run at 66 MHz (was 60 -- faithful correction)
- 	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
- 	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
- 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);
--- 
-2.47.3
-

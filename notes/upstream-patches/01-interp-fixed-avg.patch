@@ -1,0 +1,74 @@
+From 4cf79864fda127952a2f58b611bb633087f40cc2 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sun, 19 Jul 2026 02:40:37 +0100
+Subject: [PATCH 1/9] sharc: implement the fixed-point average (ALU op 0x09) in
+ the interpreter
+
+Rn = (Rx + Ry) / 2, the fixed-point twin of the floating-point FAVG (op 0x89).
+The interpreter threw 'unimplemented ALU operation 09'; ADSP-2106x DSP code
+(e.g. audio-effect microprograms: reverb/filter interpolation) uses it heavily.
+Modelled as a signed 33-bit add shifted right one bit, so it cannot overflow
+(AV always clear); the carry-out of the 32-bit adder sets AC, matching the
+hardware adder (TRM B-10). Round-to-nearest (TRUNC=0) is NOT modelled (the
+result is truncated) -- noted as a known deviation, kept bit-identical with
+the DRC (which gains a native emission of the same op later in this series).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharc.h      |  1 +
+ src/devices/cpu/sharc/sharcops.hxx | 23 +++++++++++++++++++++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/src/devices/cpu/sharc/sharc.h b/src/devices/cpu/sharc/sharc.h
+index 6faf7ac3835..71490744a37 100644
+--- a/src/devices/cpu/sharc/sharc.h
++++ b/src/devices/cpu/sharc/sharc.h
+@@ -407,6 +407,7 @@ private:
+ 	// ALU fixed-point
+ 	inline void compute_add(int rn, int rx, int ry);
+ 	inline void compute_sub(int rn, int rx, int ry);
++	inline void compute_avg(int rn, int rx, int ry);   // op 0x09: Rn = (Rx + Ry) / 2
+ 	inline void compute_add_ci(int rn, int rx, int ry);
+ 	inline void compute_sub_ci(int rn, int rx, int ry);
+ 	inline void compute_comp(int rx, int ry);
+diff --git a/src/devices/cpu/sharc/sharcops.hxx b/src/devices/cpu/sharc/sharcops.hxx
+index 772e8488937..bfbb8fdf62a 100644
+--- a/src/devices/cpu/sharc/sharcops.hxx
++++ b/src/devices/cpu/sharc/sharcops.hxx
+@@ -727,6 +727,28 @@ void adsp21062_device::SHIFT_OPERATION_IMM(int shiftop, int data, int rn, int rx
+ 
+ #include "compute.hxx"
+ 
++/* Rn = (Rx + Ry) / 2   -- fixed-point average (ALU single-function op 0x09).
++   This is the fixed-point twin of the floating-point FAVG (op 0x89) and is used
++   heavily by the ADSP-21065L effect microprograms (reverb/filter interpolation),
++   so leaving it unimplemented makes those effects compute nothing. Modelled as a
++   signed 33-bit add shifted right one bit (so it cannot overflow -> AV always 0);
++   the carry-out of the 32-bit adder sets AC, matching the hardware adder. */
++void adsp21062_device::compute_avg(int rn, int rx, int ry)
++{
++	int64_t const sum   = (int64_t)(int32_t)REG(rx) + (int64_t)(int32_t)REG(ry);
++	uint32_t const radd = REG(rx) + REG(ry);          // 32-bit adder result (for the carry flag)
++	uint32_t const r    = (uint32_t)(sum >> 1);       // (Rx + Ry) / 2, arithmetic (signed) shift
++
++	CLEAR_ALU_FLAGS();
++	SET_FLAG_AC_ADD(radd, REG(rx), REG(ry));           // AC = carry out of the add
++	// AV stays clear: an average can never overflow the destination.
++	SET_FLAG_AN(r);
++	SET_FLAG_AZ(r);
++
++	REG(rn) = r;
++	m_core->astat &= ~AF;
++}
++
+ void adsp21062_device::COMPUTE(uint32_t opcode)
+ {
+ 	int const op = (opcode >> 12) & 0xff;
+@@ -818,6 +840,7 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
+ 				{
+ 					case 0x01:      compute_add(rn, rx, ry); break;
+ 					case 0x02:      compute_sub(rn, rx, ry); break;
++					case 0x09:      compute_avg(rn, rx, ry); break;
+ 					case 0x05:      compute_add_ci(rn, rx, ry); break;
+ 					case 0x06:      compute_sub_ci(rn, rx, ry); break;
+ 					case 0x0a:      compute_comp(rx, ry); break;

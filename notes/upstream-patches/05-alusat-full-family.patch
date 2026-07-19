@@ -1,25 +1,16 @@
-From b94236659458b9f411fe75583cc7e21ba52caa61 Mon Sep 17 00:00:00 2001
+From 0e38b055ac22c713fc402ea3bdb676a7ce8fe561 Mon Sep 17 00:00:00 2001
 From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
-Date: Sat, 11 Jul 2026 18:33:29 +0100
-Subject: [PATCH] sharc drc: complete MODE1 ALUSAT across every fixed-point ALU
- form -- REAL REVERB AT FULL SPEED
+Date: Sun, 19 Jul 2026 02:41:21 +0100
+Subject: [PATCH 5/9] sharc drc: complete MODE1 ALUSAT across the whole
+ fixed-point ALU family
 
-Extends 2d308c7 (which covered only single-function ADD/SUB) to every native
-integer ALU emission in generate_compute: ADDC/SUBB (0x05/0x06), NEG (0x22),
-add/sub-with-carry-in (0x25/0x26), INC/DEC (0x29/0x2a), and the fixed-point
-dual add/sub (0x78-0x7F, both halves), via a shared generate_fixed_alusat_tail
-helper (wrapped result in I6, COND_V captured to I7 while flags are live, clamp
-SAR^0x80000000 under MODE1.ALUSAT, AN/AZ corrected for the saturated value; the
-dual form skips the per-half flag micro-corrections since its flags are
-OR-merged). The interpreter (which saturates all of these) is the reference.
-
-VERIFIED: the DRC now matches the interpreter's reverb sample-for-sample through
-the audible tail (held 14826/5447 vs 14901/5420; +1.2s 14056/2968 vs 14057/3164;
-smooth exponential decay, no rail, no 1.2s hard cut, silence after) -- the
-loud-distortion report is resolved at full DRC speed. Toggle/dry regression
-clean (dry 1731 untouched). Follow-up noted: the per-op MODE1 test costs some
-DRC throughput; specialize ALUSAT at translation time (flush on MODE1 change)
-to reclaim it.
+Extends the ADD/SUB ALUSAT fix to every fixed-point ALU form the DRC emits:
+ADDC/SUBB (0x05/0x06), NEG (0x22), the carry-in forms (0x25/0x26), INC/DEC
+(0x29/0x2a) and the dual add/sub (0x78-0x7F), via a shared
+generate_fixed_alusat_tail() helper (capture COND_V while flags are live,
+clamp to 0x7FFFFFFF/0x80000000 per TRM B-6, fix AN/AZ for the saturated
+value). The interpreter already saturates all of these; this restores
+DRC == interpreter across the family.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ---
@@ -28,10 +19,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
  2 files changed, 69 insertions(+), 29 deletions(-)
 
 diff --git a/src/devices/cpu/sharc/sharc.h b/src/devices/cpu/sharc/sharc.h
-index 297f6e8..e97f496 100644
+index 71490744a37..feaf458b06c 100644
 --- a/src/devices/cpu/sharc/sharc.h
 +++ b/src/devices/cpu/sharc/sharc.h
-@@ -550,6 +550,7 @@ private:
+@@ -520,6 +520,7 @@ private:
  	void save_fast_iregs(drcuml_block &block);
  	void update_az_an_fixed(drcuml_block &block, const opcode_desc *desc);
  	void update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub);
@@ -40,10 +31,10 @@ index 297f6e8..e97f496 100644
  	void generate_update_cycles(drcuml_block &block, compiler_state &compiler, uml::parameter param, bool allow_exception);
  	bool generate_opcode(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
 diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
-index 9366ee9..d1fde7a 100644
+index 6e520a37ede..f3f869fc806 100644
 --- a/src/devices/cpu/sharc/sharcdrc.cpp
 +++ b/src/devices/cpu/sharc/sharcdrc.cpp
-@@ -279,6 +279,30 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
+@@ -249,6 +249,30 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
  	if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
  }
  
@@ -74,7 +65,7 @@ index 9366ee9..d1fde7a 100644
  void adsp21062_device::update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub)
  {
  	// expects Z, V, S and C flags to be set appropriately
-@@ -4454,46 +4478,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+@@ -4384,46 +4408,36 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
  					case 0x01:      // Rn = Rx + Ry
  					case 0x02:      // Rn = Rx - Ry
  					{
@@ -132,7 +123,7 @@ index 9366ee9..d1fde7a 100644
  						return;
  
  					case 0x0a:      // COMP(Rx, Ry)
-@@ -4531,29 +4545,44 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+@@ -4461,29 +4475,44 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
  						return;
  
  					case 0x22:      // Rn = -Rx
@@ -182,7 +173,7 @@ index 9366ee9..d1fde7a 100644
  						return;
  
  					case 0x40:      // Rn = Rx AND Ry
-@@ -4617,12 +4646,21 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+@@ -4547,12 +4576,21 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
  
  					case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
  					case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7e: case 0x7f:
@@ -207,7 +198,7 @@ index 9366ee9..d1fde7a 100644
  						if (AZ_CALC_REQUIRED) UML_SETc(block, COND_Z, I0);
  						if (AV_CALC_REQUIRED) UML_SETc(block, COND_V, I1);
  						if (AN_CALC_REQUIRED) UML_SETc(block, COND_S, I2);
-@@ -4631,6 +4669,7 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+@@ -4561,6 +4599,7 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
  						if (AV_CALC_REQUIRED) UML_OR(block, ASTAT_AV, ASTAT_AV, I1);
  						if (AN_CALC_REQUIRED) UML_OR(block, ASTAT_AN, ASTAT_AN, I2);
  						if (AC_CALC_REQUIRED) UML_OR(block, ASTAT_AC, ASTAT_AC, I3);
@@ -215,6 +206,3 @@ index 9366ee9..d1fde7a 100644
  						return;
  
  					case 0x81:      // Fn = Fx + Fy
--- 
-2.47.3
-

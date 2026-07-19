@@ -1,0 +1,95 @@
+From 4753d50ba847ddebdb3ca9038820845e50b064af Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sun, 19 Jul 2026 02:44:30 +0100
+Subject: [PATCH 2/9] sharc: implement the general single-function fixed-point
+ multiplier / MAC decode
+
+The interpreter implemented only a handful of specific multiplier op bytes
+(0x30/0x40/0x70/0xb0/0xb2) and threw 'multiplier operation not implemented'
+for everything else. Decode the general form instead (TRM Table B-8):
+  [7:6] operation: 1 = Rx*Ry, 2 = MR + Rx*Ry, 3 = MR - Rx*Ry
+  [5] Rx signed  [4] Ry signed  [3] fractional (<<1)  [2] dest: Rn or MR
+  [1] MRF/MRB select  [0] round-to-nearest
+The existing specific cases remain as fast paths; op group 0 (the MR
+clear/saturate/round forms) keeps its own cases and still throws for
+genuinely-unknown encodings. Fractional register-destination results take
+MR1 (bits 63:32), integer take MR0, matching the hardware MR alignment.
+
+This makes real fixed-point DSP firmware runnable under the interpreter at
+all (e.g. the ADSP-21065L audio-effect kernels use Rx*Ry (SSF) 0x78,
+MR += Rx*Ry 0xb8 and MR -= Rx*Ry 0xf8 in every effect microprogram), and it
+is the conformance reference for the DRC's native emission later in this
+series.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcops.hxx | 56 +++++++++++++++++++++++++++++-
+ 1 file changed, 55 insertions(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/sharc/sharcops.hxx b/src/devices/cpu/sharc/sharcops.hxx
+index bfbb8fdf62a..6223b2f0d06 100644
+--- a/src/devices/cpu/sharc/sharcops.hxx
++++ b/src/devices/cpu/sharc/sharcops.hxx
+@@ -922,7 +922,61 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
+ 					case 0xb2:      REG(rn) = compute_mrb_plus_mul_ssin(rx, ry); break;
+ 
+ 					default:
+-						throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++					{
++						// General fixed-point multiplier / MAC. The op byte decodes as:
++						//   [7:6] operation: 1 = Rx*Ry, 2 = MR + Rx*Ry, 3 = MR - Rx*Ry
++						//   [5]   Rx signed    [4] Ry signed
++						//   [3]   fractional (result << 1)   [2] destination: 0 = Rn, 1 = MR
++						//   [1]   MR select: 0 = MRF, 1 = MRB   [0] round-to-nearest
++						// (The specific cases above are fast-paths for the same decode; op 0 =
++						// clear/saturate/round forms are handled by their own cases / still throw.)
++						const int oper = (op >> 6) & 3;
++						if (oper == 0)
++							throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++
++						const bool xsigned = BIT(op, 5);
++						const bool ysigned = BIT(op, 4);
++						const bool frac    = BIT(op, 3);
++						const bool dest_mr = BIT(op, 2);
++						const bool use_mrb = BIT(op, 1);
++						const bool round   = BIT(op, 0);
++
++						int64_t prod;
++						if (xsigned && ysigned)
++							prod = mul_32x32(int32_t(REG(rx)), int32_t(REG(ry)));
++						else if (!xsigned && !ysigned)
++							prod = int64_t(mulu_32x32(REG(rx), REG(ry)));
++						else
++						{
++							const int64_t a = xsigned ? int64_t(int32_t(REG(rx))) : int64_t(uint32_t(REG(rx)));
++							const int64_t b = ysigned ? int64_t(int32_t(REG(ry))) : int64_t(uint32_t(REG(ry)));
++							prod = a * b;
++						}
++						if (frac)
++							prod <<= 1;   // fractional multiply aligns the product to 1.63
++
++						uint64_t &mr = use_mrb ? m_core->mrb : m_core->mrf;
++						int64_t result;
++						if (oper == 1)      result = prod;                       // Rx*Ry
++						else if (oper == 2) result = int64_t(mr) + prod;         // MR + Rx*Ry
++						else                result = int64_t(mr) - prod;         // MR - Rx*Ry
++
++						if (round && frac)
++							result += 0x80000000LL;   // round the 1.31 result at the MR1/MR0 boundary
++
++						CLEAR_MULTIPLIER_FLAGS();
++						SET_FLAG_MN(uint32_t(result));
++						SET_FLAG_MV(result);
++						SET_FLAG_MU(result);
++
++						if (dest_mr)
++							mr = uint64_t(result);                              // MRF/MRB = result (accumulate)
++						else
++							// Rn destination leaves MR unchanged; fractional takes MR1 (bits 63:32),
++							// integer takes MR0 (bits 31:0).
++							REG(rn) = frac ? uint32_t(uint64_t(result) >> 32) : uint32_t(result);
++						break;
++					}
+ 				}
+ 				break;
+ 			}

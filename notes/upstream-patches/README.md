@@ -1,57 +1,66 @@
 # SHARC core fixes — upstream (MAME) submission patches
 
-## ★ Submit-ready consolidated diff (2026-07-12)
-**00-consolidated-vs-upstream-base.patch** is the authoritative artifact: the COMPLETE SHARC-core diff of
-this fork against a pristine upstream MAME checkout (../mame; verified to lack every change here). It
-applies cleanly with `patch -p1` (dry-run validated) and covers two concerns:
-1. **General ADSP-2106x DRC/interpreter fixes** (sharcdrc.cpp + sharcops.hxx): MODE1 ALUSAT across the
-   fixed-point ALU family, native UML for the single-function fixed multiplier + MAC + the fixed-point
-   average (op 0x09) -- the DRC previously punted the whole fixed multiplier family to the interpreter
-   (~82M fallbacks/reverb-run -> <500k, >99%). All verified BIT-IDENTICAL vs the interpreter.
-2. **New device variant: ADSP-21065L** (sharc.h + sharc.cpp): vector base, host boot, memory map, IOP
-   register set -- a genuinely new SHARC personality (the KN7000/KN6000/KN6500 effects DSP), currently
-   absent from upstream.
-For a real PR, split concern 1 (pure bugfix/perf, low-risk, broadly applicable) from concern 2 (new
-device). The individual patches 01-05 below are the historical fork-order slices of concern 1; the
-consolidated diff is the clean whole against upstream. Canonical source remains the fork git history
-(3fa7e3a..HEAD on src/devices/cpu/sharc/).
+## ★ The 9-patch series (regenerated 2026-07-19, rebased onto upstream 957e9dec1b4)
+Patches 01-09 are a **clean, ordered, self-contained `git am`-able series** against pristine upstream
+MAME (kn7000-base @957e9dec1b4). Verified (2026-07-19):
+- each patch applies with `git apply --check` at its point in the series, **zero offsets/fuzz**;
+- the cumulative result is **byte-identical** to replaying the fork's sharc commits (nothing lost in
+  the rebase);
+- **every intermediate state compiles** (g++ -fsyntax-only of sharc.cpp + sharcdrc.cpp with the real
+  MAME include set/flags, C++20);
+- authorship: Felipe (format-patch from rebased cherry-picks of the fork commits; commit messages
+  rewritten upstream-facing, TRM citations + "restores DRC == interpreter" framing already in).
+Patches 01-04 and 07-09 also apply to pristine upstream *individually*; 05/06 need their ALUSAT
+predecessors. Series order is the required order.
 
+| # | file | what | fork commit(s) |
+|---|---|---|---|
+| 01 | 01-interp-fixed-avg.patch | interpreter: fixed-point AVG op 0x09 (+ sharc.h decl) | slice of 630c68d |
+| 02 | 02-interp-general-fixed-multiplier.patch | interpreter: general single-fn fixed multiplier/MAC decode (upstream threw) | slice of 3aca274 |
+| 03 | 03-interp-multifunction-fixed-mac.patch | interpreter: multifunction fixed MAC forms 0x06/0x08-0x16 + 0x20-0x2f, ALUSAT-correct parallel ALU | slice of 3aca274 + 2d308c7's interp hunk |
+| 04 | 04-alusat-add-sub.patch | DRC: MODE1 ALUSAT in ADD/SUB — **the correctness headline** (real DRC-vs-interpreter divergence) | 2d308c7 (DRC part) |
+| 05 | 05-alusat-full-family.patch | DRC: ALUSAT across the whole fixed ALU family (shared tail helper) | b942366 |
+| 06 | 06-alusat-specialization.patch | DRC: ALUSAT baked at translation time, cache flush on MODE1 change | b1028bd **minus the kn7000.cpp clock hunk** |
+| 07 | 07-native-fixed-mac.patch | DRC: native multifunction fixed MAC family | cd8c720 |
+| 08 | 08-native-single-fn-fixed-multiplier.patch | DRC: native single-fn fixed multiplier SS forms — **the perf headline** (~66M fallbacks/run gone) | bb2d516 |
+| 09 | 09-native-fixed-avg-drc.patch | DRC: native fixed AVG (last hot fallback) | e487bb7 |
 
-Generated from the KN7000 fork. These target MAME's shared `src/devices/cpu/sharc/` core and are
-general ADSP-2106x fixes (not KN7000-specific). Full technical rationale: ../sharc-upstream-patch-series.md.
+### Why 01-03 exist (2026-07-19 finding, corrects the older analysis)
+The old 5-file series failed to apply because 2d308c7's sharcops.hxx hunk patches the **fork-only**
+interpreter multifunction-MAC block (added by 3aca274, NOT by 630c68d as previously believed — the
+`>> 1` average line in its context is the *parallel* average inside that block, not op 0x09).
+Upstream's interpreter also **throws** on the general fixed multiplier forms (it implements only
+0x30/0x40/0x70/0xb0/0xb2) and on the whole multifunction fixed-MAC block. Without 02/03 the DRC-native
+patches (07/08) would emit ops whose in-tree conformance reference doesn't exist and which the
+interpreter cannot run at all. 01-03 carry the interpreter reference implementations first, so every
+DRC patch keeps the "interpreter = oracle" story inside the tree.
 
-## Patches (apply in order)
-1. **01-alusat-add-sub.patch** — MODE1 ALUSAT in the DRC's single ADD/SUB. THE headline: a real
-   DRC-vs-interpreter divergence (the DRC wrapped fixed-point ALU results; the interpreter saturated
-   per MODE1.ALUSAT, TRM B-6). Any SHARC program using saturate-then-reflect logic (triangle LFOs)
-   diverges. Touches sharcdrc.cpp + sharcops.hxx (interp reference already correct).
-2. **02-alusat-full-family.patch** — extends ALUSAT to the rest of the DRC integer ALU family
-   (ADDC/SUBB, NEG, carry-in, INC/DEC, dual add/sub) via generate_fixed_alusat_tail. sharc.h + drc.
-3. **03-alusat-specialization-MIXED.patch** — ★ NOT upstream-clean as-is: bundles the DRC
-   translation-time ALUSAT specialization (upstream-worthy: bakes the flag at compile time, flushes
-   the cache on MODE1 change) WITH a KN7000-specific 60->66 MHz clock change in kn7000.cpp. SPLIT
-   before submitting: keep the sharcdrc.cpp hunk, drop the kn7000.cpp hunk.
-4. **04-native-fixed-mac.patch** — native UML for the multifunction fixed-point MAC family (multiop
-   0x06/0x08-0x16 = MRF±Rx*Ry SSF/SSFR + parallel add/sub/avg), which the SHARC DRC never
-   implemented (was interpreter fallback). Verified BIT-IDENTICAL vs the interpreter.
+### Suggested split into PRs
+- PR A (correctness): 01 + 04 + 05 + 06 (04-06 = the ALUSAT DRC-vs-interpreter divergence; 01 is tiny
+  and standalone). 04 works without 01 if a smaller headline PR is preferred.
+- PR B (fixed-point coverage + perf): 02 + 03 + 07 + 08 + 09 (interpreter implementations first, then
+  the native DRC emissions measured against them).
+- The `adsp21065l_device` variant is NOT in this series (separate PR; datasheet cross-check now done —
+  see ../sharc-upstream-patch-series.md §2026-07-19).
 
-5. **05-native-single-fn-fixed-multiplier.patch** — native UML for the SINGLE-function fixed-point
-   multiplier (signed*signed general forms 0x70-0x7f/0xb0-0xbf/0xf0-0xff = Rx*Ry / MR+Rx*Ry / MR-Rx*Ry).
-   The DRC sent the ENTIRE fixed multiplier family to the interpreter; this is a real hot path (measured
-   ~66M interpreter fallbacks per second of SHARC audio DSP -- the single-function multiplier, distinct
-   from #4's multi-function MAC). Verified BIT-IDENTICAL vs the interpreter. Unsigned/mixed-sign + SAT/RND
-   forms still fall back (can be added later). Also includes the fixed-point ALU AVERAGE (op 0x09, another heavily-used effect-kernel op the DRC left to the interpreter). Together these take the KN7000 DSP hot path from ~82M interpreter fallbacks per reverb run to <500k (>99%). sharcdrc.cpp only; upstream-clean.
+## Consolidated diff (kept)
+**00-consolidated-vs-upstream-base.patch** — the COMPLETE SHARC-core fork diff vs upstream (both
+concerns: all fixes above in their fork form + the 21065L device + fallback plumbing). Still applies
+clean to 957e9dec1b4 (re-verified 2026-07-19). Use it to reproduce the full fork state; use 01-09 for
+submission.
 
 ## Verification standard
-Every fix restores DRC == interpreter (or interpreter == TRM). The reverb WAV A/B (bit-identical
-before/after) is the oracle used throughout the KN7000 work.
+Every fix restores DRC == interpreter (or interpreter == TRM). The reverb WAV A/B is the oracle:
+historical per-commit baseline md5 0787b60cc3cec696c7aa43bb471b2b1b (preserved at
+kn7000_scratchpad_snapshot/tmp-loose-2026-07-16/ab_before.wav); current-era baseline (2026-07-19,
+published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_run 22) md5
+**44b09b9d0eaae59d9a65e5b4f4e72ec0**, deterministic across runs. Recipe in
+../sharc-upstream-patch-series.md.
 
 ## Not included (documented in the catalogue, want a maintainer's call / more testing)
-- Circular-buffer wrap off-by-one (`>` vs `>=`): correct per TRM but changes output by ~2 samples on
-  the KN7000 reverb (delay lines DO hit the boundary) -- held.
-- AVG/SSFR rounding, FIX-overflow UB, pre-modify circular wrap: identified spec deviations, low-risk,
-  each with a TRM citation in the catalogue.
-
-## Note
-These are session-generated convenience patches; the canonical source is the fork's git history
-(commits 2d308c7, b942366, b1028bd, cd8c720). A maintainer PR should cherry-pick + split #3.
+- Interpreter-fallback plumbing for the DRC (compute_fallback/shiftimm_fallback cfuncs): the fork
+  routes unimplemented DRC compute/shift-imm ops through the interpreter instead of aborting. A good
+  future patch 10, but it changes generate_unimplemented_* semantics — maintainer call.
+- SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), circular-buffer wrap off-by-one
+  (`>` vs `>=`: TRM-correct but changes the KN7000 reverb by 2 samples — held), AVG/SSFR rounding,
+  FIX-overflow UB, pre-modify circular wrap: all catalogued with TRM citations.

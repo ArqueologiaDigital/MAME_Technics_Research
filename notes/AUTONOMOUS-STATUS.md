@@ -19,6 +19,25 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★ SHARC UPSTREAM SERIES SUBMISSION-READY (prep agent complete)
+The upstream patch series is REGENERATED, REBASED and VERIFIED against the current base (kn7000-base
+@957e9dec1b4). notes/upstream-patches/ now holds a 9-file `git am`-able series (old 01-05 replaced;
+00-consolidated kept, still clean): 01-03 = INTERPRETER implementations (fixed AVG; general single-fn
+fixed multiplier decode; multifunction fixed-MAC forms) -- NEW FINDING: the old series' failure was NOT
+the 630c68d average dependency but 2d308c7's interp hunk patching the FORK-ONLY MAC block from 3aca274,
+and upstream's interpreter THROWS on all general fixed-multiplier forms, so the interp slices must lead
+the series to keep the in-tree oracle; 04-06 = ALUSAT DRC series (kn7000.cpp 66MHz hunk dropped from
+b1028bd); 07-09 = native DRC MAC/multiplier/AVG. VERIFIED: cumulative git-apply CLEAN zero-offset on
+pristine base, final tree byte-identical to the rebased fork replay, ALL 9 intermediate states compile
+(g++ -fsyntax-only, real MAME flags). RUNTIME ORACLE: money.lua reverb on the published binary, 2 runs
+BIT-IDENTICAL, new current-era baseline md5 44b09b9d0eaae59d9a65e5b4f4e72ec0 (0787b60c is historical --
+release-ramp/effect-return/SIO changes moved the WAV; ab_before.wav preserved in the 07-16 snapshot).
+DATASHEET CROSS-CHECK (§A device PR gate): TR appendices Table F-1 CONFIRMS vector base 0x8000 =
+"beginning of Block 0", RSTI offset 0x04 (reset 0x8004), IRQ0 0x8020, external space 0x20000; catalogue
+§A corrected (0x20004/0x20000 were base-2106x values); DM windows 0x9800/0xC000 stay RE-derived (UM
+ch.5 not in our PDFs) -- device PR unblocked with that labelled. Felipe's checklist = bottom of
+notes/sharc-upstream-patch-series.md. Scratch worktree cleaned; ../mame untouched (branch/tree).
+
 ## TICK 2026-07-19 — ★★ SIO->MN10300-CORE REFACTOR SHIPPED (Felipe's request, wf_920ebe24 complete)
 Core 9bb2de8: on-chip SIO (3ch, 0x34000800-2F) implemented IN mn10300_device via internal address_map
 (MN10200 precedent; addrmap.cpp appends device internal maps AFTER the driver map -> core window wins,

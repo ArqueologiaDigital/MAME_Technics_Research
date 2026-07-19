@@ -1,26 +1,19 @@
-From cd8c7202335ac4f9b51f35f149801a6feb5ac7e6 Mon Sep 17 00:00:00 2001
+From 1aca224d4e12b63f48cdbf4e62e84d25f4392501 Mon Sep 17 00:00:00 2001
 From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
-Date: Sat, 11 Jul 2026 21:29:28 +0100
-Subject: [PATCH] sharc drc: native fixed-point MAC family (multiop
- 0x06/0x08-0x16) -- removes per-op interpreter fallback
+Date: Sun, 19 Jul 2026 02:41:49 +0100
+Subject: [PATCH 7/9] sharc drc: native fixed-point multifunction MAC family
+ (multiop 0x06, 0x08-0x16)
 
-The SHARC recompiler never implemented the fixed-point multiply-accumulate
-multifunction ops; they fell back to generate_unimplemented_compute (save fast
-iregs + C call into the interpreter COMPUTE + reload) once PER OP -- and the
-KN7000 effect kernel's per-frame hot path (the reverb's coupled-form sine
-oscillators) leans on them. Implemented native UML emission mirroring the
-interpreter exactly: 64-bit signed product (DSEXT/DMULS) aligned 1.63 (<<1),
-MR accumulate (DADD/DSUB into MRF) or Rm=MR1 (>>32), in parallel with the ALU
-add/sub (with MODE1 ALUSAT, baked at translation time) or signed average
-(overflow-free (a>>1)+(b>>1)+(a&b&1)); multiplier + ALU flags matched and gated
-on liveness (*_CALC_REQUIRED) like the rest of the DRC.
+The SHARC DRC sent the entire fixed-point multiplier/MAC multifunction block
+(MRF +/- Rxm*Rym (SSF/SSFR) with a parallel ALU add/sub/average -- multiop
+0x06, 0x08-0x12, 0x14-0x16) to the interpreter fallback. Emit it natively:
+signed 32x32 fractional multiply aligned to 1.63, MR1 as the register result,
+parallel ALU with the same ALUSAT treatment as the single-function forms,
+flags gated on liveness. Multiop 0x07/0x0f (dual add/sub parallel forms)
+remain on the fallback path.
 
-CORRECTNESS: reverb WAV is BIT-IDENTICAL before vs after (md5 match, 0 of
-2,112,002 samples differ) -- because the old path invoked the interpreter, this
-proves the native emission equals the interpreter. Speed sits in the normal band
-(~75% -str, 30s); the host's -str is too noisy (58-81% for one binary) to
-quantify the fallback-removal gain, but eliminating the per-op C call is real.
-0x07/0x0f (dual add/sub, not MACs) remain fallback. Upstream candidate.
+Verified bit-identical against the interpreter on a fixed-point-MAC-heavy
+audio workload (ADSP-21065L effect kernel, 2.11M-sample WAV compare).
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ---
@@ -28,10 +21,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
  1 file changed, 99 insertions(+), 15 deletions(-)
 
 diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
-index ae3cd4a..aa7d00f 100644
+index a521535627c..0bcb7bfacd6 100644
 --- a/src/devices/cpu/sharc/sharcdrc.cpp
 +++ b/src/devices/cpu/sharc/sharcdrc.cpp
-@@ -4092,24 +4092,108 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+@@ -4022,24 +4022,108 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
  				return;
  			}
  
@@ -155,6 +148,3 @@ index ae3cd4a..aa7d00f 100644
  			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
  			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
  				// Rm = R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12,   Rs = R11-8 - R15-12
--- 
-2.47.3
-
