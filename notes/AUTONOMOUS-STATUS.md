@@ -12,8 +12,11 @@ cron tick.
    mn10300 core (MN10200-style; devcb IRQ callbacks out to the driver INTC), then rewire kn7000.cpp,
    build, publish, live-verify panel+SD+kn6000. Its Integrate stage WAITS for a free build tree
    (polls pgrep) because workflow 1 may rebuild first.
-Cron is now every 20 min (:07/:27/:47). Next after these land: blog entry (style-names fix + SD
-round-trip), MEMORY.md refresh for both.
+Cron is now every 20 min (:07/:27/:47). ★ STANDING RULE from Felipe (2026-07-19, saved to memory):
+BLOG PROACTIVELY — whenever there is something to tell, write the post without being asked.
+IN FLIGHT ALSO: blog agent writing Parts 35 (style-names fix incl. the falsified off-by-one) + 36
+(SD round-trip + the toggle retraction). QUEUED: Part 37 = the SIO->mn10300-core refactor, WRITE IT
+as soon as wf_920ebe24 lands (include the MN10200-ancestry angle from blog Part 34).
 
 ## SESSION 2026-07-18 AUTONOMOUS PLAN (Felipe away a few hours, standing green light)
 
