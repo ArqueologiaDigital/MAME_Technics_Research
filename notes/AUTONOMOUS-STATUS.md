@@ -14,8 +14,11 @@ public sio_rx_push/sio_rx_ready; save-stated. Integrate 9eb0e4b: kn7000.cpp -172
 removed, devcbs wired: ch0->cpanel + 40us tx-done timer->grp 0x11, ch1/2->MIDI UARTs + grp 0x12/0x14;
 endpoints repoint to m_maincpu->sio_rx_push). All 5 MN10300 models inherit. VERIFIED: build clean,
 -validate kn7000+kn6000, published; live home/BALLAD/SD-MENU/kn6000-boot snapshots match pre-refactor.
-IN FLIGHT: blog Part 37 agent (also flips roadmap docs item 2 + rebuilds site). Blog 35+36 published
-earlier (mame-blog fb7f139). REMAINING QUEUE: MEMORY.md refresh (SIO refactor + Parts 35-37) next tick.
+DONE: blog Part 37 published (mame-blog 736dd4a, "What the ancestor knew"); roadmap item 2 flipped by
+the SIO workflow itself (kn5000-docs 0c17afa); Parts 35+36 earlier (fb7f139). MEMORY refreshed (new
+kn7000-session-2026-07-18-results memory + index line). SESSION QUEUE now EMPTY of committed follow-ups;
+remaining big items all need Felipe (Phase C dumps, reverb A/B) or are next-of-kin refactors
+(INTC/timers into the core, SHARC upstream submission prep).
 
 ## TICK 2026-07-19 (Felipe back, interactive) — TWO WORKFLOWS IN FLIGHT, do not duplicate
 1. wf_5774e9e1-d0b "rhythm-names-offbyone": **COMPLETE 2026-07-19 (see the two ~05:xx ticks below)**
