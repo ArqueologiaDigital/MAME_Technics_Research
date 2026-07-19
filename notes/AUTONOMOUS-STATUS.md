@@ -8,10 +8,19 @@ cron tick.
 ## TICK 2026-07-19 (Felipe back, interactive) — TWO WORKFLOWS IN FLIGHT, do not duplicate
 1. wf_5774e9e1-d0b "rhythm-names-offbyone": **COMPLETE 2026-07-19 (see the two ~05:xx ticks below)**
    — hypothesis falsified, split is faithful, no code change; bug note CLOSED, verifier committed.
-2. wf_920ebe24-bf2 "sio-into-mn10300-core" (FELIPE REQUESTED): implement the on-chip serial in the
-   mn10300 core (MN10200-style; devcb IRQ callbacks out to the driver INTC), then rewire kn7000.cpp,
-   build, publish, live-verify panel+SD+kn6000. Its Integrate stage WAITS for a free build tree
-   (polls pgrep) because workflow 1 may rebuild first.
+2. wf_920ebe24-bf2 "sio-into-mn10300-core" (FELIPE REQUESTED): **COMPLETE 2026-07-19 ~02:3x.**
+   Core stage 9bb2de8 (mn10300_device models the 3-channel SIO via an internal address map,
+   MN10200-precedent; per-channel devcb: sio_tx_cb / sio_tx_done_cb / sio_rx_rdy_cb /
+   sio_rx_enable_cb + public sio_rx_push/sio_rx_ready). Integrate stage 9eb0e4b (driver HLE
+   retired: sio_r/sio_w + m_sio_* state + the 0x34000800 map entry gone; endpoints repointed at
+   m_maincpu->sio_rx_push; devcbs bound in kn7000(machine_config) -- ch0 tx->cpanel/tx-done->40us
+   panel_txdone->grp 0x11/rx-rdy->0x10/rx-enable->cpanel, ch1/ch2 tx->MIDI UARTs, rx-rdy->0x12/0x14).
+   KN6000/6500/2400/2600 inherit via kn7000(config). Sole semantic delta: ch0 no longer asserts
+   0x10 on an RX-ring OVERRUN drop (unreachable in practice, 64-byte ring drained per interrupt).
+   LIVE-VERIFIED on the published binary: kn7000 home + BALLAD genre list + SD MENU (snaps
+   kn7000-emulator/snap/kn7000/0007-0009.png, script sio_core_verify.lua), kn6000 play screen ==
+   notes/img/kn6000-boot-playscreen.png (snap/kn6000/0002.png). -validate clean both. Published.
+   Roadmap docs item 2 (kn7000-roadmap.md "Architecture") flipped to done. BLOG PART 37 UNBLOCKED.
 Cron is now every 20 min (:07/:27/:47). ★ STANDING RULE from Felipe (2026-07-19, saved to memory):
 BLOG PROACTIVELY — whenever there is something to tell, write the post without being asked.
 IN FLIGHT ALSO: blog agent writing Parts 35 (style-names fix incl. the falsified off-by-one) + 36
