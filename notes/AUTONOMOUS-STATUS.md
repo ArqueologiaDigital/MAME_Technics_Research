@@ -12,7 +12,10 @@ Use ALL idle autonomous time to IMPROVE THE DISASSEMBLY — both:
 - DSP algorithms (kn7000_disassembly/dsp): annotate the SHARC effect microprograms record-by-record
   (reverb/chorus/multi/EQ structure, delay-line topology, coefficient roles), enrich sym/recNN.sym,
   use kn7000_mame/tools/dis_sharc.sh. The MULTI-unit pinning + EQ insert RE feed directly off this.
-Every cron tick with no higher-priority queued item = disassembly work. Blog findings proactively.
+Every cron tick with no higher-priority queued item = disassembly work. ★ EXTENDED (Felipe): the
+GOAL is ALL DSP programs FULLY DOCUMENTED — per understood record: algorithm doc in
+kn7000_disassembly/dsp/, docs-site page where warranted, and a PROACTIVE blog post. Work through
+records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP variants, EQ, kernel).
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
