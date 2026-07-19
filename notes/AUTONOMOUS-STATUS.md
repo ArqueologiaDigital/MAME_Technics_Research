@@ -19,6 +19,42 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★ EXCITER + DYNAMICS + EQs + DISTORTION MAP (DSP-doc directive)
+Tone-shaping batch rec20/21/25/22/23/34 + rec17/18/19/38/39/40 documented (kn7000_disassembly
+634ba34, NEW dsp/dynamics-eq-exciter.md); blog Part 44 "The exciter was real too" (mame-blog
+8d9abdc); routing-note update in THIS repo (effect-multi-unit-routing.md 2026-07-19 section).
+Findings:
+- rec20 (0x23, GUI EXCITER1-3): the REAL harmonic exciter completing Part 43's contrast — static
+  drive -> 33-pt PWL LUT (= rec37's template curve) -> resonant BP 3556 Hz r=.758 whose g=0.2125
+  makes the peak UNITY (harmonic-band selector) -> wet 0.5 ADDED TO DRY x c00b master (template 0).
+- rec21=rec25 (0x24/0x29 Comp/Limiter, identical PM): peak detector |(L+R)<<9| atk 1/32 (0.73 ms)/
+  rel 1/2048 (46 ms); gain = 1/3+(2^31/6)/env via RECIPS + 3 NEWTON iters (full precision — the
+  distortion AGCs keep the seed), clamp 2.0 below 0.1 where the curve meets it EXACTLY; static law
+  out=e/3+1/6 = soft knee gliding 6:1 -> 1.5:1; stereo-linked; CLIP 24-bit = the final rail.
+- rec22 (0x25 SLOW ATTACKER, 28 words): two-target gain slew — thr 0.125: open tau 2^15 smp =
+  743 ms (the swell), close tau 2^7 = 2.9 ms (reset for the next note). rec12's gate machine
+  pointed at the attack.
+- rec23/rec34 (0x27 Parametric EQ / 0x4F unit-8 EQUALIZER): SAME 5-section cascade (1st + 3
+  biquads + 1st); template numerators = BIT-EXACT MIRRORS of denominators (H=1, provably flat)
+  with poles PRE-PLACED at ~124 Hz + octave-spaced mids (496/992/1985 param; 484/969/1940 5-band)
+  + high; presets move only the zeros. ★ KERNEL CORRECTION: helper 0x831B IS this cascade
+  (LCNTR=3 = the biquad loop, NOT "3-tap interpolation"); rec34 = 13-word wrapper, rec23 = the
+  inlined twin. ★ u8 MASTER-INSERT ANSWERED (static): rec34 = pure in-line full-replace (no
+  wet/dry/makeup), matches u8's copy-through empty stub; NO DSP-side chaining — the TG must close
+  unit0->u8->DAC. Open: live u8 DM dump c004..c019 (host bank appears NON-mirror even at flat —
+  explains the 2026-07-12 15% diff; doubles as the EQ-active baseline).
+- Distortion cluster byte-diffed: rec38 = rec37 +-2 words (levels; bank -> resonant LP 1744 Hz =
+  Fat); rec40 = rec39 +-4 (levels + Haas 400->200; mid-bump bank); rec18/39/40 = GROUP-B engine
+  (PM-state tone smoother 0.10/0.40 host-rewritable + unity-DC biquad; rec39 shares one bank via
+  a MODIFY(I0,-8) rewind); rec17/19 = filterless group A (rec19: rail curve, release 1/128 FASTER
+  than attack, drive clamp 2.0 = -6 dB below-threshold gate). Three LUT curves pinned (knee A
+  7.5/1.5/0.5; smooth B 8/2.67/...; rail C 10.67/4.33/~0.08).
+records.tsv 13 rows -> conf high; syms rewritten x12 + rec04 label; listings regenerated.
+REMAINING undocumented queue (updated): rec11 (0x06/0x0E chorus), rec27 VIBRATO, rec28/29 (bank-
+0x38 wahs — "dynamics + biquad" now suspicious given this family), rec32 MIXUP, rec33 SPREADER,
+rec49/50 choruses, rec57 VOICE CHANGER, rec58-61 mic reverbs, rec67-69 BRASS SIM, rec70/71/72
+combi back-ends, rec75/76 COMP+X+DELAY; unit-role live capture + u8 DM dump still open.
+
 ## TICK 2026-07-19 — ★★ ENHANCER DECODED + TRUE PHASERS + GATE REVERB (DSP-doc directive)
 Batch rec08/10/47/73/12 documented (kn7000_disassembly a8526d0, NEW dsp/phaser-enhancer-gate.md);
 blog Part 43 "What the Enhancer enhances" published (mame-blog b2928cc). Findings:

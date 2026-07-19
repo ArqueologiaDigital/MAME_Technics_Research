@@ -353,3 +353,27 @@ The "shared vs per-effect DSP return" question below is answered: RETURNS ARE PE
 only (no return reg). Toggling REVERB moves ONLY ch03.rA. Fixed: each effect scales its wet by its own
 return, so reverb-off no longer mutes the others. Reverb-only stays bit-identical. Full writeup:
 notes/effect-return-routing.md.
+
+## 2026-07-19: EQ-as-master-insert — the STATIC answer (rec34 decoded, kn7000_disassembly 634ba34)
+The 2026-07-12 "EQ insert model CONFIRMED tractable" reading is now backed by the record itself
+(kn7000_disassembly/dsp/dynamics-eq-exciter.md #5). Facts from the rec34 disassembly:
+- rec34 = a 13-word wrapper around KERNEL HELPER 0x831B, which IS the 5-section EQ cascade
+  (1st-order + LCNTR=3 biquad loop + 1st-order, FLOAT->FIX, loads the clip bound c019 into R15).
+  The kernel doc's old "3-tap interpolation coefficient generator" label was wrong (the 3 = the
+  biquad loop count); corrected in kernel-architecture.md + sym/rec04.sym.
+- Bands (template poles, mirror-flat): LOW ~124 Hz / 484 / 969 / 1940 Hz / HIGH ~4 kHz = the GUI
+  5-band EQ. TEMPLATE IS EXACTLY FLAT: every numerator is the bit-exact mirror of its denominator
+  (pole/zero cancellation, H=1) — presets only move the zeros off the pre-placed poles.
+- I/O convention = PURE IN-LINE INSERT: no wet/dry, no makeup, no envelope — input -> cascade ->
+  CLIP -> output, full replace. Consistent with u8 being one of only two slots whose EMPTY-slot
+  kernel stub is the 0x80FB copy-through (an in-line unit must default to unity).
+- NO DSP-side chaining exists: rec34 reads its OWN I4 slot (0xC372/3 in, 0xC352/3 out, SPORT1-A);
+  units cannot read each other's slots. If the hardware uses u8 as the master EQ, the
+  unit0->unit8->DAC chain is closed OUTSIDE the DSP by the TG's TDM routing (master bus out on
+  u8's pair, return into the DAC). => the proposed MAME model (feed u8 the final mix, take u8's
+  return as the DAC feed, ONLY when EQ active) is exactly what the record expects.
+- TENSION to settle live: the template is mathematically transparent, yet the 2026-07-12 live
+  feed-test measured ~15%-of-peak per-sample diff at "flat" — so the HOST's real coefficient bank
+  is apparently NOT a mirror bank even at 0 dB (or GUI-flat != 0 dB internally). One live DM dump
+  of u8 c004..c019 vs the ROM template decides it, and doubles as the EQ-active detector's
+  baseline (option (a) in the 2026-07-12 note). PROVISIONAL until captured.
