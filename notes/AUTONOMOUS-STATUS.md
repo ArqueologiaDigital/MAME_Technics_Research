@@ -3258,3 +3258,28 @@ NEXT maincpu convert target suggestion: the tempo/TM5 chain (96-PPQN ISR
 0x48447084, TM5 regs 0x340010x2 — notes/tg-pitch-pipeline.md + the
 sound-subsystem memory) or the TG note path (note-on/release writers RE'd
 in the forever-note fix, tg-pitch-pipeline.md).
+
+## 2026-07-19 — DSP pool vs SHARC core: instruction-coverage audit (Felipe's question)
+DONE (kn7000_disassembly 7a88e42): tools/check_sharc_coverage.py +
+dsp/instruction-coverage.md — decoded ALL 6,499 PM words of the 80-record
+effects pool (exact mirror of MAME's decode: sharcops_table.cpp top-level,
+compute/shiftop/sysreg subfields) and cross-checked every used class
+against the core the build links (overlay sharcops.hxx/sharcdrc.cpp/
+sharcfe.cpp + stock compute.hxx; symlinks verified in kn7000_mame_build).
+RESULT: 69 classes used; 66 native in BOTH interpreter and DRC; 2
+DRC-fallback-only, correct but interp-called (FDEP-SE imm x34, ABS Rx
+x28); ★ ONE GENUINE GAP: "Rn = SAT MRF (SF)" (single-function multiplier
+op 0x09), ONE instruction, rec12 GATE REVERB @PM 0x8438, executed every
+quiet-gate frame -> interpreter THROWS and the DRC fallback hits the same
+throw. Selecting Sound-DSP Medium/Short/Long Gate (type 0x08) in the
+emulator WILL fatalerror. Fix is a few lines in sharcops.hxx (oper==0
+SAT corner of the general multiplier decode; DRC inherits via fallback);
+in rec12 MRF is always 0 there so the correct result is simply R3=0.
+NOT fixed (audit was no-core-changes). Also: ALUSAT interaction clean for
+the whole used set (kernel sets MODE1 0x3000 once, no BR/SRCU bits ever);
+section-C TRM deviations vs usage: C.4 SSFR-rounding UNREACHABLE (pool
+has zero SSFR fixed forms), C.5 FIX-overflow masked by global ALUSAT,
+C.3 AVG truncation = 17 records' output mixes at -0.25 LSB, C.1 circular
+wrap still the staged-pending-approval item.
+NEXT: implement SAT MRF/MRB (+RND siblings while there) in sharcops.hxx,
+rebuild, load Gate Reverb live to confirm, then publish-binary.
