@@ -5,6 +5,17 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ★ STANDING IDLE-TIME DIRECTIVE (Felipe, 2026-07-19)
+Use ALL idle autonomous time to IMPROVE THE DISASSEMBLY — both:
+- maincpu (kn7000_disassembly repo): grow the CONVERT set (66 fns re-assemblable of 2302 named), name
+  more functions/constants from reflection tables + RE notes, keep the 100% byte-match invariant.
+- DSP algorithms (kn7000_disassembly/dsp): annotate the SHARC effect microprograms record-by-record
+  (reverb/chorus/multi/EQ structure, delay-line topology, coefficient roles), enrich sym/recNN.sym,
+  use kn7000_mame/tools/dis_sharc.sh. The MULTI-unit pinning + EQ insert RE feed directly off this.
+Every cron tick with no higher-priority queued item = disassembly work. Blog findings proactively.
+PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
+IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
+
 ## TICK 2026-07-19 — ★★ SIO->MN10300-CORE REFACTOR SHIPPED (Felipe's request, wf_920ebe24 complete)
 Core 9bb2de8: on-chip SIO (3ch, 0x34000800-2F) implemented IN mn10300_device via internal address_map
 (MN10200 precedent; addrmap.cpp appends device internal maps AFTER the driver map -> core window wins,
