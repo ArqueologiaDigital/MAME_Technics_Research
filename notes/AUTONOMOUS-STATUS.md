@@ -19,6 +19,39 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★★★ FULL-COVERAGE MILESTONE: EVERY DSP PROGRAM DOCUMENTED (DSP-doc directive COMPLETE)
+Final batch rec58-61 / rec67-69 / rec70-72 / rec75-76 documented (kn7000_disassembly 415c3d1,
+NEW dsp/final-batch-algorithms.md); blog Part 46 "The whole pool, written down" (mame-blog
+df89f6c). **The standing directive's goal is REACHED: kernel + 4 probes + all 72 effect
+programs + 3 data records = the entire pool has full algorithm annotation** (README now
+carries the complete inventory table + a state-of-the-documentation note). Findings:
+- ★ rec58-61 (mic reverbs Room/Karaoke/Stage/Cave, unit 7) = a THIRD reverb architecture:
+  series-allpass (Schroeder) tank at HALF SAMPLE RATE — FLAG3 = fs/2 frame-parity strobe
+  (design requires strict alternation; kernel scrolls I3 only on high frames, in u7's call
+  delay slot), program phase-splits 3+3 allpasses across the parity, 1 I3 word = 2 samples
+  (18000 w = 816 ms reach). Audio-rate unity-DC LPs = decimator + 2 interpolators. Room
+  RT60 ~2.3 s / Stage 3.2 / Cave 3.7; Karaoke = tank collapsed to ONE 363 ms k=0.7 echo
+  (zero-gain APs = pure delays) + 91 ms stereo offset. CLOSES kernel opens: FLAG3 function,
+  {u6,u7} shared-window corner (u7 uses NO I6/I2), and why boot init skips zeroing MSGR2
+  (= the mic reverbs' I3-cursor cell). FLAG3's physical driver still untraced (function =
+  design fact) — the emulator's DSP model will need the fs/2 strobe if u7 is ever fed.
+- ★ rec67-69 (BRASS SIMULATOR1-3) = physical-modeling cluster: shared 2-state nonlinear
+  "lip" ODE (u'=x-v-0.0667u^3-0.7u^2; zero-at-equilibrium output = transient-only
+  distortion), cubic +-2/3 clipper (rec62's), +6 dB Nyquist shelves. rec67 = the pool's only
+  PITCH TRACKER (once-per-cycle period detector -> period-locked +-T/2 ping-pong grain tap);
+  rec68 = naked model 4x-oversampled; rec69 = lip COUPLED to a 512-smp Karplus-Strong bore
+  (fb -0.8 through (1+z^-1)/2, odd-mode comb ~43 Hz) feeding back into the lip equation.
+- ★ combis = exact engine quotations: rec70 (= GUI Feedback Chorus AND Delay+Chorus) = float
+  rec13-echo -> 1-voice rec06 chorus geometry; rec71 = echo 8000/8000 -> rec09's flanger
+  (0.70 float regen, mono LFO + negation); rec72 = echo -> rec27's vibrato (full-replace,
+  +-112 smp); rec75/76 = ONE PM, engine A/B split in DATA (float-stored curve A/B LUTs +
+  PM-state tone-smoother pole 0/0.8) with the family AGC as the advertised "COMP".
+  Combi LFO rates ship REAL (0.673/1.346 Hz), unlike the chorus-family placeholders.
+REMAINING on the DSP side = LIVE experiments only: (1) u8 DM coefficient dump (EQ flat
+question), (2) DspEffectSelect (0x48405815) unit/type/slot capture (unit numbering + send-bank
+order), (3) FLAG3 net + rec67 grain character on real hardware. NEXT idle-time track per the
+standing directive = maincpu CONVERT growth (66 fns re-assemblable of 2302 named) + naming.
+
 ## TICK 2026-07-19 — ★★★ MODULATION/PITCH CLUSTER + GUI GROUP TABLE FULLY DECODED (DSP-doc directive)
 Batch rec11/27/28/29/32/33/49/50/57 documented (kn7000_disassembly ce32444, NEW
 dsp/modulation-pitch-family.md); blog Part 45 (mame-blog); catalog addendum §7.6 in THIS repo.
