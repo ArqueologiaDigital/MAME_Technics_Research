@@ -3167,3 +3167,26 @@ separate effort). Two productive tracks that are UNBLOCKED by the gate:
 `kn7000_mame/notes/sound-subsystem-plan.md` (rev2 + execution log). The full
 multi-phase plan (A..H) lives there; follow it in order, deferring phases that
 need the physical unit (G/H).
+
+## 2026-07-19 — disassembly CONVERT track: Techni-Chord engine (maincpu)
+DONE (kn7000_disassembly a3cb3f5, kn5000-docs d25bb31, blog part 47):
+- CONVERT set 66 -> 84 functions, byte-match held at 100% throughout.
+  Converted the complete Techni-Chord harmony engine: TechniChordCompute
+  (0x48472EBA), all 14 voicing routines (0x4847304C..0x48473732), the off
+  handler, TechniChordOrchestratorPart (0x48472E5B) and the aug/dim
+  root-fold helper (0x48473766); gen_program_s.py now merges
+  kn7000_manual.sym (manual names = region-1 split boundaries, *_entry =
+  register-save `call` entries, FUNC_DOC comment blocks, FUNC_END caps).
+- DISCOVERY: style param 0x8081 is stored in a LEGACY order, not GUI grid
+  order — GUI maps through 14 halfwords @0x485EC940 (0,1,2,4,...,13,3);
+  DUET 1 is stored LAST (param 13, grid slot 3). Docs page had
+  OCTAVE/HARDROCK addresses shifted one routine; corrected + verified 3
+  ways vs the users manual (REEDS=4-note matrix 0x485BBE64; unsplit trio
+  = the 3 chord-independent fixed-interval routines; DUET 1 = CLOSE
+  clamped to 1 note). KN6000 embeds the same pool+map.
+NEXT maincpu convert target suggestion: the panel dispatch chain
+(PanelTransaction/PanelTxState1-6/PanelRxState8/PanelButtonDispatch —
+already named in kn7000_manual.sym and fully RE'd in
+notes/panel-serial-protocol.md; boundaries now emitted by the generator),
+or the SD state machine (notes in kn7000-sd-strap-gate memory + disk
+worker RE).
