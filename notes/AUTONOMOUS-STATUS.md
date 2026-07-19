@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-19 (Felipe back, interactive) — TWO WORKFLOWS IN FLIGHT, do not duplicate
+1. wf_5774e9e1-d0b "rhythm-names-offbyone": Felipe observed C&W slot 1 = placeholder while 60s&70s
+   slot 1 = real-looking name; Latin&World + March&Waltz perfect. Hypothesis: 26+12+14=52 exactly ->
+   an off-by-one in the synthetic container shifted the 52-name window. Diagnose (ground truth from
+   the intact nametable) -> fix generator -> reinstall -> on-screen verify.
+2. wf_920ebe24-bf2 "sio-into-mn10300-core" (FELIPE REQUESTED): implement the on-chip serial in the
+   mn10300 core (MN10200-style; devcb IRQ callbacks out to the driver INTC), then rewire kn7000.cpp,
+   build, publish, live-verify panel+SD+kn6000. Its Integrate stage WAITS for a free build tree
+   (polls pgrep) because workflow 1 may rebuild first.
+Cron is now every 20 min (:07/:27/:47). Next after these land: blog entry (style-names fix + SD
+round-trip), MEMORY.md refresh for both.
+
 ## SESSION 2026-07-18 AUTONOMOUS PLAN (Felipe away a few hours, standing green light)
 
 DONE this session (all committed):
