@@ -157,6 +157,37 @@ system" published (mame-blog e7de85e). NEXT (directive): remaining record famili
 Sound-DSP inserts (=rec30 chorus family, phasers, waveshapers), the unit-7 chorus rec58-61
 (FLAG3-gated), EQ rec34, unit-0 reverb-family aliases; then per-record docs are complete.
 
+## TICK 2026-07-19 — ★★ MULTI/SOUND-DSP INSERT FAMILIES DOCUMENTED (10 records, 3 identities corrected) + blog Part 41
+DSP-doc directive: dsp/insert-effects-algorithms.md in kn7000_disassembly (commit b3798c7) — the
+wah / distortion / delay insert families at the reverb-doc standard, syms enriched (rec13/14/15/
+37/46/48/62-65/74), records.tsv relabeled, listings regenerated drift-clean. THE CORRECTIONS:
+(1) rec74 (0x46) "tremolo-rotary" = **TOUCH WAH**: no LFO — env follower (atk 1/256, rel 1/2048)
+-> QUADRATIC coeff map (g=0.05e-0.01e^2, a1=1.996-1.28e^2) sweeping a bandpass 443 Hz (quiet;
+r=1.0 but g=0 => silent by construction) -> ~8.3 kHz (loud) + per-channel echo 4000/5000 smp fb
+0.6. (2) rec46/48 (0x8C/0x91) "modulated-allpass phasers" have NO allpass: they compute the FULL
+BILINEAR TRANSFORM PER SAMPLE (LFO sweeps g=tan(pi f/fs) linearly; RECIPS + 3 Newton iters for
+the denominator reciprocal). rec46 = FIVE 2nd-order LP sections Q=1 (10-pole sweep 19.6 Hz-2.79
+kHz @1.35 Hz; old "AllpassStage6" was the output-scale load); rec48 = ONE bandpass Q=8 (+18 dB,
+56 Hz-6.56 kHz @0.336 Hz) = the crying-wah voicing. Unlike the chorus family, shipped LFO rates
+are MUSICAL (incr in PM state 0x9800). (3) rec62-65 (0x64-67) = textbook cubic clipper y=x-x^3/3
+railed EXACTLY at +-2/3 (continuous), DC-block HP 100 Hz, sign-guarded 70 Hz smoother, 4 UNITY-DC
+tone banks (A: peak r=.901@2.91k / B: NOTCH exactly there + 322 Hz poles / C: 1.05 kHz honk / D:
+softened A). Their AGC prologue is INERT as downloaded (env cell c004 never written under kernel
+M4=-2 => drive pinned at the 4.0 clamp; host-writes-c004 = PROVISIONAL); the WORKING AGC is rec37
+(0x82): env in PM state, gain 0.111+8.35e8/env meeting the 4.0 clamp EXACTLY at 0.1FS, driving a
+33-pt PWL knee-curve TABLE waveshaper (in the c028 window = host-replaceable transfer curve!) +
+Haas stereo (L delayed 400 smp, R inverted). (4) echo family rec13/14/15 (0x09/0A/0C): unity-DC
+damping in the regen + 0.004/0.996 LEVEL SMOOTHER (fade-in ~30 ms, no zipper); rec13 = dual-mono
+181.4/226.8 ms fb 0.6; rec14 = PANNING multi-tap (4 equal taps 136/272/408/544 ms, out banks
+0/.3/.6/.9 vs .9/.6/.3/0 = repeats WALK across the field; regen host-gated); rec15 = CROSS-
+FEEDBACK ping-pong 90.7/99.8 ms (L<-R, R<-L) — structurally the GUI MULTI default "Cross Delay"
+(name PROVISIONAL). NO ROTARY SPEAKER found in the pool; best remaining candidates = tremolo-pan
+rec24/26/31 + rec66 (biggest insert). Blog Part 41 "Three wah pedals and no rotary speaker"
+(mame-blog 0e81044). STILL UNDOCUMENTED after this pass: rec08/12/16-33 (dynamics/EQ/tremolo-pan/
+choruses incl. the 8-preset rec30 family), rec38-40 detail, rec47/50/57/66-73/75/76, unit-7
+rec58-61, EQ rec34, unit-9 rec49/70 — next tick continues the sweep (tremolo-pan family first to
+settle the rotary question).
+
 ## TICK 2026-07-19 ~05:3x — rhythm-names workflow CLOSED (acted on the no-bug verdict; docs+verifier committed)
 Acting stage for the tick below: since the verdict is "faithful split, no off-by-one", NO change to
 tools/gen_technics_rhythms.py, the installed kn7000_rhythms_synthetic.rom, or the driver — no
