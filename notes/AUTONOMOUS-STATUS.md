@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-19 — ★★ SIO->MN10300-CORE REFACTOR SHIPPED (Felipe's request, wf_920ebe24 complete)
+Core 9bb2de8: on-chip SIO (3ch, 0x34000800-2F) implemented IN mn10300_device via internal address_map
+(MN10200 precedent; addrmap.cpp appends device internal maps AFTER the driver map -> core window wins,
+neighboring driver INTC/timer entries untouched). Byte-exact register semantics incl. the deliberate
+ch2-status-bit omission; per-channel devcbs sio_tx_cb/sio_tx_done_cb/sio_rx_rdy_cb/sio_rx_enable_cb +
+public sio_rx_push/sio_rx_ready; save-stated. Integrate 9eb0e4b: kn7000.cpp -172/+62 (sio_r/sio_w/state
+removed, devcbs wired: ch0->cpanel + 40us tx-done timer->grp 0x11, ch1/2->MIDI UARTs + grp 0x12/0x14;
+endpoints repoint to m_maincpu->sio_rx_push). All 5 MN10300 models inherit. VERIFIED: build clean,
+-validate kn7000+kn6000, published; live home/BALLAD/SD-MENU/kn6000-boot snapshots match pre-refactor.
+IN FLIGHT: blog Part 37 agent (also flips roadmap docs item 2 + rebuilds site). Blog 35+36 published
+earlier (mame-blog fb7f139). REMAINING QUEUE: MEMORY.md refresh (SIO refactor + Parts 35-37) next tick.
+
 ## TICK 2026-07-19 (Felipe back, interactive) — TWO WORKFLOWS IN FLIGHT, do not duplicate
 1. wf_5774e9e1-d0b "rhythm-names-offbyone": **COMPLETE 2026-07-19 (see the two ~05:xx ticks below)**
    — hypothesis falsified, split is faithful, no code change; bug note CLOSED, verifier committed.
