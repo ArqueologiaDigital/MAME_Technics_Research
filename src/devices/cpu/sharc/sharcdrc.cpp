@@ -4600,12 +4600,56 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 					case 0x92:      // Fn = ABS(Fx - Fy)
 					case 0xdd:      // Rn = TRUNC Fx BY Ry
 					case 0xe0:      // Fn = Fx COPYSIGN Fy
-					case 0x30:      // Rn = ABS Rx
 					case 0xa5:      // Fn = RND Fx
 					case 0xad:      // Rn = MANT Fx
 					case 0xcd:      // Rn = TRUNC Fx
 						generate_unimplemented_compute(block, compiler, desc);
 						return;
+
+					case 0x30:      // Rn = ABS Rx
+					{
+						// Mirrors interpreter compute_abs exactly: overflow only for
+						// Rx == 0x80000000 (AV + sticky AOS, clamped to 0x7FFFFFFF when ALUSAT
+						// -- baked at translation time like generate_fixed_alusat_tail, the
+						// cache is flushed on ALUSAT changes); AS = sign of the INPUT, AZ/AN
+						// from the (possibly saturated) result, AC/AI/AF cleared.
+						uml::code_label const no_ovf = compiler.labelnum++;
+						uml::code_label const done = compiler.labelnum++;
+						if (AS_CALC_REQUIRED)
+						{
+							UML_TEST(block, REG(rx), 0x80000000);
+							UML_SETc(block, uml::COND_NZ, ASTAT_AS);
+						}
+						// I0 = abs((int32)Rx):  I1 = Rx >> 31 (arithmetic);  I0 = (Rx ^ I1) - I1
+						UML_SAR(block, I1, REG(rx), 31);
+						UML_XOR(block, I0, REG(rx), I1);
+						UML_SUB(block, I0, I0, I1);
+						UML_CMP(block, REG(rx), 0x80000000);
+						UML_JMPc(block, uml::COND_NE, no_ovf);
+						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 1);
+						UML_OR(block, STKY, STKY, AOS);
+						if (m_core->mode1 & MODE1_ALUSAT)
+							UML_MOV(block, I0, 0x7fffffff);
+						UML_JMP(block, done);
+						UML_LABEL(block, no_ovf);
+						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
+						UML_LABEL(block, done);
+						if (AZ_CALC_REQUIRED)
+						{
+							UML_TEST(block, I0, 0xffffffff);
+							UML_SETc(block, uml::COND_Z, ASTAT_AZ);
+						}
+						if (AN_CALC_REQUIRED)
+						{
+							UML_TEST(block, I0, 0x80000000);
+							UML_SETc(block, uml::COND_NZ, ASTAT_AN);
+						}
+						if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
+						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
+						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
+						UML_MOV(block, REG(rn), I0);
+						return;
+					}
 
 					case 0x01:      // Rn = Rx + Ry
 					case 0x02:      // Rn = Rx - Ry
@@ -5338,7 +5382,9 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 				// this (measured 2026-07-12; the prior native MAC covered the MULTI-function forms,
 				// but the kernel actually uses the SINGLE-function multiplier). Mirrors the
 				// interpreter's general fixed multiplier (sharcops.hxx). Unsigned/mixed-sign and the
-				// SAT/RND (oper=0) forms still fall back (rare / unused by the kernel). Op byte:
+				// RND (0x18-0x1F) forms still fall back (rare / unused by the kernel); the SAT
+				// family (0x00-0x0F) is native below (rec12 GATE REVERB uses Rn = SAT MRF (SF)
+				// at PM 0x8438). Op byte:
 				//   [7:6] oper (1=Rx*Ry, 2=MR+, 3=MR-)  [5]xsgn [4]ysgn  [3]frac  [2]dest=MR  [1]MRB  [0]round
 				if ((operation & 0x30) == 0x30 && (operation & 0xc0) != 0)   // xsgn && ysgn && oper!=0
 				{
@@ -5369,6 +5415,83 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 					{ UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(rn), I2); }
 					else
 						UML_MOV(block, REG(rn), I2);
+					return;
+				}
+				// SAT MRx family (op 0x00-0x0F, TRM B-57): saturate the accumulator to the
+				// destination format's range.  Mirrors the interpreter exactly: MR is modelled
+				// as 64 bits (no MR2 stage), so only the integer forms can actually clamp --
+				// the fractional forms pass MR through (the MAC path itself wraps at 64 bits).
+				// Op byte: [3] fractional  [2] dest = MR  [1] MRB select  [0] signed.
+				if ((operation & 0xf0) == 0x00)
+				{
+					const bool frac    = BIT(operation, 3);
+					const bool dest_mr = BIT(operation, 2);
+					const bool use_mrb = BIT(operation, 1);
+					const bool sgn     = BIT(operation, 0);
+
+					UML_DMOV(block, I0, use_mrb ? MRB : MRF);
+					if (!frac)
+					{
+						uml::code_label const done = compiler.labelnum++;
+						if (sgn)
+						{
+							uml::code_label const not_high = compiler.labelnum++;
+							UML_DCMP(block, I0, 0x000000007fffffffLL);
+							UML_JMPc(block, uml::COND_LE, not_high);
+							UML_DMOV(block, I0, 0x000000007fffffffLL);
+							UML_JMP(block, done);
+							UML_LABEL(block, not_high);
+							UML_DCMP(block, I0, 0xffffffff80000000LL);
+							UML_JMPc(block, uml::COND_GE, done);
+							UML_DMOV(block, I0, 0xffffffff80000000LL);
+						}
+						else
+						{
+							UML_DCMP(block, I0, 0x00000000ffffffffLL);
+							UML_JMPc(block, uml::COND_BE, done);
+							UML_DMOV(block, I0, 0x00000000ffffffffLL);
+						}
+						UML_LABEL(block, done);
+					}
+					// TRM B-57 flags, mirroring the interpreter: MN = sign of the result in
+					// its format (signed forms only), MV/MI cleared, MU = fractional underflow
+					// only ("integer results do not underflow").  Gated on liveness.
+					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
+					if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
+					if (MN_CALC_REQUIRED)
+					{
+						if (sgn)
+						{
+							UML_DTEST(block, I0, 1ULL << (frac ? 63 : 31));
+							UML_SETc(block, uml::COND_NZ, ASTAT_MN);
+						}
+						else
+							UML_MOV(block, ASTAT_MN, 0);
+					}
+					if (MU_CALC_REQUIRED)
+					{
+						if (frac)
+						{
+							// MU = (bits 63:32 == 0) && (bits 31:0 != 0)  [SET_FLAG_MU]
+							UML_DTEST(block, I0, 0xffffffff00000000ULL);
+							UML_SETc(block, uml::COND_Z, I1);
+							UML_TEST(block, I0, 0xffffffff);
+							UML_SETc(block, uml::COND_NZ, I2);
+							UML_AND(block, ASTAT_MU, I1, I2);
+						}
+						else
+							UML_MOV(block, ASTAT_MU, 0);
+					}
+					if (dest_mr)
+						UML_DMOV(block, use_mrb ? MRB : MRF, I0);
+					else if (frac)
+					{
+						// fractional destination takes MR1 (bits 63:32), integer takes MR0
+						UML_DSHR(block, I0, I0, 32);
+						UML_MOV(block, REG(rn), I0);
+					}
+					else
+						UML_MOV(block, REG(rn), I0);
 					return;
 				}
 				switch (operation)
@@ -5501,22 +5624,6 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
 					case 0xf6:      // MRB = MRB - Rx * Ry (SSI)
 					case 0xfe:      // MRB = MRB - Rx * Ry (SSF)
 					case 0xff:      // MRB = MRB - Rx * Ry (SSFR)
-					case 0x00:      // Rn = SAT MRF (UI)
-					case 0x01:      // Rn = SAT MRF (SI)
-					case 0x08:      // Rn = SAT MRF (UF)
-					case 0x09:      // Rn = SAT MRF (SF)
-					case 0x02:      // Rn = SAT MRB (UI)
-					case 0x03:      // Rn = SAT MRB (SI)
-					case 0x0a:      // Rn = SAT MRB (UF)
-					case 0x0b:      // Rn = SAT MRB (SF)
-					case 0x04:      // MRF = SAT MRF (UI)
-					case 0x05:      // MRF = SAT MRF (SI)
-					case 0x0c:      // MRF = SAT MRF (UF)
-					case 0x0d:      // MRF = SAT MRF (SF)
-					case 0x06:      // MRB = SAT MRB (UI)
-					case 0x07:      // MRB = SAT MRB (SI)
-					case 0x0e:      // MRB = SAT MRB (UF)
-					case 0x0f:      // MRB = SAT MRB (SF)
 					case 0x18:      // Rn = RND MRF (U)
 					case 0x19:      // Rn = RND MRF (S)
 					case 0x1a:      // Rn = RND MRB (U)
@@ -5993,10 +6100,37 @@ void adsp21062_device::generate_shift_imm(drcuml_block &block, compiler_state &c
 
 	switch (shiftop)
 	{
-		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
 		case 0x1b:      // Rn = Rn OR FDEP Rx BY <bit6>:<len6> (SE)
 			generate_unimplemented_shiftimm(block, compiler, desc);
 			break;
+
+		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
+			// Mirrors the interpreter: Rn = sext(Rx, min(len,32)) << bit (0 when len == 0
+			// or bit >= 32); SZ from the result, SV = (bit+len > 32), SS cleared.  This is
+			// the LFO phase-accumulator wrap op in the chorus/flanger/phaser families.
+			// Shift-by-zero is routed to flag-generating ops (AND/BFXS) so the requested
+			// Z flag is always produced.
+			if (bit >= 32 || len == 0)
+				UML_AND(block, REG(rn), REG(rn), 0);
+			else if (len >= 32)
+			{
+				if (bit == 0)
+					UML_AND(block, REG(rn), REG(rx), 0xffffffff);   // sext(x, 32) = x
+				else
+					UML_SHL(block, REG(rn), REG(rx), bit);
+			}
+			else if (bit == 0)
+				UML_BFXS(block, REG(rn), REG(rx), 0, len);
+			else
+			{
+				UML_BFXS(block, I0, REG(rx), 0, len);
+				UML_SHL(block, REG(rn), I0, bit);
+			}
+			if (SZ_CALC_REQUIRED) UML_SETc(block, COND_Z, ASTAT_SZ);
+			if (SV_CALC_REQUIRED && (bit + len) > 32) UML_MOV(block, ASTAT_SV, 1);
+			if (SV_CALC_REQUIRED && (bit + len) <= 32) UML_MOV(block, ASTAT_SV, 0);
+			if (SS_CALC_REQUIRED) UML_MOV(block, ASTAT_SS, 0);
+			return;
 
 		case 0x00:      // LSHIFT Rx BY <data8>
 			if (abs(shift) >= 32)

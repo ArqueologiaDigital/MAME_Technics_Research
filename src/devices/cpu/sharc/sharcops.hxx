@@ -1005,10 +1005,55 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
 						//   [3]   fractional (result << 1)   [2] destination: 0 = Rn, 1 = MR
 						//   [1]   MR select: 0 = MRF, 1 = MRB   [0] round-to-nearest
 						// (The specific cases above are fast-paths for the same decode; op 0 =
-						// clear/saturate/round forms are handled by their own cases / still throw.)
+						// clear/saturate/round forms are handled by their own cases / below.)
 						const int oper = (op >> 6) & 3;
 						if (oper == 0)
-							throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
+						{
+							// SAT MRx (op 0x00-0x0F, TRM B-57): saturate the accumulator to the
+							// destination format's range.  Op byte: [3] fractional  [2] dest = MR
+							// [1] MRB select  [0] signed (mod1, TRM Table B-5).  Our MR model is
+							// 64-bit (no MR2 stage), so the fractional forms can never observe
+							// overflow -- the MAC path itself wraps at 64 bits; only the integer
+							// forms (32-bit destination range) can actually clamp here.
+							// RND MRx (0x18-0x1F) remains unimplemented (unused by the KN7000 pool).
+							if ((op & 0x30) != 0x00)
+								throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
+
+							const bool frac    = BIT(op, 3);
+							const bool dest_mr = BIT(op, 2);
+							const bool use_mrb = BIT(op, 1);
+							const bool sgn     = BIT(op, 0);
+
+							uint64_t &mr = use_mrb ? m_core->mrb : m_core->mrf;
+							uint64_t result = mr;
+							if (!frac)
+							{
+								if (sgn)
+								{
+									if (int64_t(result) > 0x7fffffffLL)
+										result = 0x7fffffffULL;
+									else if (int64_t(result) < -0x80000000LL)
+										result = 0xffffffff80000000ULL;
+								}
+								else if (result > 0xffffffffULL)
+									result = 0xffffffffULL;
+							}
+
+							// TRM B-57 flags: MN = sign of the result in its format (unsigned
+							// results are never negative), MV/MI cleared, MU = fractional
+							// underflow only ("integer results do not underflow").
+							CLEAR_MULTIPLIER_FLAGS();
+							if (sgn && BIT(result, frac ? 63 : 31))
+								m_core->astat |= MN;
+							if (frac)
+								SET_FLAG_MU(result);
+
+							if (dest_mr)
+								mr = result;
+							else
+								REG(rn) = frac ? uint32_t(result >> 32) : uint32_t(result);
+							break;
+						}
 
 						const bool xsigned = BIT(op, 5);
 						const bool ysigned = BIT(op, 4);
