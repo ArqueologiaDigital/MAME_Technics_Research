@@ -227,3 +227,32 @@ no address map. Confirmations from what IS there (App. F Table F-1 read visually
 5. Reverb recipe: `./run.sh -window -nothrottle -seconds_to_run 22 -autoboot_script money.lua
    -wavwrite out.wav -cfg_directory <fresh> -harddisk <pristine sd copy>`; money.lua = press :KEYS1
    mask 0x0100 at t=16, release t=17 (preserved in kn7000_scratchpad_snapshot/tmp-loose-2026-07-16/).
+
+## ★ 2026-07-20 — series extended to 12: SAT MRx implemented (the Gate-Reverb gap) + last two fallbacks gone native
+
+The instruction-coverage audit (kn7000_disassembly/dsp/instruction-coverage.md) found ONE
+crash-capable gap in the whole 6,499-word effects pool: `Rn = SAT MRF (SF)` (multiplier op 0x09),
+used once, by rec12 (GATE REVERB) at PM 0x8438 — executed every below-threshold sample frame, so
+selecting Medium/Short/Long Gate fatal-errored both engines. Fixed + the two fallback-only classes
+made native:
+
+- **Core (overlay, both engines)**: interpreter SAT MRx family 0x00-0x0F in the general-multiplier
+  `oper==0` corner (TRM B-57 semantics: format-range clamp, MR0/MR1 transfer, MN/MV/MU/MI; 64-bit MR
+  model = fractional forms pass through, integer forms clamp) + DRC-native mirror (flags gated on
+  liveness); DRC-native `Rn = ABS Rx` (ALU 0x30, incl. AV+STKY-AOS corner + translation-time ALUSAT
+  clamp) and immediate `FDEP (SE)` (shiftop 0x13). RND MRx (0x18-0x1F) still throws — zero uses.
+- **Oracle**: money.lua reverb harness on the rebuilt binary = **bit-identical**,
+  md5 44b09b9d0eaae59d9a65e5b4f4e72ec0 (none of the new ops are in the non-gate reverb path).
+- **Live Gate Reverb**: SOUND DSP screen → group "Reverb" (FIRST group; scroll-up rocker =
+  :cpanel:CPC_SEG9 0x01) → Short Gate. Selecting uploads rec12 into effect **slot 2** (PM 0x8638 =
+  the SAT word 0000305003909300, Lua-verified; slots = 0x8400+unit*0x100 — do NOT look for
+  record-native addresses). 10+ s run + keybed note, no fatalerror, **both DRC and -nodrc**.
+  GUI gotchas learned: the (hold-)REVERB screen does NOT contain the Gates (2 pages Room…Stadium);
+  pressing the already-stored preset with the insert OFF uploads nothing — short-press SOUND DSP
+  (CPR_SEG3 0x08) to toggle the insert or pick a different preset.
+- **Coverage checker**: tools/check_sharc_coverage.py updated (support tables + SAT names) → exit 0;
+  the used set is now **100% DRC-NATIVE** (no fallback classes remain in use).
+- **Staging**: notes/upstream-patches/ now 10-sat-mr-family / 11-native-abs-drc /
+  12-native-fdep-se-imm-drc; full 12-stack `git am`s clean on pristine 957e9dec1b4, series-tree
+  sharc.cpp+sharcdrc.cpp pass the C++20 -fsyntax-only check. README.md updated (10 → PR B; 11/12 =
+  standalone DRC-crash fixes).

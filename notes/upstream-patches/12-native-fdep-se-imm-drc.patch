@@ -1,0 +1,71 @@
+From b5f728c867a16b9c980600b560eca7334cd9fc3e Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 00:20:51 +0100
+Subject: [PATCH 12/12] sharc drc: native immediate FDEP (SE) (shiftop 0x13)
+
+The DRC fataled through unimplemented_shiftimm on the sign-extending
+immediate field deposit while the interpreter implements it. Emit it
+natively, mirroring SHIFT_OPERATION_IMM case 0x13 exactly:
+Rn = sext(Rx, min(len,32)) << bit (zero when len == 0 or bit >= 32),
+SZ from the final result, SV = (bit+len > 32), SS cleared. The
+degenerate shift-by-zero paths go through flag-generating AND/BFXS ops
+so the requested Z flag is always produced.
+
+This is the LFO phase-accumulator wrap operation in an ADSP-21065L
+audio-effect kernel's chorus/flanger/phaser/ensemble families (34
+occurrences across 19 microprograms on the Technics KN7000); verified
+bit-identical against the interpreter on a 2.11M-sample WAV A/B.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcdrc.cpp | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index 3024aa3917c..f17df35a224 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -6029,13 +6029,39 @@ void adsp21062_device::generate_shift_imm(drcuml_block &block, compiler_state &c
+ 
+ 	switch (shiftop)
+ 	{
+-		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
+ 		case 0x1b:      // Rn = Rn OR FDEP Rx BY <bit6>:<len6> (SE)
+ 			UML_MOV(block, mem(&m_core->pc), desc->pc);
+ 			UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+ 			UML_CALLC(block, cfuncs::unimplemented_shiftimm, this);
+ 			break;
+ 
++		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
++			// Mirrors the interpreter: Rn = sext(Rx, min(len,32)) << bit (0 when len == 0
++			// or bit >= 32); SZ from the result, SV = (bit+len > 32), SS cleared.
++			// Shift-by-zero is routed to flag-generating ops (AND/BFXS) so the requested
++			// Z flag is always produced.
++			if (bit >= 32 || len == 0)
++				UML_AND(block, REG(rn), REG(rn), 0);
++			else if (len >= 32)
++			{
++				if (bit == 0)
++					UML_AND(block, REG(rn), REG(rx), 0xffffffff);   // sext(x, 32) = x
++				else
++					UML_SHL(block, REG(rn), REG(rx), bit);
++			}
++			else if (bit == 0)
++				UML_BFXS(block, REG(rn), REG(rx), 0, len);
++			else
++			{
++				UML_BFXS(block, I0, REG(rx), 0, len);
++				UML_SHL(block, REG(rn), I0, bit);
++			}
++			if (SZ_CALC_REQUIRED) UML_SETc(block, COND_Z, ASTAT_SZ);
++			if (SV_CALC_REQUIRED && (bit + len) > 32) UML_MOV(block, ASTAT_SV, 1);
++			if (SV_CALC_REQUIRED && (bit + len) <= 32) UML_MOV(block, ASTAT_SV, 0);
++			if (SS_CALC_REQUIRED) UML_MOV(block, ASTAT_SS, 0);
++			return;
++
+ 		case 0x00:      // LSHIFT Rx BY <data8>
+ 			if (abs(shift) >= 32)
+ 			{
+-- 
+2.47.3
+

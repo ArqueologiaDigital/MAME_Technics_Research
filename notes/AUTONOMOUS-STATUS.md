@@ -3283,3 +3283,38 @@ C.3 AVG truncation = 17 records' output mixes at -0.25 LSB, C.1 circular
 wrap still the staged-pending-approval item.
 NEXT: implement SAT MRF/MRB (+RND siblings while there) in sharcops.hxx,
 rebuild, load Gate Reverb live to confirm, then publish-binary.
+
+## 2026-07-20 00:xx — SAT MRx IMPLEMENTED (Gate Reverb live-verified) + last two DRC fallbacks native; series = 12 patches (Felipe-directed)
+DONE (kn7000_mame core + kn7000_disassembly checker):
+- sharcops.hxx: full SAT MRx family (mul op 0x00-0x0F) in the general-
+  multiplier oper==0 corner — TRM B-57: SI/UI/SF/UF x Rn/MR x MRF/MRB,
+  integer forms clamp (64-bit MR model => fractional forms pass MR1
+  through), flags MN(sign-in-format)/MV=0/MU(frac underflow)/MI=0.
+  RND (0x18-0x1F) still throws (pool has zero uses).
+- sharcdrc.cpp: native SAT MRx (mirrors interp exactly, liveness-gated
+  flags); native ABS Rx (ALU 0x30, AV+STKY-AOS corner, translation-time
+  ALUSAT clamp, AS=input sign); native FDEP(SE)-imm (shiftop 0x13,
+  shift-by-zero routed through flag-generating ops). => the ENTIRE used
+  pool (69 classes) is now 100% DRC-NATIVE, zero fallbacks in use.
+- ORACLE: money.lua A/B on the rebuild = BIT-IDENTICAL
+  (44b09b9d0eaae59d9a65e5b4f4e72ec0). publish-binary.sh done.
+- LIVE GATE REVERB (the coverage report's crash scenario): SOUND DSP
+  screen -> group "Reverb" (FIRST in center list) -> Short Gate. Upload
+  lands in effect slot 2 (PM 0x8638 = 0000305003909300, Lua-verified);
+  10+s + keybed note, no fatalerror, DRC AND -nodrc. Snapshots:
+  scratchpad snap8/kn7000/0000-0003.png (0002 = Short Gate selected).
+  GUI GOTCHAS (recorded in instruction-coverage.md + series notes):
+  Gates are NOT on the hold-REVERB screen (2 pages Room..Stadium);
+  group-list scroll-up = :cpanel:CPC_SEG9 0x01; pressing the stored
+  preset with the insert OFF uploads NOTHING (short-press SOUND DSP
+  CPR_SEG3 0x08 to toggle, or pick a different preset); slots =
+  0x8400+unit*0x100, don't search record-native addresses.
+- tools/check_sharc_coverage.py support tables updated -> EXIT 0;
+  instruction-coverage.md verdict updated (gap CLOSED, 2026-07-20 section).
+- upstream staging: 10-sat-mr-family / 11-native-abs-drc /
+  12-native-fdep-se-imm-drc generated from a real series worktree
+  (957e9dec1b4 + 01-09), full 12-stack git-am-clean, C++20 syntax-pass;
+  README.md + sharc-upstream-patch-series.md updated.
+NEXT: (a) wet-level calibration & MULTI unit id (unchanged), (b) consider
+RND MRx while the TRM is open if any future pool uses it, (c) Felipe's
+upstream submission now has 12 patches.

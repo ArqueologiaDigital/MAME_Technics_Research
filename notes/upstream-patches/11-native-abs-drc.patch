@@ -1,0 +1,90 @@
+From 257f628b64e666a693435ad6825b775de5f905c2 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 00:20:28 +0100
+Subject: [PATCH 11/12] sharc drc: native fixed-point ABS (ALU op 0x30)
+
+The DRC fataled through unimplemented_compute on Rn = ABS Rx while the
+interpreter has implemented it all along. Emit it natively, mirroring
+compute_abs exactly: branch-free abs via sign-mask, overflow only for
+Rx == 0x80000000 (AV set + sticky AOS, result clamped to 0x7FFFFFFF when
+MODE1 ALUSAT is on -- specialized at translation time, the mode1-write
+generators already flush the cache on ALUSAT changes), AS = sign of the
+input, AZ/AN from the (possibly saturated) result, AC/AI/AF cleared, all
+flag computation gated on liveness.
+
+Exercised by the envelope detectors of an ADSP-21065L audio-effect kernel's
+AGC/compressor/gate family (28 occurrences across 21 microprograms on the
+Technics KN7000); verified bit-identical against the interpreter on a
+2.11M-sample WAV A/B.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/sharc/sharcdrc.cpp | 46 +++++++++++++++++++++++++++++-
+ 1 file changed, 45 insertions(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index 44288141d6f..3024aa3917c 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -4530,13 +4530,57 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 					case 0x92:      // Fn = ABS(Fx - Fy)
+ 					case 0xdd:      // Rn = TRUNC Fx BY Ry
+ 					case 0xe0:      // Fn = Fx COPYSIGN Fy
+-					case 0x30:      // Rn = ABS Rx
+ 					case 0xa5:      // Fn = RND Fx
+ 					case 0xad:      // Rn = MANT Fx
+ 					case 0xcd:      // Rn = TRUNC Fx
+ 						generate_unimplemented_compute(block, compiler, desc);
+ 						return;
+ 
++					case 0x30:      // Rn = ABS Rx
++					{
++						// Mirrors interpreter compute_abs exactly: overflow only for
++						// Rx == 0x80000000 (AV + sticky AOS, clamped to 0x7FFFFFFF when ALUSAT
++						// -- baked at translation time like generate_fixed_alusat_tail, the
++						// cache is flushed on ALUSAT changes); AS = sign of the INPUT, AZ/AN
++						// from the (possibly saturated) result, AC/AI/AF cleared.
++						uml::code_label const no_ovf = compiler.labelnum++;
++						uml::code_label const done = compiler.labelnum++;
++						if (AS_CALC_REQUIRED)
++						{
++							UML_TEST(block, REG(rx), 0x80000000);
++							UML_SETc(block, uml::COND_NZ, ASTAT_AS);
++						}
++						// I0 = abs((int32)Rx):  I1 = Rx >> 31 (arithmetic);  I0 = (Rx ^ I1) - I1
++						UML_SAR(block, I1, REG(rx), 31);
++						UML_XOR(block, I0, REG(rx), I1);
++						UML_SUB(block, I0, I0, I1);
++						UML_CMP(block, REG(rx), 0x80000000);
++						UML_JMPc(block, uml::COND_NE, no_ovf);
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 1);
++						UML_OR(block, STKY, STKY, AOS);
++						if (m_core->mode1 & MODE1_ALUSAT)
++							UML_MOV(block, I0, 0x7fffffff);
++						UML_JMP(block, done);
++						UML_LABEL(block, no_ovf);
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++						UML_LABEL(block, done);
++						if (AZ_CALC_REQUIRED)
++						{
++							UML_TEST(block, I0, 0xffffffff);
++							UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++						}
++						if (AN_CALC_REQUIRED)
++						{
++							UML_TEST(block, I0, 0x80000000);
++							UML_SETc(block, uml::COND_NZ, ASTAT_AN);
++						}
++						if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
++						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++						UML_MOV(block, REG(rn), I0);
++						return;
++					}
++
+ 					case 0x01:      // Rn = Rx + Ry
+ 					case 0x02:      // Rn = Rx - Ry
+ 					{
+-- 
+2.47.3
+

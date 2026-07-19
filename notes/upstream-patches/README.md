@@ -1,5 +1,22 @@
 # SHARC core fixes — upstream (MAME) submission patches
 
+## ★ 2026-07-20 extension: patches 10-12 (SAT MRx + native ABS + native FDEP(SE)-imm)
+Three new patches extend the series (generated the same way: committed on a throwaway worktree of
+957e9dec1b4 with 01-09 applied, format-patch, Felipe's authorship, upstream-facing messages):
+
+| # | file | what |
+|---|---|---|
+| 10 | 10-sat-mr-family.patch | interpreter + DRC-native: fixed-point SAT MRx family (op 0x00-0x0f, TRM B-57; both engines previously CRASHED — a KN7000 Gate Reverb executes `Rn = SAT MRF (SF)` every quiet frame) |
+| 11 | 11-native-abs-drc.patch | DRC: native `Rn = ABS Rx` (ALU 0x30; upstream DRC fatals, interpreter has it — incl. AV+STKY-AOS overflow corner and translation-time ALUSAT clamp) |
+| 12 | 12-native-fdep-se-imm-drc.patch | DRC: native immediate `FDEP (SE)` (shiftop 0x13; upstream DRC fatals, interpreter has it) |
+
+Verified (2026-07-20): the full 12-patch stack `git am`s cleanly on pristine 957e9dec1b4; the final
+tree's sharc.cpp + sharcdrc.cpp pass the same g++ -fsyntax-only (C++20, real include set) check; the
+overlay build carrying the equivalent changes is bit-identical on the reverb A/B oracle
+(md5 44b09b9d0eaae59d9a65e5b4f4e72ec0) and survives a LIVE Gate Reverb (rec12) load + 10 s run in
+both DRC and interpreter (was: instant fatalerror). Patch 10 goes with PR B; 11/12 are standalone
+DRC-crash fixes that can ride along.
+
 ## ★ The 9-patch series (regenerated 2026-07-19, rebased onto upstream 957e9dec1b4)
 Patches 01-09 are a **clean, ordered, self-contained `git am`-able series** against pristine upstream
 MAME (kn7000-base @957e9dec1b4). Verified (2026-07-19):
