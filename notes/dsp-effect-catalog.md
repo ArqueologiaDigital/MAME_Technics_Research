@@ -247,6 +247,45 @@ register `0x0B`; the four form a 2×2 matrix of **pattern (0xAAAAAAAA / 0x555555
 boot before loading the kernel (the reg-0x0B readback is the "DSP alive" check
 the plan's Phase A must answer). They contain no audio DSP.
 
+## 7.5 ★ 2026-07-19 UPDATE — the GUI preset-descriptor table: names are ROM fact now
+
+The deferred "descriptor-table walk" of §5 is done, statically
+(`kn7000_disassembly/dsp/tremolo-rotary-family.md` §1). The firmware holds
+**~600 preset descriptors** (region CPU `0x4858FB8C..0x48597200`) of the form
+`{u16 params[n]; char name[16]; u16 0; u16 type; u16 nparams; u16 0; u32 ptr;
+u32 id}` plus group tables (`{ptr,count,name16}`, Sound-DSP list ≈`0x4870FE00`,
+menu list ≈`0x48714B00`). Because `type` indexes the confirmed §4 map, **GUI
+name → type → record is now ROM fact for every effect screen.** Highlights that
+correct or settle rows above:
+
+- **ROTARY SPEAKER (7 presets) / ROCK ROTARY (6)** = rec30/41/42/43/45 and
+  rec16/35/36/44 — the "modulated-delay chorus (conf low)" family is a **full
+  Leslie simulator** (crossover, dual magic-circle rotors 5.512/6.431 Hz =
+  exactly 7:6 with 93 ms rate glide, Doppler taps, saturation front end).
+- **Tremolo1–8 = rec24** (in-phase AM), **Auto Pan1–7 = rec26** (quadrature
+  AM), **Ring Mod.1–4 = rec31** (bipolar AM, audio-rate carrier) — the three
+  "tremolo-pan LFO" rows split into their real identities.
+- **Enhancer1–6 = type 0x03 = rec08** — the §5 "honest tension" is RESOLVED:
+  the GUI Enhancer group never pointed at rec51–56 (those are the
+  REVERB-screen presets: Room1/2=rec53, Plate1/2=rec54, Concert/Long/Large
+  Hall=rec51, Dark=rec55, Bright=rec56, Live Stage/Stadium=rec52,
+  Medium/Short/Long **Gate**=rec12).
+- **Vocal Harmonizer = rec66** (3-voice granular pitch shifter, just-maj7
+  template, host telemetry via IOP reg 0x0C); **Voice Changer1/2 = rec57**;
+  **Brass simulator1–3 = rec67–69**; mic **Room/Karaoke/Stage/Cave =
+  rec58–61** (the unit-7 "Chorus" records are the mic ambience unit);
+  **Vibrato1–8 = rec27**, **Mixup1–4 = rec32**, **Spreader = rec33**,
+  **Exciter1–3 = rec20**, **Comp.1–4 = rec21** vs **Limiter1–4 = rec25**
+  (the two identical-PM dynamics records are the two GUI groups),
+  **Slow Attacker1–4 = rec22**, **Autowah+Delay = rec74** (confirms the
+  touch-wah re-identification), **Delay+Chorus/Flanger/Vibrato/Phaser =
+  rec70–73**, **Comp+Dst/Ovd+Delay = rec75/76**, **Cross Delay presets =
+  rec15**, beat-synced **For 2/3/4Beat = rec46 (LFO filter) / rec48 (wah)**.
+
+The §5 algorithm column remains the 2026-07-09 pass; where it disagrees with
+`kn7000_disassembly/dsp/records.tsv` (regularly, after the reverb/chorus/
+insert/rotary annotation passes), **records.tsv is authoritative**.
+
 ## 8. Cross-model note
 
 The KN6000/KN6500 carry the same ADSP-21065L and a **byte-identical** record

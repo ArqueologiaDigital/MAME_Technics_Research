@@ -19,6 +19,29 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-19 — ★★★ ROTARY SPEAKER FOUND + GUI DESCRIPTOR TABLE DECODED (DSP-doc directive)
+The rotary question is SETTLED (kn7000_disassembly e35a563, dsp/tremolo-rotary-family.md): the GUI
+ROTARY SPEAKER / ROCK ROTARY is the 8-preset identical-PM family rec30/35/36/41-45 + rec16 ("modulated-
+delay chorus, conf low" until now) — a FULL LESLIE: drive -> PWL saturation table -> 1.57 kHz smoother
+-> crossover (helper 0x8300 = parallel drum resonator 500.5 Hz + horn bandpass 1985-4888 Hz preset-
+voiced) -> helper 0x830B = TWO magic-circle sin/cos rotors with 93 ms RATE GLIDE (state {target,
+current,-1}; drum 5.512 Hz / horn 6.431 Hz = exactly 7:6) -> Doppler taps (horn quadrature mic pair
+320+-29 smp = +-43 cents, drum antiphase 160+-40 = +-51 cents); rec16 = same program rebuilt
+(ASHIFT-8 vs LSHIFT-8+NOP), Rock voicing. KEY ENABLER: the ROM's GUI preset-descriptor table decoded
+(600 entries @0x4858FB8C..; params/name16/type/nparams/ptr/id + group tables @~0x4870FE00) — GUI name
+-> type -> record is now ROM FACT for every effect screen: Tremolo1-8=rec24 (in-phase AM, rec26+1
+instr, dead quadrature LFO), Auto Pan1-7=rec26 (quadrature AM), Ring Mod.1-4=rec31 (bipolar AM,
+344.5 Hz audio carrier INTENTIONAL), Vocal Harmonizer=rec66 (3-voice reflected-tap granular pitch
+shifter, just-maj7 template +386.0/+702.0/+1088.0 integer cents, host telemetry via IOP reg 0x0C),
+GUI Enhancer1-6=rec08 (unit-0 tension RESOLVED), Gate reverbs=rec12, Vibrato=rec27, Mixup=rec32,
+Spreader=rec33, VoiceChanger=rec57, mic Room/Karaoke/Stage/Cave=rec58-61, Brass sim=rec67-69,
+Delay+X=rec70-73, Autowah+Delay=rec74 (touch-wah reading CONFIRMED). records.tsv: 14 rows
+re-identified + ~45 stamped with ROM-fact names; syms rewritten rec16/24/26/30/31/35/36/41-45/66.
+Blog Part 42 published. REMAINING undocumented queue: rec08 (Enhancer engine), rec10/47/73 (phasers),
+rec11/16-detail... actually rec11/27/32/33/49/50/57 detail, rec12 gate-reverb topology, rec17-19
+distortions, rec21/22/25/28/29 dynamics/wah, rec23/34 EQs, rec58-61 mic reverbs, rec66 constant-level
+detail (conditioning polynomial), rec67-72 composites, rec75/76; unit-role live capture still open.
+
 ## TICK 2026-07-19 — ★ REVERB FULLY DOCUMENTED + BLOG PART 38 PUBLISHED (DSP-doc directive, item 1 done)
 The reverb annotation is COMPLETE (kn7000_disassembly 2888f7f: dsp/reverb-algorithm.md + deep syms
 rec51-56 + records.tsv relabels): rec51-56 = ONE Moorer-style reverberator (2 damped combs 368/328 ms,
