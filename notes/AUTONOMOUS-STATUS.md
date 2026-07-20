@@ -5471,6 +5471,36 @@ zero layout-script errors. Patch kn5000-25 unchanged and still held back.
 Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md (ADDENDUM).
 
 ================================================================================
+2026-07-20 tick -- KN5000 ORACLE BISECT: premise corrected, regression fixed (kn5000-28), full cure still open
+================================================================================
+Ran the oracle-timeline bisect. BIG CORRECTION: kn5000_aided_by_claude *tip*
+(2da2648) is ALSO broken -- built it as an oracle, shows the identical "Sound
+Name Error" (receive-HDMA INTTC0 freezes ~t=7.2, XSSP leaks). So kn5000-26/27
+"restore parity with aided" matched a BROKEN reference. The TRUE working state is
+the 2026-02-17 commit f8cd34a8: built as the real oracle it shows REAL NAMES
+(Piano / Bigband Brass / Modern E.P.1), XSSP bounded, scheduler alive, reply DMA
+13x, SC1 ComIF INTTX1+INTRX1 heartbeat steady (screenshot-verified).
+REGRESSION (commit 3ea9904): removed the GUARDED INT0 level-detect re-assertion.
+FIX kn5000-28 (committed c11209d): restore it -- re-assert INTE0AD|=0x08 only when
+no HDMA channel steals INT0 (m_dma_vector[ch]!=0x0a); + drop the Port Z MSTAT
+read-back kn5000-27 added (oracle reads back COM_SELECT|(SSTAT<<2) only). KN5000-
+only; -validate clean; KN7000 home unaffected (verified: Concert Grand/Bigband
+Brass/Modern E.P.). NECESSARY BUT NOT SUFFICIENT -- receive still freezes n=480
+@t~9.8. RULED OUT this pass (don't re-chase): timer rate (identical 168/0.5s in
+healthy window), serial storm (ours fires FEWER), UART mode (SubCPU never writes
+SCxMOD), Port H hack (present both), latch handshake (byte-identical), Port Z (0
+effect). REMAINING CAUSE (the cure): SubCPU cooperative-scheduler PACING stall --
+overlay bursts the ~480-block payload in ~8s where the oracle paces it over ~24s,
+starving a scheduler task (INTT3 leak). Traces to the SubCPU peripheral work the
+overlay DROPPED vs 2026-02-17: the SC1 Computer-Interface heartbeat that wakes a
+task (census: oracle INTRX1 21x, overlay 0x), DSP2/MN19413 (device absent from
+tree), audio-mixer window. NEXT = reinstate that SubCPU-side work / per-block
+processing that paces the transfer (larger than a tmp94c241 hunk; touches wiring
+near the cpanel-device boundary). Full write-up:
+KN7000/side-quests/findings/kn5000_driver_findings.md (2026-07-20 oracle bisect).
+Oracle worktree removed; all instrumentation reverted; clean rebuild shipped.
+
+================================================================================
 2026-07-20 tick -- KN5000 "Sound Name Error" ROOT-CAUSED (DSP2-wiring theory FALSIFIED)
 ================================================================================
 Followed method (watchpoint, not assumption). Full write-up:

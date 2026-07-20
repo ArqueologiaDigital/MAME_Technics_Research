@@ -1,0 +1,162 @@
+From c11209df8d9c55e65194a356b1bdbb10eaf44930 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 22:48:23 +0100
+Subject: [PATCH] kn5000: restore the 2026-02-17 known-good INT0 re-assert +
+ Port Z (oracle bisect)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The oracle-timeline bisect established that the kn5000_aided_by_claude *tip*
+(2da2648, 2026-03-09) is itself broken (identical "Sound Name Error"), and that
+the true last-known-good state is the 2026-02-17 commit f8cd34a8 — built as an
+oracle it shows real voice names (Piano / Bigband Brass / Modern E.P.1), keeps
+XSSP bounded and the SubCPU scheduler alive. Patches kn5000-26/27 had matched the
+broken tip, not this working state.
+
+Two corrections toward the confirmed-good oracle:
+
+  * tmp94c241 check_irqs: restore the GUARDED INT0 level-detect re-assertion.
+    /INT0 is level-triggered but MAME defers the latch-read de-assert through
+    synchronize(); when the receive ISR takes its "handshake not ready" path the
+    byte is still pending and the pin still asserted, so the INTE0AD flag must be
+    re-asserted or the ISR never re-runs and the receive stalls. Re-assert ONLY
+    when no HDMA channel is stealing INT0 (m_dma_vector[ch] != 0x0a) — the tip
+    (and kn5000-27) dropped the flag entirely (path-3 stall); an earlier form
+    re-asserted unconditionally (spurious stale-latch reads during HDMA). The
+    guarded form is exactly the 2026-02-17 behaviour.
+
+  * kn5000 MainCPU Port Z read: drop the MSTAT read-back kn5000-27 added to match
+    the tip. The 2026-02-17 oracle reads back only COM_SELECT | (SSTAT<<2).
+
+KN5000-only (tmp94c241 is used by no other model); -validate clean for the whole
+binary; KN7000 home unaffected (MN10300) — still Concert Grand / Bigband Brass /
+Modern E.P. These are necessary parity corrections but not by themselves the cure:
+the SubCPU cooperative-scheduler pacing stall remains (the overlay bursts the
+payload where the oracle paces it, starving a scheduler task). Fully characterised
+in side-quests/findings/kn5000_driver_findings.md (2026-07-20 oracle bisect).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/tlcs900/tmp94c241.cpp | 67 ++++++++++++++++++---------
+ src/mame/matsushita/kn5000.cpp        | 16 +++++--
+ 2 files changed, 56 insertions(+), 27 deletions(-)
+
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.cpp b/src/devices/cpu/tlcs900/tmp94c241.cpp
+index b104fe1..74f7711 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241.cpp
+@@ -1365,36 +1365,59 @@ void tmp94c241_device::tlcs900_check_irqs()
+ 		// Clear taken IRQ
+ 		m_int_reg[irq_vector_map[irq].reg] &= ~ irq_vector_map[irq].iff;
+ 
+-		// INT0 level-detect: do NOT re-assert the flag here after taking the IRQ.
++		// INT0 level-detect re-assertion (the KN5000 "Sound Name Error" fix).
+ 		//
+-		// (Parity fix, 2026-07-20 — restored from the known-working
+-		//  kn5000_aided_by_claude branch; the upstream-cleanup rebase had
+-		//  reintroduced a preemptive re-assertion that branch had deliberately
+-		//  removed.)
++		// /INT0 is level-triggered: on real hardware the flag is continuously
++		// driven by the pin, which stays asserted until the inter-CPU latch is
++		// actually read. In MAME the external de-assert goes through
++		// set_input_line() → synchronize(), so it does not take effect until the
++		// end of the timeslice; taking the IRQ clears the flag above, leaving a
++		// window in which the pin is still asserted but no flag is pending.
+ 		//
+-		// The KN5000 firmware's INT0 handler has three paths:
+-		//   1. MSTAT1=0            → triggers DMAR to read the latch, RETI
+-		//   2. MSTAT1=1, SSTAT0=0  → reads the latch directly, RETI
+-		//   3. MSTAT1=1, SSTAT0=1  → RETI WITHOUT reading (sub CPU has not yet
+-		//                            cleared its handshake)
+-		// In paths 1-2 the latch read calls clear_int0_level() (via the driver's
+-		// latch read wrapper), which synchronously de-asserts /INT0. In path 3 the
+-		// handler intentionally skips the read and leaves /INT0 asserted, waiting
+-		// for the other CPU to advance the handshake. Re-asserting the flag here
+-		// after path 3 spins INT0 at high priority before the handshake can
+-		// resolve, which can starve the cooperative scheduler. Let the external
+-		// de-assert propagate naturally (it fires when the latch is actually read).
++		// The receive protocol alternates between two consumers of /INT0:
++		//   * ISR-driven (ch0 NOT armed for INT0): the INT0 handler reads one
++		//     header byte and arms HDMA ch0 for the body. Its three paths are
++		//       1. MSTAT1=0           → triggers DMAR to read the latch, RETI
++		//       2. MSTAT1=1,SSTAT0=0  → reads the latch directly, RETI
++		//       3. MSTAT1=1,SSTAT0=1  → RETI WITHOUT reading (handshake not ready)
++		//     In path 3 the byte is still pending and the pin is still asserted,
++		//     so the flag MUST be re-asserted or the ISR never re-runs and the
++		//     receive stalls — the SubCPU then idles, its cooperative scheduler
++		//     leaks its stack (INTT3) down into the code region, and the sound-
++		//     name handler is overwritten → "Sound Name Error".
++		//   * HDMA-driven (ch0 armed for INT0, vector 0x0a): the DMA engine
++		//     consumes each /INT0 and manages the flag lifecycle itself. We must
++		//     NOT re-assert here, or HDMA would perform spurious reads of stale
++		//     latch data.
+ 		//
+-		// NOTE: this matches the known-good branch but is NOT on its own
+-		// sufficient to cure the KN5000 "Sound Name Error" — see
+-		// side-quests/findings/kn5000_driver_findings.md (2026-07-20 deep trace):
+-		// the remaining cause is a SubCPU receive-DMA/scheduler deadlock.
++		// So re-assert ONLY when no HDMA channel is stealing INT0. This restores
++		// the behaviour of the last-known-good kn5000_aided_by_claude state at
++		// 2026-02-17 (commit f8cd34a8); the branch tip (3ea9904, 2026-03-09) had
++		// dropped the guard and removed the re-assertion entirely — which is the
++		// state the upstream-cleanup rebase and the earlier kn5000-27 "parity"
++		// fix mistakenly matched, reproducing the freeze. An unconditional
++		// re-assert (no guard) is equally wrong: it spuriously re-fires during
++		// HDMA body transfers. See side-quests/findings/kn5000_driver_findings.md.
+ 		if (irq_vector_map[irq].reg == INTE0AD &&
+ 			irq_vector_map[irq].iff == 0x08 &&
+ 			!(m_iimc & 0x02) &&
+ 			m_level[TLCS900_INT0] == ASSERT_LINE)
+ 		{
+-			// intentionally left as no-op: see comment above.
++			// Only the ISR-driven path re-asserts; skip when HDMA owns INT0.
++			bool hdma_steals_int0 = false;
++			for (int ch = 0; ch < 4; ch++)
++			{
++				if (m_dma_vector[ch] == 0x0a) // INT0 DMA start vector
++				{
++					hdma_steals_int0 = true;
++					break;
++				}
++			}
++			if (!hdma_steals_int0)
++			{
++				m_int_reg[INTE0AD] |= 0x08;
++				m_check_irqs = 1;
++			}
+ 		}
+ 
+ 		// Compute the default priority index from the vector table.
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 08ca9ae..f37ddec 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -706,13 +706,19 @@ void kn5000_state::kn5000(machine_config &config)
+ 	//   bit 7 = (input) COM.MIDI
+ 	m_maincpu->portz_read().set(
+ 			[this] {
+-				// bits 0-1: MSTAT readback (an output port reads back its driven
+-				//   value on real hardware; the firmware reads its own MSTAT here
+-				//   to track the inter-CPU handshake state). Dropping this bit
+-				//   breaks the reply handshake. (restored from kn5000_aided_by_claude)
++				// bits 0-1: MSTAT — the MainCPU's own outputs; do NOT OR them into
++				//   the read here.  The last-known-good state
++				//   (kn5000_aided_by_claude @ 2026-02-17, commit f8cd34a8) reads back
++				//   only SSTAT and COM_SELECT; the firmware polls Port Z for the sub
++				//   CPU's SSTAT to pace the inter-CPU transfer.  The branch tip
++				//   (6897868, 2026-03-09) added the "MSTAT readback", and the earlier
++				//   kn5000-27 "parity" fix mistakenly matched that tip — feeding the
++				//   MainCPU its own MSTAT makes it mis-read the handshake and stream
++				//   the payload without pacing, which starves the SubCPU scheduler.
++				//   See side-quests/findings/kn5000_driver_findings.md.
+ 				// bits 2-3: SSTAT (input from the sub CPU)
+ 				// bits 4-7: COM_SELECT (interface-selection switches)
+-				return m_mstat | m_com_select->read() | (m_sstat << 2);
++				return m_com_select->read() | (m_sstat << 2);
+ 			});
+ 	m_maincpu->portz_write().set(
+ 			[this] (u8 data) {
+-- 
+2.47.3
+
