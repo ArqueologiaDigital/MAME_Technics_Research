@@ -3705,3 +3705,72 @@ TgPartEgRampCache54Scaled (partrec bit-0x2000 test seen), and the
 region between TgLevelTermFinalize's end 0x4C02C153 and TgPartGlide-
 Plan 0x4C02D795 (starts with an elem/tone-record walker at 0x4C02C153).
 Live-session question: SUSTAIN toggle vs 0x50009D38 (see OPEN above).
+
+## 2026-07-20: CONVERT track -- the CONTROLLER MOD-MATRIX + the LFO/mod runtime (422 -> 467)
+
+The previous NEXT is DONE (kn7000_disassembly b49139f): 45 new library
+functions, 467 total re-assemblable (233 region-1 + 234 lib), make
+verify 100% byte-identical, encoder fallback lines unchanged. All
+static RE. Tooling note: unidasm's mn10300 has a LENGTH BUG on the F4
+page (2-byte register-indexed moves printed as 1 byte -> a phantom
+instruction from the postbyte); gen_program_s.disasm_function already
+resyncs -- when hand-reading, use its corrected listing, not raw
+unidasm (the scratchpad dislib2.py wrapper).
+
+- ★ THE "LEVEL HOOKS" ARE A MOD MATRIX: 0x4C0067CD..0x4C006ED1 = the
+  part CONTROLLER MOD-MATRIX. Per part, 3 mod sources; per destination
+  a value/depth halfword pair array (partrec+0x66+dest*0xC+i*2 /
+  +0x6C+dest*0xC+i*2) and route/sign mask bytes partrec+0x53A+bank*4;
+  sum = value*depth/0x100 over routed sources. Six siblings by enable
+  bit: 0x02 PITCH (TgPitchNoteResolve's "part offset resolve"), 0x04
+  LEVEL term (TgLevelTermFinalize), 0x08 FILTER (+sbyte partrec+0x44),
+  0x10 CUTOFF, 0x20 NOTE LEVEL (TgLevelResolve/TgVoiceNoteLevelCalc),
+  0x40 (note-on programmers). partrec+0x52C = the 12-bit dest-enable
+  mask, recomputed from the 3 bank tables partrec+0x34C+bank*0x78
+  (12 dest records, stride 0xA) by TgPartModDestEnableUpdate.
+- The 0x4C02C153..0x4C02D795 region = the LFO/MOD RUNTIME ENGINE:
+  TgVoiceModSlotUpdate/TgVoiceModLfoStep step 8-byte mod slots
+  (per-voice librec+0x82+u*8, per-part partstate+0x4A+bank*0x30+u*8;
+  {val,flags,phase,,depth,,target}, +-0x1FFF), TgPartModDestApply/
+  RefreshAll latch the part GLOBAL regs (class 0x0400, dests cached at
+  partstate+2+dest*2; masks ROM 0x486D1224/0x486D123C),
+  TgVoiceModDepthWrite = the per-voice depth regs (units 0..3 ->
+  classes 0x0409/0x0402/0x040D/0x0406, cache rec+0x2C/+0x30/+0x2E/
+  +0x32). TgPartModSlotSweep + TgVoicePeriodicService are the two
+  periodic sweeps hosting TgPartGlideTick (the 0x4C02D2F8/0x4C02D552
+  call sites). Voice lifetime ticks: +0x52 = release countdown
+  (bit15 hi-byte -> gate-off+key-off; bit7 low7 -> slot service),
+  +0x54 level word auto-ramp modes 0x7000 (ramp/damp/target) via
+  TgVoiceLevelRampTick. TgPartCutoffResolve = key-follow ROM
+  0x486D23E4 * depth >> 5 + matrix + partrec+0x45, clamp 0..0x70.
+- ★ partrec bit-0x2000 (bit13) STATIC ANSWER: it selects the
+  GRACEFUL/EXTENDED path family -- graceful +0x52 release countdown
+  (vs immediate key-off) in both sweeps, the TYPE-7 EG-ramp scaled
+  part registers in TgPartModDestRefreshAll (partstate+0x1A/+0x1C/
+  +0x1E via 0x4C00F9B4 sels 0x10/0x11/0x20), the TgVoiceZoneVeloGate
+  skip, and forced mod units 2/3 when tone desc+0x44 nibble == 0xD.
+  (partrec bit12/0x1000 = the type-7 ramp ENABLE, still awaiting its
+  panel trigger -- live SUSTAIN question stays queued.)
+- Raw writer gaps closed (0x4C037759..0x4C037A34, 0x4C037B1A..
+  0x4C037C16): EG reg group writers classes 1/2/5/6/9/A (0x4C03783B =
+  TgVoiceEgRegsWriteRaw_entry, closing the TgElemKeyOffRelease cite),
+  librec+0x4C/+0x50 = the two effect-SEND words (classes 0x2800/
+  0x2C00), note level = class 0x000C, TgVoiceFadeLevelGateOff (level
+  word low13 + bit14 clear + gate off), class-8/9 rate hi/lo setters,
+  class-0x4000..0x5000 filter word group.
+- Part TONE/PROGRAM setup module 0x4C03A3CD..0x4C03A779: per-class mod
+  setup (melodic w/ jump tables 0x485879B4/0x48587990 on desc+0x44's
+  nibble; drum; table), dispatch by desc+0x10 & 0xCF, TgPartProgramSet
+  (tone block +6/+7/+8 = the tone address) + the all-parts init
+  (program 0x20).
+
+NEXT (CONVERT track): the apply layer under the tone-mod setup --
+0x4C0394A4 / 0x4C039D83 / 0x4C0396E7 / 0x4C0399DD (the mod source
+read) / 0x4C039C61 / 0x4C038942 / 0x4C038503 (sample desc getter) /
+0x4C0385xx, i.e. the 0x4C038503..0x4C03A20F gap between the note-path
+and the EG helpers; plus the mod-matrix CONFIG setters around
+0x4C005876..0x4C0067CD (the callers at 0x4C00664A/0x4C006708 that
+write the +0x34C bank tables and call TgPartModDestEnableUpdate) and
+the retrigger satellites 0x4C01349C / 0x4C033C0F / 0x4C03089B.
+Live-session questions unchanged (SUSTAIN vs 0x50009D38; partrec
+bit12 panel trigger).
