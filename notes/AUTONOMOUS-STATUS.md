@@ -5151,3 +5151,41 @@ boots and its voice engine runs on key presses; reuse
 tools/stage2_tg_diagnostic.lua) to turn the spec's INCONCLUSIVE rows into a
 complete plane map, and (2) static RE of its note->pitch routine. Neither is
 blocked on anything. Otherwise the CONVERT track is unchanged.
+
+## Tick 2026-07-20 — KN5000 joins the family binary (side quest)
+
+DONE: the unmerged KN5000 work is now IN this repo. There is only ONE MAME repo in
+the VM (kn5000_project/mame is the same directory; mame-sony-video and seven
+.claude/worktrees are worktrees of it). Its six active KN5000 branches were
+inventoried against a freshly-fetched upstream; `kn5000_pr6` (18) was rebased onto
+kn7000-base, six confirmed fixes cherry-picked from `kn5000_research_tonegen`, and
+`kn5000_research_datawheel` re-implemented against the device-owned ports. Result:
+13 overlay files under src/ (tmp94c241{,_serial}, hdae5000, kn5000{,_cpanel,_dsp,
+_tonegen}, kn5000.lay) + notes/upstream-patches/kn5000-01..25-*.patch, indexed in
+that README with a PR 6-9 split. The two are PROVEN identical: `git am` of the 25
+patches on a pristine kn7000-base yields byte-identical files (cmp, 13/13).
+
+BUILD PUZZLE SOLVED: the old "only driver_kn5000 undefined" link failure was NOT a
+drivlist filter bug -- upstream mame.lst already has an @source:matsushita/kn5000.cpp
+anchor, so the filtered list emits driver_kn5000 while SOURCES never compiled it.
+Fix = name kn5000.cpp AND its device .cpp files in SOURCES (done in build.sh, with
+the reason written next to it). kn5000 now rides in the SAME kn7000 binary.
+
+VERIFIED LIVE: -validate passes for all seven (kn1500/2400/2600/5000/6000/6500/7000
+-- no regression from the shared tmp94c241/hdae5000 overlays), and kn5000 boots to
+its main play screen (PMEM: 1-, USA March 2/4, ♩=120). "Sound Name Error" x3 is
+expected: waveform ROMs IC304-306 undumped. publish-binary.sh ships roms/kn5000 via
+its own block (per-IC filenames, not the even/odd *.rom pair MODELS assumes), so
+`./run.sh kn5000 -window` works from the published folder.
+
+GOTCHA for whoever rebases these branches next: they are 1429 commits behind, and
+their "major driver rework" commit is HALF-merged (PR #15143 took the cpanel HLE but
+NOT the SubCPU payload / NVRAM defaults / keybed HLE). Resolve conflicts TOWARDS
+upstream. Two breakages only surface at compile time: duplicate machine_start/
+machine_reset decls, and tmp94c241_device::m_serial went PRIVATE after the branches
+were cut (use rxd0()/txd0()).
+
+OPEN: the data wheel is wired and reachable (:cpanel:ENCODER) but NOT behaviourally
+confirmed -- a full Lua sweep on the play screen changes nothing, consistent with it
+being a menu-only control. Confirm it from a parameter screen before claiming it.
+Full write-up: KN7000/side-quests/findings/kn5000_driver_findings.md
