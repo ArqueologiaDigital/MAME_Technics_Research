@@ -52,6 +52,22 @@ Traced the KN7000's two prerequisite copies concretely (write-taps + caller ring
   the copy just needs the library loaded first. So the KN7000 order is **self-load library → copy overlay →
   use overlay**.
 
+  > **CORRECTION 2026-07-20 (CONVERT tick) — this is not a CODE overlay.** The copy is real and the
+  > numbers are right, but the routine is `MemStyleAreaLoadFactory` **0x4843B15B** (the entry the callers
+  > use is 0x4843B160; 0x4843b1a0 is a `bra` in the middle of it), and both ends are style data:
+  > `0x50180000` is **MEM_STYLE_AREA**, the 0x25800-byte RAM "TCMP" style container whose extent is
+  > hard-coded in `MemStyleAllocFits`, and the source is not a program-ROM code image but **table-ROM
+  > segment 2** — `TableRomSeg02PtrSize` returns `0x48000000 + dir[2] = 0x48035D08` with length
+  > `dir[3] - dir[2] = 0x40674 - 0x35D08 = 0xA96C`. That chunk starts with the ASCII bytes `TCMP`, carries
+  > allocator top `0x00A969` (hence the write span ending at `0x5018A964`), N = 3, and the three factory
+  > style names " Easy 8 Beat ", "Easy 16 Beat ", " Easy Swing  ". Nothing calls into `0x50180000`.
+  > The full writer contract is in kn7000_disassembly/kn7000_manual.sym.
+  >
+  > **Consequence for the KN2400 investigation:** "the KN2400 never populates its code overlay" is not a
+  > boot blocker — the missing copy is the factory *style* container, which a keyboard can boot without.
+  > The `0x50180000` write-tap is a red herring here; the derail has to be looked for elsewhere. (The
+  > **library self-load** finding above is unaffected and still real.)
+
 **The KN2400 is heavily relocated**, so KN7000 addresses do NOT transfer: at file offset `0x484d7b60` the
 KN2400 is only **7/112 bytes** identical to the KN7000 (it's INTC/GxICR init code there, not the block
 loader). So the KN2400's self-loader and overlay-copy are at unknown, relocated addresses — this is why the

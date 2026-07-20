@@ -4732,3 +4732,119 @@ read/insert/delete primitives (the cursors are converted but the thing they
 index is not); (3) the **MEMORY style WRITER** side -- 0x484354F0..0x48435561
 and 0x4843E07E.. build the 0x3C/0x14 variation records this tick only taught us
 to read. Live task (effect enable bits 4/10/13/14) still queued from tick b.
+
+## CONVERT tick 2026-07-20d -- the "TCMP" style container WRITER (898 -> 924)
+
+Took scoped target (1), the ★ one, plus target (2). **26 functions converted,
+`make verify` byte-exact, clean rebuild from scratch also byte-exact.**
+kn7000_disassembly commit f4a4788. NO MAME runs, no builds in
+../kn7000_mame_build (read-only use of these notes).
+
+- ★★ **TARGET (1) DONE -- the round trip is closed.** Last pass converted
+  everything that READS a "TCMP" container; this pass converted everything that
+  BUILDS one. MEMORY area builder: `MemStyleAreaHeaderInit` 0x4843531A /
+  `MemStyleAreaHeaderRestamp` 0x48435336 / `MemStyleRecInit` 0x484353AF /
+  `MemStyleRecInitAll` 0x484353E9 / `MemStyleVarRecInit` 0x484353FE /
+  `MemStyleAreaVarStreamsInit` 0x484354DE / `MemStyleAreaLoadFactory` 0x4843B15B /
+  `MemStyleAreaValidate` 0x4843B1B5 / `MemStyleAreaValidateOrInit` 0x4843B1F6.
+  Edit ops: `MemStyleStyleClear` 0x4843BF64 / `MemStyleVarClear` 0x4843BF2B /
+  `MemStyleVarCopy` 0x4843B22E. Import: `StyleBlockKindClassify` 0x48434645 /
+  `MemStyleLegacyBlockUpconvert` 0x48435221 / `MemStyleImportBlock` 0x48435280 /
+  `MemStyleImportBlockStyle` 0x484352DB / `MemStyleSlotImport` 0x48435198 /
+  `CustStyleImportToMem` 0x4843E000. Export: `MemStyleExportSize` 0x4843DDD2 /
+  `MemStyleExportToCustom` 0x4843DEC7 / `CustStyleAllocPtrGet` 0x4843DE07 /
+  `CustStyleAllocPtrSet` 0x4843DE1C / `CustStyleVarRecDataSet` 0x4843DE30 /
+  `StyleRefIdMark` 0x4843DE50 / `StyleRefIdApply` 0x4843DE8D. Plus target (2)
+  `InitializeBlock34` 0x48572F46 (one big function to 0x485731FB: the block-34
+  MILK class table -- class IDs 0x220..0x22B with method tables 0x487666FC..
+  and the seven 0x486AE0xx entries registered through 0x48431838).
+
+- ★ **WHAT A TCMP WRITER MUST PRODUCE** (asked for explicitly; full text now in
+  kn7000_manual.sym, this is the summary). Header, all multi-byte fields BE:
+  `+0x00 "TCMP"`, `+0x04 00 00`, `+0x06 u16BE checksum`, `+0x08 u24BE cksum
+  start = 0x70`, `+0x0B u24BE cksum length = 0x1B00 HALFWORDS`, `+0x0E u16BE
+  (carried, unvalidated)`, **`+0x10 u24BE container length`** (MEMORY = the
+  0x25800 capacity; CUSTOM = the used size -- `MemStyleExportToCustom` ends by
+  copying the allocator top over it), `+0x13 u24BE bump-allocator top`,
+  **`+0x16 u16BE N`** (the style count; the export path proves it by
+  `StoreU16BE(dest+0x16, 1)`), `+0x18` a fixed 0x18-byte tail then 0x20 padding
+  to 0x70. Then N style records (stride 0x80), N*20 variation records (stride
+  0xE0), then the heap. The checksum covers **exactly** the record block:
+  3*0x80 + 60*0xE0 = 0x3600 bytes = 0x1B00 halfwords from 0x70, which is why
+  the descriptor is a constant `MemStyleAreaChecksumInit` just stamps.
+  Style record: `+0x00` 13-byte name, `+0x10/0x20/0x30/0x40` four 13-byte
+  variation names, `+0x50` twenty ABSOLUTE variation indices (template holds
+  0..19, `MemStyleRecInit` adds style*0x14 -> style 0 owns 0x00..0x13 etc).
+  Variation record: `+0x00` kind, `+0x03` bit4 pair flag, `+0x04..0x0B` eight
+  per-part bytes, `+0x10/+0x11` the `MemStyleVarBarCount` inputs, `+0x15` u24BE
+  stream offset. Stream: **`+0x00` the VARIATION INDEX**, `+0x01` u24BE event
+  length L (total size L+4), `+0x04` events opening 0xF4 and closing 0xF5 with
+  exactly `MemStyleVarBarCount` 0xF4 markers. The byte just under the allocator
+  top must be 0xF5, so streams have to be allocated contiguously with no tail
+  slack. Empty prototypes live in ROM right after the record templates:
+  `0x487314B8` = `00 00 00 05 F4 F4 F4 F4 F5` (4 bars) and `0x487314C5` =
+  `00 00 00 09 F4 x8 F5` (8 bars), picked so the marker count matches the
+  `rec[0x11]=3` the builder writes. **Synthesis was NOT attempted this pass**
+  (per the brief) -- but everything a synthesiser needs is now written down,
+  and `MemStyleExportToCustom` is a complete worked example of building a
+  container from nothing but templates and a record block.
+
+- ★★ **THE FLAGGED CONTRADICTION IS RESOLVED, and the sym file was the wrong
+  one.** `RamCodeOverlayImage` 0x48035D08 is **not a code overlay**. The live
+  evidence behind that note (`LibMemCopy(dest=0x50180000, src=0x48035d08,
+  len=0xa96c)`, 44036 writes spanning 0x50180000..0x5018A964) is real, but the
+  routine is `MemStyleAreaLoadFactory` 0x4843B15B and both ends are DATA:
+  0x4843B160 does `LibMemSet(0x50180000, 0, 0x25800)` -- MEM_STYLE_AREA, at its
+  documented extent -- and then `TableRomSeg02PtrSize` (0x4843D7EF) returns
+  `0x48000000 + dir[2] = 0x48035D08`, length `dir[3]-dir[2] = 0x40674-0x35D08
+  = 0xA96C`. Byte-level confirmation: the chunk starts with ASCII `TCMP`,
+  header checksum 0x00CC, start 0x70, length 0x1B00 HW, **allocator top
+  0x00A969** (= the observed span ending at 0x5018A964), **N = 3 at +0x16**, and
+  three real style names " Easy 8 Beat " / "Easy 16 Beat " / " Easy Swing  ".
+  Nothing calls into 0x50180000. Renamed **`FactoryMemStyleContainer`**;
+  notes/table-rom-format.md already had it right as the `'TCMP'` chunk.
+  MEM_STYLE_AREA's 0x25800 extent stands unchanged. **Downstream fix:**
+  notes/kn2400-boot.md carried the same misreading and built on it; a correction
+  block is now inline there, including the consequence that "the KN2400 never
+  populates its code overlay" is NOT a boot blocker -- the missing copy is the
+  factory *style* container, which a keyboard boots fine without, so the
+  0x50180000 write-tap is a red herring for that derail. (The library self-load
+  finding in that note is unaffected.)
+
+- ★ **SECOND CORRECTION, found while converting:** a variation stream's first
+  byte is the **VARIATION INDEX**, not the zero "kind" byte last tick's header
+  comment claimed. `MemStyleAreaStreamsVerify` at 0x484357D4 does
+  `movbu (a3),d1 / extbu d2 / cmp d2,d1` against the loop counter and returns -3
+  on mismatch; all three writers stamp it (`movbu <var>,(stream)` right after
+  the copy in MemStyleAreaVarStreamsInit / MemStyleExportToCustom /
+  CustStyleImportToMem); and the factory container has `stream[0] == var` for
+  all 60 variations. kn7000_manual.sym's StreamsVerify line is corrected in
+  place with the retraction visible.
+
+- ANTI-DUPLICATION ran first: grepped notes/ and mame-blog/posts/kn7000/ for
+  MemStyleExportToCustom / CustStyleImportToMem / 0x48435403 / 0x484354E3 /
+  0x4843B160 / MemStyleVarClear -- zero hits outside this file.
+  **No blog post yet.** The bar the last tick set was explicit: the post is
+  "we synthesised a working container and killed the '8 Beat 1' fallback".
+  We now have the recipe but not the dish. A post about a struct layout alone
+  does not clear the series bar.
+
+- STANDING LESSON, eleventh pass: the trap this time was a *stale symbol*
+  rather than a mid-function address -- `RamCodeOverlayImage` had a plausible
+  name, a real trace behind it, and a cited address (`~0x4843b1a0`) that is a
+  two-byte `bra` in the middle of the routine that actually does the work.
+  Rounding a caller address to "~" hid the fact that nobody had ever read the
+  prologue. Also: 7 of this pass's 26 starts are prologues 3-5 bytes before the
+  address callers use, and 0x4843B1F9 has 10 call sites against 0 for its
+  prologue 0x4843B1F6 -- the count-both-candidates habit paid off again.
+
+NEXT (CONVERT track): (1) the **SD SOUND LIST EDIT engine** behind the cursors
+(0x4857B264 / 0x4857B2CC / 0x4857C28E / 0x4857C388 / 0x4857C3C3 / 0x4857C588 /
+0x4857C679) -- still untouched, and it is the directory the converted cursors
+index; (2) the rest of the InitializeBlock34 block, 0x485733BC..0x485736B7;
+(3) **the container SYNTHESIS experiment** now that the writer contract is
+written down -- build a minimal N=1 "TCMP" block offline in Python, run it past
+the three verifiers by hand (signature / checksum / streams), and see whether a
+synthetic container could stand in for the built-in style source that
+StyleResourceWindowProbe never finds. That one, if it works, IS the blog post.
+Live task (effect enable bits 4/10/13/14) still queued from tick b.
