@@ -3652,3 +3652,56 @@ the status readers around it, and the curve helpers 0x4C011ABC/
 0x4C0118F5/0x4C011ACE under TgVoiceEgSegParamGet; then the amp-EG
 computer family around 0x4C009F03/0x4C00AD43 cited by the key-off docs.
 Live-session question unchanged: the damper's partrec-bit6 gate.
+
+## 2026-07-20: CONVERT track -- the LEVEL chain + the type-7 EG time-ramp (382 -> 422)
+
+The previous NEXT is DONE (kn7000_disassembly 86f0350): 40 new library
+functions, 422 total re-assemblable (233 region-1 + 189 lib), make
+verify 100% byte-identical, encoder fallbacks still 5. All static RE.
+
+- ★ MISNOMER FIXED: the "pitch chain internals" 0x4C0311F3/0x4C0312A2/
+  0x4C031330 are the NOTE LEVEL chain (they only FOLLOW TgPitchRuntime-
+  Calc in program order). TgNoteLevelVariationCalc = per-note level
+  humanization (desc mode bits 15..14: velocity-sense offset from tone
+  block +0x91 / PSEUDO-RANDOM level off the 1 kHz tick 0x50151BFC /
+  set level-word bit15-bit16 + neutral 0x40) -> librec+0x50;
+  TgVoiceNoteLevelCalc folds it with part level + expression into the
+  7-bit level at shadow +0x24; TgElemLevelBaseCalc computes librec+0x12
+  /+0x14 (base level term) incl. the VELOCITY/KEY FADE crossfade zones
+  desc2+0x1C..0x27 (hard edge -0x200, slopes -0x40*d/(hi-lo)).
+- Level-word tails: TgAmpEgAttackRateCalc (curve ROM 0x486D25E4 ->
+  shadow r0 HI) + TgAmpEgDecayRatePairCalc (0x486D2649 -> librec+0x64/
+  +0x66 -> r1/+8 HI) + TgLevelTermFinalize (part/group-master gains
+  0x500C0760..66, mono/legato mutes, log->hw ROM 0x486D1BD4).
+- ★ NEW MODULE, whole gap 0x4C011730..0x4C011F2F closed (17 fns): the
+  per-part TYPE-7 EG TIME-RAMP. State 0x50009D38+part*8 {flags, cntA
+  (max 0x4F), cntB (max 0x96), scaleA/scaleB Q8.8}; enable = tone type
+  7 AND partrec halfword bit 0x1000; a tick dispatcher walks all 0x22
+  parts through an engage/release edge machine ramping the scales via
+  curve ROMs 0x4858712C/0x4858717C, live-refreshing sounding voices
+  (part class-reg list 0x500C9848 built by TgPartClassRegCollect
+  0x4C00FBCA from table 0x500C59E4+part*0x36 + tag ROM 0x485870F0 ->
+  TgGlobalRegWriteBoth; per-slot writes librec+0x28/+0x2A low-14 ->
+  TG classes 0x0401/0x0405). TgVoiceEgSegParamGet's type-7 "curve
+  helpers" are its scale getters. OPEN: which panel feature drives
+  partrec bit12 (candidate: part sustain/damper response) -- a live
+  session could toggle SUSTAIN and watch 0x50009D38.
+- Force-off family: TgVoiceStealSilence 0x4C03713A = the ONLY writer
+  of the r1/r2=0xC000 boot/steal pattern (TgSlotAllocate steal path;
+  closes that erratum thread), TgVoiceForceOff 0x4C037244 (pool-reset
+  sweep, rate 0xA2 + EG-seg clears), soft (0x7F) + damp-only variants,
+  TgVoiceEgSegRegsWrite (r8..rB from shadow +0x18..+0x22).
+- DRUM-side zone fetcher set 0x4C009F01..0x4C00A1F7 = the THIRD link
+  of the melodic/kit fetcher family (same ROMs 0x486D2713/1354/13D4),
+  serving the class-0x10 drum programmers around TgDrumAmpReleaseCalc.
+
+NEXT (CONVERT track): the remaining neighbours -- the level hooks
+0x4C006A17 (part+note level term used by TgLevelResolve/TgVoiceNote-
+LevelCalc) and 0x4C00685C (TgLevelTermFinalize's tuning hook) with
+their module 0x4C0068xx..0x4C006Axx, the shadow byte writers
+0x4C037B1A/0x4C037B4A + the 0x4C03783B raw helper cited by TgElemKey-
+OffRelease (gap 0x4C037759..0x4C037A34), the 0x4C03A3CD function after
+TgPartEgRampCache54Scaled (partrec bit-0x2000 test seen), and the
+region between TgLevelTermFinalize's end 0x4C02C153 and TgPartGlide-
+Plan 0x4C02D795 (starts with an elem/tone-record walker at 0x4C02C153).
+Live-session question: SUSTAIN toggle vs 0x50009D38 (see OPEN above).
