@@ -19,6 +19,29 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-20 — ★★★ TG AMPLITUDE ENVELOPE: SWEEP DONE + FULL 7-STAGE EG SHIPPED (Felipe's directed task)
+The ENVELOPE-screen sweep ran (env9-11.lua) and DECODED the amplitude EG: it is r0/r1/r2 as
+[rate hi | level lo] pairs (r0=ATK|PEAK, r1=DCY1|SUS1, r2=DCY2|SUS2; higher rate byte = faster;
+screen->rate is a nonlinear curve table) and **r3 = the GATE (0x87FF note-on / 0x8000 key-up,
+written for EVERY class — organ included, falsifying the 07-11 'gate-follow sounds get no key-up
+write' sweep reading)**. r4..rA are NOT the EG (chip-side damp/aux bank; rA-hi release correlation
+stands). Screen RLS + SUSTAIN PEDAL never reach the TG in the audition path (open; full-class
+diffs byte-identical). Full table: notes/tg-envelope-sweep-results.md (commit 4b3c14a).
+IMPLEMENTED (4fa66d4): full ATTACK->DCY1->SUS1->DCY2->SUS2->RELEASE chain in kn7000_tonegen —
+per-sound attack from r0 hi (edited ATK=52 audibly swells ~1.3 s, wav-verified vs instant-attack
+control), pianos two-stage-decay to true silence, organs hold; release = r3 gate-off (universal)
+at the rA damp default, overridden by the managed burst's r0 rate. Rate law PROVISIONAL:
+T=13*2^(-rate/20) s (anchored to the shipped piano 6 ms/1.8 s). A/B: default piano+organ
+byte-similar (no regression), demo songs play, published.
+REVERB ORACLE re-baselined (intentional TG change): **c3b67ea711ce3c00f8ae2af1e07651cb**
+(bit-identical x2, clean decay; nota cda5332). SWEEP GOTCHAS for every future Lua session:
+(1) write-taps installed at t=0 DIE during boot — install after t>=25 s; (2) NEVER run two MAME
+instances on one SD image (second boots degraded: TG idle frozen, keybed dead); (3) keybed
+fields are GM-renamed ('C4') — press by PORT+MASK (:KEYS1 0x0100); (4) ENVELOPE screen edits =
+balance-button columns (ATK=PART3 .. SUSTAIN=PART10), hold = ~12.7 steps/s auto-repeat.
+OPEN: where screen RLS lands (needs a WRITE-saved sound or normal-play release trace); r4..rA
+bank true role (filter-EG probe inconclusive); exact chip rate curve (needs real HW).
+
 ## TICK 2026-07-19 — ★★★★ FULL-COVERAGE MILESTONE: EVERY DSP PROGRAM DOCUMENTED (DSP-doc directive COMPLETE)
 Final batch rec58-61 / rec67-69 / rec70-72 / rec75-76 documented (kn7000_disassembly 415c3d1,
 NEW dsp/final-batch-algorithms.md); blog Part 46 "The whole pool, written down" (mame-blog
