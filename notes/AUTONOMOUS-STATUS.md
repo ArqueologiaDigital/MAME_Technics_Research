@@ -5,6 +5,21 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ★ KN5000 PRIORITY (Felipe 2026-07-20): SOUND NAME ERROR > tempo wheel
+To avoid subagents colliding on shared KN5000 files, Felipe set the order:
+  1. TOP: fix the "Sound Name Error" (SubCPU reply path — the dropped DSP2/MN19413/ComIF/serial
+     wiring; microDMA payload already fixed + byte-verified, commit e6b4cf7). Agent a0c5df63d2428dd5b
+     owns kn5000.cpp + tlcs900/tmp94c241 + any new device files for this.
+  2. DEFERRED (not abandoned): the TEMPO/PROGRAM DATA WHEEL. Layout/Lua side CONFIRMED WORKING by
+     Felipe's real mouse (rotates); only the driver->firmware tempo hook is unfinished. RESUME POINT:
+     the wheel EDITS TEMPO on real hardware (Felipe insists — ground truth; the static "no BPM writer"
+     read is wrong/incomplete). Chase PsParaBoxProc / the focused-parameter path writing BPM 0xFC62 via
+     the generic parameter machinery (no tempo-specific writer exists BY DESIGN); resolve which record
+     id the focused path consumes vs the 0x21 we were injecting; set a watchpoint on 0xFC62 and turn the
+     wheel to find the writer PC. Patch kn5000-25 stays LAST/held-back. Do NOT run a wheel agent
+     concurrently with a Sound-Name agent — they share kn5000 files.
+RULE: only ONE agent may hold the KN5000 driver files at a time until the driver stabilises.
+
 ## ★ SIDE-QUESTS = THE IDLE-TIME TASK QUEUE (Felipe 2026-07-20)
 CHECK /home/fsanches/compartilhado/KN7000/side-quests/ REGULARLY — Felipe drops new tasks there.
 Structure (see its README.md): pending/ = to do, fully_solved/ = done, ignore_these_ones_for_now/ =
