@@ -4,6 +4,13 @@ All images are de-interleaved into physical even/odd 16-bit flash chips (ROM_LOA
 They are checksum-verified reconstructions from the firmware-update disks (good dumps),
 pending real chip reads. kn2600 reuses the kn2400 set. KN5000 is already upstream (kn5000.cpp).
 
+> **See `notes/rom-provenance.md` + `tools/make-roms.sh` for the single documented
+> regeneration path.** Every shipped ROM has been verified to rebuild bit-identically
+> from preserved sources. NOTE: the `kn6000_table_*` / `kn6500_table_*` rows below are
+> **RETIRED** — they were never a dump of IC13/IC14 (just the program ROM's upper half
+> loaded again) and are no longer shipped; the KN6xxx models now use the KN7000 table ROM
+> as an explicit BAD_DUMP font placeholder. Hashes kept for the record only.
+
 ## kn1500  (SX-KN1500) — Toshiba TLCS-900 (TMP95C061); in kn5000.cpp
 Program ROMs are BAD_DUMP (unvalidated, need a redump); `kn1500_lcd.svg` is a good LCD-panel artwork asset (SCREEN_TYPE_SVG).
 
@@ -14,7 +21,14 @@ Program ROMs are BAD_DUMP (unvalidated, need a redump); `kn1500_lcd.svg` is a go
 | `kn1500_lcd.svg` (screen) | 221081 | `d779a7b9` | `0b40105175cc6e2ac05dea65f1ddb6c7c52c4662` |
 
 ## kn7000  (SX-KN7000)
-Provenance: even/odd of the decompressed JK1.SLD (program, kn7-16 update) and JK2.SLD (table, kn7-14 update).
+Provenance: even/odd of the decompressed **JK1.SLD + JK2.SLD** (program, kn7-16 update)
+and **JKT1.SLD + JKT2.SLD** (table, kn7-14 update). Each update spans two floppies whose
+decompressed payloads are concatenated (program 0x3F6F01, table 0x3E94D4), then split
+into even/odd 16-bit chips with 0xFF padding to 0x400000.
+(CORRECTED 2026-07-20 — this line previously read "JK1.SLD (program) and JK2.SLD (table)";
+JK2 is the *second half of the program image*, not the table. Verified by re-running the
+extraction end-to-end: both images match their SMCK*.INF checksum oracles and all four
+even/odd files reproduce bit-identically. See notes/rom-provenance.md.)
 
 | ROM file | size | CRC32 | SHA1 |
 |----------|------|-------|------|
