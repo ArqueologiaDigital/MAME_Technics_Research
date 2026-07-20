@@ -5502,3 +5502,24 @@ walk the base register back to the wrong value; diff vs kn5000_aided_by_claude
 DRIVER: all my instrumentation REVERTED -- shipped tree is the clean committed
 version (kn5000.cpp + tmp94c241.cpp git-clean). No code fix committed (would be
 speculative). Did NOT touch cpanel/layout/slider_lib/kn5000-25 (wheel agent).
+
+--- 2026-07-20 REFINEMENT: the corruption is a STACK LEAK (Timer-3 scheduler tick) ---
+Continued from the tick above. The "corrupt store to 0x035888" is actually STACK
+PUSHES: the SubCPU system stack pointer XSSP LEAKS DOWNWARD ~8.6 KB/s until it sits
+in the code region. Polled XSSP: 0x040688(t6) -> 0x03FF2A(t7.6, enters code) ->
+0x036580(t11) -> 0x033924(t12); its top crosses 0x035893 at ~t11.3 (== the AF->00).
+Instrumented IRQ-take/RETI: INTT1(Timer1,vec54)=32 takes/32 RETIs (balanced), but
+INTT3(Timer3,vec5C)=22 takes / 0 RETIs -- its handler (0x01FDC8, the cooperative-
+scheduler tick) does `jrl T,0x02070C` into the dispatcher, never RETI, leaking a
+~28-byte context save each tick. CPU core is NOT at fault at instruction level:
+int-entry pushes 6 (PC+SR), op_RETI pops 6; push/pop SR = 2; long push/pop = 4; the
+tmp94c241 IRQ-mask loop is byte-identical to upstream tmp95c061. => scheduler
+save/restore imbalance: a SubCPU task never gets cleanly restored, prime suspect a
+task BLOCKED on an emulated-hw event that never resolves (top candidate: response
+DMA ch2 / INTTC2 -- the SubCPU emits only 15 reply bytes then goes quiet). Stubbing
+audio HLE to 0 did NOT stop the leak. NEXT: trace one INTT3 cycle, find which task
+0x02070C/0x02011A fails to restore and what it waits on (verify DMA ch2 fires INTTC2
++ clears wait flag DRAM 0x10E8). Fixing the blocked task likely stops the leak AND
+restores the name replies. All instrumentation reverted (overlay tmp94c241.cpp git-
+clean; build-tree tlcs900.h/900tbl.hxx restored from ../mame). Full write-up in
+KN7000/side-quests/findings/kn5000_driver_findings.md.
