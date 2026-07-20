@@ -225,3 +225,42 @@ later by the slot-service pass**. Both flavours then run `TgKeyOffSample` 0x4C03
 **Bonus**: the hi-hat-style cutoff is `TgExclGroupChoke` 0x4C0309A5 — descriptor
 +0x0E bit7 marks an exclusive group; same-group voices get their r0/r1 release
 halves set to a damp rate from table 0x48586EA4, then the same burst writer fires.
+
+## Static-RE addendum (2026-07-20 CONVERT pass): the LEVEL pipeline + amp-EG rates
+
+From the kn7000_disassembly conversion (86f0350; all static, byte-match verified):
+
+**The note LEVEL chain** (previously mislabeled "pitch chain internals" — it only
+follows `TgPitchRuntimeCalc` in program order): `TgNoteLevelVariationCalc`
+0x4C0311F3 is a per-note level humanizer — desc mode bits 15..14 select a
+velocity-sense offset (tone block +0x91), a **pseudo-random level drawn from the
+1 kHz tick 0x50151BFC** (tick²>>2·0x83, low16·0x7F>>16), or set level-word
+bit15/bit16 with neutral 0x40. `TgVoiceNoteLevelCalc` 0x4C0312A2 folds it with the
+part level term (0x4C006A17) + expression (partrec+0x0A−0x40) into the 7-bit note
+level at shadow +0x24; mute/solo part states short-circuit to 0/0x7F.
+`TgElemLevelBaseCalc` 0x4C031330 writes the element base level (librec+0x12/+0x14)
+including the **velocity/key FADE crossfade zones** desc2+0x1C..0x27 (outside a
+zone edge = hard −0x200; inside the fade band slope −0x40·delta/(hi−lo)).
+
+**Amp-EG rate curves, statically confirmed**: attack rate = ROM 0x486D25E4[idx]
+(`TgAmpEgAttackRateCalc` → shadow r0 HI), the two decay rates = ROM 0x486D2649[idx]
+(`TgAmpEgDecayRatePairCalc` → librec+0x64/+0x66 → shadow r1 HI and +8 HI) — the
+same 0x486D2649 curve TgDrumAmpReleaseCalc uses, so rate bytes are one shared
+curve family. The level word ends in `TgLevelTermFinalize` 0x4C02BF8B: part
+volume/expression + the four **group master gains** (0x500C0760 parts class 2/3,
+0x500C0762 parts 0x13..0x1A, 0x500C0764 parts ≤0xF, 0x500C0766 class 4, each with
+an enable bit in 0x500C075A) + mono/legato mute gates, then the log→hw mapping ROM
+0x486D1BD4.
+
+**The r1/r2=0xC000 writer found**: `TgVoiceStealSilence` 0x4C03713A (TgSlotAllocate
+steal path) is the ONLY code that writes the 0xC000 pattern — consistent with the
+forever-note erratum ("0x0001=0xC000 is boot/steal only, not key release").
+
+**New: the type-7 EG time-ramp module** (0x4C011730..0x4C011F2F): per-part state
+0x50009D38+part·8 with two Q8.8 time scales ramped over ticks (counters to
+0x4F/0x96, curve ROMs 0x4858712C/0x4858717C) while partrec bit 0x1000 is engaged;
+`TgVoiceEgSegParamGet`'s type-7 scaling reads these. Live refresh rewrites TG
+classes 0x0401/0x0405 (librec+0x28/+0x2A low-14) on sounding voices. **Open**:
+which panel feature drives partrec bit12 — candidate is the part sustain/damper
+response of sustaining (type-7) tones; a live session should toggle SUSTAIN and
+watch 0x50009D38.
