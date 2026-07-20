@@ -97,3 +97,147 @@ engine runs on key presses with no gate fix — see the dynamic-capture section 
 plane map. Reuse `tools/stage2_tg_diagnostic.lua`. That, plus the note→pitch RE, is the whole
 remaining gap between here and a working KN6000 tone generator — the *architecture* question
 is now settled.
+
+---
+
+# ★ RESOLVED 2026-07-20 — the device SHIPPED and the KN6000 SINGS
+
+Everything in §2 ("What is NOT established") and §3's blocker list is settled or
+re-characterised below. `kn6000_tonegen_device` exists
+(`src/mame/matsushita/kn6000_tonegen.{cpp,h}`), is wired into `kn6000(machine_config)`,
+and the KN6000 plays **musically correct pitch**, live-verified.
+
+Method note: §4 proposed a per-plane LIVE sweep. That turned out to be the slower route.
+The firmware **enumerates its own register map**, so the static route gave a *complete*
+map in one read, and the live capture then confirmed it register-for-register.
+
+## 1. THE COMPLETE PER-PLANE MAP (was: "~20 planes INCONCLUSIVE")
+
+The note-on routine at **0x484948CB** is a straight blit of the 0xA0-byte shadow register
+image (`0x50043100 + slot*0xA0`) into the chip: one `call 0x4849465B` per register, each
+with its destination OR-ed in as a literal. Reading the literals off in order yields the
+whole map, and **every byte of the 0xA0-byte record is accounted for** — which is what
+makes it a map rather than a sample:
+
+| cls | shadow src | width | meaning |
+|---|---|---|---|
+| 0x0000 idx 0 | (literal 0x87FF) | — | **GATE** — 0x87FF note-on, 0x8000 key-up |
+| 0x0001–0x000F | +0x02..+0x2A | u16 | per-voice registers 1..15 (see banks below) |
+| 0x0400 / 0x0401 | +0x2C / +0x2E | u16 | |
+| **0x5000** | **+0x74** | u32 | **18-bit pitch** — high half extends the class nibble |
+| 0x5400 | +0x78 | u32 | pitch companion |
+| 0x5800 | +0x7C | u32 | gate-on pitch INIT (`and 0x00018000; or 0x58004000`) |
+| 0x0800–0x080D | +0x30..+0x3E | u16 | |
+| 0x1000–0x3000 | +0x40..+0x60 | u32 | |
+| **0x4000** | **+0x64** | u16 | **per-voice LEVEL** (default full = 0x3FFF) |
+| 0x4400–0x4C00 | +0x68..+0x70 | u32/u16 | |
+| 0x5C00–0x6400 | +0x80..+0x88 | u32 | |
+| 0x8000–0x9000 | +0x8C..+0x9C | u32 | **per-voice wave/sample params** |
+
+### Envelope banks — CONFIRMED by literal, not by position
+`0x484947B3` writes the same `0xA280/0xA200` damp pair the KN7000 writes to its r0/r1,
+and `0x484946DC` writes the same `0xC000` mute — to **cls 0x0004/0x0005/0x0006**. So the
+amplitude EG is at 4/5/6, the three banks sit at 4/8/C (KN7000: 0/4/8), and the release
+burst hits {4,5,8,9,C,D} where the KN7000 hits {0,1,4,5,8,9} — the first two registers of
+each of three banks in both cases. The gate is the one register that genuinely moved:
+r3 → r0.
+
+## 2. ★ FALSIFIED: "plane 0x20 = send matrix on both chips"
+
+§1 row (c″) called plane 0x20 and plane 0x28 "the two *structural* planes [that] match
+exactly". **The 0x20 half is wrong.** The note-on blit sources cls 0x8000–0x9000 from
+shadow +0x8C..+0x9C, i.e. on the KN6000 those are **per-voice wave/sample parameters**,
+not a per-channel send matrix. (The live capture even said so and was misread: its
+`0x800B/0x8400/0x8804/0x8C0F` quartet carries *identical data* to the KN7000's
+`0x400B/0x4400/0x4804/0x4C0F` — same default patch, per-voice both times.)
+
+The send matrix appears instead in the **0xA0xx** family — `0xA0F8 / 0xA178 / 0xA188 /
+0xA198 / 0xA1A8 / 0xA1B8 / 0xA1C8 / 0xA1E8`, the same `row<<8 | part<<4 | reg` shape,
+rebased onto plane 0x28. Which row means which effect bus is **still unverified**, so the
+shipped device deliberately does NOT drive the effect-send gains from it (see §5).
+
+## 3. THE NOTE→PITCH ROUTINE — dissolved, not reversed
+
+§3 listed "KN6000 note→pitch routine un-reversed" as a blocker and the earlier recon
+declared KN6000 pitch "not extractable by simple register-diffing". Both stand as
+statements about the *chip registers* — and both are beside the point, because the KN6000
+never had to be reversed at all. It is the **same trick the KN7000 already uses**: the
+firmware computes the musical pitch itself and publishes it in a voice record.
+
+The KN6000's record initialiser at **0x48493D80** writes, from a halfword `pitch16` arg:
+
+```
+movhu (0x20,sp),d0; asr 8,d0; extbu d0; or 0x80,d0; movbu d0,(8,a1)   ; +0x08 = 0x80|(pitch16>>8)
+movhu (0x20,sp),d0; movhu d0,(0xa,a1)                                 ; +0x0A = base pitch16
+movhu (0x20,sp),d0; movhu d0,(0xc,a1)                                 ; +0x0C = notePitch16
+```
+
+Field-for-field the KN7000's layout (+0x07 part, +0x08 active|note, +0x0A base pitch16,
++0x0C notePitch16, +0x10 velocity, +0x3C/40/44 element pointers), at the same 0xB4 stride.
+
+### ★ THE ONE REAL TRAP: two 0xB4 arrays, only one indexed by slot
+The obvious array — the **library** array at `0x502858F8` — is indexed by *note-event
+element*, NOT by voice slot. Live-measured: playing C4 then C5 filled library records
+**00/01 both times**, while the notes went to TG slots 0/1 then 2/3. Reading it by slot
+gives the wrong record (or an inactive one) and silently poisons the pitch.
+
+The array to read is **`0x5027AF28`**, a per-TG-SLOT **copy** the firmware makes at
+note-on (`0x48492F20`: destination `mulu slot,0xB4; add 0x5027AF28`, source
+`mulu libidx,0xB4; add 0x502858F8`, then a 0x2D-word block copy). Indexing *that* by slot
+reproduces the KN7000's record-index == slot identity exactly.
+
+**KN6500 equivalents** (its build shifted the RAM layout; both located the same way, via
+the note-on record copy at 0x48492E07): per-slot record **0x5027AF1C**, shadow image
+**0x500430AC**.
+
+## 4. LIVE VERIFICATION
+
+`tools/kn6000_tg_probe.lua` (new) taps the single TG window, locks onto the first slot of
+a note's burst, and samples the voice record **at the note-on pitch write**:
+
+```
+NOTE 60 -> slot 0 : +0x08 = BC (active, note 60)  +0x0C = 3C80 -> MIDI 60.000
+NOTE 72 -> slot 2 : +0x08 = C8 (active, note 72)  +0x0C = 4880 -> MIDI 72.000
+```
+
+and the ordered write burst matches the static blit map register-for-register, including
+the universal key-up `0x0000=8000` and the voice-steal `0x0005/0x0006=C000`.
+
+**Audio (the real test)** — `-wavwrite` capture, FFT of the loudest window:
+
+| note | expected | measured | error |
+|---|---|---|---|
+| C4 (60) | 261.63 Hz | **261.72 Hz** | +0.01 semitone |
+| G4 (67) | 392.00 Hz | **392.14 Hz** | +0.01 semitone |
+| C5 (72) | 523.25 Hz | **523.44 Hz** | +0.01 semitone |
+
+Correct across more than an octave — so this is real resolved pitch, not a coincidence at
+one anchor. Timbre is the placeholder sine (wave ROMs still undumped); pitch, polyphony,
+note timing and the 7-parameter amplitude envelope are the firmware's own.
+
+**KN7000 not regressed:** reverb/keybed oracle **c3b67ea711ce3c00f8ae2af1e07651cb**,
+bit-identical across three runs (twice pre-publish, once on the final published binary).
+
+## 5. WHAT THE SHIPPED DEVICE DELIBERATELY DOES NOT DO
+
+- **Effect-send matrix**: not decoded (§2 — the 0xA0xx row map is unverified). The gains
+  keep their defaults rather than being driven from a guess.
+- **Aux/mode word**: the analogue of the KN7000's cls 0x1C02 gate-follow marker is not
+  identified, so every voice is treated as MANAGED. Safe here, because the KN6000 writes a
+  **universal** key-up gate for all voice classes — nothing can hang waiting for a release.
+- **Record type**: the KN6000's +0x02 values (1/8 plus flags 0x0100/0x0800, written at
+  0x48492FF0) are not mapped onto the KN7000's {04,08,10,20,40} release classes, so the
+  resolve reports "unknown" rather than guessing.
+- **Even/odd companion pairing**: still unconfirmed (§2), so the managed-release rule
+  releases only the written voice, never a `{v&~1, v|1}` pair.
+- **Pitch/filter envelopes**: cached, not modelled (same state as the KN7000).
+
+## 6. STILL BLOCKED
+
+- **Wave ROMs undumped** (4× / 6× `QSIGX3C640xx`) and **IC13/IC14 table mask ROMs
+  undumped** — the timbre stays a placeholder. Unchanged, and it never blocked the device:
+  pitch/polyphony/envelope are all real without them.
+- **★ KN6500 emits ZERO tone-generator writes on a key-bed press** (live-probed). Its
+  voice engine never starts — a boot/enable-gate difference from the KN6000, NOT a decode
+  problem. Its device and record binding (§3) are in place and correct; the machine stays
+  `MACHINE_NO_SOUND` until that gate is found. **This is the next thing to chase.**

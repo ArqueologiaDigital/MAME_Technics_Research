@@ -84,7 +84,7 @@ public:
 	// note_x256: musical pitch in 1/256-semitone units resolved from the firmware's
 	// voice record by the caller, or -1 if unavailable (fall back to the legacy
 	// keybed-anchored absolute decode of pitch18).
-	void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1);
+	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
 
 };
 

@@ -87,6 +87,19 @@ public:
 	// chips, KN6000/KN6500 = 64 in one). Sizes every per-voice loop below.
 	int num_voices() const { return m_num_voices; }
 
+	// THE MODEL-SPECIFIC HALF: turn one tone-generator register write into voice
+	// events on the shared state below. Each derived device supplies its own chip's
+	// register NUMBERING here (which plane and which per-voice index means what);
+	// everything that decode drives is shared. The driver's io_w routes every TG
+	// write through this, so it must stay virtual -- the machine config decides at
+	// runtime which chip's decode is installed (KN7000 two-chip vs KN6000 one-chip).
+	//   tg:         which TG window the write came from (KN7000 0 = master/0x98040000,
+	//               1 = sub/0x98050000; KN6000/KN6500 have only window 1).
+	//   note_x256:  MUSICAL pitch in 1/256-semitone units, resolved by the caller from
+	//               the firmware's own library voice record, or -1 if unavailable.
+	//   rec_type:   the voice record's synthesis/release class, or -1 if unknown.
+	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) = 0;
+
 	// Envelope stages (see notes/tg-envelope-sweep-results.md). The firmware's 7-param
 	// amplitude EG: ATTACK to PEAK (r0), DCY1 toward SUS1 (r1), DCY2 toward SUS2 (r2),
 	// RELEASE to silence on the r3 gate-off / managed r0 burst / 0xC000 steal.

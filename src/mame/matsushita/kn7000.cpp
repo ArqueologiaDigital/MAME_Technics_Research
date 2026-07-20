@@ -103,6 +103,7 @@
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
 #include "kn7000_tonegen.h"       // tone-generator HLE (IC201 master + IC205 sub)
+#include "kn6000_tonegen.h"       // ... and its KN6000/KN6500 sibling (IC213, one chip, 64 voices)
 #include "kn7000_cpanel.h"        // control-panel HLE (buttons, LEDs, analog controls)
 #include "kn6000_cpanel.h"        // ... and its KN6000/KN6500 sibling (same base class)
 
@@ -373,6 +374,7 @@ public:
 
 	void kn7000(machine_config &config) ATTR_COLD;
 	void kn6000(machine_config &config) ATTR_COLD;
+	void kn6500(machine_config &config) ATTR_COLD;
 	void kn2400(machine_config &config) ATTR_COLD;
 	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
 	DECLARE_INPUT_CHANGED_MEMBER(sd_cover_changed);   // SD slot cover toggle (public: PORT_CHANGED_MEMBER)
@@ -394,7 +396,10 @@ private:
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 	required_device<kn7000_sio_uart_device> m_kbd_midi_uart;  // MIDI -> internal key bed (velocity)
-	required_device<kn7000_tonegen_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
+	// Held by BASE type, like the control panel above: kn7000() installs the two-chip
+	// KN7000 decode, kn6000() swaps in the KN6000/KN6500 one (same tag "tonegen", same
+	// voice model, different register numbering).
+	required_device<kn_tonegen_base_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
 	required_device<kn7000_dsp_bridge_device> m_dspbridge;  // F.3: routes TG audio through the effects DSP
 	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
 
@@ -550,13 +555,61 @@ private:
 	// types {04,08,10,20,40} receive the computed 6-write release ramp at key-up, any
 	// other synthesis class gets NO key-up TG writes (plucked classes ring their own
 	// envelope). Same record array and binding window as tg_pitch_resolve below.
+	// ---- MODEL BINDING for the two resolves below --------------------------------
+	// The KN6000/KN6500 firmware is a re-target of the same source tree, so it keeps
+	// the SAME 0xB4-stride voice record with the SAME field semantics -- only the
+	// array base and the slot mapping differ. Proven by the KN6000's own record
+	// initialiser at 0x48493D80, which writes exactly the three fields these resolves
+	// read, from a halfword pitch16 argument:
+	//
+	// WHICH ARRAY. The KN6000 has TWO 0xB4-stride arrays and only one of them is
+	// indexed the way this code needs. The LIBRARY array at 0x502858F8 is indexed by
+	// note-event element, NOT by voice slot -- live-measured: playing C4 then C5 filled
+	// library records 00/01 both times while the notes went to TG slots 0/1 then 2/3.
+	// The array to read is 0x5027AF28, a per-TG-SLOT COPY the firmware makes at note-on
+	// (0x48492F20: `mulu slot,0xB4; add 0x5027AF28` as the destination, `mulu libidx,
+	// 0xB4; add 0x502858F8` as the source, then a 0x2D-word block copy). Indexing THAT
+	// by slot reproduces the KN7000's record-index == slot identity exactly, and is
+	// live-verified: slot 0 -> note 60 pitch16 0x3C80, slot 2 -> note 72 pitch16 0x4880.
+	//     movhu (0x20,sp),d0; asr 8,d0; extbu d0; or 0x80,d0; movbu d0,(8,a1)
+	//        -> +0x08 = 0x80 | (pitch16 >> 8)   = active bit | internal note
+	//     movhu (0x20,sp),d0; movhu d0,(0xa,a1) -> +0x0A = base pitch16
+	//     movhu (0x20,sp),d0; movhu d0,(0xc,a1) -> +0x0C = notePitch16
+	// That is field-for-field the KN7000's layout (its own writer is the library's
+	// 0x4C030FB9), which is why the KN6000 needed no separate note->pitch RE: the
+	// firmware publishes its computed musical pitch in a record we already decode.
+	// See notes/kn6000-tonegen-spec.md.
+	offs_t  m_tg_recbase   = 0x500AF940;   // library voice-record array (KN6000: 0x502858F8)
+	bool    m_tg_one_chip  = false;        // KN6000/KN6500: one TG, slots 0..63, no chip select
+	// The register class that carries pitch -- i.e. the note-on trigger the resolves
+	// must answer for. KN7000: 0x2400|bit16. KN6000: 0x5000|bits16-17 (plane 0x14,
+	// note-on blit site 0x48494A5E).
+	uint16_t m_tg_pitch_cls = 0x2400, m_tg_pitch_mask = 0xFC0E;
+
+	// slot = the library's voice-record index. On the KN7000 the two chips share one
+	// 128-entry array with slot bit 6 selecting the window (lib primitive 0x4C036F98:
+	// slot < 0x40 -> 0x98050000, else 0x98040000); the KN6000 has a single 64-entry
+	// array behind a single window.
+	int tg_slot(int tg, uint16_t tgaddr) const
+	{
+		const int s = (tgaddr >> 4) & 0x3F;
+		return m_tg_one_chip ? s : (s | (tg == 0 ? 0x40 : 0x00));
+	}
+
 	int tg_type_resolve(int tg, uint16_t tgaddr)
 	{
-		if ((tgaddr & 0xFC0E) != 0x2400)
+		if ((tgaddr & m_tg_pitch_mask) != m_tg_pitch_cls)
 			return -1;
-		const int slot = ((tgaddr >> 4) & 0x3F) | (tg == 0 ? 0x40 : 0x00);
+		// The record's synthesis/release class is decoded for the KN7000 only. The
+		// KN6000 uses the same field offset but its value set (1/8 plus flag bits
+		// 0x0100/0x0800, written at 0x48492FF0) has not been mapped onto the KN7000's
+		// {04,08,10,20,40} release classes, so report "unknown" rather than guess --
+		// the tone generator then treats every voice as firmware-managed, which is safe
+		// because the KN6000 writes a universal key-up gate for all voice classes.
+		if (m_tg_one_chip)
+			return -1;
 		auto &sp = m_maincpu->space(AS_PROGRAM);
-		const offs_t rec = 0x500AF940 + slot * 0xB4;
+		const offs_t rec = m_tg_recbase + tg_slot(tg, tgaddr) * 0xB4;
 		if (!(sp.read_byte(rec + 0x08) & 0x80))
 			return -1;                                       // record not bound
 		return sp.read_word(rec + 0x02) & 0x7C;
@@ -564,11 +617,10 @@ private:
 
 	int32_t tg_pitch_resolve(int tg, uint16_t tgaddr)
 	{
-		if ((tgaddr & 0xFC0E) != 0x2400)
+		if ((tgaddr & m_tg_pitch_mask) != m_tg_pitch_cls)
 			return -1;                                       // not a pitch write
-		const int slot = ((tgaddr >> 4) & 0x3F) | (tg == 0 ? 0x40 : 0x00);
 		auto &sp = m_maincpu->space(AS_PROGRAM);
-		const offs_t rec = 0x500AF940 + slot * 0xB4;
+		const offs_t rec = m_tg_recbase + tg_slot(tg, tgaddr) * 0xB4;
 		if (!(sp.read_byte(rec + 0x08) & 0x80))
 			return -1;                                       // record not active
 		const uint16_t np16 = sp.read_word(rec + 0x0C);
@@ -2000,6 +2052,24 @@ void kn7000_state::kn6000(machine_config &config)
 	// worked, while running the KN7000 panel) -- but its MATRIX is almost entirely different:
 	// 88% of its populated button cells carry a different function than the KN7000 cell at the
 	// same seg/bit. Swap in the model's own panel so every button does what its silk says.
+	// The KN6000/KN6500 tone generator: ONE `D82398GD001` (IC213) with 64 voice slots
+	// behind the single 0x98050000 window, in place of the KN7000's two
+	// `C1BB00000709`. Same voice model, different register numbering -- recovered from
+	// the firmware's own note-on register blit at 0x484948CB; see kn6000_tonegen.h and
+	// notes/kn6000-tonegen-spec.md. The audio routing is inherited from kn7000()
+	// above, so only the decode changes.
+	config.device_remove("tonegen");
+	KN6000_TONEGEN(config, m_tonegen, 0);
+	m_tonegen->add_route(0, *m_dspbridge, 1.0, 0);
+	m_tonegen->add_route(1, *m_dspbridge, 1.0, 1);
+	// ...and the driver-side bindings the resolves need: the KN6000's library voice
+	// record array, its single-chip slot map, and its pitch register class.
+	m_tg_recbase    = 0x5027AF28;      // vs the KN7000's 0x500AF940 (same 0xB4 stride);
+	                                   // the per-SLOT copy, not the library array (see above)
+	m_tg_one_chip   = true;            // 64 slots, one window, no chip select
+	m_tg_pitch_cls  = 0x5000;          // plane 0x14 (KN7000: 0x2400)
+	m_tg_pitch_mask = 0xFC00;          // class low nibble carries pitch bits 16-17
+
 	config.device_remove("cpanel");
 	KN6000_CPANEL(config, m_cpanel);
 	m_cpanel->atn().set([this](int state) { if (state) intc_assert(0x1a); });
@@ -2015,6 +2085,19 @@ void kn7000_state::kn6000(machine_config &config)
 	// the SX-KN6000 service manual's own "Controls and functions" panel drawing (pp.5-6) and binds
 	// every button to the cell its silkscreen actually means.  See tools/gen_kn6000_lay.py.
 	config.set_default_layout(layout_kn6000);
+}
+
+// The KN6500 is the KN6000 machine with a different firmware BUILD. Same hardware
+// (one D82398GD001 tone generator, same 64 voices, same register numbering), but the
+// build's RAM layout shifted, so the driver-side voice-record binding has to follow it:
+// the per-TG-slot voice record sits at 0x5027AF1C rather than the KN6000's 0x5027AF28.
+// Both were located the same way, by the firmware's own note-on record copy (a 0x2D-word
+// block copy preceded by the destination base -- KN6000 at 0x48492F3D, KN6500 at
+// 0x48492E07), so this is a measured address, not an offset guess.
+void kn7000_state::kn6500(machine_config &config)
+{
+	kn6000(config);
+	m_tg_recbase = 0x5027AF1C;
 }
 
 // KN2400/KN2600 reuse the KN7000 machine, but their firmware self-loads its library
@@ -2217,8 +2300,13 @@ ROM_END
 SYST(2002, kn7000, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN7000", MACHINE_NOT_WORKING | MACHINE_IMPERFECT_SOUND)
 
 // KN6000 / KN6500 -- draft drivers reusing the KN7000 machine config (same MN10300 CPU, same 0x48400000 base).
-SYST(2000, kn6000, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
-SYST(2001, kn6500, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2000, kn6000, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6000", MACHINE_NOT_WORKING | MACHINE_IMPERFECT_SOUND)
+// KN6500: MACHINE_NO_SOUND, deliberately, even though it carries the same (correct) tone
+// generator as the KN6000. Its firmware emits ZERO tone-generator writes on a key-bed press
+// (live-probed), so its voice engine never starts -- a boot/enable-gate difference from the
+// KN6000, not a decode problem. The device and its voice-record binding are in place and
+// ready for the moment that gate is found; until then claiming sound would be a lie.
+SYST(2001, kn6500, 0,      0,      kn6500,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
 
 // KN2400 / KN2600 -- MN10300/MILK siblings sharing one firmware image (kn2600 = clone of kn2400).
 SYST(1998, kn2400, 0,      0,      kn2400,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
