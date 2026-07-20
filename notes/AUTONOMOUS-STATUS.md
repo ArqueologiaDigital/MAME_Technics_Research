@@ -5378,3 +5378,60 @@ DRAM[0xC07E] constrained to that domain is far tighter than the old "some value 
 Patch series: kn5000-25-program-data-wheel.patch REGENERATED (not duplicated), still
 LAST, and README.md now says explicitly to HOLD IT BACK until the firmware path is
 resolved. Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md
+
+--------------------------------------------------------------------------------
+TICK 2026-07-20 (later): KN5000 wheel -- SECOND PASS. Producer FOUND; the TEMPO
+                         acceptance test is FALSIFIED at firmware level.
+--------------------------------------------------------------------------------
+Felipe: wheel NOW ROTATES under real mouse drag (layout/Lua reuse CONFIRMED by
+human input -- that caveat is cleared) but does not change TEMPO.
+
+PRODUCER FOUND (was "unlocated"): it is NOT hand-written code -- that is why
+grepping for a routine writing event type 0xA9 found nothing. It is a ROM
+DESCRIPTOR, 0xED9B86 = {A9,21,00,FF}, entry 0x19 of the table at 0xED9C1E,
+copied into the event by the GENERIC emitter FileIO_ProcessMaskAndShift
+(0xFC580A) which stages {A9,21,delta,mask} at DRAM 0x8E7C. The byte pair A9 21
+occurs EXACTLY ONCE in the 2 MB image. Full chain: CP serial -> RX_MultiBytePacket
+(0xFC4A40) -> ring 0x200AD -> scan table 0x8E94 -> Encoder_ValueScanAndSync
+(0xFC5761) -> descriptor -> emitter -> queue 0xC039 -> dispatcher 0xFDB328
+(writes 0xC080=A9, 0xC07D=21, 0xC07E=signed delta) -> CtrlPanel_HandleSerialPort
+-> accel table 0xEA98E2 -> PostEvent 0x1C0001F -> GroupBox_HandleCursorNav.
+
+WHICH MESSAGE: only CPanel_RX_MultiBytePacket (types 6/7) can produce record id
+0x19, because only there is the record id a SYNTHESISED running index
+W = (header&0xC0)|(seed&0x1F). Button packets put the RAW HEADER there and header
+0x19 decodes as packet type 3 (Sync) -- structurally impossible. Type 2 headers
+are restricted to 0x1x/0x5x/0x9x/0xDx. This INDEPENDENTLY re-confirms the earlier
+negative: segment 0x0B maps to descriptor 0x0B = subcode 0x0E, NOT 0x21.
+Tried emitting `30 19 <delta>`: signature still did NOT fire. OPEN CATCH: for W
+with bit4 set (0x19 has it) the handler REPLACES the data byte with
+ENCODER_HANDLER_TABLE[1] = 0xFC6DEE = `ld HL,1; ret` = CONSTANT 1, so as
+disassembled that route cannot carry a variable signed delta. Either the panel
+uses a different seed/panel-bit combo or another route reaches the descriptor.
+That single framing detail is the whole remaining unknown.
+
+*** THE TEMPO ACCEPTANCE TEST IS WRONG (evidence, not excuse) ***
+ 1. GroupBox_HandleCursorNav (ui_control_panel.s:3847) keeps ONLY THE SIGN of the
+    accelerated value and re-dispatches whichever dial triple the FOCUSED SCREEN
+    registered (0x3EF52/56.., written by SetDialUpEvent 0xF9A579 /
+    SetDialDownEvent 0xF9A58A, ~100 callers). The +/-7 curve collapses to 1 bit.
+    The wheel is a GENERIC FOCUSED-WIDGET control, not a tempo control.
+ 2. NO ADDITIVE WRITER OF THE BPM EXISTS. BPM = 9-bit field at DRAM 0xFC62
+    (default 120, clamp 40..300), reload = 80,000,000/(BPM*64) via
+    SeqTimer_UpdateTempoReg (0xFCA318). Zero add/sub/inc/dec hits on 0xFC62 or its
+    mirror 0xBD3A across the whole 2 MB. Writers are ONLY: song/style load
+    (0xF20433), the clamp, and the inter-CPU/MIDI set (0xFCB42C). TAP TEMPO is a
+    button bit that never reaches the BPM word. Home-screen widget AcTempoBoxProc
+    (0xF9D256) handles 0x1C0001C/0C/0B/02/01 -- NOT the dial event 0x1C0001F.
+ => "turn wheel -> play-screen tempo digits change" is not a behaviour this
+    firmware has. The honest acceptance test is a FOCUSED PARAMETER FIELD on a
+    screen that called SetDialUpEvent/SetDialDownEvent.
+ CAVEAT NOT PAPERED OVER: PsParaBoxProc's parameter-change logic was not fully
+ traced, so a dedicated tempo EDIT screen registering a dial triple that reaches
+ 0xFC62 through the parameter system is not ruled out.
+
+DRIVER: all research scaffolding (ENCMODE port, send_raw_pair/send_multibyte/
+send_encoder_packet, osd_printf traces) REVERTED -- shipped tree is the clean
+committed version. build 0; -validate clean kn5000/kn7000/kn6000; kn5000 boots,
+zero layout-script errors. Patch kn5000-25 unchanged and still held back.
+Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md (ADDENDUM).
