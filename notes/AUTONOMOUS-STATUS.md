@@ -3842,3 +3842,54 @@ then the local-edit shadow module around 0x4C00C233..0x4C00C6BF
 and the resource-side region-1 fetchers 0x4844A434 / 0x4844ABF7 /
 0x484496CE / 0x48449790. Live-session questions unchanged (SUSTAIN vs
 0x50009D38; partrec bit12 panel trigger).
+
+## 2026-07-20: queue item D COMPLETE -- ★ THE 6-ITEM QUEUE IS DONE
+
+D1 (KN2400/KN2600 to first screen) shipped earlier as 94fb292. D2
+(KN6000/KN6500 text) is now RESOLVED AS A CHARACTERIZED, PROVEN
+BLOCKER -- commit 208d3fd, full write-up in notes/kn6000-kn6500-boot.md.
+
+- ★ THE TEXT SUBSYSTEM IS NOT BROKEN. Wrapper 0x484180DB runs 42x with
+  its gate *(0x50010384) open; the text drawer 0x48418112 runs 40x with
+  the same font ids (0/3/4/0x0B) the KN7000 uses. What is missing is the
+  FONT DATA.
+- ROOT CAUSE: the font init 0x48420312 copies five font-descriptor
+  pointers out of the TABLE-ROM HEADER at 0x48000200..0x210. KN7000
+  (table ROM dumped) => 48000240/4800E880/4801221C/480237A4/0. KN6000 =>
+  ASCII garbage, because the driver's "table" region is a PLACEHOLDER:
+  verified byte-identical to program bytes 0x200000+ (IK2 loaded twice).
+  IC13/IC14 (QSIGX3C16008/16007) have NEVER been dumped.
+- PROVEN by a diagnostic that is NOT and will NOT be shipped: injecting
+  the KN7000 table ROM's font region renders the KN6000 play screen with
+  complete text (snap/kn6000/0017.png). Cross-model mask-ROM substitution
+  would misrepresent the device -- integrity policy holds.
+- ★ TWO REUSABLE TOOLING LESSONS (both caused the previous pass's wrong
+  "the blitter never executes" reading):
+  (1) MN10300 movm-prologue functions are called at ENTRY+2 -- an entry
+      breakpoint never fires though the function runs constantly.
+  (2) A ROM search for an absolute address returns the OPERAND offset,
+      which is MID-INSTRUCTION; breakpointing it silently never hits.
+  Also: write-taps miss the compositor path -- dump the UI INDEX PLANE,
+  not the framebuffer.
+- KN6000 display model recovered (KN7000's, relocated): index plane
+  0x5020042C, companion 0x50225C2C, CLUT 0x5024F458, compositor
+  0x4C006EE0-0x4C006FAF.
+- NOT A RACE: five consecutive boots are byte-identical (SHA1 of decoded
+  pixels 280c82361f52); the drawer runs 40x every time. Item C's TM5
+  retirement did not affect this path. (One live run DID show text --
+  that was the injection experiment, not intermittency.)
+- No regressions: kn7000 boots to home with full text, kn2400 boots,
+  -validate clean on kn7000/kn6000/kn2400, binary published.
+
+OPEN for Felipe (ROM-manifest call, not an emulation change): the four
+kn6000/kn6500 "table" ROM_LOADs have NO emulation effect (blanking to
+0xFF gives a byte-identical screen) and imply IC13/IC14 dumps exist.
+Consider replacing them with NO_DUMP entries or dropping them for
+ROMREGION_ERASEFF. Driver comment now states the situation explicitly.
+
+QUEUE STATUS: A DONE, B DONE, C DONE, D DONE -- ★ FELIPE'S 6-ITEM
+SOFTWARE QUEUE IS COMPLETE. The parallel CONVERT track continues per the
+standing idle-time directive. Remaining PENDING-FELIPE items are
+unchanged: Phase C dump-kit go-ahead, SHARC upstream submission, DSP
+wet-level A/B by ear. NEW top blocker for the KN6xxx line: a hardware
+dump of IC13/IC14 (fonts, and likely the TG sample maps too).
