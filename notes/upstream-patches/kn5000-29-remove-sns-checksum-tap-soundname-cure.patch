@@ -1,0 +1,102 @@
+From b1cf7dbcc15d398b8214d3fdb23c6a614b615276 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 23:48:22 +0100
+Subject: [PATCH] =?UTF-8?q?kn5000:=20remove=20the=20SNS=20payload-checksum?=
+ =?UTF-8?q?=20write=20tap=20=E2=80=94=20THE=20"Sound=20Name=20Error"=20cur?=
+ =?UTF-8?q?e?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The KN5000 play screen now shows real voice names — RIGHT1 Piano, RIGHT2 Bigband
+Brass, LEFT Modern E.P.1 — on both a fresh (factory-init) NVRAM and a persisted
+one, with the SubCPU cooperative scheduler healthy (XSSP bounded ~0x40680 across
+40s, no stack leak).
+
+Root cause, found by building UPSTREAM mainline MAME's kn5000 as a third oracle:
+upstream WORKS (real names) despite being a minimal skeleton with a raw inter-CPU
+latch and none of this overlay's added HLE — because it has no SNS checksum tap.
+Our overlay installed a write tap on the MainCPU's DRAM[0xFFD4] that intercepted
+Boot_DisplayScreen's clearing of that word and substituted a payload checksum
+computed from the DRAM checksum regions (0xF180/0xF980) at that early instant.
+The firmware's SubCPU_Payload_Verify treats DRAM[0xFFD4]==0 as "no stored
+checksum -> do a fresh decompress-and-transfer of the SubCPU firmware payload";
+the tap's non-zero (and wrong-for-that-moment) value instead sent it down the
+"payload already valid, skip the transfer" path, so the SubCPU ran with no/stale
+firmware and never answered the MainCPU's 0x2B sound-name query -> "Sound Name
+Error", and its scheduler idled with no ready task and leaked its stack (INTT3)
+into the command handler. Removing the tap restores the fresh transfer.
+
+Isolation: with ONLY the tap removed (this overlay's tmp94c241, latch wrappers and
+audio HLE otherwise unchanged) all three names appear and XSSP stays bounded, so
+the earlier upstream-tmp94c241 / raw-latch / HLE-stub experiments are NOT needed.
+KN5000-only; -validate clean for the whole binary; KN7000 home unaffected
+(Concert Grand / Bigband Brass / Modern E.P.). Payload transfer path untouched
+(e6b4cf7 preserved). See side-quests/findings/kn5000_driver_findings.md.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/mame/matsushita/kn5000.cpp | 47 ++++++++++++----------------------
+ 1 file changed, 17 insertions(+), 30 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index f37ddec..99eb934 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -517,36 +517,23 @@ void kn5000_state::machine_start()
+ 	m_keybed_timer = timer_alloc(FUNC(kn5000_state::keybed_scan), this);
+ 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
+ 
+-	// SNS NMI emulation: intercept Boot_DisplayScreen's clearing of DRAM[0xFFD4]
+-	// and substitute the correct payload checksums computed from current DRAM state.
+-	// On real hardware, the NMI handler (EF08D4) computes these at power-off; we
+-	// compute them at boot time using the same one's-complement algorithm.
+-	m_maincpu->space(AS_PROGRAM).install_write_tap(
+-		0xFFD4, 0xFFD5,
+-		"sns_payload_checksum_w",
+-		[this](offs_t offset, u16 &data, u16 mem_mask)
+-		{
+-			// Only intercept the 16-bit zero-write from Boot_DisplayScreen
+-			if ((mem_mask & 0xFFFF) == 0xFFFF && data == 0x0000)
+-			{
+-				address_space &space = m_maincpu->space(AS_PROGRAM);
+-				// Region 1: DRAM[0xF180], 0x800 words — one's complement sum
+-				uint32_t sum = 0;
+-				for (int i = 0; i < 0x800; i++)
+-					sum = (sum + space.read_word(0xF180 + i * 2)) & 0xFFFF;
+-				const uint16_t cksum1 = ~sum & 0xFFFF;
+-				// Region 2: DRAM[0xF980], 0x280 words
+-				sum = 0;
+-				for (int i = 0; i < 0x280; i++)
+-					sum = (sum + space.read_word(0xF980 + i * 2)) & 0xFFFF;
+-				const uint16_t cksum2 = ~sum & 0xFFFF;
+-				data = cksum1;
+-				space.write_word(0xFFD2, cksum2);
+-				LOGMASKED(LOG_RESET, "SNS payload checksum: cksum1=0x%04X cksum2=0x%04X at PC=%06X\n",
+-					cksum1, cksum2, m_maincpu->pc());
+-			}
+-		});
+-
++	// NOTE: an earlier "SNS payload-checksum" write tap on DRAM[0xFFD4] was REMOVED
++	// here (2026-07-20) — it was the root cause of the KN5000 "Sound Name Error".
++	//
++	// Boot_DisplayScreen clears DRAM[0xFFD4] to 0 during boot.  The firmware's
++	// SubCPU_Payload_Verify treats a zero there as "no valid stored payload
++	// checksum" and therefore performs a FRESH decompress-and-transfer of the
++	// SubCPU firmware payload over the inter-CPU latch.  The old tap intercepted
++	// that clear and substituted a checksum computed from the DRAM checksum
++	// regions (0xF180/0xF980) as they stood at that early instant — before those
++	// regions hold the values the verify expects — so the firmware instead took
++	// the "payload already valid, skip the transfer" path.  The SubCPU then ran
++	// with no (or stale) firmware and never answered the MainCPU's 0x2B sound-name
++	// query: RIGHT1/RIGHT2/LEFT showed "Sound Name Error".  This also matches
++	// upstream mainline MAME, whose kn5000 has no such tap and boots to real voice
++	// names.  With the tap gone, the SubCPU receives its payload, its cooperative
++	// scheduler stays healthy (XSSP bounded, no stack leak), and it replies to the
++	// name query.  See side-quests/findings/kn5000_driver_findings.md.
+ }
+ 
+ void kn5000_state::machine_reset()
+-- 
+2.47.3
+

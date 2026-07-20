@@ -5471,6 +5471,32 @@ zero layout-script errors. Patch kn5000-25 unchanged and still held back.
 Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md (ADDENDUM).
 
 ================================================================================
+2026-07-20 tick -- ★ KN5000 "Sound Name Error" SOLVED (kn5000-29): SNS checksum tap was the cause
+================================================================================
+THIRD ORACLE settled it: built CURRENT upstream mainline MAME (upstream/master
+ecf0add) kn5000 -- it WORKS (real names) despite being a minimal skeleton (raw
+latch, stub HLE, no ComIF/DSP2, NO SNS tap). So the overlay was BREAKING boot.
+ROOT CAUSE: the overlay's SNS payload-checksum WRITE TAP on MainCPU DRAM[0xFFD4].
+It intercepted Boot_DisplayScreen's zero-clear and substituted a checksum computed
+too early (from DRAM 0xF180/0xF980 before they hold the expected values). The
+firmware reads DRAM[0xFFD4]==0 as "no stored checksum -> FRESH decompress+transfer
+of the SubCPU payload"; the tap's non-zero value sent it down "already valid ->
+SKIP transfer", so the SubCPU ran with no/stale firmware, never answered the 0x2B
+sound-name query, and its scheduler idled + leaked (the XSSP stack leak). Every
+prior symptom (leak, missing INTRX1 heartbeat, reply stopping) was downstream of
+the SubCPU never getting its firmware. FIX kn5000-29 (committed b1cf7db): REMOVE
+the tap. ISOLATION: with ONLY the tap removed (overlay tmp94c241/latch/HLE
+otherwise unchanged, kn5000-28 still applied) -> ALL THREE NAMES (RIGHT1 Piano /
+RIGHT2 Bigband Brass / LEFT Modern E.P.1, rhythm 16 Beat 1) on both fresh + persisted
+NVRAM; XSSP BOUNDED ~0x40680 across 40s (Lua poll of :subcpu XSSP; broken state
+descended to ~0x2D38A). The upstream-tmp94c241/raw-latch/HLE-stub experiments are
+NOT needed. -validate clean; KN7000 home unaffected (Concert Grand/Bigband Brass/
+Modern E.P.); payload path untouched (e6b4cf7 preserved). kn5000-28 retained
+(correct 02-17 alignment, not the cure). Three throwaway worktrees removed; all
+instrumentation reverted; clean rebuild + publish-binary shipped. Blog part written.
+Full write-up: KN7000/side-quests/findings/kn5000_driver_findings.md (2026-07-20 SOLVED).
+
+================================================================================
 2026-07-20 tick -- KN5000 ORACLE BISECT: premise corrected, regression fixed (kn5000-28), full cure still open
 ================================================================================
 Ran the oracle-timeline bisect. BIG CORRECTION: kn5000_aided_by_claude *tip*
