@@ -256,3 +256,12 @@ made native:
   12-native-fdep-se-imm-drc; full 12-stack `git am`s clean on pristine 957e9dec1b4, series-tree
   sharc.cpp+sharcdrc.cpp pass the C++20 -fsyntax-only check. README.md updated (10 → PR B; 11/12 =
   standalone DRC-crash fixes).
+
+## 2026-07-20: reverb-oracle baseline moved (intentional TG change)
+The 7-stage amplitude-envelope implementation (kn7000.cpp 4fa66d4, decoded from the
+ENVELOPE-screen sweep) changes the TG audio that feeds the oracle, so the money.lua WAV
+moved -- same precedent as the a53fdcb release-ramp fix. NEW baseline on the published
+binary (fresh cfg, pristine SD copy, recipe unchanged):
+**md5 c3b67ea711ce3c00f8ae2af1e07651cb, bit-identical across 2 runs**, non-silent,
+note decays to clean silence after release (no stuck notes). References to
+44b09b9d0eaae59d9a65e5b4f4e72ec0 above are the pre-envelope era.
