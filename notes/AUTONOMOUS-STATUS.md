@@ -4084,3 +4084,82 @@ module 0x4C00A7BE..0x4C00A900 (the +/-100 clamp + delta apply) which is
 small and directly user-visible; (4) still open: the channel-EG caller
 module 0x4C004DE4..0x4C005673. Live-session questions unchanged
 (SUSTAIN vs 0x50009D38; partrec bit12 panel trigger).
+
+## 2026-07-20b: CONVERT track -- DIGITAL DRAWBAR + LFO EDIT (588 -> 618)
+
+kn7000_disassembly 92e8372: 30 new functions, 618 total re-assemblable
+(244 region-1 + 374 lib), `make verify` byte-identical after a CLEAN
+rebuild, encoder fallback lines unchanged (5). All static RE; no MAME
+was run and nothing was built in ../kn7000_mame_build.
+
+The handoff's item (2) -- "name the actual edit parameters the user
+sees" -- is DONE for two screens, and the new mapping doc is
+notes/sound-edit-parameters.md.
+
+- ★★ DIGITAL DRAWBAR (0x4C00A1F7..0x4C00A90C, 20 functions) is fully
+  mapped. Per-part record 0x500082C8+part*0x1C: nine drawbar levels as
+  4-BIT nibbles packed three to a 12-bit word (+0x00/+0x02/+0x04),
+  PERCUSSIVE TONE as 2 bits (+0x06), the four value rows as SIGNED
+  OFFSET bytes (+0x08 ATTACK TIME, +0x09 RELEASE TIME, +0x0A
+  PERCUSSIVE TONE DECAY, +0x0B LEVEL), derived level words
+  +0x0C/+0x0E/+0x10, Jazz/Rock TYPE flag +0x19.
+  * The nibbles are NOT in display order: ROM scatter table 0x486D10A0
+    maps word0 -> slots 0,1,6 / word1 -> 3,5,8 / word2 -> 2,4,7. That
+    is why the five setters (0x4C00A5C7 / A5FB / A653 / A6AB / A702)
+    hand the drawbars over TWO AT A TIME in screen order, the fifth
+    carrying drawbar 9 plus the two percussive-tone bits.
+  * ★ The four value rows are DIFFERENTIAL. TgPartDrawbarOffsetApply
+    (0x4C00A7E5) writes the registration words into aux mod-unit fields
+    +0x04/+0x05 and then ADDS the offset bytes to the sound's existing
+    tone parameters: units 0..2 take perc decay/level into aux
+    +0x28/+0x2E (0..100), unit 3 takes attack into aux +0x19 (0..0x7F)
+    and release into aux +0x2A/+0x2C (0..100). So "ATTACK TIME +12"
+    means something different on every organ patch.
+  * The rows are indices, not values: setters look the nibble up in the
+    signed ladder 0x48586E84 (0..7,-8..-1) and scale it.
+  * ★ Item (3) of the handoff (the +/-100 offset applier) fell out here:
+    TgEditOffsetAddClamp 0x4C00A7BC/_entry 0x4C00A7BE =
+    clamp((u8)cur + (s8)delta, min, max), max 0x64 or 0x7F. It is the
+    SHARED applier behind every offset-style edit parameter, which is
+    where the manual's recurring "+/-100" ranges come from.
+
+- ★ LFO EDIT (0x4C00CCBA..0x4C00D0AC, 10 functions) structure settled.
+  TWELVE LFO groups really exist in ROM table 0x486D2ED5 (stride 0x27),
+  each with four (speed, depth, ...) triples at +0x00/+0x03/+0x06/+0x09
+  = the four destination pages (PITCH MOD / AMP / FILTER / PAN). The
+  group is the low nibble of tone-descriptor byte +0x44; jump table
+  0x48586F28 routes it to EIGHT different unpackers (the groups do not
+  share a layout), each writing an 8-byte block at +0x45 of the SOUND
+  EDIT record 0x500C0784+(part-0x10)*0x2C8 (parts 0x10..0x12 only,
+  matching TgPartLocalEditActivate's guard).
+  NOT settled, deliberately: which of the 8 block bytes is SPEED /
+  PHASE / WAVE / DELAY / DEPTH / TOUCH, and whether the bit7 toggle
+  (TgPartEditLfoFlagSet 0x4C00D047) is KEYSYNC or CONNECTION. Both need
+  a live session driving the screen -- guessing them would be exactly
+  the over-claim the docs must not make.
+
+- Handoff item (4), the region-1 fetchers 0x4844A434 / 0x4844ABF7 and
+  the bank classifier 0x485713DB / 0x48570C46, was RECONNOITRED but not
+  converted. Boundaries rescanned: the classifier's true prologue is
+  0x485713D6 (not the 0x485713DB call target) and its twin's is
+  0x48570C41 (not 0x48570C46). Both are bank SEARCH loops: for source
+  1,2,3,4(,5) ask 0x48448C0F(source) whether that source is present
+  (-> 0x4844A3D4), then a per-source lookup (0x48571585 / 0x485715F8 /
+  0x4857166B / ...) with the key (arg2<<16)|(arg1<<8)|arg0 -- i.e. a
+  MIDI-shaped bank-MSB / bank-LSB / program triple, matching the
+  SOUND EXPLORER screen's "[32.11-1" annotations. The returned source
+  number IS the class code 1..5 the resource fetchers use. Naming the
+  five banks still needs 0x4844A3D4 read out.
+
+NEXT (CONVERT track): (1) the region-1 bank classifier pair
+0x485713D6 / 0x48570C41 + the presence probe 0x4844A3D4 -- naming the
+five banks (factory / expansion / user / GM2 / drum?) is the last hop
+and would let the resource docs say WHICH banks exist; (2) the twelve
+near-identical SOUND EDIT flag refreshers 0x4C00EDE4..0x4C00F127 (they
+copy single bits out of the part-setting record 0x500B5340+part*0x54C
+into SOUND EDIT record bytes +0x4D/+0x4E/+0x4F/+0x51 -- uniform,
+cheap, and they finish section 3 of notes/sound-edit-parameters.md);
+(3) the remaining resource fetchers 0x4844A434 / 0x4844ABF7; (4) still
+open: the channel-EG caller module 0x4C004DE4..0x4C005673. Live-session
+questions: the LFO block byte roles + the KEYSYNC/CONNECTION toggle
+(above), SUSTAIN vs 0x50009D38, partrec bit12 panel trigger.
