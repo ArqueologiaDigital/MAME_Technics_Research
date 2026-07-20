@@ -3995,3 +3995,92 @@ cluster; (4) the channel-EG CALLER module 0x4C004DE4..0x4C005673, the
 last unconverted block before TgPartModRouteMaskSet. Live-session
 questions unchanged (SUSTAIN vs 0x50009D38; partrec bit12 panel
 trigger).
+
+## 2026-07-20: CONVERT track -- THE LOCAL-EDIT LIFECYCLE CLOSED (545 -> 588)
+
+The previous NEXT is DONE (kn7000_disassembly d46b232): 43 new
+functions, 588 total re-assemblable (244 region-1 + 344 lib), `make
+verify` byte-identical after a CLEAN rebuild, encoder fallback lines
+unchanged (5). All static RE; no MAME was run and nothing was built in
+../kn7000_mame_build.
+
+- Item (1) DONE: the 0x4C00C318..0x4C00C6BF gap = 25 leaf FIELD
+  ACCESSORS over the aux edit record. Get/set pairs for header +0x45/
+  +0x46/+0x47 and for mod-unit bytes +0x04/+0x05/+0x06/+0x19/+0x28/
+  +0x2A/+0x2C/+0x2E, plus bit7-only setters for +0x52/+0x56/+0x5A.
+  ★ The ranged ones are driven by the offset applier 0x4C00A820: read
+  the field, add a SIGNED delta, clamp through 0x4C00A7BE to +/-0x64
+  (100) or +/-0x7F, write back -- i.e. these are SOUND EDIT parameters
+  with a +/-100 display range, not internal state. The +0x19 setter
+  writes the low 7 bits and destroys bit7 by design.
+
+- ★★ Item (2) SETTLED -- THE WRITER EXISTS AND THE CHAIN IS CLOSED.
+  It was ~150 bytes past the end of the block the last tick scanned.
+  * SET: TgPartLocalEditActivate (0x4C00CB3F, entry 0x4C00CB44) sets
+    bit0 of 0x500C58AE+part*9, then TgPartAuxRecRefresh_entry,
+    TgPartEditStateDefaults_entry (seeds bytes 1..6 from ROM
+    0x486D3192) and a tone re-apply. Called LAZILY from the five SOUND
+    EDIT parameter APIs (0x4C00D047, 0x4C00E8D3, 0x4C00EAA0,
+    0x4C00F170, 0x4C01466C) -- the shadow springs into existence the
+    first time a parameter is touched. Its guard is
+    `if (0x10<=part<=0x12 || (flags&3)==3)` whose second half is DEAD
+    (falls into `if (flags&1) return`), so only parts 0x10/0x11/0x12
+    can ever be edited -- matching the three allocated aux records.
+  * SET/FOCUS: TgPartLocalEditSelect (0x4C00CBC2) parks the current
+    edit part in the global 0x500C59E0 (0xFF = none) and CLEARS the
+    outgoing part's flag -- moving SOUND EDIT focus discards the
+    previous part's edit.
+  * CLEAR: TgPartLocalEditClear (0x4C00E5C0) = 9 instructions, one
+    zero-byte store over the flag byte. Nothing is freed; the shadow
+    keeps the user's values but stops being consulted, and the next
+    activation rebuilds it from the resource record.
+  * ★ THE USER-VISIBLE LINK: the third caller is TgPartProgramSet
+    (0x4C03A6F2) -- ALREADY converted and already documented as
+    "rebuild through the 0x4C00E5C0/0x4C009C8D/... chain". That first
+    address was the local-edit clear all along. TgPartProgramSet is the
+    ONLY writer of a part's voice in the firmware, and it clears the
+    edit BEFORE reloading anything. So: assigning a voice to a part
+    unconditionally discards that part's sound edit. PANEL MEMORY
+    recall follows by elimination (a recall that restores part sounds
+    has no other route), but the panel->command hop itself was NOT
+    traced by hand -- the blog states the tight claim only.
+  * BONUS: TgPartProgramSet's only non-boot caller is the 0xC0 case of
+    a byte-stream interpreter at 0x4C003D4A reading the queue
+    0x500AD39C. It is MIDI-SHAPED: status & 0xF0 -> 0x90 note-on
+    (TgPartKeyEvent), 0xA0, 0xB0, 0xC0 program change, 0xD0, 0xE0,
+    0xF0 -- but over 34 PARTS, not 16 channels, with longer payloads.
+    The library's internal control path speaks MIDI's opcodes.
+
+- Item (3) PARTIALLY DONE: converted the region-1 VOICE-RESOURCE BANK
+  FETCHERS 0x484496C9 / 0x4844978B / 0x484497CB / 0x484497E0 /
+  0x48449810 / 0x4844981D / 0x4844982A / 0x4844987C. Five banks; class
+  code 0..4 (from 0x485713DB) -> descriptor 0x5003A5A4+class*4 + load
+  base 0x5003A554+class*4 (records stored as offsets, base re-added).
+  Descriptor +0x04/+0x14 = record directories, +0x18 = element table
+  (stride 0x23). Record geometry 0x8E = header 0x10 + 2 x 0x1C at +0x10
+  + 4 x 0x7A mod units at +0x54 -- exactly what the RAM shadow mirrors.
+  Overrides indirect through 0x484494E4(part, rec+0x0D or +0x11); 0xFF
+  = "no override" -> the *Default* leaves.
+  ★ BOUNDARY LESSON AGAIN: the first fetcher's true prologue is
+  0x484496C9, not the 0x484496CE call target the handoff listed.
+  0x4844A434 / 0x4844ABF7 were not reached this tick.
+
+- Item (4) NOT started (0x4C004DE4..0x4C005673).
+
+- BLOG: Part 59 written and committed (mame-blog a83b959), "One byte
+  decides whether your edit survives" -- the chain now supports a real
+  user-visible claim, with the PANEL MEMORY hop explicitly marked as
+  inference rather than traced.
+
+NEXT (CONVERT track): (1) the remaining region-1 resource fetchers
+0x4844A434 / 0x4844ABF7 and the classifier 0x485713DB / 0x48570C46 that
+produces the bank class code -- naming the five banks would let the
+resource docs say WHICH banks (factory / expansion / user?) exist;
+(2) the SOUND EDIT parameter APIs themselves, 0x4C00CCBA..0x4C00D0B0
+and 0x4C00E8xx..0x4C00F4xx, which are the callers that activate the
+shadow -- converting them would name the actual edit parameters and let
+the docs site describe SOUND EDIT properly; (3) the offset applier
+module 0x4C00A7BE..0x4C00A900 (the +/-100 clamp + delta apply) which is
+small and directly user-visible; (4) still open: the channel-EG caller
+module 0x4C004DE4..0x4C005673. Live-session questions unchanged
+(SUSTAIN vs 0x50009D38; partrec bit12 panel trigger).
