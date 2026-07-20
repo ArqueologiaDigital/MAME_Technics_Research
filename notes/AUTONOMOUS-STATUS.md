@@ -5469,3 +5469,36 @@ send_encoder_packet, osd_printf traces) REVERTED -- shipped tree is the clean
 committed version. build 0; -validate clean kn5000/kn7000/kn6000; kn5000 boots,
 zero layout-script errors. Patch kn5000-25 unchanged and still held back.
 Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md (ADDENDUM).
+
+================================================================================
+2026-07-20 tick -- KN5000 "Sound Name Error" ROOT-CAUSED (DSP2-wiring theory FALSIFIED)
+================================================================================
+Followed method (watchpoint, not assumption). Full write-up:
+KN7000/side-quests/findings/kn5000_driver_findings.md (dated 2026-07-20 later).
+
+CHAIN: payload transfer is CLEAN (SubCPU code 0x0F000-0x2DFFF byte-identical to
+ref kn5000_subprogram_v142.rom; only the runtime-cleared 0x2E000-0x2FFFF buffer
+differs) -> SubCPU boots, idles in `jr T,$` at 0x01FF1F (all work is IRQ-driven)
+-> at t~11.3 a CPU store with a CORRUPT destination pointer overwrites the
+SubCPU's own 0x60-0x7F command handler code at 0x035893 (0x035893: AF->00;
+ref handler = `af 06 23 ld XHL,(XSP+6)`) with 8-byte linked-list nodes that
+belong at ~0x1078 -> the play-screen sound-name query is delivered as a 0x60-0x7F
+command, MICRODMA_CH0_HANDLER dispatches CMD_DISPATCH_TABLE[3]=0x035893 via
+`call T,XWA` into the now-zeroed code -> NOP-sled -> SubCPU derails -> never
+answers name queries -> "Sound Name Error" on RIGHT1/RIGHT2/LEFT (screenshot).
+
+RULED OUT (do not re-chase): (a) DSP2/mn19413/ComIF/serial wiring -- mn19413 is a
+pure write-only sink, cannot change control flow; (b) audio HLE (kn5000_tonegen/
+kn5000_dsp1) -- stubbing 0x100000-0x11FFFF & 0x130000-0x13FFFF to noprw(0) STILL
+derails; (c) payload corruption; (d) undumped boot ROM (0 exec there in-window);
+(e) the micro-DMA engine -- instrumented tlcs900_process_hdma/software_dma: they
+fire ~65K x for the legit block-8 load (t~5) and NEVER after t=7.
+
+OPEN: the corrupt-pointer store (0x035888 vs ~0x1078). Next = log PC+regs in the
+shared tlcs900 WRMEM byte path when SubCPU writes 0x035888-98, disasm the store,
+walk the base register back to the wrong value; diff vs kn5000_aided_by_claude
+(which did NOT derail). Pragmatic "make it not derail" stop-gap possible.
+
+DRIVER: all my instrumentation REVERTED -- shipped tree is the clean committed
+version (kn5000.cpp + tmp94c241.cpp git-clean). No code fix committed (would be
+speculative). Did NOT touch cpanel/layout/slider_lib/kn5000-25 (wheel agent).
