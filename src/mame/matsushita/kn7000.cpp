@@ -384,10 +384,12 @@ public:
 				m_gain_depth = float(data & 0x7F) / 127.0f;   // TOTAL DEPTH (live-verified: 0x8500|depth)
 			if (tg == 1 && ch == 0x19 && reg == 0x08)
 				m_gain_chorus = float(data & 0x7F) / 127.0f;  // CHORUS send (0x8198 low7 = per-part depth;
-				                                              // 0x0B00 off -> 0; routes to chorus unit 4)
+				                                              // 0x0B00 off -> 0; routes to CHORUS unit 9 --
+				                                              // live-captured unit map, dsp-unit-roles-live-capture.md)
 			if (tg == 1 && ch == 0x09 && reg == 0x08)
 				m_gain_dsp = float(data & 0x7F) / 127.0f;     // SOUND DSP send (0x8098 low7 = per-part depth;
-				                                              // routes to SOUND-DSP unit 9, rec49)
+				                                              // routes to the per-part insert pool u2..u6;
+				                                              // RIGHT1 = unit 2 -- live-captured unit map)
 			if (tg == 1 && ch == 0x29 && reg == 0x08)
 				m_gain_multi = float(data & 0x7F) / 127.0f;   // MULTI send (0x8298 low7 = per-part MULTI DEPTH;
 				                                              // routes to MULTI unit 1, rec15 -- type-diff confirmed)
@@ -815,7 +817,7 @@ private:
 	sound_stream *m_stream = nullptr;
 	int32_t m_rx[RING][2] = { };   // TG -> DSP input
 	int32_t m_rxraw[RING][2] = { };// raw (un-send-scaled) TG mix, parallel to m_rx (chorus feed)
-	int32_t m_tx[RING][8] = { };   // DSP output ring: [0/1]=reverb(u0) [2/3]=chorus(u4) [4/5]=sound-dsp(u9) [6/7]=multi(u1)
+	int32_t m_tx[RING][8] = { };   // DSP output ring: [0/1]=reverb(u0) [2/3]=chorus(u9) [4/5]=sound-dsp(u2) [6/7]=multi(u1)
 	uint32_t m_rx_rd = 0, m_rx_wr = 0, m_tx_rd = 0, m_tx_wr = 0;
 	bool m_dsp_active = false;     // the DSP has started producing output
 	bool m_tx_primed = false;      // the output latency buffer has filled
@@ -1803,30 +1805,35 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	{
 		address_space &dm = m_dsp->space(AS_DATA);
 		auto sx24 = [](uint32_t v) -> int32_t { return int32_t(v << 8) >> 8; };
-		// Multi-unit routing: unit 0 = the audible REVERB path (wired, verified). CHORUS runs on
-		// unit 4 (rec06 modulated-delay; input 0xC36A, output 0xC34A per the kernel I4 walk) -- a
-		// non-FLAG3-gated effect that PROCESSES AND OUTPUTS when fed (proven: 664328, no rail); it
-		// was simply never fed. Feed it the TG send scaled by the per-part CHORUS send/depth (low
-		// byte of sub-TG reg 0x8198 = gain_chorus, 0 when chorus off) and sum its return into the
-		// DAC. GATED on chsend > 0 so with chorus OFF this is byte-for-byte the old unit-0-only path
-		// -> reverb output provably unchanged (A/B bit-identical). APPROXIMATION (labelled): the
-		// whole TG mix feeds the chorus bus at the send level (per-part separation needs per-bus TG
-		// output); correct for the common single-part case.
+		// Multi-unit routing per the LIVE-CAPTURED unit map (2026-07-20,
+		// notes/dsp-unit-roles-live-capture.md -- DspEffectSelect + download-port taps):
+		//   u0 = REVERB (in 0xC362/3, ret 0xC342/3)      -- wired, verified
+		//   u9 = CHORUS (in 0xC376/7, ret 0xC356/7)      -- the hold-CHORUS screen's unit
+		//   u1 = MULTI  (in 0xC364/5, ret 0xC344/5)      -- captured state (boot + PMEM recalls)
+		//   u2..u6 = per-part Sound-DSP insert pool; RIGHT1 = u2 (in 0xC366/7, ret 0xC346/7)
+		// (The previous wiring fed chorus to u4 and sound-dsp to u9 -- wrong-slot placeholders
+		// from the old I4-walk inference; each was audible only because the OTHER effect's
+		// algorithm happened to live there.) Feed each unit the TG send scaled by its per-part
+		// send/depth level and sum its return into the DAC. GATED on send > 0 so with the
+		// effect OFF this is byte-for-byte the unit-0-only path -> reverb output provably
+		// unchanged (A/B bit-identical). APPROXIMATION (labelled): the whole TG mix feeds each
+		// effect bus at the send level (per-part separation needs per-bus TG output); correct
+		// for the common single-part case.
 		const float chsend = m_tonegen->gain_chorus();
-		const float dspsend = m_tonegen->gain_dsp();   // SOUND DSP send (unit 9), same feed pattern
+		const float dspsend = m_tonegen->gain_dsp();   // SOUND DSP send (unit 2), same feed pattern
 		const float mulsend = m_tonegen->gain_multi(); // MULTI send (unit 1), same feed pattern
 		const int32_t oL = sx24(dm.read_dword(obuf));
 		const int32_t oR = sx24(dm.read_dword(obuf + 1));
 		int32_t cL = 0, cR = 0, dL = 0, dR = 0, mL = 0, mR = 0;
 		if (chsend > 0.0f)
 		{
-			cL = sx24(dm.read_dword(0xC34A));   // chorus (unit 4) return from last frame
-			cR = sx24(dm.read_dword(0xC34B));
+			cL = sx24(dm.read_dword(0xC356));   // chorus (unit 9) return from last frame
+			cR = sx24(dm.read_dword(0xC357));
 		}
 		if (dspsend > 0.0f)
 		{
-			dL = sx24(dm.read_dword(0xC356));   // SOUND DSP (unit 9) return from last frame
-			dR = sx24(dm.read_dword(0xC357));
+			dL = sx24(dm.read_dword(0xC346));   // SOUND DSP (unit 2) return from last frame
+			dR = sx24(dm.read_dword(0xC347));
 		}
 		if (mulsend > 0.0f)
 		{
@@ -1847,15 +1854,15 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		dm.write_dword(ibuf + 1, uint32_t(ir));
 		if (chsend > 0.0f)
 		{
-			// feed the chorus unit (4) its send: raw TG mix scaled by the chorus send level.
-			dm.write_dword(0xC36A, uint32_t(int32_t(double(rawl) * chsend)));
-			dm.write_dword(0xC36B, uint32_t(int32_t(double(rawr) * chsend)));
+			// feed the CHORUS unit (9) its send: raw TG mix scaled by the chorus send level.
+			dm.write_dword(0xC376, uint32_t(int32_t(double(rawl) * chsend)));
+			dm.write_dword(0xC377, uint32_t(int32_t(double(rawr) * chsend)));
 		}
 		if (dspsend > 0.0f)
 		{
-			// feed the SOUND DSP unit (9): raw TG mix scaled by its send level.
-			dm.write_dword(0xC376, uint32_t(int32_t(double(rawl) * dspsend)));
-			dm.write_dword(0xC377, uint32_t(int32_t(double(rawr) * dspsend)));
+			// feed the SOUND DSP insert (unit 2 = RIGHT1): raw TG mix scaled by its send level.
+			dm.write_dword(0xC366, uint32_t(int32_t(double(rawl) * dspsend)));
+			dm.write_dword(0xC367, uint32_t(int32_t(double(rawr) * dspsend)));
 		}
 		if (mulsend > 0.0f)
 		{
