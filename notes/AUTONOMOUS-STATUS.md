@@ -5,6 +5,18 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ☆ FELIPE WISH (2026-07-20): a PERMANENT, NON-HACKY boot-splash animation
+Long-term want (not urgent): display the boot-splash animation properly, not via a
+hack. Concrete state today: kn7000.cpp:872 has `TODO: Picture flash (splash / bitmap
+graphics), separate device.` and kn7000.cpp:1607-1608 note the boot-splash JPEG still
+decodes to GARBAGE (a separate software-JPEG-decoder bug) so it renders as noise. So
+the proper solution is two parts: (1) model the "Picture flash" as its own device
+(the bitmap/JPEG splash graphics ROM/flash), and (2) fix the firmware's software JPEG
+decoder path (or feed the decoded image) so the animation renders faithfully instead
+of noise. The KN5000 splash ("Technics KN-5000 IN COLOUR") already renders fine from
+its own firmware — this wish is about the KN7000 (and likely KN6000/6500) picture
+flash. Do it as a real device + decoder fix, no shortcuts.
+
 ## ★ KN5000 PRIORITY (Felipe 2026-07-20): SOUND NAME ERROR > tempo wheel
 To avoid subagents colliding on shared KN5000 files, Felipe set the order:
   1. TOP: fix the "Sound Name Error" (SubCPU reply path — the dropped DSP2/MN19413/ComIF/serial
