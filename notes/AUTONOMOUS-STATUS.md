@@ -9,11 +9,10 @@ cron tick.
 Execution order (driver-side items SERIALIZE on build-tree+display; launch next as each completes):
   A. [DONE 2026-07-20 — see the TICK below] r4-rA damp-bank RE + the two live DSP experiments
      (u8 DM dump, DspEffectSelect unit-role capture).
-  B. [NEXT] Per-part effect depth bank decode + fix (cold chorus/multi panel toggle audible).
-     ★ Item A feeds it directly: GUI CHORUS = unit 9 (NOT u7/u4), MULTI = u1, per-part
-     Sound-DSP = u2..u6 — the bridge's chorus/sound-dsp unit feeds are wrong-slot placeholders
-     (notes/dsp-unit-roles-live-capture.md).
-  C. INTC + timers into the mn10300 core (SIO's next of kin; also yields the real KN6000 timer).
+  B. [DONE 2026-07-20 — see the TICK below] Per-part effect depth bank decode + fix (cold
+     chorus/multi panel toggle audible) + bridge unit feeds rewired to the true units
+     (e1a94f4 + d316228; notes/per-part-depth-bank.md).
+  C. [NEXT] INTC + timers into the mn10300 core (SIO's next of kin; also yields the real KN6000 timer).
   D. Siblings: KN2400/2600 to first screen; KN6000/6500 text rendering (uses C's timer work).
   PARALLEL TRACK: [IN FLIGHT] CONVERT growth (tempo/TM5 chain, then TG note path) — kn7000_disassembly.
 Rules unchanged: commit-as-you-go, publish after rebuilds, visible video, blog per the proactive bar,
@@ -32,6 +31,38 @@ kn7000_disassembly/dsp/, docs-site page where warranted, and a PROACTIVE blog po
 records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP variants, EQ, kernel).
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
+
+## TICK 2026-07-20 — ★★★ QUEUE ITEM B COMPLETE: bridge feeds on the TRUE units + the per-part DEPTH BANK decoded (cold CHORUS/MULTI audible)
+Two commits (kn7000_mame e1a94f4 + d316228), built+validated+published, oracle clean:
+- **B1 — unit-feed rewiring**: the bridge's chorus/sound-dsp feeds were wrong-slot placeholders
+  (chorus fed u4 = an insert-pool slot, sound-dsp fed u9 = the actual CHORUS unit; each audible only
+  because the OTHER effect's algorithm lived in its slot). Rewired per the item-A live map: CHORUS ->
+  u9 (in 0xC376/7, ret 0xC356/7), SOUND-DSP -> u2 = RIGHT1 insert (in 0xC366/7, ret 0xC346/7);
+  MULTI (u1) + REVERB (u0) were already right. A/B (b1.lua): all four true returns nonzero
+  (u0 235304 / u1 87608 / u2 171845 / u9 526585), old u4 slot dead, DAC on-vs-off diff RMS 113.6,
+  control run clean. **Oracle UNCHANGED bit-stable x2 = c3b67ea711ce3c00f8ae2af1e07651cb** (u0
+  untouched; other feeds gated on send>0 = 0 in the oracle scenario) — no re-baseline.
+- **B2 — the depth bank DECODED (notes/per-part-depth-bank.md)**: group-0x20 = a PER-PART SEND
+  MATRIX, addr = 0x8000|row<<8|part<<4|reg (row0=reverb send [hi byte = dest part 3], row1=chorus
+  [hi 0x0B], row2=multi [**hi = ON marker 6/8**], row3=level/depth bank, regA=[direct|return]).
+  The old "depth channels 0x30-0x3B" = row3; "sends 0x06/0x07" = row0 of parts 6/7. Writer chain:
+  setter family 0x4C037D0F..0x4C037F10 (level low7 merged into shadow 0x500CE2B0+part*0x10; call
+  entries at movm+5 — bp the movm start NEVER fires; MDR = return addr in dbg printf), refresh
+  orchestrator 0x4C004E30 gating on PART RECORD 0x500B5340+idx*0x54C (+0 bit3 = the part-insert /
+  SOUND-DSP flag, +0x62&0xE000, +0x14; RIGHT1 = record 0x10, TG part 9). ★ COLD-TOGGLE ROOT CAUSE:
+  insert off -> the zero path (0x4C005083) writes LEVEL 0 to every row; the real depths live only
+  in the record (+0x15 chorus 0x3C, +0x16 multi 0x50); the ON state is hardware-visible ONLY via
+  the LED (chorus) / row2 base nibble (multi). Cold press = exactly 5 TG writes, zero DSP-port
+  writes (b2cap2.lua). DRIVER FIX (labeled HLE): multi = row2 ON-marker decode + default 0x50;
+  chorus = gate on the firmware's own CHORUS LED (new cpanel chorus_led()/multi_led() getters) +
+  default 0x3C; firmware-written levels always win. A/B (b2ab.lua): cold CHORUS+MULTI, NO
+  sound-dsp: u9 ret 520948 / u1 84484 / u2 stays 0; control all-zero; DAC diff RMS 76.9; demo
+  regression (env14.lua) + keybed + clean release pass. Oracle re-verified on the B2 build:
+  **c3b67ea711ce3c00f8ae2af1e07651cb x2** — unchanged.
+  RE gotchas recorded: MN10300 `call` enters setters at movm+5; watchpoint-reported pc = NEXT
+  instruction; Lua string.format eats %08X in debugger printf actions (escape as %%08X).
+  OPEN (deep): per-part audio separation (single-mix approximation stands); PART-SETTING depth
+  edits with insert OFF aren't tracked (firmware never emits them).
 
 ## TICK 2026-07-20 — ★★★ QUEUE ITEM A COMPLETE: r4..rB DECODED (pitch+filter EGs) + DSP UNIT MAP LIVE-CAPTURED + u8 EQ FLAT SETTLED
 Three live-instrumentation investigations in one pass (agent runs a1/a1b/a3/a3b.lua, logs in

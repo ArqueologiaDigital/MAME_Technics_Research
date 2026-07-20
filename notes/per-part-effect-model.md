@@ -1,5 +1,11 @@
 # KN7000 per-part effect model — the group-0x20 send/depth decode is INCOMPLETE (2026-07-13, night 21)
 
+## ★★ 2026-07-20: RESOLVED — read notes/per-part-depth-bank.md
+The "depth channels 0x30-0x3B + sends 0x06/0x07" gap below is DECODED: group-0x20 is a per-part
+send MATRIX (addr = 0x8000|row<<8|part<<4|reg; row3 = the depth bank, "ch 0x06/0x07" = row0 of
+parts 6/7). The cold-toggle silence root cause (depth application gated on the part-insert flag)
+is found and the driver now models it — cold CHORUS/MULTI panel toggles are audible (d316228).
+
 ## ⚠️ SUPERSEDED-IN-PART / READ notes/effect-multi-unit-routing.md FIRST (night 22 correction)
 The authoritative effects reference is **notes/effect-multi-unit-routing.md**. It already established
 (2026-07-12) that FOUR effects are routed + validated audible (reverb + chorus + SOUND-DSP + MULTI; DAC

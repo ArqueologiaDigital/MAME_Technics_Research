@@ -1,5 +1,12 @@
 # Per-effect DSP return routing — reverb-off no longer mutes the other effects
 
+## ★★ 2026-07-20 update: the cold-toggle "on-but-silent" question at the bottom of this note is
+## RESOLVED — see notes/per-part-depth-bank.md (depth application gated on the part-insert flag;
+## driver now substitutes the part-record default depths, cold CHORUS/MULTI audible, d316228).
+## Also: the "channels" here are really rows of a per-part matrix (ch19 = chorus row of insert
+## part 9, ch06 = multi-return part 6), and the bridge unit feeds were rewired to the TRUE units
+## (chorus u9 / sound-dsp u2, e1a94f4) per notes/dsp-unit-roles-live-capture.md.
+
 **Date:** 2026-07-12. Resolves the open faithfulness question flagged in
 effect-multi-unit-routing.md (chorus/multi/sound-DSP were scaled by the reverb return `gret`, so
 turning reverb off wrongly muted them).
