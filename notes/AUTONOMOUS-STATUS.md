@@ -5,6 +5,26 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ★ SIDE-QUESTS = THE IDLE-TIME TASK QUEUE (Felipe 2026-07-20)
+CHECK /home/fsanches/compartilhado/KN7000/side-quests/ REGULARLY — Felipe drops new tasks there.
+Structure (see its README.md): pending/ = to do, fully_solved/ = done, ignore_these_ones_for_now/ =
+parked, findings/ = one write-up per quest (flat; findings do NOT move when status changes).
+WORKFLOW per quest: do the work -> write/refresh findings/<quest>_findings.md -> `git mv` the brief
+from pending/ to fully_solved/ ONLY when genuinely delivered (an honest documented LIMITATION is fine;
+an open sub-task is not) -> update the README status section -> commit in the KN7000 repo.
+PRIORITY: side-quest pending/ items rank ABOVE generic CONVERT growth in idle time (they are Felipe's
+explicit asks). CONVERT remains the default when pending/ is empty.
+
+CURRENT pending/:
+  1. kn6000_and_kn6500_control_panels.txt — [IN FLIGHT this session] service manuals at
+     ~/compartilhado/KN6000/technics_sx-kn6000-sm.pdf + service_manual_kn6500.pdf; write the cpanel
+     declarations for both, refactoring to a shared base device + per-model derived classes (Felipe's
+     evidence: KN6000 buttons are accepted but MIS-MAPPED, while the TEMPO/PROGRAM wheel already works
+     perfectly => the protocol is shared, only the matrix differs). Decide whether KN6000/KN6500 share
+     one source file based on measured commonality.
+  2. floppy_disk_save_and_load_self_test.txt — BLOCKED on the unmodelled power-on keybed-matrix read
+     (B3+B4 entry combo); two routes in findings/floppy_self_test_findings.md.
+
 ## ★ FELIPE'S QUEUE 2026-07-20 (explicit: "do all of the autonomous software queue items")
 Execution order (driver-side items SERIALIZE on build-tree+display; launch next as each completes):
   A. [DONE 2026-07-20 — see the TICK below] r4-rA damp-bank RE + the two live DSP experiments
