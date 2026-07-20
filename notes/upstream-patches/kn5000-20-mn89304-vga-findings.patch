@@ -1,0 +1,54 @@
+From c47377b90deefe22cd2b35c6158388679e60221a Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Tue, 17 Mar 2026 16:36:11 +0000
+Subject: [PATCH 20/25] kn5000: Document MN89304 VGA controller findings
+
+Replace placeholder comments with detailed documentation of the
+MN89304 LCD controller based on firmware reverse engineering:
+4-bit RAMDAC, extended sequencer registers 0x06-0x13 with indirect
+register bank, non-standard CRTC registers 0x19/0x1A for LCD
+panel timing. A18 VRAM banking signal exists but firmware never
+uses it (confirmed by full disassembly analysis).
+
+(cherry picked from commit b840c4923c7b100942b7df74b0a99e0658afdeed)
+---
+ src/mame/matsushita/kn5000.cpp | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 6c2c90af411..f2552dd5314 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -44,10 +44,18 @@ protected:
+ 
+ DEFINE_DEVICE_TYPE(MN89304_VGA, mn89304_vga_device, "mn89304_vga", "MN89304 VGA")
+ 
+-// TODO: nothing is known about this, configured out of usage in here for now.
+-mn89304_vga_device::mn89304_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock): svga_device(mconfig, MN89304_VGA, tag, owner, clock)
++// MN89304: Matsushita/Panasonic VGA-compatible LCD controller.
++// Key differences from standard VGA:
++// - 4-bit RAMDAC (12-bit RGB, not 18-bit) — handled by palette_update() using pal4bit()
++// - Row offset has 8x multiplier — handled by offset() override
++// - Extended sequencer registers (0x06-0x13) for LCD panel timing via indirect bank (SEQ[9-C])
++// - Extended CRTC registers 0x19, 0x1A for LCD-specific configuration
++// - Region-dependent LCD timing variant selected via SEQ[0x0F]
++// - Firmware uses 320x240 8bpp indexed color, no hardware scrolling
++// Related chip: MN89306 used on Taito TZ board (taitotz.cpp)
++mn89304_vga_device::mn89304_vga_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
++	: svga_device(mconfig, MN89304_VGA, tag, owner, clock)
+ {
+-	// ...
+ }
+ 
+ void mn89304_vga_device::device_reset()
+@@ -753,7 +761,9 @@ void kn5000_state::kn5000(machine_config &config)
+ 	// 4 Mbit, M5M44265CJ6S
+ 	vga.set_vram_size(0x80000);
+ 	// iochrdy tied to refresh pin and SA19, A21 and A20 to GND
+-	// TODO: VGA.A18 signal, banking? From maincpu thru a T7W139F decoder
++	// VGA.A18 signal from maincpu thru T7W139F (IC12) decoder selects upper/lower 256KB
++	// bank of the 512KB VRAM chip. Firmware only uses the lower bank (~153KB for two
++	// 320x240 framebuffer pages), so banking is not emulated.
+ 
+ 	// audio hardware
+ 	SPEAKER(config, "lspeaker").front_left();

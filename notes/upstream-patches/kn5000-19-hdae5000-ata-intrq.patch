@@ -1,0 +1,108 @@
+From 0ffaa0d565f94ae0fb33b128969f2b72e1dc6523 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Tue, 17 Mar 2026 16:36:03 +0000
+Subject: [PATCH 19/25] kn5000: Wire ATA INTRQ from HDAE5000 extension to CPU
+ INT9
+
+Replace bare IDE_HARDDISK stub with proper ata_interface_device,
+wire INTRQ through extension slot IRQ callback to TLCS900_INT9.
+Split address map into CS0 (0x130010) and CS1 (0x130020) regions.
+Remove feature::DISK from unemulated features.
+
+(cherry picked from commit 031b2421faf2e39d02e37134d9854f14b1693a56)
+---
+ src/devices/bus/technics/kn5000/hdae5000.cpp | 35 +++++++++++---------
+ 1 file changed, 19 insertions(+), 16 deletions(-)
+
+diff --git a/src/devices/bus/technics/kn5000/hdae5000.cpp b/src/devices/bus/technics/kn5000/hdae5000.cpp
+index 6c3703b2a57..dba2edf0f1d 100644
+--- a/src/devices/bus/technics/kn5000/hdae5000.cpp
++++ b/src/devices/bus/technics/kn5000/hdae5000.cpp
+@@ -10,7 +10,8 @@
+ #include "emu.h"
+ #include "hdae5000.h"
+ 
+-#include "bus/ata/hdd.h"
++#include "bus/ata/atadev.h"
++#include "bus/ata/ataintf.h"
+ #include "machine/i8255.h"
+ 
+ namespace {
+@@ -18,7 +19,7 @@ namespace {
+ class hdae5000_device : public device_t, public device_kn5000_extension_interface
+ {
+ public:
+-	static constexpr feature_type unemulated_features() { return feature::DISK | feature::SOUND; }
++	static constexpr feature_type unemulated_features() { return feature::SOUND; }
+ 
+ 	hdae5000_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+ 
+@@ -32,21 +33,20 @@ protected:
+ 	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+ 
+ private:
+-	required_device<ide_hdd_device> m_hdd;
++	required_device<ata_interface_device> m_ata;
+ 	required_device<i8255_device> m_ppi;
+ 	required_memory_region m_rom;
+ 	memory_share_creator<uint16_t> m_ram;
+ 
+ 	void card_map(address_map &map) ATTR_COLD;
+ 
+-	uint8_t ata_r(offs_t offset);
+-	void ata_w(offs_t offset, uint8_t data);
++	void ata_intrq_w(int state);
+ };
+ 
+ hdae5000_device::hdae5000_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+ 	device_t(mconfig, HDAE5000, tag, owner, clock),
+ 	device_kn5000_extension_interface(mconfig, *this),
+-	m_hdd(*this, "hdd"),
++	m_ata(*this, "ata"),
+ 	m_ppi(*this, "ppi"),
+ 	m_rom(*this, "rom"),
+ 	m_ram(*this, "ram", 0x80000, ENDIANNESS_LITTLE)
+@@ -60,7 +60,11 @@ void hdae5000_device::program_map(address_space_installer &space)
+ 
+ void hdae5000_device::card_map(address_map &map)
+ {
+-	map(0x130000, 0x13001f).rw(FUNC(hdae5000_device::ata_r), FUNC(hdae5000_device::ata_w)); // ATA IDE at CN2
++	// ATA IDE at CN2 — 16-bit bus, registers at byte offsets (register N at base + N*2)
++	// CS0: registers 0-7 (data, error/features, sector count, LBA, status/command)
++	map(0x130010, 0x13001f).rw(m_ata, FUNC(ata_interface_device::cs0_r), FUNC(ata_interface_device::cs0_w));
++	// CS1: registers 0-7 (alt status/device control at offset 6 = address 0x13002C)
++	map(0x130020, 0x13002f).rw(m_ata, FUNC(ata_interface_device::cs1_r), FUNC(ata_interface_device::cs1_w));
+ 	map(0x160000, 0x160007).umask16(0x00ff).rw(m_ppi, FUNC(i8255_device::read), FUNC(i8255_device::write)); // parallel port interface (NEC uPD71055) IC9
+ 	map(0x200000, 0x27ffff).ram().share("ram"); // hsram: 2 * 256k bytes Static RAM @ IC5, IC6 (CS5)
+ 	map(0x280000, 0x2fffff).rom().region(m_rom, 0);
+@@ -68,22 +72,21 @@ void hdae5000_device::card_map(address_map &map)
+ 
+ /*
+ PPI pin 2 /CS = CN6 pin 59 PPIFCS
+-ATA pin 31 INTRQ = CN6 pin 58 HDINT
++ATA pin 31 INTRQ = CN6 pin 58 HDINT → routed to extension slot IRQ → TLCS900 INT9
+ */
+ 
+-uint8_t hdae5000_device::ata_r(offs_t offset)
++void hdae5000_device::ata_intrq_w(int state)
+ {
+-	return 0; //TODO: Implement-me!
+-}
+-
+-void hdae5000_device::ata_w(offs_t offset, uint8_t data)
+-{
+-	 //TODO: Implement-me!
++	// Forward ATA INTRQ (active high) through extension slot connector to main CPU INT9
++	kn5000_extension_connector *connector = downcast<kn5000_extension_connector *>(owner());
++	if (connector)
++		connector->irq_w(state);
+ }
+ 
+ void hdae5000_device::device_add_mconfig(machine_config &config)
+ {
+-	IDE_HARDDISK(config, m_hdd);
++	ATA_INTERFACE(config, m_ata).options(ata_devices, "hdd", nullptr, false);
++	m_ata->irq_handler().set(FUNC(hdae5000_device::ata_intrq_w));
+ 
+ 	/* Optional Parallel Port */
+ 	I8255(config, m_ppi); // actual chip is a NEC uPD71055 @ IC9

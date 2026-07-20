@@ -1,0 +1,218 @@
+From 2e9bf135f7f2783feedf29105512fedbd48bb3c9 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sat, 14 Mar 2026 14:57:58 +0000
+Subject: [PATCH 14/25] kn5000: Add DSP1 device stub (IC311 DS3613GF-3BA)
+
+Replace noprw stub at 0x130000 with a proper device class that accepts
+register writes via the register-indirect interface (address latch +
+data port). The firmware initializes 4 DSP channels with 0x20-byte
+register spacing.
+
+DSP2 (IC310 MN19413) remains handled by SubCPU GPIO port callbacks
+as it uses a serial bit-bang protocol rather than memory-mapped I/O.
+---
+ src/mame/matsushita/kn5000.cpp     |  8 ++-
+ src/mame/matsushita/kn5000_dsp.cpp | 78 ++++++++++++++++++++++++++++++
+ src/mame/matsushita/kn5000_dsp.h   | 61 +++++++++++++++++++++++
+ 3 files changed, 146 insertions(+), 1 deletion(-)
+ create mode 100644 src/mame/matsushita/kn5000_dsp.cpp
+ create mode 100644 src/mame/matsushita/kn5000_dsp.h
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 9a5e097bbbc..874dd3b010b 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -9,6 +9,7 @@
+ #include "emu.h"
+ 
+ #include "kn5000_cpanel.h"
++#include "kn5000_dsp.h"
+ #include "kn5000_tonegen.h"
+ 
+ #include "bus/technics/kn5000/hdae5000.h"
+@@ -120,6 +121,7 @@ public:
+ 		, m_fdc(*this, "fdc")
+ 		, m_floppy(*this, "fdc:0")
+ 		, m_tonegen(*this, "tonegen")
++		, m_dsp1(*this, "dsp1")
+ 		, m_com_select(*this, "COM_SELECT")
+ 		, m_extension(*this, "extension")
+ 		, m_keybed(*this, "KEY%u", 0U)
+@@ -147,6 +149,7 @@ private:
+ 	required_device<upd72067_device> m_fdc;
+ 	required_device<floppy_connector> m_floppy;
+ 	required_device<kn5000_tonegen_device> m_tonegen;
++	required_device<kn5000_dsp1_device> m_dsp1;
+ 	required_ioport m_com_select;
+ 	required_device<kn5000_extension_connector> m_extension;
+ 
+@@ -273,7 +276,8 @@ void kn5000_state::subcpu_mem(address_map &map)
+ 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status
+ 	map(0x120000, 0x12ffff).r(m_subcpu_latch, FUNC(generic_latch_8_device::read)); // @ IC22
+ 	map(0x120000, 0x12ffff).w(FUNC(kn5000_state::maincpu_latch_w)); // @ IC23 (logged wrapper)
+-	map(0x130000, 0x130003).noprw(); // DSP1 @ IC311 (stub)
++	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::addr_w));    // DSP1 @ IC311 register address
++	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // DSP1 @ IC311 register data
+ 	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
+ 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
+ 
+@@ -711,6 +715,8 @@ void kn5000_state::kn5000(machine_config &config)
+ 	SPEAKER(config, "lspeaker").front_left();
+ 	SPEAKER(config, "rspeaker").front_right();
+ 
++	KN5000_DSP1(config, m_dsp1, 0);
++
+ 	KN5000_TONEGEN(config, m_tonegen, 0);
+ 	m_tonegen->add_route(0, "lspeaker", 1.0);
+ 	m_tonegen->add_route(1, "rspeaker", 1.0);
+diff --git a/src/mame/matsushita/kn5000_dsp.cpp b/src/mame/matsushita/kn5000_dsp.cpp
+new file mode 100644
+index 00000000000..1f4f17fecb8
+--- /dev/null
++++ b/src/mame/matsushita/kn5000_dsp.cpp
+@@ -0,0 +1,78 @@
++// license:GPL2+
++// copyright-holders:Felipe Sanches
++/***************************************************************************
++
++    Technics KN5000 DSP1 Device (IC311 - DS3613GF-3BA)
++
++    Parallel bus digital signal processor used for audio effects.
++    Register-indirect interface: address latch + data port.
++
++    The firmware initializes 4 channels (0-3) with 0x20-byte spacing:
++      Channel N register base = N * 0x20 + 0x10
++      Each channel has 8 registers (0x10-0x17, 0x30-0x37, etc.)
++
++    Boot sequence writes test pattern 0x5A5A5A5A to all channels,
++    then configures initial values with 0x20 channel spacing.
++
++    DSP2 (IC310, MN19413) uses GPIO serial and is handled by
++    Sub CPU port callbacks in kn5000.cpp, not memory-mapped here.
++
++***************************************************************************/
++
++#include "emu.h"
++#include "kn5000_dsp.h"
++
++#define LOG_REG  (1U << 1)  // Register read/write
++
++#define VERBOSE (0)
++#include "logmacro.h"
++
++DEFINE_DEVICE_TYPE(KN5000_DSP1, kn5000_dsp1_device, "kn5000_dsp1", "KN5000 DSP1 (DS3613GF-3BA)")
++
++
++//**************************************************************************
++//  DSP1 DEVICE
++//**************************************************************************
++
++kn5000_dsp1_device::kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
++	: device_t(mconfig, KN5000_DSP1, tag, owner, clock)
++	, m_addr_latch(0)
++{
++}
++
++void kn5000_dsp1_device::device_start()
++{
++	save_item(NAME(m_addr_latch));
++	save_item(NAME(m_regs));
++}
++
++void kn5000_dsp1_device::device_reset()
++{
++	m_addr_latch = 0;
++	std::fill(std::begin(m_regs), std::end(m_regs), 0);
++}
++
++void kn5000_dsp1_device::addr_w(uint16_t data)
++{
++	m_addr_latch = data & 0xFF;
++	LOGMASKED(LOG_REG, "DSP1 addr latch: 0x%02X\n", m_addr_latch);
++}
++
++void kn5000_dsp1_device::data_w(uint16_t data)
++{
++	uint8_t val = data & 0xFF;
++	LOGMASKED(LOG_REG, "DSP1 reg[0x%02X] <- 0x%02X\n", m_addr_latch, val);
++
++	if (m_addr_latch < std::size(m_regs))
++		m_regs[m_addr_latch] = val;
++}
++
++uint16_t kn5000_dsp1_device::data_r()
++{
++	uint16_t val = 0;
++	if (m_addr_latch < std::size(m_regs))
++		val = m_regs[m_addr_latch];
++
++	LOGMASKED(LOG_REG, "DSP1 reg[0x%02X] -> 0x%02X\n", m_addr_latch, val);
++	return val;
++}
+diff --git a/src/mame/matsushita/kn5000_dsp.h b/src/mame/matsushita/kn5000_dsp.h
+new file mode 100644
+index 00000000000..f5931708140
+--- /dev/null
++++ b/src/mame/matsushita/kn5000_dsp.h
+@@ -0,0 +1,61 @@
++// license:GPL2+
++// copyright-holders:Felipe Sanches
++/***************************************************************************
++
++    Technics KN5000 DSP Devices
++
++    IC311 (DS3613GF-3BA) - "DSP1" - Parallel bus interface at 0x130000
++    IC310 (MN19413)      - "DSP2" - GPIO serial interface (bit-bang)
++
++    Both chips are digital signal processors used for audio effects
++    (reverb, chorus, delay, etc.). They are controlled by a shared
++    bytecode interpreter running on the Sub CPU.
++
++    DSP1 uses a register-indirect memory-mapped interface:
++      0x130000: register address byte
++      0x130002: register data byte
++
++    DSP2 uses GPIO bit-bang serial on Sub CPU ports:
++      PF.0 = SDA (data), PF.2 = SCLK (clock), PE.6 = CS2 (chip select)
++
++    This file provides stub device classes that accept register writes
++    without crashing the firmware. Full DSP emulation is a long-term goal.
++
++***************************************************************************/
++
++#ifndef MAME_MATSUSHITA_KN5000_DSP_H
++#define MAME_MATSUSHITA_KN5000_DSP_H
++
++#pragma once
++
++//**************************************************************************
++//  DSP1 - IC311 (DS3613GF-3BA) - Parallel bus interface
++//**************************************************************************
++
++class kn5000_dsp1_device : public device_t
++{
++public:
++	kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
++
++	// Memory-mapped register-indirect interface (SubCPU at 0x130000)
++	void addr_w(uint16_t data);    // 0x130000: register address latch
++	void data_w(uint16_t data);    // 0x130002: register data write
++	uint16_t data_r();             // 0x130002: register data read
++
++	// Number of channels and registers per channel
++	static constexpr int NUM_CHANNELS = 4;
++	static constexpr int REGS_PER_CHANNEL = 8;
++	static constexpr int CHANNEL_SPACING = 0x20;
++
++protected:
++	virtual void device_start() override ATTR_COLD;
++	virtual void device_reset() override ATTR_COLD;
++
++private:
++	uint8_t  m_addr_latch;                                    // Current register address
++	uint8_t  m_regs[NUM_CHANNELS * CHANNEL_SPACING];          // Register file (flat)
++};
++
++DECLARE_DEVICE_TYPE(KN5000_DSP1, kn5000_dsp1_device)
++
++#endif // MAME_MATSUSHITA_KN5000_DSP_H

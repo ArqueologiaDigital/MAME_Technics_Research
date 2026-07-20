@@ -1,0 +1,207 @@
+From 9b51df3ba07fd2673e73c5d531ae8716bcd3462a Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Tue, 17 Mar 2026 17:57:54 +0000
+Subject: [PATCH 21/25] kn5000: Fix tone gen voice hold timer and add Feature
+ Demo workaround
+
+Two fixes to address the Feature Demo stuck-parts issue when waveform
+ROMs are missing (IC304-IC306 are NO GOOD DUMP KNOWN):
+
+1. kn5000_tonegen.cpp: Fix hold timer not ticking for waveformless voices.
+   When wave_length == 0 (no waveform ROM data), the voice processing loop
+   skipped entirely via "continue", including the hold timer and release
+   counter decrements. This caused voices to get permanently stuck in the
+   active state after key-off, since hold_counter never reached 0. The
+   firmware's sequencer part bitmask (DRAM[0x10420]) depends on voice
+   status readback, so stuck voices prevented parts from clearing.
+   Now the hold timer and release counter tick even without waveform data.
+
+2. kn5000.cpp: Add periodic workaround for stuck accompaniment parts.
+   Even with the tone gen fix, 4 of 16 sequencer parts (accompaniment
+   patterns) remain permanently active because the accompaniment engine
+   never enters its playing state without functional waveform data.
+   A 1-second periodic timer checks for the specific stuck condition
+   (ui_state==0xE4, demo_timer==0, parts unchanged for 3+ seconds)
+   and force-clears the parts bitmask to unblock the demo. The condition
+   checks are narrow enough to be safe even with waveform ROMs present.
+
+(cherry picked from commit 53859375fd961d63ebd269abce4823d8c70bf127)
+---
+ src/mame/matsushita/kn5000.cpp         | 103 +++++++++++++++++++++++++
+ src/mame/matsushita/kn5000_tonegen.cpp |  19 ++++-
+ 2 files changed, 120 insertions(+), 2 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index f2552dd5314..8f1e1b52e26 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -193,6 +193,29 @@ private:
+ 	// computed from the current DRAM state (same algorithm as the ROM handler).
+ 	// This ensures SubCPU_Payload_Verify passes on every boot.
+ 
++	// Feature Demo sequencer workaround (when waveform ROMs are missing)
++	//
++	// Without waveform ROMs, the accompaniment sequencer never fully starts
++	// playing, so 4 of 16 sequencer parts remain permanently active. The
++	// firmware's FDemo_MultiGuardCheck requires all parts to be idle
++	// (DRAM[0x10420] == 0) before the demo can advance to the next song/slide.
++	// This creates a deadlock: the demo can't advance because parts are stuck,
++	// and the parts can't clear because the demo hasn't advanced.
++	//
++	// On real hardware with waveform ROMs present, the sequencer runs the
++	// accompaniment patterns to completion and parts clear naturally. This
++	// workaround detects the stuck condition and force-clears the parts after
++	// a timeout, simulating normal song completion.
++	emu_timer *m_demo_workaround_timer;
++	uint16_t m_demo_prev_parts;
++	int m_demo_stuck_counter;
++	TIMER_CALLBACK_MEMBER(demo_workaround_check);
++
++	// DRAM addresses for Feature Demo state (byte offsets in maincpu DRAM)
++	static constexpr uint32_t DRAM_UI_STATE     = 0x008D38; // UI state byte (0xE4 = Feature Presentation)
++	static constexpr uint32_t DRAM_SEQ_PARTS    = 0x010420; // Sequencer part active flags (16 bits)
++	static constexpr uint32_t DRAM_DEMO_TIMER   = 0x000D2F; // Demo timer countdown
++
+ 	void nvram2_init(nvram_device &device, void *data, size_t size);
+ 	void maincpu_mem(address_map &map) ATTR_COLD;
+ 	void subcpu_mem(address_map &map) ATTR_COLD;
+@@ -458,6 +481,8 @@ void kn5000_state::machine_start()
+ 	save_item(NAME(m_subcpu_latch_write_count));
+ 	save_item(NAME(m_maincpu_latch_write_count));
+ 	save_item(NAME(m_keybed_prev));
++	save_item(NAME(m_demo_prev_parts));
++	save_item(NAME(m_demo_stuck_counter));
+ 
+ 	m_extension->program_map(m_maincpu->space(AS_PROGRAM));
+ 
+@@ -497,6 +522,18 @@ void kn5000_state::machine_start()
+ 					cksum1, cksum2, m_maincpu->pc());
+ 			}
+ 		});
++
++	// Feature Demo workaround: periodic check for stuck sequencer parts.
++	// Without fully functional waveform ROMs (IC304-IC306 are NO GOOD DUMP
++	// KNOWN), the accompaniment sequencer can't complete song playback,
++	// leaving parts permanently active. The workaround detects this specific
++	// stuck condition and force-clears the parts to unblock the demo.
++	// The condition checks are narrow enough (ui_state==0xE4, timer==0,
++	// parts unchanged for 3s) that this is safe even with waveform ROMs.
++	m_demo_prev_parts = 0;
++	m_demo_stuck_counter = 0;
++	m_demo_workaround_timer = timer_alloc(FUNC(kn5000_state::demo_workaround_check), this);
++	m_demo_workaround_timer->adjust(attotime::from_seconds(1), 0, attotime::from_seconds(1));
+ }
+ 
+ void kn5000_state::machine_reset()
+@@ -506,6 +543,72 @@ void kn5000_state::machine_reset()
+ 
+ 	// Clear keybed state
+ 	std::fill(std::begin(m_keybed_prev), std::end(m_keybed_prev), 0);
++
++	// Reset demo workaround state
++	m_demo_prev_parts = 0;
++	m_demo_stuck_counter = 0;
++}
++
++
++TIMER_CALLBACK_MEMBER(kn5000_state::demo_workaround_check)
++{
++	// Feature Demo stuck-parts workaround (only active when waveform ROMs are missing).
++	//
++	// Without waveform ROMs (IC304-IC307, NO GOOD DUMP KNOWN), the accompaniment
++	// sequencer cannot complete song playback. This leaves 4 of 16 sequencer parts
++	// permanently active in DRAM[0x10420]. The firmware's FDemo_MultiGuardCheck
++	// requires this bitmask to be 0 before advancing the demo. On real hardware,
++	// the accompaniment patterns play to completion and parts clear naturally.
++	//
++	// Detection: UI state == 0xE4 (Feature Presentation), demo timer == 0 (song
++	// phase complete), parts non-zero and unchanged for 3+ consecutive checks (3s).
++	// Action: force-clear the sequencer parts bitmask to unblock the demo.
++
++	address_space &space = m_maincpu->space(AS_PROGRAM);
++
++	uint8_t ui_state = space.read_byte(DRAM_UI_STATE);
++	if (ui_state != 0xE4)
++	{
++		m_demo_stuck_counter = 0;
++		m_demo_prev_parts = 0;
++		return;
++	}
++
++	uint8_t demo_timer = space.read_byte(DRAM_DEMO_TIMER);
++	if (demo_timer != 0)
++	{
++		m_demo_stuck_counter = 0;
++		m_demo_prev_parts = 0;
++		return;
++	}
++
++	uint16_t parts = space.read_word(DRAM_SEQ_PARTS);
++	if (parts == 0)
++	{
++		// Parts already clear — nothing to do
++		m_demo_stuck_counter = 0;
++		m_demo_prev_parts = 0;
++		return;
++	}
++
++	if (parts == m_demo_prev_parts)
++	{
++		m_demo_stuck_counter++;
++		if (m_demo_stuck_counter >= 3)
++		{
++			// Parts have been stuck for 3+ seconds — force-clear
++			logerror("Feature Demo workaround: clearing stuck sequencer parts 0x%04X "
++				"(missing waveform ROMs)\n", parts);
++			space.write_word(DRAM_SEQ_PARTS, 0);
++			m_demo_stuck_counter = 0;
++			m_demo_prev_parts = 0;
++		}
++	}
++	else
++	{
++		m_demo_prev_parts = parts;
++		m_demo_stuck_counter = 1;
++	}
+ }
+ 
+ void kn5000_state::nvram2_init(nvram_device &device, void *data, size_t size)
+diff --git a/src/mame/matsushita/kn5000_tonegen.cpp b/src/mame/matsushita/kn5000_tonegen.cpp
+index 693512054c9..ce3e71ba271 100644
+--- a/src/mame/matsushita/kn5000_tonegen.cpp
++++ b/src/mame/matsushita/kn5000_tonegen.cpp
+@@ -471,10 +471,14 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
+ 		for (int ch = 0; ch < NUM_VOICES; ch++)
+ 		{
+ 			voice_t &v = m_voice[ch];
+-			if (!v.active || v.wave_length == 0)
++			if (!v.active)
+ 				continue;
+ 
+-			// Handle hold timer (keeps voice "active" for firmware status queries)
++			// Handle hold timer (keeps voice "active" for firmware status queries).
++			// This must run even when wave_length == 0 (no waveform ROM data),
++			// otherwise voices get stuck permanently active and the firmware's
++			// sequencer part bitmask (DRAM[0x10420]) never clears — blocking
++			// the Feature Demo from advancing past song initialization.
+ 			if (!v.key_on && v.hold_counter > 0)
+ 			{
+ 				v.hold_counter--;
+@@ -485,6 +489,17 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
+ 				}
+ 			}
+ 
++			// For voices without waveform data (missing ROMs), tick the release
++			// counter here since the sample rendering loop below won't run.
++			if (v.wave_length == 0)
++			{
++				if (v.release_counter > 0)
++					v.release_counter--;
++				if (!v.key_on && v.hold_counter == 0 && v.release_counter == 0)
++					v.active = false;
++				continue;
++			}
++
+ 			// Read current sample with linear interpolation (16.16 fixed point)
+ 			uint32_t sample_pos = v.wave_offset >> 16;
+ 			uint32_t frac = v.wave_offset & 0xFFFF;

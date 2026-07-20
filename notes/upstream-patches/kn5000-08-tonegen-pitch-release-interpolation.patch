@@ -1,0 +1,419 @@
+From 282e79c340080088810e708a454eb9f08d036d71 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sat, 14 Mar 2026 13:13:40 +0000
+Subject: [PATCH 08/25] Tone generator: pitch control, release envelope, linear
+ interpolation; fix FDC dskchg polarity
+
+Tone generator improvements:
+- Expand voice register array from 28 to 32 (fixes dropped group 0xA writes)
+- Add pitch control from group 1 registers (reg[4] as 16-bit pitch increment)
+- Add 50ms release envelope on key-off for smooth fade-out
+- Add 2-second hold timer for voice status readback (firmware compatibility)
+- Add linear interpolation between samples for smoother playback
+- Resolve waveform on register strobe (group 0, bank 2 with bit 15 set)
+- Trigger param updates on pitch (group 1) and pan (group 4) register writes
+- Fix pan direction (L/R were swapped)
+- Use IC307 exclusively for waveform lookup (only dumped ROM chip)
+
+FDC fix: invert dskchg_r() for active-low hardware signal. The firmware
+checks Port D bit 6 before issuing any FDC commands and was seeing "no disk"
+because MAME's dskchg_r() is active-high while the hardware expects active-low.
+---
+ src/mame/matsushita/kn5000.cpp         |   6 +-
+ src/mame/matsushita/kn5000_tonegen.cpp | 212 +++++++++++++++++--------
+ src/mame/matsushita/kn5000_tonegen.h   |  12 +-
+ 3 files changed, 160 insertions(+), 70 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index c985f3c7b4c..9a5e097bbbc 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -538,9 +538,11 @@ void kn5000_state::kn5000(machine_config &config)
+ 	//   bit 6 (input) = FD.I/O
+ 	m_maincpu->portd_write().set(m_fdc, FUNC(upd72067_device::reset_w)).bit(0);
+ 	m_maincpu->portd_read().set([this] {
+-		// bit 6 = FD.I/O: floppy disk change signal (active low)
++		// bit 6 = FD.I/O: floppy disk change signal (active low on hardware)
++		// MAME's dskchg_r() returns 1 = "change detected" (active high), so
++		// invert for the active-low hardware signal the firmware expects.
+ 		floppy_image_device *floppy = m_floppy->get_device();
+-		return floppy ? (floppy->dskchg_r() << 6) : 0x40;
++		return floppy ? ((!floppy->dskchg_r()) << 6) : 0x00;
+ 	});
+ 
+ 
+diff --git a/src/mame/matsushita/kn5000_tonegen.cpp b/src/mame/matsushita/kn5000_tonegen.cpp
+index d67c49b6fb9..e9413b42ae4 100644
+--- a/src/mame/matsushita/kn5000_tonegen.cpp
++++ b/src/mame/matsushita/kn5000_tonegen.cpp
+@@ -98,6 +98,8 @@ void kn5000_tonegen_device::device_start()
+ 		save_item(NAME(m_voice[i].pitch_step), i);
+ 		save_item(NAME(m_voice[i].volume_l), i);
+ 		save_item(NAME(m_voice[i].volume_r), i);
++		save_item(NAME(m_voice[i].release_counter), i);
++		save_item(NAME(m_voice[i].hold_counter), i);
+ 	}
+ }
+ 
+@@ -159,7 +161,7 @@ void kn5000_tonegen_device::data_w(uint16_t data)
+ 	if (ch >= NUM_VOICES)
+ 		return;
+ 
+-	// Map group+bank to register index (28 regs = 7 groups x 4 banks)
++	// Map group+bank to register index (32 regs = 8 groups x 4 banks)
+ 	// Groups: 0x00, 0x01, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0A
+ 	static const int group_map[] = { 0, 1, -1, -1, 2, 3, 4, -1, 5, 6, 7, -1, -1, -1, -1, -1 };
+ 	int gi = (group < 16) ? group_map[group] : -1;
+@@ -171,7 +173,7 @@ void kn5000_tonegen_device::data_w(uint16_t data)
+ 	}
+ 
+ 	int reg_idx = gi * 4 + bank;
+-	if (reg_idx >= 28)
++	if (reg_idx >= voice_t::NUM_REGS)
+ 		return;
+ 
+ 	m_voice[ch].regs[reg_idx] = data;
+@@ -192,8 +194,17 @@ void kn5000_tonegen_device::data_w(uint16_t data)
+ 		}
+ 	}
+ 
+-	// Volume registers (group 8, banks 0-1)
+-	if (group == 8)
++	// Waveform pointer latch: group 0, bank 2 with bit 15 SET triggers load,
++	// then bit 15 CLEAR finalizes. We resolve on the SET strobe.
++	if (group == 0 && bank == 2 && (data & 0x8000))
++		resolve_waveform(ch);
++
++	// Pitch registers (group 1)
++	if (group == 1)
++		update_pitch(ch);
++
++	// Volume/pan registers (group 4 for pan, group 8 for volume)
++	if (group == 4 || group == 8)
+ 		update_voice_params(ch);
+ }
+ 
+@@ -208,8 +219,9 @@ uint16_t kn5000_tonegen_device::data_r()
+ 
+ 	if (ch < NUM_VOICES && group == 0 && bank == 0)
+ 	{
+-		// Return voice status: 0x8100 if active, 0x7E00 if idle
+-		return m_voice[ch].active ? 0x8100 : 0x7E00;
++		// Return voice status: 0x8100 if key-on or still in hold phase, 0x7E00 if idle
++		const voice_t &v = m_voice[ch];
++		return (v.key_on || v.hold_counter > 0) ? 0x8100 : 0x7E00;
+ 	}
+ 
+ 	return 0;
+@@ -265,17 +277,17 @@ void kn5000_tonegen_device::update_voice_params(int ch)
+ 	uint16_t pan_val = v.regs[8]; // group 4, bank 0
+ 	int pan = (pan_val >> 8) & 0xFF; // 0-255, 128=center
+ 
+-	// Apply pan law (simple linear for now)
++	// Apply pan law (simple linear)
+ 	int vol_l, vol_r;
+ 	if (pan <= 128)
+ 	{
+-		vol_r = vol;
+-		vol_l = vol * pan / 128;
++		vol_l = vol;
++		vol_r = (pan == 0) ? 0 : vol * pan / 128;
+ 	}
+ 	else
+ 	{
+-		vol_l = vol;
+-		vol_r = vol * (255 - pan) / 127;
++		vol_l = vol * (255 - pan) / 127;
++		vol_r = vol;
+ 	}
+ 
+ 	v.volume_l = int16_t(std::min(vol_l, 255) * 128); // scale to 0-32640
+@@ -283,90 +295,121 @@ void kn5000_tonegen_device::update_voice_params(int ch)
+ }
+ 
+ 
+-void kn5000_tonegen_device::process_key_on(int ch)
++void kn5000_tonegen_device::update_pitch(int ch)
+ {
+ 	voice_t &v = m_voice[ch];
+ 
+-	LOGMASKED(LOG_KEY, "tonegen: KEY ON voice %d\n", ch);
++	// Pitch from register group 1 (regs 4-7)
++	// reg[4] = group 1, bank 0: pitch coarse (firmware init: 0x017F)
++	// reg[5] = group 1, bank 1: pitch fine (firmware init: 0x7F7F)
++	//
++	// The tone generator chip uses these to set the playback rate.
++	// Interpretation: reg[4] high byte = octave/coarse, low byte = note fraction.
++	// The firmware's ToneGen_Calc_Pitch adds 0x24 (36) to MIDI note before
++	// computing the pitch value, suggesting the register encodes a note number
++	// offset from some base.
++	//
++	// For now, treat reg[4] as a 16-bit pitch increment where 0x0100 = native
++	// sample rate (1.0x). This gives range 0x0001 (~1/256x) to 0xFFFF (~256x).
++	uint16_t pitch_reg = v.regs[4]; // group 1, bank 0
++	if (pitch_reg == 0)
++	{
++		v.pitch_step = 0x10000; // default: native rate
++		return;
++	}
+ 
+-	v.key_on = true;
+-	v.active = true;
+-	v.wave_offset = 0;
++	// Scale: reg[4] = 0x0100 → pitch_step = 0x10000 (1.0x native)
++	// This maps each unit of reg[4] to 256 units of pitch_step
++	v.pitch_step = uint32_t(pitch_reg) << 8;
++
++	LOGMASKED(LOG_VOICE, "tonegen: voice %d pitch reg=0x%04X step=0x%08X\n",
++		ch, pitch_reg, v.pitch_step);
++}
+ 
+-	// Determine which waveform to play
+-	// The firmware writes voice parameters that include waveform selection.
+-	// For now, use a simple mapping: voice register group 0, bank 2 (reg[2])
+-	// contains waveform index info with bit 15 as key-on flag.
+-	uint16_t wave_info = v.regs[2]; // group 0, bank 2
+-	int wave_idx = wave_info & 0x7F; // lower bits = waveform index (0-197)
+ 
++void kn5000_tonegen_device::resolve_waveform(int ch)
++{
++	voice_t &v = m_voice[ch];
++
++	// Waveform pointer from registers:
++	// reg[1] = group 0, bank 1 (0x040): waveform pointer low
++	// reg[2] = group 0, bank 2 (0x080): waveform pointer high (bit 15 = latch strobe)
++	//
++	// Together these form a waveform address. The exact encoding depends on
++	// the hardware — for now use reg[2] bits 6:0 as a waveform index (0-127)
++	// within the appropriate ROM chip, and reg[1] for fine addressing.
++	uint16_t wave_lo = v.regs[1]; // group 0, bank 1
++	uint16_t wave_hi = v.regs[2]; // group 0, bank 2
++
++	// Extract waveform index from low 7 bits of wave_hi (bit 15 is strobe)
++	int wave_idx = wave_hi & 0x7F;
+ 	if (wave_idx >= NUM_INDEX_ENTRIES)
+ 		wave_idx = 0;
+ 
+-	// Determine which ROM chip to use based on wave_idx
+-	// The firmware selects the ROM chip through some parameter, but for now
+-	// distribute across all 4 chips: idx 0-49→IC304, 50-99→IC305, 100-149→IC306, 150-197→IC307
+-	uint32_t chip_base;
+-	int local_idx;
+-	if (wave_idx < 50)
+-	{
+-		chip_base = 0x000000; // IC304
+-		local_idx = wave_idx;
+-	}
+-	else if (wave_idx < 100)
+-	{
+-		chip_base = 0x400000; // IC305
+-		local_idx = wave_idx - 50;
+-	}
+-	else if (wave_idx < 150)
+-	{
+-		chip_base = 0x800000; // IC306
+-		local_idx = wave_idx - 100;
+-	}
+-	else
+-	{
+-		chip_base = 0xC00000; // IC307
+-		local_idx = wave_idx - 150;
+-	}
++	// Determine ROM chip from reg[1] or wave_hi bits 8-14
++	// For now, only IC307 is dumped (offset 0xC00000). Use it for all lookups
++	// until other ROMs are available.
++	uint32_t chip_base = 0xC00000; // IC307
+ 
+-	// Read index entry for this chip
++	// Read index entry from chip's index table
+ 	if (m_waveform_data && m_waveform_size > chip_base + NUM_INDEX_ENTRIES * 4)
+ 	{
+ 		const uint8_t *idx = m_waveform_data + chip_base;
+-		uint16_t wave_off_raw = idx[local_idx * 4 + 2] | (idx[local_idx * 4 + 3] << 8);
++		uint16_t wave_off_raw = idx[wave_idx * 4 + 2] | (idx[wave_idx * 4 + 3] << 8);
+ 		uint32_t wave_byte_offset = uint32_t(wave_off_raw) * 16;
+ 
+ 		v.wave_start = chip_base + wave_byte_offset;
+ 
+-		// Determine length: distance to next waveform entry or end
++		// Determine length from next index entry
+ 		uint32_t next_off;
+-		if (local_idx + 1 < NUM_INDEX_ENTRIES)
++		if (wave_idx + 1 < NUM_INDEX_ENTRIES)
+ 		{
+-			uint16_t next_raw = idx[(local_idx + 1) * 4 + 2] | (idx[(local_idx + 1) * 4 + 3] << 8);
++			uint16_t next_raw = idx[(wave_idx + 1) * 4 + 2] | (idx[(wave_idx + 1) * 4 + 3] << 8);
+ 			next_off = uint32_t(next_raw) * 16;
+ 		}
+ 		else
+ 		{
+-			next_off = wave_byte_offset + 512; // default 256 samples
++			next_off = wave_byte_offset + 512;
+ 		}
+ 
+ 		if (next_off > wave_byte_offset)
+-			v.wave_length = (next_off - wave_byte_offset) / 2; // convert bytes to samples
++			v.wave_length = (next_off - wave_byte_offset) / 2; // bytes to samples
+ 		else
+-			v.wave_length = 256; // fallback
++			v.wave_length = 256;
+ 
+-		// Pitch: determined by MIDI note number. The firmware encodes pitch in
+-		// voice parameters. For now use a default of native sample rate.
+-		// Register group 1, bank 0 (reg[4]) may contain pitch info.
+-		v.pitch_step = 0x10000; // 1.0 = native pitch (will be refined later)
++		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d start=0x%06X len=%d (lo=0x%04X hi=0x%04X)\n",
++			ch, wave_idx, v.wave_start, v.wave_length, wave_lo, wave_hi);
+ 	}
+ 	else
+ 	{
+-		// No waveform data available — voice stays active but silent
+ 		v.wave_start = 0;
+ 		v.wave_length = 0;
+ 	}
++}
++
++
++void kn5000_tonegen_device::process_key_on(int ch)
++{
++	voice_t &v = m_voice[ch];
++
++	LOGMASKED(LOG_KEY, "tonegen: KEY ON voice %d\n", ch);
++
++	v.key_on = true;
++	v.active = true;
++	v.wave_offset = 0;
++	v.release_counter = 0;
++	v.hold_counter = 0;
+ 
++	// Waveform should already be resolved from the register strobe sequence
++	// (resolve_waveform called when group 0, bank 2 written with bit 15 set).
++	// If not yet resolved, try now as fallback.
++	if (v.wave_length == 0)
++		resolve_waveform(ch);
++
++	// Update pitch from current registers
++	update_pitch(ch);
++
++	// Update volume/pan from current registers
+ 	update_voice_params(ch);
+ }
+ 
+@@ -378,9 +421,12 @@ void kn5000_tonegen_device::process_key_off(int ch)
+ 	LOGMASKED(LOG_KEY, "tonegen: KEY OFF voice %d\n", ch);
+ 
+ 	v.key_on = false;
+-	// Voice remains active briefly for release envelope
+-	// For now, stop immediately
+-	v.active = false;
++
++	// Start release envelope: ~50ms fade-out at 48kHz = 2400 samples
++	v.release_counter = 2400;
++
++	// Hold voice active for firmware status readback (2 seconds at 48kHz)
++	v.hold_counter = 96000;
+ }
+ 
+ 
+@@ -411,17 +457,51 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
+ 			if (!v.active || v.wave_length == 0)
+ 				continue;
+ 
+-			// Read current sample (16.16 fixed point position)
++			// Handle hold timer (keeps voice "active" for firmware status queries)
++			if (!v.key_on && v.hold_counter > 0)
++			{
++				v.hold_counter--;
++				if (v.hold_counter == 0 && v.release_counter == 0)
++				{
++					v.active = false;
++					continue;
++				}
++			}
++
++			// Read current sample with linear interpolation (16.16 fixed point)
+ 			uint32_t sample_pos = v.wave_offset >> 16;
++			uint32_t frac = v.wave_offset & 0xFFFF;
++
+ 			if (sample_pos >= v.wave_length)
+ 			{
+-				// Loop back to start (simple loop for now)
++				// Loop back to start
+ 				v.wave_offset = 0;
+ 				sample_pos = 0;
++				frac = 0;
+ 			}
+ 
+ 			uint32_t byte_pos = v.wave_start + sample_pos * 2;
+-			int32_t sample = read_waveform_sample(byte_pos);
++			int32_t s0 = read_waveform_sample(byte_pos);
++
++			// Linear interpolation with next sample
++			int32_t s1;
++			if (sample_pos + 1 < v.wave_length)
++				s1 = read_waveform_sample(byte_pos + 2);
++			else
++				s1 = read_waveform_sample(v.wave_start); // wrap to loop start
++
++			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
++
++			// Apply release envelope
++			if (v.release_counter > 0)
++			{
++				sample = sample * int32_t(v.release_counter) / 2400;
++				v.release_counter--;
++				if (v.release_counter == 0 && v.hold_counter == 0)
++				{
++					v.active = false;
++				}
++			}
+ 
+ 			// Apply volume
+ 			mix_l += (sample * v.volume_l) >> 15;
+diff --git a/src/mame/matsushita/kn5000_tonegen.h b/src/mame/matsushita/kn5000_tonegen.h
+index 8c958d8f134..34d961574a5 100644
+--- a/src/mame/matsushita/kn5000_tonegen.h
++++ b/src/mame/matsushita/kn5000_tonegen.h
+@@ -61,8 +61,10 @@ private:
+ 	// Voice state
+ 	struct voice_t
+ 	{
+-		// Register banks (28 registers = 7 groups x 4 banks)
+-		uint16_t regs[28];
++		// Register banks (32 registers = 8 groups x 4 banks)
++		// Groups: 0x00, 0x01, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0A
++		static constexpr int NUM_REGS = 32;
++		uint16_t regs[NUM_REGS];
+ 
+ 		// Playback state
+ 		bool     active;        // Voice is producing sound
+@@ -73,6 +75,8 @@ private:
+ 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
+ 		int16_t  volume_l;      // Left channel volume (0-32767)
+ 		int16_t  volume_r;      // Right channel volume (0-32767)
++		uint32_t release_counter; // Samples remaining in release phase (0 = no release)
++		uint32_t hold_counter;  // Samples remaining in hold phase after key-off
+ 
+ 		void reset()
+ 		{
+@@ -85,6 +89,8 @@ private:
+ 			pitch_step = 0x10000; // 1.0 = native pitch
+ 			volume_l = 0;
+ 			volume_r = 0;
++			release_counter = 0;
++			hold_counter = 0;
+ 		}
+ 	};
+ 
+@@ -96,9 +102,11 @@ private:
+ 	};
+ 
+ 	void update_voice_params(int ch);
++	void update_pitch(int ch);
+ 	void process_key_on(int ch);
+ 	void process_key_off(int ch);
+ 	int16_t read_waveform_sample(uint32_t byte_offset) const;
++	void resolve_waveform(int ch);
+ 
+ 	// State
+ 	uint16_t     m_addr_latch;           // Current register address

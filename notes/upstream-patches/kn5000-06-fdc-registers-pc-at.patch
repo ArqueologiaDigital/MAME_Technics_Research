@@ -1,0 +1,38 @@
+From fa540345a40baf58090c4cf73292729ca530e687 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sat, 14 Mar 2026 11:59:46 +0000
+Subject: [PATCH 06/25] kn5000: Fix FDC register mapping to match PC AT layout
+
+The UPD72068GF FDC in the KN5000 uses PC AT-compatible register
+offsets (MSR at offset 4, FIFO at offset 5), not the UPD72065
+layout (MSR at 0, FIFO at 1). With 16-bit bus doubling, the
+firmware accesses MSR at 0x110008 and FIFO at 0x11000A.
+
+Previously, .m(upd72067_device::map) placed registers at offsets
+0/1 (addresses 0x110000/0x110001), so the firmware's reads at
+0x110008 hit unmapped space and FDC commands never executed.
+
+Replace the device map with explicit register addresses matching
+the firmware's access pattern, confirmed by disassembly of
+FDC_Read_Status (0x110008) and FDC_Read_Data (0x11000A).
+---
+ src/mame/matsushita/kn5000.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index fa5055daec9..628aa957c2d 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -265,7 +265,11 @@ void kn5000_state::maincpu_mem(address_map &map)
+ {
+ 	map(0x000000, 0x0fffff).ram().share("nvram1"); // 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3)
+ 	// Button states and LED control are handled via serial protocol to cpanel HLE device
+-	map(0x110000, 0x11ffff).m(m_fdc, FUNC(upd72067_device::map)); // Floppy Controller @ IC208
++	// Floppy Controller @ IC208 (UPD72068GF)
++	// Register layout matches PC AT (smc37c78-style) with offsets doubled for 16-bit data bus:
++	// MSR at offset 4 (address 0x110008), FIFO at offset 5 (address 0x11000A)
++	map(0x110008, 0x110008).rw(m_fdc, FUNC(upd72067_device::msr_r), FUNC(upd72067_device::auxcmd_w));
++	map(0x11000a, 0x11000a).rw(m_fdc, FUNC(upd72067_device::fifo_r), FUNC(upd72067_device::fifo_w));
+ 	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
+ 	map(0x140000, 0x14ffff).r(m_maincpu_latch, FUNC(generic_latch_8_device::read)); // @ IC23
+ 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)

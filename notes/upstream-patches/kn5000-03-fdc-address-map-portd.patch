@@ -1,0 +1,60 @@
+From f6684c6b35ec68074bc078e8cc66262452ee127b Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Sat, 14 Mar 2026 11:14:47 +0000
+Subject: [PATCH 03/25] kn5000: Wire up FDC address mapping and PORT D bit 6
+
+- Map FDC registers at 0x110000-0x11FFFF using upd72067_device::map
+  (was commented out with incorrect upd765a_device reference)
+- Map FDC DMA acknowledge at 0x120000-0x12FFFF using dma_r/dma_w
+  (was commented out with write-only dack_w reference)
+- Implement PORT D bit 6 read (FD.I/O) as floppy disk change signal
+  from the drive connected to fdc:0 (was marked TODO)
+- Add m_floppy member for direct floppy connector access
+---
+ src/mame/matsushita/kn5000.cpp | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 8663ad50752..993a9031586 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -116,6 +116,7 @@ public:
+ 		, m_maincpu_latch(*this, "maincpu_latch")
+ 		, m_subcpu_latch(*this, "subcpu_latch")
+ 		, m_fdc(*this, "fdc")
++		, m_floppy(*this, "fdc:0")
+ 		, m_com_select(*this, "COM_SELECT")
+ 		, m_extension(*this, "extension")
+ 		, m_keybed(*this, "KEY%u", 0U)
+@@ -141,6 +142,7 @@ private:
+ 	required_device<generic_latch_8_device> m_maincpu_latch;
+ 	required_device<generic_latch_8_device> m_subcpu_latch;
+ 	required_device<upd72067_device> m_fdc;
++	required_device<floppy_connector> m_floppy;
+ 	required_ioport m_com_select;
+ 	required_device<kn5000_extension_connector> m_extension;
+ 
+@@ -263,8 +265,8 @@ void kn5000_state::maincpu_mem(address_map &map)
+ {
+ 	map(0x000000, 0x0fffff).ram().share("nvram1"); // 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3)
+ 	// Button states and LED control are handled via serial protocol to cpanel HLE device
+-	//FIXME: map(0x110000, 0x11ffff).m(m_fdc, FUNC(upd765a_device::map)); // Floppy Controller @ IC208
+-	//FIXME: map(0x120000, 0x12ffff).w(m_fdc, FUNC(upd765a_device::dack_w)); // Floppy DMA Acknowledge
++	map(0x110000, 0x11ffff).m(m_fdc, FUNC(upd72067_device::map)); // Floppy Controller @ IC208
++	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
+ 	map(0x140000, 0x14ffff).r(m_maincpu_latch, FUNC(generic_latch_8_device::read)); // @ IC23
+ 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)
+ 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
+@@ -551,7 +553,11 @@ void kn5000_state::kn5000(machine_config &config)
+ 	//   bit 0 (output) = FDCRST
+ 	//   bit 6 (input) = FD.I/O
+ 	m_maincpu->portd_write().set(m_fdc, FUNC(upd72067_device::reset_w)).bit(0);
+-	// TODO: bit 6!
++	m_maincpu->portd_read().set([this] {
++		// bit 6 = FD.I/O: floppy disk change signal (active low)
++		floppy_image_device *floppy = m_floppy->get_device();
++		return floppy ? (floppy->dskchg_r() << 6) : 0x40;
++	});
+ 
+ 
+ 	// MAINCPU PORT E:

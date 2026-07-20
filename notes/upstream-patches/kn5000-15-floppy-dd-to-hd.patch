@@ -1,0 +1,39 @@
+From 273d27916a87d2c01e753988b1ea368c93ff0070 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 16 Mar 2026 02:26:00 +0000
+Subject: [PATCH 15/25] kn5000: Fix floppy drive type from DD to HD
+
+The KN5000 uses 3.5" HD (1.44MB) floppy disks for firmware updates and
+data storage. Change the default floppy type from FLOPPY_35_DD (720K)
+to FLOPPY_35_HD (1.44MB), and add HD as the primary option while
+keeping DD available.
+
+Tested with v10 firmware update disk image - firmware successfully
+enters DISK MENU, detects the floppy, and issues FDC Read Data
+commands with correct 1.44MB HD parameters (18 sectors/track, 512B
+sectors).
+---
+ src/mame/matsushita/kn5000.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 874dd3b010b..4487b5d5071 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -286,6 +286,7 @@ void kn5000_state::subcpu_mem(address_map &map)
+ 
+ static void kn5000_floppies(device_slot_interface &device)
+ {
++	device.option_add("35hd", FLOPPY_35_HD);
+ 	device.option_add("35dd", FLOPPY_35_DD);
+ }
+ 
+@@ -692,7 +693,7 @@ void kn5000_state::kn5000(machine_config &config)
+ 	// m_fdc->??_wr_callback().set_inputline(m_maincpu, TLCS900_INT7);
+ 
+ 
+-	FLOPPY_CONNECTOR(config, "fdc:0", kn5000_floppies, "35dd", floppy_image_device::default_mfm_floppy_formats).enable_sound(true);
++	FLOPPY_CONNECTOR(config, "fdc:0", kn5000_floppies, "35hd", floppy_image_device::default_mfm_floppy_formats).enable_sound(true);
+ 
+ 	/* Extension port */
+ 	KN5000_EXTENSION(config, m_extension, kn5000_extension_intf, nullptr);

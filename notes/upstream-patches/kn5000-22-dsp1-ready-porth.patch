@@ -1,0 +1,38 @@
+From 5387dfb2754ed6d538a37427476b7002530a8eb7 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Tue, 17 Mar 2026 21:35:12 +0000
+Subject: [PATCH 22/25] kn5000: Connect DSP1 ready signal to SubCPU Port H bit
+ 0
+
+The firmware's DSP_Read_Status routine reads SubCPU Port H bit 0 to
+check if DSP1 (IC311, DS3613GF-3BA) is ready to accept commands. With
+the port unconnected, reads returned 0 (busy), causing every DSP
+operation to spin through 8,000 timeout iterations before giving up.
+
+On real hardware, the DSP chip asserts its ready line after accepting
+a command. Since the DSP1 stub device already accepts all register
+writes immediately, set PH.0 permanently high to reflect this.
+
+(cherry picked from commit 4b1f9c6cea64b6ad5b4681850244fb1a126020f9)
+---
+ src/mame/matsushita/kn5000.cpp | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 8f1e1b52e26..e9f163f35ba 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -824,6 +824,13 @@ void kn5000_state::kn5000(machine_config &config)
+ 			});
+ 
+ 
++	// SUBCPU PORT H:
++	//   bit 0 (input) = DSP1 (IC311) ready signal (active high)
++	//   On real hardware, the DSP asserts this line after accepting a command.
++	//   Always ready since the DSP1 stub accepts all register writes immediately.
++	m_subcpu->porth_read().set_constant(0x01);
++
++
+ 	GENERIC_LATCH_8(config, m_maincpu_latch); // @ IC23
+ 	m_maincpu_latch->data_pending_callback().set_inputline(m_maincpu, TLCS900_INT0);
+ 

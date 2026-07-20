@@ -1,0 +1,102 @@
+From bcb8be6b819643317d3c7dc4f51d513adfc73884 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 16 Mar 2026 04:22:11 +0000
+Subject: [PATCH 16/25] kn5000: Wire Timer 0 output (TO0) to FDC Terminal Count
+
+Add a devcb_write_line callback (to0_callback) to the TMP94C241 CPU
+device that fires when Timer 0 matches. The callback pulses
+ASSERT_LINE then CLEAR_LINE, generating the Terminal Count signal
+that the UPD72067 FDC needs to complete multi-sector read commands.
+
+Wire this in the KN5000 driver: m_maincpu->to0_callback() -> FDC tc_line_w.
+
+Without TC, the FDC Read Data command hangs after transferring the
+requested sectors because the controller never receives the signal
+to finalize the operation.
+---
+ src/devices/cpu/tlcs900/tmp94c241.cpp | 9 +++++++++
+ src/devices/cpu/tlcs900/tmp94c241.h   | 6 ++++++
+ src/mame/matsushita/kn5000.cpp        | 5 +++--
+ 3 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.cpp b/src/devices/cpu/tlcs900/tmp94c241.cpp
+index dba66faabce..7ec41f62352 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241.cpp
+@@ -102,6 +102,7 @@ tmp94c241_device::tmp94c241_device(const machine_config &mconfig, const char *ta
+ 	m_an_read(*this, 0),
+ 	m_port_read(*this, 0),
+ 	m_port_write(*this),
++	m_to0_cb(*this),
+ 	m_port_latch{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+ 	m_port_control{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+ 	m_port_function{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+@@ -162,6 +163,7 @@ void tmp94c241_device::device_resolve_objects()
+ 	{
+ 		m_level[i] = CLEAR_LINE;
+ 	}
++	// m_to0_cb is auto-resolved by devcb framework
+ }
+ 
+ //-------------------------------------------------
+@@ -1436,6 +1438,13 @@ void tmp94c241_device::tlcs900_handle_timers()
+ 								m_int_reg[interrupt] |= interrupt_mask;
+ 								m_check_irqs = 1;
+ 							}
++
++							// Timer 0 match pulses the TO0 output callback
++							if (timer_index == 0)
++							{
++								m_to0_cb(ASSERT_LINE);
++								m_to0_cb(CLEAR_LINE);
++							}
+ 						}
+ 						else
+ 						{
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.h b/src/devices/cpu/tlcs900/tmp94c241.h
+index c41a7896c46..cced34c8b34 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.h
++++ b/src/devices/cpu/tlcs900/tmp94c241.h
+@@ -120,6 +120,9 @@ public:
+ 	void rxd1(int state) { m_serial[1]->rxd(state); }
+ 	void sioclk1(int state) { m_serial[1]->sioclk(state); }
+ 
++	// Timer output callbacks
++	auto to0_callback() { return m_to0_cb.bind(); }
++
+ protected:
+ 	// device_t implementation
+ 	virtual void device_config_complete() override ATTR_COLD;
+@@ -239,6 +242,9 @@ private:
+ 	// I/O Ports
+ 	devcb_read8::array<NUM_PORTS> m_port_read;
+ 	devcb_write8::array<NUM_PORTS> m_port_write;
++
++	// Timer output callbacks
++	devcb_write_line m_to0_cb;
+ 	uint8_t m_port_latch[NUM_PORTS];
+ 	uint8_t m_port_control[NUM_PORTS];
+ 	uint8_t m_port_function[NUM_PORTS];
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 4487b5d5071..ee750ee1bca 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -508,7 +508,8 @@ void kn5000_state::kn5000(machine_config &config)
+ 	// Interrupt 9: HDDINT
+ 	// Interrupt A <edge>: ~CPSCK "Control Panel Serial Clock"
+ 	// ~NMI: SNS
+-	// TC0: FDCTC
++	// TC0: FDCTC — Timer 0 match output pulses FDC Terminal Count
++	m_maincpu->to0_callback().set(m_fdc, FUNC(upd72067_device::tc_line_w));
+ 
+ 
+ 	// MAINCPU PORT 7:
+@@ -689,7 +690,7 @@ void kn5000_state::kn5000(machine_config &config)
+ 	// Interrupt 7: FDC.I/O
+ 	//
+ 	// m_fdc->hdl_wr_callback().set_inputline(m_maincpu, TLCS900_INT6);
+-	// TODO: tc coming from maincpu TC0 signal
++	// TC is wired above via m_maincpu->to0_callback()
+ 	// m_fdc->??_wr_callback().set_inputline(m_maincpu, TLCS900_INT7);
+ 
+ 

@@ -57,6 +57,8 @@ ln -sf "$HERE/src/mame/matsushita/kn_tonegen.cpp"            "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/kn_tonegen.h"              "$BUILD_TREE/src/mame/matsushita/kn_tonegen.h"
 ln -sf "$HERE/src/mame/matsushita/kn7000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn7000_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn7000_tonegen.h"
+ln -sf "$HERE/src/mame/matsushita/kn6000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn6000_tonegen.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn6000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn6000_tonegen.h"
 ln -sf "$HERE/src/mame/matsushita/kn7000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn7000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn7000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn_cpanel.cpp"             "$BUILD_TREE/src/mame/matsushita/kn_cpanel.cpp"
@@ -64,9 +66,28 @@ ln -sf "$HERE/src/mame/matsushita/kn_cpanel.h"               "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
+# KN5000 (SX-KN5000): the driver itself is upstream, but a large body of work is not --
+# the tone generator (IC303), the DSP1 stub (IC311), FDC/UART/MIDI wiring, the SNS NMI
+# payload checksum and the Program data wheel. Those live here as overlay files exactly
+# like the KN7000 ones, so this repo stays the single source of truth for every Technics
+# model. See notes/upstream-patches/README.md for the matching patch series.
+mkdir -p "$BUILD_TREE/src/devices/cpu/tlcs900" "$BUILD_TREE/src/devices/bus/technics/kn5000"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.cpp"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.h"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"  "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.h"    "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.h"
+ln -sf "$HERE/src/devices/bus/technics/kn5000/hdae5000.cpp"  "$BUILD_TREE/src/devices/bus/technics/kn5000/hdae5000.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn5000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn5000.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.h"
+ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.cpp"            "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.h"              "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.h"
+ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.h"
 mkdir -p "$BUILD_TREE/src/mame/layout"
 ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
 ln -sf "$HERE/src/mame/layout/kn6000.lay"                    "$BUILD_TREE/src/mame/layout/kn6000.lay"
+ln -sf "$HERE/src/mame/layout/kn5000.lay"                    "$BUILD_TREE/src/mame/layout/kn5000.lay"
 echo "==> overlay files symlinked"
 
 # 3. Register the MN10300 as a full CPU (idempotent).
@@ -156,5 +177,12 @@ fi
 echo "==> building (log: $LOG) ..."
 cd "$BUILD_TREE"
 # USE_QTDEBUG=0: build without the Qt debugger (no Qt 'moc' needed).
-make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,src/mame/matsushita/kn7000_tonegen.cpp,src/mame/matsushita/kn_cpanel.cpp,src/mame/matsushita/kn7000_cpanel.cpp,src/mame/matsushita/kn6000_cpanel.cpp,src/mame/matsushita/kn1500.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
+SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,src/mame/matsushita/kn7000_tonegen.cpp,src/mame/matsushita/kn6000_tonegen.cpp,src/mame/matsushita/kn_cpanel.cpp,src/mame/matsushita/kn7000_cpanel.cpp,src/mame/matsushita/kn6000_cpanel.cpp,src/mame/matsushita/kn1500.cpp"
+# The KN5000 rides in the same focused binary. NOTE: mame.lst already carries an
+# `@source:matsushita/kn5000.cpp` anchor upstream, so if kn5000.cpp is NOT listed in SOURCES
+# the filtered driver list still emits `driver_kn5000` while the object file is never
+# compiled -- that is exactly the "only driver_kn5000 undefined" link failure seen before.
+# Listing the driver *and* every device .cpp it pulls in from src/mame keeps them in step.
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp,src/mame/matsushita/kn5000_dsp.cpp"
+make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE"/kn7000 2>/dev/null || echo "(no binary — check $LOG)"

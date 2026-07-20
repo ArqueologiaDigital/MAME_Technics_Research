@@ -1,0 +1,176 @@
+From a4b934e0aeeb4d1b24090f3f3eccaa2724bcc545 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Wed, 18 Mar 2026 07:08:31 +0000
+Subject: [PATCH 24/25] kn5000: Fix tone gen voice timing for missing waveform
+ ROMs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The tone gen device now computes waveform length from IC307's index
+table for ALL voices, even when the actual PCM data is in the missing
+IC304-IC306 ROM range. This matches real hardware behavior: the tone
+gen chip tracks voice timing from its internal parameters regardless
+of which ROM holds the sample data.
+
+Previously, voices referencing missing ROMs got wave_length=0, causing
+them to be "active" but with no concept of duration. The firmware's
+sequencer part tracking depends on voices having realistic timing —
+without it, parts clear before the first bar boundary and the demo
+system cannot sustain song playback.
+
+With this fix, voices advance their position based on pitch and loop
+at the waveform boundary, producing silence but maintaining correct
+timing. The firmware sees voices as active for their natural duration,
+allowing sequencer parts to remain stable across bar boundaries.
+
+(cherry picked from commit 9957c22f43553b95999ce54a1f5cc797ca579725)
+---
+ src/mame/matsushita/kn5000.cpp         |  1 -
+ src/mame/matsushita/kn5000_tonegen.cpp | 82 +++++++++++++++++++++-----
+ 2 files changed, 66 insertions(+), 17 deletions(-)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 59081ab0a79..8c4ad0d06b4 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -468,7 +468,6 @@ void kn5000_state::machine_start()
+ 	m_keybed_timer = timer_alloc(FUNC(kn5000_state::keybed_scan), this);
+ 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
+ 
+-<<<<<<< HEAD
+ 	// SNS NMI emulation: intercept Boot_DisplayScreen's clearing of DRAM[0xFFD4]
+ 	// and substitute the correct payload checksums computed from current DRAM state.
+ 	// On real hardware, the NMI handler (EF08D4) computes these at power-off; we
+diff --git a/src/mame/matsushita/kn5000_tonegen.cpp b/src/mame/matsushita/kn5000_tonegen.cpp
+index ce3e71ba271..916cac3b15a 100644
+--- a/src/mame/matsushita/kn5000_tonegen.cpp
++++ b/src/mame/matsushita/kn5000_tonegen.cpp
+@@ -368,10 +368,14 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
+ 	// Only IC307 is dumped (offset 0xC00000). Use it for all lookups.
+ 	uint32_t chip_base = 0xC00000; // IC307
+ 
+-	// Read index entry from chip's index table
+-	if (m_waveform_data && m_waveform_size > chip_base + NUM_INDEX_ENTRIES * 4)
++	// Read index entry from IC307's index table (always available since IC307 is dumped).
++	// This gives us the waveform length for timing purposes even when the actual PCM
++	// data is in the missing IC304-IC306 ROMs.  The real tone gen chip tracks voice
++	// timing based on these parameters regardless of which ROM chip holds the data.
++	static constexpr uint32_t IC307_BASE = 0xC00000;
++	if (m_waveform_data && m_waveform_size > IC307_BASE + NUM_INDEX_ENTRIES * 4)
+ 	{
+-		const uint8_t *idx = m_waveform_data + chip_base;
++		const uint8_t *idx = m_waveform_data + IC307_BASE;
+ 		uint16_t wave_off_raw = idx[wave_idx * 4 + 2] | (idx[wave_idx * 4 + 3] << 8);
+ 		uint32_t wave_byte_offset = uint32_t(wave_off_raw) * 16;
+ 
+@@ -394,13 +398,16 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
+ 		else
+ 			v.wave_length = 256;
+ 
+-		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d start=0x%06X len=%d (reg3=0x%04X)\n",
+-			ch, wave_idx, v.wave_start, v.wave_length, wave_ctrl);
++		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d chip=0x%06X start=0x%06X len=%d (reg3=0x%04X)\n",
++			ch, wave_idx, chip_base, v.wave_start, v.wave_length, wave_ctrl);
+ 	}
+ 	else
+ 	{
++		// No index table available at all — use a reasonable default duration.
++		// Even without any ROM data, we must keep the voice active for a
++		// realistic duration so the firmware's sequencer part tracking works.
+ 		v.wave_start = 0;
+-		v.wave_length = 0;
++		v.wave_length = 48000; // ~1 second at 48kHz as fallback
+ 	}
+ }
+ 
+@@ -442,8 +449,11 @@ void kn5000_tonegen_device::process_key_off(int ch)
+ 	// Start release envelope: ~50ms fade-out at 48kHz = 2400 samples
+ 	v.release_counter = 2400;
+ 
+-	// Hold voice active for firmware status readback (2 seconds at 48kHz)
+-	v.hold_counter = 96000;
++	// Hold voice active for firmware status readback.
++	// The firmware polls voice status at each sequencer tick (~192 Hz from INTTR5).
++	// A short hold ensures at least a few poll cycles see the voice as active.
++	// 100ms = 4800 samples at 48kHz (covers ~19 poll cycles at 192 Hz).
++	v.hold_counter = 4800;
+ }
+ 
+ 
+@@ -489,27 +499,67 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
+ 				}
+ 			}
+ 
+-			// For voices without waveform data (missing ROMs), tick the release
+-			// counter here since the sample rendering loop below won't run.
+-			if (v.wave_length == 0)
++			// Check if this voice has actual PCM sample data available.
++			// IC307 is dumped; IC304-IC306 are missing (NO GOOD DUMP KNOWN).
++			bool has_pcm_data = (v.wave_length > 0 && m_waveform_data &&
++				v.wave_start + 1 < m_waveform_size &&
++				(m_waveform_data[v.wave_start] != 0 || m_waveform_data[v.wave_start + 1] != 0));
++
++			if (!has_pcm_data)
+ 			{
++				// Voice without PCM data (missing ROM or wave_length==0).
++				// Track timing efficiently without per-sample rendering.
++				// The chip still considers this voice "active" — it tracks the
++				// waveform position internally for status reporting.
++				if (v.wave_length > 0)
++				{
++					// Advance position by one pitch step per sample tick
++					v.wave_offset += v.pitch_step;
++					uint32_t sample_pos = v.wave_offset >> 16;
++					if (sample_pos >= v.wave_length)
++					{
++						if (v.key_on)
++						{
++							// Loop while key held (sustain phase)
++							v.wave_offset = 0;
++						}
++						else
++						{
++							// Waveform finished after key-off
++							if (v.hold_counter == 0 && v.release_counter == 0)
++								v.active = false;
++						}
++					}
++				}
+ 				if (v.release_counter > 0)
+ 					v.release_counter--;
+ 				if (!v.key_on && v.hold_counter == 0 && v.release_counter == 0)
+ 					v.active = false;
+-				continue;
++				continue;  // No audio output — skip sample rendering
+ 			}
+ 
++			// --- Voices with real PCM data below ---
++
+ 			// Read current sample with linear interpolation (16.16 fixed point)
+ 			uint32_t sample_pos = v.wave_offset >> 16;
+ 			uint32_t frac = v.wave_offset & 0xFFFF;
+ 
+ 			if (sample_pos >= v.wave_length)
+ 			{
+-				// Loop back to start
+-				v.wave_offset = 0;
+-				sample_pos = 0;
+-				frac = 0;
++				if (v.key_on)
++				{
++					// Loop for sustain
++					v.wave_offset = 0;
++					sample_pos = 0;
++					frac = 0;
++				}
++				else
++				{
++					// Waveform finished after key-off: deactivate
++					if (v.hold_counter == 0 && v.release_counter == 0)
++						v.active = false;
++					continue;
++				}
+ 			}
+ 
+ 			uint32_t byte_pos = v.wave_start + sample_pos * 2;

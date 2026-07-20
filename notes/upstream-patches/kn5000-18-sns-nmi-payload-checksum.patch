@@ -1,0 +1,80 @@
+From dd56e9b9701729b7a22203ae509e475382db15b7 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Fri, 27 Mar 2026 09:38:43 +0000
+Subject: [PATCH 18/25] kn5000: Emulate SNS NMI payload checksum via boot-time
+ write tap
+
+On real hardware, the power supply SNS circuit fires NMI at power-off.
+The NMI handler checksums two DRAM regions and stores the results at
+DRAM[0xFFD4/0xFFD2] so SubCPU_Payload_Verify passes on the next boot.
+
+MAME exit path calls eat_all_cycles() before NVRAM is saved, preventing
+the ROM handler from running. Instead, intercept Boot_DisplayScreen
+clearing of DRAM[0xFFD4] via install_write_tap and substitute correct
+ones-complement checksums computed from actual DRAM payload regions.
+
+Fixes ALL INITIAL SETTING appearing on every boot after the first.
+---
+ src/mame/matsushita/kn5000.cpp | 42 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 42 insertions(+)
+
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 04b9f136c7b..6c2c90af411 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -173,6 +173,18 @@ private:
+ 	TIMER_CALLBACK_MEMBER(keybed_scan);
+ 	static constexpr uint8_t KEYBED_VELOCITY = 100; // fixed velocity for PC keyboard
+ 
++	// ~NMI (SNS) emulation: on real hardware, the power supply asserts the CPU's
++	// NMI pin when power is removed.  The ROM's NMI handler (NMI_StorePayloadChecksums
++	// at 0xEF08D4) checks a guard flag in internal CPU RAM (0x0400 == 0x80), and if
++	// set, computes payload checksums and stores them at DRAM[0xFFD4/0xFFD2] so that
++	// SubCPU_Payload_Verify passes on the next boot, then halts the CPU.
++	//
++	// MAME's exit path calls eat_all_cycles() before NVRAM is saved, so we cannot
++	// run the real NMI handler at exit time.  Instead, we intercept Boot_DisplayScreen's
++	// clearing of DRAM[0xFFD4] via a write tap and substitute the correct checksums
++	// computed from the current DRAM state (same algorithm as the ROM handler).
++	// This ensures SubCPU_Payload_Verify passes on every boot.
++
+ 	void nvram2_init(nvram_device &device, void *data, size_t size);
+ 	void maincpu_mem(address_map &map) ATTR_COLD;
+ 	void subcpu_mem(address_map &map) ATTR_COLD;
+@@ -447,6 +459,36 @@ void kn5000_state::machine_start()
+ 	std::fill(std::begin(m_keybed_prev), std::end(m_keybed_prev), 0);
+ 	m_keybed_timer = timer_alloc(FUNC(kn5000_state::keybed_scan), this);
+ 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
++
++	// SNS NMI emulation: intercept Boot_DisplayScreen's clearing of DRAM[0xFFD4]
++	// and substitute the correct payload checksums computed from current DRAM state.
++	// On real hardware, the NMI handler (EF08D4) computes these at power-off; we
++	// compute them at boot time using the same one's-complement algorithm.
++	m_maincpu->space(AS_PROGRAM).install_write_tap(
++		0xFFD4, 0xFFD5,
++		"sns_payload_checksum_w",
++		[this](offs_t offset, u16 &data, u16 mem_mask)
++		{
++			// Only intercept the 16-bit zero-write from Boot_DisplayScreen
++			if ((mem_mask & 0xFFFF) == 0xFFFF && data == 0x0000)
++			{
++				address_space &space = m_maincpu->space(AS_PROGRAM);
++				// Region 1: DRAM[0xF180], 0x800 words — one's complement sum
++				uint32_t sum = 0;
++				for (int i = 0; i < 0x800; i++)
++					sum = (sum + space.read_word(0xF180 + i * 2)) & 0xFFFF;
++				const uint16_t cksum1 = ~sum & 0xFFFF;
++				// Region 2: DRAM[0xF980], 0x280 words
++				sum = 0;
++				for (int i = 0; i < 0x280; i++)
++					sum = (sum + space.read_word(0xF980 + i * 2)) & 0xFFFF;
++				const uint16_t cksum2 = ~sum & 0xFFFF;
++				data = cksum1;
++				space.write_word(0xFFD2, cksum2);
++				LOGMASKED(LOG_RESET, "SNS payload checksum: cksum1=0x%04X cksum2=0x%04X at PC=%06X\n",
++					cksum1, cksum2, m_maincpu->pc());
++			}
++		});
+ }
+ 
+ void kn5000_state::machine_reset()

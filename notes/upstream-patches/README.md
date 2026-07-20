@@ -99,3 +99,58 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 - SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), circular-buffer wrap off-by-one
   (`>` vs `>=`: TRM-correct but changes the KN7000 reverb by 2 samples — held), AVG/SSFR rounding,
   FIX-overflow UB, pre-modify circular wrap: all catalogued with TRM citations.
+
+# KN5000 driver series (kn5000-01 … kn5000-25)
+
+**Added 2026-07-20.** Everything the KN5000 has that upstream MAME does not, extracted from the
+local MAME tree's unmerged branches and rebased onto `kn7000-base` (= upstream + the cpanel-ioport
+move). The same files are carried as overlay files in `src/` and symlinked by `build.sh`, so the
+overlay and this series are two views of one thing.
+
+**Verified 2026-07-20**: `git am kn5000-*.patch` on a pristine `kn7000-base` worktree applies all
+25 with zero fuzz, and the resulting tree is **byte-identical** to the overlay files in `src/`
+(13 files compared with `cmp`). The overlay builds and `-validate kn5000` passes.
+
+Provenance: `kn5000_pr6` (18 commits, rebased — the 3-way merge dropped the parts of its "major
+rework" commit that upstream had already merged as PR #15143 and kept the rest), plus six
+cherry-picks from `kn5000_research_tonegen`, plus the two `kn5000_research_datawheel` commits
+squashed and re-implemented against the device-owned input ports. AI co-authorship trailers were
+stripped: submission is under the project owner's authorship.
+
+| # | file | what |
+|---|---|---|
+| 01 | kn5000-01-driver-rework-subcpu-payload-cpanel-keybed.patch | SubCPU payload load, NVRAM factory-defaults init (`nvram2_init`, checksum matching LABEL_FEF93B), 61-key keybed HLE feeding the tone generator FIFO at 0x110000 |
+| 02 | kn5000-02-tmp94c241-16bit-timer-irq.patch | **CPU core**: 16-bit timer interrupt generation + flip-flop gating |
+| 03 | kn5000-03-fdc-address-map-portd.patch | FDC address mapping and PORT D bit 6 (dskchg) |
+| 04 | kn5000-04-tmp94c241-8bit-uart.patch | **CPU core**: 8-bit UART mode for the serial channels (this is what makes MIDI possible) |
+| 05 | kn5000-05-midi-output-tx0.patch | MIDI out via TX0 → `midi_port` |
+| 06 | kn5000-06-fdc-registers-pc-at.patch | FDC register layout corrected to the PC AT arrangement |
+| 07-13 | kn5000-07…13 | `kn5000_tonegen_device` (IC303) and its seven refinement steps: PCM playback, pitch register location + scaling, volume semantics, stereo pan, waveform select, release envelope, linear interpolation |
+| 14 | kn5000-14-dsp1-stub-ic311.patch | `kn5000_dsp1_device` stub (IC311 DS3613GF-3BA) |
+| 15 | kn5000-15-floppy-dd-to-hd.patch | floppy drive type DD → HD |
+| 16 | kn5000-16-timer0-to-fdc-tc.patch | Timer 0 output (TO0) → FDC Terminal Count |
+| 17 | kn5000-17-code-style-cleanup.patch | upstream style compliance |
+| 18 | kn5000-18-sns-nmi-payload-checksum.patch | SNS NMI payload checksum via a boot-time write tap — gives NVRAM persistence without a core change |
+| 19 | kn5000-19-hdae5000-ata-intrq.patch | HD-AE5000: real `ata_interface_device` + INTRQ → INT9, CS0/CS1 split; drops `feature::DISK` |
+| 20 | kn5000-20-mn89304-vga-findings.patch | documents the MN89304 LCD controller (4-bit RAMDAC, 8x row-offset, extended SEQ/CRTC) |
+| 21-24 | kn5000-21…24 | tone-gen voice hold timer, DSP1 ready → SubCPU Port H bit 0, removal of the Feature Demo stuck-parts workaround, and the final voice-timing fix for the undumped waveform ROMs |
+| 25 | kn5000-25-program-data-wheel.patch | Program data wheel: `IPT_DIAL` owned by the cpanel device, reported as the segment 0x0B status byte (bit 7 CW / bit 6 CCW) that the firmware reads at DRAM[0x8E55]; interactive layout knob |
+
+### Suggested split into PRs
+- **PR 6 (peripherals)**: 01-17 — the cohesive "bring the rest of the KN5000 online" batch that the
+  branch review already proposed. 02 and 04 touch the shared TMP94C241 core and could be split out.
+- **PR 7 (NVRAM persistence)**: 18, standalone.
+- **PR 8 (HD-AE5000 + misc research)**: 19-24.
+- **PR 9 (data wheel)**: 25.
+
+### Deliberately NOT in the series
+- `kn5000_power_off_nmi` (2 commits) adds a **core** `MACHINE_NOTIFY_POWER_OFF` machine phase. Patch
+  18's write-tap achieves the same NVRAM result without touching core MAME, so the core change is
+  left as a reference approach only, not staged for submission.
+- `kn5000_research_techmanager` (9 commits): the KN5000-as-a-centronics-peripheral-of-a-PC rig for
+  TechManager5000, including a `kn5000_cable` device, a `pc_lpt` PS/2 bidirectional mode and a
+  refactor of `kn5000_state` from `driver_device` to `device_t`. Genuinely interesting research, but
+  a whole architecture on its own and not close to PR shape.
+- `kn5000_pr6_hdae5000` (1 commit) is an earlier form of what patch 19 does.
+- The SSF slide-transition experiment on `kn5000_research_tonegen` was reverted by its own author on
+  the branch; the revert pair is skipped.
