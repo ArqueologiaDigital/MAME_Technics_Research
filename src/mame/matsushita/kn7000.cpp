@@ -2618,38 +2618,78 @@ ROM_END
 // the update disks, not read from the chips (IC11/IC12 program flash,
 // IC13/IC14 table mask ROM per the service manual).
 //
-// !! The "table" region below is a PLACEHOLDER, NOT A DUMP. IC13/IC14
-// (QSIGX3C16008/16007 on the KN6000, C3FBMD000069/68 on the KN6500)
-// have never been read. What is loaded there is byte-identical to
-// program bytes 0x200000+ -- i.e. IK2/IKV2 loaded a second time -- and
-// it has NO emulation effect: blanking the region to 0xFF yields a
-// byte-identical screen.
-// CONSEQUENCE (proven, notes/kn6000-kn6500-boot.md): the KN6000/KN6500
-// render NO TEXT. The font-table initialiser at 0x48420312 copies five
-// font-descriptor pointers out of the table-ROM header at 0x48000200..
-// 0x48000210 (on the KN7000, whose table ROM *is* dumped, those words
-// are 48000240/4800E880/4801221C/480237A4/0). Here they read back as
-// ASCII from the placeholder, so the text drawer -- which runs 40x per
-// boot, correctly gated -- computes a garbage descriptor and blits
-// nothing. Only a real IC13/IC14 dump can fix this; substituting the
-// KN7000's mask ROM would misrepresent the device and is NOT done.
+// !!! THE "table" REGION BELOW HOLDS THE **KN7000's** TABLE/FONT ROM
+// !!! CONTENTS, LOADED AS A BAD_DUMP **PLACEHOLDER**.
+// The KN6000/KN6500's OWN table/font mask ROMs -- IC13 (QSIGX3C16008)
+// and IC14 (QSIGX3C16007) on the KN6000, C3FBMD000069/C3FBMD000068 on
+// the KN6500 -- are UNDUMPED and still need a hardware read. That read
+// is the only real fix; everything here is a usability stopgap.
+// WHY: the font-table initialiser at 0x48420312 copies five font-
+// descriptor pointers straight out of the table-ROM header at
+// 0x48000200..0x48000210. With nothing valid there the text drawer
+// (which runs 40x per boot, correctly gated) computes a garbage
+// descriptor and blits nothing -- the KN6000/KN6500 render NO TEXT at
+// all. Feeding the KN7000's table ROM makes the whole text subsystem
+// come alive on the KN6000 -- its play screen now shows "PMEM: A-",
+// "8 Beat 1", the tempo, the part names and every voice name (first
+// predicted by the injection experiment written up in
+// notes/kn6000-kn6500-boot.md, then confirmed live). The KN6500 does
+// not benefit yet -- see the note in ROM_START(kn6500).
+// CAVEAT -- READ THIS BEFORE CITING ANYTHING ON SCREEN: the glyphs and
+// any other table-derived content displayed by kn6000/kn6500 are the
+// KN7000's data, NOT the KN6000/KN6500's own. They must NOT be treated
+// as KN6xxx-authentic (fonts, and anything else this ROM feeds, may
+// legitimately differ between the models). This is exactly why the
+// entries carry BAD_DUMP.
+// ERRATUM: until 2026-07-20 this region instead carried four ROM_LOADs
+// of kn6xxx_table_even/odd.rom, which were themselves a placeholder and
+// not a dump -- verified byte-for-byte that their low 1 MB was exactly
+// the program ROM's upper 1 MB (the region reproduced program bytes
+// 0x200000..0x3fffff, i.e. IK2/IKV2 loaded a second time) and their
+// upper 1 MB was all 0xFF. Those had no emulation effect whatsoever
+// (blanking the region to 0xFF gave a byte-identical screen) while
+// wrongly implying that IC13/IC14 had been dumped.
 // ===================================================================
 ROM_START(kn6000)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IK1) -> 0x48400000
 	ROM_LOAD32_WORD("kn6000_program_even.rom", 0x000000, 0x200000, CRC(56c2cfe3) SHA1(e15a4c73440f1dcdf06457f9956c96bf20d68b16))
 	ROM_LOAD32_WORD("kn6000_program_odd.rom",  0x000002, 0x200000, CRC(9d94da6c) SHA1(d73b4c8ebf0c67b6a2eeb5571d0273fc6efbfe4c))
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IK2, 0x1F7A31)
-	ROM_LOAD32_WORD("kn6000_table_even.rom", 0x000000, 0x200000, CRC(fa5e4f93) SHA1(0426da99b1589c0362e6321466beab21b22b81b0))
-	ROM_LOAD32_WORD("kn6000_table_odd.rom",  0x000002, 0x200000, CRC(fd8e3bcd) SHA1(e1b63d45299b67e5258d5d08a949ea8e05c1b8e6))
+	// Table/font mask ROM -> 0x48000000. The KN6000's own IC13 (QSIGX3C16008) and
+	// IC14 (QSIGX3C16007) are UNDUMPED; these are the KN7000's table ROM files used
+	// as a BAD_DUMP placeholder so that text renders. See the block comment above.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD32_WORD("kn7000_table_even.rom", 0x000000, 0x200000, BAD_DUMP CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6))
+	ROM_LOAD32_WORD("kn7000_table_odd.rom",  0x000002, 0x200000, BAD_DUMP CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5))
+	// ...except the first 0x200 bytes, which must stay blank. Measured: with the
+	// KN7000's table-ROM identity header in place the KN6000 boot follows it and
+	// derails to a permanently BLACK screen (verified through 40 s of emulated time);
+	// blanking exactly 0x000000..0x0001FF and leaving the rest gives the full play
+	// screen WITH text. The font-descriptor pointer block the KN6000's font init
+	// reads starts at 0x200, just past this fill, and is preserved. This fill is part
+	// of the placeholder, and is another reason these entries are BAD_DUMP -- a real
+	// IC13/IC14 dump will need no such surgery.
+	ROM_FILL(0x000000, 0x000200, 0xff)
 ROM_END
 
 ROM_START(kn6500)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IKV1) -> 0x48400000
 	ROM_LOAD32_WORD("kn6500_program_even.rom", 0x000000, 0x200000, CRC(f42a2fcf) SHA1(7cebf73bf623fd714ca455ed50b80da1d2186414))
 	ROM_LOAD32_WORD("kn6500_program_odd.rom",  0x000002, 0x200000, CRC(ca2a733f) SHA1(2484d3b76b62b05ded39e4194cdc74fd3c01bcbe))
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)     // table -> 0x48000000 (IKV2, 0x181691)
-	ROM_LOAD32_WORD("kn6500_table_even.rom", 0x000000, 0x200000, CRC(8c7f33a2) SHA1(d44fb4415cd6b571e11e57d4a7642226b0bf4edf))
-	ROM_LOAD32_WORD("kn6500_table_odd.rom",  0x000002, 0x200000, CRC(6953e094) SHA1(abf4c2252d40c71c761503d657593eb6e9c0eecc))
+	// Table/font mask ROM -> 0x48000000. The KN6500's own IC13/IC14
+	// (C3FBMD000069 / C3FBMD000068) are UNDUMPED; same KN7000 BAD_DUMP placeholder
+	// as the KN6000 above -- anything it renders is the KN7000's data, not the
+	// KN6500's. See the block comment above.
+	// STATUS (measured 2026-07-20): unlike the KN6000, the KN6500 does NOT yet gain
+	// text from this placeholder -- its play screen looks exactly the same with the
+	// region loaded, blanked, or with the 0x200 header left intact. So its font path
+	// diverges from the KN6000's (different font init / descriptor pointer global)
+	// and still has to be traced. The entry is kept because the chips and the
+	// situation are the same, and it is the region that trace will need; it is NOT
+	// claimed to fix the KN6500. No regression either: the screen is unchanged.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
+	ROM_LOAD32_WORD("kn7000_table_even.rom", 0x000000, 0x200000, BAD_DUMP CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6))
+	ROM_LOAD32_WORD("kn7000_table_odd.rom",  0x000002, 0x200000, BAD_DUMP CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5))
+	ROM_FILL(0x000000, 0x000200, 0xff)   // see the KN6000 note above: identity header must stay blank
 ROM_END
 
 
@@ -2669,7 +2709,12 @@ ROM_START(kn2400)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program
 	ROM_LOAD32_WORD("kn2400_program_even.rom", 0x000000, 0x200000, CRC(b94fc8a8) SHA1(86d5d9916afdb90f82de78064b1d76fce3a21d7b))
 	ROM_LOAD32_WORD("kn2400_program_odd.rom",  0x000002, 0x200000, CRC(73781cbc) SHA1(d90a3560561efd94322dca1a6710f2d5d3837cd2))
-	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)  // no separate table flash on this model
+	// No table ROM is loaded here -- and, unlike the KN6000/KN6500 above, no
+	// placeholder ever was (checked 2026-07-20): the region has always been left
+	// empty. The KN2400 boot reads NOTHING from 0x48000000-0x483fffff (read-tap
+	// verified, notes/kn2400-boot.md), so whether this family even has a separate
+	// table/mask ROM is still undetermined; no chip is claimed as dumped.
+	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
 ROM_END
 
 // KN2600 shares the KN2400 firmware image -> clone of kn2400 (ROMs resolve from the parent set).

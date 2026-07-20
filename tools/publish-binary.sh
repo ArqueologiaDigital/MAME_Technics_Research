@@ -34,6 +34,32 @@ for m in $MODELS; do
   cp -u "$BUILD/roms/$m"/*.rom "$DEST/roms/$m/"
 done
 
+# 2a) KN6000/KN6500 table/font ROM -- BAD_DUMP PLACEHOLDER.
+#     Their own table/font mask ROMs (IC13/IC14: QSIGX3C16008/QSIGX3C16007 on the
+#     KN6000, C3FBMD000069/68 on the KN6500) have NEVER been dumped, and without a
+#     valid table ROM header those models render NO TEXT at all. The driver therefore
+#     loads the KN7000's table ROM into their "table" region, flagged BAD_DUMP, so the
+#     machines are usable. The glyphs shown are the KN7000's data, NOT the KN6xxx's own
+#     -- see the comment above ROM_START(kn6000) in src/mame/matsushita/kn7000.cpp and
+#     notes/kn6000-kn6500-boot.md. Dumping IC13/IC14 remains the real fix.
+#     Since the ROM entries reference the kn7000_table_*.rom filenames, those files must
+#     also be present in each model's set folder for MAME to resolve them.
+for m in kn6000 kn6500; do
+  [ -d "$DEST/roms/$m" ] || continue
+  for f in kn7000_table_even.rom kn7000_table_odd.rom; do
+    if [ -f "$DEST/roms/kn7000/$f" ]; then
+      cp -u "$DEST/roms/kn7000/$f" "$DEST/roms/$m/$f"
+    elif [ -f "$BUILD/roms/kn7000/$f" ]; then
+      cp -u "$BUILD/roms/kn7000/$f" "$DEST/roms/$m/$f"
+    else
+      echo "warning: $f not found -- $m will render no text"
+    fi
+  done
+  # Retire the old ${m}_table_*.rom files: they were never a dump of IC13/IC14, just
+  # the program ROM's upper half loaded a second time, and are no longer referenced.
+  rm -f "$DEST/roms/$m/${m}_table_even.rom" "$DEST/roms/$m/${m}_table_odd.rom"
+done
+
 # 2b) MAME plugins. The "layout" plugin registers the cb_layout callback that EXECUTES a
 #     layout's <script> block -- without it, layout scripts silently never run. The KN7000
 #     volume faders are made draggable by such a script (tools/slider_lib.lua), so the

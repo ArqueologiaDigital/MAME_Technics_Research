@@ -4163,3 +4163,24 @@ cheap, and they finish section 3 of notes/sound-edit-parameters.md);
 open: the channel-EG caller module 0x4C004DE4..0x4C005673. Live-session
 questions: the LFO block byte roles + the KEYSYNC/CONNECTION toggle
 (above), SUSTAIN vs 0x50009D38, partrec bit12 panel trigger.
+
+## Tick 2026-07-20 — KN6000 table/font ROM: placeholder retired, TEXT RENDERS
+
+- The kn6000/kn6500 `"table"` ROM_LOADs were verified to be a **placeholder, not a
+  dump**: `kn6xxx_table_even/odd.rom`'s low 1 MB is byte-for-byte the program ROM's
+  upper 1 MB (the region reproduced program bytes 0x200000..0x3fffff, i.e. IK2/IKV2
+  loaded twice) and their high 1 MB is all 0xFF. They had zero emulation effect.
+- Felipe's call: replace them with the **KN7000's table ROM flagged BAD_DUMP** so the
+  models are usable, with the truth stated in the driver comment — rather than NO_DUMP.
+- Shipped, plus `ROM_FILL(0x000000, 0x000200, 0xff)`: loading the KN7000 table ROM
+  whole makes the KN6000 derail to a permanently BLACK screen (black at t=6..40 s);
+  blanking just the identity header before the font-pointer block at 0x200 gives the
+  full play screen **WITH TEXT** (PMEM: A-, 8 Beat 1, ♩=120, part names, voice names).
+  Verified from the PUBLISHED folder and confirmed by Felipe on the live display.
+- **The real fix is still a hardware dump of IC13 (QSIGX3C16008) / IC14 (QSIGX3C16007)**
+  on the KN6000 and C3FBMD000069/68 on the KN6500 — undumped. Nothing table-derived on
+  a KN6xxx screen is KN6xxx-authentic. That dump likely also unblocks their TG sample maps.
+- KN6500: measured no benefit yet (identical screen loaded/blanked/header-intact) — its
+  font path diverges and needs tracing. KN2400/KN2600: never had a placeholder, and
+  injecting the KN7000 table changes nothing (they read nothing from 0x48000000) — a
+  different cause. No regressions: kn7000 boots home with text, kn2400 boots.
