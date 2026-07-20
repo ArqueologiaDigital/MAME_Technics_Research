@@ -86,11 +86,10 @@ audibly was real but the causal registers are r1/r2.
 Full-class captures (every TG write, any group) for RLS=0 vs 44 vs 100 and SUSTAIN
 LONG/HOLD are BYTE-IDENTICAL (112/112 writes) on the Concert Grand — including the key-up
 6-write release burst (odd-block r0=9180 r1=9100 r4/5=AE00 r8/9=22B0). Same on the organ
-(RLS 0 vs 100 identical, no burst at all). Interpretations (open): the edit-screen
-audition may use a fixed release, or RLS lives entirely in the firmware's key-off
-COMPUTATION for normal play (h1/h2/h3 0x4C031949/0x4C031F07/0x4C032490 + curve tables),
-or in the chip-side damp bank pre-loaded per sound (r4..rA, which the sweep proves are
-NOT the 7-param amplitude EG). The release rate the driver can trust remains: managed
+(RLS 0 vs 100 identical, no burst at all). ~~Interpretations (open)~~ **RESOLVED
+STATICALLY (RESULT 5): RLS lives in the firmware's key-off COMPUTATION** — it is the
+part-FX +0x48 term of h1's rate sum (h1/h2/h3 0x4C031949/0x4C031F07/0x4C032490 +
+curve tables), never a TG register; the second/third hypotheses fall away. The release rate the driver can trust remains: managed
 burst rate byte (0x91 for the piano damp) and the rA-hi correlation for chip-side
 releases (organ 0xAE fast / pad 0x04 slow — audibly validated across 11 families).
 
@@ -174,3 +173,55 @@ circular). Provisional exponential law calibrated to the shipped sound anchors:
 - managed damp burst rate 0x91=145 -> 85 ms (plausible piano damper)
 - organ rA 0xAE=174 -> 31 ms stop; pad rA 0x04 -> ~11 s fade
 All four anchors stay within audible-plausibility of the previously shipped calibration.
+
+## RESULT 5 (2026-07-20, STATIC RE — the disassembly answers the sweep's open questions)
+
+Source: the CONVERT pass in kn7000_disassembly (commits 935b614/83fdb4b/b321b2f) that
+converted the library's TG note path to real source. Everything below is read from the
+code (STATIC), cross-checked against the measured RESULTS above; the filter/pitch
+attribution of the two descriptor blocks is taken FROM the a1 live decode (RESULT 4) —
+statically the two blocks were unlabeled, and the first naming pass had them swapped.
+
+**The shadow register cache.** The 0x84-byte record `0x500CA0B0 + slot*0x84` caches
+every group-0 register as a 4-byte entry `[lo16 = note-on value | hi16 = release
+value]`: +0 r0, +4 r1, +8 r2, +0xC r4, +0x10 r5, +0x18 r8, +0x1C r9 (+0x0A also holds
+the r3 gate-off value; +0x78/+0x7A/+0x7C/+0x80 are dirty masks).
+
+**The managed key-up burst is `TgVoiceEgBurstWrite` (lib 0x4C0376E3)**: it flushes the
+RELEASE halves of r0,r1,r4,r5,r8,r9 — exactly the observed 6-write burst (the wire's
+regs 0x10/0x11/0x14/0x15/0x18/0x19 = the odd element's bank at +0x10). The release
+values are computed at key-off by the h1/h2/h3 trio and packed by their caller
+(0x4C0115xx et al: h1 out -> +0x02/+0x06, h2 -> +0x0E/+0x12, h3 -> +0x1A/+0x1E):
+- h1 `TgKeyOffAmpRelease` 0x4C031949 -> r0/r1: rate index = **clamp(desc2+0x2E base +
+  part-FX record (0x500B5340+n*0x54C) +0x48 RELEASE offset + key-off arg + key
+  scaling (desc2+0x31..0x33 breakpoints vs the note), 0..100) -> curve ROM
+  0x486D2649**; emits [rate|0x80],[rate|0x00] = the piano's 0x9180/0x9100.
+  **This resolves RESULT 2's open**: the screen RLS param DOES act at normal key-off —
+  it is the part-FX +0x48 term of this sum (a COMPUTATION input, never a TG register),
+  which is why RLS edits move no register at note-on.
+- h2 `TgKeyOffPitchRelease` 0x4C031F07 -> r4/r5: desc2+0x11/+0x12, flat
+  [rate|0]x2 — the 0xAE00/0xAE00 pitch rewrite of RESULT 4's re-reading.
+- h3 `TgKeyOffFilterRelease` 0x4C032490 -> r8/r9: desc2+0x46 rate, signed level
+  clamp(desc2+0x47 + desc2+0x3E, -50..50) via 0x486D2713 — **desc2+0x3E is the folded
+  CUTOFF ADJUST** RESULT 4 saw in every filter level byte (0x22B0 = sweep shut).
+The running-voice (attack/decay) programs come from the same descriptor blocks:
+pitch EG = desc2+0x0B..0x12 (0x4C031C50/0x4C031D9B), filter EG = desc2+0x3E..0x4C
+(0x4C0321BF/0x4C03231F); amp EG bytes live in the tone descriptor read by
+`TgElemNoteOnStd` 0x4C030A9D.
+
+**r3 gate, statically**: `TgVoiceGateOn` 0x4C037398 writes r3 := 0x87FF and
+class-0x3000 := (rec+0x54 & 0x18000)|0x4000 at note-on (RESULT 3's values);
+`TgVoiceGateOff` 0x4C0376A5 writes class-0x3000 := rec+0x54 & ~0x4000 then r3 := the
+cached +0x0A value at key-up — the per-note "~0x0Bxx-0x0Cxx" RESULT 3 measured is
+that cached per-note value, not a timestamp.
+
+**The sustain-pedal path**: `TgPartKeyEvent` 0x4C036EA4 (velocity==0 branch) queries
+the hold state (0x4C02E0F9): 0xFF/0xFE -> release the note's voices NOW (voice list
+0x4C010047, per slot 0x4C03B0CD + slot service(slot,0)); **0 -> mark-only via
+0x4C02E2C7 and NO voice release — the pedal-held note keeps sounding and is released
+later by the slot-service pass**. Both flavours then run `TgKeyOffSample` 0x4C036573
+(key-off retrigger, only for class-0x80 kits whose zone flags 1|2|4 request it).
+
+**Bonus**: the hi-hat-style cutoff is `TgExclGroupChoke` 0x4C0309A5 — descriptor
++0x0E bit7 marks an exclusive group; same-group voices get their r0/r1 release
+halves set to a damp rate from table 0x48586EA4, then the same burst writer fires.

@@ -3429,8 +3429,26 @@ kn7000_disassembly grew by 51 re-assembled functions, byte-match kept
   TgVoiceRecordReset/Ptr (0x500CA0B0 stride 0x84, ROM template
   0x4858766C), TgVoiceSlotService (0x500AF940 stride 0xB4 class
   dispatch), LibDiv32, LibTickSleep.
-NEXT (CONVERT track): walk UP the TG note path from TgVoiceRegWrite's
-callers — the group-0x24 pitch writer chain 0x4C036573/0x4C036837/
-0x4C036012 + the per-element EG/release writers (0x4C0309A5/0x4C030A9D,
-key-off h1/h2/h3 0x4C031949/0x4C031F07/0x4C032490) — and the tempo
-param layer 0x484478E7..0x48447F0C (params 0xD001-0xD003).
+- TG NOTE PATH CONVERTED (2026-07-20 tick, kn7000_disassembly 935b614/
+  83fdb4b/b321b2f — the previous NEXT, DONE): 23 lib + 9 region-1
+  functions -> 268 total (233 region-1 + 35 lib), zero new .byte
+  escapes, make verify 100% after clean rebuild. The whole chain
+  TgPartKeyEvent 0x4C036EA4 -> TgNoteOn 0x4C036837 (class dispatch:
+  melodic/drum 0x80..0x83/table-class 0x40) -> TgElemNoteOnStd
+  0x4C030A9D -> TgVoiceGateOn/GateOff + TgVoiceEgBurstWrite is real
+  source now. DISCOVERIES (tg-envelope-sweep-results.md RESULT 5):
+  0x500CA0B0+slot*0x84 = shadow reg cache, 4-byte entries [lo=note-on|
+  hi=release]; the managed key-up 6-write burst = TgVoiceEgBurstWrite
+  0x4C0376E3 flushing the release halves of r0,r1,r4,r5,r8,r9; h1/h2/h3
+  = amp/pitch/filter release computers (h1's rate sum CONTAINS the
+  screen RLS param via part-FX rec +0x48 -> RESULT-2 open RESOLVED;
+  desc2+0x3E = the folded CUTOFF ADJUST); sustain pedal = TgPartKeyEvent
+  key-off with hold-query 0x4C02E0F9 == 0 -> mark-only (0x4C02E2C7), no
+  voice release; r3 key-up value = the cached +0x0A per-note value.
+  Filter/pitch EG naming reconciled WITH the a1 live decode (b321b2f).
+  Tempo-sync param layer 0x484478E7..0x48447F33 (0xD001-0xD003 trio +
+  0x70xxxx property dispatcher) also converted.
+NEXT (CONVERT track): the melodic voice allocator 0x4C034FF5 (slot
+choice + steal policy, the last unnamed core of TgNoteOn), the drum
+builders 0x4C03595F/0x4C035D21, pitch calc internals 0x4C02FB7E/
+0x4C02FBE3, and the hold/sustain state machine 0x4C02E0F9/0x4C02E2C7.
