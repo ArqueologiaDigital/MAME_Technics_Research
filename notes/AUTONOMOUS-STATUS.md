@@ -5523,3 +5523,52 @@ audio HLE to 0 did NOT stop the leak. NEXT: trace one INTT3 cycle, find which ta
 restores the name replies. All instrumentation reverted (overlay tmp94c241.cpp git-
 clean; build-tree tlcs900.h/900tbl.hxx restored from ../mame). Full write-up in
 KN7000/side-quests/findings/kn5000_driver_findings.md.
+
+================================================================================
+2026-07-20 tick -- KN5000 "Sound Name Error": leak DEEP-TRACED to a SubCPU
+                   receive-DMA/scheduler DEADLOCK; 2 aided-parity fixes shipped
+                   (necessary, NOT sufficient); root device hunk NOT isolated
+================================================================================
+Full write-up: KN7000/side-quests/findings/kn5000_driver_findings.md
+(2026-07-20 "deep trace" section). Commits kn7000_mame 9fc71dd + af2c6af.
+
+EXONERATED: tlcs900 CPU core is BYTE-IDENTICAL to kn5000_aided_by_claude
+(diff of build-tree tlcs900.cpp/900tbl.hxx/tlcs900.h vs the aided branch = 0
+lines). So the leak is entirely in the overlay tmp94c241.{cpp,h} / kn5000.cpp.
+
+SHIPPED (kn5000-27, KN5000-only, -validate clean x5, KN7000 home = real names):
+ (a) tmp94c241 check_irqs no longer RE-ASSERTS the INT0 level flag after taking
+     the IRQ (aided deliberately removed it; ours had re-introduced it).
+ (b) kn5000 MainCPU Port Z read restores the MSTAT read-back (m_mstat | ...).
+ => Both are correct parity fixes but the XSSP leak trajectory is BYTE-IDENTICAL
+    before/after and the screen still shows "Sound Name Error". Necessary, not
+    sufficient.
+
+MECHANISM (disassembled): SubCPU cooperative scheduler w/ software nesting
+counter DRAM 0x10D2. XSSP is reclaimed ONLY by a task-switch/dispatch (ld XSP,
+0x00040B1E at 0x01FF3F, gated on current-task 0x1046!=0; OR ld XSP,(task+4) at
+0x01FF6F). The ONE path that does NOT reload XSP = entered-from-idle (0x1046==0)
+with NO ready task -> 0x01FF18 idle 0x01FF1F. Real HW leaves that state within a
+tick (a task becomes ready); OUR build enters it at ~t=7.5 and NEVER leaves ->
+leak ~8.6KB/s -> corrupts handler 0x035893 (~t=11) -> derail -> error.
+
+WHY no task ever becomes ready: the RECEIVE HDMA ch0 STALLS. MainCPU streams
+64KB blocks (loop 0xEF3436, E1/E2/E3 framed) to latch 0x140000; SubCPU receives
+via HDMA ch0 (DMAV0=0x0A/INT0, 4-byte packets -> 0x0010F0, INTTC0 on done). The
+INT0 LINE toggles ~616K times (every MainCPU write) but HDMA ch0 completes only
+~480 times -> INTTC0 bursts to t~7.85 then FREEZES -> no command packet
+processed -> no task linked ready -> idle/leak. Self-reinforcing deadlock (ch0
+re-arm needs a ready task needs INTTC0 needs ch0 armed). Reply path (HDMA ch2 /
+Timer2 / busy-wait DRAM 0x10E8 / INTTC2) WORKS (2 blocks then done, not stuck).
+
+RULED OUT: core; latch wrappers (identical to aided); handshake ports (identical
+but the now-fixed MSTAT read-back); CN12 check-terminal (defaults Off); reply
+DMA/INTTC2; audio HLE; serial-int wiring (disabling only SLOWED the leak).
+
+NEXT: BUILD kn5000_aided_by_claude (accept 1429-behind) as an oracle for its
+INTTC0/HDMA-ch0 timeline; and/or bisect the INT0-flag lifecycle during HDMA
+(check_hdma/process_hdma "clear triggering flag" + hdma_targeted skip vs
+execute_set_input level-detect on the acknowledge_w(0)->write() edge pair --
+suspect a deferred synchronize() edge-collapse dropping the INT0 assert for HDMA
+once the SubCPU only polls ch0 occasionally). All instrumentation reverted;
+build-tree tlcs900.cpp restored from ../mame; overlay tree = only kn5000-27.
