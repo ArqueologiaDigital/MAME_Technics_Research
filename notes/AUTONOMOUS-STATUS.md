@@ -5,6 +5,17 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## ★ FELIPE'S QUEUE 2026-07-20 (explicit: "do all of the autonomous software queue items")
+Execution order (driver-side items SERIALIZE on build-tree+display; launch next as each completes):
+  A. [IN FLIGHT] r4-rA damp-bank RE + the two live DSP experiments (u8 DM dump, DspEffectSelect
+     unit-role capture) — one agent (all need live instrumentation).
+  B. Per-part effect depth bank decode + fix (cold chorus/multi panel toggle audible).
+  C. INTC + timers into the mn10300 core (SIO's next of kin; also yields the real KN6000 timer).
+  D. Siblings: KN2400/2600 to first screen; KN6000/6500 text rendering (uses C's timer work).
+  PARALLEL TRACK: [IN FLIGHT] CONVERT growth (tempo/TM5 chain, then TG note path) — kn7000_disassembly.
+Rules unchanged: commit-as-you-go, publish after rebuilds, visible video, blog per the proactive bar,
+tick this file after each item. PENDING FELIPE: Phase C dump-kit go-ahead, SHARC submission, wet-level A/B.
+
 ## ★ STANDING IDLE-TIME DIRECTIVE (Felipe, 2026-07-19)
 Use ALL idle autonomous time to IMPROVE THE DISASSEMBLY — both:
 - maincpu (kn7000_disassembly repo): grow the CONVERT set (66 fns re-assemblable of 2302 named), name
