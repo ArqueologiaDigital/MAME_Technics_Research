@@ -5,6 +5,28 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-21 — ★ KN5000 TEMPO/PROGRAM WHEEL DONE: turning it edits the on-screen tempo
+Implemented the resume point from `side-quests/findings/kn5000_data_wheel_findings.md` ADDENDUM 2.
+The KN5000 wheel is NOT a control-panel-serial input in steady state — the firmware reads it with a
+main-loop poll (`Encoder_ValueScanAndSync` 0xFC5761) from an encoder scan table at MainCPU DRAM
+0x8E94 (3-byte entries `[record_id, delta, mask]`). HOOKUP (`kn5000_cpanel.{cpp,h}`): the cpanel got
+a `required_device<cpu_device> m_maincpu{*this, ":maincpu"}`; on each detent (the existing wrap-aware
+one-detent-per-scan slew) it now writes `[0x19, -step, 0xFF] + 0xFF` at 0x8E94 via
+`m_maincpu->space(AS_PROGRAM)`, SIGN-INVERTED so CW = tempo up (ROM 0xEA98E2 accel curve inverts),
+and writes ONLY on a detent (firmware clears the table to 0xFF each main loop — re-present per detent,
+nothing while still). The proven-no-op segment-0x0B emission was removed. 0x8E94 confirmed MainCPU
+RAM (maincpu_mem 0x000000-0x0fffff DRAM). VERIFIED LIVE via the DRIVER path (drove `:cpanel:ENCODER`
+`field.user_value` = what the layout widget does; BPM READ-POLLED at 0xFC62, write-taps blind here):
+HOME ♩=120 → CW → **141** (up), holds; → CCW → **109** (down), holds. Both directions, one step per
+detent, STOPS cleanly (no KN7000-style runaway). Snapshots captured. Direct-0x8E94 cross-check
+reproduced the ADDENDUM-2 clamp (+3→40, −3→163). REGRESSION: `-validate` clean
+kn5000/kn7000/kn6000/kn6500/kn2400; KN5000 names still real (Piano/Bigband Brass/Modern E.P.1,
+kn5000-29 intact); KN7000+KN6000 boot zero layout-script errors (share slider_lib.lua, untouched);
+KN7000 reverb oracle bit-stable ×2 AND provably unaffected (diff touches only `kn5000_cpanel.*`,
+which the KN7000 machine does not instantiate — only comment refs in kn7000.cpp). Patch **kn5000-25**
+regenerated in place (kept last, message + README PR-9 note rewritten "held back/no-op" → "WORKING";
+round-trips byte-identical). Built + published. Findings ADDENDUM 3; side-quests/README updated.
+
 ## ☆ FELIPE WISH (2026-07-20/21): PERMANENT, NON-HACKY KN5000 boot-splash animation
 Long-term want. CONTEXT (corrected): the SNS payload-checksum write tap removed by
 kn5000-29 (the sound-names cure) was ALSO what made the KN5000 boot splash ("Technics

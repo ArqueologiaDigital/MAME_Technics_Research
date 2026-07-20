@@ -123,6 +123,13 @@ private:
 	ioport_field *m_encoder_field; // the ENCODER adjuster field (read RAW, bypassing analog interp)
 	uint8_t m_encoder_latch;  // direction bits reported in the segment 0x0B status byte
 
+	// Main-CPU handle used to deposit the wheel's scan-table entry into DRAM 0x8E94.
+	// The real panel wheel is read by the firmware's main-loop poll Encoder_ValueScanAndSync
+	// (not the CP serial protocol); this finder lets the HLE emit that entry directly.
+	// Absolute ":maincpu" tag resolves from the machine root -- see the .cpp for the full
+	// rationale and side-quests/findings/kn5000_data_wheel_findings.md.
+	required_device<cpu_device> m_maincpu;
+
 	// LED outputs
 	output_finder<50> m_cpl_leds;  // Left panel LEDs (CPL_0 through CPL_49)
 	output_finder<69> m_cpr_leds;  // Right panel LEDs (CPR_0 through CPR_68)

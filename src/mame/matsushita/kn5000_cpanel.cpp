@@ -261,16 +261,16 @@ static INPUT_PORTS_START(kn5000_cpanel)
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("DOWN 2")
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("UP 2")
 
-	// The TEMPO/PROGRAM data wheel (rotary encoder) sits below the LCD and is read by the
-	// LEFT panel MCU, which reports its DIRECTION in the segment 0x0B status byte.
+	// The TEMPO/PROGRAM data wheel (rotary encoder) sits below the LCD. On real hardware it is
+	// read by the firmware's main-loop poll (Encoder_ValueScanAndSync) from an encoder scan
+	// table at main-CPU DRAM 0x8E94, NOT via the control-panel serial protocol -- so the HLE
+	// deposits the wheel's per-detent entry directly into that table (see button_scan_callback).
 	//
 	// The wheel is an INFINITE relative encoder, so the adjuster's absolute value is
-	// meaningless to the firmware: only its CHANGES matter. This device converts each
-	// change into a segment 0x0B status byte (bit 7 = CW, bit 6 = CCW) plus the neutral
-	// idle byte that follows. Same widget/abstraction as the KN7000's TEMPO_KNOB (which
-	// is an adjuster for exactly this reason), but a completely different wire encoding --
-	// the KN7000 sends a SIGNED STEP on wire 0x17 that its firmware ACCUMULATES, whereas
-	// the KN5000 firmware only ever learns "one detent happened, in this direction".
+	// meaningless to the firmware: only its CHANGES matter. Same widget/abstraction as the
+	// KN7000's TEMPO_KNOB (which is an adjuster for exactly this reason), but a completely
+	// different consumer -- the KN7000 sends a SIGNED STEP on CP wire 0x17 that its firmware
+	// ACCUMULATES, whereas the KN5000 firmware reads a signed per-detent delta from DRAM.
 	// Centre start so there is room to drag both ways.
 	PORT_START("ENCODER")
 	PORT_ADJUSTER(50, "Tempo / Program data wheel")
@@ -314,6 +314,7 @@ kn5000_cpanel_device::kn5000_cpanel_device(const machine_config &mconfig, const 
 	m_encoder_synced(false),
 	m_encoder_field(nullptr),
 	m_encoder_latch(0),
+	m_maincpu(*this, ":maincpu"),
 	m_cpl_leds(*this, "cpl_led_%u", 0U),
 	m_cpr_leds(*this, "cpr_led_%u", 0U)
 {
@@ -1138,9 +1139,28 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 		}
 	}
 
-	// Scan the Program data wheel. The left panel MCU does not report it as a scan column
-	// but as the segment 0x0B status byte (bit 7 = clockwise, bit 6 = counter-clockwise),
-	// delivered through the same INTA change notification as the buttons.
+	// Scan the TEMPO/PROGRAM data wheel.
+	//
+	// HLE MODEL (why this is a direct DRAM poke, not a CP serial packet): on real hardware the
+	// wheel is NOT a control-panel-serial input. In steady state the firmware reads it with a
+	// main-loop poll, Encoder_ValueScanAndSync (ROM 0xFC5761), which walks an encoder SCAN TABLE
+	// at main-CPU DRAM 0x8E94 -- 3-byte entries [record_id, delta, mask], 0xFF-terminated. A
+	// record_id of 0x19 selects descriptor 0xED9C1E[0x19] = {A9,21,00,FF}, which emits SwbtWr
+	// event type 0xA9 / subcode 0x21 -> DRAM 0xC07D=0x21, 0xC07E=signed delta -> PostEvent
+	// 0x1C0001F -> the focused widget's dial handler (on HOME that is the tempo box). The
+	// segment-0x0B status byte this code used to send is a PROVEN NO-OP for the wheel (0x0B maps
+	// to descriptor subcode 0x0E, never 0x21). Depositing the scan-table entry was verified live
+	// to drive the on-screen tempo, one clean BPM step per detent, with the display refreshing --
+	// see side-quests/findings/kn5000_data_wheel_findings.md (ADDENDUM 2, "PROVEN LIVE").
+	//
+	// The honest device-accurate path would model the tone-generator encoder register that feeds
+	// 0x8E94 so the firmware's poll reads the wheel naturally; poking 0x8E94 is the faithful HLE
+	// of that producer until the tonegen register is modelled.
+	//
+	// IDLE DISCIPLINE: the firmware resets the table to 0xFF every main-loop iteration after
+	// consuming it, so an entry must be RE-PRESENTED on each detent and nothing needs to be
+	// written while the wheel is still. We therefore write only on a detent and leave the table
+	// alone otherwise (matching the real producer, which stages an entry per scanned detent).
 	if (m_encoder_port)
 	{
 		// Read the RAW adjuster setting (field live value), NOT m_encoder_port->read(): the analog
@@ -1167,23 +1187,24 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 		else if (delta != 0)
 		{
 			// Advance one detent toward the adjuster per scan, so a fast drag becomes a
-			// STREAM of single-detent packets (the firmware counts detents; it cannot see
+			// STREAM of single-detent entries (the firmware counts detents; it cannot see
 			// a magnitude). This is the KN7000's per-scan slew, with the KN5000's encoding.
 			int32_t const step = (delta > 0) ? 1 : -1;
 			m_encoder_prev = int32_t((m_encoder_prev + step + 101) % 101);
-			m_encoder_latch = (step > 0) ? 0x80 : 0x40;
-			LOGMASKED(LOG_ENCODER, "data wheel %s (pos=%d delta=%d latch=0x%02X)\n",
-					(step > 0) ? "CW" : "CCW", pos, delta, m_encoder_latch);
-			send_button_packet(0x0b, false);
-			changed = true;
-		}
-		else if (m_encoder_latch)
-		{
-			// The wheel stopped: report the neutral value so the firmware sees the
-			// transition back to its idle encoder state (0x0C).
-			m_encoder_latch = 0;
-			send_button_packet(0x0b, false);
-			changed = true;
+
+			// Deposit one scan-table entry [record_id=0x19, delta, mask=0xFF] + 0xFF terminator
+			// at DRAM 0x8E94. The delta is SIGN-INVERTED: the acceleration curve at ROM 0xEA98E2
+			// maps a positive entry delta to a DECREASE, so CW (step>0) must write a negative
+			// delta to raise the tempo. One entry per detent = one BPM step per detent (verified).
+			int8_t const entry_delta = int8_t(-step);
+			address_space &space = m_maincpu->space(AS_PROGRAM);
+			space.write_byte(0x8e94, 0x19);                    // record id = data wheel
+			space.write_byte(0x8e95, uint8_t(entry_delta));    // signed delta (CW = tempo up)
+			space.write_byte(0x8e96, 0xff);                    // mask
+			space.write_byte(0x8e97, 0xff);                    // list terminator
+			LOGMASKED(LOG_ENCODER, "data wheel %s (pos=%d delta=%d entry=[19 %02X FF FF])\n",
+					(step > 0) ? "CW" : "CCW", pos, delta, uint8_t(entry_delta));
+			// No INTA needed: the firmware polls 0x8E94 from its main loop, not via a CP packet.
 		}
 	}
 
