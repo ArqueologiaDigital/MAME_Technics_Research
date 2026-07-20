@@ -2617,6 +2617,22 @@ ROM_END
 // firmware-update payloads -- BAD_DUMP because they are derived from
 // the update disks, not read from the chips (IC11/IC12 program flash,
 // IC13/IC14 table mask ROM per the service manual).
+//
+// !! The "table" region below is a PLACEHOLDER, NOT A DUMP. IC13/IC14
+// (QSIGX3C16008/16007 on the KN6000, C3FBMD000069/68 on the KN6500)
+// have never been read. What is loaded there is byte-identical to
+// program bytes 0x200000+ -- i.e. IK2/IKV2 loaded a second time -- and
+// it has NO emulation effect: blanking the region to 0xFF yields a
+// byte-identical screen.
+// CONSEQUENCE (proven, notes/kn6000-kn6500-boot.md): the KN6000/KN6500
+// render NO TEXT. The font-table initialiser at 0x48420312 copies five
+// font-descriptor pointers out of the table-ROM header at 0x48000200..
+// 0x48000210 (on the KN7000, whose table ROM *is* dumped, those words
+// are 48000240/4800E880/4801221C/480237A4/0). Here they read back as
+// ASCII from the placeholder, so the text drawer -- which runs 40x per
+// boot, correctly gated -- computes a garbage descriptor and blits
+// nothing. Only a real IC13/IC14 dump can fix this; substituting the
+// KN7000's mask ROM would misrepresent the device and is NOT done.
 // ===================================================================
 ROM_START(kn6000)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC12/IC11 (IK1) -> 0x48400000
