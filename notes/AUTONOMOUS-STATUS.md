@@ -62,6 +62,68 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-20 — ★★★ THE KN6000 SINGS: kn6000_tonegen_device SHIPPED, pitch verified in tune
+Side quest `kn6000_tone_generator` DELIVERED (kn7000_mame bb1ab85, KN7000 e7f7692).
+The previous tick shipped the shared base and said "NO kn6000_tonegen_device SHIPPED, on
+purpose". Both reasons it gave are now gone.
+
+AUDIO (the real test) — FFT of a `-wavwrite` capture, key-bed note held on kn6000:
+  C4 (60) 261.63 expected -> **261.72 Hz**  (+0.01 semitone)
+  G4 (67) 392.00 expected -> **392.14 Hz**  (+0.01 semitone)
+  C5 (72) 523.25 expected -> **523.44 Hz**  (+0.01 semitone)
+Correct across more than an octave = real resolved pitch, not one lucky anchor. Timbre is
+still the placeholder sine (wave ROMs undumped); pitch/polyphony/timing/7-param amp EG are
+the firmware's own. kn6000 -> MACHINE_IMPERFECT_SOUND.
+
+BLOCKER 1 (per-plane map, was ~20 planes INCONCLUSIVE) — **the firmware enumerates itself.**
+Note-on routine 0x484948CB = a straight blit of the 0xA0-byte shadow image (0x50043100 +
+slot*0xA0) into the chip, one writer call per register with each destination OR-ed in as a
+literal. Reading them off in order gives the COMPLETE map, every byte of the record
+accounted for. The proposed live per-plane sweep became a CONFIRMATION, not the method —
+worth remembering: check whether the firmware already enumerates a map before sweeping for it.
+  gate = cls 0x0000 idx 0 (0x87FF/0x8000); amp EG = cls 0x0004/5/6 (confirmed BY LITERAL —
+  the damp routine 0x484947B3 writes the same 0xA280/0xA200 the KN7000 writes to r0/r1);
+  18-bit pitch = cls 0x5000 (shadow +0x74, u32 high half extends the class nibble);
+  level = cls 0x4000 (default 0x3FFF); banks at 4/8/C, release burst {4,5,8,9,C,D}.
+
+★ FALSIFIED: the spec's "plane 0x20 = send matrix on BOTH chips". On the KN6000 cls
+0x8000-0x9000 are PER-VOICE wave/sample params (blit sources them from shadow +0x8C..+0x9C).
+The matrix is in the 0xA0xx family instead (same row<<8|part<<4|reg shape, rebased); its
+row->bus map is UNVERIFIED so the device does not drive the effect gains from it.
+
+BLOCKER 2 (note->pitch routine) — **dissolved, not reversed.** Same trick as the KN7000: the
+firmware computes the pitch and publishes it. Record initialiser 0x48493D80 writes
++0x08 = 0x80|(pitch16>>8), +0x0A base pitch16, +0x0C notePitch16 — field-for-field the
+KN7000 layout at the same 0xB4 stride.
+★ THE TRAP (only a live check caught it; the static read looked perfect): there are TWO
+0xB4 arrays and only one is indexed by SLOT. The library array 0x502858F8 is indexed by
+note-event ELEMENT — C4 and C5 both filled records 00/01 while going to slots 0/1 and 2/3.
+Read **0x5027AF28**, the per-TG-SLOT copy the firmware makes at note-on (0x48492F20).
+KN6500 equivalents (own build, own config): rec 0x5027AF1C, shadow 0x500430AC.
+
+★ NEW BLOCKER, precisely characterised: **KN6500 emits ZERO TG writes on a key press**
+(live-probed). Same correct device + binding, but its voice engine never starts — a
+boot/enable-gate difference from the KN6000, NOT a decode problem. Stays MACHINE_NO_SOUND.
+**This is the obvious next task.**
+
+LEFT UNDECODED ON PURPOSE (evidence does not support them): effect-send matrix, aux/mode
+word (=> every voice treated as MANAGED; safe because the KN6000 writes a UNIVERSAL key-up
+gate), record type, even/odd companion pairing.
+
+TOOLING: tools/kn6000_tg_probe.lua NEW (taps the single TG window, locks the first slot of a
+burst, samples the voice record AT the note-on pitch write, scans all 64 records so the
+slot<->record mapping is measured not assumed).
+tools/audio_playnote_wav.lua FIXED — the previous tick flagged it stale; it was broken TWICE
+OVER and the second fault is invisible until the first is fixed: (1) by-NAME lookup of
+"Key C4" in :KEYS0 (the 61-key bed moved C4 to :KEYS1 bit 8 AND renamed the field to "C4");
+(2) the frame-notifier handle was dropped, so Lua GC'd the subscription. Either alone = a
+silent capture with a cheerful status line. Now resolves the key arithmetically from a MIDI
+note (KN_NOTE/KN_AT/KN_OFF) and ERRORS LOUDLY.
+
+REGRESSION HELD: kn7000 reverb/keybed oracle **c3b67ea711ce3c00f8ae2af1e07651cb**
+bit-identical x3 (twice pre-publish, once on the final published binary). -validate clean on
+kn7000/kn6000/kn6500/kn2400/kn2600/kn5000. Built + published.
+
 ## TICK 2026-07-20 — ★★★ QUEUE ITEM C COMPLETE: INTC + TM4/TM5 timers live in the mn10300 CORE (KN6000 timer hacks retired)
 Two-stage migration mirroring the SIO precedent (9bb2de8 -> 9eb0e4b): core stage **e8429c8**
 (mn10300.{h,cpp}: byte-exact port of the driver INTC HLE — GxICR w1c-per-lane semantics, IAGR
