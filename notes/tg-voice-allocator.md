@@ -156,3 +156,75 @@ per slot by `TgPartKeyEvent` before `TgVoiceSlotService`.
   kit zone's (often NULL) descriptor — the legacy 0x4280-const path of
   tg-pitch-pipeline.md enters through here, not through a special drum
   formula in the allocator.
+
+## 2026-07-20 closure pass (static RE, all converted to source in
+## kn7000_disassembly): programmers, list engine, and THE GLIDE CORRECTION
+
+### Correction: the 0x500AD5A8 "hold mark" block is the MONO/PORTAMENTO state
+
+The earlier reading of the +0x26.. fields as a damper-pedal mark list
+(collected at pedal release) is **superseded by code**. The block
+0x500AD5A8+part*0x10C carries the part's mono/portamento state:
+
+* +0x26 current (top) note, +0x27 previous note;
+* +0x28 glide tick period / +0x29 tick counter (-1 = idle);
+* +0x2A step count / +0x2C step index;
+* +0x30 and +0x38 SOFT-DOUBLE per-step pitch deltas;
+* +0x40/+0x42 interpolated pitch offset halfwords, +0x46 curve base.
+
+`TgPartGlidePlan` 0x4C02D79A (called under `TgPartHoldMark` when partrec
+bit7 = portamento on) plans the ramp with soft-float double math
+(constants 100.0/12.0/256.0/±5.0; runtime 0x4C0007E7/0x4C000856/
+0x4C000879/0x4C000B1C/0x4C001629/0x4C0016AC/0x4C0019F2) against the
+per-part portamento curve record 0x486D319C[partrec+6], then arms
+`TgPartGlideTick` 0x4C02E5AD — the per-part periodic tick (invoked from
+the part service loops at 0x4C02D2F8/0x4C02D552, gated on partrec bits
+6+7). Mid-ramp the tick rewrites every part voice's class-0x2400 pitch
+word (`TgPitchRuntimeCalc`) and class-0x3000 level word
+(`TgVoiceLevelWordCalc` 0x4C0315D2, bit14 cleared); on the final step it
+snaps the current note's (+0x26) voices and *releases the previous
+note's (+0x27) voices* (`TgVoiceListReleaseByNote` + `TgVoiceNodeKeyOff`
++ `TgVoiceSlotService`). So partrec bit6 = mono/legato mode (the
+top-note promotion in `TgPartHoldQuery` is mono note-priority), bit7 =
+portamento. The actual damper-pedal timing story (Part 52) is a
+separate mechanism — the sustain mask 0x500D288C + held-node flags —
+and does NOT go through this block.
+
+### The per-class note-on/key-off programmers (dispatch layer now closed)
+
+Note-on (under `TgNoteOn`, dispatch on staged librec+2):
+
+* bit2 (fresh, class 0x104/0x004) -> `TgElemNoteOnFresh` 0x4C033CB3:
+  builds the COMPLETE shadow register image (pitch chain, level word,
+  all four pitch/filter EG segments + amp EG, raw EG writes to both the
+  even and odd companion register blocks) before gate-on. Every first
+  strike lands here; `TgElemNoteOnStd` programs the bit1 RESTRIKES.
+* else (drum 0x10 / table 0x40) -> `TgKitElemNoteOn` 0x4C013547, a
+  near-twin that fetches tone params through the kit/table fetchers.
+* kit classes 0x81..0x83 also fire a PCM one-shot layer:
+  `TgNoteOnKitLayer` 0x4C03678F (stage 0x4C036602 + allocate
+  0x4C0366D7, pool byte 0x83, then gate-on + immediate gate-off).
+
+Key-off (under `TgVoiceSlotService`, class&0x7C):
+
+* 0x10 drum -> `TgDrumKeyOffProgram` 0x4C00C0B1 (amp release from
+  `TgDrumAmpReleaseCalc` 0x4C00AD48, curve ROM 0x486D2649 + key
+  scaling), 0x40 table -> `TgTableKeyOffProgram` 0x4C0115AA
+  (TgKeyOffAmpRelease(0)), else/restrike -> `TgElemKeyOffRelease`
+  0x4C013F0F (key-off offset from the note's routing entry). All three
+  end in the same `TgVoiceEgBurstWrite` 6-write release burst; the
+  melodic fresh class (bit2) is only FLAG-marked here and released
+  later via the dirty-release flush.
+
+### The voice-list collect/release engine
+
+`TgVoiceListBuild` 0x4C03B3B5 + 8 tiny wrappers (0x4C010047..0x4C010127)
+are how every subsystem enumerates sounding voices: request = {flags,
+match part<<8|note, mask} -> slot bytes 0xFF/0x80-terminated. flags
+0x80 = collect-AND-release (`TgNodeRingReleaseWalk`: moves each match
+to the releasing ring, marks pending bit11, follows the slot ring so
+same-note stacked voices go together), 0x40 = skip-pending collect,
+else plain collect; all-parts mode sweeps the 128-node pool
+0x500D1278. Part order-ring heads live at 0x500D0C64+part*0x1C +4
+(sounding) / +8 (releasing); +0xC is a 16-byte slot bitmask
+(`TgPartSlotMaskBuild`/`TgNodePendingMark`/`TgPartPendingFlush`).

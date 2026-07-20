@@ -3523,3 +3523,50 @@ damp tables + 0x4C033CB3 (class-bit2 note-on programmer) and the
 key-off collection sweep that consumes TgPartHoldMark's marks (find it
 via callers of 0x500AD5A8+0x26/+0x27); then the choke/kill helpers
 0x4C00C0B1/0x4C0115AA under TgVoiceSlotService.
+
+## 2026-07-20: CONVERT track -- the note-path closure + THE GLIDE (309 -> 341)
+
+The previous NEXT is DONE and the TG note-path DISPATCH LAYER is CLOSED
+(kn7000_disassembly b5b3d4f/a4dc9dc): 32 new library functions, 341
+total re-assemblable (233 region-1 + 108 lib), make verify 100% (one
+new auto-escaped non-minimal call encoding in TgElemNoteOnFresh).
+Every dispatch target of TgPartKeyEvent -> TgNoteOn ->
+TgVoiceSlotService is now source; below remain only leaf param
+fetchers, raw shadow-cache writers, and the soft-float runtime.
+
+- ★ MAJOR REINTERPRETATION (code-settled, notes/tg-voice-allocator.md
+  new section + blog Part 54): the "pedal-release collection sweep"
+  DOES NOT EXIST as such -- 0x4C02E5AD (TgPartGlideTick) is the
+  PORTAMENTO tick and the 0x500AD5A8+part*0x10C +0x26.. block is the
+  part's MONO/PORTAMENTO state (+0x26 current note, +0x27 previous,
+  +0x28..+0x2C tick/step counters, +0x30/+0x38 SOFT-DOUBLE per-step
+  pitch deltas, +0x40/+0x42 interpolated offset). TgPartGlidePlan
+  0x4C02D79A plans the ramp in software IEEE doubles (100.0/12.0/
+  256.0/+-5.0; curve ROM 0x486D319C with a double rate coeff).
+  partrec bit6 = mono/legato (top-note promotion = mono priority),
+  bit7 = portamento. Part 52's mark-only measurement stands; the
+  damper's actual bookkeeping is the held-node flags + sustain mask
+  0x500D288C, and its part-flags gate is still OPEN.
+- Dispatch decode: staged class bit2 = FRESH strike -> TgElemNoteOnFresh
+  0x4C033CB3 (full shadow image: pitch chain, level word, 4 EG
+  segments + amp EG, even+odd banks); bit1 = RESTRIKE ->
+  TgElemNoteOnStd (misnamed "std"); drum/table -> near-twin
+  TgKitElemNoteOn 0x4C013547. Key-off per class: drum TgDrumKeyOff-
+  Program 0x4C00C0B1 (own amp-release calc 0x4C00AD48, same curve ROM
+  0x486D2649), table TgTableKeyOffProgram 0x4C0115AA, restrike
+  TgElemKeyOffRelease 0x4C013F0F -- all end in the TgVoiceEgBurstWrite
+  6-write burst. Kit classes 0x81..0x83 fire a PCM ONE-SHOT layer
+  (TgNoteOnKitLayer 0x4C03678F: gate-on + immediate gate-off).
+- The voice-list engine named: TgVoiceListBuild 0x4C03B3B5 + 8 wrappers
+  + 7 ring-walk helpers = how everything enumerates voices (flags 0x80
+  = collect-AND-release walk following the slot ring; part order-ring
+  heads at 0x500D0C64+part*0x1C +4 sounding / +8 releasing; +0xC =
+  16-byte slot bitmask for the pending-release marks, node flag bit11).
+
+NEXT (CONVERT track): the layer below the dispatch -- the melodic zone
+param fetchers 0x4C00FD4E..0x4C00FFF5 + kit/table fetchers 0x4C011F31/
+0x4C0121D8, the raw EG/shadow writers 0x4C03A214/0x4C03A2BF/0x4C037C1B
+family, and the SOFT-FLOAT double runtime (0x4C0007E7/0x4C000856/
+0x4C000879/0x4C000B1C/0x4C001629/0x4C0016AC/0x4C0019F2 + the mul
+0x4C000523) as its own module; live-session question for the runtime
+track: the damper pedal's part-flags gate into the held-voice policy.
