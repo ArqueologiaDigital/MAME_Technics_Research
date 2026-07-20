@@ -1,0 +1,208 @@
+From e6b4cf72f42f462e24943d69e81812950fb82a77 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 17:48:46 +0100
+Subject: [PATCH] =?UTF-8?q?kn5000:=20restore=20the=20inter-CPU=20latch=20I?=
+ =?UTF-8?q?NT0/handshake=20fix=20=E2=80=94=20payload=20transfer=20was=20sc?=
+ =?UTF-8?q?rambled?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Felipe reported "Sound Name Error" had regressed. Root cause: the overlay was
+taken from the cleaned-up PR branches (kn5000_pr6 / _research_tonegen), and the
+upstream-cleanup rebase dropped three load-bearing driver-side inter-CPU-latch
+workarounds that the working kn5000_aided_by_claude branch had (documented as
+fixes 10 and 12 in kn5000-docs/subcpu-payload-loading.md):
+
+  * the latch READ wrappers that synchronously clear the receiver's /INT0
+    (generic_latch::read() de-asserts /INT0 through a deferred synchronize(),
+    so the TMP94C241 level-detect re-assertion kept re-firing the receive ISR
+    spuriously per byte);
+  * acknowledge_w(0)-if-pending before each latch write (so every write raises a
+    fresh /INT0 edge even when the previous byte was not yet read);
+  * abort_timeslice() after each latch write (so the receiver's HDMA sees each
+    byte before the writer pushes the next).
+
+Without them the 192 KB SubCPU payload arrived corrupted (measured: 58 515 and
+62 804 wrong bytes in payload blocks 7 and 8), so the SubCPU ran garbage and
+never answered the sound-name query.
+
+Restored here (matching kn5000_aided_by_claude): add
+tmp94c241_device::clear_int0_level(), call it from the {sub,main}cpu_latch_r()
+read wrappers, and put the pending-clear + abort_timeslice back in the write
+wrappers. The decompressed payload in Main CPU RAM is now bit-identical to the
+reference kn5000_subprogram_v142.rom (0 mismatches); -validate passes for
+kn5000/kn7000/kn6000/kn6500/kn2400; KN7000 (MN10300, unrelated path) unchanged.
+
+Note: the on-screen "Sound Name Error" persists for a SECOND, separate reason —
+the SubCPU receives the query (527x) but emits no reply, and the overlay also
+dropped the SubCPU DSP2 (MN19413) / Computer-Interface / serial wiring that the
+working branch had. That is the next step; see
+side-quests/findings/kn5000_driver_findings.md (KN7000 repo).
+
+---
+ src/devices/cpu/tlcs900/tmp94c241.cpp | 24 ++++++++++++
+ src/devices/cpu/tlcs900/tmp94c241.h   |  8 ++++
+ src/mame/matsushita/kn5000.cpp        | 55 +++++++++++++++++++++++++--
+ 3 files changed, 84 insertions(+), 3 deletions(-)
+
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.cpp b/src/devices/cpu/tlcs900/tmp94c241.cpp
+index 7ec41f6..5b02475 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241.cpp
+@@ -305,6 +305,30 @@ void tmp94c241_device::device_reset()
+ 	m_serial[1]->pffc_sclk_w(0);
+ }
+ 
++//-------------------------------------------------
++//  clear_int0_level - synchronously clear the /INT0
++//  level and interrupt flag.
++//
++//  set_input_line() defers the level change through
++//  synchronize(), so a device that de-asserts /INT0
++//  from inside its own read handler leaves m_level
++//  stale for the rest of the timeslice.  The
++//  level-detect re-assertion in tlcs900_check_irqs()
++//  would then keep re-raising the flag, firing the
++//  handler again and again on a line that is already
++//  released.
++//-------------------------------------------------
++
++void tmp94c241_device::clear_int0_level()
++{
++	if (m_level[TLCS900_INT0] != CLEAR_LINE)
++	{
++		m_level[TLCS900_INT0] = CLEAR_LINE;
++		m_int_reg[INTE0AD] &= ~0x08;
++		m_check_irqs = 1;
++	}
++}
++
+ uint8_t tmp94c241_device::inte_r(offs_t offset)
+ {
+ 	return m_int_reg[offset];
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.h b/src/devices/cpu/tlcs900/tmp94c241.h
+index cced34c..d5c8400 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.h
++++ b/src/devices/cpu/tlcs900/tmp94c241.h
+@@ -123,6 +123,14 @@ public:
+ 	// Timer output callbacks
+ 	auto to0_callback() { return m_to0_cb.bind(); }
+ 
++	// Synchronously clear the /INT0 level and its interrupt flag.  Drivers whose
++	// /INT0 source is a device that de-asserts the line from inside its own read
++	// handler (e.g. a generic_latch read) must call this from the read handler:
++	// set_input_line() defers the level change through synchronize(), so the
++	// level-detect re-assertion in tlcs900_check_irqs() would otherwise still see
++	// the stale ASSERT_LINE and re-raise the flag for the rest of the timeslice.
++	void clear_int0_level();
++
+ protected:
+ 	// device_t implementation
+ 	virtual void device_config_complete() override ATTR_COLD;
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 8c4ad0d..49bc76f 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -171,7 +171,9 @@ private:
+ 	uint32_t m_subcpu_latch_write_count;
+ 	uint32_t m_maincpu_latch_write_count;
+ 
+-	// Latch logging wrappers
++	// Latch access wrappers
++	uint8_t subcpu_latch_r();
++	uint8_t maincpu_latch_r();
+ 	void subcpu_latch_w(uint8_t data);
+ 	void maincpu_latch_w(uint8_t data);
+ 
+@@ -198,6 +200,28 @@ private:
+ 	void subcpu_mem(address_map &map) ATTR_COLD;
+ };
+ 
++// Reading a latch de-asserts that CPU's /INT0 from inside the read handler
++// (generic_latch_8_device::read() calls set_input_line(..., CLEAR_LINE)).  That
++// clear is deferred by synchronize() until the end of the timeslice, so the
++// level-detect re-assertion in the CPU core would keep re-raising the /INT0 flag
++// on an already-released line -- firing the receive ISR many extra times per byte
++// and corrupting the inter-CPU byte stream (a scrambled SubCPU payload, and
++// "Sound Name Error" once the payload fails to answer command 0x2B).  Clear the
++// level synchronously instead.
++uint8_t kn5000_state::subcpu_latch_r()
++{
++	uint8_t const val = m_subcpu_latch->read();
++	m_subcpu->clear_int0_level();
++	return val;
++}
++
++uint8_t kn5000_state::maincpu_latch_r()
++{
++	uint8_t const val = m_maincpu_latch->read();
++	m_maincpu->clear_int0_level();
++	return val;
++}
++
+ void kn5000_state::subcpu_latch_w(uint8_t data)
+ {
+ 	m_subcpu_latch_write_count++;
+@@ -214,7 +238,21 @@ void kn5000_state::subcpu_latch_w(uint8_t data)
+ 	// between main CPU instructions.
+ 	machine().scheduler().perfect_quantum(attotime::from_usec(100));
+ 
++	// Force-clear the latch pending state before writing.  On real hardware every
++	// latch write raises a fresh /INT0 on the receiver, whether or not the previous
++	// value was read.  generic_latch's pending callback only fires on a CHANGE, so
++	// if the latch is still marked "written" -- which happens whenever the
++	// receiver's ISR ran but declined to read because of the MSTAT/SSTAT handshake
++	// -- the next write silently replaces the value and raises no interrupt.
++	if (m_subcpu_latch->pending_r())
++		m_subcpu_latch->acknowledge_w(0);
++
+ 	m_subcpu_latch->write(data);
++
++	// perfect_quantum() only constrains FUTURE scheduling, so without this the
++	// writer would run on to the end of its timeslice and could push several more
++	// bytes before the receiver ever gets to look at this one.  Yield now.
++	m_maincpu->abort_timeslice();
+ }
+ 
+ void kn5000_state::maincpu_latch_w(uint8_t data)
+@@ -226,7 +264,18 @@ void kn5000_state::maincpu_latch_w(uint8_t data)
+ 	else
+ 		LOGMASKED(LOG_LATCH_DATA, "SubCPU -> MainCPU latch: 0x%02X (write #%u)\n",
+ 			data, m_maincpu_latch_write_count);
++
++	// Same reasoning as subcpu_latch_w, in the reply direction: keep the main CPU's
++	// DMAR-driven reads in step with the SubCPU's HDMA channel 2 writes, and make
++	// each write raise a fresh /INT0.
++	machine().scheduler().perfect_quantum(attotime::from_usec(100));
++
++	if (m_maincpu_latch->pending_r())
++		m_maincpu_latch->acknowledge_w(0);
++
+ 	m_maincpu_latch->write(data);
++
++	m_subcpu->abort_timeslice();
+ }
+ 
+ // Scan PC keyboard input ports and generate note-on/note-off events
+@@ -275,7 +324,7 @@ void kn5000_state::maincpu_mem(address_map &map)
+ 	map(0x110008, 0x110008).rw(m_fdc, FUNC(upd72067_device::msr_r), FUNC(upd72067_device::auxcmd_w));
+ 	map(0x11000a, 0x11000a).rw(m_fdc, FUNC(upd72067_device::fifo_r), FUNC(upd72067_device::fifo_w));
+ 	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
+-	map(0x140000, 0x14ffff).r(m_maincpu_latch, FUNC(generic_latch_8_device::read)); // @ IC23
++	map(0x140000, 0x14ffff).r(FUNC(kn5000_state::maincpu_latch_r)); // @ IC23
+ 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)
+ 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
+ 	map(0x1a0000, 0x1dffff).rw("vga", FUNC(mn89304_vga_device::mem_linear_r), FUNC(mn89304_vga_device::mem_linear_w));
+@@ -294,7 +343,7 @@ void kn5000_state::subcpu_mem(address_map &map)
+ 	map(0x100002, 0x100003).rw(m_tonegen, FUNC(kn5000_tonegen_device::data_r), FUNC(kn5000_tonegen_device::data_w)); // Tone gen register data
+ 	map(0x110000, 0x110001).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_data_r));   // Tone gen keybed data
+ 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status
+-	map(0x120000, 0x12ffff).r(m_subcpu_latch, FUNC(generic_latch_8_device::read)); // @ IC22
++	map(0x120000, 0x12ffff).r(FUNC(kn5000_state::subcpu_latch_r)); // @ IC22
+ 	map(0x120000, 0x12ffff).w(FUNC(kn5000_state::maincpu_latch_w)); // @ IC23 (logged wrapper)
+ 	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::addr_w));    // DSP1 @ IC311 register address
+ 	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // DSP1 @ IC311 register data
+-- 
+2.47.3
+

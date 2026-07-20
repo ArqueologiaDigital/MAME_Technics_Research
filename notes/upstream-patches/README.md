@@ -100,7 +100,7 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
   (`>` vs `>=`: TRM-correct but changes the KN7000 reverb by 2 samples — held), AVG/SSFR rounding,
   FIX-overflow UB, pre-modify circular wrap: all catalogued with TRM citations.
 
-# KN5000 driver series (kn5000-01 … kn5000-25)
+# KN5000 driver series (kn5000-01 … kn5000-26)
 
 **Added 2026-07-20.** Everything the KN5000 has that upstream MAME does not, extracted from the
 local MAME tree's unmerged branches and rebased onto `kn7000-base` (= upstream + the cpanel-ioport
@@ -135,6 +135,7 @@ stripped: submission is under the project owner's authorship.
 | 20 | kn5000-20-mn89304-vga-findings.patch | documents the MN89304 LCD controller (4-bit RAMDAC, 8x row-offset, extended SEQ/CRTC) |
 | 21-24 | kn5000-21…24 | tone-gen voice hold timer, DSP1 ready → SubCPU Port H bit 0, removal of the Feature Demo stuck-parts workaround, and the final voice-timing fix for the undumped waveform ROMs |
 | 25 | kn5000-25-program-data-wheel.patch | TEMPO/PROGRAM data wheel: an infinite relative encoder owned by the cpanel device, declared as an adjuster and reported as the segment 0x0B status byte (bit 7 CW / bit 6 CCW, neutral 0x00 on stop) that the firmware reads at DRAM[0x8E55]; wrap-aware per-scan delta slewed one detent per packet, plus a draggable layout knob using the shared slider/knob library. **Held back deliberately — see below.** |
+| 26 | kn5000-26-intercpu-latch-int0-handshake.patch | **CPU core + driver (regression fix, 2026-07-20).** Restores the inter-CPU-latch INT0/handshake workarounds dropped in the PR-branch cleanup (fixes 10 & 12 in kn5000-docs/subcpu-payload-loading.md): `tmp94c241_device::clear_int0_level()` + its use from the latch READ wrappers (synchronously clear the receiver's `/INT0`, which `generic_latch::read()` otherwise only de-asserts through a deferred `synchronize()`, causing spurious per-byte ISR re-fires), and `acknowledge_w(0)`-if-pending + `abort_timeslice()` in the latch WRITE wrappers. Without these the 192 KB SubCPU payload arrived scrambled → "Sound Name Error". After: decompressed payload bit-identical to the reference ROM. **Belongs logically in patch 01's driver + patch 02's core on the next full regeneration; kept as a separate incremental patch here to avoid disturbing the byte-identical-verified 01-25 stack.** Note it does NOT by itself clear the on-screen error — the SubCPU reply path (missing DSP2/ComIF/serial wiring) is a separate follow-up. |
 
 ### Suggested split into PRs
 - **PR 6 (peripherals)**: 01-17 — the cohesive "bring the rest of the KN5000 online" batch that the
