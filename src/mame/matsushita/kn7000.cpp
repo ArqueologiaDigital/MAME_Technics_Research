@@ -911,6 +911,7 @@ public:
 
 	void kn7000(machine_config &config) ATTR_COLD;
 	void kn6000(machine_config &config) ATTR_COLD;
+	void kn2400(machine_config &config) ATTR_COLD;
 	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
 	DECLARE_INPUT_CHANGED_MEMBER(sd_cover_changed);   // SD slot cover toggle (public: PORT_CHANGED_MEMBER)
 
@@ -925,7 +926,9 @@ private:
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
+	bool m_ram90_workram = false;                // KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
+	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
 	required_device<kn7000_sio_uart_device> m_kbd_midi_uart;  // MIDI -> internal key bed (velocity)
@@ -1276,6 +1279,21 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x4c000000, 0x4cffffff).ram().share("libram");
 	map(0x8c000000, 0x8cffffff).ram().share("libram");
 	map(0x90000000, 0x97ffffff).ram().share("vram");   // LCD controller window (regs + trampolines)
+	// KN2400/KN2600: 0x90000000..0x903fffff is the +0x40000000 write/execute ALIAS of the
+	// 0x50000000 work RAM (the same one-bit window pair as 0x4C/0x8C and 0x44/0x84). The
+	// KN2400's boot-time block loader (0x4870587E, descriptor list at 0x487965BB -- the
+	// relocated twin of the KN7000's InitializeBlock27 loader) copies its ~147 KB library
+	// from program ROM 0x487285BE to logical 0x50120000; the loader's `cmp 0x80000000 /
+	// add 0x40000000` dest adjust makes the bytes land at 0x90120000, and the code is then
+	// EXECUTED at 0x5012xxxx / builds dispatch tables into 0x5018xxxx. With 0x90000000
+	// mapped as a separate "vram" share the copy went into the wrong RAM and the boot
+	// called into zeroed work RAM (the long-standing KN2400 derail at 0x5018CCF4 -- see
+	// notes/kn2400-boot.md). Gated to the kn2400 machine for now: the KN7000/KN6000 only
+	// use this window for the IRQ trampolines+LCD regs and are already verified working
+	// with the separate share (their trampoline disp math ALSO assumes this alias, so the
+	// alias is probably faithful family-wide -- revisit when the LCD regs are modeled).
+	if (m_ram90_workram)
+		map(0x90000000, 0x903fffff).ram().share("workram");
 	// NOTE: 0x96800000-0x969FFFFF within this range is actually the WRITABLE custom-data
 	// FLASH (AMD 29LV160-class; unlock cmds to 0x9680AAAA/0x96805554), programmed by the
 	// "Initial Data" disk (idd7000). Modeled here as blank RAM -> empty -> style names /
@@ -2074,6 +2092,29 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	// -- so the splash reads as noise here too, faithfully.)
 	// TODO: honour the 2-bit grayscale panel (type 2 at 0x50007578).
 	constexpr offs_t LCD = (0x9ce00000 - 0x9c000000) / 4;      // word offset of the framebuffer in the 0x9c RAM
+
+	// KN2400/KN2600: a 320x240 FOUR-LEVEL GRAYSCALE panel. The firmware composites into a
+	// 2bpp buffer at 0x9C800000 (stride 80 bytes, MSB-first pixel pairs, 0 = lightest).
+	// Found empirically: after the 0x90-alias fix the boot paints exactly this region and
+	// a 2bpp/320-wide decode shows the play screen (title bar, menus, sound-group tiles).
+	if (m_lcd_kn24)
+	{
+		constexpr offs_t LCD24 = (0x9c800000 - 0x9c000000) / 4;
+		for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
+		{
+			uint32_t *const dst = &bitmap.pix(y);
+			for (int x = cliprect.left(); x <= cliprect.right(); x++)
+			{
+				const offs_t k = offs_t(y) * 320 + x;                        // linear pixel index
+				const uint32_t w = m_lcdbuf[LCD24 + (k >> 4)];               // 16 px per 32-bit word
+				const uint8_t byte = uint8_t(w >> ((k & 0xc) << 1));         // little-endian byte within the word
+				const uint8_t v = (byte >> (6 - 2 * (k & 3))) & 3;           // MSB-first 2-bit pixel
+				const uint8_t g = 0xff - v * 0x55;
+				dst[x] = rgb_t(g, g, g);
+			}
+		}
+		return 0;
+	}
 	// KN7000: 640x240 RGB565, scanned top-to-bottom. KN6000/KN6500: the same composited buffer,
 	// but the panel is RGB555 and physically mounted rotated 180 degrees -- so read it reversed
 	// (bottom-right to top-left) and decode 5-5-5. (Decoding a 555 gray as 565 tinted it blue.)
@@ -2491,6 +2532,24 @@ void kn7000_state::kn6000(machine_config &config)
 		m_maincpu->set_maskable_vector(level, 0x90000000);
 }
 
+// KN2400/KN2600 reuse the KN7000 machine, but their firmware self-loads its library
+// into WORK RAM at 0x50120000 through the 0x90000000 (+0x40000000) alias window, so
+// that window must alias work RAM instead of being a separate share (see maincpu_mem).
+void kn7000_state::kn2400(machine_config &config)
+{
+	kn7000(config);
+	m_ram90_workram = true;
+	m_lcd_kn24 = true;
+	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).
+	m_screen->set_size(320, 240);
+	m_screen->set_visarea(0, 320 - 1, 0, 240 - 1);
+	// Like the KN6000, the KN2400 firmware builds its own interrupt trampoline
+	// table; route all maskable IRQs to trampoline slot 0 rather than the
+	// KN7000's library handler addresses (which don't exist on this firmware).
+	for (int level = 0; level < 8; level++)
+		m_maincpu->set_maskable_vector(level, 0x90000000);
+}
+
 
 ROM_START(kn7000)
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC16/IC17 -> 0x48400000
@@ -2616,5 +2675,5 @@ SYST(2000, kn6000, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "T
 SYST(2001, kn6500, 0,      0,      kn6000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN6500", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
 
 // KN2400 / KN2600 -- MN10300/MILK siblings sharing one firmware image (kn2600 = clone of kn2400).
-SYST(1998, kn2400, 0,      0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
-SYST(2000, kn2600, kn2400, 0,      kn7000,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2600", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(1998, kn2400, 0,      0,      kn2400,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2400", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)
+SYST(2000, kn2600, kn2400, 0,      kn2400,  kn7000, kn7000_state, empty_init, "Technics", "SX-KN2600", MACHINE_NOT_WORKING | MACHINE_NO_SOUND)

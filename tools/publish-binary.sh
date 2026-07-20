@@ -14,7 +14,8 @@ BUILD=/home/fsanches/compartilhado/kn7000_mame_build
 BIN="$BUILD/kn7000"
 DEST=/home/fsanches/compartilhado/kn7000-emulator
 # Models that reach a display and are worth shipping (each ships a roms/<model>/ subfolder).
-MODELS="kn7000 kn6000 kn6500"
+# (kn2600 is a clone of kn2400 -- it resolves its ROMs from the kn2400 set, no own folder.)
+MODELS="kn7000 kn6000 kn6500 kn2400"
 
 [ -x "$BIN" ] || { echo "error: binary not built at $BIN (build the driver first)"; exit 1; }
 
@@ -49,11 +50,14 @@ fi
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
 # Launch a Technics keyboard emulator. An optional first argument selects the model
-# (kn7000 / kn6000 / kn6500; default kn7000); everything else passes through to MAME.
+# (kn7000 / kn6000 / kn6500 / kn2400 / kn2600; default kn7000); everything else passes
+# through to MAME.
 #   ./run.sh                  # KN7000, fullscreen
 #   ./run.sh -window          # KN7000, windowed
 #   ./run.sh kn6000 -window   # KN6000, windowed (boots to its play screen)
 #   ./run.sh kn6500 -window   # KN6500, windowed
+#   ./run.sh kn2400 -window   # KN2400, windowed (boots to its play screen)
+#   ./run.sh kn2600 -window   # KN2600, windowed (same firmware as the KN2400)
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
@@ -141,6 +145,9 @@ be produced (binary + its own copies of the libraries + loader).
   Your saves persist in `sdcard_work.img` (auto-created working copy); delete that file to
   reset the card to the pristine dump.
 - **KN6000 / KN6500** boot to their main play screen (tone/sound-group icon row, menus, status bar).
+- **KN2400 / KN2600** boot to their main play screen too (320x240 4-level grayscale LCD;
+  sound-group tiles + instrument icons). Text rendering on the KN6xxx/KN2xxx screens is still
+  in progress.
 
 The four PCM **wave ROMs are undumped**, so the sound uses a placeholder sine rather than the real
 samples — the notes are in tune and firmware-timed, they just don't have the KN7000's actual voices

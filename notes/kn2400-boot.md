@@ -137,3 +137,48 @@ numbers** showing the KN2400 and KN7000 use the same mask ROM part. We must NOT 
 cross-model substitution as if it were the device's real ROM, to avoid misrepresenting these keyboards'
 technical history. (Known real sharing: KN2400/KN2600/PR54 share ONE program firmware — that IS a fact.
 KN2400↔KN7000 chip sharing is currently UNVERIFIED and would need the service manual.)
+
+## ✅ RESOLVED 2026-07-20 — KN2400/KN2600 BOOT TO THEIR PLAY SCREEN
+
+The whole "skipped library self-load / overlay copy" mystery had a one-line root cause in the
+DRIVER's memory map, found by searching for the copy BY CONTENT (as planned) instead of by address:
+
+**Mechanism (static RE).** The block-loader is a byte-for-byte relocated twin of the KN7000's
+`InitializeBlock27` copy engine, at KN2400 **`0x4870587E`** (right next to the crt0 at `0x48705bdf`).
+It walks a 12-byte-record descriptor list whose base is hardcoded as byte-pointers in the loader
+prologue — KN2400 **`0x487965BB`** (found via LE-u32 references to the descriptor's byte addresses).
+Record layout `{u16 flags, u16 len16, u32 src, u32 dest}`, stride 0xC; when flags bit15 is clear the
+copy length = next record's src − this src; flags bit15 marks the final record, whose 3-byte payload
+`de 00 00` (= `retf`) is planted at the window end as a sentinel. The loader's dest adjust
+(`cmp 0x80000000 / add 0x40000000`) sends every dest below 0x80000000 through the **+0x40000000
+alias**. Descriptor tables live at the very END of each program image:
+- KN7000 (`D=0x487F6EE9`): 1 record — ROM `0x487B8FD1` (len 0x3DF15) → `0x4C000000` (phys 0x8C000000,
+  the libram) + sentinel at `0x4C03FFF0`.
+- KN2400 (`D=0x487965BB`): 1 record — ROM `0x487285BE` (len 0x23DFA) → **`0x50120000`** (phys
+  **`0x90120000`**) + sentinel at `0x5018FFF0`. The payload disassembles as clean MN10300 code linked
+  at 0x50120000 (starts with the same soft-float libm as the KN7000's library at 0x4C000005). So the
+  KN2400 self-loads its library INTO WORK RAM — it never touches 0x4C/0x8C (matching every earlier
+  zero-libram trace), and 0x90000000..0x903fffff must be the +0x40000000 write/execute alias of the
+  0x50000000 work RAM.
+
+**Driver root cause.** `maincpu_mem` mapped `0x90000000-0x97ffffff` as a SEPARATE `vram` share. The
+self-load DID run every time — its 147 KB landed in the vram share at 0x90120000, while execution
+read zeros from workram 0x50120000 → `call 0x5018ccf4` into cleared RAM → the free-running derail.
+(All the old write-taps watched 0x50180000/0x8C — nobody watched 0x90120000.)
+
+**Fix.** New `kn2400` machine config (`m_ram90_workram`): `map(0x90000000, 0x903fffff).ram()
+.share("workram")` + maskable vectors → trampoline slot 0x90000000 (KN6000-style). With the alias in
+place the boot self-loads, populates the whole 0x5012xxxx-0x5018xxxx region (later stages fill past
+the initial copy), the RTOS comes up multitasking, and the firmware paints its play screen.
+
+**Display.** The KN2400/KN2600 panel is a **320x240 FOUR-LEVEL GRAYSCALE LCD**: the firmware
+composites a 2bpp framebuffer at **`0x9C800000`** (stride 80 bytes, MSB-first pixel pairs,
+0 = lightest). Found empirically by scanning the 0x9C bank for content and decoding candidates.
+`screen_update` gained an `m_lcd_kn24` path (320x240, 2bpp decode); the play screen (title bar,
+menu bars, 8 sound-group tiles with instrument icons) renders for BOTH kn2400 and kn2600
+(snapshot-verified). Like the KN6000/KN6500, TEXT does not render yet (same class of problem —
+see notes/kn6000-kn6500-boot.md); icons and screen structure are real firmware output.
+
+Regression: kn7000 reverb oracle **bit-identical c3b67ea711ce3c00f8ae2af1e07651cb**, kn6000 play
+screen unaffected, `-validate` clean. ROMs: the split even/odd images (CRCs already in the driver)
+are generated from `kn7000_scratchpad_snapshot/kn2400_full.bin` (LKG1+LKG2 concatenation).
