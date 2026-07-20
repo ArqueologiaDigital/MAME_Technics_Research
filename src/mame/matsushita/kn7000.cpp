@@ -624,9 +624,18 @@ private:
 	// the AMPLITUDE EDIT -> ENVELOPE screen sweep (notes/tg-envelope-sweep-results.md):
 	// r0 = [ATK rate | PEAK level], r1 = [DCY1 rate | SUS1 level], r2 = [DCY2 rate | SUS2
 	// level] (rate bytes: higher = faster; levels 0..0x7F), r3 = gate (0x87FF on / 0x8000
-	// key-up). r4..rA are a SECOND parameter bank (chip-side damp; rA hi = the default
-	// release rate the audible 11-family sweep validated), kept for the note-on validity
-	// check and the release-rate default.
+	// key-up). r4..rA DECODED 2026-07-20 (FILTER/PITCH ENVELOPE screen sweeps, see
+	// tg-envelope-sweep-results.md RESULT 4): r4/r5/r6 = the PITCH ENVELOPE ([ATK|PEAK]
+	// [DCY1|SUS1] [DCY2|SUS2], same pair layout as the amplitude EG), r7 hi = pitch-EG
+	// TOTAL DEPTH, r8/r9/rA = the FILTER ENVELOPE (same three pairs), rB lo = filter
+	// START POINT. Filter/pitch LEVEL bytes are SIGNED offsets (0 = screen 40) and
+	// CUTOFF ADJUST folds into every filter level byte host-side. Neither EG is
+	// modelled yet (placeholder timbre has no filter/pitch mod); the bank is kept for
+	// the note-on validity check and for rA hi as the release-rate HEURISTIC --
+	// semantically the filter-EG DCY2 rate, whose per-sound value tracks the audible
+	// release character (organ 0xAE fast stop / pad 0x04 slow fade; 11-family sweep)
+	// because these sounds close the filter in step with the amplitude release.
+	// Behaviorally validated; kept as-is.
 	uint16_t m_eg012[128][3] = { };   // raw r0/r1/r2 per voice (the 7-param amplitude EG)
 	uint16_t m_envreg[128][7] = { };  // raw r4..rA per voice (damp/aux bank)
 	double   m_peak[128] = { };       // resolved PEAK level 0..1 (r0 lo)

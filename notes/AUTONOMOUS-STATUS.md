@@ -7,9 +7,12 @@ cron tick.
 
 ## ★ FELIPE'S QUEUE 2026-07-20 (explicit: "do all of the autonomous software queue items")
 Execution order (driver-side items SERIALIZE on build-tree+display; launch next as each completes):
-  A. [IN FLIGHT] r4-rA damp-bank RE + the two live DSP experiments (u8 DM dump, DspEffectSelect
-     unit-role capture) — one agent (all need live instrumentation).
-  B. Per-part effect depth bank decode + fix (cold chorus/multi panel toggle audible).
+  A. [DONE 2026-07-20 — see the TICK below] r4-rA damp-bank RE + the two live DSP experiments
+     (u8 DM dump, DspEffectSelect unit-role capture).
+  B. [NEXT] Per-part effect depth bank decode + fix (cold chorus/multi panel toggle audible).
+     ★ Item A feeds it directly: GUI CHORUS = unit 9 (NOT u7/u4), MULTI = u1, per-part
+     Sound-DSP = u2..u6 — the bridge's chorus/sound-dsp unit feeds are wrong-slot placeholders
+     (notes/dsp-unit-roles-live-capture.md).
   C. INTC + timers into the mn10300 core (SIO's next of kin; also yields the real KN6000 timer).
   D. Siblings: KN2400/2600 to first screen; KN6000/6500 text rendering (uses C's timer work).
   PARALLEL TRACK: [IN FLIGHT] CONVERT growth (tempo/TM5 chain, then TG note path) — kn7000_disassembly.
@@ -29,6 +32,49 @@ kn7000_disassembly/dsp/, docs-site page where warranted, and a PROACTIVE blog po
 records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP variants, EQ, kernel).
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
+
+## TICK 2026-07-20 — ★★★ QUEUE ITEM A COMPLETE: r4..rB DECODED (pitch+filter EGs) + DSP UNIT MAP LIVE-CAPTURED + u8 EQ FLAT SETTLED
+Three live-instrumentation investigations in one pass (agent runs a1/a1b/a3/a3b.lua, logs in
+kn7000-emulator/):
+- **A1 — the "damp bank" r4..rA is NOT a damp bank: it is the PITCH EG (r4/r5/r6 + r7 hi =
+  TOTAL DEPTH) and the FILTER EG (r8/r9/rA + rB lo = START POINT), each in the amplitude EG's
+  exact [rate|level] 3-pair layout.** Column-verified on the FILTER ENVELOPE (page 3/4) and
+  PITCH ENVELOPE (2/3) screens; filter/pitch level bytes are SIGNED (0 = screen 40); CUTOFF
+  ADJUST folds into every filter level byte; RLS never reaches the TG (like amplitude);
+  page-1 MODE/CUTOFF/RESO edits (LPF→BPF, 21.1K→392Hz) leave group 0 untouched — the STATIC
+  filter lives elsewhere (open). The rA-hi release correlation = the filter DCY2 rate (organs
+  slam the filter shut at key-up, pads sweep it); driver heuristic kept, semantics documented
+  (comment-only kn7000.cpp change, no behavior change, no re-baseline). The key-up burst =
+  pitch-EG reset + filter closure to −0x50 at rate 0x22 (the damper is a filter sweep). Full
+  table: notes/tg-envelope-sweep-results.md RESULT 4. Multi-sound survey (16 groups + 8
+  pianos) captured in a1_run.log.
+- **A3 — DSP unit roles are LIVE FACT and three labels flip: u0=REVERB, u9=CHORUS,
+  u7=MIC REVERB; MULTI runs on u1; per-part Sound-DSP on u2..u6 (RIGHT1=u2); u8=EQ.**
+  Param-block tap (0x500A01E0 → 0x5009EB58; type at +8, double-buffer ptr flip at +0) + host
+  download-port tap while driving the GUIs. GUI map: Room1/Plate1/Concert1/Dark1 = u0 types
+  0x10/0x12/0x14/0x16 (rec53/54/51/55); "…2" partners = DM-only voicings (no type write, no
+  PM upload); Chorus1-4 = u9 0x52 (rec49), GM Chorus1-4 = u9 0x02 (rec07); Multi CrossDelay =
+  u1 0x0C (rec15). kernel-architecture §8's "MULTI=u6" REFUTED (bank↔line is per-PAIR:
+  reverb 0xC362, multi 0xC364, chorus 0xC376); scrub-stub host choreography captured live
+  (CALL slot flipped around every swap). PANEL MEMORY recall = full 10-unit resync (found by
+  accident: CPR_SEG6 0x40 / CPR_SEG3 0x40 are PMEM 2/5, NOT menus). Docs updated:
+  kernel-architecture.md §6/§8/§9, reverb-algorithm.md §3/§6/§7 (GUI map now pinned),
+  dsp-effect-catalog.md §3+§5 labels, records.tsv. NEW note (primary record):
+  notes/dsp-unit-roles-live-capture.md.
+- **A2 — u8 EQ flat bank SETTLED: the host bank at flat is an EXACT mirror bank (H≡1)**,
+  computed from the GUI FC row 125/500/1k/2k/8k (= rec23's pole values; rec34's ROM DM
+  template is never used at runtime). The old "15% diff at flat" was a measurement artifact.
+  Preset encodings dumped live (Treble Boost = +8 dB unity-DC S5 shelf; Radio mid-boost +
+  treble cut; No Hi Hat = S4 notch; presets move poles AND zeros; EQ soft key R1 = ORIGINAL
+  restore; bank uploads DM-only, no DspEffectSelect, even with EQ:OFF).
+  dynamics-eq-exciter.md §5.4 resolved.
+- **Item B hand-off**: the MAME bridge feeds chorus to u4 and sound-dsp to u9 — both
+  wrong-slot placeholders per the new map; fixing the feeds to u9/u2 (+ per-part depth bank)
+  is exactly item B's scope.
+- Gotchas for future GUI drives: authoritative soft keys = the cpanel PORT_NAMEs (LCDL1-5 =
+  CPL_SEG0 0x02/08/20/01/04, LCDR1-5 = CPR_SEG5 0x10/CPR_SEG5 0x20/CPR_SEG7 0x01/CPR_SEG6
+  0x01/CPR_SEG5 0x01); PROGRAM MENUS = CPR_SEG0 0x04; EQUALIZER = PROGRAM MENUS → LCDL2 →
+  LCDR5. Host download payload streams AFTER the DMAC commit (capture accordingly).
 
 ## TICK 2026-07-20 — ★★★ TG AMPLITUDE ENVELOPE: SWEEP DONE + FULL 7-STAGE EG SHIPPED (Felipe's directed task)
 The ENVELOPE-screen sweep ran (env9-11.lua) and DECODED the amplitude EG: it is r0/r1/r2 as

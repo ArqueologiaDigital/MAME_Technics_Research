@@ -103,14 +103,65 @@ writes 0x4000 at note-on and ~0x0Bxx-0x0Cxx at key-up (varies per note; key-off
 velocity/timestamp?). This gives the driver a UNIVERSAL, class-independent release
 trigger: r3 data hi-byte 0x80 = key released.
 
-## What r4..rA are NOT (and might be)
-None of the 7 amplitude-EG params nor SUSTAIN PEDAL move r4..rA (always AE00 AE00 AE00 /
-sound-specific r7..rA). They are a SECOND per-voice parameter bank. A FILTER ENVELOPE
-probe (filter edit page 3/4, PART3 column sweep) produced no register change either
-(inconclusive — the column mapping on that page is unverified). Hypothesis consistent
-with all data: r4..rA = the chip-side key-off/damp parameter bank (+ possibly key-scaled
-rate set): the managed key-up burst REWRITES r4/r5/r8/r9, and the rA-hi release-speed
-correlation (organ fast / pad slow) is real. Left open.
+## ~~What r4..rA are NOT (and might be)~~ → RESULT 4 (2026-07-20): r4..rB DECODED — the PITCH and FILTER envelopes
+
+The follow-up sweeps (a1.lua / a1b.lua in kn7000-emulator/, logs a1_run.log /
+a1b_run.log; every edit pixel-verified per snapshot — the earlier "inconclusive
+filter probe" was a wrong-column artifact) drove the FILTER EDIT page 3/4 (FILTER
+ENVELOPE) and PITCH EDIT page 2/3 (PITCH ENVELOPE) column-by-column on the Concert
+Grand and captured the note-on block after each edit. Column map on both pages:
+ON/OFF=PART2, START=PART3, ATK=PART4, PEAK=PART5, DCY1=PART6, SUS1=PART7,
+DCY2=PART8, SUS2=PART9, RLS=PART10, STOP=PART11, ADJUST/DEPTH=PART12.
+
+| screen edit | register moved | verdict |
+|---|---|---|
+| PITCH ATK (PART4) | r4 hi AE→62 | r4 = pitch [ATK rate \| PEAK level] |
+| PITCH DCY1 (PART6) | r5 hi AE→62 | r5 = pitch [DCY1 \| SUS1] |
+| PITCH SUS1 (PART7) | r5 lo 00→48 | ✓ level in the low byte |
+| PITCH DCY2 (PART8) | r6 hi AE→62 | r6 = pitch [DCY2 \| SUS2] |
+| PITCH TOTAL DEPTH (PART12) | **r7 hi 2C→7F** | r7 hi = pitch-EG TOTAL DEPTH |
+| FILTER ATK (PART4) | r8 hi 99→4D | r8 = filter [ATK \| PEAK] |
+| FILTER PEAK (PART5) | r8 lo 00→0A | ✓ |
+| FILTER DCY1 (PART6) | r9 hi 35→00 | r9 = filter [DCY1 \| SUS1] |
+| FILTER SUS1 (PART7) | r9 lo E8→0A | ✓ |
+| FILTER SUS2 (PART9) | rA lo B0→FE | rA = filter [DCY2 \| SUS2] |
+| FILTER START POINT (PART3) | **rB lo 00→0A** | rB lo = filter START POINT |
+| FILTER CUTOFF ADJUST (PART12) | r8/r9/rA/rB LOW bytes all shift (00→48, E8→14, B0→FE, 0A→70) | ADJUST is folded into every filter level byte host-side |
+| FILTER RLS (PART10) | nothing | like amplitude RLS: never reaches the TG at note-on |
+| FILTER page 1/4 MODE/CUTOFF/RESO (drastic: LPF+EQ→BPF, 21.1K→392 Hz) | nothing in group 0 | the STATIC filter is programmed elsewhere (not in this bank) |
+
+So the full group-0 note-on block is three parallel 7-param EGs in one layout:
+```
+r0=[amp ATK|PEAK] r1=[amp DCY1|SUS1] r2=[amp DCY2|SUS2]   r3=GATE 87FF/8000
+r4=[pit ATK|PEAK] r5=[pit DCY1|SUS1] r6=[pit DCY2|SUS2]   r7=[pit TOTAL DEPTH|? (lo E8/0A values seen per sound: START/STOP PITCH candidates, untested)]
+r8=[flt ATK|PEAK] r9=[flt DCY1|SUS1] rA=[flt DCY2|SUS2]   rB=[? (STOP POINT candidate, untested)|flt START POINT]
+rC=7F00, rD=0F10 (constants across all sweeps -- untested)
+```
+Filter/pitch LEVEL bytes are SIGNED offsets around 0 = screen 40 (curve-mapped:
+SUS2 0→0xB0, 38→0xFE; PEAK 50→0x0A), unlike the absolute 0..0x7F amplitude levels.
+Rate bytes use curve tables like the amplitude EG (higher = faster; filter ATK 30→0x99,
+68→0x4D — a different table than the amplitude ATK's 210-at-0).
+
+Re-readings this forces:
+- **The rA-hi "release rate" correlation = the filter-EG DCY2 rate.** Organs (0xAE)
+  close the filter instantly at key-up, pads (0x04) sweep it shut over seconds —
+  which is why it tracked the audible release character across the 11 families. The
+  driver keeps rA hi as its release heuristic (audibly validated) with the semantics
+  now documented (kn7000.cpp comment updated; no behavior change, no re-baseline).
+- **The managed key-up burst** (+0x14/15=0xAE00, +0x18/19=0x22B0) rewrites the pitch
+  ATK/DCY1 pairs to instant-zero and the filter [ATK|PEAK]/[DCY1|SUS1] pairs to
+  rate 0x22 toward level −0x50: the piano damper = a slow filter closure to fully
+  dark, alongside the r3 amplitude gate-off.
+- Multi-sound survey (16 group defaults + 8 piano variants, a1_run.log): r4/r5/r6 =
+  AE00 (flat pitch EG) on almost everything — exceptions guitar tone-1 (B508/8200:
+  a pluck pitch-drop), synth (BAF6 9A00 9A00: pitch sweep), drum kits / drawbar
+  percussive tones (FF00 everywhere + r7=0000: all EGs instant, depth 0). r7 hi
+  2C (piano) / 7F (sustainers) / 00 (drums) = per-sound pitch-depth defaults.
+
+Still open: r7 lo / rB hi / rC / rD assignment (START PITCH, STOP PITCH, STOP
+POINT candidates; TOUCH & KEY FOLLOW pages untested), and where the STATIC filter
+(MODE/CUTOFF/RESO) is programmed — its drastic edits leave the whole a<0x400
+note-on block byte-identical.
 
 ## Encoding notes for the driver (rate byte -> time, PROVISIONAL)
 The chip's rate->time law is not observable in-emulator (our own envelope would be
