@@ -3774,3 +3774,71 @@ write the +0x34C bank tables and call TgPartModDestEnableUpdate) and
 the retrigger satellites 0x4C01349C / 0x4C033C0F / 0x4C03089B.
 Live-session questions unchanged (SUSTAIN vs 0x50009D38; partrec
 bit12 panel trigger).
+
+## 2026-07-20: CONVERT track -- the PART TONE APPLY layer + the mod-matrix WRITE side (467 -> 510)
+
+The previous NEXT is DONE (kn7000_disassembly 91b6254 + ac52418): 43
+new library functions, 510 total re-assemblable (233 region-1 + 277
+lib), `make verify` 100% byte-identical, encoder fallback lines
+unchanged (5). All static RE; no MAME was run.
+
+- The 0x4C038503..0x4C03A20F gap is the PART TONE APPLY LAYER. Tone
+  block = 0x500CE404+part*0x130: +0 = the resolved tone DESCRIPTOR
+  pointer, +8/+7/+6 = the program / bank-lo / bank-hi bytes
+  TgPartProgramSet writes, +0x4A = the cached EG halfwords,
+  +0x60+u*0x34 = the four mod-unit blocks. Leaf accessors
+  TgPartToneProgramGet/BankLo/BankHi/DescPtr/IsTableClass.
+- ★ A LOCAL-EDIT SHADOW EXISTS: every fetch/apply entry comes in a
+  plain and a *Sel flavour; the *Sel front ends ask 0x4C00C6BF whether
+  the part is running its LOCAL EDIT copy and, if so, read/write the
+  RAM record 0x500C1183+idx*0x8E instead of the resource record
+  (0x501496B8+0x70F7+idx*0x8E / the banked lookup 0x484496CE through
+  0x5003A5A4/A8/AC + 0x5003A554/58/5C). SAME 0x8E stride on both sides
+  -- the RAM copy is a byte-for-byte edit shadow of the resource one.
+- TgPartProgramApply (0x4C038942, 2.9 KB) is the program-change
+  rebuild; it and TgPartProgramHandlerDispatch key off {program,
+  handler} hash tables (0x48587830/0x485878B0/0x48587930) indexed by
+  the tone-block program byte.
+- TgPartModUnitParamGet (0x4C0399DD) = THE mod-source read cited by
+  TgVoiceModSlotUpdate/TgVoiceModLfoStep: tone block +0x60+unit*0x34
+  +0x22+idx*2. TgPartModUnitRampStep (0x4C039A09, the sweep call site)
+  interpolates the curve ROM 0x486D1E54 in DOUBLE PRECISION -- the
+  only soft-float user in the mod runtime.
+- ★ partrec bit13 CONFIRMED AGAIN, independently: TgPartEgRampBuild
+  (0x4C039D83) runs TgPartEgRampInit and then RETURNS IMMEDIATELY
+  unless partrec (0x500B5340+part*0x54C) halfword bit 0x2000 is set.
+- ★ THE MOD-MATRIX WRITE SIDE IS NOW READ: TgPartModConfigSet
+  (0x4C006333) and its STORE-ONLY twin TgPartModConfigStore
+  (0x4C00603B) take a parameter byte (&0x7F, valid 1..0x2E) through
+  46-entry jump tables (0x48586710 / 0x48586658) and store scaled
+  values into partrec +0x66+dest*0xC+src*2 (value) / +0x6C+dest*0xC
+  (depth) -- exactly the layout the TgPartModSum* resolvers read. The
+  setter then re-collects the part's live voices (TgVoiceListCollect-
+  PartAll -> TgPartModVoicesRefreshA/B/C -> TgPartModVoiceApply) so an
+  edit is audible immediately; the store-only twin is the bulk/preset
+  path. Mask cases call TgPartModDestEnableUpdate to rebuild
+  partrec+0x52C.
+- ★ ROUTE vs SIGN DISAMBIGUATED: TgPartModRouteMaskSet (0x4C005673)
+  uses the per-dest ROM bit tables 0x485865EC (route) / 0x485865F0
+  (sign) to OR/AND partrec +0x53A+dest*4 = ROUTE and +0x53C+dest*4 =
+  SIGN. Six byte-identical value-scaling twins feed the cases
+  (0x4C005730/5766/579C/57D2/580B/583E; bipolar = flags bit7,
+  value*depth<<8 / 0x1FC0), plus TgModDepthScaleRom (ROM 0x486D1E90 /
+  0x7F) and TgModDepthScaleClamp (0..0x1FFF, the mod-slot range).
+- ★ ERRATUM to the 2026-07-20 mod-matrix notes: the scaling bytes
+  +0x43 and +0x4C used by the TgPartModRetrigger satellites
+  (TgPartCtrlSenseKit/Melodic/Elem, 0x4C01349C / 0x4C033C0F /
+  0x4C03089B) are read from the TONE DESCRIPTOR (tone block +0 ->
+  desc), NOT from the part record -- earlier docs saying "partrec+0x43"
+  conflated the two. All three share one gate: global halfword
+  0x500C0758 bit 0x0200 + partrec bit0, amount partrec+0x13.
+
+NEXT (CONVERT track): the rest of the same gap, 0x4C037D14..0x4C038503
+(15 functions, all verified alignment-clean: 0x4C037D14 / 0x4C037D8C /
+0x4C037E08 / ... / 0x4C03833F, the module feeding the tone accessors);
+then the local-edit shadow module around 0x4C00C233..0x4C00C6BF
+(TgPartAuxRecPtr's neighbours 0x4C00C25D / 0x4C00C28F / 0x4C00C2BF /
+0x4C00C2FB / 0x4C00C6BF -- the predicate that selects the RAM copy),
+and the resource-side region-1 fetchers 0x4844A434 / 0x4844ABF7 /
+0x484496CE / 0x48449790. Live-session questions unchanged (SUSTAIN vs
+0x50009D38; partrec bit12 panel trigger).
