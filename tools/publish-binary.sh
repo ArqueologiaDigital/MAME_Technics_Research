@@ -17,9 +17,33 @@ DEST=/home/fsanches/compartilhado/kn7000-emulator
 # (kn2600 is a clone of kn2400 -- it resolves its ROMs from the kn2400 set, no own folder.)
 MODELS="kn7000 kn6000 kn6500 kn2400"
 
+# The AUTHORITATIVE home of every ROM artifact: a private, git-versioned repo. The build
+# tree and this published folder are both DERIVED from it. See technics_roms/README.md.
+ROMREPO="${TECHNICS_ROMS:-/home/fsanches/compartilhado/technics_roms}"
+
 [ -x "$BIN" ] || { echo "error: binary not built at $BIN (build the driver first)"; exit 1; }
 
 mkdir -p "$DEST/roms"
+
+# 0) Top up the build tree from the authoritative repo. The build tree is disposable, so
+#    anything missing there is restored from the repo before publishing -- that way the
+#    published folder is always derived from the source of truth rather than from whatever
+#    happens to have survived in the build tree.
+if [ -d "$ROMREPO/roms" ]; then
+  for m in $MODELS; do
+    [ -d "$ROMREPO/roms/$m" ] || continue
+    mkdir -p "$BUILD/roms/$m"
+    for f in "$ROMREPO/roms/$m"/*.rom; do
+      [ -e "$f" ] || continue
+      [ -f "$BUILD/roms/$m/$(basename "$f")" ] || {
+        cp -p "$f" "$BUILD/roms/$m/"
+        echo "restored from technics_roms: $m/$(basename "$f")"
+      }
+    done
+  done
+else
+  echo "warning: authoritative ROM repo not found at $ROMREPO -- publishing from the build tree alone"
+fi
 
 # 1) The binary -- the only thing that changes each build. Atomic replace so a running
 #    instance on the host is never left half-copied.
@@ -28,8 +52,23 @@ chmod +x "$DEST/.kn7000.tmp"
 mv -f "$DEST/.kn7000.tmp" "$DEST/kn7000"
 
 # 2) The ROMs, per model (even/odd flash images). Copy each shipped model's set.
+#
+#    IMPORTANT -- this copy is ONE WAY (build tree -> published folder) and never
+#    deletes. The build tree is DISPOSABLE (build.sh says so: "regenerable and NOT
+#    version-controlled"), so if a model's ROMs go missing there, this step used to
+#    print a quiet mid-run warning and silently leave a STALE copy in the published
+#    folder -- which then became the only surviving copy. That is exactly how the
+#    kn6000/kn6500 sets ended up published-only. So: missing ROMs are now a HARD
+#    ERROR, collected and reported prominently at the end.
+#      Restore/regenerate them with:   tools/make-roms.sh restore   (or 'generate')
+#      Provenance for every file:      notes/rom-provenance.md
+#    Set PUBLISH_ALLOW_MISSING_ROMS=1 to downgrade the failure to a warning.
+MISSING_MODELS=""
 for m in $MODELS; do
-  [ -d "$BUILD/roms/$m" ] || { echo "warning: no ROMs for $m at $BUILD/roms/$m -- skipping"; continue; }
+  if [ ! -d "$BUILD/roms/$m" ] || ! ls "$BUILD/roms/$m"/*.rom >/dev/null 2>&1; then
+    MISSING_MODELS="$MISSING_MODELS $m"
+    continue
+  fi
   mkdir -p "$DEST/roms/$m"
   cp -u "$BUILD/roms/$m"/*.rom "$DEST/roms/$m/"
 done
@@ -60,6 +99,23 @@ for m in kn6000 kn6500; do
   rm -f "$DEST/roms/$m/${m}_table_even.rom" "$DEST/roms/$m/${m}_table_odd.rom"
 done
 
+# 2a-bis) KN5000 (SX-KN5000). Deliberately NOT in MODELS: its set is not the even/odd
+#     "*.rom" pair the loop above assumes but a mixed bag of per-IC files (.ic1/.ic3/.ic14/
+#     .ic19/.ic30 plus several *.rom), and its master copy lives outside the build tree in
+#     ../kn5000_original_roms/kn5000. Ship the whole folder verbatim when it is available,
+#     and stay silent (not a hard error) when it is not -- the KN5000 is a bonus model here,
+#     the KN7000 family is what this folder is primarily for.
+KN5000_SRC=""
+for cand in "$BUILD/roms/kn5000" /home/fsanches/compartilhado/kn5000_original_roms/kn5000; do
+  [ -d "$cand" ] && { KN5000_SRC="$cand"; break; }
+done
+if [ -n "$KN5000_SRC" ]; then
+  mkdir -p "$DEST/roms/kn5000"
+  cp -u "$KN5000_SRC"/* "$DEST/roms/kn5000/" 2>/dev/null || true
+else
+  echo "note: no KN5000 ROM set found -- kn5000 will not be runnable from the published folder"
+fi
+
 # 2b) MAME plugins. The "layout" plugin registers the cb_layout callback that EXECUTES a
 #     layout's <script> block -- without it, layout scripts silently never run. The KN7000
 #     volume faders are made draggable by such a script (tools/slider_lib.lua), so the
@@ -76,7 +132,7 @@ fi
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
 # Launch a Technics keyboard emulator. An optional first argument selects the model
-# (kn7000 / kn6000 / kn6500 / kn2400 / kn2600; default kn7000); everything else passes
+# (kn7000 / kn6000 / kn6500 / kn2400 / kn2600 / kn5000; default kn7000); everything else passes
 # through to MAME.
 #   ./run.sh                  # KN7000, fullscreen
 #   ./run.sh -window          # KN7000, windowed
@@ -84,6 +140,7 @@ cat > "$DEST/run.sh" <<'SH'
 #   ./run.sh kn6500 -window   # KN6500, windowed
 #   ./run.sh kn2400 -window   # KN2400, windowed (boots to its play screen)
 #   ./run.sh kn2600 -window   # KN2600, windowed (same firmware as the KN2400)
+#   ./run.sh kn5000 -window   # KN5000, windowed (boots to its main play screen)
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
@@ -189,3 +246,37 @@ SZ=$(du -h "$DEST/kn7000" | cut -f1)
 echo "published -> $DEST"
 echo "  kn7000  ($SZ, $(date '+%Y-%m-%d %H:%M'))"
 echo "  run on host:  cd $DEST && ./run.sh -window"
+
+# 5) Prominent missing-ROM summary. Deliberately LAST and LOUD: a shipped model whose
+#    ROMs are absent from the build tree means the published folder now holds the ONLY
+#    copy of those files, and this script would otherwise ship a stale set without
+#    anyone noticing.
+if [ -n "$MISSING_MODELS" ]; then
+  echo
+  echo "################################################################################"
+  echo "## ERROR: MISSING ROMs IN THE BUILD TREE"
+  echo "##"
+  echo "## No .rom files found under $BUILD/roms/<model> for:"
+  for m in $MISSING_MODELS; do
+    echo "##     $m"
+  done
+  echo "##"
+  echo "## These models were NOT refreshed. Whatever sits in $DEST/roms/"
+  echo "## is STALE, and for any file missing from the build tree it is now the ONLY"
+  echo "## surviving copy -- wiping the published folder would lose it permanently."
+  echo "##"
+  echo "## They are also absent from the authoritative repo at:"
+  echo "##     $ROMREPO"
+  echo "## which should normally have topped them up in step 0 -- check that repo first."
+  echo "##"
+  echo "## Fix:   tools/make-roms.sh restore     # repopulate from the technics_roms repo"
+  echo "##        tools/make-roms.sh generate    # rebuild them from the preserved sources"
+  echo "##        tools/make-roms.sh check       # verify the whole set against md5"
+  echo "## Docs:  notes/rom-provenance.md  +  technics_roms/README.md"
+  echo "################################################################################"
+  if [ "${PUBLISH_ALLOW_MISSING_ROMS:-0}" = "1" ]; then
+    echo "(PUBLISH_ALLOW_MISSING_ROMS=1 -- continuing anyway)"
+  else
+    exit 1
+  fi
+fi
