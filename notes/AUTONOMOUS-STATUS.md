@@ -4486,3 +4486,62 @@ go to the **PRODUCER of the command ids** — the maincpu code that builds the
 two-byte sound-command messages consumed by 0x4C003ED3 — because that is where
 a panel button and a command id sit in the same basic block, and it is the
 only remaining way to name bits 4/10/13/14. Live-session questions unchanged.
+
+## CONVERT tick 2026-07-20 -- the SOUND-COMMAND PRODUCERS (773 -> 808)
+
+Took target (1) from the previous tick: the region-1 code that BUILDS the
+two-byte sound-command messages. **35 functions converted, `make verify`
+byte-exact, clean rebuild at the end.** kn7000_disassembly commit 348551b.
+
+- ★ **The "sound-command byte stream" is an internal MIDI stream.** The
+  interpreter is **0x4C003B31** (not 0x4C003ED3 -- that address is just the
+  *0xFx case* inside it). It dispatches on `status & 0xF0`: 0x9x note,
+  0xAx, 0xBx control change, 0xCx program change, 0xDx, 0xEx -> the TG
+  global module's other entry 0x4C008C74, and **0xFx + two data bytes ->
+  `TgGlobalParamCommand(id, value)`**. Producers build a length-prefixed
+  buffer `{ len, status, data... }` and call the writer **0x4C003A65**
+  (32 call sites image-wide). Named on the library side:
+  `SndCmdStreamWrite` / `SndCmdStreamGetByte` / `SndCmdStreamSkipToStatus`
+  / `SndCmdStreamInterpret`.
+- ★ **Exactly three region-1 producers of 0xFx messages exist** (found by
+  both a code scan and a data-region scan for the template
+  `03 F0 <id 9..0x50> <val<=0x7F>`):
+  `SndCmdEmitUnitCc` 0x48410FB0 (id 0x35), `SndCmdEmitGlobalDepth`
+  0x48411101 (ids 0x32 / 0x33 / 0x34, value = `pct * 0x7F / 0x63`), and
+  `SndCmdSendReverbPartsApply` 0x4844B334 (the only ROM-resident template,
+  0x485B85EC = `{3, 0xF0, 0x2B, 0x7F}` = `TgReverbPartsApply(0x7F)`).
+- **Converted:** the SOUND-UNIT SETTING module 0x484104C7..0x4841202C (26
+  functions -- five param-DB groups 0xB010..0xB050 read via `LibParamGet`,
+  applied to the TG and re-broadcast), the canned-message sender, and the
+  PART-FLAG message builders 0x484A0B39..0x484A0CB0 (8).
+- **HONEST NEGATIVE on the bit question:** the effect ENABLE ids 0x40..0x47
+  have **no region-1 producer at all**. Nothing in the maincpu image builds
+  a 0xFx message with those ids, so bits 4/10/13/14 could NOT be named this
+  tick. They are driven from the **library**: the id list at **0x485870F0**
+  (`01..0b 10 11 20 40..4b ff`) is referenced only from library code around
+  **0x4C00FB94**. That consumer is the next place to look -- the earlier
+  plan ("go to the maincpu producer") is hereby retracted as a dead end for
+  the enable bits, though it did pin the *depth* controls.
+  Write-up: `notes/effect-enable-bits.md` section 6.
+- What the trace DID pin: id 0x32 -> 0x500082BE -> chan 0x0B (the
+  live-captured REVERB SEND) is produced by a **percent-valued** control
+  (0..99 -> 0..127) -- the shape of a front-panel depth control, and the
+  first time a region-1 control and the reverb send channel appear in one
+  basic block.
+- ANTI-DUPLICATION ran first: grepped notes/ and mame-blog/posts/kn7000/ for
+  0x4C003ED3 / 0x4C003A17 / 0x48586C60 / 0x485870F0. Nothing published.
+  **No blog post** -- a producer trace with a negative result on the bits
+  does not clear the series bar; it belongs in the notes.
+- STANDING LESSON, eighth pass: the unidasm **f4-page phantom** bit again
+  (0x484104FB decodes as `cmp 0x85,a1 / movbu d1,(0xcbcb)` in the raw
+  listing -- pure garbage; the real bytes are `f4 b5` + `85 06`). The
+  byte-exact rebuild is the only trustworthy check. Also: 0x4C003ED3 being
+  cited as "the interpreter" for two ticks was exactly this class of error
+  -- a mid-function address mistaken for an entry point.
+
+NEXT (CONVERT track): (1) the **library consumer of the id list 0x485870F0
+around 0x4C00FB94** -- the last route to naming enable bits 4/10/13/14;
+(2) the **program-ROM directory family 0x48572607..0x485731FB** (~31
+functions, still untouched, scoped three ticks ago); (3) the MEMORY /
+CUSTOM style sources 0x484355E2 / 0x484355F8 / 0x4848457D /
+0x4843E107..0x4843E128.
