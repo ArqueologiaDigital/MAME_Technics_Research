@@ -1,0 +1,108 @@
+From 9fc71dd1bbe2c24aa06ceee52c91517351a5afa0 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 21:22:48 +0100
+Subject: [PATCH] kn5000: restore two inter-CPU parity fixes vs
+ kn5000_aided_by_claude
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The upstream-cleanup rebase that produced this overlay dropped two more
+inter-CPU workarounds the known-good kn5000_aided_by_claude branch had:
+
+  * tmp94c241 check_irqs re-asserted the INT0 level-detect flag after
+    taking the IRQ (m_int_reg[INTE0AD] |= 0x08). The aided branch had
+    deliberately removed that (re-asserting spins INT0 at high priority
+    before the SubCPU handshake resolves and can starve the cooperative
+    scheduler). Restored as a no-op with the rationale in a comment.
+
+  * kn5000 MainCPU Port Z read dropped the MSTAT read-back. Port Z bits
+    0-1 are the MainCPU's own MSTAT outputs; real hardware reads back the
+    driven value and the firmware uses it to track the inter-CPU
+    handshake. Restored (m_mstat | com_select | (sstat<<2)).
+
+These are KN5000-only (tmp94c241 is instantiated only by kn5000; KN7000
+is MN10300). -validate passes for kn5000/kn7000/kn6000/kn6500/kn2400;
+KN7000 home screen still shows Concert Grand / Bigband Brass / Modern E.P.
+
+They are NECESSARY parity fixes but NOT sufficient to clear the KN5000
+"Sound Name Error": the remaining cause is a SubCPU receive-DMA/scheduler
+deadlock (HDMA ch0 stops completing → no task ready → the cooperative
+scheduler idles and its stack pointer leaks into the code). Fully
+characterised in side-quests/findings/kn5000_driver_findings.md.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/tlcs900/tmp94c241.cpp | 31 +++++++++++++++++++++------
+ src/mame/matsushita/kn5000.cpp        |  8 ++++++-
+ 2 files changed, 32 insertions(+), 7 deletions(-)
+
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.cpp b/src/devices/cpu/tlcs900/tmp94c241.cpp
+index 5b02475..b104fe1 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241.cpp
+@@ -1365,17 +1365,36 @@ void tmp94c241_device::tlcs900_check_irqs()
+ 		// Clear taken IRQ
+ 		m_int_reg[irq_vector_map[irq].reg] &= ~ irq_vector_map[irq].iff;
+ 
+-		// Level-detect re-assertion: Level-triggered interrupt
+-		// flags are continuously driven by the input level. Clearing the flag
+-		// during dispatch has no lasting effect if the input is still asserted.
+-		// Re-assert INT0 flag if input is still active in level-detect mode.
++		// INT0 level-detect: do NOT re-assert the flag here after taking the IRQ.
++		//
++		// (Parity fix, 2026-07-20 — restored from the known-working
++		//  kn5000_aided_by_claude branch; the upstream-cleanup rebase had
++		//  reintroduced a preemptive re-assertion that branch had deliberately
++		//  removed.)
++		//
++		// The KN5000 firmware's INT0 handler has three paths:
++		//   1. MSTAT1=0            → triggers DMAR to read the latch, RETI
++		//   2. MSTAT1=1, SSTAT0=0  → reads the latch directly, RETI
++		//   3. MSTAT1=1, SSTAT0=1  → RETI WITHOUT reading (sub CPU has not yet
++		//                            cleared its handshake)
++		// In paths 1-2 the latch read calls clear_int0_level() (via the driver's
++		// latch read wrapper), which synchronously de-asserts /INT0. In path 3 the
++		// handler intentionally skips the read and leaves /INT0 asserted, waiting
++		// for the other CPU to advance the handshake. Re-asserting the flag here
++		// after path 3 spins INT0 at high priority before the handshake can
++		// resolve, which can starve the cooperative scheduler. Let the external
++		// de-assert propagate naturally (it fires when the latch is actually read).
++		//
++		// NOTE: this matches the known-good branch but is NOT on its own
++		// sufficient to cure the KN5000 "Sound Name Error" — see
++		// side-quests/findings/kn5000_driver_findings.md (2026-07-20 deep trace):
++		// the remaining cause is a SubCPU receive-DMA/scheduler deadlock.
+ 		if (irq_vector_map[irq].reg == INTE0AD &&
+ 			irq_vector_map[irq].iff == 0x08 &&
+ 			!(m_iimc & 0x02) &&
+ 			m_level[TLCS900_INT0] == ASSERT_LINE)
+ 		{
+-			m_int_reg[INTE0AD] |= 0x08;
+-			m_check_irqs = 1;
++			// intentionally left as no-op: see comment above.
+ 		}
+ 
+ 		// Compute the default priority index from the vector table.
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 49bc76f..08ca9ae 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -706,7 +706,13 @@ void kn5000_state::kn5000(machine_config &config)
+ 	//   bit 7 = (input) COM.MIDI
+ 	m_maincpu->portz_read().set(
+ 			[this] {
+-				return m_com_select->read() | (m_sstat << 2);
++				// bits 0-1: MSTAT readback (an output port reads back its driven
++				//   value on real hardware; the firmware reads its own MSTAT here
++				//   to track the inter-CPU handshake state). Dropping this bit
++				//   breaks the reply handshake. (restored from kn5000_aided_by_claude)
++				// bits 2-3: SSTAT (input from the sub CPU)
++				// bits 4-7: COM_SELECT (interface-selection switches)
++				return m_mstat | m_com_select->read() | (m_sstat << 2);
+ 			});
+ 	m_maincpu->portz_write().set(
+ 			[this] (u8 data) {
+-- 
+2.47.3
+
