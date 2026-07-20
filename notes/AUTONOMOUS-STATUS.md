@@ -22,6 +22,13 @@ Rules unchanged: commit-as-you-go, publish after rebuilds, visible video, blog p
 tick this file after each item. PENDING FELIPE: Phase C dump-kit go-ahead, SHARC submission, wet-level A/B.
 
 ## ★ STANDING IDLE-TIME DIRECTIVE (Felipe, 2026-07-19)
+★ SCORE TRACKING (Felipe 2026-07-20): every CONVERT pass MUST finish with
+`python3 tools/coverage_score.py --append` in kn7000_disassembly and report the new
+SOURCE COVERAGE % in its tick. Two numbers: byte-match is 100% by construction
+(.incbin passthrough proves nothing); SOURCE COVERAGE = share of the image that is real
+re-assemblable assembly. Baseline 2026-07-20: 17.89% (743,770 / 4,157,185 bytes),
+925 functions, 71 .byte escapes. History: kn7000_disassembly/notes/coverage-history.tsv.
+
 Use ALL idle autonomous time to IMPROVE THE DISASSEMBLY — both:
 - maincpu (kn7000_disassembly repo): grow the CONVERT set (66 fns re-assemblable of 2302 named), name
   more functions/constants from reflection tables + RE notes, keep the 100% byte-match invariant.
