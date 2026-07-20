@@ -74,15 +74,19 @@ the pair against a per-unit **whitelist table** (`DspEffectTypeValid 0x48406132`
 and records the type in the unit's parameter struct. A full re-init
 (`0x4840603B`) streams the kernel then every nonzero effect record.
 
-**Per-unit whitelists pin down the fixed-function units:**
+**Per-unit whitelists pin down the fixed-function units** (GUI-role column
+CORRECTED 2026-07-20 by the live DspEffectSelect capture,
+`dsp-unit-roles-live-capture.md` — the original labels for units 0/7/9 were
+guesses and all three were wrong; the whitelist addresses/contents are
+unchanged ROM fact):
 
-| unit | whitelist @ | accepts types | = GUI role |
+| unit | whitelist @ | accepts types | = GUI role (live fact) |
 |---|---|---|---|
-| 0 | `0x486CE75D` | 0x00, 0x09, 0x10–0x1F | **Enhancer** group (Sound DSP) |
-| 1–6 | `0x486CE82D` | large shared set | **Multi / Sound-DSP insert** slots |
-| 7 | `0x486CE8FD` | 0x00, 0x58–0x5B | **Chorus** unit |
+| 0 | `0x486CE75D` | 0x00, 0x09, 0x10–0x1F | **REVERB** unit (the six rec5x comb+allpass reverbs) |
+| 1–6 | `0x486CE82D` | large shared set | **Multi / per-part Sound-DSP insert** pool (Multi captured on u1; RIGHT1's Sound DSP on u2) |
+| 7 | `0x486CE8FD` | 0x00, 0x58–0x5B | **MIC REVERB** unit (rec58–61) |
 | 8 | literal `0x4F` | 0x4F only | **Equalizer** (final 5-band bus) |
-| 9 | `0x486CE9CD` | 0x00,0x01,0x02,0x04,0x40,0x52 | **Reverb** unit |
+| 9 | `0x486CE9CD` | 0x00,0x01,0x02,0x04,0x40,0x52 | **CHORUS** unit (all its records are choruses) |
 
 ## 4. Effect-type → record map — CONFIRMED from ROM
 
@@ -102,11 +106,11 @@ the analyst's confidence in the algorithm identification.
 
 | type(s) | rec | GUI group | algorithm (from SHARC opcodes) | PM family | conf |
 |---|---|---|---|---|---|
-| 0x00 | rec05 | Reverb (unit9) | passthrough | uniq | high |
-| 0x01 0x2C | rec06 | Reverb (unit9) | modulated-delay chorus | uniq | high |
-| 0x02 0x07 0x2D | rec07 | Reverb (unit9) | modulated-delay chorus | uniq | high |
+| 0x00 | rec05 | Chorus (unit9) | passthrough | uniq | high |
+| 0x01 0x2C | rec06 | Chorus (unit9) | modulated-delay chorus | uniq | high |
+| 0x02 0x07 0x2D | rec07 | Chorus (unit9) | modulated-delay chorus | uniq | high |
 | 0x03 | rec08 | Multi/Sound-DSP insert (units1-6) | comb+allpass reverb | uniq | medium |
-| 0x04 0x0B | rec09 | Reverb (unit9) | modulated-delay chorus | uniq | medium |
+| 0x04 0x0B | rec09 | Chorus (unit9) | modulated-delay chorus | uniq | medium |
 | 0x05 0x0D | rec10 | Multi/Sound-DSP insert (units1-6) | modulated-allpass phaser | uniq | medium |
 | 0x06 0x0E | rec11 | Multi/Sound-DSP insert (units1-6) | modulated-delay chorus | uniq | high |
 | 0x08 | rec12 | Multi/Sound-DSP insert (units1-6) | dynamics/compressor + delay/filter composite | uniq | low |
@@ -146,19 +150,19 @@ the analyst's confidence in the algorithm identification.
 | 0x8C | rec46 | Multi/Sound-DSP insert (units1-6) | modulated-allpass phaser | uniq | high |
 | 0x90 | rec47 | Multi/Sound-DSP insert (units1-6) | modulated-allpass phaser | uniq | medium |
 | 0x91 | rec48 | Multi/Sound-DSP insert (units1-6) | modulated-allpass phaser | uniq | high |
-| 0x52 | rec49 | Reverb (unit9) | modulated-delay chorus | uniq | high |
+| 0x52 | rec49 | Chorus (unit9) | modulated-delay chorus | uniq | high |
 | 0x53 | rec50 | Multi/Sound-DSP insert (units1-6) | modulated-delay chorus | uniq | high |
-| 0x14 0x15 | rec51 | Enhancer (unit0) | comb+allpass reverb | =rec54,55,56 | high |
-| 0x1E 0x1F | rec52 | Enhancer (unit0) | comb+allpass reverb | uniq | high |
-| 0x10 0x11 | rec53 | Enhancer (unit0) | comb+allpass reverb | uniq | high |
-| 0x12 0x13 | rec54 | Enhancer (unit0) | comb+allpass reverb | =rec51,55,56 | high |
-| 0x16 0x17 | rec55 | Enhancer (unit0) | comb+allpass reverb | =rec51,54,56 | high |
-| 0x18 0x19 | rec56 | Enhancer (unit0) | comb+allpass reverb | =rec51,54,55 | high |
+| 0x14 0x15 | rec51 | Reverb (unit0) | comb+allpass reverb | =rec54,55,56 | high |
+| 0x1E 0x1F | rec52 | Reverb (unit0) | comb+allpass reverb | uniq | high |
+| 0x10 0x11 | rec53 | Reverb (unit0) | comb+allpass reverb | uniq | high |
+| 0x12 0x13 | rec54 | Reverb (unit0) | comb+allpass reverb | =rec51,55,56 | high |
+| 0x16 0x17 | rec55 | Reverb (unit0) | comb+allpass reverb | =rec51,54,56 | high |
+| 0x18 0x19 | rec56 | Reverb (unit0) | comb+allpass reverb | =rec51,54,55 | high |
 | 0x78 | rec57 | Multi/Sound-DSP insert (units1-6) | modulated-delay pitch-shifter (detune) | uniq | medium |
-| 0x58 | rec58 | Chorus (unit7) | comb+allpass reverb | uniq | medium |
-| 0x59 | rec59 | Chorus (unit7) | comb+allpass reverb | uniq | medium |
-| 0x5A | rec60 | Chorus (unit7) | comb+allpass reverb | uniq | medium |
-| 0x5B | rec61 | Chorus (unit7) | comb+allpass reverb | uniq | medium |
+| 0x58 | rec58 | Mic Reverb (unit7) | comb+allpass reverb | uniq | medium |
+| 0x59 | rec59 | Mic Reverb (unit7) | comb+allpass reverb | uniq | medium |
+| 0x5A | rec60 | Mic Reverb (unit7) | comb+allpass reverb | uniq | medium |
+| 0x5B | rec61 | Mic Reverb (unit7) | comb+allpass reverb | uniq | medium |
 | 0x64 | rec62 | Multi/Sound-DSP insert (units1-6) | waveshaper/distortion | =rec63,64,65 | high |
 | 0x65 | rec63 | Multi/Sound-DSP insert (units1-6) | waveshaper/distortion | =rec62,64,65 | high |
 | 0x66 | rec64 | Multi/Sound-DSP insert (units1-6) | waveshaper/distortion | =rec62,63,65 | high |
@@ -167,7 +171,7 @@ the analyst's confidence in the algorithm identification.
 | 0x79 | rec67 | Multi/Sound-DSP insert (units1-6) | waveshaper/nonlinear (+ modulated delay) | uniq | medium |
 | 0x7A | rec68 | Multi/Sound-DSP insert (units1-6) | waveshaper/nonlinear | uniq | medium |
 | 0x7B | rec69 | Multi/Sound-DSP insert (units1-6) | waveshaper/nonlinear (+ comb) | uniq | medium |
-| 0x40 | rec70 | Reverb (unit9) | modulated-delay chorus/ensemble | uniq | medium |
+| 0x40 | rec70 | Chorus (unit9) | modulated-delay chorus/ensemble | uniq | medium |
 | 0x42 | rec71 | Multi/Sound-DSP insert (units1-6) | modulated-delay chorus/flanger | uniq | medium |
 | 0x43 | rec72 | Multi/Sound-DSP insert (units1-6) | modulated-delay chorus/ensemble | uniq | medium |
 | 0x44 | rec73 | Multi/Sound-DSP insert (units1-6) | modulated-delay + series-allpass (phaser/diffu | uniq | medium |
