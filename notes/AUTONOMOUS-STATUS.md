@@ -3352,3 +3352,39 @@ DONE (kn7000_mame core + kn7000_disassembly checker):
 NEXT: (a) wet-level calibration & MULTI unit id (unchanged), (b) consider
 RND MRx while the TRM is open if any future pool uses it, (c) Felipe's
 upstream submission now has 12 patches.
+
+## 2026-07-20 late: CONVERT track — tempo/TM5 + TG primitives (185 -> 236)
+
+kn7000_disassembly grew by 51 re-assembled functions, byte-match kept
+(clean-rebuild `make verify` OK, zero new .byte escapes):
+
+- TEMPO/TM5 MODULE (39 fns, commits 3f1e97a/92b7bf9): TempoTick96Isr
+  0x48447084 fully decoded — the five "tick consumers" are 10-byte CLOCK
+  CONSUMER blocks {beat-in-bar, beats-per-bar, tick-in-beat 0..0x5F, free
+  tick ctr, flags} at 0x50149666/70/7A/84/8E (+count-in ctl 0x50149698);
+  flag bits recovered (bit15 RUN .. bit7 bar-wrap). DISCOVERY: the
+  "transport" fns are the INCOMING MIDI realtime handlers — 0x484B23F1/
+  0x484B2451 (both MIDI RX paths) dispatch 0xF8->0x48447361, 0xFA->
+  0x48447445, 0xFB->0x484475C3, 0xFC->0x48447712; 0x50149656 is the
+  MIDI-clock-SLAVE flag (prop 0x2020), NOT "stop" — when slaved TM5 is
+  re-programmed per received 0xF8 (reload = 2*dt_ms*0x7D0/4, fn
+  0x48447891) and each consumer HOLDS at 24-PPQN boundaries
+  (tick%4==3) until the next real clock steps it (0x48446e29). MIDI
+  clock OUT = 0xF8 every 4th tick; count-in = metronome-clock bar wraps
+  counted to 0x5014969A. Metronome click engine named (part 0x20, note
+  0x10/0x11 vel 0x6A/0x54/0x34, state 0x5003A530..3A).
+- LIBRARY WINDOW OPENED (12 fns, commits 4cab465/97fb4da): gen_program_s
+  now converts code-region-2 functions under a shifted .mnbase
+  (0x4C000000 = file 0x3B8FD1, per library-rom-loading.md) — PC-relative
+  encodings byte-exact at the 0x4C link address. First batch = the TG
+  note-path bottom layer: TgVoiceRegWrite 0x4C036F98 (slot<0x40 -> TG A
+  0x98050000/2 else TG B), global 18-shift broadcast writes, TgCmdReadA/B
+  readback, TgVoiceStatusRead (cmd 0xFC01, gate 0x500CE380==0x7F skips),
+  TgVoiceRecordReset/Ptr (0x500CA0B0 stride 0x84, ROM template
+  0x4858766C), TgVoiceSlotService (0x500AF940 stride 0xB4 class
+  dispatch), LibDiv32, LibTickSleep.
+NEXT (CONVERT track): walk UP the TG note path from TgVoiceRegWrite's
+callers — the group-0x24 pitch writer chain 0x4C036573/0x4C036837/
+0x4C036012 + the per-element EG/release writers (0x4C0309A5/0x4C030A9D,
+key-off h1/h2/h3 0x4C031949/0x4C031F07/0x4C032490) — and the tempo
+param layer 0x484478E7..0x48447F0C (params 0xD001-0xD003).
