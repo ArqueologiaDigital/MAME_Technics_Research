@@ -5189,3 +5189,68 @@ OPEN: the data wheel is wired and reachable (:cpanel:ENCODER) but NOT behavioura
 confirmed -- a full Lua sweep on the play screen changes nothing, consistent with it
 being a menu-only control. Confirm it from a parameter screen before claiming it.
 Full write-up: KN7000/side-quests/findings/kn5000_driver_findings.md
+
+================================================================================
+TICK 2026-07-20 -- ROM PRESERVATION: authoritative private repo + one regeneration path
+================================================================================
+
+PROBLEM (infrastructure, not emulation): publish-binary.sh copied ROMs ONE WAY out of
+the DISPOSABLE build tree (`cp -u`, never deleting), and a model whose ROMs had gone
+missing produced only a quiet mid-run warning before silently shipping a STALE set.
+The build tree had emptied out, so for most ROMs the PUBLISHED folder had become the
+only surviving copy -- one `rm -rf` from unrecoverable, with the recipes scattered
+across half a dozen notes.
+
+SHIPPED:
+
+1. NEW PRIVATE REPO /home/fsanches/compartilhado/technics_roms (commit e86b23e) is now
+   the AUTHORITATIVE home of every ROM artifact. Build tree + kn7000-emulator/ are
+   derived copies again.
+     roms/{kn7000,kn6000,kn6500,kn2400,kn5000}  the driver ROM sets (57 files, 226 MB)
+     sources/<model>/   the .SLD update-disk payloads every ROM regenerates FROM
+     media/             Felipe's own SD-card dump (existed only in kn7000-emulator/)
+     MANIFEST.tsv       size+md5+sha1+crc32, cross-referenced against the CRC/SHA1 the
+                        MAME driver declares -- all 16 declared hashes MATCH
+     verify.sh          checks the tree against the manifest
+   PRIVACY GUARD (copyrighted firmware + personal media): no remote configured, plus a
+   pre-push hook that refuses every push. Versioned at hooks/pre-push with
+   install-hooks.sh, because git does not version .git/hooks and a fresh clone would
+   otherwise start UNPROTECTED. Both paths tested (refuses; TECHNICS_ROMS_ALLOW_PUSH=1
+   overrides). Plain git, NOT LFS, and the README justifies it: an LFS pointer without
+   its server is data loss, a plain git object is self-contained, and ROMs are
+   write-once so blob churn is a non-issue.
+
+2. ★ EVERY SHIPPED ROM IS REGENERABLE -- verified by rebuilding all 14 driver ROMs from
+   the preserved sources and comparing md5. ALL 14 MATCHED BIT-FOR-BIT. New
+   tools/make-roms.sh {check,generate,restore,list} + notes/rom-provenance.md.
+     - kn7000 program+table: self-validating against the disks' own SMCK*.INF oracle
+       (program total 0x18CE8702, table 0x13DCD1A3, all 16 blocks match).
+     - kn6000/kn6500/kn2400: IK1+IK2 / IKV1+IKV2 / LKG1+LKG2. NO committed script did
+       this before -- ad hoc, outputs only. Gap now closed.
+     - rhythms_synthetic: gen_technics_rhythms.py reproduces it exactly.
+     - waves_synthetic: extract_kn5000_waves.py + make_wave_pack.py reproduce it
+       exactly. CORRECTION -- this was assumed non-regenerable; it is NOT. Its real
+       dependency is the genuine KN5000 wave dumps (now in roms/kn5000/).
+
+3. PUBLISH IS NOW SELF-HEALING + LOUD (45c04a4). Step 0 tops the build tree up from
+   technics_roms; missing ROMs are a HARD ERROR with a prominent end-of-run summary
+   (override PUBLISH_ALLOW_MISSING_ROMS=1). Verified by deleting kn6000+kn6500 from the
+   build tree: publish restored all 8 files from the repo and shipped correctly.
+
+WHAT COULD NOT BE RECONSTRUCTED (stated plainly, not invented): the .exe -> .SLD step.
+The distributed archives are DOS self-extracting installers; the SLD payload is NOT
+stored verbatim inside them (magic absent, no matching byte runs -- only the filename
+strings appear, as directory entries). Recovering a .SLD means running the installer
+under DOSBox and reading its floppy image. Hence the extracted .SLD files ARE the
+practical primary source, and are now committed in technics_roms/sources/.
+
+ERRATUM FIXED: notes/mame-pr-rom-manifest.md claimed the KN7000 ROMs were even/odd of
+"JK1.SLD (program) and JK2.SLD (table)". Wrong -- JK2 is the PROGRAM image's second
+half; the table is JKT1+JKT2 (kn7-14). Corrected, with the retired kn6xxx_table_* rows
+flagged as never having been a dump of IC13/IC14.
+
+VERIFICATION: ./build.sh exit 0; publish exit 0 with ZERO missing-ROM warnings;
+published ROM md5s UNCHANGED vs the pre-change baseline (provenance relocated, ROMs
+untouched). kn7000 (home PMEM screen), kn6000 (play screen w/ text), kn2400 (play
+screen; text rendering still WIP as documented) all boot -- snapshot-verified,
+visible video.
