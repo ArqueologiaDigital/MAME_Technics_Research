@@ -3893,3 +3893,105 @@ standing idle-time directive. Remaining PENDING-FELIPE items are
 unchanged: Phase C dump-kit go-ahead, SHARC upstream submission, DSP
 wet-level A/B by ear. NEW top blocker for the KN6xxx line: a hardware
 dump of IC13/IC14 (fonts, and likely the TG sample maps too).
+
+## 2026-07-20: CONVERT track -- the TG COLD BRING-UP + the LOCAL-EDIT SHADOW (510 -> 545)
+
+The previous NEXT is DONE (kn7000_disassembly 63f78a0): 35 new
+functions, 545 total re-assemblable (236 region-1 + 309 lib), `make
+verify` byte-identical after a CLEAN rebuild, encoder fallback lines
+unchanged (5). All static RE; no MAME was run and nothing was built in
+../kn7000_mame_build.
+
+- The 0x4C037D0F..0x4C0384C4 gap = the TG OUTPUT-CHANNEL REGISTER FILE.
+  Thirteen channels shadowed at 0x500CE2B0+chan*0x10, mirrored to the
+  chip via TgVoiceRegWrite_entry with the channel in the 20-bit SLOT
+  field, so the composed address halfword is 0x8008+chan*0x10 (bit15
+  set = the NON-VOICE register space -- distinct from the per-voice
+  slot 0..0x3F classes). The shadow is a 4-segment level envelope:
+  +0/+2/+4 halfwords (classes 0x8008/0x8108/0x8208; rate = bits 11..8,
+  level = bits 6..0), +8 long (class 0x8308, same plus a 5-bit field at
+  bits 16..12), +0xC long (class 0x800A, two 7-bit levels). Every field
+  has a level-only setter and a rate+level setter (TgChanEgSeg0..3
+  LevelSet/Set, TgChanOutLevelPairSet).
+- Which channel a part uses: part record 0x500B5340+part*0x54C halfword
+  +0x62 bits 10..8 -> ROM map 0x486D109A (value 8 = "no channel", the
+  caller 0x4C004DE4 returns early). Channel defaults = the 13 x 16-byte
+  ROM image 0x4858759C.
+- Global registers: TgGlobalRegsA0LoadA/B push classes 0xA000..0xA008
+  from an 18-byte image (0x486D11F4 / 0x486D1208 -- the B twin writes
+  the CONSTANT 0x00008000 for 0xA000..0xA006 and only reads +0x10);
+  TgGlobalRegsB0LoadA/B push classes 0xB000..0xB00E from 8 halfwords
+  (0x486D11D4 / 0x486D11E4, which differ in exactly one halfword).
+  All gated on the TG-enable cell 0x500CE380 != 0x7F.
+- ★ THE TG-ENABLE GATE STORY IS NOW COMPLETE IN SOURCE. TgChipReset-
+  SideA (0x4C03819E) / SideB (0x4C03833A) call the strap probe, set
+  0x500CE380 = 0x7F ("no TG", every register writer becomes a no-op)
+  UNCONDITIONALLY, and only when the probe does NOT return 3 write 0x40
+  and actually reset: pulse 1 -> 0x98050010 x3 and 3 -> 0x98050004 x3
+  (B: 0x98040010 / 0x98040004), load both global blocks, copy the
+  0x84-byte ROM template 0x4858766C into all 0x40 (A) / 0x80 (B) voice
+  records 0x500CA0B0+slot*0x84 with gate-on/off/silence, write 0x100
+  sample entries from 0x48587700/2, and load the 13 channel defaults.
+  This is exactly the gate the driver forces open via the CONFIG bit --
+  the forcing is now understood as "write 0x40 where the strap made the
+  firmware write 0x7F".
+- ★ ERRATUM (feeds the pending blog Part 9 strap retraction): the probe
+  is now named TgStrapProbe (0x484D7713) and converted. It reads
+  halfword 0x98070000 and returns 3 when bit 0x02 is CLEAR, 2 when bit
+  0x04 is clear, else 1. The bits are 0x02/0x04 -- earlier notes said
+  "bit1/bit2". Its neighbours TgStrapProbeZero (0x484D7736, returns 0)
+  and TgStrapProbeSideB (0x484D773A, bit 0x01) are converted too.
+- ★ THE LOCAL-EDIT SHADOW: layout EXACT and contiguous in .bss --
+    0x500BDB04 + idx*0x2C8   AUX EDIT RECORDS, but ONLY idx 0x10/0x11/
+        0x12 exist (TgPartAuxRecPtr returns NULL otherwise), so the
+        three occupy exactly 0x500C0784..0x500C0FDC. The 0x2C8 divides
+        with nothing left over: header 0x54 + 4 x 0x7A mod units at
+        +0x54 + 4 x 0x23 elements at +0x23C.
+    0x500C0FDC               a 423-byte tone-descriptor SCRATCH copy.
+    0x500C1183 + idx*0x8E    THE SHADOW proper -- 0x8E is the resource
+        record's own stride, dividing as header 0x10 + 2 x 0x1C at
+        +0x10 + 2 x 0x23 at +0x48 = 0x8E exactly.
+- ★ LIFECYCLE (the question this tick was asked to settle):
+  * PREDICATE: TgPartLocalEditActive (0x4C00C6BF) = bit0 of the byte
+    0x500C58AE + part*9 -- the 9-byte per-part EDIT-STATE record. Every
+    *Sel front end in the tone-apply layer consults it (~30 call sites
+    from 0x4C00EDF5 on). TgPartLocalEditFlagB reads bit1 of the same
+    byte.
+  * POPULATE: TgPartLocalEditRecBuild (0x4C00C783) takes the resource
+    record from TgPartVoiceRecFetch_entry, copies its first 0x48 bytes
+    VERBATIM, then lets the region-1 fetcher 0x48449813 replace the
+    +0x10 sub-record (unless resource byte +0xD bit1 is set) and the
+    +0x2C one (unless bit2). So the shadow is byte-for-byte the
+    resource record EXCEPT for those two banked sub-records.
+    TgPartAuxRecBuild (0x4C00C6E9) does the aux side: 0x23C bytes of
+    the tone descriptor, then each tone-block mod unit (+0x60+unit*0x34
+    -> ptr, 0x7A bytes) over +0x54+unit*0x7A.
+  * REFRESH: TgPartAuxElemRecBuild / TgPartLocalEditElemRecBuild write
+    one 0x23-byte element sub-record each.
+  * INVALIDATE: THERE IS NO FREE OR CLEAR IN THE MODULE. The copies are
+    permanent per-part buffers; an edit is discarded only by REBUILDING
+    from the resource record. So "does my edit survive?" reduces
+    entirely to who clears bit0 of 0x500C58AE+part*9 and who re-runs
+    the builders -- neither of which is in this module.
+- NOT settled, deliberately: which UI action SETS 0x500C58AE+part*9
+  bit0, and therefore the PANEL MEMORY recall interaction. The setter
+  is not in 0x4C00C233..0x4C00C890 and the builders have no lib-
+  internal callers other than the 0x4C00C96C driver. No blog post this
+  tick -- the lifecycle answer is real but half a chain short of a
+  user-visible claim, and inventing the recall behaviour would be
+  exactly the kind of over-claim the series must not make.
+
+NEXT (CONVERT track): (1) finish the local-edit shadow's own gap --
+the ~25 remaining tiny field accessors 0x4C00C318..0x4C00C6BF (all
+`ret [d2], 4` leaves over the same two record families, boundaries
+already scanned clean) plus the driver 0x4C00C890 / 0x4C00C96C that
+calls TgPartAuxRecBuild_entry and loops the four mod units; (2) hunt
+the WRITER of 0x500C58AE+part*9 bit0 to close the edit-state
+lifecycle (grep the lib for the 9-byte stride, then region 1); (3) the
+region-1 resource fetchers 0x4844A434 / 0x4844ABF7 / 0x484496CE /
+0x48449790 -- 0x48449813 is now a confirmed caller target from
+TgPartLocalEditRecBuild, so this group is the natural next region-1
+cluster; (4) the channel-EG CALLER module 0x4C004DE4..0x4C005673, the
+last unconverted block before TgPartModRouteMaskSet. Live-session
+questions unchanged (SUSTAIN vs 0x50009D38; partrec bit12 panel
+trigger).
