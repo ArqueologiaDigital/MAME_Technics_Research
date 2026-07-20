@@ -363,14 +363,33 @@ public:
 		}
 		else if ((addr & 0xFC00) == 0x8000)               // group 0x20: per-channel OUTPUT BUS /
 		{                                                  // EFFECT-SEND record (0x80xx-0x83xx)
-			// The GLOBAL REVERB TOGGLE's only hardware action is rewriting this family on the
-			// SUB TG (live capture 2026-07-11, notes/reverb-toggle-findings.md):
-			//   ch 0x03 reg 0xA: 0x007F (ON) <-> 0x7F00 (OFF)   [direct | dsp-return] pair
-			//   ch 0x0B reg 0x8: 0x0366 (ON) <-> 0x0300 (OFF)   reverb SEND level 0x66 <-> 0
-			// First-order bus model (semantics labeled provisional): the pair crossfades the
-			// DAC between the TG's DIRECT output and the DSP RETURN, and the send level
-			// scales what the DSP receives. Per-channel granularity is captured but the
-			// routing is applied globally until the full slot map is pinned.
+			// ★ DECODED 2026-07-20 (queue item B2; static RE of the lib setter family
+			// 0x4C037D0F..0x4C037F10 + live setter/arg traps -- see notes/per-part-depth-bank.md):
+			// the group-0x20 register space is a PER-PART SEND MATRIX, addr = 0x8000 |
+			// row<<8 | part<<4 | reg, i.e. "channel" 0xRP = row R (0-3) of mixer part P:
+			//   row0 (0x80P8)  = part P's send-to-REVERB-bus   [hi byte 0x03 = dest = the
+			//                    reverb-return mixer part 3; low7 = level]
+			//   row1 (0x81P8)  = part P's send-to-CHORUS bus   [hi 0x0B]
+			//   row2 (0x82P8)  = part P's send-to-MULTI bus    [hi = ON marker: 0x06 (dest =
+			//                    multi-return part 6) when MULTI is ON, 0x08 when OFF]
+			//   row3 (0x83P8)  = part P's output LEVEL/depth   [the "0x85xx depth bank"; for
+			//                    the effect-return parts this is the effect's TOTAL DEPTH --
+			//                    part 3 = the reverb TOTAL DEPTH we already capture]
+			//   reg 0xA        = part P's [direct | return] crossfade pair
+			// Mixer parts: raw TG parts + effect-return parts 3 (reverb), 6 (multi) and 9
+			// (the per-part Sound-DSP INSERT return for RIGHT1). The firmware maintains the
+			// per-part depths in its part records (0x500B5340 + idx*0x54C: +0x15 chorus
+			// depth 0x3C, +0x16 multi depth 0x50) and only APPLIES them to part 9's rows
+			// when the part-insert flag (record +0 bit3, the SOUND DSP toggle) is on --
+			// with the insert off the refresh writes ZERO levels (lib 0x4C004E30's gate
+			// jumps to the zero path at 0x4C005083).
+			// The GLOBAL REVERB TOGGLE rewrites (capture 2026-07-11, reverb-toggle-findings):
+			//   part 3 reg 0xA: 0x007F (ON) <-> 0x7F00 (OFF)   [direct | dsp-return] pair
+			//   part B row0:    0x0366 (ON) <-> 0x0300 (OFF)   reverb SEND level 0x66 <-> 0
+			// First-order bus model: the pair crossfades the DAC between the TG's DIRECT
+			// output and the DSP RETURN, and the send level scales what the DSP receives.
+			// Per-channel granularity is captured but the routing is applied globally
+			// (single-mix approximation; per-part separation needs per-part TG audio).
 			const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
 			m_busreg[(tg << 6) | ch][reg] = data;
 			if (tg == 1 && ch == 0x03 && reg == 0x0A)
@@ -391,8 +410,18 @@ public:
 				                                              // routes to the per-part insert pool u2..u6;
 				                                              // RIGHT1 = unit 2 -- live-captured unit map)
 			if (tg == 1 && ch == 0x29 && reg == 0x08)
-				m_gain_multi = float(data & 0x7F) / 127.0f;   // MULTI send (0x8298 low7 = per-part MULTI DEPTH;
-				                                              // routes to MULTI unit 1, rec15 -- type-diff confirmed)
+			{
+				// MULTI send (0x8298 = row2 of insert part 9; routes to MULTI unit 1). The high
+				// byte doubles as the firmware's ON marker: 0x06 (dest = multi-return part)
+				// when MULTI is ON, 0x08 when OFF. A COLD panel-MULTI toggle writes 0x0600 --
+				// ON marker with level 0, because the depth application is gated on the
+				// part-insert flag (see the row-map note above). Substitute the part record's
+				// default MULTI depth (0x50, live-read at 0x500B5340+idx*0x54C +0x16) so the
+				// cold toggle is audible; a firmware-written nonzero level always wins.
+				const uint8_t lvl = data & 0x7F;
+				const bool on = ((data >> 8) & 0x0F) == 0x06;
+				m_gain_multi = float(lvl ? lvl : (on ? 0x50 : 0)) / 127.0f;
+			}
 			// PER-EFFECT RETURN levels (reg 0xA low byte = DSP-return level for THIS effect's own
 			// bus). Live-captured per-effect toggle map (2026-07-12, notes/effect-return-routing.md):
 			// each effect owns a distinct return register -- REVERB=ch03.rA (m_gain_return above),
@@ -1819,7 +1848,16 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		// unchanged (A/B bit-identical). APPROXIMATION (labelled): the whole TG mix feeds each
 		// effect bus at the send level (per-part separation needs per-bus TG output); correct
 		// for the common single-part case.
-		const float chsend = m_tonegen->gain_chorus();
+		// CHORUS send. A COLD panel-CHORUS toggle is announced by the firmware ONLY via the
+		// CHORUS LED: the row refresh writes level 0 because the per-part depth application
+		// is gated on the part-insert (SOUND DSP) flag -- full RE in the tonegen's group-0x20
+		// note + notes/per-part-depth-bank.md. Model the missing depth application with the
+		// part record's default CHORUS depth (0x3C) whenever the firmware's own LED says ON;
+		// a firmware-written send level (insert on) always wins. With the LED off this is
+		// exactly the old path (gain 0 -> branch gated).
+		float chsend = m_tonegen->gain_chorus();
+		if (chsend == 0.0f && m_cpanel->chorus_led())
+			chsend = float(0x3C) / 127.0f;
 		const float dspsend = m_tonegen->gain_dsp();   // SOUND DSP send (unit 2), same feed pattern
 		const float mulsend = m_tonegen->gain_multi(); // MULTI send (unit 1), same feed pattern
 		const int32_t oL = sx24(dm.read_dword(obuf));

@@ -308,6 +308,8 @@ void kn7000_cpanel_device::device_start()
 	save_item(NAME(m_dial_synced));
 	save_item(NAME(m_tempoknob_prev));
 	save_item(NAME(m_tempoknob_synced));
+	save_item(NAME(m_chorus_led));
+	save_item(NAME(m_multi_led));
 }
 
 void kn7000_cpanel_device::device_reset()
@@ -421,6 +423,10 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 			m_cpr_leds[27] = BIT(data, 3);   // D1068 REVERB (red)
 			m_cpr_leds[28] = BIT(data, 4);   // D1054 MULTI (red)
 			m_cpr_leds[29] = BIT(data, 5);   // D1082 CHORUS (red)
+			// Shadow the global-effect ON state for the driver's DSP bridge (the firmware's
+			// only cold-toggle announcement of CHORUS is this LED -- see chorus_led()).
+			m_multi_led  = BIT(data, 4);
+			m_chorus_led = BIT(data, 5);
 			m_cpr_leds[30] = BIT(data, 6);   // D1096 EW EXPANSION (red)
 			m_cpr_leds[31] = BIT(data, 7);   // D1110 MEMORY (green)
 			break;

@@ -47,6 +47,13 @@ public:
 	void rx_enable();             // main CPU set SIO ch0 RX-enable (config bit14): clock out the next reply byte
 	void atn_rearm();             // group-0x1A ISR re-armed EXTMD (11b->10b): deliver ATN edge 2
 
+	// Firmware-authoritative global-effect ON state, read from the LED frames the firmware
+	// itself sends (CPR bank reg 0x03: MULTI = D1054 bit4, CHORUS = D1082 bit5). The driver's
+	// DSP bridge uses these as the effect-enable gate for the cold-toggle case where the
+	// firmware announces the state ONLY via the LED (see kn7000.cpp's group-0x20 notes).
+	bool chorus_led() const { return m_chorus_led; }
+	bool multi_led() const { return m_multi_led; }
+
 protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
@@ -78,6 +85,10 @@ private:
 	uint8_t m_btn_prev[0x21];              // last scanned state, one per normSeg 0x00-0x20
 	uint8_t m_vol_apcseq_prev;             // last DATA byte for the APC/SEQ pot
 	bool    m_vol_apcseq_synced;           // false until the first scan records the pot (no startup frame)
+
+	// Global-effect LED shadow (set in panel_led_frame; see chorus_led()/multi_led()).
+	bool    m_chorus_led = false;          // D1082 CHORUS (cpr_led29)
+	bool    m_multi_led  = false;          // D1054 MULTI (cpr_led28)
 	uint8_t m_dial_prev;                   // last IPT_DIAL position delivered for the DATA dial (wire 0x10)
 	bool    m_dial_synced;                 // false until the first scan records the dial (no startup frame)
 	uint8_t m_tempoknob_prev;              // last adjuster value seen (for the signed per-scan delta, wire 0x17)
