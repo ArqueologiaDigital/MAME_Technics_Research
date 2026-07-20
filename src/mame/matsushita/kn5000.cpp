@@ -706,7 +706,13 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 7 = (input) COM.MIDI
 	m_maincpu->portz_read().set(
 			[this] {
-				return m_com_select->read() | (m_sstat << 2);
+				// bits 0-1: MSTAT readback (an output port reads back its driven
+				//   value on real hardware; the firmware reads its own MSTAT here
+				//   to track the inter-CPU handshake state). Dropping this bit
+				//   breaks the reply handshake. (restored from kn5000_aided_by_claude)
+				// bits 2-3: SSTAT (input from the sub CPU)
+				// bits 4-7: COM_SELECT (interface-selection switches)
+				return m_mstat | m_com_select->read() | (m_sstat << 2);
 			});
 	m_maincpu->portz_write().set(
 			[this] (u8 data) {

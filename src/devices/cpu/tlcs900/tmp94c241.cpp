@@ -1365,17 +1365,36 @@ void tmp94c241_device::tlcs900_check_irqs()
 		// Clear taken IRQ
 		m_int_reg[irq_vector_map[irq].reg] &= ~ irq_vector_map[irq].iff;
 
-		// Level-detect re-assertion: Level-triggered interrupt
-		// flags are continuously driven by the input level. Clearing the flag
-		// during dispatch has no lasting effect if the input is still asserted.
-		// Re-assert INT0 flag if input is still active in level-detect mode.
+		// INT0 level-detect: do NOT re-assert the flag here after taking the IRQ.
+		//
+		// (Parity fix, 2026-07-20 — restored from the known-working
+		//  kn5000_aided_by_claude branch; the upstream-cleanup rebase had
+		//  reintroduced a preemptive re-assertion that branch had deliberately
+		//  removed.)
+		//
+		// The KN5000 firmware's INT0 handler has three paths:
+		//   1. MSTAT1=0            → triggers DMAR to read the latch, RETI
+		//   2. MSTAT1=1, SSTAT0=0  → reads the latch directly, RETI
+		//   3. MSTAT1=1, SSTAT0=1  → RETI WITHOUT reading (sub CPU has not yet
+		//                            cleared its handshake)
+		// In paths 1-2 the latch read calls clear_int0_level() (via the driver's
+		// latch read wrapper), which synchronously de-asserts /INT0. In path 3 the
+		// handler intentionally skips the read and leaves /INT0 asserted, waiting
+		// for the other CPU to advance the handshake. Re-asserting the flag here
+		// after path 3 spins INT0 at high priority before the handshake can
+		// resolve, which can starve the cooperative scheduler. Let the external
+		// de-assert propagate naturally (it fires when the latch is actually read).
+		//
+		// NOTE: this matches the known-good branch but is NOT on its own
+		// sufficient to cure the KN5000 "Sound Name Error" — see
+		// side-quests/findings/kn5000_driver_findings.md (2026-07-20 deep trace):
+		// the remaining cause is a SubCPU receive-DMA/scheduler deadlock.
 		if (irq_vector_map[irq].reg == INTE0AD &&
 			irq_vector_map[irq].iff == 0x08 &&
 			!(m_iimc & 0x02) &&
 			m_level[TLCS900_INT0] == ASSERT_LINE)
 		{
-			m_int_reg[INTE0AD] |= 0x08;
-			m_check_irqs = 1;
+			// intentionally left as no-op: see comment above.
 		}
 
 		// Compute the default priority index from the vector table.
