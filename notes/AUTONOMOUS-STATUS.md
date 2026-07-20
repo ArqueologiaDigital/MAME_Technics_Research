@@ -5061,3 +5061,93 @@ DSP, BANK VIEW, MUSIC STYLIST) change no screen -- they need the LED work.
 NEXT: unchanged CONVERT track. Newly unblocked here: the KN6000 LED binding now
 has somewhere to land -- run the built-in Panel SW & LED test against this
 artwork and bind the dots.
+
+================================================================================
+TICK 2026-07-20 -- TONE GENERATOR: split out, and the chips ARE the same
+================================================================================
+
+Felipe asked directly: "do the KN6000/KN6500 use the same tone generator? If
+so, can it be shared -- maybe split it out of the KN7000 into a device the
+other models can use too?" Then, correcting the framing: "even though these
+chips have different model numbering, they may be similar, so perhaps they
+could inherit from a common parent class."
+
+He was right, and the first framing of this task was wrong. The brief leaned
+on the part numbers -- KN7000 = 2x C1BB00000709, KN6000/KN6500 = 1x
+D82398GD001 -- and concluded "different chip, little to share". Part numbers
+are not evidence of architecture. The firmware is.
+
+STANDING LESSON, fifteenth pass: two parts with different numbers can still
+be one design, and two firmwares from one source tree will tell you so. Test
+the SOFTWARE that drives the hardware, not the label on the package. This is
+the same shape as the panel finding (protocol shared, matrix differed) -- and
+we should have expected it, because it is the same shared codebase.
+
+THE DECISIVE DATUM: the KN6000's tone-generator write primitive at 0x4849465B
+is BYTE-IDENTICAL to the KN7000's TG-A leg at 0x4C036F7C --
+81 f8c510 fc8700000598 fae0ffff fc8302000598. The KN7000's writer is that
+same routine with a chip-select branch (cmp 0x40,d0) wrapped around it. The
+two-chip KN7000 path is literally a parameterised generalisation of the
+one-chip KN6000 path.
+
+Also shared, all cited in notes/kn6000-tonegen-spec.md: the packed command
+word (slot<<20)|(class<<16)|data with an IDENTICAL bitfield split; dual
+asl-20/asl-18 addressing modes; 16 halfword regs per voice as four 4-reg
+banks of [rate|level] EG pairs; the literals 0xFF80/0xFF00, 0xA280/0xA200,
+0x7F80/0x7F00, 0xC000, 0x87FF; the 18-bit pitch built by the same
+and-0x00018000 / or-0x4000 idiom with bit 16 in class bit 0; plane 0x20
+(send matrix) and 0x28 (global bank) at the SAME numbers; 0xB4-stride voice
+record, 0x130-stride part block, 34-part model.
+FALSIFIED along the way: the "group field shifted one bit" hypothesis. The
+split is identical; only the plane NUMBERING is remapped.
+
+DONE:
+- f940b22 kn7000_tonegen.{cpp,h} -- the 541-line inline device moved out of
+  kn7000.cpp, mirroring the cpanel split. Proven PURE CODE MOTION textually
+  (only the 5 method signatures change shape; no logic/constant/comment
+  touched) and behaviourally (oracle bit-identical).
+- 75d091c kn_tonegen.{cpp,h} -- shared base. Split drawn where the evidence
+  draws it: base = the MECHANISM proven identical on both chips (envelope
+  state machine + rate->seconds law, per-voice state, gate-follow coupling,
+  effect-send/return gains, wave pack, stream/render; voice count is a ctor
+  parameter). Derived = the NUMBERING (tg_write decode, two-chip mapping).
+- a04c7f9 notes/kn6000-tonegen-spec.md -- comparison table with a firmware
+  address per row, the four INCONCLUSIVE points, what a kn6000_tonegen needs,
+  and the blockers.
+
+NO kn6000_tonegen_device SHIPPED, on purpose: its plane map has only three
+points pinned, and its audio is blocked on the undumped IC13/IC14 table ROMs
+and the un-reversed note->pitch routine regardless. It is now a small,
+obvious addition -- a second tg_write() decode over the base -- rather than
+a speculative device that cannot be exercised.
+
+REGRESSION IS THE POINT, and it held at BOTH steps:
+  reverb/keybed oracle  c3b67ea711ce3c00f8ae2af1e07651cb (documented baseline,
+    reproduced on the pre-split build FIRST, then after the split, then again
+    after the base-class factoring)
+  demo-button capture   53b02f539c76ccba78a8058df033390d (A/B'd against a
+    REBUILT PRE-SPLIT BINARY -- a real before/after, not a re-run)
+Build clean; -validate kn7000/kn6000/kn6500/kn2400; published. KN6000 still
+boots to its play screen with its own panel (screenshot-verified).
+
+TOOLING GOTCHAS FOUND (cost time, recorded so the next tick skips them):
+- tools/audio_playnote_wav.lua is STALE: it presses a ":KEYS0" field by the
+  name "Key C4", which no longer matches, so it captures SILENCE. Use the
+  money.lua style instead (press :KEYS1 by MASK 0x0100) -- masks survive
+  renames, names do not.
+- A DEMO press via :cpanel:CPL_SEG6 0x40 does NOT start the demonstration
+  (verified silent on the PRE-SPLIT binary too, so it is a recipe problem,
+  not a regression -- and that A/B is exactly why the pre-split rebuild was
+  worth doing). The working DEMO recipe is still unknown; find it before
+  citing "demo plays" as a check again.
+- kn6000/kn6500 ROMs are MISSING from the build tree (roms/ has only kn2400
+  and kn7000), so publish-binary.sh warns and skips them; the published
+  folder still has them from earlier runs. Harmless today, but a clean
+  rebuild of the tree would lose them -- restage before relying on it.
+
+NEXT: the architecture question is settled, so the KN6000 TG gap is now
+exactly two items -- (1) a per-plane live sweep on the KN6000 (it already
+boots and its voice engine runs on key presses; reuse
+tools/stage2_tg_diagnostic.lua) to turn the spec's INCONCLUSIVE rows into a
+complete plane map, and (2) static RE of its note->pitch routine. Neither is
+blocked on anything. Otherwise the CONVERT track is unchanged.
