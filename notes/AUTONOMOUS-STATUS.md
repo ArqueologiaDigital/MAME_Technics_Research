@@ -4718,8 +4718,8 @@ clean rebuild.** kn7000_disassembly commits 52bd978 (33) and 1d16d8a (26).
   kill the "8 Beat 1" fallback for the built-in source too, *that* is the post.)
 - STANDING LESSON, tenth pass: two of this pass's cited addresses were again
   mid-function (0x484403A7 and 0x4848457D are the `_entry` points, prologues at
-  0x484403A5 / 0x48484578), and eleven of the 59 starts are bare `retf`/`rets`
-  leaves with no prologue at all. The new habit that worked: verify every
+  0x484403A5 / 0x48484578), and 25 of the 59 starts are bare `retf`/`rets`
+  leaves with no prologue at all (both targets are accessor-heavy). The new habit that worked: verify every
   claimed `_entry` by counting call sites for BOTH candidate addresses -- the
   prologue address should have zero.
 
