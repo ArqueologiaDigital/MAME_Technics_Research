@@ -123,3 +123,63 @@ global enables have not been located at all. The next place to look is the
 **producer** of the command ids — the maincpu code that builds the two-byte
 sound-command messages — since that is where a panel button and a command id
 are in the same basic block.
+
+---
+
+## 6. Addendum 2026-07-20: the PRODUCER side
+
+Section 5 said the next place to look was the *producer* of the command
+ids. It has now been traced (kn7000_disassembly commit 348551b, 35 more
+functions converted, byte-match held).
+
+### 6.1 The "sound-command byte stream" is an internal MIDI stream
+
+The interpreter is **0x4C003B31** (prologue 0x4C003B2C). It pulls a status
+byte with `SndCmdStreamGetByte` 0x4C003A17 and dispatches on `status & 0xF0`:
+
+| status | data bytes | meaning |
+|---|---|---|
+| 0x9x | 3 | note-on family -> 0x4C036EA4, or 0x48483873 when the first data byte >= 0xF0 |
+| 0xAx | 2 | -> 0x4C003C6B |
+| 0xBx | 3 | control change -> 0x4C003CC6 |
+| 0xCx | 2 | program change -> 0x4C003D4A |
+| 0xDx | 2 | -> 0x4C003DD4 |
+| 0xEx | 3 | -> `0x4C008C74` (the TG global module's *other* entry) |
+| **0xFx** | **2** | **`TgGlobalParamCommand(id = data1, value = data2)`** at 0x4C003ED3 |
+
+Region-1 code produces messages by building a **length-prefixed byte
+buffer** (`{ len, status, data... }`) and calling the stream writer
+**`SndCmdStreamWrite` 0x4C003A65** (32 call sites image-wide).
+
+### 6.2 Who emits which global-parameter id
+
+A full scan of the image for 0xFx message construction (both the code
+pattern and a data-region scan for the byte template `03 F0 <id> <val>`)
+finds **exactly three** producers:
+
+| producer | id emitted | value |
+|---|---|---|
+| `SndCmdEmitUnitCc` **0x48410FB0** | **0x35** | the unit value, when the resolved unit is 0xFF |
+| `SndCmdEmitGlobalDepth` **0x48411101** | **0x33** (sel 1) / **0x34** (sel 5) / **0x32** (sel 9) | `d1 * 0x7F / 0x63` — a 0..99 **percent** control |
+| `SndCmdSendReverbPartsApply` **0x4844B334** | **0x2B** | the canned ROM message 0x485B85EC, value 0x7F |
+
+Both of the first two live in the **sound-unit setting module**
+0x484104C7..0x4841202C, which is driven by five parameter-database groups
+`0xB010 / 0xB020 / 0xB030 / 0xB040 / 0xB050` (sub-key `+0x04` = the target
+part, which must be in 0x13..0x1A).
+
+### 6.3 What this does and does not settle
+
+* It **confirms** the id → channel chain from the other end: id 0x32 sets
+  0x500082BE and refreshes chan **0x0B** — the live-captured REVERB SEND —
+  and its producer is a **percent-valued** control (0..99 → 0..127). That is
+  the shape of a front-panel *depth* control, and it is the first time a
+  region-1 control and the reverb send channel have been seen in the same
+  basic block.
+* It **does not** name bits 4/10/13/14. The enable ids 0x40..0x47 have **no
+  region-1 producer at all** — nothing in the maincpu image builds a 0xFx
+  message with those ids. They are driven from the **library** side: the id
+  list at **0x485870F0** (`01 02 .. 0b 10 11 20 40 41 42 43 44 45 46 47 48
+  49 4a 4b ff`) is referenced only from library code around 0x4C00FB94.
+  So the next place to look is that library consumer, not the maincpu.
+* No behavioural result: no MAME run was made for this addendum.
