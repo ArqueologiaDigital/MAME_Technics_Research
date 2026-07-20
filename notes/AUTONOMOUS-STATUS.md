@@ -3570,3 +3570,54 @@ family, and the SOFT-FLOAT double runtime (0x4C0007E7/0x4C000856/
 0x4C000879/0x4C000B1C/0x4C001629/0x4C0016AC/0x4C0019F2 + the mul
 0x4C000523) as its own module; live-session question for the runtime
 track: the damper pedal's part-flags gate into the held-voice policy.
+
+## 2026-07-20: CONVERT track -- the SOFT-FLOAT LIBM + the fetcher leaves (341 -> 382)
+
+The previous NEXT is DONE and then some (kn7000_disassembly ddb6468/
+3a673d1/c04145a/2622d0b): 41 new library functions, 382 total
+re-assemblable (233 region-1 + 149 lib), make verify 100%.
+
+- ★ THE FIRMWARE SHIPS A FULL IEEE-754 DOUBLE LIBM (lib 0x4C000000..
+  0x4C001A00, no FPU anywhere): not just the glide helpers -- add/sub/
+  mul/div/cmp + unpack/pack cores + 6 int<->double converters, AND an
+  errno-style math library: frexp/ldexp/modf/LOG/EXP/POW (pow =
+  modf-split, integer part by repeated squaring, fraction via
+  exp(frac*log(x))), errno cell 0x500AD390 (1=domain 2=range), DBL_MAX
+  saturation, ln2/sqrt2/ln(DBL_MAX) constants, log's coeff table at ROM
+  0x48586198. ABI: doubles on the caller's arg area (8,sp)/(0xC,sp) +
+  (0x10,sp)/(0x14,sp), result d0(lo):d1(hi). CORRECTION to the glide
+  note: 0x4C000523 is NOT the mul, it is LibI32ToF64 (mul = 0x4C000874
+  entry 0x879). All 21 converted; the only known callers are the
+  portamento pair, so the libm is 99% dead weight -- linked-in compiler
+  runtime.
+- Encoder milestone (3a673d1): mn10300_asm now encodes addc/subc,
+  rol/ror, bvc/bvs/bnc/bns (fields per mn103dasm.cpp) -- the soft-float
+  carry chains emit real assembly; image-wide .byte fallbacks 43 -> 5
+  (all five = the ROM toolchain's own non-minimal call encodings).
+- The zone param fetchers decoded (15 converted): desc2 UI bytes ->
+  hw units through the +-50 sensitivity curve ROM 0x486D2713 (negative
+  = negated mirror), key scaling via the 0x486D1354/0x486D13D4 pair;
+  the three filter-EG level calcs all fold the CUTOFF ADJUST desc2+0x3E
+  into per-segment offsets +0x3F/+0x41/arg(+0x43/+0x45). Kit set
+  0x4C011F2F..0x4C012225 = byte-for-byte twins (second link) serving
+  TgKitElemNoteOn. Plus TgPartElemLastSet, the EG-segment pair
+  TgVoiceEgSegParamGet/FlagTest (tone-TYPE feature records ROM
+  0x486D2ED5+type*0x27), and TgVoiceRouteFieldSet (shadow +0x40 bits
+  12..19; mode 0 = hw-config remap via PanelSubTypeGet).
+- ★ PEDAL (static piece, live gate still queued): the sustain-mask
+  consumer scan found TgStageHeldPolicyShed 0x4C0147AD inside
+  TgSlotAllocate -- parts > 0x12 lose the HELD bit7 of pool bytes +4/+5
+  when the active high water 0x500D287A hits 0x40/0x60 (threshold by
+  context byte 0x500D2878): under load the damper holds at most 2
+  elements per note. Also TgVoicePoolReset 0x4C014803 (cold init:
+  force-off sweep, quota ROM 0x486D379C, order-head ROM 0x486D37B0,
+  mask block 0x500D287C/8C/9C cleared).
+
+NEXT (CONVERT track): the remaining leaves under the note-on
+programmers -- the pitch chain internals 0x4C0311F3/0x4C0312A2/
+0x4C031330 + the level-word tails 0x4C03162C/0x4C03178C/0x4C02BF8B,
+the per-slot force-off 0x4C037244 (TgVoicePoolReset's sweep target) and
+the status readers around it, and the curve helpers 0x4C011ABC/
+0x4C0118F5/0x4C011ACE under TgVoiceEgSegParamGet; then the amp-EG
+computer family around 0x4C009F03/0x4C00AD43 cited by the key-off docs.
+Live-session question unchanged: the damper's partrec-bit6 gate.
