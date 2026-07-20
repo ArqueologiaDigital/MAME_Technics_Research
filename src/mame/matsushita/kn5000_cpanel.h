@@ -118,7 +118,9 @@ private:
 
 	// Program data wheel (rotary encoder next to the LCD) -- also owned by this device.
 	optional_ioport m_encoder_port;
-	int32_t m_encoder_prev;   // last read position, for delta detection
+	int32_t m_encoder_prev;   // last adjuster value seen, for the wrap-aware per-scan delta
+	bool    m_encoder_synced; // false until the first scan adopts the knob (no startup detent)
+	ioport_field *m_encoder_field; // the ENCODER adjuster field (read RAW, bypassing analog interp)
 	uint8_t m_encoder_latch;  // direction bits reported in the segment 0x0B status byte
 
 	// LED outputs

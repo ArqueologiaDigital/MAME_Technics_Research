@@ -5316,3 +5316,65 @@ published ROM md5s UNCHANGED vs the pre-change baseline (provenance relocated, R
 untouched). kn7000 (home PMEM screen), kn6000 (play screen w/ text), kn2400 (play
 screen; text rendering still WIP as documented) all boot -- snapshot-verified,
 visible video.
+
+================================================================================
+TICK 2026-07-20 (late): KN5000 TEMPO/PROGRAM DATA WHEEL -- verdict + widget shipped,
+                        screen-visible change HONESTLY NOT achieved
+================================================================================
+
+TASK: "does the KN5000 wheel work like the KN6000/KN7000 one? if so reuse the code."
+
+VERDICT: SAME PURPOSE, DIFFERENT PROTOCOL -- and the KN5000's single wheel is the
+functional MERGE of the KN7000's TWO rotaries (KN7000: TEMPO/PROGRAM on wire 0x17 as a
+SIGNED STEP the firmware ACCUMULATES, plus a separate DATA dial on wire 0x10; KN5000:
+ONE wheel labelled TEMPO/PROGRAM, reported as segment 0x0B DIRECTION BIT-FLAGS,
+bit7=CW bit6=CCW, carrying NO magnitude). Do not wire a second KN5000 rotary.
+
+KEY FIRMWARE CORRECTION (supersedes kn5000-docs/data-wheel-investigation.md):
+DRAM[0x8E55]/[0x8E6A] are BOOT-ONLY. 0x8e55 appears at exactly ONE site in the whole
+v10 maincpu disassembly (the CPanel_ButtonPollLoop settling query). The UI is fed by a
+DIFFERENT, SIGNED path: SwbtWr event type 0xA9 + payload 0x21 at DRAM[0xC07D], with the
+step at DRAM[0xC07E] run through a +/-7 ACCELERATION TABLE at ROM 0xEA98E2 (dumped;
+index 16 = zero, and the curve INVERTS SIGN). Nothing in the disassembly converts the
+0x8E55 bit-flags into that signed count -- the producer is in the NON-disassembled NAKA
+region (~0xF9xxxx-0xFDxxxx). This FALSIFIES hypotheses H2/H3 in that doc:
+Encoder_PrepareCallback writes event type 0xAA, not 0xA9.
+Also corrected: the neutral 0x00 idle byte IS required, but because
+CPanel_RX_ButtonPacket does `ex (xhl),a` + `xor` (changed-bits mask) -- repeating a
+direction byte yields an EMPTY mask and is silently dropped. Not because of 0x8E6A.
+
+MEASURED (not assumed), DISPLAY=:0 -window, write-tap on DRAM[0x8E55]:
+ * STEADY STATE: navigate MENU:SOUND -> LEFT 4 (MASTER TUNING, numeric page), sweep
+   ~9.5s => driver emitted 112 encoder packets, ZERO reached DRAM[0x8E55]; before/after
+   snapshots byte-identical. NOT "menu-only" and NOT a bad packet format.
+ * BOOT WINDOW (positive control): same code path lands PERFECTLY --
+   value=80 / 00 / 80 / 00 ... i.e. transport + format + encoding are PROVEN CORRECT.
+ => The wheel is a FIRMWARE-SIDE DEAD END in steady state, not a wiring mistake.
+ Supporting: the MENU:SOUND vocal-reverb page shows a highlighted VOLUME field AND
+ LIGHTS THE TEMPO/PROGRAM LED (firmware really does arm the dial there), and the panel
+ BUTTONS on those screens work -- so the target screens were right.
+
+SHIPPED anyway (correct, documented, not claimed to "work"):
+ * REUSED VERBATIM: tools/slider_lib.lua add_rotary_knob + install_slider_callbacks +
+   poll_rotary_wheels, now in src/mame/layout/kn5000.lay, replacing the old PASSIVE
+   (non-draggable) finger script. Layouts can't include files, so it's inlined;
+   tools/refresh_kn5000_lay_script.py re-inlines it (mirrors gen_lay.py / gen_kn6000_lay.py).
+ * REUSED AS A PATTERN, re-encoded: kn5000_cpanel is a standalone device_t (TLCS-900,
+   different protocol), NOT a kn_cpanel_base_device subclass -- sharing a base would be
+   wrong. Adopted the KN7000 pipeline: PORT_ADJUSTER instead of IPT_DIAL (infinite
+   encoder), RAW adjuster field read (live().value, NOT the interpolated port read --
+   the KN7000's hard-won lesson), wrap-aware delta (>50 -> -=101), one-detent-per-scan
+   slew, m_encoder_synced so startup emits no phantom detent. Driver trace verified:
+   clean `delta=1` per-detent stream + neutral idle.
+
+VERIFICATION: ./build.sh 0; -validate CLEAN for kn5000/kn7000/kn6000/kn6500/kn2400/
+kn2600; publish-binary 0; kn7000 + kn6000 boot with ZERO layout-script errors (their
+wheels share slider_lib.lua, which was NOT modified).
+
+NEXT LEVER for the wheel: the acceleration table pins the exact numeric domain the
+missing producer must emit (small signed counts, +/-1 typical) -- a watchpoint on
+DRAM[0xC07E] constrained to that domain is far tighter than the old "some value 0x21".
+
+Patch series: kn5000-25-program-data-wheel.patch REGENERATED (not duplicated), still
+LAST, and README.md now says explicitly to HOLD IT BACK until the firmware path is
+resolved. Findings: KN7000/side-quests/findings/kn5000_data_wheel_findings.md

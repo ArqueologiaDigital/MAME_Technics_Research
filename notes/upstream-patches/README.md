@@ -134,14 +134,23 @@ stripped: submission is under the project owner's authorship.
 | 19 | kn5000-19-hdae5000-ata-intrq.patch | HD-AE5000: real `ata_interface_device` + INTRQ → INT9, CS0/CS1 split; drops `feature::DISK` |
 | 20 | kn5000-20-mn89304-vga-findings.patch | documents the MN89304 LCD controller (4-bit RAMDAC, 8x row-offset, extended SEQ/CRTC) |
 | 21-24 | kn5000-21…24 | tone-gen voice hold timer, DSP1 ready → SubCPU Port H bit 0, removal of the Feature Demo stuck-parts workaround, and the final voice-timing fix for the undumped waveform ROMs |
-| 25 | kn5000-25-program-data-wheel.patch | Program data wheel: `IPT_DIAL` owned by the cpanel device, reported as the segment 0x0B status byte (bit 7 CW / bit 6 CCW) that the firmware reads at DRAM[0x8E55]; interactive layout knob |
+| 25 | kn5000-25-program-data-wheel.patch | TEMPO/PROGRAM data wheel: an infinite relative encoder owned by the cpanel device, declared as an adjuster and reported as the segment 0x0B status byte (bit 7 CW / bit 6 CCW, neutral 0x00 on stop) that the firmware reads at DRAM[0x8E55]; wrap-aware per-scan delta slewed one detent per packet, plus a draggable layout knob using the shared slider/knob library. **Held back deliberately — see below.** |
 
 ### Suggested split into PRs
 - **PR 6 (peripherals)**: 01-17 — the cohesive "bring the rest of the KN5000 online" batch that the
   branch review already proposed. 02 and 04 touch the shared TMP94C241 core and could be split out.
 - **PR 7 (NVRAM persistence)**: 18, standalone.
 - **PR 8 (HD-AE5000 + misc research)**: 19-24.
-- **PR 9 (data wheel)**: 25.
+- **PR 9 (data wheel)**: 25. **Keep this one last and hold it back until the firmware path is
+  resolved.** The transport it implements is verified correct against the firmware's own boot-time
+  `20 0B` query (segment 0x0B lands in DRAM[0x8E55] as 0x80/0x40 with the neutral 0x00 in between),
+  but the KN5000 firmware consumes that byte **only during boot**: in steady state it never requests
+  or stores it, and the UI is driven from a different, signed path (SwbtWr event type 0xA9, payload
+  0x21 at DRAM[0xC07D], routed through a ±7 acceleration table at ROM 0xEA98E2) whose producer lives
+  in the not-yet-disassembled NAKA ROM region. So turning the wheel is **not yet visible on screen**.
+  The patch is worth keeping staged — the input, the widget and the encoding are right — but it
+  should not be submitted as a working feature. Full evidence:
+  `KN7000/side-quests/findings/kn5000_data_wheel_findings.md`.
 
 ### Deliberately NOT in the series
 - `kn5000_power_off_nmi` (2 commits) adds a **core** `MACHINE_NOTIFY_POWER_OFF` machine phase. Patch

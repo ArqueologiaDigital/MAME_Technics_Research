@@ -261,10 +261,19 @@ static INPUT_PORTS_START(kn5000_cpanel)
 	PORT_BIT( 0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("DOWN 2")
 	PORT_BIT( 0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD ) PORT_NAME("UP 2")
 
-	// The "Program" data wheel (rotary encoder) sits next to the LCD and is read by the
-	// LEFT panel MCU, which reports its direction in the segment 0x0B status byte.
+	// The TEMPO/PROGRAM data wheel (rotary encoder) sits below the LCD and is read by the
+	// LEFT panel MCU, which reports its DIRECTION in the segment 0x0B status byte.
+	//
+	// The wheel is an INFINITE relative encoder, so the adjuster's absolute value is
+	// meaningless to the firmware: only its CHANGES matter. This device converts each
+	// change into a segment 0x0B status byte (bit 7 = CW, bit 6 = CCW) plus the neutral
+	// idle byte that follows. Same widget/abstraction as the KN7000's TEMPO_KNOB (which
+	// is an adjuster for exactly this reason), but a completely different wire encoding --
+	// the KN7000 sends a SIGNED STEP on wire 0x17 that its firmware ACCUMULATES, whereas
+	// the KN5000 firmware only ever learns "one detent happened, in this direction".
+	// Centre start so there is room to drag both ways.
 	PORT_START("ENCODER")
-	PORT_BIT( 0xff, 0x00, IPT_DIAL ) PORT_NAME("Program data wheel") PORT_SENSITIVITY(25) PORT_KEYDELTA(5)
+	PORT_ADJUSTER(50, "Tempo / Program data wheel")
 INPUT_PORTS_END
 
 ioport_constructor kn5000_cpanel_device::device_input_ports() const
@@ -302,6 +311,8 @@ kn5000_cpanel_device::kn5000_cpanel_device(const machine_config &mconfig, const 
 	m_cpr_ports(*this, "CPR_SEG%u", 0U),
 	m_encoder_port(*this, "ENCODER"),
 	m_encoder_prev(0),
+	m_encoder_synced(false),
+	m_encoder_field(nullptr),
 	m_encoder_latch(0),
 	m_cpl_leds(*this, "cpl_led_%u", 0U),
 	m_cpr_leds(*this, "cpr_led_%u", 0U)
@@ -341,6 +352,7 @@ void kn5000_cpanel_device::device_start()
 	save_item(NAME(m_last_button_state));
 	save_item(NAME(m_pending_button_state));
 	save_item(NAME(m_encoder_prev));
+	save_item(NAME(m_encoder_synced));
 	save_item(NAME(m_encoder_latch));
 
 	// Initial state - line idle high
@@ -1131,14 +1143,37 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 	// delivered through the same INTA change notification as the buttons.
 	if (m_encoder_port)
 	{
-		int32_t const pos = m_encoder_port->read();
-		int32_t const delta = pos - m_encoder_prev;
-		if (delta != 0)
+		// Read the RAW adjuster setting (field live value), NOT m_encoder_port->read(): the analog
+		// PORT value is interpolated/smoothed by the input system, so a layout script that steps the
+		// adjuster directly is invisible through read(). (The KN7000's TEMPO/PROGRAM knob learned
+		// this the hard way -- see kn_cpanel.cpp.)
+		if (m_encoder_field == nullptr)
+			for (ioport_field &f : m_encoder_port->fields())
+				if (f.type() == IPT_ADJUSTER) { m_encoder_field = &f; break; }
+		int32_t const pos = m_encoder_field ? int32_t(m_encoder_field->live().value) : m_encoder_port->read();
+
+		// The layout knob is an INFINITE rotary encoder: a full-circle drag wraps the 0..100 adjuster
+		// past its end, which must read as ONE detent onward rather than a 100-step jump backwards.
+		int32_t delta = pos - m_encoder_prev;
+		if (delta > 50) delta -= 101;
+		else if (delta < -50) delta += 101;
+
+		if (!m_encoder_synced)
 		{
+			// Adopt the startup position without emitting a phantom detent.
 			m_encoder_prev = pos;
-			m_encoder_latch = (delta > 0) ? 0x80 : 0x40;
+			m_encoder_synced = true;
+		}
+		else if (delta != 0)
+		{
+			// Advance one detent toward the adjuster per scan, so a fast drag becomes a
+			// STREAM of single-detent packets (the firmware counts detents; it cannot see
+			// a magnitude). This is the KN7000's per-scan slew, with the KN5000's encoding.
+			int32_t const step = (delta > 0) ? 1 : -1;
+			m_encoder_prev = int32_t((m_encoder_prev + step + 101) % 101);
+			m_encoder_latch = (step > 0) ? 0x80 : 0x40;
 			LOGMASKED(LOG_ENCODER, "data wheel %s (pos=%d delta=%d latch=0x%02X)\n",
-					(delta > 0) ? "CW" : "CCW", pos, delta, m_encoder_latch);
+					(step > 0) ? "CW" : "CCW", pos, delta, m_encoder_latch);
 			send_button_packet(0x0b, false);
 			changed = true;
 		}
