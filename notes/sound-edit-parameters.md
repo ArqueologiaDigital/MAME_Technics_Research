@@ -140,7 +140,52 @@ in `TgPartLocalEditActivate` (0x4C00CB3F). Known so far:
 |---|---|
 | +0x44 | LFO block header; bit7 = an on/off toggle (`TgPartEditLfoFlagSet`) |
 | +0x45..+0x4C | the 8-byte LFO parameter block |
-| +0x4D, +0x4E, +0x4F, +0x51 | flag bytes whose bit7 is refreshed from the part-setting record `0x500B5340 + part*0x54C` by the family at 0x4C00EDE4..0x4C00F127 (twelve near-identical functions, not yet converted) |
+| +0x4D, +0x4E, +0x4F, +0x51 | flag bytes: bit7 mirrors a single bit of the part-setting record, bits0-6 mirror a whole byte of it (table below) |
+| +0x52, +0x53 | whole bytes copied straight from the part-setting record |
+
+### The flag refreshers — CONVERTED, 2026-07-20
+
+The family at **0x4C00EDE4..0x4C00F12A** turns out to be **NINE**
+functions, not twelve (the earlier count was a guess from a call-target
+scan; rescanning the prologues gives nine). All nine are converted and
+byte-verified in `kn7000_disassembly`. They share one shape:
+
+```c
+void refresh(u8 part) {
+    if (part < 0x10 || part > 0x12) return;          /* editable parts only */
+    if (!TgPartLocalEditActive(part)) return;        /* 0x4C00C6BF */
+    u8  *dst = SOUND_EDIT(part) + FIELD;             /* 0x500C0784+(part-0x10)*0x2C8 */
+    u8  *src = (u8 *)(0x500B5340 + part*0x54C);      /* part-setting record */
+    ...one bit, or one byte, copied...
+}
+```
+
+| function (lib CPU) | SOUND EDIT field | source in `0x500B5340 + part*0x54C` |
+|---|---|---|
+| `TgSoundEditFlag4DBit7Refresh` 0x4C00EDE4 | +0x4D bit7 | halfword +0x00, bit7 |
+| `TgSoundEditFlag4DLowRefresh`  0x4C00EE41 | +0x4D bits0-6 | byte +0x06 |
+| `TgSoundEditFlag4EBit7Refresh` 0x4C00EE9A | +0x4E bit7 | halfword +0x00, bit1 |
+| `TgSoundEditFlag4ELowRefresh`  0x4C00EEF7 | +0x4E bits0-6 | byte +0x15 |
+| `TgSoundEditFlag4FBit7Refresh` 0x4C00EF4B | +0x4F bit7 | halfword +0x00, bit6 |
+| `TgSoundEditFlag51Bit7Refresh` 0x4C00EFA8 | +0x51 bit7 | **composite** (below) |
+| `TgSoundEditFlag51LowRefresh`  0x4C00F04E | +0x51 bits0-6 | byte +0x0E |
+| `TgSoundEditByte52Refresh`     0x4C00F0A2 | +0x52 (whole byte) | byte +0x0F |
+| `TgSoundEditByte53Refresh`     0x4C00F0E6 | +0x53 (whole byte) | byte +0x14 |
+
+Eight of the nine are a straight mirror. The odd one out,
+`TgSoundEditFlag51Bit7Refresh`, computes its bit from three places in
+the part-setting record: a 2-bit mode field (halfword +0x62, bits11-12),
+bit3 of halfword +0x00, the group bits14-15 of halfword +0x62, and byte
++0x14 — set when the mode is 0 or 3 and byte +0x14 is non-zero, or when
+the mode is 1/2 and the +0x62 group bits are set. That is the shape of a
+"this part actually has an effect send / is actually audible" derivation
+rather than a plain copy, so its user-facing name is left open until a
+live session can watch it change.
+
+What the four flag bytes *mean* on the screen is still open — the six
+low-bit sources (+0x06, +0x15, +0x0E, +0x0F, +0x14) are single-byte
+part-setting fields, so a live session that moves one SOUND EDIT row at
+a time and diffs `0x500B5340 + part*0x54C` will name them in one pass.
 
 ---
 

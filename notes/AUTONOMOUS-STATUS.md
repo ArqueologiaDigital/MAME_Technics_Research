@@ -4184,3 +4184,75 @@ questions: the LFO block byte roles + the KEYSYNC/CONNECTION toggle
   font path diverges and needs tracing. KN2400/KN2600: never had a placeholder, and
   injecting the KN7000 table changes nothing (they read nothing from 0x48000000) — a
   different cause. No regressions: kn7000 boots home with text, kn2400 boots.
+
+## AUTONOMOUS-STATUS tick — CONVERT track, 2026-07-20 (618 -> 652)
+
+Handoff items (1), (2) and (3) all landed. `kn7000_disassembly` commit
+036e68b; both flash images still rebuild **100% byte-identical**
+(`make verify`).
+
+- ★ **THE FIVE VOICE-RESOURCE BANK SOURCES ARE NAMED.** New write-up:
+  `notes/sound-bank-classes.md`. The classifier's key is the MIDI triple
+  the SOUND EXPLORER screen prints ("[32.11-1"):
+  `key = (bank MSB << 16) | (bank LSB << 8) | program`. Byte order
+  confirmed independently by `CustomVoiceRecFetch` (0x4844A42F), which
+  reads a stored 3-byte `{program, LSB, MSB}` record and passes it
+  straight to `VoiceRecFetchBanked_entry`. The classifier probes sources
+  1..4 for presence, first hit wins, and the winning SOURCE NUMBER is
+  the class code:
+    class 0 INTERNAL 0x48000000 (dir *(0x48000018)) = factory presets
+    class 1 0x57000000 = factory read-only data flash
+    class 2 0x56000000 = CUSTOM flash (disk-programmed)
+    class 3 0x41000000
+    class 4 0x41800000
+  Sources 1..4 are validated identically by the boot archive parser
+  0x48449EF4..0x4844A3D1: `*(base)+base == base+0x200` plus a 16-byte
+  compare against the ROM string **"Expansion Board"** at 0x485B8518,
+  then presence byte `0x501496B4+n` is set. `VoiceBankSourceFlagGet`
+  0x4844A3D4 reads it; two sibling probes (0x4844A3EE/0x4844A3F2) are
+  `return 0` stubs in this firmware.
+  DELIBERATELY NOT CLAIMED: which SOUND GROUP panel button (MEMORY vs
+  EW EXPANSION) is which of classes 1..4 — the firmware uses the same
+  signature for all four windows and only the address differs. Needs a
+  live session with a card/board fitted.
+  All ten per-source lookups are one shape: a multiplicative-hash bucket
+  walk with base-relative offsets (params at `dir+0x24`, buckets at
+  `dir+0x0C`, chain link +0 / key +4 / payload +8). Family B
+  (`VoiceParamBank*`) additionally reads bit15 as "invalid" and degrades
+  exact -> LSB rounded to a multiple of 8 -> LSB-only -> 0x7F7F default.
+
+- Item (2): the SOUND EDIT flag refreshers are **NINE, not twelve** —
+  0x4C00EDE4..0x4C00F12A. (Standing lesson again: the handoff count came
+  from call targets; rescanning prologues gives nine.) All converted;
+  section 3 of `notes/sound-edit-parameters.md` now has the full field
+  table (+0x4D/+0x4E/+0x4F/+0x51 bit7 and bits0-6, plus whole bytes
+  +0x52/+0x53) and their sources in `0x500B5340+part*0x54C`. Eight are
+  straight mirrors; `TgSoundEditFlag51Bit7Refresh` (0x4C00EFA8) derives
+  its bit from a 2-bit mode field at +0x62 bits11-12 plus +0x00 bit3,
+  +0x62 bits14-15 and byte +0x14 — left unnamed pending a live session.
+
+- Item (3): `CustomVoiceRecFetch` 0x4844A42F/34 (resource block
+  0x4848463F() + 0x1A7 + idx*0x8E, else error 0x26 + the triple
+  fallback) and `UserVoiceRecPtr` 0x4844ABF7 (`*(0x501496B8) + 0x70F7 +
+  idx*0x8E`, the user/MEMORY record leaf). Also named+converted the
+  family-B record fetcher `VoiceParamRecFetchBanked` 0x48449925/2A
+  (bank descriptor `+0x1C` directory + index*0x10).
+
+- unidasm GOTCHA worth recording: at 0x4844A3E3 unidasm prints
+  `f4  movbu (d0,a0),d0` consuming ONE byte and then shows a phantom
+  `00  clr d0` — which made the presence probe look like it always
+  returned 0. The real encoding is the two-byte `f4 00`; the encoder
+  round-trips it and `make verify` proves it. Do not read semantics off
+  a single unidasm line in the F0/F4 groups.
+
+NEXT (CONVERT track): (1) the SIBLING classifiers immediately after the
+two converted ones — 0x48571056 and 0x4857176B (and further on) have the
+identical five-source shape and are probably the rhythm/style and other
+resource kinds; converting them would extend `sound-bank-classes.md`
+into a general resource-archive chapter; (2) still open from before: the
+channel-EG caller module 0x4C004DE4..0x4C005673; (3) the boot archive
+parser itself 0x48449EF4..0x4844A3D1 (four near-identical blocks, cheap,
+and it is the code that decides what a fitted expansion looks like).
+Live-session questions unchanged: LFO block byte roles, the
+KEYSYNC/CONNECTION toggle, the six SOUND EDIT low-bit sources, and which
+panel button maps to bank classes 1..4.
