@@ -4935,3 +4935,59 @@ SOUND LIST EDIT engine (0x4857B264 / 0x4857B2CC / 0x4857C28E / 0x4857C388 /
 0x4857C3C3 / 0x4857C588 / 0x4857C679); (2) the rest of InitializeBlock34,
 0x485733BC..0x485736B7. Live task (effect enable bits 4/10/13/14) still
 queued from tick b.
+
+---
+
+## TICK 24 — KN6000/KN6500 CONTROL PANELS (side quest, 2026-07-20)
+
+DONE. Both models now have a correct, dedicated panel device; the quest moved
+to side-quests/fully_solved/. Code: 74ff1f6. Notes: notes/kn6000-panel-matrix.md.
+
+Felipe's report was the whole diagnosis: "presses are accepted but the mapping
+is all wrong, yet the TEMPO/PROGRAM wheel works PERFECTLY". Both halves of that
+sentence are load-bearing, and together they say exactly where the seam is. The
+wheel working proves the CP wire protocol is shared across the MN10300 models;
+the mapping being wrong proves the matrix contents are not. Measured:
+
+  19 cells same event, 123 DIFFERENT, 8 KN6000-only, 9 KN7000-only
+  -> 88% of populated button cells differ from the KN7000.
+
+Split on that seam: kn_cpanel_base_device holds the protocol (frame parse,
+handshake, ATN/RX dance, reply queue, scan, all three analog controllers);
+kn7000_cpanel_device and kn6000_cpanel_device supply ONLY geometry + LED decode.
+Driver holds the panel by base type; kn6000() device_remove()s and re-installs.
+
+COMMONALITY MEASURED BEFORE DECIDING (Felipe asked for this explicitly): the
+KN6000 and KN6500 descriptor tables are BYTE-IDENTICAL -- 30 segments, 164
+button-bits, zero differing entries -- so one class serves both. No speculative
+second derived class.
+
+METHOD WORTH REUSING: two independent sources, cross-checked rather than
+merged. Firmware descriptor arrays gave GEOMETRY (seg/bit, authoritative);
+service-manual schematics gave NAMES. They agreed cell-for-cell on all 150
+button-bits, and the manual CORRECTED a firmware-only guess (the 6 pads share
+three columns as 1/4, 2/5, 3/6, not 1/2, 3/4, 5/6 -- positional ordering would
+have got that wrong and it would have looked fine). The single strongest datum:
+a wire-trace found exactly ONE unfitted switch position on the CPR board
+(SEG9/SW3) and the ROM table has exactly ONE hole there (normSeg 0x12 bit 3).
+
+STANDING LESSON, thirteenth pass: when a symptom has a working part and a
+broken part, the boundary between them IS the refactor. The wheel was not a
+curiosity to explain away -- it was the proof of which code is shared. Don't
+design the class split from taste; read it off the failure.
+
+LIVE-VERIFIED (the proof is a button doing what its silk says, not just
+responding): POP -> RHYTHM screen header POP; PIANO -> SOUND-RIGHT 1 category
+PIANO with real voice names; DISK -> DISK MENU; PROGRAM MENU -> PROGRAM MENUS.
+KN6500 opens the same screens. KN7000 unregressed (PROGRAM MENUS / DISK MENU
+LOAD / PIANO). Build clean; -validate kn7000/kn6000/kn6500/kn2400; published.
+
+HONEST LIMITATION, not papered over: the LED decode is GENERIC. The hardware
+LED coordinates are now fully traced (rows Q20-Q25 x SEG columns, 74LS138
+decode is CM[2:0] = row+1 because Y0 is unconnected) and tabulated in the
+notes -- but how that maps onto the protocol's [register][bit] is unconfirmed,
+and there is no KN6000 layout to display an LED anyway. Bind it when artwork
+exists, against the built-in "Panel SW & LED test" (service manual p.22 7.5).
+
+NEXT: unchanged CONVERT track. Newly unblocked by this tick: a real KN6000
+layout is now drawable -- the port tags and button names exist.
