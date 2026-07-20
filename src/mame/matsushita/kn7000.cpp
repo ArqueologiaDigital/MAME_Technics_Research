@@ -193,6 +193,19 @@ public:
 	// note_x256: musical pitch in 1/256-semitone units resolved from the firmware's
 	// voice record by the caller, or -1 if unavailable (fall back to the legacy
 	// keybed-anchored absolute decode of pitch18).
+	// Envelope stages (see notes/tg-envelope-sweep-results.md). The firmware's 7-param
+	// amplitude EG: ATTACK to PEAK (r0), DCY1 toward SUS1 (r1), DCY2 toward SUS2 (r2),
+	// RELEASE to silence on the r3 gate-off / managed r0 burst / 0xC000 steal.
+	enum : uint8_t { ST_ATTACK = 0, ST_DECAY1, ST_DECAY2, ST_RELEASE };
+
+	// PROVISIONAL chip rate-byte -> seconds law (higher byte = faster; sweep-calibrated
+	// anchors: piano ATK 0xD2 -> 9 ms, piano DCY1 0x39 -> 1.8 s, damp burst 0x91 -> 85 ms,
+	// organ rA 0xAE -> 31 ms, pad rA 0x04 -> ~11 s).
+	static double eg_tau(uint8_t rate)
+	{
+		return std::clamp(13.0 * pow(2.0, -double(rate) / 20.0), 0.001, 30.0);
+	}
+
 	void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1)
 	{
 		if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
@@ -238,12 +251,6 @@ public:
 				else                        m_mode[v] = 0;             // unknown record: safest = managed
 				const double nowt = machine().time().as_double();
 				m_srckey[v] = (m_ctx_time >= 0.0 && (nowt - m_ctx_time) < 0.060) ? m_ctx_key : 0xFF;
-				// Natural-decay tone shape (sweep-validated, 24/24 blocks over 11 families):
-				// nonzero LOW bytes in r9/rA mark tones that die out even while held (piano,
-				// guitar, mallet, synth, bass); pure sustainers (strings/pad/organ/brass/sax/
-				// world) are all-00 there. Lets a held Concert Grand fade out like a real
-				// piano instead of freezing at its SUS1 level.
-				m_dies[v] = (m_mode[v] == 2) || (((m_envreg[v][5] | m_envreg[v][6]) & 0x00FF) != 0);
 				// Sample select: (bank,zone) from the aux word -> donor wave (sine if unmapped).
 				{
 					const int bank = (m_aux[v] >> 12) & 3, zone = m_aux[v] & 0xFF;
@@ -253,23 +260,37 @@ public:
 							{ m_wsel[v] = int16_t(i); break; }
 					m_wpos[v] = 0.0;
 				}
-				m_atk[v]    = 1;      // start the attack
 				m_phase[v]  = 0.0;    // clean attack transient
-				// Resolve this voice's amplitude envelope from the firmware's EG registers.
-				// CONFIRMED by live capture (piano vs organ/strings): SUS1 (r7) is the sustain
-				// level -- 0x2C (~35%) for the decaying Concert Grand, 0x7F (max) for sustaining
-				// organ/strings -- so a held note now decays or sustains per the sound. The decay
-				// time is scaled from DCY2 (r8) and calibrated so the Concert Grand's ~1.8 s decay
-				// is preserved; the exact chip rate curve + release (rA) are still provisional.
+				// Resolve this voice's amplitude envelope from the firmware's 7-param EG.
+				// DECODED 2026-07-20 via the AMPLITUDE EDIT -> ENVELOPE screen sweep
+				// (notes/tg-envelope-sweep-results.md): the EG lives in r0/r1/r2 as
+				// [rate hi | level lo] byte pairs -- r0 = ATK rate | PEAK level,
+				// r1 = DCY1 rate | SUS1 level, r2 = DCY2 rate | SUS2 level. Rate bytes:
+				// HIGHER = FASTER. Levels 0..0x7F. (Piano: D27F/3900/4500 = fast attack
+				// to full peak, two-stage decay to SILENCE; organ: D27F/727F/727F = fast
+				// attack, sustain at max -- exactly the audible behavior.) The chip's
+				// exact rate->seconds law is PROVISIONAL: T = 13 * 2^(-rate/20) s,
+				// calibrated so the piano keeps its shipped ~6 ms attack / ~1.8 s decay.
 				constexpr double FS = 44100.0;
-				const double sus  = std::clamp(double(m_envreg[v][3] >> 8) / 127.0, 0.0, 1.0);      // SUS1 = sustain level
-				const double dcyT = std::clamp(1.8 * pow(2.0, (0x99 - double(m_envreg[v][4] >> 8)) / 10.0), 0.03, 8.0); // DCY2 rate
-				// RLS (rA) is the release rate: HIGHER = faster (organ rA=0xAE stops quickly; a pad
-				// rA=0x04 fades slowly; piano rA=0x25 is in between). Calibrated to piano=0x25 -> 0.15 s.
-				const double rlsT = std::clamp(0.15 * pow(2.0, (0x25 - double(m_envreg[v][6] >> 8)) / 10.0), 0.02, 5.0);
-				m_sus[v]  = sus;
-				m_dcyc[v] = exp(-1.0 / (dcyT * FS));
-				m_rlsc[v] = exp(-1.0 / (rlsT * FS));
+				const double peak = std::max(double(m_eg012[v][0] & 0x7F) / 127.0, 1.0 / 127.0);
+				double sus1 = double(m_eg012[v][1] & 0x7F) / 127.0;
+				double sus2 = double(m_eg012[v][2] & 0x7F) / 127.0;
+				// ONESHOT plucks (no key-up ramp): the sample dies out naturally -- force
+				// the decay chain to run to silence (the old held-decay behavior).
+				if (m_mode[v] == 2) { sus1 = 0.0; sus2 = 0.0; }
+				m_peak[v]    = peak;
+				m_sus1[v]    = sus1;
+				m_sus2[v]    = sus2;
+				m_atkstep[v] = peak / (eg_tau(m_eg012[v][0] >> 8) * FS);
+				m_d1c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][1] >> 8) * FS));
+				m_d2c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][2] >> 8) * FS));
+				// Default RELEASE rate: the chip-side damp bank's rA high byte (organ
+				// 0xAE = fast stop, pad 0x04 = slow fade -- audibly validated across 11
+				// families). Firmware-managed sounds override this with the key-up
+				// burst's own r0 rate (see cls 0x0000 below).
+				m_rlsc[v] = exp(-1.0 / (std::clamp(eg_tau(m_envreg[v][6] >> 8), 0.02, 12.0) * FS));
+				m_stage[v] = ST_ATTACK;
+				m_env[v]   = 0.0;
 			}
 			else
 			{
@@ -280,35 +301,56 @@ public:
 			}
 			m_tgwrites++;
 		}
-		else if (cls == 0x0000)                           // reg0 = per-voice level target
+		else if (cls == 0x0000)                           // r0 = [ATK rate | PEAK level]
 		{
-			// THE KEY-RELEASE IS NOT A 0x0001=0xC000 MUTE (that is only boot init and voice-
-			// steal). Live captures 2026-07-11: on key/MIDI release the firmware rewrites regs
-			// 0,1,4,5,8,9 of the note's ODD companion block with a ramp-down target + rates
-			// (reg0: 0x9180; vs 0xFF80/0xD27F/0xE77F during note-on programming) -- and it
-			// aims at the companion even when only the even block is sounding (single-voice
-			// notes get the same 001x-style rewrite). So: a reg0 rewrite below full scale on
-			// EITHER block of a pair releases every gated voice of the pair {v&~1, v|1} that
-			// has been gated >20 ms (the note-on's own reg0/companion programming happens
-			// within ~1 ms of the gate, so the timed guard skips it; a mid-note expression
-			// rewrite would false-trigger -- acceptable for the placeholder).
-			// NOTE: some sounds (plucked guitar family) write NOTHING at key-up -- their
-			// samples ring their natural multi-stage envelope; our placeholder holds them at
-			// SUS1 instead (known limitation, see notes/tg-envelope-implementation-plan.md).
+			m_eg012[v][0] = data;                         // cache for the next note-on resolve
+			// KEY-RELEASE, path 2 (firmware-managed sounds): after the r3=0x8000 gate-off
+			// the firmware rewrites regs 0,1,4,5,8,9 of the note's ODD companion block with
+			// a ramp-down (r0=0x9180: rate 0x91 toward level 0) -- aimed at the companion
+			// even when only the even block sounds. A reg0 rewrite below full scale on
+			// EITHER block of a pair releases every gated/releasing voice of the pair
+			// {v&~1, v|1} gated >20 ms (the note-on's own r0 programming happens BEFORE
+			// the pitch-write gate, and boot resets are 0xFF80, so the guard+threshold
+			// skip them) and OVERRIDES the release coefficient with the burst's own rate
+			// byte -- the piano damp 0x91 -> ~85 ms under the provisional law.
 			if (data != 0 && (data >> 8) < 0xFF)
 			{
 				const double now = machine().time().as_double();
 				for (int y = (v & ~1); y <= (v | 1); y++)
-					if (m_gate[y] && (now - m_ton[y]) > 0.020)
+					if ((m_gate[y] || m_stage[y] == ST_RELEASE) && (now - m_ton[y]) > 0.020)
 					{
 						m_stream->update();
-						m_gate[y] = 0;
+						m_gate[y]  = 0;
+						m_stage[y] = ST_RELEASE;
+						m_rlsc[y]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
 					}
 			}
 		}
-		else if (cls == 0x0001)                           // 0xC000 = voice mute (boot init /
-		{                                                 // voice-steal; NOT the key release)
-			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; }
+		else if (cls == 0x0001)                           // r1 = [DCY1 rate | SUS1 level];
+		{                                                 // 0xC000 = mute (boot init / voice-steal)
+			m_eg012[v][1] = data;
+			if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; m_stage[v] = ST_RELEASE; }
+		}
+		else if (cls == 0x0002)                           // r2 = [DCY2 rate | SUS2 level]
+		{
+			m_eg012[v][2] = data;
+		}
+		else if (cls == 0x0003)                           // r3 = GATE (sweep result 3):
+		{                                                 // 0x87FF at note-on, 0x8000 at key-up
+			// UNIVERSAL key-release trigger -- written for EVERY class on key-up (verified
+			// on the managed piano AND the gate-follow organ, falsifying the earlier "no
+			// key-up write for organ/brass" reading). Release at the voice's default rate
+			// (rA damp law); managed sounds refine it with the r0 burst that follows.
+			if ((data >> 8) == 0x80)
+			{
+				const double now = machine().time().as_double();
+				if (m_gate[v] && (now - m_ton[v]) > 0.020)
+				{
+					m_stream->update();
+					m_gate[v]  = 0;
+					m_stage[v] = ST_RELEASE;
+				}
+			}
 		}
 		else if (cls == 0x2009)                           // per-voice level (best-effort)
 		{
@@ -403,7 +445,8 @@ public:
 			if (m_gate[v] && m_mode[v] == 1 && m_srckey[v] == key)
 			{
 				m_stream->update();
-				m_gate[v] = 0;                       // release at the voice's own rA rate
+				m_gate[v]  = 0;                      // release at the voice's own rA rate
+				m_stage[v] = ST_RELEASE;
 			}
 	}
 
@@ -415,10 +458,14 @@ protected:
 		std::fill(std::begin(m_freq),  std::end(m_freq),  0.0);
 		std::fill(std::begin(m_env),   std::end(m_env),   0.0);
 		std::fill(std::begin(m_gate),  std::end(m_gate),  0);
-		std::fill(std::begin(m_atk),   std::end(m_atk),   0);
+		std::fill(std::begin(m_stage), std::end(m_stage), uint8_t(ST_RELEASE));
 		std::fill(std::begin(m_level), std::end(m_level), 1.0);
-		std::fill(std::begin(m_sus),   std::end(m_sus),   0.0);
-		std::fill(std::begin(m_dcyc),  std::end(m_dcyc),  0.0);
+		std::fill(std::begin(m_peak),  std::end(m_peak),  0.0);
+		std::fill(std::begin(m_sus1),  std::end(m_sus1),  0.0);
+		std::fill(std::begin(m_sus2),  std::end(m_sus2),  0.0);
+		std::fill(std::begin(m_atkstep), std::end(m_atkstep), 0.0);
+		std::fill(std::begin(m_d1c),   std::end(m_d1c),   0.0);
+		std::fill(std::begin(m_d2c),   std::end(m_d2c),   0.0);
 		std::fill(std::begin(m_rlsc),  std::end(m_rlsc),  0.0);
 		std::fill(std::begin(m_srckey), std::end(m_srckey), 0xFF);
 		std::fill(std::begin(m_wsel), std::end(m_wsel), int16_t(-1));
@@ -454,16 +501,20 @@ protected:
 		save_item(NAME(m_p18ref));
 		save_item(NAME(m_env));
 		save_item(NAME(m_gate));
-		save_item(NAME(m_atk));
+		save_item(NAME(m_stage));
 		save_item(NAME(m_level));
 		save_item(NAME(m_envreg));
-		save_item(NAME(m_sus));
-		save_item(NAME(m_dcyc));
+		save_item(NAME(m_eg012));
+		save_item(NAME(m_peak));
+		save_item(NAME(m_sus1));
+		save_item(NAME(m_sus2));
+		save_item(NAME(m_atkstep));
+		save_item(NAME(m_d1c));
+		save_item(NAME(m_d2c));
 		save_item(NAME(m_rlsc));
 		save_item(NAME(m_ton));
 		save_item(NAME(m_aux));
 		save_item(NAME(m_mode));
-		save_item(NAME(m_dies));
 		save_item(NAME(m_wsel));
 		save_item(NAME(m_busreg));
 		save_item(NAME(m_wpos));
@@ -473,40 +524,40 @@ protected:
 		save_item(NAME(m_tgwrites));
 	}
 
-	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S EG registers (resolved at note-on
-	// into m_sus / m_dcyc / m_rlsc, see tg_write). Each voice: fast attack to peak, exponential
-	// decay toward the sound's SUSTAIN level, hold there while the firmware keeps the voice gated,
-	// then exponential release once it is muted. A decaying sound (piano, low sustain) fades toward
-	// its low sustain; a sustaining sound (organ/strings, sustain = max) holds -- the audible
-	// difference the old fixed "always decay to silence" envelope threw away.
+	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
+	// pairs, resolved at note-on -- see tg_write and notes/tg-envelope-sweep-results.md).
+	// Full stage chain: linear ATTACK to PEAK (r0), exponential DCY1 toward SUS1 (r1),
+	// exponential DCY2 toward SUS2 (r2, the long-tail second stage), then exponential
+	// RELEASE to silence when the gate drops (r3=0x8000 / managed r0 burst / steal mute).
+	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
+	// (SUS1=SUS2=max) holds; an edited slow attack (r0 hi below ~0xD0) swells audibly.
 	virtual void sound_stream_update(sound_stream &stream) override
 	{
 		constexpr double FS = 44100.0;
 		constexpr double TWO_PI = 6.28318530717958647692;
-		const double atk = 1.0 / (0.006 * FS);         // linear ~6 ms attack (click-free)
 		for (int s = 0; s < stream.samples(); s++)
 		{
 			double acc = 0.0;
 			for (int v = 0; v < 128; v++)
 			{
-				if (m_atk[v])                                  // attack: ramp to peak
+				switch (m_stage[v])
 				{
-					m_env[v] += atk;
-					if (m_env[v] >= 1.0) { m_env[v] = 1.0; m_atk[v] = 0; }
-				}
-				else if (m_gate[v])                            // held
-				{
-					if (m_dies[v])
-						m_env[v] *= m_dcyc[v];                     // ONESHOT: SUS1 is a waypoint, not a
-						                                           // floor -- pluck/piano-class samples
-						                                           // die out at the r8 rate while held
-					else
-						m_env[v] = m_sus[v] + (m_env[v] - m_sus[v]) * m_dcyc[v];   // hold at SUS1
-				}
-				else                                           // released: decay to silence
-				{
+				case ST_ATTACK:                                // linear ramp to PEAK (r0)
+					m_env[v] += m_atkstep[v];
+					if (m_env[v] >= m_peak[v]) { m_env[v] = m_peak[v]; m_stage[v] = ST_DECAY1; }
+					break;
+				case ST_DECAY1:                                // toward SUS1 at the DCY1 rate
+					m_env[v] = m_sus1[v] + (m_env[v] - m_sus1[v]) * m_d1c[v];
+					if (std::abs(m_env[v] - m_sus1[v]) < (1.0 / 1024.0))
+						{ m_env[v] = m_sus1[v]; m_stage[v] = ST_DECAY2; }
+					break;
+				case ST_DECAY2:                                // toward SUS2 at the DCY2 rate (hold there)
+					m_env[v] = m_sus2[v] + (m_env[v] - m_sus2[v]) * m_d2c[v];
+					break;
+				default:                                       // ST_RELEASE: decay to silence
 					m_env[v] *= m_rlsc[v];
 					if (m_env[v] < 0.0005) m_env[v] = 0.0;
+					break;
 				}
 				if (m_env[v] <= 0.0) continue;
 				if (m_wsel[v] >= 0)
@@ -543,7 +594,6 @@ private:
 	double   m_ton[128]   = { };     // note-on machine time (s) -- release detection
 	uint16_t m_aux[128]   = { };     // per-voice aux/mode word (latch class 0x1C02; bit15 = gate-follow)
 	uint8_t  m_mode[128]  = { };     // 0=MANAGED (firmware key-up burst) 1=GATE_FOLLOW 2=ONESHOT
-	uint8_t  m_dies[128]  = { };     // held envelope continues to 0 (natural-decay tone shape)
 	// SYNTHETIC wave-pack playback (kn7000_waves_synthetic.rom, optional). Entries map the
 	// runtime sample select -- aux word bank (bits13:12) + zone (bits7:0) -- to donor PCM.
 	struct wentry { uint8_t bank, zlo, zhi; const int16_t *pcm; uint32_t len, lstart, llen; double root_hz; };
@@ -568,16 +618,25 @@ private:
 	uint32_t m_p18ref[128] = { };    // per-voice pitch18 at note-on (bend reference)
 	double   m_env[128]   = { };     // per-voice envelope level
 	uint8_t  m_gate[128]  = { };     // per-voice gate: 1 = firmware note held, 0 = muted/released
-	uint8_t  m_atk[128]   = { };     // per-voice attack-in-progress flag
+	uint8_t  m_stage[128] = { };     // envelope stage (ST_ATTACK..ST_RELEASE)
 	double   m_level[128] = { };     // per-voice level (firmware class 0x2009; 1.0 = default full)
-	// Per-voice AMPLITUDE ENVELOPE, driven by the firmware's own EG registers (group-0 regs
-	// 0x04-0x0A = ATK,PEAK,DCY1,SUS1,DCY2,SUS2,RLS; see notes/tg-envelope-implementation-plan.md).
-	// Captured live: sustaining sounds (organ/strings) write a HIGH SUS1 (r7=0x7F), decaying
-	// sounds (piano) write a LOW SUS1 (r7=0x2C) -- so the note now sustains or decays per the sound.
-	uint16_t m_envreg[128][7] = { };  // raw r4..rA per voice (index 0..6)
-	double   m_sus[128]  = { };       // resolved sustain level 0..1 (from SUS1)
-	double   m_dcyc[128] = { };       // per-sample decay coefficient (toward sustain)
-	double   m_rlsc[128] = { };       // per-sample release coefficient (toward 0)
+	// Per-voice AMPLITUDE ENVELOPE, driven by the firmware's own 7-param EG. Decoded via
+	// the AMPLITUDE EDIT -> ENVELOPE screen sweep (notes/tg-envelope-sweep-results.md):
+	// r0 = [ATK rate | PEAK level], r1 = [DCY1 rate | SUS1 level], r2 = [DCY2 rate | SUS2
+	// level] (rate bytes: higher = faster; levels 0..0x7F), r3 = gate (0x87FF on / 0x8000
+	// key-up). r4..rA are a SECOND parameter bank (chip-side damp; rA hi = the default
+	// release rate the audible 11-family sweep validated), kept for the note-on validity
+	// check and the release-rate default.
+	uint16_t m_eg012[128][3] = { };   // raw r0/r1/r2 per voice (the 7-param amplitude EG)
+	uint16_t m_envreg[128][7] = { };  // raw r4..rA per voice (damp/aux bank)
+	double   m_peak[128] = { };       // resolved PEAK level 0..1 (r0 lo)
+	double   m_sus1[128] = { };       // resolved SUS1 level 0..1 (r1 lo)
+	double   m_sus2[128] = { };       // resolved SUS2 level 0..1 (r2 lo)
+	double   m_atkstep[128] = { };    // per-sample linear attack increment (r0 hi)
+	double   m_d1c[128]  = { };       // per-sample DCY1 coefficient toward SUS1 (r1 hi)
+	double   m_d2c[128]  = { };       // per-sample DCY2 coefficient toward SUS2 (r2 hi)
+	double   m_rlsc[128] = { };       // per-sample release coefficient (rA hi default,
+	                                  // overridden by the managed key-up burst's r0 rate)
 	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 };
 

@@ -159,3 +159,14 @@ VERIFIED (WAV): organ+brass hold steady, stop <0.25s at key-up (gate-follow -- t
 rings through release, fades to silence ~12s (one-shot); piano decays held + damps at release;
 strings hold rock-steady + stop at key-up (their own burst rates ARE 0xAE00 fast-damp). Sweep data:
 /tmp/sweep_writes.txt (+run2); full agent reports in the session workflow journal wf_c8e2bf8d-0c1.
+
+## 2026-07-20: SUPERSEDED IN PART — the EG sweep decoded the real register layout
+The AMPLITUDE EDIT -> ENVELOPE screen sweep (notes/tg-envelope-sweep-results.md) proves the
+7-param amplitude EG is r0/r1/r2 as [rate hi | level lo] pairs (r0=ATK|PEAK, r1=DCY1|SUS1,
+r2=DCY2|SUS2) and r3 is the gate (0x87FF on / 0x8000 key-up, written for EVERY class — the
+"organ gets no key-up write" reading above is FALSIFIED for r3). r4..rA are NOT the EG (a
+second, chip-side damp/aux bank; the rA-hi release-speed correlation stands and remains the
+driver's default release rate). The driver now implements the full ATTACK->DCY1->SUS1->
+DCY2->SUS2->RELEASE chain from r0-r2, with the per-sound attack (r0 hi) that this plan's
+"r0-r3 vary per sound" hunch pointed at. The behavioral findings above (which sounds decay/
+sustain/damp) all still hold — only the causal register attribution moved.
