@@ -43,11 +43,67 @@ public:
 	// construction/destruction (single concrete, instantiable device)
 	mn10300_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	// The driver's interrupt controller tells the core where the AM33 maskable
-	// interrupt vector points (set once at machine start). Input line 0 is the
-	// single maskable interrupt.
+	// Legacy external-INTC hooks (the on-chip INTC now lives in this core; these
+	// remain so a machine may still override the vector/level directly -- the
+	// KN7000 driver used them before the INTC-in-core migration). The core's own
+	// INTC recompute/accept paths overwrite both from the per-level vector table.
 	void set_irq_vector(uint32_t v) { m_irq_vector = v; }
 	void set_irq_level(int l) { m_irq_level = l; }
+
+	// ---- on-chip interrupt controller (INTC) @ 0x34000100 ------------------
+	//
+	// Byte-exact port of the KN7000 driver's proven HLE (kn7000.cpp intc_r/
+	// intc_w/intc_assert/intc_recompute/irq_ack before the INTC-in-core
+	// refactor); the behavior was reverse-engineered from the KN7000 firmware
+	// (kn7000_mame overlay: notes/interrupt-mechanism.md).
+	//
+	// GxICR(group) = 0x34000100 + group*4 (16-bit): bits 3:0 DETECT, bit4
+	// REQUEST, bit8 ENABLE, bits 14:12 LEVEL. A source is pending when its
+	// REQUEST bit is set; the maskable line is asserted while any
+	// ENABLE&REQUEST source exists; among pending groups the winner is the
+	// LOWEST level value (highest priority). Quirks preserved from the HLE:
+	//  * 0x34000100/0x104 double as the IAGR the (self-loaded) library
+	//    dispatcher reads: 0x34000100 returns the latched group << 3; the
+	//    0x34000200 group register returns it << 2. Both latch at the accept
+	//    instant (real INTC latches IAGR at acknowledge).
+	//  * GxICR write: high byte (ENABLE+LEVEL) stored as written; DETECT bits
+	//    are write-1-to-clear, limited to the byte lanes actually written;
+	//    REQUEST is derived from the surviving DETECT bits.
+	//  * group 0x17 software-trigger self-ack: writing DETECT bit0 latches
+	//    DETECT+REQUEST (the KN7000 effects-DSP self-test handshake; its
+	//    dsp_present() gate was constant-true, so this is unconditional).
+	//  * EXTMD (0x34000280) is a latched read-back register; every write is
+	//    reported outward via intc_extmd_cb (the KN7000 decodes the panel-ATN
+	//    edge re-arm transition there -- board policy, stays driver-side).
+	//
+	// Vector delivery: the AM33 vectors each interrupt LEVEL through a machine-
+	// specific handler address (KN7000: firmware quick-dispatch 0x4C03DDA0 for
+	// all levels except the level-6 scheduler entry 0x4C03DE26; KN6000/KN6500:
+	// trampoline 0x90000000 for every level). That mapping is board policy:
+	// the machine fills the per-level table with set_maskable_vector().
+	void intc_assert(int group);                  // set DETECT bit0 + REQUEST, recompute delivery
+	// Raw ICR access for POLLED lines a board drives directly (e.g. the KN7000
+	// SD card-detect pin on group 0x1B). Deliberately NO recompute -- byte-
+	// exact with the driver HLE's direct m_gxicr pokes (such polled lines never
+	// have ENABLE set, so delivery is unaffected).
+	uint16_t intc_icr(int group) const { return m_gxicr[group & 0x1f]; }
+	void intc_icr_set(int group, uint16_t bits) { m_gxicr[group & 0x1f] |= bits; }
+	void intc_icr_clear(int group, uint16_t bits) { m_gxicr[group & 0x1f] &= ~bits; }
+	// Per-level maskable vector table (see the delivery note above).
+	void set_maskable_vector(int level, uint32_t vector) { m_level_vector[level & 7] = vector; }
+	// Outward event callbacks (all optional):
+	//   intc_ack_cb    (write8, data = group): a GxICR write carried DETECT-ack
+	//        bits (data & mem_mask & 0x000f). The KN7000 uses it for the panel
+	//        transfer-complete "level-like until serviced" re-delivery (its
+	//        c11_unserviced flag + deferred re-assert stay driver-side).
+	//   intc_accept_cb (write8, data = group): this group was latched into the
+	//        IAGR at interrupt accept (KN7000: group 0x11 accept clears the
+	//        c11_unserviced flag).
+	//   intc_extmd_cb  (write16): new EXTMD value after each write (the driver
+	//        keeps its own previous-value shadow to decode transitions).
+	auto intc_ack_cb() { return m_intc_ack_cb.bind(); }
+	auto intc_accept_cb() { return m_intc_accept_cb.bind(); }
+	auto intc_extmd_cb() { return m_intc_extmd_cb.bind(); }
 
 	// ---- on-chip serial (SIO): three channels @ 0x34000800/0x810/0x820 -----
 	//
@@ -70,9 +126,10 @@ public:
 	//   +C  status   bit4 = RxRDY only. ch2's bit7 (RX-empty) / bit6 (TxRDY)
 	//                are deliberately NOT modeled (doing so wedged boot).
 	//
-	// The interrupt controller is NOT on this device (the KN7000 driver models
-	// it at 0x34000100), so interrupt-worthy events are routed OUT through
-	// per-channel callbacks and the driver forwards them to its INTC:
+	// Interrupt-worthy events are routed OUT through per-channel callbacks and
+	// the driver forwards them to the INTC (now also on this core -- the
+	// forward is typically a thin intc_assert() call; keeping the routing in
+	// the driver preserves the board-specific group numbers and deferrals):
 	//   sio_tx_cb        (write8): byte written to the TX data register
 	//   sio_tx_done_cb   (write_line, called with 1 per event): the transfer of
 	//        that byte completed (instant-completion HLE). Invoked BEFORE
@@ -96,6 +153,20 @@ public:
 	// here; each successful push fires sio_rx_rdy_cb for that channel.
 	void sio_rx_push(int ch, uint8_t data);
 	bool sio_rx_ready(int ch) const { return m_sio_rx_head[ch] != m_sio_rx_tail[ch]; }
+
+	// ---- on-chip 16-bit timers @ 0x34001080 (TM4/TM5 pair) -----------------
+	//
+	// Byte-exact port of the KN7000 driver's "tempo timer" model (kn7000.cpp
+	// tmr7_* -- named after its INTC group there; the register addresses are
+	// the AM33 TM5: mode byte @0x34001082, 16-bit reload @0x34001092, down-
+	// counter @0x340010A2). TM5 underflow asserts INTC group 7 = the KN7000
+	// firmware's 96-PPQN sequencer tick (and the KN6000/KN6500 firmware's
+	// ms-counter tick -- both program THIS timer). The TM4 half of each
+	// register word (offset 0 of each window) keeps the driver behaviour:
+	// reads 0, writes dropped; TM5BC writes fall through to the machine map
+	// (the driver mapped the counter window read-only). Full RE in the
+	// members' comments and kn7000_mame notes/sequenced-playback-and-style-
+	// data-rootcause.md.
 
 protected:
 	// device_t overrides
@@ -130,11 +201,12 @@ private:
 
 	// ---- address space -----------------------------------------------------
 	// Flat 32-bit little-endian space with a 32-bit data bus. The internal map
-	// decodes ONLY the on-chip SIO window (0x34000800-0x3400082F); the rest of
-	// the machine (including the neighboring 0x34xxxxxx I/O: INTC, timers, ...)
-	// is mapped by the driver. MAME appends a device's internal map AFTER the
-	// driver's map ("last so it takes priority" -- src/emu/addrmap.cpp), so
-	// this window layers cleanly over any driver-side entries.
+	// decodes the on-chip peripherals: the INTC (0x34000100-0x340002FF), the
+	// SIO (0x34000800-0x3400082F) and the TM4/TM5 timer windows (0x34001080/
+	// 0x34001090/0x340010A0, 4 bytes each); the rest of the machine is mapped
+	// by the driver. MAME appends a device's internal map AFTER the driver's
+	// map ("last so it takes priority" -- src/emu/addrmap.cpp), so these
+	// windows layer cleanly over any driver-side entries.
 	void internal_map(address_map &map) ATTR_COLD;
 	address_space_config m_program_config;
 	address_space *m_program;
@@ -156,6 +228,38 @@ private:
 	uint8_t  m_sio_rx_head[NUM_SIO];
 	uint8_t  m_sio_rx_tail[NUM_SIO];
 
+	// ---- on-chip INTC state (see the public section for the model) ---------
+	static constexpr unsigned NUM_INTC_GROUPS = 0x20;
+	uint16_t intc_r(offs_t offset, uint16_t mem_mask = ~0);
+	void intc_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void intc_recompute();       // re-arbitrate + drive the maskable line/vector
+	void intc_accept();          // latch IAGR (group+vector) at interrupt accept
+	int  intc_pending_group() const;
+
+	devcb_write8  m_intc_ack_cb;
+	devcb_write8  m_intc_accept_cb;
+	devcb_write16 m_intc_extmd_cb;
+
+	uint16_t m_gxicr[NUM_INTC_GROUPS];
+	int      m_iagr_latch;       // group latched at interrupt accept
+	uint16_t m_intc_280;         // 0x34000280 (EXTMD) latched control fields
+	uint32_t m_level_vector[8];  // per-level maskable vector (board-configured)
+
+	// ---- on-chip TM4/TM5 timer state (see the public section) --------------
+	uint16_t tm45_mode_r(offs_t offset);
+	void tm45_mode_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t tm45_base_r(offs_t offset);
+	void tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t tm45_count_r(offs_t offset);
+	void tm5_mode_w(uint8_t data);
+	void tm5_base_w(uint16_t data);
+	void tm5_rearm(bool restart_phase);
+	TIMER_CALLBACK_MEMBER(tm5_tick);
+
+	uint8_t   m_tm5_mode;        // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
+	uint16_t  m_tm5_base;        // 16-bit reload (underflow period)
+	emu_timer *m_tm5_timer;
+
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)
 	uint32_t m_d[4];  // data registers D0..D3 (full 32-bit)
@@ -173,11 +277,11 @@ private:
 	// TODO(MN10300/AM33): extended registers E0..E7, MDRQ, register banks.
 
 	// ---- interrupt state ---------------------------------------------------
-	// The on-chip interrupt controller is modelled in the driver (0x34000100
-	// block); it drives the single maskable IRQ input line here and supplies the
-	// address the AM33 maskable vector jumps to. On accept the core pushes PC+PSW
-	// and clears IE; the (self-loaded library-ROM) handler reads IAGR, dispatches,
-	// acks, and returns via rti. See notes/interrupt-mechanism.md.
+	// The on-chip interrupt controller (0x34000100 block, above) drives the
+	// single maskable IRQ input line and supplies the address the AM33 maskable
+	// vector jumps to (per-level table). On accept the core latches IAGR, pushes
+	// PC+PSW and clears IE; the (self-loaded library-ROM) handler reads IAGR,
+	// dispatches, acks, and returns via rti. See notes/interrupt-mechanism.md.
 	bool     m_possible_irq; // an IRQ may be serviceable; re-checked at the loop top
 	int      m_irq_state;    // latched maskable IRQ line (execute_set_input)
 	uint32_t m_irq_vector;   // where the maskable interrupt vectors to

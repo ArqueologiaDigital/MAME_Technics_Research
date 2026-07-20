@@ -56,8 +56,8 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	// Flat 32-bit little-endian space, 32-bit data bus. The KN7000 peripherals
 	// (program flash @0x48400000, table flash @0x48000000, work RAM @0x50000000,
 	// picture flash @0x57800000, I/O banks) are decoded by the machine driver's
-	// external address map. The internal map supplied here decodes ONLY the
-	// on-chip SIO window (0x34000800-0x3400082F); MAME appends it after the
+	// external address map. The internal map supplied here decodes the on-chip
+	// peripherals (INTC, SIO, TM4/TM5 timers); MAME appends it after the
 	// driver's map, so it takes priority over any overlapping driver entry
 	// while leaving the surrounding 0x34xxxxxx driver mappings intact.
 	, m_program_config("program", ENDIANNESS_LITTLE, 32, 32, 0, address_map_constructor(FUNC(mn10300_device::internal_map), this))
@@ -66,6 +66,11 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_sio_tx_done_cb(*this)
 	, m_sio_rx_rdy_cb(*this)
 	, m_sio_rx_enable_cb(*this)
+	, m_intc_ack_cb(*this)
+	, m_intc_accept_cb(*this)
+	, m_intc_extmd_cb(*this)
+	, m_iagr_latch(0), m_intc_280(0)
+	, m_tm5_mode(0), m_tm5_base(0), m_tm5_timer(nullptr)
 	, m_pc(0), m_sp(0), m_mdr(0), m_mdrq(0), m_mcrh(0), m_mcrl(0), m_mcvf(0), m_psw(0), m_lir(0), m_lar(0)
 	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
@@ -79,15 +84,27 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 		std::fill(std::begin(fifo), std::end(fifo), 0);
 	std::fill(std::begin(m_sio_rx_head), std::end(m_sio_rx_head), 0);
 	std::fill(std::begin(m_sio_rx_tail), std::end(m_sio_rx_tail), 0);
+	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
+	std::fill(std::begin(m_level_vector), std::end(m_level_vector), 0);
 }
 
-// Internal address map: the on-chip SIO block only. Precedent: the MN10200
-// core (mn1020012a_internal_map) hangs its on-chip peripherals off the same
-// mechanism; here everything except the SIO stays in the driver, so this map
-// is deliberately a single window.
+// Internal address map: the on-chip INTC, SIO and TM4/TM5 timer blocks.
+// Precedent: the MN10200 core (mn1020012a_internal_map) hangs its on-chip
+// peripherals off the same mechanism. The timer windows are deliberately
+// narrow (4 bytes each, and the counter window is READ-only) so everything
+// the pre-migration KN7000 driver left to its logging handlers -- the
+// 0x1084-0x108F siblings, TMnBC writes, ... -- still falls through to the
+// machine map exactly as before.
 void mn10300_device::internal_map(address_map &map)
 {
+	// GxICR array + the 0x34000200 group register + 0x34000280 EXTMD
+	map(0x34000100, 0x340002ff).rw(FUNC(mn10300_device::intc_r), FUNC(mn10300_device::intc_w));
 	map(0x34000800, 0x3400082f).rw(FUNC(mn10300_device::sio_r), FUNC(mn10300_device::sio_w));
+	// TM4/TM5: mode bytes @0x34001080/82, reloads @0x34001090/92, counters
+	// @0x340010A0/A2 (only TM5 -- offset 1 of each word pair -- is live).
+	map(0x34001080, 0x34001083).rw(FUNC(mn10300_device::tm45_mode_r), FUNC(mn10300_device::tm45_mode_w));
+	map(0x34001090, 0x34001093).rw(FUNC(mn10300_device::tm45_base_r), FUNC(mn10300_device::tm45_base_w));
+	map(0x340010a0, 0x340010a3).r(FUNC(mn10300_device::tm45_count_r));
 }
 
 device_memory_interface::space_config_vector mn10300_device::memory_space_config() const
@@ -125,6 +142,15 @@ void mn10300_device::device_start()
 	save_item(NAME(m_sio_rx_fifo));
 	save_item(NAME(m_sio_rx_head));
 	save_item(NAME(m_sio_rx_tail));
+	save_item(NAME(m_gxicr));
+	save_item(NAME(m_iagr_latch));
+	save_item(NAME(m_intc_280));
+	save_item(NAME(m_tm5_mode));
+	save_item(NAME(m_tm5_base));
+	// (m_level_vector is machine configuration, not runtime state; m_tm5_timer
+	// is a device-allocated emu_timer and is save-stated automatically.)
+
+	m_tm5_timer = timer_alloc(FUNC(mn10300_device::tm5_tick), this);
 
 	state_add(MN10300_PC,  "PC",  m_pc ).formatstr("%08X");
 	state_add(MN10300_SP,  "SP",  m_sp ).formatstr("%08X");
@@ -169,6 +195,17 @@ void mn10300_device::device_reset()
 		m_sio_control[ch] = 0;
 		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
 	}
+
+	// On-chip INTC + TM5: same reset the KN7000 driver's machine_reset applied
+	// to its HLE state. m_iagr_latch/m_intc_280 are deliberately NOT cleared
+	// (the driver's machine_reset didn't either; both are construction-
+	// initialized). Board-side re-init of polled lines (e.g. the KN7000's SD
+	// card-detect bits on group 0x1B) happens in the driver's machine_reset,
+	// which runs AFTER this (device_reset_after_children ordering).
+	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
+	m_tm5_mode = 0;
+	m_tm5_base = 0;
+	m_tm5_timer->adjust(attotime::never);
 }
 
 void mn10300_device::state_import(const device_state_entry &entry) { }
@@ -208,9 +245,15 @@ void mn10300_device::execute_set_input(int inputnum, int state)
 // for faithfulness; the actual source is resolved by the handler reading IAGR.
 void mn10300_device::take_irq(int level, int group)
 {
-	// Standard MAME acknowledge: the driver's INTC latches its arbitration
-	// result (group + vector) at the exact accept instant, like real hardware.
+	// Debugger notification (and any machine-registered acknowledge callback --
+	// none is needed now that the INTC latch lives here in intc_accept).
 	standard_irq_callback(0, m_pc);
+	// The on-chip INTC freezes its arbitration result (group + vector) at the
+	// exact accept instant, like real hardware. NOTE: the PSW.IM level below
+	// deliberately uses the `level` PARAMETER (captured by check_irq before
+	// this re-arbitration) -- byte-exact with the pre-migration driver flow,
+	// where irq_ack updated m_irq_level after check_irq had read it.
+	intc_accept();
 	push32(m_pc);
 	push32(m_psw);
 	m_psw = ((m_psw & ~FLAG_IM) | (level << IM_SHIFT)) & ~FLAG_IE;
@@ -233,6 +276,284 @@ void mn10300_device::check_irq()
 	const int im = (m_psw & FLAG_IM) >> IM_SHIFT;
 	if (m_irq_state != CLEAR_LINE && m_irq_vector != 0 && m_irq_level < im)
 		take_irq(m_irq_level, 0);
+}
+
+
+//**************************************************************************
+//  on-chip interrupt controller (INTC) @ 0x34000100
+//**************************************************************************
+//
+// Byte-exact port of the KN7000 driver's HLE (kn7000.cpp intc_r/intc_w/
+// intc_assert/intc_recompute/irq_ack); the register model and its quirks are
+// documented in mn10300.h and in the kn7000_mame overlay's
+// notes/interrupt-mechanism.md. The library-ROM interrupt handler (self-
+// loaded, entry 0x4C03DDA0) reads the pending group from the IAGR at
+// 0x34000100, indexes its handler table, and calls the registered ISR
+// callback. `offset` is the 16-bit word index within 0x34000100; group =
+// offset/2, register = 0x34000100 + group*4.
+
+int mn10300_device::intc_pending_group() const
+{
+	// Among enabled+requested groups, the winner is the highest-priority one =
+	// the LOWEST ICR LEVEL value (bits 14:12). KN7000 firmware programs: SIO
+	// panel/MIDI groups 0x12-0x15 LEVEL=1, 0x0F/0x19 LEVEL=3, group 7 LEVEL=4,
+	// and the system tick (group 6) LEVEL=6 -- the lowest priority in the system.
+	int best = 0, best_level = 8;
+	for (int g = 2; g < int(NUM_INTC_GROUPS); g++)
+		if ((m_gxicr[g] & 0x0110) == 0x0110)   // ENABLE(0x100) & REQUEST(0x10)
+		{
+			const int level = (m_gxicr[g] >> 12) & 7;
+			if (level < best_level) { best_level = level; best = g; }
+		}
+	return best;
+}
+
+// Freeze the arbitration result (group AND vector, atomically) at the instant
+// the CPU accepts the interrupt -- the real INTC latches IAGR at acknowledge.
+// (This was the driver's set_irq_acknowledge_callback, irq_ack.)
+void mn10300_device::intc_accept()
+{
+	const int g = intc_pending_group();
+	if (g)
+	{
+		m_iagr_latch = g;
+		// Board hook (KN7000: group 0x11 accepted -> its panel transfer-
+		// complete "unserviced" flag clears; see intc_ack_cb in the header).
+		m_intc_accept_cb(uint8_t(g));
+		const int level = (m_gxicr[g] >> 12) & 7;
+		// Vector selection is board policy (per-level table): the KN7000 maps
+		// every level to the firmware quick-dispatch handler 0x4C03DDA0 except
+		// the level-6 scheduler entry 0x4C03DE26; the KN6000/KN6500 map ALL
+		// levels to their firmware trampoline slot 0 (0x90000000) -- see
+		// intc_recompute for why the split matters.
+		m_irq_vector = m_level_vector[level];
+		m_irq_level = level;
+	}
+}
+
+uint16_t mn10300_device::intc_r(offs_t offset, uint16_t mem_mask)
+{
+	const int reg = offset << 1;                  // byte offset within 0x34000100
+	if (reg == 0x00)                              // IAGR: the group latched at interrupt accept
+		return m_iagr_latch << 3;
+	if (reg == 0x04)
+		return 0;
+	if (reg == 0x100)                             // 0x34000200: level-6 group register (latched at accept)
+		return m_iagr_latch << 2;
+	if (reg == 0x180)                             // 0x34000280: per-source 2-bit control fields (latched)
+		return m_intc_280;                        // firmware only ever RMWs it (|0xC0 panel, |0x0C00 sound,
+		                                          // &0xFF3F|0x80 post-ping) -- state must accumulate
+	const int group = reg >> 2;                   // GxICR(group) at +group*4
+	if (group < int(NUM_INTC_GROUPS))
+		return m_gxicr[group];
+	return 0;
+}
+
+void mn10300_device::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	const int reg = offset << 1;
+	if (reg == 0x180)                             // 0x34000280 = EXTMD (ext-int trigger modes)
+	{
+		COMBINE_DATA(&m_intc_280);
+		// Board hook: the KN7000 decodes the panel-ATN edge re-arm transition
+		// (bits 7:6, 11b -> 10b) here -- the group-0x1A ISR's pass 1 re-arms
+		// the pin for the opposite edge and expects the second edge of the
+		// panel's attention pulse after it returns. That decode (with its
+		// previous-value shadow and deferred assert) stays driver-side.
+		m_intc_extmd_cb(m_intc_280);
+		return;
+	}
+	if (reg < 0x08)
+		return;                                   // IAGR is read-only
+	const int group = reg >> 2;
+	if (group >= int(NUM_INTC_GROUPS))
+		return;
+	// A write carrying DETECT-ack bits: report it outward. The KN7000 binds
+	// this to its panel transfer-complete re-delivery -- group 0x11 is level-
+	// like until serviced: the firmware's ISR-exit ack (full-word 0x0101 at
+	// 0x484AC736) w1c-clears DETECT, and on real hardware the NEXT byte's
+	// completion always arrives after that ack (the serial shift is slower
+	// than the ISR exit). If the deferred completion landed before the ack
+	// (and was thus wiped un-serviced), the driver re-delivers it after the
+	// ack (its c11_unserviced flag + 40us one-shot).
+	if (data & mem_mask & 0x000f)
+		m_intc_ack_cb(uint8_t(group));
+	// Effects-DSP self-test handshake (group 0x17 == GxICR 0x3400015c). During init the
+	// KN7000 firmware SOFTWARE-TRIGGERS this interrupt (writes bit0) then spin-polls bit4
+	// (REQUEST) to confirm the ADSP-21065L answered its power-on self-test (fw 0x48404d25).
+	// On the 0x3ffff-count timeout it marks the DSP ABSENT (stores 0x500066CC=0xFF), which
+	// slams shut the runtime effect-upload gate (fw 0x48404ef5 checks 0x500066CC==0) -- so
+	// after that, selecting a reverb/chorus in the sound menus never reaches the DSP and
+	// "the sound doesn't change". The real DSP asserts group 0x17 on self-test completion;
+	// the booted SHARC in the emulator is present, so model the ack: latch REQUEST here so
+	// the poll succeeds and 0x500066CC stays "present". The firmware's write is 0x0001, so
+	// the ENABLE byte stays 0 -> no spurious dispatch. Group 0x17 has no other user (no ISR
+	// is registered against it; its only refs are this handshake + the INTC bulk-clear).
+	// (The driver gated this on dsp_present(), which was constant-true on every machine
+	// sharing the config -- so the quirk is unconditional here.)
+	if (group == 0x17 && (data & mem_mask & 0x000f))
+	{
+		m_gxicr[0x17] = uint16_t((data & mem_mask & 0xff00) | 0x0011);   // DETECT+REQUEST; ENABLE as written
+		intc_recompute();
+		return;
+	}
+	// GxICR write semantics (matches the on-chip INTC, and required for correct
+	// delivery): the high byte (ENABLE + LEVEL) is stored as written; the DETECT
+	// flags (bits 0-3) are WRITE-1-TO-CLEAR; REQUEST (0x10) is hardware status
+	// derived from the surviving DETECT bits. A plain latched write here would
+	// let the firmware's enable write (e.g. 0x0100) silently destroy a pending
+	// request that arrived between 'clear' and 'enable' -- observed in the panel
+	// handshake, where the reply's REQUEST was wiped by the subsequent enable.
+	{
+		const uint16_t cur = m_gxicr[group];
+		const uint16_t nv  = (cur & ~mem_mask) | (data & mem_mask);
+		// w1c applies ONLY to detect bits the access actually wrote (mem_mask):
+		// the firmware's control-byte writes (movbu to +1, mask 0xFF00) must not
+		// touch pending DETECT flags.
+		uint16_t detect = (cur & 0x000f) & ~(data & mem_mask & 0x000f);
+		m_gxicr[group] = (nv & 0xff00) | detect | (detect ? 0x0010 : 0x0000);
+	}
+	intc_recompute();
+}
+
+void mn10300_device::intc_assert(int group)
+{
+	m_gxicr[group & (NUM_INTC_GROUPS - 1)] |= 0x0011;
+	// (REQUEST + DETECT bit0 were just set above; the scheduler-level dispatcher at 0x4C03DE72 scans the DETECT bits 0-3 to pick the sub-source within the group)
+	intc_recompute();
+}
+
+void mn10300_device::intc_recompute()
+{
+	// The AM33 dispatches each interrupt LEVEL through its own vector. The
+	// KN7000 firmware installs two distinct handlers:
+	//  - 0x4C03DDA0: quick dispatch (no stack switch) -- used by the high-
+	//    priority device levels (reads IAGR at 0x34000100).
+	//  - 0x4C03DE26: the SCHEDULER entry -- outermost entry saves the interrupted
+	//    task's SP into its TCB (*0x5038002C), switches to the scheduler stack
+	//    (*0x50380CBC), dispatches (reads the group register at 0x34000200), and
+	//    on exit reloads SP from the (possibly re-chosen) current TCB. Only the
+	//    system tick (group 6, LEVEL=6, the lowest priority) uses this one.
+	// Routing the tick to the quick handler instead desynchronizes the TCB
+	// saved-SPs from reality (the scheduler moves *0x5038002C but nothing
+	// switches stacks), which corrupts the next yield -- so the vector must be
+	// selected per pending level. The level -> vector mapping is the board-
+	// configured table (set_maskable_vector); the KN6000/KN6500 route ALL
+	// maskable IRQs to their firmware trampoline slot 0 (0x90000000 -> the
+	// general handler, which reads the latched group at 0x34000200 and
+	// dispatches). Slot 1 (0x90000006 -> 0x4847b19d) is the KN6000's
+	// EXCEPTION/fault handler (disables IRQs + halts), NOT an IRQ dispatch --
+	// routing IRQs there halts the boot. See notes/kn6000-kn6500-boot.md.
+	const int g = intc_pending_group();
+	if (g)
+	{
+		const int level = (m_gxicr[g] >> 12) & 7;
+		m_irq_vector = m_level_vector[level];
+		m_irq_level = level;
+	}
+	// Drive our own maskable input line through the standard (synchronized)
+	// set_input_line path -- identical timing to the pre-migration driver,
+	// whose INTC called m_maincpu->set_input_line from its handlers.
+	set_input_line(0, g ? ASSERT_LINE : CLEAR_LINE);
+}
+
+
+//**************************************************************************
+//  on-chip 16-bit timers @ 0x34001080 (TM4/TM5) -- TM5 = the KN7000 tempo timer
+//**************************************************************************
+//
+// Byte-exact port of the KN7000 driver's model (kn7000.cpp tmr7_*, named after
+// its INTC group there). TM5 is the clock behind ALL sequenced playback: the
+// firmware registers ISR 0x48447084 -- a 96-PPQN tick counter (increments a
+// mod-0x60 beat phase at 0x50149664 and drives five sub-tick consumers) -- on
+// INTC group 7 (GxICR 0x3400011C, level 4, registration at 0x4844780C), and
+// programs this timer's reload to the current tempo. Semantics modeled from
+// the firmware's own driver code:
+//   start   (0x484477D3): write mode -> write base -> bset 0x40 (load counter
+//            from base) -> bclr 0x40 -> bset 0x80 (count enable)
+//   restart (0x484478C8): bclr 0x80 -> bset/bclr 0x40 -> bset 0x80
+//   tempo   (0x48447888): movhu newbase, (0x34001092) while running -- takes
+//            effect on the next underflow (hardware auto-reload semantics).
+// Prescale: low mode bits select the source clock; PRESCALE is fixed from the
+// 96-PPQN math (see tm5_rearm). The KN6000/KN6500 firmware programs the same
+// registers (mode 0x81, base 0xFA0) for its ms-counter tick, also on group 7.
+//
+// The handlers are 16-bit on the word pairs 0x1080/0x1090/0x10A0; offset 0 =
+// the TM4 half (kept at the driver behaviour: reads 0, writes dropped),
+// offset 1 = TM5.
+
+uint16_t mn10300_device::tm45_mode_r(offs_t offset)
+{
+	return offset ? m_tm5_mode : 0;
+}
+
+void mn10300_device::tm45_mode_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (offset && ACCESSING_BITS_0_7)
+		tm5_mode_w(data & 0xff);
+}
+
+uint16_t mn10300_device::tm45_base_r(offs_t offset)
+{
+	return offset ? m_tm5_base : 0;
+}
+
+void mn10300_device::tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (offset)
+		tm5_base_w(data);
+}
+
+uint16_t mn10300_device::tm45_count_r(offs_t offset)
+{
+	if (!offset || !(m_tm5_mode & 0x80))
+		return 0;
+	// live down-count derived from the emu_timer phase
+	const attotime period = m_tm5_timer->period();
+	if (period.is_never() || period.is_zero())
+		return 0;
+	return uint16_t(uint64_t(m_tm5_base + 1) * m_tm5_timer->remaining().as_attoseconds() / period.as_attoseconds());
+}
+
+void mn10300_device::tm5_mode_w(uint8_t data)
+{
+	const uint8_t rising = data & ~m_tm5_mode;
+	m_tm5_mode = data;
+	logerror("tm5: mode=%02X base=%04X\n", data, m_tm5_base);
+	if (!(data & 0x80))
+		m_tm5_timer->adjust(attotime::never);          // count disabled
+	else if (rising & (0x80 | 0x40))
+		tm5_rearm(true);                               // enabled, or load pulse while enabled
+}
+
+void mn10300_device::tm5_base_w(uint16_t data)
+{
+	m_tm5_base = data;
+	logerror("tm5: base=%04X (mode=%02X)\n", data, m_tm5_mode);
+	// While running, the new reload takes effect at the next underflow: keep the
+	// current countdown, change only the periodic reload.
+	if ((m_tm5_mode & 0x80) && !m_tm5_timer->remaining().is_never())
+		tm5_rearm(false);
+}
+
+void mn10300_device::tm5_rearm(bool restart_phase)
+{
+	// IOCLK = fc/2 (MN10300 convention; KN7000: 32 MHz core clock -> 16 MHz
+	// IOCLK, confirmed from the firmware's own MIDI-baud math: IOCLK/8/(TM3BR+1)
+	// = 31250 => 16 MHz). PRESCALE: the KN7000 tick ISR counts 96 PPQN, so at
+	// the boot default of q=120 the rate must be 192 Hz; the observed reload
+	// confirms the divider (logged above).
+	static constexpr unsigned PRESCALE = 8;
+	const attotime period = attotime::from_ticks(uint64_t(m_tm5_base + 1) * PRESCALE, clock() / 2);
+	if (restart_phase)
+		m_tm5_timer->adjust(period, 0, period);
+	else
+		m_tm5_timer->adjust(m_tm5_timer->remaining(), 0, period);
+}
+
+TIMER_CALLBACK_MEMBER(mn10300_device::tm5_tick)
+{
+	intc_assert(0x07);      // GxICR 0x3400011C -> KN7000: the 96-PPQN sequencer tick ISR 0x48447084
 }
 
 
