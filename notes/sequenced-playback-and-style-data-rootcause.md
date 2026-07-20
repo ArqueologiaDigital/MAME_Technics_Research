@@ -264,3 +264,38 @@ simply rules out one candidate shortcut. If a style-side equivalent of
 these classifiers exists it is a separate, still-unfound code path; the
 next place to look is the rhythm/style resource fetchers themselves
 rather than the shared archive-directory layer.
+
+## 2026-07-20 — TCMP container synthesis: a SECOND negative result (read this)
+
+The CONVERT track built a working "TCMP" style-container generator offline
+(`kn7000_disassembly/tools/tcmp_build.py`) and ported the firmware's own
+verifiers to Python. **It works** — the ported verifiers pass on the real
+`FactoryMemStyleContainer` 0x48035D08 (the oracle) and on a from-scratch
+synthetic container alike:
+
+* `MemStyleAreaSignatureVerify` 0x48435749, `MemStyleAreaChecksumVerify`
+  0x484356BD, `MemStyleAreaStreamsVerify` 0x4843579E, plus the composites
+  `MemStyleAreaValidate` 0x4843B1B5 and `MemStyleAreaValidateOrInit`
+  0x4843B1F6 — all +1 on both containers, and rejecting on seven distinct
+  mutations (negative controls in the note).
+* The synthetic's header matches the factory's byte-for-byte except the two
+  fields that must differ (checksum, allocator top); the 60 variation records
+  agree 60/60 on the pair bit and the per-part bytes.
+
+**★ And it does NOT help "8 Beat 1", which is what the experiment was set up
+to test.** The built-in style source does not consume a TCMP container at all.
+`StyleBuiltinNameTableInit` 0x484332F9 requires a **"Technics Rhythms" name
+resource**: 16-byte ASCII signature followed by a u24BE directory at
++0x18 (count block) / +0x1B (u16 name index table) / +0x1E (3-byte offset
+sub-table) / +0x21 (secondary sub-table) / +0x24 (fallback string). A TCMP
+container has a `"TCMP"` signature, a checksum descriptor and a bump allocator
+at those offsets and fails the first strncmp; `MemStyleAreaSignatureVerify`
+rejects a name resource just as fast. The two formats also describe different
+*things* — pattern data with an event-stream heap vs a 221-entry name/offset
+directory spanning ~4 MB of flash. No code path converts one to the other.
+
+This is consistent with, and re-derives statically, the fix that actually
+shipped for this bug: a synthetic **"Technics Rhythms" resource** at
+0x54E00000 (§2a-bis above). Container synthesis was a plausible shortcut; it
+is now ruled out. Full write-up:
+`kn7000_disassembly/notes/tcmp-container-synthesis.md`.

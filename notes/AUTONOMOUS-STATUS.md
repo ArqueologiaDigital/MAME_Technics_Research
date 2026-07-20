@@ -4848,3 +4848,63 @@ the three verifiers by hand (signature / checksum / streams), and see whether a
 synthetic container could stand in for the built-in style source that
 StyleResourceWindowProbe never finds. That one, if it works, IS the blog post.
 Live task (effect enable bits 4/10/13/14) still queued from tick b.
+
+## AUTONOMOUS-STATUS tick — 2026-07-20, CONVERT track: TCMP CONTAINER SYNTHESIS
+
+The experiment the last tick set up ran, offline, no MAME, no build.
+
+DONE: `kn7000_disassembly/tools/tcmp_build.py` (commit 1e891a8) builds a
+"TCMP" style container from the documented recipe and re-implements the
+firmware's verifiers in Python, transcribed from the converted assembly:
+MemStyleAreaSignatureVerify 0x48435749, MemStyleAreaChecksumVerify 0x484356BD
+(+ SumU16BE), MemStyleAreaStreamsVerify 0x4843579E (+ MemStyleVarBarCount,
+RhySysexLen, RhyEventLenByStatus), MemStyleAreaValidate 0x4843B1B5,
+MemStyleAreaValidateOrInit 0x4843B1F6.
+
+- ORACLE PASSES: all five return +1 on the real FactoryMemStyleContainer
+  0x48035D08 (table ROM seg 2, N=3), the checksum reproducing the stored
+  0xCC00 over 0x70..0x3670. That is what makes the port trustworthy.
+- SYNTHETIC PASSES the same five. Its 0x70 header is byte-identical to the
+  factory's except the checksum and the allocator top; the 60 variation
+  records agree 60/60 on the pair bit rec[3]&0x10 and on rec[4..0x0B].
+- Seven negative controls (corrupt signature, flipped record byte, wrong
+  stream[0] index, removed 0xF4 marker, one byte of tail slack, changed
+  meter field) all get rejected — the verifiers are not vacuous.
+- Byproduct: the style record's two u16 fields are at +0x70, not +0x68;
+  kn7000_manual.sym corrected in place. `make verify` still 100%.
+
+★★ VERDICT ON THE ACTUAL QUESTION — NEGATIVE, and it is a clean negative.
+**A synthetic TCMP container cannot stand in for the built-in style source
+and cannot fix "8 Beat 1".** The built-in path does not consume a TCMP
+container at all. StyleBuiltinNameTableInit 0x484332F9 requires a "Technics
+Rhythms" NAME RESOURCE — 16-byte ASCII signature plus a u24BE directory at
++0x18 (count block, 0xDD = 221) / +0x1B (u16 name index table) / +0x1E
+(3-byte offset sub-table) / +0x21 (secondary sub-table) / +0x24 (fallback
+string, literally "  8 Beat 1    " in the program-ROM stub 0x48729988). A
+TCMP container carries a checksum descriptor and a bump allocator at those
+offsets and dies at the first strncmp; MemStyleAreaSignatureVerify rejects a
+name resource just as fast. Different formats for different things — pattern
+data with an event-stream heap vs a name/offset directory spanning ~4 MB of
+undumped flash — and nothing in the image converts between them. This
+re-derives statically the fix that already shipped (synthetic "Technics
+Rhythms" resource at 0x54E00000, 52 real names, 168 awaiting Phase C).
+
+NO BLOG POST. The previous tick set the bar explicitly — "the recipe, not
+the dish" — and this pass produced a recipe plus a ruled-out shortcut, not a
+fixed bug. Notes only: kn7000_disassembly/notes/tcmp-container-synthesis.md
+and a new closing section in notes/sequenced-playback-and-style-data-
+rootcause.md.
+
+STANDING LESSON, twelfth pass: a format that validates is not a format that
+is WANTED. Both readers were converted and both were correct; the error the
+experiment was designed to catch was in the assumption connecting them, and
+the only way to catch it was to read the consumer's first strncmp rather than
+the producer's struct. Build the oracle before trusting the port: the
+factory container passing all five verifiers is the only reason the
+synthetic's pass means anything.
+
+NEXT (CONVERT track), unchanged from the last tick minus item 3: (1) the SD
+SOUND LIST EDIT engine (0x4857B264 / 0x4857B2CC / 0x4857C28E / 0x4857C388 /
+0x4857C3C3 / 0x4857C588 / 0x4857C679); (2) the rest of InitializeBlock34,
+0x485733BC..0x485736B7. Live task (effect enable bits 4/10/13/14) still
+queued from tick b.
