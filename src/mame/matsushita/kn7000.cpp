@@ -109,6 +109,7 @@
 #include "speaker.h"          // first-cut audio output
 
 #include "kn7000.lh"
+#include "kn6000.lh"
 
 #include <atomic>
 
@@ -2546,6 +2547,14 @@ void kn7000_state::kn6000(machine_config &config)
 	m_cpanel->set_dial_port(m_dial);
 	m_cpanel->set_volapcseq_port(m_volapcseq);
 	m_cpanel->set_tempoknob_port(m_tempoknob);
+
+	// ...and its OWN artwork.  Installing the matrix alone was not enough: the default layout was
+	// still layout_kn7000, so every clickable element on screen sat at a KN7000 position, carried a
+	// KN7000 legend and pointed at a KN7000 matrix cell -- clicking the artwork's "PIANO" sent the
+	// KN7000's PIANO cell, which is a different function here.  layout_kn6000 draws this panel from
+	// the SX-KN6000 service manual's own "Controls and functions" panel drawing (pp.5-6) and binds
+	// every button to the cell its silkscreen actually means.  See tools/gen_kn6000_lay.py.
+	config.set_default_layout(layout_kn6000);
 }
 
 // KN2400/KN2600 reuse the KN7000 machine, but their firmware self-loads its library

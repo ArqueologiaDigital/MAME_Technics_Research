@@ -4991,3 +4991,73 @@ exists, against the built-in "Panel SW & LED test" (service manual p.22 7.5).
 
 NEXT: unchanged CONVERT track. Newly unblocked by this tick: a real KN6000
 layout is now drawable -- the port tags and button names exist.
+
+================================================================================
+TICK 2026-07-20 -- KN6000 ARTWORK: the OTHER half of the wrong-mapping bug
+================================================================================
+
+Felipe, testing interactively: "the KN6000 STILL shows incorrect button mapping
+when I click the panel. Can you create a .lay file based on the drawings found
+on the service manuals?"
+
+He was right, and the previous tick's verification had a hole in it. The matrix
+device was correct -- but kn6000() inherits kn7000(), which does
+set_default_layout(layout_kn7000), and there was no KN6000 layout to override
+it. So the KN6000 was DRAWN as a KN7000: every clickable element at a KN7000
+position, with a KN7000 legend, bound to a KN7000 cell. Clicking "PIANO" sent
+the KN7000's PIANO cell.
+
+STANDING LESSON, fourteenth pass: the previous verification pressed PORTS.
+Pressing a port bypasses the artwork entirely -- it tests the matrix and nothing
+else. For a panel bug the test must go through the thing the user actually
+touches. A green test that skips the broken layer is worse than no test, because
+it buys false confidence. Drive the user's path, not the convenient one.
+
+DONE:
+- tools/lay_kit.py -- the layout vocabulary (palette, E/TXTS registries,
+  elem/two/label/P/L/panel_bg/pair_h/wrap2) extracted from gen_lay.py so a
+  second model can be drawn without forking it. Behaviour-preserving: kn7000.lay
+  regenerates BYTE-IDENTICAL (checked before/after).
+- tools/gen_kn6000_lay.py -> src/mame/layout/kn6000.lay. Geometry + silkscreen
+  from the SX-KN6000 service manual pp.5-6 (the owner's-manual "Controls and
+  functions" two-page top view of the whole panel). Flattened the same way the
+  KN7000 layout is: screen_block (LCD + flanking soft keys + the two 4x4
+  category grids + MUTE row + PAGE/HOLD/EXIT) and three lower blocks.
+- kn7000.cpp kn6000(): #include "kn6000.lh" + set_default_layout(layout_kn6000);
+  build.sh symlinks the new .lay (MAME globs src/mame/layout/*.lay).
+
+THE MANUAL CONFIRMED THE MATRIX A THIRD TIME. Read row-major, the 16 RHYTHM
+GROUP legends land exactly on the 6/6/4 split over CPL_SEG0/1/2 bits 2-7 and the
+16 SOUND GROUP legends on CPR_SEG0/1/2 bits 0-5 -- firmware descriptors, the
+schematic switch inventory and now the panel drawing all agree.
+
+COVERAGE IS ASSERTED, NOT ASSUMED: the generator cross-checks the layout's
+bindings against kn6000_cpanel.cpp's INPUT_PORTS and prints
+"COVERAGE: 150/150 named matrix cells placed", listing any MISSING or EXTRA
+cell. A driver rename or a new button can no longer silently desync the artwork.
+Each placement also carries its silk name parsed live from the driver, so the
+comment cannot drift from the binding.
+
+LIVE-VERIFIED, driven from the .lay's OWN elements (tag+mask read out of the
+layout, so each press is equivalent to clicking that drawn button):
+POP -> RHYTHM/POP; BALLROOM & SHOW TIME -> RHYTHM/BALLROOM & SHOW; MEMORY LOAD
+-> RHYTHM/MEMORY; PIANO -> SOUND-RIGHT 1/PIANO; DRUM KITS -> DRUM KITS;
+SOUND EXPLORER -> SOUND EXPLORER; DISK -> DISK MENU; PROGRAM MENU -> PROGRAM
+MENUS; DEMO -> DEMONSTRATION; SEQUENCER EASY REC -> EASY RECORD; PANEL MEMORY 5
+-> PMEM home (a recall, correct). KN6500 loads the same layout, PIANO/POP open
+the right screens. KN7000 keeps its own layout, unregressed. Build clean,
+-validate passes for kn7000/kn6000/kn6500, binary published.
+Test harness: tools/kn6000_layout_clicktest.lua (KN6000_CLICKTEST env).
+
+HONEST LIMITATION, again not papered over: LEDs are DRAWN where the manual shows
+them but carry NO output name, so they stay dark. The KN6000 [register][bit]
+decode is still unconfirmed and a guessed binding would be a false claim dressed
+as artwork. Also decorative/absent on purpose: pitch-bend & modulation wheels,
+the trackball ball (its RESET/MODE switches ARE bound), the CONTRAST trimmer
+(analog, not a matrix cell), the POWER switch, the keyboard bed.
+Not evidence either way: state-toggle buttons (SPLIT POINT, TECHNI-CHORD, SOUND
+DSP, BANK VIEW, MUSIC STYLIST) change no screen -- they need the LED work.
+
+NEXT: unchanged CONVERT track. Newly unblocked here: the KN6000 LED binding now
+has somewhere to land -- run the built-in Panel SW & LED test against this
+artwork and bind the dots.

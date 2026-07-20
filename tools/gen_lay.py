@@ -3,17 +3,10 @@
 # arranged pixel-perfectly to the mockup (4000x3000 = 2x the 2000x1500 layout;
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
 import io, math, os, re
-
-PANEL="#38383a"; PANEL2="#232325"; BTN="#54545c"; BTN_D="#262628"
-LBTN="#626268"; LBTN_D="#2c2c2e"; STROKE="#000"
-# Unified "silver" (Felipe): the shared metallic-grey used by the TEMPO/PROGRAM wheel body, MSP pads, the
-# pill-shaped buttons (not the orange/START-STOP ones), the PANEL MEMORY buttons + the encircled buttons.
-# Made a bit darker than the old wheel body #a3a3a9, still lighter than the grey buttons BTN #54545c.
-SILVER="#909097"; SILVER_D="#7a7a82"   # normal / pressed(+bevel)
-MSP=SILVER; MSP_D=SILVER_D             # MSP performance pads share the silver
-TXT ='<color red="0.90" green="0.90" blue="0.90"/>'
-TXTH='<color red="0.72" green="0.72" blue="0.74"/>'
-TXTD='<color red="0.13" green="0.13" blue="0.15"/>'   # dark legend colour (for the metallic SD plate)
+# Palette + element/label emitters are shared with the KN6000 generator: see tools/lay_kit.py
+# (PANEL/BTN/SILVER/... colours, E/TXTS registries, elem/two/label/P/L/panel_bg, the split-pill
+# helpers _hhalf/_gapseam/pair_h and wrap2).
+from lay_kit import *
 # PANEL_LED: authoritative button -> indicator-LED map, computed from the firmware's own
 # PanelSwitchClassTable (0x4860C9F4; switch#=normSeg*8+bit -> [LED row, col reg]) + the LED
 # row-remap table (0x48615058 -> panel_led_frame addr) => led = (remap[row]&0x3f)*8 + col_index,
@@ -117,44 +110,6 @@ def _mk_comment(text):
     # XML comments may not contain "--" nor end with "-".
     return "<!-- %s -->" % text.replace("--", "-").rstrip("-").strip()
 
-E=[]; TXTS={}; _TXT_NAMES=set()
-def elem(n,b): E.append(f'\t<element name="{n}">{b}</element>')
-def two(n,w,h,s0,s1):
-    E.append(f'\t<element name="{n}">\n\t\t<image state="0"><data><![CDATA[<svg width="{w}" height="{h}">{s0}</svg>]]></data></image>\n'
-             f'\t\t<image state="1"><data><![CDATA[<svg width="{w}" height="{h}">{s1}</svg>]]></data></image>\n\t</element>')
-def xesc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-def _txt_slug(s):
-    # Semantic element name derived from the label text, e.g. "FILL IN" -> "fill_in_text",
-    # "PART & FR" -> "part_and_fr_text", "+" -> "plus_text".
-    t=s.strip()
-    if   t=="+": t="plus"
-    elif t=="-": t="minus"
-    else:        t=t.replace("&"," and ")
-    t=re.sub(r'[^0-9a-z]+','_',t.lower()).strip('_')
-    return (t or "sym")+"_text"
-def label(s,color=TXT):
-    k=(s,color)
-    if k not in TXTS:
-        base=_txt_slug(s); n=base; i=2
-        while n in _TXT_NAMES:                 # disambiguate same-slug labels (e.g. differing color)
-            n=f"{base[:-5]}_{i}_text"; i+=1
-        _TXT_NAMES.add(n); TXTS[k]=n
-        E.append(f'\t<element name="{n}"><text string="{xesc(s)}">{color}</text></element>')
-    return TXTS[k]
-def P(ref,x,y,w,h,flip=False,flipy=False,tag=None,mask=None,name=None):
-    # Match the mockup's round-button size: the mockup draws them ~37px dia vs the layout's 32px
-    # (measured over the RHYTHM GROUP, centres already aligned). Grow round_btn 32->37, centre kept.
-    if ref in ("round_btn","round_btn2","metal_btn","round_btn_silver") and w==32 and h==32:
-        x-=2; y-=2; w=37; h=37
-    fl=[]
-    if flip: fl.append('flipx="yes"')
-    if flipy: fl.append('flipy="yes"')
-    o=f'<orientation {" ".join(fl)}/>' if fl else ''
-    b=f' inputtag="{tag}" inputmask="{mask}"' if tag else ''
-    nm=f' name="{name}"' if name else ''
-    return f'\t\t<element ref="{ref}"{nm}{b}>{o}<bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
-def L(s,x,y,w,h,color=TXT): return f'\t\t<element ref="{label(s,color)}"><bounds x="{x}" y="{y}" width="{w}" height="{h}"/></element>'
-def panel_bg(n,w,h,fill): elem(n,f'<image><data><![CDATA[<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="{fill}"/></svg>]]></data></image>')
 
 # ---- element library (reused kn5000 shapes + kn7000-unique) ----
 # round_btn: plain single-circle grey button (the "second/external" concentric ring was REMOVED per Felipe --
@@ -200,18 +155,6 @@ elem("split_arrow",'<image><data><![CDATA[<svg width="12" height="10"><path d="M
 # horizontal split pills (-/+, in/out, 1/2): generated at PLACEMENT size by _hhalf() below, so the stroke
 # weight, rounded ends and centre separator render IDENTICALLY at every pill size (a fixed-size SVG scaled
 # to bounds made small pills thin/round and large ones thick/oval, and varied the separator width).
-_PILLN=[0]
-def _hhalf(w,h,side,fill,fd):   # one horizontal split-pill half: rounded outer end (r=h/2), flat inner edge.
-    _PILLN[0]+=1; nm=f"hh{_PILLN[0]}"; sw=1.5; r=h/2.0; ra=(h-sw)/2.0; i=sw/2.0
-    d=f'M {w-i:.2f},{i:.2f} L {r:.2f},{i:.2f} A {ra:.2f} {ra:.2f} 0 0 0 {r:.2f},{h-i:.2f} L {w-i:.2f},{h-i:.2f} Z'
-    tf='' if side=='l' else f'transform="translate({w},0) scale(-1,1)" '
-    b=lambda f:f'<path {tf}stroke="{STROKE}" stroke-width="{sw}" fill="{f}" d="{d}"/>'
-    two(nm,w,h,b(fill),b(fd)); return nm
-_SEAMN=[0]
-def _gapseam(w,h,fill):   # the split-pill centre divider: a NON-clickable rect (no inputtag) with a BLACK
-    _SEAMN[0]+=1; nm=f"seam{_SEAMN[0]}"; sw=1.0; i=sw/2.0   # outline + silver fill (Felipe).
-    b=f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{fill}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}"/>'
-    two(nm,w,h,b,b); return nm
 def _pill_body(w,h,fill,fd):    # full stadium pill sized w×h (radius = h/2) -> perfectly round ends at any w
     sw=1.5; r=(h-sw)/2.0; i=sw/2.0
     b=lambda f:f'<rect stroke="{STROKE}" stroke-width="{sw}" fill="{f}" x="{i:.2f}" y="{i:.2f}" width="{w-sw:.2f}" height="{h-sw:.2f}" rx="{r:.2f}"/>'
@@ -234,15 +177,6 @@ elem("sd_ic_play",'<image><data><![CDATA[<svg width="24" height="14"><path d="M 
 # metallic backing plate for the whole SD block
 elem("sd_bg",'<image><data><![CDATA[<svg width="496" height="74"><defs><linearGradient id="sdbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a4a4aa"/><stop offset="0.5" stop-color="#8a8a91"/><stop offset="1" stop-color="#7c7c84"/></linearGradient></defs><rect x="1" y="1" width="494" height="72" rx="5" fill="url(#sdbg)" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')
 # pair helpers: emit two bound half-buttons (one split pill) + optional per-half labels
-def pair_h(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None,fill=None,fd=None):
-    sb=seg2 or seg; fill=fill or SILVER; fd=fd or SILVER_D   # split pills are SILVER (Felipe)
-    GAP=4; hw=(w-GAP)//2; gw=w-2*hw      # gw = centre divider width (the two halves each stay hw wide)
-    nl=_hhalf(hw,h,'l',fill,fd); nr=_hhalf(hw,h,'r',fill,fd)
-    r=[P(nl,x,y,hw,h,tag=seg,mask=ma),P(nr,x+w-hw,y,hw,h,tag=sb,mask=mb),
-       P(_gapseam(gw,h,fill),x+hw,y,gw,h)]   # NON-clickable divider (no tag) w/ black outline, fills the gap
-    if la: r.append(L(la,x+hw//2-14,y+h//2-6,28,12))
-    if lb: r.append(L(lb,x+w-hw//2-14,y+h//2-6,28,12))
-    return r
 def pair_v(seg,ma,mb,x,y,w,h,la="",lb="",seg2=None):
     sb=seg2 or seg   # top/bottom halves may straddle two SEGs (e.g. CONTRAST +/-)
     if seg: r=[P("half_t",x,y,w,h//2,tag=seg,mask=ma),P("half_b",x,y+h-h//2,w,h//2,tag=sb,mask=mb)]
@@ -360,10 +294,6 @@ S += [L("PAGE",1679,730,52,13), P("page_up",1680,756,50,78,tag="SEG0B",mask="0x1
 S.append('\t</group>')
 
 # =================== helper: labelled round grid (with bindings) ============
-def wrap2(s):
-    w=s.split(' ')
-    if len(s)<=10 or len(w)==1: return [s]
-    h=(len(w)+1)//2; return [' '.join(w[:h]),' '.join(w[h:])]
 def grid(out,x0,y0,cols,dx,dy,entries,header=None):
     if header: out.append(L(header,x0-8,y0-26,dx*cols,14,TXTH))
     for i,(nm,tag,mask) in enumerate(entries):
