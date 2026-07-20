@@ -183,3 +183,64 @@ part, which must be in 0x13..0x1A).
   49 4a 4b ff`) is referenced only from library code around 0x4C00FB94.
   So the next place to look is that library consumer, not the maincpu.
 * No behavioural result: no MAME run was made for this addendum.
+
+---
+
+## 7. Addendum 2026-07-20 (second): the 0x485870F0 lead is DEAD — RETRACTED
+
+Section 6.3 named the library consumer of the byte list **0x485870F0** as
+"the next place to look" and the *only* remaining route to naming enable
+bits 4/10/13/14. That consumer has now been read
+(kn7000_disassembly, `tools/dis_view.py`; the three references are at
+0x4C00FB92, 0x4C00FC0C and 0x4C00FC81, inside three sibling collectors
+0x4C00FB3C / 0x4C00FBC5 / 0x4C00FC3C).
+
+**It is not the same id space.** 0x485870F0 is the per-part **class-register
+TAG table** of the sub-TG register cache — the very table the already-named
+`TgPartClassRegCollect` (0x4C00FBC5, entry 0x4C00FBCA) walks in parallel with
+`0x500C59E4 + part*0x36`, one halfword slot per tag. Its 27 entries
+(`00..0B 10 11 20 40..4B`, terminator `FF`) index that cache; a companion
+table 0x48587030 maps `tag & 0x3F` to a dense 0..0x0E slot and 0x485870B0 to
+0x0F..0x1A.
+
+Two independent reasons the numeric overlap with the dispatcher ids
+0x40..0x47 is a **coincidence**:
+
+1. `TgGlobalParamCommand` only accepts ids **9..0x50** (`k = id - 8` keyed
+   into 0x48586C60). Twelve of the 27 tags are `0x00..0x0B` — below 9, so
+   they cannot be dispatcher ids at all.
+2. None of the dispatcher ids this note actually traced (0x14, 0x19, 0x1A,
+   0x20, 0x21, 0x29, 0x2B, 0x32, 0x33, 0x34, 0x35, 0x48..0x4B) appear in the
+   tag list, and none of the tag values 0x00..0x0B appear in the dispatcher
+   table. The two sets meet only on 0x40..0x4B, which is what made the lead
+   look plausible.
+
+So the plan of section 6.3 is **retracted**, as the "go to the maincpu
+producer" plan of section 5 was retracted before it. Bits 4, 10, 13 and 14
+still have **no** GUI name, and both static routes are now exhausted:
+
+* no region-1 code builds a 0xFx message with ids 0x40..0x47 (section 6.3);
+* no library code reaches those ids through 0x485870F0 either (this section).
+
+Whatever writes them either constructs the command bytes somewhere a byte
+template scan cannot see (computed id), or the enables are simply never
+driven at all in this firmware.
+
+### What would settle it — a QUEUED LIVE TASK
+
+Static analysis has nothing left to offer here. The remaining method is
+behavioural, and it is cheap:
+
+> **Live enable-path tap.** Break/watch on `TgGlobalParamCommand`
+> (0x4C0092B3) — or simply watch the halfword `0x500C0758` — and press each
+> panel effect control in turn: REVERB, CHORUS, SOUND DSP, MULTI, DIGITAL
+> EFFECT, and the per-part effect on/off keys. Record `(button, id, value,
+> 0x500C0758 before/after)`. Any button that moves bit 4, 10, 13 or 14 names
+> it outright; a full sweep that moves none of them is itself a result — it
+> would mean those four enables are dead in this firmware, which is a
+> publishable finding in its own right.
+>
+> Prerequisite: the play screen with sound (CONFIG bit2), since the effect
+> layer is idle on the SD menu.
+
+Until that session runs, bits 4/10/13/14 stay **deliberately unnamed**.

@@ -4545,3 +4545,88 @@ around 0x4C00FB94** -- the last route to naming enable bits 4/10/13/14;
 functions, still untouched, scoped three ticks ago); (3) the MEMORY /
 CUSTOM style sources 0x484355E2 / 0x484355F8 / 0x4848457D /
 0x4843E107..0x4843E128.
+
+## CONVERT tick 2026-07-20b -- the VOICE-DIRECTORY family (808 -> 839)
+
+Took targets (1) and (2) from the previous tick. **31 functions converted,
+`make verify` byte-exact, clean rebuild.** kn7000_disassembly commit a2c21c9.
+
+- ★★ **TARGET (1) IS A DEAD LEAD, AND IT IS NOW RETRACTED.** The library
+  consumer of the byte list **0x485870F0** around 0x4C00FB94 was read: it is
+  the per-part **class-register TAG table** of the sub-TG register cache --
+  the very table the already-named `TgPartClassRegCollect` 0x4C00FBC5 walks
+  in parallel with `0x500C59E4 + part*0x36`. **Different id space from
+  `TgGlobalParamCommand`**: twelve of its 27 tags are 0x00..0x0B, below the
+  dispatcher's minimum id of 9, and no dispatcher id ever traced (0x14 0x19
+  0x1A 0x20 0x21 0x29 0x2B 0x32..0x35 0x48..0x4B) appears in it. The overlap
+  on 0x40..0x4B is a numeric **coincidence**. Companion tables found:
+  0x48587030 maps `tag & 0x3F` -> dense slot 0..0x0E, 0x485870B0 -> 0x0F..0x1A.
+  Two of the three collectors there (0x4C00FB3C, 0x4C00FC3C) have **no caller
+  in the image at all** -- unused library code.
+- **VERDICT ON BITS 4/10/13/14: still unnamed, and BOTH static routes are now
+  exhausted** (no region-1 producer of ids 0x40..0x47; no library route via
+  0x485870F0). Written up as `notes/effect-enable-bits.md` section 7, with the
+  retraction stated plainly.
+  **QUEUED LIVE TASK** (the only thing left that can settle it): on the play
+  screen with sound (CONFIG bit2), watch halfword `0x500C0758` / break on
+  `TgGlobalParamCommand` 0x4C0092B3 while pressing REVERB, CHORUS, SOUND DSP,
+  MULTI, DIGITAL EFFECT and the per-part effect keys; log
+  `(button, id, value, 0x500C0758 before/after)`. A sweep that moves none of
+  the four bits is itself a result (they would be dead in this firmware).
+- **TARGET (2) DONE and it is the whole gap 0x48572607..0x48572F46** -- the
+  third and last MILK open-hash **DIRECTORY FAMILY**, five tables, same
+  generated shape as VoiceList*/VoiceBank*: `{u16 count, u16 modulus}` header,
+  modulus-sized chain-head array, `{u32 next, key, payload}` records,
+  `{Find, KeyEqual, HashIndex}` triple, HashIndex = `(key*count)/modulus`.
+  New structural fact: each table carries a **PROBE CASCADE** on top that
+  retries with progressively coarser keys (drop the low byte, round the high
+  byte down to a multiple of 8, mask the low byte to 0xC0) before giving up.
+  Tables: 0x4876398C (986, u16 key, 2-byte payload), 0x48763F5C + 0x48764944
+  (570 each), 0x4876532C (645, 12-byte), 0x48765D14 (582, **u32 key**
+  `(part<<16)|(bank<<8)|program`, folding parts 0x28..0x2F onto 0x20..0x27 --
+  the same folding `VoiceModRecFetch` already does). Callers are the thin
+  wrappers 0x4844910D..0x4844943F next to VoiceRecFetchBanked /
+  VoiceParamRecFetchBanked / VoiceAttrByteGet.
+- ★ Same gap also yielded the **SOUND EDIT TARGET REGISTRY**: three 4-byte
+  slots 0x50006194 / 0x50006198 / 0x5000619C = `{valid, b0, b1, b2}`, one per
+  edit target 0x10/0x11/0x12 -- the same three parts the SOUND EDIT record
+  0x500C0784+(part-0x10)*0x2C8 covers. `SoundEditRefSet` 0x48572E6B is called
+  by AcCompareToggleSeProc / VwSnameSeProc / OctShiftSe / RightSplitSe /
+  LeftSplitSe / MonoPolySe and the rest of the "Se" handlers;
+  `SoundEditRefInvalidatePost` 0x48572EF1 posts event **0x90C00000** and
+  `SoundEditSelEventHandler` 0x48572D61 is the sink that clears the slot.
+  Its sibling event 0x900000 loads the **DRUM note selection 0x5009260C**
+  that `DrumNoteSelGet` returns to DrumNoteSelSeProc.
+- Plus `VoiceBankIdToAlias`/`FromAlias` (0x0E <-> 0x11, 0x1E <-> 0x23) and the
+  constants `VoiceBankIdSource1`/`Source2` behind them, taken only after
+  `VoiceBankSourcePresent` reports the expansion archive fitted.
+- NEW TOOL, committed: **`kn7000_disassembly/tools/dis_view.py`** -- read-only
+  named linear disassembly of any CPU range, reusing gen_program_s.py's
+  F4-length-bug-aware decoder. MAME's `mn10300_disassembler::disassemble_f4`
+  returns length **1** for a 2-byte instruction (mn103dasm.cpp), which is the
+  root cause of the "f4-page phantom" that has now bitten this track nine
+  times. Use dis_view.py instead of raw unidasm for reading from here on.
+  (An upstream one-character MAME fix -- `return 2 | SUPPORTED;` -- is worth
+  filing; noted alongside the SHARC series in `sharc-upstream-patch-series.md`
+  territory, submission is Felipe's.)
+- ANTI-DUPLICATION ran first: grepped notes/ and mame-blog/posts/kn7000/ for
+  0x485870F0 / 0x48587030 / 0x4876398C / 0x50006194 / 0x5009260C. Only
+  0x485870F0 and TgPartClassRegCollect were previously mentioned (this file's
+  0x4C011730 module tick), and the effect-bit lead in effect-enable-bits.md.
+  **No blog post** -- a directory family plus a retraction does not clear the
+  series bar. If the queued live sweep names bits 4/10/13/14 (or proves them
+  dead), *that* is the post.
+- STANDING LESSON, ninth pass: the "cited address is really mid-function" trap
+  again -- 0x4C00FB94 is not a function start, it is the `mov 0x485870F0, a0`
+  operand inside TgPartClassRegCollect's sibling. Nine of this pass's 31
+  starts are prologues 2-5 bytes before the address callers use, and eleven
+  are bare `retf`/`rets` leaves with no prologue at all.
+
+NEXT (CONVERT track): (1) the **MEMORY / CUSTOM style sources** 0x484355E2 /
+0x484355F8 / 0x4848457D / 0x4843E107..0x4843E128 (scoped four ticks ago,
+still untouched); (2) the small **validated-index getter/setter block**
+0x485731FB..0x48573287+ (five index variables 0x500062FC..0x5000630C, each
+range-checked against a count from 0x48579303 / 0x485792FA / 0x4857B251 /
+0x4857B249; ~14 functions, but naming them needs the 0x48575xxx / 0x48577xxx
+callers read first); (3) `InitializeBlock34` 0x48572F46 and the rest of the
+block up to AcIntTitleMenuSDProc 0x485736B7. Live task queued above.
