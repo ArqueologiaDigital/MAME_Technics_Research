@@ -171,7 +171,9 @@ private:
 	uint32_t m_subcpu_latch_write_count;
 	uint32_t m_maincpu_latch_write_count;
 
-	// Latch logging wrappers
+	// Latch access wrappers
+	uint8_t subcpu_latch_r();
+	uint8_t maincpu_latch_r();
 	void subcpu_latch_w(uint8_t data);
 	void maincpu_latch_w(uint8_t data);
 
@@ -198,6 +200,28 @@ private:
 	void subcpu_mem(address_map &map) ATTR_COLD;
 };
 
+// Reading a latch de-asserts that CPU's /INT0 from inside the read handler
+// (generic_latch_8_device::read() calls set_input_line(..., CLEAR_LINE)).  That
+// clear is deferred by synchronize() until the end of the timeslice, so the
+// level-detect re-assertion in the CPU core would keep re-raising the /INT0 flag
+// on an already-released line -- firing the receive ISR many extra times per byte
+// and corrupting the inter-CPU byte stream (a scrambled SubCPU payload, and
+// "Sound Name Error" once the payload fails to answer command 0x2B).  Clear the
+// level synchronously instead.
+uint8_t kn5000_state::subcpu_latch_r()
+{
+	uint8_t const val = m_subcpu_latch->read();
+	m_subcpu->clear_int0_level();
+	return val;
+}
+
+uint8_t kn5000_state::maincpu_latch_r()
+{
+	uint8_t const val = m_maincpu_latch->read();
+	m_maincpu->clear_int0_level();
+	return val;
+}
+
 void kn5000_state::subcpu_latch_w(uint8_t data)
 {
 	m_subcpu_latch_write_count++;
@@ -214,7 +238,21 @@ void kn5000_state::subcpu_latch_w(uint8_t data)
 	// between main CPU instructions.
 	machine().scheduler().perfect_quantum(attotime::from_usec(100));
 
+	// Force-clear the latch pending state before writing.  On real hardware every
+	// latch write raises a fresh /INT0 on the receiver, whether or not the previous
+	// value was read.  generic_latch's pending callback only fires on a CHANGE, so
+	// if the latch is still marked "written" -- which happens whenever the
+	// receiver's ISR ran but declined to read because of the MSTAT/SSTAT handshake
+	// -- the next write silently replaces the value and raises no interrupt.
+	if (m_subcpu_latch->pending_r())
+		m_subcpu_latch->acknowledge_w(0);
+
 	m_subcpu_latch->write(data);
+
+	// perfect_quantum() only constrains FUTURE scheduling, so without this the
+	// writer would run on to the end of its timeslice and could push several more
+	// bytes before the receiver ever gets to look at this one.  Yield now.
+	m_maincpu->abort_timeslice();
 }
 
 void kn5000_state::maincpu_latch_w(uint8_t data)
@@ -226,7 +264,18 @@ void kn5000_state::maincpu_latch_w(uint8_t data)
 	else
 		LOGMASKED(LOG_LATCH_DATA, "SubCPU -> MainCPU latch: 0x%02X (write #%u)\n",
 			data, m_maincpu_latch_write_count);
+
+	// Same reasoning as subcpu_latch_w, in the reply direction: keep the main CPU's
+	// DMAR-driven reads in step with the SubCPU's HDMA channel 2 writes, and make
+	// each write raise a fresh /INT0.
+	machine().scheduler().perfect_quantum(attotime::from_usec(100));
+
+	if (m_maincpu_latch->pending_r())
+		m_maincpu_latch->acknowledge_w(0);
+
 	m_maincpu_latch->write(data);
+
+	m_subcpu->abort_timeslice();
 }
 
 // Scan PC keyboard input ports and generate note-on/note-off events
@@ -275,7 +324,7 @@ void kn5000_state::maincpu_mem(address_map &map)
 	map(0x110008, 0x110008).rw(m_fdc, FUNC(upd72067_device::msr_r), FUNC(upd72067_device::auxcmd_w));
 	map(0x11000a, 0x11000a).rw(m_fdc, FUNC(upd72067_device::fifo_r), FUNC(upd72067_device::fifo_w));
 	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
-	map(0x140000, 0x14ffff).r(m_maincpu_latch, FUNC(generic_latch_8_device::read)); // @ IC23
+	map(0x140000, 0x14ffff).r(FUNC(kn5000_state::maincpu_latch_r)); // @ IC23
 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)
 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
 	map(0x1a0000, 0x1dffff).rw("vga", FUNC(mn89304_vga_device::mem_linear_r), FUNC(mn89304_vga_device::mem_linear_w));
@@ -294,7 +343,7 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0x100002, 0x100003).rw(m_tonegen, FUNC(kn5000_tonegen_device::data_r), FUNC(kn5000_tonegen_device::data_w)); // Tone gen register data
 	map(0x110000, 0x110001).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_data_r));   // Tone gen keybed data
 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status
-	map(0x120000, 0x12ffff).r(m_subcpu_latch, FUNC(generic_latch_8_device::read)); // @ IC22
+	map(0x120000, 0x12ffff).r(FUNC(kn5000_state::subcpu_latch_r)); // @ IC22
 	map(0x120000, 0x12ffff).w(FUNC(kn5000_state::maincpu_latch_w)); // @ IC23 (logged wrapper)
 	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::addr_w));    // DSP1 @ IC311 register address
 	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // DSP1 @ IC311 register data

@@ -123,6 +123,14 @@ public:
 	// Timer output callbacks
 	auto to0_callback() { return m_to0_cb.bind(); }
 
+	// Synchronously clear the /INT0 level and its interrupt flag.  Drivers whose
+	// /INT0 source is a device that de-asserts the line from inside its own read
+	// handler (e.g. a generic_latch read) must call this from the read handler:
+	// set_input_line() defers the level change through synchronize(), so the
+	// level-detect re-assertion in tlcs900_check_irqs() would otherwise still see
+	// the stale ASSERT_LINE and re-raise the flag for the rest of the timeslice.
+	void clear_int0_level();
+
 protected:
 	// device_t implementation
 	virtual void device_config_complete() override ATTR_COLD;

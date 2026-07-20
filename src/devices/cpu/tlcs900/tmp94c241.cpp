@@ -305,6 +305,30 @@ void tmp94c241_device::device_reset()
 	m_serial[1]->pffc_sclk_w(0);
 }
 
+//-------------------------------------------------
+//  clear_int0_level - synchronously clear the /INT0
+//  level and interrupt flag.
+//
+//  set_input_line() defers the level change through
+//  synchronize(), so a device that de-asserts /INT0
+//  from inside its own read handler leaves m_level
+//  stale for the rest of the timeslice.  The
+//  level-detect re-assertion in tlcs900_check_irqs()
+//  would then keep re-raising the flag, firing the
+//  handler again and again on a line that is already
+//  released.
+//-------------------------------------------------
+
+void tmp94c241_device::clear_int0_level()
+{
+	if (m_level[TLCS900_INT0] != CLEAR_LINE)
+	{
+		m_level[TLCS900_INT0] = CLEAR_LINE;
+		m_int_reg[INTE0AD] &= ~0x08;
+		m_check_irqs = 1;
+	}
+}
+
 uint8_t tmp94c241_device::inte_r(offs_t offset)
 {
 	return m_int_reg[offset];
