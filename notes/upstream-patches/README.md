@@ -1,4 +1,22 @@
-# SHARC core fixes — upstream (MAME) submission patches
+# Upstream (MAME) submission patches
+
+**This directory is the single index of everything staged for upstream MAME.** Most of it is the
+SHARC series (below); non-SHARC patches use a device-name prefix instead of the numeric series.
+
+## Non-SHARC patches
+
+| file | device | what |
+|---|---|---|
+| mn10300-01-dasm-f4-length.patch | cpu/mn10300 | disassembler: the F4 page is **2 bytes**, not 1 — `disassemble_f4` reads `opcodes.r8(pc + 1)` and prints its operands but returns length 1, so linear disassembly desynchronises after every F4 and invents 1-2 phantom instructions before resyncing. One-character fix (`return 2 | SUPPORTED;`); every sibling F-page handler (f0/f1/f2/f3/f5/f6) already returns 2. |
+
+`mn10300-01` is a standalone one-liner, independent of the SHARC series, and applies cleanly to the
+pristine mn103dasm.cpp in kn7000_mame_build (verified 2026-07-20 with `patch --dry-run -p1`).
+Concrete misread cited in the commit message: KN7000 firmware 0x484357C7 `f4 02` + `fa c8 f5 00`
+comes out as three instructions instead of two. 3,440 F4 instructions in that ROM's main code
+region alone; this bug has bitten the kn7000_disassembly CONVERT track nine times, and
+`kn7000_disassembly/tools/dis_view.py` exists only to work around it. Submission is Felipe's.
+
+# SHARC core fixes
 
 ## ★ 2026-07-20 extension: patches 10-12 (SAT MRx + native ABS + native FDEP(SE)-imm)
 Three new patches extend the series (generated the same way: committed on a throwaway worktree of

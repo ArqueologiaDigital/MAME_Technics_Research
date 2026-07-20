@@ -1,0 +1,52 @@
+From ad932310ff1dac16bc278d3abdc8b56d3871e86c Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Mon, 20 Jul 2026 11:04:19 +0100
+Subject: [PATCH] mn10300 dasm: F4 page is two bytes long, not one
+
+disassemble_f4 reads its second opcode byte with opcodes.r8(pc + 1) and
+formats it correctly, but returns a length of 1. Every sibling handler on
+the F-page (disassemble_f0/f1/f2/f3/f5/f6, same shape, same single
+postbyte) returns 2; F4 is the odd one out, and the operands it prints
+prove it consumed the postbyte.
+
+The consequence is that a linear disassembly desynchronises after every
+F4 instruction: the postbyte is re-read as an opcode and one real
+instruction turns into two or three phantom ones. Concretely, on the
+Technics SX-KN7000 main-CPU firmware at 0x484357C7 the bytes
+
+    f4 02  fa c8 f5 00  c8 07
+
+are `movbu (d0, a2), d0` + `cmp 0xf5, d0` + `beq`, but come out as
+
+    484357c7: f4        movbu   (d0, a2), d0
+    484357c8: 02 fa c8  movbu   d0, (0xc8fa)
+    484357cb: f5 00     udf20   d0, d0
+    484357cd: c8 07     beq     0x484357d4
+
+- two invented instructions before the stream happens to resynchronise.
+There are 3,440 F4 instructions in that ROM's main code region alone,
+so the damage to any whole-image listing is substantial, and the same misalignment affects
+the debugger's disassembly window whenever it starts scrolling from a
+point above an F4.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/mn10300/mn103dasm.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/mn10300/mn103dasm.cpp b/src/devices/cpu/mn10300/mn103dasm.cpp
+index dd5cef3..ca54bb4 100644
+--- a/src/devices/cpu/mn10300/mn103dasm.cpp
++++ b/src/devices/cpu/mn10300/mn103dasm.cpp
+@@ -339,7 +339,7 @@ offs_t mn10300_disassembler::disassemble_f4(std::ostream &stream, offs_t pc, con
+ 		util::stream_format(stream, "d%d, (d%d, a%d)", BIT(op2, 4, 2), BIT(op2, 2, 2), BIT(op2, 0, 2));
+ 	else
+ 		util::stream_format(stream, "(d%d, a%d), d%d", BIT(op2, 2, 2), BIT(op2, 0, 2), BIT(op2, 4, 2));
+-	return 1 | SUPPORTED;
++	return 2 | SUPPORTED;
+ }
+ 
+ offs_t mn10300_disassembler::disassemble_f5(std::ostream &stream, offs_t pc, const mn10300_disassembler::data_buffer &opcodes) const
+-- 
+2.47.3
+

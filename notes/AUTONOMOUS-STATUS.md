@@ -4630,3 +4630,105 @@ range-checked against a count from 0x48579303 / 0x485792FA / 0x4857B251 /
 0x4857B249; ~14 functions, but naming them needs the 0x48575xxx / 0x48577xxx
 callers read first); (3) `InitializeBlock34` 0x48572F46 and the rest of the
 block up to AcIntTitleMenuSDProc 0x485736B7. Live task queued above.
+
+## CONVERT tick 2026-07-20c -- the "TCMP" style container + the SD browser cursors (839 -> 898)
+
+Took both scoped targets. **59 functions converted, `make verify` byte-exact,
+clean rebuild.** kn7000_disassembly commits 52bd978 (33) and 1d16d8a (26).
+
+- ★★ **TARGET (1) DONE, and the two style sources that WORK are now source.**
+  StyleNameSourceSet picks a source from the style-ID bits 0x00700000; the
+  built-in arm needs the resource window StyleResourceWindowProbe never finds in
+  emulation, but MEMORY and CUSTOM have their own fetchers and those are now
+  converted: `MemStyleRecPtr` 0x484355E2 / `MemStyleVarRecPtr` 0x484355F8 /
+  `MemStyleRecData` 0x48435614, `CustStyleRecPtr` 0x4843E107 /
+  `CustStyleVarRecPtr` 0x4843E10C / `CustStyleRecData` 0x4843E128, and
+  `CustomStyleBlockFetch` 0x4848457D.
+- ★ **NEW STRUCTURAL FACT: MEMORY and CUSTOM are the SAME container format**,
+  parameterised only by the style count N. The header is the "TCMP" layout the
+  table ROM's segment 2 also carries (ROM template 0x487312E8):
+  `+0x00 "TCMP"`, `+0x04 00 00`, `+0x06 u16BE checksum`,
+  `+0x08 u24BE checksum start (0x70)`, `+0x0B u24BE length (0x1B00 HALFWORDS)`,
+  `+0x13 u24BE bump-allocator top`, `+0x70 N style records stride 0x80`,
+  `+0x70+N*0x80 N*20 variation records stride 0xE0`, then the event-stream heap.
+  MEMORY = RAM 0x50180000, 0x25800 bytes, **N = 3** (variations at +0x1F0, heap
+  at +0x3670); CUSTOM = a flash block with **N = 1** (records +0x70, variations
+  +0xF0). 0x70 + N*0x80 in both cases; the numbers 0x1F0/0x3670/0x0003 sit in
+  the ROM template verbatim.
+- ★ **CUSTOM flash located: bank 0x96820000, RAM-shadowed at 0x5037A000**
+  (0x6000 words written back through FlashProgram128Words), status halfword
+  *(0x50001298) (-1 = absent), and a **20-entry** slot descriptor array at
+  0x96820002 + slot*2. `CustomSoundEditRecFetch` hands out 0x2C8-byte records
+  from a slot's block -- the same stride as the SOUND EDIT record
+  0x500C0784+(part-0x10)*0x2C8.
+- Also converted the five BIG-ENDIAN field primitives the whole style path funnels
+  through -- `LoadU24BE` 0x48440363 / `StoreU24BE` 0x48440378 / `LoadU16BE`
+  0x4844038B / `StoreU16BE` 0x48440398 / `SumU16BE` 0x484403A5 (0x484403A7 was
+  already cited by StyleResourceVerify) -- and `MemStyleAreaStreamsVerify`, which
+  states the **pattern-stream grammar** outright: a variation's stream opens with
+  a 0xF4 bar marker, closes with 0xF5, and must contain exactly
+  `MemStyleVarBarCount = (rec[0x10]+1) * ((rec[0x11]&7)+1)` markers, walked with
+  RhySysexLen for 0xF0 SysEx and RhyEventLenByStatus for channel events.
+- **OPEN DISCREPANCY, flagged not resolved:** kn7000_manual.sym's
+  `RamCodeOverlayImage` note claims the boot code overlay is copied to **RAM
+  0x50180000**. That is exactly MEM_STYLE_AREA, whose 0x25800-byte extent is
+  hard-coded in `MemStyleAllocFits`. Both cannot be true; the style side is the
+  one with instruction-level evidence this tick. Someone should re-read the
+  0x4843B1A0 block copy before trusting the overlay destination.
+- ★ **TARGET (2) DONE, and reading the callers first is what identified it** --
+  0x485731FB..0x485733BC is the **SD CARD browser cursor** block. Callers are the
+  Get*ListFunc list-content suppliers and the MainSDAudListSel_* /
+  MainSDSndListSel_* / MainSDSndListEdit_* soft-key handlers:
+  `0x500062FC` SD AUDIO song, `0x50006300` SD AUDIO list (clamped),
+  `0x50006304` SD SOUND song, `0x50006308` SD SOUND list (clamped),
+  `0x5000630C` SD SOUND play channel 0..0x0F (clamped),
+  `0x50006310/14` LIST EDIT default list/entry, `0x50006318/1C` LIST EDIT
+  current list/entry, `0x50006322` LIST EDIT move direction (+/-1 only).
+  Every setter re-reads a LIVE count before committing -- which is why the
+  cursors stay sane across a card swap. Two shapes: plain setters DROP an
+  out-of-range index, "clamped" ones SATURATE to 0 / count-1. The two LIST EDIT
+  cursors that address a list deliberately accept `index == count` -- that
+  one-past-the-end slot is the NEW LIST / insert row. Counts:
+  `SdAudListCountGet` (byte 0x50007F3C), `SdAudListEntryCountGet` (u16 at the
+  audio list directory **0x501720F0 + list*0x18 + 0x12**), `SdSndListCountGet`,
+  `SdSndListEntryCountGet`.
+- ★ **UPSTREAM PATCH STAGED (the one asked for):**
+  `notes/upstream-patches/mn10300-01-dasm-f4-length.patch` --
+  `mn10300_disassembler::disassemble_f4` returns length **1** for a 2-byte
+  instruction. It reads `opcodes.r8(pc + 1)` and prints its operands, and every
+  sibling F-page handler (f0/f1/f2/f3/f5/f6) returns 2; F4 is the lone typo.
+  Concrete misread, verified this tick: at **0x484357C7** the bytes
+  `f4 02 | fa c8 f5 00 | c8 07` (`movbu (d0,a2),d0` + `cmp 0xf5,d0` + `beq`)
+  come out of stock unidasm as FOUR lines, two of them invented
+  (`movbu d0,(0xc8fa)` and `udf20 d0,d0`), resyncing only at 0x484357CD.
+  3,440 F4 instructions in code region 1 alone. Fix is one character
+  (`return 2 | SUPPORTED;`); patch is git-format-patch shaped like the SHARC
+  series, Felipe's authorship, and `patch --dry-run -p1` clean against the
+  pristine mn103dasm.cpp in kn7000_mame_build. The upstream-patches README is
+  now titled as the **single index of everything staged for upstream** with a
+  non-SHARC section on top. NOT applied to the overlay core (the overlay does
+  not carry mn103dasm.cpp at all; only the CPU core files, whose own
+  mn10300_insn_length.h already gets F4 right and documents the dasm bug).
+  Submission is Felipe's.
+- ANTI-DUPLICATION ran first: grepped notes/ and mame-blog/posts/kn7000/ for
+  0x484355E2 / 0x4848457D / 0x4843E107 / 0x485731FB / 0x500062FC / 0x96820000.
+  Only the two scoping lines in this file and style-name-build.md's source table.
+  **No blog post** -- a container format plus a cursor block is notes material.
+  (If the "TCMP" layout later lets us SYNTHESISE a working style container and
+  kill the "8 Beat 1" fallback for the built-in source too, *that* is the post.)
+- STANDING LESSON, tenth pass: two of this pass's cited addresses were again
+  mid-function (0x484403A7 and 0x4848457D are the `_entry` points, prologues at
+  0x484403A5 / 0x48484578), and eleven of the 59 starts are bare `retf`/`rets`
+  leaves with no prologue at all. The new habit that worked: verify every
+  claimed `_entry` by counting call sites for BOTH candidate addresses -- the
+  prologue address should have zero.
+
+NEXT (CONVERT track): (1) `InitializeBlock34` 0x48572F46 up to
+AcIntTitleMenuSDProc 0x485736B7 (the last untouched slice of that block, and it
+calls straight into the cursor block just converted); (2) the **SD SOUND LIST
+EDIT engine** behind the cursors -- 0x4857B264 / 0x4857B2CC / 0x4857C28E /
+0x4857C388 / 0x4857C3C3 / 0x4857C588 / 0x4857C679, the list-directory
+read/insert/delete primitives (the cursors are converted but the thing they
+index is not); (3) the **MEMORY style WRITER** side -- 0x484354F0..0x48435561
+and 0x4843E07E.. build the 0x3C/0x14 variation records this tick only taught us
+to read. Live task (effect enable bits 4/10/13/14) still queued from tick b.
