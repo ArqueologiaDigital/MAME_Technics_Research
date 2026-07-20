@@ -4366,31 +4366,32 @@ flash images still rebuild **100% byte-identical** (`make verify`), **zero
   select+commit path, the 20 variation-record slots 0x50034BCC[], the
   record-bind layer that publishes a style into the pattern player's runtime
   view at 0x50122DC0.., and the built-in name resolver.
-- ★ **THE ONE REAL FINDING** (written up as section **2a-bis** of
-  `notes/sequenced-playback-and-style-data-rootcause.md`): at its tail
-  `StyleBuiltinNameTableInit` **unconditionally overrides the NAME-TABLE
-  pointer 0x50034B7C with the table-ROM copy's** (`TableRomStyleResourcePtr`
-  = dir entry `*(0x4800014C)` = 0x483E828C, `u24BE(+0x1B)` = 0x483E82BF)
-  whenever that copy carries the signature — which our dump does. So the
-  0x800-entry u16BE **name table is REAL even in emulation**, while count /
-  base / sub-table / fallback come from the count=1 stub. Verified against
-  the dump: signature + header (count 0xDD = 221) + the full name table are
-  intact, **177 of 221** sub-table offsets survive, and **ZERO** of the 221
-  13-byte name records do — the truncation lands two bytes short of the
-  first one. The surviving offsets are monotonic and reach **+0x3E5D75
-  (~4.08 MB)**, so the resource is a flash device of its own (this
-  supersedes the old "~2.3 MB" figure).
-  **Consequence for Phase D:** a synthetic at 0x54E00000 supplies count +
-  sub-table + records but does NOT control the name table — it must be
-  indexed by the REAL entries at 0x483E82BF, which is both a constraint and
-  a free consistency check.
-  Also new: `StyleVariationNameGet` (0x484335BF) resolves VARIATION names
+- ★ **CORRECTION TO MY OWN FIRST WRITE-UP OF THIS TICK.** I initially framed
+  the style finding as new. It is mostly NOT: `notes/rhythm-name-list-bug.md`
+  (2026-07-07) and blog Part 35 already established the count 0xDD = 221, the
+  intact table-ROM directory, the ~4.1 MB resource size, the 0x54E00000
+  install window and the shipped 52-real-names synthetic. Section **2a-bis**
+  of `notes/sequenced-playback-and-style-data-rootcause.md` has been rewritten
+  to say so up front. What the conversion actually adds:
+  (a) STATIC confirmation of why `*(0x50034B7C) = 0x483E82BF` — at its tail
+  `StyleBuiltinNameTableInit` overwrites the name-table pointer with the
+  TABLE-ROM copy's `u24BE(+0x1B)` **regardless of which resource the probe
+  won**, so the real name table is structurally guaranteed and a synthetic
+  can never substitute its own; that is why the shipped synthetic's numbering
+  lines up.
+  (b) NEW: `StyleVariationNameGet` (0x484335BF) resolves VARIATION names
   through the **library resource dispatcher** (lib 0x4C0149FA, resource id
-  0x0000D00A -> ROM pointer table 0x48736078), not through the flash
-  resource — so variation names are not blocked by the missing dump.
-  **NOT claimed:** none of this recovers a single real style name, and it is
-  not a shortcut around Phase C. Two of the three sources (MEMORY, CUSTOM)
-  never touch the missing flash at all.
+  0x0000D00A -> ROM pointer table 0x48736078), not through the flash resource
+  — so variation names were never blocked by the missing dump.
+  (c) NEW: only the BUILT-IN one of the three style sources depends on the
+  missing flash; MEMORY (0x484355E2 / 0x484355F8) and CUSTOM (0x4848457D /
+  0x4843E107..0x4843E128) have their own fetchers.
+  (d) Where the truncation falls, for the record: full 0x800-entry name table
+  intact, **177 of 221** sub-table offsets, **zero** name records, surviving
+  offsets monotonic to +0x3E5D75 (~4.08 MB).
+  **NOT claimed:** nothing here recovers a name or shortcuts Phase C.
+  LESSON: before writing up a "finding", grep the existing notes AND the blog
+  summaries for it. I nearly shipped a blog post re-announcing Part 35.
 - Item (3), the module at 0x48572607.., was SCOPED but NOT converted: it is
   ~31 functions and it is a THIRD directory family — a hash directory
   resident in the PROGRAM ROM (params 0x4876398C/8E, buckets 0x48763990,
