@@ -1,5 +1,12 @@
 # Effect multi-unit routing — why only REVERB is audible (2026-07-11)
 
+> ★ 2026-07-20 UPDATE — read `dsp-unit-roles-live-capture.md` FIRST. The live
+> DspEffectSelect capture flips this file's unit labels: **u0=REVERB (unchanged),
+> u9=CHORUS, u7=MIC REVERB, MULTI=u1, per-part Sound-DSP=u2..u6, u8=EQ.** The
+> "unit7=chorus" reading below is WRONG (that is why feeding u7 while toggling
+> CHORUS did nothing — the chorus unit is u9); the bridge's chorus(u4)/sound-dsp(u9)
+> feeds are wrong-slot placeholders. Queue item B = re-point the feeds per the new map.
+
 ## ★ IMPLEMENTATION ROADMAP (consolidated 2026-07-11) — read this first
 
 GOAL: make the non-reverb effects (chorus / multi / sound-DSP / EQ) audible. Reverb is complete.
