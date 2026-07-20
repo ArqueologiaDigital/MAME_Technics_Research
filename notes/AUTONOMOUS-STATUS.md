@@ -62,6 +62,25 @@ records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP vari
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
 
+## TICK 2026-07-20 — KN5000 regression: maincpu→subcpu payload microDMA was SCRAMBLED (FIXED)
+Felipe: "Sound Name Error in KN5000 now; used to work with the microDMA payload transfer." His
+testimony was right and overrides the prior agent's "IC304-306 undumped" note (a missing WAVE ROM
+silences a voice, it does not make a NAME fail — names travel the inter-CPU latch). Root cause: the
+overlay came from the cleaned-up PR branches (kn5000_pr6 / _research_tonegen); the upstream-cleanup
+rebase DROPPED three load-bearing driver-side latch workarounds the working kn5000_aided_by_claude
+branch had (fixes 10 & 12 in kn5000-docs/subcpu-payload-loading.md): the latch READ wrappers that
+synchronously clear the receiver's /INT0 (generic_latch::read() defers the CLEAR through
+synchronize() → the TMP94C241 level-detect re-assertion re-fired the receive ISR spuriously per byte),
+plus acknowledge_w(0)-if-pending + abort_timeslice() in the WRITE wrappers. Result: the 192 KB
+payload arrived corrupt (measured 58 515 / 62 804 wrong bytes in blocks 7/8). FIX (kn7000_mame
+e6b4cf7 + patch kn5000-26 56ce9a0): restored tmp94c241_device::clear_int0_level() + the read/write
+wrappers, matching aided_by_claude. VERIFIED: decompressed payload now BIT-IDENTICAL to the reference
+(0 mismatches); -validate passes kn5000/kn7000/kn6000/kn6500/kn2400; KN7000 still boots home w/ real
+names. STILL OPEN (separate cause of the on-screen error): the SubCPU receives the 0x2B query 527x but
+emits 0 replies; the overlay ALSO dropped the SubCPU DSP2 (MN19413) / ComIF / serial wiring that
+aided_by_claude had — that (needs the mn19413 device, absent here) is the next step. Full write-up:
+KN7000 side-quests/findings/kn5000_driver_findings.md (2026-07-20 section).
+
 ## TICK 2026-07-20 — ★★★ THE KN6000 SINGS: kn6000_tonegen_device SHIPPED, pitch verified in tune
 Side quest `kn6000_tone_generator` DELIVERED (kn7000_mame bb1ab85, KN7000 e7f7692).
 The previous tick shipped the shared base and said "NO kn6000_tonegen_device SHIPPED, on
