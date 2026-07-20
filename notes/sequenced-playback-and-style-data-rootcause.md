@@ -183,3 +183,28 @@ real reload-programmed tempo timer) and KN2400/2600 once their drivers mature.
   the stall was purely the clock chain, matching the fix. Useful state addrs: RUN
   gate 0x5014966E bit15, stop 0x50149656, count-in 0x50149696 bits15&7, clock-source
   byte 0x50149662 (internal vs MIDI-clock).
+
+## 2026-07-20 — a NEGATIVE result from the bank-classifier work (read this)
+
+The follow-up CONVERT pass chased the sibling classifiers at 0x48571056,
+0x4857176B, 0x48571CA0 and 0x485720D2 specifically to test the hypothesis
+that one of them probes 0x57000000 / 0x56000000 the way the voice
+classifier does and thereby ties the archive machinery to the missing
+style/rhythm data. **It does not.**
+
+All four are converted and byte-verified (`kn7000_disassembly`), and the
+finding is documented in `sound-bank-classes.md` Part 2:
+
+* they are four *more* hash directories inside the **same voice archives**
+  (`dir+0x28/+0x2C`, `+0x30/+0x34`, `+0x38/+0x3C`, `+0x40/+0x44`), and
+* **every caller of them in the whole image is a voice/drum SELECTION
+  GRID** — `ToneSelGridSe`, `TsetGridSe`, `DrumTsetGridSe`,
+  `DrumMainGridSe`, `DrumLfoGridSe`. Nothing else.
+
+So the bank-class machinery is a *voice*-side facility end to end. The
+style-name path ("8 Beat 1" and friends) does not go through it, and the
+Phase C dump case is neither strengthened nor weakened by this pass — it
+simply rules out one candidate shortcut. If a style-side equivalent of
+these classifiers exists it is a separate, still-unfound code path; the
+next place to look is the rhythm/style resource fetchers themselves
+rather than the shared archive-directory layer.

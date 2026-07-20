@@ -145,6 +145,123 @@ the archive's entry 0.
 | 0x4844A42F / 34 | `CustomVoiceRecFetch` |
 | 0x4844ABF7 | `UserVoiceRecPtr` — `*(0x501496B8) + 0x70F7 + idx*0x8E` |
 
-There are further sibling classifiers immediately after these two
+(Superseded by Part 2 below.) There are further sibling classifiers immediately after these two
 (0x48571056, 0x4857176B, …) with the same five-source shape — likely the
 rhythm/style and other resource kinds. They are left for a later pass.
+
+---
+
+# Part 2 — the voice-list INDEX layer (2026-07-20)
+
+The two classifiers above are not alone: the sibling functions at
+0x48571056 and 0x4857176B (and two more after them) have the same
+five-source shape. They are now converted and byte-verified too, and
+they answer a question the first pass left open — **what else is inside
+an archive's sound directory**.
+
+## Six parallel hash directories per archive
+
+The sound directory (`base + *(base+0x18)`) does not hold one hash
+table; it holds **six**, each described by a `(bucket-table offset,
+descriptor offset)` pair:
+
+| buckets | descriptor | key | payload | consumer |
+|---|---|---|---|---|
+| `+0x08` | `+0x20` | u32 | u16 @ `entry+8` | family B `VoiceParamBank*` |
+| `+0x0C` | `+0x24` | u32 | u16 @ `entry+8` | family A `VoiceBank*` |
+| `+0x28` | `+0x2C` | u16 | record @ `entry+6` | `VoiceListIndexOfBank` |
+| `+0x30` | `+0x34` | u16 | record @ `entry+6` | `VoiceListEntryByIndex` |
+| `+0x38` | `+0x3C` | u16 | record @ `entry+6` | `VoiceListIndexMapAtoB` |
+| `+0x40` | `+0x44` | u32 | **u8** @ `entry+8` | `VoiceAttrClassify` |
+
+A descriptor is four halfwords — `{mult, nbuckets, countA, countB}`.
+The walk is always the identical multiplicative-hash bucket chain
+documented in Part 1. The two counts live in the `+0x3C` descriptor and
+are read back by `VoiceArchiveCountA` (0x48572225) and
+`VoiceArchiveCountB` (0x485722E0).
+
+Each archive also carries a **kind byte** — `*(u8 *)(window + *(window))`,
+read by `VoiceArchiveKindByte` (0x48571C41) and its byte-identical twin
+`VoiceArchiveKindByteAlt` (0x48572073). The index classifiers pass a
+requested kind in and **skip any fitted source whose kind byte differs**,
+which is how one archive window can hold more than one resource kind.
+
+## Two global index spaces
+
+The selection GUI does not address a sound by `(bank, program)` — it
+addresses it by a **position in one merged list spanning every fitted
+archive**. Two such numbering spaces exist, and a source's local index
+becomes global by adding the running sum of `(count + 1)` over all
+preceding sources:
+
+* **space A** — byte-wide per archive, running total `VoiceArchiveCountA`
+* **space B** — halfword-wide, running total `VoiceArchiveCountB`
+
+Three functions compose into the path the grids actually walk. The
+sequence is verbatim from `ToneSelGridSe` (0x484DF84E → 0x484DF863 →
+0x484DF883) and repeats in `TsetGridSe`, `DrumTsetGridSe`,
+`DrumMainGridSe` and `DrumLfoGridSe`:
+
+```
+(bank LSB, program)  --VoiceListIndexOfBank-->  index A  (+ index B)
+index A + 1          --VoiceListIndexMapAtoB->  index B
+index B & 0x7FFF     --VoiceListEntryByIndex->  (kind, byte0, byte1)
+```
+
+`VoiceListEntryByIndex` (0x48571CA0) is the exact **inverse** of
+`VoiceListIndexOfBank` (0x4857176B): it subtracts `(countB + 1)` per
+source until the index falls inside one, then looks the *local* index up
+as the key in that archive's `+0x30/+0x34` directory. Bit 15 of an
+index-B value is a flag the grid strips (`& 0x7FFF`) before the reverse
+lookup — the same bit-15-is-special convention family B uses.
+
+`VoiceListIndexOfBank` degrades on a miss just like family B:
+exact `(LSB<<8)|program` → `program & ~7` (a sound-family fallback) →
+`program 0` → the constant `0x7F7F` default.
+
+`VoiceAttrClassify` (0x48571056) is the odd one out: same 24-bit MIDI
+key as `VoiceBankClassify`, but over the `+0x40/+0x44` directory and
+with a **single byte** payload; a total miss yields `0xFF`. Its only
+wrapper, `VoiceAttrByteGet` (0x48449B14), stages the answer through the
+scratch byte `0x5003A5B8` and has **no caller in this image**.
+
+## ★ This does NOT reach the style data
+
+Worth stating plainly, because it was the reason to look: **every caller
+of this layer found in the image is a voice/drum SELECTION GRID.**
+Nothing here probes a rhythm/style resource window, and no style-shaped
+key ever enters these directories. The sibling classifiers extend the
+*voice* archive machinery; they do **not** connect it to the missing
+style data tracked in `sequenced-playback-and-style-data-rootcause.md`.
+If a style-side equivalent exists it is a different code path, still
+unfound.
+
+## Not claimed
+
+* **Which UI axis space A and space B are.** "Space A = group/page
+  ordinal, space B = sound ordinal" is the natural reading of a grid
+  that converts A→B before resolving a sound, but the code does not say
+  so and guessing it would be an over-claim. Needs a live session.
+* **What byte `VoiceAttrClassify` returns.** The directory exists and
+  the lookup is exact; the meaning of the value is not determined by the
+  code, and its only wrapper is uncalled.
+
+## Function map (Part 2)
+
+| CPU | name |
+|---|---|
+| 0x48571056 / 5B | `VoiceAttrClassify` (+`_entry`) |
+| 0x48571178 / 7D, 0x485711EB / F0, 0x4857125E / 63, 0x485712D1 / D6, 0x48571344 / 49 | `VoiceAttrLookupInternal` / `Src1..Src4` |
+| 0x485713B7, 0x485713C2 / C4 | `VoiceAttrKeyEqual`, `VoiceAttrHashIndex` |
+| 0x48449B14 / 19 | `VoiceAttrByteGet` (uncalled wrapper) |
+| 0x4857176B / 70 | `VoiceListIndexOfBank` (+`_entry`) |
+| 0x485719D5 / DA, 0x48571A4B / 50, 0x48571AC1 / C6, 0x48571B37 / 3C, 0x48571BAD / B2 | `VoiceListIndexLookupInternal` / `Src1..Src4` |
+| 0x48571C23, 0x48571C30 | `VoiceListIndexKeyEqual`, `VoiceListIndexHashIndex` |
+| 0x48571C41, 0x48572073 | `VoiceArchiveKindByte`, `VoiceArchiveKindByteAlt` |
+| 0x48571CA0 / A5 | `VoiceListEntryByIndex` (+`_entry`) |
+| 0x48571E07 / 0C, 0x48571E7D / 82, 0x48571EF3 / F8, 0x48571F69 / 6E, 0x48571FDF / E4 | `VoiceListEntryLookupInternal` / `Src1..Src4` |
+| 0x48572055, 0x48572062 | `VoiceListEntryKeyEqual`, `VoiceListEntryHashIndex` |
+| 0x485720D2 / D7 | `VoiceListIndexMapAtoB` (+`_entry`) |
+| 0x48572225 / 27, 0x485722E0 / E2 | `VoiceArchiveCountA`, `VoiceArchiveCountB` |
+| 0x4857239B / A0, 0x48572411 / 16, 0x48572487 / 8C, 0x485724FD / 0x48572502, 0x48572573 / 78 | `VoiceListMapLookupInternal` / `Src1..Src4` |
+| 0x485725E9, 0x485725F6 | `VoiceListMapKeyEqual`, `VoiceListMapHashIndex` |

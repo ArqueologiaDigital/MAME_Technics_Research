@@ -4256,3 +4256,75 @@ and it is the code that decides what a fitted expansion looks like).
 Live-session questions unchanged: LFO block byte roles, the
 KEYSYNC/CONNECTION toggle, the six SOUND EDIT low-bit sources, and which
 panel button maps to bank classes 1..4.
+
+## AUTONOMOUS-STATUS tick — CONVERT track, 2026-07-20 (652 -> 689)
+
+Handoff item (1) landed, with a **negative answer to the question it was
+asked**. `kn7000_disassembly` commit 16a3b54; both flash images still
+rebuild **100% byte-identical** (`make verify`), zero `.byte` escapes in
+the 37 new functions.
+
+- ★ **THE SIBLING CLASSIFIERS ARE NOT THE RHYTHM/STYLE ONES.** All four
+  (0x48571056, 0x4857176B, 0x48571CA0, 0x485720D2) are four MORE hash
+  directories inside the SAME five voice archives. An archive's sound
+  directory carries **six** parallel hash tables, each a (bucket-table,
+  descriptor) pair, descriptor = `{u16 mult, nbuckets, countA, countB}`:
+    `+0x08/+0x20` u32 -> u16  family B `VoiceParamBank*`
+    `+0x0C/+0x24` u32 -> u16  family A `VoiceBank*`
+    `+0x28/+0x2C` u16 -> rec  `VoiceListIndexOfBank`
+    `+0x30/+0x34` u16 -> rec  `VoiceListEntryByIndex`
+    `+0x38/+0x3C` u16 -> rec  `VoiceListIndexMapAtoB`
+    `+0x40/+0x44` u32 -> u8   `VoiceAttrClassify`
+  Each archive also carries a **kind byte** `*(u8*)(window + *(window))`
+  (`VoiceArchiveKindByte` 0x48571C41 + a byte-identical twin at
+  0x48572073); the index classifiers **skip any fitted source whose kind
+  differs from the requested one**, which is how one window can hold
+  more than one resource kind.
+- The layer's purpose is **two global index spaces** over the merged
+  list of every fitted archive — space A (byte-wide, `VoiceArchiveCountA`
+  0x48572225) and space B (halfword-wide, `VoiceArchiveCountB`
+  0x485722E0) — a local index becoming global by adding the running sum
+  of `(count+1)` over preceding sources. The tone/drum selection grids
+  walk a fixed triple (verbatim from `ToneSelGridSe` 0x484DF84E ->
+  0x484DF863 -> 0x484DF883, repeated in `TsetGridSe`, `DrumTsetGridSe`,
+  `DrumMainGridSe`, `DrumLfoGridSe`):
+    `(bank LSB, program)` -> index A -> (`+1`) index B -> (`&0x7FFF`)
+    -> `(kind, byte0, byte1)`.
+  `VoiceListEntryByIndex` is the exact INVERSE of `VoiceListIndexOfBank`.
+- ★ **NO STYLE-DATA CONNECTION.** Every caller of this layer in the whole
+  image is a voice/drum SELECTION GRID; nothing probes a rhythm/style
+  window and no style-shaped key enters these directories. Recorded
+  prominently in `notes/sequenced-playback-and-style-data-rootcause.md`
+  so the Phase C dump case is not mis-credited: this pass rules out one
+  candidate shortcut, it does not sharpen the case. A style-side
+  equivalent, if it exists, is a separate and still-unfound code path.
+- Write-up: `notes/sound-bank-classes.md` **Part 2** (the six-directory
+  table, the two index spaces, the grid call sequence, the full function
+  map).
+- DELIBERATELY NOT CLAIMED: which UI axis space A and space B each are
+  (group ordinal vs sound ordinal is the natural reading, but the code
+  does not say so); and the meaning of the byte `VoiceAttrClassify`
+  returns (0xFF = none) — its only wrapper `VoiceAttrByteGet`
+  (0x48449B14, staging through the scratch byte 0x5003A5B8) has **no
+  caller in this image**.
+- STANDING LESSON held a fifth pass: the handoff addresses 0x48571056 /
+  0x4857176B were prologues this time, but the leaf helpers were not —
+  the `retf`/`rets` key-compare and hash leaves start 2-3 bytes after the
+  preceding `ret` (0x485713B7 not 0x485713B5, 0x48571C23 not 0x48571C21,
+  0x48572055, 0x485725E9), and unlike family A's hash they carry **no
+  register-save prologue** at all. Rescan; do not interpolate.
+
+NEXT (CONVERT track): (1) the **boot archive parser 0x48449EF4..
+0x4844A3D1** — four near-identical blocks, cheap, and it is the code
+that decides what a fitted expansion looks like (still unconverted after
+two handoffs); (2) the **channel-EG caller module 0x4C004DE4..
+0x4C005673**, open for several passes now; (3) the module immediately
+after this one, 0x48572607.., which starts with the same
+`movm [d2,d3,a2,a3] / add -0x10,sp / mov a1,a3` shape as
+`VoiceListIndexOfBank` — likely a further index variant worth a boundary
+scan; (4) for the STYLE question specifically, stop looking in the shared
+archive-directory layer and start from the rhythm/style resource fetchers
+themselves. Live-session questions unchanged: LFO block byte roles, the
+KEYSYNC/CONNECTION toggle, the six SOUND EDIT low-bit sources, which
+panel button maps to bank classes 1..4, and now the two index spaces'
+UI meaning.
