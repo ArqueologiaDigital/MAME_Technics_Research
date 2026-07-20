@@ -12,8 +12,11 @@ Execution order (driver-side items SERIALIZE on build-tree+display; launch next 
   B. [DONE 2026-07-20 — see the TICK below] Per-part effect depth bank decode + fix (cold
      chorus/multi panel toggle audible) + bridge unit feeds rewired to the true units
      (e1a94f4 + d316228; notes/per-part-depth-bank.md).
-  C. [NEXT] INTC + timers into the mn10300 core (SIO's next of kin; also yields the real KN6000 timer).
-  D. Siblings: KN2400/2600 to first screen; KN6000/6500 text rendering (uses C's timer work).
+  C. [DONE 2026-07-20 — see the TICK below] INTC + timers into the mn10300 core (e8429c8 core +
+     02f2595 integrate; KN6000 timer hacks RETIRED — the real core TM5 drives its boot at the
+     true 500 Hz ms rate).
+  D. [NEXT] Siblings: KN2400/2600 to first screen; KN6000/6500 text rendering. NOTE: the "KN6000
+     real timer" prerequisite is already DONE by item C — D starts from a real-TM5 baseline.
   PARALLEL TRACK: [IN FLIGHT] CONVERT growth (tempo/TM5 chain, then TG note path) — kn7000_disassembly.
 Rules unchanged: commit-as-you-go, publish after rebuilds, visible video, blog per the proactive bar,
 tick this file after each item. PENDING FELIPE: Phase C dump-kit go-ahead, SHARC submission, wet-level A/B.
@@ -31,6 +34,34 @@ kn7000_disassembly/dsp/, docs-site page where warranted, and a PROACTIVE blog po
 records.tsv systematically (reverb in flight; then chorus, multi, SOUND-DSP variants, EQ, kernel).
 PENDING FELIPE ANSWER: Phase C dump-tooling prep offer (update-disk + SD-sink readback) — awaiting go.
 IN FLIGHT: SHARC upstream prep agent (apply-tests/rebase/A-B/datasheet cross-check).
+
+## TICK 2026-07-20 — ★★★ QUEUE ITEM C COMPLETE: INTC + TM4/TM5 timers live in the mn10300 CORE (KN6000 timer hacks retired)
+Two-stage migration mirroring the SIO precedent (9bb2de8 -> 9eb0e4b): core stage **e8429c8**
+(mn10300.{h,cpp}: byte-exact port of the driver INTC HLE — GxICR w1c-per-lane semantics, IAGR
+<<3/<<2 latch-at-accept quirks, EXTMD accumulate, group-0x17 DSP self-test self-ack — plus TM5
+with load-pulse/count-enable/live-retempo semantics, IOCLK=clock()/2 /8; all save-stated;
+delivery via the core's own maskable line + a board-configured per-level vector table) and
+integrate stage **02f2595** (kn7000.cpp -310/+112: driver INTC/tmr7 code+maps deleted;
+intc_assert = thin forwarder so all peripheral call sites unchanged; vectors set in
+machine_config — kn7000 0x4C03DDA0 / lvl6 0x4C03DE26, kn6000 all-levels 0x90000000; the three
+quirk hooks ride the new devcbs intc_ack_cb/intc_accept_cb/intc_extmd_cb = c11 re-delivery /
+c11 clear-at-accept / panel-ATN EXTMD edge re-arm w/ driver-side m_extmd_prev shadow; SD
+group-0x1B pokes via intc_icr_set/clear).
+**KN6000/KN6500 hacks RETIRED**: the sys_tick 1 kHz group-7 piggyback is GONE — the firmware
+programs the core's real TM5 (base 0xFA0/mode 0x81) and the ms ISR runs at the TRUE hardware
+rate 2.0005 ms (~500 Hz; the old 1 kHz hack was double-rate, as the memory suspected). The
+0x340010a0-a3 counter placeholder superseded by the real TM5BC down-count; a4-af keeps the
+placeholder (TM6+ unmodeled). KEPT: the 2 s sys-tick boot delay (guards the group-6 scheduler
+tick vs RTOS object creation — group-6 HLE matter, not TM5).
+GAUNTLET (published binary, visible video): kn7000 home + BALLAD list + SD MENU (all 9 items,
+toggle verified) + DEMO plays ~20 s (WAV RMS 2229; beat phase 0x50149664 advancing = TM5->core
+group 7->96-PPQN ISR); **reverb oracle c3b67ea711ce3c00f8ae2af1e07651cb bit-stable x2** (fresh
+cfg + pristine SD — total audio-path parity to the last bit); kn6000 play screen boots with the
+hacks retired, ms-counter 4973->9971 over t=10..20 (=500 Hz real rate); -validate clean both.
+Harness: kn7000-emulator/intc_core_verify.lua (companion to sio_core_verify.lua).
+GOTCHA (pre-existing, not a regression): a keybed press at t=28 on the settled home screen is
+SILENT with a fresh default cfg (TG gate config-dependent); the oracle's t=16 press sounds. Same
+on the pre-migration build (oracle hash identical) — worth a look someday, separate from C.
 
 ## TICK 2026-07-20 — ★★★ QUEUE ITEM B COMPLETE: bridge feeds on the TRUE units + the per-part DEPTH BANK decoded (cold CHORUS/MULTI audible)
 Two commits (kn7000_mame e1a94f4 + d316228), built+validated+published, oracle clean:
