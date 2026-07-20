@@ -706,13 +706,19 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 7 = (input) COM.MIDI
 	m_maincpu->portz_read().set(
 			[this] {
-				// bits 0-1: MSTAT readback (an output port reads back its driven
-				//   value on real hardware; the firmware reads its own MSTAT here
-				//   to track the inter-CPU handshake state). Dropping this bit
-				//   breaks the reply handshake. (restored from kn5000_aided_by_claude)
+				// bits 0-1: MSTAT — the MainCPU's own outputs; do NOT OR them into
+				//   the read here.  The last-known-good state
+				//   (kn5000_aided_by_claude @ 2026-02-17, commit f8cd34a8) reads back
+				//   only SSTAT and COM_SELECT; the firmware polls Port Z for the sub
+				//   CPU's SSTAT to pace the inter-CPU transfer.  The branch tip
+				//   (6897868, 2026-03-09) added the "MSTAT readback", and the earlier
+				//   kn5000-27 "parity" fix mistakenly matched that tip — feeding the
+				//   MainCPU its own MSTAT makes it mis-read the handshake and stream
+				//   the payload without pacing, which starves the SubCPU scheduler.
+				//   See side-quests/findings/kn5000_driver_findings.md.
 				// bits 2-3: SSTAT (input from the sub CPU)
 				// bits 4-7: COM_SELECT (interface-selection switches)
-				return m_mstat | m_com_select->read() | (m_sstat << 2);
+				return m_com_select->read() | (m_sstat << 2);
 			});
 	m_maincpu->portz_write().set(
 			[this] (u8 data) {
