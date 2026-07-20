@@ -3452,3 +3452,43 @@ NEXT (CONVERT track): the melodic voice allocator 0x4C034FF5 (slot
 choice + steal policy, the last unnamed core of TgNoteOn), the drum
 builders 0x4C03595F/0x4C035D21, pitch calc internals 0x4C02FB7E/
 0x4C02FBE3, and the hold/sustain state machine 0x4C02E0F9/0x4C02E2C7.
+
+## 2026-07-20: CONVERT track — the voice allocator + steal engine (268 -> 309)
+
+The previous NEXT is DONE (kn7000_disassembly 6fd75da/ec57390): 41 new
+library functions, 309 total re-assemblable (233 region-1 + 76 lib),
+zero new .byte escapes, clean-rebuild `make verify` 100%.
+
+- STEAL POLICY DOCUMENTED PRECISELY (new note: notes/tg-voice-allocator.md,
+  static RE): every hw slot has a 0x2C-byte node (0x500D1278+slot*0x2C,
+  +0x28 note/+0x29 slot/+0x2A polled level) on class rings inside list
+  arrays with PER-SIDE POLYPHONY QUOTAS (+0/+1 quota, +2/+3 active;
+  per-part array = *(0x500D0C64+part*0x1C), global active 0x500D1238,
+  global free 0x500D1258 w/ class-6 head 0x500D1274 = first choice).
+  TgVoiceNodePick 0x4C03ACC9 walks the pool's ROM steal-order list
+  (0x485879D8 pool desc -> 0x486D3844/53/61/6C): retired (6) first,
+  releasing (5..2), HELD (1,0) LAST, global ring before own-part at
+  each priority; side policy 0x08/0x10 filters by slot < 0x40 (TG A/B).
+  Quota overflow -> TgVoiceMigrateFind (ROM order 0x486D383C) migrates
+  an opposite-side donor to the global array = the TG A/B rebalancer.
+  TgVoiceStatusSweep retires gone voices (cmd 0xFC08 vs sustain mask
+  0x500D288C) and grades steal candidates by polled envelope level
+  (cmd 0xFC02, <0x80 -> fade-kick to steal fodder).
+- DRUM PITCH LAW: the drum stagers (TgDrumStageStd 0x4C03587E class
+  0x10, TgDrumStageTable 0x4C035BE5 class 0x40) just call
+  TgPitchInitCalc_entry with the kit zone's (often NULL) descriptor --
+  the legacy 0x4280 path enters there, no allocator-side drum formula.
+- PEDAL TIMING: TgPartHoldQuery 0x4C02E0F9 = hold gate (part flags
+  bit6) + TOP-NOTE promotion (releasing the highest note rewrites the
+  survivors' class-0x3000 word, bit14 cleared); under hold the key-off
+  is MARK-ONLY (TgPartHoldMark 0x4C02E2C7 -> the part's 0x500AD5A8
+  block), no TG write until pedal release collects the marks.
+- Pitch/level internals: TgPitchZoneFold = +-0xC00 OCTAVE fold into the
+  sample's key window; TgPartPitchWordCalc applies per-scale-degree
+  microtuning (partrec+0x4A[note%12]) at every note-on; TgLevelResolve
+  = mute/solo/part-link/velocity+expression.
+NEXT (CONVERT track): the remaining TgNoteOn internals — the repeat-note
+damp tables + 0x4C033CB3 (class-bit2 note-on programmer) and the
+key-off collection sweep that consumes TgPartHoldMark's marks (find it
+via callers of 0x500AD5A8+0x26/+0x27); then the choke/kill helpers
+0x4C00C0B1/0x4C0115AA under TgVoiceSlotService.
