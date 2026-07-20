@@ -80,6 +80,75 @@ Two independently-verified chains end at the same class of missing data:
   0x4873ACC0 / StyleRecordTable 0x4873BEE8 name ptrs) — but this GUI path resolves
   through the flash resource, not those tables.
 
+### 2a-bis. What the CONVERTED style-name module adds (2026-07-20)
+
+The whole rhythm/style NAME module 0x484332F9..0x48433C1E, the resource
+window probe 0x4843D6D7 and the table-ROM segment accessors next to it are
+now re-assemblable, commented source in `kn7000_disassembly` (commit
+6b52e50, `make verify` 100% byte-identical). Reading it as source rather
+than as call traces changes two things about 2a and confirms the rest.
+
+**NEW FACT — the NAME TABLE is real even in emulation.** At its tail
+`StyleBuiltinNameTableInit` (0x484332F9) does one more thing that the trace
+never showed: after loading whatever resource the probe won, it asks
+`TableRomStyleResourcePtr` (0x4843D7A8 -> table ROM directory entry
+`*(0x4800014C)` = **0x483E828C**) for the in-flash copy, strncmp's the
+"Technics Rhythms" signature against it, and on a match **unconditionally
+overrides the name-table pointer `*(0x50034B7C)` with that copy's
+`u24BE(+0x1B)`**. Our dumped table ROM does carry the signature, so
+0x50034B7C always ends up at 0x483E82BF — the REAL 0x800-entry u16BE name
+table — while count / base / sub-table / variation sub-table / fallback all
+still come from the probed resource (in emulation: the count=1 stub).
+
+Verified against the dump (`baserom/kn7000_table.rom`):
+
+| field | offset | value | state in our dump |
+|---|---|---|---|
+| signature | +0x00 | "Technics Rhythms" | intact |
+| header (count) | u24BE +0x18 -> +2 | **0xDD = 221** | intact |
+| name table | u24BE +0x1B = 0x483E82BF | 0x800 u16BE entries | **fully intact** (ends exactly at the sub-table) |
+| offset sub-table | u24BE +0x1E = 0x483E92BF | 221 x 3 bytes | **177 of 221 present**, then EOF |
+| variation sub-table | u24BE +0x21 = 0x483E94BA | 3-byte offsets | first record offset lands 2 bytes past EOF |
+| fallback name | u24BE +0x24 = 0x483E963E | 13-byte string | past EOF |
+| the 221 name RECORDS | via the sub-table | 13 bytes each | **ZERO present** |
+
+So the table-ROM copy is truncated *just* short of the first name record.
+The 177 recoverable sub-table offsets are monotonic and reach **+0x3E5D75
+(~4.08 MB)**, so the full resource is at least ~4 MB before the remaining 44
+entries — i.e. an entire flash device of its own, not a corner of the table
+chip. (This supersedes the earlier "+0x22B434 / ~2.3 MB" figure.)
+
+**Consequence for Phase D (synthetic).** A synthetic installed at a probe
+window supplies count, base, the offset sub-table and the name records — but
+it does **not** get to choose the name table: entry values will still be the
+real ones from 0x483E82BF. A synthetic must therefore be indexed *by those
+real entries*, which is a constraint the plan did not state — and also a
+free consistency check (the real table tells you exactly which of the 221
+records each style-ID wants).
+
+**NEW — a SECOND, independent name path.** `StyleVariationNameGet`
+(0x484335BF) does not use this resource first at all: it takes the low 3
+bits of the record byte +1 (built-in) or +0x11 (MEM/CUSTOM) as a variation
+kind, asks the **library resource dispatcher** (`LibResourceLookup`, lib
+0x4C0149FA, resource id **0x0000D00A**), and on success indexes the
+program-ROM pointer table **0x48736078**. Only on failure does it fall back
+to the resource's variation sub-table. Variation names are therefore NOT
+blocked by the missing flash.
+
+**CONFIRMED, unchanged.** The probe (0x4843D6D7) really is five
+signature-gated windows -- 0x48010000, 0x40610000, 0x40010000, 0x54E10000,
+0x40810000 -- plus an **unconditional** 0x54E00000 last resort, so
+0x54E00000 remains the natural install window. `StyleNameModuleBoot`
+(0x4843385E) falls back to the program-ROM stub 0x48729988 when the winner
+fails to open, which is exactly the count=1 that makes
+`StyleBuiltinNameResolve` gate every style-ID out of range.
+
+**NOT settled.** Nothing here recovers a single real style name, and nothing
+here is a shortcut around Phase C. Two of the three style SOURCES (MEMORY
+via 0x484355E2/0x484355F8, CUSTOM via 0x4848457D/0x4843E1xx) never touch the
+missing flash at all — only the BUILT-IN source does.
+
+
 ### 2b. Chord-finder garbage pitch — RESOLVED 2026-07-11 (de4fc88), see status box at top
 - The chord finder itself is CORRECT: root/type interval tables at prog-ROM
   0x48763794/0x48763888 produce the right MIDI notes, queued at 0x50092600 and posted

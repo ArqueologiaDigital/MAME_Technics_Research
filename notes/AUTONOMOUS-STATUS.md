@@ -4328,3 +4328,91 @@ themselves. Live-session questions unchanged: LFO block byte roles, the
 KEYSYNC/CONNECTION toggle, the six SOUND EDIT low-bit sources, which
 panel button maps to bank classes 1..4, and now the two index spaces'
 UI meaning.
+
+## AUTONOMOUS-STATUS tick — CONVERT track, 2026-07-20 (689 -> 729)
+
+**FORTY functions converted** across the three open handoff items;
+`kn7000_disassembly` commits **6b52e50** (+32) and **d16917b** (+8). Both
+flash images still rebuild **100% byte-identical** (`make verify`), **zero
+`.byte` escapes** in the new code.
+
+- Item (1) DONE, and it was **ONE function, not four**: the boot archive
+  parser is 0x48449EF4..0x4844A3D4, four near-identical INLINE blocks. Per
+  window (0x57000000 / 0x56000000 / 0x41000000 / 0x41800000): header
+  self-check `*(base)+base == base+0x200`, then two 16-byte signature
+  compares against `"Expansion Board "` (0x485B8518) at `*(base+4)` and
+  `*(base+8)`; present -> presence byte 0x501496B4+n = 1, archive ID
+  `*(base + *(base))` -> 0x501496A4+n*4, and slot n+1 of the five parallel
+  descriptor arrays 0x5003A554/68/7C/90/A4 from `dir = base + *(base+0x0C)`,
+  `dir + *(dir+0x14)` and that `+0x0C`; absent -> every slot aliases the
+  INTERNAL bank (index 0, built from table ROM `*(0x48000018)`). Corrected
+  the stale symbol `0x4844A000 CustomFlashArchiveParse`, which sat in the
+  middle of this function.
+- Item (2) DONE: the channel-EG caller module 0x4C004DE4..0x4C00566E is
+  **eight** functions = the **GLOBAL EFFECT-CHANNEL REFRESHERS**, the caller
+  layer above the output-channel register file at 0x4C037D0F. Seven own one
+  fixed global channel (1, 3, 5, 6, 7, 0x0B, 0x0C) and are re-run by the
+  effect ENABLE setters at lib 0x4C00908F+; 0x4C0053B3 / 0x4C005433, named
+  in `notes/reverb-toggle-findings.md` as the "lib consumers" of the reverb
+  flag 0x500C0758, live inside two of them. The eighth (0x4C004DE4) is the
+  per-PART variant (channel = partrec+0x62 bits 10..8 through ROM
+  0x486D109A). DELIBERATELY NOT CLAIMED: which panel effect each fixed
+  channel is — only bit9 = reverb is identified anywhere.
+- Item (4), THE STYLE QUESTION, taken from the rhythm/style side as advised:
+  the **whole style NAME module 0x484332F9..0x48433C1E (22 functions)** plus
+  the resource **WINDOW PROBE** 0x4843D6D7 and the eight table-ROM segment
+  accessors around it are now source. Three style SOURCES (built-in resource
+  / MEMORY / CUSTOM) selected by style-ID bits 0x00700000, the name
+  select+commit path, the 20 variation-record slots 0x50034BCC[], the
+  record-bind layer that publishes a style into the pattern player's runtime
+  view at 0x50122DC0.., and the built-in name resolver.
+- ★ **THE ONE REAL FINDING** (written up as section **2a-bis** of
+  `notes/sequenced-playback-and-style-data-rootcause.md`): at its tail
+  `StyleBuiltinNameTableInit` **unconditionally overrides the NAME-TABLE
+  pointer 0x50034B7C with the table-ROM copy's** (`TableRomStyleResourcePtr`
+  = dir entry `*(0x4800014C)` = 0x483E828C, `u24BE(+0x1B)` = 0x483E82BF)
+  whenever that copy carries the signature — which our dump does. So the
+  0x800-entry u16BE **name table is REAL even in emulation**, while count /
+  base / sub-table / fallback come from the count=1 stub. Verified against
+  the dump: signature + header (count 0xDD = 221) + the full name table are
+  intact, **177 of 221** sub-table offsets survive, and **ZERO** of the 221
+  13-byte name records do — the truncation lands two bytes short of the
+  first one. The surviving offsets are monotonic and reach **+0x3E5D75
+  (~4.08 MB)**, so the resource is a flash device of its own (this
+  supersedes the old "~2.3 MB" figure).
+  **Consequence for Phase D:** a synthetic at 0x54E00000 supplies count +
+  sub-table + records but does NOT control the name table — it must be
+  indexed by the REAL entries at 0x483E82BF, which is both a constraint and
+  a free consistency check.
+  Also new: `StyleVariationNameGet` (0x484335BF) resolves VARIATION names
+  through the **library resource dispatcher** (lib 0x4C0149FA, resource id
+  0x0000D00A -> ROM pointer table 0x48736078), not through the flash
+  resource — so variation names are not blocked by the missing dump.
+  **NOT claimed:** none of this recovers a single real style name, and it is
+  not a shortcut around Phase C. Two of the three sources (MEMORY, CUSTOM)
+  never touch the missing flash at all.
+- Item (3), the module at 0x48572607.., was SCOPED but NOT converted: it is
+  ~31 functions and it is a THIRD directory family — a hash directory
+  resident in the PROGRAM ROM (params 0x4876398C/8E, buckets 0x48763990,
+  u16 keys, 2-byte payloads) with the same graceful-degrade chain as family
+  B (exact -> LSB & ~0x3F -> MSB rounded to a multiple of 8 -> LSB only ->
+  0x7F/0x7F). Its callers are all in the voice-resource area (0x48449264,
+  0x48449281, 0x48449416, 0x4844C31B, 0x4844CB48), so it is voice, not
+  style. Left for the next tick.
+- STANDING LESSON held a sixth pass: **three of the pre-existing style
+  symbols were on call ENTRY addresses, not function starts** (0x48433300 /
+  0x48433400 / 0x48433AC4 -> real prologues 0x484332F9 / 0x484333FF /
+  0x48433ABF), and two functions in each of the style and EG modules have
+  **no register-save prologue at all** (0x48433919, 0x48433A80, and five of
+  the eight channel refreshers). Rescan; never interpolate.
+
+NEXT (CONVERT track): (1) the program-ROM directory family at
+0x48572607..0x485731FB (~31 functions, scoped above — the third and last of
+the three directory families); (2) the effect ENABLE setters themselves at
+lib 0x4C00908F.., which are the callers of the channel refreshers just
+converted and are the place where the 0x500C0758 bits other than bit9 could
+finally be pinned to panel buttons; (3) the MEMORY / CUSTOM style sources
+0x484355E2 / 0x484355F8 / 0x4848457D / 0x4843E107..0x4843E128, which are the
+only style paths that do NOT depend on the undumped flash. Live-session
+questions unchanged, plus: which panel effect owns each fixed global channel
+(1, 3, 5, 6, 7, 0x0B, 0x0C).
