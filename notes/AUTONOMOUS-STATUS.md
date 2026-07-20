@@ -5,17 +5,29 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
-## ☆ FELIPE WISH (2026-07-20): a PERMANENT, NON-HACKY boot-splash animation
-Long-term want (not urgent): display the boot-splash animation properly, not via a
-hack. Concrete state today: kn7000.cpp:872 has `TODO: Picture flash (splash / bitmap
-graphics), separate device.` and kn7000.cpp:1607-1608 note the boot-splash JPEG still
-decodes to GARBAGE (a separate software-JPEG-decoder bug) so it renders as noise. So
-the proper solution is two parts: (1) model the "Picture flash" as its own device
-(the bitmap/JPEG splash graphics ROM/flash), and (2) fix the firmware's software JPEG
-decoder path (or feed the decoded image) so the animation renders faithfully instead
-of noise. The KN5000 splash ("Technics KN-5000 IN COLOUR") already renders fine from
-its own firmware — this wish is about the KN7000 (and likely KN6000/6500) picture
-flash. Do it as a real device + decoder fix, no shortcuts.
+## ☆ FELIPE WISH (2026-07-20/21): PERMANENT, NON-HACKY KN5000 boot-splash animation
+Long-term want. CONTEXT (corrected): the SNS payload-checksum write tap removed by
+kn5000-29 (the sound-names cure) was ALSO what made the KN5000 boot splash ("Technics
+KN-5000 IN COLOUR") play. Removing it traded splash-for-names. Felipe wants BOTH,
+non-hacky. MECHANISM fully mapped (see side-quests/findings/kn5000_driver_findings.md
+2026-07-21): the splash shows only when SubCPU_Payload_Verify (0xEF092B) passes; the
+verify checksums DRAM 0xF180/0xF980 vs reference words at DRAM[0xFFD4/0xFFD2]. Live
+watchpoint: pc=EF18DF clears FFD4/FFD2=0 at t=0, the verify reads them at t=4
+(pc=EF0941) BEFORE the payload transfer (t~18) — so a persisted checksum is wiped
+before the verify. The tap seeded FFD4=checksum(current regions) right at the clear so
+the verify ALWAYS passed -> "payload OK" -> SPLASH, but "payload OK" also makes the
+firmware SKIP the transfer -> empty (non-persistent) SubCPU RAM -> Sound Name Error.
+INTRINSIC TENSION: verify-PASS = splash but skip-transfer (no names); verify-FAIL =
+transfer (names) but no splash. MAME gaps: (1) no maincpu cycles run after the shutdown
+signal (schedule_exit -> eat_all_cycles; nvram_save at machine.cpp:375 runs BEFORE
+MACHINE_NOTIFY_EXIT at :416) so the ROM power-off NMI that stores the checksum can't
+run; (2) the t=0 EF18DF clear. NEXT (a design task for Felipe, not a one-liner):
+disassemble EF18DF (is the clear unconditional?) + EF092B (what exactly is compared,
+and is the transfer truly skipped on pass); decide the emulation model (persist SubCPU
+RAM to legitimize a skipped transfer, OR keep the transfer unconditional and only
+report welcome-screen status OK); provision the reference checksum via a
+device_nvram_interface at nvram_save (plain call at exit, no cycles) rather than a
+boot-time re-entrant tap. Names cure (kn5000-29) stands on its own meanwhile.
 
 ## ★ KN5000 PRIORITY (Felipe 2026-07-20): SOUND NAME ERROR > tempo wheel
 To avoid subagents colliding on shared KN5000 files, Felipe set the order:
