@@ -55,6 +55,10 @@ ln -sf "$HERE/src/devices/machine/spi_sdcard.h"              "$BUILD_TREE/src/de
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn7000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn7000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn7000_cpanel.h"
+ln -sf "$HERE/src/mame/matsushita/kn_cpanel.cpp"             "$BUILD_TREE/src/mame/matsushita/kn_cpanel.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn_cpanel.h"               "$BUILD_TREE/src/mame/matsushita/kn_cpanel.h"
+ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.cpp"
+ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
 mkdir -p "$BUILD_TREE/src/mame/layout"
 ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
@@ -147,5 +151,5 @@ fi
 echo "==> building (log: $LOG) ..."
 cd "$BUILD_TREE"
 # USE_QTDEBUG=0: build without the Qt debugger (no Qt 'moc' needed).
-make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn7000_cpanel.cpp,src/mame/matsushita/kn1500.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
+make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_cpanel.cpp,src/mame/matsushita/kn7000_cpanel.cpp,src/mame/matsushita/kn6000_cpanel.cpp,src/mame/matsushita/kn1500.cpp REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE"/kn7000 2>/dev/null || echo "(no binary — check $LOG)"

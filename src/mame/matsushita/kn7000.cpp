@@ -103,6 +103,7 @@
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
 #include "kn7000_cpanel.h"        // control-panel HLE (buttons, LEDs, analog controls)
+#include "kn6000_cpanel.h"        // ... and its KN6000/KN6500 sibling (same base class)
 
 #include "screen.h"
 #include "speaker.h"          // first-cut audio output
@@ -956,7 +957,9 @@ private:
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	required_ioport m_volapcseq;           // front-panel APC/SEQ VOLUME slider (0-100 adjuster)
 	required_ioport m_tempoknob;           // front-panel TEMPO/PROGRAM knob (0-100 adjuster; a RELATIVE encoder)
-	required_device<kn7000_cpanel_device> m_cpanel;   // control-panel HLE (buttons, LEDs, analog controls)
+	// Held by BASE type: kn7000() installs the KN7000 panel, kn6000() swaps in the
+	// KN6000/KN6500 one (same tag "cpanel", same protocol, different matrix + LEDs).
+	required_device<kn_cpanel_base_device> m_cpanel;   // control-panel HLE (buttons, LEDs, analog controls)
 
 	void maincpu_mem(address_map &map) ATTR_COLD;
 
@@ -2530,6 +2533,19 @@ void kn7000_state::kn6000(machine_config &config)
 	// hang). See notes/kn6000-kn6500-boot.md.
 	for (int level = 0; level < 8; level++)
 		m_maincpu->set_maskable_vector(level, 0x90000000);
+
+	// The KN6000/KN6500 front panel speaks the SAME CP wire protocol as the KN7000 (which is
+	// why these models already accepted button traffic, and why their TEMPO/PROGRAM wheel
+	// worked, while running the KN7000 panel) -- but its MATRIX is almost entirely different:
+	// 88% of its populated button cells carry a different function than the KN7000 cell at the
+	// same seg/bit. Swap in the model's own panel so every button does what its silk says.
+	config.device_remove("cpanel");
+	KN6000_CPANEL(config, m_cpanel);
+	m_cpanel->atn().set([this](int state) { if (state) intc_assert(0x1a); });
+	m_cpanel->rxd().set([this](uint8_t data) { m_maincpu->sio_rx_push(SIO_PANEL, data); });
+	m_cpanel->set_dial_port(m_dial);
+	m_cpanel->set_volapcseq_port(m_volapcseq);
+	m_cpanel->set_tempoknob_port(m_tempoknob);
 }
 
 // KN2400/KN2600 reuse the KN7000 machine, but their firmware self-loads its library
