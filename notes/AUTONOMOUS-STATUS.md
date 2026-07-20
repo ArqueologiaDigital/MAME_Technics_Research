@@ -4417,3 +4417,72 @@ finally be pinned to panel buttons; (3) the MEMORY / CUSTOM style sources
 only style paths that do NOT depend on the undumped flash. Live-session
 questions unchanged, plus: which panel effect owns each fixed global channel
 (1, 3, 5, 6, 7, 0x0B, 0x0C).
+
+## AUTONOMOUS-STATUS tick — CONVERT track, 2026-07-20b (729 -> 773)
+
+**FORTY-FOUR functions converted**, `kn7000_disassembly` commit **887169f**.
+Both flash images still rebuild **100% byte-identical** (`make verify`, clean
+`build/`); **zero new `.byte` escapes** (the 5 in `src/program.s` are the
+pre-existing boot-header ones plus the one known non-minimal `call`).
+
+- NEXT item (2) DONE and it is the whole **TG GLOBAL-PARAMETER MODULE
+  0x4C008CBB..0x4C009837** — not just "the effect enable setters". Master
+  volume / master tune / group gains, the effect ENABLE bits, and the
+  **COMMAND DISPATCHER** that drives every one of them.
+- ★ `TgGlobalParamCommand` **0x4C0092B3** (entry 0x4C0092B9) is **ONE**
+  function: id 9..0x50, `slot = (id-8) & 0x3F` in the 64-entry program-ROM
+  key/handler table **0x48586C60** (`u32 key = id-8`, `u32 handler`), and the
+  ~30 handler blocks are **inline**, all returning through its frame. Its
+  **only** caller is the sound-command byte-stream interpreter **0x4C003ED3**
+  — so every global TG parameter is set by a two-byte stream message, never by
+  a direct call from the UI.
+- ★ **THE BIT MAP IS PARTLY CLOSED** (write-up: new file
+  `notes/effect-enable-bits.md`). Each enable handler re-runs the global
+  channel refreshers converted last tick, and each refresher gates on the same
+  bit, so the bit -> sub-TG-channel edge is static fact; crossing it with the
+  LIVE per-effect send/return capture in `effect-return-routing.md` names two:
+  - **bit9 = REVERB** — handler id 0x40 refreshes chan **3** + chan **0x0B**,
+    exactly the live reverb RETURN ch03.rA and SEND ch0B.r8. (Bit9=reverb was
+    already known from the button trace; this is an independent structural
+    confirmation, not a new claim.)
+  - **bit12 = MULTI** (NEW) — handler id 0x45 refreshes chan **0x0C** + chan
+    **6**, and chan 6 is the live-captured MULTI return ch06.rA.
+  - bit13 (id 0x46) -> chan 1, bit14 (id 0x47) -> chan 5, bit10 (id 0x41) and
+    bit4 (id 0x42) refresh no channel: **DELIBERATELY NOT NAMED**. CHORUS
+    (ch19) and SOUND DSP (ch09) are per-part matrix rows, not global channels,
+    so their enables are not observable in this halfword — the natural guess
+    that bit10/bit4 are them is NOT claimed.
+  - bit11 (chan 7) has no setter here at all; it is set/cleared at
+    0x4C00840E / 0x4C008420 and is the most widely READ bit in the image
+    (the whole per-part apply layer 0x4C0046E6..0x4C004F41 gates on it).
+- NEW side facts: bits 1..3 of 0x500C0758 are a **3-VALUE ROUTE FIELD**
+  (`TgEffectRouteSelect`, id 0x29), and **route value 3 forces REVERB ON** —
+  `TgEffectEnableReverb(0)` takes the enable path anyway when bit3 is set.
+  0x500C075A bit3/bit4 are the (INVERTED) gates for the group master gains
+  0x500C0760 / 0x500C0762 that `TgLevelTermFinalize` was already documented to
+  apply, and bit5 gates the SUB master-volume term — the read side and the
+  write side of those three now meet.
+- ANTI-DUPLICATION check ran BEFORE writing anything: grepped the notes tree
+  and `mame-blog/posts/kn7000/*.md` for 0x500C0758 / 0x48586C60. Only bit9 was
+  ever published (blog Part 27, and `per-part-effect-application.md` had
+  bit9/bit10/bit11 as unnamed). **No blog post written** — one new bit name
+  plus a dispatcher table does not clear the series bar on its own; it belongs
+  in the notes. If bits 10/4 later resolve to CHORUS/SOUND DSP, the whole
+  CPU-side-meets-DSP-side story becomes post-worthy.
+- STANDING LESSON held a SEVENTH pass: **twelve** of the 44 starts are
+  prologues 2-6 bytes ahead of the address the callers use (0x4C008CBB not
+  0x4C008CC0, 0x4C0092B3 not 0x4C0092B9, ...) and **twenty-five** of them are
+  bare leaves with no prologue at all. Also a fresh gotcha for the disasm
+  helper: `unidasm` will happily decode past the end of a short `dd` window
+  and print phantom instructions from the zero padding — always dump more
+  bytes than you intend to read.
+
+NEXT (CONVERT track): (1) the **program-ROM directory family
+0x48572607..0x485731FB** (~31 functions, the third and last directory family;
+scoped two ticks ago, still untouched); (2) the **MEMORY / CUSTOM style
+sources** 0x484355E2 / 0x484355F8 / 0x4848457D / 0x4843E107..0x4843E128;
+(3) for the effect-bit question specifically, stop looking in the library and
+go to the **PRODUCER of the command ids** — the maincpu code that builds the
+two-byte sound-command messages consumed by 0x4C003ED3 — because that is where
+a panel button and a command id sit in the same basic block, and it is the
+only remaining way to name bits 4/10/13/14. Live-session questions unchanged.
