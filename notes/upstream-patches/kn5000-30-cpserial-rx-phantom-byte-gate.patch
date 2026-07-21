@@ -1,0 +1,84 @@
+From b17fb8b222bd676626f438e46d225fc43ab95ef7 Mon Sep 17 00:00:00 2001
+From: Felipe Correa da Silva Sanches <juca@members.fsf.org>
+Date: Tue, 21 Jul 2026 02:44:04 +0100
+Subject: [PATCH] =?UTF-8?q?kn5000:=20fix=20control-panel=20"scrambled=20bu?=
+ =?UTF-8?q?ttons"=20=E2=80=94=20gate=20CP-serial=20RX=20on=20the=20externa?=
+ =?UTF-8?q?l=20clock?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The KN5000 panel occasionally responded to a press with the wrong function and
+put a phantom `<Db>` transpose on the home screen that nobody asked for. The bug
+is in the SHARED TMP94C241 synchronous-serial model, not any button table (the
+SEG.bit map, layout inputtags and cpanel dispatch are byte-identical to upstream).
+
+tmp94c241_serial_device::sioclk() latched an RX byte and fired INTRX on EVERY 8
+rising edges, regardless of which side drove the clock. While the main CPU is the
+clock master transmitting a command byte (internal baud generator, IOC=0), those
+same 8 edges also completed a bogus full-duplex "RX during TX" byte from the idle
+RXD line — one phantom RX byte + spurious INTRX for every command byte the CPU
+sent. A phantom 0x00 decodes as right-panel segment 0 = the TRANSPOSE row (the
+`<Db>`); an odd phantom count inside a framed burst swaps the (header,state)
+pairing, so PIANO (seg2,0x01) reads as (seg1,0x02) = ORCHESTRAL PAD. Timing-
+dependent, hence intermittent.
+
+Behavioural oracle diff (instrument both ends): the cpanel send_byte() count
+exactly equals the externally clocked (IOC=1) RX bytes — 190==190 — while every
+phantom is internally clocked with IOC=0 (521 of them): a perfect partition with
+zero cross terms. IOC is the firmware's own receive-enable (it sets IOC=1 in the
+INTRX1 ISR, the same condition that already gates the internal baud generator off
+in timer_callback); the receiver simply wasn't honouring that gate.
+
+Fix: in sioclk()'s rising-edge RX block, count/latch bits only when the external
+clock is actually selected: (SCxMOD transfer==0) && IOC. After the fix, sent ==
+received (96==96, all IOC=1), phantoms 521->0, no phantom transpose, and every
+silk-labelled press opens its promised screen (PIANO->SOUND PIANO, DISK->DISK
+MENU, MENU:SOUND->SOUND MENU, MENU:MIDI->MIDI, POP&BALLAD->RHYTHM POP, PART
+SELECT) from a clean home savestate at three different emulated phases each.
+
+UART transfer modes drive their RX from timer_callback, so this synchronous-mode
+gate never touches the MIDI channel. KN5000/KN1500 device only (KN7000/KN6000 are
+MN10300 and don't use this device). -validate clean for kn5000/kn1500/kn7000/
+kn6000/kn6500/kn2400; sound names (kn5000-29) and tempo wheel (kn5000-25) intact.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/devices/cpu/tlcs900/tmp94c241_serial.cpp | 21 +++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+index db123ef..fb38f97 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+@@ -168,7 +168,26 @@ void tmp94c241_serial_device::sioclk(int state)
+ 			}
+ 		}
+ 
+-		if (m_rx_clock_count)
++		// Only latch RX bits that are clocked by an EXTERNAL master.  In
++		// I/O-interface mode (SCxMOD transfer=0) the control panel drives SCLK
++		// for its INTA responses, and the firmware selects the external clock
++		// by setting IOC (SCxCR bit0) in its receive ISR — the SAME condition
++		// that gates the internal baud generator off (see timer_callback).
++		//
++		// While the CPU is the clock master (IOC=0, internal baud generator
++		// running) it is TRANSMITTING commands; the RXD line then carries no
++		// framed slave byte.  Latching those full-duplex "RX during TX" edges
++		// manufactured a phantom RX byte + a spurious INTRX for EVERY command
++		// byte the CPU sent — the root cause of the control-panel "scrambled
++		// buttons" and the unrequested phantom transpose (a phantom 0x00 byte
++		// decodes as right-panel segment 0 = the TRANSPOSE row; an odd count of
++		// phantom bytes inside a framed burst swaps the header/state pairing).
++		// The sender (cpanel) is correct; the receiver was over-counting edges.
++		// Mirror the sender's start-gate: count RX bits only when the external
++		// clock is actually selected.  (UART transfer modes drive their RX from
++		// timer_callback, not here, so this synchronous gate never affects them.)
++		const bool ext_clock = ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0);
++		if (m_rx_clock_count && ext_clock)
+ 		{
+ 			m_rx_clock_count--;
+ 
+-- 
+2.47.3
+
