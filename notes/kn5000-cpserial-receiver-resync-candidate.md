@@ -55,7 +55,8 @@ the panel.
 This is a proof from the source, corroborated by measurement in three passes:
 
 1. A strand means `m_rx_clock_count ∈ 1..7` with the gate shut.
-2. `timer_callback` (line ~574) → `need_clock` contains `(m_rx_clock_count != 8)` → the baud
+2. `timer_callback` (`need_clock` is at `tmp94c241_serial.cpp:526` in the shipped tree; the
+   "~574" this note originally cited is stale) → `need_clock` contains `(m_rx_clock_count != 8)` → the baud
    generator free-runs forever.
 3. `sioclk()` forwards every edge to the panel unconditionally (lines 137/256).
 4. `kn5000_cpanel::sioclk()` (lines 464-467) re-arms its 50 µs idle timer on **every** edge while a
@@ -175,20 +176,48 @@ ones.)
 
 ## Verdict and disposition
 
+> **★ 2026-07-21, LATER THE SAME DAY — items 3 and 4 below have since been OVERTAKEN BY
+> MEASUREMENT. Read this box before acting on them.** Option A *was* built in full, and it is a
+> **REGRESSION**, not the answer: its late "only ask for a bus that is free" deferral re-phases the
+> INTA request into the middle of `CPanel_SM_RXByteN`'s teardown, and its own escape hatch
+> (`abandon_inta_cycle()`) rewinds a byte the CPU has already taken *k* bits of — manufacturing the
+> exact misframe A existed to prevent. The live candidate is now **A′** (A minus that deferral,
+> minus/guarding the rewind):
+> `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake_prime.txt`. Item 4 is worse than
+> overtaken — it is **INVALID**, see the box under item 4. Current state for the whole arc:
+> `kn5000-cpserial-INDEX.md`. Adjudication of A: `kn5000-cpserial-sender-handshake-candidate.md`.
+
 1. **Do not land B alone.** It is provably inert; landing it would lift a submission hold on the
    strength of a change that does nothing, add a `save_item` (invalidating existing savestates) for
    zero behaviour, and make the unmodelled IOC/RXE skew load-bearing.
 2. **Do not land B+C or B′ on `a1`-only evidence.** Both reproduce option C's rejection symptom on
    `b3`: false button events, including a phantom `<Db>` on a first boot from empty NVRAM.
-   Any future acceptance gate for this area **must include `b3`**.
-3. **Go to option A** (`KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt`). The
-   residue that defeats every receiver-side variant is **loss**, not misframe: `drop_ext` real
-   panel-clocked bits are discarded and cannot be reconstructed. A sender that re-arms instead of
-   clocking while the CPU's receiver is shut never loses a byte, so there is nothing to resync.
-4. **Keep B′ as the belt-and-braces to land *with* A**, where it should be measurably inert (no
-   strands to recover) and is the right model of RXE holding the counter in reset. If it is not
-   inert once A lands, A is incomplete.
-5. `kn5000-30`'s **submission hold stays**.
+   Any future acceptance gate for this area **must include `b3`**. *(This one has held up and is
+   the single most reusable sentence in this document.)*
+3. ~~**Go to option A**~~ — **superseded: A was built and REJECTED. Go to A′.** The *reasoning*
+   below is what survived and it is still correct — it is the governing insight of the whole
+   investigation. The residue that defeats every receiver-side variant is **loss**, not misframe:
+   `drop_ext` real panel-clocked bits are discarded and cannot be reconstructed. A sender that
+   re-arms instead of clocking while the CPU's receiver is shut never loses a byte, so there is
+   nothing to resync. What A got wrong was not this premise but the *liveness valve* it bolted on
+   to escape a stall.
+4. ~~**Keep B′ as the belt-and-braces to land *with* A**, where it should be measurably inert (no
+   strands to recover)… If it is not inert once A lands, A is incomplete.~~
+
+   > **★ THIS DIAGNOSTIC IS INVALID. DO NOT USE IT AS A SELF-CHECK ON A OR A′.** It was proposed
+   > in this project as a sharp test — B′ firing zero would prove A drops nothing — and it is not
+   > one. **Measured:** in the `x_sim2` A run, `bprime_calls = 2096` and `bprime_FIRED = 0` in a run
+   > that contained **28 mid-byte strands and 28 `MIDBYTE-REOPEN`s**, with the panel visibly DEAD
+   > and dispatching a false ENTERTAINER page. B′ triggers on the closed→open *gate* transition,
+   > which is exactly what a wedged link never produces — so it is **structurally blind to the
+   > sender-side failure mode** and its zero is indistinguishable from a real one. This was the main
+   > agent's error, recorded here because that is the norm in this record. The general rule it cost
+   > us: *prove an instrument can SEE the event before you report its absence.* See
+   > `kn5000-cpserial-measurement-discipline.md`.
+
+   What survives from item 4 is only the *model*: B′'s "hold the counter in reset for the whole shut
+   window" is still the right receiver-side description of RXE, and it is still not landable alone.
+5. `kn5000-30`'s **submission hold stays.** *(Held: reaffirmed a third time after A.)*
 
 ## Correction to a shared artefact
 
@@ -199,8 +228,18 @@ pre-change reference is the published `kn7000-emulator/kn7000`
 
 ## Instrumentation worth rebuilding (it settled every question here)
 
-The instrumented build is gone with its scratchpad, but its probes are the reason this pass is
-conclusive. If this area is touched again, rebuild these:
+> **★ UPDATE 2026-07-21 — you no longer have to rebuild it.** The sentence below ("gone with its
+> scratchpad") was true when written and is now **false**: the probe set was recovered from the
+> session scratchpad and committed as
+> `notes/kn5000-cpserial-sender-handshake-instrumentation.patch` (459 lines, 3 files). It is a
+> **superset** — every probe listed below (`PHASE_HIST`, `RX_LAST`/`CPTX_LAST`, the
+> `drop_int`/`tx_bytes`/`cpanel_recv` arithmetic, `wclose`/`wopen`/`wnop_open`) is in it, plus the
+> option-A probes and the `KN5A_NOIDLEWAIT=1` knob. It applies **on top of the option-A candidate
+> patch**, not on top of HEAD. Read its header first: it documents which of its own labels are
+> untrustworthy.
+
+The instrumented build was gone with its scratchpad when this was written, and its probes are the
+reason this pass is conclusive. These are the ones that carried the argument:
 
 * **`PHASE_HIST` — the non-tautological framing oracle.** The *sender's* own bit position
   (`kn5000_cpanel::m_tx_clock_count`) sampled at the instant the CPU *begins* assembling a byte.

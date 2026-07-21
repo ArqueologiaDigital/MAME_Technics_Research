@@ -125,14 +125,34 @@ instrument Felipe plays, that is the worse of the two.
 
 ## Verdict and disposition
 
-**C is a guard, not a cure, and it must not ship alone.** Land it *with* option B (the
-closed→open receiver resync that actually restores framing), as a two-patch pair, or land B
-first. If it is ever landed alone, the comment must say plainly: *removes the free-running
-clock; the misframe that follows is permanent and will dispatch false button events,
-including a phantom transpose.*
+> **★ 2026-07-21, LATER THE SAME DAY — THE DISPOSITION BELOW IS SUPERSEDED. Both halves of it are
+> now false.** It said: land C *with* option B. Since then B was built and measured to be a
+> **bit-for-bit no-op** (the wedge destroys B's own precondition, so the resync never fires), and
+> the reachable variants **B+C and B′ reproduce C's own rejection symptom on `b3`** — false button
+> events, including a phantom `<Db>` on a first boot from an empty NVRAM. So "B actually restores
+> framing" is wrong, and "C+B is a shippable pair" is wrong. Option A was then built and is a
+> **regression** as well. **C remains REJECTED and is not part of any current plan.** The live
+> candidate is **A′**:
+> `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake_prime.txt`. Current state for the
+> whole arc: `kn5000-cpserial-INDEX.md`.
+>
+> **What is still true and worth taking from this document:** the *mechanism* (a mid-byte gate
+> reopen strands `m_rx_clock_count`, the baud generator free-runs, its dead edges starve the
+> cpanel's 50 µs sliding idle detector, INTA never returns); the **342 strand exits with
+> `ll_exit_clean = 0`**, every one a `MIDBYTE-REOPEN`, which is the proof the receiver *never*
+> recovers framing on its own; and the warning that a guard which keeps a permanently misframed
+> link **alive** makes the instrument dispatch button presses nobody made.
 
-Roadmap briefs: `KN7000/side-quests/pending/kn5000_cpserial_receiver_resync.txt` (B) and
-`KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt` (A).
+**C is a guard, not a cure, and it must not ship — alone or paired.** ~~Land it *with* option B
+(the closed→open receiver resync that actually restores framing), as a two-patch pair, or land B
+first.~~ If it is ever landed at all, the comment must say plainly: *removes the free-running
+clock; the misframe that follows is permanent and will dispatch false button events, including a
+phantom transpose.*
+
+Roadmap briefs: `KN7000/side-quests/pending/kn5000_cpserial_receiver_resync.txt` (B — **built,
+INERT**), `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt` (A — **built,
+REGRESSION**), and `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake_prime.txt`
+(**A′ — the live one, not started**).
 
 ## Tree state at the time of writing
 

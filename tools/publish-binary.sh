@@ -183,6 +183,16 @@ fi
 # written is byte-identical, so it carries no settings of yours. Do NOT delete the whole
 # nvram/kn5000/ directory -- that buys one clean boot, the "<Db>" is back on the next one,
 # and you lose nvram1 for nothing.
+#
+# SECOND KNOWN KN5000 BUG (unrelated to the one above): THE CONTROL PANEL CAN GO DEAD
+# FOR THE REST OF THE SESSION. After certain press patterns -- including ordinary
+# playing, and including presses during boot -- the panel serial link wedges and NO
+# button responds until you restart. It is phase-dependent, so it is not reproducible
+# by "doing the same thing". Restarting always clears it; nothing is lost. This is an
+# EMULATION bug (a real KN5000 panel is not corrupted by presses during boot). It is
+# the exposed remainder of the fix for the old "scrambled buttons" defect, where a
+# press gave you the wrong function and a phantom "<Db>". Three candidate fixes have
+# been built, measured and rejected; see notes/kn5000-cpserial-INDEX.md.
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
 # warnings screen, so the emulator boots straight in without needing a click to dismiss it.
 # -pluginspath ./plugins ensures MAME finds the bundled "layout" plugin, which runs the
@@ -250,6 +260,16 @@ be produced (binary + its own copies of the libraries + loader).
   battery-backed-SRAM restore path, not a stray keypress — a brand-new NVRAM grows it on its own
   second boot with no input at all. Workaround until it is fixed: `rm -f nvram/kn5000/nvram2`
   before each launch (see the comment in `run.sh`; your `nvram1` is kept).
+- **KN5000 known issue — THE CONTROL PANEL CAN GO DEAD FOR THE SESSION.** After certain patterns of
+  button presses — including ordinary playing, and including presses during the boot sequence — the
+  panel serial link can wedge: from that moment on **no button does anything at all** until you
+  restart the emulator. It is a phase-dependent race, so the same presses may or may not trigger it.
+  Nothing is lost when it happens and nothing you did causes it; a restart always clears it. This is
+  an **emulation bug, not the real instrument** (a real KN5000 panel is not corrupted by presses
+  during boot). It was introduced by the fix for a separate, much more visible panel bug — presses
+  used to be *scrambled*, giving you the wrong function and a phantom `<Db>`; that scrambling is
+  fixed, and this is the exposed remainder. Three candidate fixes have been built and rejected;
+  investigation notes are in `kn7000_mame/notes/kn5000-cpserial-INDEX.md`.
 
 The four PCM **wave ROMs are undumped**, so the sound uses a placeholder sine rather than the real
 samples — the notes are in tune and firmware-timed, they just don't have the KN7000's actual voices

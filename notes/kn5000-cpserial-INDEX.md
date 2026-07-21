@@ -1,7 +1,7 @@
 # KN5000 control-panel serial — INDEX / entry point
 
 **Read this first.** The investigation behind it spans a 1,150-line findings doc, three candidate
-`.md`/`.patch` pairs, 15 deterministic repro scripts, five briefs and five blog posts. This file is
+`.md`/`.patch` pairs, 27 deterministic repro scripts, six briefs and six blog posts. This file is
 a map and a state snapshot, not a retelling: every claim below is developed somewhere else, and the
 pointer is given. Nothing here is new evidence.
 
@@ -168,6 +168,7 @@ machine probably does this too" has failed, not passed.
 | 1 | **this file** | orienting cold |
 | 2 | `KN7000/side-quests/findings/kn5000_button_mapping_findings.md` (~1,150 lines) | you need the evidence. **Six chronological sections**: root cause → kn5000-30 fix → the `<Db>` addendum → the dropped-byte test → option C → option B → option A. **Its TL;DR at lines 9–26 is the FIRST pass's conclusion** and predates everything above; read the section headers before believing any single passage. |
 | 3 | `notes/kn5000-cpserial-sender-handshake-candidate.md` | you are about to implement A′. This is the most current candidate doc and contains the A′ definition, the FC47C9 question, the tautology and blindness notes, and the route forward. |
+| 4 | `notes/kn5000-cpserial-measurement-discipline.md` | **before you believe any number you measure here.** Eight rules, each anchored to the measurement that forced it, plus the probe catalogue split into *can be embarrassed* / *cannot*, and a 9-step gate template for A′. Read it with the instrumentation patch. |
 
 ### Candidates (each `.md` = adjudication, each `.patch` = the exact build)
 
@@ -186,8 +187,10 @@ machine probably does this too" has failed, not passed.
 
 ### Repros — the real regression suite
 
-`notes/kn5000-cpserial-repros/` — 15 lua schedules + `gen.py` + `run.sh` + a README that encodes the
-method rules. Deterministic: repeat runs produce byte-identical snapshot PNGs.
+`notes/kn5000-cpserial-repros/` — 27 lua schedules + `gen.py` + `gen_adversarial.py` + `run.sh` + a
+README that encodes the method rules. Deterministic: repeat runs produce byte-identical snapshot
+PNGs. Not all 27 have been run on every build — the README says per script which were run and which
+are **written but never run**; treat the latter as untested apparatus, not as evidence.
 
 * Wedge repros: `a1` (90 presses), `b1` = `ph000` (ordinary playing), `b3` (220 presses, drifting
   interval — **the mandatory one**), `ph007`.
@@ -195,6 +198,8 @@ method rules. Deterministic: repeat runs produce byte-identical snapshot PNGs.
   `a1soak` (never resynchronises on its own).
 * **Candidate-killers** added by the A pass: `x_sim2` (two buttons at the same instant), `pfx3`
   (three presses from cold boot), `x_multi` (8 simultaneous), plus `bootwin` and `s4`.
+* **Not a discriminator:** `x_flood` (200 presses at 20 Hz) **kills the shipped build too**
+  (`7af13431` ×3 / `aed2c20f` ×3). It is a stress case. Do not score a candidate against it.
 * Simultaneous-press schedules must `table.sort` their action list — otherwise later buttons of a
   group are pressed and released inside one dispatch, invisibly to the panel's 2-scan / 14 ms filter.
 
@@ -224,11 +229,12 @@ KN5000 panel almost certainly has the original phantom bug too.
 
 | part | title | covers |
 |---|---|---|
-| 71 | The buttons that hallucinated | the phantom-byte root cause and kn5000-30. **Carries two errata**; the second one's prescription (option B) was later proven inert. |
-| 72 | The tell that belonged to another bug | the `<Db>` is a separate power-down defect. ⚠ Contains a falsified claim that the driver "already carries" a checksum write tap — it was **removed** in `b1cf7db` (kn5000-29); only a stale comment survives. Its byte-loss *location* claim is also falsified (see Part 73). |
-| 73 | The trade nobody priced | the wedge, and the trade kn5000-30 makes. ⚠ Presents S1–S5 as settled, and forecasts option B as the fix. |
-| 74 | The fix that never ran | option B is inert. Current. |
-| 75 | The counter that could not fail | option A's regression and the tautological counter. Current; closes by promising a Part 76. |
+| 71 | The buttons that hallucinated | the phantom-byte root cause and kn5000-30. **Carries three errata** — the third (added 2026-07-21) retracts the second one's prescription, since option B was proven inert. |
+| 72 | The tell that belonged to another bug | the `<Db>` is a separate power-down defect. **Carries two errata (added 2026-07-21):** the claim that the driver "already carries" a checksum write tap is false — it was **removed** in `b1cf7db` (kn5000-29) and only a stale comment survives; and its byte-loss *location* claim plus its resync prescription are both falsified. |
+| 73 | The trade nobody priced | the wedge, and the trade kn5000-30 makes. **Carries an erratum and a note (added 2026-07-21):** its forecast of option B as the fix is retracted, and S1–S5 is flagged **indicative only, not a regression suite**. |
+| 74 | The fix that never ran | option B is inert. Current, no falsified content. |
+| 75 | The counter that could not fail | option A's regression and the tautological counter. Current, no falsified content. |
+| 76 | Where it rests | **the closing post.** Felipe's stop, the state, all three rejections and the one sentence that killed them, A′, the untouched mid-byte-teardown question, and the four-times-paid rule about blind probes. Written for a blog-only reader; adds no new measurement. |
 
 ### Live status
 
@@ -243,6 +249,13 @@ not an instruction to proceed while the work is paused.**
   md5 **`52818738929b4056179d115d8ca1ad7f`**. This is the shipped build *including* kn5000-30.
 * **`optC/kn7000_cleanC_backup` (or anything named `optC`) is the OPTION C BUILD — NOT a pre-change
   reference.** Comparing a candidate against it yields a false PASS.
+* **`KN5A_PRE=1` is NOT a validated pre-change control either.** The instrumented build's "disable
+  option A" knob reproduces the pristine binary exactly on `a1` (`d9f02718` ×6) and `b3`
+  (`f2b583c5` ×6) — but on `b1` the pristine binary is **DEAD** while `KN5A_PRE=1` is **LIVE** and
+  byte-identical to full option A. *Hypothesis, unproved:* the knob gates the four panel-side sites
+  but not the serial device's `rx_ready` fan-out. **What would settle it:** re-run both to exclude
+  nondeterminism, then bisect the ungated serial-side additions. Until then use the knob to localise
+  a mechanism, **never to certify a baseline** — the only baseline is the md5 above.
 * **Line-number trap:** every citation of `kn5000_cpanel.cpp:10xx` for option A — notably the rule-5
   deferral at **`:1049-1055`** — refers to the **option-A patched tree**, i.e. after applying
   `kn5000-cpserial-sender-handshake-candidate.patch`. On the shipped tree those lines are unrelated
