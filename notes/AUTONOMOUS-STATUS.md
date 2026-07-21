@@ -5,6 +5,51 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-21 (later) — ⛔ KN5000 PANEL: OPTION **B** BUILT, VERIFIED 3×, **INERT**, NOT LANDED.
+## Both receiver-side options are now spent. **NEXT = OPTION A (sender-side handshake).**
+B = resync the byte boundary on the closed→open receive-gate transition. Implemented exactly as the
+brief specified, built, three independent verifications (repro acceptance, no-regression,
+adversarial). **It is a BIT-FOR-BIT NO-OP** on `a1`, `b1`, `b3`, all five phase offsets, a 444-press
+soak and a 38-press playing session — every snapshot PNG and every counter identical to pre-change.
+
+**Why (proof, not guess): the wedge destroys B's own precondition.** After a strand the free-running
+generator keeps the cpanel's 50 µs idle detector retriggered → INTA never returns → `INTA_HANDLER`
+never runs → `or 0xd5,0x01` (IOC=1) never executes → **the gate never reopens**, so the transition B
+triggers on never happens. Measured in every wedged run: `wclose = wopen + 1`, `resync = 0`,
+`rx_final ∈ {4,5,6,7}`. That zero is NOT blind — the same counter reads 1 (`a1`) and 3 (`b3`) when
+the option-C guard is enabled alongside. `exit_midbyte = 0` is VACUOUS (no reopen ⇒ no exit to
+classify) — do not report it as a pass.
+
+**★ The new, decisive result: the reachable variants fail too.** B+C, and the strictly better
+**B′** (`if (!ext_clock) { m_rx_clock_count = 8; m_rx_shift_register = 0; }` — holds the counter in
+reset for the whole shut window, so the free-run cannot start and C becomes unnecessary by
+construction; snapshot-bit-identical to B+C) both reproduce **option C's rejection symptom** on `b3`:
+phantom `<Db>` on a FIRST boot from empty nvram, MENU:DISK and MENU:SOUND changing 0 px, "LIVE PIANO"
+opening LEFT/ORCHESTRAL PAD. Control: `soak` (444 presses, 0 strands) is perfectly clean ⇒ the
+trigger is the strand *recoveries*, not press count/rate. **Resync restores BIT framing, not PACKET
+framing** — the lost byte still shifts the (header,state) pairing.
+
+**==> THE RESIDUE IS LOSS, NOT MISFRAME.** No receiver-side change can reconstruct a byte that was
+never delivered. **Option A is now the live task**
+(`KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt`). Keep B′ as belt-and-braces to
+land WITH A, where it should be measurably inert; if it is not inert, A is incomplete.
+
+**Also recorded:** the brief's faithfulness premise is FALSE — `cpanel_routines.s` writes IOC **alone**
+at eleven sites, so IOC ≠ RXE; a resync makes that skew load-bearing, so the RXE gate (SC1MOD bit 5,
+unmodelled) must land before/with any future resync, not after. A scratchpad binary named
+`optC/kn7000_cleanC_backup` is **not** a pre-change reference (it is the option-C build) — the only
+trustworthy one is the published `kn7000-emulator/kn7000`, md5 `52818738…`. Pre-existing, not B's:
+"Sound Name Error" in long sessions is session-state dependent and NOT a misroute symptom (bit-identical
+pre-B) — worth its own quest.
+
+**Tree state:** reverted and proven (`grep -rn "m_rx_gate_open\|KN5B" src/` empty; rebuilt binary
+byte-identical md5 `52818738…` to the published copy, so `publish-binary.sh` had nothing to do).
+kn5000-30's ⛔ SUBMISSION HOLD **stays**, reaffirmed in all three places in
+`notes/upstream-patches/README.md`. Adjudication + patch + deterministic repros:
+`notes/kn5000-cpserial-receiver-resync-candidate.{md,patch}`, `notes/kn5000-cpserial-repros/`
+(a1/b1/b3 + phase sweep + soak + README). **Any future gate in this area MUST include `b3`** — `a1`
+alone passes variants `b3` kills. Blog Part 74.
+
 ## TICK 2026-07-21 — ⛔ KN5000 PANEL: kn5000-30 is INCOMPLETE and now on SUBMISSION HOLD.
 ## Option C (livelock guard) built, verified 3×, ADJUDICATED NOT READY, NOT LANDED.
 **Corrects the earlier "scrambled panel FIXED" tick.** kn5000-30 (b17fb8b) really did kill the 521
