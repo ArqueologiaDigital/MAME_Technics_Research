@@ -105,8 +105,16 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 ## ⛔ SUBMISSION HOLD on kn5000-30 (added 2026-07-21) — do NOT submit it as it stands
 
 **`kn5000-30` is correct about phantom bytes and incomplete about everything else. Submitting it
-alone would export a worse bug than the one it fixes.** It must not go upstream until it is paired
-with the receiver-side resync (see below). Everything else in the series is unaffected.
+alone would export a worse bug than the one it fixes.** It must not go upstream until the link is
+actually fixed (see below). Everything else in the series is unaffected.
+
+**★ HOLD REAFFIRMED 2026-07-21 (second adjudication).** The receiver-side resync (option B) that
+this hold was originally waiting for has now been implemented and verified three ways, and it is a
+**bit-for-bit no-op** — it cannot even execute after a wedge. Its reachable variants (B+C and B′)
+restore bit framing but still dispatch **false button presses** on the `b3` repro, which is exactly
+what option C was rejected for. So the hold does **not** lift, and the remaining route is the
+sender-side handshake (option A). Details below and in
+`notes/kn5000-cpserial-receiver-resync-candidate.md`.
 
 kn5000-30 gates the RX latch on the external clock. That kills the 521 phantom bytes exactly as
 claimed. It also opens a **mid-byte gate-close race** that did not exist before it: if the firmware
@@ -128,16 +136,29 @@ recovered, exchanged for 0 phantoms plus a phase-dependent condition that kills 
 
 What must land with it, in order of preference:
 
-- **B — receiver-side byte-boundary resync (the minimum, and what actually determines the outcome).**
-  On a **closed→open gate transition only**, reset `m_rx_clock_count = 8` and clear the shift
-  register. On silicon RXE=0 holds the receive bit counter in reset, so this is the faithful model,
-  not a workaround. It must fire only on the transition, never on every `scNcr_w` — that would break
-  the earlier fix documented in the `scNcr_w` comment.
-  → `KN7000/side-quests/pending/kn5000_cpserial_receiver_resync.txt`
-- **A — sender-side handshake (the eventual goal, most faithful).** The panel re-arms instead of
-  clocking while the CPU's receiver is closed, matching `CPanel_SM_StartTX:781-787`. Nothing is ever
-  dropped, so no resync is needed.
+- **A — sender-side handshake (now the live task, and the only option still standing).** The panel
+  re-arms instead of clocking while the CPU's receiver is closed, matching
+  `CPanel_SM_StartTX:781-787`. Nothing is ever dropped, so there is nothing to resync. Every
+  receiver-side variant tried so far fails on the same residue: the bytes are **lost**, and no
+  receiver can reconstruct data that was never delivered.
   → `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt`
+- **B — receiver-side byte-boundary resync. IMPLEMENTED, MEASURED, ADJUDICATED INERT, NOT LANDED
+  (2026-07-21).** Resetting `m_rx_clock_count = 8` on the **closed→open gate transition only** is a
+  **bit-for-bit no-op on every known repro**, because the wedge destroys B's own precondition: the
+  free-running generator keeps the cpanel's idle detector retriggered, INTA never returns, the ISR
+  never sets IOC=1, and the transition B waits for never happens (`resync = 0` everywhere;
+  `wclose = wopen + 1` in every wedged run). Worse, the two variants that make it *reachable* —
+  B+C, and the strictly better "hold the counter in reset for the whole shut window" (B′, which
+  makes C unnecessary by construction) — both reproduce **option C's rejection symptom** on the
+  `b3` repro: a phantom `<Db>` on a FIRST boot from empty NVRAM, dead MENU presses, a press landing
+  on the wrong part. Byte-boundary resync restores **bit** framing, not **packet** framing.
+  Full adjudication, the patch and the deterministic repros:
+  `notes/kn5000-cpserial-receiver-resync-candidate.{md,patch}`, `notes/kn5000-cpserial-repros/`.
+  → `KN7000/side-quests/pending/kn5000_cpserial_receiver_resync.txt`
+  **Fidelity item recorded there, not landed:** if a receiver-side resync is ever revisited, the
+  gate must first move from IOC to **RXE** (SC1MOD bit 5, unmodelled). The claim that the firmware
+  always moves the two together is false — `cpanel_routines.s` writes IOC alone at eleven sites —
+  and a resync makes that skew load-bearing.
 - **C — livelock guard. IMPLEMENTED, MEASURED, ADJUDICATED NOT READY, NOT LANDED.** Qualifying the
   `(m_rx_clock_count != 8)` term removes the free-run but **not** the wedge: framing loss alone can
   still kill the panel (reproduced), no strand ever resyncs (`ll_exit_clean = 0` across 342 exits in
@@ -183,7 +204,7 @@ stripped: submission is under the project owner's authorship.
 | 27 | kn5000-27-intercpu-parity-int0-mstat.patch | **CPU core + driver (parity fix, 2026-07-20).** Two more inter-CPU workarounds the upstream-cleanup rebase dropped vs the working `kn5000_aided_by_claude` branch: (a) `tmp94c241::tlcs900_check_irqs` no longer re-asserts the INT0 level-detect flag after taking the IRQ (re-asserting spins INT0 before the SubCPU handshake resolves and starves the cooperative scheduler); (b) the KN5000 MainCPU Port Z read restores the MSTAT read-back (`m_mstat | com_select | (sstat<<2)`) — bits 0-1 are the MainCPU's own MSTAT outputs, which real hardware reads back and the firmware uses to track the handshake. KN5000-only; `-validate` clean for all five models; KN7000 home unaffected. **These are necessary parity fixes but do NOT by themselves clear "Sound Name Error"** — the remaining cause is a SubCPU receive-HDMA-ch0 / cooperative-scheduler deadlock (the scheduler idles with no ready task and its XSSP leaks into the code); fully characterised in `side-quests/findings/kn5000_driver_findings.md` (2026-07-20 deep trace). Belongs logically in patch 01/02 on the next full regeneration; kept incremental to preserve the byte-identical 01-25 stack. **SUPERSEDED by kn5000-28 — kn5000-26/27 matched the aided-branch *tip*, which the oracle bisect proved is itself broken.** |
 | 28 | kn5000-28-int0-reassert-portz-2026-02-17-oracle.patch | **CPU core + driver (regression fix, 2026-07-20 — oracle bisect).** The oracle-timeline bisect proved the `kn5000_aided_by_claude` *tip* (2da2648) is broken with the identical "Sound Name Error", and that the true last-known-good state is the **2026-02-17** commit `f8cd34a8` — built as an oracle it shows real names (Piano / Bigband Brass / Modern E.P.1), keeps XSSP bounded and the SubCPU scheduler alive. Corrects kn5000-27 (which matched the broken tip) toward that oracle: (a) `tmp94c241::tlcs900_check_irqs` restores the **guarded** INT0 level-detect re-assertion — re-assert `INTE0AD |= 0x08` only when no HDMA channel steals INT0 (`m_dma_vector[ch] != 0x0a`); the ISR-driven receive path needs this or a still-pending, still-asserted /INT0 byte is never re-serviced (path-3 stall), while an unconditional re-assert would spuriously re-read stale latch data during HDMA body transfers; (b) MainCPU Port Z read drops the MSTAT read-back (the oracle reads back only `COM_SELECT | (SSTAT<<2)`). KN5000-only; `-validate` clean; KN7000 home unaffected (MN10300). **Necessary but NOT sufficient** — with both applied the receive still freezes (n=480 @ t≈9.8, XSSP still leaks). The remaining cure is the SubCPU cooperative-scheduler *pacing* stall: the overlay bursts the ~480-block payload transfer in ~8 s where the oracle paces it over ~24 s (giving the scheduler time to run every task between blocks), traceable to the SubCPU peripheral work the overlay dropped vs 2026-02-17 (the SC1 Computer-Interface INTTX1/INTRX1 heartbeat that wakes a scheduler task — census: oracle 21× INTRX1, overlay 0×; plus DSP2/MN19413 and the audio-mixer window). Full write-up in `side-quests/findings/kn5000_driver_findings.md` (2026-07-20 oracle bisect). **The actual root cause turned out to be elsewhere — see kn5000-29; the re-assert/Port-Z corrections here are correct alignments to the 2026-02-17 oracle but were not the cure.** |
 | 29 | kn5000-29-remove-sns-checksum-tap-soundname-cure.patch | **★ THE "Sound Name Error" CURE (driver, 2026-07-20 — third oracle = upstream mainline).** Building CURRENT upstream mainline MAME's kn5000 as a third oracle showed it **works** (real names) despite being a minimal skeleton (raw inter-CPU latch, no ComIF/DSP2, none of this overlay's HLE) — the one thing it lacks is this overlay's **SNS payload-checksum write tap**. That tap intercepted Boot_DisplayScreen's clearing of MainCPU DRAM[0xFFD4] and substituted a checksum computed from the DRAM checksum regions (0xF180/0xF980) at that early instant. The firmware's `SubCPU_Payload_Verify` reads DRAM[0xFFD4]==0 as "no stored checksum → do a FRESH decompress-and-transfer of the SubCPU firmware payload"; the tap's non-zero (wrong-for-that-moment) value instead sent it down "payload already valid → skip transfer", so the SubCPU ran with no/stale firmware, never answered the 0x2B sound-name query, and its cooperative scheduler idled with no ready task and leaked its stack (the INTT3 leak documented in kn5000-28's notes). Removing the tap restores the fresh transfer. **Isolation:** with ONLY the tap removed (overlay tmp94c241/latch/HLE otherwise unchanged) **all three names appear — RIGHT1 Piano, RIGHT2 Bigband Brass, LEFT Modern E.P.1 — on both fresh and persisted NVRAM, and XSSP stays bounded ~0x40680 across 40 s (no leak)**; the exploratory upstream-tmp94c241 / raw-latch / HLE-stub swaps are NOT needed. KN5000-only; `-validate` clean; KN7000 home unaffected; payload path untouched (e6b4cf7 preserved). |
-| 30 | kn5000-30-cpserial-rx-phantom-byte-gate.patch | **⛔ SUBMISSION HOLD — see the hold notice at the top of this section; do NOT submit without the receiver-side resync (B), which is not yet written. This patch is correct about phantom bytes but opens a mid-byte gate-close race that can kill the panel link for the whole session.** **★ CONTROL-PANEL "scrambled buttons" CURE (shared CPU-serial core, 2026-07-21 — upstream-relevant).** The panel occasionally responded to a press with the wrong function and put a phantom `<Db>` transpose on the home screen that nobody asked for. Root cause is in the **shared** TMP94C241 synchronous-serial model, not any button table (the SEG.bit map, layout inputtags and cpanel dispatch were byte-verified identical to upstream). `tmp94c241_serial_device::sioclk()` latched an RX byte + fired INTRX on **every** 8 rising edges regardless of clock source; while the CPU is the clock master transmitting a command (internal baud generator, IOC=0) those same edges also completed a bogus full-duplex "RX during TX" byte from the idle RXD line — one **phantom byte per command byte sent**. A phantom `0x00` decodes as right-panel segment 0 = the TRANSPOSE row (the `<Db>`), and an odd phantom count inside a framed burst swaps the (header,state) pairing, so PIANO (seg2,0x01) reads as (seg1,0x02) = ORCHESTRAL PAD — timing-dependent, hence intermittent. **Behavioural oracle diff** (instrument both ends): the cpanel `send_byte()` count exactly equals the *externally clocked* (IOC=1) RX bytes — 190==190 — while every phantom is internally clocked with IOC=0 (521 of them), a perfect partition with zero cross terms. Fix: gate the RX bit-count/latch on the external clock actually being selected (`(SCxMOD&3)==0 && IOC`), mirroring the sender's own start-gate and the existing internal-clock suppression in `timer_callback`. After: **sent == received (96==96, all IOC=1), phantoms 521→0, no phantom transpose**; every silk-labelled press opens its promised screen (PIANO→SOUND PIANO, DISK→DISK MENU, MENU:SOUND→SOUND MENU, MENU:MIDI→MIDI, part-select) from a clean home savestate at three different emulated phases each. UART transfer modes drive their RX from `timer_callback`, so this synchronous-mode gate never touches MIDI. KN5000/KN1500 device only (KN7000/KN6000 are MN10300); `-validate` clean for kn5000/kn1500/kn7000/kn6000/kn6500/kn2400; sound names (kn5000-29) and tempo wheel (kn5000-25) intact; KN7000 reverb path untouched. **This bug almost certainly affects mainline MAME's PR5 KN5000 panel too** — and so, now, does the livelock it introduces, which is exactly why it must not be submitted alone. |
+| 30 | kn5000-30-cpserial-rx-phantom-byte-gate.patch | **⛔ SUBMISSION HOLD (reaffirmed 2026-07-21) — see the hold notice at the top of this section; do NOT submit without a fix for the mid-byte gate-close race, and none has passed yet: option C (livelock guard) and option B (receiver-side resync) were both built, verified three ways and rejected — B is measurably INERT, and its reachable variants dispatch false button presses. This patch is correct about phantom bytes but opens a mid-byte gate-close race that can kill the panel link for the whole session.** **★ CONTROL-PANEL "scrambled buttons" CURE (shared CPU-serial core, 2026-07-21 — upstream-relevant).** The panel occasionally responded to a press with the wrong function and put a phantom `<Db>` transpose on the home screen that nobody asked for. Root cause is in the **shared** TMP94C241 synchronous-serial model, not any button table (the SEG.bit map, layout inputtags and cpanel dispatch were byte-verified identical to upstream). `tmp94c241_serial_device::sioclk()` latched an RX byte + fired INTRX on **every** 8 rising edges regardless of clock source; while the CPU is the clock master transmitting a command (internal baud generator, IOC=0) those same edges also completed a bogus full-duplex "RX during TX" byte from the idle RXD line — one **phantom byte per command byte sent**. A phantom `0x00` decodes as right-panel segment 0 = the TRANSPOSE row (the `<Db>`), and an odd phantom count inside a framed burst swaps the (header,state) pairing, so PIANO (seg2,0x01) reads as (seg1,0x02) = ORCHESTRAL PAD — timing-dependent, hence intermittent. **Behavioural oracle diff** (instrument both ends): the cpanel `send_byte()` count exactly equals the *externally clocked* (IOC=1) RX bytes — 190==190 — while every phantom is internally clocked with IOC=0 (521 of them), a perfect partition with zero cross terms. Fix: gate the RX bit-count/latch on the external clock actually being selected (`(SCxMOD&3)==0 && IOC`), mirroring the sender's own start-gate and the existing internal-clock suppression in `timer_callback`. After: **sent == received (96==96, all IOC=1), phantoms 521→0, no phantom transpose**; every silk-labelled press opens its promised screen (PIANO→SOUND PIANO, DISK→DISK MENU, MENU:SOUND→SOUND MENU, MENU:MIDI→MIDI, part-select) from a clean home savestate at three different emulated phases each. UART transfer modes drive their RX from `timer_callback`, so this synchronous-mode gate never touches MIDI. KN5000/KN1500 device only (KN7000/KN6000 are MN10300); `-validate` clean for kn5000/kn1500/kn7000/kn6000/kn6500/kn2400; sound names (kn5000-29) and tempo wheel (kn5000-25) intact; KN7000 reverb path untouched. **This bug almost certainly affects mainline MAME's PR5 KN5000 panel too** — and so, now, does the livelock it introduces, which is exactly why it must not be submitted alone. |
 
 ### Suggested split into PRs
 - **PR 6 (peripherals)**: 01-17 — the cohesive "bring the rest of the KN5000 online" batch that the
@@ -205,8 +226,11 @@ stripped: submission is under the project owner's authorship.
   that register so the firmware's poll reads the wheel naturally (noted in the code). Full evidence:
   `KN7000/side-quests/findings/kn5000_data_wheel_findings.md`.
 
-- **PR 10 (control-panel serial) — ⛔ BLOCKED**: 30. Not submittable on its own; it needs the
-  receiver-side resync (option B) landed alongside it, which does not exist yet. See the submission
+- **PR 10 (control-panel serial) — ⛔ BLOCKED**: 30. Not submittable on its own; it needs a fix for
+  the mid-byte gate-close race landed alongside it, and no candidate has passed yet. Option C
+  (livelock guard) and option B (receiver-side resync) were both built, verified and rejected —
+  B is measurably **inert**, and both of B's reachable variants dispatch false button presses on
+  the `b3` repro. The live route is now option A, the sender-side handshake. See the submission
   hold at the top of this section. Patches 26-29 are unaffected and independent of this hold.
 
 ### Deliberately NOT in the series
@@ -217,7 +241,17 @@ stripped: submission is under the project owner's authorship.
   misframed link alive it makes the machine dispatch false button presses — phantom transposes,
   spurious PANEL MEMORY recalls, MENU:DISK opening ENTERTAINER. Kept, with its full adjudication and
   an applies-clean patch, at `notes/kn5000-cpserial-livelock-guard-candidate.{md,patch}`; land it
-  only together with option B.
+  only together with a fix that actually restores the link — which, as of 2026-07-21, does not
+  exist.
+- **Option B, the CP-serial receiver resync** (2026-07-21). Implemented, built, put through three
+  independent verification passes (repro acceptance, no-regression, adversarial); **adjudicated
+  INERT and reverted**. It is bit-for-bit identical to the pre-change build on all three
+  deterministic repros plus a five-point phase sweep, a 444-press soak and a 38-press playing
+  session, because the wedge destroys the closed→open gate transition it triggers on. Its reachable
+  variants (B+C, and B′ = hold the counter in reset for the whole shut window) restore bit framing
+  but reproduce option C's false-button-press symptom on `b3`. Kept, with its full adjudication, the
+  patch and the deterministic repro luas, at
+  `notes/kn5000-cpserial-receiver-resync-candidate.{md,patch}` and `notes/kn5000-cpserial-repros/`.
 - `kn5000_power_off_nmi` (2 commits) adds a **core** `MACHINE_NOTIFY_POWER_OFF` machine phase. Patch
   18's write-tap achieves the same NVRAM result without touching core MAME, so the core change is
   left as a reference approach only, not staged for submission.
