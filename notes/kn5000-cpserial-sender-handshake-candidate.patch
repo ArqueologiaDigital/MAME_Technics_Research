@@ -1,0 +1,528 @@
+diff --git a/src/devices/cpu/tlcs900/tmp94c241.h b/src/devices/cpu/tlcs900/tmp94c241.h
+index d5c8400..988d462 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241.h
++++ b/src/devices/cpu/tlcs900/tmp94c241.h
+@@ -110,10 +110,12 @@ public:
+ 	auto sclk0_in()  { return m_serial[0].lookup()->sclk_in(); }
+ 	auto sclk0_out() { return m_serial[0].lookup()->sclk_out(); }
+ 	auto tx0_start() { return m_serial[0].lookup()->tx_start(); }
++	auto rx0_ready() { return m_serial[0].lookup()->rx_ready(); }
+ 	auto txd1()      { return m_serial[1].lookup()->txd(); }
+ 	auto sclk1_in()  { return m_serial[1].lookup()->sclk_in(); }
+ 	auto sclk1_out() { return m_serial[1].lookup()->sclk_out(); }
+ 	auto tx1_start() { return m_serial[1].lookup()->tx_start(); }
++	auto rx1_ready() { return m_serial[1].lookup()->rx_ready(); }
+ 
+ 	void rxd0(int state) { m_serial[0]->rxd(state); }
+ 	void sioclk0(int state) { m_serial[0]->sioclk(state); }
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+index fb38f97..009f4a4 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+@@ -23,12 +23,14 @@ tmp94c241_serial_device::tmp94c241_serial_device(const machine_config &mconfig,
+ 	m_sclk_in_cb(*this),
+ 	m_sclk_out_cb(*this),
+ 	m_tx_start_cb(*this),
++	m_rx_ready_cb(*this),
+ 	m_timer(nullptr),
+ 	m_pffc_sclk(0),
+ 	m_serial_control(0),
+ 	m_serial_mode(0),
+ 	m_baud_rate(0),
+ 	m_hz(0),
++	m_rx_ready(false),
+ 	m_rx_clock_count(8),
+ 	m_rx_shift_register(0),
+ 	m_rx_buffer(0),
+@@ -62,6 +64,7 @@ void tmp94c241_serial_device::device_start()
+ 	save_item(NAME(m_serial_mode));
+ 	save_item(NAME(m_baud_rate));
+ 	save_item(NAME(m_hz));
++	save_item(NAME(m_rx_ready));
+ 	save_item(NAME(m_rx_clock_count));
+ 	save_item(NAME(m_rx_shift_register));
+ 	save_item(NAME(m_rx_buffer));
+@@ -86,6 +89,7 @@ void tmp94c241_serial_device::device_start()
+ 
+ 	m_sclk_out_cb(m_sclk_out);
+ 	m_txd_cb(m_txd);
++	m_rx_ready_cb(m_rx_ready ? 1 : 0);
+ }
+ 
+ void tmp94c241_serial_device::device_reset()
+@@ -103,6 +107,50 @@ void tmp94c241_serial_device::device_reset()
+ 	m_uart_rx_prescaler = 0;
+ 	m_uart_rx_bits_left = 0;
+ 	m_uart_rx_shift = 0;
++
++	update_rx_ready();
++}
++
++//-------------------------------------------------
++//  receive_armed - can an EXTERNAL master clock a
++//  byte into us right now?
++//-------------------------------------------------
++//
++// Three conditions, all of them things the firmware moves deliberately:
++//
++//   SCxMOD bits 1:0 == 00   I/O-interface transfer with the clock taken from the SCLK pin
++//   SCxCR  bit 0 (IOC) == 1 external clock selected.  This is the SAME predicate the RX
++//                           latch is gated on in sioclk(), and the one that gates the
++//                           internal baud generator off in timer_callback().
++//   SCxMOD bit 5 (RXE) == 1 receiver enabled.  On silicon RXE=0 holds the receive bit
++//                           counter in reset, so this is the bit that really says
++//                           "a slave-clocked byte will be assembled".
++//
++// IOC and RXE do NOT move together: the KN5000 v10 firmware writes IOC alone at eleven
++// sites in cpanel_routines.s.  The skew is deliberate and is what makes the AND the
++// right signal: when the receiver is ARMED, IOC is set first (INTA_HANDLER :682) and RXE
++// last (:686), so the AND becomes true only once the arming is complete; when it is torn
++// down, RXE is cleared first (:635 / :662 / :1027 / :1149) and IOC after, so the AND goes
++// false at the very first instant the receiver stops listening.  A slave that watches this
++// signal therefore brackets exactly the window in which its bits can survive.
++//
++// (Disassembly warning: the inline comment at cpanel_routines.s:686 mislabels this bit as
++// "parity addition" -- a stale UART-mode reading.  0xd5 is SC1CR and 0xd6 is SC1MOD per
++// sfr_tmp94c241.s:133-136; the RXE annotations at :183/:635/:662/:1027/:1049/:1149 are the
++// consistent ones.)
++bool tmp94c241_serial_device::receive_armed() const
++{
++	return ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0) && BIT(m_serial_mode, 5);
++}
++
++void tmp94c241_serial_device::update_rx_ready()
++{
++	const bool armed = receive_armed();
++	if (armed != m_rx_ready)
++	{
++		m_rx_ready = armed;
++		m_rx_ready_cb(armed ? 1 : 0);
++	}
+ }
+ 
+ void tmp94c241_serial_device::sioclk(int state)
+@@ -324,6 +372,8 @@ void tmp94c241_serial_device::scNcr_w(uint8_t data)
+ 	// byte" at the next INTA session boundary, causing segment header
+ 	// misinterpretation and button identity swapping.
+ 	m_serial_control = data;
++
++	update_rx_ready();
+ }
+ 
+ uint8_t tmp94c241_serial_device::scNmod_r()
+@@ -356,6 +406,8 @@ void tmp94c241_serial_device::scNmod_w(uint8_t data)
+ 	// machine to advance prematurely (thinking byte 1 finished before it
+ 	// started), corrupting specific command bytes and causing wrong LED
+ 	// states.
++
++	update_rx_ready();
+ }
+ 
+ uint8_t tmp94c241_serial_device::brNcr_r()
+@@ -529,4 +581,3 @@ TIMER_CALLBACK_MEMBER(tmp94c241_serial_device::timer_callback)
+ 		sioclk(m_sioclk_state ^ 1);
+ 	}
+ }
+-
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.h b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+index 0859578..7924685 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.h
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+@@ -33,6 +33,7 @@ public:
+ 	auto sclk_in() { return m_sclk_in_cb.bind(); }
+ 	auto sclk_out() { return m_sclk_out_cb.bind(); }
+ 	auto tx_start() { return m_tx_start_cb.bind(); }  // Signals start of new byte transmission
++	auto rx_ready() { return m_rx_ready_cb.bind(); }  // Receive gate opened/closed (see receive_armed())
+ 
+ 	void rxd(int state);
+ 	void sioclk(int state);
+@@ -55,12 +56,20 @@ protected:
+ 
+ 	TIMER_CALLBACK_MEMBER(timer_callback);
+ 
++	// True while an EXTERNALLY clocked byte can actually be received, i.e. while the
++	// receive shift register's bit counter is released.  Fanned out through
++	// m_rx_ready_cb so a slave that drives SCLK itself can ask for the bus instead of
++	// clocking into a receiver that is not listening.
++	bool receive_armed() const;
++	void update_rx_ready();
++
+ 	devcb_write8 m_setint_cb;
+ 
+ 	devcb_write_line m_txd_cb;
+ 	devcb_write_line m_sclk_in_cb;
+ 	devcb_write_line m_sclk_out_cb;
+ 	devcb_write_line m_tx_start_cb;  // Signals start of new byte transmission
++	devcb_write_line m_rx_ready_cb;  // Receive gate state (armed / not armed)
+ 
+ 	emu_timer *m_timer;
+ 
+@@ -72,6 +81,8 @@ protected:
+ 	uint8_t m_baud_rate;
+ 	uint32_t m_hz;
+ 
++	bool m_rx_ready;               // last receive-gate state pushed through m_rx_ready_cb
++
+ 	uint8_t m_rx_clock_count;
+ 	uint8_t m_rx_shift_register;
+ 	uint8_t m_rx_buffer;
+diff --git a/src/mame/matsushita/kn5000.cpp b/src/mame/matsushita/kn5000.cpp
+index 99eb934..9aa203b 100644
+--- a/src/mame/matsushita/kn5000.cpp
++++ b/src/mame/matsushita/kn5000.cpp
+@@ -661,12 +661,18 @@ void kn5000_state::kn5000(machine_config &config)
+ 	//   bit 2 = SCLK0 (disabled by firmware — MIDI uses no clock)
+ 	//   bit 4 = TXD1 (control panel data)
+ 	//   bit 5 = RXD1 (control panel data)
+-	//   bit 6 (input) = SCLK1 pin state — a routine in the main CPU's
+-	//     implementation of the control panel protocol polls this to confirm
+-	//     the serial clock is idle (HIGH) before sending commands.
+-	//     Without it, the firmware times out after 200 retries and displays
+-	//     "ERROR in CPU data transmission".
+-	m_maincpu->portf_read().set_constant(0x40);
++	//   bit 6 (input) = SCLK1 pin state.  The line is open-drain with a pull-up, so it
++	//     reads HIGH when nobody is driving it and LOW while the control panel is holding
++	//     it down to REQUEST THE BUS.  The firmware uses it three times:
++	//       * CPanel_WaitTXReady_Poll (cpanel_routines.s:605) and PollLoop_CheckTXReady
++	//         (:1116) refuse to start a transmission unless it reads HIGH — without that
++	//         the firmware times out after 200 retries and displays "ERROR in CPU data
++	//         transmission";
++	//       * CPanel_SM_StartTX (:781-787) samples it right after releasing its own drive
++	//         of the pin and ABORTS the transmission it just started if it reads LOW.
++	//     That last one is the panel's only way to stop the CPU from seizing the link
++	//     mid-response, so the pin is wired to the panel rather than tied high.
++	m_maincpu->portf_read().set([this] () -> u8 { return m_cpanel->sclk_level() ? 0x40 : 0x00; });
+ 
+ 
+ 	// MAINCPU PORT G:
+@@ -728,6 +734,7 @@ void kn5000_state::kn5000(machine_config &config)
+ 	m_maincpu->txd1().set(m_cpanel, FUNC(kn5000_cpanel_device::rxd));
+ 	m_maincpu->sclk1_out().set(m_cpanel, FUNC(kn5000_cpanel_device::sioclk));
+ 	m_maincpu->tx1_start().set(m_cpanel, FUNC(kn5000_cpanel_device::tx_start));
++	m_maincpu->rx1_ready().set(m_cpanel, FUNC(kn5000_cpanel_device::rx_ready));
+ 	m_cpanel->txd().set(m_maincpu, FUNC(tmp94c241_device::rxd1));
+ 	m_cpanel->sclk_out().set(m_maincpu, FUNC(tmp94c241_device::sioclk1));
+ 	m_cpanel->inta().set(
+diff --git a/src/mame/matsushita/kn5000_cpanel.cpp b/src/mame/matsushita/kn5000_cpanel.cpp
+index f3523b9..bdc6016 100644
+--- a/src/mame/matsushita/kn5000_cpanel.cpp
++++ b/src/mame/matsushita/kn5000_cpanel.cpp
+@@ -293,6 +293,7 @@ kn5000_cpanel_device::kn5000_cpanel_device(const machine_config &mconfig, const
+ 	m_sioclk_state(0),
+ 	m_tx_clock_count(0),
+ 	m_tx_shift_register(0xff),
++	m_tx_current_byte(0xff),
+ 	m_tx_skip_first_falling(false),
+ 	m_cmd_index(0),
+ 	m_initialized(false),
+@@ -304,6 +305,11 @@ kn5000_cpanel_device::kn5000_cpanel_device(const machine_config &mconfig, const
+ 	m_next_tx_output_enabled(true),
+ 	m_rx_waiting_for_start(true),
+ 	m_self_clock_bytes_sent(0),
++	m_cpu_rx_ready(false),
++	m_bus_request(false),
++	m_stall_ticks(0),
++	m_idle_retries(0),
++	m_session_clocked(false),
+ 	m_txd_cb(*this),
+ 	m_sclk_out_cb(*this),
+ 	m_inta_cb(*this),
+@@ -338,6 +344,7 @@ void kn5000_cpanel_device::device_start()
+ 	save_item(NAME(m_sioclk_state));
+ 	save_item(NAME(m_tx_clock_count));
+ 	save_item(NAME(m_tx_shift_register));
++	save_item(NAME(m_tx_current_byte));
+ 	save_item(NAME(m_tx_skip_first_falling));
+ 	save_item(NAME(m_cmd_buffer));
+ 	save_item(NAME(m_cmd_index));
+@@ -350,6 +357,11 @@ void kn5000_cpanel_device::device_start()
+ 	save_item(NAME(m_next_tx_output_enabled));
+ 	save_item(NAME(m_rx_waiting_for_start));
+ 	save_item(NAME(m_self_clock_bytes_sent));
++	save_item(NAME(m_cpu_rx_ready));
++	save_item(NAME(m_bus_request));
++	save_item(NAME(m_stall_ticks));
++	save_item(NAME(m_idle_retries));
++	save_item(NAME(m_session_clocked));
+ 	save_item(NAME(m_last_button_state));
+ 	save_item(NAME(m_pending_button_state));
+ 	save_item(NAME(m_encoder_prev));
+@@ -376,6 +388,13 @@ void kn5000_cpanel_device::device_reset()
+ 	m_next_tx_output_enabled = true;
+ 	m_rx_waiting_for_start = true;
+ 	m_self_clock_bytes_sent = 0;
++	m_bus_request = false;
++	m_stall_ticks = 0;
++	m_idle_retries = 0;
++	m_session_clocked = false;
++	// NB: m_cpu_rx_ready is NOT cleared here.  It mirrors a register bit inside the main
++	// CPU and is pushed to us by tmp94c241_serial_device; device_reset ordering between
++	// the two devices is not guaranteed, so clobbering it here could hide a real "armed".
+ 
+ 	// Clear TX queue
+ 	while (!m_tx_queue.empty())
+@@ -450,6 +469,18 @@ void kn5000_cpanel_device::tx_start(int state)
+ 	// TX queue before idle_detect fires).
+ }
+ 
++void kn5000_cpanel_device::rx_ready(int state)
++{
++	// The main CPU's receive gate (SC1CR IOC && SC1MOD RXE) opened or closed.  This is
++	// the "grant" half of the bus handshake: the panel MCUs drive SCLK themselves, so
++	// they may only clock a byte out while this is asserted.  Nothing is decided here --
++	// self_clock_callback() and sioclk() consult the flag when they are about to move
++	// the line.
++	m_cpu_rx_ready = (state != 0);
++	LOGMASKED(LOG_SERIAL, "CPU receiver %s (tx_count=%d queue=%zu)\n",
++			m_cpu_rx_ready ? "ARMED" : "closed", m_tx_clock_count, m_tx_queue.size());
++}
++
+ void kn5000_cpanel_device::sioclk(int state)
+ {
+ 	if (m_sioclk_state == state)
+@@ -505,9 +536,16 @@ void kn5000_cpanel_device::sioclk(int state)
+ 		// Falling edge: output TXD bit for CPU to sample on next rising edge.
+ 		// Suppress output during phantom byte edges (PFFC off) to keep
+ 		// response data intact for later INTA-driven delivery.
+-		if (!m_tx_output_enabled)
++		//
++		// The same hold applies whenever the main CPU's receiver is not armed.  Those
++		// edges come from the CPU's own baud generator while it is clock master (it is
++		// sending a command, IOC=0), so a bit shifted out here is clocked into a receiver
++		// that is not assembling anything: it is simply LOST, and lost bytes are what no
++		// amount of receiver-side resynchronisation can repair.  Holding instead keeps
++		// the response intact for the next INTA-driven delivery.
++		if (!m_tx_output_enabled || !m_cpu_rx_ready)
+ 		{
+-			// Phantom byte edge — hold response data
++			// Phantom byte edge, or the CPU is not listening — hold response data
+ 		}
+ 		else if (m_tx_skip_first_falling)
+ 		{
+@@ -549,6 +587,7 @@ void kn5000_cpanel_device::sioclk(int state)
+ 				if (!m_tx_queue.empty())
+ 				{
+ 					m_tx_shift_register = m_tx_queue.front();
++					m_tx_current_byte = m_tx_shift_register;
+ 					m_tx_queue.pop();
+ 					m_tx_clock_count = 8;  // Full 8 bits — don't pre-output yet
+ 
+@@ -582,6 +621,7 @@ void kn5000_cpanel_device::send_byte(uint8_t data)
+ 	{
+ 		// Start sending immediately
+ 		m_tx_shift_register = data;
++		m_tx_current_byte = data;
+ 		m_tx_clock_count = 7;  // 7 more bits to send after pre-outputting bit 0
+ 
+ 		// Pre-output first bit immediately so CPU can sample it on the first rising edge
+@@ -984,16 +1024,54 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::timer_callback)
+ 	}
+ }
+ 
++// How long the panel is willing to wait before it stops being polite.  The self-clock
++// timer ticks once per SCLK edge (250 kHz -> 4 us); idle_detect retries every 20 us.
++// Neither of these should ever be reached in normal operation: they exist so that a main
++// CPU which stops answering can never leave the panel permanently mute.
++static constexpr uint32_t CP_STALL_GIVEUP_TICKS = 125;    // 500 us: re-run the handshake
++static constexpr uint32_t CP_STALL_HARD_TICKS   = 25000;  // 100 ms: give up mid-packet too
++static constexpr uint16_t CP_IDLE_MAX_RETRIES   = 250;    // 5 ms: ask even if still armed
++
+ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::idle_detect_callback)
+ {
+-	// External SCLK has been idle — assert INTA and self-clock the response.
+-	// On real hardware, the panel MCU drives SCLK after detecting idle.
++	// External SCLK has been idle — request the bus, assert INTA and self-clock the
++	// response.  On real hardware, the panel MCU drives SCLK after detecting idle.
+ 
+ 	if (m_tx_clock_count > 0 || !m_tx_queue.empty())
+ 	{
++		// ---- ONLY ASK FOR A BUS THAT IS FREE ----
++		// The CPU's receiver being still armed means its INTRX service for the previous
++		// packet has not run yet: it has not yet decided the packet was complete and torn
++		// the receiver down (CPanel_SM_RXByteN, cpanel_routines.s:1027).  Requesting now
++		// would let us START a byte on a grant that is about to be withdrawn, and the
++		// teardown would then land in the middle of it.  Wait for the link to fall idle.
++		// (Bounded, so a receiver that never tears down cannot wedge the panel.)
++		if (m_cpu_rx_ready && m_idle_retries < CP_IDLE_MAX_RETRIES)
++		{
++			m_idle_retries++;
++			m_idle_detect_timer->adjust(attotime::from_usec(20));
++			return;
++		}
++		m_idle_retries = 0;
++
+ 		// Enable TX output — response data was frozen during phantom bytes
+ 		m_tx_output_enabled = true;
+ 
++		// ---- BUS REQUEST ----
++		// Pull SCLK1 LOW.  This is what the real panel MCU does to claim the link, and
++		// the main CPU firmware reads it back on PF.6 in three places:
++		//   * CPanel_WaitTXReady_Poll  (:605) and PollLoop_CheckTXReady (:1116) refuse to
++		//     start a transmission while it is low;
++		//   * CPanel_SM_StartTX (:781-787) samples it a few instructions after releasing
++		//     its own drive of the pin and, if it reads LOW, ABORTS the transmission it
++		//     had just begun and drops back to its idle state (ROUTINE_0).
++		// Requesting only once the line has gone idle is deliberate: yanking SCLK low in
++		// the middle of a command byte would leave the panel's own 2-byte command parser
++		// half-fed.
++		m_bus_request = true;
++		m_stall_ticks = 0;
++		m_session_clocked = false;
++
+ 		if (m_inta_asserted)
+ 		{
+ 			// Multi-packet: pulse INTA to re-trigger the interrupt
+@@ -1020,6 +1098,67 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::idle_detect_callback)
+ 
+ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::self_clock_callback)
+ {
++	// ---------------------------------------------------------------------------
++	// ASK FOR THE BUS, DO NOT JUST TAKE IT.
++	//
++	// The panel MCU is the clock master for its own responses, but the main CPU's
++	// receiver is only listening between "INTA acknowledged" and "packet consumed"
++	// (SC1CR IOC && SC1MOD RXE — see tmp94c241_serial_device::receive_armed()).  Clocking
++	// an edge while that gate is shut does NOT delay the bit, it DESTROYS it: the CPU's
++	// receive bit counter never sees it, so the byte is short and every later byte of the
++	// burst is paired with the wrong header.  Loss, unlike misframing, cannot be repaired
++	// at the receiver — which is why "resynchronise the receiver" was a dead end.
++	//
++	// So: while the receiver is closed we do not move the line at all.  The byte stays in
++	// the shift register, the queue stays put, the cadence simply slips.  The timer is
++	// periodic, so returning here IS the re-arm: we retry 4 us later.
++	// ---------------------------------------------------------------------------
++	if (!m_cpu_rx_ready)
++	{
++		// Keep holding SCLK low.  For a paused clock master that is not a special state:
++		// it is just the low phase of the clock, and it doubles as the bus request that
++		// stops the CPU from starting a transmission of its own (PF.6).
++		m_bus_request = true;
++		m_stall_ticks++;
++
++		// FORWARD PROGRESS.  INTA is edge-latched into the CPU's interrupt request
++		// register (tmp94c241_device::execute_set_input), and INTA_HANDLER clears that
++		// request even on the path that does NOT arm the receiver: it takes the
++		// "countdown" branch whenever a transfer is already in flight (:676-677).  So a
++		// level-held INTA can be consumed without producing a grant, and waiting forever
++		// on the level alone would be a deadlock.
++		//
++		// The escape is to abandon the whole cycle and re-run the handshake from the
++		// top, NOT to keep pulsing INTA at the CPU.  That distinction is load-bearing:
++		// INTA_HandleCountdown does not merely ignore an unexpected INTA, it DECREMENTS
++		// the firmware's receive ring write pointer (:697-698).  Machine-gunning INTA
++		// while the CPU is mid-transfer therefore corrupts the very buffer we are trying
++		// to fill — measured: it parks the firmware's state machine in CPanel_SM_RXByteN
++		// forever and kills the panel just as thoroughly as the bug we are fixing.
++		//
++		// Nothing is discarded by abandoning BEFORE the session has put any bit on the
++		// wire: the queue is untouched and the byte in the shift register is rewound to
++		// its first bit, which it was already at.
++		//
++		// Once bits ARE on the wire the same move would be destructive, because the CPU
++		// has already taken some of them: restarting the byte would misframe it.  A stall
++		// there is a MATCHED PAUSE — our shift register and the CPU's receive bit counter
++		// are stopped at the same bit — so simply waiting for the gate to reopen resumes
++		// the byte exactly where it left off and loses nothing.  Only a far longer
++		// deadline breaks that wait, and only to guarantee the panel can never go
++		// permanently mute.
++		if (m_stall_ticks >= (m_session_clocked ? CP_STALL_HARD_TICKS : CP_STALL_GIVEUP_TICKS))
++			abandon_inta_cycle();
++
++		return;
++	}
++
++	// Granted.  Release the request (the line is ours; from here on it is a clock, not a
++	// request) and shift out response data.
++	m_bus_request = false;
++	m_stall_ticks = 0;
++	m_session_clocked = true;
++
+ 	// Toggle SCLK to shift out response data
+ 	int new_state = m_sioclk_state ^ 1;
+ 	m_sclk_out_cb(new_state);
+@@ -1060,6 +1199,35 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::self_clock_callback)
+ 	}
+ }
+ 
++void kn5000_cpanel_device::abandon_inta_cycle()
++{
++	// Give up on this INTA cycle without losing anything: rewind the byte that was being
++	// shifted out to its first bit (m_tx_clock_count == 8 means "output bit 0 on the next
++	// falling edge, without shifting"), release INTA and the bus request, and let the
++	// ordinary idle -> INTA path try again shortly.
++	LOGMASKED(LOG_SERIAL, "abandoning INTA cycle after %u us with no grant (tx_count=%d, %zu queued)\n",
++			m_stall_ticks * 4, m_tx_clock_count, m_tx_queue.size());
++
++	m_tx_shift_register = m_tx_current_byte;
++	m_tx_clock_count = 8;
++	m_tx_skip_first_falling = false;
++
++	m_self_clocking = false;
++	m_self_clock_timer->reset(attotime::never);
++	m_self_clock_bytes_sent = 0;
++	m_stall_ticks = 0;
++	m_bus_request = false;
++
++	if (m_inta_asserted)
++	{
++		m_inta_asserted = false;
++		m_inta_cb(0);
++	}
++
++	// Retry the handshake from the top.
++	m_idle_detect_timer->adjust(attotime::from_usec(200));
++}
++
+ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
+ {
+ 	// Periodic button matrix scan (~143 Hz).  Real panel MCUs continuously
+diff --git a/src/mame/matsushita/kn5000_cpanel.h b/src/mame/matsushita/kn5000_cpanel.h
+index 3323393..ce1a8e1 100644
+--- a/src/mame/matsushita/kn5000_cpanel.h
++++ b/src/mame/matsushita/kn5000_cpanel.h
+@@ -40,6 +40,13 @@ public:
+ 	void rxd(int state);
+ 	void sioclk(int state);
+ 	void tx_start(int state);  // Called when CPU starts a new byte transmission
++	void rx_ready(int state);  // Called when the CPU's receive gate opens / closes
++
++	// State of the SCLK1 line as the main CPU's PF.6 input sees it: 1 = idle (pulled up),
++	// 0 = this panel is holding it LOW to REQUEST THE BUS.  The firmware polls PF.6 before
++	// starting a transmission (CPanel_WaitTXReady_Poll, PollLoop_CheckTXReady) and again
++	// inside CPanel_SM_StartTX, where a LOW makes it abort back to its idle state.
++	int sclk_level() const { return m_bus_request ? 0 : 1; }
+ 
+ protected:
+ 	// device_t overrides
+@@ -58,6 +65,9 @@ private:
+ 	void process_received_byte(uint8_t data);
+ 	void process_command();
+ 
++	// Bus arbitration (see the big comment above self_clock_callback in the .cpp)
++	void abandon_inta_cycle();
++
+ 	// Response generation
+ 	void send_sync_packet();
+ 	void send_button_packet(int segment, bool is_left_panel);
+@@ -86,6 +96,7 @@ private:
+ 	// Serial TX state
+ 	uint8_t m_tx_clock_count;
+ 	uint8_t m_tx_shift_register;
++	uint8_t m_tx_current_byte;     // unshifted copy of the byte in m_tx_shift_register
+ 	std::queue<uint8_t> m_tx_queue; // FIXME: this breaks save state support
+ 	bool m_tx_skip_first_falling;  // Skip first falling edge after pre-outputting bit 0
+ 
+@@ -103,6 +114,13 @@ private:
+ 	bool m_next_tx_output_enabled;  // Deferred tx_output_enabled (applied at next byte boundary)
+ 	bool m_rx_waiting_for_start;    // Ignore RX edges until next tx_start
+ 	uint8_t m_self_clock_bytes_sent;  // Bytes sent in current INTA cycle
++
++	// --- bus arbitration with the main CPU's receiver ---
++	bool m_cpu_rx_ready;       // main CPU's receive gate (IOC && RXE), pushed by rx_ready()
++	bool m_bus_request;        // we are holding SCLK1 low to ask for the bus
++	uint32_t m_stall_ticks;    // consecutive self-clock ticks spent waiting for the receiver
++	uint16_t m_idle_retries;   // idle_detect retries spent waiting for the link to fall idle
++	bool m_session_clocked;    // this INTA session has already put bits on the wire
+ 	uint8_t m_last_button_state[22];  // 11 segments * 2 panels (confirmed)
+ 	uint8_t m_pending_button_state[22];  // Per-segment confirmation buffer
+ 

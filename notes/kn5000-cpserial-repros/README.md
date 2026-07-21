@@ -17,6 +17,25 @@ because they had been living in an ephemeral session scratchpad. Every one of th
 
 `gen.py` generated the phase-sweep variants.
 
+### Added 2026-07-21 by the option-A pass (these are the *candidate-killers*)
+
+The five below were written to test option A (the sender-side handshake). Two of them are the
+reason A was rejected: they are configurations the **shipped build handles correctly and option A
+breaks**, so keep them in the gate for anything that touches this link.
+
+| lua | what it does | shipped build | option-A candidate |
+|---|---|---|---|
+| `x_sim2.lua` | **two buttons pressed at the same instant** (PIANO + ORCHESTRAL PAD), 20× at 0.6 s | LIVE, all presses correct | **DEAD** + false ENTERTAINER/VOCAL REVERB dispatch |
+| `pfx3.lua` | **three presses from a cold boot**: SPLIT POINT / AUTO PLAY CHORD / SPLIT POINT | `RIGHT1 Piano` | **`RIGHT1 Sound Name Error`** (kn5000-29 regression) |
+| `x_multi.lua` | 8 buttons in 8 segments pressed together, 30× at 0.6 s | LIVE | DEAD, `tmr_dead` 1.5 M, `cp_qmax` 466 |
+| `bootwin.lua` | the 6 boot-window presses of `b1` **and nothing else**, then settle + liveness | presses take effect, clean | identical to shipped |
+| `s4.lua` | the S4 shape: 4 boot-window presses + 33 late | — | LIVE |
+
+`x_sim2.lua` and `x_multi.lua` press several buttons at the same instant, so they `table.sort`
+their action list: without that the second and later buttons of a simultaneous group get pressed
+and released inside one dispatch, i.e. invisibly to the panel's 2-scan / 14 ms confirmation filter.
+Copy that pattern in any new simultaneous-press schedule.
+
 ## How to run one
 
 ```
@@ -34,6 +53,14 @@ with an image viewer / the Read tool; never infer screen state from the log. And
 that some instrumented event did *not* happen, prove the instrument can SEE it happen in a
 configuration where it does — a blind probe's zero looks exactly like a real one. That mistake is
 what let `kn5000-30` ship as a cure, and it is what nearly landed option C.
+
+**A counter can also be a tautology.** Option A's headline acceptance number — "zero dropped
+panel-clocked edges" — could not increment under option A at all: the panel only emitted an edge
+when the gate was open, tested in the same callback, so `drop_ext = 0` was enforced by
+construction. It read a clean 0 in runs where the panel was dead and dispatching presses nobody
+made, and a clean `strand_entry = 0 / PHASE_HIST 7:152 / cp_qmax 21` accompanied the `pfx3`
+regression. Prefer `strand_entry`, `strand_exit_mid`, the `PHASE_HIST` bucket count, `tmr_dead`,
+`cp_qmax` and `max_rearm` — and above all, the pixel diff.
 
 ## Gotchas
 
