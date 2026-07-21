@@ -5,6 +5,50 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-21 (latest) — ⛔ KN5000 PANEL: OPTION **A** BUILT, VERIFIED 3×, **REGRESSION**,
+## NOT LANDED. **ALL THREE OPTIONS ARE NOW SPENT. NEXT = A′ (A minus its idle-wait deferral).**
+A = the sender-side handshake, implemented at BOTH staging levels: `IOC && RXE` fanned out from
+`tmp94c241_serial` to the cpanel HLE, re-arm instead of clocking, hold the shift register on the
+CPU's own command clock, and the modelled SCLK-low bus request on PF.6.
+
+**It fixes a great deal, and it is still rejected.** `a1`, `b1`, `b3`, the whole phase sweep and
+the 444-press soak all go **DEAD → LIVE**; boot-window presses take effect and stop poisoning later
+packets; `-validate` clean; KN7000/KN1500 boot screens bit-identical. But it **loses to the SHIPPED
+build** on two deterministic schedules (both re-run byte-identically in the adjudication):
+
+* **`x_sim2`** — two buttons pressed at the SAME INSTANT (PIANO + ORCHESTRAL PAD, 20× at 0.6 s):
+  pristine LIVE with all four liveness screens correct; A **DEAD**, frozen on ENTERTAINER / VOCAL
+  REVERB — a page neither pressed button can reach = **option C's false-dispatch symptom**.
+* **`pfx3`** — THREE presses from a cold boot: pristine `RIGHT1 Piano`; A `RIGHT1 Sound Name Error`.
+
+**Root cause = ONE block**, isolated in two independent configs via the build's `KN5A_NOIDLEWAIT=1`
+knob: the late "only ask for a bus that is free" deferral in `idle_detect_callback`
+(`kn5000_cpanel.cpp:1049-1055`) re-phases the INTA request into the middle of `CPanel_SM_RXByteN`'s
+teardown (`FC47C9`); the panel then holds mid-byte on the **100 ms** deadline and
+`abandon_inta_cycle()` **rewinds a byte the CPU has already taken k bits of**. A's escape hatch
+manufactures the misframe A existed to avoid.
+
+**★ AND A'S HEADLINE NUMBER IS A TAUTOLOGY:** `drop_ext == 0` cannot increment under A (the panel
+emits an edge only when `IOC && RXE`, tested in the same callback; the latch gate is the weaker
+`IOC` alone). It read 0 with the panel dead. Every other counter read clean in the `pfx3` run that
+visibly regressed. Gate future work on `strand_entry` / `strand_exit_mid` / `PHASE_HIST` bucket
+count / `tmr_dead` / `cp_qmax` / `max_rearm` — and the PIXEL DIFF. Also: `bprime_FIRED = 0` in an A
+run with 28 mid-byte strands ⇒ B′ is BLIND to the sender-side failure, so its zero proves nothing.
+
+**NEXT = A′ = A minus rule 5** (and probably minus the `abandon` rewind). Both counterexamples
+return to the pristine screens with only that block disabled — two data points, not a verification;
+measure on the WHOLE suite (a1, b1, b3, ph000/007/017/033/050, soak, `x_sim2`, `x_multi`, `pfx3`,
+`bootwin`). Untouched by C, B and A alike: the CPU tears its receiver down MID-BYTE between edges.
+KEEP from A: the `IOC && RXE` fan-out, the shift-register hold (`cp_hold` 7k–10k real bits/run), the
+PF.6 request. NEVER re-add: an INTA re-pulse while stalled (kills `b3` —
+`INTA_HandleCountdown:697-698` decrements the firmware's receive-ring write pointer).
+
+Candidate + adjudication: `notes/kn5000-cpserial-sender-handshake-candidate.{md,patch}`; repros
+(now incl. `x_sim2`, `pfx3`, `x_multi`, `bootwin`, `s4`): `notes/kn5000-cpserial-repros/`;
+findings: `KN7000/side-quests/findings/kn5000_button_mapping_findings.md`; blog Part 75.
+**kn5000-30's SUBMISSION HOLD STAYS (third reaffirmation).** Tree reverted; rebuilt binary
+byte-identical to the published one (`52818738929b4056179d115d8ca1ad7f`); nothing published.
+
 ## TICK 2026-07-21 (later) — ⛔ KN5000 PANEL: OPTION **B** BUILT, VERIFIED 3×, **INERT**, NOT LANDED.
 ## Both receiver-side options are now spent. **NEXT = OPTION A (sender-side handshake).**
 B = resync the byte boundary on the closed→open receive-gate transition. Implemented exactly as the
