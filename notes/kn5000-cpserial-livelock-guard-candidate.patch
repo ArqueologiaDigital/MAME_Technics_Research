@@ -1,0 +1,68 @@
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+index fb38f97..94de309 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+@@ -186,7 +186,7 @@ void tmp94c241_serial_device::sioclk(int state)
+ 		// Mirror the sender's start-gate: count RX bits only when the external
+ 		// clock is actually selected.  (UART transfer modes drive their RX from
+ 		// timer_callback, not here, so this synchronous gate never affects them.)
+-		const bool ext_clock = ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0);
++		const bool ext_clock = rx_latch_enabled();
+ 		if (m_rx_clock_count && ext_clock)
+ 		{
+ 			m_rx_clock_count--;
+@@ -523,7 +523,35 @@ TIMER_CALLBACK_MEMBER(tmp94c241_serial_device::timer_callback)
+ 	// tx_start(0) sets accept_next_byte=false, so the cpanel assembles
+ 	// but rejects phantom bytes.  See sioclk() comments for why we also
+ 	// don't gate sclk_out_cb on PFFC (clock desync issues).
+-	bool need_clock = (m_tx_clock_count > 0) || m_tx_skip_first_falling || (m_rx_clock_count != 8) || m_tx_needs_trailing_edge;
++	//
++	// LIVELOCK GUARD (defence in depth — NOT a fix for the underlying race).
++	//
++	// The "an RX byte is half-received" term may only hold the internal baud
++	// generator on while the RX is actually being clocked BY THIS GENERATOR.
++	// It no longer ever is: RX bits are latched in sioclk() only while
++	// rx_latch_enabled() (the external clock is selected), and this callback
++	// has already returned above under exactly that condition — so an edge
++	// produced here can never decrement m_rx_clock_count.
++	//
++	// Left unqualified, the term is a trap.  If the RX gate closes part-way
++	// through a byte (the firmware clears IOC to become clock master while the
++	// control panel is still shifting a byte in), the bit counter is stranded
++	// at 1..7, "m_rx_clock_count != 8" is then permanently true, and the baud
++	// generator free-runs forever: measured 663,146 dead edges, which retrigger
++	// the control panel's 50 us sliding idle detector faster than it can
++	// expire, so INTA is never re-asserted and the panel link is dead for the
++	// rest of the session.
++	//
++	// Qualifying the term bounds that to a recoverable misframe: the generator
++	// stops, the panel goes idle, INTA flows again.  The stranded counter is
++	// deliberately NOT touched here (SCxCR writes must not abort an in-progress
++	// RX byte — see scNcr_w).  Properly closing the mid-byte reopen race is
++	// receiver-side resync / sender-side handshake work; this guard only makes
++	// the failure survivable.  Written as a qualification rather than a
++	// deletion so it stays correct on its own if the RX gate is ever relaxed.
++	const bool rx_needs_internal_clock = (m_rx_clock_count != 8) && rx_latch_enabled();
++
++	bool need_clock = (m_tx_clock_count > 0) || m_tx_skip_first_falling || rx_needs_internal_clock || m_tx_needs_trailing_edge;
+ 	if (m_hz && need_clock)
+ 	{
+ 		sioclk(m_sioclk_state ^ 1);
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.h b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+index 0859578..0eb5ded 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.h
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+@@ -55,6 +55,13 @@ protected:
+ 
+ 	TIMER_CALLBACK_MEMBER(timer_callback);
+ 
++	// True while RX bits are latched on SCLK rising edges: I/O-interface mode
++	// (SCxMOD clock-source field = 0) with the EXTERNAL clock selected through
++	// IOC (SCxCR bit 0).  Single definition shared by sioclk()'s RX gate and by
++	// timer_callback()'s "is this RX byte reachable from here?" guard, so the
++	// two can never drift apart.
++	bool rx_latch_enabled() const { return ((m_serial_mode & 0x03) == 0) && ((m_serial_control & 0x01) != 0); }
++
+ 	devcb_write8 m_setint_cb;
+ 
+ 	devcb_write_line m_txd_cb;
