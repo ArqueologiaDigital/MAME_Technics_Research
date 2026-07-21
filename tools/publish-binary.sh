@@ -169,6 +169,20 @@ if [ "$MODEL" = kn7000 ]; then
 			;;
 	esac
 fi
+# KN5000 settings persist in nvram/kn5000/ (battery-backed RAM: nvram1 = 1 MB DRAM,
+# nvram2 = 128 KB settings SRAM). KNOWN DRIVER BUG: from the SECOND boot onwards the
+# home screen shows a transpose of "<Db>" (+1 semitone) that nobody asked for, and the
+# TRANSPOSE -/+ rocker then does nothing. It is NOT a stray button press and NOT
+# something you did -- a brand-new NVRAM grows it on its own second boot, with no input
+# at any point. It comes from nvram2: with that file absent the firmware cold-initialises
+# from its ROM factory template (transpose 0, rocker works); with it present it takes a
+# restore path that writes +1. To get rid of it, delete just that file before launching:
+#     rm -f nvram/kn5000/nvram2
+# nvram1 (and everything in it) is kept. That file has to go before EVERY launch, because
+# MAME rewrites it at exit. Deleting it costs nothing: every nvram2 the firmware has ever
+# written is byte-identical, so it carries no settings of yours. Do NOT delete the whole
+# nvram/kn5000/ directory -- that buys one clean boot, the "<Db>" is back on the next one,
+# and you lose nvram1 for nothing.
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
 # warnings screen, so the emulator boots straight in without needing a click to dismiss it.
 # -pluginspath ./plugins ensures MAME finds the bundled "layout" plugin, which runs the
@@ -231,6 +245,11 @@ be produced (binary + its own copies of the libraries + loader).
 - **KN2400 / KN2600** boot to their main play screen too (320x240 4-level grayscale LCD;
   sound-group tiles + instrument icons). Text rendering on the KN6xxx/KN2xxx screens is still
   in progress.
+- **KN5000 known issue:** from the second boot onwards the home screen shows an unasked-for
+  transpose `<Db>` and the TRANSPOSE -/+ rocker stops responding. It is a driver bug in the
+  battery-backed-SRAM restore path, not a stray keypress — a brand-new NVRAM grows it on its own
+  second boot with no input at all. Workaround until it is fixed: `rm -f nvram/kn5000/nvram2`
+  before each launch (see the comment in `run.sh`; your `nvram1` is kept).
 
 The four PCM **wave ROMs are undumped**, so the sound uses a placeholder sine rather than the real
 samples — the notes are in tune and firmware-timed, they just don't have the KN7000's actual voices
