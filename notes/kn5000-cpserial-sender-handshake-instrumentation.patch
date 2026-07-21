@@ -1,0 +1,583 @@
+KN5000 control-panel serial — OPTION-A VERIFICATION INSTRUMENTATION
+==================================================================
+
+What this is
+------------
+The probe set that made the option-C / option-B / option-A adjudications possible, plus the
+two runtime knobs that isolated option A's root cause.  It is *instrumentation only*: it
+changes no emulated behaviour except where a knob is explicitly set in the environment.
+
+It lived only in an ephemeral session scratchpad until 2026-07-21; it is preserved here
+because **A' cannot be verified to this record's standard without it**.
+
+459 lines, 3 files:
+  src/mame/matsushita/kn5000_cpanel.cpp            (+185)
+  src/devices/cpu/tlcs900/tmp94c241_serial.cpp     (+233)
+  src/devices/cpu/tlcs900/tmp94c241_serial.h       (+41)
+
+Read `notes/kn5000-cpserial-measurement-discipline.md` before trusting any number this
+prints.  Two of the labels below are wrong; see "TWO OF ITS OWN LABELS ARE WRONG".
+
+How to apply
+------------
+This is a patch **on top of option A**, not on top of HEAD:
+
+    git apply notes/kn5000-cpserial-sender-handshake-candidate.patch
+    git apply notes/kn5000-cpserial-sender-handshake-instrumentation.patch
+
+Verified on 2026-07-21: HEAD + the candidate patch reproduces the option-A source tree
+byte for byte, and this patch then applies clean on top of it.  For A' (= A minus the
+rule-5 deferral in `idle_detect_callback`, and minus/guarded the `abandon_inta_cycle()`
+rewind), apply both and then remove the block — or just set `KN5A_NOIDLEWAIT=1`, which is
+exactly what that knob does.
+
+The runtime knobs (this is the main reason to keep the patch)
+-------------------------------------------------------------
+* `KN5A_NOIDLEWAIT=1` — disables ONLY the late "defer the INTA request while the receiver
+                   is still armed" rule (option A's rule 5).  This is the knob that
+                   isolated A's regression to a single block, in two independent repros:
+                   with it set, `x_sim2` and `pfx3` return to the pristine screens.
+* `KN5A_PRE=1`   — disables the four panel-side option-A sites and prints
+                   `MODE=PRE (option A DISABLED)`.  **It is NOT a validated pre-change
+                   control.**  It reproduced the pristine binary exactly on `a1`
+                   (`d9f02718` x6) and `b3` (`f2b583c5` x6), but on `b1` the pristine
+                   binary is DEAD (`f2b583c5` x6) while `KN5A_PRE=1` is LIVE and
+                   byte-identical to full option A.  The serial device's `rx_ready`
+                   fan-out is not gated by it, and this race turns on sub-bit-time phase.
+                   Use it to localise a mechanism; use the published binary
+                   (md5 52818738929b4056179d115d8ca1ad7f) as the control.
+* `KN5A_TRACE=1` — per-event cpanel tracing (verbose; for mechanism, not for gating).
+
+What it prints
+--------------
+One `KN5A| ...` summary block per run, at `device_stop()` on serial channel 1, plus a
+periodic `KN5A| HB t=...` heartbeat line.  Summary shape:
+
+    KN5A| ===== control-panel serial link summary (option A) =====
+    KN5A| drop_ext        = 0     <-- panel-clocked bits LOST; must be 0 under A
+    KN5A| drop_int        = 7664   (/8 = 958)
+    KN5A| tx_bytes        = 958    (CPU command bytes)
+    KN5A| cpanel_recv     = 958    (bytes the panel assembled)
+    KN5A| PHANTOM ARITHMETIC drop_int/8 == tx_bytes == cpanel_recv : HOLDS
+    KN5A| strand_entry    = 0      (gate closed MID-BYTE)
+    KN5A| strand_exit_mid = 0      (MIDBYTE-REOPEN)
+    KN5A| PHASE_HIST      = 7:152
+    KN5A| cp_qmax         = 21   cp_busreq = ...   cp_abandon = ...
+
+★ TWO OF ITS OWN LABELS ARE WRONG — FIX THEM BEFORE REUSING THE PATCH
+---------------------------------------------------------------------
+The summary text was written before the adjudication and encodes two claims the
+adjudication falsified.  Keep the counters; do not keep the labels.
+
+1. `drop_ext ... must be 0 under A` — **`drop_ext` is a TAUTOLOGY under option A.**  The
+   panel emits a clock edge only when `IOC && RXE`, tested in the same callback, while the
+   RX latch gate is the weaker `IOC` alone; `receive_armed()` therefore implies
+   `ext_clock` by construction and the counter cannot increment.  It read a clean 0 in
+   runs where the panel was DEAD and dispatching button presses nobody made.  Delete it
+   from any successor's acceptance gate.
+
+2. `bprime_FIRED ... must be 0 (else A incomplete)` — **B'-inertness is BLIND to the
+   sender-side failure mode.**  Measured: `bprime_calls = 2096`, `bprime_FIRED = 0` in an
+   `x_sim2` run containing 28 mid-byte strands and 28 MIDBYTE-REOPENs.  A zero from it is
+   not evidence of anything.  (Proposing it as a sharp self-check for A was the main
+   agent's error; it is recorded here so nobody trusts it again.)
+
+The counters that ARE trustworthy — they can be embarrassed
+-----------------------------------------------------------
+* `strand_entry` / `strand_exit_mid` / `strand_exit_cln` — the receive gate sampled at the
+  *register write*, independent of edge sampling, so they see the hazard even with the fix
+  disabled.  `wclose = wopen + 1` in a wedged run is the signature of the mid-byte close
+  being the last gate event of the session.
+* `PHASE_HIST` — the *sender's* own bit position (`kn5000_cpanel::m_tx_clock_count`)
+  sampled at the instant the CPU begins assembling a byte.  Intact framing = ONE bucket.
+  This is the non-tautological framing oracle; nothing else in the set is.
+* `tmr_dead` — free-running baud-generator edges (kn5000-30's livelock signature).
+* `cp_qmax` — deepest the panel's TX queue got (A's design argued it could not exceed 21;
+  `x_multi` reached 466).
+* `max_rearm` — longest single wait for the bus grant, in 4 us ticks.
+* `cp_hold` — falling edges where the panel held its shift register because the receiver
+  was shut: 7,424-10,224 real bits per run that the shipped build silently destroys.
+* `drop_int / tx_bytes / cpanel_recv` — kn5000-30's phantom arithmetic.  Valid **only on
+  live runs**: dead edges inflate `drop_int`.  The `phantom` counter itself is a tautology
+  (`sioclk()` only latches when the gate is open, so "a byte latched with the gate shut"
+  is impossible to count); this arithmetic is the real evidence.
+* `RX_LAST` / `CPTX_LAST` (in the option-B instrumentation, not this one) — last 64 bytes
+  received vs sent; direct proof of rotation.
+
+And above all of them: **the pixel diff of the snapshot PNGs.**  See
+`notes/kn5000-cpserial-measurement-discipline.md` and `notes/kn5000-cpserial-repros/README.md`.
+
+Is the instrumentation itself outcome-neutral?
+----------------------------------------------
+Where it was checked, yes: `x_multi` and `x_sim2` produce the SAME six snapshot md5s on the
+instrumented build and on the clean option-A build (`484418d3` x6 and `7322ac60` x6
+respectively), and `x_sim2` repeated on the clean build is byte-identical.  Neutral on
+three schedules is not neutral in general — see the `KN5A_PRE` caveat above.
+
+Not included here
+-----------------
+The option-B and option-C instrumented sources (also scratchpad-only) and the A+B'
+variant, which differed from this one in `tmp94c241_serial.cpp` alone: it added B''s actual
+behaviour (`if (!ext_clock) { m_rx_clock_count = 8; m_rx_shift_register = 0; }`) next to
+the `bprime_*` counters this patch already carries.  B' is a documented one-liner and its
+diagnostic is blind, so it was not worth a second preserved patch.
+
+--- a/src/mame/matsushita/kn5000_cpanel.cpp
++++ b/src/mame/matsushita/kn5000_cpanel.cpp
+@@ -36,6 +36,16 @@
+ 
+ DEFINE_DEVICE_TYPE(KN5000_CPANEL, kn5000_cpanel_device, "kn5000_cpanel", "KN5000 Control Panel HLE")
+ 
++// >>> KN5A-INSTR
++// Option-A verification counters.  Defined in tmp94c241_serial.cpp (see the note there
++// about link order); reported from that device's device_stop().
++extern bool     g_kn5a_pre_mode;
++extern uint8_t  g_kn5a_cp_txcount;
++extern uint64_t g_kn5a_cp_edges, g_kn5a_cp_rearm, g_kn5a_cp_rearm_max;
++extern uint64_t g_kn5a_cp_abandon, g_kn5a_cp_busreq, g_kn5a_cp_qmax, g_kn5a_cp_recv;
++extern uint64_t g_kn5a_cp_txbytes, g_kn5a_cp_hold;
++// <<< KN5A-INSTR
++
+ // The front-panel BUTTON matrix belongs to the two panel MCUs this device emulates, so the
+ // ports live HERE (device_input_ports()) rather than in the driver's INPUT_PORTS. The layout
+ // references them as "cpanel:CP{L,R}_SEG{col}". Each CP{L,R}_SEG{col} port is one scan segment
+@@ -487,6 +497,9 @@
+ 		return;
+ 
+ 	m_sioclk_state = state;
++// >>> KN5A-INSTR
++	g_kn5a_cp_txcount = m_tx_clock_count;   // framing oracle: the SENDER's own bit position
++// <<< KN5A-INSTR
+ 
+ 	// Sliding idle_detect window: retrigger on every edge while response
+ 	// data is pending.  Fires 50µs after the last external clock edge,
+@@ -519,6 +532,9 @@
+ 			{
+ 				// Full byte received
+ 				m_rx_clock_count = 8;
++// >>> KN5A-INSTR
++				g_kn5a_cp_recv++;
++// <<< KN5A-INSTR
+ 				process_received_byte(m_rx_shift_register);
+ 
+ 				// Apply deferred tx_start flags at byte boundary
+@@ -543,9 +559,16 @@
+ 		// that is not assembling anything: it is simply LOST, and lost bytes are what no
+ 		// amount of receiver-side resynchronisation can repair.  Holding instead keeps
+ 		// the response intact for the next INTA-driven delivery.
+-		if (!m_tx_output_enabled || !m_cpu_rx_ready)
++		if (!m_tx_output_enabled || (!m_cpu_rx_ready
++// >>> KN5A-INSTR
++				&& !g_kn5a_pre_mode
++// <<< KN5A-INSTR
++				))
+ 		{
+ 			// Phantom byte edge, or the CPU is not listening — hold response data
++// >>> KN5A-INSTR
++			if (m_tx_output_enabled) g_kn5a_cp_hold++;
++// <<< KN5A-INSTR
+ 		}
+ 		else if (m_tx_skip_first_falling)
+ 		{
+@@ -576,6 +599,9 @@
+ 
+ 			if (m_tx_clock_count == 0)
+ 			{
++// >>> KN5A-INSTR
++				g_kn5a_cp_txbytes++;
++// <<< KN5A-INSTR
+ 				// Track bytes sent during self-clocking for packet-pause.
+ 				// Must count HERE (tx_clock_count==0, before queue refill
+ 				// sets it to 8) — self_clock_callback's rising-edge check
+@@ -639,6 +665,9 @@
+ 	{
+ 		// Queue for later
+ 		m_tx_queue.push(data);
++// >>> KN5A-INSTR
++		if (m_tx_queue.size() > g_kn5a_cp_qmax) g_kn5a_cp_qmax = m_tx_queue.size();
++// <<< KN5A-INSTR
+ 		LOGMASKED(LOG_SERIAL, "TX queued: byte=%02X\n", data);
+ 	}
+ }
+@@ -844,6 +873,12 @@
+ 
+ 	LOGMASKED(LOG_BUTTONS, "Button packet: seg=%d left=%d state=%02X\n",
+ 		segment, is_left_panel, state);
++// >>> KN5A-INSTR
++	if (getenv("KN5A_TRACE"))
++		osd_printf_error("KN5A| BTNPKT t=%s seg=%d left=%d st=%02X hdr=%02X\n",
++				machine().time().as_string(), segment, is_left_panel, state,
++				uint8_t((segment & 0x0f) | (is_left_panel ? 0xc0 : 0x00)));
++// <<< KN5A-INSTR
+ 
+ 	// Track state for change detection (scan segments 0-10 only; segment 0x0B is the
+ 	// encoder status register and is tracked by m_encoder_latch instead).
+@@ -1046,7 +1081,11 @@
+ 		// would let us START a byte on a grant that is about to be withdrawn, and the
+ 		// teardown would then land in the middle of it.  Wait for the link to fall idle.
+ 		// (Bounded, so a receiver that never tears down cannot wedge the panel.)
+-		if (m_cpu_rx_ready && m_idle_retries < CP_IDLE_MAX_RETRIES)
++		if (m_cpu_rx_ready && m_idle_retries < CP_IDLE_MAX_RETRIES
++// >>> KN5A-INSTR
++				&& !g_kn5a_pre_mode && !getenv("KN5A_NOIDLEWAIT")
++// <<< KN5A-INSTR
++				)
+ 		{
+ 			m_idle_retries++;
+ 			m_idle_detect_timer->adjust(attotime::from_usec(20));
+@@ -1071,6 +1110,10 @@
+ 		m_bus_request = true;
+ 		m_stall_ticks = 0;
+ 		m_session_clocked = false;
++// >>> KN5A-INSTR
++		if (g_kn5a_pre_mode) m_bus_request = false;   // positive control: no bus request
++		g_kn5a_cp_busreq++;
++// <<< KN5A-INSTR
+ 
+ 		if (m_inta_asserted)
+ 		{
+@@ -1113,13 +1156,21 @@
+ 	// the shift register, the queue stays put, the cadence simply slips.  The timer is
+ 	// periodic, so returning here IS the re-arm: we retry 4 us later.
+ 	// ---------------------------------------------------------------------------
+-	if (!m_cpu_rx_ready)
++	if (!m_cpu_rx_ready
++// >>> KN5A-INSTR
++			&& !g_kn5a_pre_mode
++// <<< KN5A-INSTR
++			)
+ 	{
+ 		// Keep holding SCLK low.  For a paused clock master that is not a special state:
+ 		// it is just the low phase of the clock, and it doubles as the bus request that
+ 		// stops the CPU from starting a transmission of its own (PF.6).
+ 		m_bus_request = true;
+ 		m_stall_ticks++;
++// >>> KN5A-INSTR
++		g_kn5a_cp_rearm++;
++		if (m_stall_ticks > g_kn5a_cp_rearm_max) g_kn5a_cp_rearm_max = m_stall_ticks;
++// <<< KN5A-INSTR
+ 
+ 		// FORWARD PROGRESS.  INTA is edge-latched into the CPU's interrupt request
+ 		// register (tmp94c241_device::execute_set_input), and INTA_HANDLER clears that
+@@ -1161,6 +1212,9 @@
+ 
+ 	// Toggle SCLK to shift out response data
+ 	int new_state = m_sioclk_state ^ 1;
++// >>> KN5A-INSTR
++	g_kn5a_cp_edges++;
++// <<< KN5A-INSTR
+ 	m_sclk_out_cb(new_state);
+ 
+ 	// Check completion after rising edges (CPU samples last bit)
+@@ -1208,6 +1262,9 @@
+ 	LOGMASKED(LOG_SERIAL, "abandoning INTA cycle after %u us with no grant (tx_count=%d, %zu queued)\n",
+ 			m_stall_ticks * 4, m_tx_clock_count, m_tx_queue.size());
+ 
++// >>> KN5A-INSTR
++	g_kn5a_cp_abandon++;
++// <<< KN5A-INSTR
+ 	m_tx_shift_register = m_tx_current_byte;
+ 	m_tx_clock_count = 8;
+ 	m_tx_skip_first_falling = false;
+@@ -1234,6 +1291,27 @@
+ 	// scan and push change notifications via INTA, independent of polling.
+ 	// Per-segment confirmation: changes must be stable for 2 consecutive
+ 	// scans (14ms) before being reported, filtering transient glitches.
++// >>> KN5A-INSTR
++	{
++		static attotime next_hb = attotime::from_msec(500);
++		if (machine().time() >= next_hb)
++		{
++			next_hb += attotime::from_msec(500);
++			address_space &sp = m_maincpu->space(AS_PROGRAM);
++			auto rb = [&sp] (offs_t a) { return sp.read_byte(a); };
++			auto rw = [&sp] (offs_t a) { return uint16_t(sp.read_byte(a) | (sp.read_byte(a + 1) << 8)); };
++			osd_printf_error("KN5A| HB t=%s recv=%llu txb=%llu edges=%llu rearm=%llu | self=%d inta=%d q=%u txc=%d rdy=%d req=%d "
++					"| ROUTINE=%02X cnt=%02X FA=%02X FB=%02X busy=%02X TXrd=%04X TXwr=%04X RXrd=%04X RXwr=%04X\n",
++					machine().time().as_string(),
++					(unsigned long long)g_kn5a_cp_recv, (unsigned long long)g_kn5a_cp_txbytes,
++					(unsigned long long)g_kn5a_cp_edges, (unsigned long long)g_kn5a_cp_rearm,
++					m_self_clocking, m_inta_asserted,
++					unsigned(m_tx_queue.size()), m_tx_clock_count, m_cpu_rx_ready, m_bus_request,
++					rb(0x8d8a), rb(0x8d8b), rb(0x8d8c), rb(0x8d92), rb(0x8d98),
++					rw(0x8dfd), rw(0x8dff), rw(0x8d9d), rw(0x8d9f));
++		}
++	}
++// <<< KN5A-INSTR
+ 
+ 	if (!m_initialized)
+ 		return;
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+@@ -16,6 +16,24 @@
+ 
+ DEFINE_DEVICE_TYPE(TMP94C241_SERIAL, tmp94c241_serial_device, "tmp94c241_serial", "TMP94C241 Serial Channel")
+ 
++// >>> KN5A-INSTR
++// Cross-device instrumentation for the option-A verification.  Defined HERE (liboptional)
++// and referenced from kn5000_cpanel.cpp (libmame) so the link order resolves them.
++// KN5A_PRE=1 in the environment disables option A at runtime, so this ONE binary can also
++// produce the pre-change POSITIVE CONTROL.
++bool     g_kn5a_pre_mode      = false;
++uint8_t  g_kn5a_cp_txcount    = 0;   // panel's own TX bit position (framing oracle)
++uint64_t g_kn5a_cp_edges      = 0;   // SCLK edges the panel emitted
++uint64_t g_kn5a_cp_rearm      = 0;   // self-clock ticks spent waiting for the grant
++uint64_t g_kn5a_cp_rearm_max  = 0;   // longest single wait, in ticks (4 us each)
++uint64_t g_kn5a_cp_abandon    = 0;   // INTA cycles abandoned (liveness valve)
++uint64_t g_kn5a_cp_busreq     = 0;   // bus requests asserted
++uint64_t g_kn5a_cp_qmax       = 0;   // deepest the panel's TX queue ever got
++uint64_t g_kn5a_cp_recv       = 0;   // bytes the panel assembled from the CPU
++uint64_t g_kn5a_cp_txbytes    = 0;   // bytes the panel fully clocked out
++uint64_t g_kn5a_cp_hold       = 0;   // falling edges where the panel HELD (receiver shut)
++// <<< KN5A-INSTR
++
+ tmp94c241_serial_device::tmp94c241_serial_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+ 	device_t(mconfig, TMP94C241_SERIAL, tag, owner, clock),
+ 	m_setint_cb(*this),
+@@ -90,6 +108,16 @@
+ 	m_sclk_out_cb(m_sclk_out);
+ 	m_txd_cb(m_txd);
+ 	m_rx_ready_cb(m_rx_ready ? 1 : 0);
++
++// >>> KN5A-INSTR
++	if (m_channel == 1)
++	{
++		g_kn5a_pre_mode = (getenv("KN5A_PRE") != nullptr);
++		osd_printf_error("KN5A| MODE=%s (option A %s)\n",
++				g_kn5a_pre_mode ? "PRE" : "A", g_kn5a_pre_mode ? "DISABLED" : "enabled");
++	}
++	m_i_gate_prev = receive_armed();
++// <<< KN5A-INSTR
+ }
+ 
+ void tmp94c241_serial_device::device_reset()
+@@ -202,6 +230,9 @@
+ 				m_tx_buffer_full = false;
+ 				m_tx_shift_register = m_tx_buffer;
+ 				m_tx_clock_count = 7;
++// >>> KN5A-INSTR
++				if (m_channel == 1) m_i_tx_bytes++;
++// <<< KN5A-INSTR
+ 
+ 				// Signal start of new byte transmission with current PFFC state
+ 				// FIXME: data shouldn't be output at all if the pin is high-impedance
+@@ -237,6 +268,17 @@
+ 		const bool ext_clock = ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0);
+ 		if (m_rx_clock_count && ext_clock)
+ 		{
++// >>> KN5A-INSTR
++			if (m_channel == 1)
++			{
++				m_i_rise_ext++;
++				// A byte is starting: record where the SENDER thinks it is.  Intact packet
++				// framing = a single bucket; a smeared histogram is the non-tautological
++				// proof that framing moved.
++				if (m_rx_clock_count == 8)
++					m_i_phase_hist[g_kn5a_cp_txcount <= 8 ? g_kn5a_cp_txcount : 8]++;
++			}
++// <<< KN5A-INSTR
+ 			m_rx_clock_count--;
+ 
+ 			m_rx_shift_register >>= 1;
+@@ -247,8 +289,30 @@
+ 				m_rx_clock_count = 8;
+ 				m_rx_buffer = m_rx_shift_register;
+ 				m_setint_cb(0x08);
++// >>> KN5A-INSTR
++				if (m_channel == 1)
++					m_i_latch++;
++// <<< KN5A-INSTR
++			}
++		}
++// >>> KN5A-INSTR
++		else if (m_channel == 1 && !ext_clock)
++		{
++			// A rising edge that did NOT latch.  Classify by who produced it: the CPU's own
++			// baud generator (harmless -- kn5000-30's phantom suppression) or the PANEL
++			// (a genuinely LOST bit, which is what option A must drive to zero).
++			if (m_i_in_timer)
++				m_i_drop_int++;
++			else
++			{
++				m_i_drop_ext++;
++				if (m_i_drop_ext <= 20)
++					osd_printf_error("KN5A| DROP_EXT #%llu rx=%d cp_tx=%d mode=%02X ctrl=%02X t=%s\n",
++							(unsigned long long)m_i_drop_ext, m_rx_clock_count, g_kn5a_cp_txcount,
++							m_serial_mode, m_serial_control, machine().time().as_string());
+ 			}
+ 		}
++// <<< KN5A-INSTR
+ 	}
+ 	else
+ 	{
+@@ -331,6 +395,9 @@
+ 	// TX is idle — load shift register directly
+ 	m_tx_shift_register = data;
+ 	m_tx_clock_count = 7;  // 7 more bits to send (bits 1-7) after pre-outputting bit 0
++// >>> KN5A-INSTR
++	if (m_channel == 1) m_i_tx_bytes++;
++// <<< KN5A-INSTR
+ 
+ 	// Signal start of new transmission.
+ 	// Pass the PFFC state so the slave knows whether this byte is "real"
+@@ -374,6 +441,9 @@
+ 	m_serial_control = data;
+ 
+ 	update_rx_ready();
++// >>> KN5A-INSTR
++	kn5a_gate_watch("SCxCR");
++// <<< KN5A-INSTR
+ }
+ 
+ uint8_t tmp94c241_serial_device::scNmod_r()
+@@ -398,6 +468,9 @@
+ 		case 3: LOGMASKED(LOG_SERIAL,"clk source: external clock (SCLK%d) (Not implemented yet)\n", m_channel); break;
+ 	}
+ 	m_serial_mode = data;
++// >>> KN5A-INSTR
++	kn5a_gate_watch("SCxMOD");
++// <<< KN5A-INSTR
+ 
+ 	// Do NOT fire INTTX here.  On TMP94C241 hardware, writing SC1MOD
+ 	// configures the serial mode — it does not trigger a transmit-complete
+@@ -578,6 +651,99 @@
+ 	bool need_clock = (m_tx_clock_count > 0) || m_tx_skip_first_falling || (m_rx_clock_count != 8) || m_tx_needs_trailing_edge;
+ 	if (m_hz && need_clock)
+ 	{
++// >>> KN5A-INSTR
++		if (m_channel == 1)
++		{
++			m_i_tmr_edges++;
++			if (!((m_tx_clock_count > 0) || m_tx_skip_first_falling || m_tx_needs_trailing_edge))
++				m_i_tmr_dead++;   // owed only to the stranded RX counter: the free-run
++		}
++		m_i_in_timer = true;
++// <<< KN5A-INSTR
+ 		sioclk(m_sioclk_state ^ 1);
++// >>> KN5A-INSTR
++		m_i_in_timer = false;
++// <<< KN5A-INSTR
++	}
++}
++
++// >>> KN5A-INSTR
++void tmp94c241_serial_device::kn5a_gate_watch(const char *site)
++{
++	if (m_channel != 1)
++		return;
++
++	const bool g = receive_armed();
++	if (g == m_i_gate_prev)
++	{
++		if (g)
++			m_i_wnop_open++;   // the scNcr_w hazard: rewriting the register mid-byte, gate open
++		return;
++	}
++	m_i_gate_prev = g;
++
++	if (g)
++	{
++		m_i_wopen++;
++		if (m_rx_clock_count != 8)
++		{
++			m_i_wopen_mid++;
++			osd_printf_error("KN5A| STRAND_EXIT MIDBYTE-REOPEN rx=%d site=%s ctx=%s t=%s\n",
++					m_rx_clock_count, site, machine().describe_context().c_str(),
++					machine().time().as_string());
++		}
++	}
++	else
++	{
++		m_i_wclose++;
++		if (m_rx_clock_count != 8)
++		{
++			m_i_wclose_mid++;
++			osd_printf_error("KN5A| STRAND_ENTRY rx=%d cp_tx=%d site=%s ctx=%s t=%s\n",
++					m_rx_clock_count, g_kn5a_cp_txcount, site,
++					machine().describe_context().c_str(), machine().time().as_string());
++		}
+ 	}
+ }
++
++void tmp94c241_serial_device::device_stop()
++{
++	if (m_channel != 1)
++		return;
++
++	osd_printf_error("KN5A| ===== control-panel serial link summary (%s) =====\n",
++			g_kn5a_pre_mode ? "PRE (option A disabled)" : "option A");
++	osd_printf_error("KN5A| drop_ext        = %llu   <-- panel-clocked bits LOST; must be 0 under A\n", (unsigned long long)m_i_drop_ext);
++	osd_printf_error("KN5A| drop_int        = %llu   (/8 = %llu)\n", (unsigned long long)m_i_drop_int, (unsigned long long)(m_i_drop_int / 8));
++	osd_printf_error("KN5A| tx_bytes        = %llu   (CPU command bytes)\n", (unsigned long long)m_i_tx_bytes);
++	osd_printf_error("KN5A| cpanel_recv     = %llu   (bytes the panel assembled)\n", (unsigned long long)g_kn5a_cp_recv);
++	osd_printf_error("KN5A| PHANTOM ARITHMETIC drop_int/8 == tx_bytes == cpanel_recv : %s\n",
++			(m_i_drop_int / 8 == m_i_tx_bytes && m_i_tx_bytes == g_kn5a_cp_recv) ? "HOLDS" : "BROKEN");
++	osd_printf_error("KN5A| latch           = %llu   rise_ext = %llu   rx_final = %d\n",
++			(unsigned long long)m_i_latch, (unsigned long long)m_i_rise_ext, m_rx_clock_count);
++	osd_printf_error("KN5A| strand_entry    = %llu   (gate closed MID-BYTE)\n", (unsigned long long)m_i_wclose_mid);
++	osd_printf_error("KN5A| strand_exit_mid = %llu   (MIDBYTE-REOPEN)\n", (unsigned long long)m_i_wopen_mid);
++	osd_printf_error("KN5A| strand_exit_cln = %llu   (CLEAN reopen)\n", (unsigned long long)(m_i_wopen - m_i_wopen_mid));
++	osd_printf_error("KN5A| wopen/wclose    = %llu / %llu   wnop_open = %llu\n",
++			(unsigned long long)m_i_wopen, (unsigned long long)m_i_wclose, (unsigned long long)m_i_wnop_open);
++	osd_printf_error("KN5A| tmr_edges       = %llu   tmr_dead(free-run) = %llu\n",
++			(unsigned long long)m_i_tmr_edges, (unsigned long long)m_i_tmr_dead);
++	osd_printf_error("KN5A| bprime_calls    = %llu   bprime_FIRED = %llu   <-- must be 0 (else A incomplete)\n",
++			(unsigned long long)m_i_bp_calls, (unsigned long long)m_i_bp_fired);
++	osd_printf_error("KN5A| PHASE_HIST      =");
++	for (int i = 0; i <= 8; i++)
++		if (m_i_phase_hist[i])
++			osd_printf_error(" %d:%llu", i, (unsigned long long)m_i_phase_hist[i]);
++	osd_printf_error("\n");
++	osd_printf_error("KN5A| cp_edges        = %llu   cp_txbytes = %llu   cp_hold = %llu\n",
++			(unsigned long long)g_kn5a_cp_edges, (unsigned long long)g_kn5a_cp_txbytes, (unsigned long long)g_kn5a_cp_hold);
++	osd_printf_error("KN5A| cp_rearm        = %llu ticks (%llu us total)   max_rearm = %llu ticks (%llu us)\n",
++			(unsigned long long)g_kn5a_cp_rearm, (unsigned long long)(g_kn5a_cp_rearm * 4),
++			(unsigned long long)g_kn5a_cp_rearm_max, (unsigned long long)(g_kn5a_cp_rearm_max * 4));
++	osd_printf_error("KN5A| cp_qmax         = %llu   cp_busreq = %llu   cp_abandon = %llu\n",
++			(unsigned long long)g_kn5a_cp_qmax, (unsigned long long)g_kn5a_cp_busreq,
++			(unsigned long long)g_kn5a_cp_abandon);
++	osd_printf_error("KN5A| =================================================\n");
++}
++// <<< KN5A-INSTR
++
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.h
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+@@ -53,6 +53,10 @@
+ 	// device_t
+ 	virtual void device_start() override ATTR_COLD;
+ 	virtual void device_reset() override ATTR_COLD;
++// >>> KN5A-INSTR
++	virtual void device_stop() override ATTR_COLD;
++	void kn5a_gate_watch(const char *site);
++// <<< KN5A-INSTR
+ 
+ 	TIMER_CALLBACK_MEMBER(timer_callback);
+ 
+@@ -109,6 +113,27 @@
+ 	uint8_t m_uart_rx_prescaler;   // 16x oversampling counter
+ 	uint8_t m_uart_rx_bits_left;   // data bits remaining to receive
+ 	uint8_t m_uart_rx_shift;       // assembled received byte (shift register)
++
++// >>> KN5A-INSTR
++	// ---- option-A verification instrumentation (NOT part of the change) ----
++	uint64_t m_i_rise_ext = 0;    // rising edges LATCHED (receive gate open)
++	uint64_t m_i_drop_ext = 0;    // PANEL-clocked rising edges DISCARDED (gate shut) -- must be 0 under A
++	uint64_t m_i_drop_int = 0;    // internal-baud rising edges discarded (kn5000-30 arithmetic)
++	uint64_t m_i_latch = 0;       // bytes latched into SCxBUF
++	uint64_t m_i_tx_bytes = 0;    // bytes the CPU started transmitting
++	uint64_t m_i_tmr_edges = 0;   // edges emitted by the internal baud generator
++	uint64_t m_i_tmr_dead = 0;    // ... of which owed ONLY to (rx_clock_count != 8): the free-run
++	uint64_t m_i_wopen = 0;       // gate open transitions seen at the register write
++	uint64_t m_i_wclose = 0;      // gate close transitions seen at the register write
++	uint64_t m_i_wopen_mid = 0;   // ... reopened MID-BYTE  (strand exit: MIDBYTE-REOPEN)
++	uint64_t m_i_wclose_mid = 0;  // ... closed MID-BYTE    (strand entry)
++	uint64_t m_i_wnop_open = 0;   // open->open register rewrites (the scNcr_w hazard)
++	uint64_t m_i_bp_calls = 0;    // B' body reached
++	uint64_t m_i_bp_fired = 0;    // B' body actually reset a non-8 counter
++	uint64_t m_i_phase_hist[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
++	bool m_i_gate_prev = false;
++	bool m_i_in_timer = false;
++// <<< KN5A-INSTR
+ };
+ 
+ DECLARE_DEVICE_TYPE(TMP94C241_SERIAL, tmp94c241_serial_device)
