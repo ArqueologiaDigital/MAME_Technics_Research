@@ -82,6 +82,16 @@ never delivered. **Option A is now the live task**
 (`KN7000/side-quests/pending/kn5000_cpserial_sender_handshake.txt`). Keep B′ as belt-and-braces to
 land WITH A, where it should be measurably inert; if it is not inert, A is incomplete.
 
+> **[SUPERSEDED — annotation added 2026-07-21 by the later tick above.]** Two things in this
+> paragraph are dead. (1) **A is no longer the live task**: it was built and it REGRESSES; the live
+> candidate is **A′**, brief at
+> `KN7000/side-quests/pending/kn5000_cpserial_sender_handshake_prime.txt` — and the work is
+> **PAUSED at Felipe's request**, so do not start it on a cron tick. (2) **The B′-inertness check
+> is INVALID — do not use it.** `bprime_calls = 2096` with `bprime_FIRED = 0` in an `x_sim2` run
+> containing 28 mid-byte strands and a dead panel: B′ triggers on a gate transition a wedged link
+> never produces, so it is structurally blind to the sender-side failure mode. Its zero proves
+> nothing. Only the first sentence of this paragraph survived, and it is the one that matters.
+
 **Also recorded:** the brief's faithfulness premise is FALSE — `cpanel_routines.s` writes IOC **alone**
 at eleven sites, so IOC ≠ RXE; a resync makes that skew load-bearing, so the RXE gate (SC1MOD bit 5,
 unmodelled) must land before/with any future resync, not after. A scratchpad binary named
