@@ -5674,3 +5674,35 @@ execute_set_input level-detect on the acknowledge_w(0)->write() edge pair --
 suspect a deferred synchronize() edge-collapse dropping the INT0 assert for HDMA
 once the SubCPU only polls ch0 occasionally). All instrumentation reverted;
 build-tree tlcs900.cpp restored from ../mame; overlay tree = only kn5000-27.
+
+---
+## Tick 2026-07-21 — KN5000 "scrambled control panel" root-caused (no fix landed)
+
+Felipe: "the control panel is responding to button presses completely scrambled"
+(+ spurious `<Db>` transpose on the home screen, nobody pressed transpose).
+
+FINDING: NOT a mapping bug and NOT our regression. The SEG.bit->button table,
+kn5000.lay inputtags, cpanel finder-array indexing, and the TMP94C241 synchronous
+serial transport are ALL byte-identical to the pristine upstream oracle (efc8d90);
+the port-move refactor is faithful (verified by diff). The scramble is an inherent,
+timing-fragile CP-serial FRAMING corruption in the imported HLE: the cpanel sends
+correct (header,state) bytes but the main CPU clocks in ~184 PHANTOM bytes
+(traced 250 recv vs 66 sent). Phantom 0x00 = right-panel segment 0 = TRANSPOSE row
+(= Felipe's phantom `<Db>`); an ODD phantom count inside a framed burst swaps
+header<->state, so PIANO (seg2,0x01) reads as (seg1,0x02) = ORCHESTRAL PAD.
+Bisected: already corrupt at the f1b605d import (predates inter-CPU/tempo/sound-name
+work; our timing changes only altered the flavour, `<G>`->`<Db>`). Oracle can't
+A/B the mapping live because efc8d90 KN5000 won't boot to a stable screen without
+our sound-name cure.
+
+TRIED + REVERTED (none fixed it): disable inter-CPU perfect_quantum/abort_timeslice
+(broke boot); tight perfect_quantum(2us) during self-clock (no effect, 250kHz timer
+already ~4us); idle cpanel TXD high at TX-complete (no effect; damaging phantoms are
+in the CPU-transmit/INTA-handshake window). Full write-up:
+../KN7000/side-quests/findings/kn5000_button_mapping_findings.md
+
+NEXT: make the CP-serial framing robust -- re-align the main-CPU serial-RX byte
+boundary at each cpanel INTA burst start (symmetric to the cpanel's own
+m_rx_waiting_for_start gate), so exactly the intended bytes are counted per burst.
+Protocol-timing work; verify against boot/sound-name/tempo (all "just landed").
+Tree clean at HEAD; clean binary rebuilt + published.
