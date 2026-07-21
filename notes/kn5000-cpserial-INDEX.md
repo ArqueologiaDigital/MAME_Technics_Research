@@ -1,7 +1,7 @@
 # KN5000 control-panel serial — INDEX / entry point
 
 **Read this first.** The investigation behind it spans a 1,150-line findings doc, three candidate
-`.md`/`.patch` pairs, 27 deterministic repro scripts, six briefs and six blog posts. This file is
+`.md`/`.patch` pairs, 27 deterministic repro scripts, five briefs and six blog posts. This file is
 a map and a state snapshot, not a retelling: every claim below is developed somewhere else, and the
 pointer is given. Nothing here is new evidence.
 
