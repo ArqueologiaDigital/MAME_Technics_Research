@@ -183,17 +183,25 @@ private:
 	TIMER_CALLBACK_MEMBER(keybed_scan);
 	static constexpr uint8_t KEYBED_VELOCITY = 100; // fixed velocity for PC keyboard
 
-	// ~NMI (SNS) emulation: on real hardware, the power supply asserts the CPU's
-	// NMI pin when power is removed.  The ROM's NMI handler (NMI_StorePayloadChecksums
-	// at 0xEF08D4) checks a guard flag in internal CPU RAM (0x0400 == 0x80), and if
-	// set, computes payload checksums and stores them at DRAM[0xFFD4/0xFFD2] so that
+	// ~NMI (SNS): on real hardware, the power supply asserts the CPU's NMI pin when
+	// power is removed.  The ROM's NMI handler (NMI_StorePayloadChecksums at 0xEF08D4)
+	// checks a guard flag in internal CPU RAM (0x0400 == 0x80), and if set, computes
+	// payload checksums and stores them at DRAM[0xFFD4/0xFFD2] so that
 	// SubCPU_Payload_Verify passes on the next boot, then halts the CPU.
 	//
-	// MAME's exit path calls eat_all_cycles() before NVRAM is saved, so we cannot
-	// run the real NMI handler at exit time.  Instead, we intercept Boot_DisplayScreen's
-	// clearing of DRAM[0xFFD4] via a write tap and substitute the correct checksums
-	// computed from the current DRAM state (same algorithm as the ROM handler).
-	// This ensures SubCPU_Payload_Verify passes on every boot.
+	// WE DO NOT MODEL THIS.  MAME's exit path calls eat_all_cycles() before NVRAM is
+	// saved, so the real NMI handler cannot run at exit time.  A write tap used to
+	// intercept Boot_DisplayScreen's clearing of DRAM[0xFFD4] and substitute the
+	// checksums, but it was REMOVED in b1cf7db: the tap itself was the cause of the
+	// "Sound Name Error" -- it made the firmware skip the maincpu->subcpu payload
+	// transfer (upstream patch kn5000-29).
+	//
+	// So there is currently NO workaround, and the unmodelled power-down transaction
+	// is the root of two visible defects: a virgin NVRAM grows a spurious "<Db>"
+	// transpose on its own SECOND boot with no input at all, and the firmware's
+	// power-off splash animation never runs.  See side-quests/pending/
+	// kn5000_splash_animation.txt -- restoring it means EXECUTING the firmware's
+	// power-off code, not substituting driver code for it.
 
 	void nvram2_init(nvram_device &device, void *data, size_t size);
 	void maincpu_mem(address_map &map) ATTR_COLD;
