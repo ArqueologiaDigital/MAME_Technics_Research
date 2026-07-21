@@ -1,5 +1,9 @@
 # CP-serial sender handshake (option A) — CANDIDATE, ADJUDICATED **REGRESSION**, not landed
 
+> **Entry point for this whole investigation: `kn5000-cpserial-INDEX.md`** — state, artefact map and
+> the measurement rules. This document is the most current candidate adjudication and the place A′
+> is defined.
+
 **Date:** 2026-07-21. **Companion patch:** `kn5000-cpserial-sender-handshake-candidate.patch`
 (528 lines, 6 files, +268/−11 — the exact change that was built and measured; applies to this tree).
 **Repros:** `kn5000-cpserial-repros/` (deterministic, byte-identical across runs), including the two

@@ -5,6 +5,10 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+**KN5000 control-panel serial: the entry point is `notes/kn5000-cpserial-INDEX.md`** — state,
+artefact map, the four adjudicated candidates and the measurement rules. That work is **PAUSED at
+Felipe's request** (2026-07-21); the "NEXT = A′" in the tick below is a plan, not a go-ahead.
+
 ## TICK 2026-07-21 (latest) — ⛔ KN5000 PANEL: OPTION **A** BUILT, VERIFIED 3×, **REGRESSION**,
 ## NOT LANDED. **ALL THREE OPTIONS ARE NOW SPENT. NEXT = A′ (A minus its idle-wait deferral).**
 A = the sender-side handshake, implemented at BOTH staging levels: `IOC && RXE` fanned out from

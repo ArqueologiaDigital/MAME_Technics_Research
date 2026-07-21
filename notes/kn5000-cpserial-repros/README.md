@@ -1,5 +1,8 @@
 # KN5000 control-panel-serial repros (deterministic, byte-identical across runs)
 
+> **Entry point for the whole investigation: `../kn5000-cpserial-INDEX.md`** — what is shipped, what
+> is broken, what was tried and rejected, and which of these repros are mandatory in a gate (`b3` is).
+
 These are the press schedules that reproduce the `kn5000-30` mid-byte gate-close wedge. They were
 found and cross-checked by three independent verification passes on 2026-07-21 and are kept here
 because they had been living in an ephemeral session scratchpad. Every one of them is

@@ -1,5 +1,9 @@
 # CP-serial livelock guard — CANDIDATE, ADJUDICATED **NOT READY**, deliberately not landed
 
+> **Entry point for this whole investigation: `kn5000-cpserial-INDEX.md`.** Read it first if you are
+> coming in cold — it carries the current state, and this document was written before options B and A
+> were adjudicated, so its forward-looking recommendations are superseded.
+
 **Date:** 2026-07-21. **Companion patch:** `kn5000-cpserial-livelock-guard-candidate.patch`
 (applies cleanly to this tree; verified with `git apply --check`).
 

@@ -104,6 +104,8 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 
 ## ⛔ SUBMISSION HOLD on kn5000-30 (added 2026-07-21) — do NOT submit it as it stands
 
+> Full state, artefact map and measurement rules for this hold: **`notes/kn5000-cpserial-INDEX.md`**.
+
 **`kn5000-30` is correct about phantom bytes and incomplete about everything else. Submitting it
 alone would export a worse bug than the one it fixes.** It must not go upstream until the link is
 actually fixed (see below). Everything else in the series is unaffected.

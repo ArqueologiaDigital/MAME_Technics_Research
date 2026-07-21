@@ -1,5 +1,9 @@
 # CP-serial receiver resync (option B) — CANDIDATE, ADJUDICATED **INERT**, deliberately not landed
 
+> **Entry point for this whole investigation: `kn5000-cpserial-INDEX.md`.** Read it first if you are
+> coming in cold — it carries the current state, and this document was written before option A was
+> adjudicated, so its forward-looking recommendations are superseded.
+
 **Date:** 2026-07-21. **Companion patch:** `kn5000-cpserial-receiver-resync-candidate.patch`
 (the exact change that was built and measured; applies to this tree).
 **Repros:** `kn5000-cpserial-repros/` (deterministic, byte-identical across runs).
