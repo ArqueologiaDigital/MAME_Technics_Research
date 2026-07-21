@@ -5,6 +5,44 @@ many hours (started 2026-07-09 ~23:xx). Keep it updated at the end of every work
 chunk: what is DONE, what is IN PROGRESS, what is NEXT. Read it first on every
 cron tick.
 
+## TICK 2026-07-21 — ⛔ KN5000 PANEL: kn5000-30 is INCOMPLETE and now on SUBMISSION HOLD.
+## Option C (livelock guard) built, verified 3×, ADJUDICATED NOT READY, NOT LANDED.
+**Corrects the earlier "scrambled panel FIXED" tick.** kn5000-30 (b17fb8b) really did kill the 521
+phantom RX bytes, but it opened a **mid-byte gate-close race**: close the RX gate while the panel is
+still shifting a byte in and `m_rx_clock_count` is stranded at 1..7, so the `(m_rx_clock_count != 8)`
+term in `timer_callback`'s `need_clock` is permanently true and the internal baud generator FREE-RUNS
+(663,146 … 3,221,718 dead edges). Those edges retrigger the cpanel's 50 µs sliding idle detector
+faster than it can expire → INTA never re-asserted → **panel link DEAD for the session** (queue wedged
+at 106/338/653 bytes). The earlier "latent, never observed firing" filing was wrong: IT FIRES.
+Discriminator is NOT the drop count (S5 dropped 25 and recovered; S4 dropped 12 and died) — it is
+whether latching resumes MID-BYTE. Boot-window presses lose nothing themselves; they shift the PHASE
+of the panel's packet cadence so a LATER packet collides. Felipe's hardware: a real KN5000 panel is
+NOT corrupted by presses during boot → emulation bug, "faithful" is not an available defence.
+
+**Option C = qualify that term.** Implemented, built, smoke-tested, three independent verification
+passes. REJECTED, tree reverted (rebuilt binary byte-identical md5 `52818738…` to the published copy;
+`publish-binary.sh` had nothing to do). Why: (1) it does not remove the wedge — framing loss ALONE
+kills the panel, reproduced naturally (config `b3`, 220 drifting-interval presses: guard on, all four
+pixel-liveness probes 0 px, `dead=3638` only); (2) `ll_exit_clean = 0` across **342** strand exits in
+two passes, every one MIDBYTE-REOPEN, 106 s idle soak never resyncs; (3) keeping a misframed link
+ALIVE is destructive — false button presses nobody made: `<Db>`/`<D >`/`<G >` phantom transposes, a
+PANEL MEMORY recall with tempo 120→80, DRUM KITS opening the OCTAVE dialog, MENU:DISK → ENTERTAINER.
+`b1` (6 boot presses + 33 at 2 Hz = ordinary playing) triggers it.
+
+**KEEP (C proved these, B will want them):** provably inert when healthy (`dead=0` in 20 healthy runs,
+GUARD vs NOGUARD pixel-identical), TX integrity perfect 22/22, free-run genuinely gone where it occurs
+(1.4–3.2 M → 16–33 k edges), kn5000-30's phantom suppression exact (`drop_int/8 == tx_bytes ==
+cpanel_recv`). **TRAP:** the `phantom` counter is a TAUTOLOGY post-kn5000-30 (sioclk only latches when
+the gate is open) — a zero from it proves nothing; use the arithmetic. **S1–S5 is INDICATIVE ONLY** —
+two passes could not replay S3/S4; the deterministic repros are `a1` (90 presses @0.15 s from t=30),
+`b1`, `b3`.
+
+**NEXT = option B** (receiver-side resync on the closed→open transition ONLY, never on every
+`scNcr_w`), then option A (sender-side handshake, `CPanel_SM_StartTX:781-787`). Briefs:
+`KN7000/side-quests/pending/kn5000_cpserial_{receiver_resync,sender_handshake}.txt`. Rejected C patch +
+full adjudication: `notes/kn5000-cpserial-livelock-guard-candidate.{md,patch}`. Hold recorded in
+`notes/upstream-patches/README.md`. Blog Part 73 + a second erratum on Part 71.
+
 ## TICK 2026-07-21 — ★ KN5000 TEMPO/PROGRAM WHEEL DONE: turning it edits the on-screen tempo
 Implemented the resume point from `side-quests/findings/kn5000_data_wheel_findings.md` ADDENDUM 2.
 The KN5000 wheel is NOT a control-panel-serial input in steady state — the firmware reads it with a
