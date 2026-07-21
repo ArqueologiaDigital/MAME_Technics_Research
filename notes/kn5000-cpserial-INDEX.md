@@ -250,12 +250,10 @@ not an instruction to proceed while the work is paused.**
   `need_clock` at **`:526`** (some docs say 552/574 — stale), `kn5000_cpanel.cpp:1017`,
   `tmp94c241.h:121`, `kn5000.cpp:732`. `set_baudrate()` is declared, defined and **called from
   nowhere**.
-* **Instrumentation — NOT PRESERVED IN-REPO as of this snapshot.** The probes that made all three
-  adjudications possible (`strand_entry`/`wclose_mid`, `strand_exit_mid`, `PHASE_HIST`, `tmr_dead`,
-  `cp_qmax`, `cp_hold`, `cp_abandon`, `max_rearm`, `bprime_calls/FIRED`) **and the `KN5A_NOIDLEWAIT=1`
-  knob that isolated rule 5** existed only in a session scratchpad
-  (`…/c6cf97f4-…/scratchpad/{optA,optB,optC}/`; the A instrumentation diff is 459 lines across
-  `kn5000_cpanel.cpp`, `tmp94c241_serial.cpp` and `tmp94c241_serial.h`). **A′ cannot be verified to
-  this record's standard without them.** If
-  `notes/kn5000-cpserial-sender-handshake-instrumentation.patch` exists next to this file, that is
-  the preserved copy and this bullet is stale; if it does not, the probes must be rebuilt.
+* **Instrumentation:** `notes/kn5000-cpserial-sender-handshake-instrumentation.patch`. The probes
+  that made all three adjudications possible (`strand_entry`/`wclose_mid`, `strand_exit_mid`,
+  `PHASE_HIST`, `tmr_dead`, `cp_qmax`, `cp_hold`, `cp_abandon`, `max_rearm`, `bprime_calls/FIRED`)
+  **and the `KN5A_NOIDLEWAIT=1` knob that isolated rule 5** — 459 lines across `kn5000_cpanel.cpp`,
+  `tmp94c241_serial.cpp` and `tmp94c241_serial.h`, recovered from the session scratchpad on
+  2026-07-21. **A′ cannot be verified to this record's standard without them.** Read the patch's own
+  header for which probes are load-bearing and which read a vacuous zero.
