@@ -5706,3 +5706,40 @@ boundary at each cpanel INTA burst start (symmetric to the cpanel's own
 m_rx_waiting_for_start gate), so exactly the intended bytes are counted per burst.
 Protocol-timing work; verify against boot/sound-name/tempo (all "just landed").
 Tree clean at HEAD; clean binary rebuilt + published.
+
+---
+## Tick 2026-07-21 — KN5000 "scrambled control panel" FIXED & SHIPPED (kn5000-30)
+
+Felipe: "push on now!" — land the real fix for the scrambled panel + phantom `<Db>`.
+
+ROOT CAUSE PINNED (behavioural oracle diff, both ends instrumented live): the SHARED
+TMP94C241 synchronous-serial RECEIVER over-counts clock edges. `tmp94c241_serial_device::
+sioclk()` latched an RX byte + fired INTRX on EVERY 8 rising edges regardless of clock
+source. Synchronous serial is full-duplex, so while the main CPU is clock master shifting
+a COMMAND byte OUT (internal baud gen, IOC=0), the same 8 edges shift 8 meaningless bits IN
+off the idle RXD line → one phantom RX byte + spurious INTRX PER command byte sent. Phantom
+0x00 = right-panel segment 0 = TRANSPOSE row = the `<Db>`; an ODD phantom count in a framed
+burst swaps the (header,state) pair → PIANO (seg2,0x01) reads as (seg1,0x02)=ORCHESTRAL PAD
+(timing-dependent → intermittent). PROOF: cpanel send_byte()=190 == externally-clocked
+(IOC=1) RX bytes=190, while 521 phantoms are ALL internally-clocked IOC=0 — perfect
+partition, zero cross terms. (No pristine-oracle A/B needed: the protocol is the reference —
+sender provably correct, IOC is the firmware's own receive-enable set in its INTRX1 ISR.)
+
+FIX (kn5000-30, shared core, upstream-relevant): gate the RX bit-count/latch on the external
+clock actually being selected — `((m_serial_mode & 0x03)==0) && BIT(m_serial_control,0)` —
+mirroring the sender's start-gate and the existing internal-clock suppression in
+timer_callback. AFTER: send_byte()==RX (96==96, all IOC=1), phantoms 521→0, no phantom
+transpose (home shows `<C >`). UART transfer modes drive RX from timer_callback, so the MIDI
+channel is untouched.
+
+VERIFIED LIVE (savestate-isolated, 3 emulated phases each, read the PNGs): PIANO→SOUND RIGHT1
+PIANO, DISK→DISK MENU, MENU:SOUND→SOUND MENU, MENU:MIDI→MIDI MENU, POP&BALLAD→RHYTHM POP&BALLAD
+(LED lit), PART SELECT RIGHT1→part focus (home intact, no scramble). All stable across phases.
+REGRESSION: -validate clean kn5000/kn1500/kn7000/kn6000/kn6500/kn2400; sound names (kn5000-29)
+real; tempo wheel (kn5000-25) intact; KN7000 boots normally (change is in a device KN7000 never
+instantiates — MN10300). Instrumentation fully reverted; clean rebuild (0 CPDBG strings);
+tools/publish-binary.sh done.
+
+COMMITS: kn7000_mame b17fb8b (fix) + 0022bb6 (kn5000-30 patch + README). KN7000 findings +
+this tick. Blog Part 71 "The buttons that hallucinated" (mame-blog c99f46e). Full write-up:
+../KN7000/side-quests/findings/kn5000_button_mapping_findings.md (2026-07-21 FIXED section).
