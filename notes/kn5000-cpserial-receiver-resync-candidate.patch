@@ -1,0 +1,92 @@
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+index fb38f97..7abbd2f 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.cpp
+@@ -31,6 +31,7 @@ tmp94c241_serial_device::tmp94c241_serial_device(const machine_config &mconfig,
+ 	m_hz(0),
+ 	m_rx_clock_count(8),
+ 	m_rx_shift_register(0),
++	m_rx_gate_open(false),
+ 	m_rx_buffer(0),
+ 	m_rxd(0),
+ 	m_rxd_prev(0),
+@@ -64,6 +65,7 @@ void tmp94c241_serial_device::device_start()
+ 	save_item(NAME(m_hz));
+ 	save_item(NAME(m_rx_clock_count));
+ 	save_item(NAME(m_rx_shift_register));
++	save_item(NAME(m_rx_gate_open));
+ 	save_item(NAME(m_rx_buffer));
+ 	save_item(NAME(m_rxd));
+ 	save_item(NAME(m_rxd_prev));
+@@ -92,6 +94,9 @@ void tmp94c241_serial_device::device_reset()
+ {
+ 	m_serial_control &= 0x80;
+ 	m_serial_mode &= 0x80;
++	// The IOC bit was just cleared, so the receive gate is shut: keep the
++	// sampled gate state in step with it (see the resync block in sioclk).
++	m_rx_gate_open = false;
+ 	m_baud_rate = 0x00;
+ 	m_tx_skip_first_falling = false;
+ 	m_tx_needs_trailing_edge = false;
+@@ -187,6 +192,49 @@ void tmp94c241_serial_device::sioclk(int state)
+ 		// clock is actually selected.  (UART transfer modes drive their RX from
+ 		// timer_callback, not here, so this synchronous gate never affects them.)
+ 		const bool ext_clock = ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0);
++
++		// Byte-boundary resynchronisation on the closed->open transition.
++		//
++		// The gate above can shut in the MIDDLE of a byte (the firmware
++		// clears IOC to become clock master and transmit, while the panel is
++		// still shifting a byte in — the panel waits only 20 us for the ISR
++		// and then clocks regardless).  The bits clocked while the gate is
++		// shut are gone, so m_rx_clock_count is left stranded at 1..7 (4, 5,
++		// 6 and 7 have all been observed).  Without this block the receiver
++		// simply carried on from the stranded value when the gate reopened,
++		// which permanently misframed the link: every later byte was
++		// assembled from the tail of one panel byte plus the head of the
++		// next, so the control panel dispatched button events nobody made
++		// (phantom transposes, spurious PANEL MEMORY recalls, wrong screens).
++		// It never recovered on its own — 342 measured strand exits, not one
++		// of them clean, and a 106 s idle soak does not resynchronise it.
++		//
++		// On silicon this cannot happen: RXE=0 holds the receive bit counter
++		// (and the shift register) in reset, so a receiver that is disabled
++		// mid-byte always restarts on a byte boundary when it is re-enabled.
++		// Model that flip-flop: remember the gate state seen at the previous
++		// receive-clock instant and, when it goes closed->open, release the
++		// counter from reset.  The current edge then becomes bit 0 of the
++		// next byte, exactly as the released counter would make it.
++		//
++		// This deliberately keys off the TRANSITION and is deliberately
++		// sampled here rather than in scNcr_w().  The INTRX1 ISR rewrites
++		// SC1CR with IOC *already* set, in the middle of a byte, to maintain
++		// IOC=1/SCLKS=0 between received bytes; restarting the counter there
++		// truncates the byte in progress and reintroduces the corrupted
++		// "phantom byte" this device already had fixed (see the comment in
++		// scNcr_w).  Such a write leaves the gate open->open, so it is not a
++		// transition and nothing happens here.  Sampling only on rising
++		// edges keeps it conservative for the same reason: a gate that shuts
++		// and reopens without a rising edge in between cannot have lost a
++		// received bit, so the byte in progress is left alone.
++		if (ext_clock && !m_rx_gate_open)
++		{
++			m_rx_clock_count = 8;
++			m_rx_shift_register = 0;
++		}
++		m_rx_gate_open = ext_clock;
++
+ 		if (m_rx_clock_count && ext_clock)
+ 		{
+ 			m_rx_clock_count--;
+diff --git a/src/devices/cpu/tlcs900/tmp94c241_serial.h b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+index 0859578..9ed6d29 100644
+--- a/src/devices/cpu/tlcs900/tmp94c241_serial.h
++++ b/src/devices/cpu/tlcs900/tmp94c241_serial.h
+@@ -74,6 +74,7 @@ protected:
+ 
+ 	uint8_t m_rx_clock_count;
+ 	uint8_t m_rx_shift_register;
++	bool m_rx_gate_open;           // Receive gate sampled at the previous receive clock; a closed->open transition restarts the byte
+ 	uint8_t m_rx_buffer;
+ 	uint8_t m_rxd;
+ 	uint8_t m_rxd_prev;
