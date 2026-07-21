@@ -214,6 +214,15 @@ measured on the whole suite before anyone believes it.
   It is not parameterised: running it rewrites **all** the `x_*` schedules, and it carries a comment
   above each family explaining what that family attacks. It writes into a `lua/` subdirectory next
   to itself, so it will not clobber the checked-in copies unless you point it here deliberately.
+* **`phase_shift.py` (added 2026-07-22) — a TRANSFORM, not a scenario.** `phase_shift.py <in.lua>
+  <out.lua> <delta_seconds>` shifts every `press(`/`snap(`/`at(` time by the same delta, leaving the
+  press set, order and intervals alone: same schedule, different emulated-time phase. **Use it on
+  any run whose verdict is about MAPPING.** The misframe is phase-dependent and one schedule samples
+  one phase — the February oracle maps every `b3` press correctly at Δ=0 and reproduces the original
+  `PIANO → ORCHESTRAL PAD` scramble at Δ=+17 ms. Runs behind that finding (nine: three builds ×
+  {0, +7 ms, +17 ms}) are in
+  `/home/fsanches/compartilhado/kn5000_feb_oracle_artifacts/adjudication_phase_sweep/`; the
+  adjudication is the top section of `notes/kn5000-cpserial-INDEX.md`.
 
 ---
 

@@ -9,6 +9,34 @@ cron tick.
 artefact map, the four adjudicated candidates and the measurement rules. That work is **PAUSED at
 Felipe's request** (2026-07-21); the "NEXT = A′" in the tick below is a plan, not a go-ahead.
 
+## TICK 2026-07-22 — ⛔⛔ **A′ IS MOOT. `kn5000-30` (b17fb8b) IS RECOMMENDED FOR REVERT.**
+Acting on Felipe's *"I have a vague recollection that a few months ago this cpanel was working
+fine!"*, the February revision (`mame` @ `f8cd34a8`) was rebuilt as a control, alongside a build of
+today's tree with **only** `kn5000-30`'s hunk removed (`v0`). `b3` was then run on three builds at
+three phase offsets (Δ = 0 / +7 ms / +17 ms), **frames read, not just diffed**, with the firmware's
+own CP-serial receive ring tapped.
+
+* **kn5000-30 buys nothing.** At Δ=+17 ms — the one phase where it does not wedge — it is
+  **bit-identical to its own revert**: same six PNGs, 1106 bytes, 498 packets, 3 malformed frames,
+  same header histogram. Δ=0 and Δ=+7 ms are **DEAD** (404/147 and 210/51 bytes/packets). February
+  and `v0` are LIVE at all three.
+* **Its root cause is falsified.** February latches the same phantoms (ungated
+  `if (m_rx_clock_count)` at `tmp94c241_serial.cpp:167`) and maps correctly; the segment-0 header
+  count at the ring is **exactly 1 in all nine runs**. The phantoms are the "orphan" edges the
+  comment at `tmp94c241_serial.cpp:115-122` (verbatim in February at `:110-117`) says are filtered
+  at the cpanel — and that filter is byte-identical between February and today.
+* **February is not clean either**: at Δ=+17 ms it reproduces `PIANO → RIGHT2 ORCHESTRAL PAD`. The
+  difference is **alive vs dead**, not scrambled vs clean. The real bug is an older phase-dependent
+  packet misframe (5–7 malformed frames/run in February, 3–9 in `v0`) that nothing this week
+  touched.
+* **NEXT (Felipe's call, not a cron item):** revert `b17fb8b`; drop PR 10 from the upstream split;
+  if the misframe is picked up, sweep phase (`notes/kn5000-cpserial-repros/phase_shift.py`) and read
+  every liveness frame — **distinctness is not correctness** (that mistake hid a fully scrambled
+  panel for an entire adjudication pass).
+* Evidence: `/home/fsanches/compartilhado/kn5000_feb_oracle_artifacts/` (`kn5000feb`, `runs/`,
+  `adjudication_phase_sweep/`). Full adjudication: `notes/kn5000-cpserial-INDEX.md` top section;
+  `KN7000/side-quests/findings/kn5000_button_mapping_findings.md` final addendum; blog Part 77.
+
 ## TICK 2026-07-21 (latest) — ⛔ KN5000 PANEL: OPTION **A** BUILT, VERIFIED 3×, **REGRESSION**,
 ## NOT LANDED. **ALL THREE OPTIONS ARE NOW SPENT. NEXT = A′ (A minus its idle-wait deferral).**
 A = the sender-side handshake, implemented at BOTH staging levels: `IOC && RXE` fanned out from
