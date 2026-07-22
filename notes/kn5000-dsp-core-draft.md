@@ -5,6 +5,14 @@ Files: `src/devices/cpu/upd6383/upd6383d.{cpp,h}` (disassembler),
 `src/devices/cpu/upd6383/upd6383.{cpp,h}` (device), instantiated by
 `src/mame/matsushita/kn5000.cpp` as `:dsp1` (IC311).
 
+**Which memory belongs to whom** (Felipe, 2026-07-22): I-RAM 384x36, C-RAM 256x24 and
+D-RAM 256x24 are **on-die** — they sit on the internal 24-bit IDB and no pin exposes them —
+so the device maps them itself and no machine config can override them. Only the
+**digital-delay DRAM is off-chip**, a separate part on the host board driven by the DSP's
+RAS/CAS/WE and A0-A16 pins, so `AS_DELAY` is the driver's to provide. Its size on the KN5000
+mainboard is **not established** (the pin survey covers the DSP package, not its memory); the
+driver currently populates the full 128K x 16 the chip can address and says so.
+
 **This is a DRAFT / RESEARCH INSTRUMENT, not a working core.** The instruction set is not
 decoded. Six word forms are implemented, every other word is trapped and logged, and there is
 **no sound interface and no audio** — a partially-correct effects DSP produces audio that

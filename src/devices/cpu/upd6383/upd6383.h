@@ -37,12 +37,14 @@
 
 // address spaces.  The chip has four distinct memories (CDJ-500 service manual
 // block diagram, p. 1-15); MAME's four space slots map onto them one for one.
+// The first three are ON-CHIP and are mapped by the device itself; only
+// AS_DELAY is external and must be provided by the machine config.
 enum
 {
-	AS_IRAM  = AS_PROGRAM,  // 384 x 36, host-uploaded instruction RAM
-	AS_CRAM  = AS_DATA,     // 256 x 24, coefficient side of the IDB
-	AS_DRAM  = AS_IO,       // 256 x 24, state/data side of the IDB
-	AS_DELAY = 3            // external DRAM digital delay, up to 128K x 16
+	AS_IRAM  = AS_PROGRAM,  // ON-CHIP 384 x 36, host-uploaded instruction RAM
+	AS_CRAM  = AS_DATA,     // ON-CHIP 256 x 24, coefficient side of the IDB
+	AS_DRAM  = AS_IO,       // ON-CHIP 256 x 24, state/data side of the IDB
+	AS_DELAY = 3            // OFF-CHIP DRAM digital delay, up to 128K x 16
 };
 
 // debugger state indices
@@ -150,6 +152,16 @@ private:
 	void capture_byte(bool cd, u8 data);
 	void capture_flush();
 	void capture_write_files() ATTR_COLD;
+
+	// The three ON-CHIP memories.  I-RAM 384x36, C-RAM 256x24 and D-RAM 256x24
+	// are inside the package (CDJ-500 block diagram, p. 1-15): they sit on the
+	// internal 24-bit IDB and no pin exposes them, so the device supplies them
+	// itself and no machine config may override them.  The FOURTH space,
+	// AS_DELAY, is deliberately NOT mapped here -- it is off-chip (see the
+	// header comment) and belongs to whoever wires the board.
+	void iram_map(address_map &map) ATTR_COLD;
+	void cram_map(address_map &map) ATTR_COLD;
+	void dram_map(address_map &map) ATTR_COLD;
 
 	const address_space_config m_iram_config;
 	const address_space_config m_cram_config;

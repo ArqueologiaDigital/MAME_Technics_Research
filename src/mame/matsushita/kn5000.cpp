@@ -188,12 +188,10 @@ private:
 	void dsp_reg_data_w(uint16_t data);
 	uint16_t dsp_reg_data_r();
 
-	// IC311's four memories.  The uPD6383GF has I-RAM 384x36 (modelled
-	// byte-wise, 5 bytes per instruction word), C-RAM and D-RAM 256x24, and an
-	// external DRAM digital delay addressed by A0-A16.
-	void dsp1_iram_map(address_map &map) ATTR_COLD;
-	void dsp1_cram_map(address_map &map) ATTR_COLD;
-	void dsp1_dram_map(address_map &map) ATTR_COLD;
+	// IC311's EXTERNAL delay memory.  The uPD6383GF's I-RAM, C-RAM and D-RAM
+	// are all on-die and are mapped by the device itself; the digital-delay
+	// DRAM is a separate chip on this board, driven by the DSP's own RAS/CAS/WE
+	// and A0-A16 lines, so it is the driver's to provide.
 	void dsp1_delay_map(address_map &map) ATTR_COLD;
 
 	// Latch access wrappers
@@ -406,27 +404,16 @@ uint16_t kn5000_state::dsp_reg_data_r()
 }
 
 
-// --- IC311 (uPD6383GF) memories -------------------------------------------
-
-void kn5000_state::dsp1_iram_map(address_map &map)
-{
-	map(0x000, 0x77f).ram();      // 384 words x 5 bytes
-}
-
-void kn5000_state::dsp1_cram_map(address_map &map)
-{
-	map(0x00, 0xff).ram();        // 256 x 24
-}
-
-void kn5000_state::dsp1_dram_map(address_map &map)
-{
-	map(0x00, 0xff).ram();        // 256 x 24
-}
+// --- IC311 (uPD6383GF) external digital-delay DRAM -------------------------
 
 void kn5000_state::dsp1_delay_map(address_map &map)
 {
-	// the KN5000's actual delay memory size is not established; the chip
-	// addresses up to 128K 16-bit samples
+	// UNVERIFIED SIZE. The chip can address 128K 16-bit samples (A0-A16) and
+	// that whole space is populated here, but WHICH DRAM sits next to IC311 on
+	// the KN5000 mainboard has not been read off the schematic or the board --
+	// Felipe's pin survey (kn5000_project/chips_dsp_usados_no_kn5000.txt)
+	// covers the DSP package, not its memory. Size this to the real part when
+	// it is identified; the effect delay times will depend on it.
 	map(0x00000, 0x1ffff).ram();
 }
 
@@ -936,9 +923,8 @@ void kn5000_state::kn5000(machine_config &config)
 	// frame; the 44.1 kHz frame rate is established (the firmware's own
 	// ms x 0xAC44 / 0x3E8), the actual master clock of IC311 is not.
 	UPD6383(config, m_dsp1, 384 * 44100);
-	m_dsp1->set_addrmap(AS_IRAM,  &kn5000_state::dsp1_iram_map);
-	m_dsp1->set_addrmap(AS_CRAM,  &kn5000_state::dsp1_cram_map);
-	m_dsp1->set_addrmap(AS_DRAM,  &kn5000_state::dsp1_dram_map);
+	// I-RAM, C-RAM and D-RAM are on-die and the device maps them itself; only
+	// the external digital-delay DRAM is this board's business.
 	m_dsp1->set_addrmap(AS_DELAY, &kn5000_state::dsp1_delay_map);
 	// HELD DISABLED ON PURPOSE.  The instruction set is not decoded, so the
 	// core must not execute: a partially-correct effects DSP is exactly the

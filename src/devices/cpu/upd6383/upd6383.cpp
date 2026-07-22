@@ -93,12 +93,18 @@ DEFINE_DEVICE_TYPE(UPD6383, upd6383_device, "upd6383", "NEC uPD6383GF (draft)")
 
 upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
 	cpu_device(mconfig, UPD6383, tag, owner, clock),
-	// I-RAM: 384 words of 36 bits, seen as 384 * 5 = 1920 bytes
-	m_iram_config("iram", ENDIANNESS_BIG, 8, 11, 0),
-	// C-RAM / D-RAM: 256 x 24, carried in 32-bit cells
-	m_cram_config("cram", ENDIANNESS_BIG, 32, 10, -2),
-	m_dram_config("dram", ENDIANNESS_BIG, 32, 10, -2),
-	// external delay memory: A0-A16 addresses up to 128K 16-bit samples
+	// ON-CHIP.  I-RAM: 384 words of 36 bits, seen as 384 * 5 = 1920 bytes.
+	m_iram_config("iram", ENDIANNESS_BIG, 8, 11, 0,
+			address_map_constructor(FUNC(upd6383_device::iram_map), this)),
+	// ON-CHIP.  C-RAM / D-RAM: 256 x 24, carried in 32-bit cells.
+	m_cram_config("cram", ENDIANNESS_BIG, 32, 10, -2,
+			address_map_constructor(FUNC(upd6383_device::cram_map), this)),
+	m_dram_config("dram", ENDIANNESS_BIG, 32, 10, -2,
+			address_map_constructor(FUNC(upd6383_device::dram_map), this)),
+	// OFF-CHIP.  The delay memory is a separate DRAM on the host board, driven
+	// by this chip's own RAS/CAS/WE, A0-A16 and I/O1-16 pins; the machine
+	// config supplies it, and how much of the 128K x 16 space is populated is a
+	// property of that board, not of the part.
 	m_delay_config("delay", ENDIANNESS_BIG, 16, 18, -1),
 	m_icount(0),
 	m_pc(0), m_ucpc(0), m_sta(0), m_cnt(0),
@@ -130,6 +136,30 @@ device_memory_interface::space_config_vector upd6383_device::memory_space_config
 std::unique_ptr<util::disasm_interface> upd6383_device::create_disassembler()
 {
 	return std::make_unique<upd6383_disassembler>();
+}
+
+
+//**************************************************************************
+//  THE ON-CHIP MEMORIES
+//**************************************************************************
+
+//  All three are internal to the package and are therefore mapped here rather
+//  than by a driver.  Sizes come straight off the CDJ-500 block diagram
+//  (p. 1-15): I-RAM 384 x 36, C-RAM 256 x 24, D-RAM 256 x 24.
+
+void upd6383_device::iram_map(address_map &map)
+{
+	map(0x000, 0x77f).ram();      // 384 words x 5 bytes
+}
+
+void upd6383_device::cram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();        // 256 x 24
+}
+
+void upd6383_device::dram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();        // 256 x 24
 }
 
 
