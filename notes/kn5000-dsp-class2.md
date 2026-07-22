@@ -519,3 +519,46 @@ Sections: `inventory fields joint semantics mac addr8 reverb`.
 4. **Resolve ENHANCER**, which is the sole false positive of §4.3 and the sole false
    negative of §4.2. One program, and it is the only image whose category labels this
    analysis is visibly getting wrong.
+
+---
+
+## CORRECTION (main agent, verification pass): the biquad section repeats 8x, not 10x
+
+§ on the PARAMETRIC EQ states "a 9-word section repeated **10x** byte-identically = 5 bands x 2
+channels". Independently re-checked against the extracted program images. **The structural claim
+holds; the count does not.**
+
+MEASURED, by exhaustive search for the most-repeated 9-word block in every program:
+
+  * The maximum 9-word byte-identical repetition **anywhere in the corpus is 8**, in algo39
+    (105 words). No program reaches 10.
+  * algo39's block starts at indices `[5, 14, 23, 32, 59, 68, 77, 86]` -- **two groups of four**,
+    contiguous within each group, with a gap between index 41 and 59.
+
+So the reading is **4 bands x 2 channels = 8**, not 5 x 2 = 10. The "5 bands" figure appears to have
+been carried over from the coefficient note's "45 register values ~ 5 bands x 3" rather than
+measured off the program, and the two do not agree. Which of the two is right about the band count
+is UNRESOLVED -- but the microcode says four sections per channel.
+
+WHAT THE CHECK CONFIRMS, and it is the substantive part:
+
+```
+000.A.00.1D3        class A  \
+212.A.01.412        class A   |
+202.A.01.1D5        class A   >  FIVE CONSECUTIVE class-A multiplies  (b0,b1,b2,a1,a2)
+202.A.01.1D4        class A   |
+202.A.00.1D5        class A  /
+102.2.FF.687        class 2  <- lo12 = 0x687
+804.8.16.415        class 8
+212.A.FF.407        class A
+000.2.03.647        class 2  <- lo12 = 0x647
+```
+
+Five consecutive class-A multiplies is exactly a biquad's five coefficients, and **both** of the
+`lo12` values this note identifies as "the biquad section's two non-multiply steps" (0x647, 0x687)
+are present in that block, in that section, as claimed. The identification survives; only the
+multiplicity was wrong.
+
+Also verified from this pass: the corpus correction is exact. Programs **79, 88, 89, 90, 91** are the
+five lacking a terminator, and each contains **zero** class-2 words -- confirming they are a
+different kind of stream and rightly excluded (96 - 5 = 91).
