@@ -37,6 +37,7 @@ DEFINE_DEVICE_TYPE(KN5000_DSP1, kn5000_dsp1_device, "kn5000_dsp1", "KN5000 DSP1 
 kn5000_dsp1_device::kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, KN5000_DSP1, tag, owner, clock)
 	, m_cmd(0)
+	, m_addr_latch(0)
 	, m_have_current(false)
 {
 }
@@ -44,6 +45,7 @@ kn5000_dsp1_device::kn5000_dsp1_device(const machine_config &mconfig, const char
 void kn5000_dsp1_device::device_start()
 {
 	save_item(NAME(m_cmd));
+	save_item(NAME(m_addr_latch));
 	save_item(NAME(m_regs));
 	// m_transfers / m_current are capture instrumentation, not chip state,
 	// so they are deliberately not save-state items.
@@ -57,6 +59,7 @@ void kn5000_dsp1_device::device_reset()
 	flush_transfer();
 
 	m_cmd = 0;
+	m_addr_latch = 0;
 	std::fill(std::begin(m_regs), std::end(m_regs), 0);
 }
 
@@ -72,47 +75,62 @@ void kn5000_dsp1_device::flush_transfer()
 	m_current.payload.clear();
 }
 
-void kn5000_dsp1_device::cmd_w(uint16_t data)
+//-------------------------------------------------
+//  host_w - the real uC-IF (Sub CPU port PZ)
+//-------------------------------------------------
+
+void kn5000_dsp1_device::host_w(bool cd, uint8_t data)
 {
-	uint8_t const val = data & 0xff;
+	if (!cd)
+	{
+		// Command byte: ends whatever data run preceded it.
+		flush_transfer();
 
-	// A command byte ends whatever data run preceded it.
-	flush_transfer();
+		m_cmd = data;
+		m_current.cmd = data;
+		m_current.payload.clear();
+		m_have_current = true;
 
-	m_cmd = val;
-	m_current.cmd = val;
-	m_current.payload.clear();
-	m_have_current = true;
-
-	LOGMASKED(LOG_REG, "DSP1 CMD 0x%02X\n", val);
-}
-
-void kn5000_dsp1_device::data_w(uint16_t data)
-{
-	uint8_t const val = data & 0xff;
+		LOGMASKED(LOG_REG, "DSP1 CMD 0x%02X\n", data);
+		return;
+	}
 
 	if (!m_have_current)
 	{
-		// Data with no preceding command: still worth capturing, flagged with
-		// a sentinel command so it is not silently merged into the next run.
+		// Data with no preceding command: still captured, flagged with a
+		// sentinel so it is not silently merged into the next run.
 		m_current.cmd = 0xff;
 		m_current.payload.clear();
 		m_have_current = true;
 	}
-	m_current.payload.push_back(val);
-
-	// Historical read-back model: the firmware's own poking of a register file
-	// is preserved so reads behave exactly as before this device grew capture.
-	m_regs[m_cmd] = val;
+	m_current.payload.push_back(data);
 
 	LOGMASKED(LOG_REG, "DSP1 cmd 0x%02X data[%u] <- 0x%02X\n",
-			m_cmd, unsigned(m_current.payload.size() - 1), val);
+			m_cmd, unsigned(m_current.payload.size() - 1), data);
 }
 
-uint16_t kn5000_dsp1_device::data_r()
+
+//-------------------------------------------------
+//  0x130000 register block -- NOT the uC-IF
+//-------------------------------------------------
+
+void kn5000_dsp1_device::reg_addr_w(uint16_t data)
 {
-	uint16_t const val = m_regs[m_cmd];
-	LOGMASKED(LOG_REG, "DSP1 cmd 0x%02X data -> 0x%02X\n", m_cmd, val);
+	m_addr_latch = data & 0xff;
+	LOGMASKED(LOG_REG, "DSP1 reg addr latch: 0x%02X\n", m_addr_latch);
+}
+
+void kn5000_dsp1_device::reg_data_w(uint16_t data)
+{
+	uint8_t const val = data & 0xff;
+	m_regs[m_addr_latch] = val;
+	LOGMASKED(LOG_REG, "DSP1 reg[0x%02X] <- 0x%02X\n", m_addr_latch, val);
+}
+
+uint16_t kn5000_dsp1_device::reg_data_r()
+{
+	uint16_t const val = m_regs[m_addr_latch];
+	LOGMASKED(LOG_REG, "DSP1 reg[0x%02X] -> 0x%02X\n", m_addr_latch, val);
 	return val;
 }
 
@@ -141,7 +159,8 @@ void kn5000_dsp1_device::device_stop()
 	txt << "I-RAM capacity is " << IRAM_WORDS << " words of 36 bits; a program may use FEWER,\n";
 	txt << "so a run of N groups-of-5 with N <= " << IRAM_WORDS << " is plausible. The evidence to look\n";
 	txt << "for is N VARYING BY EFFECT ALGORITHM -- fixed-size register traffic would not.\n";
-	txt << "Group widths are a HYPOTHESIS: no 5-byte group has been shown to decode yet.\n\n";
+	txt << "5 bytes = one 36-bit I-RAM word, 3 bytes = one 24-bit C-RAM/D-RAM word (confirmed:\n";
+	txt << "the ROM handlers divide by literal 5 and 3, and captured uploads tile I-RAM exactly).\n\n";
 
 	size_t total = 0;
 	for (size_t i = 0; i < m_transfers.size(); i++)

@@ -4,7 +4,7 @@
 
     Technics KN5000 DSP Devices
 
-    IC311 (uPD6383GF-3BA) - "DSP1" - parallel host interface at 0x130000
+    IC311 (uPD6383GF-3BA) - "DSP1" - parallel host interface on Sub CPU port PZ
     IC310 (MN19413)       - "DSP2" - GPIO serial interface (bit-bang)
 
     Both chips are digital signal processors used for audio effects
@@ -57,8 +57,20 @@
         5 bytes = 40 bits, the smallest byte-aligned container for a
                   36-bit I-RAM instruction word
         3 bytes = 24 bits, exactly a C-RAM/D-RAM word
-    HYPOTHESIS, NOT YET PROVEN: the groups-of-5 payloads are DSP instructions.
-    No 5-byte group has yet been shown to decode as a valid instruction.
+    CONFIRMED 2026-07-22, two independent ways:
+      * in the ROM: the bytecode handlers divide payload lengths by literal
+        constants -- "div WA,0x0005" at 0x03C32E/0x03C568/0x03C7BB (ops 0/1/5)
+        and "div WA,0x0003" at 0x03C661 (op 2);
+      * at runtime, capturing the real port: every op3 upload carries a 16-bit
+        I-RAM word address followed by a body that is an EXACT multiple of 5,
+        and the addresses tile I-RAM without overlap --
+            addr   0, 300 bytes =  60 words   (common header, 0..59)
+            addr  60, 115 bytes =  23 words   (algorithm-change stub, 60..82)
+            addr  84, 350 bytes =  70 words   (effect unit 0)
+            addr 200, 665 bytes = 133 words   (effect unit 1)
+            addr 352, 155 bytes =  31 words   (ends at 382, just under the 384 limit)
+        Ten uploads, ten integer word counts, nothing out of range. A wrong word
+        size would give fractional counts and addresses past the end of I-RAM.
 
     So this device records every command/data byte and writes the transfers
     out for offline inspection. What to look for: N groups of 5 with
@@ -98,14 +110,30 @@ class kn5000_dsp1_device : public device_t
 public:
 	kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	// uPD6383GF uC-IF, parallel mode. The Sub CPU drives C/D via which
-	// address it writes: 0x130000 = command (C/D low), 0x130002 = data.
-	void cmd_w(uint16_t data);     // 0x130000: command byte
-	void data_w(uint16_t data);    // 0x130002: data byte
-	uint16_t data_r();             // 0x130002: data byte read-back
+	// ---------------------------------------------------------------
+	// THE REAL uC-IF: Sub CPU port PZ carries the byte, port 7 the control
+	// lines (P7.3 /WRITE, P7.4 /READ, P7.5 /CS-DSP1, P7.6 C/D where 0 =
+	// command and 1 = data; PH.0 ready, PH.1 reset).  EVERY microprogram and
+	// coefficient byte goes through here.
+	// ---------------------------------------------------------------
+	void host_w(bool cd, uint8_t data);   // cd=false -> command, true -> data
 
-	// Kept as the historical names used by the memory map.
-	void addr_w(uint16_t data) { cmd_w(data); }
+	// ---------------------------------------------------------------
+	// A SEPARATE, UNRELATED register block at 0x130000 (4 channels x 8
+	// registers, 0x20 spacing), written by DSP_Init_Channels (subcpu
+	// 0x01FC95) / DSP_Write_Channel (0x01FCDE).  This is NOT the uC-IF and
+	// carries no microcode -- an earlier revision of this file wrongly
+	// modelled it as the command/data port, which is why an upload capture
+	// hooked here saw nothing but zeros.
+	// ---------------------------------------------------------------
+	void reg_addr_w(uint16_t data);   // 0x130000: register address latch
+	void reg_data_w(uint16_t data);   // 0x130002: register data write
+	uint16_t reg_data_r();            // 0x130002: register data read
+
+	// Historical names used by the memory map.
+	void addr_w(uint16_t data) { reg_addr_w(data); }
+	void data_w(uint16_t data) { reg_data_w(data); }
+	uint16_t data_r() { return reg_data_r(); }
 
 	// I-RAM capacity, in 36-bit instruction words (uPD6383GF).
 	static constexpr int IRAM_WORDS = 384;
@@ -118,8 +146,9 @@ protected:
 private:
 	void flush_transfer();
 
-	uint8_t  m_cmd;                 // most recent command byte
-	uint8_t  m_regs[0x100];         // flat register file (read-back model)
+	uint8_t  m_cmd;                 // most recent uC-IF command byte
+	uint8_t  m_addr_latch;          // 0x130000 register block address latch
+	uint8_t  m_regs[0x100];         // 0x130000 register file (read-back model)
 
 	// --- upload capture (not emulation state; excluded from save states) ---
 	struct transfer

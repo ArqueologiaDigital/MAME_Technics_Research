@@ -167,6 +167,7 @@ private:
 	output_finder<> m_checking_device_led_cn12;
 	uint8_t m_mstat;
 	uint8_t m_sstat;
+	uint8_t m_subcpu_p7 = 0xff;  // Sub CPU port 7: DSP strobes / chip select / C-D
 	uint8_t m_cpanel_inta;
 	uint32_t m_subcpu_latch_write_count;
 	uint32_t m_maincpu_latch_write_count;
@@ -353,11 +354,12 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status
 	map(0x120000, 0x12ffff).r(FUNC(kn5000_state::subcpu_latch_r)); // @ IC22
 	map(0x120000, 0x12ffff).w(FUNC(kn5000_state::maincpu_latch_w)); // @ IC23 (logged wrapper)
-	// DSP1 @ IC311 (NEC uPD6383GF-3BA) parallel host interface (uC-IF).  These are the
-	// chip's COMMAND and DATA ports -- the address a write lands on selects C/D, low for
-	// command and high for data (subcpu DSP_Send_Command 0x036331 / DSP_Send_Data 0x0367EE).
-	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::cmd_w));     // C/D low  = command
-	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // C/D high = data
+	// A 4-channel x 8-register block associated with DSP1 @ IC311, written by
+	// DSP_Init_Channels (subcpu 0x01FC95) / DSP_Write_Channel (0x01FCDE).
+	// NOTE: this is NOT the uPD6383GF host interface -- the microprogram and coefficient
+	// uploads go over Sub CPU port PZ with the port 7 strobes (see machine config).
+	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::reg_addr_w));   // register address
+	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::reg_data_r), FUNC(kn5000_dsp1_device::reg_data_w)); // register data
 	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
@@ -784,8 +786,31 @@ void kn5000_state::kn5000(machine_config &config)
 			});
 
 
+	// SUBCPU PORT 7 + PORT Z: the uPD6383GF (IC311) host interface (uC-IF).
+	//
+	// THIS is where every DSP microprogram and coefficient byte travels -- NOT the
+	// 0x130000 register block, which is a separate 4x8 register file. From the v1.42
+	// Sub CPU ROM:
+	//   DSP_Set_Command_Mode  0x0383A7  RES 6,(P7)   C/D = 0 -> command
+	//   DSP_Set_Data_Mode     0x0383AB  SET 6,(P7)   C/D = 1 -> data
+	//   DSP_Assert_Write      0x0383AF  RES 3,(P7)   /WRITE (active low)
+	//   DSP_Assert_Read_Data  0x0383B7  RES 4,(P7)   /READ  (active low)
+	//   DSP_Select_Chip       0x0383CB  RES 5,(P7)   /CS DSP1 (active low; DSP2 = PE.6)
+	//   the byte itself is written to (PZ) inside DSP_Send_Command / DSP_Send_Data
+	m_subcpu->port7_write().set(
+			[this] (u8 data) {
+				m_subcpu_p7 = data;
+			});
+	m_subcpu->portz_write().set(
+			[this] (u8 data) {
+				// Only capture while DSP1 is selected (P7.5 low). P7.6 is C/D.
+				if (!BIT(m_subcpu_p7, 5))
+					m_dsp1->host_w(BIT(m_subcpu_p7, 6), data);
+			});
+
 	// SUBCPU PORT H:
 	//   bit 0 (input) = DSP1 (IC311) ready signal (active high)
+	//   bit 1 (output) = DSP1 reset (active low)
 	//   On real hardware, the DSP asserts this line after accepting a command.
 	//   Always ready since the DSP1 stub accepts all register writes immediately.
 	m_subcpu->porth_read().set_constant(0x01);
