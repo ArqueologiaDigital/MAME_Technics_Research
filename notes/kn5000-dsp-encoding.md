@@ -409,3 +409,50 @@ than another 38 straight-line effect bodies.
 
 Second priority: a runtime capture of one effect loaded into **both** units, to settle
 §7 properly.
+
+---
+
+## ADDENDUM (main agent, 2026-07-22): the common header is already captured
+
+This note's closing recommendation is to go hunting in the Sub CPU for the emitter that writes
+I-RAM 0..59, on the grounds that the header "is not in this corpus". Correct about the ROM
+`ALGO_TABLE` corpus, but the header does not need to be hunted: **the live capture already has
+it.** The `kn5000_dsp1` device records the uC-IF byte stream, and a cold boot uploads
+
+  * I-RAM 0..59  — 60 words, the common header, uploaded **three times, byte-identical**
+  * I-RAM 60..82 — 23 words, the algorithm-change stub
+
+Both are in `kn5000_dsp1_upload.txt` from any cold-boot run. No new instrumentation is required.
+
+### The prediction holds, and strongly
+
+Measured against the 841-word vocabulary of the 96 extracted effect bodies:
+
+| block | words | distinct | **never seen in any effect body** |
+|---|---|---|---|
+| header @0   | 60 | 57 | **51 / 57  (89%)** |
+| stub   @60  | 23 | 23 | **21 / 23  (91%)** |
+
+So ~90% of the header's vocabulary is machinery that appears nowhere in the per-sample effect
+code — exactly where this note predicts the loop control (LC1-LC3), `BRAKST`, the `COND` field,
+the GF flag manipulation and the DRAM-delay setup must live, since the effect bodies are
+straight-line code.
+
+The `class4` field distributions differ accordingly. Header: `{0:8, 1:8, 2:16, 3:1, 4:2, 5:1,
+6:1, 8:1, 9:1, 10:21}` over 60 words. Bodies: `{0:82, 1:37, 2:429, 3:4, 4:17, 5:4, 6:9, 7:4,
+8:30, 9:9, 10:207, 14:9}` over 841. Class 2 dominates the bodies (51%) but is a minority in the
+header (27%), while class 10 is proportionally far heavier in the header.
+
+The terminator landmark also appears in the header, so the header self-terminates like a program.
+
+### Terminator independently re-verified
+
+`class4 == 1 && addr8 in {0x0E, 0x0F}` was re-checked against all 96 extracted images:
+**91/96 end with it, and it occurs 0 times anywhere else in 7108 words.** The 5 misses are the
+malformed streams this note already flags (loads outside the 384-word I-RAM). Confirmed.
+
+### Revised next experiment
+
+Skip the emitter hunt. Analyse the 83 header+stub words that are already on disk — they are a
+small, high-value corpus containing the control-flow machinery the effect bodies lack, and 90% of
+their vocabulary is unique to them.
