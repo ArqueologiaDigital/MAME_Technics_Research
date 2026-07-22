@@ -113,6 +113,14 @@ ln -sf "$HERE/src/mame/matsushita/kn5000.cpp"                "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.cpp"            "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.cpp"
+# NEC uPD6383GF (KN5000 IC311) -- DRAFT DSP core + disassembler.  No audio, and
+# the core is instantiated DISABLED; it exists to hold the uploaded microcode in
+# a real, debugger-visible I-RAM and to make the corpus readable by unidasm.
+mkdir -p "$BUILD_TREE/src/devices/cpu/upd6383"
+ln -sf "$HERE/src/devices/cpu/upd6383/upd6383.cpp"           "$BUILD_TREE/src/devices/cpu/upd6383/upd6383.cpp"
+ln -sf "$HERE/src/devices/cpu/upd6383/upd6383.h"             "$BUILD_TREE/src/devices/cpu/upd6383/upd6383.h"
+ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.cpp"          "$BUILD_TREE/src/devices/cpu/upd6383/upd6383d.cpp"
+ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.h"            "$BUILD_TREE/src/devices/cpu/upd6383/upd6383d.h"
 ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.h"              "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.h"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.h"
@@ -149,6 +157,57 @@ if 'DRC_CPUS = { "ADSP2106X"' not in s2 and 'DRC_CPUS = { "ADSP21062"' in s2:
     print("cpu.lua: DRC_CPUS += ADSP2106X (SHARC DRC linkage)")
 else:
     print("cpu.lua: DRC_CPUS already has ADSP2106X")
+PY
+
+# 3b. Register the NEC uPD6383GF draft DSP core + disassembler (idempotent).
+# CPUS["UPD6383"] is FORCED true: in a focused build the CPU list is derived from
+# the drivers, and although kn5000_dsp.h now includes upd6383.h the annotation
+# scan is fragile enough that forcing it is the honest way to keep the core in
+# the binary. The disassembler is also added to unidasm's arch table so the
+# extracted microprogram images can be read with `unidasm -arch upd6383`.
+python3 - "$BUILD_TREE/scripts/src/cpu.lua" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'upd6383/upd6383.cpp' in s:
+    print("cpu.lua: UPD6383 already registered")
+else:
+    anchor = '--------------------------------------------------\n-- NEC uPD7725\n'
+    block = ('--------------------------------------------------\n'
+             '-- NEC uPD6383GF (Technics KN5000 effects DSP -- DRAFT)\n'
+             '--@src/devices/cpu/upd6383/upd6383.h,CPUS["UPD6383"] = true\n'
+             '--------------------------------------------------\n\n'
+             'CPUS["UPD6383"] = true\n\n'
+             'if CPUS["UPD6383"] then\n\tfiles {\n'
+             '\t\tMAME_DIR .. "src/devices/cpu/upd6383/upd6383.cpp",\n'
+             '\t\tMAME_DIR .. "src/devices/cpu/upd6383/upd6383.h",\n\t}\nend\n\n'
+             'if opt_tool(CPUS, "UPD6383") then\n'
+             '\ttable.insert(disasm_files , MAME_DIR .. "src/devices/cpu/upd6383/upd6383d.cpp")\n'
+             '\ttable.insert(disasm_files , MAME_DIR .. "src/devices/cpu/upd6383/upd6383d.h")\n'
+             'end\n\n')
+    if anchor not in s:
+        anchor = 'if CPUS["UPD7725"] then'
+        block = block + anchor
+    else:
+        block = block + anchor
+    open(p, 'w').write(s.replace(anchor, block, 1))
+    print("cpu.lua: UPD6383 registered (forced on)")
+PY
+
+python3 - "$BUILD_TREE/src/tools/unidasm.cpp" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'upd6383d.h' in s:
+    print("unidasm.cpp: upd6383 already registered")
+else:
+    s = s.replace('#include "cpu/upd7725/dasm7725.h"',
+                  '#include "cpu/upd6383/upd6383d.h"\n#include "cpu/upd7725/dasm7725.h"', 1)
+    entry = ('\t{ "upd6383",         be,  0, []() -> util::disasm_interface * '
+             '{ return new upd6383_disassembler; } },\n')
+    anchor = '\t{ "upd7725",'
+    i = s.index(anchor)
+    s = s[:i] + entry + s[i:]
+    open(p, 'w').write(s)
+    print("unidasm.cpp: upd6383 registered")
 PY
 
 # 4. Register the driver in the driver list (idempotent).

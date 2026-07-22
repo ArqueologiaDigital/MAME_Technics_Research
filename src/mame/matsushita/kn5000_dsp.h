@@ -72,6 +72,21 @@
         Ten uploads, ten integer word counts, nothing out of range. A wrong word
         size would give fractional counts and addresses past the end of I-RAM.
 
+    ---------------------------------------------------------------------
+    WHAT IS THIS DEVICE FOR, NOW THAT src/devices/cpu/upd6383 EXISTS?
+    ---------------------------------------------------------------------
+    Three things, none of which belong in the CPU core:
+      1. the 0x130000 register block below, which is NOT the uPD6383 at all;
+      2. the KN5000-side wiring: the Sub CPU's port PZ / port 7 strobes, which
+         are a property of this instrument;
+      3. the upload CAPTURE artefacts (kn5000_dsp1_upload.{bin,txt}), which are
+         research instrumentation, not chip behaviour.
+    The uC-IF PROTOCOL -- command 0x01 = write I-RAM, the 16-bit word address,
+    the 5-byte words -- moved to upd6383_device::host_w where it belongs: it is
+    the same protocol wherever the part is used, and the Pioneer CDJ-500 uses
+    the same chip.  This device now owns the real core as a subdevice ("core")
+    and forwards every byte to it, so the uploads land in a real I-RAM.
+
     So this device records every command/data byte and writes the transfers
     out for offline inspection. What to look for: N groups of 5 with
     N <= 384 (I-RAM capacity -- a program may use only part of it), and
@@ -98,6 +113,8 @@
 #define MAME_MATSUSHITA_KN5000_DSP_H
 
 #pragma once
+
+#include "cpu/upd6383/upd6383.h"
 
 #include <vector>
 
@@ -142,9 +159,21 @@ protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
 	virtual void device_stop() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
 	void flush_transfer();
+	void iram_map(address_map &map) ATTR_COLD;
+	void cram_map(address_map &map) ATTR_COLD;
+	void dram_map(address_map &map) ATTR_COLD;
+	void delay_map(address_map &map) ATTR_COLD;
+
+	// The DSP core proper (draft: no ISA, no audio -- see upd6383.cpp).  It is
+	// a SUBDEVICE of the host interface so that the uploads this device
+	// already decodes land in the core's real I-RAM.  It is held SUSPENDED:
+	// nothing here executes, so instantiating it cannot change how the machine
+	// boots, and a half-decoded core must not be allowed to invent behaviour.
+	required_device<upd6383_device> m_core;
 
 	uint8_t  m_cmd;                 // most recent uC-IF command byte
 	uint8_t  m_addr_latch;          // 0x130000 register block address latch

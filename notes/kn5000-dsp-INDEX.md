@@ -30,6 +30,7 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-effect-map.md` | ★ the per-effect structural map of **all 38 images**, the table-lookup idiom, MULTI TAP DELAY resolved |
 | `kn5000-dsp-semantics.md` | ★★★ the biquad section **SOLVED by exhaustive constraint search** (19.7 M assignments, 144 survivors = one dataflow): Direct Form I, four state cells, **two of the four writes folded into multiply instructions**; `[7]` determined uniquely (make-up gain × accumulator, writes `S2`); exact impulse-response agreement on 9 real ROM banks; the reverb all-pass cross-check and its numbers |
 | `kn5000-dsp-avsdrv.md` | ★ **`AVSDRV.SYS` v5.10 ACQUIRED** from NEC's own server (inside NEC's free MS-DOS 6.2 update module `UPDOS62.EXE`, via Wayback) and **VERIFIED** as the real uPD6380 driver (`MOV DX,0A462h/0A464h`, `AVSDRV$$`, three `INT 0D9h` installs) — but its payload is LZ-packed behind an `AVSLOAD$` loader, so the upload loop / 19 microprograms / word size are still unread. Next step and reproduce recipe inside |
+| `kn5000-dsp-core-draft.md` | ★ the MAME **device + disassembler** (`src/devices/cpu/upd6383/`), the six decoded forms and their evidence, the live-I-RAM-vs-static-extraction acceptance test, and **the undecoded-word worklist ranked by frequency** (655 distinct words, 185 families, 9 % of the corpus decoded) |
 | `kn5000-dsp-necfamily.md` | ★ the uPD7725-descendant hypothesis, **REJECTED** (6 of 8 borrowed structures fail); the bodies are proved HAND-UNROLLED, which is why no branch exists to find; new `lo12` sub-boundary `[11:8]‖[7:2]` |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
@@ -102,6 +103,10 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    36. Effect units 2–4 route to it. A whole second chip awaits.
 8. **Emulating the DSP core** in MAME, once enough ISA is known — the payoff being that KN5000
    effects would actually be audible. Circular until the ISA exists, but it is the destination.
+   **STARTED (2026-07-22, `kn5000-dsp-core-draft.md`): the device and disassembler now exist
+   at `src/devices/cpu/upd6383/`, the KN5000 instantiates the core DISABLED and the host
+   uploads land in a real I-RAM (verified byte-identical against the static extraction), and
+   the undecoded vocabulary is now a frequency-ranked worklist. Still no ISA and no audio.**
 
 ### Elsewhere in the project (not DSP)
 9. **Power-down NMI** — the `<Db>` that returns on every warm boot, and the same root cause as the

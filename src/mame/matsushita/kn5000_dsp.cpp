@@ -36,10 +36,61 @@ DEFINE_DEVICE_TYPE(KN5000_DSP1, kn5000_dsp1_device, "kn5000_dsp1", "KN5000 DSP1 
 
 kn5000_dsp1_device::kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, KN5000_DSP1, tag, owner, clock)
+	, m_core(*this, "core")
 	, m_cmd(0)
 	, m_addr_latch(0)
 	, m_have_current(false)
 {
+}
+
+//-------------------------------------------------
+//  the DSP core, and its four memories
+//-------------------------------------------------
+
+// I-RAM, seen by the core as 384 * 5 = 1920 bytes (see upd6383.cpp for why the
+// 36-bit instruction RAM is modelled byte-wise).
+void kn5000_dsp1_device::iram_map(address_map &map)
+{
+	map(0x000, 0x77f).ram();
+}
+
+// C-RAM / D-RAM: 256 x 24, carried in 32-bit cells.
+void kn5000_dsp1_device::cram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();
+}
+
+void kn5000_dsp1_device::dram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();
+}
+
+// External DRAM digital delay.  The KN5000's actual delay memory size is not
+// established; the chip addresses up to 128K 16-bit samples (A0-A16).
+void kn5000_dsp1_device::delay_map(address_map &map)
+{
+	map(0x00000, 0x1ffff).ram();
+}
+
+void kn5000_dsp1_device::device_add_mconfig(machine_config &config)
+{
+	// NOMINAL clock: 384 * 44,100 Hz = 16.9344 MHz, chosen so that one full
+	// pass of the 384-word I-RAM fits one sample frame.  The 44.1 kHz frame
+	// rate is established (the firmware's own ms x 0xAC44 / 0x3E8); the actual
+	// master clock of IC311 is NOT, and this device does not execute anyway.
+	UPD6383(config, m_core, 384 * 44100);
+	m_core->set_addrmap(AS_IRAM,  &kn5000_dsp1_device::iram_map);
+	m_core->set_addrmap(AS_CRAM,  &kn5000_dsp1_device::cram_map);
+	m_core->set_addrmap(AS_DRAM,  &kn5000_dsp1_device::dram_map);
+	m_core->set_addrmap(AS_DELAY, &kn5000_dsp1_device::delay_map);
+
+	// HELD DISABLED ON PURPOSE.  The instruction set is not decoded, so the
+	// core must not execute: it would trap on nearly every word and, worse, a
+	// partially-correct effects DSP is exactly the failure mode that produced
+	// audible-but-wrong sound on the KN7000.  What we want from it today is
+	// its I-RAM -- a real, addressable, debugger-visible copy of the uploaded
+	// microcode.  Remove this line only when the ISA justifies it.
+	m_core->set_disable();
 }
 
 void kn5000_dsp1_device::device_start()
@@ -81,6 +132,11 @@ void kn5000_dsp1_device::flush_transfer()
 
 void kn5000_dsp1_device::host_w(bool cd, uint8_t data)
 {
+	// The byte goes to the chip; everything below is CAPTURE ONLY.  The uC-IF
+	// protocol itself (command 0x01 = write I-RAM, and so on) belongs to the
+	// part, not to the KN5000, and lives in upd6383_device::host_w.
+	m_core->host_w(cd, data);
+
 	if (!cd)
 	{
 		// Command byte: ends whatever data run preceded it.
