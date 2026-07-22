@@ -4,22 +4,81 @@
 
     Technics KN5000 DSP Devices
 
-    IC311 (DS3613GF-3BA) - "DSP1" - Parallel bus interface at 0x130000
-    IC310 (MN19413)      - "DSP2" - GPIO serial interface (bit-bang)
+    IC311 (uPD6383GF-3BA) - "DSP1" - parallel host interface at 0x130000
+    IC310 (MN19413)       - "DSP2" - GPIO serial interface (bit-bang)
 
     Both chips are digital signal processors used for audio effects
     (reverb, chorus, delay, etc.). They are controlled by a shared
     bytecode interpreter running on the Sub CPU.
 
-    DSP1 uses a register-indirect memory-mapped interface:
-      0x130000: register address byte
-      0x130002: register data byte
+    ---------------------------------------------------------------------
+    PART IDENTIFICATION (2026-07-22)
+    ---------------------------------------------------------------------
+    IC311 was previously recorded as "DS3613GF-3BA", described as a custom
+    ASIC of unknown origin with no public documentation. That part number is
+    a TRANSCRIPTION ERROR. The chip is an NEC uPD6383GF-3BA.
 
-    DSP2 uses GPIO bit-bang serial on Sub CPU ports:
-      PF.0 = SDA (data), PF.2 = SCLK (clock), PE.6 = CS2 (chip select)
+    The same part appears as IC302 in the Pioneer CDJ-500/CDJ-500G service
+    manual (RRV1087), pages 1-15..1-17, which documents its block diagram and
+    all 100 pins. Felipe's own pin survey of the KN5000 chip
+    (kn5000_project/chips_dsp_usados_no_kn5000.txt) matches that pinout
+    one-for-one over the pins he transcribed:
+        1 /CS, 2 /DC, 3 /SCK, 4 SI, 5 SO, 6 EIFLAG, 7 EOFLAG, 8 RDY, 9 /RST,
+        10 /RST2, 11 /BR-RQ, 12 /BR-AK, 13 /Fs-RST, 14 /Fs-MASK, 15 VDD,
+        16 GND, 17 BCLKI, 18 LRCKI, 19 XFsI, 20-22 DI1-DI3
+    ...and both are 100-pin parts.
 
-    This file provides stub device classes that accept register writes
-    without crashing the firmware. Full DSP emulation is a long-term goal.
+    uPD6383GF ARCHITECTURE (from the CDJ-500 manual):
+      * I-RAM  384 x 36  - INSTRUCTION RAM, uploaded by the host CPU
+      * C-RAM  256 x 24  - coefficient RAM
+      * D-RAM  256 x 24  - data RAM
+      * 24x24 multiplier -> 44-bit ALU, ACCA/ACCB accumulators, 2 shifters
+      * PC + 2-level stack, loop counters LC1-LC3, pointers DP/BP1/BP2/PR1/PR2
+      * external DRAM controller (RAS/CAS/WE, A0-A16, 16-bit I/O) for delay
+      * 3 serial audio in (DI1-DI3), 3 serial audio out (DO1-DO3)
+      * host flags: GF1-GF3 (set by instructions), RQ1-RQ3 (set by host,
+        testable in an instruction's COND field)
+      * host interface selectable parallel (P/S high) or serial (P/S low)
+
+    The KN5000 uses the PARALLEL interface: the Sub CPU writes command and
+    data bytes through port PZ with READ/WRITE strobes (DSP_Send_Command at
+    subcpu 0x036331, DSP_Send_Data at 0x0367EE), chip select on P7.5 and
+    reset on PH.1.
+
+    ---------------------------------------------------------------------
+    WHY THIS DEVICE CAPTURES THE BYTE STREAM
+    ---------------------------------------------------------------------
+    Because I-RAM is RAM, the DSP program MUST be uploaded at runtime, so the
+    program image is reachable without decoding a single opcode.
+
+    The Sub CPU's two-level bytecode interpreter emits payloads in "groups of
+    5" (opcodes 0x0N/0x1N/0x5N) and "groups of 3" (opcode 0x2N). Those widths
+    match this chip exactly:
+        5 bytes = 40 bits, the smallest byte-aligned container for a
+                  36-bit I-RAM instruction word
+        3 bytes = 24 bits, exactly a C-RAM/D-RAM word
+    HYPOTHESIS, NOT YET PROVEN: the groups-of-5 payloads are DSP instructions.
+    No 5-byte group has yet been shown to decode as a valid instruction.
+
+    So this device records every command/data byte and writes the transfers
+    out for offline inspection. What to look for: N groups of 5 with
+    N <= 384 (I-RAM capacity -- a program may use only part of it), and
+    crucially a DIFFERENT N per effect algorithm. Fixed-size register traffic
+    would not vary that way, so the variation is the real evidence.
+
+    DECODING STRATEGY (Felipe, 2026-07-22): cross-check numeric constants
+    against the KN7000 effect algorithms, which are already fully disassembled
+    and documented (see kn7000_disassembly/dsp/ -- reverb, chorus family,
+    insert effects, tremolo/rotary, phaser/enhancer/gate, dynamics/EQ/exciter,
+    modulation/pitch). No guarantee the two are the same, but correlations are
+    plausible: both are Technics effect units of the same era, and the KN7000
+    algorithms are known in full.
+    Aim this at the GROUPS OF 3 first, not the instructions: 24-bit C-RAM/D-RAM
+    words are coefficients and delay lengths, and those are the values most
+    likely to survive a change of instruction set -- a delay tap of a given
+    number of milliseconds is the same physical quantity on either machine, so
+    a length should reappear (scaled by the sample rate) even if nothing about
+    the opcode encoding matches. Filter coefficients likewise.
 
 ***************************************************************************/
 
@@ -28,8 +87,10 @@
 
 #pragma once
 
+#include <vector>
+
 //**************************************************************************
-//  DSP1 - IC311 (DS3613GF-3BA) - Parallel bus interface
+//  DSP1 - IC311 (uPD6383GF-3BA) - parallel host interface
 //**************************************************************************
 
 class kn5000_dsp1_device : public device_t
@@ -37,23 +98,38 @@ class kn5000_dsp1_device : public device_t
 public:
 	kn5000_dsp1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	// Memory-mapped register-indirect interface (SubCPU at 0x130000)
-	void addr_w(uint16_t data);    // 0x130000: register address latch
-	void data_w(uint16_t data);    // 0x130002: register data write
-	uint16_t data_r();             // 0x130002: register data read
+	// uPD6383GF uC-IF, parallel mode. The Sub CPU drives C/D via which
+	// address it writes: 0x130000 = command (C/D low), 0x130002 = data.
+	void cmd_w(uint16_t data);     // 0x130000: command byte
+	void data_w(uint16_t data);    // 0x130002: data byte
+	uint16_t data_r();             // 0x130002: data byte read-back
 
-	// Number of channels and registers per channel
-	static constexpr int NUM_CHANNELS = 4;
-	static constexpr int REGS_PER_CHANNEL = 8;
-	static constexpr int CHANNEL_SPACING = 0x20;
+	// Kept as the historical names used by the memory map.
+	void addr_w(uint16_t data) { cmd_w(data); }
+
+	// I-RAM capacity, in 36-bit instruction words (uPD6383GF).
+	static constexpr int IRAM_WORDS = 384;
 
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual void device_stop() override;
 
 private:
-	uint8_t  m_addr_latch;                                    // Current register address
-	uint8_t  m_regs[NUM_CHANNELS * CHANNEL_SPACING];          // Register file (flat)
+	void flush_transfer();
+
+	uint8_t  m_cmd;                 // most recent command byte
+	uint8_t  m_regs[0x100];         // flat register file (read-back model)
+
+	// --- upload capture (not emulation state; excluded from save states) ---
+	struct transfer
+	{
+		uint8_t              cmd;
+		std::vector<uint8_t> payload;
+	};
+	std::vector<transfer> m_transfers;    // completed transfers this session
+	transfer              m_current;      // transfer being accumulated
+	bool                  m_have_current;
 };
 
 DECLARE_DEVICE_TYPE(KN5000_DSP1, kn5000_dsp1_device)

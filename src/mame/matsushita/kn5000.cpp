@@ -353,8 +353,11 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status
 	map(0x120000, 0x12ffff).r(FUNC(kn5000_state::subcpu_latch_r)); // @ IC22
 	map(0x120000, 0x12ffff).w(FUNC(kn5000_state::maincpu_latch_w)); // @ IC23 (logged wrapper)
-	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::addr_w));    // DSP1 @ IC311 register address
-	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // DSP1 @ IC311 register data
+	// DSP1 @ IC311 (NEC uPD6383GF-3BA) parallel host interface (uC-IF).  These are the
+	// chip's COMMAND and DATA ports -- the address a write lands on selects C/D, low for
+	// command and high for data (subcpu DSP_Send_Command 0x036331 / DSP_Send_Data 0x0367EE).
+	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::cmd_w));     // C/D low  = command
+	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::data_r), FUNC(kn5000_dsp1_device::data_w)); // C/D high = data
 	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
