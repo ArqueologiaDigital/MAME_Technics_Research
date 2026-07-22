@@ -22,6 +22,7 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-reverb.md` | the reverb motif and topology (two ladders of five all-pass diffusers) |
 | `kn5000-dsp-header.md` | I-RAM memory map, the unit index, host poke region |
 | `kn5000-dsp-parameters.md` | proof-by-construction of the pointer-load, 44.1 kHz, parameter names, dB curve |
+| `kn5000-dsp-paramnames.md` | ★ the **name→slot binding LOCATED** (supersedes §4/§10 "NOT FOUND"): it is **not a table** — a per-effect list of name indices in the UI object-property DB, drawn by `DspItem0CngFunc`/`F3561F` (`name = 0xE324D5 + 17*(RAM[0x29AC+slot]-1)`), loaded by `LABEL_F457CF` via property reader `FDC6E7`. Explains the fixed-stride scan's blindness. Constraint-propagation reported as a MISS (count-check needs the object DB) |
 | `kn5000-dsp-class2.md` | class-2 round one **plus a correction and its retraction — read all three** |
 | `kn5000-dsp-class2-round2.md` | ★ most recent and most reliable: all-pass reframe, P-consumer test, class4-as-space-selector |
 | `kn5000-dsp-biquad.md` | (in progress) operand-level semantics from the PARAMETRIC EQ |
@@ -132,6 +133,15 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    at `src/devices/cpu/upd6383/`, the KN5000 instantiates the core DISABLED and the host
    uploads land in a real I-RAM (verified byte-identical against the static extraction), and
    the undecoded vocabulary is now a frequency-ranked worklist. Still no ISA and no audio.**
+
+### DSP, parameter-name binding
+16. **★ name→slot binding LOCATED, lists not yet extracted** (`kn5000-dsp-paramnames.md`). The binding
+    is a per-effect **object-property list** (RAM `0x29AC`, count `0x29AA`), not a fixed-stride table —
+    which is why the §4 scan failed. Reader (`F3561F`) and loader (`F457CF`) are decoded with
+    addresses. OPEN: decode the UI object DB (`FDC5AB` + tables `0xEE6044/0xEE61D4/0xEE637A`) to resolve
+    `FDC6E7(0x4B10+i)` statically per effect → yields the true per-effect slot count (closes the
+    propagation count-check) and the ordered name-index lists. Or dump `RAM[0x29AC]` per effect in the
+    emulator.
 
 ### Elsewhere in the project (not DSP)
 9. **Power-down NMI** — the `<Db>` that returns on every warm boot, and the same root cause as the
