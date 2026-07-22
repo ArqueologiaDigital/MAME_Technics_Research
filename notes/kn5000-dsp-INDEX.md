@@ -80,11 +80,16 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    `204.2.FE.687 / 804.8.16.1DA / 000.2.FF.647` triple, already in the corpus.
 1. **C-RAM vs D-RAM.** Two 256×24 spaces plus a bank register; how they are distinguished is
    unknown. Partly folded into the biquad run.
-1b. **★ The pointer-DELTA rule** — now the single binding unknown (`-pointer.md` §6, §8.2).
-   `addr8` is a signed post-increment and classes 1/3/5/6/8 provably carry none, but the working
-   rule "classes 2 and A move it" is measurably WRONG: the reverb's walk leaves any 256-cell
-   window under all 512 class subsets, and the phaser's shared cell is read at `0x76` while its
-   own modulator writes `0x7B`. Two labelled words, three images, one equation to satisfy.
+1b. ~~**★ The pointer-DELTA rule**~~ **RESOLVED** (`kn5000-dsp-addressing.md`,
+   `tools/kn5000_dsp_addressing.py`). The rule is **signed `addr8` post-increment on an 8-bit
+   (wrapping) pointer, gated by `class4 & 7 == 2` (classes 2 and A only)**; `class4 = bit23-mult ‖
+   3-bit mode`, carrying the poke-family "class4 = address-space selector" (`-class2-round2.md` §4)
+   into the bodies. This is the naive rule plus two data-forced fixes: **8-bit WRAP** (dissolves the
+   reverb's "leaves any 256-cell window" — it was measured without wrap) and **class 8 is frozen**
+   (biquad forces it). Reproduces all three falsifiers, and the biquad's +4/band walk lands EXACTLY
+   on the host STATE block `{64,68,6C,70,74}` (5/5) — the strongest host/body coincidence yet.
+   STILL OPEN: the absolute ORIGIN (the fit needs `0x19`, not the header's `0x70`/`0x6C`/`0x25`), so
+   the core is left DISABLED and un-edited until the base is pinned.
 2. **The `COND` field and control flow.** The pin table proves a `COND` field exists and names a
    `BRAKST` instruction, but an exhaustive scan of every contiguous bitfield found **no encoded
    branch** and no field carrying the body entry addresses 84/200. Current model is fall-through
