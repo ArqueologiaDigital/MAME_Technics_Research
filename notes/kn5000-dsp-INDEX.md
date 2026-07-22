@@ -28,6 +28,7 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-biquad-map.md` | coefficient→multiply mapping, the make-up gain, class 8 |
 | `kn5000-dsp-cursor-general.md` | the generalised coefficient cursor; the reverb decoded |
 | `kn5000-dsp-effect-map.md` | ★ the per-effect structural map of **all 38 images**, the table-lookup idiom, MULTI TAP DELAY resolved |
+| `kn5000-dsp-necfamily.md` | ★ the uPD7725-descendant hypothesis, **REJECTED** (6 of 8 borrowed structures fail); the bodies are proved HAND-UNROLLED, which is why no branch exists to find; new `lo12` sub-boundary `[11:8]‖[7:2]` |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
 `_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`,
@@ -66,6 +67,11 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    `BRAKST` instruction, but an exhaustive scan of every contiguous bitfield found **no encoded
    branch** and no field carrying the body entry addresses 84/200. Current model is fall-through
    plus host-driven entry. Likely needs the header's control words understood first.
+   **UPDATE (necfamily.md §6): a second, wider scan — every field of width 7–12 at every offset,
+   shifts 0/1/2, tested against each program's OWN extent — is also negative, and there is now a
+   positive reason: the effect bodies are HAND-UNROLLED (algo16 repeats 32 words at period 8
+   varying only `addr8`; algo39 36 words at period 9). There is no loop in a body to branch back
+   to. Statistical scanning is exhausted; this needs a PC trace or the datasheet.**
 3. **What `104.2.00.000` actually does.** Confirmed as an all-pass marker, but its *position*
    differs between reverb and phaser, so the step it performs is unidentified.
 4. **The remaining vocabulary** — after the effect-map pass, **37 `hi12` and 36 `lo12` values**
