@@ -9,7 +9,10 @@ set can be decoded and the core emulated in MAME.
 public web.** Nothing was found beyond distributor stock listings. The chip is an NEC
 consumer-ASSP audio DSP that was never published in any general NEC databook, is absent from
 every online datasheet aggregator checked, and has no community/forum footprint at all.
-**The instruction set must be inferred.** One new lead of secondary value was found (the
+**The instruction set must be inferred.** (See **ROUND 2** at the end of this file for the
+follow-up actions, which found the family's host-interface register semantics, an NEC patent
+describing the memory/pointer subsystem, and a lead on a second microprogram corpus — but still
+no ISA.) One new lead of secondary value was found (the
 family sibling uPD6380 in the NEC PC-9801-73 sound board — see §4), but it does not itself
 yield an ISA.
 
@@ -194,3 +197,186 @@ Residual actions, in descending value-per-hour, if anyone wants to spend more ti
 None of these are likely to produce an ISA. The inference route (analysing the extracted 36-bit
 program words against the known register/pointer set from the CDJ pin table, plus observed host
 behaviour) should be treated as the primary path, not the fallback.
+
+---
+
+# ROUND 2 (same day) — the residual actions were carried out
+
+The four follow-ups listed above were executed. The **verdict is unchanged** (no ISA
+documentation exists), but round 2 produced **one genuinely useful primary source** and **one
+strong new actionable lead**. Details below.
+
+## R2.1 ★ NEW PRIMARY SOURCE: the uPD6380 host-interface registers, documented
+
+**URL:** `https://www.webtech.co.jp/company/doc/undocumented_mem/io_sound.txt`
+(index: `https://www.webtech.co.jp/company/doc/undocumented_mem/`)
+**Status: DOWNLOADED AND READ IN FULL** (Shift-JIS plain text, 31 KB). This is the well-known
+Japanese *PC-9801 undocumented I/O* reference by Terumasa Kodaka & Takeshi Kono (1994-1997),
+hosted by Webtech/CRI. It is a serious, long-standing reverse-engineering document.
+
+It contains a dedicated section **［オーディオ用DSP(μPD6380)の概要］** and per-port entries.
+Verbatim content (translated), for the **PC-98GS and PC-9801-73** sound hardware:
+
+* The PC-9801-73 sound function uses the audio DSP **μPD6380**; the DSP implements ADPCM and
+  **real-time effects**. DSP control is provided by the extended sound driver
+  **AVSDRV.SYS / AVSDRV.EXE**.
+* **I/O A462h — μPD6380 control** (byte, R/W):
+  * WRITE: bit7 = *Command/data control*; bit6 = *DSPEXT-R read flag*; bit5 = **DSP reset flag**;
+    bit1 = *SO2 output on/off*; bit0 = *SO1 output on/off*.
+  * READ: bit7 = *Command/data status*; bit6 = **DSP read busy flag**; bit5 = **I-RAM modify
+    status**; bit3 = **DSP write ready flag**; bit1 = **DSP GF**; bit0 = **DSP OVF**.
+* **I/O A464h — μPD6380 data port** (byte, R/W): bits 7-0 = DSP data port.
+* The document then says: *"For details of the DSP, refer to the manufacturer-issued
+  datasheet."* — i.e. even these authors had no datasheet and did not reproduce one. (Another
+  independent confirmation that the datasheet was never public.)
+
+**Why this matters to the KN5000 work.** It is the first *independent* corroboration of the
+uPD638x family host-interface model, and it lines up point-for-point with the uPD6383 pin table
+in the Pioneer RRV1087 manual:
+* `GF` — the general flags GF1-GF3 that instructions set/reset/toggle, visible to the host.
+* `OVF` — an ALU overflow/saturation status also exported to the host.
+* **`I-RAM modify status`** — direct confirmation that the host uploads the instruction RAM and
+  that there is a *status bit telling the host when an I-RAM write is in progress/complete*.
+  Anything the KN5000 firmware does around its DSP status port should be re-read with this
+  mapping in mind.
+* A **byte-wide** data port plus a **command/data** discriminator bit — the same "parallel or
+  serial host interface" the RRV1087 pin table describes, here in its parallel form.
+* `SO1`/`SO2` output enables map onto the "3 serial audio out" of the 6383.
+
+This is a *pin/interface-level* find only. **It contains no instruction set, no opcode field
+layout, and no register file description.**
+
+## R2.2 ★ NEW ACTIONABLE LEAD: AVSDRV.SYS contains uPD6380 microcode
+
+Following directly from R2.1: NEC's own **AVSDRV.SYS / AVSDRV.EXE** (the PC-9801-73 / PC-98GS
+extended sound driver, shipped by NEC with MS-DOS 5.0/6.2 for those machines) **drives the
+uPD6380 and therefore must contain the I-RAM images it uploads** — a *second corpus of
+uPD638x DSP microprograms whose effects are named and whose semantics are known* (the -73's
+advertised effects were reverb and chorus, the same two we care about on the KN5000).
+
+For ISA inference this is potentially worth as much as a datasheet: two independent program
+corpora for the same instruction set, one of them with a labelled host-side API, massively
+constrains opcode-field hypotheses.
+
+**Status: NOT YET OBTAINED.** A search for a download did not turn up a direct link. Where to
+look next (untried):
+* PC-98 driver archives and DOS 5.0/6.2 for PC-98 disk images (Neko Project / np21w community
+  distributions, `simk98.github.io/np21w`, PC-98 software archives, dw230.com driver lists).
+* NEC's own legacy download server appeared in results
+  (`search.casnavi.nec.co.jp/download/pc/module/...`) — worth probing for the -73/-86 sound
+  modules.
+* Any PC-98GS system disk image (the GS shipped with the DSP and its driver).
+
+**Availability update (verified):** `AVSDRV.SYS` is **not rare** — it was bundled onto PC-98
+*game* boot floppies. Confirmed by fetching dosbox-x issue #1210
+(`https://github.com/joncampbell123/dosbox-x/issues/1210`), where AVSDRV.SYS is present on the
+boot floppy of *Policenauts* (PC-9821) and DOSBox-X fails to install it. So any decent PC-98
+floppy-image archive should yield a copy in minutes. **Caution:** the dosbox-x thread calls
+AVSDRV.SYS "the Qvision PCM audio card" driver and says nothing about the uPD6380 — the name
+may be reused across NEC AV sound products, so *verify the copy you obtain actually touches
+I/O A462h/A464h* (trivial to check: search the binary for those port numbers) before assuming
+it contains uPD638x microcode.
+
+Caveat before anyone invests: it is possible AVSDRV only exposes canned firmware already in a
+board ROM. Check whether the -73 board carries a ROM next to the uPD6380 before assuming the
+microcode is in the driver file.
+
+## R2.3 Patents — done properly this time (via the Google Patents XHR API)
+
+Method that works (the HTML UI is a JS SPA and returns nothing to WebFetch):
+`https://patents.google.com/xhr/query?url=<urlencoded query string>`, e.g.
+`q=reverberation+"digital+signal+processor"&assignee=NEC&before=priority:19970101&after=priority:19880101`.
+Returns JSON. **Note: it rate-limits hard (503) after ~5 queries; back off for several minutes.**
+
+Verified negative: `q="μPD6383"` and `q="uPD6383"` → **0 results across all of Google Patents.**
+
+Results of the structured NEC searches (all publication data verified from the API response):
+
+* **JPH08166795A — NEC Corp, priority 1994-12-14, "ディジタルシグナルプロセッサ (Digital
+  signal processor)"** — **FETCHED AND READ. This is the closest architectural disclosure
+  found anywhere, and it is very probably about this chip family.** It describes a DSP that
+  **unifies PCM sound-source generation and audio effects in one chip** (explicitly motivated by
+  prior art needing separate LSIs), with a **memory address generation circuit** that divides a
+  **large external memory into predetermined block regions — "echo area, reverb area A, reverb
+  area B"** plus PCM sample areas. Hardware: an **offset memory** (per-region base), a **pointer
+  memory** (per-region current position), an **adder** producing offset+pointer, an **AND circuit**
+  for boundary detection / pointer wrap, latches and selectors. Regions behave as **ring buffers**
+  for delay effects while PCM areas are accessed at fixed locations. This is exactly the
+  "external DRAM controller for digital delay + CP/DP/BP1/BP2/PR1/PR2 pointer set + bank
+  register" arrangement seen in the uPD6383 pin table, described in words. Timing (Dec 1994)
+  fits a part in production by 1996. **It does NOT disclose instruction word width, opcode
+  fields, flag names, or the host interface** — it is an address-generator patent, not a core
+  patent. Still: it is the best public description of *what the pointer/bank machinery does*,
+  and should be read in full by whoever infers the ISA.
+* **JPH04142600A — NEC Corp, priority 1990-10-04, "Memory address generator of voice
+  processor"** — **FETCHED AND READ.** Earlier, simpler relative of the above: counter +
+  subtracter generating ring-buffer addresses for **multiple delay lines with differing delay
+  amounts**, upper address bits fixed per unit, lower bits cycling. Confirms the design lineage.
+  No ISA content.
+* Other hits noted but not fetched (Google Patents began returning 503): **JPH05313889A** (NEC
+  Corp, priority 1992-05-07, "Digital signal processor" — surfaced by a *loop counter* query, so
+  it is the **most promising unread candidate** given the 6383's LC1-LC3 loop counters);
+  **JPH052479A** (NEC IC Microcomputer Systems, priority 1991-06-25, "Digital signal
+  processor"); JPH02295400A / JPH04328797A / JPH08314684A (NEC Home Electronics — sound-field
+  and audio-information processing, application-level).
+* Ruled out as irrelevant: EP0712231A2 (echo canceller), US5790657A (echo suppressor),
+  US5375238A (loop nesting, general CPU).
+
+**Verdict on patents: the avenue is real but has now largely been mined.** NEC patented the
+*memory/address* subsystem, not the instruction encoding. Two candidate patents remain unread
+(JPH05313889A, JPH052479A) — cheap to check when Google Patents un-throttles, and JPH05313889A
+is the one worth reading.
+
+## R2.4 Pioneer CDJ-500II — ruled out as a second pin table
+
+`https://www.manualslib.com/manual/962593/Pioneer-Cdj-500ii.html` — **fetched.** The CDJ-500II
+service manual is **order no. RRV2031 and only 6 pages** — a *supplement* to the CDJ-500 manual,
+containing a parts-difference list and schematic sheets, not a full IC-description section. It
+does reference "TO IC302 BUS" on the schematic (so the II very likely carries the same DSP), but
+it will not contain a second pin table. **Not worth pursuing further.**
+Also noted: elektrotanya's copy is behind a **captcha** (verified — the download page returns a
+captcha form, no direct PDF href), so it is not fetchable by tooling anyway.
+
+## R2.5 Panasonic part code GGC1163 — negative
+
+Searched `"GGC1163" Panasonic Technics part`. **NOTHING** — no parts list, no other model, only
+generic Panasonic parts-portal pages. The code is only visible on the instrumentalparts listing.
+Panasonic's own parts portal (`panasonic.encompass.com`) would need an interactive search to
+enumerate which models order GGC1163; not doable with these tools, and unlikely to yield ISA
+information even if it worked (it would only find sibling *products*).
+
+## R2.6 PC-9801-73 / PC-98GS technical references — partially answered
+
+Japanese searches confirmed (multiple independent sources, wdic.org fetched and verified) that
+the uPD6380 was NEC's **PC-98GS** audio DSP first, inherited by the **PC-9801-73**, doing
+**chorus and reverb**; the PC-9801-86 is a -73 with the effects (and the DSP) removed. No NEC
+technical reference reproducing the DSP's programming model was found online. The Webtech
+document (R2.1) is the community's best effort and it explicitly defers to a datasheet it did
+not have. Also checked and found to contain **no** DSP material: the same site's `io_gs.txt`
+(PC-98GS I/O) and `io_music.txt` — downloaded and grepped, zero hits for 6380/DSP.
+
+---
+
+## REVISED BOTTOM LINE
+
+**Unchanged: there is no instruction-set documentation. The uPD6383 ISA must be inferred.**
+Round 2 did not find a datasheet and produced a third independent confirmation that none was
+ever published (the Webtech authors, who reverse-engineered the host ports in the 1990s, had to
+tell readers to "refer to the manufacturer's datasheet" because they did not have one).
+
+What round 2 *did* change:
+1. We now have **independently-sourced host-interface semantics** for the family (GF, OVF,
+   I-RAM modify status, read-busy, write-ready, command/data, DSP reset) — directly useful for
+   interpreting the KN5000 firmware's DSP port accesses.
+2. We now have a **patent (JPH08166795A) describing the pointer/offset/ring-buffer memory
+   subsystem** in prose — useful background for decoding pointer-manipulation instructions.
+3. There is a **new, high-value lead worth real effort: obtaining AVSDRV.SYS** (or a PC-98GS /
+   PC-9801-73 system disk) to recover a second corpus of uPD638x microprograms with known
+   effect semantics.
+
+Recommended next actions, in order:
+1. **Hunt AVSDRV.SYS** in PC-98 software archives (§R2.2). Highest expected value of anything
+   remaining.
+2. Read **JPH05313889A** (and JPH052479A) when Google Patents un-throttles — the loop-counter
+   query surfaced it, so it may touch the control unit.
+3. Proceed with ISA inference regardless; do not block on any of the above.
