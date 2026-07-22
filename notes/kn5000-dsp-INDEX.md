@@ -28,11 +28,12 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-biquad-map.md` | coefficient→multiply mapping, the make-up gain, class 8 |
 | `kn5000-dsp-cursor-general.md` | the generalised coefficient cursor; the reverb decoded |
 | `kn5000-dsp-effect-map.md` | ★ the per-effect structural map of **all 38 images**, the table-lookup idiom, MULTI TAP DELAY resolved |
+| `kn5000-dsp-semantics.md` | ★★★ the biquad section **SOLVED by exhaustive constraint search** (19.7 M assignments, 144 survivors = one dataflow): Direct Form I, four state cells, **two of the four writes folded into multiply instructions**; `[7]` determined uniquely (make-up gain × accumulator, writes `S2`); exact impulse-response agreement on 9 real ROM banks; the reverb all-pass cross-check and its numbers |
 | `kn5000-dsp-necfamily.md` | ★ the uPD7725-descendant hypothesis, **REJECTED** (6 of 8 borrowed structures fail); the bodies are proved HAND-UNROLLED, which is why no branch exists to find; new `lo12` sub-boundary `[11:8]‖[7:2]` |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
 `_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`,
-`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`.
+`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`, `_semantics`.
 Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 
 ## Established
@@ -61,6 +62,12 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 ## BACKLOG — open investigations
 
 ### DSP, near-term
+0. **★ THE BIQUAD IS DECODED** (`kn5000-dsp-semantics.md`). Direct Form I; the cell walk,
+   the two "missing" state writes, the make-up gain's operand and the class-8 word's
+   *position* are all resolved. What is left there: which of two words performs each of
+   three writes (2 each, broken only by an encoding argument), what class 8 computes, and
+   the reverb motif's instruction ordering. The cheapest next test is `AUTO WAH`'s
+   `204.2.FE.687 / 804.8.16.1DA / 000.2.FF.647` triple, already in the corpus.
 1. **C-RAM vs D-RAM.** Two 256×24 spaces plus a bank register; how they are distinguished is
    unknown. Partly folded into the biquad run.
 2. **The `COND` field and control flow.** The pin table proves a `COND` field exists and names a
