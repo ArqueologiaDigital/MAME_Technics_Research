@@ -380,3 +380,110 @@ Recommended next actions, in order:
 2. Read **JPH05313889A** (and JPH052479A) when Google Patents un-throttles — the loop-counter
    query surfaced it, so it may touch the control unit.
 3. Proceed with ISA inference regardless; do not block on any of the above.
+
+---
+
+# ROUND 3 — acquisition (uPD6380 corpus / MAME angle)
+
+## R3.1 ★ ACQUIRED: NEC's own PC-9800 Technical Data Books (CD-ROM editions)
+
+Found via the archive.org advanced-search API and **downloaded in full**. Item:
+`https://archive.org/details/pc-9800-tdb-cd` — *PC-9800シリーズテクニカルデータブック
+CD-ROM版*. Two ISOs, **both now stored locally at `/home/fsanches/compartilhado/pc98_tdb/`**:
+
+* **`PC98Docs1stEd.iso`** (601 MB, Publisher: **NEC CORPORATION**, 1994-09-01). Contains
+  `BI.ABV`, `HW.ABV` and — the important one — **`MM.ABV`**, whose header reads (verified by
+  decoding the Shift-JIS at offset 0x24):
+  `PC-9800シリーズ テクニカルデータブック MULTIMEDIA編`
+  The MULTIMEDIA volume is precisely where NEC documented the PC-98GS / PC-9801-73 sound
+  subsystem — i.e. the **uPD6380**. Raw strings in `MM.ABV` include index entries `PCM/DSP`
+  and `DSP`.
+* **`PC98TDB.ISO`** (83 MB, 1995-09-28) — a later, Windows-installer edition with `HW.ABV`,
+  `APL.ABV`, `WIN95.ABV`.
+
+**Blocker: the `.ABV` container is compressed and undecoded.** The bundled reader is
+`ABV.EXE` = **"ASCII Book Viewer Version 2.0, Copyright(C) ASCII Corp. 1994-1995"**, a 16-bit
+**NE Windows 3.1** executable. Body text is not plain Shift-JIS; only the title header and a few
+index strings are readable raw. Searched for an existing converter (`abv2txt`, "ASCII Book
+Viewer" format, Japanese and English queries) — **none exists publicly.**
+
+Two ways forward, both straightforward but not doable in this environment (no `wine`, no
+`dosbox-x` installed here):
+* **Run ABV.EXE** under wine with win16 support (needs a 32-bit prefix) or in a Japanese
+  Windows 3.1 / 95 VM, and read/print the sound chapter. Fastest path.
+* **Reverse the ABV container** (it is a 1994 ASCII Corp e-book format; header at 0x00 has a
+  small table of 32-bit offsets/sizes, title at 0x24). A modest RE task, and it would unlock
+  *all three volumes* of NEC's technical data books for the PC-98 preservation community — a
+  worthwhile artifact in its own right.
+
+**This is now the single most promising documentation lead in the whole hunt.** It is NEC's own
+technical documentation for a machine NEC built around a uPD638x DSP. It will almost certainly
+document the host registers and the effect API; whether it goes as far as the DSP's *instruction
+set* is unknown (probably not — but the "MULTIMEDIA" volume is a hardware-programming book, so
+it is not a silly hope).
+
+## R3.2 MAME status for the uPD6380 platform — checked in the local tree
+
+* **MAME has no PC-9801-73 device.** `src/devices/bus/pc98_cbus/` has `pc9801_26`, `_86`, `_96`,
+  `_118`, `speakboard`, `wavestar`, etc., but no `_73`.
+* **MAME already knows the ports.** `src/devices/bus/pc98_cbus/pc9801_86.cpp` contains, in the
+  I/O map, the commented-out lines:
+  `//  map(0xa462, 0xa462) μPD6380 for PC9801-73 control`
+  `//  map(0xa464, 0xa464) μPD6380 for PC9801-73 data`
+  and its board-ID table already enumerates `0001 ---- PC-98GS built-in` and
+  `0010/0011 ---- PC-9801-73/-76`.
+* `src/mame/nec/pc9801.cpp` line ~2973 has a comment describing PC-98GS as having the
+  "-73 sound board (a superset of later -86)". So the PC-98GS driver skeleton is aware of it.
+
+**Implication:** if a uPD638x CPU core is ever written for the KN5000, a `pc9801_73` C-bus
+device is a small, natural, upstreamable MAME contribution that would give the core a *second*
+independent test platform with real software. Conversely, the -73 board almost certainly carries
+a sound-BIOS ROM that is **not dumped** in MAME; that would need hardware.
+
+## R3.3 Negative: AVSDRV.SYS not yet located
+
+* `archive.org` full-item search for `AVSDRV` → **0 results.**
+* Downloaded and checked **NEC MS-DOS 5.0A Rev.5 + Expansion**
+  (`https://archive.org/details/nec-msdos50ar5`, all five `.hdm` floppy images incl.
+  `extdev.hdm` = 拡張デバイス disk): **no AVSDRV.SYS** (that disk carries NECAI.SYS etc.).
+* Remaining candidates, **not downloaded**: the Policenauts PC-98 item
+  (`https://archive.org/details/policenauts-pc98`, a 584 MB zip whose boot floppy is reported by
+  dosbox-x issue #1210 to contain AVSDRV.SYS) — but note that thread calls it the *Qvision PCM*
+  driver, so it may be the PC-9801-86 variant that never touches the uPD6380. **Verify by
+  searching any recovered copy for the byte patterns of ports A462h/A464h.**
+* Best untried sources: NEC's own legacy module server (`search.casnavi.nec.co.jp/download/pc/
+  module/...`), Japanese PC-98 driver archives (`dw230.com/98/dr2.php`,
+  `navitoku.jp/archive/nx-station/support_pc98.html`), and any **PC-98GS** system/utility disk.
+
+## R3.4 ★ URLs I could NOT fetch — for Felipe to grab
+
+Highest value first:
+
+1. **PC-9801-73 (or PC-98GS) driver / utility floppy containing `AVSDRV.SYS`** — no single URL;
+   this needs a human with access to Japanese PC-98 archives or a PC-98GS disk set. Payload
+   wanted: `AVSDRV.SYS` / `AVSDRV.EXE`, and anything else on the -73's bundled disk. Verify it
+   references I/O **A462h/A464h** before assuming it drives the uPD6380.
+2. **Anything that decodes `.ABV`** — or simply: run `ABV.EXE` from
+   `/home/fsanches/compartilhado/pc98_tdb/PC98Docs1stEd.iso` under wine/Win3.1 and export the
+   **MULTIMEDIA volume's sound chapter** (µPD6380 / PCM / DSP sections). The ISOs are already
+   on disk here; only the viewer is missing.
+3. **Google Patents pages that 503'd on me** (rate limiting, not access control — they may work
+   for you, or for me later):
+   * `https://patents.google.com/patent/JPH05313889A/ja` — NEC, priority 1992-05-07, "Digital
+     signal processor". **Most promising unread patent** (surfaced by a loop-counter query).
+   * `https://patents.google.com/patent/JPH052479A/ja` — NEC IC Microcomputer Systems,
+     priority 1991-06-25, "Digital signal processor".
+   * `https://patents.google.com/patent/JPH08166795A/ja` — the Japanese original of the
+     address-generator patent I read in English translation; the JA text may name registers.
+4. **Pioneer CDJ-500II service manual** — `https://elektrotanya.com/pioneer_cdj-500-2_cdj-500ii_sm.pdf/download.html`
+   (**captcha-gated**, verified: the download page returns a captcha form and no direct PDF
+   href). ⚠️ **Low value** — it is only the 6-page supplement RRV2031, not a second pin table.
+   Do not spend effort on this unless it is free.
+5. **chipdocs UPD63 series index** — `http://www.chipdocs.com/datasheets/datasheet-pdf/NEC-Electronics-Inc/UPD63.html`
+   — WebFetch failed with *"unable to verify the first certificate"* (broken TLS chain). Its
+   part list was visible in search-result text and contains no 638x, so this is **almost
+   certainly a dead end**; listed only for completeness.
+6. **OCR of our own Pioneer RRV1087 PDF** — not a URL, but worth doing: the local file
+   `/home/fsanches/compartilhado/kn5000_project/pioneer_cdj-500_cdj-500g_rrv1087.pdf` has **no
+   text layer**, so the uPD6383 pin table cannot be grepped or diffed against the uPD6380 port
+   description in §R2.1. Running OCR over pages 1-15…1-17 would make it searchable.
