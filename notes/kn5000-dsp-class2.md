@@ -562,3 +562,28 @@ multiplicity was wrong.
 Also verified from this pass: the corpus correction is exact. Programs **79, 88, 89, 90, 91** are the
 five lacking a terminator, and each contains **zero** class-2 words -- confirming they are a
 different kind of stream and rightly excluded (96 - 5 = 91).
+
+### RETRACTION of the correction above: it is FIVE bands, not four
+
+The correction immediately above is WRONG and is retracted. It claimed 4 bands x 2 channels on the
+strength of "the maximum 9-word BYTE-IDENTICAL repetition is 8". That method was the error: it
+searched only for exact repeats, and the fifth section of each channel differs from the other four
+in exactly ONE word (a cursor rewind at the end of the chain), so byte-identity could never see it.
+
+MEASURED, allowing a one-word difference against the same reference block in algo39:
+
+    idx   5  14  23  32  41 | 59  68  77  86  95
+    diff  0   0   0   0   1 |  0   0   0   0   1
+
+**Ten sections, in two groups of five**, each group ending with the rewind variant. So
+**5 bands x 2 channels = 10**, as round one originally said.
+
+notes/kn5000-dsp-class2-round2.md establishes the same result two further independent ways (T2 = 15
+records in 5 groups of 3; T1 op 70 = 5 + 5 addresses), and also voids the coefficients note's
+"45 registers ~ 5 bands x 3" for a different reason: 43 of those 45 values are zero, so it is a
+scratch zero-fill and never supported any band count at all.
+
+Lesson worth keeping: byte-identity is the wrong equivalence for finding repeated code. Loop bodies
+routinely differ in their first or last iteration (rewind, prologue, saturation), so a
+near-miss-tolerant search is the correct instrument. The exact-match search did not merely undercount
+here -- it produced a *coherent wrong answer* (4 x 2 = 8) that looked like a clean result.
