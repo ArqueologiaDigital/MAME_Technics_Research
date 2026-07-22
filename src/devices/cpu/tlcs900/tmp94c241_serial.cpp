@@ -168,26 +168,7 @@ void tmp94c241_serial_device::sioclk(int state)
 			}
 		}
 
-		// Only latch RX bits that are clocked by an EXTERNAL master.  In
-		// I/O-interface mode (SCxMOD transfer=0) the control panel drives SCLK
-		// for its INTA responses, and the firmware selects the external clock
-		// by setting IOC (SCxCR bit0) in its receive ISR — the SAME condition
-		// that gates the internal baud generator off (see timer_callback).
-		//
-		// While the CPU is the clock master (IOC=0, internal baud generator
-		// running) it is TRANSMITTING commands; the RXD line then carries no
-		// framed slave byte.  Latching those full-duplex "RX during TX" edges
-		// manufactured a phantom RX byte + a spurious INTRX for EVERY command
-		// byte the CPU sent — the root cause of the control-panel "scrambled
-		// buttons" and the unrequested phantom transpose (a phantom 0x00 byte
-		// decodes as right-panel segment 0 = the TRANSPOSE row; an odd count of
-		// phantom bytes inside a framed burst swaps the header/state pairing).
-		// The sender (cpanel) is correct; the receiver was over-counting edges.
-		// Mirror the sender's start-gate: count RX bits only when the external
-		// clock is actually selected.  (UART transfer modes drive their RX from
-		// timer_callback, not here, so this synchronous gate never affects them.)
-		const bool ext_clock = ((m_serial_mode & 0x03) == 0) && BIT(m_serial_control, 0);
-		if (m_rx_clock_count && ext_clock)
+		if (m_rx_clock_count)
 		{
 			m_rx_clock_count--;
 
