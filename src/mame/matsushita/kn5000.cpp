@@ -386,7 +386,25 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
 	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2.
-	// Clocked by its own 20 MHz crystal (Felipe, from the board), against the
+	// ---------------------------------------------------------------------
+	// ---------------------------------------------------------------------
+	// PROVENANCE (2026-07-22): the board facts below -- IC311's 25 MHz crystal,
+	// IC310's 20 MHz, and the delay DRAMs IC309 = M5M44260AJ-7S and
+	// IC308 = M5M418128AJ-6 -- were CONFIRMED BY FELIPE, who read them directly.
+	// (An automated pass had cited him before he had actually been asked; he has
+	// since verified them himself, so the attribution now stands.)
+	// These are load-bearing: the delay-memory size sets where addresses wrap and
+	// therefore every reverb tap length and delay time the emulation produces.
+	//
+	// STILL OPEN: the M5M44260 is organised 256K x 16, which needs 18 address bits
+	// (9 row + 9 column), but the uPD6383GF's documented bus is A0-A16 -- 17 lines,
+	// exactly half the part.  Either one bit is left unconnected and half the DRAM
+	// is unused, or the KN5000 wires something the CDJ-500 block diagram does not
+	// show.  AS_DELAY is deliberately mapped at what the DSP can defensibly
+	// address rather than the full part, because the wrap point is what would
+	// silently corrupt the reverb tap lengths.
+	// ---------------------------------------------------------------------
+	// Clocked by its own 20 MHz crystal (Felipe, verified), against the
 	// 25 MHz one on IC311 -- two independent effect processors, two clocks.
 	// NOT EMULATED AT ALL: no device, no capture, no audio. Its bodies
 	// autocorrelate at lag 4, suggesting a 32-bit instruction word rather than
@@ -421,7 +439,7 @@ uint16_t kn5000_state::dsp_reg_data_r()
 
 void kn5000_state::dsp1_delay_map(address_map &map)
 {
-	// IC309 = M5M44260AJ-7S (Felipe, from the board): a Mitsubishi 4-Mbit
+	// IC309 = M5M44260AJ-7S (Felipe, verified): a Mitsubishi 4-Mbit
 	// DRAM with a 16-BIT DATA BUS and 9 ADDRESS PINS, i.e. 262,144 words x 16
 	// bits with the row and column addresses multiplexed over A0-A8 by RAS and
 	// CAS in the usual way -- 9 + 9 = 18 address bits in total.
@@ -950,7 +968,7 @@ void kn5000_state::kn5000(machine_config &config)
 	SPEAKER(config, "rspeaker").front_right();
 
 	// IC311: NEC uPD6383GF-3BA effects DSP, clocked by its own 25 MHz crystal
-	// (Felipe, from the board -- this replaces an earlier NOMINAL 16.9344 MHz
+	// (Felipe, verified -- this replaces an earlier NOMINAL 16.9344 MHz
 	// that was reverse-engineered from "384 words per 44.1 kHz frame").
 	//
 	// Worth noting because it is a consistency check on the whole execution
