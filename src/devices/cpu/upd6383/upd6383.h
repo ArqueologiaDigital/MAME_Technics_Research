@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:Felipe Correa da Silva Sanches
+// copyright-holders:Felipe Sanches
 /***************************************************************************
 
     upd6383.h
@@ -29,6 +29,7 @@
 #include "upd6383d.h"
 
 #include <map>
+#include <vector>
 
 //**************************************************************************
 //  ENUMERATIONS
@@ -112,6 +113,14 @@ public:
 	// diagnostic: dump the undecoded-word histogram to the error log
 	void dump_trap_histogram() const ATTR_COLD;
 
+	// RESEARCH INSTRUMENTATION.  Record every uC-IF byte and write the host
+	// upload stream out at exit as <basename>.{bin,txt}.  This is how the
+	// microprogram corpus was obtained in the first place and it is what
+	// notes/data/kn5000_dsp1_upload_coldboot.txt was produced by, so it is
+	// kept -- but it is capture, not chip behaviour, and it does nothing
+	// unless a machine config asks for it.
+	void set_capture_file(const char *basename) { m_capture_base = basename; }
+
 	// I-RAM capacity, in 36-bit instruction words
 	static constexpr int IRAM_WORDS = 384;
 
@@ -138,6 +147,9 @@ protected:
 private:
 	u64 fetch(offs_t pc);
 	void trap(u64 word, offs_t pc) ATTR_COLD;
+	void capture_byte(bool cd, u8 data);
+	void capture_flush();
+	void capture_write_files() ATTR_COLD;
 
 	const address_space_config m_iram_config;
 	const address_space_config m_cram_config;
@@ -180,6 +192,16 @@ private:
 	u8  m_host_word[upd6383_disassembler::WORD_BYTES];
 
 	// diagnostics -- NOT machine state, deliberately not save_item()ed
+	struct transfer
+	{
+		u8             cmd;
+		std::vector<u8> payload;
+	};
+	const char        *m_capture_base;
+	std::vector<transfer> m_transfers;
+	transfer           m_capture_current;
+	bool               m_capture_open;
+
 	u32 m_program_id;
 	u64 m_trap_total;
 	std::map<u64, u64> m_trap_hist;

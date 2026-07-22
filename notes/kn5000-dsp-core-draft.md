@@ -2,8 +2,8 @@
 
 KN5000 IC311 effects DSP. Date: 2026-07-22.
 Files: `src/devices/cpu/upd6383/upd6383d.{cpp,h}` (disassembler),
-`src/devices/cpu/upd6383/upd6383.{cpp,h}` (device), wired into the KN5000 through
-`src/mame/matsushita/kn5000_dsp.{cpp,h}`.
+`src/devices/cpu/upd6383/upd6383.{cpp,h}` (device), instantiated by
+`src/mame/matsushita/kn5000.cpp` as `:dsp1` (IC311).
 
 **This is a DRAFT / RESEARCH INSTRUMENT, not a working core.** The instruction set is not
 decoded. Six word forms are implemented, every other word is trapped and logged, and there is
@@ -53,7 +53,8 @@ word plus a full histogram at exit.
 
 * `./build.sh` — clean build.
 * `-validate kn5000` → exit 0. `-validate kn7000` → exit 0.
-* KN5000 boots to its **main play screen** (verified from a snapshot, not from logs):
+* KN5000 boots to its **main play screen** (verified from a snapshot, not from logs), both
+  before and after the `kn5000_dsp1_device` dissolution, with a byte-identical I-RAM:
   `PMEM: 1-`, `16 Beat 1`, `♩=120`, RIGHT1 Piano / RIGHT2 Bigband Brass / LEFT Modern E.P.1.
   Unchanged from before the wiring, which is what "instantiated disabled" is for.
 

@@ -9,12 +9,12 @@
 #include "emu.h"
 
 #include "kn5000_cpanel.h"
-#include "kn5000_dsp.h"
 #include "kn5000_tonegen.h"
 
 #include "bus/technics/kn5000/hdae5000.h"
 #include "bus/midi/midi.h"
 #include "cpu/tlcs900/tmp94c241.h"
+#include "cpu/upd6383/upd6383.h"
 #include "imagedev/floppy.h"
 #include "machine/gen_latch.h"
 #include "machine/nvram.h"
@@ -157,7 +157,11 @@ private:
 	required_device<upd72067_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	required_device<kn5000_tonegen_device> m_tonegen;
-	required_device<kn5000_dsp1_device> m_dsp1;
+	// IC311, the effects DSP -- an NEC uPD6383GF-3BA.  DRAFT CORE, held
+	// DISABLED: the host interface is exercised and the uploaded microcode
+	// lands in a real I-RAM, but the instruction set is not decoded, so
+	// nothing executes and there is no audio from it.
+	required_device<upd6383_device> m_dsp1;
 	required_ioport m_com_select;
 	required_device<kn5000_extension_connector> m_extension;
 
@@ -171,6 +175,26 @@ private:
 	uint8_t m_cpanel_inta;
 	uint32_t m_subcpu_latch_write_count;
 	uint32_t m_maincpu_latch_write_count;
+
+	// A 4-channel x 8-register block at 0x130000, associated with IC311 but
+	// NOT part of the uPD6383GF: it is a separate board-level register file
+	// (written by DSP_Init_Channels, subcpu 0x01FC95, and DSP_Write_Channel,
+	// 0x01FCDE).  An earlier revision wrongly modelled it as the DSP's
+	// command/data port, which is why an upload capture hooked here saw
+	// nothing but zeros.  Read-back model only.
+	uint8_t m_dsp_reg_addr = 0;
+	uint8_t m_dsp_regs[0x100]{};
+	void dsp_reg_addr_w(uint16_t data);
+	void dsp_reg_data_w(uint16_t data);
+	uint16_t dsp_reg_data_r();
+
+	// IC311's four memories.  The uPD6383GF has I-RAM 384x36 (modelled
+	// byte-wise, 5 bytes per instruction word), C-RAM and D-RAM 256x24, and an
+	// external DRAM digital delay addressed by A0-A16.
+	void dsp1_iram_map(address_map &map) ATTR_COLD;
+	void dsp1_cram_map(address_map &map) ATTR_COLD;
+	void dsp1_dram_map(address_map &map) ATTR_COLD;
+	void dsp1_delay_map(address_map &map) ATTR_COLD;
 
 	// Latch access wrappers
 	uint8_t subcpu_latch_r();
@@ -358,13 +382,54 @@ void kn5000_state::subcpu_mem(address_map &map)
 	// DSP_Init_Channels (subcpu 0x01FC95) / DSP_Write_Channel (0x01FCDE).
 	// NOTE: this is NOT the uPD6383GF host interface -- the microprogram and coefficient
 	// uploads go over Sub CPU port PZ with the port 7 strobes (see machine config).
-	map(0x130000, 0x130001).w(m_dsp1, FUNC(kn5000_dsp1_device::reg_addr_w));   // register address
-	map(0x130002, 0x130003).rw(m_dsp1, FUNC(kn5000_dsp1_device::reg_data_r), FUNC(kn5000_dsp1_device::reg_data_w)); // register data
+	map(0x130000, 0x130001).w(FUNC(kn5000_state::dsp_reg_addr_w));   // register address
+	map(0x130002, 0x130003).rw(FUNC(kn5000_state::dsp_reg_data_r), FUNC(kn5000_state::dsp_reg_data_w)); // register data
 	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
 	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2
 }
+
+void kn5000_state::dsp_reg_addr_w(uint16_t data)
+{
+	m_dsp_reg_addr = data & 0xff;
+}
+
+void kn5000_state::dsp_reg_data_w(uint16_t data)
+{
+	m_dsp_regs[m_dsp_reg_addr] = data & 0xff;
+}
+
+uint16_t kn5000_state::dsp_reg_data_r()
+{
+	return m_dsp_regs[m_dsp_reg_addr];
+}
+
+
+// --- IC311 (uPD6383GF) memories -------------------------------------------
+
+void kn5000_state::dsp1_iram_map(address_map &map)
+{
+	map(0x000, 0x77f).ram();      // 384 words x 5 bytes
+}
+
+void kn5000_state::dsp1_cram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();        // 256 x 24
+}
+
+void kn5000_state::dsp1_dram_map(address_map &map)
+{
+	map(0x00, 0xff).ram();        // 256 x 24
+}
+
+void kn5000_state::dsp1_delay_map(address_map &map)
+{
+	// the KN5000's actual delay memory size is not established; the chip
+	// addresses up to 128K 16-bit samples
+	map(0x00000, 0x1ffff).ram();
+}
+
 
 static void kn5000_floppies(device_slot_interface &device)
 {
@@ -520,6 +585,8 @@ void kn5000_state::machine_start()
 	save_item(NAME(m_subcpu_latch_write_count));
 	save_item(NAME(m_maincpu_latch_write_count));
 	save_item(NAME(m_keybed_prev));
+	save_item(NAME(m_dsp_reg_addr));
+	save_item(NAME(m_dsp_regs));
 
 	m_extension->program_map(m_maincpu->space(AS_PROGRAM));
 
@@ -864,7 +931,24 @@ void kn5000_state::kn5000(machine_config &config)
 	SPEAKER(config, "lspeaker").front_left();
 	SPEAKER(config, "rspeaker").front_right();
 
-	KN5000_DSP1(config, m_dsp1, 0);
+	// IC311: NEC uPD6383GF-3BA effects DSP.  NOMINAL clock 384 * 44,100 Hz =
+	// 16.9344 MHz, chosen so one pass of the 384-word I-RAM fits one sample
+	// frame; the 44.1 kHz frame rate is established (the firmware's own
+	// ms x 0xAC44 / 0x3E8), the actual master clock of IC311 is not.
+	UPD6383(config, m_dsp1, 384 * 44100);
+	m_dsp1->set_addrmap(AS_IRAM,  &kn5000_state::dsp1_iram_map);
+	m_dsp1->set_addrmap(AS_CRAM,  &kn5000_state::dsp1_cram_map);
+	m_dsp1->set_addrmap(AS_DRAM,  &kn5000_state::dsp1_dram_map);
+	m_dsp1->set_addrmap(AS_DELAY, &kn5000_state::dsp1_delay_map);
+	// HELD DISABLED ON PURPOSE.  The instruction set is not decoded, so the
+	// core must not execute: a partially-correct effects DSP is exactly the
+	// failure mode that produced audible-but-wrong sound on the KN7000.  What
+	// we want from it today is its I-RAM -- a real, addressable,
+	// debugger-visible copy of the uploaded microcode.  Remove this only when
+	// the ISA justifies it.
+	m_dsp1->set_disable();
+	// research instrumentation: dump the host upload stream at exit
+	m_dsp1->set_capture_file("kn5000_dsp1_upload");
 
 	KN5000_TONEGEN(config, m_tonegen, 0);
 	m_tonegen->add_route(0, "lspeaker", 1.0);

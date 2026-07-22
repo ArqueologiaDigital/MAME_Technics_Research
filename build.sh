@@ -112,7 +112,6 @@ ln -sf "$HERE/src/devices/bus/technics/kn5000/hdae5000.cpp"  "$BUILD_TREE/src/de
 ln -sf "$HERE/src/mame/matsushita/kn5000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn5000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.h"
-ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.cpp"            "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.cpp"
 # NEC uPD6383GF (KN5000 IC311) -- DRAFT DSP core + disassembler.  No audio, and
 # the core is instantiated DISABLED; it exists to hold the uploaded microcode in
 # a real, debugger-visible I-RAM and to make the corpus readable by unidasm.
@@ -121,7 +120,6 @@ ln -sf "$HERE/src/devices/cpu/upd6383/upd6383.cpp"           "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/upd6383/upd6383.h"             "$BUILD_TREE/src/devices/cpu/upd6383/upd6383.h"
 ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.cpp"          "$BUILD_TREE/src/devices/cpu/upd6383/upd6383d.cpp"
 ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.h"            "$BUILD_TREE/src/devices/cpu/upd6383/upd6383d.h"
-ln -sf "$HERE/src/mame/matsushita/kn5000_dsp.h"              "$BUILD_TREE/src/mame/matsushita/kn5000_dsp.h"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.h"
 mkdir -p "$BUILD_TREE/src/mame/layout"
@@ -161,7 +159,7 @@ PY
 
 # 3b. Register the NEC uPD6383GF draft DSP core + disassembler (idempotent).
 # CPUS["UPD6383"] is FORCED true: in a focused build the CPU list is derived from
-# the drivers, and although kn5000_dsp.h now includes upd6383.h the annotation
+# the drivers, and although kn5000.cpp now includes upd6383.h the annotation
 # scan is fragile enough that forcing it is the honest way to keep the core in
 # the binary. The disassembler is also added to unidasm's arch table so the
 # extracted microprogram images can be read with `unidasm -arch upd6383`.
@@ -274,7 +272,7 @@ SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,
 # the filtered driver list still emits `driver_kn5000` while the object file is never
 # compiled -- that is exactly the "only driver_kn5000 undefined" link failure seen before.
 # Listing the driver *and* every device .cpp it pulls in from src/mame keeps them in step.
-SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp,src/mame/matsushita/kn5000_dsp.cpp"
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp"
 make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE/kn7000" 2>/dev/null || echo "(no binary — check $LOG)"
 echo "==> Qt debugger included. Run it with -debug:"

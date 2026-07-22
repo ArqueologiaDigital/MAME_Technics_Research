@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:Felipe Correa da Silva Sanches
+// copyright-holders:Felipe Sanches
 /***************************************************************************
 
     upd6383d.cpp

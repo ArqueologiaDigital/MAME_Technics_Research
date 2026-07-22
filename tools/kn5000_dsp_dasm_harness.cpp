@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:Felipe Correa da Silva Sanches
+// copyright-holders:Felipe Sanches
 //
 // Standalone driver for upd6383_disassembler, so the microprogram corpus can be
 // disassembled without building unidasm (which a FOCUSED MAME build does not produce:

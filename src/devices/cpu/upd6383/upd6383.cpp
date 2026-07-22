@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:Felipe Correa da Silva Sanches
+// copyright-holders:Felipe Sanches
 /***************************************************************************
 
     upd6383.cpp
@@ -73,6 +73,8 @@
 #include "upd6383.h"
 #include "upd6383d.h"
 
+#include <fstream>
+
 #define LOG_TRAP   (1U << 1)    // words we cannot execute
 #define LOG_EXEC   (1U << 2)    // words we can
 #define LOG_HOST   (1U << 3)    // uC-IF command/data bytes
@@ -105,6 +107,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_bnk(0), m_lc1(0), m_lc2(0), m_lc3(0),
 	m_gf(0), m_rq(0), m_ovc(0), m_frame_done(0),
 	m_host_cmd(0), m_host_pos(0), m_host_addr(0),
+	m_capture_base(nullptr), m_capture_open(false),
 	m_program_id(0), m_trap_total(0)
 {
 	std::fill(std::begin(m_stack), std::end(m_stack), 0);
@@ -230,6 +233,9 @@ void upd6383_device::device_stop()
 {
 	if (m_trap_total != 0)
 		dump_trap_histogram();
+
+	capture_flush();
+	capture_write_files();
 }
 
 
@@ -251,6 +257,8 @@ void upd6383_device::state_string_export(const device_state_entry &entry, std::s
 
 void upd6383_device::host_w(bool cd, u8 data)
 {
+	capture_byte(cd, data);
+
 	if (!cd)
 	{
 		// command byte -- restarts the payload
@@ -316,6 +324,127 @@ void upd6383_device::host_w(bool cd, u8 data)
 	}
 
 	m_host_pos++;
+}
+
+
+
+//**************************************************************************
+//  RESEARCH INSTRUMENTATION: the uC-IF upload capture
+//**************************************************************************
+
+//  Because I-RAM is RAM, the microprogram MUST be uploaded at runtime, so the
+//  program image is reachable without decoding a single opcode.  This capture
+//  is what produced the corpus every note in notes/kn5000-dsp-*.md is built on
+//  (see notes/data/kn5000_dsp1_upload_coldboot.txt).  It is instrumentation,
+//  not chip behaviour: it is inert unless set_capture_file() was called, and
+//  m_transfers is deliberately not a save-state item.
+//
+//  A payload whose length is 2 + a multiple of 5 is an I-RAM instruction run
+//  (36-bit words in 40-bit containers); a multiple of 3 is a C-RAM/D-RAM run
+//  (24-bit words).  Both divide 15, so multiples of 15 are AMBIGUOUS and are
+//  reported as such rather than being claimed for either.
+
+void upd6383_device::capture_byte(bool cd, u8 data)
+{
+	if (m_capture_base == nullptr)
+		return;
+
+	if (!cd)
+	{
+		// a command byte ends whatever data run preceded it
+		capture_flush();
+		m_capture_current.cmd = data;
+		m_capture_current.payload.clear();
+		m_capture_open = true;
+		return;
+	}
+
+	if (!m_capture_open)
+	{
+		// data with no preceding command: captured with a sentinel so it is
+		// not silently merged into the next run
+		m_capture_current.cmd = 0xff;
+		m_capture_current.payload.clear();
+		m_capture_open = true;
+	}
+
+	m_capture_current.payload.push_back(data);
+}
+
+
+void upd6383_device::capture_flush()
+{
+	if (!m_capture_open)
+		return;
+
+	if (!m_capture_current.payload.empty())
+		m_transfers.push_back(m_capture_current);
+
+	m_capture_open = false;
+	m_capture_current.payload.clear();
+}
+
+
+void upd6383_device::capture_write_files()
+{
+	if (m_capture_base == nullptr || m_transfers.empty())
+		return;
+
+	std::string const base(m_capture_base);
+	std::ofstream bin(base + ".bin", std::ios::binary);
+	std::ofstream txt(base + ".txt");
+
+	if (!txt)
+		return;
+
+	txt << "NEC uPD6383GF host uploads (uC-IF capture)\n";
+	txt << "I-RAM capacity is " << IRAM_WORDS << " words of 36 bits; a program may use FEWER.\n";
+	txt << "5 bytes = one 36-bit I-RAM word, 3 bytes = one 24-bit C-RAM/D-RAM word (confirmed:\n";
+	txt << "the KN5000 Sub CPU bytecode handlers divide by literal 5 and 3, and captured uploads\n";
+	txt << "tile I-RAM exactly). Command 0x01 payloads are a 16-bit word address + N*5 bytes.\n\n";
+
+	size_t total = 0;
+	for (size_t i = 0; i < m_transfers.size(); i++)
+	{
+		auto const &t = m_transfers[i];
+		size_t const n = t.payload.size();
+		total += n;
+
+		if (bin)
+			bin.write(reinterpret_cast<char const *>(t.payload.data()), n);
+
+		char const *shape;
+		if (n % 15 == 0)      shape = "ambiguous (multiple of both 5 and 3)";
+		else if (n % 5 == 0)  shape = "groups of 5 -> candidate I-RAM instruction words";
+		else if (n % 3 == 0)  shape = "groups of 3 -> candidate C-RAM/D-RAM words";
+		else                  shape = "neither";
+
+		util::stream_format(txt, "transfer %4u: cmd 0x%02X  %5u bytes", unsigned(i), t.cmd, unsigned(n));
+		if (n % 5 == 0)
+			util::stream_format(txt, "  (%u x5)", unsigned(n / 5));
+		if (n % 3 == 0)
+			util::stream_format(txt, "  (%u x3)", unsigned(n / 3));
+		if (t.cmd == 0x01 && n >= 2 && ((n - 2) % 5) == 0)
+			util::stream_format(txt, "  I-RAM[%u..%u]",
+					unsigned((t.payload[0] << 8) | t.payload[1]),
+					unsigned(((t.payload[0] << 8) | t.payload[1]) + (n - 2) / 5 - 1));
+		util::stream_format(txt, "  %s\n", shape);
+
+		for (size_t j = 0; j < n; j++)
+		{
+			if ((j % 16) == 0)
+				util::stream_format(txt, "    %04X:", unsigned(j));
+			util::stream_format(txt, " %02X", t.payload[j]);
+			if ((j % 16) == 15 || j == n - 1)
+				txt << "\n";
+		}
+	}
+
+	util::stream_format(txt, "\n%u transfers, %u payload bytes total\n",
+			unsigned(m_transfers.size()), unsigned(total));
+
+	osd_printf_info("upd6383: wrote %u transfers (%u bytes) to %s.{bin,txt}\n",
+			unsigned(m_transfers.size()), unsigned(total), base);
 }
 
 
