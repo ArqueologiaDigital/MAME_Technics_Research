@@ -25,9 +25,13 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-class2.md` | class-2 round one **plus a correction and its retraction — read all three** |
 | `kn5000-dsp-class2-round2.md` | ★ most recent and most reliable: all-pass reframe, P-consumer test, class4-as-space-selector |
 | `kn5000-dsp-biquad.md` | (in progress) operand-level semantics from the PARAMETRIC EQ |
+| `kn5000-dsp-biquad-map.md` | coefficient→multiply mapping, the make-up gain, class 8 |
+| `kn5000-dsp-cursor-general.md` | the generalised coefficient cursor; the reverb decoded |
+| `kn5000-dsp-effect-map.md` | ★ the per-effect structural map of **all 38 images**, the table-lookup idiom, MULTI TAP DELAY resolved |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
-`_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`.
+`_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`,
+`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`.
 Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 
 ## Established
@@ -44,6 +48,14 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
   all-pass marker (MCC +0.881), `hi12=0x082` = LFO read, `hi12=0xC40` = envelope detector,
   `lo12 ∈ {647,687}` = biquad non-multiply steps, P-consumer/non-consumer split.
 * PARAMETRIC EQ = 5 bands × 2 channels (confirmed three ways; an earlier "4 bands" was retracted).
+* **Coefficient cursor**: implicit, +1 per class-A word, reset by `801.0.00.021`; biquad block
+  `+0=b1 +1=b0 +2=b2 +3=−a1/a0 +4=−a2/a0 +5=make-up gain`; unit 1's bank base is `+0x80`.
+* **All 38 images are mapped** (`kn5000-dsp-effect-map.md`), 25 high / 13 medium confidence.
+* **The 3-word TABLE-LOOKUP idiom** `xxx.0.00.C63 | 000.6.TT.4CD/407 | 012.4.01.1CE` accounts for
+  every class-4 and class-6 word (53/53/53) and occurs in exactly the 25 images with an LFO or a
+  distortion stage (MCC +1.000); the class-6 `addr8` is the table selector.
+* **`op 0x76` writes a fixed 3-word damping/tone filter** (14/14 entries over 5 images).
+* The reverb is the **only** unit-1 program in the corpus.
 
 ## BACKLOG — open investigations
 
@@ -56,9 +68,16 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    plus host-driven entry. Likely needs the header's control words understood first.
 3. **What `104.2.00.000` actually does.** Confirmed as an all-pass marker, but its *position*
    differs between reverb and phaser, so the step it performs is unidentified.
-4. **The remaining vocabulary** — ~24 `hi12` and ~25 `lo12` values carry no assigned meaning.
-5. **The `NO OPERATION` program** is the sole false positive of two independent controls; worth
-   understanding rather than excusing.
+4. **The remaining vocabulary** — after the effect-map pass, **37 `hi12` and 36 `lo12` values**
+   still carry no meaning, and image-granularity co-occurrence is mined out. What is left needs
+   *position*-level evidence or the datasheet (`kn5000-dsp-effect-map.md` §6.4).
+5. ~~**The `NO OPERATION` program** is the sole false positive of two independent controls.~~
+   **CLOSED**: it genuinely contains an envelope-detector block (2/π scale, `C40` pair, one-pole
+   smoothers) and real DRAM accesses — the controls were right (effect-map §4).
+5b. **The partial-cursor-rewind encoding.** `MULTI TAP DELAY` needs a −3 rewind between words 49
+   and 52; only two words sit there. The best-posed open question in the file (effect-map §5.1).
+5c. **The compressor's four coefficient consumers**, now bounded to three word families
+   (effect-map §5.2), and the `804.8.16.1DA` / `80A.8.16.000` section families.
 
 ### DSP, bigger swings
 6. **Hunt for the actual µPD6383 datasheet or databook.** The CDJ manual was luck; a datasheet
