@@ -151,11 +151,18 @@ const char *annotate(u64 word)
 	// ways, notes/kn5000-dsp-header.md sect. 3), not the halt.
 	if (upd6383_disassembler::is_end(word))
 	{
+		// The UNIT-TAGGED form carries a transfer of control; the untagged
+		// form does not.  PROVEN BY CONSTRUCTION (notes/kn5000-dsp-headerdecode.md
+		// sect. 2): the header loads registers 821/827/825 TWICE, at I-RAM 42-44
+		// and again at 50-52, so unit 0's body must run between them and return --
+		// I-RAM 49 is the only word in the window that can transfer.  Conversely
+		// the untagged end-of-block words FALL THROUGH, because I-RAM 42-44 is
+		// reachable only by falling through I-RAM 41, which is one of them.
 		if (cl == 1 && ad == 0x0e)
-			return "END OF PROGRAM, unit 0 -- and still performs the rest of the word";
+			return "END OF BLOCK, unit 0 -- CALL/RETURN -- and still performs the rest of the word";
 		if (cl == 1 && ad == 0x0f)
-			return "END OF PROGRAM, unit 1 -- and still performs the rest of the word";
-		return "END OF PROGRAM -- and still performs the rest of the word";
+			return "END OF BLOCK, unit 1 -- CALL/RETURN -- and still performs the rest of the word";
+		return "END OF BLOCK (falls through) -- and still performs the rest of the word";
 	}
 
 	// external-DRAM (digital delay) bracket: predicts the DRAM-using effects at

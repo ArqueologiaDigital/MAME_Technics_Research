@@ -50,11 +50,11 @@ public:
 	//  never as an opaque 12-bit number.
 	// ---------------------------------------------------------------
 	static constexpr u16 HI_ESC = 1 << 11;  // FORMAT ESCAPE (bits[10:0] mean something else)
-	static constexpr u16 HI_END = 1 << 10;  // END OF PROGRAM, only when HI_ESC is clear
+	static constexpr u16 HI_END = 1 << 10;  // END OF BLOCK, only when HI_ESC is clear
 	static constexpr u16 HI_ST  = 1 << 4;   // WRITE ACCUMULATOR -> mem[ptr]
 
 	// proven to be FIELDS (all values exercised), meaning UNKNOWN
-	static constexpr u16 hi_f98(u16 hi) { return (hi >> 8) & 3; }   // 4/4 values seen
+	static constexpr u16 hi_f98(u16 hi) { return (hi >> 8) & 3; }   // ARITY 3: 1713/493/766/2
 	static constexpr u16 hi_f31(u16 hi) { return (hi >> 1) & 7; }   // 8/8 values seen
 
 	// bits with no reading at all: 7, 6, 5, 0 (plus 10 inside the escape)
@@ -79,10 +79,15 @@ public:
 	// true when this word is one of the (few) forms the corpus has decoded
 	static bool decoded(u64 word);
 
-	// bit 10 with bit 11 clear.  MEASURED: 38 such words in 2974, exactly one
-	// per image, every one of them the FINAL word, and stripping the bit
-	// leaves an ordinary working hi12 in 9 of 9 cases.  The last instruction
-	// HALTS AND STILL DOES ITS WORK -- there is no separate halt instruction.
+	// bit 10 with bit 11 clear = END OF BLOCK.  MEASURED: 38 such words in
+	// 2974 body words, exactly one per image and every one of them the FINAL
+	// word; but FOURTEEN in the 60-word common header and ZERO in the 23-word
+	// epilogue at I-RAM 60..82.  So it is NOT a halt and NOT a commit -- a body
+	// performs many stores yet carries it once.  Its default action is FALL
+	// THROUGH; a transfer happens only when the word also carries a UNIT TAG
+	// (class4 == 1 && addr8 in {0E,0F}).  notes/kn5000-dsp-headerdecode.md.
+	// Stripping the bit leaves an ordinary working hi12 in 9 of 9 cases, so the
+	// word still does its datapath work.
 	static constexpr bool is_end(u64 word)
 	{
 		const u16 hi = hi12(word);
