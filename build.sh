@@ -21,10 +21,15 @@
 #              QTDEBUG=1 ./build.sh   -> ../kn7000_mame_build/kn7000_host  (run with -debug)
 #              ./build.sh             -> ../kn7000_mame_build/kn7000       (the published one)
 #              The two coexist; building one never overwrites the other.
-#              KNOWN BROKEN as of 2026-07-22 with Qt 6.8 (Debian trixie): moc is found, but
-#              MAME's qt debugger fails to compile its own moc output
-#              ("qt_staticMetaObjectStaticContent<...>" -- a Qt 6.8 moc change this MAME
-#              revision predates). Needs a newer MAME or a Qt5 build to work.
+#              STATUS 2026-07-22: it BUILDS. If it fails compiling moc output with
+#              "qt_staticMetaObjectStaticContent<...> expected primary-expression", that is
+#              STALE generated moc from a different Qt (ours said "Qt 6.10.2" while the headers
+#              were 6.8.2). Clear it -- note the real path is build/generated, NOT generated:
+#                  rm -rf ../kn7000_mame_build/build/generated/osd/modules/debugger/qt \
+#                         ../kn7000_mame_build/linux_gcc/obj/x64/Release/qtdbg_sdl
+#              CAVEAT: the resulting kn7000_host does NOT link Qt6 (ldd shows no Qt), so the qt
+#              debugger module is not actually selectable yet -- "-debugger qt" falls back to
+#              imgui. Unfinished; use the imgui debugger below until this is sorted.
 #
 #   ★ YOU PROBABLY DO NOT NEED QTDEBUG AT ALL. The NORMAL binary already has a full
 #     graphical debugger via Dear ImGui -- it just needs the BGFX renderer:
