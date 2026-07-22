@@ -21,6 +21,15 @@
 #              QTDEBUG=1 ./build.sh   -> ../kn7000_mame_build/kn7000_host  (run with -debug)
 #              ./build.sh             -> ../kn7000_mame_build/kn7000       (the published one)
 #              The two coexist; building one never overwrites the other.
+#              KNOWN BROKEN as of 2026-07-22 with Qt 6.8 (Debian trixie): moc is found, but
+#              MAME's qt debugger fails to compile its own moc output
+#              ("qt_staticMetaObjectStaticContent<...>" -- a Qt 6.8 moc change this MAME
+#              revision predates). Needs a newer MAME or a Qt5 build to work.
+#
+#   ★ YOU PROBABLY DO NOT NEED QTDEBUG AT ALL. The NORMAL binary already has a full
+#     graphical debugger via Dear ImGui -- it just needs the BGFX renderer:
+#         ./kn7000 kn5000 -rompath ./roms -debug -debugger imgui -video bgfx
+#     Verified working 2026-07-22. No Qt, no separate build.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -36,6 +45,20 @@ QTDEBUG="${QTDEBUG:-0}"
 if [ "$QTDEBUG" = "1" ]; then
 	SUBTARGET=kn7000_host
 	BINARY=kn7000_host
+	# ~/.local/bin/qmake6 is a STUB that always echoes ~/.local/share/noqt.  It exists so
+	# USE_QTDEBUG=0 builds work: without it "-I$(shell qmake6 -query ...)" collapses to a bare
+	# "-I" that swallows the following -std=c++20.  But it also hides the REAL qmake6, so MAME's
+	# moc probe (scripts/src/osd/modules.lua: qmake6 -query QT_HOST_LIBEXECS) finds nothing and
+	# the build dies with "Qt's Meta Object Compiler (moc) wasn't found!".  Put the real Qt6 bin
+	# dir FIRST for this build only -- do not delete the stub, the normal build still needs it.
+	for _qtbin in /usr/lib/qt6/bin /usr/lib/x86_64-linux-gnu/qt6/bin; do
+		if [ -x "$_qtbin/qmake6" ]; then PATH="$_qtbin:$PATH"; export PATH; break; fi
+	done
+	if [ "$(qmake6 -query QT_HOST_LIBEXECS 2>/dev/null)" = "$HOME/.local/share/noqt" ]; then
+		echo "ERROR: the real qmake6 is still shadowed by the ~/.local/bin stub." >&2
+		echo "       Install qt6-base-dev, or prepend the dir holding the real qmake6 to PATH." >&2
+		exit 1
+	fi
 else
 	SUBTARGET=kn7000
 	BINARY=kn7000
