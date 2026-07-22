@@ -266,6 +266,12 @@ void upd6383_device::device_stop()
 
 	capture_flush();
 	capture_write_files();
+
+	// The pointer trace rides on the same opt-in as the upload capture: it is
+	// instrumentation, it is inert unless a machine config asked for capture,
+	// and it needs no driver change of its own.
+	if (m_capture_base != nullptr)
+		write_pointer_trace((std::string(m_capture_base) + "_ptrtrace.txt").c_str());
 }
 
 
@@ -525,7 +531,34 @@ void upd6383_device::execute_run()
 	{
 		debugger_instruction_hook(m_pc);
 
-		const u64 word = fetch(m_pc);
+		const u64 raw = fetch(m_pc);
+
+		// END OF PROGRAM is hi12 bit 10 with bit 11 clear, and it is a
+		// MODIFIER: the halting instruction STILL PERFORMS ITS NORMAL WORK.
+		// MEASURED (notes/kn5000-dsp-hi12.md sect. 3): 38 such words in 2974,
+		// exactly one per image, all 38 the final word, and stripping the bit
+		// leaves an ordinary working hi12 in 9 of 9 cases (612 = END|212,
+		// 604 = END|204, 602 = END|202, 504 = END|104, 42C, 428, 424, 420,
+		// 400 = END alone).  An ENUMERATED opcode field has no reason to place
+		// nine halt codes at a constant offset 0x400 from nine ordinary codes.
+		// So the model is: strip the bit, execute what is left, then halt --
+		// NOT "the terminator is a separate halt instruction", which is what
+		// the old class4==1 && addr8 in {0E,0F} test implied.
+		// ...but ONLY where the measurement actually reaches.  The 38 words it
+		// was measured on are all unit-index terminators, and the pointer
+		// trace shows the COMMON HEADER carrying bit-10 words in its interior
+		// (word 6, 400.A.00.419), so the "it is the halt" half of the reading
+		// does not generalise off the body corpus.  The core therefore applies
+		// the strip-and-halt model to the form it was measured on and traps
+		// the rest, rather than extrapolating.
+		const bool ending = upd6383_disassembler::is_end(raw)
+				&& upd6383_disassembler::class4(raw) == 1
+				&& (upd6383_disassembler::addr8(raw) == 0x0e
+					|| upd6383_disassembler::addr8(raw) == 0x0f);
+		const u64 word = ending
+				? (raw & ~(u64(upd6383_disassembler::HI_END) << 24))
+				: raw;
+
 		const u16 hi = upd6383_disassembler::hi12(word);
 		const u8  cl = upd6383_disassembler::class4(word);
 		const u8  ad = upd6383_disassembler::addr8(word);
@@ -538,13 +571,14 @@ void upd6383_device::execute_run()
 		if (!upd6383_disassembler::decoded(word))
 		{
 			// TRAP AND LOG.  No state is changed -- an undecoded word must not
-			// silently corrupt the model.  The terminator is the one exception:
-			// it is not decoded either, but it is a MEASURED end-of-program
-			// landmark (91/91 final words, 0 false positives) and something has
-			// to stop the draft core running off the end of the body.
-			trap(word, m_pc - upd6383_disassembler::WORD_BYTES);
+			// silently corrupt the model.  In particular bit 4 (= store the
+			// accumulator to mem[ptr]) is NOT acted on here: one bit of a
+			// 36-bit word is not a decode, and performing half a word is how a
+			// draft core starts producing plausible-but-wrong results.
+			trap(raw, m_pc - upd6383_disassembler::WORD_BYTES);
+			(void)cl;
 
-			if (cl == 1 && (ad == 0x0e || ad == 0x0f))
+			if (ending)
 			{
 				m_frame_done = 1;
 				m_icount = 0;       // "wait for the next sample" -- SPECULATIVE
@@ -552,7 +586,7 @@ void upd6383_device::execute_run()
 			continue;
 		}
 
-		LOGMASKED(LOG_EXEC, "%010X  %s\n", word, upd6383_disassembler::text(word));
+		LOGMASKED(LOG_EXEC, "%010X  %s\n", raw, upd6383_disassembler::text(raw));
 
 		if (hi == 0x000 && cl == 2)
 		{
@@ -613,4 +647,158 @@ void upd6383_device::execute_run()
 			m_dp = u8(m_dp + dd);
 		}
 	}
+}
+
+
+//**************************************************************************
+//  RESEARCH INSTRUMENTATION: THE POINTER-ORIGIN TRACE
+//**************************************************************************
+
+//  WHY THIS EXISTS
+//      notes/kn5000-dsp-hi12.md sect. 5 showed that the data pointer's ORIGIN
+//      cannot be pinned from the ROM: no class subset, wrap modulus or hi12
+//      bit gate makes any image's pointer return to where it started (net
+//      delta -87..+1149, zero in 0 of 38), and the one PROVEN pointer-load
+//      form `801.0.NN.821' occurs ZERO times in the 38 effect bodies.  Its
+//      stated remedy was "run the core and watch the address bus".
+//
+//      This is that instrument -- and running it makes visible what every
+//      static search had EXCLUDED BY CONSTRUCTION.  The corpus statistic
+//      "2974 words over 38 images" counts effect BODIES only; the common
+//      header at I-RAM 0..59 and the algorithm-change stub at 60..82 are 83
+//      words that every effect executes and that no search covered.  They are
+//      in the live I-RAM, and they contain the pointer loads:
+//
+//          I-RAM 42  801.0.70.821   |
+//          I-RAM 43  801.0.6C.827   +-  unit 0 setup, then 49: END, unit 0
+//          I-RAM 44  801.0.25.825   |
+//          I-RAM 50  801.0.50.821   |
+//          I-RAM 51  801.0.64.827   +-  unit 1 setup, then 59: END, unit 1
+//          I-RAM 52  801.0.25.825   |
+//
+//      MEASURED.  See notes/kn5000-dsp-pointer.md for the full argument, the
+//      candidate discrimination, and the misses.
+//
+//  WHAT IT IS NOT
+//      It is not execution of the machine.  The core stays DISABLED; this
+//      walks the resident I-RAM under the decoded subset, changes no device
+//      state, and produces no audio.  Everything it reports about which words
+//      MOVE the pointer rests on a rule that is NOT established, and the file
+//      it writes says so at the top rather than in a footnote.
+
+void upd6383_device::write_pointer_trace(const char *path)
+{
+	std::ofstream f(path);
+	if (!f)
+		return;
+
+	f << "NEC uPD6383GF -- data-pointer trace over the RESIDENT I-RAM\n";
+	f << "Written by upd6383_device::write_pointer_trace().  See\n";
+	f << "notes/kn5000-dsp-pointer.md.  The core is DISABLED; nothing here is\n";
+	f << "machine execution and there is no audio.\n\n";
+	f << "CAUTION, stated up front: WHICH words move the pointer is NOT\n";
+	f << "established.  addr8 is a signed post-increment (MEASURED) but the set\n";
+	f << "of classes that carry one is not; classes 1/3/5/6/8 provably do not\n";
+	f << "(their addr8 is a bracket code, unit index or table selector), so the\n";
+	f << "rule used below is `classes 2 and A move it'.  Two independent checks\n";
+	f << "say that rule is still WRONG -- see the note.  Read the p821/p827/p825\n";
+	f << "columns as three parallel candidates, not as an answer.\n\n";
+	f << "  iw  word          fields         hi12                    d   p821 p827 p825\n";
+	f << "  --  ----------    ------------   ---------------------  ---  ---- ---- ----\n";
+
+	// three pointer registers, seeded by the header's own loads.  0x821 is the
+	// PROVEN form; 0x825/0x827 are INFERRED siblings whose target register is
+	// unknown, which is exactly why all three are carried side by side.
+	int p821 = -1, p827 = -1, p825 = -1;
+
+	auto dump_region = [&](const char *label, u32 first, u32 last)
+	{
+		util::stream_format(f, "\n--- %s (I-RAM %u..%u) ---\n", label, first, last);
+
+		for (u32 iw = first; iw <= last && iw < IRAM_WORDS; iw++)
+		{
+			u64 w = 0;
+			for (u32 i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
+				w = (w << 8) | m_iram.read_byte(iw * upd6383_disassembler::WORD_BYTES + i);
+			w &= 0xfffffffffULL;
+
+			const u16 hi = upd6383_disassembler::hi12(w);
+			const u8  cl = upd6383_disassembler::class4(w);
+			const u8  ad = upd6383_disassembler::addr8(w);
+			const u16 lo = upd6383_disassembler::lo12(w);
+			const s8  dd = s8(ad);
+
+			// the pointer LOADS -- absolute 8-bit immediates
+			if (hi == 0x801 && cl == 0)
+			{
+				if (lo == 0x821) p821 = ad;
+				else if (lo == 0x827) p827 = ad;
+				else if (lo == 0x825) p825 = ad;
+			}
+
+			const bool moves = (cl == 2 || cl == 0xa);
+			util::stream_format(f, "  %3u  %010X    %03X.%X.%02X.%03X   %-21s  %+4d  ",
+					iw, w, hi, cl, ad, lo,
+					upd6383_disassembler::hi12_text(hi), moves ? int(dd) : 0);
+
+			auto col = [&f](int v) { if (v < 0) f << "  -- "; else util::stream_format(f, "  %02X ", v & 0xff); };
+			col(p821); col(p827); col(p825);
+
+			// the store -- LOGGED, never performed (one bit is not a decode)
+			if ((hi & upd6383_disassembler::HI_ST) && !(hi & upd6383_disassembler::HI_ESC))
+				f << "  ST->mem[p]";
+			if (upd6383_disassembler::cursor_fetch(w))
+				f << "  cur+";
+			// *** A CONTRADICTION THE INTERPRETER FOUND, reported not buried ***
+			// notes/kn5000-dsp-hi12.md sect. 3 measured "bit 10 with bit 11
+			// clear = END OF PROGRAM: 38 such words in 2974, exactly one per
+			// image, zero anywhere else".  That corpus is the 38 effect
+			// BODIES.  Run the same rule over the RESIDENT I-RAM and the
+			// COMMON HEADER carries bit-10 words in its interior -- word 6
+			// (400.A.00.419) is the first.  So the rule does NOT generalise
+			// off the corpus it was measured on.  Either bit 10 is "end of
+			// SEGMENT / return" and the header is a chain of short segments
+			// (which fits the dispatch reading below), or it is not the halt
+			// at all.  The trace therefore stops ONLY at a unit-index END and
+			// flags every interior one.
+			const bool unit_end = upd6383_disassembler::is_end(w)
+					&& cl == 1 && (ad == 0x0e || ad == 0x0f);
+			if (unit_end)
+				util::stream_format(f, "  <== END, unit index %02X", ad);
+			else if (upd6383_disassembler::is_end(w))
+				f << "  <== !! bit 10 set MID-PROGRAM -- the END rule does not"
+					 " generalise off the 38 body images";
+			f << "\n";
+
+			if (moves)
+			{
+				if (p821 >= 0) p821 = (p821 + dd) & 0xff;
+				if (p827 >= 0) p827 = (p827 + dd) & 0xff;
+				if (p825 >= 0) p825 = (p825 + dd) & 0xff;
+			}
+
+			if (unit_end)
+				break;
+		}
+	};
+
+	// The dispatch model (INFERRED, strong -- see the note): the header's two
+	// segments each set a unit's pointers and end with that unit's index, the
+	// body then runs and ends with the SAME index.  It is what makes four
+	// separately-recorded facts one fact, including "no branch word carrying
+	// the entry addresses 84 or 200 has ever been found" -- because the
+	// dispatch is by unit index, not by an immediate.
+	dump_region("common header, unit-0 segment", 0, 49);
+	dump_region("effect body, unit 0", 84, 199);
+	dump_region("common header, unit-1 segment", 50, 59);
+	dump_region("effect body, unit 1", 200, 351);
+
+	f << "\nORIGINS NAMED BY THE HEADER (MEASURED, they are in I-RAM):\n";
+	f << "    unit 0   lo12 821 -> #$70   lo12 827 -> #$6C   lo12 825 -> #$25\n";
+	f << "    unit 1   lo12 821 -> #$50   lo12 827 -> #$64   lo12 825 -> #$25\n";
+	f << "  0x825 holds the SAME value in both segments, so it cannot be the\n";
+	f << "  per-unit state pointer: both units are resident simultaneously\n";
+	f << "  (MEASURED) and would alias completely.  That leaves two candidates.\n";
+
+	osd_printf_info("upd6383: wrote pointer trace to %s\n", path);
 }

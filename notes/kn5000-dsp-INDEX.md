@@ -31,11 +31,13 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-semantics.md` | ★★★ the biquad section **SOLVED by exhaustive constraint search** (19.7 M assignments, 144 survivors = one dataflow): Direct Form I, four state cells, **two of the four writes folded into multiply instructions**; `[7]` determined uniquely (make-up gain × accumulator, writes `S2`); exact impulse-response agreement on 9 real ROM banks; the reverb all-pass cross-check and its numbers |
 | `kn5000-dsp-avsdrv.md` | ★ **`AVSDRV.SYS` v5.10 ACQUIRED** from NEC's own server (inside NEC's free MS-DOS 6.2 update module `UPDOS62.EXE`, via Wayback) and **VERIFIED** as the real uPD6380 driver (`MOV DX,0A462h/0A464h`, `AVSDRV$$`, three `INT 0D9h` installs) — but its payload is LZ-packed behind an `AVSLOAD$` loader, so the upload loop / 19 microprograms / word size are still unread. Next step and reproduce recipe inside |
 | `kn5000-dsp-core-draft.md` | ★ the MAME **device + disassembler** (`src/devices/cpu/upd6383/`), the six decoded forms and their evidence, the live-I-RAM-vs-static-extraction acceptance test, and **the undecoded-word worklist ranked by frequency** (655 distinct words, 185 families, 9 % of the corpus decoded) |
+| `kn5000-dsp-hi12.md` | ★★★ `hi12` decoded as a **horizontal microword** (HD-1 closure z = +7.9): bit 11 = format escape, bit 10 = end (see below), bit 4 = write acc to `mem[ptr]`; bits [9:8] and [3:1] proven fields with unknown meaning; four negative searches for the pointer origin |
+| `kn5000-dsp-pointer.md` | ★★★ **THE POINTER ORIGIN IS FOUND** by running the core: the loads are in the **common header**, which every static search excluded by construction. Unit 0 `0x70`, unit 1 `0x50`, via the `0x821` register (`0x825` falsified by aliasing, `0x827` the runner-up). Plus a per-frame **dispatch model** that explains why no branch word carrying 84/200 exists, and the **falsification of "bit 10 = END OF PROGRAM"** as a bit meaning (14 occurrences in the 60-word header, 12 of them interior) |
 | `kn5000-dsp-necfamily.md` | ★ the uPD7725-descendant hypothesis, **REJECTED** (6 of 8 borrowed structures fail); the bodies are proved HAND-UNROLLED, which is why no branch exists to find; new `lo12` sub-boundary `[11:8]‖[7:2]` |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
 `_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`,
-`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`, `_semantics`.
+`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`, `_semantics`, `_hi12`, `_pointer`.
 Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 
 ## Established
@@ -45,8 +47,14 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 * **44,100 Hz**, derived from the firmware's own `ms × 0xAC44 / 0x3E8`.
 * I-RAM map: 0–59 header, 60–82 stub, 84–193 unit 0, 200–332 unit 1, 352–382 host poke.
   **Both effect units are resident at once.**
-* Terminator `class4==1 && addr8 ∈ {0x0E,0x0F}`; that `addr8` is a **unit index** (91/91).
+* Terminator `class4==1 && addr8 ∈ {0x0E,0x0F}`; that `addr8` is a **unit index** (91/91). The
+  halt itself is `hi12` bit 10 — but only **within an effect body**: the common header carries
+  that bit 14 times in 60 words, so "bit 10 = end of PROGRAM" is falsified as a bit meaning and
+  "end of segment / return" is what survives (`-pointer.md` §5).
 * Corpus: **91 valid programs**, 38 distinct images (79/88/89/90/91 malformed).
+* **Data-pointer ORIGIN: unit 0 = `0x70`, unit 1 = `0x50`** (`kn5000-dsp-pointer.md`), loaded by
+  the common header at I-RAM 42/50 immediately before each unit's terminator. The pointer does
+  **not** return over a program pass — it is **reloaded every frame**.
 * Roles: pointer-load `801.0.NN.821` (**proven by construction**), NOP `000.2.00.000` (**proven**),
   bit 23 = multiplier, `880.1.60/20.*` = external-DRAM bracket (MCC +0.944), `104.2.00.000` =
   all-pass marker (MCC +0.881), `hi12=0x082` = LFO read, `hi12=0xC40` = envelope detector,
@@ -72,6 +80,11 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    `204.2.FE.687 / 804.8.16.1DA / 000.2.FF.647` triple, already in the corpus.
 1. **C-RAM vs D-RAM.** Two 256×24 spaces plus a bank register; how they are distinguished is
    unknown. Partly folded into the biquad run.
+1b. **★ The pointer-DELTA rule** — now the single binding unknown (`-pointer.md` §6, §8.2).
+   `addr8` is a signed post-increment and classes 1/3/5/6/8 provably carry none, but the working
+   rule "classes 2 and A move it" is measurably WRONG: the reverb's walk leaves any 256-cell
+   window under all 512 class subsets, and the phaser's shared cell is read at `0x76` while its
+   own modulator writes `0x7B`. Two labelled words, three images, one equation to satisfy.
 2. **The `COND` field and control flow.** The pin table proves a `COND` field exists and names a
    `BRAKST` instruction, but an exhaustive scan of every contiguous bitfield found **no encoded
    branch** and no field carrying the body entry addresses 84/200. Current model is fall-through

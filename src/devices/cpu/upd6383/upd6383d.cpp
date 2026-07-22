@@ -26,12 +26,57 @@
         (MEASURED, notes/kn5000-dsp-header.md sect. 6).  This disassembler says
         so in a comment rather than pretending the nibble is a class there.
 
+    *** hi12 IS NOT AN OPCODE ***  (notes/kn5000-dsp-hi12.md, 2026-07-22)
+        It is a HORIZONTAL MICROWORD of independent enable bits.  MEASURED by
+        Hamming-distance-1 closure: the 54 observed values contain 77 HD-1
+        pairs against a popcount-matched null of 43.4 +/- 4.3 (z = +7.9),
+        spread over ALL TWELVE bit positions, and two sub-fields are complete
+        (bits[3:1] shows 8/8 values under prefix 0x02_, bits[9:8] 4/4 on the
+        ..02 base).  Consequently EVERY word here renders hi12 as decoded
+        FLAGS PLUS AN EXPLICIT RESIDUE -- never as an opaque number.  A reader
+        then sees which bits are set and which are still unexplained, instead
+        of 54 opaque values.
+
+           bit 11   FORMAT ESCAPE     bits[10:0] mean something else.  MEASURED
+                                      as an escape and not a modifier: removing
+                                      it leaves a legal hi12 in only 1 of 9
+                                      cases, against 9 of 9 for bits 10 and 4.
+           bit 10   END OF PROGRAM    when bit 11 is clear.  See is_end().
+           bits 9:8 a proven FIELD, MEANING UNKNOWN (rendered f98=n).  It is
+                    NOT an accumulator-op selector -- that was measured and
+                    FAILED (hi12.md sect. 8), so no guess is rendered.
+           bit 7    SPECULATIVE "index/address domain"; rendered as residue.
+           bits 6,5 no reading; rendered as residue.
+           bit 4    WRITE ACCUMULATOR -> mem[ptr].  See below.
+           bits 3:1 a proven FIELD, MEANING UNKNOWN (rendered f31=n).
+           bit 0    "addr8 is an absolute immediate", PROVEN BY CONSTRUCTION
+                    for 0x801 only; rendered as residue.
+
+    bit 4 = WRITE THE ACCUMULATOR TO mem[ptr] (MEASURED, hi12.md sect. 4).
+        Two investigations that were not looking at bit 4 supply the labels and
+        both land the same way: 0x212 = mulst (writes) is 0x202 = mac (does
+        not) plus bit 4, and 0x092 = phase accumulate (must write the phase
+        back) is 0x082 = LFO read plus bit 4.  The CONTROL is absence and it
+        passes: excluding terminators, 0 of 410 words carry bit 4 in the
+        classes whose addr8 is provably not a pointer (1, 3, 5, 6, 8), against
+        94 expected.  FLAGGED EXCEPTION: the five `612.1.**.000' terminators
+        carry bit 4 while their addr8 is a unit index -- annotated below,
+        deliberately not explained away.
+        ONE BIT OF A 36-BIT WORD IS NOT A DECODE: bit-4 words still print with
+        the `?' prefix and stay on the worklist.
+
+    bit 23 = CURSOR-FETCH ENABLE, not multiply-enable (CORRECTION, axes.md):
+        18 of the phaser's 20 all-pass sections contain no cursor-fetching
+        word at all and they still need gains, so bit 23 cannot be gating the
+        multiplier.
+
     WHAT IS EMITTED
         * a real mnemonic ONLY for the forms listed in DECODED FORMS below,
           each of which carries its source of evidence in a comment;
         * `?word 0x0XXXXXXXXX' for everything else, always with the field
-          breakdown, plus a structural annotation where the corpus has one.
-          The `?' prefix is deliberately greppable: it is the worklist.
+          breakdown AND the hi12 flag/residue rendering, plus a structural
+          annotation where the corpus has one.  The `?' prefix is deliberately
+          greppable: it is the worklist.
 
     DECODED FORMS (and where each comes from)
 
@@ -97,13 +142,21 @@ const char *annotate(u64 word)
 	const u8  ad = upd6383_disassembler::addr8(word);
 	const u16 lo = upd6383_disassembler::lo12(word);
 
-	// end-of-program landmark: 91/91 final words, 0 occurrences elsewhere in
-	// 2974 words; addr8 is a UNIT INDEX, not a branch target -- confirmed three
-	// independent ways (notes/kn5000-dsp-header.md sect. 3)
-	if (cl == 1 && ad == 0x0e)
-		return "TERMINATOR, unit 0 -- end-of-frame or return, UNKNOWN";
-	if (cl == 1 && ad == 0x0f)
-		return "TERMINATOR, unit 1 -- end-of-frame or return, UNKNOWN";
+	// END OF PROGRAM is hi12 bit 10 (bit 11 clear), and the halting word STILL
+	// DOES ITS WORK (MEASURED, notes/kn5000-dsp-hi12.md sect. 3): 38 such words
+	// in 2974, exactly one per image, all 38 the final word, and stripping the
+	// bit leaves an ordinary working hi12 in 9 of 9 cases.  This RETIRES the
+	// old `class4==1 && addr8 in {0E,0F}' test, which was recognising a
+	// correlate: that addr8 is the UNIT INDEX (confirmed three independent
+	// ways, notes/kn5000-dsp-header.md sect. 3), not the halt.
+	if (upd6383_disassembler::is_end(word))
+	{
+		if (cl == 1 && ad == 0x0e)
+			return "END OF PROGRAM, unit 0 -- and still performs the rest of the word";
+		if (cl == 1 && ad == 0x0f)
+			return "END OF PROGRAM, unit 1 -- and still performs the rest of the word";
+		return "END OF PROGRAM -- and still performs the rest of the word";
+	}
 
 	// external-DRAM (digital delay) bracket: predicts the DRAM-using effects at
 	// MCC +0.944 over 38 images (notes/kn5000-dsp-class2-round2.md sect. 1.1)
@@ -120,6 +173,25 @@ const char *annotate(u64 word)
 	if (word == 0x104200000ULL)
 		return "all-pass marker -- step UNKNOWN";
 
+	// The reverb diffuser's 2-permutation, BROKEN by bit 4 (hi12.md sect. 4.4).
+	// -semantics.md sect. 6 left "one is d_in <- x+t, the other y <- d_out-t"
+	// constrained to two.  Only 0x012 carries bit 4, so 012 is the write -- and
+	// it sits immediately before 880.1.20.655, the DRAM-WRITE half of the
+	// bracket, a positional corroboration the bit-4 argument did not use.
+	// Nine of each in algo 16, one per diffuser.
+	if (word == 0x012200680ULL)
+		return "all-pass: d_in <- x + t (the WRITE), bit 4 breaks the 2-permutation";
+	if (word == 0x000200419ULL)
+		return "all-pass: y <- d_out - t (its partner)";
+
+	// The LFO phase accumulator, DECODED as an idiom (notes/kn5000-dsp-chorus.md
+	// sect. 2.2, and the wrap constant 29/29 in hi12.md): the increment is
+	// f/44100 in Q0.23 and the wrap constant is 0x7FFFFF.
+	if (hi == 0x092 && cl == 0xa && lo == 0x200)
+		return "LFO: phase += increment (increment = f/44100 in Q0.23)";
+	if (hi == 0x094 && cl == 0xa && lo == 0x200)
+		return "LFO: phase wrap, consumes the constant 0x7FFFFF (29/29)";
+
 	// pointer-load family siblings (INFERRED, header note sect. 7)
 	if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
 		return "pointer-load family sibling, target register UNKNOWN";
@@ -133,9 +205,9 @@ const char *annotate(u64 word)
 
 	// hi12 families with corpus-wide roles but no decode
 	if (hi == 0x082)
-		return "LFO read (INFERRED)";
+		return "LFO / modulation-source read (INFERRED)";
 	if (hi == 0xc40)
-		return "envelope detector (INFERRED)";
+		return "envelope / level detector (INFERRED)";
 
 	// the 3-word table-lookup idiom accounts for every class-4 and class-6 word
 	// (53/53/53) and occurs in exactly the 25 images with an LFO or distortion
@@ -155,6 +227,24 @@ const char *annotate(u64 word)
 	if (lo == 0x1d4)
 		return "read into carry latch B (INFERRED)";
 
+	// hi12 = 0x212 is the write to mem[ptr] in EVERY class, not just class A
+	// (GENERALISED by bit 4 -- notes/kn5000-dsp-hi12.md sect. 7).  The plain
+	// store 212.2.00.000 occurs 103 times over 32 of 38 images and needs
+	// nothing from lo12 at all, which is itself the corroboration that the
+	// store is named in hi12 and not in lo12.
+	if (word == 0x212200000ULL)
+		return "plain store: mem[ptr] <- acc (nothing asked of lo12)";
+	if (hi == 0x212)
+		return "writes mem[ptr] (bit 4), class-independent";
+
+	// the same gain multiply in two effect families that agree on nothing else:
+	// the phaser's all-pass (102.2.<k>.1CD, gain via mem[ptr]) and the reverb
+	// diffuser's (102.A.00.64B, gain via the cursor).  MEASURED that hi12 is
+	// CONSTANT across the two while class4 and lo12 both change
+	// (notes/kn5000-dsp-axes.md sect. 2.5).
+	if (hi == 0x102)
+		return "gain multiply (same op in phaser all-pass and reverb diffuser)";
+
 	// class4 is immediate data, not a class, inside these families
 	// (MEASURED, notes/kn5000-dsp-header.md sect. 6)
 	if ((hi & 0xf00) == 0xc00)
@@ -166,6 +256,62 @@ const char *annotate(u64 word)
 }
 
 } // anonymous namespace
+
+
+//-------------------------------------------------
+//  hi12_text - the horizontal microword, as FLAGS + an explicit RESIDUE
+//-------------------------------------------------
+
+//  This is the rendering change the hi12 result forces.  Showing `0x092' tells
+//  a reader nothing; showing `ST f31=1 ?7' tells them it is `0x082' plus the
+//  store, which is exactly the measured relationship.  Where a bit has no
+//  reading it appears as `?n' and is summed into `res=' -- so the unexplained
+//  part of every word is visible and greppable rather than hidden inside a
+//  number.
+
+std::string upd6383_disassembler::hi12_text(u16 hi)
+{
+	std::ostringstream s;
+	bool first = true;
+	auto sep = [&s, &first]() { if (!first) s << ' '; first = false; };
+
+	if (hi & HI_ESC)
+	{
+		// bit 11 is an ESCAPE, not a modifier: removing it leaves a legal hi12
+		// in only 1 of 9 cases (MEASURED, hi12.md sect. 2.4).  Inside the
+		// escape, bit 10 is NOT the end marker -- the control is 0xC40, which
+		// carries bit 10 yet has mean normalised position 0.570, not 1.000.
+		sep(); s << "ESC";
+	}
+	else if (hi & HI_END)
+	{
+		sep(); s << "END";
+	}
+
+	if ((hi & HI_ST) && !(hi & HI_ESC))
+	{
+		sep(); s << "ST";
+	}
+
+	// proven fields, deliberately rendered as named-but-unexplained
+	if (hi_f98(hi)) { sep(); util::stream_format(s, "f98=%d", hi_f98(hi)); }
+	if (hi_f31(hi)) { sep(); util::stream_format(s, "f31=%d", hi_f31(hi)); }
+
+	const u16 res = hi_residue(hi);
+	if (res)
+	{
+		for (int b = 11; b >= 0; b--)
+			if (BIT(res, b)) { sep(); util::stream_format(s, "?%d", b); }
+		sep(); util::stream_format(s, "res=%03X", res);
+	}
+
+	if (first)
+		s << '-';           // hi12 == 0x000: every enable clear.  27.2 % of the
+							// corpus, and the NOP is one of them -- which is
+							// what a horizontal microword predicts and an
+							// enumerated opcode does not.
+	return s.str();
+}
 
 
 //-------------------------------------------------
@@ -226,9 +372,27 @@ std::string upd6383_disassembler::text(u64 word)
 		util::stream_format(s, "?word   0x%010X   ; %03X.%X.%02X.%03X",
 				word & 0xfffffffffULL, hi, cl, ad, lo);
 
+		// hi12 as FLAGS + RESIDUE.  This is the whole point of the rendering
+		// change: instead of 54 opaque values a reader sees which enables are
+		// set and which bits nothing accounts for.
+		util::stream_format(s, "  hi12{%s}", hi12_text(hi));
+
+		// bit 23 = CURSOR-FETCH enable (CORRECTED reading -- NOT multiply)
+		if (cursor_fetch(word))
+			s << " cur+";
+
 		const char *note = annotate(word);
 		if (note != nullptr)
 			util::stream_format(s, "  [%s]", note);
+
+		// FLAGGED EXCEPTION, reported rather than explained away: five
+		// `612.1.**.000' words carry the accumulator store while their addr8
+		// is the UNIT INDEX, not a pointer.  Either a terminator repurposes
+		// addr8 or the halting store goes elsewhere.  It is the only blemish
+		// on an otherwise clean bit-4 control (0 of 410), and the project has
+		// had to retract results before that were quietly swept up.
+		if (is_end(word) && (hi & HI_ST) && cl == 1 && (ad == 0x0e || ad == 0x0f))
+			s << "  [!! bit 4 = store, yet addr8 is the unit index -- UNEXPLAINED]";
 	}
 
 	return s.str();

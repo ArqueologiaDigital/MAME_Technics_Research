@@ -115,6 +115,15 @@ public:
 	// diagnostic: dump the undecoded-word histogram to the error log
 	void dump_trap_histogram() const ATTR_COLD;
 
+	// RESEARCH INSTRUMENTATION: walk the RESIDENT I-RAM under the decoded
+	// subset and write a per-word log of (I-RAM index, word, hi12 flags,
+	// signed addr8, the three candidate pointers, any would-be store).  This
+	// is the address-bus trace notes/kn5000-dsp-hi12.md sect. 5.4 asked for,
+	// and it is what located the pointer loads in the common header -- a
+	// region every static search had excluded by construction.  It changes no
+	// device state, executes nothing, and produces no audio.
+	void write_pointer_trace(const char *path) ATTR_COLD;
+
 	// RESEARCH INSTRUMENTATION.  Record every uC-IF byte and write the host
 	// upload stream out at exit as <basename>.{bin,txt}.  This is how the
 	// microprogram corpus was obtained in the first place and it is what
