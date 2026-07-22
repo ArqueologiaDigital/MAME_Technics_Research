@@ -9,9 +9,41 @@ Files: `src/devices/cpu/upd6383/upd6383d.{cpp,h}` (disassembler),
 D-RAM 256x24 are **on-die** — they sit on the internal 24-bit IDB and no pin exposes them —
 so the device maps them itself and no machine config can override them. Only the
 **digital-delay DRAM is off-chip**, a separate part on the host board driven by the DSP's
-RAS/CAS/WE and A0-A16 pins, so `AS_DELAY` is the driver's to provide. Its size on the KN5000
-mainboard is **not established** (the pin survey covers the DSP package, not its memory); the
-driver currently populates the full 128K x 16 the chip can address and says so.
+RAS/CAS/WE and A0-A16 pins, so `AS_DELAY` is the driver's to provide.
+
+### Board facts, from Felipe (2026-07-22)
+
+| | |
+|---|---|
+| IC311 clock | **25 MHz crystal** — replaces the earlier nominal 16.9344 MHz, which had been reverse-engineered from "384 words per 44.1 kHz frame" |
+| IC311 delay memory | **IC309 = M5M44260AJ-7S**, 4 Mbit, **16-bit data bus, 9 address pins** → 256K × 16, row/column multiplexed (9 + 9 = 18 address bits) |
+| IC310 (DSP2, MN19413) clock | **20 MHz crystal** — the two effect processors are independently clocked |
+| IC310 delay memory | **IC308 = M5M418128AJ-6**, 1 Mbit, **8-bit data bus, 9 address pins** → 128K × 8 (row 9 + column 8 = 17 bits) |
+
+Three things follow, and they are worth having on record even though none of them changes code
+today:
+
+* **The ×16 delay bus CORROBORATES the block diagram.** The CDJ-500 diagram shows the delay
+  memory on I/O1–16 while the core is 24-bit; the real part is genuinely ×16. The delay line
+  stores **16-bit** samples, so a delayed sample is truncated going out and coming back. That is
+  hardware, not an emulation shortcut, and it will matter once the core runs — the reverb's
+  measured all-pass energies assume full precision.
+* **The 25 MHz clock is a consistency check on the execution model.** 25 MHz / 44.1 kHz = **567
+  cycles per sample frame** against 384 words of I-RAM. "The PC sweeps I-RAM once per frame",
+  which the Fs-RST/PC-RST pins and the straight-line, hand-unrolled effect bodies imply
+  (`-encoding.md` §6, `-necfamily.md` §6), **fits with room to spare** — as it must, since some
+  instructions will take more than one cycle. Had the number come out below 384, the model would
+  have been in trouble.
+* **How much of IC309 the DSP reaches is NOT established.** The DRAM wants 18 multiplexed
+  address bits; the DSP's documented bus is A0–A16, 17 lines, and it drives RAS/CAS itself. 17
+  bits is 131,072 words — exactly **half** the part. Either a bit is left off and half the DRAM
+  is unused, or the KN5000 wires something the CDJ-500 diagram does not show. The driver maps
+  what the DSP can defensibly address and refuses to guess wider, because **the delay times
+  depend on where the address wraps** and the reverb tap lengths are what would silently go
+  wrong. Settled by tracing which DSP pins reach IC309's A0–A8, or by a measured delay time.
+* **DSP2's 8-bit delay bus is unexplained.** 8-bit samples are far too coarse for an audio
+  delay send, so either two accesses per sample or companded storage. Worth settling before
+  anyone models MN19413.
 
 **This is a DRAFT / RESEARCH INSTRUMENT, not a working core.** The instruction set is not
 decoded. Six word forms are implemented, every other word is trapped and logged, and there is

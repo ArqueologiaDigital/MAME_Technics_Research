@@ -101,6 +101,12 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 7. **DSP2 (MN19413, IC310) is entirely untouched.** Bit-banged serial on PF.0/PF.2/PE.6, opcode 0xE
    with command 0x30; its bodies autocorrelate at lag 4, suggesting a **32-bit** word rather than
    36. Effect units 2–4 route to it. A whole second chip awaits.
+   **Board facts (Felipe, 2026-07-22): IC310 has its own 20 MHz crystal**, against the 25 MHz
+   one on IC311 — the two effect processors are independently clocked. Its delay memory is
+   **IC308, an M5M418128AJ-6**: 1 Mbit, **8-bit data bus, 9 address pins** (128K × 8, row 9 +
+   column 8 = 17 bits) — self-consistent, and a quarter of what IC311 gets. **The 8-bit width
+   is unexplained**: 8-bit samples are too coarse for an audio delay, so DSP2 either does two
+   accesses per sample or companded storage. Settle that before modelling it.
 8. **Emulating the DSP core** in MAME, once enough ISA is known — the payoff being that KN5000
    effects would actually be audible. Circular until the ISA exists, but it is the destination.
    **STARTED (2026-07-22, `kn5000-dsp-core-draft.md`): the device and disassembler now exist

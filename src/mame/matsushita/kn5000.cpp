@@ -188,10 +188,10 @@ private:
 	void dsp_reg_data_w(uint16_t data);
 	uint16_t dsp_reg_data_r();
 
-	// IC311's EXTERNAL delay memory.  The uPD6383GF's I-RAM, C-RAM and D-RAM
-	// are all on-die and are mapped by the device itself; the digital-delay
-	// DRAM is a separate chip on this board, driven by the DSP's own RAS/CAS/WE
-	// and A0-A16 lines, so it is the driver's to provide.
+	// IC311's EXTERNAL delay memory = IC309, a 4-Mbit DRAM.  The uPD6383GF's
+	// I-RAM, C-RAM and D-RAM are all on-die and are mapped by the device
+	// itself; this one is a separate chip on this board, driven by the DSP's
+	// own RAS/CAS/WE and A0-A16 lines, so it is the driver's to provide.
 	void dsp1_delay_map(address_map &map) ATTR_COLD;
 
 	// Latch access wrappers
@@ -385,7 +385,20 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
-	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2
+	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2.
+	// Clocked by its own 20 MHz crystal (Felipe, from the board), against the
+	// 25 MHz one on IC311 -- two independent effect processors, two clocks.
+	// NOT EMULATED AT ALL: no device, no capture, no audio. Its bodies
+	// autocorrelate at lag 4, suggesting a 32-bit instruction word rather than
+	// the uPD6383's 36 (notes/kn5000-dsp-INDEX.md backlog item 7).
+	//
+	// Its delay memory is IC308 = M5M418128AJ-6: a 1-Mbit DRAM, 8-BIT data bus
+	// and 9 address pins, i.e. 131,072 words x 8 (row 9 + column 8 = 17 bits).
+	// Self-consistent, and a quarter of the delay memory IC311 gets from IC309.
+	// The 8-bit width is the interesting part and is NOT explained: 8-bit audio
+	// samples would be far too coarse for a delay/reverb send, so either DSP2
+	// takes two accesses per sample (16-bit samples in a byte-wide memory) or
+	// it stores something companded. Worth settling before anyone models it.
 }
 
 void kn5000_state::dsp_reg_addr_w(uint16_t data)
@@ -408,13 +421,31 @@ uint16_t kn5000_state::dsp_reg_data_r()
 
 void kn5000_state::dsp1_delay_map(address_map &map)
 {
-	// UNVERIFIED SIZE. The chip can address 128K 16-bit samples (A0-A16) and
-	// that whole space is populated here, but WHICH DRAM sits next to IC311 on
-	// the KN5000 mainboard has not been read off the schematic or the board --
-	// Felipe's pin survey (kn5000_project/chips_dsp_usados_no_kn5000.txt)
-	// covers the DSP package, not its memory. Size this to the real part when
-	// it is identified; the effect delay times will depend on it.
-	map(0x00000, 0x1ffff).ram();
+	// IC309 = M5M44260AJ-7S (Felipe, from the board): a Mitsubishi 4-Mbit
+	// DRAM with a 16-BIT DATA BUS and 9 ADDRESS PINS, i.e. 262,144 words x 16
+	// bits with the row and column addresses multiplexed over A0-A8 by RAS and
+	// CAS in the usual way -- 9 + 9 = 18 address bits in total.
+	//
+	// The x16 organisation CORROBORATES the CDJ-500 block diagram, which shows
+	// the delay memory reached through I/O1-16 while the DSP core is 24-bit:
+	// the delay line really does store 16-bit samples, so a delayed sample is
+	// truncated going out and coming back. That is a property of the hardware,
+	// not an emulation shortcut, and it will matter once the core runs.
+	//
+	// HOW MUCH OF IT THE DSP REACHES IS NOT ESTABLISHED. The DRAM wants 18
+	// multiplexed bits; the uPD6383GF's documented address bus is A0-A16, 17
+	// lines, and it drives RAS/CAS/WE itself, so it is doing the multiplexing.
+	// 17 bits addresses 131,072 words -- exactly HALF the part. Either one bit
+	// is left off and half the DRAM is unused (routine when the bigger part is
+	// the cheaper or the second-sourced one), or the KN5000 wires something the
+	// CDJ-500 diagram does not show. So this maps what the DSP can defensibly
+	// address, not what the part holds. Do NOT quietly widen it to 256K: the
+	// delay TIMES depend on where the address wraps, and the reverb tap lengths
+	// in notes/kn5000-dsp-reverb.md are the thing that would go wrong.
+	//
+	// What would settle it: which of the DSP's address pins actually reach
+	// IC309's A0-A8 on the board, or a measured delay time once the core runs.
+	map(0x00000, 0x1ffff).ram();      // 128K words x 16 bits (A0-A16)
 }
 
 
@@ -918,11 +949,20 @@ void kn5000_state::kn5000(machine_config &config)
 	SPEAKER(config, "lspeaker").front_left();
 	SPEAKER(config, "rspeaker").front_right();
 
-	// IC311: NEC uPD6383GF-3BA effects DSP.  NOMINAL clock 384 * 44,100 Hz =
-	// 16.9344 MHz, chosen so one pass of the 384-word I-RAM fits one sample
-	// frame; the 44.1 kHz frame rate is established (the firmware's own
-	// ms x 0xAC44 / 0x3E8), the actual master clock of IC311 is not.
-	UPD6383(config, m_dsp1, 384 * 44100);
+	// IC311: NEC uPD6383GF-3BA effects DSP, clocked by its own 25 MHz crystal
+	// (Felipe, from the board -- this replaces an earlier NOMINAL 16.9344 MHz
+	// that was reverse-engineered from "384 words per 44.1 kHz frame").
+	//
+	// Worth noting because it is a consistency check on the whole execution
+	// model: the sample rate is 44,100 Hz (established from the firmware's own
+	// ms x 0xAC44 / 0x3E8) and is set by the audio clocks on BCLKI/LRCKI/XFsI,
+	// NOT by this crystal. 25 MHz / 44.1 kHz = 567 cycles per sample frame,
+	// comfortably more than the 384 words of I-RAM. So "the PC sweeps I-RAM
+	// once per sample frame", which is what the Fs-RST / PC-RST pins and the
+	// straight-line effect bodies imply (notes/kn5000-dsp-encoding.md sect. 6),
+	// FITS -- with room to spare, as it must, since real instructions may take
+	// more than one cycle.
+	UPD6383(config, m_dsp1, 25_MHz_XTAL);
 	// I-RAM, C-RAM and D-RAM are on-die and the device maps them itself; only
 	// the external digital-delay DRAM is this board's business.
 	m_dsp1->set_addrmap(AS_DELAY, &kn5000_state::dsp1_delay_map);
