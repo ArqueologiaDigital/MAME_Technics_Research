@@ -17,6 +17,10 @@
 #   BUILD_TREE where the build tree lives (non-volatile!) (default: ../kn7000_mame_build)
 #   ROM_SRC    dir holding kn7000_program.rom/kn7000_table.rom for a run test
 #   JOBS       parallel compile jobs                       (default: nproc)
+#   QTDEBUG    1 = build a SEPARATE binary with MAME's Qt debugger (default: 0)
+#              QTDEBUG=1 ./build.sh   -> ../kn7000_mame_build/kn7000_host  (run with -debug)
+#              ./build.sh             -> ../kn7000_mame_build/kn7000       (the published one)
+#              The two coexist; building one never overwrites the other.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +28,19 @@ MAME_SRC="${MAME_SRC:-$HERE/../mame}"
 BUILD_TREE="${BUILD_TREE:-$HERE/../kn7000_mame_build}"
 ROM_SRC="${ROM_SRC:-}"
 JOBS="${JOBS:-$(nproc)}"
-LOG="$BUILD_TREE/kn7000_build.log"
+# QTDEBUG=1 builds a SEPARATE binary WITH MAME's Qt debugger (run it with -debug).
+# It uses its own SUBTARGET so the two coexist: the normal build stays `kn7000`, the
+# debugger build is `kn7000_host`.  Neither overwrites the other, so you can rebuild
+# either one without disturbing the published binary.  Needs Qt dev packages (moc).
+QTDEBUG="${QTDEBUG:-0}"
+if [ "$QTDEBUG" = "1" ]; then
+	SUBTARGET=kn7000_host
+	BINARY=kn7000_host
+else
+	SUBTARGET=kn7000
+	BINARY=kn7000
+fi
+LOG="$BUILD_TREE/${BINARY}_build.log"
 
 echo "overlay:    $HERE"
 echo "mame src:   $MAME_SRC"
@@ -184,5 +200,9 @@ SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,
 # compiled -- that is exactly the "only driver_kn5000 undefined" link failure seen before.
 # Listing the driver *and* every device .cpp it pulls in from src/mame keeps them in step.
 SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp,src/mame/matsushita/kn5000_dsp.cpp"
-make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=0 -j"$JOBS" 2>&1 | tee "$LOG"
-echo "==> done. Binary:"; ls -la "$BUILD_TREE"/kn7000 2>/dev/null || echo "(no binary — check $LOG)"
+make SUBTARGET="$SUBTARGET" SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG="$QTDEBUG" -j"$JOBS" 2>&1 | tee "$LOG"
+echo "==> done. Binary:"; ls -la "$BUILD_TREE/$BINARY" 2>/dev/null || echo "(no binary — check $LOG)"
+if [ "$QTDEBUG" = "1" ]; then
+	echo "==> Qt debugger build. Run it with -debug, e.g.:"
+	echo "    cd $HERE/../kn7000-emulator && ../kn7000_mame_build/$BINARY kn5000 -rompath ./roms -debug"
+fi
