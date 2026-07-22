@@ -17,24 +17,14 @@
 #   BUILD_TREE where the build tree lives (non-volatile!) (default: ../kn7000_mame_build)
 #   ROM_SRC    dir holding kn7000_program.rom/kn7000_table.rom for a run test
 #   JOBS       parallel compile jobs                       (default: nproc)
-#   QTDEBUG    1 = build a SEPARATE binary with MAME's Qt debugger (default: 0)
-#              QTDEBUG=1 ./build.sh   -> ../kn7000_mame_build/kn7000_host  (run with -debug)
-#              ./build.sh             -> ../kn7000_mame_build/kn7000       (the published one)
-#              The two coexist; building one never overwrites the other.
-#              STATUS 2026-07-22: it BUILDS. If it fails compiling moc output with
-#              "qt_staticMetaObjectStaticContent<...> expected primary-expression", that is
-#              STALE generated moc from a different Qt (ours said "Qt 6.10.2" while the headers
-#              were 6.8.2). Clear it -- note the real path is build/generated, NOT generated:
-#                  rm -rf ../kn7000_mame_build/build/generated/osd/modules/debugger/qt \
-#                         ../kn7000_mame_build/linux_gcc/obj/x64/Release/qtdbg_sdl
-#              CAVEAT: the resulting kn7000_host does NOT link Qt6 (ldd shows no Qt), so the qt
-#              debugger module is not actually selectable yet -- "-debugger qt" falls back to
-#              imgui. Unfinished; use the imgui debugger below until this is sorted.
 #
-#   ★ YOU PROBABLY DO NOT NEED QTDEBUG AT ALL. The NORMAL binary already has a full
-#     graphical debugger via Dear ImGui -- it just needs the BGFX renderer:
-#         ./kn7000 kn5000 -rompath ./roms -debug -debugger imgui -video bgfx
-#     Verified working 2026-07-22. No Qt, no separate build.
+# THE BUILD ALWAYS INCLUDES MAME'S Qt DEBUGGER (USE_QTDEBUG=1). Run it with -debug:
+#     cd ../kn7000-emulator && ./kn7000 kn5000 -rompath ./roms -debug
+# There is ONE build and ONE binary. Felipe uses the Qt debugger and nothing else, so the
+# old QTDEBUG=0/1 split is gone -- it existed only to avoid needing Qt, and its two modes
+# shared -DUSE_QTDEBUG-sensitive object files, which silently produced a binary that built
+# fine but had the qt module stripped at link time. One mode cannot desync with itself.
+# Requires Qt dev packages (Debian: qt6-base-dev).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -42,33 +32,31 @@ MAME_SRC="${MAME_SRC:-$HERE/../mame}"
 BUILD_TREE="${BUILD_TREE:-$HERE/../kn7000_mame_build}"
 ROM_SRC="${ROM_SRC:-}"
 JOBS="${JOBS:-$(nproc)}"
-# QTDEBUG=1 builds a SEPARATE binary WITH MAME's Qt debugger (run it with -debug).
-# It uses its own SUBTARGET so the two coexist: the normal build stays `kn7000`, the
-# debugger build is `kn7000_host`.  Neither overwrites the other, so you can rebuild
-# either one without disturbing the published binary.  Needs Qt dev packages (moc).
-QTDEBUG="${QTDEBUG:-0}"
-if [ "$QTDEBUG" = "1" ]; then
-	SUBTARGET=kn7000_host
-	BINARY=kn7000_host
-	# ~/.local/bin/qmake6 is a STUB that always echoes ~/.local/share/noqt.  It exists so
-	# USE_QTDEBUG=0 builds work: without it "-I$(shell qmake6 -query ...)" collapses to a bare
-	# "-I" that swallows the following -std=c++20.  But it also hides the REAL qmake6, so MAME's
-	# moc probe (scripts/src/osd/modules.lua: qmake6 -query QT_HOST_LIBEXECS) finds nothing and
-	# the build dies with "Qt's Meta Object Compiler (moc) wasn't found!".  Put the real Qt6 bin
-	# dir FIRST for this build only -- do not delete the stub, the normal build still needs it.
-	for _qtbin in /usr/lib/qt6/bin /usr/lib/x86_64-linux-gnu/qt6/bin; do
-		if [ -x "$_qtbin/qmake6" ]; then PATH="$_qtbin:$PATH"; export PATH; break; fi
-	done
-	if [ "$(qmake6 -query QT_HOST_LIBEXECS 2>/dev/null)" = "$HOME/.local/share/noqt" ]; then
-		echo "ERROR: the real qmake6 is still shadowed by the ~/.local/bin stub." >&2
-		echo "       Install qt6-base-dev, or prepend the dir holding the real qmake6 to PATH." >&2
-		exit 1
-	fi
-else
-	SUBTARGET=kn7000
-	BINARY=kn7000
+# ~/.local/bin/qmake6 is a STUB that always echoes ~/.local/share/noqt.  It was added back when
+# this script built WITHOUT Qt, to stop "-I$(shell qmake6 -query ...)" collapsing to a bare "-I"
+# that swallowed the following -std=c++20.  It also HIDES the real qmake6, so MAME's moc probe
+# (scripts/src/osd/modules.lua: qmake6 -query QT_HOST_LIBEXECS) finds nothing and the build dies
+# with "Qt's Meta Object Compiler (moc) wasn't found!".  Put the real Qt6 bin dir first.
+for _qtbin in /usr/lib/qt6/bin /usr/lib/x86_64-linux-gnu/qt6/bin; do
+	if [ -x "$_qtbin/qmake6" ]; then PATH="$_qtbin:$PATH"; export PATH; break; fi
+done
+if [ "$(qmake6 -query QT_HOST_LIBEXECS 2>/dev/null)" = "$HOME/.local/share/noqt" ]; then
+	echo "ERROR: the real qmake6 is shadowed by the ~/.local/bin/qmake6 stub." >&2
+	echo "       Install qt6-base-dev, or prepend the dir holding the real qmake6 to PATH." >&2
+	exit 1
 fi
-LOG="$BUILD_TREE/${BINARY}_build.log"
+# Sanity-check moc against the headers we compile against.  A moc from a DIFFERENT Qt emits code
+# the installed headers do not declare (we hit "Qt 6.10.2" moc output vs 6.8.2 headers ->
+# "qt_staticMetaObjectStaticContent<...> expected primary-expression", which reads like a MAME
+# incompatibility but is really just stale/mismatched moc).
+_mocver=$("$(qmake6 -query QT_HOST_LIBEXECS)/moc" --version 2>/dev/null | awk '{print $NF}')
+_hdrver=$(sed -n 's/^#define QT_VERSION_STR "\(.*\)"/\1/p' \
+	"$(qmake6 -query QT_INSTALL_HEADERS)/QtCore/qconfig.h" 2>/dev/null)
+if [ -n "$_mocver" ] && [ -n "$_hdrver" ] && [ "$_mocver" != "$_hdrver" ]; then
+	echo "WARNING: moc is $_mocver but Qt headers are $_hdrver -- generated moc output may not compile." >&2
+	echo "         If it fails, clear: $BUILD_TREE/build/generated/osd/modules/debugger/qt" >&2
+fi
+LOG="$BUILD_TREE/kn7000_build.log"
 
 echo "overlay:    $HERE"
 echo "mame src:   $MAME_SRC"
@@ -220,7 +208,7 @@ fi
 # 6. Focused build (REGENIE picks up the cpu.lua / mame.lst edits).
 echo "==> building (log: $LOG) ..."
 cd "$BUILD_TREE"
-# USE_QTDEBUG=0: build without the Qt debugger (no Qt 'moc' needed).
+
 SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,src/mame/matsushita/kn7000_tonegen.cpp,src/mame/matsushita/kn6000_tonegen.cpp,src/mame/matsushita/kn_cpanel.cpp,src/mame/matsushita/kn7000_cpanel.cpp,src/mame/matsushita/kn6000_cpanel.cpp,src/mame/matsushita/kn1500.cpp"
 # The KN5000 rides in the same focused binary. NOTE: mame.lst already carries an
 # `@source:matsushita/kn5000.cpp` anchor upstream, so if kn5000.cpp is NOT listed in SOURCES
@@ -228,9 +216,7 @@ SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,
 # compiled -- that is exactly the "only driver_kn5000 undefined" link failure seen before.
 # Listing the driver *and* every device .cpp it pulls in from src/mame keeps them in step.
 SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp,src/mame/matsushita/kn5000_dsp.cpp"
-make SUBTARGET="$SUBTARGET" SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG="$QTDEBUG" -j"$JOBS" 2>&1 | tee "$LOG"
-echo "==> done. Binary:"; ls -la "$BUILD_TREE/$BINARY" 2>/dev/null || echo "(no binary — check $LOG)"
-if [ "$QTDEBUG" = "1" ]; then
-	echo "==> Qt debugger build. Run it with -debug, e.g.:"
-	echo "    cd $HERE/../kn7000-emulator && ../kn7000_mame_build/$BINARY kn5000 -rompath ./roms -debug"
-fi
+make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 -j"$JOBS" 2>&1 | tee "$LOG"
+echo "==> done. Binary:"; ls -la "$BUILD_TREE/kn7000" 2>/dev/null || echo "(no binary — check $LOG)"
+echo "==> Qt debugger included. Run it with -debug:"
+echo "    cd $HERE/../kn7000-emulator && ./kn7000 kn5000 -rompath ./roms -debug"
