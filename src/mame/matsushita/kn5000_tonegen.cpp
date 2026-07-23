@@ -179,7 +179,13 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	m_voice[ch].regs[reg_idx] = data;
 	LOGMASKED(LOG_REG_W, "tonegen: voice %d reg[%d] (g%d.b%d) = 0x%04X\n", ch, reg_idx, group, bank, data);
 
-	// Voice control register (group 0, bank 0) — key on/off
+	// Voice control register (group 0, bank 0) — carries BOTH the key gate command
+	// AND the per-tick amplitude-envelope magnitude. The sub-CPU firmware's software
+	// envelope (stepper LABEL_026E5B) rewrites this register every audio tick with
+	// 0xF000|mag / 0xFE00|mag, low 9 bits = linear magnitude (0xFF = loudest). The
+	// real note-on command is 0x8100; key-off is 0x7E00. Discriminate by command so
+	// the per-tick envelope writes do NOT retrigger the voice (which was resetting
+	// wave_offset every coarse tick). See notes/kn5000-tonegen-register-semantics.md.
 	if (group == 0 && bank == 0)
 	{
 		if (data == 0x7E00)
@@ -187,10 +193,19 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 			// Idle / key off
 			process_key_off(ch);
 		}
+		else if ((data & 0xFF00) == 0x8100)
+		{
+			// Real note-on command (0x81xx). Confirmed against the sub-CPU
+			// disassembly: LDW (100002h:24), 8100h to group0/bank0 (v142 asm L30213).
+			process_key_on(ch);
+		}
 		else if (data & 0x8000)
 		{
-			// Key on (bit 15 = active flag)
-			process_key_on(ch);
+			// Per-tick amplitude-envelope magnitude update (0xF000|mag, 0xFE00|mag).
+			// Latch the magnitude; do NOT touch key state or waveform position.
+			// Verified live: after note-on the firmware writes 0xF0FF (mag 0xFF) here
+			// per tick — previously this retriggered the voice (reset wave_offset).
+			m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
 		}
 	}
 
@@ -423,6 +438,7 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.wave_offset = 0;
 	v.release_counter = 0;
 	v.hold_counter = 0;
+	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
 
 	// Waveform should already be resolved from the register strobe sequence
 	// (resolve_waveform called when group 0, bank 2 written with bit 15 set).
@@ -574,7 +590,14 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 
 			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
 
-			// Apply release envelope
+			// Apply the firmware's per-tick amplitude envelope (reg_idx 0 magnitude,
+			// written every audio tick by the sub-CPU's software envelope generator).
+			// This is the real attack/decay/sustain/release contour; env_level=0xFF is
+			// full. See notes/kn5000-tonegen-register-semantics.md.
+			sample = sample * v.env_level / 0xFF;
+
+			// Apply release envelope (voice-lifecycle fade + deactivation). Kept for
+			// deactivation timing; the firmware envelope above supplies the real shape.
 			if (v.release_counter > 0)
 			{
 				sample = sample * int32_t(v.release_counter) / 2400;

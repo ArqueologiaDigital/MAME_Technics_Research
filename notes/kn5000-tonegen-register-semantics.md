@@ -287,3 +287,35 @@ and the exact magnitude bit-width in reg_idx 0. Confirm on the running KN5000 bu
 watching group0.bank0 (`0x100000/0x100002`) writes over a held note for a slow-attack
 vs fast-decay sound — expect the low byte of the `0xF000|mag` writes to rise then fall.
 Everything else here is MEASURED from the disassembly.
+
+---
+
+## LIVE VERIFICATION (2026-07-23) — items 1+2 implemented
+
+Implemented the minimal render change (items 1 and 2) in `kn5000_tonegen.{cpp,h}`:
+key-on now gates on the real note-on command `(data & 0xFF00) == 0x8100` (was: any
+bit15-set write), and the per-tick magnitude from group0/bank0 (`data & 0x1FF`) is
+latched into a new `voice_t::env_level` and applied as an amplitude multiplier in
+`sound_stream_update` (`sample = sample * env_level / 0xFF`; default 0xFF = no-op so a
+voice the firmware never modulates behaves exactly as before). Item 3 (the group8
+bus-gain reinterpretation, which *revises* the currently-working volume/pan path) is
+DEFERRED until the KN5000 tonegen gets a fabricated-PCM fallback, so it can be A/B'd by
+ear rather than changed blind.
+
+**Register path CONFIRMED live** via a temporary `logerror` trace (since removed),
+driving a scripted C4 keybed note on the built KN5000:
+- 64 boot-init `KEYON 0x8100`/`KEYOFF 0x7E00` pairs (v0..v63) = `DSP_Init_Channels` — expected.
+- Then a fresh `KEYON 0x8100` on v0/v1 (the C4 press) → **`ENVLVL 0xF0FF -> mag 255`** → `KEYOFF`.
+
+This proves, on the running machine: (a) note-on is `0x8100` exactly (matches disasm
+L30213); (b) the firmware's envelope stepper writes the predicted `0xF000|mag` form
+(observed `0xF0FF`) to group0/bank0 per tick; (c) the new code latches that magnitude
+WITHOUT retriggering the voice — the old code would have called `process_key_on` on the
+`0xF0FF` write and reset `wave_offset` every tick. `-validate kn5000` clean; boots.
+
+**NOT audible on KN5000 yet.** The main PCM wave ROMs IC304/IC305/IC306 are `NO_DUMP`
+(`kn5000.cpp:1067-1069`; only IC307 index ROM at 0xC00000 is dumped), and the render
+emits nothing for voices without PCM data. The envelope now correctly shapes an
+amplitude that has no waveform under it. Making it audible needs the same
+"fake-with-the-real-mechanism" fabricated-PCM fallback the KN7000 tone-gen received
+(sine-as-PCM) — the enabling NEXT step, and the point at which item 3 can be A/B'd.
