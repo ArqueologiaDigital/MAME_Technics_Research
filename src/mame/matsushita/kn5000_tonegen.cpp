@@ -28,6 +28,7 @@
 #include "kn5000_tonegen.h"
 
 #include <algorithm>
+#include <cmath>
 
 // Logging
 #define LOG_REG_W    (1U << 1)
@@ -322,7 +323,46 @@ uint16_t kn5000_tonegen_device::kbd_data_r()
 
 void kn5000_tonegen_device::push_keybed_event(uint16_t data)
 {
+	// Record note-ONs (high byte != 0xFF is the SubCPU's note-off marker) with a
+	// timestamp so a voice's genuine musical note can be recovered at key-on. The
+	// wire format (keybed_scan / kbd_midi_rx) is note-on = (vel<<8)|(raw|0x80),
+	// note-off = 0xFF00|raw, raw = MIDI note − 36 (61-key bed spans MIDI 36..96).
+	if ((data >> 8) != 0xFF)
+	{
+		int midi = (data & 0x7F) + 36;
+		m_pending_notes.emplace_back(machine().time().as_double(), midi);
+		// Bound the history so it can't grow without limit.
+		while (m_pending_notes.size() > 64)
+			m_pending_notes.pop_front();
+	}
 	m_keybed_queue.push(data);
+}
+
+
+// Recover the true MIDI note for a voice about to key on, by correlating with the
+// most recent keybed/MIDI note-on. The firmware issues the voice's register burst
+// only a few ms after the input event (MEASURED: ~2-4 ms), and a note may map to
+// several voices (dual-layer) that all arrive within that window — so "the most
+// recent note-on within a short window" assigns the same correct note to every
+// layer of one press. Returns −1 if no recent input (e.g. demo/rhythm voices),
+// in which case update_pitch() falls back to the register-relative pitch.
+int kn5000_tonegen_device::recover_true_note(double now)
+{
+	// Prune events older than the correlation window.
+	while (!m_pending_notes.empty() && now - m_pending_notes.front().first > 0.30)
+		m_pending_notes.pop_front();
+
+	int best = -1;
+	double best_t = -1.0;
+	for (const auto &ev : m_pending_notes)
+	{
+		if (ev.first <= now + 0.05 && now - ev.first < 0.30 && ev.first > best_t)
+		{
+			best_t = ev.first;
+			best = ev.second;
+		}
+	}
+	return best;
 }
 
 
@@ -334,42 +374,52 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// Velocity volume from reg[2] (group 0, bank 2, offset +0x080)
-	// Firmware computes: vol = (velocity^2 / 4) + 63, range 63-4095 (0x3F-0xFFF)
-	// Bit 15 is the latch strobe (ignore for volume), bits 11:0 are volume.
-	uint16_t vel_vol = v.regs[2] & 0x0FFF; // 0-4095
+	// --- Loudness / velocity ---------------------------------------------------
+	//
+	// The firmware's per-voice loudness is a LOG-DOMAIN level in the HIGH byte of
+	// reg[20] (group8/bank0, +0x800). It is built in sub-CPU LABEL_026769 as
+	// `loglevel<<8`, where `loglevel` comes from the log table 0x0118FE indexed by
+	// (patch level + key-scale) and then VELOCITY-scaled (LABEL_022BB8). Crucially
+	// it is an ATTENUATION: LOWER value = LOUDER (MEASURED live 2026-07-23 — reg[20]
+	// high byte 0xE7@vel40 → 0xCC@vel127, monotonically falling as velocity rises).
+	//
+	// The old code (a) inverted reg[20] LINEARLY (0xFF−hi), giving a tiny 24..51
+	// span, and (b) multiplied by `reg[2]&0x0FFF` used as a *direct* volume — but
+	// reg[2] is ALSO a velocity attenuation (falls with velocity), so that term
+	// fought the reg[20] term and squeezed the whole dynamic range to ~1.8x
+	// (vel40→127). That is the "velocity too weak / compressed" bug.
+	//
+	// Correct model: reg[20]'s high byte is a log attenuation, so the linear gain
+	// is an EXPONENTIAL of it. K = attenuation units per halving, REF = the value
+	// at (near) unity. reg[2] is redundant here — the firmware already folded the
+	// velocity into reg[20] — so it is not multiplied in a second time.
+	//   gain = 2^((REF − loglevel) / K)
+	// The exponential form is grounded (log→linear); K and REF are CALIBRATED (the
+	// chip's exact dB/step is internal to the undumped IC303) to keep loud notes
+	// strong while giving a musical ~16 dB velocity spread. See
+	// notes/kn5000-pitch-velocity.md.
+	static constexpr double K = 10.0;    // reg[20] attenuation units per amplitude halving
+	static constexpr double REF = 181.0; // loglevel that maps to ~0.2 full-scale
 
-	// Main volume from reg[20] (group 8, bank 0, offset +0x800)
-	// Firmware uses 0xFF80 for mute, lower values for louder.
-	// Invert: 0xFF00 → 0, 0x0000 → max
-	uint16_t vol_main = v.regs[20];
-	int main_vol = 0xFF00 - (vol_main & 0xFF00);
-	main_vol = (main_vol >> 8) & 0xFF; // 0-255
-
-	// Combined volume: velocity (0-4095) * main (0-255) / 4095 → 0-255
-	int vol = (vel_vol > 0 && main_vol > 0) ? (vel_vol * main_vol / 4095) : 0;
-
-	// Pan from group 8 registers (firmware Voice_WriteChPanShift):
-	//   reg[21] (group 8, bank 1, +0x840) = left channel pan
-	//   reg[22] (group 8, bank 2, +0x880) = right channel pan
-	// Range: 0x00 = silence, 0x3C = center, 0x78 = full
-	// ClampS8_0_to_78 in firmware ensures 0-0x78.
-	int pan_l = v.regs[21] & 0xFF; // low byte is pan position
-	int pan_r = v.regs[22] & 0xFF;
-
-	// Default to center pan (0x3C) if no pan values written yet
-	if (pan_l == 0 && pan_r == 0)
+	int loglevel = (v.regs[20] >> 8) & 0xFF;
+	double gain;
+	if (v.regs[20] == 0)
+		gain = 1.0; // uninitialised level register → full (matches old reg[20]==0 case)
+	else
 	{
-		pan_l = 0x3C;
-		pan_r = 0x3C;
+		gain = std::pow(2.0, (REF - double(loglevel)) / K);
+		if (gain > 1.0) gain = 1.0;
+		if (gain < 0.0) gain = 0.0;
 	}
 
-	// Scale: vol * pan / 0x3C (center = unity gain)
-	int vol_l = (vol * pan_l) / 0x3C;
-	int vol_r = (vol * pan_r) / 0x3C;
-
-	v.volume_l = int16_t(std::min(vol_l, 255) * 128); // scale to 0-32640
-	v.volume_r = int16_t(std::min(vol_r, 255) * 128);
+	// Pan: kept centred. reg[21]/reg[22] are the bus-0 R gain / 2nd-domain level
+	// (also `level<<8`), NOT the low-byte pan the old code assumed (their low bytes
+	// read ~0 here). A faithful L/R-gain split is deferred (see the register-
+	// semantics note); centred pan preserves the current stereo behaviour.
+	int amp = int(gain * 32767.0 + 0.5);
+	amp = std::min(amp, 32767);
+	v.volume_l = int16_t(amp);
+	v.volume_r = int16_t(amp);
 }
 
 
@@ -377,41 +427,63 @@ void kn5000_tonegen_device::update_pitch(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// Pitch from register group 0, bank 1 (reg[1], offset +0x040)
-	// The firmware writes a 16-bit pitch table value for the semitone component.
-	// Equal-temperament: C=0x8000, C#=0x879C, ..., B=0xF1A1 (0x8000 = 1.0x rate).
+	// --- Why this is not a simple register read ---
 	//
-	// Octave comes from reg[8] (group 4, bank 0, +0x400): firmware stores
-	// (note_value << 8) where note_value = (MIDI_note + 36). The octave is
-	// note_value / 12. The base octave (octave 3 = MIDI note 0 + 36 = 36/12 = 3)
-	// corresponds to native waveform rate.
-	uint16_t pitch_reg = v.regs[1]; // group 0, bank 1 — semitone ratio
-	if (pitch_reg == 0)
+	// The IC303 is a PCM MULTISAMPLE chip. Its per-voice pitch registers are
+	// sample-zone RELATIVE, not absolute (MEASURED live, 2026-07-23):
+	//   * reg[8] (group4/bank0, +0x400) steps EXACTLY 0x100 per semitone WITHIN a
+	//     sample zone, but RESETS at each zone boundary;
+	//   * reg[1] (group0/bank1, +0x040) is the zone / coarse selector (its low
+	//     nibble = the multisample zone index; +1 every ~3-4 semitones).
+	// The per-zone sample ROOT pitch (what turns the relative value into an
+	// absolute frequency) lives in the chip's internal multisample table in the
+	// WAVE ROM — which is NO_DUMP for IC304-306. So absolute pitch simply CANNOT
+	// be derived from the registers; there is no absolute-note register (verified
+	// by dumping all 32 per-voice registers across a chromatic run — only reg[1]
+	// and reg[8] vary per semitone). See notes/kn5000-pitch-velocity.md.
+	//
+	// Because every voice currently renders the SAME fabricated waveform (IC307
+	// index 0, a 256-sample single-cycle sine — the wave-number decode is a
+	// separate unresolved bug), the correct output is simply the played note at
+	// equal temperament. We recover the TRUE musical note from the real input
+	// event (keybed / USB-MIDI, both routed through push_keybed_event) that caused
+	// this voice — the faithful "use the real mechanism" approach.
+
+	double freq;
+	if (v.true_note >= 0)
 	{
-		v.pitch_step = 0x10000; // default: native rate (1.0 in 16.16)
-		return;
+		// Equal temperament, A4 (MIDI 69) = 440 Hz.
+		freq = 440.0 * std::pow(2.0, (double(v.true_note) - 69.0) / 12.0);
+	}
+	else
+	{
+		// Fallback for voices with no correlated input (e.g. demo / rhythm): use
+		// reg[8] as a global log-pitch (0x100 = 1 semitone). This is correct
+		// WITHIN a sample zone and monotonic; it can jump at zone boundaries (the
+		// missing sample-root problem above), but it is far better than the former
+		// behaviour where every semitone collapsed to one pitch. Anchor chosen so
+		// a mid-range value lands near middle C.
+		uint16_t r8 = v.regs[8];
+		if (r8 == 0)
+		{
+			v.pitch_step = 0x10000;
+			return;
+		}
+		double semis = (double(int(r8)) - double(0x3524)) / 256.0; // 0x100/semitone
+		freq = 261.63 * std::pow(2.0, semis / 12.0);               // ref ≈ C4
 	}
 
-	// Convert semitone ratio: 0x8000 = 1.0x, so pitch_reg * 2 gives 16.16 step
-	uint32_t base_step = uint32_t(pitch_reg) * 2; // 16.16 fixed point
+	// The fabricated waveform (index 0) is a single cycle over wave_length samples,
+	// so it sounds at 48000/wave_length Hz when pitch_step == 0x10000. Set the step
+	// to hit the target musical frequency exactly.
+	uint32_t wlen = v.wave_length ? v.wave_length : 256;
+	double step = 65536.0 * freq * double(wlen) / 48000.0;
+	if (step < 1.0) step = 1.0;
+	if (step > double(0x7FFFFFFF)) step = double(0x7FFFFFFF);
+	v.pitch_step = uint32_t(step + 0.5);
 
-	// Apply octave scaling from reg[8] (note key info)
-	// reg[8] = (note_value << 8), note_value = MIDI_note + 36
-	// octave = note_value / 12; base_octave = 3 (for MIDI note 0)
-	uint16_t note_reg = v.regs[8];
-	int note_value = (note_reg >> 8) & 0x7F;
-	int octave = note_value / 12;
-	int octave_shift = octave - 3; // relative to base octave 3
-
-	if (octave_shift > 0)
-		v.pitch_step = base_step << std::min(octave_shift, 8);
-	else if (octave_shift < 0)
-		v.pitch_step = base_step >> std::min(-octave_shift, 8);
-	else
-		v.pitch_step = base_step;
-
-	LOGMASKED(LOG_VOICE, "tonegen: voice %d pitch reg=0x%04X step=0x%08X\n",
-		ch, pitch_reg, v.pitch_step);
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d note=%d freq=%.2f step=0x%08X (r1=%04X r8=%04X)\n",
+		ch, v.true_note, freq, v.pitch_step, v.regs[1], v.regs[8]);
 }
 
 
@@ -495,6 +567,12 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.release_counter = 0;
 	v.hold_counter = 0;
 	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
+
+	// Recover the genuine musical note from the real input event that triggered
+	// this voice (see recover_true_note / update_pitch). Done at the note-on gate
+	// because by now the register burst — and the keybed/MIDI event before it —
+	// have all arrived.
+	v.true_note = recover_true_note(machine().time().as_double());
 
 	// Resolve the waveform at key-on: by the time the firmware writes the note-on
 	// command (0x8100) it has already written the wave number (regs[9]/regs[10])

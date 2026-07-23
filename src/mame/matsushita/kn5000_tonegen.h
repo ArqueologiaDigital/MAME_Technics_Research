@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <deque>
 #include <queue>
 
 class kn5000_tonegen_device :
@@ -85,6 +86,9 @@ private:
 		                        // sub-CPU firmware writes to group0/bank0 (reg_idx 0)
 		                        // every audio tick — the real software envelope. 0xFF =
 		                        // full (default until the firmware modulates it).
+		int      true_note;     // MIDI note recovered from the keybed/MIDI input FIFO at
+		                        // key-on (−1 = unknown → r8-relative fallback). Used to
+		                        // resolve equal-tempered pitch (see update_pitch()).
 
 		void reset()
 		{
@@ -101,6 +105,7 @@ private:
 			release_counter = 0;
 			hold_counter = 0;
 			env_level = 0xFF;
+			true_note = -1;
 		}
 	};
 
@@ -126,6 +131,15 @@ private:
 
 	// Keybed event queue
 	std::queue<uint16_t> m_keybed_queue;
+
+	// Pending keybed/MIDI note-ons (machine time, MIDI note), used to recover the
+	// TRUE musical note for each voice at key-on. The IC303 registers only carry a
+	// sample-zone-RELATIVE pitch (reg[8] steps 0x100/semitone within a multisample
+	// zone; the per-zone sample root lives in the undumped wave ROM), so absolute
+	// pitch cannot be derived from the registers alone. Instead we correlate each
+	// voice note-on with the real input event that caused it. See update_pitch().
+	std::deque<std::pair<double,int>> m_pending_notes;
+	int recover_true_note(double now);
 
 	// Waveform ROM
 	const char  *m_waveform_region_tag;
