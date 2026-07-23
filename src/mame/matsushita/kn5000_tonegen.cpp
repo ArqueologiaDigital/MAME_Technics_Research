@@ -81,6 +81,8 @@ void kn5000_tonegen_device::device_start()
 	std::fill(std::begin(m_wave_pcm_start), std::end(m_wave_pcm_start), 0);
 	std::fill(std::begin(m_wave_pcm_samples), std::end(m_wave_pcm_samples), 0);
 	std::fill(std::begin(m_wave_period), std::end(m_wave_period), 0);
+	std::fill(std::begin(m_wave_loop_start), std::end(m_wave_loop_start), 0);
+	std::fill(std::begin(m_wave_loop_len), std::end(m_wave_loop_len), 0);
 	if (m_waveform_data && m_waveform_size >= 0x1000000)
 	{
 		static constexpr uint32_t IC307_BASE = 0xC00000;
@@ -109,7 +111,10 @@ void kn5000_tonegen_device::device_start()
 		}
 
 		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
+		{
 			m_wave_period[i] = detect_period(m_wave_pcm_start[i], m_wave_pcm_samples[i]);
+			compute_loop(i);
+		}
 	}
 
 	// Save state
@@ -124,7 +129,10 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].key_on_time), i);
 		save_item(NAME(m_voice[i].wave_offset), i);
 		save_item(NAME(m_voice[i].wave_start), i);
-		save_item(NAME(m_voice[i].wave_length), i);
+		save_item(NAME(m_voice[i].wave_samples), i);
+		save_item(NAME(m_voice[i].loop_start), i);
+		save_item(NAME(m_voice[i].loop_end), i);
+		save_item(NAME(m_voice[i].pitch_period), i);
 		save_item(NAME(m_voice[i].pitch_step), i);
 		save_item(NAME(m_voice[i].volume_l), i);
 		save_item(NAME(m_voice[i].volume_r), i);
@@ -559,10 +567,12 @@ void kn5000_tonegen_device::update_pitch(int ch)
 		freq = 261.63 * std::pow(2.0, semis / 12.0);               // ref ≈ C4
 	}
 
-	// The looped waveform is one fundamental period of wave_length samples, so it
-	// sounds at 48000/wave_length Hz when pitch_step == 0x10000. Set the step to hit
-	// the target musical frequency exactly (resamples the real period to that pitch).
-	uint32_t wlen = v.wave_length ? v.wave_length : 256;
+	// The recording's fundamental period is pitch_period samples, so advancing the
+	// playback pointer by `step` per output sample makes that period recur at exactly
+	// `freq` Hz — i.e. the whole multi-cycle recording plays back at the played note's
+	// pitch, decoupled from the recording's (un-stored) native root. Same period-driven
+	// pitch as the previous single-cycle model, so chromatic pitch cannot regress.
+	uint32_t wlen = v.pitch_period ? v.pitch_period : 256;
 	double step = 65536.0 * freq * double(wlen) / 48000.0;
 	if (step < 1.0) step = 1.0;
 	if (step > double(0x7FFFFFFF)) step = double(0x7FFFFFFF);
@@ -574,11 +584,11 @@ void kn5000_tonegen_device::update_pitch(int ch)
 
 
 //-----------------------------------------------------------------------
-// Real-waveform selection + single-period wavetable extraction
+// Real-waveform selection + FULL multi-cycle playback with a derived sustain loop
 //-----------------------------------------------------------------------
 //
-// FAITHFULNESS MODEL (see notes/kn5000-faithful-render.md; all grounded in the three
-// findings notes kn5000-wave-number.md / kn5000-tone-record.md / kn5000-ic307-content-map.md):
+// FAITHFULNESS MODEL (see notes/kn5000-real-sample-select.md; grounded in the findings
+// notes kn5000-wave-number.md / kn5000-tone-record.md / kn5000-ic307-content-map.md):
 //
 //   * The firmware's real per-voice WAVE NUMBER (register +0x440/+0x480) is 0 for every
 //     ordinary PCM voice (MEASURED live) — it is a legacy selector these voices bypass by
@@ -592,32 +602,36 @@ void kn5000_tonegen_device::update_pitch(int ch)
 //   * IC307 is the one REAL wave-ROM dump; its 198 indexed waveforms are real KN5000 PCM.
 //     (IC304-306 are BAD_DUMP copies of IC307, so any address computed here reads real
 //     PCM — a voice mapping to a "wrong" waveform still plays a real-but-wrong-instrument
-//     timbre, the accepted ~75% placeholder, never silence or a synthesized timbre.)
+//     timbre, the accepted placeholder, never silence or a synthesized timbre.)
 //
-// SELECTION: map the instrument fingerprint -> a real IC307 waveform index. Different
-// fingerprints deterministically resolve to DIFFERENT real waveforms, so different
-// instruments sound genuinely different (real timbres, not invented ones).
+// SELECTION: the true per-instrument sample map lives in the custom LSI + the undumped
+// IC304-306, so it CANNOT be reproduced exactly. We select a real IC307 waveform from the
+// firmware's per-instrument fingerprint so that DIFFERENT instruments deterministically
+// resolve to DIFFERENT real waveforms (distinct real timbres, never a synthesized one).
+// This is a labelled placeholder mapping, not a decode of the real instrument->wave table.
 //
-// PITCH (the hard part, handled by construction): IC307 waves are MULTI-cycle recordings
-// whose absolute ROOT note is PROVEN ABSENT from the ROM. Rather than resample the whole
-// recording at its native rate (which would need that missing root and could mistune),
-// we extract ONE fundamental period (detect_period, autocorrelation — the ROM is periodic,
-// r~=0.99) and loop it as a single-cycle wavetable, resampled to the played note in
-// update_pitch. This preserves the real harmonic spectrum (the period is a genuine cycle
-// of real PCM) while pitch is driven ENTIRELY by the equal-tempered played note — so pitch
-// is DECOUPLED from the source root and CANNOT regress the currently-correct pitch/chords.
-// If no clean period is found (period==0), the voice falls back to IC307 index 0 (the real
-// single-cycle sine): a real waveform at exactly the right pitch, never a wrong pitch.
+// PLAYBACK (the fix for the previous harshness): each voice plays the FULL multi-cycle
+// recording from sample 0 — its genuine attack and timbral evolution — then loops a
+// precomputed SUSTAIN region (compute_loop) for as long as the note is held. The previous
+// model looped ONE short fundamental period taken from the ATTACK transient, which sounded
+// like a static buzz; playing the real recording body fixes that.
+//
+// PITCH (must not regress): pitch is driven ENTIRELY by the equal-tempered played note
+// (recovered from the real keybed/MIDI event, update_pitch), via the recording's detected
+// fundamental period pitch_period. Advancing the read pointer by that period-derived step
+// makes the recording's fundamental recur at exactly the played frequency, so absolute
+// pitch is DECOUPLED from the recording's (un-stored) native root — chromatic/octave/chord
+// pitch is identical to the prior single-cycle model and cannot regress. The sustain loop
+// length is an integer multiple of pitch_period, so looping does not perturb pitch.
 
 // Pick a real IC307 waveform index (0..197, page 0) from the firmware's per-instrument
 // register fingerprint. An all-zero fingerprint (boot-init / degenerate voices) maps to
-// index 0 (the real sine), preserving the previous behaviour for those. The hash keeps
-// one instrument on one waveform and (VERIFIED live) puts the measured instruments on
-// DIFFERENT real waveforms. Range 1..189 covers the page-0 indexed instrument waveforms
-// and excludes index 0 (sine) plus the multisample-duplicate / 3 MB-tail entries (190-197,
-// which share offsets and point at the un-indexed page tail). The +0x040 multisample-zone
-// nibble is an available refinement lever (documented in the note) but is intentionally
-// NOT folded in here, so each instrument maps to one stable, testable base waveform.
+// index 0 (the real sine). This is a deterministic PLACEHOLDER distinctness mapping over
+// real IC307 waveforms — NOT a decode of the (undumped) real instrument->wave table; it
+// only guarantees that different instruments map to different real waveforms. Range 1..189
+// covers the page-0 indexed instrument waveforms and excludes index 0 (sine) plus the
+// multisample-duplicate / 3 MB-tail entries (190-197, which share offsets / point at the
+// un-indexed page tail).
 int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 {
 	uint32_t s1  = (v.regs[1]  >> 8) & 0xFF;
@@ -690,6 +704,73 @@ uint32_t kn5000_tonegen_device::detect_period(uint32_t region_byte_start, uint32
 }
 
 
+// Derive a SUSTAIN LOOP for waveform `i`: IC307 stores no loop points (MEASURED,
+// notes/kn5000-ic307-content-map.md §3.4), yet the real chip loops the sustain of a held
+// note autonomously. We pick a region in the recording's BODY (never the attack transient,
+// which is what made single-period looping sound harsh) whose length is an integer number of
+// fundamental periods — so the loop seam is pitch-continuous — and slide the start within one
+// period to minimise the sample/slope discontinuity at the seam. Result: play the whole real
+// recording once (real attack + evolution), then loop a clean body region for as long as held.
+void kn5000_tonegen_device::compute_loop(int i)
+{
+	uint32_t start = m_wave_pcm_start[i];
+	uint32_t N     = m_wave_pcm_samples[i];
+	uint32_t P     = m_wave_period[i];
+
+	if (P == 0 || N == 0)
+	{
+		m_wave_loop_start[i] = 0;
+		m_wave_loop_len[i]   = (N > 0) ? N : 0;
+		return;
+	}
+
+	// Short waves (<= ~2 periods, e.g. the single-cycle sine): loop the whole thing.
+	if (N <= 2 * P)
+	{
+		m_wave_loop_start[i] = 0;
+		m_wave_loop_len[i]   = std::max<uint32_t>(P, (P <= N) ? (N / P) * P : N);
+		return;
+	}
+
+	auto smp = [&](uint32_t s) -> int32_t {
+		uint32_t bp = start + s * 2;
+		if (bp + 1 >= m_waveform_size) return 0;
+		return int16_t(m_waveform_data[bp] | (m_waveform_data[bp + 1] << 8));
+	};
+
+	// Loop length = k periods, a few kcycles but bounded, and at most ~2/5 of the recording.
+	uint32_t cap = std::min<uint32_t>(4096, N / 2);
+	uint32_t k = std::max<uint32_t>(1, std::min<uint32_t>(cap / P, (N * 2 / 5) / P));
+	uint32_t loop_len = k * P;
+
+	// Place the loop to END about one period before the recording end (skip any tail
+	// boundary artifact), inside the sustain region (>= N/3 in).
+	uint32_t le0 = (N > P) ? (N - P) : N;
+	uint32_t ls0 = (le0 > loop_len) ? (le0 - loop_len) : 0;
+	if (ls0 < N / 3) { ls0 = N / 3; }
+	if (ls0 + loop_len >= N) { ls0 = (N > loop_len) ? (N - loop_len - 1) : 0; }
+
+	// Refine ls within +/- P/2 to minimise the seam discontinuity x[le-1]->x[ls].
+	uint32_t best_ls = ls0;
+	int64_t  best_score = INT64_MAX;
+	uint32_t lo = (ls0 > P / 2) ? (ls0 - P / 2) : 0;
+	uint32_t hi = ls0 + P / 2;
+	for (uint32_t ls = lo; ls <= hi; ls++)
+	{
+		uint32_t le = ls + loop_len;
+		if (le >= N) break;
+		int64_t disc = std::abs(int64_t(smp(ls)) - int64_t(smp(le)));
+		int64_t slope = std::abs((int64_t(smp(ls + 1)) - int64_t(smp(ls))) -
+		                         (int64_t(smp(le)) - int64_t(smp(le - 1))));
+		int64_t score = disc * 2 + slope;
+		if (score < best_score) { best_score = score; best_ls = ls; }
+	}
+
+	m_wave_loop_start[i] = best_ls;
+	m_wave_loop_len[i]   = loop_len;
+}
+
+
 void kn5000_tonegen_device::resolve_waveform(int ch)
 {
 	voice_t &v = m_voice[ch];
@@ -711,13 +792,20 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 		period = m_wave_period[0] ? m_wave_period[0] : 256;
 	}
 
-	v.wave_index  = idx;
-	v.wave_start  = m_wave_pcm_start[idx];
-	v.wave_length = period;
-	v.wave_offset = 0;
+	v.wave_index    = idx;
+	v.wave_start    = m_wave_pcm_start[idx];
+	v.wave_samples  = m_wave_pcm_samples[idx];
+	v.pitch_period  = period;
+	v.loop_start    = m_wave_loop_start[idx];
+	v.loop_end      = m_wave_loop_start[idx] + m_wave_loop_len[idx];
+	if (v.loop_end == 0 || v.loop_end > v.wave_samples)
+		v.loop_end = v.wave_samples;          // safety: never index past the recording
+	if (v.loop_start >= v.loop_end)
+		v.loop_start = (v.loop_end > period) ? (v.loop_end - period) : 0;
+	v.wave_offset   = 0;                       // start at sample 0 = the real attack
 
-	LOGMASKED(LOG_VOICE, "tonegen: voice %d wave idx=%d start=0x%06X period=%d (fp %02X/%02X/%02X/%02X)\n",
-		ch, v.wave_index, v.wave_start, v.wave_length,
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d wave idx=%d start=0x%06X samples=%d period=%d loop[%d:%d] (fp %02X/%02X/%02X/%02X)\n",
+		ch, v.wave_index, v.wave_start, v.wave_samples, v.pitch_period, v.loop_start, v.loop_end,
 		(v.regs[1] >> 8) & 0xFF, (v.regs[3] >> 8) & 0xFF, (v.regs[5] >> 8) & 0xFF, (v.regs[12] >> 8) & 0xFF);
 }
 
@@ -744,7 +832,7 @@ void kn5000_tonegen_device::process_key_on(int ch)
 
 	// Recover the genuine musical note for this voice (and re-pair the whole chord it
 	// belongs to) from the real input events that triggered it. Must run after
-	// resolve_waveform (update_pitch needs wave_length). See assign_chord_notes().
+	// resolve_waveform (update_pitch needs pitch_period). See assign_chord_notes().
 	assign_chord_notes(ch);
 
 	// Update pitch (also covers the no-input fallback case where assign_chord_notes
@@ -803,10 +891,9 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				continue;
 
 			// Handle hold timer (keeps voice "active" for firmware status queries).
-			// This must run even when wave_length == 0 (no waveform ROM data),
-			// otherwise voices get stuck permanently active and the firmware's
-			// sequencer part bitmask (DRAM[0x10420]) never clears — blocking
-			// the Feature Demo from advancing past song initialization.
+			// This must run even when the voice has no waveform data, otherwise voices
+			// get stuck permanently active and the firmware's sequencer part bitmask
+			// (DRAM[0x10420]) never clears — blocking the Feature Demo from advancing.
 			if (!v.key_on && v.hold_counter > 0)
 			{
 				v.hold_counter--;
@@ -826,9 +913,9 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// genuinely-missing (zero-filled) waveform stays 0 throughout, while any real
 			// waveform has a nonzero sample within a few.
 			bool has_pcm_data = false;
-			if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			if (v.wave_samples > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
 			{
-				uint32_t probe = std::min<uint32_t>(v.wave_length, 64);
+				uint32_t probe = std::min<uint32_t>(v.wave_samples, 64);
 				for (uint32_t k = 0; k < probe; k++)
 				{
 					uint32_t bp = v.wave_start + k * 2;
@@ -839,28 +926,20 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 
 			if (!has_pcm_data)
 			{
-				// Voice without PCM data (missing ROM or wave_length==0).
+				// Voice without PCM data (missing ROM or wave_samples==0).
 				// Track timing efficiently without per-sample rendering.
 				// The chip still considers this voice "active" — it tracks the
 				// waveform position internally for status reporting.
-				if (v.wave_length > 0)
+				if (v.wave_samples > 0)
 				{
-					// Advance position by one pitch step per sample tick
 					v.wave_offset += v.pitch_step;
 					uint32_t sample_pos = v.wave_offset >> 16;
-					if (sample_pos >= v.wave_length)
+					if (sample_pos >= v.wave_samples)
 					{
 						if (v.key_on)
-						{
-							// Loop while key held (sustain phase)
-							v.wave_offset = 0;
-						}
-						else
-						{
-							// Waveform finished after key-off
-							if (v.hold_counter == 0 && v.release_counter == 0)
-								v.active = false;
-						}
+							v.wave_offset = 0;         // loop while key held (sustain phase)
+						else if (v.hold_counter == 0 && v.release_counter == 0)
+							v.active = false;          // finished after key-off
 					}
 				}
 				if (v.release_counter > 0)
@@ -871,46 +950,52 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			}
 
 			// --- Voices with real PCM data below ---
-
-			// Read current sample with linear interpolation (16.16 fixed point)
+			//
+			// FULL multi-cycle playback: play the whole real IC307 recording once from
+			// sample 0 (its genuine attack + timbral evolution), then, while the note is
+			// held (or ringing out under release), loop the precomputed SUSTAIN region
+			// [loop_start,loop_end). The loop length is an integer number of fundamental
+			// periods (compute_loop), so the seam is pitch-continuous and there is no
+			// buzzy single-cycle artefact. Positions are 16.16 fixed point.
+			uint32_t loop_len = (v.loop_end > v.loop_start) ? (v.loop_end - v.loop_start) : 0;
 			uint32_t sample_pos = v.wave_offset >> 16;
 			uint32_t frac = v.wave_offset & 0xFFFF;
 
-			if (sample_pos >= v.wave_length)
+			if (sample_pos >= v.loop_end)
 			{
-				if (v.key_on)
+				// Reached the end of the play-through / loop region -> wrap back into the
+				// sustain loop, preserving fractional phase (no glitch). If there is no
+				// usable loop, snap to the loop start (or 0). This runs whether or not the
+				// key is still down; the release/hold counters below handle deactivation,
+				// so a released note keeps sounding (faded) instead of cutting abruptly.
+				if (loop_len)
 				{
-					// Loop one fundamental period for sustain. Wrap by the loop length
-					// (preserving the fractional phase) rather than snapping to 0, so the
-					// loop seam has no phase glitch.
-					uint32_t lenfp = v.wave_length << 16;
-					if (lenfp)
-						v.wave_offset %= lenfp;
-					else
-						v.wave_offset = 0;
-					sample_pos = v.wave_offset >> 16;
-					frac = v.wave_offset & 0xFFFF;
+					uint32_t base = v.loop_start << 16;
+					uint32_t span = loop_len << 16;
+					v.wave_offset = base + ((v.wave_offset - base) % span);
 				}
 				else
 				{
-					// Waveform finished after key-off: deactivate
-					if (v.hold_counter == 0 && v.release_counter == 0)
-						v.active = false;
-					continue;
+					v.wave_offset = v.loop_start << 16;
 				}
+				sample_pos = v.wave_offset >> 16;
+				frac = v.wave_offset & 0xFFFF;
 			}
 
-			// One period of real IC307 PCM, looped and interpolated (16.16 fixed point).
+			// Real IC307 PCM, linearly interpolated (16.16 fixed point). At the loop tail
+			// the "next" sample wraps to loop_start so interpolation stays continuous.
 			int32_t s0, s1;
 			{
+				if (sample_pos >= v.wave_samples)          // safety clamp
+					sample_pos = v.wave_samples ? v.wave_samples - 1 : 0;
 				uint32_t byte_pos = v.wave_start + sample_pos * 2;
 				s0 = read_waveform_sample(byte_pos);
-				// Linear interpolation with next sample; wrap the last sample back to the
-				// loop start so the interpolation is continuous across the seam.
-				if (sample_pos + 1 < v.wave_length)
-					s1 = read_waveform_sample(byte_pos + 2);
-				else
-					s1 = read_waveform_sample(v.wave_start); // wrap to loop start
+				uint32_t next_pos = sample_pos + 1;
+				if (loop_len && next_pos >= v.loop_end)
+					next_pos = v.loop_start;               // wrap interp to loop start
+				if (next_pos >= v.wave_samples)
+					next_pos = v.wave_samples ? v.wave_samples - 1 : 0;
+				s1 = read_waveform_sample(v.wave_start + next_pos * 2);
 			}
 
 			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;

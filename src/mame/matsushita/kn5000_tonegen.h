@@ -75,11 +75,16 @@ private:
 		double   key_on_time;   // machine time (s) of the note-on gate — used to
 		                        // distinguish note-on EG programming (same burst,
 		                        // <1ms after gate) from a note-off release burst.
-		uint32_t wave_offset;   // Current position in waveform data (16.16 fixed point)
-		uint32_t wave_start;    // Start byte offset (into the waveform ROM region) of
-		                        // the ONE fundamental period looped for this voice.
-		uint32_t wave_length;   // Loop length in samples = the selected wave's detected
-		                        // fundamental period (see detect_period / resolve_waveform).
+		uint32_t wave_offset;   // Current playback position (16.16 fixed point), relative
+		                        // to wave_start; runs 0 .. loop_end then loops [loop_start,loop_end).
+		uint32_t wave_start;    // Start byte offset (into the waveform ROM region) of the
+		                        // selected waveform's FULL multi-cycle PCM recording.
+		uint32_t wave_samples;  // Total samples in the recording (full attack+body played once).
+		uint32_t loop_start;    // Sustain-loop start sample (held notes loop [loop_start,loop_end)).
+		uint32_t loop_end;      // Sustain-loop end sample; loop length = loop_end-loop_start is
+		                        // an integer multiple of pitch_period so the seam is pitch-continuous.
+		uint32_t pitch_period;  // Fundamental period (samples) used to derive playback rate so the
+		                        // recording sounds at the played note (see update_pitch / detect_period).
 		int      wave_index;    // Selected IC307 index (0..197) whose real PCM this voice
 		                        // renders; 0 = the real single-cycle sine (degenerate /
 		                        // period-unknown fallback). Chosen from the firmware's
@@ -108,7 +113,10 @@ private:
 			key_on_time = 0.0;
 			wave_offset = 0;
 			wave_start = 0;
-			wave_length = 0;
+			wave_samples = 0;
+			loop_start = 0;
+			loop_end = 0;
+			pitch_period = 0;
 			wave_index = 0;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			volume_l = 0;
@@ -176,6 +184,13 @@ private:
 	uint32_t m_wave_pcm_samples[NUM_INDEX_ENTRIES]; // total PCM samples available for this waveform
 	uint32_t m_wave_period[NUM_INDEX_ENTRIES];      // detected fundamental period in samples
 	                                                // (0 = no clean period -> real-sine fallback)
+	uint32_t m_wave_loop_start[NUM_INDEX_ENTRIES];  // sustain-loop start sample (in the recording body)
+	uint32_t m_wave_loop_len[NUM_INDEX_ENTRIES];    // sustain-loop length (integer multiple of m_wave_period)
+
+	// Precompute a sustain loop for one waveform: a region in the recording's body whose
+	// length is an integer number of fundamental periods, refined to the lowest seam
+	// discontinuity. The ROM stores no loop points (see notes), so we derive one.
+	void compute_loop(int i);
 };
 
 DECLARE_DEVICE_TYPE(KN5000_TONEGEN, kn5000_tonegen_device)
