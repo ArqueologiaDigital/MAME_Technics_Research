@@ -174,6 +174,42 @@ kn5000` clean; boots to the play screen (notes sound). IC307 idx-0 sine stays th
 waveform (wave-number decode remains a separate unresolved bug — pitch/velocity apply
 regardless of which waveform plays).
 
+## POLYPHONY / CHORDS (follow-up, 2026-07-23)
+
+The first cut recovered the note with "the most-recent input note within the window",
+which is WRONG for chords: keybed_scan pushes all chord notes in ONE scan (identical
+timestamp), so every voice got the same note — a C-major triad played as three C4's
+(coordinator MEASURED only C4 present). Fixed by pairing the SET of keying voices with
+the SET of input notes:
+
+- **`voice_pitch_index(ch) = (reg[1]&0x0F)·0x100000 + reg[8]`** — a per-voice relative
+  pitch order (zone weighted far above the within-zone reg[8] so it stays monotonic
+  across zone boundaries). VERIFIED live on a C-major chord: C4=0x07034C1 <
+  E4=0x08035EC < G4=0x08038EC, and the two dual-layer voices of each note share it
+  exactly.
+- **`assign_chord_notes()`** (called at each note-on): finds the chord = the most recent
+  burst of input note-ons; gathers every keyed-on voice tagged with that press time;
+  sorts voices by pitch-index and notes by MIDI; pairs in order (lowest voice ← lowest
+  note); dual-layer voices (identical index) collapse to the same note. Re-run as each
+  voice arrives, so it is order-independent and converges to the correct assignment.
+  Voices with no correlated input still fall back to register-relative pitch.
+
+**Verification (Goertzel at each note's fundamental, onset window):**
+
+```
+C major (C4/E4/G4):  in {C4:3774, E4:3482, G4:1392}  off max 151   PASS
+D minor (D4/F4/A4):  in {D4:3254, F4:2309, A4:765}   off max 200   PASS
+G7 (G4/B4/D5/F5):    in {G4:1462, B4:541, D5:823, F5:309}  off max 58  PASS
+```
+
+Every in-chord fundamental is present and ≥2× (up to 9×) above every off-chord
+frequency, across single-octave and cross-octave (KEY2+KEY3) chords. Live register
+dump confirmed correct pairing (D minor: 3 notes → 6 voices → 3 distinct indices →
+D4=62, F4=65, A4=69). Chromatic single-note scale re-verified 12/12 distinct (no
+regression). NOTE: mid-hold the higher chord notes measure quieter — that is the
+firmware's per-note amplitude envelope (higher keys decay faster, piano-like), applied
+equally to all voices (all had identical reg[20]/vol_l), NOT a pitch/pairing artifact.
+
 ## Open / future
 
 - Absolute demo/rhythm pitch needs the multisample sample-root table (undumped WAVE

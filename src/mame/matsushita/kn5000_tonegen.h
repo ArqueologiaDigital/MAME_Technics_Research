@@ -89,6 +89,9 @@ private:
 		int      true_note;     // MIDI note recovered from the keybed/MIDI input FIFO at
 		                        // key-on (−1 = unknown → r8-relative fallback). Used to
 		                        // resolve equal-tempered pitch (see update_pitch()).
+		double   chord_time;    // press time of the chord this voice belongs to, used to
+		                        // group simultaneous voices for polyphonic note pairing
+		                        // (−1e9 = none). See assign_chord_notes().
 
 		void reset()
 		{
@@ -106,6 +109,7 @@ private:
 			hold_counter = 0;
 			env_level = 0xFF;
 			true_note = -1;
+			chord_time = -1e9;
 		}
 	};
 
@@ -139,7 +143,8 @@ private:
 	// pitch cannot be derived from the registers alone. Instead we correlate each
 	// voice note-on with the real input event that caused it. See update_pitch().
 	std::deque<std::pair<double,int>> m_pending_notes;
-	int recover_true_note(double now);
+	void assign_chord_notes(int ch);
+	uint32_t voice_pitch_index(int ch) const;
 
 	// Waveform ROM
 	const char  *m_waveform_region_tag;

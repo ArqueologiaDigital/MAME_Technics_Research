@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 // Logging
 #define LOG_REG_W    (1U << 1)
@@ -339,30 +340,86 @@ void kn5000_tonegen_device::push_keybed_event(uint16_t data)
 }
 
 
-// Recover the true MIDI note for a voice about to key on, by correlating with the
-// most recent keybed/MIDI note-on. The firmware issues the voice's register burst
-// only a few ms after the input event (MEASURED: ~2-4 ms), and a note may map to
-// several voices (dual-layer) that all arrive within that window — so "the most
-// recent note-on within a short window" assigns the same correct note to every
-// layer of one press. Returns −1 if no recent input (e.g. demo/rhythm voices),
-// in which case update_pitch() falls back to the register-relative pitch.
-int kn5000_tonegen_device::recover_true_note(double now)
+// A voice's RELATIVE pitch order, built from the two registers that vary per note:
+// reg[1]'s low nibble = the multisample zone (coarse, +1 per ~3-4 semitones) and
+// reg[8] = the within-zone log pitch (+0x100 per semitone, MEASURED). Weighting the
+// zone far above reg[8] makes the combined value MONOTONIC with musical pitch across
+// zone boundaries (each zone step of 0x100000 dwarfs reg[8]'s ~0x400 span / ~0x3C8
+// boundary reset). Voices of the SAME musical note (dual-layer) share it exactly.
+// VERIFIED live on a C-major chord: C4=0x07034C1 < E4=0x08035EC < G4=0x08038EC.
+uint32_t kn5000_tonegen_device::voice_pitch_index(int ch) const
 {
+	return uint32_t(m_voice[ch].regs[1] & 0x0F) * 0x100000u + m_voice[ch].regs[8];
+}
+
+
+// Assign the genuine musical note to each voice of a chord (or a single note) by
+// PAIRING the set of simultaneously-keying voices with the set of input notes that
+// caused them — because the IC303 registers carry only sample-zone-relative pitch,
+// not the note (see update_pitch), and a chord shares one input timestamp so "the
+// most recent note" cannot tell the voices apart.
+//
+// The voice `ch` has just keyed on. We (1) find its chord = the most recent burst of
+// input note-ons within the correlation window; (2) gather every currently-keying
+// voice belonging to that same burst; (3) sort the voices by voice_pitch_index() and
+// the notes by MIDI value, and pair them in order (lowest voice ← lowest note). This
+// assigns each DISTINCT pitch its own note, maps dual-layer voices (identical index)
+// to the same note, and is independent of the order the voices key on. It is
+// re-run as each voice of the chord arrives, so the final state is always correct.
+void kn5000_tonegen_device::assign_chord_notes(int ch)
+{
+	voice_t &v = m_voice[ch];
+	double now = machine().time().as_double();
+
 	// Prune events older than the correlation window.
 	while (!m_pending_notes.empty() && now - m_pending_notes.front().first > 0.30)
 		m_pending_notes.pop_front();
 
-	int best = -1;
-	double best_t = -1.0;
+	// Chord press time = the most recent input note-on within the window.
+	double tchord = -1.0;
 	for (const auto &ev : m_pending_notes)
+		if (ev.first <= now + 0.02 && now - ev.first < 0.30 && ev.first > tchord)
+			tchord = ev.first;
+
+	if (tchord < 0.0)
 	{
-		if (ev.first <= now + 0.05 && now - ev.first < 0.30 && ev.first > best_t)
-		{
-			best_t = ev.first;
-			best = ev.second;
-		}
+		// No correlated input (e.g. demo / rhythm voice) → register-relative fallback.
+		v.true_note = -1;
+		v.chord_time = -1e9;
+		return;
 	}
-	return best;
+	v.chord_time = tchord;
+
+	// Notes of this chord = input note-ons clustered around the press time (a keybed
+	// chord shares one exact timestamp; a MIDI chord spans a few ms), sorted ascending.
+	std::vector<int> notes;
+	for (const auto &ev : m_pending_notes)
+		if (std::abs(ev.first - tchord) < 0.015)
+			notes.push_back(ev.second);
+	if (notes.empty()) { v.true_note = -1; return; }
+	std::sort(notes.begin(), notes.end());
+
+	// Voices of this chord = all keyed-on voices tagged with the same press time.
+	std::vector<std::pair<uint32_t,int>> voices; // (pitch_index, ch)
+	for (int c = 0; c < NUM_VOICES; c++)
+		if (m_voice[c].key_on && std::abs(m_voice[c].chord_time - tchord) < 0.020)
+			voices.emplace_back(voice_pitch_index(c), c);
+
+	// Distinct pitch indices, ascending (dual-layer voices collapse to one entry).
+	std::vector<uint32_t> distinct;
+	for (const auto &p : voices) distinct.push_back(p.first);
+	std::sort(distinct.begin(), distinct.end());
+	distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
+
+	// Pair each voice's pitch rank with the note of the same rank (clamp if the counts
+	// differ — e.g. a dropped voice), then recompute pitch.
+	for (const auto &p : voices)
+	{
+		size_t rank = std::lower_bound(distinct.begin(), distinct.end(), p.first) - distinct.begin();
+		int note = notes[std::min(rank, notes.size() - 1)];
+		m_voice[p.second].true_note = note;
+		update_pitch(p.second);
+	}
 }
 
 
@@ -568,19 +625,19 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.hold_counter = 0;
 	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
 
-	// Recover the genuine musical note from the real input event that triggered
-	// this voice (see recover_true_note / update_pitch). Done at the note-on gate
-	// because by now the register burst — and the keybed/MIDI event before it —
-	// have all arrived.
-	v.true_note = recover_true_note(machine().time().as_double());
-
 	// Resolve the waveform at key-on: by the time the firmware writes the note-on
 	// command (0x8100) it has already written the wave number (regs[9]/regs[10])
 	// and all voice params, so this picks up the final wave number rather than a
 	// possibly-stale value from the earlier group0/bank2 strobe.
 	resolve_waveform(ch);
 
-	// Update pitch from current registers
+	// Recover the genuine musical note for this voice (and re-pair the whole chord it
+	// belongs to) from the real input events that triggered it. Must run after
+	// resolve_waveform (update_pitch needs wave_length). See assign_chord_notes().
+	assign_chord_notes(ch);
+
+	// Update pitch (also covers the no-input fallback case where assign_chord_notes
+	// leaves true_note = −1 without calling update_pitch itself).
 	update_pitch(ch);
 
 	// Update volume/pan from current registers
