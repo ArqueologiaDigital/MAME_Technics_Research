@@ -135,13 +135,17 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    the undecoded vocabulary is now a frequency-ranked worklist. Still no ISA and no audio.**
 
 ### DSP, parameter-name binding
-16. **★ name→slot binding LOCATED, lists not yet extracted** (`kn5000-dsp-paramnames.md`). The binding
-    is a per-effect **object-property list** (RAM `0x29AC`, count `0x29AA`), not a fixed-stride table —
-    which is why the §4 scan failed. Reader (`F3561F`) and loader (`F457CF`) are decoded with
-    addresses. OPEN: decode the UI object DB (`FDC5AB` + tables `0xEE6044/0xEE61D4/0xEE637A`) to resolve
-    `FDC6E7(0x4B10+i)` statically per effect → yields the true per-effect slot count (closes the
-    propagation count-check) and the ordered name-index lists. Or dump `RAM[0x29AC]` per effect in the
-    emulator.
+16. ~~**name→slot binding**~~ **RESOLVED** (`kn5000-dsp-paramlist.md`). The per-effect name-index
+    lists were dumped **live** by driving the panel in MAME (SOUND MENU → DSP EFFECT / REVERB, then
+    stepping the TYPE selector) and reading `RAM[0x29AA]`/`RAM[0x29AC..]` after each redraw. **50
+    distinct effects now have a fully-named, ordered, unit-tagged parameter list** (38 on the DSP
+    EFFECT page type 0x0B; 12 reverbs sharing one list + 2 delays on the DIGITAL REVERB page type
+    0x0A) — pixel-verified against the LCD. The mechanism from `-paramnames.md` is confirmed exactly
+    (1-based index, maincpu space). Validation passed: counts match, families sane, and the DSP-target
+    pins (HIGH DAMP GAIN=reverb, THRESHOLD/RATIO=compressor, 5×BAND EMPHASIS=PARAMETRIC EQ, LFO
+    SPEED/WAVEFORM only on LFO effects) are proven end-to-end. Tools: `tools/kn5000_dsp_paramlist.py`,
+    `tools/kn5000_cycle.lua`, `tools/kn5000_dsp_paramlist_capture.json`. EQUALIZER (0x0C) and ACOUSTIC
+    ILLUSION (0x0E) use fixed layouts, not this array. Static object-DB decode no longer needed.
 
 ### Elsewhere in the project (not DSP)
 9. **Power-down NMI** — the `<Db>` that returns on every warm boot, and the same root cause as the
