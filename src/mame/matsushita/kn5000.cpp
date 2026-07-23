@@ -1150,10 +1150,18 @@ ROM_START(kn5000)
 	ROM_LOAD("kn5000_rhythm_data_rom.ic14", 0x000000, 0x400000, CRC(76d11a5e) SHA1(e4b572d318c9fe7ba00e5b44ea783e89da9c68bd))
 
 	ROM_REGION16_LE(0x1000000, "waveform", 0)
-	ROM_LOAD("kn5000_waveform_rom.ic304", 0x000000, 0x400000, NO_DUMP)
-	ROM_LOAD("kn5000_waveform_rom.ic305", 0x400000, 0x400000, NO_DUMP)
-	ROM_LOAD("kn5000_waveform_rom.ic306", 0x800000, 0x400000, NO_DUMP)
-	ROM_LOAD("kn5000_waveform_rom.ic307", 0xc00000, 0x400000, CRC(20ff4629) SHA1(4b511bff6625f4655cabd96a263bf548d2ef4bf7))
+	// Only IC307 is dumped. IC304/305/306 are NOT dumped. As a faithful-mechanism
+	// PLACEHOLDER (Felipe Sanches, 2026-07-23), the three undumped banks are filled
+	// with a copy of the real IC307 dump, marked BAD_DUMP so MAME's audit/UI flags
+	// them as not-genuine. This lets the tone generator read REAL KN5000 PCM through
+	// the real paged datapath for every bank: voices that select IC304-306 play a
+	// real-but-WRONG-instrument waveform (~75% of sounds), rather than silence or a
+	// fabricated synthesised timbre. Drop in the real IC304-306 dumps when available
+	// (change these three lines) and nothing else needs to change.
+	ROM_LOAD("kn5000_waveform_rom.ic307", 0x000000, 0x400000, BAD_DUMP CRC(20ff4629) SHA1(4b511bff6625f4655cabd96a263bf548d2ef4bf7)) // placeholder for IC304 (undumped)
+	ROM_LOAD("kn5000_waveform_rom.ic307", 0x400000, 0x400000, BAD_DUMP CRC(20ff4629) SHA1(4b511bff6625f4655cabd96a263bf548d2ef4bf7)) // placeholder for IC305 (undumped)
+	ROM_LOAD("kn5000_waveform_rom.ic307", 0x800000, 0x400000, BAD_DUMP CRC(20ff4629) SHA1(4b511bff6625f4655cabd96a263bf548d2ef4bf7)) // placeholder for IC306 (undumped)
+	ROM_LOAD("kn5000_waveform_rom.ic307", 0xc00000, 0x400000, CRC(20ff4629) SHA1(4b511bff6625f4655cabd96a263bf548d2ef4bf7)) // IC307 (real dump)
 ROM_END
 
 } // anonymous namespace
