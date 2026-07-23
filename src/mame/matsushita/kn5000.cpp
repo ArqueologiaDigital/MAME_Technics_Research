@@ -370,7 +370,7 @@ void kn5000_state::maincpu_mem(address_map &map)
 void kn5000_state::subcpu_mem(address_map &map)
 {
 	map(0x000000, 0x0fffff).ram(); // 1Mbyte = 2 * 4Mbit DRAMs @ IC28, IC29
-	map(0x100000, 0x100001).w(m_tonegen, FUNC(kn5000_tonegen_device::addr_w));    // Tone gen register address latch
+	map(0x100000, 0x100001).rw(m_tonegen, FUNC(kn5000_tonegen_device::status_r), FUNC(kn5000_tonegen_device::addr_w)); // Tone gen register address latch (write) / active-voice bitmap poll (read)
 	map(0x100002, 0x100003).rw(m_tonegen, FUNC(kn5000_tonegen_device::data_r), FUNC(kn5000_tonegen_device::data_w)); // Tone gen register data
 	map(0x110000, 0x110001).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_data_r));   // Tone gen keybed data
 	map(0x110002, 0x110003).r(m_tonegen, FUNC(kn5000_tonegen_device::kbd_status_r)); // Tone gen keybed status

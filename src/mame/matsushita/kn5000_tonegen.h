@@ -25,6 +25,7 @@ public:
 
 	// Register-indirect interface (SubCPU memory-mapped)
 	void addr_w(uint16_t data);    // 0x100000: register address latch
+	uint16_t status_r();           // 0x100000: active-voice bitmap readback (poll)
 	void data_w(uint16_t data);    // 0x100002: register data write
 	uint16_t data_r();             // 0x100002: register data read (status)
 
@@ -69,6 +70,9 @@ private:
 		// Playback state
 		bool     active;        // Voice is producing sound
 		bool     key_on;        // Key is pressed
+		double   key_on_time;   // machine time (s) of the note-on gate — used to
+		                        // distinguish note-on EG programming (same burst,
+		                        // <1ms after gate) from a note-off release burst.
 		uint32_t wave_offset;   // Current position in waveform data (16.16 fixed point)
 		uint32_t wave_start;    // Start byte offset in waveform ROM region
 		uint32_t wave_length;   // Length in samples
@@ -87,6 +91,7 @@ private:
 			std::fill(std::begin(regs), std::end(regs), 0);
 			active = false;
 			key_on = false;
+			key_on_time = 0.0;
 			wave_offset = 0;
 			wave_start = 0;
 			wave_length = 0;

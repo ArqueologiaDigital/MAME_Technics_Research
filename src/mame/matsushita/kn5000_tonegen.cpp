@@ -92,6 +92,7 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].regs), i);
 		save_item(NAME(m_voice[i].active), i);
 		save_item(NAME(m_voice[i].key_on), i);
+		save_item(NAME(m_voice[i].key_on_time), i);
 		save_item(NAME(m_voice[i].wave_offset), i);
 		save_item(NAME(m_voice[i].wave_start), i);
 		save_item(NAME(m_voice[i].wave_length), i);
@@ -209,6 +210,31 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		}
 	}
 
+	// Key RELEASE detection.
+	//
+	// The sub-CPU never writes a 0x7E00 key-off to group0/bank0 when a held key
+	// is released. Instead it re-programs the voice's hardware envelope generator
+	// with a *release* ramp: a burst of six writes to groups 8/9/A (routine
+	// LABEL_027FD6 in v142 asm L23045). Both note-on setup AND note-off release
+	// program these same EG registers, so a register write alone is ambiguous.
+	// The discriminator: note-ON rewrites the group0/bank0 gate (0x8100) as part
+	// of its burst, so its EG-program writes land only a few microseconds after
+	// process_key_on(); the note-OFF release burst carries no gate and arrives
+	// only once the key is actually released (>=45ms, typically seconds, later).
+	//
+	// We trigger on the group9/bank0 EG write (0x0900+ch) — written in both bursts
+	// but, at note-on, ~12us after the gate — gated on "voice currently keyed on"
+	// and "more than 1ms since the note-on gate". That cleanly separates the
+	// note-on setup (same-burst, <1ms) from a genuine release (long after the gate)
+	// without matching data-table-dependent envelope values. Without this the
+	// held voice would never be told to release and would sustain forever.
+	if (group == 9 && bank == 0 && m_voice[ch].key_on)
+	{
+		double now = machine().time().as_double();
+		if (now - m_voice[ch].key_on_time > 0.001)
+			process_key_off(ch);
+	}
+
 	// Waveform pointer latch: group 0, bank 2 with bit 15 SET triggers load,
 	// then bit 15 CLEAR finalizes. We resolve on the SET strobe.
 	if (group == 0 && bank == 2 && (data & 0x8000))
@@ -241,6 +267,35 @@ uint16_t kn5000_tonegen_device::data_r()
 	}
 
 	return 0;
+}
+
+
+uint16_t kn5000_tonegen_device::status_r()
+{
+	// Active-voice status poll (read from 0x100000).
+	//
+	// MEASURED (sub-CPU v142 asm DAC_Write_Sample L11479-11483): the firmware
+	// writes a bank index (0..3) to 0x100000, then reads a 16-bit bitmap back
+	// from 0x100000 giving the currently-sounding voices in that bank of 16.
+	// The voice-manager (LABEL_02219F/LABEL_02222A L13273-13330) computes
+	//   ((prev | cur) XOR M) AND M   with M = firmware-commanded-on bitmap,
+	// i.e. "voices the firmware turned on that the chip reports SILENT", and
+	// releases each such voice via LABEL_02B4A1 (the 0x7E00 key-off, PC 02B4DB).
+	//
+	// If this read is left unmapped it returns 0 => every held voice looks
+	// silent => the firmware auto-releases held keys ~45ms after key-on. To
+	// make a held key SUSTAIN (as on real hardware) we report each keyed-on
+	// voice as active. Bank = low 2 bits of the value last latched at 0x100000;
+	// bit i of the result = voice (bank*16 + i) is currently gated on.
+	int bank = m_addr_latch & 0x03;
+	uint16_t bitmap = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		int vch = bank * 16 + i;
+		if (vch < NUM_VOICES && m_voice[vch].key_on)
+			bitmap |= (1u << i);
+	}
+	return bitmap;
 }
 
 
@@ -434,6 +489,7 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	LOGMASKED(LOG_KEY, "tonegen: KEY ON voice %d\n", ch);
 
 	v.key_on = true;
+	v.key_on_time = machine().time().as_double(); // gate timestamp for release detection
 	v.active = true;
 	v.wave_offset = 0;
 	v.release_counter = 0;
