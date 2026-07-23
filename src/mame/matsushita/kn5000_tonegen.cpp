@@ -73,22 +73,44 @@ void kn5000_tonegen_device::device_start()
 		m_waveform_size = 0;
 	}
 
-	// Parse waveform index tables from each ROM chip (IC304-IC307)
-	// Each chip has 198 entries at offset 0, 4 bytes each
+	// Parse IC307's 198-entry index table (region offset 0xC00000 = the real dump) and
+	// precompute, for every waveform, its PCM start, sample count, and — the crux for
+	// faithful pitched playback — its fundamental period (autocorrelation). The other
+	// three banks (IC304-306) are BAD_DUMP copies of IC307, so every address computed
+	// here reads real KN5000 PCM.
+	std::fill(std::begin(m_wave_pcm_start), std::end(m_wave_pcm_start), 0);
+	std::fill(std::begin(m_wave_pcm_samples), std::end(m_wave_pcm_samples), 0);
+	std::fill(std::begin(m_wave_period), std::end(m_wave_period), 0);
 	if (m_waveform_data && m_waveform_size >= 0x1000000)
 	{
-		// Use IC307 index table (offset 0xC00000) as default
-		const uint8_t *idx = m_waveform_data + 0xC00000;
+		static constexpr uint32_t IC307_BASE = 0xC00000;
+		const uint8_t *idx = m_waveform_data + IC307_BASE;
 		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
 		{
 			m_wave_index[i].param_ptr   = idx[i * 4 + 0] | (idx[i * 4 + 1] << 8);
 			m_wave_index[i].wave_offset = idx[i * 4 + 2] | (idx[i * 4 + 3] << 8);
 		}
-	}
 
-	// Build the single-cycle timbre palette (needs the IC307 sine, so after the
-	// waveform region is resolved above).
-	build_palette();
+		// PCM byte address = wave_offset * 16 (signed-16-LE). Length = span to the next
+		// strictly-greater wave_offset (offsets are monotonic non-decreasing; equal
+		// entries are multisample duplicates). See notes/kn5000-ic307-content-map.md.
+		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
+		{
+			uint32_t off = uint32_t(m_wave_index[i].wave_offset) * 16;
+			uint32_t next = off;
+			for (int j = i + 1; j < NUM_INDEX_ENTRIES; j++)
+			{
+				uint32_t o = uint32_t(m_wave_index[j].wave_offset) * 16;
+				if (o > off) { next = o; break; }
+			}
+			uint32_t bytes = (next > off) ? (next - off) : 512;
+			m_wave_pcm_start[i]   = IC307_BASE + off;
+			m_wave_pcm_samples[i] = bytes / 2;
+		}
+
+		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
+			m_wave_period[i] = detect_period(m_wave_pcm_start[i], m_wave_pcm_samples[i]);
+	}
 
 	// Save state
 	save_item(NAME(m_addr_latch));
@@ -96,7 +118,7 @@ void kn5000_tonegen_device::device_start()
 	for (int i = 0; i < NUM_VOICES; i++)
 	{
 		save_item(NAME(m_voice[i].regs), i);
-		save_item(NAME(m_voice[i].wave_palette), i);
+		save_item(NAME(m_voice[i].wave_index), i);
 		save_item(NAME(m_voice[i].active), i);
 		save_item(NAME(m_voice[i].key_on), i);
 		save_item(NAME(m_voice[i].key_on_time), i);
@@ -504,12 +526,14 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	// by dumping all 32 per-voice registers across a chromatic run — only reg[1]
 	// and reg[8] vary per semitone). See notes/kn5000-pitch-velocity.md.
 	//
-	// Because every voice currently renders the SAME fabricated waveform (IC307
-	// index 0, a 256-sample single-cycle sine — the wave-number decode is a
-	// separate unresolved bug), the correct output is simply the played note at
-	// equal temperament. We recover the TRUE musical note from the real input
-	// event (keybed / USB-MIDI, both routed through push_keybed_event) that caused
-	// this voice — the faithful "use the real mechanism" approach.
+	// Each voice loops ONE fundamental period of a real IC307 waveform (see
+	// resolve_waveform / detect_period). Because that one period is resampled to the
+	// target frequency regardless of the recording's native rate, pitch is decoupled
+	// from the waveform's (unknown, un-stored) root note — so absolute pitch comes
+	// purely from the played note at equal temperament, and NO per-waveform root is
+	// needed. We recover the TRUE musical note from the real input event (keybed /
+	// USB-MIDI, both routed through push_keybed_event) that caused this voice — the
+	// faithful "use the real mechanism" approach.
 
 	double freq;
 	if (v.true_note >= 0)
@@ -535,9 +559,9 @@ void kn5000_tonegen_device::update_pitch(int ch)
 		freq = 261.63 * std::pow(2.0, semis / 12.0);               // ref ≈ C4
 	}
 
-	// The fabricated waveform (index 0) is a single cycle over wave_length samples,
-	// so it sounds at 48000/wave_length Hz when pitch_step == 0x10000. Set the step
-	// to hit the target musical frequency exactly.
+	// The looped waveform is one fundamental period of wave_length samples, so it
+	// sounds at 48000/wave_length Hz when pitch_step == 0x10000. Set the step to hit
+	// the target musical frequency exactly (resamples the real period to that pitch).
 	uint32_t wlen = v.wave_length ? v.wave_length : 256;
 	double step = 65536.0 * freq * double(wlen) / 48000.0;
 	if (step < 1.0) step = 1.0;
@@ -550,126 +574,119 @@ void kn5000_tonegen_device::update_pitch(int ch)
 
 
 //-----------------------------------------------------------------------
-// Timbre palette — faithful-mechanism placeholder for distinct instruments
+// Real-waveform selection + single-period wavetable extraction
 //-----------------------------------------------------------------------
 //
-// WHY THIS EXISTS (all MEASURED live on the running KN5000, 2026-07-23; see
-// notes/kn5000-wave-number.md):
-//   * The firmware's resolved per-voice WAVE NUMBER is written to register
-//     +0x440 (= regs[9], osc1) / +0x480 (= regs[10], osc2). Traced raw, its value
-//     is 0x0000 for Piano, Brass, Guitar and Strings, and only the bank bits
-//     (0xC0/0x40, wave-number part still 0) for Organ. So the firmware, as
-//     emulated, selects wave 0 for every instrument — that is exactly why every
-//     voice used to render IC307 index 0 (a single-cycle sine): it was not a
-//     decode bug in the HLE, the chip is being told "wave 0".
-//   * The real per-instrument multisample waveforms live in IC304/IC305/IC306,
-//     which are NO_DUMP. IC307 (the one real dump) contains one clean single-cycle
-//     wave (index 0 = sine); its other 197 entries are MULTI-cycle recordings with
-//     NO loop-point or root-note metadata in their parameter records (the record
-//     bytes are single-byte envelope/zone fields, far too small to be sample
-//     offsets — MEASURED), so they cannot be pitched correctly by the single-cycle
-//     playback model and would break chord tuning.
-//   Consequently, distinct *real* instrument timbres are physically unavailable.
+// FAITHFULNESS MODEL (see notes/kn5000-faithful-render.md; all grounded in the three
+// findings notes kn5000-wave-number.md / kn5000-tone-record.md / kn5000-ic307-content-map.md):
 //
-// WHAT WE DO instead (fake-with-the-real-mechanism): synthesize a small palette of
-// distinct single-cycle timbres, MATERIALISED as PCM here (no sin() in the render
-// loop), and SELECT among them using the firmware's real per-instrument register
-// signature (select_palette()). This keeps pitch exactly correct (single-cycle
-// model, same as the old sine path) and makes different instruments spectrally
-// distinct. Entry 0 is the REAL IC307 index-0 sine, copied byte-exact, so any voice
-// mapping to it is bit-identical to the previous behaviour. The synthesized entries
-// are clearly-labelled placeholders and become moot the moment IC304-306 are dumped
-// and the firmware's wave-number path delivers real indices.
-void kn5000_tonegen_device::build_palette()
+//   * The firmware's real per-voice WAVE NUMBER (register +0x440/+0x480) is 0 for every
+//     ordinary PCM voice (MEASURED live) — it is a legacy selector these voices bypass by
+//     design. Per-instrument identity instead flows through the delivered tonerec's
+//     partial-parameter records, which the firmware programs into the pitch/zone and
+//     timbre registers. Their high bytes form a STABLE per-instrument fingerprint
+//     (regs[1]=+0x040, regs[3]=+0x0C0, regs[5]=+0x140, regs[12]=+0x500) — identical
+//     across notes and across a voice's two oscillator layers, distinct between
+//     instruments (MEASURED: Piano/Brass/Guitar/Strings/Organ all differ).
+//
+//   * IC307 is the one REAL wave-ROM dump; its 198 indexed waveforms are real KN5000 PCM.
+//     (IC304-306 are BAD_DUMP copies of IC307, so any address computed here reads real
+//     PCM — a voice mapping to a "wrong" waveform still plays a real-but-wrong-instrument
+//     timbre, the accepted ~75% placeholder, never silence or a synthesized timbre.)
+//
+// SELECTION: map the instrument fingerprint -> a real IC307 waveform index. Different
+// fingerprints deterministically resolve to DIFFERENT real waveforms, so different
+// instruments sound genuinely different (real timbres, not invented ones).
+//
+// PITCH (the hard part, handled by construction): IC307 waves are MULTI-cycle recordings
+// whose absolute ROOT note is PROVEN ABSENT from the ROM. Rather than resample the whole
+// recording at its native rate (which would need that missing root and could mistune),
+// we extract ONE fundamental period (detect_period, autocorrelation — the ROM is periodic,
+// r~=0.99) and loop it as a single-cycle wavetable, resampled to the played note in
+// update_pitch. This preserves the real harmonic spectrum (the period is a genuine cycle
+// of real PCM) while pitch is driven ENTIRELY by the equal-tempered played note — so pitch
+// is DECOUPLED from the source root and CANNOT regress the currently-correct pitch/chords.
+// If no clean period is found (period==0), the voice falls back to IC307 index 0 (the real
+// single-cycle sine): a real waveform at exactly the right pitch, never a wrong pitch.
+
+// Pick a real IC307 waveform index (0..197, page 0) from the firmware's per-instrument
+// register fingerprint. An all-zero fingerprint (boot-init / degenerate voices) maps to
+// index 0 (the real sine), preserving the previous behaviour for those. The hash keeps
+// one instrument on one waveform and (VERIFIED live) puts the measured instruments on
+// DIFFERENT real waveforms. Range 1..189 covers the page-0 indexed instrument waveforms
+// and excludes index 0 (sine) plus the multisample-duplicate / 3 MB-tail entries (190-197,
+// which share offsets and point at the un-indexed page tail). The +0x040 multisample-zone
+// nibble is an available refinement lever (documented in the note) but is intentionally
+// NOT folded in here, so each instrument maps to one stable, testable base waveform.
+int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 {
-	m_palette.assign(PALETTE_COUNT * PALETTE_LEN, 0);
-
-	// Entry 0: the genuine IC307 index-0 single-cycle sine, copied verbatim from the
-	// real ROM (256 signed-16-LE samples at 0xC00000 + wave_offset*16). If the ROM is
-	// missing, fall back to a computed sine so the palette is never silent.
-	bool got_real_sine = false;
-	if (m_waveform_data && m_waveform_size >= 0xC00000 + 4)
-	{
-		const uint8_t *idx = m_waveform_data + 0xC00000;
-		uint16_t wave_off_raw = idx[2] | (idx[3] << 8); // entry 0 wave_offset
-		uint32_t base = 0xC00000 + uint32_t(wave_off_raw) * 16;
-		if (base + PALETTE_LEN * 2 <= m_waveform_size)
-		{
-			for (int k = 0; k < PALETTE_LEN; k++)
-				m_palette[k] = int16_t(m_waveform_data[base + k*2] | (m_waveform_data[base + k*2 + 1] << 8));
-			got_real_sine = true;
-		}
-	}
-	if (!got_real_sine)
-		for (int k = 0; k < PALETTE_LEN; k++)
-			m_palette[k] = int16_t(std::lround(16383.0 * std::sin(2.0 * 3.14159265358979323846 * k / PALETTE_LEN)));
-
-	// Entries 1..PALETTE_COUNT-1: synthesized single-cycle timbres with deliberately
-	// different harmonic content (additive; band-limited to <= PALETTE_LEN/2 to avoid
-	// aliasing). Each row = per-harmonic amplitudes h1,h2,... The set spans hollow,
-	// bright, buzzy and mellow spectra so instruments that hash to different entries
-	// are audibly and spectrally distinct. FABRICATED placeholder data.
-	static const double kHarm[PALETTE_COUNT][10] = {
-		{ 1.00, 0,    0,    0,    0,    0,    0,    0,    0,    0    }, // 0 sine (overwritten by real IC307 above)
-		{ 1.00, 0.50, 0.33, 0.25, 0.20, 0.16, 0.14, 0.12, 0.11, 0.10 }, // 1 sawtooth-ish (all harmonics)
-		{ 1.00, 0,    0.33, 0,    0.20, 0,    0.14, 0,    0.11, 0    }, // 2 square-ish (odd harmonics)
-		{ 1.00, 0.80, 0.10, 0.60, 0.08, 0.40, 0.05, 0.20, 0,    0.10 }, // 3 pulse/reedy
-		{ 1.00, 0,    0.11, 0,    0.04, 0,    0.02, 0,    0.01, 0    }, // 4 triangle-ish (soft odd)
-		{ 1.00, 0.90, 0.60, 0.30, 0.70, 0.10, 0.40, 0,    0.20, 0   }, // 5 organ/drawbar-ish
-		{ 0.60, 1.00, 0.90, 0.70, 0.50, 0.55, 0.35, 0.30, 0.20, 0.15 }, // 6 brass-ish (formant-ish peak)
-		{ 1.00, 0.70, 0.85, 0.45, 0.55, 0.30, 0.35, 0.20, 0.22, 0.12 }, // 7 string-ish (rich, gentle rolloff)
-		{ 1.00, 1.00, 0,    0,    0,    0,    0,    0,    0,    0    }, // 8 two-harmonic (octave)
-		{ 1.00, 0,    0,    0.60, 0,    0,    0.30, 0,    0,    0.15 }, // 9 hollow (1,4,7,10)
-		{ 1.00, 0.60, 0.40, 0.50, 0.30, 0.45, 0.25, 0.35, 0.20, 0.25 }, // 10 bright/complex
-		{ 1.00, 0.30, 0,    0.12, 0,    0,    0,    0,    0,    0    }, // 11 mellow (1 + soft 2,4)
-	};
-	for (int p = 1; p < PALETTE_COUNT; p++)
-	{
-		double norm = 0.0;
-		for (int h = 0; h < 10; h++) norm += std::abs(kHarm[p][h]);
-		if (norm < 1e-6) norm = 1.0;
-		for (int k = 0; k < PALETTE_LEN; k++)
-		{
-			double acc = 0.0;
-			for (int h = 0; h < 10; h++)
-				if (kHarm[p][h] != 0.0)
-					acc += kHarm[p][h] * std::sin(2.0 * 3.14159265358979323846 * (h + 1) * k / PALETTE_LEN);
-			int val = int(std::lround(16383.0 * acc / norm));
-			m_palette[p * PALETTE_LEN + k] = int16_t(std::clamp(val, -32768, 32767));
-		}
-	}
-}
-
-
-// Pick the palette timbre for a voice from the firmware's real per-instrument
-// register signature. MEASURED live: across Piano/Brass/Guitar/Strings/Organ the
-// HIGH bytes of regs[1] (+0x040), regs[3] (+0x0C0), regs[5] (+0x140) and regs[12]
-// (+0x500) form a stable per-instrument fingerprint (identical across notes and
-// across the two oscillator layers of one voice, distinct between instruments):
-//   Piano 70/74/6F/2C  Brass 10/5A/66/00  Guitar 30/5A/6F/2C
-//   Strings 00/7F/7F/7F  Organ 40/5A/66/7F
-// A voice whose signature is all-zero (uninitialised / boot-init voices) maps to
-// entry 0 (the real sine), preserving the previous behaviour for those. Hashing the
-// four bytes into PALETTE_COUNT keeps the same instrument on the same timbre and
-// (verified) puts all five measured instruments on DIFFERENT palette entries.
-int kn5000_tonegen_device::select_palette(const voice_t &v) const
-{
-	uint32_t s1 = (v.regs[1]  >> 8) & 0xFF;
-	uint32_t s3 = (v.regs[3]  >> 8) & 0xFF;
-	uint32_t s5 = (v.regs[5]  >> 8) & 0xFF;
+	uint32_t s1  = (v.regs[1]  >> 8) & 0xFF;
+	uint32_t s3  = (v.regs[3]  >> 8) & 0xFF;
+	uint32_t s5  = (v.regs[5]  >> 8) & 0xFF;
 	uint32_t s12 = (v.regs[12] >> 8) & 0xFF;
 	if ((s1 | s3 | s5 | s12) == 0)
-		return 0; // degenerate/boot voice → real sine (old behaviour)
+		return 0; // degenerate / boot voice -> real IC307 sine (old behaviour)
 	uint32_t h = s1 * 131u + s3 * 17u + s5 * 7u + s12;
-	return int(h % PALETTE_COUNT);
+	return 1 + int(h % 189u);
 }
 
 
-int16_t kn5000_tonegen_device::palette_sample(int pidx, uint32_t sample_pos) const
+// Detect the fundamental period (in samples) of a real IC307 waveform, so ONE clean cycle
+// can be looped and resampled to any note. Method: biased normalized autocorrelation over a
+// bounded window; find the first negative-going zero crossing (to skip the lag-0 shoulder
+// that fools a naive "highest early peak" — which is why a pure sine was previously
+// mis-detected), then take the argmax lag beyond it. Returns 0 when no clear repetition is
+// found and the wave is too long to treat as a single cycle (caller then uses the real
+// sine). Short waves with no internal repetition (e.g. IC307 index 0, one 256-sample sine)
+// return their own length. MEASURED periodicity basis: notes/kn5000-ic307-content-map.md 2.2.
+uint32_t kn5000_tonegen_device::detect_period(uint32_t region_byte_start, uint32_t samples) const
 {
-	if (pidx < 0 || pidx >= PALETTE_COUNT)
-		return 0;
-	return m_palette[pidx * PALETTE_LEN + (sample_pos % PALETTE_LEN)];
+	if (!m_waveform_data || samples < 32)
+		return samples; // trivially one "cycle" (or nothing)
+
+	const uint32_t W = std::min<uint32_t>(samples, 4096);
+	const uint32_t minlag = 16;
+	const uint32_t maxlag = std::min<uint32_t>(W / 2, 2048);
+	if (maxlag <= minlag)
+		return samples; // very short -> the whole wave is a single cycle
+
+	// Load the window as doubles (bounds-checked; region is real PCM at every bank).
+	std::vector<double> x(W, 0.0);
+	for (uint32_t i = 0; i < W; i++)
+	{
+		uint32_t bp = region_byte_start + i * 2;
+		if (bp + 1 >= m_waveform_size) { x.resize(i); break; }
+		x[i] = double(int16_t(m_waveform_data[bp] | (m_waveform_data[bp + 1] << 8)));
+	}
+	const uint32_t n = uint32_t(x.size());
+	if (n <= minlag + 4)
+		return samples;
+
+	double c0 = 0.0;
+	for (uint32_t i = 0; i < n; i++) c0 += x[i] * x[i];
+	if (c0 < 1.0)
+		return samples; // silent window -> nothing to loop
+
+	bool crossed = false;
+	double best_r = -2.0;
+	uint32_t best_lag = 0;
+	const uint32_t hi = std::min<uint32_t>(maxlag, n - 1);
+	for (uint32_t lag = 1; lag <= hi; lag++)
+	{
+		double c = 0.0;
+		for (uint32_t i = 0; i + lag < n; i++) c += x[i] * x[i + lag];
+		double r = c / c0;
+		if (!crossed && r < 0.0) crossed = true;
+		if (crossed && lag >= minlag && r > best_r) { best_r = r; best_lag = lag; }
+	}
+
+	if (best_lag == 0 || best_r < 0.5)
+	{
+		// No clear periodic peak. A short wave is itself ~one cycle; a long one has no
+		// usable single-cycle loop -> signal fallback (0) so the caller uses the sine.
+		return (samples <= 2048) ? samples : 0;
+	}
+	return best_lag;
 }
 
 
@@ -677,85 +694,31 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// Timbre selection (see build_palette / select_palette above). The firmware's
-	// true wave number (+0x440/regs[9]) resolves to 0 for every instrument in the
-	// emulated firmware, and the real per-instrument samples are in the undumped
-	// IC304-306 ROMs, so we route every voice through the single-cycle timbre
-	// palette, choosing the entry from the instrument's register fingerprint. This
-	// makes distinct instruments spectrally distinct while keeping pitch exact.
-	// (If a future dump + firmware wave-number path ever writes a nonzero wave
-	// number, the real-ROM branch below can be re-enabled by clearing wave_palette.)
-	v.wave_palette = select_palette(v);
-	v.wave_length  = PALETTE_LEN;
-	v.wave_start   = 0;
-	return;
-}
+	// Select the real IC307 waveform for this voice from the instrument fingerprint, then
+	// loop ONE detected fundamental period of its real PCM. Pitch is applied by resampling
+	// that period to the played note (update_pitch), so no per-waveform root is needed.
+	int idx = select_waveform_index(v);
+	if (idx < 0 || idx >= NUM_INDEX_ENTRIES)
+		idx = 0;
 
-
-void kn5000_tonegen_device::resolve_waveform_rom(int ch)
-{
-	voice_t &v = m_voice[ch];
-
-	// Waveform selection. PROVISIONAL / UNRESOLVED: the chip's wave-number ->
-	// physical-address decode lives inside the TC183C230002 and is absent from
-	// all dumped data. Static analysis suggested the resolved wave number lands
-	// at group4/bank1 (+0x440 = regs[9]), but a live capture of a real Piano
-	// note shows regs[9] == 0 (and reg[3]'s low byte is also 0), so neither is
-	// confirmed as the wave-number source — every voice currently collapses to
-	// index 0. Finding the true wave-number register needs multi-instrument
-	// register diffing (select different sounds, diff the voice register file).
-	// See notes/kn5000-waveform-rom-banking.md. Until then we resolve through
-	// IC307's self-contained 198-entry index (the one real dump), so a voice at
-	// least plays real IC307 PCM rather than nothing.
-	uint16_t wave_num_reg = v.regs[9]; // group4/bank1 (+0x440): provisional osc-1 wave number
-	int wave_idx = wave_num_reg & 0xFF; // valid wave numbers 0x00-0xBF
-	if (wave_idx >= NUM_INDEX_ENTRIES)
-		wave_idx = wave_idx % NUM_INDEX_ENTRIES;
-
-	// Only IC307 is dumped (offset 0xC00000). Use it for all lookups.
-	uint32_t chip_base = 0xC00000; // IC307
-
-	// Read index entry from IC307's index table (always available since IC307 is dumped).
-	// This gives us the waveform length for timing purposes even when the actual PCM
-	// data is in the missing IC304-IC306 ROMs.  The real tone gen chip tracks voice
-	// timing based on these parameters regardless of which ROM chip holds the data.
-	static constexpr uint32_t IC307_BASE = 0xC00000;
-	if (m_waveform_data && m_waveform_size > IC307_BASE + NUM_INDEX_ENTRIES * 4)
+	uint32_t period = m_wave_period[idx];
+	if (period == 0)
 	{
-		const uint8_t *idx = m_waveform_data + IC307_BASE;
-		uint16_t wave_off_raw = idx[wave_idx * 4 + 2] | (idx[wave_idx * 4 + 3] << 8);
-		uint32_t wave_byte_offset = uint32_t(wave_off_raw) * 16;
-
-		v.wave_start = chip_base + wave_byte_offset;
-
-		// Determine length from next index entry
-		uint32_t next_off;
-		if (wave_idx + 1 < NUM_INDEX_ENTRIES)
-		{
-			uint16_t next_raw = idx[(wave_idx + 1) * 4 + 2] | (idx[(wave_idx + 1) * 4 + 3] << 8);
-			next_off = uint32_t(next_raw) * 16;
-		}
-		else
-		{
-			next_off = wave_byte_offset + 512;
-		}
-
-		if (next_off > wave_byte_offset)
-			v.wave_length = (next_off - wave_byte_offset) / 2; // bytes to samples
-		else
-			v.wave_length = 256;
-
-		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d chip=0x%06X start=0x%06X len=%d (wavenum reg9=0x%04X)\n",
-			ch, wave_idx, chip_base, v.wave_start, v.wave_length, wave_num_reg);
+		// No clean loop period for this waveform -> fall back to the real IC307 sine
+		// (index 0). Keeps a REAL waveform at EXACTLY the right pitch rather than risk a
+		// wrong pitch (the task's hard constraint). Honest approximation, labelled here.
+		idx = 0;
+		period = m_wave_period[0] ? m_wave_period[0] : 256;
 	}
-	else
-	{
-		// No index table available at all — use a reasonable default duration.
-		// Even without any ROM data, we must keep the voice active for a
-		// realistic duration so the firmware's sequencer part tracking works.
-		v.wave_start = 0;
-		v.wave_length = 48000; // ~1 second at 48kHz as fallback
-	}
+
+	v.wave_index  = idx;
+	v.wave_start  = m_wave_pcm_start[idx];
+	v.wave_length = period;
+	v.wave_offset = 0;
+
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d wave idx=%d start=0x%06X period=%d (fp %02X/%02X/%02X/%02X)\n",
+		ch, v.wave_index, v.wave_start, v.wave_length,
+		(v.regs[1] >> 8) & 0xFF, (v.regs[3] >> 8) & 0xFF, (v.regs[5] >> 8) & 0xFF, (v.regs[12] >> 8) & 0xFF);
 }
 
 
@@ -854,22 +817,16 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				}
 			}
 
-			// Check if this voice has actual PCM sample data available.
-			// IC307 is dumped; IC304-IC306 are missing (NO GOOD DUMP KNOWN) and
-			// their region reads back as all zeros, so "has real data" == "some
-			// nonzero sample in this waveform". We must NOT judge that by the FIRST
+			// Check if this voice has actual PCM sample data available. All four wave
+			// banks now hold real IC307 PCM (IC304-306 are BAD_DUMP copies), so any
+			// resolved wave_start reads real data. We must NOT judge that by the FIRST
 			// sample alone: real waveforms routinely start at a zero-crossing (e.g.
-			// IC307 index 0 is a sine that begins at sample 0), which the old
-			// first-sample-only test misread as "no data" -> silence. Scan a small
-			// window instead: a genuinely-missing (zero-filled) waveform stays 0
-			// throughout, while any real waveform has a nonzero sample within a few.
+			// IC307 index 0 is a sine that begins at sample 0), which a first-sample-only
+			// test would misread as "no data" -> silence. Scan a small window instead: a
+			// genuinely-missing (zero-filled) waveform stays 0 throughout, while any real
+			// waveform has a nonzero sample within a few.
 			bool has_pcm_data = false;
-			if (v.wave_palette >= 0 && v.wave_length > 0)
-			{
-				// Palette voices always carry (synthesized) PCM.
-				has_pcm_data = true;
-			}
-			else if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
 			{
 				uint32_t probe = std::min<uint32_t>(v.wave_length, 64);
 				for (uint32_t k = 0; k < probe; k++)
@@ -923,10 +880,16 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			{
 				if (v.key_on)
 				{
-					// Loop for sustain
-					v.wave_offset = 0;
-					sample_pos = 0;
-					frac = 0;
+					// Loop one fundamental period for sustain. Wrap by the loop length
+					// (preserving the fractional phase) rather than snapping to 0, so the
+					// loop seam has no phase glitch.
+					uint32_t lenfp = v.wave_length << 16;
+					if (lenfp)
+						v.wave_offset %= lenfp;
+					else
+						v.wave_offset = 0;
+					sample_pos = v.wave_offset >> 16;
+					frac = v.wave_offset & 0xFFFF;
 				}
 				else
 				{
@@ -937,18 +900,13 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				}
 			}
 
+			// One period of real IC307 PCM, looped and interpolated (16.16 fixed point).
 			int32_t s0, s1;
-			if (v.wave_palette >= 0)
-			{
-				// Synthesized single-cycle timbre (see build_palette).
-				s0 = palette_sample(v.wave_palette, sample_pos);
-				s1 = palette_sample(v.wave_palette, sample_pos + 1); // wraps within cycle
-			}
-			else
 			{
 				uint32_t byte_pos = v.wave_start + sample_pos * 2;
 				s0 = read_waveform_sample(byte_pos);
-				// Linear interpolation with next sample
+				// Linear interpolation with next sample; wrap the last sample back to the
+				// loop start so the interpolation is continuous across the seam.
 				if (sample_pos + 1 < v.wave_length)
 					s1 = read_waveform_sample(byte_pos + 2);
 				else

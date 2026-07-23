@@ -76,15 +76,14 @@ private:
 		                        // distinguish note-on EG programming (same burst,
 		                        // <1ms after gate) from a note-off release burst.
 		uint32_t wave_offset;   // Current position in waveform data (16.16 fixed point)
-		uint32_t wave_start;    // Start byte offset in waveform ROM region
-		uint32_t wave_length;   // Length in samples
-		int      wave_palette;  // >=0: play synthesized single-cycle timbre-palette
-		                        // entry N (see build_palette / select_palette). -1 =
-		                        // play real ROM PCM at wave_start. The palette is a
-		                        // faithful-mechanism placeholder that makes distinct
-		                        // instruments timbrally distinct while the real per-
-		                        // instrument multisamples (undumped IC304-306) and the
-		                        // firmware's true wave-number decode are unavailable.
+		uint32_t wave_start;    // Start byte offset (into the waveform ROM region) of
+		                        // the ONE fundamental period looped for this voice.
+		uint32_t wave_length;   // Loop length in samples = the selected wave's detected
+		                        // fundamental period (see detect_period / resolve_waveform).
+		int      wave_index;    // Selected IC307 index (0..197) whose real PCM this voice
+		                        // renders; 0 = the real single-cycle sine (degenerate /
+		                        // period-unknown fallback). Chosen from the firmware's
+		                        // per-instrument register fingerprint (select_waveform_index).
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		int16_t  volume_l;      // Left channel volume (0-32767)
 		int16_t  volume_r;      // Right channel volume (0-32767)
@@ -110,7 +109,7 @@ private:
 			wave_offset = 0;
 			wave_start = 0;
 			wave_length = 0;
-			wave_palette = -1;
+			wave_index = 0;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			volume_l = 0;
 			volume_r = 0;
@@ -135,16 +134,13 @@ private:
 	void process_key_off(int ch);
 	int16_t read_waveform_sample(uint32_t byte_offset) const;
 	void resolve_waveform(int ch);
-	void resolve_waveform_rom(int ch); // dormant real-IC307 index path (kept for the
-	                                   // day the firmware writes a nonzero wave number)
 
-	// Timbre palette (faithful-mechanism placeholder). See kn5000_tonegen.cpp.
-	void build_palette();
-	int  select_palette(const voice_t &v) const;
-	int16_t palette_sample(int pidx, uint32_t sample_pos) const;
-	static constexpr int PALETTE_LEN   = 256; // samples per single-cycle timbre
-	static constexpr int PALETTE_COUNT = 12;  // number of distinct timbres
-	std::vector<int16_t> m_palette;           // PALETTE_COUNT * PALETTE_LEN samples
+	// Real-waveform selection + single-period wavetable extraction. Different
+	// instruments (different register fingerprints) resolve to DIFFERENT real IC307
+	// waveforms; one fundamental period of each is looped and resampled to the played
+	// note, so timbre is real PCM and pitch is exact. See kn5000_tonegen.cpp.
+	int  select_waveform_index(const voice_t &v) const;
+	uint32_t detect_period(uint32_t region_byte_start, uint32_t samples) const;
 
 	// State
 	uint16_t     m_addr_latch;           // Current register address
@@ -173,6 +169,13 @@ private:
 	// Index table cache (198 entries from IC307-format header)
 	static constexpr int NUM_INDEX_ENTRIES = 198;
 	wave_index_entry_t m_wave_index[NUM_INDEX_ENTRIES];
+
+	// Per-waveform PCM geometry + detected fundamental period, precomputed at
+	// device_start from IC307's index table (the one real dump; region offset 0xC00000).
+	uint32_t m_wave_pcm_start[NUM_INDEX_ENTRIES];   // region byte offset of the waveform's PCM
+	uint32_t m_wave_pcm_samples[NUM_INDEX_ENTRIES]; // total PCM samples available for this waveform
+	uint32_t m_wave_period[NUM_INDEX_ENTRIES];      // detected fundamental period in samples
+	                                                // (0 = no clean period -> real-sine fallback)
 };
 
 DECLARE_DEVICE_TYPE(KN5000_TONEGEN, kn5000_tonegen_device)
