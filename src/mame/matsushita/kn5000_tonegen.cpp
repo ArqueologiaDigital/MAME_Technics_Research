@@ -364,19 +364,19 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// Waveform selection: The real tone gen chip (TC183C230002) internally
-	// maps register values to waveform ROM addresses. The firmware writes
-	// synthesis parameters from the Table Data ROM — it does NOT write
-	// waveform addresses directly. Without the chip's internal logic, we
-	// approximate by using reg[3] (waveform control, +0x0C0) as a waveform
-	// index into IC307's index table.
-	//
-	// reg[2] = group 0, bank 2 (+0x080): velocity volume + latch strobe
-	// reg[3] = group 0, bank 3 (+0x0C0): waveform control (cleared on note-off)
-	uint16_t wave_ctrl = v.regs[3]; // group 0, bank 3
-
-	// Use low byte as waveform index (approximation)
-	int wave_idx = wave_ctrl & 0xFF;
+	// Waveform selection. PROVISIONAL / UNRESOLVED: the chip's wave-number ->
+	// physical-address decode lives inside the TC183C230002 and is absent from
+	// all dumped data. Static analysis suggested the resolved wave number lands
+	// at group4/bank1 (+0x440 = regs[9]), but a live capture of a real Piano
+	// note shows regs[9] == 0 (and reg[3]'s low byte is also 0), so neither is
+	// confirmed as the wave-number source — every voice currently collapses to
+	// index 0. Finding the true wave-number register needs multi-instrument
+	// register diffing (select different sounds, diff the voice register file).
+	// See notes/kn5000-waveform-rom-banking.md. Until then we resolve through
+	// IC307's self-contained 198-entry index (the one real dump), so a voice at
+	// least plays real IC307 PCM rather than nothing.
+	uint16_t wave_num_reg = v.regs[9]; // group4/bank1 (+0x440): provisional osc-1 wave number
+	int wave_idx = wave_num_reg & 0xFF; // valid wave numbers 0x00-0xBF
 	if (wave_idx >= NUM_INDEX_ENTRIES)
 		wave_idx = wave_idx % NUM_INDEX_ENTRIES;
 
@@ -413,8 +413,8 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 		else
 			v.wave_length = 256;
 
-		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d chip=0x%06X start=0x%06X len=%d (reg3=0x%04X)\n",
-			ch, wave_idx, chip_base, v.wave_start, v.wave_length, wave_ctrl);
+		LOGMASKED(LOG_VOICE, "tonegen: voice %d waveform idx=%d chip=0x%06X start=0x%06X len=%d (wavenum reg9=0x%04X)\n",
+			ch, wave_idx, chip_base, v.wave_start, v.wave_length, wave_num_reg);
 	}
 	else
 	{
@@ -440,11 +440,11 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.hold_counter = 0;
 	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
 
-	// Waveform should already be resolved from the register strobe sequence
-	// (resolve_waveform called when group 0, bank 2 written with bit 15 set).
-	// If not yet resolved, try now as fallback.
-	if (v.wave_length == 0)
-		resolve_waveform(ch);
+	// Resolve the waveform at key-on: by the time the firmware writes the note-on
+	// command (0x8100) it has already written the wave number (regs[9]/regs[10])
+	// and all voice params, so this picks up the final wave number rather than a
+	// possibly-stale value from the earlier group0/bank2 strobe.
+	resolve_waveform(ch);
 
 	// Update pitch from current registers
 	update_pitch(ch);
@@ -516,10 +516,25 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			}
 
 			// Check if this voice has actual PCM sample data available.
-			// IC307 is dumped; IC304-IC306 are missing (NO GOOD DUMP KNOWN).
-			bool has_pcm_data = (v.wave_length > 0 && m_waveform_data &&
-				v.wave_start + 1 < m_waveform_size &&
-				(m_waveform_data[v.wave_start] != 0 || m_waveform_data[v.wave_start + 1] != 0));
+			// IC307 is dumped; IC304-IC306 are missing (NO GOOD DUMP KNOWN) and
+			// their region reads back as all zeros, so "has real data" == "some
+			// nonzero sample in this waveform". We must NOT judge that by the FIRST
+			// sample alone: real waveforms routinely start at a zero-crossing (e.g.
+			// IC307 index 0 is a sine that begins at sample 0), which the old
+			// first-sample-only test misread as "no data" -> silence. Scan a small
+			// window instead: a genuinely-missing (zero-filled) waveform stays 0
+			// throughout, while any real waveform has a nonzero sample within a few.
+			bool has_pcm_data = false;
+			if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			{
+				uint32_t probe = std::min<uint32_t>(v.wave_length, 64);
+				for (uint32_t k = 0; k < probe; k++)
+				{
+					uint32_t bp = v.wave_start + k * 2;
+					if (bp + 1 >= m_waveform_size) break;
+					if (m_waveform_data[bp] != 0 || m_waveform_data[bp + 1] != 0) { has_pcm_data = true; break; }
+				}
+			}
 
 			if (!has_pcm_data)
 			{
