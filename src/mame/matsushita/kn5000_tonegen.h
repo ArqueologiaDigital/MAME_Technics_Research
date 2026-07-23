@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <queue>
+#include <vector>
 
 class kn5000_tonegen_device :
 	public device_t,
@@ -77,6 +78,13 @@ private:
 		uint32_t wave_offset;   // Current position in waveform data (16.16 fixed point)
 		uint32_t wave_start;    // Start byte offset in waveform ROM region
 		uint32_t wave_length;   // Length in samples
+		int      wave_palette;  // >=0: play synthesized single-cycle timbre-palette
+		                        // entry N (see build_palette / select_palette). -1 =
+		                        // play real ROM PCM at wave_start. The palette is a
+		                        // faithful-mechanism placeholder that makes distinct
+		                        // instruments timbrally distinct while the real per-
+		                        // instrument multisamples (undumped IC304-306) and the
+		                        // firmware's true wave-number decode are unavailable.
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		int16_t  volume_l;      // Left channel volume (0-32767)
 		int16_t  volume_r;      // Right channel volume (0-32767)
@@ -102,6 +110,7 @@ private:
 			wave_offset = 0;
 			wave_start = 0;
 			wave_length = 0;
+			wave_palette = -1;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			volume_l = 0;
 			volume_r = 0;
@@ -126,6 +135,16 @@ private:
 	void process_key_off(int ch);
 	int16_t read_waveform_sample(uint32_t byte_offset) const;
 	void resolve_waveform(int ch);
+	void resolve_waveform_rom(int ch); // dormant real-IC307 index path (kept for the
+	                                   // day the firmware writes a nonzero wave number)
+
+	// Timbre palette (faithful-mechanism placeholder). See kn5000_tonegen.cpp.
+	void build_palette();
+	int  select_palette(const voice_t &v) const;
+	int16_t palette_sample(int pidx, uint32_t sample_pos) const;
+	static constexpr int PALETTE_LEN   = 256; // samples per single-cycle timbre
+	static constexpr int PALETTE_COUNT = 12;  // number of distinct timbres
+	std::vector<int16_t> m_palette;           // PALETTE_COUNT * PALETTE_LEN samples
 
 	// State
 	uint16_t     m_addr_latch;           // Current register address

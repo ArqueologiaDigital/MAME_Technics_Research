@@ -86,12 +86,17 @@ void kn5000_tonegen_device::device_start()
 		}
 	}
 
+	// Build the single-cycle timbre palette (needs the IC307 sine, so after the
+	// waveform region is resolved above).
+	build_palette();
+
 	// Save state
 	save_item(NAME(m_addr_latch));
 	save_item(NAME(m_global_regs));
 	for (int i = 0; i < NUM_VOICES; i++)
 	{
 		save_item(NAME(m_voice[i].regs), i);
+		save_item(NAME(m_voice[i].wave_palette), i);
 		save_item(NAME(m_voice[i].active), i);
 		save_item(NAME(m_voice[i].key_on), i);
 		save_item(NAME(m_voice[i].key_on_time), i);
@@ -544,7 +549,150 @@ void kn5000_tonegen_device::update_pitch(int ch)
 }
 
 
+//-----------------------------------------------------------------------
+// Timbre palette — faithful-mechanism placeholder for distinct instruments
+//-----------------------------------------------------------------------
+//
+// WHY THIS EXISTS (all MEASURED live on the running KN5000, 2026-07-23; see
+// notes/kn5000-wave-number.md):
+//   * The firmware's resolved per-voice WAVE NUMBER is written to register
+//     +0x440 (= regs[9], osc1) / +0x480 (= regs[10], osc2). Traced raw, its value
+//     is 0x0000 for Piano, Brass, Guitar and Strings, and only the bank bits
+//     (0xC0/0x40, wave-number part still 0) for Organ. So the firmware, as
+//     emulated, selects wave 0 for every instrument — that is exactly why every
+//     voice used to render IC307 index 0 (a single-cycle sine): it was not a
+//     decode bug in the HLE, the chip is being told "wave 0".
+//   * The real per-instrument multisample waveforms live in IC304/IC305/IC306,
+//     which are NO_DUMP. IC307 (the one real dump) contains one clean single-cycle
+//     wave (index 0 = sine); its other 197 entries are MULTI-cycle recordings with
+//     NO loop-point or root-note metadata in their parameter records (the record
+//     bytes are single-byte envelope/zone fields, far too small to be sample
+//     offsets — MEASURED), so they cannot be pitched correctly by the single-cycle
+//     playback model and would break chord tuning.
+//   Consequently, distinct *real* instrument timbres are physically unavailable.
+//
+// WHAT WE DO instead (fake-with-the-real-mechanism): synthesize a small palette of
+// distinct single-cycle timbres, MATERIALISED as PCM here (no sin() in the render
+// loop), and SELECT among them using the firmware's real per-instrument register
+// signature (select_palette()). This keeps pitch exactly correct (single-cycle
+// model, same as the old sine path) and makes different instruments spectrally
+// distinct. Entry 0 is the REAL IC307 index-0 sine, copied byte-exact, so any voice
+// mapping to it is bit-identical to the previous behaviour. The synthesized entries
+// are clearly-labelled placeholders and become moot the moment IC304-306 are dumped
+// and the firmware's wave-number path delivers real indices.
+void kn5000_tonegen_device::build_palette()
+{
+	m_palette.assign(PALETTE_COUNT * PALETTE_LEN, 0);
+
+	// Entry 0: the genuine IC307 index-0 single-cycle sine, copied verbatim from the
+	// real ROM (256 signed-16-LE samples at 0xC00000 + wave_offset*16). If the ROM is
+	// missing, fall back to a computed sine so the palette is never silent.
+	bool got_real_sine = false;
+	if (m_waveform_data && m_waveform_size >= 0xC00000 + 4)
+	{
+		const uint8_t *idx = m_waveform_data + 0xC00000;
+		uint16_t wave_off_raw = idx[2] | (idx[3] << 8); // entry 0 wave_offset
+		uint32_t base = 0xC00000 + uint32_t(wave_off_raw) * 16;
+		if (base + PALETTE_LEN * 2 <= m_waveform_size)
+		{
+			for (int k = 0; k < PALETTE_LEN; k++)
+				m_palette[k] = int16_t(m_waveform_data[base + k*2] | (m_waveform_data[base + k*2 + 1] << 8));
+			got_real_sine = true;
+		}
+	}
+	if (!got_real_sine)
+		for (int k = 0; k < PALETTE_LEN; k++)
+			m_palette[k] = int16_t(std::lround(16383.0 * std::sin(2.0 * 3.14159265358979323846 * k / PALETTE_LEN)));
+
+	// Entries 1..PALETTE_COUNT-1: synthesized single-cycle timbres with deliberately
+	// different harmonic content (additive; band-limited to <= PALETTE_LEN/2 to avoid
+	// aliasing). Each row = per-harmonic amplitudes h1,h2,... The set spans hollow,
+	// bright, buzzy and mellow spectra so instruments that hash to different entries
+	// are audibly and spectrally distinct. FABRICATED placeholder data.
+	static const double kHarm[PALETTE_COUNT][10] = {
+		{ 1.00, 0,    0,    0,    0,    0,    0,    0,    0,    0    }, // 0 sine (overwritten by real IC307 above)
+		{ 1.00, 0.50, 0.33, 0.25, 0.20, 0.16, 0.14, 0.12, 0.11, 0.10 }, // 1 sawtooth-ish (all harmonics)
+		{ 1.00, 0,    0.33, 0,    0.20, 0,    0.14, 0,    0.11, 0    }, // 2 square-ish (odd harmonics)
+		{ 1.00, 0.80, 0.10, 0.60, 0.08, 0.40, 0.05, 0.20, 0,    0.10 }, // 3 pulse/reedy
+		{ 1.00, 0,    0.11, 0,    0.04, 0,    0.02, 0,    0.01, 0    }, // 4 triangle-ish (soft odd)
+		{ 1.00, 0.90, 0.60, 0.30, 0.70, 0.10, 0.40, 0,    0.20, 0   }, // 5 organ/drawbar-ish
+		{ 0.60, 1.00, 0.90, 0.70, 0.50, 0.55, 0.35, 0.30, 0.20, 0.15 }, // 6 brass-ish (formant-ish peak)
+		{ 1.00, 0.70, 0.85, 0.45, 0.55, 0.30, 0.35, 0.20, 0.22, 0.12 }, // 7 string-ish (rich, gentle rolloff)
+		{ 1.00, 1.00, 0,    0,    0,    0,    0,    0,    0,    0    }, // 8 two-harmonic (octave)
+		{ 1.00, 0,    0,    0.60, 0,    0,    0.30, 0,    0,    0.15 }, // 9 hollow (1,4,7,10)
+		{ 1.00, 0.60, 0.40, 0.50, 0.30, 0.45, 0.25, 0.35, 0.20, 0.25 }, // 10 bright/complex
+		{ 1.00, 0.30, 0,    0.12, 0,    0,    0,    0,    0,    0    }, // 11 mellow (1 + soft 2,4)
+	};
+	for (int p = 1; p < PALETTE_COUNT; p++)
+	{
+		double norm = 0.0;
+		for (int h = 0; h < 10; h++) norm += std::abs(kHarm[p][h]);
+		if (norm < 1e-6) norm = 1.0;
+		for (int k = 0; k < PALETTE_LEN; k++)
+		{
+			double acc = 0.0;
+			for (int h = 0; h < 10; h++)
+				if (kHarm[p][h] != 0.0)
+					acc += kHarm[p][h] * std::sin(2.0 * 3.14159265358979323846 * (h + 1) * k / PALETTE_LEN);
+			int val = int(std::lround(16383.0 * acc / norm));
+			m_palette[p * PALETTE_LEN + k] = int16_t(std::clamp(val, -32768, 32767));
+		}
+	}
+}
+
+
+// Pick the palette timbre for a voice from the firmware's real per-instrument
+// register signature. MEASURED live: across Piano/Brass/Guitar/Strings/Organ the
+// HIGH bytes of regs[1] (+0x040), regs[3] (+0x0C0), regs[5] (+0x140) and regs[12]
+// (+0x500) form a stable per-instrument fingerprint (identical across notes and
+// across the two oscillator layers of one voice, distinct between instruments):
+//   Piano 70/74/6F/2C  Brass 10/5A/66/00  Guitar 30/5A/6F/2C
+//   Strings 00/7F/7F/7F  Organ 40/5A/66/7F
+// A voice whose signature is all-zero (uninitialised / boot-init voices) maps to
+// entry 0 (the real sine), preserving the previous behaviour for those. Hashing the
+// four bytes into PALETTE_COUNT keeps the same instrument on the same timbre and
+// (verified) puts all five measured instruments on DIFFERENT palette entries.
+int kn5000_tonegen_device::select_palette(const voice_t &v) const
+{
+	uint32_t s1 = (v.regs[1]  >> 8) & 0xFF;
+	uint32_t s3 = (v.regs[3]  >> 8) & 0xFF;
+	uint32_t s5 = (v.regs[5]  >> 8) & 0xFF;
+	uint32_t s12 = (v.regs[12] >> 8) & 0xFF;
+	if ((s1 | s3 | s5 | s12) == 0)
+		return 0; // degenerate/boot voice → real sine (old behaviour)
+	uint32_t h = s1 * 131u + s3 * 17u + s5 * 7u + s12;
+	return int(h % PALETTE_COUNT);
+}
+
+
+int16_t kn5000_tonegen_device::palette_sample(int pidx, uint32_t sample_pos) const
+{
+	if (pidx < 0 || pidx >= PALETTE_COUNT)
+		return 0;
+	return m_palette[pidx * PALETTE_LEN + (sample_pos % PALETTE_LEN)];
+}
+
+
 void kn5000_tonegen_device::resolve_waveform(int ch)
+{
+	voice_t &v = m_voice[ch];
+
+	// Timbre selection (see build_palette / select_palette above). The firmware's
+	// true wave number (+0x440/regs[9]) resolves to 0 for every instrument in the
+	// emulated firmware, and the real per-instrument samples are in the undumped
+	// IC304-306 ROMs, so we route every voice through the single-cycle timbre
+	// palette, choosing the entry from the instrument's register fingerprint. This
+	// makes distinct instruments spectrally distinct while keeping pitch exact.
+	// (If a future dump + firmware wave-number path ever writes a nonzero wave
+	// number, the real-ROM branch below can be re-enabled by clearing wave_palette.)
+	v.wave_palette = select_palette(v);
+	v.wave_length  = PALETTE_LEN;
+	v.wave_start   = 0;
+	return;
+}
+
+
+void kn5000_tonegen_device::resolve_waveform_rom(int ch)
 {
 	voice_t &v = m_voice[ch];
 
@@ -716,7 +864,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// window instead: a genuinely-missing (zero-filled) waveform stays 0
 			// throughout, while any real waveform has a nonzero sample within a few.
 			bool has_pcm_data = false;
-			if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			if (v.wave_palette >= 0 && v.wave_length > 0)
+			{
+				// Palette voices always carry (synthesized) PCM.
+				has_pcm_data = true;
+			}
+			else if (v.wave_length > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
 			{
 				uint32_t probe = std::min<uint32_t>(v.wave_length, 64);
 				for (uint32_t k = 0; k < probe; k++)
@@ -784,15 +937,23 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				}
 			}
 
-			uint32_t byte_pos = v.wave_start + sample_pos * 2;
-			int32_t s0 = read_waveform_sample(byte_pos);
-
-			// Linear interpolation with next sample
-			int32_t s1;
-			if (sample_pos + 1 < v.wave_length)
-				s1 = read_waveform_sample(byte_pos + 2);
+			int32_t s0, s1;
+			if (v.wave_palette >= 0)
+			{
+				// Synthesized single-cycle timbre (see build_palette).
+				s0 = palette_sample(v.wave_palette, sample_pos);
+				s1 = palette_sample(v.wave_palette, sample_pos + 1); // wraps within cycle
+			}
 			else
-				s1 = read_waveform_sample(v.wave_start); // wrap to loop start
+			{
+				uint32_t byte_pos = v.wave_start + sample_pos * 2;
+				s0 = read_waveform_sample(byte_pos);
+				// Linear interpolation with next sample
+				if (sample_pos + 1 < v.wave_length)
+					s1 = read_waveform_sample(byte_pos + 2);
+				else
+					s1 = read_waveform_sample(v.wave_start); // wrap to loop start
+			}
 
 			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
 
