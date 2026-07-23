@@ -1,0 +1,6 @@
+armed TAG=piano arm=8.00 mid=9.80 end=12.00
+BOOT D130 count=72
+IC303 wp armed
+mid snapshot @9.80
+---- PLAY WINDOW [75..74] ----
+DONE

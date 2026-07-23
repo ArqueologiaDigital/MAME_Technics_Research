@@ -1,0 +1,19 @@
+dbg=sol.debugger_manager*: 0x56534729c558 sub=tmp94c241(:subcpu) sub.debug=sol.device_debug*: 0x56534729ca48
+armed diag
+consolelog type=userdata
+consolelog len=74
+after printf len=75 last=CNT dwc=0 dic=0
+  D130 130000=0050
+  D130 130002=0000
+  D130 130000=0051
+  D130 130002=0000
+  D130 130000=0052
+  D130 130002=0000
+  D130 130000=0053
+  D130 130002=0000
+  D130 130000=0054
+  D130 130002=0000
+  D130 130000=0055
+  D130 130002=0000
+D130 line count=72
+DIAG DONE

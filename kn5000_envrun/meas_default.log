@@ -1,0 +1,10 @@
+armed. TAG=default key=KEY2 mask=0x001 arm=10.00 on=10.30 off=11.80 end=12.80
+BOOT D130 write count = 72
+IC303 watchpoint armed; play window begins
+!! no port
+KEY ON @10.318
+mid snapshot
+!! no port
+KEY OFF @11.807
+---- PLAY WINDOW (D130 + IC303 stream) : consolelog[75..74] ----
+DONE

@@ -1,0 +1,12 @@
+pcsample armed
+samples=495
+== SUBCPU pc buckets ==
+  FF0000 : 495
+== MAINCPU pc buckets ==
+  EF0000 : 166
+  F90000 : 1
+  FA0000 : 2
+  FB0000 : 211
+  FC0000 : 113
+  FF0000 : 2
+DONE

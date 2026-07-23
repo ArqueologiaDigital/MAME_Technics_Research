@@ -1,0 +1,12 @@
+armed TAG=piano prog=0 note=60 vel=100
+BOOT D130 count=72
+ringbuf pre: rd=0x000 wr=0x000 cnt=0
+IC303 wp armed
+inject 3 bytes at tail=0x000 (rd=0x000 cnt=0->3): 192,0,0
+inject 4 bytes at tail=0x003 (rd=0x000 cnt=3->7): 144,0,60,100
+NOTE ON @8.313
+mid snap; ringbuf cnt=7
+inject 4 bytes at tail=0x007 (rd=0x000 cnt=7->11): 144,0,60,0
+NOTE OFF @9.802
+---- PLAY WINDOW [75..74] ----
+DONE
