@@ -1,5 +1,40 @@
 # KN5000 vs KN7000 tone-generator DESIGN — a firmware-level comparison
 
+> ## ⚠ SUPERSEDED IN PART (2026-07-23) — see `notes/kn5000-envelope-engine.md`
+>
+> **This note's verdict "(a) INFERRED NO — the KN5000 has no per-note envelope" is
+> WRONG and is retracted.** A follow-up pass found the envelope engine the analysis
+> below missed. Felipe's objection ("the GUI sets envelope values, so it must be
+> applied") is correct.
+>
+> The KN5000 has a **per-note, multi-stage, multi-domain SOFTWARE envelope** running
+> in the SUB CPU, clocked by the audio timer tick — steppers **`LABEL_026E5B`
+> (amplitude)** / **`LABEL_026EC3`** in the periodic `Audio_Process_Init` pipeline
+> (`027A46`/`027AC4`), which call **`ToneGen_WriteSingleReg` (0x02D41B)** to rewrite
+> the IC303 level register (`0x100000/0x100002`) over the note's lifetime. Seeded
+> from patch bytes (0x832000 tone record) + velocity + keyscale. The GUI is a full
+> synth Sound-Edit section with **AMP + PITCH + FILTER envelope** pages
+> (`SEAMPENV/SEPITENV/SEFILENV`, MAIN CPU 0xF039CD…) — falsifying §3's "there is no
+> AMP/PITCH/FILTER ENVELOPE edit screen."
+>
+> **Why this note was wrong:** §2-§3 inspected only the NOTE-ON writer
+> (`ToneGen_WriteVoiceParams`) and the boot block; the envelope is not a chip
+> register block written at note-on, it is a **software loop in the periodic tick**
+> that was never traced (and the trace ran the wrong, wedged binary). The tables
+> `Voice_AttackDecay_Widths`/`Voice_EnvelopeRate_Lookup` this note names in passing
+> ARE the per-stage width/rate tables, seeded into 18 seven-stage state blocks at
+> 0x112D by `LABEL_021ECB`.
+>
+> **Corrected verdict:** (a) **YES** — a software EG, same conceptual shape as the
+> KN7000's (per-note, multi-stage, amp/pitch/filter, patch+velocity+keyscale driven),
+> at a different LAYER (KN7000 = chip hardware; KN5000 = sub-CPU software clocked by
+> the audio tick). (b) The envelope core IS shareable in concept after all. The
+> "sample-driven, no ADSR" reading below is the retracted error. **Read
+> `kn5000-envelope-engine.md` instead; the §4-§5 sample-playback/pitch/wave-addressing
+> comparisons below remain valid.**
+
+---
+
 Author: autonomous RE pass, 2026-07-23. Requested by Felipe to **re-open** the
 prior HLE-level verdict (`notes/kn5000-tonegen-sharing.md`) and test two theses at
 the *firmware* level:
