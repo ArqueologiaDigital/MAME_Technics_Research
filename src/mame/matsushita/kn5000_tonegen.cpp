@@ -624,24 +624,44 @@ void kn5000_tonegen_device::update_pitch(int ch)
 // pitch is identical to the prior single-cycle model and cannot regress. The sustain loop
 // length is an integer multiple of pitch_period, so looping does not perturb pitch.
 
-// Pick a real IC307 waveform index (0..197, page 0) from the firmware's per-instrument
-// register fingerprint. An all-zero fingerprint (boot-init / degenerate voices) maps to
-// index 0 (the real sine). This is a deterministic PLACEHOLDER distinctness mapping over
-// real IC307 waveforms — NOT a decode of the (undumped) real instrument->wave table; it
-// only guarantees that different instruments map to different real waveforms. Range 1..189
-// covers the page-0 indexed instrument waveforms and excludes index 0 (sine) plus the
-// multisample-duplicate / 3 MB-tail entries (190-197, which share offsets / point at the
-// un-indexed page tail).
+// Pick a real IC307 waveform index (0..197, page 0) from the firmware's REGISTER inputs.
+//
+// The per-voice waveform selection reaches the chip in register +0x040 (= regs[1]), decoded
+// from the disassembly + live capture (notes/kn5000-voice-pipeline.md):
+//   * high nibble (bits 12-15) = per-instrument BANK/class (MEASURED: Piano 0x7, Brass 0x1,
+//     Guitar 0x3, Strings 0x0);
+//   * low byte  (bits  0-7)    = multisample KEY-ZONE index (MEASURED live: steps 01->07->
+//     08->0A as Piano is played up C2->C4->E4->C5 — i.e. it changes the sampled waveform per
+//     key range, which is what MULTISAMPLING is).
+// The timbre triple +0x0C0/+0x140/+0x500 (regs[3]/[5]/[12]) is an instrument-constant
+// disambiguator for banks that would otherwise overlap.
+//
+// FAITHFUL vs PROVISIONAL: using (bank, zone) from +0x040 is the REAL register-only encoding
+// the chip receives (HLE chip-boundary discipline — we read the chip's own inputs, never
+// sub-CPU RAM), and it makes multisampling behave correctly (the waveform now varies with the
+// played key-zone, and per instrument). What remains PROVISIONAL is the mapping from
+// (bank, zone) to a specific IC307 entry: the custom LSI's internal (bank,zone)->wave-address
+// logic is undocumented and the real per-instrument samples are in the undumped IC304-306, so
+// the group ASSIGNMENT below is a labelled placeholder over the real IC307 waveforms (a voice
+// still always plays real KN5000 PCM). Range 1..189 excludes index 0 (sine) and the
+// multisample-duplicate / 3 MB-tail entries 190-197.
 int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 {
-	uint32_t s1  = (v.regs[1]  >> 8) & 0xFF;
-	uint32_t s3  = (v.regs[3]  >> 8) & 0xFF;
-	uint32_t s5  = (v.regs[5]  >> 8) & 0xFF;
-	uint32_t s12 = (v.regs[12] >> 8) & 0xFF;
-	if ((s1 | s3 | s5 | s12) == 0)
-		return 0; // degenerate / boot voice -> real IC307 sine (old behaviour)
-	uint32_t h = s1 * 131u + s3 * 17u + s5 * 7u + s12;
-	return 1 + int(h % 189u);
+	int bank = (v.regs[1] >> 12) & 0x0F;   // +0x040 high nibble: per-instrument
+	int zone =  v.regs[1]        & 0xFF;    // +0x040 low byte: multisample key-zone
+	uint32_t timbre = ((v.regs[3]  >> 8) & 0xFF) * 7u
+	                + ((v.regs[5]  >> 8) & 0xFF) * 3u
+	                + ((v.regs[12] >> 8) & 0xFF);
+	if ((uint32_t(v.regs[1]) | timbre) == 0)
+		return 0; // degenerate / boot voice -> real IC307 sine
+
+	// Per-instrument multisample-group base (bank+timbre), then the key-zone steps WITHIN the
+	// group so playing up the keyboard walks adjacent IC307 waveforms (multisample behaviour).
+	// The base is the provisional part; the zone-stepping is the faithful register-driven part.
+	uint32_t base = 1u + ((uint32_t(bank) * 41u + timbre) % 160u);
+	uint32_t idx  = base + (uint32_t(zone) % 24u);
+	if (idx > 189u) idx = 189u;
+	return int(idx);
 }
 
 
