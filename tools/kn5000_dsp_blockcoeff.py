@@ -55,145 +55,36 @@ import kn5000_dsp_namedcoeff as N      # noqa: E402
 
 
 # --------------------------------------------------------------------------
-#  Block layout, decoded from the sub-CPU writers (see module docstring).
-#  span = consecutive C-RAM cells written from the T1 base address.
-#  Only +0 (C-RAM, writer 0387E6/0388B3) opcodes can name a class-A multiply.
+#  Block layout + join were FOLDED INTO kn5000_dsp_namedcoeff.py (2026-07-23):
+#  a single call to N.host_coeff_map / N.annotate_image now returns the full
+#  391 individual + 109 block = 500 union.  This module keeps its REPORT sections
+#  (blocks / biqctl / ensemble / coverage / delta) and simply REUSES the unified
+#  definitions so there is one source of truth.
 # --------------------------------------------------------------------------
-BLOCK_SPAN = {
-    0x70: 6,   # biquad designer (b1,b0,b2,-a1,-a2,makeup)  -- already in namedcoeff
-    0x76: 3,   # fixed damping/tone filter                  -- already in namedcoeff
-    0x73: 5,   # computed bilinear 5-coeff section (NEW)
-    0x71: 5,   # computed 5-coeff section, 3 filter types (NEW; declared by no effect)
-    0x77: 1,   # per-voice depth, single computed cell (NEW)
-}
+BLOCK_SPAN = N.BLOCK_SPAN            # {0x73:5, 0x71:5, 0x77:1}
+BLOCK_ROLE = N.BLOCK_ROLE
 # opcodes whose 0387E6 writer lands in C-RAM (name class-A multiplies)
-CRAM_OPCODES = N.coeff_opcodes() | {0x73, 0x71, 0x77}
+CRAM_OPCODES = N.coeff_opcodes() | set(N.BLOCK_OPCODES)
 
-BLOCK_ROLE = {
-    0x73: ("filter",  "INFERRED", "computed 5-coeff bilinear section (all-pass/comb of the delay stage)"),
-    0x71: ("filter",  "INFERRED", "computed 5-coeff section, 3 filter types (unused by any effect)"),
-    0x77: ("depth",   "INFERRED", "ENSEMBLE per-voice modulation depth (192.A.*.41A)"),
-}
+t2_confirmed = N.t2_confirmed        # T2-confirmed (opcode, operand) set per algo
+_is_lfo_word = N._is_lfo_word        # the LFO over-reach revocation predicate
+role_of = N._role_lookup             # (role, evidence) for an opcode
 
 
-# --------------------------------------------------------------------------
-#  T2-confirmed (opcode, operand) set for one algo.  A pair is confirmed if it
-#  appears in EVERY surviving parse of its record (ambiguous parses intersected).
-#  This is the chorus-note methodology -- the T1 map alone over-counts.
-# --------------------------------------------------------------------------
-def t2_confirmed(rom, algo):
-    t1p = rom.u32le(P.ALGO_T1_ARRAY + 4 * algo)
-    t2p = rom.u32le(P.ALGO_T2_ARRAY + 4 * algo)
-    if not t2p or not t1p or t1p == P.NULL_T1:
-        return set()
-    addrmap = {op: ent for (_a, op, ent) in P.parse_t1(rom, t1p)}
-    confirmed = set()
-    for (_a, _ln, body) in P.split_records(rom, t2p):
-        sols = P.decode_record(rom, body, addrmap)
-        if not sols:
-            continue
-        # the intended decode is the parse with the MOST instructions (a record
-        # is a packed list; the maximal parse consumes every instruction -- this
-        # is what params.py section 3 reports and what the chorus note used to
-        # find ENSEMBLE's 6 voices).  decode_record caps at 4 solutions, so a
-        # blind intersection under-counts long records; the max-length parse does
-        # not.  Pairs still must resolve to a real T1 operand.
-        best = max(sols, key=len)
-        for (op, oper, _im) in best:
-            if op in addrmap and oper < len(addrmap[op]):
-                confirmed.add((op, oper))
-    return confirmed
-
-
-# --------------------------------------------------------------------------
-#  Extended C-RAM host map: namedcoeff's map (single +0 writers, biquad/damping
-#  expanded) PLUS the block opcodes 0x73/0x71/0x77 expanded from T2-confirmed
-#  operands.  Additive -- never overrides an existing namedcoeff cell.
-# --------------------------------------------------------------------------
 def host_coeff_map_ext(rom, algo):
-    amap = dict(N.host_coeff_map(rom, algo))      # existing 391-name base
-    t1p = rom.u32le(P.ALGO_T1_ARRAY + 4 * algo)
-    if not t1p or t1p == P.NULL_T1:
-        return amap, {}
-    t1 = {op: ent for (_a, op, ent) in P.parse_t1(rom, t1p)}
-    confirmed = t2_confirmed(rom, algo)
-    added = {}
-    for op in (0x73, 0x71, 0x77):
-        if op not in t1:
-            continue
-        span = BLOCK_SPAN[op]
-        for (bop, oper) in sorted(confirmed):
-            if bop != op or oper >= len(t1[op]):
-                continue
-            base = t1[op][oper]
-            if base == 0 and oper > 0:            # padding guard (never mint bogus 0x00)
-                continue
-            for c in range(span):
-                cell = (base + c) & 0xFF
-                if cell not in amap:               # never override namedcoeff
-                    amap[cell] = (op, oper, c)
-                    added[cell] = (op, oper, c)
-    return amap, added
+    """Compat shim: the unified N.host_coeff_map already includes the block cells.
+    Returns (full_map, block_added) where block_added is the +109 delta over the
+    individual-only names, for callers that still want the split."""
+    full = N.host_coeff_map(rom, algo)
+    added = {cell: v for cell, v in full.items() if v[0] in N.BLOCK_OPCODES}
+    return full, added
 
 
-def role_of(op):
-    if op in BLOCK_ROLE:
-        return BLOCK_ROLE[op][0], BLOCK_ROLE[op][1]
-    r = N.OPCODE_ROLE.get(op)
-    return (r[0], r[1]) if r else ("coeff", "INFERRED")
-
-
-# PROVEN LFO accumulator/wrap words (chorus.md sect. 2.2, MEASURED 29/29):
-#   092.A.**.200 = phase increment (LFO rate coefficient)
-#   094.A.**.200 = wrap/scale, the fixed constant 0x7FFFFF (= 1.0)
-# These read BAKED-IN LFO constants, not host block coefficients.  A span-5 block
-# that reaches them (e.g. PHASER's op0x73 base 0x0A extends over the LFO cells at
-# 0C/0D) is OVER-REACHING; the MEASURED LFO decode wins and the block claim yields.
-def _is_lfo_word(w):
-    hi, cl, _a, lo = K.fl(w)
-    return cl == 0xA and lo == 0x200 and hi in (0x092, 0x094)
-
-
-def annotate_ext(rom, algo, words, count_revoked=None):
-    """Like namedcoeff.annotate_image but with the extended block map."""
+def annotate_ext(rom, algo, words):
+    """The unified annotation (individual + block, LFO over-reach revoked)."""
     base = N.base_of(algo)
-    reverb = base == N.REVERB_BASE
-    cmap, _added = host_coeff_map_ext(rom, algo)
-    ca = N.cursor_addrs(words)
-    ann = [None] * len(words)
-    for i, w in enumerate(words):
-        if ca[i] is None:
-            continue
-        haddr = (base + ca[i]) & 0xFF
-        if reverb and haddr in N.REVERB_SLOTS:
-            role, name = N.REVERB_SLOTS[haddr]
-            ann[i] = (ca[i], haddr, 0x100, role, "PROVEN", name)
-            continue
-        hit = cmap.get(haddr)
-        if hit is None:
-            ann[i] = (ca[i], haddr, None, None, None, None)
-            continue
-        op, oi, cell = hit
-        # conflict guard: a NEW block opcode must not overwrite the MEASURED LFO
-        # decode.  Report as an over-reach miss, leave the word unnamed.
-        if op in (0x73, 0x71, 0x77) and _is_lfo_word(w):
-            if count_revoked is not None:
-                count_revoked[0] += 1
-            ann[i] = (ca[i], haddr, None, None, None, None)
-            continue
-        role, ev = role_of(op)
-        if op == 0x70:
-            name = "biquad " + N.BIQUAD_CELLS[cell]
-        elif op == 0x73:
-            name = "filter section cell %d" % cell
-        elif op == 0x77:
-            name = "ENSEMBLE voice depth"
-        elif op == 0x76:
-            name = "damping filter tap %d" % cell
-        else:
-            name = "op0x%02X[%d]" % (op, oi)
-        ann[i] = (ca[i], haddr, op, role, ev, name)
-    return ann
+    return N.annotate_image(words, base, N.host_coeff_map(rom, algo),
+                            base == N.REVERB_BASE)
 
 
 # ==========================================================================
@@ -302,7 +193,10 @@ def sec_delta(progs, imgs, rom, mrom):
     for a in sorted(imgs):
         words = progs[a]
         base = N.base_of(a)
-        old = N.annotate_image(words, base, N.host_coeff_map(rom, a), base == N.REVERB_BASE)
+        # the individual-only baseline = the unified map with the block cells removed
+        full = N.host_coeff_map(rom, a)
+        indiv = {c: v for c, v in full.items() if v[0] not in N.BLOCK_OPCODES}
+        old = N.annotate_image(words, base, indiv, base == N.REVERB_BASE)
         new = annotate_ext(rom, a, words)
         d = 0
         for xo, xn in zip(old, new):

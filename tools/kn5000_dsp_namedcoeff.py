@@ -19,6 +19,16 @@ THE JOIN (only possible since the disassembler emits ABSOLUTE C-RAM addresses):
   This names the operand of the ~822 class-A multiplies, and lets non-multiply
   neighbours inherit meaning by the role of the product they consume.
 
+  ★ UNIFIED SOURCE (2026-07-23): the BLOCK-UPLOAD coefficient opcodes (op0x73 =
+  5-cell bilinear filter section, op0x77 = ENSEMBLE per-voice depth), formerly a
+  separate pass in kn5000_dsp_blockcoeff.py, are FOLDED IN here so ONE call to
+  host_coeff_map / annotate_image returns the full union: 391 individually-
+  addressed + 109 block = 500 / 822 named (60.8 %), zero overlap.  The block span
+  is T2-confirmed-operand-driven (over-counting guarded), the T1 0x00-padding
+  hazard stays guarded, and the op0x73 over-reach onto the MEASURED LFO words
+  (092.A/094.A) is REVOKED, not scored.  See notes/kn5000-dsp-blockcoeff.md.
+  kn5000_dsp_blockcoeff.py now reuses these definitions (its report sections stay).
+
 Nothing is edited here; this imports the existing corpus tools.  Reproduce:
 
     python3 tools/kn5000_dsp_extract.py \\
@@ -106,6 +116,73 @@ def coeff_opcodes():
     return {op for op, (_n, _w, desc) in P.OPCODE_EVAL.items() if desc == '+0'}
 
 
+# --------------------------------------------------------------------------
+#  BLOCK-UPLOAD coefficient opcodes (folded in from kn5000_dsp_blockcoeff.py,
+#  notes/kn5000-dsp-blockcoeff.md).  These opcodes carry desc '-' in P.OPCODE_EVAL
+#  (EXCLUDED from coeff_opcodes above) because they write a WIDE block of
+#  consecutive C-RAM cells from one T1 base via the auto-incrementing writer
+#  0387E6 + 0388B3*n, not a single +0 cell.  Decoded from the sub-CPU v1.42
+#  writers; span = number of consecutive C-RAM cells written from the T1 base.
+#  Only 0x73/0x71/0x77 write C-RAM and can name a class-A multiply (0x75/0x6B/0x6C
+#  write the D-RAM/state space and are deliberately absent here).  This is what
+#  lifts the join from 391 individually-addressed names to the full 500.
+BLOCK_SPAN = {
+    0x73: 5,   # computed bilinear 5-coeff section (op0x73, 14 delay/all-pass effects)
+    0x71: 5,   # computed 5-coeff section, 3 filter types (declared by NO effect)
+    0x77: 1,   # ENSEMBLE per-voice modulation depth, single computed cell
+}
+BLOCK_OPCODES = (0x73, 0x71, 0x77)
+
+#            role,      evidence,   note
+BLOCK_ROLE = {
+    0x73: ("filter",  "INFERRED", "computed 5-coeff bilinear section (all-pass/comb of the delay stage)"),
+    0x71: ("filter",  "INFERRED", "computed 5-coeff section, 3 filter types (unused by any effect)"),
+    0x77: ("depth",   "INFERRED", "ENSEMBLE per-voice modulation depth (192.A.*.41A)"),
+}
+
+
+def _role_lookup(op):
+    """(role, evidence) for an opcode, block opcodes first, then OPCODE_ROLE."""
+    if op in BLOCK_ROLE:
+        return BLOCK_ROLE[op][0], BLOCK_ROLE[op][1]
+    r = OPCODE_ROLE.get(op)
+    return (r[0], r[1]) if r else ("coeff", "INFERRED")
+
+
+def _is_lfo_word(w):
+    """PROVEN LFO accumulator/wrap words (chorus.md sect. 2.2, MEASURED 29/29):
+      092.A.**.200 = phase increment (LFO rate coefficient)
+      094.A.**.200 = wrap/scale, the fixed constant 0x7FFFFF (= 1.0)
+    A span-5 block that reaches them (e.g. PHASER's op0x73 base 0x0A extends over
+    the LFO cells at 0C/0D) is OVER-REACHING; the MEASURED LFO decode wins and the
+    block claim yields.  This is the over-reach REVOCATION guard."""
+    hi, cl, _a, lo = K.fl(w)
+    return cl == 0xA and lo == 0x200 and hi in (0x092, 0x094)
+
+
+def t2_confirmed(rom, algo):
+    """T2-confirmed (opcode, operand) set for one algo, so block expansion is
+    driven by REAL operands only -- the T1 map over-counts (op0x73 lists base AND
+    base+1 for each section; expanding both would falsely claim a neighbour's cell).
+    A pair is confirmed if it appears in the maximal-length parse of its record
+    (the chorus-note methodology that found ENSEMBLE's 6 voices)."""
+    t1p = rom.u32le(P.ALGO_T1_ARRAY + 4 * algo)
+    t2p = rom.u32le(P.ALGO_T2_ARRAY + 4 * algo)
+    if not t2p or not t1p or t1p == P.NULL_T1:
+        return set()
+    addrmap = {op: ent for (_a, op, ent) in P.parse_t1(rom, t1p)}
+    confirmed = set()
+    for (_a, _ln, body) in P.split_records(rom, t2p):
+        sols = P.decode_record(rom, body, addrmap)
+        if not sols:
+            continue
+        best = max(sols, key=len)     # the maximal parse consumes every instruction
+        for (op, oper, _im) in best:
+            if op in addrmap and oper < len(addrmap[op]):
+                confirmed.add((op, oper))
+    return confirmed
+
+
 # PROVEN reverb bank slot -> (role, name) overlay, straight from the fully-decoded
 # reverb (cursor-general.md sect. 3.2 / 3.3).  base 0x90.  Every class-A word of the
 # 133-word reverb image lands on one of these, so the reverb is named 33/33.
@@ -147,8 +224,11 @@ def host_coeff_map(rom, algo):
     if not t1p or t1p == P.NULL_T1:
         return {}
     cops = coeff_opcodes()
+    t1_entries = list(P.parse_t1(rom, t1p))
     amap = {}
-    for _ad, op, ent in P.parse_t1(rom, t1p):
+    # (1) INDIVIDUALLY-ADDRESSED +0 writers (biquad op0x70 = 6 cells, damping
+    #     op0x76 = 3 cells, everything else 1 cell) -- the base 391 names.
+    for _ad, op, ent in t1_entries:
         if op not in cops:
             continue
         span = 6 if op == 0x70 else (3 if op == 0x76 else 1)
@@ -160,6 +240,24 @@ def host_coeff_map(rom, algo):
                 continue
             for c in range(span):
                 amap.setdefault((e + c) & 0xFF, (op, oi, c))  # first writer wins
+    # (2) BLOCK-UPLOAD writers (op0x73/0x71/0x77) -- the +109 that complete the 500.
+    #     Additive: the individual map above wins any shared cell.  Driven by
+    #     T2-CONFIRMED operands only (the T1 map over-counts), with the SAME
+    #     0x00-padding guard (base==0 && operand>0 is padding, never a real cell).
+    t1 = {op: ent for (_a, op, ent) in t1_entries}
+    confirmed = t2_confirmed(rom, algo)
+    for op in BLOCK_OPCODES:
+        if op not in t1:
+            continue
+        span = BLOCK_SPAN[op]
+        for (bop, oper) in sorted(confirmed):
+            if bop != op or oper >= len(t1[op]):
+                continue
+            base = t1[op][oper]
+            if base == 0 and oper > 0:                 # padding guard
+                continue
+            for c in range(span):
+                amap.setdefault((base + c) & 0xFF, (op, oper, c))  # never override (1)
     return amap
 
 
@@ -225,9 +323,19 @@ def annotate_image(words, base, cmap, reverb=False):
             ann[i] = (ca[i], haddr, None, None, None, None)
             continue
         op, oi, cell = hit
-        role, ev, _note = OPCODE_ROLE.get(op, ("coeff", "INFERRED", ""))
+        # OVER-REACH REVOCATION: a NEW block opcode must not override the MEASURED
+        # LFO decode.  Leave the word unnamed (the block span is context-clipped
+        # where an LFO constant sits inside its nominal 5-cell footprint).
+        if op in BLOCK_OPCODES and _is_lfo_word(w):
+            ann[i] = (ca[i], haddr, None, None, None, None)
+            continue
+        role, ev = _role_lookup(op)
         if op == 0x70:
             name = "biquad " + BIQUAD_CELLS[cell]
+        elif op == 0x73:
+            name = "filter section cell %d" % cell
+        elif op == 0x77:
+            name = "ENSEMBLE voice depth"
         elif op == 0x76:
             name = "damping filter tap %d" % cell
         else:
@@ -300,7 +408,7 @@ def sec_coverage(progs, imgs, rom, mrom):
         per_effect.append((a, P.effect_name(mrom, a) if mrom else str(a),
                            ca_here, nm_here))
     print(f"  class-A words in corpus (38 images) : {total_ca}")
-    print(f"  NAMED (land on a host +0 coeff addr) : {named}   "
+    print(f"  NAMED (host +0 coeff OR block cell)  : {named}   "
           f"({100.0*named/total_ca:.1f} %)")
     print(f"  unnamed (no host coeff at that cell) : {unnamed}\n")
     print("  named multiplies by ROLE:")
