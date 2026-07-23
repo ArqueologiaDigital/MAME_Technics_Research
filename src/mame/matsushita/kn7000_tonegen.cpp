@@ -62,10 +62,12 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			else                        m_mode[v] = 0;             // unknown record: safest = managed
 			const double nowt = machine().time().as_double();
 			m_srckey[v] = (m_ctx_time >= 0.0 && (nowt - m_ctx_time) < 0.060) ? m_ctx_key : 0xFF;
-			// Sample select: (bank,zone) from the aux word -> donor wave (sine if unmapped).
+			// Sample select: (bank,zone) from the aux word -> donor wave, else the
+			// fabricated default sine (m_wdefault). Never -1 -> the voice always plays
+			// PCM through the single sample-playback datapath (no sin() oscillator).
 			{
 				const int bank = (m_aux[v] >> 12) & 3, zone = m_aux[v] & 0xFF;
-				m_wsel[v] = -1;
+				m_wsel[v] = int16_t(m_wdefault);
 				for (size_t i = 0; i < m_wentries.size(); i++)
 					if (m_wentries[i].bank == bank && zone >= m_wentries[i].zlo && zone <= m_wentries[i].zhi)
 						{ m_wsel[v] = int16_t(i); break; }

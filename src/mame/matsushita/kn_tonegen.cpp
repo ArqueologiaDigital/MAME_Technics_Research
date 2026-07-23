@@ -83,11 +83,35 @@ void kn_tonegen_base_device::device_start()
 					&& w.lstart + w.llen <= w.len && w.llen)
 				{
 					w.pcm = reinterpret_cast<const int16_t *>(p + off);
+					// Reserved wildcard bank 0xFF = the fabricated DEFAULT sine (see header):
+					// it never zone-matches a real voice, so unmapped voices adopt it.
+					if (w.bank == 0xFF) m_wdefault = int(m_wentries.size());
 					m_wentries.push_back(w);
 				}
 			}
 			osd_printf_info("kn7000 tonegen: synthetic wave pack loaded (%d zone maps)\n", int(m_wentries.size()));
 		}
+	}
+	// If the optional pack ROM supplied no default sine (or is absent entirely), synthesize
+	// the identical single-cycle sine ourselves so EVERY voice still plays PCM, never a
+	// sin() oscillator. This keeps the render path a single, faithful sample-playback
+	// datapath regardless of whether the fabricated ROM is present. Faithful mechanism,
+	// fabricated data. (441 samples / one cycle -> 44100/441 = 100.000 Hz root, matching
+	// tools/make_wave_pack.py so the audible tone is the same whichever source provides it.)
+	if (m_wdefault < 0)
+	{
+		constexpr int SINE_LEN = 441;
+		constexpr double TWO_PI = 6.28318530717958647692;
+		m_sine_pcm.resize(SINE_LEN);
+		for (int i = 0; i < SINE_LEN; i++)
+			m_sine_pcm[i] = int16_t(std::lround(32767.0 * sin(TWO_PI * i / SINE_LEN)));
+		wentry w;
+		w.bank = 0xFF; w.zlo = 0; w.zhi = 0;
+		w.pcm = m_sine_pcm.data();
+		w.len = SINE_LEN; w.lstart = 0; w.llen = SINE_LEN;
+		w.root_hz = 44100.0 / SINE_LEN;   // 100.000 Hz
+		m_wdefault = int(m_wentries.size());
+		m_wentries.push_back(w);
 	}
 	save_item(NAME(m_phase));
 	save_item(NAME(m_freq));
@@ -134,8 +158,6 @@ void kn_tonegen_base_device::device_start()
 	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
 void kn_tonegen_base_device::sound_stream_update(sound_stream &stream)
 {
-	constexpr double FS = 44100.0;
-	constexpr double TWO_PI = 6.28318530717958647692;
 	for (int s = 0; s < stream.samples(); s++)
 	{
 		double acc = 0.0;
@@ -161,27 +183,45 @@ void kn_tonegen_base_device::sound_stream_update(sound_stream &stream)
 				break;
 			}
 			if (m_env[v] <= 0.0) continue;
-			if (m_wsel[v] >= 0)
+			if (m_wsel[v] < 0) continue;   // no wave selected (unkeyed voice) -> silent
+			// SINGLE, FAITHFUL DATAPATH: every voice reads PCM from the wave pack, exactly
+			// as the real chip reads its wave ROM -- donor zones where a KN5000 sample was
+			// mapped, or the fabricated default sine (m_wdefault) everywhere else. There is
+			// no sin() oscillator; the hardware has none. Linear interpolation, tail loop
+			// (seam crossfaded at build time for donors; single cycle for the sine), stepped
+			// by musical pitch / root. Faithful mechanism -- the DATA is placeholder, the
+			// PLAYBACK PATH is real.
+			const wentry &we = m_wentries[m_wsel[v]];
+			double pos = m_wpos[v];
+			// SANITISE the read position before indexing the PCM. A model whose
+			// note->pitch resolve is not yet reversed (e.g. the KN6000) can hand us a
+			// non-finite or out-of-range frequency; an unguarded uint32_t(pos) on inf/NaN
+			// or a huge pos would index the sample array out of bounds and crash the
+			// emulator. Keep pos finite and within the sample before use.
+			if (!std::isfinite(pos) || pos < 0.0 || pos >= double(we.len))
+				pos = double(we.lstart);
+			const uint32_t i0 = uint32_t(pos);
+			const double fr = pos - double(i0);
+			const uint32_t i1 = (i0 + 1 < we.len) ? i0 + 1 : we.lstart;
+			const double smp = double(we.pcm[i0]) * (1.0 - fr) + double(we.pcm[i1]) * fr;
+			acc += (smp / 32768.0) * m_env[v] * m_level[v];
+			// Advance by musical pitch / root, then wrap into the tail loop. GUARD both:
+			// a model whose note->pitch resolve is not yet reversed (e.g. the KN6000) can
+			// hand us a non-finite, negative, or absurdly large frequency. The step is
+			// clamped finite/non-negative, and the loop wrap is done with an O(1) modulo
+			// (NOT a subtract-loop): a huge finite step through a subtract-loop would
+			// iterate billions of times and livelock the single-threaded emulator.
+			double step = m_freq[v] / we.root_hz;
+			if (!std::isfinite(step) || step < 0.0) step = 0.0;
+			pos += step;
+			const double end = double(we.lstart + we.llen);
+			if (pos >= end)
 			{
-				// Donor-sample playback (synthetic wave pack): linear interpolation, tail
-				// loop (seam crossfaded at build time), stepped by musical pitch / root.
-				const wentry &we = m_wentries[m_wsel[v]];
-				double pos = m_wpos[v];
-				const uint32_t i0 = uint32_t(pos);
-				const double fr = pos - double(i0);
-				const uint32_t i1 = (i0 + 1 < we.len) ? i0 + 1 : we.lstart;
-				const double smp = double(we.pcm[i0]) * (1.0 - fr) + double(we.pcm[i1]) * fr;
-				acc += (smp / 32768.0) * m_env[v] * m_level[v];
-				pos += m_freq[v] / we.root_hz;
-				while (pos >= double(we.lstart + we.llen)) pos -= double(we.llen);
-				m_wpos[v] = pos;
+				double rel = fmod(pos - double(we.lstart), double(we.llen));
+				if (!std::isfinite(rel) || rel < 0.0) rel = 0.0;
+				pos = double(we.lstart) + rel;
 			}
-			else
-			{
-				acc += sin(m_phase[v]) * m_env[v] * m_level[v];
-				m_phase[v] += TWO_PI * m_freq[v] / FS;
-				if (m_phase[v] >= TWO_PI) m_phase[v] -= TWO_PI;
-			}
+			m_wpos[v] = pos;
 		}
 		float smp = std::clamp(float(acc * 0.11), -1.0f, 1.0f);  // headroom for polyphony
 		stream.put(0, s, smp);

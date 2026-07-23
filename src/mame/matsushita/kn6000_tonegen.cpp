@@ -68,7 +68,7 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			m_mode[v]   = 0;
 			(void)rec_type;
 			m_srckey[v] = 0xFF;
-			m_wsel[v]   = -1;                          // wave ROMs undumped -> sine
+			m_wsel[v]   = int16_t(m_wdefault);         // wave ROMs undumped -> fabricated default sine PCM
 			m_wpos[v]   = 0.0;
 			m_phase[v]  = 0.0;                         // clean attack transient
 

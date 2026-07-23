@@ -2148,7 +2148,7 @@ ROM_START(kn7000)
 	// clearly labeled NOT-A-DUMP (embedded provenance block). When absent the tone
 	// generator falls back to the sine placeholder. Rebuild + update hashes with the tool.
 	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
-	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(fcaf76ad) SHA1(c4268b2b385dd1a6fe80bd7eeb662aea55da7caf))
+	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(bc94e4ba) SHA1(66543485ac7ba53126a765168555b525b38d87b2))
 
 	// SYNTHETIC "Technics Rhythms" style-name resource (optional) -- built by
 	// tools/gen_technics_rhythms.py, NOT a dump (hence BAD_DUMP). The real ~4.1MB

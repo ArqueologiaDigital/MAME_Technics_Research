@@ -163,7 +163,16 @@ protected:
 	// runtime sample select -- aux word bank (bits13:12) + zone (bits7:0) -- to donor PCM.
 	struct wentry { uint8_t bank, zlo, zhi; const int16_t *pcm; uint32_t len, lstart, llen; double root_hz; };
 	std::vector<wentry> m_wentries;
-	int16_t  m_wsel[128];            // wave-pack entry per voice (-1 = sine fallback)
+	// FABRICATED DEFAULT SINE (Felipe Sanches' faithful-MECHANISM principle): the wave
+	// ROMs are undumped, so a voice that maps to no donor zone plays a fabricated sine
+	// PCM sample through the SAME sample-playback datapath the real chip uses -- there is
+	// NO sin() oscillator, exactly as on hardware. m_wdefault indexes that pack entry
+	// (pack bank 0xFF); if the optional pack ROM is absent we synthesize the identical
+	// sine into m_sine_pcm at start so the datapath is still pure PCM. So m_wsel is never
+	// left -1 for a keyed voice -- every voice plays PCM. Faithful mechanism, fabricated data.
+	std::vector<int16_t> m_sine_pcm;   // owned buffer for the synthesized fallback sine
+	int      m_wdefault = -1;          // pack index of the default sine (-1 = no pack at all)
+	int16_t  m_wsel[128];            // wave-pack entry per voice (-1 = none/silent; else PCM)
 	uint16_t m_busreg[128][16] = { };// group-0x20 output-bus/effect-send register file
 	std::atomic<float> m_gain_direct{ 0.0f };  // DAC crossfade: TG direct (reverb OFF side)
 	std::atomic<float> m_gain_return{ 1.0f };  // DAC crossfade: DSP return (reverb ON side)

@@ -23,11 +23,38 @@ Pack layout (little-endian):
   driver can wrap with a plain position jump.
 File padded to exactly 16 MiB (the driver ROM region size).
 """
-import json, struct, sys, wave, zlib, hashlib, argparse
+import json, struct, sys, wave, zlib, hashlib, argparse, math
 from pathlib import Path
 
 PACK_SIZE = 0x1000000
 MAGIC = b"KN7WVSY2"
+
+# --- FABRICATED DEFAULT SINE (faithful MECHANISM, not faithful data) ----------
+# Felipe Sanches' faithful-mechanism principle: the KN7000/KN6000/KN6500 wave
+# ROMs are undumped, so voices whose runtime sample-select maps to no donor zone
+# used to fall back to a computed sin() oscillator in the render loop. Real
+# hardware has NO sine oscillator -- every voice reads PCM from wave ROM. So we
+# fabricate the fallback timbre as an honest PCM sample and play it through the
+# SAME sample-playback datapath (start/len/loop/interp) as the donor zones. The
+# audible result is unchanged (a clean sine at the same pitch/level); only the
+# MECHANISM becomes faithful. This entry uses the reserved wildcard bank 0xFF so
+# it never zone-matches a real voice; the driver adopts it as the default that
+# any otherwise-unmapped voice maps to (so the per-voice wave-select is NEVER -1).
+SINE_LEN = 441                     # one cycle; 44100/441 = 100.000 Hz root, exact
+SINE_ROOT_HZ = 44100.0 / SINE_LEN  # = 100.000 Hz
+
+def build_sine_entry(pcm_base, pool):
+    """One single-cycle, whole-loop sine at full scale. Returns the 32-byte entry
+    record and appends its s16le PCM to `pool` (mutated in place)."""
+    smp = [max(-32768, min(32767, int(round(32767.0 * math.sin(2.0 * math.pi * i / SINE_LEN)))))
+           for i in range(SINE_LEN)]
+    off = pcm_base + len(pool)
+    pool += struct.pack("<%dh" % SINE_LEN, *smp)
+    ent = struct.pack("<BBBBIIIII8s",
+        0xFF, 0x00, 0x00, 1,                 # bank 0xFF = DEFAULT wildcard (never zone-matches)
+        off, SINE_LEN, 0, SINE_LEN,          # whole single cycle loops seamlessly
+        int(round(SINE_ROOT_HZ * 1000.0)), b"SINE\0\0\0\0")
+    return ent
 
 def load_wav(path):
     w = wave.open(str(path), "rb")
@@ -78,7 +105,10 @@ def main():
 
     spec = json.load(open(args.map))
     entries, pool = [], bytearray()
-    pcm_base = 0x110 + 32 * len(spec["entries"])
+    # +1 entry for the fabricated default sine (built first, index 0).
+    pcm_base = 0x110 + 32 * (len(spec["entries"]) + 1)
+    entries.append(build_sine_entry(pcm_base, pool))
+    print(f"  DEFAULT     SINE fallback (fabricated) {SINE_LEN} smp root {SINE_ROOT_HZ:.1f} Hz loop 0+{SINE_LEN}")
     for e in spec["entries"]:
         w = wrec[e["wave"]]
         smp = load_wav(waves_dir / "ic307" / Path(w["wav"]).name)
@@ -116,7 +146,8 @@ def main():
 
     prov = ("SYNTHETIC KN7000 WAVE PLACEHOLDER -- NOT A DUMP. Donor PCM from the genuine "
             "KN5000 IC307 waveform ROM (CRC32 20ff4629); mapping per tools/wave_pack_map.json. "
-            "Built by tools/make_wave_pack.py.").encode()[:255]
+            "Entry 0 (bank 0xFF) is a FABRICATED sine placeholder for unmapped voices -- "
+            "faithful sample-playback mechanism, fabricated data. Built by tools/make_wave_pack.py.").encode()[:255]
     pack = bytearray()
     pack += MAGIC
     pack += struct.pack("<II", len(entries), 0)
