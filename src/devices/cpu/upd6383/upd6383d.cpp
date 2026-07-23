@@ -70,6 +70,22 @@
         word at all and they still need gains, so bit 23 cannot be gating the
         multiplier.
 
+    ABSOLUTE C-RAM COEFFICIENT ADDRESSES (MEASURED, disassemble() below):
+        Every CLASS-A word (class4 == 0xA) reads one coefficient from the on-chip
+        COEFFICIENT RAM (C-RAM) through the implicit cursor.  The cursor's BASE is
+        0x00 -- MEASURED across all 16 swept effects in the captured uC-IF stream,
+        which frame every coefficient upload identically with `801.0.00.821'
+        (notes/kn5000-dsp-origin-capture.md) -- and it advances +1 per class-A
+        word, reset to 0 by the `801.0.00.021' rewind (biquad-map.md sect. 2).
+        So a class-A word's coefficient has a KNOWN ABSOLUTE C-RAM address:
+        0x00 + (number of class-A words since the last rewind or program start).
+        This disassembler prints it as `; C-RAM[0xNN]'.  It is emitted ONLY for
+        class-A words (the strict coefficient-consumer predicate, NOT bit 23,
+        which would over-count the class-8 post-sum step); and ONLY for the
+        COEFFICIENT space -- no absolute is invented for the D-RAM state operand,
+        whose base (the header's 0x70/0x6C per unit) is still unpinned
+        (notes/kn5000-dsp-addressing.md sect. 5, notes/kn5000-dsp-spaces.md).
+
     WHAT IS EMITTED
         * a real mnemonic ONLY for the forms listed in DECODED FORMS below,
           each of which carries its source of evidence in a comment;
@@ -422,6 +438,31 @@ offs_t upd6383_disassembler::disassemble(std::ostream &stream, offs_t pc, const 
 	word &= 0xfffffffffULL;         // bits 36..39 are always zero (MEASURED)
 
 	stream << text(word);
+
+	// ABSOLUTE C-RAM COEFFICIENT ADDRESS (MEASURED -- see the header block).
+	// A class-A word consumes the coefficient at cursor position 0x00 + k, where
+	// k is the number of class-A words between the last cursor reset and this
+	// word.  The cursor is stateful, so recover k by scanning BACKWARD from pc in
+	// whole 5-byte words to the nearest `801.0.00.021' rewind (or the start of the
+	// buffer, which is the program / per-frame origin where the base is 0x00).
+	// Correct regardless of call order -- it does not rely on linear disassembly.
+	if (coeff_consumer(word))
+	{
+		unsigned k = 0;
+		for (offs_t p = pc; p >= WORD_BYTES; )
+		{
+			p -= WORD_BYTES;
+			u64 prev = 0;
+			for (int i = 0; i < int(WORD_BYTES); i++)
+				prev = (prev << 8) | opcodes.r8(p + i);
+			prev &= 0xfffffffffULL;
+			if (is_rstcur(prev))
+				break;              // cursor was reset here: k counts from 0 after it
+			if (coeff_consumer(prev))
+				k++;
+		}
+		util::stream_format(stream, "   ; C-RAM[0x%02x] (coeff, base 0x00 MEASURED)", k & 0xff);
+	}
 
 	return WORD_BYTES | SUPPORTED;
 }

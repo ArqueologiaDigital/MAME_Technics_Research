@@ -38,11 +38,13 @@ several instruction roles are established. **The instruction set is not decoded.
 | `kn5000-dsp-paramsemantics.md` | ★ the **parameter → cell → reader chain**: propagates the named parameter list into the reading instruction. Positive controls PASS (LFO read `082` = the UI LFO-control reader, 0 false-neg; biquad 5/5; VOLUME/REV SEND tail `0x90`/`0x06`). NEW operand-meaning: the compressor's `C40` envelope-detector coefficient = ATTACK/RELEASE time constant. NEGATIVE: **no comparator opcode exists** — no `hi12` is unique to the threshold effects; the branchless bodies compute gain arithmetically. Coverage unchanged 18.3 %. Tool `tools/kn5000_dsp_paramsemantics.py` |
 | `kn5000-dsp-origin.md` | ★★ CONTINUOUS whole-frame execution (`tools/kn5000_dsp_origin.py`): the EQ origin is **0x19** (unique, geometric) and — with the COMPLETE reverb host map (a low block `{19..1E}` the trace note lacked) — the **reverb's low state pointer SHARES it across the unit boundary**, superseding trace-Q1's "no common constant". But the origin's SOURCE is **still not a decoded word** (model A→0x70, model B→0x06, no immediate is 0x19) and CANNOT be, because the header is effect-independent while origins are per-effect → both hypotheses (a)/(b) FALSIFIED; the survivor is a **per-effect HOST descriptor-poke**. Concrete next step: capture the uC-IF stream with PARAMETRIC EQ selected in MAME (no hardware). New lead: epilogue `0x822<-#$86` = reverb high-block base ⇒ the escape-loads are the state pointers |
 | `kn5000-dsp-origin-capture.md` | ★★ CAPTURED the uC-IF host stream with PARAMETRIC EQ selected in MAME (`tools/kn5000_dsp_origincap.{lua,py}`) to test `-origin.md` §4's prediction. **PREDICTION FALSIFIED**: there is NO `0x19` pointer poke (nor any per-effect origin poke) in the EQ stream. Positive control PASSES (captured EQ body == static algo39, byte-identical; snapshot + RAM verified). What the stream DOES contain: **every one of 16 swept effects frames its coefficient upload identically** — opens `26.825`, sets coefficient base `00.821` (`0x00`, the SAME for all), streams per-effect sections all anchored at `0x00`, closes `90.821`; only the section count/spacing is per-effect (EQ = `00,06,0C,12,18` = 5 bands×6, plus `1E`=30 extent). The `0x19`/reverb-`0x07` origins were a single-pointer modelling artifact; the real machine uses several pointer registers + the C-RAM/D-RAM split, with **state** on the header's effect-independent `0x6C`/`0x70` and **coefficients** on host base `0x00`. Disassembler NOT upgraded (origin falsified, not proven). Coverage unchanged 18.3% |
+| `kn5000-dsp-spaces.md` | ★★★ **the C-RAM/D-RAM SPACE SELECTOR, DECIDED** (`tools/kn5000_dsp_spaces.py`): there is **NO encoded selector field** — the space is **pointer-identity**. C-RAM (coeffs) is reached ONLY via the implicit cursor (base 0x00 MEASURED, +1 per class-A word), D-RAM (state) ONLY via the signed-`addr8` data pointer, external delay RAM ONLY via the `880` bracket; **no word ever names a single C-RAM cell** (labelled biquad: 0 single-cell C-RAM accessors), so no `hi12` bit can select and the prediction that one would **MISSES**. Controls hold present-AND-absence (coeffs 197/197 cursor-reachable; state only via `+2`/`000.1`; 18/38 images have a C-address == a D-address, so the number never names the space). **JOB 1 SHIPPED: the disassembler now prints absolute `; C-RAM[0xNN]` on all 822 class-A words** (base 0x00, class-A advance not bit-23 → make-up gain stays at `NN+5`); `-validate` kn5000+kn7000 clean, coverage unchanged 18.3 % |
 | `kn5000-dsp-trace.md` | ★ the pointer-arithmetic TRACE (`tools/kn5000_dsp_trace.py`) settling the three addressing residuals: **Q1 origin STILL NOT PINNED** (EQ needs 0x19, reverb ~0xA6, neither a header register, no unified offset → core left un-edited, absolute addressing NOT implemented); **Q2 wrap = 256** INFERRED with a MEASURED floor > 0xCF (mod-128 ruled out by host pokes); **Q3 modes 3/4/5 freeze `addr8` at a constant, only mode 6's `addr8` is an operand (the table selector)** |
 
 Tools: `tools/kn5000_dsp_extract.py` (all 100 programs from ROM), `_wordfields`, `_encoding`,
 `_reverb`, `_coeffs`, `_header`, `_params`, `_class2`, `_class2b`, `_biquad`,
-`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`, `_semantics`, `_hi12`, `_pointer`.
+`_biquadcoeffs`, `_biquadmap`, `_cursorgen`, `_effectmap`, `_semantics`, `_hi12`, `_pointer`,
+`_spaces` (C-RAM/D-RAM selector + absolute C-RAM addresses).
 Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
 
 ## Established
@@ -83,8 +85,15 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
    three writes (2 each, broken only by an encoding argument), what class 8 computes, and
    the reverb motif's instruction ordering. The cheapest next test is `AUTO WAH`'s
    `204.2.FE.687 / 804.8.16.1DA / 000.2.FF.647` triple, already in the corpus.
-1. **C-RAM vs D-RAM.** Two 256×24 spaces plus a bank register; how they are distinguished is
-   unknown. Partly folded into the biquad run.
+1. ~~**C-RAM vs D-RAM.**~~ **RESOLVED** (`kn5000-dsp-spaces.md`, `tools/kn5000_dsp_spaces.py`).
+   The two 256×24 spaces are **NOT distinguished by an encoded field** — the space is
+   **pointer-identity**: C-RAM via the implicit coefficient cursor, D-RAM (state) via the
+   signed-`addr8` data pointer, external delay RAM via the `880` bracket. No word single-cell-
+   addresses C-RAM, so there is nothing for a selector bit to pick; the `hi12`-bit prediction
+   MISSES. Controls hold across families (present AND absence). **JOB 1 also shipped**: the
+   disassembler now prints absolute `; C-RAM[0xNN]` coefficient addresses (base 0x00 MEASURED)
+   on every class-A word. STILL OPEN: the D-RAM absolute BASE (the origin `0x19` residual,
+   `-addressing.md` §5), so D-RAM absolutes are still withheld.
 1b. ~~**★ The pointer-DELTA rule**~~ **RESOLVED** (`kn5000-dsp-addressing.md`,
    `tools/kn5000_dsp_addressing.py`). The rule is **signed `addr8` post-increment on an 8-bit
    (wrapping) pointer, gated by `class4 & 7 == 2` (classes 2 and A only)**; `class4 = bit23-mult ‖

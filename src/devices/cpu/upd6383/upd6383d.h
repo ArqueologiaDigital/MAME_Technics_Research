@@ -76,6 +76,24 @@ public:
 	// need gains (notes/kn5000-dsp-axes.md sect. 2.2, sect. 1).
 	static constexpr bool cursor_fetch(u64 w) { return BIT(w, 23); }
 
+	// COEFFICIENT CONSUMER = class4 == 0xA (MEASURED, notes/kn5000-dsp-biquad-map.md
+	// sect. 2, cursor-general.md sect. 1).  This is a STRICTER predicate than
+	// cursor_fetch()/bit 23: the implicit coefficient cursor advances by exactly
+	// one per CLASS-A word, and the bank the loader uploads holds `class-A + 1'
+	// words in 26 of 38 images -- a test class 8 (also bit-23) fails, so class 8
+	// does NOT advance the cursor (it is the biquad's post-sum step, which is why
+	// the make-up gain still lands on slot NN+5, semantics.md sect. 3).  Every
+	// class-A word reads ONE coefficient from C-RAM at the current cursor position.
+	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa; }
+
+	// the implicit coefficient cursor is reset to its base by this rewind word
+	// (MEASURED, biquad-map.md sect. 2.1: `801.0.00.021' sends the cursor back to
+	// 0; algo 39's two channels share coefficients across it).
+	static constexpr bool is_rstcur(u64 w)
+	{
+		return hi12(w) == 0x801 && class4(w) == 0 && addr8(w) == 0x00 && lo12(w) == 0x021;
+	}
+
 	// true when this word is one of the (few) forms the corpus has decoded
 	static bool decoded(u64 word);
 
