@@ -16,6 +16,7 @@
 #include "cpu/tlcs900/tmp94c241.h"
 #include "cpu/upd6383/upd6383.h"
 #include "imagedev/floppy.h"
+#include "diserial.h"                 // device_serial_interface (MIDI->keybed UART)
 #include "machine/gen_latch.h"
 #include "machine/nvram.h"
 #include "machine/upd765.h"
@@ -103,6 +104,44 @@ uint16_t mn89304_vga_device::offset()
 }
 
 
+// ----------------------------------------------------------------------------
+//  KN5000 MIDI->keybed UART -- byte<->bit bridge between MAME's bit-serial
+//  midi_port and a byte callback (31250 baud, 8N1). Used to let a host MIDI
+//  controller play the internal 61-key bed with velocity (a separate input
+//  from the rear MIDI jacks). Modelled on the KN7000 SIO UART / vocalizer.cpp.
+// ----------------------------------------------------------------------------
+class kn5000_kbd_uart_device : public device_t, public device_serial_interface
+{
+public:
+	kn5000_kbd_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	auto rx_cb() { return m_rx_cb.bind(); }   // each fully-received MIDI byte -> driver
+
+protected:
+	virtual void device_start() override {}
+	virtual void device_reset() override ATTR_COLD;
+
+	virtual void rcv_complete() override { receive_register_extract(); m_rx_cb(get_received_char()); }
+
+	devcb_write8 m_rx_cb;
+};
+
+DEFINE_DEVICE_TYPE(KN5000_KBD_UART, kn5000_kbd_uart_device, "kn5000_kbd_uart", "KN5000 MIDI->keybed UART")
+
+kn5000_kbd_uart_device::kn5000_kbd_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+	device_t(mconfig, KN5000_KBD_UART, tag, owner, clock),
+	device_serial_interface(mconfig, *this),
+	m_rx_cb(*this)
+{
+}
+
+void kn5000_kbd_uart_device::device_reset()
+{
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);   // MIDI: 8N1
+	set_rate(31250);                                  // MIDI baud
+}
+
+
 namespace {
 
 // Logging macros for inter-CPU communication debugging
@@ -129,6 +168,7 @@ public:
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_tonegen(*this, "tonegen")
+		, m_kbd_uart(*this, "kbdmidi_uart")
 		, m_dsp1(*this, "dsp1")
 		, m_com_select(*this, "COM_SELECT")
 		, m_extension(*this, "extension")
@@ -157,6 +197,45 @@ private:
 	required_device<upd72067_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	required_device<kn5000_tonegen_device> m_tonegen;
+	required_device<kn5000_kbd_uart_device> m_kbd_uart;  // MIDI -> internal key bed (velocity)
+
+	// --- MIDI -> internal KEY BED bridge (velocity-sensitive) ------------------
+	// A host MIDI controller wired to the "kbdmidi" port plays the machine's OWN
+	// 61-key bed (the events the SubCPU reads at 0x110000), NOT the rear MIDI IN
+	// jacks: MIDI note-on/off become keybed events carrying the MIDI velocity, so
+	// the firmware's software envelope / voice engine treats them like real key
+	// presses. Encoding matches keybed_scan(): note-on = (vel<<8)|(raw|0x80),
+	// note-off = 0xFF00|raw, where raw = MIDI note - 36 (the 61-key bed spans
+	// MIDI 36..96 = C2..C7). Connect a host controller with -kbdmidi <port>.
+	uint8_t m_kbd_midi_status = 0;      // MIDI running-status byte
+	uint8_t m_kbd_midi_d1 = 0;          // first data byte (note)
+	bool    m_kbd_midi_have_d1 = false;
+	void kbd_midi_rx(uint8_t b)
+	{
+		if (b & 0x80)                       // status byte
+		{
+			if (b >= 0xF8) return;          // real-time messages: ignore
+			m_kbd_midi_status = (b < 0xF0) ? b : 0;  // system-common clears running status
+			m_kbd_midi_have_d1 = false;
+			return;
+		}
+		const uint8_t cmd = m_kbd_midi_status & 0xF0;
+		if (cmd != 0x90 && cmd != 0x80) return;      // only note-on / note-off
+		if (!m_kbd_midi_have_d1) { m_kbd_midi_d1 = b; m_kbd_midi_have_d1 = true; return; }
+		const uint8_t note = m_kbd_midi_d1, vel = b;
+		m_kbd_midi_have_d1 = false;         // ready for the next note in running status
+		if (note < 36 || note > 96) return; // outside the 61-key bed (C2..C7)
+		const uint8_t raw = note - 36;
+		const bool on = (cmd == 0x90) && (vel != 0);
+		// Match keybed_scan()'s wire format: note-on sets bit 7 of the key byte and
+		// carries velocity in the high byte; note-off is 0xFF00 | raw (velocity 0xFF
+		// = the SubCPU's note-off marker). Pass the MIDI velocity straight through.
+		if (on)
+			m_tonegen->push_keybed_event((uint16_t(vel) << 8) | (uint16_t(raw) | 0x80));
+		else
+			m_tonegen->push_keybed_event(0xFF00 | uint16_t(raw));
+	}
+
 	// IC311, the effects DSP -- an NEC uPD6383GF-3BA.  DRAFT CORE, held
 	// DISABLED: the host interface is exercised and the uploaded microcode
 	// lands in a real I-RAM, but the instruction set is not decoded, so
@@ -838,6 +917,13 @@ void kn5000_state::kn5000(machine_config &config)
 	auto &mdout(MIDI_PORT(config, "mdout"));
 	midiout_slot(mdout);
 	m_maincpu->txd0().set("mdout", FUNC(midi_port_device::write_txd));
+
+	// MIDI -> internal KEY BED bridge (velocity): a SEPARATE MIDI input ("kbdmidi")
+	// that plays the 61-key bed via push_keybed_event, distinct from the rear MIDI
+	// jacks above. Host: -kbdmidi <port>. See kbd_midi_rx().
+	KN5000_KBD_UART(config, m_kbd_uart, 0);
+	m_kbd_uart->rx_cb().set(FUNC(kn5000_state::kbd_midi_rx));
+	MIDI_PORT(config, "kbdmidi", midiin_slot, "midiin").rxd_handler().set(m_kbd_uart, FUNC(kn5000_kbd_uart_device::rx_w));
 
 	// RX1/TX1 = CPDATA, SCLK1 = CPSCK — wired to control panel HLE
 	KN5000_CPANEL(config, m_cpanel);
