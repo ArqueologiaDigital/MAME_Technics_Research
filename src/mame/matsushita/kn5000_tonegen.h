@@ -143,10 +143,13 @@ private:
 	int16_t read_waveform_sample(uint32_t byte_offset) const;
 	void resolve_waveform(int ch);
 
-	// Real-waveform selection + single-period wavetable extraction. Different
-	// instruments (different register fingerprints) resolve to DIFFERENT real IC307
-	// waveforms; one fundamental period of each is looped and resampled to the played
-	// note, so timbre is real PCM and pitch is exact. See kn5000_tonegen.cpp.
+	// Real-waveform selection from register +0x040 (= regs[1]) ONLY (chip boundary):
+	// cls=bits[15:12] (wave family/bank) + entry=bits[11:0] (multisample key-zone, full
+	// 12 bits). Each class maps to a disjoint IC307 band; entry steps monotonically within
+	// it, so different instruments resolve to different coherent real IC307 waveforms and an
+	// instrument's notes walk its multisample zones. Physical {cls,entry}->PCM map is the
+	// undumped LSI's black box; the band layout is a labelled placeholder over the one real
+	// bank (IC307). See kn5000_tonegen.cpp / notes/kn5000-voice-pipeline-MODEL.md.
 	int  select_waveform_index(const voice_t &v) const;
 	uint32_t detect_period(uint32_t region_byte_start, uint32_t samples) const;
 

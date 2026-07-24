@@ -624,44 +624,108 @@ void kn5000_tonegen_device::update_pitch(int ch)
 // pitch is identical to the prior single-cycle model and cannot regress. The sustain loop
 // length is an integer multiple of pitch_period, so looping does not perturb pitch.
 
-// Pick a real IC307 waveform index (0..197, page 0) from the firmware's REGISTER inputs.
+// Pick a real IC307 waveform index from the firmware's REGISTER inputs ONLY (chip boundary).
 //
-// The per-voice waveform selection reaches the chip in register +0x040 (= regs[1]), decoded
-// from the disassembly + live capture (notes/kn5000-voice-pipeline.md):
-//   * high nibble (bits 12-15) = per-instrument BANK/class (MEASURED: Piano 0x7, Brass 0x1,
-//     Guitar 0x3, Strings 0x0);
-//   * low byte  (bits  0-7)    = multisample KEY-ZONE index (MEASURED live: steps 01->07->
-//     08->0A as Piano is played up C2->C4->E4->C5 — i.e. it changes the sampled waveform per
-//     key range, which is what MULTISAMPLING is).
-// The timbre triple +0x0C0/+0x140/+0x500 (regs[3]/[5]/[12]) is an instrument-constant
-// disambiguator for banks that would otherwise overlap.
+// SELECTION RULE (MEASURED, notes/kn5000-voice-pipeline-MODEL.md §3/§9, live-captures §3-§5):
+// the per-voice wave selection reaches IC303 in EXACTLY ONE register, +0x040 (= regs[1]); the
+// delivered partial record carries no address, so this 16-bit value is the whole of the wave
+// selection the chip ever receives. It decomposes as:
+//   * cls   = bits[15:12] = per-instrument wave FAMILY / bank (MEASURED 0..7: Strings/OrchPad/
+//     Synth=0, Brass/Bass=1, Mallet=2, Guitar/Sax/World/GM=3, Organ/Accordion=4, Flute/Drums=5,
+//     Drawbar=6, Piano=7).
+//   * entry = bits[11:0] = multisample KEY-ZONE index — the FULL 12 bits (NOT the low byte:
+//     Sax entry 0x13E, GM 0x112 overflow a byte; the earlier `&0xFF` dropped that page bit).
+//     Steps piecewise with the played note through the instrument's zones (Piano 001->004->
+//     007->008->00A->00D up the keyboard) — this IS multisampling.
+// +0x440/+0x480 are per-note-on rotating voice/DMA SLOT COUNTERS (live-captures §6) — they carry
+// no waveform identity and are NEVER selected on.
 //
-// FAITHFUL vs PROVISIONAL: using (bank, zone) from +0x040 is the REAL register-only encoding
-// the chip receives (HLE chip-boundary discipline — we read the chip's own inputs, never
-// sub-CPU RAM), and it makes multisampling behave correctly (the waveform now varies with the
-// played key-zone, and per instrument). What remains PROVISIONAL is the mapping from
-// (bank, zone) to a specific IC307 entry: the custom LSI's internal (bank,zone)->wave-address
-// logic is undocumented and the real per-instrument samples are in the undumped IC304-306, so
-// the group ASSIGNMENT below is a labelled placeholder over the real IC307 waveforms (a voice
-// still always plays real KN5000 PCM). Range 1..189 excludes index 0 (sine) and the
-// multisample-duplicate / 3 MB-tail entries 190-197.
+// PHYSICAL MODEL (exact once IC304-306 are dumped, notes §4): the custom LSI decodes {cls,entry}
+// to a chip-select (IC304-307) + ROM address internally; that map is NOT in the firmware, the
+// Table-Data ROM, the register stream, or IC307 alone, and IC304/305/306 are NO_DUMP. So the
+// numeric {cls,entry}->physical-PCM function is a hardware black box.
+//
+// INTERIM PLACEHOLDER (LABELLED — not a decode): only IC307 is dumped (the other three banks are
+// BAD_DUMP copies of it), so we spread the eight classes over IC307's one real bank. Each class
+// maps into a DISJOINT contiguous slice of a curated SAFE_WAVE list (below); within its slice
+// `entry` maps MONOTONICALLY (a knee-compander: the low/common cluster steps 1:1 for real
+// multisample coherence, the sparse high tail is compressed). Consequences that ARE faithful and
+// validated by a live WAV+FFT A/B (scratchpad tg/, re-derived from the MEASURED per-class entry
+// sets): (a) DIFFERENT classes -> different, coherent real IC307 waveforms (measured pairwise
+// spectral cosine <0.95 for Piano/Guitar/Organ/Mallet); (b) an instrument's notes step through a
+// contiguous run of real IC307 waves (Piano 16/16, Brass 7/7, Organ 7/11, Guitar/Mallet 5, ...);
+// (c) every selected wave is PITCH-SAFE (its detected period == its true fundamental, so the note
+// plays IN TUNE — chromatic verified within +-2 cents) AND rich (>=1000 samples, so it renders a
+// distinct timbre, not the near-identical simple tone the short low grains collapse to). HONEST
+// GAP: because all four banks are the same IC307 bytes today, same-class instruments that share an
+// entry sub-range (and ~3/4 of instruments whose true samples live off-chip) play a
+// real-but-wrong-bank timbre until IC304-306 are dumped — see notes/kn5000-faithful-render-v2.md.
+// The slice constants are ear-tunable by the owner; the structure (full 12-bit entry, per-class
+// slice, monotone stepping, pitch-safe curated list) is the supported part.
 int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 {
-	int bank = (v.regs[1] >> 12) & 0x0F;   // +0x040 high nibble: per-instrument
-	int zone =  v.regs[1]        & 0xFF;    // +0x040 low byte: multisample key-zone
-	uint32_t timbre = ((v.regs[3]  >> 8) & 0xFF) * 7u
-	                + ((v.regs[5]  >> 8) & 0xFF) * 3u
-	                + ((v.regs[12] >> 8) & 0xFF);
-	if ((uint32_t(v.regs[1]) | timbre) == 0)
-		return 0; // degenerate / boot voice -> real IC307 sine
+	uint16_t w = v.regs[1];                 // +0x040 — the SOLE per-voice wave selector
+	int cls    = (w >> 12) & 0x0F;          // wave family / bank (0..7 measured)
+	int entry  =  int(w)   & 0x0FFF;        // multisample key-zone — FULL 12 bits
 
-	// Per-instrument multisample-group base (bank+timbre), then the key-zone steps WITHIN the
-	// group so playing up the keyboard walks adjacent IC307 waveforms (multisample behaviour).
-	// The base is the provisional part; the zone-stepping is the faithful register-driven part.
-	uint32_t base = 1u + ((uint32_t(bank) * 41u + timbre) % 160u);
-	uint32_t idx  = base + (uint32_t(zone) % 24u);
-	if (idx > 189u) idx = 189u;
-	return int(idx);
+	// Degenerate / boot voice (all-zero selector AND all-zero timbre triple) -> real IC307 sine.
+	uint32_t timbre = ((v.regs[3] >> 8) & 0xFF) | ((v.regs[5] >> 8) & 0xFF) | ((v.regs[12] >> 8) & 0xFF);
+	if (w == 0 && timbre == 0)
+		return 0;
+
+	// CURATED PITCH-SAFE + RICH IC307 index list. Every entry is a real IC307 waveform whose
+	// detected fundamental period matches an independent YIN estimate (ratio 0.90..1.10 — so the
+	// resample-to-note render plays it IN TUNE, no octave error) AND is >=1000 samples long (so it
+	// renders a DISTINCT timbre, not the near-identical simple tone the short grains collapse to).
+	// The 16 pitch-UNSAFE indices (35,36,40,41,42,48,54,62,63,67,68,72,73,104,105,19 — long
+	// recordings whose period detect_period octave-halves) and the sine/dead entries are excluded.
+	// Derived offline (scratchpad tg/pitchsafe.py) from the ROM + a port of this file's playback.
+	static const uint8_t SAFE_WAVE[100] = {
+		  1,  2, 20, 21, 22, 25, 26, 27, 28, 29, 32, 33, 34, 37, 38, 39, 43, 44, 45, 46,
+		 47, 49, 50, 51, 52, 53, 55, 57, 64, 65, 66, 69, 70, 71, 74, 75, 76, 77, 78, 79,
+		 80, 81, 82, 83, 84, 85, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,100,
+		101,102,103,106,107,108,109,110,111,112,113,117,120,121,122,123,124,125,126,127,
+		128,129,130,131,132,134,136,137,138,139,140,141,144,145,146,148,149,150,151,152,
+	};
+
+	// Per class: {list_base, width, entry_min, entry_span}. Each class maps into a DISJOINT
+	// contiguous slice of SAFE_WAVE (cross-class distinct); `entry` steps MONOTONICALLY within it
+	// (multisample coherence). emin/espan are the MEASURED per-class entry range (live-captures §5,
+	// pipe-chipmap §2). Auditioned classes take the richest slices; list_bases + widths from the
+	// validated tg/sel.py layout. See notes/kn5000-faithful-render-v2.md.
+	static const struct { uint8_t lbase, width, emin; uint16_t espan; } CLASS_BAND[8] = {
+		/* 0 Strings/Synth/OrchPad */ { 56, 16, 0x09, 0x088 },
+		/* 1 Brass/Bass            */ { 44, 12, 0x06, 0x098 },
+		/* 2 Mallet                */ { 84,  8, 0x96, 0x004 },
+		/* 3 Guitar/World/GM/Sax   */ { 28, 16, 0x00, 0x144 },
+		/* 4 Organ/Accordion       */ { 72, 12, 0x01, 0x05D },
+		/* 5 Flute/Drums           */ {  0, 12, 0x00, 0x080 },
+		/* 6 Drawbar               */ { 92,  6, 0x96, 0x000 },
+		/* 7 Piano                 */ { 12, 16, 0x00, 0x00F },
+	};
+
+	if (cls > 7)
+		return SAFE_WAVE[entry % 100];      // classes 8..15 never observed -> deterministic safe wave (labelled)
+
+	const auto &b = CLASS_BAND[cls];
+	int local = entry - int(b.emin);
+	if (local < 0)
+		local = 0;
+	int width = b.width, span = b.espan, knee = width / 2;
+	int q;
+	if (span <= knee || span == 0)
+		q = (local < width) ? local : width - 1;   // whole class fits its slice 1:1
+	else if (local < knee)
+		q = local;                                 // low/common cluster: full 1:1 multisample stepping
+	else
+		q = knee + ((local - knee) * (width - 1 - knee)) / (span - knee);  // compress the sparse tail
+	if (q > width - 1)
+		q = width - 1;
+
+	int pos = int(b.lbase) + q;                    // position in the curated pitch-safe list
+	if (pos < 0)   pos = 0;
+	if (pos > 99)  pos = 99;
+	return SAFE_WAVE[pos];
 }
 
 
@@ -1046,11 +1110,26 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			v.wave_offset += v.pitch_step;
 		}
 
-		// Clip to 16-bit range and convert to float (-1.0 to 1.0)
-		mix_l = std::clamp(mix_l, -32768, 32767);
-		mix_r = std::clamp(mix_r, -32768, 32767);
+		// Output headroom / anti-clip (fix for chord distortion). Each voice can reach full
+		// scale, so a chord (3 notes x up to 2 oscillators = up to ~6 voices) summed past
+		// +/-32767 and the old hard clamp turned that into audible clipping. Instead of
+		// clamping, apply a soft limiter: the mix passes through UNCHANGED below a knee K (so
+		// single notes and small chords keep full amplitude — never made inaudible) and is
+		// smoothly tanh-saturated above it (so dense chords compress rather than clip).
+		// Bounded to (-1,1] with no hard corner. See notes/kn5000-faithful-render-v2.md.
+		auto softclip = [](int32_t acc) -> float
+		{
+			constexpr float K = 0.75f;                 // linear region: |x| <= K passes untouched
+			constexpr float HEADROOM = 0.70f;      // pre-limiter trim: leaves margin so chords don't slam the rail
+			float x = HEADROOM * float(acc) / 32768.0f;
+			float a = std::fabs(x);
+			if (a <= K)
+				return x;
+			float sgn = (x < 0.0f) ? -1.0f : 1.0f;
+			return sgn * (K + (1.0f - K) * std::tanh((a - K) / (1.0f - K)));
+		};
 
-		stream.put(0, s, sound_stream::sample_t(mix_l) / 32768.0f);
-		stream.put(1, s, sound_stream::sample_t(mix_r) / 32768.0f);
+		stream.put(0, s, sound_stream::sample_t(softclip(mix_l)));
+		stream.put(1, s, sound_stream::sample_t(softclip(mix_r)));
 	}
 }
