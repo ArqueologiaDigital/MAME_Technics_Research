@@ -684,24 +684,30 @@ int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 	// through the group's own CONTIGUOUS indices and can never leave it.
 	struct group_t { uint8_t first, last; };
 	static const group_t GROUP[8] = {
-		{ 121, 134 },   // class 0 — Strings / Synth / Orchestral Pad (14 zones)
-		{  73,  83 },   // class 1 — Brass / Bass                     (11 zones)
-		{ 102, 107 },   // class 2 — Mallet & Orch Perc                (6 zones)
-		{ 135, 141 },   // class 3 — Guitar / World / GM / Sax         (7 zones)
-		{  86,  89 },   // class 4 — Organ & Accordion                 (4 zones)
-		{ 142, 146 },   // class 5 — Flute / Drums                     (5 zones)
-		{ 108, 111 },   // class 6 — Digital Drawbar                   (4 zones)
-		{  90,  93 },   // class 7 — Piano                             (4 zones)
+		{ 121, 134 },   // class 0 — Strings / Synth / Orchestral Pad (14 waves)
+		{  73,  83 },   // class 1 — Brass / Bass                     (11 waves)
+		{ 102, 107 },   // class 2 — Mallet & Orch Perc                (6 waves)
+		{ 135, 141 },   // class 3 — Guitar / World / GM / Sax         (7 waves)
+		{  86,  89 },   // class 4 — Organ & Accordion                 (4 waves)
+		{ 142, 146 },   // class 5 — Flute / Drums                     (5 waves)
+		{ 108, 111 },   // class 6 — Digital Drawbar                   (4 waves)
+		{  39,  54 },   // class 7 — Piano                            (16 waves)
 	};
 
 	const group_t &g = GROUP[cls & 7];
 	const int size = int(g.last) - int(g.first) + 1;
 
-	// Map the key-zone monotonically onto the group's contiguous real indices. Zones are
-	// small per instrument (measured: Piano 0x0-0xF, Brass 0x6-0xC, ...), so step 1:1 and
-	// clamp at the top; a zone beyond the group is reported by LOG_BOUND (below).
+	// Map the key-zone monotonically ACROSS the group's contiguous real indices. The
+	// firmware's zone index spans far more values than a group has waveforms (LOG_BOUND
+	// MEASURED Piano zones 1..26+), and the ROM's multisample zones step ~8 semitones per
+	// waveform (notes/kn5000-ic307-content-map.md) — so SCALE the zone over a ZONE_SPAN of
+	// 32 rather than clamping. Clamping made every note above the group size collapse onto
+	// the group's LAST waveform (26 such clamps measured on Piano alone), which destroyed
+	// multisampling; scaling walks the whole group monotonically as you play up the keyboard.
+	static const int ZONE_SPAN = 32;        // zone units covered by a full group (~8 semitones/wave)
 	int local = entry % 256;                // low byte is the key-zone proper
-	int q     = (local < size) ? local : size - 1;
+	int q     = (local * size) / ZONE_SPAN;
+	if (q > size - 1) q = size - 1;         // above the group's range: hold the top wave
 	int idx   = int(g.first) + q;
 
 	// ---- BOUNDARY-CROSSING DIAGNOSTIC (LOG_BOUND) --------------------------------
@@ -711,9 +717,9 @@ int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 		if (idx < int(g.first) || idx > int(g.last))
 			logerror("tonegen: BOUNDARY VIOLATION cls=%d entry=0x%03X -> idx %d OUTSIDE group [%d..%d]\n",
 				cls, entry, idx, g.first, g.last);
-		else if (local >= size)
-			logerror("tonegen: BOUNDARY CLAMP cls=%d entry=0x%03X zone %d >= group size %d (group [%d..%d]) -> idx %d\n",
-				cls, entry, local, size, g.first, g.last, idx);
+		else if (local >= ZONE_SPAN)
+			logerror("tonegen: BOUNDARY CLAMP cls=%d entry=0x%03X zone %d >= zone-span %d (group [%d..%d] size %d) -> idx %d\n",
+				cls, entry, local, ZONE_SPAN, g.first, g.last, size, idx);
 		else
 			logerror("tonegen: bound ok cls=%d entry=0x%03X zone %d -> idx %d in group [%d..%d]\n",
 				cls, entry, local, idx, g.first, g.last);
