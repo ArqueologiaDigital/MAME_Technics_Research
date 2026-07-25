@@ -17,6 +17,11 @@ Sources
   (**file offset = address − 0xEF00**, verified against the two key-bed tables the driver
   already dumped at 0x01F43E/0x01F53E).
 * HLE `kn7000_mame/src/mame/matsushita/kn5000_tonegen.{cpp,h}`, driver `kn5000.cpp`.
+* Sibling audits of the same HLE from this review, in this directory:
+  `kn5000-audit-voicelife.md` (voice lifecycle / allocation) and
+  `kn5000-audit-pitch.md` (pitch). GAP 1 below (the missing chip-side envelope) is the
+  reason a held voice never decays to silence and never self-releases, so it is the shared
+  root of several lifecycle symptoms — read them together.
 * **NEW live capture** (this pass): `scratchpad/outcap.lua` → `outcap.txt` (2 s hold) and
   `outcap2.lua` → `outcap2.txt` (8 s hold), default sound (PIANO), part R1, C4,
   driver key-bed velocity. Reproduce with:
