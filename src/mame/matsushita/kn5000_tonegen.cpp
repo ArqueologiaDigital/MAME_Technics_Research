@@ -11,10 +11,15 @@
     0x100000, then reads/writes data at 0x100002. P6.7 GPIO acts as chip-select
     strobe (active low during address phase).
 
-    Waveform ROM format (per IC307 analysis):
-      - 198-entry index table at offset 0 (4 bytes each)
-      - Parameter records (key zone definitions)
-      - Signed 16-bit LE PCM data starting at ~0x1A30
+    Waveform ROM format (MEASURED, notes/kn5000-structural-validation.md §1):
+    each 4MB chip is FOUR independent 1MB PAGES, and every page carries its own
+    self-delimiting directory:
+      - index of {param_ptr, wave_offset} u16 pairs; the entry count is encoded in
+        entry 0 as `entry0.param_ptr == 4 * count`  (IC307: 198 / 168 / 1072 / 57)
+      - parameter records, each starting with a redundant copy of its own
+        wave_offset (verified 1495/1495 on IC307)
+      - signed 16-bit LE PCM at `page_base + wave_offset * 16`
+    A u16 wave_offset times 16 addresses exactly 1MB, which is *why* the page is 1MB.
 
     Each ROM chip is 4MB. The combined 16MB region is loaded as "waveform":
       IC304 at offset 0x000000
@@ -36,10 +41,14 @@
 #define LOG_KEY      (1U << 2)
 #define LOG_VOICE    (1U << 3)
 #define LOG_GLOBAL   (1U << 4)
-// LOG_BOUND: waveform-group BOUNDARY diagnostics. Reports, per note-on, which IC307
-// multisample group a voice selects into, and WARNS when a voice would read outside the
-// group its instrument class is assigned to (a crossing that must not happen) or when its
-// key-zone exceeds the group's size. Runtime feedback for converging the wave mapping.
+// LOG_BOUND: waveform-selection diagnostics for the DATA-DERIVED map. Reports, per
+// note-on, the full decode of +0x040 — class -> {bank, page} and entry -> directory
+// slot — plus the chunk's PCM geometry, and WARNS when
+//   * the entry lands outside that page's own directory (`OUT-OF-RANGE`) — measured
+//     impossible on IC307, so it can only mean an undumped bank; or
+//   * the entry exceeds the highest value the firmware's own tone tables ever use for
+//     that class (`UNDOCUMENTED`); or
+//   * the selected bank has no directory of its own and IC307's was substituted.
 // Enable by building with VERBOSE including (1U << 5), e.g. #define VERBOSE (LOG_BOUND).
 #define LOG_BOUND    (1U << 5)
 
@@ -79,49 +88,9 @@ void kn5000_tonegen_device::device_start()
 		m_waveform_size = 0;
 	}
 
-	// Parse IC307's 198-entry index table (region offset 0xC00000 = the real dump) and
-	// precompute, for every waveform, its PCM start, sample count, and — the crux for
-	// faithful pitched playback — its fundamental period (autocorrelation). The other
-	// three banks (IC304-306) are BAD_DUMP copies of IC307, so every address computed
-	// here reads real KN5000 PCM.
-	std::fill(std::begin(m_wave_pcm_start), std::end(m_wave_pcm_start), 0);
-	std::fill(std::begin(m_wave_pcm_samples), std::end(m_wave_pcm_samples), 0);
-	std::fill(std::begin(m_wave_period), std::end(m_wave_period), 0);
-	std::fill(std::begin(m_wave_loop_start), std::end(m_wave_loop_start), 0);
-	std::fill(std::begin(m_wave_loop_len), std::end(m_wave_loop_len), 0);
-	if (m_waveform_data && m_waveform_size >= 0x1000000)
-	{
-		static constexpr uint32_t IC307_BASE = 0xC00000;
-		const uint8_t *idx = m_waveform_data + IC307_BASE;
-		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
-		{
-			m_wave_index[i].param_ptr   = idx[i * 4 + 0] | (idx[i * 4 + 1] << 8);
-			m_wave_index[i].wave_offset = idx[i * 4 + 2] | (idx[i * 4 + 3] << 8);
-		}
-
-		// PCM byte address = wave_offset * 16 (signed-16-LE). Length = span to the next
-		// strictly-greater wave_offset (offsets are monotonic non-decreasing; equal
-		// entries are multisample duplicates). See notes/kn5000-ic307-content-map.md.
-		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
-		{
-			uint32_t off = uint32_t(m_wave_index[i].wave_offset) * 16;
-			uint32_t next = off;
-			for (int j = i + 1; j < NUM_INDEX_ENTRIES; j++)
-			{
-				uint32_t o = uint32_t(m_wave_index[j].wave_offset) * 16;
-				if (o > off) { next = o; break; }
-			}
-			uint32_t bytes = (next > off) ? (next - off) : 512;
-			m_wave_pcm_start[i]   = IC307_BASE + off;
-			m_wave_pcm_samples[i] = bytes / 2;
-		}
-
-		for (int i = 0; i < NUM_INDEX_ENTRIES; i++)
-		{
-			m_wave_period[i] = detect_period(m_wave_pcm_start[i], m_wave_pcm_samples[i]);
-			compute_loop(i);
-		}
-	}
+	// Parse every page directory the wave ROM region carries (4 banks x 4 pages). This
+	// is what the {class, entry} decode indexes into; see decode_wave_select().
+	parse_page_directories();
 
 	// Save state
 	save_item(NAME(m_addr_latch));
@@ -129,7 +98,9 @@ void kn5000_tonegen_device::device_start()
 	for (int i = 0; i < NUM_VOICES; i++)
 	{
 		save_item(NAME(m_voice[i].regs), i);
-		save_item(NAME(m_voice[i].wave_index), i);
+		save_item(NAME(m_voice[i].wave_bank), i);
+		save_item(NAME(m_voice[i].wave_page), i);
+		save_item(NAME(m_voice[i].wave_chunk), i);
 		save_item(NAME(m_voice[i].active), i);
 		save_item(NAME(m_voice[i].key_on), i);
 		save_item(NAME(m_voice[i].key_on_time), i);
@@ -139,6 +110,7 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].loop_start), i);
 		save_item(NAME(m_voice[i].loop_end), i);
 		save_item(NAME(m_voice[i].pitch_period), i);
+		save_item(NAME(m_voice[i].pitch_period_q16), i);
 		save_item(NAME(m_voice[i].pitch_step), i);
 		save_item(NAME(m_voice[i].volume_l), i);
 		save_item(NAME(m_voice[i].volume_r), i);
@@ -570,6 +542,18 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	// USB-MIDI, both routed through push_keybed_event) that caused this voice — the
 	// faithful "use the real mechanism" approach.
 
+	// An APERIODIC recording (drum, applause, noise — detect_period returned 0) has no
+	// fundamental, so "resample it so its fundamental lands on the played note" is not
+	// defined for it. Play it exactly as recorded. MEASURED: this is 16/198 of page 0 and
+	// 28/168 of page 1 — precisely the pages the ROM's own name table fills with
+	// `Rock Bass Drm`, `HiHat Open`, `Applause`, `Telephone`. Pitched pages are unaffected
+	// (page 3 = piano and page 2 = drawbar footage have 0 such chunks).
+	if (v.pitch_period_q16 == 0)
+	{
+		v.pitch_step = 0x10000;   // 1.0 = the recording's own rate
+		return;
+	}
+
 	double freq;
 	if (v.true_note >= 0)
 	{
@@ -599,8 +583,11 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	// `freq` Hz — i.e. the whole multi-cycle recording plays back at the played note's
 	// pitch, decoupled from the recording's (un-stored) native root. Same period-driven
 	// pitch as the previous single-cycle model, so chromatic pitch cannot regress.
-	uint32_t wlen = v.pitch_period ? v.pitch_period : 256;
-	double step = 65536.0 * freq * double(wlen) / 48000.0;
+	// Fractional period (16.16) — rounding it to whole samples detunes the note by up to
+	// 1200/(2P) cents, which is tens of cents on the short recordings at the top of a
+	// multisample. MEASURED: this is what takes the chromatic run from +-26 cents to a
+	// few, and the octave ratio from 1.9705 to ~2.
+	double step = freq * double(v.pitch_period_q16) / 48000.0;
 	if (step < 1.0) step = 1.0;
 	if (step > double(0x7FFFFFFF)) step = double(0x7FFFFFFF);
 	v.pitch_step = uint32_t(step + 0.5);
@@ -614,198 +601,383 @@ void kn5000_tonegen_device::update_pitch(int ch)
 // Real-waveform selection + FULL multi-cycle playback with a derived sustain loop
 //-----------------------------------------------------------------------
 //
-// FAITHFULNESS MODEL (see notes/kn5000-real-sample-select.md; grounded in the findings
-// notes kn5000-wave-number.md / kn5000-tone-record.md / kn5000-ic307-content-map.md):
+// FAITHFULNESS MODEL (notes/kn5000-datamap-applied.md, resting on
+// notes/kn5000-structural-validation.md and notes/kn5000-firmware-sample-tables.md):
 //
-//   * The firmware's real per-voice WAVE NUMBER (register +0x440/+0x480) is 0 for every
-//     ordinary PCM voice (MEASURED live) — it is a legacy selector these voices bypass by
-//     design. Per-instrument identity instead flows through the delivered tonerec's
-//     partial-parameter records, which the firmware programs into the pitch/zone and
-//     timbre registers. Their high bytes form a STABLE per-instrument fingerprint
-//     (regs[1]=+0x040, regs[3]=+0x0C0, regs[5]=+0x140, regs[12]=+0x500) — identical
-//     across notes and across a voice's two oscillator layers, distinct between
-//     instruments (MEASURED: Piano/Brass/Guitar/Strings/Organ all differ).
+//   * The per-voice wave selection reaches IC303 in EXACTLY ONE register, +0x040
+//     (= regs[1]) — traced through ToneGen_WriteVoiceParams (sub-CPU v142 asm L29565)
+//     and confirmed live for 16 SOUND-GROUPs x 7 notes. The delivered partial record
+//     carries no address, so this one 16-bit value is the WHOLE of the wave selection
+//     the chip ever receives. +0x440/+0x480 are per-note-on rotating voice/DMA SLOT
+//     COUNTERS and carry no waveform identity — they are NEVER selected on.
 //
-//   * IC307 is the one REAL wave-ROM dump; its 198 indexed waveforms are real KN5000 PCM.
-//     (IC304-306 are BAD_DUMP copies of IC307, so any address computed here reads real
-//     PCM — a voice mapping to a "wrong" waveform still plays a real-but-wrong-instrument
-//     timbre, the accepted placeholder, never silence or a synthesized timbre.)
+//   * That value is DECODED, not guessed. A wave ROM is four 1 MB pages, each with its
+//     own self-delimiting directory; +0x040 names {bank, page, directory slot}. The
+//     firmware's own tone tables and the ROM's own directories were derived completely
+//     independently of each other and AGREE — see decode_wave_select() below.
 //
-// SELECTION: the true per-instrument sample map lives in the custom LSI + the undumped
-// IC304-306, so it CANNOT be reproduced exactly. We select a real IC307 waveform from the
-// firmware's per-instrument fingerprint so that DIFFERENT instruments deterministically
-// resolve to DIFFERENT real waveforms (distinct real timbres, never a synthesized one).
-// This is a labelled placeholder mapping, not a decode of the real instrument->wave table.
+//   * The firmware's per-instrument PARTIAL RECORDS (Table Data ROM, reached via the
+//     tone record's multisample-SET index) are what say which samples belong to which
+//     instrument. This device never reads them: they are outside the chip boundary. It
+//     only decodes the +0x040 words those records ultimately produce — which is exactly
+//     what the real LSI sees.
 //
-// PLAYBACK (the fix for the previous harshness): each voice plays the FULL multi-cycle
-// recording from sample 0 — its genuine attack and timbral evolution — then loops a
-// precomputed SUSTAIN region (compute_loop) for as long as the note is held. The previous
-// model looped ONE short fundamental period taken from the ATTACK transient, which sounded
-// like a static buzz; playing the real recording body fixes that.
+// PLAYBACK: each voice plays the FULL multi-cycle recording from sample 0 — its genuine
+// attack and timbral evolution — then loops a precomputed SUSTAIN region (compute_loop)
+// for as long as the note is held.
 //
-// PITCH (must not regress): pitch is driven ENTIRELY by the equal-tempered played note
-// (recovered from the real keybed/MIDI event, update_pitch), via the recording's detected
-// fundamental period pitch_period. Advancing the read pointer by that period-derived step
-// makes the recording's fundamental recur at exactly the played frequency, so absolute
-// pitch is DECOUPLED from the recording's (un-stored) native root — chromatic/octave/chord
-// pitch is identical to the prior single-cycle model and cannot regress. The sustain loop
-// length is an integer multiple of pitch_period, so looping does not perturb pitch.
+// PITCH: driven ENTIRELY by the equal-tempered played note (recovered from the real
+// keybed/MIDI event, update_pitch) via the recording's measured fundamental period.
+// Advancing the read pointer by that period-derived step makes the recording's
+// fundamental recur at exactly the played frequency, so absolute pitch is DECOUPLED from
+// the recording's (un-stored) native root. The sustain loop length is an integer multiple
+// of the period, so looping does not perturb pitch.
 
-// Pick a real IC307 waveform index from the firmware's REGISTER inputs ONLY (chip boundary).
+
+// Parse the self-delimiting directory at the head of every 1 MB page of every bank.
 //
-// SELECTION RULE (MEASURED, notes/kn5000-voice-pipeline-MODEL.md §3/§9, live-captures §3-§5):
-// the per-voice wave selection reaches IC303 in EXACTLY ONE register, +0x040 (= regs[1]); the
-// delivered partial record carries no address, so this 16-bit value is the whole of the wave
-// selection the chip ever receives. It decomposes as:
-//   * cls   = bits[15:12] = per-instrument wave FAMILY / bank (MEASURED 0..7: Strings/OrchPad/
-//     Synth=0, Brass/Bass=1, Mallet=2, Guitar/Sax/World/GM=3, Organ/Accordion=4, Flute/Drums=5,
-//     Drawbar=6, Piano=7).
-//   * entry = bits[11:0] = multisample KEY-ZONE index — the FULL 12 bits (NOT the low byte:
-//     Sax entry 0x13E, GM 0x112 overflow a byte; the earlier `&0xFF` dropped that page bit).
-//     Steps piecewise with the played note through the instrument's zones (Piano 001->004->
-//     007->008->00A->00D up the keyboard) — this IS multisampling.
-// +0x440/+0x480 are per-note-on rotating voice/DMA SLOT COUNTERS (live-captures §6) — they carry
-// no waveform identity and are NEVER selected on.
-//
-// PHYSICAL MODEL (exact once IC304-306 are dumped, notes §4): the custom LSI decodes {cls,entry}
-// to a chip-select (IC304-307) + ROM address internally; that map is NOT in the firmware, the
-// Table-Data ROM, the register stream, or IC307 alone, and IC304/305/306 are NO_DUMP. So the
-// numeric {cls,entry}->physical-PCM function is a hardware black box.
-//
-// INTERIM PLACEHOLDER (LABELLED — not a decode): only IC307 is dumped (the other three banks are
-// BAD_DUMP copies of it), so the eight classes are spread over IC307's one real bank — each class
-// bound to ONE coherent multisample GROUP of that bank (contiguous, spectrally-related waveforms),
-// with the key-zone stepping WITHIN the group. HONEST GAP: because all four banks hold the same
-// IC307 bytes today, ~3/4 of instruments (whose true samples live off-chip) play a real-but-WRONG-
-// BANK timbre until IC304-306 are dumped. The GROUP table is ear-tunable; the structure (full
-// 12-bit entry, one contiguous group per class, in-group monotone stepping, boundary-checked)
-// is the supported part. See notes/kn5000-ic307-groups.md.
-int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
+// ACCEPTANCE TEST (all six checks are MEASURED properties of the real IC307 dump,
+// notes/kn5000-structural-validation.md §1) — a page is only accepted as a directory if
+// it passes all of them, so a blank or non-directory page is rejected rather than
+// producing garbage addresses:
+//   1. entry0.param_ptr is a nonzero multiple of 4  -> count = entry0.param_ptr / 4
+//   2. the directory itself fits in the page
+//   3. param_ptr is monotonic non-decreasing
+//   4. the directory does not overlap the first parameter record
+//   5. every wave_offset x16 stays inside the page
+//   6. the redundant back-reference holds for EVERY entry: the u16 at the head of a
+//      parameter record equals that entry's own wave_offset (1495/1495 on IC307).
+void kn5000_tonegen_device::parse_page_directories()
 {
-	uint16_t w = v.regs[1];                 // +0x040 — the SOLE per-voice wave selector
-	int cls    = (w >> 12) & 0x0F;          // wave family / bank (0..7 measured)
-	int entry  =  int(w)   & 0x0FFF;        // multisample key-zone — FULL 12 bits
-
-	// Degenerate / boot voice -> the real IC307 sine.
-	uint32_t timbre = ((v.regs[3] >> 8) & 0xFF) | ((v.regs[5] >> 8) & 0xFF) | ((v.regs[12] >> 8) & 0xFF);
-	if (w == 0 && timbre == 0)
-		return 0;
-
-	// ---- IC307 multisample GROUP table (instrument boundaries) -------------------
-	// Derived from the real IC307 dump by segmenting its 198 indexed waveforms into
-	// coherent multisample groups: adjacent entries whose sustain spectra are similar
-	// belong to ONE instrument (its key zones); a sharp similarity drop is an instrument
-	// BOUNDARY. Groups below are the musically usable ones (>=4 zones, real multi-kilobyte
-	// recordings, low noise) — see notes/kn5000-ic307-groups.md.
+	// Bank field (+0x040 bits[15:14]) -> which socket, as a region byte offset.
 	//
-	// WHY THIS SHAPE: an instrument must play only waveforms from ONE group. The previous
-	// mapping stepped through a CURATED SKIP-LIST, so consecutive key zones landed on
-	// NON-ADJACENT, unrelated IC307 waveforms — the voice jumped between instruments as you
-	// played up the keyboard, which is what made it sound wrong. Here the key-zone steps
-	// through the group's own CONTIGUOUS indices and can never leave it.
-	struct group_t { uint8_t first, last; };
-	static const group_t GROUP[8] = {
-		{ 121, 134 },   // class 0 — Strings / Synth / Orchestral Pad (14 waves)
-		{  73,  83 },   // class 1 — Brass / Bass                     (11 waves)
-		{ 102, 107 },   // class 2 — Mallet & Orch Perc                (6 waves)
-		{ 135, 141 },   // class 3 — Guitar / World / GM / Sax         (7 waves)
-		{  86,  89 },   // class 4 — Organ & Accordion                 (4 waves)
-		{ 142, 146 },   // class 5 — Flute / Drums                     (5 waves)
-		{ 108, 111 },   // class 6 — Digital Drawbar                   (4 waves)
-		{  39,  54 },   // class 7 — Piano                            (16 waves)
-	};
+	//   bank 1 = IC307. PROVEN (structural-validation §3): IC307's four pages declare
+	//     198 / 168 / 1072 / 57 slots, and the firmware's classes 4 / 5 / 7 require
+	//     directories of exactly 198 / 168 / 57 — three exact hits out of three testable
+	//     classes, with all 465 of their (class, entry) pairs in range at base 0.
+	//   bank 0 = the socket serving classes 0-3. Those classes need directories of
+	//     >=214 / 177 / 185 / 436 slots, which no IC307 page can supply, so they are on a
+	//     DIFFERENT chip. WHICH of IC304/305/306 that is, is a wiring fact we do not have
+	//     (§7 states the falsifiable test: whichever chip declares those four counts, in
+	//     that order, is bank 0). It is given IC304's slot here; today all three sockets
+	//     are loaded with a BAD_DUMP copy of IC307 anyway (see kn5000.cpp ROM_REGION), so
+	//     the choice is byte-equivalent and is the ONE line to revisit when a real dump
+	//     of IC304/305/306 appears.
+	//   banks 2/3 are never selected: bit 3 of the class field is 0 in all 1444
+	//     (class, entry) pairs the firmware's tone tables produce.
+	static constexpr uint32_t BANK_BASE[NUM_BANKS] = { 0x000000, 0xC00000, 0x400000, 0x800000 };
 
-	const group_t &g = GROUP[cls & 7];
-	const int size = int(g.last) - int(g.first) + 1;
-
-	// Map the key-zone monotonically ACROSS the group's contiguous real indices. The
-	// firmware's zone index spans far more values than a group has waveforms (LOG_BOUND
-	// MEASURED Piano zones 1..26+), and the ROM's multisample zones step ~8 semitones per
-	// waveform (notes/kn5000-ic307-content-map.md) — so SCALE the zone over a ZONE_SPAN of
-	// 32 rather than clamping. Clamping made every note above the group size collapse onto
-	// the group's LAST waveform (26 such clamps measured on Piano alone), which destroyed
-	// multisampling; scaling walks the whole group monotonically as you play up the keyboard.
-	static const int ZONE_SPAN = 32;        // zone units covered by a full group (~8 semitones/wave)
-	int local = entry % 256;                // low byte is the key-zone proper
-	int q     = (local * size) / ZONE_SPAN;
-	if (q > size - 1) q = size - 1;         // above the group's range: hold the top wave
-	int idx   = int(g.first) + q;
-
-	// ---- BOUNDARY-CROSSING DIAGNOSTIC (LOG_BOUND) --------------------------------
-	// Runtime feedback: confirm a voice never reads outside its instrument's group.
-	if (VERBOSE & LOG_BOUND)
+	for (int b = 0; b < NUM_BANKS; b++)
 	{
-		if (idx < int(g.first) || idx > int(g.last))
-			logerror("tonegen: BOUNDARY VIOLATION cls=%d entry=0x%03X -> idx %d OUTSIDE group [%d..%d]\n",
-				cls, entry, idx, g.first, g.last);
-		else if (local >= ZONE_SPAN)
-			logerror("tonegen: BOUNDARY CLAMP cls=%d entry=0x%03X zone %d >= zone-span %d (group [%d..%d] size %d) -> idx %d\n",
-				cls, entry, local, ZONE_SPAN, g.first, g.last, size, idx);
-		else
-			logerror("tonegen: bound ok cls=%d entry=0x%03X zone %d -> idx %d in group [%d..%d]\n",
-				cls, entry, local, idx, g.first, g.last);
-	}
+		for (int p = 0; p < PAGES_PER_BANK; p++)
+		{
+			page_dir_t &d = m_dir[b][p];
+			d = page_dir_t();
+			d.base = BANK_BASE[b] + uint32_t(p) * PAGE_SIZE;
 
-	return idx;
+			if (!m_waveform_data || uint64_t(d.base) + PAGE_SIZE > m_waveform_size)
+				continue;
+			const uint8_t *pg = m_waveform_data + d.base;
+
+			auto u16at = [&](uint32_t o) -> uint32_t { return uint32_t(pg[o]) | (uint32_t(pg[o + 1]) << 8); };
+
+			const uint32_t head = u16at(0);                                   // 1
+			if (head == 0 || (head & 3) != 0)
+				continue;
+			const uint32_t n = head / 4;
+			if (uint64_t(n) * 4 > PAGE_SIZE - 4)                              // 2
+				continue;
+
+			std::vector<uint32_t> param(n), wave(n);
+			bool ok = true;
+			for (uint32_t i = 0; i < n && ok; i++)
+			{
+				param[i] = u16at(i * 4);
+				wave[i]  = u16at(i * 4 + 2);
+				if (i && param[i] < param[i - 1])                             // 3
+					ok = false;
+				if (param[i] < n * 4)                                         // 4
+					ok = false;
+				if (uint64_t(wave[i]) * 16 >= PAGE_SIZE)                      // 5
+					ok = false;
+				if (ok && u16at(param[i]) != wave[i])                         // 6
+					ok = false;
+			}
+			if (!ok)
+				continue;
+
+			// PCM extent of a chunk = from its own wave_offset to the SMALLEST wave_offset
+			// in the directory that is strictly greater (else the end of the page). Taking
+			// the minimum over the whole directory rather than "the next entry" is what
+			// makes this correct where offsets step backwards — page 1 of IC307 has three
+			// such entries, which re-use an earlier recording rather than break the format.
+			std::vector<uint32_t> sorted(wave);
+			std::sort(sorted.begin(), sorted.end());
+			sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+
+			d.count = n;
+			d.pcm_start.resize(n);
+			d.pcm_samples.resize(n);
+			d.period.assign(n, 0);
+			d.period_q16.assign(n, 0);
+			d.loop_start.assign(n, 0);
+			d.loop_len.assign(n, 0);
+			d.analysed.assign(n, 0);
+			for (uint32_t i = 0; i < n; i++)
+			{
+				auto it = std::upper_bound(sorted.begin(), sorted.end(), wave[i]);
+				const uint32_t end_off = (it == sorted.end()) ? PAGE_SIZE : (*it * 16);
+				const uint32_t off = wave[i] * 16;
+				d.pcm_start[i]   = d.base + off;
+				d.pcm_samples[i] = (end_off > off) ? ((end_off - off) / 2) : 0;
+			}
+
+			LOGMASKED(LOG_GLOBAL, "tonegen: wave bank %d page %d @0x%06X: %d directory slots\n",
+				b, p, d.base, d.count);
+		}
+	}
 }
 
 
-// Detect the fundamental period (in samples) of a real IC307 waveform, so ONE clean cycle
-// can be looped and resampled to any note. Method: biased normalized autocorrelation over a
-// bounded window; find the first negative-going zero crossing (to skip the lag-0 shoulder
-// that fools a naive "highest early peak" — which is why a pure sine was previously
-// mis-detected), then take the argmax lag beyond it. Returns 0 when no clear repetition is
-// found and the wave is too long to treat as a single cycle (caller then uses the real
-// sine). Short waves with no internal repetition (e.g. IC307 index 0, one 256-sample sine)
-// return their own length. MEASURED periodicity basis: notes/kn5000-ic307-content-map.md 2.2.
+// Measure the fundamental period and derive a sustain loop for one chunk, on first use.
+// Doing this for all 1495 chunks of all four banks at device_start would cost seconds of
+// start-up; a chunk is analysed once, the first time a voice selects it.
+void kn5000_tonegen_device::analyse_chunk(page_dir_t &d, int chunk)
+{
+	if (chunk < 0 || uint32_t(chunk) >= d.count || d.analysed[chunk])
+		return;
+	d.analysed[chunk] = 1;
+	d.period_q16[chunk] = detect_period(d.pcm_start[chunk], d.pcm_samples[chunk]);
+	d.period[chunk]     = d.period_q16[chunk] >> 16;   // whole samples, for the loop geometry
+	compute_loop(d, chunk);
+}
+
+
+// DECODE the sole wave-selection register, +0x040, into a physical chunk. This replaces
+// the previous heuristic GROUP table + zone scaling entirely: there is no table of tuned
+// constants left in the selection path, only the ROM's own directories.
+//
+//     class = bits[15:12]        entry = bits[11:0]
+//     page  = class & 3          bank  = (class >> 2) & 3
+//     chunk = entry              a PLAIN 0-BASED INDEX into that page's directory
+//
+// WHY THIS AND NOT SOMETHING ELSE — every step is a measurement, not a choice:
+//
+//   * The four counts IC307 declares for its pages (198 / 168 / 1072 / 57) were read from
+//     the ROM with no reference to the firmware. The directory size each class REQUIRES
+//     (max entry + 1, over all 487 multisample SET descriptors in the Table Data ROM) was
+//     computed from the firmware with no reference to the ROM. class 4 -> 198, class 5 ->
+//     168, class 7 -> 57: THREE EXACT MATCHES OUT OF THREE testable classes, with
+//     page = class & 3. All 465 of those classes' pairs land in range with base 0 — no
+//     per-class offset, no fudge constant.
+//   * The assignment is forced, not chosen: classes 0 and 3 need >=214 and >=436 slots, so
+//     only page 2 could hold either and they collide there — classes 0-3 cannot be on
+//     IC307 at all, and for classes 4-7 the identity map is the UNIQUE injective
+//     assignment with more than one exact match.
+//   * Cross-checked three further ways, each against a structure derived independently:
+//     the firmware's key zones for one shared recording tile the keyboard with 0 overlaps
+//     (15 groups, 11 tiling exactly); IC307's own key-split bytes track the firmware's
+//     zone bounds as MIDI key = 1.5 x (value - 40) exactly; and the measured fundamental
+//     of the chunk this formula selects tracks the firmware's key zone with slope 1.00 /
+//     R^2 0.998 on all five piano SETs, where every wrong page or shuffled index collapses
+//     to slope ~0.
+//   * It also explains the live capture: PIANO's two oscillators read +0x040 = 0x7007 and
+//     0x7017, and page 3 is two byte-identical 16-chunk runs — the 0x10 offset IS the
+//     group size.
+//
+// Class 7 = the acoustic piano bank = page 3. Class 4 = page 0 (organ/accordion + SFX),
+// class 5 = page 1 (drums/flutes), class 6 = page 2 (drawbar footage).
+kn5000_tonegen_device::wave_ref_t kn5000_tonegen_device::decode_wave_select(uint16_t w) const
+{
+	wave_ref_t r;
+	const int cls = (w >> 12) & 0x0F;
+	r.entry = int(w) & 0x0FFF;
+	r.page  = cls & 3;
+	r.bank  = (cls >> 2) & 3;
+	r.chunk = r.entry;
+	r.out_of_range = false;
+	r.undocumented = false;
+	r.substituted  = false;
+
+	// Highest entry each class uses across all 487 firmware multisample SET descriptors
+	// (MEASURED, notes/data/kn5000-multisample-sets.tsv). DIAGNOSTIC ONLY — it does not
+	// take part in the decode; it just lets LOG_BOUND flag a value the firmware's own
+	// tables never produce, which would mean an untraced selection path (drawbar/drum-kit)
+	// or a decode error.
+	static const uint16_t FW_MAX_ENTRY[8] = { 0x0D5, 0x0B0, 0x0B8, 0x1B3, 0x0C5, 0x0A7, 0x096, 0x038 };
+	if (cls < 8 && r.entry > int(FW_MAX_ENTRY[cls]))
+		r.undocumented = true;
+
+	const page_dir_t *d = &m_dir[r.bank][r.page];
+	if (!d->count && m_dir[IC307_BANK][r.page].count)
+	{
+		// This socket carries no directory of its own (undumped / blank). Fall back to the
+		// same PAGE of IC307, the one hardware-rooted dump, so the voice still renders real
+		// KN5000 PCM through the real paged datapath instead of going silent. LABELLED as a
+		// substitution — it is dead code while kn5000.cpp fills every bank with IC307.
+		d = &m_dir[IC307_BANK][r.page];
+		r.substituted = true;
+	}
+
+	if (!d->count)
+	{
+		r.chunk = -1;                       // no wave ROM at all
+		r.out_of_range = true;
+		return r;
+	}
+
+	if (uint32_t(r.chunk) >= d->count)
+	{
+		// The entry is past the end of this page's directory. On IC307 (bank 1) this is
+		// MEASURED impossible — 465/465 of the firmware's classes-4-7 pairs are in range —
+		// so it can only occur for classes 0-3, whose real chip is undumped and whose
+		// directory is therefore the wrong (substituted) size. Wrap rather than clamp, so a
+		// multisample still steps through distinct real recordings as it walks its zones,
+		// and flag it: every occurrence is a consequence of the missing dump, not of the
+		// decode. Never silence.
+		r.chunk = int(uint32_t(r.chunk) % d->count);
+		r.out_of_range = true;
+	}
+	return r;
+}
+
+
+// Measure the fundamental period (in samples) of a real wave-ROM recording, so it can be
+// resampled to the played note and given a pitch-continuous sustain loop.
+//
+// Method: UNBIASED normalized autocorrelation
+//     r(lag) = sum x[i]x[i+lag] / sqrt( sum x[i]^2 * sum x[i+lag]^2 )
+// over the overlap, taken from a window in the recording's BODY; then, only AFTER the
+// correlation has first fallen below zero (any smooth waveform has r ~ 1 at small lags —
+// without this guard a single-cycle recording reports a tiny bogus period: MEASURED, the
+// 256-sample synthetic sine on page 0 read 4), the SMALLEST lag that is a local maximum
+// reaching 0.92 x peak (which defeats octave-doubling, where the correlation at 2P is as
+// high as at P), finally refined to SUB-SAMPLE resolution by fitting a parabola to r()
+// around that lag.
+//
+// The sub-sample refinement is not a nicety: the playback rate is proportional to the
+// measured period, so rounding it to a whole sample detunes the note by up to
+// 1200/(2P) cents. The piano bank's periods run 237 down to 7 samples, i.e. up to ~85
+// cents at the top — MEASURED live before this refinement: +16 cents on C4-D#4, +24 on
+// E4-G4, -14 on G#4-B4, jumping exactly at the firmware's 4-semitone zone boundaries
+// (the signature of per-chunk rounding), and an octave ratio of 1.9705 instead of 2.
+//
+// Two corrections over the previous estimator, both of them fixes to a measurement bias
+// rather than tuning:
+//   * it normalised every lag by the FULL-window energy while summing progressively fewer
+//     terms, which biases r downward in proportion to lag and so systematically rejects
+//     low notes. The unbiased form divides by the energy actually in the overlap.
+//   * it correlated from sample 0, i.e. across the ATTACK transient, which is inharmonic
+//     and defeats correlation. The body window is the same "sustain starts about a third
+//     in" convention compute_loop() already uses.
+//
+// PREDICT-THEN-CHECK on the piano bank (page 3), whose 16 chunks are one chromatic
+// multisample: the measured periods MUST fall monotonically with the key zone.
+//     old estimator: 238 173 132 103 82 69 54 40 34 26 21 18 [29 51 16 29]  <- breaks
+//     this one:  237.40 173.47 132.28 103.73 82.17 69.00 54.07 40.68
+//                 34.60  26.22  21.51  18.07 14.40 10.16  8.12  7.21        <- 16/16 monotone
+// and the span 237.40 : 7.21 = 60.50 semitones against the firmware's own 16 zones x 4
+// semitones = 60. Chunks with no resolvable period fall from 11/57 to 0/57 on that page
+// and 36 -> 30 of 168 on page 1; unchanged at 16/198 on page 0 and 0/1072 on page 2.
+//
+// Returns the period in 16.16 fixed point, or 0 when the recording has no fundamental at
+// all (drum, applause, noise); the caller then plays it at its native rate, which is what
+// an aperiodic one-shot wants.
 uint32_t kn5000_tonegen_device::detect_period(uint32_t region_byte_start, uint32_t samples) const
 {
 	if (!m_waveform_data || samples < 32)
-		return samples; // trivially one "cycle" (or nothing)
+		return samples << 16; // trivially one "cycle" (or nothing)
 
-	const uint32_t W = std::min<uint32_t>(samples, 4096);
-	const uint32_t minlag = 16;
+	// Window from the recording's BODY, past the attack transient.
+	uint32_t off = samples / 3;
+	uint32_t W   = std::min<uint32_t>(samples - off, 4096);
+	if (W < 64) { off = 0; W = std::min<uint32_t>(samples, 4096); }
+
+	const uint32_t minlag = 4;
 	const uint32_t maxlag = std::min<uint32_t>(W / 2, 2048);
 	if (maxlag <= minlag)
-		return samples; // very short -> the whole wave is a single cycle
+		return samples << 16; // very short -> the whole wave is a single cycle
 
 	// Load the window as doubles (bounds-checked; region is real PCM at every bank).
 	std::vector<double> x(W, 0.0);
 	for (uint32_t i = 0; i < W; i++)
 	{
-		uint32_t bp = region_byte_start + i * 2;
+		uint32_t bp = region_byte_start + (off + i) * 2;
 		if (bp + 1 >= m_waveform_size) { x.resize(i); break; }
 		x[i] = double(int16_t(m_waveform_data[bp] | (m_waveform_data[bp + 1] << 8)));
 	}
 	const uint32_t n = uint32_t(x.size());
-	if (n <= minlag + 4)
-		return samples;
+	if (n <= minlag * 2 + 4)
+		return samples << 16;
 
-	double c0 = 0.0;
-	for (uint32_t i = 0; i < n; i++) c0 += x[i] * x[i];
-	if (c0 < 1.0)
-		return samples; // silent window -> nothing to loop
+	// Remove DC, so a sample with an offset does not correlate with itself at every lag.
+	double mean = 0.0;
+	for (uint32_t i = 0; i < n; i++) mean += x[i];
+	mean /= double(n);
+	double energy = 0.0;
+	for (uint32_t i = 0; i < n; i++) { x[i] -= mean; energy += x[i] * x[i]; }
+	if (energy < 1.0)
+		return samples << 16; // silent window -> nothing to loop
 
-	bool crossed = false;
-	double best_r = -2.0;
-	uint32_t best_lag = 0;
 	const uint32_t hi = std::min<uint32_t>(maxlag, n - 1);
-	for (uint32_t lag = 1; lag <= hi; lag++)
+	std::vector<double> r(hi + 1, -2.0);
+	for (uint32_t lag = minlag; lag <= hi; lag++)
 	{
-		double c = 0.0;
-		for (uint32_t i = 0; i + lag < n; i++) c += x[i] * x[i + lag];
-		double r = c / c0;
-		if (!crossed && r < 0.0) crossed = true;
-		if (crossed && lag >= minlag && r > best_r) { best_r = r; best_lag = lag; }
+		double c = 0.0, e0 = 0.0, e1 = 0.0;
+		for (uint32_t i = 0; i + lag < n; i++)
+		{
+			c  += x[i] * x[i + lag];
+			e0 += x[i] * x[i];
+			e1 += x[i + lag] * x[i + lag];
+		}
+		const double den = std::sqrt(e0 * e1);
+		r[lag] = (den > 1.0) ? (c / den) : -2.0;
 	}
 
-	if (best_lag == 0 || best_r < 0.5)
+	// Skip the lag-0 shoulder: a period can only be claimed once the correlation has
+	// fallen below zero at least once. If it never does, the window contains less than one
+	// cycle — the recording IS a single cycle (page 2's 64-sample drawbar footage waves,
+	// page 0's synthetic sine), so its own length is the period.
+	uint32_t cross = 0;
+	for (uint32_t lag = minlag; lag <= hi; lag++)
+		if (r[lag] < 0.0) { cross = lag; break; }
+	if (cross == 0)
+		return (samples <= 2048) ? (samples << 16) : 0;
+
+	double peak = -2.0;
+	for (uint32_t lag = cross; lag <= hi; lag++)
+		peak = std::max(peak, r[lag]);
+
+	// Refine an integer lag to sub-sample resolution by fitting a parabola to the three
+	// correlation values around it — the standard estimator for a sampled peak.
+	auto refine = [&](uint32_t lag) -> uint32_t
 	{
-		// No clear periodic peak. A short wave is itself ~one cycle; a long one has no
-		// usable single-cycle loop -> signal fallback (0) so the caller uses the sine.
-		return (samples <= 2048) ? samples : 0;
+		double frac = 0.0;
+		if (lag > minlag && lag + 1 <= hi)
+		{
+			const double y0 = r[lag - 1], y1 = r[lag], y2 = r[lag + 1];
+			const double den = y0 - 2.0 * y1 + y2;
+			if (den < -1e-12 || den > 1e-12)
+				frac = 0.5 * (y0 - y2) / den;
+			frac = std::clamp(frac, -0.5, 0.5);
+		}
+		const double p = std::max(1.0, double(lag) + frac);
+		return uint32_t(p * 65536.0 + 0.5);
+	};
+
+	if (peak >= 0.5)
+	{
+		for (uint32_t lag = cross + 1; lag + 1 <= hi; lag++)
+			if (r[lag] >= 0.92 * peak && r[lag] >= r[lag - 1] && r[lag] >= r[lag + 1])
+				return refine(lag);
+		for (uint32_t lag = cross; lag <= hi; lag++)
+			if (r[lag] >= 0.92 * peak)
+				return refine(lag);
 	}
-	return best_lag;
+
+	// No fundamental. A short recording is itself ~one cycle; a long aperiodic one
+	// (drum hit, applause) has none -> 0, and the caller plays it as recorded.
+	return (samples <= 2048) ? (samples << 16) : 0;
 }
 
 
@@ -816,24 +988,24 @@ uint32_t kn5000_tonegen_device::detect_period(uint32_t region_byte_start, uint32
 // fundamental periods — so the loop seam is pitch-continuous — and slide the start within one
 // period to minimise the sample/slope discontinuity at the seam. Result: play the whole real
 // recording once (real attack + evolution), then loop a clean body region for as long as held.
-void kn5000_tonegen_device::compute_loop(int i)
+void kn5000_tonegen_device::compute_loop(page_dir_t &d, int i)
 {
-	uint32_t start = m_wave_pcm_start[i];
-	uint32_t N     = m_wave_pcm_samples[i];
-	uint32_t P     = m_wave_period[i];
+	uint32_t start = d.pcm_start[i];
+	uint32_t N     = d.pcm_samples[i];
+	uint32_t P     = d.period[i];
 
 	if (P == 0 || N == 0)
 	{
-		m_wave_loop_start[i] = 0;
-		m_wave_loop_len[i]   = (N > 0) ? N : 0;
+		d.loop_start[i] = 0;
+		d.loop_len[i]   = (N > 0) ? N : 0;
 		return;
 	}
 
 	// Short waves (<= ~2 periods, e.g. the single-cycle sine): loop the whole thing.
 	if (N <= 2 * P)
 	{
-		m_wave_loop_start[i] = 0;
-		m_wave_loop_len[i]   = std::max<uint32_t>(P, (P <= N) ? (N / P) * P : N);
+		d.loop_start[i] = 0;
+		d.loop_len[i]   = std::max<uint32_t>(P, (P <= N) ? (N / P) * P : N);
 		return;
 	}
 
@@ -871,8 +1043,8 @@ void kn5000_tonegen_device::compute_loop(int i)
 		if (score < best_score) { best_score = score; best_ls = ls; }
 	}
 
-	m_wave_loop_start[i] = best_ls;
-	m_wave_loop_len[i]   = loop_len;
+	d.loop_start[i] = best_ls;
+	d.loop_len[i]   = loop_len;
 }
 
 
@@ -880,38 +1052,71 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// Select the real IC307 waveform for this voice from the instrument fingerprint, then
-	// loop ONE detected fundamental period of its real PCM. Pitch is applied by resampling
-	// that period to the played note (update_pitch), so no per-waveform root is needed.
-	int idx = select_waveform_index(v);
-	if (idx < 0 || idx >= NUM_INDEX_ENTRIES)
-		idx = 0;
+	// DECODE the sole wave-selection register into a physical wave-ROM chunk, then play
+	// that chunk's real PCM. Register-only: nothing outside the chip's own interfaces is
+	// consulted (the +0x040 word it is given, and the wave ROM it is wired to).
+	const uint16_t w = v.regs[1];             // +0x040
+	const wave_ref_t s = decode_wave_select(w);
 
-	uint32_t period = m_wave_period[idx];
-	if (period == 0)
+	v.wave_bank  = s.bank;
+	v.wave_page  = s.page;
+	v.wave_chunk = s.chunk;
+
+	if (s.chunk < 0)
 	{
-		// No clean loop period for this waveform -> fall back to the real IC307 sine
-		// (index 0). Keeps a REAL waveform at EXACTLY the right pitch rather than risk a
-		// wrong pitch (the task's hard constraint). Honest approximation, labelled here.
-		idx = 0;
-		period = m_wave_period[0] ? m_wave_period[0] : 256;
+		// No wave ROM at all (no dump loaded). Nothing to render.
+		v.wave_start = v.wave_samples = v.loop_start = v.loop_end = 0;
+		v.pitch_period = 0;
+		v.pitch_period_q16 = 0;
+		v.wave_offset = 0;
+		return;
 	}
 
-	v.wave_index    = idx;
-	v.wave_start    = m_wave_pcm_start[idx];
-	v.wave_samples  = m_wave_pcm_samples[idx];
-	v.pitch_period  = period;
-	v.loop_start    = m_wave_loop_start[idx];
-	v.loop_end      = m_wave_loop_start[idx] + m_wave_loop_len[idx];
+	// A directory of the substituted bank may have been used; re-resolve the same way
+	// decode_wave_select() did so we read the geometry it actually chose.
+	page_dir_t &d = s.substituted ? m_dir[IC307_BANK][s.page] : m_dir[s.bank][s.page];
+	analyse_chunk(d, s.chunk);
+
+	v.wave_start    = d.pcm_start[s.chunk];
+	v.wave_samples  = d.pcm_samples[s.chunk];
+	// pitch_period == 0 means the recording is APERIODIC (a drum, applause, noise). It has
+	// no fundamental, so resampling it to a musical note is meaningless; update_pitch()
+	// plays it at its native rate. That keeps REAL PCM for percussion instead of
+	// substituting an unrelated waveform, which is what the old sine fallback did.
+	v.pitch_period     = d.period[s.chunk];
+	v.pitch_period_q16 = d.period_q16[s.chunk];
+	v.loop_start    = d.loop_start[s.chunk];
+	v.loop_end      = d.loop_start[s.chunk] + d.loop_len[s.chunk];
 	if (v.loop_end == 0 || v.loop_end > v.wave_samples)
 		v.loop_end = v.wave_samples;          // safety: never index past the recording
 	if (v.loop_start >= v.loop_end)
-		v.loop_start = (v.loop_end > period) ? (v.loop_end - period) : 0;
+		v.loop_start = (v.loop_end > v.pitch_period) ? (v.loop_end - v.pitch_period) : 0;
 	v.wave_offset   = 0;                       // start at sample 0 = the real attack
 
-	LOGMASKED(LOG_VOICE, "tonegen: voice %d wave idx=%d start=0x%06X samples=%d period=%d loop[%d:%d] (fp %02X/%02X/%02X/%02X)\n",
-		ch, v.wave_index, v.wave_start, v.wave_samples, v.pitch_period, v.loop_start, v.loop_end,
-		(v.regs[1] >> 8) & 0xFF, (v.regs[3] >> 8) & 0xFF, (v.regs[5] >> 8) & 0xFF, (v.regs[12] >> 8) & 0xFF);
+	// ---- SELECTION DIAGNOSTIC (LOG_BOUND) ----------------------------------------
+	// Reports the data-derived decode and flags anything the derivation says must not
+	// happen. On IC307 (bank 1) OUT-OF-RANGE is MEASURED impossible: 465/465 of the
+	// firmware's class-4..7 pairs are inside their page's directory.
+	if (VERBOSE & LOG_BOUND)
+	{
+		const int cls = (w >> 12) & 0x0F;
+		if (s.out_of_range)
+			logerror("tonegen: OUT-OF-RANGE +040=%04X cls=%d entry=0x%03X -> bank %d page %d has %d slots -> wrapped to chunk %d%s\n",
+				w, cls, s.entry, s.bank, s.page, d.count, s.chunk,
+				(s.bank != IC307_BANK) ? " (bank is UNDUMPED)" : " *** ON IC307: DECODE ERROR ***");
+		else if (s.undocumented)
+			logerror("tonegen: UNDOCUMENTED +040=%04X cls=%d entry=0x%03X exceeds the firmware tables' max for this class -> bank %d page %d chunk %d\n",
+				w, cls, s.entry, s.bank, s.page, s.chunk);
+		else
+			logerror("tonegen: sel +040=%04X cls=%d entry=0x%03X -> bank %d page %d chunk %d/%d  pcm 0x%06X %d smp period %d%s\n",
+				w, cls, s.entry, s.bank, s.page, s.chunk, d.count,
+				v.wave_start, v.wave_samples, v.pitch_period,
+				s.substituted ? " (IC307 substituted for an undumped socket)" : "");
+	}
+
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d +040=%04X -> bank %d page %d chunk %d start=0x%06X samples=%d period=%d loop[%d:%d]\n",
+		ch, w, v.wave_bank, v.wave_page, v.wave_chunk, v.wave_start, v.wave_samples,
+		v.pitch_period, v.loop_start, v.loop_end);
 }
 
 
@@ -1013,7 +1218,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// banks now hold real IC307 PCM (IC304-306 are BAD_DUMP copies), so any
 			// resolved wave_start reads real data. We must NOT judge that by the FIRST
 			// sample alone: real waveforms routinely start at a zero-crossing (e.g.
-			// IC307 index 0 is a sine that begins at sample 0), which a first-sample-only
+			// page 0 chunk 0 is a sine that begins at sample 0), which a first-sample-only
 			// test would misread as "no data" -> silence. Scan a small window instead: a
 			// genuinely-missing (zero-filled) waveform stays 0 throughout, while any real
 			// waveform has a nonzero sample within a few.

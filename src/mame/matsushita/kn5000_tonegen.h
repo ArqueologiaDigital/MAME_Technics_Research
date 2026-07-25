@@ -83,12 +83,14 @@ private:
 		uint32_t loop_start;    // Sustain-loop start sample (held notes loop [loop_start,loop_end)).
 		uint32_t loop_end;      // Sustain-loop end sample; loop length = loop_end-loop_start is
 		                        // an integer multiple of pitch_period so the seam is pitch-continuous.
-		uint32_t pitch_period;  // Fundamental period (samples) used to derive playback rate so the
-		                        // recording sounds at the played note (see update_pitch / detect_period).
-		int      wave_index;    // Selected IC307 index (0..197) whose real PCM this voice
-		                        // renders; 0 = the real single-cycle sine (degenerate /
-		                        // period-unknown fallback). Chosen from the firmware's
-		                        // per-instrument register fingerprint (select_waveform_index).
+		uint32_t pitch_period;  // Fundamental period, whole samples (see update_pitch / detect_period).
+		                        // 0 = the recording is APERIODIC (drum/SFX) -> played at native rate.
+		uint32_t pitch_period_q16; // The same period in 16.16 — what the playback rate is derived
+		                        // from, so the note is not detuned by the rounding to whole samples.
+		int      wave_bank;     // Wave-ROM bank  = +0x040 bits[15:14]  (1 = IC307, the one real dump)
+		int      wave_page;     // 1 MB page      = +0x040 bits[13:12]
+		int      wave_chunk;    // Directory slot = +0x040 bits[11:0], a plain 0-based index into
+		                        // that page's own self-delimiting directory. See decode_wave_select().
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		int16_t  volume_l;      // Left channel volume (0-32767)
 		int16_t  volume_r;      // Right channel volume (0-32767)
@@ -119,7 +121,10 @@ private:
 			loop_start = 0;
 			loop_end = 0;
 			pitch_period = 0;
-			wave_index = 0;
+			pitch_period_q16 = 0;
+			wave_bank = 0;
+			wave_page = 0;
+			wave_chunk = 0;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			volume_l = 0;
 			volume_r = 0;
@@ -132,12 +137,49 @@ private:
 		}
 	};
 
-	// Waveform ROM index entry (matches IC307 format)
-	struct wave_index_entry_t
+	// ---- Wave-ROM page directory -------------------------------------------------
+	//
+	// MEASURED (notes/kn5000-structural-validation.md §1): a KN5000 wave ROM is FOUR
+	// self-delimiting directories, one per 1 MB page — not one index plus 3 MB of
+	// un-indexed PCM, as the older content map assumed. Each page begins with its own
+	// index of {param_ptr, wave_offset} u16 pairs whose length is encoded in entry 0
+	// (`entry0.param_ptr == 4 * count`), followed by the parameter records and then
+	// s16le PCM. IC307's four counts are 198 / 168 / 1072 / 57, and every one of the
+	// 1495 parameter records starts with a redundant copy of its own `wave_offset`
+	// (1495/1495 — a back-reference an accidental pattern cannot satisfy).
+	struct page_dir_t
 	{
-		uint16_t param_ptr;     // Pointer to parameter record
-		uint16_t wave_offset;   // Waveform byte offset / 16
+		uint32_t base = 0;                  // region byte offset of this 1 MB page
+		uint32_t count = 0;                 // directory slots (0 = no valid directory here)
+		std::vector<uint32_t> pcm_start;    // region byte offset of each chunk's PCM
+		std::vector<uint32_t> pcm_samples;  // s16le sample count of each chunk
+		std::vector<uint32_t> period;       // measured fundamental, whole samples (0 = aperiodic)
+		std::vector<uint32_t> period_q16;   // the same fundamental in 16.16 fixed point. A real
+		                                    // fundamental is NOT a whole number of samples, and
+		                                    // rounding it to one detunes the note by up to
+		                                    // 1200/(2*P) cents — ~30 cents where P is only ~20
+		                                    // samples, as it is at the top of the piano bank.
+		std::vector<uint32_t> loop_start;   // sustain-loop start sample within the chunk
+		std::vector<uint32_t> loop_len;     // sustain-loop length (integer multiple of period)
+		std::vector<uint8_t>  analysed;     // period/loop computed for this chunk yet?
 	};
+
+	// Which wave-ROM chunk a +0x040 value names.
+	struct wave_ref_t
+	{
+		int  bank;          // +0x040 bits[15:14]
+		int  page;          // +0x040 bits[13:12]
+		int  chunk;         // directory slot actually used
+		int  entry;         // +0x040 bits[11:0] as written by the firmware
+		bool out_of_range;  // entry >= directory count (only reachable on an undumped bank)
+		bool undocumented;  // entry above the highest value the firmware's own tables use
+		bool substituted;   // this bank has no directory of its own; IC307's was used
+	};
+
+	static constexpr int NUM_BANKS = 4;
+	static constexpr int PAGES_PER_BANK = 4;
+	static constexpr uint32_t PAGE_SIZE = 0x100000;   // a u16 wave_offset x16 addresses exactly 1 MB
+	static constexpr int IC307_BANK = 1;              // the one hardware-rooted dump
 
 	void update_voice_params(int ch);
 	void update_pitch(int ch);
@@ -146,14 +188,23 @@ private:
 	int16_t read_waveform_sample(uint32_t byte_offset) const;
 	void resolve_waveform(int ch);
 
-	// Real-waveform selection from register +0x040 (= regs[1]) ONLY (chip boundary):
-	// cls=bits[15:12] (wave family/bank) + entry=bits[11:0] (multisample key-zone, full
-	// 12 bits). Each class maps to a disjoint IC307 band; entry steps monotonically within
-	// it, so different instruments resolve to different coherent real IC307 waveforms and an
-	// instrument's notes walk its multisample zones. Physical {cls,entry}->PCM map is the
-	// undumped LSI's black box; the band layout is a labelled placeholder over the one real
-	// bank (IC307). See kn5000_tonegen.cpp / notes/kn5000-voice-pipeline-MODEL.md.
-	int  select_waveform_index(const voice_t &v) const;
+	// Real-waveform selection from register +0x040 (= regs[1]) ONLY (chip boundary).
+	// DATA-DERIVED — the wave ROM's own directories decode it (no heuristic, no table
+	// of guessed constants):
+	//
+	//     page      = (w >> 12) & 3          1 MB page inside the bank
+	//     bank      = (w >> 14) & 3          which wave ROM   (1 = IC307)
+	//     chunk     =  w        & 0x0FFF     plain 0-based slot in THAT page's directory
+	//
+	// Validated by predict-then-check: the directory sizes the firmware's tone tables
+	// REQUIRE (max entry + 1 per class: 198 / 168 / 57) equal the directory sizes IC307
+	// itself DECLARES on pages 0 / 1 / 3 — 3/3 exact — and all 465 (class, entry) pairs
+	// the firmware uses on those pages land in range with base 0.
+	// See notes/kn5000-datamap-applied.md and notes/kn5000-structural-validation.md.
+	wave_ref_t decode_wave_select(uint16_t w) const;
+	void parse_page_directories();
+	void analyse_chunk(page_dir_t &d, int chunk);
+	// Returns the measured fundamental in 16.16 fixed point (0 = the recording is aperiodic).
 	uint32_t detect_period(uint32_t region_byte_start, uint32_t samples) const;
 
 	// State
@@ -180,23 +231,16 @@ private:
 	const uint8_t *m_waveform_data;
 	uint32_t     m_waveform_size;
 
-	// Index table cache (198 entries from IC307-format header)
-	static constexpr int NUM_INDEX_ENTRIES = 198;
-	wave_index_entry_t m_wave_index[NUM_INDEX_ENTRIES];
+	// The 16 page directories (4 banks x 4 pages), parsed from the wave ROM region at
+	// device_start. PCM geometry is filled in eagerly (cheap); the fundamental period
+	// and sustain loop of a chunk are measured on first use (analyse_chunk), because
+	// measuring all 1495 chunks of every bank up front would cost seconds of start-up.
+	page_dir_t m_dir[NUM_BANKS][PAGES_PER_BANK];
 
-	// Per-waveform PCM geometry + detected fundamental period, precomputed at
-	// device_start from IC307's index table (the one real dump; region offset 0xC00000).
-	uint32_t m_wave_pcm_start[NUM_INDEX_ENTRIES];   // region byte offset of the waveform's PCM
-	uint32_t m_wave_pcm_samples[NUM_INDEX_ENTRIES]; // total PCM samples available for this waveform
-	uint32_t m_wave_period[NUM_INDEX_ENTRIES];      // detected fundamental period in samples
-	                                                // (0 = no clean period -> real-sine fallback)
-	uint32_t m_wave_loop_start[NUM_INDEX_ENTRIES];  // sustain-loop start sample (in the recording body)
-	uint32_t m_wave_loop_len[NUM_INDEX_ENTRIES];    // sustain-loop length (integer multiple of m_wave_period)
-
-	// Precompute a sustain loop for one waveform: a region in the recording's body whose
-	// length is an integer number of fundamental periods, refined to the lowest seam
+	// Derive a sustain loop for one chunk: a region in the recording's body whose length
+	// is an integer number of fundamental periods, refined to the lowest seam
 	// discontinuity. The ROM stores no loop points (see notes), so we derive one.
-	void compute_loop(int i);
+	void compute_loop(page_dir_t &d, int chunk);
 };
 
 DECLARE_DEVICE_TYPE(KN5000_TONEGEN, kn5000_tonegen_device)
