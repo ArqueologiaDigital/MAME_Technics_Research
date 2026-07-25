@@ -487,46 +487,34 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 	// chip's exact dB/step is internal to the undumped IC303) to keep loud notes
 	// strong while giving a musical ~16 dB velocity spread. See
 	// notes/kn5000-pitch-velocity.md.
-	static constexpr double K = 10.0;    // reg[20] attenuation units per amplitude halving
-	static constexpr double REF = 181.0; // loglevel that maps to ~0.2 full-scale
+	static constexpr double K = 10.0;    // reg[20] level units per amplitude halving
+	// REF = the level that maps to full scale. MEASURED live: the loudest strike puts
+	// 0xE7 (231) in reg[20]'s high byte, the softest 0xCC (204).
+	static constexpr double REF = 231.0;
 
 	int loglevel = (v.regs[20] >> 8) & 0xFF;
-	double gain;
-	if (v.regs[20] == 0)
-	{
-		// The level register is CLEARED (0x0000). This is NOT "uninitialised, play at full":
-		// at note-off the firmware clears it, and because this is a log-domain ATTENUATION
-		// (lower value = LOUDER) a cleared register would read as MAXIMUM gain — which made
-		// a released note jump to full amplitude (heard as the sound getting LOUDER on key
-		// release; MEASURED sustain hi=0xD1 -> 0.14 vs cleared -> 1.0, a 7.1x jump).
-		// Keep whatever level the voice already had; the note-on burst always programs a
-		// real level, so nothing legitimate depends on the old full-gain default.
-		return;
-	}
-	else
-	{
-		gain = std::pow(2.0, (REF - double(loglevel)) / K);
-		if (gain > 1.0) gain = 1.0;
-		if (gain < 0.0) gain = 0.0;
-	}
 
-	// Pan: kept centred. reg[21]/reg[22] are the bus-0 R gain / 2nd-domain level
-	// (also `level<<8`), NOT the low-byte pan the old code assumed (their low bytes
-	// read ~0 here). A faithful L/R-gain split is deferred (see the register-
-	// semantics note); centred pan preserves the current stereo behaviour.
+	// POLARITY (corrected 2026-07-26): reg[20]'s high byte is a LOG-DOMAIN LEVEL —
+	// HIGHER = LOUDER. The earlier code had it inverted (as an attenuation), because the
+	// calibration capture was taken BEFORE the key-bed velocity fix: with the input
+	// running backwards, "velocity 40" actually reached the firmware as a HARD strike and
+	// "velocity 127" as a SOFT one, so the measured 0xE7-at-40 / 0xCC-at-127 was read as
+	// "falls as velocity rises". The two inversions cancelled; fixing the input exposed
+	// this one. Felipe (real-hardware comparison, 2026-07-26): "If I hit hard I hear a
+	// soft sound. If I hit softly, I hear a louder sound."
+	//
+	// The same error inverted the RELEASE: the firmware ramps this level DOWN at key-up,
+	// which under the old reading rendered as amplitude RISING — the long-standing
+	// "sound gets louder when I release a key" defect. With the correct polarity the
+	// release ramp decays on its own, and a CLEARED register (0x0000) is silence rather
+	// than full volume, both of which fall out for free.
+	double gain = std::pow(2.0, (double(loglevel) - REF) / K);
+	if (gain > 1.0) gain = 1.0;
+	if (gain < 0.0) gain = 0.0;
+
+	// Pan: kept centred (see the register-semantics note).
 	int amp = int(gain * 32767.0 + 0.5);
 	amp = std::min(amp, 32767);
-
-	// A RELEASED voice must never get LOUDER. At note-off the firmware CLEARS the level
-	// register (reg[20] -> 0x0000); because this is a log-domain ATTENUATION (lower =
-	// louder), a cleared register reads as maximum gain, so the voice jumped to full
-	// amplitude at key-up — heard as the sound momentarily getting LOUDER when a key is
-	// released (reported from real-hardware comparison, 2026-07-25; MEASURED: sustain
-	// reg[20] hi=0xD1 -> gain 0.14, cleared -> gain 1.0 = a 7.1x jump, matching the 6.2x
-	// jump measured in the rendered WAV). A release is monotonically decaying on the real
-	// instrument, so clamp: once the key is up, the level can only fall.
-	if (!v.key_on && v.volume_l > 0)
-		amp = std::min<int>(amp, v.volume_l);
 
 	v.volume_l = int16_t(amp);
 	v.volume_r = int16_t(amp);
@@ -1561,19 +1549,11 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// MEASURED ~6x). Latch the level seen while the key was down and never exceed
 			// it once released. Enforced here, at the point of use, so it cannot be bypassed
 			// by the order in which the firmware writes its release registers.
-			int32_t vol_l = v.volume_l, vol_r = v.volume_r;
-			if (v.key_on)
-			{
-				if (vol_l > v.sustain_vol) v.sustain_vol = int16_t(vol_l);
-			}
-			else if (v.sustain_vol > 0)
-			{
-				vol_l = std::min<int32_t>(vol_l, v.sustain_vol);
-				vol_r = std::min<int32_t>(vol_r, v.sustain_vol);
-			}
-
-			mix_l += (sample * vol_l) >> 15;
-			mix_r += (sample * vol_r) >> 15;
+			// (The release-only-decays clamp was removed: with the reg[20] polarity
+			// corrected the firmware's release ramp decays by itself, so the clamp is no
+			// longer masking an inverted level.)
+			mix_l += (sample * v.volume_l) >> 15;
+			mix_r += (sample * v.volume_r) >> 15;
 
 			// Advance position
 			v.wave_offset += v.pitch_step;
