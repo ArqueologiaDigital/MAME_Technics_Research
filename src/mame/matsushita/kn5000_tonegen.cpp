@@ -502,7 +502,16 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 	int loglevel = (v.regs[20] >> 8) & 0xFF;
 	double gain;
 	if (v.regs[20] == 0)
-		gain = 1.0; // uninitialised level register → full (matches old reg[20]==0 case)
+	{
+		// The level register is CLEARED (0x0000). This is NOT "uninitialised, play at full":
+		// at note-off the firmware clears it, and because this is a log-domain ATTENUATION
+		// (lower value = LOUDER) a cleared register would read as MAXIMUM gain — which made
+		// a released note jump to full amplitude (heard as the sound getting LOUDER on key
+		// release; MEASURED sustain hi=0xD1 -> 0.14 vs cleared -> 1.0, a 7.1x jump).
+		// Keep whatever level the voice already had; the note-on burst always programs a
+		// real level, so nothing legitimate depends on the old full-gain default.
+		return;
+	}
 	else
 	{
 		gain = std::pow(2.0, (REF - double(loglevel)) / K);
@@ -516,6 +525,18 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 	// semantics note); centred pan preserves the current stereo behaviour.
 	int amp = int(gain * 32767.0 + 0.5);
 	amp = std::min(amp, 32767);
+
+	// A RELEASED voice must never get LOUDER. At note-off the firmware CLEARS the level
+	// register (reg[20] -> 0x0000); because this is a log-domain ATTENUATION (lower =
+	// louder), a cleared register reads as maximum gain, so the voice jumped to full
+	// amplitude at key-up — heard as the sound momentarily getting LOUDER when a key is
+	// released (reported from real-hardware comparison, 2026-07-25; MEASURED: sustain
+	// reg[20] hi=0xD1 -> gain 0.14, cleared -> gain 1.0 = a 7.1x jump, matching the 6.2x
+	// jump measured in the rendered WAV). A release is monotonically decaying on the real
+	// instrument, so clamp: once the key is up, the level can only fall.
+	if (!v.key_on && v.volume_l > 0)
+		amp = std::min<int>(amp, v.volume_l);
+
 	v.volume_l = int16_t(amp);
 	v.volume_r = int16_t(amp);
 }
@@ -1101,10 +1122,38 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 					v.active = false;
 				}
 			}
+			else if (!v.key_on)
+			{
+				// Released AND the release fade has completed: the voice must stay SILENT.
+				// hold_counter keeps it "active" ~100ms purely so the firmware's status
+				// polling still sees it, but that is a bookkeeping lifetime, NOT audio.
+				// Without this, once release_counter hit 0 the fade multiplier above was
+				// skipped and the voice jumped back to FULL amplitude for the rest of the
+				// hold — heard as the amplitude momentarily INCREASING on key release
+				// (reported from real-hardware comparison, 2026-07-25).
+				sample = 0;
+			}
 
-			// Apply volume
-			mix_l += (sample * v.volume_l) >> 15;
-			mix_r += (sample * v.volume_r) >> 15;
+			// Apply volume. A RELEASED note must only ever DECAY: the firmware's release
+			// burst reprograms the level registers, and our log-domain gain model can read
+			// those release values as LOUDER than the sustain level — which made the sound
+			// audibly JUMP UP at key-up (reported from real-hardware comparison 2026-07-25;
+			// MEASURED ~6x). Latch the level seen while the key was down and never exceed
+			// it once released. Enforced here, at the point of use, so it cannot be bypassed
+			// by the order in which the firmware writes its release registers.
+			int32_t vol_l = v.volume_l, vol_r = v.volume_r;
+			if (v.key_on)
+			{
+				if (vol_l > v.sustain_vol) v.sustain_vol = int16_t(vol_l);
+			}
+			else if (v.sustain_vol > 0)
+			{
+				vol_l = std::min<int32_t>(vol_l, v.sustain_vol);
+				vol_r = std::min<int32_t>(vol_r, v.sustain_vol);
+			}
+
+			mix_l += (sample * vol_l) >> 15;
+			mix_r += (sample * vol_r) >> 15;
 
 			// Advance position
 			v.wave_offset += v.pitch_step;

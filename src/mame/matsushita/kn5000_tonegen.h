@@ -94,6 +94,8 @@ private:
 		int16_t  volume_r;      // Right channel volume (0-32767)
 		uint32_t release_counter; // Samples remaining in release phase (0 = no release)
 		uint32_t hold_counter;  // Samples remaining in hold phase after key-off
+		int16_t  sustain_vol;   // volume last seen while the key was DOWN — a released
+		                        // voice may never exceed it (a release only decays).
 		int      env_level;     // Per-tick amplitude envelope magnitude (0-0xFF) the
 		                        // sub-CPU firmware writes to group0/bank0 (reg_idx 0)
 		                        // every audio tick — the real software envelope. 0xFF =
@@ -123,6 +125,7 @@ private:
 			volume_r = 0;
 			release_counter = 0;
 			hold_counter = 0;
+			sustain_vol = 0;
 			env_level = 0xFF;
 			true_note = -1;
 			chord_time = -1e9;
