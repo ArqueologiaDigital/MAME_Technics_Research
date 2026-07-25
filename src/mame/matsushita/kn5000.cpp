@@ -228,10 +228,11 @@ private:
 		const uint8_t raw = note - 36;
 		const bool on = (cmd == 0x90) && (vel != 0);
 		// Match keybed_scan()'s wire format: note-on sets bit 7 of the key byte and
-		// carries velocity in the high byte; note-off is 0xFF00 | raw (velocity 0xFF
-		// = the SubCPU's note-off marker). Pass the MIDI velocity straight through.
+		// carries the key-travel TIME in the high byte (NOT the velocity — see
+		// KEYBED_TIME, the sub-CPU converts it back to a velocity through its own two
+		// ROM curves); note-off is 0xFF00 | raw (0xFF = the SubCPU's note-off marker).
 		if (on)
-			m_tonegen->push_keybed_event((uint16_t(vel) << 8) | (uint16_t(raw) | 0x80));
+			m_tonegen->push_keybed_event((uint16_t(KEYBED_TIME[vel & 0x7F]) << 8) | (uint16_t(raw) | 0x80));
 		else
 			m_tonegen->push_keybed_event(0xFF00 | uint16_t(raw));
 	}
@@ -284,6 +285,38 @@ private:
 	emu_timer *m_keybed_timer;
 	TIMER_CALLBACK_MEMBER(keybed_scan);
 	static constexpr uint8_t KEYBED_VELOCITY = 100; // fixed velocity for PC keyboard
+
+	// The key-bed FIFO's high byte is NOT a velocity — it is a key-travel TIME.
+	//
+	// MEASURED (sub-CPU v142): ToneGen_Read_Voice_Data (asm L51500) reads the 16-bit key-bed
+	// word at 0x110000 as {high = this byte, low = key}, and ToneGen_Calc_Pitch (L51556)
+	// converts it to the note-on velocity through
+	//     x   = T1[byte]                      ; 256-byte table @0x01F43E
+	//     y   = clamp((x - 0x4D) * G / 0x80 + O)  ; TOUCH curve, G/O @0x01F420/0x01F421,
+	//                                           ; mode *(0x4A48) = 6 at power-on (L51415)
+	//     vel = T2[y]                         ; 256-byte table @0x01F53E  -> 1..127
+	// Both tables were dumped from kn5000_subprogram_v142.rom (file offset = address -
+	// 0xEF00) and VERIFIED here: T1 is monotone DECREASING (255...0) and T2 monotone
+	// INCREASING (1...127). A decreasing input table is only meaningful if the byte is a
+	// make-to-break TIME: a short time is a hard strike.
+	//
+	// Feeding the MIDI velocity into that byte therefore ran the whole machine BACKWARDS —
+	// MEASURED end to end: velocity 20 reached the firmware as 126 and velocity 127 as 39.
+	// Every velocity-split patch (24 of them) picked the wrong sample layer and every
+	// velocity-scaled level was inverted.
+	//
+	// This table is the inverse: raw = argmin |firmware(raw) - v| at touch mode 6, computed
+	// from the two ROM tables above. Round-trip: 117/127 velocities exact, max error 1.
+	// Index 0 is unused (velocity 0 is a note-off).
+	static constexpr uint8_t KEYBED_TIME[128] = {
+		  0,221,221,216,210,205,202,197,193,188,182,177,171,167,164,160,
+		156,155,152,151,150,147,146,145,143,142,141,139,138,136,136,135,
+		134,133,132,131,130,129,128,125,124,123,120,119,118,115,114,113,
+		111,110,109,107,106,104,104,103,102,101,100, 99, 98, 97, 96, 93,
+		 92, 91, 88, 87, 86, 83, 82, 81, 79, 78, 77, 75, 74, 72, 72, 71,
+		 70, 69, 68, 67, 66, 65, 64, 61, 60, 59, 56, 55, 54, 51, 50, 49,
+		 47, 46, 45, 43, 42, 40, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31,
+		 30, 28, 28, 27, 27, 26, 25, 24, 24, 23, 22, 22, 21, 20, 20,  0 };
 
 	// ~NMI (SNS): on real hardware, the power supply asserts the CPU's NMI pin when
 	// power is removed.  The ROM's NMI handler (NMI_StorePayloadChecksums at 0xEF08D4)
@@ -405,11 +438,12 @@ TIMER_CALLBACK_MEMBER(kn5000_state::keybed_scan)
 
 			if (pressed && !prev)
 			{
-				// Key pressed: data = (velocity << 8) | (raw_note | 0x80)
-				uint16_t data = (uint16_t(KEYBED_VELOCITY) << 8) | (raw_note | 0x80);
+				// Key pressed: data = (key-travel TIME << 8) | (raw_note | 0x80).
+				// The high byte is a TIME, not a velocity — see KEYBED_TIME.
+				uint16_t data = (uint16_t(KEYBED_TIME[KEYBED_VELOCITY]) << 8) | (raw_note | 0x80);
 				m_tonegen->push_keybed_event(data);
-				LOGMASKED(LOG_KEYBED, "Keybed: note ON raw=%d MIDI=%d vel=%d data=0x%04X\n",
-					raw_note, raw_note + 0x24, KEYBED_VELOCITY, data);
+				LOGMASKED(LOG_KEYBED, "Keybed: note ON raw=%d MIDI=%d vel=%d time=%d data=0x%04X\n",
+					raw_note, raw_note + 0x24, KEYBED_VELOCITY, KEYBED_TIME[KEYBED_VELOCITY], data);
 			}
 			else if (!pressed && prev)
 			{

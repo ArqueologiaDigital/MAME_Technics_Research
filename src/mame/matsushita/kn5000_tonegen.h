@@ -91,6 +91,11 @@ private:
 		int      wave_page;     // 1 MB page      = +0x040 bits[13:12]
 		int      wave_chunk;    // Directory slot = +0x040 bits[11:0], a plain 0-based index into
 		                        // that page's own self-delimiting directory. See decode_wave_select().
+		bool     wave_real;     // The +0x040 word names a chunk on the ONE hardware-rooted dump
+		                        // (IC307) and lands inside that page's real directory. Only then
+		                        // is the {chunk <-> +0x400} pitch relation meaningful, because on
+		                        // an undumped socket the chunk actually played is a substituted,
+		                        // unrelated recording. See resolve_note_group().
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		int16_t  volume_l;      // Left channel volume (0-32767)
 		int16_t  volume_r;      // Right channel volume (0-32767)
@@ -108,6 +113,10 @@ private:
 		double   chord_time;    // press time of the chord this voice belongs to, used to
 		                        // group simultaneous voices for polyphonic note pairing
 		                        // (−1e9 = none). See assign_chord_notes().
+		double   pitch_offset;  // semitones this voice sounds ABOVE its played note, taken
+		                        // from +0x400: the partial's coarse/fine transpose and the
+		                        // unison detune. 0 = sounds at the played note.
+		                        // See resolve_note_group().
 
 		void reset()
 		{
@@ -125,6 +134,7 @@ private:
 			wave_bank = 0;
 			wave_page = 0;
 			wave_chunk = 0;
+			wave_real = false;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			volume_l = 0;
 			volume_r = 0;
@@ -134,6 +144,7 @@ private:
 			env_level = 0xFF;
 			true_note = -1;
 			chord_time = -1e9;
+			pitch_offset = 0.0;
 		}
 	};
 
@@ -162,6 +173,26 @@ private:
 		std::vector<uint32_t> loop_start;   // sustain-loop start sample within the chunk
 		std::vector<uint32_t> loop_len;     // sustain-loop length (integer multiple of period)
 		std::vector<uint8_t>  analysed;     // period/loop computed for this chunk yet?
+
+		// ---- per-chunk LOG-PITCH TRIM, learned from the register stream -----------------
+		// +0x400 (regs[8]) is an ABSOLUTE log pitch at 0x100 units/semitone, offset by a
+		// constant that belongs to the CHUNK (the recording's own tuning/root trim):
+		//     regs[8] = 0x100 * note + 0x80 + trim(chunk)
+		// MEASURED over the firmware's 143 stride-6 multisample SET descriptors x 128 keys:
+		// the trim is a function of the +0x040 word ALONE — 367 of 368 chunks carry exactly
+		// one value across every SET, patch and key that reaches them (the single exception,
+		// +0x040 = 0x6028, carries two values 3072 apart = one octave: a drawbar footage wave
+		// deliberately reused an octave up). So one observation of a chunk pins it, and the
+		// note can then be read straight out of the register.
+		//
+		// It is only learned from a note-on the device can prove is UNTRANSPOSED (see
+		// kn5000_tonegen_device::assign_chord_notes), because a transposed partial reports the
+		// PLAYED note against a register that carries the SOUNDING one — an error of exactly
+		// one octave, indistinguishable after the fact.
+		//   state 0 = never learned;  1 = learned;  2 = CONFLICTED (two observations more than
+		//   half a semitone apart -> the chunk cannot serve as a pitch anchor).
+		std::vector<int32_t> trim;
+		std::vector<uint8_t> trim_state;
 	};
 
 	// Which wave-ROM chunk a +0x040 value names.
@@ -183,6 +214,10 @@ private:
 
 	void update_voice_params(int ch);
 	void update_pitch(int ch);
+	// +0x400 handling: a voice's log pitch REFERRED TO ITS OWN RECORDING (so it can be
+	// compared across chunks), and the per-key-press resolution of transpose + detune.
+	double voice_rho(int ch) const;
+	void resolve_note_group(double tchord, int note);
 	void process_key_on(int ch);
 	void process_key_off(int ch);
 	int16_t read_waveform_sample(uint32_t byte_offset) const;

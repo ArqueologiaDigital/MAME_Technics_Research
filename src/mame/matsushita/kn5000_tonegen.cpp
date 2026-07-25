@@ -255,7 +255,9 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	if (group == 0 && bank == 2 && (data & 0x8000))
 		resolve_waveform(ch);
 
-	// Pitch: semitone from group 0 bank 1, octave from group 4 bank 0
+	// Pitch: wave/zone select in group 0 bank 1 (+0x040), absolute log pitch in group 4
+	// bank 0 (+0x400). The transpose/detune this voice carries is resolved once the whole
+	// key press has been programmed (process_key_on -> assign_chord_notes).
 	if ((group == 0 && bank == 1) || (group == 4 && bank == 0))
 		update_pitch(ch);
 
@@ -399,6 +401,7 @@ void kn5000_tonegen_device::assign_chord_notes(int ch)
 		// No correlated input (e.g. demo / rhythm voice) → register-relative fallback.
 		v.true_note = -1;
 		v.chord_time = -1e9;
+		v.pitch_offset = 0.0;
 		return;
 	}
 	v.chord_time = tchord;
@@ -409,7 +412,7 @@ void kn5000_tonegen_device::assign_chord_notes(int ch)
 	for (const auto &ev : m_pending_notes)
 		if (std::abs(ev.first - tchord) < 0.015)
 			notes.push_back(ev.second);
-	if (notes.empty()) { v.true_note = -1; return; }
+	if (notes.empty()) { v.true_note = -1; v.pitch_offset = 0.0; return; }
 	std::sort(notes.begin(), notes.end());
 
 	// Voices of this chord = all keyed-on voices tagged with the same press time.
@@ -431,8 +434,24 @@ void kn5000_tonegen_device::assign_chord_notes(int ch)
 		size_t rank = std::lower_bound(distinct.begin(), distinct.end(), p.first) - distinct.begin();
 		int note = notes[std::min(rank, notes.size() - 1)];
 		m_voice[p.second].true_note = note;
-		update_pitch(p.second);
+		m_voice[p.second].pitch_offset = 0.0;
 	}
+
+	// Every voice of the chord now knows its played note. Resolve, per played note, the
+	// TRANSPOSE and DETUNE its partials carry in +0x400 (resolve_note_group), then recompute
+	// pitch. Done per note because the comparison is only defined between partials of the
+	// same key press — a chord's voices legitimately differ by the chord's own intervals.
+	std::vector<int> done;
+	for (const auto &p : voices)
+	{
+		const int note = m_voice[p.second].true_note;
+		if (std::find(done.begin(), done.end(), note) != done.end())
+			continue;
+		done.push_back(note);
+		resolve_note_group(tchord, note);
+	}
+	for (const auto &p : voices)
+		update_pitch(p.second);
 }
 
 
@@ -514,33 +533,218 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 }
 
 
+// ---------------------------------------------------------------------------------------
+// +0x400 (regs[8]) is an ABSOLUTE log pitch — transpose and detune, taken from the bus
+// ---------------------------------------------------------------------------------------
+//
+// TRACED (sub-CPU v142 asm: LABEL_023584 L15504 -> LABEL_023A05 L15996 -> LABEL_023A4A
+// L16025) and MEASURED. The word the firmware ships to +0x400 is
+//
+//     +0x400 = (effective note << 8) + 0x80 + trim(chunk) + 2*fine + detune + tunings
+//
+// at 0x100 units per semitone (0xC00 per octave). `trim` is the multisample partial record's
+// own tuning word (`record[+0x04..05]`, stride-6 records only) — how the recording sits
+// against the key. Everything the PLAYED note cannot show rides in here: the partial COARSE
+// transpose (blk[+0x04], which also moves the key zone, so it changes +0x040 too), the
+// partial FINE transpose (blk[+0x05], x2) and the unison/slot detune. MEASURED census over
+// the 1046 partial blocks: 879 have no coarse transpose, 109 are +-12/+-24, 58 are other
+// intervals; 364 carry a non-zero FINE transpose.
+//
+// TWO THINGS ARE DERIVABLE FROM THE CHIP'S OWN INPUTS, AND ONE IS NOT.
+//
+// Derivable — the RELATIVE interval between two voices of the SAME key press. Referring each
+// voice's register to its own recording's measured fundamental,
+//
+//     rho = regs[8]/0x100 - 12*log2(period)          [semitones]
+//
+// makes the value comparable ACROSS chunks: rho(i) - rho(j) is the interval between the two
+// partials. PREDICT-THEN-CHECK on the live capture: `Piano 1 Octave` at C4 (partial 0 on
+// chunk 0x019 with +0x400 = 0x392C, partial 1 on chunk 0x007 with 0x34C1) gives
+// 4.418 + 7.556 = 11.974 semitones against the +12 its patch record declares — residual
+// 0.026 semitone. `Honky-Tonk` (fine -6/+6 on one chunk) gives 0.141 against the 12 register
+// units the ROM declares; plain `Piano`'s two layers give 0.003.
+//
+// NOT derivable — WHICH voice of the pair is the transposed one, i.e. where the pair sits in
+// absolute terms. That needs the chunk's own ROOT PITCH, which lives in the wave ROM's
+// per-chunk parameter records and is not yet decoded. Everything that could stand in for it
+// was measured and rejected this pass (see notes/kn5000-variant-applied.md §3): the
+// per-chunk trim can be learned from the register stream, but a transposed partial teaches
+// it a value exactly one octave wrong and nothing downstream can tell the two apart; and the
+// page-local law `trim + 0x80 - 3072*log2(period) = const (mod 0xC00)`, though it holds to 47
+// units on the acoustic-piano page, only fixes the trim MODULO AN OCTAVE.
+//
+// So this device takes the interval from the register and the anchor from a note-on it can
+// PROVE is untransposed: one where every partial of the key press lands at the same rho. Such
+// a press pins its chunks' trims for good; a chunk pinned that way can later anchor a press
+// that does have a spread. A chunk whose observations disagree by more than half a semitone
+// is marked CONFLICTED and never anchors anything. When no anchor exists the device keeps the
+// played note — exactly what it did before — so this can only add information.
+
+// A voice's log pitch referred to its own recording's native pitch, in semitones. Comparable
+// across chunks (see above). Returns false if the voice has no usable pitch/period.
+double kn5000_tonegen_device::voice_rho(int ch) const
+{
+	const voice_t &v = m_voice[ch];
+	return double(int(v.regs[8])) / 256.0 - 12.0 * std::log2(double(v.pitch_period_q16) / 65536.0);
+}
+
+
+// Resolve transpose + detune for every voice of ONE key press (all voices tagged with this
+// chord's press time whose paired note is `note`). Partials of one key are what the
+// comparison above is defined over — a CHORD's voices differ by the chord's own intervals,
+// so they are handled one played note at a time.
+void kn5000_tonegen_device::resolve_note_group(double tchord, int note)
+{
+	// Collect the voices of this key press whose +0x040 names a real IC307 recording with a
+	// measurable fundamental — the only ones for which any of this is defined.
+	int    ch[NUM_VOICES];
+	double rho[NUM_VOICES];
+	double off[NUM_VOICES];
+	bool   fixed[NUM_VOICES];
+	int    n = 0;
+	for (int c = 0; c < NUM_VOICES && n < NUM_VOICES; c++)
+	{
+		const voice_t &v = m_voice[c];
+		if (!v.key_on || v.true_note != note || std::abs(v.chord_time - tchord) >= 0.020)
+			continue;
+		if (!v.wave_real || v.regs[8] == 0 || v.pitch_period_q16 == 0)
+			continue;
+		ch[n] = c;
+		rho[n] = voice_rho(c);
+		off[n] = 0.0;
+		fixed[n] = false;
+		n++;
+	}
+	if (n == 0)
+		return;
+
+	double lo = rho[0], hi = rho[0];
+	for (int i = 0; i < n; i++) { lo = std::min(lo, rho[i]); hi = std::max(hi, rho[i]); }
+
+	// ---- 1. LEARN, from a key press that is provably free of a coarse transpose ----------
+	//
+	// All partials landing within half a semitone of each other means no partial is shifted
+	// against the others, so each one's +0x400 reads the note that was played. MEASURED: 441
+	// of the 585 multi-partial patches have no coarse transpose at all and 117 have a MIXED
+	// set (which this test detects); the 27 that shift every partial equally are caught by
+	// the CONFLICTED marking below, as is a part-level octave/transpose setting. Two DISTINCT
+	// chunks are required: a lone partial, or a unison pair on one chunk, is no evidence.
+	static constexpr double FLAT = 0.5;          // semitones
+	if (hi - lo < FLAT)
+	{
+		bool distinct = false;
+		for (int i = 1; i < n && !distinct; i++)
+			if (m_voice[ch[i]].wave_chunk != m_voice[ch[0]].wave_chunk ||
+				m_voice[ch[i]].wave_page  != m_voice[ch[0]].wave_page)
+				distinct = true;
+		if (distinct)
+		{
+			for (int i = 0; i < n; i++)
+			{
+				voice_t &v = m_voice[ch[i]];
+				page_dir_t &d = m_dir[v.wave_bank][v.wave_page];
+				if (uint32_t(v.wave_chunk) >= d.count)
+					continue;
+				const int32_t obs = int32_t(v.regs[8]) - 256 * v.true_note - 0x80;
+				uint8_t &st = d.trim_state[v.wave_chunk];
+				if (st == 0)
+				{
+					d.trim[v.wave_chunk] = obs;
+					st = 1;
+				}
+				else if (st == 1 && std::abs(obs - d.trim[v.wave_chunk]) > 128)
+				{
+					// Two readings more than half a semitone apart. MEASURED impossible for
+					// one chunk (367/368 carry a single value across every SET, patch and key
+					// that reaches them), so one of them came from a shift this device cannot
+					// see: never anchor on that chunk again.
+					st = 2;
+				}
+			}
+		}
+	}
+
+	// ---- 2. RESOLVE each voice from ITS OWN chunk's trim ---------------------------------
+	//
+	// Only a voice's own chunk may place it. Crossing chunks is NOT safe: rho differences are
+	// the interval between two partials only while both recordings sit in the same octave
+	// slot of the wave ROM, and that slot is exactly the undecoded per-chunk root. MEASURED
+	// live: `Piano 1 Octave` (chunks 0x019/0x007) gives 11.974 against the +12 its record
+	// declares, but `Piano 2 Octave` (chunks 0x019/0x004) gives 36.004 against a true 24 —
+	// one octave of error, from two chunks whose slots differ. So the offset of every voice
+	// comes from an EXACT learned trim, or from a voice on the SAME chunk (where the slot
+	// cancels identically), or it stays 0 and the voice sounds at the played note.
+	int nfixed = 0;
+	for (int i = 0; i < n; i++)
+	{
+		const voice_t &v = m_voice[ch[i]];
+		const page_dir_t &d = m_dir[v.wave_bank][v.wave_page];
+		if (uint32_t(v.wave_chunk) >= d.count || d.trim_state[v.wave_chunk] != 1)
+			continue;
+		const double nf = (double(int(v.regs[8])) - 128.0 - double(d.trim[v.wave_chunk])) / 256.0;
+		if (std::abs(nf - double(note)) > 25.0)   // two octaves of transpose is the extreme
+			continue;
+		off[i] = nf - double(note);
+		fixed[i] = true;
+		nfixed++;
+	}
+
+	// Voices on a chunk another voice of this press already placed: same chunk, so the
+	// unknown per-chunk term cancels and the register difference IS the interval. This is
+	// what makes a unison/detune layer beat instead of rendering twice identically.
+	for (int i = 0; i < n; i++)
+	{
+		if (fixed[i])
+			continue;
+		for (int j = 0; j < n; j++)
+		{
+			if (!fixed[j])
+				continue;
+			const voice_t &a = m_voice[ch[i]], &b = m_voice[ch[j]];
+			if (a.wave_bank != b.wave_bank || a.wave_page != b.wave_page || a.wave_chunk != b.wave_chunk)
+				continue;
+			off[i] = off[j] + (rho[i] - rho[j]);
+			fixed[i] = true;
+			nfixed++;
+			break;
+		}
+	}
+
+	// Nothing placed at all, but the press is flat: spread the layers around the played note
+	// by their own register differences. Mean-centred, so the note itself cannot move.
+	if (nfixed == 0 && (hi - lo) < FLAT)
+	{
+		double sum = 0.0;
+		for (int i = 0; i < n; i++) sum += rho[i];
+		const double mean = sum / double(n);
+		for (int i = 0; i < n; i++) off[i] = rho[i] - mean;
+	}
+
+	for (int i = 0; i < n; i++)
+		m_voice[ch[i]].pitch_offset = std::clamp(off[i], -30.0, 30.0);
+}
+
+
+
 void kn5000_tonegen_device::update_pitch(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// --- Why this is not a simple register read ---
+	// --- Where absolute pitch comes from ---
 	//
-	// The IC303 is a PCM MULTISAMPLE chip. Its per-voice pitch registers are
-	// sample-zone RELATIVE, not absolute (MEASURED live, 2026-07-23):
-	//   * reg[8] (group4/bank0, +0x400) steps EXACTLY 0x100 per semitone WITHIN a
-	//     sample zone, but RESETS at each zone boundary;
-	//   * reg[1] (group0/bank1, +0x040) is the zone / coarse selector (its low
-	//     nibble = the multisample zone index; +1 every ~3-4 semitones).
-	// The per-zone sample ROOT pitch (what turns the relative value into an
-	// absolute frequency) lives in the chip's internal multisample table in the
-	// WAVE ROM — which is NO_DUMP for IC304-306. So absolute pitch simply CANNOT
-	// be derived from the registers; there is no absolute-note register (verified
-	// by dumping all 32 per-voice registers across a chromatic run — only reg[1]
-	// and reg[8] vary per semitone). See notes/kn5000-pitch-velocity.md.
+	// The IC303 is a PCM MULTISAMPLE chip. +0x400 (reg[8]) is an ABSOLUTE log pitch at
+	// 0x100 units/semitone, but offset by a constant belonging to the selected chunk (the
+	// recording's own tuning trim) — which is why a chromatic run appears to "reset" at every
+	// zone boundary, and why the register alone cannot give the note. The ABSOLUTE frame
+	// therefore still comes from the real input event (keybed / USB-MIDI, both routed through
+	// push_keybed_event) that caused this voice; what the register adds is `pitch_offset`, the
+	// semitones this partial sounds ABOVE that note — its coarse/fine transpose and its unison
+	// detune (resolve_note_group()). An unresolved voice has offset 0, i.e. exactly the
+	// behaviour this device had before.
 	//
-	// Each voice loops ONE fundamental period of a real IC307 waveform (see
-	// resolve_waveform / detect_period). Because that one period is resampled to the
-	// target frequency regardless of the recording's native rate, pitch is decoupled
-	// from the waveform's (unknown, un-stored) root note — so absolute pitch comes
-	// purely from the played note at equal temperament, and NO per-waveform root is
-	// needed. We recover the TRUE musical note from the real input event (keybed /
-	// USB-MIDI, both routed through push_keybed_event) that caused this voice — the
-	// faithful "use the real mechanism" approach.
+	// Each voice plays a real IC307 recording whose measured fundamental period is resampled
+	// to the target frequency, so pitch is decoupled from the recording's (un-stored) native
+	// root. See notes/kn5000-pitch-velocity.md and notes/kn5000-variant-applied.md.
 
 	// An APERIODIC recording (drum, applause, noise — detect_period returned 0) has no
 	// fundamental, so "resample it so its fundamental lands on the played note" is not
@@ -555,19 +759,22 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	}
 
 	double freq;
+	double note_f = 0.0;
+
 	if (v.true_note >= 0)
 	{
-		// Equal temperament, A4 (MIDI 69) = 440 Hz.
-		freq = 440.0 * std::pow(2.0, (double(v.true_note) - 69.0) / 12.0);
+		// Equal temperament, A4 (MIDI 69) = 440 Hz, plus the transpose/detune the +0x400
+		// register carries for this partial.
+		note_f = double(v.true_note) + v.pitch_offset;
+		freq = 440.0 * std::pow(2.0, (note_f - 69.0) / 12.0);
 	}
 	else
 	{
-		// Fallback for voices with no correlated input (e.g. demo / rhythm): use
-		// reg[8] as a global log-pitch (0x100 = 1 semitone). This is correct
-		// WITHIN a sample zone and monotonic; it can jump at zone boundaries (the
-		// missing sample-root problem above), but it is far better than the former
-		// behaviour where every semitone collapsed to one pitch. Anchor chosen so
-		// a mid-range value lands near middle C.
+		// Fallback for voices with no correlated input (e.g. demo / rhythm) on a chunk whose
+		// trim is not known: use reg[8] as a global log-pitch (0x100 = 1 semitone). This is
+		// correct WITHIN a sample zone and monotonic; it can jump at zone boundaries, but it
+		// is far better than the former behaviour where every semitone collapsed to one
+		// pitch. Anchor chosen so a mid-range value lands near middle C.
 		uint16_t r8 = v.regs[8];
 		if (r8 == 0)
 		{
@@ -592,8 +799,8 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	if (step > double(0x7FFFFFFF)) step = double(0x7FFFFFFF);
 	v.pitch_step = uint32_t(step + 0.5);
 
-	LOGMASKED(LOG_VOICE, "tonegen: voice %d note=%d freq=%.2f step=0x%08X (r1=%04X r8=%04X)\n",
-		ch, v.true_note, freq, v.pitch_step, v.regs[1], v.regs[8]);
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d note=%d off=%+.3f -> %.3f freq=%.2f step=0x%08X (r1=%04X r8=%04X)\n",
+		ch, v.true_note, v.pitch_offset, note_f, freq, v.pitch_step, v.regs[1], v.regs[8]);
 }
 
 
@@ -723,6 +930,8 @@ void kn5000_tonegen_device::parse_page_directories()
 			d.loop_start.assign(n, 0);
 			d.loop_len.assign(n, 0);
 			d.analysed.assign(n, 0);
+			d.trim.assign(n, 0);
+			d.trim_state.assign(n, 0);
 			for (uint32_t i = 0; i < n; i++)
 			{
 				auto it = std::upper_bound(sorted.begin(), sorted.end(), wave[i]);
@@ -1061,6 +1270,11 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 	v.wave_bank  = s.bank;
 	v.wave_page  = s.page;
 	v.wave_chunk = s.chunk;
+	// Only a chunk that resolves inside the ONE hardware-rooted dump is a real recording
+	// whose {chunk <-> +0x400} pitch relation means anything: on an undumped socket the
+	// entry was wrapped into a substituted directory, so the recording played has no
+	// connection to the pitch the register asks for. See update_pitch().
+	v.wave_real  = (s.bank == IC307_BANK) && !s.substituted && !s.out_of_range && (s.chunk >= 0);
 
 	if (s.chunk < 0)
 	{
@@ -1133,6 +1347,7 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.release_counter = 0;
 	v.hold_counter = 0;
 	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
+	v.pitch_offset = 0.0; // resolved from +0x400 once the whole key press is programmed
 
 	// Resolve the waveform at key-on: by the time the firmware writes the note-on
 	// command (0x8100) it has already written the wave number (regs[9]/regs[10])
