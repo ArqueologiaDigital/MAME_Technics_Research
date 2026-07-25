@@ -36,6 +36,12 @@
 #define LOG_KEY      (1U << 2)
 #define LOG_VOICE    (1U << 3)
 #define LOG_GLOBAL   (1U << 4)
+// LOG_BOUND: waveform-group BOUNDARY diagnostics. Reports, per note-on, which IC307
+// multisample group a voice selects into, and WARNS when a voice would read outside the
+// group its instrument class is assigned to (a crossing that must not happen) or when its
+// key-zone exceeds the group's size. Runtime feedback for converging the wave mapping.
+// Enable by building with VERBOSE including (1U << 5), e.g. #define VERBOSE (LOG_BOUND).
+#define LOG_BOUND    (1U << 5)
 
 #define VERBOSE (0)
 #include "logmacro.h"
@@ -646,86 +652,74 @@ void kn5000_tonegen_device::update_pitch(int ch)
 // numeric {cls,entry}->physical-PCM function is a hardware black box.
 //
 // INTERIM PLACEHOLDER (LABELLED — not a decode): only IC307 is dumped (the other three banks are
-// BAD_DUMP copies of it), so we spread the eight classes over IC307's one real bank. Each class
-// maps into a DISJOINT contiguous slice of a curated SAFE_WAVE list (below); within its slice
-// `entry` maps MONOTONICALLY (a knee-compander: the low/common cluster steps 1:1 for real
-// multisample coherence, the sparse high tail is compressed). Consequences that ARE faithful and
-// validated by a live WAV+FFT A/B (scratchpad tg/, re-derived from the MEASURED per-class entry
-// sets): (a) DIFFERENT classes -> different, coherent real IC307 waveforms (measured pairwise
-// spectral cosine <0.95 for Piano/Guitar/Organ/Mallet); (b) an instrument's notes step through a
-// contiguous run of real IC307 waves (Piano 16/16, Brass 7/7, Organ 7/11, Guitar/Mallet 5, ...);
-// (c) every selected wave is PITCH-SAFE (its detected period == its true fundamental, so the note
-// plays IN TUNE — chromatic verified within +-2 cents) AND rich (>=1000 samples, so it renders a
-// distinct timbre, not the near-identical simple tone the short low grains collapse to). HONEST
-// GAP: because all four banks are the same IC307 bytes today, same-class instruments that share an
-// entry sub-range (and ~3/4 of instruments whose true samples live off-chip) play a
-// real-but-wrong-bank timbre until IC304-306 are dumped — see notes/kn5000-faithful-render-v2.md.
-// The slice constants are ear-tunable by the owner; the structure (full 12-bit entry, per-class
-// slice, monotone stepping, pitch-safe curated list) is the supported part.
+// BAD_DUMP copies of it), so the eight classes are spread over IC307's one real bank — each class
+// bound to ONE coherent multisample GROUP of that bank (contiguous, spectrally-related waveforms),
+// with the key-zone stepping WITHIN the group. HONEST GAP: because all four banks hold the same
+// IC307 bytes today, ~3/4 of instruments (whose true samples live off-chip) play a real-but-WRONG-
+// BANK timbre until IC304-306 are dumped. The GROUP table is ear-tunable; the structure (full
+// 12-bit entry, one contiguous group per class, in-group monotone stepping, boundary-checked)
+// is the supported part. See notes/kn5000-ic307-groups.md.
 int kn5000_tonegen_device::select_waveform_index(const voice_t &v) const
 {
 	uint16_t w = v.regs[1];                 // +0x040 — the SOLE per-voice wave selector
 	int cls    = (w >> 12) & 0x0F;          // wave family / bank (0..7 measured)
 	int entry  =  int(w)   & 0x0FFF;        // multisample key-zone — FULL 12 bits
 
-	// Degenerate / boot voice (all-zero selector AND all-zero timbre triple) -> real IC307 sine.
+	// Degenerate / boot voice -> the real IC307 sine.
 	uint32_t timbre = ((v.regs[3] >> 8) & 0xFF) | ((v.regs[5] >> 8) & 0xFF) | ((v.regs[12] >> 8) & 0xFF);
 	if (w == 0 && timbre == 0)
 		return 0;
 
-	// CURATED PITCH-SAFE + RICH IC307 index list. Every entry is a real IC307 waveform whose
-	// detected fundamental period matches an independent YIN estimate (ratio 0.90..1.10 — so the
-	// resample-to-note render plays it IN TUNE, no octave error) AND is >=1000 samples long (so it
-	// renders a DISTINCT timbre, not the near-identical simple tone the short grains collapse to).
-	// The 16 pitch-UNSAFE indices (35,36,40,41,42,48,54,62,63,67,68,72,73,104,105,19 — long
-	// recordings whose period detect_period octave-halves) and the sine/dead entries are excluded.
-	// Derived offline (scratchpad tg/pitchsafe.py) from the ROM + a port of this file's playback.
-	static const uint8_t SAFE_WAVE[100] = {
-		  1,  2, 20, 21, 22, 25, 26, 27, 28, 29, 32, 33, 34, 37, 38, 39, 43, 44, 45, 46,
-		 47, 49, 50, 51, 52, 53, 55, 57, 64, 65, 66, 69, 70, 71, 74, 75, 76, 77, 78, 79,
-		 80, 81, 82, 83, 84, 85, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,100,
-		101,102,103,106,107,108,109,110,111,112,113,117,120,121,122,123,124,125,126,127,
-		128,129,130,131,132,134,136,137,138,139,140,141,144,145,146,148,149,150,151,152,
+	// ---- IC307 multisample GROUP table (instrument boundaries) -------------------
+	// Derived from the real IC307 dump by segmenting its 198 indexed waveforms into
+	// coherent multisample groups: adjacent entries whose sustain spectra are similar
+	// belong to ONE instrument (its key zones); a sharp similarity drop is an instrument
+	// BOUNDARY. Groups below are the musically usable ones (>=4 zones, real multi-kilobyte
+	// recordings, low noise) — see notes/kn5000-ic307-groups.md.
+	//
+	// WHY THIS SHAPE: an instrument must play only waveforms from ONE group. The previous
+	// mapping stepped through a CURATED SKIP-LIST, so consecutive key zones landed on
+	// NON-ADJACENT, unrelated IC307 waveforms — the voice jumped between instruments as you
+	// played up the keyboard, which is what made it sound wrong. Here the key-zone steps
+	// through the group's own CONTIGUOUS indices and can never leave it.
+	struct group_t { uint8_t first, last; };
+	static const group_t GROUP[8] = {
+		{ 121, 134 },   // class 0 — Strings / Synth / Orchestral Pad (14 zones)
+		{  73,  83 },   // class 1 — Brass / Bass                     (11 zones)
+		{ 102, 107 },   // class 2 — Mallet & Orch Perc                (6 zones)
+		{ 135, 141 },   // class 3 — Guitar / World / GM / Sax         (7 zones)
+		{  86,  89 },   // class 4 — Organ & Accordion                 (4 zones)
+		{ 142, 146 },   // class 5 — Flute / Drums                     (5 zones)
+		{ 108, 111 },   // class 6 — Digital Drawbar                   (4 zones)
+		{  90,  93 },   // class 7 — Piano                             (4 zones)
 	};
 
-	// Per class: {list_base, width, entry_min, entry_span}. Each class maps into a DISJOINT
-	// contiguous slice of SAFE_WAVE (cross-class distinct); `entry` steps MONOTONICALLY within it
-	// (multisample coherence). emin/espan are the MEASURED per-class entry range (live-captures §5,
-	// pipe-chipmap §2). Auditioned classes take the richest slices; list_bases + widths from the
-	// validated tg/sel.py layout. See notes/kn5000-faithful-render-v2.md.
-	static const struct { uint8_t lbase, width, emin; uint16_t espan; } CLASS_BAND[8] = {
-		/* 0 Strings/Synth/OrchPad */ { 56, 16, 0x09, 0x088 },
-		/* 1 Brass/Bass            */ { 44, 12, 0x06, 0x098 },
-		/* 2 Mallet                */ { 84,  8, 0x96, 0x004 },
-		/* 3 Guitar/World/GM/Sax   */ { 28, 16, 0x00, 0x144 },
-		/* 4 Organ/Accordion       */ { 72, 12, 0x01, 0x05D },
-		/* 5 Flute/Drums           */ {  0, 12, 0x00, 0x080 },
-		/* 6 Drawbar               */ { 92,  6, 0x96, 0x000 },
-		/* 7 Piano                 */ { 12, 16, 0x00, 0x00F },
-	};
+	const group_t &g = GROUP[cls & 7];
+	const int size = int(g.last) - int(g.first) + 1;
 
-	if (cls > 7)
-		return SAFE_WAVE[entry % 100];      // classes 8..15 never observed -> deterministic safe wave (labelled)
+	// Map the key-zone monotonically onto the group's contiguous real indices. Zones are
+	// small per instrument (measured: Piano 0x0-0xF, Brass 0x6-0xC, ...), so step 1:1 and
+	// clamp at the top; a zone beyond the group is reported by LOG_BOUND (below).
+	int local = entry % 256;                // low byte is the key-zone proper
+	int q     = (local < size) ? local : size - 1;
+	int idx   = int(g.first) + q;
 
-	const auto &b = CLASS_BAND[cls];
-	int local = entry - int(b.emin);
-	if (local < 0)
-		local = 0;
-	int width = b.width, span = b.espan, knee = width / 2;
-	int q;
-	if (span <= knee || span == 0)
-		q = (local < width) ? local : width - 1;   // whole class fits its slice 1:1
-	else if (local < knee)
-		q = local;                                 // low/common cluster: full 1:1 multisample stepping
-	else
-		q = knee + ((local - knee) * (width - 1 - knee)) / (span - knee);  // compress the sparse tail
-	if (q > width - 1)
-		q = width - 1;
+	// ---- BOUNDARY-CROSSING DIAGNOSTIC (LOG_BOUND) --------------------------------
+	// Runtime feedback: confirm a voice never reads outside its instrument's group.
+	if (VERBOSE & LOG_BOUND)
+	{
+		if (idx < int(g.first) || idx > int(g.last))
+			logerror("tonegen: BOUNDARY VIOLATION cls=%d entry=0x%03X -> idx %d OUTSIDE group [%d..%d]\n",
+				cls, entry, idx, g.first, g.last);
+		else if (local >= size)
+			logerror("tonegen: BOUNDARY CLAMP cls=%d entry=0x%03X zone %d >= group size %d (group [%d..%d]) -> idx %d\n",
+				cls, entry, local, size, g.first, g.last, idx);
+		else
+			logerror("tonegen: bound ok cls=%d entry=0x%03X zone %d -> idx %d in group [%d..%d]\n",
+				cls, entry, local, idx, g.first, g.last);
+	}
 
-	int pos = int(b.lbase) + q;                    // position in the curated pitch-safe list
-	if (pos < 0)   pos = 0;
-	if (pos > 99)  pos = 99;
-	return SAFE_WAVE[pos];
+	return idx;
 }
 
 
