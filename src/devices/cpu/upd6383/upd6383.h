@@ -9,12 +9,13 @@
     *** DRAFT.  NOT WORKING.  NO AUDIO IN PRACTICE. ***
 
     See upd6383.cpp for the full explanation.  In one line: the instruction set
-    of this chip is not decoded, this device executes the six word forms that
-    are, executes the ADDRESSING (only) of the twelve audio-input words that K6
-    decoded, traps and logs every other word, and produces NO AUDIO.  It exists
-    so that MAME's own tooling can read the microcode corpus, so that the host
-    uploads land in a real I-RAM, and so that the remaining unknowns become a
-    frequency-ranked worklist.
+    of this chip is not decoded, this device executes the word forms that are,
+    executes the ADDRESS GENERATOR of every word whose class4 decodes it (the
+    signed pointer post-increment and the coefficient cursor -- neither reads
+    lo12), traps and logs every word whose arithmetic is unknown, and produces
+    NO AUDIO.  It exists so that MAME's own tooling can read the microcode
+    corpus, so that the host uploads land in a real I-RAM, and so that the
+    remaining unknowns become a frequency-ranked worklist.
 
     It IS instantiated by the Technics KN5000 (as a subdevice of the DSP1 host
     glue), and it is instantiated DISABLED **as a CPU** (set_disable(), no
@@ -24,13 +25,19 @@
     audio, and it still produces the WORKLIST: which word blocks audio first.
     See notes/dsp-audiopath-wired.md.
 
-    SINCE THE K6 DECODE, A SAMPLE DOES ENTER THE CHIP.  The twelve words of the
-    kernel's audio input stage no longer trap: their ADDRESSING is decoded and
-    executed, so the DI latches are deposited in D-RAM and the microcode really
-    reads them.  Their ALU is NOT decoded, so those words are counted as
-    PARTIAL, not decoded, and a frame containing one is discarded exactly like a
-    frame that trapped -- the audible result is still the dry sound, by
-    construction.  notes/dsp-k6-input-stage-applied.md.
+    SINCE THE K6 DECODE, A SAMPLE DOES ENTER THE CHIP.  The kernel's audio input
+    stage has its ADDRESSING executed, so the DI latches are deposited in D-RAM
+    and the microcode really reads them -- MEASURED every frame by an audit that
+    can fail.  Its ALU is NOT decoded, so those words are counted as PARTIAL,
+    not decoded, and a frame containing one is discarded exactly like a frame
+    that trapped -- the audible result is still the dry sound, by construction.
+
+    ★ SINCE 2026-07-26 THE ADDRESS GENERATOR RUNS FOR THE WHOLE FRAME, not just
+    for those twelve words.  Restricting it was a defect, not a safety property:
+    the words that DO execute were reading D-RAM and C-RAM through a generator
+    that had skipped every undecoded word's contribution.  MEASURED: over the
+    cold-boot frame the pointer's net displacement moved from -259 to -135 and
+    the coefficient cursor from 37 advances to 73.  notes/dsp-frame-advance.md.
 
 ***************************************************************************/
 
@@ -266,7 +273,9 @@ private:
 	u64 fetch(offs_t pc);
 	void trap(u64 word, offs_t pc) ATTR_COLD;
 	void latch_inputs_to_dram();
-	void exec_addressing_only(u64 word);
+	// `k6' = one of the twelve whitelisted input-stage words, which additionally
+	// perform their hi12 bit-4 store (see the comment on the definition).
+	void exec_addressing_only(u64 word, bool k6);
 	void exec_decoded(u64 word);
 	void exec_alu(u64 word);
 
@@ -412,7 +421,12 @@ private:
 	// word we cannot execute is a pointer move we do not make.  It is a
 	// criterion that CAN fail, and today it does -- which is the point.
 	s32 m_last_dp_delta;    // signed net displacement of the last frame
-	u64 m_frames_dp_closed; // frames whose net displacement was exactly 0
+	u64 m_frames_dp_closed;   // COMPLETE frames whose net displacement was exactly 0
+	u64 m_frames_dp_measured; // COMPLETE frames (reached the wait word) -- the denominator
+	// min/max over the run: a CONSTANT residue is a fixed per-frame drift (which
+	// the hardware cannot tolerate, so it falsifies part of the model), a VARYING
+	// one says the frame's shape itself changes.  The two point at different bugs.
+	s32 m_dp_delta_min, m_dp_delta_max;
 
 	// --- THE INPUT-STAGE AUDIT (see the accessors above)
 	u64 m_in_frames;        // frames in which BOTH port-read words executed

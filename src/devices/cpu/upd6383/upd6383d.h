@@ -271,6 +271,18 @@ public:
 	//     destination and must keep trapping.  MEASURED: this removes ZERO words
 	//     from the executable set -- no class-8 word in the corpus carries bit 4
 	//     -- so it costs nothing and closes the hole before it opens.
+	//  6. ...AND THE SAME IS TRUE OF ACTION 0x07, which is the DEFECT TWIN of
+	//     guard 5 and was left open by it.  `LO_ACT_ST_BUS' means "write the
+	//     operand to A DESTINATION", and which destination is again the MODE:
+	//     `2C7' on a mode-1 escape word is the external DELAY-RAM write, and the
+	//     output stage's four `L=07' words (`087 0C7 107 287') write the register
+	//     /port space (dsp-alu-structure.md sect. 6).  exec_alu() writes mem[ptr]
+	//     for this action unconditionally, and class 8 is MODE 0 -- so a class-8
+	//     `L=07' word would have been an invented D-RAM write.
+	//     PREDICT-THEN-CHECK: predicted this was already firing; it is NOT.
+	//     MEASURED over the 3057-word corpus -- of the 303 executing `L=07' words,
+	//     303 are mode 2 and 0 are not.  So, exactly like guard 5, this costs ZERO
+	//     words and closes a hole before it opens rather than fixing a live bug.
 	// ---------------------------------------------------------------
 	static constexpr bool alu_decoded(u64 w)
 	{
@@ -287,6 +299,8 @@ public:
 			return false;
 		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)
 			return false;                       // bit-4 target unproven off mode 2
+		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2)
+			return false;                       // ...and neither is action 07's
 
 		switch (hi_f31(hi12(w)))
 		{
@@ -425,6 +439,43 @@ public:
 	//  bit-23 words are C-format, where class4 is immediate data.
 	// ---------------------------------------------------------------
 	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa && !c_format(w); }
+
+	// ---------------------------------------------------------------
+	//  ★ THE ADDRESS GENERATOR IS DECODED EVEN WHERE THE ALU IS NOT.
+	//
+	//  Two of this machine's addressing effects do not read `lo12' AT ALL:
+	//
+	//      ptr_postinc()     `class4 & 7 == 2'  ->  p += (s8)addr8   [MEASURED]
+	//      coeff_consumer()  `class4 == 0xA'    ->  cursor++         [FORCED, K4]
+	//
+	//  They therefore do not need the ALU decode, and K6 already relied on exactly
+	//  that to walk the input stage's pointer.  Restricting them to the twelve
+	//  whitelisted words was NOT a safety property -- it was a LIVE DEFECT, and of
+	//  the same family as the one the ALU pass caught: the ~92 words that DO
+	//  execute were addressing D-RAM and C-RAM through a generator that had
+	//  skipped every undecoded word's contribution.
+	//
+	//  MEASURED on the cold-boot frame (285 slots, kernel + CHORUS + ROOM REVERB):
+	//  the pointer's net displacement was -259 with only the executing words
+	//  moving it and is -135 with every word moving it, and the coefficient cursor
+	//  advanced 37 times instead of 73.  So a decoded `mac (p),c+' late in the
+	//  frame was reading a D-RAM cell ~124 away from the right one and a
+	//  coefficient ~36 cells early.  Neither number is a rounding error.
+	//
+	//  WHAT IS DELIBERATELY *NOT* GENERALISED: hi12 bit 4 (the accumulator store).
+	//  That one needs a CORRECT ACCUMULATOR, and the accumulator of a frame full
+	//  of undecoded words is not the chip's -- so performing it would write
+	//  invented data into real cells.  It stays confined to the K6 twelve, where
+	//  the note established which cells it can reach.  The line is: EXECUTE WHAT
+	//  ADDRESSES, NEVER WHAT COMPUTES.
+	// ---------------------------------------------------------------
+	static constexpr bool ptr_postinc(u64 w) { return !c_format(w) && (class4(w) & 7) == 2; }
+
+	// does this word have ANY modelled addressing effect?  A word that has none
+	// (a delay-DRAM access, a table lookup, a register-file word) executes
+	// NOTHING and stays a pure trap -- its own addressing is undecoded too.
+	static constexpr bool has_addressing(u64 w)
+	{ return ptr_postinc(w) || coeff_consumer(w) || cursor_fetch(w); }
 
 	// true when this word is one of the (few) forms the corpus has decoded
 	static bool decoded(u64 word);

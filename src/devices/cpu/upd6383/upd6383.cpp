@@ -22,6 +22,14 @@
     *** unchanged.  Their ALU is still open, so they count as PARTIAL and
     *** the frame is still discarded: silence, but now an OBSERVABLE
     *** machine.  notes/dsp-k6-input-stage.md, ...-applied.md.
+    ***
+    *** AND SINCE THE SAME DAY THE ADDRESS GENERATOR RUNS FOR THE WHOLE
+    *** FRAME.  The pointer post-increment and the coefficient cursor read
+    *** no part of lo12, so they never needed the ALU decode; confining
+    *** them to those twelve words meant the ~92 words that DID execute
+    *** were addressing the wrong cells and the wrong coefficients.
+    *** 199 of 285 words now execute something; 80 execute FULLY.
+    *** notes/dsp-frame-advance.md.
 
     WHAT THIS IS
         The effects DSP of the Technics SX-KN5000 (IC311).  The same part is
@@ -148,7 +156,8 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_in_base(0), m_in_seen_mask(0),
 	m_frames_run(0), m_frames_trapped(0), m_frames_partial(0), m_frames_capped(0), m_frames_overrun(0),
 	m_last_slots(0), m_last_traps(0), m_last_partials(0), m_partial_total(0),
-	m_last_dp_delta(0), m_frames_dp_closed(0),
+	m_last_dp_delta(0), m_frames_dp_closed(0), m_frames_dp_measured(0),
+	m_dp_delta_min(127), m_dp_delta_max(-128),
 	m_in_frames(0), m_in_ok(0), m_in_bad(0), m_in_nonzero(0), m_in_peak(0),
 	m_in_log_left(INPUT_LOG_FRAMES),
 	m_frame_detail_left(FRAME_DETAIL_FRAMES),
@@ -628,70 +637,79 @@ void upd6383_device::latch_inputs_to_dram()
 }
 
 
-//  EXECUTE THE ADDRESSING OF A K6 INPUT-STAGE WORD -- and NOTHING else.
+//  EXECUTE A WORD'S ADDRESSING -- and NOTHING else.
 //
-//  Three effects, all MEASURED, none of them this file's invention:
-//      hi12 bit 4    -> the word STORES the accumulator to mem[ptr]
+//  Four effects.  The first is K6-only; the other three read NO PART of `lo12'
+//  and are therefore available on EVERY word, decoded or not:
+//      hi12 bit 4    -> the word STORES the accumulator to mem[ptr]   (K6 only)
 //      bit 23        -> the word FETCHES a coefficient...
 //      class4 == 0xA -> ...and ONLY then does the cursor ADVANCE
-//      addr8         -> a SIGNED pointer post-increment
+//      class4 & 7 == 2 -> a SIGNED pointer post-increment by addr8
+//
+//  ★ THIS IS NO LONGER RESTRICTED TO THE TWELVE K6 WORDS, and restricting it was
+//  a LIVE DEFECT rather than a safety property -- see upd6383d.h has_addressing()
+//  for the measurement.  In one sentence: the ~92 words that execute were
+//  addressing D-RAM and C-RAM through an address generator that had skipped every
+//  undecoded word's contribution, so they read the wrong cells and the wrong
+//  coefficients.  `k6' below selects the ONE extra effect the whitelist earns.
 //
 //  ★ FETCH IS NOT ADVANCE (K4, FORCED -- dsp/analysis/k4-cursor.md item I).
 //  This used to read `if (cl & 8) m_cursor++', i.e. it advanced the cursor on
 //  classes 8, 9, A, B, C, D, E and F.  Only class A advances: the PARAMETRIC EQ
 //  body's ten class-8 words sit inside a cursor map proven to the bit at 6 cells
-//  per band, and if class 8 advanced, band k would start at cell 7k.  MEASURED
-//  that this changes nothing for THESE twelve words -- the input stage contains
-//  four class-A words and no class 8/9 at all -- which is exactly why it had to
-//  be fixed before something else relied on it.
+//  per band, and if class 8 advanced, band k would start at cell 7k.
 //
-//  What is NOT done, on purpose: the ALU.  The `lo12' field that selects the
-//  arithmetic is undecoded for all twelve words, so the accumulator is left
-//  exactly as it was.  That is why a frame containing one of these is DISCARDED
-//  like a frame that trapped -- see run_frame().  The value the stores write is
-//  therefore arbitrary; it lands only in cells the input stage and the epilogue
-//  own (X+0, X+1, X+3, X+4, X+6), never in the two input latches, and the audit
-//  in run_frame() is what checks that claim every single frame instead of
-//  asserting it.
+//  What is NOT done, on purpose: the ALU, and -- off the K6 whitelist -- the
+//  bit-4 STORE.  The store needs a CORRECT accumulator, and the accumulator of a
+//  frame full of undecoded words is not the chip's, so performing it generally
+//  would write invented data into real cells.  On the twelve it is kept because
+//  the note established where those stores can land (X+0, X+1, X+3, X+4, X+6 --
+//  never the two input latches) and because the audit in run_frame() re-checks
+//  that claim every single frame instead of asserting it.
+//
+//  The word is still UNDECODED either way: its arithmetic is unknown, so the
+//  frame that contains it is discarded exactly as before, and it still appears on
+//  the decoding worklist.  EXECUTE WHAT ADDRESSES, NEVER WHAT COMPUTES.
 
-void upd6383_device::exec_addressing_only(u64 word)
+void upd6383_device::exec_addressing_only(u64 word, bool k6)
 {
 	const u16 hi = upd6383_disassembler::hi12(word);
-	const s8  dd = s8(upd6383_disassembler::addr8(word));
 
-	// The one C-format word of the stage carries no class4, no addr8 and no
-	// memory operand: a SAFE NO-OP, not a word we execute badly.  (The predicate
-	// is now the shared c_format(); it used to be spelled out here, which is one
-	// more place the two mirrors could drift apart.)
+	// A C-format word carries no class4 and no addr8 at all, so there is no
+	// addressing to execute: a SAFE NO-OP, not a word we execute badly.
 	if (upd6383_disassembler::c_format(word))
 		return;
 
 	const u8 cell = m_dp;
 
-	// THE PORT READ.  Record what the microcode really took out of the cell, so
-	// the frame can compare it with what was deposited.  The read itself has no
-	// modelled consequence -- the ALU is open -- but the VALUE is the whole
-	// question, so it is captured rather than thrown away.
-	bool right;
-	if (upd6383_disassembler::is_input_latch_read(word, right))
+	if (k6)
 	{
-		m_in_seen[right ? 1 : 0] = s32(util::sext(m_dram.read_dword(cell) & 0xffffff, 24));
-		m_in_seen_mask |= right ? 2 : 1;
-	}
+		// THE PORT READ.  Record what the microcode really took out of the cell,
+		// so the frame can compare it with what was deposited.  The read itself
+		// has no modelled consequence -- the ALU is open -- but the VALUE is the
+		// whole question, so it is captured rather than thrown away.
+		bool right;
+		if (upd6383_disassembler::is_input_latch_read(word, right))
+		{
+			m_in_seen[right ? 1 : 0] = s32(util::sext(m_dram.read_dword(cell) & 0xffffff, 24));
+			m_in_seen_mask |= right ? 2 : 1;
+		}
 
-	if (hi & upd6383_disassembler::HI_ST)
-		m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+		if (hi & upd6383_disassembler::HI_ST)
+			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+	}
 
 	// bit 23 FETCHES; class A ADVANCES.  The fetch is modelled because it is what
 	// the bit means -- the value lands in the K latch, which is chip state the
-	// debugger shows -- but nothing consumes it here, because the ALU of these
-	// twelve words is exactly what is NOT decoded.
+	// debugger shows -- but nothing consumes it here, because the ALU of this
+	// word is exactly what is NOT decoded.
 	if (upd6383_disassembler::cursor_fetch(word))
 		m_k = m_cram.read_dword(m_cursor) & 0xffffff;
 	if (upd6383_disassembler::coeff_consumer(word))
 		m_cursor++;
 
-	m_dp = u8(m_dp + dd);
+	if (upd6383_disassembler::ptr_postinc(word))
+		m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 }
 
 
@@ -1010,22 +1028,20 @@ void upd6383_device::execute_run()
 
 		if (!upd6383_disassembler::decoded(word))
 		{
-			// K6: the twelve input-stage words are neither decoded nor unknown.
-			// Their ADDRESSING is executed (see exec_addressing_only()); their
-			// arithmetic is not, so they are still counted on the worklist.
-			if (upd6383_disassembler::addressing_only(word))
+			// AN UNDECODED WORD IS ALWAYS ON THE WORKLIST -- that is what this
+			// device is for -- but it may still have an ADDRESSING effect that is
+			// decoded, and skipping that was corrupting the words that DO execute.
+			// See exec_addressing_only().  Bit 4 (= store the accumulator to
+			// mem[ptr]) is still NOT acted on outside the K6 twelve: one bit of a
+			// 36-bit word is not a decode, and performing half a word is how a
+			// draft core starts producing plausible-but-wrong results.
+			trap(raw, m_pc - upd6383_disassembler::WORD_BYTES);
+
+			const bool k6 = upd6383_disassembler::addressing_only(word);
+			if (k6 || upd6383_disassembler::has_addressing(word))
 			{
-				exec_addressing_only(word);
+				exec_addressing_only(word, k6);
 				m_partial_total++;
-			}
-			else
-			{
-				// TRAP AND LOG.  No state is changed -- an undecoded word must
-				// not silently corrupt the model.  In particular bit 4 (= store
-				// the accumulator to mem[ptr]) is NOT acted on here: one bit of
-				// a 36-bit word is not a decode, and performing half a word is
-				// how a draft core starts producing plausible-but-wrong results.
-				trap(raw, m_pc - upd6383_disassembler::WORD_BYTES);
 			}
 			(void)cl;
 
@@ -1263,28 +1279,22 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
 
-		if (upd6383_disassembler::addressing_only(word))
+		if (!upd6383_disassembler::decoded(word))
 		{
-			// K6 -- A THIRD STATE, and it is deliberately not folded into
-			// either of the other two.  The word's ADDRESSING is executed, so
-			// the sample enters, the pointer walks and the frame becomes
-			// observable; its ALU is unknown, so the frame is still not
-			// KEPT (see `clean' below) and the audible result is still exactly
-			// the dry sound.  Counting these separately is what turns "100 % of
-			// frames trap" into a number that can go down.
-			partials++;
-			m_partial_total++;
-			exec_addressing_only(word);
-			(void)cl;
-		}
-		else if (!upd6383_disassembler::decoded(word))
-		{
-			// TRAP.  No state is changed -- exactly as in execute_run().  The
-			// frame's return will be discarded (see below), so a trap is a
-			// no-op twice over.
-			if (traps == 0)
+			// UNDECODED -- and that is ONE state with TWO sub-cases, not two
+			// states.  Either way the word's arithmetic is unknown, so it goes on
+			// the worklist and the frame's return is discarded (`clean' below).
+			// What differs is how much of it we can honestly perform:
+			//
+			//   PARTIAL   its ADDRESSING is decoded (pointer post-increment,
+			//             coefficient cursor) and is executed.  That is not a
+			//             favour to the word -- it is what makes the DECODED words
+			//             around it address the right cells.
+			//   TRAP      nothing at all is known, nothing at all is done.
+			//
+			// Both are counted on the worklist because both block the frame.
+			if (traps + partials == 0)
 				order_before = slots - 1;   // this word is already counted in `slots'
-			traps++;
 			if (detail)
 				trap(raw, pc);
 			else
@@ -1295,6 +1305,18 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				m_order_iw[order_n] = pc / upd6383_disassembler::WORD_BYTES;
 				m_order_word[order_n] = raw;
 				order_n++;
+			}
+
+			const bool k6 = upd6383_disassembler::addressing_only(word);
+			if (k6 || upd6383_disassembler::has_addressing(word))
+			{
+				partials++;
+				m_partial_total++;
+				exec_addressing_only(word, k6);
+			}
+			else
+			{
+				traps++;
 			}
 			(void)cl;
 		}
@@ -1340,13 +1362,32 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	m_last_partials = partials;
 
 	// FRAME CLOSURE.  Signed net displacement of the D-RAM operand pointer, mod
-	// 256 mapped to [-128, 127].  A complete frame must return the pointer to
-	// where it started (see the header); today it does not, and the size of the
-	// residue is a direct measure of how much of the pointer walk the undecoded
-	// words still owe us.
+	// 256 mapped to [-128, 127].
+	//
+	// ★ THIS MEASUREMENT CHANGED MEANING THIS PASS, and that is the point of it.
+	// While only the executing words moved the pointer, a non-zero residue mostly
+	// measured OUR COVERAGE.  Now that EVERY word's post-increment is performed,
+	// it measures THE MACHINE: the walk is complete, so a residue that is still
+	// non-zero says the model of the walk is wrong somewhere -- and it is
+	// FORCED that it must be, because the DI latches are at FIXED chip addresses
+	// and the microcode reads them at ptr+2 / ptr+5, so the pointer at PC-restart
+	// cannot be allowed to move from frame to frame.
+	// See dump_frame_report() for what the surviving candidates are.
+	//
+	// COUNTED ONLY ON COMPLETE FRAMES.  A frame that hit the slot cap or ran off
+	// the end of I-RAM never finished its program -- at boot, before the host has
+	// uploaded anything, I-RAM is all zeros -- so its residue is not a
+	// measurement of anything.  Mixing those in made the run-wide spread read
+	// `VARIES' when the quantity that matters is dead constant.
 	m_last_dp_delta = s32(s8(u8(m_dp - dp_at_entry)));
-	if (m_last_dp_delta == 0)
-		m_frames_dp_closed++;
+	if (hit_wait)
+	{
+		m_frames_dp_measured++;
+		if (m_last_dp_delta == 0)
+			m_frames_dp_closed++;
+		if (m_last_dp_delta < m_dp_delta_min) m_dp_delta_min = m_last_dp_delta;
+		if (m_last_dp_delta > m_dp_delta_max) m_dp_delta_max = m_last_dp_delta;
+	}
 	if (traps != 0)
 		m_frames_trapped++;
 	if (partials != 0)
@@ -1410,7 +1451,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		m_order_n = order_n;
 		m_order_total = traps;
 		m_order_slots = slots;
-		m_order_before = traps ? order_before : slots;
+		m_order_before = (traps || partials) ? order_before : slots;
 		m_order_partials = partials;
 	}
 
@@ -1459,6 +1500,9 @@ void upd6383_device::dump_frame_report() const
 	logerror("    frames with PARTIAL words (addressing executed, ALU unknown) %u\n",
 			u32(m_frames_partial));
 	logerror("    partial words executed, all frames %u\n", u32(m_partial_total));
+	logerror("    last frame: %u slots = %u DECODED + %u PARTIAL (addressing only) + %u TRAP\n",
+			m_last_slots, m_last_slots - m_last_partials - m_last_traps,
+			m_last_partials, m_last_traps);
 	logerror("    ended on the wait word %010X: %u\n", FRAME_WAIT_WORD,
 			u32(m_frames_run - m_frames_capped - m_frames_overrun));
 	logerror("    ended on the %u-slot CAP:      %u\n", FRAME_SLOT_CAP, u32(m_frames_capped));
@@ -1466,16 +1510,48 @@ void upd6383_device::dump_frame_report() const
 	logerror("    last frame: %u slots, %u partial, %u traps\n",
 			m_last_slots, m_last_partials, m_last_traps);
 
-	// FRAME CLOSURE -- a convergence criterion that CAN fail, and today does.
-	// A complete frame must leave the D-RAM operand pointer where it found it
-	// (the host addresses that state by ABSOLUTE index), so every non-zero
-	// residue here is pointer motion owed by words that still trap.  This
-	// became measurable only when `ldptr' stopped writing the operand pointer:
-	// under the withdrawn reading the pointer was pinned every frame and the
-	// residue was invisible.
-	logerror("    FRAME CLOSURE: net D-RAM pointer displacement, last frame %+d"
-			" (must reach 0); frames that closed %u of %u\n",
-			m_last_dp_delta, u32(m_frames_dp_closed), u32(m_frames_run));
+	// ---- FRAME CLOSURE -- a criterion that CAN fail, and today does ---------
+	//
+	// THE CRITERION IS FORCED, and by the strongest thing K6 established: the DI
+	// latches are at FIXED addresses in the chip's D-RAM (a hardware property --
+	// the serial receivers write them, no instruction does), and the microcode
+	// reads them at ptr+2 and ptr+5.  For that to work on every LRCK period, the
+	// pointer at PC-RESTART MUST BE THE SAME EVERY FRAME.  So the net
+	// displacement over a frame must be 0 (mod 256), full stop.
+	//
+	// ★ AND IT IS NOT.  Since this pass, EVERY word's post-increment is
+	// performed -- the walk is complete, not a sample of it -- so the residue is
+	// no longer a measure of our coverage.  It is a measure of the machine, and
+	// a non-zero value is a FALSIFICATION of something.  The surviving
+	// candidates, none of them chosen here:
+	//
+	//   (P-1) SOME WORD RELOADS THE POINTER, and we do not decode it.  Strongly
+	//         favoured: nothing loads m_dp at all today (K3 withdrew `0x821',
+	//         adjudication sect. 5.1 falsified `0x827' at 0 of 85 streams), and
+	//         the header carries FIVE undecoded C-format words with the
+	//         register-load selector 0x20 (I-RAM 15, 22, 29, 31, 40) plus
+	//         `801.0.6C.827' / `801.0.64.827'.  Under (P-1) "net == 0" is the
+	//         WRONG criterion and the right one is "the pointer at PC-restart is
+	//         constant", which a reload makes true automatically.
+	//   (P-2) the post-increment rule is not `class4 & 7 == 2' everywhere.  It is
+	//         MEASURED, but on body words; the kernel is where it is least tested.
+	//   (P-3) the CALL/RETURN sequencer (EDUCATED GUESS G-5) puts words in the
+	//         wrong order, or a body is entered that the real machine skips.
+	//   (P-4) some words are CONDITIONAL -- the part has a COND field (CDJ-500
+	//         block diagram) that nothing in this decode models.
+	logerror("    FRAME CLOSURE (FORCED criterion: the DI latches are at fixed chip\n");
+	logerror("    addresses and are read at ptr+2 / ptr+5, so the pointer at PC-restart\n");
+	logerror("    must be identical every frame => net displacement must be 0 mod 256):\n");
+	logerror("        net D-RAM pointer displacement, last frame %+d\n", m_last_dp_delta);
+	logerror("        over every COMPLETE frame (%u of them): min %+d  max %+d  %s\n",
+			u32(m_frames_dp_measured), m_dp_delta_min, m_dp_delta_max,
+			(m_dp_delta_min == m_dp_delta_max) ? "(CONSTANT -- a fixed per-frame drift)"
+					: "(VARIES between frames)");
+	logerror("        frames that closed %u of %u\n",
+			u32(m_frames_dp_closed), u32(m_frames_dp_measured));
+	if (m_frames_dp_measured != 0 && m_frames_dp_closed != m_frames_dp_measured)
+		logerror("        *** THE POINTER WALK DOES NOT CLOSE -- see the candidate list in"
+				" dump_frame_report() ***\n");
 
 	// ---- THE INPUT-STAGE AUDIT (K6) ----------------------------------------
 	// The one measurement that says whether audio reaches the microcode at all.
@@ -1497,14 +1573,22 @@ void upd6383_device::dump_frame_report() const
 
 	if (m_order_valid)
 	{
-		logerror("    MOST RECENT REPRESENTATIVE FRAME: %u slots, %u partial, %u traps.\n",
-				m_order_slots, m_order_partials, m_order_total);
-		logerror("    %u words EXECUTED before the first trap.  The first %u offending words\n",
+		logerror("    MOST RECENT REPRESENTATIVE FRAME: %u slots, %u DECODED,"
+				" %u PARTIAL (addressing only), %u TRAP.\n",
+				m_order_slots, m_order_slots - m_order_partials - m_order_total,
+				m_order_partials, m_order_total);
+		logerror("    %u words fully DECODED before the first undecoded one.  The first %u\n",
 				m_order_before, m_order_n);
-		logerror("    IN EXECUTION ORDER -- THIS IS THE DECODING WORKLIST:\n");
+		logerror("    IN EXECUTION ORDER -- THIS IS THE DECODING WORKLIST.  `A' marks a word\n");
+		logerror("    whose ADDRESSING was executed and whose ALU is what blocks the frame:\n");
 		for (u32 i = 0; i < m_order_n; i++)
-			logerror("      %2u.  iw %3u  %010X  %s\n", i, m_order_iw[i], m_order_word[i],
-					upd6383_disassembler::text(m_order_word[i]));
+		{
+			const u64 w = m_order_word[i];
+			const bool k6 = upd6383_disassembler::addressing_only(w);
+			logerror("      %2u.  iw %3u  %010X  %s  %s\n", i, m_order_iw[i], w,
+					(k6 || upd6383_disassembler::has_addressing(w)) ? "A" : "-",
+					upd6383_disassembler::text(w, int(m_order_iw[i])));
+		}
 	}
 	else
 	{
@@ -1608,7 +1692,9 @@ void upd6383_device::write_pointer_trace(const char *path)
 				}
 			}
 
-			const bool moves = (cl == 2 || cl == 0xa);
+			// the shared predicate, so this instrument and the executor can no
+			// longer disagree about which words move the pointer
+			const bool moves = upd6383_disassembler::ptr_postinc(w);
 			util::stream_format(f, "  %3u  %010X    %03X.%X.%02X.%03X   %-21s  %+4d  ",
 					iw, w, hi, cl, ad, lo,
 					upd6383_disassembler::hi12_text(hi), moves ? int(dd) : 0);
