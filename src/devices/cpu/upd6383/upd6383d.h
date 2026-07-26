@@ -42,6 +42,41 @@ public:
 	static constexpr u16 lo12(u64 w)   { return u16(w & 0xfff); }
 
 	// ---------------------------------------------------------------
+	//  THE C-FORMAT -- TWO DIFFERENT PREDICATES, AND CONFLATING THEM HAS
+	//  ALREADY COST THIS PROJECT TWO COMMITTED RESULTS.
+	//  (dsp/analysis/isa-adjudication.md sect. 1, sect. 3.)
+	//
+	//  In `hi12[11:8] == 0xC' there is no class4 and no addr8: bits [24:12] are
+	//  ONE 13-bit immediate that reaches one bit INTO hi12 (which is why the
+	//  unit-1 link value reads 0xC41 and not 0xC40).
+	//
+	//    c_format()  hi12[11:8] == 0xC        THE FORMAT.  68 words of 3057.
+	//        Decides whether class4/addr8 exist at all, so it must be tested
+	//        BEFORE any rule keyed on either.  Forced three ways: R2's
+	//        addressing-mode census reproduces row for row ONLY under it;
+	//        classes 3/7/B/E/F are empty ONLY under it (narrow, the corpus's one
+	//        apparent "class 3" is C04.3.12.820, a header POINTER-LOAD word);
+	//        and both C00 words carry a non-zero B while encoding their own
+	//        I-RAM address (76*32+4 at I-RAM 76, 82*32+7 at I-RAM 82).
+	//    is_c40()    (hi12 & 0xFFE) == 0xC40  THE PAYLOAD RULE.  57 words.
+	//        Only INSIDE it is imm13 a multiple of 32 -- 57/57 in, 2/11 out
+	//        (MEASURED, dsp/analysis/k3-pointers.md sect. 5.3) -- so only there
+	//        is the payload the 8-bit field [24:17] with B == 0.  The rule is
+	//        FAMILY-LOCAL and must NOT be extended to C00/C04/C0A/C16/C42/C4A/C64.
+	//
+	//  ONE LIVE DEFECT THIS FIXES, MEASURED: `C00.A.47.407' -- the frame
+	//  terminator at I-RAM 82 -- passed the old alu_decoded() and was rendered
+	//  and executed as an ordinary class-A multiply-and-store, because nothing
+	//  tested the format.  It is one word of 3057, and it is the last word of
+	//  every frame.
+	// ---------------------------------------------------------------
+	static constexpr bool c_format(u64 w) { return (hi12(w) & 0xf00) == 0xc00; }
+	static constexpr bool is_c40(u64 w)   { return (hi12(w) & 0xffe) == 0xc40; }
+	static constexpr u16  c_imm13(u64 w)  { return u16((w >> 12) & 0x1fff); }
+	static constexpr u8   c_a(u64 w)      { return u8((w >> 17) & 0xff); }   // payload
+	static constexpr u8   c_b(u64 w)      { return u8((w >> 12) & 0x1f); }   // 5-bit sub-field
+
+	// ---------------------------------------------------------------
 	//  hi12 IS NOT AN OPCODE.  It is a HORIZONTAL MICROWORD of independent
 	//  enable bits (MEASURED, notes/kn5000-dsp-hi12.md sect. 2): the 54
 	//  observed values contain 77 Hamming-distance-1 pairs against a
@@ -130,6 +165,20 @@ public:
 	static constexpr u8 lo_act(u64 w) { return u8(w & 0x1f); }
 	static constexpr bool lo_ptrmode(u64 w) { return BIT(w, 5); }
 
+	// ---------------------------------------------------------------
+	//  lo12 BIT 11 IS A FIELD, NOT PART OF AN OPCODE.
+	//  PROVEN BY CONSTRUCTION (dsp/analysis/k3-pointers.md sect. 1.1 item 2):
+	//  the Sub CPU writer at LABEL_0387E6 assembles the low byte first and then
+	//  does a literal `INC 8, WA' into byte 3's low nibble, i.e. it builds
+	//  `lo12 = 0x800 | 0x021' and `lo12 = 0x800 | 0x025'.  So `0x021' (rstcur)
+	//  and `0x821' (ldptr) are ONE ROUTE PLUS A MODIFIER -- they differ in
+	//  exactly one bit of the whole 36-bit word -- and must never be modelled as
+	//  two unrelated 12-bit codes.  lo_sel() is the route, lo_imm() the modifier.
+	// ---------------------------------------------------------------
+	static constexpr u8   lo_sel(u64 w) { return u8(lo12(w) & 0xff); }        // the register SELECTOR
+	static constexpr bool lo_imm(u64 w) { return BIT(w, 11); }                // "addr8 carries a payload"
+	static constexpr u8   lo_mid(u64 w) { return u8((lo12(w) >> 8) & 7); }    // residue: 0 in all 10 corpus sites
+
 	// lo12[10:6] = THE OPERAND-SOURCE SELECT -- which register or bus supplies
 	// the word's operand.  Four of its eighteen observed codes are anchored;
 	// they are the four the biquad section FORCES, and they are exactly the
@@ -195,7 +244,12 @@ public:
 	//     of any other class pass the routing guard anyway, so this costs
 	//     nothing and prevents the category error above.
 	//  2. ROUTING.  Both halves of lo12 must be anchored, and neither the
-	//     pointer-mode bit (5) nor the G bit (11) may be set.
+	//     pointer-mode bit (5) nor the bit-11 MODIFIER may be set.  Bit 11 is
+	//     rejected because it is UNMODELLED on an ALU route, NOT because it is
+	//     part of an opcode: PROVEN BY CONSTRUCTION it is a separately-assembled
+	//     flag (see lo_imm()), so `0x021' and `0x821' are one route plus a
+	//     modifier.  A future decode of the modifier widens this guard; it does
+	//     not add two new codes.
 	//  3. OPERATION.  hi12[3:1] must be one the biquad determines.  HI_ACC_HOLD
 	//     is admitted ONLY on class 8: that is the one word the biquad shows it
 	//     on, "the accumulator is unchanged there" is what the reconstruction
@@ -204,18 +258,35 @@ public:
 	//     survivors, a 2^23 AND and a conditional subtract -- both of which ARE
 	//     the identity on a completed biquad sum, which is why executing this
 	//     one word as "unchanged" is correct under either).
+	//  4. FORMAT.  A C-format word has no class4 and no addr8 at all, so every
+	//     guard below is meaningless there.  MEASURED, and it BIT: without this
+	//     test `C00.A.47.407' -- the frame terminator -- reads as class A with an
+	//     anchored route (src 0x10 = acc, action 0x07 = store the bus) and an
+	//     hi12[3:1] of 0, and was executed as a multiply-and-store.  One word of
+	//     3057, and the last word of every frame.
+	//  5. STORE TARGET.  hi12 bit 4's destination is MODE-DEPENDENT and mem[ptr]
+	//     is the MODE-2 target (R2, dsp/analysis/r2-output.md sect. 1/4.4 -- the
+	//     universal reading manufactures four dead stores in the 23-word output
+	//     stage).  A bit-4 word outside mode 2 therefore has an UNPROVEN
+	//     destination and must keep trapping.  MEASURED: this removes ZERO words
+	//     from the executable set -- no class-8 word in the corpus carries bit 4
+	//     -- so it costs nothing and closes the hole before it opens.
 	// ---------------------------------------------------------------
 	static constexpr bool alu_decoded(u64 w)
 	{
+		if (c_format(w))                        // bits [24:12] are one immediate
+			return false;
 		const u8 cl = class4(w);
 		if (cl != 2 && cl != 8 && cl != 0xa)
 			return false;
-		if (lo12(w) & 0x800)                    // G
-			return false;
-		if (lo_ptrmode(w))                      // M
+		if (lo12(w) & 0x800)                    // the bit-11 MODIFIER: see lo_imm().
+			return false;                       // Not part of the code -- simply not
+		if (lo_ptrmode(w))                      // modelled on an ALU route yet.
 			return false;
 		if (!lo_src_anchored(lo_src(w)) || !lo_act_anchored(lo_act(w)))
 			return false;
+		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)
+			return false;                       // bit-4 target unproven off mode 2
 
 		switch (hi_f31(hi12(w)))
 		{
@@ -225,29 +296,135 @@ public:
 		}
 	}
 
+	// ---------------------------------------------------------------
+	//  THE REGISTER-LOAD FAMILY -- `hi12 == 0x801' IS NOT AN ALU OPCODE.
+	//
+	//  K3 (dsp/analysis/k3-pointers.md sect. 8 item 1): with class4 == 0 and a
+	//  `0x_2x' selector this word is a REGISTER WRITE and nothing else.  Nine
+	//  corpus words carry hi12 == 0x801 (6 header, 2 output stage, 1 body) and a
+	//  tenth, `859.0.86.822', is the same form with other microword bits set.
+	//  They must be dropped from any lo12-as-ALU-route modelling -- which the
+	//  class guard above already does, but only by accident of class4 == 0;
+	//  naming the family makes the exclusion deliberate and survivable.
+	//
+	//  hi12 is NOT part of the predicate.  It cannot be: `859.0.86.822' is the
+	//  same register-write form and its hi12 is 0x859, because hi12 is a
+	//  horizontal microword and this word ALSO carries bit 4 (the store).  That
+	//  combination is exactly why it is NOT decoded below: it names a register
+	//  AND carries a store whose target, off mode 2, is unproven.  It traps.
+	//
+	//  WHICH register each selector names:
+	//      0x21   a C-RAM POINTER -- MEASURED (K3 sect. 4.1): its three in-program
+	//             payloads 0x70 / 0x50 / 0x90 are three of the FOUR structural
+	//             bases of the host's own C-RAM map, P ~ 4e-6 under a uniform
+	//             null.  It is NOT the implicit coefficient cursor -- FORCED
+	//             (K3 sect. 4.2): if it were, CHORUS's `094.A.00.200' would read
+	//             C-RAM[0x71] instead of the wrap constant the host puts at
+	//             C-RAM[0x01].  So C-RAM has at least two independent pointers.
+	//             ★ This WITHDRAWS "the body's operand pointer is the 0x821
+	//             register" (notes/kn5000-dsp-pointer.md headline 2).
+	//      0x25   the DELAY-DESCRIPTOR pointer, tag-0x4C space -- PROVEN BY
+	//             CONSTRUCTION in both halves (encoding from Sub CPU writer
+	//             LABEL_038922, space from R3).
+	//      0x20 / 0x22 / 0x27   OPEN.  0x27's D-RAM-origin assignment was
+	//             FALSIFIED (0 of 85 streams; isa-adjudication.md sect. 5.1).
+	//
+	//  ★ A RESIDUAL TENSION, STATED RATHER THAN SMOOTHED OVER.  Selector 0x21
+	//  WITHOUT the modifier is the cursor rewind -- MEASURED on algo 39
+	//  (PARAMETRIC EQ), whose class-A count at its ten section starts runs
+	//  0,6,12,18,24 | rstcur | 0,6,12,18,24.  Selector 0x21 WITH the modifier
+	//  loads a pointer that is FORCED not to be that cursor.  Two readings
+	//  survive and neither is picked here:
+	//      (a) 0x21 names the C-RAM ADDRESSING UNIT, and the modifier chooses
+	//          "load the payload into the pointer" vs "rewind the cursor";
+	//      (b) in this family bit 11 IS part of the selector after all, and the
+	//          `INC 8, WA' construction is only how the assembler spells it.
+	//  What is settled either way: they are not two unrelated 12-bit codes, and
+	//  the write targets are different registers.
+	// ---------------------------------------------------------------
+	enum : u8 {
+		LO_SEL_CP  = 0x21,      // a C-RAM pointer (NOT the cursor)
+		LO_SEL_DSC = 0x25       // the delay-descriptor pointer (tag 0x4C)
+	};
+
+	static constexpr bool is_regload(u64 w)
+	{
+		if (c_format(w))            return false;
+		if (class4(w) != 0)         return false;   // the writer hard-zeroes this nibble
+		if (lo_mid(w) != 0)         return false;   // 0 at all 10 corpus sites
+		switch (lo_sel(w))
+		{
+		case 0x20: case 0x21: case 0x22: case 0x25: case 0x27: return true;
+		default: return false;
+		}
+	}
+
+	// the three whose REGISTER and MODIFIER are both established.  The store bit
+	// disqualifies: a register write that also stores is a register write with an
+	// UNPROVEN second effect (see 859.0.86.822 above).
+	static constexpr bool is_ldptr(u64 w)
+	{ return is_regload(w) && !(hi12(w) & HI_ST) && lo_sel(w) == LO_SEL_CP && lo_imm(w); }
+	static constexpr bool is_rstcur(u64 w)
+	{ return is_regload(w) && !(hi12(w) & HI_ST) && lo_sel(w) == LO_SEL_CP && !lo_imm(w); }
+	static constexpr bool is_ldptrd(u64 w)
+	{ return is_regload(w) && !(hi12(w) & HI_ST) && lo_sel(w) == LO_SEL_DSC && lo_imm(w); }
+
+	// ---------------------------------------------------------------
+	//  THE PER-UNIT CALL VECTOR (K5, dsp/analysis/k5-output-stage.md sect. 2.4).
+	//  DETERMINED: lo12 0x445 / 0x446 are the ONLY two I-RAM words the host ever
+	//  rewrites (I-RAM 64 and 71), they are written by EFF_Link / EFF_Disconnect
+	//  indexed by effect unit, and the four values decode to 84/42 (unit 0) and
+	//  200/50 (unit 1) -- the I-RAM load address of every unit-0 / unit-1 body
+	//  (91/91 streams) and the first word of that unit's own header setup block.
+	//  The SOURCE field is open; the DESTINATION is not.
+	// ---------------------------------------------------------------
+	static constexpr bool is_vector_lo12(u16 lo) { return lo == 0x445 || lo == 0x446; }
+	static constexpr int  vector_unit(u16 lo)    { return (lo == 0x446) ? 1 : 0; }
+	static constexpr bool is_setvec(u64 w)       { return is_c40(w) && is_vector_lo12(lo12(w)); }
+
+	// ---------------------------------------------------------------
+	//  THE EXTERNAL DELAY-DRAM FAMILY -- and why the C-format guard is not
+	//  optional.  R2's predicate is `addressing mode 1 WITH the format escape'
+	//  and it is exceptionless over the corpus (mode 1 without the escape is the
+	//  internal register file, 324/324).  But `hi12[11:8] == 0xC' ALWAYS carries
+	//  bit 11, so without a C-format guard three immediate loads walk straight
+	//  in -- C40.1.80.000, C40.1.E0.451, C4A.1.C0.820 -- and that is exactly the
+	//  contamination that FALSIFIED R3's cursor-counting headline
+	//  (isa-adjudication.md sect. 1: C40.1.80.000 and C40.2.C0.000 are the SAME
+	//  instruction on the SAME destination register, differing only in the
+	//  immediate; they read class4 1 and 2 because bit 8 of that immediate
+	//  differs).  ANY predicate that selects DRAM words by class4 alone is wrong.
+	//  NOT decoded: the address is a descriptor cell reached through an implicit
+	//  cursor, so it is not in the word.
+	// ---------------------------------------------------------------
+	static constexpr bool is_dram(u64 w)
+	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }
+
 	// bit 23 (== class4 bit 3) is the CURSOR-FETCH enable.  It is NOT a
 	// multiply enable -- that reading was CORRECTED: 18 of the phaser's 20
 	// all-pass sections contain no cursor-fetching word at all and they still
-	// need gains (notes/kn5000-dsp-axes.md sect. 2.2, sect. 1).
-	static constexpr bool cursor_fetch(u64 w) { return BIT(w, 23); }
+	// need gains (notes/kn5000-dsp-axes.md sect. 2.2, sect. 1).  NOT in the
+	// C-format family: there bit 23 is a bit of the 13-bit immediate.
+	static constexpr bool cursor_fetch(u64 w) { return BIT(w, 23) && !c_format(w); }
 
-	// COEFFICIENT CONSUMER = class4 == 0xA (MEASURED, notes/kn5000-dsp-biquad-map.md
-	// sect. 2, cursor-general.md sect. 1).  This is a STRICTER predicate than
-	// cursor_fetch()/bit 23: the implicit coefficient cursor advances by exactly
-	// one per CLASS-A word, and the bank the loader uploads holds `class-A + 1'
-	// words in 26 of 38 images -- a test class 8 (also bit-23) fails, so class 8
-	// does NOT advance the cursor (it is the biquad's post-sum step, which is why
-	// the make-up gain still lands on slot NN+5, semantics.md sect. 3).  Every
-	// class-A word reads ONE coefficient from C-RAM at the current cursor position.
-	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa; }
-
-	// the implicit coefficient cursor is reset to its base by this rewind word
-	// (MEASURED, biquad-map.md sect. 2.1: `801.0.00.021' sends the cursor back to
-	// 0; algo 39's two channels share coefficients across it).
-	static constexpr bool is_rstcur(u64 w)
-	{
-		return hi12(w) == 0x801 && class4(w) == 0 && addr8(w) == 0x00 && lo12(w) == 0x021;
-	}
+	// ---------------------------------------------------------------
+	//  ★ FETCH IS NOT ADVANCE (K4, FORCED -- dsp/analysis/k4-cursor.md item I).
+	//
+	//  bit 23 says a coefficient is FETCHED; only `class4 == 0xA' moves the
+	//  cursor ON.  The PARAMETRIC EQ body has TEN class-8 words (804.8.16.415,
+	//  one per biquad section) sitting inside a cursor map proven to the bit at
+	//  6 cells per band; if class 8 advanced, band k would start at cell 7k
+	//  instead of 6k and all 60 named roles would shift.  So the `cur+'
+	//  annotation on a class-8 word is WRONG -- it must read `cur'.
+	//
+	//  MEASURED, and split by region because a core must not over-generalise:
+	//      BODIES (2974 words)  bit 23 by class:  8 -> 42,  A -> 822, nothing else
+	//      KERNEL    (83 words)  8 -> 2, 9 -> 4, A -> 21, C -> 1, D -> 1
+	//  K4's claim is body-scoped and exact; `bit 23 => class 8 or A' is NOT true
+	//  of the kernel.  The C-format guard also matters here: 3 of the kernel's
+	//  bit-23 words are C-format, where class4 is immediate data.
+	// ---------------------------------------------------------------
+	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa && !c_format(w); }
 
 	// true when this word is one of the (few) forms the corpus has decoded
 	static bool decoded(u64 word);
@@ -299,8 +476,11 @@ public:
 	}
 
 	// one-line text for `word', usable outside a disassembly context (the
-	// device's trap-and-log path uses it)
-	static std::string text(u64 word);
+	// device's trap-and-log path uses it).  `at' is the word's I-RAM index when
+	// the caller knows it and -1 when it does not; ONLY the C00 self-address
+	// check reads it (both C00 words in the machine encode their own address as
+	// A*32 + B, 2/2 -- see annotate()).
+	static std::string text(u64 word, int at = -1);
 };
 
 #endif // MAME_CPU_UPD6383_UPD6383D_H

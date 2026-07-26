@@ -139,7 +139,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_icount(0),
 	m_pc(0), m_ucpc(0), m_sta(0), m_cnt(0),
 	m_acc(0), m_accb(0), m_p(0), m_k(0), m_l(0), m_ta(0), m_tb(0),
-	m_cursor(0), m_cp(0), m_dp(0), m_bp1(0), m_bp2(0), m_pr1(0), m_pr2(0),
+	m_cursor(0), m_cp(0), m_dp(0), m_dsc(0), m_bp1(0), m_bp2(0), m_pr1(0), m_pr2(0),
 	m_bnk(0), m_lc1(0), m_lc2(0), m_lc3(0),
 	m_gf(0), m_rq(0), m_ovc(0), m_frame_done(0), m_sp(0),
 	m_host_cmd(0), m_host_pos(0), m_host_addr(0),
@@ -148,6 +148,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_in_base(0), m_in_seen_mask(0),
 	m_frames_run(0), m_frames_trapped(0), m_frames_partial(0), m_frames_capped(0), m_frames_overrun(0),
 	m_last_slots(0), m_last_traps(0), m_last_partials(0), m_partial_total(0),
+	m_last_dp_delta(0), m_frames_dp_closed(0),
 	m_in_frames(0), m_in_ok(0), m_in_bad(0), m_in_nonzero(0), m_in_peak(0),
 	m_in_log_left(INPUT_LOG_FRAMES),
 	m_frame_detail_left(FRAME_DETAIL_FRAMES),
@@ -155,6 +156,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_order_partials(0), m_order_valid(false)
 {
 	std::fill(std::begin(m_stack), std::end(m_stack), 0);
+	std::fill(std::begin(m_vec), std::end(m_vec), 0);
 	std::fill(std::begin(m_tr), std::end(m_tr), 0);
 	std::fill(std::begin(m_host_word), std::end(m_host_word), 0);
 	std::fill(std::begin(m_order_iw), std::end(m_order_iw), 0);
@@ -234,6 +236,9 @@ void upd6383_device::device_start()
 	state_add(UPD6383_CURSOR, "CUR",    m_cursor);
 	state_add(UPD6383_CP,     "CP",     m_cp);
 	state_add(UPD6383_DP,     "DP",     m_dp);
+	state_add(UPD6383_DSC,    "DSC",    m_dsc);
+	state_add(UPD6383_VEC0,   "VEC0",   m_vec[0]);
+	state_add(UPD6383_VEC1,   "VEC1",   m_vec[1]);
 	state_add(UPD6383_BP1,    "BP1",    m_bp1);
 	state_add(UPD6383_BP2,    "BP2",    m_bp2);
 	state_add(UPD6383_PR1,    "PR1",    m_pr1);
@@ -268,6 +273,8 @@ void upd6383_device::device_start()
 	save_item(NAME(m_cursor));
 	save_item(NAME(m_cp));
 	save_item(NAME(m_dp));
+	save_item(NAME(m_dsc));
+	save_item(NAME(m_vec));
 	save_item(NAME(m_bp1));
 	save_item(NAME(m_bp2));
 	save_item(NAME(m_pr1));
@@ -625,8 +632,18 @@ void upd6383_device::latch_inputs_to_dram()
 //
 //  Three effects, all MEASURED, none of them this file's invention:
 //      hi12 bit 4    -> the word STORES the accumulator to mem[ptr]
-//      class4 bit 3  -> the word FETCHES the next coefficient (cursor += 1)
+//      bit 23        -> the word FETCHES a coefficient...
+//      class4 == 0xA -> ...and ONLY then does the cursor ADVANCE
 //      addr8         -> a SIGNED pointer post-increment
+//
+//  ★ FETCH IS NOT ADVANCE (K4, FORCED -- dsp/analysis/k4-cursor.md item I).
+//  This used to read `if (cl & 8) m_cursor++', i.e. it advanced the cursor on
+//  classes 8, 9, A, B, C, D, E and F.  Only class A advances: the PARAMETRIC EQ
+//  body's ten class-8 words sit inside a cursor map proven to the bit at 6 cells
+//  per band, and if class 8 advanced, band k would start at cell 7k.  MEASURED
+//  that this changes nothing for THESE twelve words -- the input stage contains
+//  four class-A words and no class 8/9 at all -- which is exactly why it had to
+//  be fixed before something else relied on it.
 //
 //  What is NOT done, on purpose: the ALU.  The `lo12' field that selects the
 //  arithmetic is undecoded for all twelve words, so the accumulator is left
@@ -640,12 +657,13 @@ void upd6383_device::latch_inputs_to_dram()
 void upd6383_device::exec_addressing_only(u64 word)
 {
 	const u16 hi = upd6383_disassembler::hi12(word);
-	const u8  cl = upd6383_disassembler::class4(word);
 	const s8  dd = s8(upd6383_disassembler::addr8(word));
 
 	// The one C-format word of the stage carries no class4, no addr8 and no
-	// memory operand: a SAFE NO-OP, not a word we execute badly.
-	if ((hi & 0xf00) == 0xc00)
+	// memory operand: a SAFE NO-OP, not a word we execute badly.  (The predicate
+	// is now the shared c_format(); it used to be spelled out here, which is one
+	// more place the two mirrors could drift apart.)
+	if (upd6383_disassembler::c_format(word))
 		return;
 
 	const u8 cell = m_dp;
@@ -664,7 +682,13 @@ void upd6383_device::exec_addressing_only(u64 word)
 	if (hi & upd6383_disassembler::HI_ST)
 		m_dram.write_dword(cell, u32(m_acc & 0xffffff));
 
-	if (cl & 8)
+	// bit 23 FETCHES; class A ADVANCES.  The fetch is modelled because it is what
+	// the bit means -- the value lands in the K latch, which is chip state the
+	// debugger shows -- but nothing consumes it here, because the ALU of these
+	// twelve words is exactly what is NOT decoded.
+	if (upd6383_disassembler::cursor_fetch(word))
+		m_k = m_cram.read_dword(m_cursor) & 0xffffff;
+	if (upd6383_disassembler::coeff_consumer(word))
 		m_cursor++;
 
 	m_dp = u8(m_dp + dd);
@@ -765,6 +789,15 @@ void upd6383_device::exec_alu(u64 word)
 	// two words of the section that carry bit 4 are exactly the two at which
 	// the accumulator must restart from zero, and without it the section is
 	// 57 dB wrong.
+	//
+	// THE TARGET IS mem[ptr] ONLY BECAUSE THE MODE SAYS SO.  R2 falsified the
+	// class-independent reading (analysis/r2-output.md sect. 1, 4.4): bit 4's
+	// destination is MODE-DEPENDENT and mem[ptr] is the MODE-2 target, so a
+	// universal mem[ptr] manufactures four dead stores in the output stage.
+	// alu_decoded() now refuses any bit-4 word outside mode 2, which is what
+	// makes the write below sound.  MEASURED: that guard removes ZERO words from
+	// the executable set (no class-8 corpus word carries bit 4), so this is a
+	// hole closed before it opened rather than a behaviour change.
 	if (hi & upd6383_disassembler::HI_ST)
 	{
 		m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
@@ -812,8 +845,15 @@ void upd6383_device::exec_alu(u64 word)
 		break;                  // 0x12 and 0x15: no temp / memory side effect
 	}
 
-	// ---- the multiply (class A only -- class 8 is bit 23 but does NOT fetch)
-	if (cl == 0xa)
+	// ---- the multiply, and the ONE place the cursor advances ----------------
+	// class A only.  class 8 sets bit 23 -- so it FETCHES -- but it does NOT
+	// advance the cursor (K4, FORCED), and this model does not give it a
+	// multiply either: the biquad, which is the block that determines class 8's
+	// position, reproduces to 0.094 dB with class 8 doing no multiply at all.
+	// coeff_consumer() carries the C-format guard, so a C-format word whose
+	// immediate happens to read `class4 == 0xA' -- e.g. the frame terminator
+	// C00.A.47.407 -- can never reach here.
+	if (upd6383_disassembler::coeff_consumer(word))
 	{
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
 		m_k = coef;
@@ -825,6 +865,94 @@ void upd6383_device::exec_alu(u64 word)
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
+}
+
+
+//**************************************************************************
+//  THE DECODED FORMS -- ONE IMPLEMENTATION, TWO CALLERS
+//**************************************************************************
+
+//  execute_run() (the debugger path) and run_frame() (the audio path) used to
+//  carry two hand-copied dispatch ladders.  They agreed, but "they agree" is a
+//  property that has to be re-established after every edit, and this file exists
+//  inside a project whose most expensive recent bug was two mirrors drifting
+//  apart.  So there is now exactly one ladder and both callers use it.
+//
+//  EVERY BRANCH BELOW IS A DECODED FORM.  Anything not listed here traps; that
+//  is the rule this device is for.
+
+void upd6383_device::exec_decoded(u64 word)
+{
+	const u8 ad = upd6383_disassembler::addr8(word);
+
+	if (upd6383_disassembler::is_setvec(word))
+	{
+		// THE PER-UNIT CALL VECTOR (K5, DETERMINED destination).  Stored, and
+		// deliberately NOT wired to the call sequencer in this pass: the
+		// sequencer's target table (0x0E -> 84, 0x0F -> 200) is an OBSERVED
+		// upload layout, and swapping it for these registers changes the PC
+		// ORDER of every frame.  That is a separate, testable change --
+		// enumerated in the note, not smuggled in here.
+		m_vec[upd6383_disassembler::vector_unit(upd6383_disassembler::lo12(word))]
+				= upd6383_disassembler::c_a(word);
+	}
+	else if (upd6383_disassembler::is_ldptr(word))
+	{
+		// ★ THIS NO LONGER LOADS THE D-RAM OPERAND POINTER.
+		// K3 (dsp/analysis/k3-pointers.md sect. 4) MEASURED that lo12 = 0x821
+		// addresses the COEFFICIENT space -- its three in-program payloads
+		// 0x70 / 0x50 / 0x90 are three of the four structural bases of the
+		// host's own C-RAM map -- and FORCED that it is not the implicit
+		// coefficient cursor either.  Both halves of that result say it is not
+		// the D-RAM pointer, so `m_dp = ad' was executing a semantic the corpus
+		// has since withdrawn (notes/kn5000-dsp-pointer.md headline 2).
+		//
+		// It is displayed as CP because CP is the CDJ-500 block diagram's
+		// COEFFICIENT POINTER and this register addresses C-RAM; that
+		// IDENTIFICATION is an EDUCATED GUESS.  What is FORCED is the negative
+		// part -- it is neither the cursor nor the D-RAM operand pointer.
+		//
+		// CONSEQUENCE, stated because it is observable: NO decoded word now
+		// loads m_dp.  The D-RAM origin is OPEN (K3's `0x827' candidate was
+		// falsified at 0 of 85 streams), so the operand pointer moves only by
+		// post-increment.  The K6 input window follows it, which is why the
+		// input-stage audit is a comparison and not an assertion.
+		m_cp = ad;
+	}
+	else if (upd6383_disassembler::is_ldptrd(word))
+	{
+		// ldptr.d -- the DELAY-DESCRIPTOR pointer (tag-0x4C space).  PROVEN BY
+		// CONSTRUCTION in both halves.  Nothing reads it yet: the DRAM words
+		// that would consume the descriptor cells are not decoded, so this is a
+		// register that is correctly written and honestly unused.
+		m_dsc = ad;
+	}
+	else if (upd6383_disassembler::is_rstcur(word))
+	{
+		// rstcur -- resets the implicit coefficient cursor to its per-unit BASE.
+		// VERIFIED on algo39 (PARAMETRIC EQ): its class-A count at the ten
+		// section starts runs 0,6,12,18,24 | rstcur | 0,6,12,18,24.
+		// The base is modelled as 0 because that is the unit-0 value; K4 FORCED
+		// that the real base lives in a per-unit COEFFICIENT-BASE register
+		// (0x00 at I-RAM 84, 0x90 at 200) that nothing in the instruction stream
+		// loads, so 0 is a placeholder and is labelled as one.
+		m_cursor = 0;
+	}
+	else if (upd6383_disassembler::hi12(word) == 0x000
+			&& upd6383_disassembler::class4(word) == 2
+			&& upd6383_disassembler::lo12(word) == 0x000)
+	{
+		// nop -- INFERRED.  (The old "PROVEN BY CONSTRUCTION, writer
+		// LABEL_038922" citation was WITHDRAWN: that routine emits
+		// 801.0.NN.825 plus a tag-0x4C packet and never emits this word.  What
+		// supports it now is that the host injects this exact pattern three
+		// times in the PARAMETRIC EQ stream as the only word matching no known
+		// form.)
+	}
+	else
+	{
+		exec_alu(word);     // the lo12 routing / hi12[3:1] operation decode
+	}
 }
 
 
@@ -909,34 +1037,12 @@ void upd6383_device::execute_run()
 			continue;
 		}
 
-		LOGMASKED(LOG_EXEC, "%010X  %s\n", raw, upd6383_disassembler::text(raw));
+		LOGMASKED(LOG_EXEC, "%010X  %s\n", raw,
+				upd6383_disassembler::text(raw, int((m_pc - upd6383_disassembler::WORD_BYTES)
+						/ upd6383_disassembler::WORD_BYTES)));
 
-		if (hi == 0x000 && cl == 2 && lo == 0x000)
-		{
-			// nop -- PROVEN BY CONSTRUCTION (sub-CPU writer LABEL_038922 builds
-			// this exact pattern, setting the class4 nibble to 2 explicitly)
-		}
-		else if (hi == 0x801 && lo == 0x821)
-		{
-			// ldptr #NN -- PROVEN BY CONSTRUCTION (the firmware assembles these
-			// bytes at sub-CPU LABEL_0387E6; in the host poke region such a word
-			// always opens a burst of 1..30 data words).
-			// WHICH of CP/DP/BP1/BP2/PR1/PR2 it loads is UNKNOWN; the model
-			// keeps one data pointer.
-			m_dp = ad;
-		}
-		else if (hi == 0x801 && lo == 0x021)
-		{
-			// rstcur -- resets the implicit coefficient cursor.  VERIFIED on
-			// algo39 (PARAMETRIC EQ): its class-A count at the ten section
-			// starts runs 0,6,12,18,24 | rstcur | 0,6,12,18,24.
-			m_cursor = 0;
-		}
-		else
-		{
-			exec_alu(word);     // the lo12 field decode -- see exec_alu()
-		}
-		(void)dd;
+		exec_decoded(word);
+		(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
 	}
 }
 
@@ -1035,6 +1141,9 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	m_sp = 0;
 	m_frame_done = 0;
 
+	// the pointer this frame starts on -- see m_last_dp_delta in the header
+	const u8 dp_at_entry = m_dp;
+
 	// ---- PRESENT THE SAMPLES (K6) ------------------------------------------
 	// The DI latches land in the two D-RAM cells the input stage reads, at
 	// offsets +2 and +5 from the pointer the previous frame left.  Unconditional
@@ -1079,11 +1188,21 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		// contains no end-of-block word at all -- a block that never ends is a
 		// block closed by hardware.  MEASURED (notes/dsp-perframe-execution.md
 		// sect. 1).  NOT MODELLED: whatever datapath work this word also does.
-		// It is class 0xA, so under the cursor rule it would advance the
-		// coefficient cursor, and it is simultaneously C-format, which would
-		// make class4 immediate data instead -- an open contradiction
-		// (dsp-next-steps-roadmap.md K2).  Rather than pick a side, the frame
-		// stops here and the word performs nothing.
+		//
+		// ★ THE "OPEN CONTRADICTION" HERE IS NOW RESOLVED, and it resolved
+		// AGAINST the class reading.  This word looks like class 0xA and would
+		// therefore advance the coefficient cursor -- but it is C-FORMAT, and in
+		// that family bits [24:12] are ONE 13-bit immediate, so there is no
+		// class4 to read.  The immediate is 2631 = 82*32 + 7, i.e. A = 82 = THIS
+		// WORD'S OWN I-RAM ADDRESS (both C00 words in the machine do that, 2/2),
+		// which is what a self-addressing wait looks like.  coeff_consumer() now
+		// carries the C-format guard, so it is no longer a cursor consumer
+		// anywhere in this device or in either disassembler.
+		// (dsp/analysis/isa-adjudication.md sect. 3, k5-output-stage.md.)
+		//
+		// It still stops the frame here rather than executing: the ADDRESS is
+		// decoded, the WAIT semantics are INFERRED, and one inferred word is not
+		// a reason to let a frame's datapath run past it.
 		if (raw == FRAME_WAIT_WORD)
 		{
 			hit_wait = true;
@@ -1181,27 +1300,14 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		}
 		else
 		{
-			LOGMASKED(LOG_EXEC, "%010X  %s\n", raw, upd6383_disassembler::text(raw));
+			LOGMASKED(LOG_EXEC, "%010X  %s\n", raw,
+					upd6383_disassembler::text(raw, int(pc / upd6383_disassembler::WORD_BYTES)));
 
-			// The decoded semantics are IDENTICAL to execute_run()'s; see the
-			// per-form evidence there and in upd6383d.cpp.
-			if (hi == 0x000 && cl == 2 && lo == 0x000)
-			{
-				// nop
-			}
-			else if (hi == 0x801 && lo == 0x821)
-			{
-				m_dp = ad;
-			}
-			else if (hi == 0x801 && lo == 0x021)
-			{
-				m_cursor = 0;
-			}
-			else
-			{
-				exec_alu(word);
-			}
-			(void)dd;
+			// ONE implementation, shared with execute_run().  It used to be a
+			// hand-copied second ladder; two copies of a decode is exactly the
+			// drift this pass exists to remove.
+			exec_decoded(word);
+			(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
 		}
 
 		// ---- the transfer, AFTER the word has done its datapath work -------
@@ -1232,6 +1338,15 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	m_last_slots = slots;
 	m_last_traps = traps;
 	m_last_partials = partials;
+
+	// FRAME CLOSURE.  Signed net displacement of the D-RAM operand pointer, mod
+	// 256 mapped to [-128, 127].  A complete frame must return the pointer to
+	// where it started (see the header); today it does not, and the size of the
+	// residue is a direct measure of how much of the pointer walk the undecoded
+	// words still owe us.
+	m_last_dp_delta = s32(s8(u8(m_dp - dp_at_entry)));
+	if (m_last_dp_delta == 0)
+		m_frames_dp_closed++;
 	if (traps != 0)
 		m_frames_trapped++;
 	if (partials != 0)
@@ -1351,6 +1466,17 @@ void upd6383_device::dump_frame_report() const
 	logerror("    last frame: %u slots, %u partial, %u traps\n",
 			m_last_slots, m_last_partials, m_last_traps);
 
+	// FRAME CLOSURE -- a convergence criterion that CAN fail, and today does.
+	// A complete frame must leave the D-RAM operand pointer where it found it
+	// (the host addresses that state by ABSOLUTE index), so every non-zero
+	// residue here is pointer motion owed by words that still trap.  This
+	// became measurable only when `ldptr' stopped writing the operand pointer:
+	// under the withdrawn reading the pointer was pinned every frame and the
+	// residue was invisible.
+	logerror("    FRAME CLOSURE: net D-RAM pointer displacement, last frame %+d"
+			" (must reach 0); frames that closed %u of %u\n",
+			m_last_dp_delta, u32(m_frames_dp_closed), u32(m_frames_run));
+
 	// ---- THE INPUT-STAGE AUDIT (K6) ----------------------------------------
 	// The one measurement that says whether audio reaches the microcode at all.
 	// It is a COMPARISON of the value the microcode read against the value this
@@ -1467,12 +1593,19 @@ void upd6383_device::write_pointer_trace(const char *path)
 			const u16 lo = upd6383_disassembler::lo12(w);
 			const s8  dd = s8(ad);
 
-			// the pointer LOADS -- absolute 8-bit immediates
-			if (hi == 0x801 && cl == 0)
+			// the pointer LOADS -- absolute 8-bit immediates.  Matched by the
+			// shared REGISTER-LOAD predicate (selector = lo12[7:0], payload flag
+			// = bit 11) rather than by three literal lo12 constants, because
+			// PROVEN BY CONSTRUCTION they are one route plus a modifier.
+			if (upd6383_disassembler::is_regload(w) && upd6383_disassembler::lo_imm(w))
 			{
-				if (lo == 0x821) p821 = ad;
-				else if (lo == 0x827) p827 = ad;
-				else if (lo == 0x825) p825 = ad;
+				switch (upd6383_disassembler::lo_sel(w))
+				{
+				case 0x21: p821 = ad; break;
+				case 0x27: p827 = ad; break;
+				case 0x25: p825 = ad; break;
+				default: break;
+				}
 			}
 
 			const bool moves = (cl == 2 || cl == 0xa);
@@ -1486,8 +1619,10 @@ void upd6383_device::write_pointer_trace(const char *path)
 			// the store -- LOGGED, never performed (one bit is not a decode)
 			if ((hi & upd6383_disassembler::HI_ST) && !(hi & upd6383_disassembler::HI_ESC))
 				f << "  ST->mem[p]";
+			// FETCH IS NOT ADVANCE (K4, FORCED): bit 23 fetches, only class A
+			// advances.  This column used to print `cur+' for both.
 			if (upd6383_disassembler::cursor_fetch(w))
-				f << "  cur+";
+				f << (upd6383_disassembler::coeff_consumer(w) ? "  cur+" : "  cur");
 			// *** A CONTRADICTION THE INTERPRETER FOUND, reported not buried ***
 			// notes/kn5000-dsp-hi12.md sect. 3 measured "bit 10 with bit 11
 			// clear = END OF PROGRAM: 38 such words in 2974, exactly one per

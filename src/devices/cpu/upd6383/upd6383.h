@@ -91,7 +91,10 @@ enum
 	UPD6383_TR3,
 	UPD6383_GF,
 	UPD6383_RQ,
-	UPD6383_OVC
+	UPD6383_OVC,
+	UPD6383_DSC,            // the delay-DESCRIPTOR pointer (lo12 selector 0x25)
+	UPD6383_VEC0,           // per-unit CALL VECTOR, unit 0 (lo12 0x445)
+	UPD6383_VEC1            // ...and unit 1 (lo12 0x446)
 };
 
 //**************************************************************************
@@ -264,6 +267,7 @@ private:
 	void trap(u64 word, offs_t pc) ATTR_COLD;
 	void latch_inputs_to_dram();
 	void exec_addressing_only(u64 word);
+	void exec_decoded(u64 word);
 	void exec_alu(u64 word);
 
 	// THE FIXED POINT (notes/dsp-alu-biquad.md sect. 5).  What is FORCED is
@@ -317,7 +321,22 @@ private:
 	u32 m_k, m_l;           // multiplier input latches
 	u32 m_ta, m_tb;         // the two carry latches used by the biquad section
 	u8  m_cursor;           // implicit coefficient cursor (MEASURED behaviour)
+	// m_cp is the register `ldptr' (lo12 selector 0x21) writes.  MEASURED that
+	// it addresses C-RAM; FORCED that it is NEITHER the cursor above NOR the
+	// D-RAM operand pointer below (dsp/analysis/k3-pointers.md sect. 4).  Naming
+	// it CP -- the CDJ-500 block diagram's COEFFICIENT POINTER -- is an EDUCATED
+	// GUESS on top of that.
+	// m_dp is the D-RAM operand pointer.  ★ NOTHING LOADS IT: the origin is OPEN
+	// (K3's `0x827' candidate was falsified at 0 of 85 streams), so it moves
+	// only by the signed post-increments of the words that execute.
 	u8  m_cp, m_dp;         // pointers, per the block diagram
+	u8  m_dsc;              // the DELAY-DESCRIPTOR pointer, tag-0x4C space
+	                        // (`ldptr.d', lo12 selector 0x25 -- PROVEN BY
+	                        // CONSTRUCTION).  Written, not yet read: the DRAM
+	                        // words that consume descriptor cells are undecoded.
+	u8  m_vec[2];           // the per-unit CALL VECTOR registers (K5).  Written
+	                        // by setvec; the call sequencer deliberately still
+	                        // uses its OBSERVED target table -- see exec_decoded().
 	u8  m_bp1, m_bp2;
 	u8  m_pr1, m_pr2;
 	u8  m_bnk;              // BNK-R
@@ -375,6 +394,25 @@ private:
 	u32 m_last_traps;
 	u32 m_last_partials;
 	u64 m_partial_total;    // addressing-only words executed, all frames
+
+	// ---- THE FRAME-CLOSURE MEASUREMENT -------------------------------------
+	// The NET D-RAM pointer displacement over one frame.  It became visible the
+	// moment `ldptr' stopped writing m_dp (K3 withdrew that assignment), and it
+	// is worth far more as a measurement than the fixed pointer it replaced:
+	//
+	//   A COMPLETE frame must leave the pointer where it found it.  The host
+	//   addresses D-RAM state by ABSOLUTE index -- its tag-0x15 zero-fill is a
+	//   contiguous block based at register 0x50 / 0xD0 in 87 of 91 parameter
+	//   streams -- so a body that walked its pointer a net non-zero amount per
+	//   sample would drift off its own state block within seconds.  INFERRED
+	//   (strong); it rests on the mode-1 register file and the mode-2 D-RAM
+	//   being one 256-cell RAM, which isa-adjudication.md sect. 5.1 leaves OPEN.
+	//
+	// So NET == 0 is a falsifiable convergence criterion for the decode: every
+	// word we cannot execute is a pointer move we do not make.  It is a
+	// criterion that CAN fail, and today it does -- which is the point.
+	s32 m_last_dp_delta;    // signed net displacement of the last frame
+	u64 m_frames_dp_closed; // frames whose net displacement was exactly 0
 
 	// --- THE INPUT-STAGE AUDIT (see the accessors above)
 	u64 m_in_frames;        // frames in which BOTH port-read words executed

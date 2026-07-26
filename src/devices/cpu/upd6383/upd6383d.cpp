@@ -77,21 +77,33 @@
         word at all and they still need gains, so bit 23 cannot be gating the
         multiplier.
 
+    *** FETCH IS NOT ADVANCE *** (K4, FORCED -- dsp/analysis/k4-cursor.md item I)
+        bit 23 says a coefficient is FETCHED.  ONLY `class4 == 0xA' moves the
+        cursor on.  The PARAMETRIC EQ body carries TEN class-8 words
+        (804.8.16.415) inside a cursor map proven to the bit at 6 cells per band;
+        if class 8 advanced, band k would start at cell 7k and all 60 named roles
+        would shift.  So the `cur+' annotation this file used to print on every
+        bit-23 word is WRONG on class 8: it now prints `cur+' only where the
+        cursor really advances and `cur' where it merely fetches.
+
     ABSOLUTE C-RAM COEFFICIENT ADDRESSES (MEASURED, disassemble() below):
-        Every CLASS-A word (class4 == 0xA) reads one coefficient from the on-chip
-        COEFFICIENT RAM (C-RAM) through the implicit cursor.  The cursor's BASE is
-        0x00 -- MEASURED across all 16 swept effects in the captured uC-IF stream,
-        which frame every coefficient upload identically with `801.0.00.821'
-        (notes/kn5000-dsp-origin-capture.md) -- and it advances +1 per class-A
-        word, reset to 0 by the `801.0.00.021' rewind (biquad-map.md sect. 2).
+        Every CLASS-A word (class4 == 0xA, C-format excluded) reads one
+        coefficient from the on-chip COEFFICIENT RAM (C-RAM) through the implicit
+        cursor.  The cursor's BASE is 0x00 for the unit-0 body and 0x90 for the
+        unit-1 body -- MEASURED in the captured uC-IF stream -- and it advances +1
+        per class-A word, reset by the `...021' rewind (biquad-map.md sect. 2).
         So a class-A word's coefficient has a KNOWN ABSOLUTE C-RAM address:
-        0x00 + (number of class-A words since the last rewind or program start).
+        base + (number of class-A words since the last rewind or program start).
         This disassembler prints it as `; C-RAM[0xNN]'.  It is emitted ONLY for
         class-A words (the strict coefficient-consumer predicate, NOT bit 23,
         which would over-count the class-8 post-sum step); and ONLY for the
         COEFFICIENT space -- no absolute is invented for the D-RAM state operand,
-        whose base (the header's 0x70/0x6C per unit) is still unpinned
-        (notes/kn5000-dsp-addressing.md sect. 5, notes/kn5000-dsp-spaces.md).
+        whose origin is OPEN again (K3 withdrew the `0x821' assignment and the
+        adjudication then falsified its `0x827' replacement, 0 of 85 streams).
+        NB the REBASE between units is FORCED to be a per-unit COEFFICIENT-BASE
+        REGISTER, not an instruction immediate: an exhaustive search of every
+        contiguous 8-to-16-bit field of the ten words that can perform it finds
+        the value 0x90 NOWHERE (k4-cursor.md item C/D).
 
     WHAT IS EMITTED -- THREE STATES, NOT TWO
         * a real mnemonic ONLY for the forms listed in DECODED FORMS below,
@@ -116,22 +128,43 @@
           bit pattern, setting the class4 nibble to 2 explicitly
           (notes/kn5000-dsp-class2-round2.md sect. 4, headline 7).
 
-      801.0.NN.821                    ldptr   #$NN
-          PROVEN BY CONSTRUCTION: the firmware builds these bytes at sub-CPU
-          LABEL_0387E6; in the host poke region such a word is always the first
-          of a burst, followed by 1..30 data words -- the classic "set the
-          pointer, then stream values" idiom (notes/kn5000-dsp-parameters.md
-          sect. 2, notes/kn5000-dsp-header.md sect. 7).
-          NB: lo12 = 0x820/0x825/0x827 are INFERRED sibling forms selecting
-          other pointer registers.  They are NOT decoded here -- inferring the
-          family is not the same as knowing which register each one loads.
+      THE REGISTER-LOAD FAMILY -- ONE ROUTE PLUS A MODIFIER, not four codes
+          PROVEN BY CONSTRUCTION (dsp/analysis/k3-pointers.md sect. 1.1): the
+          Sub CPU writers assemble the low byte of lo12 first and then do a
+          literal `INC 8, WA' into byte 3's low nibble, i.e. they build
+          `lo12 = 0x800 | 0x021' and `lo12 = 0x800 | 0x025'.  lo12[7:0] is the
+          REGISTER SELECTOR and bit 11 is a MODIFIER ("addr8 carries a payload"),
+          class4 is left 0 by the writer, and the payload is exactly 8 bits
+          because the writer hard-zeroes the nibble above it.  hi12 is NOT part
+          of the form -- it is the usual horizontal microword, which is how
+          `859.0.86.822' can be the same register write PLUS the bit-4 store.
 
-      801.0.00.021                    rstcur
-          Resets the implicit coefficient cursor.  VERIFIED against algo39
-          (PARAMETRIC EQ), whose class-A word count at its ten section starts
-          runs 0,6,12,18,24 | rstcur | 0,6,12,18,24
-          (notes/kn5000-dsp-biquad-map.md sect. 2, generalised and confirmed
-          bank-size-wise over 26/38 images in notes/kn5000-dsp-cursor-general.md).
+          NN.821  ldptr   #$NN   a C-RAM POINTER.  MEASURED: its three
+                  in-program payloads 0x70 / 0x50 / 0x90 are three of the four
+                  structural bases of the host's own C-RAM map (P ~ 4e-6).
+                  ★ It is NOT the coefficient cursor -- FORCED -- and it is NOT
+                  the D-RAM operand pointer, which WITHDRAWS
+                  notes/kn5000-dsp-pointer.md headline 2.
+          NN.825  ldptr.d #$NN   the DELAY-DESCRIPTOR pointer, tag-0x4C space.
+                  PROVEN BY CONSTRUCTION in both halves (encoding from writer
+                  LABEL_038922, space from R3).
+          00.021  rstcur         resets the implicit coefficient cursor to its
+                  per-unit base.  VERIFIED against algo39 (PARAMETRIC EQ), whose
+                  class-A count at its ten section starts runs
+                  0,6,12,18,24 | rstcur | 0,6,12,18,24.
+          NN.820 / NN.822 / NN.827   the register is OPEN.  NOT decoded -- and
+                  `0x827' is where the D-RAM origin was parked until the
+                  adjudication falsified it (0 of 85 streams).
+
+      C40.x.xx.445 / .446             setvec  unitN,#A
+          The per-unit CALL VECTOR.  DETERMINED (K5 sect. 2.4): lo12 0x445/0x446
+          are the ONLY two I-RAM words the host ever rewrites (I-RAM 64 and 71),
+          they are written by EFF_Link / EFF_Disconnect indexed by effect unit,
+          and the four values are 84/42 (unit 0) and 200/50 (unit 1) -- the load
+          address of every unit-0 / unit-1 body (91/91 streams) and the first
+          word of that unit's own header setup block.  The ROM's own boot-default
+          spelling of these two slots is `011.9.0E.445' / `011.9.0F.446', whose
+          SOURCE field is open; those are annotated, not decoded.
 
       THE ALU -- lo12 ROUTES, hi12[3:1] OPERATES
           notes/dsp-alu-applied.md, which reconciles three concurrent analyses
@@ -190,10 +223,38 @@
           whether code 2 is a no-op or a wrap that does not fire.
 
     EXPLICITLY NOT DECODED, and why they still get a comment: the terminator,
-    the external-DRAM bracket, the all-pass marker, the LFO read, the envelope
-    detector, class 8, and the biquad words whose reading the search left
-    constrained-to-two.  Those are MEASURED *landmarks* with UNKNOWN semantics;
-    they are annotated, never given a mnemonic.
+    the external delay-DRAM family, the all-pass core, the LFO read, class 8,
+    the internal register file, and the biquad words whose reading the search
+    left constrained-to-two.  Those are MEASURED *landmarks* with UNKNOWN or
+    only PARTLY known semantics; they are annotated, never given a mnemonic.
+
+    *** LABELS WITHDRAWN FROM THIS FILE (2026-07-26 sync pass) ***
+    Each of these was emitted for months and each is now known to be wrong.  A
+    wrong decode costs more than a missing one, so they are listed rather than
+    quietly deleted (dsp/analysis/isa-adjudication.md sect. 9 is the queue this
+    pass drains):
+
+      * `hi12 == 0xC40 -> envelope / level detector'.  FALSIFIED at ALL 61
+        SITES; it fired on the reverb tank, on CHORUS and on the frame
+        terminator's neighbours.  The family is a 13-bit IMMEDIATE LOAD.
+      * `880.1.60 / 880.1.20 -> external-DRAM bracket OPEN / CLOSE'.  They are a
+        READ and a WRITE (FORCED, R1 F1), and `addr8' does not select the
+        direction at all (R3 sect. 6.3).
+      * `880.1.30 -> framing word, carries no DRAM information'.  It is the
+        FIRST DRAM ACCESS of a body, 37 of 38 distinct images (R3 sect. 6.2).
+      * `012.2.00.680 -> d_in <- x + t (the WRITE)' and `000.2.00.419 ->
+        y <- d_out - t'.  TWO assignments survive the constraint search; these
+        were printed as if settled.
+      * `hi12 == 0x212 -> writes mem[ptr], CLASS-INDEPENDENT'.  Bit 4's target
+        is MODE-DEPENDENT; the universal reading manufactures four dead stores
+        in the 23-word output stage (R2).
+      * `hi12[11:8] == 0xA -> host-poke data form'.  `0A aa bb cc dd' is a
+        HOST-STREAM packet, not an instruction, and the rule fired on genuine
+        in-program words (A00.0.00.041 in CHORUS, A3C.D.9F.287 at I-RAM 78).
+      * `cur+' on every bit-23 word.  FETCH IS NOT ADVANCE (K4) -- see above.
+      * the C-format family predicate `(hi12 & 0xFFE) == 0xC40'.  That is the
+        PAYLOAD rule; the FORMAT is `hi12[11:8] == 0xC'.  Conflating them is
+        what let `C00.A.47.407' be decoded and executed as arithmetic.
 
 ***************************************************************************/
 
@@ -247,9 +308,51 @@ constexpr u64 K6_PORT_READ_L = 0x2042021ceULL;      // 204.2.02.1CE, header w4, 
 constexpr u64 K6_PORT_READ_R = 0x0842011c0ULL;      // 084.2.01.1C0, header w8, cell X+5
 
 // ---------------------------------------------------------------------------
-//  structural annotations -- MEASURED landmarks whose SEMANTICS are unknown
+//  NAMED CELLS OF THE INTERNAL REGISTER FILE (addressing mode 1 without the
+//  format escape).  ★ BIT 7 OF THE INDEX IS THE EFFECT UNIT -- K4 item G,
+//  FORCED, and it resolves the class-1 addr8 lead K6 opened: over the 91
+//  well-formed parameter streams the `000.1.NN.000' register selects split
+//  perfectly, 368 packets / 23 distinct NN ALL < 0x80 in unit-0 streams and
+//  60 / 5 ALL >= 0x80 in unit-1 streams, with 5 of 5 unit-1 numbers being a
+//  unit-0 number + 0x80; and the boot blob writes the matched pair
+//  000.1.06.000 / 000.1.86.000 back to back.
+//
+//  NOTE WHAT THIS IS *NOT*: the delay-DRAM sub-ops 0x20 / 0x30 / 0x60 are
+//  discriminated by hi12 (the FORMAT ESCAPE), NOT by addr8 bit 7 -- bit 7
+//  misclassifies 3 of 324 while the escape classifies 324/324
+//  (dsp/analysis/r2-output.md sect. 1.1, k4-cursor.md sect. 3).
 // ---------------------------------------------------------------------------
-const char *annotate(u64 word)
+struct reg_role
+{
+	u8          index;
+	const char *role;
+};
+
+const reg_role REGISTER_ROLE[] =
+{
+	{ 0x06, "per-unit OUTPUT LEVEL (PROVEN BY CONSTRUCTION -- the last four host actions of cold boot are setvec unit1,#200 / setvec unit0,#84 / reg 0x06 <- +0.500000 / reg 0x86 <- +0.183992, both cleared at reset)" },
+	{ 0x86, "per-unit OUTPUT LEVEL (PROVEN BY CONSTRUCTION -- see 0x06)" },
+	{ 0x50, "base of the per-unit STATE BLOCK (MEASURED: in 87 of 91 parameter streams the host's tag-0x15 zero-fill is a CONTIGUOUS run based here; PARAMETRIC EQ's is the 40-cell one, 0x50..0x77 = 5 bands x 2 ch x 4 Direct-Form-I state words)" },
+	{ 0xd0, "base of the per-unit STATE BLOCK (MEASURED -- see 0x50; unit 1's run is 3 cells in all 12 reverbs)" }
+};
+
+// ---------------------------------------------------------------------------
+//  structural annotations -- MEASURED landmarks whose SEMANTICS are unknown
+//
+//  ★ PRECEDENCE IS LOAD-BEARING.  The C-FORMAT rule must come BEFORE every rule
+//  keyed on lo12, class4 or addr8, because in that family class4|addr8 are not a
+//  class and a pointer -- they are immediate data.  This file used to have the
+//  C-format test at the BOTTOM and got away with it only because the delay-DRAM
+//  rule tested `hi12 == 0x880' exactly; widening that family to R2's real
+//  predicate makes it a live bug the same day (the reverb's C40.1.80.000
+//  matches).  That is precisely the error R3 made and the adjudication caught
+//  (dsp/analysis/isa-adjudication.md sect. 1, sect. 7).
+//
+//  The ONE rule above it is the K6 input-stage whitelist, which matches by exact
+//  36-bit word value over twelve individually-reviewed words -- including the
+//  one C-format word of the stage, whose role string says what it is.
+// ---------------------------------------------------------------------------
+std::string annotate(u64 word, int at)
 {
 	const u16 hi = upd6383_disassembler::hi12(word);
 	const u8  cl = upd6383_disassembler::class4(word);
@@ -261,6 +364,44 @@ const char *annotate(u64 word)
 	// or "C-format immediate" and nothing else).
 	if (const char *k6 = upd6383_disassembler::input_stage_role(word))
 		return k6;
+
+	// ---- C-FORMAT FIRST.  bits [24:12] are ONE 13-bit immediate -------------
+	if (upd6383_disassembler::c_format(word))
+	{
+		const u8 a = upd6383_disassembler::c_a(word);
+		const u8 b = upd6383_disassembler::c_b(word);
+
+		if (upd6383_disassembler::is_setvec(word))
+			return "";                      // decoded(); never reaches here
+
+		// THE PAYLOAD RULE IS FAMILY-LOCAL (K3 sect. 5.3): `A = imm13 >> 5' is
+		// MEASURED 57/57 inside (hi12 & 0xFFE) == 0xC40 and 2/11 outside, so the
+		// A/B split is asserted only here.  It is NOT extended to
+		// C00/C04/C0A/C16/C42/C4A/C64.
+		if (upd6383_disassembler::is_c40(word))
+			return util::string_format(
+					"C-format IMMEDIATE LOAD: A=%d B=%d (imm13 0x%04X = %d*32, MEASURED 57/57 in "
+					"this sub-family); destination register lo12=%03X UNKNOWN",
+					a, b, upd6383_disassembler::c_imm13(word), a, lo);
+
+		if (hi == 0xc00)
+		{
+			const char *own = (at >= 0 && a == at) ? "= its own I-RAM address" : "(I-RAM index?)";
+			return util::string_format(
+					"WAIT / SYNC (INFERRED): A=%d %s, B=%d = the event; both C00 words in the "
+					"machine encode their own address (2/2)", a, own, b);
+		}
+
+		if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
+			return util::string_format(
+					"C-format word with a pointer-load lo12; the A/B split is NOT established for "
+					"this sub-family (B in {0,17,18,23}) -- residue A=%d B=%d shown for the record",
+					a, b);
+
+		return util::string_format(
+				"C-format: bits [24:12] are one 13-bit IMMEDIATE reaching into hi12 bit 0, not "
+				"class+addr; A=%d B=%d", a, b);
+	}
 
 	// END OF PROGRAM is hi12 bit 10 (bit 11 clear), and the halting word STILL
 	// DOES ITS WORK (MEASURED, notes/kn5000-dsp-hi12.md sect. 3): 38 such words
@@ -285,31 +426,62 @@ const char *annotate(u64 word)
 		return "END OF BLOCK (falls through) -- and still performs the rest of the word";
 	}
 
-	// external-DRAM (digital delay) bracket: predicts the DRAM-using effects at
-	// MCC +0.944 over 38 images (notes/kn5000-dsp-class2-round2.md sect. 1.1)
-	if (hi == 0x880 && cl == 1 && ad == 0x60)
-		return "external-DRAM bracket OPEN (INFERRED)";
-	if (hi == 0x880 && cl == 1 && ad == 0x20)
-		return "external-DRAM bracket CLOSE (INFERRED)";
-	if (hi == 0x880 && cl == 1 && ad == 0x30)
-		return "framing word, carries no DRAM information (MEASURED)";
+	// ---- external delay DRAM.  ADDRESS SOURCE now known, DIRECTION mostly not
+	// WITHDRAWN HERE, all three at once (dsp/analysis/r1-allpass-motif.md sect. 5,
+	// r3-delaydram.md sect. 6.2/6.3):
+	//   * "880.1.60 = bracket OPEN / 880.1.20 = bracket CLOSE" -- they are a READ
+	//     and a WRITE, FORCED (the opposite assignment has zero survivors in all
+	//     three machine models);
+	//   * "addr8 selects the direction" -- FALSIFIED: three of MULTI TAP DELAY's
+	//     four tap READS land on 880.1.20.2C7 and its line WRITE on 880.1.60.000;
+	//   * "880.1.30 = framing word, carries no DRAM information" -- it is the
+	//     FIRST DRAM ACCESS of a body, 37 of 38 distinct images.
+	if (upd6383_disassembler::is_dram(word))
+	{
+		const std::string base =
+				"external delay-DRAM access; address = DESCRIPTOR_CELL[cursor] + G, from the host "
+				"bank behind pointer ...825 / tag 0x4C (R3, PROVEN BY CONSTRUCTION) -- one cell per "
+				"DRAM word, in program order, so it is NOT in this word";
 
-	// all-pass marker: present in every all-pass-bearing image and no other,
-	// MCC +0.881; its POSITION differs between reverb and phaser, so which step
-	// of the all-pass it performs is NOT established (class2-round2 sect. 1.3)
+		if (ad == 0x60 && lo == 0x2d4)
+			return "external delay-DRAM READ (DETERMINED, R1 F1 -- the opposite direction has zero "
+					"survivors in all 3 models); read data visible 2-5 words later (R1 F6). " + base;
+		if (ad == 0x20 && lo == 0x655)
+			return "external delay-DRAM WRITE (DETERMINED, R1 F1 -- the opposite direction has zero "
+					"survivors in all 3 models); write data staged by the preceding bit-4 store, "
+					"44/44. " + base;
+		if (ad == 0x30)
+			return base + ". addr8 0x30 marks the FIRST DRAM access of a body (37 of 38 distinct "
+					"images, R3 sect. 6.2)";
+		return base + ". DIRECTION UNKNOWN: addr8 does NOT select it -- MULTI TAP DELAY's tap READS "
+				"land on 880.1.20.2C7 and its line WRITE on 880.1.60.000 (R3 sect. 6.3 falsifies "
+				"the old addr8 rule)";
+	}
+
+	// ---- the reverb all-pass core (dsp/analysis/r1-allpass-motif.md) --------
+	// NOT decoded: TWO role assignments survive the constraint search, and the
+	// corpus RANKS -- but does not prove -- the one in which mem[ptr] stages the
+	// DRAM write.  The old family-A-only readings ("d_in <- x + t (the WRITE)" /
+	// "y <- d_out - t") were printed as if settled; they are WITHDRAWN.
 	if (word == 0x104200000ULL)
-		return "all-pass marker -- step UNKNOWN";
-
-	// The reverb diffuser's 2-permutation, BROKEN by bit 4 (hi12.md sect. 4.4).
-	// -semantics.md sect. 6 left "one is d_in <- x+t, the other y <- d_out-t"
-	// constrained to two.  Only 0x012 carries bit 4, so 012 is the write -- and
-	// it sits immediately before 880.1.20.655, the DRAM-WRITE half of the
-	// bracket, a positional corroboration the bit-4 argument did not use.
-	// Nine of each in algo 16, one per diffuser.
-	if (word == 0x012200680ULL)
-		return "all-pass: d_in <- x + t (the WRITE), bit 4 breaks the 2-permutation";
+		return "all-pass core slot 1/6 -- role NOT settled (family B: acc += P; family A: no job at "
+				"all).  Outside the reverb all 8 sites follow a class-A multiply-and-store";
 	if (word == 0x000200419ULL)
-		return "all-pass: y <- d_out - t (its partner)";
+		return "all-pass core slot 2/6 -- one accumulate step; which one is NOT settled";
+	if (word == 0x012200680ULL)
+		return "all-pass core slot 3/6 -- the bit-4 store takes the accumulator BEFORE this word's "
+				"own ALU step (FORCED, R1 F2)";
+	if (hi == 0x102 && cl == 0xa && lo == 0x64b)
+		return "all-pass core slot 6/6 -- class-A multiply whose multiplicand is a SUM OF TWO "
+				"REGISTERS, so lo12 0x64B is a fourth multiplicand route beside mac (0x1D5) and "
+				"mulst (0x407) (FORCED under a 2-input ALU, R1 F8)";
+
+	// ---- the per-unit CALL VECTOR, in its canned boot-default source form ---
+	if (upd6383_disassembler::is_vector_lo12(lo))
+		return util::string_format(
+				"writes the unit-%d CALL VECTOR (I-RAM %d) -- DETERMINED destination; this SOURCE "
+				"form is the canned boot default, its source field is OPEN",
+				upd6383_disassembler::vector_unit(lo), (lo == 0x445) ? 64 : 71);
 
 	// The LFO phase accumulator, DECODED as an idiom (notes/kn5000-dsp-chorus.md
 	// sect. 2.2, and the wrap constant 29/29 in hi12.md): the increment is
@@ -324,9 +496,54 @@ const char *annotate(u64 word)
 	if (hi == 0x094 && cl == 0xa && lo == 0x200)
 		return "LFO: phase wrap, consumes 0x7FFFFF (29/29); AND vs sub-if-ge OPEN";
 
-	// pointer-load family siblings (INFERRED, header note sect. 7)
-	if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
-		return "pointer-load family sibling, target register UNKNOWN";
+	// ---- mode 1 WITHOUT the escape = the internal REGISTER FILE -------------
+	// R2 sect. 1: the index space is shared with the host's own `000.1.NN.000',
+	// which the host stream proves auto-increments.  bit 7 of the index is the
+	// EFFECT UNIT (K4 item G, FORCED -- see the REGISTER_ROLE table above).
+	// Class 1 and class 9 (= mode 1 plus the cursor fetch) both land here.
+	if ((cl & 7) == 1)
+	{
+		for (const auto &r : REGISTER_ROLE)
+			if (r.index == ad)
+				return util::string_format("internal register file [%02X] -- %s, unit %d",
+						ad, r.role, BIT(ad, 7));
+		return util::string_format(
+				"internal register file [%02X], unit %d (bit 7 = the unit); this index has no named "
+				"role yet", ad, BIT(ad, 7));
+	}
+
+	// ---- the REGISTER-LOAD family: one route (lo12[7:0]) plus a MODIFIER ----
+	// PROVEN BY CONSTRUCTION that bit 11 is a separate flag (K3 sect. 1.1); the
+	// decoded members are handled by decoded() and never reach here, so what is
+	// left is the OPEN selectors -- and `859.0.86.822', which is a register write
+	// that ALSO carries the bit-4 store.
+	if (upd6383_disassembler::is_regload(word))
+	{
+		// ★ A CONFLICT BETWEEN TWO COMMITTED READINGS, REPORTED NOT RESOLVED.
+		// K3 sect. 5.2 says `859.0.86.822' "both names a register AND carries
+		// the store", because hi12 bit 4 is set.  But hi12 bit 11 -- the FORMAT
+		// ESCAPE -- is set too, and this decoder's own escape rule says that
+		// inside the escape bits[10:0] mean something else, which is why
+		// hi12_text() does not print `ST' here.  Both cannot be right.  The word
+		// is the ONLY site, so neither reading has a second data point.
+		const bool esc = (hi & upd6383_disassembler::HI_ESC) != 0;
+		return util::string_format(
+				"register write: selector lo12[7:0]=%02X, %s (bit 11 is a SEPARATE FLAG -- the "
+				"firmware builds it with a literal `INC 8, WA' on top of the low byte).  This "
+				"selector's register is OPEN%s",
+				upd6383_disassembler::lo_sel(word),
+				upd6383_disassembler::lo_imm(word) ? "payload = addr8" : "no payload",
+				!(hi & upd6383_disassembler::HI_ST) ? ""
+				: esc ? "; hi12 bit 4 is set BUT SO IS THE FORMAT ESCAPE (bit 11), and inside the "
+						"escape this decoder does not read bit 4 as the store -- K3 sect. 5.2 reads "
+						"it as a store anyway.  CONFLICT, 1 site, UNRESOLVED"
+					  : "; and hi12 bit 4 is SET, so it also stores -- to a target that is "
+						"mode-dependent and unproven off mode 2 (R2)");
+	}
+
+	if (lo == 0x839)
+		return "lo12 0x839 -- selector OPEN (K3 sect. 5.4: 'sub-op 3 on register 1' under one field "
+				"reading, a sixth register under the other); 2 sites in 3057";
 
 	// class 8: occurs in filter-bearing images and nowhere else (MCC +0.947).
 	// The constraint search fixes its POSITION -- between "the sum is complete"
@@ -335,11 +552,14 @@ const char *annotate(u64 word)
 	if (cl == 8)
 		return "class 8: post-sum step (rescale/round/saturate?), OPERATION UNKNOWN";
 
-	// hi12 families with corpus-wide roles but no decode
+	// hi12 families with corpus-wide roles but no decode.
+	// ★ WITHDRAWN HERE: `hi12 == 0xC40 -> envelope / level detector'.  FALSIFIED
+	// at ALL 61 SITES (dsp/analysis/k5-output-stage.md sect. 2.3) -- it fired on
+	// the reverb tank, on CHORUS and on the frame terminator's neighbours.  The
+	// family is a 13-bit IMMEDIATE LOAD and is rendered by the C-format block at
+	// the top of this function.
 	if (hi == 0x082)
 		return "LFO / modulation-source read (INFERRED)";
-	if (hi == 0xc40)
-		return "envelope / level detector (INFERRED)";
 
 	// the 3-word table-lookup idiom accounts for every class-4 and class-6 word
 	// (53/53/53) and occurs in exactly the 25 images with an LFO or distortion
@@ -359,15 +579,23 @@ const char *annotate(u64 word)
 	if (lo == 0x1d4)
 		return "read into carry latch B (INFERRED)";
 
-	// hi12 = 0x212 is the write to mem[ptr] in EVERY class, not just class A
-	// (GENERALISED by bit 4 -- notes/kn5000-dsp-hi12.md sect. 7).  The plain
-	// store 212.2.00.000 occurs 103 times over 32 of 38 images and needs
-	// nothing from lo12 at all, which is itself the corroboration that the
-	// store is named in hi12 and not in lo12.
+	// The plain store 212.2.00.000 occurs 103 times over 32 of 38 images and needs
+	// nothing from lo12 at all, which is itself the corroboration that the store
+	// is named in hi12 and not in lo12.  Its TIMING is FORCED (R1 F2): the store
+	// takes the accumulator BEFORE the word's own ALU step.
 	if (word == 0x212200000ULL)
-		return "plain store: mem[ptr] <- acc (nothing asked of lo12)";
-	if (hi == 0x212)
-		return "writes mem[ptr] (bit 4), class-independent";
+		return "plain store: mem[ptr] <- acc, taken BEFORE this word's ALU step (FORCED)";
+
+	// ★ WITHDRAWN: `hi12 == 0x212 -> writes mem[ptr], CLASS-INDEPENDENT'.  R2
+	// falsified it -- bit 4's TARGET is MODE-DEPENDENT and mem[ptr] is the MODE-2
+	// target.  Two mode-1 bit-4 words (w64/w71) have a DETERMINED destination in
+	// the REGISTER space, and w60/w61 are adjacent mode-1 stores with no
+	// pointer-moving word between them, so under a universal mem[ptr] reading the
+	// first is provably dead: the old rule manufactured FOUR DEAD STORES in the
+	// 23-word output stage.  Bit 4 is now rendered as the flag `ST' by
+	// hi12_text() and given no target unless the mode supplies one.
+	if (hi == 0x212 && (cl & 7) == 2)
+		return "writes mem[ptr] (bit 4); mode 2, so the target IS the pointer";
 
 	// the same gain multiply in two effect families that agree on nothing else:
 	// the phaser's all-pass (102.2.<k>.1CD, gain via mem[ptr]) and the reverb
@@ -377,14 +605,15 @@ const char *annotate(u64 word)
 	if (hi == 0x102)
 		return "gain multiply (same op in phaser all-pass and reverb diffuser)";
 
-	// class4 is immediate data, not a class, inside these families
-	// (MEASURED, notes/kn5000-dsp-header.md sect. 6)
-	if ((hi & 0xf00) == 0xc00)
-		return "hi12[11:8]==C: bits [23:12] are a 12-bit IMMEDIATE, not class+addr";
-	if ((hi & 0xf00) == 0xa00)
-		return "hi12[11:8]==A: host-poke data form, bits [23:12] are immediate";
-
-	return nullptr;
+	// ★ WITHDRAWN: `hi12[11:8] == 0xA -> host-poke data form'.  `0A aa bb cc dd'
+	// is a HOST-STREAM coefficient packet, not an instruction (PROVEN BY
+	// CONSTRUCTION from the Sub CPU writers, dsp/analysis/k5-output-stage.md
+	// sect. 1.3), and the rule fired on genuine IN-PROGRAM words where it is
+	// meaningless -- A00.0.00.041 in CHORUS and A3C.D.9F.287 at I-RAM 78.  Host
+	// packets belong to a host-stream viewer, not to an instruction decoder.
+	// (The C-format rule that used to sit beside it is now at the TOP of this
+	// function, where its precedence is load-bearing.)
+	return "";
 }
 
 } // anonymous namespace
@@ -466,14 +695,28 @@ bool upd6383_disassembler::decoded(u64 word)
 	const u16 lo = lo12(word);
 
 	if (hi == 0x000 && cl == 2 && ad == 0x00 && lo == 0x000) return true;  // nop
-	if (hi == 0x801 && cl == 0 && lo == 0x821)               return true;  // ldptr
-	if (hi == 0x801 && cl == 0 && ad == 0x00 && lo == 0x021) return true;  // rstcur
+
+	// THE REGISTER-LOAD FAMILY, as ONE ROUTE PLUS A MODIFIER (K3, PROVEN BY
+	// CONSTRUCTION).  Three members have both a register and a modifier reading:
+	//     sel 0x21 + payload -> ldptr    (a C-RAM pointer, NOT the cursor)
+	//     sel 0x21, no payload -> rstcur (the implicit coefficient cursor)
+	//     sel 0x25 + payload -> ldptr.d  (the delay-DESCRIPTOR pointer, tag 0x4C)
+	// The rest of the family -- selectors 0x20 / 0x22 / 0x27 -- is OPEN and keeps
+	// trapping, as does any member carrying the bit-4 store (859.0.86.822).
+	if (is_ldptr(word) || is_rstcur(word) || is_ldptrd(word)) return true;
+
+	// setvec -- the per-unit CALL VECTOR write.  DETERMINED destination (K5);
+	// the SOURCE field of the canned boot-default form is OPEN, which is why
+	// only the C-format `is_setvec' spelling is decoded and the ROM's own
+	// `011.9.0E.445' / `011.9.0F.446' are annotated but not.
+	if (is_setvec(word)) return true;
 
 	// THE ALU.  alu_decoded() carries the whole predicate and its evidence: a
-	// CLASS guard, a ROUTING guard on both halves of lo12, and an OPERATION
-	// guard on hi12[3:1].  It replaces a lo12-only whitelist that, because it
-	// looked at nothing else, also executed class-1 external delay-RAM words as
-	// on-chip arithmetic (notes/dsp-alu-applied.md sect. 3).
+	// FORMAT guard, a CLASS guard, a ROUTING guard on both halves of lo12, a
+	// STORE-TARGET guard, and an OPERATION guard on hi12[3:1].  It replaces a
+	// lo12-only whitelist that, because it looked at nothing else, also executed
+	// class-1 external delay-RAM words as on-chip arithmetic
+	// (notes/dsp-alu-applied.md sect. 3).
 	if (alu_decoded(word))
 		return true;
 
@@ -525,7 +768,7 @@ bool upd6383_disassembler::is_input_latch_read(u64 word, bool &right)
 //  text - one line for a single word
 //-------------------------------------------------
 
-std::string upd6383_disassembler::text(u64 word)
+std::string upd6383_disassembler::text(u64 word, int at)
 {
 	std::ostringstream s;
 	const u16 hi = hi12(word);
@@ -536,11 +779,27 @@ std::string upd6383_disassembler::text(u64 word)
 
 	if (decoded(word))
 	{
-		if (hi == 0x000 && lo == 0x000)
+		if (is_setvec(word))
+		{
+			// the four values K5 DETERMINED: 84/42 (unit 0) and 200/50 (unit 1)
+			const int unit = vector_unit(lo);
+			const u8  a    = c_a(word);
+			const char *m  = nullptr;
+			if (unit == 0 && a ==  84) m = "LINK -- unit-0 body entry";
+			if (unit == 0 && a ==  42) m = "DISCONNECT -- header unit-0 setup block (runs, returns, no body)";
+			if (unit == 1 && a == 200) m = "LINK -- unit-1 body entry";
+			if (unit == 1 && a ==  50) m = "DISCONNECT -- header unit-1 setup block (runs, returns, no body)";
+			util::stream_format(s, "setvec  unit%d,#%d", unit, a);
+			if (m != nullptr)
+				util::stream_format(s, "   ; %s", m);
+		}
+		else if (hi == 0x000 && lo == 0x000)
 			s << "nop";
-		else if (hi == 0x801 && lo == 0x821)
+		else if (is_ldptr(word))
 			util::stream_format(s, "ldptr   #$%02x", ad);
-		else if (hi == 0x801 && lo == 0x021)
+		else if (is_ldptrd(word))
+			util::stream_format(s, "ldptr.d #$%02x", ad);
+		else if (is_rstcur(word))
 			s << "rstcur";
 		else
 		{
@@ -587,12 +846,36 @@ std::string upd6383_disassembler::text(u64 word)
 			while (mnem.size() < 7)
 				mnem += ' ';
 			util::stream_format(s, "%s %s", mnem, sname);
-			if (cl == 0xa)
-				s << ",c+";             // one coefficient, cursor post-increment
+			// ★ FETCH IS NOT ADVANCE, in the MNEMONIC too.  `,c+' = fetches one
+			// coefficient AND post-increments the cursor (class A).  `,c' =
+			// bit 23 is set so a coefficient IS fetched, but the cursor does not
+			// move (class 8, K4 FORCED) -- and this model gives that word no
+			// multiply either, because the biquad reproduces to 0.094 dB with
+			// class 8 doing none.  Saying nothing at all, which is what this
+			// branch used to do, hid the fetch on all 35 sites of 804.8.16.415.
+			if (coeff_consumer(word))
+				s << ",c+";
+			else if (cursor_fetch(word))
+				s << ",c";
 			if ((cl & 7) == 2)
 				util::stream_format(s, ",(p)%+d", dd);
 			if (hi & HI_ST)
 				s << " ; mem[p]<-acc, acc=0";
+
+			// ★ END OF BLOCK SURVIVES THE DECODE.  A decoded word prints no
+			// [annotation], and MEASURED that costs nothing on 381 of the 384
+			// decoded words that carry one -- "writes mem[ptr] (bit 4)",
+			// "P-consumer stores latch A/B", "read into carry latch A/B",
+			// "gain multiply" and "class 8 post-sum step" are all things the
+			// FIELD DECODE now says properly, and the two agree (lo12 0x1D4 =
+			// src mem[p] + action CAP_TB IS "read into carry latch B").  The
+			// remaining three are END-OF-BLOCK words, and that is a CONTROL-FLOW
+			// fact orthogonal to the ALU: the word still performs its datapath
+			// work AND ends the block.  Dropping it would lose a landmark.
+			// (class 1 cannot reach here -- alu_decoded() admits only 2/8/A --
+			// so the unit-tagged CALL/RETURN form is unreachable by construction.)
+			if (is_end(word))
+				s << ((hi & HI_ST) ? "; " : " ; ") << "END OF BLOCK (falls through)";
 		}
 	}
 	else
@@ -608,17 +891,24 @@ std::string upd6383_disassembler::text(u64 word)
 		util::stream_format(s, "%s   0x%010X   ; %03X.%X.%02X.%03X",
 				addr_only ? "~word" : "?word", word & 0xfffffffffULL, hi, cl, ad, lo);
 
+		// in the C-format family the printed class4|addr8 split is a FICTION --
+		// say so, and show the immediate the bits really are
+		if (c_format(word))
+			util::stream_format(s, "  {C-fmt A=%d B=%d}", c_a(word), c_b(word));
+
 		// What a `~word' actually DOES when the device executes it: the store
-		// enable (hi12 bit 4), the cursor fetch (class4 bit 3) and the signed
-		// pointer post-increment, all MEASURED.  Printing it means the trace
-		// shows the pointer walk instead of leaving a reader to recompute it.
+		// enable (hi12 bit 4), the cursor fetch (bit 23) and the signed pointer
+		// post-increment, all MEASURED.  Printing it means the trace shows the
+		// pointer walk instead of leaving a reader to recompute it.
 		if (addr_only)
 		{
-			if ((hi & 0xf00) == 0xc00)
+			if (c_format(word))
 				s << "  {addr: none -- C-format, SAFE NO-OP}";
 			else
 				util::stream_format(s, "  {addr: %s mem[p]%s, p%+d}",
-						(hi & HI_ST) ? "ST" : "rd", (cl & 8) ? ", cur+" : "", int(dd));
+						(hi & HI_ST) ? "ST" : "rd",
+						cursor_fetch(word) ? (coeff_consumer(word) ? ", cur+" : ", cur") : "",
+						int(dd));
 		}
 
 		// hi12 as FLAGS + RESIDUE.  This is the whole point of the rendering
@@ -626,12 +916,17 @@ std::string upd6383_disassembler::text(u64 word)
 		// set and which bits nothing accounts for.
 		util::stream_format(s, "  hi12{%s}", hi12_text(hi));
 
-		// bit 23 = CURSOR-FETCH enable (CORRECTED reading -- NOT multiply)
+		// ★ FETCH IS NOT ADVANCE (K4, FORCED).  bit 23 = CURSOR-FETCH enable
+		// (CORRECTED reading -- NOT multiply-enable); only class4 == 0xA moves
+		// the cursor on.  So `cur+' means "fetches AND advances" and `cur' means
+		// "fetches, cursor stays put".  The old code printed `cur+' on every
+		// bit-23 word, which is wrong on the PARAMETRIC EQ's ten class-8 words
+		// and on every class-8 word in the corpus (42 of them).
 		if (cursor_fetch(word))
-			s << " cur+";
+			s << (coeff_consumer(word) ? " cur+" : " cur");
 
-		const char *note = annotate(word);
-		if (note != nullptr)
+		const std::string note = annotate(word, at);
+		if (!note.empty())
 			util::stream_format(s, "  [%s]", note);
 
 		// FLAGGED EXCEPTION, reported rather than explained away: five
@@ -663,7 +958,10 @@ offs_t upd6383_disassembler::disassemble(std::ostream &stream, offs_t pc, const 
 		word = (word << 8) | opcodes.r8(pc + i);
 	word &= 0xfffffffffULL;         // bits 36..39 are always zero (MEASURED)
 
-	stream << text(word);
+	// `at' is the word's I-RAM index.  It is only used by the C00 self-address
+	// check, and it is correct exactly when the buffer starts at an I-RAM origin
+	// -- which is how the corpus images are disassembled.
+	stream << text(word, int(pc / WORD_BYTES));
 
 	// ABSOLUTE C-RAM COEFFICIENT ADDRESS (MEASURED -- see the header block).
 	// A class-A word consumes the coefficient at cursor position 0x00 + k, where
