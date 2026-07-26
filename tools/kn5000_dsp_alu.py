@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """kn5000_dsp_alu.py -- decode and VERIFY the uPD6383GF `lo12' ALU field.
 
-Companion note: notes/dsp-alu-biquad.md
+Companion note: notes/dsp-alu-applied.md (supersedes dsp-alu-biquad.md)
 Mirror of the C++ that ships: src/devices/cpu/upd6383/upd6383.cpp exec_alu().
 
 The PARAMETRIC EQ biquad is the only block in the corpus whose arithmetic is
@@ -10,9 +10,9 @@ with a tan()-based bilinear designer (notes/kn5000-dsp-biquad-coeffs.md, PROVEN
 BY CONSTRUCTION).  So the nine words of one section can be scored against a
 transfer function nothing in the DSP was used to compute.  This tool:
 
-  * runs the UNIFORM ALU (one operation per word; the accumulator op is NOT in
-    lo12 -- see sect. 7-A8 of the note for the one alternative that also fits)
-    on real ROM coefficient banks in exact fixed point;
+  * runs the ALU THAT SHIPS (lo12 routes, hi12[3:1] selects the accumulator
+    operation -- notes/dsp-alu-applied.md) on real ROM coefficient banks in
+    exact fixed point;
   * measures the transfer function with a hand-rolled DFT (stdlib only) and
     reports dB/degree error against the biquad those coefficients describe;
   * ABLATES the two non-obvious parts -- the accumulator clear that rides on
@@ -75,21 +75,25 @@ def wrap(v):
 
 
 class Alu:
-    """THE UNIFORM ALU.
+    """THE ALU -- lo12 ROUTES, hi12[3:1] OPERATES (notes/dsp-alu-applied.md).
 
         L    := src[ lo12[10:6] ]   07 mem[ptr]  10 acc  19 tempA  1A tempB
         if hi12 bit 4:  mem[ptr] <- acc ; acc := 0      (store AND CLEAR)
-        acc  += P ; P := 0                              (P is CONSUMED)
+        hi12[3:1]:  0 -> acc <- P   1 -> acc += P   2 -> acc unchanged
         lo12[4:0]:  13 -> tempA <- L  14 -> tempB <- L  07 -> mem[ptr] <- L
         if class4 == A:  P := coef[cursor++] * L
         if class4 & 7 == 2:  ptr += (s8)addr8
+
+    The product register is NOT consumed.  `accop='uniform'` selects the
+    SUPERSEDED reading (one op, P consumed); it is kept because the biquad
+    cannot distinguish the two and the ablation table has to show that.
 
     Only PSH + ASH == 22 is forced (the coefficient Q formats force it); the
     split is not, and 2..12 are numerically identical.
     """
 
     def __init__(self, psh=6, shift_on='srcB', clear_on_store=True, total=22,
-                 accop='uniform'):
+                 accop='f31'):
         self.psh = psh
         self.ash = total - psh
         self.shift_on = shift_on            # 'srcB' | 'capB' | 'none'
@@ -268,8 +272,8 @@ def sect_ablate(rom):
             ("total alignment 23 instead of 22", Alu(total=23)),
             ("a DIFFERENT split of the same total (2/20)", Alu(psh=2)),
             ("a DIFFERENT split of the same total (12/10)", Alu(psh=12)),
-            ("ALT: hi12[3:1] selects the accumulator op", Alu(accop='f31')),
-            ("ALT above, but WITHOUT the bit-4 clear", Alu(accop='f31', clear_on_store=False))]
+            ("ALT: one uniform op with P CONSUMED (superseded)", Alu(accop='uniform')),
+            ("ALT above, but WITHOUT the bit-4 clear", Alu(accop='uniform', clear_on_store=False))]
     for tag, alu in rows:
         print("   %-46s %10.5f dB" % (tag, worst(alu)))
 

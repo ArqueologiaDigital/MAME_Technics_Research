@@ -675,20 +675,27 @@ void upd6383_device::exec_addressing_only(u64 word)
 //  THE ALU (the lo12 field)
 //**************************************************************************
 
-//  ONE OPERATION, EVERY WORD.  There is no per-word "accumulator op": the
-//  accumulator always takes the pending product, and the two things that used
-//  to look like different accumulator ops are (a) the store on hi12 bit 4 also
-//  CLEARING the accumulator and (b) the product register being consumed by the
-//  add.  Derived from, and verified against, the PARAMETRIC EQ biquad -- the
-//  one block whose transfer function is known independently, because the
-//  firmware designs its coefficients itself (notes/dsp-alu-biquad.md).
+//  TWO FIELDS, TWO JOBS.  lo12 is the OPERAND ROUTING and hi12[3:1] is the
+//  OPERATION.  That split is the reconciliation of three concurrent analyses
+//  (notes/dsp-alu-applied.md), and it FALSIFIES the framing they all started
+//  from -- "lo12 is the ALU field".  Three independent minimal pairs put the
+//  operation outside lo12, and the strongest of them, the LFO's
+//  `092.A.dd.200' / `094.A.dd.200', differs in NOTHING but hi12[3:1] while its
+//  two words must do different things to one D-RAM cell.
 //
-//      L    := bus[ lo12[7:6] ]      00 acc   01 tempA   02 tempB   03 mem[p]
-//      if hi12 bit 4 :  mem[p] <- acc ; acc := 0
-//      acc  += P ; P := 0
-//      lo12[3:0] :  3 -> tempA <- L   4 -> tempB <- L   7 -> mem[p] <- L
+//      L    := src[ lo12[10:6] ]     07 mem[p]   10 acc   19 tempA   1A tempB
+//      if hi12 bit 4 :  mem[p] <- acc ; acc := 0            store AND clear
+//      hi12[3:1] :  0 -> acc <- P    1 -> acc += P    2 -> acc unchanged
+//      lo12[4:0] :  13 -> tempA <- L  14 -> tempB <- L  07 -> mem[p] <- L
 //      if class4 == A :  P := coef[cursor++] * L
 //      if class4 & 7 == 2 :  p += (s8)addr8
+//
+//  THE PRODUCT REGISTER IS NOT CONSUMED.  It holds until the next multiply
+//  writes it, which is what a hardware MPLY output latch does; the accumulator
+//  op says whether to take it, add it or ignore it.  (The superseded reading
+//  had one uniform `acc += P; P := 0'.  On the biquad the two are identical to
+//  the last bit -- MEASURED, 0.074 dB either way -- which is exactly why that
+//  block could not choose and why the LFO had to.)
 //
 //  ORDER MATTERS AND IS FORCED, not chosen: the bus source is latched BEFORE
 //  the ALU step (same rule R1 forced for the bit-4 store -- "store = after" has
@@ -715,12 +722,12 @@ void upd6383_device::exec_alu(u64 word)
 	const u8  cl = upd6383_disassembler::class4(word);
 	const s8  dd = s8(upd6383_disassembler::addr8(word));
 	const u8  src = upd6383_disassembler::lo_src(word);
-	const u8  op = upd6383_disassembler::lo_op(word);
+	const u8  act = upd6383_disassembler::lo_act(word);
 
 	// ---- the operand bus, latched before anything else ---------------------
-	// alu_decoded() is an eight-value whitelist, so only the four ANCHORED
-	// source codes can reach this switch; there is deliberately no default
-	// case that guesses at the other fourteen the corpus contains.
+	// alu_decoded() admits only the four ANCHORED source codes, so there is
+	// deliberately no default case that guesses at the other fourteen the
+	// corpus contains.
 	s32 L = 0;
 	switch (src)
 	{
@@ -741,8 +748,14 @@ void upd6383_device::exec_alu(u64 word)
 		// the tempB path is the only path between them.
 		L = s32(util::sext(m_tb, 24)) >> 1;
 		break;
-	default:
+	case upd6383_disassembler::LO_SRC_MEM:
 		L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+		break;
+	default:
+		// UNREACHABLE BY CONSTRUCTION -- alu_decoded() gates the four codes
+		// above.  Spelled out rather than folded into the mem[ptr] case: if the
+		// predicate is ever widened, an unanchored source must NOT quietly
+		// become a memory read.  Leaving L at 0 is the failure that shows.
 		break;
 	}
 
@@ -758,34 +771,45 @@ void upd6383_device::exec_alu(u64 word)
 		m_acc = 0;
 	}
 
-	// ---- the ALU: the pending product, consumed -----------------------------
-	// *** ONE OF TWO NUMERICALLY IDENTICAL READINGS (notes/dsp-alu-biquad.md
-	// *** sect. 7-A8).  The alternative is that the product register is NOT
-	// *** consumed and hi12[3:1] selects the accumulator op (0 -> acc <- P,
-	// *** 1 -> acc += P).  Over the eight whitelisted lo12 codes the two agree
-	// *** to the LAST BIT on all eight ROM coefficient banks, so the biquad
-	// *** cannot choose between them -- but notes/dsp-alu-crossval.md B1 shows
-	// *** independently (from the LFO's 092/094 minimal pair) that hi12[3:1]
-	// *** DOES select an operation somewhere, so the alternative is the one to
-	// *** expect to win once a second block is decoded.  Nothing downstream
-	// *** changes if it does: swap these three lines.
-	m_acc = (m_acc + m_p) & 0xfffffffffffULL;
-	m_p = 0;
-
-	// ---- the lo12[3:0] side effect ------------------------------------------
-	switch (op)
+	// ---- the ALU: hi12[3:1] says what to do with the pending product --------
+	// The product register is NOT consumed here: an MPLY output latch holds
+	// until the next multiply overwrites it, and the accumulator op is what
+	// decides whether this word takes it.  alu_decoded() admits only the three
+	// codes below, and HI_ACC_HOLD only on class 8.
+	switch (upd6383_disassembler::hi_f31(hi))
 	{
-	case upd6383_disassembler::LO_OP_CAP_TA:
+	case upd6383_disassembler::HI_ACC_LOAD:
+		m_acc = m_p;
+		break;
+	case upd6383_disassembler::HI_ACC_ADD:
+		m_acc = (m_acc + m_p) & 0xfffffffffffULL;
+		break;
+	default:
+		// HI_ACC_HOLD.  On the class-8 post-sum word the biquad DETERMINES the
+		// accumulator comes out unchanged; whether that is because the code is
+		// a no-op or because it is a wrap/limit that does not fire on an
+		// in-range sum is OPEN (the LFO needs it to be an operation, and both
+		// of its surviving candidates -- a 2^23 AND and a conditional subtract
+		// -- ARE the identity here).  Executing it as "unchanged" is correct
+		// under every candidate, which is why class 8 is the only place
+		// alu_decoded() lets this code through.
+		break;
+	}
+
+	// ---- the lo12[4:0] side effect ------------------------------------------
+	switch (act)
+	{
+	case upd6383_disassembler::LO_ACT_CAP_TA:
 		m_ta = u32(L) & 0xffffff;
 		break;
-	case upd6383_disassembler::LO_OP_CAP_TB:
+	case upd6383_disassembler::LO_ACT_CAP_TB:
 		m_tb = u32(L) & 0xffffff;
 		break;
-	case upd6383_disassembler::LO_OP_ST_BUS:
+	case upd6383_disassembler::LO_ACT_ST_BUS:
 		m_dram.write_dword(m_dp, u32(L) & 0xffffff);
 		break;
 	default:
-		break;                  // 0x2 and 0x5: no temp / memory side effect
+		break;                  // 0x12 and 0x15: no temp / memory side effect
 	}
 
 	// ---- the multiply (class A only -- class 8 is bit 23 but does NOT fetch)

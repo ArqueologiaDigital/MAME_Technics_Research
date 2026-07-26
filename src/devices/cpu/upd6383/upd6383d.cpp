@@ -48,7 +48,14 @@
            bit 7    SPECULATIVE "index/address domain"; rendered as residue.
            bits 6,5 no reading; rendered as residue.
            bit 4    WRITE ACCUMULATOR -> mem[ptr].  See below.
-           bits 3:1 a proven FIELD, MEANING UNKNOWN (rendered f31=n).
+           bits 3:1 THE ACCUMULATOR OPERATION (notes/dsp-alu-applied.md).
+                    Three of the eight codes are read -- 0 = acc <- P,
+                    1 = acc += P, 2 = acc unchanged (established on class 8
+                    only) -- and the other five are still unknown.  FORCED
+                    into hi12 and out of lo12 by the LFO's 092/094 minimal
+                    pair, which is identical in class4, addr8 and all twelve
+                    lo12 bits.  Still rendered `f31=n' in the field dump, on
+                    purpose: see hi12_text().
            bit 0    "addr8 is an absolute immediate", PROVEN BY CONSTRUCTION
                     for 0x801 only; rendered as residue.
 
@@ -126,33 +133,44 @@
           (notes/kn5000-dsp-biquad-map.md sect. 2, generalised and confirmed
           bank-size-wise over 26/38 images in notes/kn5000-dsp-cursor-general.md).
 
-      THE lo12 ALU -- eight values, one uniform operation
-          notes/dsp-alu-biquad.md.  lo12 is not an opcode either: two of its
-          sub-fields are decoded and the machine needs no per-word accumulator
-          op at all.  Every word does the SAME thing:
+      THE ALU -- lo12 ROUTES, hi12[3:1] OPERATES
+          notes/dsp-alu-applied.md, which reconciles three concurrent analyses
+          (dsp-alu-structure.md, dsp-alu-biquad.md, dsp-alu-crossval.md).  The
+          headline FALSIFIES what all three set out to do: lo12 is NOT the ALU
+          field.  It is a second horizontal microword carrying the OPERAND
+          ROUTING; the accumulator operation is in hi12[3:1].
 
-              L    := bus[ lo12[7:6] ]     00 acc  01 tempA  02 tempB  03 mem[p]
+              L    := src[ lo12[10:6] ]  07 mem[p]  10 acc  19 tempA  1A tempB
               if hi12 bit 4 :  mem[p] <- acc ; acc := 0     (store AND CLEAR)
-              acc  += P ; P := 0                            (P is consumed)
-              lo12[3:0] :  3 -> tempA <- L    4 -> tempB <- L    7 -> mem[p] <- L
+              hi12[3:1] :  0 -> acc <- P   1 -> acc += P   2 -> acc unchanged
+              lo12[4:0] :  13 -> tempA <- L   14 -> tempB <- L   07 -> mem[p] <- L
               if class4 == A :  P := coef[cursor++] * L
               if class4 & 7 == 2 :  p += (s8)addr8
 
-          The eight lo12 values this covers are 1D3/1D4/1D5 (bus = mem[p]),
-          407/412/415 (bus = acc), 647 (bus = tempA) and 687 (bus = tempB).
-          They are 1146 of the 3057 corpus words.
+          P is NOT consumed by the add: an MPLY output latch holds until the
+          next multiply, and hi12[3:1] decides whether this word takes it.
 
-          EVIDENCE.  The PARAMETRIC EQ's nine-word biquad section is the only
-          block in the corpus whose arithmetic is known independently -- the
-          firmware designs its coefficients with its own tan()-based bilinear
-          designer (notes/kn5000-dsp-biquad-coeffs.md, PROVEN BY CONSTRUCTION),
-          so the transfer function it must compute is known exactly.  Running
-          the model above on eleven real ROM coefficient banks reproduces that
-          transfer function to max 0.074 dB / 4.0 deg, and the residual falls
-          with signal level, i.e. it is 24-bit state quantisation and not a
-          structural error.  Removing either of the two non-obvious parts --
-          the accumulator CLEAR that rides on hi12 bit 4, or the one-bit right
-          shift on the tempB path -- costs 57 dB and 77 dB respectively.
+          EVIDENCE, TWO INDEPENDENT BLOCKS.
+          (a) The PARAMETRIC EQ's nine-word biquad section is the only block in
+          the corpus whose arithmetic is known independently -- the firmware
+          designs its coefficients with its own tan()-based bilinear designer
+          (notes/kn5000-dsp-biquad-coeffs.md, PROVEN BY CONSTRUCTION), so the
+          transfer function it must compute is known exactly.  The model above,
+          run on eight distinct ROM coefficient banks in eleven section
+          instances across four programs, reproduces it to max 0.094 dB /
+          4.0 deg, and the residual falls with signal level -- i.e. it is
+          24-bit state quantisation, not a structural error.  Removing either
+          of the two non-obvious parts -- the accumulator CLEAR that rides on
+          hi12 bit 4, or the one-bit right shift on the tempB path -- costs
+          57 dB and 77 dB.
+          (b) The LFO phase accumulator is what puts the operation in hi12 and
+          not in lo12.  `092.A.dd.200' and `094.A.dd.200' are identical in
+          class4, addr8 and ALL TWELVE lo12 BITS and differ only in hi12[3:1];
+          in 12 of 20 images they hit the same D-RAM cell with the pointer
+          frozen, and they consume C-RAM[+0] = 0x000072 and C-RAM[+1] =
+          0x7FFFFF.  114/2^23 * 44100 = 0.5993 Hz, so those two constants are
+          an increment and a 2^23 wrap -- and no single operation applied twice
+          with both of them makes a ramp.  FORCED.
 
           This SUPERSEDES the three hi12-specific forms it grew out of
           (202.A.dd.1D5 mac, 202.A.dd.1D4 mac.lb, 212.A.dd.407 mulst), which
@@ -164,9 +182,12 @@
           of the section are the same 36-bit word except for addr8, so they
           cannot carry two different latch stores).
 
-          STILL OPEN inside lo12: bits[11:8], bit 4, and the difference between
-          OP codes 0x2 and 0x5 -- the biquad cannot see it, because 0x412 always
-          carries hi12 bit 4 in it and 0x415 never does.
+          STILL OPEN.  In lo12: bit 4, 14 of the 18 observed SRC codes, 19 of
+          the 24 observed ACTION codes (including the two largest, 0x00 and
+          0x0E), and the difference between ACTION 0x12 and 0x15 -- the biquad
+          cannot see it, because 0x412 always carries hi12 bit 4 in it and
+          0x415 never does.  In hi12: five of the eight [3:1] codes, and
+          whether code 2 is a no-op or a wrap that does not fire.
 
     EXPLICITLY NOT DECODED, and why they still get a comment: the terminator,
     the external-DRAM bracket, the all-pass marker, the LFO read, the envelope
@@ -292,11 +313,16 @@ const char *annotate(u64 word)
 
 	// The LFO phase accumulator, DECODED as an idiom (notes/kn5000-dsp-chorus.md
 	// sect. 2.2, and the wrap constant 29/29 in hi12.md): the increment is
-	// f/44100 in Q0.23 and the wrap constant is 0x7FFFFF.
+	// f/44100 in Q0.23 and the wrap constant is 0x7FFFFF.  This PAIR is what
+	// forced the accumulator operation into hi12 -- the two words are identical
+	// in class4, addr8 and every bit of lo12 (notes/dsp-alu-applied.md sect. 2).
+	// The wrap word's own operation is still open, with exactly two survivors:
+	// a 2^23 AND and a conditional subtract, both giving 0.5993 Hz on the
+	// MEASURED C-RAM[0x00] = 0x72.  Neither is executed.
 	if (hi == 0x092 && cl == 0xa && lo == 0x200)
 		return "LFO: phase += increment (increment = f/44100 in Q0.23)";
 	if (hi == 0x094 && cl == 0xa && lo == 0x200)
-		return "LFO: phase wrap, consumes the constant 0x7FFFFF (29/29)";
+		return "LFO: phase wrap, consumes 0x7FFFFF (29/29); AND vs sub-if-ge OPEN";
 
 	// pointer-load family siblings (INFERRED, header note sect. 7)
 	if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
@@ -399,8 +425,16 @@ std::string upd6383_disassembler::hi12_text(u16 hi)
 		sep(); s << "ST";
 	}
 
-	// proven fields, deliberately rendered as named-but-unexplained
+	// a proven field, deliberately rendered as named-but-unexplained
 	if (hi_f98(hi)) { sep(); util::stream_format(s, "f98=%d", hi_f98(hi)); }
+
+	// hi12[3:1] = THE ACCUMULATOR OPERATION (notes/dsp-alu-applied.md), but it
+	// stays rendered as the neutral `f31=n' HERE ON PURPOSE.  hi12_text() is a
+	// field dump and it is printed for EVERY word, including the class-1
+	// external-DRAM words and the escape forms this decode does not reach;
+	// printing "acc+=P" on one of those would assert a semantic the word has
+	// not been shown to have.  The operation is named in the MNEMONIC instead,
+	// which is emitted only for words decoded() admits.
 	if (hi_f31(hi)) { sep(); util::stream_format(s, "f31=%d", hi_f31(hi)); }
 
 	const u16 res = hi_residue(hi);
@@ -435,14 +469,12 @@ bool upd6383_disassembler::decoded(u64 word)
 	if (hi == 0x801 && cl == 0 && lo == 0x821)               return true;  // ldptr
 	if (hi == 0x801 && cl == 0 && ad == 0x00 && lo == 0x021) return true;  // rstcur
 
-	// THE ALU.  The three forms that used to be listed here individually --
-	// 202.A.dd.1D5 mac, 202.A.dd.1D4 mac.lb, 212.A.dd.407 mulst -- are now
-	// special cases of one field decode, and five more lo12 values come with
-	// them (notes/dsp-alu-biquad.md).  The hi12/class4 restriction is dropped
-	// on purpose: hi12 bit 4 (store) and class4 (multiply / pointer) were
-	// already MEASURED as independent controls, so the three old forms were
-	// never really hi12-specific -- they were lo12 forms observed at one hi12.
-	if (alu_decoded(word) && !lo_ptrmode(word))
+	// THE ALU.  alu_decoded() carries the whole predicate and its evidence: a
+	// CLASS guard, a ROUTING guard on both halves of lo12, and an OPERATION
+	// guard on hi12[3:1].  It replaces a lo12-only whitelist that, because it
+	// looked at nothing else, also executed class-1 external delay-RAM words as
+	// on-chip arithmetic (notes/dsp-alu-applied.md sect. 3).
+	if (alu_decoded(word))
 		return true;
 
 	return false;
@@ -512,25 +544,51 @@ std::string upd6383_disassembler::text(u64 word)
 			s << "rstcur";
 		else
 		{
-			// THE UNIFORM ALU, rendered as what it is: one operation
-			// (acc += P, P consumed) plus a bus source, a side effect and the
-			// optional multiply/store/pointer controls that live OUTSIDE lo12.
-			//     mnemonic  = mac (class A multiplies) / alu (it does not)
-			//     operand   = the bus source, then the lo12[3:0] side effect
-			static const char *const SRC[4] = { "acc", "ta", "tb", "(p)" };
-			const char *mn = (cl == 0xa) ? "mac" : "alu";
-			std::string suffix;
-			switch (lo_op(word))
+			// THE ALU, rendered as the two fields it really is: the OPERATION
+			// from hi12[3:1] and the ROUTING from lo12.  The optional
+			// multiply / store / pointer controls live outside both.
+			//     mnemonic = the accumulator op, then the lo12[4:0] side effect
+			//     operand  = the lo12[10:6] bus source, then the pointer walk
+			//
+			// *** THE SOURCE IS LOOKED UP, NOT INDEXED.  It used to be
+			// `SRC[lo_src(word)]' over a four-entry table, which became an
+			// out-of-bounds read the moment lo_src() was widened from two bits
+			// to five: the four ANCHORED codes are 0x07/0x10/0x19/0x1A and
+			// every one of them is past the end of a 4-entry array.  Fixed
+			// here; a switch cannot acquire that defect again. ***
+			const char *sname;
+			switch (lo_src(word))
 			{
-			case LO_OP_CAP_TA: suffix = ".ta"; break;   // tempA <- bus
-			case LO_OP_CAP_TB: suffix = ".tb"; break;   // tempB <- bus
-			case LO_OP_ST_BUS: suffix = ".st"; break;   // mem[ptr] <- bus
-			default:           suffix = "";    break;
+			case LO_SRC_MEM: sname = "(p)"; break;
+			case LO_SRC_ACC: sname = "acc"; break;
+			case LO_SRC_TA:  sname = "ta";  break;
+			case LO_SRC_TB:  sname = "tb";  break;
+			default:         sname = "?";   break;      // unreachable: decoded()
 			}
+
+			const char *mn;
+			switch (hi_f31(hi))
+			{
+			case HI_ACC_LOAD: mn = "ld";   break;       // acc <- P
+			case HI_ACC_ADD:  mn = "mac";  break;       // acc += P
+			default:          mn = "post"; break;       // class-8 post-sum step
+			}
+
+			std::string suffix;
+			switch (lo_act(word))
+			{
+			case LO_ACT_CAP_TA: suffix = ".ta"; break;  // tempA <- bus
+			case LO_ACT_CAP_TB: suffix = ".tb"; break;  // tempB <- bus
+			case LO_ACT_ST_BUS: suffix = ".st"; break;  // mem[ptr] <- bus
+			default:            suffix = "";    break;
+			}
+
 			std::string mnem = std::string(mn) + suffix;
 			while (mnem.size() < 7)
 				mnem += ' ';
-			util::stream_format(s, "%s %s", mnem, SRC[lo_src(word)]);
+			util::stream_format(s, "%s %s", mnem, sname);
+			if (cl == 0xa)
+				s << ",c+";             // one coefficient, cursor post-increment
 			if ((cl & 7) == 2)
 				util::stream_format(s, ",(p)%+d", dd);
 			if (hi & HI_ST)

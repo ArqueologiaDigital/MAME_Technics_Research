@@ -53,9 +53,42 @@ public:
 	static constexpr u16 HI_END = 1 << 10;  // END OF BLOCK, only when HI_ESC is clear
 	static constexpr u16 HI_ST  = 1 << 4;   // WRITE ACCUMULATOR -> mem[ptr]
 
-	// proven to be FIELDS (all values exercised), meaning UNKNOWN
+	// proven to be a FIELD (all values exercised), meaning UNKNOWN
 	static constexpr u16 hi_f98(u16 hi) { return (hi >> 8) & 3; }   // ARITY 3: 1713/493/766/2
+
+	// ---------------------------------------------------------------
+	//  hi12[3:1] = THE ACCUMULATOR OPERATION.
+	//
+	//  THIS IS THE ADJUDICATION OF THREE CONCURRENT ANALYSES, and it FALSIFIES
+	//  the framing the work started from ("lo12 is the ALU field").  The
+	//  operation is NOT in lo12.  FORCED, by a minimal pair that the biquad
+	//  could not see (notes/dsp-alu-crossval.md B1, re-derived in
+	//  notes/dsp-alu-applied.md sect. 2):
+	//
+	//      092.A.dd.200  and  094.A.dd.200  are identical in class4, in addr8
+	//      and in ALL TWELVE lo12 BITS; they differ only in hi12[3:1] (1 vs 2).
+	//      In 12 of 20 images they address the SAME D-RAM cell with the pointer
+	//      frozen, and they consume C-RAM[+0] = 0x000072 and C-RAM[+1] =
+	//      0x7FFFFF.  That cell has to end up a 0.6 Hz ramp -- and 114/2^23 *
+	//      44100 = 0.5993 Hz, so the two constants ARE an increment and a
+	//      2^23 wrap.  No single binary operation applied twice with those two
+	//      constants makes a ramp (+ - * min max and or xor: all give ~22 kHz
+	//      or a constant, MEASURED).  So the two words compute DIFFERENT
+	//      things, and the only field that differs is this one.
+	//
+	//  Its three low codes are the ones the PARAMETRIC EQ biquad exercises, and
+	//  reading them this way reproduces that block's transfer function to the
+	//  last bit (notes/dsp-alu-biquad.md sect. 7-A8 measured the equivalence;
+	//  what is new is that the LFO REMOVES the alternative).  The product
+	//  register is NOT consumed by the add: it holds until the next multiply.
+	// ---------------------------------------------------------------
 	static constexpr u16 hi_f31(u16 hi) { return (hi >> 1) & 7; }   // 8/8 values seen
+
+	enum : u16 {
+		HI_ACC_LOAD = 0,    // acc <- P
+		HI_ACC_ADD  = 1,    // acc <- acc + P
+		HI_ACC_HOLD = 2     // acc unchanged -- ONLY established on class 8
+	};
 
 	// bits with no reading at all: 7, 6, 5, 0 (plus 10 inside the escape)
 	static constexpr u16 hi_residue(u16 hi)
@@ -71,14 +104,15 @@ public:
 	static std::string hi12_text(u16 hi);
 
 	// ---------------------------------------------------------------
-	//  lo12 -- THE ALU FIELD.  Two sub-fields are decoded; the rest is open.
-	//  (notes/dsp-alu-biquad.md, which derives the ARITHMETIC from the
-	//  PARAMETRIC EQ biquad -- the one block whose transfer function is known
-	//  exactly, from the firmware's own bilinear designer.  The FIELD
-	//  BOUNDARIES below are the ones two concurrent, independent analyses
-	//  converged on: notes/dsp-alu-structure.md, from the vocabulary
-	//  statistics, and notes/dsp-alu-crossval.md, from the all-pass, the LFO
-	//  and the input stage.)
+	//  lo12 -- THE OPERAND ROUTING.  NOT the operation: see hi_f31() above.
+	//
+	//  Three concurrent, independent analyses converged on the SAME field map
+	//  -- notes/dsp-alu-structure.md (vocabulary statistics: 55 Hamming-1 pairs
+	//  against a popcount-matched null of 15.2 +/- 3.7, z = +10.8, so lo12 is a
+	//  horizontal microword exactly as hi12 is), notes/dsp-alu-biquad.md (the
+	//  PARAMETRIC EQ section, whose transfer function is known independently
+	//  from the firmware's own bilinear coefficient designer) and
+	//  notes/dsp-alu-crossval.md (the all-pass, the LFO and the input stage).
 	//
 	//      11 10           6 5 4              0
 	//     +--+--------------+-+----------------+
@@ -93,7 +127,7 @@ public:
 	//  toggled alone in the 55 Hamming-distance-1 pairs of the vocabulary.
 	// ---------------------------------------------------------------
 	static constexpr u8 lo_src(u64 w) { return u8((w >> 6) & 0x1f); }
-	static constexpr u8 lo_op(u64 w)  { return u8(w & 0x1f); }
+	static constexpr u8 lo_act(u64 w) { return u8(w & 0x1f); }
 	static constexpr bool lo_ptrmode(u64 w) { return BIT(w, 5); }
 
 	// lo12[10:6] = THE OPERAND-SOURCE SELECT -- which register or bus supplies
@@ -121,34 +155,73 @@ public:
 	// observed codes are pinned by the biquad; the rest are OPEN and this
 	// decoder does not guess them.
 	enum : u8 {
-		LO_OP_ST_BUS = 0x07,    // mem[ptr] <- bus
-		LO_OP_NONE_2 = 0x12,    // no temp/memory side effect
-		LO_OP_CAP_TA = 0x13,    // tempA <- bus
-		LO_OP_CAP_TB = 0x14,    // tempB <- bus
-		LO_OP_NONE_5 = 0x15     // ditto -- how it differs from 0x12 is OPEN
+		LO_ACT_ST_BUS = 0x07,   // mem[ptr] <- bus
+		LO_ACT_NONE_2 = 0x12,   // no temp/memory side effect
+		LO_ACT_CAP_TA = 0x13,   // tempA <- bus
+		LO_ACT_CAP_TB = 0x14,   // tempB <- bus
+		LO_ACT_NONE_5 = 0x15    // ditto -- how it differs from 0x12 is OPEN
 	};
 
-	// THE EIGHT lo12 VALUES THE BIQUAD PINS, and deliberately no more.
+	static constexpr bool lo_src_anchored(u8 s)
+	{
+		return s == LO_SRC_MEM || s == LO_SRC_ACC || s == LO_SRC_TA || s == LO_SRC_TB;
+	}
+
+	static constexpr bool lo_act_anchored(u8 a)
+	{
+		return a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2 || a == LO_ACT_CAP_TA
+				|| a == LO_ACT_CAP_TB || a == LO_ACT_NONE_5;
+	}
+
+	// ---------------------------------------------------------------
+	//  THE EXECUTABLE PREDICATE -- three guards, each with its own evidence,
+	//  and NOTHING outside their conjunction.
 	//
-	// The SRC and OP fields above are read as fields, but bits[11:8] and bit 4
-	// are still open, so a word that shares an OP nibble while differing in
-	// those bits is NOT the same instruction as far as this decoder knows.
-	// Whitelisting the eight exact values keeps the claim exactly as wide as
-	// the evidence: they are the eight lo12 values of the PARAMETRIC EQ
-	// section, whose arithmetic is verified against the firmware's own biquad
-	// designer.  They are also, by a wide margin, the most common values in the
-	// corpus -- 1146 of 3057 words (37.5 %) -- so the restriction costs little.
+	//  This REPLACES an eight-value lo12 whitelist that had a real defect: it
+	//  tested lo12 ALONE, so it also executed `880.1.20.407', `900.1.60.1D5'
+	//  and `800.1.60.1D5' -- CLASS-1 words that R1's constraint solve FORCED to
+	//  be external delay-RAM accesses (dsp/analysis/r1-allpass-motif.md) -- as
+	//  though they were ordinary on-chip arithmetic.  A DRAM word executed as
+	//  arithmetic is exactly the plausible-but-wrong behaviour this device
+	//  exists to refuse.  MEASURED: 116 corpus words leave the executable set
+	//  because of the class and operation guards, and 154 join it because the
+	//  routing fields are now read as FIELDS.  (notes/dsp-alu-applied.md.)
+	//
+	//  1. CLASS.  Only 2 (pointer post-increment), A (post-increment + one
+	//     coefficient) and 8 (the post-sum step) are on-chip datapath classes.
+	//     In classes 1/3/5/6 the addr8 is a bracket code, unit index or table
+	//     selector, NOT a pointer delta (MEASURED, kn5000-dsp-pointer.md), and
+	//     class 1 is where the external-DRAM bracket lives.  Zero corpus words
+	//     of any other class pass the routing guard anyway, so this costs
+	//     nothing and prevents the category error above.
+	//  2. ROUTING.  Both halves of lo12 must be anchored, and neither the
+	//     pointer-mode bit (5) nor the G bit (11) may be set.
+	//  3. OPERATION.  hi12[3:1] must be one the biquad determines.  HI_ACC_HOLD
+	//     is admitted ONLY on class 8: that is the one word the biquad shows it
+	//     on, "the accumulator is unchanged there" is what the reconstruction
+	//     DETERMINES, and the LFO says the same code does something visible
+	//     elsewhere (notes/dsp-alu-applied.md sect. 2.3 enumerates the two
+	//     survivors, a 2^23 AND and a conditional subtract -- both of which ARE
+	//     the identity on a completed biquad sum, which is why executing this
+	//     one word as "unchanged" is correct under either).
+	// ---------------------------------------------------------------
 	static constexpr bool alu_decoded(u64 w)
 	{
-		switch (lo12(w))
-		{
-		case 0x1d3: case 0x1d4: case 0x1d5:     // src = mem[ptr]
-		case 0x407: case 0x412: case 0x415:     // src = acc
-		case 0x647:                             // src = tempA
-		case 0x687:                             // src = tempB
-			return true;
-		default:
+		const u8 cl = class4(w);
+		if (cl != 2 && cl != 8 && cl != 0xa)
 			return false;
+		if (lo12(w) & 0x800)                    // G
+			return false;
+		if (lo_ptrmode(w))                      // M
+			return false;
+		if (!lo_src_anchored(lo_src(w)) || !lo_act_anchored(lo_act(w)))
+			return false;
+
+		switch (hi_f31(hi12(w)))
+		{
+		case HI_ACC_LOAD: case HI_ACC_ADD: return true;
+		case HI_ACC_HOLD: return cl == 8;
+		default: return false;
 		}
 	}
 
