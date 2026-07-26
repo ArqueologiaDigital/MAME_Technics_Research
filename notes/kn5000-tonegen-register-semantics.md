@@ -260,13 +260,16 @@ READ the level the ROM writes. Minimal, ordered by impact:
    `0xF000|mag` for level (the 0xFE00 vs 0xF000 difference is release-mode/routing, not
    a different scale).
 
-3. **Fix the group8 interpretation (`update_voice_params`, L263-303).**
-   `reg[20]` (+0x800) and `reg[21]` (+0x840) are the bus-0 **L and R gains**, each
-   `loglevel<<8` (level in the HIGH byte, louder = higher IF 0x0118FE is a straight
-   level table — verify direction live). They are NOT "main volume + pan". Replace the
-   `main_vol = 0xFF00 - (reg20 & 0xFF00)` inversion and the `reg[21]/reg[22] low-byte
-   pan` reads with: `gain_L = reg[20] >> 8`, `gain_R = reg[21] >> 8` (pan already baked
-   in). `reg[22]`/group9/group10 are the effect-send buses — ignore for dry output.
+3. ~~**Fix the group8 interpretation (`update_voice_params`, L263-303).**~~
+   **STRUCK 2026-07-26 — `reg[20]`/`reg[21]` are NOT an L/R pair, so `gain_L = reg[20]>>8`,
+   `gain_R = reg[21]>>8` must NOT be implemented.** Every firmware updater writes the SAME
+   computed value to both members of a group-8/9/10 pair (`LABEL_02682F` v142 asm
+   L20831-20838, `LABEL_026A93` L21080-21086, `LABEL_026AAA` L21209-21212, `LABEL_02D620`
+   L30130-30150), which an L/R gain pair cannot do; and at note-on the pair reads
+   `+0x800 = 0xE57F` against `+0x840 = 0x484C`, i.e. hard-left on every note. They are the
+   `{level, rate}` words of successive envelope stages. Only `reg[20]`'s high byte is a
+   loudness (higher = louder, which the polarity fix in `7072b09` confirmed by ear);
+   pan stays centred until an evidence-based source is found.
 
 4. **Expression (reg_idx 6, +0x180) — optional second pass.** A second per-tick level;
    fold in as an extra multiplier once item 2 is validated. Lower priority.

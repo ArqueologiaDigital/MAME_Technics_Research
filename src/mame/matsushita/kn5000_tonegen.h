@@ -107,17 +107,14 @@ private:
 		                        // from here, because the firmware's own release burst rewrites
 		                        // +0x800 with the ramp's TARGET level *before* it signals the
 		                        // release, and we have no rate engine to walk towards it.
-		bool     finished;      // A one-shot (aperiodic) recording has played to its end. The
-		                        // voice is silent and status_r reports it so, which is what
-		                        // makes the firmware's own voice manager free it (0x7E00).
-		int      env_level;     // Amplitude-envelope magnitude (0-0xFF) from group0/bank0.
-		                        // Present only when bit 8 of that word is set — the firmware's
-		                        // builder LABEL_025589 (v142 asm L18859-18869) computes
-		                        // mag = 0xFF - 4*(p & 0x3F) in bits[7:0] and SETs bit 8 only
-		                        // when the source byte is non-zero, so bit 8 is a
-		                        // "magnitude present" flag, not part of the value.
-		                        // 0xFF = no attenuation (the default, and what a bare
-		                        // 0xF000/0xFE00 command means).
+		int      env_level;     // Low 9 bits of the group0/bank0 HAND-OFF word (0xF0xx/0xFExx),
+		                        // used as a linear amplitude. That reading is WRONG — the word
+		                        // is written exactly once per note, right before the firmware
+		                        // frees the channel, and its low bits are an undecoded
+		                        // hand-off parameter. It is retained only because removing it
+		                        // turns the accompaniment into a saturated drone. The full
+		                        // evidence, and what has to be decoded to fix it properly, are
+		                        // in the comment on data_w().
 		double   lp_a;          // One-pole low-pass coefficient for the per-voice TVF driven by
 		                        // +0x100 (see update_timbre). 0.0 = filter bypassed.
 		double   lp_z;          // ... and its state.
@@ -155,7 +152,6 @@ private:
 			release_counter = 0;
 			hold_counter = 0;
 			sustain_vol = 0;
-			finished = false;
 			env_level = 0xFF;
 			lp_a = 0.0;
 			lp_z = 0.0;

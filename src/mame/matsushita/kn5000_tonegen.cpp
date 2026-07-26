@@ -117,7 +117,6 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].release_counter), i);
 		save_item(NAME(m_voice[i].hold_counter), i);
 		save_item(NAME(m_voice[i].sustain_vol), i);
-		save_item(NAME(m_voice[i].finished), i);
 		save_item(NAME(m_voice[i].env_level), i);
 		save_item(NAME(m_voice[i].lp_a), i);
 		save_item(NAME(m_voice[i].lp_z), i);
@@ -200,22 +199,38 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	m_voice[ch].regs[reg_idx] = data;
 	LOGMASKED(LOG_REG_W, "tonegen: voice %d reg[%d] (g%d.b%d) = 0x%04X\n", ch, reg_idx, group, bank, data);
 
-	// Voice control register (group 0, bank 0) — carries BOTH the key gate command
-	// AND an amplitude-envelope magnitude. The real note-on command is 0x8100; key-off
-	// is 0x7E00. Discriminate by command so an envelope write does NOT retrigger the
-	// voice (which was resetting wave_offset). See notes/kn5000-tonegen-register-semantics.md.
+	// Voice control register (group 0, bank 0). Three commands reach it:
+	//   0x8100          note ON  (7 sites, all `LDW (100002h:24),8100h`)
+	//   0x7E00          voice OFF / free (asm L13066 all-voices loop, L26793, L31188)
+	//   0xF0xx / 0xFExx the HAND-OFF word, `slot[+0x2d]`
 	//
-	// WORD LAYOUT (MEASURED, sub-CPU v142 asm):
-	//   LABEL_025589 (L18859-18869)  A = *(slot+0x17); WA = A & 0x3F; SLL 2,WA;
-	//                                BC = 0x00FF; SUB BC,WA          -> bits[7:0] = magnitude
-	//                                CP (XWA),0 / JR Z / SET 8,BC    -> bit 8 = "magnitude present"
-	//   LABEL_02552A (L18813-18855)  ORs bits 9-11 and 12-14 only    -> bits[15:9] = routing
-	//   LABEL_0255F3 (L18907-18942)  writes a BARE 0xF000 / 0xFE00   -> NO magnitude field
-	// so `mag = 0xFF - 4*(p & 0x3F)` can only ever produce 0x03..0xFF, and bit 8 is set
-	// exactly when there IS a magnitude. The previous code read `min(data & 0x1FF, 0xFF)`,
-	// which (a) turned every bare 0xF000 into env_level 0 = SILENCE — MEASURED: the whole
-	// rhythm section rendered at -81 dB against the keyboard — and (b) clamped every genuine
-	// attenuation (bit 8 set) back up to full, so the envelope was a no-op on that class.
+	// WHAT THE HAND-OFF WORD IS NOT (settled this pass, and it contradicts the comment that
+	// used to stand here as well as three of the audit reports). It is NOT a per-tick
+	// software envelope magnitude:
+	//   * it is built by LABEL_025589 (asm L18856-18906, `mag = 0xFF - 4*(VP[0] & 0x3F)`,
+	//     `SET 8` iff VP[0] != 0) or by LABEL_0255F3 (L18907-18942, a BARE 0xF000/0xFE00 with
+	//     no magnitude field at all), and both only STORE it into `slot[+0x2d]`;
+	//   * the five places that ship `slot[+0x2d]` to this register (asm L21485, L24100,
+	//     L24137, L29209, L29242) each call `LABEL_022587` — free the channel — on the very
+	//     next line;
+	//   * MEASURED on the live bus this pass: it is written exactly ONCE per note, 42 us
+	//     after the gate for a rhythm voice and 0.5 ms after it for a key-bed voice, from
+	//     `ToneGen_WriteSingleReg` (PC 0x02D42F); a 3-second held note gets exactly one
+	//     (0xF0FF at +0.5 ms) and nothing else until its release.
+	// So it is the point where the firmware stops managing the note and leaves it to the
+	// chip's own envelope, and its low bits are a per-partial parameter of that hand-off
+	// whose meaning is NOT established.
+	//
+	// WHY THE ARITHMETIC BELOW IS KEPT ANYWAY. Reading those low bits as an amplitude is
+	// wrong in principle, and it is what silences the accompaniment: rhythm voices get the
+	// bare 0xF000, so `data & 0x1FF` is 0 and they render at -81 dB. But simply not
+	// silencing them is worse, MEASURED: the whole rhythm section then becomes a saturated
+	// drone (rms 0.75 FS, peak pinned at 32767, and still sounding after STOP), because a
+	// handed-off voice has NO remaining path to end — the firmware has freed its channel and
+	// will never send it a 0x7E00, so on real hardware the chip must end it by itself, and
+	// how it does that is exactly what is still undecoded. Until that is decoded, the two
+	// defects cancel and unmuting alone regresses the instrument. See
+	// notes/audit/kn5000-audit-applied.md.
 	if (group == 0 && bank == 0)
 	{
 		if (data == 0x7E00)
@@ -231,7 +246,8 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		}
 		else if (data & 0x8000)
 		{
-			m_voice[ch].env_level = (data & 0x0100) ? int(data & 0xFF) : 0xFF;
+			// Hand-off. Do NOT touch key state or waveform position.
+			m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
 		}
 	}
 
@@ -328,20 +344,17 @@ uint16_t kn5000_tonegen_device::status_r()
 	// voice as active. Bank = low 2 bits of the value last latched at 0x100000;
 	// bit i of the result = voice (bank*16 + i) is currently gated on.
 	//
-	// EXCEPTION — a one-shot that has PLAYED OUT. A recording with no fundamental
-	// (detect_period == 0: the drums, applause and sound effects on pages 0/1) has no
-	// sustain loop, so once the chip has read past its last sample the voice really is
-	// silent. Reporting that lets the firmware's OWN voice manager reclaim the channel
-	// with its OWN 0x7E00 (LABEL_02219F -> LABEL_02B4A1), which is how a rhythm voice is
-	// supposed to end. Without it the firmware believed all 64 channels were still
-	// sounding and started stealing them.
-	m_stream->update();
+	// KNOWN GAP: this answers "gated on", not "still sounding", so a voice the firmware
+	// HANDED OFF (the 0xF0xx write in data_w, after which it frees the channel and can
+	// never send a 0x7E00) is reported active forever and is never reclaimed. Closing that
+	// needs a decode of how the chip ends a handed-off note, which is not established —
+	// see the long comment in data_w() and notes/audit/kn5000-audit-applied.md.
 	int bank = m_addr_latch & 0x03;
 	uint16_t bitmap = 0;
 	for (int i = 0; i < 16; i++)
 	{
 		int vch = bank * 16 + i;
-		if (vch < NUM_VOICES && m_voice[vch].key_on && !m_voice[vch].finished)
+		if (vch < NUM_VOICES && m_voice[vch].key_on)
 			bitmap |= (1u << i);
 	}
 	return bitmap;
@@ -1449,11 +1462,10 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.key_on = true;
 	v.key_on_time = machine().time().as_double(); // gate timestamp for release detection
 	v.active = true;
-	v.finished = false;
 	v.wave_offset = 0;
 	v.release_counter = 0;
 	v.hold_counter = 0;
-	v.env_level = 0xFF; // no attenuation until the firmware sends a magnitude (bit 8)
+	v.env_level = 0xFF; // see the hand-off discussion in data_w()
 	v.lp_z = 0.0;       // the per-voice filter starts from rest
 	v.pitch_offset = 0.0; // resolved from +0x400 once the whole key press is programmed
 
@@ -1604,21 +1616,6 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			uint32_t sample_pos = v.wave_offset >> 16;
 			uint32_t frac = v.wave_offset & 0xFFFF;
 
-			// A ONE-SHOT that has played out. `pitch_period_q16 == 0` means detect_period
-			// found no fundamental — the drums, applause and sound effects of pages 0/1
-			// (16/198 and 28/168 of them). There is no pitch-continuous loop to be had for
-			// such a recording, and compute_loop's fallback [0, N) made a drum hit REPEAT
-			// for as long as the firmware held the gate — which is forever, because the
-			// firmware only releases a voice the chip reports silent. Stop at the end
-			// instead, and report it silent (status_r) so the firmware issues its own
-			// 0x7E00. This is the mechanism the real voice manager is written around.
-			if (v.pitch_period_q16 == 0 && sample_pos >= v.wave_samples)
-			{
-				v.finished = true;
-				v.active = false;
-				continue;
-			}
-
 			if (sample_pos >= v.loop_end)
 			{
 				// Reached the end of the play-through / loop region -> wrap back into the
@@ -1668,8 +1665,8 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				sample = int32_t(v.lp_z);
 			}
 
-			// Apply the amplitude-envelope magnitude the firmware sends in group0/bank0
-			// (env_level; 0xFF = no attenuation). See the decode in data_w().
+			// The group0/bank0 hand-off word's low bits, used as a linear amplitude.
+			// Known to be the WRONG reading and deliberately retained — see data_w().
 			sample = sample * v.env_level / 0xFF;
 
 			// Apply release envelope (voice-lifecycle fade + deactivation). Kept for
