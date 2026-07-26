@@ -342,6 +342,16 @@ public:
 	//     MEASURED over the 3057-word corpus -- of the 303 executing `L=07' words,
 	//     303 are mode 2 and 0 are not.  So, exactly like guard 5, this costs ZERO
 	//     words and closes a hole before it opens rather than fixing a live bug.
+	//     ★ AND IT NOW HAS A POSITIVE REASON, not just a precautionary one
+	//     (dsp/analysis/output-stage-decode.md item J, FORCED).  On a MODE-1 word
+	//     ACTION 0x07 does NOT write `reg[addr8]': the output stage's `w72' is
+	//     `000.1.06.087' and register 0x06 is the unit-0 OUTPUT LEVEL, written
+	//     once by the firmware's EFF_VolumeLoop after linking (PROVEN BY
+	//     CONSTRUCTION) and carrying the user's effect depth.  If ACTION 0x07 on
+	//     a mode-1 word wrote the addressed register, that depth would survive
+	//     exactly ONE frame.  So the guard is not merely cheap -- widening it
+	//     would be wrong.  (Stated escape, not excluded: SRC 0x02, undecoded,
+	//     might carry the level itself and make the write an identity.)
 	//  7. ★ THE BIT-4 STORE GATE, and it is the first guard here that COSTS
 	//     WORDS.  hi12 bit 7 suppresses the store (see HI_B7 above).  Three gates
 	//     survive the LFO's falsification and they agree on two of the four

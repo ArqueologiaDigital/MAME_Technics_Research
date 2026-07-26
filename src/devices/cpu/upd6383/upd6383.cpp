@@ -166,6 +166,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	m_last_slots(0), m_last_traps(0), m_last_partials(0), m_partial_total(0),
 	m_last_dp_delta(0), m_frames_dp_closed(0), m_frames_dp_measured(0),
 	m_dp_delta_min(127), m_dp_delta_max(-128),
+	m_calls_u0(0), m_calls_u1(0), m_rebase_agreed_u0(0), m_rebase_agreed_u1(0),
 	m_in_frames(0), m_in_ok(0), m_in_bad(0), m_in_nonzero(0), m_in_peak(0),
 	m_in_log_left(INPUT_LOG_FRAMES),
 	m_frame_detail_left(FRAME_DETAIL_FRAMES),
@@ -178,6 +179,7 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	std::fill(std::begin(m_host_word), std::end(m_host_word), 0);
 	std::fill(std::begin(m_order_iw), std::end(m_order_iw), 0);
 	std::fill(std::begin(m_order_word), std::end(m_order_word), 0);
+	std::fill(std::begin(m_in_base_hist), std::end(m_in_base_hist), 0);
 	std::fill(std::begin(m_in_addr), std::end(m_in_addr), 0);
 	std::fill(std::begin(m_in_val), std::end(m_in_val), 0);
 	std::fill(std::begin(m_in_seen), std::end(m_in_seen), 0);
@@ -628,14 +630,25 @@ void upd6383_device::trap(u64 word, offs_t pc)
 //
 //  ★ RETRACTED SENTENCE, kept visible (retraction-sweep.md, P1).  This comment
 //  used to continue: "In steady state the epilogue's `ldptr #$90' at I-RAM 69
-//  and its w79 (-1) leave X = 0x8F, giving 0x91 and 0x94".  THAT IS NO LONGER
-//  TRUE OF THIS CODE.  `ldptr' stopped writing m_dp when K3 withdrew the
-//  0x821 = data-pointer reading, so I-RAM 69 does not place X at all and there
-//  is no such steady state: NOTHING loads m_dp today, and it moves only by
-//  post-increment (which is why the frame-closure residue is +121).
-//  The sentence's own escape clause is what saves the code, and it still holds:
-//  nothing here depends on X -- only the OFFSETS +2 / +5 are used, and those
-//  come from an origin-free pointer-rule walk of the twelve input words.
+//  and its w79 (-1) leave X = 0x8F, giving 0x91 and 0x94".  THAT IS NOT TRUE OF
+//  THIS CODE and never becomes true: `ldptr' stopped writing m_dp when K3
+//  withdrew the 0x821 = data-pointer reading, so I-RAM 69 does not place X at
+//  all.  For a while NOTHING placed it, and the pointer moved only by
+//  post-increment -- which is where the +121 frame-closure residue came from.
+//
+//  ★ THERE IS A STEADY STATE AGAIN, and X IS 0xFF (2026-07-27).  Not because
+//  the retracted sentence came back, but because the PER-UNIT REBASE at the CALL
+//  does place the pointer (DRAM_UNIT_BASE, FORCED): the unit-1 body starts at
+//  0x85, walks -133, the output stage walks -1, and the frame ends on 0xFF.
+//  So the two deposits below land on cells 0x01 and 0x04 -- exactly the two DI
+//  latches of dsp/analysis/output-stage-decode.md sect. 3.5's map, which is a
+//  PREDICTION of that map and not an input to it.
+//
+//  THE CODE IS UNCHANGED ANYWAY, and that is deliberate: nothing here depends on
+//  X.  Only the OFFSETS +2 / +5 are used and those come from an origin-free
+//  pointer-rule walk of the twelve input words, so if the origin is ever
+//  re-adjudicated this function does not move.  The audit in run_frame() is what
+//  would notice: it COMPARES what the microcode read against what was latched.
 
 void upd6383_device::latch_inputs_to_dram()
 {
@@ -989,11 +1002,14 @@ void upd6383_device::exec_decoded(u64 word)
 		// IDENTIFICATION is an EDUCATED GUESS.  What is FORCED is the negative
 		// part -- it is neither the cursor nor the D-RAM operand pointer.
 		//
-		// CONSEQUENCE, stated because it is observable: NO decoded word now
-		// loads m_dp.  The D-RAM origin is OPEN (K3's `0x827' candidate was
-		// falsified at 0 of 85 streams), so the operand pointer moves only by
-		// post-increment.  The K6 input window follows it, which is why the
-		// input-stage audit is a comparison and not an assertion.
+		// CONSEQUENCE, stated because it is observable: NO decoded word loads
+		// m_dp.  ★ THAT IS STILL TRUE AND IT IS NO LONGER A HOLE (2026-07-27).
+		// The D-RAM ORIGIN IS PINNED -- base = 0x05 | (unit << 7), FORCED, see
+		// DRAM_UNIT_BASE -- and it is established at the per-unit CALL, not by an
+		// instruction.  K3's `0x827' candidate stays falsified (0 of 85 streams).
+		// What is still OPEN is WHICH word, if any, performs the rebase: the site
+		// is constrained to the window between the last pointer-moving word and
+		// the body's first, and nothing selects an instruction inside it.
 		m_cp = ad;
 	}
 	else if (upd6383_disassembler::is_ldptrd(word))
@@ -1396,12 +1412,53 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		{
 			if (m_sp == 0)
 			{
+				const bool unit1 = (upd6383_disassembler::addr8(raw) != 0x0e);
 				m_stack[m_sp++] = m_pc;     // return to the word after this one
-				m_pc = (upd6383_disassembler::addr8(raw) == 0x0e ? UNIT0_ENTRY : UNIT1_ENTRY)
+				m_pc = (unit1 ? UNIT1_ENTRY : UNIT0_ENTRY)
 						* upd6383_disassembler::WORD_BYTES;
+
+				// ★ THE PER-UNIT D-RAM REBASE.  base = 0x05 | (unit << 7).
+				// FORCED to exist and forced in its VALUE; see DRAM_UNIT_BASE in
+				// the header for the three-step derivation and for the one thing
+				// that is NOT forced -- the site, which is why this is written
+				// here (at the CALL) rather than as a word decode.  No word gains
+				// a semantic from it and no word stops trapping: it is the frame
+				// SEQUENCER's model, not the ISA's, exactly like the call itself.
+				//
+				// It is the missing absolute reload that dsp/analysis/
+				// retraction-sweep.md P1/P13 re-opened -- "NOTHING loads m_dp".
+				// WITHDRAWN with it: the +121 closure residue as an open defect
+				// -- it was the same phenomenon, and one change answers both.
+				const u8 base = u8(DRAM_UNIT_BASE | (unit1 ? DRAM_UNIT_STRIDE : 0));
+
+				// DIAGNOSTIC, not a criterion.  For unit 1 the rebase is forced
+				// to do work (net(body0) takes 8 values, so no walk can deliver
+				// 0x85).  For unit 0 the closure model says the header walk from
+				// X = 0xFF ALREADY delivers 0x05 -- so applying it there should
+				// be a NO-OP, and "should be" is not "is".  These two counters
+				// measure it every frame instead of assuming it, and they are
+				// what would show the unit-0 half being load-bearing (which
+				// would mean the closure arithmetic is wrong somewhere).
+				if (unit1)
+				{
+					m_calls_u1++;
+					if (m_dp == base) m_rebase_agreed_u1++;
+				}
+				else
+				{
+					m_calls_u0++;
+					if (m_dp == base) m_rebase_agreed_u0++;
+				}
+
+				m_dp = base;
 			}
 			else
 			{
+				// NO rebase on the RETURN.  The closure arithmetic requires the
+				// body's exit pointer to survive into the header words that
+				// follow it (delta(50..58) = +2 is measured on top of whatever
+				// body 0 left), and net(body0) varying over 8 values is only a
+				// constraint at all because those words see it.
 				m_pc = m_stack[--m_sp];
 			}
 		}
@@ -1423,17 +1480,31 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// FRAME CLOSURE.  Signed net displacement of the D-RAM operand pointer, mod
 	// 256 mapped to [-128, 127].
 	//
-	// ★ THIS MEASUREMENT CHANGED MEANING THIS PASS, and that is the point of it.
-	// While only the executing words moved the pointer, a non-zero residue mostly
-	// measured OUR COVERAGE.  Now that EVERY word's post-increment is performed,
-	// it measures THE MACHINE: the walk is complete, so a residue that is still
-	// non-zero says the model of the walk is wrong somewhere -- IF the criterion
-	// holds.  ★ THAT "IF" IS NEW (dsp/analysis/retraction-sweep.md, P10).  This
-	// comment used to read "and it is FORCED that it must be", on the strength of
-	// K6 finding 5, which dsp/analysis/closure-pointer.md item F has since
-	// FALSIFIED: 79 of 79 unit-0 bodies enter the I/O window, not 0 of 38.  The
-	// criterion is now CONSISTENT -- strongly expected, not proved.
-	// See dump_frame_report() for the full retraction and the candidates.
+	// ★ THIS MEASUREMENT CHANGED MEANING TWICE.  While only the executing words
+	// moved the pointer, a non-zero residue mostly measured OUR COVERAGE.  Once
+	// EVERY word's post-increment was performed it measured THE MACHINE -- and
+	// it read +121 on 1 130 880 of 1 130 880 frames.  ★ THAT NUMBER WAS NOT AN
+	// ALU DEFECT AND IT IS NOW GONE: it was the arithmetic of walking ONE pointer
+	// straight through a machine that REBASES it per unit (DRAM_UNIT_BASE).  With
+	// the rebase performed, 0x85 - 133 - 1 = 0xFF and 0xFF + 6 = 0x05, so the
+	// walk returns to where it started and the residue is 0.
+	//
+	// The CRITERION is still only CONSISTENT, not FORCED (retraction-sweep.md
+	// P10): it used to say "and it is FORCED that it must be", on the strength of
+	// K6 finding 5, which dsp/analysis/closure-pointer.md item F FALSIFIED -- 79
+	// of 79 unit-0 bodies enter the I/O window, not 0 of 38.  What changed is the
+	// MEASUREMENT, not the entitlement to call a non-zero value a defect.  A
+	// residue of 0 is therefore evidence FOR the rebase, not proof of it; the
+	// proof of the rebase is the ROM (see DRAM_UNIT_BASE), and this is its
+	// strongest live consequence.  See dump_frame_report().
+	//
+	// AND IT STILL CANNOT SUCCEED FOR FREE.  A complete frame closes only if its
+	// ENTRY pointer was 0xFF, i.e. only if the PREVIOUS frame also completed --
+	// the frames that hit the slot cap or overran I-RAM leave the pointer
+	// anywhere, and the complete frame that follows one of those does NOT close.
+	// So a run with capped frames in it must report a shortfall, and if it ever
+	// reports 100.00 % on a run that also reports capped frames, this counter has
+	// stopped measuring anything.
 	//
 	// COUNTED ONLY ON COMPLETE FRAMES.  A frame that hit the slot cap or ran off
 	// the end of I-RAM never finished its program -- at boot, before the host has
@@ -1443,6 +1514,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	m_last_dp_delta = s32(s8(u8(m_dp - dp_at_entry)));
 	if (hit_wait)
 	{
+		m_in_base_hist[dp_at_entry]++;
 		m_frames_dp_measured++;
 		if (m_last_dp_delta == 0)
 			m_frames_dp_closed++;
@@ -1591,37 +1663,40 @@ void upd6383_device::dump_frame_report() const
 	//
 	// SO THE LABEL IS NOW **CONSISTENT**, NOT FORCED.  The criterion may still be
 	// true -- closure-pointer.md sect. 4.1 Package B, which is the better bet --
-	// but it is no longer proved, and Package A (the pointer really is shared and
-	// nothing re-establishes it) would make the +121 residue not a defect at all.
-	// NOTHING ABOUT THE MEASUREMENT CHANGES: the number below is the same number,
-	// counted the same way.  What changed is what we are entitled to conclude
-	// from it, which is why only the LABEL is edited here.
+	// but it is no longer proved.  ★ And the other arm of that sentence --
+	// "Package A would make the +121 residue not a defect at all" -- is WITHDRAWN
+	// (2026-07-27).  The choice between the packages is still open; the residue
+	// is not what hangs on it any more -- see the paragraph below.
 	//
-	// ★ AND IT IS NOT.  Since this pass, EVERY word's post-increment is
-	// performed -- the walk is complete, not a sample of it -- so the residue is
-	// no longer a measure of our coverage.  It is a measure of the machine, and
-	// a non-zero value is a FALSIFICATION of something.  The surviving
-	// candidates, none of them chosen here:
+	// ★ AND THE +121 IS ANSWERED, 2026-07-27.  Candidate (P-1) below -- "SOME
+	// WORD RELOADS THE POINTER, and we do not decode it" -- was the right one,
+	// with one correction: it is not a WORD, it is the per-unit CALL.  The
+	// D-RAM origin is pinned (DRAM_UNIT_BASE: base = 0x05 | unit << 7, FORCED),
+	// a rebase between the two calls is FORCED to exist because net(body0) takes
+	// eight different values across the 37 unit-0 images, and with it performed
+	// the walk returns to its start exactly.  (P-2), (P-3) and (P-4) are NOT
+	// resolved by that and are kept below, unchanged, because a residue of 0 is
+	// consistent with all of them too.
 	//
-	//   (P-1) SOME WORD RELOADS THE POINTER, and we do not decode it.  Strongly
-	//         favoured: nothing loads m_dp at all today (K3 withdrew `0x821',
-	//         adjudication sect. 5.1 falsified `0x827' at 0 of 85 streams), and
-	//         the header carries FIVE undecoded C-format words with the
-	//         register-load selector 0x20 (I-RAM 15, 22, 29, 31, 40) plus
-	//         `801.0.6C.827' / `801.0.64.827'.  Under (P-1) "net == 0" is the
-	//         WRONG criterion and the right one is "the pointer at PC-restart is
-	//         constant", which a reload makes true automatically.
+	//   (P-1) ANSWERED: the pointer is re-established per unit, at the CALL.
+	//         Its old wording survives as a record of what was searched: nothing
+	//         loaded m_dp at all (K3 withdrew `0x821', adjudication sect. 5.1
+	//         falsified `0x827' at 0 of 85 streams) and the five undecoded
+	//         C-format words with selector 0x20 (I-RAM 15, 22, 29, 31, 40) were
+	//         the favoured carriers.  They are STILL undecoded and they still may
+	//         be the instruction that does this -- what is settled is the VALUE
+	//         and the fact that it happens, not which word performs it.
 	//   (P-2) the post-increment rule is not `class4 & 7 == 2' everywhere.  It is
 	//         MEASURED, but on body words; the kernel is where it is least tested.
 	//   (P-3) the CALL/RETURN sequencer (EDUCATED GUESS G-5) puts words in the
 	//         wrong order, or a body is entered that the real machine skips.
 	//   (P-4) some words are CONDITIONAL -- the part has a COND field (CDJ-500
 	//         block diagram) that nothing in this decode models.
-	logerror("    FRAME CLOSURE (CONSISTENT, no longer FORCED: the criterion rests on K6\n");
-	logerror("    finding 5, which closure-pointer.md item F FALSIFIED -- 79 of 79 bodies\n");
-	logerror("    enter the I/O window.  If the pointer IS re-established per unit the\n");
-	logerror("    criterion holds and this residue is the size of the hole; if it is not,\n");
-	logerror("    the residue is not a defect.  Both readings are open):\n");
+	logerror("    FRAME CLOSURE (the criterion is CONSISTENT, not FORCED -- it rests on K6\n");
+	logerror("    finding 5, which closure-pointer.md item F FALSIFIED.  What IS forced is\n");
+	logerror("    the per-unit D-RAM base 0x%02X | unit<<7 this core now applies at the CALL;\n",
+			DRAM_UNIT_BASE);
+	logerror("    a residue of 0 is that base's strongest live consequence, not its proof):\n");
 	logerror("        net D-RAM pointer displacement, last frame %+d\n", m_last_dp_delta);
 	logerror("        over every COMPLETE frame (%u of them): min %+d  max %+d  %s\n",
 			u32(m_frames_dp_measured), m_dp_delta_min, m_dp_delta_max,
@@ -1629,9 +1704,39 @@ void upd6383_device::dump_frame_report() const
 					: "(VARIES between frames)");
 	logerror("        frames that closed %u of %u\n",
 			u32(m_frames_dp_closed), u32(m_frames_dp_measured));
+	// A complete frame can only close if its ENTRY pointer was the steady-state
+	// one, i.e. if the frame BEFORE it also completed.  So the honest target is
+	// not the whole denominator -- it is the denominator minus the complete
+	// frames that follow a capped or overrun one.  Printed so that a shortfall
+	// is read as arithmetic rather than as a defect, and so that a 100.00 % on a
+	// run WITH capped frames reads as a broken counter.
+	logerror("        (frames that did NOT complete, and so denied the NEXT frame its\n");
+	logerror("         entry pointer: %u capped + %u overrun)\n",
+			u32(m_frames_capped), u32(m_frames_overrun));
 	if (m_frames_dp_measured != 0 && m_frames_dp_closed != m_frames_dp_measured)
-		logerror("        *** THE POINTER WALK DOES NOT CLOSE -- see the candidate list in"
-				" dump_frame_report() ***\n");
+		logerror("        *** THE POINTER WALK DOES NOT CLOSE ON %u FRAME(S) -- see the"
+				" candidate list in dump_frame_report() ***\n",
+				u32(m_frames_dp_measured - m_frames_dp_closed));
+
+	// ---- THE PER-UNIT REBASE AUDIT -----------------------------------------
+	// Does the rebase do WORK, and where?  For unit 1 it must (net(body0) takes
+	// eight values, so no walk delivers 0x85).  For unit 0 the closure
+	// arithmetic says the header walk from X = 0xFF already delivers 0x05, so
+	// the rebase should be a NO-OP there -- a claim that is measured here rather
+	// than assumed, because if it is not a no-op the closure model is wrong.
+	logerror("    PER-UNIT D-RAM REBASE (base = 0x%02X | unit<<7, FORCED -- see DRAM_UNIT_BASE):\n",
+			DRAM_UNIT_BASE);
+	logerror("        unit 0 (I-RAM %u): %u calls, the walk ALREADY delivered 0x%02X on %u"
+			" (%u.%02u %%)\n",
+			UNIT0_ENTRY, u32(m_calls_u0), DRAM_UNIT_BASE, u32(m_rebase_agreed_u0),
+			u32(m_calls_u0 ? (100 * m_rebase_agreed_u0) / m_calls_u0 : 0),
+			u32(m_calls_u0 ? ((10000 * m_rebase_agreed_u0) / m_calls_u0) % 100 : 0));
+	logerror("        unit 1 (I-RAM %u): %u calls, the walk ALREADY delivered 0x%02X on %u"
+			" (%u.%02u %%)\n",
+			UNIT1_ENTRY, u32(m_calls_u1), u8(DRAM_UNIT_BASE | DRAM_UNIT_STRIDE),
+			u32(m_rebase_agreed_u1),
+			u32(m_calls_u1 ? (100 * m_rebase_agreed_u1) / m_calls_u1 : 0),
+			u32(m_calls_u1 ? ((10000 * m_rebase_agreed_u1) / m_calls_u1) % 100 : 0));
 
 	// ---- THE INPUT-STAGE AUDIT (K6) ----------------------------------------
 	// The one measurement that says whether audio reaches the microcode at all.
@@ -1646,6 +1751,28 @@ void upd6383_device::dump_frame_report() const
 	logerror("        ... of those, frames carrying a NON-ZERO sample  %u\n", u32(m_in_nonzero));
 	logerror("        peak |sample| that entered and was read  0x%06X (%d)\n",
 			u32(m_in_peak) & 0xffffff, m_in_peak);
+	// WHERE the window sat.  The map of dsp/analysis/output-stage-decode.md
+	// sect. 3.5 predicts X = 0xFF and therefore latch cells 0x01 / 0x04; this
+	// prints what actually happened, with no expected value compiled in, so it
+	// can contradict the map.
+	{
+		u32 best = 0, second = 0, distinct = 0, total = 0;
+		u8 best_x = 0;
+		for (u32 i = 0; i < 256; i++)
+		{
+			total += m_in_base_hist[i];
+			if (m_in_base_hist[i] != 0) distinct++;
+			if (m_in_base_hist[i] > best) { second = best; best = m_in_base_hist[i]; best_x = u8(i); }
+			else if (m_in_base_hist[i] > second) second = m_in_base_hist[i];
+		}
+		logerror("        WHERE THE WINDOW SAT, over %u complete frames: %u distinct values of X;\n",
+				total, distinct);
+		logerror("        most common X = 0x%02X on %u (%u.%02u %%) -> latch cells 0x%02X / 0x%02X"
+				"  (runner-up %u)\n",
+				best_x, best, u32(total ? (100 * u64(best)) / total : 0),
+				u32(total ? ((10000 * u64(best)) / total) % 100 : 0),
+				u8(best_x + IN_LATCH_L_OFF), u8(best_x + IN_LATCH_R_OFF), second);
+	}
 	if (m_in_frames == 0)
 		logerror("        NOTHING ENTERED THE CHIP -- the input stage never ran to completion\n");
 	else if (m_in_bad != 0)

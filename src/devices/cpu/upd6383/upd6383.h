@@ -223,6 +223,59 @@ public:
 	static constexpr u32 UNIT1_ENTRY = 200;
 
 	// ---------------------------------------------------------------
+	//  ★ THE PER-UNIT D-RAM BASE.  base = 0x05 | (unit << 7).
+	//
+	//  FORCED, and it is the number this device was missing.  Full derivation:
+	//  dsp/analysis/output-stage-decode.md items A/B/D; re-derived from the ROM
+	//  before it was applied (notes/dsp-allpass-rerun-applied.md sect. 2).
+	//
+	//  WHAT IS FORCED, in three steps:
+	//    1. The mode-1 REGISTER INDEX and the mode-2 POINTER address ONE 256-cell
+	//       RAM (isa-adjudication.md sect. 6 enumerated it; this is its test).
+	//    2. Under (1) the body's entry pointer is over-determined.  Two host-side
+	//       derivations: PARAMETRIC EQ's 40-cell contiguous run must align with
+	//       the host's 40-cell zero-fill block, which has exactly ONE alignment
+	//       and no free parameter (E + 75 = 0x50); and min(host zero-fill) is
+	//       0x05 in 79 of 79 unit-0 streams and 0x85 in 12 of 12 unit-1 streams.
+	//       ★ And one HOST-FREE derivation, added when this was applied: the
+	//       shared 83-word kernel names six mode-1 absolute indices in the
+	//       unit-1 half (0x85, 0x8A, 0x8C, 0x8D, 0x8F, 0xD0) and the reverb
+	//       body's own mode-2 pointer walk reaches ALL SIX at exactly ONE origin
+	//       of 256 -- 0x85.  Control over all 256 origins: mean 0.33, sd 0.85,
+	//       sole winner.  That is the microcode agreeing with itself, with no
+	//       host data in it at all, and it is what makes (1) a measurement
+	//       rather than a preference.  (Unit 0 the same way: 119 hits, rank 1
+	//       of 256, z = +4.5 -- weaker, because the low cells sit near the walk
+	//       start and E = 0x03/0x04/0x06 score 90..93.)
+	//    3. net(body0) takes EIGHT different values across the 37 unit-0 images
+	//       (-16, -9, -7, -5, -4, +5, +6, +112), so the unit-1 base CANNOT be
+	//       reached by walking from the unit-0 base: a REBASE between the two
+	//       CALLs is forced to exist.  Its value is in no instruction immediate
+	//       (0 nibble-aligned hits in I-RAM 50..58; at chance over every
+	//       contiguous 8-bit field), so it is a REGISTER, which is exactly what
+	//       K4 item D and closure-pointer.md D' forced for the coefficient
+	//       cursor and could not put a number on.
+	//
+	//  WHAT IS *NOT* FORCED: the SITE.  The rebase is forced to lie between the
+	//  last pointer-moving word before a body and that body's first word; within
+	//  that window nothing selects an instruction.  This device sites it AT THE
+	//  CALL, which is the choice that reproduces the closure arithmetic with the
+	//  MEASURED base values (delta(55..58) = +2, so siting it at K4's favourite
+	//  candidate `800.1.60.00B' at I-RAM 54 would need the value 0x83, not
+	//  0x85 -- also not an immediate anywhere).  Every admissible siting gives
+	//  the SAME pointer at body entry, which is the only thing this model uses.
+	//
+	//  CONSEQUENCE, and it is a prediction that was checked after the fact: the
+	//  frame then CLOSES.  0x85 + net(reverb -133) + delta(60..82 -1) = 0xFF, and
+	//  0xFF + delta(0..44 +6) = 0x05 = the unit-0 base again.  So "the +121
+	//  closure residue is an open defect" is WITHDRAWN: it had stood since the
+	//  ADVANCE pass and it was never an ALU defect at all -- it is what walking
+	//  ONE pointer through a machine that rebases per unit produces.  It is 0.
+	// ---------------------------------------------------------------
+	static constexpr u8 DRAM_UNIT_BASE   = 0x05;   // FORCED (see above)
+	static constexpr u8 DRAM_UNIT_STRIDE = 0x80;   // FORCED: E1 - E0, = R2's unit bit
+
+	// ---------------------------------------------------------------
 	//  WHERE THE INCOMING SAMPLES LAND (K6, notes/dsp-k6-input-stage.md).
 	//
 	//  ★ THE LABEL ON THIS PARAGRAPH WAS DOWNGRADED ON 2026-07-26 -- see
@@ -447,6 +500,16 @@ private:
 	// one says the frame's shape itself changes.  The two point at different bugs.
 	s32 m_dp_delta_min, m_dp_delta_max;
 
+	// --- THE PER-UNIT REBASE AUDIT (DRAM_UNIT_BASE, above)
+	// How often the pointer the WALK delivers to a body entry already equals the
+	// base the rebase writes.  For unit 1 this must be rare (net(body0) takes 8
+	// values); for unit 0 the closure arithmetic says it must be essentially
+	// always, and this is how that is measured rather than assumed.  A unit-0
+	// number well below 100 % on complete frames would say the closure model is
+	// wrong somewhere -- so this is a criterion that can fail, not a tally.
+	u64 m_calls_u0, m_calls_u1;
+	u64 m_rebase_agreed_u0, m_rebase_agreed_u1;
+
 	// --- THE INPUT-STAGE AUDIT (see the accessors above)
 	u64 m_in_frames;        // frames in which BOTH port-read words executed
 	u64 m_in_ok;            // ... and read back exactly what was latched off DI
@@ -454,6 +517,16 @@ private:
 	u64 m_in_nonzero;       // ... with a non-zero sample on the pins
 	s32 m_in_peak;          // largest |sample| that entered and was consumed
 	u32 m_in_log_left;      // LOG_INPUT budget for non-silent frames
+	// WHERE the input window actually sat, over the whole run.  One bucket per
+	// possible frame-entry pointer.  This is a MEASUREMENT with no criterion
+	// baked into it -- it does not know what X "should" be -- and it exists
+	// because the D-RAM map (output-stage-decode.md sect. 3.5) makes a checkable
+	// prediction about it: with the per-unit rebase in force the frame must end,
+	// and therefore restart, on 0xFF, which puts the two DI latches on cells
+	// 0x01 and 0x04.  Before the rebase X drifted and the map could not be
+	// tested at all.  Counted on COMPLETE frames only, for the same reason the
+	// closure residue is.
+	u32 m_in_base_hist[256];
 
 	// Per-word trap accounting is a std::map lookup, and run_frame() is called
 	// at the audio sample rate, so the full accounting runs only for a WINDOW of

@@ -4,6 +4,15 @@ NEC **uPD6383GF-3BA** (Technics SX-KN5000, IC311). Date: **2026-07-26**.
 No hardware. Static analysis, the ROM corpus, constraint solving and the live
 emulator only.
 
+> ★ **RETRACTION BANNER, 2026-07-27.** This note's headline live number — **the
+> +121 residue** — is **WITHDRAWN as a defect**, and the reading below that it
+> "may not be a defect at all" is withdrawn with it. The D-RAM origin is pinned
+> (`base = 0x05 | (unit << 7)`, FORCED) and the walk closes exactly: residue
+> **0** on 1 080 959 of 1 106 880 complete frames. The MEASUREMENTS in this note
+> are unchanged and correct for the core of the day; their *interpretation* as
+> an open pointer defect is not. See `dsp/analysis/output-stage-decode.md` and
+> `notes/dsp-allpass-rerun-applied.md`.
+
 Labels used throughout: **MEASURED** / **PROVEN BY CONSTRUCTION** / **FORCED** /
 **INFERRED** / **EDUCATED GUESS** / **OPEN**. Nothing here is a recording.
 

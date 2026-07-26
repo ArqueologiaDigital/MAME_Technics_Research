@@ -79,12 +79,19 @@ import sys
 import dsp_disasm as D
 for line in open(sys.argv[1] + "/words.txt"):
     at, w = line.split()
-    print(D.text(int(w, 16), int(at)))
+    w = int(w, 16)
+    # the three EXECUTION predicates, then the text -- see upd6383d_dump.cpp for
+    # why text() alone was not enough (has_addressing never reaches the text).
+    print("%s%s%s %s" % ("D" if D.decoded(w) else ".",
+                         "A" if D.has_addressing(w) else ".",
+                         "K" if D.addressing_only(w) else ".",
+                         D.text(w, int(at))))
 PY
 
 n=$(wc -l < "$WORK/words.txt")
 if diff -q "$WORK/py.txt" "$WORK/cpp.txt" > /dev/null; then
 	echo "MIRRORS AGREE -- $n/$n words render identically in C++ and Python"
+	echo "                (text AND the three execution predicates D/A/K)"
 	rc=0
 else
 	echo "*** MIRRORS DISAGREE ***"

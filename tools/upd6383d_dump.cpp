@@ -17,6 +17,18 @@
     output can be diffed against it line for line over the whole 3057-word
     corpus.  It executes nothing and models no hardware.
 
+    ★ AND IT PRINTS THE EXECUTION PREDICATES TOO (2026-07-27).  Comparing
+    `text()' alone left a REAL HOLE: `decoded()' does reach the text (a decoded
+    word renders as a mnemonic and an undecoded one as `?word'/`~word'), but
+    `has_addressing()' and `addressing_only()' DO NOT -- the corpus contains
+    `?word' lines with and without an addressing effect that render identically.
+    Those two predicates are what decide whether a core executes a word's
+    addressing, i.e. whether the frame is PARTIAL or TRAP, so a divergence there
+    would silently change every pointer in the machine and the mirror check would
+    still say AGREE.  Found while reconstructing a live frame's 108/91/86 split
+    statically and getting 106/93/86 -- which turned out not to be a mirror bug,
+    but only because this check was then written and run.
+
     BUILD (inside the disposable MAME build tree, which already compiles the
     disassembler; tools/upd6383d_diff.sh does this for you):
 
@@ -51,7 +63,15 @@ int main()
 			return 2;
 		}
 
-		std::cout << upd6383_disassembler::text(u64(w) & 0xfffffffffULL, int(at)) << '\n';
+		const u64 word = u64(w) & 0xfffffffffULL;
+
+		// The three EXECUTION predicates, then the text.  D = a real mnemonic,
+		// A = its addressing is executable, K = one of the K6 input-stage twelve.
+		std::cout << (upd6383_disassembler::decoded(word)         ? 'D' : '.')
+				<< (upd6383_disassembler::has_addressing(word)    ? 'A' : '.')
+				<< (upd6383_disassembler::addressing_only(word)   ? 'K' : '.')
+				<< ' '
+				<< upd6383_disassembler::text(word, int(at)) << '\n';
 	}
 	return 0;
 }
