@@ -6,7 +6,7 @@
 
     NEC uPD6383GF digital signal processor.
 
-    *** DRAFT.  NOT WORKING.  NO AUDIO. ***
+    *** DRAFT.  NOT WORKING.  NO AUDIO IN PRACTICE. ***
 
     See upd6383.cpp for the full explanation.  In one line: the instruction set
     of this chip is not decoded, this device executes the six word forms that
@@ -16,8 +16,14 @@
     frequency-ranked worklist.
 
     It IS instantiated by the Technics KN5000 (as a subdevice of the DSP1 host
-    glue), but it is instantiated DISABLED: the uC-IF is exercised, nothing
-    executes.  Enabling execution needs an ISA, not a decision.
+    glue), and it is instantiated DISABLED **as a CPU** (set_disable(), no
+    scheduler time).  Since 2026-07-26 there is also a second, OPT-IN entry
+    point -- run_frame(), one LRCK period, called by the tone generator once per
+    output sample -- behind a default-OFF driver option.  It still produces no
+    audio: 13.4 % of the words on the floor of every frame are decoded, so every
+    frame traps and every frame's return is discarded by construction.  What it
+    produces instead is the WORKLIST: which word blocks audio first.
+    See notes/dsp-audiopath-wired.md.
 
 ***************************************************************************/
 
@@ -100,6 +106,36 @@ public:
 	// ---------------------------------------------------------------
 	void host_w(bool cd, u8 data);
 
+	// ---------------------------------------------------------------
+	//  THE SERIAL AUDIO PORTS -- ONE LRCK PERIOD (see upd6383.cpp).
+	//
+	//  di[port][ch] / do_[port][ch]: port 0..2 = DI1..DI3 / DO1..DO3,
+	//  ch 0 = LEFT, ch 1 = RIGHT.  Both are 24-bit two's complement
+	//  (the chip's IDB is 24 bits wide) carried sign-extended in s32.
+	//  This is a PIN-LEVEL interface of the real part: the CDJ-500
+	//  block diagram (p. 1-15) draws a pair of 24-bit latches behind
+	//  every DI/DO line (DI1L-R/DI1R-R ... DO3L-R/DO3R-R), with L/R
+	//  designated by LRCKI (pin 18).  No caller may reach past it.
+	//
+	//  RETURNS TRUE only when the frame ran to the frame-wait word with
+	//  ZERO traps, i.e. only when every word of the frame was executed
+	//  as decoded.  On FALSE, do_ has already been zeroed: a
+	//  partially-executed frame is not "slightly wrong" audio, it is
+	//  arbitrary, and this project's standing rule is that
+	//  plausible-but-wrong sound is worse than silence.
+	// ---------------------------------------------------------------
+	bool run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2]);
+
+	// Frame instrumentation.  Diagnostics, NOT machine state -- the point of
+	// the experimental audio path today is to tell us WHICH WORDS BLOCK AUDIO.
+	u64 frames_run() const       { return m_frames_run; }
+	u64 frames_trapped() const   { return m_frames_trapped; }
+	u64 frames_capped() const    { return m_frames_capped; }
+	u64 frames_overrun() const   { return m_frames_overrun; }
+	u32 last_frame_slots() const { return m_last_slots; }
+	u32 last_frame_traps() const { return m_last_traps; }
+	void dump_frame_report() const ATTR_COLD;
+
 	// Only the request flags are modelled: RQ1-RQ3 are host-written and
 	// testable by the COND field of an instruction, GF1-GF3 are set by
 	// instructions and read by the host (CDJ-500 pin table, pins 83-88).
@@ -134,6 +170,22 @@ public:
 
 	// I-RAM capacity, in 36-bit instruction words
 	static constexpr int IRAM_WORDS = 384;
+
+	// ---------------------------------------------------------------
+	//  FRAME LANDMARKS.  All three are MEASURED positions/word values in
+	//  the live KN5000 I-RAM, NOT decodes.  See run_frame() in the .cpp
+	//  for the evidence and for what each one is guessing.
+	// ---------------------------------------------------------------
+	// C00.A.47.407 -- the last word of the frame, I-RAM 82.
+	static constexpr u64 FRAME_WAIT_WORD = 0xc00a47407ULL;
+	// Hard slot cap.  The corpus executes 256..326 slots per frame and I-RAM
+	// holds 384 words, so no honest frame can reach this; it exists so a
+	// mis-decode cannot hang MAME.
+	static constexpr u32 FRAME_SLOT_CAP = IRAM_WORDS;
+	// Body entry points for the two effect units, OBSERVED in every captured
+	// upload (unit tag 0x0E -> I-RAM 84, 0x0F -> I-RAM 200).
+	static constexpr u32 UNIT0_ENTRY = 84;
+	static constexpr u32 UNIT1_ENTRY = 200;
 
 protected:
 	// device_t implementation
@@ -205,6 +257,13 @@ private:
 	u8  m_gf, m_rq;         // host flags
 	u8  m_ovc;              // overflow control
 	u8  m_frame_done;       // set by the terminator landmark (see .cpp)
+	u8  m_sp;               // stack pointer into m_stack -- 0..2 (the chip has
+	                        // STACK1/STACK2 and nothing deeper)
+
+	// --- the serial audio latches, DI1L-R .. DO3R-R on the CDJ-500 block
+	//     diagram (p. 1-15).  Real chip state, so save_item()ed.
+	s32 m_di[3][2];
+	s32 m_do[3][2];
 
 	// --- parallel uC-IF receive state ---
 	u8  m_host_cmd;         // most recent command byte
@@ -226,6 +285,38 @@ private:
 	u32 m_program_id;
 	u64 m_trap_total;
 	std::map<u64, u64> m_trap_hist;
+
+	// --- FRAME DIAGNOSTICS.  Not machine state; deliberately not save_item()ed.
+	u64 m_frames_run;
+	u64 m_frames_trapped;   // frames that hit >= 1 undecoded word (return DISCARDED)
+	u64 m_frames_capped;    // frames that ended on FRAME_SLOT_CAP, not on the wait word
+	u64 m_frames_overrun;   // frames whose PC walked off the end of the 384-word I-RAM
+	u32 m_last_slots;
+	u32 m_last_traps;
+
+	// Per-word trap accounting is a std::map lookup, and run_frame() is called
+	// at the audio sample rate, so the full accounting runs only for a WINDOW of
+	// frames after every I-RAM change (a new microprogram is the only thing that
+	// can introduce a word we have not already seen).  Outside the window traps
+	// are still COUNTED, just not histogrammed.
+	static constexpr u32 FRAME_DETAIL_FRAMES = 256;
+	u32 m_frame_detail_left;
+
+	// The most recent REPRESENTATIVE frame's trap sequence, in execution order.
+	// This is the decoding worklist: "which word blocks audio, and in what
+	// order".  A frame counts as representative only if it reached the frame-wait
+	// word AND executed at least FRAME_ORDER_MIN_SLOTS -- the frames right after
+	// reset run on an empty or half-uploaded I-RAM and are NOT representative
+	// (the floor of a real frame is 216 words: 83 kernel + 133 reverb).
+	// Captured only inside a detail window, so the cost is bounded.
+	static constexpr int TRAP_ORDER_MAX = 48;
+	static constexpr u32 FRAME_ORDER_MIN_SLOTS = 200;
+	u32  m_order_iw[TRAP_ORDER_MAX];
+	u64  m_order_word[TRAP_ORDER_MAX];
+	u32  m_order_n;
+	u32  m_order_total;     // traps in that frame, including the ones past TRAP_ORDER_MAX
+	u32  m_order_slots;
+	bool m_order_valid;
 };
 
 DECLARE_DEVICE_TYPE(UPD6383, upd6383_device)

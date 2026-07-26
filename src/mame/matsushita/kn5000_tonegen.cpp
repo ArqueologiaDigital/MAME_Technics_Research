@@ -66,6 +66,8 @@ kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, cons
 	, m_waveform_region_tag("waveform")
 	, m_waveform_data(nullptr)
 	, m_waveform_size(0)
+	, m_dsp1(*this, finder_base::DUMMY_TAG)
+	, m_dsp1_enable(*this, finder_base::DUMMY_TAG)
 {
 }
 
@@ -151,6 +153,26 @@ void kn5000_tonegen_device::device_reset()
 	// Clear keybed queue
 	while (!m_keybed_queue.empty())
 		m_keybed_queue.pop();
+}
+
+
+void kn5000_tonegen_device::device_stop()
+{
+	// Honest accounting of the EXPERIMENTAL IC311 send/return. Reported here as
+	// well as in the DSP device itself because this is the side that decides
+	// whether a return was actually mixed in.
+	if (m_dsp1_frames != 0)
+	{
+		// plain %u, matching MAME house style (a u64 count only overflows u32
+		// after ~25 hours of emulated audio at 48 kHz).
+		logerror("IC311 send/return: %u frames sent, %u returns USABLE (%u per 10000).\n",
+				uint32_t(m_dsp1_frames), uint32_t(m_dsp1_kept),
+				uint32_t((10000 * m_dsp1_kept) / m_dsp1_frames));
+		if (m_dsp1_kept == 0)
+			logerror("IC311 send/return: EVERY frame trapped, so EVERY return was discarded and\n"
+					"    the rendered audio is EXACTLY the dry mix. That is the expected outcome\n"
+					"    today -- see notes/dsp-audiopath-wired.md.\n");
+	}
 }
 
 
@@ -1768,6 +1790,15 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// 4 x 24.576 ms = 98.33 ms. See the R2s interlock below.
 	static constexpr uint32_t SILENT_HOLDOFF = 4720;   // 98.33 ms at 48 kHz
 
+	// ---- IC311 (uPD6383GF) EFFECTS-DSP SEND/RETURN INSERT ---------------------------
+	//
+	// EXPERIMENTAL and OFF BY DEFAULT. The gate is read ONCE per stream update, not per
+	// sample, so toggling it in the MAME menu takes effect at the next update and never
+	// costs anything per sample. With it off, `dsp_on' is false, run_frame() is never
+	// called, and the two `wet' accumulators below stay at literal 0 -- so `mix_l + 0'
+	// is bit-identical to today's `mix_l'.
+	const bool dsp_on = m_dsp1.found() && (m_dsp1_enable.read_safe(0) & 1);
+
 	for (int s = 0; s < stream.samples(); s++)
 	{
 		int32_t mix_l = 0;
@@ -2030,7 +2061,106 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			return sgn * (K + (1.0f - K) * std::tanh((a - K) / (1.0f - K)));
 		};
 
-		stream.put(0, s, sound_stream::sample_t(softclip(mix_l)));
-		stream.put(1, s, sound_stream::sample_t(softclip(mix_r)));
+		// ---- THE IC311 SEND / RETURN --------------------------------------------------
+		//
+		// The dry mix above is FINISHED and is NOT touched here. Everything below can only
+		// ADD, which is what the board does: the main mix leaves this chip on SDO0 -- a bus
+		// IC311 is not on -- while SDOA/SDOB/SDO1 are COPIES that go out to the DSP and come
+		// back on SDIA/SDIB. MEASURED, service manual pp. 34/35.
+		//
+		// It is guaranteed three times over that this cannot break the sound: by the
+		// HARDWARE (the insert topology above), by the CODE (mix_l/mix_r are computed above
+		// and the wet is a separate accumulator added at the end), and by the GATE (default
+		// off => run_frame() is not even called).
+		int32_t wet_l = 0;
+		int32_t wet_r = 0;
+
+		if (dsp_on)
+		{
+			// ---- format: the tone generator's mix accumulator is in 16-bit units (the
+			// softclip below divides by 32768); IC311's IDB is 24 bits wide and its
+			// coefficient format is signed Q0.23. So full scale maps to full scale with a
+			// shift of 8, and the return shifts back. That factor is FORCED by the two
+			// formats, not chosen.
+			auto to24 = [](int32_t v) -> int32_t
+			{
+				int64_t x = int64_t(v) * 256;
+				if (x >  0x7fffff) x =  0x7fffff;
+				if (x < -0x800000) x = -0x800000;
+				return int32_t(x);
+			};
+
+			int32_t di[3][2], dout[3][2];
+
+			// *** EDUCATED GUESS G-2 -- THE SEND LEVELS ARE PLACEHOLDERS ***
+			// WHAT IS DECIDED: a UNITY stereo send of the finished dry mix.
+			// WHY: the per-voice send levels are genuinely NOT established. They are NOT
+			// the per-voice registers +0x8C0 / +0x900..+0x9C0 -- those were checked and are
+			// envelope-generator stage words written in (seg0, seg1) pairs (see the
+			// register decode above), and the effect-depth controllers CC 0x91/0x97/0x9B
+			// never reach this chip at all. Unity is the only level that adds no invented
+			// structure.
+			// WHAT WOULD SETTLE IT: the 0x130000 register block is the candidate -- a
+			// 4-channel x 8-register file written by DSP_Init_Channels (sub-CPU 0x01FC95)
+			// and DSP_Write_Channel (0x01FCDE), which is associated with IC311 but is NOT
+			// its uC-IF. Tap it in MAME while moving the DSP EFFECT / REVERB depth sliders
+			// and diff, the same live-capture method that bound the parameter names.
+			// WHAT CHANGES IF IT IS WRONG: the WET BALANCE, and the fact that today
+			// changing a part's DSP depth does not change the wet level at all. The
+			// mechanism -- a stereo send at LRCK rate, a stereo return added to the mix --
+			// stays exactly as it is; only the numbers move. Drop-in replaceable.
+			//
+			// *** EDUCATED GUESS G-3 -- WHICH PORT EACH BLOCK SERVES IS UNKNOWN ***
+			// WHAT IS DECIDED: feed the SAME dry stereo pair to all three wired inputs
+			// DI1/DI2/DI3, and sum the wired returns.
+			// WHY: all three DI and all three DO are wired on this board (MEASURED), but
+			// which of the microcode's two opening blocks (I-RAM 0..11) reads which PORT,
+			// and which of the closing words (I-RAM 73..78) writes which port, is not
+			// decoded -- the port index is expected to be a small field in those 12 words
+			// and that field has not been located.
+			// WHAT WOULD SETTLE IT: resolving that field; the prediction on record is that
+			// it takes exactly three distinct values across those words.
+			// WHAT CHANGES IF IT IS WRONG: which effect unit hears what. With one dry
+			// source for everything, a per-port routing error is currently invisible.
+			const int32_t sl = to24(mix_l);
+			const int32_t sr = to24(mix_r);
+			for (int port = 0; port < 3; port++)
+			{
+				di[port][0] = sl;   // DI1/DI2/DI3, LEFT  (LRCK phase 0)
+				di[port][1] = sr;   // DI1/DI2/DI3, RIGHT (LRCK phase 1)
+			}
+
+			// One LRCK period. Returns false -- with dout already zeroed -- if ANY word of
+			// the frame trapped, because a partially-executed effect frame is arbitrary,
+			// not "slightly wrong". Today that is every frame.
+			const bool kept = m_dsp1->run_frame(di, dout);
+			m_dsp1_frames++;
+			if (kept)
+				m_dsp1_kept++;
+
+			// *** EDUCATED GUESS G-4 -- DO3's DESTINATION IS UNKNOWN, SO IT IS IGNORED ***
+			// WHAT IS DECIDED: sum DO1 and DO2 only.
+			// WHY: DO1 -> SDIA and DO2 -> SDIB come back into THIS chip and are therefore
+			// part of this chip's mix by construction (MEASURED). DO3 (pin 25, R331) leaves
+			// the tone-generator block entirely on a long run heading out of the area; it
+			// is not the DAC (that is IC310) and it is not one of this chip's six serial
+			// ports (all accounted for). Adding an unknown-destination output into this
+			// mix would invent a route the board does not have.
+			// WHAT WOULD SETTLE IT: tracing that net -- the CN2/CN3 option-connector region
+			// (HD-AE5000 side) and a monitor/record tap are the candidates.
+			// WHAT CHANGES IF IT IS WRONG: nothing audible here; DO3 would be a route to
+			// somewhere else on the machine, which would need its own model.
+			wet_l = (dout[0][0] + dout[1][0]) >> 8;   // DO1 L + DO2 L -> SDIA
+			wet_r = (dout[0][1] + dout[1][1]) >> 8;   // DO1 R + DO2 R -> SDIB
+
+			// KNOWN APPROXIMATION, declared: on real hardware an INSERT-type effect
+			// (distortion, compressor) presumably has its dry part REMOVED from the main
+			// mix inside this chip, which we cannot model until the send levels above are
+			// found. So with the gate on and a working insert effect, the part would be
+			// heard dry PLUS wet rather than wet only.
+		}
+
+		stream.put(0, s, sound_stream::sample_t(softclip(mix_l + wet_l)));
+		stream.put(1, s, sound_stream::sample_t(softclip(mix_r + wet_r)));
 	}
 }

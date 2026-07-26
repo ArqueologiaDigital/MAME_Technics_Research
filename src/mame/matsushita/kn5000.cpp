@@ -543,13 +543,16 @@ void kn5000_state::subcpu_mem(address_map &map)
 	// These are load-bearing: the delay-memory size sets where addresses wrap and
 	// therefore every reverb tap length and delay time the emulation produces.
 	//
-	// STILL OPEN: the M5M44260 is organised 256K x 16, which needs 18 address bits
-	// (9 row + 9 column), but the uPD6383GF's documented bus is A0-A16 -- 17 lines,
-	// exactly half the part.  Either one bit is left unconnected and half the DRAM
-	// is unused, or the KN5000 wires something the CDJ-500 block diagram does not
-	// show.  AS_DELAY is deliberately mapped at what the DSP can defensibly
-	// address rather than the full part, because the wrap point is what would
-	// silently corrupt the reverb tap lengths.
+	// STILL OPEN, but sharper than it was: the M5M44260 is organised 256K x 16,
+	// which needs 18 multiplexed address bits.  MEASURED on the board (BLOCK (A)
+	// p. 28 and the schematic p. 35): ONLY DSP1A0-DSP1A8 reach IC309 -- IC311 pins
+	// 55..62 (A9..A16) carry no net at all -- and MD1..MD4 (pins 32..35), the
+	// "external RAM type / connection conditions" straps, are all tied to VDD
+	// (= 0b1111).  So the chip multiplexes internally and the open question is
+	// whether it emits 8 or 9 COLUMN bits, i.e. 17 or 18 address bits total.
+	// AS_DELAY is deliberately mapped at what the DSP can defensibly address
+	// rather than the full part, because the wrap point is what would silently
+	// corrupt the reverb tap lengths.  See dsp1_delay_map() below.
 	// ---------------------------------------------------------------------
 	// Clocked by its own 20 MHz crystal (Felipe, verified), against the
 	// 25 MHz one on IC311 -- two independent effect processors, two clocks.
@@ -597,20 +600,48 @@ void kn5000_state::dsp1_delay_map(address_map &map)
 	// truncated going out and coming back. That is a property of the hardware,
 	// not an emulation shortcut, and it will matter once the core runs.
 	//
-	// HOW MUCH OF IT THE DSP REACHES IS NOT ESTABLISHED. The DRAM wants 18
-	// multiplexed bits; the uPD6383GF's documented address bus is A0-A16, 17
-	// lines, and it drives RAS/CAS/WE itself, so it is doing the multiplexing.
-	// 17 bits addresses 131,072 words -- exactly HALF the part. Either one bit
-	// is left off and half the DRAM is unused (routine when the bigger part is
-	// the cheaper or the second-sourced one), or the KN5000 wires something the
-	// CDJ-500 diagram does not show. So this maps what the DSP can defensibly
-	// address, not what the part holds. Do NOT quietly widen it to 256K: the
-	// delay TIMES depend on where the address wraps, and the reverb tap lengths
-	// in notes/kn5000-dsp-reverb.md are the thing that would go wrong.
+	// HOW MUCH OF IT THE DSP REACHES IS STILL NOT ESTABLISHED, but the question
+	// is now SHARPER than it was. What used to be written here -- "the DSP's bus
+	// is A0-A16, 17 lines, exactly half the part; either one bit is left
+	// unconnected or the KN5000 wires something the CDJ-500 diagram does not
+	// show" -- is SUPERSEDED by a direct reading of the board:
 	//
-	// What would settle it: which of the DSP's address pins actually reach
-	// IC309's A0-A8 on the board, or a measured delay time once the core runs.
-	map(0x00000, 0x1ffff).ram();      // 128K words x 16 bits (A0-A16)
+	//   * BLOCK (A) (service manual PDF p. 28) labels the IC311<->IC309 bus
+	//     DSP1A0-DSP1A8 and DSP1D0-DSP1D15: NINE address lines, sixteen data.
+	//   * On the schematic (p. 35) IC311 pins 46..54 (A0..A8) carry DSP1A0..A8,
+	//     and pins 55..62 (A9..A16) CARRY NO NET AT ALL -- they are unconnected.
+	//     Pins 43/44/45 = RAS/CAS/WE drive the DRAM directly, so the chip does
+	//     the row/column multiplexing itself, as the CDJ-500 pin table says
+	//     ("Row address and column address are output at DRAM selection").
+	//   * IC311 pins 32..35 = MD1..MD4, "select external RAM type for digital
+	//     delay and connection conditions", are ALL strapped to the VDD rail
+	//     (the same rail as pin 42 VDD and pin 38 SEL), i.e. MD1-MD4 = 0b1111.
+	//     MEASURED at 1200 dpi from p. 35. Its ENCODING is unknown, and it is
+	//     exactly the field that decides the question below.
+	//   All three MEASURED; see notes/dsp-audiopath-wiring.md sect. 4.
+	//
+	// So the real question is HOW MANY COLUMN BITS the chip emits on A0-A8:
+	//   * row 9 + column 8 = 17 bits -> 131,072 words -> this map is right and
+	//     half of IC309 is unused. Matches the pin table's "A0-A16" bus width
+	//     and matches how IC308 (DSP2's byte-wide DRAM) reads.
+	//   * row 9 + column 9 = 18 bits -> 262,144 words -> this map is half the
+	//     size it should be. Weak supporting evidence: two ROM-resident FLANGER
+	//     tap values, 140,800 and 153,600, are > 131,072 and < 262,144, so they
+	//     only fit an 18-bit space -- but that note itself flags them as
+	//     possibly a sweep range rather than a tap address.
+	//
+	// DO NOT quietly widen it to 256K on that evidence: the delay TIMES depend
+	// on where the address wraps, and the reverb tap lengths in
+	// notes/kn5000-dsp-reverb.md are the thing that would go wrong. (Note the
+	// device's own AS_DELAY space config is declared 18 bits wide in
+	// upd6383.cpp -- that is the PART's size, deliberately left alone; it is
+	// this map that limits what the DSP can reach.)
+	//
+	// What would settle it, in order of cheapness: (a) once the core runs,
+	// program a delay whose UI value crosses 131,072 words (~2.97 s at 44.1 kHz)
+	// and see whether it wraps; (b) Felipe buzzing IC311 pins 55-62 to IC309 to
+	// confirm they really are unconnected -- the scan says so, but it is a scan.
+	map(0x00000, 0x1ffff).ram();      // 128K words x 16 bits -- see above, 17 or 18 bits is OPEN
 }
 
 
@@ -637,6 +668,21 @@ static INPUT_PORTS_START(kn5000)
 	PORT_DIPSETTING(   0xd0, "PC1")
 	PORT_DIPSETTING(   0xb0, "PC2")
 	PORT_DIPSETTING(   0x70, "Mac")
+
+	// ---- IC311, the effects DSP -------------------------------------------------------
+	// EXPERIMENTAL, DEFAULT OFF, and it is a DECODING INSTRUMENT rather than an audio
+	// feature. Turning it on runs one uPD6383GF frame per tone-generator output sample
+	// (the hardware relationship: IC303 generates IC311's LRCK) and logs which words of
+	// the resident microprogram cannot be executed. It CANNOT damage the sound: IC311 is
+	// a send/return insert -- the main mix leaves IC303 on SDO0, a bus IC311 is not on
+	// (MEASURED, service manual pp. 34/35) -- and a frame that traps has its whole return
+	// discarded. Only 13.4 % of the words on the frame path are decoded, so today every
+	// frame traps and the audio is exactly the dry mix either way.
+	// See notes/dsp-audiopath-wired.md.
+	PORT_START("DSPCFG")
+	PORT_CONFNAME(0x01, 0x00, "Effects DSP IC311 (EXPERIMENTAL - incomplete ISA)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, DEF_STR(On))
 
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
@@ -1149,6 +1195,24 @@ void kn5000_state::kn5000(machine_config &config)
 	m_dsp1->set_capture_file("kn5000_dsp1_upload");
 
 	KN5000_TONEGEN(config, m_tonegen, 0);
+	// IC311 is a SEND/RETURN INSERT ON IC303, not an output-path device: IC303's
+	// SDOA/SDOB/SDO1 feed IC311's DI1/DI2/DI3 and IC311's DO1/DO2 come back into
+	// IC303's SDIA/SDIB, while the MAIN MIX leaves IC303 on SDO0 -> IC310 -> the
+	// PCM69AU DAC. MEASURED off the service manual, pp. 34/35 and BLOCK (A) p. 28;
+    // see notes/dsp-audiopath-wiring.md sect. 1-2.
+	//
+	// So the DSP is wired to the TONE GENERATOR, not to a speaker: it can only ever
+	// ADD to IC303's own mix, exactly as on the board, and NOTHING is added to the
+	// speaker routes below. IC303 also generates IC311's LRCK (pin 208 via R311) and
+	// BCK (pin 207 via R312), and IC311's Fs-RST/Fs-MASK are strapped +5D = inactive,
+	// so the per-frame PC restart is cadenced by that LRCK -- which is why the tone
+	// generator, and not the scheduler, drives one DSP frame per output sample.
+	// m_dsp1->set_disable() above STAYS: under this design the core never needs
+	// scheduler time.
+	//
+	// EXPERIMENTAL and gated OFF by default -- see the "DSPCFG" port.
+	m_tonegen->set_dsp1(m_dsp1);
+	m_tonegen->set_dsp1_enable_port(":DSPCFG");
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 

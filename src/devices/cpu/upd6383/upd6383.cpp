@@ -7,7 +7,13 @@
     NEC uPD6383GF digital signal processor.
 
     *** DRAFT / RESEARCH INSTRUMENT -- MACHINE_NOT_WORKING GRADE. ***
-    *** NO SOUND INTERFACE.  NO AUDIO.  INSTANTIATED DISABLED (see below). ***
+    *** NO AUDIO.  INSTANTIATED DISABLED AS A CPU (see below). ***
+    *** There IS a serial-audio frame entry point since 2026-07-26 --
+    *** run_frame(), one LRCK period -- but it is opt-in behind a
+    *** default-OFF driver option and it produces silence BY
+    *** CONSTRUCTION: 13.4 % of the words on the frame path are decoded,
+    *** so every frame traps and every frame's return is discarded.
+    *** What it produces is the decoding worklist.  See run_frame().
 
     WHAT THIS IS
         The effects DSP of the Technics SX-KN5000 (IC311).  The same part is
@@ -31,11 +37,12 @@
         A working CPU core.  The instruction set is NOT decoded.  Six word
         forms are established (see upd6383d.cpp, which carries the evidence for
         each); this device executes exactly those and TRAPS AND LOGS every
-        other word without changing any state.  There is deliberately no sound
-        interface: a partially-correct effects DSP produces audio that
-        DIVERGES, and plausible-but-wrong audio is worse than silence because
-        nobody can hear that it is wrong.  When the ISA is known, that is the
-        moment to make noise.
+        other word without changing any state.  A partially-correct effects DSP
+        produces audio that DIVERGES, and plausible-but-wrong audio is worse
+        than silence because nobody can hear that it is wrong -- so run_frame()
+        DISCARDS the whole frame's return the moment any word traps, which today
+        is every frame.  When the ISA is known, that is the moment to make
+        noise.
 
         The Technics KN5000 instantiates this device so that the host interface
         is really exercised and the uploaded microcode really lands in I-RAM,
@@ -79,6 +86,7 @@
 #define LOG_EXEC   (1U << 2)    // words we can
 #define LOG_HOST   (1U << 3)    // uC-IF command/data bytes
 #define LOG_UPLOAD (1U << 4)    // completed I-RAM uploads
+#define LOG_FRAME  (1U << 5)    // per-LRCK-period frame summaries (rate-limited)
 
 #define VERBOSE (LOG_TRAP)
 #include "logmacro.h"
@@ -105,20 +113,37 @@ upd6383_device::upd6383_device(const machine_config &mconfig, const char *tag, d
 	// by this chip's own RAS/CAS/WE, A0-A16 and I/O1-16 pins; the machine
 	// config supplies it, and how much of the 128K x 16 space is populated is a
 	// property of that board, not of the part.
+	//
+	// The 18 here is the SPACE, i.e. the widest address the part could carry --
+	// LEFT AS IS DELIBERATELY.  How many bits the chip actually emits is OPEN:
+	// on the KN5000 only A0-A8 reach the DRAM (nine lines, MEASURED -- IC311
+	// pins 55..62 carry no net) and the chip multiplexes row/column itself, so
+	// the total is 9+8 = 17 or 9+9 = 18 and the strap that decides it,
+	// MD1-MD4 = 0b1111, has no known encoding.  The DRIVER's map() is what
+	// limits the reachable range (kn5000.cpp, dsp1_delay_map), and widening
+	// either one on a guess would silently change every delay tap length.
 	m_delay_config("delay", ENDIANNESS_BIG, 16, 18, -1),
 	m_icount(0),
 	m_pc(0), m_ucpc(0), m_sta(0), m_cnt(0),
 	m_acc(0), m_accb(0), m_p(0), m_k(0), m_l(0), m_ta(0), m_tb(0),
 	m_cursor(0), m_cp(0), m_dp(0), m_bp1(0), m_bp2(0), m_pr1(0), m_pr2(0),
 	m_bnk(0), m_lc1(0), m_lc2(0), m_lc3(0),
-	m_gf(0), m_rq(0), m_ovc(0), m_frame_done(0),
+	m_gf(0), m_rq(0), m_ovc(0), m_frame_done(0), m_sp(0),
 	m_host_cmd(0), m_host_pos(0), m_host_addr(0),
 	m_capture_base(nullptr), m_capture_open(false),
-	m_program_id(0), m_trap_total(0)
+	m_program_id(0), m_trap_total(0),
+	m_frames_run(0), m_frames_trapped(0), m_frames_capped(0), m_frames_overrun(0),
+	m_last_slots(0), m_last_traps(0),
+	m_frame_detail_left(FRAME_DETAIL_FRAMES),
+	m_order_n(0), m_order_total(0), m_order_slots(0), m_order_valid(false)
 {
 	std::fill(std::begin(m_stack), std::end(m_stack), 0);
 	std::fill(std::begin(m_tr), std::end(m_tr), 0);
 	std::fill(std::begin(m_host_word), std::end(m_host_word), 0);
+	std::fill(std::begin(m_order_iw), std::end(m_order_iw), 0);
+	std::fill(std::begin(m_order_word), std::end(m_order_word), 0);
+	for (auto &p : m_di) { p[0] = 0; p[1] = 0; }
+	for (auto &p : m_do) { p[0] = 0; p[1] = 0; }
 }
 
 
@@ -236,6 +261,9 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rq));
 	save_item(NAME(m_ovc));
 	save_item(NAME(m_frame_done));
+	save_item(NAME(m_sp));
+	save_item(NAME(m_di));
+	save_item(NAME(m_do));
 	save_item(NAME(m_host_cmd));
 	save_item(NAME(m_host_pos));
 	save_item(NAME(m_host_addr));
@@ -256,11 +284,19 @@ void upd6383_device::device_reset()
 	m_cursor = 0;
 	m_gf = 0;
 	m_frame_done = 0;
+	m_sp = 0;
+	std::fill(std::begin(m_stack), std::end(m_stack), 0);
+	for (auto &p : m_di) { p[0] = 0; p[1] = 0; }
+	for (auto &p : m_do) { p[0] = 0; p[1] = 0; }
+	m_frame_detail_left = FRAME_DETAIL_FRAMES;
 }
 
 
 void upd6383_device::device_stop()
 {
+	if (m_frames_run != 0)
+		dump_frame_report();
+
 	if (m_trap_total != 0)
 		dump_trap_histogram();
 
@@ -349,6 +385,12 @@ void upd6383_device::host_w(bool cd, u8 data)
 
 				LOGMASKED(LOG_UPLOAD, "I-RAM[%u] <- %02X%02X%02X%02X%02X\n", word_index,
 						m_host_word[0], m_host_word[1], m_host_word[2], m_host_word[3], m_host_word[4]);
+
+				// A NEW MICROPROGRAM is the only thing that can put a word we
+				// have never seen on the frame path, so re-arm the full
+				// per-word trap accounting for a window of frames (see the
+				// FRAME_DETAIL_FRAMES comment in the header).
+				m_frame_detail_left = FRAME_DETAIL_FRAMES;
 			}
 			else
 			{
@@ -646,6 +688,365 @@ void upd6383_device::execute_run()
 			m_cursor++;
 			m_dp = u8(m_dp + dd);
 		}
+	}
+}
+
+
+//**************************************************************************
+//  ONE LRCK PERIOD -- THE SERIAL AUDIO FRAME
+//**************************************************************************
+
+//  WHY THE FRAME IS DRIVEN BY THE TONE GENERATOR AND NOT BY THE SCHEDULER
+//
+//      The KN5000's topology is a CYCLE: IC303 (tone generator) -> IC311
+//      (this chip) -> IC303.  MEASURED off the service manual, pp. 34/35:
+//
+//          IC303 SDOA (pin 4, R308) -> IC311 DI1 (pin 20)
+//          IC303 SDOB (pin 6, R309) -> IC311 DI2 (pin 21)
+//          IC303 SDO1 (pin 197, R313) -> IC311 DI3 (pin 22)
+//          IC311 DO1 (pin 23, R333) -> IC303 SDIA (pin 3)
+//          IC311 DO2 (pin 24, R332) -> IC303 SDIB (pin 5)
+//          IC311 DO3 (pin 25, R331) -> leaves the tone-generator block
+//
+//      and the MAIN MIX does not pass through here at all: it leaves IC303 on
+//      SDO0 (pin 196) -> IC310 (MN19413) -> IC313 (PCM69AU) -> the analog board.
+//      So IC311 is a SEND/RETURN INSERT.  It can only ever ADD to the output;
+//      it cannot remove or attenuate the dry sound.  That safety property is a
+//      property of the HARDWARE, not a bypass this model invents.
+//      (notes/dsp-audiopath-wiring.md sect. 1, sect. 2 -- MEASURED.)
+//
+//      IC303 also GENERATES the clocks: LRCK on pin 208 through R311 and BCK on
+//      pin 207 through R312 fan out to IC311 pins 18/17/19, to IC310 and to the
+//      DAC.  IC311's pin 13 (Fs-RST) and pin 14 (Fs-MASK) are both strapped to
+//      +5D -- per the CDJ-500 pin table those are emulator-mode overrides,
+//      "pull up in regular modes" -- so the per-frame program-counter restart is
+//      the chip's own internal PC-RST off the TIMING block, cadenced by LRCKI,
+//      and it CANNOT be inhibited on this board.  MEASURED, p. 35.
+//
+//      Therefore "one PC sweep per LRCK period" IS "one PC sweep per tone
+//      generator output sample", and calling run_frame() from the tone
+//      generator's sound_stream_update() is the hardware relationship, not a
+//      shortcut.  It also keeps the chip boundary honest: this entry point is
+//      DI1..DI3 / DO1..DO3 over one LRCK period, which is a real pin interface;
+//      no device reads another device's memory.
+//
+//  *** EDUCATED GUESS G-1 -- THE ABSOLUTE SAMPLE RATE IS UNRESOLVED ***
+//      WHAT IS DECIDED: exactly one frame per tone-generator output sample.
+//      WHY: correct IN KIND regardless of the number, because IC303 generates
+//      LRCKI, so the DSP's frame rate IS the tone generator's sample rate
+//      whatever that turns out to be.
+//      WHAT IS NOT KNOWN: the number itself.  The sub-CPU firmware converts a
+//      user millisecond parameter with `ms * 0xAC44 / 0x3E8' = ms * 44100/1000
+//      (LABEL_03925E) -- so the FIRMWARE says 44,100 Hz.  MAME's tone generator
+//      allocates its stream at 48,000 Hz (kn5000_tonegen.cpp, device_start).
+//      IC303's crystal X301 reads `36.8688 MHz' on the 1996 scan, which divides
+//      to NEITHER (36.864 = 768 x 48k and 33.8688 = 768 x 44.1k are the two
+//      stock parts that would).
+//      WHAT WOULD SETTLE IT: Felipe reading X301's marking off the board (his
+//      testimony outranks the scan), or locating IC303's LRCK divider.
+//      WHAT CHANGES IF IT IS WRONG: every delay time and reverb time in
+//      SECONDS, and the interpretation scale of any frequency-domain
+//      coefficient -- by the ratio 48000/44100 = +8.8 %.  What does NOT change:
+//      the per-frame instruction budget (25 MHz / 44.1 kHz = 566.9 cycles for
+//      256..326 slots; at 48 kHz it is 520.8, still comfortable), the wiring,
+//      or anything in this function.
+//
+//  *** WHAT THIS PRODUCES TODAY: NOTHING, AND THAT IS THE EXPECTED OUTCOME ***
+//      Only 13.4 % of the words on the floor of every frame are decoded (the
+//      83-word kernel 3/79 = 3.6 %, the 133-word reverb 26/133 = 19.5 % --
+//      notes/dsp-next-steps-roadmap.md sect. 3.2, MEASURED).  Every frame
+//      therefore traps, every frame's return is DISCARDED, and the audible
+//      result is exactly the dry sound.  The useful output is the trap report.
+
+bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
+{
+	// ---- latch the inputs (the DI1L-R .. DI3R-R registers) -----------------
+	// 24-bit two's complement: the internal IDB is 24 lines wide on the CDJ-500
+	// block diagram, and the coefficient format is signed Q0.23.
+	for (int port = 0; port < 3; port++)
+		for (int ch = 0; ch < 2; ch++)
+			m_di[port][ch] = s32(util::sext(u32(di[port][ch]) & 0xffffff, 24));
+
+	// ---- restart the PC, and ONLY the PC -----------------------------------
+	// The register file is NOT reset.  Words 0..41 -- including the whole input
+	// stage at 0..11 -- run on pointers left behind by the PREVIOUS frame's
+	// epilogue (its last loads are I-RAM 62 `825<-$26', 69 `821<-$90', 77
+	// `822<-$86'); the first load in the frame that can set an 8-bit D-RAM
+	// pointer is at I-RAM 42.  Zeroing m_dp / m_cursor / m_acc here would break
+	// the machine's own state threading.  (MEASURED positions,
+	// notes/dsp-next-steps-roadmap.md sect. 2.2 step 3.)
+	m_pc = 0;
+	m_sp = 0;
+	m_frame_done = 0;
+
+	const bool detail = (m_frame_detail_left > 0);
+	const bool capture_order = detail;
+	u32 order_n = 0;
+
+	u32 slots = 0;
+	u32 traps = 0;
+	bool hit_wait = false;
+	bool overrun = false;
+
+	while (slots < FRAME_SLOT_CAP)
+	{
+		// ---- TERMINATION 3: the PC left the 384-word I-RAM ------------------
+		// MEASURED DEFECT, found by running this the first time: with the
+		// call/return sequencer below, a frame whose body region has not been
+		// uploaded yet (or whose body carries no tagged return) walks the PC
+		// straight off the end of I-RAM -- 3.4 million "unmapped iram memory
+		// read" complaints in a 24-second run.  What the real chip does with a
+		// PC past word 383 is UNKNOWN (wrap? stall until the next PC-RST?), so
+		// this does NOT invent a wrap: it ends the frame, counts it, and
+		// discards the return like any other anomaly.
+		if (m_pc >= IRAM_WORDS * upd6383_disassembler::WORD_BYTES)
+		{
+			overrun = true;
+			break;
+		}
+
+		const offs_t pc = m_pc;
+		const u64 raw = fetch(pc);
+
+		// ---- TERMINATION 1: the frame-wait word ----------------------------
+		// C00.A.47.407 at I-RAM 82.  The evidence is POSITIONAL, not a decode:
+		// it is the last word of the frame, and the 23-word epilogue at 60..82
+		// contains no end-of-block word at all -- a block that never ends is a
+		// block closed by hardware.  MEASURED (notes/dsp-perframe-execution.md
+		// sect. 1).  NOT MODELLED: whatever datapath work this word also does.
+		// It is class 0xA, so under the cursor rule it would advance the
+		// coefficient cursor, and it is simultaneously C-format, which would
+		// make class4 immediate data instead -- an open contradiction
+		// (dsp-next-steps-roadmap.md K2).  Rather than pick a side, the frame
+		// stops here and the word performs nothing.
+		if (raw == FRAME_WAIT_WORD)
+		{
+			hit_wait = true;
+			m_frame_done = 1;
+			break;
+		}
+
+		// ---- the UNIT-TAGGED TRANSFER word ---------------------------------
+		// *** EDUCATED GUESS G-5 -- THE CALL/RETURN SEQUENCER ***
+		// WHAT IS DECIDED: a word with the END bit (hi12 bit 10, bit 11 clear),
+		// class4 == 1 and addr8 in {0x0E, 0x0F} transfers control -- it CALLS
+		// the tagged unit's body when the stack is empty and RETURNS when it is
+		// not.  The chip has exactly a TWO-level stack (CDJ-500 block diagram:
+		// STACK1/STACK2), which is exactly deep enough for one call at a time.
+		// WHY: without it the frame is a straight line 0..82 and the two effect
+		// BODIES never execute, so the trap report -- the entire value of the
+		// experimental path today -- would cover the kernel only.  The sequence
+		// itself is PROVEN BY CONSTRUCTION: the common header loads the same
+		// three pointer registers TWICE, at I-RAM 42-44 (#$70/#$6C/#$25) and
+		// 50-52 (#$50/#$64/#$25), and no body word anywhere in the 2974-word
+		// corpus contains a pointer load -- so unit 0's body must run BETWEEN
+		// 44 and 50.  I-RAM 49 and 59 are the only two tagged words in the
+		// header; the LAST word of 38 of 38 bodies is tagged; and there are
+		// ZERO tagged words anywhere else in 7108 words.
+		// WHAT IS NOT KNOWN: the MECHANISM by which the target is chosen.  The
+		// entry addresses 84 and 200 are NOT in the word (addr8 is 8 bits and
+		// two exhaustive bitfield scans for them were negative), so they are
+		// either a hard-wired 2-entry vector or host-loaded entry registers.
+		// The table below (0x0E -> 84, 0x0F -> 200) is OBSERVED in every
+		// captured upload -- it is where the host puts the bodies -- NOT
+		// derived.  Also unknown: what hi12 = 0x612 (= END | 0x212, an
+		// accumulator store) does in addition, on the 5 words that carry it.
+		// WHAT WOULD SETTLE IT: an effect whose body the host loads somewhere
+		// other than 84/200, or the uPD6383 instruction set.
+		// WHAT CHANGES IF IT IS WRONG: the PC ORDER within the frame, hence
+		// which words appear in the trap report and in what order.  It cannot
+		// change the audio, because every frame is discarded anyway.
+		const bool tagged = upd6383_disassembler::is_end(raw)
+				&& upd6383_disassembler::class4(raw) == 1
+				&& (upd6383_disassembler::addr8(raw) == 0x0e
+					|| upd6383_disassembler::addr8(raw) == 0x0f);
+
+		// END OF BLOCK is a MODIFIER: the word still performs its normal
+		// datapath work (MEASURED, notes/kn5000-dsp-hi12.md sect. 3 -- stripping
+		// the bit leaves an ordinary working hi12 in 9 of 9 cases).  Same model
+		// as execute_run(); only the CONTROL half differs, because
+		// execute_run() halts here and a frame must not.
+		const u64 word = tagged
+				? (raw & ~(u64(upd6383_disassembler::HI_END) << 24))
+				: raw;
+
+		const u16 hi = upd6383_disassembler::hi12(word);
+		const u8  cl = upd6383_disassembler::class4(word);
+		const u8  ad = upd6383_disassembler::addr8(word);
+		const u16 lo = upd6383_disassembler::lo12(word);
+		const s8  dd = s8(ad);      // signed pointer POST-increment (MEASURED)
+
+		m_pc += upd6383_disassembler::WORD_BYTES;
+		slots++;
+
+		if (!upd6383_disassembler::decoded(word))
+		{
+			// TRAP.  No state is changed -- exactly as in execute_run().  The
+			// frame's return will be discarded (see below), so a trap is a
+			// no-op twice over.
+			traps++;
+			if (detail)
+				trap(raw, pc);
+			else
+				m_trap_total++;
+
+			if (capture_order && order_n < TRAP_ORDER_MAX)
+			{
+				m_order_iw[order_n] = pc / upd6383_disassembler::WORD_BYTES;
+				m_order_word[order_n] = raw;
+				order_n++;
+			}
+			(void)cl;
+		}
+		else
+		{
+			LOGMASKED(LOG_EXEC, "%010X  %s\n", raw, upd6383_disassembler::text(raw));
+
+			// The decoded semantics are IDENTICAL to execute_run()'s; see the
+			// per-form evidence there and in upd6383d.cpp.
+			if (hi == 0x000 && cl == 2)
+			{
+				// nop
+			}
+			else if (hi == 0x801 && lo == 0x821)
+			{
+				m_dp = ad;
+			}
+			else if (hi == 0x801 && lo == 0x021)
+			{
+				m_cursor = 0;
+			}
+			else if (hi == 0x202 && (lo == 0x1d5 || lo == 0x1d4))
+			{
+				const u32 operand = m_dram.read_dword(m_dp) & 0xffffff;
+				const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+
+				if (lo == 0x1d4)
+					m_tb = operand;
+
+				m_acc = (m_acc + m_p) & 0xfffffffffffULL;   // 44-bit ALU
+				m_k = coef;
+				m_l = operand;
+				m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(operand, 24))) & 0xfffffffffffULL;
+				m_cursor++;
+				m_dp = u8(m_dp + dd);
+			}
+			else if (hi == 0x212 && lo == 0x407)
+			{
+				const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+				const u32 accval = u32(m_acc & 0xffffff);
+
+				m_dram.write_dword(m_dp, accval);
+				m_k = coef;
+				m_l = accval;
+				m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(accval, 24))) & 0xfffffffffffULL;
+				m_cursor++;
+				m_dp = u8(m_dp + dd);
+			}
+		}
+
+		// ---- the transfer, AFTER the word has done its datapath work -------
+		if (tagged)
+		{
+			if (m_sp == 0)
+			{
+				m_stack[m_sp++] = m_pc;     // return to the word after this one
+				m_pc = (upd6383_disassembler::addr8(raw) == 0x0e ? UNIT0_ENTRY : UNIT1_ENTRY)
+						* upd6383_disassembler::WORD_BYTES;
+			}
+			else
+			{
+				m_pc = m_stack[--m_sp];
+			}
+		}
+	}
+
+	// ---- TERMINATION 2: the hard slot cap ----------------------------------
+	// ALL THREE terminations are needed and none is redundant.  The cap alone
+	// would silently MASK a mis-decode of the wait word (which is itself
+	// undecoded); the wait word alone would HANG MAME on any program that never
+	// reaches it -- and at boot, before the host has uploaded anything, I-RAM is
+	// all zeros and there is no wait word to reach.
+	const bool capped = !hit_wait && !overrun;
+
+	m_frames_run++;
+	m_last_slots = slots;
+	m_last_traps = traps;
+	if (traps != 0)
+		m_frames_trapped++;
+	if (capped)
+		m_frames_capped++;
+	if (overrun)
+		m_frames_overrun++;
+	if (m_frame_detail_left > 0)
+		m_frame_detail_left--;
+
+	// A frame is only worth keeping as the WORKLIST if it actually ran a whole
+	// program: it must have reached the frame-wait word AND executed at least
+	// FRAME_ORDER_MIN_SLOTS.  Frames that pass are kept, most recent wins --
+	// which matters because the host RELOADS the bodies when the user changes
+	// effect, and the newest program is the one worth working on.
+	if (capture_order && hit_wait && slots >= FRAME_ORDER_MIN_SLOTS)
+	{
+		m_order_valid = true;
+		m_order_n = order_n;
+		m_order_total = traps;
+		m_order_slots = slots;
+	}
+
+	// rate-limited: the first three frames, then roughly one per second
+	if (m_frames_run <= 3 || (m_frames_run % 48000) == 0)
+	{
+		LOGMASKED(LOG_FRAME, "frame %u: %u slots, %u traps, ended on %s -> return %s\n",
+				u32(m_frames_run), slots, traps,
+				hit_wait ? "wait word" : (overrun ? "I-RAM OVERRUN" : "SLOT CAP"),
+				traps ? "DISCARDED" : "kept");
+	}
+
+	// ---- present the outputs (the DO1L-R .. DO3R-R registers) --------------
+	// SAFETY PROPERTY, MANDATORY: if ANY word trapped, this frame's result is
+	// arbitrary, not "slightly wrong".  Discard it entirely.  The DO latches
+	// themselves are chip state and are left alone; it is the value handed to
+	// the caller that is zeroed, so an unchecked caller is still safe.
+	const bool clean = (traps == 0) && hit_wait && !overrun;
+	for (int port = 0; port < 3; port++)
+		for (int ch = 0; ch < 2; ch++)
+			do_[port][ch] = clean ? m_do[port][ch] : 0;
+
+	return clean;
+}
+
+
+void upd6383_device::dump_frame_report() const
+{
+	// NB: plain %u / %d only, matching the rest of this file.  (A u64 count only
+	// overflows u32 after ~25 hours of emulated audio at 48 kHz.)
+	logerror("upd6383: FRAME REPORT (experimental IC311 audio path)\n");
+	logerror("    frames run          %u\n", u32(m_frames_run));
+	logerror("    frames that TRAPPED %u (%d.%02d %%) -- their return was DISCARDED\n",
+			u32(m_frames_trapped),
+			u32(m_frames_run ? (100 * m_frames_trapped) / m_frames_run : 0),
+			u32(m_frames_run ? ((10000 * m_frames_trapped) / m_frames_run) % 100 : 0));
+	logerror("    ended on the wait word %010X: %u\n", FRAME_WAIT_WORD,
+			u32(m_frames_run - m_frames_capped - m_frames_overrun));
+	logerror("    ended on the %u-slot CAP:      %u\n", FRAME_SLOT_CAP, u32(m_frames_capped));
+	logerror("    ended by I-RAM OVERRUN:        %u\n", u32(m_frames_overrun));
+	logerror("    last frame: %u slots, %u traps\n", m_last_slots, m_last_traps);
+
+	if (m_order_valid)
+	{
+		logerror("    MOST RECENT REPRESENTATIVE FRAME: %u slots, %u traps.  The first %u\n",
+				m_order_slots, m_order_total, m_order_n);
+		logerror("    offending words IN EXECUTION ORDER -- THIS IS THE DECODING WORKLIST:\n");
+		for (u32 i = 0; i < m_order_n; i++)
+			logerror("      %2u.  iw %3u  %010X  %s\n", i, m_order_iw[i], m_order_word[i],
+					upd6383_disassembler::text(m_order_word[i]));
+	}
+	else
+	{
+		logerror("    no representative frame was captured (no frame ever reached the\n");
+		logerror("    frame-wait word %010X with >= %u slots -- was a program uploaded?)\n",
+				FRAME_WAIT_WORD, FRAME_ORDER_MIN_SLOTS);
 	}
 }
 

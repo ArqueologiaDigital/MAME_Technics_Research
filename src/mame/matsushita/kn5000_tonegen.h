@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "cpu/upd6383/upd6383.h"
+
 #include <deque>
 #include <queue>
 #include <vector>
@@ -41,12 +43,25 @@ public:
 	// Waveform ROM access
 	void set_waveform_region(const char *tag) { m_waveform_region_tag = tag; }
 
+	// ---- IC311, the effects DSP: a SEND/RETURN INSERT on this chip ----------
+	// MEASURED on the service manual (pp. 34/35, notes/dsp-audiopath-wiring.md
+	// sect. 1): this chip's SDOA/SDOB/SDO1 feed IC311's DI1/DI2/DI3 and IC311's
+	// DO1/DO2 come back into this chip's SDIA/SDIB. The MAIN MIX leaves on a
+	// DIFFERENT pin, SDO0, straight to IC310 and the DAC -- so IC311 can only
+	// ever ADD to the output. This chip also GENERATES IC311's LRCK (pin 208),
+	// so one DSP frame per output sample is the hardware relationship.
+	// set_dsp1_enable_port() names a driver ioport whose bit 0 gates the whole
+	// thing; unset or 0 means the DSP is never called at all.
+	template <typename T> void set_dsp1(T &&tag) { m_dsp1.set_tag(std::forward<T>(tag)); }
+	template <typename T> void set_dsp1_enable_port(T &&tag) { m_dsp1_enable.set_tag(std::forward<T>(tag)); }
+
 	static constexpr int NUM_VOICES = 64;
 	static constexpr int NUM_GLOBAL_REGS = 16;
 
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual void device_stop() override ATTR_COLD;
 
 	// device_sound_interface
 	virtual void sound_stream_update(sound_stream &stream) override;
@@ -315,6 +330,13 @@ private:
 	const char  *m_waveform_region_tag;
 	const uint8_t *m_waveform_data;
 	uint32_t     m_waveform_size;
+
+	// ---- IC311 effects-DSP send/return (see set_dsp1 above) -----------------
+	optional_device<upd6383_device> m_dsp1;
+	optional_ioport                 m_dsp1_enable;
+	// diagnostics only, reported at device_stop
+	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
+	uint64_t m_dsp1_kept = 0;        // frames whose return was USABLE (trap-free)
 
 	// The 16 page directories (4 banks x 4 pages), parsed from the wave ROM region at
 	// device_start. PCM geometry is filled in eagerly (cheap); the fundamental period
