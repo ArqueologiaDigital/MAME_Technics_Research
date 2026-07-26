@@ -75,6 +75,22 @@ private:
 		double   key_on_time;   // machine time (s) of the note-on gate — used to
 		                        // distinguish note-on EG programming (same burst,
 		                        // <1ms after gate) from a note-off release burst.
+
+		// ---- AMPLITUDE ENVELOPE GENERATOR (GAP CAL-1) --------------------------------
+		// The three-segment EG the firmware programs into +0x800 / +0x840 / +0x880, each
+		// word = (target_level << 8) | rate. The level is a LOG amplitude at exactly
+		// 16 counts per octave (DERIVED — see eg_level_to_gain in the .cpp), so the ramp
+		// is linear in level units, i.e. linear in dB.
+		double   eg_level;      // current level code, 0..255 (0 = silence, 255 = 0 dB)
+		double   eg_target;     // the running segment's target level code
+		double   eg_step;       // level units per output sample; 0 = HOLD (rate 0)
+		int      eg_seg;        // 0/1/2 = which of +0x800/+0x840/+0x880 is running
+		bool     eg_running;    // R1 latch: SET by the 0x81xx gate, CLEARED by 0x7E00 or
+		                        // by genuine silence (R2s). This — not "is it loud yet" —
+		                        // is what status_r reports, because the firmware's
+		                        // teardown edge is pre-armed at allocation.
+		uint32_t silent_samples; // R2s interlock: consecutive output samples whose rendered
+		                        // contribution rounded below 0.5 LSB of the 16-bit output.
 		uint32_t wave_offset;   // Current playback position (16.16 fixed point), relative
 		                        // to wave_start; runs 0 .. loop_end then loops [loop_start,loop_end).
 		uint32_t wave_start;    // Start byte offset (into the waveform ROM region) of the
@@ -97,16 +113,10 @@ private:
 		                        // an undumped socket the chunk actually played is a substituted,
 		                        // unrelated recording. See resolve_note_group().
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
-		int16_t  volume_l;      // Left channel volume (0-32767)
-		int16_t  volume_r;      // Right channel volume (0-32767)
+		int16_t  volume_l;      // Left  PAN gain, Q15 (0-32767) — from +0x180, see update_voice_params.
+		int16_t  volume_r;      // Right PAN gain, Q15 (0-32767). Loudness is the EG's job, not these.
 		uint32_t release_counter; // Samples remaining in release phase (0 = no release)
 		uint32_t hold_counter;  // Samples remaining in hold phase after key-off
-		int16_t  sustain_vol;   // The amplitude this voice was PROGRAMMED with while the key
-		                        // was down (the last +0x800 write whose low byte has bit 7
-		                        // CLEAR — see update_voice_params). The release fade starts
-		                        // from here, because the firmware's own release burst rewrites
-		                        // +0x800 with the ramp's TARGET level *before* it signals the
-		                        // release, and we have no rate engine to walk towards it.
 		int      env_level;     // Low 9 bits of the group0/bank0 HAND-OFF word (0xF0xx/0xFExx),
 		                        // used as a linear amplitude. That reading is WRONG — the word
 		                        // is written exactly once per note, right before the firmware
@@ -132,9 +142,20 @@ private:
 		void reset()
 		{
 			std::fill(std::begin(regs), std::end(regs), 0);
+			// +0x180 (regs[6]) is the PAN register and the firmware's own default for it is
+			// 0x0040 = CENTRE (LABEL_0272A3, v142 asm L21912). It MUST be initialised to that:
+			// a voice whose +0x180 is never written would otherwise decode as pan 0x00 and
+			// render HARD LEFT. See update_voice_params().
+			regs[6] = 0x0040;
 			active = false;
 			key_on = false;
 			key_on_time = 0.0;
+			eg_level = 0.0;
+			eg_target = 0.0;
+			eg_step = 0.0;
+			eg_seg = 0;
+			eg_running = false;
+			silent_samples = 0;
 			wave_offset = 0;
 			wave_start = 0;
 			wave_samples = 0;
@@ -151,7 +172,6 @@ private:
 			volume_r = 0;
 			release_counter = 0;
 			hold_counter = 0;
-			sustain_vol = 0;
 			env_level = 0xFF;
 			lp_a = 0.0;
 			lp_z = 0.0;
@@ -226,6 +246,13 @@ private:
 	static constexpr int IC307_BANK = 1;              // the one hardware-rooted dump
 
 	void update_voice_params(int ch);
+	// ---- amplitude EG (GAP CAL-1) ------------------------------------------------
+	// LEVEL byte -> linear gain, DERIVED from the sub-CPU's own log table (see the .cpp).
+	float  eg_level_to_gain(double level) const;
+	// RATE byte -> level units per output sample (0 = HOLD).
+	static double eg_rate_to_step(int rate);
+	// Load segment `seg` (0/1/2 = +0x800/+0x840/+0x880) as the running segment.
+	void load_eg_segment(int ch, int seg);
 	// Per-voice TVF (filter / brightness) from +0x100 = regs[4]. See the comment on the
 	// definition for the full firmware derivation.
 	void update_timbre(int ch);
@@ -257,6 +284,13 @@ private:
 	void analyse_chunk(page_dir_t &d, int chunk);
 	// Returns the measured fundamental in 16.16 fixed point (0 = the recording is aperiodic).
 	uint32_t detect_period(uint32_t region_byte_start, uint32_t samples) const;
+
+	// Amplitude-EG gain curve, built at device_start: index = round(level * 16), so
+	// 0..4080 covers level codes 0..255 at 1/16-count (0.0235 dB) resolution. Built from
+	// the DERIVED law gain = 2^((L-255)/16); tabulated because it is evaluated once per
+	// voice per output sample.
+	static constexpr int EG_GAIN_TABLE = 4096;
+	float m_eg_gain[EG_GAIN_TABLE];
 
 	// State
 	uint16_t     m_addr_latch;           // Current register address

@@ -92,6 +92,17 @@ void kn5000_tonegen_device::device_start()
 	// is what the {class, entry} decode indexes into; see decode_wave_select().
 	parse_page_directories();
 
+	// Amplitude-EG gain curve (see eg_level_to_gain for the derivation).
+	for (int i = 0; i < EG_GAIN_TABLE; i++)
+	{
+		const double L = double(i) / 16.0;
+		// Level code 0 is the firmware's TERMINAL target and must render as true silence:
+		// the whole voice manager presupposes that the chip can reach zero (it frees a
+		// channel only once the chip reports it silent). The exact law gives -95.95 dB
+		// there, which is within a hair of the 16-bit quantum anyway.
+		m_eg_gain[i] = (i == 0) ? 0.0f : float(std::pow(2.0, (L - 255.0) / 16.0));
+	}
+
 	// Save state
 	save_item(NAME(m_addr_latch));
 	save_item(NAME(m_global_regs));
@@ -116,7 +127,12 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].volume_r), i);
 		save_item(NAME(m_voice[i].release_counter), i);
 		save_item(NAME(m_voice[i].hold_counter), i);
-		save_item(NAME(m_voice[i].sustain_vol), i);
+		save_item(NAME(m_voice[i].eg_level), i);
+		save_item(NAME(m_voice[i].eg_target), i);
+		save_item(NAME(m_voice[i].eg_step), i);
+		save_item(NAME(m_voice[i].eg_seg), i);
+		save_item(NAME(m_voice[i].eg_running), i);
+		save_item(NAME(m_voice[i].silent_samples), i);
 		save_item(NAME(m_voice[i].env_level), i);
 		save_item(NAME(m_voice[i].lp_a), i);
 		save_item(NAME(m_voice[i].lp_z), i);
@@ -235,7 +251,19 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	{
 		if (data == 0x7E00)
 		{
-			// Idle / key off
+			// FREE. This is the firmware's REPLY to our own silence report (status_r), so by
+			// construction the channel is already inaudible when it arrives. It drops the
+			// eg_running latch at once — the firmware has taken the channel back and must be
+			// able to re-gate it — while the short fade below finishes any residue.
+			//
+			// The lifecycle design (rule R5) calls for a hard stop on the same sample. That is
+			// NOT adopted here and the reason is measured, not cautious: with the release
+			// heuristic still in place (GAP LIFE-2 below), the 0x7E00 for a key-bed voice
+			// arrives ~41 ms after the fade has already started, when the voice is still at
+			// ~18 % amplitude — a hard stop there would ADD a click that today's guarded
+			// path does not have. R5 only becomes free once the chip's own release ramp is
+			// decoded; see notes/audit/kn5000-gaps-applied.md.
+			m_voice[ch].eg_running = false;
 			process_key_off(ch);
 		}
 		else if ((data & 0xFF00) == 0x8100)
@@ -251,16 +279,40 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		}
 	}
 
-	// Key RELEASE detection.
+	// Key RELEASE detection — GAP LIFE-2, and the answer is that THERE IS NO DETERMINISTIC
+	// NOTE-OFF SIGNAL ON THIS BUS. IC303 has no note-off input: +0x000 takes a GATE (0x81xx)
+	// and a FREE (0x7E00) and nothing else, and a key release reaches the chip only as a new
+	// (target, rate) for the amplitude EG. Four measured facts kill every candidate signal:
+	//   * LABEL_02CD71 (asm L29178) is a GENERAL "levels changed" service with ten call
+	//     sites; Voice_CC_Portamento (L25150) -> LABEL_02CCD3 (L29116) -> Voice_ParamInit
+	//     (L29344) -> LABEL_02CD71 -> LABEL_02D436 re-emits the whole six-write "release"
+	//     burst on every sounding channel of a part WITH THE KEYS STILL DOWN;
+	//   * Voice_ParamInit is simultaneously the note-off service (asm L29469, the velocity-0
+	//     branch of Voice_NoteOn) — one routine, both duties;
+	//   * a note-off may produce NO bus write at all for up to ~3.1 s (chan[+0x2f] |= 0x0080
+	//     arms a countdown, asm L29372-L29386, consumed by LABEL_026E5B at L21467);
+	//   * a note-off may instead arrive as a hard mute 0xFF00/0xFF80 (Voice_NoteOff asm
+	//     L28663/L28677) which is BYTE-IDENTICAL to the note-ON pre-mute from Voice_SetPitch
+	//     (L28560/L28578).
+	// The +0x840 -> +0x940 adjacency proposed by the audit is exact for LABEL_02D436, but
+	// LABEL_02D436 is not note-off-specific: it says "the EG program was replaced", which is
+	// precisely the thing that carries no note-off information. Reported as a MISS rather
+	// than shipped.
 	//
-	// HEURISTIC — kept deliberately, and its limits are known. When a held key is
-	// released the sub-CPU re-programs the voice's envelope generator with a *release*
-	// ramp: a burst of six writes to groups 8/9/A (routine LABEL_027FD6 in v142 asm
-	// L23045, and its twin LABEL_02D436 at L29936). It writes the 0x7E00 key-off only
-	// LATER, and only once its voice manager (LABEL_02219F asm L13273 -> LABEL_02B4A1
-	// L26770) sees the chip report the voice SILENT — which our status_r only does for a
-	// one-shot that has played out. Both note-on setup AND note-off release program the
-	// same EG registers, so a register write alone is ambiguous.
+	// So the timing HEURISTIC below stays. The lifecycle design would delete it, on the
+	// argument that the chip's own release ramp ends the note and status_r then reports the
+	// silence — but that ramp is exactly what is NOT decoded (the low byte of the +0x800
+	// release word is 0x80, i.e. rate 0 = HOLD, so an EG driven straight from the register
+	// stream would freeze a released note at its sustain level and never end it). Until the
+	// meaning of that bit-7 word is established, this heuristic is the only thing that ends
+	// a key-bed note, and removing it would be a regression, not a fix.
+	//
+	// Its limits are known. When a held key is released the sub-CPU re-programs the voice's
+	// envelope generator: a burst of six writes to groups 8/9/A (routine LABEL_027FD6 in
+	// v142 asm L23045, and its twin LABEL_02D436 at L29936). It writes the 0x7E00 key-off
+	// only LATER, once its voice manager (LABEL_02219F asm L13273 -> LABEL_02B4A1 L26770)
+	// sees the chip report the voice SILENT. Both note-on setup AND note-off release program
+	// the same EG registers, so a register write alone is ambiguous.
 	// The discriminator: note-ON rewrites the group0/bank0 gate (0x8100) as part
 	// of its burst, so its EG-program writes land only a few microseconds after
 	// process_key_on(); the note-OFF release burst carries no gate and arrives
@@ -278,6 +330,19 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		if (now - m_voice[ch].key_on_time > 0.001)
 			process_key_off(ch);
 	}
+
+	// EFFECT SENDS: there are none, and ignoring +0x8C0 / +0x900..+0x9C0 / +0xA00 / +0xA40
+	// is CORRECT, not a gap. They are envelope-generator stage words of exactly the same
+	// shape as +0x800/+0x840/+0x880: the +0x8C0 builder (asm L17645-17660) is literally
+	// `rate = curve(TONE[+0x3d] + TONE[+0x3e]); level<<8; OR; LD (0451EAh),WA`, and
+	// LABEL_027FD6 (L23045) / LABEL_02D436 (L29936) rewrite six of them as three (seg0,seg1)
+	// PAIRS from consecutive struct words — a send would not be paired with another send by
+	// a shared struct stride. The effects live on a DIFFERENT bus (DSP1/DSP2 at 0x130000 /
+	// 0x130002, DSP_Write_Channel L9687), and the per-part depths (CC 0x91 -> chan+0x7F,
+	// 0x97 -> +0x80, 0x9B -> +0x8D) never reach IC303: the depth routine LABEL_0233F8
+	// (L15318-15600) contains no 0x100000/0x100002 access at all. No placeholder is written.
+	// (What IS still missing from those words is their role as ENVELOPES — the two extra EGs
+	// are not modelled; only the amplitude EG is.)
 
 	// +0x080 (group 0, bank 2) is the voice's LEVEL word, and its bit 15 is the burst
 	// LOAD STROBE — SET on the first write of ToneGen_WriteVoiceParams (v142 asm L29594
@@ -300,9 +365,12 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	if (group == 1 && bank == 0)
 		update_timbre(ch);
 
-	// Loudness: the level word +0x800 (group 8, bank 0). Group 0 bank 2 is included because
-	// the burst's final +0x080 write is the end-of-burst strobe.
-	if ((group == 0 && bank == 2) || group == 8)
+	// PAN (+0x180 = group 1, bank 2) and the amplitude EG (+0x800/+0x840/+0x880 = group 8).
+	// Group 0 bank 2 is included because the burst's final +0x080 write is its end strobe.
+	// +0x180 is written BEFORE the gate in the note-on burst (MEASURED: 22.307762 0180 0000
+	// vs 22.307783 0000 8100), so the pan is valid from the very first rendered sample; it
+	// can also be re-shipped mid-note by LABEL_026F4A, so it is read live rather than latched.
+	if ((group == 0 && bank == 2) || (group == 1 && bank == 2) || group == 8)
 		update_voice_params(ch);
 }
 
@@ -328,36 +396,75 @@ uint16_t kn5000_tonegen_device::data_r()
 
 uint16_t kn5000_tonegen_device::status_r()
 {
-	// Active-voice status poll (read from 0x100000).
+	// Chip status poll (read from 0x100000), and the closing half of GAP LIFE-1.
 	//
-	// MEASURED (sub-CPU v142 asm DAC_Write_Sample L11479-11483): the firmware
-	// writes a bank index (0..3) to 0x100000, then reads a 16-bit bitmap back
-	// from 0x100000 giving the currently-sounding voices in that bank of 16.
-	// The voice-manager (LABEL_02219F/LABEL_02222A L13273-13330) computes
-	//   ((prev | cur) XOR M) AND M   with M = firmware-commanded-on bitmap,
-	// i.e. "voices the firmware turned on that the chip reports SILENT", and
-	// releases each such voice via LABEL_02B4A1 (the 0x7E00 key-off, PC 02B4DB).
+	// THE ROOT FACT: IC303 has no note-off input. Its control register +0x000 accepts
+	// exactly two lifecycle commands — 0x81xx = GATE and 0x7E00 = FREE — and everything
+	// between is envelope programming. So the firmware learns that a note has ended by
+	// ASKING THE CHIP, through this port, and that closes a loop the HLE used to break.
+	// MEASURED on the live bus: `12.481481 R 0000 0000` -> `12.481537 W 0000 7E00`, 56 us
+	// later. The comment that used to stand here — "a handed-off voice can never get a
+	// 0x7E00" — is therefore false: the 0x7E00 is GENERATED BY the silence report.
+	// Because we never reported silence, handed-off (accompaniment / rhythm) voices were
+	// never freed: MEASURED, ch0 gated 5.859349, handed off 5.859385, never freed,
+	// re-gated 12.006012 for a different note.
 	//
-	// If this read is left unmapped it returns 0 => every held voice looks
-	// silent => the firmware auto-releases held keys ~45ms after key-on. To
-	// make a held key SUSTAIN (as on real hardware) we report each keyed-on
-	// voice as active. Bank = low 2 bits of the value last latched at 0x100000;
-	// bit i of the result = voice (bank*16 + i) is currently gated on.
-	//
-	// KNOWN GAP: this answers "gated on", not "still sounding", so a voice the firmware
-	// HANDED OFF (the 0xF0xx write in data_w, after which it frees the channel and can
-	// never send a 0x7E00) is reported active forever and is never reclaimed. Closing that
-	// needs a decode of how the chip ends a handed-off note, which is not established —
-	// see the long comment in data_w() and notes/audit/kn5000-audit-applied.md.
-	int bank = m_addr_latch & 0x03;
-	uint16_t bitmap = 0;
-	for (int i = 0; i < 16; i++)
+	// R0 — THE LATCH IS NOT TWO BITS. The firmware issues two different reads through this
+	// one port (asm L13280 and L13341):
+	//     latch 0x0000..0x0003  -> the active-voice bitmap of that bank of 16
+	//     latch 0x0180 + ch     -> that voice's current envelope level
+	//     anything else         -> not issued by v142
+	// Masking the latch to 2 bits answered a level query with a bank bitmap (MEASURED:
+	// latch 0x0180 returned 0x0003, latch 0x018C returned 0xFC00).
+	m_stream->update();   // the silence interlock below is maintained per rendered sample
+
+	const uint16_t latch = m_addr_latch;
+
+	if (latch >= 0x0180 && latch < 0x0180 + NUM_VOICES)
 	{
-		int vch = bank * 16 + i;
-		if (vch < NUM_VOICES && m_voice[vch].key_on)
-			bitmap |= (1u << i);
+		// Per-voice envelope-level readback. The firmware keeps (V & 0x3FFF) >> 5 truncated
+		// to 8 bits (asm L13341-13342) and only ever COMPARES it against 0x80 — the level at
+		// which LABEL_021E83 (asm L12946) advances the voice's allocator stage — so the map
+		// only has to be monotone, not exact. Our EG level code is already the chip's own
+		// 8-bit log amplitude, so it goes out shifted into place.
+		const voice_t &v = m_voice[latch - 0x0180];
+		if (!v.eg_running)
+			return 0;
+		int lvl = int(v.eg_level + 0.5);
+		lvl = std::clamp(lvl, 0, 0xFF);
+		return uint16_t(lvl << 5);
 	}
-	return bitmap;
+
+	if (latch <= 0x0003)
+	{
+		// R1 — "active" is the eg_running LATCH, not a level test. It is SET only by the
+		// 0x81xx gate (all seven sites: asm L29757, L30213, L30294, L30667, L30891, L31071,
+		// L31086) and CLEARED only by 0x7E00 or by genuine silence. It must be a latch
+		// because the allocator PRE-ARMS the teardown edge at allocation time
+		// (`LDA XBC,292Eh / OR (XBC+WA),DE`, asm L13582-L13584): an "is it loud yet" test
+		// would report 0 on the first poll after the gate — while the attack is still
+		// ramping — and the firmware would tear the brand-new note straight back down.
+		//
+		// WHY A HELD NOTE CANNOT BE RECLAIMED BY THIS. The teardown needs a poll that reads
+		// the bit as 0 (it is computed from `prev & ~new`, asm L13291-13302). We only report
+		// 0 once the voice's own rendered contribution has been below half an output LSB
+		// continuously for a full bank-poll period, so on the poll that could fire a
+		// teardown the voice is already contributing exactly nothing — the firmware's
+		// 0x7E00 can never remove audible sound. While a key is down the EG sits at its
+		// programmed sustain level, so the interlock never arms and the voice is
+		// structurally unreclaimable, for any hold duration.
+		const int bank = latch & 0x03;
+		uint16_t bitmap = 0;
+		for (int i = 0; i < 16; i++)
+		{
+			const int vch = bank * 16 + i;
+			if (vch < NUM_VOICES && m_voice[vch].eg_running)
+				bitmap |= (1u << i);
+		}
+		return bitmap;
+	}
+
+	return 0;
 }
 
 
@@ -504,86 +611,197 @@ void kn5000_tonegen_device::assign_chord_notes(int ch)
 // Voice parameter management
 //-----------------------------------------------------------------------
 
+// =======================================================================================
+// GAP CAL-1 — THE AMPLITUDE ENVELOPE GENERATOR
+// =======================================================================================
+//
+// Registers +0x800 / +0x840 / +0x880 (regs[20]/[21]/[22]) are the three programmed
+// segments of the per-voice amplitude EG. Each word is
+//
+//     (target_level << 8) | (bit7 flag) | rate[6:0]
+//
+// MEASURED-by-construction: the sole builder LABEL_025A9E (v142 asm L19395-19469) writes
+//   slot[+0x3c] = (PEAK  << 8) | 0x7F                      -> +0x800   ATK  / PEAK
+//   slot[+0x3e] = (SUST1 << 8) | max(RATE[desc+0x0a], 4)   -> +0x840   DECAY1 / SUST1
+//   slot[+0x40] = (SUST2 << 8) | RATE[desc+0x0c]  (or 0)   -> +0x880   DECAY2 / SUST2
+// and the alternate path LABEL_025636 (asm L19078-19087) builds +0x800 as
+// `(level<<8) | RATETAB_0x011963[desc+0x28]`. The main-CPU Sound-Edit page (main ROM file
+// 0x112072) reads `ATK PEAK DECAY1 SUST1 DECAY2 SUST2 RELEASE`, landing 1:1 on those three
+// registers. Full derivation: notes/audit/kn5000-eg-calibration.md.
+//
+// ---------------------------------------------------------------------------------------
+// LAW (a)  LEVEL byte -> LINEAR GAIN.  **DERIVED FROM THE ROM, not fitted.**
+// ---------------------------------------------------------------------------------------
+//
+//     gain(L) = 2 ^ ((L - 255) / 16)          i.e. 0.376287 dB per level unit
+//
+// The evidence is the firmware's OWN level converter. LABEL_0232C7 (asm L15195-15214)
+// builds register +0x080 through table 0x010764 (sub-ROM file offset 0x1864), and that
+// table is bit-exactly
+//        T[i] = round( 128 * log2( 2^(i>>4) * (1 + (i&15)/16) ) )   for 256 of 256 entries
+// — a 4-bit-exponent / 4-bit-mantissa float. So an 8-bit level code is a LOG AMPLITUDE at
+// exactly 16 counts per octave. Three independent corroborations:
+//   * the 9-position maximum-loudness cap table 0x011ADF steps exactly 3.010 dB;
+//   * the 8-bit target (16/oct), the 12-bit +0x080 (256/oct) and the 13-bit level readback
+//     (512/oct, from `AND 3FFFh; SRL 5` asm L13341-13342) span the SAME 96 dB domain;
+//   * the voice manager's 0x80 stage-advance threshold is exactly 8 octaves = -47.79 dB.
+//
+// THIS REPLACES the fitted pair `2^((L-231)/10)` that shipped until 2026-07-26, which was
+// wrong in BOTH constants: K = 10 (0.602 dB/unit) is 1.6x too steep — it implies 153.5 dB
+// across a register whose own domain is 96 dB — and REF = 231 saturated the top 25 codes,
+// making 26 of the 127 velocities render identically. Measured discrepancies on values the
+// firmware actually writes: Piano PEAK 0xE5 -9.78 vs -1.20 dB; Piano SUST1 0x48 -68.86 vs
+// -95.73; Piano SUST2 0x40 -71.87 vs -100.54; terminal 0x00 -95.95 vs -139.08. That last
+// pair is why "running the EG" looked dangerous: under the OLD constants a held piano's
+// own sustain target evaluated to -100 dB. Under the derived law it is -71.9 dB and the
+// note sustains, which is what a piano string does.
+//
+// Level code 0 returns exactly 0 (see device_start): the firmware's voice manager frees a
+// channel only when the chip reports it SILENT, so a gain law that never reaches zero
+// would deadlock a 64-voice instrument. -95.95 dB vs -inf is inaudible either way.
+float kn5000_tonegen_device::eg_level_to_gain(double level) const
+{
+	int i = int(level * 16.0 + 0.5);
+	if (i <= 0) return 0.0f;
+	if (i >= EG_GAIN_TABLE) i = EG_GAIN_TABLE - 1;
+	return m_eg_gain[i];
+}
+
+
+// ---------------------------------------------------------------------------------------
+// LAW (b)  RATE byte -> SEGMENT SPEED.  Structure DERIVED; the two time constants are
+//          explicitly CALIBRATED because the seconds are NOT in the ROM.
+// ---------------------------------------------------------------------------------------
+//
+// DERIVED (MEASURED), and these are the parts that matter musically:
+//   * rate 0x7F is the FASTEST rate. It is hard-coded as the attack (`OR BC,007fh`,
+//     asm L19399) and is the firmware's neutral default word 0xFF7F (asm L21915).
+//   * rate 0 means HOLD — the segment does not move. Proved by the clamp asymmetry:
+//     DECAY1 is clamp(.,4,127) (asm L19424-19427 and L19304-19307) but DECAY2 is
+//     clamp(.,0,127) (asm L19309-19312) and is simply omitted (= 0) when the descriptor's
+//     "has DECAY2" bit is clear (asm L19463-19467). A firmware that refuses to put 0 on
+//     the segment that must ramp, and defaults to 0 on the segment that must not, is
+//     saying 0 = stop. LIVE: +0x880 is xx00 in 197/197 rhythm note-ons.
+//   * a LINEAR rate->speed law is FALSIFIED by the register pair the machine actually
+//     writes: Piano DECAY1 = rate 76 over 157 level units, Drum DECAY1 = rate 4 over 115.
+//     Linear would make the piano's whole decay 13.7x SHORTER than the drum's and only
+//     15 % longer than its own attack. The encoding must be exponential, and solving the
+//     same two anchors against "attack 2-10 ms, held piano audible 4-10 s" bounds it to
+//     3.8 .. 7.7 rate counts per doubling.
+//
+// NOT DERIVABLE, with a positive argument (notes/audit/kn5000-eg-calibration.md §3.5):
+// the firmware never computes an envelope time — it POLLS the chip (LABEL_02219F asm
+// L13334-13348) — and an exhaustive scan of every near-geometric u16 run in the sub ROM
+// found 11 exponential tables, all LFO/pitch, none indexed by a rate byte. IC303 is
+// undumped. So the two constants below are CALIBRATED, not measured, and they are the
+// only fitted numbers in this file's envelope path.
+//
+// THE EXPERIMENT THAT REPLACES THEM (~20 min on Felipe's real KN5000): hold one note on
+// PIANO at a fixed velocity and time the attack peak -> -40 dB; repeat on a patch whose
+// DECAY1 rate differs strongly (STRINGS / ORGAN), reading the rate back out of +0x840's
+// low byte. Then D = (r2-r1) / log2(t1*dL2 / (t2*dL1)) and T127 follows from either point.
+// A third rate over-determines it and validates the exponential FORM itself.
+double kn5000_tonegen_device::eg_rate_to_step(int rate)
+{
+	static constexpr double D    = 4.0;      // CALIBRATED — rate counts per doubling of speed
+	                                         //   (tight end of the DERIVED 3.8..7.7 bound)
+	static constexpr double T127 = 0.0034;   // CALIBRATED — seconds for rate 127 to traverse
+	                                         //   the full 255-unit range
+	static constexpr double SAMPLE_RATE = 48000.0;
+
+	rate &= 0x7F;
+	if (rate == 0)
+		return 0.0;                          // HOLD — DERIVED, see above
+	// speed = 255 / (T127 * 2^((127-rate)/D))  level units per second
+	return 255.0 / (T127 * std::pow(2.0, (127.0 - double(rate)) / D) * SAMPLE_RATE);
+}
+
+
+// Make segment `seg` (0/1/2 = +0x800/+0x840/+0x880) the running one. The EG's CURRENT
+// LEVEL is deliberately untouched (rule R3): a segment load is a new (target, rate) pair
+// and nothing else, so a ramp always continues from where it actually is. That is what
+// makes "the release starts from the HELD level" (commit d3457eb) an emergent property
+// rather than a special case.
+void kn5000_tonegen_device::load_eg_segment(int ch, int seg)
+{
+	voice_t &v = m_voice[ch];
+	if (seg < 0) seg = 0;
+	if (seg > 2) seg = 2;
+	const uint16_t w = v.regs[20 + seg];      // +0x800 / +0x840 / +0x880
+	v.eg_seg    = seg;
+	v.eg_target = double((w >> 8) & 0xFF);
+	v.eg_step   = eg_rate_to_step(w & 0x7F);
+}
+
+
 void kn5000_tonegen_device::update_voice_params(int ch)
 {
 	voice_t &v = m_voice[ch];
 
-	// --- Loudness / velocity ---------------------------------------------------
+	// ---- STEREO PAN, from +0x180 (regs[6]) bits[6:0] -------------------------------
 	//
-	// The firmware's per-voice loudness is a LOG-DOMAIN level in the HIGH byte of
-	// reg[20] (group8/bank0, +0x800). It is built in sub-CPU LABEL_026769 as
-	// `loglevel<<8`, where `loglevel` comes from the log table 0x0118FE indexed by
-	// (patch level + key-scale) and then VELOCITY-scaled (LABEL_022BB8). Crucially
-	// it is an ATTENUATION: LOWER value = LOUDER (MEASURED live 2026-07-23 — reg[20]
-	// high byte 0xE7@vel40 → 0xCC@vel127, monotonically falling as velocity rises).
+	// MEASURED end to end (notes/audit/kn5000-output-design.md §1): MIDI CC 0x0A (Pan)
+	// -> Voice_CC_Pan (asm L25081) -> LABEL_0288C5 (L23469, store at chan +0x76) ->
+	// LABEL_032E1E (L35522), which computes
+	//     pan = clamp(patch_pan + (CC10 - 0x40), 0, 0x7F)
+	// into each of the part's four tone slots at [+0x23]/[+0x24], and LABEL_0251BA
+	// (L18456) / the per-tick LABEL_026F4A (L21568) -> LABEL_02D670 (L30169) ship it to
+	// chip register +0x180. The PATCH-side source is partial_block[+0x01] (previously
+	// recorded only as "partial flags"), and the firmware's own default word is 0x0040
+	// (asm L21912) — which is why voice_t::reset() seeds regs[6] with it.
 	//
-	// The old code (a) inverted reg[20] LINEARLY (0xFF−hi), giving a tiny 24..51
-	// span, and (b) multiplied by `reg[2]&0x0FFF` used as a *direct* volume — but
-	// reg[2] is ALSO a velocity attenuation (falls with velocity), so that term
-	// fought the reg[20] term and squeezed the whole dynamic range to ~1.8x
-	// (vel40→127). That is the "velocity too weak / compressed" bug.
+	// ROM-wide census: the value is strictly 0..0x7F, 692 of 1046 partials sit exactly at
+	// 0x40, 252 of 258 mono patches are centred, and 194 of 216 two-partial patches are
+	// mirror-paired around it. Live: a held Piano C4's two oscillators carry +0x180 =
+	// 0x0000 and 0x007F — hard left and hard right — while their group-8/9/10 words are
+	// byte-identical, which is also what falsifies the old "+0x840/+0x880 are the L/R bus
+	// gains" reading (they are EG segments 1 and 2; equal high bytes mean "decay to X then
+	// hold at X", and the Piano's own 484C / 4000 pair is not even equal).
 	//
-	// Correct model: reg[20]'s high byte is a log attenuation, so the linear gain
-	// is an EXPONENTIAL of it. K = attenuation units per halving, REF = the value
-	// at (near) unity. reg[2] is redundant here — the firmware already folded the
-	// velocity into reg[20] — so it is not multiplied in a second time.
-	//   gain = 2^((REF − loglevel) / K)
-	// The exponential form is grounded (log→linear); K and REF are CALIBRATED (the
-	// chip's exact dB/step is internal to the undumped IC303) to keep loud notes
-	// strong while giving a musical ~16 dB velocity spread. See
-	// notes/kn5000-pitch-velocity.md.
-	static constexpr double K = 10.0;    // reg[20] level units per amplitude halving
-	// REF = the level that maps to full scale. MEASURED live: the loudest strike puts
-	// 0xE7 (231) in reg[20]'s high byte, the softest 0xCC (204).
-	static constexpr double REF = 231.0;
+	// TAPER: linear BALANCE. This is forced, not preferred — 66.2 % of partials sit at
+	// centre so centre must keep unity, and the mix already reaches +8.96 dB over full
+	// scale in dense passages so no gain may exceed unity. Constant-power normalised to
+	// centre gives sqrt(2) at the extremes (violates the second), normalised to the
+	// extremes gives 0.707 at centre (violates the first). Balance is the only standard
+	// law satisfying both; the shape BETWEEN the anchors is CALIBRATED (IC303's pan
+	// attenuator table is a chip internal).
+	//
+	// WHICH END IS LEFT is INFERRED (strong): the firmware adds CC10 - 0x40 with no
+	// inversion and MIDI CC 10 is 0 = left by definition. If the real instrument is the
+	// other way round, invert with `pan = 0x7F - pan` — one line. Felipe's ear on the
+	// default Piano (whose two layers are hard-panned) is the arbiter.
+	const int pan = v.regs[6] & 0x7F;         // bits[15:7] are a separate streamed-voice field
+	const double gl = (pan <= 0x40) ? 1.0 : double(0x7F - pan) / double(0x7F - 0x40);
+	const double gr = (pan >= 0x40) ? 1.0 : double(pan)       / double(0x40);
 
-	int loglevel = (v.regs[20] >> 8) & 0xFF;
+	v.volume_l = int16_t(std::lround(gl * 32767.0));
+	v.volume_r = int16_t(std::lround(gr * 32767.0));
 
-	// POLARITY (corrected 2026-07-26): reg[20]'s high byte is a LOG-DOMAIN LEVEL —
-	// HIGHER = LOUDER. The earlier code had it inverted (as an attenuation), because the
-	// calibration capture was taken BEFORE the key-bed velocity fix: with the input
-	// running backwards, "velocity 40" actually reached the firmware as a HARD strike and
-	// "velocity 127" as a SOFT one, so the measured 0xE7-at-40 / 0xCC-at-127 was read as
-	// "falls as velocity rises". The two inversions cancelled; fixing the input exposed
-	// this one. Felipe (real-hardware comparison, 2026-07-26): "If I hit hard I hear a
-	// soft sound. If I hit softly, I hear a louder sound."
+	// ---- EG segment reprogramming (rule R3) ---------------------------------------
 	//
-	// The same error inverted the RELEASE: the firmware ramps this level DOWN at key-up,
-	// which under the old reading rendered as amplitude RISING — the long-standing
-	// "sound gets louder when I release a key" defect. With the correct polarity the
-	// release ramp decays on its own, and a CLEARED register (0x0000) is silence rather
-	// than full volume, both of which fall out for free.
-	double gain = std::pow(2.0, (double(loglevel) - REF) / K);
-	if (gain > 1.0) gain = 1.0;
-	if (gain < 0.0) gain = 0.0;
-
-	// Pan: kept centred. The group-8/9/10 register PAIRS are NOT an L/R pair — every
-	// updater writes the SAME computed value to both members (LABEL_02682F asm L20831-20838,
-	// LABEL_026A93 L21080-21086, LABEL_026AAA L21209-21212, LABEL_02D620 L30130-30150), which
-	// an L/R gain pair could not do. There is no evidence-based per-voice pan source yet.
-	int amp = int(gain * 32767.0 + 0.5);
-	amp = std::min(amp, 32767);
-
-	v.volume_l = int16_t(amp);
-	v.volume_r = int16_t(amp);
-
-	// Latch the level this voice was PROGRAMMED with, so the release fade can start from it.
+	// A write to +0x800/+0x840/+0x880 loads a new (target, rate) for that segment and
+	// NOTHING else: it never re-arms the voice, never resets the wave pointer and never
+	// resets the EG's current level. If the write lands on the segment that is currently
+	// running, the ramp simply re-aims.
 	//
-	// MEASURED discriminator (no timing involved): the LOW byte of +0x800 is a rate/flag
-	// byte, and its bit 7 separates the two writers. A note-on level comes from
-	// LABEL_025636 (v142 asm L19078-19085) as `(level<<8) | TAB_011963[rec+0x28]`, and
-	// TAB_011963[0..100] runs 0x00..0x7F — bit 7 CLEAR. Every periodic/release update goes
-	// through LABEL_026769 -> LABEL_02682F (L20831-20838), which does `SET 7` — bit 7 SET.
-	// Live capture agrees exactly: note-on 0xE57F / 0xD17F / 0xDA7F, pre-note mute 0xFF80,
-	// key-up release 0x8B80, panic 0xA280.
+	// BIT 7 OF THE LOW BYTE is the one thing here that is NOT decoded, and the
+	// conservative treatment of it is load-bearing. MEASURED: every note-on programming
+	// path leaves it CLEAR (the rate tables run 0..127, and the attack literal is 0x7F),
+	// while the software volume/expression path LABEL_026769 -> LABEL_02682F (asm
+	// L20831-20838, `SLA 8,WA; SET 7,WA -> +0x800`) always SETS it. Those software writes
+	// are a level COMMAND of undecoded semantics, not a segment program — and taking them
+	// as segment targets would be actively wrong: at key-up the firmware ships 0x8B80
+	// (level 139 = -43.65 dB), which is LOUDER than the piano's own sustain level 0x48
+	// (-68.86 dB), so honouring it would make a released note get LOUDER. That is exactly
+	// the defect reported from real-hardware comparison on 2026-07-25. So a bit-7 write
+	// is ignored by the EG.
 	//
-	// This is what removes the key-up CLICK. The release burst writes +0x800 with the ramp's
-	// TARGET level (0x8B = gain 0.0017) BEFORE it writes the +0x900 that signals the release,
-	// so applying it instantly collapsed the voice by 54 dB in a single sample and the 50 ms
-	// fade below then operated on already-silent audio. We have not decoded the chip's ramp
-	// RATE, so we do not walk towards the target; we fade from the held level instead.
-	if (v.key_on && !(v.regs[20] & 0x0080))
-		v.sustain_vol = int16_t(amp);
+	// The same rule disposes of the pre-reuse "full scale blip" (audit GAP 7) with no
+	// special case at all: the pre-reuse pair is +0x840 = 0xFF00 / +0x800 = 0xFF80, and
+	// 0xFF00 carries rate 0 = HOLD while 0xFF80 has bit 7 set — so neither moves the EG,
+	// and the channel is no longer slammed to full scale 386 us before it is re-gated.
+	if (v.eg_running)
+		load_eg_segment(ch, v.eg_seg);
 }
 
 
@@ -1459,9 +1677,18 @@ void kn5000_tonegen_device::process_key_on(int ch)
 
 	LOGMASKED(LOG_KEY, "tonegen: KEY ON voice %d\n", ch);
 
+	// R4 — THE GATE IS AN UNCONDITIONAL FULL RE-INITIALISATION. No per-voice playback state
+	// survives it: wave pointer to 0, filter to rest, EG back to segment 0, silence interlock
+	// cleared. This is what makes voice STEALING clean — a stolen channel is re-initialised,
+	// never left ringing — without the HLE having to model the firmware's allocator (which it
+	// must not: that is list surgery over sub-CPU RAM at 0x148D + ch*0x27, outside the chip
+	// boundary). The EG's current LEVEL is deliberately NOT reset (rule R3): the attack ramps
+	// from wherever the channel actually is, which is click-free in both directions.
 	v.key_on = true;
 	v.key_on_time = machine().time().as_double(); // gate timestamp for release detection
 	v.active = true;
+	v.eg_running = true;
+	v.silent_samples = 0;
 	v.wave_offset = 0;
 	v.release_counter = 0;
 	v.hold_counter = 0;
@@ -1484,11 +1711,12 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	// leaves true_note = −1 without calling update_pitch itself).
 	update_pitch(ch);
 
-	// Update volume and the TVF from the current registers. +0x800 and +0x100 are both
-	// written earlier in the same burst (asm L29736 and L29619), so they are already final.
+	// Update pan and the TVF from the current registers, then start the amplitude EG at
+	// segment 0. +0x800, +0x180 and +0x100 are all written earlier in the same burst
+	// (asm L29736, L29691 and L29619), so they are already final when the gate arrives.
 	update_voice_params(ch);
 	update_timbre(ch);
-	v.sustain_vol = v.volume_l;   // floor for the release fade, refined by update_voice_params
+	load_eg_segment(ch, 0);
 }
 
 
@@ -1534,6 +1762,12 @@ int16_t kn5000_tonegen_device::read_waveform_sample(uint32_t byte_offset) const
 
 void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 {
+	// One full bank-poll period of the firmware's voice manager, in output samples.
+	// MEASURED: Audio_Process_Init alternates two paths at 40.69 Hz (24.576 ms) and the
+	// manager reads one bank of 16 per pass, so a given voice's bit is inspected every
+	// 4 x 24.576 ms = 98.33 ms. See the R2s interlock below.
+	static constexpr uint32_t SILENT_HOLDOFF = 4720;   // 98.33 ms at 48 kHz
+
 	for (int s = 0; s < stream.samples(); s++)
 	{
 		int32_t mix_l = 0;
@@ -1555,6 +1789,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (v.hold_counter == 0 && v.release_counter == 0)
 				{
 					v.active = false;
+					v.eg_running = false;   // a voice that is no longer rendered is silent
 					continue;
 				}
 			}
@@ -1601,6 +1836,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 					v.release_counter--;
 				if (!v.key_on && v.hold_counter == 0 && v.release_counter == 0)
 					v.active = false;
+				// It renders exactly nothing, so it IS silent: run the same interlock the
+				// audible path uses, so the firmware can reclaim the channel.
+				if (++v.silent_samples >= SILENT_HOLDOFF)
+					v.eg_running = false;
+				if (!v.active)
+					v.eg_running = false;
 				continue;  // No audio output — skip sample rendering
 			}
 
@@ -1669,8 +1910,40 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// Known to be the WRONG reading and deliberately retained — see data_w().
 			sample = sample * v.env_level / 0xFF;
 
-			// Apply release envelope (voice-lifecycle fade + deactivation). Kept for
-			// deactivation timing; the firmware envelope above supplies the real shape.
+			// ---- AMPLITUDE ENVELOPE GENERATOR (GAP CAL-1) --------------------------------
+			// Advance the running segment's level toward its target at the segment's own
+			// rate, in LEVEL units — which, because the level code is a log amplitude at 16
+			// counts per octave, is a ramp that is linear in dB. A segment whose rate is 0
+			// HOLDS (derived, see eg_rate_to_step): that is what lets a held piano note park
+			// at its sustain level for as long as the key is down instead of decaying away,
+			// and it is also why a rhythm patch — SUST1 == SUST2 with DECAY1 pinned at the
+			// clamp floor 4 in 197/197 measured rhythm note-ons — is a flat gate that leaves
+			// the contour entirely to the sample.
+			if (v.eg_step > 0.0)
+			{
+				if (v.eg_level < v.eg_target)
+				{
+					v.eg_level += v.eg_step;
+					if (v.eg_level >= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) load_eg_segment(ch, v.eg_seg + 1); }
+				}
+				else if (v.eg_level > v.eg_target)
+				{
+					v.eg_level -= v.eg_step;
+					if (v.eg_level <= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) load_eg_segment(ch, v.eg_seg + 1); }
+				}
+				else if (v.eg_seg < 2)
+				{
+					load_eg_segment(ch, v.eg_seg + 1);
+				}
+			}
+			sample = int32_t(float(sample) * eg_level_to_gain(v.eg_level));
+
+			// Apply the release fade (GAP LIFE-2 is UNRESOLVED — see the heuristic in
+			// data_w()). The EG above holds at whatever level the key-up burst left it, so
+			// this fade starts from the HELD level and can only fall: the "release starts
+			// from the held level" property of commit d3457eb is now emergent rather than a
+			// special case, and the release burst can no longer raise a note's level because
+			// its bit-7 word is not taken as a segment target (see update_voice_params).
 			if (v.release_counter > 0)
 			{
 				sample = sample * int32_t(v.release_counter) / 2400;
@@ -1678,6 +1951,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (v.release_counter == 0 && v.hold_counter == 0)
 				{
 					v.active = false;
+					v.eg_running = false;
 				}
 			}
 			else if (!v.key_on)
@@ -1685,45 +1959,70 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				// Released AND the release fade has completed: the voice must stay SILENT.
 				// hold_counter keeps it "active" ~100ms purely so the firmware's status
 				// polling still sees it, but that is a bookkeeping lifetime, NOT audio.
-				// Without this, once release_counter hit 0 the fade multiplier above was
-				// skipped and the voice jumped back to FULL amplitude for the rest of the
-				// hold — heard as the amplitude momentarily INCREASING on key release
-				// (reported from real-hardware comparison, 2026-07-25).
 				sample = 0;
 			}
 
-			// Apply volume. Once the key is up the amplitude comes from `sustain_vol`, the
-			// level the voice was PROGRAMMED with while it was held, and the fade above
-			// supplies the decay. Using volume_l here instead read the release burst's
-			// TARGET level as if it were already reached, which collapsed the voice by
-			// 54 dB in a single sample: an audible CLICK on every key release, MEASURED as
-			// a 2346-LSB step. The chip's ramp RATE is not decoded, so we do not pretend to
-			// walk to that target — see update_voice_params.
-			const int32_t vol_l = v.key_on ? v.volume_l : v.sustain_vol;
-			const int32_t vol_r = v.key_on ? v.volume_r : v.sustain_vol;
-			mix_l += (sample * vol_l) >> 15;
-			mix_r += (sample * vol_r) >> 15;
+			// Stereo. volume_l/volume_r are now PURE PAN gains (+0x180, see
+			// update_voice_params); loudness is the EG's job. The balance law has
+			// max(gL) = max(gR) = 1.0, so panning can only ever LOWER a per-channel peak.
+			const int32_t out_l = (sample * int32_t(v.volume_l)) >> 15;
+			const int32_t out_r = (sample * int32_t(v.volume_r)) >> 15;
+			mix_l += out_l;
+			mix_r += out_r;
+
+			// ---- R2s: the calibration-independent SILENCE INTERLOCK ----------------------
+			// A voice reports itself silent to the firmware only after its own rendered
+			// contribution has stayed below half an output LSB continuously for one full
+			// bank-poll period (MEASURED 24.58 ms per bank read x 4 banks = 98.33 ms). The
+			// two numbers are not tuning knobs: 0.5 LSB is the output quantum and 98.33 ms
+			// is the measured poll period. Together they make the teardown provably
+			// inaudible — a teardown can only fire on a poll that read 0, and on that poll
+			// the voice was already contributing exactly nothing.
+			{
+				const int64_t mag = int64_t(std::abs(sample)) * int64_t(std::max(v.volume_l, v.volume_r));
+				if (mag >= (int64_t(1) << 14))          // >= 0.5 LSB of the 16-bit output
+					v.silent_samples = 0;
+				else if (++v.silent_samples >= SILENT_HOLDOFF)
+					v.eg_running = false;
+			}
 
 			// Advance position
 			v.wave_offset += v.pitch_step;
 		}
 
-		// Output headroom / anti-clip (fix for chord distortion). Each voice can reach full
-		// scale, so a chord (3 notes x up to 2 oscillators = up to ~6 voices) summed past
-		// +/-32767 and the old hard clamp turned that into audible clipping. Instead of
-		// clamping, apply a soft limiter: the mix is trimmed by HEADROOM and then passes
-		// through LINEARLY below a knee K, and is smoothly tanh-saturated above it (so dense
-		// chords compress rather than clip). Bounded to (-1,1] with no hard corner.
-		// NOTE the trim applies to EVERYTHING, so the "passes through unchanged" the older
-		// comment claimed is really "passes through scaled by HEADROOM, linearly": a single
-		// voice at full scale peaks at 0.70, not 1.0. That is deliberate (it is the chord
-		// margin) and MEASURED as not making the instrument quiet — a plain two-oscillator
-		// C4 peaks at -1.2 dBFS. See notes/kn5000-faithful-render-v2.md.
+		// ---- OUTPUT HEADROOM ------------------------------------------------------------
+		//
+		// THE HEADROOM BELONGS UPSTREAM, IN THE LEVEL LAW — not in a global trim. The
+		// firmware's own declared per-voice ceiling is 0xFF (LABEL_026FDD / LABEL_023328
+		// clamp every level to [0, 0xFF]) while a real patch at a normal velocity programs
+		// 0xE5 = 229 (MEASURED, Piano at velocity 100). Real notes therefore sit below the
+		// firmware's maximum BY CONSTRUCTION, and that gap is the hardware's per-voice
+		// margin — but it only exists in the render because the derived level law refers
+		// gain to 255 (see eg_level_to_gain). The old fitted law referred it to 231 and
+		// clamped, which threw the margin away by pinning every level >= 231 to full scale;
+		// the unconditional 0.70 trim below then paid a flat 3.1 dB on the whole programme
+		// to buy it back.
+		//
+		// So: no trim. MEASURED on a dense captured passage, 95.6 % of non-silent samples
+		// are below 0.75 x FS and only 0.564 % exceed full scale — a constant 3.1 dB tax on
+		// 100 % of the programme to protect half a percent of it is the wrong trade. What
+		// stays is the soft knee, raised to 0.85: below it the sum passes through exactly
+		// unchanged (which it never did before), above it a tanh saturates smoothly into
+		// (-1,1) with no hard corner and no wrap.
+		//
+		// The knee is CALIBRATED — IC303's own saturation point is undumped — but it is
+		// BOUNDED by the data: it must sit at or above the level a single full-scale voice
+		// reaches (so single notes stay linear) and low enough that the over-scale tail is
+		// compressed rather than clipped.
+		//
+		// NOT done, deliberately: no voice-count normalisation and no auto-gain. There is no
+		// hardware mechanism for either — 64 voices sum into one stereo pair (one PCM69AU),
+		// the 13 global registers are written once at boot, and MAIN VOLUME is analog — and
+		// it would make a single note change loudness depending on what else is sounding.
 		auto softclip = [](int32_t acc) -> float
 		{
-			constexpr float K = 0.75f;                 // linear region: |x| <= K is not saturated
-			constexpr float HEADROOM = 0.70f;      // pre-limiter trim: leaves margin so chords don't slam the rail
-			float x = HEADROOM * float(acc) / 32768.0f;
+			constexpr float K = 0.85f;                 // linear region: |x| <= K is not saturated
+			float x = float(acc) / 32768.0f;
 			float a = std::fabs(x);
 			if (a <= K)
 				return x;

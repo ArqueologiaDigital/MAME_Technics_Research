@@ -1,0 +1,77 @@
+life armed
+START
+t=23.0 live=13 max=13
+t=25.0 live=23 max=23
+t=27.0 live=27 max=27
+t=29.0 live=37 max=37
+t=31.0 live=45 max=45
+t=33.0 live=54 max=54
+t=35.0 live=64 max=64
+t=37.0 live=64 max=64
+t=39.0 live=64 max=64
+STOP
+TOTAL gates=152 frees=64 channels-used=64 peak-simultaneously-live=64 final-live=64
+  ch00 gate=4 free=1 live=true
+  ch01 gate=3 free=1 live=true
+  ch02 gate=3 free=1 live=true
+  ch03 gate=3 free=1 live=true
+  ch04 gate=3 free=1 live=true
+  ch05 gate=3 free=1 live=true
+  ch06 gate=3 free=1 live=true
+  ch07 gate=3 free=1 live=true
+  ch08 gate=3 free=1 live=true
+  ch09 gate=3 free=1 live=true
+  ch10 gate=3 free=1 live=true
+  ch11 gate=3 free=1 live=true
+  ch12 gate=2 free=1 live=true
+  ch13 gate=3 free=1 live=true
+  ch14 gate=3 free=1 live=true
+  ch15 gate=3 free=1 live=true
+  ch16 gate=2 free=1 live=true
+  ch17 gate=3 free=1 live=true
+  ch18 gate=3 free=1 live=true
+  ch19 gate=3 free=1 live=true
+  ch20 gate=2 free=1 live=true
+  ch21 gate=3 free=1 live=true
+  ch22 gate=3 free=1 live=true
+  ch23 gate=3 free=1 live=true
+  ch24 gate=2 free=1 live=true
+  ch25 gate=3 free=1 live=true
+  ch26 gate=3 free=1 live=true
+  ch27 gate=2 free=1 live=true
+  ch28 gate=2 free=1 live=true
+  ch29 gate=2 free=1 live=true
+  ch30 gate=2 free=1 live=true
+  ch31 gate=2 free=1 live=true
+  ch32 gate=2 free=1 live=true
+  ch33 gate=2 free=1 live=true
+  ch34 gate=2 free=1 live=true
+  ch35 gate=2 free=1 live=true
+  ch36 gate=2 free=1 live=true
+  ch37 gate=2 free=1 live=true
+  ch38 gate=2 free=1 live=true
+  ch39 gate=2 free=1 live=true
+  ch40 gate=2 free=1 live=true
+  ch41 gate=2 free=1 live=true
+  ch42 gate=2 free=1 live=true
+  ch43 gate=2 free=1 live=true
+  ch44 gate=2 free=1 live=true
+  ch45 gate=2 free=1 live=true
+  ch46 gate=2 free=1 live=true
+  ch47 gate=2 free=1 live=true
+  ch48 gate=2 free=1 live=true
+  ch49 gate=2 free=1 live=true
+  ch50 gate=2 free=1 live=true
+  ch51 gate=2 free=1 live=true
+  ch52 gate=2 free=1 live=true
+  ch53 gate=2 free=1 live=true
+  ch54 gate=2 free=1 live=true
+  ch55 gate=2 free=1 live=true
+  ch56 gate=2 free=1 live=true
+  ch57 gate=2 free=1 live=true
+  ch58 gate=2 free=1 live=true
+  ch59 gate=2 free=1 live=true
+  ch60 gate=2 free=1 live=true
+  ch61 gate=2 free=1 live=true
+  ch62 gate=2 free=1 live=true
+  ch63 gate=2 free=1 live=true
