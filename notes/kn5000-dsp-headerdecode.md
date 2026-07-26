@@ -235,6 +235,23 @@ so this is a **two-channel (stereo) structure**, not a three-way `DI1/DI2/DI3` s
 three ports, this board uses one stereo pair. `addr8 == 0xFF` at words 3 and 9 is the signed −1
 post-decrement already established for the pointer.
 
+> ⚠ **CONCLUSION UPHELD, REASON FALSIFIED — banner added 2026-07-26**
+> (`analysis/retraction-sweep.md` P6). The sentence *"the chip has three ports, this
+> board uses one stereo pair"* is **wrong about the board**: `dsp-audiopath-wiring.md`
+> §1.1/§2 MEASURED from the service manual that **all three DI and all three DO are
+> wired** (`SDOA/SDOB/SDO1` → `DI1/DI2/DI3`; `DO1/DO2` → `SDIA/SDIB`). And the
+> supporting step is a category error: **`addr8` is a pointer delta**, so it could
+> never have carried a port index — "`addr8 == 0x03` never occurs" says nothing about
+> DI3.
+>
+> **The two-channel conclusion nevertheless SURVIVES**, re-derived by K6 on
+> independent evidence (`dsp-k6-input-stage.md` finding 6): exactly two D-RAM cells are
+> supplied from outside the instruction stream, one PC sweep runs per LRCK period, and
+> the reverb's MEASURED mirrored L/R output tails prove the result is stereo — so the
+> two blocks are the **L and R channels**, and this board's microcode reads **one** of
+> its three wired ports. **Which** port is not decidable from the microcode (the
+> latch→cell map is a chip property); DI1 is an assumption, labelled as one.
+
 ### 4.3 The per-unit send: the class-5 / class-6 twin (**INFERRED**)
 
 ```

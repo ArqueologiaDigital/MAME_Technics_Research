@@ -225,13 +225,32 @@ public:
 	// ---------------------------------------------------------------
 	//  WHERE THE INCOMING SAMPLES LAND (K6, notes/dsp-k6-input-stage.md).
 	//
-	//  FORCED, and the only part of this that is: over the whole frame -- the
-	//  60-word header, the 23-word epilogue AND all 38 body images, 3057 words --
-	//  exactly TWO D-RAM cells are READ AND NEVER WRITTEN, at offsets +2 and +5
-	//  from the data pointer at PC-restart.  A cell a program reads and never
-	//  writes is supplied from outside the instruction stream, and nothing else
-	//  in the machine is.  So those two cells ARE the audio input latches, and
-	//  exactly two samples enter per frame.
+	//  ★ THE LABEL ON THIS PARAGRAPH WAS DOWNGRADED ON 2026-07-26 -- see
+	//  dsp/analysis/retraction-sweep.md, premise P9.  It used to read "FORCED,
+	//  and the only part of this that is".  The argument ran: over the whole
+	//  frame -- the 60-word header, the 23-word epilogue AND all 38 body images,
+	//  3057 words -- exactly TWO D-RAM cells are READ AND NEVER WRITTEN, at
+	//  offsets +2 and +5 from the data pointer at PC-restart; a cell a program
+	//  reads and never writes is supplied from outside the instruction stream;
+	//  so those two cells ARE the audio input latches.
+	//
+	//  THE "NEVER WRITTEN" HALF DOES NOT SURVIVE.  It was measured with the
+	//  bodies given an origin of their own, via the reading that `801.0.NN.821'
+	//  loads the data pointer -- which K3 WITHDREW (0x821 addresses C-RAM,
+	//  FORCED).  With the pointer shared across the CALL boundary,
+	//  dsp/analysis/closure-pointer.md item F MEASURED 79 of 79 unit-0 images
+	//  entering X+0..X+6 and 10 of 79 touching an input latch.
+	//
+	//  WHAT STILL STANDS, and why this code is unchanged: the two cells are read
+	//  at +2 / +5 (MEASURED, and origin-free -- it is a pointer-rule walk of the
+	//  twelve words), the deposit here happens at FRAME START, and the kernel
+	//  reads them in words 4 and 8, before any body runs.  A body that scribbles
+	//  on the window later in the frame cannot corrupt the read that already
+	//  happened, and the next frame re-deposits.  The identification of the two
+	//  cells as the input latches is therefore now INFERRED (STRONG) rather than
+	//  FORCED -- and it is not asserted anywhere: the audit below is a
+	//  COMPARISON against what this device latched off the DI pins, so if the
+	//  identification is wrong the audit says MISMATCHED instead of lying.
 	//
 	//  EDUCATED GUESS, clearly labelled, on top of that: WHICH latch is which.
 	//  The two are read by the kernel's two parallel blocks, one PC sweep happens

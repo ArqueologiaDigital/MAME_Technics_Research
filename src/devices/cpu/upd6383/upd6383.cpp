@@ -78,10 +78,18 @@
           space, i.e. that they are two DIFFERENT spaces
           (notes/kn5000-dsp-cursor-general.md sect. 5.1).  WHICH of C-RAM and
           D-RAM is which is UNKNOWN; this assignment is arbitrary.
-        * `ldptr' loads a single modelled data pointer.  The chip has six
-          pointer registers and the corpus shows four variants of the load
-          (lo12 = 0x820/0x821/0x825/0x827); which variant loads which register
-          is UNKNOWN, and only the 0x821 form is decoded at all.
+        * ★ STALE AS WRITTEN UNTIL 2026-07-26 (retraction-sweep.md, P1); this
+          entry used to say "`ldptr' loads a single modelled data pointer ...
+          and only the 0x821 form is decoded at all".  Both halves are dead.
+          `ldptr' (0x821) loads m_cp, a COEFFICIENT-space pointer -- K3 FORCED
+          that it is neither the D-RAM operand pointer nor the implicit cursor;
+          `ldptr.d' (0x825) loads m_dsc, the delay-DESCRIPTOR pointer (PROVEN BY
+          CONSTRUCTION); `rstcur' resets m_cursor.  The chip has six pointer
+          registers and the corpus shows four variants of the load
+          (lo12 = 0x820/0x821/0x825/0x827).  What is genuinely UNKNOWN now is
+          NARROWER and WORSE: 0x820's register is OPEN, 0x827 was falsified as
+          the D-RAM origin at 0 of 85 streams, and so NOTHING IN THE DECODED SET
+          LOADS m_dp AT ALL -- the operand pointer moves only by post-increment.
         * The terminator word ends the frame here.  That it is the last word of
           91 of 91 programs is MEASURED; that it means "end of frame" rather
           than "return" is NOT.  Stopping is a convenience so a draft core does
@@ -616,10 +624,18 @@ void upd6383_device::trap(u64 word, offs_t pc)
 //  X is the data pointer as the frame starts -- NOT a constant, and deliberately
 //  not treated as one: the register file threads across frames (run_frame()
 //  restarts the PC and only the PC), so the input window moves with it and the
-//  deposit follows.  In steady state the epilogue's `ldptr #$90' at I-RAM 69
-//  and its w79 (-1) leave X = 0x8F, giving 0x91 and 0x94 -- which is the
-//  0x8F..0x97 window notes/dsp-k6-input-stage.md sect. 5 predicts.  Nothing here
-//  depends on that: only the OFFSETS are used, and they are the forced part.
+//  deposit follows.
+//
+//  ★ RETRACTED SENTENCE, kept visible (retraction-sweep.md, P1).  This comment
+//  used to continue: "In steady state the epilogue's `ldptr #$90' at I-RAM 69
+//  and its w79 (-1) leave X = 0x8F, giving 0x91 and 0x94".  THAT IS NO LONGER
+//  TRUE OF THIS CODE.  `ldptr' stopped writing m_dp when K3 withdrew the
+//  0x821 = data-pointer reading, so I-RAM 69 does not place X at all and there
+//  is no such steady state: NOTHING loads m_dp today, and it moves only by
+//  post-increment (which is why the frame-closure residue is +121).
+//  The sentence's own escape clause is what saves the code, and it still holds:
+//  nothing here depends on X -- only the OFFSETS +2 / +5 are used, and those
+//  come from an origin-free pointer-rule walk of the twelve input words.
 
 void upd6383_device::latch_inputs_to_dram()
 {
@@ -1411,11 +1427,13 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// While only the executing words moved the pointer, a non-zero residue mostly
 	// measured OUR COVERAGE.  Now that EVERY word's post-increment is performed,
 	// it measures THE MACHINE: the walk is complete, so a residue that is still
-	// non-zero says the model of the walk is wrong somewhere -- and it is
-	// FORCED that it must be, because the DI latches are at FIXED chip addresses
-	// and the microcode reads them at ptr+2 / ptr+5, so the pointer at PC-restart
-	// cannot be allowed to move from frame to frame.
-	// See dump_frame_report() for what the surviving candidates are.
+	// non-zero says the model of the walk is wrong somewhere -- IF the criterion
+	// holds.  ★ THAT "IF" IS NEW (dsp/analysis/retraction-sweep.md, P10).  This
+	// comment used to read "and it is FORCED that it must be", on the strength of
+	// K6 finding 5, which dsp/analysis/closure-pointer.md item F has since
+	// FALSIFIED: 79 of 79 unit-0 bodies enter the I/O window, not 0 of 38.  The
+	// criterion is now CONSISTENT -- strongly expected, not proved.
+	// See dump_frame_report() for the full retraction and the candidates.
 	//
 	// COUNTED ONLY ON COMPLETE FRAMES.  A frame that hit the slot cap or ran off
 	// the end of I-RAM never finished its program -- at boot, before the host has
@@ -1555,12 +1573,29 @@ void upd6383_device::dump_frame_report() const
 
 	// ---- FRAME CLOSURE -- a criterion that CAN fail, and today does ---------
 	//
-	// THE CRITERION IS FORCED, and by the strongest thing K6 established: the DI
-	// latches are at FIXED addresses in the chip's D-RAM (a hardware property --
-	// the serial receivers write them, no instruction does), and the microcode
-	// reads them at ptr+2 and ptr+5.  For that to work on every LRCK period, the
-	// pointer at PC-RESTART MUST BE THE SAME EVERY FRAME.  So the net
-	// displacement over a frame must be 0 (mod 256), full stop.
+	// ★ RETRACTION, 2026-07-26 (dsp/analysis/retraction-sweep.md, premise P10).
+	// THIS BLOCK USED TO SAY "THE CRITERION IS FORCED".  IT IS NOT, ANY MORE.
+	// The forcing ran: the DI latches are at FIXED addresses in the chip's D-RAM
+	// (the serial receivers write them, no instruction does), the microcode reads
+	// them at ptr+2 / ptr+5, therefore the pointer at PC-restart must be the same
+	// every frame, therefore net displacement == 0 (mod 256).
+	//
+	// The middle step is K6 finding 4, and K6 ITSELF flagged that its step 1 --
+	// finding 5, "0 of 38 body images touch X+0..X+6" -- was "not origin-free: it
+	// uses the standing reading that `801.0.NN.821' loads the data pointer".
+	// K3 WITHDREW EXACTLY THAT READING (0x821 addresses C-RAM, FORCED), and with
+	// the pointer shared across the CALL boundary dsp/analysis/closure-pointer.md
+	// item F MEASURED the opposite: 79 OF 79 unit-0 images enter the window and
+	// 10 of 79 touch an input latch.  "Read and never written" is not a property
+	// of the corpus; it was a property of a withdrawn origin model.
+	//
+	// SO THE LABEL IS NOW **CONSISTENT**, NOT FORCED.  The criterion may still be
+	// true -- closure-pointer.md sect. 4.1 Package B, which is the better bet --
+	// but it is no longer proved, and Package A (the pointer really is shared and
+	// nothing re-establishes it) would make the +121 residue not a defect at all.
+	// NOTHING ABOUT THE MEASUREMENT CHANGES: the number below is the same number,
+	// counted the same way.  What changed is what we are entitled to conclude
+	// from it, which is why only the LABEL is edited here.
 	//
 	// ★ AND IT IS NOT.  Since this pass, EVERY word's post-increment is
 	// performed -- the walk is complete, not a sample of it -- so the residue is
@@ -1582,9 +1617,11 @@ void upd6383_device::dump_frame_report() const
 	//         wrong order, or a body is entered that the real machine skips.
 	//   (P-4) some words are CONDITIONAL -- the part has a COND field (CDJ-500
 	//         block diagram) that nothing in this decode models.
-	logerror("    FRAME CLOSURE (FORCED criterion: the DI latches are at fixed chip\n");
-	logerror("    addresses and are read at ptr+2 / ptr+5, so the pointer at PC-restart\n");
-	logerror("    must be identical every frame => net displacement must be 0 mod 256):\n");
+	logerror("    FRAME CLOSURE (CONSISTENT, no longer FORCED: the criterion rests on K6\n");
+	logerror("    finding 5, which closure-pointer.md item F FALSIFIED -- 79 of 79 bodies\n");
+	logerror("    enter the I/O window.  If the pointer IS re-established per unit the\n");
+	logerror("    criterion holds and this residue is the size of the hole; if it is not,\n");
+	logerror("    the residue is not a defect.  Both readings are open):\n");
 	logerror("        net D-RAM pointer displacement, last frame %+d\n", m_last_dp_delta);
 	logerror("        over every COMPLETE frame (%u of them): min %+d  max %+d  %s\n",
 			u32(m_frames_dp_measured), m_dp_delta_min, m_dp_delta_max,

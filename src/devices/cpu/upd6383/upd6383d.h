@@ -295,7 +295,11 @@ public:
 	//     coefficient) and 8 (the post-sum step) are on-chip datapath classes.
 	//     In classes 1/3/5/6 the addr8 is a bracket code, unit index or table
 	//     selector, NOT a pointer delta (MEASURED, kn5000-dsp-pointer.md), and
-	//     class 1 is where the external-DRAM bracket lives.  Zero corpus words
+	//     class 1 is where the external delay-DRAM family lives (this line said
+	//     "the external-DRAM bracket" until 2026-07-26; the OPEN/CLOSE bracket
+	//     reading is withdrawn -- R1 FORCED that the pair is a READ and a WRITE.
+	//     The GUARD is unaffected: it only ever cared that class 1's addr8 is
+	//     not a pointer delta).  Zero corpus words
 	//     of any other class pass the routing guard anyway, so this costs
 	//     nothing and prevents the category error above.
 	//  2. ROUTING.  Both halves of lo12 must be anchored, and neither the

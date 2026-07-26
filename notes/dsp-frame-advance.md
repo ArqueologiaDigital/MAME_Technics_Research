@@ -17,7 +17,7 @@ Labels used throughout: **MEASURED** / **PROVEN BY CONSTRUCTION** / **FORCED** /
 | **B** | The size of it: over the cold-boot frame the D-RAM pointer's net displacement was **−259** with only the executing words moving it and is **−135** with every word moving it; the coefficient cursor advanced **37** times instead of **73**. A decoded `mac (p),c+` late in the frame was reading a cell ~124 away from the right one and a coefficient ~36 cells early. | **MEASURED** |
 | **C** | Words executing per frame **92 → 199 of 285**. But only **80 execute FULLY** (that number is unchanged): the other 119 have their *addressing* executed and their arithmetic is still unknown, and they count against the frame exactly like a trap. Words that execute **nothing at all**: 193 → **86**. | **MEASURED** |
 | **D** | ★ **NO FRAME COMPLETES, and it was never going to.** 100 % of frames are still discarded. This is the expected outcome and it is stated plainly: 205 of 285 slots are still undecoded, spread over 123 distinct words. The useful product is §4, the ranked blocker list. | **MEASURED** |
-| **E** | ★ **FRAME CLOSURE BECAME A REAL MEASUREMENT AND IMMEDIATELY FAILED.** The criterion is **FORCED**, not assumed. With the walk now complete the residue is **+121 on 1 130 880 of 1 130 880 complete frames**. Under the previous code it was measuring our coverage; now it measures the machine, and it says part of the model is wrong. Candidates enumerated in §3, none chosen. | **FORCED** (the criterion), **MEASURED** (the failure) |
+| **E** | ★ **FRAME CLOSURE BECAME A REAL MEASUREMENT AND IMMEDIATELY FAILED.** ⚠ **The label on the criterion is RETRACTED (2026-07-26, `analysis/retraction-sweep.md` P10): it was written "FORCED, not assumed" and it is CONSISTENT, not forced** — it rested on K6 finding 5, which `analysis/closure-pointer.md` item F falsified (79 of 79 bodies enter the I/O window, not 0 of 38). With the walk now complete the residue is **+121 on 1 130 880 of 1 130 880 complete frames** — **that measurement is untouched**. What is no longer entitled is the inference "therefore part of the model is wrong": true under Package B, moot under Package A (§3.1 banner). Candidates enumerated in §3, none chosen. | ~~FORCED~~ → **CONSISTENT** (the criterion), **MEASURED** (the residue) |
 | **F** | **The ALU is at its proven ceiling.** Every candidate relaxation was measured and priced (§2). None is proven, so none was applied — and the price list is the useful output, because it says which single unknown is worth the most slots. | **MEASURED** |
 | **G** | Two **PREDICT-THEN-CHECK MISSES**, both reported: the "dead source" widening buys **0** words, and the action-`0x07` mode hole — the defect twin of the bit-4 guard — is **not** firing anywhere (303/303 of the executing `L=07` words are mode 2). The guard was added anyway, at zero cost. | **MEASURED** |
 | **H** | Safety holds: **DSPCFG Off is BIT-IDENTICAL to the published pre-change binary** over a capture that can fail (1 033 679 non-zero samples, peak 21 894); On is bit-identical to Off; `-validate` clean, exit 0; the cap, the overrun guard and the wait-word termination all still fire; no hang; mirrors agree 3057/3057; `verify.py` BYTE-MATCH OK. | **MEASURED** |
@@ -140,6 +140,39 @@ because a miss is cheaper to publish than to rediscover:
 ## 3. ★ FRAME CLOSURE — a criterion that is FORCED, and that now fails
 
 ### 3.1 Why the criterion is forced, not assumed
+
+> ⚠⚠ **THIS SUBSECTION'S CONCLUSION IS RETRACTED — banner added 2026-07-26
+> (`kn5000-roms-disasm/dsp/analysis/retraction-sweep.md`, premise P10). THE CRITERION IS
+> NOT FORCED. IT IS CONSISTENT.** The argument below is kept verbatim because it is
+> still the best statement of *why one would expect* closure; only its label is wrong.
+>
+> The load-bearing step is *"K6 **FORCED** that exactly two D-RAM cells in the whole
+> 3057-word machine are read and never written"*. **K6 itself flagged that step as not
+> origin-free** — it used the standing reading that `801.0.NN.821` loads the data pointer
+> — and **K3 withdrew that reading** (`0x821` addresses C-RAM, FORCED).
+> `analysis/closure-pointer.md` item F then re-measured it under the completed
+> shared-pointer walk: **79 of 79 unit-0 images enter the I/O window** and 10 of 79 touch
+> an input latch, against the "0 of 38" this argument relies on.
+>
+> **What that costs, precisely.** Not the measurement — the +121 residue below is
+> unchanged and still MEASURED on 1 130 880 of 1 130 880 complete frames. What is lost is
+> the entitlement to call a non-zero residue a **defect**. `closure-pointer.md` §4.1
+> enumerates two coherent packages and chooses neither:
+>
+> * **Package A** — the pointer really is shared and nothing re-establishes it. Then the
+>   bodies legitimately write into `X+0..X+6`, "externally supplied only" is false, and
+>   **the +121 residue may not be a defect at all.**
+> * **Package B** — the pointer IS re-established per unit by something undecoded. Then
+>   the criterion holds, K6 findings 4/5 survive, and **+121 is exactly the size of the
+>   hole**. Better bet, but it needs a **fourth** mechanism: `0x821` (C-RAM), `0x825`
+>   (delay-descriptor) and `0x822` (unit-1 level) are spoken for and `0x827` is falsified
+>   at 0 of 85.
+>
+> §3.3's candidate list below stays valid under Package B and is simply moot under A.
+> ★ **P-1 additionally died on SITING** (`closure-pointer.md` item B, FORCED): the five
+> `lo12 = 0x820` header words sit *before* the unit-0 call, whose pool has **8 distinct
+> net displacements over 37 images**, so no payload can make `X` algorithm-independent.
+> The admissible site set is **I-RAM 50…78**.
 
 The previous pass introduced the net D-RAM pointer displacement as a convergence
 criterion and justified it by the host's absolute addressing of state — an

@@ -5,6 +5,25 @@ Task: *"which instructions would actually execute"* — the concrete, ordered, p
 instruction list for the audio path, and a decoding roadmap ranked by **what blocks audio**
 rather than by corpus frequency.
 
+> ⚠ **ARCHIVAL TRACE — READ THE ANNOTATIONS, NOT THE LABELS** (banner added
+> 2026-07-26 by the retraction sweep,
+> `kn5000-roms-disasm/dsp/analysis/retraction-sweep.md`).
+> The per-word listings in this file are a **verbatim record of what the
+> disassembler printed on the day**, and several of the labels it printed have
+> since been **withdrawn**. They are deliberately **not** rewritten: the wrong
+> label *is* the evidence, and editing it would destroy the record of the bug.
+> Withdrawn labels you will see below, with what replaced them:
+>
+> | printed here | status | replaced by |
+> |---|---|---|
+> | `envelope / level detector` (`hi12 == 0xC40`) | **FALSIFIED at all 61 sites** | a 13-bit C-format **immediate load** (`analysis/k5-output-stage.md` §2.3) |
+> | `external-DRAM bracket OPEN / CLOSE` (`880.1.60/20`) | **FALSIFIED** | one is a **READ**, the other a **WRITE** (R1, FORCED — `analysis/r1-allpass-motif.md` §5) |
+> | anything implying the D-RAM pointer origin `0x70` / `0x50` | **FALSIFIED** | `0x821` is a **C-RAM** pointer (K3, FORCED); the D-RAM origin is **OPEN** |
+>
+> The **word bytes, the slot order and the counts in this file are unaffected** and
+> remain the measurement they always were.
+
+
 Reproduce:
 
 ```

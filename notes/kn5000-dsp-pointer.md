@@ -26,6 +26,42 @@ python3 tools/kn5000_dsp_pointer.py \
 
 ---
 
+> ⚠⚠ **RETRACTION BANNER — added 2026-07-26 by the retraction sweep
+> (`kn5000-roms-disasm/dsp/analysis/retraction-sweep.md`, premises P1 / P13).**
+> **HEADLINE 2 OF THIS NOTE IS WITHDRAWN, AND HEADLINE 3 FALLS WITH IT.** Nothing
+> below has been deleted — the reasoning is kept intact and readable, because the
+> *method* of headline 1 was sound and it is only the *assignment* that died.
+>
+> * **Headline 2 — "unit 0 origin `0x70`, unit 1 origin `0x50`, via the `0x821`
+>   register" — is FALSIFIED.** **K3 FORCED that `lo12 = 0x821` addresses the
+>   COEFFICIENT space** (`dsp/analysis/k3-pointers.md` §4): its three in-program
+>   payloads `0x70` / `0x50` / `0x90` are three of the four structural bases of the
+>   host's own C-RAM map, P ≈ 4e-6. The host-map argument this note used was **right
+>   about the space and wrong about the job**. The runner-up `0x827` inherited the
+>   slot for a few hours and was then **falsified at 0 of 85 streams**
+>   (`isa-adjudication.md` §5.1). **The D-RAM operand pointer's origin is OPEN, and
+>   NOTHING IN THE DECODED SET LOADS IT.**
+> * **Headline 3 — "the static searches had to fail because the pointer is *reloaded*
+>   every frame" — loses its explanation.** With no pointer load, the `-hi12.md` §5.1
+>   negative result (net deltas `−87 … +1149`, zero in 0 of 38) is **unexplained
+>   again**. It is not a historical curiosity: it is **the same defect** the live core
+>   now measures as the **frame-closure residue of +121 on 1 130 880 of 1 130 880
+>   complete frames** (`dsp-frame-advance.md` §3, `dsp/analysis/closure-pointer.md`).
+>   This note declared that problem solved; it is not, and the failure to propagate
+>   that is precisely what the sweep was built to find.
+> * **What SURVIVES, and it is the valuable part:** headline 1's *structural*
+>   discovery — the pointer-family loads live in the **common header at I-RAM
+>   42–44 / 50–52**, 83 words that every static search had excluded by construction —
+>   is **MEASURED three ways and untouched**. So is headline 4's dispatch-by-unit-index
+>   control-flow model, and so is the falsification of "bit 10 = END OF PROGRAM".
+>   What changed is only **which register each of those loads writes**.
+> * **Consequence for a future pass:** `closure-pointer.md` §4.1 enumerates the two
+>   coherent packages (A: the pointer really is shared and nothing re-establishes it;
+>   B: something we do not decode re-establishes it per unit). **Neither is chosen.**
+>   Package B needs a **fourth** mechanism, because `0x821` (C-RAM), `0x825`
+>   (delay-descriptor) and `0x822` (unit-1 output level) are all spoken for and
+>   `0x827` is falsified.
+
 ## Headline
 
 1. **★★★ THE ORIGIN IS IN THE INSTRUCTION STREAM AFTER ALL — 83 WORDS EARLIER THAN ANYBODY

@@ -65,16 +65,35 @@ Archived cold-boot capture: `notes/data/kn5000_dsp1_upload_coldboot.txt`.
   that bit 14 times in 60 words, so "bit 10 = end of PROGRAM" is falsified as a bit meaning and
   "end of segment / return" is what survives (`-pointer.md` §5).
 * Corpus: **91 valid programs**, 38 distinct images (79/88/89/90/91 malformed).
-* **Data-pointer ORIGIN: unit 0 = `0x70`, unit 1 = `0x50`** (`kn5000-dsp-pointer.md`), loaded by
-  the common header at I-RAM 42/50 immediately before each unit's terminator. The pointer does
-  **not** return over a program pass — it is **reloaded every frame**.
-* Roles: pointer-load `801.0.NN.821` (**proven by construction**), NOP `000.2.00.000` (**proven**),
-  bit 23 = multiplier, `880.1.60/20.*` = external-DRAM bracket (MCC +0.944), `104.2.00.000` =
-  all-pass marker (MCC +0.881), `hi12=0x082` = LFO read, `hi12=0xC40` = envelope detector,
+* ⚠ **RETRACTED — was: "Data-pointer ORIGIN: unit 0 = `0x70`, unit 1 = `0x50`, loaded by the common
+  header at I-RAM 42/50 … the pointer does not return over a program pass, it is reloaded every
+  frame."** **K3 FORCED that `lo12 = 0x821` addresses the COEFFICIENT space**, so it is neither the
+  D-RAM operand pointer nor the cursor (`dsp/analysis/k3-pointers.md` §4); the runner-up `0x827` was
+  then **falsified at 0 of 85 streams** (`isa-adjudication.md` §5.1). **NOTHING IN THE DECODED SET
+  LOADS THE D-RAM POINTER.** The "does not return" problem this bullet declared solved is therefore
+  **re-opened, and it is exactly the +121 frame-closure residue** measured on 1 130 880 of
+  1 130 880 complete frames (`dsp-frame-advance.md` §3, `analysis/closure-pointer.md`). The origin
+  is **OPEN**; the reload SITE is localised to I-RAM 50…78. See `analysis/retraction-sweep.md` P1/P13.
+* Roles: pointer-load `801.0.NN.821` (**proven by construction** — as a pointer-load *form*; its
+  TARGET is C-RAM, not the data pointer, see above), NOP `000.2.00.000` (**proven**),
+  `104.2.00.000` = all-pass marker (MCC +0.881), `hi12=0x082` = LFO read,
   `lo12 ∈ {647,687}` = biquad non-multiply steps, P-consumer/non-consumer split.
+  ⚠ **Three entries were REMOVED from this list on 2026-07-26, all falsified** (kept visible here
+  rather than deleted): **"bit 23 = multiplier"** — it is the **CURSOR-FETCH** enable, 18 of the
+  phaser's 20 all-pass sections fetch no coefficient and still need gains (`-axes.md` §2.2);
+  **"`880.1.60/20.*` = external-DRAM bracket (MCC +0.944)"** — R1 **FORCED** that one is a **READ**
+  and the other a **WRITE**, the opposite assignment having zero survivors in all three machine
+  models (`analysis/r1-allpass-motif.md` §5); **"`hi12=0xC40` = envelope detector"** — wrong on
+  **all 61 sites**, the family is a 13-bit **immediate load** (`analysis/k5-output-stage.md` §2.3).
 * PARAMETRIC EQ = 5 bands × 2 channels (confirmed three ways; an earlier "4 bands" was retracted).
 * **Coefficient cursor**: implicit, +1 per class-A word, reset by `801.0.00.021`; biquad block
-  `+0=b1 +1=b0 +2=b2 +3=−a1/a0 +4=−a2/a0 +5=make-up gain`; unit 1's bank base is `+0x80`.
+  `+0=b1 +1=b0 +2=b2 +3=−a1/a0 +4=−a2/a0 +5=make-up gain`.
+  ⚠ **RETRACTED — was: "unit 1's bank base is `+0x80`."** K4 **falsified** the C-RAM halving:
+  the 60-cell resident table at `0x50..0x8B` **straddles `0x80`**, unit 1's bank starts at **`0x90`**
+  (the first 16-aligned cell after it) and it is a **software** allocation. The real `+0x80` lives
+  in the **class-1 register file**, a different space (`analysis/k4-cursor.md` §1, §4). Also: the
+  cursor's reset TARGET is a per-unit **base register** that nothing in the instruction stream
+  loads — modelling it as 0 is a labelled placeholder, not a decode.
 * **All 38 images are mapped** (`kn5000-dsp-effect-map.md`), 25 high / 13 medium confidence.
 * **The 3-word TABLE-LOOKUP idiom** `xxx.0.00.C63 | 000.6.TT.4CD/407 | 012.4.01.1CE` accounts for
   every class-4 and class-6 word (53/53/53) and occurs in exactly the 25 images with an LFO or a

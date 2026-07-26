@@ -26,8 +26,8 @@ be synced into that tree later.
 | 1 | The twelve words match the canned Sub-CPU blob at `0x01E496` **byte for byte, 12/12**, and the record decodes exactly as K5's bytecode rule predicts (`op 3, len 303, cmd 0x01, I-RAM 0x0000, 60 words`). | **PROVEN BY CONSTRUCTION** |
 | 2 | **The block split is 0..6 / 7..11, not 0..5 / 6..11.** Three independent lines agree. The brief's proposed 6+6 split is **FALSIFIED**. | **MEASURED** |
 | 3 | The data-pointer walk of the twelve words is fully determined by the established class-2/A rule; it touches exactly **seven cells, X+0 .. X+6**, where `X` is the pointer at I-RAM 0. | **FORCED** |
-| 4 | Over the *whole frame* (kernel + epilogue + all 38 body images) exactly **two** cells are READ and NEVER WRITTEN: **X+2 and X+5**. No word can have written them before they are read, and no `880` DRAM bracket is open across them. They are the only externally-supplied operands in the machine ⇒ **X+2 and X+5 are the two audio input latches. Exactly two samples enter the chip per frame — one per block.** | **MEASURED + FORCED** |
-| 5 | Those two + the whole I/O window X+0..X+6 are touched by **0 of the 38 body images** (0 of 2974 body words). The input cells are private to the kernel. | **MEASURED (38/38)** |
+| 4 | ⚠ **DOWNGRADED — see the banner below §0.** Over the *whole frame* (kernel + epilogue + all 38 body images) exactly **two** cells are READ and NEVER WRITTEN: **X+2 and X+5**. No word can have written them before they are read, and no `880` DRAM bracket is open across them. They are the only externally-supplied operands in the machine ⇒ **X+2 and X+5 are the two audio input latches. Exactly two samples enter the chip per frame — one per block.** | ~~MEASURED + FORCED~~ → **INFERRED (STRONG)**; the "never written" half rests on finding 5 |
+| 5 | ⚠ **FALSIFIED — see the banner below §0.** ~~Those two + the whole I/O window X+0..X+6 are touched by **0 of the 38 body images** (0 of 2974 body words). The input cells are private to the kernel.~~ Under the completed shared-pointer walk it is **79 of 79**. | ~~MEASURED (38/38)~~ → **FALSIFIED** (`analysis/closure-pointer.md` item F) |
 | 6 | **Two CHANNELS (L and R), not two ports.** One PC sweep per LRCK period ⇒ one pass must produce a stereo result; the reverb's MEASURED mirrored L/R output tails prove the result *is* stereo; only two samples enter ⇒ they are L and R. The board reads **one** of its three wired DI ports. §4.2 of `kn5000-dsp-headerdecode.md` reached the same conclusion **from a premise that is now false** ("this board uses one stereo pair") — the conclusion survives, its reason does not. | **INFERRED (strong)** |
 | 7 | **DESTINATION, over-determined 37×:** the input stage does *not* hand cells to the bodies. It hands the **accumulator** to the header's mix block, which deposits the per-unit send with `w45` (unit 0) / `w53` (unit 1) at exactly **the cell the body reads first**. `w45`'s cell *is* the unit-0 entry pointer (FORCED: `addr8 = 0`, and w46..w49 do not move the pointer), and **38 of 38 body images make offset +0 their first D-RAM access; 34 of 38 READ it**. | **FORCED + MEASURED** |
 | 8 | The unit-1 (reverb) send has a **2-cell discrepancy**: `w55`/`w57` advance the pointer by +1 each between `w53`'s store and the call. Three resolutions are enumerated; none is chosen. | **OPEN** |
@@ -35,6 +35,45 @@ be synced into that tree later.
 | 10 | **X+3 is written (`iw3`) and never read anywhere in the frame.** Either a hardware register (a DO/side-chain latch) or a dead store. | **OPEN** |
 | 11 | By-product, and it matters for K3: **the host window's `801.0.NN.821` and the in-I-RAM `801.0.NN.821` cannot target the same space.** If the I-RAM form aimed at C-RAM the chorus's MEASURED bank base 0x00 would be impossible; if the host form aimed at D-RAM the reverb's coefficient block at 0x90..0xB4 would land on top of this input window. | **MEASURED (both directions)** |
 | 12 | By-product: the cold-boot capture's 20-value stream at C-RAM 0x00 is the **CHORUS body's** bank, not the header's — confirmed by `C-RAM[0x01] = 0x7FFFFF` matching the chorus's 2nd class-A word, the LFO wrap constant (29/29 elsewhere), and `C-RAM[0x00] = 0x000072` being an LFO rate (0.6 Hz). The header's own 23-slot bank is **not written anywhere in the cold-boot capture**, so **the four input-stage coefficients are UNKNOWN values**. | **MEASURED** |
+
+> ⚠⚠ **RETRACTION BANNER — added 2026-07-26 by the retraction sweep
+> (`kn5000-roms-disasm/dsp/analysis/retraction-sweep.md`, premise P9). FINDING 5 IS
+> FALSIFIED AND FINDING 4 IS DOWNGRADED.** Nothing is deleted; this note called its own
+> soft step, and the sweep is only propagating what the note itself warned about.
+>
+> **What this note flagged, in §4.1 step 1:** *"(This one step is not origin-free — it
+> uses the standing reading that `801.0.NN.821` loads the data pointer, which fixes the
+> offset between `X` and the bodies' origins.)"*
+>
+> **K3 WITHDREW EXACTLY THAT READING.** `0x821` addresses the COEFFICIENT space
+> (`dsp/analysis/k3-pointers.md` §4, **FORCED**). With no per-body origin the bodies
+> inherit the kernel's pointer across the CALL boundary, and `closure_pointer.py window`
+> re-ran step 1 under the completed walk:
+>
+> ```
+>    unit-0 body entry = X+6;  kernel I/O window = X+0..X+6;  latches X+2, X+5
+>       images whose walk enters X+0..X+6 : 79 of 79      (was: 0 of 38)
+>       images that touch an INPUT LATCH  : 10 of 79
+>    the cold-boot frame's unit-1 reverb touches BOTH latches
+> ```
+>
+> * **Finding 5 is FALSE as stated.** "The input cells are private to the kernel" was a
+>   property of a withdrawn origin model, not of the corpus.
+> * **Finding 4 keeps its identification but loses its FORCED label.** "Read and never
+>   written over the whole frame" no longer holds, so the two cells are the audio input
+>   latches by **INFERENCE (strong)**, not by forcing. The *offsets* +2 / +5 survive
+>   untouched — finding 3 is an origin-free walk of the twelve words.
+> * **KNOCK-ON, and it is the important one: §5's frame-closure loop, and every
+>   downstream use of "the closure criterion is FORCED", inherit this.** See the banner
+>   on §5, `dsp-frame-advance.md` §3.1, and `analysis/closure-pointer.md` item F.
+> * **Finding 6 is unaffected** — it was already re-derived from independent evidence
+>   after its own premise ("this board uses one stereo pair") was falsified. That is the
+>   propagation this note did right, and the model for the rest.
+> * **The shipped MAME device is SAFE and was checked**: the DI deposit happens at frame
+>   start and the kernel reads the cells in words 4/8 before any body runs, so a body
+>   entering the window cannot corrupt a read that already happened; and the input-stage
+>   audit is a **comparison**, not an assertion, so a wrong cell map reports MISMATCHED
+>   rather than lying. Only the *labels* in `upd6383.h` were corrected.
 
 ---
 
@@ -227,6 +266,15 @@ code, and any model that assumes they are will be wrong. **MEASURED.**
 ---
 
 ## 5. The frame-closure loop — origin-free (**FORCED**)
+
+> ⚠ **PARTIALLY INHERITED FROM FINDING 5 — banner added 2026-07-26.** The *loop* in this
+> section (`iw0` writes X+0, the epilogue's `w80`/`w81` read X+0 in the same frame;
+> `w79` writes X+1 and `iw2` reads it in the NEXT frame) is a pointer-rule walk and is
+> **genuinely origin-free — it SURVIVES**, and `closure-pointer.md` item D confirmed its
+> relation `X = Y − 1` independently from the closure side (**PREDICT-THEN-CHECK: HIT**).
+> What does **not** survive is the use made of this section to label the **frame-closure
+> CRITERION** as FORCED: that route runs through finding 4/5, which are retracted above.
+> The criterion is now **CONSISTENT**, not FORCED. See `analysis/retraction-sweep.md` P10.
 
 The epilogue's last three class-2 words are `w79 = 012.2.FF.1CE` (STORE, −1),
 `w80 = 104.2.00.1CE` (read, +0), `w81 = 102.2.00.000` (read, +0). Let `Y` be the pointer at w79.

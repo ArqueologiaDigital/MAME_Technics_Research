@@ -3,6 +3,25 @@
 **Date:** 2026-07-26. **Commit:** the change set of `notes/dsp-audiopath-wiring.md` §5.2 /
 `notes/dsp-next-steps-roadmap.md` §2.2, implemented.
 
+> ⚠ **ARCHIVAL TRACE — READ THE ANNOTATIONS, NOT THE LABELS** (banner added
+> 2026-07-26 by the retraction sweep,
+> `kn5000-roms-disasm/dsp/analysis/retraction-sweep.md`).
+> The per-word listings in this file are a **verbatim record of what the
+> disassembler printed on the day**, and several of the labels it printed have
+> since been **withdrawn**. They are deliberately **not** rewritten: the wrong
+> label *is* the evidence, and editing it would destroy the record of the bug.
+> Withdrawn labels you will see below, with what replaced them:
+>
+> | printed here | status | replaced by |
+> |---|---|---|
+> | `envelope / level detector` (`hi12 == 0xC40`) | **FALSIFIED at all 61 sites** | a 13-bit C-format **immediate load** (`analysis/k5-output-stage.md` §2.3) |
+> | `external-DRAM bracket OPEN / CLOSE` (`880.1.60/20`) | **FALSIFIED** | one is a **READ**, the other a **WRITE** (R1, FORCED — `analysis/r1-allpass-motif.md` §5) |
+> | anything implying the D-RAM pointer origin `0x70` / `0x50` | **FALSIFIED** | `0x821` is a **C-RAM** pointer (K3, FORCED); the D-RAM origin is **OPEN** |
+>
+> The **word bytes, the slot order and the counts in this file are unaffected** and
+> remain the measurement they always were.
+
+
 This note says **what was built**, **every guess that was made and why**, and **what the option
 actually does today** — which is *nothing audible*, exactly as `dsp-next-steps-roadmap.md` §2.4
 predicted, and the useful output is the trap report at the end.

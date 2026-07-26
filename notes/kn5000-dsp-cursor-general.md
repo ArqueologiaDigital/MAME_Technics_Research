@@ -72,7 +72,19 @@ Sections: `bank hostxref compress reverb ladders state`.
    state base of channel 1**: `0x50 + 20 + 4·band`, where `0x50` is the state
    region the same algorithm's op-0 stream clears and `20 = 5 bands × 4 cells`
    is precisely the "+20 channel delta" the biquad note measured (§5.2).
-8. **★ Unit 1 has a coefficient-space base of `0x80`** (§1.2). Reverb programs
+8. ⚠ **FALSIFIED AS A C-RAM STATEMENT — banner added 2026-07-26**
+   (`dsp/analysis/k4-cursor.md` §1, §4; `analysis/retraction-sweep.md` P3). C-RAM is
+   **not** halved at `0x80`: cells **`0x50..0x8B` hold a 60-word RESIDENT table**,
+   written once by a literal uC-IF blob at Sub CPU ROM `0x01E6BE`, and that table
+   **straddles `0x80`**. Unit 1's bank starts at **`0x90`** — the first 16-aligned
+   cell after it — and it is a **software** allocation (a literal in each parameter
+   script; the poke writer builds the address with an 8-bit add), not a hardware bank
+   bit. **The `+0x80` this headline actually saw is REAL but lives in the class-1
+   REGISTER FILE, a different space**: over the 91 well-formed streams the unit-0
+   register selects are 368 packets / 23 distinct `NN`, all `< 0x80`, and the unit-1
+   ones are 60 packets / 5 distinct `NN`, all `≥ 0x80`, with 5 of 5 a unit-0 number
+   `+ 0x80`. The text below is kept unedited so the error stays traceable.
+   **★ Unit 1 has a coefficient-space base of `0x80`** (§1.2). Reverb programs
    load at I-RAM 200 and their banks at `0x90`; the effect-level opcode `0x63`
    writes `0x06` in every unit-0 image and `0x86` in the reverb. **MEASURED.**
 
