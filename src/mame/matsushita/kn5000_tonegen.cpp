@@ -171,7 +171,9 @@ void kn5000_tonegen_device::device_stop()
 		if (m_dsp1_kept == 0)
 			logerror("IC311 send/return: EVERY frame trapped, so EVERY return was discarded and\n"
 					"    the rendered audio is EXACTLY the dry mix. That is the expected outcome\n"
-					"    today -- see notes/dsp-audiopath-wired.md.\n");
+					"    today -- see notes/dsp-audiopath-wired.md. Whether the SEND is reaching\n"
+					"    the microcode at all is a separate question, and the DSP's own\n"
+					"    INPUT-STAGE AUDIT above answers it (notes/dsp-k6-input-stage-applied.md).\n");
 	}
 }
 

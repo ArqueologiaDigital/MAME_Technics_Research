@@ -10,8 +10,9 @@
 
     See upd6383.cpp for the full explanation.  In one line: the instruction set
     of this chip is not decoded, this device executes the six word forms that
-    are, traps and logs every other word, and produces NO AUDIO.  It exists so
-    that MAME's own tooling can read the microcode corpus, so that the host
+    are, executes the ADDRESSING (only) of the twelve audio-input words that K6
+    decoded, traps and logs every other word, and produces NO AUDIO.  It exists
+    so that MAME's own tooling can read the microcode corpus, so that the host
     uploads land in a real I-RAM, and so that the remaining unknowns become a
     frequency-ranked worklist.
 
@@ -20,10 +21,16 @@
     scheduler time).  Since 2026-07-26 there is also a second, OPT-IN entry
     point -- run_frame(), one LRCK period, called by the tone generator once per
     output sample -- behind a default-OFF driver option.  It still produces no
-    audio: 13.4 % of the words on the floor of every frame are decoded, so every
-    frame traps and every frame's return is discarded by construction.  What it
-    produces instead is the WORKLIST: which word blocks audio first.
+    audio, and it still produces the WORKLIST: which word blocks audio first.
     See notes/dsp-audiopath-wired.md.
+
+    SINCE THE K6 DECODE, A SAMPLE DOES ENTER THE CHIP.  The twelve words of the
+    kernel's audio input stage no longer trap: their ADDRESSING is decoded and
+    executed, so the DI latches are deposited in D-RAM and the microcode really
+    reads them.  Their ALU is NOT decoded, so those words are counted as
+    PARTIAL, not decoded, and a frame containing one is discarded exactly like a
+    frame that trapped -- the audible result is still the dry sound, by
+    construction.  notes/dsp-k6-input-stage-applied.md.
 
 ***************************************************************************/
 
@@ -118,8 +125,11 @@ public:
 	//  designated by LRCKI (pin 18).  No caller may reach past it.
 	//
 	//  RETURNS TRUE only when the frame ran to the frame-wait word with
-	//  ZERO traps, i.e. only when every word of the frame was executed
-	//  as decoded.  On FALSE, do_ has already been zeroed: a
+	//  ZERO traps AND ZERO PARTIALS, i.e. only when every word of the
+	//  frame was executed as decoded.  A K6 input-stage word counts
+	//  against this exactly like a trap: its addressing is right, its
+	//  arithmetic is unknown, so the accumulator it leaves is not the
+	//  chip's.  On FALSE, do_ has already been zeroed: a
 	//  partially-executed frame is not "slightly wrong" audio, it is
 	//  arbitrary, and this project's standing rule is that
 	//  plausible-but-wrong sound is worse than silence.
@@ -130,11 +140,23 @@ public:
 	// the experimental audio path today is to tell us WHICH WORDS BLOCK AUDIO.
 	u64 frames_run() const       { return m_frames_run; }
 	u64 frames_trapped() const   { return m_frames_trapped; }
+	u64 frames_partial() const   { return m_frames_partial; }
 	u64 frames_capped() const    { return m_frames_capped; }
 	u64 frames_overrun() const   { return m_frames_overrun; }
 	u32 last_frame_slots() const { return m_last_slots; }
 	u32 last_frame_traps() const { return m_last_traps; }
 	void dump_frame_report() const ATTR_COLD;
+
+	// THE INPUT-STAGE AUDIT.  A self-checking measurement, not a claim: every
+	// frame, compare the value the microcode's port-read words actually took out
+	// of D-RAM against the sample this device latched off the DI pins.  It CAN
+	// fail -- point the deposit one cell away and `mismatched' becomes every
+	// frame -- which is the whole reason it is here rather than an assertion in
+	// a note.  See dump_frame_report().
+	u64 input_frames() const     { return m_in_frames; }
+	u64 input_matched() const    { return m_in_ok; }
+	u64 input_mismatched() const { return m_in_bad; }
+	u64 input_nonzero() const    { return m_in_nonzero; }
 
 	// Only the request flags are modelled: RQ1-RQ3 are host-written and
 	// testable by the COND field of an instruction, GF1-GF3 are set by
@@ -190,6 +212,33 @@ public:
 	static constexpr u32 UNIT0_ENTRY = 84;
 	static constexpr u32 UNIT1_ENTRY = 200;
 
+	// ---------------------------------------------------------------
+	//  WHERE THE INCOMING SAMPLES LAND (K6, notes/dsp-k6-input-stage.md).
+	//
+	//  FORCED, and the only part of this that is: over the whole frame -- the
+	//  60-word header, the 23-word epilogue AND all 38 body images, 3057 words --
+	//  exactly TWO D-RAM cells are READ AND NEVER WRITTEN, at offsets +2 and +5
+	//  from the data pointer at PC-restart.  A cell a program reads and never
+	//  writes is supplied from outside the instruction stream, and nothing else
+	//  in the machine is.  So those two cells ARE the audio input latches, and
+	//  exactly two samples enter per frame.
+	//
+	//  EDUCATED GUESS, clearly labelled, on top of that: WHICH latch is which.
+	//  The two are read by the kernel's two parallel blocks, one PC sweep happens
+	//  per LRCK period, and the effect return is stereo (the reverb's coefficient
+	//  bank has MEASURED mirrored L/R output tails) -- so the two blocks are the
+	//  LEFT and RIGHT channel chains rather than two ports, and this board's
+	//  microcode reads ONE of its three wired DI ports.  Which port is NOT
+	//  decidable from the microcode: the latch->cell map is a chip property.
+	//  DI1 is assumed.  Today that assumption is unobservable, because the
+	//  driver feeds the same dry stereo pair to all three DI ports (G-3).
+	//  WHAT WOULD SETTLE IT: one address-bus trace against real hardware, or the
+	//  uPD6383 datasheet's D-RAM memory map.
+	// ---------------------------------------------------------------
+	static constexpr int IN_PORT       = 0;   // DI1 -- EDUCATED GUESS
+	static constexpr u8  IN_LATCH_L_OFF = 2;  // FORCED (the cell header w4 reads)
+	static constexpr u8  IN_LATCH_R_OFF = 5;  // FORCED (the cell header w8 reads)
+
 protected:
 	// device_t implementation
 	virtual void device_start() override ATTR_COLD;
@@ -213,6 +262,8 @@ protected:
 private:
 	u64 fetch(offs_t pc);
 	void trap(u64 word, offs_t pc) ATTR_COLD;
+	void latch_inputs_to_dram();
+	void exec_addressing_only(u64 word);
 	void capture_byte(bool cd, u8 data);
 	void capture_flush();
 	void capture_write_files() ATTR_COLD;
@@ -289,13 +340,34 @@ private:
 	u64 m_trap_total;
 	std::map<u64, u64> m_trap_hist;
 
+	// --- THE AUDIO INPUT LATCHES, as they were presented to D-RAM this frame.
+	//     m_in_base is the data pointer at PC-restart (`X' in the K6 note); the
+	//     deposit addresses and values are kept so the audit can compare what
+	//     the microcode read back against what was put there.
+	u8  m_in_base;
+	u8  m_in_addr[2];       // D-RAM cells written this frame (X+2, X+5)
+	s32 m_in_val[2];        // the samples deposited there
+	s32 m_in_seen[2];       // what the port-read words actually took out
+	u8  m_in_seen_mask;     // bit 0 / bit 1: that port read executed this frame
+
 	// --- FRAME DIAGNOSTICS.  Not machine state; deliberately not save_item()ed.
 	u64 m_frames_run;
 	u64 m_frames_trapped;   // frames that hit >= 1 undecoded word (return DISCARDED)
+	u64 m_frames_partial;   // frames that hit >= 1 ADDRESSING-ONLY word (also discarded)
 	u64 m_frames_capped;    // frames that ended on FRAME_SLOT_CAP, not on the wait word
 	u64 m_frames_overrun;   // frames whose PC walked off the end of the 384-word I-RAM
 	u32 m_last_slots;
 	u32 m_last_traps;
+	u32 m_last_partials;
+	u64 m_partial_total;    // addressing-only words executed, all frames
+
+	// --- THE INPUT-STAGE AUDIT (see the accessors above)
+	u64 m_in_frames;        // frames in which BOTH port-read words executed
+	u64 m_in_ok;            // ... and read back exactly what was latched off DI
+	u64 m_in_bad;           // ... and did not
+	u64 m_in_nonzero;       // ... with a non-zero sample on the pins
+	s32 m_in_peak;          // largest |sample| that entered and was consumed
+	u32 m_in_log_left;      // LOG_INPUT budget for non-silent frames
 
 	// Per-word trap accounting is a std::map lookup, and run_frame() is called
 	// at the audio sample rate, so the full accounting runs only for a WINDOW of
@@ -304,6 +376,10 @@ private:
 	// are still COUNTED, just not histogrammed.
 	static constexpr u32 FRAME_DETAIL_FRAMES = 256;
 	u32 m_frame_detail_left;
+
+	// LOG_INPUT budget: the first N frames in which a NON-SILENT sample entered.
+	// Bounded on purpose -- at 48 kHz an unlimited per-frame log is a 200 MB file.
+	static constexpr u32 INPUT_LOG_FRAMES = 8;
 
 	// The most recent REPRESENTATIVE frame's trap sequence, in execution order.
 	// This is the decoding worklist: "which word blocks audio, and in what
@@ -319,6 +395,8 @@ private:
 	u32  m_order_n;
 	u32  m_order_total;     // traps in that frame, including the ones past TRAP_ORDER_MAX
 	u32  m_order_slots;
+	u32  m_order_before;    // slots executed before that frame's FIRST trap
+	u32  m_order_partials;  // addressing-only words in that frame
 	bool m_order_valid;
 };
 

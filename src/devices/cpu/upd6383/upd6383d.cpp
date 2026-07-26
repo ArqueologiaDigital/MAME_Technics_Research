@@ -86,13 +86,21 @@
         whose base (the header's 0x70/0x6C per unit) is still unpinned
         (notes/kn5000-dsp-addressing.md sect. 5, notes/kn5000-dsp-spaces.md).
 
-    WHAT IS EMITTED
+    WHAT IS EMITTED -- THREE STATES, NOT TWO
         * a real mnemonic ONLY for the forms listed in DECODED FORMS below,
           each of which carries its source of evidence in a comment;
+        * `~word 0x0XXXXXXXXX  {addr: ...}' for the twelve K6 AUDIO INPUT STAGE
+          words, whose ADDRESSING is decoded and executed while their ALU is
+          still open (notes/dsp-k6-input-stage.md).  The `{addr:}' group is what
+          the device really performs: the store enable, the cursor fetch and the
+          signed pointer post-increment.  NO MNEMONIC is invented for them --
+          naming an operation nobody has decoded is exactly what this file
+          refuses to do;
         * `?word 0x0XXXXXXXXX' for everything else, always with the field
           breakdown AND the hi12 flag/residue rendering, plus a structural
           annotation where the corpus has one.  The `?' prefix is deliberately
-          greppable: it is the worklist.
+          greppable: it is the worklist, and it stays the worklist -- a `~word'
+          is progress, not an answer.
 
     DECODED FORMS (and where each comes from)
 
@@ -149,6 +157,49 @@
 namespace {
 
 // ---------------------------------------------------------------------------
+//  K6 -- THE AUDIO INPUT STAGE, I-RAM 0..11 (notes/dsp-k6-input-stage.md)
+//
+//  ADDRESSING DECODED, ALU NOT.  Every one of these twelve words has a FORCED
+//  pointer/store/cursor effect and an OPEN arithmetic one, so they get their own
+//  classification rather than being lumped in with either the decoded forms or
+//  the worklist.  The cell names are relative to `X', the data pointer at
+//  PC-restart; the note's pointer walk (sect. 3) is reproduced in the comments
+//  so a reader can check the table without the note in hand.
+//
+//  `iw1' is a C-format word: no class4, no addr8, no memory operand and no
+//  cursor effect, so there is nothing for it to do to the input path.  Its
+//  13-bit immediate 0x0E0 = 7 x 32 names I-RAM 7, the first word of the second
+//  block.  It is listed here as an explicit SAFE NO-OP rather than left to trap,
+//  because a trap would stop the frame's accounting dead in the middle of a
+//  stage whose other eleven words are understood.
+// ---------------------------------------------------------------------------
+struct k6_input_word
+{
+	u64         word;
+	const char *role;
+};
+
+const k6_input_word K6_INPUT_STAGE[] =
+{
+	{ 0x09220120dULL, "K6 input stage, header w0: ST mem[X+0], p+1 -- the epilogue's w80/w81 read X+0 this same frame" },
+	{ 0xc0a0e0000ULL, "K6 input stage, header w1: C-format, imm13 0x0E0 = 7*32 -> I-RAM 7 = block B; SAFE NO-OP (no memory, pointer or cursor effect)" },
+	{ 0x084202680ULL, "K6 input stage, header w2: read mem[X+1], p+2 -- X+1 is the one-frame feedback cell the epilogue's w79 wrote" },
+	{ 0x0122ff1ceULL, "K6 input stage, header w3 (= epilogue w79): ST mem[p], p-1; ALU UNKNOWN" },
+	{ 0x2042021ceULL, "K6 input stage, header w4: *** THE PORT READ, block A *** mem[X+2] is an AUDIO INPUT LATCH (read-never-written by all 3057 words); p+2" },
+	{ 0x202a00448ULL, "K6 input stage, header w5: read mem[X+4], p+0, cursor+1; ALU UNKNOWN" },
+	{ 0x400a00419ULL, "K6 input stage, header w6: END OF BLOCK A (falls through), read mem[X+4], p+0, cursor+1" },
+	{ 0x090a011c8ULL, "K6 input stage, header w7: ST mem[X+4], p+1, cursor+1 -- X+4 is a one-frame state cell (read at w5/w6, written here)" },
+	{ 0x0842011c0ULL, "K6 input stage, header w8: *** THE PORT READ, block B *** mem[X+5] is an AUDIO INPUT LATCH; p+1" },
+	{ 0x0122ff1d5ULL, "K6 input stage, header w9: ST mem[X+6], p-1 -- the only input-stage product the header's mix block consumes" },
+	{ 0x282a01417ULL, "K6 input stage, header w10: read mem[X+5] a SECOND time, p+1, cursor+1; ALU UNKNOWN" },
+	{ 0x400201447ULL, "K6 input stage, header w11: END OF BLOCK B (falls through), read mem[X+6], p+1 -- the pointer leaves at X+7" }
+};
+
+// the two whose D-RAM operand IS a latch (table indices 4 and 8 above)
+constexpr u64 K6_PORT_READ_L = 0x2042021ceULL;      // 204.2.02.1CE, header w4, cell X+2
+constexpr u64 K6_PORT_READ_R = 0x0842011c0ULL;      // 084.2.01.1C0, header w8, cell X+5
+
+// ---------------------------------------------------------------------------
 //  structural annotations -- MEASURED landmarks whose SEMANTICS are unknown
 // ---------------------------------------------------------------------------
 const char *annotate(u64 word)
@@ -157,6 +208,12 @@ const char *annotate(u64 word)
 	const u8  cl = upd6383_disassembler::class4(word);
 	const u8  ad = upd6383_disassembler::addr8(word);
 	const u16 lo = upd6383_disassembler::lo12(word);
+
+	// K6 first: these twelve words have a role the generic annotations below
+	// would only blur (three of them would otherwise print as "END OF BLOCK"
+	// or "C-format immediate" and nothing else).
+	if (const char *k6 = upd6383_disassembler::input_stage_role(word))
+		return k6;
 
 	// END OF PROGRAM is hi12 bit 10 (bit 11 clear), and the halting word STILL
 	// DOES ITS WORK (MEASURED, notes/kn5000-dsp-hi12.md sect. 3): 38 such words
@@ -360,6 +417,43 @@ bool upd6383_disassembler::decoded(u64 word)
 
 
 //-------------------------------------------------
+//  addressing_only / input_stage_role / is_input_latch_read
+//  -- K6: the twelve input-stage words, ADDRESSING decoded, ALU not
+//-------------------------------------------------
+
+const char *upd6383_disassembler::input_stage_role(u64 word)
+{
+	for (const auto &e : K6_INPUT_STAGE)
+		if (e.word == (word & 0xfffffffffULL))
+			return e.role;
+
+	return nullptr;
+}
+
+
+bool upd6383_disassembler::addressing_only(u64 word)
+{
+	// deliberately NOT `decoded() || input_stage_role()': a caller must be able
+	// to tell the three states apart, and a word can never be both (none of the
+	// twelve is one of the six decoded forms -- checked: their lo12 values are
+	// 0x20D/0x000/0x680/0x1CE/0x448/0x419/0x1C8/0x1C0/0x1D5/0x417/0x447, and the
+	// one that shares `mac''s 0x1D5 has hi12 0x012, not 0x202).
+	return input_stage_role(word) != nullptr;
+}
+
+
+bool upd6383_disassembler::is_input_latch_read(u64 word, bool &right)
+{
+	const u64 w = word & 0xfffffffffULL;
+
+	if (w == K6_PORT_READ_L) { right = false; return true; }
+	if (w == K6_PORT_READ_R) { right = true;  return true; }
+
+	return false;
+}
+
+
+//-------------------------------------------------
 //  text - one line for a single word
 //-------------------------------------------------
 
@@ -389,11 +483,29 @@ std::string upd6383_disassembler::text(u64 word)
 	}
 	else
 	{
-		// the greppable form.  Ten nibbles: a 36-bit word prints as ten, not
-		// nine -- an off-by-one-nibble trap that has cost this project time
-		// before (notes/kn5000-dsp-encoding.md sect. 0).
-		util::stream_format(s, "?word   0x%010X   ; %03X.%X.%02X.%03X",
-				word & 0xfffffffffULL, hi, cl, ad, lo);
+		// TWO greppable forms, because there are two kinds of not-decoded:
+		//   `?word'  nothing is known -- the worklist, unchanged;
+		//   `~word'  K6: the ADDRESSING is decoded and executed, the ALU is not.
+		// Ten nibbles: a 36-bit word prints as ten, not nine -- an
+		// off-by-one-nibble trap that has cost this project time before
+		// (notes/kn5000-dsp-encoding.md sect. 0).
+		const bool addr_only = addressing_only(word);
+
+		util::stream_format(s, "%s   0x%010X   ; %03X.%X.%02X.%03X",
+				addr_only ? "~word" : "?word", word & 0xfffffffffULL, hi, cl, ad, lo);
+
+		// What a `~word' actually DOES when the device executes it: the store
+		// enable (hi12 bit 4), the cursor fetch (class4 bit 3) and the signed
+		// pointer post-increment, all MEASURED.  Printing it means the trace
+		// shows the pointer walk instead of leaving a reader to recompute it.
+		if (addr_only)
+		{
+			if ((hi & 0xf00) == 0xc00)
+				s << "  {addr: none -- C-format, SAFE NO-OP}";
+			else
+				util::stream_format(s, "  {addr: %s mem[p]%s, p%+d}",
+						(hi & HI_ST) ? "ST" : "rd", (cl & 8) ? ", cur+" : "", int(dd));
+		}
 
 		// hi12 as FLAGS + RESIDUE.  This is the whole point of the rendering
 		// change: instead of 54 opaque values a reader sees which enables are

@@ -97,6 +97,37 @@ public:
 	// true when this word is one of the (few) forms the corpus has decoded
 	static bool decoded(u64 word);
 
+	// ---------------------------------------------------------------
+	//  K6 -- THE AUDIO INPUT STAGE.  ADDRESSING DECODED, ALU NOT.
+	//
+	//  The twelve words of the shared kernel's input stage (I-RAM 0..11) have a
+	//  FORCED addressing effect and an OPEN arithmetic one
+	//  (notes/dsp-k6-input-stage.md sect. 3, sect. 7).  That is a THIRD state,
+	//  not a second: they are not `decoded()' -- the value they leave in the
+	//  accumulator is unknown -- but their pointer walk, their store enable and
+	//  their cursor fetch are all MEASURED, and executing just that much is what
+	//  lets a sample enter the chip.
+	//
+	//  Matched by EXACT 36-bit WORD VALUE, never by I-RAM position.  MEASURED:
+	//  each of the twelve occurs exactly once in the 60-word header and ZERO
+	//  times in the 2974-word body corpus, with a single exception -- the
+	//  epilogue's w79 is byte-identical to the header's w3, which is the note's
+	//  own frame-closure loop (sect. 5) and is meant to execute in both places.
+	//  So the whitelist cannot reach a word this decode did not cover.
+	// ---------------------------------------------------------------
+	static bool addressing_only(u64 word);
+
+	// non-null for the words above: the role string the trace prints
+	static const char *input_stage_role(u64 word);
+
+	// True for the two words whose D-RAM operand IS an audio input latch --
+	// `iw4' (header w4) and `iw8' (header w8).  There is no "read DI"
+	// OPCODE on this chip: the port-ness is entirely in the ADDRESS, which is
+	// why every opcode-level search for an I/O instruction came up empty
+	// (notes/dsp-k6-input-stage.md sect. 7).  `right' is set false for the
+	// first block's latch and true for the second's.
+	static bool is_input_latch_read(u64 word, bool &right);
+
 	// bit 10 with bit 11 clear = END OF BLOCK.  MEASURED: 38 such words in
 	// 2974 body words, exactly one per image and every one of them the FINAL
 	// word; but FOURTEEN in the 60-word common header and ZERO in the 23-word
