@@ -70,6 +70,88 @@ public:
 	// and the explicit residue of bits nothing accounts for
 	static std::string hi12_text(u16 hi);
 
+	// ---------------------------------------------------------------
+	//  lo12 -- THE ALU FIELD.  Two sub-fields are decoded; the rest is open.
+	//  (notes/dsp-alu-biquad.md, which derives the ARITHMETIC from the
+	//  PARAMETRIC EQ biquad -- the one block whose transfer function is known
+	//  exactly, from the firmware's own bilinear designer.  The FIELD
+	//  BOUNDARIES below are the ones two concurrent, independent analyses
+	//  converged on: notes/dsp-alu-structure.md, from the vocabulary
+	//  statistics, and notes/dsp-alu-crossval.md, from the all-pass, the LFO
+	//  and the input stage.)
+	//
+	//      11 10           6 5 4              0
+	//     +--+--------------+-+----------------+
+	//     |G |     SRC      |M|     ACTION     |
+	//     +--+--------------+-+----------------+
+	//
+	//  bit 5 (M) partitions the field: the eleven lo12 values that carry it
+	//  (0x021 rstcur, 0x820/821/822/825/827, 0x839, 0x864, 0x8BC, 0x921, 0xC63)
+	//  are EXACTLY the pointer-register / cursor / table-lookup family and
+	//  nothing else -- 96 of 3057 corpus words -- and bit 11 (G) is locked to
+	//  it (95 of 96).  MEASURED, and it is the only bit of lo12 that is never
+	//  toggled alone in the 55 Hamming-distance-1 pairs of the vocabulary.
+	// ---------------------------------------------------------------
+	static constexpr u8 lo_src(u64 w) { return u8((w >> 6) & 0x1f); }
+	static constexpr u8 lo_op(u64 w)  { return u8(w & 0x1f); }
+	static constexpr bool lo_ptrmode(u64 w) { return BIT(w, 5); }
+
+	// lo12[10:6] = THE OPERAND-SOURCE SELECT -- which register or bus supplies
+	// the word's operand.  Four of its eighteen observed codes are anchored;
+	// they are the four the biquad section FORCES, and they are exactly the
+	// four things the CDJ-500 block diagram's datapath can put on that bus.
+	// CONSISTENT with the corpus elsewhere: 0x64B -- the reverb diffuser
+	// multiply that R1's constraint solve proved cannot read mem[p] and cannot
+	// read the incoming accumulator -- is LO_SRC_TA, which is the one route R1
+	// could name only as "something else".
+	//
+	// The field is FIVE bits, not two.  A 2-bit reading agrees on every code
+	// used here, but corpus-wide it would merge the delay-RAM operand into
+	// mem[ptr] (0x0B vs 0x07) and the LFO into the accumulator (0x08/0x1C vs
+	// 0x10) -- separations that are 0-of-106 / 87-of-87 clean.
+	// (notes/dsp-alu-structure.md sect. 5.)
+	enum : u8 {
+		LO_SRC_MEM = 0x07,      // mem[ptr]
+		LO_SRC_ACC = 0x10,      // the accumulator
+		LO_SRC_TA  = 0x19,      // temporary register A
+		LO_SRC_TB  = 0x1a       // temporary register B
+	};
+
+	// lo12[4:0] = the ACTION -- what is done with the operand.  Five of its 24
+	// observed codes are pinned by the biquad; the rest are OPEN and this
+	// decoder does not guess them.
+	enum : u8 {
+		LO_OP_ST_BUS = 0x07,    // mem[ptr] <- bus
+		LO_OP_NONE_2 = 0x12,    // no temp/memory side effect
+		LO_OP_CAP_TA = 0x13,    // tempA <- bus
+		LO_OP_CAP_TB = 0x14,    // tempB <- bus
+		LO_OP_NONE_5 = 0x15     // ditto -- how it differs from 0x12 is OPEN
+	};
+
+	// THE EIGHT lo12 VALUES THE BIQUAD PINS, and deliberately no more.
+	//
+	// The SRC and OP fields above are read as fields, but bits[11:8] and bit 4
+	// are still open, so a word that shares an OP nibble while differing in
+	// those bits is NOT the same instruction as far as this decoder knows.
+	// Whitelisting the eight exact values keeps the claim exactly as wide as
+	// the evidence: they are the eight lo12 values of the PARAMETRIC EQ
+	// section, whose arithmetic is verified against the firmware's own biquad
+	// designer.  They are also, by a wide margin, the most common values in the
+	// corpus -- 1146 of 3057 words (37.5 %) -- so the restriction costs little.
+	static constexpr bool alu_decoded(u64 w)
+	{
+		switch (lo12(w))
+		{
+		case 0x1d3: case 0x1d4: case 0x1d5:     // src = mem[ptr]
+		case 0x407: case 0x412: case 0x415:     // src = acc
+		case 0x647:                             // src = tempA
+		case 0x687:                             // src = tempB
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	// bit 23 (== class4 bit 3) is the CURSOR-FETCH enable.  It is NOT a
 	// multiply enable -- that reading was CORRECTED: 18 of the phaser's 20
 	// all-pass sections contain no cursor-fetching word at all and they still

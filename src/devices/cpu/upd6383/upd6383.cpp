@@ -671,6 +671,139 @@ void upd6383_device::exec_addressing_only(u64 word)
 }
 
 
+//**************************************************************************
+//  THE ALU (the lo12 field)
+//**************************************************************************
+
+//  ONE OPERATION, EVERY WORD.  There is no per-word "accumulator op": the
+//  accumulator always takes the pending product, and the two things that used
+//  to look like different accumulator ops are (a) the store on hi12 bit 4 also
+//  CLEARING the accumulator and (b) the product register being consumed by the
+//  add.  Derived from, and verified against, the PARAMETRIC EQ biquad -- the
+//  one block whose transfer function is known independently, because the
+//  firmware designs its coefficients itself (notes/dsp-alu-biquad.md).
+//
+//      L    := bus[ lo12[7:6] ]      00 acc   01 tempA   02 tempB   03 mem[p]
+//      if hi12 bit 4 :  mem[p] <- acc ; acc := 0
+//      acc  += P ; P := 0
+//      lo12[3:0] :  3 -> tempA <- L   4 -> tempB <- L   7 -> mem[p] <- L
+//      if class4 == A :  P := coef[cursor++] * L
+//      if class4 & 7 == 2 :  p += (s8)addr8
+//
+//  ORDER MATTERS AND IS FORCED, not chosen: the bus source is latched BEFORE
+//  the ALU step (same rule R1 forced for the bit-4 store -- "store = after" has
+//  zero survivors, analysis/r1-allpass-motif.md F2), which is what lets
+//  `212.A.FF.407' both write the accumulator to memory and multiply by it.
+
+s32 upd6383_device::acc_to_datum(u64 acc)
+{
+	// the 44-bit accumulator read as a 24-bit datum, with saturation.  The
+	// chip has two shifters and an OVC on the CDJ-500 block diagram; whether it
+	// saturates or wraps is UNKNOWN, and saturation is the choice that cannot
+	// turn a loud sound into a louder one.
+	const s64 v = s64(util::sext(acc, 44)) >> ACC_SHIFT;
+
+	if (v >  0x7fffff) return  0x7fffff;
+	if (v < -0x800000) return -0x800000;
+	return s32(v);
+}
+
+
+void upd6383_device::exec_alu(u64 word)
+{
+	const u16 hi = upd6383_disassembler::hi12(word);
+	const u8  cl = upd6383_disassembler::class4(word);
+	const s8  dd = s8(upd6383_disassembler::addr8(word));
+	const u8  src = upd6383_disassembler::lo_src(word);
+	const u8  op = upd6383_disassembler::lo_op(word);
+
+	// ---- the operand bus, latched before anything else ---------------------
+	// alu_decoded() is an eight-value whitelist, so only the four ANCHORED
+	// source codes can reach this switch; there is deliberately no default
+	// case that guesses at the other fourteen the corpus contains.
+	s32 L = 0;
+	switch (src)
+	{
+	case upd6383_disassembler::LO_SRC_ACC:
+		L = acc_to_datum(m_acc);
+		break;
+	case upd6383_disassembler::LO_SRC_TA:
+		L = s32(util::sext(m_ta, 24));
+		break;
+	case upd6383_disassembler::LO_SRC_TB:
+		// THE ONE-BIT SHIFT.  Without it the biquad is 77 dB wrong, so it is
+		// FORCED; that it sits on the tempB BUS SOURCE rather than on the
+		// tempB CAPTURE is NOT -- the two are indistinguishable inside the
+		// section, and the alternative is listed in the note.  Its origin is
+		// the coefficient format: the firmware writes -a1/a0 at 2^22 and
+		// -a2/a0 at 2^23 (MEASURED, notes/kn5000-dsp-biquad-coeffs.md sect. 4),
+		// so the y[n-2] cell must hold half the scale of the y[n-1] cell, and
+		// the tempB path is the only path between them.
+		L = s32(util::sext(m_tb, 24)) >> 1;
+		break;
+	default:
+		L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+		break;
+	}
+
+	// ---- hi12 bit 4: store the accumulator to mem[ptr] AND CLEAR IT --------
+	// The store is MEASURED and its "before the word's own ALU step" timing is
+	// FORCED (R1 F2).  The CLEAR is new here and is forced by the biquad: the
+	// two words of the section that carry bit 4 are exactly the two at which
+	// the accumulator must restart from zero, and without it the section is
+	// 57 dB wrong.
+	if (hi & upd6383_disassembler::HI_ST)
+	{
+		m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
+		m_acc = 0;
+	}
+
+	// ---- the ALU: the pending product, consumed -----------------------------
+	// *** ONE OF TWO NUMERICALLY IDENTICAL READINGS (notes/dsp-alu-biquad.md
+	// *** sect. 7-A8).  The alternative is that the product register is NOT
+	// *** consumed and hi12[3:1] selects the accumulator op (0 -> acc <- P,
+	// *** 1 -> acc += P).  Over the eight whitelisted lo12 codes the two agree
+	// *** to the LAST BIT on all eight ROM coefficient banks, so the biquad
+	// *** cannot choose between them -- but notes/dsp-alu-crossval.md B1 shows
+	// *** independently (from the LFO's 092/094 minimal pair) that hi12[3:1]
+	// *** DOES select an operation somewhere, so the alternative is the one to
+	// *** expect to win once a second block is decoded.  Nothing downstream
+	// *** changes if it does: swap these three lines.
+	m_acc = (m_acc + m_p) & 0xfffffffffffULL;
+	m_p = 0;
+
+	// ---- the lo12[3:0] side effect ------------------------------------------
+	switch (op)
+	{
+	case upd6383_disassembler::LO_OP_CAP_TA:
+		m_ta = u32(L) & 0xffffff;
+		break;
+	case upd6383_disassembler::LO_OP_CAP_TB:
+		m_tb = u32(L) & 0xffffff;
+		break;
+	case upd6383_disassembler::LO_OP_ST_BUS:
+		m_dram.write_dword(m_dp, u32(L) & 0xffffff);
+		break;
+	default:
+		break;                  // 0x2 and 0x5: no temp / memory side effect
+	}
+
+	// ---- the multiply (class A only -- class 8 is bit 23 but does NOT fetch)
+	if (cl == 0xa)
+	{
+		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+		m_k = coef;
+		m_l = u32(L) & 0xffffff;
+		m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
+		m_cursor++;
+	}
+
+	// ---- the pointer post-increment (classes 2 and A) -----------------------
+	if ((cl & 7) == 2)
+		m_dp = u8(m_dp + dd);
+}
+
+
 void upd6383_device::dump_trap_histogram() const
 {
 	logerror("upd6383: %d undecoded words executed, %d distinct:\n",
@@ -754,7 +887,7 @@ void upd6383_device::execute_run()
 
 		LOGMASKED(LOG_EXEC, "%010X  %s\n", raw, upd6383_disassembler::text(raw));
 
-		if (hi == 0x000 && cl == 2)
+		if (hi == 0x000 && cl == 2 && lo == 0x000)
 		{
 			// nop -- PROVEN BY CONSTRUCTION (sub-CPU writer LABEL_038922 builds
 			// this exact pattern, setting the class4 nibble to 2 explicitly)
@@ -775,43 +908,11 @@ void upd6383_device::execute_run()
 			// starts runs 0,6,12,18,24 | rstcur | 0,6,12,18,24.
 			m_cursor = 0;
 		}
-		else if (hi == 0x202 && (lo == 0x1d5 || lo == 0x1d4))
+		else
 		{
-			// mac / mac.lb -- DETERMINED by the exhaustive constraint search of
-			// notes/kn5000-dsp-semantics.md sect. 3.1 (144 survivors out of
-			// 19,674,720 enumerated assignments all agree), and validated by an
-			// impulse response matching the transfer function of nine real ROM
-			// coefficient banks at max|err| = 0.000e+00.
-			//     acc += P ; P = coef[cursor++] * mem[dp] ; dp += (s8)addr8
-			const u32 operand = m_dram.read_dword(m_dp) & 0xffffff;
-			const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
-
-			if (lo == 0x1d4)
-				m_tb = operand;     // "read into carry latch B" (INFERRED)
-
-			m_acc = (m_acc + m_p) & 0xfffffffffffULL;   // 44-bit ALU
-			m_k = coef;
-			m_l = operand;
-			m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(operand, 24))) & 0xfffffffffffULL;
-			m_cursor++;
-			m_dp = u8(m_dp + dd);
+			exec_alu(word);     // the lo12 field decode -- see exec_alu()
 		}
-		else if (hi == 0x212 && lo == 0x407)
-		{
-			// mulst -- DETERMINED uniquely, with no residual freedom, by all 144
-			// survivors of the same search: the make-up gain multiplies the
-			// ACCUMULATOR and the ACCUMULATOR is written to the state cell.
-			//     mem[dp] <- acc ; P = coef[cursor++] * acc ; dp += (s8)addr8
-			const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
-			const u32 accval = u32(m_acc & 0xffffff);
-
-			m_dram.write_dword(m_dp, accval);
-			m_k = coef;
-			m_l = accval;
-			m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(accval, 24))) & 0xfffffffffffULL;
-			m_cursor++;
-			m_dp = u8(m_dp + dd);
-		}
+		(void)dd;
 	}
 }
 
@@ -1060,7 +1161,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 
 			// The decoded semantics are IDENTICAL to execute_run()'s; see the
 			// per-form evidence there and in upd6383d.cpp.
-			if (hi == 0x000 && cl == 2)
+			if (hi == 0x000 && cl == 2 && lo == 0x000)
 			{
 				// nop
 			}
@@ -1072,33 +1173,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			{
 				m_cursor = 0;
 			}
-			else if (hi == 0x202 && (lo == 0x1d5 || lo == 0x1d4))
+			else
 			{
-				const u32 operand = m_dram.read_dword(m_dp) & 0xffffff;
-				const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
-
-				if (lo == 0x1d4)
-					m_tb = operand;
-
-				m_acc = (m_acc + m_p) & 0xfffffffffffULL;   // 44-bit ALU
-				m_k = coef;
-				m_l = operand;
-				m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(operand, 24))) & 0xfffffffffffULL;
-				m_cursor++;
-				m_dp = u8(m_dp + dd);
+				exec_alu(word);
 			}
-			else if (hi == 0x212 && lo == 0x407)
-			{
-				const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
-				const u32 accval = u32(m_acc & 0xffffff);
-
-				m_dram.write_dword(m_dp, accval);
-				m_k = coef;
-				m_l = accval;
-				m_p = u64(s64(util::sext(coef, 24)) * s64(util::sext(accval, 24))) & 0xfffffffffffULL;
-				m_cursor++;
-				m_dp = u8(m_dp + dd);
-			}
+			(void)dd;
 		}
 
 		// ---- the transfer, AFTER the word has done its datapath work -------

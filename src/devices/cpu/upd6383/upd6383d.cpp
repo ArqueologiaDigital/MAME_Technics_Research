@@ -126,21 +126,47 @@
           (notes/kn5000-dsp-biquad-map.md sect. 2, generalised and confirmed
           bank-size-wise over 26/38 images in notes/kn5000-dsp-cursor-general.md).
 
-      202.A.dd.1D5                    mac     (p)+dd
-      202.A.dd.1D4                    mac.lb  (p)+dd
-      212.A.dd.407                    mulst   (p)+dd
-          DETERMINED by the exhaustive constraint search of
-          notes/kn5000-dsp-semantics.md sect. 3.1: of 19,674,720 enumerated
-          semantic assignments, all 144 survivors agree on these three, and the
-          recovered interpreter reproduces the transfer function of nine real
-          ROM coefficient banks at max|err| = 0.000e+00 (sect. 4).
-              mac    :  acc += P ; P = coef[cursor++] * mem[p] ; p += (s8)dd
-              mac.lb :  as mac, and latch B <- mem[p]
-              mulst  :  mem[p] <- acc ; P = coef[cursor++] * acc ; p += (s8)dd
-          The search determined the words at their observed addr8 values (0x00,
-          0x01, 0xFF).  Generalising over addr8 rests on the separately MEASURED
-          fact that addr8 is a signed pointer post-increment
-          (notes/kn5000-dsp-encoding.md sect. 4, the algo-32/34 minimal pair).
+      THE lo12 ALU -- eight values, one uniform operation
+          notes/dsp-alu-biquad.md.  lo12 is not an opcode either: two of its
+          sub-fields are decoded and the machine needs no per-word accumulator
+          op at all.  Every word does the SAME thing:
+
+              L    := bus[ lo12[7:6] ]     00 acc  01 tempA  02 tempB  03 mem[p]
+              if hi12 bit 4 :  mem[p] <- acc ; acc := 0     (store AND CLEAR)
+              acc  += P ; P := 0                            (P is consumed)
+              lo12[3:0] :  3 -> tempA <- L    4 -> tempB <- L    7 -> mem[p] <- L
+              if class4 == A :  P := coef[cursor++] * L
+              if class4 & 7 == 2 :  p += (s8)addr8
+
+          The eight lo12 values this covers are 1D3/1D4/1D5 (bus = mem[p]),
+          407/412/415 (bus = acc), 647 (bus = tempA) and 687 (bus = tempB).
+          They are 1146 of the 3057 corpus words.
+
+          EVIDENCE.  The PARAMETRIC EQ's nine-word biquad section is the only
+          block in the corpus whose arithmetic is known independently -- the
+          firmware designs its coefficients with its own tan()-based bilinear
+          designer (notes/kn5000-dsp-biquad-coeffs.md, PROVEN BY CONSTRUCTION),
+          so the transfer function it must compute is known exactly.  Running
+          the model above on eleven real ROM coefficient banks reproduces that
+          transfer function to max 0.074 dB / 4.0 deg, and the residual falls
+          with signal level, i.e. it is 24-bit state quantisation and not a
+          structural error.  Removing either of the two non-obvious parts --
+          the accumulator CLEAR that rides on hi12 bit 4, or the one-bit right
+          shift on the tempB path -- costs 57 dB and 77 dB respectively.
+
+          This SUPERSEDES the three hi12-specific forms it grew out of
+          (202.A.dd.1D5 mac, 202.A.dd.1D4 mac.lb, 212.A.dd.407 mulst), which
+          the 19,674,720-point search of notes/kn5000-dsp-semantics.md sect. 3.1
+          determined.  Nothing that search determined is contradicted; what
+          changes is that its per-word "accumulator op" table was an artefact of
+          a hypothesis space that never offered a store-and-clear, and that its
+          144 residual survivors are cut to 1 by the ENCODING (words [2] and [4]
+          of the section are the same 36-bit word except for addr8, so they
+          cannot carry two different latch stores).
+
+          STILL OPEN inside lo12: bits[11:8], bit 4, and the difference between
+          OP codes 0x2 and 0x5 -- the biquad cannot see it, because 0x412 always
+          carries hi12 bit 4 in it and 0x415 never does.
 
     EXPLICITLY NOT DECODED, and why they still get a comment: the terminator,
     the external-DRAM bracket, the all-pass marker, the LFO read, the envelope
@@ -408,9 +434,16 @@ bool upd6383_disassembler::decoded(u64 word)
 	if (hi == 0x000 && cl == 2 && ad == 0x00 && lo == 0x000) return true;  // nop
 	if (hi == 0x801 && cl == 0 && lo == 0x821)               return true;  // ldptr
 	if (hi == 0x801 && cl == 0 && ad == 0x00 && lo == 0x021) return true;  // rstcur
-	if (hi == 0x202 && cl == 0xa && lo == 0x1d5)             return true;  // mac
-	if (hi == 0x202 && cl == 0xa && lo == 0x1d4)             return true;  // mac.lb
-	if (hi == 0x212 && cl == 0xa && lo == 0x407)             return true;  // mulst
+
+	// THE ALU.  The three forms that used to be listed here individually --
+	// 202.A.dd.1D5 mac, 202.A.dd.1D4 mac.lb, 212.A.dd.407 mulst -- are now
+	// special cases of one field decode, and five more lo12 values come with
+	// them (notes/dsp-alu-biquad.md).  The hi12/class4 restriction is dropped
+	// on purpose: hi12 bit 4 (store) and class4 (multiply / pointer) were
+	// already MEASURED as independent controls, so the three old forms were
+	// never really hi12-specific -- they were lo12 forms observed at one hi12.
+	if (alu_decoded(word) && !lo_ptrmode(word))
+		return true;
 
 	return false;
 }
@@ -433,12 +466,15 @@ const char *upd6383_disassembler::input_stage_role(u64 word)
 
 bool upd6383_disassembler::addressing_only(u64 word)
 {
-	// deliberately NOT `decoded() || input_stage_role()': a caller must be able
-	// to tell the three states apart, and a word can never be both (none of the
-	// twelve is one of the six decoded forms -- checked: their lo12 values are
-	// 0x20D/0x000/0x680/0x1CE/0x448/0x419/0x1C8/0x1C0/0x1D5/0x417/0x447, and the
-	// one that shares `mac''s 0x1D5 has hi12 0x012, not 0x202).
-	return input_stage_role(word) != nullptr;
+	// The three states must stay distinguishable, so a word is `addressing
+	// only' ONLY while it is not fully decoded.  That ordering used to be free
+	// -- none of the twelve matched any of the six hi12-specific forms -- but
+	// the lo12 ALU decode is a FIELD decode, and it claims the stage's
+	// `012.A.dd.1D5' (which the old note explicitly excluded because its hi12
+	// is 0x012 and not 0x202).  One of the twelve therefore graduates from
+	// PARTIAL to DECODED, which is exactly the movement this classification
+	// exists to measure.
+	return input_stage_role(word) != nullptr && !decoded(word);
 }
 
 
@@ -468,18 +504,38 @@ std::string upd6383_disassembler::text(u64 word)
 
 	if (decoded(word))
 	{
-		if (hi == 0x000)
+		if (hi == 0x000 && lo == 0x000)
 			s << "nop";
 		else if (hi == 0x801 && lo == 0x821)
 			util::stream_format(s, "ldptr   #$%02x", ad);
-		else if (hi == 0x801)
+		else if (hi == 0x801 && lo == 0x021)
 			s << "rstcur";
-		else if (hi == 0x202 && lo == 0x1d5)
-			util::stream_format(s, "mac     (p)%+d", dd);
-		else if (hi == 0x202)
-			util::stream_format(s, "mac.lb  (p)%+d", dd);
 		else
-			util::stream_format(s, "mulst   (p)%+d", dd);
+		{
+			// THE UNIFORM ALU, rendered as what it is: one operation
+			// (acc += P, P consumed) plus a bus source, a side effect and the
+			// optional multiply/store/pointer controls that live OUTSIDE lo12.
+			//     mnemonic  = mac (class A multiplies) / alu (it does not)
+			//     operand   = the bus source, then the lo12[3:0] side effect
+			static const char *const SRC[4] = { "acc", "ta", "tb", "(p)" };
+			const char *mn = (cl == 0xa) ? "mac" : "alu";
+			std::string suffix;
+			switch (lo_op(word))
+			{
+			case LO_OP_CAP_TA: suffix = ".ta"; break;   // tempA <- bus
+			case LO_OP_CAP_TB: suffix = ".tb"; break;   // tempB <- bus
+			case LO_OP_ST_BUS: suffix = ".st"; break;   // mem[ptr] <- bus
+			default:           suffix = "";    break;
+			}
+			std::string mnem = std::string(mn) + suffix;
+			while (mnem.size() < 7)
+				mnem += ' ';
+			util::stream_format(s, "%s %s", mnem, SRC[lo_src(word)]);
+			if ((cl & 7) == 2)
+				util::stream_format(s, ",(p)%+d", dd);
+			if (hi & HI_ST)
+				s << " ; mem[p]<-acc, acc=0";
+		}
 	}
 	else
 	{

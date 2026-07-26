@@ -264,6 +264,21 @@ private:
 	void trap(u64 word, offs_t pc) ATTR_COLD;
 	void latch_inputs_to_dram();
 	void exec_addressing_only(u64 word);
+	void exec_alu(u64 word);
+
+	// THE FIXED POINT (notes/dsp-alu-biquad.md sect. 5).  What is FORCED is
+	// only the TOTAL: a coefficient is scaled by 2^22 (Q1.22 -- MEASURED from
+	// the firmware's own scale constants) while a datum is Q0.23, so the
+	// product must be brought back down by 22 bits somewhere between the
+	// multiplier and the memory.  WHERE the 22 is split between the multiplier
+	// output and the accumulator read is NOT determined -- every split from 2
+	// to 12 gives numerically identical results on all eleven ROM coefficient
+	// banks.  6 is chosen because it keeps the whole 48-bit product inside the
+	// 44-bit ALU with room for the five-term sum, which is the only physical
+	// consideration that discriminates at all.
+	static constexpr int P_SHIFT   = 6;
+	static constexpr int ACC_SHIFT = 22 - P_SHIFT;
+	static s32 acc_to_datum(u64 acc);
 	void capture_byte(bool cd, u8 data);
 	void capture_flush();
 	void capture_write_files() ATTR_COLD;
