@@ -172,15 +172,18 @@ public:
 	static constexpr int IRAM_WORDS = 384;
 
 	// ---------------------------------------------------------------
-	//  FRAME LANDMARKS.  All three are MEASURED positions/word values in
-	//  the live KN5000 I-RAM, NOT decodes.  See run_frame() in the .cpp
-	//  for the evidence and for what each one is guessing.
+	//  FRAME LANDMARKS.  Mixed provenance -- read the label on each one.
+	//  FRAME_WAIT_WORD and the two entry points are OBSERVED positions/word
+	//  values in the live KN5000 I-RAM (not decodes); FRAME_SLOT_CAP is NOT a
+	//  measurement at all, it is a safety limit this model invents.  See
+	//  run_frame() in the .cpp for the evidence and for what each is guessing.
 	// ---------------------------------------------------------------
-	// C00.A.47.407 -- the last word of the frame, I-RAM 82.
+	// OBSERVED: C00.A.47.407 -- the last word of the frame, I-RAM 82.
 	static constexpr u64 FRAME_WAIT_WORD = 0xc00a47407ULL;
-	// Hard slot cap.  The corpus executes 256..326 slots per frame and I-RAM
-	// holds 384 words, so no honest frame can reach this; it exists so a
-	// mis-decode cannot hang MAME.
+	// INVENTED BY THIS MODEL -- not a property of the chip.  A hard slot cap so
+	// a mis-decode cannot hang MAME.  Its VALUE is bounded by measurements (the
+	// corpus executes 256..326 slots per frame and I-RAM holds 384 words, so no
+	// honest frame can reach it), but the cap itself is ours.
 	static constexpr u32 FRAME_SLOT_CAP = IRAM_WORDS;
 	// Body entry points for the two effect units, OBSERVED in every captured
 	// upload (unit tag 0x0E -> I-RAM 84, 0x0F -> I-RAM 200).

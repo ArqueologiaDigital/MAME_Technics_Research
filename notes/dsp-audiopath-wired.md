@@ -205,10 +205,23 @@ bit-identical to gate OFF over 3,456,003 samples.
 | the cold-boot frame is **60 + 70 + 23 + 133 = 286** slots | `dsp-critical-path-coverage.md` §2 | **285 slots + the frame-wait word = 286** | **HIT, exact** |
 | **30 of 286** words are decoded-and-implementable (10.5 %) | `dsp-critical-path-coverage.md` §4.1 | 285 slots, **255 traps ⇒ 30 decoded** (10.5 %) | **HIT, exact** |
 
-The first is a strong check on **G-5**, the call/return sequencer: a straight-line PC would give
-83 slots, and the *measured* 286 is only reachable if the frame really goes
-`0..49 → 84.. → 50..59 → 200.. → 60..82`. It also confirms which unit-0 body is resident at cold
-boot (**70 words = CHORUS**, not the 49-word NO OPERATION).
+**How much do those two "hits" actually prove?  Less than they look — corrected 2026-07-26 after
+an adversarial re-read.** Both the prediction and the measurement are sums over *the same five
+regions* of *the same captured upload*, so they are largely a **self-consistency check**, not an
+independent test:
+
+* What the run **does** establish: the program resident in the live I-RAM at that moment really is
+  the one the static analysis assumed — the unit-0 body's tagged terminator lands at 84+69, i.e.
+  it is the **70-word CHORUS** and not the 49-word NO OPERATION — and no other word on the
+  executed path accidentally matches the tagged pattern. That is worth having.
+* What it **does not** establish: **G-5's mechanism.** "A straight-line PC would give 83" is true
+  but it is not the competing hypothesis; *any* transfer mechanism that visits those five regions
+  once each — a jump table, host-loaded entry registers, a different stack discipline — yields the
+  same 286. The measurement cannot discriminate between them, so it must not be quoted as
+  evidence that the call/return model is right.
+
+It also confirms which unit-0 body is resident at cold boot (**70 words = CHORUS**, not the
+49-word NO OPERATION).
 
 Also visible in the worklist: **I-RAM 42 is absent from it**. That is `801.0.70.821` = `ldptr #$70`
 — one of the three decoded words on the kernel path — so the decoded subset really is executing.
@@ -368,8 +381,9 @@ None of them is a measurement and none may be quoted as one.
   the instruction set.
 * **What changes if it is wrong:** the **PC order within the frame**, hence which words appear in
   the trap report and in what order. It cannot change the audio, because every frame is discarded.
-  Note §6.2: the measured 286-slot frame is a non-trivial *check* on this guess, not a restatement
-  of it.
+  **It is NOT confirmed by the 286-slot measurement** — see §6.2: that number is a sum over the
+  same five regions the guess assumes, and every rival transfer mechanism produces it too. G-5
+  remains wholly unconfirmed.
 
 ### And one modelling choice that is not on the list, but should be visible
 
@@ -393,3 +407,48 @@ That is a gap, not a decode.
 What it *does* do is make every future decode **testable the moment it lands**: decode one word,
 turn the option on, and the report says whether the frame still traps and where. That is the whole
 point of doing the plumbing first.
+
+---
+
+## 9. INDEPENDENT ADVERSARIAL RE-VERIFICATION (2026-07-26, second agent)
+
+Everything below was re-measured **on the published binary** with a fresh harness, not taken from
+§3. The reference binary (`kn7000_ref`, parent-commit sources, no `run_frame` symbol, no `DSPCFG`
+port) was reused; the published binary is `md5 d4215394…` and matches
+`kn7000_mame_build/kn7000`.
+
+| what | measured | verdict |
+|---|---|---|
+| gate OFF vs **pre-change binary**, 3 programmes | c4 3,456,003 + pitch 5,716,803 + stress 5,788,803 = **14,961,609 samples, 0 differing** | **BIT-IDENTICAL — reproduced** |
+| gate ON vs gate OFF, the **same** 3 programmes | **14,961,609 samples, 0 differing** (§3 had only run `play_c4` ON) | **BIT-IDENTICAL** |
+| gate ON vs pre-change binary (`play_c4`) | 3,456,003 samples, 0 differing | BIT-IDENTICAL |
+| `-validate kn5000` | exit 0, **zero output** | clean |
+| boots to the play screen | `PMEM: 1-` / `16 Beat 1` / ♩=120 / Piano · Bigband Brass · Modern E.P.1 | yes |
+| held C4, release | peak rms 2536.0, 380.7 at release (−16.5 dB), floor 0.0; release 256→18→0, **0** non-monotone steps | matches §3.1 exactly |
+| chromatic / octave / chord | **12/12** ascending, \|err\| max **5.1** mean **4.1** cents; C4 262.39 / C5 524.05 → **1.9972**; triad 3/3, weakest-in/strongest-off **5.3×**, 0 clipped | pass (different estimator to §3.1, same conclusion) |
+| 42 rapid notes + a fresh one | **42/42**, fresh-note peak rms 2309 | pass |
+| **ON from the FIRST sample** (seeded `cfg`, not toggled at t=1) **plus 16 soft resets mid-run** | **1,152,001 frames sent = 24.00 s × 48 kHz exactly**, 0 usable, 914,880 wait-word + 210,241 cap + 26,880 overrun = 1,152,001; audio bit-identical to the same run with the gate off; exit 0 | **no hang, no crash, no leak** |
+| the 384-slot cap really fires | 162,240 frames (toggled) / **210,241** (ON from boot) | yes |
+| log volume is bounded | ON adds a **constant ≈58 KB** over OFF whether the run is 24 s or 40 s (198,655 B for both a 24 s and a 40 s capture); 169 first-sighting lines, one per distinct word | rate-limiting works |
+| per-word histogram cost control works | **1,911,552** of **300,086,415** traps were histogrammed = **0.64 %** | the 256-frame window is real |
+| cost | 2 instances in parallel, same load: OFF 57.05 / 56.85 %, ON 50.78 / 50.66 %; ON-from-boot 47.91 % vs 53.58 % → **≈11 % relative**, only when On | acceptable |
+
+**Structural safety, re-derived from the source rather than from the runs:**
+
+* `run_frame()` has **exactly one `return`** (upd6383.cpp:1016) and the zeroing loop above it runs
+  on every path, so `do_` is never left uninitialised or stale.
+* Every DSP-side pointer is **width-bounded**: `m_cursor`/`m_dp` are `u8`, so C-RAM/D-RAM stay
+  inside their 256-word spaces; `m_pc` is guarded against the 384-word I-RAM; `m_sp` only ever
+  indexes `m_stack[0]`. The external delay DRAM is **not touched at all** by `run_frame()`.
+* **The DSP cannot influence the emulated machine.** `m_dsp1` is only ever *written*
+  (`host_w`, kn5000.cpp:1111); there is no `host_r`, and `porth_read` — the DSP-ready line — is
+  `set_constant(0x01)`. Nothing the core computes can reach the TLCS-900s.
+* **Two labelling defects found and fixed** in this pass: `upd6383.h`'s FRAME LANDMARKS header
+  called all of its constants MEASURED, which mislabelled the invented `FRAME_SLOT_CAP`; and §6.2
+  oversold the 286-slot match as a check on G-5 (see the correction there).
+
+**Nuance worth stating once:** with the gate off the dry mix is bit-identical *and always will
+be*. Once a future decode makes a return non-zero, `softclip(mix + wet)` means the dry component's
+rendering also changes — that is a shared saturating mix, which is what IC303 does, not a bypass
+violation. "Bit-identical with the gate ON" is a property of *today's* all-trapping state, not a
+promise.
