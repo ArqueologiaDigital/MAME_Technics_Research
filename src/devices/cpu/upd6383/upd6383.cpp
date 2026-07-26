@@ -695,7 +695,13 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 			m_in_seen_mask |= right ? 2 : 1;
 		}
 
-		if (hi & upd6383_disassembler::HI_ST)
+		// the SAME bit-7 gate the ALU now applies -- a store that is suppressed
+		// there must be suppressed here, or the twelve whitelisted words would
+		// be the one place in the machine running the falsified model.
+		// MEASURED: none of the twelve carries bit 7, so this changes nothing
+		// today; it closes the hole before it opens.
+		if ((hi & upd6383_disassembler::HI_ST)
+				&& !upd6383_disassembler::st_suppressed(word))
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
 	}
 
@@ -803,54 +809,89 @@ void upd6383_device::exec_alu(u64 word)
 
 	// ---- hi12 bit 4: store the accumulator to mem[ptr] AND CLEAR IT --------
 	// The store is MEASURED and its "before the word's own ALU step" timing is
-	// FORCED (R1 F2).  The CLEAR is new here and is forced by the biquad: the
-	// two words of the section that carry bit 4 are exactly the two at which
-	// the accumulator must restart from zero, and without it the section is
-	// 57 dB wrong.
+	// FORCED (R1 F2, and independently re-forced here: of 2160 enumerated
+	// accumulator models only those that store BEFORE the ALU are bit-identical
+	// to this one on the PARAMETRIC EQ section -- "after" and "store early,
+	// clear late" both change it).  The CLEAR is forced by the biquad: the two
+	// words of the section that carry bit 4 are exactly the two at which the
+	// accumulator must restart from zero, and without it the section is 57 dB
+	// wrong.
 	//
 	// THE TARGET IS mem[ptr] ONLY BECAUSE THE MODE SAYS SO.  R2 falsified the
 	// class-independent reading (analysis/r2-output.md sect. 1, 4.4): bit 4's
 	// destination is MODE-DEPENDENT and mem[ptr] is the MODE-2 target, so a
 	// universal mem[ptr] manufactures four dead stores in the output stage.
 	// alu_decoded() now refuses any bit-4 word outside mode 2, which is what
-	// makes the write below sound.  MEASURED: that guard removes ZERO words from
-	// the executable set (no class-8 corpus word carries bit 4), so this is a
-	// hole closed before it opened rather than a behaviour change.
-	if (hi & upd6383_disassembler::HI_ST)
+	// makes the write below sound.
+	//
+	// ★ AND IT IS NOT UNCONDITIONAL.  hi12 bit 7 SUPPRESSES it -- see
+	// upd6383d.h HI_B7 for the falsification (the LFO cannot run at all if these
+	// words store, 0 of 181440 machines) and for why the three surviving gates
+	// let only two of the four cases through.  alu_decoded() guard 7 keeps the
+	// disputed ones trapping, so the test below is the AGREED part and nothing
+	// more.
+	if ((hi & upd6383_disassembler::HI_ST)
+			&& !upd6383_disassembler::st_suppressed(word))
 	{
 		m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
 		m_acc = 0;
 	}
 
-	// ---- the ALU: hi12[3:1] says what to do with the pending product --------
-	// The product register is NOT consumed here: an MPLY output latch holds
-	// until the next multiply overwrites it, and the accumulator op is what
-	// decides whether this word takes it.  alu_decoded() admits only the three
-	// codes below, and HI_ACC_HOLD only on class 8.
-	switch (upd6383_disassembler::hi_f31(hi))
+	// ---- ★ THE ACCUMULATOR: ONE ADDER, TWO SELECTORS ------------------------
+	// This REPLACES a two-step reading ("do the hi12[3:1] operation, then do the
+	// ACTION") and it is the adjudication of a real contradiction between two
+	// concurrent passes -- dsp/analysis/acc-adder.md.  Both of them are right
+	// about the ANSWER and wrong about the MECHANISM:
+	//
+	//      LFO   082.2.00.1C0   hi12[3:1] = 1, ACTION 0x00, bus = phase
+	//      SD    000.2.48.000   hi12[3:1] = 0, ACTION 0x00, bus = x
+	//
+	// both have to produce `bus + P'.  No ORDER does that -- act-first gives
+	// `P' at hi12[3:1] == 0 and act-last gives `acc + P + bus' at 1 -- but a
+	// single adder whose accumulator-feedback input is OVERRIDDEN by the bus
+	// gives it at both.  So:
+	//
+	//      acc <- SRC_TERM + P_TERM
+	//         SRC_TERM = bus                     if ACTION == 0x00
+	//                  = 0                       if hi12[3:1] == 0  (acc <- P)
+	//                  = acc                     otherwise
+	//         P_TERM   = 0                       if hi12[3:1] == 2  (no P)
+	//                  = P                       otherwise
+	//
+	// ★ ON EVERY WORD WHOSE ACTION IS NOT 0x00 THIS IS THE OLD CODE EXACTLY --
+	// PROVEN BY CONSTRUCTION, and it is why the PARAMETRIC EQ reconstruction is
+	// untouched (measured: bit-identical impulse response) and why the published
+	// build's audio cannot move.  The product register is still NOT consumed:
+	// an MPLY output latch holds until the next multiply overwrites it.
+	//
+	// A CONSEQUENCE, stated because it is a testable prediction and not a
+	// convenience: on an ACTION-0x00 word hi12[3:1] == 0 and == 1 become
+	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
 	{
-	case upd6383_disassembler::HI_ACC_LOAD:
-		m_acc = m_p;
-		break;
-	case upd6383_disassembler::HI_ACC_ADD:
-		m_acc = (m_acc + m_p) & 0xfffffffffffULL;
-		break;
-	default:
-		// HI_ACC_HOLD.  On the class-8 post-sum word the biquad DETERMINES the
-		// accumulator comes out unchanged; whether that is because the code is
-		// a no-op or because it is a wrap/limit that does not fire on an
-		// in-range sum is OPEN (the LFO needs it to be an operation, and both
-		// of its surviving candidates -- a 2^23 AND and a conditional subtract
-		// -- ARE the identity here).  Executing it as "unchanged" is correct
-		// under every candidate, which is why class 8 is the only place
-		// alu_decoded() lets this code through.
-		break;
+		const u16 f31 = upd6383_disassembler::hi_f31(hi);
+		const u64 src_term =
+				(act == upd6383_disassembler::LO_ACT_ACC_BUS)
+					? u64(s64(L) << ACC_SHIFT)
+					: (f31 == upd6383_disassembler::HI_ACC_LOAD ? 0 : m_acc);
+		// HI_ACC_HOLD contributes no product.  On the class-8 post-sum word the
+		// biquad DETERMINES the accumulator comes out unchanged; whether the
+		// code is a no-op or a wrap/limit that does not fire on an in-range sum
+		// is still OPEN (the joint solve leaves "unchanged" and "AND 2^23-1"
+		// both alive), and both ARE the identity there -- which is why class 8
+		// is the only place alu_decoded() lets this code through.
+		const u64 p_term =
+				(f31 == upd6383_disassembler::HI_ACC_HOLD) ? 0 : m_p;
+		m_acc = (src_term + p_term) & 0xfffffffffffULL;
 	}
 
 	// ---- the lo12[4:0] side effect ------------------------------------------
 	switch (act)
 	{
 	case upd6383_disassembler::LO_ACT_CAP_TA:
+	case upd6383_disassembler::LO_ACT_CAP_TA2:
+		// 0x13 and 0x19 are ONE OPERATION IN TWO ENCODINGS -- a second capture
+		// pair beside 0x13/0x14 (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  FORCED
+		// 72/72 by SINGLE DELAY; see upd6383d.h.
 		m_ta = u32(L) & 0xffffff;
 		break;
 	case upd6383_disassembler::LO_ACT_CAP_TB:
@@ -859,6 +900,8 @@ void upd6383_device::exec_alu(u64 word)
 	case upd6383_disassembler::LO_ACT_ST_BUS:
 		m_dram.write_dword(m_dp, u32(L) & 0xffffff);
 		break;
+	case upd6383_disassembler::LO_ACT_ACC_BUS:
+		break;                  // 0x00: its whole effect is the adder, above
 	default:
 		break;                  // 0x12 and 0x15: no temp / memory side effect
 	}

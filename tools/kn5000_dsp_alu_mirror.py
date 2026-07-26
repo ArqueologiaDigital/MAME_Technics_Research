@@ -93,9 +93,20 @@ struct upd6383_disassembler {
 	static constexpr u8  addr8(u64 w)  { return u8((w >> 12) & 0xff); }
 	static constexpr u16 lo12(u64 w)   { return u16(w & 0xfff); }
 	static constexpr u16 HI_ST = 1 << 4;
+	static constexpr u16 HI_B7 = 1 << 7;
 	static constexpr u16 hi_f31(u16 hi) { return (hi >> 1) & 7; }
 	static constexpr u8 lo_src(u64 w) { return u8((w >> 6) & 0x1f); }
 	static constexpr u8 lo_act(u64 w) { return u8(w & 0x1f); }
+	// the predicates exec_alu() calls.  They are COPIES of upd6383d.h's
+	// one-liners, which is a hand copy and therefore the one place this
+	// generator can drift -- so keep them one-liners, and note that the build
+	// FAILS LOUDLY (it did, on `coeff_consumer' and `st_suppressed') when
+	// exec_alu() starts calling something that is not here.
+	static constexpr bool c_format(u64 w) { return (hi12(w) & 0xf00) == 0xc00; }
+	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa && !c_format(w); }
+	static constexpr bool cursor_fetch(u64 w) { return ((w >> 23) & 1) && !c_format(w); }
+	static constexpr bool ptr_postinc(u64 w) { return !c_format(w) && (class4(w) & 7) == 2; }
+	static constexpr bool st_suppressed(u64 w) { return (hi12(w) & HI_B7) && hi_f31(hi12(w)) == 1; }
 @ENUMS@
 };
 

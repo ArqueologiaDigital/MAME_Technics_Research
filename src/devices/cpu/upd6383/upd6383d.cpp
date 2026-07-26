@@ -836,10 +836,17 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			std::string suffix;
 			switch (lo_act(word))
 			{
-			case LO_ACT_CAP_TA: suffix = ".ta"; break;  // tempA <- bus
-			case LO_ACT_CAP_TB: suffix = ".tb"; break;  // tempB <- bus
-			case LO_ACT_ST_BUS: suffix = ".st"; break;  // mem[ptr] <- bus
-			default:            suffix = "";    break;
+			case LO_ACT_CAP_TA:  suffix = ".ta";  break; // tempA <- bus
+			case LO_ACT_CAP_TA2: suffix = ".ta2"; break; // ...the second encoding
+			case LO_ACT_CAP_TB:  suffix = ".tb";  break; // tempB <- bus
+			case LO_ACT_ST_BUS:  suffix = ".st";  break; // mem[ptr] <- bus
+			// ★ the accumulator's own input term comes from the BUS, so the
+			// hi12[3:1] prefix loses its meaning here: `ld.b' and `mac.b' both
+			// compute `bus + P'.  Both are printed, because hi12[3:1] IS a field
+			// and the listing renders fields; the equality is the finding, not a
+			// reason to hide one of them.
+			case LO_ACT_ACC_BUS: suffix = ".b";   break;
+			default:             suffix = "";     break;
 			}
 
 			std::string mnem = std::string(mn) + suffix;
@@ -860,7 +867,8 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			if ((cl & 7) == 2)
 				util::stream_format(s, ",(p)%+d", dd);
 			if (hi & HI_ST)
-				s << " ; mem[p]<-acc, acc=0";
+				s << (st_suppressed(word) ? " ; store SUPPRESSED (bit7)"
+										  : " ; mem[p]<-acc, acc=0");
 
 			// ★ END OF BLOCK SURVIVES THE DECODE.  A decoded word prints no
 			// [annotation], and MEASURED that costs nothing on 381 of the 384
@@ -906,7 +914,7 @@ std::string upd6383_disassembler::text(u64 word, int at)
 				s << "  {addr: none -- C-format, SAFE NO-OP}";
 			else
 				util::stream_format(s, "  {addr: %s mem[p]%s, p%+d}",
-						(hi & HI_ST) ? "ST" : "rd",
+						((hi & HI_ST) && !st_suppressed(word)) ? "ST" : "rd",
 						cursor_fetch(word) ? (coeff_consumer(word) ? ", cur+" : ", cur") : "",
 						int(dd));
 		}

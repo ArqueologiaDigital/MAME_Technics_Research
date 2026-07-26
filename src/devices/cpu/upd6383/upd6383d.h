@@ -201,14 +201,40 @@ public:
 	};
 
 	// lo12[4:0] = the ACTION -- what is done with the operand.  Five of its 24
-	// observed codes are pinned by the biquad; the rest are OPEN and this
-	// decoder does not guess them.
+	// observed codes were pinned by the biquad; TWO MORE are pinned here by a
+	// three-context adjudication, and the rest are OPEN and this decoder does
+	// not guess them.
+	//
+	// ★ LO_ACT_ACC_BUS (0x00) -- THE LARGEST CODE IN THE FIELD (820 corpus
+	// words, 170 distinct) AND THE ONE THAT RECONCILES TWO PASSES THAT
+	// CONTRADICTED EACH OTHER.  dsp/analysis/acc-adder.md:
+	//     * the LFO ramp (29 blocks, 16 programs, 0.2..1000 Hz) DETERMINED
+	//       `acc <- bus' taken BEFORE the hi12[3:1] operation;
+	//     * SINGLE DELAY (algo 9) DETERMINED `acc += bus' taken AFTER it.
+	// Neither pass enumerated the other's ORDER, and no sequential order
+	// satisfies both.  What both contexts actually demand is the SAME
+	// EXPRESSION at the word where their sum forms -- `acc = bus + P' -- once at
+	// hi12[3:1] == 1 and once at hi12[3:1] == 0.  So the ACTION is not a step
+	// before or after the operation: it is a SELECTOR ON THE SAME ADDER, and it
+	// substitutes the operand bus for the accumulator's own feedback term.  See
+	// upd6383.cpp exec_alu().  FORCED: the one reading that survives the LFO,
+	// SINGLE DELAY *and* bit-identity with the PARAMETRIC EQ biquad.
+	//
+	// ★ LO_ACT_CAP_TA2 (0x19) -- a SECOND CAPTURE PAIR beside 0x13/0x14
+	// (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  FORCED 72/72 by SINGLE DELAY once
+	// the order above is fixed, in a model where the input arrives through the
+	// MEASURED pointer walk and every register the block does not set is
+	// randomised.  This settles a reading `dsp-frame-advance.md' sect. 2 called
+	// "INFERRED, and internally contradicted" -- and it resolves AGAINST the
+	// lo12[2:0]-as-destination pattern, which put tempA at [2:0] == 3.
 	enum : u8 {
-		LO_ACT_ST_BUS = 0x07,   // mem[ptr] <- bus
-		LO_ACT_NONE_2 = 0x12,   // no temp/memory side effect
-		LO_ACT_CAP_TA = 0x13,   // tempA <- bus
-		LO_ACT_CAP_TB = 0x14,   // tempB <- bus
-		LO_ACT_NONE_5 = 0x15    // ditto -- how it differs from 0x12 is OPEN
+		LO_ACT_ACC_BUS = 0x00,  // the accumulator's input term comes from the BUS
+		LO_ACT_ST_BUS  = 0x07,  // mem[ptr] <- bus
+		LO_ACT_NONE_2  = 0x12,  // no temp/memory side effect
+		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
+		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
+		LO_ACT_NONE_5  = 0x15,  // ditto -- how it differs from 0x12 is OPEN
+		LO_ACT_CAP_TA2 = 0x19   // tempA <- bus, the second capture pair
 	};
 
 	static constexpr bool lo_src_anchored(u8 s)
@@ -218,8 +244,37 @@ public:
 
 	static constexpr bool lo_act_anchored(u8 a)
 	{
-		return a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2 || a == LO_ACT_CAP_TA
-				|| a == LO_ACT_CAP_TB || a == LO_ACT_NONE_5;
+		return a == LO_ACT_ACC_BUS || a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2
+				|| a == LO_ACT_CAP_TA || a == LO_ACT_CAP_TB || a == LO_ACT_NONE_5
+				|| a == LO_ACT_CAP_TA2;
+	}
+
+	// ---------------------------------------------------------------
+	//  ★ hi12 BIT 7 GATES THE BIT-4 STORE.
+	//
+	//  The biquad validated "bit 4 stores the accumulator and clears it" to
+	//  0.094 dB -- but MEASURED, PARAMETRIC EQ contains ZERO words carrying bit 4
+	//  and bit 7 together, and all 22 of its store words are (bit7 = 0,
+	//  hi12[3:1] = 1).  So the 57 dB never reached the 180 corpus words that have
+	//  bit 4 WITH bit 7, and the LFO -- whose three words are all bit7 = 1 --
+	//  cannot run at all if they store: 0 of 276480 machines
+	//  (dsp/analysis/lfo-ramp.md Part II sect. 8.3), re-confirmed here at 0 of
+	//  181440 in a differently-parameterised space.
+	//
+	//  Three gates survive that falsification, and they AGREE on:
+	//      bit7 == 0                     -> store and clear   (the biquad's case)
+	//      bit7 == 1 && hi12[3:1] == 1   -> NO STORE
+	//      bit7 == 1 && hi12[3:1] == 2   -> store and clear
+	//  They DISAGREE on whether the suppressed case still CLEARS, and on what
+	//  happens at bit7 == 1 with hi12[3:1] outside {1,2} (13 corpus words, nine
+	//  of them the COMPRESSOR's envelope step at hi12[3:1] == 5).  So the device
+	//  executes the agreed part and TRAPS the rest -- see alu_decoded().
+	// ---------------------------------------------------------------
+	static constexpr u16 HI_B7 = 1 << 7;
+
+	static constexpr bool st_suppressed(u64 w)
+	{
+		return (hi12(w) & HI_B7) && hi_f31(hi12(w)) == 1;
 	}
 
 	// ---------------------------------------------------------------
@@ -283,6 +338,21 @@ public:
 	//     MEASURED over the 3057-word corpus -- of the 303 executing `L=07' words,
 	//     303 are mode 2 and 0 are not.  So, exactly like guard 5, this costs ZERO
 	//     words and closes a hole before it opens rather than fixing a live bug.
+	//  7. ★ THE BIT-4 STORE GATE, and it is the first guard here that COSTS
+	//     WORDS.  hi12 bit 7 suppresses the store (see HI_B7 above).  Three gates
+	//     survive the LFO's falsification and they agree on two of the four
+	//     cases; where they DISAGREE the word must keep trapping:
+	//        bit7 && hi12[3:1] == 1  -> the store is suppressed (3 of 3), but
+	//              whether the CLEAR still fires is disputed.  It is UNOBSERVABLE
+	//              exactly when the ACTION is LO_ACT_ACC_BUS, because that
+	//              substitutes the bus for the accumulator's own feedback term
+	//              and the old accumulator cannot reach the result.  So those
+	//              words execute and the other 31 trap.
+	//        bit7 && hi12[3:1] not in {1,2} -> the gates disagree outright.
+	//     MEASURED over the 3057-word corpus: 707 words carry bit 4 -- 527 at
+	//     bit7 = 0 (unchanged), 29 at (bit7, f31) = (1, 2) (unchanged),
+	//     138 at (1, 1) of which 107 carry ACTION 0x00 and execute, and 13 at
+	//     (1, f31 outside {1,2}) which trap.
 	// ---------------------------------------------------------------
 	static constexpr bool alu_decoded(u64 w)
 	{
@@ -301,6 +371,17 @@ public:
 			return false;                       // bit-4 target unproven off mode 2
 		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2)
 			return false;                       // ...and neither is action 07's
+
+		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7))
+		{
+			// guard 7 -- the only case the three surviving gates settle is
+			// hi12[3:1] == 1 with the clear made unobservable, and == 2.
+			const u16 f = hi_f31(hi12(w));
+			if (f == 1 && lo_act(w) != LO_ACT_ACC_BUS)
+				return false;                   // the CLEAR is disputed and visible
+			if (f != 1 && f != 2)
+				return false;                   // the gates disagree outright
+		}
 
 		switch (hi_f31(hi12(w)))
 		{

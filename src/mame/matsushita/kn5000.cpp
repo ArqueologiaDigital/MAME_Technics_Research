@@ -676,11 +676,11 @@ static INPUT_PORTS_START(kn5000)
 	// the resident microprogram cannot be executed. It CANNOT damage the sound: IC311 is
 	// a send/return insert -- the main mix leaves IC303 on SDO0, a bus IC311 is not on
 	// (MEASURED, service manual pp. 34/35) -- and a frame that traps has its whole return
-	// discarded. 199 of the 285 words on the frame path now execute -- but only 80 of
-	// them FULLY: the other 119 have their ADDRESSING executed and their arithmetic
+	// discarded. 199 of the 285 words on the frame path now execute -- but only 108 of
+	// them FULLY: the other 91 have their ADDRESSING executed and their arithmetic
 	// is still unknown, which counts against the frame exactly like a trap. So today
 	// every frame is still discarded and the audio is exactly the dry mix either way.
-	// See notes/dsp-audiopath-wired.md.
+	// See notes/dsp-audiopath-wired.md and notes/dsp-closure-applied.md.
 	PORT_START("DSPCFG")
 	PORT_CONFNAME(0x01, 0x00, "Effects DSP IC311 (EXPERIMENTAL - incomplete ISA)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
