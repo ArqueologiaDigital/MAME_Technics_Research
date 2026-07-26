@@ -232,7 +232,7 @@ private:
 		// KEYBED_TIME, the sub-CPU converts it back to a velocity through its own two
 		// ROM curves); note-off is 0xFF00 | raw (0xFF = the SubCPU's note-off marker).
 		if (on)
-			m_tonegen->push_keybed_event((uint16_t(KEYBED_TIME[vel & 0x7F]) << 8) | (uint16_t(raw) | 0x80));
+			m_tonegen->push_keybed_event((uint16_t(keybed_time(raw, vel)) << 8) | (uint16_t(raw) | 0x80));
 		else
 			m_tonegen->push_keybed_event(0xFF00 | uint16_t(raw));
 	}
@@ -305,18 +305,50 @@ private:
 	// Every velocity-split patch (24 of them) picked the wrong sample layer and every
 	// velocity-scaled level was inverted.
 	//
-	// This table is the inverse: raw = argmin |firmware(raw) - v| at touch mode 6, computed
-	// from the two ROM tables above. Round-trip: 117/127 velocities exact, max error 1.
+	// ...and the key bed is NOT uniform: the firmware applies a per-mode trim to the FIVE
+	// BLACK KEYS. MEASURED (ToneGen_Calc_Pitch, asm L51595-51616): it divides the note by 12
+	// and, when the remainder is 10, 8, 6, 3 or 1 — i.e. A#, G#, F#, D#, C#, since MIDI 36
+	// (the bottom of this 61-key bed) is a C — subtracts TOUCH[mode*3+2] (table 0x01F422,
+	// = 16 at the power-on mode 6) from `y` before the T2 lookup. A black key therefore has
+	// to be struck HARDER for the same velocity, which is exactly what a real key bed does:
+	// the black keys sit higher and travel further.
+	//
+	// So there are TWO inverse tables, not one. Feeding the white-key table for a black key
+	// under-reports by a mean of 13.5 and up to 16 velocity units (recomputed from the ROM
+	// this pass) — every black note came out softer, and darker, than the same white note.
+	//
+	// Both tables are raw = argmin |firmware(raw, keyclass) - v| at touch mode 6, computed
+	// from the ROM tables above. Round-trip: WHITE 117/127 exact, BLACK 109/127 exact, max
+	// error 1 in both. (The previous single table scored 97/127 with a max error of 2, so the
+	// white key bed gets slightly more accurate as well; velocity 100 — the fixed velocity the
+	// PC-keyboard path uses — maps to the same raw 42 in both, so that path is unchanged.)
 	// Index 0 is unused (velocity 0 is a note-off).
 	static constexpr uint8_t KEYBED_TIME[128] = {
-		  0,221,221,216,210,205,202,197,193,188,182,177,171,167,164,160,
-		156,155,152,151,150,147,146,145,143,142,141,139,138,136,136,135,
+		  0,222,222,217,211,206,202,197,194,189,183,178,172,168,165,161,
+		157,156,153,152,151,149,147,146,143,142,141,139,138,136,136,135,
 		134,133,132,131,130,129,128,125,124,123,120,119,118,115,114,113,
 		111,110,109,107,106,104,104,103,102,101,100, 99, 98, 97, 96, 93,
 		 92, 91, 88, 87, 86, 83, 82, 81, 79, 78, 77, 75, 74, 72, 72, 71,
 		 70, 69, 68, 67, 66, 65, 64, 61, 60, 59, 56, 55, 54, 51, 50, 49,
 		 47, 46, 45, 43, 42, 40, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31,
-		 30, 28, 28, 27, 27, 26, 25, 24, 24, 23, 22, 22, 21, 20, 20,  0 };
+		 30, 28, 28, 27, 27, 26, 25, 24, 24, 23, 22, 22, 21, 20, 20,  1 };
+	static constexpr uint8_t KEYBED_TIME_BLACK[128] = {
+		  0,200,200,197,193,185,181,175,170,167,162,158,152,146,141,136,
+		134,133,132,131,130,129,128,125,124,123,120,119,118,115,114,113,
+		111,110,109,107,106,104,104,103,102,101,100, 99, 98, 97, 96, 93,
+		 92, 91, 88, 87, 86, 83, 82, 81, 79, 78, 77, 75, 74, 72, 72, 71,
+		 70, 69, 68, 67, 66, 65, 64, 61, 60, 59, 56, 55, 54, 51, 50, 49,
+		 47, 46, 45, 43, 42, 40, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31,
+		 30, 28, 28, 27, 27, 26, 25, 24, 24, 23, 22, 22, 21, 20, 20, 19,
+		 19, 18, 18, 17, 17, 16, 16, 15, 15, 14, 14, 14, 13, 13,  1,  1 };
+
+	// The key-travel time to send for velocity `vel` on key-bed key `raw` (0 = MIDI 36 = C2).
+	static constexpr uint8_t keybed_time(uint8_t raw, uint8_t vel)
+	{
+		const int pc = (raw + 36) % 12;   // MIDI 36 is a C
+		const bool black = (pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10);
+		return (black ? KEYBED_TIME_BLACK : KEYBED_TIME)[vel & 0x7F];
+	}
 
 	// ~NMI (SNS): on real hardware, the power supply asserts the CPU's NMI pin when
 	// power is removed.  The ROM's NMI handler (NMI_StorePayloadChecksums at 0xEF08D4)
@@ -439,11 +471,13 @@ TIMER_CALLBACK_MEMBER(kn5000_state::keybed_scan)
 			if (pressed && !prev)
 			{
 				// Key pressed: data = (key-travel TIME << 8) | (raw_note | 0x80).
-				// The high byte is a TIME, not a velocity — see KEYBED_TIME.
-				uint16_t data = (uint16_t(KEYBED_TIME[KEYBED_VELOCITY]) << 8) | (raw_note | 0x80);
+				// The high byte is a TIME, not a velocity — see KEYBED_TIME. It is also
+				// key-dependent: the firmware trims the black keys (see keybed_time()).
+				const uint8_t t = keybed_time(uint8_t(raw_note), KEYBED_VELOCITY);
+				uint16_t data = (uint16_t(t) << 8) | (raw_note | 0x80);
 				m_tonegen->push_keybed_event(data);
 				LOGMASKED(LOG_KEYBED, "Keybed: note ON raw=%d MIDI=%d vel=%d time=%d data=0x%04X\n",
-					raw_note, raw_note + 0x24, KEYBED_VELOCITY, KEYBED_TIME[KEYBED_VELOCITY], data);
+					raw_note, raw_note + 0x24, KEYBED_VELOCITY, t, data);
 			}
 			else if (!pressed && prev)
 			{

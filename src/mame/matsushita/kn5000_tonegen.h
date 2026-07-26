@@ -101,12 +101,26 @@ private:
 		int16_t  volume_r;      // Right channel volume (0-32767)
 		uint32_t release_counter; // Samples remaining in release phase (0 = no release)
 		uint32_t hold_counter;  // Samples remaining in hold phase after key-off
-		int16_t  sustain_vol;   // volume last seen while the key was DOWN — a released
-		                        // voice may never exceed it (a release only decays).
-		int      env_level;     // Per-tick amplitude envelope magnitude (0-0xFF) the
-		                        // sub-CPU firmware writes to group0/bank0 (reg_idx 0)
-		                        // every audio tick — the real software envelope. 0xFF =
-		                        // full (default until the firmware modulates it).
+		int16_t  sustain_vol;   // The amplitude this voice was PROGRAMMED with while the key
+		                        // was down (the last +0x800 write whose low byte has bit 7
+		                        // CLEAR — see update_voice_params). The release fade starts
+		                        // from here, because the firmware's own release burst rewrites
+		                        // +0x800 with the ramp's TARGET level *before* it signals the
+		                        // release, and we have no rate engine to walk towards it.
+		bool     finished;      // A one-shot (aperiodic) recording has played to its end. The
+		                        // voice is silent and status_r reports it so, which is what
+		                        // makes the firmware's own voice manager free it (0x7E00).
+		int      env_level;     // Amplitude-envelope magnitude (0-0xFF) from group0/bank0.
+		                        // Present only when bit 8 of that word is set — the firmware's
+		                        // builder LABEL_025589 (v142 asm L18859-18869) computes
+		                        // mag = 0xFF - 4*(p & 0x3F) in bits[7:0] and SETs bit 8 only
+		                        // when the source byte is non-zero, so bit 8 is a
+		                        // "magnitude present" flag, not part of the value.
+		                        // 0xFF = no attenuation (the default, and what a bare
+		                        // 0xF000/0xFE00 command means).
+		double   lp_a;          // One-pole low-pass coefficient for the per-voice TVF driven by
+		                        // +0x100 (see update_timbre). 0.0 = filter bypassed.
+		double   lp_z;          // ... and its state.
 		int      true_note;     // MIDI note recovered from the keybed/MIDI input FIFO at
 		                        // key-on (−1 = unknown → r8-relative fallback). Used to
 		                        // resolve equal-tempered pitch (see update_pitch()).
@@ -141,7 +155,10 @@ private:
 			release_counter = 0;
 			hold_counter = 0;
 			sustain_vol = 0;
+			finished = false;
 			env_level = 0xFF;
+			lp_a = 0.0;
+			lp_z = 0.0;
 			true_note = -1;
 			chord_time = -1e9;
 			pitch_offset = 0.0;
@@ -213,6 +230,9 @@ private:
 	static constexpr int IC307_BANK = 1;              // the one hardware-rooted dump
 
 	void update_voice_params(int ch);
+	// Per-voice TVF (filter / brightness) from +0x100 = regs[4]. See the comment on the
+	// definition for the full firmware derivation.
+	void update_timbre(int ch);
 	void update_pitch(int ch);
 	// +0x400 handling: a voice's log pitch REFERRED TO ITS OWN RECORDING (so it can be
 	// compared across chunks), and the per-key-press resolution of transpose + detune.

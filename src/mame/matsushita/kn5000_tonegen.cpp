@@ -116,6 +116,11 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].volume_r), i);
 		save_item(NAME(m_voice[i].release_counter), i);
 		save_item(NAME(m_voice[i].hold_counter), i);
+		save_item(NAME(m_voice[i].sustain_vol), i);
+		save_item(NAME(m_voice[i].finished), i);
+		save_item(NAME(m_voice[i].env_level), i);
+		save_item(NAME(m_voice[i].lp_a), i);
+		save_item(NAME(m_voice[i].lp_z), i);
 	}
 }
 
@@ -196,12 +201,21 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	LOGMASKED(LOG_REG_W, "tonegen: voice %d reg[%d] (g%d.b%d) = 0x%04X\n", ch, reg_idx, group, bank, data);
 
 	// Voice control register (group 0, bank 0) — carries BOTH the key gate command
-	// AND the per-tick amplitude-envelope magnitude. The sub-CPU firmware's software
-	// envelope (stepper LABEL_026E5B) rewrites this register every audio tick with
-	// 0xF000|mag / 0xFE00|mag, low 9 bits = linear magnitude (0xFF = loudest). The
-	// real note-on command is 0x8100; key-off is 0x7E00. Discriminate by command so
-	// the per-tick envelope writes do NOT retrigger the voice (which was resetting
-	// wave_offset every coarse tick). See notes/kn5000-tonegen-register-semantics.md.
+	// AND an amplitude-envelope magnitude. The real note-on command is 0x8100; key-off
+	// is 0x7E00. Discriminate by command so an envelope write does NOT retrigger the
+	// voice (which was resetting wave_offset). See notes/kn5000-tonegen-register-semantics.md.
+	//
+	// WORD LAYOUT (MEASURED, sub-CPU v142 asm):
+	//   LABEL_025589 (L18859-18869)  A = *(slot+0x17); WA = A & 0x3F; SLL 2,WA;
+	//                                BC = 0x00FF; SUB BC,WA          -> bits[7:0] = magnitude
+	//                                CP (XWA),0 / JR Z / SET 8,BC    -> bit 8 = "magnitude present"
+	//   LABEL_02552A (L18813-18855)  ORs bits 9-11 and 12-14 only    -> bits[15:9] = routing
+	//   LABEL_0255F3 (L18907-18942)  writes a BARE 0xF000 / 0xFE00   -> NO magnitude field
+	// so `mag = 0xFF - 4*(p & 0x3F)` can only ever produce 0x03..0xFF, and bit 8 is set
+	// exactly when there IS a magnitude. The previous code read `min(data & 0x1FF, 0xFF)`,
+	// which (a) turned every bare 0xF000 into env_level 0 = SILENCE — MEASURED: the whole
+	// rhythm section rendered at -81 dB against the keyboard — and (b) clamped every genuine
+	// attenuation (bit 8 set) back up to full, so the envelope was a no-op on that class.
 	if (group == 0 && bank == 0)
 	{
 		if (data == 0x7E00)
@@ -217,21 +231,20 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		}
 		else if (data & 0x8000)
 		{
-			// Per-tick amplitude-envelope magnitude update (0xF000|mag, 0xFE00|mag).
-			// Latch the magnitude; do NOT touch key state or waveform position.
-			// Verified live: after note-on the firmware writes 0xF0FF (mag 0xFF) here
-			// per tick — previously this retriggered the voice (reset wave_offset).
-			m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
+			m_voice[ch].env_level = (data & 0x0100) ? int(data & 0xFF) : 0xFF;
 		}
 	}
 
 	// Key RELEASE detection.
 	//
-	// The sub-CPU never writes a 0x7E00 key-off to group0/bank0 when a held key
-	// is released. Instead it re-programs the voice's hardware envelope generator
-	// with a *release* ramp: a burst of six writes to groups 8/9/A (routine
-	// LABEL_027FD6 in v142 asm L23045). Both note-on setup AND note-off release
-	// program these same EG registers, so a register write alone is ambiguous.
+	// HEURISTIC — kept deliberately, and its limits are known. When a held key is
+	// released the sub-CPU re-programs the voice's envelope generator with a *release*
+	// ramp: a burst of six writes to groups 8/9/A (routine LABEL_027FD6 in v142 asm
+	// L23045, and its twin LABEL_02D436 at L29936). It writes the 0x7E00 key-off only
+	// LATER, and only once its voice manager (LABEL_02219F asm L13273 -> LABEL_02B4A1
+	// L26770) sees the chip report the voice SILENT — which our status_r only does for a
+	// one-shot that has played out. Both note-on setup AND note-off release program the
+	// same EG registers, so a register write alone is ambiguous.
 	// The discriminator: note-ON rewrites the group0/bank0 gate (0x8100) as part
 	// of its burst, so its EG-program writes land only a few microseconds after
 	// process_key_on(); the note-OFF release burst carries no gate and arrives
@@ -250,8 +263,11 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 			process_key_off(ch);
 	}
 
-	// Waveform pointer latch: group 0, bank 2 with bit 15 SET triggers load,
-	// then bit 15 CLEAR finalizes. We resolve on the SET strobe.
+	// +0x080 (group 0, bank 2) is the voice's LEVEL word, and its bit 15 is the burst
+	// LOAD STROBE — SET on the first write of ToneGen_WriteVoiceParams (v142 asm L29594
+	// `SET 0fh,WA`) and RES on the very last (L29907). +0x040 is written earlier in the
+	// same burst (L29573), so resolving here reads a fresh wave number; the authoritative
+	// resolve is the one in process_key_on().
 	if (group == 0 && bank == 2 && (data & 0x8000))
 		resolve_waveform(ch);
 
@@ -261,8 +277,15 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	if ((group == 0 && bank == 1) || (group == 4 && bank == 0))
 		update_pitch(ch);
 
-	// Volume/pan: velocity in group 0 bank 2; main volume (bank 0),
-	// pan L (bank 1), pan R (bank 2), DSP send (bank 3) all in group 8
+	// TVF (filter / brightness): +0x100 = group 1, bank 0. Recomputed on EVERY write, not
+	// sampled at key-on, so a controller move that re-emits the register mid-note is honoured
+	// (the emitter LABEL_024366, v142 asm L17006, can fold a live PART[+0x1f] offset into the
+	// low 7 bits and re-ship the word).
+	if (group == 1 && bank == 0)
+		update_timbre(ch);
+
+	// Loudness: the level word +0x800 (group 8, bank 0). Group 0 bank 2 is included because
+	// the burst's final +0x080 write is the end-of-burst strobe.
 	if ((group == 0 && bank == 2) || group == 8)
 		update_voice_params(ch);
 }
@@ -304,12 +327,21 @@ uint16_t kn5000_tonegen_device::status_r()
 	// make a held key SUSTAIN (as on real hardware) we report each keyed-on
 	// voice as active. Bank = low 2 bits of the value last latched at 0x100000;
 	// bit i of the result = voice (bank*16 + i) is currently gated on.
+	//
+	// EXCEPTION — a one-shot that has PLAYED OUT. A recording with no fundamental
+	// (detect_period == 0: the drums, applause and sound effects on pages 0/1) has no
+	// sustain loop, so once the chip has read past its last sample the voice really is
+	// silent. Reporting that lets the firmware's OWN voice manager reclaim the channel
+	// with its OWN 0x7E00 (LABEL_02219F -> LABEL_02B4A1), which is how a rhythm voice is
+	// supposed to end. Without it the firmware believed all 64 channels were still
+	// sounding and started stealing them.
+	m_stream->update();
 	int bank = m_addr_latch & 0x03;
 	uint16_t bitmap = 0;
 	for (int i = 0; i < 16; i++)
 	{
 		int vch = bank * 16 + i;
-		if (vch < NUM_VOICES && m_voice[vch].key_on)
+		if (vch < NUM_VOICES && m_voice[vch].key_on && !m_voice[vch].finished)
 			bitmap |= (1u << i);
 	}
 	return bitmap;
@@ -512,12 +544,98 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 	if (gain > 1.0) gain = 1.0;
 	if (gain < 0.0) gain = 0.0;
 
-	// Pan: kept centred (see the register-semantics note).
+	// Pan: kept centred. The group-8/9/10 register PAIRS are NOT an L/R pair — every
+	// updater writes the SAME computed value to both members (LABEL_02682F asm L20831-20838,
+	// LABEL_026A93 L21080-21086, LABEL_026AAA L21209-21212, LABEL_02D620 L30130-30150), which
+	// an L/R gain pair could not do. There is no evidence-based per-voice pan source yet.
 	int amp = int(gain * 32767.0 + 0.5);
 	amp = std::min(amp, 32767);
 
 	v.volume_l = int16_t(amp);
 	v.volume_r = int16_t(amp);
+
+	// Latch the level this voice was PROGRAMMED with, so the release fade can start from it.
+	//
+	// MEASURED discriminator (no timing involved): the LOW byte of +0x800 is a rate/flag
+	// byte, and its bit 7 separates the two writers. A note-on level comes from
+	// LABEL_025636 (v142 asm L19078-19085) as `(level<<8) | TAB_011963[rec+0x28]`, and
+	// TAB_011963[0..100] runs 0x00..0x7F — bit 7 CLEAR. Every periodic/release update goes
+	// through LABEL_026769 -> LABEL_02682F (L20831-20838), which does `SET 7` — bit 7 SET.
+	// Live capture agrees exactly: note-on 0xE57F / 0xD17F / 0xDA7F, pre-note mute 0xFF80,
+	// key-up release 0x8B80, panic 0xA280.
+	//
+	// This is what removes the key-up CLICK. The release burst writes +0x800 with the ramp's
+	// TARGET level (0x8B = gain 0.0017) BEFORE it writes the +0x900 that signals the release,
+	// so applying it instantly collapsed the voice by 54 dB in a single sample and the 50 ms
+	// fade below then operated on already-silent audio. We have not decoded the chip's ramp
+	// RATE, so we do not walk towards the target; we fade from the held level instead.
+	if (v.key_on && !(v.regs[20] & 0x0080))
+		v.sustain_vol = int16_t(amp);
+}
+
+
+// ---------------------------------------------------------------------------------------
+// +0x100 (regs[4]) — the per-voice TVF (filter / brightness)
+// ---------------------------------------------------------------------------------------
+//
+// TRACED end to end in the sub-CPU (v142) and MEASURED live. The note-on chain
+// LABEL_02B4E3 (asm L26803) -> LABEL_024102 (L16748) -> LABEL_024444 (L17106) computes
+//
+//     V = clamp( VP[0x4d] + (int8)PART[0x67]
+//                + ((int8)VP[0x37] * (int8)KSCURVE[VP[0x36]>>5][velocity]) >> 5    ; vel curve
+//                + ((int8)VP[0x3c] * (clamp(note,VP[0x3a],VP[0x3b]) - VP[0x39])) >> 5 ; key follow
+//                + 0x18 , 0, 0x78 )                                      ; LABEL_022BF2 L14494
+//     +0x100 = ((VP[0x4e] & 7) << 13) | 0x0400 | V                        ; LABEL_023D01 L16312
+//
+// BIT 10 IS THE GATE, and it is exact: `SET 0ah` occurs at six places in the whole ROM
+// (asm L16346/16429/16476/16542/16790/16832) and ALL SIX store to desc+0x42, i.e. to this
+// register — every builder that computes a cutoff sets it, and nothing else in the ROM does.
+// The firmware's own "no TVF" constant is 0x017F (LABEL_022DA1, asm L14697) and the
+// percussion path ships 0x0000: both have bit 10 CLEAR. So bit 10 = "this word carries a
+// computed cutoff", and its absence means BYPASS. (Testing `V != 0x7F` instead would have
+// closed the filter completely on every drum kit, whose V is 0.)
+//
+// PREDICT-THEN-CHECK, 12/12 exact: 9 values recomputed from the ROM bytes against earlier
+// live captures, plus 3 taken fresh on the running machine this pass at the driver's
+// KEYBED_VELOCITY = 100 — Piano 0x2466 (V=102), Bright Piano 0x2470 (V=112), Mellow Piano
+// 0x2450 (V=80). Those three patches are byte-identical in every register the HLE read
+// before this change, which is exactly why they rendered bit-identically.
+//
+// THE ONE CALIBRATED CONSTANT is how many cents of cutoff one unit of V is worth: that
+// belongs to the undumped LSI and is not in the firmware. It is BOUNDED by the data, and
+// the bounds are what picks the value, not taste:
+//   * V = 0x78 must be effectively open. It is the clamp ceiling, 504 of the 1046 partial
+//     blocks reach it at velocity 127, and they include Applause / Gun Shot / Helicopter —
+//     broadband recordings that cannot be dull. => FC(0x78) ~ 20 kHz.
+//   * No pitched stock patch may be silenced. The darkest patch-level value in the whole
+//     table is V = 32 ("Vocal Ah", both partials, at C4/velocity 100). Keeping its first
+//     formant (~800 Hz) needs <= 63 cents/unit; at the 100 cents/unit that would make the
+//     key-follow depth 0x20 exactly 1:1 it would sit at 202 Hz, i.e. inaudible. So 100 is
+//     REFUTED by the firmware's own patch data and the usable range is (0, 63].
+// 50 cents/unit is taken: safely inside that bound, it puts the floor of the whole computed
+// range (V = 0) at 625 Hz so the filter can never silence a voice, and it makes the measured
+// ppp->fff swing of a median block (36 units) 1.5 octaves of brightness.
+//
+// The filter SLOPE is likewise not decoded (the main-CPU Sound Editor has LPF/HPF/BPF/BCF
+// pages, so a type selector exists — bits[15:13] and bit 7 are the only plausible carriers
+// and neither is established). One pole is the minimal, conservative choice.
+void kn5000_tonegen_device::update_timbre(int ch)
+{
+	voice_t &v = m_voice[ch];
+
+	static constexpr double CENTS_PER_UNIT = 50.0;   // CALIBRATED, bounded to (0,63] by the data
+	static constexpr double FC_TOP         = 20000.0; // cutoff at V = 0x78, the clamp ceiling
+	static constexpr double V_TOP          = 120.0;   // = 0x78
+
+	if (!(v.regs[4] & 0x0400))
+	{
+		v.lp_a = 0.0;   // no computed cutoff in this word -> bypass
+		return;
+	}
+
+	const double cut = double(v.regs[4] & 0x7F);
+	const double fc  = FC_TOP * std::pow(2.0, (cut - V_TOP) * CENTS_PER_UNIT / 1200.0);
+	v.lp_a = std::exp(-2.0 * M_PI * fc / 48000.0);
 }
 
 
@@ -1331,16 +1449,18 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.key_on = true;
 	v.key_on_time = machine().time().as_double(); // gate timestamp for release detection
 	v.active = true;
+	v.finished = false;
 	v.wave_offset = 0;
 	v.release_counter = 0;
 	v.hold_counter = 0;
-	v.env_level = 0xFF; // full until the firmware's per-tick envelope modulates it
+	v.env_level = 0xFF; // no attenuation until the firmware sends a magnitude (bit 8)
+	v.lp_z = 0.0;       // the per-voice filter starts from rest
 	v.pitch_offset = 0.0; // resolved from +0x400 once the whole key press is programmed
 
 	// Resolve the waveform at key-on: by the time the firmware writes the note-on
-	// command (0x8100) it has already written the wave number (regs[9]/regs[10])
-	// and all voice params, so this picks up the final wave number rather than a
-	// possibly-stale value from the earlier group0/bank2 strobe.
+	// command (0x8100) it has already written the wave-select register +0x040 (= regs[1],
+	// v142 asm L29573, the FIRST write of the burst) and all the other voice params, so
+	// this picks up the final selection rather than a possibly-stale earlier value.
 	resolve_waveform(ch);
 
 	// Recover the genuine musical note for this voice (and re-pair the whole chord it
@@ -1352,14 +1472,24 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	// leaves true_note = −1 without calling update_pitch itself).
 	update_pitch(ch);
 
-	// Update volume/pan from current registers
+	// Update volume and the TVF from the current registers. +0x800 and +0x100 are both
+	// written earlier in the same burst (asm L29736 and L29619), so they are already final.
 	update_voice_params(ch);
+	update_timbre(ch);
+	v.sustain_vol = v.volume_l;   // floor for the release fade, refined by update_voice_params
 }
 
 
 void kn5000_tonegen_device::process_key_off(int ch)
 {
 	voice_t &v = m_voice[ch];
+
+	// IDEMPOTENT. This is reached from two places — the release heuristic above and the
+	// firmware's own 0x7E00 — and the firmware's 0x7E00 arrives ~41 ms after the heuristic
+	// has already fired. Re-arming the counters there would restart the fade at full
+	// amplitude, i.e. make a released note get LOUDER again part-way through its release.
+	if (!v.key_on)
+		return;
 
 	LOGMASKED(LOG_KEY, "tonegen: KEY OFF voice %d\n", ch);
 
@@ -1474,6 +1604,21 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			uint32_t sample_pos = v.wave_offset >> 16;
 			uint32_t frac = v.wave_offset & 0xFFFF;
 
+			// A ONE-SHOT that has played out. `pitch_period_q16 == 0` means detect_period
+			// found no fundamental — the drums, applause and sound effects of pages 0/1
+			// (16/198 and 28/168 of them). There is no pitch-continuous loop to be had for
+			// such a recording, and compute_loop's fallback [0, N) made a drum hit REPEAT
+			// for as long as the firmware held the gate — which is forever, because the
+			// firmware only releases a voice the chip reports silent. Stop at the end
+			// instead, and report it silent (status_r) so the firmware issues its own
+			// 0x7E00. This is the mechanism the real voice manager is written around.
+			if (v.pitch_period_q16 == 0 && sample_pos >= v.wave_samples)
+			{
+				v.finished = true;
+				v.active = false;
+				continue;
+			}
+
 			if (sample_pos >= v.loop_end)
 			{
 				// Reached the end of the play-through / loop region -> wrap back into the
@@ -1513,10 +1658,18 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 
 			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
 
-			// Apply the firmware's per-tick amplitude envelope (reg_idx 0 magnitude,
-			// written every audio tick by the sub-CPU's software envelope generator).
-			// This is the real attack/decay/sustain/release contour; env_level=0xFF is
-			// full. See notes/kn5000-tonegen-register-semantics.md.
+			// ---- Per-voice TVF (filter / brightness) from +0x100 -------------------------
+			// One-pole low-pass whose cutoff the firmware computed from the patch's base
+			// cutoff, its velocity curve and its key follow (see update_timbre). lp_a == 0
+			// is the firmware's own bypass encoding, and costs a compare.
+			if (v.lp_a > 0.0)
+			{
+				v.lp_z = double(sample) * (1.0 - v.lp_a) + v.lp_z * v.lp_a;
+				sample = int32_t(v.lp_z);
+			}
+
+			// Apply the amplitude-envelope magnitude the firmware sends in group0/bank0
+			// (env_level; 0xFF = no attenuation). See the decode in data_w().
 			sample = sample * v.env_level / 0xFF;
 
 			// Apply release envelope (voice-lifecycle fade + deactivation). Kept for
@@ -1542,18 +1695,17 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				sample = 0;
 			}
 
-			// Apply volume. A RELEASED note must only ever DECAY: the firmware's release
-			// burst reprograms the level registers, and our log-domain gain model can read
-			// those release values as LOUDER than the sustain level — which made the sound
-			// audibly JUMP UP at key-up (reported from real-hardware comparison 2026-07-25;
-			// MEASURED ~6x). Latch the level seen while the key was down and never exceed
-			// it once released. Enforced here, at the point of use, so it cannot be bypassed
-			// by the order in which the firmware writes its release registers.
-			// (The release-only-decays clamp was removed: with the reg[20] polarity
-			// corrected the firmware's release ramp decays by itself, so the clamp is no
-			// longer masking an inverted level.)
-			mix_l += (sample * v.volume_l) >> 15;
-			mix_r += (sample * v.volume_r) >> 15;
+			// Apply volume. Once the key is up the amplitude comes from `sustain_vol`, the
+			// level the voice was PROGRAMMED with while it was held, and the fade above
+			// supplies the decay. Using volume_l here instead read the release burst's
+			// TARGET level as if it were already reached, which collapsed the voice by
+			// 54 dB in a single sample: an audible CLICK on every key release, MEASURED as
+			// a 2346-LSB step. The chip's ramp RATE is not decoded, so we do not pretend to
+			// walk to that target — see update_voice_params.
+			const int32_t vol_l = v.key_on ? v.volume_l : v.sustain_vol;
+			const int32_t vol_r = v.key_on ? v.volume_r : v.sustain_vol;
+			mix_l += (sample * vol_l) >> 15;
+			mix_r += (sample * vol_r) >> 15;
 
 			// Advance position
 			v.wave_offset += v.pitch_step;
@@ -1562,13 +1714,17 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		// Output headroom / anti-clip (fix for chord distortion). Each voice can reach full
 		// scale, so a chord (3 notes x up to 2 oscillators = up to ~6 voices) summed past
 		// +/-32767 and the old hard clamp turned that into audible clipping. Instead of
-		// clamping, apply a soft limiter: the mix passes through UNCHANGED below a knee K (so
-		// single notes and small chords keep full amplitude — never made inaudible) and is
-		// smoothly tanh-saturated above it (so dense chords compress rather than clip).
-		// Bounded to (-1,1] with no hard corner. See notes/kn5000-faithful-render-v2.md.
+		// clamping, apply a soft limiter: the mix is trimmed by HEADROOM and then passes
+		// through LINEARLY below a knee K, and is smoothly tanh-saturated above it (so dense
+		// chords compress rather than clip). Bounded to (-1,1] with no hard corner.
+		// NOTE the trim applies to EVERYTHING, so the "passes through unchanged" the older
+		// comment claimed is really "passes through scaled by HEADROOM, linearly": a single
+		// voice at full scale peaks at 0.70, not 1.0. That is deliberate (it is the chord
+		// margin) and MEASURED as not making the instrument quiet — a plain two-oscillator
+		// C4 peaks at -1.2 dBFS. See notes/kn5000-faithful-render-v2.md.
 		auto softclip = [](int32_t acc) -> float
 		{
-			constexpr float K = 0.75f;                 // linear region: |x| <= K passes untouched
+			constexpr float K = 0.75f;                 // linear region: |x| <= K is not saturated
 			constexpr float HEADROOM = 0.70f;      // pre-limiter trim: leaves margin so chords don't slam the rail
 			float x = HEADROOM * float(acc) / 32768.0f;
 			float a = std::fabs(x);
