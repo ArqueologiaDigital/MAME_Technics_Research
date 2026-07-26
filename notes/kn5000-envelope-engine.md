@@ -1,5 +1,42 @@
 # KN5000 SOFTWARE amplitude envelope — the engine the prior pass missed
 
+> ## ⛔ RETRACTION (2026-07-26) — §§ on 0x00F507 / 0x00F519 ARE WRONG
+>
+> **These two tables are POLYPHONY QUOTAS, not envelope tables.** They were named
+> `Voice_AttackDecay_Widths` / `Voice_EnvelopeRate_Lookup` here and described as per-group stage
+> WIDTHS and RATES seeded into "18 seven-stage state blocks". That is falsified, MEASURED from the
+> ROM bytes during the 2026-07-26 naming pass (kn5000-roms-disasm commit `1ebc634`):
+>
+> * each table's first 16 bytes sum to **exactly 64** — the voice count.
+>   `0xF507` = 32+16+4+12 = 64; `0xF519` = 12+6+6+4·5+2·7+6 = 64. Two partitions of the same
+>   64-voice polyphony budget; the trailing `0x40 0x40` are the free pool and the global pool.
+> * the "18 seven-stage state blocks" at `0x112D + g*0x1E` are 18 voice **POOLS**
+>   (byte0 = quota, byte1 = occupancy), and the "7 accumulators" are the **seven priority-list
+>   heads** of a doubly-linked voice list (`LABEL_021C83` computes them as `pool + 0x02 + 4*key`).
+> * `LABEL_021E31` decrements one pool's occupancy and increments another's around a list move —
+>   i.e. "transfer one voice from pool A to pool B", which only makes sense for quotas.
+> * they are now named `Voice_Pool_Quota_ModeA` / `Voice_Pool_Quota_ModeB`; the mode is selected by
+>   `LABEL_028ADC`.
+>
+> **CONSEQUENCE: there is NO per-group envelope width/rate table in the sub ROM.** Any HLE plan that
+> feeds EG segments from these addresses (including §6 step 2 below) is reading a polyphony table.
+>
+> **WHAT SURVIVES:** the central finding of this note — that the KN5000 *has* a real per-note
+> envelope engine — stands. The real EG machinery is the segment builders
+> `Voice_Build_EnvSegments_FixedAtk` (0x025A35 — note: NOT 0x025A9E, which is an inner join point)
+> and `_PatchAtk` (0x025636), the level converter `Voice_Build_OutputLevel` (0x0232C7 + the
+> float→log table at 0x010764, which is where the derived 16-counts-per-octave gain law came from),
+> and the `(level<<8)|rate` words in +0x800/+0x840/+0x880. See
+> `notes/audit/kn5000-eg-calibration.md` and `notes/naming/kn5000-naming-envelope.md`.
+>
+> Other corrections from the same pass: `0x021ECB` is the whole voice-engine RESET (not an
+> envelope-table init); `LABEL_02222A` / `LABEL_02CDDA` are inner labels, not routines;
+> `0x026769/026975/026AAA` write the **shared scratch** at 0x0451CC (offsets +0x2C..+0x36), NOT the
+> voice slot — two structs with overlapping offset numbering, which is how "struct +0x2C" and
+> "slot+0x2d" got conflated; and the envelope-counter seed is `LABEL_03421E`, not `LABEL_0253FE`.
+
+
+
 Author: autonomous RE pass, 2026-07-23. Requested by Felipe Sanches.
 
 **Corrects** `notes/kn5000-vs-kn7000-tonegen-design.md` and `notes/kn5000-envelope-trace.md`,
@@ -55,9 +92,9 @@ Voice_EnvelopeRate_Lookup  (0x00F519):  0C 06 06 04 04 04 04 04 02 02 02 02 02 0
 Voice_CommandIndexTable    (0x00F4EC):  ... (27 entries, selects which of the 18 groups)
 ```
 
-- **`Voice_AttackDecay_Widths`** = per-group **stage WIDTHS (durations)**: 0x20, 0x10,
+- ⛔RETRACTED (polyphony quota, see banner) ~~**`Voice_AttackDecay_Widths`** = per-group **stage WIDTHS (durations)**~~: 0x20, 0x10,
   0x04, 0x0C ticks … tail groups 16/17 = 0x40.
-- **`Voice_EnvelopeRate_Lookup`** = per-group **envelope RATES**: 0x0C, 0x06, 0x04, 0x02 …
+- ⛔RETRACTED (polyphony quota, see banner) ~~**`Voice_EnvelopeRate_Lookup`** = per-group **envelope RATES**~~: 0x0C, 0x06, 0x04, 0x02 …
   tail groups = 0x40. Small = slow, matching a rate/step meaning.
 
 **How indexed / by what (MEASURED — init routine `LABEL_021ECB`, L12980-13060):**
@@ -302,8 +339,8 @@ sounds.
 
 | routine / symbol | addr | role |
 |---|---|---|
-| `Voice_AttackDecay_Widths` | 0x00F507 | per-group stage WIDTHS (18 B) |
-| `Voice_EnvelopeRate_Lookup` | 0x00F519 | per-group stage RATES (18 B) |
+| ⛔ `Voice_Pool_Quota_ModeA` (was `Voice_AttackDecay_Widths`) | 0x00F507 | per-pool POLYPHONY QUOTA (18 B, sums to 64) |
+| ⛔ `Voice_Pool_Quota_ModeB` (was `Voice_EnvelopeRate_Lookup`) | 0x00F519 | per-pool POLYPHONY QUOTA (18 B, sums to 64) |
 | `LABEL_021ECB` | 0x021ECB | init: seed 0x112D env state blocks from the tables |
 | 0x112D (RAM) | — | 18 × 0x1E env state blocks (byte0=width/rate, +2..29 = 7 stage accumulators) |
 | `LABEL_02219F` | 0x02219F | periodic lifecycle: poll IC303 level, sequence/steal (path B) |
