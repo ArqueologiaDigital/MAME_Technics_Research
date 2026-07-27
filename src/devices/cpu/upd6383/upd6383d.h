@@ -338,9 +338,21 @@ public:
 		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
 		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
 		LO_ACT_NONE_5  = 0x15,  // ditto -- how it differs from 0x12 is OPEN
-		LO_ACT_CAP_TA2 = 0x19   // tempA <- ??? : DESTINATION measured (74/89,
-		                        // lag 1), SOURCE open; "second capture
-		                        // pair beside 0x13" is UNSUPPORTED
+		LO_ACT_CAP_TA2 = 0x19   // tempA <- ??? : ships on the OWNER'S DECISION
+		                        // of 2026-07-27.  !! The DESTINATION is NOT
+		                        // MEASURED.  This comment used to claim it was
+		                        // ("74/89, lag 1"); that statistic FAILS ITS
+		                        // OWN CALIBRATION 0 of 2 -- for 0x13 (tempA)
+		                        // tempA and tempB tie and mem beats both, and
+		                        // for 0x14 (tempB) the WRONG temporary wins by
+		                        // 20 points.  It sees motif adjacency, not
+		                        // dataflow.  0x19's profile is the cleanest of
+		                        // the three, but "cleanest" is not a
+		                        // calibrated criterion.  SUCCESSION survives;
+		                        // destination does not.  SOURCE open; "second
+		                        // capture pair beside 0x13" is UNSUPPORTED.
+		                        // See kn5000-roms-disasm analysis/
+		                        // capture-signature.md (tools/capture_sig.py)
 	};
 
 	static constexpr bool lo_src_anchored(u8 s)
