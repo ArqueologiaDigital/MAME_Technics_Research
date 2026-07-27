@@ -963,14 +963,29 @@ void upd6383_device::exec_alu(u64 word)
 	{
 	case upd6383_disassembler::LO_ACT_CAP_TA:
 	case upd6383_disassembler::LO_ACT_CAP_TA2:
-		// 0x13 and 0x19 are ONE OPERATION IN TWO ENCODINGS -- a second capture
-		// pair beside 0x13/0x14 (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).
-		// ⛔ NOT FORCED any more: the "72/72 by SINGLE DELAY" came from a
-		// harness that wires the delay line at the polarity round 5 REVERSED,
-		// and the corrected re-run scores 0 of 5832 for a reason that is a
-		// harness artefact too.  0x19 is CONSISTENT, retained, and must not be
-		// cited as FORCED -- upd6383d.h LO_ACT_CAP_TA2 and
-		// dsp/analysis/adjudication-round6.md sect. 3.
+		// 0x13 and 0x19 both capture into tempA.
+		// ⚠ THIS COMMENT USED TO ASSERT "0x13 and 0x19 are ONE OPERATION IN TWO
+		// ENCODINGS".  That has NO POSITIVE EVIDENCE and is no longer stated as
+		// fact: their consumer lags are DISJOINT (0x13's tempA reader sits at
+		// lag EXACTLY 8 -- one 8-word motif repetition -- in 35 of 40 sites vs a
+		// 5.1% base rate; 0x19's sits at lag 1), and 9 of 38 distinct body
+		// images use BOTH, so it is not a per-program assembler convention.
+		// Not refuted -- unsupported.  dsp/tools/adjudicate8.py `capture'.
+		// ⛔ NOT FORCED: the "72/72 by SINGLE DELAY" came from a harness that
+		// wires the delay line at the polarity round 5 REVERSED.  Round 6
+		// blamed the corrected re-run's 0 of 5832 on that harness's one-cell
+		// `Line'; ROUND 7 CORRECTS THE DIAGNOSIS -- on a genuine two-address
+		// line the published-polarity window still scores 108, THE SAME 108
+		// MACHINES.  ** IT WAS A POLARITY ARTEFACT, NOT A MEMORY ARTEFACT. **
+		// And at the FORCED polarity SINGLE DELAY cannot score 0x19 at all:
+		// both its loops cross w21..w24 (ACTIONs 0x0D/0x0E, undecoded), so
+		// every cell of the enumeration is "no search", not "no survivors".
+		// WHAT IS MEASURED, with no delay line in the argument: ACTION 0x19 is
+		// followed by a word SOURCING tempA in 74 of 89 distinct-image sites
+		// (base rate 16.0%, shuffled null 42.7%).  DESTINATION = tempA is
+		// measured; SOURCE (bus vs acc) is untested and OPEN.  It keeps
+		// shipping under the owner's 2026-07-27 decision.  See upd6383d.h
+		// LO_ACT_CAP_TA2 and dsp/analysis/adjudication-round8.md.
 		m_ta = u32(L) & 0xffffff;
 		break;
 	case upd6383_disassembler::LO_ACT_CAP_TB:

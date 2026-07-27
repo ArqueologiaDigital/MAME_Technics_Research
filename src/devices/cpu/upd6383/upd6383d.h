@@ -298,11 +298,39 @@ public:
 	// Withdrawing it would re-trap corpus words on the authority of a harness
 	// that provably cannot model the corrected machine -- a method-rule-1 defect
 	// pointing the other way.  It is therefore CONSISTENT, like LO_ACT_ACC_BUS
-	// above, and MUST NOT be cited as FORCED.  What re-derives it is a
-	// TWO-ADDRESS delay line -- read cell and write cell separate, as
-	// analysis/dram-bounds.md's line set gives them, plus the rotation register
-	// G -- which no tool in dsp/tools has yet.  That is round 6's rank-1
-	// experiment.
+	// above, and MUST NOT be cited as FORCED.
+	//
+	// ═══════════════════════════════════════════════════════════════════════
+	// ★ ROUND 7 RESOLUTION -- analysis/adjudication-round8.md.
+	// The paragraph that used to end here said "what re-derives it is a
+	// TWO-ADDRESS delay line ... which no tool in dsp/tools has yet.  That is
+	// round 6's rank-1 experiment."  ** BOTH HALVES ARE NOW FALSE. **
+	//   (a) The line EXISTS: dsp/tools/delayline.py, audited independently by
+	//       dsp/tools/adjudicate8.py `harness' -- it delays by ra-wa at both
+	//       access orders, says YES to a textbook comb and NO to that comb's
+	//       D+1 twin, and represents all 324 ROM lines (324/324 positive D).
+	//   (b) IT DOES NOT RE-DERIVE THE FORCING AND CANNOT.  At the FORCED
+	//       polarity both of SINGLE DELAY's loops cross w21..w24 (ACTIONs
+	//       0x0D/0x0E, undecoded), so no executable window contains a delay
+	//       loop.  Every cell of {forced,published} x {push_read,push_any,
+	//       latency,blocking} x 4 windows x 7776 machines reads "-- NONE --"
+	//       at the forced polarity: AN ABSENCE OF A SEARCH, NOT A ZERO.
+	//   (c) And round 6's diagnosis of the 108 is CORRECTED: on a genuine
+	//       two-address line the published-polarity window still scores 108,
+	//       the SAME 108 machines.  It was a POLARITY artefact all along, not
+	//       a memory artefact.
+	// WHAT IS MEASURED, by a corpus route containing no delay line at all:
+	// ACTION 0x19 is followed by a word SOURCING tempA at a tight modal lag of
+	// 1, in 74 of 89 distinct-image sites (base rate 16.0%, best-of-2000
+	// ACTION-shuffled null 42.7%).  ⚠ NOT "401 of 402 / 99.8%" -- that counts
+	// one word position once per ALGORITHM sharing the image, a 4.79x
+	// replication.  DESTINATION = tempA, MEASURED.  SOURCE (bus vs acc) was
+	// never tested by any of it and stays OPEN.
+	// ⚠ "a SECOND CAPTURE PAIR beside 0x13/0x14" is UNSUPPORTED: 0x13's tempA
+	// reader sits at lag EXACTLY 8 (35/40, base rate 5.1%) and 0x19's at lag 1
+	// -- disjoint -- and 9 of 38 images use both.  Not refuted; unsupported.
+	// ⇒ IT KEEPS SHIPPING under the owner's 2026-07-27 decision.
+	// ═══════════════════════════════════════════════════════════════════════
 	enum : u8 {
 		LO_ACT_ACC_BUS = 0x00,  // the accumulator's input term comes from the BUS
 		LO_ACT_ST_BUS  = 0x07,  // mem[ptr] <- bus
@@ -310,7 +338,9 @@ public:
 		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
 		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
 		LO_ACT_NONE_5  = 0x15,  // ditto -- how it differs from 0x12 is OPEN
-		LO_ACT_CAP_TA2 = 0x19   // tempA <- bus, the second capture pair
+		LO_ACT_CAP_TA2 = 0x19   // tempA <- ??? : DESTINATION measured (74/89,
+		                        // lag 1), SOURCE open; "second capture
+		                        // pair beside 0x13" is UNSUPPORTED
 	};
 
 	static constexpr bool lo_src_anchored(u8 s)
