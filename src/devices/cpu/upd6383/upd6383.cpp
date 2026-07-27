@@ -829,7 +829,12 @@ void upd6383_device::exec_alu(u64 word)
 		// core's comb search enumerates this shift as `tbsh', and in every
 		// STRICT row it has ever run it FORCES tbsh = 0: 112/112 in the
 		// PUBLISHED row, 3206/3206 with the blocking read, 2310/2310
-		// sequential.  Stated at its real strength rather than its best: in
+		// sequential.  ⛔ 2026-07-27: the two BLOCKING-READ rows (3206, 2310)
+		// are VOID -- the blocking read was forced under the delay-DRAM
+		// polarity round 5 reversed (adjudication-round6.md sect. 3).  The
+		// 112/112 PUBLISHED row survives, and the tension it records is
+		// unchanged in kind; only its width shrinks.
+		// Stated at its real strength rather than its best: in
 		// the JOINT row it is only a 92.1 % majority (32050 of 34815), so
 		// this is a tension INSIDE a topology hypothesis, not a contradiction
 		// between two determinations.  Every one of those numbers was
@@ -959,8 +964,13 @@ void upd6383_device::exec_alu(u64 word)
 	case upd6383_disassembler::LO_ACT_CAP_TA:
 	case upd6383_disassembler::LO_ACT_CAP_TA2:
 		// 0x13 and 0x19 are ONE OPERATION IN TWO ENCODINGS -- a second capture
-		// pair beside 0x13/0x14 (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  FORCED
-		// 72/72 by SINGLE DELAY; see upd6383d.h.
+		// pair beside 0x13/0x14 (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).
+		// ⛔ NOT FORCED any more: the "72/72 by SINGLE DELAY" came from a
+		// harness that wires the delay line at the polarity round 5 REVERSED,
+		// and the corrected re-run scores 0 of 5832 for a reason that is a
+		// harness artefact too.  0x19 is CONSISTENT, retained, and must not be
+		// cited as FORCED -- upd6383d.h LO_ACT_CAP_TA2 and
+		// dsp/analysis/adjudication-round6.md sect. 3.
 		m_ta = u32(L) & 0xffffff;
 		break;
 	case upd6383_disassembler::LO_ACT_CAP_TB:

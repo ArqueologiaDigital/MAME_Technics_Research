@@ -219,6 +219,17 @@ public:
 	// substitutes the operand bus for the accumulator's own feedback term.  See
 	// upd6383.cpp exec_alu().  ★ THE ADDER ITSELF IS FORCED.
 	//
+	// ⚠ ONE OF THE ADDER'S TWO LEGS HAS BEEN WITHDRAWN, 2026-07-27
+	// (analysis/adjudication-round6.md sect. 3).  The argument above is a
+	// RECONCILIATION of the LFO ramp with SINGLE DELAY, and SINGLE DELAY's
+	// harness wires the delay line at the polarity adjudication-round5 item D
+	// REVERSED, so its half of the reconciliation is void.  The adder is
+	// RETAINED -- it is not refuted, the LFO leg is untouched, and it is the
+	// plurality (27 of 33) in the three-context solve even in the reversed
+	// model -- but "FORCED" now stands on ONE context and must be re-derived
+	// against a TWO-ADDRESS delay line before it is quoted as a two-context
+	// forcing again.
+	//
 	// ⚠ WHICH accumulator half `0x00' selects is CONSISTENT, NOT FORCED --
 	// CORRECTED 2026-07-27, dsp/analysis/action00-discriminator.md.  This comment
 	// used to read "FORCED: the one reading that survives the LFO, SINGLE DELAY
@@ -240,29 +251,58 @@ public:
 	// label.)
 	//
 	// ★ LO_ACT_CAP_TA2 (0x19) -- a SECOND CAPTURE PAIR beside 0x13/0x14
-	// (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  FORCED 72/72 by SINGLE DELAY once
-	// the order above is fixed (108/108 in the wider space of
-	// analysis/action00-discriminator.md sect. 7, both windows and both input-mix
-	// settings), in a model where the input arrives through the MEASURED pointer
-	// walk and every register the block does not set is randomised.  This settles
-	// a reading `dsp-frame-advance.md' sect. 2 called "INFERRED, and internally
-	// contradicted" -- and it resolves AGAINST the lo12[2:0]-as-destination
-	// pattern, which put tempA at [2:0] == 3.
+	// (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  It reads tempA <- bus, it SHIPS, and
+	// ⛔ ITS FORCING IS WITHDRAWN -- 2026-07-27,
+	// analysis/adjudication-round6.md sect. 3.  READ THAT BEFORE QUOTING ANY
+	// NUMBER BELOW.
 	//
-	// ★★ IT SURVIVED A CHALLENGE, 2026-07-27, AND THE CHALLENGE IS WITHDRAWN.
-	// analysis/schroeder-topology.md sect. 0-C reported that the reverb's comb
-	// core FALSIFIES this reading conditionally: its STRICT survivors force
-	// `tempB <- bus' (112/112) and its joint row forces `tempA <- acc' with an
-	// accumulator half as well -- i.e. "only ACTION 0x00 routes the bus", the rule
-	// this decoder implements, would be wrong.  Re-derived: that search enumerated
-	// the read latency over {0,1,2,7,8} and OMITTED the BLOCKING read (land = -1),
-	// which is the read model SINGLE DELAY itself FORCES 5145/5145.  Put it back
-	// and the reverb's fresh delay sample reaches slot 3 through the read word's
-	// OWN anchored ACTION 0x14 (tempB <- bus) instead of through 0x19 -- 3206 comb
-	// machines survive against 112, `tempB <- bus' collapses from FORCED to 56 of
-	// 3206, `tempA <- bus' is admissible again, and ACTION 0x19's ACCUMULATOR half
-	// comes out FORCED to "no effect" 3206/3206, which RE-UPHOLDS the strict
-	// vocabulary rather than falsifying it.  See analysis/blocking-read.md.
+	// WHAT THIS COMMENT USED TO SAY, and why both halves fall together:
+	//   (a) "FORCED 72/72 by SINGLE DELAY once the order above is fixed
+	//       (108/108 in the wider space of analysis/action00-discriminator.md
+	//       sect. 7, both windows and both input-mix settings)";
+	//   (b) "IT SURVIVED A CHALLENGE AND THE CHALLENGE IS WITHDRAWN" --
+	//       analysis/schroeder-topology.md sect. 0-C's comb core conditionally
+	//       FALSIFIES this reading (STRICT survivors force `tempB <- bus',
+	//       112/112), and analysis/blocking-read.md withdrew that challenge
+	//       because the comb search "omitted the BLOCKING read (land = -1),
+	//       which is the read model SINGLE DELAY itself FORCES 5145/5145".
+	//
+	// ⛔ THE PREMISE UNDER BOTH IS FALSIFIED.  analysis/dram-datapath.md sect.
+	// 3.1 re-attributes that 5145/5145: it read SINGLE DELAY under the OLD
+	// delay-DRAM polarity, and adjudication-round5 item D REVERSED it
+	// (addr8 0x20/0x30 = READ, 0x60 = WRITE).  Round 6 then checked the thing
+	// nobody had: the SINGLE DELAY harnesses themselves.
+	// `action00_discriminate.sd_run' and `acc_adjudicate.sd_run' BOTH hard-code
+	//     if (addr8(w) & 0xf0) == 0x20: line.write(bus) else: dr = line.read()
+	// -- the delay line wired BACKWARDS relative to the FORCED direction.  And
+	// SINGLE DELAY is the ONLY published ALU context carrying delay-DRAM words:
+	// of the 94 corpus ACTION-0x19 sites, 92 sit in DRAM-carrying images and the
+	// only DRAM-free one is algo 88, which analysis/second-dsp-and-ready.md
+	// showed is an IC310 (MN19413) stream, not an IC311 program at all.  It is
+	// also the ONLY context that constrains 0x19 (the biquad carries no 0x19,
+	// the LFO does not enumerate it).
+	//
+	// RE-RUN AT THE CORRECTED POLARITY THE SAME HARNESS SCORES 0 OF 5832 -- and
+	// that zero is NOT a refutation either.  Its `Line' reads and writes ONE
+	// cell and advances once per frame, so it silently requires READ-before-
+	// WRITE in program order; corrected, SINGLE DELAY's w5 (0x60) WRITES and its
+	// w9 (0x20) READS, so the read returns the value written in that very frame
+	// -- delay 0, the loop is gone.  DEMONSTRATED, not argued.
+	//
+	// ⇒ THE 108 AND THE 0 ARE BOTH ARTEFACTS.  ACTION 0x19's determination is
+	// UNFORCED, and schroeder-topology.md sect. 0-C's conditional challenge is
+	// RE-OPENED (its withdrawal had no other support).
+	//
+	// ★ WHY THE SEMANTIC IS RETAINED ANYWAY, stated so nobody mistakes it for a
+	// forcing: nothing REFUTES `tempA <- bus'; what fell is the evidence for it.
+	// Withdrawing it would re-trap corpus words on the authority of a harness
+	// that provably cannot model the corrected machine -- a method-rule-1 defect
+	// pointing the other way.  It is therefore CONSISTENT, like LO_ACT_ACC_BUS
+	// above, and MUST NOT be cited as FORCED.  What re-derives it is a
+	// TWO-ADDRESS delay line -- read cell and write cell separate, as
+	// analysis/dram-bounds.md's line set gives them, plus the rotation register
+	// G -- which no tool in dsp/tools has yet.  That is round 6's rank-1
+	// experiment.
 	enum : u8 {
 		LO_ACT_ACC_BUS = 0x00,  // the accumulator's input term comes from the BUS
 		LO_ACT_ST_BUS  = 0x07,  // mem[ptr] <- bus
