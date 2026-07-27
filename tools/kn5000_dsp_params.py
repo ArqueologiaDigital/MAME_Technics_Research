@@ -209,12 +209,33 @@ def decode_record(rom, body, addrmap, maxlen=48):
 # ---------------------------------------------------------------- DSP word synthesis
 # Reproduces sub-CPU writers 0x0387E6 and 0x038539 / 0x03846C byte-for-byte.
 
+# ---------------------------------------------------------------------------
+#  ★ CORRECTED 2026-07-27 (kn5000-roms-disasm/dsp/analysis/register-space.md).
+#
+#  Byte 1 of the datum was transcribed as `(value >> 1) & 0x7F'.  It is
+#  `(value >> 17) & 0x7F'.  All three writers emit
+#
+#        sra 0x01,XWA        ; >> 1
+#        sra 0x00,XWA        ; >> 16   <-- a shift COUNT OF 0 MEANS 16 on the
+#        and XWA,0x7F        ;             TLCS-900; the old reading dropped this
+#
+#  (LABEL_038539 at 0x03859D, LABEL_0387E6 at 0x03884A, LABEL_038922 at
+#  0x038985 -- the identical three-instruction sequence in all three).
+#
+#  Consequence: the old formula loses the top seven bits of every coefficient.
+#  Round-trip over the 1751 data packets canned in the ROM's per-algorithm PARAM
+#  streams: `v>>17' reproduces 1751 of 1751 exactly, `v>>1' only 938.  The
+#  MEASURED live cold-boot datum `0A 20 00 00 15' is +0.500000 under `v>>17' and
+#  +0.000000 under `v>>1'.  (dsp_disasm.host_packet() always had this right.)
+#
+#  Re-derive with:  python3 dsp/tools/register_space.py control
+# ---------------------------------------------------------------------------
 def writer_0387E6(dsp_addr, value):
     """Returns the two 5-byte DSP instruction words emitted by LABEL_0387E6."""
     a = dsp_addr & 0xFF
     w1 = bytes([0x08, 0x01, (a >> 4) & 0x0F, ((a << 4) & 0xF0) | 8, 0x21])
     w2 = bytes([0x0A,
-                (value >> 1) & 0x7F,
+                (value >> 17) & 0x7F,
                 (value >> 9) & 0xFF,
                 (value >> 1) & 0xFF,
                 ((value << 7) & 0x80) | 0x26])
@@ -226,7 +247,7 @@ def writer_038539(dsp_addr, value):
     a = dsp_addr & 0xFF
     w1 = bytes([0x00, 0x00, 0x10 | ((a >> 4) & 0x0F), (a << 4) & 0xF0, 0x00])
     w2 = bytes([0x0A,
-                (value >> 1) & 0x7F,
+                (value >> 17) & 0x7F,
                 (value >> 9) & 0xFF,
                 (value >> 1) & 0xFF,
                 ((value << 7) & 0x80) | 0x15])

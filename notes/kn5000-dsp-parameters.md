@@ -130,8 +130,20 @@ The name table also has its own descending pointer array at main-CPU `0x032A7A`
 
 ```
     0x08, 0x01, (A>>4)&0x0F, ((A<<4)&0xF0)|8, 0x21          <- 5 bytes = one 36-bit word
-    0x0A, (v>>1)&0x7F, (v>>9)&0xFF, (v>>1)&0xFF, ((v<<7)&0x80)|0x26
+    0x0A, (v>>17)&0x7F, (v>>9)&0xFF, (v>>1)&0xFF, ((v<<7)&0x80)|0x26
 ```
+
+> ## ⚠ ★ CORRECTED 2026-07-27 — byte 1 was `(v>>1)&0x7F` here and in
+> `tools/kn5000_dsp_params.py`. **It is `(v>>17)&0x7F`.** All three writers emit
+> `sra 1,XWA ; sra 0,XWA ; and 0x7F` (`0x03859D`, `0x03884A`, `0x038985`), and
+> **a shift count of 0 means 16 on the TLCS-900** — the old reading dropped that
+> instruction and lost the top seven bits of every coefficient. Round-trip over
+> the 1751 data packets canned in the ROM's per-algorithm PARAM streams:
+> `v>>17` reproduces **1751 of 1751**, `v>>1` only **938**. The MEASURED live
+> cold-boot datum `0A 20 00 00 15` is `+0.500000` under `v>>17` and `+0.000000`
+> under `v>>1`. `dsp_disasm.host_packet()` always had this right, so **no
+> disassembly is affected**; the tool has been fixed.
+> Source: `kn5000-roms-disasm/dsp/analysis/register-space.md` §1.1.
 
 Decoded with the established field map (`hi12.class4.addr8.lo12`):
 
@@ -144,7 +156,7 @@ Decoded with the established field map (`hi12.class4.addr8.lo12`):
 
 ```
     0x00, 0x00, 0x10|((A>>4)&0x0F), (A<<4)&0xF0, 0x00
-    0x0A, (v>>1)&0x7F, (v>>9)&0xFF, (v>>1)&0xFF, ((v<<7)&0x80)|0x15
+    0x0A, (v>>17)&0x7F, (v>>9)&0xFF, (v>>1)&0xFF, ((v<<7)&0x80)|0x15
 
     word 1 = 000 . 1 . AA . 000
     word 2 = A?? . ? . ?? . ??5
@@ -174,6 +186,16 @@ Decoded with the established field map (`hi12.class4.addr8.lo12`):
   `…15` tails, which are the `038539` family).
 
 The 24-bit value is scattered across the data word as
+`W[30:24]=v[23:17]`, `W[23:16]=v[16:9]`, `W[15:8]=v[8:1]`, `W[7]=v[0]` —
+**bits `W[30:7]` are ONE CONTIGUOUS 24-bit field.**
+
+> ⚠ **CORRECTED 2026-07-27.** The rest of this paragraph followed from the
+> byte-1 error above and is withdrawn: there is **no duplicated 7-bit field and
+> no 17-bit immediate**. What remains OPEN is the two bits above the value
+> (`byte 0` = `0x0A` or `0x0B`): 44 of the 1751 canned packets carry `0x0B`, all
+> targeting even cells of the `0x50…` state block.
+
+~~The superseded text:~~
 `W[23:16]=v[16:9]`, `W[15:8]=v[8:1]`, `W[7]=v[0]`, `W[30:24]=v[7:1]`.
 Bits `W[23:7]` therefore form a **contiguous 17-bit field holding v[16:0]** — and 17
 bits is exactly the external DRAM address width (A0–A16) on the block diagram.
@@ -301,6 +323,22 @@ every time.** A control that (a) every effect has, (b) always has the same range
 > the universal one may instead be `DEPTH` (name index 6) or the effect send.
 > **Verdict: address 0x90 is a universal, 0..0.8-ranged level. Which of the two names it
 > carries is NOT decided.** Marked SPECULATIVE deliberately.
+
+> ## ⚠ ★ SETTLED — AND THE PREDICTION WAS WRONG, 2026-07-27
+> **Cell `0x90` is `REV SEND`, 37 of 37.** Aligning each algorithm's parameter
+> bytecode record list against the captured UI parameter-name list (record count
+> == UI count in **49 of 49** algorithms; **22 of 23** opcodes come out carrying
+> exactly one measurement unit) binds `op 0x21 → 0x90 → REV SEND` and
+> `op 0x63 → 0x06`/`0x86` → **VOLUME**, 49 of 49. So the universal level this
+> section predicted at `0x90` is the *send to the reverb unit*, and the effect's
+> own output level is `0x06`/`0x86` — the registers `r2-output.md` had already
+> identified positionally, now with a name, a format (Q0.23 linear gain) and a
+> law (a dB curve table indexed by the 0..99 user value; value 0 = exact mute).
+> The clinching control: the twelve reverbs have **no** REV SEND parameter (a
+> reverb cannot send to itself) and their streams carry `op 0x63` **12 of 12**
+> and `op 0x21` **0 of 12**; under the swapped reading it would be the other way
+> round.
+> Source: `kn5000-roms-disasm/dsp/analysis/register-space.md` §2.3.
 
 `op 0x63` is the second-best case: its handler is `LABEL_038EB9`, which consumes exactly
 one immediate byte — a selector 0/1/2 — and returns `*(TABLE[sel] + 4*user_value)` from
