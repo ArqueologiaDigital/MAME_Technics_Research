@@ -889,6 +889,16 @@ void upd6383_device::exec_alu(u64 word)
 	// let only two of the four cases through.  alu_decoded() guard 7 keeps the
 	// disputed ones trapping, so the test below is the AGREED part and nothing
 	// more.
+	//
+	// ★ 2026-07-27: guard 7 is now STRICTER, and st_suppressed() is therefore
+	// unreachable from here.  Every bit-4 word carrying bit 7 with
+	// hi12[3:1] == 1 traps (the ACTION-0x00 escape was withdrawn -- a clear
+	// deferred past the ALU is visible at exactly those words), and the only
+	// bit-7 case alu_decoded() still admits is hi12[3:1] == 2, where the store
+	// FIRES.  The call is kept because st_suppressed() is also applied on the
+	// input-stage path below and the two must never disagree; it is now a
+	// belt-and-braces identity here rather than a live gate.
+	// dsp/analysis/adjudication-round4.md sect. 6.
 	if ((hi & upd6383_disassembler::HI_ST)
 			&& !upd6383_disassembler::st_suppressed(word))
 	{

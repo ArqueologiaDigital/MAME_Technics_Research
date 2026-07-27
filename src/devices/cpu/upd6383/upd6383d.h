@@ -305,6 +305,40 @@ public:
 	//  happens at bit7 == 1 with hi12[3:1] outside {1,2} (13 corpus words, nine
 	//  of them the COMPRESSOR's envelope step at hi12[3:1] == 5).  So the device
 	//  executes the agreed part and TRAPS the rest -- see alu_decoded().
+	//
+	//  ★ 2026-07-27, ROUND-4 ADJUDICATION (dsp/analysis/adjudication-round4.md).
+	//  Three things above are now measured rather than assumed, and one of them
+	//  cost the escape clause in alu_decoded():
+	//
+	//   1. bit 7 REALLY IS IN THE CONDITION, and that is now FORCED rather than
+	//      assumed.  Classes (0,1) and (1,1) differ in bit 7 and in nothing
+	//      else; the biquad needs (0,1) to store (suppressing it is 51.090 dB
+	//      wrong) and the LFO needs (1,1) not to.  store-gate.md item C runs
+	//      all NINE conditions of its enumeration against both witnesses and
+	//      exactly TWO survive -- `b7 & f31 == 1' (this one) and
+	//      `b7 & f31 != 2'.  They differ only where hi12[3:1] is outside {1,2},
+	//      which alu_decoded() refuses anyway, so the choice costs ZERO words.
+	//
+	//   2. WHAT THE SUPPRESSED CASE DOES is FORCED only NEGATIVELY.  Over
+	//      19 758 816 machines, 17 928 survive the LFO and NOT ONE writes
+	//      mem[ptr] at class (1,1) -- but 21 of 33 effects survive, in three
+	//      families: `no memory access', `store -> elsewhere', and ★ `LOAD',
+	//      i.e. bit 7 as a memory-port DIRECTION bit.  This code implements
+	//      "no store, no clear", which is one point inside that set.  It is
+	//      sound ONLY because alu_decoded() now refuses every class-(1,1)
+	//      store word outright (guard 7 below).
+	//
+	//   3. THE "13 CORPUS WORDS" IS CORRECT AND store-gate.md item F's
+	//      falsification of it IS WITHDRAWN.  Both numbers are right and they
+	//      count different sets: 13 over the 3057-word corpus this comment
+	//      names (38 distinct body images PLUS the 83-word resident kernel),
+	//      11 over the 38 body images alone, which is what gate_settle.py's
+	//      images() walks.  The kernel contributes the other 2.
+	//      MEASURED: adjudicate4.py mirror.
+	//      What SURVIVES from item F is the price: of those 13, ten trap on
+	//      hi12[3:1] > 2 and the other three (`090.A.00.1D5', `090.2.FB.40E',
+	//      `090.A.01.1C8') are refused by guard 7 -- so settling the CONDITION
+	//      changes the emulated machine by ZERO words.
 	// ---------------------------------------------------------------
 	static constexpr u16 HI_B7 = 1 << 7;
 
@@ -389,20 +423,45 @@ public:
 	//     would be wrong.  (Stated escape, not excluded: SRC 0x02, undecoded,
 	//     might carry the level itself and make the write an identity.)
 	//  7. ★ THE BIT-4 STORE GATE, and it is the first guard here that COSTS
-	//     WORDS.  hi12 bit 7 suppresses the store (see HI_B7 above).  Three gates
-	//     survive the LFO's falsification and they agree on two of the four
-	//     cases; where they DISAGREE the word must keep trapping:
-	//        bit7 && hi12[3:1] == 1  -> the store is suppressed (3 of 3), but
-	//              whether the CLEAR still fires is disputed.  It is UNOBSERVABLE
-	//              exactly when the ACTION is LO_ACT_ACC_BUS, because that
-	//              substitutes the bus for the accumulator's own feedback term
-	//              and the old accumulator cannot reach the result.  So those
-	//              words execute and the other 31 trap.
-	//        bit7 && hi12[3:1] not in {1,2} -> the gates disagree outright.
-	//     MEASURED over the 3057-word corpus: 707 words carry bit 4 -- 527 at
-	//     bit7 = 0 (unchanged), 29 at (bit7, f31) = (1, 2) (unchanged),
-	//     138 at (1, 1) of which 107 carry ACTION 0x00 and execute, and 13 at
-	//     (1, f31 outside {1,2}) which trap.
+	//     WORDS.  hi12 bit 7 suppresses the store (see HI_B7 above).  A bit-4
+	//     word carrying bit 7 executes ONLY at hi12[3:1] == 2; everything else
+	//     traps.
+	//
+	//     ★ THIS USED TO CARRY AN ESCAPE CLAUSE AND THE ESCAPE IS WITHDRAWN
+	//     (2026-07-27, dsp/analysis/adjudication-round4.md sect. 6).  It read:
+	//
+	//        "bit7 && hi12[3:1] == 1 -> the store is suppressed (3 of 3), but
+	//         whether the CLEAR still fires is disputed.  It is UNOBSERVABLE
+	//         exactly when the ACTION is LO_ACT_ACC_BUS, because that
+	//         substitutes the bus for the accumulator's own feedback term and
+	//         the old accumulator cannot reach the result."
+	//
+	//     The argument is UNDER-ENUMERATED.  It covers the two gates whose
+	//     clear is taken BEFORE the ALU or not at all; it does NOT cover
+	//     `b7_f31_1_clrlate', the third surviving gate, which defers the clear
+	//     to AFTER the word's own ALU step.  A clear taken after the ALU sets
+	//     the result to zero WHATEVER the ACTION was, so it is visible at
+	//     exactly the words the escape admitted.  store-gate.md sect. 4 makes
+	//     this worse rather than better: the class-(1,1) survivor set is 21
+	//     effects and its first family is `-/clr:{never,before,after}'.
+	//
+	//     The word must therefore keep trapping (the standing rule: losing a
+	//     decode is acceptable, shipping a guess is not).
+	//
+	//     ★ AND THE PRICE IS ONE WORD, MEASURED, NOT 107.  The old comment said
+	//     "138 at (1,1) of which 107 carry ACTION 0x00 and execute".  They do
+	//     not execute: 106 of the 107 are refused by the SRC/ACTION anchoring
+	//     guard above (SRC 0x1C x46, SRC 0x00 x31, SRC 0x08 x29, ACTION 0x1A,
+	//     ACTION 0x0E -- store-gate.md item G).  Exactly ONE corpus word ever
+	//     reached the escape: `092.A.01.1C0', the LFO ramp step at header
+	//     I-RAM 37, slot 37 of the cold-boot frame.  It becomes PARTIAL.
+	//
+	//     MEASURED over the 3057-word corpus: 708 words carry bit 4 -- 528 at
+	//     bit7 = 0 (unchanged), 29 at (bit7, f31) = (1, 2) (unchanged, and none
+	//     of them decodes today), 138 at (1, 1) (ALL trap now; 1 of them used
+	//     to execute), and 13 at (1, f31 outside {1,2}) which trap.
+	//     (The old "707/527" was one word short; adjudicate4.py mirror prints
+	//     the census for the full corpus, the bodies and the kernel separately.)
 	// ---------------------------------------------------------------
 	static constexpr bool alu_decoded(u64 w)
 	{
@@ -424,13 +483,12 @@ public:
 
 		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7))
 		{
-			// guard 7 -- the only case the three surviving gates settle is
-			// hi12[3:1] == 1 with the clear made unobservable, and == 2.
-			const u16 f = hi_f31(hi12(w));
-			if (f == 1 && lo_act(w) != LO_ACT_ACC_BUS)
-				return false;                   // the CLEAR is disputed and visible
-			if (f != 1 && f != 2)
-				return false;                   // the gates disagree outright
+			// guard 7 -- the ONLY case the surviving gates settle is
+			// hi12[3:1] == 2.  The ACTION-0x00 escape at hi12[3:1] == 1 was
+			// withdrawn 2026-07-27: a clear deferred past the ALU is visible
+			// there too, so the case is not settled.  See above.
+			if (hi_f31(hi12(w)) != 2)
+				return false;
 		}
 
 		switch (hi_f31(hi12(w)))
