@@ -533,6 +533,23 @@ void kn5000_state::subcpu_mem(address_map &map)
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
 	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2.
+	// CONFIRMED 2026-07-27 from two independent sources -- the firmware routines
+	// DSP2_Send_Command / DSP2_Send_Data (8 bits MSB-first, NOP-padded, and they
+	// never poll PH.0) and the schematic's own net names DSP2DA / DSP2SCK / DSP2CS.
+	// The link is WRITE-ONLY: the board gives IC310 no data-in line at all, and
+	// unlike IC311 there is no READY bit, no timeout and no error return.
+	// ** AND IC310, NOT IC311, IS THE CHIP THE WHOLE MAIN MIX PASSES THROUGH: **
+	// IC303 SDO0 (main mix) -> IC310 SDI (pin 6); IC310 SDO1/SDO2 -> IC313 PCM69AU.
+	// The microphone reaches IC310's own stereo ADC (AINL 93 / AINR 85) and no
+	// other digital device.  NINE of the 100 effect-algorithm slots are its
+	// programs -- 57 STANDARD, 58 PERCUSSIVE, 59 SYMPHONIC, 60 DEEP SPACE (the
+	// master REVERB types), 79 GEQ, 88 ROOM, 89 KARAOKE, 90 BATH ROOM, 91 STAGE --
+	// and NONE of them touches IC311, so the IC311 algorithm population is 91.
+	// Its microcode word is 32 bits (3 images, 402 words) and its coefficient word
+	// is 16 bits, word-addressed (9 images, 674 words).  Scoped in
+	// kn5000-roms-disasm/dsp/analysis/second-dsp-and-ready.md sect. 2; the
+	// instruction set is NOT decoded and must not be guessed at -- this chip is on
+	// the output bus, so a partially-correct model would be AUDIBLY wrong.
 	// ---------------------------------------------------------------------
 	// ---------------------------------------------------------------------
 	// PROVENANCE (2026-07-22): the board facts below -- IC311's 25 MHz crystal,
@@ -1113,11 +1130,42 @@ void kn5000_state::kn5000(machine_config &config)
 					m_dsp1->host_w(BIT(m_subcpu_p7, 6), data);
 			});
 
-	// SUBCPU PORT H:
-	//   bit 0 (input) = DSP1 (IC311) ready signal (active high)
-	//   bit 1 (output) = DSP1 reset (active low)
-	//   On real hardware, the DSP asserts this line after accepting a command.
-	//   Always ready since the DSP1 stub accepts all register writes immediately.
+	// SUBCPU PORT H (IC27 pins 146..149 = PH0..PH3):
+	//   bit 0 = net DSPRDY  <- IC311 (uPD6383GF) pin 8 RDY, OPEN DRAIN, pulled up
+	//                          through R334 4.7k to +5D.  MEASURED off the service
+	//                          manual, p.35 (IC311 pin column) and p.33 (CPU
+	//                          SECTION (B): pin 146 = PH0, and the only DSP control
+	//                          nets on that sheet are DSPRST2 / DSPRST / DSPRDY).
+	//   bit 1 = net DSPRST   -> DSP1 reset (active low; DSP1_Assert_Reset 0x038396)
+	//   bit 2 = net DSPRST2  -> DSP2 reset (active low; DSP2_Assert_Reset 0x03839E)
+	//   bit 3 = a strap, read exactly ONCE (see below)
+	//
+	// ** DO NOT CHANGE THIS CONSTANT TO "MODEL THE READY LINE". BIT 0 OF IT IS
+	// DEAD CODE AND BIT 3 IS LOAD-BEARING. **  Analysis and reproduce command:
+	// kn5000-roms-disasm/dsp/analysis/second-dsp-and-ready.md sect. 1
+	// (`python3 dsp/tools/second_dsp.py ready').
+	//
+	//   * The sub CPU's RESET writes PHCR = 0x07, so PH.0/1/2 are OUTPUTS.  A read
+	//     of a bit programmed as an output returns the OUTPUT LATCH, not the pin
+	//     (tmp94c241_device::port_r<PORT_H> implements exactly that, and the MAIN
+	//     CPU's own firmware corroborates the convention: it writes PHCR = 0x09 and
+	//     the only port-H bits it ever reads are 1 and 2, the two it left at 0).
+	//   * DSP_Read_Status (0x0383F7) is `SET 0,(PH)' / `LDCF 0,(PH)' / `SCC C,L' --
+	//     it sets that latch to 1 and then samples it.  So READY reads 1 ALWAYS,
+	//     whatever IC311 does and whatever this callback returns.  The 8000-poll
+	//     timeout in DSP_Send_Command/DSP_Send_Data and BOTH of its error returns
+	//     (which end in a bare `ret' at 0x03CFED that silently drops the parameter
+	//     write) are unreachable in this firmware.  Always-ready is therefore
+	//     FAITHFUL -- but not because "the DSP is quick", and not because of the
+	//     value below.
+	//   * With PHCR = 0x07 this callback supplies bits 3..7 ONLY.  The single bit
+	//     the sub-CPU firmware consumes from it is BIT 3: DSP_SYSTEM_INIT samples
+	//     `bit 3,(PH)' at 0x034C87 and stores its COMPLEMENT into bit 3 of the DSP
+	//     config word at RAM 0x041343.  0x01 -> PH.3 = 0 -> that config bit is SET.
+	//   * OPEN: whether the real TMP94C241 port H reads the pin regardless of PHCR.
+	//     If it does, PHCR = 0x07 is a firmware bug that the 4.7k pull-up masks and
+	//     the handshake is live on hardware.  Deciding it needs the port-H spec or
+	//     a board (strap DSPRDY low and see whether effects still load).
 	m_subcpu->porth_read().set_constant(0x01);
 
 
