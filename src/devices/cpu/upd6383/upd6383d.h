@@ -217,16 +217,52 @@ public:
 	// hi12[3:1] == 1 and once at hi12[3:1] == 0.  So the ACTION is not a step
 	// before or after the operation: it is a SELECTOR ON THE SAME ADDER, and it
 	// substitutes the operand bus for the accumulator's own feedback term.  See
-	// upd6383.cpp exec_alu().  FORCED: the one reading that survives the LFO,
-	// SINGLE DELAY *and* bit-identity with the PARAMETRIC EQ biquad.
+	// upd6383.cpp exec_alu().  ★ THE ADDER ITSELF IS FORCED.
+	//
+	// ⚠ WHICH accumulator half `0x00' selects is CONSISTENT, NOT FORCED --
+	// CORRECTED 2026-07-27, dsp/analysis/action00-discriminator.md.  This comment
+	// used to read "FORCED: the one reading that survives the LFO, SINGLE DELAY
+	// *and* the biquad".  Two of those three are BLIND to the question and always
+	// were: on an ACTION-0x00 word with hi12[3:1] == 0 `load' (bus + P) and `add'
+	// (0 + P + bus) are THE SAME EXPRESSION, SINGLE DELAY's ACTION-0x00 word is
+	// exactly that shape, and the biquad carries no ACTION-0x00 word at all
+	// (MEASURED: its ACTION codes are 07 12 13 14 15).  The 18/18 was ONE context,
+	// the LFO, plus a store-timing pin -- and it breaks on a gate nobody had
+	// enumerated (a bit-7-SUPPRESSED store whose CLEAR is deferred to the END of
+	// the word): the same three-context solve then has 33 survivors, `load' x15,
+	// `add' x12, `rload' x6.  ★ AND THE TWO QUESTIONS ARE ONE: in all 33, `add'
+	// and `rload' occur ONLY on a late-clearing gate and `load' on any of five.
+	// `load' SHIPS because it is the plurality and the only reading compatible
+	// with every surviving gate -- withdrawing it would re-trap 107 corpus words
+	// that no evidence falsifies -- but it is CONSISTENT and must not be cited as
+	// FORCED.  (The reverb comb of analysis/schroeder-topology.md forces `load'
+	// too, but only INSIDE a topology hypothesis, so it does not restore the
+	// label.)
 	//
 	// ★ LO_ACT_CAP_TA2 (0x19) -- a SECOND CAPTURE PAIR beside 0x13/0x14
 	// (0x19 = 0x13 + 6, 0x1A = 0x14 + 6).  FORCED 72/72 by SINGLE DELAY once
-	// the order above is fixed, in a model where the input arrives through the
-	// MEASURED pointer walk and every register the block does not set is
-	// randomised.  This settles a reading `dsp-frame-advance.md' sect. 2 called
-	// "INFERRED, and internally contradicted" -- and it resolves AGAINST the
-	// lo12[2:0]-as-destination pattern, which put tempA at [2:0] == 3.
+	// the order above is fixed (108/108 in the wider space of
+	// analysis/action00-discriminator.md sect. 7, both windows and both input-mix
+	// settings), in a model where the input arrives through the MEASURED pointer
+	// walk and every register the block does not set is randomised.  This settles
+	// a reading `dsp-frame-advance.md' sect. 2 called "INFERRED, and internally
+	// contradicted" -- and it resolves AGAINST the lo12[2:0]-as-destination
+	// pattern, which put tempA at [2:0] == 3.
+	//
+	// ★★ IT SURVIVED A CHALLENGE, 2026-07-27, AND THE CHALLENGE IS WITHDRAWN.
+	// analysis/schroeder-topology.md sect. 0-C reported that the reverb's comb
+	// core FALSIFIES this reading conditionally: its STRICT survivors force
+	// `tempB <- bus' (112/112) and its joint row forces `tempA <- acc' with an
+	// accumulator half as well -- i.e. "only ACTION 0x00 routes the bus", the rule
+	// this decoder implements, would be wrong.  Re-derived: that search enumerated
+	// the read latency over {0,1,2,7,8} and OMITTED the BLOCKING read (land = -1),
+	// which is the read model SINGLE DELAY itself FORCES 5145/5145.  Put it back
+	// and the reverb's fresh delay sample reaches slot 3 through the read word's
+	// OWN anchored ACTION 0x14 (tempB <- bus) instead of through 0x19 -- 3206 comb
+	// machines survive against 112, `tempB <- bus' collapses from FORCED to 56 of
+	// 3206, `tempA <- bus' is admissible again, and ACTION 0x19's ACCUMULATOR half
+	// comes out FORCED to "no effect" 3206/3206, which RE-UPHOLDS the strict
+	// vocabulary rather than falsifying it.  See analysis/blocking-read.md.
 	enum : u8 {
 		LO_ACT_ACC_BUS = 0x00,  // the accumulator's input term comes from the BUS
 		LO_ACT_ST_BUS  = 0x07,  // mem[ptr] <- bus

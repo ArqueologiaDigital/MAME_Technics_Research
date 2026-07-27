@@ -823,6 +823,36 @@ void upd6383_device::exec_alu(u64 word)
 		// -a2/a0 at 2^23 (MEASURED, notes/kn5000-dsp-biquad-coeffs.md sect. 4),
 		// so the y[n-2] cell must hold half the scale of the y[n-1] cell, and
 		// the tempB path is the only path between them.
+		//
+		// ★ A SECOND BLOCK NOW HAS AN OPINION, AND IT DISAGREES -- recorded
+		// 2026-07-27, unresolved, and deliberately NOT acted on.  The reverb
+		// core's comb search enumerates this shift as `tbsh', and in every
+		// STRICT row it has ever run it FORCES tbsh = 0: 112/112 in the
+		// PUBLISHED row, 3206/3206 with the blocking read, 2310/2310
+		// sequential.  Stated at its real strength rather than its best: in
+		// the JOINT row it is only a 92.1 % majority (32050 of 34815), so
+		// this is a tension INSIDE a topology hypothesis, not a contradiction
+		// between two determinations.  Every one of those numbers was
+		// produced before this comment and NONE had ever been PRINTED, which
+		// is why nobody noticed; the marginal is printed now
+		// (dsp/analysis/blocking-read.md item H).
+		//
+		// The reverb's motif writes tempB at slot 0 and reads it at slot 3,
+		// so a shift on the CAPTURE and a shift on the BUS are equally
+		// excluded there: the disagreement is about the shift existing AT ALL
+		// on a tempB->operand path, not about where it sits.  Candidates,
+		// ENUMERATED and none chosen:
+		//   (a) the shift is conditional on something neither search varies
+		//       -- the class, or the capture code (the reverb captures with
+		//       ACTION 0x14 on an ESCAPE word, the biquad on a mode-2 word);
+		//   (b) the reverb's ROM gains are not the comb's loop gains, so
+		//       tbsh = 1 is rejected by a mislabelled reference, not by the
+		//       machine;
+		//   (c) the biquad's factor of two lives somewhere else entirely and
+		//       this is the wrong home for it.
+		// IT STAYS AS IT IS, because the biquad's 77 dB is a MEASURED
+		// reconstruction while the reverb's tbsh is a constraint inside a
+		// hypothesis.
 		L = s32(util::sext(m_tb, 24)) >> 1;
 		break;
 	case upd6383_disassembler::LO_SRC_MEM:

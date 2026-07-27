@@ -247,7 +247,23 @@ Ranked by frame slots in the cold-boot frame (285 slots, **177 undecoded** over
    class 6 / class 4 -- addressing mode unknown       4 slots,  3 distinct
 ```
 
-### #1 — the external delay-DRAM family — **41 slots, 12 distinct** (unchanged)
+> ## ⚠ CORRECTION — THIS LIST IS NOT A PARTITION AND ITS COUNTS ARE NOT ADDITIVE
+> (2026-07-27, `kn5000-roms-disasm/dsp/analysis/dark-words.md` item E)
+>
+> The twelve buckets above sum to **179** against the **177** undecoded slots
+> stated three lines earlier, because a word carrying two unknowns is charged to
+> two buckets. And the first bucket is **42, not 41**: `880.1.30.8BC` also carries
+> the `lo12` bit-11 modifier and was counted only in that bucket.
+>
+> **The RANKING survives** — the delay-DRAM family is rank 1 by reach on 37 of 37
+> unit-0 bodies, and it is also rank 1 on the two leverage metrics `dark-words.md`
+> introduces — but the numbers must not be arithmetic-ed with. The strict
+> partition of the 86 TRAP slots by *blocker set* is in `dark-words.md` §3.1
+> (delay-DRAM 42 / C-format 17 / mode-1 space 12 / unknown class 12 / class-0
+> register load 3 = 86 exactly), and that is the list to use for per-unknown
+> leverage. This one remains useful only as a per-unknown *reach* count.
+
+### #1 — the external delay-DRAM family — **42 slots, 13 distinct** (corrected)
 
 `880.1.60.2D4` ×9, `880.1.20.655` ×9, `900.1.60.1D5` ×4, `880.1.20.2C7` ×4, …
 The **address** is PROVEN BY CONSTRUCTION (`DESCRIPTOR_CELL[cursor] + G`, R3); the
