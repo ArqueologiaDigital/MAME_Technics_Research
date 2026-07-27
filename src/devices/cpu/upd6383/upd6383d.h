@@ -599,9 +599,19 @@ public:
 	//  differs).  ANY predicate that selects DRAM words by class4 alone is wrong.
 	//  NOT decoded: the address is a descriptor cell reached through an implicit
 	//  cursor, so it is not in the word.
+	//
+	//  DIRECTION -- FORCED, and it is the REVERSE of what this file used to say
+	//  (dsp/analysis/adjudication-round5.md; the reasoning is spelled out beside
+	//  the annotation in upd6383d.cpp).  `addr8' bit 6 selects it and 0x60 is the
+	//  WRITE.  Applied ONLY over the addr8 values the rule was validated on --
+	//  0x20 and 0x30 are READ, 0x60 is WRITE, anything else keeps trapping.
 	// ---------------------------------------------------------------
 	static constexpr bool is_dram(u64 w)
 	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }
+
+	//  'R' = delay-DRAM read, 'W' = write, 0 = outside the validated addr8 set.
+	static constexpr char dram_dir(u64 w)
+	{ return (addr8(w) == 0x20 || addr8(w) == 0x30) ? 'R' : (addr8(w) == 0x60) ? 'W' : 0; }
 
 	// bit 23 (== class4 bit 3) is the CURSOR-FETCH enable.  It is NOT a
 	// multiply enable -- that reading was CORRECTED: 18 of the phaser's 20

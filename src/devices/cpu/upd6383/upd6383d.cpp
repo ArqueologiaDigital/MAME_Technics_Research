@@ -426,36 +426,67 @@ std::string annotate(u64 word, int at)
 		return "END OF BLOCK (falls through) -- and still performs the rest of the word";
 	}
 
-	// ---- external delay DRAM.  ADDRESS SOURCE now known, DIRECTION mostly not
-	// WITHDRAWN HERE, all three at once (dsp/analysis/r1-allpass-motif.md sect. 5,
-	// r3-delaydram.md sect. 6.2/6.3):
-	//   * "880.1.60 = bracket OPEN / 880.1.20 = bracket CLOSE" -- they are a READ
-	//     and a WRITE, FORCED (the opposite assignment has zero survivors in all
-	//     three machine models);
-	//   * "addr8 selects the direction" -- FALSIFIED: three of MULTI TAP DELAY's
-	//     four tap READS land on 880.1.20.2C7 and its line WRITE on 880.1.60.000;
-	//   * "880.1.30 = framing word, carries no DRAM information" -- it is the
-	//     FIRST DRAM ACCESS of a body, 37 of 38 distinct images.
+	// ---- external delay DRAM.  ADDRESS SOURCE and DIRECTION known; the CELL is
+	//      still an implicit cursor, so these stay TIER 2 and keep trapping.
+	//
+	// THE DIRECTION IS NOW FORCED, AND IT IS THE REVERSE OF WHAT THIS FILE USED
+	// TO PRINT (dsp/analysis/adjudication-round5.md).  Both sides are named:
+	//   * the FIELD: over the 133 non-C-format equal-value descriptor pairs, of
+	//     every boolean function of every named field only `addr8' bit 6 and its
+	//     own global flip reach zero violations, and bit by bit over all 36 bits
+	//     exactly one does (dram-direction.md item B, an exhaustive enumeration).
+	//   * the MAP: three POLARITY-FREE oracles -- op-0x67 taps of one algorithm
+	//     share a direction; a tap and its own line base oppose; equal-value
+	//     pairs oppose -- are simultaneously perfect at exactly ONE of thirteen
+	//     phases, the IDENTITY (adjudication-round5 sect. 1; permutation null
+	//     0 of 2000).  Phase and polarity are ONE parameter, which is why the
+	//     phase had to be settled by tests that cannot see a polarity.
+	//   * the POLARITY, twice over: (a) MULTI TAP DELAY has FOUR op-0x67 taps
+	//     sharing ONE line base and a multi-tap is one write and N reads -- the
+	//     four taps carry addr8 0x20/0x30, the shared base carries 0x60;
+	//     (b) at a boundary shared by two ladder segments the READ must take the
+	//     aged word BEFORE the write overwrites it, and the earlier access of
+	//     all 133 opposite-bit pairs carries bit 6 = 0.
+	//   * R1 F1 said the opposite and is FALSIFIED AS STATED, not outvoted: its
+	//     acceptance test 2 and F6 bound the DRAM read latency to inside one
+	//     8-word repetition, and the descriptor addresses need TWENTY words, so
+	//     read_slot = 4 was outside the searched model class.
+	//   * R3 sect. 6.3, which this file quoted as REFUTING the addr8 rule,
+	//     refutes only its old POLARITY.  Its MULTI TAP observation is (a).
 	if (upd6383_disassembler::is_dram(word))
 	{
 		const std::string base =
-				"external delay-DRAM access; address = DESCRIPTOR_CELL[cursor] + G, from the host "
-				"bank behind pointer ...825 / tag 0x4C (R3, PROVEN BY CONSTRUCTION) -- one cell per "
-				"DRAM word, in program order, so it is NOT in this word";
+				"external delay-DRAM access; address = DESCRIPTOR_CELL[k] + G, from the host bank "
+				"behind pointer ...825 / tag 0x4C (R3, PROVEN BY CONSTRUCTION) -- the k-th class-1 "
+				"escape word of a body takes the k-th cell of that body's own descriptor block (the "
+				"IDENTITY map, FORCED in adjudication-round5 sect. 1), so the address is NOT in "
+				"this word";
 
-		if (ad == 0x60 && lo == 0x2d4)
-			return "external delay-DRAM READ (DETERMINED, R1 F1 -- the opposite direction has zero "
-					"survivors in all 3 models); read data visible 2-5 words later (R1 F6). " + base;
-		if (ad == 0x20 && lo == 0x655)
-			return "external delay-DRAM WRITE (DETERMINED, R1 F1 -- the opposite direction has zero "
-					"survivors in all 3 models); write data staged by the preceding bit-4 store, "
-					"44/44. " + base;
-		if (ad == 0x30)
-			return base + ". addr8 0x30 marks the FIRST DRAM access of a body (37 of 38 distinct "
-					"images, R3 sect. 6.2)";
-		return base + ". DIRECTION UNKNOWN: addr8 does NOT select it -- MULTI TAP DELAY's tap READS "
-				"land on 880.1.20.2C7 and its line WRITE on 880.1.60.000 (R3 sect. 6.3 falsifies "
-				"the old addr8 rule)";
+		std::string role, extra;
+		if (ad == 0x20 || ad == 0x30)
+		{
+			role = "READ";
+			extra = "; this end moves with the user's DELAY (ms) knob, and the delay is "
+					"READ_CELL - WRITE_CELL";
+			if (ad == 0x30)
+				extra += "; addr8 0x30 also marks the FIRST DRAM access of a body, 37 of 38 "
+						"distinct images (R3 sect. 6.2)";
+		}
+		else if (ad == 0x60)
+		{
+			role = "WRITE";
+			extra = "; the line BASE -- MULTI TAP DELAY's four taps share exactly one of these, "
+					"which is what forces the polarity";
+		}
+		else
+		{
+			return base + util::string_format(". DIRECTION OUT OF SCOPE: addr8 0x%02X is outside "
+					"the 0x20 / 0x30 / 0x60 the rule was validated on", ad);
+		}
+		return "external delay-DRAM " + role + " (FORCED, adjudication-round5 sect. 3 -- addr8 bit "
+				"6 is the direction field and 0x60 is the WRITE; this REVERSES R1 F1, which bounded "
+				"the read latency to one repetition when the descriptors need twenty words)"
+				+ extra + ". " + base;
 	}
 
 	// ---- the reverb all-pass core (dsp/analysis/r1-allpass-motif.md) --------
