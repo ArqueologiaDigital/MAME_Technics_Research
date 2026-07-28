@@ -465,6 +465,9 @@ private:
 	u64  m_pres_seen = 0, m_pres_nonzero = 0;   // ★ diagnostic: presentation words
 	s32  m_pres_peak = 0;
 	s64  m_pres_accpeak = 0;
+	u8   m_cwr_hi = 0, m_cwr_word[3] = {0,0,0};   // ★ SPECULATIVE cmd-0x02 coefficient
+	u16  m_cwr_port = 0;                          //   stream: port prefix and the
+	u32  m_cwr = 0;                               //   sequential C-RAM write pointer
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next
 	                                //   delay-DRAM word consumes, reset each frame
 	u64 m_trap_total;

@@ -413,6 +413,42 @@ void upd6383_device::host_w(bool cd, u8 data)
 	// (e.g. 0x0161), so it is not a plain 256-word C-RAM address and routing it
 	// would put invented data in a real memory.  Ignoring is not a stall: the
 	// host is never held up, which is what keeps the machine booting.
+	//  ★★★ COMMAND 0x02 -- THE COEFFICIENT STREAM, SPECULATIVE, 2026-07-28.
+	//  This command was ACCEPTED AND IGNORED, so C-RAM was NEVER LOADED and the
+	//  emulated DSP ran with no effect coefficients at all.  The captured stream
+	//  verifies itself against work done entirely outside this device:
+	//      transfer 37:  01 61 | 00 00 72 | 7F FF FF | ...
+	//  0x000072 = 114 is CHORUS's LFO ramp step, floor(f * 2^23 / 44100), and
+	//  0x7FFFFF is the wrap constant -- the two numbers dsp/tools/lfo_ramp.py
+	//  derives from the ROM.  transfer 23 opens 0x200000 / 0x400000 = 0.25 / 0.5.
+	//
+	//  MEASURED: the framing.  Every cmd-0x02 payload is a 2-byte prefix 0x0161
+	//  (host-side.md C4 calls it "the 24-bit coefficient port", NOT an address)
+	//  followed by a whole number of 3-byte 24-bit words.
+	//  ⛔ GUESSED: that the words land in C-RAM sequentially from 0, and that the
+	//  write pointer restarts at each transfer.  A zero-payload 0x0161 transfer
+	//  (transfer 10) is treated as a reset.  Register row 17.
+	if (m_host_cmd == 0x02 && m_speculative)
+	{
+		if (m_host_pos == 0)      m_cwr_hi = data;
+		else if (m_host_pos == 1) { m_cwr_port = (u16(m_cwr_hi) << 8) | data; m_cwr = 0; }
+		else
+		{
+			const u32 b = (m_host_pos - 2) % 3;
+			m_cwr_word[b] = data;
+			if (b == 2)
+			{
+				const u32 v = (u32(m_cwr_word[0]) << 16) | (u32(m_cwr_word[1]) << 8)
+						| m_cwr_word[2];
+				if (m_cwr < 256)
+					m_cram.write_dword(m_cwr, v & 0xffffff);
+				m_cwr++;
+			}
+		}
+		m_host_pos++;
+		return;
+	}
+
 	if (m_host_cmd != 0x01)
 	{
 		m_host_pos++;
@@ -949,7 +985,28 @@ void upd6383_device::exec_alu(u64 word)
 			//  Presenting the raw value is the reading that makes the chip audible;
 			//  it is SPECULATIVE and is row 16 of SPECULATIVE-APPLIED-REGISTER.md.
 			const s64 rawacc = util::sext(m_acc, 44);
-			const s32 v = s32(std::clamp<s64>(rawacc, -(1 << 23), (1 << 23) - 1));
+			s64 scaled = std::clamp<s64>(rawacc, -(1 << 23), (1 << 23) - 1);
+			//  ★★ SPECULATIVE, and the best-evidenced guess in this block: apply the
+			//  PER-UNIT OUTPUT LEVEL.  Registers 0x06 (unit 0) and 0x86 (unit 1) are
+			//  named per-unit OUTPUT LEVEL and their role is PROVEN BY CONSTRUCTION --
+			//  the last four host actions of cold boot are
+			//      setvec unit1,#200 / setvec unit0,#84 / reg 0x06 <- +0.500000
+			//                                           / reg 0x86 <- +0.183992
+			//  and both are cleared at reset.  dark-words.md sect. 4.3 calls testing
+			//  them "the cheapest live experiment in the project ... a repeatable test
+			//  with a known answer".
+			//
+			//  WHAT IS GUESSED: that the level applies HERE, at the presentation, as a
+			//  Q0.23 multiply.  Its VALUE is measured; its point of application is not.
+			//  Motivation is an observed defect -- with the raw accumulator presented,
+			//  the wet peaks at 32696 against a dry peak of 20441, i.e. too hot, and
+			//  0.5 / 0.184 are the right order to fix it.
+			{
+				const u32 lvl = m_dram.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
+				if (lvl != 0)
+					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
+			}
+			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
 			m_do[unit][0] = v;
 			m_do[unit][1] = v;
 			m_pres_seen++;
