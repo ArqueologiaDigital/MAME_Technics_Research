@@ -370,6 +370,11 @@ void upd6383_device::device_stop()
 				for (u32 i = 0; i < 6; i++)
 					so += string_format(" slot%d:%d/%d", i, m_out_slot_nonzero[i], m_out_slot_writes[i]);
 				logerror("upd6383: OUTPUT SLOT WRITES (nonzero/total):%s\n", so);
+				std::string s7;
+				for (u32 q = 0; q < m_st07n; q++)
+					s7 += string_format(" [dest %02X src %02X ptr %02X L %d]",
+							m_st07_dest[q], m_st07_src[q], m_st07_ptr[q], m_st07_val[q]);
+				logerror("upd6383: MODE-1 ACT-07 STORES:%s\n", s7);
 				std::string sd;
 				for (u32 i = 0; i < 256; i++)
 					if (m_dwr[i]) sd += string_format(" %02X:%d/%d", i, m_dwr_nz[i], m_dwr[i]);
@@ -1271,6 +1276,16 @@ void upd6383_device::exec_alu(u64 word)
 		case 0x11:
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
+		//  ★★★ SRC 0x02/0x03/0x04 -- register row 22, 2026-07-28.  These occur ONLY
+		//  on the five class-1 mode-1 ACT-0x07 STORE words of the epilogue, whose
+		//  destinations (0x8A, 0x0F, 0x8C, 0x85, 0x06) are now confirmed by cadence.
+		//  Their SOURCE was unread, so those stores wrote zero.
+		//  ⛔ PURE ENUMERATION: mem[ptr] is chosen because it is what every other
+		//  unanchored source in this device resolves to and because the epilogue's
+		//  pointer walks the cells the bodies deposit in.  No independent support.
+		case 0x02: case 0x03: case 0x04:
+			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			break;
 		case upd6383_disassembler::LO_SRC_MEM:
 		case upd6383_disassembler::LO_SRC_ACC:
 		case upd6383_disassembler::LO_SRC_TA:
@@ -1514,6 +1529,19 @@ void upd6383_device::exec_alu(u64 word)
 		const u8 mode07 = upd6383_disassembler::c_format(word)
 				? 2 : u8(upd6383_disassembler::class4(word) & 7);
 		const u8 d07 = (mode07 == 1) ? upd6383_disassembler::addr8(word) : m_dp;
+		if (mode07 == 1 && m_st07n < 8)
+		{   // ★ where is the pointer, and what is under it, at these five stores?
+			bool seen = false;
+			for (u32 q = 0; q < m_st07n; q++) if (m_st07_dest[q] == d07) seen = true;
+			if (!seen)
+			{
+				m_st07_dest[m_st07n] = d07;
+				m_st07_ptr[m_st07n] = m_dp;
+				m_st07_val[m_st07n] = L;
+				m_st07_src[m_st07n] = upd6383_disassembler::lo_src(word);
+				m_st07n++;
+			}
+		}
 		m_dram.write_dword(d07, u32(L) & 0xffffff);
 		m_dwr[d07]++;
 		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
