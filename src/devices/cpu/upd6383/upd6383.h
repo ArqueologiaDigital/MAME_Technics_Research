@@ -353,6 +353,7 @@ private:
 	// `k6' = one of the twelve whitelisted input-stage words, which additionally
 	// perform their hi12 bit-4 store (see the comment on the definition).
 	void exec_addressing_only(u64 word, bool k6);
+	void exec_alu_k6(u64 word);     // ★ the K6 input stage's arithmetic (row 18)
 	void exec_decoded(u64 word);
 	void exec_alu(u64 word);
 
@@ -472,6 +473,7 @@ private:
 	//  Answers "where does the signal die?" with a measurement instead of a search.
 	s64  m_accprof[384] = {};
 	u32  m_slotseen[384] = {};
+	bool m_in_k6 = false;           // ★ re-entrancy guard for exec_alu_k6()
 	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
 	bool m_cram_wp_set = false;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer

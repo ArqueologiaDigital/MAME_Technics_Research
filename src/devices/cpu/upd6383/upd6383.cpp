@@ -800,6 +800,20 @@ void upd6383_device::latch_inputs_to_dram()
 //  frame that contains it is discarded exactly as before, and it still appears on
 //  the decoding worklist.  EXECUTE WHAT ADDRESSES, NEVER WHAT COMPUTES.
 
+//  ★ The K6 ALU: exec_alu()'s arithmetic with the pointer walk left to
+//  exec_addressing_only(), which has already performed the MEASURED version.
+void upd6383_device::exec_alu_k6(u64 word)
+{
+	const u8 dp_save = m_dp;
+	const u32 cur_save = m_cursor;
+	m_in_k6 = true;                 // stop exec_alu() re-entering the K6 branch
+	exec_alu(word);
+	m_in_k6 = false;
+	m_dp = dp_save;                 // addressing already done by the caller
+	m_cursor = cur_save;
+}
+
+
 void upd6383_device::exec_addressing_only(u64 word, bool k6)
 {
 	const u16 hi = upd6383_disassembler::hi12(word);
@@ -913,9 +927,36 @@ void upd6383_device::exec_alu(u64 word)
 		//  over 5 472 003 samples, which is exactly what the owner heard.
 		//  Their addressing is MEASURED (notes/dsp-k6-input-stage.md); only the
 		//  ALU is open, so run the measured part and leave the ALU alone.
-		if (upd6383_disassembler::addressing_only(word))
+		if (upd6383_disassembler::addressing_only(word) && !m_in_k6)
 		{
-			exec_addressing_only(word, true);
+			//  ★★★ THE K6 INPUT STAGE'S ALU -- 2026-07-28.  Measured cause of the
+			//  whole audio failure: profiling peak |acc| at all 285 slots showed it
+			//  is ZERO EVERYWHERE, because these twelve words deposit the sample and
+			//  return BEFORE the arithmetic.  They are the only words that read the
+			//  audio latches, so nothing downstream ever sees a signal.
+			//
+			//  Decoding their lo12 shows the block is far less open than "ALU OPEN"
+			//  suggests.  Both fields are ANCHORED on five of them, and the refusals
+			//  are narrow:
+			//     iw6  400.A.00.419  SRC 0x10 acc, ACT 0x19  -- NOTHING refuses it
+			//     iw9  012.2.FF.1D5  SRC 0x07 mem, ACT 0x15  -- NOTHING refuses it
+			//     iw8  084.2.01.1C0  SRC 0x07 mem, ACT 0x00  -- refused ONLY by
+			//     iw2  084.2.02.680  SRC 0x1A tB,  ACT 0x00     "f31==2 on class 2"
+			//     iw4  204.2.02.1CE  SRC 0x07 mem, ACT 0x0E     (see below)
+			//
+			//  ★ iw8 IS "THE PORT READ of block B" (notes/dsp-k6-input-stage.md §7)
+			//  and its ACTION is 0x00 = acc's input term <- bus.  Executing it hands
+			//  the input sample to the accumulator as `L << ACC_SHIFT' -- exactly the
+			//  link the profile showed missing.
+			//
+			//  ⛔ WHAT IS ASSUMED: that hi12[3:1] == 2 (HI_ACC_HOLD) means the same
+			//  thing off class 8.  alu_decoded()'s own comment says it is "ONLY
+			//  ESTABLISHED on class 8" -- established, not restricted -- so this
+			//  extends a proven reading to a class where it was never tested.  It is
+			//  register row 18 and it is a GUESS, not a decode.
+			exec_addressing_only(word, true);   // the MEASURED part: pointer, store,
+			                                    // cursor, latch capture
+			exec_alu_k6(word);                  // the ALU, without re-walking the pointer
 			return;
 		}
 		//  C-FORMAT: a 13-bit immediate.  status() already calls it MEASURED

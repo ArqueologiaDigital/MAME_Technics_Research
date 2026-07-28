@@ -570,6 +570,10 @@ public:
 	{
 		if (alu_decoded(w))
 			return true;
+		//  ★ HI_ACC_HOLD off class 8.  alu_decoded() admits hi12[3:1] == 2 only on
+		//  class 8 because that is where the biquad ESTABLISHED it -- "established",
+		//  not "restricted".  Three K6 input-stage words are refused by this alone,
+		//  including THE PORT READ.  Register row 18.
 		if (c_format(w))
 			return true;                        // 13-bit immediate -> acc (dest OPEN)
 		if (lo12(w) & 0x800)
