@@ -1249,8 +1249,10 @@ void upd6383_device::exec_alu(u64 word)
 			//  stuck value below the tone generator's >> 8 instead of injecting DC
 			//  into the mix.  The REAL defect is that the accumulator is constant at
 			//  this word; see SPECULATIVE-APPLIED-REGISTER.md sect. 3.4.
-			const s64 rawacc = util::sext(m_acc, 44);
-			s64 scaled = acc_to_datum(m_acc);
+			//  ★ §27: unit 0 presents ACCA, unit 1 presents ACCB.
+			const u64 pacc = (m_speculative && unit) ? m_accb : m_acc;
+			const s64 rawacc = util::sext(pacc, 44);
+			s64 scaled = acc_to_datum(pacc);
 			(void)rawacc;
 			//  ★★ SPECULATIVE, and the best-evidenced guess in this block: apply the
 			//  PER-UNIT OUTPUT LEVEL.  Registers 0x06 (unit 0) and 0x86 (unit 1) are
@@ -1279,7 +1281,7 @@ void upd6383_device::exec_alu(u64 word)
 			if (v != 0) m_pres_nonzero++;
 			if (std::abs(v) > std::abs(m_pres_peak)) m_pres_peak = v;
 			{   // ★ diagnostic: is the ACCUMULATOR small, or only its datum?
-				const s64 raw = util::sext(m_acc, 44);
+				const s64 raw = util::sext(pacc, 44);
 				if (std::abs(raw) > std::abs(m_pres_accpeak)) m_pres_accpeak = raw;
 			}
 			return;
@@ -1329,7 +1331,7 @@ void upd6383_device::exec_alu(u64 word)
 	//               11 of 19 such constants across the corpus.  The rival "unity"
 	//               saturates the accumulator on the LFO's first word.
 	//    SRC 0x00 = mem[ptr]   ⛔ 1 of 6 enumerated, no independent support
-	//    SRC 0x11 = mem[ptr]   ⛔ 1 of 7 enumerated, no independent support
+	//    SRC 0x11 = ACCB       ★ §27 -- was mem[ptr] (1 of 7 enumerated); replaced
 	//  0x13, 0x1B and 0x1C have NO reading anywhere and keep reading zero; they are
 	//  counted so the next pass can see whether they matter.
 	if (m_speculative)
@@ -1343,9 +1345,14 @@ void upd6383_device::exec_alu(u64 word)
 			L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
 			break;
 		case 0x00:
-		case 0x11:
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
+		//  ⛔ SRC 0x11 WAS HERE, read as mem[ptr] -- "1 of 7 enumerated, no
+		//  independent support".  §27 REPLACES that guess: 0x11 = ACCB, which has
+		//  support (adjacent to 0x10 = ACCA; the block diagram gives this ALU two
+		//  accumulators; and it predicts w73/w77/w78's roles correctly).  The old
+		//  reading was also demonstrably inert -- the epilogue runs at dp = 0x46
+		//  whose cell is 0, which is exactly why w64/w71 multiplied by zero.
 		//  ★★★ SRC 0x02/0x03/0x04 -- register row 22, 2026-07-28.  These occur ONLY
 		//  on the five class-1 mode-1 ACT-0x07 STORE words of the epilogue, whose
 		//  destinations (0x8A, 0x0F, 0x8C, 0x85, 0x06) are now confirmed by cadence.
@@ -1361,6 +1368,7 @@ void upd6383_device::exec_alu(u64 word)
 			break;
 		case upd6383_disassembler::LO_SRC_MEM:
 		case upd6383_disassembler::LO_SRC_ACC:
+		case upd6383_disassembler::LO_SRC_ACCB:   // ★ §27
 		case upd6383_disassembler::LO_SRC_TA:
 		case upd6383_disassembler::LO_SRC_TB:
 			break;                           // anchored -- handled by the switch below
@@ -1375,6 +1383,12 @@ void upd6383_device::exec_alu(u64 word)
 	{
 	case upd6383_disassembler::LO_SRC_ACC:
 		L = acc_to_datum(m_acc);
+		break;
+	//  ★★★ §27 SPECULATIVE: SRC 0x11 = ACCB.  w64 and w71 -- the two
+	//  coefficient-fetching LOAD-acc words of the output stage -- source this code,
+	//  and with it unmodelled they multiplied the output level by a silent zero.
+	case upd6383_disassembler::LO_SRC_ACCB:
+		L = m_speculative ? acc_to_datum(m_accb) : 0;
 		break;
 	case upd6383_disassembler::LO_SRC_TA:
 		L = s32(util::sext(m_ta, 24));
@@ -1581,8 +1595,20 @@ void upd6383_device::exec_alu(u64 word)
 		//  0 still cuts the feedback, 1 still keeps it -- so the biquad and the LFO
 		//  results are untouched; only the HOLD case, which alu_decoded() admits
 		//  solely on class 8, changes.
+		//  ★★★ §27 SPECULATIVE: f31[2] SELECTS THE ACCUMULATOR, f31[1:0] IS THE
+		//  OPERATION.  hi12[3:1] is a THREE-bit field carrying only three known
+		//  codes; the observed values are {0,1,2,3,4,6,7}.  Reading bit 2 as an
+		//  ACCA/ACCB select turns that into a 4x2 grid and predicts the output
+		//  stage exactly: w73 (unit 0) is f31 0 SRC ACCA => ACCA <- level x ACCA,
+		//  the output-level multiply r2-output.md §3.1 independently says it must
+		//  be; w77 (addr8 0x86, the unit-1 LEVEL register) is f31 4 => LOAD ACCB;
+		//  w78 (unit 1) is f31 6 => HOLD ACCB, presenting without disturbing it.
+		//  Operation 3 remains OPEN and is given HOLD's no-product behaviour.
+		const bool use_b = m_speculative && (f31 & 4);
+		const u16  op    = m_speculative ? u16(f31 & 3) : f31;
+		u64 &accum = use_b ? m_accb : m_acc;
 		const u64 src_term =
-				(f31 == upd6383_disassembler::HI_ACC_LOAD ? 0 : m_acc)
+				(op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum)
 				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS)
 					? u64(s64(L) << ACC_SHIFT) : 0);
 		// HI_ACC_HOLD contributes no product.  On the class-8 post-sum word the
@@ -1595,9 +1621,9 @@ void upd6383_device::exec_alu(u64 word)
 		//  the same "no product" behaviour as HI_ACC_HOLD (`f31hi = hold'), which
 		//  is one of four enumerated options and has no independent support.
 		const u64 p_term =
-				(f31 == upd6383_disassembler::HI_ACC_HOLD
-					|| (m_speculative && f31 > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
-		m_acc = (src_term + p_term) & 0xfffffffffffULL;
+				(op == upd6383_disassembler::HI_ACC_HOLD
+					|| (m_speculative && op == 3)) ? 0 : m_p;
+		accum = (src_term + p_term) & 0xfffffffffffULL;
 	}
 
 	// ---- the lo12[4:0] side effect ------------------------------------------

@@ -513,6 +513,14 @@ private:
 	//  over a double-count against the class-1 selector rule above -- but that rule
 	//  is the one that is wrong (it hijacked three internal register writes), so the
 	//  double-count was resolved in favour of the wrong member of the pair.
+	//  ★★★ §27 SPECULATIVE 2026-07-28: THE SECOND ACCUMULATOR.
+	//  effects-dsp.md's CDJ-500 block diagram, marked PROVEN, gives this ALU
+	//  "two accumulators (ACCA / ACCB)".  Only one was modelled, which made the
+	//  ENTIRE epilogue dead: 22 words, peak |acc| = 0 at every slot, while tempA
+	//  visibly carried the unit result (504) straight through them.
+	//  Unit 0 -> ACCA (m_acc), unit 1 -> ACCB (m_accb -- ALREADY DECLARED above at
+	//  the register block, save-stated and reset, but never once read or written by
+	//  the ALU until now).
 	bool m_row13 = true;       // ★ was RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
 	                                //   words ALSO write m_do?  (double-count check)
 	s64  m_mulmax = 0; s32 m_mul_coef = 0, m_mul_L = 0; u8 m_mul_src = 0; u32 m_mul_iw = 0;

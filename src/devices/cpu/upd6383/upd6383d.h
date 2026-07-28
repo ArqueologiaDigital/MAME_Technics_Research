@@ -196,6 +196,9 @@ public:
 	enum : u8 {
 		LO_SRC_MEM = 0x07,      // mem[ptr]
 		LO_SRC_ACC = 0x10,      // the accumulator
+		LO_SRC_ACCB = 0x11,     // ★ §27 SPECULATIVE: the SECOND accumulator (ACCB).
+		                        //   Adjacent to LO_SRC_ACC, and the CDJ-500 block
+		                        //   diagram (PROVEN) gives this ALU two accumulators.
 		LO_SRC_TA  = 0x19,      // temporary register A
 		LO_SRC_TB  = 0x1a       // temporary register B
 	};
