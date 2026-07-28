@@ -699,9 +699,15 @@ static INPUT_PORTS_START(kn5000)
 	// every frame is still discarded and the audio is exactly the dry mix either way.
 	// See notes/dsp-audiopath-wired.md and notes/dsp-closure-applied.md.
 	PORT_START("DSPCFG")
-	PORT_CONFNAME(0x01, 0x00, "Effects DSP IC311 (EXPERIMENTAL - incomplete ISA)")
+	PORT_CONFNAME(0x03, 0x00, "Effects DSP IC311 (EXPERIMENTAL - incomplete ISA)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x01, DEF_STR(On))
+	PORT_CONFSETTING(   0x01, "On (decoded ISA only - silent)")
+	//  ★ bit 1 additionally enables the SPECULATIVE ISA: ~56 word forms whose
+	//  readings are RESEARCHED GUESSES, not decodings.  A frame is discarded the
+	//  moment any word traps, so nothing can be heard without them -- and what
+	//  is heard with them is NOT known to be right.  See upd6383d.h
+	//  alu_decoded_speculative().
+	PORT_CONFSETTING(   0x03, "On + SPECULATIVE ISA (guessed semantics)")
 
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")

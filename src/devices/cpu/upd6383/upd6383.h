@@ -146,6 +146,11 @@ public:
 	// ---------------------------------------------------------------
 	bool run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2]);
 
+	//  ★ SPECULATIVE-ISA GATE, default OFF.  See upd6383d.h
+	//  alu_decoded_speculative(): everything it admits beyond alu_decoded() is a
+	//  researched GUESS.  The driver drives this from bit 1 of the DSPCFG port.
+	void set_speculative(bool on) { m_speculative = on; }
+
 	// Frame instrumentation.  Diagnostics, NOT machine state -- the point of
 	// the experimental audio path today is to tell us WHICH WORDS BLOCK AUDIO.
 	u64 frames_run() const       { return m_frames_run; }
@@ -452,6 +457,7 @@ private:
 	bool               m_capture_open;
 
 	u32 m_program_id;
+	bool m_speculative = false;     // ★ opt-in speculative ISA -- see set_speculative()
 	u64 m_trap_total;
 	std::map<u64, u64> m_trap_hist;
 

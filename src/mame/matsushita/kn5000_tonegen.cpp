@@ -1799,7 +1799,11 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// costs anything per sample. With it off, `dsp_on' is false, run_frame() is never
 	// called, and the two `wet' accumulators below stay at literal 0 -- so `mix_l + 0'
 	// is bit-identical to today's `mix_l'.
-	const bool dsp_on = m_dsp1.found() && (m_dsp1_enable.read_safe(0) & 1);
+	const u8 dspcfg = u8(m_dsp1_enable.read_safe(0));
+	const bool dsp_on = m_dsp1.found() && (dspcfg & 1);
+	//  ★ bit 1 = the SPECULATIVE ISA (guessed semantics).  See kn5000.cpp DSPCFG.
+	if (m_dsp1.found())
+		m_dsp1->set_speculative((dspcfg & 2) != 0);
 
 	for (int s = 0; s < stream.samples(); s++)
 	{

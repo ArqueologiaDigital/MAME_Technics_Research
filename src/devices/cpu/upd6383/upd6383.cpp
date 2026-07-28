@@ -795,6 +795,37 @@ s32 upd6383_device::acc_to_datum(u64 acc)
 
 void upd6383_device::exec_alu(u64 word)
 {
+	//  ★★★ SPECULATIVE-ONLY FORMS.  Reached only when m_speculative is set and
+	//  alu_decoded_speculative() admitted a word alu_decoded() refuses.  Each
+	//  reading is a RESEARCHED GUESS; see upd6383d.h alu_decoded_speculative()
+	//  and dsp/analysis/unblocking-and-discriminators.md.
+	if (m_speculative && !upd6383_disassembler::alu_decoded(word))
+	{
+		//  C-FORMAT: a 13-bit immediate.  status() already calls it MEASURED
+		//  with the DESTINATION open; `acc' is one of six enumerated choices.
+		if (upd6383_disassembler::c_format(word))
+		{
+			s32 imm = s32(upd6383_disassembler::c_imm13(word));
+			if (imm & 0x1000)
+				imm -= 0x2000;
+			m_acc = s64(imm) << 11;
+			return;
+		}
+		//  THE ALTERNATE lo12 ENCODING (bit 11).  sect. 9 of bit11-family.md
+		//  proves it is a SECOND encoding with no SRC and no ACTION field, so
+		//  the only honest execution is its ADDRESSING -- which IS decoded.
+		if (upd6383_disassembler::lo12(word) & 0x800)
+		{
+			if (upd6383_disassembler::coeff_consumer(word))
+				m_cursor++;
+			if ((upd6383_disassembler::class4(word) & 7) == 2)
+				m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+			return;
+		}
+		//  Everything else the speculative gate admits falls through into the
+		//  normal path below, where the widened SRC/ACTION defaults apply.
+	}
+
 	const u16 hi = upd6383_disassembler::hi12(word);
 	const u8  cl = upd6383_disassembler::class4(word);
 	const s8  dd = s8(upd6383_disassembler::addr8(word));
@@ -953,12 +984,38 @@ void upd6383_device::exec_alu(u64 word)
 		// is still OPEN (the joint solve leaves "unchanged" and "AND 2^23-1"
 		// both alive), and both ARE the identity there -- which is why class 8
 		// is the only place alu_decoded() lets this code through.
+		//  ★ SPECULATIVE: hi12[3:1] > 2 is undecoded; the research model gives it
+		//  the same "no product" behaviour as HI_ACC_HOLD (`f31hi = hold'), which
+		//  is one of four enumerated options and has no independent support.
 		const u64 p_term =
-				(f31 == upd6383_disassembler::HI_ACC_HOLD) ? 0 : m_p;
+				(f31 == upd6383_disassembler::HI_ACC_HOLD
+					|| (m_speculative && f31 > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
 		m_acc = (src_term + p_term) & 0xfffffffffffULL;
 	}
 
 	// ---- the lo12[4:0] side effect ------------------------------------------
+	//  ★ SPECULATIVE: five further ACTION codes (0x01, 0x08, 0x0C, 0x11, 0x16)
+	//  and the three long-open ones (0x0D, 0x0E, 0x1A) are given the SAME
+	//  reading -- capture into a temporary.  There is NO independent evidence
+	//  for any of them; sect. 5.3/6 show the LFO and the delay contexts cannot
+	//  discriminate them at all, and the delay-line traffic is INVARIANT across
+	//  every reading tried.  They are here only so the frame can complete.
+	if (m_speculative)
+	{
+		switch (act)
+		{
+		case 0x01: case 0x08: case 0x0C: case 0x11: case 0x16:
+		case 0x0D: case 0x0E:
+			m_ta = u32(L) & 0xffffff;
+			break;
+		case 0x1A:
+			m_tb = u32(L) & 0xffffff;
+			break;
+		default:
+			break;
+		}
+	}
+
 	switch (act)
 	{
 	case upd6383_disassembler::LO_ACT_CAP_TA:
@@ -1451,7 +1508,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
 
-		if (!upd6383_disassembler::decoded(word))
+		//  ★ the speculative gate widens what counts as executable; with
+		//  m_speculative clear this is EXACTLY decoded(), bit for bit.
+		const bool word_ok = upd6383_disassembler::decoded(word)
+				|| (m_speculative && upd6383_disassembler::alu_decoded_speculative(word));
+		if (!word_ok)
 		{
 			// UNDECODED -- and that is ONE state with TWO sub-cases, not two
 			// states.  Either way the word's arithmetic is unknown, so it goes on

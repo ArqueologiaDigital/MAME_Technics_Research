@@ -545,6 +545,42 @@ public:
 	//     (The old "707/527" was one word short; adjudicate4.py mirror prints
 	//     the census for the full corpus, the bodies and the kernel separately.)
 	// ---------------------------------------------------------------
+	//======================================================================
+	//  ★★★ THE SPECULATIVE ISA -- OPT-IN, DEFAULT OFF, 2026-07-28.
+	//
+	//  Everything this predicate admits BEYOND alu_decoded() is a RESEARCHED
+	//  GUESS, not a decoding.  It exists because a frame is discarded the moment
+	//  ANY word traps, so applying settled fields one at a time can never make
+	//  the emulated DSP audible: with the conservative gate, 100.00 % of
+	//  1 200 001 frames trapped and 0 returns were usable.
+	//
+	//  Of the 123 distinct word forms the device traps, the research model
+	//  executes 58 under the shipped semantics and 114 with these readings --
+	//  so 56 forms are researched but unapplied, and they are what this admits.
+	//
+	//  EVERY reading here is recorded, with its evidence and its label, in
+	//  kn5000-roms-disasm/dsp/analysis/unblocking-and-discriminators.md.  The
+	//  strongest (f31 == 2 does not write P) reproduces 14 of 19 ROM LFO ramp
+	//  constants against 11; most of the rest have NO independent support at all
+	//  and were chosen only because they let the corpus execute.
+	//
+	//  ⛔ DO NOT PROMOTE ANY OF THIS INTO alu_decoded() WITHOUT ITS OWN EVIDENCE.
+	//======================================================================
+	static constexpr bool alu_decoded_speculative(u64 w)
+	{
+		if (alu_decoded(w))
+			return true;
+		if (c_format(w))
+			return true;                        // 13-bit immediate -> acc (dest OPEN)
+		if (lo12(w) & 0x800)
+			return true;                        // the alternate lo12 encoding:
+		                                        // addressing only, no ALU effect
+		const u8 cl = class4(w);
+		if (cl != 2 && cl != 8 && cl != 0xa && cl != 1 && cl != 4 && cl != 9)
+			return false;
+		return true;
+	}
+
 	static constexpr bool alu_decoded(u64 w)
 	{
 		if (c_format(w))                        // bits [24:12] are one immediate
