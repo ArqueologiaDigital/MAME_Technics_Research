@@ -370,6 +370,10 @@ void upd6383_device::device_stop()
 				for (u32 i = 0; i < 6; i++)
 					so += string_format(" slot%d:%d/%d", i, m_out_slot_nonzero[i], m_out_slot_writes[i]);
 				logerror("upd6383: OUTPUT SLOT WRITES (nonzero/total):%s\n", so);
+				std::string sd;
+				for (u32 i = 0; i < 256; i++)
+					if (m_dwr[i]) sd += string_format(" %02X:%d/%d", i, m_dwr_nz[i], m_dwr[i]);
+				logerror("upd6383: D-RAM WRITES (nonzero/total):%s\n", sd);
 			}
 			logerror("upd6383: BIGGEST MULTIPLY: pre-shift %lld = coef %d (0x%06X) x L %d, SRC 0x%02X at iw%d\n",
 					(long long)m_mulmax, m_mul_coef, m_mul_coef, m_mul_L, m_mul_src, m_mul_iw);
@@ -887,6 +891,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		if ((hi & upd6383_disassembler::HI_ST)
 				&& !upd6383_disassembler::st_suppressed(word))
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+		{ m_dwr[cell & 0xff]++; if (m_dram.read_dword(cell) & 0xffffff) m_dwr_nz[cell & 0xff]++; }
 	}
 
 	// bit 23 FETCHES; class A ADVANCES.  The fetch is modelled because it is what
@@ -1370,6 +1375,7 @@ void upd6383_device::exec_alu(u64 word)
 			&& !upd6383_disassembler::st_suppressed(word))
 	{
 		m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
+		{ m_dwr[m_dp & 0xff]++; if (m_dram.read_dword(m_dp) & 0xffffff) m_dwr_nz[m_dp & 0xff]++; }
 		m_acc = 0;
 	}
 
@@ -1481,6 +1487,7 @@ void upd6383_device::exec_alu(u64 word)
 		break;
 	case upd6383_disassembler::LO_ACT_ST_BUS:
 		m_dram.write_dword(m_dp, u32(L) & 0xffffff);
+		{ m_dwr[m_dp & 0xff]++; if (m_dram.read_dword(m_dp) & 0xffffff) m_dwr_nz[m_dp & 0xff]++; }
 		break;
 	case upd6383_disassembler::LO_ACT_ACC_BUS:
 		break;                  // 0x00: its whole effect is the adder, above
