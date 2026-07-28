@@ -350,6 +350,17 @@ void upd6383_device::device_stop()
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
 		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
 				(long long)m_pres_accpeak, (long long)(m_pres_accpeak >> ACC_SHIFT));
+		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
+			logerror("upd6383: ACCUMULATOR PROFILE (peak |acc| per I-RAM slot)\n");
+			std::string ln;
+			for (u32 i = 0; i < 285; i++)
+			{
+				if (!m_slotseen[i]) continue;
+				ln += string_format(" %d:%lld", i, (long long)m_accprof[i]);
+				if (ln.size() > 110) { logerror("upd6383:  %s\n", ln); ln.clear(); }
+			}
+			if (!ln.empty()) logerror("upd6383:  %s\n", ln);
+		}
 		{   // ★ did the coefficients land where the cursor reads?
 			u32 nz = 0;
 			for (u32 i = 0; i < 256; i++)
@@ -1781,6 +1792,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		const u16 lo = upd6383_disassembler::lo12(word);
 		const s8  dd = s8(ad);      // signed pointer POST-increment (MEASURED)
 
+		const u32 prof_iw = (m_pc / upd6383_disassembler::WORD_BYTES) & 0x1ff;
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
 
@@ -1838,6 +1850,12 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
 			exec_decoded(word);
+			if (prof_iw < 384)
+			{
+				const s64 a = util::sext(m_acc, 44);
+				m_slotseen[prof_iw]++;
+				if (std::abs(a) > std::abs(m_accprof[prof_iw])) m_accprof[prof_iw] = a;
+			}
 			(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
 		}
 
