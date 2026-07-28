@@ -522,10 +522,15 @@ private:
 	//  saturation -- and the input-latch corruption it causes -- requires BOTH ACCB
 	//  bits, and appears with neither §29 fix.  §28 already failed its own test; this
 	//  makes it actively harmful, so it is off by default and kept only as a switch.
-	u32  m_specmask = 0x4c;   // ★ §42: bit 6 = read the output level from C-RAM
+	//  ★★★ §44: DEFAULT 0x14C -- bit 2 coeff_fetch, bit 3 deferred presentation,
+	//  bit 6 level from C-RAM, bit 8 tap-table.  With these four the chip produces
+	//  a non-zero output for the first time.  Bits 0/1 (§28 ACCB) and 4 (§40
+	//  latched-K) and 7 (§43 level-select) are OFF and each measurably destroys it.
+	u32  m_specmask = 0x14c;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
+	u32  m_tap_n = 0;
 	u32  m_lvlguard_n = 0; u32 m_lvl_seen[2] = {}; u32 m_lvl_nz[2] = {};
 	u32  m_latchguard_n = 0; u64 m_latchguard_word = 0;
 	u16  m_cur_iw = 0; u32 m_latchguard_slot[384] = {};

@@ -1939,6 +1939,32 @@ void upd6383_device::exec_alu(u64 word)
 					  : upd6383_disassembler::coeff_consumer(word))
 	{
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+		//  ★★★ §44 SPECULATIVE (mask bit 8): C-RAM 0x50..0x8B IS A DELAY-TAP TABLE,
+		//  NOT COEFFICIENTS.  Dumped, the space has three clearly distinct regions:
+		//      0x00..0x13  real parameters (LFO rate 000072, wrap 7FFFFF, 400000 ...)
+		//      0x50..0x6F  LINEAR RAMP, step 0x400:  008000 008400 ... 00FC00
+		//      0x70..0x8B  LINEAR RAMP, step 0x4BE:  000000 0004BE ... 007FFF
+		//      0x90..0xB4  real coefficients (200000 400000 3B9885 2DF3A0 C62251 ...)
+		//  The two ramps are exactly the host's two 30-cell write runs, and they are
+		//  monotonic, evenly spaced and address-shaped -- 0x8000..0xFC00 spans the
+		//  upper half of a 64 K space in steps of 1024.  This chip's block diagram
+		//  (PROVEN) gives it "an on-chip controller for external DRAM; ring-buffer
+		//  address generation (echo / reverb-A / reverb-B regions)", which is what a
+		//  table like that is for.
+		//  MEASURED CONSEQUENCE of consuming them as coefficients: as Q0.23 they are
+		//  0.006..0.008, and the body's ladder multiplies the accumulator by one at
+		//  each stage -- 1.97e11 -> 2.5e9 -> 3.3e7 -> 424 000 -> 10 656 -> 0. That
+		//  chain IS the missing 10^4, and the kernel (cursor 0x90+, real
+		//  coefficients) shows no such decay.
+		//  ⛔ The delay-DRAM datapath is NOT modelled, so the honest action is to stop
+		//  MULTIPLYING BY AN ADDRESS rather than to invent a delay read.
+		const bool tap_table = (m_cursor >= 0x50 && m_cursor <= 0x8b);
+		if (m_speculative && (m_specmask & 0x100) && tap_table)
+		{
+			m_tap_n++;
+			if (upd6383_disassembler::coeff_consumer(word)) m_cursor++;
+			return;
+		}
 		m_k = coef;
 		m_l = u32(L) & 0xffffff;
 		{   // ★ which multiply overflows?  record the biggest |product| and its operands
@@ -2855,6 +2881,21 @@ void upd6383_device::dump_frame_report() const
 {
 	// NB: plain %u / %d only, matching the rest of this file.  (A u64 count only
 	// overflows u32 after ~25 hours of emulated audio at 48 kHz.)
+	{   //  ★ §44: dump C-RAM.  The body's multiplies consume cursor 0x62..0x70 and
+		//  the values there run 00C800, 00CC00, 00D000 ... -- a LINEAR RAMP of step
+		//  0x400, which is not a coefficient set.  The kernel's cursor 0x90+ carries
+		//  what look like real coefficients (200000, 400000, 3B9885, C62251 ...).
+		//  Print the whole space so the two can be compared directly.
+		for (u32 base = 0; base < 256; base += 16)
+		{
+			std::string ln;
+			for (u32 i = 0; i < 16; i++)
+				ln += string_format(" %06X", const_cast<upd6383_device *>(this)->m_cram.read_dword(base + i) & 0xffffff);
+			logerror("upd6383: C-RAM %02X:%s\n", base, ln);
+		}
+	}
+	logerror("upd6383: §44 TAP-TABLE fetches (C-RAM 0x50..0x8B, treated as addresses "
+			"not coefficients): %u\n", m_tap_n);
 	logerror("upd6383: FRAME REPORT (experimental IC311 audio path)\n");
 	logerror("    frames run          %u\n", u32(m_frames_run));
 	logerror("    frames that TRAPPED %u (%d.%02d %%) -- their return was DISCARDED\n",
