@@ -1099,7 +1099,20 @@ void upd6383_device::do_presentation()
 			//  the wet peaks at 32696 against a dry peak of 20441, i.e. too hot, and
 			//  0.5 / 0.184 are the right order to fix it.
 			{
-				const u32 lvl = m_dram.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
+				//  ★★★ §42, 2026-07-28: THE LEVEL LIVES IN C-RAM, NOT D-RAM.
+				//  The per-unit OUTPUT LEVEL is set by the HOST ("reg 0x06 <- +0.5,
+				//  reg 0x86 <- +0.183992", the last two actions of cold boot), and
+				//  the host's ONLY write path into this device writes m_cram.  There
+				//  is no host write to D-RAM anywhere.  Reading D-RAM[0x06] therefore
+				//  read a cell the host never touches: MEASURED 0x000000 at every
+				//  presentation, so `if (lvl != 0)' skipped the level multiply
+				//  entirely and the per-unit output level was never applied at all.
+				//  Corroboration from the kernel cursor dump: C-RAM carries 0x400000
+				//  -- exactly +0.5 -- among its coefficients.
+				const u32 lvl = ((m_specmask & 0x40) ? m_cram : m_dram)
+						.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
+				m_lvl_seen[unit] = lvl;   // ★ §41: is the host's level still there?
+				if (lvl) m_lvl_nz[unit]++;
 				if (lvl != 0)
 					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
 			}
@@ -1860,6 +1873,27 @@ void upd6383_device::exec_alu(u64 word)
 				m_st07n++;
 			}
 		}
+		//  ★★★ §41 SPECULATIVE (mask bit 5): DO NOT LET AN UNSUPPORTED SOURCE
+		//  OVERWRITE A HOST-PROGRAMMED REGISTER.
+		//  MEASURED: register 0x06 -- the unit-0 OUTPUT LEVEL, which cold boot sets
+		//  to +0.500000 and which do_presentation() reads back -- is written
+		//  1 613 627 times, ONCE PER FRAME, and EVERY WRITE IS ZERO.  0x86 (unit 1,
+		//  +0.183992) likewise.  So the presentation's `if (lvl != 0)' guard skips
+		//  the level multiply entirely: the per-unit output level is never applied.
+		//  The value written comes from `w72' (000.1.06.087) and `w77' -- ACT 0x07
+		//  stores whose SOURCE is SRC 0x02, which this register grades "PURE
+		//  ENUMERATION ... no independent support" and which reads mem[ptr] = 0.
+		//  This is the input-latch failure again, one register along: a store with an
+		//  invented value landing on a value the HOST established.  r2-output.md §3.1
+		//  describes w77 as one that "aims a POINTER at reg 0x86", not one that
+		//  writes it -- so the store itself is likely the mis-decode.
+		//  ⛔ A GUARD, NOT A DECODE: it suppresses the symptom so the level survives
+		//  and the presentation can be measured; what w72/w77 really do is OPEN.
+		const bool unsupported_src = (src == 0x02 || src == 0x03);
+		const bool host_reg = (d07 == 0x06 || d07 == 0x86);
+		if (m_speculative && (m_specmask & 0x20) && unsupported_src && host_reg)
+			m_lvlguard_n++;
+		else
 		m_dram.write_dword(d07, u32(L) & 0xffffff);
 			watch_store(d07, s32(L) & 0xffffff, 3);
 		m_dwr[d07]++;
@@ -3005,6 +3039,13 @@ void upd6383_device::dump_frame_report() const
 					"on %u of %u (%.2f%%) --%s\n", (bestd < 128) ? bestd : bestd - 256,
 					best, tot, tot ? 100.0 * double(best) / double(tot) : 0.0, dh.c_str());
 		}
+	logerror("        §41 LEVEL AT PRESENTATION: unit0 0x%06X (non-zero on %u), "
+			"unit1 0x%06X (non-zero on %u)  [cold boot set 0x06=+0.5=0x400000, "
+			"0x86=+0.183992=0x178D50]\n", m_lvl_seen[0], m_lvl_nz[0],
+			m_lvl_seen[1], m_lvl_nz[1]);
+	if (m_lvlguard_n)
+		logerror("        §41 LEVEL GUARD: suppressed %u zero-stores onto the per-unit "
+				"OUTPUT LEVEL registers 0x06/0x86\n", m_lvlguard_n);
 	if (m_latchguard_n)
 	{
 		std::string gs;
