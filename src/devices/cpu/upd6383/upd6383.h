@@ -511,6 +511,18 @@ private:
 	//  microcode reads 0x800000 back out of them while the tone generator writes a
 	//  clean 0x4FD900 -- so something in here overwrites the input before it is read.
 	u64  m_watch_word[4] = {}; u64 m_cur_word = 0;
+	//  ★ §32 BISECTION MASK for the speculative rows added 2026-07-28, so ONE build
+	//  can leave each out in turn.  Env UPD6383_SPEC (hex), default 0xF = all on.
+	//     bit 0  ACCB + f31[2] accumulator select      (§28)
+	//     bit 1  SRC 0x11 = ACCB  (else the old mem[ptr] guess)   (§28)
+	//     bit 2  coeff_fetch split -- multiply on class4 bit 3    (§29)
+	//     bit 3  deferred presentation (else present and return)  (§29)
+	//  ★ DEFAULT 0xC, set by the §32 bisection: bits 2|3 (§29's two CODE-DEFECT fixes)
+	//  ON; bits 0|1 (§28's ACCB reading) OFF.  Leave-one-out showed the accumulator
+	//  saturation -- and the input-latch corruption it causes -- requires BOTH ACCB
+	//  bits, and appears with neither §29 fix.  §28 already failed its own test; this
+	//  makes it actively harmful, so it is off by default and kept only as a switch.
+	u32  m_specmask = 0xc;
 	u16  m_out_slot_reg[6]  = { 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff };
 	s32  m_out_slot_peak[6] = {};
 	u64  m_out_slot_word[6] = {};

@@ -284,6 +284,11 @@ void upd6383_device::device_start()
 	save_item(NAME(m_cnt));
 	save_item(NAME(m_acc));
 	save_item(NAME(m_accb));
+	if (const char *e = getenv("UPD6383_SPEC"))
+	{
+		m_specmask = u32(strtoul(e, nullptr, 16));
+		logerror("upd6383: §32 bisection mask UPD6383_SPEC = 0x%X\n", m_specmask);
+	}
 	save_item(NAME(m_p));
 	save_item(NAME(m_k));
 	save_item(NAME(m_l));
@@ -1317,8 +1322,14 @@ void upd6383_device::exec_alu(u64 word)
 			//  (class4 bit 3) precisely because an output-level multiply needs one:
 			//  w73 is `ACCA <- level x ACCA' and then presents.  So the word must run
 			//  the ALU FIRST and present the RESULT, not present and return.
-			m_pres_pending = true;
 			m_pres_unit    = (ad & 0x80) ? 1 : 0;
+			if (m_specmask & 8)
+				m_pres_pending = true;      // present AFTER the arithmetic (§29)
+			else
+			{   // the pre-§29 behaviour: present the stale accumulator and return
+				do_presentation();
+				return;
+			}
 		}
 		if (cl == 6)
 		{
@@ -1422,7 +1433,9 @@ void upd6383_device::exec_alu(u64 word)
 	//  coefficient-fetching LOAD-acc words of the output stage -- source this code,
 	//  and with it unmodelled they multiplied the output level by a silent zero.
 	case upd6383_disassembler::LO_SRC_ACCB:
-		L = m_speculative ? acc_to_datum(m_accb) : 0;
+		L = !m_speculative ? 0
+			: (m_specmask & 2) ? acc_to_datum(m_accb)
+			: s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));   // old guess
 		break;
 	case upd6383_disassembler::LO_SRC_TA:
 		L = s32(util::sext(m_ta, 24));
@@ -1639,8 +1652,9 @@ void upd6383_device::exec_alu(u64 word)
 		//  be; w77 (addr8 0x86, the unit-1 LEVEL register) is f31 4 => LOAD ACCB;
 		//  w78 (unit 1) is f31 6 => HOLD ACCB, presenting without disturbing it.
 		//  Operation 3 remains OPEN and is given HOLD's no-product behaviour.
-		const bool use_b = m_speculative && (f31 & 4);
-		const u16  op    = m_speculative ? u16(f31 & 3) : f31;
+		const bool sel   = m_speculative && (m_specmask & 1);
+		const bool use_b = sel && (f31 & 4);
+		const u16  op    = sel ? u16(f31 & 3) : f31;
 		u64 &accum = use_b ? m_accb : m_acc;
 		const u64 src_term =
 				(op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum)
@@ -1657,7 +1671,7 @@ void upd6383_device::exec_alu(u64 word)
 		//  is one of four enumerated options and has no independent support.
 		const u64 p_term =
 				(op == upd6383_disassembler::HI_ACC_HOLD
-					|| (m_speculative && op == 3)) ? 0 : m_p;
+					|| (m_speculative && op > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
 		accum = (src_term + p_term) & 0xfffffffffffULL;
 	}
 
@@ -1778,7 +1792,7 @@ void upd6383_device::exec_alu(u64 word)
 	// immediate happens to read `class4 == 0xA' -- e.g. the frame terminator
 	// C00.A.47.407 -- can never reach here.
 	//  ★ §29: FETCH (the multiply) and CONSUME (the cursor advance) are separate.
-	if (m_speculative ? upd6383_disassembler::coeff_fetch(word)
+	if ((m_speculative && (m_specmask & 4)) ? upd6383_disassembler::coeff_fetch(word)
 					  : upd6383_disassembler::coeff_consumer(word))
 	{
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
