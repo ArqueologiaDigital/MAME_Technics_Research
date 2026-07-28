@@ -1618,10 +1618,15 @@ void upd6383_device::exec_alu(u64 word)
 		//  cells are X+2 and X+5.  A store reaching them means our ADDRESSING is
 		//  wrong, and that is still to be found -- this stops the corruption from
 		//  masking every downstream measurement in the meantime.
+		//  ★ §34: the ad-hoc latch guard is GONE -- st_suppressed()'s corrected
+		//  condition removes these stores at the decode, which is where they belong.
+		//  The counters stay as a REGRESSION ALARM: if anything ever stores onto the
+		//  latch cells again, it is reported rather than silently corrupting the input.
 		if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
 		{
 			m_latchguard_n++;
 			m_latchguard_word = m_cur_word;
+			m_latchguard_slot[m_cur_iw < 384 ? m_cur_iw : 383]++;
 		}
 		else
 		{
@@ -2399,6 +2404,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// drift this pass exists to remove.
 			m_mul_issued = false;
 			m_cur_word = raw;
+			m_cur_iw = u16(pc / upd6383_disassembler::WORD_BYTES);
 			exec_decoded(word);
 			if (m_trace_armed && m_trace_n < 400)
 			{   // ★★★ THE TIME-ORDERED FRAME TRACE -- execution order, not maxima
@@ -2859,6 +2865,13 @@ void upd6383_device::dump_frame_report() const
 					"on %u of %u (%.2f%%) --%s\n", (bestd < 128) ? bestd : bestd - 256,
 					best, tot, tot ? 100.0 * double(best) / double(tot) : 0.0, dh.c_str());
 		}
+	if (m_latchguard_n)
+	{
+		std::string gs;
+		for (u32 i = 0; i < 384; i++)
+			if (m_latchguard_slot[i]) gs += string_format(" iw%u:%u", i, m_latchguard_slot[i]);
+		logerror("        §34 WHICH SLOTS store onto the latch:%s\n", gs.c_str());
+	}
 	if (m_latchguard_n)
 		logerror("        §33 LATCH GUARD: suppressed %u accumulator stores onto the "
 				"input latch cells; last offender %09llX\n", m_latchguard_n,

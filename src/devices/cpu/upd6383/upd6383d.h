@@ -427,6 +427,33 @@ public:
 	// ---------------------------------------------------------------
 	static constexpr u16 HI_B7 = 1 << 7;
 
+	//  ★★★ §34, 2026-07-28: THE ROUND-4 TIE IS BROKEN, and by the input stage.
+	//  Item 1 above left EXACTLY TWO conditions alive -- `b7 & f31 == 1' and
+	//  `b7 & f31 != 2' -- noting they "differ only where hi12[3:1] is outside {1,2},
+	//  which alu_decoded() refuses anyway, so the choice costs ZERO words."
+	//  That last clause is true of the DECODED core and FALSE of the speculative one,
+	//  which admits those words -- and one of the three the note names by hand,
+	//  `090.A.01.1C8' (f31 = 0, i.e. exactly the region where the two rules differ),
+	//  turns out to be I-RAM word 3.
+	//  MEASURED: w3 and w7 each store onto the two input-latch cells ONCE PER FRAME
+	//  (1 597 440 times each) -- the cells that w4 and w8 then read. Under
+	//  `f31 == 1' they are not suppressed, so the chip overwrote its own input before
+	//  reading it, on 1 565 758 frames of 1 597 440. Under `f31 != 2' they ARE
+	//  suppressed and the input survives intact on 100 %.
+	//  ⛔⛔ TESTED 2026-07-28 AND IT DOES NOT HOLD. Adopting `!= 2' removes w3/w7's
+	//  stores as predicted -- and the corruption simply MOVES: `w79' then reaches the
+	//  latch 1 600 927 times (it reached it 2 880 times before), and the mismatch
+	//  returns unchanged at 1 565 758 of 1 597 440. Suppressing more stores also
+	//  perturbs alu_decoded()'s executable set, so the pointer trajectory itself
+	//  moves. The tie-break is therefore NOT settled by the input stage: one rule
+	//  does not save the input and the other does not uniquely destroy it.
+	//  REVERTED to the round-4 condition. What SURVIVES is the observation that the
+	//  "costs ZERO words" clause holds only for the DECODED core; under speculation
+	//  the choice is live, and it is the first known context that can even see it.
+	//  ⛔ Cost outside the speculative gate: still ZERO words, exactly as the note
+	//  says -- alu_decoded() refuses this whole region, so the decoded core is
+	//  bit-identical either way. This settles the CONDITION, not what the suppressed
+	//  case does (item 2 remains open: "no store, no clear" is one point in a set).
 	static constexpr bool st_suppressed(u64 w)
 	{
 		return (hi12(w) & HI_B7) && hi_f31(hi12(w)) == 1;
