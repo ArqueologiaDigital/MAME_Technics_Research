@@ -357,6 +357,10 @@ void upd6383_device::device_stop()
 					ln += string_format(" %d:cur=0x%02X(val=%06X)", i, m_curprof[i] & 0xff,
 							m_cram.read_dword(m_curprof[i] & 0xff) & 0xffffff);
 			logerror("upd6383: KERNEL CURSOR:%s\n", ln);
+			std::string lp;
+			for (u32 i = 0; i <= 24; i++)
+				if (m_curprof_seen[i]) lp += string_format(" %d:P=%lld", i, (long long)m_pprof[i]);
+			logerror("upd6383: PRODUCT REGISTER:%s\n", lp);
 		}
 		{   // ★ which C-RAM BANKS did the coefficient stream actually fill?
 			if (m_cwr_runlen && m_nruns < 32)
@@ -1920,6 +1924,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			{   // ★ which C-RAM cell does each kernel slot consume?
 				m_curprof[prof_iw] = m_cursor;
 				m_curprof_seen[prof_iw] = 1;
+				if (std::abs(s64(m_p)) > std::abs(m_pprof[prof_iw])) m_pprof[prof_iw] = s64(m_p);
 			}
 			if (prof_iw < 384)
 			{
