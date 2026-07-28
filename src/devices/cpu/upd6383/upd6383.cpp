@@ -1013,7 +1013,39 @@ void upd6383_device::exec_alu(u64 word)
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
 		m_k = coef;
 		m_l = u32(L) & 0xffffff;
-		m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
+		//  ★★★ SPECULATIVE, 2026-07-28, APPLIED ON THE OWNER'S INSTRUCTION.
+		//  An `hi12[3:1] == 2' (HI_ACC_HOLD) word does NOT update the product
+		//  register.  See kn5000-roms-disasm/dsp/analysis/
+		//  unblocking-and-discriminators.md sect. 17.
+		//
+		//  EVIDENCE.  The LFO's ramp constant is the one number on this chip
+		//  whose value is known independently -- floor(f * 2^23 / 44100), read
+		//  out of the ROM by dsp/tools/lfo_ramp.py.  Over the 16 LFO-bearing
+		//  images the model reproduces 14 of 19 such constants with this line
+		//  suppressed and 11 with it live, and EVERY constant reproduced
+		//  without it is still reproduced with it -- a strict superset, not a
+		//  trade.  It also fixes the structural defect that motivated the
+		//  search: a program carrying LFOs at DIFFERENT rates previously ran
+		//  only its first, because the wrap word (f31 == 2, coefficient
+		//  0x7FFFFF) left that constant in P and the next block's `acc <- P'
+		//  word inherited it.  MODULATED CHORUS now runs both its rates and
+		//  MIX UP two of its three.
+		//
+		//  CONTROLS.  SINGLE DELAY's validated output is unchanged (lag 1001,
+		//  gain +0.02149296, itself a three-factor ROM coefficient product
+		//  matched to 0.001 %); execution coverage is unchanged; and the
+		//  PARAMETRIC EQ biquad reproduces its designer at 0.198 dB either way.
+		//  ⛔ The biquad NEITHER CONFIRMS NOR REFUTES -- only 1 of its 9 words
+		//  is f31 == 2, so it is nearly blind here.  THE LFO IS THE SOLE
+		//  ANCHOR, and 5 of the 19 constants are still unexplained
+		//  (RING MODULATOR 190217, MIX UP's 1407, PEQ+CHORUS/FLANGER/VIBRATO),
+		//  so this may be one refinement short of the real rule.
+		//
+		//  The CURSOR still advances and m_k/m_l still latch: the coefficient
+		//  is consumed either way, and K4's cursor result is untouched.
+		if (upd6383_disassembler::hi_f31(upd6383_disassembler::hi12(word))
+				!= upd6383_disassembler::HI_ACC_HOLD)
+			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
 		m_cursor++;
 	}
 
