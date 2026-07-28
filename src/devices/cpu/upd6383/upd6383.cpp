@@ -284,6 +284,8 @@ void upd6383_device::device_start()
 	save_item(NAME(m_cnt));
 	save_item(NAME(m_acc));
 	save_item(NAME(m_accb));
+	if (const char *e = getenv("UPD6383_LAND"))
+		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
 	if (const char *e = getenv("UPD6383_SPEC"))
 	{
 		m_specmask = u32(strtoul(e, nullptr, 16));
@@ -1330,8 +1332,17 @@ void upd6383_device::exec_alu(u64 word)
 				m_delay.write_word(addr, u16((u32(acc_to_datum(m_acc)) >> 8) & 0xffff));
 			else if (dir == 'R')
 			{
-				m_dr = u32(m_delay.read_word(addr)) << 8;
-				if (m_dr) m_dly_r_nz++;
+				const u32 datum = u32(m_delay.read_word(addr)) << 8;
+				if (datum) m_dly_r_nz++;
+				if (m_speculative && (m_specmask & 0x400))
+				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
+					const u32 k = (m_slotn + m_land) & 7;
+					if (m_dr_pipe_v[k]) m_dr_lost++;   // ring collision = model too shallow
+					m_dr_pipe[k] = datum;
+					m_dr_pipe_v[k] = true;
+				}
+				else
+					m_dr = datum;
 			}
 			return;
 		}
@@ -2399,6 +2410,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// offsets +2 and +5 from the pointer the previous frame left.  Unconditional
 	// and before the first word, because that is what the serial receivers do:
 	// they do not wait to see whether the microcode is interested.
+	m_slotn = 0;                //  ★ §49: the pipeline ring is per-frame
 	latch_inputs_to_dram();
 
 	const bool detail = (m_frame_detail_left > 0);
@@ -2599,6 +2611,28 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
 			m_mul_issued = false;
+			//  ★ §49: deliver any delay datum scheduled to land on THIS slot.
+			if (m_speculative && (m_specmask & 0x400))
+			{
+				const u32 k = m_slotn & 7;
+				if (m_dr_pipe_v[k])
+				{
+					m_dr = m_dr_pipe[k];
+					//  ★★★ §50 (mask bit 11): LAND IT IN tempA TOO.
+					//  §49 delivered 32 986 560 data into m_dr and NOTHING changed,
+					//  because this program contains exactly ONE word naming
+					//  SRC 0x0B -- 1.0 consumption per frame against ~20.8 reads.
+					//  So m_dr cannot be where the ladder takes its feedback.
+					//  dram-datapath.md item H says where: "the multiply at slot 5
+					//  reads SRC 0x19 = tempA and the read is at slot 4 with nothing
+					//  between them", i.e. a read's datum reaches the multiplicand
+					//  through tempA, one slot later.
+					if (m_specmask & 0x800) m_ta = m_dr_pipe[k] & 0xffffff;
+					m_dr_pipe_v[k] = false;
+					m_dr_landed++;
+				}
+			}
+			m_slotn++;
 			m_cur_word = raw;
 			m_cur_iw = u16(pc / upd6383_disassembler::WORD_BYTES);
 			exec_decoded(word);
@@ -2956,7 +2990,9 @@ void upd6383_device::dump_frame_report() const
 		std::string ds;
 		for (u32 q = 0; q < m_dly_n; q++)
 			ds += string_format(" [%c dsc %02X = %04X]", m_dly_dir[q], m_dly_dsc[q], m_dly_val[q]);
-		logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
+		logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
+			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
+	logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
 			"non-zero datum\n", m_dr_reads, m_dr_reads_nz);
 	logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
 				"descriptor cell non-zero on %u accesses.%s\n",

@@ -526,11 +526,21 @@ private:
 	//  bit 6 level from C-RAM, bit 8 tap-table.  With these four the chip produces
 	//  a non-zero output for the first time.  Bits 0/1 (§28 ACCB) and 4 (§40
 	//  latched-K) and 7 (§43 level-select) are OFF and each measurably destroys it.
-	u32  m_specmask = 0x14c;
+	u32  m_specmask = 0x74c;   // ★ §49: + bit 10, the one-deep delay-read pipeline
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
 	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
+	//  ★★★ §49: THE ONE-DEEP READ PIPELINE (dram-datapath.md items A and E).
+	//  A delay read's datum is NOT on its own bus (item A, FORCED) -- it lands
+	//  `land' slots later, with land in [1,4] FORCED and 4 both the upper bound and
+	//  the corpus mode over 111 reads (item E).  Modelled as a ring indexed by the
+	//  slot counter: a read schedules its datum, and each slot delivers whatever was
+	//  scheduled for it.  Without this m_dr is a single register that every read
+	//  overwrites, so 20 of the ~21 reads per frame are destroyed unconsumed (§48).
+	u32  m_dr_pipe[8] = {}; bool m_dr_pipe_v[8] = {};
+	u32  m_slotn = 0, m_land = 4;
+	u32  m_dr_landed = 0, m_dr_lost = 0;
 	u32  m_dly_r = 0, m_dly_w = 0, m_dly_r_nz = 0, m_dly_cell_nz = 0, m_dly_n = 0;
 	u8   m_dly_dsc[8] = {}, m_dly_dir[8] = {}; u32 m_dly_val[8] = {};
 	u32  m_lvlguard_n = 0; u32 m_lvl_seen[2] = {}; u32 m_lvl_nz[2] = {};
