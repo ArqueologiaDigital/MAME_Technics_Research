@@ -1754,6 +1754,26 @@ void upd6383_device::exec_alu(u64 word)
 		//  be; w77 (addr8 0x86, the unit-1 LEVEL register) is f31 4 => LOAD ACCB;
 		//  w78 (unit 1) is f31 6 => HOLD ACCB, presenting without disturbing it.
 		//  Operation 3 remains OPEN and is given HOLD's no-product behaviour.
+		//  ★★★ §43 SPECULATIVE (mask bit 7): w72 / w77 ARE LEVEL-SELECT WORDS, NOT
+		//  ACCUMULATOR OPERATIONS.
+		//  w72 = 000.1.06.087 and w77 = 859.0.86.822 carry addr8 0x06 / 0x86 -- the
+		//  per-unit OUTPUT LEVEL cells in C-RAM (§42), one per unit, each immediately
+		//  before its own presentation (w73 -> DO1, w78 -> DO2).  r2-output.md §3.1
+		//  describes w77 as the word that "aims a POINTER at reg 0x86".
+		//  MEASURED (§40): decoded as f31 = 0 => LOAD acc <- P, w72 ZEROES THE
+		//  ACCUMULATOR one slot before w73 presents it, because P is 0 there -- so the
+		//  epilogue's whole ladder is discarded at the last step.
+		//  The reading: these words LOAD THE COEFFICIENT (K <- C-RAM[addr8]) for the
+		//  presentation that follows, and must leave the accumulator alone.
+		const bool lvlsel = m_speculative && (m_specmask & 0x80)
+				&& upd6383_disassembler::class4(word) == 1
+				&& (upd6383_disassembler::addr8(word) == 0x06
+					|| upd6383_disassembler::addr8(word) == 0x86);
+		if (lvlsel)
+		{
+			m_k = m_cram.read_dword(upd6383_disassembler::addr8(word)) & 0xffffff;
+			return;                 // accumulator untouched
+		}
 		const bool sel   = m_speculative && (m_specmask & 1);
 		const bool use_b = sel && (f31 & 4);
 		const u16  op    = sel ? u16(f31 & 3) : f31;
