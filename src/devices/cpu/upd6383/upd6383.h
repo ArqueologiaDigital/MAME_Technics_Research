@@ -485,7 +485,8 @@ private:
 	//  reading a per-slot MAXIMUM as if it were a SEQUENCE.  This records ONE frame
 	//  in EXECUTION ORDER: slot, word, pointer, the value under it, acc and P after.
 	//  Armed once, on the first frame whose input sample is non-zero.
-	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p; };
+	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p;
+	                 s32 ta; s32 tb; u8 cur; u32 coef; };
 	trace_t m_trace[400] = {};
 	u32  m_trace_n = 0;
 	bool m_trace_armed = false, m_trace_done = false;

@@ -399,13 +399,14 @@ void upd6383_device::device_stop()
 		if (m_trace_n)
 		{   // ★★★ THE TIME-ORDERED FRAME TRACE, in execution order
 			logerror("upd6383: ==== TIME-ORDERED FRAME TRACE, %d slots ====\n", m_trace_n);
-			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P\n");
+			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P         tA        tB cur   coef\n");
 			for (u32 q = 0; q < m_trace_n; q++)
 			{
 				const trace_t &t = m_trace[q];
-				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld\n",
+				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld %9d %9d %02X %06X\n",
 						q, t.iw, (unsigned long long)t.word, t.dp,
-						t.mem, (long long)t.acc, (long long)t.p);
+						t.mem, (long long)t.acc, (long long)t.p,
+						t.ta, t.tb, t.cur, t.coef);
 			}
 		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
@@ -1161,6 +1162,10 @@ void upd6383_device::exec_alu(u64 word)
 		{
 			const u32 slot = src_sp - 1;
 			const s32 v = s32(util::sext(m_dram.read_dword(ad) & 0xffffff, 24));
+			//  ⛔ The diagnostic remap onto ports 0/1 was tried and REVERTED: the
+			//  resulting wet was rms 1.0 -- a +/-1 LSB constant present even in
+			//  silence -- so the live presentation carries no audio signal, and
+			//  asserting a routing the evidence does not support bought nothing.
 			m_do[slot >> 1][slot & 1] = v;
 			m_out_slot_writes[slot]++;
 			if (v) m_out_slot_nonzero[slot]++;
@@ -2119,6 +2124,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				t.iw = u16(prof_iw); t.word = raw; t.dp = m_dp;
 				t.mem = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 				t.acc = util::sext(m_acc, 44); t.p = s64(util::sext(m_p, 44));
+				//  ★ tempB and the cursor: sect. 12.3 pinned the death to a class-A
+				//  multiply with SRC 0x1A (tempB), so P = coef * tempB and one of the
+				//  two is empty.  These two columns say which.
+				t.ta = s32(util::sext(m_ta, 24)); t.tb = s32(util::sext(m_tb, 24));
+				t.cur = u8(m_cursor); t.coef = m_cram.read_dword(m_cursor) & 0xffffff;
 			}
 			if (prof_iw <= 24 && m_curprof_n < 25)
 			{   // ★ which C-RAM cell does each kernel slot consume?
@@ -2179,6 +2189,26 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				}
 
 				m_dp = base;
+
+				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
+				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
+				//  with SRC 0x1A, because P = coef * tempB and the COEFFICIENT is
+				//  zero -- tempB holds 5 872 025, a healthy 0.70 of full scale.  The
+				//  cursor there is 0xCE, OUTSIDE every C-RAM run the host writes
+				//  (0x50..0xB4 and 0x00..0x13): it free-ran past the end of the bank.
+				//
+				//  The kernel loads each unit's bank immediately before its CALL --
+				//  iw42 `801.0.70.821' -> 0x70 for unit 0, iw50 `801.0.50.821' ->
+				//  0x50 for unit 1 -- and those are the two banks the coefficient
+				//  stream fills.  Applying that pointer to the cursor at the CALL is
+				//  the same shape as the D-RAM rebase directly above.
+				//
+				//  ⛔ GUESSED, and against a FORCED result: K3 proves selector 0x21
+				//  loads a C-RAM POINTER that is *NOT* the implicit cursor.  This
+				//  couples them anyway, on the functional grounds that a body must
+				//  read its own bank and nothing else re-seeds the cursor.  If K3 is
+				//  right the coupling is wrong and some other word does this job.
+				m_cursor = m_cp;
 			}
 			else
 			{
