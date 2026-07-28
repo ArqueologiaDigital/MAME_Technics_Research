@@ -1306,7 +1306,10 @@ void upd6383_device::exec_alu(u64 word)
 		//  ⛔ PURE ENUMERATION: mem[ptr] is chosen because it is what every other
 		//  unanchored source in this device resolves to and because the epilogue's
 		//  pointer walks the cells the bodies deposit in.  No independent support.
-		case 0x02: case 0x03: case 0x04:
+		case 0x04:
+			L = s32(util::sext(m_ta, 24));     // ★ row 29: the pair test
+			break;
+		case 0x02: case 0x03:
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		case upd6383_disassembler::LO_SRC_MEM:
@@ -1560,6 +1563,15 @@ void upd6383_device::exec_alu(u64 word)
 	{
 		switch (act)
 		{
+		//  ★★★ THE PAIR TEST, row 29.  iw65 `200.1.8F.1C1' (ACT 0x01) reads register
+		//  0x8F -- which body 1 now fills on 1 559 999 of 1 560 839 frames -- and
+		//  iw66 `000.1.8C.107' (SRC 0x04) stores into 0x8C.  For the link to carry,
+		//  whatever ACT 0x01 writes must be what SRC 0x04 reads.  ACT 0x01 sits in
+		//  the same family as 0x13/0x14/0x19, all of which are temp captures, so the
+		//  pairing under test is ACT 0x01 = tempA <- bus and SRC 0x04 = tempA.
+		//  ⛔ ONE PAIRING OF SIXTEEN.  This is the first test of these codes that CAN
+		//  discriminate -- their source is live for the first time -- but a single
+		//  pairing passing is weak evidence and a single pairing failing is weaker.
 		case 0x01: case 0x08: case 0x0C: case 0x11: case 0x16:
 		case 0x0D: case 0x0E:
 			m_ta = u32(L) & 0xffffff;
