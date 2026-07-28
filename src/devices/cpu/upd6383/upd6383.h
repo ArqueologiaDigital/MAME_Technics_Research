@@ -462,6 +462,8 @@ private:
 	                                //   The chip must latch what a delay READ returns
 	                                //   somewhere; SRC 0x0B is the only source code
 	                                //   whose operand is otherwise unaccounted for.
+	u64  m_pres_seen = 0, m_pres_nonzero = 0;   // ★ diagnostic: presentation words
+	s32  m_pres_peak = 0;
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next
 	                                //   delay-DRAM word consumes, reset each frame
 	u64 m_trap_total;

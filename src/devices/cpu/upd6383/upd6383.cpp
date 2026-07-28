@@ -344,7 +344,11 @@ void upd6383_device::device_reset()
 void upd6383_device::device_stop()
 {
 	if (m_frames_run != 0)
+	{
 		dump_frame_report();
+		logerror("upd6383: PRESENTATION WORDS: %d executed, %d wrote NON-ZERO, peak %d\n",
+				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
+	}
 
 	if (m_trap_total != 0)
 		dump_trap_histogram();
@@ -805,6 +809,21 @@ void upd6383_device::exec_alu(u64 word)
 	{
 		const u8 cl = upd6383_disassembler::class4(word);
 		const bool hi_esc = (upd6383_disassembler::hi12(word) & 0xF00) == 0xA00;
+
+		//  ★★★ K6 INPUT STAGE -- MUST KEEP ITS OWN ADDRESSING.  Found 2026-07-28
+		//  by A/B capture: with the speculative gate admitting every word, these
+		//  twelve took the generic path instead of exec_addressing_only(), their
+		//  MEASURED pointer walk was lost, and the frame report went from
+		//  "973440 frames in which both port reads executed" to ZERO --
+		//  "NOTHING ENTERED THE CHIP".  The wet mix was then bit-identical to dry
+		//  over 5 472 003 samples, which is exactly what the owner heard.
+		//  Their addressing is MEASURED (notes/dsp-k6-input-stage.md); only the
+		//  ALU is open, so run the measured part and leave the ALU alone.
+		if (upd6383_disassembler::addressing_only(word))
+		{
+			exec_addressing_only(word, true);
+			return;
+		}
 		//  C-FORMAT: a 13-bit immediate.  status() already calls it MEASURED
 		//  with the DESTINATION open; `acc' is one of six enumerated choices.
 		if (upd6383_disassembler::c_format(word))
@@ -913,6 +932,9 @@ void upd6383_device::exec_alu(u64 word)
 			const s32 v = acc_to_datum(m_acc);
 			m_do[unit][0] = v;
 			m_do[unit][1] = v;
+			m_pres_seen++;
+			if (v != 0) m_pres_nonzero++;
+			if (std::abs(v) > std::abs(m_pres_peak)) m_pres_peak = v;
 			return;
 		}
 		if (cl == 6)
