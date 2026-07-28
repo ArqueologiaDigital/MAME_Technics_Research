@@ -1689,6 +1689,21 @@ void upd6383_device::exec_decoded(u64 word)
 		// is constrained to the window between the last pointer-moving word and
 		// the body's first, and nothing selects an instruction inside it.
 		m_cp = ad;
+		//  ★★★ ldptr ALSO SEEDS THE COEFFICIENT CURSOR -- register row 25, and it
+		//  SUBSUMES rows 19 and 24.  MEASURED: the epilogue was multiplying by
+		//  0x0004BE = 1214, a value from the linear RAMP TABLE at cursor 0x71 left
+		//  over from unit 1's body -- 1214/2^23 = 0.000145, an attenuation of ~6900x,
+		//  which is the whole reason its output was ~1 LSB.  Its own bank is 0x90,
+		//  named by its own `iw69 = 801.0.90.821', but that word only ever set m_cp.
+		//  The corpus loads this pointer exactly three times and each load precedes
+		//  the block that needs that bank: iw42 -> 0x70 (unit 0), iw50 -> 0x50
+		//  (unit 1), iw69 -> 0x90 (the epilogue, and therefore the next frame's
+		//  kernel -- which is exactly the 0x90 row 19 had to seed by hand).
+		//  ⛔ STILL AGAINST K3, which proves 0x21 is NOT the implicit cursor.  One
+		//  rule now replaces two hand-placed seeds, which is better, but it does not
+		//  make the coupling proven.
+		if (m_speculative)
+			m_cursor = ad;
 	}
 	else if (upd6383_disassembler::is_ldptrd(word))
 	{
@@ -2208,7 +2223,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  couples them anyway, on the functional grounds that a body must
 				//  read its own bank and nothing else re-seeds the cursor.  If K3 is
 				//  right the coupling is wrong and some other word does this job.
-				m_cursor = m_cp;
+				//  ⛔ ROW 24 RETIRED: subsumed by row 25 -- iw42/iw50 now seed the
+				//  cursor themselves, before the call rather than at it.
 			}
 			else
 			{
@@ -2252,8 +2268,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	//  only `rstcur' in the corpus is in PARAMETRIC EQ's body -- so what resets the
 	//  cursor per frame is genuinely unknown.  Seeding it from the epilogue's
 	//  payload is the reading that makes a fixed program read fixed coefficients.
-	if (m_speculative)
-		m_cursor = 0x90;
+	//  ⛔ ROW 19 RETIRED: subsumed by row 25 -- the epilogue's own iw69 ldptr now
+	//  leaves the cursor at 0x90, which is what this line was seeding by hand.
 
 	if (m_trace_armed && !m_trace_done)
 	{   // one frame only
