@@ -1923,7 +1923,8 @@ void upd6383_device::exec_alu(u64 word)
 		//  The CURSOR still advances and m_k/m_l still latch: the coefficient
 		//  is consumed either way, and K4's cursor result is untouched.
 		if (upd6383_disassembler::hi_f31(upd6383_disassembler::hi12(word))
-				!= upd6383_disassembler::HI_ACC_HOLD)
+				!= upd6383_disassembler::HI_ACC_HOLD
+				&& !(m_speculative && (m_specmask & 0x10)))
 		{
 			m_mul_issued = true;    // ★ §29: it RAN -- distinct from "P came out 0"
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
@@ -1932,6 +1933,24 @@ void upd6383_device::exec_alu(u64 word)
 		//  is untouched by the fetch/consume split.
 		if (upd6383_disassembler::coeff_consumer(word))
 			m_cursor++;
+	}
+
+	//  ★★★ §40 SPECULATIVE (mask bit 4): THE MULTIPLY IS NOT GATED BY THE FETCH.
+	//  dsp_disasm.py's cursor_fetch() is documented as "CURSOR-FETCH enable (NOT
+	//  multiply-enable)", and this device declares m_k/m_l as "multiplier input
+	//  latches" -- latched on fetch (above) and then never used, because the
+	//  multiply reads the freshly-read `coef' instead.  That is a latched-coefficient
+	//  MAC with the latch bypassed.
+	//  The reading: bit 23 RELOADS K from C-RAM[cursor]; the multiplier computes
+	//  P = K x L on every word that is not f31 == HOLD, using whatever K currently
+	//  holds.  Words with no coefficient of their own reuse the last one -- which is
+	//  what a coefficient LATCH is for, and what makes "not multiply-enable" true.
+	if (m_speculative && (m_specmask & 0x10)
+			&& upd6383_disassembler::hi_f31(hi) != upd6383_disassembler::HI_ACC_HOLD)
+	{
+		m_mul_issued = true;
+		m_l = u32(L) & 0xffffff;
+		m_p = u64((s64(util::sext(m_k, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
 	}
 
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
