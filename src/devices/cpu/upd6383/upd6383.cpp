@@ -1422,8 +1422,35 @@ void upd6383_device::exec_alu(u64 word)
 	if ((hi & upd6383_disassembler::HI_ST)
 			&& !upd6383_disassembler::st_suppressed(word))
 	{
-		m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
-		{ m_dwr[m_dp & 0xff]++; if (m_dram.read_dword(m_dp) & 0xffffff) m_dwr_nz[m_dp & 0xff]++; }
+		//  ★★★ THE BIT-4 STORE TARGET IS MODE-DEPENDENT -- register row 27.
+		//  This site wrote mem[m_dp] UNCONDITIONALLY, which contradicts
+		//  isa-adjudication.md behavioural note 1: "hi12 bit 4's target is
+		//  mode-dependent -- mem[ptr] ONLY IN MODE 2.  Eight kernel words
+		//  mis-execute otherwise."  do_store() implements the rule; this path did
+		//  not.
+		//
+		//  MEASURED consequence: body 1's TERMINATOR `612.1.0F.000' is MODE 1, so
+		//  it should deposit into register 0x0F -- instead it wrote mem[0x46], which
+		//  is exactly the 504 the epilogue was seen holding at the pointer while the
+		//  registers it actually reads stayed empty.
+		//
+		//  ★ AND THE UNIT BIT.  addr8 bit 7 selects the unit -- MEASURED in
+		//  output-stage-decode.md item I ("0x00 -> unit 0, 0x9F -> unit 1"), named in
+		//  this device's own register annotations ([06] unit 0 / [86] unit 1), and
+		//  already applied to the pointer as DRAM_UNIT_BASE = 0x05 | unit<<7.  The
+		//  microcode writes addr8 UNIT-RELATIVE and the hardware supplies the unit,
+		//  so body 1's 0x0F is register 0x8F -- which is precisely what the epilogue
+		//  reads at iw65 `200.1.8F.1C1'.
+		//  ⛔ GUESSED: that the unit bit applies to REGISTER destinations and not only
+		//  to the D-RAM pointer.  The parallel is strong and the two addresses meet,
+		//  but it is a parallel.
+		const u8 stmode = upd6383_disassembler::c_format(word)
+				? 2 : u8(upd6383_disassembler::class4(word) & 7);
+		u8 stdest = m_dp;
+		if (stmode == 1)
+			stdest = u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00));
+		m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
+		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
 		m_acc = 0;
 	}
 
@@ -2225,6 +2252,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				}
 
 				m_dp = base;
+				m_cur_unit1 = unit1;    // ★ row 27: who is executing
 
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
@@ -2255,6 +2283,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				// body 0 left), and net(body0) varying over 8 values is only a
 				// constraint at all because those words see it.
 				m_pc = m_stack[--m_sp];
+			m_cur_unit1 = false;    // ★ row 27: back in the kernel/epilogue
 			}
 		}
 	}

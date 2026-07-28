@@ -473,6 +473,7 @@ private:
 	//  Answers "where does the signal die?" with a measurement instead of a search.
 	s64  m_accprof[384] = {};
 	u32  m_slotseen[384] = {};
+	bool m_cur_unit1 = false;       // ★ which unit body is executing (row 27)
 	bool m_in_k6 = false;           // ★ re-entrancy guard for exec_alu_k6()
 	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
