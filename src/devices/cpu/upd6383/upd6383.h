@@ -533,6 +533,12 @@ private:
 	//  that recurs in steady state, and the run-wide min/max cannot tell them apart.
 	u32  m_disp_hist[256] = {}; u64 m_disp_first = 0, m_disp_last = 0;
 	u32  m_disp_bucket[16] = {}; u32 m_disp_open_run = 0, m_disp_open_run_max = 0;
+	//  ★ §38: the 13 % of frames that never reach the wait word.  Same treatment:
+	//  WHEN do they happen, and for OVERRUN, where did the PC run off?
+	u32  m_cap_bucket[16] = {}, m_ovr_bucket[16] = {};
+	u64  m_cap_first = 0, m_cap_last = 0, m_ovr_first = 0, m_ovr_last = 0;
+	u32  m_ovr_slots_min = 0xffffffff, m_ovr_slots_max = 0;
+	u32  m_cap_slots_min = 0xffffffff, m_cap_slots_max = 0;
 	//  ★ §36: the residue -- which WORDS reach the latch, where they aim, and in
 	//  which mode.  The slot attribution alone proved unreliable.
 	u64  m_lg_word[8] = {}; u32 m_lg_cnt[8] = {}; u8 m_lg_dest[8] = {};

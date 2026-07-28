@@ -2635,6 +2635,29 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// measurement of anything.  Mixing those in made the run-wide spread read
 	// `VARIES' when the quantity that matters is dead constant.
 	m_last_dp_delta = s32(s8(u8(m_dp - dp_at_entry)));
+	//  ★ §38: place the non-completing frames in time, exactly as §37 did for the
+	//  closure residue -- a boot transient and a steady-state fault look identical
+	//  in a run-wide total.
+	{
+		const u32 b = u32((m_frames_run * 16) / 1900000) < 16
+				? u32((m_frames_run * 16) / 1900000) : 15;
+		if (overrun)
+		{
+			m_ovr_bucket[b]++;
+			if (!m_ovr_first) m_ovr_first = m_frames_run;
+			m_ovr_last = m_frames_run;
+			if (slots < m_ovr_slots_min) m_ovr_slots_min = slots;
+			if (slots > m_ovr_slots_max) m_ovr_slots_max = slots;
+		}
+		else if (capped)
+		{
+			m_cap_bucket[b]++;
+			if (!m_cap_first) m_cap_first = m_frames_run;
+			m_cap_last = m_frames_run;
+			if (slots < m_cap_slots_min) m_cap_slots_min = slots;
+			if (slots > m_cap_slots_max) m_cap_slots_max = slots;
+		}
+	}
 	if (hit_wait)
 	{
 		m_in_base_hist[dp_at_entry]++;
@@ -2773,8 +2796,31 @@ void upd6383_device::dump_frame_report() const
 			m_last_partials, m_last_traps);
 	logerror("    ended on the wait word %010X: %u\n", FRAME_WAIT_WORD,
 			u32(m_frames_run - m_frames_capped - m_frames_overrun));
+	//  ★★★ §38, 2026-07-28: THE CAP AND OVERRUN FRAMES ARE ALSO A BOOT TRANSIENT.
+	//  13 % of frames never reach the wait word, which reads like a standing fault.
+	//  Measured over 1 824 001 frames, they are bounded in time and END AT THE SAME
+	//  FRAME as §37's closure residue (~264 002 -- the last program upload):
+	//     CAP     frames 1 .. 264 001,        always EXACTLY 384 slots (the cap)
+	//     OVERRUN frames 231 362 .. 258 241,  always EXACTLY 350 slots
+	//  After that boundary, every one of the remaining ~1.56 M frames reaches the
+	//  wait word, traps 0 times and closes with residue 0.  Neither kind produces
+	//  audio either: `clean' requires hit_wait && !overrun, so the tone generator
+	//  discards them.  ⇒ Not a defect; do not chase.
 	logerror("    ended on the %u-slot CAP:      %u\n", FRAME_SLOT_CAP, u32(m_frames_capped));
 	logerror("    ended by I-RAM OVERRUN:        %u\n", u32(m_frames_overrun));
+	{   // ★ §38
+		std::string cb, ob;
+		for (int b = 0; b < 16; b++) cb += string_format(" %u", m_cap_bucket[b]);
+		for (int b = 0; b < 16; b++) ob += string_format(" %u", m_ovr_bucket[b]);
+		logerror("    §38 CAP     over time:%s\n", cb.c_str());
+		logerror("    §38 CAP     first %u last %u, slots %u..%u\n",
+				u32(m_cap_first), u32(m_cap_last),
+				m_cap_slots_min == 0xffffffff ? 0 : m_cap_slots_min, m_cap_slots_max);
+		logerror("    §38 OVERRUN over time:%s\n", ob.c_str());
+		logerror("    §38 OVERRUN first %u last %u, slots %u..%u\n",
+				u32(m_ovr_first), u32(m_ovr_last),
+				m_ovr_slots_min == 0xffffffff ? 0 : m_ovr_slots_min, m_ovr_slots_max);
+	}
 	logerror("    last frame: %u slots, %u partial, %u traps\n",
 			m_last_slots, m_last_partials, m_last_traps);
 
