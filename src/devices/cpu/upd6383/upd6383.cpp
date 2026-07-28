@@ -361,6 +361,12 @@ void upd6383_device::device_stop()
 			for (u32 i = 0; i <= 24; i++)
 				if (m_curprof_seen[i]) lp += string_format(" %d:P=%lld", i, (long long)m_pprof[i]);
 			logerror("upd6383: PRODUCT REGISTER:%s\n", lp);
+			{
+				std::string su;
+				for (u32 i = 0; i < 32; i++)
+					if (m_src_unread[i]) su += string_format(" 0x%02X:%d", i, m_src_unread[i]);
+				logerror("upd6383: SRC CODES STILL READING ZERO:%s\n", su.empty() ? " none" : su.c_str());
+			}
 			logerror("upd6383: BIGGEST MULTIPLY: pre-shift %lld = coef %d (0x%06X) x L %d, SRC 0x%02X at iw%d\n",
 					(long long)m_mulmax, m_mul_coef, m_mul_coef, m_mul_L, m_mul_src, m_mul_iw);
 		}
@@ -1194,8 +1200,45 @@ void upd6383_device::exec_alu(u64 word)
 	//  to land somewhere for the next word to use, and 0x0B is the only source
 	//  code in the corpus whose operand is otherwise unaccounted for.  It is a
 	//  GUESS; dsp/analysis/SPECULATIVE-APPLIED-REGISTER.md row 14.
-	if (m_speculative && src == 0x0B)
-		L = s32(util::sext(m_dr, 24));
+	//  ★★★ THE UNANCHORED SOURCE CODES, 2026-07-28, register row 20.
+	//  The default: branch below warns that widening alu_decoded() must not let an
+	//  unanchored source quietly become a memory read, and that "leaving L at 0 is
+	//  the failure that shows".  The speculative gate widened it, and that failure
+	//  duly showed: SRC 0x00/0x08/0x11/0x13/0x1B/0x1C all read ZERO, so the
+	//  multiplies feeding P multiplied by nothing and the accumulator died.
+	//
+	//  Readings taken from the research model (dsp/tools/action00_discriminate.py),
+	//  where each is an ENUMERATED parameter rather than a fixed choice:
+	//    SRC 0x08 = the COEFFICIENT.  ★ MEASURED: it is the setting under which the
+	//               LFO's phase accumulator reproduces its ROM ramp constant exactly
+	//               (mem[0x04] 1000 -> 1228, step +228 = coefficient 0x0000E4), and
+	//               11 of 19 such constants across the corpus.  The rival "unity"
+	//               saturates the accumulator on the LFO's first word.
+	//    SRC 0x00 = mem[ptr]   ⛔ 1 of 6 enumerated, no independent support
+	//    SRC 0x11 = mem[ptr]   ⛔ 1 of 7 enumerated, no independent support
+	//  0x13, 0x1B and 0x1C have NO reading anywhere and keep reading zero; they are
+	//  counted so the next pass can see whether they matter.
+	if (m_speculative)
+	{
+		switch (src)
+		{
+		case 0x0B:
+			L = s32(util::sext(m_dr, 24));
+			break;
+		case 0x08:
+			L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
+			break;
+		case 0x00:
+		case 0x11:
+			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			break;
+		case 0x13: case 0x1B: case 0x1C:
+			m_src_unread[src & 0x1f]++;      // no reading exists -- stays 0
+			break;
+		default:
+			break;
+		}
+	}
 	switch (src)
 	{
 	case upd6383_disassembler::LO_SRC_ACC:
