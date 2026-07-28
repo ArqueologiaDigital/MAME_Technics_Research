@@ -1124,7 +1124,17 @@ void upd6383_device::exec_alu(u64 word)
 		//  slot = SRC-1 in natural order is the obvious reading and nothing more.
 		const u16 hi_sp = upd6383_disassembler::hi12(word);
 		const u8  src_sp = upd6383_disassembler::lo_src(word);
-		if (cl == 1 && !(hi_sp & 0x800) && src_sp >= 0x01 && src_sp <= 0x06)
+		//  ★ ADJUDICATION sect.5 vs sect.6.1.  The two readings concern DIFFERENT
+		//  fields -- sect.5 is lo12[10:6], sect.6.1 is lo12[4:0] and its store
+		//  target -- and on the ten kernel/epilogue words those fields CO-VARY:
+		//      ACT 0x07 (store) <-> SRC 0x00, 0x02, 0x03, 0x04
+		//      ACT 0x1B         <-> SRC 0x01, 0x05, 0x06
+		//      ACT 0x01         <-> SRC 0x07
+		//  A free six-slot selector would pair with any ACT.  This partition says
+		//  the routing reading belongs to the NON-STORE words, so an ACT 0x07 word
+		//  falls through to the ALU and performs its mode-1 store instead.
+		if (cl == 1 && !(hi_sp & 0x800) && src_sp >= 0x01 && src_sp <= 0x06
+				&& upd6383_disassembler::lo_act(word) != upd6383_disassembler::LO_ACT_ST_BUS)
 		{
 			const u32 slot = src_sp - 1;
 			const s32 v = s32(util::sext(m_dram.read_dword(ad) & 0xffffff, 24));
