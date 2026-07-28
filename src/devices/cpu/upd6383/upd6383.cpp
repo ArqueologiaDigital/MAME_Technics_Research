@@ -1376,8 +1376,31 @@ void upd6383_device::exec_alu(u64 word)
 		L = s32(util::sext(m_tb, 24)) >> 1;
 		break;
 	case upd6383_disassembler::LO_SRC_MEM:
-		L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+	{
+		//  ★★★ THE MODE-1 READ IS THE MIRROR OF THE MODE-1 STORE -- row 28.
+		//  Row 27 established (from isa-adjudication.md behavioural note 1) that a
+		//  mode-1 bit-4 store targets mem[addr8], not mem[ptr].  A register-file word
+		//  names its register in addr8; there is no reason the SAME word class would
+		//  address one way to write and another to read.
+		//
+		//  MEASURED motivation: the epilogue's iw65 `200.1.8F.1C1' is mode 1 with
+		//  addr8 = 0x8F -- the register body 1 now fills 1 559 999 frames out of
+		//  1 560 839 -- yet it was reading mem[m_dp] and getting nothing.  This is
+		//  the link between 0x8F and the presentations that read 0x8C/0x8D.
+		//
+		//  ⛔ GUESSED: symmetry.  The store side is documented; the read side is not,
+		//  and no note in this project states it.  It is applied because the two
+		//  halves of one addressing mode disagreeing would be the odd claim, not
+		//  because anything proves it.
+		const u8 rdmode = upd6383_disassembler::c_format(word)
+				? 2 : u8(upd6383_disassembler::class4(word) & 7);
+		const bool regfile = (rdmode == 1) && !(hi & 0x800);
+		const u8 rdsrc = regfile
+				? u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00))
+				: m_dp;
+		L = s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
 		break;
+	}
 	default:
 		// UNREACHABLE BY CONSTRUCTION -- alu_decoded() gates the four codes
 		// above.  Spelled out rather than folded into the mem[ptr] case: if the
