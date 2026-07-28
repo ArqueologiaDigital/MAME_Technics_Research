@@ -375,6 +375,10 @@ void upd6383_device::device_stop()
 					s7 += string_format(" [dest %02X src %02X ptr %02X L %d]",
 							m_st07_dest[q], m_st07_src[q], m_st07_ptr[q], m_st07_val[q]);
 				logerror("upd6383: MODE-1 ACT-07 STORES:%s\n", s7);
+				logerror("upd6383: epilogue pointer on entry (last frame) = 0x%02X\n", m_epi_ptr_before);
+				std::string ep;
+				for (u32 q = 0; q < 23; q++) ep += string_format(" %d:%02X", 60 + q, m_epi_ptr[q]);
+				logerror("upd6383: EPILOGUE POINTER WALK:%s\n", ep);
 				std::string sd;
 				for (u32 i = 0; i < 256; i++)
 					if (m_dwr[i]) sd += string_format(" %02X:%d/%d", i, m_dwr_nz[i], m_dwr[i]);
@@ -2007,6 +2011,37 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		const s8  dd = s8(ad);      // signed pointer POST-increment (MEASURED)
 
 		const u32 prof_iw = (m_pc / upd6383_disassembler::WORD_BYTES) & 0x1ff;
+		//  ★★★ SPECULATIVE, register row 23: REBASE AT THE EPILOGUE ENTRY.
+		//  Measured defect: the bodies deposit at 0x07 (unit 0 = base 0x05 + 2) and
+		//  0x8E (unit 1 = base 0x85 + 9), and the epilogue's five mode-1 stores
+		//  execute with the pointer at 0x00 -- a cell that is never non-zero.  The
+		//  walk does not carry from producer to consumer.
+		//  The device already applies base = 0x05 | unit<<7 AT THE PER-UNIT CALL
+		//  (DRAM_UNIT_BASE, FORCED to exist and in its value; only its SITE is open).
+		//  ⛔ GUESSED: that the epilogue gets the same treatment on entry.  It is the
+		//  one place in the frame that runs without a CALL and therefore never
+		//  receives the rebase, which is exactly the shape of the observed defect.
+		//  ★★★ ROW 23, RESHAPED: the epilogue's pointer is ONE BELOW the data.
+		//  MEASURED walk: 0x46 at every slot 60..79, 0x45 at 80..81.  The bodies'
+		//  live cells are 0x47/0x48/0x4B/0x4C/0x4D -- the pointer parks exactly one
+		//  short of the first of them.  ⛔ GUESSED: a +1.  It is the smallest change
+		//  that puts the consumer on the producer, and an off-by-one is the standing
+		//  shape of this project's frame-closure residue -- but "smallest" is not
+		//  "proven".
+		//  ⛔ WITHDRAWN: the +1 was tried and changed nothing -- the stores still read
+		//  zero at 0x47, a cell with 3.1 M non-zero writes.  So the epilogue is not
+		//  merely mis-aimed by one; either it runs BEFORE the bodies deposit in the
+		//  frame order, or the value it needs is not in D-RAM at all.  Two guesses
+		//  in a row that a measurement cannot separate is the signal to stop.
+		//  ⛔ ROW 23 (first form) WITHDRAWN.  Rebasing here moved the stores from ptr 0x00 to
+		//  ptr 0x05 and they still read zero -- but it also revealed that the
+		//  epilogue ARRIVES with the pointer at 0x46, immediately below the live
+		//  cells 0x47/0x48/0x4B/0x4C/0x4D the bodies deposit in.  The arrival is
+		//  RIGHT; the walk from there to the store words is what loses it.
+		if (m_speculative && prof_iw == 60)
+			m_epi_ptr_before = m_dp;
+		if (m_speculative && prof_iw >= 60 && prof_iw <= 82)
+			m_epi_ptr[prof_iw - 60] = m_dp;
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
 
