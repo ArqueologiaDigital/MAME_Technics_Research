@@ -528,6 +528,10 @@ private:
 	u32  m_dbg_once = 0;
 	u32  m_latchguard_n = 0; u64 m_latchguard_word = 0;
 	u16  m_cur_iw = 0; u32 m_latchguard_slot[384] = {};
+	//  ★ §36: the residue -- which WORDS reach the latch, where they aim, and in
+	//  which mode.  The slot attribution alone proved unreliable.
+	u64  m_lg_word[8] = {}; u32 m_lg_cnt[8] = {}; u8 m_lg_dest[8] = {};
+	u8   m_lg_mode[8] = {}; u16 m_lg_iw[8] = {}; u32 m_lg_n = 0;
 	u8   m_in_readbase[2] = {}; u32 m_in_delta_hist[256] = {};
 	u16  m_out_slot_reg[6]  = { 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff };
 	s32  m_out_slot_peak[6] = {};

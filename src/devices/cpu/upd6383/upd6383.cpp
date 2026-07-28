@@ -1636,17 +1636,42 @@ void upd6383_device::exec_alu(u64 word)
 		//  X+2 and X+5, one step ahead, which are precisely the two input latches.
 		//  They are the latches *because* the walk is built so the post-increment
 		//  parks the pointer on the cell the NEXT word reads.
+		//  ★★★ §36 2026-07-28: THE GUARD NO LONGER SUPPRESSES -- it only REPORTS.
+		//  With §35's double store fixed, the whole residue is 609 stores in 1.6 M
+		//  frames, and a census by word shows NONE of them is clobbering an input:
+		//      01218D05B iw61 mode 1 dest 8D x203
+		//      01190F446 iw71 mode 1 dest 0F x201
+		//      01190E445 iw64 mode 1 dest 0E x203
+		//      0902FB40E iw320 mode 2 dest 53 x2
+		//  Every destination is a NAMED REGISTER (mode-1 stores aim at addr8), not a
+		//  latch cell.  They matched only because `m_in_addr' had DRIFTED on top of
+		//  them: X = m_dp at frame start, steady state 0x45 on 98.31 % of frames, and
+		//  in the other 1.69 % the input window lands wherever the pointer failed to
+		//  return to -- sometimes on 0x8D or 0x0E.
+		//  So the residue is a SYMPTOM OF FRAME-CLOSURE FAILURE (936 959 of 962 880
+		//  frames close), not a store defect, and suppressing it corrupted 607
+		//  legitimate register writes to fake-fix 0.04 % of frames.  Letting the
+		//  stores happen is the faithful choice; the drift is the real defect.
 		if (m_in_k6)
 			; // already stored, correctly, by exec_addressing_only()
-		else if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
-		{
-			m_latchguard_n++;
-			m_latchguard_word = m_cur_word;
-			m_latchguard_slot[m_cur_iw < 384 ? m_cur_iw : 383]++;
-		}
 		else
 		{
-		m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
+			if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
+			{   // ★ observe only -- the regression alarm for §35
+				m_latchguard_n++;
+				m_latchguard_word = m_cur_word;
+				m_latchguard_slot[m_cur_iw < 384 ? m_cur_iw : 383]++;
+				u32 q = 0;
+				for (; q < m_lg_n; q++) if (m_lg_word[q] == m_cur_word) break;
+				if (q == m_lg_n && m_lg_n < 8)
+				{
+					m_lg_word[q] = m_cur_word; m_lg_dest[q] = stdest;
+					m_lg_mode[q] = stmode;     m_lg_iw[q]   = m_cur_iw;
+					m_lg_n++;
+				}
+				if (q < 8) m_lg_cnt[q]++;
+			}
+			m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
 			watch_store(stdest, s32(acc_to_datum(m_acc)) & 0xffffff, 2);
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
@@ -2889,9 +2914,15 @@ void upd6383_device::dump_frame_report() const
 		logerror("        §34 WHICH SLOTS store onto the latch:%s\n", gs.c_str());
 	}
 	if (m_latchguard_n)
-		logerror("        §33 LATCH GUARD: suppressed %u accumulator stores onto the "
-				"input latch cells; last offender %09llX\n", m_latchguard_n,
+	{
+		for (u32 q = 0; q < m_lg_n; q++)
+			logerror("        §36 residue: word %09llX  iw%u  mode %u  dest %02X  x%u\n",
+					(unsigned long long)m_lg_word[q], m_lg_iw[q], m_lg_mode[q],
+					m_lg_dest[q], m_lg_cnt[q]);
+		logerror("        §36 LATCH ALARM: %u stores landed on the input window; NOT suppressed, "
+				"and the input stays 100%% intact. Last %09llX\n", m_latchguard_n,
 				(unsigned long long)m_latchguard_word);
+	}
 	if (m_in_frames == 0)
 		logerror("        NOTHING ENTERED THE CHIP -- the input stage never ran to completion\n");
 	else if (m_in_bad != 0)
