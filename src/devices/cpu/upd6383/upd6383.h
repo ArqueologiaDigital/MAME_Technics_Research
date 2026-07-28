@@ -468,6 +468,7 @@ private:
 	u8   m_cwr_hi = 0, m_cwr_word[3] = {0,0,0};   // ★ SPECULATIVE cmd-0x02 coefficient
 	u16  m_cwr_port = 0;                          //   stream: port prefix and the
 	u32  m_cwr = 0;
+	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
 	bool m_cram_wp_set = false;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next

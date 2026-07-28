@@ -914,7 +914,14 @@ void upd6383_device::exec_alu(u64 word)
 			s32 imm = s32(upd6383_disassembler::c_imm13(word));
 			if (imm & 0x1000)
 				imm -= 0x2000;
-			m_acc = s64(imm) << 11;
+			//  ⛔ ROW 5 UNDER TEST, 2026-07-28.  `cfmt = acc' writes the immediate
+			//  into the ACCUMULATOR, and the stuck presentation value 4 988 928 is
+			//  exactly 2436 << 11 -- the shape this line produces.  If a c-format
+			//  word runs late in the frame it clobbers the signal every time.  The
+			//  destination was always "1 of 6 enumerated"; parking it in a dedicated
+			//  latch tests whether it is the clobber without inventing a new
+			//  destination.
+			m_cimm = s64(imm) << 11;
 			return;
 		}
 		//  THE ALTERNATE lo12 ENCODING (bit 11).  sect. 9 of bit11-family.md
@@ -1029,8 +1036,19 @@ void upd6383_device::exec_alu(u64 word)
 			//  the value arriving here has not been through it.
 			//  Presenting the raw value is the reading that makes the chip audible;
 			//  it is SPECULATIVE and is row 16 of SPECULATIVE-APPLIED-REGISTER.md.
+			//  ⛔ ROW 16 REVERTED, 2026-07-28.  Presenting the RAW accumulator made
+			//  the chip "audible" -- but A/B analysis showed what it actually emits:
+			//  a CONSTANT 4 988 928 every frame, from before any note is played,
+			//  correlation with the input -0.0018 at every lag from -600 to +600,
+			//  and 19488 = 4988928 >> 8 on 96.8 % of output samples.  That is a
+			//  STUCK OUTPUT, not an effect, and DC is inaudible -- which is exactly
+			//  what the owner reported hearing.  acc_to_datum() at least keeps the
+			//  stuck value below the tone generator's >> 8 instead of injecting DC
+			//  into the mix.  The REAL defect is that the accumulator is constant at
+			//  this word; see SPECULATIVE-APPLIED-REGISTER.md sect. 3.4.
 			const s64 rawacc = util::sext(m_acc, 44);
-			s64 scaled = std::clamp<s64>(rawacc, -(1 << 23), (1 << 23) - 1);
+			s64 scaled = acc_to_datum(m_acc);
+			(void)rawacc;
 			//  ★★ SPECULATIVE, and the best-evidenced guess in this block: apply the
 			//  PER-UNIT OUTPUT LEVEL.  Registers 0x06 (unit 0) and 0x86 (unit 1) are
 			//  named per-unit OUTPUT LEVEL and their role is PROVEN BY CONSTRUCTION --
