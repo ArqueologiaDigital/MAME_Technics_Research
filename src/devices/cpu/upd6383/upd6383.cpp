@@ -846,7 +846,11 @@ void upd6383_device::latch_inputs_to_dram()
 	m_in_val[0] = m_di[IN_PORT][0];
 	m_in_val[1] = m_di[IN_PORT][1];
 
-	if (!m_trace_done && !m_trace_armed && (m_in_val[0] || m_in_val[1]))
+	//  ★ 2026-07-28: also arm unconditionally once the machine is well past boot.
+	//  The trace used to fire only on live input, so a run with no notes played
+	//  produced NO trace at all -- yet the accumulator profile shows the epilogue
+	//  dead in every frame regardless of input, so the diagnosis does not need a note.
+	if (!m_trace_done && !m_trace_armed && (m_in_val[0] || m_in_val[1] || m_frames_run > 400000))
 	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
