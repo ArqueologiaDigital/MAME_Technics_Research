@@ -850,7 +850,17 @@ void upd6383_device::latch_inputs_to_dram()
 	//  The trace used to fire only on live input, so a run with no notes played
 	//  produced NO trace at all -- yet the accumulator profile shows the epilogue
 	//  dead in every frame regardless of input, so the diagnosis does not need a note.
-	if (!m_trace_done && !m_trace_armed && (m_in_val[0] || m_in_val[1] || m_frames_run > 400000))
+	//  ⚠ The fallback is deliberately LATE (2M frames ~= 45 s of audio) so that it
+	//  NEVER preempts a real note: live input must always win the arming race, or
+	//  the trace silently documents a silent chip.
+	//  ⚠⚠ AND the threshold is a MAGNITUDE, not "nonzero": arming on the first
+	//  nonzero sample catches boot noise seconds before any note is played, which
+	//  is exactly how a trace can claim to be "with input" and not be.
+	//  ★ note_spec.lua presses its triad at t = 20 s; 970 000 frames = 22 s, so this
+	//  lands DETERMINISTICALLY inside the held note -- no reliance on the input latch,
+	//  whose audit peak is exactly 0x800000 (the rail) and so cannot be trusted to
+	//  distinguish "a note is sounding" from "the latch is railed".
+	if (!m_trace_done && !m_trace_armed && m_frames_run > 970000)
 	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
