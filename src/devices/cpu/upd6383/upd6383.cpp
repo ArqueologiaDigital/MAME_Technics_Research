@@ -952,6 +952,23 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		if (upd6383_disassembler::is_input_latch_read(word, right))
 		{
 			m_in_seen[right ? 1 : 0] = s32(util::sext(m_dram.read_dword(cell) & 0xffffff, 24));
+			//  ★ §33: the DEPOSIT uses m_in_base = m_dp at FRAME START; this read uses
+			//  the pointer as it is NOW.  If words 0..3 moved it, the two disagree.
+			m_in_readbase[right ? 1 : 0] = m_dp;
+			m_in_delta_hist[u8(m_dp - m_in_base)]++;
+			//  ★ §33 one-shot: the addresses are supposed to be IDENTICAL, so dump
+			//  every quantity at one read and see which identity actually breaks.
+			if (m_frames_run > 970000 && m_dbg_once < 4)
+			{
+				m_dbg_once++;
+				logerror("upd6383: §33 READ ch%d  in_base=%02X dp=%02X cell=%02X "
+						"in_addr=%02X/%02X | mem[cell]=%08X mem[in_addr]=%08X "
+						"in_val=%08X\n", right ? 1 : 0, m_in_base, m_dp, cell,
+						m_in_addr[0], m_in_addr[1],
+						m_dram.read_dword(cell) & 0xffffff,
+						m_dram.read_dword(m_in_addr[right ? 1 : 0]) & 0xffffff,
+						u32(m_in_val[right ? 1 : 0]) & 0xffffff);
+			}
 			m_in_seen_mask |= right ? 2 : 1;
 		}
 
@@ -1583,8 +1600,34 @@ void upd6383_device::exec_alu(u64 word)
 		u8 stdest = m_dp;
 		if (stmode == 1)
 			stdest = u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00));
+		//  ★★★ §33 2026-07-28: NEVER let the accumulator store land on the two
+		//  INPUT-LATCH cells.  MEASURED: the header read at w4 was taking 0x2CCCCC
+		//  (the previous frame's body datum) out of cell 0x47 while the deposit had
+		//  just written 0x170800 there -- 1 565 758 mismatches against 31 682 matches
+		//  -- so the chip processed its own stale output instead of its input, every
+		//  frame.  The addresses were never wrong: in_base=45, dp=cell=in_addr=47.
+		//
+		//  THIS IS THE FAILURE THIS DEVICE'S OWN COMMENT PREDICTED, verbatim:
+		//  "hi12 bit 4 (the accumulator store) ... needs a CORRECT ACCUMULATOR, and
+		//  the accumulator of a frame full of undecoded words is not the chip's -- so
+		//  performing it would write invented data into real cells. ... EXECUTE WHAT
+		//  ADDRESSES, NEVER WHAT COMPUTES."  The speculative gate generalised the
+		//  store and broke exactly that rule.
+		//
+		//  ⛔ A GUARD, NOT A DECODE.  K6's feedback store is FORCED at X+1; the latch
+		//  cells are X+2 and X+5.  A store reaching them means our ADDRESSING is
+		//  wrong, and that is still to be found -- this stops the corruption from
+		//  masking every downstream measurement in the meantime.
+		if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
+		{
+			m_latchguard_n++;
+			m_latchguard_word = m_cur_word;
+		}
+		else
+		{
 		m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
 			watch_store(stdest, s32(acc_to_datum(m_acc)) & 0xffffff, 2);
+		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
 		m_acc = 0;
 	}
@@ -2806,6 +2849,20 @@ void upd6383_device::dump_frame_report() const
 				u32(total ? ((10000 * u64(best)) / total) % 100 : 0),
 				u8(best_x + IN_LATCH_L_OFF), u8(best_x + IN_LATCH_R_OFF), second);
 	}
+		{   // ★ §33: how far had the pointer moved by the time the header read?
+			std::string dh; u32 tot = 0, best = 0; int bestd = 0;
+			for (int d = 0; d < 256; d++) { tot += m_in_delta_hist[d];
+				if (m_in_delta_hist[d] > best) { best = m_in_delta_hist[d]; bestd = d; } }
+			for (int d = 0; d < 256; d++) if (m_in_delta_hist[d])
+				dh += string_format(" %+d:%u", (d < 128) ? d : d - 256, m_in_delta_hist[d]);
+			logerror("        §33 POINTER DRIFT between deposit and read: most common %+d "
+					"on %u of %u (%.2f%%) --%s\n", (bestd < 128) ? bestd : bestd - 256,
+					best, tot, tot ? 100.0 * double(best) / double(tot) : 0.0, dh.c_str());
+		}
+	if (m_latchguard_n)
+		logerror("        §33 LATCH GUARD: suppressed %u accumulator stores onto the "
+				"input latch cells; last offender %09llX\n", m_latchguard_n,
+				(unsigned long long)m_latchguard_word);
 	if (m_in_frames == 0)
 		logerror("        NOTHING ENTERED THE CHIP -- the input stage never ran to completion\n");
 	else if (m_in_bad != 0)

@@ -523,6 +523,11 @@ private:
 	//  bits, and appears with neither §29 fix.  §28 already failed its own test; this
 	//  makes it actively harmful, so it is off by default and kept only as a switch.
 	u32  m_specmask = 0xc;
+	//  ★ §33: what the pointer actually WAS when the header words read the latch,
+	//  against m_in_base (the pointer at frame start, which the deposit uses).
+	u32  m_dbg_once = 0;
+	u32  m_latchguard_n = 0; u64 m_latchguard_word = 0;
+	u8   m_in_readbase[2] = {}; u32 m_in_delta_hist[256] = {};
 	u16  m_out_slot_reg[6]  = { 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff };
 	s32  m_out_slot_peak[6] = {};
 	u64  m_out_slot_word[6] = {};
