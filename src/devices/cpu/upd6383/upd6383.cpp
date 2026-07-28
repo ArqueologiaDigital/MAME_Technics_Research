@@ -2005,7 +2005,21 @@ void upd6383_device::exec_alu(u64 word)
 	if ((m_speculative && (m_specmask & 4)) ? upd6383_disassembler::coeff_fetch(word)
 					  : upd6383_disassembler::coeff_consumer(word))
 	{
-		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+		u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+		//  ★ §53 SPECULATIVE (mask bit 13): READ THE RAMP BANK AT Q0.16, NOT Q0.23.
+		//  §52 established that the microcode DELIBERATELY aims the coefficient cursor
+		//  at 0x50..0x8B (three ldptr 0x821 loads: iw42->0x70, iw50->0x50, iw69->0x90)
+		//  and that 1590 body words fetch from it as coefficients while NO delay word
+		//  ever does (disjoint, 91 programs).  So the ramps ARE multiplicands -- but as
+		//  Q0.23 they are 0.006..0.008 and cost 10^4 per frame.
+		//  As Q0.16 the same cells are 0.5..0.98: 0x008000 << 7 = 0x400000 = exactly
+		//  +0.5, and 0x00FC00 << 7 = 0x7E0000 = 0.984.  Plausible reverb gains.
+		//  ⛔ FALSIFIER, stated before the run: a no-stimulus window must be SILENT and
+		//  the output must TRACK the input.  A non-zero silent window kills this
+		//  outright, whatever the note windows do.
+		if (m_speculative && (m_specmask & 0x2000)
+				&& m_cursor >= 0x50 && m_cursor <= 0x8b)
+			coef = (coef << 7) & 0xffffff;
 		//  ★★★ §44 SPECULATIVE (mask bit 8): C-RAM 0x50..0x8B IS A DELAY-TAP TABLE,
 		//  NOT COEFFICIENTS.  Dumped, the space has three clearly distinct regions:
 		//      0x00..0x13  real parameters (LFO rate 000072, wrap 7FFFFF, 400000 ...)
