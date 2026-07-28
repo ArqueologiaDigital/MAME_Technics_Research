@@ -528,6 +528,11 @@ private:
 	u32  m_dbg_once = 0;
 	u32  m_latchguard_n = 0; u64 m_latchguard_word = 0;
 	u16  m_cur_iw = 0; u32 m_latchguard_slot[384] = {};
+	//  ★ §37: the shape of the frame-closure drift -- WHICH residues occur, and
+	//  WHEN.  A drift confined to boot/program-load is not the same defect as one
+	//  that recurs in steady state, and the run-wide min/max cannot tell them apart.
+	u32  m_disp_hist[256] = {}; u64 m_disp_first = 0, m_disp_last = 0;
+	u32  m_disp_bucket[16] = {}; u32 m_disp_open_run = 0, m_disp_open_run_max = 0;
 	//  ★ §36: the residue -- which WORDS reach the latch, where they aim, and in
 	//  which mode.  The slot attribution alone proved unreliable.
 	u64  m_lg_word[8] = {}; u32 m_lg_cnt[8] = {}; u8 m_lg_dest[8] = {};

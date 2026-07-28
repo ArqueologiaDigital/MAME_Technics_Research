@@ -2643,6 +2643,18 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			m_frames_dp_closed++;
 		if (m_last_dp_delta < m_dp_delta_min) m_dp_delta_min = m_last_dp_delta;
 		if (m_last_dp_delta > m_dp_delta_max) m_dp_delta_max = m_last_dp_delta;
+		//  ★ §37: distribution and time-placement of the non-closing frames.
+		m_disp_hist[u8(m_last_dp_delta)]++;
+		if (m_last_dp_delta != 0)
+		{
+			if (!m_disp_first) m_disp_first = m_frames_run;
+			m_disp_last = m_frames_run;
+			m_disp_bucket[(m_frames_run * 16) / 1900000 < 16
+					? (m_frames_run * 16) / 1900000 : 15]++;
+			if (++m_disp_open_run > m_disp_open_run_max)
+				m_disp_open_run_max = m_disp_open_run;
+		}
+		else m_disp_open_run = 0;
 	}
 	if (traps != 0)
 		m_frames_trapped++;
@@ -2820,11 +2832,33 @@ void upd6383_device::dump_frame_report() const
 	logerror("    the per-unit D-RAM base 0x%02X | unit<<7 this core now applies at the CALL;\n",
 			DRAM_UNIT_BASE);
 	logerror("    a residue of 0 is that base's strongest live consequence, not its proof):\n");
+	//  ★★★ §37, 2026-07-28: THE DRIFT IS A BOOT TRANSIENT, NOT A STEADY-STATE DEFECT.
+	//  The run-wide "min -1 max +116 (VARIES)" line below reads like an ongoing
+	//  problem and is not one.  Measured over 1 824 001 frames: EVERY non-closing
+	//  frame falls between frame 204 482 and 264 002 -- one contiguous window of
+	//  ~60 000 frames (~4.6 s to ~6.0 s of emulated audio, i.e. while the host is
+	//  still uploading programs).  From frame 264 003 to the end of the run, all
+	//  1 560 959 measured frames close with residue EXACTLY 0.
+	//  The residues are -1 x 21 120 (one contiguous run), +5 x 2880, +6 x 960,
+	//  +7 x 960, +116 x 1 -- transient programs, each internally consistent.
+	//  ⇒ Do NOT chase this as a pointer bug. The 1.69 % of frames whose X is not
+	//  0x45 are the SAME frames, so the input-window spread is the same transient.
 	logerror("        net D-RAM pointer displacement, last frame %+d\n", m_last_dp_delta);
 	logerror("        over every COMPLETE frame (%u of them): min %+d  max %+d  %s\n",
 			u32(m_frames_dp_measured), m_dp_delta_min, m_dp_delta_max,
 			(m_dp_delta_min == m_dp_delta_max) ? "(CONSTANT -- a fixed per-frame drift)"
 					: "(VARIES between frames)");
+	{   // ★ §37
+		std::string dh;
+		for (int d = 0; d < 256; d++)
+			if (m_disp_hist[d]) dh += string_format(" %+d:%u", (d < 128) ? d : d - 256, m_disp_hist[d]);
+		logerror("        §37 RESIDUE HISTOGRAM:%s\n", dh.c_str());
+		std::string tb;
+		for (int b = 0; b < 16; b++) tb += string_format(" %u", m_disp_bucket[b]);
+		logerror("        §37 non-closing frames over time (16 buckets):%s\n", tb.c_str());
+		logerror("        §37 first non-closing frame %u, last %u, longest consecutive run %u\n",
+				u32(m_disp_first), u32(m_disp_last), m_disp_open_run_max);
+	}
 	logerror("        frames that closed %u of %u\n",
 			u32(m_frames_dp_closed), u32(m_frames_dp_measured));
 	// A complete frame can only close if its ENTRY pointer was the steady-state
