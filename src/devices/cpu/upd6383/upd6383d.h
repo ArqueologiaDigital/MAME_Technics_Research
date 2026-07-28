@@ -575,9 +575,12 @@ public:
 		if (lo12(w) & 0x800)
 			return true;                        // the alternate lo12 encoding:
 		                                        // addressing only, no ALU effect
-		const u8 cl = class4(w);
-		if (cl != 2 && cl != 8 && cl != 0xa && cl != 1 && cl != 4 && cl != 9)
-			return false;
+		//  ROUND 2 (2026-07-28): the grid is now filled COMPLETELY.  Every word
+		//  form is given a reading so that a frame can close; the eight that
+		//  round 1 left are listed with their grades in upd6383.cpp's
+		//  SPECULATIVE READING TABLE.  Filling the whole grid is deliberate --
+		//  contradictions downstream are the point, and a form that traps can
+		//  produce none.
 		return true;
 	}
 

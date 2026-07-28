@@ -801,6 +801,8 @@ void upd6383_device::exec_alu(u64 word)
 	//  and dsp/analysis/unblocking-and-discriminators.md.
 	if (m_speculative && !upd6383_disassembler::alu_decoded(word))
 	{
+		const u8 cl = upd6383_disassembler::class4(word);
+		const bool hi_esc = (upd6383_disassembler::hi12(word) & 0xF00) == 0xA00;
 		//  C-FORMAT: a 13-bit immediate.  status() already calls it MEASURED
 		//  with the DESTINATION open; `acc' is one of six enumerated choices.
 		if (upd6383_disassembler::c_format(word))
@@ -822,6 +824,63 @@ void upd6383_device::exec_alu(u64 word)
 				m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 			return;
 		}
+		//==================================================================
+		//  ★★★ THE SPECULATIVE READING TABLE -- ROUND 2, 2026-07-28.
+		//
+		//  Round 1 removed 115 of the 123 trapping forms and left EIGHT, all of
+		//  them in the SHARED kernel/epilogue so they blocked every frame.  Each
+		//  is filled in below with its GRADE.  Grades, strongest first:
+		//
+		//    [PART-MEASURED]  some field of the word is independently measured
+		//                     and only the arithmetic is guessed
+		//    [INFERRED]       the disassembler already annotates an idiom
+		//    [PLAIN GUESS]    nothing supports the reading; it exists so the
+		//                     frame can close
+		//
+		//  form            grade            reading
+		//  000.0.00.000    [INFERRED]       NOP -- the all-zero word is I-RAM's
+		//                                   reset state and its own disassembly
+		//  000.6.18.4CD    [INFERRED]       table-lookup idiom; no table is
+		//  000.6.20.407    [INFERRED]       modelled, so: addressing only
+		//  980.5.20.402    [PLAIN GUESS]    no side effect
+		//  A00.0.00.015    [PLAIN GUESS]    no side effect (ACT 0x15 spelling)
+		//  A00.0.00.041    [PLAIN GUESS]    no side effect
+		//  A3C.D.9F.287    [PART-MEASURED]  OUTPUT PRESENTATION, unit 1
+		//  E30.C.00.404    [PART-MEASURED]  OUTPUT PRESENTATION, unit 0
+		//
+		//  ★ THE TWO PRESENTATION WORDS ARE THE LOAD-BEARING ONES, and they are
+		//  the only place in this device that writes m_do[][] AT ALL -- until
+		//  now the output latch had NO WRITER, so even a clean frame returned
+		//  silence.  What is MEASURED about them (output-stage-decode.md item I):
+		//  w73's SRC 0x10 IS the accumulator (ANCHORED), and addr8 bit 7 assigns
+		//  the unit -- 0x00 -> unit 0, 0x9F -> unit 1.  What is GUESSED is the
+		//  ARITHMETIC: here, the identity.  output-stage-io.md sect. 10 proved
+		//  both words UNDECIDABLE BY COMPARISON, so this is a placeholder that
+		//  lets the frame close and NOT a decoding.
+		//==================================================================
+		const u16 lo = u16(upd6383_disassembler::lo12(word));
+		const u8  ad = upd6383_disassembler::addr8(word);
+
+		if (cl == 0xC || cl == 0xD)
+		{
+			// the two output presentations.  addr8 bit 7 selects the unit.
+			const int unit = (ad & 0x80) ? 1 : 0;
+			const s32 v = acc_to_datum(m_acc);
+			m_do[unit][0] = v;
+			m_do[unit][1] = v;
+			return;
+		}
+		if (cl == 6)
+		{
+			// table-lookup idiom: no table is modelled, so execute the
+			// addressing and leave the ALU alone.
+			if (upd6383_disassembler::coeff_consumer(word))
+				m_cursor++;
+			return;
+		}
+		if (word == 0 || cl == 5 || (hi_esc && lo == 0x015) || (hi_esc && lo == 0x041))
+			return;                 // NOP / no modelled side effect
+
 		//  Everything else the speculative gate admits falls through into the
 		//  normal path below, where the widened SRC/ACTION defaults apply.
 	}
