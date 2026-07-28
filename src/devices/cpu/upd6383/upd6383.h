@@ -495,7 +495,25 @@ private:
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
 	u32  m_dwr[256] = {}, m_dwr_nz[256] = {};
 	u32  m_out_slot_writes[6] = {}, m_out_slot_nonzero[6] = {};
-	bool m_row13 = false;      // ★ RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
+	//  ★ §25 diagnostic 2026-07-28: WHY are two of the three presentations always
+	//  zero?  Remapping which PORT a zero lands on cannot create signal, so before
+	//  testing the port hypothesis, record for each SRC code which REGISTER its word
+	//  reads (addr8) and the peak value seen there.  0xffff = never executed.
+	//  ★ §25 follow-up: WHO WRITES 0x8C / 0x8D?  Two of the three presentations read
+	//  0x8D and it is always zero.  Watch every D-RAM store to those two cells.
+	void watch_store(u32 addr, s32 val, u8 site);
+	u32  m_watch_hits[2] = {}, m_watch_nz[2] = {};
+	u8   m_watch_site[2] = {};
+	u16  m_out_slot_reg[6]  = { 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff };
+	s32  m_out_slot_peak[6] = {};
+	u64  m_out_slot_word[6] = {};
+	//  ★ UN-RETIRED 2026-07-28.  This is the class 0xC / 0xD presentation path, and
+	//  r2-output.md §3.2 identifies it as the CORRECT one: w73 (class C, addr8 0x00,
+	//  unit 0 -> DO1) and w78 (class D, addr8 0x9F, unit 1 -> DO2).  It was retired
+	//  over a double-count against the class-1 selector rule above -- but that rule
+	//  is the one that is wrong (it hijacked three internal register writes), so the
+	//  double-count was resolved in favour of the wrong member of the pair.
+	bool m_row13 = true;       // ★ was RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
 	                                //   words ALSO write m_do?  (double-count check)
 	s64  m_mulmax = 0; s32 m_mul_coef = 0, m_mul_L = 0; u8 m_mul_src = 0; u32 m_mul_iw = 0;
 	s64  m_pprof[25] = {};

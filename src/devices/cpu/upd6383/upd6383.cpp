@@ -341,6 +341,16 @@ void upd6383_device::device_reset()
 }
 
 
+//  ★ §25 follow-up instrumentation: record stores landing on 0x8C / 0x8D.
+void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
+{
+	const int w = (addr == 0x8c) ? 0 : (addr == 0x8d) ? 1 : -1;
+	if (w < 0) return;
+	m_watch_hits[w]++;
+	if (val) m_watch_nz[w]++;
+	m_watch_site[w] = site;
+}
+
 void upd6383_device::device_stop()
 {
 	if (m_frames_run != 0)
@@ -369,7 +379,18 @@ void upd6383_device::device_stop()
 				std::string so;
 				for (u32 i = 0; i < 6; i++)
 					so += string_format(" slot%d:%d/%d", i, m_out_slot_nonzero[i], m_out_slot_writes[i]);
+				logerror("upd6383:   WATCH 0x8C: %d stores (%d nonzero) site %d | "
+						"0x8D: %d stores (%d nonzero) site %d\n",
+						m_watch_hits[0], m_watch_nz[0], m_watch_site[0],
+						m_watch_hits[1], m_watch_nz[1], m_watch_site[1]);
 				logerror("upd6383: OUTPUT SLOT WRITES (nonzero/total):%s\n", so);
+				for (int i = 0; i < 6; i++)
+				{
+					if (m_out_slot_reg[i] == 0xffff) continue;
+					logerror("upd6383:   slot%d SRC 0x%02X  reads reg 0x%02X  word %09X  peak %d  (%d/%d nonzero)\n",
+							i, i + 1, m_out_slot_reg[i], u32(m_out_slot_word[i] & 0xffffffff),
+							m_out_slot_peak[i], m_out_slot_nonzero[i], m_out_slot_writes[i]);
+				}
 				std::string s7;
 				for (u32 q = 0; q < m_st07n; q++)
 					s7 += string_format(" [dest %02X src %02X ptr %02X L %d]",
@@ -914,7 +935,10 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		// today; it closes the hole before it opens.
 		if ((hi & upd6383_disassembler::HI_ST)
 				&& !upd6383_disassembler::st_suppressed(word))
+		{
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+			watch_store(cell, s32(m_acc & 0xffffff), 1);
+		}
 		{ m_dwr[cell & 0xff]++; if (m_dram.read_dword(cell) & 0xffffff) m_dwr_nz[cell & 0xff]++; }
 	}
 
@@ -1157,7 +1181,23 @@ void upd6383_device::exec_alu(u64 word)
 		//  A free six-slot selector would pair with any ACT.  This partition says
 		//  the routing reading belongs to the NON-STORE words, so an ACT 0x07 word
 		//  falls through to the ALU and performs its mode-1 store instead.
-		if (cl == 1 && !(hi_sp & 0x800) && src_sp >= 0x01 && src_sp <= 0x06
+		//  ⛔⛔ REFUTED 2026-07-28 by r2-output.md §3.2, which had already inventoried
+		//  these very words -- and which this rule was written without reading (the
+		//  "check the handover first" failure, again).  Instrumenting the three words
+		//  this rule actually fires on gave:
+		//        slot0  012.1.8D.05B   reads reg 0x8D   peak 0
+		//        slot4  092.1.8D.15B   reads reg 0x8D   peak 0
+		//        slot5  092.1.8C.19B   reads reg 0x8C   peak 504
+		//  Those are exactly w61, w60 and w68, and §3.2 classifies all three as
+		//  INTERNAL register writes -- w68 explicitly "read at w66 first => a state
+		//  register".  They are not outputs at all.  The REAL presentations are
+		//  w73 (E30.C.00.404, unit 0 -> DO1) and w78 (A3C.D.9F.287, unit 1 -> DO2),
+		//  which are class 0xC / 0xD and are handled by the presentation path below.
+		//  Keeping this rule hijacked three internal writes onto the output latches,
+		//  which is why DO2 was never written and DO3 carried a signal that
+		//  §3.2 predicts it never carries.  Disabled; the words now fall through to
+		//  the ALU and perform their mode-1 store, which is what they are.
+		if (false && cl == 1 && !(hi_sp & 0x800) && src_sp >= 0x01 && src_sp <= 0x06
 				&& upd6383_disassembler::lo_act(word) != upd6383_disassembler::LO_ACT_ST_BUS)
 		{
 			const u32 slot = src_sp - 1;
@@ -1169,6 +1209,9 @@ void upd6383_device::exec_alu(u64 word)
 			m_do[slot >> 1][slot & 1] = v;
 			m_out_slot_writes[slot]++;
 			if (v) m_out_slot_nonzero[slot]++;
+			m_out_slot_reg[slot]  = u16(ad);
+			m_out_slot_word[slot] = word;
+			if (std::abs(v) > std::abs(m_out_slot_peak[slot])) m_out_slot_peak[slot] = v;
 			return;
 		}
 		if (m_row13 && (cl == 0xC || cl == 0xD))
@@ -1476,6 +1519,7 @@ void upd6383_device::exec_alu(u64 word)
 		if (stmode == 1)
 			stdest = u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00));
 		m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
+			watch_store(stdest, s32(acc_to_datum(m_acc)) & 0xffffff, 2);
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
 		m_acc = 0;
 	}
@@ -1649,6 +1693,7 @@ void upd6383_device::exec_alu(u64 word)
 			}
 		}
 		m_dram.write_dword(d07, u32(L) & 0xffffff);
+			watch_store(d07, s32(L) & 0xffffff, 3);
 		m_dwr[d07]++;
 		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
 		break;
