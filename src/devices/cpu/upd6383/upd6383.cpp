@@ -350,6 +350,21 @@ void upd6383_device::device_stop()
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
 		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
 				(long long)m_pres_accpeak, (long long)(m_pres_accpeak >> ACC_SHIFT));
+		{   // ★ did the coefficients land where the cursor reads?
+			u32 nz = 0;
+			for (u32 i = 0; i < 256; i++)
+				if ((m_cram.read_dword(i) & 0xffffff) != 0) nz++;
+			logerror("upd6383:   C-RAM cells written: %d of 256 non-zero, %d coefficients routed\n",
+					nz, u32(m_cwr));
+			std::string ln;
+			for (u32 i = 0; i < 256; i++)
+			{
+				const u32 v = m_cram.read_dword(i) & 0xffffff;
+				if (v) ln += string_format(" %02X=%06X", i, v);
+				if (ln.size() > 100) { logerror("upd6383:   CRAM%s\n", ln); ln.clear(); }
+			}
+			if (!ln.empty()) logerror("upd6383:   CRAM%s\n", ln);
+		}
 	}
 
 	if (m_trap_total != 0)
@@ -431,7 +446,7 @@ void upd6383_device::host_w(bool cd, u8 data)
 	if (m_host_cmd == 0x02 && m_speculative)
 	{
 		if (m_host_pos == 0)      m_cwr_hi = data;
-		else if (m_host_pos == 1) { m_cwr_port = (u16(m_cwr_hi) << 8) | data; m_cwr = 0; }
+		else if (m_host_pos == 1) { m_cwr_port = (u16(m_cwr_hi) << 8) | data; }
 		else
 		{
 			const u32 b = (m_host_pos - 2) % 3;
@@ -440,9 +455,16 @@ void upd6383_device::host_w(bool cd, u8 data)
 			{
 				const u32 v = (u32(m_cwr_word[0]) << 16) | (u32(m_cwr_word[1]) << 8)
 						| m_cwr_word[2];
-				if (m_cwr < 256)
-					m_cram.write_dword(m_cwr, v & 0xffffff);
-				m_cwr++;
+				//  ★ land AT THE POINTER, auto-incrementing.  The pointer is NOT
+				//  reset per transfer -- it is set by an `801.0.NN.821' ldptr word
+				//  in the program stream (below).  Sequential-from-0 was the round-4
+				//  guess and it was wrong: it changed the wet on 0.03 % of samples.
+				if (m_cram_wp_set)
+				{
+					m_cram.write_dword(m_cram_wp, v & 0xffffff);
+					m_cram_wp = (m_cram_wp + 1) & 0xff;
+					m_cwr++;
+				}
 			}
 		}
 		m_host_pos++;
@@ -467,6 +489,29 @@ void upd6383_device::host_w(bool cd, u8 data)
 		if (byte_in_word == upd6383_disassembler::WORD_BYTES - 1)
 		{
 			const u32 word_index = m_host_addr + (m_host_pos - 2) / upd6383_disassembler::WORD_BYTES;
+
+			//  ★★★ THE C-RAM WRITE POINTER -- PROVEN BY CONSTRUCTION.
+			//  `801.0.NN.821' loads the C-RAM POINTER (writer LABEL_0387E6; K3
+			//  confirmed the host-stream and in-program meanings are the same
+			//  space), and the command-0x02 coefficients that follow land AT that
+			//  pointer, auto-incrementing.  dsp/tools/lfo_ramp.py cram_of_algo()
+			//  replays exactly this to recover every coefficient this project has
+			//  measured, so the rule is not a guess -- only its use here is new.
+			//  The word arrives through the ordinary cmd-0x01 path, including at
+			//  the host poke port (I-RAM 352+), e.g. captured transfer 26:
+			//      01 60 | 08 01 09 78 21 | ...   -> ldptr 0x09
+			{
+				u64 hw = 0;
+				for (int i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
+					hw = (hw << 8) | m_host_word[i];
+				if (upd6383_disassembler::hi12(hw) == 0x801
+						&& upd6383_disassembler::class4(hw) == 0
+						&& upd6383_disassembler::lo12(hw) == 0x821)
+				{
+					m_cram_wp = upd6383_disassembler::addr8(hw);
+					m_cram_wp_set = true;
+				}
+			}
 
 			if (word_index < IRAM_WORDS)
 			{
