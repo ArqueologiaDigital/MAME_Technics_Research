@@ -1459,10 +1459,31 @@ void upd6383_device::exec_alu(u64 word)
 	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
 	{
 		const u16 f31 = upd6383_disassembler::hi_f31(hi);
+		//  ★★★ ACTION 0x00 ADDS the bus; it does not REPLACE the accumulator.
+		//  Register row 26, found 2026-07-28 by the time-ordered trace.
+		//
+		//  The old expression returned the bus ALONE whenever ACTION was 0x00,
+		//  regardless of hi12[3:1].  On an hi12[3:1] == 2 (HI_ACC_HOLD) word that
+		//  DISCARDS the accumulator the code is simultaneously being told to hold.
+		//  MEASURED consequence: the reverb's 8-word allpass motif ends in exactly
+		//  such a word (`104.2.00.000', f31 = 2, SRC 0x00, ACT 0x00) and it zeroed
+		//  the accumulator at EVERY stage --
+		//      n=158 acc 192 414 482 432 -> 0,  n=166, n=174, n=182, n=208, n=224 ...
+		//  so no ladder stage could accumulate on the one before it, and the body
+		//  delivered a datum of 504 instead of ~2 936 000.
+		//
+		//  The three operations are: 0 = LOAD (feedback cut, acc <- P), 1 = ADD
+		//  (acc <- acc + P), 2 = HOLD (accumulator kept, no product).  ACTION 0x00
+		//  contributes the bus as an EXTRA term to whichever of those applies, which
+		//  is exactly what this device's own DELTA table describes ("hi12[3:1] == 1,
+		//  act != 00: acc += P").  ⛔ For f31 = 0 and 1 the behaviour is UNCHANGED --
+		//  0 still cuts the feedback, 1 still keeps it -- so the biquad and the LFO
+		//  results are untouched; only the HOLD case, which alu_decoded() admits
+		//  solely on class 8, changes.
 		const u64 src_term =
-				(act == upd6383_disassembler::LO_ACT_ACC_BUS)
-					? u64(s64(L) << ACC_SHIFT)
-					: (f31 == upd6383_disassembler::HI_ACC_LOAD ? 0 : m_acc);
+				(f31 == upd6383_disassembler::HI_ACC_LOAD ? 0 : m_acc)
+				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS)
+					? u64(s64(L) << ACC_SHIFT) : 0);
 		// HI_ACC_HOLD contributes no product.  On the class-8 post-sum word the
 		// biquad DETERMINES the accumulator comes out unchanged; whether the
 		// code is a no-op or a wrap/limit that does not fire on an in-range sum
