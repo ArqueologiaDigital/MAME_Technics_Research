@@ -1279,13 +1279,60 @@ void upd6383_device::exec_alu(u64 word)
 		if (upd6383_disassembler::is_dram(word))
 		{
 			const char dir = upd6383_disassembler::dram_dir(word);
-			const u32 cellv = m_dram.read_dword(u8(m_dsc + m_delay_ix)) & 0xffff;
+			//  ★★★ §47 SPECULATIVE (mask bit 9): TAKE THE DESCRIPTOR FROM THE
+			//  PER-UNIT C-RAM BANK, NOT FROM D-RAM AT m_dsc.
+			//  MEASURED: with the D-RAM source, the descriptor cell is 0x0000 on
+			//  essentially every one of ~64 M accesses (dsc 0x25..0x2C all read
+			//  0000), so every tap addresses the SAME rotating cell and there is no
+			//  delay line at all.  Nothing writes those D-RAM cells: the host's only
+			//  write path reaches C-RAM.
+			//  Where the descriptors ARE: the two host-written C-RAM runs the body's
+			//  cursor is deliberately aimed at -- this file's own note records the
+			//  three loads, "iw42 -> 0x70 (unit 0), iw50 -> 0x50 (unit 1), iw69 ->
+			//  0x90 (the epilogue)".  And their CONTENTS match the MEASURED per-unit
+			//  region split exactly:
+			//      bank 0x70 (unit 0) : 0x0000..0x7FFF  -> unit 0 region, below 0x8000
+			//      bank 0x50 (unit 1) : 0x8000..0xFC00  -> unit 1 region, above 0x8000
+			//  (adjudication-round4 §2, "unit 0 below 0x8000, unit 1 above", measured
+			//  over 486+384 cells).  Two independent structures agreeing.
+			//  ⇒ a class-A delay word FETCHES ITS OWN ADDRESS from the per-unit bank.
+			//  That also explains §44: read as Q0.23 those cells are ~0.007, and
+			//  multiplying by them is what destroyed the signal.
+			const u32 cellv = (m_speculative && (m_specmask & 0x200))
+					? (m_cram.read_dword(m_cursor) & 0xffff)
+					: (m_dram.read_dword(u8(m_dsc + m_delay_ix)) & 0xffff);
+			if (m_speculative && (m_specmask & 0x200)
+					&& upd6383_disassembler::coeff_consumer(word))
+				m_cursor++;
+			//  ★ §46: is the delay port FED?  It reads its descriptors from D-RAM at
+			//  m_dsc, but the host's only write path reaches C-RAM -- where two
+			//  address-shaped ramps sit at 0x50..0x8B (§44).  Count what arrives.
+			{
+				if (dir == 'W') m_dly_w++; else if (dir == 'R') m_dly_r++;
+				if (cellv) m_dly_cell_nz++;
+				if (m_dly_n < 8)
+				{
+					bool seen = false;
+					for (u32 q = 0; q < m_dly_n; q++)
+						if (m_dly_dsc[q] == u8(m_dsc + m_delay_ix)) seen = true;
+					if (!seen)
+					{
+						m_dly_dsc[m_dly_n] = u8(m_dsc + m_delay_ix);
+						m_dly_val[m_dly_n] = cellv;
+						m_dly_dir[m_dly_n] = u8(dir);
+						m_dly_n++;
+					}
+				}
+			}
 			m_delay_ix++;
 			const u32 addr = (cellv + u32(m_frames_run)) & 0xffff;
 			if (dir == 'W')
 				m_delay.write_word(addr, u16((u32(acc_to_datum(m_acc)) >> 8) & 0xffff));
 			else if (dir == 'R')
+			{
 				m_dr = u32(m_delay.read_word(addr)) << 8;
+				if (m_dr) m_dly_r_nz++;
+			}
 			return;
 		}
 
@@ -2896,6 +2943,14 @@ void upd6383_device::dump_frame_report() const
 	}
 	logerror("upd6383: §44 TAP-TABLE fetches (C-RAM 0x50..0x8B, treated as addresses "
 			"not coefficients): %u\n", m_tap_n);
+	{
+		std::string ds;
+		for (u32 q = 0; q < m_dly_n; q++)
+			ds += string_format(" [%c dsc %02X = %04X]", m_dly_dir[q], m_dly_dsc[q], m_dly_val[q]);
+		logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
+				"descriptor cell non-zero on %u accesses.%s\n",
+				m_dly_r, m_dly_r_nz, m_dly_w, m_dly_cell_nz, ds.c_str());
+	}
 	logerror("upd6383: FRAME REPORT (experimental IC311 audio path)\n");
 	logerror("    frames run          %u\n", u32(m_frames_run));
 	logerror("    frames that TRAPPED %u (%d.%02d %%) -- their return was DISCARDED\n",
