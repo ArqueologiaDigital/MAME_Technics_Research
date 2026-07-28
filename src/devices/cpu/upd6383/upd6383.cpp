@@ -1232,10 +1232,15 @@ void upd6383_device::exec_alu(u64 word)
 		case 0x11:
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
-		case 0x13: case 0x1B: case 0x1C:
-			m_src_unread[src & 0x1f]++;      // no reading exists -- stays 0
-			break;
+		case upd6383_disassembler::LO_SRC_MEM:
+		case upd6383_disassembler::LO_SRC_ACC:
+		case upd6383_disassembler::LO_SRC_TA:
+		case upd6383_disassembler::LO_SRC_TB:
+			break;                           // anchored -- handled by the switch below
 		default:
+			//  EVERY remaining source has no reading and silently returns 0.
+			//  Counted so the next pass can see which ones actually matter.
+			m_src_unread[src & 0x1f]++;
 			break;
 		}
 	}
