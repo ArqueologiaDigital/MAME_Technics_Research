@@ -2180,7 +2180,18 @@ void upd6383_device::exec_decoded(u64 word)
 		//  rule now replaces two hand-placed seeds, which is better, but it does not
 		//  make the coupling proven.
 		if (m_speculative)
-			m_cursor = ad;
+			//  ★★★ §52 (mask bit 12 CLEARS this): row 25 seeds the coefficient
+			//  cursor from ldptr -- and this file already records that it is
+			//  "⛔ STILL AGAINST K3, which proves 0x21 is NOT the implicit cursor".
+			//  K3 is FORCED; row 25 is speculative and contradicts it.
+			//  MEASURED consequence: with row 25 the body's cursor sits at
+			//  0x50..0x71, the DELAY-DESCRIPTOR ramps, and the body multiplies by
+			//  0.0066 per stage (10^4 loss) -- while the sixteen genuine
+			//  coefficients at 0xA5..0xB4 are read by NOBODY.  Without it the cursor
+			//  runs continuously: kernel 0x90..0xA4 (21 cells) then body 0xA5..0xB4
+			//  (16), and 21 + 16 = 37 = exactly the host's coefficient run count.
+			if (!(m_specmask & 0x1000))
+				m_cursor = ad;
 	}
 	else if (upd6383_disassembler::is_ldptrd(word))
 	{

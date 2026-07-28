@@ -526,7 +526,11 @@ private:
 	//  bit 6 level from C-RAM, bit 8 tap-table.  With these four the chip produces
 	//  a non-zero output for the first time.  Bits 0/1 (§28 ACCB) and 4 (§40
 	//  latched-K) and 7 (§43 level-select) are OFF and each measurably destroys it.
-	u32  m_specmask = 0x74c;   // ★ §49: + bit 10, the one-deep delay-read pipeline
+	//  ★ §52: default 0x54C.  Bit 9 (delay descriptors from the CURSOR, §47) is
+	//  RETIRED: cursor_fetch and is_dram are DISJOINT across all 91 programs
+	//  (0 overlap, 1590 fetch-only, 834 dram-only), so a delay word never fetches
+	//  from the cursor and bit 9 fed a pointer those words do not use.
+	u32  m_specmask = 0x54c;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
