@@ -480,6 +480,9 @@ private:
 	u32  m_cwr_runlen = 0, m_cwr_start = 0, m_nruns = 0;
 	u8   m_run_base[32] = {}; u32 m_run_len[32] = {};
 	u32  m_src_unread[32] = {};
+	u32  m_out_slot_writes[6] = {}, m_out_slot_nonzero[6] = {};
+	bool m_row13 = false;      // ★ RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
+	                                //   words ALSO write m_do?  (double-count check)
 	s64  m_mulmax = 0; s32 m_mul_coef = 0, m_mul_L = 0; u8 m_mul_src = 0; u32 m_mul_iw = 0;
 	s64  m_pprof[25] = {};
 	u32  m_curprof[25] = {}; u8 m_curprof_seen[25] = {}; u32 m_curprof_n = 0;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer

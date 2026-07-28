@@ -366,6 +366,10 @@ void upd6383_device::device_stop()
 				for (u32 i = 0; i < 32; i++)
 					if (m_src_unread[i]) su += string_format(" 0x%02X:%d", i, m_src_unread[i]);
 				logerror("upd6383: SRC CODES STILL READING ZERO:%s\n", su.empty() ? " none" : su.c_str());
+				std::string so;
+				for (u32 i = 0; i < 6; i++)
+					so += string_format(" slot%d:%d/%d", i, m_out_slot_nonzero[i], m_out_slot_writes[i]);
+				logerror("upd6383: OUTPUT SLOT WRITES (nonzero/total):%s\n", so);
 			}
 			logerror("upd6383: BIGGEST MULTIPLY: pre-shift %lld = coef %d (0x%06X) x L %d, SRC 0x%02X at iw%d\n",
 					(long long)m_mulmax, m_mul_coef, m_mul_coef, m_mul_L, m_mul_src, m_mul_iw);
@@ -1104,7 +1108,27 @@ void upd6383_device::exec_alu(u64 word)
 			return;
 		}
 
-		if (cl == 0xC || cl == 0xD)
+		//  ★★★ CLASS-1 REGISTER-FILE WORDS: lo12[10:6] IS AN OUTPUT-SLOT SELECTOR,
+		//  NOT A SOURCE.  Register section 5, INFERRED (strong):
+		//    * SRC 0x02..0x06 are ABSENT from all 2974 body words and SRC 0x01
+		//      occurs only as class 0 -- so these codes exist nowhere in the machine
+		//      except here, ONCE EACH, in the kernel/epilogue.
+		//    * six codes, and this chip's output latch is m_do[3][2] = SIX SLOTS.
+		//  addr8 names the register supplying the value; ACT says what is done;
+		//  lo12[10:6] says WHERE IT GOES.  ⛔ The slot->code MAPPING is untested --
+		//  slot = SRC-1 in natural order is the obvious reading and nothing more.
+		const u16 hi_sp = upd6383_disassembler::hi12(word);
+		const u8  src_sp = upd6383_disassembler::lo_src(word);
+		if (cl == 1 && !(hi_sp & 0x800) && src_sp >= 0x01 && src_sp <= 0x06)
+		{
+			const u32 slot = src_sp - 1;
+			const s32 v = s32(util::sext(m_dram.read_dword(ad) & 0xffffff, 24));
+			m_do[slot >> 1][slot & 1] = v;
+			m_out_slot_writes[slot]++;
+			if (v) m_out_slot_nonzero[slot]++;
+			return;
+		}
+		if (m_row13 && (cl == 0xC || cl == 0xD))
 		{
 			// the two output presentations.  addr8 bit 7 selects the unit.
 			const int unit = (ad & 0x80) ? 1 : 0;
