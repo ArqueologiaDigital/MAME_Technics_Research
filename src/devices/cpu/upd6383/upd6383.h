@@ -505,8 +505,12 @@ private:
 	//  ★ §25 follow-up: WHO WRITES 0x8C / 0x8D?  Two of the three presentations read
 	//  0x8D and it is always zero.  Watch every D-RAM store to those two cells.
 	void watch_store(u32 addr, s32 val, u8 site);
-	u32  m_watch_hits[2] = {}, m_watch_nz[2] = {};
-	u8   m_watch_site[2] = {};
+	u32  m_watch_hits[4] = {}, m_watch_nz[4] = {};
+	u8   m_watch_site[4] = {};
+	//  ★ §31: slots 2/3 watch the INPUT LATCH cells.  Under the speculative gate the
+	//  microcode reads 0x800000 back out of them while the tone generator writes a
+	//  clean 0x4FD900 -- so something in here overwrites the input before it is read.
+	u64  m_watch_word[4] = {}; u64 m_cur_word = 0;
 	u16  m_out_slot_reg[6]  = { 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff };
 	s32  m_out_slot_peak[6] = {};
 	u64  m_out_slot_word[6] = {};

@@ -344,8 +344,10 @@ void upd6383_device::device_reset()
 //  ★ §25 follow-up instrumentation: record stores landing on 0x8C / 0x8D.
 void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
 {
-	const int w = (addr == 0x8c) ? 0 : (addr == 0x8d) ? 1 : -1;
+	const int w = (addr == 0x8c) ? 0 : (addr == 0x8d) ? 1
+			: (addr == m_in_addr[0]) ? 2 : (addr == m_in_addr[1]) ? 3 : -1;
 	if (w < 0) return;
+	if (w >= 2) m_watch_word[w] = m_cur_word;
 	m_watch_hits[w]++;
 	if (val) m_watch_nz[w]++;
 	m_watch_site[w] = site;
@@ -383,6 +385,12 @@ void upd6383_device::device_stop()
 						"0x8D: %d stores (%d nonzero) site %d\n",
 						m_watch_hits[0], m_watch_nz[0], m_watch_site[0],
 						m_watch_hits[1], m_watch_nz[1], m_watch_site[1]);
+				logerror("upd6383:   WATCH INPUT LATCH L(0x%02X): %d stores site %d word %09llX | "
+						"R(0x%02X): %d stores site %d word %09llX\n",
+						m_in_addr[0], m_watch_hits[2], m_watch_site[2],
+						(unsigned long long)m_watch_word[2],
+						m_in_addr[1], m_watch_hits[3], m_watch_site[3],
+						(unsigned long long)m_watch_word[3]);
 				logerror("upd6383: OUTPUT SLOT WRITES (nonzero/total):%s\n", so);
 				for (int i = 0; i < 6; i++)
 				{
@@ -2333,6 +2341,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
 			m_mul_issued = false;
+			m_cur_word = raw;
 			exec_decoded(word);
 			if (m_trace_armed && m_trace_n < 400)
 			{   // ★★★ THE TIME-ORDERED FRAME TRACE -- execution order, not maxima

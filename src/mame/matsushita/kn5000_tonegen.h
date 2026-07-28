@@ -336,6 +336,9 @@ private:
 	optional_ioport                 m_dsp1_enable;
 	// diagnostics only, reported at device_stop
 	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
+	//  ★ §31: DSP input-stage clipping census (see kn5000_tonegen.cpp)
+	uint64_t m_insta_n = 0, m_insta_clip = 0, m_insta_clip2x = 0, m_insta_sum = 0;
+	int32_t  m_insta_peak = 0;
 	uint64_t m_dsp1_kept = 0;        // frames whose return was USABLE (trap-free)
 
 	// The 16 page directories (4 banks x 4 pages), parsed from the wave ROM region at

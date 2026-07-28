@@ -168,6 +168,13 @@ void kn5000_tonegen_device::device_stop()
 		logerror("IC311 send/return: %u frames sent, %u returns USABLE (%u per 10000).\n",
 				uint32_t(m_dsp1_frames), uint32_t(m_dsp1_kept),
 				uint32_t((10000 * m_dsp1_kept) / m_dsp1_frames));
+		if (m_insta_n)
+			logerror("kn5000_tonegen: DSP INPUT AUDIT -- %u samples, peak |mix| %d "
+					"(full scale 32768), clipped %u (%.2f%%), over 2x FS %u (%.2f%%), mean |mix| %u\n",
+					uint32_t(m_insta_n), m_insta_peak,
+					uint32_t(m_insta_clip), 100.0 * double(m_insta_clip) / double(m_insta_n),
+					uint32_t(m_insta_clip2x), 100.0 * double(m_insta_clip2x) / double(m_insta_n),
+					uint32_t(m_insta_sum / m_insta_n));
 		if (m_dsp1_kept == 0)
 			logerror("IC311 send/return: EVERY frame trapped, so EVERY return was discarded and\n"
 					"    the rendered audio is EXACTLY the dry mix. That is the expected outcome\n"
@@ -2128,6 +2135,20 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// it takes exactly three distinct values across those words.
 			// WHAT CHANGES IF IT IS WRONG: which effect unit hears what. With one dry
 			// source for everything, a per-port routing error is currently invisible.
+			//  ★ §31 2026-07-28: CHARACTERISE THE RAILING INPUT.  The DSP's input audit
+			//  peaks at exactly 0x800000 -- to24()'s NEGATIVE CLAMP -- whenever a note
+			//  sounds.  to24 multiplies by 256, so it clamps whenever |mix| >= 32768,
+			//  and mix_l/mix_r here are PRE-SOFTCLIP and unbounded.  Peak alone cannot
+			//  say whether that is a rare transient or a square wave, so count.
+			for (int32_t m : { mix_l, mix_r })
+			{
+				m_insta_n++;
+				const int32_t a = std::abs(m);
+				if (a > m_insta_peak) m_insta_peak = a;
+				if (a >= 32768) m_insta_clip++;
+				if (a >= 65536) m_insta_clip2x++;
+				m_insta_sum += a;
+			}
 			const int32_t sl = to24(mix_l);
 			const int32_t sr = to24(mix_r);
 			for (int port = 0; port < 3; port++)
