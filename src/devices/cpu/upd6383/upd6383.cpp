@@ -361,6 +361,8 @@ void upd6383_device::device_stop()
 			for (u32 i = 0; i <= 24; i++)
 				if (m_curprof_seen[i]) lp += string_format(" %d:P=%lld", i, (long long)m_pprof[i]);
 			logerror("upd6383: PRODUCT REGISTER:%s\n", lp);
+			logerror("upd6383: BIGGEST MULTIPLY: pre-shift %lld = coef %d (0x%06X) x L %d, SRC 0x%02X at iw%d\n",
+					(long long)m_mulmax, m_mul_coef, m_mul_coef, m_mul_L, m_mul_src, m_mul_iw);
 		}
 		{   // ★ which C-RAM BANKS did the coefficient stream actually fill?
 			if (m_cwr_runlen && m_nruns < 32)
@@ -1427,6 +1429,11 @@ void upd6383_device::exec_alu(u64 word)
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
 		m_k = coef;
 		m_l = u32(L) & 0xffffff;
+		{   // ★ which multiply overflows?  record the biggest |product| and its operands
+			const s64 pre = s64(util::sext(coef, 24)) * s64(L);
+			if (std::abs(pre) > std::abs(m_mulmax))
+			{ m_mulmax = pre; m_mul_coef = coef; m_mul_L = L; m_mul_src = src; m_mul_iw = u32(m_pc / upd6383_disassembler::WORD_BYTES); }
+		}
 		//  ★★★ SPECULATIVE, 2026-07-28, APPLIED ON THE OWNER'S INSTRUCTION.
 		//  An `hi12[3:1] == 2' (HI_ACC_HOLD) word does NOT update the product
 		//  register.  See kn5000-roms-disasm/dsp/analysis/
