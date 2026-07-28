@@ -1486,9 +1486,29 @@ void upd6383_device::exec_alu(u64 word)
 		m_tb = u32(L) & 0xffffff;
 		break;
 	case upd6383_disassembler::LO_ACT_ST_BUS:
-		m_dram.write_dword(m_dp, u32(L) & 0xffffff);
-		{ m_dwr[m_dp & 0xff]++; if (m_dram.read_dword(m_dp) & 0xffffff) m_dwr_nz[m_dp & 0xff]++; }
+	{
+		//  ★★★ ACTION 0x07's TARGET IS MODE-DEPENDENT, 2026-07-28, register row 21.
+		//  alu_decoded() refuses this code off mode 2 precisely because its target
+		//  there is unproven -- "...and neither is action 07's".  The speculative
+		//  gate admits it anyway, and it was then storing to the POINTER on mode-1
+		//  words, which is why the epilogue's registers stayed empty: its
+		//  `000.1.8C.107' is a MODE-1 STORE to register 0x8C and the value was
+		//  going to mem[m_dp] instead.
+		//
+		//  ★ THE RULE IS NOT NEW.  isa-adjudication.md behavioural note 1 already
+		//  establishes exactly this for the bit-4 store -- "hi12 bit 4's target is
+		//  mode-dependent -- mem[ptr] ONLY IN MODE 2.  Eight kernel words
+		//  mis-execute otherwise." -- and do_store() implements it.  ⛔ Applying the
+		//  same mode rule to ACTION 0x07 is the CONSISTENT reading, not a separate
+		//  proof: it extends a proven rule to a second opcode.
+		const u8 mode07 = upd6383_disassembler::c_format(word)
+				? 2 : u8(upd6383_disassembler::class4(word) & 7);
+		const u8 d07 = (mode07 == 1) ? upd6383_disassembler::addr8(word) : m_dp;
+		m_dram.write_dword(d07, u32(L) & 0xffffff);
+		m_dwr[d07]++;
+		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
 		break;
+	}
 	case upd6383_disassembler::LO_ACT_ACC_BUS:
 		break;                  // 0x00: its whole effect is the adder, above
 	default:
