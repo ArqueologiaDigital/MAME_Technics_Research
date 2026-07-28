@@ -458,6 +458,12 @@ private:
 
 	u32 m_program_id;
 	bool m_speculative = false;     // ★ opt-in speculative ISA -- see set_speculative()
+	u32  m_dr = 0;                  // ★ SPECULATIVE: the delay-DRAM data register.
+	                                //   The chip must latch what a delay READ returns
+	                                //   somewhere; SRC 0x0B is the only source code
+	                                //   whose operand is otherwise unaccounted for.
+	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next
+	                                //   delay-DRAM word consumes, reset each frame
 	u64 m_trap_total;
 	std::map<u64, u64> m_trap_hist;
 

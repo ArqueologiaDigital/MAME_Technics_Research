@@ -293,6 +293,8 @@ void upd6383_device::device_start()
 	save_item(NAME(m_cp));
 	save_item(NAME(m_dp));
 	save_item(NAME(m_dsc));
+	save_item(NAME(m_dr));
+	save_item(NAME(m_delay_ix));
 	save_item(NAME(m_vec));
 	save_item(NAME(m_bp1));
 	save_item(NAME(m_bp2));
@@ -861,6 +863,49 @@ void upd6383_device::exec_alu(u64 word)
 		const u16 lo = u16(upd6383_disassembler::lo12(word));
 		const u8  ad = upd6383_disassembler::addr8(word);
 
+		//==================================================================
+		//  ★★★ THE EXTERNAL DELAY DRAM (IC309) -- SPECULATIVE, 2026-07-28.
+		//
+		//  AS_DELAY has been DECLARED and driver-MAPPED all along and NEVER
+		//  ACCESSED: grep found zero reads and zero writes in this device.  A
+		//  delay line that is never written cannot produce an echo, so every
+		//  time-based effect -- delay, reverb, chorus, flanger -- was
+		//  structurally impossible no matter how correct the ALU became.
+		//  dark-words.md sect. 5.3 named this as the one failure "structurally
+		//  out of reach of ALU decoding", 48.8 % of the dark set.
+		//
+		//  WHAT IS MEASURED
+		//    * the DIRECTION field: addr8 0x20/0x30 = READ, 0x60 = WRITE
+		//      (adjudication-round5 item D, FORCED by two independent routes).
+		//    * the REGION split: unit 0 below 0x8000, unit 1 above
+		//      (adjudication-round4 sect. 2, MEASURED over 486+384 cells).
+		//    * the descriptor cells themselves, in D-RAM at m_dsc (ldptr.d).
+		//
+		//  WHAT IS GUESSED
+		//    * that the Nth delay word of a frame consumes the Nth descriptor
+		//      cell.  This mirrors how dsp/tools/delayline.py pairs `cons' with
+		//      `cells', which is where every measured tap length in this project
+		//      comes from -- but the pairing is an ASSUMPTION, not a decoding.
+		//    * that the line rotates by ONE cell per frame, which is what makes
+		//      a descriptor DIFFERENCE a delay in samples (SINGLE DELAY's
+		//      501/500 and NO OPERATION's 4410 = exactly 100.000 ms at 44.1 kHz
+		//      both fall out of this, which is the strongest support it has).
+		//    * the 24 -> 16 bit truncation: the DRAM is 16 bits wide and the
+		//      datum is 24, so the top 16 are stored.  UNVERIFIED.
+		//==================================================================
+		if (upd6383_disassembler::is_dram(word))
+		{
+			const char dir = upd6383_disassembler::dram_dir(word);
+			const u32 cellv = m_dram.read_dword(u8(m_dsc + m_delay_ix)) & 0xffff;
+			m_delay_ix++;
+			const u32 addr = (cellv + u32(m_frames_run)) & 0xffff;
+			if (dir == 'W')
+				m_delay.write_word(addr, u16((u32(acc_to_datum(m_acc)) >> 8) & 0xffff));
+			else if (dir == 'R')
+				m_dr = u32(m_delay.read_word(addr)) << 8;
+			return;
+		}
+
 		if (cl == 0xC || cl == 0xD)
 		{
 			// the two output presentations.  addr8 bit 7 selects the unit.
@@ -896,6 +941,12 @@ void upd6383_device::exec_alu(u64 word)
 	// deliberately no default case that guesses at the other fourteen the
 	// corpus contains.
 	s32 L = 0;
+	//  ★ SPECULATIVE: SRC 0x0B = the delay-DRAM data register.  A delay READ has
+	//  to land somewhere for the next word to use, and 0x0B is the only source
+	//  code in the corpus whose operand is otherwise unaccounted for.  It is a
+	//  GUESS; dsp/analysis/SPECULATIVE-APPLIED-REGISTER.md row 14.
+	if (m_speculative && src == 0x0B)
+		L = s32(util::sext(m_dr, 24));
 	switch (src)
 	{
 	case upd6383_disassembler::LO_SRC_ACC:
@@ -1689,6 +1740,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// all zeros and there is no wait word to reach.
 	const bool capped = !hit_wait && !overrun;
 
+	m_delay_ix = 0;         // ★ SPECULATIVE: descriptor cells are consumed in
+	                        //   program order, restarting every frame.
 	m_frames_run++;
 	m_last_slots = slots;
 	m_last_traps = traps;
