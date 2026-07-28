@@ -464,6 +464,7 @@ private:
 	                                //   whose operand is otherwise unaccounted for.
 	u64  m_pres_seen = 0, m_pres_nonzero = 0;   // ★ diagnostic: presentation words
 	s32  m_pres_peak = 0;
+	s64  m_pres_accpeak = 0;
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next
 	                                //   delay-DRAM word consumes, reset each frame
 	u64 m_trap_total;

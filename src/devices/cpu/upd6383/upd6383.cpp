@@ -346,8 +346,10 @@ void upd6383_device::device_stop()
 	if (m_frames_run != 0)
 	{
 		dump_frame_report();
-		logerror("upd6383: PRESENTATION WORDS: %d executed, %d wrote NON-ZERO, peak %d\n",
+		logerror("upd6383: PRESENTATION WORDS: %d executed, %d wrote NON-ZERO, datum peak %d\n",
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
+		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
+				(long long)m_pres_accpeak, (long long)(m_pres_accpeak >> ACC_SHIFT));
 	}
 
 	if (m_trap_total != 0)
@@ -929,12 +931,34 @@ void upd6383_device::exec_alu(u64 word)
 		{
 			// the two output presentations.  addr8 bit 7 selects the unit.
 			const int unit = (ad & 0x80) ? 1 : 0;
-			const s32 v = acc_to_datum(m_acc);
+			//  ★ FIXED-POINT REGIME, MEASURED 2026-07-28 and still a GUESS as to
+			//  which side is wrong.  acc_to_datum() shifts right by ACC_SHIFT = 16.
+			//  Instrumented at this very word: the raw accumulator peaks at
+			//  4 988 928 while the sample that ENTERED the chip peaks at 5 232 896
+			//  -- i.e. the signal traverses the chip at ~0.95x IN THESE UNITS, and
+			//  applying the 16-bit shift here turns it into 76, which the tone
+			//  generator's `wet = (DO1 + DO2) >> 8' then floors to ZERO.  That is
+			//  the whole of the "no audible difference" the owner reported.
+			//
+			//  ⛔ WHICH SIDE IS WRONG IS OPEN.  Either (a) the accumulator at this
+			//  point legitimately holds a DATUM and must not be shifted, or (b) some
+			//  upstream path fails to scale a datum INTO accumulator units by
+			//  ACC_SHIFT and the shift here is right.  ACT 0x00 does apply
+			//  `L << ACC_SHIFT', which argues for (b) -- but the measurement says
+			//  the value arriving here has not been through it.
+			//  Presenting the raw value is the reading that makes the chip audible;
+			//  it is SPECULATIVE and is row 16 of SPECULATIVE-APPLIED-REGISTER.md.
+			const s64 rawacc = util::sext(m_acc, 44);
+			const s32 v = s32(std::clamp<s64>(rawacc, -(1 << 23), (1 << 23) - 1));
 			m_do[unit][0] = v;
 			m_do[unit][1] = v;
 			m_pres_seen++;
 			if (v != 0) m_pres_nonzero++;
 			if (std::abs(v) > std::abs(m_pres_peak)) m_pres_peak = v;
+			{   // ★ diagnostic: is the ACCUMULATOR small, or only its datum?
+				const s64 raw = util::sext(m_acc, 44);
+				if (std::abs(raw) > std::abs(m_pres_accpeak)) m_pres_accpeak = raw;
+			}
 			return;
 		}
 		if (cl == 6)
