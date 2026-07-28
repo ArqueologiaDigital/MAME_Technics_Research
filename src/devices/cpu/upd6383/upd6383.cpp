@@ -1622,7 +1622,23 @@ void upd6383_device::exec_alu(u64 word)
 		//  condition removes these stores at the decode, which is where they belong.
 		//  The counters stay as a REGRESSION ALARM: if anything ever stores onto the
 		//  latch cells again, it is reported rather than silently corrupting the input.
-		if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
+		//  ★★★ §35 2026-07-28: DO NOT REPEAT THE STORE ON THE K6 PATH.
+		//  The twelve input-stage words are executed as
+		//      exec_addressing_only(word, true);   // pointer, STORE, cursor, latch
+		//      exec_alu_k6(word);                  // "the ALU, without re-walking"
+		//  and exec_addressing_only() ALREADY performs the bit-4 store, at `cell'
+		//  -- the pointer BEFORE its post-increment, which is correct.  exec_alu()
+		//  then performed it a SECOND time at `stdest = m_dp', i.e. at the pointer
+		//  the first call had already advanced: one cell late.
+		//  MEASURED, and it explains the input corruption exactly.  The documented
+		//  walk (K6_INPUT_STAGE) has w3 store at X+3 and w7 at X+4, and our pointer
+		//  trace matches that table at ALL TWELVE words -- yet the stores landed on
+		//  X+2 and X+5, one step ahead, which are precisely the two input latches.
+		//  They are the latches *because* the walk is built so the post-increment
+		//  parks the pointer on the cell the NEXT word reads.
+		if (m_in_k6)
+			; // already stored, correctly, by exec_addressing_only()
+		else if (m_speculative && (stdest == m_in_addr[0] || stdest == m_in_addr[1]))
 		{
 			m_latchguard_n++;
 			m_latchguard_word = m_cur_word;
