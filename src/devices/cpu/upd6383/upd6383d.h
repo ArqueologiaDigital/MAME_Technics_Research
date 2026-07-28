@@ -808,6 +808,18 @@ public:
 	//  MUL = '.' at all 22 slots.
 	//  ⛔ SPECULATIVE: the split is applied only under the speculative gate, and
 	//  the cursor advance is left exactly as K4 forced it.
+	//  ★★★ §39: THIS IS NOT SPECULATIVE.  It is `cursor_fetch()' in the offline
+	//  model (dsp/tools/dsp_disasm.py), marked K4 FORCED and in use there all along:
+	//      "bit 23 (== class4 bit3) = CURSOR-FETCH enable (NOT multiply-enable).
+	//       NOT in the C-format family: there bit 23 is a bit of the immediate."
+	//  and `class4 & 8' IS `(w >> 23) & 1'.  The PARAMETRIC EQ biquad is the
+	//  evidence: its ten class-8 words sit in a cursor map proven at 6 cells per
+	//  band, and if class 8 advanced, band k would start at 7k and all 60 named
+	//  roles would shift.  This core was the only place conflating fetch with
+	//  advance.  coeff_consumer() below (class4 == 0xA) remains the ADVANCE.
+	//  ⚠ ONE ASSUMPTION REMAINS: the note says bit 23 is *not* multiply-enable,
+	//  and this core gates the MULTIPLY on it.  What enables the multiply, as
+	//  distinct from the fetch, is OPEN.
 	static constexpr bool coeff_fetch(u64 w) { return (class4(w) & 8) && !c_format(w); }
 
 	// ---------------------------------------------------------------
