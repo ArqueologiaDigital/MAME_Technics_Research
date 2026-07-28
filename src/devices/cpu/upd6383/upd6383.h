@@ -481,6 +481,14 @@ private:
 	u8   m_run_base[32] = {}; u32 m_run_len[32] = {};
 	u32  m_src_unread[32] = {};
 	u8   m_epi_ptr_before = 0, m_epi_ptr[23] = {};
+	//  ★ THE TIME-ORDERED FRAME TRACE.  Every wrong turn of 2026-07-28 came from
+	//  reading a per-slot MAXIMUM as if it were a SEQUENCE.  This records ONE frame
+	//  in EXECUTION ORDER: slot, word, pointer, the value under it, acc and P after.
+	//  Armed once, on the first frame whose input sample is non-zero.
+	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p; };
+	trace_t m_trace[400] = {};
+	u32  m_trace_n = 0;
+	bool m_trace_armed = false, m_trace_done = false;
 	u8   m_st07_dest[8] = {}, m_st07_ptr[8] = {}, m_st07_src[8] = {};
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
 	u32  m_dwr[256] = {}, m_dwr_nz[256] = {};

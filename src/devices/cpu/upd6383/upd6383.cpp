@@ -396,6 +396,18 @@ void upd6383_device::device_stop()
 						(m_run_base[i] + m_run_len[i] - 1) & 0xff, m_run_len[i]);
 			logerror("upd6383: C-RAM WRITE RUNS (%d):%s\n", m_nruns, ln);
 		}
+		if (m_trace_n)
+		{   // ★★★ THE TIME-ORDERED FRAME TRACE, in execution order
+			logerror("upd6383: ==== TIME-ORDERED FRAME TRACE, %d slots ====\n", m_trace_n);
+			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P\n");
+			for (u32 q = 0; q < m_trace_n; q++)
+			{
+				const trace_t &t = m_trace[q];
+				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld\n",
+						q, t.iw, (unsigned long long)t.word, t.dp,
+						t.mem, (long long)t.acc, (long long)t.p);
+			}
+		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
 			logerror("upd6383: ACCUMULATOR PROFILE (peak |acc| per I-RAM slot)\n");
 			std::string ln;
@@ -812,6 +824,8 @@ void upd6383_device::latch_inputs_to_dram()
 	m_in_val[0] = m_di[IN_PORT][0];
 	m_in_val[1] = m_di[IN_PORT][1];
 
+	if (!m_trace_done && !m_trace_armed && (m_in_val[0] || m_in_val[1]))
+	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
 
@@ -2099,6 +2113,13 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
 			exec_decoded(word);
+			if (m_trace_armed && m_trace_n < 400)
+			{   // ★★★ THE TIME-ORDERED FRAME TRACE -- execution order, not maxima
+				trace_t &t = m_trace[m_trace_n++];
+				t.iw = u16(prof_iw); t.word = raw; t.dp = m_dp;
+				t.mem = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+				t.acc = util::sext(m_acc, 44); t.p = s64(util::sext(m_p, 44));
+			}
 			if (prof_iw <= 24 && m_curprof_n < 25)
 			{   // ★ which C-RAM cell does each kernel slot consume?
 				m_curprof[prof_iw] = m_cursor;
@@ -2204,6 +2225,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	if (m_speculative)
 		m_cursor = 0x90;
 
+	if (m_trace_armed && !m_trace_done)
+	{   // one frame only
+		m_trace_done = true;
+		m_trace_armed = false;
+	}
 	m_delay_ix = 0;         // ★ SPECULATIVE: descriptor cells are consumed in
 	                        //   program order, restarting every frame.
 	m_frames_run++;
