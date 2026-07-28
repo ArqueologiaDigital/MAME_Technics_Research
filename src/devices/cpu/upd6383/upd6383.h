@@ -530,7 +530,7 @@ private:
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
-	u32  m_tap_n = 0;
+	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
 	u32  m_dly_r = 0, m_dly_w = 0, m_dly_r_nz = 0, m_dly_cell_nz = 0, m_dly_n = 0;
 	u8   m_dly_dsc[8] = {}, m_dly_dir[8] = {}; u32 m_dly_val[8] = {};
 	u32  m_lvlguard_n = 0; u32 m_lvl_seen[2] = {}; u32 m_lvl_nz[2] = {};

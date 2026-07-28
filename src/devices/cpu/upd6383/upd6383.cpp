@@ -1461,6 +1461,15 @@ void upd6383_device::exec_alu(u64 word)
 		switch (src)
 		{
 		case 0x0B:
+			//  ★ §48: is the DELAY READ ever consumed?  The is_dram branch returns
+			//  before the ALU, so a delay datum reaches the ladder ONLY through this
+			//  source code.  If nothing reads it, the delay line is write-only and
+			//  the ladder has no feedback term -- which is why removing the (bogus)
+			//  tap multiplies in §44 left it with unity gain per stage, and why it
+			//  saturates: acc peaks are exact small-integer multiples of one quantum
+			//  and tA sits at 0x7FFFFF.
+			m_dr_reads++;
+			if (m_dr) m_dr_reads_nz++;
 			L = s32(util::sext(m_dr, 24));
 			break;
 		case 0x08:
@@ -2947,7 +2956,9 @@ void upd6383_device::dump_frame_report() const
 		std::string ds;
 		for (u32 q = 0; q < m_dly_n; q++)
 			ds += string_format(" [%c dsc %02X = %04X]", m_dly_dir[q], m_dly_dsc[q], m_dly_val[q]);
-		logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
+		logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
+			"non-zero datum\n", m_dr_reads, m_dr_reads_nz);
+	logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
 				"descriptor cell non-zero on %u accesses.%s\n",
 				m_dly_r, m_dly_r_nz, m_dly_w, m_dly_cell_nz, ds.c_str());
 	}
