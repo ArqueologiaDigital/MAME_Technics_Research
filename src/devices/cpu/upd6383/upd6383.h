@@ -486,8 +486,11 @@ private:
 	//  reading a per-slot MAXIMUM as if it were a SEQUENCE.  This records ONE frame
 	//  in EXECUTION ORDER: slot, word, pointer, the value under it, acc and P after.
 	//  Armed once, on the first frame whose input sample is non-zero.
+	//  ★ §29: L (the bus operand) and a multiply-issued flag, to separate "the
+	//  multiply never runs" from "it runs and multiplies by zero".
+	s32  m_last_l = 0; bool m_mul_issued = false;
 	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p;
-	                 s32 ta; s32 tb; u8 cur; u32 coef; };
+	                 s32 ta; s32 tb; u8 cur; u32 coef; s32 l; bool mul; };
 	trace_t m_trace[400] = {};
 	u32  m_trace_n = 0;
 	bool m_trace_armed = false, m_trace_done = false;
@@ -521,6 +524,8 @@ private:
 	//  Unit 0 -> ACCA (m_acc), unit 1 -> ACCB (m_accb -- ALREADY DECLARED above at
 	//  the register block, save-stated and reset, but never once read or written by
 	//  the ALU until now).
+	bool m_pres_pending = false; int m_pres_unit = 0;
+	void do_presentation();
 	bool m_row13 = true;       // ★ was RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
 	                                //   words ALSO write m_do?  (double-count check)
 	s64  m_mulmax = 0; s32 m_mul_coef = 0, m_mul_L = 0; u8 m_mul_src = 0; u32 m_mul_iw = 0;

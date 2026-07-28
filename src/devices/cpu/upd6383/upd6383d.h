@@ -767,6 +767,22 @@ public:
 	// ---------------------------------------------------------------
 	static constexpr bool coeff_consumer(u64 w) { return class4(w) == 0xa && !c_format(w); }
 
+	//  ★★★ §29, 2026-07-28.  TWO EFFECTS WERE CONFLATED INTO ONE PREDICATE.
+	//  coeff_consumer() is FORCED by K4 -- but K4 forced it for the CURSOR ADVANCE
+	//  (`class4 == 0xA -> cursor++'), and the MULTIPLY was written inside the same
+	//  block, so the multiply silently inherited a gate that was never established
+	//  for it.  r2-output.md §3.1 reads coefficient FETCH as `class4 bit 3'
+	//  ("Both w73 and w78 fetch a coefficient (class4 bit 3), which is what an
+	//  output-level multiply needs").
+	//  MEASURED consequence of the conflation: of the 22 epilogue words, EIGHT
+	//  carry class4 bit 3 and NOT ONE satisfies coeff_consumer -- the only class-A
+	//  word among them (iw 64, hi12 0xC40) is c-format, which the predicate
+	//  excludes.  So the entire output stage formed no product, in every frame:
+	//  MUL = '.' at all 22 slots.
+	//  ⛔ SPECULATIVE: the split is applied only under the speculative gate, and
+	//  the cursor advance is left exactly as K4 forced it.
+	static constexpr bool coeff_fetch(u64 w) { return (class4(w) & 8) && !c_format(w); }
+
 	// ---------------------------------------------------------------
 	//  ★ THE ADDRESS GENERATOR IS DECODED EVEN WHERE THE ALU IS NOT.
 	//

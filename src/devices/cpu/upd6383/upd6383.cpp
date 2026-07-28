@@ -420,14 +420,14 @@ void upd6383_device::device_stop()
 		if (m_trace_n)
 		{   // ★★★ THE TIME-ORDERED FRAME TRACE, in execution order
 			logerror("upd6383: ==== TIME-ORDERED FRAME TRACE, %d slots ====\n", m_trace_n);
-			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P         tA        tB cur   coef\n");
+			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P         tA        tB cur   coef  MUL          L\n");
 			for (u32 q = 0; q < m_trace_n; q++)
 			{
 				const trace_t &t = m_trace[q];
-				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld %9d %9d %02X %06X\n",
+				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld %9d %9d %02X %06X  %c %10d\n",
 						q, t.iw, (unsigned long long)t.word, t.dp,
 						t.mem, (long long)t.acc, (long long)t.p,
-						t.ta, t.tb, t.cur, t.coef);
+						t.ta, t.tb, t.cur, t.coef, t.mul ? 'Y' : '.', t.l);
 			}
 		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
@@ -1005,6 +1005,77 @@ s32 upd6383_device::acc_to_datum(u64 acc)
 }
 
 
+//  ★ §29: the deferred output presentation, run AFTER exec_alu()'s arithmetic.
+void upd6383_device::do_presentation()
+{
+	//  addr8 bit 7 selected the unit; it was latched when the word deferred.
+	const int unit = m_pres_unit;
+	{
+			//  ★ FIXED-POINT REGIME, MEASURED 2026-07-28 and still a GUESS as to
+			//  which side is wrong.  acc_to_datum() shifts right by ACC_SHIFT = 16.
+			//  Instrumented at this very word: the raw accumulator peaks at
+			//  4 988 928 while the sample that ENTERED the chip peaks at 5 232 896
+			//  -- i.e. the signal traverses the chip at ~0.95x IN THESE UNITS, and
+			//  applying the 16-bit shift here turns it into 76, which the tone
+			//  generator's `wet = (DO1 + DO2) >> 8' then floors to ZERO.  That is
+			//  the whole of the "no audible difference" the owner reported.
+			//
+			//  ⛔ WHICH SIDE IS WRONG IS OPEN.  Either (a) the accumulator at this
+			//  point legitimately holds a DATUM and must not be shifted, or (b) some
+			//  upstream path fails to scale a datum INTO accumulator units by
+			//  ACC_SHIFT and the shift here is right.  ACT 0x00 does apply
+			//  `L << ACC_SHIFT', which argues for (b) -- but the measurement says
+			//  the value arriving here has not been through it.
+			//  Presenting the raw value is the reading that makes the chip audible;
+			//  it is SPECULATIVE and is row 16 of SPECULATIVE-APPLIED-REGISTER.md.
+			//  ⛔ ROW 16 REVERTED, 2026-07-28.  Presenting the RAW accumulator made
+			//  the chip "audible" -- but A/B analysis showed what it actually emits:
+			//  a CONSTANT 4 988 928 every frame, from before any note is played,
+			//  correlation with the input -0.0018 at every lag from -600 to +600,
+			//  and 19488 = 4988928 >> 8 on 96.8 % of output samples.  That is a
+			//  STUCK OUTPUT, not an effect, and DC is inaudible -- which is exactly
+			//  what the owner reported hearing.  acc_to_datum() at least keeps the
+			//  stuck value below the tone generator's >> 8 instead of injecting DC
+			//  into the mix.  The REAL defect is that the accumulator is constant at
+			//  this word; see SPECULATIVE-APPLIED-REGISTER.md sect. 3.4.
+			//  ★ §27: unit 0 presents ACCA, unit 1 presents ACCB.
+			const u64 pacc = (m_speculative && unit) ? m_accb : m_acc;
+			const s64 rawacc = util::sext(pacc, 44);
+			s64 scaled = acc_to_datum(pacc);
+			(void)rawacc;
+			//  ★★ SPECULATIVE, and the best-evidenced guess in this block: apply the
+			//  PER-UNIT OUTPUT LEVEL.  Registers 0x06 (unit 0) and 0x86 (unit 1) are
+			//  named per-unit OUTPUT LEVEL and their role is PROVEN BY CONSTRUCTION --
+			//  the last four host actions of cold boot are
+			//      setvec unit1,#200 / setvec unit0,#84 / reg 0x06 <- +0.500000
+			//                                           / reg 0x86 <- +0.183992
+			//  and both are cleared at reset.  dark-words.md sect. 4.3 calls testing
+			//  them "the cheapest live experiment in the project ... a repeatable test
+			//  with a known answer".
+			//
+			//  WHAT IS GUESSED: that the level applies HERE, at the presentation, as a
+			//  Q0.23 multiply.  Its VALUE is measured; its point of application is not.
+			//  Motivation is an observed defect -- with the raw accumulator presented,
+			//  the wet peaks at 32696 against a dry peak of 20441, i.e. too hot, and
+			//  0.5 / 0.184 are the right order to fix it.
+			{
+				const u32 lvl = m_dram.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
+				if (lvl != 0)
+					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
+			}
+			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
+			m_do[unit][0] = v;
+			m_do[unit][1] = v;
+			m_pres_seen++;
+			if (v != 0) m_pres_nonzero++;
+			if (std::abs(v) > std::abs(m_pres_peak)) m_pres_peak = v;
+			{   // ★ diagnostic: is the ACCUMULATOR small, or only its datum?
+				const s64 raw = util::sext(pacc, 44);
+				if (std::abs(raw) > std::abs(m_pres_accpeak)) m_pres_accpeak = raw;
+			}
+	}
+}
+
 void upd6383_device::exec_alu(u64 word)
 {
 	//  ★★★ SPECULATIVE-ONLY FORMS.  Reached only when m_speculative is set and
@@ -1220,71 +1291,16 @@ void upd6383_device::exec_alu(u64 word)
 		}
 		if (m_row13 && (cl == 0xC || cl == 0xD))
 		{
-			// the two output presentations.  addr8 bit 7 selects the unit.
-			const int unit = (ad & 0x80) ? 1 : 0;
-			//  ★ FIXED-POINT REGIME, MEASURED 2026-07-28 and still a GUESS as to
-			//  which side is wrong.  acc_to_datum() shifts right by ACC_SHIFT = 16.
-			//  Instrumented at this very word: the raw accumulator peaks at
-			//  4 988 928 while the sample that ENTERED the chip peaks at 5 232 896
-			//  -- i.e. the signal traverses the chip at ~0.95x IN THESE UNITS, and
-			//  applying the 16-bit shift here turns it into 76, which the tone
-			//  generator's `wet = (DO1 + DO2) >> 8' then floors to ZERO.  That is
-			//  the whole of the "no audible difference" the owner reported.
-			//
-			//  ⛔ WHICH SIDE IS WRONG IS OPEN.  Either (a) the accumulator at this
-			//  point legitimately holds a DATUM and must not be shifted, or (b) some
-			//  upstream path fails to scale a datum INTO accumulator units by
-			//  ACC_SHIFT and the shift here is right.  ACT 0x00 does apply
-			//  `L << ACC_SHIFT', which argues for (b) -- but the measurement says
-			//  the value arriving here has not been through it.
-			//  Presenting the raw value is the reading that makes the chip audible;
-			//  it is SPECULATIVE and is row 16 of SPECULATIVE-APPLIED-REGISTER.md.
-			//  ⛔ ROW 16 REVERTED, 2026-07-28.  Presenting the RAW accumulator made
-			//  the chip "audible" -- but A/B analysis showed what it actually emits:
-			//  a CONSTANT 4 988 928 every frame, from before any note is played,
-			//  correlation with the input -0.0018 at every lag from -600 to +600,
-			//  and 19488 = 4988928 >> 8 on 96.8 % of output samples.  That is a
-			//  STUCK OUTPUT, not an effect, and DC is inaudible -- which is exactly
-			//  what the owner reported hearing.  acc_to_datum() at least keeps the
-			//  stuck value below the tone generator's >> 8 instead of injecting DC
-			//  into the mix.  The REAL defect is that the accumulator is constant at
-			//  this word; see SPECULATIVE-APPLIED-REGISTER.md sect. 3.4.
-			//  ★ §27: unit 0 presents ACCA, unit 1 presents ACCB.
-			const u64 pacc = (m_speculative && unit) ? m_accb : m_acc;
-			const s64 rawacc = util::sext(pacc, 44);
-			s64 scaled = acc_to_datum(pacc);
-			(void)rawacc;
-			//  ★★ SPECULATIVE, and the best-evidenced guess in this block: apply the
-			//  PER-UNIT OUTPUT LEVEL.  Registers 0x06 (unit 0) and 0x86 (unit 1) are
-			//  named per-unit OUTPUT LEVEL and their role is PROVEN BY CONSTRUCTION --
-			//  the last four host actions of cold boot are
-			//      setvec unit1,#200 / setvec unit0,#84 / reg 0x06 <- +0.500000
-			//                                           / reg 0x86 <- +0.183992
-			//  and both are cleared at reset.  dark-words.md sect. 4.3 calls testing
-			//  them "the cheapest live experiment in the project ... a repeatable test
-			//  with a known answer".
-			//
-			//  WHAT IS GUESSED: that the level applies HERE, at the presentation, as a
-			//  Q0.23 multiply.  Its VALUE is measured; its point of application is not.
-			//  Motivation is an observed defect -- with the raw accumulator presented,
-			//  the wet peaks at 32696 against a dry peak of 20441, i.e. too hot, and
-			//  0.5 / 0.184 are the right order to fix it.
-			{
-				const u32 lvl = m_dram.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
-				if (lvl != 0)
-					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
-			}
-			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
-			m_do[unit][0] = v;
-			m_do[unit][1] = v;
-			m_pres_seen++;
-			if (v != 0) m_pres_nonzero++;
-			if (std::abs(v) > std::abs(m_pres_peak)) m_pres_peak = v;
-			{   // ★ diagnostic: is the ACCUMULATOR small, or only its datum?
-				const s64 raw = util::sext(pacc, 44);
-				if (std::abs(raw) > std::abs(m_pres_accpeak)) m_pres_accpeak = raw;
-			}
-			return;
+			//  ★★★ §29 2026-07-28: DEFER THE PRESENTATION UNTIL AFTER THE ARITHMETIC.
+			//  This branch used to `return', which skipped the multiply at the bottom
+			//  of this very function -- so w73 (class C) and w78 (class D), the two
+			//  output presentations, NEVER FORMED A PRODUCT.  MUL = '.' at both, in
+			//  every frame.  r2-output.md §3.1 says these words fetch a coefficient
+			//  (class4 bit 3) precisely because an output-level multiply needs one:
+			//  w73 is `ACCA <- level x ACCA' and then presents.  So the word must run
+			//  the ALU FIRST and present the RESULT, not present and return.
+			m_pres_pending = true;
+			m_pres_unit    = (ad & 0x80) ? 1 : 0;
 		}
 		if (cl == 6)
 		{
@@ -1572,6 +1588,7 @@ void upd6383_device::exec_alu(u64 word)
 	// A CONSEQUENCE, stated because it is a testable prediction and not a
 	// convenience: on an ACTION-0x00 word hi12[3:1] == 0 and == 1 become
 	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
+	m_last_l = L;               // ★ §29: the bus operand actually selected
 	{
 		const u16 f31 = upd6383_disassembler::hi_f31(hi);
 		//  ★★★ ACTION 0x00 ADDS the bus; it does not REPLACE the accumulator.
@@ -1742,7 +1759,9 @@ void upd6383_device::exec_alu(u64 word)
 	// coeff_consumer() carries the C-format guard, so a C-format word whose
 	// immediate happens to read `class4 == 0xA' -- e.g. the frame terminator
 	// C00.A.47.407 -- can never reach here.
-	if (upd6383_disassembler::coeff_consumer(word))
+	//  ★ §29: FETCH (the multiply) and CONSUME (the cursor advance) are separate.
+	if (m_speculative ? upd6383_disassembler::coeff_fetch(word)
+					  : upd6383_disassembler::coeff_consumer(word))
 	{
 		const u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
 		m_k = coef;
@@ -1784,13 +1803,26 @@ void upd6383_device::exec_alu(u64 word)
 		//  is consumed either way, and K4's cursor result is untouched.
 		if (upd6383_disassembler::hi_f31(upd6383_disassembler::hi12(word))
 				!= upd6383_disassembler::HI_ACC_HOLD)
+		{
+			m_mul_issued = true;    // ★ §29: it RAN -- distinct from "P came out 0"
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
-		m_cursor++;
+		}
+		//  ★ §29: the cursor still advances ONLY on class 0xA -- K4's forced result
+		//  is untouched by the fetch/consume split.
+		if (upd6383_disassembler::coeff_consumer(word))
+			m_cursor++;
 	}
 
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
+
+	//  ★ §29: now that the product and the accumulator are final, present.
+	if (m_pres_pending)
+	{
+		m_pres_pending = false;
+		do_presentation();
+	}
 }
 
 
@@ -2290,6 +2322,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// ONE implementation, shared with execute_run().  It used to be a
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
+			m_mul_issued = false;
 			exec_decoded(word);
 			if (m_trace_armed && m_trace_n < 400)
 			{   // ★★★ THE TIME-ORDERED FRAME TRACE -- execution order, not maxima
@@ -2302,6 +2335,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  two is empty.  These two columns say which.
 				t.ta = s32(util::sext(m_ta, 24)); t.tb = s32(util::sext(m_tb, 24));
 				t.cur = u8(m_cursor); t.coef = m_cram.read_dword(m_cursor) & 0xffffff;
+				t.l = m_last_l; t.mul = m_mul_issued;
 			}
 			if (prof_iw <= 24 && m_curprof_n < 25)
 			{   // ★ which C-RAM cell does each kernel slot consume?
