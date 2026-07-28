@@ -350,6 +350,23 @@ void upd6383_device::device_stop()
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
 		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
 				(long long)m_pres_accpeak, (long long)(m_pres_accpeak >> ACC_SHIFT));
+		{   // ★ which C-RAM CELL does each kernel slot read?
+			std::string ln;
+			for (u32 i = 0; i <= 24; i++)
+				if (m_curprof_seen[i])
+					ln += string_format(" %d:cur=0x%02X(val=%06X)", i, m_curprof[i] & 0xff,
+							m_cram.read_dword(m_curprof[i] & 0xff) & 0xffffff);
+			logerror("upd6383: KERNEL CURSOR:%s\n", ln);
+		}
+		{   // ★ which C-RAM BANKS did the coefficient stream actually fill?
+			if (m_cwr_runlen && m_nruns < 32)
+			{ m_run_base[m_nruns] = m_cwr_start; m_run_len[m_nruns] = m_cwr_runlen; m_nruns++; }
+			std::string ln;
+			for (u32 i = 0; i < m_nruns; i++)
+				ln += string_format(" [0x%02X..0x%02X]=%d", m_run_base[i],
+						(m_run_base[i] + m_run_len[i] - 1) & 0xff, m_run_len[i]);
+			logerror("upd6383: C-RAM WRITE RUNS (%d):%s\n", m_nruns, ln);
+		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
 			logerror("upd6383: ACCUMULATOR PROFILE (peak |acc| per I-RAM slot)\n");
 			std::string ln;
@@ -472,9 +489,10 @@ void upd6383_device::host_w(bool cd, u8 data)
 				//  guess and it was wrong: it changed the wet on 0.03 % of samples.
 				if (m_cram_wp_set)
 				{
+					if (m_cwr_runlen == 0) m_cwr_start = m_cram_wp;
 					m_cram.write_dword(m_cram_wp, v & 0xffffff);
 					m_cram_wp = (m_cram_wp + 1) & 0xff;
-					m_cwr++;
+					m_cwr++; m_cwr_runlen++;
 				}
 			}
 		}
@@ -519,6 +537,13 @@ void upd6383_device::host_w(bool cd, u8 data)
 						&& upd6383_disassembler::class4(hw) == 0
 						&& upd6383_disassembler::lo12(hw) == 0x821)
 				{
+					if (m_cwr_runlen && m_nruns < 32)
+					{
+						m_run_base[m_nruns] = m_cwr_start;
+						m_run_len[m_nruns] = m_cwr_runlen;
+						m_nruns++;
+					}
+					m_cwr_runlen = 0;
 					m_cram_wp = upd6383_disassembler::addr8(hw);
 					m_cram_wp_set = true;
 				}
@@ -1891,6 +1916,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			// hand-copied second ladder; two copies of a decode is exactly the
 			// drift this pass exists to remove.
 			exec_decoded(word);
+			if (prof_iw <= 24 && m_curprof_n < 25)
+			{   // ★ which C-RAM cell does each kernel slot consume?
+				m_curprof[prof_iw] = m_cursor;
+				m_curprof_seen[prof_iw] = 1;
+			}
 			if (prof_iw < 384)
 			{
 				const s64 a = util::sext(m_acc, 44);

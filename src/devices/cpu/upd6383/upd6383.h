@@ -476,7 +476,10 @@ private:
 	bool m_in_k6 = false;           // ★ re-entrancy guard for exec_alu_k6()
 	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
-	bool m_cram_wp_set = false;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer
+	bool m_cram_wp_set = false;
+	u32  m_cwr_runlen = 0, m_cwr_start = 0, m_nruns = 0;
+	u8   m_run_base[32] = {}; u32 m_run_len[32] = {};
+	u32  m_curprof[25] = {}; u8 m_curprof_seen[25] = {}; u32 m_curprof_n = 0;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next
 	                                //   delay-DRAM word consumes, reset each frame
 	u64 m_trap_total;
