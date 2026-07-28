@@ -1995,6 +1995,31 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// all zeros and there is no wait word to reach.
 	const bool capped = !hit_wait && !overrun;
 
+	//  ★★★ THE KERNEL'S COEFFICIENT CURSOR -- SPECULATIVE, register row 19.
+	//  MEASURED: the cursor was FREE-RUNNING across frames (it had drifted to 0x77
+	//  and kept climbing), so a fixed program read different coefficients every
+	//  frame -- which cannot be right.  It reads a LINEAR RAMP there, i.e. a lookup
+	//  table, not its own bank.
+	//
+	//  WHY 0x90.  The corpus loads the C-RAM POINTER exactly three times and K3
+	//  names 0x70/0x50/0x90 as three of the four structural bases of the host's
+	//  C-RAM map:
+	//      kernel iw42  801.0.70.821  -> 0x70   the unit-0 body's bank
+	//      kernel iw50  801.0.50.821  -> 0x50   the unit-1 body's bank
+	//      epilogue iw69 801.0.90.821 -> 0x90   ★ the LAST load of the frame, so it
+	//                                             is what the NEXT frame's kernel
+	//                                             inherits
+	//  and the coefficient stream fills [0x90..0xAD] with 30 values, unclaimed by
+	//  either body and enough for the kernel's 23 slots.
+	//
+	//  ⛔ GUESSED: that the implicit cursor should be RE-SEEDED here at all.  K3
+	//  proves 0x21 loads a C-RAM POINTER that is NOT the implicit cursor, and the
+	//  only `rstcur' in the corpus is in PARAMETRIC EQ's body -- so what resets the
+	//  cursor per frame is genuinely unknown.  Seeding it from the epilogue's
+	//  payload is the reading that makes a fixed program read fixed coefficients.
+	if (m_speculative)
+		m_cursor = 0x90;
+
 	m_delay_ix = 0;         // ★ SPECULATIVE: descriptor cells are consumed in
 	                        //   program order, restarting every frame.
 	m_frames_run++;
