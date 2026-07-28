@@ -2144,18 +2144,32 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			if (kept)
 				m_dsp1_kept++;
 
-			// *** EDUCATED GUESS G-4 -- DO3's DESTINATION IS UNKNOWN, SO IT IS IGNORED ***
-			// WHAT IS DECIDED: sum DO1 and DO2 only.
+			// *** G-4 -- RESOLVED 2026-07-28: DO3 IS THE HD-AE5000 AUDIO EXTENSION ***
+			// WHAT IS DECIDED: sum DO1 and DO2 only. Unchanged -- but this is no longer a
+			// guess, and the reason has changed from "unknown" to "known and elsewhere".
 			// WHY: DO1 -> SDIA and DO2 -> SDIB come back into THIS chip and are therefore
 			// part of this chip's mix by construction (MEASURED). DO3 (pin 25, R331) leaves
-			// the tone-generator block entirely on a long run heading out of the area; it
-			// is not the DAC (that is IC310) and it is not one of this chip's six serial
-			// ports (all accounted for). Adding an unknown-destination output into this
-			// mix would invent a route the board does not have.
-			// WHAT WOULD SETTLE IT: tracing that net -- the CN2/CN3 option-connector region
-			// (HD-AE5000 side) and a monitor/record tap are the candidates.
-			// WHAT CHANGES IF IT IS WRONG: nothing audible here; DO3 would be a route to
-			// somewhere else on the machine, which would need its own model.
+			// the tone-generator block entirely, and the service manual's schematics say
+			// where it goes:
+			//
+			//     DO3  -> extension connector (HSO) pin 62
+			//     LRCK -> extension connector (HSO) pin 61
+			//
+			// That connector takes exactly one board, the optional HD-AE5000, whose "AE" is
+			// Audio Extension: it provides the separate bass/drum outputs (three
+			// selections -- Drums L/R, Drums+Bass mixed stereo, Drums L + Bass R). Per
+			// Technics' own material those outputs are DIRECT OUT, with no volume control
+			// from the KN5000, at the same level as the line outputs.
+			// So DO3 is a SEPARATE PHYSICAL OUTPUT, not a component of this mix. Excluding
+			// it here is correct, and summing it in would have been wrong -- it would have
+			// folded the direct-out feed back into the main L/R.
+			// PRIOR GUESS G-4 named "the CN2/CN3 option-connector region (HD-AE5000 side)"
+			// as the leading candidate under WHAT WOULD SETTLE IT. That is what it was.
+			// SOURCE: KN5000 service manual schematics + HD-AE5000 promotional material,
+			// both supplied by Felipe (hardware testimony outranks inference here).
+			// See src/devices/bus/technics/kn5000/hdae5000.cpp for the full note.
+			// STILL NOT MODELLED: the extension board does not render DO3 -- feature::SOUND
+			// is declared unemulated there. When it is, DO3 feeds IT, never this sum.
 			wet_l = (dout[0][0] + dout[1][0]) >> 8;   // DO1 L + DO2 L -> SDIA
 			wet_r = (dout[0][1] + dout[1][1]) >> 8;   // DO1 R + DO2 R -> SDIB
 

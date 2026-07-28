@@ -6,6 +6,50 @@
 // The HD-AE5000 was an extension board for the Technics KN5000 musical keyboard.
 // It provided a hard-disk, additional audio outputs and a serial port to interface
 // with a computer to transfer files to/from the hard-drive.
+//
+// "AE" is Audio Extension.
+//
+//
+// THE AUDIO EXTENSION -- where the third serial output of IC311 goes
+// ==================================================================
+// The effects DSP (IC311, uPD6383GF) has three serial audio outputs.  DO1 and DO2
+// return into the tone generator and become the main mix.  DO3 does not: the
+// KN5000 service manual's schematics route it OFF THE MAIN BOARD --
+//
+//     DO3  -> extension connector (HSO) pin 62
+//     LRCK -> extension connector (HSO) pin 61
+//
+// -- and the only board that plugs into that connector is this one.  So the third
+// DSP output IS the audio extension, and the "AE" in the product name is literal.
+//
+// WHAT THE BOARD DOES WITH IT, from Technics' own promotional material:
+//
+//     "On requests from many musicians we [have] realized the best possible
+//      solution for separate outputs for bass and drums.  In detail, there are
+//      3 different selections (Drums L/R, Drums and bass mixed stereo, Drums L
+//      and Bass R) and for MIDI file play you also are able to select the tracks
+//      for drums and bass, or you can separate any other track to your main PA
+//      system.  Because of KN5000 hardware reasons, all separate outputs are
+//      developed as DIRECT OUT and have NO VOLUME CONTROL from the KN5000.  They
+//      have the same level as the line outputs."
+//
+// Three consequences worth stating, because each is a modelling decision:
+//
+//   1. DO3 is a SEPARATE PHYSICAL OUTPUT, not a component of the main mix.  The
+//      tone generator is therefore CORRECT to leave DO3 out of its L/R sum -- see
+//      kn5000_tonegen.cpp, where this note retires an educated guess that had DO3
+//      down as "unknown destination".
+//   2. It is DIRECT OUT at line level.  Whatever the KN5000's master volume and
+//      the per-unit output-level registers do, they do not apply here.
+//   3. The three selections (Drums L/R | Drums+Bass stereo | Drums L + Bass R)
+//      are a function of THIS board, not of the DSP: the DSP presents one stereo
+//      serial stream on DO3/LRCK and the HD-AE5000 decides what appears on the
+//      jacks.
+//
+// NOT EMULATED (see unemulated_features() below).  What is recorded here is the
+// ROUTING, which is documented by the schematics and by the manufacturer; the
+// rendering is not implemented, and the DSP that would feed it does not yet
+// produce audio.
 
 #include "emu.h"
 #include "hdae5000.h"
@@ -19,6 +63,10 @@ namespace {
 class hdae5000_device : public device_t, public device_kn5000_extension_interface
 {
 public:
+	// The separate bass/drum outputs.  The board's input is the effects DSP's third
+	// serial output, DO3 + LRCK, on extension-connector pins 62 and 61 (see the note
+	// at the top of this file).  Neither the DO3 feed nor the three output selections
+	// are rendered.
 	static constexpr feature_type unemulated_features() { return feature::SOUND; }
 
 	hdae5000_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
