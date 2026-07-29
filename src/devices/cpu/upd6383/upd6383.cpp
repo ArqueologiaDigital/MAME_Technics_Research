@@ -365,7 +365,9 @@ void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
 //  ★ §86: record a kernel D-RAM write, split by input presence.
 void upd6383_device::kwatch(u8 cell, s32 v)
 {
-	if (m_frames_run <= 420000 || m_cur_iw >= 60) return;   // kernel slots only
+	if (m_frames_run <= 420000) return;   // ★ §95: ALL slots, not just iw < 60 --
+	                                      //   the epilogue (60..82) holds the per-unit
+	                                      //   deposit pair iw72 -> 0x06, iw77 -> 0x86
 	const bool nz = (m_in_val[0] != 0) || (m_in_val[1] != 0);
 	s32 &lo = nz ? m_kl_min[cell] : m_kq_min[cell];
 	s32 &hi = nz ? m_kl_max[cell] : m_kq_max[cell];
@@ -3049,8 +3051,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				int p = -1;
 				switch (prof_iw) {
 				case 12:  p=0; break;   case 20:  p=1; break;   case 30: p=2; break;
-				case 40:  p=3; break;   case 46:  p=4; break;   case 49: p=5; break;
-				case 84:  p=6; break;   case 201: p=7; break; }
+				case 40:  p=3; break;   case 90:  p=4; break;   case 152: p=5; break;
+				case 210: p=6; break;   case 332: p=7; break; }
 				if (p >= 0)
 				{
 					const s64 v = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
@@ -3444,8 +3446,8 @@ void upd6383_device::dump_frame_report() const
 	}
 	{
 		static const char *NM[8] = { "kernel iw12", "kernel iw20", "kernel iw30",
-		                             "kernel iw40", "kernel iw46", "kernel iw49",
-		                             "body-0 ENTRY iw84", "body-1 entry iw201" };
+		                             "kernel iw40", "body-0 iw90", "body-0 END iw152",
+		                             "body-1 iw210", "body-1 END iw332" };
 		for (int p = 0; p < 8; p++)
 			logerror("upd6383: ★ §81 PROBE %-19s quiet [%lld .. %lld]  loud [%lld .. %lld]  %s\n",
 					NM[p], (long long)(m_pq_min[p]==INT64_MAX?0:m_pq_min[p]),
