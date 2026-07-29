@@ -581,7 +581,8 @@ private:
 	u32  m_pa_n[2] = {};
 	u32 m_dly_w_nz = 0, m_dly_dbg = 0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
-	u32 m_dr_pend = 0; bool m_dr_pend_v = false;   // ★ §76 the one outstanding access
+	u32 m_dr_pend = 0; bool m_dr_pend_v = false;
+	u32 m_dr_line[64] = {}; bool m_dr_line_v[64] = {};   // ★ §78 per-line outstanding access   // ★ §76 the one outstanding access
 	bool m_in_dram = false;   // ★ §74 re-entrancy guard
 	bool m_poke_active = false;
 	static constexpr u16 POKE_PORT = 0x0160;

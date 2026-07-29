@@ -1467,10 +1467,22 @@ void upd6383_device::exec_alu(u64 word)
 			//  performs its own port access.  Order matters -- a write must store the
 			//  accumulator AFTER the ALU has updated it.
 			const bool port_pipe = m_speculative && (m_specmask & 0x100000);
-			if (port_pipe && m_dr_pend_v)
+			//  ★★★★ §78: THE OUTSTANDING ACCESS IS PER-LINE, NOT PER-PORT.
+			//  §77 made all ~19 consumers per frame fire, and every one saw zero,
+			//  because ONE pending register cannot serve nineteen.  Every delay word
+			//  is both a consumer and an issuer.
+			//  The line identity is the DESCRIPTOR VALUE: §59-60 measured the bank
+			//  holding each value TWICE, five cells apart (51E2 at 02 and 07, 5460 at
+			//  06 and 0B ...) -- one read and one write per line, sharing a descriptor.
+			//  With addr = (desc + frame) & 0xffff, reading a walking address and then
+			//  overwriting it is exactly a circular delay line whose lag is the buffer
+			//  length.  So a read latches under ITS OWN descriptor and the write that
+			//  shares that descriptor collects it.
+			const u32 line = cellv & 0x3f;
+			if (port_pipe && m_dr_line_v[line])
 			{
-				m_dr = m_dr_pend;
-				m_dr_pend_v = false;
+				m_dr = m_dr_line[line];
+				m_dr_line_v[line] = false;
 				m_dr_landed++;
 			}
 			if (port_pipe && run_alu)
@@ -1493,8 +1505,8 @@ void upd6383_device::exec_alu(u64 word)
 				}
 				if (datum) m_dly_r_nz++;
 				if (port_pipe)
-				{   // ★ §76: one outstanding access -- latch, next delay word consumes
-					m_dr_pend = datum; m_dr_pend_v = true;
+				{   // ★ §78: latch under this line's descriptor
+					m_dr_line[line] = datum; m_dr_line_v[line] = true;
 				}
 				else if (m_speculative && (m_specmask & 0x400))
 				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
