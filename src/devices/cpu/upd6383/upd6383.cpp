@@ -3000,8 +3000,10 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			if (m_frames_run > 420000)
 			{
 				int p = -1;
-				switch (prof_iw) { case 12: p=0; break; case 84: p=1; break;
-				                   case 201: p=2; break; case 332: p=3; break; }
+				switch (prof_iw) {
+				case 12:  p=0; break;   case 20:  p=1; break;   case 30: p=2; break;
+				case 40:  p=3; break;   case 46:  p=4; break;   case 49: p=5; break;
+				case 84:  p=6; break;   case 201: p=7; break; }
 				if (p >= 0)
 				{
 					const s64 v = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
@@ -3394,9 +3396,10 @@ void upd6383_device::dump_frame_report() const
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
 	{
-		static const char *NM[4] = { "header exit iw12", "body-0 ENTRY iw84",
-		                             "body-1 entry iw201", "body-1 end  iw332" };
-		for (int p = 0; p < 4; p++)
+		static const char *NM[8] = { "kernel iw12", "kernel iw20", "kernel iw30",
+		                             "kernel iw40", "kernel iw46", "kernel iw49",
+		                             "body-0 ENTRY iw84", "body-1 entry iw201" };
+		for (int p = 0; p < 8; p++)
 			logerror("upd6383: ★ §81 PROBE %-19s quiet [%lld .. %lld]  loud [%lld .. %lld]  %s\n",
 					NM[p], (long long)(m_pq_min[p]==INT64_MAX?0:m_pq_min[p]),
 					(long long)(m_pq_max[p]==INT64_MIN?0:m_pq_max[p]),
