@@ -557,7 +557,7 @@ private:
 	u32  m_specmask = 0x1f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
-	u32  m_dbg_once = 0; u32 m_dbg_pres = 0;
+	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
 	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
 	//  ★★★ §59 P1.1 -- THE HOST POKE PORT.  cmd 0x01 address 0x0160 is a PORT, not an
 	//  I-RAM address (host-side.md C4).  Its payload is a byte stream of 5-byte units:

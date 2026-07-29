@@ -1238,6 +1238,19 @@ void upd6383_device::exec_alu(u64 word)
 	//  alu_decoded_speculative() admitted a word alu_decoded() refuses.  Each
 	//  reading is a RESEARCHED GUESS; see upd6383d.h alu_decoded_speculative()
 	//  and dsp/analysis/unblocking-and-discriminators.md.
+	//  ★ §90: why does iw213 (000.2.BA.000) lose its -70 post-increment?
+	if (m_cur_iw == 213 && m_dbg213 < 3 && m_frames_run > 420000)
+	{
+		m_dbg213++;
+		logerror("upd6383: §90 iw213 %09llX alu_decoded=%d addressing_only=%d "
+				"c_format=%d lo12=%03X cl=%X ptr_postinc=%d dp_in=%02X\n",
+				(unsigned long long)word,
+				upd6383_disassembler::alu_decoded(word) ? 1 : 0,
+				upd6383_disassembler::addressing_only(word) ? 1 : 0,
+				upd6383_disassembler::c_format(word) ? 1 : 0,
+				upd6383_disassembler::lo12(word), upd6383_disassembler::class4(word),
+				upd6383_disassembler::ptr_postinc(word) ? 1 : 0, m_dp);
+	}
 	if (m_speculative && !upd6383_disassembler::alu_decoded(word))
 	{
 		const u8 cl = upd6383_disassembler::class4(word);
@@ -2435,6 +2448,9 @@ void upd6383_device::exec_alu(u64 word)
 		m_p = u64((s64(util::sext(m_k, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
 	}
 
+	if (m_cur_iw == 213 && m_dbg213 <= 3 && m_frames_run > 420000)
+		logerror("upd6383: §90 iw213 REACHED post-increment: cl=%X dd=%d dp=%02X\n",
+				cl, (int)dd, m_dp);
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
@@ -2557,6 +2573,20 @@ void upd6383_device::exec_decoded(u64 word)
 		// supports it now is that the host injects this exact pattern three
 		// times in the PARAMETRIC EQ stream as the only word matching no known
 		// form.)
+		//
+		//  ★★★★ §90: "NOP" MUST NOT MEAN "NO ADDRESSING".
+		//  This word has class4 == 2, and `class4 & 7 == 2 -> p += (s8)addr8' is
+		//  MEASURED (ptr_postinc, and this file's own header says "THE ADDRESS
+		//  GENERATOR IS DECODED EVEN WHERE THE ALU IS NOT ... EXECUTE WHAT
+		//  ADDRESSES, NEVER WHAT COMPUTES").  Swallowing the pointer move as well
+		//  lets an INFERRED reading override a MEASURED one.
+		//  MEASURED CONSEQUENCE: body 1's word iw213 = `000.2.BA.000' carries
+		//  delta -70 and lost it, so body 1 walked -63 where the ROM sums to
+		//  exactly -133 -- and that single omission displaced the whole input
+		//  window by 0x46, put the kernel's audio deposit at 0x4C where no body
+		//  word can address it, and left the reverb unexcited and silent.
+		if (upd6383_disassembler::ptr_postinc(word))
+			m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 	}
 	else
 	{
