@@ -1448,6 +1448,31 @@ void upd6383_device::exec_alu(u64 word)
 			//  term, which is §73's "a loop whose behaviour does not change when its
 			//  gains change is not being attenuated by them at all".
 			const bool run_alu = m_speculative && (m_specmask & 0x80000) && !m_in_dram;
+			//  ★★★★ §76 (mask bit 20): THE PIPELINE IS KEYED TO THE PORT, NOT TO THE
+			//  SLOT COUNTER.  dram-datapath.md item A: "THE DRAM PORT IS A ONE-DEEP
+			//  PIPELINE" -- ONE OUTSTANDING ACCESS.  §49 implemented a slot-indexed
+			//  ring (datum lands `land' slots later), which is a different machine:
+			//  §75 measured 491 520 consumptions all seeing zero because the consumer
+			//  never executes on the scheduled slot.
+			//  §74 says why it cannot: the consumer is the delay WRITE word itself,
+			//  which sits a VARIABLE number of ordinary words after its read.
+			//  So: a read LATCHES into a pending register; the NEXT delay word
+			//  publishes it, runs its ALU with the datum on the bus, and only then
+			//  performs its own port access.  Order matters -- a write must store the
+			//  accumulator AFTER the ALU has updated it.
+			const bool port_pipe = m_speculative && (m_specmask & 0x100000);
+			if (port_pipe && m_dr_pend_v)
+			{
+				m_dr = m_dr_pend;
+				m_dr_pend_v = false;
+				m_dr_landed++;
+			}
+			if (port_pipe && run_alu)
+			{
+				m_in_dram = true;
+				exec_alu(word);
+				m_in_dram = false;
+			}
 			if (dir == 'R')
 			{
 				const u32 datum = u32(m_delay.read_word(addr)) << 8;
@@ -1458,7 +1483,11 @@ void upd6383_device::exec_alu(u64 word)
 							addr, cellv, u32(m_frames_run), datum);
 				}
 				if (datum) m_dly_r_nz++;
-				if (m_speculative && (m_specmask & 0x400))
+				if (port_pipe)
+				{   // ★ §76: one outstanding access -- latch, next delay word consumes
+					m_dr_pend = datum; m_dr_pend_v = true;
+				}
+				else if (m_speculative && (m_specmask & 0x400))
 				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
 					const u32 k = (m_slotn + m_land) & 7;
 					if (m_dr_pipe_v[k]) m_dr_lost++;   // ring collision = model too shallow
@@ -1468,7 +1497,7 @@ void upd6383_device::exec_alu(u64 word)
 				else
 					m_dr = datum;
 			}
-			if (run_alu)
+			if (run_alu && !port_pipe)
 			{   // now let the word do its datapath work, with m_dr on the bus
 				m_in_dram = true;
 				exec_alu(word);
