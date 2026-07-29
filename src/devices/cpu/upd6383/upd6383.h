@@ -547,6 +547,24 @@ private:
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
 	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
+	//  ★★★ §59 P1.1 -- THE HOST POKE PORT.  cmd 0x01 address 0x0160 is a PORT, not an
+	//  I-RAM address (host-side.md C4).  Its payload is a byte stream of 5-byte units:
+	//  a 0x0A marker introduces a DATA packet (24-bit datum + tag byte), anything else
+	//  is a 36-bit instruction word that aims a write pointer.
+	//  Tags (C4/A4): 0x15 = D-RAM register file, 0x4C/0xCC = descriptor bank
+	//  (0x80 = direction), 0x26 = C-RAM.  Auto-increment +1, PROVEN BY CONSTRUCTION.
+	u8   m_poke[8] = {}; u32 m_poke_n = 0;
+	u8   m_dram_wp = 0, m_dsc_wp = 0;
+	u32  m_pk_dram = 0, m_pk_dsc = 0, m_pk_cram = 0, m_pk_other = 0, m_pk_ptr = 0;
+	u32  m_pk_tag[256] = {};
+	//  ★★★ §60 P1.2 -- THE DESCRIPTOR BANK IS ITS OWN SPACE.
+	//  r3-delaydram.md: "descriptor bank is its own space (tag 0x4C via pointer ...825)",
+	//  with its own writer LABEL_038922 byte-for-byte matching the coefficient writer.
+	//  Writing descriptors into D-RAM let the microcode's own stores clobber them --
+	//  measured: the host wrote 43 descriptors and the delay port still read 0x0000.
+	u16  m_dscbank[256] = {};
+	bool m_poke_active = false;
+	static constexpr u16 POKE_PORT = 0x0160;
 	//  ★★★ §54 THE TRACKING TEST -- an in-core DC detector, so speculative readings can
 	//  ACCUMULATE without a DC quietly passing for signal again.
 	//  Per frame, classify (was the INPUT non-zero?) x (was the OUTPUT non-zero?):

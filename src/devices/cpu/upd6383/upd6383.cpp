@@ -587,7 +587,65 @@ void upd6383_device::host_w(bool cd, u8 data)
 	if (m_host_pos == 0)
 		m_host_addr = u16(data) << 8;
 	else if (m_host_pos == 1)
+	{
 		m_host_addr |= data;
+		//  ★★★ §59 P1.1: 0x0160 is the POKE PORT.  Everything after it is a packet
+		//  stream, NOT I-RAM words -- writing it to I-RAM[352+] (past the 285-slot
+		//  frame) silently dropped all 881 tag-0x15 D-RAM writes and all 870 tag-0x4C
+		//  descriptor writes, which is why every delay descriptor read 0x0000 and no
+		//  per-effect parameter ever reached the chip.
+		m_poke_active = (m_host_addr == POKE_PORT);
+		m_poke_n = 0;
+	}
+	else if (m_poke_active)
+	{
+		m_poke[m_poke_n++] = data;
+		if (m_poke_n == 5)
+		{
+			m_poke_n = 0;
+			if (m_poke[0] == 0x0a)
+			{   // DATA packet: 0A | dd dd dd | TAG
+				const u32 v = (u32(m_poke[1]) << 16) | (u32(m_poke[2]) << 8) | m_poke[3];
+				const u8  tag = m_poke[4];
+				m_pk_tag[tag]++;
+				switch (tag & 0x7f)
+				{
+				case 0x15:                       // D-RAM register file
+					m_dram.write_dword(m_dram_wp, v & 0xffffff);
+					m_dram_wp = u8(m_dram_wp + 1);
+					m_pk_dram++;
+					break;
+				case 0x4c:                       // the DESCRIPTOR bank -- its OWN space
+					m_dscbank[m_dsc_wp] = u16(v & 0xffff);
+					m_dsc_wp = u8(m_dsc_wp + 1);
+					m_pk_dsc++;
+					break;
+				case 0x26:                       // C-RAM
+					if (m_cram_wp_set)
+					{
+						m_cram.write_dword(m_cram_wp, v & 0xffffff);
+						m_cram_wp = u8(m_cram_wp + 1);
+					}
+					m_pk_cram++;
+					break;
+				default: m_pk_other++; break;
+				}
+			}
+			else
+			{   // an instruction word that aims a pointer
+				u64 w = 0;
+				for (int i = 0; i < 5; i++) w = (w << 8) | m_poke[i];
+				w &= 0xfffffffffULL;
+				const u16 lo = upd6383_disassembler::lo12(w);
+				const u8  ad = upd6383_disassembler::addr8(w);
+				if (lo == 0x825)      { m_dsc_wp  = ad; m_pk_ptr++; }   // ldptr.d
+				else if (lo == 0x821) { m_cram_wp = ad; m_cram_wp_set = true; m_pk_ptr++; }
+				else if (upd6383_disassembler::class4(w) == 1 && lo == 0x000)
+					{ m_dram_wp = ad; m_pk_ptr++; }                     // mode-1 register addr
+				else m_pk_other++;
+			}
+		}
+	}
 	else
 	{
 		const u32 byte_in_word = (m_host_pos - 2) % upd6383_disassembler::WORD_BYTES;
@@ -1302,9 +1360,10 @@ void upd6383_device::exec_alu(u64 word)
 			//  ⇒ a class-A delay word FETCHES ITS OWN ADDRESS from the per-unit bank.
 			//  That also explains §44: read as Q0.23 those cells are ~0.007, and
 			//  multiplying by them is what destroyed the signal.
+			//  ★ §60: read the descriptor from the BANK the host now fills.
 			const u32 cellv = (m_speculative && (m_specmask & 0x200))
 					? (m_cram.read_dword(m_cursor) & 0xffff)
-					: (m_dram.read_dword(u8(m_dsc + m_delay_ix)) & 0xffff);
+					: u32(m_dscbank[u8(m_dsc + m_delay_ix)]);
 			if (m_speculative && (m_specmask & 0x200)
 					&& upd6383_disassembler::coeff_consumer(word))
 				m_cursor++;
@@ -3040,6 +3099,17 @@ void upd6383_device::dump_frame_report() const
 					: "★ TRACKS THE INPUT",
 				quiet ? 100.0 * double(ql) / double(quiet) : 0.0,
 				loud ? 100.0 * double(ll) / double(loud) : 0.0);
+	}
+	{   // ★ §59 P1.1 report
+		std::string db;
+		for (u32 i = 0; i < 256; i++)
+			if (m_dscbank[i]) db += string_format(" %02X:%04X", i, m_dscbank[i]);
+		logerror("upd6383: ★ §60 DESCRIPTOR BANK (non-zero cells):%s\n", db.c_str());
+		std::string tg;
+		for (u32 i = 0; i < 256; i++) if (m_pk_tag[i]) tg += string_format(" %02X:%u", i, m_pk_tag[i]);
+		logerror("upd6383: ★ §59 POKE PORT: %u pointer words | data packets -> D-RAM %u, "
+				"DESCRIPTOR %u, C-RAM %u, unrecognised %u | tags:%s\n",
+				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
 	logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
 			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
