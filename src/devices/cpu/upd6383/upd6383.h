@@ -530,11 +530,36 @@ private:
 	//  RETIRED: cursor_fetch and is_dram are DISJOINT across all 91 programs
 	//  (0 overlap, 1590 fetch-only, 834 dram-only), so a delay word never fetches
 	//  from the cursor and bit 9 fed a pointer those words do not use.
-	u32  m_specmask = 0x54c;
+	//  ★★★ §55, 2026-07-29, ON THE OWNER'S INSTRUCTION: default 0x5DF.
+	//  Bits 0/1 (ACCB + f31[2]), 4 (latched-K) and 7 (level-select) are RESTORED.
+	//  They were switched off for failing a WHOLE-CHAIN test applied to SINGLE
+	//  changes -- a bar almost no individual reading can clear, so their failures
+	//  carried no information.  Each is independently motivated: the CDJ-500 block
+	//  diagram PROVES two accumulators, so modelling one is wrong by construction;
+	//  m_k/m_l are declared "multiplier input latches" and the multiply bypassed
+	//  them; and r2-output.md §3.1 calls w77 the word that "aims a POINTER at reg
+	//  0x86", which §42 proved holds the level.
+	//  Bit 9 stays OFF -- it is SPECIFICALLY refuted (cursor_fetch and is_dram are
+	//  disjoint across 91 programs), which is evidence about that reading rather
+	//  than about the chain.  That is the distinction this default encodes.
+	u32  m_specmask = 0x5df;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0;
 	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
+	//  ★★★ §54 THE TRACKING TEST -- an in-core DC detector, so speculative readings can
+	//  ACCUMULATE without a DC quietly passing for signal again.
+	//  Per frame, classify (was the INPUT non-zero?) x (was the OUTPUT non-zero?):
+	//      quiet-in / quiet-out  = correct silence
+	//      quiet-in / LOUD-out   = ★ DC EVIDENCE. Any large count here is fatal.
+	//      loud-in  / loud-out   = the chip is passing signal
+	//      loud-in  / quiet-out  = the chip is eating it
+	//  A reading that raises loud/loud WITHOUT raising quiet/loud is real progress even
+	//  if the whole chain still does not sing.  This is the criterion an individual
+	//  change can actually pass.
+	u32  m_trk[2][2] = {};   // [input non-zero][output non-zero]
+	s32  m_out_peak_quiet = 0, m_out_peak_loud = 0;
+	bool m_frame_out_nz = false; s32 m_frame_out_peak = 0;
 	//  ★★★ §49: THE ONE-DEEP READ PIPELINE (dram-datapath.md items A and E).
 	//  A delay read's datum is NOT on its own bus (item A, FORCED) -- it lands
 	//  `land' slots later, with land in [1,4] FORCED and 4 both the upper bound and

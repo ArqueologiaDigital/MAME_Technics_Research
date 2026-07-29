@@ -1119,6 +1119,8 @@ void upd6383_device::do_presentation()
 					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
 			}
 			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
+			if (v) m_frame_out_nz = true;                       // ★ §54
+			if (std::abs(v) > std::abs(m_frame_out_peak)) m_frame_out_peak = v;
 			m_do[unit][0] = v;
 			m_do[unit][1] = v;
 			m_pres_seen++;
@@ -2435,6 +2437,16 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	// offsets +2 and +5 from the pointer the previous frame left.  Unconditional
 	// and before the first word, because that is what the serial receivers do:
 	// they do not wait to see whether the microcode is interested.
+	//  ★ §54: score the PREVIOUS frame before starting this one.
+	if (m_frames_run > 300000)   // ★ §54: score only AFTER the last program upload
+	{                            //   (§38: all boot transients end by frame 264 002)
+		const bool in_nz  = (m_in_val[0] != 0) || (m_in_val[1] != 0);
+		const bool out_nz = m_frame_out_nz;
+		m_trk[in_nz ? 1 : 0][out_nz ? 1 : 0]++;
+		s32 &pk = in_nz ? m_out_peak_loud : m_out_peak_quiet;
+		if (std::abs(m_frame_out_peak) > std::abs(pk)) pk = m_frame_out_peak;
+		m_frame_out_nz = false; m_frame_out_peak = 0;
+	}
 	m_slotn = 0;                //  ★ §49: the pipeline ring is per-frame
 	latch_inputs_to_dram();
 
@@ -3015,7 +3027,21 @@ void upd6383_device::dump_frame_report() const
 		std::string ds;
 		for (u32 q = 0; q < m_dly_n; q++)
 			ds += string_format(" [%c dsc %02X = %04X]", m_dly_dir[q], m_dly_dsc[q], m_dly_val[q]);
-		logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
+		{   // ★ §54 THE TRACKING TEST
+		const u32 qq = m_trk[0][0], ql = m_trk[0][1], lq = m_trk[1][0], ll = m_trk[1][1];
+		const u32 quiet = qq + ql, loud = lq + ll;
+		logerror("upd6383: ★ §54 TRACKING: quiet-in %u frames -> %u silent / %u LOUD (peak %d)"
+				" | loud-in %u -> %u silent / %u loud (peak %d)\n",
+				quiet, qq, ql, m_out_peak_quiet, loud, lq, ll, m_out_peak_loud);
+		logerror("upd6383:   VERDICT: %s  (DC leak %.2f%% of quiet frames; pass-through %.2f%% "
+				"of loud frames)\n",
+				(quiet && ql * 20 > quiet) ? "DC -- output present with NO input"
+					: (!loud || ll * 20 <= loud) ? "SILENT -- chip eats the signal"
+					: "★ TRACKS THE INPUT",
+				quiet ? 100.0 * double(ql) / double(quiet) : 0.0,
+				loud ? 100.0 * double(ll) / double(loud) : 0.0);
+	}
+	logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
 			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
 	logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
 			"non-zero datum\n", m_dr_reads, m_dr_reads_nz);
