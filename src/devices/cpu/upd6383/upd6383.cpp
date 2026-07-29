@@ -1417,7 +1417,22 @@ void upd6383_device::exec_alu(u64 word)
 			const u32 addr = (cellv + u32(m_frames_run)) & 0xffff;
 			if (dir == 'W')
 				m_delay.write_word(addr, u16((u32(acc_to_datum(m_acc)) >> 8) & 0xffff));
-			else if (dir == 'R')
+			//  ★★★★ §74 SPECULATIVE (mask bit 19): A DELAY WORD ALSO RUNS ITS ALU.
+			//  MEASURED over the twelve unit-1 reverbs: ALL 168 words carrying
+			//  SRC 0x0B (the delay-read register) are class4 == 1 with the escape
+			//  bit -- i.e. is_dram claims EVERY one of them -- and every one has
+			//  addr8 = 0x60, the WRITE direction.
+			//  So the delay WRITE word is itself the delay-read CONSUMER: it stores
+			//  to the line and reads the read-register onto its bus in the same
+			//  word.  That is dram-datapath.md item F in its own words -- "the
+			//  structural argument moves onto the WRITE word, which is the pipeline".
+			//  This branch `return'ed after the port access, so their ALU never ran:
+			//  §48 measured SRC 0x0B consumed 1.0 times per frame against ~20.8
+			//  delay reads issued.  The ladder therefore had NO per-pass feedback
+			//  term, which is §73's "a loop whose behaviour does not change when its
+			//  gains change is not being attenuated by them at all".
+			const bool run_alu = m_speculative && (m_specmask & 0x80000) && !m_in_dram;
+			if (dir == 'R')
 			{
 				const u32 datum = u32(m_delay.read_word(addr)) << 8;
 				if (datum) m_dly_r_nz++;
@@ -1430,6 +1445,12 @@ void upd6383_device::exec_alu(u64 word)
 				}
 				else
 					m_dr = datum;
+			}
+			if (run_alu)
+			{   // now let the word do its datapath work, with m_dr on the bus
+				m_in_dram = true;
+				exec_alu(word);
+				m_in_dram = false;
 			}
 			return;
 		}

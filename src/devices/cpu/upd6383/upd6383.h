@@ -579,6 +579,7 @@ private:
 	//  columns the input never reaches the accumulation at all.
 	s64  m_pa_min[2] = { INT64_MAX, INT64_MAX }, m_pa_max[2] = { INT64_MIN, INT64_MIN };
 	u32  m_pa_n[2] = {};
+	bool m_in_dram = false;   // ★ §74 re-entrancy guard
 	bool m_poke_active = false;
 	static constexpr u16 POKE_PORT = 0x0160;
 	//  ★★★ §54 THE TRACKING TEST -- an in-core DC detector, so speculative readings can
