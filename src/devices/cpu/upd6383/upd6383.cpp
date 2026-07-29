@@ -410,6 +410,27 @@ void upd6383_device::pwatch(u8 cell, bool wr, bool mode1)
 //  ★★★ §99: one rule for both store sites.  See upd6383.h.
 void upd6383_device::store_mode(u8 mode, u8 dest, u32 v)
 {
+	//  ★★★ §106 DIAGNOSTIC (mask bit 26) -- NOT A FIX, and it must not be promoted.
+	//  §105 called the deposit/pickup mismatch an OFF-BY-ONE.  It is not: the
+	//  kernel's audio pair is ADJACENT (0x06/0x07) while the body's pickup is
+	//  base+0 / base+2 = 0x05/0x07 (stride 2, §94, 12 of 12 reverbs).  No single
+	//  offset aligns a stride-1 pair to a stride-2 pair, and the kernel's window
+	//  cannot slide anyway -- the frame closure pins it, residue exactly 0.
+	//
+	//  So instead of moving a FORCED anchor on a premise that does not hold, this
+	//  MIRRORS the kernel's 0x06 result into 0x05 as well, to ask ONE question:
+	//  is base+0 the right pickup?  Two-sided:
+	//    * if body 0's accumulator becomes input-dependent, the pickup model is
+	//      right and the DEPOSIT ADDRESS is the defect;
+	//    * if it does not, base+0 is not an input cell either and the whole
+	//      pair identification is wrong -- which is worth as much.
+	//  It deliberately does NOT touch 0x07, so the CHORUS LFO phase cell keeps
+	//  whatever it has and the two effects stay separable.
+	if (m_speculative && (m_specmask & 0x4000000) && mode != 1 && dest == 0x06)
+	{
+		m_dram.write_dword(0x05, v & 0xffffff);
+		m_mirror06_n++;
+	}
 	const bool m1 = (mode == 1);
 	if (m1 && m_speculative && (m_specmask & 0x800000))
 	{
@@ -3984,6 +4005,9 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		if (m_mirror06_n)
+			logerror("            §106 DIAGNOSTIC: mirrored %u writes of cell 0x06 into 0x05\n",
+					m_mirror06_n);
 		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
 			std::string r; u32 n = 0;
 			for (u32 c = 0; c < 256; c++)
