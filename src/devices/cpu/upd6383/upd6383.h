@@ -580,6 +580,13 @@ private:
 	s64  m_pa_min[2] = { INT64_MAX, INT64_MAX }, m_pa_max[2] = { INT64_MIN, INT64_MIN };
 	u32  m_pa_n[2] = {};
 	u32 m_dly_w_nz = 0, m_dly_dbg = 0;
+	//  ★ §81: where does the input STOP?  Probe the accumulator at four points and
+	//  split the range by whether the frame carried input.  A probe whose quiet and
+	//  loud ranges are identical has not seen the input.
+	s64  m_pr_min[4] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
+	s64  m_pr_max[4] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
+	s64  m_pq_min[4] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
+	s64  m_pq_max[4] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
 	u32 m_dr_pend = 0; bool m_dr_pend_v = false;

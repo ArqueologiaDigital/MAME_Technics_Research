@@ -2960,6 +2960,23 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				m_curprof_seen[prof_iw] = 1;
 				if (std::abs(s64(m_p)) > std::abs(m_pprof[prof_iw])) m_pprof[prof_iw] = s64(m_p);
 			}
+			//  ★ §81: probes -- header exit (iw 12), body-0 end (iw 152),
+			//  body-1 entry (iw 201), body-1 end (iw 332).
+			if (m_frames_run > 420000)
+			{
+				int p = -1;
+				switch (prof_iw) { case 12: p=0; break; case 152: p=1; break;
+				                   case 201: p=2; break; case 332: p=3; break; }
+				if (p >= 0)
+				{
+					const s64 v = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
+					const bool nz = (m_in_val[0] != 0) || (m_in_val[1] != 0);
+					s64 &lo = nz ? m_pr_min[p] : m_pq_min[p];
+					s64 &hi2 = nz ? m_pr_max[p] : m_pq_max[p];
+					if (v < lo) lo = v;
+					if (v > hi2) hi2 = v;
+				}
+			}
 			if (prof_iw < 384)
 			{
 				const s64 a = util::sext(m_acc, 44);
@@ -3340,6 +3357,18 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★ §59 POKE PORT: %u pointer words | data packets -> D-RAM %u, "
 				"DESCRIPTOR %u, C-RAM %u, unrecognised %u | tags:%s\n",
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
+	}
+	{
+		static const char *NM[4] = { "header exit iw12", "body-0 end iw152",
+		                             "body-1 entry iw201", "body-1 end  iw332" };
+		for (int p = 0; p < 4; p++)
+			logerror("upd6383: ★ §81 PROBE %-19s quiet [%lld .. %lld]  loud [%lld .. %lld]  %s\n",
+					NM[p], (long long)(m_pq_min[p]==INT64_MAX?0:m_pq_min[p]),
+					(long long)(m_pq_max[p]==INT64_MIN?0:m_pq_max[p]),
+					(long long)(m_pr_min[p]==INT64_MAX?0:m_pr_min[p]),
+					(long long)(m_pr_max[p]==INT64_MIN?0:m_pr_max[p]),
+					(m_pq_min[p]==m_pr_min[p] && m_pq_max[p]==m_pr_max[p])
+						? "IDENTICAL -- input has NOT reached here" : "★ DIFFERS -- input reaches here");
 	}
 	logerror("upd6383: §80 LATCH/PUBLISH: latched %u (%u non-zero) | publish attempts %u, "
 			"hits %u (%u non-zero)\n", m_latch_n, m_latch_nz, m_pub_try, m_pub_hit, m_pub_nz);
