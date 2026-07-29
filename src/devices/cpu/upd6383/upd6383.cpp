@@ -3332,7 +3332,69 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				// retraction-sweep.md P1/P13 re-opened -- "NOTHING loads m_dp".
 				// WITHDRAWN with it: the +121 closure residue as an open defect
 				// -- it was the same phenomenon, and one change answers both.
-				const u8 base = u8(DRAM_UNIT_BASE | (unit1 ? DRAM_UNIT_STRIDE : 0));
+				//  ★★★ §108 SPECULATIVE (mask bit 27): the per-unit base is 0x06,
+				//  not 0x05.  From reconstructing what CHORUS must compute at
+				//  iw84..92, and it is OVER-DETERMINED -- one parameter, two
+				//  independently measured symptoms:
+				//
+				//   (a) THE LFO PHASE CANNOT RAMP.  lfo-ramp.md §1 names iw89/90/91
+				//       as the LFO block and §11 records "the block stores the phase
+				//       back unchanged -- no ramp".  The §104 census shows why: the
+				//       phase cell reads 4194304 at iw89/90/91 but 4194304+57 at
+				//       iw92, so the body DOES increment it (by 57; lfo-ramp.md
+				//       predicts 114 for CHORUS -- the familiar factor of 2) and it
+				//       is reset before the next frame.  Reset to 0x400000, which is
+				//       exactly what kernel iw32 stores.  Under base 0x05 the phase
+				//       lands on 0x07, INSIDE kernel A's measured 01..07 window.
+				//       Under base 0x06 it lands on 0x08, outside it, and can ramp.
+				//   (b) THE BODY READS AN EMPTY INPUT CELL.  iw85 reads base+0, and
+				//       base+0 = 0x05 is measurably 0..0 in every frame while the
+				//       kernel's audio is at 0x06/0x07 (§86).  Under base 0x06 the
+				//       read lands on the audio.
+				//
+				//  ⚠ THIS CONTRADICTS DRAM_UNIT_BASE, WHICH IS LABELLED FORCED, and
+				//  §94 measured both units reading base+0 / base+2 at 0x05/0x07 and
+				//  0x85/0x87.  So this is a DIRECT CHALLENGE to a forced reading and
+				//  is gated OFF by default.  It also moves the frame closure: the
+				//  arithmetic 0x85-133-1 = 0xFF, 0xFF+6 = 0x05 becomes 0x86-133-1 =
+				//  0x00, 0x00+6 = 0x06, so the closure residue MUST be re-measured
+				//  rather than assumed.
+				//
+				//  ★ PREDICTION, stated before the run: (a) fires -- the phase cell
+				//  advances across frames.  (b) does NOT fire on its own, because
+				//  iw85's ACTION 0x0D is still undecoded (§107) and routes the value
+				//  nowhere; §106 already showed that filling base+0 alone changes
+				//  nothing.  If (b) DOES fire, ACTION 0x0D is doing more than §106
+				//  concluded and that is the more valuable outcome.
+				//
+				//  ⛔⛔ REFUTED BY MEASUREMENT, AND THE REFUTATION IS THE USEFUL PART.
+				//  The gate fires (dp is 0x06 at iw84/85 and 0x08 at iw89..92) and
+				//  EVERY value is bit-identical, phase still pinned at 4194304.
+				//  Because the whole frame moves together: kernel A's window shifted
+				//  from 01..07 to 02..08, so iw32 writes 0x08 -- the LFO phase cell
+				//  again.  THE BASE AND THE KERNEL'S WINDOW ARE COUPLED THROUGH THE
+				//  FRAME CLOSURE: the kernel's walk starts where the previous frame
+				//  closed, and the closure is downstream of the base, so both move
+				//  as one.
+				//
+				//  ★★★ CONSEQUENCE, and it retires a whole family of attempts: NO
+				//  value of DRAM_UNIT_BASE can fix the deposit/pickup collision,
+				//  because the collision is in the RELATIVE geometry and the base
+				//  cancels out of it.  That is why §105's off-by-one framing was
+				//  doomed and why §106's mirror changed nothing.  What CAN change the
+				//  relative geometry is a per-word ADDRESSING decode: some word's
+				//  addr8 contribution to the walk, or iw30/iw32's store target, or
+				//  the body's LFO block not really sitting at base+2.  Look there,
+				//  not at the anchor.
+				//
+				//  Kept gated OFF and implemented, so the refutation is reproducible
+				//  rather than a claim.  ⚠ NOTE the PER-UNIT REBASE audit still
+				//  prints DRAM_UNIT_BASE rather than this gated value, so its
+				//  "already delivered 0x05" percentages are stale whenever bit 27 is
+				//  on -- do not read them under the gate.
+				const u8 dub = (m_speculative && (m_specmask & 0x8000000))
+						? u8(DRAM_UNIT_BASE + 1) : DRAM_UNIT_BASE;
+				const u8 base = u8(dub | (unit1 ? DRAM_UNIT_STRIDE : 0));
 
 				// DIAGNOSTIC, not a criterion.  For unit 1 the rebase is forced
 				// to do work (net(body0) takes 8 values, so no walk can deliver
