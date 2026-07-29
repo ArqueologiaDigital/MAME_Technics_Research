@@ -1364,7 +1364,13 @@ void upd6383_device::exec_alu(u64 word)
 		//    * the 24 -> 16 bit truncation: the DRAM is 16 bits wide and the
 		//      datum is 24, so the top 16 are stored.  UNVERIFIED.
 		//==================================================================
-		if (upd6383_disassembler::is_dram(word))
+		//  ★★★★ §77: re-entrancy guard.  §76 calls exec_alu() from inside this very
+		//  branch so a delay word can run its ALU with the fetched datum on the bus.
+		//  Without `!m_in_dram' the recursive call re-enters here, performs a SECOND
+		//  port access and returns -- so the ALU half never ran and SRC 0x0B was
+		//  reached 0 times out of 19 096 320 delay-path entries.  Same shape as the
+		//  m_in_k6 guard the K6 input stage already needed.
+		if (upd6383_disassembler::is_dram(word) && !m_in_dram)
 		{
 			const char dir = upd6383_disassembler::dram_dir(word);
 			//  ★★★ §47 SPECULATIVE (mask bit 9): TAKE THE DESCRIPTOR FROM THE
@@ -1469,10 +1475,13 @@ void upd6383_device::exec_alu(u64 word)
 			}
 			if (port_pipe && run_alu)
 			{
+				m_dly_alu++;                       // ★ §77: is this path taken at all?
 				m_in_dram = true;
 				exec_alu(word);
 				m_in_dram = false;
 			}
+			else if (port_pipe)
+				m_dly_noalu++;
 			if (dir == 'R')
 			{
 				const u32 datum = u32(m_delay.read_word(addr)) << 8;
@@ -1639,6 +1648,7 @@ void upd6383_device::exec_alu(u64 word)
 			//  saturates: acc peaks are exact small-integer multiples of one quantum
 			//  and tA sits at 0x7FFFFF.
 			m_dr_reads++;
+		if (m_in_dram) m_dly_alu_0b++;      // ★ §77: reached from a delay word?
 			if (m_dr) m_dr_reads_nz++;
 			L = s32(util::sext(m_dr, 24));
 			break;
@@ -3316,6 +3326,8 @@ void upd6383_device::dump_frame_report() const
 				"DESCRIPTOR %u, C-RAM %u, unrecognised %u | tags:%s\n",
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
+	logerror("upd6383: §77 DELAY-PATH ALU: entered %u times, skipped %u; SRC 0x0B words "
+			"among them %u\n", m_dly_alu, m_dly_noalu, m_dly_alu_0b);
 	logerror("upd6383: §75 DELAY WRITES WITH CONTENT: %u of %u\n", m_dly_w_nz, m_dly_w);
 	logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
 			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
