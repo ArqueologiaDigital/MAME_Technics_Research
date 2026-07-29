@@ -2160,7 +2160,23 @@ void upd6383_device::exec_alu(u64 word)
 	if ((m_speculative && (m_specmask & 4)) ? upd6383_disassembler::coeff_fetch(word)
 					  : upd6383_disassembler::coeff_consumer(word))
 	{
-		u32 coef = m_cram.read_dword(m_cursor) & 0xffffff;
+		//  ★★★★ §72 SPECULATIVE (mask bit 17): THE BODY'S COEFFICIENT BANK IS 0x90+,
+		//  NOT THE RAMP AT 0x50..0x8B.
+		//  MEASURED this session over all 91 algorithms' parameter streams:
+		//      C-RAM writes into 0x50..0x8B :   0   (from  0 algorithms)
+		//      C-RAM writes into 0x90..0xB5 : 445   (from 12 algorithms)
+		//  NO algorithm ever writes the ramp bank.  Its monotonic contents are boot
+		//  residue, which is why no scaling of it ever worked (§43 Q0.23 -> silence,
+		//  §44 unity -> saturation, §53 Q0.16 -> saturation) and why its shape never
+		//  looked like a gain set.
+		//  cram-unit-base.md item A is MEASURED: the unit-1 reverbs' class-A fetches
+		//  resolve 33/33 at base 0x90 and 0/33 at base 0x00, in 12/12 algorithms.
+		//  The in-program ldptr aims the cursor at 0x50 (unit 1) / 0x70 (unit 0), so
+		//  relocate that window onto the bank the host actually fills.
+		u32 ccur = m_cursor;
+		if (m_speculative && (m_specmask & 0x20000) && ccur >= 0x50 && ccur <= 0x8b)
+			ccur = u8(ccur + 0x40);
+		u32 coef = m_cram.read_dword(ccur) & 0xffffff;
 		//  ★ §53 SPECULATIVE (mask bit 13): READ THE RAMP BANK AT Q0.16, NOT Q0.23.
 		//  §52 established that the microcode DELIBERATELY aims the coefficient cursor
 		//  at 0x50..0x8B (three ldptr 0x821 loads: iw42->0x70, iw50->0x50, iw69->0x90)
@@ -2194,7 +2210,8 @@ void upd6383_device::exec_alu(u64 word)
 		//  coefficients) shows no such decay.
 		//  ⛔ The delay-DRAM datapath is NOT modelled, so the honest action is to stop
 		//  MULTIPLYING BY AN ADDRESS rather than to invent a delay read.
-		const bool tap_table = (m_cursor >= 0x50 && m_cursor <= 0x8b);
+		const bool tap_table = (m_cursor >= 0x50 && m_cursor <= 0x8b)
+				&& !(m_speculative && (m_specmask & 0x20000));
 		if (m_speculative && (m_specmask & 0x100) && tap_table)
 		{
 			m_tap_n++;
