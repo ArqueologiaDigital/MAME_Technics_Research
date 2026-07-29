@@ -284,6 +284,7 @@ void upd6383_device::device_start()
 	save_item(NAME(m_cnt));
 	save_item(NAME(m_acc));
 	save_item(NAME(m_accb));
+	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
 	if (const char *e = getenv("UPD6383_SPEC"))
@@ -335,6 +336,7 @@ void upd6383_device::device_reset()
 	// host-driven via the PC-RST / Fs-RST pins.  Starting at 0 is a placeholder.
 	m_pc = 0;
 	m_acc = m_accb = m_p = 0;
+	std::fill(std::begin(m_rf), std::end(m_rf), 0);   // §97
 	for (int i = 0; i < 256; i++)
 	{ m_kq_min[i] = m_kl_min[i] = INT32_MAX; m_kq_max[i] = m_kl_max[i] = INT32_MIN; }
 	m_k = m_l = m_ta = m_tb = 0;
@@ -641,7 +643,15 @@ void upd6383_device::host_w(bool cd, u8 data)
 				switch (tag & 0x7f)
 				{
 				case 0x15:                       // D-RAM register file
-					m_dram.write_dword(m_dram_wp, v & 0xffffff);
+					// ★ §97: "register file" is what host-side.md C4 calls this
+					//  tag, and it is the MODE-1 space -- not the pointer-walked
+					//  D-RAM.  Writing it into m_dram put the host's parameters
+					//  in the same array the kernel uses as scratch, which is
+					//  the §71/§86 conflict.  See upd6383.h `m_rf'.
+					if (m_speculative && (m_specmask & 0x800000))
+						m_rf[m_dram_wp & 0xff] = v & 0xffffff;
+					else
+						m_dram.write_dword(m_dram_wp, v & 0xffffff);
 					m_dram_wp = u8(m_dram_wp + 1);
 					m_pk_dram++;
 					break;
@@ -1202,8 +1212,19 @@ void upd6383_device::do_presentation()
 				//  entirely and the per-unit output level was never applied at all.
 				//  Corroboration from the kernel cursor dump: C-RAM carries 0x400000
 				//  -- exactly +0.5 -- among its coefficients.
-				const u32 lvl = ((m_specmask & 0x40) ? m_cram : m_dram)
-						.read_dword(unit ? 0x86 : 0x06) & 0xffffff;
+				// ★ §97: the level lives in the MODE-1 REGISTER FILE.  The
+				//  comment above -- "the host's ONLY write path into this device
+				//  writes m_cram; there is no host write to D-RAM anywhere" --
+				//  was overtaken by §71, which found the host poke port and its
+				//  tag-0x15 writes to 0x06/0x86.  It read 0x000000 not because
+				//  the host cannot reach the cell but because we dropped the
+				//  packets, and then because the kernel's scratch overwrote it.
+				//  Bit 23 reads the register file; bit 6 keeps the C-RAM
+				//  workaround for bisection.
+				const u32 lvl = (m_speculative && (m_specmask & 0x800000))
+						? m_rf[unit ? 0x86 : 0x06]
+						: (((m_specmask & 0x40) ? m_cram : m_dram)
+								.read_dword(unit ? 0x86 : 0x06) & 0xffffff);
 				m_lvl_seen[unit] = lvl;   // ★ §41: is the host's level still there?
 				if (lvl) m_lvl_nz[unit]++;
 				if (lvl != 0)
@@ -1844,7 +1865,12 @@ void upd6383_device::exec_alu(u64 word)
 		const u8 rdsrc = regfile
 				? u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00))
 				: m_dp;
-		L = s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
+		// ★ §97: this site ALREADY separated the two addressing modes -- the
+		//  local is named `regfile' -- and then read both from m_dram.  That is
+		//  the alias, in one line.  Bit 23 sends the mode-1 half to m_rf.
+		L = (regfile && m_speculative && (m_specmask & 0x800000))
+				? s32(util::sext(m_rf[rdsrc] & 0xffffff, 24))
+				: s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
 		break;
 	}
 	default:

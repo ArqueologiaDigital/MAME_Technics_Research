@@ -394,6 +394,49 @@ private:
 	memory_access<10, 2, -2, ENDIANNESS_BIG>::specific m_dram;
 	memory_access<18, 1, -1, ENDIANNESS_BIG>::specific m_delay;
 
+	// ★★★ §97 SPECULATIVE (mask bit 23): MODE-1 `addr8' AND MODE-2 `mem[ptr]'
+	//  ARE NOT THE SAME MEMORY, so they must not be the same array.
+	//
+	//  §96 resolved the §71/§86 conflict by noting that this core resolves both
+	//  routes onto ONE 256-cell array.  That is what makes the conflict: §71
+	//  measured the host writing REGISTER 0x06 (the unit-0 output level) and §86
+	//  measured the kernel writing D-RAM CELL 0x06 (audio scratch).  Both are
+	//  right; the alias is ours.
+	//
+	//  WHY THEY CANNOT BE ONE MEMORY -- the argument needs no pointer walk, and
+	//  it is not new, only extended.  `output-stage-decode.md' item J is FORCED:
+	//  a mode-1 ACTION-0x07 word does NOT write reg[addr8], because the output
+	//  stage's w72 is `000.1.06.087', register 0x06 is the host-programmed
+	//  output level (EFF_VolumeLoop, PROVEN BY CONSTRUCTION), and if that word
+	//  wrote, "that depth would survive exactly ONE frame".  Guard 6 in the
+	//  disassembler rests on that.  Under the alias the kernel's own mode-2
+	//  scratch stores overwrite the same cell EVERY frame -- the same
+	//  impossibility item J already rejected, only worse.  So: two memories.
+	//
+	//  CORROBORATION, and it is the kind that costs a hack rather than adding
+	//  one: exec_alu()'s ACTION-0x07 store carries a `host_reg' guard on cells
+	//  0x06/0x86 whose own comment reads "⛔ A GUARD, NOT A DECODE: it
+	//  suppresses the symptom so the level survives".  Under the split that
+	//  guard is unreachable by construction -- a mode-2 store cannot address the
+	//  register file at all.  An acknowledged symptom-suppressor disappearing is
+	//  evidence for the model that removes it.
+	//
+	//  FURTHER, ALREADY ON RECORD: `register-space.md' C2 found four mode-1
+	//  cells (0x0F, 0x8C, 0x8D, 0x8F) that the host never initialises -- in 100
+	//  canned streams AND the live cold-boot capture -- and concluded "a cell
+	//  the host never initialises is not state the host owns; it behaves like a
+	//  hardware register or port".  Ports do not live in working memory.
+	//
+	//  SHAPE: corpus-wide the mode-1 route names 8 distinct cells across 48 of
+	//  3057 words; the mode-2 route reaches 129 cells across 3440 accesses.
+	//  A register file and a memory (dsp/tools/mode_alias.py).
+	//
+	//  WHAT IS *NOT* CLAIMED: the two spaces' sizes, whether the register file
+	//  is 256 deep or much smaller with the index truncated, and whether bit 7
+	//  of a register index is the unit select here as it is in D-RAM.  256 is
+	//  chosen to make the change a routing change and nothing else.
+	u32 m_rf[256];          // the mode-1 / host-tag-0x15 REGISTER FILE
+
 	int m_icount;
 
 	// --- the register file, bounded by the CDJ-500 block diagram ---
@@ -554,7 +597,10 @@ private:
 	//  before the multiply, so it suppressed the kernel's arithmetic, and §72 proved
 	//  its premise false (0 of 91 algorithms write 0x50..0x8B).  Bit 17 relocates the
 	//  cursor onto the bank the host actually fills, which is the correct successor.
-	u32  m_specmask = 0x1f440f;
+	// bit 23 (§97) is ON by default: the two-space reading is FORCED by item J,
+	// and the A/B raised the unit-0 output level from 0x000000 on 100% of frames
+	// to the host's value on 452 160, with no rise in the §54 DC leak.
+	u32  m_specmask = 0x9f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
