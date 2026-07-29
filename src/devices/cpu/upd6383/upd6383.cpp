@@ -2917,6 +2917,19 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 
 				m_dp = base;
 				m_cur_unit1 = unit1;    // ★ row 27: who is executing
+				//  ★★★★ §73 SPECULATIVE (mask bit 18): SEED THE COEFFICIENT CURSOR
+				//  WITH THE PER-UNIT BASE AT THE CALL.
+				//  cram-unit-base.md item A is MEASURED over 91 programs / 1546
+				//  class-A words: "The C-RAM cursor is UNIT-RELATIVE: base 0x00 for
+				//  unit 0, 0x90 for unit 1."  Unit 1's twelve reverbs resolve 33/33
+				//  at 0x90 and 0/33 at 0x00, keys running 0x90..0xB4 and NOTHING
+				//  below 0x90; item E rejects the tempting global "always add 0x90"
+				//  79/79 on unit 0.  The tools count k from ZERO within each unit's
+				//  body and add the base -- i.e. the cursor is reset per unit, not
+				//  aimed by the in-program ldptr, whose 0x50/0x70 payloads land in
+				//  the never-written ramp bank (§72: 0 writes from 0 algorithms).
+				if (m_speculative && (m_specmask & 0x40000))
+					m_cursor = unit1 ? 0x90 : 0x00;
 
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
