@@ -550,7 +550,11 @@ private:
 	//  values +0.5 / +0.183992 -- matching r3-delaydram.md's "host payload is 2x the
 	//  raw three bytes".  The ORIGINAL code was right; my §42 fix compensated for a
 	//  different bug.  Default 0x5DF -> 0x59F.
-	u32  m_specmask = 0x59f;
+	//  ★ §84: bit 8 (§44's tap-table guard) RETIRED from the default -- it returns
+	//  before the multiply, so it suppressed the kernel's arithmetic, and §72 proved
+	//  its premise false (0 of 91 algorithms write 0x50..0x8B).  Bit 17 relocates the
+	//  cursor onto the bank the host actually fills, which is the correct successor.
+	u32  m_specmask = 0x1f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg_pres = 0;
