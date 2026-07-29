@@ -439,10 +439,10 @@ void upd6383_device::device_stop()
 			for (u32 q = 0; q < m_trace_n; q++)
 			{
 				const trace_t &t = m_trace[q];
-				logerror("upd6383:  %3d %3d %010llX %02X %11d %14lld %14lld %9d %9d %02X %06X  %c %10d\n",
-						q, t.iw, (unsigned long long)t.word, t.dp,
-						t.mem, (long long)t.acc, (long long)t.p,
-						t.ta, t.tb, t.cur, t.coef, t.mul ? 'Y' : '.', t.l);
+				logerror("upd6383:  %3d %3d  %d %010llX %02X %14lld %14lld %14lld %02X %06X  %c %8d\n",
+						q, t.iw, t.u1 ? 1 : 0, (unsigned long long)t.word, t.dp,
+						(long long)t.acc, (long long)t.accb, (long long)t.p,
+						t.cur, t.coef, t.mul ? 'Y' : '.', t.l);
 			}
 		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
@@ -1603,7 +1603,16 @@ void upd6383_device::exec_alu(u64 word)
 	switch (src)
 	{
 	case upd6383_disassembler::LO_SRC_ACC:
-		L = acc_to_datum(m_acc);
+		//  ★★★ §66: "the accumulator" means THIS UNIT'S accumulator.
+		//  Under mask bit 14 the accumulator is selected by m_cur_unit1, but this
+		//  source always read m_acc -- so during body 1 (unit 1, accumulating into
+		//  ACCB) any word reading SRC = ACC got ACCA, which is 0.
+		//  MEASURED: body 1's ladder ran correctly to iw305 (ACCB = 269 380 247 879,
+		//  oscillating like a comb) and died at iw306 = `000.2.49.407' -- SRC = ACC,
+		//  f31 = 0 => LOAD acc <- P.  It read ACCA = 0, formed P = 0, and loaded that
+		//  into ACCB.  One reader of the wrong register killed the whole unit.
+		L = acc_to_datum((m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
+				? m_accb : m_acc);
 		break;
 	//  ★★★ §27 SPECULATIVE: SRC 0x11 = ACCB.  w64 and w71 -- the two
 	//  coefficient-fetching LOAD-acc words of the output stage -- source this code,
@@ -2796,6 +2805,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				t.ta = s32(util::sext(m_ta, 24)); t.tb = s32(util::sext(m_tb, 24));
 				t.cur = u8(m_cursor); t.coef = m_cram.read_dword(m_cursor) & 0xffffff;
 				t.l = m_last_l; t.mul = m_mul_issued;
+				t.accb = util::sext(m_accb, 44); t.u1 = m_cur_unit1;   // ★ §65
 			}
 			if (prof_iw <= 24 && m_curprof_n < 25)
 			{   // ★ which C-RAM cell does each kernel slot consume?

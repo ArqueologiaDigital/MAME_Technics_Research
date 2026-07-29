@@ -490,7 +490,8 @@ private:
 	//  multiply never runs" from "it runs and multiplies by zero".
 	s32  m_last_l = 0; bool m_mul_issued = false;
 	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p;
-	                 s32 ta; s32 tb; u8 cur; u32 coef; s32 l; bool mul; };
+	                 s32 ta; s32 tb; u8 cur; u32 coef; s32 l; bool mul;
+	                 s64 accb; bool u1; };
 	trace_t m_trace[400] = {};
 	u32  m_trace_n = 0;
 	bool m_trace_armed = false, m_trace_done = false;
