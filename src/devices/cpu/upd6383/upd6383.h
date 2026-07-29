@@ -597,7 +597,14 @@ private:
 	//  before the multiply, so it suppressed the kernel's arithmetic, and §72 proved
 	//  its premise false (0 of 91 algorithms write 0x50..0x8B).  Bit 17 relocates the
 	//  cursor onto the bank the host actually fills, which is the correct successor.
-	// bit 5 (0x20, the mode-1 store guard) is ON by default since §99: it was
+	// ★ §100 RETIRES BIT 5.  Decoding SRC 0x02 as reg[addr8] makes w72 an identity,
+	// so the level survives with NO guard: mask 0x19F440F (guard OFF, bit 24 ON)
+	// gives unit0 0x200000 on 452 160 frames, where 0x9F440F gives 0x000000 on 0.
+	// The guard was the correct INTERIM state -- its own comment asked for exactly
+	// this ("A GUARD, NOT A DECODE") -- and a decode replacing it is the outcome it
+	// was holding the place for.  Bit 5 remains available for bisection.
+	//
+	// (superseded, kept for the record) bit 5 (0x20, the mode-1 store guard): it was
 	// INERT while mode-1 stores went to D-RAM, and became LOAD-BEARING the moment
 	// they were routed to the register file -- without it iw72 (`000.1.06.087',
 	// SRC 0x02, which this core does not decode and evaluates as 0) zeroes the
@@ -616,7 +623,7 @@ private:
 	// bit 23 (§97) is ON by default: the two-space reading is FORCED by item J,
 	// and the A/B raised the unit-0 output level from 0x000000 on 100% of frames
 	// to the host's value on 452 160, with no rise in the §54 DC leak.
-	u32  m_specmask = 0x9f442f;
+	u32  m_specmask = 0x19f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -701,6 +708,7 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
 	void store_mode(u8 mode, u8 dest, u32 v);
 	static u32 pw_region(u16 iw);
 	static const char *pw_name(u32 r);

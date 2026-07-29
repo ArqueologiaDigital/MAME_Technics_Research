@@ -1807,7 +1807,39 @@ void upd6383_device::exec_alu(u64 word)
 		case 0x04:
 			L = s32(util::sext(m_ta, 24));     // ★ row 29: the pair test
 			break;
-		case 0x02: case 0x03:
+		case 0x02:
+			//  ★★★ §100 SPECULATIVE (mask bit 24): SRC 0x02 = reg[addr8], the
+			//  MODE-1 ADDRESSED REGISTER.  This is item J's own stated escape --
+			//  "SRC 0x02, undecoded, might carry the level itself and make the
+			//  write an identity" -- and it is the ONLY reading under which w72
+			//  (`000.1.06.087') can execute without destroying the user's effect
+			//  depth, which §99 measured it doing.
+			//
+			//  ⚠ 0x02 IS SPLIT FROM 0x03 HERE.  They were one case, and that merge
+			//  is the same shape of error as the two memories: item J's escape
+			//  needs w72 (SRC 0x02) to be an IDENTITY, while output-stage-decode.md
+			//  §7.2's reading (R-2) needs w70 (SRC 0x03) to SUPPLY reg 0x85 with
+			//  something new -- §98 measured that nothing else in the machine feeds
+			//  unit 1 at all.  Both cannot hold of one route.  They are different
+			//  codes, so nothing forces them to share one.
+			//
+			//  0x03 deliberately keeps the old mem[ptr] guess: this change tests
+			//  ONE code, and the whole-chain-test lesson (Part 103) is that a
+			//  reading must be allowed to show its own effect.
+			if (m_speculative && (m_specmask & 0x1000000)
+					&& !upd6383_disassembler::c_format(word)
+					&& upd6383_disassembler::class4(word) == 1)
+			{
+				const u8 r = u8(upd6383_disassembler::addr8(word)
+						| (m_cur_unit1 ? 0x80 : 0x00));
+				L = s32(util::sext(((m_specmask & 0x800000) ? m_rf[r]
+						: m_dram.read_dword(r)) & 0xffffff, 24));
+				m_src02_n++;
+				break;
+			}
+			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			break;
+		case 0x03:
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		case upd6383_disassembler::LO_SRC_MEM:
