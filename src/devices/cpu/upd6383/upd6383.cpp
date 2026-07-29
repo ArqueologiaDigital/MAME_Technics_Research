@@ -1840,11 +1840,36 @@ void upd6383_device::exec_alu(u64 word)
 				}
 				if (q < 8) m_lg_cnt[q]++;
 			}
-			m_dram.write_dword(stdest, u32(acc_to_datum(m_acc)) & 0xffffff);
-			watch_store(stdest, s32(acc_to_datum(m_acc)) & 0xffffff, 2);
+			//  ★★★ §68: the bit-4 store must READ and CLEAR the CURRENT UNIT'S
+			//  accumulator, not ACCA unconditionally.  Same defect as §66, in the
+			//  store path instead of the source path.
+			//  MEASURED: kernel slots 50..59 leave ACCA = 769 657 969 049 (healthy);
+			//  it is 0 by iw 202, one slot into body 1.  Under mask bit 14 body 1
+			//  accumulates into ACCB, so every bit-4 store it executes was reading
+			//  ACCA for its datum and then wiping it -- destroying unit 0's result,
+			//  which has to survive body 1 to reach w73 and DO1.
+			u64 &sacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
+					? m_accb : m_acc;
+			m_dram.write_dword(stdest, u32(acc_to_datum(sacc)) & 0xffffff);
+			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
-		m_acc = 0;
+		//  ★★★ §69 SPECULATIVE (mask bit 16 SUPPRESSES the clear).
+		//  "store-and-clear" is one point in a set the round-4 adjudication leaves
+		//  open -- item 2 there lists `no memory access', `store -> elsewhere' and
+		//  `LOAD' as equally surviving, and says this code "implements 'no store, no
+		//  clear', which is one point inside that set".
+		//  MEASURED, and now specific evidence against it: ACCA survives body 1
+		//  intact (769 657 969 049 at iw 332) and is 0 by iw 73.  The epilogue's
+		//  FIRST word w60 = `092.1.8D.15B' carries HI_ST, so it stores AND CLEARS --
+		//  destroying unit 0's result at the top of the very stage whose job is to
+		//  present it.  A store that annihilates the value the next word must read
+		//  is not a plausible chip behaviour.
+		if (!(m_speculative && (m_specmask & 0x10000)))
+		{
+			if (m_speculative && (m_specmask & 0x4000) && m_cur_unit1) m_accb = 0;
+			else m_acc = 0;
+		}
 	}
 
 	// ---- ★ THE ACCUMULATOR: ONE ADDER, TWO SELECTORS ------------------------
