@@ -396,6 +396,22 @@ void upd6383_device::pwatch(u8 cell, bool wr, bool mode1)
 	else       (wr ? m_pw_wr : m_pw_rd)[r][cell]++;
 }
 
+//  ★★★ §99: one rule for both store sites.  See upd6383.h.
+void upd6383_device::store_mode(u8 mode, u8 dest, u32 v)
+{
+	const bool m1 = (mode == 1);
+	if (m1 && m_speculative && (m_specmask & 0x800000))
+	{
+		m_rf[dest] = v & 0xffffff;
+		m_rf_st[dest]++;
+	}
+	else
+		m_dram.write_dword(dest, v & 0xffffff);
+	//  the WORD's mode, not the routing decision -- so the census stays honest
+	//  with the bit off as well as on.
+	pwatch(dest, true, m1);
+}
+
 void upd6383_device::kwatch(u8 cell, s32 v)
 {
 	if (m_frames_run <= 420000) return;   // ★ §95: ALL slots, not just iw < 60 --
@@ -2063,8 +2079,7 @@ void upd6383_device::exec_alu(u64 word)
 			//  which has to survive body 1 to reach w73 and DO1.
 			u64 &sacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
 					? m_accb : m_acc;
-			m_dram.write_dword(stdest, u32(acc_to_datum(sacc)) & 0xffffff);
-			pwatch(u8(stdest), true);                                  // §98
+			store_mode(stmode, u8(stdest), u32(acc_to_datum(sacc)));   // §99
 			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
 			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
 		}
@@ -2378,7 +2393,7 @@ void upd6383_device::exec_alu(u64 word)
 		if (m_speculative && (m_specmask & 0x20) && unsupported_src && host_reg)
 			m_lvlguard_n++;
 		else
-		{ m_dram.write_dword(d07, u32(L) & 0xffffff); pwatch(u8(d07), true); }  // §98
+		store_mode(mode07, u8(d07), u32(L));                           // §99
 			kwatch(d07, s32(u32(L) & 0xffffff));
 			watch_store(d07, s32(L) & 0xffffff, 3);
 		m_dwr[d07]++;
@@ -3810,6 +3825,13 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
+			std::string r; u32 n = 0;
+			for (u32 c = 0; c < 256; c++)
+				if (m_rf_st[c]) { r += string_format(" %02X:%u", c, m_rf_st[c]); n++; }
+			logerror("            §99 MODE-1 STORES -> register file: %u cells%s\n",
+					n, r.empty() ? " (none)" : r.c_str());
+		}
 	}
 	logerror("        §41 LEVEL AT PRESENTATION: unit0 0x%06X (non-zero on %u), "
 			"unit1 0x%06X (non-zero on %u)  [cold boot set 0x06=+0.5=0x400000, "

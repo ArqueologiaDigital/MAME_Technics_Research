@@ -597,10 +597,26 @@ private:
 	//  before the multiply, so it suppressed the kernel's arithmetic, and §72 proved
 	//  its premise false (0 of 91 algorithms write 0x50..0x8B).  Bit 17 relocates the
 	//  cursor onto the bank the host actually fills, which is the correct successor.
+	// bit 5 (0x20, the mode-1 store guard) is ON by default since §99: it was
+	// INERT while mode-1 stores went to D-RAM, and became LOAD-BEARING the moment
+	// they were routed to the register file -- without it iw72 (`000.1.06.087',
+	// SRC 0x02, which this core does not decode and evaluates as 0) zeroes the
+	// unit-0 level on every frame, exactly as item J predicted.  483 840
+	// zero-stores suppressed over 16 s.
+	//
+	// ⚠ THE GUARD IS NARROWER THAN THE DEFECT.  It tests `d07 == 0x06 || d07 ==
+	// 0x86' only.  iw70 (`2A6.1.85.0C7') carries SRC 0x03 -- also undecoded, also
+	// evaluated as 0 -- and stores to register 0x85, which register-space.md C2
+	// lists as host-primed.  Nothing reads reg 0x85 today so there is no live
+	// harm, but we are writing a value we did not decode into a host parameter.
+	// Widening the guard to "any mode-1 store whose SRC is undecoded" is the
+	// principled form and is NOT done here: it is a separate change with its own
+	// measurement, not a free rider on this one.
+	//
 	// bit 23 (§97) is ON by default: the two-space reading is FORCED by item J,
 	// and the A/B raised the unit-0 output level from 0x000000 on 100% of frames
 	// to the host's value on 452 160, with no rise in the §54 DC leak.
-	u32  m_specmask = 0x9f440f;
+	u32  m_specmask = 0x9f442f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -666,6 +682,26 @@ private:
 	u32  m_pw_rd[PW_NREGION][256] = {}, m_pw_wr[PW_NREGION][256] = {};
 	u32  m_rw_rd[PW_NREGION][256] = {}, m_rw_wr[PW_NREGION][256] = {};
 	void pwatch(u8 cell, bool wr, bool mode1 = false);
+	//  ★★★ §99: COMPLETE THE §97 SPLIT ON THE STORE SIDE.
+	//  §97 routed the mode-1 READ and the host's tag-0x15 writes to m_rf and left
+	//  the two STORE sites writing m_dram unconditionally.  §98 measured what that
+	//  costs: the ONLY outside writer of body 1's input cell 0x85 is `2A6.1.85.0C7'
+	//  at iw70 -- a MODE-1 word -- and kernel B's stray 0x8A is `000.1.8A.007' at
+	//  iw58, also mode-1.  Both are mode-1 stores landing in the pointer-walked
+	//  D-RAM, which is precisely the category error §97 diagnosed.
+	//
+	//  WHERE THEY GO INSTEAD is the open part, and the two established readings
+	//  disagree, so this is written to let the machine decide:
+	//    * guard 6 says mode-1 `L=07' words "write the register/port space"
+	//    * item J says w72 (`000.1.06.087') must NOT write reg[0x06], or the user's
+	//      effect depth "would survive exactly ONE frame" -- with a STATED ESCAPE:
+	//      "SRC 0x02, undecoded, might carry the level itself and make the write an
+	//      identity".
+	//  Routing mode-1 stores to m_rf tests exactly that escape, and it has a live
+	//  failure mode: if the store is not an identity, the unit-0 level stops being
+	//  0x200000 and the §41 counter collapses.  That is the measurement.
+	u32  m_rf_st[256] = {};
+	void store_mode(u8 mode, u8 dest, u32 v);
 	static u32 pw_region(u16 iw);
 	static const char *pw_name(u32 r);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
