@@ -543,7 +543,14 @@ private:
 	//  Bit 9 stays OFF -- it is SPECIFICALLY refuted (cursor_fetch and is_dram are
 	//  disjoint across 91 programs), which is evidence about that reading rather
 	//  than about the chain.  That is the distinction this default encodes.
-	u32  m_specmask = 0x5df;
+	//  ★★★ §71: bit 6 (level from C-RAM) REMOVED from the default -- §42 is REFUTED.
+	//  The host DOES write the per-unit output level to D-RAM; it read 0 only because
+	//  the poke port was dropped (§56).  Now that P1.1 works, D-RAM 0x06 = 0x200000
+	//  (+0.25) and 0x86 = 0x0BC685 (+0.091996), exactly HALF the documented cold-boot
+	//  values +0.5 / +0.183992 -- matching r3-delaydram.md's "host payload is 2x the
+	//  raw three bytes".  The ORIGINAL code was right; my §42 fix compensated for a
+	//  different bug.  Default 0x5DF -> 0x59F.
+	u32  m_specmask = 0x59f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg_pres = 0;
@@ -567,6 +574,11 @@ private:
 	//  ★ §61 P2.1: per-UNIT presentation census.  Every §43-53 measurement was
 	//  DO1-only because m_accb was never written (§56); unit 1 needs its own column.
 	u32  m_pres_u[2] = {}, m_pres_u_nz[2] = {}; s32 m_pres_u_peak[2] = {};
+	//  ★ §70: is the presented accumulator a HARD CONSTANT?  Track min and max of
+	//  ACCA-at-w73, split by whether the frame had input.  If min == max in both
+	//  columns the input never reaches the accumulation at all.
+	s64  m_pa_min[2] = { INT64_MAX, INT64_MAX }, m_pa_max[2] = { INT64_MIN, INT64_MIN };
+	u32  m_pa_n[2] = {};
 	bool m_poke_active = false;
 	static constexpr u16 POKE_PORT = 0x0160;
 	//  ★★★ §54 THE TRACKING TEST -- an in-core DC detector, so speculative readings can

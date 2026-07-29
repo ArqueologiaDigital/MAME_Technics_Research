@@ -1192,6 +1192,14 @@ void upd6383_device::do_presentation()
 						(long long)util::sext(m_acc, 44), (long long)util::sext(m_accb, 44),
 						(long long)util::sext(pacc, 44), v);
 			}
+			if (unit == 0 && m_frames_run > 400000)
+			{   // ★ §70: ACCA at w73, split by whether this frame had input
+				const int k = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+				const s64 a = util::sext(pacc, 44);
+				if (a < m_pa_min[k]) m_pa_min[k] = a;
+				if (a > m_pa_max[k]) m_pa_max[k] = a;
+				m_pa_n[k]++;
+			}
 			m_pres_u[unit]++;                                   // ★ §61 per-unit
 			if (v) { m_pres_u_nz[unit]++; }
 			if (std::abs(v) > std::abs(m_pres_u_peak[unit])) m_pres_u_peak[unit] = v;
@@ -3191,7 +3199,11 @@ void upd6383_device::dump_frame_report() const
 		std::string db;
 		for (u32 i = 0; i < 256; i++)
 			if (m_dscbank[i]) db += string_format(" %02X:%04X", i, m_dscbank[i]);
-		logerror("upd6383: ★ §61 PER-UNIT PRESENTATION: unit0/DO1 %u exec, %u non-zero, peak %d | "
+		logerror("upd6383: ★ §70 ACCA AT w73: quiet frames %u  min %lld  max %lld  |  "
+			"loud frames %u  min %lld  max %lld\n",
+			m_pa_n[0], (long long)(m_pa_n[0] ? m_pa_min[0] : 0), (long long)(m_pa_n[0] ? m_pa_max[0] : 0),
+			m_pa_n[1], (long long)(m_pa_n[1] ? m_pa_min[1] : 0), (long long)(m_pa_n[1] ? m_pa_max[1] : 0));
+	logerror("upd6383: ★ §61 PER-UNIT PRESENTATION: unit0/DO1 %u exec, %u non-zero, peak %d | "
 			"unit1/DO2 %u exec, %u non-zero, peak %d\n",
 			m_pres_u[0], m_pres_u_nz[0], m_pres_u_peak[0],
 			m_pres_u[1], m_pres_u_nz[1], m_pres_u_peak[1]);
