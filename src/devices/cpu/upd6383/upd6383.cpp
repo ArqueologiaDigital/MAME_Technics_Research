@@ -933,7 +933,7 @@ void upd6383_device::latch_inputs_to_dram()
 	//  lands DETERMINISTICALLY inside the held note -- no reliance on the input latch,
 	//  whose audit peak is exactly 0x800000 (the rail) and so cannot be trusted to
 	//  distinguish "a note is sounding" from "the latch is railed".
-	if (!m_trace_done && !m_trace_armed && m_frames_run > 970000)
+	if (!m_trace_done && !m_trace_armed && m_frames_run > 420000)   // ★ ~9.5 s: fires on the fast harness too
 	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
@@ -1179,6 +1179,19 @@ void upd6383_device::do_presentation()
 					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
 			}
 			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
+			//  ★ §63: what is actually in the two accumulators at each presentation,
+			//  and what unit context are we in?  §62 assumed body 1 leaves
+			//  m_cur_unit1 SET -- but row 27 already clears it at :2858, so that
+			//  diagnosis needs checking rather than fixing.
+			if (m_dbg_pres < 6 && m_frames_run > 400000)
+			{
+				m_dbg_pres++;
+				logerror("upd6383: §63 PRESENT unit%d  cur_unit1=%d  "
+						"ACCA=%lld ACCB=%lld  pacc=%lld -> v=%d\n",
+						unit, m_cur_unit1 ? 1 : 0,
+						(long long)util::sext(m_acc, 44), (long long)util::sext(m_accb, 44),
+						(long long)util::sext(pacc, 44), v);
+			}
 			m_pres_u[unit]++;                                   // ★ §61 per-unit
 			if (v) { m_pres_u_nz[unit]++; }
 			if (std::abs(v) > std::abs(m_pres_u_peak[unit])) m_pres_u_peak[unit] = v;
@@ -1920,6 +1933,25 @@ void upd6383_device::exec_alu(u64 word)
 		//  which this core already tracks as m_cur_unit1 (and which the FORCED
 		//  per-unit D-RAM base 0x05 | unit<<7 is already keyed on).
 		//  So: ACCA for unit 0, ACCB for unit 1; f31[1:0] still gives the operation.
+		//  ★★★ §64 SPECULATIVE (mask bit 15): A POINTER-LOAD WORD IS NOT AN ALU OP.
+		//  `801.0.NN.821' (ldptr, C-RAM cursor) and `801.0.PP.825' (ldptr.d, the
+		//  descriptor pointer) carry hi12 = 0x801, so f31 = (0x801 >> 1) & 7 = 0 --
+		//  which this ALU reads as LOAD acc <- P.  With P = 0 that WIPES THE
+		//  ACCUMULATOR.
+		//  MEASURED: the epilogue's SECOND word is `801.0.26.825', and 0x26 is
+		//  exactly the dsc range the delay port reads -- so it is unambiguously the
+		//  descriptor-pointer load, and it zeroes ACCA at the top of the epilogue on
+		//  every frame.  That is why w73 has presented 0 in every configuration ever
+		//  measured (§43, §48, §61, §63), while ACCB -- which no epilogue word
+		//  reloads -- kept whatever the kernel put in it.
+		//  A word whose whole job is to aim a pointer should not also clobber the
+		//  accumulator; nothing in the ISA notes says hi12 = 0x801 means "load".
+		if (m_speculative && (m_specmask & 0x8000))
+		{
+			const u16 lo_pl = upd6383_disassembler::lo12(word);
+			if (lo_pl == 0x821 || lo_pl == 0x825)
+				return;                     // pointer aimed; accumulator untouched
+		}
 		const bool sel   = m_speculative && (m_specmask & 1);
 		const bool use_b = (m_speculative && (m_specmask & 0x4000))
 				? m_cur_unit1
