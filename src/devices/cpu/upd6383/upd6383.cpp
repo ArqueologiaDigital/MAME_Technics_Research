@@ -1840,6 +1840,28 @@ void upd6383_device::exec_alu(u64 word)
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		case 0x03:
+			//  ★★★ §101 SPECULATIVE (mask bit 25): SRC 0x03 = THE ACCUMULATOR.
+			//  SRC 0x03's ONLY corpus site is w70 (`2A6.1.85.0C7'), so like 0x02 it
+			//  cannot be decoded by counting -- n = 1.  What CAN be tested is the
+			//  consequence: output-stage-decode.md §7.2's reading (R-2) needs w70 to
+			//  SUPPLY reg 0x85, and §98 measured that nothing in the machine feeds
+			//  unit 1 at all.  For R-2 to be possible the value w70 stores must be
+			//  input-dependent, and this is the only candidate operand at that point
+			//  in the frame that could be: it is the epilogue, one word before the
+			//  unit-1 entry vector, and the accumulator there holds unit 0's result.
+			//
+			//  ★ THE TEST IS TWO-SIDED AND CURRENTLY FAILING: §86 reports which
+			//  written cells have DIFFERENT quiet and loud ranges, and today only
+			//  0x06 and 0x07 do.  If the accumulator at w70 carries audio, cell 0x85
+			//  joins them.  If it does not, R-2 dies here regardless of which memory
+			//  receives the store -- which is worth knowing before resolving the
+			//  §97/§98 routing conflict.
+			if (m_speculative && (m_specmask & 0x2000000))
+			{
+				L = acc_to_datum((m_specmask & 0x4000) && m_cur_unit1
+						? m_accb : m_acc);
+				break;
+			}
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		case upd6383_disassembler::LO_SRC_MEM:
