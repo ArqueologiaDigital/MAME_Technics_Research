@@ -563,6 +563,9 @@ private:
 	//  Writing descriptors into D-RAM let the microcode's own stores clobber them --
 	//  measured: the host wrote 43 descriptors and the delay port still read 0x0000.
 	u16  m_dscbank[256] = {};
+	//  ★ §61 P2.1: per-UNIT presentation census.  Every §43-53 measurement was
+	//  DO1-only because m_accb was never written (§56); unit 1 needs its own column.
+	u32  m_pres_u[2] = {}, m_pres_u_nz[2] = {}; s32 m_pres_u_peak[2] = {};
 	bool m_poke_active = false;
 	static constexpr u16 POKE_PORT = 0x0160;
 	//  ★★★ §54 THE TRACKING TEST -- an in-core DC detector, so speculative readings can

@@ -1139,7 +1139,9 @@ void upd6383_device::do_presentation()
 			//  into the mix.  The REAL defect is that the accumulator is constant at
 			//  this word; see SPECULATIVE-APPLIED-REGISTER.md sect. 3.4.
 			//  ★ §27: unit 0 presents ACCA, unit 1 presents ACCB.
-			const u64 pacc = (m_speculative && unit) ? m_accb : m_acc;
+			//  ★ §62: present the accumulator that belongs to THIS unit.
+			const u64 pacc = (m_speculative && (m_specmask & 0x4001) && unit)
+					? m_accb : m_acc;
 			const s64 rawacc = util::sext(pacc, 44);
 			s64 scaled = acc_to_datum(pacc);
 			(void)rawacc;
@@ -1177,6 +1179,9 @@ void upd6383_device::do_presentation()
 					scaled = (scaled * s64(util::sext(lvl, 24))) >> 23;
 			}
 			const s32 v = s32(std::clamp<s64>(scaled, -(1 << 23), (1 << 23) - 1));
+			m_pres_u[unit]++;                                   // ★ §61 per-unit
+			if (v) { m_pres_u_nz[unit]++; }
+			if (std::abs(v) > std::abs(m_pres_u_peak[unit])) m_pres_u_peak[unit] = v;
 			if (v) m_frame_out_nz = true;                       // ★ §54
 			if (std::abs(v) > std::abs(m_frame_out_peak)) m_frame_out_peak = v;
 			m_do[unit][0] = v;
@@ -1592,6 +1597,7 @@ void upd6383_device::exec_alu(u64 word)
 	//  and with it unmodelled they multiplied the output level by a silent zero.
 	case upd6383_disassembler::LO_SRC_ACCB:
 		L = !m_speculative ? 0
+			: (m_specmask & 0x4000) ? acc_to_datum(m_cur_unit1 ? m_accb : m_acc)
 			: (m_specmask & 2) ? acc_to_datum(m_accb)
 			: s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));   // old guess
 		break;
@@ -1902,8 +1908,22 @@ void upd6383_device::exec_alu(u64 word)
 			m_k = m_cram.read_dword(upd6383_disassembler::addr8(word)) & 0xffffff;
 			return;                 // accumulator untouched
 		}
+		//  ★★★ §62 SPECULATIVE (mask bit 14): THE ACCUMULATOR IS SELECTED BY THE
+		//  UNIT, NOT BY f31[2].
+		//  MEASURED (§61): with f31[2] as the select, unit0/DO1 presents 0 non-zero of
+		//  483 840 while unit1/DO2 presents 455 998 -- one accumulator takes
+		//  everything and the other is dead.
+		//  Structural argument: body 0 and body 1 execute the SAME instruction
+		//  encodings, so an INSTRUCTION field cannot separate them -- whatever f31[2]
+		//  means, it cannot be "which unit's accumulator", because both units run
+		//  identical words.  The per-unit separation must come from the CALL context,
+		//  which this core already tracks as m_cur_unit1 (and which the FORCED
+		//  per-unit D-RAM base 0x05 | unit<<7 is already keyed on).
+		//  So: ACCA for unit 0, ACCB for unit 1; f31[1:0] still gives the operation.
 		const bool sel   = m_speculative && (m_specmask & 1);
-		const bool use_b = sel && (f31 & 4);
+		const bool use_b = (m_speculative && (m_specmask & 0x4000))
+				? m_cur_unit1
+				: (sel && (f31 & 4));
 		const u16  op    = sel ? u16(f31 & 3) : f31;
 		u64 &accum = use_b ? m_accb : m_acc;
 		const u64 src_term =
@@ -3104,7 +3124,11 @@ void upd6383_device::dump_frame_report() const
 		std::string db;
 		for (u32 i = 0; i < 256; i++)
 			if (m_dscbank[i]) db += string_format(" %02X:%04X", i, m_dscbank[i]);
-		logerror("upd6383: ★ §60 DESCRIPTOR BANK (non-zero cells):%s\n", db.c_str());
+		logerror("upd6383: ★ §61 PER-UNIT PRESENTATION: unit0/DO1 %u exec, %u non-zero, peak %d | "
+			"unit1/DO2 %u exec, %u non-zero, peak %d\n",
+			m_pres_u[0], m_pres_u_nz[0], m_pres_u_peak[0],
+			m_pres_u[1], m_pres_u_nz[1], m_pres_u_peak[1]);
+	logerror("upd6383: ★ §60 DESCRIPTOR BANK (non-zero cells):%s\n", db.c_str());
 		std::string tg;
 		for (u32 i = 0; i < 256; i++) if (m_pk_tag[i]) tg += string_format(" %02X:%u", i, m_pk_tag[i]);
 		logerror("upd6383: ★ §59 POKE PORT: %u pointer words | data packets -> D-RAM %u, "
