@@ -642,8 +642,32 @@ private:
 	//  A cell whose quiet and loud ranges DIFFER is carrying the audio.
 	s32  m_kq_min[256], m_kq_max[256], m_kl_min[256], m_kl_max[256];
 	u32  m_kw_n[256] = {};
-	u16  m_kw_who[12] = {}; u8 m_kw_cell[12] = {}; u64 m_kw_word[12] = {}; u32 m_kw_who_n = 0;
+	u16  m_kw_who[24] = {}; u8 m_kw_cell[24] = {}; u64 m_kw_word[24] = {}; u32 m_kw_who_n = 0;
 	void kwatch(u8 cell, s32 v);
+	//  ★★★ §98: THE POINTER WINDOW, MEASURED LIVE.
+	//  §97 answered "are mode-1 and mode-2 the same memory?" partly from a STATIC
+	//  walk that then failed its own calibration against the live trace (6 of 7
+	//  writers, plus 4 invented) -- so every window figure it produced is
+	//  discredited, including the one §97 leaned on ("the kernel's window is
+	//  0x01..0x07, so 0x06 is inside it and 0x86 is not").  That reading happened
+	//  to match the observed damage, which is exactly when a discredited
+	//  instrument is most dangerous.  This measures the window instead.
+	//
+	//  Per REGION and per cell, how many mode-2 (pointer) reads and writes land
+	//  there.  Regions follow the MEASURED execution order, not the I-RAM order:
+	//      kernel A  iw   0.. 49      body 0    iw  84..199
+	//      kernel B  iw  50.. 59      body 1    iw 200..332
+	//      epilogue  iw  60.. 82
+	//  Mode-1 accesses are counted SEPARATELY (m_rw_*) so the two spaces can be
+	//  compared side by side rather than pooled -- pooling them is the defect
+	//  §97 removed.
+	enum : u32 { PW_KERNEL_A = 0, PW_BODY0 = 1, PW_KERNEL_B = 2, PW_BODY1 = 3,
+	             PW_EPILOGUE = 4, PW_NREGION = 5 };
+	u32  m_pw_rd[PW_NREGION][256] = {}, m_pw_wr[PW_NREGION][256] = {};
+	u32  m_rw_rd[PW_NREGION][256] = {}, m_rw_wr[PW_NREGION][256] = {};
+	void pwatch(u8 cell, bool wr, bool mode1 = false);
+	static u32 pw_region(u16 iw);
+	static const char *pw_name(u32 r);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
 	u32 m_dr_pend = 0; bool m_dr_pend_v = false;

@@ -365,6 +365,37 @@ void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
 }
 
 //  ★ §86: record a kernel D-RAM write, split by input presence.
+//  ★★★ §98: the pointer window, measured live.  See upd6383.h.
+u32 upd6383_device::pw_region(u16 iw)
+{
+	if (iw <  50) return PW_KERNEL_A;
+	if (iw <  60) return PW_KERNEL_B;
+	if (iw <  83) return PW_EPILOGUE;
+	if (iw < 200) return PW_BODY0;
+	return PW_BODY1;
+}
+
+const char *upd6383_device::pw_name(u32 r)
+{
+	static const char *const n[PW_NREGION] =
+			{ "kernel A  (iw 0..49)", "body 0    (iw 84..199)",
+			  "kernel B  (iw 50..59)", "body 1    (iw 200..332)",
+			  "epilogue  (iw 60..82)" };
+	return n[r];
+}
+
+void upd6383_device::pwatch(u8 cell, bool wr, bool mode1)
+{
+	//  Same boot gate as kwatch(): §46 established that three statistics which
+	//  looked like standing faults were one contiguous boot transient ending at
+	//  the last program upload.  Counting it would put phantom cells in the
+	//  window.
+	if (m_frames_run <= 420000) return;
+	const u32 r = pw_region(m_cur_iw);
+	if (mode1) (wr ? m_rw_wr : m_rw_rd)[r][cell]++;
+	else       (wr ? m_pw_wr : m_pw_rd)[r][cell]++;
+}
+
 void upd6383_device::kwatch(u8 cell, s32 v)
 {
 	if (m_frames_run <= 420000) return;   // ★ §95: ALL slots, not just iw < 60 --
@@ -377,7 +408,11 @@ void upd6383_device::kwatch(u8 cell, s32 v)
 	if (v > hi) hi = v;
 	m_kw_n[cell]++;
 	//  ★ §96: WHICH word writes it?  §71 (host) and §86 (kernel) both claim 0x06.
-	if ((cell == 0x06 || cell == 0x07 || cell == 0x86 || cell == 0x87) && m_kw_who_n < 12)
+	//  §98: 0x85 and 0x8A added -- the live pointer window shows body 1 READS 0x85
+	//  and NO region writes it with input-dependent data, and kernel B writes 0x8A
+	//  where symmetry with kernel A wants 0x85.  Name the writers.
+	if ((cell == 0x06 || cell == 0x07 || cell == 0x85 || cell == 0x86
+			|| cell == 0x87 || cell == 0x8a) && m_kw_who_n < 24)
 	{
 		bool seen = false;
 		for (u32 q = 0; q < m_kw_who_n; q++)
@@ -1052,6 +1087,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		if (upd6383_disassembler::is_input_latch_read(word, right))
 		{
 			m_in_seen[right ? 1 : 0] = s32(util::sext(m_dram.read_dword(cell) & 0xffffff, 24));
+			pwatch(u8(cell), false);                                   // §98
 			//  ★ §33: the DEPOSIT uses m_in_base = m_dp at FRAME START; this read uses
 			//  the pointer as it is NOW.  If words 0..3 moved it, the two disagree.
 			m_in_readbase[right ? 1 : 0] = m_dp;
@@ -1081,6 +1117,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 				&& !upd6383_disassembler::st_suppressed(word))
 		{
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+			pwatch(u8(cell), true);                                    // §98
 			kwatch(cell, s32(u32(m_acc & 0xffffff)));
 			watch_store(cell, s32(m_acc & 0xffffff), 1);
 		}
@@ -1871,6 +1908,7 @@ void upd6383_device::exec_alu(u64 word)
 		L = (regfile && m_speculative && (m_specmask & 0x800000))
 				? s32(util::sext(m_rf[rdsrc] & 0xffffff, 24))
 				: s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
+		pwatch(rdsrc, false, regfile);                                 // §98
 		break;
 	}
 	default:
@@ -2026,6 +2064,7 @@ void upd6383_device::exec_alu(u64 word)
 			u64 &sacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
 					? m_accb : m_acc;
 			m_dram.write_dword(stdest, u32(acc_to_datum(sacc)) & 0xffffff);
+			pwatch(u8(stdest), true);                                  // §98
 			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
 			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
 		}
@@ -2339,7 +2378,7 @@ void upd6383_device::exec_alu(u64 word)
 		if (m_speculative && (m_specmask & 0x20) && unsupported_src && host_reg)
 			m_lvlguard_n++;
 		else
-		m_dram.write_dword(d07, u32(L) & 0xffffff);
+		{ m_dram.write_dword(d07, u32(L) & 0xffffff); pwatch(u8(d07), true); }  // §98
 			kwatch(d07, s32(u32(L) & 0xffffff));
 			watch_store(d07, s32(L) & 0xffffff, 3);
 		m_dwr[d07]++;
@@ -3732,6 +3771,46 @@ void upd6383_device::dump_frame_report() const
 					"on %u of %u (%.2f%%) --%s\n", (bestd < 128) ? bestd : bestd - 256,
 					best, tot, tot ? 100.0 * double(best) / double(tot) : 0.0, dh.c_str());
 		}
+	//  ★★★ §98 THE POINTER WINDOW, MEASURED.  Replaces the static walk's figures,
+	//  which failed calibration (§97 sect. 3).  Per region: the mode-2 cells the
+	//  pointer actually reaches, and -- listed separately, never pooled -- the
+	//  mode-1 register cells the same region names.
+	{
+		logerror("        ★ §98 POINTER WINDOW (live, after the boot transient)\n");
+		static const u8 marked[4] = { 0x05, 0x07, 0x85, 0x87 };
+		for (u32 r = 0; r < PW_NREGION; r++)
+		{
+			std::string m2, m1;
+			u32 lo2 = 0x100, hi2 = 0, n2 = 0, n1 = 0, nd2 = 0;
+			for (u32 c = 0; c < 256; c++)
+			{
+				const u32 rd = m_pw_rd[r][c], wr = m_pw_wr[r][c];
+				if (rd || wr)
+				{
+					if (c < lo2) lo2 = c;
+					hi2 = c; n2 += rd + wr; nd2++;
+					bool mk = false;
+					for (u8 q : marked) if (q == c) mk = true;
+					m2 += string_format(" %s%02X%s%s", mk ? "[" : "", c,
+							(rd && wr) ? "rw" : (wr ? "w" : "r"), mk ? "]" : "");
+				}
+				if (m_rw_rd[r][c] || m_rw_wr[r][c])
+				{
+					n1 += m_rw_rd[r][c] + m_rw_wr[r][c];
+					m1 += string_format(" %02X%s", c,
+							(m_rw_rd[r][c] && m_rw_wr[r][c]) ? "rw"
+									: (m_rw_wr[r][c] ? "w" : "r"));
+				}
+			}
+			if (!n2 && !n1) { logerror("            %-24s (no accesses)\n", pw_name(r)); continue; }
+			logerror("            %-24s mode-2 %2u cells %02X..%02X, %u acc:%s\n",
+					pw_name(r), nd2, lo2 & 0xff, hi2, n2, m2.c_str());
+			if (n1)
+				logerror("            %-24s mode-1                        %u acc:%s\n",
+						"", n1, m1.c_str());
+		}
+		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+	}
 	logerror("        §41 LEVEL AT PRESENTATION: unit0 0x%06X (non-zero on %u), "
 			"unit1 0x%06X (non-zero on %u)  [cold boot set 0x06=+0.5=0x400000, "
 			"0x86=+0.183992=0x178D50]\n", m_lvl_seen[0], m_lvl_nz[0],
