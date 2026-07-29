@@ -335,6 +335,8 @@ void upd6383_device::device_reset()
 	// host-driven via the PC-RST / Fs-RST pins.  Starting at 0 is a placeholder.
 	m_pc = 0;
 	m_acc = m_accb = m_p = 0;
+	for (int i = 0; i < 256; i++)
+	{ m_kq_min[i] = m_kl_min[i] = INT32_MAX; m_kq_max[i] = m_kl_max[i] = INT32_MIN; }
 	m_k = m_l = m_ta = m_tb = 0;
 	m_cursor = 0;
 	m_gf = 0;
@@ -358,6 +360,18 @@ void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
 	m_watch_hits[w]++;
 	if (val) m_watch_nz[w]++;
 	m_watch_site[w] = site;
+}
+
+//  ★ §86: record a kernel D-RAM write, split by input presence.
+void upd6383_device::kwatch(u8 cell, s32 v)
+{
+	if (m_frames_run <= 420000 || m_cur_iw >= 60) return;   // kernel slots only
+	const bool nz = (m_in_val[0] != 0) || (m_in_val[1] != 0);
+	s32 &lo = nz ? m_kl_min[cell] : m_kq_min[cell];
+	s32 &hi = nz ? m_kl_max[cell] : m_kq_max[cell];
+	if (v < lo) lo = v;
+	if (v > hi) hi = v;
+	m_kw_n[cell]++;
 }
 
 void upd6383_device::device_stop()
@@ -1041,6 +1055,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 				&& !upd6383_disassembler::st_suppressed(word))
 		{
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+			kwatch(cell, s32(u32(m_acc & 0xffffff)));
 			watch_store(cell, s32(m_acc & 0xffffff), 1);
 		}
 		{ m_dwr[cell & 0xff]++; if (m_dram.read_dword(cell) & 0xffffff) m_dwr_nz[cell & 0xff]++; }
@@ -1956,6 +1971,7 @@ void upd6383_device::exec_alu(u64 word)
 			u64 &sacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
 					? m_accb : m_acc;
 			m_dram.write_dword(stdest, u32(acc_to_datum(sacc)) & 0xffffff);
+			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
 			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
@@ -2269,6 +2285,7 @@ void upd6383_device::exec_alu(u64 word)
 			m_lvlguard_n++;
 		else
 		m_dram.write_dword(d07, u32(L) & 0xffffff);
+			kwatch(d07, s32(u32(L) & 0xffffff));
 			watch_store(d07, s32(L) & 0xffffff, 3);
 		m_dwr[d07]++;
 		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
@@ -3407,6 +3424,21 @@ void upd6383_device::dump_frame_report() const
 					(long long)(m_pr_max[p]==INT64_MIN?0:m_pr_max[p]),
 					(m_pq_min[p]==m_pr_min[p] && m_pq_max[p]==m_pr_max[p])
 						? "IDENTICAL -- input has NOT reached here" : "★ DIFFERS -- input reaches here");
+	}
+	{
+		logerror("upd6383: ★ §86 KERNEL D-RAM WRITES -- cells whose value depends on the INPUT:\n");
+		u32 dep = 0, tot = 0;
+		for (u32 i = 0; i < 256; i++)
+		{
+			if (!m_kw_n[i]) continue;
+			tot++;
+			const bool q = (m_kq_min[i] != INT32_MAX), l = (m_kl_min[i] != INT32_MAX);
+			const bool diff = q && l && (m_kq_min[i] != m_kl_min[i] || m_kq_max[i] != m_kl_max[i]);
+			if (diff) { dep++;
+				logerror("upd6383:    ★ cell %02X  quiet [%d .. %d]  loud [%d .. %d]  (%u writes)\n",
+						i, m_kq_min[i], m_kq_max[i], m_kl_min[i], m_kl_max[i], m_kw_n[i]); }
+		}
+		logerror("upd6383:    %u of %u kernel-written cells are INPUT-DEPENDENT\n", dep, tot);
 	}
 	logerror("upd6383: §80 LATCH/PUBLISH: latched %u (%u non-zero) | publish attempts %u, "
 			"hits %u (%u non-zero)\n", m_latch_n, m_latch_nz, m_pub_try, m_pub_hit, m_pub_nz);

@@ -591,6 +591,12 @@ private:
 	s64  m_pr_max[8] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
 	s64  m_pq_min[8] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
 	s64  m_pq_max[8] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
+	//  ★ §86: which D-RAM cells does the KERNEL write, and do their values depend on
+	//  the input?  Per cell, the value range split by whether the frame had input.
+	//  A cell whose quiet and loud ranges DIFFER is carrying the audio.
+	s32  m_kq_min[256], m_kq_max[256], m_kl_min[256], m_kl_max[256];
+	u32  m_kw_n[256] = {};
+	void kwatch(u8 cell, s32 v);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
 	u32 m_dr_pend = 0; bool m_dr_pend_v = false;
