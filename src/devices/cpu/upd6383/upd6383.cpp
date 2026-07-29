@@ -3200,7 +3200,16 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				switch (prof_iw) {
 				case 12:  p=0; break;   case 20:  p=1; break;   case 30: p=2; break;
 				case 40:  p=3; break;   case 90:  p=4; break;   case 152: p=5; break;
-				case 210: p=6; break;   case 332: p=7; break; }
+				case 210: p=6; break;   case 332: p=7; break;
+				//  ★ §102: the DEATH WINDOW.  iw30 still DIFFERS and iw40 is a
+				//  constant, and the window holds FOUR `f31 = 0' words -- acc <- P,
+				//  which discards the accumulator by design.
+				//  ⚠ THESE PROBES ARE POST-EXECUTION.  exec_decoded() is called
+				//  above; probe `iwN' is the accumulator AFTER slot N ran.  Reading
+				//  them as pre-execution puts the blame one slot early and made iw31
+				//  (a C-format word) look like the culprit when it is iw32.
+				case 31:  p=8; break;   case 34:  p=9; break;
+				case 36:  p=10; break;  case 39:  p=11; break; }
 				if (p >= 0)
 				{
 					const s64 v = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
@@ -3593,10 +3602,12 @@ void upd6383_device::dump_frame_report() const
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
 	{
-		static const char *NM[8] = { "kernel iw12", "kernel iw20", "kernel iw30",
-		                             "kernel iw40", "body-0 iw90", "body-0 END iw152",
-		                             "body-1 iw210", "body-1 END iw332" };
-		for (int p = 0; p < 8; p++)
+		static const char *NM[12] = { "kernel iw12", "kernel iw20", "kernel iw30",
+		                              "kernel iw40", "body-0 iw90", "body-0 END iw152",
+		                              "body-1 iw210", "body-1 END iw332",
+		                              "  after iw31 C-fmt", "  after iw34 SRC10",
+		                              "  after iw36 SRC00", "  after iw39 SRC19" };
+		for (int p = 0; p < 12; p++)
 			logerror("upd6383: ★ §81 PROBE %-19s quiet [%lld .. %lld]  loud [%lld .. %lld]  %s\n",
 					NM[p], (long long)(m_pq_min[p]==INT64_MAX?0:m_pq_min[p]),
 					(long long)(m_pq_max[p]==INT64_MIN?0:m_pq_max[p]),

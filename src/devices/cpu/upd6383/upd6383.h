@@ -656,10 +656,14 @@ private:
 	//  ★ §81: where does the input STOP?  Probe the accumulator at four points and
 	//  split the range by whether the frame carried input.  A probe whose quiet and
 	//  loud ranges are identical has not seen the input.
-	s64  m_pr_min[8] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
-	s64  m_pr_max[8] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
-	s64  m_pq_min[8] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
-	s64  m_pq_max[8] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
+	s64  m_pr_min[12] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX,
+	                    INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
+	s64  m_pr_max[12] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN,
+	                    INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
+	s64  m_pq_min[12] = { INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX,
+	                    INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX };
+	s64  m_pq_max[12] = { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN,
+	                    INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN };
 	//  ★ §86: which D-RAM cells does the KERNEL write, and do their values depend on
 	//  the input?  Per cell, the value range split by whether the frame had input.
 	//  A cell whose quiet and loud ranges DIFFER is carrying the audio.
