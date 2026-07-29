@@ -374,6 +374,20 @@ void upd6383_device::kwatch(u8 cell, s32 v)
 	if (v < lo) lo = v;
 	if (v > hi) hi = v;
 	m_kw_n[cell]++;
+	//  ★ §96: WHICH word writes it?  §71 (host) and §86 (kernel) both claim 0x06.
+	if ((cell == 0x06 || cell == 0x07 || cell == 0x86 || cell == 0x87) && m_kw_who_n < 12)
+	{
+		bool seen = false;
+		for (u32 q = 0; q < m_kw_who_n; q++)
+			if (m_kw_who[q] == m_cur_iw && m_kw_cell[q] == cell) seen = true;
+		if (!seen)
+		{
+			m_kw_who[m_kw_who_n] = m_cur_iw;
+			m_kw_cell[m_kw_who_n] = cell;
+			m_kw_word[m_kw_who_n] = m_cur_word;
+			m_kw_who_n++;
+		}
+	}
 }
 
 void upd6383_device::device_stop()
@@ -3471,6 +3485,9 @@ void upd6383_device::dump_frame_report() const
 						i, m_kq_min[i], m_kq_max[i], m_kl_min[i], m_kl_max[i], m_kw_n[i]); }
 		}
 		logerror("upd6383:    %u of %u kernel-written cells are INPUT-DEPENDENT\n", dep, tot);
+		for (u32 q = 0; q < m_kw_who_n; q++)
+			logerror("upd6383:    §96 cell %02X written by iw%-4u  word %09llX\n",
+					m_kw_cell[q], m_kw_who[q], (unsigned long long)m_kw_word[q]);
 	}
 	logerror("upd6383: §80 LATCH/PUBLISH: latched %u (%u non-zero) | publish attempts %u, "
 			"hits %u (%u non-zero)\n", m_latch_n, m_latch_nz, m_pub_try, m_pub_hit, m_pub_nz);

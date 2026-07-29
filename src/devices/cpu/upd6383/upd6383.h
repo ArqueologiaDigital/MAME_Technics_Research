@@ -596,6 +596,7 @@ private:
 	//  A cell whose quiet and loud ranges DIFFER is carrying the audio.
 	s32  m_kq_min[256], m_kq_max[256], m_kl_min[256], m_kl_max[256];
 	u32  m_kw_n[256] = {};
+	u16  m_kw_who[12] = {}; u8 m_kw_cell[12] = {}; u64 m_kw_word[12] = {}; u32 m_kw_who_n = 0;
 	void kwatch(u8 cell, s32 v);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
