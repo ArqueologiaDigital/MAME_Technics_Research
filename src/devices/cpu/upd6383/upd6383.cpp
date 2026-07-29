@@ -1479,8 +1479,10 @@ void upd6383_device::exec_alu(u64 word)
 			//  length.  So a read latches under ITS OWN descriptor and the write that
 			//  shares that descriptor collects it.
 			const u32 line = cellv & 0x3f;
+			if (port_pipe) m_pub_try++;
 			if (port_pipe && m_dr_line_v[line])
 			{
+				m_pub_hit++; if (m_dr_line[line]) m_pub_nz++;
 				m_dr = m_dr_line[line];
 				m_dr_line_v[line] = false;
 				m_dr_landed++;
@@ -1506,7 +1508,8 @@ void upd6383_device::exec_alu(u64 word)
 				if (datum) m_dly_r_nz++;
 				if (port_pipe)
 				{   // ★ §78: latch under this line's descriptor
-					m_dr_line[line] = datum; m_dr_line_v[line] = true;
+					m_dr_line[line] = datum; m_dr_line_v[line] = true; m_latch_n++;
+					if (datum) m_latch_nz++;
 				}
 				else if (m_speculative && (m_specmask & 0x400))
 				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
@@ -3338,6 +3341,8 @@ void upd6383_device::dump_frame_report() const
 				"DESCRIPTOR %u, C-RAM %u, unrecognised %u | tags:%s\n",
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
+	logerror("upd6383: §80 LATCH/PUBLISH: latched %u (%u non-zero) | publish attempts %u, "
+			"hits %u (%u non-zero)\n", m_latch_n, m_latch_nz, m_pub_try, m_pub_hit, m_pub_nz);
 	logerror("upd6383: §77 DELAY-PATH ALU: entered %u times, skipped %u; SRC 0x0B words "
 			"among them %u\n", m_dly_alu, m_dly_noalu, m_dly_alu_0b);
 	logerror("upd6383: §75 DELAY WRITES WITH CONTENT: %u of %u\n", m_dly_w_nz, m_dly_w);

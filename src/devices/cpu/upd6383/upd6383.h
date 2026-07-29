@@ -580,6 +580,7 @@ private:
 	s64  m_pa_min[2] = { INT64_MAX, INT64_MAX }, m_pa_max[2] = { INT64_MIN, INT64_MIN };
 	u32  m_pa_n[2] = {};
 	u32 m_dly_w_nz = 0, m_dly_dbg = 0;
+	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
 	u32 m_dly_alu = 0, m_dly_noalu = 0, m_dly_alu_0b = 0;
 	u32 m_dr_pend = 0; bool m_dr_pend_v = false;
 	u32 m_dr_line[64] = {}; bool m_dr_line_v[64] = {};   // ★ §78 per-line outstanding access   // ★ §76 the one outstanding access
