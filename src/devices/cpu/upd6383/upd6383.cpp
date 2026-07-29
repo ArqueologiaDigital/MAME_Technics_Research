@@ -1416,7 +1416,23 @@ void upd6383_device::exec_alu(u64 word)
 			m_delay_ix++;
 			const u32 addr = (cellv + u32(m_frames_run)) & 0xffff;
 			if (dir == 'W')
-				m_delay.write_word(addr, u16((u32(acc_to_datum(m_acc)) >> 8) & 0xffff));
+			{
+				//  ★ §75: is anything with CONTENT being written?  The store takes
+				//  acc_to_datum(m_acc) -- ACCA -- but under bit 14 the unit-1 body
+				//  accumulates into ACCB, so this writes ACCA (empty during body 1).
+				//  Same unit-blind defect as §66/§68, third instance.
+				const u64 wacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
+						? m_accb : m_acc;
+				const u16 wv = u16((u32(acc_to_datum(wacc)) >> 8) & 0xffff);
+				if (wv) m_dly_w_nz++;
+				if (m_dly_dbg < 6 && m_frames_run > 420000)
+				{
+					m_dly_dbg++;
+					logerror("upd6383: §75 DLY %c addr %04X  cell %04X  frame %u  data %04X\n",
+							dir, addr, cellv, u32(m_frames_run), wv);
+				}
+				m_delay.write_word(addr, wv);
+			}
 			//  ★★★★ §74 SPECULATIVE (mask bit 19): A DELAY WORD ALSO RUNS ITS ALU.
 			//  MEASURED over the twelve unit-1 reverbs: ALL 168 words carrying
 			//  SRC 0x0B (the delay-read register) are class4 == 1 with the escape
@@ -1435,6 +1451,12 @@ void upd6383_device::exec_alu(u64 word)
 			if (dir == 'R')
 			{
 				const u32 datum = u32(m_delay.read_word(addr)) << 8;
+				if (m_dly_dbg < 6 && m_frames_run > 420000)
+				{
+					m_dly_dbg++;
+					logerror("upd6383: §75 DLY R addr %04X  cell %04X  frame %u  got %06X\n",
+							addr, cellv, u32(m_frames_run), datum);
+				}
 				if (datum) m_dly_r_nz++;
 				if (m_speculative && (m_specmask & 0x400))
 				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
@@ -3265,6 +3287,7 @@ void upd6383_device::dump_frame_report() const
 				"DESCRIPTOR %u, C-RAM %u, unrecognised %u | tags:%s\n",
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
+	logerror("upd6383: §75 DELAY WRITES WITH CONTENT: %u of %u\n", m_dly_w_nz, m_dly_w);
 	logerror("upd6383: §49 PIPELINE: %u delay data LANDED, %u lost to ring collisions "
 			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
 	logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
