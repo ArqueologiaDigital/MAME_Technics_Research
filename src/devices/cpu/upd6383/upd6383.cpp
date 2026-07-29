@@ -2099,7 +2099,24 @@ void upd6383_device::exec_alu(u64 word)
 		u64 &accum = use_b ? m_accb : m_acc;
 		const u64 src_term =
 				(op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum)
-				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS)
+				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS
+					//  ★★★★ §82 SPECULATIVE (mask bit 21): A DELAY WORD'S ACTION PUTS
+					//  ITS DATUM ON THE ACCUMULATOR.
+					//  The 168 delay-write words carry ACT 0x14 / 0x1A, which this
+					//  register grades "PLAIN GUESS x5 -- capture into a temporary,
+					//  NO independent evidence".  Under that reading the delay datum
+					//  they fetch goes into tempA and is never summed, while their
+					//  f31 = 0 (hi12 0x880) LOADs acc <- P with P stale -- so ~19
+					//  words per frame WIPE the accumulator and nothing injects the
+					//  tap.  §81 measured the consequence: the input reaches the
+					//  kernel (iw12 range differs with input) and the body starts at
+					//  exactly zero.
+					//  A comb is y = x + g*delayed: the delayed sample must be SUMMED.
+					//  Row 26 already established the mechanism -- ACTION 0x00 ADDS
+					//  the bus rather than replacing the accumulator -- so this
+					//  extends a MEASURED reading to the delay consumers rather than
+					//  inventing one.
+					|| (m_speculative && (m_specmask & 0x200000) && m_in_dram))
 					? u64(s64(L) << ACC_SHIFT) : 0);
 		// HI_ACC_HOLD contributes no product.  On the class-8 post-sum word the
 		// biquad DETERMINES the accumulator comes out unchanged; whether the
@@ -2110,9 +2127,27 @@ void upd6383_device::exec_alu(u64 word)
 		//  ★ SPECULATIVE: hi12[3:1] > 2 is undecoded; the research model gives it
 		//  the same "no product" behaviour as HI_ACC_HOLD (`f31hi = hold'), which
 		//  is one of four enumerated options and has no independent support.
+		//  ★★★★ §83 SPECULATIVE (mask bit 22): A DELAY WORD DOES NOT LOAD THE
+		//  ACCUMULATOR FROM A STALE PRODUCT.
+		//  The 168 delay-write words carry hi12 = 0x880, so f31 = 0 = LOAD acc <- P.
+		//  But they fetch NO coefficient (class 1, bit 3 clear), and §29 established
+		//  the multiply issues only on coefficient-fetching words -- so their P is
+		//  whatever an earlier word left. LOADing the accumulator from a stale
+		//  product is not an operation; it is an erasure.
+		//  MEASURED (§81/§83): the input reaches the kernel accumulator (iw12 range
+		//  differs with input, 101e9..344e9 live at iw12-16) and body-0 ENTRY at iw84
+		//  is already exactly zero -- ~20 delay words per frame each doing
+		//  LOAD acc <- 0 drain it before the body ever starts.
+		//  Treat the LOAD as a HOLD when the word brought no fresh product.
+		const bool stale_p = m_speculative && (m_specmask & 0x400000) && m_in_dram
+				&& !upd6383_disassembler::coeff_fetch(word);
 		const u64 p_term =
 				(op == upd6383_disassembler::HI_ACC_HOLD
 					|| (m_speculative && op > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
+		if (stale_p) accum = (accum + ((act == upd6383_disassembler::LO_ACT_ACC_BUS
+					|| (m_specmask & 0x200000)) ? u64(s64(L) << ACC_SHIFT) : 0))
+				& 0xfffffffffffULL;
+		else
 		accum = (src_term + p_term) & 0xfffffffffffULL;
 	}
 
@@ -2965,7 +3000,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			if (m_frames_run > 420000)
 			{
 				int p = -1;
-				switch (prof_iw) { case 12: p=0; break; case 152: p=1; break;
+				switch (prof_iw) { case 12: p=0; break; case 84: p=1; break;
 				                   case 201: p=2; break; case 332: p=3; break; }
 				if (p >= 0)
 				{
@@ -3359,7 +3394,7 @@ void upd6383_device::dump_frame_report() const
 				m_pk_ptr, m_pk_dram, m_pk_dsc, m_pk_cram, m_pk_other, tg.c_str());
 	}
 	{
-		static const char *NM[4] = { "header exit iw12", "body-0 end iw152",
+		static const char *NM[4] = { "header exit iw12", "body-0 ENTRY iw84",
 		                             "body-1 entry iw201", "body-1 end  iw332" };
 		for (int p = 0; p < 4; p++)
 			logerror("upd6383: ★ §81 PROBE %-19s quiet [%lld .. %lld]  loud [%lld .. %lld]  %s\n",
