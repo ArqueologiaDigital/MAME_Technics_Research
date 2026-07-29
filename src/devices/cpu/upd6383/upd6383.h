@@ -516,6 +516,27 @@ private:
 	//  Answers "where does the signal die?" with a measurement instead of a search.
 	s64  m_accprof[384] = {};
 	u32  m_slotseen[384] = {};
+	//  ★ §104: FULL PER-SLOT QUIET/LOUD SPLIT.  §81's 12 hand-placed probes cannot
+	//  find a transition they were not placed on; this records EVERY slot, split by
+	//  whether the frame carried input, for three quantities at once:
+	//    acc  -- the accumulator AFTER the slot ran (same convention as §81)
+	//    mem  -- the D-RAM cell UNDER THE POINTER BEFORE the slot ran (the value the
+	//            word would read in mode 2 -- a RESIDENCY census, not a write census)
+	//    L    -- the operand bus the decode actually selected (m_last_l)
+	//  The three columns separate "the cell is dead" from "the cell is live but the
+	//  SRC decode does not pick it up" from "the operand arrives and the ALU drops it".
+	u32  m_sp_nq[384] = {}, m_sp_nr[384] = {};
+	s64  m_sp_accq_lo[384] = {}, m_sp_accq_hi[384] = {};
+	s64  m_sp_accr_lo[384] = {}, m_sp_accr_hi[384] = {};
+	s32  m_sp_memq_lo[384] = {}, m_sp_memq_hi[384] = {};
+	s32  m_sp_memr_lo[384] = {}, m_sp_memr_hi[384] = {};
+	s32  m_sp_lq_lo[384] = {}, m_sp_lq_hi[384] = {};
+	s32  m_sp_lr_lo[384] = {}, m_sp_lr_hi[384] = {};
+	u8   m_sp_dp[384] = {};
+	u64  m_sp_word[384] = {};
+	//  ★ §104 A/B, diagnostic only, off unless UPD6383_AB_NOSTORE08=1 in the env.
+	bool m_ab_nostore08 = false;
+	u32  m_ab_nostore08_n = 0;
 	bool m_cur_unit1 = false;       // ★ which unit body is executing (row 27)
 	bool m_in_k6 = false;           // ★ re-entrancy guard for exec_alu_k6()
 	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)

@@ -292,6 +292,17 @@ void upd6383_device::device_start()
 		m_specmask = u32(strtoul(e, nullptr, 16));
 		logerror("upd6383: §32 bisection mask UPD6383_SPEC = 0x%X\n", m_specmask);
 	}
+	//  ★ §104 A/B (DIAGNOSTIC ONLY, off by default): suppress the ACTION-0x07 store
+	//  when the bus source is SRC 0x08.  This is NOT a proposed fix -- it is the
+	//  one-word counterfactual that turns "cell 0x07 goes constant across kernel
+	//  iw32" from a correlation into a causal claim.  Prediction stated in advance:
+	//  with it set, §104's `mem' column at body-0 iw89/90/91 must go from IDENTICAL
+	//  to DIFFERS, and acc at iw90 with it.  If it does not, the mechanism is wrong.
+	if (const char *e = getenv("UPD6383_AB_NOSTORE08"))
+	{
+		m_ab_nostore08 = (strtoul(e, nullptr, 10) != 0);
+		logerror("upd6383: §104 A/B UPD6383_AB_NOSTORE08 = %d\n", m_ab_nostore08 ? 1 : 0);
+	}
 	save_item(NAME(m_p));
 	save_item(NAME(m_k));
 	save_item(NAME(m_l));
@@ -2446,6 +2457,8 @@ void upd6383_device::exec_alu(u64 word)
 		const bool host_reg = (d07 == 0x06 || d07 == 0x86);
 		if (m_speculative && (m_specmask & 0x20) && unsupported_src && host_reg)
 			m_lvlguard_n++;
+		else if (m_ab_nostore08 && src == 0x08)   // ★ §104 A/B, diagnostic only
+			m_ab_nostore08_n++;
 		else
 		store_mode(mode07, u8(d07), u32(L));                           // §99
 			kwatch(d07, s32(u32(L) & 0xffffff));
@@ -3171,6 +3184,13 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			m_slotn++;
 			m_cur_word = raw;
 			m_cur_iw = u16(pc / upd6383_disassembler::WORD_BYTES);
+			//  ★ §104: the pointer and the cell UNDER it, sampled BEFORE the word
+			//  runs.  This is the RESIDENCY of the cell the word is about to read,
+			//  which is a different question from §86/§96's census of what gets
+			//  WRITTEN to a cell (a cell can be written with audio once and with a
+			//  constant three times and still be graded "input-dependent" there).
+			const u8  s104_dp  = m_dp;
+			const s32 s104_mem = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			exec_decoded(word);
 			if (m_trace_armed && m_trace_n < 400)
 			{   // ★★★ THE TIME-ORDERED FRAME TRACE -- execution order, not maxima
@@ -3225,6 +3245,46 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				const s64 a = util::sext(m_acc, 44);
 				m_slotseen[prof_iw]++;
 				if (std::abs(a) > std::abs(m_accprof[prof_iw])) m_accprof[prof_iw] = a;
+			}
+			//  ★ §104: the full per-slot quiet/loud split (see upd6383.h).  Same
+			//  arming threshold and the same quiet/loud predicate as §81, so the two
+			//  instruments are directly comparable; §81's 12 probes are a subset of
+			//  these 384 and act as the calibration.
+			if (m_frames_run > 420000 && prof_iw < 384)
+			{
+				const s64  a  = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
+				const s32  lv = m_last_l;
+				const bool nz = (m_in_val[0] != 0) || (m_in_val[1] != 0);
+				m_sp_dp[prof_iw] = s104_dp;
+				m_sp_word[prof_iw] = raw;
+				if (nz)
+				{
+					if (m_sp_nr[prof_iw]++ == 0)
+					{ m_sp_accr_lo[prof_iw] = m_sp_accr_hi[prof_iw] = a;
+					  m_sp_memr_lo[prof_iw] = m_sp_memr_hi[prof_iw] = s104_mem;
+					  m_sp_lr_lo[prof_iw] = m_sp_lr_hi[prof_iw] = lv; }
+					else
+					{ if (a < m_sp_accr_lo[prof_iw]) m_sp_accr_lo[prof_iw] = a;
+					  if (a > m_sp_accr_hi[prof_iw]) m_sp_accr_hi[prof_iw] = a;
+					  if (s104_mem < m_sp_memr_lo[prof_iw]) m_sp_memr_lo[prof_iw] = s104_mem;
+					  if (s104_mem > m_sp_memr_hi[prof_iw]) m_sp_memr_hi[prof_iw] = s104_mem;
+					  if (lv < m_sp_lr_lo[prof_iw]) m_sp_lr_lo[prof_iw] = lv;
+					  if (lv > m_sp_lr_hi[prof_iw]) m_sp_lr_hi[prof_iw] = lv; }
+				}
+				else
+				{
+					if (m_sp_nq[prof_iw]++ == 0)
+					{ m_sp_accq_lo[prof_iw] = m_sp_accq_hi[prof_iw] = a;
+					  m_sp_memq_lo[prof_iw] = m_sp_memq_hi[prof_iw] = s104_mem;
+					  m_sp_lq_lo[prof_iw] = m_sp_lq_hi[prof_iw] = lv; }
+					else
+					{ if (a < m_sp_accq_lo[prof_iw]) m_sp_accq_lo[prof_iw] = a;
+					  if (a > m_sp_accq_hi[prof_iw]) m_sp_accq_hi[prof_iw] = a;
+					  if (s104_mem < m_sp_memq_lo[prof_iw]) m_sp_memq_lo[prof_iw] = s104_mem;
+					  if (s104_mem > m_sp_memq_hi[prof_iw]) m_sp_memq_hi[prof_iw] = s104_mem;
+					  if (lv < m_sp_lq_lo[prof_iw]) m_sp_lq_lo[prof_iw] = lv;
+					  if (lv > m_sp_lq_hi[prof_iw]) m_sp_lq_hi[prof_iw] = lv; }
+				}
 			}
 			(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
 		}
@@ -3615,6 +3675,40 @@ void upd6383_device::dump_frame_report() const
 					(long long)(m_pr_max[p]==INT64_MIN?0:m_pr_max[p]),
 					(m_pq_min[p]==m_pr_min[p] && m_pq_max[p]==m_pr_max[p])
 						? "IDENTICAL -- input has NOT reached here" : "★ DIFFERS -- input reaches here");
+	}
+	{   //  ★ §104: THE FULL PER-SLOT QUIET/LOUD SPLIT.
+		//  Reported for every slot that executed at least once in EACH bucket --
+		//  a slot seen in only one bucket is printed with its counts and the verdict
+		//  "NO-NULL", because a comparison with an empty cell carries no information.
+		logerror("upd6383: ★ §104 PER-SLOT QUIET/LOUD SPLIT (acc AFTER the slot | mem UNDER the pointer BEFORE it | L the selected bus)\n");
+		logerror("upd6383:    iw  word        dp  nq/nl   acc: quiet[..]/loud[..]           mem: quiet[..]/loud[..]        L: quiet[..]/loud[..]\n");
+		int first_acc = -1, first_mem = -1, first_l = -1;
+		for (u32 i = 0; i < 384; i++)
+		{
+			if (!m_sp_nq[i] && !m_sp_nr[i]) continue;
+			const bool both = m_sp_nq[i] && m_sp_nr[i];
+			const bool da = both && (m_sp_accq_lo[i] != m_sp_accr_lo[i] || m_sp_accq_hi[i] != m_sp_accr_hi[i]);
+			const bool dm = both && (m_sp_memq_lo[i] != m_sp_memr_lo[i] || m_sp_memq_hi[i] != m_sp_memr_hi[i]);
+			const bool dl = both && (m_sp_lq_lo[i] != m_sp_lr_lo[i] || m_sp_lq_hi[i] != m_sp_lr_hi[i]);
+			if (i >= 84 && i <= 199)
+			{
+				if (da && first_acc < 0) first_acc = int(i);
+				if (dm && first_mem < 0) first_mem = int(i);
+				if (dl && first_l < 0) first_l = int(i);
+			}
+			logerror("upd6383:   %3u %010llX %02X %5u/%-5u %14lld..%-14lld %14lld..%-14lld %c | %9d..%-9d %9d..%-9d %c | %9d..%-9d %9d..%-9d %c%s\n",
+					i, (unsigned long long)m_sp_word[i], m_sp_dp[i], m_sp_nq[i], m_sp_nr[i],
+					(long long)m_sp_accq_lo[i], (long long)m_sp_accq_hi[i],
+					(long long)m_sp_accr_lo[i], (long long)m_sp_accr_hi[i], da ? '*' : '=',
+					m_sp_memq_lo[i], m_sp_memq_hi[i], m_sp_memr_lo[i], m_sp_memr_hi[i], dm ? '*' : '=',
+					m_sp_lq_lo[i], m_sp_lq_hi[i], m_sp_lr_lo[i], m_sp_lr_hi[i], dl ? '*' : '=',
+					both ? "" : "  NO-NULL");
+		}
+		logerror("upd6383: ★ §104 SUMMARY over body-0 range iw84..199: first acc DIFFERS at %d, "
+				"first mem DIFFERS at %d, first L DIFFERS at %d  (-1 = never)\n",
+				first_acc, first_mem, first_l);
+		logerror("upd6383: ★ §104 A/B: ACT-0x07 stores suppressed on SRC 0x08 = %u (0 = A/B not enabled)\n",
+				m_ab_nostore08_n);
 	}
 	{
 		logerror("upd6383: ★ §86 KERNEL D-RAM WRITES -- cells whose value depends on the INPUT:\n");
