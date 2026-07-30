@@ -529,7 +529,11 @@ void upd6383_device::kwatch(u8 cell, s32 v)
 	//  §98: 0x85 and 0x8A added -- the live pointer window shows body 1 READS 0x85
 	//  and NO region writes it with input-dependent data, and kernel B writes 0x8A
 	//  where symmetry with kernel A wants 0x85.  Name the writers.
-	if ((cell == 0x06 || cell == 0x07 || cell == 0x85 || cell == 0x86
+	//  §110: 0x05 added.  The iw11 timing fix made cell 0x05 input-dependent when
+	//  WRITTEN, yet §104's residency column still reports body 0 reading it as
+	//  constant -- so something overwrites it between deposit and pickup, exactly as
+	//  iw32 does to 0x07.  Name the writers, in execution order.
+	if ((cell == 0x05 || cell == 0x06 || cell == 0x07 || cell == 0x85 || cell == 0x86
 			|| cell == 0x87 || cell == 0x8a) && m_kw_who_n < 24)
 	{
 		bool seen = false;
@@ -2552,6 +2556,39 @@ void upd6383_device::exec_alu(u64 word)
 				m_act07_post_n++;
 			}
 		}
+		//======================================================================
+		//  ★★★ §110 THE iw11 TIMING DEFECT -- FIXED (mask bit 30 REVERTS to the old
+		//  behaviour; the fix is ON by default).
+		//
+		//  §109 MEASURED that iw11 (`0400201447', the ONE K6 input-stage word
+		//  carrying ACTION 0x07) stored at its POST-increment cell 0x06 while EVERY
+		//  other ACT-07 word in the build stored at its PRE-increment cell.  Two
+		//  timings for one action code in one binary.
+		//
+		//  CAUSE: exec_alu_k6() is called by exec_addressing_only() AFTER that
+		//  function has already advanced m_dp, so inside exec_alu() the pointer is
+		//  the post-increment cell.  §35's `if (m_in_k6)' short-circuit -- which
+		//  exists precisely to stop a K6 word storing twice at the wrong cell --
+		//  covers ONLY the bit-4 site a few hundred lines above.  This site was
+		//  never given the same treatment.
+		//
+		//  WHY CORRECT THE ADDRESS RATHER THAN SKIP THE STORE: the bit-4 site can
+		//  skip, because exec_addressing_only() performs that store itself at
+		//  `cell = m_dp' captured on entry.  It performs NO ACT-07 store, and iw11
+		//  carries no bit 4 (hi12 = 0x400), so skipping here would lose the store
+		//  entirely.  Undoing the advance reproduces the pre-increment cell.
+		//
+		//  PRE is the right convention on independent evidence, not by symmetry:
+		//  §109 confirmed it on iw34, a FULLY DECODED anchored ACT-07 word, and
+		//  lfo-ramp.md §8.3 ran the post-increment hypothesis over 276 480 machines
+		//  with ZERO survivors.
+		if (m_in_k6 && !(m_speculative && (m_specmask & 0x40000000))
+				&& mode07 == 2 && upd6383_disassembler::ptr_postinc(word))
+		{
+			const u8 pre = u8(m_dp - s8(upd6383_disassembler::addr8(word)));
+			if (pre != d07) m_k6_act07_fix_n++;
+			d07 = pre;
+		}
 		if (mode07 == 1 && m_st07n < 8)
 		{   // ★ where is the pointer, and what is under it, at these five stores?
 			bool seen = false;
@@ -4269,6 +4306,8 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		logerror("            §110 K6 ACT-07 stores re-pointed to pre-increment: %u\n",
+				m_k6_act07_fix_n);
 		if (m_mirror06_n)
 			logerror("            §106 DIAGNOSTIC: mirrored %u writes of cell 0x06 into 0x05\n",
 					m_mirror06_n);

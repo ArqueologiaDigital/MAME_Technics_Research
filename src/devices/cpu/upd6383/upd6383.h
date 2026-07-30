@@ -791,6 +791,7 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
 	void store_mode(u8 mode, u8 dest, u32 v);
