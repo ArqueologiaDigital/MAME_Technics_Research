@@ -600,6 +600,24 @@ private:
 	//  POST-increment cell instead of the pre-increment one.  DIAGNOSTIC, default
 	//  OFF, with a FIRED COUNT so a silent no-op can never be read as a null.
 	u32  m_act07_post_n = 0, m_act07_post_k6_n = 0;
+	//  ★★★ §119 mask bit 34 (0x400000000): THE MEMORY-TO-MEMORY MOVE.
+	//  A mode-2 ACTION-0x07 store whose SOURCE is itself a memory read (SRC 0x00 or
+	//  SRC 0x11, both = mem[m_dp]) targets the POST-increment cell.
+	//  WHY THESE TWO AND NOT THE OTHER SIX: under the shipped PRE-increment target
+	//  such a word is `mem[dp] <- mem[dp]' -- an IDENTITY, for every one of its 56
+	//  corpus sites, in every program.  A word form that is unconditionally a no-op
+	//  is a decode failure, and the degeneracy is a property of the ENCODING (source
+	//  and destination naming the same cell), not something fitted to the LFO.
+	//  The six other sources (0x10 acc x256, 0x1A x43, 0x19 x41, 0x0B x46 ...) name
+	//  something that is NOT the destination cell, so they stay PRE -- which leaves
+	//  §109's PRE anchors iw34 and iw88 (both SRC 0x10) untouched.  That is the whole
+	//  difference from bit 28, which moved all 9 768 960 stores and killed the ramp
+	//  by letting iw88 (`000.2.F4.407', SRC 0x10 = acc) land on the phase cell.
+	//  ⛔ SCOPE: rests on §113 (bit 18) reading SRC 0x11 as mem[ptr].  Under the
+	//  shipped SRC 0x11 = ACCB reading the degeneracy argument covers only the four
+	//  SRC 0x00 words and this gate is unmotivated.
+	//  DEFAULT OFF.  FIRED COUNT below so a silent no-op cannot pass for a null.
+	u32  m_act07_memmove_n = 0, m_act07_memmove_nz = 0;
 	//  ★★★ §109 mask bit 29 (0x20000000): THE OTHER SURVIVING STORE GATE.
 	//  store-gate.md item C ran all nine conditions of its enumeration against both
 	//  known-mathematics witnesses and exactly TWO survive:
@@ -619,6 +637,14 @@ private:
 	//  resident in the phase cell, sampled at body-0 iw89, over consecutive frames.
 	s32  m_lfo_phase[8] = {}; u32 m_lfo_phase_n = 0;
 	u32  m_lfo_phase_frame[8] = {};
+	//  ★ §119 RULE-8 TRACKING WITNESS.  "It stopped being constant" is not a result;
+	//  the destination must carry THE PHASE.  These sample mem[m_dp] on the SAME
+	//  frames as the iw89 phase witness, at the two cells the CHORUS delay branch
+	//  reads: iw94 (dp = 0x10, the cell iw92's move targets under bit 34) and iw95
+	//  (dp = 0x50, the per-voice cell feeding the 0x44C port and the delay read).
+	s32  m_lfo_dst[8] = {};  u32 m_lfo_dst_n = 0;   // iw94's mem[dp]
+	s32  m_lfo_tap[8] = {};  u32 m_lfo_tap_n = 0;   // iw95's mem[dp]
+	u8   m_lfo_dst_dp[8] = {}, m_lfo_tap_dp[8] = {};
 	u32  m_dwr[256] = {}, m_dwr_nz[256] = {};
 	u32  m_out_slot_writes[6] = {}, m_out_slot_nonzero[6] = {};
 	//  ★ §25 diagnostic 2026-07-28: WHY are two of the three presentations always

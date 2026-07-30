@@ -420,7 +420,12 @@ int upd6383_device::sprobe_idx(u16 iw)
 	//  writer list had missed.  It is class 2, addr8 = 0xF4 = -12, ACTION 0x07, and its
 	//  SRC is 0x10 = the accumulator -- ANCHORED, and the whole word is DECODED.  So it
 	//  is measured rather than reasoned about.
-	static const u16 SLOTS[] = { 11, 30, 32, 33, 34, 37, 39, 88, 89, 90, 91, 92 };
+	//  ★ §119 added 93/94/95/98: the CHORUS delay-tap branch that iw92's move feeds
+	//  under bit 34 (94 reads cell 0x10, 95 reads cell 0x50, 98 is the external
+	//  delay-DRAM READ).  Without them the probe can see whether the phase LEAVES Q
+	//  but not whether it reaches a consumer.
+	static const u16 SLOTS[] = { 11, 30, 32, 33, 34, 37, 39, 88, 89, 90, 91, 92,
+								 93, 94, 95, 98 };
 	for (u32 i = 0; i < sizeof(SLOTS) / sizeof(SLOTS[0]); i++)
 		if (SLOTS[i] == iw) return int(i);
 	return -1;
@@ -2693,6 +2698,41 @@ void upd6383_device::exec_alu(u64 word)
 			}
 		}
 		//======================================================================
+		//  ★★★ §119 SPECULATIVE (mask bit 34, 0x400000000): THE MEMORY-TO-MEMORY MOVE.
+		//
+		//  Same geometry as bit 28 but restricted to the two sources that read the
+		//  DESTINATION CELL: SRC 0x00 and SRC 0x11 are both mem[m_dp], so under the
+		//  shipped PRE-increment target the word is `mem[dp] <- mem[dp]', an IDENTITY.
+		//  Corpus census over the 41 committed listings (3057 words): of the 444
+		//  mode-2 ACTION-0x07 words, 52 carry SRC 0x11 and 4 carry SRC 0x00 -- all 56
+		//  degenerate under PRE, 46 of them with addr8 != 0 so POST makes them real
+		//  MOVEs.  The other 388 (SRC 0x10 x256, 0x1A x43, 0x19 x41, 0x0B x46, ...)
+		//  name a source that is not the destination and are left at PRE, so §109's
+		//  two PRE anchors iw34 and iw88 -- both SRC 0x10 -- do not move.
+		//
+		//  ★ THE WORD THIS IS AIMED AT is CHORUS body-0 iw92 `000.2.09.447': SRC 0x11
+		//  at dp = 0x07 (the LFO phase cell Q), addr8 = +9.  lfo-ramp.md's tail motif
+		//  calls it "the phase leaves Q here; addr8 repositions".  Under PRE it stores
+		//  the phase onto the phase cell and the only surviving effect is the pointer
+		//  move; under POST it deposits the phase at 0x10, which is exactly the cell
+		//  iw93/iw94 then read (iw94 = `192.A.40.000', SRC 0x00 = mem[m_dp], class A).
+		//
+		//  ⛔ NOT A DECODE.  A diagnostic with a fired count, default OFF, whose only
+		//  claim is two-sided: either cell 0x10 becomes the phase sawtooth or it does
+		//  not.  K6 excluded for the same reason bit 28 excludes it (m_dp is already
+		//  the post cell inside exec_alu for those words).
+		//======================================================================
+		if (m_speculative && (m_specmask & 0x400000000ull)
+				&& mode07 == 2 && !m_in_k6
+				&& (src == 0x00 || src == 0x11)
+				&& upd6383_disassembler::addr8(word) != 0
+				&& upd6383_disassembler::ptr_postinc(word))
+		{
+			d07 = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+			m_act07_memmove_n++;
+			if (u32(L) & 0xffffff) m_act07_memmove_nz++;
+		}
+		//======================================================================
 		//  ★★★ §110 THE iw11 TIMING DEFECT -- FIXED (mask bit 30 REVERTS to the old
 		//  behaviour; the fix is ON by default).
 		//
@@ -3487,6 +3527,19 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				m_lfo_phase[m_lfo_phase_n++] =
 						s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			}
+			//  ★ §119 RULE-8: sample the two DOWNSTREAM cells on the same frames.
+			if (prof_iw == 94 && m_lfo_dst_n < 8)
+			{
+				m_lfo_dst_dp[m_lfo_dst_n] = m_dp;
+				m_lfo_dst[m_lfo_dst_n++] =
+						s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			}
+			if (prof_iw == 95 && m_lfo_tap_n < 8)
+			{
+				m_lfo_tap_dp[m_lfo_tap_n] = m_dp;
+				m_lfo_tap[m_lfo_tap_n++] =
+						s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			}
 		}
 		if (!word_ok)
 		{
@@ -4194,6 +4247,18 @@ void upd6383_device::dump_frame_report() const
 			ph += string_format(" f%u:%d", m_lfo_phase_frame[q], m_lfo_phase[q]);
 		logerror("upd6383: ★ §109 LFO PHASE resident at body-0 iw89 on %u consecutive frames:%s\n",
 				m_lfo_phase_n, ph.c_str());
+		//  ★ §119 RULE-8: the two downstream cells on the SAME frames.  A value that
+		//  merely stops being constant proves nothing -- these must TRACK the phase
+		//  printed above, frame for frame.
+		{
+			std::string a, b;
+			for (u32 q = 0; q < m_lfo_dst_n; q++)
+				a += string_format(" [dp%02X]%d", m_lfo_dst_dp[q], m_lfo_dst[q]);
+			for (u32 q = 0; q < m_lfo_tap_n; q++)
+				b += string_format(" [dp%02X]%d", m_lfo_tap_dp[q], m_lfo_tap[q]);
+			logerror("upd6383: ★ §119 TRACK iw94 mem[dp] on the same frames:%s\n", a.c_str());
+			logerror("upd6383: ★ §119 TRACK iw95 mem[dp] on the same frames:%s\n", b.c_str());
+		}
 	}
 	{
 		logerror("upd6383: ★ §86 KERNEL D-RAM WRITES -- cells whose value depends on the INPUT:\n");
@@ -4476,6 +4541,9 @@ void upd6383_device::dump_frame_report() const
 			logerror("            §116 OVC loads: %u, values seen:%s (bit3 = wrap)\n",
 					m_ovc_loads, ov.empty() ? " (none)" : ov.c_str());
 		}
+		logerror("            §119 mem-to-mem ACT-07 MOVEs re-targeted POST (bit 34): "
+				"%u fired, %u with a non-zero datum\n",
+				m_act07_memmove_n, m_act07_memmove_nz);
 		logerror("            §114 accumulator stores WRAPPED mod 2^23: %u\n", m_wrap_n);
 		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
 		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",
