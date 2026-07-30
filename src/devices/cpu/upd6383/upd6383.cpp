@@ -4384,6 +4384,33 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	m_delay_ix = 0;         // ★ SPECULATIVE: descriptor cells are consumed in
 	                        //   program order, restarting every frame.
 	bx_frame_end();         // ★ §133, after the frame has fully executed
+	//==========================================================================
+	//  ★★★ §164 PROBE (read-only, always on): DOES ANY D-RAM CELL RAMP?
+	//
+	//  §112's two-sided criterion is *"the phase stops being reset and RAMPS"*
+	//  vs *"the phase stays pinned and nothing else should move either"*, and
+	//  there is no instrument that can tell those apart.  This is it.
+	//
+	//  ⚠ min/max ALONE IS NOT ENOUGH and this is the §137 trap in a new place: a
+	//  cell that is pinned at 0x400000 and a cell that takes two values a frame
+	//  apart both report a range.  So also count the frames in which the cell
+	//  CHANGED from the previous frame.  A pinned cell changes 0 times; a ramp
+	//  changes essentially every frame.  The two numbers together cannot be
+	//  satisfied by a constant, which is what makes this a test.
+	//  ★ The NULL, stated in advance: under the shipped default every cell in
+	//  0x00..0x1F must report chg = 0 or a tiny startup count.
+	for (u32 i = 0; i < 0x20; i++)
+	{
+		const s32 v = s32(util::sext(m_dram.read_dword(i) & 0xffffff, 24));
+		if (!m_frames_run) { m_rampmin[i] = m_rampmax[i] = v; }
+		else
+		{
+			if (v < m_rampmin[i]) m_rampmin[i] = v;
+			if (v > m_rampmax[i]) m_rampmax[i] = v;
+			if (v != m_rampprev[i]) m_rampchg[i]++;
+		}
+		m_rampprev[i] = v;
+	}
 	m_frames_run++;
 	m_last_slots = slots;
 	m_last_traps = traps;
@@ -5146,7 +5173,16 @@ void upd6383_device::dump_frame_report() const
 				wt += string_format(" %06X", m_rf[c] & 0xffffff);
 				if (m_rf[c] & 0xffffff) wnz++;
 			}
-			for (int i = 0; i < m_c6_n; i++)
+			{
+			std::string rr;
+			for (u32 i = 0; i < 0x20; i++)
+				if (m_rampchg[i] || m_rampmin[i] != m_rampmax[i])
+					rr += string_format(" %02X:%d..%d/chg%llu", i, m_rampmin[i], m_rampmax[i],
+							(unsigned long long)m_rampchg[i]);
+			logerror("upd6383: ★★ §164 D-RAM RAMP CENSUS over %llu frames (cells that moved at all):%s\n",
+					(unsigned long long)m_frames_run, rr.empty() ? "  NONE -- every cell 0x00..0x1F is PINNED" : rr.c_str());
+		}
+		for (int i = 0; i < m_c6_n; i++)
 			logerror("upd6383: ★★ §162 CLASS-6 SITE %010llX addr8=%02X lo12=%03X : hits %llu | "
 					"acc %lld .. %lld (%s) | m_dp %u..%u | cursor %u..%u\n",
 					(unsigned long long)m_c6_word[i],
