@@ -702,7 +702,11 @@ private:
 	// bit 23 (§97) is ON by default: the two-space reading is FORCED by item J,
 	// and the A/B raised the unit-0 output level from 0x000000 on 100% of frames
 	// to the host's value on 452 160, with no rise in the §54 DC leak.
-	u32  m_specmask = 0x19f440f;
+	// ★ §111: bit 31 ON by default -- the host payload is 2x the raw three bytes.
+	// Two independent known-right answers hit exactly: unit-0 level 0x200000 ->
+	// 0x400000 (+0.5, the documented cold boot) and the CHORUS LFO increment
+	// 57 -> 114 (= 0x72, lfo-ramp.md at 11 sites, 0.5993 Hz).
+	u32  m_specmask = 0x819f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -791,6 +795,7 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register

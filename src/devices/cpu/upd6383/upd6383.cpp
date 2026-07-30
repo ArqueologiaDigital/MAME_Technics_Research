@@ -794,7 +794,26 @@ void upd6383_device::host_w(bool cd, u8 data)
 			m_poke_n = 0;
 			if (m_poke[0] == 0x0a)
 			{   // DATA packet: 0A | dd dd dd | TAG
-				const u32 v = (u32(m_poke[1]) << 16) | (u32(m_poke[2]) << 8) | m_poke[3];
+				u32 v = (u32(m_poke[1]) << 16) | (u32(m_poke[2]) << 8) | m_poke[3];
+				//  ★★★ §111 SPECULATIVE (mask bit 31): THE HOST PAYLOAD IS 2x THE RAW
+				//  THREE BYTES.  r3-delaydram.md states it; §71/A3 reproduced it as a
+				//  control that could have failed -- the cold-boot record says
+				//  `reg 0x06 <- +0.500000' and `reg 0x86 <- +0.183992' while the wire
+				//  carries +0.250000 and +0.091996, HALF of each to six decimal
+				//  places.  We have been storing the raw bytes ever since, and every
+				//  host-programmed quantity in this device is consequently half.
+				//
+				//  ★ TWO INDEPENDENT KNOWN-RIGHT ANSWERS, from different notes and
+				//  different subsystems -- this is why it is worth doing now:
+				//    (1) unit-0 OUTPUT LEVEL  0x200000 -> 0x400000 = +0.5, the
+				//        documented cold-boot value (register-space.md A1/A3).
+				//    (2) CHORUS LFO INCREMENT      57 -> 114 = 0x72, which
+				//        lfo-ramp.md derives independently at 11 sites and ties to a
+				//        real modulation rate of 0.5993 Hz.
+				//  Neither was fitted to the other; a wrong scaling cannot satisfy
+				//  both.  If only one moves, this reading is wrong.
+				if (m_speculative && (m_specmask & 0x80000000u))
+				{ v = (v << 1) & 0xffffff; m_pk_x2_n++; }
 				const u8  tag = m_poke[4];
 				m_pk_tag[tag]++;
 				switch (tag & 0x7f)
@@ -4306,6 +4325,7 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		logerror("            §111 host payload x2 applied to %u packets\n", m_pk_x2_n);
 		logerror("            §110 K6 ACT-07 stores re-pointed to pre-increment: %u\n",
 				m_k6_act07_fix_n);
 		if (m_mirror06_n)
