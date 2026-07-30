@@ -1371,7 +1371,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 	if (upd6383_disassembler::coeff_consumer(word))
 		m_cursor++;
 
-	if (upd6383_disassembler::ptr_postinc(word))
+	if (upd6383_disassembler::ptr_postinc(word) && !ptrd_a_suppressed(word))
 		m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 }
 
@@ -3673,7 +3673,7 @@ void upd6383_device::exec_decoded(u64 word)
 		//  exactly -133 -- and that single omission displaced the whole input
 		//  window by 0x46, put the kernel's audio deposit at 0x4C where no body
 		//  word can address it, and left the reverb unexcited and silent.
-		if (upd6383_disassembler::ptr_postinc(word))
+		if (upd6383_disassembler::ptr_postinc(word) && !ptrd_a_suppressed(word))
 			m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 	}
 	else
@@ -4746,6 +4746,30 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 //  ARMED BY IDENTITY, NOT BY TIME: the sweep only runs once I-RAM slot 84 holds
 //  PARAMETRIC EQ's first word.  §129 showed a frame-count arm silently described
 //  CHORUS instead, for every "PEQ" measurement ever taken.
+//  ★★★ §180 SPECULATIVE (mask bit 62): PTRD-A -- `lo12 == 0x1C0' DOES NOT MOVE
+//  THE POINTER.
+//
+//  Provenance: an exhaustive search over 21 364 736 candidate delta rules
+//  (sign x class-subset x one field-level gate) returns `class4 in {2,0xA}' AND
+//  `lo12 != 0x1C0' as the UNIQUE best NON-DEGENERATE rule in the whole space --
+//  it satisfies C4 + P1 + P2 + P3 and nothing else does.
+//  ⚠ The search's four 7/7 rules are DEGENERATE: they freeze the pointer so every
+//  constraint reads 0 == 0 (N cells [1,1,1]).  A criterion that cannot fail.
+//  ⚠ The gate is NOT vacuous: 103 sites carry lo12 0x1C0 on a pointer-moving
+//  class and 36 of them have a non-zero addr8 (+66, -11, +69..+78, +/-1 ...).
+//  ⚠ And it does NOT solve the rule: C1/C2/C3 are satisfied by ZERO of 6 088 704
+//  non-degenerate rules, and C3 is PROVABLY unreachable -- it demands
+//  77x - 80y = 0 with x,y in {0,1}, and gcd(77,80) = 1 forces the inert case.
+bool upd6383_device::ptrd_a_suppressed(u64 word)
+{
+	if (!m_speculative || !(m_specmask & (1ull << 62)))
+		return false;
+	if ((word & 0xfff) != 0x1c0)
+		return false;
+	m_ptrd_a_n++;
+	return true;
+}
+
 void upd6383_device::bx_frame_end()
 {
 	if (!m_bx_on && !m_bx_sweep)
@@ -5371,6 +5395,9 @@ void upd6383_device::dump_frame_report() const
 					: !m_a15w_lnz[i] ? "<= L ALWAYS 0 -> POINTER"
 					: (m_a15w_pmin[i] == 0 && m_a15w_pmax[i] == 0) ? "<= operands live but P ALWAYS 0 (?!)"
 					: "live");
+		logerror("upd6383: ★ §180 PTRD-A `lo12 == 0x1C0' suppressed from the walk "
+				"(mask bit 62 = %d): FIRED %llu times\n",
+				(m_specmask & (1ull << 62)) ? 1 : 0, (unsigned long long)m_ptrd_a_n);
 		logerror("upd6383: ★★ §174 AT THE class-A ACT-0x15 MULTIPLY: fired %llu | "
 				"coef %lld..%lld chg %llu nonzero %llu | L %lld..%lld chg %llu nonzero %llu | "
 				"P %lld..%lld  => %s\n",

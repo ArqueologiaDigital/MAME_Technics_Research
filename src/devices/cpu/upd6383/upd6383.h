@@ -1025,6 +1025,9 @@ private:
 	s64  m_c6_lmin[8]  = {}, m_c6_lmax[8]  = {};
 	//  §175: identity of the last writer of m_p, so "P is zero at the lookup" can
 	//  name WHICH site left it that way rather than being attributed by reasoning.
+	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
+	bool ptrd_a_suppressed(u64 word);
+	u64  m_ptrd_a_n = 0;
 	u8   m_pw = 0;
 	u32  m_c6_pwseen[8] = {};
 	//  §175: the SAME census keyed PER WORD -- the pooled form cannot see one dead
