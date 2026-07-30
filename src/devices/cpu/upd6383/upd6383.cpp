@@ -2021,6 +2021,24 @@ void upd6383_device::exec_alu(u64 word)
 	//  coefficient-fetching LOAD-acc words of the output stage -- source this code,
 	//  and with it unmodelled they multiplied the output level by a silent zero.
 	case upd6383_disassembler::LO_SRC_ACCB:
+		//  ★★★ §113 SPECULATIVE (mask bit 18): SRC 0x11 = mem[ptr], NOT ACCB.
+		//  lfo-ramp.md item L enumerates mem[ptr] as the COMPLIANT reading of the
+		//  `447' word iw92 (0000209447), and §8.4 FORCES the negative: the 447 word
+		//  must not deposit a foreign value in the phase cell -- "a 447 that copied
+		//  [acc] would overwrite the phase with unity every frame", which is exactly
+		//  what our ACCB reading makes it do (measured: the phase pins at 0x7FFFFF
+		//  once iw32's clobber is removed).  Under mem[ptr] the word stores
+		//  mem[0x07] back to mem[0x07] -- an IDENTITY -- and the phase survives.
+		//  Same shape as §100's SRC 0x02 = reg[addr8] identity at w72.
+		//  ⚠ This CONTRADICTS §27's ACCB reading, which is live.  Gated, and the
+		//  criterion is two-sided: the phase either ramps by 114 per frame or it
+		//  does not.
+		if (m_speculative && (m_specmask & 0x40000u))
+		{
+			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			m_src11_mem_n++;
+			break;
+		}
 		L = !m_speculative ? 0
 			: (m_specmask & 0x4000) ? acc_to_datum(m_cur_unit1 ? m_accb : m_acc)
 			: (m_specmask & 2) ? acc_to_datum(m_accb)
@@ -2650,6 +2668,33 @@ void upd6383_device::exec_alu(u64 word)
 			m_lvlguard_n++;
 		else if (ab_hit)                          // ★ §104 A/B, diagnostic only
 			m_ab_nostore08_n++;
+		else
+		//  ★★★ §112 SPECULATIVE (mask bit 26 was the §106 diagnostic; this is bit 25's
+		//  neighbour -- see below): ACTION 0x07 ON A CLASS-A WORD LATCHES P, IT DOES
+		//  NOT STORE TO D-RAM.
+		//
+		//  class4 == 0xA is the COEFFICIENT CONSUMER (it advances the cursor), and
+		//  lfo-ramp.md §11 annotates iw32's two SIBLING class-A / SRC-0x08 words in
+		//  exactly those terms:
+		//      092.A.dd.200   ... acc += P ; P := INC
+		//      094.A.dd.200   ... op2      ; P := 0x7FFFFF
+		//  i.e. a class-A word reading SRC 0x08 LATCHES the coefficient into the
+		//  multiplier input.  iw32 (000.A.FF.207) is the same family with ACT 0x07.
+		//  Guard 6 already concedes the point being tested here: "Applying the same
+		//  mode rule to ACTION 0x07 is the CONSISTENT reading, not a separate proof".
+		//
+		//  ★ TWO-SIDED CRITERION, CURRENTLY FAILING: iw32 stores 0x400000 = 4194304
+		//  onto cell 0x07, and 4194304 is EXACTLY the value the CHORUS LFO phase cell
+		//  is pinned at every frame.  If this reading is right the phase stops being
+		//  reset and RAMPS by 114 per frame (the §111-corrected increment).  If it is
+		//  wrong the phase stays pinned and nothing else should move either.
+		if (m_speculative && (m_specmask & 0x2000000u)
+				&& upd6383_disassembler::class4(word) == 0xa
+				&& !upd6383_disassembler::c_format(word))
+		{
+			m_p = u32(L) & 0xffffff;    // latch the multiplier input
+			m_act07_latchp_n++;
+		}
 		else
 		store_mode(mode07, u8(d07), u32(L));                           // §99
 			kwatch(d07, s32(u32(L) & 0xffffff));
@@ -4325,6 +4370,9 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
+		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",
+				m_act07_latchp_n);
 		logerror("            §111 host payload x2 applied to %u packets\n", m_pk_x2_n);
 		logerror("            §110 K6 ACT-07 stores re-pointed to pre-increment: %u\n",
 				m_k6_act07_fix_n);
