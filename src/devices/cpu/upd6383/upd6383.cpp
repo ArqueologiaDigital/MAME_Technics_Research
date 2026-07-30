@@ -289,7 +289,7 @@ void upd6383_device::device_start()
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
 	if (const char *e = getenv("UPD6383_SPEC"))
 	{
-		m_specmask = u32(strtoul(e, nullptr, 16));
+		m_specmask = u64(strtoull(e, nullptr, 16));
 		logerror("upd6383: §32 bisection mask UPD6383_SPEC = 0x%X\n", m_specmask);
 	}
 	//  ★ §109: say bits 28/29 out loud, so an arm can never be confused with a null.
@@ -1311,7 +1311,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 //  zero survivors, analysis/r1-allpass-motif.md F2), which is what lets
 //  `212.A.FF.407' both write the accumulator to memory and multiply by it.
 
-s32 upd6383_device::acc_to_datum(u64 acc)
+s32 upd6383_device::acc_to_datum(u64 acc) const
 {
 	// the 44-bit accumulator read as a 24-bit datum, with saturation.  The
 	// chip has two shifters and an OVC on the CDJ-500 block diagram; whether it
@@ -1319,6 +1319,26 @@ s32 upd6383_device::acc_to_datum(u64 acc)
 	// turn a loud sound into a louder one.
 	const s64 v = s64(util::sext(acc, 44)) >> ACC_SHIFT;
 
+	//  ★★★ §114 SPECULATIVE (mask bit 32): WRAP mod 2^23 instead of saturating.
+	//  The comment above states the choice was UNKNOWN and saturation was picked as
+	//  the safe default.  lfo-ramp.md §11 settles it for at least one datapath, in
+	//  the simulation it uses to derive the LFO rates:
+	//        094.A.00.200   ST mem[Q] <- (phase + INC) mod 2**23
+	//  MEASURED consequence of clamping: once §112 removes iw32's clobber the CHORUS
+	//  phase runs up to 0x7FFFFF -- the 24-bit maximum -- and STICKS.  A clamped
+	//  accumulator stops dead at full scale; a wrapped one is the sawtooth an LFO is.
+	//
+	//  ★ TWO-SIDED AND CURRENTLY FAILING: the phase's per-frame min..max at body
+	//  iw89 is a SINGLE value (8388607..8388607).  If the publish wraps it becomes a
+	//  wide range.  ⚠ And the risk the original comment names is real and is the
+	//  falsifier: wrapping an AUDIO accumulator turns a loud sample into an inverted
+	//  one, so if this is wrong the §54 DC leak should rise or the tracking verdict
+	//  should get worse.  Both are watched.
+	if (m_speculative && (m_specmask & 0x100000000ull))
+	{
+		m_wrap_n++;
+		return s32(util::sext(u32(v) & 0xffffff, 24));
+	}
 	if (v >  0x7fffff) return  0x7fffff;
 	if (v < -0x800000) return -0x800000;
 	return s32(v);
@@ -4370,6 +4390,7 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		logerror("            §114 accumulator stores WRAPPED mod 2^23: %u\n", m_wrap_n);
 		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
 		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",
 				m_act07_latchp_n);

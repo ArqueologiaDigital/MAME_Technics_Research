@@ -369,7 +369,7 @@ private:
 	// consideration that discriminates at all.
 	static constexpr int P_SHIFT   = 6;
 	static constexpr int ACC_SHIFT = 22 - P_SHIFT;
-	static s32 acc_to_datum(u64 acc);
+	s32 acc_to_datum(u64 acc) const;   // §114: reads m_specmask, no longer static
 	void capture_byte(bool cd, u8 data);
 	void capture_flush();
 	void capture_write_files() ATTR_COLD;
@@ -706,7 +706,15 @@ private:
 	// Two independent known-right answers hit exactly: unit-0 level 0x200000 ->
 	// 0x400000 (+0.5, the documented cold boot) and the CHORUS LFO increment
 	// 57 -> 114 (= 0x72, lfo-ramp.md at 11 sites, 0.5993 Hz).
-	u32  m_specmask = 0x819f440f;
+	//  ⚠ WIDENED TO u64 (§114): every bit 0..31 now has a consumer, and the one
+	//  apparent exception -- bit 18 -- was SET in the default, which is exactly how
+	//  §113 came to be gated behind a bit that was already on and never tested.
+	//  A free-bit search must check BOTH "no consumer in code" AND "clear in the
+	//  default".  New experiments take bit 32 and up.
+	//  ★ bit 18 is CLEARED here, so §113 (SRC 0x11 = mem[ptr]) is now genuinely OFF
+	//  and can finally be A/B'd.  It has no other consumer, so clearing it restores
+	//  the pre-§113 behaviour rather than changing anything else.
+	u64  m_specmask = 0x819b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -795,6 +803,7 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	mutable u32 m_wrap_n = 0;   // §114: accumulator stores wrapped instead of clamped
 	u32  m_src11_mem_n = 0;     // §113: SRC 0x11 reads honoured as mem[ptr]
 	u32  m_act07_latchp_n = 0;  // §112: class-A ACT-07 words that latched P
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
