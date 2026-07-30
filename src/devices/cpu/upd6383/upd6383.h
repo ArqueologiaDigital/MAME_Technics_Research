@@ -567,6 +567,50 @@ private:
 	//  Every gate must log one: it is what distinguishes a real null arm from a
 	//  gate that silently never ran.
 	u64  m_cursor_rebase_n = 0;
+
+	// ---- §133 THE BANK-ENTRY DEMULTIPLEXER ---------------------------------------
+	//  Decodes PARAMETRIC EQ's two five-word bank entries (ACT 0x0D, ACT 0x0E,
+	//  f31=4, f31=5) WITHOUT needing the chip audible and WITHOUT needing the
+	//  `SRC 0x08' clobber fixed: a known, per-frame-distinct stimulus is injected
+	//  straight into D-RAM 0x05/0x0F at the unit-0 body CALL -- downstream of the
+	//  clobber -- and the 40 Direct-Form-I state cells 0x50..0x77 are read back as
+	//  a bit-exact witness of what the entry left in P.  §131: the accumulator
+	//  CANNOT carry the sample across the entry (every entry word is f31=0,
+	//  `acc <- P'), so P is the only conduit and the four unknowns compete for it.
+	//
+	//  Mask bits (39+; 35-37 = §121's selector, 38 = §130's rebase):
+	//    39      injector on
+	//    40      inject DIFFERENT sequences into 0x05 and 0x0F (else the same)
+	//    41      in-device SWEEP: drive the four selectors from the trial counter
+	//    42-44   static ACT 0x0D destination        45-47  static ACT 0x0E destination
+	//    48-49   static f31=4 reading               50-51  static f31=5 reading
+	//    52      suppress the blanket tempA capture when the action's selector is set
+	static constexpr u32 BX_TRIAL_FRAMES = 64;
+	static constexpr u32 BX_TRIALS       = 1024;   // 8 x 8 x 4 x 4
+	bool m_bx_on = false, m_bx_distinct = false, m_bx_sweep = false, m_bx_supp_ta = false;
+	u32  m_bx_sel0d = 0, m_bx_sel0e = 0, m_bx_f4 = 0, m_bx_f5 = 0;
+	bool m_bx_armed = false;
+	u32  m_bx_trial = 0, m_bx_tframe = 0;
+	u32  m_bx_prev[40] = {};
+	u32  m_bx_nz = 0, m_bx_chg = 0, m_bx_f1s = 0, m_bx_f1t = 0;
+	u32  m_bx_f2s = 0, m_bx_f2t = 0, m_bx_shift = 0, m_bx_shmax = 0;
+	u64  m_bx_inj_n = 0, m_bx_act0e_n = 0, m_bx_f4_n = 0, m_bx_f5_n = 0, m_bx_supp_n = 0;
+	static u32 bx_stim(u32 n, bool second)
+	{   //  non-repeating over the 64-frame trial, and the two streams never collide,
+		//  so "which cell did the entry feed from" is decidable bit-exactly.  Small
+		//  enough that the cascade's x2 make-up cannot rail a 24-bit cell.
+		return second ? (0x018000u + n * 0x000203u) : (0x010000u + n * 0x000101u);
+	}
+	void bx_frame_end();
+	//  Reading 0 is "keep the current alias" and is handled by the caller, so this
+	//  only maps 1..3.  LOAD/ADD/HOLD are the three accumulator ops the ISA already
+	//  has (upd6383d.h:123-125); HOLD is otherwise only established on class 8, so
+	//  admitting it here for f31 >= 4 is exactly the kind of extension this test is
+	//  meant to decide rather than assume.
+	static u16 bx_f31_op(u32 r)
+	{
+		return (r == 1) ? 0u : (r == 2) ? 1u : 2u;   // LOAD / ADD / HOLD
+	}
 	u8   m_st07_dest[8] = {}, m_st07_ptr[8] = {}, m_st07_src[8] = {};
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
 	//======================================================================

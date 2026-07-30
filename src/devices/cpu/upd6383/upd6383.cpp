@@ -104,6 +104,7 @@
 #include "upd6383.h"
 #include "upd6383d.h"
 
+#include <cstring>
 #include <fstream>
 
 #define LOG_TRAP   (1U << 1)    // words we cannot execute
@@ -294,6 +295,22 @@ void upd6383_device::device_start()
 	}
 	if (const char *e = getenv("UPD6383_TRACE_FRAME"))
 		m_trace_frame = u64(strtoull(e, nullptr, 10));
+	//  ★ §133: unpack the bank-entry demultiplexer's mask fields ONCE, and say every
+	//  one of them out loud.  A silent selector is how §121 ran seven arms that were
+	//  all the same arm.
+	m_bx_on       = (m_specmask & (1ull << 39)) != 0;
+	m_bx_distinct = (m_specmask & (1ull << 40)) != 0;
+	m_bx_sweep    = (m_specmask & (1ull << 41)) != 0;
+	m_bx_sel0d    = u32((m_specmask >> 42) & 7);
+	m_bx_sel0e    = u32((m_specmask >> 45) & 7);
+	m_bx_f4       = u32((m_specmask >> 48) & 3);
+	m_bx_f5       = u32((m_specmask >> 50) & 3);
+	m_bx_supp_ta  = (m_specmask & (1ull << 52)) != 0;
+	if (m_bx_on || m_bx_sweep)
+		logerror("upd6383: ★ §133 DEMUX injector=%d distinct=%d sweep=%d "
+				"sel0D=%d sel0E=%d f31_4=%d f31_5=%d suppressTA=%d\n",
+				m_bx_on, m_bx_distinct, m_bx_sweep, m_bx_sel0d, m_bx_sel0e,
+				m_bx_f4, m_bx_f5, m_bx_supp_ta);
 	//  ★ §128: say the arm frame out loud.  An effect selected from the panel lands
 	//  at t ~ 40-50 s = frame 1.8-2.2 M; tracing at the 420 000 default would silently
 	//  describe the cold-boot default (CHORUS) instead of the selected program.
@@ -2565,7 +2582,15 @@ void upd6383_device::exec_alu(u64 word)
 		const bool use_b = (m_speculative && (m_specmask & 0x4000))
 				? m_cur_unit1
 				: (sel && (f31 & 4));
-		const u16  op    = sel ? u16(f31 & 3) : f31;
+		//  ★ §133: f31 = 4 and 5 have never been decoded; with mask bit 0 set they
+		//  execute SILENTLY as `f31 & 3' (4 -> LOAD, 5 -> ADD) with no fired-count
+		//  anywhere -- a standing breach of this project's own rule, and it means an
+		//  enumeration must A/B against that ALIAS, not against a trap.  Give each
+		//  its own reading and its own counter.  Reading 0 reproduces the alias
+		//  exactly, so the default arm is unchanged.
+		u16 op = sel ? u16(f31 & 3) : f31;
+		if (sel && f31 == 4) { m_bx_f4_n++; if (m_bx_f4) op = bx_f31_op(m_bx_f4); }
+		if (sel && f31 == 5) { m_bx_f5_n++; if (m_bx_f5) op = bx_f31_op(m_bx_f5); }
 		u64 &accum = use_b ? m_accb : m_acc;
 		const u64 src_term =
 				(op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum)
@@ -2643,6 +2668,19 @@ void upd6383_device::exec_alu(u64 word)
 		//  pairing passing is weak evidence and a single pairing failing is weaker.
 		case 0x01: case 0x08: case 0x0C: case 0x11: case 0x16:
 		case 0x0D: case 0x0E:
+			//  ⛔ §132: THIS BLANKET CAPTURE IS ONE OF THE TWO STRUCTURAL REASONS
+			//  §121 COULD NOT WORK.  It runs for 0x0D/0x0E BEFORE their own
+			//  destination switch below, so every arm was "destination X *and*
+			//  tempA" and selector value 2 (-> tempA) was indistinguishable from
+			//  value 0 (none).  With mask bit 52 an action that carries its own
+			//  non-zero selector is excused from it, so the selector can be
+			//  isolated.  The other five codes are untouched.
+			if (m_bx_supp_ta
+					&& ((act == 0x0d && m_bx_sel0d) || (act == 0x0e && m_bx_sel0e)))
+			{
+				m_bx_supp_n++;
+				break;
+			}
 			m_ta = u32(L) & 0xffffff;
 			break;
 		case 0x1A:
@@ -2676,18 +2714,50 @@ void upd6383_device::exec_alu(u64 word)
 	//  ⚠ Rule 8: a candidate that merely makes something non-constant is NOT a pass.
 	//  The criterion is specifically INPUT dependence -- quiet frames versus frames
 	//  with notes playing -- which a free-running or DC quantity cannot fake.
+	//  ★ §133: the selector now comes from m_bx_sel0d (mask bits 42-44, or the sweep
+	//  counter), and gains value 7.  Values 1/2/3/4/5/6 keep §121's meanings so its
+	//  arms stay reproducible; §121's own bits 35-37 remain honoured as a fallback.
+	//  ⚠ value 5 ("-> P") writes a RAW datum while a multiply writes
+	//  `(coef*L) >> P_SHIFT' (:3039) -- the two differ by 2^ACC_SHIFT = 2^16, which
+	//  is the §132 §3 tension.  Value 7 is the same destination at the multiply's
+	//  scale.  Both are kept and enumerated so the scale is DECIDED, not assumed;
+	//  §131 makes this the load-bearing pair, since P is the only register that can
+	//  carry the sample across the entry.
 	case 0x0d:
-		if (m_speculative && ((m_specmask >> 35) & 7))
+		if (m_speculative && (m_bx_sel0d || ((m_specmask >> 35) & 7)))
 		{
+			const u32 s0d = m_bx_sel0d ? m_bx_sel0d : u32((m_specmask >> 35) & 7);
 			m_act0d_n++;
-			switch ((m_specmask >> 35) & 7)
+			switch (s0d)
 			{
 			case 1: m_acc = u64(s64(L)) << ACC_SHIFT; break;   // -> accumulator (load)
 			case 2: m_ta = u32(L) & 0xffffff; break;           // -> tempA
 			case 3: m_tb = u32(L) & 0xffffff; break;           // -> tempB
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;  // -> mem[ptr]
-			case 5: m_p = u32(L) & 0xffffff; break;            // -> the multiplier latch P
+			case 5: m_p = u32(L) & 0xffffff; break;            // -> P, RAW (suspect scale)
 			case 6: m_acc += u64(s64(L)) << ACC_SHIFT; break;  // -> accumulator (add)
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;     // -> P at the MULTIPLY's scale
+			default: break;
+			}
+		}
+		break;
+	//  ★ §133: ACT 0x0E gets the SAME menu, which it has never had.  It needs one:
+	//  in bank 1 the entry is w0 (ACT 0x0D) immediately followed by w1 (ACT 0x0E),
+	//  so whatever 0x0D writes, 0x0E can overwrite one slot later -- they cannot be
+	//  decoded separately, which is §125 point 4 and the constraint §121 broke.
+	case 0x0e:
+		if (m_speculative && m_bx_sel0e)
+		{
+			m_bx_act0e_n++;
+			switch (m_bx_sel0e)
+			{
+			case 1: m_acc = u64(s64(L)) << ACC_SHIFT; break;
+			case 2: m_ta = u32(L) & 0xffffff; break;
+			case 3: m_tb = u32(L) & 0xffffff; break;
+			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;
+			case 5: m_p = u32(L) & 0xffffff; break;
+			case 6: m_acc += u64(s64(L)) << ACC_SHIFT; break;
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;
 			default: break;
 			}
 		}
@@ -3941,6 +4011,24 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					m_cursor_rebase_n++;
 				}
 
+				//  ★★★ §133 THE INJECTOR.  Write the trial's stimulus into the two
+				//  candidate source cells at the unit-0 CALL.  This is deliberately
+				//  DOWNSTREAM of the `iw45'/`iw32' SRC 0x08 clobber, which is why the
+				//  decode does not have to wait for that fix: whatever the kernel did
+				//  to 0x05/0x0F, the body sees these two values.
+				//  ⚠ It also replaces a DC stimulus with a non-repeating one.  With
+				//  the injector off, cell 0x05 is railed at 0x7FFFFF every loud frame
+				//  (§129), and a DC input drives the state cells to a fixed point
+				//  where the shift identity mem[B+1] == mem[B+0] holds TRIVIALLY --
+				//  a criterion that cannot fail.  The distinct-value count below is
+				//  the guard that catches exactly that.
+				if (m_bx_on && m_bx_armed && !unit1)
+				{
+					m_dram.write_dword(0x05, bx_stim(m_bx_tframe, false));
+					m_dram.write_dword(0x0f, bx_stim(m_bx_tframe, m_bx_distinct));
+					m_bx_inj_n++;
+				}
+
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
 				//  with SRC 0x1A, because P = coef * tempB and the COEFFICIENT is
@@ -4015,6 +4103,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	}
 	m_delay_ix = 0;         // ★ SPECULATIVE: descriptor cells are consumed in
 	                        //   program order, restarting every frame.
+	bx_frame_end();         // ★ §133, after the frame has fully executed
 	m_frames_run++;
 	m_last_slots = slots;
 	m_last_traps = traps;
@@ -4195,6 +4284,96 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			do_[port][ch] = clean ? m_do[port][ch] : 0;
 
 	return clean;
+}
+
+
+//  ★★★ §133 THE BANK-ENTRY DEMULTIPLEXER -- one trial per 64 frames, scored in
+//  device, one line per trial.  Called once per frame after the frame completes.
+//
+//  ARMED BY IDENTITY, NOT BY TIME: the sweep only runs once I-RAM slot 84 holds
+//  PARAMETRIC EQ's first word.  §129 showed a frame-count arm silently described
+//  CHORUS instead, for every "PEQ" measurement ever taken.
+void upd6383_device::bx_frame_end()
+{
+	if (!m_bx_on && !m_bx_sweep)
+		return;
+	if (!m_bx_armed)
+	{
+		u64 w0 = 0;
+		for (u32 i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
+			w0 = (w0 << 8) | m_iram.read_byte(84 * upd6383_disassembler::WORD_BYTES + i);
+		if (w0 != 0x000020B1CDULL)       // PARAMETRIC EQ's w0, `000.2.0B.1CD'
+			return;
+		m_bx_armed = true;
+		logerror("upd6383: ★ §133 ARMED on I-RAM[84] = PARAMETRIC EQ, frame %u\n",
+				u32(m_frames_run));
+		logerror("upd6383: §133 trial sel0D sel0E f4 f5 | nz/40 chg/63 "
+				"feed1(s,t) feed2(s,t) shift/%u\n", 20 * (BX_TRIAL_FRAMES - 1));
+		return;
+	}
+
+	//  read the 40 Direct-Form-I state cells: bank 1 at 0x50..0x63, bank 2 at
+	//  0x64..0x77, four cells per section, five sections each (§129 §1, MEASURED).
+	u32 cell[40];
+	for (u32 i = 0; i < 40; i++)
+		cell[i] = m_dram.read_dword(0x50 + i) & 0xffffff;
+
+	const u32 n = m_bx_tframe;
+	if (n > 0)
+	{
+		//  C1 non-degeneracy: does mem[0x64] actually MOVE?  A live feed gives 63,
+		//  a DC fixed point gives 0.  Scored first, because every other predicate
+		//  is meaningless on a constant.
+		if (cell[20] != m_bx_prev[20]) m_bx_chg++;
+		//  C3 shift identity, model-free: mem[B+1][n] must equal mem[B+0][n-1] for
+		//  all ten sections.  It uses only the ANCHORED core, none of the four
+		//  unknowns, so it is a control -- if it fails on an arm that feeds a bank,
+		//  the CORE model is wrong and nothing may be concluded about the entry.
+		for (u32 k = 0; k < 10; k++)
+		{
+			const u32 b = (k < 5) ? (4 * k) : (20 + 4 * (k - 5));
+			if (cell[b + 1] == m_bx_prev[b + 0]) m_bx_shift++;
+			if (cell[b + 3] == (m_bx_prev[b + 2] >> 1)) m_bx_shift++;
+		}
+	}
+	//  C2 feed identity: a 24-bit bit-exact match against the two injected streams
+	//  says WHICH cell each bank's entry fed from.  Chance is 2^-24 per frame.
+	if (cell[0]  == bx_stim(n, false)) m_bx_f1s++;
+	if (cell[0]  == bx_stim(n, true))  m_bx_f1t++;
+	if (cell[20] == bx_stim(n, false)) m_bx_f2s++;
+	if (cell[20] == bx_stim(n, true))  m_bx_f2t++;
+
+	std::memcpy(m_bx_prev, cell, sizeof(cell));
+	m_bx_tframe++;
+
+	if (m_bx_tframe >= BX_TRIAL_FRAMES)
+	{
+		for (u32 i = 0; i < 40; i++) if (cell[i]) m_bx_nz++;
+		logerror("upd6383: §133 %4u  %u %u %u %u | %2u %2u | %2u %2u | %2u %2u | %u\n",
+				m_bx_trial, m_bx_sel0d, m_bx_sel0e, m_bx_f4, m_bx_f5,
+				m_bx_nz, m_bx_chg, m_bx_f1s, m_bx_f1t, m_bx_f2s, m_bx_f2t, m_bx_shift);
+		m_bx_nz = m_bx_chg = m_bx_f1s = m_bx_f1t = m_bx_f2s = m_bx_f2t = m_bx_shift = 0;
+		m_bx_tframe = 0;
+		//  clear the state cells so trials cannot contaminate each other
+		for (u32 i = 0; i < 40; i++) m_dram.write_dword(0x50 + i, 0);
+		std::memset(m_bx_prev, 0, sizeof(m_bx_prev));
+
+		if (m_bx_sweep && ++m_bx_trial < BX_TRIALS)
+		{   //  8 x 8 x 4 x 4 = 1024 joint readings, ALL FOUR MOVING TOGETHER.
+			//  §125 point 4 / §121's failure: three of the four held at a guess
+			//  while one varies cannot decide anything, because they share one
+			//  five-word block and compete for one register (§131).
+			m_bx_sel0d = (m_bx_trial >> 7) & 7;
+			m_bx_sel0e = (m_bx_trial >> 4) & 7;
+			m_bx_f4    = (m_bx_trial >> 2) & 3;
+			m_bx_f5    =  m_bx_trial       & 3;
+		}
+		else if (m_bx_sweep)
+		{
+			logerror("upd6383: ★ §133 SWEEP COMPLETE, %u trials\n", m_bx_trial);
+			m_bx_sweep = false;
+		}
+	}
 }
 
 
