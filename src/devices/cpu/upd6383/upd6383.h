@@ -921,6 +921,12 @@ private:
 	mutable u32 m_wrap_n = 0;   // §114: accumulator stores wrapped instead of clamped
 	u32  m_src11_mem_n = 0;     // §113: SRC 0x11 reads honoured as mem[ptr]
 	u32  m_act07_latchp_n = 0;  // §112: class-A ACT-07 words that latched P
+	//  §136: the same words routed to the MULTIPLIER INPUT latch instead (mask bit 54).
+	//  m_k/m_l (:451) are the input latches and m_p (:450) is the product register --
+	//  the split this reading needs is already in the type system; §112 writes the
+	//  wrong half of it.  ⚠ Coupled to §40 (bit 4): writing m_k does nothing unless
+	//  the multiply reads m_k, which only §40 makes it do.
+	u32  m_act07_latchk_n = 0;
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05

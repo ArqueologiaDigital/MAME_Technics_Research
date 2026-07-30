@@ -599,6 +599,15 @@ void upd6383_device::device_stop()
 		logerror("upd6383: §130 per-unit coefficient-cursor rebase (mask bit 38 = %d): "
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
+		//  ★ §136: which half of the multiplier register file did the class-A ACT-07
+		//  latch write, and did the multiply actually READ the input latch?
+		logerror("upd6383: ★ §136 class-A ACT-07 latch: -> PRODUCT m_p %u times, "
+				"-> INPUT m_k %u times (bit 54 = %d) | multiply reads the INPUT LATCH: "
+				"%s (§40, bit 4 = %d)\n",
+				m_act07_latchp_n, m_act07_latchk_n,
+				(m_specmask & (1ull << 54)) ? 1 : 0,
+				(m_specmask & 0x10) ? "YES" : "no -- it uses the freshly-read coef",
+				(m_specmask & 0x10) ? 1 : 0);
 		logerror("upd6383: PRESENTATION WORDS: %d executed, %d wrote NON-ZERO, datum peak %d\n",
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
 		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
@@ -2992,8 +3001,35 @@ void upd6383_device::exec_alu(u64 word)
 				&& upd6383_disassembler::class4(word) == 0xa
 				&& !upd6383_disassembler::c_format(word))
 		{
-			m_p = u32(L) & 0xffffff;    // latch the multiplier input
-			m_act07_latchp_n++;
+			//  ★★★ §136: THE REGISTER SPLIT ALREADY EXISTS -- THIS SITE USES THE
+			//  WRONG HALF OF IT.  `m_k'/`m_l' are declared "multiplier input
+			//  latches" (upd6383.h:451) and `m_p' is the "MPLY product register"
+			//  (:450).  §112's own reasoning above is *"a class-A word reading
+			//  SRC 0x08 LATCHES the coefficient into the multiplier input"* -- but
+			//  the code writes the PRODUCT register, so it does not latch an input
+			//  at all, it overwrites the outcome of the last multiply with a raw
+			//  24-bit datum.  §133 proved a raw datum in P is wrong by 2^ACC_SHIFT.
+			//
+			//  ⚠ §112 AND §40 ARE COUPLED, and neither can be right alone:
+			//    * writing `m_k' here is a NO-OP unless the multiply reads it, and
+			//      the default multiply (:3126) bypasses the latch and uses the
+			//      freshly-read `coef' -- "a latched-coefficient MAC with the latch
+			//      bypassed" in this file's own words (:3136).
+			//    * §40 (mask bit 4) makes the multiply read `m_k', and was REFUSED
+			//      because it "measurably destroys the result" -- but it was tested
+			//      while THIS site was writing the wrong register, so the pair has
+			//      never been evaluated together.
+			//  Bit 54 routes the latch to the input register; the §40 arm is bit 4.
+			if (m_speculative && (m_specmask & (1ull << 54)))
+			{
+				m_k = u32(L) & 0xffffff;    // the MULTIPLIER INPUT latch
+				m_act07_latchk_n++;
+			}
+			else
+			{
+				m_p = u32(L) & 0xffffff;    // the PRODUCT register (§112 as shipped)
+				m_act07_latchp_n++;
+			}
 		}
 		else
 		store_mode(mode07, u8(d07), u32(L));                           // §99
