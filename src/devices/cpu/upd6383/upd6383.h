@@ -1015,6 +1015,14 @@ private:
 	s64  m_c6_amin[8] = {}, m_c6_amax[8] = {};
 	u32  m_c6_pmin[8] = {}, m_c6_pmax[8] = {};
 	u32  m_c6_cmin[8] = {}, m_c6_cmax[8] = {};
+	//  §167: the temporaries at the class-6 site.  m_tb is §166's candidate index;
+	//  the change-count is what makes it a test (a range alone cannot rule out two
+	//  alternating constants).
+	s64  m_c6_tbmin[8] = {}, m_c6_tbmax[8] = {}, m_c6_tbprev[8] = {};
+	u64  m_c6_tbchg[8] = {};
+	s64  m_c6_tamin[8] = {}, m_c6_tamax[8] = {};
+	s64  m_c6_kmin[8]  = {}, m_c6_kmax[8]  = {};
+	s64  m_c6_lmin[8]  = {}, m_c6_lmax[8]  = {};
 	//  ★★★ §153 (mask bit 60): THE DELAY-TAP MODULATION REGISTER.
 	//  §152: `lo12 == 0x44C' is "apply the modulation offset" (kn5000-dsp-chorus.md
 	//  §3.1/§3.2, 2026-07-22), the class selecting interpolation -- CHORUS uses the

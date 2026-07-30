@@ -2066,11 +2066,31 @@ void upd6383_device::exec_alu(u64 word)
 				if (slot >= 0)
 				{
 					const s64 a = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
+					//  ★★★ §167: `m_tb' IS THE CANDIDATE INDEX and this is the rule-4
+					//  gate on it.  §166 measured C63 + class-6 as ONE idiom -- 53 of
+					//  53 in BOTH directions, against a base-rate null of 0.94 -- and
+					//  C63 is `SRC 0x11 / ACT 0x03' = `m_tb = L'.  So the shape is
+					//  "load the index register, then read the table indexed by it".
+					//  ⚠ BEFORE implementing `table[m_tb]', measure that m_tb VARIES.
+					//  §162 censused acc/m_dp/cursor and never looked at the temps; if
+					//  m_tb is constant the lookup is frozen and building it
+					//  manufactures exactly the false null §162 exists to prevent.
+					//  m_ta/m_k/m_l ride along -- they are the other registers a
+					//  varying index could plausibly arrive in, and enumerating all
+					//  four costs nothing while guessing one costs a run.
+					const s64 tb = s64(s32(util::sext(m_tb, 24)));
+					const s64 ta = s64(s32(util::sext(m_ta, 24)));
+					const s64 kk = s64(s32(util::sext(m_k,  24)));
+					const s64 ll = s64(s32(util::sext(m_l,  24)));
 					if (!m_c6_hits[slot])
 					{
 						m_c6_amin[slot] = m_c6_amax[slot] = a;
 						m_c6_pmin[slot] = m_c6_pmax[slot] = m_dp;
 						m_c6_cmin[slot] = m_c6_cmax[slot] = m_cursor;
+						m_c6_tbmin[slot] = m_c6_tbmax[slot] = tb;
+						m_c6_tamin[slot] = m_c6_tamax[slot] = ta;
+						m_c6_kmin[slot]  = m_c6_kmax[slot]  = kk;
+						m_c6_lmin[slot]  = m_c6_lmax[slot]  = ll;
 					}
 					else
 					{
@@ -2080,7 +2100,17 @@ void upd6383_device::exec_alu(u64 word)
 						m_c6_pmax[slot] = std::max<u32>(m_c6_pmax[slot], m_dp);
 						m_c6_cmin[slot] = std::min<u32>(m_c6_cmin[slot], m_cursor);
 						m_c6_cmax[slot] = std::max<u32>(m_c6_cmax[slot], m_cursor);
+						m_c6_tbmin[slot] = std::min(m_c6_tbmin[slot], tb);
+						m_c6_tbmax[slot] = std::max(m_c6_tbmax[slot], tb);
+						m_c6_tamin[slot] = std::min(m_c6_tamin[slot], ta);
+						m_c6_tamax[slot] = std::max(m_c6_tamax[slot], ta);
+						m_c6_kmin[slot]  = std::min(m_c6_kmin[slot],  kk);
+						m_c6_kmax[slot]  = std::max(m_c6_kmax[slot],  kk);
+						m_c6_lmin[slot]  = std::min(m_c6_lmin[slot],  ll);
+						m_c6_lmax[slot]  = std::max(m_c6_lmax[slot],  ll);
 					}
+					if (m_c6_hits[slot] && tb != m_c6_tbprev[slot]) m_c6_tbchg[slot]++;
+					m_c6_tbprev[slot] = tb;
 					m_c6_hits[slot]++;
 				}
 			}
@@ -2336,6 +2366,20 @@ void upd6383_device::exec_alu(u64 word)
 		//  ⚠ This CONTRADICTS §27's ACCB reading, which is live.  Gated, and the
 		//  criterion is two-sided: the phase either ramps by 114 per frame or it
 		//  does not.
+		//  ★★★ §168 2026-07-30: TESTED AT LAST, and the two-sided criterion is
+		//  decided on arm 2.  Gate FIRED 9 279 912 times -- so "nothing moved" is a
+		//  decision, not an absence -- and `m_tb' at the class-6 site is UNCHANGED
+		//  (0..5872025, chg 1).  Swapping SRC 0x11 from ACCB to mem[ptr] moves WHICH
+		//  constant arrives, not whether it is constant.
+		//  ⇒ The real defect is ADDRESSING: §162 measures m_dp = 12 (0x0C) at the
+		//  class-6 word, and §164's exhaustive per-frame census lists every D-RAM
+		//  cell 0x00..0x1F that moves -- 01 02 04 06 07 0E and nothing else.  Cell
+		//  0x0C is not among them.  `C63' reads cell 0x0C; the LFO phase is in cell
+		//  0x07.  It is reading the wrong cell.
+		//  ⚠ NOT inert and still NOT shipped: one cell differs from the control
+		//  (`06: chg 1100 -> 2'), everything else bit-identical.  Too small to
+		//  overturn §27's live ACCB reading.  This bit is now TESTED-and-recorded,
+		//  no longer "off because nobody ran it".
 		if (m_speculative && (m_specmask & 0x40000u))
 		{
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
@@ -3219,6 +3263,14 @@ void upd6383_device::exec_alu(u64 word)
 			//  at all, it overwrites the outcome of the last multiply with a raw
 			//  24-bit datum.  §133 proved a raw datum in P is wrong by 2^ACC_SHIFT.
 			//
+			//  ⛔⛔ §165 2026-07-30: THE PAIR HAS NOW BEEN EVALUATED TOGETHER, AND
+			//  IT IS REFUTED.  Bit 54 alone is BIT-IDENTICAL to the control in every
+			//  D-RAM cell.  Bit 54 + bit 4 produces `§70 ACCA min = max =
+			//  176 471 605 248' -- the exact DC constant §137 already retracted, and
+			//  min == max, so standing rule 1 catches it before it can be reported as
+			//  output.  Both bits stay off.  The paragraph below is kept because its
+			//  REASONING is still the best account of why the two are coupled; only
+			//  its closing claim that they were never tested together is now stale.
 			//  ⚠ §112 AND §40 ARE COUPLED, and neither can be right alone:
 			//    * writing `m_k' here is a NO-OP unless the multiply reads it, and
 			//      the default multiply (:3126) bypasses the latch and uses the
@@ -5191,6 +5243,15 @@ void upd6383_device::dump_frame_report() const
 					(long long)m_c6_amin[i], (long long)m_c6_amax[i],
 					(m_c6_amin[i] == m_c6_amax[i]) ? "CONSTANT -- phase is NOT here" : "VARIES",
 					m_c6_pmin[i], m_c6_pmax[i], m_c6_cmin[i], m_c6_cmax[i]);
+		for (int i = 0; i < m_c6_n; i++)
+			logerror("upd6383:    §167 SAME SITE, THE TEMPS: tB %lld..%lld chg %llu (%s) | "
+					"tA %lld..%lld | K %lld..%lld | L %lld..%lld\n",
+					(long long)m_c6_tbmin[i], (long long)m_c6_tbmax[i],
+					(unsigned long long)m_c6_tbchg[i],
+					(m_c6_tbmin[i] == m_c6_tbmax[i]) ? "CONSTANT -- tB is NOT the index" : "VARIES",
+					(long long)m_c6_tamin[i], (long long)m_c6_tamax[i],
+					(long long)m_c6_kmin[i], (long long)m_c6_kmax[i],
+					(long long)m_c6_lmin[i], (long long)m_c6_lmax[i]);
 		logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
 				"(mask bit 61 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
