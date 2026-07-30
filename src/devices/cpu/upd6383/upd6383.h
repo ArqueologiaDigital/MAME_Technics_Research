@@ -793,7 +793,7 @@ private:
 	//  A cell whose quiet and loud ranges DIFFER is carrying the audio.
 	s32  m_kq_min[256], m_kq_max[256], m_kl_min[256], m_kl_max[256];
 	u32  m_kw_n[256] = {};
-	u16  m_kw_who[24] = {}; u8 m_kw_cell[24] = {}; u64 m_kw_word[24] = {}; u32 m_kw_who_n = 0;
+	u16  m_kw_who[40] = {}; u8 m_kw_cell[40] = {}; u64 m_kw_word[40] = {}; u32 m_kw_who_n = 0;
 	void kwatch(u8 cell, s32 v);
 	//  ★★★ §98: THE POINTER WINDOW, MEASURED LIVE.
 	//  §97 answered "are mode-1 and mode-2 the same memory?" partly from a STATIC

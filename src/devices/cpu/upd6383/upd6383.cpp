@@ -538,8 +538,13 @@ void upd6383_device::kwatch(u8 cell, s32 v)
 	//  WRITTEN, yet §104's residency column still reports body 0 reading it as
 	//  constant -- so something overwrites it between deposit and pickup, exactly as
 	//  iw32 does to 0x07.  Name the writers, in execution order.
-	if ((cell == 0x05 || cell == 0x06 || cell == 0x07 || cell == 0x85 || cell == 0x86
-			|| cell == 0x87 || cell == 0x8a) && m_kw_who_n < 24)
+	//  §120: 0x0E/0x0F/0x10 added.  §119's verifier argues these are the real
+	//  modulation cells -- small magnitudes (0..264 / 0..203, tap-offset sized) and
+	//  fed by CHORUS's two table-lookup idioms, producing the quadrature pair the
+	//  disassembly header names.  Name their writers and measure their ranges.
+	if ((cell == 0x05 || cell == 0x06 || cell == 0x07 || cell == 0x0e || cell == 0x0f
+			|| cell == 0x10 || cell == 0x85 || cell == 0x86
+			|| cell == 0x87 || cell == 0x8a) && m_kw_who_n < 40)
 	{
 		bool seen = false;
 		for (u32 q = 0; q < m_kw_who_n; q++)
