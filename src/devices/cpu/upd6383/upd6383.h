@@ -1030,10 +1030,11 @@ private:
 	//  §175: the SAME census keyed PER WORD -- the pooled form cannot see one dead
 	//  site among 36 million live firings.
 	int  m_a15w_n = 0;
-	u64  m_a15w_word[12] = {}, m_a15w_hits[12] = {}, m_a15w_cnz[12] = {}, m_a15w_lnz[12] = {};
-	s64  m_a15w_cmin[12] = {}, m_a15w_cmax[12] = {};
-	s64  m_a15w_lmin[12] = {}, m_a15w_lmax[12] = {};
-	s64  m_a15w_pmin[12] = {}, m_a15w_pmax[12] = {};
+	u64  m_a15w_word[24] = {}, m_a15w_hits[24] = {}, m_a15w_cnz[24] = {}, m_a15w_lnz[24] = {};
+	s64  m_a15w_cmin[24] = {}, m_a15w_cmax[24] = {};
+	s64  m_a15w_lmin[24] = {}, m_a15w_lmax[24] = {};
+	s64  m_a15w_pmin[24] = {}, m_a15w_pmax[24] = {};
+	u32  m_a15w_dmin[24] = {}, m_a15w_dmax[24] = {};   // §176 F2: the pointer per site
 	//  §174: the operands AT the class-A ACT-0x15 multiply (not at its consumer).
 	u64  m_a15_n = 0, m_a15_cchg = 0, m_a15_lchg = 0, m_a15_cnz = 0, m_a15_lnz = 0;
 	s64  m_a15_cmin = 0, m_a15_cmax = 0, m_a15_cprev = 0;

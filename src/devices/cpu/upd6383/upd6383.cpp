@@ -3469,7 +3469,7 @@ void upd6383_device::exec_alu(u64 word)
 				const s64 cf0 = s64(util::sext(coef, 24));
 				int sl = -1;
 				for (int q = 0; q < m_a15w_n; q++) if (m_a15w_word[q] == word) { sl = q; break; }
-				if (sl < 0 && m_a15w_n < 12) { sl = m_a15w_n++; m_a15w_word[sl] = word; }
+				if (sl < 0 && m_a15w_n < 24) { sl = m_a15w_n++; m_a15w_word[sl] = word; }
 				if (sl >= 0)
 				{
 					if (!m_a15w_hits[sl])
@@ -3477,12 +3477,15 @@ void upd6383_device::exec_alu(u64 word)
 						m_a15w_cmin[sl] = m_a15w_cmax[sl] = cf0;
 						m_a15w_lmin[sl] = m_a15w_lmax[sl] = s64(L);
 						m_a15w_pmin[sl] = m_a15w_pmax[sl] = s64(m_p);
+						m_a15w_dmin[sl] = m_a15w_dmax[sl] = m_dp;                 // §176 F2
 					}
 					else
 					{
 						m_a15w_cmin[sl] = std::min(m_a15w_cmin[sl], cf0); m_a15w_cmax[sl] = std::max(m_a15w_cmax[sl], cf0);
 						m_a15w_lmin[sl] = std::min(m_a15w_lmin[sl], s64(L)); m_a15w_lmax[sl] = std::max(m_a15w_lmax[sl], s64(L));
 						m_a15w_pmin[sl] = std::min(m_a15w_pmin[sl], s64(m_p)); m_a15w_pmax[sl] = std::max(m_a15w_pmax[sl], s64(m_p));
+						m_a15w_dmin[sl] = std::min<u32>(m_a15w_dmin[sl], m_dp);   // §176 F2
+						m_a15w_dmax[sl] = std::max<u32>(m_a15w_dmax[sl], m_dp);
 					}
 					if (cf0) m_a15w_cnz[sl]++;
 					if (L)   m_a15w_lnz[sl]++;
@@ -5314,12 +5317,20 @@ void upd6383_device::dump_frame_report() const
 			}
 			{
 			std::string rr;
+			//  ★ §176 F1: report EVERY cell, not only the ones that moved.  §164
+			//  listed movers only, so it could not tell "static and non-zero" from
+			//  "static and ZERO" -- and the whole H1/H2 fork turns on exactly that.
+			u32 nz = 0;
 			for (u32 i = 0; i < 0x20; i++)
-				if (m_rampchg[i] || m_rampmin[i] != m_rampmax[i])
-					rr += string_format(" %02X:%d..%d/chg%llu", i, m_rampmin[i], m_rampmax[i],
-							(unsigned long long)m_rampchg[i]);
-			logerror("upd6383: ★★ §164 D-RAM RAMP CENSUS over %llu frames (cells that moved at all):%s\n",
-					(unsigned long long)m_frames_run, rr.empty() ? "  NONE -- every cell 0x00..0x1F is PINNED" : rr.c_str());
+			{
+				if (m_rampprev[i]) nz++;
+				rr += string_format(" %02X:%d", i, m_rampprev[i]);
+				if (m_rampchg[i]) rr += string_format("(%d..%d/chg%llu)", m_rampmin[i],
+						m_rampmax[i], (unsigned long long)m_rampchg[i]);
+			}
+			rr += string_format("  ||  NON-ZERO %u of 32", nz);
+			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames:%s\n",
+					(unsigned long long)m_frames_run, rr.c_str());
 		}
 		for (int i = 0; i < m_c6_n; i++)
 			logerror("upd6383: ★★ §162 CLASS-6 SITE %010llX addr8=%02X lo12=%03X : hits %llu | "
@@ -5341,11 +5352,12 @@ void upd6383_device::dump_frame_report() const
 					(long long)m_c6_lmin[i], (long long)m_c6_lmax[i]);
 		for (int i = 0; i < m_a15w_n; i++)
 			logerror("upd6383: ★★ §175 PER-SITE %010llX hits %llu | coef %lld..%lld nz %llu | "
-					"L %lld..%lld nz %llu | P %lld..%lld  %s\n",
+					"L %lld..%lld nz %llu | P %lld..%lld | m_dp %u..%u  %s\n",
 					(unsigned long long)m_a15w_word[i], (unsigned long long)m_a15w_hits[i],
 					(long long)m_a15w_cmin[i], (long long)m_a15w_cmax[i], (unsigned long long)m_a15w_cnz[i],
 					(long long)m_a15w_lmin[i], (long long)m_a15w_lmax[i], (unsigned long long)m_a15w_lnz[i],
 					(long long)m_a15w_pmin[i], (long long)m_a15w_pmax[i],
+					m_a15w_dmin[i], m_a15w_dmax[i],
 					(!m_a15w_cnz[i] && !m_a15w_lnz[i]) ? "<= BOTH DEAD"
 					: !m_a15w_cnz[i] ? "<= coef ALWAYS 0 -> CURSOR"
 					: !m_a15w_lnz[i] ? "<= L ALWAYS 0 -> POINTER"
