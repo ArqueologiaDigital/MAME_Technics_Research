@@ -2041,6 +2041,49 @@ void upd6383_device::exec_alu(u64 word)
 		}
 		if (cl == 6)
 		{
+			//==================================================================
+			//  ★★★ §162 PROBE (read-only, always on): WHAT IS THE INDEX?
+			//
+			//  K2 needs the table INDEX, and §161 only supplied the table.  The
+			//  owning note (`lfo-ramp.md' §10) MEASURED the scale coefficient as
+			//  `0x000018' = 24 at 8 of 8 sites and reads the idiom as
+			//  `(coef x phase) >> 23' -> an integer 0..23.  That fixes the arith-
+			//  metic but NOT where `phase' lives.  Guessing it would be a fourth
+			//  hypothesis about a datapath I have not instrumented, so: measure.
+			//
+			//  ⚠ THE NULL, stated before running.  If the accumulator at this site
+			//  is the phase it must SWEEP -- min != max, spanning a large fraction
+			//  of 2^23, at the LFO rate.  If min == max the phase is NOT in the
+			//  accumulator and the candidate is refuted, exactly as §158 refuted
+			//  "the tap sweeps" by finding a constant.  A probe that cannot come
+			//  back constant would not be a test.
+			//  ★ And §137's rule is in force: read min AGAINST max before calling
+			//  anything a signal.
+			{
+				int slot = -1;
+				for (int i = 0; i < m_c6_n; i++) if (m_c6_word[i] == word) { slot = i; break; }
+				if (slot < 0 && m_c6_n < 8) { slot = m_c6_n++; m_c6_word[slot] = word; }
+				if (slot >= 0)
+				{
+					const s64 a = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
+					if (!m_c6_hits[slot])
+					{
+						m_c6_amin[slot] = m_c6_amax[slot] = a;
+						m_c6_pmin[slot] = m_c6_pmax[slot] = m_dp;
+						m_c6_cmin[slot] = m_c6_cmax[slot] = m_cursor;
+					}
+					else
+					{
+						m_c6_amin[slot] = std::min(m_c6_amin[slot], a);
+						m_c6_amax[slot] = std::max(m_c6_amax[slot], a);
+						m_c6_pmin[slot] = std::min<u32>(m_c6_pmin[slot], m_dp);
+						m_c6_pmax[slot] = std::max<u32>(m_c6_pmax[slot], m_dp);
+						m_c6_cmin[slot] = std::min<u32>(m_c6_cmin[slot], m_cursor);
+						m_c6_cmax[slot] = std::max<u32>(m_c6_cmax[slot], m_cursor);
+					}
+					m_c6_hits[slot]++;
+				}
+			}
 			// table-lookup idiom: no table is modelled, so execute the
 			// addressing and leave the ALU alone.
 			if (upd6383_disassembler::coeff_consumer(word))
@@ -5103,7 +5146,16 @@ void upd6383_device::dump_frame_report() const
 				wt += string_format(" %06X", m_rf[c] & 0xffffff);
 				if (m_rf[c] & 0xffffff) wnz++;
 			}
-			logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
+			for (int i = 0; i < m_c6_n; i++)
+			logerror("upd6383: ★★ §162 CLASS-6 SITE %010llX addr8=%02X lo12=%03X : hits %llu | "
+					"acc %lld .. %lld (%s) | m_dp %u..%u | cursor %u..%u\n",
+					(unsigned long long)m_c6_word[i],
+					unsigned((m_c6_word[i] >> 12) & 0xff), unsigned(m_c6_word[i] & 0xfff),
+					(unsigned long long)m_c6_hits[i],
+					(long long)m_c6_amin[i], (long long)m_c6_amax[i],
+					(m_c6_amin[i] == m_c6_amax[i]) ? "CONSTANT -- phase is NOT here" : "VARIES",
+					m_c6_pmin[i], m_c6_pmax[i], m_c6_cmin[i], m_c6_cmax[i]);
+		logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
 				"(mask bit 61 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "

@@ -1004,6 +1004,13 @@ private:
 	u64  m_src00_coef_n = 0;
 	//  §161: delay words whose ACT-07 store was re-aimed off the direction field.
 	u64  m_dlystore_fix_n = 0;
+	//  §162 read-only probe: per-class-6-site census of the candidate index sources.
+	int  m_c6_n = 0;
+	u64  m_c6_word[8] = {};
+	u64  m_c6_hits[8] = {};
+	s64  m_c6_amin[8] = {}, m_c6_amax[8] = {};
+	u32  m_c6_pmin[8] = {}, m_c6_pmax[8] = {};
+	u32  m_c6_cmin[8] = {}, m_c6_cmax[8] = {};
 	//  ★★★ §153 (mask bit 60): THE DELAY-TAP MODULATION REGISTER.
 	//  §152: `lo12 == 0x44C' is "apply the modulation offset" (kn5000-dsp-chorus.md
 	//  §3.1/§3.2, 2026-07-22), the class selecting interpolation -- CHORUS uses the
