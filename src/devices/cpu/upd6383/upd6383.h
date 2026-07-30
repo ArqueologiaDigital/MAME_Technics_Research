@@ -714,7 +714,12 @@ private:
 	//  ★ bit 18 is CLEARED here, so §113 (SRC 0x11 = mem[ptr]) is now genuinely OFF
 	//  and can finally be A/B'd.  It has no other consumer, so clearing it restores
 	//  the pre-§113 behaviour rather than changing anything else.
-	u64  m_specmask = 0x819b440f;
+	// ★ §116: bits 25 (class-A ACT-07 latches P), 29 (store-gate co-equal survivor)
+	// and 33 (selector-0x27 -> per-unit OVC, bit 3 selects wrap) join the default.
+	// Jointly they make the CHORUS LFO phase ramp for the first time; each has its
+	// own local justification (see §112, store-gate.md item C, §115/§116) and each
+	// is individually removable.  Still HALF RATE -- see §114 on 2^23 vs 2^24.
+	u64  m_specmask = 0x2a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -803,6 +808,8 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	u32  m_ovc_loads = 0;       // §116: selector-0x27 loads of the mode register
+	u32  m_ovc_hist[256] = {};  // §116: which payloads it was loaded with
 	mutable u32 m_wrap_n = 0;   // §114: accumulator stores wrapped instead of clamped
 	u32  m_src11_mem_n = 0;     // §113: SRC 0x11 reads honoured as mem[ptr]
 	u32  m_act07_latchp_n = 0;  // §112: class-A ACT-07 words that latched P

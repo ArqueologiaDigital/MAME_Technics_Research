@@ -1334,7 +1334,21 @@ s32 upd6383_device::acc_to_datum(u64 acc) const
 	//  falsifier: wrapping an AUDIO accumulator turns a loud sample into an inverted
 	//  one, so if this is wrong the §54 DC leak should rise or the tracking verdict
 	//  should get worse.  Both are watched.
-	if (m_speculative && (m_specmask & 0x100000000ull))
+	//  ★ §116: the wrap is selected PER UNIT by m_ovc bit 3 (see above).  Bit 33
+	//  routes through the register; bit 32 (§114) is the unconditional global wrap
+	//  kept for comparison.  The FALSIFIER is explicit: under bit 33 unit 0's AUDIO
+	//  wraps too, which is exactly the risk this function's own comment defends
+	//  against.  If the §54 tracking worsens while the LFO ramps, bit 3 is a
+	//  per-unit flag but NOT the overflow mode.
+	if (m_speculative && (m_specmask & 0x200000000ull))
+	{
+		if (m_ovc & 0x08)
+		{
+			m_wrap_n++;
+			return s32(util::sext(u32(v) & 0xffffff, 24));
+		}
+	}
+	else if (m_speculative && (m_specmask & 0x100000000ull))
 	{
 		m_wrap_n++;
 		return s32(util::sext(u32(v) & 0xffffff, 24));
@@ -1553,6 +1567,20 @@ void upd6383_device::exec_alu(u64 word)
 		//  THE ALTERNATE lo12 ENCODING (bit 11).  sect. 9 of bit11-family.md
 		//  proves it is a SECOND encoding with no SRC and no ACTION field, so
 		//  the only honest execution is its ADDRESSING -- which IS decoded.
+		//  ★ §116 MUST BE TESTED BEFORE THE ALTERNATE-ENCODING RETURN.  lo12 = 0x827
+		//  carries bit 11, so a selector-0x27 word is swallowed here and never
+		//  reaches the register-load dispatch further down -- the first placement
+		//  measured 0 loads, caught by its own fired-count.  The bit-11 branch
+		//  executes ADDRESSING ONLY, which is right for words whose ALU route is
+		//  unmodelled but wrong for one whose whole job is to load a register.
+		if (m_speculative && (m_specmask & 0x200000000ull)
+				&& upd6383_disassembler::lo12(word) == 0x827)
+		{
+			m_ovc = upd6383_disassembler::addr8(word);
+			m_ovc_loads++;
+			m_ovc_hist[m_ovc]++;
+			return;                     // a register aimed; accumulator untouched
+		}
 		if (upd6383_disassembler::lo12(word) & 0x800)
 		{
 			if (upd6383_disassembler::coeff_consumer(word))
@@ -2429,6 +2457,26 @@ void upd6383_device::exec_alu(u64 word)
 		//  reloads -- kept whatever the kernel put in it.
 		//  A word whose whole job is to aim a pointer should not also clobber the
 		//  accumulator; nothing in the ISA notes says hi12 = 0x801 means "load".
+		//  ★★★ §116 SPECULATIVE (mask bit 33): SELECTOR 0x27 LOADS THE PER-UNIT
+		//  OVERFLOW / MODE REGISTER (m_ovc).
+		//
+		//  m_ovc is declared, reset, saved and debugger-exposed by this device and
+		//  NEVER written or read -- the shape m_accb had before §27.  The CDJ-500
+		//  block diagram gives this ALU "two shifters and an OVC".
+		//
+		//  The common header loads a per-unit TRIPLE immediately before each body's
+		//  CALL: cursor bank (0x821, K3 FORCED), selector 0x27, descriptor pointer
+		//  (0x825, PROVEN BY CONSTRUCTION).  0x27 is the ONLY member whose target is
+		//  unidentified and it occurs exactly twice -- iw43 payload 0x6C for unit 0,
+		//  iw51 payload 0x64 for unit 1.  See §115.
+		//
+		//  ⚠ The device's "K3's 0x827 candidate stays falsified (0 of 85 streams)"
+		//  does NOT block this: in full it is "falsified as the D-RAM ORIGIN", and
+		//  this file also says 0x825/0x827 are "INFERRED siblings whose target
+		//  register is unknown".  An overflow-mode register is compatible.
+		//
+		//  Gated independently of mask bit 15, which is CLEAR in the default -- the
+		//  0x821/0x825 early-return below would otherwise never run and this with it.
 		if (m_speculative && (m_specmask & 0x8000))
 		{
 			const u16 lo_pl = upd6383_disassembler::lo12(word);
@@ -4390,6 +4438,13 @@ void upd6383_device::dump_frame_report() const
 						"", n1, m1.c_str());
 		}
 		logerror("            [..] marks the per-unit base/input cells 05 07 85 87\n");
+		{
+			std::string ov;
+			for (u32 i = 0; i < 256; i++)
+				if (m_ovc_hist[i]) ov += string_format(" %02X:%u", i, m_ovc_hist[i]);
+			logerror("            §116 OVC loads: %u, values seen:%s (bit3 = wrap)\n",
+					m_ovc_loads, ov.empty() ? " (none)" : ov.c_str());
+		}
 		logerror("            §114 accumulator stores WRAPPED mod 2^23: %u\n", m_wrap_n);
 		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
 		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",
