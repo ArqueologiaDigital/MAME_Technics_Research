@@ -1023,6 +1023,22 @@ private:
 	s64  m_c6_tamin[8] = {}, m_c6_tamax[8] = {};
 	s64  m_c6_kmin[8]  = {}, m_c6_kmax[8]  = {};
 	s64  m_c6_lmin[8]  = {}, m_c6_lmax[8]  = {};
+	//  §175: identity of the last writer of m_p, so "P is zero at the lookup" can
+	//  name WHICH site left it that way rather than being attributed by reasoning.
+	u8   m_pw = 0;
+	u32  m_c6_pwseen[8] = {};
+	//  §175: the SAME census keyed PER WORD -- the pooled form cannot see one dead
+	//  site among 36 million live firings.
+	int  m_a15w_n = 0;
+	u64  m_a15w_word[12] = {}, m_a15w_hits[12] = {}, m_a15w_cnz[12] = {}, m_a15w_lnz[12] = {};
+	s64  m_a15w_cmin[12] = {}, m_a15w_cmax[12] = {};
+	s64  m_a15w_lmin[12] = {}, m_a15w_lmax[12] = {};
+	s64  m_a15w_pmin[12] = {}, m_a15w_pmax[12] = {};
+	//  §174: the operands AT the class-A ACT-0x15 multiply (not at its consumer).
+	u64  m_a15_n = 0, m_a15_cchg = 0, m_a15_lchg = 0, m_a15_cnz = 0, m_a15_lnz = 0;
+	s64  m_a15_cmin = 0, m_a15_cmax = 0, m_a15_cprev = 0;
+	s64  m_a15_lmin = 0, m_a15_lmax = 0, m_a15_lprev = 0;
+	s64  m_a15_pmin = 0, m_a15_pmax = 0;
 	//  §169: the product register at the class-6 site, with its change count.
 	s64  m_c6_pmin2[8] = {}, m_c6_pmax2[8] = {}, m_c6_pprev[8] = {};
 	u64  m_c6_pchg[8]  = {};

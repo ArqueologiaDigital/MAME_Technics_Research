@@ -2087,6 +2087,7 @@ void upd6383_device::exec_alu(u64 word)
 					//  m_k = 24 here: the scale is already in the multiplier input
 					//  latch.  Its product with the phase lands in m_p.
 					const s64 pp = util::sext(m_p, 44);
+					m_c6_pwseen[slot] |= (1u << (m_pw & 31));   // §175
 					const s64 ll = s64(s32(util::sext(m_l,  24)));
 					if (!m_c6_hits[slot])
 					{
@@ -2989,9 +2990,9 @@ void upd6383_device::exec_alu(u64 word)
 			case 2: m_ta = u32(L) & 0xffffff; break;           // -> tempA
 			case 3: m_tb = u32(L) & 0xffffff; break;           // -> tempB
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;  // -> mem[ptr]
-			case 5: m_p = u32(L) & 0xffffff; break;            // -> P, RAW (suspect scale)
+			case 5: m_p = u32(L) & 0xffffff; m_pw = 1; break;            // -> P, RAW (suspect scale)
 			case 6: bx_acc_w(L, true); break;                  // -> accumulator (add)
-			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;     // -> P at the MULTIPLY's scale
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 2; break;     // -> P at the MULTIPLY's scale
 			default: break;
 			}
 		}
@@ -3022,9 +3023,9 @@ void upd6383_device::exec_alu(u64 word)
 			case 2: m_ta = u32(L) & 0xffffff; break;
 			case 3: m_tb = u32(L) & 0xffffff; break;
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;
-			case 5: m_p = u32(L) & 0xffffff; break;
+			case 5: m_p = u32(L) & 0xffffff; m_pw = 3; break;
 			case 6: bx_acc_w(L, true); break;
-			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 4; break;
 			default: break;
 			}
 		}
@@ -3303,6 +3304,7 @@ void upd6383_device::exec_alu(u64 word)
 			else
 			{
 				m_p = u32(L) & 0xffffff;    // the PRODUCT register (§112 as shipped)
+				m_pw = 5; /* §175: who last wrote P -- "§112 classA-ACT07" */
 				m_act07_latchp_n++;
 			}
 		}
@@ -3435,6 +3437,76 @@ void upd6383_device::exec_alu(u64 word)
 		{
 			m_mul_issued = true;    // ★ §29: it RAN -- distinct from "P came out 0"
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
+			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
+			//==============================================================
+			//  ★★★ §174 PROBE (read-only): WHICH OPERAND IS ZERO?
+			//
+			//  §169 claimed the LFO index multiply "never issues" because
+			//  ACT 0x15 decodes as a no-op.  ⛔ THAT IS WRONG AT SOURCE LEVEL:
+			//  the gate above is `coeff_consumer(word)' = class4 == 0xA and not
+			//  C-format -- the ACTION FIELD IS NOT IN IT.  CHORUS's word is
+			//  `202.A.07.1D5': class A, f31 = 1, so it multiplies already.
+			//  §169's MEASUREMENT stands (m_p 0..0 chg 0 two words later); its
+			//  CAUSE does not.
+			//
+			//  If the multiply issues and the product is still zero, then one of
+			//  its operands is zero, and WHICH one names the defect:
+			//     L    == 0  ->  the D-RAM read is empty  -> the POINTER (§168)
+			//     coef == 0  ->  the coefficient is empty -> the CURSOR
+			//  ⚠ Measure at THE MULTIPLY, not at the consumer two words later --
+			//  measuring downstream is what made §169 mis-attribute this.
+			//  ★ Change-counts, not ranges (§167): a range cannot tell a live
+			//  operand from two constants.
+			if (upd6383_disassembler::class4(word) == 0xa
+					&& (word & 0x1f) == 0x15)
+			{
+				//  ★★ §175 FIX: KEY THIS BY WORD.  The first cut pooled every
+				//  class-A ACT-0x15 site in every program and reported "both
+				//  operands live" -- while §175 showed THE MULTIPLY is the last
+				//  writer of P at CHORUS's lookup and P is still 0 there.  A
+				//  pooled census cannot see one dead site among 36 million live
+				//  firings.  That is §155's error in a new place.
+				const s64 cf0 = s64(util::sext(coef, 24));
+				int sl = -1;
+				for (int q = 0; q < m_a15w_n; q++) if (m_a15w_word[q] == word) { sl = q; break; }
+				if (sl < 0 && m_a15w_n < 12) { sl = m_a15w_n++; m_a15w_word[sl] = word; }
+				if (sl >= 0)
+				{
+					if (!m_a15w_hits[sl])
+					{
+						m_a15w_cmin[sl] = m_a15w_cmax[sl] = cf0;
+						m_a15w_lmin[sl] = m_a15w_lmax[sl] = s64(L);
+						m_a15w_pmin[sl] = m_a15w_pmax[sl] = s64(m_p);
+					}
+					else
+					{
+						m_a15w_cmin[sl] = std::min(m_a15w_cmin[sl], cf0); m_a15w_cmax[sl] = std::max(m_a15w_cmax[sl], cf0);
+						m_a15w_lmin[sl] = std::min(m_a15w_lmin[sl], s64(L)); m_a15w_lmax[sl] = std::max(m_a15w_lmax[sl], s64(L));
+						m_a15w_pmin[sl] = std::min(m_a15w_pmin[sl], s64(m_p)); m_a15w_pmax[sl] = std::max(m_a15w_pmax[sl], s64(m_p));
+					}
+					if (cf0) m_a15w_cnz[sl]++;
+					if (L)   m_a15w_lnz[sl]++;
+					m_a15w_hits[sl]++;
+				}
+				const s64 cf = cf0;
+				if (!m_a15_n)
+				{
+					m_a15_cmin = m_a15_cmax = cf;  m_a15_lmin = m_a15_lmax = s64(L);
+					m_a15_pmin = m_a15_pmax = s64(m_p);
+				}
+				else
+				{
+					m_a15_cmin = std::min(m_a15_cmin, cf);  m_a15_cmax = std::max(m_a15_cmax, cf);
+					m_a15_lmin = std::min(m_a15_lmin, s64(L)); m_a15_lmax = std::max(m_a15_lmax, s64(L));
+					m_a15_pmin = std::min(m_a15_pmin, s64(m_p)); m_a15_pmax = std::max(m_a15_pmax, s64(m_p));
+					if (cf != m_a15_cprev) m_a15_cchg++;
+					if (s64(L) != m_a15_lprev) m_a15_lchg++;
+				}
+				m_a15_cprev = cf;  m_a15_lprev = s64(L);
+				if (cf) m_a15_cnz++;
+				if (L)  m_a15_lnz++;
+				m_a15_n++;
+			}
 		}
 		//  ★ §29: the cursor still advances ONLY on class 0xA -- K4's forced result
 		//  is untouched by the fetch/consume split.
@@ -3458,6 +3530,7 @@ void upd6383_device::exec_alu(u64 word)
 		m_mul_issued = true;
 		m_l = u32(L) & 0xffffff;
 		m_p = u64((s64(util::sext(m_k, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
+		m_pw = 7; /* §175: who last wrote P -- "§40 m_k multiply" */
 	}
 
 	if (m_cur_iw == 213 && m_dbg213 <= 3 && m_frames_run > 420000)
@@ -5266,6 +5339,45 @@ void upd6383_device::dump_frame_report() const
 					(long long)m_c6_tamin[i], (long long)m_c6_tamax[i],
 					(long long)m_c6_kmin[i], (long long)m_c6_kmax[i],
 					(long long)m_c6_lmin[i], (long long)m_c6_lmax[i]);
+		for (int i = 0; i < m_a15w_n; i++)
+			logerror("upd6383: ★★ §175 PER-SITE %010llX hits %llu | coef %lld..%lld nz %llu | "
+					"L %lld..%lld nz %llu | P %lld..%lld  %s\n",
+					(unsigned long long)m_a15w_word[i], (unsigned long long)m_a15w_hits[i],
+					(long long)m_a15w_cmin[i], (long long)m_a15w_cmax[i], (unsigned long long)m_a15w_cnz[i],
+					(long long)m_a15w_lmin[i], (long long)m_a15w_lmax[i], (unsigned long long)m_a15w_lnz[i],
+					(long long)m_a15w_pmin[i], (long long)m_a15w_pmax[i],
+					(!m_a15w_cnz[i] && !m_a15w_lnz[i]) ? "<= BOTH DEAD"
+					: !m_a15w_cnz[i] ? "<= coef ALWAYS 0 -> CURSOR"
+					: !m_a15w_lnz[i] ? "<= L ALWAYS 0 -> POINTER"
+					: (m_a15w_pmin[i] == 0 && m_a15w_pmax[i] == 0) ? "<= operands live but P ALWAYS 0 (?!)"
+					: "live");
+		logerror("upd6383: ★★ §174 AT THE class-A ACT-0x15 MULTIPLY: fired %llu | "
+				"coef %lld..%lld chg %llu nonzero %llu | L %lld..%lld chg %llu nonzero %llu | "
+				"P %lld..%lld  => %s\n",
+				(unsigned long long)m_a15_n,
+				(long long)m_a15_cmin, (long long)m_a15_cmax,
+				(unsigned long long)m_a15_cchg, (unsigned long long)m_a15_cnz,
+				(long long)m_a15_lmin, (long long)m_a15_lmax,
+				(unsigned long long)m_a15_lchg, (unsigned long long)m_a15_lnz,
+				(long long)m_a15_pmin, (long long)m_a15_pmax,
+				!m_a15_n ? "NEVER FIRED -- the word is not reached"
+				: (!m_a15_lnz && !m_a15_cnz) ? "BOTH operands always zero"
+				: !m_a15_lnz ? "L is ALWAYS ZERO -> the D-RAM read is empty -> POINTER (§168)"
+				: !m_a15_cnz ? "coef is ALWAYS ZERO -> the coefficient is empty -> CURSOR"
+				: "both operands live -- the product is NOT structurally zero");
+		{
+			static const char *const PW[8] = { "none", "ACT-05 raw", "ACT-07 shl",
+					"ACT-05 raw(b)", "ACT-07 shl(b)", "§112 classA-ACT07", "THE MULTIPLY",
+					"§40 m_k multiply" };
+			for (int i = 0; i < m_c6_n; i++)
+			{
+				std::string who;
+				for (int b2 = 0; b2 < 8; b2++)
+					if (m_c6_pwseen[i] & (1u << b2)) { who += ' '; who += PW[b2]; }
+				logerror("upd6383: ★★ §175 WHO LAST WROTE P AT THE LOOKUP:%s\n",
+						who.empty() ? " (never observed)" : who.c_str());
+			}
+		}
 		for (int i = 0; i < m_c6_n; i++)
 			logerror("upd6383:    §169 SAME SITE, THE PRODUCT: P %lld..%lld chg %llu (%s)\n",
 					(long long)m_c6_pmin2[i], (long long)m_c6_pmax2[i],
