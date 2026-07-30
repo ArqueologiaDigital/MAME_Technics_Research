@@ -600,6 +600,8 @@ void upd6383_device::device_stop()
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
 		//  ★ §138: the output-stage erasure guard.  0 with the bit off is the null.
+		logerror("upd6383: ★ §145 SRC 0x00 = coef (mask bit 57 = %d): FIRED %u times\n",
+				(m_specmask & (1ull << 57)) ? 1 : 0, u32(m_src00_coef_n));
 		logerror("upd6383: ★ §142 ACT 0x0D/0x0E accumulator write (mask bit 56 = %d): "
 				"routed to ACCB %u times\n", (m_specmask & (1ull << 56)) ? 1 : 0, u32(m_acc_w_unit1_n));
 		logerror("upd6383: ★ §138 stale-LOAD guard (mask bit 55 = %d): FIRED %u times "
@@ -2073,6 +2075,59 @@ void upd6383_device::exec_alu(u64 word)
 			//  where anchored SRC 0x07 appears with nine different actions -- which
 			//  is exactly what a null encoding looks like.  §122 re-derived that
 			//  hypothesis from the corpus and item I had already killed it.
+			//  ★★★ §145 (mask bit 57): SRC 0x00 = coef, i.e. C-RAM[cursor] -- what
+			//  SRC 0x08 delivers.  NEVER ENUMERATED: action00_discriminate.py's
+			//  src00 menu is {mem, P, acc, zero, DR, tA} while the *src08* menu
+			//  beside it contains `coef'.  Every "1 of 6" statement about this
+			//  source is a statement about those six.
+			//  ⚠ And the §123 comment above cites action00-discriminator.md item I,
+			//  which adjudication-round6.md:605 had already VOIDED -- at the forced
+			//  delay polarity EVERY src00 reading scores 0, so nothing is excluded.
+			//  THE CORPUS TWIN (§145, MEASURED here):
+			//    092.A.xx.200  SRC 0x08  n=29, successor 082.2.00.1C0 in 29/29
+			//    192.A.xx.000  SRC 0x00  n=29, successor 082.2.00.1C0 in 29/29
+			//    base rate for that successor after any class-A word: 64/822 = 7.79%
+			//  The two differ in exactly two bits (hi12 bit 8, SRC bit 3), sit in the
+			//  same slot of the same idiom, and 082.2.00.1C0 is the ANCHORED LFO
+			//  phase-read.  CHORUS's anchored word consumes C-RAM[0x00] = 114 = its
+			//  known LFO increment (0.599 Hz); its four twins consume C-RAM[0x02]/
+			//  [0x04]/[0x0D]/[0x0F], and 0x02/0x04 hold 240 = 1.262 Hz -- a second
+			//  chorus rate.  Under `coef' the twins are LFO phase accumulators
+			//  running at their own designed rates; under the shipped mem[ptr] they
+			//  get whatever D-RAM holds, MEASURED as the rail at two of the four.
+			//  ★ §146 (mask bit 58): `coef' ONLY ON A COEFFICIENT-CONSUMING WORD.
+			//  Bit 57 applied `coef' to all 1610 SRC-0x00 words and RAILED unit 1
+			//  (98.9 % at full scale, DC leak 99.94 %) -- while being bit-exact on
+			//  the 29 twins.  The split explains both: only 111 of the 1610 are
+			//  class A.  A class-2 word does NOT consume a cursor coefficient, so
+			//  reading C-RAM[cursor] there returns whatever the last class-A word
+			//  happened to leave -- garbage, and exactly the shape of a corpus-wide
+			//  rail.  The twins are class A; the 1262-word class-2 majority is not.
+			//  ★ §148 (mask bit 59): `coef' only where f98 == 1 AND the word consumes
+			//  a coefficient.  §146 localised the railing to four words -- kernel
+			//  iw14/iw36 (400.A.00.000, f98=0) and ROOM REVERB iw315/iw326
+			//  (282.A.00.000, f98=2) -- and NONE of them is f98=1.
+			//  ⚠ Gating on f98 BECAUSE it separates the twins from the railers would
+			//  be fitting the gate to the outcome.  What licenses it is §147, an
+			//  INDEPENDENT test on the other f98=1 form: the twelve 182.A.00.000
+			//  words land on the 2/pi envelope idiom's one-pole time constants
+			//  (0.004812 = 4.712 ms, 0.001927 = 11.764 ms), consumed in exactly the
+			//  order the ROM's own upload script at 0x84CD writes them, and named
+			//  ATTACK SENS.(s) / RELEASE SENS.(s) in the UI parameter list.
+			//  So f98=1 collects {LFO phase accumulator, envelope smoother} -- two
+			//  coefficient-consuming filter contexts.
+			if (m_speculative
+					&& ((m_specmask & (1ull << 59))
+						? (upd6383_disassembler::coeff_consumer(word)
+							&& (((upd6383_disassembler::hi12(word) >> 8) & 3) == 1))
+					: (m_specmask & (1ull << 58))
+						? upd6383_disassembler::coeff_consumer(word)
+						: (m_specmask & (1ull << 57)) != 0))
+			{
+				L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
+				m_src00_coef_n++;
+				break;
+			}
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		//  ⛔ SRC 0x11 WAS HERE, read as mem[ptr] -- "1 of 7 enumerated, no

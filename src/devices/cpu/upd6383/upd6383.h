@@ -956,6 +956,8 @@ private:
 	//  With the bit clear the old, unit-blind behaviour is reproduced exactly, so
 	//  every §133/§135 measurement stays comparable.
 	u64  m_acc_w_unit1_n = 0;
+	//  §145: SRC 0x00 read as C-RAM[cursor] instead of mem[ptr] (mask bit 57).
+	u64  m_src00_coef_n = 0;
 	void bx_acc_w(s64 L, bool add)
 	{
 		u64 &dst = (m_speculative && (m_specmask & (1ull << 56))
