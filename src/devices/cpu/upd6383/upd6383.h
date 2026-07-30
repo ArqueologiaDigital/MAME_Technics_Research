@@ -927,6 +927,11 @@ private:
 	//  wrong half of it.  ⚠ Coupled to §40 (bit 4): writing m_k does nothing unless
 	//  the multiply reads m_k, which only §40 makes it do.
 	u32  m_act07_latchk_n = 0;
+	//  §138 (mask bit 55): LOAD-from-an-unformed-product treated as HOLD, everywhere
+	//  rather than only on delay words (§83's gate has `m_in_dram').  The epilogue is
+	//  where this matters: 1 class-A word in 23, so no multiply issues there, and
+	//  iw65..72 erase the body's result before w73 presents it.
+	u64  m_stale_load_n = 0;
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05

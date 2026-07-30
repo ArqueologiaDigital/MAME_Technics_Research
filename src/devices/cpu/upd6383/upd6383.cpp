@@ -599,6 +599,10 @@ void upd6383_device::device_stop()
 		logerror("upd6383: §130 per-unit coefficient-cursor rebase (mask bit 38 = %d): "
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
+		//  ★ §138: the output-stage erasure guard.  0 with the bit off is the null.
+		logerror("upd6383: ★ §138 stale-LOAD guard (mask bit 55 = %d): FIRED %u times "
+				"| ⚠ a non-zero DO1 means NOTHING until §70 ACCA min != max\n",
+				(m_specmask & (1ull << 55)) ? 1 : 0, u32(m_stale_load_n));
 		//  ★ §136: which half of the multiplier register file did the class-A ACT-07
 		//  latch write, and did the multiply actually READ the input latch?
 		logerror("upd6383: ★ §136 class-A ACT-07 latch: -> PRODUCT m_p %u times, "
@@ -2643,8 +2647,33 @@ void upd6383_device::exec_alu(u64 word)
 		//  is already exactly zero -- ~20 delay words per frame each doing
 		//  LOAD acc <- 0 drain it before the body ever starts.
 		//  Treat the LOAD as a HOLD when the word brought no fresh product.
-		const bool stale_p = m_speculative && (m_specmask & 0x400000) && m_in_dram
+		//  ★★★ §138 (mask bit 55): THE SAME ERASURE, AT THE OUTPUT STAGE.
+		//  §83 above was REFUTED -- but only for DELAY words, because its gate is
+		//  `m_in_dram'.  The per-slot accumulator profile shows the identical shape
+		//  in the EPILOGUE, on ordinary words, and that one is what gates the audio:
+		//      iw60..64  acc = 1 102 114 506 752      the body's result DOES arrive
+		//      iw65..72  acc = 0                      erased, eight slots running
+		//      iw73      w73 presents -> DO1          so DO1 presents ZERO
+		//  Every one of iw65..72 is `f31 = 0' (LOAD acc <- P), and the epilogue
+		//  contains exactly ONE class-A word out of 23 (iw82, the last), so no
+		//  multiply issues there at all and P is stale/zero throughout.
+		//  ⇒ There are (at least) TWO drains, not one: §83's trace found iw47 before
+		//  body 0, and this one is AFTER both bodies.  Fixing only the kernel drain
+		//  cannot make unit 0 audible, because this one erases the result again.
+		//  The guard: a LOAD that brought no fresh product is an erasure, not an
+		//  operation -- treat it as HOLD.  §83's reading, with `m_in_dram' dropped.
+		//  ⚠ Use §83's own STATIC predicate `!coeff_fetch(word)', not the runtime
+		//  `m_mul_issued': the multiply is executed later in this same function, so
+		//  the flag would refer to the PREVIOUS slot and the gate would silently
+		//  test something other than what it claims.
+		const bool stale83 = m_speculative && (m_specmask & 0x400000) && m_in_dram
 				&& !upd6383_disassembler::coeff_fetch(word);
+		const bool stale138 = m_speculative && (m_specmask & (1ull << 55))
+				&& op == upd6383_disassembler::HI_ACC_LOAD
+				&& !upd6383_disassembler::coeff_fetch(word);
+		if (stale138)
+			m_stale_load_n++;
+		const bool stale_p = stale83 || stale138;
 		const u64 p_term =
 				(op == upd6383_disassembler::HI_ACC_HOLD
 					|| (m_speculative && op > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
