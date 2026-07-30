@@ -563,6 +563,10 @@ private:
 	//  UPD6383_TRACE_FRAME so a panel-SELECTED effect (which cannot load before the
 	//  boot settles, ~19 s) can be traced instead of the cold-boot default.
 	u64  m_trace_frame = 420000;
+	//  ★ §130 fired-count for the per-unit coefficient-cursor rebase (mask bit 38).
+	//  Every gate must log one: it is what distinguishes a real null arm from a
+	//  gate that silently never ran.
+	u64  m_cursor_rebase_n = 0;
 	u8   m_st07_dest[8] = {}, m_st07_ptr[8] = {}, m_st07_src[8] = {};
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
 	//======================================================================

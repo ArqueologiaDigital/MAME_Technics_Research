@@ -571,6 +571,12 @@ void upd6383_device::device_stop()
 	if (m_frames_run != 0)
 	{
 		dump_frame_report();
+		//  ★ §130: the rebase's FIRED-COUNT.  0 with the bit off is the null arm;
+		//  0 with the bit ON would mean the gate never ran and any "no change"
+		//  reading of the arm would be an artefact rather than a result.
+		logerror("upd6383: §130 per-unit coefficient-cursor rebase (mask bit 38 = %d): "
+				"FIRED %u times\n",
+				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
 		logerror("upd6383: PRESENTATION WORDS: %d executed, %d wrote NON-ZERO, datum peak %d\n",
 				u32(m_pres_seen), u32(m_pres_nonzero), m_pres_peak);
 		logerror("upd6383:   raw accumulator peak at presentation = %lld (datum would be %lld)\n",
@@ -3914,8 +3920,21 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  body and add the base -- i.e. the cursor is reset per unit, not
 				//  aimed by the in-program ldptr, whose 0x50/0x70 payloads land in
 				//  the never-written ramp bank (§72: 0 writes from 0 algorithms).
-				if (m_speculative && (m_specmask & 0x40000))
+				//  ⛔ §130: THIS GATE WAS DOUBLE-BOOKED ON BIT 18 with §113
+				//  (`SRC 0x11 = mem[ptr]', upd6383.cpp:2151) -- two unrelated readings
+				//  behind one mask bit, so neither could ever be A/B'd alone.  §129's
+				//  first rebase run turned BOTH on and was confounded: §121 had
+				//  deliberately removed §113 because it destroys the audio deposit
+				//  (iw11 becomes a self-copy of mem[0x05]).  The rebase moves to its
+				//  own bit 38; bit 18 stays §113's alone.
+				//  ★ The miss was a grep bug worth recording: `0x40000\b' does not
+				//  match `0x40000u', so the second site did not show up in the audit
+				//  that checked this bit was free.  Match the bit, not the spelling.
+				if (m_speculative && (m_specmask & 0x4000000000ull))
+				{
 					m_cursor = unit1 ? 0x90 : 0x00;
+					m_cursor_rebase_n++;
+				}
 
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
