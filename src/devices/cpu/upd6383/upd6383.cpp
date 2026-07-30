@@ -297,8 +297,13 @@ void upd6383_device::device_start()
 	//  ★ §128: say the arm frame out loud.  An effect selected from the panel lands
 	//  at t ~ 40-50 s = frame 1.8-2.2 M; tracing at the 420 000 default would silently
 	//  describe the cold-boot default (CHORUS) instead of the selected program.
-	logerror("upd6383: §128 frame trace arms after frame %u (t = %.1f s at 44100 Hz)\n",
-			u32(m_trace_frame), double(m_trace_frame) / 44100.0);
+	//  ⚠ §132: the EMULATED frame rate is the tone generator's stream rate, 48 000
+	//  (kn5000_tonegen.cpp), NOT the 44 100 the firmware designs its filters for.
+	//  §128 printed this in 44 100ths and so overstated the arm time by 8.8 %.
+	//  The same 48000/44100 = 1.0884 factor applies to every predicted FREQUENCY.
+	logerror("upd6383: §128 frame trace arms after frame %u (t = %.1f s at the emulated "
+			"48000 Hz frame rate)\n",
+			u32(m_trace_frame), double(m_trace_frame) / 48000.0);
 	//  ★ §109: say bits 28/29 out loud, so an arm can never be confused with a null.
 	logerror("upd6383: §109 ACT-07 store target = %s-increment (mask bit 28 = %d)\n",
 			(m_specmask & 0x10000000) ? "POST" : "PRE",
