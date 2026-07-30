@@ -761,7 +761,28 @@ private:
 	// accumulator.  Bit 34 (mem-source ACT-07 words are MOVES) joins instead: it
 	// gives the LFO ramp WITHOUT bit 18, and both §119 verifiers granted the
 	// mechanism even while refuting its consumer conclusion.
-	u64  m_specmask = 0x6a39b440f;
+	// §130: bit 38 (the PER-UNIT COEFFICIENT-CURSOR REBASE) JOINS the default.
+	// Without it body 0's cursor enters at 0x71 and PARAMETRIC EQ's first bank walks
+	// C-RAM TABLE B -- the delay-tap ADDRESS table, step 0x4BE = 1214, clamped
+	// 0x7FFF -- so the program multiplies audio by tap addresses.  Only its second
+	// bank was correct, and only because w58 = rstcur re-bases the cursor by hand.
+	// Gated on a pre-registered, bit-exact prediction that came in exactly:
+	//   P1 bank 1 (iw84..) now fetches C-RAM 0x00..0x1D in order, bit-identical to
+	//      bank 2's stream -- both banks read the same coefficients (§127 §4);
+	//   P2 bank 2 UNCHANGED (the control whose answer was known: the gate must be a
+	//      no-op where rstcur already did the job) -- confirmed;
+	//   P3 unit 1 rebases to 0x90, not 0x00 -- confirmed, cursor 90/91/92/93.
+	// Fired-count 5 148 920 (2 body CALLs per frame), so this is not a silent no-op.
+	// Backed by cram-unit-base.md item A, MEASURED over 91 programs / 1546 class-A
+	// words: unit-1 reverbs resolve 33/33 at base 0x90 and 0/33 at 0x00, and the
+	// rival "always add 0x90" is rejected 79/79 on unit 0.
+	// ⚠ CONSEQUENCE: unit 1's output changes (620 866 -> 1 064 113 non-zero
+	// presentations, peak +1543433 -> -1543434) because the reverb now reads its
+	// real coefficient bank.  NEEDS A LISTEN.
+	// ⚠ AND: every earlier measurement taken inside a BODY was taken against
+	// tap-table values standing in for coefficients.  Re-check body-0 findings
+	// before quoting them.
+	u64  m_specmask = 0x46a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
