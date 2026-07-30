@@ -4541,7 +4541,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	//  satisfied by a constant, which is what makes this a test.
 	//  ★ The NULL, stated in advance: under the shipped default every cell in
 	//  0x00..0x1F must report chg = 0 or a tiny startup count.
-	for (u32 i = 0; i < 0x20; i++)
+	//  ★ §179: sweep ALL 256 cells, not 0x00..0x1F.  D-RAM is map(0x00,0xff) and
+	//  §176 censused one EIGHTH of it -- while the owning pointer note measures the
+	//  operand origin at 0x70/0x50 and this device ships DRAM_UNIT_BASE = 0x05.
+	//  If the live data sits near 0x50..0x8B then §176's window was an empty corner.
+	for (u32 i = 0; i < 0x100; i++)
 	{
 		const s32 v = s32(util::sext(m_dram.read_dword(i) & 0xffffff, 24));
 		if (!m_frames_run) { m_rampmin[i] = m_rampmax[i] = v; }
@@ -5320,15 +5324,19 @@ void upd6383_device::dump_frame_report() const
 			//  ★ §176 F1: report EVERY cell, not only the ones that moved.  §164
 			//  listed movers only, so it could not tell "static and non-zero" from
 			//  "static and ZERO" -- and the whole H1/H2 fork turns on exactly that.
-			u32 nz = 0;
-			for (u32 i = 0; i < 0x20; i++)
+			u32 nz = 0, mv = 0, nzlo = 0;
+			for (u32 i = 0; i < 0x100; i++)
 			{
-				if (m_rampprev[i]) nz++;
-				rr += string_format(" %02X:%d", i, m_rampprev[i]);
-				if (m_rampchg[i]) rr += string_format("(%d..%d/chg%llu)", m_rampmin[i],
-						m_rampmax[i], (unsigned long long)m_rampchg[i]);
+				if (m_rampprev[i]) { nz++; if (i < 0x20) nzlo++; }
+				if (m_rampchg[i]) mv++;
+				if (m_rampprev[i] || m_rampchg[i])
+				{
+					rr += string_format(" %02X:%d", i, m_rampprev[i]);
+					if (m_rampchg[i]) rr += string_format("(%d..%d/chg%llu)", m_rampmin[i],
+							m_rampmax[i], (unsigned long long)m_rampchg[i]);
+				}
 			}
-			rr += string_format("  ||  NON-ZERO %u of 32", nz);
+			rr += string_format("  ||  NON-ZERO %u of 256 (%u of them below 0x20), MOVING %u", nz, nzlo, mv);
 			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames:%s\n",
 					(unsigned long long)m_frames_run, rr.c_str());
 		}

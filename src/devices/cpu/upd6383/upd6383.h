@@ -1006,8 +1006,8 @@ private:
 	u64  m_dlystore_fix_n = 0;
 	//  §164 read-only probe: per-D-RAM-cell ramp census (range AND change count --
 	//  a range alone cannot distinguish a ramp from two alternating constants).
-	s32  m_rampmin[0x20] = {}, m_rampmax[0x20] = {}, m_rampprev[0x20] = {};
-	u64  m_rampchg[0x20] = {};
+	s32  m_rampmin[0x100] = {}, m_rampmax[0x100] = {}, m_rampprev[0x100] = {};
+	u64  m_rampchg[0x100] = {};
 	//  §162 read-only probe: per-class-6-site census of the candidate index sources.
 	int  m_c6_n = 0;
 	u64  m_c6_word[8] = {};
