@@ -600,6 +600,18 @@ void upd6383_device::device_stop()
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
 		//  ★ §138: the output-stage erasure guard.  0 with the bit off is the null.
+		{   //  ★ §153: did the tap actually SWEEP?  A correct depth gives a range
+			//  of about 2 x |depth| samples; 0 means the modulation never reached
+			//  the address, which is the state this change exists to end.
+			std::string ln;
+			for (u32 k = 0; k < 64; k++)
+				if (m_tap_seen[k] && m_tap_hi[k] != m_tap_lo[k])
+					ln += string_format(" [%02X]%u..%u(range %u)", k, m_tap_lo[k],
+							m_tap_hi[k], m_tap_hi[k] - m_tap_lo[k]);
+			logerror("upd6383: ★ §153 TAP MODULATION (mask bit 60 = %d): FIRED %u | "
+					"swept cells:%s\n", (m_specmask & (1ull << 60)) ? 1 : 0,
+					u32(m_tapmod_n), ln.empty() ? " NONE -- no cell's address moved" : ln.c_str());
+		}
 		logerror("upd6383: ★ §145 SRC 0x00 = coef (mask bit 57 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 57)) ? 1 : 0, u32(m_src00_coef_n));
 		logerror("upd6383: ★ §142 ACT 0x0D/0x0E accumulator write (mask bit 56 = %d): "
@@ -1810,7 +1822,18 @@ void upd6383_device::exec_alu(u64 word)
 				}
 			}
 			m_delay_ix++;
-			const u32 addr = (cellv + u32(m_frames_run)) & 0xffff;
+			//  ★★★ §153: + the modulation offset.  `m_frames_run' is the
+			//  circular-buffer rotation G (r3-delaydram.md §5.1); `m_tapmod' is the
+			//  swept-tap term the model has never had.
+			const u32 addr = (cellv + u32(m_frames_run)
+					+ ((m_speculative && (m_specmask & (1ull << 60)))
+						? u32(s32(m_tapmod)) : 0u)) & 0xffff;
+			{   // per-cell excursion census
+				const u32 k = cellv & 0x3f;
+				if (!m_tap_seen[k]) { m_tap_seen[k] = true; m_tap_lo[k] = m_tap_hi[k] = addr; }
+				else { if (addr < m_tap_lo[k]) m_tap_lo[k] = addr;
+				       if (addr > m_tap_hi[k]) m_tap_hi[k] = addr; }
+			}
 			if (dir == 'W')
 			{
 				//  ★ §75: is anything with CONTENT being written?  The store takes
@@ -3910,6 +3933,20 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			m_slotn++;
 			m_cur_word = raw;
 			m_cur_iw = u16(pc / upd6383_disassembler::WORD_BYTES);
+			//  ★★★ §153: `lo12 == 0x44C' APPLIES THE MODULATION OFFSET (§152).
+			//  Taken as the accumulator in DATUM units, i.e. a signed sample count,
+			//  because the depth the idiom loads is a sample count (ENHANCER's
+			//  15435 = 350 ms).  ⚠ This is the SIMPLEST defensible transport and it
+			//  is deliberately NOT scaled to make any particular excursion come out:
+			//  the tap-address census below MEASURES the excursion, so a wrong
+			//  quantity shows up as a wrong range instead of being fitted away.
+			if (m_speculative && (m_specmask & (1ull << 60))
+					&& upd6383_disassembler::lo12(word) == 0x44c)
+			{
+				m_tapmod = s32(acc_to_datum(
+						(m_specmask & 0x4000) && m_cur_unit1 ? m_accb : m_acc));
+				m_tapmod_n++;
+			}
 			//  ★ §104: the pointer and the cell UNDER it, sampled BEFORE the word
 			//  runs.  This is the RESIDENCY of the cell the word is about to read,
 			//  which is a different question from §86/§96's census of what gets

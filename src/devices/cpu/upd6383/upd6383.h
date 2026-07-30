@@ -958,6 +958,21 @@ private:
 	u64  m_acc_w_unit1_n = 0;
 	//  §145: SRC 0x00 read as C-RAM[cursor] instead of mem[ptr] (mask bit 57).
 	u64  m_src00_coef_n = 0;
+	//  ★★★ §153 (mask bit 60): THE DELAY-TAP MODULATION REGISTER.
+	//  §152: `lo12 == 0x44C' is "apply the modulation offset" (kn5000-dsp-chorus.md
+	//  §3.1/§3.2, 2026-07-22), the class selecting interpolation -- CHORUS uses the
+	//  C-format `C40.3.20.44C', ENSEMBLE the truncating `000.2.00.44C'.  The offset
+	//  is a SAMPLE COUNT: ENHANCER's UI "DELAY L (ms)" = 350 lands as C-RAM 15435 =
+	//  350 x 44100/1000 exactly, and `allocation = nominal tap + |depth|' holds
+	//  exactly in four effects across two independent host streams.
+	//  The device has had NO modulation register at all; the delay address was
+	//  `cellv + m_frames_run' (the circular-buffer rotation G) and nothing else, so
+	//  a swept delay could not exist (§149).
+	s32  m_tapmod = 0;
+	u64  m_tapmod_n = 0;
+	//  per-descriptor-cell tap-address excursion census, so the sweep can be MEASURED
+	//  rather than asserted: a correct depth gives range ~= 2 x |depth|.
+	u32  m_tap_lo[64] = {}, m_tap_hi[64] = {}; bool m_tap_seen[64] = {};
 	void bx_acc_w(s64 L, bool add)
 	{
 		u64 &dst = (m_speculative && (m_specmask & (1ull << 56))
