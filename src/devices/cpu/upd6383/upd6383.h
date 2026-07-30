@@ -1023,6 +1023,9 @@ private:
 	s64  m_c6_tamin[8] = {}, m_c6_tamax[8] = {};
 	s64  m_c6_kmin[8]  = {}, m_c6_kmax[8]  = {};
 	s64  m_c6_lmin[8]  = {}, m_c6_lmax[8]  = {};
+	//  §169: the product register at the class-6 site, with its change count.
+	s64  m_c6_pmin2[8] = {}, m_c6_pmax2[8] = {}, m_c6_pprev[8] = {};
+	u64  m_c6_pchg[8]  = {};
 	//  ★★★ §153 (mask bit 60): THE DELAY-TAP MODULATION REGISTER.
 	//  §152: `lo12 == 0x44C' is "apply the modulation offset" (kn5000-dsp-chorus.md
 	//  §3.1/§3.2, 2026-07-22), the class selecting interpolation -- CHORUS uses the

@@ -2081,6 +2081,12 @@ void upd6383_device::exec_alu(u64 word)
 					const s64 tb = s64(s32(util::sext(m_tb, 24)));
 					const s64 ta = s64(s32(util::sext(m_ta, 24)));
 					const s64 kk = s64(s32(util::sext(m_k,  24)));
+					//  ★★★ §169: `m_p' -- THE ONE REGISTER §167 DID NOT READ, and the
+					//  one the arithmetic points at.  lfo-ramp.md §10 reads the idiom
+					//  as `(coef x phase) >> 23' with coef = 24, and §167 MEASURED
+					//  m_k = 24 here: the scale is already in the multiplier input
+					//  latch.  Its product with the phase lands in m_p.
+					const s64 pp = util::sext(m_p, 44);
 					const s64 ll = s64(s32(util::sext(m_l,  24)));
 					if (!m_c6_hits[slot])
 					{
@@ -2109,6 +2115,14 @@ void upd6383_device::exec_alu(u64 word)
 						m_c6_lmin[slot]  = std::min(m_c6_lmin[slot],  ll);
 						m_c6_lmax[slot]  = std::max(m_c6_lmax[slot],  ll);
 					}
+					if (!m_c6_hits[slot]) { m_c6_pmin2[slot] = m_c6_pmax2[slot] = pp; }
+					else
+					{
+						m_c6_pmin2[slot] = std::min(m_c6_pmin2[slot], pp);
+						m_c6_pmax2[slot] = std::max(m_c6_pmax2[slot], pp);
+						if (pp != m_c6_pprev[slot]) m_c6_pchg[slot]++;
+					}
+					m_c6_pprev[slot] = pp;
 					if (m_c6_hits[slot] && tb != m_c6_tbprev[slot]) m_c6_tbchg[slot]++;
 					m_c6_tbprev[slot] = tb;
 					m_c6_hits[slot]++;
@@ -5252,6 +5266,11 @@ void upd6383_device::dump_frame_report() const
 					(long long)m_c6_tamin[i], (long long)m_c6_tamax[i],
 					(long long)m_c6_kmin[i], (long long)m_c6_kmax[i],
 					(long long)m_c6_lmin[i], (long long)m_c6_lmax[i]);
+		for (int i = 0; i < m_c6_n; i++)
+			logerror("upd6383:    §169 SAME SITE, THE PRODUCT: P %lld..%lld chg %llu (%s)\n",
+					(long long)m_c6_pmin2[i], (long long)m_c6_pmax2[i],
+					(unsigned long long)m_c6_pchg[i],
+					(m_c6_pchg[i] < 100) ? "NOT the index -- at most a few steps" : "VARIES per execution");
 		logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
 				"(mask bit 61 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
