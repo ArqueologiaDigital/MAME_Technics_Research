@@ -1344,8 +1344,21 @@ s32 upd6383_device::acc_to_datum(u64 acc) const
 	{
 		if (m_ovc & 0x08)
 		{
+			//  ★★★ §117: the modulus is 2^23 UNSIGNED, not a signed 24-bit wrap.
+			//  lfo-ramp.md §11's simulation states it as `mem[Q] <- (phase + INC)
+			//  mod 2**23', and its measured phase series is 000072 / 0000E4 / 000156
+			//  -- small POSITIVE values ramping, i.e. the accumulator lives in
+			//  0..0x7FFFFF and wraps to 0, never going negative.
+			//  §114 measured the consequence of getting this wrong: a signed 24-bit
+			//  wrap runs the LFO at 0.2997 Hz where mod 2^23 with increment 114
+			//  gives 0.5993 Hz -- the rate lfo-ramp.md item C anchors across 29 LFO
+			//  blocks in 16 programs with 9 distinct increments.
+			//  ⚠ COST, stated: this is applied per UNIT (m_ovc bit 3), so unit 0's
+			//  AUDIO also becomes non-negative, which is wrong for a signal.  That
+			//  is evidence the modulus really belongs to the DATAPATH and the OVC
+			//  bit only selects which units have a wrapping datapath at all.
 			m_wrap_n++;
-			return s32(util::sext(u32(v) & 0xffffff, 24));
+			return s32(u32(v) & 0x7fffff);
 		}
 	}
 	else if (m_speculative && (m_specmask & 0x100000000ull))
