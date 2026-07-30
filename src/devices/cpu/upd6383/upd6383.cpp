@@ -1342,7 +1342,25 @@ s32 upd6383_device::acc_to_datum(u64 acc) const
 	//  per-unit flag but NOT the overflow mode.
 	if (m_speculative && (m_specmask & 0x200000000ull))
 	{
-		if (m_ovc & 0x08)
+		//  ★★★ §118: THE PER-UNIT ENABLE AND THE PER-DATAPATH MODULUS ARE TWO
+		//  DIFFERENT THINGS, and §117 recorded that conflating them was known-wrong
+		//  (unit 0's AUDIO came out unsigned).  Separated here:
+		//
+		//    m_ovc bit 3        -- does this UNIT contain a wrapping datapath?
+		//    the WRAP-WORD form -- is THIS STORE the wrapping one?
+		//
+		//  The second is exceptionless in the corpus.  Of the 678 bit-4 store words,
+		//  the family carrying BOTH the gate bit 7 AND f31 == 2 is:
+		//        29 words, hi12 forms {0x094: 29}, SRC {0x08: 29}
+		//  -- a single hi12 form and a single operand source, and lfo-ramp.md item C
+		//  independently counts "29 LFO blocks in 16 programs".  29 words, 29 blocks.
+		//  The wrap-word family IS the set of LFO publishers, exactly.
+		//  (It is also the only bit-7 store shape that survives store-gate.md item
+		//  C's co-equal survivor, which is why iw91 publishes and iw30 does not.)
+		const u16 hi_w = upd6383_disassembler::hi12(m_cur_word);
+		const bool wrapword = (hi_w & 0x10) && (hi_w & 0x80)
+				&& (((hi_w >> 1) & 7) == 2);
+		if ((m_ovc & 0x08) && wrapword)
 		{
 			//  ★★★ §117: the modulus is 2^23 UNSIGNED, not a signed 24-bit wrap.
 			//  lfo-ramp.md §11's simulation states it as `mem[Q] <- (phase + INC)

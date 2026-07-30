@@ -719,7 +719,9 @@ private:
 	// Jointly they make the CHORUS LFO phase ramp for the first time; each has its
 	// own local justification (see §112, store-gate.md item C, §115/§116) and each
 	// is individually removable.  Still HALF RATE -- see §114 on 2^23 vs 2^24.
-	u64  m_specmask = 0x2a39b440f;
+	// §118: bit 18 (§113, SRC 0x11 = mem[ptr]) rejoins the default -- now VALIDLY
+	// tested, since §114 freed it from the default and gave it a real null arm.
+	u64  m_specmask = 0x2a39f440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
