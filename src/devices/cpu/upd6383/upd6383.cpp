@@ -600,6 +600,18 @@ void upd6383_device::device_stop()
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
 		//  ★ §138: the output-stage erasure guard.  0 with the bit off is the null.
+		{   //  ★★★ §157 THE DECIDING CENSUS: per I-RAM SLOT, so voices cannot pool.
+			//  A real sweep gives each slot a NON-ZERO range; four signed constants
+			//  give every slot range 0.  §155's per-cell figure cannot tell these
+			//  apart, because CHORUS's depths are +240 +240 -240 -240.
+			std::string sl;
+			for (u32 q = 0; q < 384; q++)
+				if (m_tapslot_seen[q])
+					sl += string_format(" iw%u:%d..%d(r%d)", q, m_tapslot_lo[q],
+							m_tapslot_hi[q], m_tapslot_hi[q] - m_tapslot_lo[q]);
+			logerror("upd6383: ★★ §157 TAPMOD PER SLOT:%s\n",
+					sl.empty() ? " (none)" : sl.c_str());
+		}
 		{   //  ★ §153: did the tap actually SWEEP?  A correct depth gives a range
 			//  of about 2 x |depth| samples; 0 means the modulation never reached
 			//  the address, which is the state this change exists to end.
@@ -2964,7 +2976,28 @@ void upd6383_device::exec_alu(u64 word)
 		//  proof: it extends a proven rule to a second opcode.
 		const u8 mode07 = upd6383_disassembler::c_format(word)
 				? 2 : u8(upd6383_disassembler::class4(word) & 7);
-		u8 d07 = (mode07 == 1) ? upd6383_disassembler::addr8(word) : m_dp;
+		//  ★★★ §161 (mask bit 61): A DELAY WORD'S `addr8' IS A DIRECTION FIELD,
+		//  NOT A REGISTER ADDRESS -- so ACTION 0x07 must not store to it.
+		//  MEASURED consequence: CHORUS's four `880.1.20.2C7' delay READs carry
+		//  ACT 0x07 and class 1, so this line takes d07 = addr8 = 0x20 and stores
+		//  there 4 times a frame -- 4 513 920 stores, matching the census exactly.
+		//  Register cell 0x20 is LFO WAVETABLE INDEX 3, and §160 measured it as the
+		//  single destroyed entry in an otherwise bit-exact 36-entry sine
+		//  (23 of 24 cells within 3 LSB; index 3 reads 0 where the sine needs
+		//  +6 169 476, confirmed by index 15's exact -6 169 476).
+		//  `addr8' bit 6 selecting READ/WRITE on these words is FORCED
+		//  (adjudication-round5 item D; 0x20/0x30 READ, 0x60 WRITE, 276/276), so
+		//  0x20 is a direction code that cannot also be a destination.
+		//  ⚠ The other 22 addr8==0x20 words in the frame carry ACT 0x15 or 0x0B and
+		//  never reach this line -- which is why the count is 4 and not 26, and is a
+		//  built-in check that this gate is aimed at the right words.
+		const bool esc_dly = (upd6383_disassembler::hi12(word) & 0x800)
+				&& upd6383_disassembler::class4(word) == 1;
+		u8 d07 = (mode07 == 1
+					&& !(m_speculative && (m_specmask & (1ull << 61)) && esc_dly))
+				? upd6383_disassembler::addr8(word) : m_dp;
+		if (m_speculative && (m_specmask & (1ull << 61)) && esc_dly && mode07 == 1)
+			m_dlystore_fix_n++;
 		//======================================================================
 		//  ★★★ §109 SPECULATIVE (mask bit 28, 0x10000000): ACTION 0x07's MODE-2
 		//  store lands on the POST-increment cell.
@@ -3958,6 +3991,15 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				m_tapmod = s32(acc_to_datum(
 						(m_specmask & 0x4000) && m_cur_unit1 ? m_accb : m_acc));
 				m_tapmod_n++;
+				//  ★ §157 per-SLOT census -- no pooling, so a constant reads range 0.
+				if (m_cur_iw < 384)
+				{
+					const u16 q = m_cur_iw;
+					if (!m_tapslot_seen[q])
+					{ m_tapslot_seen[q] = true; m_tapslot_lo[q] = m_tapslot_hi[q] = m_tapmod; }
+					else { if (m_tapmod < m_tapslot_lo[q]) m_tapslot_lo[q] = m_tapmod;
+					       if (m_tapmod > m_tapslot_hi[q]) m_tapslot_hi[q] = m_tapmod; }
+				}
 			}
 			//  ★ §104: the pointer and the cell UNDER it, sampled BEFORE the word
 			//  runs.  This is the RESIDENCY of the cell the word is about to read,
@@ -5043,6 +5085,37 @@ void upd6383_device::dump_frame_report() const
 			std::string r; u32 n = 0;
 			for (u32 c = 0; c < 256; c++)
 				if (m_rf_st[c]) { r += string_format(" %02X:%u", c, m_rf_st[c]); n++; }
+		{   //  ★★★ §160: WHAT IS ACTUALLY IN THE REGISTER FILE, by value.
+			//  §159 measured D-RAM 0x1D..0x40 -- the 36-entry LFO wavetable range --
+			//  as ~800 writes per cell with NOT ONE non-zero, so the table never
+			//  lands there.  Tag 0x15 routes host pokes to m_rf instead (:919,
+			//  mask bit 23, SET in the default), and §97 split that space off from
+			//  the pointer-walked D-RAM deliberately.  The open half of §159 §2 is
+			//  whether the table ARRIVES in m_rf or never arrives at all -- two
+			//  different fixes.  The §99 line below counts MICROCODE stores, not
+			//  host writes, so it cannot answer that.  This dumps the contents.
+			//  ★ The wavetable window is printed separately and in full, zeros
+			//  included, so "absent" is visible rather than inferred from a gap.
+			std::string wt;
+			u32 wnz = 0;
+			for (u32 c = 0x1d; c <= 0x40; c++)
+			{
+				wt += string_format(" %06X", m_rf[c] & 0xffffff);
+				if (m_rf[c] & 0xffffff) wnz++;
+			}
+			logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
+				"(mask bit 61 = %d): FIRED %u times\n",
+				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
+		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
+					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
+			std::string rf;
+			u32 rnz = 0;
+			for (u32 c = 0; c < 256; c++)
+				if (m_rf[c] & 0xffffff)
+				{ rf += string_format(" %02X=%06X", c, m_rf[c] & 0xffffff); rnz++; }
+			logerror("upd6383:    §160 register file, ALL non-zero cells (%u):%s\n",
+					rnz, rf.empty() ? " NONE" : rf.c_str());
+		}
 			logerror("            §99 MODE-1 STORES -> register file: %u cells%s\n",
 					n, r.empty() ? " (none)" : r.c_str());
 		}

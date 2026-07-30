@@ -862,7 +862,33 @@ private:
 	// ⚠ AND THE WAVEFORM IS UNDECODED: the census measures the excursion's EXTENT,
 	// not its SHAPE OVER TIME.  Two anomalies stand unfitted -- DEPTH's 0.5 gain is
 	// not applied (measured +/-240, not +/-120), and one cell sweeps -240..0.
-	u64  m_specmask = 0x1910e446a39b440f;
+	// §161: A DELAY WORD'S `addr8' IS A DIRECTION FIELD, NOT A STORE ADDRESS
+	// (bit 61) joins the default.
+	//   0x1910E446A39B440F | (1<<61) = 0x3910E446A39B440F
+	// ACTION 0x07's mode-1 store took its destination from addr8(word).  On a
+	// class-1 ESCAPE word that field is the delay direction code -- FORCED by
+	// adjudication-round5 item D at 276/276 (bit 6 selects; 0x20/0x30 READ,
+	// 0x60 WRITE) -- so it cannot also be a destination.  CHORUS's four delay
+	// READs `880.1.20.2C7' therefore stored to register cell 0x20, which is LFO
+	// WAVETABLE INDEX 3.
+	// A/B on the cold-boot CHORUS vehicle, all four pre-registered falsifiers:
+	//   F1 aim:   §161 FIRED 4 515 636 == §153's tapmod count IN THE SAME RUN.
+	//             Same four words, exactly -- the other 22 addr8==0x20 words in
+	//             the frame carry ACT 0x15/0x0B and never reach that line.
+	//   F2 value: cell 0x20 restored to 0x5E2382, window 35/36 -> 36/36.  The
+	//             table is 36 entries and the sine's period is 24, so index 3
+	//             and index 27 are the SAME PHASE: cell 0x38 already held
+	//             0x5E2382 in the control, undisturbed.  BIT-IDENTICAL.
+	//   F3 collat:the store is re-aimed to m_dp, not deleted, so it could have
+	//             punched a new hole.  Full non-zero-cell diff vs the control is
+	//             exactly one added line, `20=5E2382'.  Nothing else moved.
+	//   F4 null:  control (bit 61 clear) still 35/36 with 0x20 = 000000, FIRED 0.
+	// The recovered table is 0.9500000 x 2^23 x sin(2*pi*k/24 + 0.100000 rad) to
+	// within 2 LSB over all 36 entries -- amplitude and phase both fell out of a
+	// least-squares fit, neither was assumed.
+	// ⚠ This does NOT make the chip audible and does NOT implement class 6.  It
+	// removes the reason class 6 could not be built: the table is its data.
+	u64  m_specmask = 0x3910e446a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -976,6 +1002,8 @@ private:
 	u64  m_acc_w_unit1_n = 0;
 	//  §145: SRC 0x00 read as C-RAM[cursor] instead of mem[ptr] (mask bit 57).
 	u64  m_src00_coef_n = 0;
+	//  §161: delay words whose ACT-07 store was re-aimed off the direction field.
+	u64  m_dlystore_fix_n = 0;
 	//  ★★★ §153 (mask bit 60): THE DELAY-TAP MODULATION REGISTER.
 	//  §152: `lo12 == 0x44C' is "apply the modulation offset" (kn5000-dsp-chorus.md
 	//  §3.1/§3.2, 2026-07-22), the class selecting interpolation -- CHORUS uses the
@@ -991,6 +1019,12 @@ private:
 	//  per-descriptor-cell tap-address excursion census, so the sweep can be MEASURED
 	//  rather than asserted: a correct depth gives range ~= 2 x |depth|.
 	u32  m_tap_lo[64] = {}, m_tap_hi[64] = {}; bool m_tap_seen[64] = {};
+	//  ★★★ §157: the SAME census, per I-RAM SLOT.  §155's per-descriptor-cell
+	//  bucketing pools voices, and CHORUS's four ROM depths are +240 +240 -240 -240 --
+	//  so a bucket holding one positive and one negative voice reports "-240..+240"
+	//  with NO sweep at all.  Per slot, each voice is alone: a real sweep still shows
+	//  a range, pooled constants collapse to range 0.
+	s32  m_tapslot_lo[384] = {}, m_tapslot_hi[384] = {}; bool m_tapslot_seen[384] = {};
 	void bx_acc_w(s64 L, bool add)
 	{
 		u64 &dst = (m_speculative && (m_specmask & (1ull << 56))
