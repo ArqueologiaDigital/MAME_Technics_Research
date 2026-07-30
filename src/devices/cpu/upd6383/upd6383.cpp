@@ -606,14 +606,19 @@ void upd6383_device::device_stop()
 			std::string ln;
 			for (u32 k = 0; k < 64; k++)
 				if (m_tap_seen[k] && m_tap_hi[k] != m_tap_lo[k])
-					ln += string_format(" [%02X]%u..%u(range %u)", k, m_tap_lo[k],
-							m_tap_hi[k], m_tap_hi[k] - m_tap_lo[k]);
+					ln += string_format(" [%02X]%d..%d(range %d)", k, s32(m_tap_lo[k]),
+							s32(m_tap_hi[k]), s32(m_tap_hi[k]) - s32(m_tap_lo[k]));
 			logerror("upd6383: ★ §153 TAP MODULATION (mask bit 60 = %d): FIRED %u | "
-					"swept cells:%s\n", (m_specmask & (1ull << 60)) ? 1 : 0,
-					u32(m_tapmod_n), ln.empty() ? " NONE -- no cell's address moved" : ln.c_str());
+					"tapmod excursion per cell:%s\n", (m_specmask & (1ull << 60)) ? 1 : 0,
+					u32(m_tapmod_n), ln.empty() ? " NONE -- the modulation term never moved" : ln.c_str());
 		}
-		logerror("upd6383: ★ §145 SRC 0x00 = coef (mask bit 57 = %d): FIRED %u times\n",
-				(m_specmask & (1ull << 57)) ? 1 : 0, u32(m_src00_coef_n));
+		//  ⛔ §156 fix: this printed bit 57's state while reporting firings driven by
+		//  bit 58 or 59 -- a gate reporting the wrong gate.  Name whichever is active.
+		logerror("upd6383: ★ §145 SRC 0x00 = coef [%s]: FIRED %u times\n",
+				(m_specmask & (1ull << 59)) ? "bit 59: f98==1 && coeff_consumer"
+				: (m_specmask & (1ull << 58)) ? "bit 58: coeff_consumer only"
+				: (m_specmask & (1ull << 57)) ? "bit 57: ALL SRC 0x00 words"
+				: "OFF", u32(m_src00_coef_n));
 		logerror("upd6383: ★ §142 ACT 0x0D/0x0E accumulator write (mask bit 56 = %d): "
 				"routed to ACCB %u times\n", (m_specmask & (1ull << 56)) ? 1 : 0, u32(m_acc_w_unit1_n));
 		logerror("upd6383: ★ §138 stale-LOAD guard (mask bit 55 = %d): FIRED %u times "
@@ -1828,11 +1833,18 @@ void upd6383_device::exec_alu(u64 word)
 			const u32 addr = (cellv + u32(m_frames_run)
 					+ ((m_speculative && (m_specmask & (1ull << 60)))
 						? u32(s32(m_tapmod)) : 0u)) & 0xffff;
-			{   // per-cell excursion census
+			{   //  ⛔ §154 FIX: census the MODULATION TERM, not the absolute address.
+				//  §153's census took the range of `addr' per cell over the whole run
+				//  and got 65535 for every cell in BOTH arms -- because `m_frames_run'
+				//  (the rotation G) ramps across the entire 16-bit space by itself, so
+				//  an absolute-address range can only ever return 65535.  My own F2
+				//  fired and voided that run: the census could not fail in the other
+				//  direction.  The modulation term is what has to be measured.
 				const u32 k = cellv & 0x3f;
-				if (!m_tap_seen[k]) { m_tap_seen[k] = true; m_tap_lo[k] = m_tap_hi[k] = addr; }
-				else { if (addr < m_tap_lo[k]) m_tap_lo[k] = addr;
-				       if (addr > m_tap_hi[k]) m_tap_hi[k] = addr; }
+				const s32 t = (m_speculative && (m_specmask & (1ull << 60))) ? m_tapmod : 0;
+				if (!m_tap_seen[k]) { m_tap_seen[k] = true; m_tap_lo[k] = m_tap_hi[k] = u32(t); }
+				else { if (s32(m_tap_lo[k]) > t) m_tap_lo[k] = u32(t);
+				       if (s32(m_tap_hi[k]) < t) m_tap_hi[k] = u32(t); }
 			}
 			if (dir == 'W')
 			{

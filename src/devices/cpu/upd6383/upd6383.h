@@ -844,7 +844,25 @@ private:
 	// railed at 0x7FFFFF<<16 exactly), so this is a polarity change between two
 	// railed states, not a change from clean audio to clipped -- but it is audible
 	// behaviour in the only audible unit and it is not mine to call.
-	u64  m_specmask = 0x110e446a39b440f;
+	// §156: `SRC 0x00 = C-RAM[cursor]' (bit 59, gated on f98==1 AND coefficient-
+	// consuming) and THE DELAY-TAP MODULATION PATH (bit 60) join the default.
+	//   0x110E446A39B440F | (1<<59) | (1<<60) = 0x1910E446A39B440F
+	// Together they make CHORUS's delay tap sweep by EXACTLY +/-240 samples -- the
+	// depth the ROM designs at C-RAM[0x02] -- reproducing the 160..640 containment
+	// window inside a 1040-sample line that §152 computed FROM THE ROM ALONE before
+	// any of this existed.  Neither is observable without the other: tapmod without
+	// coef rails at 0x7FFFFF (§154), and §148 had graded coef "inert downstream"
+	// because its consumer did not yet exist.
+	// Regression, clean cold-boot vehicle (data/PREDICT_156.md), all four pass:
+	//   285/285 decoded, 0 PARTIAL, 0 TRAP | tap sweeps +/-240 | DO1/DO2 UNCHANGED
+	//   at 0 non-zero, §70 ACCA min == max == 0 | DC leak 0.00%, verdict SILENT.
+	// ⚠ THIS MAKES NOTHING AUDIBLE.  It models a swept delay for the first time; the
+	// chip stays silent for reasons upstream (§141/§150: w73 zeroes the accumulator
+	// despite a formed product).  Shipped on the mechanism, not on a sound.
+	// ⚠ AND THE WAVEFORM IS UNDECODED: the census measures the excursion's EXTENT,
+	// not its SHAPE OVER TIME.  Two anomalies stand unfitted -- DEPTH's 0.5 gain is
+	// not applied (measured +/-240, not +/-120), and one cell sweeps -240..0.
+	u64  m_specmask = 0x1910e446a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
