@@ -826,7 +826,25 @@ private:
 	// ⚠ AND: every earlier measurement taken inside a BODY was taken against
 	// tap-table values standing in for coefficients.  Re-check body-0 findings
 	// before quoting them.
-	u64  m_specmask = 0x46a39b440f;
+	// §144: the §133 READINGS JOIN THE DEFAULT, together with the §142 unit-aware
+	// accumulator write they depend on.  sel0D = 1 (ACT 0x0D = acc <- bus), sel0E = 7
+	// (ACT 0x0E = P <- bus at the multiply's scale), bit 52 (excuse them from the
+	// blanket tempA capture) and bit 56 (write the PER-UNIT accumulator).
+	//   0x46A39B440F | (1<<42) | (7<<45) | (1<<52) | (1<<56) = 0x110E446A39B440F
+	// §135 refused to ship these because they railed unit 1 at -0x800000 on 98.9% of
+	// presentations.  §143 §3 found why: MY OWN destination menu was unit-blind, so
+	// in unit 1 the pair wrote ACCA while the SRC 0x10 reader read ACCB.  With bit 56
+	// the arm returns to the default's statistics -- 1 062 933 non-zero vs 1 064 113
+	// (0.1%), DC leak 34.64% vs 34.69% -- and frames still close 320/320, 0 traps.
+	// Three pre-registered predictions all hit: fired-count 0 -> 7 690 128; the
+	// railing stops; and DO1 is UNCHANGED (the known-answer control, since unit 0
+	// uses m_acc either way).
+	// ⚠ ONE REAL DIFFERENCE REMAINS AND IT NEEDS A LISTEN: unit 1's peak flips sign,
+	// -1 543 434 -> +1 543 433.  Both are rails (§143 §2 measured the DEFAULT already
+	// railed at 0x7FFFFF<<16 exactly), so this is a polarity change between two
+	// railed states, not a change from clean audio to clipped -- but it is audible
+	// behaviour in the only audible unit and it is not mine to call.
+	u64  m_specmask = 0x110e446a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -932,6 +950,19 @@ private:
 	//  where this matters: 1 class-A word in 23, so no multiply issues there, and
 	//  iw65..72 erase the body's result before w73 presents it.
 	u64  m_stale_load_n = 0;
+	//  §142: the per-unit accumulator write for the ACT 0x0D / 0x0E destination
+	//  menu.  Mask bit 56 makes it unit-aware, matching the SRC 0x10 reader at
+	//  upd6383.cpp:2143 and the §62 convention (bit 14) that unit 1 uses ACCB.
+	//  With the bit clear the old, unit-blind behaviour is reproduced exactly, so
+	//  every §133/§135 measurement stays comparable.
+	u64  m_acc_w_unit1_n = 0;
+	void bx_acc_w(s64 L, bool add)
+	{
+		u64 &dst = (m_speculative && (m_specmask & (1ull << 56))
+				&& (m_specmask & 0x4000) && m_cur_unit1) ? m_accb : m_acc;
+		if (&dst == &m_accb) m_acc_w_unit1_n++;
+		if (add) dst += u64(L) << ACC_SHIFT; else dst = u64(L) << ACC_SHIFT;
+	}
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05

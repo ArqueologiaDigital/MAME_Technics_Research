@@ -600,6 +600,8 @@ void upd6383_device::device_stop()
 				"FIRED %u times\n",
 				(m_specmask & 0x4000000000ull) ? 1 : 0, u32(m_cursor_rebase_n));
 		//  ★ §138: the output-stage erasure guard.  0 with the bit off is the null.
+		logerror("upd6383: ★ §142 ACT 0x0D/0x0E accumulator write (mask bit 56 = %d): "
+				"routed to ACCB %u times\n", (m_specmask & (1ull << 56)) ? 1 : 0, u32(m_acc_w_unit1_n));
 		logerror("upd6383: ★ §138 stale-LOAD guard (mask bit 55 = %d): FIRED %u times "
 				"| ⚠ a non-zero DO1 means NOTHING until §70 ACCA min != max\n",
 				(m_specmask & (1ull << 55)) ? 1 : 0, u32(m_stale_load_n));
@@ -2768,12 +2770,24 @@ void upd6383_device::exec_alu(u64 word)
 			m_act0d_n++;
 			switch (s0d)
 			{
-			case 1: m_acc = u64(s64(L)) << ACC_SHIFT; break;   // -> accumulator (load)
+			//  ⛔ §142: THESE TWO WERE UNIT-BLIND -- the FOURTH instance of a defect
+			//  this file has already fixed three times (§66 source side, §68 the
+			//  bit-4 store, §75 the delay write).  `m_acc' was written
+			//  unconditionally, but mask bit 14 is SET in the default so unit 1
+			//  accumulates into `m_accb', and the SRC 0x10 READER at :2143 is
+			//  unit-aware.  So in unit 1 the pair wrote ACCA and read ACCB -- the
+			//  write and the read targeted different registers, and ACT 0x0D's
+			//  write went to a register nothing in unit 1 reads.
+			//  ★ That is exactly why "ACT 0x0D -> acc alone is bit-identical to the
+			//  default" (§135 §3): in unit 1 it wrote a dead register, and §133's
+			//  decode was only ever validated in unit 0, where m_acc IS the live one.
+			//  Gated on bit 56 so the correction is A/B-able rather than assumed.
+			case 1: bx_acc_w(L, false); break;                 // -> accumulator (load)
 			case 2: m_ta = u32(L) & 0xffffff; break;           // -> tempA
 			case 3: m_tb = u32(L) & 0xffffff; break;           // -> tempB
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;  // -> mem[ptr]
 			case 5: m_p = u32(L) & 0xffffff; break;            // -> P, RAW (suspect scale)
-			case 6: m_acc += u64(s64(L)) << ACC_SHIFT; break;  // -> accumulator (add)
+			case 6: bx_acc_w(L, true); break;                  // -> accumulator (add)
 			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;     // -> P at the MULTIPLY's scale
 			default: break;
 			}
@@ -2801,12 +2815,12 @@ void upd6383_device::exec_alu(u64 word)
 			m_bx_act0e_n++;
 			switch (m_bx_sel0e)
 			{
-			case 1: m_acc = u64(s64(L)) << ACC_SHIFT; break;
+			case 1: bx_acc_w(L, false); break;   // §142: unit-aware, see ACT 0x0D
 			case 2: m_ta = u32(L) & 0xffffff; break;
 			case 3: m_tb = u32(L) & 0xffffff; break;
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;
 			case 5: m_p = u32(L) & 0xffffff; break;
-			case 6: m_acc += u64(s64(L)) << ACC_SHIFT; break;
+			case 6: bx_acc_w(L, true); break;
 			case 7: m_p = u64(s64(L)) << ACC_SHIFT; break;
 			default: break;
 			}
