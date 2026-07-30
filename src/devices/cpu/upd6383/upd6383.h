@@ -561,6 +561,64 @@ private:
 	bool m_trace_armed = false, m_trace_done = false;
 	u8   m_st07_dest[8] = {}, m_st07_ptr[8] = {}, m_st07_src[8] = {};
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
+	//======================================================================
+	//  ★★★ §109 (2026-07-30) THE STORE-SITE PROBE -- INSTRUMENTATION ONLY.
+	//
+	//  The question it answers: for a NAMED set of slots, WHERE does the store
+	//  land, WHICH code path performs it, and WHICH decode predicate admitted the
+	//  word.  Every previous statement about kernel iw30/iw32 was derived from a
+	//  static walk plus a per-cell census (§96) -- neither of which observes the
+	//  pointer at the store, and neither of which distinguishes "guard 7 refuses
+	//  this word" from "a guard SEVEN GUARDS EARLIER refuses it, so guard 7 is
+	//  never consulted".  alu_decoded() is a conjunction: only its first failure
+	//  is observable, and §109 measures which one that is.
+	//
+	//  Per probe slot it records: the word, the pointer BEFORE the slot, the
+	//  pointer AFTER it, the execution path taken, the four decode predicates,
+	//  and up to four distinct (path, address) store events with value ranges.
+	//======================================================================
+	static constexpr u32 SPROBE_MAX = 16;
+	static constexpr u32 SPROBE_ST  = 4;
+	struct sprobe_t {
+		u16 iw = 0xffff; u64 word = 0; u32 n_exec = 0;
+		u8  dp_pre = 0, dp_post = 0;
+		u8  path = 0xff;        // 0 decoded(), 1 speculative catch-all, 2 PARTIAL, 3 TRAP
+		u8  decoded = 0;        // alu_decoded()
+		u8  gfail = 0xff;       // alu_guard_fail() -- the FIRST failing guard
+		u8  supp = 0;           // st_suppressed()
+		u8  g7 = 0;             // guard7_would_refuse()
+		u32 nst = 0;
+		u8  st_site[SPROBE_ST] = {}, st_addr[SPROBE_ST] = {};
+		s32 st_lo[SPROBE_ST] = {}, st_hi[SPROBE_ST] = {};
+		u32 st_n[SPROBE_ST] = {};
+	};
+	sprobe_t m_sprobe[SPROBE_MAX] = {};
+	int  m_sprobe_cur = -1;         // index of the slot currently executing, or -1
+	static int sprobe_idx(u16 iw);
+	void store_probe(u8 addr, s32 val, u8 site);
+	//  ★ §109 mask bit 28 (0x10000000): ACTION 0x07's mode-2 store lands on the
+	//  POST-increment cell instead of the pre-increment one.  DIAGNOSTIC, default
+	//  OFF, with a FIRED COUNT so a silent no-op can never be read as a null.
+	u32  m_act07_post_n = 0, m_act07_post_k6_n = 0;
+	//  ★★★ §109 mask bit 29 (0x20000000): THE OTHER SURVIVING STORE GATE.
+	//  store-gate.md item C ran all nine conditions of its enumeration against both
+	//  known-mathematics witnesses and exactly TWO survive:
+	//      b7 && f31 == 1   (SHIPPED, st_suppressed())
+	//      b7 && f31 != 2   (co-equal, never applied)
+	//  They differ on exactly 13 corpus words, and kernel iw30 (f31 = 5) is one of
+	//  them: under the shipped arm it stores, under the co-equal arm it does not.
+	//  ⛔ NOT A FIX and NOT A TIE-BREAK -- it makes the OTHER arm of an open tie
+	//  measurable, so "iw30 stores" can be reported as a gate CHOICE rather than as
+	//  chip behaviour.  Default OFF, with a FIRED COUNT.
+	//  It is applied at BOTH store gates (exec_alu and the K6 input-stage path),
+	//  because the two must never disagree -- that identity is the reason
+	//  st_suppressed() is called in both places at all.
+	bool st_suppressed_live(u64 w);
+	u32  m_stgate_alt_n = 0;        // times the two conditions DISAGREED on a word
+	//  ★ §109 cross-frame LFO phase witness: the value the body's LFO block finds
+	//  resident in the phase cell, sampled at body-0 iw89, over consecutive frames.
+	s32  m_lfo_phase[8] = {}; u32 m_lfo_phase_n = 0;
+	u32  m_lfo_phase_frame[8] = {};
 	u32  m_dwr[256] = {}, m_dwr_nz[256] = {};
 	u32  m_out_slot_writes[6] = {}, m_out_slot_nonzero[6] = {};
 	//  ★ §25 diagnostic 2026-07-28: WHY are two of the three presentations always

@@ -655,6 +655,52 @@ public:
 	}
 
 	// ---------------------------------------------------------------
+	//  ★★★ §109 INSTRUMENTATION ONLY (2026-07-30).  WHICH guard refuses a word.
+	//
+	//  This is a MIRROR of alu_decoded() above, in the same order, returning the
+	//  identity of the FIRST failing test instead of a bool.  It exists because
+	//  "guard 7 traps this word" was being ASSERTED for words that never reach
+	//  guard 7 -- alu_decoded() is a conjunction and only its first failure is
+	//  observable.  It must stay byte-for-byte in step with alu_decoded(); it has
+	//  no effect on execution and nothing may branch on it.
+	//
+	//  Codes: 0 = passes every guard (decoded).  4 = FORMAT (c_format).
+	//  1 = CLASS.  21 = routing/bit-11.  22 = routing/pointer-mode.
+	//  23 = routing/SRC-or-ACTION not anchored.  5 = bit-4 off mode 2.
+	//  6 = ACTION-0x07 off mode 2.  7 = GUARD 7 (bit4+bit7 at f31 != 2).
+	//  3 = OPERATION (the hi12[3:1] switch).
+	// ---------------------------------------------------------------
+	static constexpr u8 alu_guard_fail(u64 w)
+	{
+		if (c_format(w))                        return 4;
+		const u8 cl = class4(w);
+		if (cl != 2 && cl != 8 && cl != 0xa)    return 1;
+		if (lo12(w) & 0x800)                    return 21;
+		if (lo_ptrmode(w))                      return 22;
+		if (!lo_src_anchored(lo_src(w)) || !lo_act_anchored(lo_act(w)))
+			return 23;
+		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)          return 5;
+		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2) return 6;
+		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2)
+			return 7;
+		switch (hi_f31(hi12(w)))
+		{
+		case HI_ACC_LOAD: case HI_ACC_ADD: return 0;
+		case HI_ACC_HOLD: return (cl == 8) ? 0 : 3;
+		default: return 3;
+		}
+	}
+
+	//  ★ §109: guard 7's OWN condition, evaluated in isolation -- "this word is a
+	//  bit-4 store carrying bit 7 whose f31 is not 2, so guard 7 WOULD refuse it if
+	//  it were ever consulted".  Distinct from alu_guard_fail() == 7, which says
+	//  guard 7 is the FIRST guard that refuses it.
+	static constexpr bool guard7_would_refuse(u64 w)
+	{
+		return (hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2;
+	}
+
+	// ---------------------------------------------------------------
 	//  THE REGISTER-LOAD FAMILY -- `hi12 == 0x801' IS NOT AN ALU OPCODE.
 	//
 	//  K3 (dsp/analysis/k3-pointers.md sect. 8 item 1): with class4 == 0 and a

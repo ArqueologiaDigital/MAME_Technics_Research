@@ -292,6 +292,14 @@ void upd6383_device::device_start()
 		m_specmask = u32(strtoul(e, nullptr, 16));
 		logerror("upd6383: §32 bisection mask UPD6383_SPEC = 0x%X\n", m_specmask);
 	}
+	//  ★ §109: say bits 28/29 out loud, so an arm can never be confused with a null.
+	logerror("upd6383: §109 ACT-07 store target = %s-increment (mask bit 28 = %d)\n",
+			(m_specmask & 0x10000000) ? "POST" : "PRE",
+			(m_specmask & 0x10000000) ? 1 : 0);
+	logerror("upd6383: §109 bit-4 store gate = %s (mask bit 29 = %d)\n",
+			(m_specmask & 0x20000000) ? "b7 && f31 != 2  (the CO-EQUAL survivor)"
+					: "b7 && f31 == 1  (SHIPPED)",
+			(m_specmask & 0x20000000) ? 1 : 0);
 	//  ★ §104 A/B (DIAGNOSTIC ONLY, off by default): suppress the ACTION-0x07 store
 	//  when the bus source is SRC 0x08.  This is NOT a proposed fix -- it is the
 	//  one-word counterfactual that turns "cell 0x07 goes constant across kernel
@@ -373,6 +381,68 @@ void upd6383_device::watch_store(u32 addr, s32 val, u8 site)
 	m_watch_hits[w]++;
 	if (val) m_watch_nz[w]++;
 	m_watch_site[w] = site;
+}
+
+//======================================================================
+//  ★★★ §109 (2026-07-30) THE STORE-SITE PROBE -- INSTRUMENTATION ONLY.
+//  See upd6383.h.  Nothing here changes execution.
+//
+//  THE SLOT SET, and why each one is in it:
+//    11   the ONE K6 input-stage word carrying ACTION 0x07 -- the only place the
+//         ACT-07 store runs after exec_addressing_only() already advanced the
+//         pointer, so it is the internal control on pre- vs post-increment.
+//    30   `09A.A.00.200' -- bit 4 AND bit 7 with f31 = 5.  The word under test.
+//    32   `000.A.FF.207' -- ACTION 0x07, delta -1.  The word under test.
+//    33/34/37/39   the rest of the kernel's descending store block, as the
+//         CALIBRATION: iw34 stores SRC 0x10 (the accumulator, ANCHORED) with the
+//         same addr8 = 0xFF, so whatever geometry iw32 shows, iw34 must show too.
+//    89/90/91/92   body-0's LFO block and its `447' follower -- the cells the
+//         kernel block is accused of clobbering.
+//======================================================================
+//  ★★★ §109 mask bit 29: the CO-EQUAL surviving store gate.  See upd6383.h.
+//  With the bit clear this is st_suppressed() exactly, bit for bit.
+bool upd6383_device::st_suppressed_live(u64 w)
+{
+	const bool shipped = upd6383_disassembler::st_suppressed(w);
+	if (!(m_speculative && (m_specmask & 0x20000000)))
+		return shipped;
+	const u16 hi = upd6383_disassembler::hi12(w);
+	const bool alt = (hi & upd6383_disassembler::HI_B7)
+			&& upd6383_disassembler::hi_f31(hi) != 2;
+	if (alt != shipped) m_stgate_alt_n++;
+	return alt;
+}
+
+int upd6383_device::sprobe_idx(u16 iw)
+{
+	//  ★ iw88 `000.2.F4.407' added 2026-07-30 AFTER the first four arms: under bit 28
+	//  the §96 writer census named it as a NEW writer of the phase cell 0x07, which my
+	//  writer list had missed.  It is class 2, addr8 = 0xF4 = -12, ACTION 0x07, and its
+	//  SRC is 0x10 = the accumulator -- ANCHORED, and the whole word is DECODED.  So it
+	//  is measured rather than reasoned about.
+	static const u16 SLOTS[] = { 11, 30, 32, 33, 34, 37, 39, 88, 89, 90, 91, 92 };
+	for (u32 i = 0; i < sizeof(SLOTS) / sizeof(SLOTS[0]); i++)
+		if (SLOTS[i] == iw) return int(i);
+	return -1;
+}
+
+void upd6383_device::store_probe(u8 addr, s32 val, u8 site)
+{
+	if (m_sprobe_cur < 0) return;
+	sprobe_t &s = m_sprobe[m_sprobe_cur];
+	u32 q = 0;
+	for (; q < s.nst; q++)
+		if (s.st_site[q] == site && s.st_addr[q] == addr) break;
+	if (q == s.nst)
+	{
+		if (s.nst >= SPROBE_ST) return;
+		s.nst++;
+		s.st_site[q] = site; s.st_addr[q] = addr;
+		s.st_lo[q] = s.st_hi[q] = val; s.st_n[q] = 0;
+	}
+	if (val < s.st_lo[q]) s.st_lo[q] = val;
+	if (val > s.st_hi[q]) s.st_hi[q] = val;
+	s.st_n[q]++;
 }
 
 //  ★ §86: record a kernel D-RAM write, split by input presence.
@@ -1162,12 +1232,13 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		// MEASURED: none of the twelve carries bit 7, so this changes nothing
 		// today; it closes the hole before it opens.
 		if ((hi & upd6383_disassembler::HI_ST)
-				&& !upd6383_disassembler::st_suppressed(word))
+				&& !st_suppressed_live(word))           // ★ §109 bit 29
 		{
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
 			pwatch(u8(cell), true);                                    // §98
 			kwatch(cell, s32(u32(m_acc & 0xffffff)));
 			watch_store(cell, s32(m_acc & 0xffffff), 1);
+			store_probe(u8(cell), s32(m_acc & 0xffffff), 1);           // §109
 		}
 		{ m_dwr[cell & 0xff]++; if (m_dram.read_dword(cell) & 0xffffff) m_dwr_nz[cell & 0xff]++; }
 	}
@@ -2055,7 +2126,7 @@ void upd6383_device::exec_alu(u64 word)
 	// belt-and-braces identity here rather than a live gate.
 	// dsp/analysis/adjudication-round4.md sect. 6.
 	if ((hi & upd6383_disassembler::HI_ST)
-			&& !upd6383_disassembler::st_suppressed(word))
+			&& !st_suppressed_live(word))               // ★ §109 bit 29
 	{
 		//  ★★★ THE BIT-4 STORE TARGET IS MODE-DEPENDENT -- register row 27.
 		//  This site wrote mem[m_dp] UNCONDITIONALLY, which contradicts
@@ -2168,6 +2239,7 @@ void upd6383_device::exec_alu(u64 word)
 			store_mode(stmode, u8(stdest), u32(acc_to_datum(sacc)));   // §99
 			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
 			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
+			store_probe(u8(stdest), s32(acc_to_datum(sacc)) & 0xffffff, 2);   // §109
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
 		//  ★★★ §69 SPECULATIVE (mask bit 16 SUPPRESSES the clear).
@@ -2444,7 +2516,42 @@ void upd6383_device::exec_alu(u64 word)
 		//  proof: it extends a proven rule to a second opcode.
 		const u8 mode07 = upd6383_disassembler::c_format(word)
 				? 2 : u8(upd6383_disassembler::class4(word) & 7);
-		const u8 d07 = (mode07 == 1) ? upd6383_disassembler::addr8(word) : m_dp;
+		u8 d07 = (mode07 == 1) ? upd6383_disassembler::addr8(word) : m_dp;
+		//======================================================================
+		//  ★★★ §109 SPECULATIVE (mask bit 28, 0x10000000): ACTION 0x07's MODE-2
+		//  store lands on the POST-increment cell.
+		//
+		//  The shipped model uses m_dp, and the ONLY pointer advance on this path is
+		//  at the very end of exec_alu(), so every ACT-07 store today is on the
+		//  PRE-increment cell.  That was never enumerated: lfo_ramp.py:868 hard-codes
+		//  mem[p] for ACTION 0x07 while offering `next_ptr' for the bit-4 store, so
+		//  the project's 276 480-machine search settled the timing of bit 4 and
+		//  silently ASSUMED it for ACTION 0x07.  This bit is that missing arm.
+		//
+		//  ⛔ NOT A FIX and NOT A DECODE -- a DIAGNOSTIC with a FIRED COUNT, default
+		//  OFF.  It moves every mode-2 ACT-07 store in the machine, not just iw32:
+		//  kernel iw34/iw39, body-0 iw92 and ~300 body words.  Read the fired count
+		//  before reading any consequence.
+		//
+		//  The K6 input-stage words are EXCLUDED because exec_addressing_only() has
+		//  ALREADY advanced m_dp for them (exec_alu_k6() restores it afterwards), so
+		//  m_dp is the POST cell there in BOTH arms.  That makes iw11 -- the one K6
+		//  word carrying ACTION 0x07 -- a built-in POSITIVE CONTROL: the probe must
+		//  report iw11 landing on its post-increment cell with the bit OFF, and if it
+		//  does not, the probe cannot see a post-increment at all and any null here
+		//  is worthless.
+		//======================================================================
+		if (m_speculative && (m_specmask & 0x10000000)
+				&& mode07 == 2 && upd6383_disassembler::ptr_postinc(word))
+		{
+			if (m_in_k6)
+				m_act07_post_k6_n++;            // pointer already advanced: left alone
+			else
+			{
+				d07 = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+				m_act07_post_n++;
+			}
+		}
 		if (mode07 == 1 && m_st07n < 8)
 		{   // ★ where is the pointer, and what is under it, at these five stores?
 			bool seen = false;
@@ -2476,14 +2583,23 @@ void upd6383_device::exec_alu(u64 word)
 		//  and the presentation can be measured; what w72/w77 really do is OPEN.
 		const bool unsupported_src = (src == 0x02 || src == 0x03);
 		const bool host_reg = (d07 == 0x06 || d07 == 0x86);
-		if (m_speculative && (m_specmask & 0x20) && unsupported_src && host_reg)
+		//  ★ §109: the two suppressors made explicit so the probe records only the
+		//  stores that ACTUALLY happen.  Behaviour is unchanged -- the if/else-if/else
+		//  ladder below is the same ladder, and kwatch()/watch_store() still run on
+		//  every visit exactly as they did (the indentation always lied about that).
+		const bool lvl_hit = m_speculative && (m_specmask & 0x20)
+				&& unsupported_src && host_reg;
+		const bool ab_hit  = !lvl_hit && m_ab_nostore08 && src == 0x08;
+		if (lvl_hit)
 			m_lvlguard_n++;
-		else if (m_ab_nostore08 && src == 0x08)   // ★ §104 A/B, diagnostic only
+		else if (ab_hit)                          // ★ §104 A/B, diagnostic only
 			m_ab_nostore08_n++;
 		else
 		store_mode(mode07, u8(d07), u32(L));                           // §99
 			kwatch(d07, s32(u32(L) & 0xffffff));
 			watch_store(d07, s32(L) & 0xffffff, 3);
+			if (!lvl_hit && !ab_hit)
+				store_probe(u8(d07), s32(L) & 0xffffff, 3);            // §109
 		m_dwr[d07]++;
 		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
 		break;
@@ -3131,6 +3247,47 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		//  m_speculative clear this is EXACTLY decoded(), bit for bit.
 		const bool word_ok = upd6383_disassembler::decoded(word)
 				|| (m_speculative && upd6383_disassembler::alu_decoded_speculative(word));
+		//======================================================================
+		//  ★★★ §109 THE STORE-SITE PROBE arms HERE, one slot at a time, and the
+		//  four decode predicates are evaluated on the SAME word the machine is
+		//  about to run -- so "guard 7 fires" / "guard 7 is never consulted" is a
+		//  MEASUREMENT of this build, not a reading of the source.
+		//  Same boot gate as §86/§98/§104 (§46: the first 420 000 frames are one
+		//  contiguous boot transient and counting them puts phantoms in the census).
+		//======================================================================
+		m_sprobe_cur = (m_frames_run > 420000) ? sprobe_idx(u16(prof_iw)) : -1;
+		if (m_sprobe_cur >= 0)
+		{
+			sprobe_t &sp = m_sprobe[m_sprobe_cur];
+			sp.iw = u16(prof_iw);
+			sp.word = raw;
+			sp.n_exec++;
+			sp.dp_pre = m_dp;
+			sp.decoded = upd6383_disassembler::alu_decoded(raw) ? 1 : 0;
+			sp.gfail = upd6383_disassembler::alu_guard_fail(raw);
+			{   //  the LIVE store gate (bit 29 aware), evaluated WITHOUT touching the
+				//  fired counter -- the probe must not inflate the arm's own statistic.
+				const u16 phi = upd6383_disassembler::hi12(raw);
+				sp.supp = ((m_specmask & 0x20000000)
+						? bool((phi & upd6383_disassembler::HI_B7)
+						       && upd6383_disassembler::hi_f31(phi) != 2)
+						: upd6383_disassembler::st_suppressed(raw)) ? 1 : 0;
+			}
+			sp.g7 = upd6383_disassembler::guard7_would_refuse(raw) ? 1 : 0;
+			sp.path = !word_ok
+					? (upd6383_disassembler::addressing_only(raw)
+					   || upd6383_disassembler::has_addressing(raw) ? 2 : 3)
+					: (upd6383_disassembler::decoded(raw) ? 0 : 1);
+			//  ★ the cross-frame LFO PHASE witness: what the body's LFO block finds
+			//  resident in the phase cell when it arrives.  A free-running ramp shows
+			//  a DIFFERENT value on consecutive frames; a reset one shows the same.
+			if (prof_iw == 89 && m_lfo_phase_n < 8)
+			{
+				m_lfo_phase_frame[m_lfo_phase_n] = u32(m_frames_run);
+				m_lfo_phase[m_lfo_phase_n++] =
+						s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			}
+		}
 		if (!word_ok)
 		{
 			// UNDECODED -- and that is ONE state with TWO sub-cases, not two
@@ -3308,6 +3465,14 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				}
 			}
 			(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
+		}
+
+		//  ★ §109: the pointer AFTER the slot -- the second half of the pre/post
+		//  question, read from the machine rather than from the source.
+		if (m_sprobe_cur >= 0)
+		{
+			m_sprobe[m_sprobe_cur].dp_post = m_dp;
+			m_sprobe_cur = -1;
 		}
 
 		// ---- the transfer, AFTER the word has done its datapath work -------
@@ -3792,6 +3957,43 @@ void upd6383_device::dump_frame_report() const
 				first_acc, first_mem, first_l);
 		logerror("upd6383: ★ §104 A/B: ACT-0x07 stores suppressed on SRC 0x08 = %u (0 = A/B not enabled)\n",
 				m_ab_nostore08_n);
+	}
+	{   //======================================================================
+		//  ★★★ §109 THE STORE-SITE PROBE.  SCOPE: this build, DSPCFG as configured,
+		//  UPD6383_SPEC as logged above, frames after 420 000 only, notes playing.
+		//======================================================================
+		logerror("upd6383: ★★★ §109 STORE-SITE PROBE  (mask bit 28 ACT-07 POST-increment: "
+				"FIRED %u non-K6 + %u K6-excluded | mask bit 29 alt store gate: "
+				"DISAGREED on %u store-gate evaluations)\n",
+				m_act07_post_n, m_act07_post_k6_n, m_stgate_alt_n);
+		logerror("upd6383:   path: 0=decoded() 1=speculative catch-all 2=PARTIAL 3=TRAP\n");
+		logerror("upd6383:   gfail: 0=passes 1=class 21=bit11 22=ptrmode 23=SRC/ACT anchor "
+				"5=bit4-off-mode2 6=ACT07-off-mode2 7=GUARD7 3=operation 4=c-format\n");
+		logerror("upd6383:   site: 1=exec_addressing_only K6 store  2=exec_alu bit-4 store  "
+				"3=exec_alu ACTION-0x07 store\n");
+		logerror("upd6383:    iw  word        n_exec  dpPre dpPost dlt | dec gfail supp g7 path | stores\n");
+		for (u32 i = 0; i < SPROBE_MAX; i++)
+		{
+			const sprobe_t &s = m_sprobe[i];
+			if (s.iw == 0xffff || !s.n_exec) continue;
+			std::string st;
+			for (u32 q = 0; q < s.nst; q++)
+				st += string_format("  [site%u addr %02X val %d..%d x%u]",
+						s.st_site[q], s.st_addr[q], s.st_lo[q], s.st_hi[q], s.st_n[q]);
+			if (s.nst == 0) st = "  (NO STORE)";
+			logerror("upd6383:   %3u %010llX %7u   %02X    %02X   %+4d |  %u  %5u   %u   %u   %u |%s\n",
+					s.iw, (unsigned long long)s.word, s.n_exec, s.dp_pre, s.dp_post,
+					int(s8(u8(s.dp_post - s.dp_pre))), s.decoded, s.gfail, s.supp, s.g7,
+					s.path, st.c_str());
+		}
+		//  ★ the CROSS-FRAME LFO PHASE WITNESS, and it is TWO-SIDED: identical values
+		//  on consecutive frames = the phase is reset every frame (no modulation);
+		//  a per-frame advance = the ramp is free-running.
+		std::string ph;
+		for (u32 q = 0; q < m_lfo_phase_n; q++)
+			ph += string_format(" f%u:%d", m_lfo_phase_frame[q], m_lfo_phase[q]);
+		logerror("upd6383: ★ §109 LFO PHASE resident at body-0 iw89 on %u consecutive frames:%s\n",
+				m_lfo_phase_n, ph.c_str());
 	}
 	{
 		logerror("upd6383: ★ §86 KERNEL D-RAM WRITES -- cells whose value depends on the INPUT:\n");
