@@ -2004,6 +2004,20 @@ void upd6383_device::exec_alu(u64 word)
 			L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
 			break;
 		case 0x00:
+			//  ★ §123: this reading is BETTER SUPPORTED than the neighbouring
+			//  comments suggest, and the elsewhere-quoted "1 of 6 enumerated, no
+			//  independent support" is STALE.  action00-discriminator.md item I
+			//  ran the constraint solve: of the rival readings, `zero` (a null
+			//  routing) has 0 SURVIVORS and `DR` (the delay-RAM register) has 0,
+			//  in every SINGLE DELAY variant, both windows, both mix settings.
+			//  "SRC 0x00 carries data."
+			//  ⚠ Item H states the limit precisely: mem[ptr] is NOT forced
+			//  absolutely, it is forced GIVEN THE LOADED COEFFICIENTS.
+			//  ⛔ The null-routing reading is attractive and WRONG: 572 of 599
+			//  SRC-0x00 words are exactly lo12 == 0x000 and pair with ACTION 0x00,
+			//  where anchored SRC 0x07 appears with nine different actions -- which
+			//  is exactly what a null encoding looks like.  §122 re-derived that
+			//  hypothesis from the corpus and item I had already killed it.
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			break;
 		//  ⛔ SRC 0x11 WAS HERE, read as mem[ptr] -- "1 of 7 enumerated, no
