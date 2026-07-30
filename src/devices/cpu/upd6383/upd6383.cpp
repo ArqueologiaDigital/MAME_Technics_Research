@@ -4305,6 +4305,15 @@ void upd6383_device::bx_frame_end()
 		if (w0 != 0x000020B1CDULL)       // PARAMETRIC EQ's w0, `000.2.0B.1CD'
 			return;
 		m_bx_armed = true;
+		//  ⛔ §134 FIX: clear the state cells AT ARM, not only at trial end.  In the
+		//  first run trial 0 inherited whatever ordinary PEQ execution had left in
+		//  0x50..0x77 and scored nz = 18, which fired the pre-registered F1 ("trial 0
+		//  nz > 0 -> the injector leaks -> run VOID").  It was not a leak: trials 1-3
+		//  with the SAME selector settings scored nz = 3.  Rather than argue the
+		//  criterion away after the fact, the instrument is fixed so trial 0 starts
+		//  from the same state as every other trial and F1 can be scored as written.
+		for (u32 i = 0; i < 40; i++) m_dram.write_dword(0x50 + i, 0);
+		std::memset(m_bx_prev, 0, sizeof(m_bx_prev));
 		logerror("upd6383: ★ §133 ARMED on I-RAM[84] = PARAMETRIC EQ, frame %u\n",
 				u32(m_frames_run));
 		logerror("upd6383: §133 trial sel0D sel0E f4 f5 | nz/40 chg/63 "
@@ -4372,6 +4381,14 @@ void upd6383_device::bx_frame_end()
 		{
 			logerror("upd6383: ★ §133 SWEEP COMPLETE, %u trials\n", m_bx_trial);
 			m_bx_sweep = false;
+			//  ⛔ §134 FIX: and STOP.  The first run kept scoring after the sweep
+			//  finished, emitting 11 826 further lines all labelled trial 1024 --
+			//  92 % of the log.  A naive parse of that file reports 84.6 % of trials
+			//  passing (they are one frozen arm repeated) instead of the true 21.9 %,
+			//  i.e. the contamination turns a discriminating criterion into one that
+			//  looks like it cannot fail.
+			m_bx_on = false;
+			m_bx_armed = false;
 		}
 	}
 }
