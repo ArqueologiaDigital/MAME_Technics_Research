@@ -2618,6 +2618,43 @@ void upd6383_device::exec_alu(u64 word)
 
 	switch (act)
 	{
+	//  ★★★ §121 SPECULATIVE (mask bits 35..37 = a 3-bit DESTINATION SELECTOR):
+	//  ENUMERATE ACTION 0x0D's DESTINATION AGAINST A LIVE TWO-SIDED CRITERION.
+	//
+	//  ACT 0x0D is the last blocker on the AUDIO path.  body-0 iw85 (000.2.0E.1CD)
+	//  reads the per-unit base+0 cell through SRC 0x07 (mem[ptr], ANCHORED) and
+	//  hands the operand to ACT 0x0D, which routes it nowhere -- so the body never
+	//  acquires its input (§106, §107).  §110 made base+0 carry audio and §106
+	//  showed that filling the cell alone changes nothing.
+	//
+	//  §107 tried to decode this with a follow-on statistic and the test
+	//  DISQUALIFIED ITSELF: its control, the ANCHORED tempA capture 0x13, scored
+	//  0 of 40 where it had to score high.  So: enumeration against a LIVE criterion
+	//  the §104 instrument already reports, and which is currently FAILING --
+	//      "first acc DIFFERS at -1" over body-0 iw84..199        (-1 = never)
+	//  If the destination is right, body 0's accumulator becomes INPUT-dependent and
+	//  that stops being -1.  203 corpus words carry this action, so any survivor
+	//  must then be checked against them.
+	//
+	//  ⚠ Rule 8: a candidate that merely makes something non-constant is NOT a pass.
+	//  The criterion is specifically INPUT dependence -- quiet frames versus frames
+	//  with notes playing -- which a free-running or DC quantity cannot fake.
+	case 0x0d:
+		if (m_speculative && ((m_specmask >> 35) & 7))
+		{
+			m_act0d_n++;
+			switch ((m_specmask >> 35) & 7)
+			{
+			case 1: m_acc = u64(s64(L)) << ACC_SHIFT; break;   // -> accumulator (load)
+			case 2: m_ta = u32(L) & 0xffffff; break;           // -> tempA
+			case 3: m_tb = u32(L) & 0xffffff; break;           // -> tempB
+			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;  // -> mem[ptr]
+			case 5: m_p = u32(L) & 0xffffff; break;            // -> the multiplier latch P
+			case 6: m_acc += u64(s64(L)) << ACC_SHIFT; break;  // -> accumulator (add)
+			default: break;
+			}
+		}
+		break;
 	case upd6383_disassembler::LO_ACT_CAP_TA:
 	case upd6383_disassembler::LO_ACT_CAP_TA2:
 		// 0x13 and 0x19 both capture into tempA.
@@ -4549,6 +4586,8 @@ void upd6383_device::dump_frame_report() const
 		logerror("            §119 mem-to-mem ACT-07 MOVEs re-targeted POST (bit 34): "
 				"%u fired, %u with a non-zero datum\n",
 				m_act07_memmove_n, m_act07_memmove_nz);
+		logerror("            §121 ACT 0x0D routed (dest sel %u): %u\n",
+				u32((m_specmask >> 35) & 7), m_act0d_n);
 		logerror("            §114 accumulator stores WRAPPED mod 2^23: %u\n", m_wrap_n);
 		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
 		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",

@@ -747,7 +747,13 @@ private:
 	// is individually removable.  Still HALF RATE -- see §114 on 2^23 vs 2^24.
 	// §118: bit 18 (§113, SRC 0x11 = mem[ptr]) rejoins the default -- now VALIDLY
 	// tested, since §114 freed it from the default and gave it a real null arm.
-	u64  m_specmask = 0x2a39f440f;
+	// §121: bit 18 (§113) REMOVED -- it has no discriminating evidence (§119) and it
+	// actively destroys the audio deposit: iw11 (400.2.01.447, SRC 0x11 + ACT 0x07)
+	// becomes mem[0x05] <- mem[0x05], a self-copy, instead of depositing the
+	// accumulator.  Bit 34 (mem-source ACT-07 words are MOVES) joins instead: it
+	// gives the LFO ramp WITHOUT bit 18, and both §119 verifiers granted the
+	// mechanism even while refuting its consumer conclusion.
+	u64  m_specmask = 0x6a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -836,6 +842,7 @@ private:
 	//  failure mode: if the store is not an identity, the unit-0 level stops being
 	//  0x200000 and the §41 counter collapses.  That is the measurement.
 	u32  m_rf_st[256] = {};
+	u32  m_act0d_n = 0;         // §121: ACT 0x0D words routed to the selected dest
 	u32  m_ovc_loads = 0;       // §116: selector-0x27 loads of the mode register
 	u32  m_ovc_hist[256] = {};  // §116: which payloads it was loaded with
 	mutable u32 m_wrap_n = 0;   // §114: accumulator stores wrapped instead of clamped
