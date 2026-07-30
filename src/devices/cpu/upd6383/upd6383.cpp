@@ -2746,6 +2746,18 @@ void upd6383_device::exec_alu(u64 word)
 	//  so whatever 0x0D writes, 0x0E can overwrite one slot later -- they cannot be
 	//  decoded separately, which is §125 point 4 and the constraint §121 broke.
 	case 0x0e:
+		//  ★ §135 diagnostic (mask bit 53): restrict the P write to BODY slots.
+		//  Shipping `ACT 0x0E -> P' corpus-wide rails unit 1 at -0x800000 on 98.9 %
+		//  of presentations (§135).  ACT 0x0D -> acc alone is harmless, so 0x0E is
+		//  the whole cause.  Of the ten 0x0E sites in a live frame, FIVE are in the
+		//  resident scaffolding -- 3 in the kernel and 2 in the EPILOGUE, which is
+		//  the output stage that presents the accumulator.  A P write there lands
+		//  between the last multiply and `acc <- P', so it would replace the
+		//  accumulated result with a raw datum.  This gate tests exactly that: body
+		//  slots are iw84..199 (unit 0) and iw200..332 (unit 1); the kernel is
+		//  0..59 and the epilogue 60..82.
+		if (m_speculative && (m_specmask & (1ull << 53)) && m_cur_iw < 84)
+			break;
 		if (m_speculative && m_bx_sel0e)
 		{
 			m_bx_act0e_n++;
