@@ -559,6 +559,10 @@ private:
 	trace_t m_trace[400] = {};
 	u32  m_trace_n = 0;
 	bool m_trace_armed = false, m_trace_done = false;
+	//  ★ §128: frame at which the time-ordered trace arms.  Settable via
+	//  UPD6383_TRACE_FRAME so a panel-SELECTED effect (which cannot load before the
+	//  boot settles, ~19 s) can be traced instead of the cold-boot default.
+	u64  m_trace_frame = 420000;
 	u8   m_st07_dest[8] = {}, m_st07_ptr[8] = {}, m_st07_src[8] = {};
 	s32  m_st07_val[8] = {}; u32 m_st07n = 0;
 	//======================================================================

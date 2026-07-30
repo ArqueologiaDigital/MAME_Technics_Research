@@ -292,6 +292,13 @@ void upd6383_device::device_start()
 		m_specmask = u64(strtoull(e, nullptr, 16));
 		logerror("upd6383: §32 bisection mask UPD6383_SPEC = 0x%X\n", m_specmask);
 	}
+	if (const char *e = getenv("UPD6383_TRACE_FRAME"))
+		m_trace_frame = u64(strtoull(e, nullptr, 10));
+	//  ★ §128: say the arm frame out loud.  An effect selected from the panel lands
+	//  at t ~ 40-50 s = frame 1.8-2.2 M; tracing at the 420 000 default would silently
+	//  describe the cold-boot default (CHORUS) instead of the selected program.
+	logerror("upd6383: §128 frame trace arms after frame %u (t = %.1f s at 44100 Hz)\n",
+			u32(m_trace_frame), double(m_trace_frame) / 44100.0);
 	//  ★ §109: say bits 28/29 out loud, so an arm can never be confused with a null.
 	logerror("upd6383: §109 ACT-07 store target = %s-increment (mask bit 28 = %d)\n",
 			(m_specmask & 0x10000000) ? "POST" : "PRE",
@@ -1159,7 +1166,12 @@ void upd6383_device::latch_inputs_to_dram()
 	//  lands DETERMINISTICALLY inside the held note -- no reliance on the input latch,
 	//  whose audit peak is exactly 0x800000 (the rail) and so cannot be trusted to
 	//  distinguish "a note is sounding" from "the latch is railed".
-	if (!m_trace_done && !m_trace_armed && m_frames_run > 420000)   // ★ ~9.5 s: fires on the fast harness too
+	//  ★ §128: the arm frame is settable, because an effect SELECTED from the panel
+	//  cannot be loaded before the boot settles.  PARAMETRIC EQ lands at t ~ 40-50 s
+	//  = frame 1.8-2.2 M, so the 420 000 default traces a frame of the cold-boot
+	//  default (CHORUS) and calls it the selected effect.  UPD6383_TRACE_FRAME sets
+	//  it; the default is unchanged so every existing harness traces what it did.
+	if (!m_trace_done && !m_trace_armed && m_frames_run > m_trace_frame)
 	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
