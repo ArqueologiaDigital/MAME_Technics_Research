@@ -534,6 +534,29 @@ private:
 	s32  m_sp_lr_lo[384] = {}, m_sp_lr_hi[384] = {};
 	u8   m_sp_dp[384] = {};
 	u64  m_sp_word[384] = {};
+	//  ★★★ §213: THE SAME CENSUS FOR `P' AND `tempA'.  §104 covers acc / mem / L and
+	//  those three are enough to see WHERE a value stops depending on the input, but
+	//  not WHICH REGISTER carried it there.  Kernel A's send path runs
+	//  delay-read -> tempA -> P -> acc, and every hop of that is invisible to §104:
+	//  `L' shows tempA only at the slots that SOURCE it, and P is never shown at all.
+	//  Same arming threshold and the same quiet/loud predicate as §104, so the two
+	//  tables are directly comparable slot for slot.  `pwm' is a bitmask of m_pw --
+	//  who last wrote P (§175): bit 5 = §112 class-A ACT-07 latch, bit 6 = THE MULTIPLY.
+	u32  m_s213_nq[384] = {}, m_s213_nr[384] = {};
+	s64  m_s213_pq_lo[384] = {}, m_s213_pq_hi[384] = {};
+	s64  m_s213_pr_lo[384] = {}, m_s213_pr_hi[384] = {};
+	s32  m_s213_taq_lo[384] = {}, m_s213_taq_hi[384] = {};
+	s32  m_s213_tar_lo[384] = {}, m_s213_tar_hi[384] = {};
+	u32  m_s213_pwm[384] = {};
+	//  ★★★ §213: THE STORE-PROBE FIX.  `upd6383.cpp'`s ACTION-0x07 site had an
+	//  UNBRACED `else' in front of store_mode(), so kwatch()/watch_store()/
+	//  store_probe()/m_dwr[] ran on every VISIT rather than on every STORE -- and the
+	//  §112 latch arm (mask bit 25, ON by default) performs NO store.  §211 §6 built
+	//  its headline lead ("iw39 stores TWICE to cell 0x06, second one wins") on one of
+	//  those phantom records.  Default 1 = the bookkeeping follows the store;
+	//  UPD6383_STPROBE=0 restores the old accounting so the A/B isolates it.
+	bool m_stprobe = true;
+	u64  m_stprobe_n = 0;           // phantom records suppressed
 	//  ★ §104 A/B, diagnostic only, off unless UPD6383_AB_NOSTORE08=1 in the env.
 	bool m_ab_nostore08 = false;
 	u32  m_ab_nostore08_n = 0;

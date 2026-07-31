@@ -339,6 +339,14 @@ void upd6383_device::device_start()
 	{
 		m_ab_nostore08 = (strtoul(e, nullptr, 10) != 0);
 	}
+	//  ★★★ §213: the store-probe fix, announced UNCONDITIONALLY so a run can never be
+	//  read against the wrong accounting.  It changes NO machine state -- only which
+	//  visits the §96/§109/§46 write censuses record.  See upd6383.h `m_stprobe'.
+	if (const char *es = getenv("UPD6383_STPROBE"))
+		m_stprobe = (strtoul(es, nullptr, 10) != 0);
+	logerror("upd6383: §213 UPD6383_STPROBE = %d  (1 = store bookkeeping follows the "
+			"STORE; 0 = the pre-§213 accounting, which records the §112 latch arm as "
+			"a phantom store)\n", m_stprobe ? 1 : 0);
 	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
@@ -3412,6 +3420,26 @@ void upd6383_device::exec_alu(u64 word)
 		const bool lvl_hit = m_speculative && (m_specmask & 0x20)
 				&& unsupported_src && host_reg;
 		const bool ab_hit  = !lvl_hit && m_ab_nostore08 && src == 0x08;
+		//  ★★★ §213: THE THIRD SUPPRESSOR, WHICH THE COMMENT ABOVE PREDATES.
+		//  §112's arm below (mask bit 25, ON in the shipped default) performs NO
+		//  D-RAM store -- it latches P instead -- but it was added AFTER the two
+		//  suppressors were made explicit, and the `else' in front of store_mode()
+		//  is UNBRACED, so kwatch()/watch_store()/store_probe()/m_dwr[] kept running
+		//  on every VISIT.  The probe therefore reported stores the machine does not
+		//  perform, at exactly three words per frame (§112 fired 3 630 720 times =
+		//  3 x 1 210 240 settled frames = iw32, iw34, iw39).
+		//  ⇒ §211 §6's headline lead -- "iw39 stores TWICE to cell 0x06 and the
+		//  second one wins" -- was ONE REAL STORE AND ONE PHANTOM.
+		//  ★ MEASURED, from §211's own log, independently of this source: iw34
+		//  (`000.A.FF.407', class A, ACT 0x07) was logged storing 8 388 607 to cell
+		//  0x06, yet §104's residency column shows 0x06 still holding 6 039 795 --
+		//  what iw33's bit-4 store put there -- at iw38 AND at iw39, with nothing
+		//  writing it in between.  The store did not happen.
+		//  Default ON; UPD6383_STPROBE=0 restores the old accounting for the A/B.
+		const bool act07_latch = m_speculative && (m_specmask & 0x2000000u)
+				&& upd6383_disassembler::class4(word) == 0xa
+				&& !upd6383_disassembler::c_format(word);
+		const bool phantom = act07_latch && m_stprobe;
 		if (lvl_hit)
 			m_lvlguard_n++;
 		else if (ab_hit)                          // ★ §104 A/B, diagnostic only
@@ -3436,9 +3464,7 @@ void upd6383_device::exec_alu(u64 word)
 		//  is pinned at every frame.  If this reading is right the phase stops being
 		//  reset and RAMPS by 114 per frame (the §111-corrected increment).  If it is
 		//  wrong the phase stays pinned and nothing else should move either.
-		if (m_speculative && (m_specmask & 0x2000000u)
-				&& upd6383_disassembler::class4(word) == 0xa
-				&& !upd6383_disassembler::c_format(word))
+		if (act07_latch)
 		{
 			//  ★★★ §136: THE REGISTER SPLIT ALREADY EXISTS -- THIS SITE USES THE
 			//  WRONG HALF OF IT.  `m_k'/`m_l' are declared "multiplier input
@@ -3480,13 +3506,23 @@ void upd6383_device::exec_alu(u64 word)
 			}
 		}
 		else
-		store_mode(mode07, u8(d07), u32(L));                           // §99
+			store_mode(mode07, u8(d07), u32(L));                       // §99
+		//  ★★★ §213: THE BOOKKEEPING NOW FOLLOWS THE STORE, NOT THE VISIT.
+		//  These four lines used to sit outside the `else' with no braces around it,
+		//  so they ran even when the §112 arm above had latched P and stored nothing.
+		//  The `!lvl_hit && !ab_hit' guard on store_probe() is the hand-patch that
+		//  covered the first two suppressors; the third one never got it.
+		if (!phantom)
+		{
 			kwatch(d07, s32(u32(L) & 0xffffff));
 			watch_store(d07, s32(L) & 0xffffff, 3);
 			if (!lvl_hit && !ab_hit)
 				store_probe(u8(d07), s32(L) & 0xffffff, 3);            // §109
-		m_dwr[d07]++;
-		if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
+			m_dwr[d07]++;
+			if (u32(L) & 0xffffff) m_dwr_nz[d07]++;
+		}
+		else
+			m_stprobe_n++;
 		break;
 	}
 	case upd6383_disassembler::LO_ACT_ACC_BUS:
@@ -4488,6 +4524,36 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					  if (lv < m_sp_lq_lo[prof_iw]) m_sp_lq_lo[prof_iw] = lv;
 					  if (lv > m_sp_lq_hi[prof_iw]) m_sp_lq_hi[prof_iw] = lv; }
 				}
+				//  ★★★ §213: the same split for `P' and `tempA'.  §104 shows tempA
+				//  only at the slots that SOURCE it (`L') and never shows P at all,
+				//  so the kernel's send chain -- delay-read -> tempA -> P -> acc --
+				//  is invisible to it between the hops.  Sampled AFTER the slot, on
+				//  the same predicate, so the tables line up row for row.
+				const s64 pv = util::sext(m_p, 44);
+				const s32 tv = s32(util::sext(m_ta, 24));
+				m_s213_pwm[prof_iw] |= (1u << (m_pw & 31));
+				if (nz)
+				{
+					if (m_s213_nr[prof_iw]++ == 0)
+					{ m_s213_pr_lo[prof_iw] = m_s213_pr_hi[prof_iw] = pv;
+					  m_s213_tar_lo[prof_iw] = m_s213_tar_hi[prof_iw] = tv; }
+					else
+					{ if (pv < m_s213_pr_lo[prof_iw]) m_s213_pr_lo[prof_iw] = pv;
+					  if (pv > m_s213_pr_hi[prof_iw]) m_s213_pr_hi[prof_iw] = pv;
+					  if (tv < m_s213_tar_lo[prof_iw]) m_s213_tar_lo[prof_iw] = tv;
+					  if (tv > m_s213_tar_hi[prof_iw]) m_s213_tar_hi[prof_iw] = tv; }
+				}
+				else
+				{
+					if (m_s213_nq[prof_iw]++ == 0)
+					{ m_s213_pq_lo[prof_iw] = m_s213_pq_hi[prof_iw] = pv;
+					  m_s213_taq_lo[prof_iw] = m_s213_taq_hi[prof_iw] = tv; }
+					else
+					{ if (pv < m_s213_pq_lo[prof_iw]) m_s213_pq_lo[prof_iw] = pv;
+					  if (pv > m_s213_pq_hi[prof_iw]) m_s213_pq_hi[prof_iw] = pv;
+					  if (tv < m_s213_taq_lo[prof_iw]) m_s213_taq_lo[prof_iw] = tv;
+					  if (tv > m_s213_taq_hi[prof_iw]) m_s213_taq_hi[prof_iw] = tv; }
+				}
 			}
 			(void)hi; (void)cl; (void)ad; (void)lo; (void)dd;
 		}
@@ -5294,6 +5360,36 @@ void upd6383_device::dump_frame_report() const
 				first_acc, first_mem, first_l);
 		logerror("upd6383: ★ §104 A/B: ACT-0x07 stores suppressed on SRC 0x08 = %u (0 = A/B not enabled)\n",
 				m_ab_nostore08_n);
+	}
+	{   //======================================================================
+		//  ★★★ §213: `P' AND `tempA', PER SLOT, SAME BUCKETS AS §104.
+		//  Kernel A only (iw 0..59): this exists to trace the SEND's datapath, and
+		//  the send is built and consumed there.  Same '*' / '=' convention, and the
+		//  SAME CAVEAT: the flag is not by itself a test of input dependence -- score
+		//  it with `dsp/tools/s104_score.py'`s rule (both endpoints translating by
+		//  one constant = free-running, not a signal).
+		//  `pw' is the bitmask of who wrote P at that slot: bit 5 = §112 class-A
+		//  ACT-07 latch, bit 6 = THE MULTIPLY, bit 7 = the §40 m_k multiply.
+		//======================================================================
+		logerror("upd6383: ★★★ §213 KERNEL-A P / tempA PER-SLOT (both sampled AFTER the slot)\n");
+		logerror("upd6383:    iw  word        nq/nl   P: quiet[..]/loud[..]                    tempA: quiet[..]/loud[..]    pw\n");
+		for (u32 i = 0; i < 60; i++)
+		{
+			if (!m_s213_nq[i] && !m_s213_nr[i]) continue;
+			const bool both = m_s213_nq[i] && m_s213_nr[i];
+			const bool dp2 = both && (m_s213_pq_lo[i] != m_s213_pr_lo[i] || m_s213_pq_hi[i] != m_s213_pr_hi[i]);
+			const bool dt  = both && (m_s213_taq_lo[i] != m_s213_tar_lo[i] || m_s213_taq_hi[i] != m_s213_tar_hi[i]);
+			logerror("upd6383:   %3u %010llX %5u/%-5u %14lld..%-14lld %14lld..%-14lld %c | %9d..%-9d %9d..%-9d %c | %02X%s\n",
+					i, (unsigned long long)m_sp_word[i], m_s213_nq[i], m_s213_nr[i],
+					(long long)m_s213_pq_lo[i], (long long)m_s213_pq_hi[i],
+					(long long)m_s213_pr_lo[i], (long long)m_s213_pr_hi[i], dp2 ? '*' : '=',
+					m_s213_taq_lo[i], m_s213_taq_hi[i], m_s213_tar_lo[i], m_s213_tar_hi[i], dt ? '*' : '=',
+					m_s213_pwm[i], both ? "" : "  NO-NULL");
+		}
+		logerror("upd6383: ★★★ §213 STORE-PROBE FIX: %llu phantom store records suppressed "
+				"(must EQUAL the §112 latch count %llu; UPD6383_STPROBE = %d)\n",
+				(unsigned long long)m_stprobe_n,
+				(unsigned long long)(m_act07_latchp_n + m_act07_latchk_n), m_stprobe ? 1 : 0);
 	}
 	{   //======================================================================
 		//  ★★★ §109 THE STORE-SITE PROBE.  SCOPE: this build, DSPCFG as configured,
