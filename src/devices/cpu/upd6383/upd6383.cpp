@@ -368,11 +368,13 @@ void upd6383_device::device_start()
 	//  UNCONDITIONALLY so a log can never be read against the wrong arm.  See
 	//  upd6383.h `m_noz05' and data/PREDICT_220.md, committed before this build.
 	if (const char *e9 = getenv("UPD6383_NOZ05"))
-		m_noz05 = (strtoul(e9, nullptr, 10) != 0);
-	logerror("upd6383: §220 UPD6383_NOZ05 = %d  (0 = SHIPPED: the site-2 bit-4 store "
-			"writes cell 0x05 in kernel A at iw9/iw35/iw45; 1 = DIAGNOSTIC: those three "
-			"stores are suppressed, so iw11's deposit survives to body 0's pickup)\n",
-			m_noz05 ? 1 : 0);
+		m_noz05 = u8(strtoul(e9, nullptr, 10));
+	logerror("upd6383: §220/§223 UPD6383_NOZ05 = %d  (0 = SHIPPED: the site-2 bit-4 store "
+			"writes cell 0x05 in kernel A at iw9/iw35/iw45; 1 = §220 DIAGNOSTIC: EVERY "
+			"kernel-A site-2 store to 0x05 is suppressed -- which is EIGHT words, not "
+			"three, iw9 among them; 2 = §223 DIAGNOSTIC: iw35 and iw45 ONLY, so iw9 "
+			"survives)\n",
+			(int)m_noz05);
 	//  ★★★ §221 `§E1': the epilogue/handover OPERAND-PROVENANCE census.  READ-ONLY --
 	//  it changes no decode, no route and no value; it only records WHICH ARRAY,
 	//  WHICH INDEX and WHICH `iw' LAST WROTE each operand the output stage fetches.
@@ -2182,6 +2184,12 @@ s32 upd6383_device::acc_to_datum(u64 acc) const
 	// turn a loud sound into a louder one.
 	const s64 v = s64(util::sext(acc, 44)) >> ACC_SHIFT;
 
+	//  ★★★★ §223 `§S1' -- THE SATURATION CENSUS.  Recorded HERE, on the PRE-CLAMP
+	//  value, because this is the one point in the machine where "the accumulator is
+	//  bigger than the datum can hold" is knowable.  READ-ONLY: it changes nothing
+	//  and it cannot change anything, so every arm can carry it.  See upd6383.h.
+	s1_record(v);
+
 	//  ★★★ §114 SPECULATIVE (mask bit 32): WRAP mod 2^23 instead of saturating.
 	//  The comment above states the choice was UNKNOWN and saturation was picked as
 	//  the safe default.  lfo-ramp.md §11 settles it for at least one datapath, in
@@ -3679,7 +3687,17 @@ void upd6383_device::exec_alu(u64 word)
 			//  IS suppressed -- it writes the constant 5 084 004 that `iw11' overwrites
 			//  two slots later, so removing it costs nothing.  The per-iw breakdown is
 			//  reported so "which words fired" is measured, not assumed.
-			if (m_noz05 && stdest == 0x05 && pw_region(m_cur_iw) == PW_KERNEL_A)
+			//  ★★★ §223: MODE 2 SUPPRESSES ONLY `iw35' AND `iw45'.
+			//  Mode 1's own per-iw breakdown shows it deleting EIGHT words, and
+			//  `iw9' -- 1 176 015 of them -- is not one of the two §219 §3 named.
+			//  §222 argued `iw9' "costs nothing" because `iw11' overwrites the cell
+			//  two slots later; that is true of the CELL and says nothing about the
+			//  accumulator path that decides what `iw11' has to store.  Mode 2 is
+			//  the narrower rig that tests exactly that difference, and mode 1 is
+			//  left BIT-IDENTICAL so it stays the regression control.
+			const bool noz05_hit = (m_noz05 == 1)
+					|| (m_noz05 == 2 && (m_cur_iw == 35 || m_cur_iw == 45));
+			if (noz05_hit && stdest == 0x05 && pw_region(m_cur_iw) == PW_KERNEL_A)
 			{
 				m_noz05_n++;
 				u32 q = 0;
@@ -4693,9 +4711,20 @@ void upd6383_device::exec_alu(u64 word)
 		m_pw = 7; /* §175: who last wrote P -- "§40 m_k multiply" */
 	}
 
-	if (m_cur_iw == 213 && m_dbg213 <= 3 && m_frames_run > 420000)
+	//  ⚠⚠ §223: THIS PRINT WAS A LATENT RUNAWAY, and the nop-guard narrowing set it
+	//  off.  Its bound was `m_dbg213 <= 3', but `m_dbg213' is incremented ONLY by the
+	//  probe at the top of this function, whose own bound is `< 3' -- so once that one
+	//  stops at 3 this one is true FOREVER.  It was harmless only because `iw213' was
+	//  swallowed by the nop guard and never reached exec_alu() at all.  With the guard
+	//  narrowed it fired 1 020 000 times and made the log 300x larger.
+	//  ★ The class of defect is the instrument audit's own: a bound that depends on a
+	//  counter some OTHER site owns.  Give it its own counter and its own bound.
+	if (m_cur_iw == 213 && m_dbg213b < 3 && m_frames_run > 420000)
+	{
+		m_dbg213b++;
 		logerror("upd6383: §90 iw213 REACHED post-increment: cl=%X dd=%d dp=%02X\n",
 				cl, (int)dd, m_dp);
+	}
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
@@ -4816,6 +4845,22 @@ void upd6383_device::exec_decoded(u64 word)
 	}
 	else if (upd6383_disassembler::hi12(word) == 0x000
 			&& upd6383_disassembler::class4(word) == 2
+			//  ★★★ §223 (BUILD-LANE-QUEUE item 1): AND `addr8 == 0x00'.
+			//  The evidence for the `nop' reading is, in every note that carries it,
+			//  evidence about the single word `000.2.00.000'.  Without this term the
+			//  guard also swallowed 41 corpus words carrying a LIVE signed pointer
+			//  delta (+72, -70, -75, +75 ...), 100 % of them isolated, 46 % of them
+			//  immediately followed by a bit-4 STORE, and 103 of 103 MID-LADDER --
+			//  zero at the end of an image, zero carrying the END bit.
+			//  ★ THE NARROWER PREDICATE ALREADY EXISTS TWICE IN THIS TREE:
+			//  `decoded()' in upd6383d.cpp requires `ad == 0x00', and the shipped
+			//  listings render the 41 as `?word'.  The core was the only one of the
+			//  three implementations that swallowed them.
+			//  ★ SAFE FOR THE ADDRESS GENERATOR BY CONSTRUCTION: exec_alu() ends
+			//  with the identical `(cl & 7) == 2 -> m_dp += (s8)addr8', and
+			//  ptrd_a_suppressed() can never fire on a word whose lo12 is 0x000
+			//  (it tests `(word & 0xfff) == 0x1c0').
+			&& upd6383_disassembler::addr8(word) == 0x00
 			&& upd6383_disassembler::lo12(word) == 0x000)
 	{
 		// nop -- INFERRED.  (The old "PROVEN BY CONSTRUCTION, writer
@@ -4841,6 +4886,23 @@ void upd6383_device::exec_decoded(u64 word)
 	}
 	else
 	{
+		//  ★★★ §223 `§NG': COUNT THE WORDS THE NARROWING HANDED BACK.
+		//  A narrowing whose fired count is zero is UNTESTED, not inert, so this
+		//  runs unconditionally and is printed unconditionally.  By construction
+		//  `addr8 != 0x00' on every word that gets here through this shape: the
+		//  guard above claims `addr8 == 0x00' and nothing else in the ladder
+		//  matches `hi12 == 0x000 && class4 == 2 && lo12 == 0x000'.
+		if (upd6383_disassembler::hi12(word) == 0x000
+				&& upd6383_disassembler::class4(word) == 2
+				&& upd6383_disassembler::lo12(word) == 0x000)
+		{
+			m_ng_n++;
+			u32 q = 0;
+			for (; q < m_ng_slots; q++) if (m_ng_iw[q] == m_cur_iw) break;
+			if (q == m_ng_slots && m_ng_slots < 16)
+			{ m_ng_iw[q] = m_cur_iw; m_ng_slots++; }
+			if (q < 16) m_ng_cnt[q]++;
+		}
 		exec_alu(word);     // the lo12 routing / hi12[3:1] operation decode
 	}
 }
@@ -6796,9 +6858,73 @@ void upd6383_device::dump_frame_report() const
 			std::string r;
 			for (u32 q = 0; q < m_noz05_slots; q++)
 				r += string_format(" iw%u:%u", m_noz05_iw[q], m_noz05_cnt[q]);
-			logerror("            §220 NOZ05 (UPD6383_NOZ05 = %d): %u site-2 bit-4 stores "
+			logerror("            §220/§223 NOZ05 (UPD6383_NOZ05 = %d): %u site-2 bit-4 stores "
 					"to cell 0x05 in kernel A SUPPRESSED |%s\n",
-					m_noz05 ? 1 : 0, m_noz05_n, r.empty() ? " (none)" : r.c_str());
+					(int)m_noz05, m_noz05_n, r.empty() ? " (none)" : r.c_str());
+		}
+		{   //  ★★★ §223 `§NG': the NOP-GUARD NARROWING, printed UNCONDITIONALLY.
+			//  Zero here means the narrowing is UNTESTED in this vehicle, not that
+			//  it is inert -- 82 of the 103 corpus words sit in body images no
+			//  archived log ever loads.  Say which, do not average.
+			std::string r;
+			for (u32 q = 0; q < m_ng_slots; q++)
+				r += string_format(" iw%u:%u", m_ng_iw[q], m_ng_cnt[q]);
+			logerror("            ★ §223 §NG NOP-GUARD NARROWED (addr8 == 0x00 added): "
+					"%u words handed to exec_alu() that the old guard swallowed, "
+					"%u distinct slots (cap 16)%s |%s\n",
+					m_ng_n, m_ng_slots, m_ng_slots >= 16 ? " ⚠ CAPPED" : "",
+					r.empty() ? " (none -- UNTESTED in this vehicle)" : r.c_str());
+		}
+		{   //  ★★★★ §223 `§S1': THE SATURATION CENSUS.
+			//  `§54' can only see a DC that reaches the OUTPUT.  This sees the
+			//  clamp that MAKES one, at the single point where the 44-bit
+			//  accumulator becomes a 24-bit datum.  Pre-clamp values, per `iw',
+			//  split by `§54's own quiet/loud predicate, settled frames only.
+			logerror("upd6383: ★★★★ §223 §S1 SATURATION CENSUS (pre-clamp acc >> %u, "
+					"frames > %u, bucket = §54's in_nz).  ⚠ COUNTS CONVERSIONS, NOT "
+					"STORES: one store calls acc_to_datum() up to five times, so read "
+					"the RATIO, not the count.\n",
+					(unsigned)ACC_SHIFT, (unsigned)S1_ARM_FRAME);
+			logerror("upd6383:    TOTALS  quiet %llu clip / %llu conversions (%.3f %%)  |  "
+					"loud %llu clip / %llu conversions (%.3f %%)  |  off-range iw %u\n",
+					(unsigned long long)m_s1_total_clip[0], (unsigned long long)m_s1_total_calls[0],
+					m_s1_total_calls[0] ? 100.0 * double(m_s1_total_clip[0]) / double(m_s1_total_calls[0]) : 0.0,
+					(unsigned long long)m_s1_total_clip[1], (unsigned long long)m_s1_total_calls[1],
+					m_s1_total_calls[1] ? 100.0 * double(m_s1_total_clip[1]) / double(m_s1_total_calls[1]) : 0.0,
+					m_s1_offrange_n);
+			logerror("upd6383:    iw   region    calls q/l        clips q/l        "
+					"pre-clamp quiet[min..max]            pre-clamp loud[min..max]\n");
+			u32 rows = 0, dropped = 0;
+			for (u32 i = 0; i < 384; i++)
+			{
+				if (!m_s1_clip[0][i] && !m_s1_clip[1][i]) continue;
+				if (rows >= S1_MAX_ROWS) { dropped++; continue; }
+				rows++;
+				const u32 rg = pw_region(u16(i));
+				const char *rn = (rg == PW_KERNEL_A) ? "kernelA"
+						: (i >= 84 && i <= 199) ? "body0"
+						: (i >= 200 && i <= 332) ? "body1"
+						: (i >= 60 && i <= 83) ? "epilog" : "other";
+				logerror("upd6383:   %3u %-8s %8u/%-8u %8u/%-8u %14lld..%-14lld %14lld..%lld\n",
+						i, rn, m_s1_calls[0][i], m_s1_calls[1][i],
+						m_s1_clip[0][i], m_s1_clip[1][i],
+						(long long)(m_s1_seen[0][i] ? m_s1_min[0][i] : 0),
+						(long long)(m_s1_seen[0][i] ? m_s1_max[0][i] : 0),
+						(long long)(m_s1_seen[1][i] ? m_s1_min[1][i] : 0),
+						(long long)(m_s1_seen[1][i] ? m_s1_max[1][i] : 0));
+			}
+			//  ★ store_probe()'s missing overflow counter cost the audit a finding.
+			//  This one has it, and it prints even when it is zero.
+			logerror("upd6383:    §S1 rows printed %u of cap %u, DROPPED %u\n",
+					rows, (unsigned)S1_MAX_ROWS, dropped);
+			//  ★ THE CONTROL, printed beside the result so it cannot be quoted apart
+			//  from it: two conversions PREDICT_223 §3.1 S2 requires to be CLEAN.
+			logerror("upd6383:    §S1 CONTROL (must be clips = 0): iw34 q %u/%u l %u/%u "
+					"[q %lld..%lld] | iw40 q %u/%u l %u/%u [q %lld..%lld]\n",
+					m_s1_clip[0][34], m_s1_calls[0][34], m_s1_clip[1][34], m_s1_calls[1][34],
+					(long long)m_s1_min[0][34], (long long)m_s1_max[0][34],
+					m_s1_clip[0][40], m_s1_calls[0][40], m_s1_clip[1][40], m_s1_calls[1][40],
+					(long long)m_s1_min[0][40], (long long)m_s1_max[0][40]);
 		}
 		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
 			std::string r; u32 n = 0;

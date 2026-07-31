@@ -1016,6 +1016,7 @@ private:
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
+	u32  m_dbg213b = 0;   // ★ §223: the post-increment probe's OWN bound (see .cpp)
 	u32  m_tap_n = 0; u32 m_dr_reads = 0, m_dr_reads_nz = 0;
 	//  ★★★ §59 P1.1 -- THE HOST POKE PORT.  cmd 0x01 address 0x0160 is a PORT, not an
 	//  I-RAM address (host-side.md C4).  Its payload is a byte stream of 5-byte units:
@@ -1123,6 +1124,47 @@ private:
 	u32  m_ovc_loads = 0;       // §116: selector-0x27 loads of the mode register
 	u32  m_ovc_hist[256] = {};  // §116: which payloads it was loaded with
 	mutable u32 m_wrap_n = 0;   // §114: accumulator stores wrapped instead of clamped
+	//  ★★★★ §223 `§S1' -- THE SATURATION CENSUS.  READ-ONLY, always on, settled
+	//  frames only.  It exists because `§54' can only see a DC that reaches the
+	//  OUTPUT, and the pedestal that has now cost three sections is created much
+	//  further upstream, inside `acc_to_datum()' itself.
+	//
+	//  WHAT IT MEASURES, and it is a fact about the SHIPPED build, not about a rig:
+	//  in `A_pickup_222.log' (UPD6383_NOZ05 = 0) the kernel-A accumulator exceeds
+	//  full scale in the QUIET bucket -- input EXACTLY ZERO, `§54's own predicate --
+	//  at 7 of 46 slots, peaking at 2.249 x FS, and `iw39's bit-4 store clamps and
+	//  deposits 8 388 607 into D-RAM[0x06], which `iw12..iw21' read back.
+	//  A clamp is not a rounding detail here; it is the difference between "the
+	//  model overflows" and "the chip's output is a full-scale DC", and until this
+	//  census existed nobody could tell those apart from the log.
+	//
+	//  ⚠ IT COUNTS CONVERSIONS, NOT STORES.  One store calls acc_to_datum() up to
+	//  five times (the store itself plus kwatch / watch_store / store_probe), so the
+	//  absolute call counts are inflated by a constant factor and the meaningful
+	//  column is the RATIO clips/calls.  The report says so on its own line.
+	//  ⚠ The bucket key is `§54's, verbatim: in_nz = m_in_val[0] || m_in_val[1].
+	static constexpr u32 S1_ARM_FRAME = 420000;   // the ONE arming window (audit R6)
+	static constexpr u32 S1_MAX_ROWS  = 48;
+	mutable u32 m_s1_calls[2][384] = {};
+	mutable u32 m_s1_clip [2][384] = {};
+	mutable s64 m_s1_min  [2][384] = {};
+	mutable s64 m_s1_max  [2][384] = {};
+	mutable bool m_s1_seen[2][384] = {};
+	mutable u64 m_s1_total_calls[2] = {};
+	mutable u64 m_s1_total_clip [2] = {};
+	mutable u32 m_s1_offrange_n = 0;   // conversions with m_cur_iw >= 384 (uncounted)
+	void s1_record(s64 v) const
+	{
+		if (m_frames_run <= S1_ARM_FRAME) return;
+		const u32 b = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+		if (m_cur_iw >= 384) { m_s1_offrange_n++; return; }
+		const u16 i = m_cur_iw;
+		m_s1_calls[b][i]++;
+		m_s1_total_calls[b]++;
+		if (!m_s1_seen[b][i]) { m_s1_seen[b][i] = true; m_s1_min[b][i] = m_s1_max[b][i] = v; }
+		else { if (v < m_s1_min[b][i]) m_s1_min[b][i] = v; if (v > m_s1_max[b][i]) m_s1_max[b][i] = v; }
+		if (v > 0x7fffff || v < -0x800000) { m_s1_clip[b][i]++; m_s1_total_clip[b]++; }
+	}
 	u32  m_src11_mem_n = 0;     // §113: SRC 0x11 reads honoured as mem[ptr]
 	u32  m_act07_latchp_n = 0;  // §112: class-A ACT-07 words that latched P
 	//  §136: the same words routed to the MULTIPLIER INPUT latch instead (mask bit 54).
@@ -1392,11 +1434,37 @@ private:
 	//  three words §219 §3 measured overwriting body 0's input pickup between
 	//  `iw11's deposit and the CALL at `iw49'.  DIAGNOSTIC, never a fix; it asks
 	//  whether cell 0x05 is the pickup at all, and both answers are worth the same.
-	bool m_noz05 = false;
+	//
+	//  ★★★ §223: THE GATE IS NOW A MODE, because mode 1 deletes MORE than the two
+	//  stores §219 named.  Its own per-iw breakdown in `B_pickup_noz05_222.log' is
+	//      iw9:1176015 iw19:19 iw21:12 iw27:12 iw35:1176007 iw33:8 iw45:1176003 iw39:4
+	//  -- EIGHT words, and `iw9' is a full 1.176 M of them.  §222 dismissed `iw9' on
+	//  the grounds that "it writes the constant 5 084 004 that iw11 overwrites two
+	//  slots later, so removing it costs nothing", which is a statement about the
+	//  CELL and not about the ACCUMULATOR PATH that reaches `iw11'.
+	//      0 = OFF (shipped)
+	//      1 = §220's original: every site-2 bit-4 store to 0x05 in kernel A
+	//      2 = §223: `iw35' and `iw45' ONLY -- the two words §219 §3 actually names
+	//  ⚠ Mode 1 must stay BIT-IDENTICAL to §222 arm B; that is this pass's
+	//  regression control for the change.
+	u8   m_noz05 = 0;
 	u32  m_noz05_n = 0;                 // fired count (rule 8)
 	u32  m_noz05_slots = 0;             // distinct iw values that fired
 	u16  m_noz05_iw[8] = { 0 };
 	u32  m_noz05_cnt[8] = { 0 };
+	//  ★★★ §223 `§NG': the NOP GUARD NARROWING (BUILD-LANE-QUEUE.md item 1).
+	//  The guard used to test `hi12 == 0x000 && class4 == 2 && lo12 == 0x000' and
+	//  NOT `addr8', swallowing 103 corpus words across 28 of 40 streams, 41 of them
+	//  carrying a live signed pointer delta.  The correct narrower predicate already
+	//  exists TWICE in this tree: `decoded()' (upd6383d.cpp) requires `ad == 0x00',
+	//  and the shipped listings render the 41 as `?word'.  The core was the only one
+	//  of three implementations that swallowed them.
+	//  ⚠ A narrowing whose fired count is ZERO is UNTESTED, not inert -- so the
+	//  count and the distinct slots are printed UNCONDITIONALLY (rule 8, §220).
+	u32  m_ng_n = 0;
+	u32  m_ng_slots = 0;
+	u16  m_ng_iw[16] = { 0 };
+	u32  m_ng_cnt[16] = { 0 };
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
 
 	//======================================================================
