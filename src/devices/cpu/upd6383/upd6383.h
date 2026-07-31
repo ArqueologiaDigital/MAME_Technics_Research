@@ -1209,6 +1209,110 @@ private:
 	u16  m_f31x_iw[8] = {};
 	u8   m_f31x_f31[8] = {}, m_f31x_n = 0;
 
+	//  ★★★★★ §231 -- THE COLLAPSED-OP CENSUS: **WHAT DOES `op = f31 & 3' DISCARD?**
+	//
+	//  §229 measured that `f31 in {3,6,7}' executes at exactly four sites, all in
+	//  the epilogue (`iw63/70/75/78'), and that our model runs all four through
+	//  `op = f31 & 3'.  It described the consequence as *"hold, no product"*.
+	//  ⚠ THAT IS ONLY HALF TRUE, AND THE OTHER HALF IS THE WHOLE QUESTION:
+	//
+	//    * the ADDER's `p_term' is forced to 0 (`op == HOLD' or `op > HOLD'), but
+	//    * the MULTIPLIER's gate at :4947 reads the **RAW** `f31', not `op':
+	//        `hi_f31(hi12(word)) != HI_ACC_HOLD'
+	//      and 3, 6 and 7 are all != 2 -- so on the three sites that also satisfy
+	//      `coeff_fetch()' (class4 & 8: iw63 class 9, iw75 class 8, iw78 class D)
+	//      the model DOES issue a multiply and DOES write `m_p'.
+	//
+	//  ⇒ the model is internally inconsistent at these words: the same word both
+	//  "holds, no product" for the adder and "issues a multiply" for the
+	//  multiplier.  And because the accumulate at :4310 runs BEFORE the multiply
+	//  at :4963 inside the SAME exec_alu() call, `p_term' consumes the product
+	//  left by the PREVIOUS fetching word.  So the quantity `op = f31 & 3'
+	//  actually discards at each site is `m_p ON ENTRY' -- and NOBODY HAS EVER
+	//  MEASURED IT.
+	//
+	//  THIS CENSUS MEASURES EXACTLY THAT, read-only, unconditional, in `§54's own
+	//  quiet/loud buckets, armed at `S1_ARM_FRAME' so it is comparable with
+	//  `§S1'/`§104' (⚠ NOT with `§54's own 300 000-frame arms -- rule: never
+	//  compare counts across the two arming windows).
+	//
+	//  ★ RULE 20 -- THE CONTROL, AND IT CAN FAIL.  Three aggregate reference rows
+	//  are kept beside the per-site ones:
+	//    f31 == 0 (LOAD, a DECODED op)  -> `p_term' MUST equal `m_p' every time;
+	//    f31 == 1 (ADD,  a DECODED op)  -> `p_term' MUST equal `m_p' every time;
+	//    f31 == 2 (HOLD, the UNDISPUTED hold) -> `p_term' MUST be 0 every time.
+	//  A non-zero mismatch column means the census is reading the wrong variable
+	//  and every number below it is void.  The HOLD row is also the two-sided
+	//  REFERENCE: if `f31 == 2' has just as much product available to discard as
+	//  `f31 in {3,6,7}', the collapse is not distinguishable from the decoded
+	//  behaviour by size alone.
+	//
+	//  ⛔ IT COUNTS.  IT DOES NOT DECODE, AND IT CHANGES NOTHING.
+	static constexpr u32 CO_SLOTS = 8;
+	mutable u16  m_co_iw[CO_SLOTS] = {};
+	mutable u8   m_co_f31[CO_SLOTS] = {}, m_co_op[CO_SLOTS] = {}, m_co_src[CO_SLOTS] = {};
+	mutable u8   m_co_act[CO_SLOTS] = {}, m_co_fetch[CO_SLOTS] = {};
+	mutable u32  m_co_slots = 0, m_co_overflow = 0;
+	mutable u64  m_co_n[2][CO_SLOTS] = {};
+	mutable bool m_co_seen[2][CO_SLOTS] = {};
+	mutable s64  m_co_pmin[2][CO_SLOTS] = {}, m_co_pmax[2][CO_SLOTS] = {};
+	mutable u64  m_co_pnz[2][CO_SLOTS] = {};
+	mutable s64  m_co_lmin[2][CO_SLOTS] = {}, m_co_lmax[2][CO_SLOTS] = {};
+	mutable u64  m_co_lnz[2][CO_SLOTS] = {};
+	mutable s64  m_co_amin[2][CO_SLOTS] = {}, m_co_amax[2][CO_SLOTS] = {};
+	//  the three reference rows, indexed BY f31: [0] LOAD, [1] ADD, [2] HOLD
+	mutable u64  m_co_ref_n[3] = {}, m_co_ref_bad[3] = {}, m_co_ref_pnz[3] = {};
+	mutable s64  m_co_ref_pmax[3] = {};
+
+	//  ★ §231: record one ALU execution.  `pavail' is `m_p' ON ENTRY (the product
+	//  the operation field decides whether to admit); `pterm' is what the shipped
+	//  expression actually admitted.  The counterfactual "what would ADD give" is
+	//  exactly `accin + pavail', so measuring `pavail' measures the whole gap --
+	//  no second machine and no behaviour change is needed to answer it.
+	void co_record(u16 iw, u8 f31, u8 op, u8 src, u8 act, bool fetch,
+			s64 pavail, s64 pterm, s64 L, s64 accin) const
+	{
+		if (m_frames_run <= S1_ARM_FRAME) return;
+		const u32 b = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+		if (f31 < 3)                                  // the three reference rows
+		{
+			m_co_ref_n[f31]++;
+			if (f31 == 2 ? (pterm != 0) : (pterm != pavail)) m_co_ref_bad[f31]++;
+			if (pavail) m_co_ref_pnz[f31]++;
+			if (pavail > m_co_ref_pmax[f31]) m_co_ref_pmax[f31] = pavail;
+			return;
+		}
+		if (f31 != 3 && f31 != 6 && f31 != 7) return;   // 4 and 5 are §133's alias
+		u32 q = 0;
+		for (; q < m_co_slots; q++) if (m_co_iw[q] == iw) break;
+		if (q == m_co_slots)
+		{
+			if (m_co_slots >= CO_SLOTS) { m_co_overflow++; return; }
+			q = m_co_slots++;
+			m_co_iw[q] = iw; m_co_f31[q] = f31; m_co_op[q] = op;
+			m_co_src[q] = src; m_co_act[q] = act; m_co_fetch[q] = fetch ? 1 : 0;
+		}
+		m_co_n[b][q]++;
+		if (!m_co_seen[b][q])
+		{
+			m_co_seen[b][q] = true;
+			m_co_pmin[b][q] = m_co_pmax[b][q] = pavail;
+			m_co_lmin[b][q] = m_co_lmax[b][q] = L;
+			m_co_amin[b][q] = m_co_amax[b][q] = accin;
+		}
+		else
+		{
+			if (pavail < m_co_pmin[b][q]) m_co_pmin[b][q] = pavail;
+			if (pavail > m_co_pmax[b][q]) m_co_pmax[b][q] = pavail;
+			if (L      < m_co_lmin[b][q]) m_co_lmin[b][q] = L;
+			if (L      > m_co_lmax[b][q]) m_co_lmax[b][q] = L;
+			if (accin  < m_co_amin[b][q]) m_co_amin[b][q] = accin;
+			if (accin  > m_co_amax[b][q]) m_co_amax[b][q] = accin;
+		}
+		if (pavail) m_co_pnz[b][q]++;
+		if (L)      m_co_lnz[b][q]++;
+	}
+
 	//  ★★★★ §229's fabricated-zero census -- see the banner at `m_src_unread'.
 	u64  m_srcz_fetch = 0;                 // every operand resolution, all SRC codes
 	u64  m_srcz_total = 0;                 // ... of which FABRICATED (`default:' -> 0)

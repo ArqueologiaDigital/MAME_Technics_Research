@@ -4268,6 +4268,17 @@ void upd6383_device::exec_alu(u64 word)
 		const u64 p_term =
 				(op == upd6383_disassembler::HI_ACC_HOLD
 					|| (m_speculative && op > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
+		//  ★★★★★ §231 THE COLLAPSED-OP CENSUS -- read-only, unconditional.
+		//  WHAT does `op = f31 & 3' discard at the four `f31 in {3,6,7}' sites?
+		//  Answer: `m_p' ON ENTRY -- and this is the only place that quantity and
+		//  the operation field are both in scope.  Sign-extended to 44 bits so a
+		//  negative product is not reported as a huge positive one (the bug that
+		//  would make an "it discards a lot" headline out of nothing).
+		//  See upd6383.h `co_record' for the banner, the control and the caveats.
+		co_record(u16(m_cur_iw), u8(upd6383_disassembler::hi_f31(hi)), u8(op),
+				u8(src), u8(act), upd6383_disassembler::coeff_fetch(word),
+				s64(util::sext(m_p, 44)), s64(util::sext(p_term, 44)),
+				s64(L), s64(util::sext(accum, 44)));
 		//  ★★★ §224 `UPD6383_LFOWRAP' (env, DEFAULT OFF).  THE WRAP WORD'S SRC-0x08
 		//  OPERAND IS A MODULUS, NOT AN ADDEND.  §118's family, by PREDICATE:
 		//  bit-4 STORE + bit 7 + hi12[3:1] == 2 + ACTION 0x00 + SRC 0x08 + class A.
@@ -6781,6 +6792,53 @@ void upd6383_device::dump_frame_report() const
 				"f31 in {3,6,7}:%s\n", fs.c_str(),
 				m_f31x_n ? xs.c_str() : "  NONE -- the family is UNREACHABLE in this vehicle, "
 						"so rule 4 forbids implementing it from here");
+	}
+
+	//  ★★★★★ §231 -- THE COLLAPSED-OP CENSUS.  §229 said the four `f31 in {3,6,7}'
+	//  sites run as "hold, no product".  The ADDER part is true; the MULTIPLIER
+	//  gate at :4947 reads the RAW `f31', so three of the four DO issue a multiply.
+	//  What `op = f31 & 3' actually discards is `m_p' ON ENTRY -- printed here.
+	{
+		static const char *const REFN[3] = { "LOAD acc<-P", "ADD  acc+=P", "HOLD acc,noP" };
+		std::string rs;
+		bool ctl_ok = true;
+		for (u32 r = 0; r < 3; r++)
+		{
+			if (m_co_ref_bad[r]) ctl_ok = false;
+			rs += string_format("\nupd6383:      f31=%u %-12s n=%-12llu mismatches=%-8llu %s"
+					"   (product available: %llu non-zero, peak %lld)",
+					r, REFN[r], (unsigned long long)m_co_ref_n[r],
+					(unsigned long long)m_co_ref_bad[r],
+					m_co_ref_bad[r] ? "✘ FAIL -- EVERY NUMBER BELOW IS VOID" : "✔",
+					(unsigned long long)m_co_ref_pnz[r], (long long)m_co_ref_pmax[r]);
+		}
+		std::string ss;
+		for (u32 q = 0; q < m_co_slots; q++)
+			for (u32 b = 0; b < 2; b++)
+			{
+				if (!m_co_seen[b][q]) continue;
+				ss += string_format("\nupd6383:      iw%-3u f31=%u op=%u SRC=%02X ACT=%02X "
+						"fetch=%s  %-5s n=%-10llu | DISCARDED PRODUCT min %lld max %lld "
+						"non-zero %llu | L min %lld max %lld nz %llu | acc-in min %lld max %lld",
+						m_co_iw[q], m_co_f31[q], m_co_op[q], m_co_src[q], m_co_act[q],
+						m_co_fetch[q] ? "Y" : "n", b ? "loud" : "quiet",
+						(unsigned long long)m_co_n[b][q],
+						(long long)m_co_pmin[b][q], (long long)m_co_pmax[b][q],
+						(unsigned long long)m_co_pnz[b][q],
+						(long long)m_co_lmin[b][q], (long long)m_co_lmax[b][q],
+						(unsigned long long)m_co_lnz[b][q],
+						(long long)m_co_amin[b][q], (long long)m_co_amax[b][q]);
+			}
+		logerror("upd6383: ★★★★★ §231 COLLAPSED-OP CENSUS -- what `op = f31 & 3' DISCARDS at the "
+				"four `f31 in {3,6,7}' sites.  ⚠ The discarded quantity is `m_p' ON ENTRY: the "
+				"accumulate at :4310 runs BEFORE the multiply at :4963, so `p_term' consumes the "
+				"PREVIOUS fetching word's product.  Armed at frame %u (`§S1'/`§104' population -- "
+				"NOT `§54's).\nupd6383:    ★ RULE 20 CONTROL (decoded ops; a mismatch voids the "
+				"census):%s\nupd6383:    THE COLLAPSED SITES:%s\nupd6383:    (%u slots used, %u "
+				"overflow)  CONTROL: %s\n",
+				S1_ARM_FRAME, rs.c_str(),
+				m_co_slots ? ss.c_str() : "  NONE REACHED -- the family does not execute here",
+				m_co_slots, m_co_overflow, ctl_ok ? "PASS 3 of 3" : "✘ FAILED");
 	}
 
 	//  ★★★★ §229 -- THE UPLOAD LEDGER, SUMMARISED.  Close any run still open,
