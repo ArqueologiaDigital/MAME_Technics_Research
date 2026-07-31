@@ -343,6 +343,11 @@ void upd6383_device::device_start()
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
 		logerror("upd6383: §200 UPD6383_ROTSIGN = %d\n", m_rotsign ? 1 : 0);
+	}
+	if (const char *e3 = getenv("UPD6383_BODYIX"))
+	{
+		m_bodyix = (strtoul(e3, nullptr, 10) != 0);
+		logerror("upd6383: §201 UPD6383_BODYIX = %d\n", m_bodyix ? 1 : 0);
 		logerror("upd6383: §104 A/B UPD6383_AB_NOSTORE08 = %d\n", m_ab_nostore08 ? 1 : 0);
 	}
 	save_item(NAME(m_p));
@@ -4257,6 +4262,17 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			//  logged ZERO sites.  LEDGER rule 10 applied to my own instrument:
 			//  I placed it in the function whose NAME matched the concept rather
 			//  than on the path the words take.
+			//  ★★★ §201: RESET THE DESCRIPTOR INDEX AT EACH BODY ENTRY.
+			//  adjudication-round5.md §1 FORCES the IDENTITY map -- "the k-th class-1
+			//  format-escape consumer takes the k-th descriptor cell of ITS OWN
+			//  BODY's block".  `m_delay_ix' is frame-global and reset only at frame
+			//  end (:4622), so body 1 continues body 0's count: §200 MEASURED the
+			//  indices in use as 0x29 0x2B 0x2D 0x2F 0x31 and 0x33 (1 135 149 hits)
+			//  where unit 1 should be drawing its own block -- "no delay line at all"
+			//  (§198 gap 3), confirmed by frames_since_written 0..0 on every line.
+			//  ⚠ The u64 spec mask is EXHAUSTED; env gate, as §104/§200 did.
+			if (m_bodyix && (m_cur_iw == 84 || m_cur_iw == 200))
+			{ m_delay_ix = 0; m_bodyix_n++; }
 			b11_probe(raw);
 			f31_probe(raw);         // ★ §193
 			//  ★★★ §153: `lo12 == 0x44C' APPLIES THE MODULATION OFFSET (§152).
@@ -5646,6 +5662,8 @@ void upd6383_device::dump_frame_report() const
 					(unsigned long long)m_b11_dchg[i],
 					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
 					: "CONSTANT -- a reset would be unobservable");
+		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",
+				(unsigned long long)m_bodyix_n);
 		for (int i = 0; i < m_age_n; i++)
 			logerror("upd6383: ★★ §200 DELAY AGE dsc %02X: hits %llu | frames_since_written "
 					"%u .. %u  (%.2f .. %.2f ms @44.1k)\n",

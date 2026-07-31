@@ -1064,6 +1064,16 @@ private:
 	u64  m_pk_lsb_n = 0, m_pk_lsb_seen = 0;
 	u64  m_pk_0b_n = 0;   // §197
 	//  §200: rotation sign + the write-timestamp census (the ONLY probe that can grade it).
+	//  §201 SHIPPED ON by default: adjudication-round5.md §1 FORCES the IDENTITY map
+	//  -- the k-th class-1 escape consumer takes the k-th cell of ITS OWN BODY's
+	//  descriptor block -- and m_delay_ix was frame-global, so body 1 continued body
+	//  0's count.  Measured consequence: the descriptor indices move from
+	//  0x29..0x33 to 0x26..0x30 (the block §189 measured live as CHORUS's), and
+	//  frames_since_written goes from 0..0 on EVERY line to 240 / 480 / 640 samples
+	//  (5.44 / 10.88 / 14.51 ms).  The delay lines have length for the first time.
+	//  Override with UPD6383_BODYIX=0.
+	bool m_bodyix = true;
+	u64  m_bodyix_n = 0;   // §201
 	bool m_rotsign = false;
 	u64  m_rotsign_n = 0;
 	std::unique_ptr<u32[]> m_dts_store;
