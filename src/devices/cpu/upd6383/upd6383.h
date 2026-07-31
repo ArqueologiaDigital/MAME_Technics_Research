@@ -1605,11 +1605,112 @@ private:
 	//  ⚠ It is NOT §114/§116's wrap (mask bits 32/33): those wrap EVERY conversion
 	//  against a hardwired 2^23 inside acc_to_datum().  This wraps ONE word family
 	//  against ITS OWN C-RAM operand, which is where the constant actually lives.
-	bool m_lfowrap = false;
+	//  ★★★ §225 SHIPPED AS THE DEFAULT.  `W4' -- the one gate §224 failed -- was
+	//  RESTATED so it cannot fire on a ramp (which is what RULE 21 demands) and then
+	//  PASSED: body 0's input-dependent tally is graded on markers whose QUIET range
+	//  is DEGENERATE, and that is `0/0/0' with the arm OFF and `0/0/0' with it ON.
+	//  §224's `2/4/1 -> 2/9/4' was 7 free-running markers becoming 15 free-running
+	//  markers, every one of them at cell 0x07 (the LFO phase) or cell 0x10 (its
+	//  published copy) -- ZERO input-dependent markers on either side.
+	//  The env var is kept as a two-sided control: `UPD6383_LFOWRAP=0' restores
+	//  §224's arm I exactly.
+	bool m_lfowrap = true;
 	u32  m_lfowrap_n = 0;
 	u32  m_lfowrap_slots = 0;
 	u16  m_lfowrap_iw[8] = { 0 };
 	u32  m_lfowrap_cnt[8] = { 0 };
+
+	//======================================================================
+	//  ★★★ §225 `§S3' -- THE BOOT-WINDOW FIRST-STORE RECORDER FOR D-RAM CELL 0x06.
+	//  READ-ONLY, ALWAYS ON.  It changes no decode, no route and no value.
+	//
+	//  THE QUESTION (§224 §2/§7.2): `§S2' showed `iw13'/`iw14' taking `mem[0x06]'
+	//  onto the ACT-0x00 bus AT UNITY (bus 549 755 748 352 = 0x7FFFFF << 16, busSRC
+	//  00) while `iw19' stores the clamped accumulator back into 0x06.  `iw13's other
+	//  two terms sum to 0.870 x FS -- BELOW the rail -- so the rail looked like a
+	//  STABLE SECOND STATE.  `§176' says the cell's census minimum is 0, so it was
+	//  not always railed.  WHAT FIRST DRIVES IT PAST THE THRESHOLD?
+	//
+	//  THE THRESHOLD, derived: with `iw13's two coefficient terms fixed at
+	//  2 x 239 225 266 218 = 478 450 532 436, full scale (8 388 607 << 16 =
+	//  549 755 748 352) is reached once the bus term exceeds 71 305 215 916, i.e.
+	//  once m_dram[0x06] > 1 088 031 = 0.129 703 x FS.
+	//
+	//  ⚠⚠ AND HERE IS THE TRAP IT HAD TO BEAT.  `§S1'/`§S2'/`§104' all arm at frame
+	//  420 000 and cannot see the transition -- but RULE 16 exists because a
+	//  BOOT-TIME SAMPLE MEASURES THE RESET STATE (`§46's descriptor claim was exactly
+	//  that error, and `§193'/`§204's "a histogram over boot measures boot" is its
+	//  twin).  An instrument that merely samples EARLIER repeats it.
+	//
+	//  ★★★ SO `§S3' DOES NOT SAMPLE A TIME WINDOW.  IT RECORDS STORES, AND SPLITS
+	//  THEM BY A PROPERTY OF THE DATUM ITSELF:
+	//    * the PRE-store value at the FIRST store to 0x06 in the whole run is, BY
+	//      CONSTRUCTION, the state of the cell BEFORE ANY INSTRUCTION EVER WROTE IT
+	//      -- the reset / host-initialised state.  Printed as EPOCH-0 with the frame
+	//      it was seen at AND the prior-write count (necessarily 0) so the claim is
+	//      CHECKABLE and not asserted.
+	//    * every later entry's `pre' is, by construction, the result of a previous
+	//      instruction.  That is SETTLING and it cannot be anything else.
+	//  The VERDICT is the RELATION between the two, printed UNCONDITIONALLY:
+	//      RESET-STATE   EPOCH-0 pre >= THRESH -- already latched before any word
+	//                    ran, so there is no transition to find and the question is
+	//                    VOID.  RULE 16 caught by the instrument, not by a reader.
+	//      SETTLING      EPOCH-0 pre < THRESH and some store crosses it -- THAT
+	//                    STORE IS THE ENTRY, printed with frame / iw / pre / val.
+	//      NO CROSSING   neither -- a STATED negative with its window printed, never
+	//                    a silent zero (RULE 20).
+	//
+	//  ARMING, STATED: THERE IS NO FRAME GATE.  `§S3' arms on the device's FIRST
+	//  D-RAM store to cell 0x06, whenever that is, and the LADDER is UNBOUNDED IN
+	//  TIME so a crossing at frame 800 000 is caught as surely as one at frame 3.
+	//  The only bound is the 96-entry trajectory, and it has ITS OWN OVERFLOW COUNTER
+	//  (the audit's finding: store_probe() truncates at 4 with none).
+	//
+	//  ★ ITS CONTROL IS EXTERNAL (RULE 20): mask bit 26 (`§106') counts the IDENTICAL
+	//  predicate (`mode != 1 && dest == 0x06') at the IDENTICAL hook (store_mode())
+	//  and `§220' measured it firing 5 881 351 times at iw19/21/27/33/39.  `§S3's
+	//  unbounded TOTAL must reproduce that.  A different instrument, a different
+	//  pass, a different arm, counting the same thing.
+	static constexpr u32 S3_THRESH = 1088031;      // 0.129703 x FS, derived above
+	static constexpr u32 S3_TRAJ   = 96;
+	static constexpr u32 S3_RING   = 16;
+	static constexpr u32 S3_LADDER = 7;
+	struct s3_ent { u64 frame; u16 iw; u8 site; s32 pre; s32 val; };
+	//  ⚠ THE SLOT CAP WAS 8 AND IT OVERFLOWED 2 352 974 TIMES ON THE FIRST RUN.
+	//  The overflow counter is why that is a MEASUREMENT and not a silent truncation
+	//  (the audit's `store_probe()' finding, applied).  Widened to 32, which the run
+	//  then showed is enough.  ★ AND THE CENSUS REFUTED `§106's OWN WRITER LIST:
+	//  that note says "exactly 5 per kernel-A pass, at iw19/21/27/33/39", but
+	//  5 881 351 is NOT DIVISIBLE BY 5 and the real writer set is much larger --
+	//  the epilogue (iw73/iw78) and body 1 (iw321) write this cell too, with ZEROS,
+	//  for 1356 stores before any kernel-A word ever runs.
+	static constexpr u32 S3_SLOTS = 32;
+	u64     m_s3_n = 0;                            // unbounded total (bit-26 predicate)
+	u32     m_s3_slots = 0;
+	u16     m_s3_iw[S3_SLOTS] = { 0 };
+	u64     m_s3_cnt[S3_SLOTS] = { 0 };
+	u64     m_s3_nzc[S3_SLOTS] = { 0 };            // ★ how many of them were NON-ZERO
+	u64     m_s3_iw_over = 0;                      // ★ the overflow counter
+	bool    m_s3_have_e0 = false;
+	s3_ent  m_s3_e0 = { 0, 0, 0, 0, 0 };
+	u32     m_s3_traj_n = 0;
+	u64     m_s3_traj_over = 0;                    // ★ the overflow counter
+	s3_ent  m_s3_traj[S3_TRAJ] = {};
+	u32     m_s3_ring_n = 0;                       // ring, frozen at the crossing
+	s3_ent  m_s3_ring[S3_RING] = {};
+	bool    m_s3_crossed = false;
+	u64     m_s3_cross_k = 0;                      // which store number crossed
+	s3_ent  m_s3_cross = { 0, 0, 0, 0, 0 };
+	//  the graded ladder: 1, 0.01, 0.05, 0.129703, 0.50, 0.99, 1.00 x FS
+	static constexpr s32 S3_LVL[S3_LADDER] =
+			{ 1, 83886, 419430, s32(S3_THRESH), 4194304, 8304721, 8388607 };
+	bool    m_s3_lad_hit[S3_LADDER] = { false };
+	u64     m_s3_lad_k[S3_LADDER] = { 0 };
+	s3_ent  m_s3_lad[S3_LADDER] = {};
+	//  ★ S3-C4: did the HOST (tag 0x15) ever write D-RAM cell 0x06?  Default mask
+	//  bit 23 is SET, so host pokes go to m_rf and this must stay 0.  If it does not,
+	//  the entry is the host's own +0.5 level write and the whole reading changes.
+	u64     m_s3_host_wr = 0;
 
 	//======================================================================
 	//  ★★★ §221 `§E1' -- THE EPILOGUE / HANDOVER OPERAND-PROVENANCE CENSUS.
@@ -1884,6 +1985,7 @@ private:
 	//  `force_dram' is §E-D85's narrow, two-word array route.  Site numbering extends
 	//  §109's: 1 = exec_addressing_only K6 bit-4, 2 = exec_alu bit-4, 3 = ACT-07.
 	void store_mode(u8 mode, u8 dest, u32 v, u8 site = 0, bool force_dram = false);
+	void s3_boot(u8 dest, s32 val, u8 site);     // ★★★ §225 §S3, read-only
 	static u32 pw_region(u16 iw);
 	static const char *pw_name(u32 r);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;

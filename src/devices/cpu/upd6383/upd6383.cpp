@@ -375,18 +375,29 @@ void upd6383_device::device_start()
 			"three, iw9 among them; 2 = §223 DIAGNOSTIC: iw35 and iw45 ONLY, so iw9 "
 			"survives)\n",
 			(int)m_noz05);
-	//  ★★★ §224: THE WRAP WORD'S OPERAND IS A MODULUS, NOT AN ADDEND.  DEFAULT OFF,
-	//  announced UNCONDITIONALLY so a log can never be read against the wrong arm.
-	//  See upd6383.h `m_lfowrap' and data/PREDICT_224.md §2, committed before this
-	//  build.  The family is §118's, by predicate and not by line: bit-4 STORE +
-	//  bit 7 + hi12[3:1] == 2 + ACTION 0x00 + SRC 0x08 + coefficient consumer.
+	//  ★★★ §224/§225: THE WRAP WORD'S OPERAND IS A MODULUS, NOT AN ADDEND.
+	//  ★★★ §225 SHIPPED IT AS THE DEFAULT (was OFF in §224).  Announced
+	//  UNCONDITIONALLY so a log can never be read against the wrong arm.  See
+	//  upd6383.h `m_lfowrap' and data/PREDICT_225.md §1, committed before this build.
+	//  The family is §118's, by predicate and not by line: bit-4 STORE + bit 7 +
+	//  hi12[3:1] == 2 + ACTION 0x00 + SRC 0x08 + coefficient consumer.
+	//  §224 measured every falsifier but one passing (W0 one slot, W1's clip-count
+	//  delta predicted TO THE UNIT in both buckets, W2 the chorus LFO reaching its
+	//  published cell as a +114/frame ramp, W3 every regression control unmoved).
+	//  The one that failed -- W4, body 0's §104 tally 2/4/1 -> 2/9/4 -- was RULE 21:
+	//  §225 restated it to grade only markers whose QUIET range is DEGENERATE (which
+	//  by the bucket predicate `in_val != 0' cannot fire on a ramp) and it is 0/0/0
+	//  in BOTH arms.  All 15 of arm J's markers sit at cell 0x07 or 0x10 -- the LFO
+	//  phase and its published copy -- and NONE is input-dependent.
 	if (const char *e11 = getenv("UPD6383_LFOWRAP"))
 		m_lfowrap = (strtoul(e11, nullptr, 10) != 0);
-	logerror("upd6383: §224 UPD6383_LFOWRAP = %d  (0 = SHIPPED: the wrap word's SRC-0x08 "
-			"operand is ADDED to the accumulator by ACTION 0x00 -- which is why iw92 "
-			"publishes clamp(phase + INC + 0x7FFFFF) = 8 388 607 into D-RAM 0x10 on "
-			"every frame; 1 = §224: the operand is applied as a MODULUS, "
-			"acc <- (datum(acc) & L) << ACC_SHIFT, at the ADDER only)\n",
+	logerror("upd6383: §224/§225 UPD6383_LFOWRAP = %d  (DEFAULT IS NOW 1.  1 = §224/§225 "
+			"SHIPPED: the wrap word's SRC-0x08 operand is applied as a MODULUS, "
+			"acc <- (datum(acc) & L) << ACC_SHIFT, at the ADDER only, so D-RAM 0x10 "
+			"carries the chorus LFO as a +114/frame ramp; 0 = the PRE-§225 reading, "
+			"kept as a two-sided control: the operand is ADDED by ACTION 0x00, which "
+			"is why iw92 published clamp(phase + INC + 0x7FFFFF) = 8 388 607 into "
+			"D-RAM 0x10 on every frame)\n",
 			m_lfowrap ? 1 : 0);
 	//  ★★★ §221 `§E1': the epilogue/handover OPERAND-PROVENANCE census.  READ-ONLY --
 	//  it changes no decode, no route and no value; it only records WHICH ARRAY,
@@ -1189,6 +1200,54 @@ void upd6383_device::pk_report() const
 //  ★★★ §99: one rule for both store sites.  See upd6383.h.
 //  ★ §222: the two callers now ALSO agree about the unit rebase -- see upd6383.h §222(c).
 //  `site' and `force_dram' are §222's; both default to the shipped behaviour.
+//======================================================================
+//  ★★★ §225 `§S3' -- THE BOOT-WINDOW FIRST-STORE RECORDER FOR D-RAM CELL 0x06.
+//  READ-ONLY, ALWAYS ON, NO FRAME GATE.  See upd6383.h `m_s3_n' for the full
+//  rationale, the derived threshold and the RULE-16 argument.
+//
+//  ⚠ IT IS CALLED BEFORE THE WRITE, so `pre' is the cell's value as the store
+//  finds it.  The FIRST call's `pre' is therefore, BY CONSTRUCTION, the state of
+//  the cell before any instruction ever wrote it -- that is what separates the
+//  RESET STATE from SETTLING here, and it is a property of the datum, not a
+//  threshold anybody chose.
+void upd6383_device::s3_boot(u8 dest, s32 val, u8 site)
+{
+	const s32 pre = s32(m_dram.read_dword(dest) & 0xffffff);
+	const s3_ent e = { m_frames_run, m_cur_iw, site, pre, val };
+
+	if (!m_s3_have_e0) { m_s3_have_e0 = true; m_s3_e0 = e; }   // EPOCH 0
+
+	//  per-`iw' breakdown, WITH an overflow counter (the audit's finding:
+	//  store_probe() truncates at 4 and has none)
+	u32 q = 0;
+	for (; q < m_s3_slots; q++) if (m_s3_iw[q] == m_cur_iw) break;
+	if (q == m_s3_slots)
+	{
+		if (m_s3_slots < S3_SLOTS) { m_s3_iw[q] = m_cur_iw; m_s3_slots++; }
+		else { m_s3_iw_over++; q = S3_SLOTS; }
+	}
+	if (q < S3_SLOTS) { m_s3_cnt[q]++; if (val) m_s3_nzc[q]++; }
+
+	if (m_s3_traj_n < S3_TRAJ) m_s3_traj[m_s3_traj_n++] = e;
+	else m_s3_traj_over++;
+
+	//  the APPROACH ring: keeps the last S3_RING stores BEFORE the crossing and
+	//  freezes at it, so the run-up is visible wherever the crossing lands.
+	if (!m_s3_crossed)
+		m_s3_ring[m_s3_ring_n++ % S3_RING] = e;
+
+	m_s3_n++;
+
+	//  the LADDER -- unbounded in time.  Graded on the STORED value, because that
+	//  is what the next frame's `iw13'/`iw14' will put on the bus.
+	for (u32 i = 0; i < S3_LADDER; i++)
+		if (!m_s3_lad_hit[i] && val >= S3_LVL[i])
+		{ m_s3_lad_hit[i] = true; m_s3_lad_k[i] = m_s3_n; m_s3_lad[i] = e; }
+
+	if (!m_s3_crossed && val >= s32(S3_THRESH))
+	{ m_s3_crossed = true; m_s3_cross_k = m_s3_n; m_s3_cross = e; }
+}
+
 void upd6383_device::store_mode(u8 mode, u8 dest, u32 v, u8 site, bool force_dram)
 {
 	//  ★★★ §106 DIAGNOSTIC (mask bit 26): mirror the kernel's 0x06 result into 0x05
@@ -1223,6 +1282,13 @@ void upd6383_device::store_mode(u8 mode, u8 dest, u32 v, u8 site, bool force_dra
 	//      pair identification is wrong -- which is worth as much.
 	//  It deliberately does NOT touch 0x07, so the CHORUS LFO phase cell keeps
 	//  whatever it has and the two effects stay separable.
+	//  ★★★ §225 `§S3': the boot-window first-store recorder.  READ-ONLY.
+	//  ⚠ THE PREDICATE IS DELIBERATELY IDENTICAL to mask bit 26's, immediately below,
+	//  and so is the hook -- that is what makes `§220's measured 5 881 351 an
+	//  EXTERNAL known-answer control for this instrument (RULE 20).  Do not narrow
+	//  one without narrowing the other, or the control silently stops being one.
+	if (mode != 1 && dest == 0x06)
+		s3_boot(dest, s32(v & 0xffffff), site);
 	if (m_speculative && (m_specmask & 0x4000000) && mode != 1 && dest == 0x06)
 	{
 		m_dram.write_dword(0x05, v & 0xffffff);
@@ -1689,6 +1755,13 @@ void upd6383_device::host_w(bool cd, u8 data)
 					}
 					else
 					{
+						//  ★ §225 S3-C4: did the HOST ever write D-RAM cell 0x06?
+						//  Default mask bit 23 is SET, so this branch should not run
+						//  for 0x06 at all.  If it does, the cell-0x06 rail's ENTRY is
+						//  the host's own +0.5 level poke and not a settling
+						//  transient -- a different answer, so it is counted, not
+						//  assumed.
+						if ((m_dram_wp & 0xff) == 0x06) m_s3_host_wr++;
 						m_dram.write_dword(m_dram_wp, v & 0xffffff);
 						pv_wr_dram_tag(u8(m_dram_wp), v, E1_PV_HOST);  // ★ §221 §E1
 						pk_write(u8(m_dram_wp), v, 4, false, PK_IW_HOST);  // §222
@@ -7087,11 +7160,127 @@ void upd6383_device::dump_frame_report() const
 				std::string r;
 				for (u32 q = 0; q < m_lfowrap_slots; q++)
 					r += string_format(" iw%u:%u", m_lfowrap_iw[q], m_lfowrap_cnt[q]);
-				logerror("upd6383:    ★ §224 LFOWRAP (UPD6383_LFOWRAP = %d): %u wrap-word "
-						"adder steps took the MODULUS path, %u distinct slots%s |%s\n",
+				logerror("upd6383:    ★ §224/§225 LFOWRAP (UPD6383_LFOWRAP = %d, DEFAULT "
+						"NOW 1): %u wrap-word adder steps took the MODULUS path, %u "
+						"distinct slots%s |%s\n",
 						m_lfowrap ? 1 : 0, m_lfowrap_n, m_lfowrap_slots,
 						m_lfowrap_slots >= 8 ? " ⚠ CAPPED" : "",
 						r.empty() ? " (none -- UNTESTED in this arm)" : r.c_str());
+			}
+		}
+		//======================================================================
+		//  ★★★ §225 `§S3': THE BOOT-WINDOW FIRST-STORE RECORDER FOR CELL 0x06.
+		//  Printed UNCONDITIONALLY, always, in every arm.  Its verdict distinguishes
+		//  the RESET STATE from SETTLING by construction; see upd6383.h.
+		{
+			logerror("upd6383: ★★★ §225 §S3 CELL-0x06 BOOT-WINDOW RECORDER (READ-ONLY, "
+					"NO FRAME GATE -- arms on the FIRST D-RAM store to 0x06; the ladder "
+					"is UNBOUNDED in time).  THRESH = %u = 0.129703 x FS, derived from "
+					"§S2's iw13 terms: (8388607<<16 - 2*239225266218) >> 16\n",
+					S3_THRESH);
+			//  ★ per writer: total AND how many were NON-ZERO.  A writer that only ever
+			//  stores 0 cannot be what drives the cell to the rail, and saying so needs
+			//  the second number -- the first alone made §106's list look complete.
+			std::string r;
+			for (u32 q = 0; q < m_s3_slots; q++)
+				r += string_format(" iw%u:%llu(nz %llu)", m_s3_iw[q],
+						(unsigned long long)m_s3_cnt[q], (unsigned long long)m_s3_nzc[q]);
+			logerror("upd6383:    §S3 TOTAL stores (mode != 1 && dest == 0x06, the "
+					"IDENTICAL predicate and hook mask bit 26 counts): %llu | %u distinct "
+					"slots%s |%s\n"
+					"            ★ S3-C1 (EXTERNAL known-answer control, §220 arm B "
+					"measured mask bit 26 firing 5 881 351 at this hook): %s\n",
+					(unsigned long long)m_s3_n, m_s3_slots,
+					m_s3_iw_over ? string_format(" ⚠ %llu SLOT OVERFLOWS",
+							(unsigned long long)m_s3_iw_over).c_str() : "",
+					r.empty() ? " (none)" : r.c_str(),
+					m_s3_n == 5881351 ? "PASS" : "⚠ FAIL -- §S3 IS WRONG, quote nothing else");
+			logerror("upd6383:    §S3 HOST tag-0x15 writes to D-RAM[0x06] (S3-C4; default "
+					"mask bit 23 is SET so host pokes go to m_rf and this must be 0): "
+					"%llu%s\n",
+					(unsigned long long)m_s3_host_wr,
+					m_s3_host_wr ? "  ⚠⚠ NON-ZERO -- the ENTRY may be the host's own "
+							"+0.5 level write, not a settling transient" : "  PASS");
+			if (!m_s3_have_e0)
+				logerror("upd6383:    §S3 VERDICT: NO STORE TO 0x06 EVER EXECUTED in this "
+						"run -- a STATED negative, not a silent zero.  The cell cannot "
+						"have been driven by a store here.\n");
+			else
+			{
+				logerror("upd6383:    §S3 EPOCH-0 (THE RESET / PRE-EXECUTION STATE, by "
+						"construction: the `pre' of the FIRST store to 0x06, with 0 "
+						"prior writes): frame %llu  iw%u  site %u  pre %d  val %d\n",
+						(unsigned long long)m_s3_e0.frame, m_s3_e0.iw, m_s3_e0.site,
+						m_s3_e0.pre, m_s3_e0.val);
+				//  the verdict, three ways, unconditional
+				if (m_s3_e0.pre >= s32(S3_THRESH))
+					logerror("upd6383:    ★★★ §S3 VERDICT: RESET-STATE.  The cell was "
+							"ALREADY at %d >= %u before any instruction wrote it, so "
+							"there is NO TRANSITION TO FIND and §225's question as posed "
+							"is VOID.  ⚠ RULE 16 caught BY THE INSTRUMENT.  The next "
+							"question is who put it there (see S3-C4 above).\n",
+							m_s3_e0.pre, S3_THRESH);
+				else if (m_s3_crossed)
+					logerror("upd6383:    ★★★ §S3 VERDICT: SETTLING.  EPOCH-0 pre = %d < "
+							"%u, and store #%llu IS THE ENTRY: frame %llu  iw%u  site %u "
+							" pre %d  val %d  (%.4f x FS)%s\n",
+							m_s3_e0.pre, S3_THRESH, (unsigned long long)m_s3_cross_k,
+							(unsigned long long)m_s3_cross.frame, m_s3_cross.iw,
+							m_s3_cross.site, m_s3_cross.pre, m_s3_cross.val,
+							double(m_s3_cross.val) / 8388607.0,
+							m_s3_cross_k <= 2 ? "  ⇒ ★★★ ON THE FIRST OR SECOND STORE: "
+									"0 IS NOT A FIXED POINT.  The loop's forward gain "
+									"from an EMPTY cell already exceeds the threshold, "
+									"so the rail is the ONLY stable state and §224's "
+									"\"BISTABLE\" framing is RETIRED." : "");
+				else
+					logerror("upd6383:    ★★★ §S3 VERDICT: NO CROSSING in %llu stores up "
+							"to frame %llu -- a STATED negative with its window, not a "
+							"silent zero.  EPOCH-0 pre = %d, threshold %u.\n",
+							(unsigned long long)m_s3_n,
+							(unsigned long long)m_frames_run, m_s3_e0.pre, S3_THRESH);
+				//  the graded ladder, unbounded in time
+				logerror("upd6383:    §S3 LADDER (first store to REACH each level; "
+						"unbounded in time):\n");
+				for (u32 i = 0; i < S3_LADDER; i++)
+					logerror("               %9d (%.6f FS)  %s\n", S3_LVL[i],
+							double(S3_LVL[i]) / 8388607.0,
+							m_s3_lad_hit[i]
+								? string_format("store #%llu  frame %llu  iw%u  pre %d "
+										" val %d", (unsigned long long)m_s3_lad_k[i],
+										(unsigned long long)m_s3_lad[i].frame,
+										m_s3_lad[i].iw, m_s3_lad[i].pre,
+										m_s3_lad[i].val).c_str()
+								: "NEVER REACHED");
+				//  the trajectory: the first S3_TRAJ stores, in execution order
+				logerror("upd6383:    §S3 TRAJECTORY, the first %u stores (each `pre' "
+						"after the first is BY CONSTRUCTION the result of a previous "
+						"instruction = SETTLING)%s:\n", m_s3_traj_n,
+						m_s3_traj_over ? string_format("  ⚠ %llu FURTHER STORES NOT "
+								"RECORDED", (unsigned long long)m_s3_traj_over).c_str()
+								: "");
+				for (u32 i = 0; i < m_s3_traj_n; i++)
+					logerror("               #%-3u frame %-8llu iw%-4u site %u  pre %-9d "
+							"val %-9d (%.4f FS)\n", i + 1,
+							(unsigned long long)m_s3_traj[i].frame, m_s3_traj[i].iw,
+							m_s3_traj[i].site, m_s3_traj[i].pre, m_s3_traj[i].val,
+							double(m_s3_traj[i].val) / 8388607.0);
+				//  the approach ring, frozen at the crossing
+				if (m_s3_crossed && m_s3_ring_n)
+				{
+					logerror("upd6383:    §S3 APPROACH -- the last %u stores BEFORE the "
+							"crossing (ring frozen at it; %u total before):\n",
+							std::min(m_s3_ring_n, S3_RING), m_s3_ring_n);
+					const u32 cnt = std::min(m_s3_ring_n, S3_RING);
+					for (u32 i = 0; i < cnt; i++)
+					{
+						const s3_ent &e = m_s3_ring[(m_s3_ring_n - cnt + i) % S3_RING];
+						logerror("               frame %-8llu iw%-4u site %u  pre %-9d "
+								"val %-9d (%.4f FS)\n",
+								(unsigned long long)e.frame, e.iw, e.site, e.pre, e.val,
+								double(e.val) / 8388607.0);
+					}
+				}
 			}
 		}
 		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
