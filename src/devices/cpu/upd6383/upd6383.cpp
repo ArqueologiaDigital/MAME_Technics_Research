@@ -5777,6 +5777,16 @@ void upd6383_device::dump_frame_report() const
 				(unsigned long long)m_dscring_n, (unsigned long long)m_dscring_u1,
 				(unsigned long long)(m_dscring_n - m_dscring_u1),
 				DSC_RING1_BASE, DSC_RING1_TOP, DSC_RING0_BASE, DSC_RING0_TOP);
+		//  ★ §209 falsifier 4, localised.  Unit 0's ring must be UNREACHABLE.
+		if (m_dscring_n - m_dscring_u1)
+			logerror("upd6383: ★★ §209 UNIT-0 WRAPS (must be pre-upload only): %llu total, "
+					"%llu in a SETTLED frame (> 900k) | last at frame %llu of %llu | "
+					"I-RAM %u..%u | raw cursor reached 0x%02X\n",
+					(unsigned long long)(m_dscring_n - m_dscring_u1),
+					(unsigned long long)m_dscring_u0_late,
+					(unsigned long long)m_dscring_u0_lastframe,
+					(unsigned long long)m_frames_run,
+					m_dscring_u0_iwmin, m_dscring_u0_iwmax, m_dscring_u0_rawmax);
 		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
 				(unsigned long long)m_cfmtix_n);
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",

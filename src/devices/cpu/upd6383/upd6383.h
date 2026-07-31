@@ -1092,11 +1092,18 @@ private:
 	//  delay = READ_CELL - WRITE_CELL; with G rising a read returns a FUTURE sample.
 	//  ★ The proof is bit-exact and was NOT the falsifier I pre-registered (I predicted
 	//  the complement 65536-D and got neither that nor the old values): with the sign
-	//  falling the measured delays equal the ROM'"'"'s OWN descriptor cells --
-	//      dsc 28 -> 4161 = 0x1041 = descriptor cell 0x27
-	//      dsc 30 -> 3120 = 0x0C30 = descriptor cell 0x2F
-	//  at two independent lines, against §189'"'"'s live dump taken for another purpose.
-	//  Override with UPD6383_ROTSIGN=0.
+	//  falling the measured delays equal the ROM'"'"'s OWN descriptor cells.
+	//  ⛔⛔ §207/§209 RE-BASELINE -- DO NOT QUOTE THE OLD NUMBERS.  They were printed
+	//  through the +1 `dsc' label, and §209's corrected labels show the SAME machine
+	//  (ring OFF) reporting them as cells 0x27 and 0x2F, not 0x28 and 0x30:
+	//      cell 0x27 -> 4161 = 0x1041     cell 0x2F -> 3120 = 0x0C30
+	//  and the 0x2F line was BODY 1's -- CHORUS has ten consumers, ix 0..9, and 0x2F
+	//  is only reachable at ix 10.  With the ring shipped (§209) cell 0x27 reads
+	//  0..4401 and unit 1 no longer touches 0x2F at all; the two headline numbers
+	//  MOVED, by construction, and that is the correction rather than a regression.
+	//  §202's CONCLUSION is untouched: it rests on the temporal argument, and the
+	//  fifteen unit-1 lines the ring exposes are 7.6..780 ms rather than complements
+	//  near 1.48 s.  Override with UPD6383_ROTSIGN=0.
 	bool m_rotsign = true;
 	u64  m_rotsign_n = 0;
 	//========================================================================
@@ -1149,6 +1156,18 @@ private:
 	u64  m_dscring_seen = 0; // times the ring path was evaluated at all
 	u64  m_dscring_n = 0;    // times the wrap actually CHANGED the cell
 	u64  m_dscring_u1 = 0;   // of those, on unit 1
+	//  ★ §209 FOLLOW-UP PROBE.  The first run reported 23 040 UNIT-0 wraps, and
+	//  unit 0's ring is supposed to be UNREACHABLE (top 0x40, longest shipped
+	//  block 20 cells).  A fired count that is not zero and not explained is a
+	//  defect until it is localised, so localise it: WHERE (I-RAM slot), WHEN
+	//  (last frame, and how many after the census threshold), and HOW FAR the
+	//  raw cursor had run.  If they are all pre-upload, they are a boot artefact
+	//  of a partially-written I-RAM; if any lands in a settled frame, the ring
+	//  bound is wrong and falsifier 4 fires after all.
+	u64  m_dscring_u0_late = 0;      // unit-0 wraps in a SETTLED frame (> 900k)
+	u64  m_dscring_u0_lastframe = 0; // the last frame in which one happened
+	u32  m_dscring_u0_iwmin = 0xffff, m_dscring_u0_iwmax = 0;
+	u32  m_dscring_u0_rawmax = 0;
 	//  THE descriptor cell a consumer takes.  Every probe below must use THIS and
 	//  not re-derive a label: §207/§208 -- the old `u8(m_dsc + m_delay_ix)' label
 	//  was +1 for body consumers (it was read AFTER the increment at :1927) and
@@ -1170,9 +1189,17 @@ private:
 		const u8 L = m_cur_unit1 ? DSC_RING1_TOP  : DSC_RING0_TOP;
 		if (raw >= L)
 		{
-			raw = u32(B) + (raw - L) % u32(L - B);
 			m_dscring_n++;
 			if (m_cur_unit1) m_dscring_u1++;
+			else
+			{
+				if (m_frames_run > 900000) m_dscring_u0_late++;
+				m_dscring_u0_lastframe = m_frames_run;
+				m_dscring_u0_iwmin = std::min<u32>(m_dscring_u0_iwmin, m_cur_iw);
+				m_dscring_u0_iwmax = std::max<u32>(m_dscring_u0_iwmax, m_cur_iw);
+				m_dscring_u0_rawmax = std::max<u32>(m_dscring_u0_rawmax, raw);
+			}
+			raw = u32(B) + (raw - L) % u32(L - B);
 		}
 		return u8(raw);
 	}
