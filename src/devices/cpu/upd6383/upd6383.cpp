@@ -355,6 +355,17 @@ void upd6383_device::device_start()
 		logerror("upd6383: §203 UPD6383_CFMTIX = %d\n", m_cfmtix ? 1 : 0);
 		logerror("upd6383: §104 A/B UPD6383_AB_NOSTORE08 = %d\n", m_ab_nostore08 ? 1 : 0);
 	}
+	//  ★★★ §209: the two halves of the per-unit descriptor ring, INDEPENDENTLY
+	//  gated so the 2x2 identifies each rather than shipping a bundle.
+	//  ⚠ Announced UNCONDITIONALLY, unlike the three gates above: those log only
+	//  when the env var is present, so a default run leaves no record of the arm
+	//  it was in.  Same rule as the fired counts.
+	if (const char *e5 = getenv("UPD6383_DSCPRE"))
+		m_dscpre = (strtoul(e5, nullptr, 10) != 0);
+	if (const char *e6 = getenv("UPD6383_DSCRING"))
+		m_dscring = (strtoul(e6, nullptr, 10) != 0);
+	logerror("upd6383: §209 UPD6383_DSCPRE = %d  UPD6383_DSCRING = %d\n",
+			m_dscpre ? 1 : 0, m_dscring ? 1 : 0);
 	save_item(NAME(m_p));
 	save_item(NAME(m_k));
 	save_item(NAME(m_l));
@@ -1877,9 +1888,18 @@ void upd6383_device::exec_alu(u64 word)
 			//  That also explains §44: read as Q0.23 those cells are ~0.007, and
 			//  multiplying by them is what destroyed the signal.
 			//  ★ §60: read the descriptor from the BANK the host now fills.
+			//  ★★★ §209: ONE cell, computed ONCE, used by every probe below.
+			//  `dsc_cell()' is the PER-UNIT RING (see upd6383.h): the base is not a
+			//  register -- every register candidate is dead by the gcd(d,256)|38
+			//  argument -- it is per-unit state established at the CALL.  ⚠ It has
+			//  side effects (the fired counters), so it must be called EXACTLY once
+			//  per consumer; that is also what §207/§208 demand, since the old
+			//  re-derived `u8(m_dsc + m_delay_ix)' labels were read AFTER the
+			//  increment at :1927 and were +1 for every body consumer.
+			const u8  dsc   = dsc_cell();
 			const u32 cellv = (m_speculative && (m_specmask & 0x200))
 					? (m_cram.read_dword(m_cursor) & 0xffff)
-					: u32(m_dscbank[u8(m_dsc + m_delay_ix)]);
+					: u32(m_dscbank[dsc]);
 			if (m_speculative && (m_specmask & 0x200)
 					&& upd6383_disassembler::coeff_consumer(word))
 				m_cursor++;
@@ -1893,10 +1913,10 @@ void upd6383_device::exec_alu(u64 word)
 				{
 					bool seen = false;
 					for (u32 q = 0; q < m_dly_n; q++)
-						if (m_dly_dsc[q] == u8(m_dsc + m_delay_ix)) seen = true;
+						if (m_dly_dsc[q] == dsc) seen = true;      // ★ §209: the real cell
 					if (!seen)
 					{
-						m_dly_dsc[m_dly_n] = u8(m_dsc + m_delay_ix);
+						m_dly_dsc[m_dly_n] = dsc;
 						m_dly_val[m_dly_n] = cellv;
 						m_dly_dir[m_dly_n] = u8(dir);
 						m_dly_n++;
@@ -1922,6 +1942,12 @@ void upd6383_device::exec_alu(u64 word)
 					m_c2c_ix[b][k]  = u8(m_delay_ix);
 					m_c2c_iw[b][k]  = m_cur_iw;
 					m_c2c_cell[b][k] = u16(cellv);
+					//  ★ §209: the cell NUMBER, recorded at the site that used it.
+					//  §208 removed the printed label because it was RE-DERIVED at
+					//  print time from an m_dsc the bodies never ran with; this is
+					//  the addressed cell itself, so it is a measurement and not a
+					//  reconstruction.  Both are printed: index, cell, value.
+					m_c2c_dsc[b][k] = dsc;
 				}
 			}
 			m_delay_ix++;
@@ -1947,14 +1973,19 @@ void upd6383_device::exec_alu(u64 word)
 			//  report how many frames ago that address was written.  THAT is the
 			//  delay, and it is the only quantity the sign changes.
 			{
-				const u8 dsc = u8(m_dsc + m_delay_ix);
+				//  ⛔ §207/§209: this label WAS `u8(m_dsc + m_delay_ix)' read AFTER
+				//  :1927's increment -- +1 for every body consumer, which is how
+				//  §202's two "bit-exact" numbers came to be body-1 consumers
+				//  reading body-0's block.  It is now the cell the consumer
+				//  ACTUALLY read, computed once above.  ⚠ §202's numbers therefore
+				//  MOVE, by construction; that is the correction, not a regression.
 				if (dir == 'W') { m_dts[addr] = u32(m_frames_run); }
 				else if (dir == 'R' && m_dts[addr])
 				{
 					const u32 age = u32(m_frames_run) - m_dts[addr];
 					int sl = -1;
 					for (int q = 0; q < m_age_n; q++) if (m_age_dsc[q] == dsc) { sl = q; break; }
-					if (sl < 0 && m_age_n < 12) { sl = m_age_n++; m_age_dsc[sl] = dsc;
+					if (sl < 0 && m_age_n < AGE_SLOTS) { sl = m_age_n++; m_age_dsc[sl] = dsc;
 						m_age_min[sl] = m_age_max[sl] = age; }
 					if (sl >= 0)
 					{
@@ -5713,8 +5744,11 @@ void upd6383_device::dump_frame_report() const
 				//  makes it per-unit state established at the CALL, so `m_dsc + ix'
 				//  is not the cell for unit 1 under ANY correction.
 				//  ⇒ print the RAW INGREDIENTS and let the reader derive nothing.
-				r += string_format(" iw%u:ix%u,val%04X", m_c2c_iw[b][k],
-						m_c2c_ix[b][k], m_c2c_cell[b][k]);
+				//  ★ §209: `cell' is now MEASURED -- recorded at the access site
+				//  from dsc_cell(), the same value that indexed m_dscbank -- so it
+				//  is printed again.  It is not a reconstruction from m_dsc.
+				r += string_format(" iw%u:ix%u,cell%02X,val%04X", m_c2c_iw[b][k],
+						m_c2c_ix[b][k], m_c2c_dsc[b][k], m_c2c_cell[b][k]);
 			//  ⚠ §204 label fix: bucket 0 collects everything below I-RAM 200, which
 			//  includes the KERNEL (0..59) and the epilogue, not only body 0.  The A/B
 			//  compares like with like so the result stands, but the label was wrong
@@ -5729,6 +5763,20 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★★ §205 f31 alias counts: f31=4 %u | f31=5 %u  "
 				"(mask bits 48-51 = %u; default runs 4 as LOAD, 5 as ADD)\n",
 				m_bx_f4_n, m_bx_f5_n, u32((m_specmask >> 48) & 0xf));
+		//  ★★★ §209: THE PER-UNIT DESCRIPTOR RING.  Two independent gates, each with
+		//  its own fired count -- a null with no fired count cannot distinguish
+		//  "did nothing" from "never ran", and this project has been bitten by that.
+		//  ⚠ `wrap CHANGED the cell' is the number that matters: the ring is
+		//  DESIGNED to be inert for unit 0 (its ring top 0x40 is never reached by
+		//  any shipped algorithm), so a unit-0 firing would itself be a defect.
+		logerror("upd6383: ★★★ §209 DESCRIPTOR RING: DSCPRE=%d applied %llu | "
+				"DSCRING=%d evaluated %llu, wrapped %llu (unit 1: %llu, unit 0: %llu) | "
+				"rings [%02X,%02X) unit 1 / [%02X,%02X) unit 0\n",
+				m_dscpre ? 1 : 0, (unsigned long long)m_dscpre_n,
+				m_dscring ? 1 : 0, (unsigned long long)m_dscring_seen,
+				(unsigned long long)m_dscring_n, (unsigned long long)m_dscring_u1,
+				(unsigned long long)(m_dscring_n - m_dscring_u1),
+				DSC_RING1_BASE, DSC_RING1_TOP, DSC_RING0_BASE, DSC_RING0_TOP);
 		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
 				(unsigned long long)m_cfmtix_n);
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",

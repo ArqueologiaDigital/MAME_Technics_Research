@@ -1075,6 +1075,7 @@ private:
 	//  §204: the consumer-to-cell map, first pass only, per body.
 	int  m_c2c_n[2] = {};
 	u8   m_c2c_ix[2][16] = {};
+	u8   m_c2c_dsc[2][16] = {};    // ★ §209: the cell NUMBER, recorded where it was used
 	u16  m_c2c_iw[2][16] = {}, m_c2c_cell[2][16] = {};
 	//  §204 SHIPPED ON.  r3-delaydram.md §6.1 FORCES that C40.1.80.000 consumes a
 	//  descriptor cell (all 8 exact solutions; 28 non-C + 4 C-format = 32 = n).
@@ -1098,12 +1099,93 @@ private:
 	//  Override with UPD6383_ROTSIGN=0.
 	bool m_rotsign = true;
 	u64  m_rotsign_n = 0;
+	//========================================================================
+	//  ★★★ §209: THE PER-UNIT DESCRIPTOR RING.
+	//
+	//  The descriptor BASE is not a register.  `data/DSCBASE_findings.md' closes
+	//  the register family by ARITHMETIC: a base register means
+	//  base_u = s*F_u + b (mod 256), the offset b CANCELS on subtraction, so the
+	//  whole test is whether s*d = 38 (mod 256) is solvable -- iff gcd(d,256)|38.
+	//  38 = 2*19 and gcd(d,256) is a power of two, so d must be odd or = 2 (mod 4).
+	//      0x827 d=8    0x821 d=32    w45/w53 addr8 d=48    ALL IMPOSSIBLE.
+	//  Also eliminated: the body's own first D-RAM word (`880.1.30.00B' is
+	//  consumer 0 on BOTH units -- the same 36 bits cannot yield 0x26 and 0x00)
+	//  and the host write pointer (m_dsc_wp ends 0x30, order-dependent).
+	//
+	//  ★ What survives (`dram-unit-cursor.md', 2026-07-27): the base is PER-UNIT
+	//  STATE ESTABLISHED AT THE CALL -- a per-unit RING on the ONE shared cursor.
+	//  Its sweep: 4440 survivors of 766 576 machines, and in EVERY one
+	//  B1 = 0x00 and L1 <= 0x26.  Unit 1's ring ENDS WHERE UNIT 0's BLOCK BEGINS,
+	//  so the single immediate 0x25 that `ldptr.d' loads for BOTH units means
+	//  "one below unit 0's base" to unit 0 and "the last cell of my ring" to
+	//  unit 1 -- one pre-increment delivers 0x26 to one and wraps 0x00 to the
+	//  other.  That is why no FIELD of the word could ever carry the difference.
+	//
+	//  ⚠⚠ A HARDWIRED TWO-ENTRY BASE TABLE indexed by the unit is OBSERVATIONALLY
+	//  TIED with the ring and this device does NOT claim which it is: separating
+	//  them needs a unit-1 block longer than 38 cells and the corpus maximum is
+	//  32 (all twelve reverbs).  The ring is implemented because it gives the
+	//  immediate 0x25 a job; that is parsimony, NOT evidence.
+	//
+	//  Two INDEPENDENT env gates, so the two halves are scored separately (the
+	//  u64 spec mask is exhausted; UPD6383_BODYIX/CFMTIX precedent):
+	//      UPD6383_DSCPRE   pre-increment: the cell is m_dsc + m_delay_ix + 1
+	//      UPD6383_DSCRING  the per-unit ring, [0x00,0x26) unit 1, [0x26,0x40) unit 0
+	//  ⚠ The wrap fires ONLY on passing the ring TOP.  A cursor loaded BELOW its
+	//  own base (unit 0's 0x25) is not clamped up -- that is the whole mechanism,
+	//  and it is why RING is INERT for unit 0 (a pre-registered falsifier: if
+	//  body 0 moves when only RING is toggled, the reading is wrong).
+	//
+	//  ★ FREE PARAMETERS, not measured, printed so they are never read as forced:
+	//  the sweep pins L1 only to 0x20..0x26 (= 0x26 under the MOD flavour alone),
+	//  B0 is unconstrained in 0x00..0x26 and L0 only bounded to 0x3A..0x41.  No
+	//  shipped algorithm reaches either bound, so no run can move them.
+	//  0x00/0x26/0x40 is the 38+26 = 64 partition of `dram-unit-cursor.md' item G.
+	static constexpr u8 DSC_RING1_BASE = 0x00, DSC_RING1_TOP = 0x26;
+	static constexpr u8 DSC_RING0_BASE = 0x26, DSC_RING0_TOP = 0x40;
+	bool m_dscpre  = true;
+	bool m_dscring = true;
+	u64  m_dscpre_n = 0;     // times the pre-increment was applied
+	u64  m_dscring_seen = 0; // times the ring path was evaluated at all
+	u64  m_dscring_n = 0;    // times the wrap actually CHANGED the cell
+	u64  m_dscring_u1 = 0;   // of those, on unit 1
+	//  THE descriptor cell a consumer takes.  Every probe below must use THIS and
+	//  not re-derive a label: §207/§208 -- the old `u8(m_dsc + m_delay_ix)' label
+	//  was +1 for body consumers (it was read AFTER the increment at :1927) and
+	//  §202 quoted two "bit-exact" numbers through it.
+	u8 dsc_cell()
+	{
+		u32 raw = u32(m_dsc) + u32(m_delay_ix);
+		if (m_dscpre) { raw++; m_dscpre_n++; }
+		if (!m_dscring) return u8(raw);
+		m_dscring_seen++;
+		//  ★ The unit is the one the device ALREADY establishes at the CALL for
+		//  the per-unit D-RAM rebase (DRAM_UNIT_BASE) -- no new chip-boundary
+		//  violation, nothing reaches into another device's memory, and the unit
+		//  is available at the chip's own CALL interface.  In this corpus the
+		//  census's own `m_cur_iw >= 200' partition is IDENTICAL (kernel < 84 and
+		//  body 0 at 84..199 are unit 0; body 1 starts at 200), so the choice is
+		//  not load-bearing for any number reported here.
+		const u8 B = m_cur_unit1 ? DSC_RING1_BASE : DSC_RING0_BASE;
+		const u8 L = m_cur_unit1 ? DSC_RING1_TOP  : DSC_RING0_TOP;
+		if (raw >= L)
+		{
+			raw = u32(B) + (raw - L) % u32(L - B);
+			m_dscring_n++;
+			if (m_cur_unit1) m_dscring_u1++;
+		}
+		return u8(raw);
+	}
 	std::unique_ptr<u32[]> m_dts_store;
 	u32 *m_dts = nullptr;
+	//  §209: 12 slots saturated the moment the two units stopped aliasing onto one
+	//  sequence -- with the ring, body 1 reads 0x00..0x1F and body 0 0x26..0x2F, so
+	//  a 12-entry census can no longer see every line.  32.
+	static constexpr int AGE_SLOTS = 32;
 	int  m_age_n = 0;
-	u8   m_age_dsc[12] = {};
-	u32  m_age_min[12] = {}, m_age_max[12] = {};
-	u64  m_age_hits[12] = {};
+	u8   m_age_dsc[AGE_SLOTS] = {};
+	u32  m_age_min[AGE_SLOTS] = {}, m_age_max[AGE_SLOTS] = {};
+	u64  m_age_hits[AGE_SLOTS] = {};
 	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
 	u32  m_hostw_cell[0x100] = {}, m_hostw_nz[0x100] = {};
 	u8   m_pw = 0;
