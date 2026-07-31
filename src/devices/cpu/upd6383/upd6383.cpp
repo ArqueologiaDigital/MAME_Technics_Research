@@ -5713,6 +5713,12 @@ void upd6383_device::dump_frame_report() const
 					b ? "unit 1 (I-RAM >= 200)" : "kernel + body 0 (I-RAM < 200)",
 					m_c2c_n[b], r.c_str());
 		}
+		//  ★ §205: these two counters were incremented and NEVER PRINTED -- the
+		//  project's own "every gate logs a fired-count" rule, breached for exactly
+		//  the field (§133's f31=4/5 alias) whose decode is most contested.
+		logerror("upd6383: ★★ §205 f31 alias counts: f31=4 %u | f31=5 %u  "
+				"(mask bits 48-51 = %u; default runs 4 as LOAD, 5 as ADD)\n",
+				m_bx_f4_n, m_bx_f5_n, u32((m_specmask >> 48) & 0xf));
 		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
 				(unsigned long long)m_cfmtix_n);
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",
