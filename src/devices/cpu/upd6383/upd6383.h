@@ -1376,6 +1376,16 @@ private:
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
 	u32  m_mirror06_n = 0;  // §106 diagnostic: 0x06 writes mirrored into 0x05
+	//  ★★★ §220 (env UPD6383_NOZ05, DEFAULT OFF): suppress the site-2 bit-4 store
+	//  when it targets cell 0x05 in kernel A -- i.e. `iw9', `iw35' and `iw45', the
+	//  three words §219 §3 measured overwriting body 0's input pickup between
+	//  `iw11's deposit and the CALL at `iw49'.  DIAGNOSTIC, never a fix; it asks
+	//  whether cell 0x05 is the pickup at all, and both answers are worth the same.
+	bool m_noz05 = false;
+	u32  m_noz05_n = 0;                 // fired count (rule 8)
+	u32  m_noz05_slots = 0;             // distinct iw values that fired
+	u16  m_noz05_iw[8] = { 0 };
+	u32  m_noz05_cnt[8] = { 0 };
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
 	void store_mode(u8 mode, u8 dest, u32 v);
 	static u32 pw_region(u16 iw);

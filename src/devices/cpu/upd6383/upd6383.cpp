@@ -364,6 +364,15 @@ void upd6383_device::device_start()
 			"the §78 per-line publish, which fires only at a DELAY WORD; 1 = a delay "
 			"READ also puts its datum on the bus register immediately)\n",
 			m_drpub ? 1 : 0);
+	//  ★★★ §220: the OVERWRITE half of §219 §8.  DEFAULT OFF, announced
+	//  UNCONDITIONALLY so a log can never be read against the wrong arm.  See
+	//  upd6383.h `m_noz05' and data/PREDICT_220.md, committed before this build.
+	if (const char *e9 = getenv("UPD6383_NOZ05"))
+		m_noz05 = (strtoul(e9, nullptr, 10) != 0);
+	logerror("upd6383: §220 UPD6383_NOZ05 = %d  (0 = SHIPPED: the site-2 bit-4 store "
+			"writes cell 0x05 in kernel A at iw9/iw35/iw45; 1 = DIAGNOSTIC: those three "
+			"stores are suppressed, so iw11's deposit survives to body 0's pickup)\n",
+			m_noz05 ? 1 : 0);
 	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
@@ -593,7 +602,23 @@ void upd6383_device::pwatch(u8 cell, bool wr, bool mode1)
 //  ★★★ §99: one rule for both store sites.  See upd6383.h.
 void upd6383_device::store_mode(u8 mode, u8 dest, u32 v)
 {
-	//  ★★★ §106 DIAGNOSTIC (mask bit 26) -- NOT A FIX, and it must not be promoted.
+	//  ★★★ §106 DIAGNOSTIC (mask bit 26): mirror the kernel's 0x06 result into 0x05
+	//  -- ⛔ RUN IN §220 AND REFUTED.  DEAD-END 30.  DO NOT FLIP IT.
+	//  §220 armed it for the first time (arm `data/B_mirror06_220.log.gz'): it FIRED
+	//  5 881 351 times -- exactly 5 per kernel-A pass, at `iw19/21/27/33/39' (mode 2,
+	//  dest 0x06) and NOT at `iw72' (mode 1, so §99 routes it to the register file) --
+	//  and body 0's §104 pickup at `iw84' stayed 0 in BOTH buckets, because every one
+	//  of those sites is UPSTREAM of `iw45', whose zero store is the last write to
+	//  0x05 before the CALL at `iw49'.  Worse, it made kernel A STRICTLY LESS
+	//  input-dependent (s104: acc 27->22, mem 21->10, L 18->12): with `iw35' reading
+	//  `iw33's mirrored constant 6 039 795, the accumulator at `iw38' goes constant,
+	//  so `iw39's store to 0x06 goes constant, and THAT propagates across the frame
+	//  boundary into the next frame's `iw12..iw21'.  ⇒ the mirror DESTROYS input
+	//  dependence; it does not create it.
+	//  ★ The question it was built to ask was answered the other way, by `m_noz05'
+	//  (§220, exec_alu below): cell 0x05 IS body 0's pickup -- suppress `iw35'/`iw45'
+	//  and body 0 goes from 0/0/0 input-dependent slots to 28/32/28.
+	//  ---- the original §106 rationale, kept because it is still the right question:
 	//  §105 called the deposit/pickup mismatch an OFF-BY-ONE.  It is not: the
 	//  kernel's audio pair is ADJACENT (0x06/0x07) while the body's pickup is
 	//  base+0 / base+2 = 0x05/0x07 (stride 2, §94, 12 of 12 reverbs).  No single
@@ -2968,10 +2993,49 @@ void upd6383_device::exec_alu(u64 word)
 			//  which has to survive body 1 to reach w73 and DO1.
 			u64 &sacc = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
 					? m_accb : m_acc;
+			//  ★★★ §220 DIAGNOSTIC (env UPD6383_NOZ05, DEFAULT OFF) -- the OVERWRITE
+			//  half of §219 §8's pre-registered pair, and the twin of mask bit 26's
+			//  DEPOSIT half.  It is NOT a fix and must not be promoted on the strength
+			//  of a number moving.
+			//
+			//  §219 §3 located the unit-0 send: D-RAM cell 0x05 is body 0's input
+			//  pickup, `iw9'/`iw11' DEPOSIT the audio into it, and then `iw35' and
+			//  `iw45' -- both site-2 bit-4 stores, both in kernel A -- OVERWRITE it
+			//  with acc_to_datum(2^38) = 4 194 304 and with 0, before the CALL at
+			//  `iw49'.  §104's residency prints the collapse slot by slot.
+			//
+			//  This gate removes exactly those stores, to ask ONE question that the
+			//  mirror cannot: is cell 0x05 body 0's pickup at all?  Two-sided, and
+			//  both sides are worth the same:
+			//    * if body 0's §104 columns become INPUT-DEPENDENT at `iw84', the
+			//      pickup model is right and the defect is the store TARGET of
+			//      `iw35'/`iw45' (or our HI_ST decode firing on words that do not
+			//      store);
+			//    * if `iw84' still reads 0 with the fired count non-zero, cell 0x05
+			//      is NOT the pickup and `base = 0x05 | unit<<7' is wrong.
+			//  ⚠⚠ IT CANNOT PRODUCE AUDIO, BY §216: the output stage is a null even
+			//  when body 0 runs on live audio.  Grade it on §104, never on §70/§211.
+			//  ⚠ `iw11's DEPOSIT is a site-3 ACT-0x07 store and is NOT touched here,
+			//  so the audio still reaches 0x05.  `iw9' IS a site-2 store to 0x05 and
+			//  IS suppressed -- it writes the constant 5 084 004 that `iw11' overwrites
+			//  two slots later, so removing it costs nothing.  The per-iw breakdown is
+			//  reported so "which words fired" is measured, not assumed.
+			if (m_noz05 && stdest == 0x05 && pw_region(m_cur_iw) == PW_KERNEL_A)
+			{
+				m_noz05_n++;
+				u32 q = 0;
+				for (; q < m_noz05_slots; q++) if (m_noz05_iw[q] == m_cur_iw) break;
+				if (q == m_noz05_slots && m_noz05_slots < 8)
+				{ m_noz05_iw[q] = m_cur_iw; m_noz05_slots++; }
+				if (q < 8) m_noz05_cnt[q]++;
+			}
+			else
+			{
 			store_mode(stmode, u8(stdest), u32(acc_to_datum(sacc)));   // §99
 			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
 			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
 			store_probe(u8(stdest), s32(acc_to_datum(sacc)) & 0xffffff, 2);   // §109
+			}
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
 		//  ★★★ §69 SPECULATIVE (mask bit 16 SUPPRESSES the clear).
@@ -5918,9 +5982,21 @@ void upd6383_device::dump_frame_report() const
 		logerror("            §111 host payload x2 applied to %u packets\n", m_pk_x2_n);
 		logerror("            §110 K6 ACT-07 stores re-pointed to pre-increment: %u\n",
 				m_k6_act07_fix_n);
-		if (m_mirror06_n)
-			logerror("            §106 DIAGNOSTIC: mirrored %u writes of cell 0x06 into 0x05\n",
-					m_mirror06_n);
+		//  ★ §220 rule 8: print the fired count UNCONDITIONALLY, with the arm's own
+		//  flag beside it.  `m_mirror06_n's `if' makes 0 fires and "the block never
+		//  ran" look identical in a log, which is precisely the ambiguity a fired
+		//  count exists to remove -- so this one does not repeat it.
+		logerror("            §106 DIAGNOSTIC (mask bit 26 = %d): mirrored %u writes of "
+				"cell 0x06 into 0x05\n",
+				(m_speculative && (m_specmask & 0x4000000)) ? 1 : 0, m_mirror06_n);
+		{   // ★★★ §220: the OVERWRITE half.  Count AND the words it fired on.
+			std::string r;
+			for (u32 q = 0; q < m_noz05_slots; q++)
+				r += string_format(" iw%u:%u", m_noz05_iw[q], m_noz05_cnt[q]);
+			logerror("            §220 NOZ05 (UPD6383_NOZ05 = %d): %u site-2 bit-4 stores "
+					"to cell 0x05 in kernel A SUPPRESSED |%s\n",
+					m_noz05 ? 1 : 0, m_noz05_n, r.empty() ? " (none)" : r.c_str());
+		}
 		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
 			std::string r; u32 n = 0;
 			for (u32 c = 0; c < 256; c++)
