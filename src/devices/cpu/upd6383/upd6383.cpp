@@ -4198,6 +4198,13 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			m_slotn++;
 			m_cur_word = raw;
 			m_cur_iw = u16(pc / upd6383_disassembler::WORD_BYTES);
+			//  ★ §191: the probe belongs HERE, on the per-word dispatch, not in
+			//  exec_addressing_only() -- that function is only reached from the k6
+			//  path (:1708), so bit-11 words never entered it and the first run
+			//  logged ZERO sites.  LEDGER rule 10 applied to my own instrument:
+			//  I placed it in the function whose NAME matched the concept rather
+			//  than on the path the words take.
+			b11_probe(raw);
 			//  ★★★ §153: `lo12 == 0x44C' APPLIES THE MODULATION OFFSET (§152).
 			//  Taken as the accumulator in DATUM units, i.e. a signed sample count,
 			//  because the depth the idiom loads is a sample count (ENHANCER's
@@ -4803,6 +4810,45 @@ bool upd6383_device::ptrd_a_suppressed(u64 word)
 		return false;
 	m_ptrd_a_n++;
 	return true;
+}
+
+//  ★★★ §191 PROBE (read-only): the pointer AT every bit-11 word.
+//
+//  §185 INFERS that `050.0.00.921' (MULTI TAP DELAY w33) writes addr8 = 0 to
+//  selector 0x21 -- the POINTER register -- resetting it at the tap->filter
+//  section boundary.  §187 FORCED that the selector space is the chip's internal
+//  control registers, so selector 0x21's effect is `m_dp', which is the one
+//  family member whose predicted effect is observable.
+//
+//  ⚠ MEASURE BEFORE IMPLEMENTING (§162's rule, fourth occurrence).  If `m_dp' at
+//  the word and at its successor is ALREADY constant across frames, a reset is
+//  unobservable and any "it works" reading would be a criterion that cannot fail.
+//  If it varies, the reset should make the successor constant -- a real two-sided
+//  test.  This probe decides which experiment is even possible.
+void upd6383_device::b11_probe(u64 word)
+{
+	//  ⚠ EXCLUDE C-FORMAT.  On a C-format word bits [24:12] are one 13-bit
+	//  immediate -- there is no `lo12' field at all, so an immediate that happens
+	//  to carry bit 11 is not a member of this family.  The static census excluded
+	//  them; the first version of this probe did not, and its 12 slots filled with
+	//  C-format false positives (0C0A292820, 0C04312820, ...) before 0x921, 0xC63
+	//  or 0x8BC were ever seen.  A probe whose sample is chosen by arrival order
+	//  must be filtered at the door, not afterwards.
+	if (upd6383_disassembler::c_format(word)) return;
+	if (!((word & 0xfff) & 0x800)) return;
+	int sl = -1;
+	for (int i = 0; i < m_b11_n; i++) if (m_b11_word[i] == word) { sl = i; break; }
+	if (sl < 0 && m_b11_n < 24) { sl = m_b11_n++; m_b11_word[sl] = word; }
+	if (sl < 0) return;
+	if (!m_b11_hits[sl]) { m_b11_dmin[sl] = m_b11_dmax[sl] = m_dp; }
+	else
+	{
+		m_b11_dmin[sl] = std::min<u32>(m_b11_dmin[sl], m_dp);
+		m_b11_dmax[sl] = std::max<u32>(m_b11_dmax[sl], m_dp);
+		if (m_dp != m_b11_dprev[sl]) m_b11_dchg[sl]++;
+	}
+	m_b11_dprev[sl] = m_dp;
+	m_b11_hits[sl]++;
 }
 
 void upd6383_device::bx_frame_end()
@@ -5440,7 +5486,16 @@ void upd6383_device::dump_frame_report() const
 					cl += string_format(" %02X:%u%s", i, m_hostw_cell[i],
 							m_hostw_nz[i] ? "" : "(z)");
 				}
-			logerror("upd6383: ★ §188 host payload LSB restored (mask bit 63 = %d): "
+			for (int i = 0; i < m_b11_n; i++)
+			logerror("upd6383: ★★ §191 BIT-11 WORD %010llX (lo12 %03X sel %02X sub %d): hits %llu | "
+					"m_dp %u..%u chg %llu (%s)\n",
+					(unsigned long long)m_b11_word[i], unsigned(m_b11_word[i] & 0xfff),
+					unsigned(m_b11_word[i] & 0xff), unsigned((m_b11_word[i] >> 8) & 7),
+					(unsigned long long)m_b11_hits[i], m_b11_dmin[i], m_b11_dmax[i],
+					(unsigned long long)m_b11_dchg[i],
+					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
+					: "CONSTANT -- a reset would be unobservable");
+		logerror("upd6383: ★ §188 host payload LSB restored (mask bit 63 = %d): "
 				"FIRED %llu of %llu packets (%.1f%%)\n",
 				(m_specmask & (1ull << 63)) ? 1 : 0,
 				(unsigned long long)m_pk_lsb_n, (unsigned long long)m_pk_lsb_seen,

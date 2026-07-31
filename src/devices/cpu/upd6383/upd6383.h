@@ -1048,6 +1048,11 @@ private:
 	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
 	bool ptrd_a_suppressed(u64 word);
 	u64  m_ptrd_a_n = 0;
+	//  §191: the pointer at every bit-11 word, with a change count.
+	void b11_probe(u64 word);
+	int  m_b11_n = 0;
+	u64  m_b11_word[24] = {}, m_b11_hits[24] = {}, m_b11_dchg[24] = {};
+	u32  m_b11_dmin[24] = {}, m_b11_dmax[24] = {}, m_b11_dprev[24] = {};
 	//  §188: host payload LSB restoration counters.
 	u64  m_pk_lsb_n = 0, m_pk_lsb_seen = 0;
 	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
