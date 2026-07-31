@@ -310,6 +310,24 @@ coefficients), already known to be the corpus's odd one out.
 > **every one of `0x00..0x13`**, and the boot run's length there tracks the algorithm (20 cells for
 > CHORUS's `classA 19`, **31** for PARAMETRIC EQ — this section's own −39 outlier).
 > Reproduce: `python3 dsp/tools/hdrbase.py` in the disassembly repo.
+>
+> ⛔⛔ **RETRACTED IN PART — banner added 2026-07-31 (register §227).** The bank is **NOT
+> boot-fixed and this section's §5 prediction is NOT confirmed.** §226's invariance was measured
+> on **one capture pair carrying the same reverb**. §227 took the missing capture: a preset change
+> **CONCERT REVERB 1 → ROOM REVERB 1** rewrites **23 cells, every one inside `0x90..0xB4` and
+> NOTHING else in the 256-cell C-RAM** — `[00..4F]` **0 of 80**, `[50..8F]` **0 of 64**, the
+> header's own walk `[90..A3]` **13 of 20**, and the ladder cells `[9B..9D]` **2 of 3** (`0x9B`,
+> `0x9C`).
+> ⇒ **`C-RAM[0x90..0xB4]` IS UNIT 1's (THE REVERB's) PER-ALGORITHM PARAMETER BANK.** The "22 cells
+> written by no algorithm" measured a **gap in the ROM's T1 map** — **15 of those 22 move** under a
+> preset change. In Q1.22 the cells read as reverb gains (CONCERT `1.200/1.000/1.000`, ROOM
+> `1.000/0.800/1.000`).
+> ★ **The control:** an independent 45 s panel run landing on CONCERT REVERB 1 reproduces the
+> archived cold-boot capture on **all 256 cells, 0 differ** ⇒ **the cold-boot default reverb is
+> CONCERT REVERB 1**, not ROOM REVERB 1.
+> ✔ **Still true:** the base is `0x90` and it is set by `iw69`; it is **not** `0x00` (unit 0's
+> bank); the upload is the `cmd 0x02` runs at `0x90` + `0xAE`.
+> Reproduce: `python3 dsp/tools/hdrbase.py --score notes/data/kn5000_dsp1_upload_concertreverb1.txt notes/data/kn5000_dsp1_upload_roomreverb1.txt`
 
 ## 6. `hi12[9:8]` (**MEASURED**)
 
@@ -350,7 +368,9 @@ operand-source selector is consistent with the solved biquad, which needs three 
 
    > ★★★★ **ANSWERED 2026-07-31 (register §226).** The upload is the **boot-time `cmd 0x02` runs
    > at base `0x90` (30 values) and `0xAE` (7)** — 37 cells, `0x90..0xB4`, **byte-identical in
-   > both archived captures**.
+   > both archived captures**. ⚠ **§227:** byte-identical because both captures carried the **same
+   > reverb**; those 37 cells are the **cold-boot reverb's coefficients**, not a fixed bank. The
+   > *upload* answer stands; the *fixed* adjective does not.
    > ★ **Why looking at the `cmd 0x02` transfers alone would not have found it:** a `cmd 0x02`
    > packet is a bare stream of 3-byte coefficients and **carries no destination address**. The
    > host sets the destination by writing an **`ldptr` word** (`hi12 0x801`, `lo12 0x821`) into a

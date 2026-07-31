@@ -399,6 +399,36 @@ void upd6383_device::device_start()
 			"is why iw92 published clamp(phase + INC + 0x7FFFFF) = 8 388 607 into "
 			"D-RAM 0x10 on every frame)\n",
 			m_lfowrap ? 1 : 0);
+	//  ★★★ §227 `UPD6383_NOCARRY' -- the §226 handover's one untested reading of the
+	//  header ladder, built as a DIAGNOSTIC and announced UNCONDITIONALLY.  See
+	//  upd6383.h `m_nocarry' for the from-disk refutation that precedes the run, and
+	//  dsp/tools/f31carry.py for the census behind it.
+	if (const char *e12 = getenv("UPD6383_NOCARRY"))
+		m_nocarry = (strtoul(e12, nullptr, 10) != 0);
+	logerror("upd6383: §227 UPD6383_NOCARRY = %d  (0 = SHIPPED: hi12[3:1] == 1 is "
+			"HI_ACC_ADD and carries the accumulator, which is the ONLY accumulate the "
+			"ISA has -- 1309 of 2989 non-C-format corpus words, including the five "
+			"PARAMETRIC EQ biquad words the listing renders `acc += P'; 1 = §226's "
+			"pre-registered reading, `f31 == 1 does not carry', which makes op 1 "
+			"identical to op 0 and is REFUTED FROM DISK before it is run)\n",
+			m_nocarry ? 1 : 0);
+	//  ★★★ §227 `UPD6383_PSHIFT' -- the OTHER half of §226's pre-registered bisection.
+	//  Three-way because "the Q-consistent P_SHIFT = 7" has two incompatible meanings.
+	if (const char *e13 = getenv("UPD6383_PSHIFT"))
+		m_pshift_mode = std::clamp<u32>(u32(strtoul(e13, nullptr, 10)), 0, 2);
+	switch (m_pshift_mode)
+	{
+	case 1:  P_SHIFT = 7; ACC_SHIFT = 15; break;    // TIED   -- total still 22
+	case 2:  P_SHIFT = 7; ACC_SHIFT = 16; break;    // UNTIED -- total 23
+	default: P_SHIFT = 6; ACC_SHIFT = 16; break;    // SHIPPED
+	}
+	logerror("upd6383: §227 UPD6383_PSHIFT = %u  ->  P_SHIFT = %d  ACC_SHIFT = %d  "
+			"TOTAL = %d  (0 = SHIPPED 6/16; 1 = the TIED move 7/15, total still 22 so "
+			"the product-as-datum is UNCHANGED and this is predicted to move nothing "
+			"at the FS scale; 2 = the UNTIED move 7/16, total 23, which asserts "
+			"coefficients are Q0.23 and therefore contradicts the MEASURED Q1.22 "
+			"scale -- kept only as the two-sided control)\n",
+			m_pshift_mode, P_SHIFT, ACC_SHIFT, P_SHIFT + ACC_SHIFT);
 	//  ★★★ §221 `§E1': the epilogue/handover OPERAND-PROVENANCE census.  READ-ONLY --
 	//  it changes no decode, no route and no value; it only records WHICH ARRAY,
 	//  WHICH INDEX and WHICH `iw' LAST WROTE each operand the output stage fetches.
@@ -3996,8 +4026,15 @@ void upd6383_device::exec_alu(u64 word)
 		if (sel && f31 == 4) { m_bx_f4_n++; if (m_bx_f4) op = bx_f31_op(m_bx_f4); }
 		if (sel && f31 == 5) { m_bx_f5_n++; if (m_bx_f5) op = bx_f31_op(m_bx_f5); }
 		u64 &accum = use_b ? m_accb : m_acc;
+		//  ★★★ §227 `UPD6383_NOCARRY' (DEFAULT OFF, DIAGNOSTIC).  §226 pre-registered
+		//  "iw33's f31 = 1 should not carry".  hi12[3:1] == 1 IS HI_ACC_ADD, so the
+		//  reading is necessarily global: with it on, op 1 becomes op 0 exactly.
+		//  Counted unconditionally; see upd6383.h `m_nocarry' for why it is refuted
+		//  from disk before it runs.
+		const bool nocarry = m_nocarry && (op == upd6383_disassembler::HI_ACC_ADD);
+		if (nocarry) m_nocarry_n++;
 		const u64 src_term =
-				(op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum)
+				((op == upd6383_disassembler::HI_ACC_LOAD || nocarry) ? 0 : accum)
 				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS
 					//  ★★★★ §82 SPECULATIVE (mask bit 21): A DELAY WORD'S ACTION PUTS
 					//  ITS DATUM ON THE ACCUMULATOR.
@@ -4084,7 +4121,7 @@ void upd6383_device::exec_alu(u64 word)
 				&& upd6383_disassembler::coeff_consumer(word);
 		//  ★ §224 `§S2': the three terms, split out of `src_term' ITSELF so they can
 		//  never drift from the expression the ALU actually evaluated.
-		const u64 s2_carry = (op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum);
+		const u64 s2_carry = ((op == upd6383_disassembler::HI_ACC_LOAD || nocarry) ? 0 : accum);
 		const u64 s2_bus   = src_term - s2_carry;
 		if (lfw)
 		{
@@ -5960,12 +5997,35 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	//        §226's next-experiment list.  ⚠ Do NOT "fix" it with the tempting
 	//        "kernel 0x90..0xA4 (21) then body 0xA5..0xB4 (16), 21+16 = 37"
 	//        arithmetic: ROOM REVERB 1 has 33 cursor-advancing words, not 16.
-	//  ★ AND THE PARAGRAPH'S CONCLUSION SURVIVES, now positively: C-RAM
-	//  [0x90..0xB4] IS the fixed bank notes/kn5000-dsp-headerdecode.md §5
-	//  predicted, and §7.6's "I did not find the upload that fills it" is
-	//  ANSWERED -- 22 of its 37 cells are written by NO algorithm's parameter
-	//  map, and the header's ladder cells 0x9B/0x9C/0x9D are identical in the
-	//  cold-boot capture, the PARAMETRIC-EQ capture and a live 30 s run.
+	//  ⛔⛔ A THIRD CORRECTION, AND IT RETRACTS §226's OWN CONCLUSION (register
+	//  §227, 2026-07-31).  §226 read [0x90..0xB4] as "the FIXED bank
+	//  notes/kn5000-dsp-headerdecode.md §5 predicted", on the strength of
+	//  ONE capture pair in which unit 1 did not change.  §227 took the missing
+	//  capture.  A REVERB-PRESET CHANGE (CONCERT REVERB 1 -> ROOM REVERB 1)
+	//  rewrites 23 cells, EVERY ONE OF THEM INSIDE [0x90..0xB4] AND NOTHING
+	//  ELSE IN THE 256-CELL C-RAM:
+	//        [00..4F]  0 of 80 differ        [50..8F]  0 of 64 differ
+	//        [90..A3] 13 of 20 differ  <- the header's own 20-cell walk
+	//        [9B..9D]  2 of  3 differ  <- 0x9B and 0x9C, the LADDER cells
+	//  ==> C-RAM[0x90..0xB4] IS UNIT 1's (THE REVERB's) PER-ALGORITHM PARAMETER
+	//  BANK.  It looked boot-fixed only because both §226 captures carried the
+	//  same reverb.  The "22 cells written by no algorithm" measured a GAP IN
+	//  THE ROM's T1 MAP -- 15 of those 22 move under a preset change.
+	//  ★ The control that makes this proof-grade: an independent 45 s panel run
+	//  landing on CONCERT REVERB 1 reproduces the archived cold-boot capture on
+	//  ALL 256 CELLS, 0 differ ==> the cold-boot default reverb is CONCERT
+	//  REVERB 1, not ROOM REVERB 1 as §226 labelled it.
+	//  ★ SURVIVES UNCHANGED: the UPLOAD half.  §7.6's "I did not find the
+	//  upload that fills it" is still ANSWERED -- the boot-time cmd-0x02 runs at
+	//  base 0x90 (30) and 0xAE (7) are it, and the destination is not in the
+	//  packet (the host writes an ldptr into a scratch I-RAM slot first).  Only
+	//  their MEANING changed: they carry the cold-boot reverb's coefficients.
+	//  ==> the overlap flagged in (b) is not an overlap; on the shipped decode
+	//  a canned, effect-independent header reads the reverb's LIVE parameters.
+	//  THAT is now the blocker.  Reproduce (one line, in the disassembly repo):
+	//     python3 dsp/tools/hdrbase.py --score
+	//        notes/data/kn5000_dsp1_upload_concertreverb1.txt
+	//        notes/data/kn5000_dsp1_upload_roomreverb1.txt
 	//  ⛔ DO NOT re-aim the kernel at base 0x00: [0x00..0x13] is the UNIT-0
 	//  EFFECT's own parameter bank (selecting PARAMETRIC EQ rewrites 0x00..0x1E
 	//  wholesale and moves all 20 cells), and the same ladder run there with PEQ
@@ -7196,6 +7256,18 @@ void upd6383_device::dump_frame_report() const
 						m_lfowrap_slots >= 8 ? " ⚠ CAPPED" : "",
 						r.empty() ? " (none -- UNTESTED in this arm)" : r.c_str());
 			}
+			//  ★★★ §227: the two arms of §226's pre-registered bisection, each printed
+			//  UNCONDITIONALLY with its gate state, in EVERY arm (rule 8).
+			logerror("upd6383:    ★ §227 NOCARRY (UPD6383_NOCARRY = %d): %llu ADD steps "
+					"dropped their carried term%s.  ⛔ DIAGNOSTIC ONLY -- f31 == 1 is "
+					"the ISA's only accumulate and the PARAMETRIC EQ biquad needs it; "
+					"see dsp/tools/f31carry.py\n",
+					m_nocarry ? 1 : 0, (unsigned long long)m_nocarry_n,
+					m_nocarry_n ? "" : " (none -- UNTESTED in this arm)");
+			logerror("upd6383:    ★ §227 PSHIFT (UPD6383_PSHIFT = %u): P_SHIFT = %d, "
+					"ACC_SHIFT = %d, TOTAL = %d (22 is the FORCED total -- coefficients "
+					"are MEASURED Q1.22, data Q0.23)\n",
+					m_pshift_mode, P_SHIFT, ACC_SHIFT, P_SHIFT + ACC_SHIFT);
 		}
 		//======================================================================
 		//  ★★★ §225 `§S3': THE BOOT-WINDOW FIRST-STORE RECORDER FOR CELL 0x06.

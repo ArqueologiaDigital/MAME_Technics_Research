@@ -357,6 +357,25 @@ private:
 	void exec_decoded(u64 word);
 	void exec_alu(u64 word);
 
+	//  ★★★ §227 `UPD6383_PSHIFT' (env, DEFAULT 0 = the shipped 6/16).  The §226
+	//  handover pre-registered "apply the Q-consistent P_SHIFT = 7" as half of a
+	//  bisection.  It is filed here as a THREE-WAY knob because the phrase has two
+	//  incompatible meanings and they are not the same experiment:
+	//
+	//      mode 0  P_SHIFT 6, ACC_SHIFT 16   SHIPPED.  total 22.
+	//      mode 1  P_SHIFT 7, ACC_SHIFT 15   the TIED move -- total STILL 22, so the
+	//                                        product-as-datum is unchanged and this
+	//                                        is predicted to move NOTHING at the FS
+	//                                        scale.  A falsifiable no-op.
+	//      mode 2  P_SHIFT 7, ACC_SHIFT 16   the UNTIED move -- total 23, i.e. it
+	//                                        asserts coefficients are Q0.23.  ⛔ The
+	//                                        comment below records them as MEASURED
+	//                                        Q1.22, so this arm contradicts a
+	//                                        measurement and exists only as the
+	//                                        two-sided control.
+	//  ⚠ They are no longer `constexpr' so the arms can exist at all; the DEFAULT
+	//  values are the shipped ones and mode 0 must reproduce §225's arm K exactly.
+	//
 	// THE FIXED POINT (notes/dsp-alu-biquad.md sect. 5).  What is FORCED is
 	// only the TOTAL: a coefficient is scaled by 2^22 (Q1.22 -- MEASURED from
 	// the firmware's own scale constants) while a datum is Q0.23, so the
@@ -367,8 +386,9 @@ private:
 	// banks.  6 is chosen because it keeps the whole 48-bit product inside the
 	// 44-bit ALU with room for the five-term sum, which is the only physical
 	// consideration that discriminates at all.
-	static constexpr int P_SHIFT   = 6;
-	static constexpr int ACC_SHIFT = 22 - P_SHIFT;
+	int P_SHIFT   = 6;
+	int ACC_SHIFT = 16;
+	u32 m_pshift_mode = 0;
 	s32 acc_to_datum(u64 acc) const;   // §114: reads m_specmask, no longer static
 	void capture_byte(bool cd, u8 data);
 	void capture_flush();
@@ -1619,6 +1639,33 @@ private:
 	u32  m_lfowrap_slots = 0;
 	u16  m_lfowrap_iw[8] = { 0 };
 	u32  m_lfowrap_cnt[8] = { 0 };
+
+	//======================================================================
+	//  ★★★ §227 `UPD6383_NOCARRY' (env, DEFAULT OFF).  DIAGNOSTIC, NEVER A FIX.
+	//
+	//  §226's handover pre-registered ONE untested reading of the header ladder:
+	//  "iw33's `f31 = 1' should NOT carry iw32's accumulator".  `f31 == 1' is
+	//  HI_ACC_ADD, so the honest implementation of that reading is GLOBAL -- there
+	//  is no field that distinguishes iw33's ADD from any other ADD, and a
+	//  per-word exception is not a reading.  This is that arm, two-sided, default
+	//  OFF, with an unconditional fired count.
+	//
+	//  ⛔ IT IS REFUTED FROM DISK BEFORE IT IS RUN (dsp/tools/f31carry.py):
+	//    * `f31 == 1' is 1309 of 2989 non-C-format corpus words and 695 of the
+	//      1178 ALU-decoded ones.  With op 0 = LOAD, op 2 = HOLD (no product) and
+	//      op 3 given HOLD's behaviour, it is the ONLY accumulate the ISA has.
+	//    * the PARAMETRIC EQ biquad -- the one program `programs.tsv' grades SOLVED
+	//      and this file validates against its designer at 0.198 dB -- sums FIVE
+	//      products through `f31 == 1' words w6..w10, which the generated listing
+	//      renders `acc += P'.  Without the carry, H(z) collapses to
+	//      `makeup * (-a2) * z^-2': a delayed gain, not an EQ.
+	//    * and it does not even stop the clip it was proposed to stop: the
+	//      accumulator iw34 converts becomes (C[0x9D] << 16) + (C[0x9C]^2 >> 6)
+	//      = 549 755 813 888, i.e. datum 8 388 608 = 2^23 = FS + 1.  It turns a
+	//      1.720 x FS clip into a 1.0000001 x FS clip, on every frame.
+	//  It is built anyway so the blast radius is MEASURED rather than argued.
+	bool m_nocarry = false;
+	u64  m_nocarry_n = 0;
 
 	//======================================================================
 	//  ★★★ §225 `§S3' -- THE BOOT-WINDOW FIRST-STORE RECORDER FOR D-RAM CELL 0x06.
