@@ -1048,6 +1048,11 @@ private:
 	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
 	bool ptrd_a_suppressed(u64 word);
 	u64  m_ptrd_a_n = 0;
+	//  §193: the f31 = 4 window, keyed by I-RAM slot (122..130).
+	void f31_probe(u64 word);
+	u64  m_f31_word[9] = {}, m_f31_hits[9] = {}, m_f31_achg[9] = {};
+	s64  m_f31_amin[9] = {}, m_f31_amax[9] = {}, m_f31_aprev[9] = {};
+	u64  m_f31_reject = 0;
 	//  §191: the pointer at every bit-11 word, with a change count.
 	void b11_probe(u64 word);
 	int  m_b11_n = 0;

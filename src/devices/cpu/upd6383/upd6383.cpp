@@ -4205,6 +4205,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			//  I placed it in the function whose NAME matched the concept rather
 			//  than on the path the words take.
 			b11_probe(raw);
+			f31_probe(raw);         // ★ §193
 			//  ★★★ §153: `lo12 == 0x44C' APPLIES THE MODULATION OFFSET (§152).
 			//  Taken as the accumulator in DATUM units, i.e. a signed sample count,
 			//  because the depth the idiom loads is a sample count (ENHANCER's
@@ -4810,6 +4811,56 @@ bool upd6383_device::ptrd_a_suppressed(u64 word)
 		return false;
 	m_ptrd_a_n++;
 	return true;
+}
+
+//  ★★★ §193 PROBE (read-only): THE f31 = 4 WINDOW.
+//
+//  PEQ+CHORUS w38..w46 and PEQ+FLANGER w38..w46 are byte-identical for NINE
+//  words and differ at ONE BIT -- `020.A.06.1D5' (f31 = 0, decoded acc <- P)
+//  vs `028.A.06.1D5' (f31 = 4).  Body 0 loads at I-RAM 84, so the window is
+//  I-RAM slots 122..130:
+//        +0..+2   the INPUT CONTROL
+//        +3       the f31 word            (I-RAM 125)
+//        +4       `182.2.00.407' -- store acc to memory: THE READOUT (I-RAM 126)
+//        +5..+8   C63, the class-6 lookup, and two 1CE words
+//
+//  ★ THE CRITERION, and why this family is worth a run where the bit-11 family
+//  is not (§192): the ground truth is THE OTHER PROGRAM, not a guess.  Run both,
+//  compare the accumulator slot by slot.
+//  ⚠ AND ITS FAILURE MODE, which is why +0..+2 are instrumented: the two
+//  programs differ OUTSIDE the window, so the accumulator arriving into it may
+//  already differ.  If it does, the comparison is confounded and the run says
+//  nothing about f31 -- a control that can fail.
+//  ★ Keyed by I-RAM SLOT, not by word value: several of these words recur
+//  elsewhere in the same program, and §174 measured what pooling costs.
+void upd6383_device::f31_probe(u64 word)
+{
+	if (m_cur_iw < 122 || m_cur_iw > 130) return;
+	//  ⚠ GATE ON THE EXPECTED WORD.  The first version sampled from frame 0 --
+	//  before the program is uploaded -- so `word' logged as 0000000000 and the
+	//  min/max were dominated by boot content.  Both arms then reported
+	//  BYTE-IDENTICAL accumulator ranges for two different programs, which is the
+	//  symptom.  Slot alone does not identify the instruction; slot AND word does.
+	static const u64 WIN[] = {
+		0x0202AFC415ull, 0x0204200000ull, 0x00922FA700ull,
+		0x0020A061D5ull, 0x0028A061D5ull,          // the f31 pair
+		0x0182200407ull, 0x0040000C63ull, 0x00006184CDull,
+		0x00124011CEull, 0x01042061CEull };
+	bool ok = false;
+	for (u64 w : WIN) if (w == word) { ok = true; break; }
+	if (!ok) { m_f31_reject++; return; }
+	const int i = m_cur_iw - 122;
+	const s64 a = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
+	if (!m_f31_hits[i]) { m_f31_amin[i] = m_f31_amax[i] = a; }
+	else
+	{
+		m_f31_amin[i] = std::min(m_f31_amin[i], a);
+		m_f31_amax[i] = std::max(m_f31_amax[i], a);
+		if (a != m_f31_aprev[i]) m_f31_achg[i]++;
+	}
+	m_f31_word[i] = word;
+	m_f31_aprev[i] = a;
+	m_f31_hits[i]++;
 }
 
 //  ★★★ §191 PROBE (read-only): the pointer AT every bit-11 word.
@@ -5486,7 +5537,17 @@ void upd6383_device::dump_frame_report() const
 					cl += string_format(" %02X:%u%s", i, m_hostw_cell[i],
 							m_hostw_nz[i] ? "" : "(z)");
 				}
-			for (int i = 0; i < m_b11_n; i++)
+			logerror("upd6383: §193 window samples REJECTED (slot in range, word not a window word): %llu\n",
+				(unsigned long long)m_f31_reject);
+		for (int i = 0; i < 9; i++)
+			if (m_f31_hits[i])
+				logerror("upd6383: ★★ §193 f31 WINDOW +%d (I-RAM %d) %010llX : hits %llu | "
+						"acc %lld .. %lld chg %llu\n",
+						i, 122 + i, (unsigned long long)m_f31_word[i],
+						(unsigned long long)m_f31_hits[i],
+						(long long)m_f31_amin[i], (long long)m_f31_amax[i],
+						(unsigned long long)m_f31_achg[i]);
+		for (int i = 0; i < m_b11_n; i++)
 			logerror("upd6383: ★★ §191 BIT-11 WORD %010llX (lo12 %03X sel %02X sub %d): hits %llu | "
 					"m_dp %u..%u chg %llu (%s)\n",
 					(unsigned long long)m_b11_word[i], unsigned(m_b11_word[i] & 0xfff),
