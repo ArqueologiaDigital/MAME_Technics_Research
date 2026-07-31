@@ -905,6 +905,30 @@ void upd6383_device::host_w(bool cd, u8 data)
 				//  both.  If only one moves, this reading is wrong.
 				if (m_speculative && (m_specmask & 0x80000000u))
 				{ v = (v << 1) & 0xffffff; m_pk_x2_n++; }
+				//==========================================================
+				//  ★★★ §188 SPECULATIVE (mask bit 63): RESTORE THE PAYLOAD'S
+				//  LSB.  `k5-output-stage.md' item 9 and `k3-pointers.md'
+				//  §1.1 item 3 both give the packet decode as
+				//      V = ((aa&0x7F)<<17) | (bb<<9) | (cc<<1) | (dd>>7)
+				//  -- PROVEN BY CONSTRUCTION, off the firmware's own writers.
+				//  §111's x2 above reproduces the three shifts but DROPS
+				//  `dd>>7', so a third of every host-programmed quantity in
+				//  this device is 1 LSB low (32% of packets carry it set).
+				//  ⚠ `adjudication-round4.md' item D records that this
+				//  retraction "never reached" six downstream documents and
+				//  leaves 7 LIVE sites; this is one of them.
+				//
+				//  ★ MEASURED STATICALLY before implementing, against the LFO
+				//  sine the host uploads -- decoding those 24 packets both ways
+				//  and comparing with round(0.95 * 2^23 * sin(2*pi*k/24 + 0.1)):
+				//      PROVEN decode : max err 1 LSB, RMS 0.707   (pure rounding)
+				//      DEVICE decode : max err 2 LSB, RMS 1.291
+				//      tag bit 7 set in 12 of 24 -- half, as a sine's LSBs should be
+				if (m_speculative && (m_specmask & (1ull << 63)))
+				{
+					if (m_poke[4] & 0x80) { v |= 1; m_pk_lsb_n++; }
+					m_pk_lsb_seen++;
+				}
 				const u8  tag = m_poke[4];
 				m_pk_tag[tag]++;
 				switch (tag & 0x7f)
@@ -5416,7 +5440,12 @@ void upd6383_device::dump_frame_report() const
 					cl += string_format(" %02X:%u%s", i, m_hostw_cell[i],
 							m_hostw_nz[i] ? "" : "(z)");
 				}
-			logerror("upd6383: ★★ §186 HOST tag-0x15 WRITE TARGETS: %u writes over %u cells "
+			logerror("upd6383: ★ §188 host payload LSB restored (mask bit 63 = %d): "
+				"FIRED %llu of %llu packets (%.1f%%)\n",
+				(m_specmask & (1ull << 63)) ? 1 : 0,
+				(unsigned long long)m_pk_lsb_n, (unsigned long long)m_pk_lsb_seen,
+				m_pk_lsb_seen ? 100.0 * double(m_pk_lsb_n) / double(m_pk_lsb_seen) : 0.0);
+		logerror("upd6383: ★★ §186 HOST tag-0x15 WRITE TARGETS: %u writes over %u cells "
 					"(%u ever non-zero) | 0x63 written %u times |%s\n",
 					tot, nc, nnz, m_hostw_cell[0x63], cl.c_str());
 		}

@@ -888,7 +888,27 @@ private:
 	// least-squares fit, neither was assumed.
 	// ⚠ This does NOT make the chip audible and does NOT implement class 6.  It
 	// removes the reason class 6 could not be built: the table is its data.
-	u64  m_specmask = 0x3910e446a39b440f;
+	// §188: RESTORE THE HOST PAYLOAD'S LSB (bit 63) joins the default.
+	//   0x3910E446A39B440F | (1<<63) = 0xB910E446A39B440F
+	// `k5-output-stage.md' item 9 and `k3-pointers.md' §1.1 item 3 both give the
+	// packet decode as V = ((aa&0x7F)<<17)|(bb<<9)|(cc<<1)|(dd>>7) -- PROVEN BY
+	// CONSTRUCTION off the firmware's own writers.  §111's x2 reproduced the three
+	// shifts but DROPPED `dd>>7', so a third of every host-programmed quantity in
+	// this device was 1 LSB low.
+	// ★ Verified against the LFO sine the host uploads, all numbers pre-registered
+	// in data/PREDICT_188.md BEFORE the run, scored against the ideal
+	// round(0.95 * 2^23 * sin(2*pi*k/24 + 0.1)):
+	//     control       max|err| 2 LSB   RMS 1.291   mean -1.000   negative 16/24
+	//     bit 63 armed  max|err| 1 LSB   RMS 0.707   mean -0.500   negative 12/24
+	// RMS 0.707 = 1/sqrt(2) is exactly the RMS of uniform +/-0.5 rounding: the
+	// residual is now pure quantisation, i.e. the table is reproduced as exactly as
+	// a 24-bit integer can represent it.
+	// ★★ And the 12 cells that moved match the capture's tag-bit-7 pattern
+	// BIT-FOR-BIT: 011000000011100111111100.  Cells whose packet had the bit clear
+	// are bit-identical (the null half).
+	// ⚠ Output is unchanged and silent -- this is a 1-LSB parameter correction, not
+	// an audio fix.
+	u64  m_specmask = 0xb910e446a39b440f;
 	//  ★ §33: what the pointer actually WAS when the header words read the latch,
 	//  against m_in_base (the pointer at frame start, which the deposit uses).
 	u32  m_dbg_once = 0; u32 m_dbg213 = 0; u32 m_dbg_pres = 0;
@@ -1028,6 +1048,8 @@ private:
 	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
 	bool ptrd_a_suppressed(u64 word);
 	u64  m_ptrd_a_n = 0;
+	//  §188: host payload LSB restoration counters.
+	u64  m_pk_lsb_n = 0, m_pk_lsb_seen = 0;
 	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
 	u32  m_hostw_cell[0x100] = {}, m_hostw_nz[0x100] = {};
 	u8   m_pw = 0;
