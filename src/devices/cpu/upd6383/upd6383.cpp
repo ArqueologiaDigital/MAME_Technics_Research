@@ -5948,6 +5948,29 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	//  and the coefficient stream fills [0x90..0xAD] with 30 values, unclaimed by
 	//  either body and enough for the kernel's 23 slots.
 	//
+	//  ⚠ TWO CORRECTIONS TO THE PARAGRAPH ABOVE (register §226, 2026-07-31,
+	//  kn5000-roms-disasm/dsp/analysis/HEADER-BANK_findings.md).  Both were
+	//  measured from the two archived host captures, with no run:
+	//    (a) the run is [0x90..0xB4] = 37 cells, delivered as TWO packets
+	//        (ldptr #$90 -> 30 values, then ldptr #$AE -> 7).  "30 values" and
+	//        "[0x90..0xAD]" are the first packet only.
+	//    (b) "unclaimed by either body" is FALSE on the shipped build: mask bit
+	//        38 seeds unit 1's CALL to 0x90 as well, so the header (0x90..0xA3)
+	//        and the reverb body overlap.  THAT OVERLAP IS OPEN -- see item 3 of
+	//        §226's next-experiment list.  ⚠ Do NOT "fix" it with the tempting
+	//        "kernel 0x90..0xA4 (21) then body 0xA5..0xB4 (16), 21+16 = 37"
+	//        arithmetic: ROOM REVERB 1 has 33 cursor-advancing words, not 16.
+	//  ★ AND THE PARAGRAPH'S CONCLUSION SURVIVES, now positively: C-RAM
+	//  [0x90..0xB4] IS the fixed bank notes/kn5000-dsp-headerdecode.md §5
+	//  predicted, and §7.6's "I did not find the upload that fills it" is
+	//  ANSWERED -- 22 of its 37 cells are written by NO algorithm's parameter
+	//  map, and the header's ladder cells 0x9B/0x9C/0x9D are identical in the
+	//  cold-boot capture, the PARAMETRIC-EQ capture and a live 30 s run.
+	//  ⛔ DO NOT re-aim the kernel at base 0x00: [0x00..0x13] is the UNIT-0
+	//  EFFECT's own parameter bank (selecting PARAMETRIC EQ rewrites 0x00..0x1E
+	//  wholesale and moves all 20 cells), and the same ladder run there with PEQ
+	//  loaded reaches 2.733 x FS -- worse than the 1.720 it was meant to cure.
+	//
 	//  ⛔ GUESSED: that the implicit cursor should be RE-SEEDED here at all.  K3
 	//  proves 0x21 loads a C-RAM POINTER that is NOT the implicit cursor, and the
 	//  only `rstcur' in the corpus is in PARAMETRIC EQ's body -- so what resets the
@@ -5955,6 +5978,12 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	//  payload is the reading that makes a fixed program read fixed coefficients.
 	//  ⛔ ROW 19 RETIRED: subsumed by row 25 -- the epilogue's own iw69 ldptr now
 	//  leaves the cursor at 0x90, which is what this line was seeding by hand.
+	//  ★ §226 makes that exact: the epilogue has ZERO cursor-advancing words, so
+	//  iw69 is the last thing to touch the cursor in a frame and word 0 of the
+	//  next frame starts at EXACTLY 0x90 -- not 0x90 + n.  ⚠ Therefore "nothing
+	//  seeds the cursor at frame start" is true only of an assignment statement:
+	//  an instruction seeds it, deterministically.  A frame-start seed to 0x90
+	//  would set it to the value it already has and CANNOT FAIL as a test.
 
 	if (m_trace_armed && !m_trace_done)
 	{   // one frame only

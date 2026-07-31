@@ -295,6 +295,22 @@ loaded once at boot — which is also why the header's constants never varied ac
 identical uploads in the cold-boot capture. The −39 outlier is algo 39 (70 cursor words, 31
 coefficients), already known to be the corpus's odd one out.
 
+> ★★★★ **CONFIRMED AND LOCATED — banner added 2026-07-31 (`kn5000-roms-disasm` register §226,
+> `dsp/analysis/HEADER-BANK_findings.md`).** The bank is **`C-RAM[0x90..0xB4]`** and the header
+> consumes **`0x90..0xA3`** (20 cursor-advancing words before `w42`'s `ldptr #$70`; `w30/w32/w33`
+> are offsets `+0x0B/+0x0C/+0x0D`, which is why `§S2` measures `0x9B`). The base is set by an
+> **instruction** — the epilogue's own `iw69 = 801.0.90.821 ldptr #$90`, the last pointer load of
+> the frame — and the **epilogue contains ZERO cursor-advancing words**, so the next frame's `w0`
+> starts at **exactly `0x90`, every frame**.
+> **22 of the 37 cells in `0x90..0xB4` are written by NO algorithm's parameter map** (`91..9D`,
+> `A1..A5`, `AD AE B3 B4`), and `0x9B/0x9C/0x9D` are identical in the cold-boot capture, in the
+> PARAMETRIC-EQ capture **and** in a live 30-second run.
+> ⛔ **It is NOT `0x00`.** `C-RAM[0x00..0x13]` is the **unit-0 effect's own parameter bank**:
+> selecting PARAMETRIC EQ rewrites `0x00..0x1E` wholesale (twelve `cmd 0x02` runs) and moves
+> **every one of `0x00..0x13`**, and the boot run's length there tracks the algorithm (20 cells for
+> CHORUS's `classA 19`, **31** for PARAMETRIC EQ — this section's own −39 outlier).
+> Reproduce: `python3 dsp/tools/hdrbase.py` in the disassembly repo.
+
 ## 6. `hi12[9:8]` (**MEASURED**)
 
 ```
@@ -331,6 +347,20 @@ operand-source selector is consistent with the solved biquad, which needs three 
 6. **The 23 header cursor-fetch words have no coefficients to point at.** §5 says the bank is
    separate; I did not find the upload that fills it. The cold-boot capture's early `cmd 0x0C`
    / short `cmd 0x02` transfers are the place to look, and I did not look.
+
+   > ★★★★ **ANSWERED 2026-07-31 (register §226).** The upload is the **boot-time `cmd 0x02` runs
+   > at base `0x90` (30 values) and `0xAE` (7)** — 37 cells, `0x90..0xB4`, **byte-identical in
+   > both archived captures**.
+   > ★ **Why looking at the `cmd 0x02` transfers alone would not have found it:** a `cmd 0x02`
+   > packet is a bare stream of 3-byte coefficients and **carries no destination address**. The
+   > host sets the destination by writing an **`ldptr` word** (`hi12 0x801`, `lo12 0x821`) into a
+   > scratch I-RAM slot (I-RAM 352 in the capture) with a `cmd 0x01`, *then* streams. Replaying
+   > that rule over the cold-boot capture gives, in order:
+   > `#$50→30, #$6E→30` (the two ramps, `0x50..0x8B`), `#$90→30, #$AE→7` (**the header's bank**),
+   > `#$00→20` (the unit-0 effect's bank) — and `30+30+30+7+20 = 117`, the emulator's own
+   > *"117 coefficients routed"*.
+   > ⚠ The count is **20**, not 23: only `class4 == 0xA` non-`c_format` words advance the cursor,
+   > and 20 of them run before `w42`'s `ldptr #$70` re-aims it. §5's "23" counts `class4` bit 3.
 
 ## 8. What this instrument is blind to
 
