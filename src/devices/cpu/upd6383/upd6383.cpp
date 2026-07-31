@@ -355,6 +355,15 @@ void upd6383_device::device_start()
 	logerror("upd6383: §215 UPD6383_SRC0B2 = %d  (0 = SHIPPED: SRC 0x0B is the delay-read "
 			"register everywhere; 1 = RIVAL: on a word with no delay access it is "
 			"mem[ptr])\n", m_src0b2 ? 1 : 0);
+	//  ★★★ §217: the publish schedule.  DEFAULT OFF, announced UNCONDITIONALLY so a log
+	//  can never be read against the wrong arm.  See upd6383.h `m_drpub' and
+	//  data/PREDICT_217.md, committed before this build.
+	if (const char *e8 = getenv("UPD6383_DRPUB"))
+		m_drpub = (strtoul(e8, nullptr, 10) != 0);
+	logerror("upd6383: §217 UPD6383_DRPUB = %d  (0 = SHIPPED: `m_dr' is written ONLY by "
+			"the §78 per-line publish, which fires only at a DELAY WORD; 1 = a delay "
+			"READ also puts its datum on the bus register immediately)\n",
+			m_drpub ? 1 : 0);
 	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
@@ -529,6 +538,24 @@ void upd6383_device::store_probe(u8 addr, s32 val, u8 site)
 	if (val < s.st_lo[q]) s.st_lo[q] = val;
 	if (val > s.st_hi[q]) s.st_hi[q] = val;
 	s.st_n[q]++;
+}
+
+//  ★★★ §217: a keyed histogram over at most PROV_SLOTS distinct `iw' values, with an
+//  overflow bucket.  Keyed, NOT pooled -- standing rule 10's second occurrence was
+//  "36 M firings POOLED ACROSS SITES instead of keyed", which made the measurement
+//  answer a different question than the one asked.  `nz' may be null.
+void upd6383_device::prov_bump(u16 *key, u64 *n, u64 *nz, u32 &cnt, u64 &other,
+		u16 k, bool isnz)
+{
+	for (u32 q = 0; q < cnt; q++)
+		if (key[q] == k) { n[q]++; if (nz && isnz) nz[q]++; return; }
+	if (cnt < PROV_SLOTS)
+	{
+		key[cnt] = k; n[cnt] = 1; if (nz) nz[cnt] = isnz ? 1 : 0;
+		cnt++;
+		return;
+	}
+	other++;
 }
 
 //  ★ §86: record a kernel D-RAM write, split by input presence.
@@ -2108,6 +2135,18 @@ void upd6383_device::exec_alu(u64 word)
 			{
 				m_pub_hit++; if (m_dr_line[line]) m_pub_nz++;
 				m_dr = m_dr_line[line];
+				//  ★★★ §217: carry the tag with the datum.  Read-only, both arms.
+				m_dr_prov_iw    = m_dr_line_iw[line];
+				m_dr_prov_line  = u8(line);
+				m_dr_prov_frame = m_dr_line_frame[line];
+				//  WHERE does the datum `iw12' fetched actually get published?
+				if (m_frames_run > 900000 && m_dr_prov_iw == 12)
+					prov_bump(m_p12_iw, m_p12_n, nullptr, m_p12_cnt, m_p12_other,
+							m_cur_iw, false);
+				//  ...and does ANY publish fire between iw12 and iw25?  Structurally
+				//  no -- the kernel has no delay word in iw13..iw24 -- but asserting
+				//  that is not measuring it.
+				if (m_cur_iw > 12 && m_cur_iw < 25) m_pub_between++;
 				m_dr_line_v[line] = false;
 				m_dr_landed++;
 			}
@@ -2134,6 +2173,23 @@ void upd6383_device::exec_alu(u64 word)
 				{   // ★ §78: latch under this line's descriptor
 					m_dr_line[line] = datum; m_dr_line_v[line] = true; m_latch_n++;
 					if (datum) m_latch_nz++;
+					//  ★ §217: tag the latch with the word that performed the READ
+					m_dr_line_iw[line]    = m_cur_iw;
+					m_dr_line_frame[line] = m_frames_run;
+					//  ★★★ §217 (UPD6383_DRPUB, DEFAULT OFF): ALSO put the datum on the
+					//  bus register now.  This site is AFTER `exec_alu' above, so a
+					//  fused read+capture word still does not see its own datum
+					//  (`dram-datapath.md' item A survives); and `m_dr_line[]' is
+					//  untouched, so §79's pairing and §80's counters are identical
+					//  across the arms -- which is PREDICT_217 N4.
+					if (m_drpub)
+					{
+						m_drpub_fired++;
+						m_dr = datum;
+						m_dr_prov_iw    = m_cur_iw;
+						m_dr_prov_line  = u8(line);
+						m_dr_prov_frame = m_frames_run;
+					}
 				}
 				else if (m_speculative && (m_specmask & 0x400))
 				{   // ★ §49: schedule it `land' slots ahead, do NOT publish now
@@ -2393,6 +2449,20 @@ void upd6383_device::exec_alu(u64 word)
 				m_src0b2_n++;
 				if (m_dram.read_dword(m_dp) & 0xffffff) m_src0b2_memnz++;
 				if (m_dr) m_src0b2_drnz++;
+				//  ★★★ §217 PROVENANCE, READ-ONLY, BOTH ARMS.  Not "is the operand
+				//  alive" (standing rule 15 -- every live operand passes that) but
+				//  WHICH WORD READ IT.  Settled frames only: before the host uploads
+				//  the descriptor bank every cell reads 0000, so every line is 0 and
+				//  the histogram would be boot, not steady state (§193/§204's trap).
+				if (m_frames_run > 900000)
+				{
+					m_prov_tot++;
+					prov_bump(m_prov_iw, m_prov_n, m_prov_nz, m_prov_cnt, m_prov_other,
+							m_dr_prov_iw, m_dr != 0);
+					const u64 age = m_frames_run - m_dr_prov_frame;
+					if (age < m_prov_age_min) m_prov_age_min = age;
+					if (age > m_prov_age_max) m_prov_age_max = age;
+				}
 				//  ⚠ DEFAULT OFF.  The rival: on a word that performs NO delay
 				//  access the code cannot be naming the delay port, so it names
 				//  what every other unanchored source in this device resolves to.
@@ -5515,6 +5585,30 @@ void upd6383_device::dump_frame_report() const
 			(unsigned long long)m_src0b2_n, (unsigned long long)m_src0b2_memnz,
 			(unsigned long long)m_src0b2_drnz, (unsigned long long)m_src0b2_fired,
 			m_src0b2 ? 1 : 0);
+	//  ★★★ §217: WHERE THE DATUM COMES FROM, not whether it is alive.
+	logerror("upd6383: ★★★ §217 `m_dr' PROVENANCE AT THE CLASS-2 SRC 0x0B WORD (iw25), "
+			"SETTLED FRAMES > 900000: %llu evaluations | age %llu..%llu frames | "
+			"UPD6383_DRPUB = %d, fired %llu\n",
+			(unsigned long long)m_prov_tot,
+			(unsigned long long)(m_prov_age_min == ~0ull ? 0 : m_prov_age_min),
+			(unsigned long long)m_prov_age_max, m_drpub ? 1 : 0,
+			(unsigned long long)m_drpub_fired);
+	for (u32 q = 0; q < m_prov_cnt; q++)
+		logerror("upd6383:    §217 read by iw%-5u  x%-12llu  (%llu with a NON-ZERO datum)\n",
+				m_prov_iw[q], (unsigned long long)m_prov_n[q],
+				(unsigned long long)m_prov_nz[q]);
+	if (m_prov_other)
+		logerror("upd6383:    §217 producers beyond slot %u: %llu\n",
+				PROV_SLOTS, (unsigned long long)m_prov_other);
+	logerror("upd6383: ★★★ §217 WHERE A DATUM TAGGED `iw12' IS PUBLISHED (settled):\n");
+	for (u32 q = 0; q < m_p12_cnt; q++)
+		logerror("upd6383:    §217 published at iw%-5u  x%llu\n",
+				m_p12_iw[q], (unsigned long long)m_p12_n[q]);
+	if (m_p12_cnt == 0)
+		logerror("upd6383:    §217 (never -- no publish ever carried an iw12 tag)\n");
+	logerror("upd6383: §217 publishes strictly between iw12 and iw25: %llu  "
+			"(structurally 0 -- the kernel has no delay word in iw13..iw24)\n",
+			(unsigned long long)m_pub_between);
 	logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
 				"descriptor cell non-zero on %u accesses.%s\n",
 				m_dly_r, m_dly_r_nz, m_dly_w, m_dly_cell_nz, ds.c_str());

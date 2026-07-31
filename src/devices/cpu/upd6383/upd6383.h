@@ -572,6 +572,67 @@ private:
 	u64  m_src0b2_n = 0;            // class-2 SRC 0x0B evaluations (BOTH arms)
 	u64  m_src0b2_memnz = 0;        // ... of which mem[m_dp] was non-zero (BOTH arms)
 	u64  m_src0b2_drnz = 0;         // ... of which m_dr was non-zero  (BOTH arms)
+	//==================================================================
+	//  ★★★ §217: THE PROVENANCE OF `m_dr', AND WHY `iw12's DATUM NEVER REACHES `iw25'.
+	//
+	//  §215/§216 measured `m_dr' non-zero at `iw25' on 0 of 1 211 520 evaluations in
+	//  the arm where §80 published 181 521 non-zero data, and named the §78 per-line
+	//  publish schedule -- specifically `line = descriptor_value & 0x3f' with "the
+	//  kernel's delay words all share line 0".
+	//
+	//  ⛔ THAT LAST CLAIM COMES FROM §46's DESCRIPTOR DUMP, WHICH IS AN UNGUARDED
+	//  BOOT-TIME SAMPLE.  `m_dly_dsc[]/m_dly_val[]' (upd6383.cpp, the §46 block) take
+	//  the first 8 DISTINCT descriptor cells EVER seen, with no `m_frames_run' guard,
+	//  so they freeze the pre-upload state where every cell reads 0000 -- the exact
+	//  defect §204's own comment warns about.  §204's census IS guarded (> 900 000)
+	//  and in the SAME log gives the kernel THREE distinct lines:
+	//      iw12 cell 0x1041 -> line 0x01      iw98  cell 0x1041 -> line 0x01  (its PAIR)
+	//      iw26 cell 0x05A0 -> line 0x20      iw102 cell 0x05A0 -> line 0x20
+	//      iw46 cell 0x0000 -> line 0x00      iw54  cell 0x0C30 -> line 0x30
+	//  i.e. §79's stride-5 pairing working exactly.  The line index is not the fault.
+	//
+	//  WHAT IS: the publish lives INSIDE the `is_dram' branch, so only a DELAY WORD can
+	//  fire it -- and `iw25' is `000.2.00.2D9', class 2, no delay access.  It can never
+	//  trigger a publish and only ever reads a residue.  `iw12' latches AFTER it
+	//  publishes, so its datum waits in `m_dr_line[0x01]' until the next line-0x01
+	//  delay word, which §204 names as `iw98' -- 73 slots and one body-CALL later.
+	//  ⇒ the datum is not lost, it is DELIVERED TO THE WRONG WORD.
+	//
+	//  THE INSTRUMENT.  ⚠ standing rule 15 / dead-end 22: the four falsifiers of the
+	//  previous handoff were retired because ANY LIVE OPERAND passed them.  This one
+	//  does not ask "did something arrive", it asks WHICH WORD READ IT: every latch is
+	//  tagged with the `iw' that performed the read and the frame it read in, the tag
+	//  travels with the datum, and it is histogrammed at the class-2 site.  A wrong
+	//  source reports a WRONG `iw' NUMBER, which liveness cannot fake.  Read-only, and
+	//  it runs in BOTH arms.
+	//==================================================================
+	//  ⚠ DEFAULT OFF (UPD6383_DRPUB=1 to arm), with a fired count.  The u64 spec mask
+	//  is EXHAUSTED.  A delay READ also writes the bus register immediately, in
+	//  ADDITION to its per-line latch.  It runs AFTER `exec_alu', so a fused
+	//  read+capture word still does not see its own datum (`dram-datapath.md' item A
+	//  survives), and the per-line publish still overrides at every delay word, so
+	//  §79's pairing and §80's counters are untouched.
+	bool m_drpub = false;
+	u64  m_drpub_fired = 0;
+	u16  m_dr_prov_iw = 0xffff;     // which word READ the datum now on the bus
+	u8   m_dr_prov_line = 0xff;
+	u64  m_dr_prov_frame = 0;
+	u16  m_dr_line_iw[64] = {};     // per line: which word latched it, and when
+	u64  m_dr_line_frame[64] = {};
+	//  the provenance seen at the class-2 SRC 0x0B word (`iw25'), SETTLED frames only
+	//  (> 900 000) so the boot's all-zero descriptor bank cannot contaminate it -- the
+	//  §193/§204 trap, third occurrence.
+	static constexpr u32 PROV_SLOTS = 8;
+	u16  m_prov_iw[PROV_SLOTS] = {}; u64 m_prov_n[PROV_SLOTS] = {}, m_prov_nz[PROV_SLOTS] = {};
+	u32  m_prov_cnt = 0; u64 m_prov_other = 0, m_prov_tot = 0;
+	u64  m_prov_age_min = ~0ull, m_prov_age_max = 0;
+	//  where a datum tagged `iw12' is PUBLISHED (settled frames only)
+	u16  m_p12_iw[PROV_SLOTS] = {}; u64 m_p12_n[PROV_SLOTS] = {};
+	u32  m_p12_cnt = 0; u64 m_p12_other = 0;
+	//  publishes at a word strictly between iw12 and iw25 -- structurally 0, counted
+	//  so it is a MEASUREMENT rather than an assertion
+	u64  m_pub_between = 0;
+	void prov_bump(u16 *key, u64 *n, u64 *nz, u32 &cnt, u64 &other, u16 k, bool isnz);
 	//  ★ §104 A/B, diagnostic only, off unless UPD6383_AB_NOSTORE08=1 in the env.
 	bool m_ab_nostore08 = false;
 	u32  m_ab_nostore08_n = 0;
