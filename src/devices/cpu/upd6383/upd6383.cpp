@@ -670,6 +670,52 @@ u32 upd6383_device::pw_region(u16 iw)
 	return PW_BODY1;
 }
 
+//  ★★★★ §229 -- CLOSE AN I-RAM UPLOAD RUN AND SAY WHAT IT WAS, UNCONDITIONALLY.
+//
+//  See upd6383.h `m_upl_base'.  A run is a maximal sequence of consecutive
+//  `word_index' writes; its identity is (load address, word count, FNV-1a hash
+//  of the raw 5-byte words).  The hash is over the BYTES AS UPLOADED, so it is
+//  directly comparable with `dsp/tools/pat_corpus.py`'s images without trusting
+//  any decode.
+void upd6383_device::upl_flush()
+{
+	if (!m_upl_n) return;
+	const u32 base = m_upl_base, n = m_upl_n;
+	const u64 h = m_upl_hash;
+	const u32 fr = m_upl_frame;   // ★ the run's LAST WORD, not the flush
+	m_upl_n = 0;
+	m_upl_next = 0xffffffff;
+	m_upl_hash = 0xcbf29ce484222325ull;
+	m_upl_runs++;
+
+	u32 q = 0;
+	for (; q < m_upl_seen; q++)
+		if (m_upl_t_base[q] == base && m_upl_t_n[q] == n && m_upl_t_hash[q] == h) break;
+	const bool fresh = (q == m_upl_seen);
+	if (fresh)
+	{
+		if (m_upl_seen < UPL_SLOTS)
+		{
+			q = m_upl_seen++;
+			m_upl_t_base[q] = base; m_upl_t_n[q] = n; m_upl_t_hash[q] = h;
+			m_upl_t_first[q] = fr;
+		}
+		else { m_upl_overflow++; q = UPL_SLOTS; }
+	}
+	if (q < UPL_SLOTS) { m_upl_t_hits[q]++; m_upl_t_last[q] = fr; }
+
+	//  ⚠ UNCONDITIONAL.  §38 measured every boot transient as ending by frame
+	//  264 002, so the frame number is what separates a BOOT upload from a
+	//  runtime effect selection -- and that distinction has been inferred from
+	//  timing in every pass until now.
+	logerror("upd6383: ★★★★ §229 UPLOAD run #%u: I-RAM[%u..%u] %u words  hash %016llX  "
+			"frame %u (%s)  %s\n",
+			m_upl_runs, base, base + n - 1, n, (unsigned long long)h, fr,
+			(fr <= 264002) ? "BOOT -- §38's transient window"
+									 : "★ RUNTIME -- an effect was selected",
+			fresh ? "NEW IMAGE" : "already seen");
+}
+
 const char *upd6383_device::pw_name(u32 r)
 {
 	static const char *const n[PW_NREGION] =
@@ -1479,10 +1525,56 @@ void upd6383_device::device_stop()
 				if (m_curprof_seen[i]) lp += string_format(" %d:P=%lld", i, (long long)m_pprof[i]);
 			logerror("upd6383: PRODUCT REGISTER:%s\n", lp);
 			{
-				std::string su;
-				for (u32 i = 0; i < 32; i++)
-					if (m_src_unread[i]) su += string_format(" 0x%02X:%d", i, m_src_unread[i]);
-				logerror("upd6383: SRC CODES STILL READING ZERO:%s\n", su.empty() ? " none" : su.c_str());
+				//  ★★★★ §229 -- THE FABRICATED-ZERO CENSUS, MADE LOUD.
+				//
+				//  This used to be one quiet line of counts.  It is the most
+				//  dangerous number in the device: every one of these is a zero
+				//  WE put on the operand bus because we have no reading for the
+				//  SRC code, and this project's headline open result is a NULL.
+				//  A null cannot be quoted honestly without knowing how much of
+				//  it we manufactured, and IN WHICH REGION.
+				//
+				//  ⛔ NOT A PROPOSAL TO IMPLEMENT THEM.  Dead end 4 / rule 4:
+				//  SRC 0x13's every index candidate is measured CONSTANT
+				//  (acc 0..0 | m_dp 12..12 | cursor 9..9 over 1 129 389 hits), so
+				//  a consumer built on it returns one entry forever and cannot be
+				//  validated.  This counts; it does not decode.
+				{
+					std::string su;
+					for (u32 i = 0; i < 32; i++)
+						if (m_src_unread[i])
+						{
+							su += string_format("\nupd6383:      SRC 0x%02X  %10u fabricated "
+									"zeros  (%.3f per frame)  at iw", i, m_src_unread[i],
+									m_frames_run ? double(m_src_unread[i]) / double(m_frames_run)
+												 : 0.0);
+							for (u8 q = 0; q < m_srcz_niw[i]; q++)
+								su += string_format("%s%u", q ? "/" : "", m_srcz_iw[i][q]);
+							if (m_srcz_niw[i] >= 6) su += "/… ⚠ CAPPED";
+						}
+					logerror("upd6383: ★★★★ §229 FABRICATED ZEROS -- SRC CODES WITH NO READING, "
+							"COUNTED AGAINST EVERY OPERAND RESOLUTION.\n"
+							"upd6383:    ⚠ THESE ARE *OUR* ZEROS, NOT THE CHIP'S, AND THEY ARE "
+							"INDISTINGUISHABLE FROM CHIP ZEROS AT EVERY DOWNSTREAM INSTRUMENT.\n"
+							"upd6383:    TOTAL %llu fabricated / %llu operand resolutions "
+							"(%.3f %%)%s\n",
+							(unsigned long long)m_srcz_total,
+							(unsigned long long)m_srcz_fetch,
+							m_srcz_fetch ? 100.0 * double(m_srcz_total) / double(m_srcz_fetch) : 0.0,
+							su.empty() ? "\nupd6383:      none -- every SRC code reached has a "
+										 "reading" : su.c_str());
+					//  ★ THE SPLIT THAT DECIDES WHETHER A GIVEN NULL IS OURS.
+					std::string sr;
+					for (u32 r = 0; r < PW_NREGION; r++)
+						sr += string_format("\nupd6383:      %-22s %10llu / %10llu  = %6.3f %% "
+								"of this region's operands are INVENTED",
+								pw_name(r), (unsigned long long)m_srcz_rgn[r],
+								(unsigned long long)m_srcz_rgn_all[r],
+								m_srcz_rgn_all[r] ? 100.0 * double(m_srcz_rgn[r])
+													/ double(m_srcz_rgn_all[r]) : 0.0);
+					logerror("upd6383:    ★ PER REGION -- quote THIS beside any null you publish "
+							"for that region:%s\n", sr.c_str());
+				}
 				std::string so;
 				for (u32 i = 0; i < 6; i++)
 					so += string_format(" slot%d:%d/%d", i, m_out_slot_nonzero[i], m_out_slot_writes[i]);
@@ -1879,6 +1971,22 @@ void upd6383_device::host_w(bool cd, u8 data)
 				address_space &iram = space(AS_IRAM);
 				for (u32 i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
 					iram.write_byte(word_index * upd6383_disassembler::WORD_BYTES + i, m_host_word[i]);
+
+				//  ★★★★ §229: accumulate this word into the current upload RUN.
+				//  A run breaks when `word_index' is not the expected next slot.
+				if (word_index != m_upl_next)
+				{
+					upl_flush();
+					m_upl_base = word_index;
+				}
+				for (u32 i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
+				{   // FNV-1a over the bytes AS UPLOADED -- no decode is trusted
+					m_upl_hash ^= u64(m_host_word[i]);
+					m_upl_hash *= 0x100000001b3ull;
+				}
+				m_upl_n++;
+				m_upl_next = word_index + 1;
+				m_upl_frame = u32(m_frames_run);   // ★ §229: WHEN the word arrived
 
 				LOGMASKED(LOG_UPLOAD, "I-RAM[%u] <- %02X%02X%02X%02X%02X\n", word_index,
 						m_host_word[0], m_host_word[1], m_host_word[2], m_host_word[3], m_host_word[4]);
@@ -3215,6 +3323,12 @@ void upd6383_device::exec_alu(u64 word)
 	//    SRC 0x11 = ACCB       ★ §27 -- was mem[ptr] (1 of 7 enumerated); replaced
 	//  0x13, 0x1B and 0x1C have NO reading anywhere and keep reading zero; they are
 	//  counted so the next pass can see whether they matter.
+	//  ★★★★ §229: THE DENOMINATOR.  Counted here, before any branch, so that
+	//  "N fabricated zeros" can be quoted as a SHARE of operand resolutions and
+	//  not as a bare number nobody can size.  Read-only, unconditional.
+	m_srcz_fetch++;
+	m_srcz_rgn_all[pw_region(m_cur_iw)]++;
+
 	if (m_speculative)
 	{
 		switch (src)
@@ -3473,8 +3587,22 @@ void upd6383_device::exec_alu(u64 word)
 			break;                           // anchored -- handled by the switch below
 		default:
 			//  EVERY remaining source has no reading and silently returns 0.
-			//  Counted so the next pass can see which ones actually matter.
+			//  ★★★★ §229: AND THAT ZERO IS FABRICATED BY US, NOT BY THE CHIP.
+			//  At every downstream instrument it is indistinguishable from a chip
+			//  zero -- and this project's central open result IS a null.  So it is
+			//  now counted per REGION against a denominator, and announced loudly.
+			//  ⛔ Counting is NOT implementing: dead end 4 / rule 4 forbid giving
+			//  these codes a reading while their index is measured constant.
 			m_src_unread[src & 0x1f]++;
+			{
+				const u32 c = src & 0x1f;
+				m_srcz_total++;
+				m_srcz_rgn[pw_region(m_cur_iw)]++;
+				u8 q = 0;
+				for (; q < m_srcz_niw[c]; q++) if (m_srcz_iw[c][q] == m_cur_iw) break;
+				if (q == m_srcz_niw[c] && m_srcz_niw[c] < 6)
+					m_srcz_iw[c][m_srcz_niw[c]++] = u16(m_cur_iw);
+			}
 			e1route = E1_DEF;                                               // §221 §E1
 			break;
 		}
@@ -4027,6 +4155,36 @@ void upd6383_device::exec_alu(u64 word)
 		//  enumeration must A/B against that ALIAS, not against a trap.  Give each
 		//  its own reading and its own counter.  Reading 0 reproduces the alias
 		//  exactly, so the default arm is unchanged.
+		//  ★★★★ §229 -- THE `f31` x `hi12 bit 5` CENSUS.
+		//
+		//  The corpus says something about bit 5 that our model does not know:
+		//  `f31 ∈ {3, 6, 7}` occurs ONLY on a word with hi12 bit 5 SET -- 53 words,
+		//  53 of 53, zero counterexamples in 3057.  In classes 2/8/A, bit5 = 0
+		//  admits only `f31 ∈ {0,1,2,4,5}` while bit5 = 1 admits ALL EIGHT codes.
+		//  And bit 5 is mutually exclusive with `f98` on class-2 words, 142 of 142.
+		//  ⇒ SPECULATIVE: bit 5 EXTENDS THE OPERATION FIELD, `(bit5, f31)` acting as
+		//  a 4-bit selector whose codes 3/6/7 are reachable only with bit 5 set.
+		//  That is the first FALSIFIABLE hypothesis this bit has ever had, and it
+		//  comes from the ROM rather than from our dispatch table.
+		//
+		//  ⚠ THE SHIPPED MODEL COLLAPSES ALL 53 OF THEM: `op = f31 & 3` maps
+		//  3 -> 3 (given HOLD's behaviour, i.e. "no product"), 6 -> 2, 7 -> 3.  If
+		//  the hypothesis is right that collapse is wrong on 53 sites.
+		//
+		//  ⛔ THIS CHANGES NOTHING.  It COUNTS, so the next pass knows whether those
+		//  53 sites are even reachable in the resident frame -- which rule 4 requires
+		//  before anyone implements a reading for them.
+		{
+			const u32 b5 = (upd6383_disassembler::hi12(word) >> 5) & 1;
+			m_f31cen[b5][f31 & 7]++;
+			if (b5 && (f31 == 3 || f31 == 6 || f31 == 7))
+			{
+				u8 q = 0;
+				for (; q < m_f31x_n; q++) if (m_f31x_iw[q] == m_cur_iw) break;
+				if (q == m_f31x_n && m_f31x_n < 8)
+				{ m_f31x_iw[m_f31x_n] = u16(m_cur_iw); m_f31x_f31[m_f31x_n] = u8(f31 & 7); m_f31x_n++; }
+			}
+		}
 		u16 op = sel ? u16(f31 & 3) : f31;
 		if (sel && f31 == 4) { m_bx_f4_n++; if (m_bx_f4) op = bx_f31_op(m_bx_f4); }
 		if (sel && f31 == 5) { m_bx_f5_n++; if (m_bx_f5) op = bx_f31_op(m_bx_f5); }
@@ -6600,6 +6758,50 @@ void upd6383_device::dump_frame_report() const
 				"100.000 ms; 29 LFO blocks x 9 increments = floor(f*2^23/44100), null "
 				"3.1e-12).  The crystal argument is INFERRED, not measured -- the 1996 "
 				"scan prints 36.8688 MHz, which divides to neither rate.\n");
+	}
+
+	//  ★★★★ §229 -- THE `f31` x `hi12 bit 5` CENSUS.  Does the corpus's bit-5-only
+	//  operation family (`f31` 3/6/7, 53 words, 53 of 53 bit-5 set) EXECUTE in the
+	//  resident frame at all?  Rule 4 requires that answer before anyone gives
+	//  those codes a reading.
+	{
+		std::string fs;
+		for (u32 b = 0; b < 2; b++)
+		{
+			fs += string_format("\nupd6383:      hi12 bit5 = %u :", b);
+			for (u32 f = 0; f < 8; f++)
+				fs += string_format(" f31=%u:%llu", f, (unsigned long long)m_f31cen[b][f]);
+		}
+		std::string xs;
+		for (u8 q = 0; q < m_f31x_n; q++)
+			xs += string_format(" iw%u(f31=%u)", m_f31x_iw[q], m_f31x_f31[q]);
+		logerror("upd6383: ★★★★ §229 f31 x hi12-BIT-5 CENSUS (the corpus says f31 in {3,6,7} is "
+				"BIT-5-ONLY, 53 of 53 -- our model reads bit 5 in exactly ONE place, the nop "
+				"guard's hi12==0x000 equality):%s\nupd6383:    ★ BIT-5 WORDS EXECUTING WITH "
+				"f31 in {3,6,7}:%s\n", fs.c_str(),
+				m_f31x_n ? xs.c_str() : "  NONE -- the family is UNREACHABLE in this vehicle, "
+						"so rule 4 forbids implementing it from here");
+	}
+
+	//  ★★★★ §229 -- THE UPLOAD LEDGER, SUMMARISED.  Close any run still open,
+	//  then print the distinct images this machine actually loaded.  Before this
+	//  the answer to "how many images have ever executed" was an inference from
+	//  the offline corpus; now the device says it.
+	{
+		const_cast<upd6383_device *>(this)->upl_flush();
+		std::string us;
+		for (u32 q = 0; q < m_upl_seen; q++)
+			us += string_format("\nupd6383:      I-RAM[%u..%u] %3u words  hash %016llX  "
+					"loaded %u time(s), frames %u..%u  (%s)",
+					m_upl_t_base[q], m_upl_t_base[q] + m_upl_t_n[q] - 1, m_upl_t_n[q],
+					(unsigned long long)m_upl_t_hash[q], m_upl_t_hits[q],
+					m_upl_t_first[q], m_upl_t_last[q],
+					(m_upl_t_first[q] <= 264002) ? "boot" : "★ runtime selection");
+		logerror("upd6383: ★★★★ §229 UPLOAD LEDGER: %u runs, %u DISTINCT IMAGES%s%s\n",
+				m_upl_runs, m_upl_seen,
+				m_upl_overflow ? string_format(" ⚠ %u runs OVERFLOWED the %u-slot table",
+						m_upl_overflow, UPL_SLOTS).c_str() : "",
+				us.empty() ? "  -- NOTHING WAS EVER UPLOADED" : us.c_str());
 	}
 
 	{   //  ★ §44: dump C-RAM.  The body's multiplies consume cursor 0x62..0x70 and

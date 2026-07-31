@@ -697,6 +697,25 @@ private:
 	u32  m_cwr_runlen = 0, m_cwr_start = 0, m_nruns = 0;
 	u8   m_run_base[32] = {}; u32 m_run_len[32] = {};
 	u32  m_src_unread[32] = {};
+	//  ★★★★ §229 -- MAKE THE FABRICATED ZEROS LOUD.
+	//
+	//  `src_term()`'s `default:` branch returns a literal 0 for every SRC code
+	//  this project has no reading for.  That zero is INDISTINGUISHABLE, at every
+	//  downstream instrument, from a zero the CHIP produced -- and this project's
+	//  central open result is a NULL ("the output stage emits zero").  So every
+	//  null we have ever published has been silently contaminated by an unknown
+	//  number of zeros WE INVENTED.
+	//
+	//  ⛔ THIS DOES NOT IMPLEMENT THEM, and must not: dead end 4 and standing
+	//  rule 4 forbid implementing a consumer whose index is measured constant
+	//  (SRC 0x13's candidates are `acc 0..0 | m_dp 12..12 | cursor 9..9` over
+	//  1 129 389 hits).  It MEASURES them, so a null can be quoted honestly.
+	//
+	//  The denominators are what make it a measurement rather than a number:
+	//  the per-REGION split says whether the region whose null we are quoting is
+	//  the one being fed invented zeros, and `m_srcz_fetch` is every operand
+	//  resolution, so the share is computable.
+	//  (the arrays live below, next to PW_NREGION which sizes them)
 	u8   m_epi_ptr_before = 0, m_epi_ptr[23] = {};
 	//  ★ THE TIME-ORDERED FRAME TRACE.  Every wrong turn of 2026-07-28 came from
 	//  reading a per-slot MAXIMUM as if it were a SEQUENCE.  This records ONE frame
@@ -1152,8 +1171,54 @@ private:
 	enum : u32 { PW_KERNEL_A = 0, PW_BODY0 = 1, PW_KERNEL_B = 2, PW_BODY1 = 3,
 	             PW_EPILOGUE = 4, PW_NREGION = 5 };
 	u32  m_pw_rd[PW_NREGION][256] = {}, m_pw_wr[PW_NREGION][256] = {};
+	//  ★★★★ §229 -- THE UPLOAD LEDGER.  "How many images have ever executed" has
+	//  been an INFERENCE in every pass of this project: the corpus is read from
+	//  the ROM offline, and the device never said out loud which of those images
+	//  the running machine actually loaded, where, or when.
+	//
+	//  I-RAM arrives one word at a time over cmd 0x01, so a "program upload" is
+	//  a RUN of consecutive `word_index' writes.  This closes each run and emits
+	//  ONE unconditional line: load address, word count, image hash, and the
+	//  frame it completed on -- which separates BOOT uploads from a runtime
+	//  effect selection, because §38 measured every boot transient as ending by
+	//  frame 264 002.
+	//
+	//  ⚠ It is UNCONDITIONAL, not behind LOG_UPLOAD.  Rule 8 as sharpened by
+	//  §220: a fact you only print when you already suspected it is not evidence.
+	static constexpr u32 UPL_SLOTS = 24;
+	u32  m_upl_base = 0, m_upl_n = 0, m_upl_next = 0xffffffff;
+	//  ⚠ §229 SELF-CORRECTION: the run's frame must be the frame its LAST WORD
+	//  ARRIVED, not the frame the run was FLUSHED.  The first build flushed the
+	//  final open run from dump_frame_report() and so stamped it with the run's
+	//  END-OF-SESSION frame -- which labelled a BOOT upload `RUNTIME, an effect
+	//  was selected'.  An instrument that mislabels the one distinction it exists
+	//  to draw is worse than no instrument (rule 20).
+	u32  m_upl_frame = 0;
+	u64  m_upl_hash = 0xcbf29ce484222325ull;   // FNV-1a
+	u32  m_upl_seen = 0;                       // distinct (base, count, hash) triples
+	u32  m_upl_t_base[UPL_SLOTS] = {}, m_upl_t_n[UPL_SLOTS] = {};
+	u64  m_upl_t_hash[UPL_SLOTS] = {};
+	u32  m_upl_t_hits[UPL_SLOTS] = {}, m_upl_t_first[UPL_SLOTS] = {}, m_upl_t_last[UPL_SLOTS] = {};
+	u32  m_upl_runs = 0, m_upl_overflow = 0;
+
+	//  ★★★★ §229: the `f31' x `hi12 bit 5' census -- see the banner at its hook in
+	//  exec_alu().  Read-only.  It exists because the corpus constrains bit 5
+	//  (f31 in {3,6,7} is bit-5-ONLY, 53 of 53) while our dispatch table reads bit 5
+	//  in exactly ONE place -- the nop guard's `hi12 == 0x000' equality.
+	u64  m_f31cen[2][8] = {};
+	u16  m_f31x_iw[8] = {};
+	u8   m_f31x_f31[8] = {}, m_f31x_n = 0;
+
+	//  ★★★★ §229's fabricated-zero census -- see the banner at `m_src_unread'.
+	u64  m_srcz_fetch = 0;                 // every operand resolution, all SRC codes
+	u64  m_srcz_total = 0;                 // ... of which FABRICATED (`default:' -> 0)
+	u64  m_srcz_rgn[PW_NREGION] = {};      // fabricated, per region
+	u64  m_srcz_rgn_all[PW_NREGION] = {};  // all fetches, per region (the denominator)
+	u16  m_srcz_iw[32][6] = {};            // up to 6 distinct `iw' per code
+	u8   m_srcz_niw[32] = {};
 	u32  m_rw_rd[PW_NREGION][256] = {}, m_rw_wr[PW_NREGION][256] = {};
 	void pwatch(u8 cell, bool wr, bool mode1 = false);
+	void upl_flush();          // ★ §229: close an I-RAM upload run and announce it
 	//  ★★★ §99: COMPLETE THE §97 SPLIT ON THE STORE SIDE.
 	//  §97 routed the mode-1 READ and the host's tag-0x15 writes to m_rf and left
 	//  the two STORE sites writing m_dram unconditionally.  §98 measured what that
