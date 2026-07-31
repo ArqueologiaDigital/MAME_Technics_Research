@@ -2351,7 +2351,7 @@ void upd6383_device::do_presentation()
 						(long long)util::sext(m_acc, 44), (long long)util::sext(m_accb, 44),
 						(long long)util::sext(pacc, 44), v);
 			}
-			if (unit == 0 && m_frames_run > 400000)
+			if (unit == 0 && m_frames_run > S70_ARM_FRAME)
 			{   // ★ §70: ACCA at w73, split by whether this frame had input
 				const int k = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
 				const s64 a = util::sext(pacc, 44);
@@ -2360,7 +2360,7 @@ void upd6383_device::do_presentation()
 				m_pa_sum[k] += a;                       // ★ STANDING RULE 19 (§221)
 				m_pa_n[k]++;
 			}
-			if (unit == 1 && m_frames_run > 400000)
+			if (unit == 1 && m_frames_run > S70_ARM_FRAME)
 			{   // ★★★ §211: the SAME test for unit 1 -- ACCB at w78.  Standing rule 1
 				//  has never been applied to this port; §61's "DO2 peak 0" cannot tell
 				//  an empty ACCB from an empty unit-1 OUTPUT LEVEL.  The level itself

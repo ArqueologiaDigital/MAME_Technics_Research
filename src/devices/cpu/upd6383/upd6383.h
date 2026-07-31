@@ -1612,6 +1612,15 @@ private:
 	//      Left unfixed it is a latent CROSS-UNIT CORRUPTION: a04 FLANGER w64 and
 	//      a05 PHASER w105 (both addr8 = 0x0E) would write unit 0's cell from unit 1.
 	//**********************************************************************
+	//  ★★★ §222 / INSTRUMENT-AUDIT R6: `§70' and `§211' armed at 400 000 while
+	//  `kwatch()', `§81' and `§104' arm at 420 000, so every log carried a
+	//  TWENTY-THOUSAND-FRAME window that the comparative censuses excluded and these
+	//  two did not (`§70 quiet 726 040' vs `§104 nq 706 040' -- exactly 20 000).
+	//  Harmless while the answer was `min == max == 0'; NOT harmless the moment a
+	//  non-zero reading appears, which is what §222 produced.  The audit's own
+	//  recommendation, applied: ONE window for every census in the file.
+	static constexpr u64 S70_ARM_FRAME = 420000;
+
 	u32  m_xb85 = 0;             // UPD6383_XB85: 0 OFF, 1 full, 2 route only, 3 latch only
 	u32  m_xb = 0;               // the crossbar latch: ACT 0x03 writes it, SRC 0x03 reads it
 	u64  m_xb_st_n = 0, m_xb_ld_n = 0, m_xb_rd_dram_n = 0, m_xb_wr_dram_n = 0;
