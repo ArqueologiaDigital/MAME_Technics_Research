@@ -883,7 +883,20 @@ void upd6383_device::host_w(bool cd, u8 data)
 		if (m_poke_n == 5)
 		{
 			m_poke_n = 0;
-			if (m_poke[0] == 0x0a)
+			//  ★★★ §197: THE LEADING NIBBLE IS A FLAG, NOT A CONSTANT.
+			//  `k3-pointers.md' §7 item 6 and `register-space.md' §1.1 both record
+			//  `0B .. .. .. 15' as the SAME tag-0x15 packet with one extra flag bit.
+			//  Testing `== 0x0a' dropped every 0x0B packet -- 44 of 3456 in the
+			//  TYPE-walk capture -- AND stalled the auto-increment, shifting the rest
+			//  of the stream one cell low.
+			//  ★ CONTROL, bit-exact and independent: the four lost values
+			//  400 / 1440 / 2480 / 3520 sit cell-for-cell in the DELAY-DESCRIPTOR
+			//  space at 0x26 / 0x28 / 0x2A / 0x2C (§189's live dump, taken for an
+			//  unrelated purpose), written by a different writer through a different
+			//  pointer register into a different memory -- register-space.md §6.2's
+			//  "CHORUS writes the same four tap lengths twice".
+			//  ⚠ This ACCEPTS the packet; the flag bit's MEANING stays undecoded.
+			if ((m_poke[0] & 0xfe) == 0x0a)
 			{   // DATA packet: 0A | dd dd dd | TAG
 				u32 v = (u32(m_poke[1]) << 16) | (u32(m_poke[2]) << 8) | m_poke[3];
 				//  ★★★ §111 SPECULATIVE (mask bit 31): THE HOST PAYLOAD IS 2x THE RAW
@@ -930,6 +943,7 @@ void upd6383_device::host_w(bool cd, u8 data)
 					m_pk_lsb_seen++;
 				}
 				const u8  tag = m_poke[4];
+				if (m_poke[0] == 0x0b) m_pk_0b_n++;     // §197 fired-count
 				m_pk_tag[tag]++;
 				switch (tag & 0x7f)
 				{
@@ -5593,6 +5607,8 @@ void upd6383_device::dump_frame_report() const
 					(unsigned long long)m_b11_dchg[i],
 					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
 					: "CONSTANT -- a reset would be unobservable");
+		logerror("upd6383: ★ §197 0x0B poke packets accepted: %llu\n",
+				(unsigned long long)m_pk_0b_n);
 		logerror("upd6383: ★ §188 host payload LSB restored (mask bit 63 = %d): "
 				"FIRED %llu of %llu packets (%.1f%%)\n",
 				(m_specmask & (1ull << 63)) ? 1 : 0,

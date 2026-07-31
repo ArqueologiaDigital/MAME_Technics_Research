@@ -1062,6 +1062,7 @@ private:
 	u32  m_b11_dmin[24] = {}, m_b11_dmax[24] = {}, m_b11_dprev[24] = {};
 	//  §188: host payload LSB restoration counters.
 	u64  m_pk_lsb_n = 0, m_pk_lsb_seen = 0;
+	u64  m_pk_0b_n = 0;   // §197
 	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
 	u32  m_hostw_cell[0x100] = {}, m_hostw_nz[0x100] = {};
 	u8   m_pw = 0;
