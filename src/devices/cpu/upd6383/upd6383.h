@@ -1072,6 +1072,8 @@ private:
 	//  frames_since_written goes from 0..0 on EVERY line to 240 / 480 / 640 samples
 	//  (5.44 / 10.88 / 14.51 ms).  The delay lines have length for the first time.
 	//  Override with UPD6383_BODYIX=0.
+	bool m_cfmtix = false;
+	u64  m_cfmtix_n = 0;   // §203
 	bool m_bodyix = true;
 	u64  m_bodyix_n = 0;   // §201
 	//  §202 SHIPPED ON: the delay rotation SWEEPS DOWN.  round5 §3 FORCES

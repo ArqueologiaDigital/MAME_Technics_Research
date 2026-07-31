@@ -348,6 +348,11 @@ void upd6383_device::device_start()
 	{
 		m_bodyix = (strtoul(e3, nullptr, 10) != 0);
 		logerror("upd6383: §201 UPD6383_BODYIX = %d\n", m_bodyix ? 1 : 0);
+	}
+	if (const char *e4 = getenv("UPD6383_CFMTIX"))
+	{
+		m_cfmtix = (strtoul(e4, nullptr, 10) != 0);
+		logerror("upd6383: §203 UPD6383_CFMTIX = %d\n", m_cfmtix ? 1 : 0);
 		logerror("upd6383: §104 A/B UPD6383_AB_NOSTORE08 = %d\n", m_ab_nostore08 ? 1 : 0);
 	}
 	save_item(NAME(m_p));
@@ -4273,6 +4278,17 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			//  ⚠ The u64 spec mask is EXHAUSTED; env gate, as §104/§200 did.
 			if (m_bodyix && (m_cur_iw == 84 || m_cur_iw == 200))
 			{ m_delay_ix = 0; m_bodyix_n++; }
+			//  ★★★ §203 (§198 gap #4): `C40.1.80.000' MUST CONSUME A DESCRIPTOR CELL.
+			//  r3-delaydram.md §6.1 FORCES it -- all 8 exact solutions require it --
+			//  and it is verified arithmetically from the .dsm: 28 non-C-format
+			//  consumers + 4 C-format = 32 = n.  The delay path excludes C-format, so
+			//  the cursor runs FOUR SHORT inside every reverb.
+			//  round5 §1's IDENTITY map counts consumers in PROGRAM ORDER, so the
+			//  advance belongs here, at the dispatch, alongside §201's reset.
+			//  ⚠ u64 spec mask exhausted; env gate UPD6383_CFMTIX.
+			if (m_cfmtix && upd6383_disassembler::c_format(raw)
+					&& upd6383_disassembler::class4(raw) == 1)
+			{ m_delay_ix++; m_cfmtix_n++; }
 			b11_probe(raw);
 			f31_probe(raw);         // ★ §193
 			//  ★★★ §153: `lo12 == 0x44C' APPLIES THE MODULATION OFFSET (§152).
@@ -5662,6 +5678,8 @@ void upd6383_device::dump_frame_report() const
 					(unsigned long long)m_b11_dchg[i],
 					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
 					: "CONSTANT -- a reset would be unobservable");
+		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
+				(unsigned long long)m_cfmtix_n);
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",
 				(unsigned long long)m_bodyix_n);
 		for (int i = 0; i < m_age_n; i++)
