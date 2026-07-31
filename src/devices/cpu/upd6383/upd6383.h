@@ -629,7 +629,12 @@ private:
 	//  pointer AFTER it, the execution path taken, the four decode predicates,
 	//  and up to four distinct (path, address) store events with value ranges.
 	//======================================================================
-	static constexpr u32 SPROBE_MAX = 16;
+	//  ★★★ §211: 16 -> 24.  The eight new slots are the OUTPUT STAGE's own store
+	//  words (see sprobe_idx()).  §150 §4 named exactly this instrument -- "point
+	//  the §109 per-slot store witness at slot 73 and read it" -- and it was never
+	//  pointed there, so `w73 stores and clears' has stood as a SOURCE READING for
+	//  60 sections while the probe that would settle it was already in the build.
+	static constexpr u32 SPROBE_MAX = 24;
 	static constexpr u32 SPROBE_ST  = 4;
 	struct sprobe_t {
 		u16 iw = 0xffff; u64 word = 0; u32 n_exec = 0;
@@ -937,6 +942,14 @@ private:
 	//  columns the input never reaches the accumulation at all.
 	s64  m_pa_min[2] = { INT64_MAX, INT64_MAX }, m_pa_max[2] = { INT64_MIN, INT64_MIN };
 	u32  m_pa_n[2] = {};
+	//  ★★★ §211: THE SAME PROBE FOR UNIT 1.  §70 has only ever watched ACCA at
+	//  `w73', and `w78' presents ACCB -- so the unit-1 half of the presentation has
+	//  never had the standing-rule-1 test applied to it at all.  §61 reports DO2's
+	//  peak, but a zero there is ambiguous between "ACCB is empty" and "the unit-1
+	//  OUTPUT LEVEL is empty", and the two call for different work.  Same shape,
+	//  same buckets, so the two columns are directly comparable.
+	s64  m_pb_min[2] = { INT64_MAX, INT64_MAX }, m_pb_max[2] = { INT64_MIN, INT64_MIN };
+	u32  m_pb_n[2] = {};
 	u32 m_dly_w_nz = 0, m_dly_dbg = 0;
 	//  ★ §81: where does the input STOP?  Probe the accumulator at four points and
 	//  split the range by whether the frame carried input.  A probe whose quiet and

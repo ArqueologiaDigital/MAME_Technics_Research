@@ -480,8 +480,17 @@ int upd6383_device::sprobe_idx(u16 iw)
 	//  under bit 34 (94 reads cell 0x10, 95 reads cell 0x50, 98 is the external
 	//  delay-DRAM READ).  Without them the probe can see whether the phase LEAVES Q
 	//  but not whether it reaches a consumer.
+	//  ★★★ §211 added the OUTPUT STAGE's eight store-bearing words.  §150 §4:
+	//  "The discriminating observable is whether the store fires at iw73 and what
+	//  it writes ... Point it at slot 73 (SPROBE list) and read it -- no new
+	//  mechanism needed, and it distinguishes 'the store-and-clear zeroed it' from
+	//  'something else did'."  That was written 60 sections ago and never done.
+	//  63/70 are the two per-unit BASE words, 64/71 the two setvec words, 72 the
+	//  unit-0 LEVEL read, 73/78 THE TWO PRESENTATIONS, 77 the unit-1 level pointer
+	//  and 79 the frame-closing D-RAM store.
 	static const u16 SLOTS[] = { 11, 30, 32, 33, 34, 37, 39, 88, 89, 90, 91, 92,
-								 93, 94, 95, 98 };
+								 93, 94, 95, 98,
+								 63, 64, 70, 71, 72, 73, 77, 78 };
 	for (u32 i = 0; i < sizeof(SLOTS) / sizeof(SLOTS[0]); i++)
 		if (SLOTS[i] == iw) return int(i);
 	return -1;
@@ -1667,6 +1676,18 @@ void upd6383_device::do_presentation()
 				if (a < m_pa_min[k]) m_pa_min[k] = a;
 				if (a > m_pa_max[k]) m_pa_max[k] = a;
 				m_pa_n[k]++;
+			}
+			if (unit == 1 && m_frames_run > 400000)
+			{   // ★★★ §211: the SAME test for unit 1 -- ACCB at w78.  Standing rule 1
+				//  has never been applied to this port; §61's "DO2 peak 0" cannot tell
+				//  an empty ACCB from an empty unit-1 OUTPUT LEVEL.  The level itself
+				//  is already reported by §41 (m_lvl_seen), so printing both separates
+				//  them without any new mechanism.
+				const int k = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+				const s64 b = util::sext(pacc, 44);
+				if (b < m_pb_min[k]) m_pb_min[k] = b;
+				if (b > m_pb_max[k]) m_pb_max[k] = b;
+				m_pb_n[k]++;
 			}
 			m_pres_u[unit]++;                                   // ★ §61 per-unit
 			if (v) { m_pres_u_nz[unit]++; }
@@ -5209,6 +5230,11 @@ void upd6383_device::dump_frame_report() const
 			"loud frames %u  min %lld  max %lld\n",
 			m_pa_n[0], (long long)(m_pa_n[0] ? m_pa_min[0] : 0), (long long)(m_pa_n[0] ? m_pa_max[0] : 0),
 			m_pa_n[1], (long long)(m_pa_n[1] ? m_pa_min[1] : 0), (long long)(m_pa_n[1] ? m_pa_max[1] : 0));
+		logerror("upd6383: ★★★ §211 ACCB AT w78 (the unit-1 half, never measured before): "
+			"quiet frames %u  min %lld  max %lld  |  loud frames %u  min %lld  max %lld"
+			"  | ⚠ min == max is a CONSTANT, not audio (standing rule 1)\n",
+			m_pb_n[0], (long long)(m_pb_n[0] ? m_pb_min[0] : 0), (long long)(m_pb_n[0] ? m_pb_max[0] : 0),
+			m_pb_n[1], (long long)(m_pb_n[1] ? m_pb_min[1] : 0), (long long)(m_pb_n[1] ? m_pb_max[1] : 0));
 	logerror("upd6383: ★ §61 PER-UNIT PRESENTATION: unit0/DO1 %u exec, %u non-zero, peak %d | "
 			"unit1/DO2 %u exec, %u non-zero, peak %d\n",
 			m_pres_u[0], m_pres_u_nz[0], m_pres_u_peak[0],
