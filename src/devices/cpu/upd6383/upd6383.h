@@ -1049,6 +1049,16 @@ private:
 	//  same buckets, so the two columns are directly comparable.
 	s64  m_pb_min[2] = { INT64_MAX, INT64_MAX }, m_pb_max[2] = { INT64_MIN, INT64_MIN };
 	u32  m_pb_n[2] = {};
+	//  ★★★ STANDING RULE 19 (§221, earned by OUTPUT-STAGE-NULL_findings.md §6.5(ii)
+	//  BEFORE any run): min-vs-max and §211's translation rule are JOINTLY
+	//  INSUFFICIENT.  The worked counter-example is a naive `iw205' fix, under which
+	//  `w78' would present a pedestal of 79 438 with a +/-90 ripple -- min != max, so
+	//  standing rule 1 PASSES; the quiet and loud deltas differ, so the translation
+	//  rule PASSES; and it is a DC at -59 dB with the no-stimulus window wobbling
+	//  +/-40 around the SAME pedestal.  Report the MEAN and the AC SPAN separately so
+	//  the rule is enforced by the printout instead of by a reader remembering a note.
+	//  Read-only, always on, no behavioural change.
+	s64  m_pa_sum[2] = { 0, 0 }, m_pb_sum[2] = { 0, 0 };
 	u32 m_dly_w_nz = 0, m_dly_dbg = 0;
 	//  ★ §81: where does the input STOP?  Probe the accumulator at four points and
 	//  split the range by whether the frame carried input.  A probe whose quiet and
@@ -1372,6 +1382,7 @@ private:
 				&& (m_specmask & 0x4000) && m_cur_unit1) ? m_accb : m_acc;
 		if (&dst == &m_accb) m_acc_w_unit1_n++;
 		if (add) dst += u64(L) << ACC_SHIFT; else dst = u64(L) << ACC_SHIFT;
+		pv_wr_acc(&dst == &m_accb, dst);                       // ★ §221 §E1
 	}
 	u32  m_pk_x2_n = 0;         // §111: host packets whose payload was doubled
 	u32  m_k6_act07_fix_n = 0;  // §110: K6 ACT-07 stores re-pointed to pre-increment
@@ -1387,6 +1398,175 @@ private:
 	u16  m_noz05_iw[8] = { 0 };
 	u32  m_noz05_cnt[8] = { 0 };
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
+
+	//======================================================================
+	//  ★★★ §221 `§E1' -- THE EPILOGUE / HANDOVER OPERAND-PROVENANCE CENSUS.
+	//  env UPD6383_EPIBUS, DEFAULT OFF, unconditional fired count (rule 8).
+	//  READ-ONLY: no decode change, no mask bit, no behavioural gate.  The
+	//  shadow tables below are written ONLY while the gate is on, so the
+	//  shipped build is untouched in behaviour AND in cost.
+	//
+	//  It answers a question no existing instrument can: for each operand the
+	//  epilogue fetches, WHICH ARRAY, WHICH INDEX, and WHICH `iw' LAST WROTE
+	//  IT.  That is standing RULE 17 -- provenance, not liveness -- and rule 15
+	//  is exactly why it is needed: `iw25's pointer sits on a live cell, so
+	//  "the operand is alive" scores 4/4 for any reading whatsoever.
+	//
+	//  ⚠ §104's `L' column is STICKY (`m_last_l' is a member that survives a
+	//  word which never reaches the bus), so its "21 of 22 slots read zero" is
+	//  a statement about 22 REPORT ROWS, not 22 operand fetches.  This census
+	//  hooks the fetch itself, and 8 of the 22 epilogue slots never reach it
+	//  (4 C-format, 3 lo12-bit-11, 1 class-5).  See data/PREDICT_221.md N0.
+	//======================================================================
+	enum : u8 {
+		E1_NONE = 0,        // never recorded (bug in the instrument if seen)
+		E1_DEF,             // the literal `default: m_src_unread[]++' -- NO READING
+		E1_DRAM_PTR,        // m_dram[m_dp]
+		E1_DRAM_IDX,        // m_dram[addr8 | unit<<7]
+		E1_RF_IDX,          // m_rf[addr8 | unit<<7]
+		E1_CRAM,            // m_cram[cursor]
+		E1_ACCA, E1_ACCB, E1_TA, E1_TB,
+		E1_DR               // the delay-port data register (SRC 0x0B)
+	};
+	static const char *e1_route_name(u8 r);
+	//  provenance sentinels, kept out of the 0..383 `iw' range
+	static constexpr u16 E1_PV_NONE = 0xffff;   // never written
+	static constexpr u16 E1_PV_HOST = 0xfffe;   // the host tag-0x15 upload path
+	static constexpr u16 E1_PV_IN   = 0xfffd;   // the per-frame input-latch deposit
+	static constexpr u16 E1_PV_BOOT = 0xfffc;   // a reset / boot clear
+
+	//  ⚠ 24 WAS TOO SMALL AND SILENTLY TRUNCATED THE WATCH LIST.  The list is 26
+	//  entries (54 + iw60..81 + 152 + 153 + 200); with a capacity of 24 the LAST TWO
+	//  -- `iw153' and `iw200', both handover slots -- were dropped by `e1_init's
+	//  `break', and the census simply did not print them.  Caught by comparing the
+	//  printed row count against PREDICT_221's N0.  ★ The lesson is the pre-
+	//  registration's: a predicted ROW COUNT catches a truncated instrument, and an
+	//  instrument with no predicted shape cannot report its own omissions.
+	static constexpr u32 E1_SLOTS = 32;         // watch list capacity (26 used)
+	static constexpr u32 E1_HIST  = 6;          // histogram bins per column
+
+	bool m_epibus = false;
+	u64  m_epibus_fired = 0;                    // rule 8: printed UNCONDITIONALLY
+	s8   m_e1_map[384];                         // iw -> census row, or -1
+	u16  m_e1_iw[E1_SLOTS] = { 0 };
+	u32  m_e1_rows = 0;
+
+	struct e1_row_t
+	{
+		u64 word = 0;
+		u64 n[2] = { 0, 0 };                    // [0] = quiet, [1] = loud
+		s32 lo[2] = { 0, 0 }, hi[2] = { 0, 0 };
+		//  which route the C++ ACTUALLY took, and which index it resolved to
+		u8  route[E1_HIST] = { 0 }; u16 idx[E1_HIST] = { 0 };
+		u64 rn[E1_HIST] = { 0 };    u32 rcnt = 0; u64 rother = 0;
+		//  PROVENANCE: last writer, and last writer that left it NON-ZERO
+		u16 pw[E1_HIST] = { 0 };    u64 pwn[E1_HIST] = { 0 }; u32 pwcnt = 0; u64 pwother = 0;
+		u16 pz[E1_HIST] = { 0 };    u64 pzn[E1_HIST] = { 0 }; u32 pzcnt = 0; u64 pzother = 0;
+		//  ★★★ THE PRODUCER COLUMN.  "Last writer" is usually the previous slot and
+		//  says almost nothing; "last NON-ZERO writer" is confounded by a word that
+		//  re-writes the SAME constant (measured: `iw63' re-writes ACCA's kernel-B
+		//  constant unchanged, so it -- not `w54' -- is the last non-zero writer).
+		//  This column records the last write that CHANGED the operand to a
+		//  different, non-zero value, which is the nearest single-hop approximation
+		//  to "who produced this datum".  ⚠ Still ONE HOP: it names the word that
+		//  last moved the value, not the whole chain.  Stated so the limit travels
+		//  with the number.
+		u16 pc[E1_HIST] = { 0 };    u64 pcn[E1_HIST] = { 0 }; u32 pccnt = 0; u64 pcother = 0;
+		u64 age_min = ~0ull, age_max = 0;
+	};
+	e1_row_t m_e1[E1_SLOTS];
+
+	//  ---- the shadow provenance tables ---------------------------------
+	u16 m_pv_dram_iw[256], m_pv_dram_ziw[256], m_pv_dram_ciw[256];
+	u64 m_pv_dram_fr[256], m_pv_dram_zfr[256];
+	u32 m_pv_dram_last[256];                    // for the PRODUCER column
+	u16 m_pv_rf_iw[256],   m_pv_rf_ziw[256],   m_pv_rf_ciw[256];
+	u64 m_pv_rf_fr[256],   m_pv_rf_zfr[256];
+	u32 m_pv_rf_last[256];
+	u16 m_pv_ta_iw = E1_PV_NONE, m_pv_ta_ziw = E1_PV_NONE, m_pv_ta_ciw = E1_PV_NONE;
+	u16 m_pv_tb_iw = E1_PV_NONE, m_pv_tb_ziw = E1_PV_NONE, m_pv_tb_ciw = E1_PV_NONE;
+	u32 m_pv_ta_last = 0, m_pv_tb_last = 0;
+	u16 m_pv_acc_iw[2], m_pv_acc_ziw[2], m_pv_acc_ciw[2];   // [0] = ACCA, [1] = ACCB
+	u64 m_pv_acc_last[2] = { 0, 0 };
+	u64 m_pv_ta_fr = 0, m_pv_tb_fr = 0, m_pv_ta_zfr = 0, m_pv_tb_zfr = 0;
+	u64 m_pv_acc_fr[2] = { 0, 0 }, m_pv_acc_zfr[2] = { 0, 0 };
+
+	//  ★ §E1b: the COUNTERFACTUAL operands of the four decode gaps.  For a slot
+	//  that reads NOTHING there is no provenance to report -- which is exactly
+	//  what OUTPUT-STAGE-NULL_findings.md §5.1 argues about statically.  Record
+	//  all three candidate readings (`m_rf[addr8|unit]', `m_dram[addr8|unit]',
+	//  `m_dram[m_dp]') with their values AND their provenance, so "decoding this
+	//  source could not have helped" becomes a measurement.
+	struct e1cf_t
+	{
+		u16 iw = 0; u8 src = 0; u16 ridx = 0, didx = 0, pidx = 0;
+		u64 n = 0;
+		s32 rf_lo[2] = { 0 }, rf_hi[2] = { 0 };
+		s32 dm_lo[2] = { 0 }, dm_hi[2] = { 0 };
+		s32 dp_lo[2] = { 0 }, dp_hi[2] = { 0 };
+		u16 rf_pw = E1_PV_NONE, dm_pw = E1_PV_NONE, dp_pw = E1_PV_NONE;
+		u64 nq = 0, nl = 0;
+	};
+	static constexpr u32 E1_GAPS = 6;
+	e1cf_t m_e1cf[E1_GAPS];
+	u32 m_e1cf_n = 0;
+
+	inline void pv_wr_dram(u8 i, u32 v)
+	{
+		if (!m_epibus) return;
+		m_pv_dram_iw[i] = m_cur_iw; m_pv_dram_fr[i] = m_frames_run;
+		if (v & 0xffffff) { m_pv_dram_ziw[i] = m_cur_iw; m_pv_dram_zfr[i] = m_frames_run; }
+		if ((v & 0xffffff) && (v & 0xffffff) != m_pv_dram_last[i]) m_pv_dram_ciw[i] = m_cur_iw;
+		m_pv_dram_last[i] = v & 0xffffff;
+	}
+	inline void pv_wr_dram_tag(u8 i, u32 v, u16 tag)
+	{
+		if (!m_epibus) return;
+		m_pv_dram_iw[i] = tag; m_pv_dram_fr[i] = m_frames_run;
+		if (v & 0xffffff) { m_pv_dram_ziw[i] = tag; m_pv_dram_zfr[i] = m_frames_run; }
+		if ((v & 0xffffff) && (v & 0xffffff) != m_pv_dram_last[i]) m_pv_dram_ciw[i] = tag;
+		m_pv_dram_last[i] = v & 0xffffff;
+	}
+	inline void pv_wr_rf(u8 i, u32 v, u16 tag)
+	{
+		if (!m_epibus) return;
+		m_pv_rf_iw[i] = tag; m_pv_rf_fr[i] = m_frames_run;
+		if (v & 0xffffff) { m_pv_rf_ziw[i] = tag; m_pv_rf_zfr[i] = m_frames_run; }
+		if ((v & 0xffffff) && (v & 0xffffff) != m_pv_rf_last[i]) m_pv_rf_ciw[i] = tag;
+		m_pv_rf_last[i] = v & 0xffffff;
+	}
+	inline void pv_wr_acc(bool b, u64 v)
+	{
+		if (!m_epibus) return;
+		const int k = b ? 1 : 0;
+		m_pv_acc_iw[k] = m_cur_iw; m_pv_acc_fr[k] = m_frames_run;
+		if (v) { m_pv_acc_ziw[k] = m_cur_iw; m_pv_acc_zfr[k] = m_frames_run; }
+		if (v && v != m_pv_acc_last[k]) m_pv_acc_ciw[k] = m_cur_iw;
+		m_pv_acc_last[k] = v;
+	}
+	inline void pv_wr_ta(u32 v)
+	{
+		if (!m_epibus) return;
+		m_pv_ta_iw = m_cur_iw; m_pv_ta_fr = m_frames_run;
+		if (v & 0xffffff) { m_pv_ta_ziw = m_cur_iw; m_pv_ta_zfr = m_frames_run; }
+		if ((v & 0xffffff) && (v & 0xffffff) != m_pv_ta_last) m_pv_ta_ciw = m_cur_iw;
+		m_pv_ta_last = v & 0xffffff;
+	}
+	inline void pv_wr_tb(u32 v)
+	{
+		if (!m_epibus) return;
+		m_pv_tb_iw = m_cur_iw; m_pv_tb_fr = m_frames_run;
+		if (v & 0xffffff) { m_pv_tb_ziw = m_cur_iw; m_pv_tb_zfr = m_frames_run; }
+		if ((v & 0xffffff) && (v & 0xffffff) != m_pv_tb_last) m_pv_tb_ciw = m_cur_iw;
+		m_pv_tb_last = v & 0xffffff;
+	}
+	void e1_init();
+	void e1_report() const;
+	static std::string e1_pv_name(u16 k);
+	void e1_record(u8 route, u16 idx, s32 L);
+	void e1_counterfactual(s32 L);
+	static void e1_bump(u16 *keys, u64 *cnt, u32 &nk, u64 &other, u16 key);
+
 	void store_mode(u8 mode, u8 dest, u32 v);
 	static u32 pw_region(u16 iw);
 	static const char *pw_name(u32 r);

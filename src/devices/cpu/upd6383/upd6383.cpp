@@ -373,6 +373,19 @@ void upd6383_device::device_start()
 			"writes cell 0x05 in kernel A at iw9/iw35/iw45; 1 = DIAGNOSTIC: those three "
 			"stores are suppressed, so iw11's deposit survives to body 0's pickup)\n",
 			m_noz05 ? 1 : 0);
+	//  ★★★ §221 `§E1': the epilogue/handover OPERAND-PROVENANCE census.  READ-ONLY --
+	//  it changes no decode, no route and no value; it only records WHICH ARRAY,
+	//  WHICH INDEX and WHICH `iw' LAST WROTE each operand the output stage fetches.
+	//  DEFAULT OFF and announced UNCONDITIONALLY (rule 8, as §220 sharpened it: a
+	//  fired count printed under `if (count)' makes "fired zero times" and "never
+	//  ran" the same log line).  See data/PREDICT_221.md, committed before this build.
+	if (const char *e10 = getenv("UPD6383_EPIBUS"))
+		m_epibus = (strtoul(e10, nullptr, 10) != 0);
+	logerror("upd6383: §221 UPD6383_EPIBUS = %d  (0 = SHIPPED: no provenance tracking; "
+			"1 = §E1: shadow the last writer of every D-RAM / register-file cell and of "
+			"tempA/tempB/ACCA/ACCB, and census the operands of iw60..81 + the handover "
+			"slots 54/152/153/200 on settled frames)\n", m_epibus ? 1 : 0);
+	e1_init();
 	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
@@ -599,6 +612,381 @@ void upd6383_device::pwatch(u8 cell, bool wr, bool mode1)
 	else       (wr ? m_pw_wr : m_pw_rd)[r][cell]++;
 }
 
+//**************************************************************************
+//  ★★★ §221 `§E1' -- THE EPILOGUE / HANDOVER OPERAND-PROVENANCE CENSUS
+//
+//  RULE 17, mechanised.  Every earlier attempt to localise the output-stage
+//  null asked "is the operand ALIVE?", and rule 15 says why that decides
+//  nothing: on a live cell EVERY candidate reading scores 4/4.  This asks the
+//  question liveness cannot fake -- WHICH ARRAY, WHICH INDEX, WHICH `iw' LAST
+//  WROTE IT -- and it is two-sided: `F1' predicts 0 of 14 epilogue operands
+//  trace to a body-0 word, and a single one that does NAMES THE ROUTING ERROR.
+//  See dsp/analysis/data/PREDICT_221.md, committed before this build.
+//**************************************************************************
+
+const char *upd6383_device::e1_route_name(u8 r)
+{
+	switch (r)
+	{
+	case E1_DEF:      return "DEFAULT(no reading)";
+	case E1_DRAM_PTR: return "m_dram[m_dp]";
+	case E1_DRAM_IDX: return "m_dram[addr8]";
+	case E1_RF_IDX:   return "m_rf[addr8]";
+	case E1_CRAM:     return "m_cram[cursor]";
+	case E1_ACCA:     return "ACCA";
+	case E1_ACCB:     return "ACCB";
+	case E1_TA:       return "tempA";
+	case E1_TB:       return "tempB";
+	case E1_DR:       return "m_dr(delay)";
+	default:          return "?";
+	}
+}
+
+void upd6383_device::e1_init()
+{
+	for (u32 i = 0; i < 384; i++) m_e1_map[i] = -1;
+	for (u32 i = 0; i < 256; i++)
+	{
+		m_pv_dram_iw[i] = m_pv_dram_ziw[i] = m_pv_dram_ciw[i] = E1_PV_NONE;
+		m_pv_rf_iw[i]   = m_pv_rf_ziw[i]   = m_pv_rf_ciw[i]   = E1_PV_NONE;
+		m_pv_dram_fr[i] = m_pv_dram_zfr[i] = m_pv_rf_fr[i] = m_pv_rf_zfr[i] = 0;
+		m_pv_dram_last[i] = m_pv_rf_last[i] = 0;
+	}
+	m_pv_acc_iw[0] = m_pv_acc_iw[1] = m_pv_acc_ziw[0] = m_pv_acc_ziw[1] = E1_PV_NONE;
+	m_pv_acc_ciw[0] = m_pv_acc_ciw[1] = E1_PV_NONE;
+	//  the watch list, IN EXECUTION ORDER so the printed table reads as the frame
+	//  does: kernel-B handover, the epilogue, then body-0 exit and body-1 entry.
+	static const u16 watch[] = { 54, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
+			72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 152, 153, 200 };
+	m_e1_rows = 0;
+	for (u16 iw : watch)
+	{
+		if (m_e1_rows >= E1_SLOTS) break;
+		m_e1_iw[m_e1_rows] = iw;
+		m_e1_map[iw] = s8(m_e1_rows);
+		m_e1_rows++;
+	}
+}
+
+//  a tiny key-histogram, so a column that turns out to be MULTI-VALUED reports
+//  the split instead of the last value.  Standing rule: a census that can only
+//  print one answer cannot show that the answer varies.
+void upd6383_device::e1_bump(u16 *keys, u64 *cnt, u32 &nk, u64 &other, u16 key)
+{
+	for (u32 q = 0; q < nk; q++)
+		if (keys[q] == key) { cnt[q]++; return; }
+	if (nk < E1_HIST) { keys[nk] = key; cnt[nk] = 1; nk++; return; }
+	other++;
+}
+
+void upd6383_device::e1_record(u8 route, u16 idx, s32 L)
+{
+	const s8 row = m_e1_map[m_cur_iw];
+	if (row < 0) return;
+	e1_row_t &r = m_e1[u32(row)];
+	r.word = m_cur_word;
+	const int k = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+	if (r.n[k]++ == 0) { r.lo[k] = r.hi[k] = L; }
+	else { if (L < r.lo[k]) r.lo[k] = L; if (L > r.hi[k]) r.hi[k] = L; }
+
+	//  the ROUTE and the RESOLVED INDEX, keyed together: a route that resolves to
+	//  two different cells on different frames is a different fact from a route
+	//  that is stable, and pooling them would hide it.
+	{
+		const u16 key = u16((u16(route) << 9) | (idx & 0x1ff));
+		u32 q = 0;
+		for (; q < r.rcnt; q++)
+			if (r.route[q] == route && r.idx[q] == (idx & 0x1ff)) break;
+		if (q < r.rcnt) r.rn[q]++;
+		else if (r.rcnt < E1_HIST)
+		{ r.route[r.rcnt] = route; r.idx[r.rcnt] = u16(idx & 0x1ff); r.rn[r.rcnt] = 1; r.rcnt++; }
+		else r.rother++;
+		(void)key;
+	}
+
+	//  ★ THE PROVENANCE.  Two columns, because they answer different questions:
+	//  `pw' = the last word to write this operand at all (which is usually the
+	//  slot before it, and says little); `pz' = the last word to leave it
+	//  NON-ZERO, which is the one that names a producer.
+	u16 pw = E1_PV_NONE, pz = E1_PV_NONE, pc = E1_PV_NONE;
+	u64 fr = 0; bool have = false;
+	switch (route)
+	{
+	case E1_DRAM_PTR: case E1_DRAM_IDX:
+		pw = m_pv_dram_iw[idx & 0xff]; pz = m_pv_dram_ziw[idx & 0xff];
+		pc = m_pv_dram_ciw[idx & 0xff];
+		fr = m_pv_dram_fr[idx & 0xff]; have = (pw != E1_PV_NONE);
+		break;
+	case E1_RF_IDX:
+		pw = m_pv_rf_iw[idx & 0xff]; pz = m_pv_rf_ziw[idx & 0xff];
+		pc = m_pv_rf_ciw[idx & 0xff];
+		fr = m_pv_rf_fr[idx & 0xff]; have = (pw != E1_PV_NONE);
+		break;
+	case E1_ACCA:
+		pw = m_pv_acc_iw[0]; pz = m_pv_acc_ziw[0]; pc = m_pv_acc_ciw[0];
+		fr = m_pv_acc_fr[0]; have = (pw != E1_PV_NONE);
+		break;
+	case E1_ACCB:
+		pw = m_pv_acc_iw[1]; pz = m_pv_acc_ziw[1]; pc = m_pv_acc_ciw[1];
+		fr = m_pv_acc_fr[1]; have = (pw != E1_PV_NONE);
+		break;
+	case E1_TA: pw = m_pv_ta_iw; pz = m_pv_ta_ziw; pc = m_pv_ta_ciw;
+		fr = m_pv_ta_fr; have = (pw != E1_PV_NONE); break;
+	case E1_TB: pw = m_pv_tb_iw; pz = m_pv_tb_ziw; pc = m_pv_tb_ciw;
+		fr = m_pv_tb_fr; have = (pw != E1_PV_NONE); break;
+	case E1_DR:
+		//  §217 already carries this tag with the datum; reuse it rather than
+		//  building a second, divergable one.
+		pw = pz = pc = m_dr_prov_iw; fr = m_dr_prov_frame; have = (pw != E1_PV_NONE);
+		break;
+	case E1_CRAM:
+		//  C-RAM has no I-RAM writer in this device: the host fills it.
+		pw = pz = pc = E1_PV_HOST;
+		break;
+	default: break;                          // E1_DEF: there is no operand
+	}
+	e1_bump(r.pw, r.pwn, r.pwcnt, r.pwother, pw);
+	e1_bump(r.pz, r.pzn, r.pzcnt, r.pzother, pz);
+	e1_bump(r.pc, r.pcn, r.pccnt, r.pcother, pc);
+	if (have)
+	{
+		const u64 age = (m_frames_run >= fr) ? (m_frames_run - fr) : 0;
+		if (age < r.age_min) r.age_min = age;
+		if (age > r.age_max) r.age_max = age;
+	}
+	if (route == E1_DEF) e1_counterfactual(L);
+}
+
+//  ★ §E1b -- THE COUNTERFACTUAL OPERANDS OF THE FOUR DECODE GAPS.
+//  `w60'/`w61'/`w68'/`w78' read NOTHING, so they have no provenance -- which is
+//  exactly the situation OUTPUT-STAGE-NULL_findings.md §5.1 reasons about
+//  STATICALLY, from cell-content counters that are known to be broken (the
+//  `D-RAM WRITES nonzero/total' column counts VISITS, not content).  Measure it:
+//  record the value AND the provenance of all three candidate readings the note
+//  enumerates.  If any of them is input-dependent with a body-0 provenance,
+//  decoding that source WOULD be load-bearing and §5.1 is overturned.
+void upd6383_device::e1_counterfactual(s32 /*L*/)
+{
+	const u8 a  = upd6383_disassembler::addr8(m_cur_word);
+	const u8 ru = u8(a | (m_cur_unit1 ? 0x80 : 0x00));
+	const u8 src = upd6383_disassembler::lo_src(m_cur_word);
+	u32 q = 0;
+	for (; q < m_e1cf_n; q++) if (m_e1cf[q].iw == m_cur_iw) break;
+	if (q == m_e1cf_n)
+	{
+		if (m_e1cf_n >= E1_GAPS) return;
+		m_e1cf_n++;
+		m_e1cf[q].iw = m_cur_iw; m_e1cf[q].src = src;
+		m_e1cf[q].ridx = ru; m_e1cf[q].didx = ru; m_e1cf[q].pidx = m_dp;
+	}
+	e1cf_t &c = m_e1cf[q];
+	const int k = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+	const s32 vr = s32(util::sext(m_rf[ru] & 0xffffff, 24));
+	const s32 vd = s32(util::sext(m_dram.read_dword(ru) & 0xffffff, 24));
+	const s32 vp = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+	if ((k ? c.nl : c.nq)++ == 0)
+	{ c.rf_lo[k] = c.rf_hi[k] = vr; c.dm_lo[k] = c.dm_hi[k] = vd; c.dp_lo[k] = c.dp_hi[k] = vp; }
+	else
+	{
+		if (vr < c.rf_lo[k]) c.rf_lo[k] = vr;
+		if (vr > c.rf_hi[k]) c.rf_hi[k] = vr;
+		if (vd < c.dm_lo[k]) c.dm_lo[k] = vd;
+		if (vd > c.dm_hi[k]) c.dm_hi[k] = vd;
+		if (vp < c.dp_lo[k]) c.dp_lo[k] = vp;
+		if (vp > c.dp_hi[k]) c.dp_hi[k] = vp;
+	}
+	c.n++;
+	c.pidx = m_dp;
+	c.rf_pw = m_pv_rf_iw[ru];
+	c.dm_pw = m_pv_dram_iw[ru];
+	c.dp_pw = m_pv_dram_iw[m_dp];
+}
+
+std::string upd6383_device::e1_pv_name(u16 k)
+{
+	switch (k)
+	{
+	case E1_PV_NONE: return "NONE";
+	case E1_PV_HOST: return "HOST";
+	case E1_PV_IN:   return "IN";
+	case E1_PV_BOOT: return "BOOT";
+	default:         return string_format("iw%u", k);
+	}
+}
+
+void upd6383_device::e1_report() const
+{
+	//  ★ RULE 8, as §220 sharpened it: the fired count prints UNCONDITIONALLY,
+	//  with the gate's own state beside it, so "fired zero times" and "the block
+	//  was never compiled in" are never the same log line.
+	logerror("upd6383: ★★★ §221 §E1 OPERAND-PROVENANCE CENSUS "
+			"(UPD6383_EPIBUS = %d, fired %llu, settled frames > 900000)\n",
+			m_epibus ? 1 : 0, (unsigned long long)m_epibus_fired);
+	if (!m_epibus)
+	{
+		logerror("            (gate OFF -- no shadow tables were maintained and no row was "
+				"recorded.  This is a CONTROL line, not a null.)\n");
+		return;
+	}
+	logerror("            ⚠ §104's `L' column is STICKY (`m_last_l' survives a word that never "
+			"reaches the bus); THIS census hooks the fetch itself, so a slot absent below "
+			"performed NO operand fetch at all.\n");
+	logerror("     iw  word        SRC  route[idx]              nq/nl            "
+			"L quiet[..]        L loud[..]         prov LAST-WRITER        prov LAST-NONZERO       "
+			"prov PRODUCER(changed)  age\n");
+
+	u32 f1_body0 = 0, f1_body1 = 0, zero_rows = 0, live_rows = 0;
+	std::string f1_where, f1b_where;
+	for (u32 i = 0; i < m_e1_rows; i++)
+	{
+		const e1_row_t &r = m_e1[i];
+		const u16 iw = m_e1_iw[i];
+		if (!r.n[0] && !r.n[1]) continue;             // never fetched -- see the note above
+		std::string rt;
+		for (u32 q = 0; q < r.rcnt; q++)
+			rt += string_format("%s%s[%02X]x%llu", q ? "," : "",
+					e1_route_name(r.route[q]), r.idx[q],
+					(unsigned long long)r.rn[q]);
+		if (r.rother) rt += string_format(",+%llu", (unsigned long long)r.rother);
+		std::string pw, pz, pc;
+		for (u32 q = 0; q < r.pwcnt; q++)
+			pw += string_format("%s%s:%llu", q ? "," : "", e1_pv_name(r.pw[q]),
+					(unsigned long long)r.pwn[q]);
+		for (u32 q = 0; q < r.pzcnt; q++)
+			pz += string_format("%s%s:%llu", q ? "," : "", e1_pv_name(r.pz[q]),
+					(unsigned long long)r.pzn[q]);
+		for (u32 q = 0; q < r.pccnt; q++)
+			pc += string_format("%s%s:%llu", q ? "," : "", e1_pv_name(r.pc[q]),
+					(unsigned long long)r.pcn[q]);
+		const bool live = (r.lo[0] != r.hi[0]) || (r.lo[1] != r.hi[1])
+				|| (r.n[0] && r.n[1] && r.lo[0] != r.lo[1]);
+		const bool zero = !r.lo[0] && !r.hi[0] && !r.lo[1] && !r.hi[1];
+		if (zero) zero_rows++;
+		if (live) live_rows++;
+		logerror("    %3u  %010llX  %02X  %-24s %llu/%llu  %11d..%-11d %11d..%-11d  %-22s  %-22s  %-22s  %llu..%llu %s\n",
+				iw, (unsigned long long)r.word,
+				upd6383_disassembler::lo_src(r.word), rt.c_str(),
+				(unsigned long long)r.n[0], (unsigned long long)r.n[1],
+				r.lo[0], r.hi[0], r.lo[1], r.hi[1], pw.c_str(), pz.c_str(), pc.c_str(),
+				(unsigned long long)(r.age_min == ~0ull ? 0 : r.age_min),
+				(unsigned long long)r.age_max, live ? "*" : "=");
+
+		//  ★★★ F1 / F1b -- THE DECISIVE TEST.  Provenance, not liveness (RULE 17).
+		//  An epilogue operand whose LAST NON-ZERO WRITER is a body word means the
+		//  epilogue IS wired to the bodies and the loss is a routing error that can
+		//  be named.  F1 is BODY 0 (iw84..153); F1b is BODY 1 (iw200..332) and is
+		//  PREDICTED to occur once, at w65 via m_rf[0x8F] -- pre-registered so a
+		//  pass is not misread as a fail.
+		//  ⚠ SCAN ALL THREE COLUMNS.  Grading F1 on the LAST-NON-ZERO column alone
+		//  MISSES the case that matters most: a cell a body writes EVERY FRAME WITH
+		//  ZERO has no non-zero writer at all, so the wiring is invisible in that
+		//  column while being plain in the last-writer one.  Measured in arm A:
+		//  `w65's `m_rf[0x8F]' is written by `iw332' -- body 1's LAST word -- 540 000
+		//  times, and its non-zero column is NONE.  A test that could not see that
+		//  would have called an existing link an absence.
+		if (iw >= 60 && iw <= 81)
+		{
+			const u16 *cols[3] = { r.pw, r.pz, r.pc };
+			const u32  cnts[3] = { r.pwcnt, r.pzcnt, r.pccnt };
+			static const char *cn[3] = { "w", "z", "p" };
+			for (u32 c = 0; c < 3; c++)
+				for (u32 q = 0; q < cnts[c]; q++)
+				{
+					const u16 k = cols[c][q];
+					if (k >= 84 && k <= 153)
+					{ f1_body0++; f1_where += string_format(" w%u<-iw%u(%s)", iw, k, cn[c]); }
+					else if (k >= 200 && k <= 332)
+					{ f1_body1++; f1b_where += string_format(" w%u<-iw%u(%s)", iw, k, cn[c]); }
+				}
+		}
+	}
+	logerror("            rows with an operand identically ZERO in both buckets: %u | rows whose "
+			"operand VARIES: %u\n", zero_rows, live_rows);
+	logerror("upd6383: ★★★ §221 F1 (RULE 17, the decisive one): epilogue operands (iw60..81) whose "
+			"LAST-NON-ZERO provenance names BODY 0 (iw84..153): %u%s  -- PREDICTED 0; >= 1 "
+			"OVERTURNS OUTPUT-STAGE-NULL_findings.md §5.1 and NAMES the routing error\n",
+			f1_body0, f1_where.c_str());
+	logerror("upd6383: ★ §221 F1b: ...naming BODY 1 (iw200..332): %u%s  -- PREDICTED >= 1, at w65 "
+			"via m_rf[0x8F] (§99 8F:1176000).  A 0 here is a MISS, not a pass\n",
+			f1_body1, f1b_where.c_str());
+
+	//  ★★★ F2 -- the PRESENTATION's own operand.  `w73' SOURCES the accumulator
+	//  (SRC 0x10, ANCHORED), so its provenance is the accumulator's last non-zero
+	//  writer.  PREDICTED: a KERNEL-B word (iw50..59), never a body-0 one.
+	{
+		const s8 row = m_e1_map[73];
+		if (row < 0 || (!m_e1[u32(row)].n[0] && !m_e1[u32(row)].n[1]))
+			logerror("upd6383: ⚠ §221 F2: w73 recorded NO operand fetch -- the census cannot "
+					"grade the presentation's own operand.  Treat F2 as NOT RUN.\n");
+		else
+		{
+			const e1_row_t &r = m_e1[u32(row)];
+			std::string hz, hp; u64 tot = 0, kb = 0, b0 = 0;
+			for (u32 q = 0; q < r.pzcnt; q++)
+				hz += string_format("%s%s:%llu", q ? " " : "", e1_pv_name(r.pz[q]),
+						(unsigned long long)r.pzn[q]);
+			for (u32 q = 0; q < r.pccnt; q++)
+			{
+				hp += string_format("%s%s:%llu", q ? " " : "", e1_pv_name(r.pc[q]),
+						(unsigned long long)r.pcn[q]);
+				tot += r.pcn[q];
+				if (r.pc[q] >= 50 && r.pc[q] <= 59) kb += r.pcn[q];
+				if (r.pc[q] >= 84 && r.pc[q] <= 153) b0 += r.pcn[q];
+			}
+			logerror("upd6383: ★★★ §221 F2: ACCA at w73 -- LAST-NON-ZERO writer: %s | "
+					"PRODUCER (last writer that CHANGED it): %s | kernel B (iw50..59) %llu of "
+					"%llu (%.2f %%) | BODY 0 (iw84..153) %llu\n"
+					"            ⚠ ONE HOP.  A word that re-writes the SAME constant is the "
+					"last non-zero writer without producing anything -- which is why the "
+					"PRODUCER column exists.  Neither column traces the whole chain.\n",
+					hz.c_str(), hp.c_str(), (unsigned long long)kb, (unsigned long long)tot,
+					tot ? 100.0 * double(kb) / double(tot) : 0.0, (unsigned long long)b0);
+		}
+	}
+
+	//  ★★★ F3 -- THE CALIBRATION THAT CAN FAIL.  `w72' must resolve to index 0x06
+	//  with L = 4 194 304 in both buckets.  If it does not, the instrument is
+	//  mis-wired and NO OTHER NUMBER IN THIS RUN MAY BE QUOTED (the §46
+	//  unguarded-sample trap, fourth occurrence).
+	{
+		const s8 row = m_e1_map[72];
+		bool ok = false; s32 lq = 0, ll = 0; u16 gotidx = 0xffff; u8 gotroute = E1_NONE;
+		if (row >= 0)
+		{
+			const e1_row_t &r = m_e1[u32(row)];
+			if (r.rcnt) { gotroute = r.route[0]; gotidx = r.idx[0]; }
+			lq = r.lo[0]; ll = r.lo[1];
+			ok = (r.n[0] || r.n[1]) && r.rcnt == 1 && gotidx == 0x06
+					&& r.lo[0] == 4194304 && r.hi[0] == 4194304
+					&& r.lo[1] == 4194304 && r.hi[1] == 4194304;
+		}
+		logerror("upd6383: ★★★ §221 F3 CALIBRATION (w72 = the host's unit-0 OUTPUT LEVEL): "
+				"route %s idx %02X  L quiet %d loud %d  ==>  %s\n",
+				e1_route_name(gotroute), gotidx, lq, ll,
+				ok ? "PASS -- the census resolves a KNOWN cell to its KNOWN value"
+				   : "★ VOID -- instrument mis-wired; NO OTHER NUMBER IN THIS RUN MAY BE QUOTED");
+	}
+
+	//  ★★★ §E1b -- the COUNTERFACTUAL operands of the four decode gaps.
+	logerror("upd6383: ★★★ §221 §E1b COUNTERFACTUAL OPERANDS OF THE DECODE GAPS "
+			"(what SRC 0x01/0x05/0x06/0x0A WOULD have read under each candidate addressing)\n");
+	if (!m_e1cf_n)
+		logerror("            (no gap slot was reached -- if the four SRC codes are still "
+				"counted by `SRC CODES STILL READING ZERO', this instrument is mis-wired)\n");
+	for (u32 q = 0; q < m_e1cf_n; q++)
+	{
+		const e1cf_t &c = m_e1cf[q];
+		logerror("            iw%-3u SRC %02X n=%llu (q %llu / l %llu) | m_rf[%02X] q %d..%d l %d..%d "
+				"prov %s | m_dram[%02X] q %d..%d l %d..%d prov %s | m_dram[m_dp=%02X] q %d..%d "
+				"l %d..%d prov %s\n",
+				c.iw, c.src, (unsigned long long)c.n,
+				(unsigned long long)c.nq, (unsigned long long)c.nl,
+				c.ridx, c.rf_lo[0], c.rf_hi[0], c.rf_lo[1], c.rf_hi[1], e1_pv_name(c.rf_pw).c_str(),
+				c.didx, c.dm_lo[0], c.dm_hi[0], c.dm_lo[1], c.dm_hi[1], e1_pv_name(c.dm_pw).c_str(),
+				c.pidx, c.dp_lo[0], c.dp_hi[0], c.dp_lo[1], c.dp_hi[1], e1_pv_name(c.dp_pw).c_str());
+	}
+}
+
 //  ★★★ §99: one rule for both store sites.  See upd6383.h.
 void upd6383_device::store_mode(u8 mode, u8 dest, u32 v)
 {
@@ -637,16 +1025,21 @@ void upd6383_device::store_mode(u8 mode, u8 dest, u32 v)
 	if (m_speculative && (m_specmask & 0x4000000) && mode != 1 && dest == 0x06)
 	{
 		m_dram.write_dword(0x05, v & 0xffffff);
+		pv_wr_dram(0x05, v);                                  // ★ §221 §E1
 		m_mirror06_n++;
 	}
 	const bool m1 = (mode == 1);
 	if (m1 && m_speculative && (m_specmask & 0x800000))
 	{
 		m_rf[dest] = v & 0xffffff;
+		pv_wr_rf(dest, v, m_cur_iw);                          // ★ §221 §E1
 		m_rf_st[dest]++;
 	}
 	else
+	{
 		m_dram.write_dword(dest, v & 0xffffff);
+		pv_wr_dram(dest, v);                                  // ★ §221 §E1
+	}
 	//  the WORD's mode, not the routing decision -- so the census stays honest
 	//  with the bit off as well as on.
 	pwatch(dest, true, m1);
@@ -1082,9 +1475,15 @@ void upd6383_device::host_w(bool cd, u8 data)
 					m_hostw_cell[m_dram_wp & 0xff]++;
 					if (v & 0xffffff) m_hostw_nz[m_dram_wp & 0xff]++;
 					if (m_speculative && (m_specmask & 0x800000))
+					{
 						m_rf[m_dram_wp & 0xff] = v & 0xffffff;
+						pv_wr_rf(u8(m_dram_wp), v, E1_PV_HOST);   // ★ §221 §E1
+					}
 					else
+					{
 						m_dram.write_dword(m_dram_wp, v & 0xffffff);
+						pv_wr_dram_tag(u8(m_dram_wp), v, E1_PV_HOST);  // ★ §221 §E1
+					}
 					m_dram_wp = u8(m_dram_wp + 1);
 					m_pk_dram++;
 					break;
@@ -1415,6 +1814,10 @@ void upd6383_device::latch_inputs_to_dram()
 	{ m_trace_armed = true; m_trace_n = 0; }
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
+	//  ★ §221 §E1: the audio entry point gets its OWN provenance tag, so an operand
+	//  fed straight from the port is distinguishable from one an `iw' wrote.
+	pv_wr_dram_tag(m_in_addr[0], u32(m_in_val[0]), E1_PV_IN);
+	pv_wr_dram_tag(m_in_addr[1], u32(m_in_val[1]), E1_PV_IN);
 
 	m_in_seen[0] = m_in_seen[1] = 0;
 	m_in_seen_mask = 0;
@@ -1520,6 +1923,7 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 				&& !st_suppressed_live(word))           // ★ §109 bit 29
 		{
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
+			pv_wr_dram(u8(cell), u32(m_acc));                          // ★ §221 §E1
 			pwatch(u8(cell), true);                                    // §98
 			kwatch(cell, s32(u32(m_acc & 0xffffff)));
 			watch_store(cell, s32(m_acc & 0xffffff), 1);
@@ -1756,6 +2160,7 @@ void upd6383_device::do_presentation()
 				const s64 a = util::sext(pacc, 44);
 				if (a < m_pa_min[k]) m_pa_min[k] = a;
 				if (a > m_pa_max[k]) m_pa_max[k] = a;
+				m_pa_sum[k] += a;                       // ★ STANDING RULE 19 (§221)
 				m_pa_n[k]++;
 			}
 			if (unit == 1 && m_frames_run > 400000)
@@ -1768,6 +2173,7 @@ void upd6383_device::do_presentation()
 				const s64 b = util::sext(pacc, 44);
 				if (b < m_pb_min[k]) m_pb_min[k] = b;
 				if (b > m_pb_max[k]) m_pb_max[k] = b;
+				m_pb_sum[k] += b;                       // ★ STANDING RULE 19 (§221)
 				m_pb_n[k]++;
 			}
 			m_pres_u[unit]++;                                   // ★ §61 per-unit
@@ -2434,6 +2840,14 @@ void upd6383_device::exec_alu(u64 word)
 	// deliberately no default case that guesses at the other fourteen the
 	// corpus contains.
 	s32 L = 0;
+	//  ★★★ §221 §E1: WHICH ROUTE DID THE C++ ACTUALLY TAKE, and to WHICH INDEX?
+	//  Set INSIDE the case that runs -- never re-derived afterwards, because a
+	//  re-derivation is a second copy of the decision that can drift from it (the
+	//  `alu_guard_fail' lesson, and §218's lo12-by-eye lesson).  Read once, at the
+	//  `m_last_l = L' statement below, which is the single point where the operand
+	//  bus is final.
+	u8  e1route = E1_NONE;
+	u16 e1idx   = 0;
 	//  ★ SRC 0x0B = the delay-DRAM data register.  A delay READ has to land
 	//  somewhere for the next word to use, and 0x0B is the only source code in the
 	//  corpus whose operand is otherwise unaccounted for.
@@ -2541,13 +2955,16 @@ void upd6383_device::exec_alu(u64 word)
 				{
 					m_src0b2_fired++;
 					L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+					e1route = E1_DRAM_PTR; e1idx = m_dp;                 // §221 §E1
 					break;
 				}
 			}
 			L = s32(util::sext(m_dr, 24));
+			e1route = E1_DR;                                            // §221 §E1
 			break;
 		case 0x08:
 			L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
+			e1route = E1_CRAM; e1idx = u16(m_cursor);                   // §221 §E1
 			break;
 		case 0x00:
 			//  ★ §123: this reading is BETTER SUPPORTED than the neighbouring
@@ -2614,10 +3031,12 @@ void upd6383_device::exec_alu(u64 word)
 						: (m_specmask & (1ull << 57)) != 0))
 			{
 				L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
+				e1route = E1_CRAM; e1idx = u16(m_cursor);                   // §221 §E1
 				m_src00_coef_n++;
 				break;
 			}
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			e1route = E1_DRAM_PTR; e1idx = m_dp;                            // §221 §E1
 			break;
 		//  ⛔ SRC 0x11 WAS HERE, read as mem[ptr] -- "1 of 7 enumerated, no
 		//  independent support".  §27 REPLACES that guess: 0x11 = ACCB, which has
@@ -2634,6 +3053,7 @@ void upd6383_device::exec_alu(u64 word)
 		//  pointer walks the cells the bodies deposit in.  No independent support.
 		case 0x04:
 			L = s32(util::sext(m_ta, 24));     // ★ row 29: the pair test
+			e1route = E1_TA;                                                // §221 §E1
 			break;
 		case 0x02:
 			//  ★★★ §100 SPECULATIVE (mask bit 24): SRC 0x02 = reg[addr8], the
@@ -2662,10 +3082,13 @@ void upd6383_device::exec_alu(u64 word)
 						| (m_cur_unit1 ? 0x80 : 0x00));
 				L = s32(util::sext(((m_specmask & 0x800000) ? m_rf[r]
 						: m_dram.read_dword(r)) & 0xffffff, 24));
+				e1route = (m_specmask & 0x800000) ? E1_RF_IDX : E1_DRAM_IDX;  // §221 §E1
+				e1idx = r;
 				m_src02_n++;
 				break;
 			}
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			e1route = E1_DRAM_PTR; e1idx = m_dp;                            // §221 §E1
 			break;
 		case 0x03:
 			//  ★★★ §101 SPECULATIVE (mask bit 25): SRC 0x03 = THE ACCUMULATOR.
@@ -2688,9 +3111,12 @@ void upd6383_device::exec_alu(u64 word)
 			{
 				L = acc_to_datum((m_specmask & 0x4000) && m_cur_unit1
 						? m_accb : m_acc);
+				e1route = ((m_specmask & 0x4000) && m_cur_unit1)             // §221 §E1
+						? E1_ACCB : E1_ACCA;
 				break;
 			}
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			e1route = E1_DRAM_PTR; e1idx = m_dp;                            // §221 §E1
 			break;
 		case upd6383_disassembler::LO_SRC_MEM:
 		case upd6383_disassembler::LO_SRC_ACC:
@@ -2702,6 +3128,7 @@ void upd6383_device::exec_alu(u64 word)
 			//  EVERY remaining source has no reading and silently returns 0.
 			//  Counted so the next pass can see which ones actually matter.
 			m_src_unread[src & 0x1f]++;
+			e1route = E1_DEF;                                               // §221 §E1
 			break;
 		}
 	}
@@ -2718,6 +3145,8 @@ void upd6383_device::exec_alu(u64 word)
 		//  into ACCB.  One reader of the wrong register killed the whole unit.
 		L = acc_to_datum((m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
 				? m_accb : m_acc);
+		e1route = (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)   // §221 §E1
+				? E1_ACCB : E1_ACCA;
 		break;
 	//  ★★★ §27 SPECULATIVE: SRC 0x11 = ACCB.  w64 and w71 -- the two
 	//  coefficient-fetching LOAD-acc words of the output stage -- source this code,
@@ -2752,6 +3181,7 @@ void upd6383_device::exec_alu(u64 word)
 		if (m_speculative && (m_specmask & 0x40000u))
 		{
 			L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+			e1route = E1_DRAM_PTR; e1idx = m_dp;                            // §221 §E1
 			m_src11_mem_n++;
 			break;
 		}
@@ -2759,9 +3189,14 @@ void upd6383_device::exec_alu(u64 word)
 			: (m_specmask & 0x4000) ? acc_to_datum(m_cur_unit1 ? m_accb : m_acc)
 			: (m_specmask & 2) ? acc_to_datum(m_accb)
 			: s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));   // old guess
+		e1route = !m_speculative ? E1_DEF                                   // §221 §E1
+			: (m_specmask & 0x4000) ? (m_cur_unit1 ? E1_ACCB : E1_ACCA)
+			: (m_specmask & 2) ? E1_ACCB : E1_DRAM_PTR;
+		if (e1route == E1_DRAM_PTR) e1idx = m_dp;
 		break;
 	case upd6383_disassembler::LO_SRC_TA:
 		L = s32(util::sext(m_ta, 24));
+		e1route = E1_TA;                                                    // §221 §E1
 		break;
 	case upd6383_disassembler::LO_SRC_TB:
 		// THE ONE-BIT SHIFT.  Without it the biquad is 77 dB wrong, so it is
@@ -2808,6 +3243,7 @@ void upd6383_device::exec_alu(u64 word)
 		// reconstruction while the reverb's tbsh is a constraint inside a
 		// hypothesis.
 		L = s32(util::sext(m_tb, 24)) >> 1;
+		e1route = E1_TB;                                                    // §221 §E1
 		break;
 	case upd6383_disassembler::LO_SRC_MEM:
 	{
@@ -2838,10 +3274,17 @@ void upd6383_device::exec_alu(u64 word)
 		L = (regfile && m_speculative && (m_specmask & 0x800000))
 				? s32(util::sext(m_rf[rdsrc] & 0xffffff, 24))
 				: s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
+		//  ★ §221 §E1: `regfile' names the ADDRESSING MODE, bit 23 names the ARRAY.
+		//  Both are recorded, because the epilogue's `w63'/`w65' resolve to mode-1
+		//  indices (0x05, 0x8F) that COLLIDE with live mode-2 cells -- §5.1's trap.
+		e1route = (regfile && m_speculative && (m_specmask & 0x800000))
+				? E1_RF_IDX : (regfile ? E1_DRAM_IDX : E1_DRAM_PTR);
+		e1idx = rdsrc;
 		pwatch(rdsrc, false, regfile);                                 // §98
 		break;
 	}
 	default:
+		if (e1route == E1_NONE) e1route = E1_DEF;                           // §221 §E1
 		// UNREACHABLE BY CONSTRUCTION -- alu_decoded() gates the four codes
 		// above.  Spelled out rather than folded into the mem[ptr] case: if the
 		// predicate is ever widened, an unanchored source must NOT quietly
@@ -3051,8 +3494,12 @@ void upd6383_device::exec_alu(u64 word)
 		//  is not a plausible chip behaviour.
 		if (!(m_speculative && (m_specmask & 0x10000)))
 		{
-			if (m_speculative && (m_specmask & 0x4000) && m_cur_unit1) m_accb = 0;
-			else m_acc = 0;
+			//  ★ §221 §E1: a CLEAR is a write.  It updates the last-writer column
+			//  and deliberately NOT the last-NON-ZERO-writer column, which is what
+			//  makes the second column able to name a producer at all.
+			if (m_speculative && (m_specmask & 0x4000) && m_cur_unit1)
+			{ m_accb = 0; pv_wr_acc(true, 0); }
+			else { m_acc = 0; pv_wr_acc(false, 0); }
 		}
 	}
 
@@ -3087,6 +3534,15 @@ void upd6383_device::exec_alu(u64 word)
 	// convenience: on an ACTION-0x00 word hi12[3:1] == 0 and == 1 become
 	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
 	m_last_l = L;               // ★ §29: the bus operand actually selected
+	//  ★★★ §221 `§E1' -- THE OPERAND-PROVENANCE CENSUS.  Read-only, settled frames
+	//  only (rule 16: a census over a 1.44 M-frame run that includes boot measures
+	//  boot).  It fires at the ONE point where `L' is final, so it can never
+	//  disagree with what the ALU is about to use.
+	if (m_epibus && m_frames_run > 900000 && m_cur_iw < 384)
+	{
+		m_epibus_fired++;
+		e1_record(e1route, e1idx, L);
+	}
 	{
 		const u16 f31 = upd6383_disassembler::hi_f31(hi);
 		//  ★★★ ACTION 0x00 ADDS the bus; it does not REPLACE the accumulator.
@@ -3281,6 +3737,7 @@ void upd6383_device::exec_alu(u64 word)
 				& 0xfffffffffffULL;
 		else
 		accum = (src_term + p_term) & 0xfffffffffffULL;
+		pv_wr_acc(use_b, accum);                              // ★ §221 §E1
 	}
 
 	// ---- the lo12[4:0] side effect ------------------------------------------
@@ -3319,9 +3776,11 @@ void upd6383_device::exec_alu(u64 word)
 				break;
 			}
 			m_ta = u32(L) & 0xffffff;
+			pv_wr_ta(u32(L));                                  // ★ §221 §E1
 			break;
 		case 0x1A:
 			m_tb = u32(L) & 0xffffff;
+			pv_wr_tb(u32(L));                                  // ★ §221 §E1
 			break;
 		default:
 			break;
@@ -3380,9 +3839,10 @@ void upd6383_device::exec_alu(u64 word)
 			//  decode was only ever validated in unit 0, where m_acc IS the live one.
 			//  Gated on bit 56 so the correction is A/B-able rather than assumed.
 			case 1: bx_acc_w(L, false); break;                 // -> accumulator (load)
-			case 2: m_ta = u32(L) & 0xffffff; break;           // -> tempA
-			case 3: m_tb = u32(L) & 0xffffff; break;           // -> tempB
-			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;  // -> mem[ptr]
+			case 2: m_ta = u32(L) & 0xffffff; pv_wr_ta(u32(L)); break;   // -> tempA
+			case 3: m_tb = u32(L) & 0xffffff; pv_wr_tb(u32(L)); break;   // -> tempB
+			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff);
+			        pv_wr_dram(m_dp, u32(L)); break;                     // -> mem[ptr]
 			case 5: m_p = u32(L) & 0xffffff; m_pw = 1; break;            // -> P, RAW (suspect scale)
 			case 6: bx_acc_w(L, true); break;                  // -> accumulator (add)
 			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 2; break;     // -> P at the MULTIPLY's scale
@@ -3413,9 +3873,10 @@ void upd6383_device::exec_alu(u64 word)
 			switch (m_bx_sel0e)
 			{
 			case 1: bx_acc_w(L, false); break;   // §142: unit-aware, see ACT 0x0D
-			case 2: m_ta = u32(L) & 0xffffff; break;
-			case 3: m_tb = u32(L) & 0xffffff; break;
-			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff); break;
+			case 2: m_ta = u32(L) & 0xffffff; pv_wr_ta(u32(L)); break;
+			case 3: m_tb = u32(L) & 0xffffff; pv_wr_tb(u32(L)); break;
+			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff);
+			        pv_wr_dram(m_dp, u32(L)); break;
 			case 5: m_p = u32(L) & 0xffffff; m_pw = 3; break;
 			case 6: bx_acc_w(L, true); break;
 			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 4; break;
@@ -3449,9 +3910,11 @@ void upd6383_device::exec_alu(u64 word)
 		// shipping under the owner's 2026-07-27 decision.  See upd6383d.h
 		// LO_ACT_CAP_TA2 and dsp/analysis/adjudication-round8.md.
 		m_ta = u32(L) & 0xffffff;
+		pv_wr_ta(u32(L));                                          // ★ §221 §E1
 		break;
 	case upd6383_disassembler::LO_ACT_CAP_TB:
 		m_tb = u32(L) & 0xffffff;
+		pv_wr_tb(u32(L));                                          // ★ §221 §E1
 		break;
 	case upd6383_disassembler::LO_ACT_ST_BUS:
 	{
@@ -4576,7 +5039,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					//  reads SRC 0x19 = tempA and the read is at slot 4 with nothing
 					//  between them", i.e. a read's datum reaches the multiplicand
 					//  through tempA, one slot later.
-					if (m_specmask & 0x800) m_ta = m_dr_pipe[k] & 0xffffff;
+					if (m_specmask & 0x800)
+					{ m_ta = m_dr_pipe[k] & 0xffffff; pv_wr_ta(m_ta); }   // ★ §221 §E1
 					m_dr_pipe_v[k] = false;
 					m_dr_landed++;
 				}
@@ -4929,6 +5393,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				{
 					m_dram.write_dword(0x05, bx_stim(m_bx_tframe, false));
 					m_dram.write_dword(0x0f, bx_stim(m_bx_tframe, m_bx_distinct));
+					pv_wr_dram_tag(0x05, bx_stim(m_bx_tframe, false), E1_PV_IN);
+					pv_wr_dram_tag(0x0f, bx_stim(m_bx_tframe, m_bx_distinct), E1_PV_IN);
 					m_bx_inj_n++;
 				}
 
@@ -5383,7 +5849,8 @@ void upd6383_device::bx_frame_end()
 		//  with the SAME selector settings scored nz = 3.  Rather than argue the
 		//  criterion away after the fact, the instrument is fixed so trial 0 starts
 		//  from the same state as every other trial and F1 can be scored as written.
-		for (u32 i = 0; i < 40; i++) m_dram.write_dword(0x50 + i, 0);
+		for (u32 i = 0; i < 40; i++)
+		{ m_dram.write_dword(0x50 + i, 0); pv_wr_dram_tag(u8(0x50 + i), 0, E1_PV_BOOT); }
 		std::memset(m_bx_prev, 0, sizeof(m_bx_prev));
 		logerror("upd6383: ★ §133 ARMED on I-RAM[84] = PARAMETRIC EQ, frame %u\n",
 				u32(m_frames_run));
@@ -5435,7 +5902,8 @@ void upd6383_device::bx_frame_end()
 		m_bx_nz = m_bx_chg = m_bx_f1s = m_bx_f1t = m_bx_f2s = m_bx_f2t = m_bx_shift = 0;
 		m_bx_tframe = 0;
 		//  clear the state cells so trials cannot contaminate each other
-		for (u32 i = 0; i < 40; i++) m_dram.write_dword(0x50 + i, 0);
+		for (u32 i = 0; i < 40; i++)
+		{ m_dram.write_dword(0x50 + i, 0); pv_wr_dram_tag(u8(0x50 + i), 0, E1_PV_BOOT); }
 		std::memset(m_bx_prev, 0, sizeof(m_bx_prev));
 
 		if (m_bx_sweep && ++m_bx_trial < BX_TRIALS)
@@ -5515,6 +5983,29 @@ void upd6383_device::dump_frame_report() const
 			"  | ⚠ min == max is a CONSTANT, not audio (standing rule 1)\n",
 			m_pb_n[0], (long long)(m_pb_n[0] ? m_pb_min[0] : 0), (long long)(m_pb_n[0] ? m_pb_max[0] : 0),
 			m_pb_n[1], (long long)(m_pb_n[1] ? m_pb_min[1] : 0), (long long)(m_pb_n[1] ? m_pb_max[1] : 0));
+		//  ★★★ STANDING RULE 19 (§221): THE MEAN AND THE AC SPAN, SEPARATELY.
+		//  Rule 1 (min != max) and §211's translation rule are JOINTLY INSUFFICIENT --
+		//  OUTPUT-STAGE-NULL_findings.md §6.5(ii) constructs a pedestal of 79 438 with
+		//  a +/-90 ripple that passes BOTH and is a DC at -59 dB.  A DC is what
+		//  `|mean| >> AC span' looks like, so print the two quantities that decide it
+		//  rather than trusting a reader to remember the note.
+		{
+			const auto mean = [](s64 sum, u32 n) { return n ? double(sum) / double(n) : 0.0; };
+			logerror("upd6383: ★★★ §221 RULE 19 -- MEAN vs AC SPAN (a DC is |mean| >> span):\n"
+				"            §70  ACCA@w73  quiet mean %.1f span %lld | loud mean %.1f span %lld\n"
+				"            §211 ACCB@w78  quiet mean %.1f span %lld | loud mean %.1f span %lld\n"
+				"            ⚠ min != max alone does NOT establish audio; neither does §211's "
+				"translation rule.  See OUTPUT-STAGE-NULL_findings.md §6.5(ii).\n",
+				mean(m_pa_sum[0], m_pa_n[0]),
+				(long long)(m_pa_n[0] ? m_pa_max[0] - m_pa_min[0] : 0),
+				mean(m_pa_sum[1], m_pa_n[1]),
+				(long long)(m_pa_n[1] ? m_pa_max[1] - m_pa_min[1] : 0),
+				mean(m_pb_sum[0], m_pb_n[0]),
+				(long long)(m_pb_n[0] ? m_pb_max[0] - m_pb_min[0] : 0),
+				mean(m_pb_sum[1], m_pb_n[1]),
+				(long long)(m_pb_n[1] ? m_pb_max[1] - m_pb_min[1] : 0));
+		}
+		e1_report();
 	logerror("upd6383: ★ §61 PER-UNIT PRESENTATION: unit0/DO1 %u exec, %u non-zero, peak %d | "
 			"unit1/DO2 %u exec, %u non-zero, peak %d\n",
 			m_pres_u[0], m_pres_u_nz[0], m_pres_u_peak[0],
