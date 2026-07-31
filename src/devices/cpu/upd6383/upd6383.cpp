@@ -646,6 +646,19 @@ void upd6383_device::kwatch(u8 cell, s32 v)
 	//  WRITTEN, yet §104's residency column still reports body 0 reading it as
 	//  constant -- so something overwrites it between deposit and pickup, exactly as
 	//  iw32 does to 0x07.  Name the writers, in execution order.
+	//  ★★★ §219 -- AND THIS CENSUS ANSWERED IT, IN EVERY LOG SINCE.  Cell 0x05 is
+	//  THE UNIT-0 SEND (body 0's input pickup, `[05r]' in §98's window) and it has
+	//  FOUR writers per frame: `iw9' (`mac (p),(p)-1') and `iw11' DEPOSIT the audio
+	//  -- §86 grades the cell INPUT-DEPENDENT when written, loud [0 .. 16 760 298] --
+	//  and then `iw35' and `iw45' OVERWRITE it before the CALL at `iw49'.
+	//  §104's residency, same log, states the destruction slot by slot: `mem' under
+	//  the pointer is INPUT-DEPENDENT before `iw35', the constant 4 194 304
+	//  (= acc_to_datum(2^38), the accumulator `iw34' leaves) at `iw36..iw45', and
+	//  0 at `iw46' and at body 0's own `iw84'.  `iw35's store also plants the
+	//  constant that `iw36'/`iw37' re-read as the multiplicand, which is why `P'
+	//  -- and the accumulator from `iw39' on -- stops depending on the input.
+	//  ⇒ ONE store, `iw35', accounts for both deaths.  DO NOT look for the send
+	//  defect in a SOURCE-field decode; see the `case 0x0B' note below.
 	//  §120: 0x0E/0x0F/0x10 added.  §119's verifier argues these are the real
 	//  modulation cells -- small magnitudes (0..264 / 0..203, tap-offset sized) and
 	//  fed by CHORUS's two table-lookup idioms, producing the quadrature pair the
@@ -2396,10 +2409,24 @@ void upd6383_device::exec_alu(u64 word)
 	// deliberately no default case that guesses at the other fourteen the
 	// corpus contains.
 	s32 L = 0;
-	//  ★ SPECULATIVE: SRC 0x0B = the delay-DRAM data register.  A delay READ has
-	//  to land somewhere for the next word to use, and 0x0B is the only source
-	//  code in the corpus whose operand is otherwise unaccounted for.  It is a
-	//  GUESS; dsp/analysis/SPECULATIVE-APPLIED-REGISTER.md row 14.
+	//  ★ SRC 0x0B = the delay-DRAM data register.  A delay READ has to land
+	//  somewhere for the next word to use, and 0x0B is the only source code in the
+	//  corpus whose operand is otherwise unaccounted for.
+	//  ⚠ IT WAS ORIGINALLY A GUESS (register row 14) AND IT IS NOT ONE ANY MORE --
+	//  do not re-open it.  §215 ANCHORED it by the corpus over 41 listings / 3057
+	//  words: `lo12 0x2D9' is a 36-word family whose consumer `0012201655'
+	//  (`mac ta', 0.43 % base rate) is IMMEDIATELY preceded by a class-1 addr8 0x20
+	//  DELAY READ at 13 of 13 sites, and ENSEMBLE fuses read+capture into one `2D9'
+	//  where the kernel splits the identical `2D9' off one word ahead of its read.
+	//  §217 graded it BY PROVENANCE and §218 re-verified the population (7 class-2
+	//  words, below) with the disassembler's own field accessors.
+	//  ★★★ §219: AND IT IS NOT WHAT CLOSES THE UNIT-0 SEND, which is the question
+	//  it kept being re-opened for.  No SRC on the send path decides a stored value:
+	//  the delay WRITE at :2081 and the HI_ST store at :2942 both take
+	//  `acc_to_datum(m_acc)', never the bus, so `SRC 0x0B' reaches the delay line
+	//  only as a MULTIPLICAND (tempA -> P = coef x tempA -> acc).  The send is D-RAM
+	//  cell 0x05, and what closes it is kernel `iw35' overwriting the audio that
+	//  `iw9'/`iw11' deposited there.  See dsp/tools/src0b_census.py sendpath.
 	//  ★★★ THE UNANCHORED SOURCE CODES, 2026-07-28, register row 20.
 	//  The default: branch below warns that widening alu_decoded() must not let an
 	//  unanchored source quietly become a memory read, and that "leaving L at 0 is
