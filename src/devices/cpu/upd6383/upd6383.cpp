@@ -5705,8 +5705,13 @@ void upd6383_device::dump_frame_report() const
 			for (int k = 0; k < m_c2c_n[b]; k++)
 				r += string_format(" iw%u->ix%u(dsc%02X,cell%04X)", m_c2c_iw[b][k],
 						m_c2c_ix[b][k], u8(m_dsc + m_c2c_ix[b][k]), m_c2c_cell[b][k]);
-			logerror("upd6383: ★★ §204 CONSUMER->CELL body %d (%d consumers):%s\n",
-					b, m_c2c_n[b], r.c_str());
+			//  ⚠ §204 label fix: bucket 0 collects everything below I-RAM 200, which
+			//  includes the KERNEL (0..59) and the epilogue, not only body 0.  The A/B
+			//  compares like with like so the result stands, but the label was wrong
+			//  and would mislead if the data were quoted elsewhere.
+			logerror("upd6383: ★★ §204 CONSUMER->CELL %s (%d consumers):%s\n",
+					b ? "unit 1 (I-RAM >= 200)" : "kernel + body 0 (I-RAM < 200)",
+					m_c2c_n[b], r.c_str());
 		}
 		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
 				(unsigned long long)m_cfmtix_n);
