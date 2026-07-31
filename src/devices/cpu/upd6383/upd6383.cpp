@@ -375,6 +375,19 @@ void upd6383_device::device_start()
 			"three, iw9 among them; 2 = §223 DIAGNOSTIC: iw35 and iw45 ONLY, so iw9 "
 			"survives)\n",
 			(int)m_noz05);
+	//  ★★★ §224: THE WRAP WORD'S OPERAND IS A MODULUS, NOT AN ADDEND.  DEFAULT OFF,
+	//  announced UNCONDITIONALLY so a log can never be read against the wrong arm.
+	//  See upd6383.h `m_lfowrap' and data/PREDICT_224.md §2, committed before this
+	//  build.  The family is §118's, by predicate and not by line: bit-4 STORE +
+	//  bit 7 + hi12[3:1] == 2 + ACTION 0x00 + SRC 0x08 + coefficient consumer.
+	if (const char *e11 = getenv("UPD6383_LFOWRAP"))
+		m_lfowrap = (strtoul(e11, nullptr, 10) != 0);
+	logerror("upd6383: §224 UPD6383_LFOWRAP = %d  (0 = SHIPPED: the wrap word's SRC-0x08 "
+			"operand is ADDED to the accumulator by ACTION 0x00 -- which is why iw92 "
+			"publishes clamp(phase + INC + 0x7FFFFF) = 8 388 607 into D-RAM 0x10 on "
+			"every frame; 1 = §224: the operand is applied as a MODULUS, "
+			"acc <- (datum(acc) & L) << ACC_SHIFT, at the ADDER only)\n",
+			m_lfowrap ? 1 : 0);
 	//  ★★★ §221 `§E1': the epilogue/handover OPERAND-PROVENANCE census.  READ-ONLY --
 	//  it changes no decode, no route and no value; it only records WHICH ARRAY,
 	//  WHICH INDEX and WHICH `iw' LAST WROTE each operand the output stage fetches.
@@ -3045,6 +3058,11 @@ void upd6383_device::exec_alu(u64 word)
 	// deliberately no default case that guesses at the other fourteen the
 	// corpus contains.
 	s32 L = 0;
+	//  ★ §224 `§S2sq': "no C-RAM cell reached the bus on THIS word" is the default,
+	//  cleared here and set only by the SRC-0x08 case.  A stale value would make the
+	//  squaring counter fire on a word that never read C-RAM -- the exact shape of
+	//  the `m_mul_issued' defect §138's comment warns about.
+	m_s2_bus_cram = 0xffffffff;
 	//  ★★★ §221 §E1: WHICH ROUTE DID THE C++ ACTUALLY TAKE, and to WHICH INDEX?
 	//  Set INSIDE the case that runs -- never re-derived afterwards, because a
 	//  re-derivation is a second copy of the decision that can drift from it (the
@@ -3170,6 +3188,9 @@ void upd6383_device::exec_alu(u64 word)
 		case 0x08:
 			L = s32(util::sext(m_cram.read_dword(m_cursor) & 0xffffff, 24));
 			e1route = E1_CRAM; e1idx = u16(m_cursor);                   // §221 §E1
+			//  ★★★ §224 `§S2sq': remember WHICH C-RAM cell reached the bus, so the
+			//  multiply below can say whether it then squared it.  READ-ONLY.
+			m_s2_bus_cram = m_cursor;
 			break;
 		case 0x00:
 			//  ★ §123: this reading is BETTER SUPPORTED than the neighbouring
@@ -3974,11 +3995,53 @@ void upd6383_device::exec_alu(u64 word)
 		const u64 p_term =
 				(op == upd6383_disassembler::HI_ACC_HOLD
 					|| (m_speculative && op > upd6383_disassembler::HI_ACC_HOLD)) ? 0 : m_p;
-		if (stale_p) accum = (accum + ((act == upd6383_disassembler::LO_ACT_ACC_BUS
+		//  ★★★ §224 `UPD6383_LFOWRAP' (env, DEFAULT OFF).  THE WRAP WORD'S SRC-0x08
+		//  OPERAND IS A MODULUS, NOT AN ADDEND.  §118's family, by PREDICATE:
+		//  bit-4 STORE + bit 7 + hi12[3:1] == 2 + ACTION 0x00 + SRC 0x08 + class A.
+		//  See upd6383.h `m_lfowrap' for the from-disk derivation (iw92 - iw91 =
+		//  8 388 607 = C-RAM[0x01] = the constant this file's own C-RAM annotation
+		//  calls "wrap") and data/PREDICT_224.md §4.3 for the two-sided falsifier.
+		//  ⚠ The ADDER only.  The bit-4 store above still clamps, deliberately.
+		const bool lfw = m_lfowrap
+				&& (hi & upd6383_disassembler::HI_ST)
+				&& (hi & upd6383_disassembler::HI_B7)
+				&& f31 == upd6383_disassembler::HI_ACC_HOLD
+				&& act == upd6383_disassembler::LO_ACT_ACC_BUS
+				&& src == 0x08
+				&& upd6383_disassembler::coeff_consumer(word);
+		//  ★ §224 `§S2': the three terms, split out of `src_term' ITSELF so they can
+		//  never drift from the expression the ALU actually evaluated.
+		const u64 s2_carry = (op == upd6383_disassembler::HI_ACC_LOAD ? 0 : accum);
+		const u64 s2_bus   = src_term - s2_carry;
+		if (lfw)
+		{
+			m_lfowrap_n++;
+			u32 q = 0;
+			for (; q < m_lfowrap_slots; q++) if (m_lfowrap_iw[q] == m_cur_iw) break;
+			if (q == m_lfowrap_slots && m_lfowrap_slots < 8)
+			{ m_lfowrap_iw[q] = u16(m_cur_iw); m_lfowrap_slots++; }
+			if (q < 8) m_lfowrap_cnt[q]++;
+			const s64 d = s64(util::sext(accum, 44)) >> ACC_SHIFT;
+			accum = (u64(d & s64(L)) << ACC_SHIFT) & 0xfffffffffffULL;
+			m_s2_skipped++;
+		}
+		else if (stale_p)
+		{
+			accum = (accum + ((act == upd6383_disassembler::LO_ACT_ACC_BUS
 					|| (m_specmask & 0x200000)) ? u64(s64(L) << ACC_SHIFT) : 0))
 				& 0xfffffffffffULL;
+			m_s2_skipped++;
+		}
 		else
+		{
 		accum = (src_term + p_term) & 0xfffffffffffULL;
+		//  ★★★★ §224 `§S2' -- THE ACCUMULATOR TERM CENSUS, read-only, settled frames.
+		//  Recorded HERE and only on the plain adder path, so `carried + bus + P ==
+		//  result' is a self-test that CAN FAIL (rule 20) rather than a tautology
+		//  over three different formulas.  Skips are counted and printed.
+		s2_record(m_cur_iw, s2_carry, s2_bus, p_term, accum,
+				src, act == upd6383_disassembler::LO_ACT_ACC_BUS);
+		}
 		pv_wr_acc(use_b, accum);                              // ★ §221 §E1
 	}
 
@@ -4611,6 +4674,19 @@ void upd6383_device::exec_alu(u64 word)
 				&& !(m_speculative && (m_specmask & 0x10)))
 		{
 			m_mul_issued = true;    // ★ §29: it RAN -- distinct from "P came out 0"
+			//  ★★★ §224 `§S2sq', READ-ONLY: did this multiply SQUARE a coefficient?
+			//  `SRC 0x08' resolved to C-RAM[m_cursor] a few hundred lines above, and
+			//  the cursor has not moved since -- so when `ccur' is that same index the
+			//  product is `C-RAM[c] * C-RAM[c]'.  Counted, never acted on.
+			if (m_s2_bus_cram == ccur && m_frames_run > S1_ARM_FRAME)
+			{
+				m_s2sq_n++;
+				u32 q = 0;
+				for (; q < m_s2sq_slots; q++) if (m_s2sq_iw[q] == m_cur_iw) break;
+				if (q == m_s2sq_slots && m_s2sq_slots < 16)
+				{ m_s2sq_iw[q] = u16(m_cur_iw); m_s2sq_slots++; }
+				if (q < 16) m_s2sq_cnt[q]++;
+			}
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
 			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
 			//==============================================================
@@ -6925,6 +7001,98 @@ void upd6383_device::dump_frame_report() const
 					(long long)m_s1_min[0][34], (long long)m_s1_max[0][34],
 					m_s1_clip[0][40], m_s1_calls[0][40], m_s1_clip[1][40], m_s1_calls[1][40],
 					(long long)m_s1_min[0][40], (long long)m_s1_max[0][40]);
+			//  ★★★ §224: `§S1' says WHETHER the accumulator clipped.  `§224 §1' says
+			//  WHICH conversion each row belongs to, because that has now been got
+			//  wrong once: `§S1's `iw34' row is the SRC-0x10 BUS READ of the value
+			//  `iw33' left, not a store's datum, and its number is `§104' row 33's
+			//  `acc >> 16'.  Printed here so the two can never be quoted apart.
+			logerror("upd6383:    ★ §224 §S1 PROVENANCE: every §S1 row above is the "
+					"PRE-update accumulator, i.e. the PREVIOUS slot's §104 `acc' >> %u "
+					"(verified 8 of 8 from data/F_satcen_223.log.gz).  iw34 = row 33, "
+					"iw92 = row 91, iw39 = row 38.\n", (unsigned)ACC_SHIFT);
+		}
+		{   //  ★★★★ §224 `§S2': THE ACCUMULATOR TERM CENSUS.
+			//  §223 closed by naming the task: "name the words that build that
+			//  accumulator between iw30 and iw34 and grade each one's contribution
+			//  against full scale".  This is that, for every slot in the frame.
+			logerror("upd6383: ★★★★ §224 §S2 ACCUMULATOR TERM CENSUS (the adder, frames "
+					"> %u, bucket = §54's in_nz).  acc <- CARRIED + BUS + P, where "
+					"CARRIED = 0 on f31 == 0, BUS = L << %u only on ACTION 0x00, "
+					"P = 0 on f31 == 2.  Values are 44-bit accumulator units; the FS "
+					"column is (value >> %u) / 8 388 607.\n",
+					(unsigned)S1_ARM_FRAME, (unsigned)ACC_SHIFT, (unsigned)ACC_SHIFT);
+			logerror("upd6383:    adder runs recorded %llu | NOT recorded (LFOWRAP / "
+					"stale-P paths) %llu | 44-bit OVERFLOWS %llu\n",
+					(unsigned long long)m_s2_total, (unsigned long long)m_s2_skipped,
+					(unsigned long long)m_s2_wrap44);
+			logerror("upd6383:    ROWS: emitted where the RESULT exceeds 24-bit full "
+					"scale in either bucket.  ⚠ the result is the AFTER-slot value, so "
+					"the row that OVERFLOWS is one BEFORE the row §S1 names.\n");
+			logerror("upd6383:    iw  region   over q/l   busSRC | quiet: "
+					"carried + bus + P = result (xFS)\n");
+			u32 rows = 0, dropped = 0;
+			for (u32 i = 0; i < 384; i++)
+			{
+				if (!m_s2_over[0][i] && !m_s2_over[1][i]) continue;
+				if (rows >= S2_MAX_ROWS) { dropped++; continue; }
+				rows++;
+				const u32 rg = pw_region(u16(i));
+				const char *rn = (rg == PW_KERNEL_A) ? "kernelA"
+						: (i >= 84 && i <= 199) ? "body0"
+						: (i >= 200 && i <= 332) ? "body1"
+						: (i >= 60 && i <= 83) ? "epilog" : "other";
+				std::string sl;
+				for (u32 s = 0; s < 32; s++)
+					if (m_s2_srcmask[i] & (1u << s)) sl += string_format(" %02X", s);
+				logerror("upd6383:   %3u %-8s %7u/%-7u %-8s | q %lld..%lld + %lld..%lld "
+						"+ %lld..%lld = %lld..%lld  (%.3f..%.3f xFS)\n",
+						i, rn, m_s2_over[0][i], m_s2_over[1][i],
+						sl.empty() ? " --" : sl.c_str(),
+						(long long)m_s2_car_min[0][i], (long long)m_s2_car_max[0][i],
+						(long long)m_s2_bus_min[0][i], (long long)m_s2_bus_max[0][i],
+						(long long)m_s2_p_min[0][i],   (long long)m_s2_p_max[0][i],
+						(long long)m_s2_res_min[0][i], (long long)m_s2_res_max[0][i],
+						double(m_s2_res_min[0][i] >> ACC_SHIFT) / 8388607.0,
+						double(m_s2_res_max[0][i] >> ACC_SHIFT) / 8388607.0);
+			}
+			logerror("upd6383:    §S2 rows printed %u of cap %u, DROPPED %u\n",
+					rows, (unsigned)S2_MAX_ROWS, dropped);
+			//  ★ THE CONTROLS, pre-registered in data/PREDICT_224.md §4.1 from a
+			//  DIFFERENT instrument (§104 + the frame trace) before this code existed,
+			//  printed BESIDE the result so the two cannot be quoted apart.
+			for (u32 i : { 30u, 32u, 33u, 91u })
+				logerror("upd6383:    §S2 CONTROL iw%-3u n q/l %u/%u | q carried "
+						"%lld..%lld  bus %lld..%lld  P %lld..%lld  = %lld..%lld\n",
+						i, m_s2_calls[0][i], m_s2_calls[1][i],
+						(long long)m_s2_car_min[0][i], (long long)m_s2_car_max[0][i],
+						(long long)m_s2_bus_min[0][i], (long long)m_s2_bus_max[0][i],
+						(long long)m_s2_p_min[0][i],   (long long)m_s2_p_max[0][i],
+						(long long)m_s2_res_min[0][i], (long long)m_s2_res_max[0][i]);
+			//  ★★★ §224 `§S2sq': the coefficient-squaring counter, UNCONDITIONAL.
+			{
+				std::string r;
+				for (u32 q = 0; q < m_s2sq_slots; q++)
+					r += string_format(" iw%u:%u", m_s2sq_iw[q], m_s2sq_cnt[q]);
+				logerror("upd6383:    ★ §224 §S2sq CLASS-A MULTIPLIES THAT SQUARE THEIR "
+						"OWN COEFFICIENT (SRC 0x08 put C-RAM[c] on the bus and the "
+						"multiply read C-RAM[c] again): %u, %u distinct slots (cap 16)"
+						"%s |%s\n",
+						m_s2sq_n, m_s2sq_slots, m_s2sq_slots >= 16 ? " ⚠ CAPPED" : "",
+						r.empty() ? " (none)" : r.c_str());
+			}
+			//  ★★★ §224 `LFOWRAP': the fired count, printed UNCONDITIONALLY with the
+			//  gate's own state beside it (rule 8 as §220 sharpened it).  ZERO with the
+			//  gate ON means UNTESTED, not inert.
+			{
+				std::string r;
+				for (u32 q = 0; q < m_lfowrap_slots; q++)
+					r += string_format(" iw%u:%u", m_lfowrap_iw[q], m_lfowrap_cnt[q]);
+				logerror("upd6383:    ★ §224 LFOWRAP (UPD6383_LFOWRAP = %d): %u wrap-word "
+						"adder steps took the MODULUS path, %u distinct slots%s |%s\n",
+						m_lfowrap ? 1 : 0, m_lfowrap_n, m_lfowrap_slots,
+						m_lfowrap_slots >= 8 ? " ⚠ CAPPED" : "",
+						r.empty() ? " (none -- UNTESTED in this arm)" : r.c_str());
+			}
 		}
 		{   // ★ §99: where the mode-1 stores went, now that they no longer go to D-RAM
 			std::string r; u32 n = 0;

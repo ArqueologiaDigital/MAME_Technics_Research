@@ -1468,6 +1468,150 @@ private:
 	u32  m_src02_n = 0;     // §100: times SRC 0x02 read the addressed register
 
 	//======================================================================
+	//  ★★★★ §224 `§S2' -- THE ACCUMULATOR TERM CENSUS.  READ-ONLY, always on.
+	//
+	//  `§S1' (§223) records the accumulator at the moment it becomes a datum and
+	//  says WHETHER it clipped.  It cannot say WHY, and §223 closed by naming that
+	//  as the blocker: *"name the words that build that accumulator between iw30
+	//  and iw34 and grade each one's contribution against full scale."*
+	//
+	//  This is that instrument, generalised to every slot.  It hooks the ONE point
+	//  where the adder runs -- `accum = src_term + p_term' -- and splits the sum
+	//  into the three physical terms the register's own row 26 names:
+	//
+	//      CARRIED   = 0            if hi12[3:1] == 0 (HI_ACC_LOAD)
+	//                = accum        otherwise
+	//      BUS       = L << ACC_SHIFT   if ACTION == 0x00, else 0
+	//      P         = 0            if hi12[3:1] == 2 (HI_ACC_HOLD), else m_p
+	//
+	//  ★ THE SELF-TEST IS BUILT IN AND IT CAN FAIL (rule 20).  `carried + bus + P'
+	//  must equal the accumulator the slot leaves, which `§104' measures by a
+	//  DIFFERENT route; a mismatch is counted and printed, and a non-zero mismatch
+	//  count means nothing else in the block may be quoted.  The values below were
+	//  derived from `F_satcen_223.log.gz' + the frame trace BEFORE this code was
+	//  written and are pre-registered in data/PREDICT_224.md §4.1:
+	//
+	//      iw30  carried 0              bus 329 853 435 904  P 0              (SRC 08)
+	//      iw32  carried 0              bus 0                P 395 824 060 170
+	//      iw33  carried 395 824 060 170 bus 274 877 906 944 P 274 877 906 944 (SRC 08)
+	//      iw91  carried 7 733 451..    bus 549 755 748 352  P 0              (SRC 08)
+	//
+	//  ⚠ ROWS ARE EMITTED ON THE **RESULT** EXCEEDING FULL SCALE, and the result is
+	//  the AFTER-slot value.  `iw34' therefore must NOT appear: the over-scale
+	//  number `§S1' censuses at `iw34' belongs to row 33.  Stating which side of the
+	//  slot a number came from is the whole point (the after/before off-by-one has
+	//  now cost five sections).
+	static constexpr u32 S2_MAX_ROWS = 48;
+	mutable u32 m_s2_calls[2][384] = {};
+	mutable bool m_s2_seen[2][384] = {};
+	mutable s64 m_s2_car_min[2][384] = {}, m_s2_car_max[2][384] = {};
+	mutable s64 m_s2_bus_min[2][384] = {}, m_s2_bus_max[2][384] = {};
+	mutable s64 m_s2_p_min  [2][384] = {}, m_s2_p_max  [2][384] = {};
+	mutable s64 m_s2_res_min[2][384] = {}, m_s2_res_max[2][384] = {};
+	mutable u32 m_s2_over[2][384] = {};       // results whose datum exceeds 24-bit range
+	mutable u32 m_s2_srcmask[384] = {};       // which SRC codes fed the bus term here
+	//  ⚠ NOT a self-test -- `carry + bus + P == result' is TRUE BY CONSTRUCTION here
+	//  (the terms are split out of `src_term' itself), and a criterion that cannot
+	//  fail is not a pass.  What this counts is a real event that can be zero or
+	//  non-zero: the 44-bit accumulator OVERFLOWING, i.e. the untruncated sum of the
+	//  three terms not fitting in the register the ALU keeps it in.
+	//  The census's real can-fail control is EXTERNAL and pre-registered -- the
+	//  per-term values in data/PREDICT_224.md §4.1, derived from `§104' + the frame
+	//  trace BEFORE this code existed.
+	mutable u64 m_s2_wrap44 = 0;
+	mutable u64 m_s2_total = 0;
+	mutable u64 m_s2_skipped = 0;             // adder runs NOT recorded (lfowrap / stale-P)
+	void s2_record(u32 iw, u64 carried, u64 bus, u64 p, u64 res, u16 src, bool bus_live)
+	{
+		if (m_frames_run <= S1_ARM_FRAME || iw >= 384) return;
+		const u32 b = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+		m_s2_total++;
+		const u64 raw = carried + bus + p;
+		if (raw != (raw & 0xfffffffffffULL)) m_s2_wrap44++;
+		const s64 scar = s64(util::sext(carried, 44));
+		const s64 sbus = s64(bus);
+		const s64 sp   = s64(util::sext(p, 44));
+		const s64 sres = s64(util::sext(res, 44));
+		s2_apply(b, iw, scar, sbus, sp, sres, src, bus_live);
+	}
+	void s2_apply(u32 b, u32 iw, s64 carried, s64 bus, s64 p, s64 res, u16 src, bool bus_live)
+	{
+		m_s2_calls[b][iw]++;
+		if (bus_live && src < 32) m_s2_srcmask[iw] |= (1u << src);
+		if (!m_s2_seen[b][iw])
+		{
+			m_s2_seen[b][iw] = true;
+			m_s2_car_min[b][iw] = m_s2_car_max[b][iw] = carried;
+			m_s2_bus_min[b][iw] = m_s2_bus_max[b][iw] = bus;
+			m_s2_p_min  [b][iw] = m_s2_p_max  [b][iw] = p;
+			m_s2_res_min[b][iw] = m_s2_res_max[b][iw] = res;
+		}
+		else
+		{
+			if (carried < m_s2_car_min[b][iw]) m_s2_car_min[b][iw] = carried;
+			if (carried > m_s2_car_max[b][iw]) m_s2_car_max[b][iw] = carried;
+			if (bus < m_s2_bus_min[b][iw]) m_s2_bus_min[b][iw] = bus;
+			if (bus > m_s2_bus_max[b][iw]) m_s2_bus_max[b][iw] = bus;
+			if (p   < m_s2_p_min  [b][iw]) m_s2_p_min  [b][iw] = p;
+			if (p   > m_s2_p_max  [b][iw]) m_s2_p_max  [b][iw] = p;
+			if (res < m_s2_res_min[b][iw]) m_s2_res_min[b][iw] = res;
+			if (res > m_s2_res_max[b][iw]) m_s2_res_max[b][iw] = res;
+		}
+		const s64 d = res >> ACC_SHIFT;
+		if (d > 0x7fffff || d < -0x800000) m_s2_over[b][iw]++;
+	}
+
+	//  ★★★ §224 `§S2sq' -- THE COEFFICIENT-SQUARING COUNTER.  READ-ONLY.
+	//  `SRC 0x08' resolves to `C-RAM[m_cursor]', and on a class-A word the multiply
+	//  then reads `C-RAM[m_cursor]' AGAIN, before the post-increment -- so the
+	//  product is the coefficient SQUARED.  Verified by hand on four slots
+	//  (iw30 5 033 164^2>>6 = 395 824 060 170; iw32/iw33 4 194 304^2>>6 =
+	//  274 877 906 944; body-0 iw89 114^2>>6 = 203, digit for digit against the
+	//  frame trace's own `p' column).  This counts it corpus-wide instead of by
+	//  hand: it is the mechanism behind §224 §0.3, and if it fires ZERO the whole
+	//  reading collapses.
+	u32  m_s2sq_n = 0;
+	u32  m_s2sq_slots = 0;
+	u16  m_s2sq_iw[16] = { 0 };
+	u32  m_s2sq_cnt[16] = { 0 };
+	//  set by the SRC switch when 0x08 resolves, cleared at the top of every word
+	u32  m_s2_bus_cram = 0xffffffff;
+
+	//======================================================================
+	//  ★★★ §224 `UPD6383_LFOWRAP' -- THE WRAP WORD'S OPERAND IS A MODULUS.
+	//  env, DEFAULT OFF, unconditional fired count, TWO-SIDED.
+	//
+	//  §118 identifies the family exactly: bit-4 STORE + bit 7 + `hi12[3:1] == 2',
+	//  `SRC 0x08', class A -- 29 words, one per LFO block, and this file's own
+	//  §-note calls it *"the wrap word (f31 == 2, coefficient 0x7FFFFF)"*.  Its
+	//  documented semantics are `ST mem[Q] <- (phase + INC) mod 2**23'.
+	//
+	//  MEASURED, from data/F_satcen_223.log.gz, no run required (PREDICT_224 §2):
+	//      §S1  iw91  pre-clamp      118 ..  8 388 708      (the phase + INC)
+	//      §S1  iw92  pre-clamp  8 388 725 .. 16 777 315    (clips 706 040/706 040)
+	//      iw92 - iw91 = 8 388 607 EXACTLY at BOTH endpoints in BOTH buckets
+	//      8 388 607 = 0x7FFFFF = C-RAM[0x01], which this file's own C-RAM
+	//      annotation names: "0x00..0x13 real parameters (LFO rate 000072,
+	//      wrap 7FFFFF, 400000 ...)"
+	//  ⇒ `ACT 0x00' adds the MODULUS to the accumulator, so `iw92' publishes a
+	//  clamped constant and D-RAM cell 0x10 -- §120's modulation cell -- is pinned
+	//  at 8 388 607 forever (§119: [dp10]8388607 on 8 of 8 settled frames) while the
+	//  phase itself ramps correctly at +114/frame in cell 0x07 (§109).
+	//
+	//  ⚠ THIS TOUCHES THE ADDER ONLY.  The bit-4 store's own datum keeps clamping
+	//  (it clips 36 of 2 824 160 quiet conversions, so it is not the damage); making
+	//  the STORE wrap as well is a separate question and is deliberately not merged
+	//  into this bisection.
+	//  ⚠ It is NOT §114/§116's wrap (mask bits 32/33): those wrap EVERY conversion
+	//  against a hardwired 2^23 inside acc_to_datum().  This wraps ONE word family
+	//  against ITS OWN C-RAM operand, which is where the constant actually lives.
+	bool m_lfowrap = false;
+	u32  m_lfowrap_n = 0;
+	u32  m_lfowrap_slots = 0;
+	u16  m_lfowrap_iw[8] = { 0 };
+	u32  m_lfowrap_cnt[8] = { 0 };
+
+	//======================================================================
 	//  ★★★ §221 `§E1' -- THE EPILOGUE / HANDOVER OPERAND-PROVENANCE CENSUS.
 	//  env UPD6383_EPIBUS, DEFAULT OFF, unconditional fired count (rule 8).
 	//  READ-ONLY: no decode change, no mask bit, no behavioural gate.  The
