@@ -338,6 +338,11 @@ void upd6383_device::device_start()
 	if (const char *e = getenv("UPD6383_AB_NOSTORE08"))
 	{
 		m_ab_nostore08 = (strtoul(e, nullptr, 10) != 0);
+	}
+	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
+	{
+		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
+		logerror("upd6383: §200 UPD6383_ROTSIGN = %d\n", m_rotsign ? 1 : 0);
 		logerror("upd6383: §104 A/B UPD6383_AB_NOSTORE08 = %d\n", m_ab_nostore08 ? 1 : 0);
 	}
 	save_item(NAME(m_p));
@@ -383,6 +388,7 @@ void upd6383_device::device_reset()
 	// word carrying 84 or 200 has ever been found -- entry may well be
 	// host-driven via the PC-RST / Fs-RST pins.  Starting at 0 is a placeholder.
 	m_pc = 0;
+	if (!m_dts_store) { m_dts_store = std::make_unique<u32[]>(0x10000); m_dts = m_dts_store.get(); }
 	m_acc = m_accb = m_p = 0;
 	std::fill(std::begin(m_rf), std::end(m_rf), 0);   // §97
 	for (int i = 0; i < 256; i++)
@@ -1891,9 +1897,42 @@ void upd6383_device::exec_alu(u64 word)
 			//  ★★★ §153: + the modulation offset.  `m_frames_run' is the
 			//  circular-buffer rotation G (r3-delaydram.md §5.1); `m_tapmod' is the
 			//  swept-tap term the model has never had.
-			const u32 addr = (cellv + u32(m_frames_run)
+			//  ★★★ §200: THE ROTATION SIGN.  `adjudication-round5.md' §3 FORCES
+			//  `delay = READ_CELL - WRITE_CELL'.  With G RISING a read at R+T returns
+			//  the sample written at T' = T + (R-W) -- a FUTURE sample -- so the only
+			//  consistent reading is the COMPLEMENT, 65536-(R-W): 1.478 s where 7.60 ms
+			//  was intended.  With G FALLING it is (R-W) samples, correct. (§199)
+			//  ⚠ The u64 spec mask is EXHAUSTED, so this uses an env gate, the same
+			//  mechanism §104 used (UPD6383_AB_NOSTORE08).
+			//  ⚠⚠ `G' CANCELS in R-W, so NO address measurement can grade this --
+			//  every existing probe is bit-identical across it.  The falsifier is the
+			//  §200 write-timestamp census below, and nothing else.
+			const u32 rot = m_rotsign ? (0u - u32(m_frames_run)) : u32(m_frames_run);
+			if (m_rotsign) m_rotsign_n++;
+			const u32 addr = (cellv + rot
 					+ ((m_speculative && (m_specmask & (1ull << 60)))
 						? u32(s32(m_tapmod)) : 0u)) & 0xffff;
+			//  ★ §200 PROBE: tag every delay WRITE with its frame; at every READ
+			//  report how many frames ago that address was written.  THAT is the
+			//  delay, and it is the only quantity the sign changes.
+			{
+				const u8 dsc = u8(m_dsc + m_delay_ix);
+				if (dir == 'W') { m_dts[addr] = u32(m_frames_run); }
+				else if (dir == 'R' && m_dts[addr])
+				{
+					const u32 age = u32(m_frames_run) - m_dts[addr];
+					int sl = -1;
+					for (int q = 0; q < m_age_n; q++) if (m_age_dsc[q] == dsc) { sl = q; break; }
+					if (sl < 0 && m_age_n < 12) { sl = m_age_n++; m_age_dsc[sl] = dsc;
+						m_age_min[sl] = m_age_max[sl] = age; }
+					if (sl >= 0)
+					{
+						m_age_min[sl] = std::min(m_age_min[sl], age);
+						m_age_max[sl] = std::max(m_age_max[sl], age);
+						m_age_hits[sl]++;
+					}
+				}
+			}
 			{   //  ⛔ §154 FIX: census the MODULATION TERM, not the absolute address.
 				//  §153's census took the range of `addr' per cell over the whole run
 				//  and got 65535 for every cell in BOTH arms -- because `m_frames_run'
@@ -5607,6 +5646,13 @@ void upd6383_device::dump_frame_report() const
 					(unsigned long long)m_b11_dchg[i],
 					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
 					: "CONSTANT -- a reset would be unobservable");
+		for (int i = 0; i < m_age_n; i++)
+			logerror("upd6383: ★★ §200 DELAY AGE dsc %02X: hits %llu | frames_since_written "
+					"%u .. %u  (%.2f .. %.2f ms @44.1k)\n",
+					m_age_dsc[i], (unsigned long long)m_age_hits[i], m_age_min[i], m_age_max[i],
+					1000.0 * m_age_min[i] / 44100.0, 1000.0 * m_age_max[i] / 44100.0);
+		logerror("upd6383: ★ §200 rotation sign FALLING (UPD6383_ROTSIGN): applied %llu times\n",
+				(unsigned long long)m_rotsign_n);
 		logerror("upd6383: ★ §197 0x0B poke packets accepted: %llu\n",
 				(unsigned long long)m_pk_0b_n);
 		logerror("upd6383: ★ §188 host payload LSB restored (mask bit 63 = %d): "

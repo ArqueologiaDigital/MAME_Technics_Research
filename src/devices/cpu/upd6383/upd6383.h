@@ -1063,6 +1063,15 @@ private:
 	//  §188: host payload LSB restoration counters.
 	u64  m_pk_lsb_n = 0, m_pk_lsb_seen = 0;
 	u64  m_pk_0b_n = 0;   // §197
+	//  §200: rotation sign + the write-timestamp census (the ONLY probe that can grade it).
+	bool m_rotsign = false;
+	u64  m_rotsign_n = 0;
+	std::unique_ptr<u32[]> m_dts_store;
+	u32 *m_dts = nullptr;
+	int  m_age_n = 0;
+	u8   m_age_dsc[12] = {};
+	u32  m_age_min[12] = {}, m_age_max[12] = {};
+	u64  m_age_hits[12] = {};
 	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
 	u32  m_hostw_cell[0x100] = {}, m_hostw_nz[0x100] = {};
 	u8   m_pw = 0;
