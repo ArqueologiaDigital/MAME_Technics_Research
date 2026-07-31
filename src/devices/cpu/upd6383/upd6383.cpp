@@ -2444,6 +2444,22 @@ void upd6383_device::exec_alu(u64 word)
 			//  are excluded rather than misclassified.  MEASURED over the 41 listings:
 			//  0 of 3057 c-format words carry SRC 0x0B, so the guard is a no-op on
 			//  every shipped program and exists only to keep the counter unambiguous.
+			//  ★★★ §218: THE `7' ABOVE IS RIGHT AND HAS BEEN SINCE §215 -- DO NOT
+			//  RE-DERIVE IT BY EYE.  §217 sect.5 recounted it in prose, read lo12's
+			//  ACTION field (lo12[4:0]) as its SOURCE field (lo12[10:6]), and got 9 by
+			//  sweeping in `000.2.00.40B' (ENSEMBLE w62) and `000.2.09.40B' (MULTI TAP
+			//  w25) -- whose SRC is 0x10, THE ACCUMULATOR; only their ACTION is 0x0B.
+			//  It then built a handover question on the two impostors.  Eleven distinct
+			//  lo12 values occur on BOTH class-1 delay words and class-2 words (the
+			//  kernel's own iw26 is `880.1.20.40B'), so lo12 carries no class
+			//  information at all.  Census it with dsp/tools/src0b_census.py, which
+			//  uses the disassembler's own lo_src()/lo_act().  (Standing rule 18.)
+			//  ⛔ §218 also RETIRED the cross-frame rival for this word: the §217
+			//  provenance histogram below is SINGLE-BIN `iw289' in the shipped arm, and
+			//  41 delay words (21 READS) separate iw26 of frame N-1 from iw25 of frame
+			//  N, so a one-deep m_dr cannot be carrying the FOLLOWING read's datum.
+			//  `UPD6383_DRPUB's age 0 is CORRECT; it stays default OFF only because it
+			//  is bit-identical to the control while the delay line is empty.
 			if (cl != 1 && !upd6383_disassembler::c_format(word))
 			{
 				m_src0b2_n++;
