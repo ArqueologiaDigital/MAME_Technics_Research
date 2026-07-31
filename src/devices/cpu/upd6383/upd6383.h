@@ -1053,6 +1053,7 @@ private:
 	u64  m_f31_word[9] = {}, m_f31_hits[9] = {}, m_f31_achg[9] = {};
 	s64  m_f31_amin[9] = {}, m_f31_amax[9] = {}, m_f31_aprev[9] = {};
 	u64  m_f31_reject = 0;
+	u32  m_f31_smin[9] = {}, m_f31_smax[9] = {};
 	//  §191: the pointer at every bit-11 word, with a change count.
 	void b11_probe(u64 word);
 	int  m_b11_n = 0;

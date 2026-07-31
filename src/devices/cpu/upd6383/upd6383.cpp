@@ -4835,7 +4835,15 @@ bool upd6383_device::ptrd_a_suppressed(u64 word)
 //  elsewhere in the same program, and §174 measured what pooling costs.
 void upd6383_device::f31_probe(u64 word)
 {
-	if (m_cur_iw < 122 || m_cur_iw > 130) return;
+	//  ★ §195: KEY BY WORD, NOT BY SLOT.  PEQ+VIBRATO carries the same nine-word
+	//  window at program word 31, i.e. I-RAM 115..123, where PEQ+CHORUS and
+	//  PEQ+FLANGER carry it at 122..130 -- a slot key cannot compare all three.
+	//  Eight of the nine word values are distinct, so the word identifies the
+	//  offset unambiguously.  ⚠ And the SLOT is recorded per word as a
+	//  self-check: if a window word recurs elsewhere in the program the slot
+	//  range widens and the sample is pooled (§174's error).  slot min == max is
+	//  the pass condition.
+	if (m_cur_iw < 100 || m_cur_iw > 140) return;
 	//  ⚠ GATE ON THE EXPECTED WORD.  The first version sampled from frame 0 --
 	//  before the program is uploaded -- so `word' logged as 0000000000 and the
 	//  min/max were dominated by boot content.  Both arms then reported
@@ -4849,7 +4857,12 @@ void upd6383_device::f31_probe(u64 word)
 	bool ok = false;
 	for (u64 w : WIN) if (w == word) { ok = true; break; }
 	if (!ok) { m_f31_reject++; return; }
-	const int i = m_cur_iw - 122;
+	int i = -1;
+	for (int q = 0; q < 10; q++) if (WIN[q] == word) { i = (q < 4) ? q : (q == 4 ? 3 : q - 1); break; }
+	if (i < 0) return;
+	if (!m_f31_hits[i]) { m_f31_smin[i] = m_f31_smax[i] = m_cur_iw; }
+	else { m_f31_smin[i] = std::min<u32>(m_f31_smin[i], m_cur_iw);
+	       m_f31_smax[i] = std::max<u32>(m_f31_smax[i], m_cur_iw); }
 	const s64 a = util::sext(m_cur_unit1 ? m_accb : m_acc, 44);
 	if (!m_f31_hits[i]) { m_f31_amin[i] = m_f31_amax[i] = a; }
 	else
@@ -5542,11 +5555,12 @@ void upd6383_device::dump_frame_report() const
 		for (int i = 0; i < 9; i++)
 			if (m_f31_hits[i])
 				logerror("upd6383: ★★ §193 f31 WINDOW +%d (I-RAM %d) %010llX : hits %llu | "
-						"acc %lld .. %lld chg %llu\n",
+						"acc %lld .. %lld chg %llu | slot %u..%u %s\n",
 						i, 122 + i, (unsigned long long)m_f31_word[i],
 						(unsigned long long)m_f31_hits[i],
 						(long long)m_f31_amin[i], (long long)m_f31_amax[i],
-						(unsigned long long)m_f31_achg[i]);
+						(unsigned long long)m_f31_achg[i], m_f31_smin[i], m_f31_smax[i],
+						(m_f31_smin[i] == m_f31_smax[i]) ? "" : "⚠ POOLED");
 		for (int i = 0; i < m_b11_n; i++)
 			logerror("upd6383: ★★ §191 BIT-11 WORD %010llX (lo12 %03X sel %02X sub %d): hits %llu | "
 					"m_dp %u..%u chg %llu (%s)\n",
