@@ -5703,15 +5703,25 @@ void upd6383_device::dump_frame_report() const
 		{
 			std::string r;
 			for (int k = 0; k < m_c2c_n[b]; k++)
-				r += string_format(" iw%u->ix%u(dsc%02X,cell%04X)", m_c2c_iw[b][k],
-						m_c2c_ix[b][k], u8(m_dsc + m_c2c_ix[b][k]), m_c2c_cell[b][k]);
+				//  ⛔ §208: DO NOT PRINT A DERIVED CELL LABEL.  The old field
+				//  `dsc%02X' = u8(m_dsc + ix) was +1 for body consumers -- §204's own
+				//  output showed `ix3(dsc29,cell05A0)' while 0x05A0 is cell 0x28 --
+				//  and §202 quoted two matches computed through it, so its
+				//  "bit-exact" numbers were body-1 consumers reading body-0's block.
+				//  ★ The base is not a simple register anyway: `dram-unit-cursor.md'
+				//  (4440 survivors of 766 576 machines, all B1 = 0x00, L1 <= 0x26)
+				//  makes it per-unit state established at the CALL, so `m_dsc + ix'
+				//  is not the cell for unit 1 under ANY correction.
+				//  ⇒ print the RAW INGREDIENTS and let the reader derive nothing.
+				r += string_format(" iw%u:ix%u,val%04X", m_c2c_iw[b][k],
+						m_c2c_ix[b][k], m_c2c_cell[b][k]);
 			//  ⚠ §204 label fix: bucket 0 collects everything below I-RAM 200, which
 			//  includes the KERNEL (0..59) and the epilogue, not only body 0.  The A/B
 			//  compares like with like so the result stands, but the label was wrong
 			//  and would mislead if the data were quoted elsewhere.
-			logerror("upd6383: ★★ §204 CONSUMER->CELL %s (%d consumers):%s\n",
+			logerror("upd6383: ★★ §204 CONSUMER->CELL %s (%d consumers, m_dsc=%02X):%s\n",
 					b ? "unit 1 (I-RAM >= 200)" : "kernel + body 0 (I-RAM < 200)",
-					m_c2c_n[b], r.c_str());
+					m_c2c_n[b], m_dsc, r.c_str());
 		}
 		//  ★ §205: these two counters were incremented and NEVER PRINTED -- the
 		//  project's own "every gate logs a fired-count" rule, breached for exactly
