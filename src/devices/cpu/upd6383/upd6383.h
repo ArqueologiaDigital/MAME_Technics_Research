@@ -557,6 +557,21 @@ private:
 	//  UPD6383_STPROBE=0 restores the old accounting so the A/B isolates it.
 	bool m_stprobe = true;
 	u64  m_stprobe_n = 0;           // phantom records suppressed
+	//  ★★★ §215: THE RIVAL READING OF `SRC 0x0B' ON A WORD THAT PERFORMS NO DELAY
+	//  ACCESS.  `SRC 0x0B = the delay-DRAM data register' is a GUESS (register row 14)
+	//  motivated by the 99 class-1 delay words -- and the ONE word that decides what
+	//  the unit-0 send carries, kernel `iw25 = 000.2.00.2D9', is NOT one of them: it is
+	//  class 2, addr8 0x00, and it is UNIQUE in the 3057-word corpus.  Under the shipped
+	//  reading it captures a register measured ZERO on 24 922 560 of 24 922 560 reads,
+	//  which is exactly what zeroes tempA and silences the send (§213 §4).
+	//  ⚠ DEFAULT OFF (UPD6383_SRC0B2=1 to arm).  The u64 spec mask is EXHAUSTED.
+	//  ⚠ It changes ONLY class4 != 1 words: the 22 521 600 delay-word evaluations
+	//  (§77) are untouched in both arms.
+	bool m_src0b2 = false;          // arm the rival reading (mem[ptr])
+	u64  m_src0b2_fired = 0;        // times the substitution actually happened
+	u64  m_src0b2_n = 0;            // class-2 SRC 0x0B evaluations (BOTH arms)
+	u64  m_src0b2_memnz = 0;        // ... of which mem[m_dp] was non-zero (BOTH arms)
+	u64  m_src0b2_drnz = 0;         // ... of which m_dr was non-zero  (BOTH arms)
 	//  ★ §104 A/B, diagnostic only, off unless UPD6383_AB_NOSTORE08=1 in the env.
 	bool m_ab_nostore08 = false;
 	u32  m_ab_nostore08_n = 0;

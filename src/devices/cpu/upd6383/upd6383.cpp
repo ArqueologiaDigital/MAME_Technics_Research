@@ -347,6 +347,14 @@ void upd6383_device::device_start()
 	logerror("upd6383: §213 UPD6383_STPROBE = %d  (1 = store bookkeeping follows the "
 			"STORE; 0 = the pre-§213 accounting, which records the §112 latch arm as "
 			"a phantom store)\n", m_stprobe ? 1 : 0);
+	//  ★★★ §215: the rival reading of SRC 0x0B on a NON-DELAY word.  DEFAULT OFF, and
+	//  announced UNCONDITIONALLY (same rule as §209/§213) so a log can never be read
+	//  against the wrong arm.  See upd6383.h `m_src0b2' and data/PREDICT_215.md.
+	if (const char *e7 = getenv("UPD6383_SRC0B2"))
+		m_src0b2 = (strtoul(e7, nullptr, 10) != 0);
+	logerror("upd6383: §215 UPD6383_SRC0B2 = %d  (0 = SHIPPED: SRC 0x0B is the delay-read "
+			"register everywhere; 1 = RIVAL: on a word with no delay access it is "
+			"mem[ptr])\n", m_src0b2 ? 1 : 0);
 	if (const char *e2 = getenv("UPD6383_ROTSIGN"))
 	{
 		m_rotsign = (strtoul(e2, nullptr, 10) != 0);
@@ -2369,6 +2377,35 @@ void upd6383_device::exec_alu(u64 word)
 			m_dr_reads++;
 		if (m_in_dram) m_dly_alu_0b++;      // ★ §77: reached from a delay word?
 			if (m_dr) m_dr_reads_nz++;
+			//  ★★★ §215: THE CLASS-2 SRC-0x0B WORD, WHICH THE 0x0B GUESS WAS NEVER
+			//  MOTIVATED BY.  Of 106 corpus `SRC 0x0B' words, 99 are class-1 delay
+			//  words (addr8 0x20 READ / 0x60 WRITE) and 7 are class 2 addr8 0x00 --
+			//  ENSEMBLE's `020.2.00.2C7' x6 and the resident kernel's
+			//  `000.2.00.2D9' x1, which is `iw25', the word that decides what the
+			//  unit-0 send carries (§213 §4).  Counted UNCONDITIONALLY so a
+			//  default run measures the null: what the rival WOULD have delivered.
+			//  ⚠ c-format words have NO class4 field at all (upd6383d.h:49), so they
+			//  are excluded rather than misclassified.  MEASURED over the 41 listings:
+			//  0 of 3057 c-format words carry SRC 0x0B, so the guard is a no-op on
+			//  every shipped program and exists only to keep the counter unambiguous.
+			if (cl != 1 && !upd6383_disassembler::c_format(word))
+			{
+				m_src0b2_n++;
+				if (m_dram.read_dword(m_dp) & 0xffffff) m_src0b2_memnz++;
+				if (m_dr) m_src0b2_drnz++;
+				//  ⚠ DEFAULT OFF.  The rival: on a word that performs NO delay
+				//  access the code cannot be naming the delay port, so it names
+				//  what every other unanchored source in this device resolves to.
+				//  ⛔ Passing the §1.2 falsifiers does NOT confirm this reading --
+				//  `iw25's pointer sits on a LIVE cell, so any live operand scores
+				//  4/4.  See data/PREDICT_215.md §0, committed before this build.
+				if (m_src0b2)
+				{
+					m_src0b2_fired++;
+					L = s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
+					break;
+				}
+			}
 			L = s32(util::sext(m_dr, 24));
 			break;
 		case 0x08:
@@ -5467,6 +5504,17 @@ void upd6383_device::dump_frame_report() const
 			"(land = %u)\n", m_dr_landed, m_dr_lost, m_land);
 	logerror("upd6383: §48 DELAY READ CONSUMED (SRC 0x0B): %u times, %u with a "
 			"non-zero datum\n", m_dr_reads, m_dr_reads_nz);
+	//  ★★★ §215: the class-2 half of §48, split out.  §48 minus §77 already implied
+	//  this number; printing it directly is what lets the gate be graded against a
+	//  pre-registered null (data/PREDICT_215.md §2 predicted 1 211 520 +/- 1 %).
+	//  `mem nz' and `dr nz' are counted in BOTH arms: they say what each reading
+	//  WOULD deliver, so the default run measures the counterfactual for free.
+	logerror("upd6383: ★★★ §215 CLASS-2 SRC 0x0B (no delay access -- kernel iw25): "
+			"%llu evaluations | mem[ptr] non-zero on %llu | m_dr non-zero on %llu | "
+			"RIVAL FIRED %llu (UPD6383_SRC0B2 = %d)\n",
+			(unsigned long long)m_src0b2_n, (unsigned long long)m_src0b2_memnz,
+			(unsigned long long)m_src0b2_drnz, (unsigned long long)m_src0b2_fired,
+			m_src0b2 ? 1 : 0);
 	logerror("upd6383: §46 DELAY PORT: %u reads (%u returned NON-ZERO), %u writes; "
 				"descriptor cell non-zero on %u accesses.%s\n",
 				m_dly_r, m_dly_r_nz, m_dly_w, m_dly_cell_nz, ds.c_str());
