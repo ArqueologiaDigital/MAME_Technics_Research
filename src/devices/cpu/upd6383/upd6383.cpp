@@ -4598,6 +4598,17 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			if (v > m_rampmax[i]) m_rampmax[i] = v;
 			if (v != m_rampprev[i]) m_rampchg[i]++;
 		}
+		//  ★★★ §196: COUNT LFO WRAP EVENTS.  §114 §3 flags that the wrap modulus is
+		//  exactly half -- mod 2^24 where `lfo-ramp.md' item C anchors mod 2^23 --
+		//  and the two give LFO periods of 147 169 and 73 584 frames, i.e. 0.2997 Hz
+		//  and 0.5993 Hz.  item C anchors 0.5993 Hz across 29 LFO blocks in 16
+		//  programs with NINE DISTINCT INCREMENTS, so it is not one coincidence.
+		//  ★ A wrap is a large NEGATIVE step in an otherwise rising ramp.  Counting
+		//  them in the phase cell discriminates the two moduli 2:1 with NO gate
+		//  change and no implementation -- a pure measurement against an
+		//  independently derived number.
+		if (m_frames_run && v < m_rampprev[i] && (m_rampprev[i] - v) > 0x400000)
+			m_rampwrap[i]++;
 		m_rampprev[i] = v;
 	}
 	m_frames_run++;
@@ -5506,6 +5517,18 @@ void upd6383_device::dump_frame_report() const
 				}
 			}
 			rr += string_format("  ||  NON-ZERO %u of 256 (%u of them below 0x20), MOVING %u", nz, nzlo, mv);
+			{
+				std::string ww;
+				for (u32 i = 0; i < 0x100; i++)
+					if (m_rampwrap[i])
+						ww += string_format(" %02X:%llu wraps -> period %llu frames (%.4f Hz)",
+								i, (unsigned long long)m_rampwrap[i],
+								(unsigned long long)(m_frames_run / m_rampwrap[i]),
+								48000.0 * double(m_rampwrap[i]) / double(m_frames_run));
+				logerror("upd6383: ★★ §196 LFO WRAP CENSUS over %llu frames:%s\n",
+						(unsigned long long)m_frames_run,
+						ww.empty() ? "  NO CELL EVER WRAPS" : ww.c_str());
+			}
 			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames:%s\n",
 					(unsigned long long)m_frames_run, rr.c_str());
 		}
