@@ -1074,7 +1074,16 @@ private:
 	//  Override with UPD6383_BODYIX=0.
 	bool m_bodyix = true;
 	u64  m_bodyix_n = 0;   // §201
-	bool m_rotsign = false;
+	//  §202 SHIPPED ON: the delay rotation SWEEPS DOWN.  round5 §3 FORCES
+	//  delay = READ_CELL - WRITE_CELL; with G rising a read returns a FUTURE sample.
+	//  ★ The proof is bit-exact and was NOT the falsifier I pre-registered (I predicted
+	//  the complement 65536-D and got neither that nor the old values): with the sign
+	//  falling the measured delays equal the ROM'"'"'s OWN descriptor cells --
+	//      dsc 28 -> 4161 = 0x1041 = descriptor cell 0x27
+	//      dsc 30 -> 3120 = 0x0C30 = descriptor cell 0x2F
+	//  at two independent lines, against §189'"'"'s live dump taken for another purpose.
+	//  Override with UPD6383_ROTSIGN=0.
+	bool m_rotsign = true;
 	u64  m_rotsign_n = 0;
 	std::unique_ptr<u32[]> m_dts_store;
 	u32 *m_dts = nullptr;
