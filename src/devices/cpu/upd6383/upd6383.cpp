@@ -1903,6 +1903,27 @@ void upd6383_device::exec_alu(u64 word)
 					}
 				}
 			}
+			//  ★★★ §204 CONSUMER-TO-CELL CENSUS (read-only).  round5 §1's IDENTITY
+			//  map FORCES "the k-th class-1 format-escape consumer takes the k-th
+			//  descriptor cell of ITS OWN BODY's block".  §203 could not be graded
+			//  because the delay census only reports lines that RESOLVE.  This
+			//  reports the mapping itself: per body, which index each consumer took.
+			{
+				//  ⚠ SAMPLE A SETTLED FRAME.  The first version recorded the first 16
+				//  consumers EVER -- all from boot, before the program is uploaded:
+				//  body 0 logged `iw12' sixteen times with cell 0000, and both arms of
+				//  the CFMTIX A/B were identical because the gate never fires there.
+				//  Same defect as §193's first probe.  §162 uses ~970 k as the settled
+				//  threshold; this uses 900 k.
+				const int b = (m_cur_iw >= 200) ? 1 : 0;
+				if (m_frames_run > 900000 && m_c2c_n[b] < 16)
+				{
+					const int k = m_c2c_n[b]++;
+					m_c2c_ix[b][k]  = u8(m_delay_ix);
+					m_c2c_iw[b][k]  = m_cur_iw;
+					m_c2c_cell[b][k] = u16(cellv);
+				}
+			}
 			m_delay_ix++;
 			//  ★★★ §153: + the modulation offset.  `m_frames_run' is the
 			//  circular-buffer rotation G (r3-delaydram.md §5.1); `m_tapmod' is the
@@ -5678,6 +5699,15 @@ void upd6383_device::dump_frame_report() const
 					(unsigned long long)m_b11_dchg[i],
 					m_b11_dchg[i] ? "VARIES -- a reset here is observable"
 					: "CONSTANT -- a reset would be unobservable");
+		for (int b = 0; b < 2; b++)
+		{
+			std::string r;
+			for (int k = 0; k < m_c2c_n[b]; k++)
+				r += string_format(" iw%u->ix%u(dsc%02X,cell%04X)", m_c2c_iw[b][k],
+						m_c2c_ix[b][k], u8(m_dsc + m_c2c_ix[b][k]), m_c2c_cell[b][k]);
+			logerror("upd6383: ★★ §204 CONSUMER->CELL body %d (%d consumers):%s\n",
+					b, m_c2c_n[b], r.c_str());
+		}
 		logerror("upd6383: ★ §203 C-format class-1 descriptor consumption: FIRED %llu times\n",
 				(unsigned long long)m_cfmtix_n);
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",

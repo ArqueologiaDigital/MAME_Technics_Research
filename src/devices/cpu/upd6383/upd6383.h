@@ -1072,7 +1072,18 @@ private:
 	//  frames_since_written goes from 0..0 on EVERY line to 240 / 480 / 640 samples
 	//  (5.44 / 10.88 / 14.51 ms).  The delay lines have length for the first time.
 	//  Override with UPD6383_BODYIX=0.
-	bool m_cfmtix = false;
+	//  §204: the consumer-to-cell map, first pass only, per body.
+	int  m_c2c_n[2] = {};
+	u8   m_c2c_ix[2][16] = {};
+	u16  m_c2c_iw[2][16] = {}, m_c2c_cell[2][16] = {};
+	//  §204 SHIPPED ON.  r3-delaydram.md §6.1 FORCES that C40.1.80.000 consumes a
+	//  descriptor cell (all 8 exact solutions; 28 non-C + 4 C-format = 32 = n).
+	//  §203 could not grade it -- the delay census only reports lines that resolve.
+	//  The §204 consumer-to-cell census does: with the gate OFF, consumers iw26 and
+	//  iw46 BOTH read descriptor value 0x1041 -- two consumers, one cell.  With it
+	//  ON, iw46 advances to index 3 and reads 0x05A0: every consumer gets a distinct
+	//  cell, which is what the identity map requires.  Override UPD6383_CFMTIX=0.
+	bool m_cfmtix = true;
 	u64  m_cfmtix_n = 0;   // §203
 	bool m_bodyix = true;
 	u64  m_bodyix_n = 0;   // §201
