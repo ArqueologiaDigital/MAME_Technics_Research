@@ -1567,7 +1567,102 @@ private:
 	void e1_counterfactual(s32 L);
 	static void e1_bump(u16 *keys, u64 *cnt, u32 &nk, u64 &other, u16 key);
 
-	void store_mode(u8 mode, u8 dest, u32 v);
+	//**********************************************************************
+	//  ★★★ §222 -- THREE THINGS, ALL DEFAULT-OFF OR PROVABLY INERT.
+	//
+	//  (a) `§E-D85', THE EPILOGUE CROSSBAR ARM.  `PREDICT_D0_producer.md' §4.3
+	//      names the exact structural break between the units:
+	//          unit 0   producer iw9/iw11 -> m_dram[0x05]   consumer iw85  <- m_dram[0x05]
+	//          unit 1   producer iw70     -> m_rf  [0x85]   consumer iw205 <- m_dram[0x85]
+	//      Unit 0's pair is (pointer, pointer); unit 1's is (register, pointer) -- the
+	//      ONLY cross-space producer/consumer pair in the machine.  The two words
+	//      involved are a matched pair by construction:
+	//          w63 = 2A7.9.05.1C3   mode 1  addr8 = 05  SRC 07  ACT 03
+	//          w70 = 2A6.1.85.0C7   mode 1  addr8 = 85  SRC 03  ACT 07
+	//      -- SRC and ACT TRANSPOSED, addresses = the two units' base cells, and
+	//      `SRC 0x03'/`ACT 0x03' occur ONCE EACH in 2557 plain corpus words, both here,
+	//      inside a private 0x01..0x06 numbering that occurs nowhere else.
+	//      The arm makes ACT 0x03 a LATCH, SRC 0x03 its READER, and routes those TWO
+	//      WORDS ONLY through pointer space.  ⚠ n = 1 per code: NO corpus statistic can
+	//      support or refute the latch reading.  SPECULATIVE, deliberately.
+	//      ⚠ It is COMPOUND: a positive result MUST be bisected (XB85=2 route-only,
+	//      XB85=3 latch-only) before any part of it is promoted.
+	//
+	//  (b) `§E-D0', THE PICKUP AUDIT.  READ-ONLY.  For every `lo12 == 0x1CD' word --
+	//      the per-unit INPUT PICKUP, 38 of 38 corpus images against a 2.1 % null --
+	//      record the pointer BEFORE and AFTER the post-increment as SEPARATE COLUMNS
+	//      (the pre-increment trap has now cost three sections: iw205's `0xD0', §104's
+	//      `dp' column, and §221's `w79'), the array and index actually indexed, the
+	//      operand, and ACCA/ACCB before and after.  Plus a writer census for the two
+	//      PICKUP CELLS ONLY, 0x05 and 0x85, across every write site in the device.
+	//
+	//  (c) THE `:2914'/`:3491' MODE-1 UNIT-REBASE UNIFICATION.  The bit-4 store and the
+	//      mode-1 READ both resolve `addr8 | (m_cur_unit1 ? 0x80 : 0)'; the ACT-07 store
+	//      used a BARE `addr8', beneath store_mode()'s own banner "one rule for both
+	//      store sites".  DECIDED, not guessed:
+	//        * corpus body images name mode-1 destinations UNIT-RELATIVE 7 of 7,
+	//          ABSOLUTE 0 of 7 (dsp/tools/rebase_census.py) -- a shared image cannot
+	//          address unit 1 absolutely, so the hardware supplies the unit bit;
+	//        * the rebase is MEASURED CORRECT on the one resident unit-1 case:
+	//          iw332 (a16 ROOM REVERB 1 w132, addr8 = 0x0F) -> m_rf[0x8F], which §221
+	//          measured `w65' reading back on 540 000 of 540 000 settled frames;
+	//        * it is PROVABLY INERT in the resident frame -- 0 of 9 mode-1 ACT-07 words
+	//          execute in unit-1 context -- and the divergence counter below proves it
+	//          at run time rather than asserting it.
+	//      Left unfixed it is a latent CROSS-UNIT CORRUPTION: a04 FLANGER w64 and
+	//      a05 PHASER w105 (both addr8 = 0x0E) would write unit 0's cell from unit 1.
+	//**********************************************************************
+	u32  m_xb85 = 0;             // UPD6383_XB85: 0 OFF, 1 full, 2 route only, 3 latch only
+	u32  m_xb = 0;               // the crossbar latch: ACT 0x03 writes it, SRC 0x03 reads it
+	u64  m_xb_st_n = 0, m_xb_ld_n = 0, m_xb_rd_dram_n = 0, m_xb_wr_dram_n = 0;
+	u64  m_xb_n[2] = { 0, 0 };
+	s32  m_xb_lo[2] = { 0x7fffffff, 0x7fffffff };
+	s32  m_xb_hi[2] = { -0x7fffffff - 1, -0x7fffffff - 1 };
+	bool xb_route() const { return m_xb85 == 1 || m_xb85 == 2; }
+	bool xb_latch() const { return m_xb85 == 1 || m_xb85 == 3; }
+	//  rule 8, as §220 sharpened it: an UNCONDITIONAL counter beside the arm's own
+	//  state, so "the two rules never disagreed" and "the site never ran" can never be
+	//  the same log line.
+	u64  m_rebase_eval = 0, m_rebase_diff = 0;
+
+	bool m_pickup = false;
+	u64  m_pickup_fired = 0, m_pickup_post = 0;
+	static constexpr u32 PK_ROWS  = 16;   // predicted 5; capacity states the truncation
+	static constexpr u32 PKW_ROWS = 64;
+	struct pk_row_t
+	{
+		u16 iw = 0; u64 word = 0; u64 n[2] = { 0, 0 }; u64 npost[2] = { 0, 0 };
+		u8  dp_pre = 0, dp_post = 0; u32 pre_var = 0, post_var = 0;
+		u8  route = 0; u16 idx = 0; u32 route_var = 0;
+		s32 l_lo[2] = { 0x7fffffff, 0x7fffffff };
+		s32 l_hi[2] = { -0x7fffffff - 1, -0x7fffffff - 1 };
+		s64 pa_lo[2] = { INT64_MAX, INT64_MAX }, pa_hi[2] = { INT64_MIN, INT64_MIN };
+		s64 pb_lo[2] = { INT64_MAX, INT64_MAX }, pb_hi[2] = { INT64_MIN, INT64_MIN };
+		s64 qa_lo[2] = { INT64_MAX, INT64_MAX }, qa_hi[2] = { INT64_MIN, INT64_MIN };
+		s64 qb_lo[2] = { INT64_MAX, INT64_MAX }, qb_hi[2] = { INT64_MIN, INT64_MIN };
+	};
+	pk_row_t m_pk[PK_ROWS];
+	u32 m_pk_rows = 0, m_pk_over = 0;
+	s16 m_pk_pending = -1;
+	struct pk_wr_t
+	{
+		u8  idx = 0; bool rf = false; u8 site = 0; u16 iw = 0; u64 n = 0;
+		s32 lo[2] = { 0x7fffffff, 0x7fffffff };
+		s32 hi[2] = { -0x7fffffff - 1, -0x7fffffff - 1 };
+	};
+	pk_wr_t m_pkw[PKW_ROWS];
+	u32 m_pkw_rows = 0, m_pkw_over = 0;
+	static constexpr u16 PK_IW_HOST = 0xFFFF, PK_IW_IN = 0xFFFE, PK_IW_BOOT = 0xFFFD;
+	void pk_write(u8 idx, u32 v, u8 site, bool rf, u16 iw);
+	void pk_fetch(u8 dp_pre, u8 route, u16 idx, s32 L);
+	void pk_after();
+	void pk_report() const;
+
+	//  §222(c): `site' is passed in so the writer census can be taken INSIDE the branch
+	//  that ran (the §221 lesson -- never re-derive a routing decision afterwards), and
+	//  `force_dram' is §E-D85's narrow, two-word array route.  Site numbering extends
+	//  §109's: 1 = exec_addressing_only K6 bit-4, 2 = exec_alu bit-4, 3 = ACT-07.
+	void store_mode(u8 mode, u8 dest, u32 v, u8 site = 0, bool force_dram = false);
 	static u32 pw_region(u16 iw);
 	static const char *pw_name(u32 r);
 	u32 m_latch_n=0, m_latch_nz=0, m_pub_try=0, m_pub_hit=0, m_pub_nz=0;
