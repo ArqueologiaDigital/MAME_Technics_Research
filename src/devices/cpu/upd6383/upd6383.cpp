@@ -915,6 +915,17 @@ void upd6383_device::host_w(bool cd, u8 data)
 					//  D-RAM.  Writing it into m_dram put the host's parameters
 					//  in the same array the kernel uses as scratch, which is
 					//  the §71/§86 conflict.  See upd6383.h `m_rf'.
+					//  ★★★ §186 PROBE (read-only): WHICH cells does the host write?
+					//  §185 infers `C63' RESETS register 0x63, and a reset
+					//  presupposes a WRITER.  The roadmap counts 65 cells written by
+					//  this tag; the census shows non-zero at only 06 and 1D..40
+					//  (~37).  Recording every TARGET -- not only the ones that end
+					//  non-zero -- decides whether 0x63 is in the host's range at all.
+					//  Two-sided: in range -> the reset has something to reset and the
+					//  reading becomes testable; not in range -> the selector space is
+					//  not m_rf and §185 §2's identification is wrong.
+					m_hostw_cell[m_dram_wp & 0xff]++;
+					if (v & 0xffffff) m_hostw_nz[m_dram_wp & 0xff]++;
 					if (m_speculative && (m_specmask & 0x800000))
 						m_rf[m_dram_wp & 0xff] = v & 0xffffff;
 					else
@@ -5395,6 +5406,20 @@ void upd6383_device::dump_frame_report() const
 					: !m_a15w_lnz[i] ? "<= L ALWAYS 0 -> POINTER"
 					: (m_a15w_pmin[i] == 0 && m_a15w_pmax[i] == 0) ? "<= operands live but P ALWAYS 0 (?!)"
 					: "live");
+		{
+			std::string cl; u32 nc = 0, nnz = 0, tot = 0;
+			for (u32 i = 0; i < 0x100; i++)
+				if (m_hostw_cell[i])
+				{
+					nc++; tot += m_hostw_cell[i];
+					if (m_hostw_nz[i]) nnz++;
+					cl += string_format(" %02X:%u%s", i, m_hostw_cell[i],
+							m_hostw_nz[i] ? "" : "(z)");
+				}
+			logerror("upd6383: ★★ §186 HOST tag-0x15 WRITE TARGETS: %u writes over %u cells "
+					"(%u ever non-zero) | 0x63 written %u times |%s\n",
+					tot, nc, nnz, m_hostw_cell[0x63], cl.c_str());
+		}
 		logerror("upd6383: ★ §180 PTRD-A `lo12 == 0x1C0' suppressed from the walk "
 				"(mask bit 62 = %d): FIRED %llu times\n",
 				(m_specmask & (1ull << 62)) ? 1 : 0, (unsigned long long)m_ptrd_a_n);

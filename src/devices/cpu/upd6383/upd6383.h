@@ -1028,6 +1028,8 @@ private:
 	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
 	bool ptrd_a_suppressed(u64 word);
 	u64  m_ptrd_a_n = 0;
+	//  §186: which m_rf cells the host tag-0x15 stream actually targets.
+	u32  m_hostw_cell[0x100] = {}, m_hostw_nz[0x100] = {};
 	u8   m_pw = 0;
 	u32  m_c6_pwseen[8] = {};
 	//  §175: the SAME census keyed PER WORD -- the pooled form cannot see one dead
