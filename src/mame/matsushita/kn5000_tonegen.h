@@ -58,6 +58,16 @@ public:
 	static constexpr int NUM_VOICES = 64;
 	static constexpr int NUM_GLOBAL_REGS = 16;
 
+	// ★ THE TWO RATES, WHICH ARE NOT THE SAME NUMBER (§228).
+	//   STREAM_RATE     -- what MAME RENDERS at.  Unchanged, and load-bearing:
+	//                      the EG rate law, the voice LP coefficient and the
+	//                      pitch step are all expressed against it.
+	//   DSP_FRAME_RATE  -- IC311's LRCK, i.e. the instrument's Fs.  44 100, by
+	//                      four independent ROM-internal proofs; see
+	//                      upd6383.h m_frame_hz.  44100/48000 = 147/160 exactly.
+	static constexpr uint32_t STREAM_RATE    = 48000;
+	static constexpr uint32_t DSP_FRAME_RATE = 44100;
+
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
@@ -340,6 +350,31 @@ private:
 	uint64_t m_insta_n = 0, m_insta_clip = 0, m_insta_clip2x = 0, m_insta_sum = 0;
 	int32_t  m_insta_peak = 0;
 	uint64_t m_dsp1_kept = 0;        // frames whose return was USABLE (trap-free)
+
+	// ---- ★★★★ §228: THE DSP FRAME CLOCK IS DECOUPLED FROM THIS STREAM --------
+	//
+	// IC303 drives IC311's LRCK, so ONE PC sweep per LRCK period is the hardware
+	// relationship.  It does NOT follow that one sweep per *emulated output
+	// sample* is right, and it was not: this stream is allocated at 48 000 while
+	// the instrument's Fs is 44 100 (four independent ROM-internal proofs -- see
+	// upd6383.h m_frame_hz).  So every emulated delay, reverb and LFO ran
+	// 48000/44100 = +8.84 % fast.
+	//
+	// The fix keeps the RENDERING rate where it is (moving the stream would drag
+	// the EG law, the LP coefficient and the pitch step with it, i.e. shipping
+	// audio) and gates run_frame() with a phase accumulator instead:
+	// 44 100/48 000 = 147/160 exactly, so 44 100 frames are issued per emulated
+	// second, exactly, with no drift.
+	//
+	// ⚠ TWO DECLARED APPROXIMATIONS, both confined to the WET path, which is
+	// behind DSPCFG and today measures exactly zero (§54 peak 0, both buckets):
+	//   * the send is DECIMATED without a filter (the chip's serial receiver
+	//     simply never sees the 13 of 160 samples that fall between LRCK edges);
+	//   * the return is held zero-order until the next frame (imaging).
+	// Neither touches the dry mix, which is finished before this block runs.
+	uint32_t m_dsp1_phase = 0;       // 0 .. STREAM_RATE-1, the 147/160 accumulator
+	uint32_t m_dsp1_hz = 0;          // LRCK rate handed to IC311 (resolved at start)
+	int32_t  m_dsp1_wet[2] = { 0, 0 };  // last frame's return, held between frames
 
 	// The 16 page directories (4 banks x 4 pages), parsed from the wave ROM region at
 	// device_start. PCM geometry is filled in eagerly (cheap); the fundamental period

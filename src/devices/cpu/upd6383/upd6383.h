@@ -151,6 +151,39 @@ public:
 	//  researched GUESS.  The driver drives this from bit 1 of the DSPCFG port.
 	void set_speculative(bool on) { m_speculative = on; }
 
+	// ---------------------------------------------------------------
+	//  ★★★★ §228 THE FRAME CLOCK -- LRCK, AND IT IS AN INPUT, NOT A CONSTANT.
+	//
+	//  This chip has no oscillator of its own on this board.  IC303 generates
+	//  LRCK on pin 208 (through R311) and it fans out to IC311 pins 18/17/19;
+	//  Fs-RST (pin 13) and Fs-MASK (pin 14) are strapped to +5D, so the
+	//  per-frame PC restart is cadenced by LRCKI and cannot be inhibited
+	//  (MEASURED, service manual p.35).  ⇒ ONE PC sweep per LRCK period, and
+	//  the LRCK rate is whatever the tone generator drives it at.
+	//
+	//  So the rate lives with the DRIVER of the pin, and the chip is TOLD.
+	//  That is the HLE chip-boundary rule: this device must not reach into
+	//  kn5000_tonegen for a number, and it must not invent one either.
+	//
+	//  ⚠ IT IS ONLY EVER USED TO PRINT.  Nothing in the datapath reads it --
+	//  the microcode advances by one frame per run_frame() call whatever the
+	//  wall-clock rate is.  Every rate-dependent figure this device REPORTS
+	//  (the §196 LFO census in Hz, §128's arm time in seconds, the LOG_FRAME
+	//  heartbeat's "one per second") was hard-coding 48 000 and was therefore
+	//  wrong by 48000/44100 = +8.84 % whenever the caller ran at 44 100.
+	//  ⚠ ORDERING: the DSP device starts BEFORE the tone generator, so anything
+	//  this device prints in its own device_start() carries the INITIALISER, not
+	//  the caller's rate.  §227's first §228 arm caught exactly that (the §128
+	//  banner said 44100 in a 48000 arm).  So the setter re-announces.
+	void set_frame_hz(u32 hz)
+	{
+		if (hz) m_frame_hz = hz;
+		logerror("upd6383: ★★★★ §228 FRAME CLOCK SET BY THE CALLER: %u Hz  (supersedes the "
+				"initialiser printed above; §128's arm frame %u is t = %.2f s at this rate)\n",
+				m_frame_hz, u32(m_trace_frame), double(m_trace_frame) / double(m_frame_hz));
+	}
+	u32  frame_hz() const     { return m_frame_hz; }
+
 	// Frame instrumentation.  Diagnostics, NOT machine state -- the point of
 	// the experimental audio path today is to tell us WHICH WORDS BLOCK AUDIO.
 	u64 frames_run() const       { return m_frames_run; }
@@ -1213,6 +1246,45 @@ private:
 	s32  m_rampmin[0x100] = {}, m_rampmax[0x100] = {}, m_rampprev[0x100] = {};
 	u64  m_rampchg[0x100] = {};
 	u64  m_rampwrap[0x100] = {};   // §196: LFO wrap events per cell
+	//  ★★★★ §228 -- THE LFO RATE, MEASURED PROPERLY.  §196's wrap census cannot
+	//  do it and never could, for TWO independent reasons, both measured:
+	//    * its denominator is `m_frames_run', which includes the 264 001 frames
+	//      BEFORE the program is uploaded -- and cell 0x07 is frozen through all
+	//      of them (`chg' = 1 176 000 of 1 440 001, and 1 440 001 - 1 176 000 =
+	//      264 001 EXACTLY, the §38 boot-transient end at frame 264 002);
+	//    * its numerator truncates the partial last wrap: 15 counted where the
+	//      running window predicts 15.98.
+	//  Together they turned a 0.6523 Hz ramp into a printed "0.5000 Hz", which
+	//  is why LEDGER's 0.652-vs-0.599 residual could never be reproduced from a
+	//  log -- the 0.652 was DERIVED from the increment, never measured.
+	//  ⇒ MEASURE THE INCREMENT.  It is rate-INVARIANT (a property of the
+	//  microcode), the frame clock is graded separately and independently by
+	//  §228's T4 against the machine's own clock, and the LFO rate is then the
+	//  product of two things neither of which is the declaration.
+	s32  m_rampinc_min[0x100] = {}, m_rampinc_max[0x100] = {};
+	u64  m_rampinc_n[0x100] = {}, m_rampinc_sum[0x100] = {};
+	u64  m_rampfirst[0x100] = {};   // first frame on which the cell ever rose
+	//  ★★★★ §228: the LRCK rate the CALLER drives, in Hz.  Set by set_frame_hz();
+	//  REPORTING ONLY (see the setter's banner).  The initialiser is 44 100
+	//  because that is Fs on this instrument, established four ways INSIDE the
+	//  ROM and independent of any scan:
+	//    (1) the ONLY opcode that can write a delay descriptor, `0x67'
+	//        (LABEL_03925E), evaluates `cell = K24 + ms * 0xAC44 / 0x3E8'
+	//        = `+ ms * 44100/1000'                    (PROVEN BY CONSTRUCTION)
+	//    (2) the biquad designer's prewarp constant is the ROM double
+	//        pi/44100 = 7.1237928650000007e-05 at 0x012F57 (also 0x012FBF,
+	//        0x012FEB) -- and PARAMETRIC EQ, the ONE program graded SOLVED,
+	//        validates against THAT designer to 0.198 dB               (MEASURED)
+	//    (3) NO OPERATION's own descriptors give D = 4410 = 100.000 ms  (MEASURED)
+	//    (4) 29 LFO ramp blocks in 16 programs take 9 distinct increments and
+	//        every one is floor(f * 2^23 / 44100) for a round decimal f;
+	//        joint null 3.1e-12                                        (MEASURED)
+	//  ⚠ A FIFTH ARGUMENT IS OFTEN QUOTED AND IT IS NOT MEASURED: "X301 is
+	//  33.8688 MHz = 768 x 44100".  The 1996 scan prints `36.8688 MHz', which
+	//  divides to NEITHER rate; 33.8688 is inferred from a shared digit string.
+	//  Grade it INFERRED and leave it out of the count.  Felipe reading the
+	//  crystal off the board settles it (TODO-FOR-FELIPE).
+	u32  m_frame_hz = 44100;
 	//  §162 read-only probe: per-class-6-site census of the candidate index sources.
 	int  m_c6_n = 0;
 	u64  m_c6_word[8] = {};

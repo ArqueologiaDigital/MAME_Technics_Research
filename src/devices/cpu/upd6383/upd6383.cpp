@@ -104,6 +104,7 @@
 #include "upd6383.h"
 #include "upd6383d.h"
 
+#include <cmath>
 #include <cstring>
 #include <fstream>
 
@@ -314,13 +315,17 @@ void upd6383_device::device_start()
 	//  ★ §128: say the arm frame out loud.  An effect selected from the panel lands
 	//  at t ~ 40-50 s = frame 1.8-2.2 M; tracing at the 420 000 default would silently
 	//  describe the cold-boot default (CHORUS) instead of the selected program.
-	//  ⚠ §132: the EMULATED frame rate is the tone generator's stream rate, 48 000
+	//  ⚠ §132: the EMULATED frame rate WAS the tone generator's stream rate, 48 000
 	//  (kn5000_tonegen.cpp), NOT the 44 100 the firmware designs its filters for.
 	//  §128 printed this in 44 100ths and so overstated the arm time by 8.8 %.
-	//  The same 48000/44100 = 1.0884 factor applies to every predicted FREQUENCY.
-	logerror("upd6383: §128 frame trace arms after frame %u (t = %.1f s at the emulated "
-			"48000 Hz frame rate)\n",
-			u32(m_trace_frame), double(m_trace_frame) / 48000.0);
+	//  ★★★★ §228 FIXED THE CLOCK ITSELF, so this no longer hard-codes either
+	//  number -- it prints in the rate the CALLER declared via set_frame_hz().
+	//  ⚠ The arm frame is a FRAME COUNT and did not move; its WALL-CLOCK time
+	//  did (420 000 frames = 8.75 s at 48 000, 9.52 s at 44 100).  Any older log
+	//  quoting "8.8 s" was taken on the 48 000 clock.
+	logerror("upd6383: §128 frame trace arms after frame %u (t = %.2f s at the declared "
+			"%u Hz frame rate)\n",
+			u32(m_trace_frame), double(m_trace_frame) / double(m_frame_hz), m_frame_hz);
 	//  ★ §109: say bits 28/29 out loud, so an arm can never be confused with a null.
 	logerror("upd6383: §109 ACT-07 store target = %s-increment (mask bit 28 = %d)\n",
 			(m_specmask & 0x10000000) ? "POST" : "PRE",
@@ -5221,26 +5226,39 @@ void upd6383_device::execute_run()
 //      DI1..DI3 / DO1..DO3 over one LRCK period, which is a real pin interface;
 //      no device reads another device's memory.
 //
-//  *** EDUCATED GUESS G-1 -- THE ABSOLUTE SAMPLE RATE IS UNRESOLVED ***
-//      WHAT IS DECIDED: exactly one frame per tone-generator output sample.
-//      WHY: correct IN KIND regardless of the number, because IC303 generates
-//      LRCKI, so the DSP's frame rate IS the tone generator's sample rate
-//      whatever that turns out to be.
-//      WHAT IS NOT KNOWN: the number itself.  The sub-CPU firmware converts a
-//      user millisecond parameter with `ms * 0xAC44 / 0x3E8' = ms * 44100/1000
-//      (LABEL_03925E) -- so the FIRMWARE says 44,100 Hz.  MAME's tone generator
-//      allocates its stream at 48,000 Hz (kn5000_tonegen.cpp, device_start).
-//      IC303's crystal X301 reads `36.8688 MHz' on the 1996 scan, which divides
-//      to NEITHER (36.864 = 768 x 48k and 33.8688 = 768 x 44.1k are the two
-//      stock parts that would).
-//      WHAT WOULD SETTLE IT: Felipe reading X301's marking off the board (his
-//      testimony outranks the scan), or locating IC303's LRCK divider.
-//      WHAT CHANGES IF IT IS WRONG: every delay time and reverb time in
-//      SECONDS, and the interpretation scale of any frequency-domain
-//      coefficient -- by the ratio 48000/44100 = +8.8 %.  What does NOT change:
-//      the per-frame instruction budget (25 MHz / 44.1 kHz = 566.9 cycles for
-//      256..326 slots; at 48 kHz it is 520.8, still comfortable), the wiring,
-//      or anything in this function.
+//  *** G-1 -- THE ABSOLUTE SAMPLE RATE.  ★★★★ RESOLVED TO 44 100 BY §228 ***
+//      WHAT IS DECIDED: exactly one frame per LRCK period, at 44 100 LRCK
+//      periods per second.
+//      WHY THE STRUCTURE: correct IN KIND regardless of the number, because
+//      IC303 generates LRCKI, so the DSP's frame rate IS whatever IC303 drives.
+//      WHY THE NUMBER, and it is FOUR independent arguments INSIDE THE ROM:
+//        (1) the ONLY opcode that can write a delay descriptor, 0x67
+//            (LABEL_03925E), evaluates cell = K24 + ms * 0xAC44 / 0x3E8, and
+//            0xAC44/0x3E8 IS 44100/1000        (PROVEN BY CONSTRUCTION)
+//        (2) the biquad designer's bilinear prewarp is the ROM double
+//            pi/44100 = 7.1237928650000007e-05 at 0x012F57 (also 0x012FBF,
+//            0x012FEB) -- and PARAMETRIC EQ, the one program graded SOLVED,
+//            validates against THAT designer to 0.198 dB       (MEASURED)
+//        (3) NO OPERATION's own descriptors give D = 4410 = 100.000 ms exactly
+//        (4) 29 LFO ramp blocks in 16 programs take 9 distinct increments and
+//            every one is floor(f * 2^23 / 44100) for a round decimal f;
+//            joint null 3.1e-12                                (MEASURED)
+//      ⚠ THE CRYSTAL IS *NOT* ONE OF THE FOUR, though it is often quoted as
+//      such.  X301 reads `36.8688 MHz' on the 1996 scan, which divides to
+//      NEITHER rate (36.864 = 768 x 48k, 33.8688 = 768 x 44.1k).  "It must be
+//      33.8688 because the digit string 8688 matches" is INFERRED.  Felipe
+//      reading the marking off the board still settles it; nothing waits on it.
+//      ⚠ WHAT WAS WRONG UNTIL §228: MAME's tone generator allocates its stream
+//      at 48 000 Hz and called run_frame() once per output sample, so the
+//      emulated frame clock ran at 48 000 -- MEASURED from disk, 1 440 001
+//      frames on every archived `-seconds_to_run 30' arm.  Every emulated delay
+//      time, reverb time and LFO rate was therefore 48000/44100 = +8.84 % fast,
+//      which is exactly the size of LEDGER's unexplained chorus-LFO residual
+//      (0.652 emulated vs 0.599 designed).  §228 decouples the two: the tone
+//      generator still renders at 48 000 and now gates run_frame() with a
+//      147/160 phase accumulator.  What does NOT change: the per-frame
+//      instruction budget (25 MHz / 44.1 kHz = 566.9 cycles for 256..326
+//      slots), the wiring, or anything in this function.
 //
 //  *** WHAT THIS PRODUCES TODAY: NOTHING AUDIBLE, AND THAT IS THE EXPECTATION ***
 //      Most of the words on the floor of every frame are still undecoded (the
@@ -6093,6 +6111,24 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		//  independently derived number.
 		if (m_frames_run && v < m_rampprev[i] && (m_rampprev[i] - v) > 0x400000)
 			m_rampwrap[i]++;
+		//  ★★★★ §228: THE PER-FRAME RISE.  Everything the wrap census gets wrong
+		//  (a denominator that includes the pre-upload freeze, a numerator that
+		//  truncates the last partial wrap) it gets wrong because it counts a
+		//  RARE event over a WHOLE run.  The rise happens on every running frame,
+		//  so it needs no window and has no truncation.  The `< 0x400000' bound
+		//  is the same one the wrap detector uses, from the other side.
+		if (m_frames_run)
+		{
+			const s32 d = v - m_rampprev[i];
+			if (d > 0 && d < 0x400000)
+			{
+				if (!m_rampinc_n[i]) { m_rampinc_min[i] = m_rampinc_max[i] = d; m_rampfirst[i] = m_frames_run; }
+				else { if (d < m_rampinc_min[i]) m_rampinc_min[i] = d;
+					   if (d > m_rampinc_max[i]) m_rampinc_max[i] = d; }
+				m_rampinc_n[i]++;
+				m_rampinc_sum[i] += u64(d);
+			}
+		}
 		m_rampprev[i] = v;
 	}
 	m_frames_run++;
@@ -6247,7 +6283,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	}
 
 	// rate-limited: the first three frames, then roughly one per second
-	if (m_frames_run <= 3 || (m_frames_run % 48000) == 0)
+	//  ★ §228: "one per second" is the DECLARED frame rate, not a literal 48000.
+	if (m_frames_run <= 3 || (m_frames_run % m_frame_hz) == 0)
 	{
 		LOGMASKED(LOG_FRAME, "frame %u: %u slots, %u partial, %u traps, ended on %s -> return %s\n",
 				u32(m_frames_run), slots, partials, traps,
@@ -6517,6 +6554,54 @@ void upd6383_device::dump_frame_report() const
 {
 	// NB: plain %u / %d only, matching the rest of this file.  (A u64 count only
 	// overflows u32 after ~25 hours of emulated audio at 48 kHz.)
+
+	//  ★★★★ §228 -- THE FRAME CLOCK, MEASURED, AND ITS SELF-TEST PRINTED FIRST.
+	//
+	//  RULE 20: a detector is not evidence until it has reproduced an answer
+	//  already on record, and the check is printed BEFORE the finding.
+	//
+	//  ⚠⚠ THE OBVIOUS CRITERION HERE CANNOT FAIL, SO IT IS NOT USED.  "Does the
+	//  §196 LFO census read 0.599 Hz?" is CIRCULAR: the census's Hz column is
+	//  `wraps/frames x DECLARED rate', `wraps/frames' is a property of the
+	//  microcode and is invariant under any frame-clock change, so changing the
+	//  declaration alone moves that column to 0.599 with nothing measured.  Rule
+	//  8: a criterion that cannot come out the other way is not a pass.
+	//
+	//  WHAT *CAN* FAIL, and is therefore what is graded: frames per EMULATED
+	//  SECOND, taken from the device's own frame counter against the machine's
+	//  own clock.  Neither term is under the declaration's control.
+	//
+	//  ★ THE EXTERNAL KNOWN ANSWER, from disk, no run required: every archived
+	//  arm through §227 reports 1 440 001 frames on a `-seconds_to_run 30'
+	//  vehicle -- exactly 48 000.0/s, and its settled window 1 440 000 - 420 000
+	//  = 1 020 000 = the 706 040 quiet + 313 960 loud that §S1 splits.  So the
+	//  pre-§228 clock IS 48 000 Hz, measured, before anything was built.  Run
+	//  this build with UPD6383_FRAMEHZ=48000 and T4 must reproduce it.
+	{
+		const double secs = machine().time().as_double();
+		const double meas = (secs > 0.0) ? double(m_frames_run) / secs : 0.0;
+		const double err  = (meas > 0.0) ? std::fabs(meas - double(m_frame_hz)) / double(m_frame_hz)
+										 : 1.0;
+		logerror("upd6383: ★★★★ §228 FRAME CLOCK -- SELF-TEST FIRST (rule 20)\n");
+		logerror("upd6383:    T1 DECLARED frame rate (set_frame_hz)   %u Hz\n", m_frame_hz);
+		logerror("upd6383:    T2 frames run                           %u\n", u32(m_frames_run));
+		logerror("upd6383:    T3 emulated wall time                   %.6f s\n", secs);
+		logerror("upd6383:    T4 MEASURED frames / emulated second    %.3f  <- the only "
+				"figure here not under the declaration's control\n", meas);
+		logerror("upd6383:    T5 |T4 - T1| / T1 = %.6f  -> %s  (tolerance 1e-3)\n",
+				err, (err < 1e-3) ? "PASS" : "★ FAIL -- THE CALLER IS NOT DRIVING LRCK AT "
+											 "THE RATE THIS DEVICE WAS TOLD");
+		logerror("upd6383:    T6 EXTERNAL known answer: the archived pre-§228 arms read "
+				"1440001 frames / 30 s = 48000.0/s.  UPD6383_FRAMEHZ=48000 must "
+				"reproduce that.\n");
+		logerror("upd6383:    ⚠ Fs = 44 100 is established FOUR ways inside the ROM "
+				"(ms*0xAC44/0x3E8; the double pi/44100 at 0x012F57 that the SOLVED "
+				"PARAMETRIC EQ validates against at 0.198 dB; NO OPERATION's D = 4410 = "
+				"100.000 ms; 29 LFO blocks x 9 increments = floor(f*2^23/44100), null "
+				"3.1e-12).  The crystal argument is INFERRED, not measured -- the 1996 "
+				"scan prints 36.8688 MHz, which divides to neither rate.\n");
+	}
+
 	{   //  ★ §44: dump C-RAM.  The body's multiplies consume cursor 0x62..0x70 and
 		//  the values there run 00C800, 00CC00, 00D000 ... -- a LINEAR RAMP of step
 		//  0x400, which is not a coefficient set.  The kernel's cursor 0x90+ carries
@@ -7431,10 +7516,44 @@ void upd6383_device::dump_frame_report() const
 						ww += string_format(" %02X:%llu wraps -> period %llu frames (%.4f Hz)",
 								i, (unsigned long long)m_rampwrap[i],
 								(unsigned long long)(m_frames_run / m_rampwrap[i]),
-								48000.0 * double(m_rampwrap[i]) / double(m_frames_run));
-				logerror("upd6383: ★★ §196 LFO WRAP CENSUS over %llu frames:%s\n",
+								double(m_frame_hz) * double(m_rampwrap[i]) / double(m_frames_run));
+				//  ★★★★ §228: THE PERIOD IN FRAMES IS THE MEASUREMENT; THE Hz IS A
+				//  CONVERSION.  `period frames' is a property of the MICROCODE (the
+				//  phase increment) and is INVARIANT under a frame-clock change --
+				//  it is the number to compare across arms.  The Hz column is that
+				//  period divided into the DECLARED rate, so quoting it as evidence
+				//  that the rate is right would be circular (rule 8).  Grade the
+				//  rate on §228's FRAME CLOCK line, which measures frames against
+				//  emulated wall time and can disagree with the declaration.
+				logerror("upd6383: ⚠ §196 LFO WRAP CENSUS over %llu frames -- SUPERSEDED BY "
+						"§228's RISE CENSUS BELOW, and BIASED LOW TWO WAYS (denominator "
+						"includes the pre-upload freeze; numerator truncates the last "
+						"partial wrap).  Kept only for continuity with §164/§196 logs:%s\n",
 						(unsigned long long)m_frames_run,
 						ww.empty() ? "  NO CELL EVER WRAPS" : ww.c_str());
+			}
+			//  ★★★★ §228 -- THE LFO RATE, MEASURED FROM THE PER-FRAME RISE.
+			{
+				std::string rs;
+				for (u32 i = 0; i < 0x100; i++)
+				{
+					if (m_rampinc_n[i] < 1000) continue;   // not a ramp
+					const double inc = double(m_rampinc_sum[i]) / double(m_rampinc_n[i]);
+					const double per = (inc > 0.0) ? 8388608.0 / inc : 0.0;
+					rs += string_format("\nupd6383:    %02X: rises %u of %u frames, step %d..%d "
+							"(%s) mean %.4f | first rise at frame %u | period 2^23/step = "
+							"%.1f frames = %.5f s = %.6f Hz at the declared %u Hz",
+							i, u32(m_rampinc_n[i]), u32(m_frames_run),
+							m_rampinc_min[i], m_rampinc_max[i],
+							(m_rampinc_min[i] == m_rampinc_max[i]) ? "CONSTANT -- a clean ramp"
+																   : "VARIES",
+							inc, u32(m_rampfirst[i]), per,
+							per / double(m_frame_hz), double(m_frame_hz) / per, m_frame_hz);
+				}
+				logerror("upd6383: ★★★★ §228 LFO RISE CENSUS (rate-invariant STEP x "
+						"independently-graded CLOCK; §228 T4 grades the clock against the "
+						"machine's own time, so the Hz below is NOT circular):%s%s\n",
+						rs.empty() ? "  NO CELL EVER RISES" : "", rs.c_str());
 			}
 			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames:%s\n",
 					(unsigned long long)m_frames_run, rr.c_str());
@@ -7562,10 +7681,14 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★ §201 per-body descriptor-index reset: FIRED %llu times\n",
 				(unsigned long long)m_bodyix_n);
 		for (int i = 0; i < m_age_n; i++)
+			//  ★ §228: this converted frames to ms with a hard-coded 44 100 while the
+			//  frame clock actually ran at 48 000 -- so every ms figure it ever
+			//  printed was 8.84 % HIGH.  It now divides by the DECLARED rate.
 			logerror("upd6383: ★★ §200 DELAY AGE dsc %02X: hits %llu | frames_since_written "
-					"%u .. %u  (%.2f .. %.2f ms @44.1k)\n",
+					"%u .. %u  (%.2f .. %.2f ms @ %u Hz)\n",
 					m_age_dsc[i], (unsigned long long)m_age_hits[i], m_age_min[i], m_age_max[i],
-					1000.0 * m_age_min[i] / 44100.0, 1000.0 * m_age_max[i] / 44100.0);
+					1000.0 * m_age_min[i] / double(m_frame_hz),
+					1000.0 * m_age_max[i] / double(m_frame_hz), m_frame_hz);
 		logerror("upd6383: ★ §200 rotation sign FALLING (UPD6383_ROTSIGN): applied %llu times\n",
 				(unsigned long long)m_rotsign_n);
 		logerror("upd6383: ★ §197 0x0B poke packets accepted: %llu\n",

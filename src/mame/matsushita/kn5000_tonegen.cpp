@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 // Logging
@@ -75,7 +76,31 @@ kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, cons
 void kn5000_tonegen_device::device_start()
 {
 	// Create stereo output stream at 48kHz (matching DAC sample rate)
-	m_stream = stream_alloc(0, 2, 48000);
+	m_stream = stream_alloc(0, 2, STREAM_RATE);
+
+	// ---- ★★★★ §228: TELL IC311 ITS LRCK RATE ---------------------------------
+	//
+	// See the m_dsp1_phase banner in the header.  DEFAULT 44 100, which is Fs on
+	// this instrument by four independent ROM-internal proofs (upd6383.h
+	// m_frame_hz carries them).  `UPD6383_FRAMEHZ=48000' restores the pre-§228
+	// behaviour -- one frame per output sample -- and is the TWO-SIDED CONTROL
+	// arm: it must reproduce the archived 1 440 001 frames over 30 s exactly.
+	//
+	// ⚠ It is read here and not per sample, and it is announced UNCONDITIONALLY
+	// with the gate's state (rule 8 as sharpened by §220).
+	m_dsp1_hz = DSP_FRAME_RATE;
+	if (const char *e = getenv("UPD6383_FRAMEHZ"))
+	{
+		const unsigned long v = strtoul(e, nullptr, 10);
+		if (v >= 1000 && v <= STREAM_RATE)
+			m_dsp1_hz = uint32_t(v);
+	}
+	logerror("kn5000_tonegen: ★★★★ §228 DSP FRAME CLOCK = %u Hz (UPD6383_FRAMEHZ; "
+			"DEFAULT %u = the instrument's Fs; %u = the pre-§228 one-frame-per-output-sample "
+			"behaviour, kept as the two-sided control).  The rendering stream stays at %u Hz.\n",
+			m_dsp1_hz, DSP_FRAME_RATE, STREAM_RATE, STREAM_RATE);
+	if (m_dsp1.found())
+		m_dsp1->set_frame_hz(m_dsp1_hz);
 
 	// Resolve waveform ROM region
 	memory_region *wave_region = machine().root_device().memregion(m_waveform_region_tag);
@@ -139,6 +164,10 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].lp_a), i);
 		save_item(NAME(m_voice[i].lp_z), i);
 	}
+
+	//  ★ §228: the LRCK accumulator and the held return are stream state.
+	save_item(NAME(m_dsp1_phase));
+	save_item(NAME(m_dsp1_wet));
 }
 
 
@@ -168,8 +197,24 @@ void kn5000_tonegen_device::device_stop()
 		logerror("IC311 send/return: %u frames sent, %u returns USABLE (%u per 10000).\n",
 				uint32_t(m_dsp1_frames), uint32_t(m_dsp1_kept),
 				uint32_t((10000 * m_dsp1_kept) / m_dsp1_frames));
+		//  ★★★★ §228: SAY THE CLOCK OUT LOUD, from THIS side of the pin, with the
+		//  measurement that grades it.  Frames per emulated second is the one
+		//  figure here that the declaration cannot fabricate.
+		{
+			const double secs = machine().time().as_double();
+			logerror("kn5000_tonegen: ★★★★ §228 DSP FRAME CLOCK: declared %u Hz, rendering "
+					"stream %u Hz, %u frames over %.6f emulated s = %.3f frames/s "
+					"(pre-§228 this read 48000.0 -- archived arms, 1440001 frames / 30 s)\n",
+					m_dsp1_hz, STREAM_RATE, uint32_t(m_dsp1_frames), secs,
+					(secs > 0.0) ? double(m_dsp1_frames) / secs : 0.0);
+		}
 		if (m_insta_n)
-			logerror("kn5000_tonegen: DSP INPUT AUDIT -- %u samples, peak |mix| %d "
+			//  ⚠ §228 CHANGED THIS DENOMINATOR, deliberately: the audit is inside
+			//  the LRCK gate, so it counts the channel-samples the CHIP ACTUALLY
+			//  SEES (2 per frame), not the ones MAME renders.  Against a pre-§228
+			//  log it is smaller by 44100/48000; the PERCENTAGES are comparable,
+			//  the raw count is not.
+			logerror("kn5000_tonegen: DSP INPUT AUDIT -- %u channel-samples AT LRCK, peak |mix| %d "
 					"(full scale 32768), clipped %u (%.2f%%), over 2x FS %u (%.2f%%), mean |mix| %u\n",
 					uint32_t(m_insta_n), m_insta_peak,
 					uint32_t(m_insta_clip), 100.0 * double(m_insta_clip) / double(m_insta_n),
@@ -1811,6 +1856,15 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	//  ★ bit 1 = the SPECULATIVE ISA (guessed semantics).  See kn5000.cpp DSPCFG.
 	if (m_dsp1.found())
 		m_dsp1->set_speculative((dspcfg & 2) != 0);
+	//  ★★★★ §228: with the insert OFF, the LRCK accumulator and the held return
+	//  are cleared ONCE per update, not per sample -- so the default path pays
+	//  nothing and cannot inherit a stale wet sample when the gate is switched
+	//  on mid-session.
+	if (!dsp_on)
+	{
+		m_dsp1_phase = 0;
+		m_dsp1_wet[0] = m_dsp1_wet[1] = 0;
+	}
 
 	for (int s = 0; s < stream.samples(); s++)
 	{
@@ -2088,7 +2142,28 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		int32_t wet_l = 0;
 		int32_t wet_r = 0;
 
-		if (dsp_on)
+		// ★★★★ §228 -- ONE FRAME PER LRCK PERIOD, NOT PER RENDERED SAMPLE.
+		//
+		// `lrck_edge' is true on exactly DSP_FRAME_RATE samples of every
+		// STREAM_RATE, with no drift: 44100/48000 = 147/160 is exact, so the
+		// accumulator is periodic in 160 samples and issues 147 frames.
+		//
+		// ⚠ THE MEASUREMENT THAT FORCED THIS, from disk and with no run: every
+		// archived arm through §227 reports 1 440 001 frames on a
+		// `-seconds_to_run 30' vehicle = 48 000.0 frames/s exactly, and its
+		// settled window 1 440 000 - 420 000 = 1 020 000 is precisely the
+		// 706 040 quiet + 313 960 loud that §S1 splits.  So the old clock was
+		// not approximately 48 000, it WAS 48 000.
+		// (short-circuits when the insert is off, so the default path pays nothing)
+		const bool lrck_edge = dsp_on && [this]()
+		{
+			m_dsp1_phase += m_dsp1_hz;
+			if (m_dsp1_phase < STREAM_RATE) return false;
+			m_dsp1_phase -= STREAM_RATE;
+			return true;
+		}();
+
+		if (lrck_edge)
 		{
 			// ---- format: the tone generator's mix accumulator is in 16-bit units (the
 			// softclip below divides by 32768); IC311's IDB is 24 bits wide and its
@@ -2191,14 +2266,22 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// See src/devices/bus/technics/kn5000/hdae5000.cpp for the full note.
 			// STILL NOT MODELLED: the extension board does not render DO3 -- feature::SOUND
 			// is declared unemulated there. When it is, DO3 feeds IT, never this sum.
-			wet_l = (dout[0][0] + dout[1][0]) >> 8;   // DO1 L + DO2 L -> SDIA
-			wet_r = (dout[0][1] + dout[1][1]) >> 8;   // DO1 R + DO2 R -> SDIB
+			//  ★ §228: LATCH the return.  It is held until the next LRCK edge --
+			//  a zero-order hold, declared, and confined to the wet path.
+			m_dsp1_wet[0] = (dout[0][0] + dout[1][0]) >> 8;   // DO1 L + DO2 L -> SDIA
+			m_dsp1_wet[1] = (dout[0][1] + dout[1][1]) >> 8;   // DO1 R + DO2 R -> SDIB
 
 			// KNOWN APPROXIMATION, declared: on real hardware an INSERT-type effect
 			// (distortion, compressor) presumably has its dry part REMOVED from the main
 			// mix inside this chip, which we cannot model until the send levels above are
 			// found. So with the gate on and a working insert effect, the part would be
 			// heard dry PLUS wet rather than wet only.
+		}
+
+		if (dsp_on)
+		{
+			wet_l = m_dsp1_wet[0];
+			wet_r = m_dsp1_wet[1];
 		}
 
 		stream.put(0, s, sound_stream::sample_t(softclip(mix_l + wet_l)));
