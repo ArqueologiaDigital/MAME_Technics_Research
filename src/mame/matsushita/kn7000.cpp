@@ -1981,7 +1981,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// reported as either 320x240 or 640x240. Using 640x240 as a placeholder.
 	// TODO: confirm resolution, pixel clock and the LCD controller feeding
 	//       the V-RAM at IC104.
-	SCREEN(config, m_screen, SCREEN_TYPE_LCD);
+	SCREEN(config, m_screen).set_lcd();
 	m_screen->set_refresh_hz(60);
 	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
 	// 640x240 8bpp LCD (proven from the blitter stride 0x280 and height 0xF0).

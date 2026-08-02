@@ -14,7 +14,7 @@
 
 #include "emu.h"
 #include "cpu/tlcs900/tmp95c061.h"
-#include "screen.h"
+#include "screen_svg.h"
 
 
 namespace {
@@ -57,10 +57,13 @@ void kn1500_state::kn1500(machine_config &config)
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn1500_state::mem_map);
 
 	// LCD panel artwork, rendered from the "screen" SVG ROM region.
-	screen_device &screen(SCREEN(config, "screen", SCREEN_TYPE_SVG));
+	// Upstream replaced SCREEN(..., SCREEN_TYPE_SVG) with a dedicated SCREEN_SVG device
+	// type; see e.g. casio/ctk551.cpp.
+	// screen_svg_device is NOT a screen_device and has no set_visarea_full(); its SVG
+	// region defaults to the device tag, which is the "screen" region declared below.
+	screen_svg_device &screen(SCREEN_SVG(config, "screen"));
 	screen.set_refresh_hz(60);
 	screen.set_size(600, 232);
-	screen.set_visarea_full();
 }
 
 // IC15 mask ROM -> program + rhythm halves. BAD_DUMP is a conservative
