@@ -57,7 +57,17 @@ DIVERGENT=(
 	"src/mame/matsushita/kn7000.cpp   PR = ROM-record skeleton, overlay = full driver"
 	"src/mame/mame.lst                PR declares five machines, overlay declares its own"
 	"scripts/src/cpu.lua              overlay enables the MN10300 core; upstream has none"
+	"kn7000_*_synthetic.rom           overlay ships synthetic dev data; the PR declares NO_DUMP"
 )
+
+# Felipe, 2026-08-03: "The synthetic wave ROMs are part of our development efforts. They should
+# remain, while only the ROM submission PR should have something different. Work on PR preparation
+# branches/subtrees should not alter the overlays unless we're developing new features."
+#
+# So: the overlay KEEPS kn7000_waves_synthetic.rom / kn7000_rhythms_synthetic.rom and their
+# BAD_DUMP declarations. The PR declares those chips NO_DUMP instead. That divergence is the
+# intended end state -- never "reconcile" it. Refreshing a stale COPY of a synthetic ROM under
+# roms/ is maintenance of a derived artifact, not an overlay change.
 
 red() { printf '\033[31m%s\033[0m\n' "$*"; }
 grn() { printf '\033[32m%s\033[0m\n' "$*"; }

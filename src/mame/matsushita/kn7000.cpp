@@ -821,8 +821,10 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// command sequences are decoded instead of being stored as stray bytes. Contents come
 	// from the "customflash" region, which holds what the "Initial Data" disk installs.
 	// See notes/initial-data-disk-and-custom-flash.md.
-	if (m_customflash)
-		map(0x96800000, 0x969fffff).rw(FUNC(kn7000_state::customflash_r), FUNC(kn7000_state::customflash_w));
+	// (installed at runtime in machine_start -- this map is SHARED between machines and is
+	// also built during the validity check, where the device finder is not resolved, so a
+	// map-time guard here silently skips the install and every access falls through to the
+	// RAM window above. Same reason the rhythm name resource is installed at runtime.)
 
 	// Further windows the boot reaches only AFTER the library ROM loads and runs
 	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
@@ -1695,6 +1697,17 @@ void kn7000_state::machine_start()
 {
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
 	// no explicit resolve() call is needed or available.
+
+	// IC21 custom-data flash at 0x96800000, over the top of the broad RAM window. Installed
+	// here rather than in the address map because the map is shared and is also constructed
+	// during the validity check, when this optional device is not resolved.
+	if (m_customflash)
+	{
+		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x96800000, 0x969fffff,
+				read32s_delegate(*this, FUNC(kn7000_state::customflash_r)),
+				write32s_delegate(*this, FUNC(kn7000_state::customflash_w)));
+		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
+	}
 
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
