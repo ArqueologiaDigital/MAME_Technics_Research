@@ -32,6 +32,28 @@ MAME_SRC="${MAME_SRC:-$HERE/../mame}"
 BUILD_TREE="${BUILD_TREE:-$HERE/../kn7000_mame_build}"
 ROM_SRC="${ROM_SRC:-}"
 JOBS="${JOBS:-$(nproc)}"
+
+# ---------------------------------------------------------------------------------------
+# GUARD: the base tree must be on kn7000-base.
+#
+# MAME_SRC is rsynced wholesale into the build tree, so whatever branch it sits on becomes
+# the build.  The upstream-PR branch (technics-rom-record) carries its OWN
+# src/mame/matsushita/kn7000.cpp -- a ROM-record skeleton with no CPU -- plus its own
+# mame.lst entries.  Building from it silently produces a driver that is not this project's.
+# That happened on 2026-08-02 and is exactly what this check prevents.
+#
+# PR work belongs in the sibling worktree ~/compartilhado/mame-pr.  Neither tree should ever
+# change branch; see tools/sync-check.sh.
+# ---------------------------------------------------------------------------------------
+if _br=$(git -C "$MAME_SRC" rev-parse --abbrev-ref HEAD 2>/dev/null); then
+	if [ "$_br" != "kn7000-base" ]; then
+		echo "ERROR: MAME_SRC ($MAME_SRC) is on branch '$_br', expected 'kn7000-base'." >&2
+		echo "       Do not switch branches in this tree -- it is the overlay's base tree." >&2
+		echo "       Upstream PR work lives in the ~/compartilhado/mame-pr worktree." >&2
+		echo "       Override deliberately with ALLOW_ANY_BASE=1 if you really mean it." >&2
+		[ "${ALLOW_ANY_BASE:-0}" = "1" ] || exit 1
+	fi
+fi
 # ~/.local/bin/qmake6 is a STUB that always echoes ~/.local/share/noqt.  It was added back when
 # this script built WITHOUT Qt, to stop "-I$(shell qmake6 -query ...)" collapsing to a bare "-I"
 # that swallowed the following -std=c++20.  It also HIDES the real qmake6, so MAME's moc probe
