@@ -1317,7 +1317,11 @@ INPUT_CHANGED_MEMBER(kn7000_state::sd_cover_changed)
 
 // One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
 // Favorites into battery-backed SRAM so the Favorites screen lists the 4 presets
-// without the (still-unreversed) custom-flash AST install. The firmware VALIDATES this
+// without a custom-flash AST install. (The install itself is no longer unreversed: as of
+// 2026-08-02 the AST payload is known to be inflated and written VERBATIM to flash offset
+// 0x20000, the top 30 of the 64 KiB sectors. The upstream ROM-record driver now declares
+// the nine published images there. This preload remains the stopgap only because the
+// battery SRAM, not the flash, is what is unmodeled here.) The firmware VALIDATES this
 // block against a 16-byte magic ("KN7000 SDDIR INF" @0x50083D72; check at 0x4855EC0B)
 // rather than clearing it, so once present the firmware keeps it. The Favorites LIST
 // only needs the 16-char names; the 9 u16 recall-items per record need flash-backed

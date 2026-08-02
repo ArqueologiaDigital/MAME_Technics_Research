@@ -215,3 +215,29 @@ Remaining to USE it in the driver:
 NOTE: this fixes CUSTOM styles. The built-in-genre "8 Beat 1" rhythm-list default is a SEPARATE
 issue — those styles are enumerated from the program/table ROM, not this flash (0x484420CB is
 unrelated bit-manip code, not the template site; "8 Beat 1" = built-in style "8 Beat" + variation).
+
+---
+
+## ★★ RESOLVED 2026-08-02 — the install path, both variants
+
+**KN6000 / KN6500 / KN7000 — VERBATIM.** The `.AST` payload is inflated (zlib, Adler-32 verified)
+and written **straight to flash offset `0x20000`**, untransformed. `0x1E0000` is explained exactly:
+the **top 30 of the 64 KiB sectors of a 16 Mbit bottom-boot flash** (`0x20000 + 0x1E0000 =
+0x200000`). Nothing is written below `0x20000`.
+
+**KN5000 — TRANSFORMED.** Its `.rcm` path (`rcm_ld` = `0xF18A74`, extension table `0xEA0360`, RCM is
+index 6) writes 8 sections to `0x300000`–`0x3BFFFF` and **stamps record IDs**:
+`v = (v == 0xFFFF) ? v : ((k+1) << 12) | (v & 0x0FFF)` applied by `0xF1710C` to five fields of each
+of 30 records of 0x60 bytes per section. ★ **Control case: section 7 skips that path and is
+byte-identical to chip `0xB0000`–`0xBEFFF`.**
+
+### The eight custom images (KN7000)
+
+`custom1.exe` + `custom2.exe` hold eight named data sets — Blue Bayou, Piano Player, Jazz Organ
+Soloist, Bob's Band, Traditional Melody, Jogeh 1, Vibraphone, Italian Accordion 7 — each inflating
+to exactly `0x1E0000` with CTMINI's own magic. ★ **All nine images are byte-identical in sectors
+19–29** (704 KiB, 37 % of the region), so the region is per-set content (sectors 0–18) plus an
+invariant template. Full write-up: `~/compartilhado/KN7000/kn7000-custom-flash-images-findings.md`.
+
+**Upstream:** the ROM-record driver now declares all nine as `ROM_SYSTEM_BIOS` choices at offset
+`0x20000` in an `ROMREGION_ERASEFF` region, and the shared IDD6000 payload for KN6000/KN6500.
