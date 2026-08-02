@@ -1664,6 +1664,21 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
 
+	// Install the custom-data flash content into its window (0x96800000, inside the
+	// broad "vram" share). On real hardware this region is a 16 Mbit bottom-boot flash
+	// that the "Initial Data" disk populates; modelling it as blank RAM left every
+	// custom style name, Favorite and Custom registration reading empty. The payload is
+	// written by the firmware VERBATIM at chip offset 0x20000, so installing the region
+	// as-is reproduces a part programmed from that floppy. It stays writable, so the
+	// firmware can still save over it -- only the erase/program command sequences are
+	// unmodelled (they would need a real flash device at this window).
+	if (memory_region *cd = memregion("custom_data"))
+	{
+		uint8_t *dst = reinterpret_cast<uint8_t *>(m_vram.target());
+		memcpy(dst + (0x96800000 - 0x90000000), cd->base(), cd->bytes());
+		logerror("custom-data flash: installed %u bytes at 0x96800000\n", cd->bytes());
+	}
+
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
 	// continuously and report changes over the serial link).
 	m_panel_txdone = timer_alloc(FUNC(kn7000_state::panel_txdone_cb), this);
@@ -2170,6 +2185,15 @@ ROM_START(kn7000)
 	// firmware's last-resort probe window 0x54E00000 (see maincpu_mem).
 	ROM_REGION32_LE(0x400000, "rhythms", ROMREGION_ERASEFF)
 	ROM_LOAD_OPTIONAL("kn7000_rhythms_synthetic.rom", 0x000000, 0x3eb07f, BAD_DUMP CRC(1fff54c5) SHA1(c6c9615c40745096b436ec98e9c61d83295b7ebb))
+
+	// IC21, the writable custom-data flash at 0x96800000 (2 MB, 16 Mbit bottom boot).
+	// NOT a chip dump: this is the payload the "Initial Data" disk installs, which the
+	// firmware inflates and writes VERBATIM to flash offset 0x20000 -- the top 30 of the
+	// 64 KiB sectors. Nothing is written below that, so the boot sectors stay erased.
+	// Installed into the window at machine_start; see machine_start() and
+	// notes/initial-data-disk-and-custom-flash.md.
+	ROM_REGION(0x200000, "custom_data", ROMREGION_ERASEFF)
+	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
