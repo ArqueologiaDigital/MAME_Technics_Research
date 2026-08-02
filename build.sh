@@ -84,13 +84,20 @@ echo "overlay:    $HERE"
 echo "mame src:   $MAME_SRC"
 echo "build tree: $BUILD_TREE"
 
-# 1. Assemble the build tree (reuse if present for a fast incremental build).
-if [ ! -d "$BUILD_TREE/src" ]; then
-	echo "==> creating build tree (rsync from $MAME_SRC, excluding .git) ..."
-	rsync -a --exclude='.git' "$MAME_SRC"/ "$BUILD_TREE"/
-else
-	echo "==> reusing existing build tree"
-fi
+# 1. Assemble the build tree.
+#
+# This rsync runs EVERY TIME, not just on first creation. It used to be skipped whenever the
+# build tree already existed, which meant any change to the base tree -- a cherry-picked core
+# device, a bus registration -- silently never reached the build. On 2026-08-02 that produced a
+# "successful" build that did not contain the flash device types it was supposed to, and the
+# failure only surfaced one build later. rsync is incremental, so unchanged files keep their
+# mtimes and the compile stays fast; the cost of always syncing is a directory walk.
+#
+# 'build' is excluded so object files and the generated project survive, and the overlay's own
+# files are re-symlinked in step 2 (rsync replaces a symlink with the base-tree copy).
+echo "==> syncing build tree from $MAME_SRC ..."
+rsync -a --exclude='.git' --exclude='/build/' --exclude='/kn7000' --exclude='/kn7000_build.log' \
+	"$MAME_SRC"/ "$BUILD_TREE"/
 
 # 2. Symlink the overlay's source files in (single source of truth = this repo).
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.cpp"

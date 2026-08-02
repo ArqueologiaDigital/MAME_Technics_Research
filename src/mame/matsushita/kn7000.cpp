@@ -98,6 +98,7 @@
 
 #include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
 #include "machine/spi_sdcard.h"     // the SD card (SPI protocol via the 0x9805000C byte mailbox)
+#include "machine/intelfsh.h"      // IC21 custom-data flash (16 Mbit bottom boot)
 #include "imagedev/floppy.h"        // IC103 floppy drive
 #include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
 #include "bus/midi/midiinport.h"
@@ -351,6 +352,7 @@ public:
 		, m_screen(*this, "screen")
 		, m_workram(*this, "workram")
 		, m_vram(*this, "vram")
+		, m_customflash(*this, "customflash")
 		, m_lcdbuf(*this, "lcdbuf")
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
@@ -388,6 +390,9 @@ private:
 	required_device<screen_device> m_screen;
 	required_shared_ptr<uint32_t> m_workram;
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
+	optional_device<fujitsu_29lv160b_device> m_customflash;  // IC21 @ 0x96800000
+	uint32_t customflash_r(offs_t offset, uint32_t mem_mask = ~0);
+	void customflash_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
 	bool m_ram90_workram = false;                // KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
@@ -810,11 +815,14 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// alias is probably faithful family-wide -- revisit when the LCD regs are modeled).
 	if (m_ram90_workram)
 		map(0x90000000, 0x903fffff).ram().share("workram");
-	// NOTE: 0x96800000-0x969FFFFF within this range is actually the WRITABLE custom-data
-	// FLASH (AMD 29LV160-class; unlock cmds to 0x9680AAAA/0x96805554), programmed by the
-	// "Initial Data" disk (idd7000). Modeled here as blank RAM -> empty -> style names /
-	// Favorites / Custom default. TODO: split out as a real flash device + load the
-	// installed content. See notes/initial-data-disk-and-custom-flash.md.
+	// 0x96800000-0x969FFFFF inside the window above is the WRITABLE custom-data FLASH
+	// (IC21), not RAM. It is carved back out here -- a later map() entry overrides an
+	// earlier one -- and handed to a real flash device so the firmware's erase and program
+	// command sequences are decoded instead of being stored as stray bytes. Contents come
+	// from the "customflash" region, which holds what the "Initial Data" disk installs.
+	// See notes/initial-data-disk-and-custom-flash.md.
+	if (m_customflash)
+		map(0x96800000, 0x969fffff).rw(FUNC(kn7000_state::customflash_r), FUNC(kn7000_state::customflash_w));
 
 	// Further windows the boot reaches only AFTER the library ROM loads and runs
 	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
@@ -1656,6 +1664,33 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 }
 
 
+// IC21, the custom-data flash at 0x96800000 -- a 16 Mbit bottom-boot part (MBM29LV160B class).
+// The firmware drives it with the full AMD command set: unlock at +0xAAAA / +0x5554, autoselect
+// 0x90, program 0xA0, sector erase 0x80+0x30, reset 0xF0. It refuses to program a device whose
+// autoselect response is not in its own table at 0x485CF9E0, which is why the part identity here
+// has to be right rather than merely plausible.
+//
+// The chip is 16 bits wide and the CPU bus is 32, and every firmware access is a halfword
+// (movhu). Split each 32-bit slot into its two 16-bit device words rather than relying on umask,
+// so the command sequences arrive at the device exactly as written.
+uint32_t kn7000_state::customflash_r(offs_t offset, uint32_t mem_mask)
+{
+	uint32_t data = 0;
+	if (ACCESSING_BITS_0_15)
+		data |= m_customflash->read(offset * 2);
+	if (ACCESSING_BITS_16_31)
+		data |= uint32_t(m_customflash->read(offset * 2 + 1)) << 16;
+	return data;
+}
+
+void kn7000_state::customflash_w(offs_t offset, uint32_t data, uint32_t mem_mask)
+{
+	if (ACCESSING_BITS_0_15)
+		m_customflash->write(offset * 2, data & 0xffff);
+	if (ACCESSING_BITS_16_31)
+		m_customflash->write(offset * 2 + 1, (data >> 16) & 0xffff);
+}
+
 void kn7000_state::machine_start()
 {
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
@@ -1664,20 +1699,6 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
 
-	// Install the custom-data flash content into its window (0x96800000, inside the
-	// broad "vram" share). On real hardware this region is a 16 Mbit bottom-boot flash
-	// that the "Initial Data" disk populates; modelling it as blank RAM left every
-	// custom style name, Favorite and Custom registration reading empty. The payload is
-	// written by the firmware VERBATIM at chip offset 0x20000, so installing the region
-	// as-is reproduces a part programmed from that floppy. It stays writable, so the
-	// firmware can still save over it -- only the erase/program command sequences are
-	// unmodelled (they would need a real flash device at this window).
-	if (memory_region *cd = memregion("custom_data"))
-	{
-		uint8_t *dst = reinterpret_cast<uint8_t *>(m_vram.target());
-		memcpy(dst + (0x96800000 - 0x90000000), cd->base(), cd->bytes());
-		logerror("custom-data flash: installed %u bytes at 0x96800000\n", cd->bytes());
-	}
 
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
 	// continuously and report changes over the serial link).
@@ -1869,6 +1890,12 @@ static void kn7000_floppies(device_slot_interface &device)
 
 void kn7000_state::kn7000(machine_config &config)
 {
+	// IC21, the custom-data flash. The firmware validates the part via a JEDEC autoselect
+	// against its own table, so this must be one of the accepted devices; MBM29LV160B is the
+	// first entry. Being an nvram device, whatever the firmware saves here PERSISTS across
+	// runs -- which is the point of modelling it rather than leaving the window as RAM.
+	FUJITSU_29LV160B(config, m_customflash);
+
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
 	// reference crystal X1 (part H0J160500026 -- the H0J<freq*10> code family:
@@ -2192,7 +2219,11 @@ ROM_START(kn7000)
 	// 64 KiB sectors. Nothing is written below that, so the boot sectors stay erased.
 	// Installed into the window at machine_start; see machine_start() and
 	// notes/initial-data-disk-and-custom-flash.md.
-	ROM_REGION(0x200000, "custom_data", ROMREGION_ERASEFF)
+	// Region tag must match the device tag -- intelfsh loads its initial contents from the
+	// region named after itself. It must be *_BE: for a 16-bit part nvram_default() stores
+	// each region word big-endian while read_raw() reassembles little-endian, so declaring
+	// this LE would byte-swap every halfword the firmware reads.
+	ROM_REGION16_BE(0x200000, "customflash", ROMREGION_ERASEFF)
 	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
