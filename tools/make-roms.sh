@@ -171,9 +171,18 @@ gen_kn7000_flash() {
   rm -rf "$tmp"
 }
 
-# KN6000 / KN6500 / KN2400: same container, no .INF oracle shipped. The .SLD files
-# themselves are the preserved source (see notes/rom-provenance.md on why the
-# self-extracting .exe -> .SLD step is NOT scripted here).
+# KN6000 / KN6500 / KN2400: same container. The .SLD files themselves are the preserved
+# source (see notes/rom-provenance.md on why the self-extracting .exe -> .SLD step is NOT
+# scripted here).
+#
+# CORRECTION 2026-08-02: this used to say "no .INF oracle shipped". That was wrong -- all
+# three ship one, in the same format as the KN7000's, but inside the .exe rather than at
+# the top level of the .zip, which is why it had been missed. They are now preserved in
+# technics_roms/sources/<model>/ and all three verify exactly (total + every 0x40000
+# block, over the unpadded linear image):
+#   kn6000 SMCKPR1.INF  0x166ADB67  16/16
+#   kn6500 SMCKPV1.INF  0x157ED142  15/15
+#   kn2400 SMCKPR1.INF  0x16DA58C4  15/15
 gen_sld_model() {
   local model="$1" s1="$2" s2="$3"
   echo "== $model program (from $(basename "$s1") + $(basename "$s2"))"
