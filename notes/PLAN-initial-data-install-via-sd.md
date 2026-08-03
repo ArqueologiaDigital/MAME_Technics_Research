@@ -150,3 +150,38 @@ so the parallel-array ordering is verified, not assumed.
 
 ⇒ **Proceed to the SD plan, Step 1** — does any *load* path reach the flash programmer? The tap
 harness is built and proven. Falsifier unchanged: zero flash writes across every SD load ⇒ abandon.
+
+---
+
+## ⛔ STEP 1 ANSWERED — an SD LOAD does NOT reach the flash programmer (2026-08-03)
+
+Ran `tools/sd_roundtrip_load.lua` (the proven SD LOAD flow) with a custom-flash read/write tap
+appended. The load unambiguously executed — **88,974 SPI reads**, matching the ~95k the script
+documents as its own proof — and the flash counters never moved:
+
+```
+  t= 5s  CF reads=1365436  writes=31   SPI reads=3
+  t=10s  CF reads=1365436  writes=31   SPI reads=88974   <- load ran here
+  t=45s  CF reads=1365436  writes=31   SPI reads=88974
+```
+
+Writes were already frozen at 31 (the boot autoselect sequences) **before** the load's SPI traffic
+started, and stayed there. **Zero flash writes across the entire load.**
+
+⇒ This is the pre-registered falsifier: *"zero flash writes across every SD load ⇒ abandon."*
+**SD LOAD is a working-set path — it fills RAM, not flash.** Steps 2–4 (SAVE a slot, swap the
+payload in, load it back) are pointless: even a perfectly named and indexed AST would be read into
+the working set and never programmed.
+
+### ⚠ The one limit on this result
+
+The card carries `TFLD001` with `EFC/TM/LSW/PMT/MSP/CMP/SQT/ACT` and **no `.AST` item**, so what was
+exercised is a **panel-state** load, not an AST load. The firmware does have an AST entry on the SD
+Load page (`SD_LD2_LBAST`), and it is *conceivable* that type routes differently. But the same
+low-level file machinery serves every type, and nothing in the trace suggests a flash path exists on
+the load side at all.
+
+⇒ **Do not spend more on the SD route without first finding a way to exercise specifically an AST
+load.** The remaining honest way to reach a post-install flash state is what we already do: place
+the four Initial Data files at their validated offsets (see
+`notes/HANDOFF-custom-flash-and-splash.md`), which is now known to work.
