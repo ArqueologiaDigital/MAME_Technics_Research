@@ -237,6 +237,43 @@ command set include a flash/firmware-update or service memory op?) needs either 
 / PC-side software, or a captured USB session — none of which we have. Within the maincpu ROM alone,
 the answer is: **USB moves MIDI and SD-card files, with no evidence of arbitrary maincpu-RAM access.**
 
+## MIDI SysEx — pass 5 (2026-08-03): the other channel USB-MIDI can carry
+
+USB-MIDI carries SysEx, and SysEx is the classic bulk-dump / parameter read-write channel — so this is
+the right place to look for a memory primitive. What the maincpu ROM shows:
+
+**SysEx is fully supported, in three families** (from the transmit templates in the ROM):
+- **Universal:** `F0 7E 7F 09 01/03 F7` = GM / GM2 System On; `F0 7F 7F 04 01 …` = master volume.
+- **Yamaha XG:** `F0 43 10 4C aa bb cc dd F7` — *address-based* writes, but into the **XG parameter map**
+  (System On, effect type/params, per-part settings). Dozens of templates at `0x48617034+`.
+- **Technics (manufacturer ID `0x50`):** `F0 50 <cmd> …` — Technics-specific commands (`0x21-0x33`,
+  `0x25`, `0x7E`) at `0x48616254+`; e.g. `F0 50 25 00 00 F7`, `F0 50 21 7E 31 1F 00 F7`.
+- **Bulk dump/load:** the MIDI-menu "PANEL MEMORY OUTPUT" dumps panel memories over SysEx; SysEx
+  reception has explicit error handling ("An error has occurred during System Exclusive data
+  reception…"). Style/rhythm data even embeds SysEx (`RhySysexLen` `0x484403CD`).
+
+**What those addresses/commands actually reach:**
+- **XG/GS** address-based SysEx writes the **tone-generator parameter map** (a standardized musical
+  parameter space the firmware maps to its TG structures) — *not* the CPU address space. A PC cannot
+  say "poke maincpu byte 0x50001234"; it can only set defined TG parameters.
+- **Technics `F0 50`** commands and the panel-memory bulk dump/load move **structured data** (panel
+  memories, settings) to/from fixed, bounds-checked data structures — again not arbitrary RAM.
+
+⇒ **Same conclusion as the file-transfer path: SysEx over USB-MIDI is a rich control/data channel (TG
+parameters + panel-memory dump/load), but NOT an arbitrary maincpu-RAM read/write primitive.** There is
+no peek/poke-CPU-address-X SysEx command in evidence.
+
+**The one raw-memory exposure is LOCAL, not networked.** `DbMemoryDumpProc` (`0x484878AC`) is a
+service/debug screen (the "Db…" = Debug menu family: `DbMemoProc`, `DbColorRGBProc`, `DbBitmapLoadProc`,
+`DbVariableMenuProc`, …) that reads work RAM (`0x84000000`) and displays it on the LCD via a jump-table
+screen handler. It is a local hex viewer — **not reachable over MIDI/USB**.
+
+⚠ Not exhaustively disassembled: the Technics `F0 50` *receive* dispatcher (whether it has a PC-requested
+dump-request, and the exact bulk-load target structs). The transmit templates + the structured nature of
+Technics bulk dump make a raw-RAM command unlikely, but a captured SysEx session or the receive parser
+would confirm. The receive path is also PC/enumeration-gated for the USB route (DIN-MIDI SysEx receive
+is not — that path could be exercised in-emulator later to map the `F0 50` command set).
+
 ## Concrete next steps
 
 1. Read schematic **p118/119** (main-CPU 4/5) to fix which MN10300 port pins carry `USB.SI/SO`,
