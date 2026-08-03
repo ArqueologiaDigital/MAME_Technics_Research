@@ -198,6 +198,45 @@ status (chase the "This function is only available when you connect to a PC" mes
 `0x485E34F8`) and force it "connected", then see whether the main CPU then drives a link. Either way it
 is now a firmware/HLE task, not a UI-navigation one.
 
+## Maincpu USB semantics — pass 4 (2026-08-03): following the connection-diagram clue
+
+Traced the COMPUTER CONNECTION screen from its draw code, per the "the mode-update is near the diagram
+routine" clue. Where it leads:
+
+- **Screen structure.** Handler table `0x486280A4` (events→handlers `0x484CF469-0x484CFC4A`), registered
+  at `0x484CF435`. The 5 mode option strings (NORMAL / PC as master / KN as master / KN as slave /
+  INTERFACE) are at `0x48628000` (0x20 stride).
+- **★ The mode variable is `0x5006CC6C`** (a byte). `0x484CF54C` (event 0x05) increments it on MUTE UP
+  13 and stores it; the screen redraws the routing diagram from it. **All 32 references to `0x5006CC6C`
+  are inside this one screen.** No always-running routing logic reads it.
+- ⇒ **The "connection mode" is USB-MIDI *routing* config** — which of USB1/USB2/MIDI-IN/MIDI-OUT connect
+  to the KN — and the routing itself is performed by the USB co-processor (IC408), which owns the USB-
+  MIDI class. The main CPU just stores the choice. **This path does not read or write maincpu RAM as
+  data**; it is a MIDI-routing selector.
+
+### Does USB read/write maincpu RAM? — best answer from the maincpu ROM
+The two data roles of the port are **separate subsystems**, and neither is an arbitrary-RAM primitive:
+
+1. **USB-MIDI** (the connection mode, above): MIDI events routed by IC408. Not RAM access.
+2. **Data transfer** ("Song Manager" / "Audio Recorder" PC apps). Its dialogs — *"Data transmission"*
+   (`0x486B12DC`) and *"…don't disconnect the USB Cable during this procedure, to do so may damage your
+   **SD Card**"* — belong to a transfer screen whose resource handler is `0x4858387C` (message IDs
+   `0x60090/0x600B1/0x50000`). **The firmware's own warning names the transfer target as the SD card**,
+   i.e. the transfer is **file/data I/O to the SD card**, mediated by the main CPU — not a
+   read/write-arbitrary-memory protocol.
+
+**Conclusion (evidence-based, not yet byte-level-confirmed):** the maincpu ROM shows **no raw
+"read/write RAM at address X" USB command**. USB data lands in the SD card (Song Manager) or is routed
+as MIDI (connection mode). Data necessarily passes through transient RAM *buffers* during a transfer,
+but that is ordinary buffering, not a PC-addressable memory window.
+
+**Why it can't be pinned to the byte level here:** the transfer *engine* sits behind RTOS screen/message
+indirection AND is **PC-connection-gated** — it only runs once a real PC + the (undumped) USB CPU
+complete enumeration, which the emulator cannot provide. So the remaining uncertainty (does the transfer
+command set include a flash/firmware-update or service memory op?) needs either the USB CPU's dumped ROM
+/ PC-side software, or a captured USB session — none of which we have. Within the maincpu ROM alone,
+the answer is: **USB moves MIDI and SD-card files, with no evidence of arbitrary maincpu-RAM access.**
+
 ## Concrete next steps
 
 1. Read schematic **p118/119** (main-CPU 4/5) to fix which MN10300 port pins carry `USB.SI/SO`,
