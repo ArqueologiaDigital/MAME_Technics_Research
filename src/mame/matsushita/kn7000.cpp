@@ -2210,13 +2210,14 @@ ROM_START(kn7000)
 	//   0x010000  03FAVINI.FAV compared at 0x4849EDC0
 	//   0x011000  04HPGINI.HMP compared at 0x48496F60
 	//
-	// These three use ROM_LOAD16_WORD_SWAP: measured against the firmware's own read, a plain
+	// These three use ROM_GROUPWORD|ROM_REVERSE (i.e. a word swap) plus ROM_OPTIONAL -- they
+	// are user data and the machine must still boot without them. Measured against the firmware's own read, a plain
 	// ROM_LOAD into this _BE region delivers every 16-bit word reversed (the signature came
 	// back as "KJ", byte 0x4000 reading 0x4B where 0x4A is required). CTMINI below is
 	// unaffected and stays a plain ROM_LOAD.
-	ROM_LOAD16_WORD_SWAP("kn7000_umdini.rom",      0x004000, 0x000280, CRC(f36352d3) SHA1(f5693ab1f1d986dfd7af2776c862af45b0a69488))
-	ROM_LOAD16_WORD_SWAP("kn7000_favini.rom",      0x010000, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599))
-	ROM_LOAD16_WORD_SWAP("kn7000_hpgini.rom",      0x011000, 0x004442, CRC(d56caae3) SHA1(931b35afe46942744b37abb64898c4524fe75a6f))
+	ROMX_LOAD("kn7000_umdini.rom",      0x004000, 0x000280, CRC(f36352d3) SHA1(f5693ab1f1d986dfd7af2776c862af45b0a69488), ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)
+	ROMX_LOAD("kn7000_favini.rom",      0x010000, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599), ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)
+	ROMX_LOAD("kn7000_hpgini.rom",      0x011000, 0x004442, CRC(d56caae3) SHA1(931b35afe46942744b37abb64898c4524fe75a6f), ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)
 	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
