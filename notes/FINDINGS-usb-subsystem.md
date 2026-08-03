@@ -94,6 +94,44 @@ Firmware gate string: *"This function is only available when you connect to a PC
   co-processors' private state from a distance (see the HLE chip-boundary rule). If USB behaviour
   depends on data X and the only inputs are the link registers, X is already encoded there; decode it.
 
+## Register-level RE — pass 1 (2026-08-03): what the host link is NOT, and what it is
+
+Pushed on "which main-CPU register carries the link." Progress is mostly by **elimination**, which
+narrows it sharply:
+
+1. **NOT an SIO channel.** The MN10300 has exactly **three** on-chip USARTs (0x34000800/810/820), and
+   the driver's verified RE assigns all three: ch0 = control panel, ch1 = MIDI-1, ch2 = MIDI-2. (The
+   old "SD sub-CPU on ch2" idea was already retracted — ch2 is MIDI-2.) So the USB link is not a
+   hardware serial peripheral.
+2. **NOT a prominent memory-mapped mailbox.** A histogram of every absolute access into the whole
+   `0x98000000–0x9807ffff` I/O window accounts for all of it: main/sub TG (incl. the new wave-read
+   port), the `0x9805000C` SD mailbox + `0x9805000E` readback, the FDC at `0x98020000`, and sound
+   control at `0x98060000`. The two "unknowns" resolve to sound: `0x98050010` is written beside the
+   TG-enable gate `0x500CE380`, and `0x98060000` is an IRQ-protected GPIO latch (shadow `0x50005214`).
+   None is USB.
+3. **It looks like a transistor-buffered GPIO bit-bang.** On the CPU sheet (p100) the main-side nets
+   **`USB.SD`, `USB.ST`, `USB.MAITU`** run through discrete level-shifter transistors (`2SB709ARTX`,
+   `2SD601AQTX`) and `TC7W08` AND-gate glue — i.e. GPIO port pins bit-banged into a serial link, not a
+   peripheral register. That is exactly why steps 1–2 find nothing. The board side (p118, SCHEMATIC-10)
+   carries `USBM.TX`, `USB.WAITM/H`, `USB.SI`, `USB.SO`, and IC408 exposes a `UTXD2` UART pin.
+4. **The link is NON-BLOCKING at boot.** The machine boots to the play screen with no USB present, so
+   the USB code path runs only on demand (Computer Connection menu / Audio Recorder / Song Manager).
+   ⇒ **No boot stub is needed**; HLE is required only to make the USB *features* work, not basic
+   operation. This lowers the priority and de-risks it.
+
+⇒ Working model: main CPU bit-bangs a synchronous serial link (`USB.SD` = data, `USB.ST` = clock/strobe,
+plus `USB.MAITU` and the `USB.WAIT*` handshake) over GPIO port pins to the USB CPU (IC408), which also
+has a UART. The exact **GPIO port + bit** is the missing datum.
+
+### Sharpest next probe (either works)
+- **Dynamic:** run the emulator, navigate MIDI MENU → COMPUTER CONNECTION (or open Audio Recorder), and
+  log GPIO accesses (`0x36008000` region + the MN10300 port data registers). The pins toggled only in
+  that screen are the link. This is the fastest way to the port/bit.
+- **Static/visual:** trace `USB.SD/ST/MAITU` on p100 through the buffer transistors to the CPU port pins
+  (the net names appear once, at the CN105 connector edge; the CPU-pin end is reached through the glue).
+- Then find the firmware bit-bang routine at that port and the Computer-Connection handler that drives
+  it; that yields the command framing for HLE.
+
 ## Concrete next steps
 
 1. Read schematic **p118/119** (main-CPU 4/5) to fix which MN10300 port pins carry `USB.SI/SO`,
