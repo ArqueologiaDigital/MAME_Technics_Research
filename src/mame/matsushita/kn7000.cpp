@@ -523,6 +523,25 @@ private:
 	                                           // space -- the old [0x1000] + <0x1000 gate silently
 	                                           // dropped the per-voice pitch/key-on writes at 0x2000+)
 
+	// Wave-memory READ port (main 0x9804 / sub 0x9805, offsets +6/+8/+A). The
+	// firmware's service-mode WAVE ROM test (checksum core 0x484839A1) reads the
+	// four PCM wave ROMs THROUGH the tone generator: it latches a bank at base+6,
+	// a word address within the bank at base+8, then reads each 16-bit sample word
+	// back at base+A and sums (hi+lo) across the full 16 MiB of each device. So the
+	// wave ROMs -- on the TG's private bus -- ARE reachable by the CPU (main TG,
+	// index 0 = IC207/208; sub TG, index 1 = IC203/204). Composed word address per
+	// 0x484839A1: bank = (base+6 & 0x1FF); the two ROMs on a side are selected by
+	// bit0 of (base+8); word = ((base+8) >> 1) & 0x3FFF; linear = bank*0x4000 + word
+	// (0..0x7FFFFF within one 16 MiB ROM). Data comes from the synthetic "wavepack"
+	// placeholder until IC203/204/207/208 are dumped (real data drops straight in;
+	// the §8.9 checksum then matches the firmware's golden values 0x485CFD18).
+	// See docs kn7000-expansion-and-wave-dump / notes/FINDINGS-expansion-buses-and-code-exec.md.
+	uint16_t m_tg_wave_bank[2] = { 0, 0 };     // latched bank register  (base+6), [0]=main [1]=sub
+	uint16_t m_tg_wave_addr[2] = { 0, 0 };     // latched word-address   (base+8)
+	const uint8_t *m_wavepack = nullptr;       // cached "wavepack" region base (nullptr if absent)
+	uint32_t m_wavepack_size = 0;
+	uint16_t tg_wave_read(int tg);             // compose the address and return the sample word
+
 	// --- Effects DSP (IC306 ADSP-21065L) host port -------------------------
 	// The CPU host-boots the SHARC through an index register at 0x98000000 and a
 	// data register at 0x9C000000 (the 0x9C bank the driver otherwise treats as
@@ -969,6 +988,24 @@ void kn7000_state::maincpu_mem(address_map &map)
 // route all of them. One handler serves all five banks, so `offset` is relative
 // to the mapped range -- shift left 1 for the byte offset within the bank. The
 // decoded per-register list is in notes/io-map.md.
+// Tone-generator wave-memory read port. The firmware's WAVE ROM test drives this
+// (checksum core 0x484839A1): bank latched at base+6, word address at base+8, the
+// 16-bit sample word read here. Composition follows the firmware exactly; the four
+// real wave ROMs are undumped, so sample data is sourced from the synthetic
+// "wavepack" placeholder (mapped modulo its size) until the dumps arrive.
+uint16_t kn7000_state::tg_wave_read(int tg)
+{
+	if (!m_wavepack || !m_wavepack_size)
+		return 0xFFFF;                                       // no wave data -> open bus (test reports NG)
+	const uint32_t bank = m_tg_wave_bank[tg] & 0x1FF;        // base+6: 512 banks (bit15 = enable, masked off)
+	const uint32_t chip = m_tg_wave_addr[tg] & 1;            // base+8 bit0: which of the two ROMs on this side
+	const uint32_t word = (m_tg_wave_addr[tg] >> 1) & 0x3FFF;// base+8 bits1..14: word within the bank
+	const uint32_t rom  = (uint32_t(tg) << 1) | chip;        // 0..3: one of the four 16 MiB wave ROMs
+	const uint32_t byteaddr = rom * 0x1000000u + (bank * 0x4000u + word) * 2u;
+	const uint32_t a = byteaddr % m_wavepack_size;
+	return uint16_t(m_wavepack[a] | (m_wavepack[(a + 1) % m_wavepack_size] << 8));
+}
+
 uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 {
 	// 0x98070000 (offset 0x38000 within the 0x98000000 window): a status/strap word.
@@ -1014,6 +1051,10 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
+	// Wave-memory read port DATA (main 0x9804000A / sub 0x9805000A): return the
+	// sample word for the latched (bank, address). See tg_wave_read().
+	if (offset == 0x20005) return tg_wave_read(0);
+	if (offset == 0x28005) return tg_wave_read(1);
 	// (The FDC is IC103 at 0x98020000 = decoder slot Y2; 0x98010000 = Y1 = FDC.DACK, the DMA-ack strobe,
 	// not the register base -- that is why the old 0x98010000 probe never saw register traffic. The FDC
 	// registers are carved out of this io window at 0x98020000-0f -> fdc_r/fdc_w.)
@@ -1053,6 +1094,12 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		return;
 	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
 		return;
+	// Wave-memory read port: the service-mode WAVE ROM test latches a bank at
+	// base+6 and a word address at base+8, then reads the sample word at base+A.
+	case 0x20003: m_tg_wave_bank[0] = data; return;              // main TG wave bank    (0x98040006)
+	case 0x20004: m_tg_wave_addr[0] = data; return;              // main TG wave address (0x98040008)
+	case 0x28003: m_tg_wave_bank[1] = data; return;              // sub  TG wave bank    (0x98050006)
+	case 0x28004: m_tg_wave_addr[1] = data; return;              // sub  TG wave address (0x98050008)
 	}
 	// (The FDC registers at 0x98020000-0f are carved out of this window -> fdc_r/fdc_w; see io_r note.)
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
@@ -1685,8 +1732,18 @@ void kn7000_state::machine_start()
 		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
 	}
 
+	// Cache the synthetic wave pack so the TG wave-read port can source sample
+	// words without a region lookup per read (the §8.9 sweep does millions).
+	if (memory_region *wp = memregion("wavepack"))
+	{
+		m_wavepack = wp->base();
+		m_wavepack_size = wp->bytes();
+	}
+
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_dl_words));
+	save_item(NAME(m_tg_wave_bank));
+	save_item(NAME(m_tg_wave_addr));
 
 
 	// Periodic control-panel button scan (the real sub-CPUs poll their matrices
