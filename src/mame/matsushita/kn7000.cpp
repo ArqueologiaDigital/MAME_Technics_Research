@@ -2237,6 +2237,19 @@ ROM_START(kn7000)
 	// each region word big-endian while read_raw() reassembles little-endian, so declaring
 	// this LE would byte-swap every halfword the firmware reads.
 	ROM_REGION16_BE(0x200000, "customflash", ROMREGION_ERASEFF)
+	// The Initial Data Disk is FOUR files, each installed to its own flash region -- not one
+	// payload at one offset. Three of them (MD/FAV/HMP) carry the ASCII signature "JK " that
+	// the boot validation at 0x487DCE9A compares against a ROM template (0x4858D730); with
+	// that signature absent the firmware sets an error bit at 0x5001602C and falls back to
+	// defaults everywhere, which is why the style list, Favorites and Custom came up empty.
+	//
+	// 02UMDINI.MD -> 0x4000 is solid: it is 0x280 bytes, exactly the 0x4000..0x4280 span the
+	// firmware references, and its header fields (0xC0, 0xD0, 0x90, 3 records) reproduce the
+	// referenced offsets 0x4010/0x40D0/0x4160/0x41F0/0x4280 exactly.
+	// 03FAVINI.FAV -> 0x4A70 is the other referenced header cluster; less certain.
+	// 04HPGINI.HMP placement is NOT established -- left out rather than guessed.
+	ROM_LOAD_OPTIONAL("kn7000_umdini.rom",      0x004000, 0x000280, CRC(f36352d3) SHA1(f5693ab1f1d986dfd7af2776c862af45b0a69488))
+	ROM_LOAD_OPTIONAL("kn7000_favini.rom",      0x004a70, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599))
 	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
