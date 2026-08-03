@@ -156,22 +156,47 @@ So on `0x36008004`: **bit1 = SD SPI CS** (known), **bit5 = periodic heartbeat/cl
 is ready to capture the USB bit-bang the moment the USB code path runs; it just needs that path
 triggered.
 
-### ⛔ The blocker to capturing USB dynamically: the COMPUTER CONNECTION screen is unreachable
-The USB code runs from **MIDI MENU → COMPUTER CONNECTION** (or the Audio Recorder). Reaching it needs
-the **LCD soft-keys** (the bezel buttons around the screen), which are **not yet mapped** in the driver
-— the same known gap that blocks the DISK menu. There is no dedicated MIDI/menu hardware button to
-shortcut it. So the dynamic tool cannot yet drive the firmware into the USB path.
+## Register-level RE — pass 3 (2026-08-03): navigated to the screen; the USB link is dormant without a PC
 
-### Two ways to unblock (pick one next)
-1. **Map the LCD soft-keys.** Then navigate to COMPUTER CONNECTION and let `gpio_trace.lua` capture the
-   bit-bang directly. Also unblocks DISK/other menus — high general value.
-2. **Find and force the USB-connect input.** Locate the GPIO input bit the firmware reads to detect a
-   PC, force it "connected" from a Lua tap, and watch the firmware start driving the link. Cheaper if
-   the connect bit can be found (it's likely a bit of an input latch near `0x36008084`), but the input
-   latches beyond `0x36008084` are not yet identified.
+★ **CORRECTION: the LCD soft-keys ARE fully mapped and work** (`LCDL 1-5` + `LCDR 1-5`,
+kn7000_cpanel.cpp). An earlier claim here that they were unmapped was a stale-memory error and is
+retracted. I drove the firmware straight to the target screen with the soft-keys, via a Lua button
+harness (`ioport.fields[name]:set_value`):
 
-Either path ends the same way: `gpio_trace.lua` records the exact `0x36008000` bits toggled by the USB
-routine, and disassembling those PCs gives the bit-bang framing to HLE.
+```
+  PROGRAM MENUS  ->  LCDL 4 (= MIDI)  ->  LCDR 5 (= COMPUTER CONNECTION)
+  MODE value cycled with MUTE UP 13 (a part-mute button acts as the value key on this screen)
+```
+
+Verified by snapshot: the screen opens ("MODE: NORMAL", a PC/USB/MIDI/KN routing diagram) and the mode
+cycles NORMAL → … → "KN as slave" as MUTE UP 13 is pressed.
+
+★ **But neither opening the screen nor changing the mode talks to the USB CPU.** With `gpio_trace.lua`
+armed on the screen (taps on `0x36008000` + SIO ch0 `0x34000800-82f`), every access is the **control
+panel**: the panel-ready poll `0x36008084` (`0x484ACEE1`), the panel serial engine on **SIO ch0**
+(`0x34000800/808/80C`) MUXed by GPIO **`0x36008024`/`0x36008064` bit0/1** (code cluster
+`0x484AC640-0x484ACDxx`), plus the SD/heartbeat on `0x36008004`. **No USB-specific bit-bang fires.**
+Changing the connection mode just stores the setting and redraws the routing; it does not drive the
+USB link.
+
+⇒ **The real gate is a PC connection, not the UI.** The USB co-processor (IC408) only starts a
+conversation with the main CPU once a PC is physically attached (VBUS + USB enumeration). The emulator
+provides no PC, and IC408 is undumped/unmodeled, so it never raises "PC connected" and the main CPU
+never initiates USB traffic. This is chicken-and-egg: reaching the USB bit-bang dynamically requires
+first modelling the USB CPU's "connected" handshake — which is itself the HLE we want to write.
+
+### Bonus finding (real, reusable): the CONTROL-PANEL serial link
+Falling out of this: the panel link is **SIO ch0** (`0x34000800`) MUXed to the panel by GPIO
+`0x36008024`/`0x36008064` (bit0/1), driven from `0x484AC640-0x484ACDxx`. (`0x3400082C` = SIO ch2 status
+is hammered ~1.9 M times = the MIDI-2 idle poll.) Useful for the panel-serial-protocol work; NOT the
+USB link.
+
+### Next, to actually reach USB
+The productive path is no longer "navigate the UI" — it is to **model IC408's connected/enumeration
+handshake** (the HLE step 1), or to first find, statically, the routine that reads the USB-connect
+status (chase the "This function is only available when you connect to a PC" message's gating check
+`0x485E34F8`) and force it "connected", then see whether the main CPU then drives a link. Either way it
+is now a firmware/HLE task, not a UI-navigation one.
 
 ## Concrete next steps
 
