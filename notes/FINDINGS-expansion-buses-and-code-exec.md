@@ -136,6 +136,25 @@ is known to write the dumper loop; confirm the address arithmetic against `0x484
 byte order. The TG wave-read port is **not yet modelled** in the driver (the tonegen device would need
 `0x9804/0x9805 0006/08/0A`), so the software dump runs on real hardware today; emulating it needs that port.
 
+## Can MIDI/SysEx dump the wave ROMs? NO — the wave port has exactly one reader
+
+Asked whether XG/GS address-based SysEx could reach the wave ROMs. It cannot:
+
+- **The wave-data ports have a single reader each.** `0x9805000A` is read only at `0x48483A05`,
+  `0x9804000A` only at `0x48483AB1` — both inside the checksum core `0x484839A1`, reachable only from
+  the §8.9 WAVE ROM *service test*. The address latches `0x98050006/08` are written only by that same
+  routine. **No MIDI, SysEx, or general firmware path touches the wave port.**
+- **XG/GS SysEx addresses the tone-generator PARAMETER map** (system/parts/effects/drums), which the
+  firmware maps to TG parameter registers — the wave *sample* ROM is not in that address space, and the
+  XG/GS spec has no wave-read command. (GS RQ1 read-requests: 0 in the ROM.) The sample data is not in
+  the maincpu address space at all; it lives on the TG's private bus, reached only via the wave port's
+  write-address/read-data protocol.
+
+⇒ Dumping the wave ROMs is a **maincpu** operation via the wave port (drive `0x98050006/08→0A`), not a
+SysEx one. Cleanest firmware-reuse path: the §8.9 checksum core already reads *every* wave word — patch
+its loop to EMIT each word (MIDI/SD) instead of summing. Custom code to do that can be delivered via the
+KN6000/KN6500 XAPR expansion route (see above) or a firmware patch; SysEx is the wrong tool.
+
 ## Corrections to `HANDOFF-expansion-connectors.md` / blog Part 122
 
 1. **`CN106` is the SD-card connector**, not the expansion/HDD bus — its 11 pins are
