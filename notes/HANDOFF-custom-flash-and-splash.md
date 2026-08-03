@@ -154,3 +154,32 @@ what condition triggers it.** It may explain residual oddities including the stu
 is wanted for testing, use one of the handlers that names flash explicitly
 (`CustomPanelFlashFunc`, `LangSetFlashFunc`, `MainWallSetFlashFunc`, `DataProtectOKFunc`),
 reachable from the settings menus rather than a panel button.
+
+### ✅ TRACED — the erase is READ-then-ERASE, so it is NOT destroying our data
+
+PC-annotated write tap, with a running count of payload-sector reads:
+
+```
+  autoselect x6                       PC 4847F98B/993/99C, reset 4847F6D5   reads=0
+  W 9680AAA8=00AA  PC=4847F78B                                        reads=65,539
+  W 96805554=0055  PC=4847F793
+  W 9680AAA8=0080  PC=4847F799   ERASE SETUP
+  W 9680AAA8=00AA  PC=4847F79F
+  W 96805554=0055  PC=4847F7A5
+  W 96820000=0030  PC=4847F7AD   ERASE CONFIRM @ chip 0x20000
+```
+
+★ **65,539 payload reads happen BEFORE the erase** — the firmware reads the full 64 KiB sector out,
+then erases it. That is a normal read-modify-erase cycle, **not** our data being wiped before use.
+Reads go on to 4.1 M in the same run, so the payload is being consumed heavily.
+
+Issuer is the standard sector-erase helper at `0x4847F78B..0x4847F7AD` (the `0x80` setup / `0x30`
+confirm routine first disassembled at `0x4847F775`). **No program (`0xA0`) follows in this run**, so
+the sector is left erased rather than rewritten — worth checking whether a write-back happens later
+(on save, or at power-down) on a longer run.
+
+⇒ This **does not** explain the stuck splash, and it does not supersede the byte-order hypothesis.
+The splash investigation stands as written above.
+
+⇒ To find the CALLER rather than the helper, breakpoint the helper entry and read the return
+address; the PCs above are all inside the helper itself.
