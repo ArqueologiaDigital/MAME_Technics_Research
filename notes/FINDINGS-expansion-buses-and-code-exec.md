@@ -152,8 +152,15 @@ Asked whether XG/GS address-based SysEx could reach the wave ROMs. It cannot:
 
 ⇒ Dumping the wave ROMs is a **maincpu** operation via the wave port (drive `0x98050006/08→0A`), not a
 SysEx one. Cleanest firmware-reuse path: the §8.9 checksum core already reads *every* wave word — patch
-its loop to EMIT each word (MIDI/SD) instead of summing. Custom code to do that can be delivered via the
-KN6000/KN6500 XAPR expansion route (see above) or a firmware patch; SysEx is the wrong tool.
+its loop to EMIT each word (MIDI/SD) instead of summing.
+
+⚠ **How to run that custom code ON THE KN7000: NOT via XAPR.** XAPR/`calls`-the-board code-exec is
+**KN6000/KN6500-only** (XAPR=2, HD-SX3=1, board vectors called at 0x48572A6F/8C/AF). The **KN7000 has
+XAPR=0, HD-SX3=0** and its expansion slots are **data-only SOUND RAM** — the firmware never transfers
+control to a board pointer, so an expansion board cannot run code. On the KN7000 the realistic code-exec
+route is a **modified firmware-update disk** (program is reflashable FLASH IC16/IC17, service manual §9).
+The hardware alternative (no firmware risk) is an active in-circuit read of the 80-pin wave bus with the
+TG tri-stated. SysEx is the wrong tool regardless.
 
 ## Corrections to `HANDOFF-expansion-connectors.md` / blog Part 122
 
