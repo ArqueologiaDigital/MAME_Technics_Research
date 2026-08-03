@@ -4,6 +4,15 @@
 KN7000 service manual (`pdftotext -layout` of `service_manual/technics_sx-kn7000_keyboard.pdf`,
 6.6 MB of text) and from firmware string counts.
 
+> ⚠ **SUPERSEDED IN PART — read `FINDINGS-expansion-buses-and-code-exec.md` first.** Reading the
+> schematic *pages* (not the text layer) overturned two claims below: (1) **`CN106` is the SD-card
+> connector, not the EXP.CS bus** — the peripheral bus is the four 40-pin `CN202/03/05/07`; (2) the
+> **EW slots DO share the internal wave bus** (buffered, nets renamed `BWD`→`EXBWD`), so the
+> "zero overlap" grep in route A was a false negative. Also: the code-execution blocker in route B
+> is now **closed** — the KN6000/KN6500 `XAPR` header at `0x97800000` is validated and its export
+> vectors are `calls`'d (`0x48572A15`/`A6F`/`A8C`/`AF`). The corrected picture lives in the FINDINGS
+> note; the string-count table and the KN2400-control reasoning below still stand.
+
 ## The two connectors are DIFFERENT interfaces
 
 | | connector | side | carries |
