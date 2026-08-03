@@ -132,6 +132,47 @@ has a UART. The exact **GPIO port + bit** is the missing datum.
 - Then find the firmware bit-bang routine at that port and the Computer-Connection handler that drives
   it; that yields the command framing for HLE.
 
+## Register-level RE — pass 2 (2026-08-03): dynamic GPIO trace built + run
+
+Built a reusable dynamic tracer — `tools/gpio_trace.lua` (MAME `-autoboot_script`). It installs
+read/write taps over the GPIO ranges, records `(addr, PC, R/W)` for every access (arming AFTER boot to
+skip init noise), and dumps an aggregate via `emu.print_info`. (Two gotchas baked in: retain the tap +
+notifier subscriptions in `_G` or the GC kills them at ~frame 120; `io.open` is sandboxed, so log via
+`emu.print_info`.)
+
+**What it showed.** All GPIO the firmware touches is in the **external latches at `0x36008000`** — the
+on-chip port ranges `0x34000000-0xff` and `0x34000300-0x7ff` are never accessed. Steady-state (post-boot,
+idle) only two things run:
+
+| addr | PC | what |
+|---|---|---|
+| `0x36008084` (in) | `0x484ACEE1` (×521) | control-panel ready/handshake input poll (known) |
+| `0x36008004` (out) | `0x4C02BCF0` (×260) | toggles **bit 5** at ~10 Hz — a heartbeat/clock (RMW: read, invert bit5, write) |
+
+So on `0x36008004`: **bit1 = SD SPI CS** (known), **bit5 = periodic heartbeat/clock**. Other bits of
+`0x36008004` and of the `0x36008024/44/64` output latches are set once at boot and idle after.
+
+**No USB activity at idle** — confirming the pass-1 conclusion that the USB link is on-demand. The tool
+is ready to capture the USB bit-bang the moment the USB code path runs; it just needs that path
+triggered.
+
+### ⛔ The blocker to capturing USB dynamically: the COMPUTER CONNECTION screen is unreachable
+The USB code runs from **MIDI MENU → COMPUTER CONNECTION** (or the Audio Recorder). Reaching it needs
+the **LCD soft-keys** (the bezel buttons around the screen), which are **not yet mapped** in the driver
+— the same known gap that blocks the DISK menu. There is no dedicated MIDI/menu hardware button to
+shortcut it. So the dynamic tool cannot yet drive the firmware into the USB path.
+
+### Two ways to unblock (pick one next)
+1. **Map the LCD soft-keys.** Then navigate to COMPUTER CONNECTION and let `gpio_trace.lua` capture the
+   bit-bang directly. Also unblocks DISK/other menus — high general value.
+2. **Find and force the USB-connect input.** Locate the GPIO input bit the firmware reads to detect a
+   PC, force it "connected" from a Lua tap, and watch the firmware start driving the link. Cheaper if
+   the connect bit can be found (it's likely a bit of an input latch near `0x36008084`), but the input
+   latches beyond `0x36008084` are not yet identified.
+
+Either path ends the same way: `gpio_trace.lua` records the exact `0x36008000` bits toggled by the USB
+routine, and disassembling those PCs gives the bit-bang framing to HLE.
+
 ## Concrete next steps
 
 1. Read schematic **p118/119** (main-CPU 4/5) to fix which MN10300 port pins carry `USB.SI/SO`,
