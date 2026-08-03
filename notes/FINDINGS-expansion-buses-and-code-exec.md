@@ -162,6 +162,46 @@ route is a **modified firmware-update disk** (program is reflashable FLASH IC16/
 The hardware alternative (no firmware risk) is an active in-circuit read of the 80-pin wave bus with the
 TG tri-stated. SysEx is the wrong tool regardless.
 
+## ★ Second DEEP pass (12-agent adversarial workflow, 2026-08-03): can the KN7000 run BOARD CODE?
+
+Felipe's strong prior: the KN6000/KN6500 have the capability, the connector signals are all present on
+the KN7000, and leaving a few dead instructions costs nothing — so there *should* be a hidden vector.
+Re-investigated exhaustively (8 dataflow angles + aggressive vector-hunter + adversarial refuter +
+completeness critic + synthesis; ~979K tokens). **Verdict: NO_VECTOR_FOUND, confidence ~0.97.** But the
+prior is half-right — see the fossil.
+
+- **The XAPR facility is ABSENT, not neutered.** KN6000/KN6500: **21** `mov (0x978000XX),aN ; calls (aN)`
+  board-function-pointer thunks each (slots +04..+54), a gate flag `0x500056FC`, and `"XAPR"`×2.
+  KN7000: **0** such pointer-loads, `"XAPR"`×0, no gate, no thunks. **Positive control:** the same scan
+  finds 20/21 load→call on the KN6000, so it *would* detect a vector if one existed.
+- **★ The one fossil that vindicates the intuition:** the KN7000's *only* touch of the `0x97800000`
+  window is a **dead** checksum stub at **`0x4849FD9E`** — `mov 0x97800000,a0 ; movbu (a0),d1 ; inc a0`
+  (a 2 MiB byte-sum, error flag 4 on mismatch). It has **0 callers and 0 stored pointers** — unreachable.
+  It proves the HD-SX3/XAPR support *once existed in this codebase and was cut* for the KN7000 build
+  (which dropped HD-SX3), rather than being left dead. So the capability was removed, not retained.
+- **The four SOUND-RAM windows are data-only.** All 53 `mov (window+off),aN` loads → **0** followed by
+  any indirect transfer within 48 B; the detector region `0x48449400-0x4844A400` has **zero** `F0 F0..F7`
+  opcodes. The header (§ above) is a pure data descriptor: `+0x00` payload offset (write-only word),
+  `+0x04/+0x08` signature-string offsets (byte-compared vs `0x485B8518`), `+0x0C` data-record offset —
+  all relocated by the window base and dereferenced only as data. No field is an entry vector.
+- **The only indirect transfers in the whole window-reading closure are the 5 bounds-checked firmware-
+  table dispatches** (`0x485702E5/0630/07C4/095B` + loader `0x4848392F`), indexing ROM tables
+  `0x486A2D90/DC0/DF0/E20`. The board supplies only the *selector* (0..0xB, clamped), never the target.
+- **Global backstop:** image-wide only **12** `mov (abs32),aN ; calls/jmp (aN)` sites exist — **0 from
+  any board window**; the RAM-slot ones trace to firmware writers (RTOS callback vectors, fixed msg-ids),
+  and `0x50-0x53` work RAM is not board-writable. Refuter: NOT REFUTED. Hunter: NEGATIVE.
+
+⚠ **Residual (low-risk, not load-bearing):** a few data-consumer helper callees that *receive* a board
+DATA pointer were not descended internally (`0x484298A0`, `0x48425398`, `0x48429569`, `0x484A3DB3`,
+library `0x4C001A48`) — a "data-driven interpreter inside a helper" is the only unrefuted shape. Any exec
+would still need a `calls/jmp(aN)` with a board-derived target, and the census found none. Next probe if
+certainty must exceed 0.97: descend those 5 helpers for `mov (dN,aM),aP ; calls/jmp(aP)` where `dN` is a
+board-byte index and `aM` a board pointer, confirming every such index hits a fixed firmware table.
+
+⇒ Supersedes the terse "data-only" claim above with adversarial-grade evidence: **the KN7000 cannot be
+made to execute code from an expansion board — the shared-codebase capability was excised, leaving only
+the dead checksum fossil at `0x4849FD9E`.**
+
 ## Corrections to `HANDOFF-expansion-connectors.md` / blog Part 122
 
 1. **`CN106` is the SD-card connector**, not the expansion/HDD bus — its 11 pins are
