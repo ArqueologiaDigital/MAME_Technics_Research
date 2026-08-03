@@ -185,3 +185,43 @@ the load side at all.
 load.** The remaining honest way to reach a post-install flash state is what we already do: place
 the four Initial Data files at their validated offsets (see
 `notes/HANDOFF-custom-flash-and-splash.md`), which is now known to work.
+
+## SD CARD IMAGE BUILT + TESTED (2026-08-03) — and what the string hunt found
+
+**Built:** `scratchpad/sd_idd.img` — the real Technics card image with all four Initial Data files
+injected into the FAT16 root (direct FAT16 injector; `mtools` is not installed). All four verified
+byte-correct on readback. **Keep this image; it does not need rebuilding.**
+
+**Tested** with the flash genuinely erased (all four ROMs withheld): the card was read hard —
+**183,951 SPI reads** — and flash writes stayed at **zero**. ⚠ But the screen showed `BALLAD 01 ?`,
+i.e. the scripted flow loaded the pre-existing `TFLD001` item at a fixed browser row. **Our
+root-level files were never selected**, so this run does NOT test them. The browser enumerates via
+`KN7000MN.INF` inside `PRIVATE/TECHNICS/KN7000/TFLD<nnn>/` with `<item><folder>KN7.<ext>` naming —
+root files are almost certainly invisible to it.
+
+**String hunt for a service-mode installer: NOT FOUND.** The flash-related handlers cluster at
+`0x4860DD80`+ and are all **settings** writers, not an installer:
+
+```
+  MT_FLASHWRITE / MT_FLASHLOAD / MT_WALLINI
+  MainFlashFunc · CustomPanelFlashFunc · LangSetFlashFunc · MainTimeFlashFunc
+  MainWallSetFlashFunc · MainDtPrtFlashFunc · DataProtectOKFunc · WallSetOKFunc
+  neighbouring UI text: "DATA PROTECTION", "FOOT CONTROLLERS SETTING", "TOTAL EQUALIZER", ...
+```
+
+⇒ These persist **settings** to flash when the user changes them. There is no user-facing "install
+initial data" menu; the manual's procedure is the DISK (floppy) load of the `.AST`, and that path is
+blocked by the RTOS-dispatch wall.
+
+### ★ The genuinely useful lead from this
+
+`CustomPanelFlashFunc` / `LangSetFlashFunc` / `MainWallSetFlashFunc` mean **changing a setting
+should program the flash**. That is a cheap way to (a) prove the write path works end to end with
+the real `FUJITSU_29LV160B`, and (b) produce a legitimately *written* flash image to dump.
+**Next experiment:** change one setting in the UI (DATA PROTECTION or language are the simplest)
+with the write tap armed, and watch for unlock/erase/program at `0x96800000`.
+
+### On dumping the flash as a ROM
+We effectively have this already: declaring the four Initial Data files at their firmware-validated
+offsets produces the same bytes a chip read would, with *better* provenance — Panasonic's own files
+plus the firmware's own placement rules, rather than an opaque snapshot.
