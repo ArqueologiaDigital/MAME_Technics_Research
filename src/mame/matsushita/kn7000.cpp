@@ -653,8 +653,6 @@ private:
 	TIMER_CALLBACK_MEMBER(dsp_audio_tick);
 	emu_timer *m_sys_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(sys_tick);
-	emu_timer *m_fav_timer = nullptr;      // one-shot: pre-load Favorites SRAM after the boot BSS-clear
-	TIMER_CALLBACK_MEMBER(fav_preload);
 
 	// --- On-chip 16-bit TEMPO timer (mode 0x34001082 / base 0x34001092 / count 0x340010A2)
 	// The clock behind ALL sequenced playback (KN7000 96-PPQN sequencer tick;
@@ -1325,40 +1323,6 @@ INPUT_CHANGED_MEMBER(kn7000_state::sd_cover_changed)
 	sd_update_carddetect();
 }
 
-// One-shot (t=3s, after the boot BSS-clear): install the factory "Initial Data"
-// Favorites into battery-backed SRAM so the Favorites screen lists the 4 presets
-// without a custom-flash AST install. (The install itself is no longer unreversed: as of
-// 2026-08-02 the AST payload is known to be inflated and written VERBATIM to flash offset
-// 0x20000, the top 30 of the 64 KiB sectors. The upstream ROM-record driver now declares
-// the nine published images there. This preload remains the stopgap only because the
-// battery SRAM, not the flash, is what is unmodeled here.) The firmware VALIDATES this
-// block against a 16-byte magic ("KN7000 SDDIR INF" @0x50083D72; check at 0x4855EC0B)
-// rather than clearing it, so once present the firmware keeps it. The Favorites LIST
-// only needs the 16-char names; the 9 u16 recall-items per record need flash-backed
-// reference resolution, so they stay 0 (a CUSTOM favorite can't be recalled until the
-// flash is modeled). Data = idd7000 03FAVINI.FAV; layout verified by RE (name-setter
-// 0x48561CDB, item-setter 0x48561D8E, format 0x4855EC34). STOPGAP for the unmodeled
-// battery SRAM; see notes/initial-data-disk-and-custom-flash.md.
-TIMER_CALLBACK_MEMBER(kn7000_state::fav_preload)
-{
-	auto poke8 = [&](offs_t cpu, uint8_t b)
-	{
-		const offs_t o = cpu - 0x50000000;                 // byte offset into workram
-		uint32_t &w = m_workram[o >> 2];
-		const unsigned sh = 8 * (o & 3);
-		w = (w & ~(0xffu << sh)) | (uint32_t(b) << sh);
-	};
-	static const char magic[16] =
-		{ 'K','N','7','0','0','0',' ','S','D','D','I','R',' ','I','N','F' };
-	for (int i = 0; i < 16; i++)
-		poke8(0x50083D72 + i, uint8_t(magic[i]));           // block magic @+0x00
-	static const char *const fav[4] = {                     // directory @0x5008FDCA, 34-byte records
-		"    Example     ", " Cool Sounds !  ", " Cool Rhythms ! ", "  Entertainer   " };
-	for (int r = 0; r < 4; r++)
-		for (int i = 0; i < 16; i++)
-			poke8(0x5008FDCA + r * 34 + i, uint8_t(fav[r][i]));  // name[16]; items[9] left 0
-}
-
 // A PC-key note press/release: push a voice-event into the keyboard FIFO the
 // firmware polls at 0x98050004. param carries the KEY index; velocity is fixed
 // (PC keys are not velocity-sensitive). Make/break = BIT 7 of the key byte (see the
@@ -1744,7 +1708,6 @@ void kn7000_state::machine_start()
 	if (m_lib_mirror)
 		memcpy(memshare("libram")->ptr(), memregion("maincpu")->base(), memregion("maincpu")->bytes());
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
-	m_fav_timer = timer_alloc(FUNC(kn7000_state::fav_preload), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
@@ -1792,12 +1755,6 @@ void kn7000_state::machine_reset()
 	else
 		m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 
-	// Pre-load the factory "Initial Data" Favorites into battery-backed SRAM. This
-	// must run AFTER the boot BSS-clear (which zeroes work RAM up to ~0x50180000) but
-	// before the Favorites screen is opened, so it is deferred to a one-shot timer
-	// (see fav_preload). Confirmed by RE: a machine_reset write is wiped by the clear;
-	// a t=3s write survives and the firmware keeps it.
-	m_fav_timer->adjust(attotime::from_seconds(3));
 
 	// (TM5 mode/base/countdown are reset by the core's device_reset.)
 	if (!m_lib_mirror)
