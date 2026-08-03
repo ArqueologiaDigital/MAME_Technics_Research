@@ -866,16 +866,28 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// not run during the validity check (no machine yet -> crash). See machine_start
 	// for the full rationale.
 
-	// Data-flash READ views (byte-verified RE, notes/initial-data-disk-and-custom-flash.md):
-	//   0x56000000 = the CUSTOM writable flash's read view (programmed by the "Initial Data"
-	//                disk idd7000; command/program aperture is a SEPARATE window at 0x96800000,
-	//                AMD unlocks 0x9680AAAA -- same 2MB 29LV160 chip). A u32-offset directory
-	//                archive lives at flash-offset 0x200. THIS is where the custom-flash image
-	//                must be ROM_LOADed once the AST install codec is reversed.
-	//   0x57000000 = FACTORY read-only rhythm/style flash (extends the table ROM).
-	// Both UNDUMPED; read-as-0 placeholders so boot-time pointer parsing is stable. Empty ->
-	// style names / Custom fall back to defaults (the "8 Beat 1" bug).
-	map(0x56000000, 0x577fffff).ram().share("dataflash");
+	// --- EXP.CS "SOUND RAM" expansion slots ---------------------------------
+	// The firmware's 4-slot detector (the SoundRam probe at 0x48449EF4) validates
+	// an "Expansion Board KN7000 SOUND RAM" signature (ASCII table 0x485B8518) at
+	// FOUR EXP.CS windows -- 0x41000000, 0x41800000, 0x56000000, 0x57000000 -- and,
+	// on a match, walks a relocatable data structure the board exports (each pointer
+	// is relocated by the window base). These are the four 40-pin SY-EW slots
+	// (CN202/03/05/07), asserted by the address decoder IC3 (TC74VHC139, the
+	// PSRT.EXP region). The board is CPU-loaded SOUND RAM here; a tone generator
+	// reads the samples back separately over the 80-pin wave bus. Every board
+	// pointer is dereferenced as DATA -- the shipped firmware never calls one -- so
+	// an EW board cannot run code (unlike the KN6000/KN6500 XAPR route at
+	// 0x97800000). See notes/FINDINGS-expansion-buses-and-code-exec.md.
+	//
+	// With no SY-EW board fitted every slot reads empty and the firmware reports
+	// "NO WAVE EXPANSION BOARD". Modelled as open bus (read 0, writes dropped): the
+	// firmware only ever READS these windows -- there are zero stores among its
+	// references to all four bases -- so no RAM backing is needed. This replaces the
+	// earlier 24 MiB "dataflash" RAM placeholder, which reflected a superseded
+	// reading of 0x56/0x57 as custom/factory flash (the live custom flash is the
+	// real device at 0x96800000; 0x56000000 was the "dead alias", 4 reads, no data).
+	map(0x41000000, 0x41ffffff).lr8(NAME([](offs_t) -> uint8_t { return 0x00; })).nopw();
+	map(0x56000000, 0x577fffff).lr8(NAME([](offs_t) -> uint8_t { return 0x00; })).nopw();
 
 	// TODO: Picture flash (splash / bitmap graphics), separate device.
 	//map(0x57800000, 0x57ffffff).rom().region("picture", 0);

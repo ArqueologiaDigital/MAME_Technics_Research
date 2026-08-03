@@ -102,6 +102,40 @@ This is the "host-side extension-header validation" that was flagged four times 
 Note MAME already carries a `bus/technics/kn6000/hdsx3` device — the mechanism above is what a
 code-carrying board would have to satisfy.
 
+## ★★ Q3 (better than a bus snoop) — the wave ROMs ARE CPU-readable, via the TG
+
+Asked whether the service-mode **§8.9 WAVE ROM test** could dump the ROMs by making the TG sweep them
+for us. It does more than that: the CPU reads **every raw sample word itself**, through a tone-generator
+**wave-memory read port**. No bus snoop, no tri-stating, no soldering.
+
+- `MainWaveRomTestFunc` `0x484A2E3A` runs the test for indices 0..3 = the four wave ROMs, calling the
+  per-ROM checksum helper `0x48483B63` four times and OR-ing an error bit (0x1/0x2/0x4/0x8) per ROM.
+- The helper sets a length of **`0x00FFFFFF`** (the full 16 MiB = 128 Mbit of each ROM — a **complete
+  sweep**) and calls the checksum core `0x484839A1` with a side param (0,0,1,1) and a chip param
+  (0,1,0,1) → the four ROMs (IC203/IC204 on TG side 0, IC207/IC208 on side 1).
+- The core (`0x484839A1`) is a plain read loop over a TG port:
+  ```
+    side 0 (IC203/IC204):  write hi-addr -> 0x98050006 ; write addr -> 0x98050008 ; read WORD <- 0x9805000A
+    side 1 (IC207/IC208):  write hi-addr -> 0x98040006 ; write addr -> 0x98040008 ; read WORD <- 0x9804000A
+    checksum += (word>>8) + (word&0xFF)   for every 16-bit word across 0x00FFFFFF
+  ```
+  ⇒ **The CPU sees each raw 16-bit sample word.** So the wave ROMs — the project's "only category with
+  no non-invasive route" — actually have a fully **software** route: walk `0x9805/0x9804 0006/08→000A`
+  across the address space and stream the words out over MIDI/SD. The passive 80-pin snoop (Q1) still
+  works, but this is simpler and exhaustive.
+
+- **Golden checksums** (firmware's expected values, table `0x485CFD18`, = Σ(hi+lo) over all words):
+  ```
+    IC203 = 0x8164C77C   IC204 = 0x815CFC83   IC207 = 0x8331EF0B   IC208 = 0x83254F9D
+  ```
+  These verify any dump we produce, even before we have the chips.
+
+⚠ Not yet pinned: the exact (side, chip, addr)→byte mapping inside the port (bank base 0x8000 + the
+running hi/lo latches), and whether the two ROMs per side are a 32-bit-wide pair or a hi/lo bank. Enough
+is known to write the dumper loop; confirm the address arithmetic against `0x484839A1` before trusting
+byte order. The TG wave-read port is **not yet modelled** in the driver (the tonegen device would need
+`0x9804/0x9805 0006/08/0A`), so the software dump runs on real hardware today; emulating it needs that port.
+
 ## Corrections to `HANDOFF-expansion-connectors.md` / blog Part 122
 
 1. **`CN106` is the SD-card connector**, not the expansion/HDD bus — its 11 pins are
