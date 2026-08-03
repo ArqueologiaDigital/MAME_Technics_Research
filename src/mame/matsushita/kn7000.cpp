@@ -2243,13 +2243,23 @@ ROM_START(kn7000)
 	// that signature absent the firmware sets an error bit at 0x5001602C and falls back to
 	// defaults everywhere, which is why the style list, Favorites and Custom came up empty.
 	//
-	// 02UMDINI.MD -> 0x4000 is solid: it is 0x280 bytes, exactly the 0x4000..0x4280 span the
-	// firmware references, and its header fields (0xC0, 0xD0, 0x90, 3 records) reproduce the
-	// referenced offsets 0x4010/0x40D0/0x4160/0x41F0/0x4280 exactly.
-	// 03FAVINI.FAV -> 0x4A70 is the other referenced header cluster; less certain.
-	// 04HPGINI.HMP placement is NOT established -- left out rather than guessed.
-	ROM_LOAD_OPTIONAL("kn7000_umdini.rom",      0x004000, 0x000280, CRC(f36352d3) SHA1(f5693ab1f1d986dfd7af2776c862af45b0a69488))
-	ROM_LOAD_OPTIONAL("kn7000_favini.rom",      0x004a70, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599))
+	// Each region is validated against its own blank TEMPLATE in program ROM, and those
+	// templates identify the files: comparing the first 16 bytes gives 16/16 for UMDINI
+	// (0x48617638), 16/16 for FAVINI (0x48605728) and 15/16 for HPGINI (0x485F9584 -- the
+	// template is the empty variant, differing only in a count field). The chip address each
+	// template is checked against is then read straight out of the code:
+	//   0x004000  02UMDINI.MD  header 0x10 + 0xC0 + 3 x 0x90 = 0x280, its exact size, and the
+	//                          referenced offsets 0x4010/0x40D0/0x4160/0x41F0/0x4280
+	//   0x010000  03FAVINI.FAV compared at 0x4849EDC0
+	//   0x011000  04HPGINI.HMP compared at 0x48496F60
+	//
+	// These three use ROM_LOAD16_WORD_SWAP: measured against the firmware's own read, a plain
+	// ROM_LOAD into this _BE region delivers every 16-bit word reversed (the signature came
+	// back as "KJ", byte 0x4000 reading 0x4B where 0x4A is required). CTMINI below is
+	// unaffected and stays a plain ROM_LOAD.
+	ROM_LOAD16_WORD_SWAP("kn7000_umdini.rom",      0x004000, 0x000280, CRC(f36352d3) SHA1(f5693ab1f1d986dfd7af2776c862af45b0a69488))
+	ROM_LOAD16_WORD_SWAP("kn7000_favini.rom",      0x010000, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599))
+	ROM_LOAD16_WORD_SWAP("kn7000_hpgini.rom",      0x011000, 0x004442, CRC(d56caae3) SHA1(931b35afe46942744b37abb64898c4524fe75a6f))
 	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
 
 	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
