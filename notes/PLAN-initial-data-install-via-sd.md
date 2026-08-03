@@ -101,3 +101,52 @@ firmware must initialise it itself. There may be a *menu-driven* initialise/form
 area (a service or "clear custom" function) that populates it without any disk at all. Finding that
 function in the UI string table is far cheaper than the file surgery above, and would answer why the
 style list stays empty.
+
+---
+
+## ⛔ THE CHEAP ALTERNATIVE IS CLOSED (2026-08-03, measured)
+
+**`CONTROL MENU -> INITIAL -> Yes` runs, and does NOT touch the custom flash.**
+
+Established by breakpointing all 23 entries of the SysInit handler table (addresses at
+`0x4874C140`, names at `0x4874C1A0`; auto-`g` so the machine never halts). Felipe drove the UI by
+hand. The captured sequence:
+
+```
+SystemInitMDFunc        menu drawn
+CtlIniLngCheck x2
+SystemInitOkFunc      <- INITIAL selected
+InitShowHideFunc
+AttnLngCheck x2
+SysSureLngCheck x2      "are you sure?"
+SureLngCheck x2
+SysIniYesFunc         <- CONFIRMED YES
+InitShowHideFunc x3
+```
+
+Custom-flash counters on **every** line: `CF r=2962 w=20` — the boot baseline, unchanged.
+
+⇒ INITIAL initialises the CONTROL MENU settings (touch sensitivity, P.MEM mode, foot controllers —
+the handlers sitting beside it in that same table), **not** the custom-data region. No menu function
+populates the `0x4000` area the firmware probes at boot; only a real data-disk install does.
+
+★ The index->name mapping **proved itself** (`FIRED 0 SystemInitOkFunc`, `FIRED 6 SysIniYesFunc`),
+so the parallel-array ordering is verified, not assumed.
+
+### What this cost, and the lesson
+
+- A wrong hypothesis: the `0x56000000` "dataflash" alias is NOT the read path — **4 reads, 0
+  writes** across a whole session. Cheap to rule out, worth having done.
+- An **unvalidated proxy**: the battery-SRAM window was picked because Favorites live there and it
+  showed 6890 boot writes. That proved the window was live; it never proved INITIAL would write
+  there. A flat reading was therefore uninformative — not evidence of absence.
+- **Two runs lost to a stale emulator**: a `kill` silently failed, leaving two windows open, so the
+  UI was being driven on an uninstrumented instance. Always confirm the old process is gone AND
+  that the survivor has the script loaded (`/proc/<pid>/cmdline`).
+
+> **The lesson:** observe the thing itself, not a signature it might leave. The breakpoint settled
+> in one attempt what two memory-watching rounds could not, because a proxy that does not fire tells
+> you nothing unless you have shown it *would* fire.
+
+⇒ **Proceed to the SD plan, Step 1** — does any *load* path reach the flash programmer? The tap
+harness is built and proven. Falsifier unchanged: zero flash writes across every SD load ⇒ abandon.
