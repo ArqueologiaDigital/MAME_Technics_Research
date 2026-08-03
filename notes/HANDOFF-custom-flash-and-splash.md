@@ -124,3 +124,33 @@ c95f33b  keep the Initial Data files OPTIONAL
 ac13ad4  actually map the custom flash -- the map-time guard silently skipped it
 c9862c2  model IC21 as a real flash device so saving custom data works
 ```
+
+---
+
+## ★★ THE FIRMWARE ERASES SECTOR 0x20000 AT BOOT (2026-08-03)
+
+Arming the write tap and changing a setting produced no writes from the setting — but revealed
+that **boot itself issues a complete AMD SECTOR ERASE**, and the target is the CTMINI payload:
+
+```
+  W 9680AAA8 = 00AA    unlock 1
+  W 96805554 = 0055    unlock 2
+  W 9680AAA8 = 0080    ERASE SETUP
+  W 9680AAA8 = 00AA    unlock 1
+  W 96805554 = 0055    unlock 2
+  W 96820000 = 0030    SECTOR ERASE CONFIRM  <- chip 0x20000
+```
+
+⇒ **The write path works end to end** — the firmware programs, and our `FUJITSU_29LV160B` decodes
+the sequence. That is the first confirmed flash *programming* in this emulator.
+
+⇒ ⚠ **But it erases the sector our CTMINI payload occupies, on every boot.** All 31 writes are
+complete by ~t=25s. Whatever the firmware decides during validation, it is clearing 0x20000.
+Flash reads still reach 4.5 M in a 50 s run, so data is being consumed — but the payload sector may
+be getting wiped after (or before) use. **This needs tracing: which routine issues the erase, and
+what condition triggers it.** It may explain residual oddities including the stuck splash.
+
+**TRANSPOSE does not persist to flash** — zero writes across four presses. If a setting-driven write
+is wanted for testing, use one of the handlers that names flash explicitly
+(`CustomPanelFlashFunc`, `LangSetFlashFunc`, `MainWallSetFlashFunc`, `DataProtectOKFunc`),
+reachable from the settings menus rather than a panel button.
