@@ -372,6 +372,40 @@ separately why `0xD2F` doesn't reload after the section ends. Key addrs: section
 `f3a09a`/`f3a18e`, re-arm gate `0xf19e` (set `f43bf6`, cleared `f3a18e`), beat dispatch `f5ae1c`,
 re-arm `f5af8f`, demo timer `0xD2F`/`f86bf3`.
 
+## UPDATE 11 — keeping 0xf19e non-zero does NOT fix it → deeper re-arm DEADLOCK (timing)
+
+Decisive test: a write-tap that FORCES `0xf19e` to stay `0xFFFF` (returns 0xFFFF whenever anything
+writes 0). Result: `0xf19e=FFFF` the whole run, but the **transport still dies** (`0x420=00`,
+`0x417` frozen at 24, `0x41C=0`) — the re-arm `f5af8f` still never fires. (It also knocked
+`AccPlayMode` 3→1, i.e. the poke was disruptive.) So **preventing the `f3a18e` clear is NOT the
+fix.**
+
+**Why:** the re-arm path (`f5ae1c`→`f5ae77`→`f5af5f`→`f5af8f`) is a BEAT-boundary handler, but the
+beat clock `0x417` only increments while `0x420` bit2 is set (`ef0e70` gate). When the transport
+stops (`0x420=0x00`), `0x417` STOPS → no more beat boundaries → the beat handler that would re-arm
+is never called again. A genuine **deadlock**: the re-arm needs a beat, the beat needs the transport
+running. It must therefore fire in the exact tick where the park/clear happens — and in emulation it
+loses that race.
+
+**All state-level pokes now REFUTED:** force `0x420=0x06` (breaks handshake), force `0x420=0x04`
+surgically (stopped), arm `0x41E` (dies too), keep `0xf19e` non-zero (still dies). None sustain the
+transport. This is strong evidence the defect is a **TIMING/ORDERING issue in the tick ISR**, not a
+single wrong cell: the sequence per tick is fixed (`f4e635..f4e656`: …`f3ecd4`(clear park)…
+`f43ca9`(re-arm-countdown)… + the beat handler), and the ORDER/PHASE at which the park (INTTR4
+`ef0fa0`), the clear (`f3ecd4`), and the beat-re-arm (`f5af8f`) execute in the same tick decides
+whether the transport survives. On real HW they interleave so it survives; in emulation the re-arm
+misses.
+
+**STRONGEST REMAINING LEADS (need a new angle — state-poking is exhausted):**
+1. **Timer4 rate/phase vs the sequencer.** If INTTR4's tick rate/phase (prescaler, TREG5 reload,
+   the 24-tick beat) is subtly off, the park catches the sync at the wrong moment. Verify the KN5000
+   Timer4 clock/prescaler + the `0x417∈{0,24,48,72}` beat math against the TMP94C241 datasheet and
+   the firmware's tempo programming (analogous to the KN7000 tempo-timer fix's 1,250,000/BPM).
+2. **ISR call-ordering.** Trace the EXACT order the park (`ef0fa0`), `f3ecd4` clear, and the beat
+   handler run within one INTTR4 tick, and whether MAME's interrupt-servicing timing shifts it.
+3. **KN7000 comparison** (its demo plays through measures) — different CPU, but the run→sync→park→
+   re-arm concept is shared; see how it avoids the deadlock.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
