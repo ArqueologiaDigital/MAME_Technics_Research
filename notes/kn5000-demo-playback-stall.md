@@ -291,6 +291,29 @@ records are populated. If `f86fff(18)==0` is genuinely correct, then the FEATURE
 not supposed to use the 0x41E lane and the survival mechanism is elsewhere (re-examine — but note
 `ef0f52` is the only pattern-end re-arm found). This is the single most promising lead for the fix.
 
+## UPDATE 8 — song data IS loaded; f86fff fails on the part-qualification sub-checks
+
+Dumped the current-song RAM buffer at `0x69800` during the demo (the accessors `f86fb7`/`f86fdc`/
+`f86f92` read `table[songidx]` at `0x9C4000`, and when non-null use the fixed RAM buffer `0x69800`;
+`table[18]=0x008E0000` non-null → uses `0x69800`):
+```
+0x69800: 5A 5A 5A 5A 01 01 08 00 0C 00 ...            "ZZZZ" magic — song IS loaded
+0x69820: 00 02 01 0B 0F 09 0A 03 04 05 06 07 11 12 13 0C 10 10 10 ...   part-type array (has 0F,10)
+```
+So the demo song data loads correctly — **this is NOT an emulation data-loading bug.** `f86fff`'s
+FIRST check (part type ∈ {0x0D..0x10}) passes for the `0x0F`/`0x10` parts, yet `f86fff(18)` still
+returns 0 (0x41E never arms). So every part fails one of the two FURTHER checks in `f86fff`:
+`f87059` (mask `0xEA00DA[type*2]` AND the 16-bit value from `f86fb7`=`*(0x69800+0x1e)`=0xFFFF here)
+or `f87071` (bit7 of the per-part record from `f86f92`, 3 bytes/part).
+
+**Consequence:** either (a) `f86fff(18)==0` is CORRECT and this song's transport is NOT meant to
+use the `0x41E` lane / `ef0f52` re-arm — so its per-measure survival mechanism is something else not
+yet found (but `ef0f52` is the only pattern-end re-arm located); or (b) one of the two sub-check
+inputs (`f86f92`'s per-part bit7, or the mask table vs `0x69800+0x1e`) reads differently than on
+hardware. Distinguishing these needs the semantics of those part records — best obtained by the
+**KN7000 comparison** (its demo plays continuously through measures; find its equivalent survival
+path) or Felipe confirming whether the KN5000 demo's backing is a full multi-part arrangement.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
