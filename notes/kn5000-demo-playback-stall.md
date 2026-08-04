@@ -103,6 +103,44 @@ the internal MIDI path `fcf5..`.
 
 This is a **multi-layer** issue (as March suspected "two independent bugs"), not a one-line fix.
 
+## UPDATE 2 — the two layers are ONE dependency chain (single root)
+
+Second disassembly pass mapped the SSF slideshow and the transport handoff:
+
+- **`0x251D8` is a boolean "presentation-active" latch (0/1), not a slide counter.** Writers:
+  `f86313` set=1, `f86625` clear. Owned by an SSF-player GUI object (dispatcher `0xF86694`,
+  child of AcPresentationControlProc `0xF8450B`). It flips 0→1 only on message `0x01E10007`,
+  produced downstream of **AcPresentCtrl_CheckSSFStart `0xF84625`** whose gate is a data-block
+  header `== 0x0000B80A` (`f84636`) — a value that only ever arrives **in a delivered SSF data
+  block**, never written by an instruction. So the presentation start is **event/data-gated**.
+- **Slides advance on SSF SysEx EVENTS in the song stream, not on any position cell.** The SSF
+  decoder `f84b6f` is driven from the SysEx/SMF router `f0e92f` (screen id `0x8D38` must be
+  `0xEA`); it parses opcodes 0x82/0x83 and calls `f83cea`, which broadcasts `0x01C0001C` →
+  CheckSSFStart. **This is exactly why poking the beat counter `0x41C` did nothing** — the
+  slideshow is keyed to the sequencer DEQUEUING the next SSF event, which requires the song to
+  actually play.
+- **The demo deliberately arms SYNC/count-in (`0x0C`)** — `f71f04: ld (0x041f),0x0c` at demo
+  entry, and the `f5af..` transport helpers set `0x41E/0x420/0x421 = 0x0C`.
+- **Handoff analysis (INTT1 handler `0xEF0BF9`).** The ONLY promotion to free-run `0x06` is from
+  the ARM state (`0x01`): `ef0c61` tests `0x420` bit0, then after a `0x41A` dwell `ef0cac` sets
+  `0x420=0x06` (and `ef0cbb/ef0cca` do the same for `0x41E/0x421` if they hold bit0). The SYNC
+  state `0x0C` (bit3) is only ever **parked to `0x10`** (`ef0d3a` for `0x41F`; `ef0fa0` in
+  INTTR4 for `0x420`). **There is NO `0x0C → 0x06` path in the timer handlers** — completing the
+  synchro/count-in (0x0C → arm 0x01 → free-run 0x06) must come from an external trigger the
+  accompaniment engine expects (a synchro-start note-on and/or a count-in completion).
+
+**SINGLE ROOT:** the demo arms a synchro/count-in transport; the timer parks it and nothing
+completes the handoff to free-run → the song never plays past the count-in → the medley's SSF
+SysEx events are never dequeued → CheckSSFStart never sees a `0xB80A` block → `0x251D8` stays 0
+and the globe never advances. **Fixing the one handoff un-sticks BOTH the audible sequencer and
+the slideshow.** The missing thing the emulation must provide is whatever completes the
+synchro/count-in — most likely a **synchro-start trigger** (the song's first chord note-on) or a
+count-in-complete signal — routed to the transport dispatch (`f59a..`/`f5af..`).
+
+Open sub-thread the 2nd pass flagged: `f83cea` has a second caller cluster near `f83c25` in the
+demo module (possibly a direct SSF-file parser, not the song-event path) — worth checking as an
+independent slideshow route.
+
 ## What "fixing it like the KN7000" means here
 
 NOT another timer-modeling change (Timer4 already fixed). The remaining defect is the
