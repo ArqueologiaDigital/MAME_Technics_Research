@@ -176,6 +176,39 @@ at the flip: `8d34=13 8d36=E4 28b2=00 fd50=10 fd56=FA 348a=09` (fd50 bit2 = inte
 transport to sync `0x0C`**, which then parks and stops. On real HW that command is either not
 issued or is harmless. Find what posts/dispatches it and the emulated condition it depends on.
 
+## UPDATE 5 — runtime-verified flip source (RULES OUT the accompaniment diagnosis)
+
+Felipe (hardware): real demo = music immediately, NO count-in. Confirmation probes + a
+full-frame flip capture RULE OUT the earlier static hypotheses and pin the real source:
+
+- **Auto-accompaniment is NOT the cause.** `0x3283=00` (auto-accomp NOT armed) and the six voice
+  tables `0x3094/0x30C4/0x30F4/0x313C/0x3184/0x31CC` are ALWAYS empty (never bit7) — but the
+  handler `f591D1` that a prior pass blamed is *gated on `0x3283` bit2*, so it never runs. The
+  "fix the style/accompaniment engine" diagnosis is WRONG for this stall.
+- **`f5af3c` / `f5ace5` are NOT the flip either.** Through the whole flip `0x41E`/`0x41F` stay
+  `00` and `0x346d` stays `00`. `f5af3c` would set `0x41E=0x0C`; `f5ace5` needs `0x41E` running
+  and sets `0x346d` bit4 — neither happened.
+- **The real flip is `f5afb2`** (it sets BOTH `0x420` and `0x421` to `0x0C` and leaves `0x41E`
+  alone — exactly what the capture shows). `f5afb2`'s in-function callers are guarded by
+  `0x41E` running (false here), so it is reached via the **transport-command jump table**
+  (`f59ac7: jp 0xf5afb2`) — i.e. a **queued "sync" transport command dispatched against the
+  running demo transport**. State at the flip: `379b=00 28aa=0000 f19e=FFFF 28a7=01 346d=00`.
+
+**Runtime-verified failure chain:** demo transport starts RUNNING (`0x420/0x421=0x06`, ticks
+advancing — matches real HW) → ~80 ms in, a queued transport **sync** command (`f59ac7→f5afb2`)
+flips both lanes to `0x0C` → INTTR4 parks `0x0C→0x10` at the 24-sub-tick boundary → transport
+stops (`0x00`) → song never continues → SSF SysEx events never dequeue → slideshow latch
+`0x251D8` stays 0.
+
+**NEXT TARGET (precise):** find the PRODUCER of that sync transport command — what posts the
+jump-table command that reaches `f59ac7/f5afb2` ~80 ms after the demo transport starts, and why.
+On real HW it is either not posted or the resulting `0x0C` sync **releases back to running** each
+measure (the demo plays continuously). The park (`0x0C→0x10`, INTTR4 `ef0fa0`) never releasing is
+the emulator-visible symptom. Strong method: compare against the **KN7000** (its demo plays; its
+transport-command posting for the same measure boundary does NOT wedge — diff the two paths).
+Also worth a debugger breakpoint on `f5afb2` with a stack dump to capture the actual command
+dispatcher and its poster in one shot.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
