@@ -141,14 +141,40 @@ Open sub-thread the 2nd pass flagged: `f83cea` has a second caller cluster near 
 demo module (possibly a direct SSF-file parser, not the song-event path) — worth checking as an
 independent slideshow route.
 
-## What "fixing it like the KN7000" means here
+## UPDATE 3 — arm-poke test + where this stands
 
-NOT another timer-modeling change (Timer4 already fixed). The remaining defect is the
-**internal-clock / clock-source gate**: find the cell that drives `0x41A` and the condition the
-firmware checks before letting the internal sequencer clock run, and make the emulation satisfy
-it (a missing internal-clock tick source, or a default clock-source/sync byte the emulation
-leaves in the wrong state). Once `0x41A` advances, per the KN7000 analogy both the music and the
-slideshow (`0x251D8`) should follow.
+Poking the four transport bytes to the ARM value `0x01` (to let INTT1 promote them to `0x06`)
+FAILS: `0x41F` promotes to `0x06` and survives, but `0x41E/0x420/0x421` are immediately zeroed by
+the stop-guard **`f59c91`** (which fires from the `0x01`-arm substate). So "arm instead of sync"
+is not the fix — the demo's intended path is genuinely the SYNC/count-in (`0x0C`), and only its
+**completion trigger** is missing. Forcing free-run (`0x06`) from outside also fails to make the
+demo play (it breaks the handshake; the transport disarms/stops). So no external poke reproduces
+correct behaviour — the fix must let the firmware complete the count-in *its own way*.
+
+## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
+
+The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
+The single root is a **synchro/count-in transport that never completes** (`0x0C` → parked `0x10`,
+no `0x0C→0x06` path in the timer handlers), which starves both the song and the SSF slideshow.
+
+To finish the fix, the next investigation must find **what completes the synchro/count-in on real
+hardware** and provide it in emulation. Leading candidates, in priority order:
+1. **A synchro-start trigger** — the style/accompaniment is armed to start on a chord-section
+   note-on; the demo song's first chord should fire it. If the emulated note→synchro path drops
+   the trigger, the count-in never completes. (Trace the synchro-start detector: reads of the
+   `0x0C` state + the note-on hook in the accompaniment engine, `f59a..`/`f5af..` and callers.)
+2. **A count-in-complete signal** driven by a second timer or the sub-CPU/tone-gen that the HLE
+   doesn't emit.
+3. The `f83c25` direct SSF-file parser cluster (2nd-pass caveat) as an independent slideshow route.
+
+⚠ Do NOT ship a poke/force of `0x420=0x06` — it is not faithful and does not actually play the
+demo (proven above). Fix the real completion path.
+
+★ HARDWARE QUESTION FOR FELIPE (ground truth, decides direction): on the real KN5000, when the
+Feature Demo / Feature Presentation runs, **does it play music under the slides, and is there an
+audible count-in (a few metronome beats) before the music starts — or do the picture slides just
+cycle on their own with no accompaniment?** That distinguishes "provide the count-in/synchro
+completion" from "the slideshow should run independently of the sequencer."
 
 ## Repro / tooling
 
