@@ -342,6 +342,36 @@ sequencer's measure-advance is supposed to rewrite the lane to running as part o
 `0x0C`, and that step is gated on something the emulation doesn't satisfy. STRONGEST METHOD remains
 the **KN7000 comparison** (its demo plays continuously through measures). ⚠ Do NOT chase `f86fff`.
 
+## UPDATE 10 — ★ DEEPEST ROOT: a DEMO-CONDITIONAL section-end clears 0xf19e ★
+
+Traced the re-arm block to the end. The beat dispatcher `f5ae1c` routes to the re-arm handler
+`f5ae77`→`f5af5f`→`f5af8f` (`ld (0x420),0x01`) ONLY when `0xf19e != 0`. A write-tap on `0xf19e`
+caught exactly two writes during the demo:
+```
+f19e <- FFFF  @PC=F43BF6   (setup, before playback)
+f19e <- 0000  @PC=F3A194   (right after the stop — THIS blocks the re-arm)
+```
+The clear is `f3a18e: ld (0xf19e),0x0000`, inside a "section-end" handler (function entry `f3a09a`),
+and it is **GUARDED BY `f3a187: cp (0x8d34),0x13; jr NZ`** — i.e. it fires **ONLY in the DEMO
+state (`0x8d34==0x13`)**. In normal playback that clear is SKIPPED, `0xf19e` stays non-zero, the
+beat dispatcher keeps hitting `f5ae77`, and the transport re-arms every measure (run→sync→park→
+stop→**re-arm**→run). In the demo, `0xf19e` is cleared → dispatcher routes to `f5ae9b` instead →
+NO re-arm → the transport stays stopped → song dies → slideshow frozen. And it fires after just
+**one beat** (24 ticks).
+
+**So the transport IS designed to die-and-re-arm each measure; the demo-specific `0xf19e` clear at
+`f3a18e` breaks the re-arm.** The confirmed lifecycle: `f5af8f` (per-measure re-arm) NEVER fired in
+the demo (only the once-per-song `f43cf8` arm did).
+
+**THE REMAINING QUESTION (precise, deepest):** why does the demo's section-end handler (`f3a09a`,
+reaching `f3a18e`) fire after one beat and clear `0xf19e`? Is that a premature end-of-section
+detection (the sequencer thinks the demo song's section ended when it shouldn't), or is it correct
+and the demo is meant to CYCLE via the demo timer `0xD2F` (which froze at 0 and never reloaded for
+the next song)? Trace: the caller of `f3a09a` and the end-of-section event that reaches it; and
+separately why `0xD2F` doesn't reload after the section ends. Key addrs: section-end handler
+`f3a09a`/`f3a18e`, re-arm gate `0xf19e` (set `f43bf6`, cleared `f3a18e`), beat dispatch `f5ae1c`,
+re-arm `f5af8f`, demo timer `0xD2F`/`f86bf3`.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
