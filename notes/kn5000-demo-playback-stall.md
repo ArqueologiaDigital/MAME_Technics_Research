@@ -442,6 +442,31 @@ signal) that makes the sequencer sync-and-die instead of playing through. Distin
 cleanly now genuinely needs the **KN7000 comparison** or Felipe's description of the real demo
 (one continuous song vs. cycling short clips).
 
+## UPDATE 13 — cycle hypothesis REFUTED; KN5000-alone avenues exhausted
+
+Forced `0xD2F` to reload whenever it hit 0 (simulating "song complete → next"). Result: the demo
+timer cycles (reloads 1→8), but **`entry(0x28a4)` stays 18** — the FEATURE PRESENTATION is LOCKED to
+demo song 18 (`f86b74: ld (0x1158),0x12`), it does NOT cycle songs — and **`0x251D8` stays 0** (the
+slideshow never advances). So the demo-cycle path is not the fix either.
+
+**Every hypothesis is now experimentally refuted:** timer (already fixed), sync-park recovery
+(force 0x06/0x04, arm 0x41E, keep 0xf19e — all die), and demo-cycle (force 0xD2F reload — song
+locked, slideshow frozen). And crucially, in NO experiment does `0x251D8` (the SSF slideshow latch)
+advance — not with a forced-running clock, not with a forced cycle. So the slideshow advancement is
+gated by something none of these reach.
+
+**Honest state:** the direct KN5000 trace+poke avenue is EXHAUSTED. The bug is genuinely multi-layer
+(the transport dies at the first measure with no demo re-arm; AND the SSF slideshow latch never
+advances even when the clock is forced). Resolving it requires a NEW reference:
+1. **KN7000 comparison** — its demo plays continuously through measures AND advances its slideshow
+   ("slideshow pacing = song position", commit 60d5392). Trace how the KN7000 demo drives both the
+   sequencer survival and the slideshow, and map the concept back. This is now the primary path.
+2. **Felipe's hardware observation** — precisely: on the real KN5000 Feature Presentation, does the
+   globe (FTBMP01) advance to the next pictures (subwoofers, discs…) automatically, and is there a
+   continuous backing song or short clips? That disambiguates the intended slideshow model.
+
+⚠ Do not spawn more KN5000 force-pokes — they are exhausted and all fail.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
