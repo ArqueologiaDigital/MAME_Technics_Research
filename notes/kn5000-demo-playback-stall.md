@@ -151,6 +151,31 @@ is not the fix — the demo's intended path is genuinely the SYNC/count-in (`0x0
 demo play (it breaks the handshake; the transport disarms/stops). So no external poke reproduces
 correct behaviour — the fix must let the firmware complete the count-in *its own way*.
 
+## UPDATE 4 — ★ the transport STARTS RUNNING (0x06), then is CONVERTED to sync ★
+
+Felipe (hardware ground truth): the real demo plays music **immediately, NO count-in**. A
+full-frame-rate capture of the transition shows the transport is *correct at first*:
+
+```
+t=26.218  420=06 421=06   RUNNING (free-run), sub-tick 417: 02→05→07
+t=26.278  420=04 421=04   still bit2 (running), 417=0A
+t=26.298  420=0C 421=0C   ← FLIPPED TO SYNC (0x0C), 417=0D..16
+t=26.377  420=10 421=10   PARKED
+t=26.675  420=00 421=00   STOPPED (frozen at 417=18)
+```
+
+So the demo does NOT arm sync at start (my earlier framing was wrong) — it **starts in free-run
+`0x06`, running correctly**, then ~80 ms later a transport command **converts the running
+transport to sync `0x0C`** (`f5af3c` sets `0x0C` only when `0x420` already has bit2 set & bit3
+clear — i.e. it takes a RUNNING transport to sync). The `0x0C`→park→stop death follows. Context
+at the flip: `8d34=13 8d36=E4 28b2=00 fd50=10 fd56=FA 348a=09` (fd50 bit2 = internal clock; note
+`348a` climbs 05→08→09 across the start).
+
+**Revised bug statement:** the demo transport starts running as it should; the defect is that
+**something dispatches a SYNCHRO/measure transport command (`f5af3c`) that flips the running
+transport to sync `0x0C`**, which then parks and stops. On real HW that command is either not
+issued or is harmless. Find what posts/dispatches it and the emulated condition it depends on.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
