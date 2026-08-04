@@ -257,6 +257,40 @@ different CPU) to see how its transport survives the measure sync; (3) verify th
 (`ef0f81`/`ef0fa0`) is even correct for this path — it may be a count-in-only behaviour wrongly
 applied. Do NOT ship a poke.
 
+## UPDATE 7 — ★ THE LINCHPIN: 0x41E lane never arms because f86fff(song 18)==0 ★
+
+The INTTR4 handler DOES have a pattern-end **re-arm** path: `ef0f52: ld (0x0420),0x01` (+ 0x421),
+reached when the transport is stopped but conditions met — GATED on **`0x41E` running**
+(`ef0f30: bit 2,(0x041e)`, plus counters 0x415≥0x5f, 0x434≥1, 0x416≥0x433-1). This is what would
+restart the transport for the next pattern/measure. It never fires because **`0x41E` is never
+armed.**
+
+`0x41E` is armed in the re-arm handler `f43ca9` ONLY conditionally:
+```
+f43cd1: ld A,(0x28a4)          ; demo song index (=0x12=18 for the FEATURE PRESENTATION, set at f86b74)
+f43cd7/f86fff: call 0xf86fff   ; returns L = count of qualifying parts in the song
+f43cdb: cp L,0 ; jr Z f43cf3   ; if 0 → SKIP arming 0x41E
+f43cdf: ld (0x041e),0x01       ; arm 0x41E only if f86fff != 0
+```
+Runtime confirms `0x41E` stays 0 all run ⇒ **`f86fff(18) == 0`.**
+
+`f86fff` (0xF86FFF) iterates the song's parts via song-data accessors `f86fb7`/`f86fdc`/`f86f92`
+(indexed by the song index), counting parts whose type ∈ {0x0D,0x0E,0x0F,0x10}, that pass a mask
+from table `0xEA00DA`, and have bit7 set in the third accessor's record. For song 18 it finds none.
+
+**PRECISE ROOT (as far as traced):** the FEATURE PRESENTATION runs demo song **18**; `f86fff(18)`
+returns 0 → the `0x41E` accompaniment/melody lane is never armed → the INTTR4 pattern-end re-arm
+(`ef0f52`) is disabled → after the first measure-sync parks+clears `0x420` to 0x00, nothing
+restarts it → song (and thus the SSF slideshow) dies.
+
+**THE NEXT QUESTION (fixable-defect candidate):** is `f86fff(18)==0` correct, or does song 18's
+data / the accessors (`f86fb7`/`f86fdc`/`f86f92`) return empty/wrong in emulation? If song 18
+SHOULD have a qualifying part (so `0x41E` arms on HW), the defect is in the song-data those
+accessors read (loading/decoding) — check what `0x28a4=18` resolves to and whether its part
+records are populated. If `f86fff(18)==0` is genuinely correct, then the FEATURE PRESENTATION is
+not supposed to use the 0x41E lane and the survival mechanism is elsewhere (re-examine — but note
+`ef0f52` is the only pattern-end re-arm found). This is the single most promising lead for the fix.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
