@@ -209,6 +209,54 @@ transport-command posting for the same measure boundary does NOT wedge — diff 
 Also worth a debugger breakpoint on `f5afb2` with a stack dump to capture the actual command
 dispatcher and its poster in one shot.
 
+## UPDATE 6 — ★ COMPLETE lifecycle traced (debugger write-tap + stack) ★
+
+A Lua write-tap on `0x420` (with PC + TLCS-900 stack dumps; system stack = XSSP, XNSP unused)
+captured the full transport lifecycle and its exact instructions. The demo transport works, then
+the first measure-boundary sync KILLS it:
+
+```
+0xD2F (demo timer) counts down; at ==1  → f86c1f: ld (0x2966),0x85           [arm request]
+  → per-tick f43ca9 counts 0x2966 0x85→0x80, then f43cf8: ld (0x420),0x01     [ARM]
+  → INTT1 ef0cac: ld (0x420),0x06                                            [RUNNING ✓]
+  ... runs ~1 measure (0x417: 0→24) ...
+  → measure boundary: ISR ef1376 → … → f5adca (lane dispatcher, index from which lanes run)
+      with 0x420+0x421 running but 0x41E NOT (index 0x18) → f5afb2: ld (0x420),0x0C  [SYNC]
+  → INTTR4 ef0fa0: ld (0x420),0x10  at 0x417==24                             [PARK]
+  → per-tick f3ecd4 (called unconditionally from f4e63f in the ISR tick seq)
+        f3ece5: res 4,(0x420)  → 0x10 becomes 0x00                          [★ STOP ★]
+  → transport dead; armed only ONCE per song (0xD2F==1), never resumes → song dies after 1 measure
+```
+
+**Key facts:**
+- `f3ecd4` (clears park bit4 + bit1 of `0x420`/`0x41E`) is normal per-tick housekeeping — so the
+  park `0x10` is meant to be transient. The transport is armed **once per song** and is supposed to
+  **stay running (`0x06`) for the whole song**; the per-measure sync `0x0C` should return to `0x06`.
+- Nothing traced returns `0x0C → 0x06`. The sync `0x0C` sits until INTTR4's 24-tick beat-park
+  (`0x0C→0x10`) then f3ecd4 clears it to `0x00`. So **the first measure-boundary sync is caught by
+  the beat-park and killed** instead of resuming. THAT is the precise defect.
+- The `0x41E` lane never runs (routes the dispatch to `f5afb2`), but `f5af9d` (the 0x41E-running
+  path) falls through to `f5afb2` anyway — so it sets `0x420=0x0C` regardless; the 0x41E lane is
+  not the deciding factor for the 0x420 kill.
+- `f43cf8` (arm) exact PC confirmed: `F43CFD`; INTT1 promote `EF0CB1`; sync `F5AFC8`(=f5afb2);
+  park `EF0FA5`(=ef0fa0); stop `F3ECE9`(=f3ece5 res 4). `f3ece9` earlier "FLIP#2/3" were false
+  tap hits (a `res 1` RMW writing 0x0C back).
+
+**THE OPEN QUESTION (precise):** what returns the measure-sync `0x0C` to running `0x06` on real
+hardware before INTTR4's beat-park catches it? Candidates: (a) a per-tick sync-processing step that
+resets `0x0C→0x06` after the measure transition (not yet found — check the rest of the ISR tick
+sequence f4e635..f4e656: f39290, f4e66f, f3ecb8, f4e699, f437cb, f2057d, f43ca9, f3639c); (b) a
+timing/phase issue — on HW the `0x0C` is set and cleared within the same beat so `0x417` never
+coincides with a park boundary while `0x0C` is set (the INTTR4 park `ef0f81` may be firing when it
+should not, e.g. Timer4 tick phase vs the sequencer). Felipe: real demo plays continuously, no
+count-in, so the transport MUST stay at `0x06` through measures.
+
+**BEST NEXT METHODS:** (1) trace the remaining ISR tick calls (above) for a `0x0C→0x06` reset;
+(2) compare against the **KN7000** (its demo plays continuously through measures — same architecture,
+different CPU) to see how its transport survives the measure sync; (3) verify the INTTR4 beat-park
+(`ef0f81`/`ef0fa0`) is even correct for this path — it may be a count-in-only behaviour wrongly
+applied. Do NOT ship a poke.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
