@@ -61,6 +61,48 @@ Decisive SFR / DRAM readings **held constant through and after the stall**:
   forever on `0x41C`. The KN5000 clock-source byte + its check is being located in the
   disassembly.
 
+## UPDATE (same day) — corrected interrupt map + poke tests
+
+**Interrupt-map correction (verified 3 ways).** The active 16-bit tick interrupt is **INTTR4**
+(TREG4/low-register match, vector 0xFFFF60 → handler **0xEF0E21**), NOT INTTR5. `0xEF086A`
+(INTTR5, vector 0xFFFF64) is an empty `reti`. Runtime confirms: `INTET45=0x83` decodes as INTTR4
+priority 3 (enabled, low nibble) + INTTR5 priority 0 (disabled, high nibble, pending bit stuck).
+The March research log had this BACKWARDS (it "corrected" from INTTR4 to INTTR5 — that was the
+mistake). The MAME timer_16bits fix is still correct: TREG4 match sets the INTTR4 flag (0x08),
+TREG5 match resets the counter — so INTTR4 fires each interval. No timer bug remains.
+
+**The stall mechanism (disassembly, INTTR4 handler 0xEF0E21).** Sub-ticks `0x417`/`0x41B`
+increment only while `0x420`/`0x421` bit2 = 1; `0x41C` (beat) increments only when `0x41B` wraps
+at 0x60 (96). The demo's transport reaches the **sync/count-in value `0x0C`** (bit3 set), and the
+handler **parks** `0x420`→`0x10` (bit2 clear) at the first multiple-of-24 sub-tick (`ef0f81`..
+`ef0fa0`), freezing the sub-ticks before `0x41B` ever reaches 96. Free-run is `0x06`
+(bit2 set, bit3 clear, no park); the *internal-clock* path (INTT1 handler `ef0cac`, after a
+`0x41A` dwell) promotes `0x01`→`0x06`. So the fork is **internal free-run (0x06) vs a SYNC
+transport command (0x0C)**. `0x0C` setters: `f5af48`/`f5afc3` (transport helper `f5af3c`) and the
+MIDI external-clock handler `fcf6..`; `0x06` setters: the INTT1 internal-clock path `ef0c..` and
+the internal MIDI path `fcf5..`.
+
+**Poke tests (runtime causal proof).**
+- *Crude* (force `0x420/0x421=0x06` every frame): the tick engine runs continuously — `0x41C`
+  advances `0x0D→0x1D` at a musical rate. Confirms the park was the clock block. **But** `acc`
+  stayed 3, `0x41E` stayed 0, and **`0x251D8` (SSF slideshow) stayed 0** — the demo did NOT
+  visibly play. Forcing the clock is not sufficient and clobbers firmware state.
+- *Surgical* (convert `0x0C→0x06` only when it appears, once): the firmware then drove `0x420`
+  to `0x00` (a **transport STOP**) and everything stayed frozen. So after the sync-park the
+  transport is actively STOPPED, not merely parked.
+
+**Consequences / revised diagnosis.**
+1. The sequencer-clock stall (sync-park → stop) is real, but **fixing the clock does NOT advance
+   the visible presentation** — `0x251D8` never leaves 0 in either poke. The user's "presentation
+   playback" == the **SSF slideshow state machine at `0x251D8`**, which is the piece still to map.
+   Whether it is song-position-paced (like the KN7000 slideshow) or independently timed is the
+   open question that decides the fix.
+2. Why the demo takes the SYNC (0x0C) path instead of internal free-run (0x06 via arming 0x01),
+   and what STOPS the transport, are still open (transport-command caller `f5af3c` not yet traced
+   to the demo start).
+
+This is a **multi-layer** issue (as March suspected "two independent bugs"), not a one-line fix.
+
 ## What "fixing it like the KN7000" means here
 
 NOT another timer-modeling change (Timer4 already fixed). The remaining defect is the
