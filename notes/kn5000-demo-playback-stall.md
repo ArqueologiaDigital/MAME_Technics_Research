@@ -314,6 +314,34 @@ hardware. Distinguishing these needs the semantics of those part records — bes
 **KN7000 comparison** (its demo plays continuously through measures; find its equivalent survival
 path) or Felipe confirming whether the KN5000 demo's backing is a full multi-part arrangement.
 
+## UPDATE 9 — ★ REFRAME: general playback bug, NOT demo/f86fff-specific ★
+
+Two experiments corrected the story:
+- **Rhythm START/STOP** (select POP&BALLAD, press START/STOP): `0x41E=0x420=0x04` (running) SUSTAINED
+  for 27 s, `0x417` ticking — the transport CAN idle without dying. BUT `AccPlayMode (0x22FC)=00`
+  the whole time and `0x41B`/`0x41C`=0: the rhythm was **idling, never actually PLAYING** (my
+  START/STOP didn't reach play mode). So this is NOT a working-playback comparison.
+- **Force-arm `0x41E`** (poke `0x41E=0x01` whenever `0x420` is armed, + reset the ef0f52 counters):
+  **NO effect** — the demo stays dead exactly as before. A force-armed `0x41E` just gets measure-
+  synced/parked and dies too. So the **`f86fff` / `0x41E`-re-arm (ef0f52) angle is a RABBIT HOLE.**
+
+**Corrected root framing:** the transport dies whenever the sequencer ACTUALLY PLAYS
+(`AccPlayMode 0x22FC == 3`) and reaches a measure boundary — the `0x0C` measure-sync → INTTR4 park
+(`0x10`) → f3ecd4 clear (`0x00`) has **no `0x0C → running` recovery**. The demo reaches
+`AccPlayMode=3` and dies at measure 1; a truly-playing rhythm would almost certainly die the same
+way (untested — couldn't get one to reach AccPlayMode=3). So this is a **GENERAL KN5000
+sequenced-playback defect at the measure boundary**, likely affecting demo + rhythm + song playback
+alike. It is NOT specific to demo song 18 or `f86fff`.
+
+**The ONE unresolved question (unchanged, now correctly scoped):** what clears the measure-sync
+`0x0C` back to a running value on real hardware, in the window between f5afb2 setting `0x0C` and
+INTTR4's next 24-tick beat-park? No such path exists in the traced code. Candidates: (a) an
+emulation TIMING/phase error so the park (`ef0f81`, at `0x417 ∈ {0,24,48,72}`) fires while `0x0C`
+is set when on HW `0x0C` is cleared first — check Timer4 tick rate/phase vs the sequencer; (b) the
+sequencer's measure-advance is supposed to rewrite the lane to running as part of processing the
+`0x0C`, and that step is gated on something the emulation doesn't satisfy. STRONGEST METHOD remains
+the **KN7000 comparison** (its demo plays continuously through measures). ⚠ Do NOT chase `f86fff`.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
