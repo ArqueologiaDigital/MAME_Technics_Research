@@ -406,6 +406,42 @@ misses.
 3. **KN7000 comparison** (its demo plays through measures) — different CPU, but the run→sync→park→
    re-arm concept is shared; see how it avoids the deadlock.
 
+## UPDATE 12 — timer/ISR-timing analysis: architecture + the demo-specific re-arm skip
+
+Started the timing/ISR analysis. Findings:
+- **Tick/beat processing is MAIN-LOOP driven, not interrupt-driven.** The tick sequence `f4e635`
+  (which contains `f3ecd4`, `f43ca9`, and reaches the beat/sync handlers) is called from a
+  free-running main event loop at `ef1245..ef1385` (`ef1372: call f4e635`; `ef1385: jrl ef1245`).
+  INTTR4 (`ef0e21`) independently increments the beat clock `0x417`. So the two are decoupled and
+  their relative rate matters — but see below, the decisive block is firmware-logical, not a rate.
+- **★ The per-measure re-arm is DEMO-DISABLED.** The beat dispatcher `f5ae1c` (its `f5ae77`→`f5af5f`
+  →`f5af8f` path is the only per-measure re-arm) has EXACTLY ONE caller: `f59ca3`, inside the
+  transport-service function `f59c70`. That function RETURNS EARLY when `f59ca9` returns 1, and
+  `f59ca9` returns 1 for **`0x8d34==0x13` (demo state)**. So **in the demo, `f5ae1c` is never called
+  → the per-measure re-arm never runs** (confirms `f5af8f` never fired). Normal playback
+  (`0x8d34!=0x13`) reaches `f5ae1c` and re-arms every measure.
+- **The sync that kills it is dispatched by the sequencer engine.** The flip stack shows
+  `f5adca`←`f59ab9`(trampoline: call f5adca)←`f568ba`←…←`f53347`←the main-loop tick. So the sequencer
+  engine, during playback, calls the sync trampoline `f59ab9` → `f5adca` → `f5afb2` (0x420/0x421 =
+  0x0C) at the measure boundary.
+
+**Net:** in the demo the transport is **synced by the sequencer** at the measure boundary but the
+**per-measure re-arm is firmware-disabled** (`0x8d34==0x13`), and the only other re-arm is the
+once-per-song demo-timer path (`0xD2F` → `f43cf8`), which requires `0xD2F` to reload/cycle (it
+froze at 0). So the demo transport has **no recovery** from the measure-sync. Two possibilities
+remain, same as before but now precisely grounded:
+1. **The sequencer should NOT sync (or the sync should be harmless) in the demo** — i.e. the demo
+   song is meant to play as one continuous run and the measure-sync (`f59ab9`→`f5adca`) is the
+   anomaly. Find what makes the sequencer post it and whether that's timing/state-driven.
+2. **The demo is meant to CYCLE via `0xD2F`** and the reload (`f86d86`, callers `f86bc7`/`f86cb6`)
+   is gated on the song completing, which never happens because #1 kills it first.
+
+Both are demo-conditional firmware behaviors (`0x8d34==0x13`), so they apply on HW too — meaning the
+emulation must be feeding the demo path a wrong INPUT (a timing, a state byte, or a sub-CPU/tone-gen
+signal) that makes the sequencer sync-and-die instead of playing through. Distinguishing this
+cleanly now genuinely needs the **KN7000 comparison** or Felipe's description of the real demo
+(one continuous song vs. cycling short clips).
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
