@@ -494,7 +494,15 @@ TIMER_CALLBACK_MEMBER(kn5000_state::keybed_scan)
 
 void kn5000_state::maincpu_mem(address_map &map)
 {
-	map(0x000000, 0x0fffff).ram().share("nvram1"); // 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3)
+	// 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3).  These are ordinary VOLATILE DRAMs: they are
+	// work RAM, not the battery-backed store (that is the 1Mbit SRAM @ IC21, "nvram2" below).
+	// This region used to be declared .share("nvram1") with an NVRAM device, which saved and
+	// restored the whole megabyte between runs.  That was wrong twice over: it is unfaithful to
+	// the hardware, and because MAME's exit path never lets the power-down NMI handler run (see
+	// the ~NMI note above), every boot then started from a HALF-FINISHED power-down state --
+	// which is what grew the spurious "<Db>" transpose on the second boot.  With plain volatile
+	// RAM every start is an honest cold boot and the firmware takes its normal cold path.
+	map(0x000000, 0x0fffff).ram(); // 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3)
 	// Button states and LED control are handled via serial protocol to cpanel HLE device
 	// Floppy Controller @ IC208 (UPD72068GF)
 	// Register layout matches PC AT (smc37c78-style) with offsets doubled for 16-bit data bus:
@@ -1272,7 +1280,7 @@ void kn5000_state::kn5000(machine_config &config)
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
-	NVRAM(config, "nvram1", nvram_device::DEFAULT_ALL_0);
+	// Only the IC21 SRAM is battery-backed; the IC9/IC10 DRAMs are volatile work RAM (see maincpu_mem).
 	NVRAM(config, "nvram2").set_custom_handler(FUNC(kn5000_state::nvram2_init));
 
 	config.set_default_layout(layout_kn5000);
