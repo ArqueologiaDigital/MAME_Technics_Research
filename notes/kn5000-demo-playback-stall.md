@@ -709,6 +709,57 @@ UI event-delivery path (note the KN5000 has a KNOWN, documented control-panel se
 misframe). If some presses are delivered to the menu logic but never reach the widget handler
 chain that runs `UIState_KeyScan_Dispatch`, that is exactly the observed signature.
 
+## ★★★★ UPDATE 21 — FELIPE CORRECTION: the globe IS slide 1; the presentation DOES start ★★★★
+
+**Felipe (hardware owner, GROUND TRUTH):** *"On a real KN5000 the static submenu does not show any
+globe image. That globe is only shown when the DEMO starts playing. The globe is the first slide of
+the demo."*
+
+⇒ **RETRACT Update 20's framing "the SSF presentation never starts".** The presentation DOES start
+and correctly renders slide 1. Therefore **`0x251D8` is NOT the presentation-active latch** that a
+static-analysis pass claimed it was (that identification was never verified — and static analysis
+has now been wrong on this investigation four times). Do not treat `0x251D8 == 0` as evidence of
+anything. The March-2026 `0x1C00038`/`0xB80A` chain is NOT the blocker either.
+
+**Corrected picture:** the demo starts → shows slide 1 (correct) → then freezes because **the SONG
+never plays**, and the slides are song-paced. Everything about the watchdog chain from Update 20
+still stands (it is measured), but its FIRST link changes:
+
+```
+the SONG is never loaded  (NOT "the presentation never starts")
+ -> song event buffer @0x675A stays all zeros
+  -> reader sees unrecognised opcode bytes -> 32 of them trip the corrupt-stream watchdog (0x32ed)
+   -> watchdog issues the quantized STOP (lanes := 0x0C, terminal by design) -> park -> stop
+    -> no music; slides never advance past slide 1 (they are paced by song position)
+```
+
+### ROM STRUCTURE (decoded from the dumps — new, solid)
+- **"SLIDE" is the SLIDING-WINDOW (LZSS) COMPRESSION MAGIC, not "slideshow".** Variants
+  `SLIDE4K` (4 KB window) and `SLIDE8K` (8 KB). 26 blobs in table_data. `ef41e3` memcmps the 5-byte
+  magic (template at `0xE00032`) and dispatches on the window char: `'4'` -> `ef3fab`,
+  `'8'` -> `ef40c5`, anything else -> loads nothing.
+- **The decompressor WORKS.** Hand-decoded the entry-18 stream against the emulated output:
+  `5A EE F0` -> `ZZZZ`; `E0 FB` -> 14 zero bytes; `FF` flag byte -> 8 literals
+  (`01 2E 00 20 05 00 00 FF`), all matching RAM exactly. Flag-byte LZSS, decompressing correctly.
+- **Entry table at CPU `0x9C4000` = 19 entries + null terminator:**
+  `[0]..[17]` -> blobs at `0x9C4050, 0x9C9018, 0x9CE17C, 0x9D16F2, 0x9D645C, 0x9DA016, 0x9DE072,
+  0x9E0CE2, 0x9E2358, 0x9E61C2, 0x9E72E8, 0x9EA1F2, 0x9EDFFC, 0x9EEC62, 0x9F0E72, 0x9F1C70,
+  0x9F3B52, 0x9F494E` (all `SLIDE4K`), and **`[18]` -> `0x8E0000`** (`SLIDE4K`), `[19]` = 0.
+  ⇒ `[0]..[17]` are the **18 demo SONGS**; **`[18]` is the FEATURE PRESENTATION descriptor**.
+- Entry 18 decompresses to only ~0x110 bytes: a "ZZZZ" header, a part-type array, then **16
+  `80 xx 00` script records** at `0x698C8` (`xx` = 32,2E,20,42,4C,53,55,5A,5D,62,64,16,6A,6D,70,25)
+  and 16 `0x5F` bytes at `0x69900`. That is a **presentation SCRIPT**, not a song.
+- Six **`SLIDE8K`** blobs at `0x983B3A, 0x988690, 0x98BB3A, 0x98F0DA, 0x992A0C, 0x9963FA` — larger
+  payloads, not referenced by the 19-entry table; candidates for the presentation's own song/asset
+  data. **Worth identifying next.**
+
+**⇒ NEW FIX TARGET:** the presentation script runs (slide 1 shows) but **never causes a song to be
+loaded**. Find the script opcode/step that should load+start a song (the SSF `SONG` directive) and
+why it does not fire — i.e. which entry (`[0]..[17]`, or one of the six 8K blobs) the presentation
+should pull in, and what consumes the `80 xx 00` records. Runtime check in flight: count how many
+blob loads into `0x69800` occur during the demo (prediction: exactly ONE — entry 18 — proving no
+song is ever loaded).
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
