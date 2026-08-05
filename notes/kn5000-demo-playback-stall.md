@@ -467,6 +467,37 @@ advances even when the clock is forced). Resolving it requires a NEW reference:
 
 ⚠ Do not spawn more KN5000 force-pokes — they are exhausted and all fail.
 
+## UPDATE 14 — Felipe: LONG song, slides advance ⇒ transport must sustain; sync trigger found
+
+Felipe (hardware): the real Feature Presentation plays ONE LONG continuous song and the picture
+slides advance autonomously over it. So the transport MUST sustain many measures — the emulation
+dying after ~one beat (0x417: 0→24) is the bug, and (since the slideshow is song-paced) fixing the
+transport fixes the slides.
+
+**The sync trigger (runtime + disasm).** The sequencer counts events in `0x32ed` (`f568a8: inc
+0x32ed`) and dispatches the measure SYNC only when **`0x32ed == 0x20` (32)**: `f568b6: call f59ab9`
+→ `f5adca` → `f5afb2` sets `0x420/0x421 = 0x0C`. INTTR4 (`ef0fa0`) then parks `0x0C→0x10`, and
+`f3ecd4` clears `0x10→0x00`. `0x32ed` is NOT reset at `f568b6`, so the sync fires once and the dead
+transport freezes everything (`0x417` stops → no more events → `0x32ed` stuck at 32).
+
+**The continuation is BACK-TO-BACK with the sync (so it's LOGIC, not a timing race).** Immediately
+after the sync, the SAME main-loop iteration runs `f568ba: call f5e931` (→ `f5ce20`, `f5f444`) and
+sets markers `0x32f5=0xFF`, `0x32f4 |= 0x21`. So the measure-continuation runs right after the sync
+— there is no window/race. If the transport isn't re-armed/continued, it's because that
+continuation's LOGIC doesn't do it in the demo, not because of CPU-cycle/timer timing.
+
+**Emulation timing model (checked, likely NOT the bug):** TLCS-900 is per-instruction timed
+(`tlcs900.cpp:314 m_cycles += inst->cycles`; timers advance by `m_cycles`); maincpu = 16 MHz
+(`2*8_MHz_XTAL`). Per-instruction cycle counts are real (not a fixed constant), and since sync+
+continuation are adjacent, the CPU-cycle-to-timer ratio is not the deciding factor. Timing angle
+de-prioritised.
+
+**⇒ The fix is in the measure-CONTINUATION path** `f5e931 → f5ce20 / f5f444` (+ the markers
+`0x32f4`/`0x32f5`/`0x34cd`/`0x34d1`): it must re-arm/continue the transport for the next measure of
+the long song, and in the demo it doesn't. A fully-briefed disassembly pass is tracing exactly
+which continuation step should re-arm and the emulated condition that makes it fail (to be verified
+at runtime). This is the live lead.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
