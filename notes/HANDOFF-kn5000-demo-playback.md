@@ -63,15 +63,39 @@ variation block at `+0x118` and A≥8 a second block at `+0x518`. Measured: **id
 The record's bank array at `+0x3D1` is `1A 3D 3D 0D 3D 3D 3D 3D 3D` — banks 0x38-0x3F are entirely
 `0xFF`, so **`0x3D` is a "no data" sentinel** — and `f55fde` reads `(XIY+0x03D1)` with **no index**.
 
-**NEXT PROBE (do this first):** tap writes to **`0x32a3..0x32a8`** (the per-lane variation index)
-and to **`0x332c`** across the demo engage, logging PC + value **on change**. Two candidates:
-1. **A=10 is simply wrong here.** At the trip `(0x332c) == 0x00` — every lane-enable bit is CLEAR,
-   so nothing should sound; `f56837`'s `bit n,(0x332c)` gates only the per-lane *processing*, while
-   the fetch/dispatch at `f567f0` runs anyway, so the watchdog counts on a stream nobody plays.
-2. **The bank byte should be indexed** (by variation or lane) and `f55fde` drops the index. Against
-   bank `0x0D` (`+0x3D4`) the demo's pointers decode cleanly for lanes 1-3 (6/9/9 valid ops per 32)
-   but lanes 4-6 are still past that bank's end (`0xEC2F`) — suggestive, **not established**.
-   Decide it by checking the other `(0x3285)` writers: `f5620d`, `f5882c`, `f58ce0`, `f593ef`.
+**MEASURED (2026-08-05), correcting the note above:** the per-lane variation bytes
+`0x32a3..0x32a8` are all set to **`0x23`** at `f56382`, just before the bank is set:
+
+```
+32e5(style) <- 48   PC=F55EBE
+32a3..32a8  <- 23   PC=F56382      <-- all six lanes
+3285(bank)  <- 1A   PC=F55FE7
+```
+
+`0x23` is **not** a bank number (its resemblance to the pre-demo bank 0x23 is
+coincidence). The table at `f5646e` is `00 05 0A 0F 14 19 1E 23` -- **8 sections,
+stride 5** -- so `0x23` = section 7. **Idle runs section 0; the demo runs section 7.**
+That is the differentiator. `f56373` computes it: `W=(0x32d8)`, `A=(0x3338)`,
+`calr f563a2` -> `f563e1`/`f56402` -> `A = f5646e[A]`, then stores it to all six lanes.
+
+⚠ My earlier "variation A=10" was WRONG: `f5657e` double-shifts `W` (`f5659b` shifts
+once and clobbers W with a byte read from the style record, then `f56592` shifts
+again), so the index into `f5669a`/`f566aa` comes from the RECORD, not from `A`.
+One step still does not reconcile -- I compute HL=0x400 where the firmware used
+0x404 -- so treat the exact index chain as UNVERIFIED.
+
+**NEXT PROBE:** trace the inputs that select section 7 -- tap `(0x32d8)` and
+`(0x3338)` across the demo engage and compare against idle. If the demo should be
+running section 0 (or a section whose data exists in bank 0x1A), that is the defect.
+Also worth checking: does bank 0x1A legitimately have no section-7 data, i.e. should
+the firmware have fallen back rather than read past `0xE230`?
+
+**RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
+symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
+routine in this chain -- `F55FDE F56373 F56CD0 F5657E F58FF9 F590A9 F567CD F568A8
+F568C9 F56E71 F59AB9 F5E931 F5CE20` -- is still an unnamed `LABEL_*` there, i.e. the
+accompaniment/style reader is UNDOCUMENTED in the disassembly. The findings in this
+file are the first semantic account of it and are worth contributing back as names.
 
 **The demo SONG is not the problem** — see §6; its data is intact at `0x69800`.
 
