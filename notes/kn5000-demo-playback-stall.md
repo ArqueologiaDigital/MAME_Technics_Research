@@ -526,6 +526,43 @@ COMPUTED jump from the command dispatcher, i.e. a **queued transport command**, 
 So the true producer is whatever POSTS that sync command to the queue during demo playback — a layer
 I did not reach.
 
+## ★★★ UPDATE 17 — UPDATE 16 WAS A TAP ARTIFACT. 0x32ed IS THE ROOT: A RUNAWAY EVENT READER ★★★
+
+**Retraction.** Update 16 ("0x32ed is a red herring, not written during playback") was WRONG — a
+MEASUREMENT ARTIFACT. The tap was installed as `install_write_tap(0x32ed, 0x32ed, ...)`: an ODD,
+SINGLE-BYTE, NON-WORD-ALIGNED range on a 16-bit space, so it never fired. Re-installed correctly as
+`(0x32ec, 0x32ed)` (word-aligned pair, `0x32ed` = the HIGH byte lane, so test `mask & 0xFF00` and
+read `data >> 8`) it fires immediately — **150 captures vs 0**. The stack dump had said so all
+along: `00F568BA` is the return address of `f568b6: call 0xf59ab9`.
+★ RULE: on this 16-bit space, taps MUST be word-aligned pairs, and you must select the correct
+byte lane. An odd single-byte tap silently never fires and looks like "never written".
+
+**THE ROOT CAUSE (measured):** `0x32ed` is a **RUNAWAY / EVENT-BUDGET WATCHDOG**, and it is
+tripping constantly. Captured during playback:
+```
+t=25.85953  32ed<-00  PC=F56765   <- pattern restart (f5675b); 0x33d4 0x20 -> 0x01
+t=25.85955  32ed<-01  PC=F568AF
+   ... 32 increments in 0.00082 s (~25 us apart), 0x417 == 0 THROUGHOUT ...
+t=25.86037  32ed<-20  PC=F568AF   <- hits 0x20 -> f568b6 SYNC -> transport parked/stopped
+t=25.92835  32ed<-00  PC=F56765   <- restart, and the whole 32-burst REPEATS (~68 ms period)
+```
+So the sequencer **consumes 32 events back-to-back with NO time advance**, trips the guard at 32,
+and the guard's action (`f568b6: call f59ab9` -> `f5adca` -> `f5afb2`, lanes := 0x0C) is what parks
+and kills the transport. This repeats every ~68 ms. When the transport finally arms and runs
+(t≈26.2), the very next burst's guard trip (t≈26.29) kills it — which is the "dies after one beat"
+symptom. **The transport machinery was never the bug; it is collateral damage from a runaway
+event reader.**
+
+`0x33d4` is the track/part selector bitmask (values 1,2,4,8,0x10,0x20 = 6 tracks, dispatched at
+f56837+); `f5675b` restarts the pattern (resets `0x32ed`, sets `0x33d4=0x01`, reloads the read
+pointers). Each burst = one full restart-and-runaway cycle.
+
+**⇒ The real question is now narrow and concrete:** why does the event reader consume 32 events
+with no time advance? Two sub-cases, being measured: (a) the pattern READ POINTER does not advance
+(the same event is re-read forever) = a decode/pointer defect; or (b) the pointer does advance
+through 32 genuine zero-delta events = the song's event stream is misdecoded/wrong data. Either
+way this is an **event-stream decode** problem, NOT a transport/timer problem.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
