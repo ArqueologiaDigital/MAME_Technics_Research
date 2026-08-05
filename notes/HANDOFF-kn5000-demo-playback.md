@@ -57,9 +57,10 @@ Established by runtime measurement AND an independent 11-agent analysis that agr
 
 **THE CHAIN (every link measured):**
 ```
-SSF presentation engine never starts   (0x251D8 == 0 always)
- -> the SSF script's SONG directive never runs
-  -> the song event stream is never loaded
+the presentation runs and shows slide 1, but NEVER LOADS A SONG
+   (verified: exactly ONE blob load during the whole demo — entry 18, the presentation
+    DESCRIPTOR, at t=24.19; entries [0]..[17] = the 18 demo songs are never loaded)
+ -> the song event stream is never loaded
      (event buffer @0x675A is ALL ZEROS; exactly ONE write ever = a boot-time clear at PC EF0B9B)
    -> the reader walks zeros; 0x00 is not a valid opcode -> every byte "unrecognised"
     -> 32 unrecognised bytes in ~0.8 ms trip the watchdog (0x32ed == 0x20)
@@ -69,24 +70,31 @@ SSF presentation engine never starts   (0x251D8 == 0 always)
 ```
 **Only the first line is a defect. Everything below it is correct firmware behaviour.**
 
-**Why the presentation never starts (measured):** in state `0x8d38 == 0xE4` a sweep of ALL TEN soft
-keys (LEFT 1-5, RIGHT 1-5) left `0x251D8 == 0`, the event buffer unwritten and `0x8d38` unchanged —
-even though presses ARE delivered (LEFT 2 demonstrably starts the demo timer). So the chain
-`key in 0xE4 -> event 0x1C00038 -> GroupBoxProc_StartSSFPresentation (0xF9A273) -> 0xB80A workspace
--> AcPresentCtrl_CheckSSFStart (0xF84625) -> 0x251D8 := 1` never fires.
+★ **FELIPE (hardware, GROUND TRUTH):** *"the static submenu does not show any globe image; the globe
+is only shown when the DEMO starts playing — it is the first slide of the demo."* So the
+presentation **does start and renders slide 1 correctly**. Consequently **`0x251D8` is NOT the
+"presentation-active" latch** a static-analysis pass claimed (never verified; static analysis has
+been wrong four times in this investigation) — do not treat `0x251D8 == 0` as evidence. The
+March-2026 `0x1C00038`/`0xB80A` chain is **NOT** the blocker, and the soft-key sweep result (no key
+changes `0x251D8`) is therefore irrelevant, not a finding.
 
-★ This **REINSTATES the March-2026 target** (the `0x1C00038` / `0xB80A` chain). March's *mechanism*
-("the automated path builds a 0x82xx tag") was wrong, and my own dismissal of March as "stale" was
-ALSO wrong — I inferred "the demo starts" from the Technics-globe image, which is the STATIC
-submenu image, not a running presentation. Correct attribution: right target, wrong mechanism.
+**ROM structure (decoded, solid):** `"SLIDE"` is the **sliding-window (LZSS) compression magic**
+(`SLIDE4K` / `SLIDE8K`), NOT "slideshow"; `ef41e3` memcmps it (template `0xE00032`) and dispatches
+on the window char (`'4'`->`ef3fab`, `'8'`->`ef40c5`). The decompressor **works** (hand-verified
+against RAM: `5A EE F0`->`ZZZZ`, `E0 FB`->14 zeros, `FF` flag->8 literals). Entry table at
+`0x9C4000` = **19 entries**: `[0]..[17]` = the **18 demo SONGS**, `[18]` = `0x8E0000` = the
+**FEATURE PRESENTATION descriptor** (decompresses to ~0x110 bytes: "ZZZZ" header, part-type array,
+**16 `80 xx 00` script records** at `0x698C8`, 16 `0x5F` bytes at `0x69900`). Six extra unreferenced
+`SLIDE8K` blobs at `0x983B3A/0x988690/0x98BB3A/0x98F0DA/0x992A0C/0x9963FA` — identity unknown,
+worth checking.
 
-**THE FIX TARGET:** make the SSF presentation start — i.e. find why a delivered key press in state
-`0xE4` does not produce the `0x1C00038` broadcast via `UIState_KeyScan_Dispatch (0xF98697)` ->
-`FA9945` (the gate-table entry for `0xE4` is the unconditional marker `0xFFFE`, so ANY key should
-do it). Prime suspect: the KN5000 UI/control-panel event-delivery path — note the KN5000 has a
-KNOWN control-panel serial defect family whose residue was characterised as **LOSS** (see
-`notes/kn5000-cpserial-INDEX.md`). "Press reaches the menu logic but never reaches the widget
-handler chain" is exactly the observed signature.
+**THE FIX TARGET:** the presentation script runs (slide 1 shows) but **never loads a song**.
+Measured: during the entire demo there is exactly **ONE** blob load into `0x69800` — entry **18**
+(the descriptor) at t≈24.19 (`PC=EF4039/EF409B`); entries `[0]..[17]` are never loaded. So find
+which script step should load+start a demo song (the SSF `SONG` directive), what consumes the 16
+`80 xx 00` records, and why that step never issues the load. Once a song is loaded the event buffer
+fills, the corrupt-stream watchdog stops tripping, and (per the KN7000 model: start once, run to an
+explicit stop) playback should run the whole song with the slides paced by song position.
 
 ## 5. REFUTED — do NOT re-chase (all tested at runtime)
 
@@ -163,24 +171,27 @@ re-derive from these):
 
 ## 8. NEXT STEP (single, well-defined — the root cause is known)
 
-**Make the SSF presentation start.** Concretely, find why a *delivered* key press in state `0xE4`
-never produces event `0x1C00038`:
-1. Trace `UIState_KeyScan_Dispatch (0xF98697)` at runtime — is it called at all after boot? (March
-   measured ~900 boot-time calls, all with `0x8d38 == 0x00` -> the empty gate array, then never
-   again.) A word-aligned execution/read tap or a debugger BP will settle it.
-2. If it is never called post-boot, the gap is upstream in **UI event delivery**: the widget handler
-   chains are walked by the event-buffer dispatcher (`FDB3D1` fills a circular buffer at DRAM
-   `0xBD3C`; `FDB328` dispatches from handler-chain table `EE7CA7`). Find why a panel key press does
-   not enqueue there, while still reaching the demo-menu logic.
-3. Cross-check against the known KN5000 control-panel serial defect family
-   (`notes/kn5000-cpserial-INDEX.md` — residue characterised as **LOSS**). If key events are lost
-   between the panel HLE and the UI event buffer, fixing that fixes the demo *and* a class of other
-   UI bugs.
-Once `0x251D8` flips to 1, the SSF script runs its `SONG` directive, the event stream loads, the
-watchdog stops tripping, and (per the KN7000 model) the transport simply runs to the end of the
-song with the slides paced by song position.
+**Find why the running presentation never loads a demo song.**
+1. **Decode the presentation script.** Entry 18's decompressed descriptor at `0x69800` holds 16
+   `80 xx 00` records at `0x698C8` (`xx` = 32,2E,20,42,4C,53,55,5A,5D,62,64,16,6A,6D,70,25) and 16
+   `0x5F` bytes at `0x69900`. Find the interpreter that walks these (it is running — slide 1 shows)
+   and which opcode means "play song N" / "show slide N".
+2. **Find the song-load call site.** The loader is `f87189(idx)` -> `ef41e3` -> `ef3fab`, dst
+   `0x69800`. Something must call it (or a sibling) with an index in `0..17`. Tap `0x69800` writes
+   (proven idiom) and/or BP `f87189` to see who calls it and with what — currently only entry 18.
+   Note dst `0x69800` is shared, so a song load may need a different destination: check whether a
+   second buffer (the event buffer near `0x675A`, or one of the per-track bases
+   `0x3287/0x3297/0x32A3/0x32AB/0x32B5/0x33EB`) is the real song destination.
+3. **Identify the six unreferenced `SLIDE8K` blobs** (`0x983B3A`, `0x988690`, `0x98BB3A`,
+   `0x98F0DA`, `0x992A0C`, `0x9963FA`). They are not in the 19-entry table; if one of them is the
+   presentation's backing song, find the table//pointer that selects it.
+Once a song is loaded the event buffer fills, the corrupt-stream watchdog stops tripping, and (per
+the KN7000 model: start once, run to an explicit stop) playback runs the whole song with the slides
+paced by song position.
 
-⚠ Do NOT resume the "per-measure re-arm" hunt — that mechanism does not exist (see §4).
+⚠ Do NOT resume the "per-measure re-arm" hunt — that mechanism does not exist (§4).
+⚠ Do NOT chase the `0x1C00038`/`0xB80A` SSF-start chain or `0x251D8` — the presentation DOES start
+(Felipe, hardware); `0x251D8` is not the latch it was claimed to be.
 
 ## 9. Method lessons (cost real time here)
 
