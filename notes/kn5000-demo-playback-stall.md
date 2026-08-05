@@ -648,6 +648,67 @@ marker `0xFFFE`, so ANY key press in `0xE4` should broadcast event `0x1C00038` -
 starts. A soft-key sweep in state 0xE4 (LEFT 1-5, RIGHT 1-5) is running to find which key actually
 starts it, watching `0x8d38`, `0x251D8` and writes to the event buffer `0x675A`.
 
+## ★★★★ UPDATE 20 — ROOT CAUSE ESTABLISHED (measurement + independent multi-agent RE agree) ★★★★
+
+A 11-agent workflow (5 independent analyses, each adversarially verified) landed on exactly the
+same picture as the runtime measurements. Triangulated conclusions:
+
+- **`0x32ed` is a CORRUPT-STREAM WATCHDOG.** It counts consecutive BYTES that the realtime
+  pattern reader could not recognize as any event opcode, within one lane pass. Recognized events
+  never touch it; the legitimate end-of-track is a *different* opcode. (Independent agent finding,
+  adversarially verified — and it explains the measurement exactly: the buffer is zero-filled,
+  `0x00` is not a valid opcode, so every byte is "unrecognized" and 32 of them trip the watchdog.)
+- **The `0x0C` lane state is a quantized "STOP at the next beat boundary", and it is TERMINAL BY
+  DESIGN.** Nothing in the firmware ever converts `0x0C` back to `0x06`; its designed successors
+  are exactly what we measured: `0x10` (INTTR4 park at a multiple of 24) then `0x00` (main-loop
+  `f3ecd4`). **So the transport death is CORRECT firmware behaviour** — the watchdog detected a
+  corrupt stream and deliberately stopped playback.
+- **The KN7000 has NO measure-boundary re-arm at all** — it starts the transport once (engine
+  command 0x8002 latches a RUN bit) and runs until an explicit stop. So the entire "per-measure
+  re-arm" line of enquiry was chasing a mechanism that does not exist; the transport is simply
+  supposed to keep running.
+
+### THE ROOT CAUSE (single chain, every link measured)
+```
+SSF presentation engine never starts        (0x251D8 == 0 always)
+  -> the SSF script's SONG directive never runs
+    -> the song event stream is never loaded (event buffer @0x675A: ALL ZEROS, never written -
+       verified: exactly ONE write ever, a boot-time clear at PC EF0B9B)
+      -> the pattern reader walks zeros; every 0x00 is an unrecognized opcode
+        -> 32 unrecognized bytes in ~0.8 ms trip the corrupt-stream watchdog (0x32ed == 0x20)
+          -> watchdog issues the quantized STOP (f568b6 -> f59ab9 -> f5adca -> f5afb2: lanes=0x0C)
+            -> INTTR4 parks 0x0C->0x10, f3ecd4 clears 0x10->0x00: transport DEAD (by design)
+              -> no music; and since SSF slides ride on SysEx events IN the song stream,
+                 no slides either. Repeats every ~68 ms forever.
+```
+**Everything downstream of the first line is the firmware behaving CORRECTLY.** The one and only
+defect is that **the SSF presentation never starts.**
+
+### Why it never starts (measured)
+In state `0x8d38 == 0xE4` (FEATURE PRESENTATION submenu) a soft-key sweep of **all ten** soft keys
+(LEFT 1-5, RIGHT 1-5) produced: `0x251D8` stays 0, event buffer never written, `0x8d38` never
+leaves 0xE4. Yet the presses ARE delivered (LEFT 2 demonstrably starts the demo timer). So key
+presses reach the firmware but **the SSF-start event chain never fires**:
+`key in 0xE4 -> event 0x1C00038 -> GroupBoxProc_StartSSFPresentation (0xF9A273) -> 0xB80A workspace
+-> AcPresentCtrl_CheckSSFStart (0xF84625) -> presentation starts (0x251D8 := 1)`.
+
+★ **This REINSTATES the March-2026 finding that I earlier declared "stale".** March was RIGHT that
+the SSF presentation never starts and that the `0x1C00038` / `0xB80A` chain is the blocker; what was
+stale/wrong was only its *explanation* (the "automated demo path builds a 0x82xx tag" story) and my
+own counter-claim that "the demo does start" (I inferred that from the Technics-globe image, which
+is the STATIC submenu image, not a running presentation). Correct attribution: **March's target was
+right, its mechanism was wrong, and my dismissal of it was wrong.**
+
+### THE FIX TARGET (now unambiguous)
+Make the SSF presentation actually start: the `0x1C00038` UI-event chain in state `0xE4`. Per the
+docs the gate-table entry for `0xE4` is the unconditional marker `0xFFFE`, so ANY key press there
+should broadcast `0x1C00038` via `UIState_KeyScan_Dispatch (0xF98697)` -> `FA9945`. Determine why
+that broadcast does not happen for a delivered key press. Prime suspect: the KN5000 control-panel /
+UI event-delivery path (note the KN5000 has a KNOWN, documented control-panel serial defect family
+— see `notes/kn5000-cpserial-INDEX.md`, where the residue was characterised as **LOSS**, not
+misframe). If some presses are delivered to the menu logic but never reach the widget handler
+chain that runs `UIState_KeyScan_Dispatch`, that is exactly the observed signature.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
