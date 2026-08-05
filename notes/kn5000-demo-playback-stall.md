@@ -498,6 +498,39 @@ the long song, and in the demo it doesn't. A fully-briefed disassembly pass is t
 which continuation step should re-arm and the emulated condition that makes it fail (to be verified
 at runtime). This is the live lead.
 
+## UPDATE 15 — subagent's "f86fb7==0 / 0x2314==0" claim REFUTED at runtime
+
+Verified the re-arm cell `0x2314` directly. Result: **`0x2314 = 0xFFFF` (non-zero) the ENTIRE run**
+(and `*(0x6981e) = 0xFFFF`, so `f86fb7` returns valid data — the presentation data IS loaded). So
+the subagent's prediction (`f86fb7==0 → 0x2314==0 → no re-arm`) is WRONG. The re-arm GATE
+(`f3a0b3: ld WA,(0x2314); jr Z`) PASSES, and **AccPlayMode reaches state 3** (`0x22FC=3`, correct
+for playing). Yet `0x420` stays `0x00` (clock dead). So: gate passed + engine "playing" + clock
+still not sustained ⇒ the block is DOWNSTREAM of both the `0x2314` gate and AccPlayMode.
+
+New anomaly: **`0x32ed` is already `0x20` (32) BEFORE playback starts** (t=25.0, `0x420=00`) — the
+sync threshold is pre-tripped, not counted up during the measure. So the sync (`f568b6`, fires at
+`0x32ed==0x20`) trips immediately when the sequencer runs, rather than after a real measure of
+events. Who sets/leaves `0x32ed=32` (vs the reset `f5675b: ld (0x32ed),0x00`) is a new open thread.
+
+**Every hypothesis is now refuted at runtime** (timer, sync-park recovery, arm-0x41E, keep-0xf19e,
+force-0xD2F-cycle, and the f86fb7/0x2314 continuation). The demo reaches AccPlayMode=3 with a valid
+next-segment pointer, yet the transport clock is never sustained and `0x251D8` never advances.
+
+## HONEST BOTTOM LINE (after 15 stages, ~22 runs, 4 disasm passes)
+
+This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
+the mechanism and experimentally REFUTED every state-level and continuation-level fix. The remaining
+question — why the transport clock (`0x420`) is not sustained even though the re-arm gate (`0x2314`)
+passes and AccPlayMode reaches state 3 — sits below everything I've traced. It is very likely a
+**decoded-song-data / sequencer-event-stream issue** (the `0x32ed=32` pre-trip suggests the event
+stream isn't being consumed as a normal measure), which would be a fresh, large investigation into
+the demo song's SEQUENCE data (the note-event blob and its decode), NOT the transport state machine.
+
+Recommended: treat this as a documented deep issue. The two viable fresh angles are (a) the demo
+SONG SEQUENCE data decode (why `0x32ed` starts at 32 / whether the event stream is misdecoded), and
+(b) the KN7000 comparison. Both are multi-session efforts. All 15 stages are committed for whoever
+picks this up.
+
 ## STATUS / RECOMMENDATION (what "fixing it like the KN7000" needs here)
 
 The KN7000 fix was a clean *driver-side timer model*. This is NOT that — the KN5000 timers work.
