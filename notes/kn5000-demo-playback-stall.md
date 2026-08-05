@@ -760,6 +760,52 @@ should pull in, and what consumes the `80 xx 00` records. Runtime check in fligh
 blob loads into `0x69800` occur during the demo (prediction: exactly ONE — entry 18 — proving no
 song is ever loaded).
 
+## ★★★★★ UPDATE 22 — BANKED-CELL READER + THE DISCRIMINATING TRAP (IC19 ruled out) ★★★★★
+
+An 11-agent workflow (5 analyses, ALL surviving adversarial verification) supplied the mechanism I
+was missing, and a runtime trap then discriminated its three candidates.
+
+**The reader uses a BANKED CELL system** (so my earlier "event buffer @0x675A is all zeros" reading
+was of the WRONG address — retract that specific inference; the conclusion "data supply is broken"
+survives):
+```
+cell# = (0x33D6), offset = (0x33D8)
+physical = bank[cell>>12] + (cell & 0xFFF)*256      ; resolver f59069, bank table f59089
+bank[0..7] = 0x095C00 (DRAM pool),
+             0x301400 0x31AC00 0x331400 0x34AC00 0x361400 0x37AC00 0x391400  (IC19 custom_data)
+```
+Event grammar recognised by the reader: `0x81` beat, `0x83` end-of-track, `0x87` cell-link,
+`0x90`/`0x91` events, `0xD1..0xD5`. Anything else falls into `f568a8`, which skips ONE byte and
+increments the watchdog `0x32ed`; 32 of those in one pass -> `f568b6` -> the quantized stop.
+
+**TRAP RESULT (at the trip):**
+```
+cell=0000  off=675B  region=0  bank=095C00  phys=095C00      32E5=48 3285=1A 3277=00000000
+@phys     : 80 FF FF 96 00 87 90 00 24 70 08 00 90 00 3A 6C 08 00 90 19 3A 3E 06 00 90 30 ...
+@phys+off : 00 91 45 40 44 0D 00 00 11 D3 4B 00 81 83 00 00 00 00 00 00 00 00 00 00 00 ...
+                                                ^^^^^ end-of-track, then ALL ZEROS
+```
+1. **region == 0 -> the DRAM pool, NOT IC19.** ⇒ the workflow's rank-1 candidate (custom_data mapped
+   read-only / donor-dump content) is **RULED OUT** for this failure.
+2. **The song data IS present and valid** at `0x95C00`: real pattern bytes full of `0x90` note
+   events and an `0x87` cell link. Loading and LZSS decompression work.
+3. **The reader has walked off the end of the populated data**: at offset `0x675B` only a short tail
+   remains (`… 81 83`) followed by nothing but zeros -> 32 unrecognised bytes -> watchdog -> stop.
+   (Corroborating: several per-track base cells read `0x0000` — `0x3297`, `0x32AB`, `0x32B5`,
+   `0x33EB`.)
+
+⇒ **The surviving candidate is the workflow's (c): the CELL CHAIN walks into an unpopulated cell**
+(either a `0x87` link pointing at a cell that was never filled, or a start-cell/section record that
+points past the loaded extent). The data that IS there is fine; the chain leaves it.
+
+**NEXT (single, concrete — the workflow's own rank-3 probe):** tap **PC `0xF585A7`** and log `HL`
+(the link word) on every `0x87` follow from demo start until the trip, reconstruct the full cell
+chain, and find the first link that leaves populated data. Then fix whichever end is wrong (the link
+value, or the loader that should have populated that cell). Provenance chain for the start cell:
+`(0xFC5A)/(0xFC5B)` -> `0x32F5/0x32F7` -> `0x32E5-0x32E8`, section record
+`XIY = regionBase_f53d57[region] + styleDir_0xE46312[style] + 0x60`, start cell = word at `(XIY+0)`
+(setup `f58843`/`f5886f`/`f58873`; link follow `f585a7`/`f585ac`; resolvers `f58ff9`/`f59059`).
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
