@@ -806,6 +806,41 @@ value, or the loader that should have populated that cell). Provenance chain for
 `XIY = regionBase_f53d57[region] + styleDir_0xE46312[style] + 0x60`, start cell = word at `(XIY+0)`
 (setup `f58843`/`f5886f`/`f58873`; link follow `f585a7`/`f585ac`; resolvers `f58ff9`/`f59059`).
 
+## ★★★★★ UPDATE 23 — THE READER IS UNPACED: it races the whole song in <1 ms ★★★★★
+
+Link-chain probe (write tap on the cell number `0x33D6`, word-aligned):
+
+- **The cell number NEVER advances — it is `0x0000` on every write**, rewritten constantly from
+  `PC=F56A20` (and `F56773` at pattern restart), lane `0x33d4`=01 throughout. So there is **no cell
+  chain traversal at all**; the workflow's candidate (c) "a link points at an unpopulated cell" is
+  therefore **NOT** what happens — the reader never follows a link.
+- The **offset** (`0x33D8`) instead walks ~26 KB forward inside cell 0's pool: real pattern data all
+  the way to ≈`0x9C368`, where the stream ends with `… 81 83` (beat, end-of-track) and is followed
+  by zeros.
+- **★ The decisive detail: the whole 26 KB traversal happens between t≈25.337 and t≈25.86 — under
+  ONE MILLISECOND of emulated time — and it finishes BEFORE the transport even arms (≈26.2 s).**
+
+⇒ **NEW LEADING HYPOTHESIS (fits every observation): the pattern reader is NOT BEING PACED by the
+beat/clock.** Normally the reader consumes only the events due at the current beat and blocks on the
+`0x81` beat marker; here it consumes the ENTIRE song instantly, runs off the end of the data into
+the zero fill, and 32 unrecognised bytes trip the corrupt-stream watchdog — which then issues the
+quantized stop that kills the transport as soon as it does arm. The song is destroyed before it ever
+gets a chance to play.
+
+This finally explains, coherently, why EVERY transport-level intervention failed: by the time the
+transport is armed the reader has already blown past the end of the song, so forcing lane values
+(`0x06`/`0x04`/arm `0x41E`/`0xf19e`/`0xD2F`) can never help — the watchdog re-trips within ~68 ms
+because the reader keeps racing the (already exhausted) stream.
+
+**NEXT:** find the reader's pacing gate — the `0x81` beat-marker handler and whatever "is this event
+due yet?" comparison it makes against the beat/tick counters (`0x417`/`0x41B`/`0x41C`, master tick
+`0x0460`). Determine why that comparison always says "due" while the transport is stopped and the
+beat clock is frozen at 0. Prime suspects: (i) the due-test compares against a counter that is 0 on
+both sides (0 >= 0 always true) so everything is "due"; (ii) the pump (`ef13a5` -> `f532e1`/`f53318`
+-> `f5804f` -> `f56751`) should not run at all while the transport is stopped, and its run-gate is
+mis-evaluated. Probe idea: tap the beat/tick cells and log the reader's due-comparison inputs at the
+first few event consumptions (t≈25.33), i.e. BEFORE the transport arms.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
