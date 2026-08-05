@@ -939,6 +939,48 @@ driver has comments about a "virgin NVRAM" growing a spurious `<Db>` and there i
 `nvram/kn5000_fresh_boot_error/` directory from an earlier session, so a fresh boot may surface the
 known power-down-NMI defect. That interaction must be understood before shipping the change.
 
+## ★★★★★★ UPDATE 26 — clean-DRAM re-baseline + the buffer is a PRODUCER/CONSUMER STREAM ★★★★★★
+
+The DRAM-persistence defect is FIXED and shipped (`86aae9e`, see UPDATE 25), so everything below is
+measured on honest cold-boot RAM.
+
+**1. The earlier trap findings SURVIVE.** Re-run on clean DRAM reproduces byte-identically: same
+`cell=0000 off=675B/677A`, same `phys=095C00`, same `@phys+off` bytes, same timing. The firmware
+regenerates this state deterministically, so contamination did not change the failure.
+
+**2. ✅ The pool is NOT dependent on the saved nvram — the firmware GENERATES it.** With volatile
+DRAM the pattern pool at `0x95C00` is written during boot by code at **PC ≈ `0xF5CF95`** and matches
+the old saved-nvram content **byte-for-byte** by t≈22 s. (The pool data appears in **no ROM**
+verbatim — searched program/table/custom/rhythm/subcpu down to 8-byte prefixes — so it is
+LZSS-decompressed/assembled at runtime. The nvram file was only a snapshot of that.)
+
+**3. ★ The buffer is a continuously-refilled STREAM, not a static song image.** Write-extent probe:
+```
+extent = 0x095C00 .. 0x09FFFE  (≈42 KB)      writes = 12,091,392 in ~16 s
+```
+That is **235 full rewrites of the whole 42 KB buffer** in 16 s = one complete refill per ~68 ms —
+exactly the pattern-restart period. The reader's address `0x9C35A` is INSIDE this buffer
+(12,096 writes landed next to it).
+
+**4. ★ The read pointer sits 14 bytes behind the END of the written data.** The refill writes real
+pattern data from offset 0 to ≈`0x6768` (`… 81 83` = beat, end-of-track) and leaves the rest of the
+42 KB as zeros; the read base is `0x675A` — i.e. **the consumer has all but caught up with the
+producer.**
+
+⇒ **NEW LEADING HYPOTHESIS: this is a PRODUCER/CONSUMER STREAM and the consumer overruns the
+producer.** The refill (producer) streams pattern bytes into the buffer; the reader (consumer)
+follows behind. When the consumer reaches the producer's write frontier it finds not-yet-written
+ZEROS, treats them as unrecognised opcodes, and 32 of them trip the corrupt-stream watchdog — which
+stops the transport. The producer's advance is presumably clock/transport-paced, so once the
+watchdog stops the transport the producer cannot advance either: a **deadlock**, restarting every
+~68 ms. This finally makes sense of the "reader races 26 KB in <1 ms" observation — it is not racing
+a finished song, it is draining the buffer faster than the producer refills it.
+
+**NEXT:** identify the producer (the refill writer, entry point near `PC 0xF5CF95` for the boot fill;
+find the per-cycle refill) and the "data available" gate the consumer should honour — i.e. what
+tells the reader "the producer has not written this far yet, wait" instead of consuming zeros.
+Compare producer frontier vs consumer position over time (tap both, plot the gap).
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
