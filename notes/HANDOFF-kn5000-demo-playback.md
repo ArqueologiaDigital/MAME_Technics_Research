@@ -84,11 +84,28 @@ again), so the index into `f5669a`/`f566aa` comes from the RECORD, not from `A`.
 One step still does not reconcile -- I compute HL=0x400 where the firmware used
 0x404 -- so treat the exact index chain as UNVERIFIED.
 
-**NEXT PROBE:** trace the inputs that select section 7 -- tap `(0x32d8)` and
-`(0x3338)` across the demo engage and compare against idle. If the demo should be
-running section 0 (or a section whose data exists in bank 0x1A), that is the defect.
-Also worth checking: does bank 0x1A legitimately have no section-7 data, i.e. should
-the firmware have fallen back rather than read past `0xE230`?
+**SECTION-SELECT CHAIN — NOW FULLY RESOLVED (measured 2026-08-05):**
+
+```
+f55f87:  A = (0x3305) & 3        ; 2-bit section REQUEST
+         (0x3338) = A            ; measured: 0 at idle, 3 at demo engage (PC F55F92)
+f56373 -> f563a2 -> f56402:  idx = f56413[req]   ; table 00 03 04 07
+                    f563e1/..:  A = f5646e[idx]  ; table 00 05 0A 0F 14 19 1E 23
+         -> written to (0x32a3..0x32a8), all six lanes
+```
+
+Request 3 -> index 7 -> section byte `0x23`. **That reconciles the arithmetic
+exactly** and closes the HL=0x400-vs-0x404 gap flagged above. `(0x32d8)` stays 0
+throughout and is NOT involved. Measured: idle = request 0 / section 0 (valid data);
+demo = request 3 / section 7, whose pointers `0xE754..0xFD29` are past bank 0x1A's
+data end `0xE230`.
+
+**THE REMAINING QUESTION** is now sharp and is the next probe: **why is `(0x3305)`
+3 during the demo, and does style 0x48 legitimately have no section 7?** Either
+(a) the style->bank mapping `(0x32e5)=0x48 -> (0x3285)=0x1A` is wrong, or (b) the
+firmware should clamp/fall back when the selected style has no data for the
+requested section. Tap `(0x3305)` across the engage and find its writer; then check
+whether other styles in bank 0x1A do have section-7 pointers in range.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
