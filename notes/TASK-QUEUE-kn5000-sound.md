@@ -24,7 +24,7 @@ These touch disjoint files/tools and can all run at once. The only shared resour
 | P4 | **Triage the 130 uncommitted `[UNCERTAIN]` findings** in `kn5000-roms-disasm/symbols/proposals/`. Several are real bugs, not naming quibbles: a claimed off-by-0x68 in the part-record base (region 12 measures 0x041368, region 4 says 0x041300); a possible 0xFF return from `Voice_Selector_FindBestSlot` used as a word-table subscript; an out-of-range table read in `Voice_ToneTableRamp_Down`; slot resolvers that store before bounds-checking. | no | pure analysis |
 | P5 | **~60 addresses where the build and the curated symbol reference disagree** (regions 5/7/8/12 enumerate them: 0x026769, 0x02684A, 0x026975, 0x026AAA, 0x026BDC, 0x026E5B, 0x026EC3, 0x0271BC, 0x027A46, …). Someone must pick one set deliberately. | no | do AFTER R1 lands to avoid conflicts |
 | P6 | **788 remaining `LABEL_` placeholders** in the ASL archive at addresses no region agent named — the honest remaining backlog. | no | do AFTER R1 |
-| P7 | **"Sound Name Error".** `fee694` writes the fallback string into the sound-name buffer when the lookup at `fee55a` fails — it scans records (byte 7 = sound number) and fails on the 0xFFFF end marker. So something requests a sound number that is not in the table. Never chased to the requester. | maybe | may have been a downstream symptom of the INT0 wedge — RE-CHECK IT STILL HAPPENS first |
+| P7 | ~~**"Sound Name Error"**~~ **CLOSED 2026-08-06 — not reproducible** (0 events in 514 s over 5 conditions incl. both historical deterministic bad cases; a forced one-byte control reproduces it exactly, so the detector is not blind). It was never a bad sound number: the value is a 7-bit inter-CPU REQUEST TAG and the "lookup" is a spin waiting for the SubCPU's tagged reply on channel 3 (DE=0x0E00 is a TIMEOUT, not a table size). Almost certainly downstream of the INT0 wedge fixed by 3fd44f3. See notes/FINDINGS-sound-name-error.md. Original text: `fee694` writes the fallback string into the sound-name buffer when the lookup at `fee55a` fails — it scans records (byte 7 = sound number) and fails on the 0xFFFF end marker. So something requests a sound number that is not in the table. Never chased to the requester. | maybe | may have been a downstream symptom of the INT0 wedge — RE-CHECK IT STILL HAPPENS first |
 | P8 | **Upstream the INT0 fix.** `3fd44f3` removes MAME's tmp94c241 acceptance-time /INT0 level re-assertion. It is a CPU-core fix affecting any tmp94c241 driver, so it belongs upstream. Follow the PR workflow (`MAME-PR-HANDOFF.md`, `tools/sync-check.sh`). | yes | also re-check commit c11209d's original motivation is still satisfied — it is (voice names verified present) |
 
 ## PENDING — NOT parallelisable / blocked on hardware
@@ -44,8 +44,11 @@ These touch disjoint files/tools and can all run at once. The only shared resour
 1. `ioport_field:set_value()` **TOGGLES** a `PORT_CONFNAME` field, it does not assign, and MAME
    persists the value in `cfg/*.cfg` — so you get `saved XOR arg`. Always use a PRIVATE
    `-cfg_directory` and VERIFY by reading the port back every second.
-2. `cfg/kn5000.cfg` also carries **AREA=2**, not MAME's default 6. Region changed whether the
-   old wedge reproduced at all. Always state which AREA a measurement used.
+2. ⚠ CORRECTED 2026-08-06: the PUBLISHED `kn7000-emulator/cfg/kn5000.cfg` carries **no AREA
+   override** — only TGMODE bit 1 and ENCODER=73. The AREA=2 was in the BUILD-TREE cfg at the
+   time. Region did change whether the old wedge reproduced, so still always state which AREA a
+   measurement used — but verify the cfg rather than assuming, and always use a private
+   `-cfg_directory`.
 3. Always `-seconds_to_run`, never a wall-clock `timeout`, when comparing two runs — otherwise
    they end at different machine times and diverge harmlessly. The emulator IS bit-deterministic.
 4. Always `rm -f nvram/kn5000/nvram1` first — 1 MB of work DRAM is persisted as NVRAM.
