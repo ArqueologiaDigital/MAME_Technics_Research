@@ -1109,3 +1109,123 @@ completion" from "the slideshow should run independently of the sequencer."
   T16RUN 0x9E, INTET01 0xE4, INTET45 0xE6).
 - Disassembly: `kn5000-roms-disasm/v10/maincpu/kn5000_v10_program.s` (labeled) and
   `kn7000_mame_build/roms/kn5000/kn5000_v10_program.asm` (hex addrs). INTTR5 handler 0xEF086A.
+
+---
+
+# Update 29 (2026-08-05) — ROOT CAUSE LOCATED: the style reader walks BLANK rhythm ROM
+
+This pass RETRACTS the whole "the pattern pool is empty" line of update 28 and replaces it.
+Every claim below was measured at runtime unless marked "static".
+
+## 29.1 RETRACTION — `F5CF95` is the watchdog's own cleanup, not a song fill
+
+`F5CF95` is inside `f5cf7e`, reached ONLY as `f568ba: call f5e931` -> `f5ce20` -> `f5ce24` ->
+`calr f5cf7e`. That is the **watchdog's "reset to an empty song"** routine: it memsets the composer
+pool from three ROM templates (`f5d340`, `f5d440`, `f5d540`).
+
+Consequence: the six-lane dump in update 28 was taken AFTER the wipe, so it was reading the
+*template*, not song data. Verified byte-for-byte — e.g. lane 4's "valid" `81 81 ... 81 83` is
+`f5d440[9..]`, and lane 6's `81 90 00 43 40 03 00` is `f5d340[0x2F..]`. **The "4 of 6 lanes are
+zeros" finding is an artifact of the failure, not its cause.** Do not re-chase it.
+
+Bucketing every DRAM writer by PC during the demo confirms it: the only writers of
+`0x94800..0xAB000` are `F5CF95/CFA1/CFC5`, `F5CE8F/CECD/CEE0` and `F64149` — all inside that reset.
+
+## 29.2 The pattern reader does NOT read DRAM at all
+
+`f58ff9` picks between two resolvers. When `(0x32e5) < 0x80` it takes `f59035`:
+`A=(0x3285); call f590a9`, and `f590a9` -> `f590b4` resolves through the table at `f590d1` =
+`0x00400000, 0x00410000, 0x00420000, ...` (0x10000 stride, 0x40 entries) — i.e. **the RHYTHM ROM
+IC14 (`0x400000..0x7FFFFF`)**, plus `(0x3277)` and `+0x8000`.
+
+`(XHL+IY)` indexes with a **signed** 16-bit offset, and `f56cd0` returns `ptr - 0x8000 + 6`, so the
+`0x8000` cancels and the effective read is simply:
+
+```
+read = 0x400000 + (0x3285)*0x10000 + ptr + 6        ; +6 skips the cell header 80 FF FF FF FF 87
+```
+
+`(0x32e5)` was 0x60 at idle and 0x48 during the demo — both < 0x80, so the demo is on the rhythm-ROM
+path. All earlier `0x95C00 + cell*256 + off` arithmetic (mine, in updates 26-28) was fiction.
+
+## 29.3 MEASURED: the demo reads blank ROM
+
+| | idle (control) | demo |
+|---|---|---|
+| `(0x32e5)` style | 0x60 | 0x48 |
+| `(0x3285)` bank | 0x23 | **0x1A** |
+| record `XIY=(0x32ce)` | 0x402800 | **0x407800** |
+| lane-1 base `(0x3287)` | 0xFBA4 | 0x675A |
+| resolved read | 0x647BA4 -> `00 90 00 30 42 0C ...` | **0x5AE75B -> `FF FF FF ...`** |
+| valid opcodes in next 32 | 6 | **0** |
+
+Bank 0x1A's last non-`FF` byte is at `0xE230`; the read offset is `0xE75B`. The reader therefore
+walks `0xFF`, which is not an opcode, 32 times -> `0x32ed` hits 0x20 -> `f568b6` -> stop + wipe.
+**The stream is blank ROM. Everything downstream of that is the firmware behaving correctly.**
+
+## 29.4 Where the pointers come from (static + measured)
+
+The style record lives IN the rhythm ROM. `f55fde` reads the bank from `(XIY+0x03D1)` and, per lane,
+`A=(0x32a3+i)` -> `f5657e` -> `HL = tbl[A]` -> `f56cd0` -> `ptr = (XIY + HL + 0x118 + 0x26*lane)`.
+
+`f5669a` = `0000 0002 0004 0006 0008 000A 000C 000E 0400 0402 0404 ...`, so A<=7 selects a variation
+block at record `+0x118` and A>=8 a second block at `+0x518`.
+
+- idle: pointers came from record offsets `118 13E 164 18A 1B0 1D6` => HL=0, **variation A=0**.
+- demo: pointers came from `51C 542 568 58E 5B4 5DA` => HL=0x404, **variation A=10**, all six lanes.
+
+The record's bank byte array at `+0x3D1` is `1A 3D 3D 0D 3D 3D 3D 3D 3D` (idle record: `23 3D 3D 0D
+...`). **Banks 0x38-0x3F are entirely `0xFF`, so `0x3D` is plainly a "no data" sentinel.**
+`f55fde` reads `(XIY+0x03D1)` with **no index** — it always takes byte 0 (variation 0's bank).
+
+## 29.5 Leading hypothesis + the next probe
+
+Variation 10's pointers (`E754 E754 EBDA F103 F6BB FD29`) are blank in bank 0x1A. Against bank 0x0D
+(= `+0x3D4`, index 3 of that array) lanes 1-3 decode cleanly (6/9/9 valid opcodes per 32 bytes) but
+lanes 4-6 are still past that bank's end (`0xEC2F`). So "the bank byte should be indexed by
+variation" is **suggestive but NOT established** — it explains 3 of 6 lanes.
+
+Two live candidates, in order:
+1. **`(0x32a3..0x32a8) = 10` is wrong for the demo.** Note `(0x332c) == 0x00` at the trip: every
+   lane-enable bit is CLEAR, so nothing should be sounding. `f56837`'s `bit n,(0x332c)` gates only
+   the per-lane *processing* call; the fetch/dispatch at `f567f0` runs regardless, so the watchdog
+   still counts on a stream nobody is playing. Find who writes `0x32a3..0x32a8` and why it is 10.
+2. **The bank byte is meant to be indexed** (by variation or by lane) and `f55fde` drops the index.
+   Decide this by finding the OTHER writers of `(0x3285)` — `f5620d`, `f5882c`, `f58ce0`, `f593ef` —
+   and checking whether one of them supplies a per-variation bank that never runs here.
+
+NEXT PROBE: tap writes to `0x32a3..0x32a8` and to `0x332c` across the demo engage, logging PC and
+value on change. That separates the two candidates directly.
+
+## 29.6 Bycatch — the demo song blob is FINE, and its format is decoded
+
+`f87189(18)` -> `ef41e3` decompresses entry `[18] = 0x8E0000` (`SLIDE4K`, uncompressed size `0x9500`
+at header `+8`) to **`0x69800`**, measured at t=24.19..24.38, ~34 KB. The blob is 96% non-zero and
+is a **16-track MIDI-like sequence**, NOT slide bitmaps:
+
+```
++0x1E  u16 track-enable mask (= 0xFFFF)
++0x20  16 x u8 track type      = 00 02 01 0B 0F 09 0A 03 04 05 06 07 11 12 13 0C
++0xD0  16 x {u8 flags, u16 start-cell}   (flags 0x80 = present)
++0x800 cell area
+```
+`f8712b` gives the cell walk: `addr = base + (cell-1)*256 + 5 + idx`, 250 payload bytes per 256-byte
+cell, `u16` next-cell link at cell`+3`, `0xFFFF` = end. `f86f48/f86f6d/f86f92/f86fb7/f86fdc` select
+`0x69800` for a ROM demo song vs **`0xAB000`** for the user's song.
+
+The 19-entry table at `0x9C4000` is fine once the interleave is right: `ROM_LOAD32_WORD` means a
+**4-byte** stride (even ic3 -> bytes 0,1; odd ic1 -> bytes 2,3). All 19 entries are valid `SLIDE4K`
+blobs; `[18] = 0x8E0000`. (An earlier 2-byte interleave produced "SILDEK4" and bogus pointers.)
+
+So the demo song player has its data. It is silenced only because the style reader's watchdog stops
+the shared transport (`0x420`), which `f86f2e: bit 2,(0x0420)` and the beat clock both depend on.
+
+## 29.7 Method notes
+
+- ⚠ **Lua taps must be held in a GLOBAL** (`_G.__taps[...]`). Stored in a local, they are
+  garbage-collected and silently stop firing — this produced an empty writer bucket that looked
+  exactly like "nothing writes here". Second time an instrument defect nearly caused a retraction.
+- ⚠ Filter taps by **value change**, not just by time window: hot idle loops (`F567AC`, `F56765`,
+  `F572BC`) write these cells at ~1 kHz and ate a 45-entry budget three runs in a row.
+- ⚠ `sed -n '/^addr:/,/^addr2:/p'` on the disassembly runs to EOF (11 MB) when the end label does
+  not exist. Use `grep -n` for the line number and a bounded `sed -n 'N,+Mp'`.
