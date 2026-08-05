@@ -52,6 +52,9 @@
 //   * the selected bank has no directory of its own and IC307's was substituted.
 // Enable by building with VERBOSE including (1U << 5), e.g. #define VERBOSE (LOG_BOUND).
 #define LOG_BOUND    (1U << 5)
+// Per-second voice census, used to prove that the PCM and sine render modes allocate
+// voices identically. Build with VERBOSE including (1U << 6).
+#define LOG_CENSUS   (1U << 6)
 
 #define VERBOSE (0)
 #include "logmacro.h"
@@ -349,6 +352,7 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 			// ~18 % amplitude — a hard stop there would ADD a click that today's guarded
 			// path does not have. R5 only becomes free once the chip's own release ramp is
 			// decoded; see notes/audit/kn5000-gaps-applied.md.
+			if (VERBOSE & LOG_CENSUS) m_census_clr[0]++;
 			m_voice[ch].eg_running = false;
 			process_key_off(ch);
 		}
@@ -1927,6 +1931,42 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		m_dsp1_wet[0] = m_dsp1_wet[1] = 0;
 	}
 
+	// Voice census (LOG_CENSUS): counted on the FIRST sample of each update only, so it
+	// costs nothing per sample, and reported once per second of machine time.
+	if (VERBOSE & LOG_CENSUS)
+	{
+		int n_active = 0, n_eg = 0, n_key = 0;
+		for (int ch = 0; ch < NUM_VOICES; ch++)
+		{
+			if (m_voice[ch].active)     n_active++;
+			if (m_voice[ch].eg_running) n_eg++;
+			if (m_voice[ch].key_on)     n_key++;
+		}
+		const double now = machine().time().as_double();
+		if (now - m_census_last >= 1.0)
+		{
+			m_census_last = now;
+			LOGMASKED(LOG_CENSUS, "tonegen census t=%.1f mode=%s active=%d eg_running=%d key_on=%d nopcm=%u\n",
+				now, sine_mode ? "SINE" : "PCM ", n_active, n_eg, n_key, m_census_nopcm);
+			LOGMASKED(LOG_CENSUS, "tonegen clears  keyoffcmd=%u norender=%u nopcm_ilock=%u release=%u interlock=%u\n",
+				m_census_clr[0], m_census_clr[1], m_census_clr[2], m_census_clr[3], m_census_clr[4]);
+			// Per-voice envelope state for the first few live voices: is the EG actually
+			// reaching silence, or was PCM decay hiding a stuck envelope?
+			int shown = 0;
+			for (int ch = 0; ch < NUM_VOICES && shown < 6; ch++)
+			{
+				const voice_t &q = m_voice[ch];
+				if (!q.active) continue;
+				shown++;
+				LOGMASKED(LOG_CENSUS, "   v%02d key=%d eg_run=%d eg_lvl=%7.2f tgt=%7.2f step=%9.6f seg=%d env=%3u rel=%u hold=%u sil=%u gain=%.6f\n",
+					ch, q.key_on ? 1 : 0, q.eg_running ? 1 : 0, q.eg_level, q.eg_target, q.eg_step,
+					q.eg_seg, q.env_level, q.release_counter, q.hold_counter, q.silent_samples,
+					double(eg_level_to_gain(q.eg_level)));
+			}
+			m_census_nopcm = 0;
+		}
+	}
+
 	for (int s = 0; s < stream.samples(); s++)
 	{
 		int32_t mix_l = 0;
@@ -1948,6 +1988,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (v.hold_counter == 0 && v.release_counter == 0)
 				{
 					v.active = false;
+					if (VERBOSE & LOG_CENSUS) m_census_clr[1]++;
 					v.eg_running = false;   // a voice that is no longer rendered is silent
 					continue;
 				}
@@ -1961,12 +2002,24 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// test would misread as "no data" -> silence. Scan a small window instead: a
 			// genuinely-missing (zero-filled) waveform stays 0 throughout, while any real
 			// waveform has a nonzero sample within a few.
-			// In sine mode the voice is audible by construction and the ROM must not be
-			// touched at all, so the probe is skipped rather than answered. Without this the
-			// whole mode ships silent: a failing probe diverts to a branch that `continue`s
-			// past all rendering.
-			bool has_pcm_data = sine_mode;
-			if (!sine_mode && v.wave_samples > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			// ⚠ THIS PROBE RUNS IN BOTH MODES, ON PURPOSE.
+			// It does not ask "what should this voice sound like", it asks "did this voice's
+			// wave selection resolve to a real recording at all" -- an ALLOCATION question.
+			// Its answer decides whether the voice takes the audible path (and so keeps
+			// eg_running set through the silence interlock) or the compact silent path (which
+			// clears eg_running), and eg_running is exactly what status_r() reports back to
+			// the firmware's voice manager.
+			//
+			// An earlier revision short-circuited it in sine mode so that every voice sounded.
+			// MEASURED consequence: voices that PCM mode retires were held forever, the
+			// firmware ran out of channels, and the Feature Demo went silent from ~t=40s while
+			// PCM mode played on. Keeping the probe shared makes voice allocation IDENTICAL in
+			// the two modes, which is what makes the A/B worth anything.
+			//
+			// So sine mode still reads these <=64 probe samples. That is a lifecycle decision,
+			// not audio: no PCM sample ever reaches the output in sine mode.
+			bool has_pcm_data = false;
+			if (v.wave_samples > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
 			{
 				uint32_t probe = std::min<uint32_t>(v.wave_samples, 64);
 				for (uint32_t k = 0; k < probe; k++)
@@ -1979,6 +2032,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 
 			if (!has_pcm_data)
 			{
+				if (VERBOSE & LOG_CENSUS) m_census_nopcm++;
 				// Voice without PCM data (missing ROM or wave_samples==0).
 				// Track timing efficiently without per-sample rendering.
 				// The chip still considers this voice "active" — it tracks the
@@ -2002,7 +2056,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				// It renders exactly nothing, so it IS silent: run the same interlock the
 				// audible path uses, so the firmware can reclaim the channel.
 				if (++v.silent_samples >= SILENT_HOLDOFF)
-					v.eg_running = false;
+				{ if (VERBOSE & LOG_CENSUS) m_census_clr[2]++; v.eg_running = false; }
 				if (!v.active)
 					v.eg_running = false;
 				continue;  // No audio output — skip sample rendering
@@ -2128,6 +2182,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (v.release_counter == 0 && v.hold_counter == 0)
 				{
 					v.active = false;
+					if (VERBOSE & LOG_CENSUS) m_census_clr[3]++;
 					v.eg_running = false;
 				}
 			}
@@ -2160,7 +2215,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (mag >= (int64_t(1) << 14))          // >= 0.5 LSB of the 16-bit output
 					v.silent_samples = 0;
 				else if (++v.silent_samples >= SILENT_HOLDOFF)
-					v.eg_running = false;
+				{ if (VERBOSE & LOG_CENSUS) m_census_clr[4]++; v.eg_running = false; }
 			}
 
 			// Advance position

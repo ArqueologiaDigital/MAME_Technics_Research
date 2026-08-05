@@ -386,6 +386,11 @@ private:
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
+
+	// LOG_CENSUS diagnostic only (VERBOSE bit 6); not save-stated, not load-bearing.
+	double   m_census_last  = -1e9;
+	uint32_t m_census_nopcm = 0;
+	uint32_t m_census_clr[5] = { 0, 0, 0, 0, 0 };
 	// diagnostics only, reported at device_stop
 	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
 	//  ★ §31: DSP input-stage clipping census (see kn5000_tonegen.cpp)
