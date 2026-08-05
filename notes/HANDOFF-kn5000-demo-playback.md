@@ -100,12 +100,40 @@ throughout and is NOT involved. Measured: idle = request 0 / section 0 (valid da
 demo = request 3 / section 7, whose pointers `0xE754..0xFD29` are past bank 0x1A's
 data end `0xE230`.
 
-**THE REMAINING QUESTION** is now sharp and is the next probe: **why is `(0x3305)`
-3 during the demo, and does style 0x48 legitimately have no section 7?** Either
-(a) the style->bank mapping `(0x32e5)=0x48 -> (0x3285)=0x1A` is wrong, or (b) the
-firmware should clamp/fall back when the selected style has no data for the
-requested section. Tap `(0x3305)` across the engage and find its writer; then check
-whether other styles in bank 0x1A do have section-7 pointers in range.
+**ORIGIN OF THE SECTION REQUEST — MEASURED:** `(0x3305)` has exactly ONE writer,
+`f53409`, inside a panel-sampling routine:
+
+```
+f533ff:  A = (0xFC61) ; A &= 0x30 ; A >>= 4 ; (0x3305) = A
+```
+
+so the request is **bits 4-5 of the control-panel mirror byte `0xFC61`** (that routine
+also samples 0xFC5E/0xFC60/0xFD99/0xFDAD). Measured timeline at demo engage:
+
+```
+t=24.40393  0xFC61 <- 0x30   PC=FF0DBC     <-- origin, both bits set
+t=24.51675  0x3305 <- 03     PC=F5340D
+t=24.51879  0x32E5 <- 48     (style)
+t=24.51883  0x3338 <- 03     (section request)
+t=24.51888  0x3285 <- 1A     (bank)
+```
+
+`FF0DBC` is a **bulk copy routine** -- the same PC seen in the pool-writer bucket
+writing `0x044000..0x056000` -- so `0xFC61=0x30` arrives as part of the demo loading a
+panel/registration snapshot. The demo therefore *legitimately* asks for variation 4 /
+section 7. Nothing here looks like a stray write.
+
+**THE REMAINING QUESTION:** style 0x48's record (`XIY=(0x32CE)=0x407800`) says bank
+`0x1A` at `+0x3D1`, yet its own section-7 pointers are `0xE754..0xFD29` while bank 0x1A's
+data ends at `0xE230` -- the record is **inconsistent with its own bank**. Prime
+suspicion is now the RECORD LOOKUP: `XIY` is set at `f55f9e: call f53d9a` with
+`A=(0x32E5)=0x48`, `H=(0x32E6)`. If that picks the wrong record, everything downstream
+is wrong-but-self-consistent, which is exactly what we observe.
+
+NEXT: (1) disassemble `f53d9a` and check how it maps style 0x48 -> record address;
+(2) scan the rhythm ROM's record directory for the record whose `+0x3D1` bank and
+section-7 pointers ARE mutually consistent, and see whether that record is the one
+style 0x48 should have selected. Also verify `(0x32E6)`, the second lookup input.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
