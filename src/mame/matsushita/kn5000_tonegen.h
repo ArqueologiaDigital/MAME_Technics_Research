@@ -55,6 +55,17 @@ public:
 	template <typename T> void set_dsp1(T &&tag) { m_dsp1.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_dsp1_enable_port(T &&tag) { m_dsp1_enable.set_tag(std::forward<T>(tag)); }
 
+	// ---- DIAGNOSTIC render mode ---------------------------------------------
+	// set_render_mode_port() names a driver ioport whose bit 0 chooses how a voice's
+	// raw sample is produced: 0 = real PCM out of the wave ROM (normal), 1 = a sine
+	// synthesised at the voice's own frequency, touching no wave-ROM PCM at all.
+	// EVERYTHING else -- note on/off, allocation, pitch tracking, the amplitude EG,
+	// the TVF, panning, the mixer, the silence interlock -- is the same code in both
+	// modes; the two differ at exactly one `if` in sound_stream_update(). That is the
+	// whole point: it isolates "is the glitch in the sample data / addressing?" from
+	// "is it in the machinery around it?". Unset or 0 means PCM.
+	template <typename T> void set_render_mode_port(T &&tag) { m_render_mode.set_tag(std::forward<T>(tag)); }
+
 	static constexpr int NUM_VOICES = 64;
 	static constexpr int NUM_GLOBAL_REGS = 16;
 
@@ -138,6 +149,15 @@ private:
 		                        // an undumped socket the chunk actually played is a substituted,
 		                        // unrelated recording. See resolve_note_group().
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
+		// ---- diagnostic sine mode only (see set_render_mode_port) ----------
+		// A DEDICATED accumulator, not a reuse of wave_offset: wave_offset has only
+		// 16 integer bits and is re-based on loop_start by the loop wrap, so it
+		// cannot free-run as a phase. Q32 turns gives a 48000/2^32 = 11 uHz quantum,
+		// i.e. sub-cent at every note; a 16.16 phase would be ~46 cents out at the
+		// bottom of the keyboard.
+		uint32_t sine_phase;    // Q32 turns, free-running
+		uint32_t sine_inc;      // Q32 turns per output sample = hz * 2^32 / STREAM_RATE
+		                        // 0 = this voice has no absolute pitch -> stays silent
 		int16_t  volume_l;      // Left  PAN gain, Q15 (0-32767) — from +0x180, see update_voice_params.
 		int16_t  volume_r;      // Right PAN gain, Q15 (0-32767). Loudness is the EG's job, not these.
 		uint32_t release_counter; // Samples remaining in release phase (0 = no release)
@@ -193,6 +213,8 @@ private:
 			wave_chunk = 0;
 			wave_real = false;
 			pitch_step = 0x10000; // 1.0 = native pitch
+			sine_phase = 0;
+			sine_inc = 0;
 			volume_l = 0;
 			volume_r = 0;
 			release_counter = 0;
@@ -289,6 +311,9 @@ private:
 	void process_key_on(int ch);
 	void process_key_off(int ch);
 	int16_t read_waveform_sample(uint32_t byte_offset) const;
+	// The sine mode's counterpart to read_waveform_sample(): same role, same output
+	// range, no ROM access.
+	int32_t sine_sample(uint32_t phase) const;
 	void resolve_waveform(int ch);
 
 	// Real-waveform selection from register +0x040 (= regs[1]) ONLY (chip boundary).
@@ -317,6 +342,20 @@ private:
 	static constexpr int EG_GAIN_TABLE = 4096;
 	float m_eg_gain[EG_GAIN_TABLE];
 
+	// ---- diagnostic sine oscillator ------------------------------------------
+	// SINE_PEAK is chosen to match the wave ROM's typical RMS, not its peak. MEASURED
+	// on the IC307 dump: the PCM is peak-normalised (median chunk peak 32713, 89.7% of
+	// 1495 chunks peaking >= 32000) with a median crest factor of 5.38 dB, so a
+	// peak-matched sine would sit ~6 dB hotter than the material it stands in for.
+	// Body RMS medians are 11364 / 10929 / 18652 / 3619 for pages 0..3; a 16384 peak
+	// gives RMS 11585, within 0.2 dB of the melodic multisample pages, and is a clean
+	// power of two that leaves headroom under the 0.85 softclip knee with 64 voices.
+	// ⚠ Sine and PCM mode are therefore NOT level-matched sample for sample -- see the
+	// mode banner in sound_stream_update().
+	static constexpr int     SINE_TABLE = 4096;
+	static constexpr int32_t SINE_PEAK  = 16384;
+	int16_t m_sine_tab[SINE_TABLE];
+
 	// State
 	uint16_t     m_addr_latch;           // Current register address
 	uint16_t     m_global_regs[NUM_GLOBAL_REGS]; // Global configuration
@@ -344,6 +383,9 @@ private:
 	// ---- IC311 effects-DSP send/return (see set_dsp1 above) -----------------
 	optional_device<upd6383_device> m_dsp1;
 	optional_ioport                 m_dsp1_enable;
+	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
+	// stream update, never cached in a member -- see set_render_mode_port above.
+	optional_ioport                 m_render_mode;
 	// diagnostics only, reported at device_stop
 	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
 	//  ★ §31: DSP input-stage clipping census (see kn5000_tonegen.cpp)

@@ -751,6 +751,20 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFSETTING(   0x03, "On + SPECULATIVE ISA (guessed semantics)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
+	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------
+	// Unconditional: unlike DSPCFG this gates no optional device, it selects between two
+	// code paths that are always present. PORT_CONFNAME, not PORT_DIPNAME, because it is
+	// an emulation research option and not a physical strap on the board.
+	//
+	// Sine mode renders every voice as a sine at that voice's own frequency, with the
+	// SAME envelope, filter, panning and mixing as normal, and reads no wave-ROM PCM at
+	// all. It exists to split "the glitch is in the sample data or its addressing" from
+	// "the glitch is in the machinery around it". See kn5000_tonegen.h.
+	PORT_START("TGMODE")
+	PORT_CONFNAME(0x01, 0x00, "Tone generator rendering (DIAGNOSTIC)")
+	PORT_CONFSETTING(   0x00, "PCM from wave ROM (normal)")
+	PORT_CONFSETTING(   0x01, "Sine test tone (no wave ROM PCM)")
+
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
 	PORT_DIPSETTING(   0x02, "Thailand, Indonesia, Iran, U.A.E., Panama, Argentina, Peru, Brazil")
@@ -1297,6 +1311,9 @@ void kn5000_state::kn5000(machine_config &config)
 #endif // KN5000_ENABLE_DSP1
 
 	KN5000_TONEGEN(config, m_tonegen, 0);
+	// Diagnostic PCM/sine render switch, live from the MAME menu. Outside the
+	// KN5000_ENABLE_DSP1 block below: it has nothing to do with the effects DSP.
+	m_tonegen->set_render_mode_port(":TGMODE");
 	// IC311 is a SEND/RETURN INSERT ON IC303, not an output-path device: IC303's
 	// SDOA/SDOB/SDO1 feed IC311's DI1/DI2/DI3 and IC311's DO1/DO2 come back into
 	// IC303's SDIA/SDIB, while the MAIN MIX leaves IC303 on SDO0 -> IC310 -> the

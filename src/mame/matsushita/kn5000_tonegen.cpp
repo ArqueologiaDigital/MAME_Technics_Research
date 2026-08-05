@@ -69,6 +69,7 @@ kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, cons
 	, m_waveform_size(0)
 	, m_dsp1(*this, finder_base::DUMMY_TAG)
 	, m_dsp1_enable(*this, finder_base::DUMMY_TAG)
+	, m_render_mode(*this, finder_base::DUMMY_TAG)
 {
 }
 
@@ -130,6 +131,13 @@ void kn5000_tonegen_device::device_start()
 		m_eg_gain[i] = (i == 0) ? 0.0f : float(std::pow(2.0, (L - 255.0) / 16.0));
 	}
 
+	// Diagnostic sine oscillator table (see SINE_PEAK in the header for how the
+	// amplitude was chosen). Tabulated + interpolated rather than calling std::sin per
+	// sample, mirroring m_eg_gain above: this mode exists to expose glitches, so its own
+	// distortion must stay far below anything that could be mistaken for one.
+	for (int i = 0; i < SINE_TABLE; i++)
+		m_sine_tab[i] = int16_t(std::lround(double(SINE_PEAK) * std::sin(2.0 * M_PI * double(i) / double(SINE_TABLE))));
+
 	// Save state
 	save_item(NAME(m_addr_latch));
 	save_item(NAME(m_global_regs));
@@ -150,6 +158,8 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].pitch_period), i);
 		save_item(NAME(m_voice[i].pitch_period_q16), i);
 		save_item(NAME(m_voice[i].pitch_step), i);
+		save_item(NAME(m_voice[i].sine_phase), i);
+		save_item(NAME(m_voice[i].sine_inc), i);
 		save_item(NAME(m_voice[i].volume_l), i);
 		save_item(NAME(m_voice[i].volume_r), i);
 		save_item(NAME(m_voice[i].release_counter), i);
@@ -1159,6 +1169,45 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	// to the target frequency, so pitch is decoupled from the recording's (un-stored) native
 	// root. See notes/kn5000-pitch-velocity.md and notes/kn5000-variant-applied.md.
 
+	// ---- the voice's ABSOLUTE musical frequency ---------------------------------------
+	// Computed FIRST and unconditionally. The PCM path below is free to give up early
+	// (an aperiodic recording, a missing reg[8]) and leave pitch_step at 1.0, but the
+	// diagnostic sine oscillator still needs a real frequency in exactly those cases --
+	// indeed they are the ones it is most useful for. Nothing below this block changed:
+	// pitch_step is still produced by the same arithmetic, in the same branches, with the
+	// same early-outs.
+	double freq = 0.0;
+	double note_f = 0.0;
+
+	if (v.true_note >= 0)
+	{
+		// Equal temperament, A4 (MIDI 69) = 440 Hz, plus the transpose/detune the +0x400
+		// register carries for this partial.
+		note_f = double(v.true_note) + v.pitch_offset;
+		freq = 440.0 * std::pow(2.0, (note_f - 69.0) / 12.0);
+	}
+	else if (v.regs[8] != 0)
+	{
+		// Fallback for voices with no correlated input (e.g. demo / rhythm) on a chunk whose
+		// trim is not known: use reg[8] as a global log-pitch (0x100 = 1 semitone). This is
+		// correct WITHIN a sample zone and monotonic; it can jump at zone boundaries, but it
+		// is far better than the former behaviour where every semitone collapsed to one
+		// pitch. Anchor chosen so a mid-range value lands near middle C.
+		//  ⚠ For SINE MODE this anchor is a convenience, not a measurement -- the per-chunk
+		//  root pitch is not decoded -- so the absolute pitch of auto-accompaniment voices
+		//  may be wrong, possibly by octaves. Only true_note >= 0 voices (keybed / MIDI) give
+		//  a trustworthy absolute Hz. Do not read an octave error here as a machinery bug.
+		double semis = (double(int(v.regs[8])) - double(0x3524)) / 256.0; // 0x100/semitone
+		freq = 261.63 * std::pow(2.0, semis / 12.0);                      // ref ≈ C4
+	}
+	// freq == 0.0 means this voice carries no pitch information at all. The sine then
+	// renders honest silence rather than an invented note; the silence interlock frees the
+	// voice normally.
+	v.sine_inc = (freq <= 0.0) ? 0u
+		: uint32_t(std::llround(std::min(freq, double(STREAM_RATE) / 2.0 - 1.0)
+				* 4294967296.0 / double(STREAM_RATE)));
+
+	// ---- PCM resampling ratio (unchanged) ---------------------------------------------
 	// An APERIODIC recording (drum, applause, noise — detect_period returned 0) has no
 	// fundamental, so "resample it so its fundamental lands on the played note" is not
 	// defined for it. Play it exactly as recorded. MEASURED: this is 16/198 of page 0 and
@@ -1170,32 +1219,10 @@ void kn5000_tonegen_device::update_pitch(int ch)
 		v.pitch_step = 0x10000;   // 1.0 = the recording's own rate
 		return;
 	}
-
-	double freq;
-	double note_f = 0.0;
-
-	if (v.true_note >= 0)
+	if (v.true_note < 0 && v.regs[8] == 0)
 	{
-		// Equal temperament, A4 (MIDI 69) = 440 Hz, plus the transpose/detune the +0x400
-		// register carries for this partial.
-		note_f = double(v.true_note) + v.pitch_offset;
-		freq = 440.0 * std::pow(2.0, (note_f - 69.0) / 12.0);
-	}
-	else
-	{
-		// Fallback for voices with no correlated input (e.g. demo / rhythm) on a chunk whose
-		// trim is not known: use reg[8] as a global log-pitch (0x100 = 1 semitone). This is
-		// correct WITHIN a sample zone and monotonic; it can jump at zone boundaries, but it
-		// is far better than the former behaviour where every semitone collapsed to one
-		// pitch. Anchor chosen so a mid-range value lands near middle C.
-		uint16_t r8 = v.regs[8];
-		if (r8 == 0)
-		{
-			v.pitch_step = 0x10000;
-			return;
-		}
-		double semis = (double(int(r8)) - double(0x3524)) / 256.0; // 0x100/semitone
-		freq = 261.63 * std::pow(2.0, semis / 12.0);               // ref ≈ C4
+		v.pitch_step = 0x10000;
+		return;
 	}
 
 	// The recording's fundamental period is pitch_period samples, so advancing the
@@ -1766,6 +1793,7 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	v.eg_running = true;
 	v.silent_samples = 0;
 	v.wave_offset = 0;
+	v.sine_phase = 0;          // diagnostic sine mode: same gate, same re-initialisation
 	v.release_counter = 0;
 	v.hold_counter = 0;
 	v.env_level = 0xFF; // see the hand-off discussion in data_w()
@@ -1832,6 +1860,20 @@ int16_t kn5000_tonegen_device::read_waveform_sample(uint32_t byte_offset) const
 }
 
 
+// The diagnostic sine mode's counterpart to read_waveform_sample(): same role in the
+// pipeline, same output range, no ROM access. `phase' is Q32 turns; the table is indexed
+// by the top 12 bits and the next 16 interpolate, so the residual distortion is far below
+// anything that could be mistaken for a rendering glitch.
+int32_t kn5000_tonegen_device::sine_sample(uint32_t phase) const
+{
+	const uint32_t idx  = phase >> 20;
+	const int32_t  a    = m_sine_tab[idx];
+	const int32_t  b    = m_sine_tab[(idx + 1) & (SINE_TABLE - 1)];
+	const int32_t  frac = int32_t((phase >> 4) & 0xFFFF);
+	return a + ((b - a) * frac) / 65536;
+}
+
+
 //-----------------------------------------------------------------------
 // Sound stream update — mix all active voices into stereo output
 //-----------------------------------------------------------------------
@@ -1853,6 +1895,25 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// is bit-identical to today's `mix_l'.
 	const u8 dspcfg = u8(m_dsp1_enable.read_safe(0));
 	const bool dsp_on = m_dsp1.found() && (dspcfg & 1);
+	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
+	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
+	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
+	// sample, and it can be flipped from the MAME menu mid-note with one update of latency.
+	//
+	// The two modes differ at EXACTLY ONE `if` below, around the sample-generation seam.
+	// Everything else -- voice allocation, note on/off, pitch tracking, the amplitude EG,
+	// the TVF, panning, the mixer, the R2s silence interlock -- is literally the same code,
+	// which is what makes an A/B meaningful: it separates "the sample data or its
+	// addressing is wrong" from "the machinery around it is wrong".
+	//
+	// ⚠ TWO THINGS THE A/B DOES NOT HOLD CONSTANT, by construction:
+	//  * LOUDNESS. The wave ROM is peak-normalised with a ~5.4 dB median crest factor, so a
+	//    sine matched to its RMS is ~6 dB below it in peak. See SINE_PEAK in the header.
+	//  * VOICE ALLOCATION. Voices whose PCM probe finds silence are skipped entirely in PCM
+	//    mode but SOUND in sine mode, so eg_running -- which status_r reports back to the
+	//    firmware's voice manager -- can differ. A sine-mode capture is a faithful proxy for
+	//    the pitch/envelope/mix machinery, NOT for voice allocation.
+	const bool sine_mode = (m_render_mode.read_safe(0) & 1) != 0;
 	//  ★ bit 1 = the SPECULATIVE ISA (guessed semantics).  See kn5000.cpp DSPCFG.
 	if (m_dsp1.found())
 		m_dsp1->set_speculative((dspcfg & 2) != 0);
@@ -1900,8 +1961,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// test would misread as "no data" -> silence. Scan a small window instead: a
 			// genuinely-missing (zero-filled) waveform stays 0 throughout, while any real
 			// waveform has a nonzero sample within a few.
-			bool has_pcm_data = false;
-			if (v.wave_samples > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
+			// In sine mode the voice is audible by construction and the ROM must not be
+			// touched at all, so the probe is skipped rather than answered. Without this the
+			// whole mode ships silent: a failing probe diverts to a branch that `continue`s
+			// past all rendering.
+			bool has_pcm_data = sine_mode;
+			if (!sine_mode && v.wave_samples > 0 && m_waveform_data && v.wave_start + 1 < m_waveform_size)
 			{
 				uint32_t probe = std::min<uint32_t>(v.wave_samples, 64);
 				for (uint32_t k = 0; k < probe; k++)
@@ -1951,48 +2016,62 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// [loop_start,loop_end). The loop length is an integer number of fundamental
 			// periods (compute_loop), so the seam is pitch-continuous and there is no
 			// buzzy single-cycle artefact. Positions are 16.16 fixed point.
-			uint32_t loop_len = (v.loop_end > v.loop_start) ? (v.loop_end - v.loop_start) : 0;
-			uint32_t sample_pos = v.wave_offset >> 16;
-			uint32_t frac = v.wave_offset & 0xFFFF;
-
-			if (sample_pos >= v.loop_end)
+			// ---- THE SEAM: the ONE place the two render modes differ ------------------
+			// Everything above and everything below is shared verbatim. Sine mode reads no
+			// wave-ROM PCM and uses no wave geometry -- not wave_offset, not the loop, not
+			// wave_samples -- only its own Q32 phase, advanced by an increment derived from
+			// the same absolute frequency the PCM path resamples to (see update_pitch).
+			int32_t sample;
+			if (sine_mode)
 			{
-				// Reached the end of the play-through / loop region -> wrap back into the
-				// sustain loop, preserving fractional phase (no glitch). If there is no
-				// usable loop, snap to the loop start (or 0). This runs whether or not the
-				// key is still down; the release/hold counters below handle deactivation,
-				// so a released note keeps sounding (faded) instead of cutting abruptly.
-				if (loop_len)
-				{
-					uint32_t base = v.loop_start << 16;
-					uint32_t span = loop_len << 16;
-					v.wave_offset = base + ((v.wave_offset - base) % span);
-				}
-				else
-				{
-					v.wave_offset = v.loop_start << 16;
-				}
-				sample_pos = v.wave_offset >> 16;
-				frac = v.wave_offset & 0xFFFF;
+				sample = sine_sample(v.sine_phase);
+				v.sine_phase += v.sine_inc;   // free-running; sine_inc == 0 => silence
 			}
-
-			// Real IC307 PCM, linearly interpolated (16.16 fixed point). At the loop tail
-			// the "next" sample wraps to loop_start so interpolation stays continuous.
-			int32_t s0, s1;
+			else
 			{
-				if (sample_pos >= v.wave_samples)          // safety clamp
-					sample_pos = v.wave_samples ? v.wave_samples - 1 : 0;
-				uint32_t byte_pos = v.wave_start + sample_pos * 2;
-				s0 = read_waveform_sample(byte_pos);
-				uint32_t next_pos = sample_pos + 1;
-				if (loop_len && next_pos >= v.loop_end)
-					next_pos = v.loop_start;               // wrap interp to loop start
-				if (next_pos >= v.wave_samples)
-					next_pos = v.wave_samples ? v.wave_samples - 1 : 0;
-				s1 = read_waveform_sample(v.wave_start + next_pos * 2);
-			}
+				uint32_t loop_len = (v.loop_end > v.loop_start) ? (v.loop_end - v.loop_start) : 0;
+				uint32_t sample_pos = v.wave_offset >> 16;
+				uint32_t frac = v.wave_offset & 0xFFFF;
 
-			int32_t sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
+				if (sample_pos >= v.loop_end)
+				{
+					// Reached the end of the play-through / loop region -> wrap back into the
+					// sustain loop, preserving fractional phase (no glitch). If there is no
+					// usable loop, snap to the loop start (or 0). This runs whether or not the
+					// key is still down; the release/hold counters below handle deactivation,
+					// so a released note keeps sounding (faded) instead of cutting abruptly.
+					if (loop_len)
+					{
+						uint32_t base = v.loop_start << 16;
+						uint32_t span = loop_len << 16;
+						v.wave_offset = base + ((v.wave_offset - base) % span);
+					}
+					else
+					{
+						v.wave_offset = v.loop_start << 16;
+					}
+					sample_pos = v.wave_offset >> 16;
+					frac = v.wave_offset & 0xFFFF;
+				}
+
+				// Real IC307 PCM, linearly interpolated (16.16 fixed point). At the loop tail
+				// the "next" sample wraps to loop_start so interpolation stays continuous.
+				int32_t s0, s1;
+				{
+					if (sample_pos >= v.wave_samples)          // safety clamp
+						sample_pos = v.wave_samples ? v.wave_samples - 1 : 0;
+					uint32_t byte_pos = v.wave_start + sample_pos * 2;
+					s0 = read_waveform_sample(byte_pos);
+					uint32_t next_pos = sample_pos + 1;
+					if (loop_len && next_pos >= v.loop_end)
+						next_pos = v.loop_start;               // wrap interp to loop start
+					if (next_pos >= v.wave_samples)
+						next_pos = v.wave_samples ? v.wave_samples - 1 : 0;
+					s1 = read_waveform_sample(v.wave_start + next_pos * 2);
+				}
+
+				sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
+			}
 
 			// ---- Per-voice TVF (filter / brightness) from +0x100 -------------------------
 			// One-pole low-pass whose cutoff the firmware computed from the patch's base
