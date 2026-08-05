@@ -14,6 +14,7 @@
 #define LOG_DMA    (1U << 1)
 #define LOG_SERIAL (1U << 2)
 #define LOG_IRQ    (1U << 3)
+#define LOG_DMACNT (1U << 4)  // every micro-DMA unit transfer, with the count before/after
 
 #define VERBOSE (0)
 #include "logmacro.h"
@@ -382,6 +383,9 @@ void tmp94c241_device::intclr_w(uint8_t data)
 
 void tmp94c241_device::dmav_w(offs_t offset, uint8_t data)
 {
+	LOGMASKED(LOG_DMACNT, "t=%.6f  DMA%dV %02X -> %02X (dmac=%u) PC=%06X\n",
+		machine().time().as_double(), int(offset), m_dma_vector[offset], data,
+		m_dmac[offset].w.l, m_pc.d);
 	m_dma_vector[offset] = data;
 }
 
@@ -1127,6 +1131,10 @@ int tmp94c241_device::tlcs900_process_hdma(int channel)
 	}
 
 	// Decrement transfer count
+	LOGMASKED(LOG_DMACNT, "t=%.6f  HDMA ch%d vec=%02X dmac %u->%u src=%06X dst=%06X PC=%06X\n",
+		machine().time().as_double(), channel, start_vector,
+		m_dmac[channel].w.l, m_dmac[channel].w.l - 1,
+		m_dmas[channel].d, m_dmad[channel].d, m_pc.d);
 	m_dmac[channel].w.l -= 1;
 
 	// Check for transfer completion
@@ -1169,7 +1177,11 @@ int tmp94c241_device::tlcs900_process_hdma(int channel)
 void tmp94c241_device::tlcs900_process_software_dma(int channel)
 {
 	if (m_dmac[channel].w.l == 0)
+	{
+		LOGMASKED(LOG_DMACNT, "t=%.6f  DMAR ch%d IGNORED (count already 0) PC=%06X\n",
+			machine().time().as_double(), channel, m_pc.d);
 		return;  // No transfer to do
+	}
 
 	uint8_t dmam = m_dmam[channel].b.l;
 
@@ -1229,6 +1241,10 @@ void tmp94c241_device::tlcs900_process_software_dma(int channel)
 		break;
 	}
 
+	LOGMASKED(LOG_DMACNT, "t=%.6f  DMAR ch%d dmac %u->%u src=%06X dst=%06X PC=%06X\n",
+		machine().time().as_double(), channel,
+		m_dmac[channel].w.l, m_dmac[channel].w.l - 1,
+		m_dmas[channel].d, m_dmad[channel].d, m_pc.d);
 	m_dmac[channel].w.l -= 1;
 
 	// Check for transfer completion
@@ -1346,6 +1362,9 @@ void tmp94c241_device::tlcs900_check_irqs()
 			LOGMASKED(LOG_IRQ, "IRQ: INTTC0 (DMA ch0 done) level=%d PC=%06X\n", level, m_pc.d);
 		else if (vector == 0x9c)
 			LOGMASKED(LOG_IRQ, "IRQ: INTTC2 (DMA ch2 done) level=%d PC=%06X\n", level, m_pc.d);
+		else if (vector == 0x28)
+			LOGMASKED(LOG_IRQ, "t=%.6f  IRQ: INT0 accepted level=%d retPC=%06X sr=%04X\n",
+				machine().time().as_double(), level, m_pc.d, m_sr.w.l);
 
 		m_xssp.d -= 4;
 		WRMEML(m_xssp.d, m_pc.d);
@@ -1365,60 +1384,41 @@ void tmp94c241_device::tlcs900_check_irqs()
 		// Clear taken IRQ
 		m_int_reg[irq_vector_map[irq].reg] &= ~ irq_vector_map[irq].iff;
 
-		// INT0 level-detect re-assertion (the KN5000 "Sound Name Error" fix).
+		// /INT0 delivers EXACTLY ONE interrupt request per assertion of the pin.
 		//
-		// /INT0 is level-triggered: on real hardware the flag is continuously
-		// driven by the pin, which stays asserted until the inter-CPU latch is
-		// actually read. In MAME the external de-assert goes through
-		// set_input_line() → synchronize(), so it does not take effect until the
-		// end of the timeslice; taking the IRQ clears the flag above, leaving a
-		// window in which the pin is still asserted but no flag is pending.
+		// There used to be a "level-detect re-assertion" here: on taking INT0, if
+		// m_level[TLCS900_INT0] was still ASSERT_LINE and no HDMA channel owned the
+		// INT0 start vector, INTE0AD bit 3 was set again, on the theory that a
+		// level-triggered pin keeps re-raising the flag until the source device is
+		// read.  It was added because generic_latch de-asserts through
+		// set_input_line() → synchronize(), which leaves m_level stale until the end
+		// of the timeslice; drivers now fix that at the source by calling
+		// clear_int0_level() synchronously from the read handler.
 		//
-		// The receive protocol alternates between two consumers of /INT0:
-		//   * ISR-driven (ch0 NOT armed for INT0): the INT0 handler reads one
-		//     header byte and arms HDMA ch0 for the body. Its three paths are
-		//       1. MSTAT1=0           → triggers DMAR to read the latch, RETI
-		//       2. MSTAT1=1,SSTAT0=0  → reads the latch directly, RETI
-		//       3. MSTAT1=1,SSTAT0=1  → RETI WITHOUT reading (handshake not ready)
-		//     In path 3 the byte is still pending and the pin is still asserted,
-		//     so the flag MUST be re-asserted or the ISR never re-runs and the
-		//     receive stalls — the SubCPU then idles, its cooperative scheduler
-		//     leaks its stack (INTT3) down into the code region, and the sound-
-		//     name handler is overwritten → "Sound Name Error".
-		//   * HDMA-driven (ch0 armed for INT0, vector 0x0a): the DMA engine
-		//     consumes each /INT0 and manages the flag lifecycle itself. We must
-		//     NOT re-assert here, or HDMA would perform spurious reads of stale
-		//     latch data.
+		// Measured on the KN5000 (sub->main inter-CPU latch, 40 s of the Feature
+		// Demo): 59300 latch bytes produced 59302 INT0 dispatches, i.e. the
+		// re-assertion changed the outcome exactly twice -- and both times it was a
+		// DUPLICATE dispatch of the receive ISR for a byte the FIRST dispatch had
+		// already been given but not yet read.  That ISR is not re-entrant: it tests
+		// its two handshake bits at 0xEF3525/0xEF3536 and only reads the latch three
+		// instructions later at 0xEF353D.  When the firmware's RTOS tick (INTT0) or
+		// INTALM3 preempts it in that gap, their `ei 0x00 / nop / ei 0x06' sequence
+		// deliberately re-opens the mask, the re-asserted request is taken as a
+		// second, nested dispatch which consumes the header, and the suspended first
+		// dispatch then resumes and parses a PAYLOAD byte as a header -- re-arming
+		// micro-DMA ch0 for a count that can never complete, so MSTAT1 is never
+		// raised again and the channel wedges permanently.
 		//
-		// So re-assert ONLY when no HDMA channel is stealing INT0. This restores
-		// the behaviour of the last-known-good kn5000_aided_by_claude state at
-		// 2026-02-17 (commit f8cd34a8); the branch tip (3ea9904, 2026-03-09) had
-		// dropped the guard and removed the re-assertion entirely — which is the
-		// state the upstream-cleanup rebase and the earlier kn5000-27 "parity"
-		// fix mistakenly matched, reproducing the freeze. An unconditional
-		// re-assert (no guard) is equally wrong: it spuriously re-fires during
-		// HDMA body transfers. See side-quests/findings/kn5000_driver_findings.md.
-		if (irq_vector_map[irq].reg == INTE0AD &&
-			irq_vector_map[irq].iff == 0x08 &&
-			!(m_iimc & 0x02) &&
-			m_level[TLCS900_INT0] == ASSERT_LINE)
-		{
-			// Only the ISR-driven path re-asserts; skip when HDMA owns INT0.
-			bool hdma_steals_int0 = false;
-			for (int ch = 0; ch < 4; ch++)
-			{
-				if (m_dma_vector[ch] == 0x0a) // INT0 DMA start vector
-				{
-					hdma_steals_int0 = true;
-					break;
-				}
-			}
-			if (!hdma_steals_int0)
-			{
-				m_int_reg[INTE0AD] |= 0x08;
-				m_check_irqs = 1;
-			}
-		}
+		// With the re-assertion gone the counts are exactly 1:1:1 (latch writes :
+		// INT0 dispatches : latch reads = 64161 over 60 s), the wedge does not
+		// occur in either Area setting, and the play screen still shows the real
+		// voice names (Piano / Bigband Brass / Modern E.P.1) that the re-assertion
+		// had been restored to protect in commit c11209d.
+		//
+		// ⚠ UNVERIFIED: the electrical nature of /INT0 on the KN5000 board (IC22 /
+		// IC23) has not been read off a schematic.  If that pin really is a held
+		// level rather than one request per latch write, then the race above is the
+		// firmware's own and real hardware only survives it on probability.
 
 		// Compute the default priority index from the vector table.
 		// The datasheet's "default priority" numbering is vector/4 + 1,

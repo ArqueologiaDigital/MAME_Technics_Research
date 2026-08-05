@@ -176,6 +176,9 @@ namespace {
 #define LOG_HANDSHAKE (1U << 3) // MSTAT/SSTAT handshake changes
 #define LOG_RESET    (1U << 4)  // Sub CPU reset control
 #define LOG_KEYBED   (1U << 5)  // Tone generator keybed HLE events
+#define LOG_FRAMING  (1U << 6)  // Inter-CPU framing forensics: every latch byte in and out,
+                                // with the receiver's micro-DMA count, plus every write that
+                                // lands on a byte the receiver has not consumed yet.
 #define LOG_ALL_LATCH (LOG_LATCH | LOG_LATCH_DATA)
 
 #define VERBOSE (LOG_LATCH | LOG_RESET)
@@ -423,6 +426,18 @@ uint8_t kn5000_state::subcpu_latch_r()
 uint8_t kn5000_state::maincpu_latch_r()
 {
 	uint8_t const val = m_maincpu_latch->read();
+	if (VERBOSE & LOG_FRAMING)
+	{
+		// PC 0xEF3542 == the MainCPU INT0 ISR's own `ld A,(0x140000)' at 0xEF353D, i.e.
+		// the HEADER path.  Taking it while MSTAT1 is already low means the receiver is
+		// parsing a payload byte as a header -- the framing slip that wedges the channel.
+		u32 const pc = m_maincpu->pc();
+		bool const misframe = (pc == 0xef3542) && !BIT(m_mstat, 1);
+		LOGMASKED(LOG_FRAMING, "t=%.6f  MAIN latch_r %02X  PC=%06X dmac0=%u dmav0=%02X%s\n",
+			machine().time().as_double(), val, pc,
+			m_maincpu->dbg_dmac(0), m_maincpu->dbg_dmav(0),
+			misframe ? "  *** MISFRAME: header path with MSTAT1 low ***" : "");
+	}
 	m_maincpu->clear_int0_level();
 	return val;
 }
@@ -475,7 +490,16 @@ void kn5000_state::maincpu_latch_w(uint8_t data)
 	// each write raise a fresh /INT0.
 	machine().scheduler().perfect_quantum(attotime::from_usec(100));
 
-	if (m_maincpu_latch->pending_r())
+	// A write that lands while the previous byte is still unread is a lost byte: log it.
+	// (Measured zero times over 40 s of the Feature Demo -- this is NOT how the channel
+	// wedges, contrary to a long-standing hypothesis.)
+	bool const stale = m_maincpu_latch->pending_r();
+	if (VERBOSE & LOG_FRAMING)
+		LOGMASKED(LOG_FRAMING, "t=%.6f  SUB latch_w %02X  subPC=%06X dmac2=%u %sdmac0=%u\n",
+			machine().time().as_double(), data, m_subcpu->pc(), m_subcpu->dbg_dmac(2),
+			stale ? "*** LANDS ON AN UNREAD BYTE *** " : "", m_maincpu->dbg_dmac(0));
+
+	if (stale)
 		m_maincpu_latch->acknowledge_w(0);
 
 	m_maincpu_latch->write(data);
@@ -1089,6 +1113,21 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 7 = (input) COM.MIDI
 	m_maincpu->portz_read().set(
 			[this] {
+				// Framing forensics: report what the sub->main receive ISR actually
+				// sees on its two gate bits (MSTAT1 = bit 1, SSTAT0 = bit 2) at the
+				// moment it decides header-vs-payload.  Restricted to the ISR's own
+				// PC window so this stays cheap.
+				if (VERBOSE & LOG_FRAMING)
+				{
+					u32 const pc = m_maincpu->pc();
+					if (pc >= 0xef3520 && pc <= 0xef3550)
+						LOGMASKED(LOG_FRAMING, "t=%.6f  PZ_r PC=%06X ext=%02X latch=%02X pzcr=%02X mstat=%u sstat=%u\n",
+							machine().time().as_double(), pc,
+							m_com_select->read() | (m_sstat << 2),
+							m_maincpu->dbg_port_latch(17),
+							m_maincpu->dbg_port_control(17),
+							m_mstat, m_sstat);
+				}
 				// bits 0-1: MSTAT — the MainCPU's own outputs; do NOT OR them into
 				//   the read here.  The last-known-good state
 				//   (kn5000_aided_by_claude @ 2026-02-17, commit f8cd34a8) reads back
@@ -1118,7 +1157,7 @@ void kn5000_state::kn5000(machine_config &config)
 				// run anything else. Its transitions are what to look at first when
 				// sub->main traffic goes to zero.
 				if (m_mstat != prev)
-					LOGMASKED(LOG_HANDSHAKE, "t=%.4f MSTAT %u -> %u (MSTAT1=%u) PC=%06X\n",
+					LOGMASKED(LOG_HANDSHAKE, "t=%.6f MSTAT %u -> %u (MSTAT1=%u) PC=%06X\n",
 						machine().time().as_double(), prev, m_mstat, BIT(m_mstat, 1), m_maincpu->pc());
 			});
 
@@ -1192,7 +1231,7 @@ void kn5000_state::kn5000(machine_config &config)
 				// MAIN->SUB direction (the MainCPU polls it as Port Z bit 3) and SSTAT0
 				// is its per-chunk acknowledge.
 				if (m_sstat != prev)
-					LOGMASKED(LOG_HANDSHAKE, "t=%.4f SSTAT %u -> %u (SSTAT1=%u) PC=%06X\n",
+					LOGMASKED(LOG_HANDSHAKE, "t=%.6f SSTAT %u -> %u (SSTAT1=%u) PC=%06X\n",
 						machine().time().as_double(), prev, m_sstat, BIT(m_sstat, 1), m_subcpu->pc());
 			});
 

@@ -131,6 +131,14 @@ public:
 	// the stale ASSERT_LINE and re-raise the flag for the rest of the timeslice.
 	void clear_int0_level();
 
+	// Read-only forensics accessors for drivers that need to correlate an external
+	// event with the state of a micro-DMA channel (KN5000 inter-CPU framing trace).
+	// No side effects; safe to call from a memory handler.
+	uint16_t dbg_dmac(int channel) const { return m_dmac[channel].w.l; }
+	uint8_t dbg_dmav(int channel) const { return m_dma_vector[channel]; }
+	uint8_t dbg_port_latch(int port) const { return m_port_latch[port]; }
+	uint8_t dbg_port_control(int port) const { return m_port_control[port]; }
+
 protected:
 	// device_t implementation
 	virtual void device_config_complete() override ATTR_COLD;
