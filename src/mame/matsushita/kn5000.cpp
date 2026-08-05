@@ -16,6 +16,32 @@
 #include "cpu/tlcs900/tmp94c241.h"
 #include "cpu/upd6383/upd6383.h"
 #include "imagedev/floppy.h"
+
+// ---------------------------------------------------------------------------
+// KN5000_ENABLE_DSP1 -- compile-time switch for the IC311 effects DSP (uPD6383).
+//
+//   0 (DEFAULT) the uPD6383 device is not instantiated at all. No AS_DELAY
+//               address space, no host-interface routing from the sub-CPU, no
+//               microcode capture file at exit, and the tone generator's
+//               send/return insert is never wired up -- IC303's mix goes
+//               straight to the speakers. Build this unless you are actively
+//               reverse-engineering the DSP.
+//   1           the device exists, exactly as before. The runtime "DSPCFG" port
+//               still gates whether it is allowed to touch the audio, and still
+//               defaults to Off.
+//
+//   make ... CPPFLAGS=-DKN5000_ENABLE_DSP1=1
+//
+// ⚠ This switch does NOT change what you hear in the default build. The DSP was
+// already gated off at runtime by DSPCFG: `dsp_on' is false, run_frame() is never
+// called, and the wet accumulators stay at literal 0, so the stream is already
+// softclip(mix + 0) and already pays nothing per sample. The switch removes the
+// DEVICE, not an audio contribution -- it exists so a build can be proven free of
+// the incomplete core rather than merely configured to ignore it.
+// ---------------------------------------------------------------------------
+#ifndef KN5000_ENABLE_DSP1
+#define KN5000_ENABLE_DSP1 0
+#endif
 #include "diserial.h"                 // device_serial_interface (MIDI->keybed UART)
 #include "machine/gen_latch.h"
 #include "machine/nvram.h"
@@ -241,7 +267,9 @@ private:
 	// DISABLED: the host interface is exercised and the uploaded microcode
 	// lands in a real I-RAM, but the instruction set is not decoded, so
 	// nothing executes and there is no audio from it.
-	required_device<upd6383_device> m_dsp1;
+	// OPTIONAL because KN5000_ENABLE_DSP1=0 leaves it out of the machine config
+	// entirely; every use must therefore be guarded by found().
+	optional_device<upd6383_device> m_dsp1;
 	required_ioport m_com_select;
 	required_device<kn5000_extension_connector> m_extension;
 
@@ -272,7 +300,9 @@ private:
 	// I-RAM, C-RAM and D-RAM are all on-die and are mapped by the device
 	// itself; this one is a separate chip on this board, driven by the DSP's
 	// own RAS/CAS/WE and A0-A16 lines, so it is the driver's to provide.
+#if KN5000_ENABLE_DSP1
 	void dsp1_delay_map(address_map &map) ATTR_COLD;
+#endif
 
 	// Latch access wrappers
 	uint8_t subcpu_latch_r();
@@ -612,6 +642,7 @@ uint16_t kn5000_state::dsp_reg_data_r()
 
 // --- IC311 (uPD6383GF) external digital-delay DRAM -------------------------
 
+#if KN5000_ENABLE_DSP1
 void kn5000_state::dsp1_delay_map(address_map &map)
 {
 	// IC309 = M5M44260AJ-7S (Felipe, verified): a Mitsubishi 4-Mbit
@@ -668,6 +699,7 @@ void kn5000_state::dsp1_delay_map(address_map &map)
 	// confirm they really are unconnected -- the scan says so, but it is a scan.
 	map(0x00000, 0x1ffff).ram();      // 128K words x 16 bits -- see above, 17 or 18 bits is OPEN
 }
+#endif // KN5000_ENABLE_DSP1
 
 
 static void kn5000_floppies(device_slot_interface &device)
@@ -706,6 +738,7 @@ static INPUT_PORTS_START(kn5000)
 	// is still unknown, which counts against the frame exactly like a trap. So today
 	// every frame is still discarded and the audio is exactly the dry mix either way.
 	// See notes/dsp-audiopath-wired.md and notes/dsp-closure-applied.md.
+#if KN5000_ENABLE_DSP1
 	PORT_START("DSPCFG")
 	PORT_CONFNAME(0x03, 0x00, "Effects DSP IC311 (EXPERIMENTAL - incomplete ISA)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
@@ -716,6 +749,7 @@ static INPUT_PORTS_START(kn5000)
 	//  is heard with them is NOT known to be right.  See upd6383d.h
 	//  alu_decoded_speculative().
 	PORT_CONFSETTING(   0x03, "On + SPECULATIVE ISA (guessed semantics)")
+#endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
@@ -1140,7 +1174,9 @@ void kn5000_state::kn5000(machine_config &config)
 	m_subcpu->portz_write().set(
 			[this] (u8 data) {
 				// Only capture while DSP1 is selected (P7.5 low). P7.6 is C/D.
-				if (!BIT(m_subcpu_p7, 5))
+				// The sub-CPU uploads microcode regardless; with KN5000_ENABLE_DSP1=0
+				// there is simply nothing on the other end to receive it.
+				if (!BIT(m_subcpu_p7, 5) && m_dsp1.found())
 					m_dsp1->host_w(BIT(m_subcpu_p7, 6), data);
 			});
 
@@ -1244,6 +1280,7 @@ void kn5000_state::kn5000(machine_config &config)
 	// straight-line effect bodies imply (notes/kn5000-dsp-encoding.md sect. 6),
 	// FITS -- with room to spare, as it must, since real instructions may take
 	// more than one cycle.
+#if KN5000_ENABLE_DSP1
 	UPD6383(config, m_dsp1, 25_MHz_XTAL);
 	// I-RAM, C-RAM and D-RAM are on-die and the device maps them itself; only
 	// the external digital-delay DRAM is this board's business.
@@ -1257,6 +1294,7 @@ void kn5000_state::kn5000(machine_config &config)
 	m_dsp1->set_disable();
 	// research instrumentation: dump the host upload stream at exit
 	m_dsp1->set_capture_file("kn5000_dsp1_upload");
+#endif // KN5000_ENABLE_DSP1
 
 	KN5000_TONEGEN(config, m_tonegen, 0);
 	// IC311 is a SEND/RETURN INSERT ON IC303, not an output-path device: IC303's
@@ -1275,8 +1313,12 @@ void kn5000_state::kn5000(machine_config &config)
 	// scheduler time.
 	//
 	// EXPERIMENTAL and gated OFF by default -- see the "DSPCFG" port.
+#if KN5000_ENABLE_DSP1
 	m_tonegen->set_dsp1(m_dsp1);
 	m_tonegen->set_dsp1_enable_port(":DSPCFG");
+#endif
+	// With the insert absent, kn5000_tonegen's m_dsp1.found() is false, so dsp_on is
+	// false unconditionally: IC303's mix reaches the speakers with nothing added.
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
