@@ -250,3 +250,92 @@ before t=37 while PCM keeps ticking, the software free pool starved.
 ⚠ Also unresolved: what generates the sub->main traffic in PCM mode is still unidentified
 (probably 0x035D59, a reply from the DSP command dispatcher, by elimination — untraced).
 Identifying it would say directly what stopped.
+
+---
+
+# Update 2026-08-05 (settled): the SUB->MAIN HANDSHAKE, not the voice pool
+
+Two hypotheses were on the table: **H1** the software voice pool starves (a sine never renders
+silence -> `eg_running` never clears -> voices are never returned to the free pool -> the sub
+has nothing left to say), and **H2** the sub->main handshake times out (the sub busy-waits on
+MSTAT1 in `INTERCPU_DMA_SEND_CHUNK` with a 60001-poll limit; if it started timing out, sub->main
+would read exactly zero).
+
+**H2 SURVIVES. H1 IS DEAD.** The sub-CPU wants to send just as often as in PCM mode; every
+single attempt times out.
+
+## The discriminating measurement
+
+Opcode-execution counters on the sub-CPU (Lua read taps, the program is in DRAM and cannot be
+patched), both modes, `-seconds_to_run 52`, summed over t=39..50 s:
+
+| | entries to 0x020CB0 | MSTAT1 polls | timeout-loop spins | bytes sent |
+|---|---|---|---|---|
+| **PCM**  | 207 | 207 | **0** | 2070 |
+| **SINE** | 157 | 9,430,339 | **9,428,854** | **0** |
+
+* PCM: the grant is present on the **first** poll, 207 times out of 207. That is the null, and
+  it can fail — it does, in the other column.
+* SINE: 9,428,854 / 157 = **60,056 spins per entry**, i.e. the full `cp HL,0xea60` limit
+  (60001) on **every** entry. Not one send gets through, and the sub still asks 13x/s — the
+  same rate as PCM's 13-21/s. It is not out of work; it is not being let in.
+* The 60001-poll timeout costs ~2 M cycles a go. At 13/s that is the whole 20 MHz CPU, which
+  is why the voice bookkeeping and the tone-generator status readback also fall to zero from
+  t=38: **consequences of the stall, not its cause.**
+
+## Why the grant never comes
+
+`MSTAT1` = MainCPU Port Z bit 1 -> SubCPU Port D bit 4. It means "MainCPU ready to accept a
+sub->main header". Main clears it the instant it accepts one (`res 1,(0x68)` @ **0xEF35C4**)
+and raises it again only when the payload DMA has completed and been dispatched
+(`set 1,(0x68)` @ **0xEF366C / 0xEF367E**, in the DMA-done ISR at 0xEF35E8).
+
+Event trace of the last healthy transaction and the fatal one (sine, t=36.7):
+
+```
+36.72577 SUB  enter SEND_CHUNK
+36.72577 SUB->MAIN byte 68            header: channel 3, payload (0x68 & 0x1f)+1 = 9
+36.72580 MAIN reads latch 68 PC=EF3542   <== header read by the INT0 ISR
+36.72580 MAIN MSTAT1 1->0   PC=EF35C7    main is now busy receiving
+36.72582 SUB->MAIN byte 2B            payload 1
+36.72582 SUB->MAIN byte 30            payload 2
+36.72583 MAIN reads latch 30 PC=EF3542   <== *** READ AS A HEADER ***
+36.72583 SUB->MAIN byte 7F .. 02      payload 3..9 (delivered, nobody expecting them)
+36.76224 SUB  enter SEND_CHUNK        -> MSTAT1 already 0 -> 60001 spins -> gives up, forever
+```
+
+**A payload byte was taken for a header.** `0x30` re-armed the receive DMA for
+`(0x30 & 0x1f)+1 = 17` bytes; only 7 of the 9-byte payload were left. The DMA never completes,
+so the DMA-done ISR never runs, so `set 1,(0x68)` never executes. Verified in the stuck state
+at t=36.84 and unchanged at t=50:
+
+```
+MAIN 05E2=01 (rx state = mid-receive)  05E4=30 (header)  PZ=ED (MSTAT1=0)
+SUB  PD=67 (MSTAT1 in = 0)             10E8=00
+```
+
+PCM control at t=50: `05E2=00` (idle), `PZ=EF` (MSTAT1=1), `PD=77`. The maincpu's own stuck-
+handshake watchdog (0xEF36A8, and 0xEF36F0) never fires — worth a look separately.
+
+So the render mode is not the defect; it shifts the interleaving and loses a race that the
+inter-CPU receive path already had. **The bug is in the MainCPU INT0 ISR / micro-DMA
+arbitration on the sub->main channel** (ISR at 0xEF3525 reads the latch at 0xEF353D while the
+micro-DMA is also armed on the same interrupt), not in the tone generator.
+
+## Three methodology corrections — these bit, hard
+
+1. **`ioport_field:set_value()` TOGGLES a `PORT_CONFNAME` field, it does not assign it.**
+   MAME persists the live value in `cfg/kn5000.cfg`, so `set_value(1)` gives
+   `saved_value XOR 1`. Two parallel runs each rewrite that file at exit, so the mode a script
+   selects depends on which run exited last. Drive `TGMODE` from the **cfg file** and print
+   `ioport.ports[":TGMODE"]:read()` every second — a mode label that is not read back is not
+   evidence. (One pass of this investigation ran with the two modes silently swapped.)
+2. **`cfg/kn5000.cfg` also carries `AREA=2`**, not the MAME default 6. With the default
+   region the demo does **not** stall in either mode within 52 s. The region DIP is part of
+   the reproduction recipe.
+3. **tlcs900 `RDOP` prefetches PC+3.** A Lua read tap placed on an instruction's own address
+   counts the *previous* instruction, not that one. Put the tap at **target+3**, and filter on
+   the byte lane in `mem_mask` (the program space is 16 bits wide).
+
+`LOG_HANDSHAKE` (VERBOSE bit 3, default off) now logs MSTAT/SSTAT transitions with a
+timestamp and PC, which is the cheapest way back into this.

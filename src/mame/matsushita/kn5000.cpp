@@ -1105,7 +1105,21 @@ void kn5000_state::kn5000(machine_config &config)
 			});
 	m_maincpu->portz_write().set(
 			[this] (u8 data) {
+				u8 const prev = m_mstat;
 				m_mstat = data & 3;
+				// MSTAT1 is the MainCPU's "ready to receive" grant for the SUB->MAIN
+				// direction. The SubCPU busy-waits on it at the top of its
+				// INTERCPU_DMA_SEND_CHUNK (sub 0x020CB6, Port D bit 4) and gives up
+				// after 60001 polls. The MainCPU clears it the moment it accepts a
+				// header (main 0xEF35C4) and raises it again only when the payload DMA
+				// has completed and been dispatched (0xEF366C / 0xEF367E). If it is
+				// ever left low the sub->main channel stops dead -- and because the
+				// timeout costs ~2 M cycles a go, the SubCPU then has no time left to
+				// run anything else. Its transitions are what to look at first when
+				// sub->main traffic goes to zero.
+				if (m_mstat != prev)
+					LOGMASKED(LOG_HANDSHAKE, "t=%.4f MSTAT %u -> %u (MSTAT1=%u) PC=%06X\n",
+						machine().time().as_double(), prev, m_mstat, BIT(m_mstat, 1), m_maincpu->pc());
 			});
 
 
@@ -1172,7 +1186,14 @@ void kn5000_state::kn5000(machine_config &config)
 			});
 	m_subcpu->portd_write().set(
 			[this] (u8 data) {
+				u8 const prev = m_sstat;
 				m_sstat = data & 3;
+				// Mirror image of MSTAT above: SSTAT1 is the SubCPU's grant for the
+				// MAIN->SUB direction (the MainCPU polls it as Port Z bit 3) and SSTAT0
+				// is its per-chunk acknowledge.
+				if (m_sstat != prev)
+					LOGMASKED(LOG_HANDSHAKE, "t=%.4f SSTAT %u -> %u (SSTAT1=%u) PC=%06X\n",
+						machine().time().as_double(), prev, m_sstat, BIT(m_sstat, 1), m_subcpu->pc());
 			});
 
 
