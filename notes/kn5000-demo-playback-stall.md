@@ -516,7 +516,17 @@ events. Who sets/leaves `0x32ed=32` (vs the reset `f5675b: ld (0x32ed),0x00`) is
 force-0xD2F-cycle, and the f86fb7/0x2314 continuation). The demo reaches AccPlayMode=3 with a valid
 next-segment pointer, yet the transport clock is never sustained and `0x251D8` never advances.
 
-## HONEST BOTTOM LINE (after 15 stages, ~22 runs, 4 disasm passes)
+## UPDATE 16 — 0x32ed is a red herring; sync arrives as a QUEUED command
+
+Tapped `0x32ed` writes: **none during playback** (t=23–30). So `f568a8` (which `inc`s `0x32ed` and
+whose `f568b6` calls the sync trampoline `f59ab9`) is NOT called during playback — it is not the
+sync source, and `0x32ed`'s pre-set 32 is irrelevant. The flip-stack frames (`f568ba`/`f56834`/…)
+are the sequencer→command-QUEUE dispatch chain; the sync (`f59ab9→f5adca→f5afb2`) is reached via a
+COMPUTED jump from the command dispatcher, i.e. a **queued transport command**, not a direct call.
+So the true producer is whatever POSTS that sync command to the queue during demo playback — a layer
+I did not reach.
+
+## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
 the mechanism and experimentally REFUTED every state-level and continuation-level fix. The remaining
