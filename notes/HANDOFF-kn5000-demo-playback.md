@@ -42,19 +42,51 @@ caller is `f59ca3` inside transport-service `f59c70`, which returns early becaus
 for **`0x8d34 == 0x13`** (the demo state). So in the demo the normal re-arm never runs; the demo is
 supposed to continue via a demo-specific path — which is where it's broken.
 
-## 4. THE OPEN QUESTION (the one unreached layer)
+## 4. ★ ROOT CAUSE — SOLVED (2026-08-05). Sections 3's "death" is the firmware behaving CORRECTLY.
 
-Two equivalent framings of the single remaining gap:
-- **What POSTS the queued sync command** (`→ f59ab9 → f5adca`) during demo playback, and why? It is
-  dispatched via a computed jump from the command dispatcher (`f59b01`, called from the main loop
-  `ef124f`), so a producer enqueues it. Find the enqueue site and its condition.
-- **Equivalently: why is the clock lane `0x420` never re-armed** for the next measure, even though
-  the demo re-arm gate `0x2314 = 0xFFFF` (passes) and AccPlayMode reaches state 3 (`0x22FC=3`)? The
-  re-arm sits below both of those and does not fire.
+Established by runtime measurement AND an independent 11-agent analysis that agreed on every point:
 
-Best method to crack it: a **debugger breakpoint on the command-queue POST** (not the dispatch) to
-catch the poster of the sync command in one shot; or trace AccPlayMode state-3's per-tick body to
-see what it *should* write to `0x420` and the demo-conditional gate that skips it.
+- **`0x32ed` is a CORRUPT-STREAM WATCHDOG** — it counts consecutive bytes the pattern reader could
+  not recognise as any event opcode. Recognised events never touch it; end-of-track is a different
+  opcode.
+- **Lane value `0x0C` is a quantized "STOP at the next beat boundary", TERMINAL BY DESIGN.** Nothing
+  ever converts `0x0C` back to running; `0x10` (park) then `0x00` (stop) are its intended
+  successors. So the transport dying is the correct response to a corrupt stream.
+- **The KN7000 has NO per-measure re-arm** — it starts the transport once and runs until an explicit
+  stop. The whole "re-arm" line of enquiry (sections 3/5) chased a mechanism that does not exist.
+
+**THE CHAIN (every link measured):**
+```
+SSF presentation engine never starts   (0x251D8 == 0 always)
+ -> the SSF script's SONG directive never runs
+  -> the song event stream is never loaded
+     (event buffer @0x675A is ALL ZEROS; exactly ONE write ever = a boot-time clear at PC EF0B9B)
+   -> the reader walks zeros; 0x00 is not a valid opcode -> every byte "unrecognised"
+    -> 32 unrecognised bytes in ~0.8 ms trip the watchdog (0x32ed == 0x20)
+     -> watchdog issues the quantized STOP (f568b6 -> f59ab9 -> f5adca -> f5afb2, lanes := 0x0C)
+      -> INTTR4 parks 0x0C->0x10; f3ecd4 clears ->0x00. Transport dead. Repeats every ~68 ms.
+       -> no music, and no slides (SSF slides ride on SysEx events INSIDE the song stream)
+```
+**Only the first line is a defect. Everything below it is correct firmware behaviour.**
+
+**Why the presentation never starts (measured):** in state `0x8d38 == 0xE4` a sweep of ALL TEN soft
+keys (LEFT 1-5, RIGHT 1-5) left `0x251D8 == 0`, the event buffer unwritten and `0x8d38` unchanged —
+even though presses ARE delivered (LEFT 2 demonstrably starts the demo timer). So the chain
+`key in 0xE4 -> event 0x1C00038 -> GroupBoxProc_StartSSFPresentation (0xF9A273) -> 0xB80A workspace
+-> AcPresentCtrl_CheckSSFStart (0xF84625) -> 0x251D8 := 1` never fires.
+
+★ This **REINSTATES the March-2026 target** (the `0x1C00038` / `0xB80A` chain). March's *mechanism*
+("the automated path builds a 0x82xx tag") was wrong, and my own dismissal of March as "stale" was
+ALSO wrong — I inferred "the demo starts" from the Technics-globe image, which is the STATIC
+submenu image, not a running presentation. Correct attribution: right target, wrong mechanism.
+
+**THE FIX TARGET:** make the SSF presentation start — i.e. find why a delivered key press in state
+`0xE4` does not produce the `0x1C00038` broadcast via `UIState_KeyScan_Dispatch (0xF98697)` ->
+`FA9945` (the gate-table entry for `0xE4` is the unconditional marker `0xFFFE`, so ANY key should
+do it). Prime suspect: the KN5000 UI/control-panel event-delivery path — note the KN5000 has a
+KNOWN control-panel serial defect family whose residue was characterised as **LOSS** (see
+`notes/kn5000-cpserial-INDEX.md`). "Press reaches the menu logic but never reaches the widget
+handler chain" is exactly the observed signature.
 
 ## 5. REFUTED — do NOT re-chase (all tested at runtime)
 
@@ -129,14 +161,26 @@ re-derive from these):
   `cpu.state["XSSP"].value` (XNSP is unused on this box) via `sp:read_u32(xssp+i*4)`.
 - Nav timing: boot ~20 s, then DEMO / LEFT4 / LEFT2 with ~0.3 s press + ~1.5 s gaps.
 
-## 8. Two viable next paths (both multi-session)
+## 8. NEXT STEP (single, well-defined — the root cause is known)
 
-1. **RE the sequencer command-production** — the direct continuation. Find what enqueues the sync
-   command (`→ f59ab9`) during demo playback and the demo-conditional reason it's posted (or why the
-   clock isn't re-armed). Use a debugger BP on the queue-post, not the dispatch.
-2. **KN7000 comparison** — its demo plays through measures. Different transport model (RUN-bit flags
-   on clock-lane structs vs the KN5000's 01/06/0C/10 byte machine, different CPU), so transfer is
-   conceptual, not byte-level — but it's a *working* reference for how a demo sustains + paces slides.
+**Make the SSF presentation start.** Concretely, find why a *delivered* key press in state `0xE4`
+never produces event `0x1C00038`:
+1. Trace `UIState_KeyScan_Dispatch (0xF98697)` at runtime — is it called at all after boot? (March
+   measured ~900 boot-time calls, all with `0x8d38 == 0x00` -> the empty gate array, then never
+   again.) A word-aligned execution/read tap or a debugger BP will settle it.
+2. If it is never called post-boot, the gap is upstream in **UI event delivery**: the widget handler
+   chains are walked by the event-buffer dispatcher (`FDB3D1` fills a circular buffer at DRAM
+   `0xBD3C`; `FDB328` dispatches from handler-chain table `EE7CA7`). Find why a panel key press does
+   not enqueue there, while still reaching the demo-menu logic.
+3. Cross-check against the known KN5000 control-panel serial defect family
+   (`notes/kn5000-cpserial-INDEX.md` — residue characterised as **LOSS**). If key events are lost
+   between the panel HLE and the UI event buffer, fixing that fixes the demo *and* a class of other
+   UI bugs.
+Once `0x251D8` flips to 1, the SSF script runs its `SONG` directive, the event stream loads, the
+watchdog stops tripping, and (per the KN7000 model) the transport simply runs to the end of the
+song with the slides paced by song position.
+
+⚠ Do NOT resume the "per-measure re-arm" hunt — that mechanism does not exist (see §4).
 
 ## 9. Method lessons (cost real time here)
 
