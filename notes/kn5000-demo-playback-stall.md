@@ -563,6 +563,36 @@ with no time advance? Two sub-cases, being measured: (a) the pattern READ POINTE
 through 32 genuine zero-delta events = the song's event stream is misdecoded/wrong data. Either
 way this is an **event-stream decode** problem, NOT a transport/timer problem.
 
+## ★★★ UPDATE 18 — CONFIRMED ROOT CAUSE: the song EVENT BUFFER is never loaded (all zeros) ★★★
+
+Measured the buffer the runaway reader walks:
+```
+bases: 3287=675A  3297=0000  32A3=2323  32AB=0000  32B5=0000  33EB=0000
+ptr   33D8 = 0x677A, advancing +1 per "event" from base 0x675A
+@0x6740 .. @0x67C0 : 00 00 00 00 ... ALL ZEROS
+@0x69800           : 5A 5A 5A 5A 01 01 08 00 ...  <- the song HEADER/setup IS loaded
+```
+**The demo song's NOTE-EVENT STREAM is never loaded into the sequencer event buffer (~0x675A).**
+The reader walks a zero-filled buffer, consumes each null byte as a zero-delta event, hits 32 of
+them in ~0.8 ms, trips the `0x32ed` runaway guard, and the guard's action (`f568b6` -> sync ->
+park -> stop) kills the transport. It repeats every ~68 ms forever. Also most per-track bases
+(`0x3297`, `0x32AB`, `0x32B5`, `0x33EB`) are **0x0000** — the per-track event pointers were never
+bound either. Only track 1's base (0x675A) is set, pointing into the empty buffer.
+
+**This explains EVERYTHING consistently:** no music (no events), transport dies (guard trip),
+slideshow frozen (`0x251D8`=0 — the SSF slides ride on SSF SysEx events *in the song stream*, so
+with no events there are no slides), AccPlayMode sits at 3 (it is "playing" an empty stream), and
+every transport-level poke failed (they treated the symptom; the guard re-trips within ~68 ms).
+
+**⇒ THE FIX TARGET: the demo song LOADER.** The demo main-op calls the song loader at
+`0xD2F == 10`: `f86c06: ld A,(0x28a4)` (song index 18) `; f86c0c: calr 0xf87189`. Determine what
+`f87189` does, whether it runs, and why the event stream does not reach ~0x675A / the per-track
+bases. (Sibling reference: on the KN7000 the demo songs are **zlib blobs inflated into RAM** — 10
+setup blobs + 10 SEQUENCE blobs + 10 sound blobs; see notes/demo-and-sequencer-engine.md. The
+KN5000 equivalent is presumably an LZSS/compressed blob in table_data ROM that must be decompressed
+into the event buffer.) The KN5000 song data source is the "ZZZZ" record at 0x69800 (loaded) plus
+the pointer table at `0x9C4000[songidx]` (entry 18 = 0x8E0000).
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
