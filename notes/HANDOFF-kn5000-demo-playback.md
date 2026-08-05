@@ -4,9 +4,10 @@
 **Status: ROOT CAUSE SOLVED (§4). The bug is in the ROM DUMP, not the firmware and not the
 emulation: `kn5000_rhythm_data_rom.ic14` has address lines A19 and A21 TRANSPOSED.**
 De-swapping them makes the demo play — watchdog `0x20 -> 0x00`, transport `0x00 -> 0x04`,
-audio rms `0.0 -> 1543.9`. Not shipped: it is still open whether the DUMP is wrong or the
-BOARD wires those lines that way (see §4, "OPEN"). Roughly two thirds of ALL factory rhythms
-are affected, not just the demo.
+audio rms `0.0 -> 1543.9`. The service-manual schematic (page 32) shows IC14's address
+lines run straight, so the BOARD is not at fault: **IC14 must be RE-DUMPED** (see §4).
+Nothing is shipped — a de-swapped image we synthesised is not an honest dump.
+Roughly two thirds of ALL factory rhythms are affected, not just the demo.
 One real bug WAS fixed and shipped along the way (§8). Blow-by-blow: `kn5000-demo-playback-stall.md`.
 **This file is the pick-up point — start at §4.**
 
@@ -204,22 +205,38 @@ bit 3 != bit 5, so roughly two thirds of the factory rhythms read the wrong 64 K
 The home-screen default style (bank 0x23) is among them. This is very likely the whole
 of "the KN5000 automatic rhythms are completely messed up".
 
-**OPEN — NEEDS FELIPE / THE SCHEMATIC.** Two hypotheses fit the evidence identically:
+**SETTLED BY THE SCHEMATIC: the BOARD is straight, so the DUMP is wrong.** Service
+manual page 32 ("CPU SECTION (A) P.C. Diagram") shows IC14 = `QSIGX3C23011`, 32M BIT
+RHYTHM DATA ROM, with a perfectly monotonic address connection:
 
-  (a) the IC14 dump was taken with A19/A21 swapped (adapter/socket wiring), so the
-      ROM FILE is wrong and IC14 should be re-dumped; or
-  (b) the KN5000 board itself routes CPU A19/A21 to different IC14 pins, the dump is
-      the true chip content, and the MAME memory map should apply the permutation.
+```
+net A21 -> pin 44 = AD20      net A16 -> pin 35 = AD15
+net A20 -> pin 43 = AD19      net A15 -> pin 36 = AD14
+net A19 -> pin  2 = AD18      net A14 -> pin 37 = AD13
+net A18 -> pin  3 = AD17      net A13 -> pin 38 = AD12
+net A17 -> pin 34 = AD16      net A12 -> pin 39 = AD11  ... AD0 <- net A1
+```
 
-Do NOT ship the de-swapped file as if it were a dump until this is settled — under (b)
-the honest fix is in the driver, not the ROM. The de-swapped image is at
-`<scratchpad>/ic14_deswapped.bin` for testing only.
+i.e. device bit `AD_k` <- board net `A(k+1)` throughout — the identical regular pattern
+as IC19 (`QVIGFKN5KAX1`, custom data ROM) immediately to its right. Nothing crosses.
+File byte-offset bit 19 is `AD18` <- net `A19` and bit 21 is `AD20` <- net `A21`, so
+there is no board-level permutation for the driver to model.
 
-NEXT: (1) settle (a) vs (b) — trace IC14's A19/A21 pins on the service-manual
-schematic (`~/compartilhado/kn5000-docs/service_manual/pages/`, the large sheets are
-pages 36-48) or ask Felipe to buzz them out; (2) check whether the other 4 MB mask ROM
-dumped in the same session, the waveform ROM `ic307`, carries the same transposition —
-an A-line swap there would be far harder to notice by ear.
+==> **`kn5000_rhythm_data_rom.ic14` MUST BE RE-DUMPED.** Note that `AD18`/`AD20` are
+pins **2 and 44** — physically adjacent, separated only by pin 1, which IC14 leaves
+**NC**. That is exactly the neighbourhood where a socket adapter configured for a
+different 44-pin part mis-maps. Only one copy of this dump exists (every rom dir in
+`~/compartilhado` has the same sha1 `e4b572d3...`), so there is nothing to cross-check
+against.
+
+Until a real re-dump exists, do NOT check the de-swapped image in as if it were a dump
+— under the MAME integrity policy an image we synthesised is not an honest dump. The
+test image is at `<scratchpad>/ic14_deswapped.bin`. If the driver needs to run in the
+meantime, mark the existing ROM `BAD_DUMP` rather than silently substituting.
+
+NEXT: check whether the other 4 MB mask ROM, the waveform ROM `ic307`, carries the same
+transposition — it is the same size and presumably came off the same rig, and an A-line
+swap in wave data would be far harder to notice by ear than in sequencer data.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
