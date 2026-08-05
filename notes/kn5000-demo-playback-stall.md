@@ -981,6 +981,45 @@ find the per-cycle refill) and the "data available" gate the consumer should hon
 tells the reader "the producer has not written this far yet, wait" instead of consuming zeros.
 Compare producer frontier vs consumer position over time (tap both, plot the gap).
 
+## ★★★★★★ UPDATE 27 — the lane bases are COMPUTED (f56cd0); it is POINTER-vs-DATA now ★★★★★★
+
+**Producer/consumer hypothesis REFUTED.** The gap probe shows the "producer" is a tight two-
+instruction **fill/copy loop at `PC F5CF95`/`F5CFA1`** sweeping the whole 42 KB buffer
+(`woff 0x40 → 0xA3FE`) while the consumer is already frozen (`roff=0x677A`, `32ed=0x20` already
+tripped). It is a whole-buffer refill per cycle, not a stream the consumer chases.
+
+**★ Where the read base really comes from.** Caught the writer: `PC F55FFB`, call chain
+`f55ffb ← f55fcb ← f55ed4 ← f55e76 ← f53596 ← f5333a ← f86d25` (demo entry; later re-run every
+cycle from the main loop `ef13a9`/`ef136f`). The enclosing routine `f55fde` is a **per-lane
+initialiser, unrolled 6×**:
+```
+(0x33d4)=0x01 ; A=(0x32a3) ; calr f5657e ; call f56cd0 ; (0x3287)=WA   <- lane 1 base
+(0x33d4)=0x02 ; A=(0x32a4) ; calr f5657e ; call f56cd0 ; (0x3289)=WA   <- lane 2 base
+(0x33d4)=0x04/0x08/0x10/0x20 -> (0x328b)/(0x328d)/(0x328f)/(0x3291)     <- lanes 3..6
+```
+So the six lane bases are 16-bit cells at **`0x3287, 0x3289, 0x328b, 0x328d, 0x328f, 0x3291`** (2
+bytes apart), each = **the value returned by `f56cd0`** for that lane's parameter (`0x32a3..0x32a8`).
+The other writer, `f567ac`, stores the position where the reader STOPPED (`0x677A`) — a
+save-position, confirming base = "current read position for this lane".
+
+⇒ **RETRACT the "stale end-of-song pointer" framing (Update 24 and its repeats).** `0x675A` is
+**legitimately computed by `f56cd0`**, deterministically, on a clean cold boot. It is not leftover
+garbage and not a producer's write pointer.
+
+**★ The question is now tight and binary: POINTER or DATA?** At the computed lane-1 start the buffer
+holds `?? 00 91 45 40 44 0D 00 00 11 D3 4B 00 81 83 00 00 00 …` — the first byte the reader examines
+(offset `0x675B`) is **`0x00`, not a valid opcode**, so the watchdog starts counting on byte one and
+trips 32 bytes later in the zero fill. Either:
+  **(P)** `f56cd0` returns the WRONG start offset for lane 1 (the real track lives elsewhere in the
+      42 KB buffer), or
+  **(D)** the offset is right but the FILL wrote the wrong content there (e.g. an unused lane should
+      carry an immediate `0x83` end-of-track marker and instead got zeros).
+
+**NEXT (decisive, one probe):** dump the computed base of ALL SIX lanes (`0x3287/89/8b/8d/8f/91`)
+plus 32 bytes of buffer content at each. If some lanes point at well-formed tracks (opcode at byte
+0) and lane 1 does not, it is (P) — chase `f56cd0`'s input `0x32a3`. If ALL six point at zero-ish
+junk, it is (D) — chase the fill loop at `F5CF95` and what it is copying from.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
