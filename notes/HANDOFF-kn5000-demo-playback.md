@@ -1,204 +1,157 @@
-# HANDOFF — KN5000 Feature Demo / Presentation playback (2026-08-05)
+# HANDOFF — KN5000 Feature Demo / Presentation playback (updated 2026-08-05)
 
-**Goal:** make the KN5000 "Feature Presentation" demo play like the KN7000's does (commit 60d5392
-made the KN7000 demo play music + advance its slideshow). **Status: NOT fixed** — completely
-diagnosed, every state/logic fix experimentally refuted; the one unreached layer is named below.
-Full blow-by-blow: `notes/kn5000-demo-playback-stall.md` (16 stages). This file is the clean
-pick-up point.
+**Goal:** make the KN5000 Feature Presentation play, like the KN7000's does (commit `60d5392`).
+**Status: NOT fixed, but narrowed to one concrete defect with a defined next probe (§4).**
+One real bug WAS fixed and shipped along the way (§8). Blow-by-blow: `kn5000-demo-playback-stall.md`
+(28 updates). **This file is the pick-up point — start at §4.**
 
 ---
 
 ## 1. Ground truth (Felipe, hardware owner — outranks all inference)
 
-On the real KN5000, the Feature Presentation plays **ONE LONG continuous song** and the picture
-slides **advance autonomously over it** (no count-in, music starts immediately). So: the transport
-MUST sustain many measures, and the slideshow is **song-paced** — fix the transport and the slides
-follow.
+- The Feature Presentation plays **ONE LONG CONTINUOUS SONG** with the picture slides advancing
+  autonomously over it. Music starts **immediately, no count-in**.
+- The backing music is **its own distinct piece**, not one of the selectable demo songs.
+- **The Technics globe IS the demo's first slide** — the static submenu shows no globe. So the
+  presentation *does* start; it is the music that never plays.
 
-## 2. Current emulated behaviour (Aug-2026 build)
+## 2. Current emulated behaviour
 
-Navigate **DEMO (`CPL_SEG3` 0x01) → LEFT 4 (`CPL_SEG9` 0x02) → LEFT 2 (`CPL_SEG10` 0x01)**. Then:
-the demo activates, renders slide 1 (**FTBMP01, the Technics world-globe**), the transport starts
-running for ~one beat, then **dies**; no music, slideshow frozen on slide 1. (This is already far
-better than the March-2026 notes, which wrongly concluded "SSF never triggers / 0xB80A tag
-mismatch" — that is STALE, do not chase it.)
+Navigate **DEMO (`CPL_SEG3` 0x01) → LEFT 4 (`CPL_SEG9` 0x02) → LEFT 2 (`CPL_SEG10` 0x01)**.
+The demo activates and renders slide 1 (the globe) correctly. Then: no music, slides frozen,
+transport dead within ~1 s. Repeats internally every ~68 ms forever.
 
-## 3. The death mechanism (runtime-verified, exact)
+## 3. The verified failure chain (every link measured)
 
 ```
-demo timer 0xD2F == 1  → f86c1f sets 0x2966=0x85
-  → per-tick f43ca9 arms transport (f43cf8: 0x420/0x421 = 0x01)   [once per song]
-  → INTT1 ef0cac promotes 0x01 → 0x06 (RUNNING)                    ✓ matches HW
-  … runs ~one beat (0x417: 0→24) …
-  → a QUEUED transport SYNC command is dispatched (f59ab9 → f5adca → f5afb2 sets 0x420/0x421 = 0x0C)
-  → INTTR4 handler ef0fa0 PARKS 0x0C → 0x10  (at 0x417 ∈ {0,24,48,72})
-  → main-loop tick f3ecd4 (from f4e63f, res 4,(0x420)) clears 0x10 → 0x00  = STOP
-  → 0x417 stops (it only increments while 0x420 bit2 set, gate ef0e70) → everything freezes
+4 of the 6 accompaniment LANES have raw-zero track data in the pattern buffer
+ -> the reader walks a lane whose bytes are all 0x00 (not a valid opcode)
+  -> f568a8 skips one byte and bumps the watchdog 0x32ed for EACH unrecognised byte
+   -> at 32 (0x20) f568b6 -> f59ab9 -> f5adca -> f5afb2 writes lanes 0x420/0x421 = 0x0C
+    -> 0x0C is a quantized "STOP at next beat", TERMINAL BY DESIGN
+     -> INTTR4 ef0fa0 parks 0x0C->0x10 ; main-loop f3ecd4 (res 4) clears 0x10->0x00 = STOP
+      -> beat clock 0x417 freezes (it only counts while 0x420 bit2 is set, gate ef0e70)
+       -> no music; and no slides either (slides are paced by song position)
 ```
+**Only the first line is a defect. Everything below it is the firmware behaving CORRECTLY** — it
+detected a corrupt stream and stopped playback.
 
-The transport is **designed** to cycle run→sync→park→stop→**re-arm** each measure. The per-measure
-re-arm exists (`f5ae1c → f5ae77 → f5af5f → f5af8f: 0x420←0x01`) **but is DEMO-DISABLED**: its only
-caller is `f59ca3` inside transport-service `f59c70`, which returns early because `f59ca9` returns 1
-for **`0x8d34 == 0x13`** (the demo state). So in the demo the normal re-arm never runs; the demo is
-supposed to continue via a demo-specific path — which is where it's broken.
+## 4. ★ THE OPEN QUESTION + THE EXACT NEXT PROBE ★
 
-## 4. ★ ROOT CAUSE — SOLVED (2026-08-05). Sections 3's "death" is the firmware behaving CORRECTLY.
+Six-lane dump taken during the demo (offset bases `0x3287/89/8b/8d/8f/91`, cell bases
+`0x3297/99/9b/9d/9f/a1`, `phys = bank[cell>>12] + (cell & 0xFFF)*256 + off`):
 
-Established by runtime measurement AND an independent 11-agent analysis that agreed on every point:
-
-- **`0x32ed` is a CORRUPT-STREAM WATCHDOG** — it counts consecutive bytes the pattern reader could
-  not recognise as any event opcode. Recognised events never touch it; end-of-track is a different
-  opcode.
-- **Lane value `0x0C` is a quantized "STOP at the next beat boundary", TERMINAL BY DESIGN.** Nothing
-  ever converts `0x0C` back to running; `0x10` (park) then `0x00` (stop) are its intended
-  successors. So the transport dying is the correct response to a corrupt stream.
-- **The KN7000 has NO per-measure re-arm** — it starts the transport once and runs until an explicit
-  stop. The whole "re-arm" line of enquiry (sections 3/5) chased a mechanism that does not exist.
-
-**THE CHAIN (every link measured):**
 ```
-the presentation runs and shows slide 1, but NEVER LOADS A SONG
-   (verified: exactly ONE blob load during the whole demo — entry 18, the presentation
-    DESCRIPTOR, at t=24.19; entries [0]..[17] = the 18 demo songs are never loaded)
- -> the song event stream is never loaded
-     (event buffer @0x675A is ALL ZEROS; exactly ONE write ever = a boot-time clear at PC EF0B9B)
-   -> the reader walks zeros; 0x00 is not a valid opcode -> every byte "unrecognised"
-    -> 32 unrecognised bytes in ~0.8 ms trip the watchdog (0x32ed == 0x20)
-     -> watchdog issues the quantized STOP (f568b6 -> f59ab9 -> f5adca -> f5afb2, lanes := 0x0C)
-      -> INTTR4 parks 0x0C->0x10; f3ecd4 clears ->0x00. Transport dead. Repeats every ~68 ms.
-       -> no music, and no slides (SSF slides ride on SysEx events INSIDE the song stream)
+lane1 off=675A phys=09C35A first=00  ZEROS
+lane2 off=675A phys=09C35A first=00  ZEROS   (same offset as lane 1 => zero length)
+lane3 off=6BE0 phys=09C7E0 first=00  ZEROS
+lane4 off=7109 phys=09CD09 first=81  VALID:  81 81 81 81 81 81 81 81 81 81 81 81 81 83 00 …
+lane5 off=76C1 phys=09D2C1 first=00  ZEROS
+lane6 off=7D2F phys=09D92F first=81  VALID:  81 90 00 43 40 03 00 81 90 00 43 40 03 00 …
 ```
-**Only the first line is a defect. Everything below it is correct firmware behaviour.**
+- The offsets are **sane and sequential** (~0x500-0x670 apart) ⇒ the pointer computation (`f56cd0`)
+  is FINE. This is a **content** problem, not a pointer problem.
+- **Lane 4 is the control**: an *empty* track is supposed to look like `81 81 … 81 83` (beat markers
+  + explicit end-of-track). Lanes 1/2/3/5 have **raw zeros and no terminator at all**.
+- `f55fd8: or (0x332c),0x3f` **enables all six lanes unconditionally**, and the dispatcher gates
+  lane 1 on `bit 0,(0x332c)` (`f5683e`) — so the firmware always reads lane 1, which nothing filled.
 
-★ **FELIPE (hardware, GROUND TRUTH):** *"the static submenu does not show any globe image; the globe
-is only shown when the DEMO starts playing — it is the first slide of the demo."* So the
-presentation **does start and renders slide 1 correctly**. Consequently **`0x251D8` is NOT the
-"presentation-active" latch** a static-analysis pass claimed (never verified; static analysis has
-been wrong four times in this investigation) — do not treat `0x251D8 == 0` as evidence. The
-March-2026 `0x1C00038`/`0xB80A` chain is **NOT** the blocker, and the soft-key sweep result (no key
-changes `0x251D8`) is therefore irrelevant, not a finding.
+**NEXT PROBE (do this first):** the buffer is refilled by a tight copy loop at **`PC F5CF95` /
+`F5CFA1`** (it sweeps the whole 42 KB every ~68 ms). **Tap that loop's writes and bucket them by
+destination offset against the six lane bases.** That answers directly:
+- does the fill **write** lanes 4 and 6 but **skip** 1/2/3/5 (⇒ it should be emitting a minimal `83`
+  terminator for empty lanes and doesn't), or
+- does it **write all six** but its **SOURCE** for 1/2/3/5 is zeros (⇒ chase the source: the
+  decompressed song only carries some parts, or the part→lane mapping is wrong)?
 
-**ROM structure (decoded, solid):** `"SLIDE"` is the **sliding-window (LZSS) compression magic**
-(`SLIDE4K` / `SLIDE8K`), NOT "slideshow"; `ef41e3` memcmps it (template `0xE00032`) and dispatches
-on the window char (`'4'`->`ef3fab`, `'8'`->`ef40c5`). The decompressor **works** (hand-verified
-against RAM: `5A EE F0`->`ZZZZ`, `E0 FB`->14 zeros, `FF` flag->8 literals). Entry table at
-`0x9C4000` = **19 entries**: `[0]..[17]` = the **18 demo SONGS**, `[18]` = `0x8E0000` = the
-**FEATURE PRESENTATION descriptor** (decompresses to ~0x110 bytes: "ZZZZ" header, part-type array,
-**16 `80 xx 00` script records** at `0x698C8`, 16 `0x5F` bytes at `0x69900`). Six extra unreferenced
-`SLIDE8K` blobs at `0x983B3A/0x988690/0x98BB3A/0x98F0DA/0x992A0C/0x9963FA` — identity unknown,
-worth checking.
-
-**THE FIX TARGET:** the presentation script runs (slide 1 shows) but **never loads a song**.
-Measured: during the entire demo there is exactly **ONE** blob load into `0x69800` — entry **18**
-(the descriptor) at t≈24.19 (`PC=EF4039/EF409B`); entries `[0]..[17]` are never loaded. So find
-which script step should load+start a demo song (the SSF `SONG` directive), what consumes the 16
-`80 xx 00` records, and why that step never issues the load. Once a song is loaded the event buffer
-fills, the corrupt-stream watchdog stops tripping, and (per the KN7000 model: start once, run to an
-explicit stop) playback should run the whole song with the slides paced by song position.
+Then follow whichever branch it indicates. Useful extra: dump the fill's source pointer at the same
+time (the loop reads from somewhere — capture that address and dump it).
 
 ## 5. REFUTED — do NOT re-chase (all tested at runtime)
 
 | Hypothesis | Result |
 |---|---|
-| Timer emulation bug | Already fixed; INTTR4 fires correctly, transport DOES arm+run |
-| force `0x420=0x06` every frame | clock runs (0x41C advances) but demo doesn't play; breaks handshake |
-| surgical `0x0C→0x06` once | firmware immediately STOPs it (0x00) |
-| arm `0x41E` (simulate f86fff≠0) | 0x41E dies too; no effect |
-| keep `0xf19e` non-zero (tap-return) | still dies — re-arm f5ae1c is demo-disabled regardless |
-| force `0xD2F` cycle reload | song LOCKED to 18 (no cycling), 0x251D8 stays 0 |
-| f86fff / 0x41E-lane theory | refuted (song data present; arming 0x41E doesn't help) |
-| f86fb7 → 0x2314 "continuation" | refuted: `0x2314=0xFFFF`, AccPlayMode=3, clock STILL dead |
-| 0x32ed "safety-sync" | refuted: `0x32ed` not written during playback (f568a8 not the source) |
-
-In **no** experiment did `0x251D8` (slideshow latch) ever advance — consistent with it being
-song-paced (needs the sustained transport).
+| Timer/INTTR emulation bug | Timers verified correct; the transport does arm and run |
+| force `0x420=0x06` / `0x04` / arm `0x41E` / hold `0xf19e` / force `0xD2F` cycle | all fail; watchdog re-trips within ~68 ms |
+| "per-measure re-arm is broken" | **no such mechanism exists** — KN7000 starts once and runs to an explicit stop |
+| "the SSF presentation never starts" / `0x1C00038`/`0xB80A` chain | REFUTED by Felipe: the globe IS slide 1. `0x251D8` is NOT the presentation latch |
+| "the song is never loaded" (only entry 18 loads) | superseded: entry 18 is the presentation descriptor; the music data IS in the buffer for lanes 4/6 |
+| "stale end-of-song read pointer" | REFUTED: the bases are **computed** by `f56cd0` every cycle |
+| producer/consumer overrun | REFUTED: `F5CF95` is a whole-buffer fill loop; the consumer is already frozen when it runs |
+| f86fff / `0x41E` lane arming | forcing `0x41E` has no effect |
+| "the pool data comes from the saved nvram" | REFUTED: the firmware regenerates it at boot (PC ≈ `0xF5CF95`), byte-identical |
 
 ## 6. Address / cell map (verified)
 
-**CPU / interrupts**
-- maincpu = **TMP94C241 @ 16 MHz** (`2*8_MHz_XTAL`), TLCS-900, little-endian.
-- Active sequencer tick interrupt = **INTTR4**, handler **`0xEF0E21`** (NOT INTTR5 — `0xEF086A` is an
-  empty `reti`; the March notes had this backwards). Runtime `INTET45=0x83` = INTTR4 pri 3 enabled,
-  INTTR5 pri 0 disabled.
-- Tick/beat PROCESSING is main-loop driven: loop `ef1245..ef1385` (`ef1372: call f4e635`), decoupled
-  from INTTR4 which only increments the beat clock. (So it's not a CPU-cycle/timer race — the sync
-  and its continuation `f568ba: call f5e931` are back-to-back in one iteration.)
+**CPU/interrupts** — maincpu = TMP94C241 @ 16 MHz, TLCS-900, LE. Active tick = **INTTR4**, handler
+`0xEF0E21` (INTTR5 `0xEF086A` is an empty `reti`; the March notes had this backwards). Tick/beat
+PROCESSING is main-loop driven (`ef1245..ef1385`, `ef1372: call f4e635`), decoupled from INTTR4
+which only advances the beat clock.
 
-**Transport state machine** (lanes `0x41E 0x41F 0x420 0x421`; values: 00=stop, 01=arm, 06/04=run,
-0C=sync, 10=park)
-- arm: `f43cf8` (via `f43ca9`, from `0xD2F==1 → 0x2966=0x85`); promote 01→06: INTT1 `ef0cac`.
-- sync (→0C): `f5afb2` (via `f5adca` via trampoline `f59ab9`, **dispatched as a queued command**).
-- park (0C→10): INTTR4 `ef0fa0` at `0x417∈{0,24,48,72}`.
-- stop (10→00): `f3ecd4` `res 4,(0x420)` (main-loop tick, caller `f4e63f`).
-- per-measure re-arm (DEMO-DISABLED): `f5ae1c→f5ae77→f5af5f→f5af8f`; caller `f59ca3` in `f59c70`
-  skipped when `f59ca9`→1 for `0x8d34==0x13`.
-- beat clock `0x417` increments only while `0x420` bit2 set (gate `ef0e70`).
+**Reader / watchdog** — dispatcher `f567cd`; fetch `f567f0: A=(XHL+IY)`; opcodes `0x81` beat →
+`f568ee`, `0x83` end-of-track → `f56a25`, `0x87` cell-link, `0x90/0x91/0xD1..0xD5` events →
+`f568c9`, anything else → `f568a8` (skip 1 byte, `0x32ed`++). Watchdog trip at `0x32ed==0x20` →
+`f568b6`. Pause flag = `0x32f4` bit0. Pacing gate `f568ee` uses `f570bb` (read-ahead window 24).
 
-**Demo / presentation**
-- demo state `0x8d34==0x13`; `0x8d38` (0xE4 = Feature Presentation submenu; SSF screen id 0xEA).
-- demo timer `0xD2F` (`f86bf3`: 10=load `f87189`, 3=start `f86d3d`, 1=arm); reload `f86d86` (=0x0F,
-  callers `f86bc7`/`f86cb6`).
-- song index `0x28a4` = **18**, LOCKED for the Feature Presentation (`f86b74`).
-- demo re-arm gate `0x2314` (set by `f3ecd4→f3ed22→f3ed2a→f86fb7`; AccPlayMode init `f3a0b3`
-  re-arms if ≠0). Runtime = **0xFFFF (passes)**.
-- AccPlayMode `0x22fc` (reaches 3 = playing). Dispatch table `0xE444E2`.
-- song data bank `0x69800` ("ZZZZ" magic + part-type array; `f86fb7` reads `+0x1e = 0xFFFF`); script
-  ptr table `0x9C4000[songidx]` (entry 18 = 0x8E0000). Data IS loaded (not a load bug).
-- SSF slideshow latch `0x251D8` (boolean; owner obj dispatcher `f86694`, under
-  AcPresentationControlProc `0xF8450B`; start gate `f84625` needs a `0xB80A` block, fed by SSF SysEx
-  events in the song stream via router `f0e92f`). Advances on song EVENTS, not the beat counter.
+**Cell resolver** — `f59069`; bank table `f59089` = `0x095C00` (DRAM pool), then IC19 pools
+`0x301400 0x31AC00 0x331400 0x34AC00 0x361400 0x37AC00 0x391400`.
+`phys = bank[cell>>12] + (cell & 0xFFF)*256 (+ offset)`.
 
-## 7. Reproduce it
+**Lane state** — lane selector `0x33d4` (bitmask 1/2/4/8/0x10/0x20); lane-enable mask `0x332c`
+(`f55fd8: or (0x332c),0x3f`); live read position: cell `0x33d6`, offset `0x33d8`, bar `0x33da`,
+beat `0x33db`. Per-lane bases: offsets `0x3287/89/8b/8d/8f/91`, cells `0x3297/99/9b/9d/9f/a1`,
+params `0x32a3..0x32a8`. Base initialiser = `f55fde` (unrolled ×6, calls `f5657e` then **`f56cd0`**);
+position save = `f567ac`. Pattern restart = `f5675b` (resets `0x32ed`, sets `0x33d4=1`, reloads
+pointers from the bases). Buffer fill loop = **`F5CF95`/`F5CFA1`**, extent `0x95C00..0x9FFFE` (42 KB).
 
-Build tree: `~/compartilhado/kn7000_mame_build`, binary `kn7000`. Run:
+**Transport lanes** `0x41E/0x41F/0x420/0x421`: 00=stop, 01=arm, 06/04=running, 0C=sync(terminal),
+10=parked. Arm `f43cf8` (via `f43ca9`, from `0xD2F==1 → 0x2966=0x85`); promote 01→06 INTT1 `ef0cac`.
+
+**Demo/presentation** — `0x8d34==0x13` demo, `0x8d38==0xE4` submenu; demo timer `0xD2F`
+(`f86bf3`; ==10 load `f87189`, ==3 start `f86d3d`, ==1 arm); song index `0x28a4` = 18 (locked,
+`f86b74`). Loader `f87189(idx)` → `ef41e3` → `ef3fab`, dst `0x69800`. `"SLIDE"` = **sliding-window
+LZSS magic** (`SLIDE4K`/`SLIDE8K`), signature template at `0xE00032`, decompressor **verified
+working**. Entry table `0x9C4000` = 19 entries: `[0]..[17]` demo songs, `[18]`=`0x8E0000` the
+presentation descriptor. Six unreferenced `SLIDE8K` blobs at `0x983B3A/0x988690/0x98BB3A/0x98F0DA/
+0x992A0C/0x9963FA`, indexed by a table at `0x988018` (identity still unknown).
+
+## 7. Reproduce / tooling
+
 ```
 cd ~/compartilhado/kn7000_mame_build
 DISPLAY=:0 timeout 200 ./kn7000 kn5000 -rompath ./roms -skip_gameinfo -autoboot_delay 0 \
   -autoboot_script <probe.lua> -snapshot_directory <dir>
 ```
-Reusable Lua idioms (all verified to work; probes were in the session scratchpad, ephemeral —
-re-derive from these):
-- DRAM/SFR read: `local sp = mach.devices[":maincpu"].spaces["program"]; sp:read_u8(a)` /
-  `read_u16`. SFRs live at 0x00–0xFF (T8RUN 0x80, T16RUN 0x9E, INTET01 0xE4, INTET45 0xE6).
+Lua idioms (all verified):
+- Memory: `local sp = mach.devices[":maincpu"].spaces["program"]; sp:read_u8/u16/u32(addr)`.
+  SFRs live at 0x00-0xFF (T8RUN 0x80, T16RUN 0x9E, INTET01 0xE4, INTET45 0xE6).
 - Buttons: `mach.ioport.ports[":cpanel:CPL_SEG3"].fields[..]:set_value(1)`.
-- **Write-tap that FORCES a value**: `sp:install_write_tap(a,a,"n",function(off,data,mask) if
-  (data&0xffff)==0 then return 0xFFFF end return data end)` — the RETURN modifies the write (a
-  separate `write_u16` inside the callback is overwritten by the original store). Write-taps coexist
-  with `register_frame_done`; read-taps do not.
-- **Stack dump** (catch a caller): in a write-tap, `cpu.state["PC"].value`, and dump the SYSTEM stack
-  `cpu.state["XSSP"].value` (XNSP is unused on this box) via `sp:read_u32(xssp+i*4)`.
-- Nav timing: boot ~20 s, then DEMO / LEFT4 / LEFT2 with ~0.3 s press + ~1.5 s gaps.
+- ⚠ **`install_write_tap` ranges MUST be word-aligned pairs on this 16-bit space, and you must pick
+  the right byte lane** (mask `0x00FF` = byte X, mask `0xFF00` = byte X+1). An odd single-byte tap
+  **silently never fires** and looks exactly like "never written" — this caused a false retraction.
+- A tap can **modify** the write by RETURNING a value (a separate `write_u16` inside the callback is
+  overwritten by the original store).
+- ⚠ **Filter/window your taps.** Several hot idle loops rewrite these cells at ~1 kHz and will eat a
+  naive capture budget before the interesting moment. Log only on value CHANGE or inside a time window.
+- Stack dump (catch a caller): `cpu.state["PC"].value` + walk `cpu.state["XSSP"].value` (XNSP unused).
+- Write taps coexist with `register_frame_done`; **read taps do not**.
+- Nav timing: boot ~20 s, then DEMO / LEFT4 / LEFT2 with ~0.3 s press and ~1.5 s gaps.
 
-## 8. NEXT STEP (single, well-defined — the root cause is known)
+## 8. Shipped this session
 
-**Find why the running presentation never loads a demo song.**
-1. **Decode the presentation script.** Entry 18's decompressed descriptor at `0x69800` holds 16
-   `80 xx 00` records at `0x698C8` (`xx` = 32,2E,20,42,4C,53,55,5A,5D,62,64,16,6A,6D,70,25) and 16
-   `0x5F` bytes at `0x69900`. Find the interpreter that walks these (it is running — slide 1 shows)
-   and which opcode means "play song N" / "show slide N".
-2. **Find the song-load call site.** The loader is `f87189(idx)` -> `ef41e3` -> `ef3fab`, dst
-   `0x69800`. Something must call it (or a sibling) with an index in `0..17`. Tap `0x69800` writes
-   (proven idiom) and/or BP `f87189` to see who calls it and with what — currently only entry 18.
-   Note dst `0x69800` is shared, so a song load may need a different destination: check whether a
-   second buffer (the event buffer near `0x675A`, or one of the per-track bases
-   `0x3287/0x3297/0x32A3/0x32AB/0x32B5/0x33EB`) is the real song destination.
-3. **Identify the six unreferenced `SLIDE8K` blobs** (`0x983B3A`, `0x988690`, `0x98BB3A`,
-   `0x98F0DA`, `0x992A0C`, `0x9963FA`). They are not in the 19-entry table; if one of them is the
-   presentation's backing song, find the table//pointer that selects it.
-Once a song is loaded the event buffer fills, the corrupt-stream watchdog stops tripping, and (per
-the KN7000 model: start once, run to an explicit stop) playback runs the whole song with the slides
-paced by song position.
-
-⚠ Do NOT resume the "per-measure re-arm" hunt — that mechanism does not exist (§4).
-⚠ Do NOT chase the `0x1C00038`/`0xB80A` SSF-start chain or `0x251D8` — the presentation DOES start
-(Felipe, hardware); `0x251D8` is not the latch it was claimed to be.
+**`86aae9e` — kn5000: stop persisting the volatile work DRAM as NVRAM.** `map(0x000000,0x0fffff)`
+had `.share("nvram1")` + an `NVRAM` device, so the whole 1 MB of work RAM was saved and restored
+between runs. Real HW: IC9/IC10 are volatile; only the IC21 SRAM (`nvram2`) is battery-backed.
+Effects: (a) **the spurious `<Db>` transpose is GONE** — persisting the DRAM made every boot resume
+from a half-finished power-down state (MAME's exit never lets the power-down NMI handler run);
+(b) RAM measurements no longer inherit the previous session's contents. ⚠ Any older KN5000
+conclusion about RAM provenance should be re-verified on clean DRAM.
 
 ## 9. Method lessons (cost real time here)
 
-- **Runtime measurement repeatedly REFUTED static disassembly analysis** (3 subagent passes each
-  produced a plausible-but-wrong path: f591D1/accompaniment, f5af3c, f86fb7/0x2314). ALWAYS verify a
-  static claim with a tap/probe before building on it.
-- The March-2026 "0xB80A workspace-tag mismatch" conclusion is STALE and WRONG — the demo does
-  start; do not reopen it.
-- INTTR4 (not INTTR5) is the active tick; `INTET45` nibble layout: INTTR5 = high (pri 6:4, req bit7),
-  INTTR4 = low (pri 2:0, req bit3).
+- **Runtime measurement repeatedly REFUTED static disassembly analysis** — four separate passes
+  produced plausible-but-wrong causal chains. Always verify a static claim with a tap before
+  building on it.
+- **Check your instrument before believing a null result** (the non-firing tap above).
+- Felipe's hardware answers twice redirected the whole investigation in one sentence. **Ask him
+  early** when a question is about observable instrument behaviour.
