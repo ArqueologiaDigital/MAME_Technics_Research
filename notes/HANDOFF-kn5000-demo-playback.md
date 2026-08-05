@@ -1,9 +1,14 @@
-# HANDOFF — KN5000 Feature Demo / Presentation playback (updated 2026-08-05, update 29)
+# HANDOFF — KN5000 Feature Demo / Presentation playback (updated 2026-08-05, update 30)
 
 **Goal:** make the KN5000 Feature Presentation play, like the KN7000's does (commit `60d5392`).
-**Status: NOT fixed. Root cause LOCATED (§3/§4): the style reader walks BLANK rhythm ROM.**
-One real bug WAS fixed and shipped along the way (§8). Blow-by-blow: `kn5000-demo-playback-stall.md`
-(29 updates). **This file is the pick-up point — start at §4.**
+**Status: ROOT CAUSE SOLVED (§4). The bug is in the ROM DUMP, not the firmware and not the
+emulation: `kn5000_rhythm_data_rom.ic14` has address lines A19 and A21 TRANSPOSED.**
+De-swapping them makes the demo play — watchdog `0x20 -> 0x00`, transport `0x00 -> 0x04`,
+audio rms `0.0 -> 1543.9`. Not shipped: it is still open whether the DUMP is wrong or the
+BOARD wires those lines that way (see §4, "OPEN"). Roughly two thirds of ALL factory rhythms
+are affected, not just the demo.
+One real bug WAS fixed and shipped along the way (§8). Blow-by-blow: `kn5000-demo-playback-stall.md`.
+**This file is the pick-up point — start at §4.**
 
 ---
 
@@ -123,17 +128,98 @@ writing `0x044000..0x056000` -- so `0xFC61=0x30` arrives as part of the demo loa
 panel/registration snapshot. The demo therefore *legitimately* asks for variation 4 /
 section 7. Nothing here looks like a stray write.
 
-**THE REMAINING QUESTION:** style 0x48's record (`XIY=(0x32CE)=0x407800`) says bank
-`0x1A` at `+0x3D1`, yet its own section-7 pointers are `0xE754..0xFD29` while bank 0x1A's
-data ends at `0xE230` -- the record is **inconsistent with its own bank**. Prime
-suspicion is now the RECORD LOOKUP: `XIY` is set at `f55f9e: call f53d9a` with
-`A=(0x32E5)=0x48`, `H=(0x32E6)`. If that picks the wrong record, everything downstream
-is wrong-but-self-consistent, which is exactly what we observe.
+**ROOT CAUSE — SOLVED (2026-08-05).** The record lookup is CORRECT; the ROM DUMP is not.
 
-NEXT: (1) disassemble `f53d9a` and check how it maps style 0x48 -> record address;
-(2) scan the rhythm ROM's record directory for the record whose `+0x3D1` bank and
-section-7 pointers ARE mutually consistent, and see whether that record is the one
-style 0x48 should have selected. Also verify `(0x32E6)`, the second lookup input.
+`f53d9a` is the style-record lookup. Fully decoded:
+
+```
+f53d77  H &= 7 ; H <<= 1 ; W = 0 ; WA <<= 2 ; L = 0 ; HL = H*256 + A*4
+        XIY = 0xE45142                       ; style directory, 4 bytes/entry
+        WA  = (XIY+HL)                       ; word0: low byte = 64K bank
+        IY  = (XIY+HL+2)                     ; word1: offset within that bank
+f53d9a  calr f53d77 ; call f590b4 ; extz XIY ; add XHL,XIY ; ld XIY,XHL
+f590b4  if A > 0x3F: A = 0
+        XHL = f590d1[A] + (0x3277)           ; f590d1 = 0x400000,0x410000,... (LINEAR,
+                                             ; all 64 entries verified)
+```
+
+so `record = 0x400000 + (0x3277) + bank*0x10000 + offset`, indexed
+`(H&7)*512 + style*4` — i.e. **8 groups x 128 styles**. With `H=(0x32E6)=4`,
+`style=(0x32E5)=0x48` this yields `0x407800`, exactly the measured `(0x32CE)`.
+`(0x32E6)` is the style GROUP; the 7 compare sites `f54692..f54af4` bound it to 0..6.
+
+**ORIGIN OF THE STYLE AND GROUP — MEASURED.** The same panel sampler that produces
+the section request also produces these, from adjacent mirror bytes:
+
+```
+f53367:  A = (0xFC5A)              -> (0x32F5)   pending STYLE
+f5336F:  A = (0xFC5B) & 0x7F & 7   -> (0x32F7)   pending GROUP
+f533FF:  A = (0xFC61) & 0x30 >> 4  -> (0x3305)   section request
+f55EA4:  (0x32E6) = (0x32F7) ; (0x32E5) = (0x32F5)     ; commit
+```
+
+```
+t=24.40393  0xFC5A <- 48  0xFC5B <- 04  0xFC61 <- 30   PC=FF0DBC   (demo's snapshot)
+t=24.51879  0x32E6 <- 04  0x32E5 <- 48                 PC=F55EB2/F55EBE
+t=24.51888  0x3285 <- 1A                               rec=407800
+```
+
+Every value in the chain is what the demo asks for. Nothing is a stray write.
+
+**THE DEFECT IS IN `kn5000_rhythm_data_rom.ic14`: ADDRESS LINES A19 AND A21 ARE
+TRANSPOSED.**
+
+Every accompaniment track begins with the cell header `80 FF FF FF FF 87`, and the
+reader starts 6 bytes past it (`f56d47: WA -= 0x8000 ; WA += 6`, then `f590a9` adds the
+0x8000 back). So a correct lane pointer must land exactly 6 bytes after that pattern.
+Over all 202 records in the directory x 48 lane reads each:
+
+| image | lane reads correctly framed | reads landing on 0xFF |
+|---|---|---|
+| as dumped | 3439 / 9696  (35.5%) | 409 |
+| A19<->A21 de-swapped | **9696 / 9696 (100.0%)** | **0** |
+
+The declared-bank -> actual-bank relation is a clean deterministic bit swap, never a
+scatter: `0x08-0x0F <-> 0x20-0x27`, `0x18-0x1F <-> 0x30-0x37`, all others identity.
+That is bank bits 3 and 5 = ROM address lines **A19 and A21**. The record area
+(banks 0x00-0x07) has both bits clear, so the records themselves are unaffected —
+which is why the directory, the style names and the record contents all looked sane
+and only the pattern reads were garbage.
+
+**Emulator confirmation** (identical runs, only the ROM file differs):
+
+| | as dumped | de-swapped |
+|---|---|---|
+| watchdog `(0x32ED)` | 0x20 = tripped, pegged | **0x00, never trips** |
+| transport `(0x0420)` | 0x00 stopped | **0x04 = bit 2 running** |
+| audio ENGAGE+5..13s | peak 0, rms 0.0 | peak 32768, rms 1543.9 |
+
+```
+as dumped   crc32 76d11a5e  sha1 e4b572d318c9fe7ba00e5b44ea783e89da9c68bd
+de-swapped  crc32 aa4917ce  sha1 fef7f1927935d8fdada2afbdbfac29aac56e1c3c
+```
+
+**SCOPE.** This is not a demo-only bug. 132 of 202 style records sit in banks where
+bit 3 != bit 5, so roughly two thirds of the factory rhythms read the wrong 64 KB bank.
+The home-screen default style (bank 0x23) is among them. This is very likely the whole
+of "the KN5000 automatic rhythms are completely messed up".
+
+**OPEN — NEEDS FELIPE / THE SCHEMATIC.** Two hypotheses fit the evidence identically:
+
+  (a) the IC14 dump was taken with A19/A21 swapped (adapter/socket wiring), so the
+      ROM FILE is wrong and IC14 should be re-dumped; or
+  (b) the KN5000 board itself routes CPU A19/A21 to different IC14 pins, the dump is
+      the true chip content, and the MAME memory map should apply the permutation.
+
+Do NOT ship the de-swapped file as if it were a dump until this is settled — under (b)
+the honest fix is in the driver, not the ROM. The de-swapped image is at
+`<scratchpad>/ic14_deswapped.bin` for testing only.
+
+NEXT: (1) settle (a) vs (b) — trace IC14's A19/A21 pins on the service-manual
+schematic (`~/compartilhado/kn5000-docs/service_manual/pages/`, the large sheets are
+pages 36-48) or ask Felipe to buzz them out; (2) check whether the other 4 MB mask ROM
+dumped in the same session, the waveform ROM `ic307`, carries the same transposition —
+an A-line swap there would be far harder to notice by ear.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
