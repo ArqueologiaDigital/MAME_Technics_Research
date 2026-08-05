@@ -122,3 +122,57 @@ Fix the envelope, not the sine. Candidates, in order:
 
 ⚠ Any EG change alters PCM audio too. Establish the PCM bit-identity baseline
 (`-seconds_to_run 70`) BEFORE touching it, and expect that baseline to move — deliberately.
+
+---
+
+# Update 2026-08-05 (diagnostic pass): the feedback loop is REFUTED
+
+Felipe asked for the diagnostic before any envelope change. Two results, one negative and
+one that inverts the working picture.
+
+## 1. The status_r() feedback loop is NOT the cause
+
+`status_r()` documents the mechanism plainly: IC303 has no note-off input, so the firmware
+generates `0x7E00` (FREE) from the active-voice bitmap, that bitmap IS the `eg_running`
+latch, and the latch clears only on genuine rendered silence — "while a key is down the EG
+sits at its programmed sustain level, so the interlock never arms and the voice is
+structurally unreclaimable, for any hold duration."
+
+That reads like a closed loop, so it was tested rather than believed. `TGMODE` bit 1 reports
+a voice silent as soon as its last EG segment reaches its target, breaking the loop at
+exactly one point.
+
+| run | 28-36 s rms | 40-55 s rms |
+|---|---|---|
+| PCM | 2254 | **748** (still playing) |
+| sine | 2713 | 4.3 (stalled) |
+| sine + loop broken | 2699 | **1.2** (still stalled) |
+
+The probe DOES free the stuck voices — the residual falls from 4.3 to 1.2 — and the demo
+still does not resume. **Breaking the loop changes nothing. The hypothesis is dead.**
+
+## 2. The sub-CPU is BUSIER in sine mode, not blocked
+
+PC histogram, 44-50 s, the stalled window (the tone generator is on the sub-CPU bus):
+
+```
+PCM mode : 020CB9 30.5%  020CFA 20.9%  020CB6 17.2%  020D02 14.6%  020CFE 7.6%  020CFC 6.0%
+           -> 96.8% inside 020CB6..020D02, a ~0x4C-byte tight loop = the idle wait
+SINE mode: 01F8D5 2.6%  035ADF 2.3%  01F861 2.3%  03D0C5 2.3%  01FB03 2.3%  035AC8 2.3% ...
+           -> no address above 2.6%, execution spread across the map
+```
+
+This is the opposite of "the firmware is stuck waiting". In PCM mode the sub-CPU sits in its
+idle loop; in sine mode it is running a great deal of code and never settles. So the stall is
+not a block on a busy voice — something is giving the sub-CPU continuous work.
+
+## Where to look next
+
+* Identify the PCM-mode idle loop at `020CB6..020D02` (sub-CPU). Knowing what it waits on
+  names the condition sine mode fails to reach.
+* Find what sine mode makes the sub-CPU do instead — the spread suggests an allocator or
+  retry path running continuously. `035AC8/035AD9/035ADF` and `01F861/01F8D5/01FB03` recur
+  and are the first two clusters to disassemble.
+* Only after that, revisit the envelope. The Type A stuck voices (EG parked at its final
+  target ~-77 dB, never silent) are still a real defect masked by PCM decay — but they are
+  now demonstrably NOT what stops the demo.

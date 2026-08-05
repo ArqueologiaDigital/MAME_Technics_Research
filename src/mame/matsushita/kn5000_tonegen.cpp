@@ -1918,6 +1918,23 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	//    firmware's voice manager -- can differ. A sine-mode capture is a faithful proxy for
 	//    the pitch/envelope/mix machinery, NOT for voice allocation.
 	const bool sine_mode = (m_render_mode.read_safe(0) & 1) != 0;
+	// ---- DIAGNOSTIC PROBE, TGMODE bit 1 (see kn5000.cpp) ------------------------------
+	// Is the sine-mode stall a FEEDBACK LOOP through status_r()? The firmware has no
+	// note-off input: it generates 0x7E00 (FREE) from the active-voice bitmap this device
+	// reports, and that bitmap is the eg_running latch, cleared only by genuine rendered
+	// silence. A voice whose EG sustains at a non-zero level and whose source does not
+	// decay therefore reports "busy" forever -- status_r()'s own comment calls such a voice
+	// "structurally unreclaimable, for any hold duration".
+	//
+	// This bit breaks the loop at exactly one point: a voice whose LAST EG segment has run
+	// to its target is reported silent regardless of what it is still rendering.
+	//
+	// ⚠ RESULT (2026-08-05): REFUTED. Turning this on does free the stuck voices -- the
+	// residual drops from rms 4.3 to 1.2 -- but the demo still does NOT resume. So the
+	// status_r() feedback loop is NOT what stalls sine mode. Kept as a knob because it
+	// isolates that one mechanism cleanly; it is NOT a fix and must not be used as one.
+	// See notes/kn5000-tonegen-sine-mode.md for where the evidence actually points.
+	const bool free_on_eg_done = (m_render_mode.read_safe(0) & 2) != 0;
 	//  ★ bit 1 = the SPECULATIVE ISA (guessed semantics).  See kn5000.cpp DSPCFG.
 	if (m_dsp1.found())
 		m_dsp1->set_speculative((dspcfg & 2) != 0);
@@ -2212,7 +2229,8 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// the voice was already contributing exactly nothing.
 			{
 				const int64_t mag = int64_t(std::abs(sample)) * int64_t(std::max(v.volume_l, v.volume_r));
-				if (mag >= (int64_t(1) << 14))          // >= 0.5 LSB of the 16-bit output
+				const bool eg_done = free_on_eg_done && v.eg_seg >= 2 && v.eg_level <= v.eg_target;
+				if (mag >= (int64_t(1) << 14) && !eg_done)   // >= 0.5 LSB of the 16-bit output
 					v.silent_samples = 0;
 				else if (++v.silent_samples >= SILENT_HOLDOFF)
 				{ if (VERBOSE & LOG_CENSUS) m_census_clr[4]++; v.eg_running = false; }

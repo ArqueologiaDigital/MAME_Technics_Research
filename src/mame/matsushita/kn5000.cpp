@@ -764,6 +764,12 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFNAME(0x01, 0x00, "Tone generator rendering (DIAGNOSTIC)")
 	PORT_CONFSETTING(   0x00, "PCM from wave ROM (normal)")
 	PORT_CONFSETTING(   0x01, "Sine test tone (no wave ROM PCM)")
+	// bit 1: DIAGNOSTIC PROBE, not a fix. Reports a voice silent once its last EG segment
+	// has reached its target, which breaks the status_r() feedback loop that otherwise
+	// leaves a sustaining voice unreclaimable. See the banner in kn5000_tonegen.cpp.
+	PORT_CONFNAME(0x02, 0x00, "  ^ probe: free voices whose EG has finished")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x02, DEF_STR(On))
 
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
