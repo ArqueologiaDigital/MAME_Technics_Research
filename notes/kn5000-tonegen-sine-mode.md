@@ -176,3 +176,77 @@ not a block on a busy voice — something is giving the sub-CPU continuous work.
 * Only after that, revisit the envelope. The Type A stuck voices (EG parked at its final
   target ~-77 dB, never silent) are still a real defect masked by PCM decay — but they are
   now demonstrably NOT what stops the demo.
+
+---
+
+# Update 2026-08-05 (experiment): the maincpu keeps sending; the sub-CPU stops REPLYING
+
+## Correction to the previous update
+
+"The sub-CPU is BUSIER in sine mode, not blocked" was WRONG, and the error was in reading the
+histogram. The flat 2.0-2.6% spread is not work scattered across the map — it is seven
+instructions of ONE ~70-instruction non-nested loop, sampled uniformly (~1.3%/instruction,
+multi-cycle ones at 2.0-2.6%). **The sub-CPU is IDLE in sine mode.** Each of the four service
+calls in Audio_Main_Loop returns immediately because its queue reads empty. This does not rest
+on the sampling: none of those PCs sits in a loop that can run twice in one pass without first
+consuming a queue entry.
+
+The PCM-mode loop at 0x020CB6 is a genuine wait — on Port D bit 4 = the MSTAT1 pin driven by
+the maincpu's Port Z bit 1, inside INTERCPU_DMA_SEND_CHUNK, the sub->main path. PCM has traffic
+to send and waits on the handshake; sine has nothing to send and never enters it.
+
+Load base VERIFIED: file offset 0 of `kn5000_subprogram_v142.rom` = sub-CPU **0x00EF00**
+(3267/3278 existing symbols land on instruction boundaries there; ~36% at 0).
+
+## The experiment
+
+Every inter-CPU latch byte logged with a timestamp (LOG_LATCH_DATA), both directions, both
+modes, `-seconds_to_run 50`. Bytes per second:
+
+```
+  t     PCM main->sub  sub->main   |  SINE main->sub  sub->main
+ 33          434        140        |        434        140
+ 35          615        150        |        615        150
+ 36          906        160        |        906        120
+ 37          809        190        |        809          0     <-- replies stop dead
+ 38          444        140        |        444          0
+ 41         1266        260        |        489          0
+ 47          419        140        |        424          0
+```
+
+* **main->sub is IDENTICAL through t=39 and healthy thereafter.** The maincpu keeps delivering
+  commands at full rate in sine mode. It is not the victim, and it has not stalled.
+* **sub->main collapses to EXACTLY ZERO at t=37** and never recovers, while PCM continues at
+  140-260 bytes/s.
+
+## And the sub-CPU is not dropping the work either
+
+Reading the DSP command ring live (sub-CPU DRAM) across the same window:
+
+```
+        ringlevel(0x4366)   gate(0x448C)   0x3B60 / 0x3B62
+PCM     10 from t=37        0              DIVERGE (rd runs ahead, gap grows to 0x1E0)
+SINE    0 always            0              EQUAL every second
+```
+
+So in sine mode the ring is **fully drained every pass** and the truncated-packet gate never
+latches. The sub-CPU receives the same commands and consumes all of them. It simply produces
+no replies. (Note this is the opposite of the ring-starvation guess, and PCM is the mode with
+a standing backlog of 10 bytes — unexplained, and possibly worth a look on its own.)
+
+## Where that leaves it
+
+Delivery and consumption are both healthy and identical. The divergence is downstream of
+both: **the sub-CPU stops generating sub->main traffic at t=37 while still processing input.**
+
+Next, and unchanged from the analysis: put hit counters on the sub-CPU voice bookkeeping —
+Voice_Retire_ToFreePool 0x021E31, Voice_Demote_Decayed 0x021E83, Voice_Reset_Engine 0x021ECB,
+and the `ld (0x100002),0x7e00` FREE write at 0x021F94 — in both modes across t=25-50 s. That
+path is fed by the tone-generator status readback at 0x02102B, which is the ONLY route in the
+whole image from rendered sample values back into sub-CPU control flow, so it is the only
+place the two modes can legally diverge. If the retire/demote counters go to zero in sine mode
+before t=37 while PCM keeps ticking, the software free pool starved.
+
+⚠ Also unresolved: what generates the sub->main traffic in PCM mode is still unidentified
+(probably 0x035D59, a reply from the DSP command dispatcher, by elimination — untraced).
+Identifying it would say directly what stopped.

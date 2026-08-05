@@ -435,7 +435,7 @@ void kn5000_state::subcpu_latch_w(uint8_t data)
 		LOGMASKED(LOG_LATCH, "MainCPU -> SubCPU latch: cmd 0x%02X (write #%u) PC=%06X\n",
 			data, m_subcpu_latch_write_count, m_maincpu->pc());
 	else
-		LOGMASKED(LOG_LATCH_DATA, "MainCPU -> SubCPU latch: 0x%02X (write #%u)\n",
+		LOGMASKED(LOG_LATCH_DATA, "t=%.4f MainCPU -> SubCPU latch: 0x%02X (write #%u)\n", machine().time().as_double(),
 			data, m_subcpu_latch_write_count);
 
 	// Force tight CPU interleaving so subcpu HDMA can process each byte
@@ -467,7 +467,7 @@ void kn5000_state::maincpu_latch_w(uint8_t data)
 		LOGMASKED(LOG_LATCH, "SubCPU -> MainCPU latch: cmd 0x%02X (write #%u) PC=%06X\n",
 			data, m_maincpu_latch_write_count, m_subcpu->pc());
 	else
-		LOGMASKED(LOG_LATCH_DATA, "SubCPU -> MainCPU latch: 0x%02X (write #%u)\n",
+		LOGMASKED(LOG_LATCH_DATA, "t=%.4f SubCPU -> MainCPU latch: 0x%02X (write #%u)\n", machine().time().as_double(),
 			data, m_maincpu_latch_write_count);
 
 	// Same reasoning as subcpu_latch_w, in the reply direction: keep the main CPU's
