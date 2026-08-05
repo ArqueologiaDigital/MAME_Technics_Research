@@ -234,9 +234,39 @@ Until a real re-dump exists, do NOT check the de-swapped image in as if it were 
 test image is at `<scratchpad>/ic14_deswapped.bin`. If the driver needs to run in the
 meantime, mark the existing ROM `BAD_DUMP` rather than silently substituting.
 
-NEXT: check whether the other 4 MB mask ROM, the waveform ROM `ic307`, carries the same
-transposition — it is the same size and presumably came off the same rig, and an A-line
-swap in wave data would be far harder to notice by ear than in sequencer data.
+**IS THE WAVEFORM ROM AFFECTED TOO? — the risk is CONFIRMED, the answer is not.**
+Service manual page 34 ("TONE GENERATOR SECTION (A)") shows the four wave ROMs
+IC304 `QSIGU3C32375`, IC305 `QSIGU3C32374`, IC306 `QSIGT3C22A01`, IC307 `QSIGX3C32008`.
+**IC307 is the same `QSIGX3C` 44-pin family as IC14** (`QSIGX3C23011`), same 32 Mbit, and
+its address wiring is pin-for-pin identical: `AD20<-44<-AX20`, `AD19<-43<-AX19`,
+`AD18<-2<-AX18`, `AD17<-3<-AX17`, `AD16<-34<-AX16` ... with **NC at pin 1**. So the same
+adapter mis-map is possible on IC307. Two cheap checks already ruled out:
+
+  * per-512 KiB block statistics show no padding or dead space to exploit (all eight
+    blocks are 1-2% 00/FF and full of data), so the block-order-by-emptiness trick that
+    would have been easy here does NOT work;
+  * an A-line swap permutes whole 512 KiB blocks, so every sample stays internally
+    coherent — you get wrong-but-plausible instruments, which is why it cannot be
+    settled by ear.
+
+**The test to run** is the same shape as the one that cracked IC14: use the firmware's
+own declared boundaries as a framing oracle. Get the wave table (index -> start, loop,
+end) — statically out of the table-data/program ROM (both known-good dumps) is better
+than tapping IC303's registers, since it yields every sample at once — then, restricted
+to the IC307 bank (`0xC00000-0xFFFFFF`; IC304-306 are BAD_DUMP copies of IC307 and must
+be excluded):
+
+  1. **declared sample ends should be quiet.** Mean |amplitude| in a small window at each
+     declared end address, as-dumped vs de-swapped. Blocks 0,2,5,7 are fixed points of
+     the permutation and blocks 1,4 / 3,6 swap, so under a swap roughly half the samples
+     would have their declared end land at an arbitrary point inside some other sound.
+     This uses EVERY sample, which is why it is the primary test.
+  2. **boundary-crossing samples splice.** For samples spanning a `0x80000` boundary,
+     measure the step |x[b]-x[b-1]| at the seam. Continuous = correct order.
+  3. **loop points must join.** Same measurement across loop-end -> loop-start.
+
+⚠ Compute the NULL first in every case — the same statistic at random positions inside
+samples — or the criterion cannot fail and a pass means nothing.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
