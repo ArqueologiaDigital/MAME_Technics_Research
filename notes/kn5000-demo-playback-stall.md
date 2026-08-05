@@ -841,6 +841,56 @@ both sides (0 >= 0 always true) so everything is "due"; (ii) the pump (`ef13a5` 
 mis-evaluated. Probe idea: tap the beat/tick cells and log the reader's due-comparison inputs at the
 first few event consumptions (t≈25.33), i.e. BEFORE the transport arms.
 
+## ★★★★★★ UPDATE 24 — THE READ-POINTER BASES ARE NEVER REWOUND TO THE PATTERN START ★★★★★★
+
+**The pacing gate (decoded):**
+```
+f567cd loop: bit 0,(0x32f4) -> set = stop reading           ; the pause flag
+f567f0: A = (XHL+IY)   [XHL = resolve(cell 0x33d6), IY = offset 0x33d8]
+        0x83 -> f56a25 end-of-track   0x81 -> f568ee BEAT   0x90/91/D1..D5 -> f568c9 event
+        else -> f568a8 (skip 1 byte, watchdog 0x32ed++)
+f568ee (BEAT): A = f570bb(reader bar 0x33da/beat 0x33db vs PLAYBACK bar 0x32b4/tick 0x327d)
+        cp A,0x18 (24) ; ULE -> advance beat, set (0x32f4) bit1, KEEP READING
+                        ; else -> or (0x32f4),0x01 = PAUSE  (read-ahead window = 24)
+f570bb: returns (reader position - playback position), 0 if not ahead, capped 0x60
+```
+
+**Measured at runtime (word-aligned tap on 0x33DA-0x33DB):**
+```
+READER bar(0x33da)=00 beat(0x33db)=00   <- NEVER advance
+PLAYBACK bar(0x32b4)=00 tick(0x327d)=0  <- never advance
+gate (0x32f4)=00                        <- NEVER set
+writes to 0x33da/0x33db come only from PC=F56783/F5678B = the pattern RESTART (f5675b)
+```
+⇒ **`f568ee` is NEVER CALLED**: the reader meets **no `0x81` beat marker** in the entire 26 KB it
+consumes. With no beat marker there is nothing to pause it, so it races the whole song and falls off
+the end. The pacing gate itself is fine — it never gets the chance to run.
+
+**★ ROOT CAUSE: the persistent read-pointer BASES point at the END of the pattern data, not its
+start.** `f5675b` ("restart pattern") reloads the live pointers `0x33D6/0x33D8/0x33DA/0x33DB/
+0x33D5/0x33EA` **from** the bases `0x3287/0x3297/0x32B5/0x32AB/0x32A3/0x33EB`. Measured bases:
+```
+0x3287 = 0x675A   0x3297 = 0x0000   0x32A3 = 0x2323
+0x32AB = 0x0000   0x32B5 = 0x0000   0x33EB = 0x0000
+```
+The pattern data occupies offsets `0x0000..0x6768` in cell 0 of the DRAM pool
+(phys `0x95C00..0x9C368`, starting `80 FF FF 96 00 87 90 …` and ending `… 81 83`).
+**Base `0x675A` is 14 bytes before the END of that data** — a stale end-of-song position — and the
+other lanes' bases are `0x0000`/garbage. So every "pattern restart" rewinds to the END: the reader
+consumes the last few bytes, walks into the zero fill, accumulates 32 unrecognised bytes and trips
+the corrupt-stream watchdog, which issues the quantized stop that kills the transport. Loop repeats
+every ~68 ms.
+
+**⇒ THE DEFECT: whatever should initialise the per-lane read-pointer bases to the pattern START when
+the demo song is engaged never runs (or writes the wrong value).** Everything else in the chain —
+decompression, the pool contents, the resolver, the pacing gate, the watchdog, the transport — is
+correct. Earlier base writes were captured at t≈18.83 (`PC=F55FFB`) and t≈19.03-19.07 (`PC=F567AC`),
+i.e. all BEFORE the demo starts; nothing sets them during demo engage.
+
+**NEXT:** tap the base cells (`0x3286-0x3287` etc., word-aligned) across the demo-engage moment and
+find the writer that should set them to the pattern start; compare with what a normal
+(non-demo) style engage does, since ordinary rhythm playback presumably rewinds correctly.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
