@@ -1343,7 +1343,33 @@ ROM_START(kn5000)
 	ROMX_LOAD("kn5000_subprogram_v140_compressed.rom", 0x0e0000, 0x16bc4, CRC(5b182629) SHA1(13098dd150c5a6083a5d15a63d5d785802d8e8ae), ROM_BIOS(5)) // v5
 
 	ROM_REGION16_LE(0x400000, "rhythm_data", 0)
-	ROM_LOAD("kn5000_rhythm_data_rom.ic14", 0x000000, 0x400000, CRC(76d11a5e) SHA1(e4b572d318c9fe7ba00e5b44ea783e89da9c68bd))
+	// IC14 (QSIGX3C23011, 32 Mbit mask ROM). The dump we have was taken with the device's
+	// address lines A19 and A21 TRANSPOSED, so it is de-scrambled here at load time rather
+	// than being altered on disk -- the file below is the untouched original dump and its
+	// hashes are the hashes of that file.
+	//
+	// The service manual (page 32, "CPU SECTION (A) P.C. Diagram") shows IC14 wired straight:
+	// AD20<-pin44<-net A21, AD19<-pin43<-net A20, AD18<-pin2<-net A19, AD17<-pin3<-net A18,
+	// AD16<-pin34<-net A17 ... i.e. AD_k <- net A(k+1) throughout, exactly like IC19 beside
+	// it. So the transposition is in the DUMP, not on the board, and IC14 should be re-dumped
+	// -- at which point these eight lines collapse back to a single ROM_LOAD. Note that AD18
+	// and AD20 are pins 2 and 44, adjacent across the NC at pin 1: the neighbourhood where a
+	// socket adapter configured for a different 44-pin part mis-maps.
+	//
+	// Swapping ROM address bits 19 and 21 permutes the eight 512 KiB blocks by swapping bits
+	// 0 and 2 of the block index: 0,1,2,3,4,5,6,7 -> 0,4,2,6,1,5,3,7. Verified: every style
+	// record's lane pointers must land 6 bytes past a cell header "80 FF FF FF FF 87", which
+	// 3439 of 9696 do as dumped and 9696 of 9696 do once de-scrambled. Without this the
+	// bad-opcode watchdog trips and the accompaniment transport stops, silencing about two
+	// thirds of the factory rhythms and the Feature Demo.
+	ROM_LOAD("kn5000_rhythm_data_rom.ic14", 0x000000, 0x080000, BAD_DUMP CRC(76d11a5e) SHA1(e4b572d318c9fe7ba00e5b44ea783e89da9c68bd)) // file block 0 -> 0x000000
+	ROM_CONTINUE(                           0x200000, 0x080000) // file block 1 -> 0x200000
+	ROM_CONTINUE(                           0x100000, 0x080000) // file block 2 -> 0x100000
+	ROM_CONTINUE(                           0x300000, 0x080000) // file block 3 -> 0x300000
+	ROM_CONTINUE(                           0x080000, 0x080000) // file block 4 -> 0x080000
+	ROM_CONTINUE(                           0x280000, 0x080000) // file block 5 -> 0x280000
+	ROM_CONTINUE(                           0x180000, 0x080000) // file block 6 -> 0x180000
+	ROM_CONTINUE(                           0x380000, 0x080000) // file block 7 -> 0x380000
 
 	ROM_REGION16_LE(0x1000000, "waveform", 0)
 	// Only IC307 is dumped. IC304/305/306 are NOT dumped. As a faithful-mechanism
