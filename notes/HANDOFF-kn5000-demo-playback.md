@@ -249,24 +249,47 @@ adapter mis-map is possible on IC307. Two cheap checks already ruled out:
     coherent — you get wrong-but-plausible instruments, which is why it cannot be
     settled by ear.
 
-**The test to run** is the same shape as the one that cracked IC14: use the firmware's
-own declared boundaries as a framing oracle. Get the wave table (index -> start, loop,
-end) — statically out of the table-data/program ROM (both known-good dumps) is better
-than tapping IC303's registers, since it yields every sample at once — then, restricted
-to the IC307 bank (`0xC00000-0xFFFFFF`; IC304-306 are BAD_DUMP copies of IC307 and must
-be excluded):
+**ANSWER: IC307 IS CLEAN. Its dump is NOT address-swapped.** Two independent tests,
+both run on the as-dumped image against an A19<->A21-swapped copy of it.
 
-  1. **declared sample ends should be quiet.** Mean |amplitude| in a small window at each
-     declared end address, as-dumped vs de-swapped. Blocks 0,2,5,7 are fixed points of
-     the permutation and blocks 1,4 / 3,6 swap, so under a swap roughly half the samples
-     would have their declared end land at an arbitrary point inside some other sound.
-     This uses EVERY sample, which is why it is the primary test.
-  2. **boundary-crossing samples splice.** For samples spanning a `0x80000` boundary,
-     measure the step |x[b]-x[b-1]| at the seam. Continuous = correct order.
-  3. **loop points must join.** Same measurement across loop-end -> loop-start.
+**Test 1 — the wave ROM's own self-referential page directories.** A KN5000 wave ROM is
+four 1 MB pages, each opening with an index of `{param_ptr, wave_offset}` u16 pairs, and
+every parameter record repeats its own `wave_offset` as a back-reference
+(`kn5000_tonegen.cpp:parse_page_directories`, six acceptance checks).
 
-⚠ Compute the NULL first in every case — the same statistic at random positions inside
-samples — or the criterion cannot fail and a pass means nothing.
+| image | page 0 | page 1 | page 2 | page 3 | back-refs |
+|---|---|---|---|---|---|
+| as dumped | 198 | 168 | 1072 | 57 | **1495 / 1495** |
+| A19<->A21 swapped | 198 | 168 | **none** | **none** | 366 / 366 |
+
+Pages 0 and 1 keep their directories under the swap because those live in blocks 0 and 2,
+which are fixed points of the permutation; pages 2 and 3 have theirs in blocks 4 and 6,
+which the swap moves, and both are destroyed. If the chip really were swapped, then
+de-swapping would have to yield four valid directories — it yields two. It is the
+AS-DUMPED orientation that the format validates.
+
+**Test 2 — PCM continuity at the 0x80000 seam** (independent, and it covers pages 0-1
+which test 1 cannot). Exactly one chunk per page spans the half-page boundary; measure the
+sample-to-sample step there against the null of every other step inside that same chunk:
+
+| page | as dumped | A19<->A21 swapped |
+|---|---|---|
+| 0 | 0.17 quantile | 0.09 quantile |
+| 1 | 0.64 | **0.99** |
+| 2 | 0.14 | **0.96** |
+| 3 | 0.71 | **0.998** |
+
+As dumped, every seam is an unremarkable step inside its recording. Swapped, three of the
+four become extreme outliers. (Page 0 does not separate — one inconclusive case out of
+four, in a test that test 1 already settles.)
+
+So the two 4 MB mask ROMs were NOT dumped the same way: whatever procedure produced
+IC307 was correct, and is the one to use when re-dumping IC14.
+
+Two cheap approaches that did NOT work, recorded so they are not retried: per-512 KiB
+block statistics show no padding or dead space to exploit (all eight blocks 1-2% 00/FF),
+and an A-line swap keeps every sample internally coherent — you get wrong-but-plausible
+instruments — so it cannot be settled by ear.
 
 **RESOURCE (new):** `~/compartilhado/kn5000-roms-disasm` has semantic labels and a
 symbol table (`symbols/maincpu_symbols_reference.txt`) for this exact ROM. Every
