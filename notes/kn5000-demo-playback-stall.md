@@ -891,6 +891,54 @@ i.e. all BEFORE the demo starts; nothing sets them during demo engage.
 find the writer that should set them to the pattern start; compare with what a normal
 (non-demo) style engage does, since ordinary rhythm playback presumably rewinds correctly.
 
+## ★★★★★★ UPDATE 25 — ⚠ THE DRIVER PERSISTS ALL 1 MB OF WORK DRAM AS NVRAM ⚠ ★★★★★★
+
+Chasing "who sets the read-pointer base to 0x675A" led to a **separate, genuine emulation-fidelity
+defect that contaminates RAM-based measurements project-wide**:
+
+```cpp
+// src/mame/matsushita/kn5000.cpp
+map(0x000000, 0x0fffff).ram().share("nvram1");   // 1 Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3)
+NVRAM(config, "nvram1", nvram_device::DEFAULT_ALL_0);
+```
+**The entire main work DRAM is saved to `nvram/kn5000/nvram1` and restored on the next run.** On real
+hardware IC9/IC10 are ordinary **volatile DRAM**; only the SRAM at `0x1e0000-0x1fffff` (IC21, the
+"back-up SRAM") is battery-backed (`nvram2`, which also has a factory-defaults init handler — that
+one is legitimate). Proof from the saved file itself:
+```
+nvram1 @0x3287  : 5A 67          -> 0x675A   (the "stale end-of-song read pointer")
+nvram1 @0x95C00 : 80 FF FF 96 00 87 90 ...   (the entire "pattern pool" I had been analysing)
+```
+and at t=0.047 s the boot RAM-clear tap reported `before 3287=675A` — i.e. the value was already
+there **before the firmware ran a single relevant instruction**.
+
+### ⚠ CONSEQUENCE — RETRACTION of Update 24
+Update 24 concluded "the read-pointer bases point at the END of the pattern data". That conclusion
+was drawn from **contaminated state**: both the base value `0x675A` and the pool contents at
+`0x95C00` came from the *previous session's* leftover DRAM, not from anything this run did. The
+observation was real but its provenance was wrong, so the inference does not stand. (Likewise the
+"the song data IS present at 0x95C00" claim in Update 22 — that data was leftover.)
+
+### The clean-DRAM control run
+Deleted `nvram/kn5000/nvram1` (backed up first) and re-ran the demo from clean DRAM:
+**the demo fails IDENTICALLY** — sub-ticks freeze at 0x18, no music, `0x251D8`=0, transport dead
+(only `0x22FC` differs: 01 instead of 03). So **the persisted DRAM is NOT the demo's root cause** —
+it is an independent defect. Both need fixing, separately.
+
+### ★ Why this matters far beyond the demo
+Every KN5000 investigation in this project that reads work RAM (0x000000-0x0FFFFF) may have been
+reading state inherited from earlier sessions rather than state produced by the run under test.
+That includes this whole investigation's RAM dumps, and potentially other KN5000 work (the
+control-panel/cpserial analyses, boot-state studies, any "is this buffer populated?" question).
+**Re-verify any RAM-provenance conclusion with `nvram1` deleted.**
+
+**FIX (emulator-side, faithfulness):** stop persisting the volatile DRAM — make `0x000000-0x0FFFFF`
+a plain `.ram()` region with no `share("nvram1")`/`NVRAM()` device, keeping `nvram2` (IC21 SRAM) as
+the only battery-backed store. ⚠ Check first whether anything depends on the current behaviour: the
+driver has comments about a "virgin NVRAM" growing a spurious `<Db>` and there is a
+`nvram/kn5000_fresh_boot_error/` directory from an earlier session, so a fresh boot may surface the
+known power-down-NMI defect. That interaction must be understood before shipping the change.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
