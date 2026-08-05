@@ -593,6 +593,61 @@ KN5000 equivalent is presumably an LZSS/compressed blob in table_data ROM that m
 into the event buffer.) The KN5000 song data source is the "ZZZZ" record at 0x69800 (loaded) plus
 the pointer table at `0x9C4000[songidx]` (entry 18 = 0x8E0000).
 
+## ★★★ UPDATE 19 — the loader is the SLIDESHOW loader; the SONG is gated behind 0x8d38 != 0xE4 ★★★
+
+**What `f87189` actually loads (decoded end-to-end):**
+```
+f87189: XWA = *(0x9C4000 + songidx*4)      ; songidx 18 -> 0x008E0000
+        or XWA,XWA ; ret Z                  ; bail if null
+        XBC = 0x00069800                    ; destination
+        call 0xef41e3                       ; format dispatcher
+ef41e3: memcmp(src, template@0xE00032, 5)   ; template bytes = "SLIDE"
+        mismatch -> return 0xFFFF (loads NOTHING)
+        match -> A = src[5]:  '4'(0x34) -> decompressor ef3fab ; '8'(0x38) -> ef40c5 ;
+                              anything else -> loads NOTHING
+```
+ROM at CPU `0x8E0000` (= table_data region offset 0x0E0000, map `0x800000-0x9FFFFF`) reads:
+`53 4C 49 44 45 34 4B 00 ...` = **"SLIDE4K"**. So the blob is the **SLIDESHOW / presentation**
+data, format '4', and it **decompresses correctly** into `0x69800` (verified: output matches the
+compressed stream sensibly — "ZZZZ" header, part-type array, 16 `80 xx 00` records at 0x698C8,
+`5F` filler, then zeros). **The slideshow data is fine and IS loaded. `f87189` is NOT the song
+loader.**
+
+**★ The song is gated behind the UI sub-state.** The demo's start-playback step (demo timer
+`0xD2F == 3` -> `f86d3d`):
+```
+f86d3d: cp (0x8d34),0x13 ; ret NZ       ; demo mode
+f86d4c: ld (0x1157),(0x28a4)            ; target song := current entry
+f86d52: cp (0x8d38),0xe4                ; UI sub-state == FEATURE PRESENTATION submenu?
+f86d57: ret Z                           ; ★ YES -> RETURN, song never started ★
+f86d59: call 0xf22a37                   ; (the actual "start playback")
+```
+Runtime: `0x8d38` is **stuck at 0xE4 forever**, so `f22a37` is NEVER called. Many other demo
+branches are likewise gated on `0x8d38 != 0xE4` (f86b62, f86b9d, f86bcf, f86c46). Forcing
+`0x8d38 := 0xE1` is NOT a valid test (it flips those other branches too; AccPlayMode fell 3->1 and
+the buffer still never filled) — so the song is **not** meant to be started by the demo-timer path
+while in the presentation submenu.
+
+**⇒ REFRAME (important): the SSF PRESENTATION ENGINE NEVER STARTS.** `0x251D8` (presentation-active
+latch) is 0 the whole time. Therefore the Technics-globe image on screen is almost certainly the
+**static FEATURE PRESENTATION submenu image, NOT a running presentation**. In the real machine the
+presentation engine runs the SSF script, and the SSF vocabulary includes a **`SONG` tag** ("play a
+song / MIDI sequence") with a dedicated event `EV_READSONG` — i.e. **the SCRIPT starts the song**.
+So: presentation never starts -> no SONG directive -> song never loaded -> event buffer stays zero
+-> runaway guard trips -> transport dies. One root, everything downstream.
+
+This puts the March-2026 "the SSF presentation never starts / needs a 0xB80A block at
+`AcPresentCtrl_CheckSSFStart 0xF84625`" theme BACK IN PLAY — but now with the whole downstream
+chain understood and measured, and with the knowledge that the slideshow DATA is present and
+correctly decompressed. (My earlier "the demo does start, March is stale" claim was based on the
+globe being on screen; that inference was wrong if the globe is the menu image.)
+
+**NEXT (in progress):** per the docs, in state `0xE4` the SSF gate table entry is the unconditional
+marker `0xFFFE`, so ANY key press in `0xE4` should broadcast event `0x1C00038` ->
+`GroupBoxProc_StartSSFPresentation (0xF9A273)` -> 0xB80A workspace -> `f84625` -> presentation
+starts. A soft-key sweep in state 0xE4 (LEFT 1-5, RIGHT 1-5) is running to find which key actually
+starts it, watching `0x8d38`, `0x251D8` and writes to the event buffer `0x675A`.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
