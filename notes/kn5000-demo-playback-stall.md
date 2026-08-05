@@ -1020,6 +1020,45 @@ plus 32 bytes of buffer content at each. If some lanes point at well-formed trac
 0) and lane 1 does not, it is (P) — chase `f56cd0`'s input `0x32a3`. If ALL six point at zero-ish
 junk, it is (D) — chase the fill loop at `F5CF95` and what it is copying from.
 
+## ★★★★★★★ UPDATE 28 — SIX-LANE DUMP: it is (D), the CONTENT. 4 of 6 lanes are raw zeros ★★★★★★★
+
+Dumped all six lane bases and the buffer content at each (offset bases `0x3287/89/8b/8d/8f/91`,
+cell bases `0x3297/99/9b/9d/9f/a1`, `phys = bank[cell>>12] + (cell&0xFFF)*256 + off`).
+
+**AFTER ENGAGE (demo running):**
+```
+lane1 off=675A phys=09C35A first=00  ZEROS
+lane2 off=675A phys=09C35A first=00  ZEROS   (identical offset to lane 1 => zero length)
+lane3 off=6BE0 phys=09C7E0 first=00  ZEROS
+lane4 off=7109 phys=09CD09 first=81  VALID:  81 81 81 81 81 81 81 81 81 81 81 81 81 83 00 …
+lane5 off=76C1 phys=09D2C1 first=00  ZEROS
+lane6 off=7D2F phys=09D92F first=81  VALID:  81 90 00 43 40 03 00 81 90 00 43 40 03 00 …
+```
+**BEFORE ENGAGE** (idle/rhythm state) the same structure holds but differently populated:
+lanes 1-2 `off=FBA4` → zeros; lane3 `055A` and lane4 `096A` → real event data (`00 90 30 37 4B 07 …`);
+lane5 `0F79` → `81 90 01 24 79 06 …`; lane6 `14B4` → `90 01 53 44 08 …`.
+
+### ⇒ VERDICT: (D) — the offsets are fine, the CONTENT is missing
+- The offsets are **sane and sequential** (`675A → 6BE0 → 7109 → 76C1 → 7D2F`, ~0x500-0x670 apart),
+  exactly like a per-lane track layout. So `f56cd0` is not returning nonsense.
+- **Lane 4 shows what an EMPTY track must look like: `81 81 … 81 83`** — a run of beat markers ending
+  in an explicit end-of-track. That is well-formed and the reader would handle it.
+- **Lanes 1, 2, 3 and 5 contain RAW ZEROS with no end-of-track marker at all.** The reader therefore
+  walks them, every byte is an unrecognised opcode, and 32 bytes in the watchdog trips.
+- Lanes 1 and 2 share an identical offset ⇒ zero-length ⇒ they are meant to be unused parts, but
+  they were never given even the minimal `83` terminator that lane 4 has.
+- Corroboration from code already read: **`f55fd8: or (0x332c),0x3f` enables ALL SIX lanes
+  unconditionally**, and the dispatcher gates lane 1 on `bit 0,(0x332c)` (`f5683e`). So the firmware
+  will always try to read lane 1 — which nothing ever filled.
+
+### NEXT (narrow and concrete)
+Find the fill that writes the per-lane tracks into the 42 KB buffer (the copy loop at `PC F5CF95` /
+`F5CFA1`) and determine why it produces well-formed tracks for lanes 4 and 6 but leaves lanes
+1/2/3/5 as zeros: is its SOURCE short (the decompressed song only carries some parts), or does it
+skip lanes whose length is 0 instead of writing the minimal `83` terminator? Probe: tap the fill
+loop's writes and bucket them by destination offset against the six lane bases — that shows directly
+which lanes it writes and which it skips, and whether the source data for the missing lanes exists.
+
 ## HONEST BOTTOM LINE (after 16 stages, ~23 runs, 4 disasm passes)
 
 This is a genuinely intractable, deeply multi-layer demo-playback defect. I have COMPLETELY mapped
