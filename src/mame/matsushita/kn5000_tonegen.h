@@ -387,6 +387,9 @@ private:
 	                                //   at each segment hop.
 	bool m_use_level080  = false;   // KN5000_LVL080=on   — render +0x080 as the per-voice
 	                                //   output level it is, instead of only as a strobe.
+	bool m_handoff_ctrl  = false;   // KN5000_HANDOFF=ctrl — take the group0/bank0 hand-off
+	                                //   word as the CONTROL word it is (no amplitude field),
+	                                //   instead of muting on its low bits. See data_w().
 
 	// ---- diagnostic sine oscillator ------------------------------------------
 	// SINE_PEAK is chosen to match the wave ROM's typical RMS, not its peak. MEASURED
@@ -475,6 +478,10 @@ private:
 		int32_t  peak = 0;       // max |post-pan contribution|, either channel
 		double   sumsq = 0.0;    // for RMS of (L+R)/2
 		int      env_hand = -1;  // env_level carried by the group0/bank0 hand-off word
+		int      hand_word = -1; // ... and the RAW 16-bit word it came from. The low byte is
+		                         // a per-partial-LAYOUT constant (0x00 or 0xFF, never
+		                         // anything else); the informative fields are bits[14:12],
+		                         // bits[11:9] and bit 8. See data_w().
 		double   t_hand = -1.0;  // when that word arrived
 		double   t_ko = -1.0;    // when process_key_off() fired for this note
 		int      ko_src = 0;     // 0 = never released, 1 = group9 release heuristic,

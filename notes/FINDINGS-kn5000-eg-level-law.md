@@ -476,3 +476,159 @@ slope — and it is chip gain-staging, which is not in the firmware.
    still missing", step 2) and every one of these arms is decidable once it exists.
 3. `tools/kn5000_collapse_detect.py` is the regression gate for all of it. Report CLICK and
    INAUDIBLE separately — collapsing them is what hid mechanism (b) for this long.
+
+---
+
+# 2026-08-06 (later still) — the HAND-OFF WORD is DECODED, and it is NOT an amplitude
+
+Step 1 of the list above, done. **The group0/bank0 word's low field carries no magnitude, and
+reading it as one deletes the entire DRUM PART of both demos.** DERIVED from the sub-CPU ROM
+and MEASURED on the live bus and in the sub-CPU's own slot records. Nothing was calibrated
+and no constant was chosen; the only new code is an experiment switch, default OFF.
+
+New tool: `tools/kn5000_handoff_probe.lua` — a write tap on 0x100000/2 that, at every
+group0/bank0 write, also reads the sub-CPU's voice slot (0x04308E + ch*0x47; the slot index
+IS the TG channel, proven by 0x027338 `muls WA,0x47; lda XBC,0x0430BB; (XBC+WA) <- 0xF000`,
+0x0430BB = base+0x2D) and the records it points at. That is what turned this from a guess
+into an attribution.
+
+## A. What the register receives — MEASURED, both demos, t = 22–40 s
+
+| demo | 0x8100 gate | 0x7E00 free | hand-off | the ONLY values seen |
+|---|---|---|---|---|
+| organ | 1330 | 1320 | **1330** | FEFF 706 · FE00 412 · F000 157 · F0FF 55 |
+| piano |  484 |  458 |  **484** | F0FF 278 · F000 146 · FEFF 60 |
+
+* **the low byte is only ever 0x00 or 0xFF, and bit 8 is NEVER set** — 1814/1814;
+* one hand-off per gate, always: it is **the last write of the note-on burst**, not a
+  parting shot before the firmware abandons the note. MEASURED offsets from one gate:
+  `+3..28 µs` the nine EG words, `+31 µs` the +0x080 burst LOAD STROBE released,
+  `+38 µs` the hand-off;
+* **the free count tracks the gate count.** The old `data_w()` claim that the firmware
+  "has freed the channel and will never send that voice a 0x7E00" is refuted on the bus.
+
+## B. The two builders — DERIVED
+
+```
+Voice_Build_GateCommand           0x025589
+    BC = 0xFF - 4*(partial[0] & 0x3F) ;  BC |= 0x100 iff partial[0] != 0   (partial = slot[+0x17])
+    OR 0xFE00 if part[+0x12] != 0 and 0x04134C in {0,5,6}, else OR 0xF000
+Voice_Build_GateCommand_NoPartial 0x0255F3   ... same, but NO LOW FIELD IS EVER COMPUTED
+Voice_Apply_GateRouting           0x02552A   rewrites bits[14:12] and bits[11:9] from the two
+    nibbles of part[+0x25] (the byte CC 0x9B writes): 0 -> OR 111, 1 -> leave, 2 -> force 001
+```
+
+Fields: bit 15 (always set) · two 3-bit per-PART fields · bit 8 · byte. Only the last two
+could be a magnitude, and bit 8 is the byte's own present/enable flag — the firmware sets it
+exactly when the source is non-zero and emits the neutral 0xFF when it is not.
+
+## C. Which builder runs is a TONE-ARCHITECTURE choice — MEASURED, 1814/1814
+
+The partial's offset inside its tone record splits the population perfectly:
+
+| partial offset | stride | partial[0] | hand-off low byte | n |
+|---|---|---|---|---|
+| +102, +183, +264, +345 | 81 | **0 in 1099/1099** | **0xFF** | 1099 |
+| +16, +37 | 21 | 20,32,40,52,64,76,88,96,108 — never 0 | **0x00** | 715 |
+
+**PART 3 is 100 % of the 21-byte kind** (157/157 organ, 146/146 piano), its descriptor byte
+varies per hit over that drum-key-shaped set, and its onsets sit on a steady grid (median
+inter-onset 0.197 s organ / 0.125 s piano). **Part 3 is the drum part, and the shipped code
+silences every note of it.** The organ's parts 0 and 1 fire SIX and FIVE voices per note-on,
+two of which are of the same kind — so the mute also strips two layers off every organ note.
+
+## D. The criterion that could have failed, and did not
+
+A velocity, a per-part volume or an expression value must move when a note's loudness moves.
+Organ demo, within one fixed hand-off word:
+
+| word | n | attack level min…max | +0x080 level field min…max (sd) |
+|---|---|---|---|
+| FEFF | 960 | 242…255 | 2242…3190 (329) |
+| FE00 | 553 | 255…255 | 2166…2816 (225) |
+| **F000** (drums) | **185** | **162…249 = 32.7 dB** | **1792…3922 = 8.3 dB** (469) |
+| F0FF |  64 | 233…247 | 3508…3884 (104) |
+
+The drum part's own loudness registers span 32.7 dB and 8.3 dB across 185 note-ons while the
+hand-off word is **bit-identical in all 185**.
+
+## E. What the field IS
+
+**A per-partial parameter of the partial descriptor's byte 0, expanded as
+`0xFF - 4*(byte0 & 0x3F)`, with bit 8 as its own enable — and it is never enabled.** byte 0
+is 0 in every 81-byte partial in both demos, so the field is the constant 0xFF with its flag
+clear; the 21-byte partials have no such field, which is why their word carries 0x00. It is
+not a velocity, not a per-part volume, not an expression value (expression is part+0x10 and
+reaches the chip through `Voice_Calc_LevelPair_*` → +0x800/+0x840/+0x880, traced last pass),
+and not a per-note magnitude of any kind. Its chip-side meaning is NOT claimed here. What is
+settled is that nothing rendered may be gated on it.
+
+## F. Rendered — `KN5000_HANDOFF=ctrl`, default OFF
+
+**NULL CONTROL:** with the switch unset the organ-PCM WAV is md5-identical
+(`96ba4fa846752971a165a13bd1997bef`) to a capture from a binary rebuilt from HEAD with the
+change stashed, same note-on count (1828). Mix window t = 28–38 s, speaker pair — it
+reproduces `cb1c144`'s own baseline exactly (piano peak 24072 / 0 clipped; organ peak 17676 /
+rms 2661).
+
+| demo | mode | arm | CLICK | INAUDIBLE | OK | peak | rms | clipped | into the soft knee |
+|---|---|---|---|---|---|---|---|---|---|
+| organ | pcm  | base | 17 | 1320 | 338 | 17676 | 2661 | 0 | 0 |
+| organ | pcm  | **ctrl** | **0** | **1199** | **473** | 32747 | 6871 | 0 | 366 (0.0381 %) |
+| organ | sine | base |  1 | 1516 | 198 |  9894 | 3109 | 0 | 0 |
+| organ | sine | **ctrl** |  1 | **1404** | **316** | 26626 | 7094 | 0 | 0 |
+| piano | pcm  | base |  4 |  247 | 342 | 24072 | 3499 | 0 | 0 |
+| piano | pcm  | **ctrl** |  **0** |  **142** | **451** | 32411 | 8402 | 0 | 139 (0.0145 %) |
+| piano | sine | base |  0 |  218 | 377 | 32622 | 6373 | 0 | 396 (0.0413 %) |
+| piano | sine | **ctrl** |  0 |  **157** | **438** | 32680 | 7493 | 0 | 569 (0.0593 %) |
+
+Per hand-off class, organ PCM — the population split §6 asked for:
+
+| word | n | median voice peak base → ctrl | verdicts base → ctrl |
+|---|---|---|---|
+| FEFF | 960 |   528 → 531 | unchanged — a NULL, this class already had env_level 0xFF |
+| F0FF |  64 | 11221 → 11224 | unchanged |
+| FE00 | 553 |    85 → 309 | 553 INAUDIBLE → 540 INAUDIBLE + 13 OK |
+| **F000** | 185 | **158 → 2931 (+25.4 dB)** | 168 INAUDIBLE + 17 CLICK → **60 INAUDIBLE + 125 OK** |
+
+★ The `FE00` class rises only 3.6× and stays under the detector's −30 dBFS floor. Its
+baseline 85 is not the mute leaking — it is the 1.8 output samples rendered between the gate
+and the hand-off 37 µs later. Those voices are quiet for a **second, independent** reason;
+un-muting is necessary but not sufficient there. Separate open item, not a failure of this
+decode.
+
+## G. Why the default is still OFF
+
+The agreed clipping gate passes — 0 clipped samples in all four conditions — **but that gate
+is nearly incapable of failing**, because the output stage ends in a tanh soft knee at
+0.85 FS that bounds the mix below full scale by construction. The metric that can fail is how
+much programme the knee acts on: piano PCM 0 → 139 samples (0.0145 %), and the peak the mix
+would have had without the knee goes **24072 → 35910, +3.5 dB**; organ PCM 0 → 366 samples
+and 17676 → 42959, +7.7 dB. That is the missing gain-staging **reference R** again — putting
+~40 % of the voices back raises the sum, and nothing in the firmware says which code is full
+scale.
+
+**Recommendation:** make `ctrl` the default once `R` exists, or at Felipe's direction sooner.
+Silencing the whole percussion section is a far larger error than being 3.5 dB hot, and the
+present behaviour is not defensible on any reading of the firmware — it survives only because
+flipping a default that moves the instrument's loudness by 8 dB is his call.
+
+## H. Corrections to the record
+
+* `LABEL_022587` is `Voice_Clear_HoldBit` (clears the voice record's HELD bit and
+  re-prioritises), **not** "free the channel". The old `data_w()` argument built on it falls.
+* "a handed-off voice has NO remaining path to end" — refuted; frees track gates 1:1.
+* "rhythm voices get the bare 0xF000 … and render at −81 dB" — right about the mechanism,
+  wrong that it is acceptable: those are the drums.
+* §2(b)'s `handoff-0` population is confirmed and now attributed — it is the drum part plus
+  the 21-byte partials of the melodic tones, **not** "voices that are silent by design".
+
+## I. What the next pass needs
+
+1. **The `FE00` class** — 553 organ note-ons still at a median voice peak of 309 with the
+   mute gone. Their EG parks on a HOLD (segment-2 words 0xB800 / 0x7800 / 0x7000, rate 0).
+   Find what else attenuates them.
+2. **`R`** — unchanged, and now blocking two ship-quality changes instead of one.
+3. **Bits[14:12] and bits[11:9]** of this word. They take only 000/001/111, come from
+   `part[+0x25]` (CC 0x9B) and `part[+0x12]`, and are the only content of the word that
+   varies at all. That is what this register has left to give.

@@ -235,10 +235,17 @@ void kn5000_tonegen_device::device_start()
 	m_use_level080 = true;
 	if (const char *s = getenv("KN5000_LVL080"))
 		m_use_level080 = !(s[0] == 'o' && s[1] == 'f');
+	// KN5000_HANDOFF=ctrl stops reading the group0/bank0 hand-off word's low bits as an
+	// amplitude. The decode that says they are not one is in data_w(); this switch renders
+	// it so the claim is answered with a measurement.
+	if (const char *s = getenv("KN5000_HANDOFF"))
+		m_handoff_ctrl = (s[0] == 'c');
 	if (m_eg_gate_latch)
 		logerror("tonegen: KN5000_EGSEG=gate -- EG segment words LATCHED at the note-on gate\n");
 	if (m_use_level080)
 		logerror("tonegen: KN5000_LVL080=on -- +0x080 rendered as a per-voice output level\n");
+	if (m_handoff_ctrl)
+		logerror("tonegen: KN5000_HANDOFF=ctrl -- hand-off word carries no amplitude\n");
 
 	// Diagnostic sine oscillator table (see SINE_PEAK in the header for how the
 	// amplitude was chosen). Tabulated + interpolated rather than calling std::sin per
@@ -304,7 +311,7 @@ void kn5000_tonegen_device::device_start()
 					"lp_a,vol_l,vol_r,bank,page,chunk,wave_real,wave_samples,period,"
 					"true_note,anchor,pitch_step,pitch_off,mode,"
 					"t_off,dur,nsamp,peak,rms,peak_db,rms_db,"
-					"env_hand,t_hand_rel,env_end,eg_level_end,eg_seg_end,"
+					"env_hand,hand_word,t_hand_rel,env_end,eg_level_end,eg_seg_end,"
 					"eg0_end,eg1_end,eg2_end,t_ko_rel,ko_src,prof10ms,eglvl10ms,egseg10ms,"
 					"adv01_word,adv01_lvl,adv01_at,adv12_word,adv12_lvl,adv12_at,reason\n");
 			else
@@ -363,8 +370,9 @@ void kn5000_tonegen_device::notelog_begin(int ch)
 	r.nsamp    = 0;
 	r.peak     = 0;
 	r.sumsq    = 0.0;
-	r.env_hand = -1;
-	r.t_hand   = -1.0;
+	r.env_hand  = -1;
+	r.hand_word = -1;
+	r.t_hand    = -1.0;
 	r.t_ko     = -1.0;
 	r.ko_src   = 0;
 	r.s0       = m_nl_sampclock;
@@ -422,11 +430,12 @@ void kn5000_tonegen_device::notelog_flush(int ch, const char *reason)
 	}
 
 	std::fprintf(m_notelog,
-		"%s,%.6f,%.6f,%llu,%d,%.3f,%.2f,%.2f,%d,%.6f,%d,%.4f,%d,%04X,%04X,%04X,%.6f,%d,%s,%s,%s,"
+		"%s,%.6f,%.6f,%llu,%d,%.3f,%.2f,%.2f,%d,%04X,%.6f,%d,%.4f,%d,%04X,%04X,%04X,%.6f,%d,%s,%s,%s,"
 		"%04X,%d,%d,%04X,%d,%d,%s\n",
 		r.head.c_str(), t, t - r.t_on, (unsigned long long)r.nsamp,
 		r.peak, rms, db(double(r.peak)), db(rms),
-		r.env_hand, (r.t_hand >= 0.0) ? (r.t_hand - r.t_on) : -1.0,
+		r.env_hand, unsigned(r.hand_word & 0xFFFF),
+		(r.t_hand >= 0.0) ? (r.t_hand - r.t_on) : -1.0,
 		v.env_level, v.eg_level, v.eg_seg,
 		v.regs[20], v.regs[21], v.regs[22],
 		(r.t_ko >= 0.0) ? (r.t_ko - r.t_on) : -1.0, r.ko_src,
@@ -627,33 +636,51 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	//   0x7E00          voice OFF / free (asm L13066 all-voices loop, L26793, L31188)
 	//   0xF0xx / 0xFExx the HAND-OFF word, `slot[+0x2d]`
 	//
-	// WHAT THE HAND-OFF WORD IS NOT (settled this pass, and it contradicts the comment that
-	// used to stand here as well as three of the audit reports). It is NOT a per-tick
-	// software envelope magnitude:
-	//   * it is built by LABEL_025589 (asm L18856-18906, `mag = 0xFF - 4*(VP[0] & 0x3F)`,
-	//     `SET 8` iff VP[0] != 0) or by LABEL_0255F3 (L18907-18942, a BARE 0xF000/0xFE00 with
-	//     no magnitude field at all), and both only STORE it into `slot[+0x2d]`;
-	//   * the five places that ship `slot[+0x2d]` to this register (asm L21485, L24100,
-	//     L24137, L29209, L29242) each call `LABEL_022587` — free the channel — on the very
-	//     next line;
-	//   * MEASURED on the live bus this pass: it is written exactly ONCE per note, 42 us
-	//     after the gate for a rhythm voice and 0.5 ms after it for a key-bed voice, from
-	//     `ToneGen_WriteSingleReg` (PC 0x02D42F); a 3-second held note gets exactly one
-	//     (0xF0FF at +0.5 ms) and nothing else until its release.
-	// So it is the point where the firmware stops managing the note and leaves it to the
-	// chip's own envelope, and its low bits are a per-partial parameter of that hand-off
-	// whose meaning is NOT established.
+	// ---- THE HAND-OFF WORD, DECODED (2026-08-06) ------------------------------------
+	// Its low field is NOT an amplitude, and reading it as one is what makes 42 % of the
+	// organ demo's note-ons — INCLUDING THE ENTIRE DRUM PART — silent. The word is the last
+	// write of the note-on burst and it is emitted per PARTIAL by one of two builders,
+	// chosen by which PARTIAL-RECORD LAYOUT the voice's partial belongs to:
 	//
-	// WHY THE ARITHMETIC BELOW IS KEPT ANYWAY. Reading those low bits as an amplitude is
-	// wrong in principle, and it is what silences the accompaniment: rhythm voices get the
-	// bare 0xF000, so `data & 0x1FF` is 0 and they render at -81 dB. But simply not
-	// silencing them is worse, MEASURED: the whole rhythm section then becomes a saturated
-	// drone (rms 0.75 FS, peak pinned at 32767, and still sounding after STOP), because a
-	// handed-off voice has NO remaining path to end — the firmware has freed its channel and
-	// will never send it a 0x7E00, so on real hardware the chip must end it by itself, and
-	// how it does that is exactly what is still undecoded. Until that is decoded, the two
-	// defects cancel and unmuting alone regresses the instrument. See
-	// notes/audit/kn5000-audit-applied.md.
+	//   Voice_Build_GateCommand  0x025589   low9 = (0xFF - 4*(partial[0] & 0x3F))
+	//                                              | (partial[0] != 0 ? 0x100 : 0)
+	//   ..._NoPartial            0x0255F3   low9 = 0  (a BARE 0xF000 / 0xFE00 constant;
+	//                                                  no low field is computed at all)
+	//   both then OR in 0xF000 (or 0xFE00 when part[+0x12] != 0 and the global mode byte
+	//   0x04134C is in {0,5,6}) and run Voice_Apply_GateRouting 0x02552A, which rewrites
+	//   bits[14:12] and bits[11:9] from the two nibbles of part[+0x25] (CC 0x9B).
+	//
+	// MEASURED, tools/kn5000_handoff_probe.lua, both demos, t = 22–40 s, reading the
+	// sub-CPU's own slot record (0x04308E + ch*0x47) at each write. 1330 organ + 484 piano
+	// hand-offs, one per gate, exactly four distinct values:
+	//
+	//   organ  FEFF 706  FE00 412  F000 157  F0FF  55
+	//   piano  F0FF 278  F000 146  FEFF  60
+	//
+	//   * the low byte is only ever 0x00 or 0xFF and BIT 8 IS NEVER SET (1814/1814), i.e.
+	//     partial[0] == 0 in every one of the 1495 note-ons that ran the 0x025589 builder,
+	//     so its "magnitude" is the constant 0xFF by construction. It does not track
+	//     velocity, volume or expression — it does not vary at all;
+	//   * low byte 0x00 comes from the OTHER builder, and the split is by partial-record
+	//     LAYOUT, not by loudness: the slot's partial pointer sits at tone_base + {102,
+	//     183, 264, 345} (81-byte records) for every 0xFF note and at tone_base + {16, 37}
+	//     (21-byte records) for every 0x00 note, 1814/1814;
+	//   * PART 3 — the drum/rhythm part — is 100 % of the second kind (157/157 organ,
+	//     146/146 piano), and its partial byte varies per hit (0x14, 0x20, 0x28, 0x34,
+	//     0x40, 0x4C, 0x58, 0x60, 0x6C) exactly as a drum key would. The organ's parts 0
+	//     and 1 fire SIX and FIVE voices per note-on, of which two are of the second kind.
+	//
+	// So `sample * env_level / 0xFF` is not a level control: it is a mute keyed on a tone
+	// architecture bit, and it deletes every percussion voice in the instrument. The
+	// earlier reading ("the five sites that ship slot[+0x2d] free the channel next line")
+	// was based on a stale symbol — LABEL_022587 is Voice_Clear_HoldBit, which clears the
+	// voice's HELD bit and re-prioritises; it does not free anything. On the bus the free
+	// count matches the gate count (1320 vs 1330 organ, 458 vs 484 piano), so handed-off
+	// voices ARE reclaimed.
+	//
+	// KN5000_HANDOFF=ctrl renders the decode (env_level stays 0xFF for every voice); the
+	// default is still the old magnitude reading. See notes/FINDINGS-kn5000-handoff-word.md
+	// for why the decoded arm is not yet the default.
 	if (group == 0 && bank == 0)
 	{
 		if (data == 0x7E00)
@@ -687,14 +714,19 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		else if (data & 0x8000)
 		{
 			// Hand-off. Do NOT touch key state or waveform position.
-			m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
+			// EXPERIMENT (KN5000_HANDOFF=ctrl): with the decode above, the word carries no
+			// amplitude at all and env_level stays at the 0xFF process_key_on() set.
+			if (!m_handoff_ctrl)
+				m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
 			// PER-NOTE-ON CAPTURE: record the hand-off separately from the note-on snapshot.
 			// process_key_on() forces env_level to 0xFF, so the value that actually gates
-			// this note only exists from here on.
+			// this note only exists from here on. The RAW word is logged too — the fields
+			// that matter (bits[14:12], bits[11:9], bit 8) are all above the low byte.
 			if (m_notelog && m_nl[ch].open && m_nl[ch].env_hand < 0)
 			{
-				m_nl[ch].env_hand = m_voice[ch].env_level;
-				m_nl[ch].t_hand   = machine().time().as_double();
+				m_nl[ch].env_hand  = std::min<int>(data & 0x1FF, 0xFF);
+				m_nl[ch].hand_word = data;
+				m_nl[ch].t_hand    = machine().time().as_double();
 			}
 		}
 	}
