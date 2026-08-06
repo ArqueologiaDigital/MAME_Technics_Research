@@ -179,8 +179,30 @@ void kn5000_tonegen_device::device_start()
 	// code or a linear amplitude?" A/B; nothing in the shipped path reads it when unset.
 	//   log (default) gain = 2^((L-255)/16)     16 counts/octave, derived from table 0x010764
 	//   lin           gain = L/255              the linear-amplitude candidate under test
+	// ★ DEFAULT CHANGED 2026-08-06, at Felipe's explicit direction, as a DELIBERATELY
+	// PARTIAL fix shipped to gather listening data. `lin` is now ON unless
+	// KN5000_EGLAW=log asks for the derived logarithmic law back.
+	//
+	// The honest status: the log law IS derived and bit-exact from ROM table 0x010764,
+	// so `lin` is NOT believed to be the chip's true law. What it demonstrably does is
+	// stop the 0x727F voice class collapsing to -53 dB after a 5 ms attack, which is
+	// audible as "a click instead of a note". On its own it costs 7.65% clipped samples
+	// on the organ; TOGETHER WITH KN5000_LVL080 (also now default on) it costs NONE --
+	// MEASURED, 40 s captures, window 28-38 s, left channel:
+	//     organ  base 8996 rms / peak 32768 / 0.0160% clipped
+	//     organ  lin  18339 rms / peak 32768 / 7.6500% clipped
+	//     organ  BOTH  2661 rms / peak 17676 / 0.0000% clipped
+	//     piano  base 3370 rms / peak 23048 / 0.0000% clipped
+	//     piano  BOTH  3668 rms / peak 24072 / 0.0000% clipped
+	// So the two changes are a JOINT calibration: +0x080's per-voice level absorbs the
+	// headroom the linear law spends, and the piano -- Felipe's regression gate -- lands
+	// within 0.4 dB of its baseline with zero clipping.
+	//
+	// STILL OPEN, and the reason this is provisional rather than a fix: the true law needs
+	// the chip's gain-staging REFERENCE (which code is full scale), which is not in the
+	// firmware and needs one measurement on real hardware. Revisit when that arrives.
 	const char *eglaw = getenv("KN5000_EGLAW");
-	const bool lin = (eglaw && eglaw[0] == 'l' && eglaw[1] == 'i');
+	const bool lin = !(eglaw && eglaw[0] == 'l' && eglaw[1] == 'o');
 	for (int i = 0; i < EG_GAIN_TABLE; i++)
 	{
 		const double L = double(i) / 16.0;
@@ -207,8 +229,12 @@ void kn5000_tonegen_device::device_start()
 	// Voice_Build_OutputLevel builds it into, instead of using it only as a burst strobe.
 	if (const char *s = getenv("KN5000_EGSEG"))
 		m_eg_gate_latch = (s[0] == 'g');
+	// DEFAULT ON since 2026-08-06 -- see the EG-law banner above; the two are a joint
+	// calibration and enabling only one of them clips. KN5000_LVL080=off restores the
+	// old strobe-only behaviour.
+	m_use_level080 = true;
 	if (const char *s = getenv("KN5000_LVL080"))
-		m_use_level080 = (s[0] == 'o' && s[1] == 'n') || s[0] == '1';
+		m_use_level080 = !(s[0] == 'o' && s[1] == 'f');
 	if (m_eg_gate_latch)
 		logerror("tonegen: KN5000_EGSEG=gate -- EG segment words LATCHED at the note-on gate\n");
 	if (m_use_level080)
