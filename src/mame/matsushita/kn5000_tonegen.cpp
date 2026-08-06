@@ -230,6 +230,150 @@ void kn5000_tonegen_device::device_start()
 	//  ★ §228: the LRCK accumulator and the held return are stream state.
 	save_item(NAME(m_dsp1_phase));
 	save_item(NAME(m_dsp1_wet));
+
+	// ---- PER-NOTE-ON CAPTURE (KN5000_NOTELOG), default OFF --------------------------
+	if (const char *nlpath = std::getenv("KN5000_NOTELOG"))
+	{
+		if (*nlpath)
+		{
+			m_notelog = std::fopen(nlpath, "w");
+			if (m_notelog)
+				std::fprintf(m_notelog,
+					"t_on,ch,sel040,r080,r100,r180,r400,eg0,eg1,eg2,"
+					"eg0_lvl,eg0_rate,eg1_lvl,eg1_rate,eg2_lvl,eg2_rate,"
+					"env_on,eg_level0,eg_target0,eg_step0,eg_seg0,"
+					"lp_a,vol_l,vol_r,bank,page,chunk,wave_real,wave_samples,period,"
+					"true_note,anchor,pitch_step,pitch_off,mode,"
+					"t_off,dur,nsamp,peak,rms,peak_db,rms_db,"
+					"env_hand,t_hand_rel,env_end,eg_level_end,eg_seg_end,"
+					"eg0_end,eg1_end,eg2_end,t_ko_rel,ko_src,prof10ms,eglvl10ms,egseg10ms,"
+					"adv01_word,adv01_lvl,adv01_at,adv12_word,adv12_lvl,adv12_at,reason\n");
+			else
+				logerror("tonegen: KN5000_NOTELOG='%s' could not be opened; capture is OFF\n", nlpath);
+		}
+	}
+}
+
+
+// ---------------------------------------------------------------------------------------
+// PER-NOTE-ON CAPTURE (KN5000_NOTELOG) — see the declaration in the header.
+// ---------------------------------------------------------------------------------------
+//
+// notelog_begin() runs at the very END of process_key_on(), i.e. after the waveform, the
+// pitch, the pan, the TVF and EG segment 0 have all been resolved, so the row records the
+// state the note ACTUALLY STARTS FROM rather than a mid-burst snapshot.
+//
+// The three EG words are logged twice: as programmed at the gate (eg0/eg1/eg2) and as they
+// stand when the note is flushed (eg0_end/eg1_end/eg2_end), because the firmware rewrites
+// them on release. env_on is likewise near-useless on its own — process_key_on() forces
+// env_level to 0xFF and the group0/bank0 hand-off word arrives tens of microseconds LATER —
+// so the hand-off value and its delay are captured separately (env_hand / t_hand_rel).
+void kn5000_tonegen_device::notelog_begin(int ch)
+{
+	if (!m_notelog)
+		return;
+
+	notelog_flush(ch, "retrig");
+
+	const voice_t &v = m_voice[ch];
+	notelog_rec_t &r = m_nl[ch];
+
+	char buf[768];
+	std::snprintf(buf, sizeof(buf),
+		"%.6f,%d,%04X,%04X,%04X,%04X,%04X,%04X,%04X,%04X,"
+		"%u,%u,%u,%u,%u,%u,"
+		"%d,%.4f,%.4f,%.9f,%d,"
+		"%.6f,%d,%d,%d,%d,%d,%d,%u,%u,"
+		"%d,%u,%u,%.4f,%s",
+		machine().time().as_double(), ch,
+		v.regs[1], v.regs[2], v.regs[4], v.regs[6], v.regs[8],
+		v.regs[20], v.regs[21], v.regs[22],
+		unsigned((v.regs[20] >> 8) & 0xFF), unsigned(v.regs[20] & 0xFF),
+		unsigned((v.regs[21] >> 8) & 0xFF), unsigned(v.regs[21] & 0xFF),
+		unsigned((v.regs[22] >> 8) & 0xFF), unsigned(v.regs[22] & 0xFF),
+		v.env_level, v.eg_level, v.eg_target, v.eg_step, v.eg_seg,
+		v.lp_a, int(v.volume_l), int(v.volume_r),
+		v.wave_bank, v.wave_page, v.wave_chunk, v.wave_real ? 1 : 0,
+		v.wave_samples, v.pitch_period,
+		v.true_note, unsigned(v.pitch_anchor), v.pitch_step, v.pitch_offset,
+		(m_render_mode.read_safe(0) & 1) ? "sine" : "pcm");
+
+	r.head     = buf;
+	r.open     = true;
+	r.t_on     = machine().time().as_double();
+	r.nsamp    = 0;
+	r.peak     = 0;
+	r.sumsq    = 0.0;
+	r.env_hand = -1;
+	r.t_hand   = -1.0;
+	r.t_ko     = -1.0;
+	r.ko_src   = 0;
+	r.s0       = m_nl_sampclock;
+	std::fill(std::begin(r.prof), std::end(r.prof), 0);
+	std::fill(std::begin(r.eglvl), std::end(r.eglvl), int16_t(-1));
+	std::fill(std::begin(r.egseg), std::end(r.egseg), int8_t(-1));
+	r.adv_word[0] = r.adv_word[1] = 0xFFFF;
+	r.adv_lvl[0]  = r.adv_lvl[1]  = -1;
+	r.adv_at[0]   = r.adv_at[1]   = -1;
+}
+
+
+// Called immediately BEFORE the EG hops out of its running segment, so it records the word
+// that was in force when the hop was allowed rather than the one that replaces it.
+void kn5000_tonegen_device::notelog_seg_advance(int ch)
+{
+	if (!m_notelog)
+		return;
+	notelog_rec_t &r = m_nl[ch];
+	if (!r.open)
+		return;
+	const voice_t &v = m_voice[ch];
+	const int i = v.eg_seg;                // 0 -> 1 or 1 -> 2
+	if (i < 0 || i > 1 || r.adv_at[i] >= 0)
+		return;
+	r.adv_word[i] = v.regs[20 + i];
+	r.adv_lvl[i]  = int16_t(std::lround(v.eg_level));
+	r.adv_at[i]   = int32_t(r.nsamp);
+}
+
+
+void kn5000_tonegen_device::notelog_flush(int ch, const char *reason)
+{
+	if (!m_notelog)
+		return;
+	notelog_rec_t &r = m_nl[ch];
+	if (!r.open)
+		return;
+	r.open = false;
+
+	const voice_t &v = m_voice[ch];
+	const double t   = machine().time().as_double();
+	const double rms = r.nsamp ? std::sqrt(r.sumsq / double(r.nsamp)) : 0.0;
+	// dBFS against the 16-bit output scale the voice is summed into. A voice that rendered
+	// nothing at all reports -999 rather than -inf so the column stays numeric.
+	auto db = [](double x) { return (x > 0.0) ? 20.0 * std::log10(x / 32768.0) : -999.0; };
+
+	std::string prof, eglvl, egseg;
+	for (int i = 0; i < notelog_rec_t::NPROF; i++)
+	{
+		char pb[24];
+		std::snprintf(pb, sizeof(pb), "%s%d", i ? ";" : "", r.prof[i]);   prof  += pb;
+		std::snprintf(pb, sizeof(pb), "%s%d", i ? ";" : "", r.eglvl[i]);  eglvl += pb;
+		std::snprintf(pb, sizeof(pb), "%s%d", i ? ";" : "", r.egseg[i]);  egseg += pb;
+	}
+
+	std::fprintf(m_notelog,
+		"%s,%.6f,%.6f,%llu,%d,%.3f,%.2f,%.2f,%d,%.6f,%d,%.4f,%d,%04X,%04X,%04X,%.6f,%d,%s,%s,%s,"
+		"%04X,%d,%d,%04X,%d,%d,%s\n",
+		r.head.c_str(), t, t - r.t_on, (unsigned long long)r.nsamp,
+		r.peak, rms, db(double(r.peak)), db(rms),
+		r.env_hand, (r.t_hand >= 0.0) ? (r.t_hand - r.t_on) : -1.0,
+		v.env_level, v.eg_level, v.eg_seg,
+		v.regs[20], v.regs[21], v.regs[22],
+		(r.t_ko >= 0.0) ? (r.t_ko - r.t_on) : -1.0, r.ko_src,
+		prof.c_str(), eglvl.c_str(), egseg.c_str(),
+		r.adv_word[0], r.adv_lvl[0], r.adv_at[0],
+		r.adv_word[1], r.adv_lvl[1], r.adv_at[1], reason);
 }
 
 
@@ -249,6 +393,16 @@ void kn5000_tonegen_device::device_reset()
 
 void kn5000_tonegen_device::device_stop()
 {
+	// Notes still sounding when the run ends still carry an outcome; flush them rather than
+	// silently dropping them, so a row count can be reconciled against the note-on count.
+	if (m_notelog)
+	{
+		for (int ch = 0; ch < NUM_VOICES; ch++)
+			notelog_flush(ch, "eof");
+		std::fclose(m_notelog);
+		m_notelog = nullptr;
+	}
+
 	// ---- LOG_GLITCH summary: WHICH CHUNK produced the clicks (VERBOSE bit 7) -----------
 	// One line per wave-ROM chunk that ever made a voice's own contribution jump by more
 	// than GLITCH_THRESH, so the attribution survives a run of any length.
@@ -459,7 +613,11 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 			// decoded; see notes/audit/kn5000-gaps-applied.md.
 			if (VERBOSE & LOG_CENSUS) m_census_clr[0]++;
 			m_voice[ch].eg_running = false;
+			const bool was_on = m_voice[ch].key_on;
 			process_key_off(ch);
+			// PER-NOTE-ON CAPTURE: attribute the release to the firmware's own free.
+			if (m_notelog && m_nl[ch].open && was_on && m_nl[ch].t_ko < 0.0)
+			{ m_nl[ch].t_ko = machine().time().as_double(); m_nl[ch].ko_src = 2; }
 		}
 		else if ((data & 0xFF00) == 0x8100)
 		{
@@ -471,6 +629,14 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 		{
 			// Hand-off. Do NOT touch key state or waveform position.
 			m_voice[ch].env_level = std::min<int>(data & 0x1FF, 0xFF);
+			// PER-NOTE-ON CAPTURE: record the hand-off separately from the note-on snapshot.
+			// process_key_on() forces env_level to 0xFF, so the value that actually gates
+			// this note only exists from here on.
+			if (m_notelog && m_nl[ch].open && m_nl[ch].env_hand < 0)
+			{
+				m_nl[ch].env_hand = m_voice[ch].env_level;
+				m_nl[ch].t_hand   = machine().time().as_double();
+			}
 		}
 	}
 
@@ -523,7 +689,12 @@ void kn5000_tonegen_device::data_w(uint16_t data)
 	{
 		double now = machine().time().as_double();
 		if (now - m_voice[ch].key_on_time > 0.001)
+		{
 			process_key_off(ch);
+			// PER-NOTE-ON CAPTURE: attribute the release to the group9 timing heuristic.
+			if (m_notelog && m_nl[ch].open && m_nl[ch].t_ko < 0.0)
+			{ m_nl[ch].t_ko = now; m_nl[ch].ko_src = 1; }
+		}
 	}
 
 	// EFFECT SENDS: there are none, and ignoring +0x8C0 / +0x900..+0x9C0 / +0xA00 / +0xA40
@@ -2035,6 +2206,9 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	update_voice_params(ch);
 	update_timbre(ch);
 	load_eg_segment(ch, 0);
+
+	// PER-NOTE-ON CAPTURE (KN5000_NOTELOG). Last, so the row records the finished state.
+	notelog_begin(ch);
 }
 
 
@@ -2198,6 +2372,9 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	{
 		int32_t mix_l = 0;
 		int32_t mix_r = 0;
+		// Free-running output-sample clock for the KN5000_NOTELOG envelope profile. Kept
+		// outside the voice loop so it counts OUTPUT samples, not rendered voice-samples.
+		m_nl_sampclock++;
 
 		for (int ch = 0; ch < NUM_VOICES; ch++)
 		{
@@ -2400,15 +2577,16 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				if (v.eg_level < v.eg_target)
 				{
 					v.eg_level += v.eg_step;
-					if (v.eg_level >= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) load_eg_segment(ch, v.eg_seg + 1); }
+					if (v.eg_level >= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) { notelog_seg_advance(ch); load_eg_segment(ch, v.eg_seg + 1); } }
 				}
 				else if (v.eg_level > v.eg_target)
 				{
 					v.eg_level -= v.eg_step;
-					if (v.eg_level <= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) load_eg_segment(ch, v.eg_seg + 1); }
+					if (v.eg_level <= v.eg_target) { v.eg_level = v.eg_target; if (v.eg_seg < 2) { notelog_seg_advance(ch); load_eg_segment(ch, v.eg_seg + 1); } }
 				}
 				else if (v.eg_seg < 2)
 				{
+					notelog_seg_advance(ch);
 					load_eg_segment(ch, v.eg_seg + 1);
 				}
 			}
@@ -2446,6 +2624,25 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const int32_t out_r = (sample * int32_t(v.volume_r)) >> 15;
 			mix_l += out_l;
 			mix_r += out_r;
+
+			// PER-NOTE-ON CAPTURE (KN5000_NOTELOG): the OUTCOME half of the row. Read-only
+			// with respect to everything the render uses, so it cannot change the audio.
+			if (m_notelog && m_nl[ch].open)
+			{
+				notelog_rec_t &r = m_nl[ch];
+				const int32_t a = std::max(std::abs(out_l), std::abs(out_r));
+				if (a > r.peak) r.peak = a;
+				const double m = 0.5 * (double(out_l) + double(out_r));
+				r.sumsq += m * m;
+				r.nsamp++;
+				const uint64_t bkt = (m_nl_sampclock - r.s0) / notelog_rec_t::PROF_SAMPLES;
+				if (bkt < uint64_t(notelog_rec_t::NPROF))
+				{
+					if (a > r.prof[bkt]) r.prof[bkt] = a;
+					r.eglvl[bkt] = int16_t(std::lround(v.eg_level));
+					r.egseg[bkt] = int8_t(v.eg_seg);
+				}
+			}
 
 			// ---- LOG_GLITCH: PER-VOICE click attribution (VERBOSE bit 7, default off) ----
 			// Counted per CHUNK so the census survives a run of any length; LOG_GLITCHEV adds

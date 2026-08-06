@@ -16,9 +16,11 @@
 
 #include "cpu/upd6383/upd6383.h"
 
+#include <cstdio>
 #include <deque>
 #include <map>
 #include <queue>
+#include <string>
 #include <vector>
 
 class kn5000_tonegen_device :
@@ -433,6 +435,66 @@ private:
 	};
 	std::map<uint32_t, glitch_stat_t> m_glitch_chunk;   // key = bank<<20 | page<<16 | chunk
 	uint64_t m_glitch_total = 0, m_mixclick_total = 0;
+
+	// ---- PER-NOTE-ON CAPTURE (env var KN5000_NOTELOG=<path>; DEFAULT OFF) ------------
+	// One CSV row per note-on gate, carrying BOTH the programming that the note started
+	// with AND the outcome it actually produced (peak / RMS of this voice's own post-pan
+	// contribution over its lifetime). It is a pure observer: nothing here is read back by
+	// the render, so with the variable unset the only cost is a null-pointer test per
+	// note-on and per rendered sample, and with it set the audio is bit-identical (VERIFIED
+	// by md5 of the -wavwrite capture, see notes).
+	//
+	// It is a RUNTIME switch on purpose. The pre-existing LOG_* masks are compile-time
+	// (VERBOSE), so proving "instrumented == uninstrumented" with them would compare two
+	// different binaries; with an env var the same binary produces both captures, which is
+	// the only version of that check that can actually fail.
+	std::FILE *m_notelog = nullptr;
+	struct notelog_rec_t
+	{
+		bool     open = false;
+		double   t_on = 0.0;
+		uint64_t nsamp = 0;      // samples this voice actually rendered
+		int32_t  peak = 0;       // max |post-pan contribution|, either channel
+		double   sumsq = 0.0;    // for RMS of (L+R)/2
+		int      env_hand = -1;  // env_level carried by the group0/bank0 hand-off word
+		double   t_hand = -1.0;  // when that word arrived
+		double   t_ko = -1.0;    // when process_key_off() fired for this note
+		int      ko_src = 0;     // 0 = never released, 1 = group9 release heuristic,
+		                         // 2 = the firmware's own 0x7E00 free
+		// ENVELOPE PROFILE. "A quick click followed by a very faint sound" and "a note at
+		// the right level" are indistinguishable in a peak, and only barely distinguishable
+		// in an RMS — so the row also carries the SHAPE: the peak |contribution| in each of
+		// NPROF consecutive 10 ms windows from the gate. That is the measurement Felipe's
+		// description is actually about, and it is the one a crest factor can only hint at.
+		static constexpr int NPROF = 24;      // 240 ms
+		static constexpr int PROF_SAMPLES = 480;  // 10 ms at the 48 kHz stream rate
+		uint64_t s0 = 0;         // stream sample clock at the gate
+		int32_t  prof[NPROF] = { };
+		// The SAME buckets, but carrying the amplitude EG's own state at the end of each
+		// window: eg_level rounded, and the running segment index. Without this an
+		// amplitude collapse can only be attributed to "the envelope" in the abstract; with
+		// it, the level trajectory and the segment that produced it are both on the row.
+		// -1 = the voice rendered no sample in that window.
+		int16_t  eglvl[NPROF];
+		int8_t   egseg[NPROF];
+		// WHY the envelope left a segment. Each entry is the (target,rate) word that was
+		// RUNNING at the moment the EG advanced out of segment 0 and out of segment 1,
+		// together with the level it was at and the rendered-sample offset. Parking on
+		// segment 2 versus segment 1 is what separates an audible note from a faint one in
+		// this instrument, so the row has to carry the word whose rate allowed the hop.
+		uint16_t adv_word[2] = { 0xFFFF, 0xFFFF };  // regs[20+seg] as the hop was taken
+		int16_t  adv_lvl[2]  = { -1, -1 };
+		int32_t  adv_at[2]   = { -1, -1 };          // rendered-sample offset of the hop
+		std::string head;        // the note-on half of the row, formatted at the gate
+	};
+	// Free-running output-sample counter, used ONLY to bucket the profile above. The gate
+	// arrives between stream updates, so the note-on is timestamped with the clock as of
+	// the last rendered sample; the quantisation is at most one stream block.
+	uint64_t m_nl_sampclock = 0;
+	notelog_rec_t m_nl[NUM_VOICES];
+	void notelog_begin(int ch);
+	void notelog_seg_advance(int ch);
+	void notelog_flush(int ch, const char *reason);
 
 	// ---- PITCH-ANCHOR CENSUS (diagnostics only, reported at device_stop) -------------
 	// Counted ONCE PER NOTE-ON (in process_key_on, after update_pitch has decided), so the
