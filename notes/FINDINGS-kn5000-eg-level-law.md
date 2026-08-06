@@ -775,3 +775,186 @@ correctly at different levels" are the same measurement until `R` is known.
    should stop, not repeat ~90 times — but "stops" also frees the channel earlier through the
    silence interlock, which changes voice allocation. Measure that before changing it.
 3. **`R`**, unchanged, still blocking C.
+
+# K. The HELD-NOTE SUSTAIN defect — reproduced, attributed, and the rig that keeps it fixed
+
+2026-08-06, later still. Felipe, playing the emulator from a MIDI controller:
+
+> "Many instruments have incorrect length of sustain in their envelope params. For instance,
+> all strings should keep sounding for a long time while the player is holding a key down.
+> But instead, they decay after a very short sustain interval."
+
+**Verdict up front.** The lead hypothesis (that the HLE runs through the final EG segment while
+the key is still held) is **REFUTED, measured**. The symptom is reproduced **exactly and only**
+by the **logarithmic EG level law** — the arm that was the default until `cb1c144` earlier the
+same day. Under the shipped default (`KN5000_EGLAW` unset = `lin`) **19 of 19 voices across nine
+sound families survive a full 6-second hold** and are ended by the real key release; under
+`KN5000_EGLAW=log` **9 of those 19 are torn down by the firmware between 0.13 s and 0.31 s**.
+The cause is DERIVED (the register decode and the segment semantics come out of the sub ROM);
+the *cure* — the linear law — remains **FITTED**, exactly as §"2026-08-06" already recorded.
+
+## K.0 The rig, and the criterion that CAN fail
+
+New, all default-off, nothing compiled into the driver:
+
+    tools/kn5000_hold_note.lua      select a SOUND GROUP, hold ONE key, tap the raw TG bus
+    tools/kn5000_capture_hold.sh    one sweep -> notes.csv + bus.txt + marks.txt + out.wav
+    tools/kn5000_hold_analyze.py    per-hold rendered amplitude ENVELOPE
+
+With one key down and nothing else sounding, **the rendered WAV IS the per-voice envelope**.
+That matters because of the discipline this file keeps returning to: **rms / peak / clipping
+over a capture cannot see this defect at all.** Every one of them is perfectly happy while every
+held note dies 200 ms in — the demo keeps re-triggering notes, so the level metrics stay put.
+
+The reported number is `sus_db` = (mean of the last tenth of the hold) / (loudest tenth), in dB.
+It is a RATIO inside one hold, so it measures decay-*during*-the-hold and nothing else — a patch
+that is merely quiet scores 0 dB, and a patch that dies scores −40 dB or worse. **It demonstrably
+fails**: −47.4 dB on the strings arm that carries the bug, −2.0 dB on the arm that does not.
+`rel_db` is its mate and guards the opposite error — a "fix" that never releases — by measuring
+100 ms after key-up; it reads −120 dB (silent) in every arm, so the release is intact throughout.
+
+## K.1 REFUTED — the EG does not run past its last segment while the key is held
+
+MEASURED, `strings` held 8 s, `KN5000_NOTELOG` (the 10 ms envelope profile is 24 buckets):
+
+    ch0  eglvl10ms  77;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54;54
+         egseg10ms   1; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2; 2
+    ch1  eglvl10ms  66;66;66;...   egseg10ms 2;2;2;...
+    eg_seg_end = 2   eg_level_end = 54.0000 / 66.0000   (after 8 s of hold)
+
+The EG reaches segment 2 in 12 ms and **holds there, at a constant level, for the whole hold**.
+`load_eg_segment()` already clamps `seg` to 2 and the stepper only advances `if (v.eg_seg < 2)`,
+so there is no fourth hop to make. The hypothesis was worth testing and it is wrong.
+
+## K.2 What the three segments ARE — DERIVED from the sub ROM (v142)
+
+| register | scratch | built by | from partial bytes | meaning |
+|---|---|---|---|---|
+| `+0x800` | `0x0451E4` | `Voice_Calc_LevelPair_PatchAtk` 0x025636 (asm L19848) | `+0x27`/`+0x28` (= +39/+40) | **ATTACK**: `(PeakLevel_Fader[+0x27] << 8) \| RateTab[+0x28]` |
+| `+0x840` | `0x0451E6` | same, L19862 / `Voice_WriteChPanShift` L20105 | `+0x29`/`+0x2A` (= +41/+42) | **DECAY1 → SUST1**, rate **floored at 4** (L19981) |
+| `+0x880` | `0x0451E8` | same, L19870 / L20095 | `+0x2B`/`+0x2C` (= +43/+44) | **DECAY2 → SUST2**, rate floored at **0** (L19989) |
+
+The brief's couple layout `(+39,+40)/(+41,+42)/(+43,+44)` is **CONFIRMED exactly**, and the same
+three couples drive `_Full` (0x025C87), `_Mono` (0x025F7F) and `_FixedAtk` (0x025A35, whose
+attack rate is the literal `0x7F`). `Voice_Stage_EnvSegments` (0x02684A) is not a builder: it
+re-ships the cached `slot+0x3e` / `slot+0x40` to `+0x840` / `+0x880`.
+
+**All three are KEY-DOWN segments, and segment 2 is TERMINAL.** The decisive question — does the
+firmware program a RELEASE segment at key-off? — is answered three ways:
+
+* **By exhaustion.** `0880h` occurs at exactly **three** emitting sites in the whole payload
+  (asm L30870 note-on burst, L31233 `ToneGen_WriteEnvSegments`, L31281
+  `ToneGen_WriteSegRegs_SameLevel`). The latter two have four call sites, all inside
+  `Voice_Reload_Levels` / `Voice_AllNotes_SustainRetrigger`, and both re-ship the *note-on*
+  words. **No release word exists.**
+* **On the live bus**, this capture, one 8-second held C4 (`bus.txt`):
+      20.005905 0800 B07F | 20.005907 0000 8100 | 20.005911 0840 3674 | 20.005914 0880 3674
+      ... 8 SECONDS WITH NOT ONE WRITE ...
+      28.004975 0840 7900   0940 AE00   0A00 AE00   0800 7980   0900 AE00   09C0 AE00
+      28.124534 00C0 0000   0000 7E00
+  Key-off writes `+0x800` and `+0x840` only, with **rate 0** and a level (0x79 = 121) that is
+  *louder* than the sustain it replaces — a level COMMAND, not a ramp. `+0x880` is never touched.
+* **No fourth segment exists.** `+0x8C0` is built by `Voice_PortaLevel_Compute` (L18261) whose
+  low byte comes from `Detune_ScaleSymmetric`, the same helper that feeds `+0x900…+0xA40` — it is
+  a `level|pan` word, not `level|rate`. Only group 8 carries a rate. There IS a fourth *level*
+  parameter (`partial[+0x2D]`, read by `Voice_Calc_LevelPair_EGA` at L21580) but **no fourth
+  rate**: it is the software-commanded steady level pushed at every volume/expression/key-off.
+
+So the HLE's structure — three segments, stop and hold on the third — is **correct as written**.
+
+## K.3 The symptom, reproduced. MEASURED A/B, nine sound families, sine mode, 6 s hold
+
+Sine mode is the right instrument here: it ignores wave data entirely, so a decay it shows is
+unambiguously the envelope and not a recording running out.
+
+| family | `sus_db` shipped (`lin`) | `sus_db` `KN5000_EGLAW=log` | segment-2 word |
+|---|---:|---:|---|
+| strings | **−2.0** | **−47.4** | `3674` / `427F` |
+| pad     | −0.1 | −23.5 | `427F` `4467` `647F` |
+| organ   | −0.0 | −27.9 | `727F` |
+| brass   | −5.6 | **−120 (silent)** | `197F` |
+| flute   | −6.8 | **−120** | `326A` |
+| sax     | −5.0 | **−120** | `2674` `2A60` |
+| synth   | −34.1 | **−120** | `046A` `0467` |
+| guitar  | −0.0 | −0.0 | `4E00` |
+| piano   | −2.7 | −23.1 | `4000` |
+
+**Eight of nine families die under the log law; none die under the shipped default.** That is
+Felipe's sentence — "many instruments … for instance, all strings" — as a table. `guitar` is the
+one family the log law spares, and for a reason that supports rather than weakens the reading:
+its `+0x840` is `9200`, rate 0, so it never leaves segment 1 and its own peak IS its sustain.
+`synth` is the one family that decays under BOTH laws, also for a decoded reason: its segment-2
+level code is `0x04` = `Level_Fader[100]`, the table's maximum attenuation — a plucky patch
+programmed to decay, not a defect.
+
+Why the log law does this is already derived in this file: `gain = 2^((L−255)/16)` puts the
+strings' SUST2 code 54 at **−75.6 dB** and the organ's code 114 at −53 dB. The register spread
+between a patch's PEAK and its SUST is a structural 120–160 codes (organ census: PEAK 255 /
+SUST2 114, delta 141, n = 554), and under 0.376 dB/code that is a 45–60 dB collapse for
+*every sustaining instrument in the machine*.
+
+## K.4 The mechanism is a VOICE TEARDOWN, not merely a low level
+
+This is why the symptom is "length of sustain" and not "too quiet". MEASURED `ko_src` (2 = the
+firmware's own `0x7E00` FREE, 1 = the real key release), same 6-second holds:
+
+    KN5000_EGLAW=log   strings ch0 ko=0.167 src=2 | brass ch8 0.142 src=2 | flute ch9 0.200 src=2
+                       sax ch10/11 0.155 src=2    | synth ch12 0.215, ch13 0.313 src=2
+                       pad ch4 0.125 src=2                        -> 9 of 19 voices, all src=2
+    shipped (lin)      19 of 19 voices: ko = 6.012 … 6.015, src=1  -> every one released by the key
+
+End to end: the level law drives the sustain below the silence interlock (0.5 output LSB held
+for one 98.33 ms bank-poll period) → `eg_running` drops → `status_r()` reports the voice silent →
+the firmware's voice manager (`Voice_Manager_PollBank` → `ToneGen_SilenceChannel`) writes
+`0x7E00` and **deallocates the channel**. The note is not quiet, it is *gone*, ~0.2 s into a hold
+that has seconds left to run. Nothing can bring it back. That is the reported defect, exactly.
+
+## K.5 Two clean negatives, both worth having
+
+**Interference — a MIDI player holds notes WHILE PLAYING OTHERS.** A single isolated held note
+cannot see a false key-off, and the HLE's release heuristic fires on any `+0x900` write >1 ms
+after the gate while `Voice_Reload_Levels` re-emits that burst for ten different reasons. So:
+hold C4 for 8 s and strike E4 at +2 s, +4 s and +6 s (`KN5_POKEMASK`/`KN5_POKE_AT`), strings /
+organ / piano, both render modes. MEASURED: the held voices report `t_ko_rel = 8.000, src = 1`
+in **6 of 6** cases and the pokes take their own channels with their own correct 0.257 s
+releases. `sus_db` −2.7 / −3.1 / −5.6 dB. **No false key-off.** Not the defect.
+
+**Velocity.** DERIVED, asm L19742-19756: the PEAK level index is
+`clamp(partial[+0x27] + (int8)tone_rec[+0x6b], 0, 100)` — a **key-track** term, not a velocity
+one; velocity reaches `+0x080` and the TVF instead. So velocity scales a note uniformly and
+**cannot shorten it**. The ioport key bed's fixed `KEYBED_VELOCITY = 100` is therefore not a
+blind spot for *this* question (it still is for loudness — see `notes/dsp-audiopath-wired.md`).
+
+Also MEASURED, and a limitation of the rig rather than a finding: pressing a SOUND GROUP button
+repeatedly does **not** page through the group — eight consecutive `STRINGS & VOCAL` presses gave
+byte-identical segment words and `sus_db` −1.8 … −2.0 every time. The rig reaches each group's
+default patch only; reaching the rest needs the LCD soft keys.
+
+## K.6 SEPARATE, and Felipe should know it: four of nine groups are now SILENT in PCM mode
+
+Not the envelope, but he will hit it the moment he presses STRINGS. With the shipped defaults
+(`J.1`'s undumped-socket mute ON), the DEFAULT patch of these sound groups renders **nothing**:
+
+    strings  brass  synth  guitar        (peak 0 over a 6 s hold)
+    pad organ flute sax piano            play normally
+
+Their `+0x040` resolves to **bank 0**, i.e. IC304 — one of the three sockets nobody has dumped.
+`KN5000_UNDUMPED=play` renders them from the substituted IC307 material and they sustain
+correctly (`sus_db` −1.9 … −9.8). This is the mute working as specified, not a regression, but
+"the strings are silent" and "the strings decay" are different reports and should not be
+confused with each other.
+
+## K.7 What this leaves for the next pass
+
+1. **Nothing to change in the driver.** The segment structure is correct, the terminal-segment
+   hold is correct, the release is correct, and the level law that broke the sustain was already
+   swapped out earlier the same day. `git diff` for this pass is three new tools and this note.
+2. **Ask Felipe to re-test on the current published binary** (built 15:37, `7c53c1b`). His report
+   is reproduced bit-for-bit by the `log` arm and by nothing else in the test space above, which
+   places it before `cb1c144` (11:08) — but he is the ground truth, and if a held strings note
+   still dies on the 15:37 build then the cause is outside everything measured here and the rig
+   above is the thing to point at it.
+3. **`R` is still the open question** (§G, §J.4). `lin` is a fitted compromise that happens to
+   keep every family's sustain alive; it is not believed to be IC303's law. When the
+   gain-staging reference arrives from real hardware, `tools/kn5000_hold_analyze.py` is the gate
+   the new law has to pass — 8 of 9 families at `sus_db` > −10 dB, and `rel_db` at the floor.
