@@ -52,6 +52,13 @@ These touch disjoint files/tools and can all run at once. The only shared resour
    time. Region did change whether the old wedge reproduced, so still always state which AREA a
    measurement used — but verify the cfg rather than assuming, and always use a private
    `-cfg_directory`.
+   ★★ **AND THAT `TGMODE bit 1` COST US A DAY.** It is the "free voices whose EG has finished"
+   probe, and with it On the firmware tears down a HELD note 0.11-0.16 s after the gate. It is
+   why Felipe heard almost every ORGAN & ACCORDION patch stop short while our rigs — which
+   always write their own private cfg — measured every one of them sustaining. **A private
+   `-cfg_directory` protects the rig and hides the user's bug.** When reproducing a REPORTED
+   session, run it once with the reporter's OWN cfg (`KN5_CFGSRC=`) before concluding anything.
+   Full account: `notes/FINDINGS-kn5000-eg-level-law.md` §M.
 3. Always `-seconds_to_run`, never a wall-clock `timeout`, when comparing two runs — otherwise
    they end at different machine times and diverge harmlessly. The emulator IS bit-deterministic.
 4. Always `rm -f nvram/kn5000/nvram1` first — 1 MB of work DRAM is persisted as NVRAM.

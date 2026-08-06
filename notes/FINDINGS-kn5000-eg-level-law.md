@@ -1033,6 +1033,12 @@ so his differential is real and the rig can see it.
 
 ## L.3 …but "almost all of ORGAN & ACCORDION" does NOT reproduce
 
+> ⚠⚠ **RETRACTED IN FULL — see §M.0.** The ten-patch runs behind this table reached at most TWO
+> distinct organ patches each and then wandered onto ENTERTAINER and onto the LEFT part's PIANO
+> group; their own LCD snapshots say so. Eighteen of the twenty numbers below are not the patch
+> they are labelled with, and the "18 of 20 sustain" conclusion is unsupported. §M.3 has the
+> re-measurement, one patch per run, every name read off the LCD — and it CONFIRMS Felipe.
+
 All 20 patches of both pages, from the validated ten-patch runs:
 
     page 1/2  Perc Organ −0.1  Full Drawbars −0.0  Chapel Organ −2.4  Full Organ −1.3
@@ -1052,6 +1058,8 @@ hold to **30 s** changes nothing (Perc Organ −0.1, Full Drawbars −0.1 over t
 so it is not a slow decay the 6 s window was missing.
 
 ## L.4 Theatre Novelty is CORRECT BEHAVIOUR, not a defect
+<!-- ⚠ the Theatre NOVELTY finding stands; the Theatre ACCOMP sentence at the end is RETRACTED, §M.5 -->
+
 
 MEASURED, one-patch run, LCD confirmed: its three partials select `0000`, `0000`, `3195` —
 all **bank 0**, `wave_real = 0`, i.e. the undumped IC304/305/306 sockets. With
@@ -1093,10 +1101,16 @@ also the least specific, which is why §L.6 asks Felipe for patch NAMES instead.
 ⇒ **Do not conclude "Felipe is wrong" and do not conclude "the class is fixed."** The
 correct statement is narrow and it is the one to carry forward:
 
-> On the shipped defaults, **18 of 20 ORGAN & ACCORDION patches sustain a held note
+> ⚠⚠ **RETRACTED — §M.0.** "18 of 20 … sustain" was never measured (the runs behind it did not
+> select the patches), and the reproduction it was contrasted against needed a CONFIG bit the
+> rig could not set. §M: on Felipe's saved cfg the count is **18 of 20 CUT at 0.11-0.16 s**, and
+> the two survivors are exactly the two he named. The velocity and polyphony refutations above
+> stand and remain correct; they were simply the wrong suspects.
+>
+> ~~On the shipped defaults, **18 of 20 ORGAN & ACCORDION patches sustain a held note
 > indefinitely** (verified to 30 s), at every velocity from 15 to 127, and with other notes
 > played through the hold. **All three of Felipe's named patches behave exactly as he
-> describes.** The one patch that decays does so by design (`0x04` sustain level).
+> describes.** The one patch that decays does so by design (`0x04` sustain level).~~
 
 The gap between that and "almost all decay" is **unexplained**, and the two hypotheses that
 would have explained it are now dead. That makes the patch NAMES the next thing needed.
@@ -1115,3 +1129,221 @@ possibilities all hinge on *which patches*:
   accompaniment, no sequencer?
 * Theatre Accomp (page 2/2, RIGHT 2) should be silent too, for the same undumped-ROM reason
   as Theatre Novelty. Confirm?
+
+
+---
+
+# M. Felipe's ORGAN & ACCORDION report is CONFIRMED. §L.3's "18 of 20 sustain" is RETRACTED, and the cause is a DIAGNOSTIC PROBE LEFT ON IN THE SHARED cfg
+
+2026-08-06, night. §L.6 asked Felipe *which* patches decay. He answered by exclusion, which
+makes his list complete:
+
+> A shorter than expected sustain during held keydown can be observed with almost all
+> instruments of the "ORGAN&ACCORDION" sound group, pages 1/2 and 2/2. The only exceptions are
+> Rock Organ (Page 2/2, LCD LEFT 4) and Chapel Organ (Page 1/2, LCD LEFT 3) which do keep
+> sounding for as long as a key is held. And Theatre Novelty (Page 2/2, LCD RIGHT 3) does not
+> sound at all.
+
+**All twenty rows of that report now reproduce, by name, in one run each.** The thing the rig
+was missing was not in the patches at all: it was a **diagnostic CONFIG bit saved in the shared
+`kn7000-emulator/cfg/kn5000.cfg`**, which every rig run overwrote with its own private cfg and
+therefore could never see.
+
+## M.0 ⚠ RETRACTION — "18 of 20 ORGAN & ACCORDION patches sustain" was never measured
+
+> ⚠ **RETRACTED:** §L.3's twenty-patch listing and the sentence it produced — "*On the shipped
+> defaults, 18 of 20 ORGAN & ACCORDION patches sustain a held note indefinitely*" (§L.5) — plus
+> the "30 s changes nothing" corroboration that rested on the same runs.
+
+Not "superseded": **unsupported by its own evidence**. The four one-patch runs behind §L.2
+(Chapel Organ, Rock Organ, Soul Organ, Theatre Novelty) stand. The twenty-row table did not come
+from those; it came from the four ten-patch runs, and **their own LCD snapshots refute them**:
+
+    organ_p1  (10 steps, tags organ:L1..R5)   11 snapshots. Distinct SOUND screens appearing in
+              them: "Perc Organ" and "Full Drawbars" -- and then ENTERTAINER / VOCAL REVERB,
+              and finally SOUND / **LEFT** / **PIANO** with "Modern E.P.1" selected.
+              Chapel Organ, Full Organ, Cathedral Organ, Jazz Drawbars, 16'&1', Bright
+              Accordion, Musette and Folk Accordion NEVER APPEAR ON ANY SNAPSHOT.
+    organ_p2  (10 steps, tags organ+:L1..R5)  "Accomp Drawbars" on PAGE 2/2 for step 1, then
+              **PAGE 1/2 with "Full Drawbars"** from step 2 onward. Nine of ten rows are not
+              the patch they are labelled with.
+
+So §L.3's page-1 line is at most two distinct patches reported ten times, and its page-2 line at
+most two. §L.1 had written the countermeasure down — "*exactly one LCD snapshot per patch … the
+snapshot ordinal IS the patch index*" — but that version of `kn5000_patch_probe.lua` was saved at
+21:13 and those runs are from 20:53 and 21:08. **The snapshots were taken and never read.** A
+picture that nobody looks at is not a control.
+
+## M.1 The rig this time: ONE PATCH PER RUN, and every name read off the LCD
+
+Twenty patches x two arms = forty runs, **one patch each**, 12 s hold on C4 (MIDI 60), PCM mode,
+shipped `KN5000_EGLAW=lin` / `LVL080=on` / `HANDOFF=off` / `UNDUMPED=mute`, private `cfg/`,
+`nvram/` and `snapshot/` per run. For every one of the forty, snapshot `0000.png` was cropped to
+the LCD and **read**; all forty show `SOUND / RIGHT1 / ORGAN&ACCORDION`, the right PAGE, and the
+intended patch highlighted. No run drifted — drift grows with run length and these are one step
+long. Selectors are distinct across all twenty (`kn5000_patch_check.py` passes), but the *name*
+is what is being relied on, because a distinct-selector check is necessary and not sufficient.
+
+`tools/kn5000_hold_analyze.py --shape` is new and is the measurement §K/§L were missing.
+`sus_db` compares the last tenth of a hold with the loudest tenth, so **a patch that falls 20 dB
+in three seconds and then holds scores like a patch that never moved** — which is exactly the
+difference between "sustains" and "shorter sustain than expected" to a player. `--shape` reports
+the level at 0.5 / 1 / 2 / 5 / 10 s relative to the ATTACK PEAK, the first crossing of -3 / -6 /
+-12 dB, and per voice `t_ko_rel` / `ko_src` (1 = ended by the real key release, 2 = the
+firmware's own `0x7E00` FREE, i.e. torn down mid-hold).
+
+*The measurement can fail, two ways.* The rendered noise floor with no key down is **exactly 0**
+on every channel (MEASURED, 3 s window, all three WAV channels), so a decay cannot be hidden by a
+floor; and the same metric reads -120 dB on eighteen patches in arm B below and -0.0 dB on the
+same patches in arm A.
+
+## M.2 THE CAUSE — Felipe's saved cfg has TGMODE bit 1, the "free voices whose EG has finished" PROBE, turned ON
+
+`~/compartilhado/kn7000-emulator/cfg/kn5000.cfg` (written 20:48, the exit of his session; his
+binary is md5 `29ae7a61f754b49a2bc33600ebe66da1`, **byte-identical** to the build tree):
+
+    <port tag=":TGMODE" type="CONFIG" mask="2" defvalue="0" value="2" />
+
+MAME writes a port line only when the value differs from the default, so this is a bit somebody
+switched On in the machine-configuration menu and MAME has been restoring ever since. It is
+`kn5000.cpp`'s
+
+    PORT_CONFNAME(0x02, 0x00, "  ^ probe: free voices whose EG has finished")
+
+and it is not Felipe's mistake: `notes/FINDINGS-sound-name-error.md` §5, written EARLIER THE SAME
+DAY, already records "*the shared `kn7000-emulator/cfg/kn5000.cfg` … only non-defaults are TGMODE
+bit 1 (the EG-free probe) and `ENCODER=73`*" — it was noticed, and its consequence for sustain
+was never connected. That note also pins the bit as ON before his session.
+
+**What the bit does**, `kn5000_tonegen.cpp` sound_stream_update, one line:
+
+    const bool eg_done = free_on_eg_done && v.eg_seg >= 2 && v.eg_level <= v.eg_target;
+    if (mag >= (int64_t(1) << 14) && !eg_done)   // >= 0.5 LSB of the 16-bit output
+        v.silent_samples = 0;
+    else if (++v.silent_samples >= SILENT_HOLDOFF)   // 98.33 ms, one bank-poll period
+    { ...; v.eg_running = false; }
+
+Default OFF, the interlock is calibration-independent and provably inaudible: a voice reports
+itself silent only after its own rendered contribution has been below half an output LSB for a
+full bank-poll period, so `status_r()` can only report 0 for a voice already contributing
+nothing. `status_r()`'s own comment states the consequence — "*while a key is down the EG sits at
+its programmed sustain level, so the interlock never arms and the voice is structurally
+unreclaimable, for any hold duration*".
+
+**The probe deletes the `mag` term.** A voice whose last EG segment has reached its target is
+reported silent *regardless of what it is still rendering*. 98.33 ms later `eg_running` drops,
+the firmware's voice manager reads the bitmap, `Voice_Manager_PollBank -> ToneGen_SilenceChannel`
+writes `0x7E00` and **deallocates the channel** — while the key is still down and the voice is
+still at full level. That is §K.4's teardown, reached from the other side: not by the level
+falling, but by the report lying about it.
+
+## M.3 The A/B, all twenty patches, every one LCD-confirmed
+
+One key (C4, velocity 100), 12 s hold, nothing else sounding. Arm A = shipped defaults. Arm B =
+identical in every respect **except TGMODE bit 1**. Levels are dB relative to that hold's own
+attack peak; `pk` is the attack peak in output LSB, so a level change is separable from a decay.
+
+| # | LCD name | page/key | selectors (bank) | eg2 words | A: probe OFF  0.5/1/2/5/10 s (dB re attack) | B: probe ON | B teardown |
+|---|---|---|---|---|---|---|---|
+| 1 | **Perc Organ** | 1/2 LEFT 1 | 4002(b1)/4002(b1) | 727F/727F | pk 1784 · -0.1 / -0.1 / -0.0 / -0.0 / -0.1 | pk 1779 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 2 | **Full Drawbars** | 1/2 LEFT 2 | 4007(b1)/4007(b1) | 9A76/9A76 | pk 2767 · -0.0 / -0.0 / -0.0 / -0.1 / -0.0 | pk 2755 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 3 | **Chapel Organ** | 1/2 LEFT 3 | 4017(b1)/401E(b1)/5011(b1) | 727F/727F/9A00 | pk 602 · -0.1 / -0.5 / -1.1 / -1.1 / 0.4 | pk 568 · -8.1 / -8.0 / -8.1 / -8.1 / -8.1 | 0.16 s src2 (1 partial survives, audible) |
+| 4 | **Full Organ** | 1/2 LEFT 4 | 4025(b1)/4025(b1)/401E(b1) | 727F/727F/4A7F | pk 1139 · -2.7 / -1.0 / -1.4 / -1.8 / -1.0 | pk 1116 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 5 | **Cathedral Organ** | 1/2 LEFT 5 | 402B(b1)/4032(b1)/4025(b1) | 727F/727F/4A7F | pk 1640 · -3.1 / -2.0 / -2.3 / -3.0 / -1.4 | pk 1387 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 6 | **Jazz Drawbars** | 1/2 RIGHT 1 | 400E(b1)/400E(b1) | 9A76/9A76 | pk 3366 · -0.1 / -0.1 / -0.1 / -0.4 / -0.1 | pk 3340 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 7 | **16' & 1'** | 1/2 RIGHT 2 | 4011(b1)/4011(b1) | 7A76/7A76 | pk 3443 · -0.0 / -0.0 / -0.0 / -0.0 / -0.0 | pk 3430 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 8 | **Bright Accordion** | 1/2 RIGHT 3 | 4037(b1)/4037(b1) | 727F/727F | pk 1689 · -1.8 / -4.5 / -3.7 / -2.4 / -1.7 | pk 1551 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 9 | **Musette** | 1/2 RIGHT 4 | 4042(b1)/4042(b1) | 727F/727F | pk 1966 · -1.4 / -4.3 / -3.7 / -1.2 / -1.3 | pk 1821 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 10 | **Folk Accordion** | 1/2 RIGHT 5 | 4047(b1)/4042(b1)/404D(b1)/4071(b1) | 727F/727F/4A6C/4A7F | pk 2154 · -0.8 / -2.7 / -2.5 / -2.8 / -1.7 | pk 1871 · -120 / -120 / -120 / -120 / -120 | 0.16 s src2 |
+| 11 | **Accomp Drawbars** | 2/2 LEFT 1 | 6096(b1)/6096(b1)/0000(b0)/6050(b1) | 727F/727F/727F/727F | pk 1988 · -0.1 / -0.1 / 0.0 / 0.2 / 0.7 | pk 1988 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 12 | **Pop Organ** | 2/2 LEFT 2 | 6096(b1)/6096(b1)/0000(b0)/6050(b1) | 727F/727F/AE00/727F | pk 1353 · -0.1 / -0.1 / 0.0 / 0.5 / 1.1 | pk 1353 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 13 | **Soul Organ** | 2/2 LEFT 3 | 6070(b1)/6070(b1)/6070(b1)/6048(b1) | 047C/047C/047C/047C | pk 959 · -21.8 / -21.8 / -21.8 / -21.8 / -21.8 | pk 959 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 14 | **Rock Organ** | 2/2 LEFT 4 | 4005(b1)/4007(b1)/6040(b1) | 9A76/9A76/B300 | pk 2731 · -8.7 / -3.1 / 1.5 / -0.9 / 1.3 | pk 2731 · -4.0 / -3.9 / -3.9 / -3.9 / -3.9 | 0.11 s src2 (1 partial survives, audible) |
+| 15 | **Organ Bass** | 2/2 LEFT 5 | 6070(b1)/6070(b1) | 727F/727F | pk 2533 · -0.0 / -0.0 / -0.0 / -0.0 / -0.0 | pk 2533 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 16 | **Theatre Organ** | 2/2 RIGHT 1 | 402B(b1)/0005(b0)/3195(b0) | 727F/727F/FC00 | pk 495 · -0.1 / 0.0 / -0.5 / -0.5 / 0.0 | pk 454 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 17 | **Theatre Accomp** | 2/2 RIGHT 2 | 0005(b0)/0005(b0)/401E(b1) | 727F/727F/727F | pk 472 · -0.4 / -0.2 / 0.0 / -0.0 / -0.0 | pk 472 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 18 | **Theatre Novelty** | 2/2 RIGHT 3 | 0000(b0)/0000(b0)/3195(b0) | FF7F/C27F/727F | pk 0 · -120.0 / -120.0 / -120.0 / -120.0 / -120.0 | pk 0 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 19 | **Mellow Accordion** | 2/2 RIGHT 4 | 403B(b1) | 727F | pk 1543 · -0.0 / -0.0 / -0.1 / -0.1 / 0.0 | pk 1529 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+| 20 | **Bandoneon** | 2/2 RIGHT 5 | 403B(b1)/403E(b1) | 727F/727F | pk 935 · -0.3 / -0.6 / -1.0 / -0.3 / -0.1 | pk 934 · -120 / -120 / -120 / -120 / -120 | 0.11 s src2 |
+
+**Arm A: twenty of twenty sustain flat** (Soul Organ's -21.8 dB is a 50 ms percussive attack —
+its shape is flat at -21.8 dB from 0.1 s to 12 s — and its `047C` segment-2 level `0x04` is the
+`Level_Fader` table's maximum attenuation, the "designed to decay" signature; Theatre Novelty is
+silent, §M.5). **Arm B: eighteen of twenty are cut to DIGITAL SILENCE at 0.11-0.16 s, all
+partials `ko_src = 2`.** The two that survive are **Chapel Organ** and **Rock Organ**.
+
+**That is Felipe's list, patch for patch, with nothing left over.** Both of his named exceptions
+are exceptions here; every patch he did not except is cut; and the one patch he says is silent is
+silent in both arms. Twenty of twenty rows agree.
+
+### ARM C — his own cfg FILE, copied verbatim, not a reconstruction
+
+Arms A/B set the bit from a cfg the rig writes, which proves the MECHANISM but not that his
+file does it. So a third arm ran with `KN5_CFGSRC=~/compartilhado/kn7000-emulator/cfg`, i.e. his
+`kn5000.cfg` copied in unchanged — TGMODE bit 1, `ENCODER=73`, and **AREA left at the DIPSWITCH
+default `0x06`** rather than the `0x02` the rig has always forced. MEASURED:
+
+    Perc Organ    (1/2 L1)  cut to silence at 0.16 s, both partials ko_src = 2
+    Chapel Organ  (1/2 L3)  sounds for the whole 12 s, FLAT at -8.1 dB from 0.5 s to 10 s
+    Rock Organ    (2/2 L4)  sounds for the whole 12 s, FLAT at -4.0 dB from 0.5 s to 10 s
+
+Identical to arm B to the tenth of a dB. **His configuration file, on his binary, reproduces his
+report** — and the AREA strap makes no difference, which retires that difference too.
+
+## M.4 WHY exactly those two survive — DERIVED, and it is a one-line rule
+
+`eg_done` needs `eg_level <= eg_target` on segment 2. If the segment-2 word's **rate byte is 0**
+the EG never steps, `eg_level` stays where segment 1 left it — above the target — and the
+condition is never true, so that partial is never freed. The rule is therefore:
+
+> **a patch keeps sounding under the probe iff it has at least one partial whose segment-2 word
+> has rate 0 AND whose wave is in a dumped bank.**
+
+    Chapel Organ   ch2  sel 5011  bank 1  eg2 = 9A00   rate 0, REAL  -> survives, AUDIBLE
+    Rock Organ     ch2  sel 6040  bank 1  eg2 = B300   rate 0, REAL  -> survives, AUDIBLE
+    Pop Organ      ch2  sel 0000  bank 0  eg2 = AE00   rate 0, but bank 0 = MUTED -> inaudible
+    Theatre Organ  ch2  sel 3195  bank 0  eg2 = FC00   rate 0, but bank 0 = MUTED -> inaudible
+    all other 16   every partial has a non-zero segment-2 rate                    -> all freed
+
+The bank qualifier is not a patch: **it is what makes the rule agree with Felipe rather than
+over-predict.** Pop Organ and Theatre Organ do have a rate-0 partial and it does survive the full
+12 s in arm B (MEASURED, `ko_src=1`, `t_ko_rel` 12.01) — but it is an undumped-socket partial
+rendering silence, so both patches go quiet on schedule and Felipe correctly did not except them.
+
+## M.5 Three corrections and one answer, from the same runs
+
+* ⚠ **RETRACTED: "Theatre Accomp (2/2 RIGHT 2) is silent for the same reason as Theatre
+  Novelty"** (§L.4). It is **not silent**. MEASURED, LCD-confirmed: three partials, `0005`/
+  `0005` in bank 0 (muted) and **`401E` in bank 1, real, peak 1439** — it plays, quietly, and in
+  arm A it sustains flat for 12 s. Theatre Novelty is genuinely all-bank-0 (`0000`/`0000`/`3195`,
+  peak 0) and its silence is §J.1's mute working as specified. Partial muting is common in this
+  group: Theatre Organ, Accomp Drawbars and Pop Organ each lose one partial the same way.
+* **"Does a held note decay with nothing else sounding?" — ANSWERED, no need to ask him.** Every
+  run above is one key with nothing else playing: no rhythm, no accompaniment, no second note.
+  Arm B still cuts the note at 0.11-0.16 s. Polyphony is not required and §L.5's polyphony
+  refutation was correct but irrelevant.
+* ★ **The KN5000's on-screen octave numbering is ONE LOWER than MIDI's.** Felipe's "Db4..F#4" is
+  **MIDI 73..78**, not 61..66. That was a naming-convention difference and NOT an error in his
+  report; `notes/TASK-QUEUE-kn5000-sound.md` already carries the corrected numbers.
+* The rig's other uncontrolled difference is now on the record too: `kn5000_capture_patch.sh` has
+  always forced `AREA = 0x02` while the driver's DIPSWITCH default — and Felipe's cfg — is
+  `0x06`. It is not the cause (arm C below holds his cfg verbatim, AREA and all) but it should
+  never have been silently different. `KN5_AREA` now overrides it.
+
+## M.6 What to do
+
+1. **Nothing in the tone generator is wrong here.** Arm A is correct behaviour and matches the
+   real instrument as Felipe describes it. The defect is a diagnostic left On in a shared
+   configuration file.
+2. **Clear the bit in the published tree**: turn "^ probe: free voices whose EG has finished"
+   Off in the machine-configuration menu (Tab -> Machine Configuration) and exit, or delete
+   `kn7000-emulator/cfg/kn5000.cfg`. Then a held ORGAN & ACCORDION note sustains.
+3. **The probe is dangerous as a persisted CONFIG.** It is `PORT_CONFNAME`, so it lives in
+   `cfg/*.cfg` forever and silently, and it does not merely change a diagnostic reading — it
+   deletes notes. Its own banner already says "*it is NOT a fix and must not be used as one*"
+   (§2026-08-05, REFUTED). It should be an environment variable like every other diagnostic in
+   this driver, or it should be removed.
+4. **Rig rule, added to the list this file keeps**: when reproducing a REPORTED session, hold the
+   reporter's whole environment — cfg, nvram, straps — not just the parts the rig knows about.
+   `kn5000_capture_patch.sh` now takes `KN5_CFGSRC` / `KN5_NVSRC` (copies, never shared) and
+   `KN5_TGPROBE` / `KN5_AREA` so a saved session can be re-run bit for bit.

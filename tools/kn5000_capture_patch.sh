@@ -20,11 +20,35 @@ RD="$ROOT/run/$TAG"
 rm -rf "$RD"; mkdir -p "$RD/nvram" "$RD/snap" "$RD/cfg"
 
 TGVAL=0; [ "$MODE" = "sine" ] && TGVAL=1
+# TGMODE bit 1 -- the "free voices whose EG has finished" DIAGNOSTIC PROBE. Default OFF,
+# which is the driver's default too. It is here because a saved cfg/kn5000.cfg can carry
+# it ON without anyone noticing (Felipe's did, MEASURED 2026-08-06), and a probe that
+# reports a voice silent the moment its last EG segment reaches its target is a
+# short-sustain generator: the firmware reads that bitmap, calls the channel free and
+# writes 0x7E00. A rig that cannot set this bit cannot reproduce a session that has it.
+#   KN5_TGPROBE=1  -> probe ON
+TGPROBE=0; [ "${KN5_TGPROBE:-0}" = "1" ] && TGPROBE=2
+# AREA: the rig has always forced 0x02 (Brazil/Thailand/...) while the driver's DIPSWITCH
+# DEFAULT is 0x06 ("Other"). KN5_AREA overrides so the strap can be held equal to a
+# session being reproduced.
+AREA="${KN5_AREA:-2}"
+# KN5_CFGSRC=<dir> reproduces someone ELSE's saved MAME config instead of synthesising
+# one. Used to re-run a reported session with the reporter's own cfg/kn5000.cfg (COPIED,
+# never used in place, so their file is not written back to). Everything a saved cfg
+# carries -- CONFIG bits, DIPSWITCH straps, ADJUSTERs -- then holds as it did for them.
+if [ -n "${KN5_CFGSRC:-}" ] && [ -f "$KN5_CFGSRC/kn5000.cfg" ]; then
+  cp "$KN5_CFGSRC/kn5000.cfg" "$RD/cfg/kn5000.cfg"
+else
 printf '%s\n' '<?xml version="1.0"?>' '<mameconfig version="10">' \
   '    <system name="kn5000">' '        <input>' \
-  '            <port tag=":AREA" type="DIPSWITCH" mask="6" defvalue="6" value="2" />' \
+  "            <port tag=\":AREA\" type=\"DIPSWITCH\" mask=\"6\" defvalue=\"6\" value=\"$AREA\" />" \
   "            <port tag=\":TGMODE\" type=\"CONFIG\" mask=\"1\" defvalue=\"0\" value=\"$TGVAL\" />" \
+  "            <port tag=\":TGMODE\" type=\"CONFIG\" mask=\"2\" defvalue=\"0\" value=\"$TGPROBE\" />" \
   '        </input>' '    </system>' '</mameconfig>' > "$RD/cfg/kn5000.cfg"
+fi
+# KN5_NVSRC=<dir> likewise seeds the battery-backed IC21 SRAM (nvram2) from a session
+# being reproduced. Copied, never shared: the run gets its own directory to write back to.
+[ -n "${KN5_NVSRC:-}" ] && cp -r "$KN5_NVSRC/." "$RD/nvram/" 2>/dev/null
 
 cd "$BUILD" || exit 1
 export KN5000_NOTELOG="$RD/notes.csv"
