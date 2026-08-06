@@ -322,6 +322,15 @@ void kn5000_tonegen_device::device_start()
 	// KN5000_HANDOFF=ctrl re-enables it. In SINE mode it is safe and informative: no PCM is
 	// read, so neither failure above exists, and it is how to hear the muted part's timing
 	// and envelopes.
+	// KN5000_EGFREE=on -- the refuted probe that reports a voice silent once its last EG
+	// segment reaches its target. Kept because it isolates that one mechanism cleanly, but it
+	// DELETES HELD NOTES, so it must never be reachable from the UI: it was a persisted
+	// PORT_CONFNAME until 2026-08-06 and silently broke Felipe's instrument for a day.
+	if (const char *s = getenv("KN5000_EGFREE"))
+		m_eg_free_probe = (s[0] == 'o' && s[1] == 'n') || s[0] == '1';
+	if (m_eg_free_probe)
+		logerror("tonegen: KN5000_EGFREE=on -- freeing voices once the EG finishes (DELETES HELD NOTES)\n");
+
 	m_handoff_ctrl = false;
 	if (const char *s = getenv("KN5000_HANDOFF"))
 		m_handoff_ctrl = (s[0] == 'c');
@@ -2610,7 +2619,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// status_r() feedback loop is NOT what stalls sine mode. Kept as a knob because it
 	// isolates that one mechanism cleanly; it is NOT a fix and must not be used as one.
 	// See notes/kn5000-tonegen-sine-mode.md for where the evidence actually points.
-	const bool free_on_eg_done = (m_render_mode.read_safe(0) & 2) != 0;
+	const bool free_on_eg_done = m_eg_free_probe;
 	//  ★ bit 1 = the SPECULATIVE ISA (guessed semantics).  See kn5000.cpp DSPCFG.
 	if (m_dsp1.found())
 		m_dsp1->set_speculative((dspcfg & 2) != 0);

@@ -788,12 +788,20 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFNAME(0x01, 0x00, "Tone generator rendering (DIAGNOSTIC)")
 	PORT_CONFSETTING(   0x00, "PCM from wave ROM (normal)")
 	PORT_CONFSETTING(   0x01, "Sine test tone (no wave ROM PCM)")
-	// bit 1: DIAGNOSTIC PROBE, not a fix. Reports a voice silent once its last EG segment
-	// has reached its target, which breaks the status_r() feedback loop that otherwise
-	// leaves a sustaining voice unreclaimable. See the banner in kn5000_tonegen.cpp.
-	PORT_CONFNAME(0x02, 0x00, "  ^ probe: free voices whose EG has finished")
-	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x02, DEF_STR(On))
+	// The bit-1 PROBE THAT USED TO LIVE HERE WAS REMOVED 2026-08-06 AND MUST NOT COME BACK
+	// AS A PORT_CONFNAME. MAME persists config ports to cfg/kn5000.cfg and restores them on
+	// every launch, so a diagnostic that DELETES NOTES followed Felipe's install around for a
+	// day: it reported any voice whose last EG segment had reached its target as silent, the
+	// firmware freed the channel ~98 ms later, and held notes died at 0.11-0.16 s. He reported
+	// it as "almost all ORGAN & ACCORDION patches have a short sustain" and was right in every
+	// detail, including that Rock Organ and Chapel Organ were the two exceptions.
+	//
+	// It was invisible to every automated run because those all use a private -cfg_directory:
+	// the isolation that protects a rig from contamination also hides the user's persisted
+	// state. Only a listening report could find it.
+	//
+	// It now lives as KN5000_EGFREE=on (see kn5000_tonegen.cpp), like every other diagnostic
+	// in this driver: no persistence, no UI affordance, gone when the process exits.
 
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")

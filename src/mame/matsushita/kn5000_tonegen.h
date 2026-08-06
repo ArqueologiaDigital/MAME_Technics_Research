@@ -394,6 +394,9 @@ private:
 	                                //   at each segment hop.
 	bool m_use_level080  = false;   // KN5000_LVL080=on   — render +0x080 as the per-voice
 	                                //   output level it is, instead of only as a strobe.
+	bool m_eg_free_probe = false;   // KN5000_EGFREE=on — refuted probe; DELETES HELD NOTES.
+	                                // Never expose this via PORT_CONFNAME: MAME persists
+	                                // config ports and it broke Felipe's install for a day.
 	bool m_handoff_ctrl  = false;   // KN5000_HANDOFF=ctrl — take the group0/bank0 hand-off
 	                                //   word as the CONTROL word it is (no amplitude field),
 	                                //   instead of muting on its low bits. See data_w().
