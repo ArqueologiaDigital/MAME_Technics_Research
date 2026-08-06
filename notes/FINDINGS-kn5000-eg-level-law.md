@@ -1269,8 +1269,11 @@ attack peak; `pk` is the attack peak in output LSB, so a level change is separab
 **Arm A: twenty of twenty sustain flat** (Soul Organ's -21.8 dB is a 50 ms percussive attack —
 its shape is flat at -21.8 dB from 0.1 s to 12 s — and its `047C` segment-2 level `0x04` is the
 `Level_Fader` table's maximum attenuation, the "designed to decay" signature; Theatre Novelty is
-silent, §M.5). **Arm B: eighteen of twenty are cut to DIGITAL SILENCE at 0.11-0.16 s, all
-partials `ko_src = 2`.** The two that survive are **Chapel Organ** and **Rock Organ**.
+silent, §M.5). **Arm B: 17 of the 19 AUDIBLE patches are cut to digital silence at 0.11-0.16 s,
+every partial `ko_src = 2`.** The two that survive are **Chapel Organ** and **Rock Organ**.
+(Stated exactly: 18 of 20 have all their voices freed by the firmware — Theatre Novelty's voices
+are freed too, but it was rendering silence anyway, so 17 is the number of patches that AUDIBLY
+stop. Both countings are in the table; do not quote the 18 as "18 patches went quiet".)
 
 **That is Felipe's list, patch for patch, with nothing left over.** Both of his named exceptions
 are exceptions here; every patch he did not except is cut; and the one patch he says is silent is
