@@ -1194,7 +1194,7 @@ firmware's own `0x7E00` FREE, i.e. torn down mid-hold).
 
 *The measurement can fail, two ways.* The rendered noise floor with no key down is **exactly 0**
 on every channel (MEASURED, 3 s window, all three WAV channels), so a decay cannot be hidden by a
-floor; and the same metric reads -120 dB on eighteen patches in arm B below and -0.0 dB on the
+floor; and the same metric reads -120 dB on seventeen patches in arm B below and -0.0 dB on the
 same patches in arm A.
 
 ## M.2 THE CAUSE — Felipe's saved cfg has TGMODE bit 1, the "free voices whose EG has finished" PROBE, turned ON
