@@ -173,6 +173,14 @@ void kn5000_tonegen_device::device_start()
 	parse_page_directories();
 
 	// Amplitude-EG gain curve (see eg_level_to_gain for the derivation).
+	//
+	// KN5000_EGLAW is an EXPERIMENT SWITCH, default OFF (= the derived log law). It exists
+	// so a single binary can render both arms of the "is the EG segment LEVEL byte a log
+	// code or a linear amplitude?" A/B; nothing in the shipped path reads it when unset.
+	//   log (default) gain = 2^((L-255)/16)     16 counts/octave, derived from table 0x010764
+	//   lin           gain = L/255              the linear-amplitude candidate under test
+	const char *eglaw = getenv("KN5000_EGLAW");
+	const bool lin = (eglaw && eglaw[0] == 'l' && eglaw[1] == 'i');
 	for (int i = 0; i < EG_GAIN_TABLE; i++)
 	{
 		const double L = double(i) / 16.0;
@@ -180,8 +188,12 @@ void kn5000_tonegen_device::device_start()
 		// the whole voice manager presupposes that the chip can reach zero (it frees a
 		// channel only once the chip reports it silent). The exact law gives -95.95 dB
 		// there, which is within a hair of the 16-bit quantum anyway.
-		m_eg_gain[i] = (i == 0) ? 0.0f : float(std::pow(2.0, (L - 255.0) / 16.0));
+		m_eg_gain[i] = (i == 0) ? 0.0f
+		             : lin ? float(L / 255.0)
+		                   : float(std::pow(2.0, (L - 255.0) / 16.0));
 	}
+	if (lin)
+		logerror("tonegen: KN5000_EGLAW=lin -- EG level byte rendered as LINEAR amplitude\n");
 
 	// Diagnostic sine oscillator table (see SINE_PEAK in the header for how the
 	// amplitude was chosen). Tabulated + interpolated rather than calling std::sin per
@@ -1025,6 +1037,55 @@ void kn5000_tonegen_device::assign_chord_notes(int ch)
 // Level code 0 returns exactly 0 (see device_start): the firmware's voice manager frees a
 // channel only when the chip reports it SILENT, so a gain law that never reaches zero
 // would deadlock a 64-voice instrument. -95.95 dB vs -inf is inaudible either way.
+//
+// ---------------------------------------------------------------------------------------
+// 2026-08-06 — THE LINEAR-AMPLITUDE CANDIDATE IS FALSIFIED, and the log law is corroborated
+// by a table it had not been checked against. Run the A/B yourself with KN5000_EGLAW=lin.
+// ---------------------------------------------------------------------------------------
+//
+// The candidate was gain(L) = L/255, proposed to rescue the ORGAN demo, whose voices are
+// programmed +0x840 = 0x727F (SUST1 = level 114 at rate 127) and therefore park at
+// 2^(-141/16) = -53.06 dB about 1.9 ms into every note. It does what it was designed to do
+// and STILL fails, on the piano gate and on the ROM:
+//
+//   MEASURED A/B, one binary, 70 s runs, identical note streams in both arms (4714/4714
+//   organ and 941/941 piano notelog rows, so the change perturbs no firmware behaviour;
+//   with KN5000_EGLAW unset the piano WAV is md5-identical to the log arm, 455697aa..):
+//     organ, the 2307 voices whose +0x840 = 0x727F   click fraction 0.999 -> 0.019 (PCM)
+//                                                                   0.999 -> 0.015 (sine)
+//                        their tail/peak  -49.8 dB -> -6.7 dB, vs the loud class at -2.0 dB
+//     PIANO REGRESSION GATE, and this is what kills it:
+//                        peak 23048 -> 32768, rms -23.7 -> -10.2 dBFS, clipped-sample
+//                        fraction 0.00000 -> 0.00561
+//     organ mix clipped-sample fraction 0.00191 -> 0.12373  (12.4 % of samples at the rail)
+//   So the organ's voices become audible only by driving the whole instrument into the
+//   clipper. Restoring headroom needs a second, purely fitted master trim.
+//
+//   ROM CORROBORATION OF THE LOG LAW, from a table the derivation above never used.
+//   Voice_LevelCap_Lookup (0x011ADF) = 49 49 53 57 61 65 69 73 77 — FADER INDICES, fed
+//   through Level_Fader by Voice_Calc_LevelPair_EGA (asm L21601). Level_Fader steps a
+//   uniform -2 per index across that whole span, so the nine cap positions are level codes
+//   136 128 120 112 104 96 88 80: spaced EXACTLY 8 counts, i.e. exactly 3.010 dB apart
+//   under 16 counts/octave. A nine-position loudness cap in exact 3 dB steps is a designed
+//   control; under gain = L/255 the same nine positions span 4.6 dB in total and are not.
+//   Equally: Level_Fader's uniform -2/index makes the 0..100 parameter LINEAR IN dB at
+//   0.75 dB per step (the standard level-parameter taper) under the log law, while under
+//   the linear law its top 75 % of travel spans only 10 dB.
+//
+// WHAT THAT LEAVES. The gap the organ needs closed is 128 level counts (the loud class
+// parks at 242, the faint class at 114). Any log-form law closes it only with a slope of
+// 6 dB/128 counts = 0.047 dB/count, i.e. 128 counts per octave — eight times shallower than
+// the bit-exact 4e4m table at 0x010764 allows. So no re-calibration of THIS law can be the
+// fix; either those voices should not reach segment 1, or the loudness they are missing is
+// carried by a register the HLE does not read (see +0x080 below).
+//
+// AND THE PIANO IS NOT A CONTROL FOR THIS LAW, which invalidates the between-demo A/B that
+// motivated the candidate. MEASURED: the piano's +0x840 is 0x3A4C — SUST1 = level 58, i.e.
+// 21 dB BELOW the organ's 114 — but at rate 76, whose step traverses the EG's 255 counts in
+// 12.8 s. Its notes are ended by the group-9 release heuristic at ~77 ms, so 516 of 571
+// piano voices never leave segment 1 at all (adv12_word = FFFF) and flush with eg_level
+// still at a median of 206. The piano "plays almost perfectly" because its amplitude EG is
+// effectively BYPASSED, not because the level law is right.
 float kn5000_tonegen_device::eg_level_to_gain(double level) const
 {
 	int i = int(level * 16.0 + 0.5);
@@ -2203,6 +2264,17 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	// Update pan and the TVF from the current registers, then start the amplitude EG at
 	// segment 0. +0x800, +0x180 and +0x100 are all written earlier in the same burst
 	// (asm L29736, L29691 and L29619), so they are already final when the gate arrives.
+	//
+	// +0x840 AND +0x880 ARE NOT, and that is correct rather than a defect to work around.
+	// MEASURED on the raw bus (tools/kn5000_tgbus_trace.lua, organ demo, 65 gates): the
+	// burst is  ... +0x800 (-2 us) | GATE 0x8100 | +0x840 (+3 us) +0x880 (+6 us) +0x8C0
+	// (+10 us) +0x900..+0xA40 (+13..+28 us) | +0x080 end strobe (+31 us).  So every
+	// notelog row necessarily snapshots +0x840 at its PRE-MUTE value 0xFF00 — that is an
+	// artifact of where the snapshot is taken, not a stale register: the real segment-1
+	// word is in regs[21] 3 us later, and load_eg_segment(ch, 1) does not read it until the
+	// EG actually leaves segment 0 about 1.8 ms in. There is nothing here to defer.
+	// (An earlier pass sized this gap at ~2 ms and proposed deferring the latch; the trace
+	// says 3 us.)
 	update_voice_params(ch);
 	update_timbre(ch);
 	load_eg_segment(ch, 0);
