@@ -632,3 +632,146 @@ flipping a default that moves the instrument's loudness by 8 dB is his call.
 3. **Bits[14:12] and bits[11:9]** of this word. They take only 000/001/111, come from
    `part[+0x25]` (CC 0x9B) and `part[+0x12]`, and are the only content of the word that
    varies at all. That is what this register has left to give.
+
+---
+
+# J. The undumped-ROM mute, and the retraction of the "extreme noise" attribution
+
+2026-08-06, second pass. Felipe's spec, verbatim:
+
+> I want the PCM mode to mute all samples from the undumped ROMs, but do not mute any samples
+> from the good ROM. And I want the sine wave mode to play everything regardless of the
+> associated ROM, because it does not depend on the samples, so there's no need to mute them
+> in that mode. Then we should focus on fixing the organ demo, to make it sound correctly.
+> And that should be doable because (as far as I remember) the organ is entirely stored in
+> the good ROM.
+
+Implemented as `voice_t::wave_undumped` + `m_mute_undumped` (default ON, `KN5000_UNDUMPED=play`
+to hear what is being suppressed). It zeroes the voice's contribution AFTER the pan and BEFORE
+the mix, so the EG, the wave pointer, the release/hold counters and the silence interlock all
+still run on the unmuted sample: voice allocation and everything `status_r()` reports back to
+the firmware are unchanged by it.
+
+## J.1 The bank census — WHICH ROM each demo actually plays
+
+Note-ons per wave bank, 45 s captures, `KN5000_NOTELOG` (bank 1 = IC307, the one hardware-rooted
+dump; bank 0 = the socket serving classes 0-3, which is IC304/305/306 and is UNDUMPED — filled
+with a BAD_DUMP copy of IC307, kn5000.cpp ROM_REGION):
+
+| demo  | bank 1 = IC307 | bank 0 = UNDUMPED | share of note-ons | **share of rendered ENERGY** |
+|-------|---------------:|------------------:|------------------:|-----------------------------:|
+| organ | 1698           | 129               | 7.1 % undumped    | **75.5 % undumped**          |
+| piano |  565           | 101               | 15.2 % undumped   | **0.35 % undumped**          |
+
+**Felipe's premise is true by note count and false by loudness.** 92.9 % of the organ demo's
+note-ons are on IC307, but three quarters of the sound coming out of it today is *not*. The
+whole of that 75.5 % is one layer: 64 note-ons of `+040` = 0x109A/9B/9C (class 1 → bank 0,
+page 1), sounding in the bass register (period 256 samples played at 0.66x = 113 Hz) on a
+~0.33 s onset grid, median voice peak **11269** while the organ's own voices sit at **531**. All three selections resolve to the same IC307 page-1 chunk (they share a
+wave offset), so today the demo plays one sustained IC307 tone 64 times in place of three
+different recordings nobody has.
+
+Muting it is therefore both correct and expensive, exactly as measured:
+
+| arm (28-38 s window, ch1) | rms | peak | note-ons OK / INAUDIBLE |
+|---|---:|---:|---|
+| organ PCM, mute off (= previous build, md5-identical) | −21.81 dB | 17676 | 338 / 1320 |
+| organ PCM, **mute on** | **−29.18 dB** | 8012 | 276 / 1384 |
+| piano PCM, mute off | −19.02 dB | 24072 | 342 / 247 |
+| piano PCM, **mute on** | **−19.03 dB** | 23994 | 340 / 249 |
+
+**The piano regression gate passes with 0.01 dB and two notes.** That was PREDICTED before the
+run from the energy share (0.35 % ⇒ 0.015 dB) and then measured — it is not a gate that could
+not fail: the same prediction for the organ said −6.1 dB and the organ moved −7.37 dB.
+
+Three controls, all of which could have failed and did not:
+
+* `KN5000_UNDUMPED=play` reproduces the pre-change build **bit-for-bit** (organ WAV md5
+  96ba4fa8… in both). So the change is exactly the mute and nothing else.
+* Both **sine** arms are **bit-identical** to the pre-change build (organ 2d77e917…, piano
+  06148142…). Sine mode plays everything, per spec.
+* Note streams are identical row for row (1827 / 666 rows, same `t_on`/`ch`/`+040`), and every
+  bank-1 row's voice peak is unchanged. The mute did not leak into voice allocation.
+
+One residue: 1 of the 101 muted piano rows reaches peak **6** (−74.7 dBFS). `data_w()` re-runs
+`resolve_waveform()` on every `+0x080` burst strobe, so a voice still ringing under release can
+be re-pointed at a dumped chunk by the *next* note's burst. Pre-existing, unrelated to the mute.
+
+## J.2 RETRACTION — the "extreme noise" was never the undumped ROMs
+
+The previous pass explained Felipe's verdict on `KN5000_HANDOFF=ctrl` ("that is now really bad!
+extreme noise!") as un-muting the percussion, which it said selects the undumped sockets. **That
+is refuted by the census above.** Of the note-ons the decode un-mutes (hand-off low byte 0x00):
+
+    organ 739 of 1827 — 738 on IC307;   piano 180 of 666 — 179 on IC307
+
+The single exception in each is the power-on ping at `+040` = 0x0000. So the noise lives on the
+**good** dump, the mute in J.1 cannot suppress any of it, and re-enabling the decode "because
+the bank mute now handles it" would have shipped the identical noise a second time.
+
+**What the noise actually is.** The 185 un-muted organ voices are IC307 **page 1** selections
+held for a median of **4.4 s** (max 6.3 s), and `detect_period()` cannot pitch those recordings.
+Its fallback then declares the *whole recording* to be one cycle, and `update_pitch()` stretches
+it to reach the note:
+
+| `+040` | notes | samples | detected period | playback rate | median peak (ctrl) |
+|---|---:|---:|---:|---:|---:|
+| 0x505B | 87 | 1496 | 1496 (= N) | **11.5×** | 621 |
+| 0x5046 |  7 | 1568 | 1568 (= N) | **19.0×** | 1007 |
+| 0x504C | 31 | 2448 | 0 (aperiodic, zcr 0.53) | 1.0× | 7339 |
+| 0x5054 | 20 | 10488 | 0 (aperiodic, zcr 0.59) | 1.0× | 2270 |
+
+A 31 ms recording crammed into one 130-sample cycle (369.9 Hz) and repeated ~1830 times over a
+five-second note is a granular buzz at the right pitch, not a note; and for the aperiodic ones
+`compute_loop()` sets `loop_len` = the whole recording, so a 51 ms noise burst repeats ~100
+times per note at up to −4.6 dBFS while the organ's own voices are at −36 dBFS. Measured on the ctrl arm *with* the bank mute on: mix rms
+−29.18 → **−12.93 dB**, peak 8012 → **32502 (−0.07 dBFS)**.
+
+`m_handoff_ctrl` therefore stays OFF, for a **new and measured** reason: the estimator defect,
+not the missing dumps. §G's recommendation is superseded — `R` is no longer what blocks it.
+
+## J.3 What is still wrong with the organ demo
+
+1762 note-ons (t ≥ 12 s), classified with `tools/kn5000_collapse_detect.py`, each attributed to
+one cause. Regrouped by simultaneity, these are **549 key presses**, of which **239 (44 %)** now
+produce a summed voice peak ≥ 1000; median composite peak 1298 → 389 after the mute.
+
+| cause | note-ons | median voice peak | status |
+|---|---:|---:|---|
+| A. undumped socket — silenced by J.1 | 64 | 0 | **NOT FIXABLE without a dump of IC304/305/306** |
+| B. hand-off low byte 0x00 ⇒ `env_level` = 0 | 738 (721 INAUDIBLE + 17 CLICK) | 86 | on IC307; blocked by J.2 |
+| C. audible path, EG segment-2 target 114 | 594 INAUDIBLE (+181 OK, 56 SHORT) | 350 | see below |
+| C′. EG segment-2 target 146 | 5 INAUDIBLE (+95 OK, 29 SHORT) | 748 | |
+
+**B is now the largest defect in the organ demo — bigger than the missing ROMs.** 42 % of its
+note-ons are silenced by a register reading the previous pass showed to be wrong, and they are
+all on the one ROM we have.
+
+**On C, a caution about the unit.** These are class-6 selections = IC307 page 2 = the drawbar
+footage waves: 64- and 128-sample single-cycle tables, near full scale in the ROM (peak 32742,
+rms ~19000-23000). The organ demo fires a **median of 4 and up to 10 of them per key press**
+(1513 page-2 voices in 416 simultaneity groups) — they are *partials of one additive tone*,
+not notes. A quiet partial is not automatically a
+defect, and the per-note classifier has no way to know that. What separates the audible from the
+inaudible ones is **`+0x080`, not the EG**: within the identical `eg2` = 0x727F class,
+`+040` = 0x6096 has field 0xC2C (−21.4 dB) and median peak 1963, while 0x6263 has field 0x8F4
+(−40.6 dB) and median peak 239 — a 19 dB spread that is exactly the drawbar registration. So
+`R` (§G) remains the open question for C, and "the organ is too quiet" and "the drawbars are
+correctly at different levels" are the same measurement until `R` is known.
+
+## J.4 What the next pass needs
+
+1. **Decide `detect_period()`'s aperiodic fallback**, which is J.2's blocker. The final
+   `return (samples <= 2048) ? (samples << 16) : 0` is reached only when the correlation *has*
+   crossed zero (so the window holds more than one cycle) *and* no lag correlates above 0.5 —
+   i.e. after a positive measurement of aperiodicity, which the fallback then contradicts.
+   Returning 0 instead is self-consistent, **but it is not obviously better**: the current arm
+   gives the right pitch with a destroyed timbre, and `0` gives the recording's own timbre with
+   no pitch control at all. Both are wrong for a melodic voice; `0` is right for a one-shot.
+   **This needs to know what IC307 page-1 chunks 0x46/0x4A/0x4C/0x54/0x5B ARE** — the
+   directory's own param block (key-split bytes) or Felipe playing the patch on real hardware
+   would decide it. Do not flip it on taste.
+2. `compute_loop()` gives an aperiodic recording `loop_len` = the whole recording. A one-shot
+   should stop, not repeat ~90 times — but "stops" also frees the channel earlier through the
+   silence interlock, which changes voice allocation. Measure that before changing it.
+3. **`R`**, unchanged, still blocking C.

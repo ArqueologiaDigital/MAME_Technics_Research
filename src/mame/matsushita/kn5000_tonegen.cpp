@@ -229,15 +229,100 @@ void kn5000_tonegen_device::device_start()
 	// Voice_Build_OutputLevel builds it into, instead of using it only as a burst strobe.
 	if (const char *s = getenv("KN5000_EGSEG"))
 		m_eg_gate_latch = (s[0] == 'g');
+
+	// ---- ROM-INTEGRITY MUTE (NOT an experiment switch), DEFAULT ON ------------------
+	// Specified by Felipe, 2026-08-06: "I want the PCM mode to mute all samples from the
+	// undumped ROMs, but do not mute any samples from the good ROM. And I want the sine
+	// wave mode to play everything regardless of the associated ROM, because it does not
+	// depend on the samples, so there's no need to mute them in that mode."
+	//
+	// IC307 is the only wave ROM anyone has dumped. IC304/305/306 are loaded with a
+	// BAD_DUMP copy of it (kn5000.cpp ROM_REGION), so every voice that selects one of them
+	// plays a REAL RECORDING FROM THE WRONG PLACE. No level metric can see that — rms,
+	// peak and clipping are all perfectly happy while the instrument plays the wrong
+	// instrument — which is exactly how it went unnoticed until Felipe listened.
+	//
+	// KN5000_UNDUMPED=play renders them anyway. Use it to hear WHAT is being suppressed
+	// and how loud it would be, never as the shipped default.
+	if (const char *s = getenv("KN5000_UNDUMPED"))
+		m_mute_undumped = !(s[0] == 'p');
+	logerror("tonegen: undumped-socket mute is %s (PCM mode only; sine mode always plays everything)\n",
+			m_mute_undumped ? "ON" : "OFF (KN5000_UNDUMPED=play)");
 	// DEFAULT ON since 2026-08-06 -- see the EG-law banner above; the two are a joint
 	// calibration and enabling only one of them clips. KN5000_LVL080=off restores the
 	// old strobe-only behaviour.
 	m_use_level080 = true;
 	if (const char *s = getenv("KN5000_LVL080"))
 		m_use_level080 = !(s[0] == 'o' && s[1] == 'f');
-	// KN5000_HANDOFF=ctrl stops reading the group0/bank0 hand-off word's low bits as an
-	// amplitude. The decode that says they are not one is in data_w(); this switch renders
-	// it so the claim is answered with a measurement.
+	// ★ DEFAULT OFF, and the two paragraphs that follow are the DECODE (which stands);
+	// the ⚠⚠ block below is WHY IT IS NOT ENABLED (which was re-derived on 2026-08-06 and
+	// is not what the first attempt said). The group0/bank0 hand-off word's low bits are
+	// NOT an amplitude, and reading them as one silences 42% of both demos' note-ons.
+	//
+	// DERIVED from the sub-CPU ROM: slot[+0x2D] is built by exactly two routines --
+	// Voice_Build_GateCommand (0x025589) computes low = 0xFF - 4*(partial[0] & 0x3F) with
+	// BIT 8 AS ITS OWN ENABLE, and its twin ..._NoPartial (0x0255F3) computes no low field
+	// at all. MEASURED over 1814 note-ons on the live bus: the low byte is only ever 0x00
+	// or 0xFF and bit 8 is NEVER SET (1814/1814). So we were reading a disabled per-partial
+	// parameter as a linear gain.
+	//
+	// The population split is structural, not musical: 81-byte partials always give 0xFF,
+	// 21-byte partials always give 0x00, and Part 3 is 100% of the 21-byte kind in both
+	// demos (157/157 organ, 146/146 piano) with drum-key-shaped descriptors on a steady
+	// onset grid -- it is the percussion part. ⚠ BUT PART 3 IS NOT THE WHOLE MUTED
+	// POPULATION, and calling the mute "the drum mute" was the error that produced the
+	// wrong noise attribution below: 739 organ note-ons carry low byte 0x00, of which only
+	// 157 are Part 3. The other 553+ are class-6 = IC307 page 2 = the organ's own drawbar
+	// footage waves. Both parts are silenced by this read; only one of them is percussion.
+	//
+	// THE TEST THAT COULD HAVE FAILED: within those 185 drum note-ons the word is
+	// BIT-IDENTICAL while their own loudness registers span 32.7 dB of EG attack level and
+	// 8.3 dB of +0x080 output level. So it is not a velocity, not a per-part volume, and
+	// not an expression value (expression is part+0x10 and reaches the chip via the EG).
+	//
+	// MEASURED effect (base -> ctrl), INAUDIBLE / OK note counts:
+	//   organ pcm  1320/338 -> 1199/473     organ sine 1516/198 -> 1404/316
+	//   piano pcm   247/342 ->  142/451     piano sine  218/377 ->  157/438
+	// The drum class's median voice peak rises +25.4 dB; the already-audible classes are
+	// bit-unchanged.
+	//
+	// ⚠⚠ REVERTED TO DEFAULT OFF, 2026-08-06, ON FELIPE'S LISTENING TEST: with the decode
+	// on, the organ demo is "really bad, extreme noise".
+	//
+	// ⚠ AND THE FIRST EXPLANATION OF THAT NOISE WAS WRONG. It said the un-muted voices are
+	// the percussion part and that percussion selects the UNDUMPED sockets, so un-muting
+	// played substituted recordings. RETRACTED, 2026-08-06 — the bank census refutes it
+	// outright. Of the note-ons this decode un-mutes (hand-off low byte 0x00):
+	//     organ 739 of 1827, of which 738 are on BANK 1 = IC307, the good dump
+	//     piano 180 of  666, of which 179 are on BANK 1 = IC307
+	// One note-on in each demo, the power-on ping at +040 = 0x0000, is not. So the noise is
+	// NOT the missing dumps, the undumped-socket mute below cannot suppress it, and
+	// re-enabling this decode on that reasoning would ship the same noise again.
+	//
+	// WHAT THE NOISE ACTUALLY IS, measured on the same capture. The un-muted organ voices
+	// are 185 selections of IC307 PAGE 1 held for a MEDIAN OF 4.4 SECONDS (max 6.3), and
+	// detect_period cannot pitch those recordings. Its fallback then declares the WHOLE
+	// recording to be one cycle, so update_pitch stretches it to reach the note:
+	//     +040 = 0x505B  87 notes  1496 samples "one cycle" -> played at 11.5x
+	//     +040 = 0x5046   7 notes  1568 samples "one cycle" -> played at 19.0x
+	// A 31 ms recording crammed into one 130-sample cycle (369.9 Hz) and repeated ~1830
+	// times over a five-second note is a granular buzz at the right pitch, not a note. The
+	// other 53 get period 0 (genuinely aperiodic, zcr 0.40-0.59) and compute_loop gives them
+	// loop_len = the whole recording, so a 51 ms noise burst repeats ~100 times per note, at
+	// up to -4.6 dBFS while the organ's own voices sit at -36 dBFS. MEASURED on the ctrl arm
+	// WITH the bank mute on: mix rms -29.2 -> -12.9 dB, peak 8012 -> 32502 (-0.07 dBFS).
+	// That is the extreme noise, and it is an HLE defect in the period/loop estimators on
+	// the GOOD dump — see notes/FINDINGS-kn5000-eg-level-law.md §J.
+	//
+	// SO THIS STAYS OFF until the P == wave_samples fallback is fixed, and it is worth
+	// saying what it costs: it is the LARGEST single defect in the organ demo. It silences
+	// 738 of 1762 note-ons (42%) — more than the missing ROMs (64) and more than the faint
+	// EG class (599) — and those 738 are on the one ROM we actually have.
+	//
+	// KN5000_HANDOFF=ctrl re-enables it. In SINE mode it is safe and informative: no PCM is
+	// read, so neither failure above exists, and it is how to hear the muted part's timing
+	// and envelopes.
+	m_handoff_ctrl = false;
 	if (const char *s = getenv("KN5000_HANDOFF"))
 		m_handoff_ctrl = (s[0] == 'c');
 	if (m_eg_gate_latch)
@@ -470,6 +555,15 @@ void kn5000_tonegen_device::device_stop()
 		std::fclose(m_notelog);
 		m_notelog = nullptr;
 	}
+
+	// ---- UNDUMPED-SOCKET CENSUS --------------------------------------------------------
+	// UNCONDITIONAL, like the pitch-anchor census below and for the same reason: a run that
+	// silently dropped part of the music must say so. Grep for it before believing any
+	// statement about what this driver's audio does or does not contain.
+	if (m_undumped_muted)
+		logerror("tonegen: %u note-ons selected an UNDUMPED socket (IC304/305/306); "
+				"PCM mode rendered them %s\n",
+				uint32_t(m_undumped_muted), m_mute_undumped ? "SILENT" : "with substituted IC307 material");
 
 	// ---- LOG_GLITCH summary: WHICH CHUNK produced the clicks (VERBOSE bit 7) -----------
 	// One line per wave-ROM chunk that ever made a voice's own contribution jump by more
@@ -2262,6 +2356,18 @@ void kn5000_tonegen_device::resolve_waveform(int ch)
 	// connection to the pitch the register asks for. See update_pitch().
 	v.wave_real  = (s.bank == IC307_BANK) && !s.substituted && !s.out_of_range && (s.chunk >= 0);
 
+	// ---- ROM-INTEGRITY FLAG: is this voice reading a socket we actually HAVE? ----------
+	// bank 1 is IC307, the one hardware-rooted dump. Banks 0/2/3 are IC304/305/306, which
+	// are UNDUMPED and are filled with a BAD_DUMP copy of IC307 (kn5000.cpp ROM_REGION), so
+	// a selection there resolves to a real recording that has NOTHING to do with the sound
+	// the instrument asked for. `substituted` covers the same failure from the other side
+	// (a socket with no directory of its own, i.e. a truly empty region).
+	// This is a statement about the DUMP, not about the decode or the music: it is exactly
+	// as true with an empty wave-ROM file as with this one. See m_mute_undumped.
+	v.wave_undumped = (s.bank != IC307_BANK) || s.substituted;
+	if (v.wave_undumped)
+		m_undumped_muted++;   // note-ons that selected a socket we do not have
+
 	if (s.chunk < 0)
 	{
 		// No wave ROM at all (no dump loaded). Nothing to render.
@@ -2812,8 +2918,30 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// Stereo. volume_l/volume_r are now PURE PAN gains (+0x180, see
 			// update_voice_params); loudness is the EG's job. The balance law has
 			// max(gL) = max(gR) = 1.0, so panning can only ever LOWER a per-channel peak.
-			const int32_t out_l = (sample * int32_t(v.volume_l)) >> 15;
-			const int32_t out_r = (sample * int32_t(v.volume_r)) >> 15;
+			int32_t out_l = (sample * int32_t(v.volume_l)) >> 15;
+			int32_t out_r = (sample * int32_t(v.volume_r)) >> 15;
+
+			// ---- WE DO NOT HAVE THIS ROM, SO WE DO NOT PLAY IT --------------------------
+			// SILENCE HERE MEANS "IC304/305/306 ARE UNDUMPED", NOT "this voice is quiet".
+			// The socket is loaded with a BAD_DUMP copy of IC307, so rendering it emits a
+			// real KN5000 recording that is not the one this note asked for — audibly wrong
+			// material at full level, which is worse than an honest gap. Sine mode is exempt
+			// BY DESIGN: it never reads PCM, so it cannot play the wrong recording, and it
+			// is where you go to hear these notes' timing, pitch and envelopes.
+			//
+			// Placed AFTER the pan and BEFORE the mix, so it removes the voice from the
+			// OUTPUT and nothing else: the EG, the wave pointer, the release/hold counters
+			// and the silence interlock below all run on the unmuted `sample`, so voice
+			// allocation and everything status_r() reports back to the firmware are
+			// bit-identical to the unmuted arm. A mute that changed the voice lifecycle
+			// would make the two arms different experiments, not one experiment with a
+			// switch (this is the same rule the has_pcm_data probe above follows).
+			if (m_mute_undumped && !sine_mode && v.wave_undumped)
+			{
+				out_l = 0;
+				out_r = 0;
+			}
+
 			mix_l += out_l;
 			mix_r += out_r;
 

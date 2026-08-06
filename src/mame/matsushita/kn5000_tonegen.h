@@ -157,6 +157,12 @@ private:
 		                        // is the {chunk <-> +0x400} pitch relation meaningful, because on
 		                        // an undumped socket the chunk actually played is a substituted,
 		                        // unrelated recording. See resolve_note_group().
+		bool     wave_undumped; // THIS VOICE READS A SOCKET WE DO NOT HAVE A DUMP OF (IC304/305/306).
+		                        // Whatever it plays is a real KN5000 recording, but NOT THE ONE THE
+		                        // INSTRUMENT ASKED FOR — the socket is loaded with a BAD_DUMP copy of
+		                        // IC307 (kn5000.cpp ROM_REGION). In PCM mode such a voice is rendered
+		                        // SILENT (see m_mute_undumped); in sine mode it plays like any other,
+		                        // because the sine reads no PCM and so cannot play a wrong recording.
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		// ---- diagnostic sine mode only (see set_render_mode_port) ----------
 		// A DEDICATED accumulator, not a reuse of wave_offset: wave_offset has only
@@ -227,6 +233,7 @@ private:
 			wave_page = 0;
 			wave_chunk = 0;
 			wave_real = false;
+			wave_undumped = false;
 			pitch_step = 0x10000; // 1.0 = native pitch
 			sine_phase = 0;
 			sine_inc = 0;
@@ -390,6 +397,19 @@ private:
 	bool m_handoff_ctrl  = false;   // KN5000_HANDOFF=ctrl — take the group0/bank0 hand-off
 	                                //   word as the CONTROL word it is (no amplitude field),
 	                                //   instead of muting on its low bits. See data_w().
+
+	// ---- ROM-INTEGRITY MUTE, DEFAULT ON — NOT an experiment switch ------------------
+	// A voice whose wave selection lands on IC304/305/306 renders SILENCE in PCM mode,
+	// because we do not have those dumps and the socket is filled with a BAD_DUMP copy of
+	// IC307: playing it emits a real recording that is NOT the one the instrument asked
+	// for. Sine mode is deliberately EXEMPT (it reads no PCM, so it cannot play a wrong
+	// recording, and muting there would only hide timing and envelopes we can render
+	// faithfully). KN5000_UNDUMPED=play turns the mute off — that arm is what you listen
+	// to if you want to hear WHICH notes are missing and how loud they would be.
+	// Specified by Felipe, 2026-08-06. Delete this whole mechanism the day IC304/305/306
+	// are dumped for real; nothing else depends on it.
+	bool m_mute_undumped = true;
+	uint64_t m_undumped_muted = 0;  // note-ons silenced by it, reported at device_stop
 
 	// ---- diagnostic sine oscillator ------------------------------------------
 	// SINE_PEAK is chosen to match the wave ROM's typical RMS, not its peak. MEASURED
