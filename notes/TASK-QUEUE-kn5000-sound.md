@@ -120,3 +120,54 @@ one voice — the WAV IS the envelope; `sus_db` moves -47.4 -> -2.0 between arms
 ⚠⚠ **SEVEN criteria this session were structurally incapable of failing, all mine, and one put
 extreme noise through Felipe's speakers.** rms/peak/clipping CANNOT detect a wrong-recording or a
 dead-envelope defect. Before quoting a number, ask whether it would differ if the bug were absent.
+
+
+---
+
+# 2026-08-06 late — `detect_period()` is now the ROOT OF THREE SEPARATE SYMPTOMS
+
+P11 is no longer one bug among several. It is confirmed, DERIVED, as the cause of:
+
+1. **Jazz Flute MIDI 73-78 sounding +12 semitones** (Felipe, MIDI controller). `detect_period()`
+   returns **20.948** samples for bank1/page1/chunk 4 where YIN returns **10.436** — ratio
+   **2.007**, an exact period DOUBLING. Neighbouring flute chunks agree to 0.6%; rendered audio
+   peaks at ~1110 Hz vs 1112.6 predicted. Zone boundaries MIDI 73/79/85.
+2. **The organ "extreme noise"** when `KN5000_HANDOFF=ctrl` is enabled: 738 of 739 un-muted notes
+   are IC307 page-1 recordings the estimator cannot pitch; the fallback declares the whole
+   recording one cycle and plays it at **11.5x-19x**.
+3. **The t=35-37 s left-channel cluster** in the Feature Demo (the original P11 finding): a
+   rejected autocorrelation peak of **0.436 at lag 175** falls back to P=N=1496 and resamples a
+   tonal recording by **33.3x**.
+
+**SCOPE: 15 exact-integer-ratio failures among the 402 real recordings.** (The 83 non-integer
+disagreements with YIN are NOT claimed as defects.)
+
+## Why it was NOT fixed, and what a fix needs
+
+A minimal sub-multiple guard repairs Felipe's chunk and **breaks 0 of the 304 currently-correct
+ones** — but leaves **14 of the 15**, and 3 of those need a *multiple* test rather than a
+sub-multiple one. That makes it an ESTIMATOR REPLACEMENT, not a guard.
+
+⚠ **The oracle problem:** our only independent pitch reference is YIN, and validating a
+YIN-derived replacement against YIN is circular. A real fix needs an oracle that is not YIN —
+candidates: the wave directory's own parameter block (does it carry a root/period field we have
+not decoded?), the firmware's own key-split boundaries, or Felipe playing the affected patches
+and reporting the interval.
+
+★ This is now the highest-value single fix available: it is on the GOOD ROM, needs no hardware
+constant, and unblocks the hand-off decode (738 organ notes) as well as the two pitch symptoms.
+
+## Awaiting Felipe
+* ⭐ **The ORGAN patch names, as shown on the LCD, that decay for him.** Measured: 18 of 20
+  sustain flat to 30 s; the one that decays (Soul Organ) has segment-2 level 0x04 = max
+  attenuation, i.e. designed to. "Almost all" and "one of twenty" cannot both hold, and velocity
+  (flat 15->127) and polyphony (16 s hold survived six strikes) are both REFUTED.
+* Does a held note decay with nothing else playing at all?
+* Theatre Accomp (p2/2 LCD RIGHT 2) should also be silent — all partials on undumped bank 0.
+
+## Rig lesson (the eighth this session)
+A ten-patch sweep returned ten holds, ten envelopes and ten clean `sus_db` rows while **seven
+patches had silently re-used one selector** after the panel drifted to another screen. It read as
+"nine of ten sustain"; it meant "one patch, nine times". Two later runs drifted onto the BASS
+group *while passing* a distinct-selector check. **A distinct-selector check is necessary but NOT
+sufficient — the LCD snapshot is the arbiter.**
