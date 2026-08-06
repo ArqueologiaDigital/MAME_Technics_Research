@@ -65,3 +65,58 @@ These touch disjoint files/tools and can all run at once. The only shared resour
 6b. ⚠ A step detector is NOT a glitch detector. `|dx| > 8000` is reached by any full-scale
    content above ~1.9 kHz, so drums and SFX trip it by being played CORRECTLY.
 7. `build.sh` exits 0 EVEN ON COMPILE FAILURE — grep for `error:` and check binary mtime/size.
+
+---
+
+# END-OF-DAY STATE 2026-08-06
+
+## Shipped defaults (all in kn5000_tonegen.cpp device_start; each has an env override)
+
+| switch | default | why |
+|---|---|---|
+| `KN5000_EGLAW` | **lin** (`=log` reverts) | FITTED, not derived. The log law is bit-exact from ROM 0x010764 but drives sustains to -53..-76 dB, below the silence interlock -> `status_r()` reports silent -> firmware writes 0x7E00 and DEALLOCATES the channel 0.13-0.31 s into a hold. That is the "strings decay" bug: a voice TEARDOWN, not a low level. |
+| `KN5000_LVL080` | **on** (`=off`) | +0x080 as the per-voice output level. JOINT with EGLAW — neither works alone (lin alone clips 7.65%; together 0.0000%). |
+| `KN5000_HANDOFF` | **off** (`=ctrl`) | The decode is DERIVED and correct (bit 8 never set, 1814/1814). Enabling it put "extreme noise" through Felipe's speakers. ⚠ NOT because of undumped banks — RETRACTED — but because 738 of 739 un-muted notes are IC307 page-1 recordings that `detect_period()` cannot pitch, played at 11.5x-19x. Blocked on P11. |
+| `KN5000_UNDUMPED` | **mute** (`=play`) | Felipe's spec: PCM mutes undumped sockets, SINE plays everything. Mute is after pan, before mix, so allocation/status_r are untouched. |
+
+## EG structure — DERIVED from the sub-CPU ROM, settled
+
+`+0x800` ATTACK, `+0x840` DECAY1->SUST1 (rate floored 4), `+0x880` DECAY2->SUST2 (floored 0),
+built from partial couples (+39,+40)/(+41,+42)/(+43,+44). **All three are KEY-DOWN segments;
+segment 2 is TERMINAL; there is NO release segment** (an 8 s held note gets ZERO register writes
+between the note-on burst and key-off; key-off writes only +0x800/+0x840 at rate 0). `+0x8C0` is
+a level|pan word, not a fourth segment. ⇒ "we run into release while the key is held" is REFUTED.
+
+## Bank reality (measured, both demos)
+
+| demo | on IC307 | undumped | **share of rendered ENERGY undumped** |
+|---|---:|---:|---:|
+| organ | 92.9% | 7.1% | **75.5%** |
+| piano | 84.8% | 15.2% | 0.35% |
+
+⚠ The organ's LOUDEST layer (64 bass note-ons) is undumped, so muting costs it 7.4 dB and its
+bass line. Default patches for **strings, brass, synth, guitar** are bank 0 = IC304 = undumped,
+so they render NOTHING in PCM. **"Strings are silent" != "strings decay"** — always separate.
+
+## Blocked on ONE hardware measurement
+
+`R`, the gain-staging reference (which level code is full scale), is not in the firmware and now
+blocks THREE changes: the EG law, the hand-off level, and overall gain staging. Ask Felipe to
+hold one piano note at max velocity and report line-output peak relative to the clip point.
+
+## Open, ranked
+1. **P11 `detect_period()`'s acceptance gate** — now the top item: it blocks the hand-off decode
+   (738 organ notes, all on the GOOD ROM). It rejects real periods (0.436 peak at lag 175) and
+   falls back to declaring the whole recording one cycle.
+2. 553 organ `FE00` notes still attenuated by something else.
+3. P9 the second stall at t=131.5 s. 4. BUG-1 FindBestSlot 0xFF -> +85 semitones.
+
+## Rigs built today (all default-off, all with a metric that CAN fail)
+`tools/kn5000_capture_hold.sh` + `kn5000_hold_note.lua` + `kn5000_hold_analyze.py` (one key held,
+one voice — the WAV IS the envelope; `sus_db` moves -47.4 -> -2.0 between arms);
+`kn5000_collapse_detect.py` (CLICK/INAUDIBLE/OK, validated at sine level);
+`kn5000_tgbus_trace.lua`; `kn5000_handoff_probe.lua`; `kn5000_capture_perf.sh`.
+
+⚠⚠ **SEVEN criteria this session were structurally incapable of failing, all mine, and one put
+extreme noise through Felipe's speakers.** rms/peak/clipping CANNOT detect a wrong-recording or a
+dead-envelope defect. Before quoting a number, ask whether it would differ if the bug were absent.
