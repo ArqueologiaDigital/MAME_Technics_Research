@@ -195,6 +195,25 @@ void kn5000_tonegen_device::device_start()
 	if (lin)
 		logerror("tonegen: KN5000_EGLAW=lin -- EG level byte rendered as LINEAR amplitude\n");
 
+	// ---- EXPERIMENT SWITCHES (see the header). Both default OFF. --------------------
+	//
+	// KN5000_EGSEG=gate tests the hypothesis "the chip LATCHES all three segment words at
+	// the note-on gate", i.e. that reading v.regs[20+seg] at the moment of the hop picks
+	// up a word the note never had. What the raw bus says about that is written up at
+	// load_eg_segment(); the switch exists so the claim is answered with a rendered
+	// measurement and not only with an argument.
+	//
+	// KN5000_LVL080=on renders register +0x080 as the per-voice output level that
+	// Voice_Build_OutputLevel builds it into, instead of using it only as a burst strobe.
+	if (const char *s = getenv("KN5000_EGSEG"))
+		m_eg_gate_latch = (s[0] == 'g');
+	if (const char *s = getenv("KN5000_LVL080"))
+		m_use_level080 = (s[0] == 'o' && s[1] == 'n') || s[0] == '1';
+	if (m_eg_gate_latch)
+		logerror("tonegen: KN5000_EGSEG=gate -- EG segment words LATCHED at the note-on gate\n");
+	if (m_use_level080)
+		logerror("tonegen: KN5000_LVL080=on -- +0x080 rendered as a per-voice output level\n");
+
 	// Diagnostic sine oscillator table (see SINE_PEAK in the header for how the
 	// amplitude was chosen). Tabulated + interpolated rather than calling std::sin per
 	// sample, mirroring m_eg_gain above: this mode exists to expose glitches, so its own
@@ -232,6 +251,8 @@ void kn5000_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].eg_target), i);
 		save_item(NAME(m_voice[i].eg_step), i);
 		save_item(NAME(m_voice[i].eg_seg), i);
+		save_item(NAME(m_voice[i].eg_word), i);
+		save_item(NAME(m_voice[i].gain080), i);
 		save_item(NAME(m_voice[i].eg_running), i);
 		save_item(NAME(m_voice[i].silent_samples), i);
 		save_item(NAME(m_voice[i].env_level), i);
@@ -1149,12 +1170,24 @@ double kn5000_tonegen_device::eg_rate_to_step(int rate)
 // and nothing else, so a ramp always continues from where it actually is. That is what
 // makes "the release starts from the HELD level" (commit d3457eb) an emergent property
 // rather than a special case.
+// ⚠ "DOES THE CHIP LATCH THE THREE SEGMENT WORDS AT THE GATE?" — MEASURED, and the answer
+// is NO. The hypothesis was that reading the register at the hop picks up a word that did
+// not exist when the note started. The raw bus (tools/kn5000_tgbus_trace.lua) refutes its
+// premise outright: +0x840 is rewritten **3 us** after the gate (median 3.0 us, max 4 us,
+// in 310/310 organ and 117/117 piano note-ons) and +0x880 6 us after it, while the EG's
+// first hop is ~1.9 ms in — 600x later. The words ARE final long before they are read.
+// Latching them at the gate would instead freeze segment 1 at its pre-mute placeholder
+// 0xFF00 (level 255, rate 0 = HOLD) in 310/310 and 117/117 note-ons, i.e. it would discard
+// the entire decay program the firmware writes 3 us later and hold every voice at its
+// attack peak. KN5000_EGSEG=gate renders that arm so the regression is a number, not an
+// argument; the numbers are in notes/FINDINGS-kn5000-eg-level-law.md.
 void kn5000_tonegen_device::load_eg_segment(int ch, int seg)
 {
 	voice_t &v = m_voice[ch];
 	if (seg < 0) seg = 0;
 	if (seg > 2) seg = 2;
-	const uint16_t w = v.regs[20 + seg];      // +0x800 / +0x840 / +0x880
+	const uint16_t w = m_eg_gate_latch ? v.eg_word[seg]
+	                                   : v.regs[20 + seg];      // +0x800 / +0x840 / +0x880
 	v.eg_seg    = seg;
 	v.eg_target = double((w >> 8) & 0xFF);
 	v.eg_step   = eg_rate_to_step(w & 0x7F);
@@ -1203,6 +1236,23 @@ void kn5000_tonegen_device::update_voice_params(int ch)
 
 	v.volume_l = int16_t(std::lround(gl * 32767.0));
 	v.volume_r = int16_t(std::lround(gr * 32767.0));
+
+	// ---- +0x080 AS A PER-VOICE OUTPUT LEVEL (EXPERIMENT, KN5000_LVL080=on) ----------
+	//
+	// The HLE reads +0x080 (= regs[2]) only as a burst strobe, but Voice_Build_OutputLevel
+	// (0x0232C7) builds its low 12 bits through table 0x010764, which is bit-exactly
+	// `T[i] = round(128*log2(2^(i>>4) * (1+(i&15)/16)))` doubled — i.e. the field IS a log
+	// amplitude at 256 counts per octave, full scale 4084. So the decode needs no inversion:
+	//     gain = 2^((field - 4084) / 256)
+	// MEASURED spread over the demos: 39 dB (organ) / 26 dB (piano). Rendering it makes
+	// EVERYTHING quieter, which is why it is an experiment and not a shipped change — it
+	// only becomes a candidate together with the missing gain-staging reference R (see
+	// notes/FINDINGS-kn5000-eg-level-law.md).
+	if (m_use_level080)
+	{
+		const int field = v.regs[2] & 0x0FFF;   // bits 15 and 14:12 are the strobe and pan
+		v.gain080 = float(std::pow(2.0, (double(field) - 4084.0) / 256.0));
+	}
 
 	// ---- EG segment reprogramming (rule R3) ---------------------------------------
 	//
@@ -2277,6 +2327,12 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	// says 3 us.)
 	update_voice_params(ch);
 	update_timbre(ch);
+	// EXPERIMENT ONLY (KN5000_EGSEG=gate): snapshot the three segment words here, which is
+	// what "the chip latches at the gate" would mean. Written unconditionally because it is
+	// two stores; only load_eg_segment() reads them, and only under the switch.
+	v.eg_word[0] = v.regs[20];
+	v.eg_word[1] = v.regs[21];
+	v.eg_word[2] = v.regs[22];
 	load_eg_segment(ch, 0);
 
 	// PER-NOTE-ON CAPTURE (KN5000_NOTELOG). Last, so the row records the finished state.
@@ -2663,6 +2719,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				}
 			}
 			sample = int32_t(float(sample) * eg_level_to_gain(v.eg_level));
+
+			// EXPERIMENT ONLY (KN5000_LVL080=on): the per-voice output level from +0x080.
+			// gain080 is 1.0 whenever the switch is off, but the multiply is still skipped
+			// so the default arm is bit-identical to the tree before this switch existed.
+			if (m_use_level080)
+				sample = int32_t(float(sample) * v.gain080);
 
 			// Apply the release fade (GAP LIFE-2 is UNRESOLVED — see the heuristic in
 			// data_w()). The EG above holds at whatever level the key-up burst left it, so

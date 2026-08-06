@@ -124,6 +124,12 @@ private:
 		double   eg_target;     // the running segment's target level code
 		double   eg_step;       // level units per output sample; 0 = HOLD (rate 0)
 		int      eg_seg;        // 0/1/2 = which of +0x800/+0x840/+0x880 is running
+		// EXPERIMENT ONLY (KN5000_EGSEG=gate, default OFF): a copy of the three segment
+		// words taken at the note-on gate. Unused when the switch is off.
+		uint16_t eg_word[3];
+		// EXPERIMENT ONLY (KN5000_LVL080=on, default OFF): the per-voice output level
+		// decoded from +0x080 (= regs[2]) as a linear gain. 1.0 when the switch is off.
+		float    gain080;
 		bool     eg_running;    // R1 latch: SET by the 0x81xx gate, CLEARED by 0x7E00 or
 		                        // by genuine silence (R2s). This — not "is it loud yet" —
 		                        // is what status_r reports, because the firmware's
@@ -206,6 +212,8 @@ private:
 			eg_target = 0.0;
 			eg_step = 0.0;
 			eg_seg = 0;
+			eg_word[0] = eg_word[1] = eg_word[2] = 0;
+			gain080 = 1.0f;
 			eg_running = false;
 			silent_samples = 0;
 			wave_offset = 0;
@@ -369,6 +377,16 @@ private:
 	// voice per output sample.
 	static constexpr int EG_GAIN_TABLE = 4096;
 	float m_eg_gain[EG_GAIN_TABLE];
+
+	// ---- EXPERIMENT SWITCHES, both default OFF ------------------------------------
+	// Read once at device_start from the environment, exactly like KN5000_EGLAW, so one
+	// binary can render both arms of an A/B. Nothing in the shipped path reads them when
+	// they are unset. See the comments at their use sites for what each one tests.
+	bool m_eg_gate_latch = false;   // KN5000_EGSEG=gate  — latch all three segment words
+	                                //   at the note-on gate instead of reading the register
+	                                //   at each segment hop.
+	bool m_use_level080  = false;   // KN5000_LVL080=on   — render +0x080 as the per-voice
+	                                //   output level it is, instead of only as a strobe.
 
 	// ---- diagnostic sine oscillator ------------------------------------------
 	// SINE_PEAK is chosen to match the wave ROM's typical RMS, not its peak. MEASURED

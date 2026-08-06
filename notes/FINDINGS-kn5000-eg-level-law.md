@@ -284,3 +284,195 @@ was committed.** A fitted slope was deliberately not produced.
    `Voice_ApplyPortamento`, `Voice_ApplyPortamento2` are the output-level chain, not a pitch
    chain; `Voice_InitVoiceState`'s "maximum attenuation ... silent" comment is inverted. These
    mislabels are what made the 0x010764 derivation look unsupported in the first place.
+
+---
+
+# 2026-08-06 (later still) — the GATE-LATCH hypothesis is REFUTED, and the click has TWO causes
+
+Felipe, on real listening: *"I still hear lots of clicks in place of notes [in SINE mode],
+even though there are also notes playing OK. The PCM mode sounds a bit better."*
+
+The hypothesis under test: **the HLE re-reads the EG segment register at each segment hop
+instead of latching all three at the note-on gate**, so `load_eg_segment()`'s
+`v.regs[20 + seg]` picks up a word the note never had. Its premise was that the sub-CPU
+rewrites `+0x840` about **2 ms** after the gate, i.e. after the EG has already hopped.
+
+**REFUTED.** The premise is wrong by three orders of magnitude, and rendering the latching
+arm fails the clipping gate in three of four capture conditions.
+
+Vehicle: one binary, two experiment switches added for this pass (`KN5000_EGSEG=gate`,
+`KN5000_LVL080=on`), both default OFF. **Null control: with neither set, the organ-PCM WAV
+is md5-identical to the pre-change tree (`241e3dc4a88fe510a8a8565024e650e5`), and every arm
+logs the same note-on count (1828 organ / 667 piano), so the switches perturb no firmware
+behaviour.** Captures: `tools/kn5000_capture_perf.sh {organ,piano} {pcm,sine} … 45`,
+private cfg + nvram, AREA = 2; mix statistics over t = 30–34 s.
+
+## 0. FIRST, A DETECTOR THAT CAN ACTUALLY SEE IT — `tools/kn5000_collapse_detect.py`
+
+The old step detector (`|x[n]−x[n−1]| > 8000`) needs a fundamental above ~21 kHz to fire on
+a 16384-peak sine, so "sine mode has zero clicks" was a null that could not fail. The
+replacement is a RATIO inside one voice, taken from the notelog's own 10 ms envelope
+profile: **attack peak over 0–20 ms versus the peak from 30 ms to key-up, and it only counts
+buckets in which the key was still DOWN**. A note that was ASKED to stop is `SHORT`, not a
+click; a voice that never reached −30 dBFS at all is `INAUDIBLE` (a missing note, a
+different defect) rather than a click.
+
+**It discriminates, and it can come out both ways** (organ, PCM *and* sine, identically):
+
+| register class | n | click fraction |
+|---|---|---|
+| segment-1 decay target 114 (`0x727F`) | 831 | **0.827** |
+| hand-off word = 0 | 738 | 0.248 (PCM) / 0.053 (sine) |
+| never left segment 1 | 193 | **0.000** |
+
+**It fires at sine level**: the sine-mode CLICK class has a median attack peak of 9917 and a
+median tail/attack of **−49.5 dB**. And it is not knife-edge — the count is *identical* for
+collapse thresholds of 12, 18, 24 and 30 dB (the distribution is that bimodal), and moves
+only 833 → 921 across a 10x sweep of the audibility floor (328 → 3277 LSB).
+
+## 1. FELIPE'S REPORT, REPRODUCED AND QUANTIFIED
+
+Per note-on, t ≥ 22.6 s:
+
+| demo | mode | note-ons | CLICK | INAUDIBLE | OK |
+|---|---|---|---|---|---|
+| organ | pcm  | 1762 | **870 (49.4 %)** | 539 | 161 |
+| organ | sine | 1762 | **726 (41.2 %)** | 696 | 161 |
+| piano | pcm  |  601 |   24 (4.0 %) | 221 | 348 |
+| piano | sine |  601 |   36 (6.0 %) | 211 | 346 |
+
+**"The PCM mode sounds a bit better" is real but small, and it is not fewer clicks.** Sine
+turns 157 MORE organ note-ons completely inaudible (696 vs 539) and produces 50 % more piano
+clicks (36 vs 24); the OK count is identical (161 organ, ~347 piano). Sine mode trades clicks
+for silence. Neither mode is close to clean, which is what Felipe said.
+
+## 2. TWO MECHANISMS, NOT ONE — and they split cleanly
+
+Attributed from the same rows. The split is **identical in both render modes**, which is what
+"the symptom appears in both modes" actually means:
+
+**(a) `eg-target-114` — 687 clicks, the SAME 687 in PCM and in sine.** Median attack peak
+17392 (PCM) / 9917 (sine), median tail/attack −49.5 dB. These are the voices programmed
+`+0x840 = +0x880 = 0x727F` — decay to level 114 at rate 127 and hold there. Under the derived
+law that is −53.06 dB, reached 5.3 ms into the note.
+
+**(b) `handoff-0` — the group0/bank0 hand-off word carries magnitude 0.** MEASURED: it
+arrives **37–41 µs after the gate** (median 0.037 ms organ / 0.041 ms piano, 738/738 and
+179/179 note-ons), and `sample * env_level / 0xFF` then mutes the voice outright.
+**These are overwhelmingly MISSING NOTES, not clicks**: median whole-note peak 35 (organ PCM)
+and 1 (organ sine), so 539 of 738 land in INAUDIBLE. Only 183 (PCM) / 39 (sine) get loud
+enough first to be heard as a click. This is the known "the two defects cancel" reading of
+the hand-off word (see `data_w()`), now sized: **it accounts for 42 % of the organ demo's
+note-ons and 30 % of them being silent.**
+
+## 3. THE HYPOTHESIS, TESTED TWO WAYS. BOTH REFUTE IT.
+
+### 3a. The raw bus says the registers are final 1100x before they are read
+
+Re-analysed from the trace the previous pass took (`tools/kn5000_tgbus_trace.lua`, both
+demos, t = 30–31 s), measuring gate-to-write latency per note-on rather than eyeballing a
+burst:
+
+| write | organ (310 gates) | piano (117 gates) |
+|---|---|---|
+| `+0x840` after the gate | median **3.0 µs** (p10 3.0, p90 4.0, max 4.0) | median **3.0 µs**, max 4.0 |
+| `+0x880` after the gate | median **6.0 µs**, max 7.0 | median **6.0 µs**, max 7.0 |
+
+Misses: 0/310 and 0/117. The EG's own hops, from the notelog, are at ~3.4 ms (0→1) and
+~5.3 ms (1→2). **The word is in the register roughly 1100x earlier than the moment
+`load_eg_segment()` reads it.** The "2 ms" in the hypothesis is the HOP time, not the WRITE
+time; the two were conflated.
+
+Worse for the hypothesis: **`+0x840` reads `0xFF00` at the gate in 310/310 and 117/117
+note-ons** — level 255 at rate 0, i.e. HOLD. Latching at the gate does not recover a lost
+value; it freezes segment 1 on the *pre-mute placeholder* and **discards the entire decay
+program the firmware writes 3 µs later.**
+
+### 3b. Rendering it: it removes the EG clicks by holding every voice at its attack peak
+
+`KN5000_EGSEG=gate`, same four conditions (peak / rms / clipped samples per channel over
+4 s, from the speaker mix):
+
+| arm | CLICK | peak | rms | clipped | headroom |
+|---|---|---|---|---|---|
+| organ pcm  base | 870 | 32767 |  9534 |    25 (0.00013) | 0.00 dB |
+| organ pcm  **latch** | 578 | 32768 | 20204 | **29584 (0.15408)** | 0.00 dB |
+| organ sine base | 726 | 31429 |  5816 |     0 (0.00000) | 0.36 dB |
+| organ sine **latch** | 159 | 32768 | 16732 | **8467 (0.04410)** | 0.00 dB |
+| piano pcm  base |  24 | 23048 |  2550 |     0 | 3.06 dB |
+| piano pcm  **latch** | **42** | 26539 |  6293 |     0 | 1.83 dB |
+| piano sine base |  36 | 25455 |  5272 |     0 | 2.19 dB |
+| piano sine **latch** |   0 | 32767 | 11723 | **24 (0.00013)** | 0.00 dB |
+
+* **The clipping gate FAILS in 3 of 4 conditions**, by a factor of 1180x on the organ in PCM.
+* **The piano gets WORSE in PCM on its own click count** (24 → 42): holding voices at peak
+  makes previously-inaudible hand-off-muted voices loud enough to be heard as clicks.
+* It does exactly what §3a predicts: `eg-target-114` clicks go **687 → 0** and the median
+  attack peak of the OK class goes 18483 → **32083** — every voice parked at the rail.
+* The `handoff-0` clicks are not touched at all (they become the *only* mechanism left:
+  578/578 and 159/159), because they are not an EG effect.
+
+**Verdict: REFUTED.** The premise is false on the bus, and the arm fails the agreed gate.
+Left in the tree as `KN5000_EGSEG=gate` so the next person does not have to re-derive it.
+
+## 4. THE +0x080 DEFECT IS REAL, BUT IT CANNOT BE THE COMPENSATING FACTOR — by construction
+
+Tested separately, `KN5000_LVL080=on`, `gain = 2^((field − 4084)/256)`:
+
+| arm | CLICK | INAUDIBLE | peak | rms | headroom |
+|---|---|---|---|---|---|
+| organ pcm base | 870 |  539 | 32767 | 9534 |  0.00 dB |
+| organ pcm **+0x080** |  66 | **1506** |  9885 | 1330 | 10.41 dB |
+| organ sine **+0x080** |  23 | **1662** |  5428 | 1500 | 15.62 dB |
+| piano pcm **+0x080** |   0 |  **381** |  5697 |  567 | 15.20 dB |
+
+The click counts collapse only because 85–94 % of the programme becomes inaudible: rms falls
+17.1 dB (organ) and 13.1 dB (piano). That is the missing gain-staging reference `R`, exactly
+as step 1 of the previous section predicted, and it is why this is not shippable alone.
+
+**But the decisive point is structural.** MEASURED on the raw bus, per note-on:
+`+0x080` is written **exactly once inside the note's rendered life — 31 µs after the gate**.
+A second write exists for 246/310 organ and 53/117 piano notes, but at a median of **827 ms**
+(organ) and **2062 ms** (piano), p10 = 435 ms — i.e. after the 240 ms profile window in over
+90 % of cases, and after the organ's own median key-up at 107 ms. **A gain that is constant
+across a note cannot change any ratio inside that note**, and the collapse is precisely such
+a ratio. Confirmed rather than assumed: over the 60 piano notes that align between the two
+arms, the tail/attack ratio shifts by a median of **+0.003 dB** (p10 −0.008, p90 +0.016,
+max |shift| 0.861 dB).
+
+So `+0x080` is a real defect worth fixing for the *balance* between voices — it is not a
+candidate explanation for the click.
+
+## 5. AND NO RE-SLOPE CAN RESCUE THE ORGAN EITHER — a fresh bound, from this capture
+
+Take the law as `gain(L) = 2^((L − 255)/s)`, `s` = level counts per doubling (`s = 16` today,
+bit-exact from table 0x010764 for the `+0x080` byte; that the `+0x800` byte shares the scale
+is still the standing INFERENCE). Raising `s` lifts every level by
+`6.0206·(255 − L)·(1/16 − 1/s)` dB. MEASURED here:
+
+* piano attack level: median 218, p90 240 → 37 / 15 counts below full scale;
+* piano headroom: **3.06 dB** at peak 23048, 0 clipped samples;
+* organ peak → sustain: median 255 → 114 = **141 counts**.
+
+The piano hits the rail at **s ≤ 20.5** (median proxy) or **s ≤ 34.9** (p90 proxy). At those
+slopes the organ's 141-count drop still measures **41.4 dB** and **24.3 dB** — above the
+detector's own 18 dB collapse threshold in both cases. Bringing the organ within 12 dB needs
+s ≈ 71, which makes the piano 10.8 dB louder (peak ≈ 79 700, i.e. 7.7 dB into the clipper).
+
+**This criterion could have failed**: had the piano's headroom admitted s ≥ 71, a re-slope
+would have been the answer. It does not. The free parameter is still the REFERENCE, not the
+slope — and it is chip gain-staging, which is not in the firmware.
+
+## 6. WHAT THE NEXT PASS SHOULD DO, in order
+
+1. **The hand-off word is the bigger of the two mechanisms and the cheaper one.** 42 % of the
+   organ demo's note-ons are muted 37 µs after their gate by a register field whose meaning
+   the disassembly explicitly records as UNDECODED. Decoding `slot[+0x2d]`'s low bits — or
+   establishing that the chip ignores them — is worth more than any level-law work, and it is
+   a pure RE task with no calibration in it.
+2. **Do not spend another pass on the EG level law without `R`.** Three independent routes
+   (linear-amplitude law, gate latching, +0x080 modelling) have now each been falsified
+   against the piano headroom. `R` is one measurement on Felipe's real KN5000 (§"What is
+   still missing", step 2) and every one of these arms is decidable once it exists.
+3. `tools/kn5000_collapse_detect.py` is the regression gate for all of it. Report CLICK and
+   INAUDIBLE separately — collapsing them is what hid mechanism (b) for this long.
