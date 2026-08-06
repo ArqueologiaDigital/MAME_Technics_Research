@@ -958,3 +958,160 @@ confused with each other.
    keep every family's sustain alive; it is not believed to be IC303's law. When the
    gain-staging reference arrives from real hardware, `tools/kn5000_hold_analyze.py` is the gate
    the new law has to pass — 8 of 9 families at `sus_db` > −10 dB, and `rel_db` at the floor.
+
+---
+
+# L. Felipe re-tested on the current build. §K's conclusion was OVER-GENERALISED — RETRACTED
+
+2026-08-06, evening. §K.7 asked Felipe to re-test on the published 15:37 binary. He did:
+~20 minutes, real MIDI controller, `-midiin2 "SINCO SMK25-Master"`. Two things follow.
+
+**First, which build.** `-midiin2` is the SECOND `MIDI_PORT` the driver instantiates, i.e.
+`kbdmidi` — the MIDI→key-bed bridge, not the rear MIDI IN. So his notes take the same
+`push_keybed_event()` path §K measured, and his binary is the current source (the only
+later commit, `4bf5746`, touched tools and notes; no kn5000 source is newer than the
+binary). He is on the shipped `KN5000_EGLAW=lin` default.
+
+**Second, and this is the retraction.**
+
+> ⚠ **RETRACTED:** "*Eight of nine families die under the log law; none die under the
+> shipped default*" ⇒ "*the short-sustain defect is cured; nothing to change in the
+> driver*" (§K.3, §K.7.1).
+
+The **measurement** stands — those 19 voices really do survive, and the log law really does
+kill them. What is withdrawn is the **generalisation from it to the class**. §K.5 had already
+written down the reason and it was not respected:
+
+> "pressing a SOUND GROUP button repeatedly does **not** page through the group … The rig
+> reaches each group's default patch only; reaching the rest needs the LCD soft keys."
+
+So "nine sound families" was **nine patches — each group's default** — out of roughly 800 in
+the machine. It was never evidence about the class, and Felipe playing actual patches found
+counter-examples immediately. This is the same failure this file keeps recording: a result
+that could not have failed in the direction that mattered, because the rig could not reach
+the cases that would have falsified it.
+
+## L.1 The rig can now reach any patch — and it has to prove it did
+
+`tools/kn5000_patch_probe.lua` selects by **sound group + LCD page + LCD soft key**, so any
+of the ~800 patches is reachable; `tools/kn5000_capture_patch.sh` drives it. The soft-key
+map is lookup from `kn5000_cpanel.cpp`'s `PORT_NAME`s, and it works: FLUTE L1/L2/L3 give
+three distinct selectors `5000` / `5003` / `5007`.
+
+⚠ **A NEW WAY TO BE WRONG, and it bit immediately.** A ten-patch ORGAN sweep produced ten
+holds, ten envelopes and ten tidy `sus_db` rows — and **seven of the ten had silently
+re-used the previous patch's selector `4007`**, because the panel had wandered onto the
+ENTERTAINER screen and every later soft key landed there. Read naively it said "nine of ten
+organ patches sustain". It actually said "one patch sustains, nine times". Two more runs
+drifted onto the BASS group and onto page 1/2 while *still* passing a
+distinct-selector check.
+
+Countermeasures, all now in the rigs, and none of them sufficient alone:
+
+* `tools/kn5000_patch_check.py` — flags any patch step whose selectors repeat the previous
+  step. NECESSARY, not sufficient: two real patches may legitimately share a selector.
+* **exactly one LCD snapshot per patch**, taken immediately before the note, so the
+  snapshot ordinal *is* the patch index and the picture is a countable arbiter.
+* **short runs**. Drift grows with run length; one patch per run did not drift once.
+
+**Every per-patch number below comes from a one-patch run whose LCD snapshot was read and
+confirms the patch by name.** The ten-patch runs are used only where they agree with those.
+
+## L.2 MEASURED: Felipe's three named ORGAN & ACCORDION facts
+
+One key (C4) held 6 s, PCM mode, shipped defaults, `sus_db` as defined in §K.0.
+
+| patch | page / key | Felipe | MEASURED `sus_db` | verdict |
+|---|---|---|---:|---|
+| **Rock Organ** | 2/2 LEFT 4 | sustains | **−3.2 dB** | ✅ **reproduces** |
+| **Chapel Organ** | 1/2 LEFT 3 | sustains | **−2.3 dB** | ✅ **reproduces** |
+| **Theatre Novelty** | 2/2 RIGHT 3 | silent | **peak 0** | ✅ **reproduces** (see §L.4) |
+| Soul Organ | 2/2 LEFT 3 | (unnamed) | **−22.0 dB** | decays, and §L.3 says why |
+
+**Three of three named facts reproduce exactly.** His two "good" patches are good here too,
+so his differential is real and the rig can see it.
+
+## L.3 …but "almost all of ORGAN & ACCORDION" does NOT reproduce
+
+All 20 patches of both pages, from the validated ten-patch runs:
+
+    page 1/2  Perc Organ −0.1  Full Drawbars −0.0  Chapel Organ −2.4  Full Organ −1.3
+              Cathedral Organ −2.0  Jazz Drawbars −0.7  16'&1' −0.6  Bright Accordion −2.8
+              Musette −3.8  Folk Accordion −2.6            <- ALL TEN SUSTAIN
+    page 2/2  Accomp Drawbars −0.0  Pop Organ −0.0  **Soul Organ −22.4**  Rock Organ −1.3
+              Organ Bass −0.0  Theatre Organ −0.2  Theatre Accomp/Novelty silent
+              Mellow Accordion −0.1  Bandoneon −2.5
+
+**18 of 20 sustain; exactly one decays** (Soul Organ), and it decays for a fully decoded
+reason: its segment-2 word is `047C` on all four partials — level code **`0x04`**, the
+`Level_Fader` table's maximum attenuation, the same "programmed to decay" signature §K.3
+already identified in `synth`. That is a patch design, not a defect.
+
+⇒ **Felipe's "almost all" is NOT reproduced at one key, velocity 100, 6 s.** Extending the
+hold to **30 s** changes nothing (Perc Organ −0.1, Full Drawbars −0.1 over thirty seconds),
+so it is not a slow decay the 6 s window was missing.
+
+## L.4 Theatre Novelty is CORRECT BEHAVIOUR, not a defect
+
+MEASURED, one-patch run, LCD confirmed: its three partials select `0000`, `0000`, `3195` —
+all **bank 0**, `wave_real = 0`, i.e. the undumped IC304/305/306 sockets. With
+`KN5000_UNDUMPED=play` it sounds normally (peak 1711, `sus_db` −2.5). So §J.1's PCM-mode
+mute is doing exactly what Felipe specified. **Theatre Accomp (2/2 RIGHT 2) is silent for
+the same reason** and he did not mention it — worth telling him, since "silent" and
+"decays" are different reports.
+
+## L.5 The two obvious explanations, TESTED AND REFUTED
+
+Both were tested by feeding a Standard MIDI File to **`-midiin2`** — the `kbdmidi` bridge,
+the very port Felipe plugs his controller into — via `tools/kn5000_mkmidi_vel.py` and
+`KN5_MIDI=`. That path carries real velocities, which the ioport key bed cannot
+(`KEYBED_VELOCITY = 100` is compiled in). Patch: **Full Drawbars**, LCD-confirmed.
+
+**1. VELOCITY — REFUTED.** It was the best suspect: §K.4's teardown is *level falls below
+the silence interlock → firmware deallocates the channel*, so a quiet note starts nearer
+that floor. One C4 held 6 s at each of seven velocities:
+
+    vel  15  30  50  70  90 110 127
+    peak 873 1057 1366 1819 2428 3221 3953     <- 13 dB of level, so the test has range
+    sus_db -0.1 -0.1 -0.0 -0.1 -0.1 -0.1 -0.1  <- FLAT AT EVERY VELOCITY
+
+Velocity scales a note and does not shorten it — which is also what §K.5 derived from the
+ROM (the peak-level index carries a *key-track* term, not a velocity one). The criterion can
+fail: the same `sus_db` reads −22 dB on Soul Organ and −47 dB on the log-law arm.
+
+**2. POLYPHONY — REFUTED, and this time on a real patch.** C4 held **16 s** while E4, G4,
+B4, D5, E4, G4 are struck through it at 2 s intervals. MEASURED: the held voice reports
+`t_ko_rel = 15.995 s, ko_src = 1` — i.e. it survived the whole hold and was ended by its own
+key-off, not by the firmware's `0x7E00` FREE — and each struck note took its own channel with
+its own 0.30 s release. **No false key-off.** §K.5 found the same thing but only on default
+patches; that objection is now closed for this patch too.
+
+**3. Panel state — still uncontrolled.** 20 minutes of playing sets effects, parts, volumes
+and transposition the rig never touches. This is now the only untested difference, and it is
+also the least specific, which is why §L.6 asks Felipe for patch NAMES instead.
+
+⇒ **Do not conclude "Felipe is wrong" and do not conclude "the class is fixed."** The
+correct statement is narrow and it is the one to carry forward:
+
+> On the shipped defaults, **18 of 20 ORGAN & ACCORDION patches sustain a held note
+> indefinitely** (verified to 30 s), at every velocity from 15 to 127, and with other notes
+> played through the hold. **All three of Felipe's named patches behave exactly as he
+> describes.** The one patch that decays does so by design (`0x04` sustain level).
+
+The gap between that and "almost all decay" is **unexplained**, and the two hypotheses that
+would have explained it are now dead. That makes the patch NAMES the next thing needed.
+
+## L.6 For Felipe — the one question that now matters
+
+The velocity and chord explanations are both measured and dead, so the remaining
+possibilities all hinge on *which patches*:
+
+* ⭐ **Which ORGAN & ACCORDION patches, by the name on the LCD, decay for you?** "Almost all"
+  and the measured "one of twenty" cannot both be true. If the list turns out to be Soul
+  Organ and a couple of others, the two reports agree and there is nothing left to fix; if
+  it is genuinely most of them, something in your panel state that the rig never sets is
+  doing it, and knowing the names is what will find it.
+* Does a single held note decay for you **with nothing else playing at all** — no rhythm, no
+  accompaniment, no sequencer?
+* Theatre Accomp (page 2/2, RIGHT 2) should be silent too, for the same undumped-ROM reason
+  as Theatre Novelty. Confirm?

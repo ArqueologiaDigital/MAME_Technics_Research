@@ -59,6 +59,7 @@ local HI      = tonumber(os.getenv("KN5_HI")   or "72")
 local DUR     = tonumber(os.getenv("KN5_DUR")  or "0.60")
 local REST    = tonumber(os.getenv("KN5_REST") or "0.30")
 local MARKS   = os.getenv("KN5_MARKS")
+local IDLE    = tonumber(os.getenv("KN5_IDLE")  or "60")
 
 -- SOUND GROUP buttons, straight off kn5000_cpanel.cpp's PORT_NAMEs.
 local SOUNDBTN = {
@@ -157,7 +158,6 @@ _G._probe = emu.register_frame_done(function()
 
 	elseif phase == "press" then
 		if qi > #queue then
-			V:snapshot()
 			phase = "settle"; base = t; return
 		end
 		local b = queue[qi]
@@ -171,11 +171,26 @@ _G._probe = emu.register_frame_done(function()
 
 	elseif phase == "settle" then
 		if t >= base + SETTLE then
+			-- EXACTLY ONE SNAPSHOT PER PATCH, taken here, immediately before the note.
+			-- The snapshot ordinal is then simply the patch's index, so the LCD image is an
+			-- unambiguous record of WHICH PATCH WAS REALLY SELECTED. That is not a nicety:
+			-- panel navigation drifts (a ten-patch page-2 sweep was MEASURED landing on the
+			-- BASS group, and another on page 1/2, while still reporting ten tidy holds),
+			-- and the wave selector alone cannot always tell -- so the picture is the
+			-- arbiter and it has to be countable.
 			V:snapshot()
 			if PROBE == "sweep" then note = LO else note = -1 end
-			phase = (PROBE == "sweep") and "sw_on" or "h_on"
+			phase = (PROBE == "sweep") and "sw_on" or (PROBE == "idle" and "idle" or "h_on")
 			base = t
 		end
+
+	-- ---- IDLE: select the patch and then keep hands off ------------------------------
+	-- For runs where the NOTES come from a MIDI file on -midiin2 instead of from the key
+	-- bed ioports, which is the only way to control VELOCITY (the ioport path hard-codes
+	-- KEYBED_VELOCITY = 100). The patch still has to be chosen from the panel, exactly as
+	-- Felipe chooses it, so this script still does that and then does nothing at all.
+	elseif phase == "idle" then
+		if t >= base + IDLE then phase = "gap"; base = t end
 
 	-- ---- HOLD: one key, several seconds. The WAV over the hold IS the envelope. -------
 	elseif phase == "h_on" then
@@ -183,7 +198,6 @@ _G._probe = emu.register_frame_done(function()
 		emu.print_info(string.format("### t=%.6f HOLD ON  '%s'", t, seq[idx].spec))
 		phase = "h_hold"; base = t
 	elseif phase == "h_hold" then
-		if t >= base + HOLD / 2 and not _G._ms then _G._ms = true; V:snapshot() end
 		if t >= base + HOLD then
 			setkeyraw(KEYPORT, KEYMASK, 0)
 			emu.print_info(string.format("### t=%.6f HOLD OFF '%s'", t, seq[idx].spec))

@@ -30,8 +30,18 @@ cd "$BUILD" || exit 1
 export KN5000_NOTELOG="$RD/notes.csv"
 export KN5_PATCHSEQ="$SEQ" KN5_PROBE="$PROBE" KN5_MARKS="$RD/marks.txt"
 
+# KN5_MIDI=<file.mid> feeds a Standard MIDI File into midiin2, which is the "kbdmidi"
+# port -- the MIDI->key-bed bridge, the SECOND MIDI_PORT the driver instantiates, and the
+# one Felipe drives his controller into. This is the ONLY way to control VELOCITY: the
+# key-bed ioports the lua presses go through keybed_scan(), which hard-codes
+# KEYBED_VELOCITY = 100. Use KN5_PROBE=idle with it so the script selects the patch from
+# the panel and then leaves the notes entirely to the file.
+MIDIARG=()
+[ -n "${KN5_MIDI:-}" ] && MIDIARG=(-midiin2 "$KN5_MIDI")
+
 DISPLAY=:0 timeout $((SECS * 8 + 300)) ./kn7000 kn5000 \
     -rompath ./roms -skip_gameinfo -autoboot_delay 0 \
+    "${MIDIARG[@]}" \
     -seconds_to_run "$SECS" \
     -cfg_directory "$RD/cfg" -nvram_directory "$RD/nvram" \
     -snapshot_directory "$RD/snap" \
