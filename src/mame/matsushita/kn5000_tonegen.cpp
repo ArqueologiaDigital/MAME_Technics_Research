@@ -456,7 +456,8 @@ void kn5000_tonegen_device::notelog_begin(int ch)
 		v.wave_bank, v.wave_page, v.wave_chunk, v.wave_real ? 1 : 0,
 		v.wave_samples, v.pitch_period,
 		v.true_note, unsigned(v.pitch_anchor), v.pitch_step, v.pitch_offset,
-		(m_render_mode.read_safe(0) & 1) ? "sine" : "pcm");
+		(m_render_mode.read_safe(0) & 3) == RENDER_SINE ? "sine" :
+		(m_render_mode.read_safe(0) & 3) == RENDER_SINE_SUB ? "pcm+sine-substitutes" : "pcm");
 
 	r.head     = buf;
 	r.open     = true;
@@ -2602,7 +2603,11 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	//    mode but SOUND in sine mode, so eg_running -- which status_r reports back to the
 	//    firmware's voice manager -- can differ. A sine-mode capture is a faithful proxy for
 	//    the pitch/envelope/mix machinery, NOT for voice allocation.
-	const bool sine_mode = (m_render_mode.read_safe(0) & 1) != 0;
+	const uint8_t render_mode = m_render_mode.read_safe(0) & 3;
+	const bool sine_all = (render_mode == RENDER_SINE);
+	// RENDER_SINE_SUB substitutes a sine for exactly the voices RENDER_PCM would mute, so the
+	// two arms cover disjoint voice sets and the undumped mute below is skipped in this mode.
+	const bool sine_sub = (render_mode == RENDER_SINE_SUB);
 	// ---- DIAGNOSTIC PROBE, TGMODE bit 1 (see kn5000.cpp) ------------------------------
 	// Is the sine-mode stall a FEEDBACK LOOP through status_r()? The firmware has no
 	// note-off input: it generates 0x7E00 (FREE) from the active-voice bitmap this device
@@ -2649,7 +2654,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		{
 			m_census_last = now;
 			LOGMASKED(LOG_CENSUS, "tonegen census t=%.1f mode=%s active=%d eg_running=%d key_on=%d nopcm=%u\n",
-				now, sine_mode ? "SINE" : "PCM ", n_active, n_eg, n_key, m_census_nopcm);
+				now, sine_all ? "SINE" : (sine_sub ? "SSUB" : "PCM "), n_active, n_eg, n_key, m_census_nopcm);
 			LOGMASKED(LOG_CENSUS, "tonegen clears  keyoffcmd=%u norender=%u nopcm_ilock=%u release=%u interlock=%u\n",
 				m_census_clr[0], m_census_clr[1], m_census_clr[2], m_census_clr[3], m_census_clr[4]);
 			// Per-voice envelope state for the first few live voices: is the EG actually
@@ -2794,7 +2799,8 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			int32_t  g_s0 = 0, g_s1 = 0;
 			bool     g_wrap = false, g_clamp = false;
 			if (VERBOSE & LOG_GLITCH) g_off_in = v.wave_offset;
-			if (sine_mode)
+			// THE seam between the render modes -- one condition, nothing else differs.
+			if (sine_all || (sine_sub && v.wave_undumped))
 			{
 				sample = sine_sample(v.sine_phase);
 				v.sine_phase += v.sine_inc;   // free-running; sine_inc == 0 => silence
@@ -2945,7 +2951,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// bit-identical to the unmuted arm. A mute that changed the voice lifecycle
 			// would make the two arms different experiments, not one experiment with a
 			// switch (this is the same rule the has_pcm_data probe above follows).
-			if (m_mute_undumped && !sine_mode && v.wave_undumped)
+			if (m_mute_undumped && render_mode == RENDER_PCM && v.wave_undumped)
 			{
 				out_l = 0;
 				out_r = 0;

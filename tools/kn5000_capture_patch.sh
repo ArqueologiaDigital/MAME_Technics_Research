@@ -19,7 +19,10 @@ SEQ="$1"; MODE="$2"; PROBE="$3"; TAG="$4"; SECS="${5:-60}"
 RD="$ROOT/run/$TAG"
 rm -rf "$RD"; mkdir -p "$RD/nvram" "$RD/snap" "$RD/cfg"
 
-TGVAL=0; [ "$MODE" = "sine" ] && TGVAL=1
+# TGMODE is a 2-BIT field (mask 3): 0=pcm, 1=sine, 2=pcm with sine substitutes for
+# undumped-ROM voices. A cfg whose mask does not match the field is silently DROPPED
+# by MAME and the run falls back to pcm -- so this mask tracks kn5000.cpp exactly.
+TGVAL=0; [ "$MODE" = "sine" ] && TGVAL=1; [ "$MODE" = "sinesub" ] && TGVAL=2
 # TGMODE bit 1 -- the "free voices whose EG has finished" DIAGNOSTIC PROBE. Default OFF,
 # which is the driver's default too. It is here because a saved cfg/kn5000.cfg can carry
 # it ON without anyone noticing (Felipe's did, MEASURED 2026-08-06), and a probe that
@@ -42,7 +45,7 @@ else
 printf '%s\n' '<?xml version="1.0"?>' '<mameconfig version="10">' \
   '    <system name="kn5000">' '        <input>' \
   "            <port tag=\":AREA\" type=\"DIPSWITCH\" mask=\"6\" defvalue=\"6\" value=\"$AREA\" />" \
-  "            <port tag=\":TGMODE\" type=\"CONFIG\" mask=\"1\" defvalue=\"0\" value=\"$TGVAL\" />" \
+  "            <port tag=\":TGMODE\" type=\"CONFIG\" mask=\"3\" defvalue=\"0\" value=\"$TGVAL\" />" \
   "            <port tag=\":TGMODE\" type=\"CONFIG\" mask=\"2\" defvalue=\"0\" value=\"$TGPROBE\" />" \
   '        </input>' '    </system>' '</mameconfig>' > "$RD/cfg/kn5000.cfg"
 fi

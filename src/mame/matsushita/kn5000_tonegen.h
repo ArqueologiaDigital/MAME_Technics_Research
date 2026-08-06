@@ -59,14 +59,34 @@ public:
 	template <typename T> void set_dsp1_enable_port(T &&tag) { m_dsp1_enable.set_tag(std::forward<T>(tag)); }
 
 	// ---- DIAGNOSTIC render mode ---------------------------------------------
-	// set_render_mode_port() names a driver ioport whose bit 0 chooses how a voice's
-	// raw sample is produced: 0 = real PCM out of the wave ROM (normal), 1 = a sine
-	// synthesised at the voice's own frequency, touching no wave-ROM PCM at all.
-	// EVERYTHING else -- note on/off, allocation, pitch tracking, the amplitude EG,
-	// the TVF, panning, the mixer, the silence interlock -- is the same code in both
-	// modes; the two differ at exactly one `if` in sound_stream_update(). That is the
-	// whole point: it isolates "is the glitch in the sample data / addressing?" from
-	// "is it in the machinery around it?". Unset or 0 means PCM.
+	// set_render_mode_port() names a driver ioport whose low two bits choose how a
+	// voice's raw sample is produced (see render_mode_t below). EVERYTHING else --
+	// note on/off, allocation, pitch tracking, the amplitude EG, the TVF, panning,
+	// the mixer, the silence interlock -- is the same code in every mode; they differ
+	// at exactly one `if` in sound_stream_update(). That is the whole point: it
+	// isolates "is the glitch in the sample data / addressing?" from "is it in the
+	// machinery around it?". Unset or 0 means plain PCM.
+	enum render_mode_t : uint8_t
+	{
+		RENDER_PCM      = 0,  // real PCM out of the wave ROM. Voices that read an undumped
+		                      // socket are MUTED (m_mute_undumped) rather than allowed to
+		                      // play the wrong recording.
+		RENDER_SINE     = 1,  // every voice is a sine at its own frequency; no wave-ROM PCM
+		                      // is read at all, so no voice can play a wrong recording and
+		                      // the undumped mute is not needed.
+		                      // ⚠ Unlike the m_mute_undumped mute -- which is applied after the
+		                      // pan and so cannot touch the voice lifecycle -- a substitute
+		                      // CHANGES the rendered sample, hence the silence interlock, hence
+		                      // eg_running, hence what status_r() reports to the firmware's voice
+		                      // manager. RENDER_SINE_SUB therefore has the same allocation caveat
+		                      // as RENDER_SINE: it is a listening mode, not an A/B baseline.
+		RENDER_SINE_SUB = 2,  // PCM for everything we HAVE a dump of, and a sine SUBSTITUTE
+		                      // for exactly the voices RENDER_PCM would have muted. Lets the
+		                      // real IC307 material be heard in its own timbre while the
+		                      // undumped parts are still present as pitch/envelope only --
+		                      // an arrangement stays complete without any voice claiming to
+		                      // be a recording it is not.
+	};
 	template <typename T> void set_render_mode_port(T &&tag) { m_render_mode.set_tag(std::forward<T>(tag)); }
 
 	static constexpr int NUM_VOICES = 64;
@@ -160,9 +180,11 @@ private:
 		bool     wave_undumped; // THIS VOICE READS A SOCKET WE DO NOT HAVE A DUMP OF (IC304/305/306).
 		                        // Whatever it plays is a real KN5000 recording, but NOT THE ONE THE
 		                        // INSTRUMENT ASKED FOR — the socket is loaded with a BAD_DUMP copy of
-		                        // IC307 (kn5000.cpp ROM_REGION). In PCM mode such a voice is rendered
-		                        // SILENT (see m_mute_undumped); in sine mode it plays like any other,
-		                        // because the sine reads no PCM and so cannot play a wrong recording.
+		                        // IC307 (kn5000.cpp ROM_REGION). In RENDER_PCM such a voice is rendered
+		                        // SILENT (see m_mute_undumped); in RENDER_SINE it plays like any other,
+		                        // because the sine reads no PCM and so cannot play a wrong recording;
+		                        // in RENDER_SINE_SUB this flag is exactly the substitution predicate --
+		                        // it, and only it, selects which voices swap PCM for a sine.
 		uint32_t pitch_step;    // Pitch increment (16.16 fixed point)
 		// ---- diagnostic sine mode only (see set_render_mode_port) ----------
 		// A DEDICATED accumulator, not a reuse of wave_offset: wave_offset has only

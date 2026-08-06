@@ -785,9 +785,17 @@ static INPUT_PORTS_START(kn5000)
 	// all. It exists to split "the glitch is in the sample data or its addressing" from
 	// "the glitch is in the machinery around it". See kn5000_tonegen.h.
 	PORT_START("TGMODE")
-	PORT_CONFNAME(0x01, 0x00, "Tone generator rendering (DIAGNOSTIC)")
+	// Three-way, and the third setting is the one to reach for when LISTENING rather than
+	// measuring. IC304/305/306 are undumped; their sockets hold BAD_DUMP copies of IC307, so
+	// a voice reading one plays a real KN5000 recording that is NOT the one the instrument
+	// asked for. "PCM from wave ROM (normal)" mutes those voices -- honest, but it removes
+	// whole parts from an arrangement. "with sine substitutes" instead renders exactly those
+	// voices as sines at their own pitch and envelope: the parts we DO have a dump of keep
+	// their real timbre, the rest are audibly present and audibly not a recording.
+	PORT_CONFNAME(0x03, 0x00, "Tone generator rendering (DIAGNOSTIC)")
 	PORT_CONFSETTING(   0x00, "PCM from wave ROM (normal)")
 	PORT_CONFSETTING(   0x01, "Sine test tone (no wave ROM PCM)")
+	PORT_CONFSETTING(   0x02, "PCM from wave ROM (with sine substitutes)")
 	// The bit-1 PROBE THAT USED TO LIVE HERE WAS REMOVED 2026-08-06 AND MUST NOT COME BACK
 	// AS A PORT_CONFNAME. MAME persists config ports to cfg/kn5000.cfg and restores them on
 	// every launch, so a diagnostic that DELETES NOTES followed Felipe's install around for a
