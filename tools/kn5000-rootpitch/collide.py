@@ -13,12 +13,12 @@ plus the oracle's own null (musical time displacement).
 """
 import collections, math, os, random, sys
 sys.path.insert(0, os.path.expanduser('~/compartilhado/kn7000_mame/tools'))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'oracle'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kn5000-oracle'))
 import kn5000_pitch_audit as A
 import midiparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ORACLE = os.path.join(HERE, '..', 'oracle')
+ORACLE = os.path.join(HERE, '..', 'kn5000-oracle')
 W = A.trim_table(A.read_sets())
 Cmodal = {sel: c.most_common(1)[0][0] for sel, c in W.items()}
 
@@ -32,7 +32,7 @@ for line in open(os.path.join(HERE, 'kon.log')):
         if t >= 17.0 and pit and sel in Cmodal:
             ev.append((t, (pit - 128 - Cmodal[sel]) / 256.0, 60 + (pit - 0x3524) / 256.0, sel))
 ev.sort()
-mid = midiparse.read_smf(os.path.join(ORACLE, 'demo_preset_18.mid'))
+mid = midiparse.read_smf(os.environ.get('DEMOMID', os.path.join(ORACLE, 'demo_preset_18.mid')))
 div = mid['division']
 mn, names = [], {}
 for tr in mid['tracks']:

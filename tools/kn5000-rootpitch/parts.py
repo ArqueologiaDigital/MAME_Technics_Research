@@ -6,12 +6,12 @@ This is the direct answer to "what do Parts 7/11 have that Parts 2/8 do not".
 """
 import collections, math, os, random, sys
 sys.path.insert(0, os.path.expanduser('~/compartilhado/kn7000_mame/tools'))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'oracle'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kn5000-oracle'))
 import kn5000_pitch_audit as A
 import midiparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ORACLE = os.path.join(HERE, '..', 'oracle')
+ORACLE = os.path.join(HERE, '..', 'kn5000-oracle')
 W = A.trim_table(A.read_sets())
 Cmodal = {sel: c.most_common(1)[0][0] for sel, c in W.items()}
 Cuniq = {sel: list(c)[0] for sel, c in W.items() if len(c) == 1}
@@ -29,7 +29,7 @@ for line in open(os.path.join(HERE, 'kon.log')):
 print("captured note-ons: %d, t = %.1f .. %.1f s" % (len(ev), ev[0]['t'], ev[-1]['t']))
 
 # ---- the demo's own MIDI ----------------------------------------------------------------
-mid = midiparse.read_smf(os.path.join(ORACLE, 'demo_preset_18.mid'))
+mid = midiparse.read_smf(os.environ.get('DEMOMID', os.path.join(ORACLE, 'demo_preset_18.mid')))
 div = mid['division']
 mnotes = []
 for t in mid['tracks']:
