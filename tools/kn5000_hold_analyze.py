@@ -61,7 +61,16 @@ def run(d):
     for line in open(marks):
         if line.startswith("#") or not line.strip():
             continue
-        sound, t0, t1 = line.split()
+        # Two marks formats, both written by rigs in this directory:
+        #   kn5000_hold_note.lua     "sound t_on t_off"          (3 fields)
+        #   kn5000_patch_probe.lua   "patch midi t_on t_off"     (4 fields; midi -1 = hold)
+        f = line.split()
+        if len(f) == 4:
+            sound, midi, t0, t1 = f
+            if int(midi) >= 0:
+                continue          # a swept note, not a hold -- not this tool's job
+        else:
+            sound, t0, t1 = f
         t0, t1 = float(t0), float(t1)
         e = env(a, ch, sr, t0, t1)
         if not e:
