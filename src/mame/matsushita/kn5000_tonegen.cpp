@@ -35,6 +35,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <string>
 #include <vector>
 
 // Logging
@@ -55,6 +57,35 @@
 // Per-second voice census, used to prove that the PCM and sine render modes allocate
 // voices identically. Build with VERBOSE including (1U << 6).
 #define LOG_CENSUS   (1U << 6)
+// LOG_GLITCH: PER-VOICE click attribution. A "click" in the OUTPUT MIX proves nothing about
+// which voice caused it -- two clean voices can sum to a step -- so this watches each voice's
+// OWN post-pan contribution, accumulates a per-CHUNK census of the samples at which it jumps
+// by more than GLITCH_THRESH, and prints that census once at device_stop. Everything a cause
+// classification needs is counted there: loop-seam wraps, chunk-overrun clamps, the chunk
+// geometry (N, P, P==N) and the resampling ratio. Build with VERBOSE including (1U << 7).
+//
+// ⚠ THE STEP DETECTOR IS NOT A GLITCH DETECTOR. |x[n]-x[n-1]| > 8000 is reached by any
+// full-scale content above ~1.9 kHz, so a drum or SFX recording trips it by simply being
+// played correctly. Read the census by CHUNK GEOMETRY, never by the raw count -- and note
+// that the sine render mode's "zero clicks" is NOT a null that can fail: a sine at the
+// demo's level physically cannot produce a step that large. See
+// notes/TODO-kn5000-pcm-glitch-attribution.md.
+#define LOG_GLITCH   (1U << 7)
+// Step size, in output LSBs, at which a single voice's own contribution is counted. The
+// mix-level detector used throughout this investigation fires at 8000; 4000 here so a voice
+// that is only half the guilty step is still seen.
+#define GLITCH_THRESH 4000
+// LOG_WINDOW: unconditional per-sample dump of the finished output plus every voice that is
+// contributing, over one hard-coded window. Used to prove that a -wavwrite capture and the
+// device's own sample sequence are the same thing before any timestamp is trusted (they are:
+// MEASURED 100% of 10560 samples identical, no offset).
+#define LOG_WINDOW   (1U << 8)
+#define WINDOW_T0    30.10
+#define WINDOW_T1    30.32
+// LOG_GLITCHEV: one line PER EVENT, with the full sample-path state. Verbose enough that a
+// long run LOSES lines (MEASURED: an 80 s run kept ~1 in 6.5 of them while the same passage
+// in a 32 s run kept all), which is exactly why LOG_GLITCH keeps counters instead.
+#define LOG_GLITCHEV (1U << 9)
 
 #define VERBOSE (0)
 #include "logmacro.h"
@@ -200,6 +231,25 @@ void kn5000_tonegen_device::device_reset()
 
 void kn5000_tonegen_device::device_stop()
 {
+	// ---- LOG_GLITCH summary: WHICH CHUNK produced the clicks (VERBOSE bit 7) -----------
+	// One line per wave-ROM chunk that ever made a voice's own contribution jump by more
+	// than GLITCH_THRESH, so the attribution survives a run of any length.
+	if (VERBOSE & LOG_GLITCH)
+	{
+		logerror("glitch census: %u per-voice events, %u mix clicks (>8000) over %.3f s\n",
+				uint32_t(m_glitch_total), uint32_t(m_mixclick_total), machine().time().as_double());
+		std::vector<std::pair<uint32_t, glitch_stat_t>> gv(m_glitch_chunk.begin(), m_glitch_chunk.end());
+		std::sort(gv.begin(), gv.end(), [](auto &a, auto &b) { return a.second.events > b.second.events; });
+		for (const auto &e : gv)
+			logerror("glitch chunk b%dp%dc%-4d real=%d N=%-6u P=%-5u P==N=%d maxstep=%6.2fx "
+					"events=%-6u mean|d|=%-6u max|d|=%-6u wraps=%-5u clamps=%u\n",
+					(e.first >> 20) & 3, (e.first >> 16) & 3, e.first & 0xFFFF, e.second.real ? 1 : 0,
+					e.second.samples, e.second.period, (e.second.period == e.second.samples) ? 1 : 0,
+					double(e.second.max_step) / 65536.0, uint32_t(e.second.events),
+					uint32_t(e.second.sum_d / std::max<uint64_t>(1, e.second.events)),
+					e.second.max_d, uint32_t(e.second.wraps), uint32_t(e.second.clamps));
+	}
+
 	// Honest accounting of the EXPERIMENTAL IC311 send/return. Reported here as
 	// well as in the DSP device itself because this is the side that decides
 	// whether a return was actually mixed in.
@@ -1993,7 +2043,13 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		{
 			voice_t &v = m_voice[ch];
 			if (!v.active)
+			{
+				// A voice that is not rendered contributes exactly 0, so its "previous
+				// contribution" must be 0 as well -- otherwise re-activation would be
+				// scored as a step against a stale value (LOG_GLITCH; compiled out at 0).
+				if (VERBOSE & LOG_GLITCH) m_glitch_prev[ch][0] = m_glitch_prev[ch][1] = 0;
 				continue;
+			}
 
 			// Handle hold timer (keeps voice "active" for firmware status queries).
 			// This must run even when the voice has no waveform data, otherwise voices
@@ -2076,6 +2132,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				{ if (VERBOSE & LOG_CENSUS) m_census_clr[2]++; v.eg_running = false; }
 				if (!v.active)
 					v.eg_running = false;
+				if (VERBOSE & LOG_GLITCH) m_glitch_prev[ch][0] = m_glitch_prev[ch][1] = 0;
 				continue;  // No audio output — skip sample rendering
 			}
 
@@ -2093,6 +2150,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			// wave_samples -- only its own Q32 phase, advanced by an increment derived from
 			// the same absolute frequency the PCM path resamples to (see update_pitch).
 			int32_t sample;
+			// LOG_GLITCH bookkeeping: the sample-path state that a click has to be explained
+			// by. Compiled out entirely when VERBOSE has bit 7 clear.
+			uint32_t g_off_in = 0, g_pos = 0, g_frac = 0;
+			int32_t  g_s0 = 0, g_s1 = 0;
+			bool     g_wrap = false, g_clamp = false;
+			if (VERBOSE & LOG_GLITCH) g_off_in = v.wave_offset;
 			if (sine_mode)
 			{
 				sample = sine_sample(v.sine_phase);
@@ -2106,6 +2169,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 
 				if (sample_pos >= v.loop_end)
 				{
+					if (VERBOSE & LOG_GLITCH) g_wrap = true;
 					// Reached the end of the play-through / loop region -> wrap back into the
 					// sustain loop, preserving fractional phase (no glitch). If there is no
 					// usable loop, snap to the loop start (or 0). This runs whether or not the
@@ -2130,7 +2194,10 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				int32_t s0, s1;
 				{
 					if (sample_pos >= v.wave_samples)          // safety clamp
+					{
+						if (VERBOSE & LOG_GLITCH) g_clamp = true;
 						sample_pos = v.wave_samples ? v.wave_samples - 1 : 0;
+					}
 					uint32_t byte_pos = v.wave_start + sample_pos * 2;
 					s0 = read_waveform_sample(byte_pos);
 					uint32_t next_pos = sample_pos + 1;
@@ -2142,6 +2209,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 				}
 
 				sample = s0 + ((s1 - s0) * int32_t(frac >> 1)) / 32768;
+				if (VERBOSE & LOG_GLITCH) { g_s0 = s0; g_s1 = s1; g_pos = sample_pos; g_frac = frac; }
 			}
 
 			// ---- Per-voice TVF (filter / brightness) from +0x100 -------------------------
@@ -2218,6 +2286,43 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const int32_t out_r = (sample * int32_t(v.volume_r)) >> 15;
 			mix_l += out_l;
 			mix_r += out_r;
+
+			// ---- LOG_GLITCH: PER-VOICE click attribution (VERBOSE bit 7, default off) ----
+			// Counted per CHUNK so the census survives a run of any length; LOG_GLITCHEV adds
+			// one line per event with the full state behind it.
+			if (VERBOSE & LOG_GLITCH)
+			{
+				const int32_t dl = out_l - m_glitch_prev[ch][0];
+				const int32_t dr = out_r - m_glitch_prev[ch][1];
+				if (std::abs(dl) > GLITCH_THRESH || std::abs(dr) > GLITCH_THRESH)
+				{
+					const uint32_t key = (uint32_t(v.wave_bank) << 20) | (uint32_t(v.wave_page) << 16)
+						| (uint32_t(v.wave_chunk) & 0xFFFF);
+					glitch_stat_t &g = m_glitch_chunk[key];
+					const uint32_t mag = uint32_t(std::max(std::abs(dl), std::abs(dr)));
+					g.events++; g.sum_d += mag;
+					g.max_d = std::max(g.max_d, mag);
+					g.wraps += g_wrap ? 1 : 0;
+					g.clamps += g_clamp ? 1 : 0;
+					g.samples = v.wave_samples; g.period = v.pitch_period; g.real = v.wave_real;
+					g.max_step = std::max(g.max_step, v.pitch_step);
+					m_glitch_total++;
+					LOGMASKED(LOG_GLITCHEV,
+						"glitch t=%.6f v%02d d=%+7d/%+7d out=%7d/%7d smp=%7d real=%d b%dp%dc%-4d "
+						"N=%-6u P=%-5u lp=[%u:%u] pos=%-6u off=%08X step=%08X wrap=%d clamp=%d "
+						"s0=%6d s1=%6d frac=%5u env=%3d eg=%.2f gain=%.6f vol=%d/%d\n",
+						stream.start_time().as_double() + double(s) / double(STREAM_RATE),
+						ch, dl, dr, out_l, out_r, sample, v.wave_real ? 1 : 0,
+						v.wave_bank, v.wave_page, v.wave_chunk,
+						uint32_t(v.wave_samples), uint32_t(v.pitch_period),
+						uint32_t(v.loop_start), uint32_t(v.loop_end),
+						g_pos, g_off_in, v.pitch_step, g_wrap ? 1 : 0, g_clamp ? 1 : 0,
+						g_s0, g_s1, g_frac, int(v.env_level), v.eg_level,
+						double(eg_level_to_gain(v.eg_level)), int(v.volume_l), int(v.volume_r));
+				}
+				m_glitch_prev[ch][0] = out_l;
+				m_glitch_prev[ch][1] = out_r;
+			}
 
 			// ---- R2s: the calibration-independent SILENCE INTERLOCK ----------------------
 			// A voice reports itself silent to the firmware only after its own rendered
@@ -2436,7 +2541,59 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			wet_r = m_dsp1_wet[1];
 		}
 
-		stream.put(0, s, sound_stream::sample_t(softclip(mix_l + wet_l)));
-		stream.put(1, s, sound_stream::sample_t(softclip(mix_r + wet_r)));
+		const float fin_l = softclip(mix_l + wet_l);
+		const float fin_r = softclip(mix_r + wet_r);
+
+		// ---- LOG_GLITCH: MIX-level click, with the per-voice breakdown that caused it ----
+		// Runs on the FINAL sample the stream emits and names, on the same line, the voices
+		// whose own contribution moved most at that sample -- so the attribution is closed
+		// inside the device and needs no alignment against an external capture.
+		if (VERBOSE & LOG_GLITCH)
+		{
+			const int32_t o_l = int32_t(fin_l * 32768.0f), o_r = int32_t(fin_r * 32768.0f);
+			const int32_t dl = o_l - m_glitch_mix[0], dr = o_r - m_glitch_mix[1];
+			if (std::abs(dl) > 8000 || std::abs(dr) > 8000)
+			{
+				m_mixclick_total++;
+				std::string who;
+				for (int q = 0; q < NUM_VOICES; q++)
+				{
+					const int32_t ql = m_glitch_prev[q][0] - m_glitch_prev2[q][0];
+					const int32_t qr = m_glitch_prev[q][1] - m_glitch_prev2[q][1];
+					if (std::abs(ql) > 1000 || std::abs(qr) > 1000)
+						who += string_format(" v%02d(%+d/%+d,b%dp%dc%d,N=%u,P=%u,step=%.2fx,real=%d)",
+							q, ql, qr, m_voice[q].wave_bank, m_voice[q].wave_page, m_voice[q].wave_chunk,
+							uint32_t(m_voice[q].wave_samples), uint32_t(m_voice[q].pitch_period),
+							double(m_voice[q].pitch_step) / 65536.0, m_voice[q].wave_real ? 1 : 0);
+				}
+				LOGMASKED(LOG_GLITCHEV, "mixclick t=%.6f d=%+7d/%+7d out=%7d/%7d by:%s\n",
+					stream.start_time().as_double() + double(s) / double(STREAM_RATE),
+					dl, dr, o_l, o_r, who.empty() ? " (none above 1000)" : who.c_str());
+			}
+			m_glitch_mix[0] = o_l;
+			m_glitch_mix[1] = o_r;
+			std::memcpy(m_glitch_prev2, m_glitch_prev, sizeof(m_glitch_prev));
+		}
+
+		if (VERBOSE & LOG_WINDOW)
+		{
+			const double tnow = stream.start_time().as_double() + double(s) / double(STREAM_RATE);
+			if (tnow >= WINDOW_T0 && tnow <= WINDOW_T1)
+			{
+				std::string who;
+				for (int q = 0; q < NUM_VOICES; q++)
+					if (m_glitch_prev[q][0] || m_glitch_prev[q][1])
+						who += string_format(" v%02d(%d/%d,b%dp%dc%d,N=%u,P=%u,step=%.2fx)",
+							q, m_glitch_prev[q][0], m_glitch_prev[q][1],
+							m_voice[q].wave_bank, m_voice[q].wave_page, m_voice[q].wave_chunk,
+							uint32_t(m_voice[q].wave_samples), uint32_t(m_voice[q].pitch_period),
+							double(m_voice[q].pitch_step) / 65536.0);
+				LOGMASKED(LOG_WINDOW, "win t=%.6f out=%d/%d mix=%d/%d%s\n", tnow,
+					int32_t(fin_l * 32768.0f), int32_t(fin_r * 32768.0f), mix_l, mix_r, who.c_str());
+			}
+		}
+
+		stream.put(0, s, sound_stream::sample_t(fin_l));
+		stream.put(1, s, sound_stream::sample_t(fin_r));
 	}
 }

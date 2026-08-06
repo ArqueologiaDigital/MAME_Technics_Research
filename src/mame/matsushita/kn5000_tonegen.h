@@ -17,6 +17,7 @@
 #include "cpu/upd6383/upd6383.h"
 
 #include <deque>
+#include <map>
 #include <queue>
 #include <vector>
 
@@ -391,6 +392,22 @@ private:
 	double   m_census_last  = -1e9;
 	uint32_t m_census_nopcm = 0;
 	uint32_t m_census_clr[5] = { 0, 0, 0, 0, 0 };
+	// LOG_GLITCH diagnostic only (VERBOSE bit 7); not save-stated, not load-bearing.
+	// Previous PER-VOICE post-pan contribution, so a step can be attributed to the voice
+	// that produced it rather than to the mix. Zeroed whenever a voice contributes nothing.
+	int32_t  m_glitch_prev[NUM_VOICES][2] = { };
+	int32_t  m_glitch_prev2[NUM_VOICES][2] = { };   // one sample older still
+	int32_t  m_glitch_mix[2] = { 0, 0 };            // previous FINAL output sample
+	// Per-CHUNK glitch census. Logging one line per click loses events on a long run, so the
+	// attribution is accumulated here and reported ONCE, at device_stop.
+	struct glitch_stat_t
+	{
+		uint64_t events = 0, wraps = 0, clamps = 0, sum_d = 0;
+		uint32_t max_d = 0, samples = 0, period = 0, max_step = 0;
+		bool     real = false;
+	};
+	std::map<uint32_t, glitch_stat_t> m_glitch_chunk;   // key = bank<<20 | page<<16 | chunk
+	uint64_t m_glitch_total = 0, m_mixclick_total = 0;
 	// diagnostics only, reported at device_stop
 	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
 	//  ★ §31: DSP input-stage clipping census (see kn5000_tonegen.cpp)
