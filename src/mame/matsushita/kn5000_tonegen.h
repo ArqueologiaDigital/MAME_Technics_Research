@@ -184,6 +184,10 @@ private:
 		                        // from +0x400: the partial's coarse/fine transpose and the
 		                        // unison detune. 0 = sounds at the played note.
 		                        // See resolve_note_group().
+		uint8_t  pitch_anchor;  // pitch_anchor_t: WHERE the absolute pitch of this voice came
+		                        // from. Diagnostic only — nothing reads it back to render.
+		                        // Censused per note-on and reported at device_stop, so the
+		                        // fallback share is stated out loud rather than assumed.
 
 		void reset()
 		{
@@ -226,7 +230,23 @@ private:
 			true_note = -1;
 			chord_time = -1e9;
 			pitch_offset = 0.0;
+			pitch_anchor = 0;   // ANCHOR_KEYBED
 		}
+	};
+
+	// ---- WHERE A VOICE'S ABSOLUTE PITCH CAME FROM -----------------------------------
+	// Ordered best-evidence first. update_pitch() walks this ladder and records which
+	// rung it stopped on, so the run's own log states the coverage split instead of
+	// leaving a silent fallback to be discovered later. See update_pitch().
+	enum pitch_anchor_t : uint8_t
+	{
+		ANCHOR_KEYBED = 0,      // true_note >= 0: a real keybed / USB-MIDI event. UNCHANGED.
+		ANCHOR_FIRMWARE,        // firmware C table, selector carries exactly ONE C
+		ANCHOR_FIRMWARE_AMBIG,  // firmware C table, selector carries >1 C -> modal value used
+		ANCHOR_LEARNED,         // no firmware C; the chunk's runtime-LEARNED trim was pinned
+		ANCHOR_CONSTANT,        // ⚠ nothing placed it: the old 0x3524 constant. Not a measurement.
+		ANCHOR_NONE,            // no pitch information at all (regs[8] == 0) -> silent sine
+		ANCHOR_COUNT
 	};
 
 	// ---- Wave-ROM page directory -------------------------------------------------
@@ -305,6 +325,11 @@ private:
 	// definition for the full firmware derivation.
 	void update_timbre(int ch);
 	void update_pitch(int ch);
+	// The firmware's per-selector absolute-pitch constant C, for the +0x040 word `sel`.
+	// Returns false if the firmware's own multisample SET descriptors never produce that
+	// selector, in which case NOTHING is written to `c`/`ambiguous`. Pure table lookup over
+	// the generated kn5000_pitch_trim.hxx; no state, no ROM access.
+	static bool firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous);
 	// +0x400 handling: a voice's log pitch REFERRED TO ITS OWN RECORDING (so it can be
 	// compared across chunks), and the per-key-press resolution of transpose + detune.
 	double voice_rho(int ch) const;
@@ -408,6 +433,15 @@ private:
 	};
 	std::map<uint32_t, glitch_stat_t> m_glitch_chunk;   // key = bank<<20 | page<<16 | chunk
 	uint64_t m_glitch_total = 0, m_mixclick_total = 0;
+
+	// ---- PITCH-ANCHOR CENSUS (diagnostics only, reported at device_stop) -------------
+	// Counted ONCE PER NOTE-ON (in process_key_on, after update_pitch has decided), so the
+	// numbers are directly comparable with the offline capture analysis in
+	// tools/kn5000-rootpitch/decode.py, which counts note-on events too. The fallback to
+	// the 0x3524 constant is NOT a measurement and must never be silent: the selectors that
+	// reach it are listed by name so the next pass can extend the table rather than guess.
+	uint64_t m_anchor_census[ANCHOR_COUNT] = { };
+	std::map<uint16_t, uint64_t> m_anchor_unplaced;     // +0x040 words with no C at all
 	// diagnostics only, reported at device_stop
 	uint64_t m_dsp1_frames = 0;      // frames handed to IC311
 	//  ★ §31: DSP input-stage clipping census (see kn5000_tonegen.cpp)

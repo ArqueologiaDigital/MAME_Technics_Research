@@ -151,6 +151,10 @@ ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.cpp"          "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/upd6383/upd6383d.h"            "$BUILD_TREE/src/devices/cpu/upd6383/upd6383d.h"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.cpp"        "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.h"          "$BUILD_TREE/src/mame/matsushita/kn5000_tonegen.h"
+# GENERATED (tools/gen_kn5000_pitch_trim.py) -- the firmware's per-selector absolute-pitch
+# constant C, #included by kn5000_tonegen.cpp. It exists only in this overlay, so a missing
+# symlink here is a hard compile error, not a silent behaviour change.
+ln -sf "$HERE/src/mame/matsushita/kn5000_pitch_trim.hxx"     "$BUILD_TREE/src/mame/matsushita/kn5000_pitch_trim.hxx"
 mkdir -p "$BUILD_TREE/src/mame/layout"
 ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
 ln -sf "$HERE/src/mame/layout/kn6000.lay"                    "$BUILD_TREE/src/mame/layout/kn6000.lay"

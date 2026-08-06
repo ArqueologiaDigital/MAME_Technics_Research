@@ -32,6 +32,11 @@
 #include "emu.h"
 #include "kn5000_tonegen.h"
 
+// The firmware-derived per-selector absolute-pitch constant C, generated from
+// notes/data/kn5000-pitch-trim-table.tsv by tools/gen_kn5000_pitch_trim.py. See the
+// header of that file, and update_pitch() below, for what it is and what it is not.
+#include "kn5000_pitch_trim.hxx"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -91,6 +96,19 @@
 #include "logmacro.h"
 
 DEFINE_DEVICE_TYPE(KN5000_TONEGEN, kn5000_tonegen_device, "kn5000_tonegen", "KN5000 Tone Generator")
+
+
+// Human-readable name of a pitch_anchor_t (see the header), for the per-voice log line and
+// the device_stop census. Index-matched to the enum; out-of-range reads back as "?" rather
+// than walking off the array, so adding an enumerator and forgetting a name is visible in
+// the log instead of being undefined behaviour.
+static const char *const ANCHOR_NAMES[] =
+{ "keybed", "firmware-C", "firmware-C(ambiguous)", "learned-trim", "CONSTANT-0x3524", "none" };
+
+static const char *anchor_name(unsigned a)
+{
+	return (a < (sizeof(ANCHOR_NAMES) / sizeof(ANCHOR_NAMES[0]))) ? ANCHOR_NAMES[a] : "?";
+}
 
 
 kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
@@ -248,6 +266,43 @@ void kn5000_tonegen_device::device_stop()
 					double(e.second.max_step) / 65536.0, uint32_t(e.second.events),
 					uint32_t(e.second.sum_d / std::max<uint64_t>(1, e.second.events)),
 					e.second.max_d, uint32_t(e.second.wraps), uint32_t(e.second.clamps));
+	}
+
+	// ---- PITCH-ANCHOR CENSUS -----------------------------------------------------------
+	// UNCONDITIONAL (not behind VERBOSE): the point of it is that the fallback to the bare
+	// 0x3524 constant — which is NOT a measurement — can never be silent. One line per
+	// anchor source, plus the selectors that nothing could place.
+	{
+		uint64_t total = 0;
+		for (unsigned i = 0; i < unsigned(ANCHOR_COUNT); i++)
+			total += m_anchor_census[i];
+		if (total != 0)
+		{
+			logerror("kn5000_tonegen: pitch-anchor census over %u note-ons "
+					"(C table: %u selectors, %u single-valued, %u ambiguous):\n",
+					uint32_t(total), kn5000_pitch_trim::COUNT,
+					kn5000_pitch_trim::COUNT_SINGLE_VALUED, kn5000_pitch_trim::COUNT_AMBIGUOUS);
+			for (unsigned i = 0; i < unsigned(ANCHOR_COUNT); i++)
+				logerror("   %-24s %8u  (%5.1f%%)\n", anchor_name(i),
+						uint32_t(m_anchor_census[i]),
+						100.0 * double(m_anchor_census[i]) / double(total));
+			if (!m_anchor_unplaced.empty())
+			{
+				// Sort by how often each unplaced selector was keyed, most first: that is the
+				// work list for extending the table, and it is the honest statement of what
+				// this decode does NOT cover.
+				std::vector<std::pair<uint16_t, uint64_t>> u(m_anchor_unplaced.begin(), m_anchor_unplaced.end());
+				std::sort(u.begin(), u.end(), [](auto &a, auto &b) { return a.second > b.second; });
+				logerror("   ⚠ %u selectors have NO firmware C and fell back to the constant:\n",
+						uint32_t(u.size()));
+				for (size_t i = 0; i < u.size() && i < 24; i++)
+					logerror("      +0x040 = %04X  (class %d entry %03X)  %u note-ons\n",
+							u[i].first, (u[i].first >> 12) & 0x0F, u[i].first & 0x0FFF,
+							uint32_t(u[i].second));
+				if (u.size() > 24)
+					logerror("      ... and %u more\n", uint32_t(u.size() - 24));
+			}
+		}
 	}
 
 	// Honest accounting of the EXPERIMENTAL IC311 send/return. Reported here as
@@ -1203,6 +1258,27 @@ void kn5000_tonegen_device::resolve_note_group(double tchord, int note)
 
 
 
+// Look up the firmware's per-selector absolute-pitch constant C for a +0x040 word.
+//
+// kn5000_pitch_trim::TABLE is sorted by selector and holds 1444 entries — every
+// (class, entry) pair the firmware's own 487 multisample SET descriptors can produce.
+// A selector NOT in it is one the traced tone tables never emit (the drawbar / drum-kit
+// selection paths are the known candidates, the same ones decode_wave_select() flags as
+// `undocumented`); there is no C for it and the caller must say so out loud.
+bool kn5000_tonegen_device::firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous)
+{
+	const kn5000_pitch_trim::entry_t *const first = kn5000_pitch_trim::TABLE;
+	const kn5000_pitch_trim::entry_t *const last  = first + kn5000_pitch_trim::COUNT;
+	const kn5000_pitch_trim::entry_t *const it = std::lower_bound(first, last, sel,
+			[](const kn5000_pitch_trim::entry_t &e, uint16_t s) { return e.sel < s; });
+	if (it == last || it->sel != sel)
+		return false;
+	c = int32_t(it->c);
+	ambiguous = (it->ambiguous != 0);
+	return true;
+}
+
+
 void kn5000_tonegen_device::update_pitch(int ch)
 {
 	voice_t &v = m_voice[ch];
@@ -1212,12 +1288,21 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	// The IC303 is a PCM MULTISAMPLE chip. +0x400 (reg[8]) is an ABSOLUTE log pitch at
 	// 0x100 units/semitone, but offset by a constant belonging to the selected chunk (the
 	// recording's own tuning trim) — which is why a chromatic run appears to "reset" at every
-	// zone boundary, and why the register alone cannot give the note. The ABSOLUTE frame
-	// therefore still comes from the real input event (keybed / USB-MIDI, both routed through
-	// push_keybed_event) that caused this voice; what the register adds is `pitch_offset`, the
-	// semitones this partial sounds ABOVE that note — its coarse/fine transpose and its unison
-	// detune (resolve_note_group()). An unresolved voice has offset 0, i.e. exactly the
-	// behaviour this device had before.
+	// zone boundary, and why the register ALONE cannot give the note.
+	//
+	// TWO SOURCES for the absolute frame, and they do not overlap:
+	//
+	//   * a voice with a correlated INPUT EVENT (keybed / USB-MIDI, both routed through
+	//     push_keybed_event) takes its note from that event; what the register adds is
+	//     `pitch_offset`, the semitones this partial sounds ABOVE that note — its
+	//     coarse/fine transpose and its unison detune (resolve_note_group()). An unresolved
+	//     voice has offset 0, i.e. exactly the behaviour this device had before.
+	//
+	//   * a voice with NO input event — demo, rhythm, sequencer — takes its note from the
+	//     registers alone, by subtracting the firmware's own per-selector constant C:
+	//     `note = (regs[8] - 0x80 - C(regs[1])) / 256`. See the second branch below. Before
+	//     that decode existed those voices were placed by one global constant (0x3524),
+	//     which MEASURED a median +10.4 semitones of error over the demo.
 	//
 	// Each voice plays a real IC307 recording whose measured fundamental period is resampled
 	// to the target frequency, so pitch is decoupled from the recording's (un-stored) native
@@ -1237,22 +1322,88 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	{
 		// Equal temperament, A4 (MIDI 69) = 440 Hz, plus the transpose/detune the +0x400
 		// register carries for this partial.
+		//
+		// ⚠ REGRESSION GATE. This branch — every keybed and USB-MIDI note — is deliberately
+		// BYTE-FOR-BYTE what it was before the per-selector decode below was added. The
+		// decode serves only voices the device has no input event for.
 		note_f = double(v.true_note) + v.pitch_offset;
 		freq = 440.0 * std::pow(2.0, (note_f - 69.0) / 12.0);
+		v.pitch_anchor = ANCHOR_KEYBED;
 	}
 	else if (v.regs[8] != 0)
 	{
-		// Fallback for voices with no correlated input (e.g. demo / rhythm) on a chunk whose
-		// trim is not known: use reg[8] as a global log-pitch (0x100 = 1 semitone). This is
-		// correct WITHIN a sample zone and monotonic; it can jump at zone boundaries, but it
-		// is far better than the former behaviour where every semitone collapsed to one
-		// pitch. Anchor chosen so a mid-range value lands near middle C.
-		//  ⚠ For SINE MODE this anchor is a convenience, not a measurement -- the per-chunk
-		//  root pitch is not decoded -- so the absolute pitch of auto-accompaniment voices
-		//  may be wrong, possibly by octaves. Only true_note >= 0 voices (keybed / MIDI) give
-		//  a trustworthy absolute Hz. Do not read an octave error here as a machinery bug.
-		double semis = (double(int(v.regs[8])) - double(0x3524)) / 256.0; // 0x100/semitone
-		freq = 261.63 * std::pow(2.0, semis / 12.0);                      // ref ≈ C4
+		// ---- VOICES WITH NO CORRELATED INPUT: demo, rhythm, sequencer ------------------
+		//
+		// +0x400 is an ABSOLUTE log pitch at 0x100 units/semitone, but offset by a constant
+		// that belongs to the SELECTED RECORDING:
+		//
+		//     +0x400 = (note << 8) + 0x80 + C(+0x040) + 2*fine + detune
+		//
+		// so with C known the note comes straight out of the two registers the chip is
+		// given, and nothing else is needed:
+		//
+		//     note = (regs[8] - 0x80 - C(regs[1])) / 256
+		//
+		// C is FIRMWARE-DERIVED, not fitted to audio: it is arithmetic on the sub-CPU's own
+		// 487 multisample SET descriptors (kn5000_pitch_trim.hxx, generated). MEASURED over
+		// 5384 captured demo note-ons: this decode lands on an integer MIDI note 70.4% of
+		// the time against a C-permuted null of 15.1 ± 6.9%, and 0.9% for the bare 0x3524
+		// constant it replaces — and the residual non-integer part is the traced
+		// `2*fine + detune`, all of it under 0.4 semitone, so the NOTE still rounds right.
+		// See notes/FINDINGS-kn5000-chunk-root-pitch.md.
+		//
+		// THE LADDER, best evidence first. Every rung is recorded in v.pitch_anchor and
+		// censused per note-on at device_stop — the fallback is never silent.
+		int32_t c = 0;
+		bool ambiguous = false;
+		if (firmware_pitch_trim(v.regs[1], c, ambiguous))
+		{
+			// 1367 of the 1444 selectors carry exactly one C across every SET, patch and
+			// key that reaches them. The other 77 carry more than one; the table gives the
+			// KEY-WEIGHTED MODAL value, which is the most probable reading of that selector
+			// but can be wrong — for a handful of selectors the candidates sit a whole
+			// octave apart (a drawbar footage wave deliberately reused an octave up). They
+			// are flagged so the census can report their share separately rather than
+			// letting them dilute the single-valued result.
+			v.pitch_anchor = ambiguous ? ANCHOR_FIRMWARE_AMBIG : ANCHOR_FIRMWARE;
+		}
+		else if (v.wave_real && uint32_t(v.wave_chunk) < m_dir[v.wave_bank][v.wave_page].count
+				&& m_dir[v.wave_bank][v.wave_page].trim_state[v.wave_chunk] == 1)
+		{
+			// The firmware tables never emit this selector, but this chunk's trim was
+			// PINNED at runtime by an untransposed key press (resolve_note_group) — which
+			// is the very same quantity C, learned instead of tabulated. Strictly more
+			// information than the constant below.
+			//  ⚠ RUN-DEPENDENT: nothing is learned until a keybed/MIDI note has been
+			//  played, so during pure demo playback this rung is inert (the census will
+			//  read 0) and it cannot contaminate a demo-only measurement.
+			c = m_dir[v.wave_bank][v.wave_page].trim[v.wave_chunk];
+			v.pitch_anchor = ANCHOR_LEARNED;
+		}
+		else
+		{
+			// ⚠ NOT A MEASUREMENT. No C from any source. Keep the historical behaviour:
+			// treat reg[8] as a global log pitch anchored so a mid-range value lands near
+			// middle C. Correct WITHIN a sample zone and monotonic, but its absolute pitch
+			// is wrong by whatever the selected recording's own trim is — MEASURED median
+			// +10.4 semitones over the demo. Retained ONLY so such a voice still sounds;
+			// the census names the selectors that land here.
+			//     note = 60 + (regs[8] - 0x3524)/256  ==  (regs[8] - 0x80 - (-1884))/256
+			c = -1884;
+			v.pitch_anchor = ANCHOR_CONSTANT;
+		}
+
+		// ⚠ pitch_offset is deliberately NOT added here. It is the transpose/detune a
+		// partial carries ABOVE its played note, recovered by resolve_note_group() for
+		// keybed voices only — and it is already inside regs[8], which is what this branch
+		// decodes. Adding it would double-count. resolve_note_group() only ever runs on
+		// voices with true_note >= 0, so it is 0 on every voice reaching this branch.
+		note_f = (double(int(v.regs[8])) - 128.0 - double(c)) / 256.0;
+		freq = 440.0 * std::pow(2.0, (note_f - 69.0) / 12.0);
+	}
+	else
+	{
+		v.pitch_anchor = ANCHOR_NONE;
 	}
 	// freq == 0.0 means this voice carries no pitch information at all. The sine then
 	// renders honest silence rather than an invented note; the silence interlock frees the
@@ -1293,8 +1444,9 @@ void kn5000_tonegen_device::update_pitch(int ch)
 	if (step > double(0x7FFFFFFF)) step = double(0x7FFFFFFF);
 	v.pitch_step = uint32_t(step + 0.5);
 
-	LOGMASKED(LOG_VOICE, "tonegen: voice %d note=%d off=%+.3f -> %.3f freq=%.2f step=0x%08X (r1=%04X r8=%04X)\n",
-		ch, v.true_note, v.pitch_offset, note_f, freq, v.pitch_step, v.regs[1], v.regs[8]);
+	LOGMASKED(LOG_VOICE, "tonegen: voice %d note=%d off=%+.3f -> %.3f freq=%.2f step=0x%08X (r1=%04X r8=%04X) anchor=%s\n",
+		ch, v.true_note, v.pitch_offset, note_f, freq, v.pitch_step, v.regs[1], v.regs[8],
+		anchor_name(v.pitch_anchor));
 }
 
 
@@ -1868,6 +2020,14 @@ void kn5000_tonegen_device::process_key_on(int ch)
 	// Update pitch (also covers the no-input fallback case where assign_chord_notes
 	// leaves true_note = −1 without calling update_pitch itself).
 	update_pitch(ch);
+
+	// PITCH-ANCHOR CENSUS, one count per note-on (not per register write), so it is directly
+	// comparable with the offline capture analysis. Reported at device_stop; a voice that
+	// fell through to the bare 0x3524 constant also has its selector named there.
+	if (v.pitch_anchor < ANCHOR_COUNT)
+		m_anchor_census[v.pitch_anchor]++;
+	if (v.pitch_anchor == ANCHOR_CONSTANT)
+		m_anchor_unplaced[v.regs[1]]++;
 
 	// Update pan and the TVF from the current registers, then start the amplitude EG at
 	// segment 0. +0x800, +0x180 and +0x100 are all written earlier in the same burst
