@@ -212,6 +212,22 @@ two similar halves per period locks onto the double. The principled repair is to
 estimator octave-robust (YIN's `d'` is the obvious candidate, and is already implemented in
 `tools/kn5000_chunk_period.py` for the audit).
 
+**A minimal repair was prototyped and MEASURED, and it is NOT enough — recorded so the next
+pass does not redo it.** Keeping the whole existing search and adding one sub-multiple guard
+(accept `P/2` when its correlation is within 10% of `P`'s) against the 402 real recordings:
+
+    agree before 304 -> after 305     fixed 1 (chunk 1/4, Felipe's)     BROKE 0
+
+It fixes exactly the confirmed chunk and breaks nothing, but leaves **14 of 15** — and 3 of
+those are `detect = true/2` cases, which need a *multiple* test, not a sub-multiple one. So
+the honest position is that this is an ESTIMATOR REPLACEMENT, not a patch.
+
+⚠ **And that is why nothing was shipped.** The only independent oracle available here is
+YIN, so validating a YIN-based replacement against YIN would be circular; the one genuinely
+external check is Felipe's ear on one chunk. Shipping a half-tuned heuristic that fixes 1 of
+15 while putting the 304 currently-correct chunks at risk is exactly the FITTED-not-DERIVED
+move this project keeps having to retract. **The driver is unchanged by this pass.**
+
 Gates any change must pass, all of which CAN fail:
 
 1. `kn5000_chunk_period.py --all` over the four pages: the 15 exact-integer disagreements go
