@@ -40,5 +40,5 @@ source and must not be mistaken for verified preservation.
 
 ## License
 
-The MAME-derived files follow MAME's licensing: BSD-3-Clause for the CPU cores,
-GPL2+ for the machine drivers. (c) 2026 Felipe Correa da Silva Sanches.
+Follows Felipe's prefered licensing for MAME contributions: BSD-3-Clause for
+core modules, GPL2+ for the machine drivers. (c) 2026 Felipe Correa da Silva Sanches.
