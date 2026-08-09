@@ -100,6 +100,17 @@ absent screen.**
   (+1); column 9 inert; columns 10-13 = Aqua/Yellow/Lime/Fuchsia; column 14 inert; column 15 =
   ADR0..ADR3 slot selector; column 16 inert. The on-screen rocker row in the screenshot sits at
   exactly those column positions, which corroborates the measurement.
+* ★ **PAGE ADVANCE = `PART MUTE UP 6` / `DOWN 6`** (owner-identified on real hardware, 2026-08-09;
+  he calls them "the orange buttons"). This is not a dedicated control: column 6 is simply the
+  `0x100` hex digit, and one screenful is 16 rows x 16 bytes = 0x100 bytes exactly, so one press
+  steps precisely one page. Because the handler does `addr ±= (1 << 4i)` on the **full 32-bit
+  address**, carry propagates into the higher digits — so HOLDING `UP 6` sweeps continuously
+  through an entire ROM rather than cycling inside a 4 KB window. `DOWN 6` sweeps backwards.
+  The only bound is the handler's own `if addr >= 0xC0000000: addr &= 0x0FFFFFFF`.
+  A full 4 MB range is 16,384 pages, i.e. 16,384 auto-repeats of `UP 6`.
+  This is the basis of the video-capture dumping approach (side quest
+  `kn7000_dump_roms_via_debug_screen_in_video_grabber`).
+
 * **Read-only.** Every store in the handler set targets the stack frame or the widget's own cells
   (`0x500012EC..0x500012FC`, `0x5006B524`, `0x5006B528`); the inspected address is only ever read
   with `movbu (dN,aN),dM`. A write tap over the whole `0x96xxxxxx` flash window counted **zero**
