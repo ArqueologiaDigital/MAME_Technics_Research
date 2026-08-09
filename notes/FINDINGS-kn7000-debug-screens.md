@@ -194,3 +194,34 @@ From `KN7000/kn7-16/install.pdf` (CA-Software) and service manual §9.4.1:
 The MAME CP serial HLE delivers panel changes one segment at a time, so pressing 6-8 caps in a
 single frame never converges. Press one button at a time and wait for its bit to appear in
 `0x50021FD8`/`FDC` before the next. On real hardware Felipe's 1/6/8 chord fires normally.
+
+## 10. Sweep dynamics, measured in the emulator (2026-08-09) — and the tool that reads the screen back
+
+`tools/dumpgrab/` turns a recording of this screen back into bytes (single image, directory of
+frames, or a video file / V4L2 device), emitting a sparse binary + a per-byte KNOWN mask + a
+coverage report. Its README carries the full measured accuracy; the numbers that belong *here*
+are the ones about the screen itself, all in EMULATED frames so they are host-speed independent.
+
+* **Page-advance rate while `MUTE UP 6` is held**: 40 pages in 464 frames and, on a second
+  capture, 40 pages in 461 frames — 11.6 / 11.5 frames per page at 60 Hz = **5.17-5.21 pages/s**.
+  A 4 MB chip is 16,384 pages ≈ **53 minutes** of continuous holding.
+  (`tools/dumpgrab/capture/capture.sh --mode hold`, log line `SWEEP hold:`.)
+* **Frames per page on the recording**: min 8, median 11, max 301 (the max is the parked start
+  page before the sweep begins).
+* **The repaint is NOT atomic.** Of 555 recorded frames of a full-speed sweep, 162 (29.2%) were
+  flagged as damaged by the extractor: 66 were genuine page mixes with rows from two different
+  pages, 74 had too many half-drawn glyphs, 20 had no usable address ladder at all. The mix is
+  INTERLEAVED BY ROW, not a top/bottom split — e.g. a frame whose row addresses read
+  `48400100 48400010 48400120 48400030 ...`, alternating between two pages. This is a firmware
+  property (the repaint walks the rows over several video frames) and has nothing to do with
+  analog tearing, which remains unmeasured until the grabber exists.
+* ★ **Correction to §7's "it repaints continuously"**: the hazard framing is right but the rate is
+  not. The *idle* repaint period is ~2952 ms (~0.34 Hz), with the 16-row repaint itself taking
+  ~112 ms (`tools/dumpgrab/capture/measure_repaint_idle.lua`). A parked address is therefore
+  re-read about three times a minute, not many times a second.
+* Consequence for capture: after dialling an address the panel is still being painted for up to
+  ~3 s, so recording immediately means the START PAGE is never recorded settled.
+  `capture.sh --predelay` (default 300 frames = 5 s) exists for this. It buys a correctly-painted
+  start page and not accuracy: a 5 s pre-delay left the same page's decode errors in place, and
+  four pixel-identical frames of it decode identically wrong, so those errors are an extractor
+  fault rather than a repaint artefact.

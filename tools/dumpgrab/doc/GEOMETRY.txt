@@ -1,0 +1,58 @@
+KN7000 MEMORY DUMP screen — measured pixel geometry
+===================================================
+Source: MAME snapshots taken with `-snapview native`, i.e. the LCD's own raster with no
+window scaling. Every number below was read off the pixels, not inferred.
+
+RASTER
+  LCD frame                640 x 240, RGB
+  dump panel (grey body)   x 84..548, y 49..209   (465 x 161 px)
+  panel body colour        (128,128,128); its inner border is (200,200,200); the LCD
+                           background outside the panel is black
+
+CHARACTER GRID
+  first character cell     x = 90, y = 55        (= panel origin + 6, + 6)
+  character pitch          6 px horizontal
+  row pitch                9 px vertical
+  glyph bitmap             5 x 7 px, drawn in the top-left 5x7 of the 6x9 cell
+                           (1 px gap column at cell x+5; 2 px gap rows at cell y+7,+8)
+  text rows                16
+  glyph classes            0-9 A-F, space, '-'   (18 templates cover the hex area)
+
+LINE LAYOUT  (character-cell index within a row)
+  0..7     the 8 hex digits of the row's CPU address
+  8, 9     two spaces
+  10+3i    high nibble of byte i, for i = 0..7      (11+3i = low nibble)
+  33       the '-' separator
+  34+3j    high nibble of byte 8+j, for j = 0..7    (35+3j = low nibble)
+  56       last hex cell (low nibble of byte 15)
+  58..73   the ASCII column ('.' substituted for bytes < 0x20) — NOT decoded here; its
+           glyph set is far larger than 18 and the hex area already carries every byte
+
+  Verified glyph-by-glyph against kn7000_program.rom at 0x48414700 and then against 22
+  further pages: 5845 / 5845 oracle-covered bytes exact.
+
+FOOTER
+  one more text row below row 15 (y = 55 + 9*16 = 199): the colour legend
+  `Aqua = F0  Yellow = F7  Lime = FF  Fuchsia = XX   DUMP ADR0 = <8 hex digits>`
+  The four highlight colours are drawn as the CELL BACKGROUND of any byte holding that
+  value, which is a free redundant encoding:
+      Aqua    (0,252,252)  = 0xF0
+      Yellow  (252,252,0)  = 0xF7
+      Lime    (0,252,0)    = 0xFF
+      Fuchsia (252,0,252)  = a user-set value (columns 10..13 of the balance rockers step
+                             the four highlight bytes, so XX is whatever it was left at)
+
+REDUNDANCY AVAILABLE TO AN EXTRACTOR (in order of usefulness)
+  1. The 16 row addresses must equal base + 0x10*r. Voting them gives the page identity
+     and, more importantly, FLAGS a frame that is torn across a page flip.
+  2. The colour legend gives four byte values without reading their glyphs at all.
+  3. Consecutive pages from the orange-button sweep must ascend by 0x100.
+  4. The '-' at cell 33 and the spaces at cells 8, 9 and 12+3i are a free grid check: if
+     they do not classify as '-' and space, the grid is mis-framed.
+
+EMULATOR-SPECIFIC NOTES (matter when capturing a corpus)
+  * The viewer repaints the hex area only about every 3 seconds. Poking the address cell
+    at 0x500012EC and snapshotting 0.6 s later yields the PREVIOUS page. Dwell >= 4 s per
+    page, and take the page identity from the screen, never from the poke log.
+  * MAME's default snapshot is the whole scaled window (1000x750 here), in which the LCD
+    arrives resampled and vertically squashed. Always `-snapview native`.
