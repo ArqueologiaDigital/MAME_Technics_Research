@@ -145,8 +145,12 @@ piece of work on this tool, and it is why the honest number above is 99.87 % and
 * extraction ≈ **0.5 frames/s** per core with three other jobs on the box (~2 s/frame
   uncontended); a 40-page sweep of 555 frames takes ~17 min to extract
 * the sweep itself: **5.17-5.21 pages/s**, i.e. ~53 min of held button per 4 MB chip
-* uncompressed AVI is 460,800 B/frame — fine for a 40-page test, impractical for 4 MB; record
-  H.264 or MJPEG for real sweeps (see `doc/STRATEGY.md` for measured bitrates)
+* ⚠ **RECORD UNCOMPRESSED IF YOU POSSIBLY CAN.** Measured: cross-frame voting on H.264-medium
+  plateaus at **97.7 %** byte-exact no matter how many frames vote, while the same pipeline on
+  uncompressed video reaches **99.8 %** — lossy compression destroys glyph detail in a way
+  voting cannot recover. Uncompressed AVI is 460,800 B/frame (~84 GB for a full 4 MB sweep), so
+  if that is impossible, prefer a *lossless* codec (FFV1, MNG, or one PNG per page ≈ 208 MB)
+  over H.264/MJPEG. `doc/STRATEGY.md` has the measured bitrates.
 
 ### Simulated composite damage (a PREDICTION, not a measurement of the real chain)
 
