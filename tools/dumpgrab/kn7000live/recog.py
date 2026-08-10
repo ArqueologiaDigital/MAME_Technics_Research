@@ -75,6 +75,7 @@ class GlyphBank:
         self.sum = np.zeros((16, gh, gw), np.float64)
         self.n = np.zeros(16, np.int64)
         self._T: Optional[np.ndarray] = None
+        self._Tc: Optional[np.ndarray] = None
         self._cent: Optional[np.ndarray] = None
 
     # -- training ---------------------------------------------------------- #
@@ -91,11 +92,25 @@ class GlyphBank:
             self.sum[lab] += p
             self.n[lab] += 1
         self._T = None
+        self._Tc = None
         self._cent = None
 
     @property
     def ready(self) -> bool:
         return bool((self.n >= self.min_samples).all())
+
+    @property
+    def usable(self) -> bool:
+        """Every class has at least one sample -- enough to steer the geometry.
+
+        `ready` (eight samples each) is the bar for reading bytes.  This lower
+        bar exists because the search needs a referee much sooner than that:
+        during bootstrap the only alternative is the ladder score, which is far
+        too insensitive to track a moving camera, so the fit drifts, the
+        templates are learned through the drift, and the bank comes out
+        confidently useless.
+        """
+        return bool((self.n >= 1).all())
 
     @property
     def coverage(self) -> int:
@@ -108,6 +123,24 @@ class GlyphBank:
             m = self.sum / np.maximum(self.n, 1)[:, None, None]
             self._T = znorm_rows(m.reshape(16, -1))
         return self._T
+
+    @property
+    def coarse(self) -> np.ndarray:
+        """Templates at half resolution, for the geometry search.
+
+        The search ranks tens of candidate grids per frame and only needs to
+        know which one sits on the text; it does not need to read bytes. At
+        half resolution a candidate costs a quarter of the sampling, and the
+        result it produces -- how many rows carry a corroborated address -- is
+        not sensitive to the detail that was thrown away.  Committing a byte
+        always uses the full-resolution templates.
+        """
+        if self._Tc is None:
+            T = self.templates.reshape(16, self.gh, self.gw)
+            h2, w2 = self.gh // 2, self.gw // 2
+            T = T[:, :h2 * 2, :w2 * 2].reshape(16, h2, 2, w2, 2).mean(axis=(2, 4))
+            self._Tc = znorm_rows(T.reshape(16, -1))
+        return self._Tc
 
     @property
     def centroids(self) -> np.ndarray:
@@ -154,6 +187,53 @@ class GlyphBank:
         b.sum = z["sum"]
         b.n = z["n"]
         return b
+
+
+# The viewer prints a footer legend -- "Aqua = F0  Yellow = F7  Lime = FF
+# Fuchsia = XX" -- and draws every byte equal to one of those values on a
+# coloured background.  That is a SECOND, INDEPENDENT statement of the byte's
+# value, in a channel the glyph classifier cannot influence, and it is exactly
+# the check the glyph channel most needs: a page of erased flash is one long run
+# of FF, where a run of identical characters makes local misalignment invisible
+# and the rare-class F template is at its worst.  Measured, without this the
+# tool read a blank page as 88 bytes of EE, confidently and consistently.
+#
+# Used only to VETO, never to assert: a disagreement discards the reading and
+# leaves the cell unread, rather than substituting the colour's opinion.  The
+# values are the viewer's power-up defaults; an operator who has stepped them
+# with panel columns 10..13 must say so, and a wrong assumption here costs
+# coverage, not correctness.
+LEGEND_DEFAULT = {"aqua": 0xF0, "yellow": 0xF7, "lime": 0xFF, "fuchsia": None}
+COLOUR_NAMES = ["none", "aqua", "yellow", "lime", "fuchsia"]
+
+
+def classify_colour(rgb: np.ndarray, sat_thresh: float = 0.22) -> np.ndarray:
+    """Map (N,3) background colours to indices into COLOUR_NAMES."""
+    mx = rgb.max(axis=1)
+    mn = rgb.min(axis=1)
+    sat = np.where(mx > 1e-6, (mx - mn) / np.maximum(mx, 1e-6), 0.0)
+    hi = rgb > (mx[:, None] * 0.72)
+    out = np.zeros(len(rgb), np.int8)
+    out = np.where(~hi[:, 0] & hi[:, 1] & hi[:, 2], 1, out)     # aqua
+    out = np.where(hi[:, 0] & hi[:, 1] & ~hi[:, 2], 2, out)     # yellow
+    out = np.where(~hi[:, 0] & hi[:, 1] & ~hi[:, 2], 3, out)    # lime
+    out = np.where(hi[:, 0] & ~hi[:, 1] & hi[:, 2], 4, out)     # fuchsia
+    return np.where(sat >= sat_thresh, out, 0).astype(np.int8)
+
+
+def cell_background(reg: G.Registration, rgb: np.ndarray, cells: np.ndarray,
+                    origin: Tuple[float, float]) -> np.ndarray:
+    """Median colour of the brighter half of each byte cell -- its background."""
+    gh, gw = 6, 10
+    chans = [reg.cut(rgb[:, :, c].astype(np.float32), cells, gh, gw, 1.0, 0.0, origin)
+             for c in range(3)]
+    P = np.stack(chans, axis=-1)                       # (N, gh, gw, 3)
+    lum = P @ np.array([0.299, 0.587, 0.114], np.float32)
+    flat = P.reshape(len(cells), gh * gw, 3)
+    order = np.argsort(lum.reshape(len(cells), gh * gw), axis=1)
+    keep = order[:, gh * gw // 2:]                     # the brighter half
+    idx = np.arange(len(cells))[:, None]
+    return np.median(flat[idx, keep], axis=1)
 
 
 # --------------------------------------------------------------------------- #
@@ -206,7 +286,9 @@ class PageReader:
                  ncc_min: float = 0.25,
                  min_cluster: int = 3,
                  address_windows: Optional[List[Tuple[int, int]]] = None,
-                 assume_aligned: bool = True):
+                 assume_aligned: bool = True,
+                 jitter: Optional[Sequence[Tuple[float, float]]] = ((0.07, 0.04), (-0.07, -0.04),
+                                                                   (0.07, -0.04), (-0.07, 0.04))):
         self.bank = bank
         self.addr_margin_min = addr_margin_min
         self.byte_margin_min = byte_margin_min
@@ -214,6 +296,10 @@ class PageReader:
         self.min_cluster = min_cluster
         self.address_windows = address_windows
         self.assume_aligned = assume_aligned
+        self.jitter = list(jitter) if jitter else None
+        self.train_cap = 3
+        self.use_colour = True
+        self.legend = dict(LEGEND_DEFAULT)
 
     # -- bootstrap ---------------------------------------------------------- #
     def ladder_geometry(self, reg: G.Registration, ink: np.ndarray,
@@ -258,23 +344,51 @@ class PageReader:
             ok, why = False, "0x1s column not constant (p20 %.3f)" % p20u
         return score, ok, why, P
 
-    def fit_quality(self, reg: G.Registration, ink: np.ndarray,
-                    origin: Tuple[float, float] = (0.0, 0.0)) -> float:
-        """How well the grid explains the text, ACROSS THE WHOLE BLOCK.
+    def score_geometry(self, reg: G.Registration, ink: np.ndarray,
+                       origin: Tuple[float, float] = (0.0, 0.0)) -> float:
+        """Cheap score of a candidate geometry, for the refinement search.
 
-        The ladder check is the stronger test but it lives entirely in the left
-        eighth of the panel, so it cannot see the right-hand end of the grid
-        sliding off -- and with a handheld camera that is exactly how a fit
-        comes apart.  This samples the address block and a spread of columns to
-        the far right and reports the median match strength, which collapses as
-        soon as cells stop containing whole glyphs.
+        The same quantity `Engine._referee` wants, without building a full
+        FrameReading, computing displacements or touching the templates: the
+        search evaluates this tens of times per frame, so it is the one place
+        where the cost of the general path is worth avoiding.
+
+        Value is `rows that read a corroborated address` plus a fraction of the
+        median match strength over a spread of far-right columns, so the
+        integer part is the honest criterion and the fraction only breaks ties.
         """
-        if not self.bank.ready:
-            return 0.0
-        cells = np.array([(r, c) for r in range(G.NROW) for c in (G.ADDR_COLS + TRACK_COLS)])
-        P = reg.cut(ink, cells, self.bank.gh, self.bank.gw, OVER_X, OVER_Y, origin)
-        _, ncc, margin = self.bank.classify(P)
-        return float(np.median(ncc) + np.median(margin))
+        gh, gw = self.bank.gh // 2, self.bank.gw // 2
+        cells = np.array([(r, c) for r in range(G.NROW) for c in G.ADDR_COLS]
+                         + [(r, c) for r in range(G.NROW) for c in TRACK_COLS[::3]])
+        P = reg.cut(ink, cells, gh, gw, OVER_X, OVER_Y, origin)
+        X = znorm_rows(P.reshape(len(P), -1))
+        S = X @ self.bank.coarse.T
+        order = np.argsort(-S, axis=1)
+        i = np.arange(len(X))
+        idx = order[:, 0]
+        ncc = S[i, order[:, 0]]
+        margin = ncc - S[i, order[:, 1]]
+        na = G.NROW * 8
+        ach = np.array([HEXD[i] for i in idx[:na]]).reshape(G.NROW, 8)
+        amg = margin[:na].reshape(G.NROW, 8)
+        ancc = ncc[:na].reshape(G.NROW, 8)
+        bases: Dict[int, int] = {}
+        good: List[Tuple[int, int]] = []
+        for r in range(G.NROW):
+            if float(amg[r].min()) < self.addr_margin_min or float(ancc[r].min()) < self.ncc_min:
+                continue
+            try:
+                a = int("".join(ach[r]), 16)
+            except ValueError:
+                continue
+            b = (a - 0x10 * r) & 0xFFFFFFFF
+            bases[b] = bases.get(b, 0) + 1
+            good.append((r, b))
+        n_ok = sum(1 for _, b in good if bases[b] >= self.min_cluster
+                   and (not self.address_windows
+                        or any(lo <= b < hi for lo, hi in self.address_windows)))
+        right = margin[na:]
+        return float(n_ok) + (0.5 * float(np.median(right)) if len(right) else 0.0)
 
     def bootstrap(self, reg: G.Registration, ink: np.ndarray,
                   seed_base: Optional[int] = None,
@@ -306,7 +420,8 @@ class PageReader:
              wanted: Optional[Dict[int, List[int]]] = None,
              train: bool = True, decay: float = 0.0,
              origin: Tuple[float, float] = (0.0, 0.0),
-             known: Optional[Dict[int, Tuple[int, Dict[int, int]]]] = None) -> FrameReading:
+             known: Optional[Dict[int, Tuple[int, Dict[int, int]]]] = None,
+             rgb: Optional[np.ndarray] = None) -> FrameReading:
         """Decode one frame.
 
         `wanted` maps a row index to the byte indices still worth reading, so a
@@ -325,9 +440,33 @@ class PageReader:
                 byte_cells.append((r, lo)); byte_of.append((r, k, 0))
         track_cells = [(r, c) for r in range(G.NROW) for c in TRACK_COLS]
 
-        cells = np.array(addr_cells + byte_cells + track_cells, dtype=np.int64)
+        cells = np.array(addr_cells + byte_cells + track_cells, dtype=np.float64)
         P = reg.cut(ink, cells, gh, gw, OVER_X, OVER_Y, origin)
         idx, ncc, margin = self.bank.classify(P)
+
+        # Jitter check.  Cross-frame agreement defends against noise; it does
+        # nothing about a grid that is a fraction of a cell out of place,
+        # because that produces the SAME wrong answer in every frame, with a
+        # high match margin, and sails through any amount of voting.  Measured:
+        # the bytes that were committed wrongly had a mean confidence of 0.91
+        # against 0.99 for the correct ones -- far too close to separate with a
+        # threshold, and raising the threshold from 0.02 to 0.08 removed one
+        # wrong byte at the cost of eleven right ones.
+        #
+        # So each byte cell is read again at a deliberately displaced geometry.
+        # A glyph that genuinely fills its cell reads the same either way; one
+        # that is only being read correctly because the grid happens to sit
+        # where it does, changes.  This is the one cheap test that is sensitive
+        # to the actual failure mode rather than to its symptoms.
+        jit_agree = None
+        if self.jitter and byte_cells:
+            bc = np.array(byte_cells, dtype=np.float64)
+            jit_agree = np.ones(len(byte_cells), bool)
+            base = idx[len(addr_cells):len(addr_cells) + len(byte_cells)]
+            for du, dv in self.jitter:
+                J = reg.cut(ink, bc + np.array([dv, du]), gh, gw, OVER_X, OVER_Y, origin)
+                jidx, jncc, _ = self.bank.classify(J)
+                jit_agree &= (jidx == base)
 
         # ---- displacements, for the tracker ------------------------------- #
         obs = G.patch_centroids(P)
@@ -388,13 +527,25 @@ class PageReader:
         # ---- bytes ---------------------------------------------------------- #
         values: Dict[int, Tuple[int, float]] = {}
         acc = {rr.row: rr.address for rr in rows if rr.accepted}
+
+        # The colour channel, for the byte cells we actually read this frame.
+        colour_of: Dict[Tuple[int, int], int] = {}
+        if rgb is not None and byte_of and self.use_colour:
+            pairs = sorted({(r, k) for r, k, _ in byte_of})
+            cc = np.array([(r, G.BYTE_COLS[k][0] + 0.5) for r, k in pairs], dtype=np.float64)
+            cls = classify_colour(cell_background(reg, rgb, cc, origin))
+            for (r, k), ci in zip(pairs, cls):
+                v = self.legend.get(COLOUR_NAMES[int(ci)]) if ci else None
+                if v is not None:
+                    colour_of[(r, k)] = v
         if byte_of:
             nib = np.full((G.NROW, 16, 2), -1, np.int64)
             nw = np.zeros((G.NROW, 16, 2), np.float32)
             for t, (r, k, half) in enumerate(byte_of):
                 j = na + t
                 nib[r, k, half] = idx[j]
-                nw[r, k, half] = (margin[j] if ncc[j] >= self.ncc_min else 0.0)
+                ok = ncc[j] >= self.ncc_min and (jit_agree is None or jit_agree[t])
+                nw[r, k, half] = margin[j] if ok else 0.0
             for r, a in acc.items():
                 want = range(16) if wanted is None else wanted.get(r, [])
                 for k in want:
@@ -404,7 +555,11 @@ class PageReader:
                     m = float(min(nw[r, k, 1], nw[r, k, 0]))
                     if m < self.byte_margin_min:
                         continue
-                    values[(a + k) & 0xFFFFFFFF] = (int(hi) * 16 + int(lo), m)
+                    val = int(hi) * 16 + int(lo)
+                    want = colour_of.get((r, k))
+                    if want is not None and want != val:
+                        continue        # the highlight says otherwise -- leave it unread
+                    values[(a + k) & 0xFFFFFFFF] = (val, m)
 
         # ---- training ------------------------------------------------------- #
         ladder_ok = n_ok >= G.NROW - 2 or (torn and n_ok >= G.NROW - 3)
@@ -427,24 +582,65 @@ class PageReader:
             # Committed bytes are balanced, plentiful, and already carry four
             # frames of agreement behind them, so this is training on what has
             # been verified rather than on what has merely been guessed.
-            if known:
+            if known and byte_of:
                 pos = {(r, c): na + t for t, (r, k, half) in enumerate(byte_of)
                        for c in [G.BYTE_COLS[k][half]]}
+                # Capped per class per frame.  Committed bytes are a much better
+                # balanced teacher than the address column, but they are not
+                # balanced: this calibration page is 71 % the single byte 0x77,
+                # so feeding in every committed nibble buries the rare classes
+                # again under a flood of '7' and '0'.  Measured, that is not
+                # theoretical -- widening the audit from one row per frame to
+                # four, and so quadrupling this training set, took committed
+                # bytes from 222 a page to 144 and stopped hand-held sweeps
+                # committing at all.
+                #
+                # ⚠ And never from a committed byte this frame disputes.  Training
+                # on the store's own output is a feedback loop, and a loop with
+                # no brake: a byte committed wrongly becomes a labelled example
+                # of the wrong glyph, the template drifts towards it, and the
+                # next page makes the same mistake more confidently.  Measured,
+                # exactly that happened -- 'F' was misread as 'E', the wrong
+                # bytes taught the 'E' template what an 'F' looks like, and a
+                # whole page of erased flash came out as EE.
+                #
+                # So a committed byte may teach only if something independent
+                # still agrees with it: the highlight colour, where the viewer
+                # provides one, or failing that this frame's own reading of the
+                # cell.  A byte nothing currently corroborates is left out.
+                per_class = [0] * 16
                 for r, (want_addr, vals) in known.items():
                     rr = rows[r]
                     if not rr.accepted or rr.address != want_addr:
                         continue        # the page moved under us; labels are stale
                     for k, v in vals.items():
+                        col = colour_of.get((r, k))
+                        if col is not None:
+                            if col != v:
+                                continue
+                        elif not (0 <= r < G.NROW and nib[r, k, 1] >= 0
+                                  and int(nib[r, k, 1]) * 16 + int(nib[r, k, 0]) == v):
+                            continue
                         hi, lo = G.BYTE_COLS[k]
                         for c, lab in ((hi, v >> 4), (lo, v & 15)):
                             j = pos.get((r, c))
-                            if j is not None:
+                            if j is not None and per_class[lab] < self.train_cap:
+                                per_class[lab] += 1
                                 labels.append(lab)
                                 patches.append(P[j])
             if labels:
                 self.bank.add(labels, np.array(patches), decay=decay)
 
+        ntrack = len(track_cells)
+        right = margin[len(cells) - ntrack:] if ntrack else np.zeros(0)
         metrics = {
+            # Match strength at the FAR RIGHT of the block.  The ladder proves
+            # the left-hand end of every row; nothing else does the same for the
+            # right-hand end, and a character pitch that is slightly wrong is
+            # invisible at column 0 and half a glyph out by column 56.  So this
+            # is the missing half of the frame-quality question, and it is what
+            # decides whether a frame may vote.
+            "right_margin": float(np.median(right)) if len(right) else 0.0,
             "addr_margin": float(np.median(amg)) if len(amg) else 0.0,
             "addr_ncc": float(np.median(ancc)) if len(ancc) else 0.0,
             "byte_margin": float(np.median(margin[na:na + len(byte_of)])) if byte_of else float("nan"),

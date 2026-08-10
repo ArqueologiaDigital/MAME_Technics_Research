@@ -54,9 +54,20 @@ def load_font(path: str = FONT_PATH) -> Dict[str, np.ndarray]:
                         np.float32) for k, rows in raw.items()}
 
 
+# The viewer's highlight colours, printed in its own footer legend:
+#   "Aqua = F0   Yellow = F7   Lime = FF   Fuchsia = XX"
+# Bytes equal to one of those values are drawn on a coloured background, which
+# is a second, independent statement of their value -- see recog.colour_veto.
+HIGHLIGHT = {0xF0: (0.55, 0.95, 0.95), 0xF7: (0.95, 0.95, 0.45), 0xFF: (0.55, 0.95, 0.45)}
+
+
 def render_screen(base: int, data: bytes, font: Optional[Dict[str, np.ndarray]] = None,
-                  ink: float = 0.10, paper: float = 0.92) -> np.ndarray:
-    """One page as the 640x240 screen would show it: dark text on light."""
+                  ink: float = 0.10, paper: float = 0.92,
+                  highlight: bool = True) -> np.ndarray:
+    """One page as the 640x240 screen would show it: dark text on light.
+
+    Returns HxWx3 when `highlight` is on, so the colour channel is available.
+    """
     font = font or load_font()
     img = np.full((SCREEN_H, SCREEN_W), paper, np.float32)
     for r in range(16):
@@ -79,7 +90,23 @@ def render_screen(base: int, data: bytes, font: Optional[Dict[str, np.ndarray]] 
                 break
             sub = img[y:y + CHAR_H, x:x + CHAR_W]
             img[y:y + CHAR_H, x:x + CHAR_W] = np.where(g > 0, ink, sub)
-    return img
+    if not highlight:
+        return img
+    rgb = np.repeat(img[:, :, None], 3, axis=2)
+    for r in range(16):
+        for k in range(16):
+            col = HIGHLIGHT.get(data[r * 16 + k])
+            if col is None:
+                continue
+            # Byte k's high nibble is at character 10+3k for every k: the '-'
+            # after byte 7 occupies the separator slot, it does not add one.
+            x0 = ORIGIN_X + G.BYTE_COLS[k][0] * PITCH_X
+            y0 = ORIGIN_Y + r * PITCH_Y
+            blk = rgb[y0:y0 + CHAR_H, x0:x0 + 2 * PITCH_X]
+            paperish = blk.mean(axis=2) > (ink + paper) * 0.5
+            for c in range(3):
+                blk[:, :, c] = np.where(paperish, col[c], blk[:, :, c])
+    return rgb
 
 
 def text_quad_on_screen() -> np.ndarray:
@@ -209,15 +236,24 @@ class SimSource:
         H = quad_homography(src, dst)
         self.true_quad = dst.copy()
         w, h = self.size
-        img = warp(screen, H, w, h)
-        if self.blur:
-            img = gauss_blur(img, self.blur)
+        if screen.ndim == 3:
+            img = np.stack([warp(screen[:, :, c], H, w, h) for c in range(3)], axis=2)
+            if self.blur:
+                img = np.stack([gauss_blur(img[:, :, c], self.blur) for c in range(3)], axis=2)
+        else:
+            img = warp(screen, H, w, h)
+            if self.blur:
+                img = gauss_blur(img, self.blur)
         # a brightness gradient, as any real photograph of a lit screen has
         yy, xx = np.mgrid[0:h, 0:w]
-        img = img * (0.85 + 0.3 * (xx / max(w - 1, 1)) * (1 - 0.4 * yy / max(h - 1, 1)))
+        shade = (0.85 + 0.3 * (xx / max(w - 1, 1)) * (1 - 0.4 * yy / max(h - 1, 1)))
+        if img.ndim == 3:
+            img = img * shade[:, :, None]
+        else:
+            img = np.repeat((img * shade)[:, :, None], 3, axis=2)
         img = np.clip(img * 255.0 + self.rng.normal(0, self.noise, img.shape), 0, 255)
         self.n += 1
-        return np.repeat(img.astype(np.uint8)[:, :, None], 3, axis=2)
+        return img.astype(np.uint8)
 
     @property
     def alive(self) -> bool:

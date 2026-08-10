@@ -55,6 +55,15 @@ def _mkengine(args, frame, store):
                assume_aligned=not args.any_address,
                restrict_windows=not args.no_restrict,
                motion_gate=args.motion_gate, decay=args.decay)
+    e.reader.use_colour = not getattr(args, "no_colour", False)
+    if getattr(args, "legend", None):
+        for part in args.legend.split(","):
+            k, _, v = part.partition("=")
+            if k.strip() in e.reader.legend:
+                e.reader.legend[k.strip()] = int(v, 16) if v.strip() else None
+    j = getattr(args, "jitter", 0.07)
+    e.reader.jitter = ([(j, j * 0.55), (-j, -j * 0.55), (j, -j * 0.55), (-j, j * 0.55)]
+                       if j > 0 else None)
     return e, calib
 
 
@@ -265,6 +274,19 @@ def main(argv=None) -> int:
         p.add_argument("--lock-weight", type=float, default=2.0)
         p.add_argument("--lock-frames", type=int, default=4)
         p.add_argument("--lock-share", type=float, default=0.85)
+        p.add_argument("--no-colour", action="store_true",
+                       help="ignore the viewer's highlight colours. They are an independent "
+                            "check on the bytes the legend names (F0/F7/FF by default) and "
+                            "are what stops a page of erased flash reading as EE")
+        p.add_argument("--legend", default=None,
+                       help="override the highlight bytes if you have stepped them with "
+                            "panel columns 10..13, e.g. aqua=F0,yellow=F7,lime=FF")
+        p.add_argument("--jitter", type=float, default=0.07,
+                       help="how far, in cells, each byte is re-read from a displaced grid "
+                            "before it may be committed. This is the safety/coverage dial: "
+                            "0.07 is the measured optimum, 0.09 removed the last wrong byte "
+                            "in testing but cost more than half the coverage (222 bytes a "
+                            "page down to 91), 0.05 covers more and catches less.")
 
     p = sub.add_parser("live"); common(p)
     p.add_argument("--win-w", type=int, default=1500)
@@ -278,8 +300,12 @@ def main(argv=None) -> int:
     p.add_argument("--frames", type=int, default=60)
     p.add_argument("--rom-dir")
     p.add_argument("--no-oracle", action="store_true")
-    p.add_argument("--sim-error", type=float, default=6.0,
-                   help="px of deliberate corner-placement error on a simulated source")
+    p.add_argument("--sim-error", type=float, default=1.5,
+                   help="px of deliberate corner-placement error on a simulated source. "
+                        "1.5 px on a 12 px cell is about what an operator achieves by eye "
+                        "with the grid drawn on the picture; the cold start does not "
+                        "recover from much more than that on its own, which is why the "
+                        "corners are draggable")
     p.set_defaults(func=cmd_selftest)
 
     p = sub.add_parser("report"); p.add_argument("--store", required=True)

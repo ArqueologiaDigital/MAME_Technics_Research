@@ -17,12 +17,18 @@ of one badly-focused frame are one piece of evidence, not thirty.
 
 Once locked, a cell stops being cut, matched and voted on -- that is what lets
 a nearly-finished page run at full frame rate and concentrate on the few cells
-that are still illegible.  A locked cell is not, however, beyond question: an
-audit re-reads locked cells at a slow round-robin, and a locked value that
+that are still illegible.  A locked cell is not, however, beyond question: four
+rows per frame are re-read in full, round-robin, and a locked value that
 accumulates real evidence for a *different* value is recorded as a conflict
 rather than silently overwritten.  Conflicts are surfaced, counted, and left
 for a human, because silently preferring either the old or the new answer is
 how a dump acquires bytes nobody can account for.
+
+Four rows and not one: overturning a committed byte needs four frames of
+agreement, so at one row per frame -- a sixteen-frame round trip -- a given row
+would be revisited about three times in a normal dwell and the audit could
+never actually correct anything it found.  An audit that cannot overturn a
+wrong byte is decoration.
 
 On disk:
 
@@ -42,7 +48,7 @@ import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -88,6 +94,7 @@ class DumpStore:
         self.mask: Dict[int, bytearray] = {}
         self._votes: "OrderedDict[int, Dict[int, _Votes]]" = OrderedDict()
         self.conflicts: List[dict] = []
+        self.last_evidence: Dict[int, Tuple[float, int]] = {}
         self._journal = None
         self._dirty = 0
         self._last_snapshot = 0.0
@@ -250,6 +257,7 @@ class DumpStore:
             return None
         if w < self.lock_weight or nframes < self.lock_frames or share < self.lock_share:
             return None
+        self.last_evidence[addr] = (w, nframes)
         if cur is None:
             self._set(addr, best)
             pv.pop(key, None)
@@ -268,10 +276,20 @@ class DumpStore:
         pv.pop(key, None)
         return None
 
-    def commit_row(self, addr: int, values: List[int]) -> None:
-        """Journal a run of freshly locked bytes (called after observe locks them)."""
+    def commit_row(self, addr: int, values: List[int],
+                   evidence: Optional[List[Tuple[float, int]]] = None) -> None:
+        """Journal a run of freshly locked bytes (called after observe locks them).
+
+        The evidence is recorded alongside, so the weakest committed bytes can
+        be found again later without re-running anything.  Nothing here is
+        perfect -- a byte can be committed wrongly -- and the honest response is
+        to keep the receipts rather than to pretend otherwise.
+        """
         rec = {"t": "lock", "ts": round(time.time(), 3), "a": "%08X" % addr,
                "d": bytes(values).hex()}
+        if evidence:
+            rec["w"] = [round(w, 2) for w, _ in evidence]
+            rec["nf"] = [n for _, n in evidence]
         fh = self._open_journal()
         fh.write(json.dumps(rec) + "\n")
         fh.flush()

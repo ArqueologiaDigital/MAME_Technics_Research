@@ -199,50 +199,35 @@ class Registration:
     bv: float = 0.0
     ncols: int = NCOL_HEX
 
-    def _uv(self, r: np.ndarray, c: np.ndarray, gh: int, gw: int
-            ) -> Tuple[np.ndarray, np.ndarray]:
-        """Character-space sample grid for the given cells: (N, gh, gw) each."""
-        jj = (np.arange(gw, dtype=np.float64) + 0.5) / gw
-        ii = (np.arange(gh, dtype=np.float64) + 0.5) / gh
-        u = (c[:, None, None] + jj[None, None, :]) / self.ncols
-        v = (r[:, None, None] + ii[None, :, None]) / NROW
-        u = self.au * u + self.bu
-        v = self.av * v + self.bv
-        return np.broadcast_to(u, (len(c), gh, gw)), np.broadcast_to(v, (len(c), gh, gw))
-
     def cut(self, img: np.ndarray, cells: Sequence[Tuple[int, int]],
             gh: int, gw: int, ox: float = 0.0, oy: float = 0.0,
             origin: Tuple[float, float] = (0.0, 0.0)) -> np.ndarray:
         """Resample one gh x gw patch per (row, col) cell.  Vectorised.
 
-        `ox`/`oy` widen the aperture beyond the nominal cell, in cells; a little
-        over-cut helps on a blurred capture because the glyph's energy has
-        spread past its own cell and the neighbours' contribution is itself
-        informative once the templates are trained the same way.
+        `ox`/`oy` widen the aperture beyond the nominal cell, in cells.
+
+        This is the hot path -- the refinement search calls it tens of times a
+        frame -- so the sample grid is built once, in float32, and the whole
+        set of cells goes through a single bilinear gather.
         """
-        if len(cells) == 0:
+        n = len(cells)
+        if n == 0:
             return np.zeros((0, gh, gw), np.float32)
-        cells = np.asarray(cells, dtype=np.float64)
+        cells = np.asarray(cells, dtype=np.float32)
         r = cells[:, 0] - oy * 0.5
         c = cells[:, 1] - ox * 0.5
-        u, v = self._uv(r, c, gh, gw)
-        if ox or oy:
-            jj = (np.arange(gw, dtype=np.float64) + 0.5) / gw * (1 + ox)
-            ii = (np.arange(gh, dtype=np.float64) + 0.5) / gh * (1 + oy)
-            u = (c[:, None, None] + jj[None, None, :]) / self.ncols
-            v = (r[:, None, None] + ii[None, :, None]) / NROW
-            u = self.au * u + self.bu
-            v = self.av * v + self.bv
-        x, y = apply_h(self.quad.H, u, v)
+        jj = ((np.arange(gw, dtype=np.float32) + 0.5) / gw) * (1.0 + ox)
+        ii = ((np.arange(gh, dtype=np.float32) + 0.5) / gh) * (1.0 + oy)
+        u = (c[:, None, None] + jj[None, None, :]) * (self.au / self.ncols) + self.bu
+        v = (r[:, None, None] + ii[None, :, None]) * (self.av / NROW) + self.bv
+        H = self.quad.H
+        den = H[2, 0] * u + H[2, 1] * v + H[2, 2]
+        x = (H[0, 0] * u + H[0, 1] * v + H[0, 2]) / den - origin[0]
+        y = (H[1, 0] * u + H[1, 1] * v + H[1, 2]) / den - origin[1]
         # `img` may be a crop of the frame (the ink map is only ever computed
         # around the panel, so a 4K camera costs no more than a webcam here).
-        return sample_bilinear(img, y - origin[1], x - origin[0]).astype(np.float32)
-
-    def cell_centre(self, r: float, c: float) -> Tuple[float, float]:
-        u = self.au * ((c + 0.5) / self.ncols) + self.bu
-        v = self.av * ((r + 0.5) / NROW) + self.bv
-        x, y = apply_h(self.quad.H, np.array([u]), np.array([v]))
-        return float(x[0]), float(y[0])
+        return sample_bilinear(img, np.broadcast_to(y, (n, gh, gw)),
+                               np.broadcast_to(x, (n, gh, gw))).astype(np.float32)
 
     def bake(self) -> None:
         """Fold the affine correction into the corners and reset it."""
@@ -425,17 +410,29 @@ def _box_mean(a: np.ndarray, ry: int, rx: int) -> np.ndarray:
     return (s / np.maximum(n, 1)).astype(np.float32)
 
 
-def ink_map(rgb: np.ndarray, ry: int, rx: int) -> np.ndarray:
+def ink_map(rgb: np.ndarray, ry: int, rx: int, inset: float = 0.15) -> np.ndarray:
     """Ink strength in [0,1]: how much darker a pixel is than its surroundings.
 
     Expressed as a ratio to the local background so that neither a camera's
-    exposure gradient nor a bright reflection off the instrument's screen
-    bezel produces spurious ink.  The window radii come from the measured row
-    pitch, so this adapts to how close the camera is.
+    exposure gradient nor a bright reflection off the instrument's bezel
+    produces spurious ink.  The window radii come from the measured row pitch,
+    so this adapts to how close the camera is.
+
+    `bright` -- the reference paper level -- is taken from the CENTRE of the
+    image only.  This matters much more than it looks: the caller passes a crop
+    of the frame around the panel, and if the reference is taken over the whole
+    crop then it depends on how much dark surround the crop happens to include.
+    Measured, widening that margin from 6 % to 10 % took the tool from 242
+    committed bytes to none at all.  A decoder whose behaviour hinges on a crop
+    margin is a decoder that will behave differently every time the operator
+    reframes, so the reference is measured where the panel certainly is.
     """
     g = to_gray(rgb)
     bg = _box_mean(g, ry, rx)
-    bright = float(np.percentile(bg, 90))
+    h, w = bg.shape
+    iy, ix = int(h * inset), int(w * inset)
+    core = bg[iy:h - iy, ix:w - ix] if (h - 2 * iy) > 4 and (w - 2 * ix) > 4 else bg
+    bright = float(np.percentile(core, 90))
     den = np.maximum(bg, max(0.25 * bright, 1.0))
     ink = np.clip((bg - g) / den, 0.0, 1.0)
     return np.where(bg >= 0.35 * bright, ink, 0.0).astype(np.float32)
