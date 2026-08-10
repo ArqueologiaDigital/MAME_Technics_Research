@@ -196,9 +196,11 @@ placement 1.5 px out — about what an operator achieves by eye with the grid dr
 picture. Two things it should show: a still or gently-moving camera commits most of a page,
 and every condition it *cannot* read commits **nothing** rather than something plausible.
 
-Measured on the code as committed: a still camera on the calibration page commits
-**215 of 256 bytes with none wrong** (47 of the 75 cells that are not `0x77`). A three-page
-run that includes two mostly-erased pages is the hard case and is discussed below.
+Measured on the code as committed, on the calibration page: a still camera commits **215 of
+256 bytes with none wrong** (47 of the 75 cells that are not `0x77`); a hand-held one
+commits **171, also none wrong**. Heavier movement, and a 12° tilt on top of movement,
+commit **nothing** — which is the refusal working. A three-page run including two
+mostly-erased pages is the hard case and is discussed below.
 
 ⚠ Re-run it after any change to the decoder, and quote the numbers it prints rather than
 numbers from this file — the conditions matrix has been re-measured several times during
