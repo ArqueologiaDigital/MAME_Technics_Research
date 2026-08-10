@@ -191,22 +191,18 @@ shaken like a handheld camera, then decoded back to bytes that are known.
     python3 -m kn7000live selftest --source "sim:48019000,px=12,blur=1.1,shake=1.5" \
                                    --address 48019000 --frames 60
 
-Measured over 60 frames a page, at 12 camera pixels per character, starting from a corner
+Run it over 60 frames a page, at 12 camera pixels per character, starting from a corner
 placement 1.5 px out — about what an operator achieves by eye with the grid drawn on the
-picture:
+picture. Two things it should show: a still or gently-moving camera commits most of a page,
+and every condition it *cannot* read commits **nothing** rather than something plausible.
 
-| condition | committed | **wrong** | of the 75 non-`0x77` cells |
-|---|---|---|---|
-| camera still | 228/256 | **0** | 60 |
-| hand movement | 176/256 | **0** | 16 |
-| hand movement, further away (9 px/char) | 176/256 | **0** | 8 |
-| hand movement, 3× the sensor noise | 168/256 | **0** | 8 |
-| heavier movement, or 2× the blur, or a 12° tilt | 0 | **0** | 0 |
+Measured on the code as committed: a still camera on the calibration page commits
+**215 of 256 bytes with none wrong** (47 of the 75 cells that are not `0x77`). A three-page
+run that includes two mostly-erased pages is the hard case and is discussed below.
 
-The last row is the design working rather than failing: those conditions do not produce
-wrong bytes, they produce *nothing at all*, and the HUD says which check is refusing. What
-is missed is picked up by the next pass over the same page — the store accumulates, so
-coverage is recoverable and correctness is not.
+⚠ Re-run it after any change to the decoder, and quote the numbers it prints rather than
+numbers from this file — the conditions matrix has been re-measured several times during
+development and each safety mechanism moved it.
 
 There is also one real page whose 256 bytes are known — table page `0x48019000`, in
 `../real-NTSC-48019000.png`. ⚠ It is **71 % the single byte `0x77`**, so accuracy on it
@@ -214,6 +210,20 @@ must always be quoted twice: overall, and over the 75 cells that are not `0x77`.
 that always guessed `0x77` would score 71 % and be useless. On that frame — a composite
 grab, not a camera — the tool commits **0 bytes and gets 0 wrong**: it declines, which is
 the correct answer for a signal that does not carry the information.
+
+### Erased flash is the hard case, and `E`/`F` is the hard pair
+
+A sweep spends much of its time on erased regions, and those are the worst case for this
+decoder: a page of `FF` is simultaneously a long run of identical characters, the least
+naturally-trained glyph class, and a pair (`E` versus `F`) that differs by one stroke of a
+5×7 font. On a three-page test including two mostly-erased pages, an early version committed
+**92 wrong bytes**; breaking the self-training loop and adding the colour veto brought that
+to **18**, with the well-resolved page at 200/200 and none wrong.
+
+Eighteen is not zero. What remains is a genuine classifier limit rather than a bug: at that
+blur the `E` and `F` templates are barely separable, and the HUD's **separation** number is
+exactly the measurement of it. If separation is low, the picture is the limit — move closer
+or focus — and the two-sweep check below matters more than usual.
 
 ### The one failure mode that is understood and not fully solved
 
