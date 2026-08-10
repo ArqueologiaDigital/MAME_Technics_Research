@@ -479,6 +479,69 @@ def largest_bright_bbox(g: np.ndarray, frac: float = 0.55, ds: int = 6):
     return (x0 * ds, y0 * ds, (x1 + 1) * ds, (y1 + 1) * ds)
 
 
+def screen_candidate(rgb: np.ndarray, ds: int = 8) -> Optional[Tuple[int, int, int, int]]:
+    """Is there a lit, text-covered screen anywhere in this frame?  Cheap.
+
+    The operator needs a few seconds to pick the camera up and aim it, so for
+    those seconds the tool is looking at a room.  Everything expensive here --
+    the registration search above all -- is pointless until there is something
+    to register on, and running it anyway is what made the first frames crawl:
+    measured at 700 ms each, because the search ran on every frame and failed
+    every time.
+
+    So this runs first, on a 1/8-scale copy, and answers in about a
+    millisecond.  Brightness alone is not enough (a lamp or a white wall is
+    bright), so it also requires horizontal texture: a screen full of hex digits
+    is nothing but vertical strokes, and a wall has none.
+    """
+    g = to_gray(rgb[::ds, ::ds])
+    if g.size < 64:
+        return None
+    hi = float(np.percentile(g, 99))
+    if hi < 40.0:
+        return None                                  # nothing lit at all
+    m = g > max(0.55 * hi, 25.0)
+    if m.mean() < 0.005:
+        return None
+    rows = np.nonzero(m.mean(axis=1) > 0.10)[0]
+    cols = np.nonzero(m.mean(axis=0) > 0.10)[0]
+    if len(rows) < 3 or len(cols) < 6:
+        return None
+    y0, y1, x0, x1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    bx0, by0, bx1, by1 = int(x0 * ds), int(y0 * ds), int(x1 * ds), int(y1 * ds)
+    if (bx1 - bx0) < 80 or (by1 - by0) < 40:
+        return None
+
+    # Is it TEXT, or just something bright?  Judged at half resolution, not at
+    # the eighth used above: a character is about six pixels wide, so by 1/8
+    # scale the text is gone and the only thing left to measure is sensor
+    # noise -- which measured "textured" and let the tool spend five seconds a
+    # frame hunting for a grid on a picture of a wall.
+    #
+    # The discriminator is ANISOTROPY.  A screenful of hex digits is mostly
+    # vertical strokes, so it has markedly more horizontal gradient than
+    # vertical; noise, fabric and most of a room are isotropic and score about
+    # one either way.
+    crop = to_gray(rgb[by0:by1:2, bx0:bx1:2])
+    if crop.shape[0] < 8 or crop.shape[1] < 16:
+        return None
+    gh_ = float(np.abs(np.diff(crop, axis=1)).mean())
+    gv_ = float(np.abs(np.diff(crop, axis=0)).mean())
+    if gh_ / max(float(crop.mean()), 1.0) < 0.015:
+        return None                                  # flat: a lamp, a wall
+    if gh_ <= 1.12 * gv_:
+        return None                                  # isotropic: not text
+    return (bx0, by0, bx1, by1)
+
+
+def auto_seed_from(bbox: Tuple[int, int, int, int]) -> Quad:
+    """A first-guess quad inside an already-located screen."""
+    x0, y0, x1, y1 = bbox
+    w, h = x1 - x0, y1 - y0
+    return Quad.from_bbox(x0 + 0.03 * w, y0 + 0.10 * h,
+                          x0 + 0.79 * w, y0 + 0.88 * h)
+
+
 def auto_seed(rgb: np.ndarray) -> Quad:
     """A first guess at the character block: the text area of the lit screen.
 

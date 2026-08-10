@@ -47,6 +47,13 @@ each character.
     python3 -m kn7000live live --source v4l2:/dev/video0 --store ~/kn7000-dump \
                                --seed-address 48019000
 
+**Take your time aiming.** The tool expects to spend its first seconds looking at a room
+while you pick the camera up: until it can see a lit, text-covered screen it does no work at
+all beyond looking for one (about 3 ms a frame), and the HUD says *point the camera at the
+screen*. When a screen appears it aims the grid at it by itself, and you refine from there.
+The view redraws at full video rate no matter how slow the decoding is — `--decode-hz`
+lowers the decode rate on a slow machine without making the picture stutter.
+
 1. On the instrument, hold **UP+DOWN of mixer columns 1, 4, 5 and 8** together to reach the
    MEMORY DUMP screen, and dial an address.
 2. Frame the screen so the hex table fills as much of the picture as possible. **Aim for the

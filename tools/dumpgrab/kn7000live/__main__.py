@@ -109,7 +109,8 @@ def cmd_live(args) -> int:
     print("%s  %dx%d   store %s (%d pages, %d bytes locked)"
           % (src.name, frame.shape[1], frame.shape[0], store.path, len(store.data),
              sum(sum(m) for m in store.mask.values())))
-    app = LiveApp(e, src, calib_path=calib, win=(args.win_w, args.win_h))
+    app = LiveApp(e, src, calib_path=calib, win=(args.win_w, args.win_h),
+                  decode_hz=args.decode_hz)
     try:
         return app.run()
     finally:
@@ -291,6 +292,10 @@ def main(argv=None) -> int:
     p = sub.add_parser("live"); common(p)
     p.add_argument("--win-w", type=int, default=1500)
     p.add_argument("--win-h", type=int, default=860)
+    p.add_argument("--decode-hz", type=float, default=12.0,
+                   help="how often to decode, per second. The view redraws at full "
+                        "rate regardless, so lowering this keeps aiming smooth on a "
+                        "slow machine")
     p.set_defaults(func=cmd_live)
 
     p = sub.add_parser("devices"); p.set_defaults(func=cmd_devices)

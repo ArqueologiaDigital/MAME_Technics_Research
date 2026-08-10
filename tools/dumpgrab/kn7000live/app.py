@@ -75,11 +75,22 @@ class Engine:
         self._settle = 0
         self._vel = None
         self._best_ladder = 0.0
+        self.panel = None
         self._audit_row = 0
         self._t_last = time.time()
         self._recent_locks: List[int] = []
 
     # -- helpers ------------------------------------------------------------ #
+    def _quad_is_lost(self, panel) -> bool:
+        """True when the registration is not plausibly on the detected screen."""
+        px0, py0, px1, py1 = panel
+        c = self.reg.quad.centre
+        if not (px0 <= c[0] <= px1 and py0 <= c[1] <= py1):
+            return True
+        qw = float(np.ptp(self.reg.quad.corners[:, 0]))
+        pw = max(px1 - px0, 1)
+        return not (0.35 * pw <= qw <= 1.25 * pw)
+
     def _ink(self, frame: np.ndarray):
         x0, y0, x1, y1 = self.reg.quad.bbox(0.06)
         h, w = frame.shape[:2]
@@ -269,6 +280,25 @@ class Engine:
     def process(self, frame: np.ndarray, vote: bool = True) -> R.FrameReading:
         t0 = time.time()
         self.stats.frames += 1
+
+        # Before anything expensive: is the camera even looking at the screen?
+        # It will not be for the first few seconds -- the operator has to pick it
+        # up and aim it -- and the registration search is meaningless until it
+        # is.  Skipping it here is what keeps those seconds responsive.
+        if not self.bank.ready or self.lost:
+            self.panel = G.screen_candidate(frame)
+            if self.panel is None:
+                self.stats.last_reason = "point the camera at the screen"
+                self.last = None
+                self._finish_timing(t0)
+                return R.FrameReading(rows=[], base=None, n_rows_ok=0)
+            # Aim the quad at the screen we just found, if it is nowhere near
+            # it.  Without this, a quad seeded from a frame taken before the
+            # camera was raised stays parked on a piece of the room for ever.
+            if self._quad_is_lost(self.panel):
+                self.reg = G.Registration(G.auto_seed_from(self.panel), ncols=self.reg.ncols)
+                self.stats.last_reason = "found the screen -- aiming"
+
         ink, origin, crop = self._ink(frame)
 
         # Templates learned through a registration that turned out to be wrong
@@ -432,20 +462,25 @@ class Engine:
             self.stats.fps = 0.85 * self.stats.fps + 0.15 * (1.0 / dt) if self.stats.fps else 1.0 / dt
 
     # -- recovery ----------------------------------------------------------- #
-    def _score_quad(self, frame: np.ndarray, q: G.Quad) -> float:
-        reg = G.Registration(q, ncols=self.reg.ncols)
-        saved, self.reg = self.reg, reg
-        try:
-            ink, origin, crop = self._ink(frame)
-            if self.bank.ready:
-                rd = self.reader.read(reg, ink, wanted={}, train=False, origin=origin)
-                return 2.0 + rd.n_rows_ok / 16.0
-            s, ok, _, _ = self.reader.ladder_geometry(reg, ink, origin)
-            return s + (1.0 if ok else 0.0)
-        finally:
-            self.reg = saved
+    def _ink_over(self, frame: np.ndarray, quad: G.Quad, pad: float):
+        """Ink map over a padded box around `quad`, computed once."""
+        x0, y0, x1, y1 = quad.bbox(pad)
+        h, w = frame.shape[:2]
+        x0 = max(0, min(x0, w - 2)); x1 = max(x0 + 2, min(x1, w))
+        y0 = max(0, min(y0, h - 2)); y1 = max(y0 + 2, min(y1, h))
+        cw, ch = quad.cell_pitch()
+        return (G.ink_map(frame[y0:y1, x0:x1], max(2, int(round(ch * 1.3))),
+                          max(2, int(round(cw * 3.0)))), (float(x0), float(y0)))
 
-    def reacquire(self, frame: np.ndarray, span: float = 1.5, steps: int = 7,
+    def _score_quad(self, q: G.Quad, ink, origin) -> float:
+        reg = G.Registration(q, ncols=self.reg.ncols)
+        if self.bank.ready:
+            rd = self.reader.read(reg, ink, wanted={}, train=False, origin=origin)
+            return 2.0 + rd.n_rows_ok / 16.0
+        s, ok, _, _ = self.reader.ladder_geometry(reg, ink, origin)
+        return s + (1.0 if ok else 0.0)
+
+    def reacquire(self, frame: np.ndarray, span: float = 1.5, steps: int = 5,
                   min_interval: float = 0.5) -> bool:
         """Local search for the registration when tracking has nothing to hold.
 
@@ -461,28 +496,40 @@ class Engine:
             return False
         self._last_reacq = now
         self.stats.reacquires += 1
+        # ONE ink map for the whole search.  Recomputing it per candidate -- the
+        # obvious way to write this, and how it was written -- made a single
+        # re-acquire cost about 750 ms, because the ink map is the expensive
+        # part and the search tries dozens of candidates.  They all live inside
+        # one padded box, so one map serves all of them.
+        ink, origin = self._ink_over(frame, self.reg.quad, 0.6)
         cw, ch = self.reg.quad.cell_pitch()
         best = (-1e9, G.Quad(self.reg.quad.corners.copy()))
-        for sx in (0.96, 1.0, 1.04):
+        # One scale before the templates exist.  A cold-start search is the
+        # single most expensive thing this tool does, it runs on frames where
+        # the operator is still aiming, and every candidate it tries costs a
+        # full ladder evaluation -- three scales by seven by seven was 172 of
+        # them per call, which is where the first seconds went.
+        scales = (1.0,) if not self.bank.ready else (0.96, 1.0, 1.04)
+        for sx in scales:
             for dx in np.linspace(-span * cw, span * cw, steps):
                 for dy in np.linspace(-span * ch, span * ch, steps):
                     q = G.Quad(self.reg.quad.corners.copy())
                     q.scale(sx, sx)
                     q.translate(dx, dy)
-                    s = self._score_quad(frame, q)
+                    s = self._score_quad(q, ink, origin)
                     if s > best[0]:
                         best = (s, q)
-        for dx in np.linspace(-0.25 * cw, 0.25 * cw, 5):
-            for dy in np.linspace(-0.25 * ch, 0.25 * ch, 5):
+        for dx in np.linspace(-0.25 * cw, 0.25 * cw, 3):
+            for dy in np.linspace(-0.25 * ch, 0.25 * ch, 3):
                 q = G.Quad(best[1].corners.copy())
                 q.translate(dx, dy)
-                s = self._score_quad(frame, q)
+                s = self._score_quad(q, ink, origin)
                 if s > best[0]:
                     best = (s, q)
         # Monotone, like the per-frame refinement: a search that is allowed to
         # settle for something worse than what it started with turns a fit that
         # was merely struggling into one that is lost.
-        if best[0] > self._score_quad(frame, self.reg.quad) + 1e-9:
+        if best[0] > self._score_quad(self.reg.quad, ink, origin) + 1e-9:
             self.reg = G.Registration(best[1], ncols=self.reg.ncols)
             self._bad_streak = 0
             return True
@@ -514,11 +561,12 @@ HELP = [
 
 class LiveApp:
     def __init__(self, engine: Engine, source, calib_path: Optional[str] = None,
-                 win: Tuple[int, int] = (1500, 860)):
+                 win: Tuple[int, int] = (1500, 860), decode_hz: float = 12.0):
         from .overlay import Renderer
         self.e = engine
         self.src = source
         self.calib_path = calib_path
+        self.decode_period = 1.0 / max(decode_hz, 0.5)
         self.rnd = Renderer(win[0], win[1])
         self.selected: Optional[int] = None
         self.paused = False
@@ -696,6 +744,7 @@ class LiveApp:
         clock = pygame.time.Clock()
         running = True
         last_bank_save = time.time()
+        last_decode = 0.0
         while running:
             for ev in pygame.event.get():
                 if not self._handle(ev):
@@ -710,16 +759,24 @@ class LiveApp:
                     break
                 clock.tick(30)
                 continue
-            # Keep decoding while frozen, but never commit.  This is what makes
-            # placing the corners possible at all: the operator drags a handle
-            # and watches ADDRESS LADDER climb, instead of guessing and then
-            # unfreezing to find out.  It is also the right moment for the
-            # templates to be learned -- on a still image, at a registration the
-            # operator has just perfected -- which is precisely the cold start
-            # the automatic path is worst at.
-            self.e.process(self.frame, vote=not self.paused)
-            if self.e.lost and not self.paused:
-                self.e.reacquire(self.frame)
+            # Decode on its own clock, draw on every pass.  A decode costs tens
+            # of milliseconds and the picture must not wait for it: while the
+            # operator is aiming the camera, a smooth view is the whole product,
+            # and a window that redraws at the decoder's rate is unusable for
+            # pointing something by hand.
+            #
+            # Decoding while FROZEN but never committing is what makes placing
+            # the corners possible at all: the operator drags a handle and
+            # watches ADDRESS LADDER climb, instead of guessing and unfreezing
+            # to find out.  It is also the right moment for the templates to be
+            # learned -- on a still image, at a registration just perfected --
+            # which is exactly the cold start the automatic path is worst at.
+            now = time.time()
+            if now - last_decode >= self.decode_period:
+                last_decode = now
+                self.e.process(self.frame, vote=not self.paused)
+                if self.e.lost and not self.paused:
+                    self.e.reacquire(self.frame)
 
             self._draw()
             if time.time() - last_bank_save > 30 and self.e.bank.ready:
