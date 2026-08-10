@@ -1,0 +1,19 @@
+frame /home/fsanches/compartilhado/KN7000/photos/1st-frame-grabbed.png  1055x533
+STAGE 0  panel edges  L 146.81  T 112.11  R 894.53  B 416.00  (capture px)
+         gutter comb: row pitch 18.3452 px from 14 gutters
+         seed char pitch 9.6274 px  row pitch 18.3452 px  bx 12.025 by 13.068
+STAGE 1  address prefix by whole-block least squares (no oracle)
+   sweep 0  prefix 04000000  rms 4.3688  sigma_nat x 1.532 y 0.784  pitch 9.6274/18.3717
+   sweep 1  prefix B4000000  rms 3.9428  sigma_nat x 1.579 y 0.814  pitch 9.6274/18.3724
+   sweep 2  prefix B4000000  rms 3.9428  sigma_nat x 1.579 y 0.814  pitch 9.6274/18.3724
+         cell 0 -> 'B' rms 3.9428 | runners-up '8' 4.3298 '0' 4.3973 '6' 4.6277
+         cell 1 -> '4' rms 3.9428 | runners-up '9' 5.6331 'A' 5.6981 '0' 5.9623
+         cell 2 -> '0' rms 3.9428 | runners-up 'B' 4.2869 '8' 4.4739 'A' 4.7576
+         cell 3 -> '0' rms 3.9428 | runners-up '8' 4.0779 'B' 4.4898 '9' 4.6458
+         cell 4 -> '0' rms 3.9428 | runners-up '8' 4.1008 'B' 4.5474 '9' 4.6202
+         cell 5 -> '0' rms 3.9428 | runners-up '8' 4.1672 '9' 4.4909 'B' 4.6957
+         cell 6 = the row ladder 0..F
+         cell 7 -> '0' rms 3.9428 | runners-up '8' 4.2608 'B' 4.3387 '6' 4.7880
+         BASE ADDRESS 0xB4000000      ladder correct in 12/16 rows
+   addrblk   ax 1.604561 shx +0.00000 bx   13.727 | ay 2.041381 shy +0.00019 by   13.087
+             char pitch 9.6274 px  row pitch 18.3724 px  sigma_nat x 1.579 y 0.814  rms nan  (0 px)

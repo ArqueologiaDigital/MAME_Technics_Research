@@ -1,0 +1,13 @@
+opening MEMORY DUMP
+  chord seg CPC_SEG5 30 -> both=00000001 
+  chord seg CPC_SEG8 3C -> both=00000019 
+  chord seg CPC_SEG9 0C -> both=00000099 
+  chord released, both=00000000
+memdump opened=true
+filled 44000000, mismatches=0
+dialled to 44000000 ok=true presses=4 live=44000000
+pre-snap mismatches=0
+filled 44000100, mismatches=0
+dialled to 44000100 ok=true presses=1 live=44000100
+pre-snap mismatches=0
+DONE

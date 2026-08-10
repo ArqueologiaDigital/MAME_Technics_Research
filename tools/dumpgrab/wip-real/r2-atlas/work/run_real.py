@@ -1,0 +1,18 @@
+import numpy as np, time, json, pickle, sys
+sys.path.insert(0,'/home/fsanches/.claude/jobs/d0e1b1c2/tmp/dgreal/r2-atlas/src')
+from kn7000blur import decode, geom, layout as L
+rgb,lum = geom.load_frame('/home/fsanches/compartilhado/KN7000/photos/1st-frame-grabbed.png')
+t=time.time()
+res = decode.decode_frame(lum, verbose=True, em_rounds=2)
+print('%.1fs'%(time.time()-t))
+print(decode.render_hex(res))
+print('base %08X ladder %d/16'%(res['base'],res['ladder_ok']))
+print('row rms', np.round(res['rms_rows'],2))
+gt_photo=np.load('/home/fsanches/.claude/jobs/d0e1b1c2/tmp/dgreal/r2-atlas/work/gt_photo.npy')
+gt_rom  =np.load('/home/fsanches/.claude/jobs/d0e1b1c2/tmp/dgreal/r2-atlas/work/gt_rom.npy')
+d=res['data'].reshape(-1)
+print('vs photo transcription: %d/256'%int((d==gt_photo).sum()))
+print('vs kn7000_table.rom   : %d/256'%int((d==gt_rom).sum()))
+print('vs table.rom first 240: %d/240'%int((d[:240]==gt_rom[:240]).sum()))
+res['geometry']=res['geometry'].to_dict()
+pickle.dump(res, open('/home/fsanches/.claude/jobs/d0e1b1c2/tmp/dgreal/r2-atlas/work/real_res.pkl','wb'))
