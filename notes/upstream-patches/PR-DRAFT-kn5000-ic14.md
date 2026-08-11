@@ -1,194 +1,106 @@
-# PR draft — kn5000: correct the IC14 ROM, and make the Feature Demo run
+# PR draft — kn5000: four fixes, and the Feature Presentation demo runs
 
-★ **2026-08-11: this PR grew from 1 commit to 3, on measurement.** The ROM fix alone revives the
-accompaniment transport but does not make the Feature Demo play. Bisected on the branch itself,
-three changes are needed and each does a distinct job:
+**Branch:** `kn5000_ic14_transposed_dump` (worktree `~/compartilhado/mame-pr-ic14`), off
+`upstream/master` @ `a4f77431604`. Four commits, 37 insertions, two files.
+**ROM set for testing:** `~/compartilhado/kn5000_corrected_roms/`
 
-| commit | what it fixes | measured effect |
-|---|---|---|
-| `40ce9f1` IC14 dump | style data read from the wrong 512 KiB block | transport `0x0420` 0C (terminal STOP) -> **04**, watchdog `0x32ed` 20 -> **00** |
-| `26bdb1c` IC21 NVRAM (bare declaration) | backup SRAM invalid at every boot | AccPlayMode `0x22FC` 00 -> **03**: the demo actually starts |
-| `df00b73` tmp94c241 timer | INTTR5, the sequencer clock, never fires | sub-tick `0x0417` frozen at 00 -> **cycling continuously** (49, 1A, 4A, 1B, 4B, 19 over 60 s) |
+---
 
-**Result: the Feature Demo runs.** Screen snapshots every 5 s: **7 distinct of 9**, against 3 of 17
-(a two-state blink) with the ROM fix alone. No tone generator is involved — there is no sound
-upstream yet, and none is needed for this.
+## The PR message
 
-⚠ Each ingredient was verified necessary, not merely sufficient: the timer fix *without* the NVRAM
-makes things strictly worse (every signal flat at 00), and the NVRAM without the timer starts the
-demo but never clocks it.
+### kn5000: get the Feature Presentation demo running
 
-⚠ Unexplained residual: SSF state `0x251D8` stays 00 and `0x8D38` reaches E4 rather than the E1 our
-notes call "playing", yet the picture demonstrably advances. Either those addresses differ upstream
-or the slides advance by another path. Not chased; recorded so nobody claims full understanding.
+Four small independent fixes. Together they make the instrument's built-in Feature Presentation
+demo run for the first time. It runs **silently** — the tone generator is not emulated yet.
 
-⚠ The NVRAM is a **bare declaration** — no custom handler, no factory-defaults seeding. A version
-that seeded IC21 from program-ROM offset 0x0A0150 and synthesised the firmware's checksum was
-built and measured **bit-identical in effect**: the firmware initialises the SRAM itself, so all
-that was ever needed was persistence. Dropped, which also removes a dependency on a v10-only ROM
-offset.
+**kn5000: correct the IC14 rhythm data ROM dump.** The dump in MAME was read with address lines
+A19 and A21 transposed, which permutes the chip's eight 512 KiB blocks. No byte differs, only
+their order. The service manual (page 32) shows IC14 wired straight, so the transposition was in
+the dumping rig rather than on the board. Verified from the ROM's own structure: every style
+record's lane pointers must land 6 bytes past a cell header `80 FF FF FF FF 87` — 3,439 of 9,696
+as dumped, 9,696 of 9,696 corrected. Left uncorrected, the bad-opcode watchdog stops the
+accompaniment transport and roughly two thirds of the factory rhythms are silent.
+CRC32 `76d11a5e` → `aa4917ce`, SHA1 `e4b572d3…` → `fef7f192…`.
 
-### Two fixes from our tree that must NOT be added to this PR
+**tmp94c241: fix 16-bit timer interrupt generation and flip-flop gating.** A TREG_HIGH match set
+the lower interrupt flag instead of the upper one, and the flip-flop control bits gated the match
+itself rather than just the flip-flop toggle. INTTR5 — the KN5000's sequencer clock — therefore
+never fired.
 
-Both were ported, built and measured on this branch, and both **regress it**:
+**kn5000: model the IC21 backup SRAM as NVRAM.** It is battery-backed; declared as plain RAM it
+was invalid at every boot, so the firmware failed its checksum check and skipped the sub-CPU
+payload transfer.
 
-| ported fix | result on this branch |
+**tmp94c241: do not re-assert INT0 while micro-DMA owns it.** The level-detect re-assertion should
+apply only to the ISR-driven path: when a micro-DMA channel is armed on the INT0 start vector the
+DMA engine consumes each request and manages the flag itself, so re-asserting made it read stale
+latch data.
+
+A partial tone-generator implementation already exists and will follow in a later PR — it is a lot
+of code and is better reviewed on its own.
+
+---
+
+## Notes for us, not for the PR
+
+### Measured effect of each commit
+
+| commit | signal |
 |---|---|
-| `kn5000-02` tmp94c241 timer, *without* the NVRAM commit | every signal flat at 00 — worse than the ROM fix alone |
-| `3fd44f3` + `e6b4cf7` inter-CPU INT0 (drop the level re-assertion, add `clear_int0_level()` and call it from the latch reads) | **kills the running demo**: sub-tick/transport/AccPlayMode all back to 00, screen back to a 3-of-18 blink. Reproduced twice. |
+| `aa74557` IC14 dump | transport `0x0420` 0C (terminal STOP) → **04**; watchdog `0x32ed` 20 → **00** |
+| `4444ec5` 16-bit timer | sub-tick `0x0417` frozen at 00 → **cycling** (49, 1A, 4A, 1B, 4B, 19 over 60 s) |
+| `8eab8d0` IC21 NVRAM | AccPlayMode `0x22FC` 00 → **03** — the demo starts |
+| `3c118c1` INT0 guard | no regression; the panel-corruption claim is **unverified**, see Open |
 
-The INT0 one is worth stating carefully because its root cause is solid and its provenance is ours:
-the acceptance-time `/INT0` level re-assertion reached upstream in Felipe's PR #15003 (Feb 2026),
-added while chasing `Sound Name Error`, and the August trace showed it *causes* a duplicate nested
-dispatch of a non-reentrant ISR. But our tree's version of that fix leans on a latch path upstream
-does not have (patches 26-28, MSTAT/SSTAT tracking, misframe detection, micro-DMA changes). The ten
-lines are the tip of it, and alone they make things worse. It needs its own PR with its siblings —
-and a repro, which nobody has for the symptom on this branch.
+Demo screen: **7 distinct snapshots of 9**, against 3 of 17 (a two-state blink) with the ROM fix
+alone. `-validate` clean, `-verifyroms` OK. Each ingredient was shown *necessary*, not merely
+present.
 
-**Still unexplained:** Felipe sees wrong LEDs/buttons and `Sound Name Error` on this branch build
-after some minutes of use. Not reproduced automatically, and demonstrably *not* cured by the INT0
-port above. The other suspect is the older control-panel serial misframe, which predates all of
-this and which mainline's PR5 panel already has.
+The NVRAM is a bare declaration. A version seeding IC21 with factory defaults from program-ROM
+offset `0x0A0150` plus a synthesised checksum measured **identical in effect** — the firmware
+initialises the SRAM itself, so only persistence was ever missing. Dropped, which also removes a
+dependency on a v10-only ROM offset.
 
----
+### Provenance of the corrected ROM — the one weak point
 
-## Original single-commit draft (the ROM fix)
+The corrected file is derived by permuting blocks; it is **not** a second physical read. Before
+submitting, re-dump IC14 and confirm it produces `aa4917ce`. That turns a reconstruction into
+first-hand provenance and independently validates the analysis. If the PR goes out first, say
+plainly that the file was derived.
 
+`BAD_DUMP` deliberately not used: the data is the chip's content in the chip's order, recovered
+from a read whose *addressing* was wrong. Fallback if a maintainer insists — keep the old file and
+hashes, mark `BAD_DUMP`, and de-scramble at load with eight `ROM_CONTINUE` lines (the form our
+overlay used).
 
-**Branch:** `kn5000_ic14_transposed_dump` (worktree `~/compartilhado/mame-pr-ic14`, off
-`upstream/master` @ `a4f77431604`)
-**Commit:** `40ce9f12b5e`, authored as Felipe
-**Diff:** 2 lines in `src/mame/matsushita/kn5000.cpp`
-**Corrected ROM set for testing:** `~/compartilhado/kn5000_corrected_roms/`
+### Do not add these
 
----
+Both were ported, built and measured on this branch, and both regress it:
 
-## Suggested PR description
+- **the timer fix without the NVRAM commit** — every signal flat at 00, worse than the ROM fix alone;
+- **`3fd44f3` + `e6b4cf7`** (drop the re-assertion entirely, add `clear_int0_level()` and call it
+  from the latch reads) — **kills the running demo**, reproduced twice. Its root cause is sound,
+  but our version leans on a latch path upstream does not have (patches 26-28, MSTAT/SSTAT
+  tracking, misframe detection). The **guarded** form now in this PR is the 2026-02-17 known-good
+  behaviour and is self-contained; the *removal* form is not.
 
-### kn5000: correct the IC14 rhythm data ROM dump
+### Open
 
-The KN5000's rhythm data ROM (IC14, `QSIGX3C23011`, 32 Mbit mask ROM) is currently in MAME with a
-dump that was read with **address lines A19 and A21 transposed**. The chip's data is intact in
-that file — only the order of its eight 512 KiB blocks is wrong — so this is a re-ordering of the
-existing dump, not a different read of different silicon.
+- Felipe reports wrong LEDs/buttons and `Sound Name Error` on this branch after minutes of use.
+  Not reproduced automatically; the INT0 guard is aimed at it but is unproven. Next lead: February
+  `f8cd34a8` was measurably good on the `b3` repro — diff it against upstream.
+- SSF state `0x251D8` stays 00 and `0x8D38` reaches E4 rather than the E1 our notes call
+  "playing", yet the picture advances. Unexplained.
 
-| | size | CRC32 | SHA1 |
-|---|---|---|---|
-| current in MAME | 4,194,304 | `76d11a5e` | `e4b572d318c9fe7ba00e5b44ea783e89da9c68bd` |
-| corrected | 4,194,304 | `aa4917ce` | `fef7f1927935d8fdada2afbdbfac29aac56e1c3c` |
-
-Swapping A19 and A21 permutes the block index by exchanging its bits 0 and 2:
-`0,1,2,3,4,5,6,7 → 0,4,2,6,1,5,3,7` (an involution). Verified mechanically: the multiset of
-512 KiB block hashes is identical before and after, so **no byte was altered**.
-
-#### Why this is the dumping rig and not the board
-
-This matters, because board-level address scrambling should be modelled in the driver, while a
-dumping error should be corrected in the file. The service manual settles it.
-
-Page 32 ("CPU SECTION (A) P.C. Diagram") shows IC14 wired straight:
-
-```
-AD20 <- pin 44 <- net A21
-AD19 <- pin 43 <- net A20
-AD18 <- pin  2 <- net A19
-AD17 <- pin  3 <- net A18
-AD16 <- pin 34 <- net A17
-```
-
-i.e. AD*k* ← net A(*k*+1) throughout, exactly like IC19 next to it. There is no transposition on
-the PCB. Note also that AD18 and AD20 are pins 2 and 44 — adjacent across the NC at pin 1, which is
-the neighbourhood where a socket adapter configured for a different 44-pin part mis-maps.
-
-#### How the correction was verified
-
-Independently of any reference image, using only the ROM's own internal structure: every style
-record's lane pointers must land 6 bytes past a cell header `80 FF FF FF FF 87`.
-
-| | lane pointers landing correctly |
-|---|---|
-| as currently dumped | 3,439 of 9,696 |
-| corrected | **9,696 of 9,696** |
-
-#### User-visible effect
-
-With the current dump the accompaniment engine reads style data from the wrong 512 KiB block, hits
-an invalid opcode, and the bad-opcode watchdog stops the transport. Roughly **two thirds of the
-factory rhythms are silent**, and the built-in Feature Demo stops early. With the corrected dump
-the transport runs.
-
-(The KN5000 has no sound in MAME yet — the tone generator is not emulated — so the audible part of
-this is not yet observable upstream. The transport, the style engine and the Feature Demo's
-progress are.)
-
----
-
-## Notes for our own review, not for the PR
-
-### Provenance — the one weak point, and the fix
-
-The corrected file is derived from the existing dump by permuting blocks; it is **not** a second
-physical read. The derivation is sound and the verification is strong, but a maintainer is entitled
-to ask who has read these bytes off the chip in this order, and the answer today is nobody.
-
-**Recommended before submitting:** re-dump IC14 on Felipe's unit with correct wiring and confirm it
-produces `aa4917ce`. That converts the reconstruction into first-hand provenance, removes the
-objection entirely, and independently validates the analysis. If it does not match, we learn
-something important instead of shipping it.
-
-If the PR goes out before that, say plainly in the description that the file was derived by
-correcting the transposition and state the verification — do not let it read as a fresh dump.
-
-### On `BAD_DUMP`
-
-Not used, deliberately. `BAD_DUMP` marks data known or suspected to be incorrect or incomplete;
-this data is neither — it is the chip's content in the chip's order, recovered from a read whose
-addressing was wrong. Flagging it would misdescribe it.
-
-(An earlier position in our notes argued for keeping `BAD_DUMP` and de-scrambling at load time with
-`ROM_CONTINUE`. That is the wrong shape for a dumping-rig error and it leaves the ROM set wrong for
-everyone; it is kept only as a fallback if a maintainer insists on it.)
-
-### Fallback if the hash change is rejected
-
-Our overlay's form: keep the original file and hashes, mark `BAD_DUMP`, and de-scramble at load:
-
-```
-ROM_LOAD("kn5000_rhythm_data_rom.ic14", 0x000000, 0x080000, BAD_DUMP CRC(76d11a5e) SHA1(e4b572d3...))
-ROM_CONTINUE(                           0x200000, 0x080000)
-ROM_CONTINUE(                           0x100000, 0x080000)
-ROM_CONTINUE(                           0x300000, 0x080000)
-ROM_CONTINUE(                           0x080000, 0x080000)
-ROM_CONTINUE(                           0x280000, 0x080000)
-ROM_CONTINUE(                           0x180000, 0x080000)
-ROM_CONTINUE(                           0x380000, 0x080000)
-```
-
-Honest, but it fixes the emulation without fixing the ROM set, and eight lines say what one hash
-should.
-
-### Testing
-
-The branch needs its own build — the worktree starts empty, and no existing binary carries the new
-hash (a binary built before this change will reject the corrected file as a bad ROM, and vice
-versa).
+### Building this branch
 
 ```
 cd ~/compartilhado/mame-pr-ic14
-./build_kn5000.sh                     # SUBTARGET=kn5000, ccache shared across worktrees
+./build_kn5000.sh                 # SUBTARGET=kn5000, USE_QTDEBUG=0, shared ccache
 ./kn5000 kn5000 -rompath ~/compartilhado/kn5000_corrected_roms
 ```
 
-⚠ The main tree's `build_mame.sh` **cannot** be used on an upstream branch: its curated `SOURCES`
-list names fork-only drivers (`src/mame/itautec/i7000.cpp` and others) that do not exist on
-`upstream/master`, and genie aborts before compiling anything. `build_kn5000.sh` in the worktree
-builds the single driver instead, and passes `USE_QTDEBUG=0` because this host has no Qt `moc`.
-Both failures report zero `error:` lines, so grepping the log for `error:` is not sufficient here
-— check the exit status and that a binary actually appeared.
-
-The ROM set there is the corrected IC14 plus symlinks to the rest of Felipe's originals.
-
-Note that the *behaviour* this PR restores is already observable in our overlay build, which
-reaches the same memory contents by de-scrambling at load with `ROM_CONTINUE`. Building the branch
-tests the PR's own form: that MAME accepts the corrected file under the new hash and the driver
-loads it flat.
+⚠ The main tree's `build_mame.sh` cannot be used on an upstream branch — its `SOURCES` list names
+fork-only drivers absent from `upstream/master` and genie aborts. ⚠ Both that failure and a missing
+Qt `moc` exit non-zero with **zero `error:` lines**, so grepping for `error:` is not enough; check
+the exit status and that a binary appeared.
