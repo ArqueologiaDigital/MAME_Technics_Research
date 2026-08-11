@@ -7,7 +7,7 @@ three changes are needed and each does a distinct job:
 | commit | what it fixes | measured effect |
 |---|---|---|
 | `40ce9f1` IC14 dump | style data read from the wrong 512 KiB block | transport `0x0420` 0C (terminal STOP) -> **04**, watchdog `0x32ed` 20 -> **00** |
-| `ab6f4fa` IC21 NVRAM | backup SRAM invalid at every boot, so the firmware skips the sub-CPU payload | AccPlayMode `0x22FC` 00 -> **03**: the demo actually starts |
+| `26bdb1c` IC21 NVRAM (bare declaration) | backup SRAM invalid at every boot | AccPlayMode `0x22FC` 00 -> **03**: the demo actually starts |
 | `df00b73` tmp94c241 timer | INTTR5, the sequencer clock, never fires | sub-tick `0x0417` frozen at 00 -> **cycling continuously** (49, 1A, 4A, 1B, 4B, 19 over 60 s) |
 
 **Result: the Feature Demo runs.** Screen snapshots every 5 s: **7 distinct of 9**, against 3 of 17
@@ -22,8 +22,33 @@ demo but never clocks it.
 notes call "playing", yet the picture demonstrably advances. Either those addresses differ upstream
 or the slides advance by another path. Not chased; recorded so nobody claims full understanding.
 
-⚠ The NVRAM initialiser reads factory defaults from **program ROM offset 0x0A0150**, established
-on the v10 image. Whether that offset holds for the v5-v9 BIOS options is untested.
+⚠ The NVRAM is a **bare declaration** — no custom handler, no factory-defaults seeding. A version
+that seeded IC21 from program-ROM offset 0x0A0150 and synthesised the firmware's checksum was
+built and measured **bit-identical in effect**: the firmware initialises the SRAM itself, so all
+that was ever needed was persistence. Dropped, which also removes a dependency on a v10-only ROM
+offset.
+
+### Two fixes from our tree that must NOT be added to this PR
+
+Both were ported, built and measured on this branch, and both **regress it**:
+
+| ported fix | result on this branch |
+|---|---|
+| `kn5000-02` tmp94c241 timer, *without* the NVRAM commit | every signal flat at 00 — worse than the ROM fix alone |
+| `3fd44f3` + `e6b4cf7` inter-CPU INT0 (drop the level re-assertion, add `clear_int0_level()` and call it from the latch reads) | **kills the running demo**: sub-tick/transport/AccPlayMode all back to 00, screen back to a 3-of-18 blink. Reproduced twice. |
+
+The INT0 one is worth stating carefully because its root cause is solid and its provenance is ours:
+the acceptance-time `/INT0` level re-assertion reached upstream in Felipe's PR #15003 (Feb 2026),
+added while chasing `Sound Name Error`, and the August trace showed it *causes* a duplicate nested
+dispatch of a non-reentrant ISR. But our tree's version of that fix leans on a latch path upstream
+does not have (patches 26-28, MSTAT/SSTAT tracking, misframe detection, micro-DMA changes). The ten
+lines are the tip of it, and alone they make things worse. It needs its own PR with its siblings —
+and a repro, which nobody has for the symptom on this branch.
+
+**Still unexplained:** Felipe sees wrong LEDs/buttons and `Sound Name Error` on this branch build
+after some minutes of use. Not reproduced automatically, and demonstrably *not* cured by the INT0
+port above. The other suspect is the older control-panel serial misframe, which predates all of
+this and which mainline's PR5 panel already has.
 
 ---
 
