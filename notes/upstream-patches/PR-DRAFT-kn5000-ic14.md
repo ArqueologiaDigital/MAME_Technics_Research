@@ -120,9 +120,16 @@ versa).
 
 ```
 cd ~/compartilhado/mame-pr-ic14
-./build_mame.sh                       # SUBTARGET=fs_mame, ccache shared across worktrees
-./fs_mame kn5000 -rompath ~/compartilhado/kn5000_corrected_roms
+./build_kn5000.sh                     # SUBTARGET=kn5000, ccache shared across worktrees
+./kn5000 kn5000 -rompath ~/compartilhado/kn5000_corrected_roms
 ```
+
+⚠ The main tree's `build_mame.sh` **cannot** be used on an upstream branch: its curated `SOURCES`
+list names fork-only drivers (`src/mame/itautec/i7000.cpp` and others) that do not exist on
+`upstream/master`, and genie aborts before compiling anything. `build_kn5000.sh` in the worktree
+builds the single driver instead, and passes `USE_QTDEBUG=0` because this host has no Qt `moc`.
+Both failures report zero `error:` lines, so grepping the log for `error:` is not sufficient here
+— check the exit status and that a binary actually appeared.
 
 The ROM set there is the corrected IC14 plus symlinks to the rest of Felipe's originals.
 
