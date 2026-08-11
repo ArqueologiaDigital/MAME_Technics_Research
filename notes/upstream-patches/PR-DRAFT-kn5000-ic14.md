@@ -1,7 +1,9 @@
 # PR draft — kn5000: four fixes, and the Feature Presentation demo runs
 
-**Branch:** `kn5000_ic14_transposed_dump` (worktree `~/compartilhado/mame-pr-ic14`), off
-`upstream/master` @ `a4f77431604`. Four commits, 37 insertions, two files.
+**SUBMITTED: https://github.com/mamedev/mame/pull/15878** — open, not merged as of 2026-08-11.
+
+**Branch:** `kn5000_make_feature_presentation_demo_run` (worktree `~/compartilhado/mame-pr-ic14`),
+off `upstream/master` @ `a4f77431604`. Four commits, 37 insertions, two files.
 **ROM set for testing:** `~/compartilhado/kn5000_corrected_roms/`
 
 ---
