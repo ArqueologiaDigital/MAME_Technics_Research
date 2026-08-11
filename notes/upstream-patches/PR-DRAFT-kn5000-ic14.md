@@ -114,8 +114,19 @@ should.
 
 ### Testing
 
+The branch needs its own build — the worktree starts empty, and no existing binary carries the new
+hash (a binary built before this change will reject the corrected file as a bad ROM, and vice
+versa).
+
 ```
-mame kn5000 -rompath ~/compartilhado/kn5000_corrected_roms
+cd ~/compartilhado/mame-pr-ic14
+./build_mame.sh                       # SUBTARGET=fs_mame, ccache shared across worktrees
+./fs_mame kn5000 -rompath ~/compartilhado/kn5000_corrected_roms
 ```
 
-The set there is the corrected IC14 plus symlinks to the rest of Felipe's originals.
+The ROM set there is the corrected IC14 plus symlinks to the rest of Felipe's originals.
+
+Note that the *behaviour* this PR restores is already observable in our overlay build, which
+reaches the same memory contents by de-scrambling at load with `ROM_CONTINUE`. Building the branch
+tests the PR's own form: that MAME accepts the corrected file under the new hash and the driver
+loads it flat.
