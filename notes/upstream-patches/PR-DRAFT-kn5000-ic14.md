@@ -1,4 +1,34 @@
-# PR draft — kn5000: correct the IC14 rhythm data ROM dump
+# PR draft — kn5000: correct the IC14 ROM, and make the Feature Demo run
+
+★ **2026-08-11: this PR grew from 1 commit to 3, on measurement.** The ROM fix alone revives the
+accompaniment transport but does not make the Feature Demo play. Bisected on the branch itself,
+three changes are needed and each does a distinct job:
+
+| commit | what it fixes | measured effect |
+|---|---|---|
+| `40ce9f1` IC14 dump | style data read from the wrong 512 KiB block | transport `0x0420` 0C (terminal STOP) -> **04**, watchdog `0x32ed` 20 -> **00** |
+| `ab6f4fa` IC21 NVRAM | backup SRAM invalid at every boot, so the firmware skips the sub-CPU payload | AccPlayMode `0x22FC` 00 -> **03**: the demo actually starts |
+| `df00b73` tmp94c241 timer | INTTR5, the sequencer clock, never fires | sub-tick `0x0417` frozen at 00 -> **cycling continuously** (49, 1A, 4A, 1B, 4B, 19 over 60 s) |
+
+**Result: the Feature Demo runs.** Screen snapshots every 5 s: **7 distinct of 9**, against 3 of 17
+(a two-state blink) with the ROM fix alone. No tone generator is involved — there is no sound
+upstream yet, and none is needed for this.
+
+⚠ Each ingredient was verified necessary, not merely sufficient: the timer fix *without* the NVRAM
+makes things strictly worse (every signal flat at 00), and the NVRAM without the timer starts the
+demo but never clocks it.
+
+⚠ Unexplained residual: SSF state `0x251D8` stays 00 and `0x8D38` reaches E4 rather than the E1 our
+notes call "playing", yet the picture demonstrably advances. Either those addresses differ upstream
+or the slides advance by another path. Not chased; recorded so nobody claims full understanding.
+
+⚠ The NVRAM initialiser reads factory defaults from **program ROM offset 0x0A0150**, established
+on the v10 image. Whether that offset holds for the v5-v9 BIOS options is untested.
+
+---
+
+## Original single-commit draft (the ROM fix)
+
 
 **Branch:** `kn5000_ic14_transposed_dump` (worktree `~/compartilhado/mame-pr-ic14`, off
 `upstream/master` @ `a4f77431604`)
