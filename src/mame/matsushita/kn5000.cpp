@@ -403,7 +403,7 @@ private:
 	// kn5000_splash_animation.txt -- restoring it means EXECUTING the firmware's
 	// power-off code, not substituting driver code for it.
 
-	void nvram2_init(nvram_device &device, void *data, size_t size);
+	void nvram_init(nvram_device &device, void *data, size_t size);
 	void maincpu_mem(address_map &map) ATTR_COLD;
 	void subcpu_mem(address_map &map) ATTR_COLD;
 };
@@ -549,7 +549,7 @@ TIMER_CALLBACK_MEMBER(kn5000_state::keybed_scan)
 void kn5000_state::maincpu_mem(address_map &map)
 {
 	// 1Mbyte = 2 * 4Mbit DRAMs @ IC9, IC10 (CS3).  These are ordinary VOLATILE DRAMs: they are
-	// work RAM, not the battery-backed store (that is the 1Mbit SRAM @ IC21, "nvram2" below).
+	// work RAM, not the battery-backed store (that is the 1Mbit SRAM @ IC21, "nvram" below).
 	// This region used to be declared .share("nvram1") with an NVRAM device, which saved and
 	// restored the whole megabyte between runs.  That was wrong twice over: it is unfaithful to
 	// the hardware, and because MAME's exit path never lets the power-down NMI handler run (see
@@ -568,7 +568,7 @@ void kn5000_state::maincpu_mem(address_map &map)
 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)
 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
 	map(0x1a0000, 0x1dffff).rw("vga", FUNC(mn89304_vga_device::mem_linear_r), FUNC(mn89304_vga_device::mem_linear_w));
-	map(0x1e0000, 0x1fffff).ram().share("nvram2"); // 1Mbit SRAM @ IC21 (CS0)  Note: I think this is the message "ERROR in back-up SRAM"
+	map(0x1e0000, 0x1fffff).ram().share("nvram"); // 1Mbit SRAM @ IC21 (CS0)  Note: I think this is the message "ERROR in back-up SRAM"
 	map(0x300000, 0x3fffff).rom().region("custom_data", 0); // 8MBit FLASH ROM @ IC19 (CS5)
 	map(0x400000, 0x7fffff).rom().region("rhythm_data", 0); // 32MBit ROM @ IC14 (A22=1 and CS5)
 	// The subcpu payload is stored compressed in IC19 flash at 0x3E0000, which is part of the "custom_data" region above.
@@ -984,7 +984,7 @@ void kn5000_state::machine_reset()
 
 
 
-void kn5000_state::nvram2_init(nvram_device &device, void *data, size_t size)
+void kn5000_state::nvram_init(nvram_device &device, void *data, size_t size)
 {
 	// Initialize NVRAM with factory defaults from program ROM.
 	// On real hardware, NVRAM (backup SRAM) is pre-programmed at the factory.
@@ -1422,7 +1422,7 @@ void kn5000_state::kn5000(machine_config &config)
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
 	// Only the IC21 SRAM is battery-backed; the IC9/IC10 DRAMs are volatile work RAM (see maincpu_mem).
-	NVRAM(config, "nvram2").set_custom_handler(FUNC(kn5000_state::nvram2_init));
+	NVRAM(config, "nvram").set_custom_handler(FUNC(kn5000_state::nvram_init));
 
 	config.set_default_layout(layout_kn5000);
 }
