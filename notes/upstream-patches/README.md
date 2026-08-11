@@ -102,6 +102,13 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 
 # KN5000 driver series (kn5000-01 … kn5000-30)
 
+> ## ★ 2026-08-11 — **read `PR-PLAN-2026-08-11.md` first**
+> It supersedes the "Suggested split into PRs" section below (PR 6–10). That split was
+> organised by what was on the branch; the new one is organised by what a maintainer can
+> review in one sitting and see a result from, and it adds the item this queue never had:
+> **the IC14 rhythm-ROM correction**, which is not in patches 01–30 at all and is priority 1.
+> Upstream currently ships the scrambled IC14 dump as if it were good.
+
 ## ⛔⛔ 2026-07-22 — THE HOLD ON kn5000-30 IS NOW A **REVERT RECOMMENDATION**
 
 > Full state, artefact map and measurement rules: **`notes/kn5000-cpserial-INDEX.md`** — read its
