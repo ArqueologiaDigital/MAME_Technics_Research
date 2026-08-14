@@ -123,3 +123,37 @@ criterion that cannot fire is not a test. Required instead:
 4. **Fix the selection first:** `b0p1c35` is a *bank-0* selection, i.e. the BAD_DUMP copy of
    IC307. Re-run on a bank-1 selection or the A/B measures the substitution, not the fix.
 5. **Negative control:** a chunk accepted with peak 0.9979 (p1c4) must be bit-identical after.
+
+
+---
+
+## A/B against the real emulator (2026-08-14/15)
+
+Two full builds, differing only in the `detect_period` bound (2048 vs 256), each capturing 90 s
+of the Feature Presentation demo — sequencer, accompaniment and drum parts, one button press,
+`nvram1` deleted, fresh cfg (`tools/rigs/kn5000_demo_capture.lua`, compared with
+`tools/kn5000_wav_ab.py`).
+
+**Result: the two captures are BIT-IDENTICAL** (4,320,001 frames, 3 ch, 48 kHz).
+
+What that does and does not establish:
+
+* ✅ **No regression.** The strongest invariance evidence available short of a full corpus: 90 s
+  of the instrument playing itself, unchanged to the sample.
+* ❌ **The benefit is still unproven in-emulator.** The demo never selects any of the 35 affected
+  chunks, so this A/B cannot speak to whether the fix improves anything. A negative that the
+  comparison tool reports explicitly rather than hunting for a difference that is not there.
+
+**Why the demo is the wrong stimulus:** the two chunks the tone-generator source itself blames
+for "extreme noise" are `+040 = 0x505B` (**Brush Slap**, SET 375) and `0x5046` (**Rock Rim**,
+SET 376) — drum-kit sounds reached through the percussion table. **No melodic patch references
+them** (checked against `kn5000-patch-partials.tsv`), and the demo's styles evidently do not
+either.
+
+**What would exercise it:** a stimulus that plays those specific drums — a rhythm style that uses
+them, a DRUM KITS patch played from the keybed, or MIDI note-ons on the drum channel. Identifying
+which factory style uses SET 375/376 means decoding the rhythm patterns in IC14, so the MIDI or
+keybed route is likely cheaper.
+
+Until then the honest status of the fix is: **argued from code and arithmetic, verified not to
+regress, not yet heard.**
