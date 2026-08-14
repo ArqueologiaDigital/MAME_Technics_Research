@@ -116,6 +116,34 @@ else
   echo "note: no KN5000 ROM set found -- kn5000 will not be runnable from the published folder"
 fi
 
+# 2a2) PROVENANCE GUARD -- no file may claim to be a chip dump unless it is one.
+#      A filename like kn5000_waveform_rom.ic304 asserts "this is a dump of IC304".
+#      Three such files (the project's own synthetic banks) sat in the published set
+#      for months; nothing loads them, but a copy taken out of context reads as a dump.
+#      Any *_rom.ic* whose md5 is absent from technics_roms/MANIFEST.tsv is quarantined
+#      into roms/<model>/NOT-A-DUMP/ rather than shipped. Set PUBLISH_SKIP_PROVENANCE=1
+#      to bypass (and say why in the commit that does).
+if [ -z "${PUBLISH_SKIP_PROVENANCE:-}" ] && [ -f "$ROMREPO/MANIFEST.tsv" ]; then
+  QUARANTINED=0
+  for f in "$DEST"/roms/*/*_rom.ic*; do
+    [ -f "$f" ] || continue
+    case "$f" in */NOT-A-DUMP/*) continue ;; esac
+    h=$(md5sum "$f" | cut -d' ' -f1)
+    b=$(basename "$f")
+    # Match basename AND hash: a hash alone still matches after a file is renamed to
+    # disown its chip identity, which is exactly the case this guard exists to catch.
+    if ! awk -F'\t' -v b="$b" -v h="$h" \
+         '{n=$1; sub(/.*\//,"",n); if (n==b && $3==h) found=1} END{exit !found}' \
+         "$ROMREPO/MANIFEST.tsv"; then
+      mkdir -p "$(dirname "$f")/NOT-A-DUMP"
+      mv "$f" "$(dirname "$f")/NOT-A-DUMP/"
+      echo "provenance: quarantined $(basename "$f") -- md5 $h not in MANIFEST.tsv"
+      QUARANTINED=$((QUARANTINED+1))
+    fi
+  done
+  [ "$QUARANTINED" -gt 0 ] && echo "provenance: $QUARANTINED file(s) moved to NOT-A-DUMP/"
+fi
+
 # 2b) MAME plugins. The "layout" plugin registers the cb_layout callback that EXECUTES a
 #     layout's <script> block -- without it, layout scripts silently never run. The KN7000
 #     volume faders are made draggable by such a script (tools/slider_lib.lua), so the
