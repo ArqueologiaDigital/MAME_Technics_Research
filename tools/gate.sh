@@ -20,6 +20,9 @@ set -uo pipefail
 
 EMU_DIR="${EMU_DIR:-/home/fsanches/compartilhado/kn7000-emulator}"
 RIGS="$(cd "$(dirname "$0")" && pwd)/rigs"
+# Resolve every repo path HERE, before the cd to $EMU_DIR further down -- a relative
+# dirname "$0" after that cd resolves against the emulator directory and silently breaks.
+DEMO_RIG="${DEMO_RIG:-$RIGS/../../notes/kn5000-demo-probes/demo_max.lua}"  # overridable for fault-injection
 ONLY=""
 STATIC=0
 while [ $# -gt 0 ]; do
@@ -45,6 +48,12 @@ cd "$EMU_DIR" || { echo "gate: no emulator at $EMU_DIR"; exit 1; }
 MODELS="kn7000:11 kn5000:18 kn6000:8 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 
 ORACLE_MD5="780de131e33a4a0c99d092b57a074247"
+
+# KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
+# detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
+# and its kn5000 liveness check sits at the home screen with no notes playing.
+# Baseline measured on the binary with the N>256 bound; deterministic across two runs.
+KN5000_DEMO_MD5="4c8671b68f446cd3f6c10c8784e7748f"
 
 PASS=0; FAIL=0; SKIP=0
 FAILED=""
@@ -110,6 +119,50 @@ else
 		fi
 	fi
 	rm -rf "$(dirname "$W")" "$C"
+fi
+
+echo
+echo "== kn5000 demo audio (the tone generator actually playing) =="
+if [ -n "$ONLY" ] && [ "$ONLY" != kn5000 ]; then
+	skip "kn5000 demo oracle -- --model $ONLY"
+elif [ ! -f "$DEMO_RIG" ]; then
+	bad "kn5000 demo oracle -- rig missing at $DEMO_RIG"
+else
+	D=$(mktemp -d)
+	rm -f nvram/kn5000/nvram1     # 1 MB of work DRAM is persisted as NVRAM; stale state changes the run
+	out=$(timeout 560 ./run.sh kn5000 -window -nothrottle -seconds_to_run 90 \
+		-wavwrite "$D/demo.wav" -cfg_directory "$D" -nvram_directory "$D" \
+		-snapshot_directory "$D" -autoboot_script "$DEMO_RIG" 2>&1)
+	# PRECONDITION 1 -- the stimulus must have fired. The demo needs DEMO -> LEFT 4 -> LEFT 2;
+	# pressing DEMO alone leaves transport at 0x00 and the machine silent, and a comparison of
+	# two silent captures once got mistaken for a bit-identical pass.
+	if ! echo "$out" | grep -q 'transport=04'; then
+		bad "kn5000 demo -- stimulus never fired (transport never reached 0x04)"
+	elif [ ! -s "$D/demo.wav" ]; then
+		bad "kn5000 demo -- no wav produced"
+	else
+		# PRECONDITION 2 -- the capture must be audible, on the channels that carry audio.
+		# Channel 0 is ALWAYS silent on this machine; the audio is on channels 1 and 2.
+		lvl=$(python3 - "$D/demo.wav" <<-'PYEOF'
+			import struct, sys, wave
+			w = wave.open(sys.argv[1]); n, ch = w.getnframes(), w.getnchannels()
+			s = struct.unpack("<%dh" % (n * ch), w.readframes(n))
+			r = [ (sum(float(v) * v for v in s[c::ch]) / max(n, 1)) ** 0.5 for c in range(ch) ]
+			print("%.1f" % max(r[1:] if ch > 1 else r))
+		PYEOF
+		)
+		if [ "${lvl%%.*}" -lt 100 ] 2>/dev/null; then
+			bad "kn5000 demo -- capture is silent or near-silent (max rms $lvl on ch1/ch2)"
+		else
+			got=$(md5sum "$D/demo.wav" | cut -d' ' -f1)
+			if [ "$got" = "$KN5000_DEMO_MD5" ]; then
+				ok "kn5000 demo oracle md5 $got  (rms $lvl)"
+			else
+				bad "kn5000 demo oracle md5 $got != $KN5000_DEMO_MD5 (rms $lvl) -- the tone-generator path changed; re-baseline deliberately"
+			fi
+		fi
+	fi
+	rm -rf "$D"
 fi
 
 echo

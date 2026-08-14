@@ -1,0 +1,16 @@
+== static ==
+  PASS  -validate
+  PASS  -listxml
+  PASS  verifyroms kn5000
+
+== liveness (does it boot and draw?) ==
+  PASS  liveness kn5000  (distinct=20 hash=b1a48d45 PASS)
+
+== audio oracle (kn7000 keybed + reverb) ==
+  SKIP  oracle -- --model kn5000
+
+== kn5000 demo audio (the tone generator actually playing) ==
+  PASS  kn5000 demo oracle md5 4c8671b68f446cd3f6c10c8784e7748f  (rms 499.8)
+
+== 5 passed, 0 failed, 1 skipped ==
+EXIT=0

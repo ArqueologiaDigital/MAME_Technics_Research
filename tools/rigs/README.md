@@ -66,6 +66,37 @@ changed under them and nobody noticed — which is precisely what an unrun gate 
 The no-stimulus window is exactly zero and the note is three orders above it. Still: this is a
 **regression** hash. It says nothing changed, never that anything is *correct*.
 
+## The KN5000 demo-audio oracle (gate arm, added 2026-08-15)
+
+The gate's other audio check (`money.lua`) runs on the **KN7000**, and its KN5000 liveness check
+sits at the home screen with **no notes playing** — so the gate passed 16/16 on a KN5000
+tone-generator change it structurally could not see. This arm closes that.
+
+```
+./run.sh kn5000 -window -nothrottle -seconds_to_run 90 \
+    -wavwrite out.wav -cfg_directory <fresh> -nvram_directory <fresh> \
+    -autoboot_script notes/kn5000-demo-probes/demo_max.lua
+```
+
+| | |
+|---|---|
+| baseline md5 | `4c8671b68f446cd3f6c10c8784e7748f` |
+| determinism | **verified** — identical across two runs of the same binary |
+| level | max rms 499.8 on ch1/ch2, against 0.00 before the demo starts |
+
+⚠ **Two preconditions, both fault-injected on 2026-08-15**, because each corresponds to a
+mistake that already happened here:
+
+1. **The stimulus must fire.** The demo needs `DEMO → LEFT 4 → LEFT 2`; pressing DEMO alone
+   leaves transport at `0x00` and the machine silent. Injected by pointing `DEMO_RIG` at the
+   single-press rig → `FAIL — stimulus never fired (transport never reached 0x04)`.
+2. **The capture must be audible on ch1/ch2.** **Channel 0 is always silent on this machine.**
+   Injected against a known-silent capture → max rms `0.0`, guard fires; the good capture reads
+   `499.8`.
+
+Those two faults together once produced a "bit-identical" A/B of two silent files that was
+reported as evidence of no regression. Each is now a separate red gate.
+
 ## By family
 
 | prefix | count | question the family answers |
