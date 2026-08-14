@@ -1,0 +1,25 @@
+== static ==
+  PASS  -validate
+  PASS  -listxml
+  PASS  verifyroms kn7000
+  PASS  verifyroms kn5000
+  PASS  verifyroms kn6000
+  PASS  verifyroms kn6500
+  PASS  verifyroms kn2400
+  PASS  verifyroms kn2600
+  PASS  verifyroms kn1500
+
+== liveness (does it boot and draw?) ==
+  PASS  liveness kn7000  (distinct=12 hash=316cd785 PASS)
+  PASS  liveness kn5000  (distinct=20 hash=b1a48d45 PASS)
+  PASS  liveness kn6000  (distinct=9 hash=9e0b3785 PASS)
+  PASS  liveness kn6500  (distinct=8 hash=82075785 PASS)
+  PASS  liveness kn2400  (distinct=4 hash=571e1a45 PASS)
+  PASS  liveness kn2600  (distinct=4 hash=571e1a45 PASS)
+  SKIP  liveness kn1500  -- no screen device
+
+== audio oracle (kn7000 keybed + reverb) ==
+  PASS  oracle md5 780de131e33a4a0c99d092b57a074247
+
+== 16 passed, 0 failed, 1 skipped ==
+GATE_EXIT=0

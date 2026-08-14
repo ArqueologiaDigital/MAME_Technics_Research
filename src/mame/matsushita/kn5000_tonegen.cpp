@@ -2274,9 +2274,20 @@ uint32_t kn5000_tonegen_device::detect_period(uint32_t region_byte_start, uint32
 				return refine(lag);
 	}
 
-	// No fundamental. A short recording is itself ~one cycle; a long aperiodic one
-	// (drum hit, applause) has none -> 0, and the caller plays it as recorded.
-	return (samples <= 2048) ? (samples << 16) : 0;
+	// No fundamental. A short recording is itself ~one cycle; a long one with no detectable
+	// period has none -> 0, and the caller plays it as recorded (pitch_step = 1.0).
+	//
+	// The bound is 256, not 2048 (changed 2026-08-14). MEASURED: 29 REFERENCED chunks of
+	// 608-2016 samples reach this line, and returning N<<16 for them makes update_pitch
+	// compute step = freq * N / 48000 -- 8x too fast at C4 for N=1496, worse higher up.
+	// That is the "extreme noise" this file already blames on +040 = 0x505B and 0x5046,
+	// which are exactly two of them (page 1 entries 0x05B/0x046, 1496 and 1568 samples).
+	// Below 256 the opposite holds: page 2's 16-144-sample wavetable chunks really ARE one
+	// cycle, and N<<16 is the only correct answer for them -- detect_period's own maxlag is
+	// ~N/3, so it cannot report a period equal to N even when that is the truth.
+	// Full analysis and the falsified alternative (lowering the 0.5 gate returns the second
+	// harmonic on known ground truth) in notes/FINDINGS-ic307-page2.md.
+	return (samples <= 256) ? (samples << 16) : 0;
 }
 
 
