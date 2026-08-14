@@ -60,8 +60,24 @@ gate 0.30 returns **31.53** — the second harmonic, an octave wrong in the othe
 `N<<16`. Code-verified loop-neutral (`compute_loop` maps both P=0 and P=N to `(0, N)`,
 kn5000_tonegen.cpp:2296-2309). Reaches 43 chunks, 35 referenced, 3 audible.
 
-**★ The real fallback damage is on PAGE 1**, not page 2: 23 referenced fallbacks of ≥512 samples,
-including 3 audible tonal drums. That is where this work should go next.
+**★ The real fallback damage is on PAGES 1 AND 0**, not page 2. Re-verified here
+(`notes/ic307-page2-probes/page1.py`):
+
+| page | referenced fallbacks | of which ≥512 samples | lengths |
+|---|---|---|---|
+| 0 | 10 | **6** | 968–2016 |
+| 1 | 29 | **23** | 608–1816 |
+| 2 | 11 | **0** | max 144 |
+| 3 | 0 | 0 | — |
+
+A fallback on a chunk of ≥512 samples is a real defect: `P = N` makes it stretch, audibly. So the
+target is **29 long referenced fallbacks across pages 0 and 1**, not the 543 the raw count
+suggested — and none of them on page 2.
+
+Independent confirmation from the emulator's own source: `kn5000_tonegen.cpp` (~L310) already
+blames audible "extreme noise" on `+040 = 0x505B` and `0x5046`. Both decode to **page 1**, entries
+`0x05B` and `0x046`, lengths 1496 and 1568 — and both fall back today. The code named two
+offenders before anyone counted them, and they sit exactly where this analysis points.
 
 ## The falsification test, run
 
