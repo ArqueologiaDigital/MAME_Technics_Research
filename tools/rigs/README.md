@@ -23,12 +23,48 @@ cd ~/compartilhado/kn7000-emulator
 
 | rig | what it does | the signal |
 |---|---|---|
-| `money.lua` | **the audio oracle.** Presses keybed note `KEYS1` mask `0x0100` at t=16 s, releases at t=17 s. Run with `-wavwrite`; the WAV's md5 is the regression baseline quoted in at least six notes. | baseline md5 `c3b67ea711ce3c00f8ae2af1e07651cb` — ⚠ this is a *regression* hash (nothing changed), **not** evidence of correctness |
+| `money.lua` | **the audio oracle.** Presses keybed note `KEYS1` mask `0x0100` at t=16 s, releases at t=17 s. Run with `-wavwrite`; the WAV's md5 is the regression gate. **Re-baselined 2026-08-14 — see below.** | md5 `780de131e33a4a0c99d092b57a074247` |
 | `env14.lua` | demo-song regression: press DEMO, play ~25 s | audio + transport regression |
 | `kn7000_regress.lua` | save a settled home state, then press PROGRAM MENUS / DISK MENU LOAD / PIANO from it, snapshotting each | three screenshots; catches UI regressions without re-booting |
 | `sio_core_verify.lua` | live verification of the SIO-into-CPU-core refactor | boot + panel still work after the move |
 | `intc_core_verify.lua` | same for the INTC + TM5 timer move | tempo timer drives the demo |
 | `a3.lua`, `a3b.lua` | live DSP experiments; produced the shipped DSP unit-role map and the EQUALIZER bank dump | per-unit DM bank contents |
+
+### The money.lua baseline, pinned 2026-08-14
+
+The exact recipe, which was previously recorded in only one note:
+
+```
+cd ~/compartilhado/kn7000-emulator
+cp -f sdcard_from_real_kn7000.img /tmp/sd_pristine.img && chmod u+w /tmp/sd_pristine.img
+./run.sh kn7000 -window -nothrottle -seconds_to_run 22 \
+    -autoboot_script <this-dir>/money.lua \
+    -wavwrite out.wav -cfg_directory <fresh dir> -harddisk /tmp/sd_pristine.img
+md5sum out.wav
+```
+
+| | |
+|---|---|
+| **current md5** | `780de131e33a4a0c99d092b57a074247` (6,336,050 B; 1,056,001 frames, 3 ch, 48 kHz) |
+| binary | `kn7000-emulator/kn7000`, 74,035,784 B, 2026-08-11 20:17 |
+| determinism | **verified** — two identical runs produced the identical hash |
+
+⚠ **Both previously recorded baselines are stale, and they disagree with each other**:
+`44b09b9d0eaae59d9a65e5b4f4e72ec0` (`notes/sharc-upstream-patch-series.md:223`) and
+`c3b67ea711ce3c00f8ae2af1e07651cb` (quoted in `AUTONOMOUS-STATUS.md`, `kn2400-boot.md`,
+`kn6000-tonegen-spec.md`). Neither reproduces today. Since the rig is bit-deterministic, the driver
+changed under them and nobody noticed — which is precisely what an unrun gate does.
+
+**This gate can fail** — measured on the current capture, so it is not a criterion that cannot fail:
+
+| window | rms | peak |
+|---|---|---|
+| t=10–15.5 s, no stimulus | **0.0** | **0** |
+| t=16–18 s, note held | **165.7** | 972 |
+| t=18–21 s, after release | 0.7 | 9 (the reverb tail) |
+
+The no-stimulus window is exactly zero and the note is three orders above it. Still: this is a
+**regression** hash. It says nothing changed, never that anything is *correct*.
 
 ## By family
 
@@ -49,8 +85,9 @@ cd ~/compartilhado/kn7000-emulator
 ## Honesty note
 
 This index was built from each script's own header comment plus a reading of the handful that had
-none. **The scripts were not re-run during the rescue**, so any one of them may have rotted against
-the current driver — several target addresses and screens that later work moved. Re-run before
+none. **Only `money.lua` was re-run during the rescue** (above); the other 94 were not, so any one
+of them may have rotted against the current driver — several target addresses and screens that
+later work moved. Re-run before
 trusting, and fix the header while you are there: about a fifth have no description at all, and two
 (`kn6_blit.lua`, `kn6_fn.lua`, `kn7_fn.lua`, `latin_verify.lua`) carry a copy-pasted header naming a
 *different* script.
