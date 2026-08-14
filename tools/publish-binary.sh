@@ -15,7 +15,7 @@ BIN="$BUILD/kn7000"
 DEST=/home/fsanches/compartilhado/kn7000-emulator
 # Models that reach a display and are worth shipping (each ships a roms/<model>/ subfolder).
 # (kn2600 is a clone of kn2400 -- it resolves its ROMs from the kn2400 set, no own folder.)
-MODELS="kn7000 kn6000 kn6500 kn2400"
+MODELS="kn7000 kn6000 kn6500 kn2400 kn1500"
 
 # The AUTHORITATIVE home of every ROM artifact: a private, git-versioned repo. The build
 # tree and this published folder are both DERIVED from it. See technics_roms/README.md.
@@ -33,8 +33,9 @@ if [ -d "$ROMREPO/roms" ]; then
   for m in $MODELS; do
     [ -d "$ROMREPO/roms/$m" ] || continue
     mkdir -p "$BUILD/roms/$m"
-    for f in "$ROMREPO/roms/$m"/*.rom; do
-      [ -e "$f" ] || continue
+    for f in "$ROMREPO/roms/$m"/*; do
+      [ -f "$f" ] || continue                      # skip subdirs, e.g. synthetic/
+      case "$f" in *.md|*.txt) continue ;; esac    # docs, not ROM content
       [ -f "$BUILD/roms/$m/$(basename "$f")" ] || {
         cp -p "$f" "$BUILD/roms/$m/"
         echo "restored from technics_roms: $m/$(basename "$f")"
@@ -65,12 +66,13 @@ mv -f "$DEST/.kn7000.tmp" "$DEST/kn7000"
 #    Set PUBLISH_ALLOW_MISSING_ROMS=1 to downgrade the failure to a warning.
 MISSING_MODELS=""
 for m in $MODELS; do
-  if [ ! -d "$BUILD/roms/$m" ] || ! ls "$BUILD/roms/$m"/*.rom >/dev/null 2>&1; then
+  if [ ! -d "$BUILD/roms/$m" ] || [ -z "$(find "$BUILD/roms/$m" -maxdepth 1 -type f ! -name '*.md' -print -quit 2>/dev/null)" ]; then
     MISSING_MODELS="$MISSING_MODELS $m"
     continue
   fi
   mkdir -p "$DEST/roms/$m"
-  cp -u "$BUILD/roms/$m"/*.rom "$DEST/roms/$m/"
+  find "$BUILD/roms/$m" -maxdepth 1 -type f ! -name '*.md' ! -name '*.txt' \
+       -exec cp -u {} "$DEST/roms/$m/" \;
 done
 
 # 2a) KN6000/KN6500 table/font ROM -- BAD_DUMP PLACEHOLDER.
