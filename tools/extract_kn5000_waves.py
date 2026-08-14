@@ -342,6 +342,11 @@ def main():
     ap.add_argument("--rate", type=int, default=44100,
                     help="WAV header sample rate (native TG rate unknown; "
                          "44100 default)")
+    ap.add_argument("--allow-unverified", action="store_true",
+                    help="process ROMs whose CRC32 is not in KNOWN_DUMPS. Off by default: "
+                         "the default --roms list names IC304-306, which are NOT dumps but "
+                         "the project's synthetic banks, and extracting them would put "
+                         "fabricated PCM into the donor pool under a real chip name.")
     ap.add_argument("--no-wavs", action="store_true",
                     help="manifest only, skip WAV writing")
     args = ap.parse_args()
@@ -356,9 +361,20 @@ def main():
         "roms": [],
     }
     for rom in args.roms:
+        if not os.path.exists(rom):
+            print("skipping %s (absent)" % rom, flush=True)
+            continue
+        with open(rom, "rb") as fh:
+            crc = zlib.crc32(fh.read()) & 0xFFFFFFFF
+        if crc not in KNOWN_DUMPS and not args.allow_unverified:
+            print("SKIPPING %s -- crc32 %08x is not a known genuine dump. "
+                  "Pass --allow-unverified to force." % (rom, crc), flush=True)
+            continue
         print("processing %s ..." % rom, flush=True)
         manifest["roms"].append(process_rom(rom, args.outdir, args.rate,
                                             not args.no_wavs))
+    if not manifest["roms"]:
+        raise SystemExit("no verified donor ROM processed -- refusing to write an empty manifest")
     mpath = os.path.join(args.outdir, "manifest.json")
     with open(mpath, "w") as f:
         json.dump(manifest, f, indent=1)
