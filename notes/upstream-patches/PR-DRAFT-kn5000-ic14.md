@@ -86,6 +86,20 @@ Both were ported, built and measured on this branch, and both regress it:
   tracking, misframe detection). The **guarded** form now in this PR is the 2026-02-17 known-good
   behaviour and is self-contained; the *removal* form is not.
 
+### ⚠ Fork and PR disagree on IC14 — same filename, different content
+
+The fork (`kn7000_mame/src/mame/matsushita/kn5000.cpp:1506-1513`) keeps the ORIGINAL file
+`BAD_DUMP CRC(76d11a5e)` and de-scrambles at load with seven `ROM_CONTINUE` lines. The PR
+(`mame-pr-ic14/.../kn5000.cpp:733`) ships a flat, already-de-scrambled `CRC(aa4917ce)`, not
+`BAD_DUMP`. **Both call the file `kn5000_rhythm_data_rom.ic14`**, so one romset cannot satisfy
+both: the fork needs `kn5000_original_roms/`, the PR needs `kn5000_corrected_roms/`.
+
+Consequences to handle before the PR merges: (a) anyone testing the PR with the widely-circulated
+original set gets a verification failure with no hint why; (b) when the PR lands, the fork must
+switch to the flat form in the same change, or the two trees silently diverge. Decide ONE
+representation and make both trees agree, so a future physical re-dump flips `BAD_DUMP` in one
+place only.
+
 ### Open
 
 - Felipe reports wrong LEDs/buttons and `Sound Name Error` on this branch after minutes of use.
