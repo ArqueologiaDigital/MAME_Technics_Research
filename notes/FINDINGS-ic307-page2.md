@@ -74,6 +74,15 @@ A fallback on a chunk of ≥512 samples is a real defect: `P = N` makes it stret
 target is **29 long referenced fallbacks across pages 0 and 1**, not the 543 the raw count
 suggested — and none of them on page 2.
 
+⚠ **Use the ROM, not the TSV, for "referenced".** The reference set must come from walking the
+487 SET descriptors in the table-data ROM and reading the real `+0x040` words
+(`tools/kn5000_referenced_fallbacks.py`). Using the derived
+`notes/data/kn5000-multisample-sets.tsv` zone column instead is a *narrower* view, and it made a
+first pass of this check report **zero** referenced chunks where the ROM walk finds 29 — nearly
+causing the fix to be dismissed as unreachable. Note also that the table-data image is the two
+halves interleaved as **16-bit words**, even half first; byte-wise interleaving yields a
+different image (md5 `55a92199…` against the correct `57d838b3…`) that parses into nonsense.
+
 Independent confirmation from the emulator's own source: `kn5000_tonegen.cpp` (~L310) already
 blames audible "extreme noise" on `+040 = 0x505B` and `0x5046`. Both decode to **page 1**, entries
 `0x05B` and `0x046`, lengths 1496 and 1568 — and both fall back today. The code named two
