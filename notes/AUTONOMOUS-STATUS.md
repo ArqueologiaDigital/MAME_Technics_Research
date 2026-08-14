@@ -9,6 +9,59 @@ cron tick.
 artefact map, the four adjudicated candidates and the measurement rules. That work is **PAUSED at
 Felipe's request** (2026-07-21); the "NEXT = A′" in the tick below is a plan, not a go-ahead.
 
+## ★ CURRENT STATE — 2026-08-14 (read this; the ticks below are history)
+
+Everything under this heading is the live world state. The dated TICK entries that follow stop at
+**2026-07-22** and describe a tree that has since changed substantially — treat them as an archive,
+not as instructions. If a tick and this block disagree, this block wins.
+
+**Where the project is**
+
+* **Planning now lives on the docs site** — `kn5000-docs/roadmap.md` (`/roadmap/`) is the
+  project-wide plan: a four-grade definition of done, the whole product line by silicon generation,
+  and a phase structure. Read it before choosing work.
+* **PR #15878 is submitted and open** (not merged): IC14 dump correction, the tmp94c241 16-bit
+  timer fix, IC21 as NVRAM, and an INT0/micro-DMA guard. Together the KN5000 **Feature Presentation
+  demo runs**, silently. ⚠ The fork and the PR expect *different content* under the filename
+  `kn5000_rhythm_data_rom.ic14`, so no single romset satisfies both — resolve before it is reviewed.
+* **KN5000 demo** reaches **58 %** of the song (was ~6 %) after the INT0 core fix `3fd44f3`.
+* **No hardware access** for the foreseeable future: the KN7000 is owned but unreachable, KN5000
+  access uncertain. Do not queue work whose acceptance test needs a bench or a new dump.
+
+**Landed 2026-08-14 (Phase 0 of the roadmap — custody and truth)**
+
+* 95 Lua rigs rescued from `kn7000-emulator/` (not a git repo, overwritten by every publish) into
+  `tools/rigs/`. The KN1500 IC15 dump and the SX-WSA1 v2.0 OS went into `technics_roms`.
+* ★ **The `money.lua` audio oracle was re-baselined.** It is bit-deterministic, but **both**
+  previously recorded baselines were stale and disagreed with each other; neither reproduced. New
+  baseline **`780de131e33a4a0c99d092b57a074247`**, with the invocation and binary identity pinned in
+  `tools/rigs/README.md`. Re-run it after any audio-path change.
+* Provenance: three synthetic banks were shipping as `kn5000_waveform_rom.ic304/305/306`. Renamed;
+  `extract_kn5000_waves.py` now refuses unverified donors by CRC; `publish-binary.sh` quarantines
+  any `*_rom.ic*` whose basename+md5 are not both in the manifest.
+* ★ **`coverage_score.py` was over-reporting KN7000 source coverage ~5x** — 18.03 % against a real
+  **3.64 %**. Fixed with two assertions. Any plan that used the old figure was mis-scoped.
+
+**NEXT, in order (all desk work)**
+
+1. **KN6000/KN6500 declare the KN7000's table ROM as `BAD_DUMP`** where the honest flag is
+   `NO_DUMP`. Flipping it stops those models rendering text, so it needs Felipe's decision.
+2. Rescue what remains in `KN7000/tmp-dir/` (roadmap Phase 0 item 1).
+3. Phase 1 instrumentation: `tools/gate.sh`, `tools/rig.sh`, and the factory service-diagnostic
+   suite — the cheapest route to a defensible "this subsystem is correct" claim.
+4. KN5000 audio root cause: `detect_period()` first, then the hand-off decode, then P9/P10.
+   Do **not** start P10 before `detect_period()` lands.
+
+**Standing rules that keep biting**
+
+* `build.sh` exits 0 even on compile failure — grep for `error:` *and* check binary mtime/size.
+* Delete `nvram/kn5000/nvram1` before trusting any KN5000 RAM-provenance claim.
+* Hold Lua tap handles in a global or the GC kills them silently.
+* A private `-cfg_directory` protects the rig and *hides the user's bug* — reproduce the reporter's
+  own cfg before contradicting them.
+
+---
+
 ## TICK 2026-07-22 — ⛔⛔ **A′ IS MOOT. `kn5000-30` (b17fb8b) IS RECOMMENDED FOR REVERT.**
 Acting on Felipe's *"I have a vague recollection that a few months ago this cpanel was working
 fine!"*, the February revision (`mame` @ `f8cd34a8`) was rebuilt as a control, alongside a build of
