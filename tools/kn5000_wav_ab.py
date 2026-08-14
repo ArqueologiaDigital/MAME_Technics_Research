@@ -8,6 +8,17 @@ needs a KN5000 capture with the demo actually playing.
 
     python3 tools/kn5000_wav_ab.py before.wav after.wav
 
+⚠ TWO TRAPS THAT MADE A FIRST ATTEMPT AT THIS VACUOUS (2026-08-14):
+  1. **The stimulus must actually fire.** The KN5000 demo needs NAVIGATION -- DEMO -> LEFT 4 ->
+     LEFT 2 -- not one button press. Pressing DEMO alone leaves transport/AccPlayMode flat at
+     0x00 and the machine silent. Confirm transport 0x0420 reads 0x04.
+  2. **Channel 0 of these captures is ALWAYS SILENT.** The KN5000 writes 3 channels and the
+     audio is on channels 1 and 2 (measured: ch0 rms 0.00, ch1 472, ch2 525 with the demo
+     running). Analysing channel 0 shows silence no matter what the machine is doing.
+Both were skipped once, producing two silent files whose "bit-identical" comparison was
+mistaken for evidence of no regression. This tool now reports per-channel rms so neither can
+recur unnoticed.
+
 FIRST QUESTION, and it is the one that can end the exercise: are the two captures IDENTICAL?
 If they are, the stimulus never selected an affected chunk, and this A/B proves nothing either
 way. That is a legitimate negative result and the tool says so rather than hunting for a
@@ -50,6 +61,18 @@ def main():
     print(f"B {sys.argv[2]}: {nb} frames, {chb}ch, {srb} Hz, {nb / srb:.2f}s")
     if (cha, sra) != (chb, srb):
         sys.exit("format mismatch -- captures are not comparable")
+
+    # Per-channel levels FIRST: a silent capture makes every later number meaningless.
+    print()
+    for c in range(cha):
+        ca = a[c::cha]
+        cb = b[c::chb]
+        print(f"  ch{c}: rmsA {rms(ca):9.2f}  rmsB {rms(cb):9.2f}"
+              + ("   <-- SILENT IN BOTH, carries no evidence" if rms(ca) == 0 and rms(cb) == 0 else ""))
+    if all(rms(a[c::cha]) == 0 for c in range(cha)):
+        print("\n=> BOTH CAPTURES ARE SILENT. Nothing was played, so this comparison cannot "
+              "support\n   any conclusion in either direction. Fix the stimulus and re-run.")
+        return
 
     if a == b:
         print("\n=> IDENTICAL. The stimulus never selected a chunk the change affects, so this "

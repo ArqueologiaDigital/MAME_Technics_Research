@@ -184,3 +184,56 @@ keybed route is likely cheaper.
 
 Until then the honest status of the fix is: **argued from code and arithmetic, verified not to
 regress, not yet heard.**
+
+
+---
+
+## The A/B, done properly (2026-08-15)
+
+After the retraction above, both faults were fixed — the demo is now started with its real
+navigation (`DEMO → LEFT 4 → LEFT 2`, confirmed by `transport=0x04`, `accmode=0x03`, sub-tick
+cycling), and the analysis reads **channels 1 and 2** rather than the permanently-silent
+channel 0.
+
+**The stimulus does reach the change.** `tools/rigs/kn5000_waveselect_log.lua` logs 90,960 TG
+writes and **151 distinct wave-select words** over 90 s, of which **9 are chunks this change
+affects**, two of them heavily:
+
+| `+040` | bank | page | chunk | samples | times selected |
+|---|---|---|---|---|---|
+| `0x5049` | 1 | 1 | `0x049` | 1120 | **306** |
+| `0x507D` | 1 | 1 | `0x07D` | 1344 | **140** |
+| `0x409D` | 1 | 0 | `0x09D` | 352 | 109 |
+| `0x1023` | 0 | 1 | `0x023` | 1496 | 8 |
+| `0x1048` | 0 | 1 | `0x048` | 736 | 7 |
+| `0x605F` / `0x605E` | 1 | 2 | | 1544 | 4 / 2 |
+| `0x1049` | 0 | 1 | `0x049` | 1120 | 2 |
+| `0x1046` | 0 | 1 | `0x046` | 1568 | 1 |
+
+Note several are on **bank 0** — the substituted socket, which carries a copy of IC307 — so the
+same chunks are reachable through the undumped banks too.
+
+**Result of two builds differing only in the bound:**
+
+| measure | value |
+|---|---|
+| samples differing | **586,492 of 12,960,003 (4.53 %)** |
+| peak sample delta | 871 |
+| rms of the difference | 5.3 |
+| overall rms ch1 | 455.25 → **455.27** |
+| overall rms ch2 | 499.78 → **499.79** |
+
+Differences begin at t≈27 s, when the demo starts playing, and recur throughout; per-second
+rms-of-difference peaks around 18 against a signal rms of 300–700.
+
+**What this establishes.** The change is real, bounded, and **level-preserving** — which is the
+adjudicator's pre-declared refutation criterion, run in the direction that could have failed: if
+the high-band content had dropped *together with* the level, the change would be removing signal
+rather than removing aliasing, and it would have to be rejected. Overall rms moves by 0.02 and
+0.01 counts on a signal of 455 and 500.
+
+**What it still does not establish** is that the result is *better*. That rests on the arithmetic:
+a 1120-sample recording selected 306 times now plays at its own rate instead of `step = freq × N /
+48000` ≈ 6–8× too fast. The A/B proves the code path is live and does not damage the mix; it
+cannot by itself adjudicate taste. Felipe's ear on the Feature Presentation demo is the remaining
+check, and it is cheap — the two captures exist.
