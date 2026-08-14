@@ -127,7 +127,34 @@ criterion that cannot fire is not a test. Required instead:
 
 ---
 
-## A/B against the real emulator (2026-08-14/15)
+## ⚠ RETRACTED — the A/B below was VACUOUS (corrected 2026-08-15)
+
+**Both captures are pure silence.** rms 0.00 and peak 0 across all 90 s, in both arms. The
+"bit-identical" result was therefore guaranteed and means nothing: two silent files are
+identical trivially. It is **not** evidence of no regression, and I wrote it up as if it were.
+
+Measured afterwards, which is the wrong order:
+
+| window | rms | peak |
+|---|---|---|
+| boot, t=0-20 | 0.00 | 0 |
+| t=35-50 | 0.00 | 0 |
+| t=50-70 | 0.00 | 0 |
+| t=70-89 | 0.00 | 0 |
+
+Corroborated independently by `tools/rigs/kn5000_waveselect_log.lua`: across the same 90 s the
+machine issues only **2 distinct wave-select words** (`0x0000` and `0x0002`, both bank 0 page 0)
+in 2,343 tone-generator writes. Essentially nothing is being played.
+
+Two checks were skipped and either would have caught it: **verify the stimulus actually fired**
+(there is no evidence the demo ever started), and **verify the capture is non-silent before
+comparing it**. The project's own rules say both — "a difference from SILENCE is not a signal"
+and "a test with no notes playing is not a test".
+
+The A/B section is kept below, struck through, because the mistake is more instructive than a
+clean deletion.
+
+## ~~A/B against the real emulator (2026-08-14/15)~~ (VACUOUS — see above)
 
 Two full builds, differing only in the `detect_period` bound (2048 vs 256), each capturing 90 s
 of the Feature Presentation demo — sequencer, accompaniment and drum parts, one button press,
