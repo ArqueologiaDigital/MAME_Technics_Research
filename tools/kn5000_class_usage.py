@@ -20,14 +20,15 @@ Reference result (2026-08-14), which reframed task-queue item P11:
     class 3 (bank0 page3):    31 pairs  Fret Noise, Orch.Hit, Timpani..
     class 4 (bank1 page0):    60 pairs  AmbientHammer, Applause 1-7..
     class 5 (bank1 page1):   333 pairs  Agogo, Bongo, Analog Snare..   <- the percussion page
-    class 6 (bank1 page2):     0        <- NOTHING in this table names it
-    class 7 (bank1 page3):     0        <- likewise
+    class 6 (bank1 page2):     9 pairs  Organ Click -- entries 0x028,0x030..0x068, stride 8
+    class 7 (bank1 page3):     0        <- nothing in this table names it
 
-★ Classes 6 and 7 are absent entirely, yet page 2 holds 1050 of IC307's 1495 chunks and page
-3 holds 57. So ~70% of the chip is not referenced by any NAMED tone record here. Either those
-chunks are reached by another mechanism (drum-kit map, rhythm engine, sub-CPU) or they are
-genuinely unused. Until that is settled, do NOT read page 2's period-detection failures as an
-audible defect -- nothing has been shown to play them.
+★ Page 2 has exactly ONE named user, "Organ Click", reaching 9 of its 1050 chunks; page 3 has
+none at all. So the overwhelming majority of the chip is not referenced by any NAMED tone
+record here. Either those chunks are reached by another mechanism (drum-kit map, rhythm
+engine, sub-CPU) or they are genuinely unused. Until that is settled, do NOT read page 2's
+period-detection failures as an audible defect -- almost nothing has been shown to play them.
+An organ key-click is a transient, which fits page 2 holding one-shot material.
 
 Note the multisample zone table (kn5000-multisample-sets.tsv) DOES reference classes 6 and 7
 (77 and 128 refs), so the two tables disagree about what exists. That disagreement is itself
@@ -55,7 +56,10 @@ def main():
                 continue
             rows += 1
             name = f[1].strip()
-            for ce in f[8].split(","):
+            # The field separates references with EITHER a comma or a semicolon. Splitting
+            # on comma alone silently dropped the only two semicolon rows -- both "Organ
+            # Click" -- and made class 6 look completely unreferenced. Corrected 2026-08-14.
+            for ce in re.split(r"[;,]", f[8]):
                 m = re.match(r"^(\d+):([0-9A-Fa-f]+)$", ce.strip())
                 if m:
                     by_class[int(m.group(1))].add((name, int(m.group(2), 16)))
