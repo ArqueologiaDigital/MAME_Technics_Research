@@ -1,3 +1,9 @@
+> ⚠ **RETRACTION 2026-08-14 — §2.3 is wrong.** It calls page 2's directory a "rising-audio
+> artifact / coincidental". Refuted: page 0's undisputed directory reads *louder* as s16le than
+> page 2's (rms 11370 vs 8448), so the discriminator used to condemn page 2 acquits nothing. A
+> sliding window over all 2,097,150 candidate bases accepts only 4 with n>=20, and 0 in shuffled
+> or random data. Page 2 is a real directory of 1072 slots. See `notes/FINDINGS-ic307-page2.md`.
+
 # KN5000 IC307 waveform ROM — complete content map + metadata decode
 
 Author: autonomous ROM-byte analysis pass, 2026-07-23. Requested by Felipe Sanches.

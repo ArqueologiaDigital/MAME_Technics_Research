@@ -1,3 +1,9 @@
+> ⚠ **RETRACTION 2026-08-14 — §8 is wrong.** It states that class 6 is reached "mostly through
+> the 610-record footage table rather than through patch partials". Measured: **10 of the 12**
+> class-6 SETs are reached from patch partials (23 named instruments), and **1** from the named
+> table (`Organ Click`). The named table is 75 % percussion (912 of 1220 refs are class 5), so its
+> near-silence on class 6 was read as absence. See `notes/FINDINGS-ic307-page2.md`.
+
 # KN5000 — the firmware's OWN sample tables, mined exhaustively from the Table-Data ROM
 
 Author: autonomous EXTRACT pass, 2026-07-25. Requested by Felipe Sanches.
