@@ -2400,10 +2400,16 @@ ROM_START(kn2400)
 	ROM_LOAD32_WORD("kn2400_program_even.rom", 0x000000, 0x200000, CRC(b94fc8a8) SHA1(86d5d9916afdb90f82de78064b1d76fce3a21d7b))
 	ROM_LOAD32_WORD("kn2400_program_odd.rom",  0x000002, 0x200000, CRC(73781cbc) SHA1(d90a3560561efd94322dca1a6710f2d5d3837cd2))
 	// No table ROM is loaded here -- and, unlike the KN6000/KN6500 above, no
-	// placeholder ever was (checked 2026-07-20): the region has always been left
-	// empty. The KN2400 boot reads NOTHING from 0x48000000-0x483fffff (read-tap
-	// verified, notes/kn2400-boot.md), so whether this family even has a separate
-	// table/mask ROM is still undetermined; no chip is claimed as dumped.
+	// placeholder ever was (checked 2026-07-20): the region has always been left empty.
+	//
+	// CORRECTED 2026-08-14: the earlier claim that the KN2400 "reads NOTHING from
+	// 0x48000000-0x483fffff" is WRONG. A read tap held to t=30 counts 164,300 reads,
+	// first at t=0.84 s, concentrated at 0x48000000 (124,933) and spread over
+	// 0x480000xx-0x48004Cxx -- deterministic across runs. So this family DOES have a
+	// separate table/font ROM and it is UNDUMPED. Because the region is ERASEFF, every
+	// glyph fetch returns 0xFF and text renders as solid filled cells, which is exactly
+	// what the KN2400/KN2600 screens show while their icons draw correctly.
+	// Reproduce: tools/rigs/kn24_fontsrc.lua.
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
 ROM_END
 

@@ -1,3 +1,25 @@
+# ⚠ CORRECTION 2026-08-14 — read this first
+
+This note states that the KN2400 boot reads nothing from the table region
+`0x48000000-0x483fffff`. **That is false.** A read tap held to t=30 s
+(`tools/rigs/kn24_fontsrc.lua`) counts **164,300 reads, the first at t=0.84 s**, concentrated
+at `0x48000000` (124,933 reads) and spread over `0x480000xx`-`0x48004Cxx`. The count is
+identical across two runs, so it is deterministic, not a sampling artefact.
+
+Consequences:
+* The KN2400/KN2600/PR54 family **does** have a separate table/font ROM, and it is **undumped**
+  — a device that was missing from the project's undumped inventory.
+* The driver declares that region `ROMREGION_ERASEFF`, so every glyph fetch returns `0xFF` and
+  text draws as solid filled cells. That is precisely the visible symptom: on the KN2400 the
+  **icons render correctly** (the grand-piano glyphs in the part cells) while every run of text
+  is a black bar. The blitter and compositor are fine; the font source is empty.
+* This also explains the gate's liveness baseline for these two models — `distinct=4` with an
+  identical screen hash, the lowest of any model.
+
+The original text follows, retained for its other content.
+
+---
+
 # KN2400 / KN2600 — boot derail analysis (in progress)
 
 The KN2400/KN2600 drivers (they use the `kn7000` machine, so `m_lib_mirror = false`) **derail early at
