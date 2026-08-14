@@ -15,15 +15,26 @@ firmware's zone table, which is data we already hold.
 
     log2(period) vs zone-centre key must fit a line of slope -1/12 per semitone.
 
-⚠⚠ STATUS 2026-08-14: THE GRADING HALF IS BLOCKED. The zone table addresses samples as
-`class:entry` -- an 8-way class field plus an entry index reaching 0x1B2 (429 distinct
-values). The global IC307 index has only 198 entries, max 0x0C5, so `entry` is NOT a global
-wave index and the two cannot be joined yet. Until `class:entry` is decoded to (chip, wave)
-this tool must not emit a detector verdict; a first version of it did, and its "0 of 28 sets
-within 25% of ideal slope" was measuring a bad join, not a bad detector.
-   Note the likely consequence: if `class` selects the waveform chip, most zones resolve to
-IC304/305/306, which are NOT dumped -- so this oracle will only ever grade the IC307 subset,
-which the roadmap already declares the KN5000 test corpus.
+STATUS 2026-08-14 — the class:entry mapping is SOLVED, but the oracle CANNOT grade P11.
+
+  MAPPING (resolved): bank = (class >> 2) & 1, page = class & 3. Evidence: the zone table's
+  per-class maximum entry is 214/177/185/436 for classes 0-3 and 198/168/151/57 for classes
+  4-7, against IC307's declared page sizes 198/168/1072/57 — classes 4, 5 and 7 are EXACT
+  hits on pages 0, 1, 3 and class 6 fits page 2. Classes 0-3 are the other, undumped socket.
+  Parsing all four pages yields 1495 chunks, matching the driver's own 1495/1495 figure.
+
+  ⚠ BUT THE ORACLE IS BLIND TO THE CHANGE IT WAS BUILT TO JUDGE. Measured: 94 chunks change
+  period between gate 0.5 and 0.30; 321 IC307 chunks are referenced by zone sets; the
+  intersection is ZERO. Both gates therefore score identically (9 of 53 sets within 25% of
+  the ideal slope, median |err| 0.0641) — and that identity is NON-OBSERVATION, not
+  agreement. Per the project's own rule, a criterion that cannot distinguish is not a pass.
+  DO NOT cite this oracle as validating any detect_period change until it can see one.
+
+  WHY: the fallback problem is concentrated in page 2 — 500 of its 1050 chunks (48%) fall
+  back, against 11/198, 32/168 and 0/57 elsewhere — and page 2 draws only 75 of the 530
+  IC307 zone references. Page 2 is very likely drums/SFX/one-shots, where "no periodicity"
+  may be the CORRECT answer rather than a defect. That reframes P11: before changing the
+  gate, establish whether page-2 chunks are meant to be pitched at all.
 
 WHAT THIS TOOL DOES
   * ports detect_period() from kn5000_tonegen.cpp faithfully (same window, same DC removal,
@@ -59,24 +70,61 @@ def load_rom():
         return fh.read()
 
 
-def wave_table(rom):
-    """(start_byte, n_samples) per index entry.
+PAGE_SIZE = 0x100000
 
-    The index is 198 entries of TWO u16 -- (param_ptr, wave_offset) -- exactly as
-    tools/extract_kn5000_waves.py parses it. Reading it as one u32 gives nonsense, which
-    is how the first version of this tool found periods for 1 wave in 12.
+
+def page_dir(rom, page):
+    """Parse one 1 MB page's self-delimiting directory -> [(start_byte, n_samples)].
+
+    Port of kn5000_tonegen_device::parse_page_directories, including all six acceptance
+    checks, so a non-directory page is rejected instead of yielding garbage.
+
+    ⚠ Each chip holds FOUR such pages, each with its OWN directory -- IC307 declares
+    198 / 168 / 1072 / 57 slots. An earlier version of this tool parsed only the first
+    198-entry table and therefore analysed page 0 alone, about 13% of the chip.
     """
-    entries = [struct.unpack_from("<HH", rom, i * 4) for i in range(INDEX_ENTRIES)]
-    if entries[0][0] != INDEX_ENTRIES * 4:
-        sys.exit("entry0 param_ptr 0x%04x != 0x%04x -- not a KN5000 waveform ROM"
-                 % (entries[0][0], INDEX_ENTRIES * 4))
-    starts = sorted({w * GRANULE for _, w in entries})
+    base = page * PAGE_SIZE
+    if base + PAGE_SIZE > len(rom):
+        return []
+    u16 = lambda o: struct.unpack_from("<H", rom, base + o)[0]
+    head = u16(0)                                                   # 1
+    if head == 0 or head % 4:
+        return []
+    n = head // 4
+    if n * 4 > PAGE_SIZE - 4:                                       # 2
+        return []
+    param, wave = [], []
+    for i in range(n):
+        pp, wo = u16(i * 4), u16(i * 4 + 2)
+        if i and pp < param[-1]:                                    # 3 monotonic
+            return []
+        if pp < n * 4:                                              # 4 no overlap
+            return []
+        if wo * GRANULE >= PAGE_SIZE:                               # 5 in-page
+            return []
+        if u16(pp) != wo:                                           # 6 back-reference
+            return []
+        param.append(pp); wave.append(wo)
+    starts = sorted({w * GRANULE for w in wave})
     out = []
-    for _pp, w in entries:
+    for w in wave:
         s0 = w * GRANULE
-        nxt = min((t for t in starts if t > s0), default=len(rom))
-        out.append((s0, max(0, (nxt - s0) // 2)))
+        nxt = min((t for t in starts if t > s0), default=PAGE_SIZE)
+        out.append((base + s0, max(0, (nxt - s0) // 2)))
     return out
+
+
+def class_to_page(cls):
+    """Zone-table class -> (bank, page). bank 1 = IC307, the one genuine dump.
+
+    MEASURED (2026-08-14): the zone table's per-class maximum entry index is
+    214/177/185/436 for classes 0-3 and 198/168/151/57 for classes 4-7, against IC307's
+    declared page sizes 198/168/1072/57. Classes 4, 5 and 7 are EXACT hits on pages
+    0, 1 and 3; class 6 (needs 151) fits page 2's 1072. Classes 0-3 exceed every page
+    except one, so they cannot all live on this chip -- they are the other, undumped
+    socket. Hence bank = (class >> 2) & 1, page = class & 3.
+    """
+    return (cls >> 2) & 1, cls & 3
 
 
 def detect_period(rom, start, samples, gate=0.5):
@@ -168,9 +216,9 @@ def zone_sets(path):
             zones = []
             for z in f[zi].split(";"):
                 try:
-                    rng, _cls, ent = z.split(":")
+                    rng, cls, ent = z.split(":")
                     lo, hi = (int(v) for v in rng.split("-"))
-                    zones.append(((lo + hi) / 2.0, int(ent, 16)))
+                    zones.append(((lo + hi) / 2.0, int(cls), int(ent, 16)))
                 except ValueError:
                     continue
             if len(zones) >= 4:
@@ -194,8 +242,11 @@ def grade(periods, sets, label):
     errs = []
     for _idx, zones in sets:
         pts = []
-        for key, ent in zones:
-            p = periods.get(ent)
+        for key, cls, ent in zones:
+            bank, page = class_to_page(cls)
+            if bank != 1:
+                continue          # the other socket is undumped -- cannot grade it
+            p = periods.get((page, ent))
             if p:
                 pts.append((key, math.log2(p / 65536.0)))
         if len(pts) < 4:
@@ -223,25 +274,26 @@ def main():
     if not os.path.exists(IC307):
         sys.exit(f"missing {IC307}")
     rom = load_rom()
-    table = wave_table(rom)
+    pages = {p: page_dir(rom, p) for p in range(4)}
+    print("IC307 page directories: " +
+          ", ".join(f"p{p}={len(v)}" for p, v in pages.items()))
+    table = [(p, i, st, ns) for p, v in pages.items() for i, (st, ns) in enumerate(v)]
     if args.limit:
         table = table[:args.limit]
 
     cur, cand = {}, {}
     nfall_cur = nfall_cand = 0
-    for i, (start, ns) in enumerate(table):
+    for (pg, i, start, ns) in table:
         if ns < 32 or start + 2 * ns > len(rom):
             continue
         pc = detect_period(rom, start, ns, gate=0.5)
         pk = detect_period(rom, start, ns, gate=args.gate)
-        pc = pc[0] if isinstance(pc, tuple) else pc
-        pk = pk[0] if isinstance(pk, tuple) else pk
         if pc:
-            cur[i] = pc
+            cur[(pg, i)] = pc
             if pc == (ns << 16):
                 nfall_cur += 1
         if pk:
-            cand[i] = pk
+            cand[(pg, i)] = pk
             if pk == (ns << 16):
                 nfall_cand += 1
 
@@ -249,16 +301,12 @@ def main():
     print(f"  shipped gate 0.5   : {len(cur):3d} periods, {nfall_cur:3d} are the P=N fallback")
     print(f"  candidate gate {args.gate:<4}: {len(cand):3d} periods, {nfall_cand:3d} are the P=N fallback")
     sets = zone_sets(SETS)
-    ents = [e for _i, z in sets for _k, e in z]
-    print(f"\nzone table: {len(sets)} sets, {len(ents)} zone refs, "
-          f"entry range 0x{min(ents):03X}..0x{max(ents):03X}, {len(set(ents))} distinct")
-    print(f"global IC307 wave index: {INDEX_ENTRIES} entries (max 0x{INDEX_ENTRIES - 1:03X})")
-    if max(ents) >= INDEX_ENTRIES:
-        print("\n⚠ GRADING SKIPPED -- zone 'entry' exceeds the global wave index, so "
-              "class:entry is not a\n  global index and any join would be meaningless. "
-              "Decode class:entry -> (chip, wave) first.")
-        print("  Until then this tool reports only the DETECTOR's own behaviour above.")
-        return
+    refs = [(c, e) for _i, z in sets for _k, c, e in z]
+    on307 = sum(1 for c, _e in refs if class_to_page(c)[0] == 1)
+    print(f"\nzone table: {len(sets)} sets, {len(refs)} zone refs; "
+          f"{on307} ({100.0 * on307 / len(refs):.0f}%) resolve to IC307, "
+          f"the rest to the undumped socket")
+    print(f"grading only IC307 zones, ideal slope -1/12 = {-1/12:.4f} per semitone:")
     grade(cur, sets, "shipped gate 0.5")
     grade(cand, sets, f"candidate gate {args.gate}")
 
