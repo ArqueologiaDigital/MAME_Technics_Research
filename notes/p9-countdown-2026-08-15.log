@@ -1,0 +1,41 @@
+kn5000_subcpu_boot.ic30 ROM NEEDS REDUMP
+kn5000_rhythm_data_rom.ic14 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+CD demo engaged at t=23.97 -- watching 0x0D2F
+CD t=  23.99 0x0D2F <-  12  PC=0x00F86C01   (first time)
+CD t=  23.99 write #1 value= 12 PC=0x00F86C01
+CD t=  24.09 0x0D2F <-  11  PC=0x00F86C01   (first time)
+CD t=  24.09 write #2 value= 11 PC=0x00F86C01
+CD t=  24.19 0x0D2F <-  10  PC=0x00F86C01   (first time)
+CD t=  24.19 write #3 value= 10 PC=0x00F86C01
+CD t=  24.70 0x0D2F <-   9  PC=0x00F86C01   (first time)
+CD t=  24.70 write #4 value=  9 PC=0x00F86C01
+CD t=  24.77 0x0D2F <-   8  PC=0x00F86C01   (first time)
+CD t=  24.77 write #5 value=  8 PC=0x00F86C01
+CD t=  24.87 0x0D2F <-   7  PC=0x00F86C01   (first time)
+CD t=  24.87 write #6 value=  7 PC=0x00F86C01
+CD t=  24.97 0x0D2F <-   6  PC=0x00F86C01   (first time)
+CD t=  24.97 write #7 value=  6 PC=0x00F86C01
+CD t=  25.07 0x0D2F <-   5  PC=0x00F86C01   (first time)
+CD t=  25.07 write #8 value=  5 PC=0x00F86C01
+CD t=  25.17 0x0D2F <-   4  PC=0x00F86C01   (first time)
+CD t=  25.17 write #9 value=  4 PC=0x00F86C01
+CD t=  25.27 0x0D2F <-   3  PC=0x00F86C01   (first time)
+CD t=  25.27 write #10 value=  3 PC=0x00F86C01
+CD t=  25.36 0x0D2F <-   2  PC=0x00F86C01   (first time)
+CD t=  25.36 write #11 value=  2 PC=0x00F86C01
+CD t=  25.46 0x0D2F <-   1  PC=0x00F86C01   (first time)
+CD t=  25.46 write #12 value=  1 PC=0x00F86C01
+CD t=  25.56 0x0D2F <-   0  PC=0x00F86C01   (first time)
+CD t=  25.56 write #13 value=  0 PC=0x00F86C01
+CD t= 40  total writes so far: 13
+CD t= 60  total writes so far: 13
+CD t= 80  total writes so far: 13
+CD t=100  total writes so far: 13
+CD t=120  total writes so far: 13
+CD t=140  total writes so far: 13
+CD t=160  total writes so far: 13
+Average speed: 113.38% (169 seconds)
