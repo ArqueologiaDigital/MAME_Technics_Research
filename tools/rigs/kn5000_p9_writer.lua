@@ -61,6 +61,40 @@ local function watch(addr, name)
             log(string.format("P9W t=%7.2f %-11s <- 0x%02X  from PC=0x%08X   (first time)",
                 t, name, v, p))
         end
+        -- On the terminal STOP, dump the stack so the CALLER can be identified. The write
+        -- itself is at 0xF5AFC3 (confirmed by disassembly); what decides to call it is the
+        -- open question. TLCS-900 `calr` pushes a return address, so the caller's address is
+        -- a few words up the stack.
+        -- On the terminal STOP, dump the stack so the CALLER can be identified. The write
+        -- itself is at 0xF5AFC3 (confirmed by disassembly); what decides to call it is the
+        -- open question, and the routine is entered by `calr`, so a static search for its
+        -- address finds nothing -- the runtime stack is the only way in.
+        --
+        -- ⚠ The TLCS-900 has TWO stack pointers and neither is called "SP": XNSP (normal)
+        -- and XSSP (system). A first attempt looked for XSP/SP, found neither, and produced
+        -- no output at all.
+        if name == "transport" and v == 0x0C and not S.dumped then
+            S.dumped = true
+            local ok, err = pcall(function()
+                for _, nm in ipairs({ "XNSP", "XSSP" }) do
+                    local ok2, spv = pcall(function() return cpu.state[nm].value end)
+                    if ok2 and spv then
+                        log(string.format("P9W ★★ STOP PC=0x%08X  %s=0x%08X -- stack:", p, nm, spv))
+                        for i = 0, 9 do
+                            local a = spv + i * 4
+                            local ok3, w = pcall(function() return sp:read_u32(a) end)
+                            if ok3 and w then
+                                local tag = (w >= 0xE00000 and w <= 0xFFFFFF) and "  <- code" or ""
+                                log(string.format("    %s+%2d 0x%08X = 0x%08X%s", nm, i * 4, a, w, tag))
+                            end
+                        end
+                    else
+                        log("P9W stack: register " .. nm .. " unreadable")
+                    end
+                end
+            end)
+            if not ok then log("P9W stack dump ERROR: " .. tostring(err)) end
+        end
         if name == "transport" and v ~= 0x04 and v ~= 0x00 then
             log(string.format("P9W ★ t=%7.2f %s <- 0x%02X from PC=0x%08X", t, name, v, p))
         end
