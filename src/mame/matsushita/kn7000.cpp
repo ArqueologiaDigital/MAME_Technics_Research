@@ -2406,10 +2406,22 @@ ROM_START(kn2400)
 	// 0x48000000-0x483fffff" is WRONG. A read tap held to t=30 counts 164,300 reads,
 	// first at t=0.84 s, concentrated at 0x48000000 (124,933) and spread over
 	// 0x480000xx-0x48004Cxx -- deterministic across runs. So this family DOES have a
-	// separate table/font ROM and it is UNDUMPED. Because the region is ERASEFF, every
-	// glyph fetch returns 0xFF and text renders as solid filled cells, which is exactly
-	// what the KN2400/KN2600 screens show while their icons draw correctly.
+	// separate table/font ROM and it is UNDUMPED.
 	// Reproduce: tools/rigs/kn24_fontsrc.lua.
+	//
+	// ⚠ CORRECTED AGAIN 2026-08-15 -- the causal half of the 2026-08-14 note was wrong.
+	// It said the ERASEFF region is why "text renders as solid filled cells, which is
+	// exactly what the KN2400/KN2600 screens show". Two independent measurements refute
+	// that, and both are in notes/FINDINGS-kn2400-table-rom.md:
+	//   * the region IS copied into RAM at boot (loop at 0x4860C274 -> 0x502A5024, 40
+	//     records x 712 B, 99.86% 0xFF), but holding those buffers overwritten across the
+	//     compositing paint leaves the frame BIT-IDENTICAL to a control, while poking the
+	//     framebuffer itself changes it (so the test can succeed);
+	//   * the routine that paints the panel (0x485EC9D6) reads work RAM 550,901 times and
+	//     this region ZERO times.
+	// What survives: the region is read, and it is undumped. What does not: that it is why
+	// the text draws as bars. The real glyph source is work RAM around 0x500B1A00-0x500B2400
+	// and 0x5039B700 -- who fills those, and whether that data is itself degenerate, is open.
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
 ROM_END
 
