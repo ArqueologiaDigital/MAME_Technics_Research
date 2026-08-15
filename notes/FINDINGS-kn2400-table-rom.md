@@ -149,13 +149,59 @@ This is the same trap as the positive control passing for the wrong reason: poki
 framebuffer "worked" precisely because it skips the drawing step, and its persistence from
 t=22 to t=30 is what revealed that nothing ever redraws.
 
-### So where do the glyphs come from?
+### So where do the glyphs come from? Not the table ROM.
 
-Open. What is now excluded: the two table-ROM-derived buffers, for the boot play screen as
-rendered. What is not excluded: that they feed content reached only by navigating (style or
-sound names on other screens), which this test never displays. The next move is to tap reads
-of the framebuffer-filling routine around t=6 and see what memory it sources — the same
-reader/writer correlation that found the copy loop, pointed at the compositor instead.
+Asked and answered. `tools/rigs/kn24_fbwrites.lua` names the compositor and
+`tools/rigs/kn24_glyphsrc.lua` taps every mapped region, recording only reads made from
+inside the compositor's own code.
+
+The compositor is at `0x485EC9D6`:
+
+```
+485ec993: movbu (a2), d0     ; ★ the pixel source
+...
+485ec9ab: call  0x486053f5   ; per-pixel lookup/convert
+485ec9b2: lsr   6, d0
+485ec9b5: and   0x03, d0     ; a 2-bit pixel
+...
+485ec9d6: movhu d1, (a0)     ; ★ the framebuffer write
+485ec9e3: cmp   0x28, d0     ; 40 halfwords = 80 B = one 320px 2bpp scanline
+485ec9f6: cmp   0xf0, d0     ; 240 rows
+```
+
+Its geometry matches the panel exactly, so this is unambiguously the routine that paints what
+is on screen. What it reads:
+
+| region | reads by the compositor |
+|---|---|
+| **`0x48000000` table ROM (undumped)** | **0** |
+| `0x50000000` work RAM | **550,901** — `0x500063D8..0x5039B808` |
+| libram, libram alias, work-RAM alias, LCD buffer | 0 |
+
+**The compositor never touches the undumped table ROM.** Its input is work RAM, concentrated
+in a hot bucket at `0x5039B700` (90,006 reads) and an even cluster around
+`0x500B1A00..0x500B2400` (1,536 reads per 256 B bucket) — and *none* of those addresses are
+the table-ROM copy destinations (`0x502A5024`, `0x502AC108`) found earlier. That is consistent
+with, and independent of, the poke result.
+
+⚠ **One artefact, named so it is not rediscovered as a finding.** The first run of this rig
+reported 9,851,799 "reads" of the program ROM at `0x485EC954..0x485ECA00`. That is the
+compositor's own **instruction fetch** — the PC filter window lies inside the program ROM, so
+the routine was catching itself executing. The rig now skips reads whose address falls inside
+the PC window. The work-RAM figures were never affected.
+
+### What this means for the black bars
+
+The chain "undumped table ROM → `0xFF` → solid glyph cells" is **not supported**. Two
+independent measurements now say so: overwriting the table-ROM-derived buffers changes
+nothing on screen, and the routine that actually paints the screen never reads that ROM.
+
+The `ROM_START(kn2400)` comment added 2026-08-14 asserts the region being `ERASEFF` is "exactly
+what the KN2400/KN2600 screens show". That causal claim should be softened: the region *is*
+read and *is* undumped — both still true — but it is not what draws the bars.
+
+Next: find who fills `0x500B1A00..0x500B2400` and `0x5039B700`, and whether that data is itself
+degenerate. The same reader/writer correlation applies, pointed at those addresses.
 
 ### A methodology note worth more than the finding
 

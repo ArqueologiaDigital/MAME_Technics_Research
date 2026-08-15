@@ -28,7 +28,12 @@ local function log(s) emu.print_error(s) end
 local UNTIL = tonumber(os.getenv("TAP_UNTIL")) or 32
 local FB_LO, FB_HI = 0x9C800000, 0x9C804AFF     -- 320*240*2bpp = 19200 B
 
-_G.FB = _G.FB or { n = 0, per = {} }
+_G.FB = _G.FB or { n = 0, per = {}, pcs = {} }
+
+local function pc()
+    local ok, v = pcall(function() return cpu.state["PC"].value end)
+    return ok and v or -1
+end
 
 _G.FB.tap = prog:install_write_tap(FB_LO, FB_HI, "fb", function(offset, data, mask)
     local s = _G.FB
@@ -37,6 +42,15 @@ _G.FB.tap = prog:install_write_tap(FB_LO, FB_HI, "fb", function(offset, data, ma
     if not s.first then s.first = mac.time.seconds + mac.time.attoseconds / 1e18 end
     s.last = mac.time.seconds + mac.time.attoseconds / 1e18
     s.per[t] = (s.per[t] or 0) + 1
+    -- WHO composites. This is the handle on the glyph source: disassembling the writer shows
+    -- what it reads from, which is exactly how the table-ROM copy loop at 0x4860C274 was found.
+    local p = pc()
+    local e = s.pcs[p]
+    if not e then e = { n = 0, lo = offset, hi = offset, tfirst = t }; s.pcs[p] = e end
+    e.n = e.n + 1
+    if offset < e.lo then e.lo = offset end
+    if offset > e.hi then e.hi = offset end
+    e.tlast = t
     return nil
 end)
 
@@ -59,5 +73,16 @@ _G.FB.h = emu.add_machine_frame_notifier(function()
     log("FB per second -- " .. table.concat(parts, " "))
     log(string.format("FB ---- a glyph-source poke is only a fair test if it lands BEFORE t=%.2f",
         s.last))
+
+    local l = {}
+    for p, e in pairs(s.pcs) do l[#l + 1] = { p, e } end
+    table.sort(l, function(a, b) return a[2].n > b[2].n end)
+    log(string.format("FB writers: %d distinct PCs", #l))
+    for i = 1, math.min(12, #l) do
+        local p, e = l[i][1], l[i][2]
+        log(string.format("   pc=0x%08X  %6d writes  fb=0x%08X..0x%08X  t=%d..%d",
+            p, e.n, e.lo, e.hi, e.tfirst, e.tlast))
+    end
+    log("FB ---- disassemble the top writer to find what it READS. That is the glyph source.")
     mac:exit()
 end)
