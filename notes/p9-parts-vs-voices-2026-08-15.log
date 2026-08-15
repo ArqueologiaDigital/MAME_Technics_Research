@@ -1,0 +1,84 @@
+kn5000_subcpu_boot.ic30 ROM NEEDS REDUMP
+kn5000_rhythm_data_rom.ic14 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+SPK demo engaged at t=23.97
+SPK t=125 parts=0x044A (4 set)  voices=0x0260 (3 active, 29997 polls)  transport=0x04
+SPK t=126 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 30367 polls)  transport=0x04
+SPK t=127 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 30656 polls)  transport=0x04
+SPK t=128 parts=0x044A (4 set)  voices=0x1B00 (4 active, 30935 polls)  transport=0x04
+SPK t=129 parts=0x044A (4 set)  voices=0x1CE0 (6 active, 31265 polls)  transport=0x04
+SPK t=130 parts=0x044A (4 set)  voices=0x0640 (3 active, 31530 polls)  transport=0x04
+SPK t=131 parts=0x044A (4 set)  voices=0x3980 (5 active, 31870 polls)  transport=0x04
+SPK t=132 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 32124 polls)  transport=0x04
+SPK t=133 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 32422 polls)  transport=0x04
+SPK t=134 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 32714 polls)  transport=0x04
+SPK t=135 parts=0x044A (4 set)  voices=0x1CE0 (6 active, 33090 polls)  transport=0x04
+SPK t=136 parts=0x044A (4 set)  voices=0x1CE0 (6 active, 33537 polls)  transport=0x04
+SPK t=137 parts=0x044A (4 set)  voices=0x1BE0 (7 active, 33807 polls)  transport=0x04
+SPK t=138 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 33983 polls)  transport=0x04
+SPK t=139 parts=0x044A (4 set)  voices=0x1CC0 (5 active, 34153 polls)  transport=0x04
+SPK t=140 parts=0x044A (4 set)  voices=0x0000 (0 active, 34272 polls)  transport=0x00
+SPK t=141 parts=0x044A (4 set)  voices=0x0000 (0 active, 34313 polls)  transport=0x00
+SPK t=142 parts=0x044A (4 set)  voices=0x0000 (0 active, 34353 polls)  transport=0x00
+SPK t=143 parts=0x044A (4 set)  voices=0x0000 (0 active, 34394 polls)  transport=0x00
+SPK t=144 parts=0x044A (4 set)  voices=0x0000 (0 active, 34435 polls)  transport=0x00
+SPK t=145 parts=0x044A (4 set)  voices=0x0000 (0 active, 34476 polls)  transport=0x00
+SPK t=146 parts=0x044A (4 set)  voices=0x0000 (0 active, 34516 polls)  transport=0x00
+SPK t=147 parts=0x044A (4 set)  voices=0x0000 (0 active, 34557 polls)  transport=0x00
+SPK t=148 parts=0x044A (4 set)  voices=0x0000 (0 active, 34598 polls)  transport=0x00
+SPK t=149 parts=0x044A (4 set)  voices=0x0000 (0 active, 34638 polls)  transport=0x00
+SPK t=150 parts=0x044A (4 set)  voices=0x0000 (0 active, 34679 polls)  transport=0x00
+SPK t=151 parts=0x044A (4 set)  voices=0x0000 (0 active, 34720 polls)  transport=0x00
+SPK t=152 parts=0x044A (4 set)  voices=0x0000 (0 active, 34760 polls)  transport=0x00
+SPK t=153 parts=0x044A (4 set)  voices=0x0000 (0 active, 34801 polls)  transport=0x00
+SPK t=154 parts=0x044A (4 set)  voices=0x0000 (0 active, 34842 polls)  transport=0x00
+SPK t=155 parts=0x044A (4 set)  voices=0x0000 (0 active, 34882 polls)  transport=0x00
+SPK t=156 parts=0x044A (4 set)  voices=0x0000 (0 active, 34923 polls)  transport=0x00
+SPK t=157 parts=0x044A (4 set)  voices=0x0000 (0 active, 34964 polls)  transport=0x00
+SPK t=158 parts=0x044A (4 set)  voices=0x0000 (0 active, 35004 polls)  transport=0x00
+SPK t=159 parts=0x044A (4 set)  voices=0x0000 (0 active, 35045 polls)  transport=0x00
+SPK t=160 parts=0x044A (4 set)  voices=0x0000 (0 active, 35086 polls)  transport=0x00
+SPK t=161 parts=0x044A (4 set)  voices=0x0000 (0 active, 35126 polls)  transport=0x00
+SPK t=162 parts=0x044A (4 set)  voices=0x0000 (0 active, 35167 polls)  transport=0x00
+SPK t=163 parts=0x044A (4 set)  voices=0x0000 (0 active, 35208 polls)  transport=0x00
+SPK t=164 parts=0x044A (4 set)  voices=0x0000 (0 active, 35249 polls)  transport=0x00
+SPK t=165 parts=0x044A (4 set)  voices=0x0000 (0 active, 35289 polls)  transport=0x00
+SPK t=166 parts=0x044A (4 set)  voices=0x0000 (0 active, 35330 polls)  transport=0x00
+SPK t=167 parts=0x044A (4 set)  voices=0x0000 (0 active, 35371 polls)  transport=0x00
+SPK t=168 parts=0x044A (4 set)  voices=0x0000 (0 active, 35411 polls)  transport=0x00
+SPK t=169 parts=0x044A (4 set)  voices=0x0000 (0 active, 35452 polls)  transport=0x00
+SPK t=170 parts=0x044A (4 set)  voices=0x0000 (0 active, 35493 polls)  transport=0x00
+SPK t=171 parts=0x044A (4 set)  voices=0x0000 (0 active, 35533 polls)  transport=0x00
+SPK t=172 parts=0x044A (4 set)  voices=0x0000 (0 active, 35574 polls)  transport=0x00
+SPK t=173 parts=0x044A (4 set)  voices=0x0000 (0 active, 35615 polls)  transport=0x00
+SPK t=174 parts=0x044A (4 set)  voices=0x0000 (0 active, 35655 polls)  transport=0x00
+SPK t=175 parts=0x044A (4 set)  voices=0x0000 (0 active, 35696 polls)  transport=0x00
+SPK t=176 parts=0x044A (4 set)  voices=0x0000 (0 active, 35737 polls)  transport=0x00
+SPK t=177 parts=0x044A (4 set)  voices=0x0000 (0 active, 35777 polls)  transport=0x00
+SPK t=178 parts=0x044A (4 set)  voices=0x0000 (0 active, 35818 polls)  transport=0x00
+SPK t=179 parts=0x044A (4 set)  voices=0x0000 (0 active, 35859 polls)  transport=0x00
+SPK t=180 parts=0x044A (4 set)  voices=0x0000 (0 active, 35900 polls)  transport=0x00
+SPK t=181 parts=0x044A (4 set)  voices=0x0000 (0 active, 35940 polls)  transport=0x00
+SPK t=182 parts=0x044A (4 set)  voices=0x0000 (0 active, 35981 polls)  transport=0x00
+SPK t=183 parts=0x044A (4 set)  voices=0x0000 (0 active, 36022 polls)  transport=0x00
+SPK t=184 parts=0x044A (4 set)  voices=0x0000 (0 active, 36062 polls)  transport=0x00
+SPK t=185 parts=0x044A (4 set)  voices=0x0000 (0 active, 36103 polls)  transport=0x00
+SPK t=186 parts=0x044A (4 set)  voices=0x0000 (0 active, 36144 polls)  transport=0x00
+SPK t=187 parts=0x044A (4 set)  voices=0x0000 (0 active, 36184 polls)  transport=0x00
+SPK t=188 parts=0x044A (4 set)  voices=0x0000 (0 active, 36225 polls)  transport=0x00
+SPK t=189 parts=0x044A (4 set)  voices=0x0000 (0 active, 36266 polls)  transport=0x00
+SPK t=190 parts=0x044A (4 set)  voices=0x0000 (0 active, 36306 polls)  transport=0x00
+SPK t=191 parts=0x044A (4 set)  voices=0x0000 (0 active, 36347 polls)  transport=0x00
+SPK t=192 parts=0x044A (4 set)  voices=0x0000 (0 active, 36388 polls)  transport=0x00
+SPK t=193 parts=0x044A (4 set)  voices=0x0000 (0 active, 36428 polls)  transport=0x00
+SPK t=194 parts=0x044A (4 set)  voices=0x0000 (0 active, 36469 polls)  transport=0x00
+SPK t=195 parts=0x044A (4 set)  voices=0x0000 (0 active, 36510 polls)  transport=0x00
+SPK t=196 parts=0x044A (4 set)  voices=0x0000 (0 active, 36550 polls)  transport=0x00
+SPK t=197 parts=0x044A (4 set)  voices=0x0000 (0 active, 36591 polls)  transport=0x00
+SPK t=198 parts=0x044A (4 set)  voices=0x0000 (0 active, 36632 polls)  transport=0x00
+SPK t=199 parts=0x044A (4 set)  voices=0x0000 (0 active, 36673 polls)  transport=0x00
+SPK t=200 parts=0x044A (4 set)  voices=0x0000 (0 active, 36713 polls)  transport=0x00
+Average speed: 111.51% (199 seconds)
