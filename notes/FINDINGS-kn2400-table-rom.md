@@ -200,8 +200,42 @@ The `ROM_START(kn2400)` comment added 2026-08-14 asserts the region being `ERASE
 what the KN2400/KN2600 screens show". That causal claim should be softened: the region *is*
 read and *is* undumped — both still true — but it is not what draws the bars.
 
-Next: find who fills `0x500B1A00..0x500B2400` and `0x5039B700`, and whether that data is itself
-degenerate. The same reader/writer correlation applies, pointed at those addresses.
+### And the compositor's input is not degenerate either
+
+Re-run with the instruction-fetch artefact filtered, the picture is unambiguous:
+
+```
+GS reads by PC in the compositor = 550,901 total
+  table(UNDUMPED)        0
+  programROM             0          <- was 9.85M before the artefact filter
+  workram          550,901   0x500063D8..0x5039B808
+      0x5039B700    90006 reads    0.4% 0xFF     <- ~one read per pixel (320x240 = 76,800)
+      0x500B1A00     1536 reads    0.0% 0xFF
+      0x500B1C00     1536 reads    0.0% 0xFF     <- eleven buckets, all 1536, all 0.0%
+      ...
+  libram / aliases / lcdbuf   0
+```
+
+`0x5039B700` is a 256-byte block read about once per pixel — the per-pixel lookup behind
+`call 0x486053f5`. The `0x500B….` cluster is the source plane, each byte read six times.
+
+**None of it is `0xFF`.** The compositor is fed real, varied data. So the last surviving form
+of the original theory — "`0xFF` glyph data draws as filled cells" — is dead: there is no
+`0xFF` glyph data anywhere in the path that paints the screen.
+
+### Where the defect has to be, by elimination
+
+The KN2400 draws its **icons correctly** and its **text as solid bars**, and both go through
+the *same* compositor and the *same* per-pixel lookup. A stage shared by a working case and a
+broken case cannot be the defect. Combined with the measurements above, that eliminates:
+
+* the undumped table ROM (0 reads by the compositor; poking its buffers changes nothing),
+* the compositor itself (correct geometry, and icons come out right),
+* the per-pixel lookup at `0x5039B700` (shared with the working icons).
+
+What is left is **upstream**: whatever draws text into the source plane is already writing
+solid bars. `tools/rigs/kn24_planewriters.lua` tests exactly that — it groups writes to the
+plane by PC and reports how solid each writer's output is.
 
 ### A methodology note worth more than the finding
 
