@@ -1,0 +1,102 @@
+kn5000_subcpu_boot.ic30 ROM NEEDS REDUMP
+kn5000_rhythm_data_rom.ic14 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+P9W demo engaged at t=23.97 -- watching 0x0420 and 0x22FC
+P9W t=  23.97 transport   <- 0x00  from PC=0x00F3ECE9   (first time)
+P9W t=  23.97 transport   <- 0x00  from PC=0x00F3ECED   (first time)
+P9W t=  25.30 AccPlayMode <- 0x01  from PC=0x00F39C08   (first time)
+P9W t=  25.47 transport   <- 0x01  from PC=0x00F43CFD   (first time)
+P9W ★ t=  25.47 transport <- 0x01 from PC=0x00F43CFD
+P9W t=  25.47 transport   <- 0x01  from PC=0x00F3ECE9   (first time)
+P9W ★ t=  25.47 transport <- 0x01 from PC=0x00F3ECE9
+P9W t=  25.47 transport   <- 0x01  from PC=0x00F3ECED   (first time)
+P9W ★ t=  25.47 transport <- 0x01 from PC=0x00F3ECED
+P9W ★ t=  25.47 transport <- 0x01 from PC=0x00F3ECE9
+P9W ★ t=  25.47 transport <- 0x01 from PC=0x00F3ECED
+P9W t=  25.47 transport   <- 0x06  from PC=0x00EF0CB1   (first time)
+P9W ★ t=  25.47 transport <- 0x06 from PC=0x00EF0CB1
+P9W t=  25.47 transport   <- 0x06  from PC=0x00F3ECE9   (first time)
+P9W ★ t=  25.47 transport <- 0x06 from PC=0x00F3ECE9
+P9W t=  25.47 transport   <- 0x04  from PC=0x00F3ECED   (first time)
+P9W t=  25.49 AccPlayMode <- 0x03  from PC=0x00F3A105   (first time)
+P9W t=  25.49 transport   <- 0x04  from PC=0x00F3ECE9   (first time)
+P9W t= 139.47 transport   <- 0x0C  from PC=0x00F5AFC8   (first time)
+P9W ★ t= 139.47 transport <- 0x0C from PC=0x00F5AFC8
+P9W t= 139.50 AccPlayMode <- 0x00  from PC=0x00F3CB3E   (first time)
+P9W t= 139.52 transport   <- 0x0C  from PC=0x00F3ECE9   (first time)
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECE9
+P9W t= 139.52 transport   <- 0x0C  from PC=0x00F3ECED   (first time)
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.52 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.53 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.54 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.55 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.55 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.55 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.55 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.56 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.56 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.56 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.56 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.57 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.57 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.57 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.57 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.58 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.58 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.58 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.58 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.59 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.59 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.59 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.59 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.60 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.61 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.61 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.61 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.61 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.62 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.63 transport <- 0x0C from PC=0x00F3ECED
+P9W ★ t= 139.64 transport <- 0x0C from PC=0x00F3ECE9
+P9W ★ t= 139.64 transport <- 0x0C from PC=0x00F3ECED
+P9W t= 139.64 transport   <- 0x10  from PC=0x00EF0FA5   (first time)
+P9W ★ t= 139.64 transport <- 0x10 from PC=0x00EF0FA5
+P9W t= 139.64 AccPlayMode <- 0x00  from PC=0x00F394B5   (first time)
+Average speed: 73.04% (144 seconds)
