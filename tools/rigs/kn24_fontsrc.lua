@@ -1,4 +1,5 @@
 -- kn24_fontsrc.lua -- where does the KN2400 text drawer fetch its glyphs?
+-- rig-machine: kn2400
 --
 -- THE SYMPTOM (screenshot, 2026-08-14): the KN2400 draws ICONS correctly -- the grand-piano
 -- glyphs in the part cells are clean -- but every run of TEXT renders as a solid black bar.
@@ -20,8 +21,7 @@
 -- instead; a large count with addresses clustered in one sub-range CONFIRMS it and names
 -- the font table's offset.
 --
---   ./run.sh kn2400 -window -nothrottle -seconds_to_run 32 \
---       -autoboot_script tools/rigs/kn24_fontsrc.lua
+--   ./tools/rig.sh kn24_fontsrc kn2400 -s 32
 
 local mac  = manager.machine
 local cpu  = mac.devices[":maincpu"]

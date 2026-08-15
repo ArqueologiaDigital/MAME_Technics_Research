@@ -1,4 +1,5 @@
 -- kn5000_waveselect_log.lua -- which waveform chunks does the machine ACTUALLY select?
+-- rig-machine: kn5000
 --
 -- Answers the reachability question directly, without an audio A/B and without a second build.
 -- The 2026-08-14 detect_period change affects 35 chunks; a 90 s Feature Presentation capture
@@ -19,8 +20,7 @@
 -- tools/kn5000_referenced_fallbacks.py -- do not hard-code that set here, so this rig stays
 -- a plain observation with no hypothesis baked in.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 90 \
---       -autoboot_script tools/rigs/kn5000_waveselect_log.lua
+--   ./tools/rig.sh kn5000_waveselect_log kn5000 -s 90
 --
 -- ⚠ Delete nvram/kn5000/nvram1 first, and use a fresh -cfg_directory.
 

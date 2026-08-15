@@ -9,8 +9,10 @@
 -- It also reports which of a candidate list are readable, so a rig can be written against
 -- names that are known to exist rather than names that seem plausible.
 --
---   ./run.sh <model> -window -nothrottle -seconds_to_run 5 \
---       -autoboot_script tools/rigs/cpu_state_probe.lua
+-- Deliberately NO rig-machine: header -- the question is per-CPU, so name the model you
+-- mean. The measurement below is kn5000 (TLCS-900); kn7000 is an MN10300 and answers
+-- differently, which is the entire point of running it.
+--   ./tools/rig.sh cpu_state_probe kn5000 -s 5
 --   CPU_TAG=":subcpu" ...        (default ":maincpu")
 --
 -- Measured on kn5000 :maincpu (TMP94C241, TLCS-900/H2), 41 keys, including:

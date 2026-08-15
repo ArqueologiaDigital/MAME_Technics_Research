@@ -1,4 +1,5 @@
 -- kn5000_tgflags.lua -- is ToneGen_GlobalFlags bit 2 EVER set on the shipped configuration?
+-- rig-machine: kn5000
 --
 -- WHY THIS ONE BIT MATTERS. The 2026-08-14 page-2 adjudication concluded that IC307 page 2's
 -- 48% period-detection "failure" is not an audible defect, because the ~1020 wavetable entries
@@ -16,8 +17,7 @@
 -- Samples the byte every frame from t=0 to t=UNTIL (default 40 s) and reports every distinct
 -- value seen, with the time it first appeared, plus an explicit verdict on bit 2.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 42 \
---       -autoboot_script tools/rigs/kn5000_tgflags.lua
+--   ./tools/rig.sh kn5000_tgflags kn5000 -s 42
 --
 -- PRE-DECLARED: bit 2 never set  -> the page-2 "not a defect" verdict stands.
 --               bit 2 ever set   -> it collapses; ~1000 chunks become reachable.

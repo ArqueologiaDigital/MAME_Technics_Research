@@ -1,4 +1,5 @@
 -- kn5000_note_capture.lua -- hold one known keybed note, so its pitch can be measured.
+-- rig-machine: kn5000
 --
 -- For task-queue item P10, the octave error: the emulator's onset centroid measures ~13
 -- semitones above a reference render, and nobody has yet played a KNOWN note and measured
@@ -13,8 +14,7 @@
 --   NOTECAP port=:KEYS0 field="Key C4" found=yes pressed_at=16.00
 --   NOTECAP fields available: ...        (only when the named field is NOT found)
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 30 -wavwrite out.wav \
---       -autoboot_script tools/rigs/kn5000_note_capture.lua
+--   ./tools/rig.sh kn5000_note_capture kn5000 -s 30 -w out.wav
 --   NOTE_NAME="Key C4" NOTE_AT=16 ...
 --
 -- Expected pitch for C4 is 261.626 Hz; an octave high reads 523.25, an octave low 130.81.

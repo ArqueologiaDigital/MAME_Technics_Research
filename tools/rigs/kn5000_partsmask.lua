@@ -1,4 +1,5 @@
 -- kn5000_partsmask.lua -- what clears the sequencer part-active mask, and why not these four?
+-- rig-machine: kn5000
 --
 -- Established 2026-08-15: after the Feature Presentation's song stops, DRAM[0x10420] holds
 -- 0x044A -- bits 1, 3, 6, 10 -- forever, and FDemo_MultiGuardCheck therefore refuses to start
@@ -11,9 +12,7 @@
 -- This taps every WRITE to the mask and reports the value, the PC, and which bits changed --
 -- so "who clears bits" and "who never clears these" are both answered from one run.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 200 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_partsmask.lua
+--   ./tools/rig.sh kn5000_partsmask kn5000 -s 200
 --
 -- ⚠ The tap range must be word-aligned (16-bit bus): 0x10420-0x10421, not 0x10420-0x10420.
 -- ⚠ The reported PC is a prefetch neighbourhood, not exactly the writing instruction --

@@ -1,4 +1,5 @@
 -- kn5000_demotimer.lua -- why does no NEXT song start after the first one ends?
+-- rig-machine: kn5000
 --
 -- Per kn5000-docs/ssf-presentation.md the Feature Presentation drives itself:
 --     enter state 0xE4 -> Demo_ResetCountdownTimer sets DRAM[0x0D2F] = 15
@@ -15,9 +16,7 @@
 -- Note the idle machine has no demo at all -- the timer lives INSIDE the presentation, so
 -- "wait at the home screen and see if a demo starts" tests something that does not exist.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 220 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_demotimer.lua
+--   ./tools/rig.sh kn5000_demotimer kn5000 -s 220
 --
 -- Prints once a second from DT_FROM: the countdown, the parts mask, the state byte and the
 -- transport, so "timer stopped" and "guard blocked" are distinguishable rather than lumped

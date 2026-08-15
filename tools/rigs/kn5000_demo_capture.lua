@@ -1,4 +1,5 @@
 -- kn5000_demo_capture.lua -- boot, start the Feature Presentation demo, hold it playing.
+-- rig-machine: kn5000
 --
 -- Purpose: give -wavwrite something to record that actually exercises the tone generator,
 -- including the DRUM parts. The gate's liveness check sits at the home screen with no notes
@@ -13,9 +14,7 @@
 -- once the boot has settled; held 0.5 s because a shorter tap is cleared by the input
 -- frame-update before the 250 Hz panel scan samples it.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 90 \
---       -wavwrite out.wav -cfg_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_demo_capture.lua
+--   ./tools/rig.sh kn5000_demo_capture kn5000 -s 90 -w out.wav
 --
 -- ⚠ Delete nvram/kn5000/nvram1 first: 1 MB of work DRAM is persisted as NVRAM, so a stale
 -- one changes what the run does.

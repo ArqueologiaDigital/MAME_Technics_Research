@@ -13,8 +13,7 @@
 --     pixels() ok=true type=string len=614400        (= 640*240*4, so 32bpp)
 --
 -- Usage:
---   ./run.sh <model> -window -nothrottle -seconds_to_run 5 \
---       -autoboot_script tools/rigs/api_probe.lua 2>&1 | grep -E 'SCREEN|DEV|pixels'
+--   ./tools/rig.sh api_probe -s 5
 
 local mac = manager.machine
 local function log(s) emu.print_error(s) end

@@ -1,4 +1,5 @@
 -- kn5000_p9_writer.lua -- WHO stops the Feature Presentation?
+-- rig-machine: kn5000
 --
 -- P9 is now pinned (notes/p9-stall-2026-08-15.log): the demo does not stall, it reaches its own
 -- terminal STOP. Transport 0x0420 goes 0x04 -> 0x0C at t=139.48, then 0x00, with AccPlayMode
@@ -11,9 +12,7 @@
 -- Also taps AccPlayMode, because whichever of the two moves FIRST is the cause and the other
 -- is the consequence -- and a one-second sampling cannot tell them apart.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 150 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_p9_writer.lua
+--   ./tools/rig.sh kn5000_p9_writer kn5000 -s 150
 --
 -- Prints every write to either address once the demo is engaged:
 --   P9W t=139.48 transport <- 0x0C  from PC=0x00FEE1A2

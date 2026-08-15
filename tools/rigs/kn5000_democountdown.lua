@@ -1,4 +1,5 @@
 -- kn5000_democountdown.lua -- does the demo countdown timer ever get armed?
+-- rig-machine: kn5000
 --
 -- kn5000-docs/ssf-presentation.md: entering the Feature Presentation (state 0xE4) calls
 -- Demo_ResetCountdownTimer, which sets DRAM[0x0D2F] = 15; the timer ticks down and at 10 it
@@ -16,9 +17,7 @@
 -- Deliberately NOT assuming the docs' address labels are right: this session already found
 -- 0x10420 mislabelled, so treat 0x0D2F as a hypothesis under test, not a fact.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 170 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_democountdown.lua
+--   ./tools/rig.sh kn5000_democountdown kn5000 -s 170
 
 local mac = manager.machine
 local cpu = mac.devices[":maincpu"]

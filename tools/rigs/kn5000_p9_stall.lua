@@ -1,4 +1,5 @@
 -- kn5000_p9_stall.lua -- when exactly does the Feature Presentation stop, and into what state?
+-- rig-machine: kn5000
 --
 -- Task-queue item P9 records: after the INT0 fix the demo plays 19.26 -> 131.5 s, then
 -- `transport` (0x0420) goes 04 -> 00, at beat 171 of 292 = 58% of the song.
@@ -10,9 +11,7 @@
 --
 -- Navigation is demo_probe.lua's: DEMO -> LEFT 4 -> LEFT 2. Pressing DEMO alone does nothing.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 170 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_p9_stall.lua
+--   ./tools/rig.sh kn5000_p9_stall kn5000 -s 170
 --
 -- Prints one line per second once past P9_FROM (default 100 s):
 --   P9 t=131.0 transport=04 subtick=19 wd=00 acc=03 8d38=E4

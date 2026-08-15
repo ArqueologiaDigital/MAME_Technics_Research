@@ -24,9 +24,8 @@
 -- Prints exactly one line to stderr:
 --   LIVENESS <machine> distinct=<n> hash=<hex> <PASS|FAIL>
 --
--- Usage:
---   LIVENESS_AT=25 ./run.sh <model> -window -nothrottle -seconds_to_run 30 \
---       -autoboot_script tools/rigs/liveness.lua
+-- Usage (no rig-machine: header on purpose -- the gate runs this on every model):
+--   LIVENESS_AT=25 LIVENESS_MIN=18 ./tools/rig.sh liveness kn5000 -s 27
 
 local mac = manager.machine
 local function log(s) emu.print_error(s) end

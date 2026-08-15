@@ -1,4 +1,5 @@
 -- kn5000_stuckparts.lua -- are the 4 stuck sequencer parts the same bug as the stuck EG voices?
+-- rig-machine: kn5000
 --
 -- Established 2026-08-15: after the Feature Presentation's first song stops at t=139.47, the
 -- next song never starts because FDemo_MultiGuardCheck sees DRAM[0x10420] = 0x044A -- four
@@ -15,9 +16,7 @@
 -- issuing its own: a Lua read would invoke the device handler and could perturb the very state
 -- being measured.
 --
---   ./run.sh kn5000 -window -nothrottle -seconds_to_run 200 \
---       -cfg_directory <fresh> -nvram_directory <fresh> \
---       -autoboot_script tools/rigs/kn5000_stuckparts.lua
+--   ./tools/rig.sh kn5000_stuckparts kn5000 -s 200
 --
 -- Prints once a second from SP_FROM: the parts mask and the most recent active-voice bitmap
 -- the firmware saw, plus a popcount of each. If voices stay active while parts stay stuck,
