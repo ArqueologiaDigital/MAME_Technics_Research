@@ -176,7 +176,13 @@ prior is half-right — see the fossil.
   finds 20/21 load→call on the KN6000, so it *would* detect a vector if one existed.
 - **★ The one fossil that vindicates the intuition:** the KN7000's *only* touch of the `0x97800000`
   window is a **dead** checksum stub at **`0x4849FD9E`** — `mov 0x97800000,a0 ; movbu (a0),d1 ; inc a0`
-  (a 2 MiB byte-sum, error flag 4 on mismatch). It has **0 callers and 0 stored pointers** — unreachable.
+  (a 2 MiB byte-sum, error flag 4 on mismatch).
+  ⚠ **CORRECTED 2026-08-15: it is NOT unreachable.** The original search looked for the entry
+  address `0x4849FD9E` and found nothing; MN10300 `call` saves registers itself, so callers enter
+  at **entry+2**. It has **two** callers — `0x4849FE30` (`MainRomTestFunc`) and `0x484A501C` —
+  making it a *service-mode test*, not dead code. See `notes/FINDINGS-mn10300-caller-search.md`
+  and `tools/mn10300_callers.py`. The XAPR conclusion below does not rest on this stub (it rests
+  on 0 pointer-loads / 0 `"XAPR"` / 0 thunks against a 20/21 positive control), so it stands.
   It proves the HD-SX3/XAPR support *once existed in this codebase and was cut* for the KN7000 build
   (which dropped HD-SX3), rather than being left dead. So the capability was removed, not retained.
 - **The four SOUND-RAM windows are data-only.** All 53 `mov (window+off),aN` loads → **0** followed by
