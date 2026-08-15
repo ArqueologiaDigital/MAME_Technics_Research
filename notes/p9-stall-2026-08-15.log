@@ -1,0 +1,30 @@
+kn5000_subcpu_boot.ic30 ROM NEEDS REDUMP
+kn5000_rhythm_data_rom.ic14 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+P9 demo engaged at t=23.97
+P9 t=130 transport=04 subtick=4D wd=00 acc=03 8d38=E4
+P9 t=131 transport=04 subtick=1C wd=00 acc=03 8d38=E4
+P9 t=132 transport=04 subtick=4E wd=00 acc=03 8d38=E4
+P9 t=133 transport=04 subtick=1D wd=00 acc=03 8d38=E4
+P9 t=134 transport=04 subtick=4C wd=00 acc=03 8d38=E4
+P9 t=135 transport=04 subtick=1D wd=00 acc=03 8d38=E4
+P9 t=136 transport=04 subtick=4C wd=00 acc=03 8d38=E4
+P9 t=137 transport=04 subtick=1E wd=00 acc=03 8d38=E4
+P9 t=138 transport=04 subtick=4D wd=00 acc=03 8d38=E4
+P9 t=139 transport=04 subtick=1C wd=00 acc=03 8d38=E4
+P9 ★ transport LEFT 0x04 at t=139.48 -> 0x0C
+P9 t=140 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=141 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=142 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=143 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=144 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=145 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=146 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=147 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=148 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=149 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+P9 t=150 transport=00 subtick=18 wd=00 acc=00 8d38=E4
+Average speed: 84.12% (149 seconds)
