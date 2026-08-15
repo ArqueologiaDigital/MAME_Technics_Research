@@ -66,6 +66,26 @@ Exactly what the comment says. The scanner confirms it independently rather than
 * Displacements are taken PC-relative from the opcode byte. That matches the disassembler on
   every case checked here, including the two-byte-skewed ones.
 
+## The sweep: every MN10300 reachability claim in the notes, re-checked
+
+Having found one wrong, the rest were re-run with the corrected decoding (skews 0 and +2).
+**One correction, six confirmations** — the defect was not systemic:
+
+| address | claim | re-check |
+|---|---|---|
+| `0x4849FD9E` | "0 callers — unreachable" | ❌ **wrong** — 2 callers at +2 |
+| `0x484A4FBA` | FDC engine, dead code | ✅ 0 callers |
+| `0x4854D835` | FDC init, only called from inside the dead engine | ✅ exactly 1 caller, `0x484A4FE3` |
+| `0x484057D6` | unreachable | ✅ 0 callers |
+| `0x484A5075` | unreachable | ✅ 0 callers |
+| `0x484A50A9` | unreachable | ✅ 0 callers |
+| `0x484D7490` | unreachable | ✅ 0 callers |
+
+⚠ `0x4854BF60` also appeared in the sweep but is **not** a dead-code claim — it is the real
+serial disk transport, reached through *runtime driver-method pointers*. "0 direct callers" is
+the expected result there and means nothing on its own, which is the whole caveat above in one
+example.
+
 ## Reproduce
 
 ```
