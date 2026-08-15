@@ -389,3 +389,58 @@ Both print a verdict line. `kn24_tableshape`'s first verdict logic classified on
 touched in more than one second", which put 112 of 113 blocks in a "repeated" bucket and
 reported a useless *mixed*; it now classifies on whether traffic **ceases** and how concentrated
 it is. Recorded because the rig's own criterion had to be fixed before its answer meant anything.
+
+## The table-ROM consumer, and a bug I nearly reported
+
+`0x486FA938` is the routine that walks the table ROM's descriptor (it is the `0x486FA9xx`
+reader group from the copy-loop survey):
+
+```
+486fa938: mov  (0x48000018), d2     ; descriptor field +0x18 -- one of the hottest addresses
+486fa93e: call 0x487055c4
+486fa945: add  0x48000000, d2       ; so +0x18 holds a RELATIVE offset, not a pointer
+486fa94c: cmp  1, d0
+486fa94e: bne  0x486fa9ad           ; a bail path
+486fa950: mov  0x24, a2 ; add d2, a2 ; mov (a2), d0 ; add d2, d0   ; more relative offsets
+```
+
+That `+0x18` field being an **offset relative to `0x48000000`** is a concrete, contents-independent
+fact about the format, and it is the kind of thing a candidate dump can be checked against.
+
+⚠ **I nearly reported this as an emulation bug, and it is not one.** `0x487055C4` looked like a
+table-ROM validator whose failure would explain everything. It is not — it reads the hardware
+strap at `0x98070000` and returns a **model-variant code** (one firmware serves KN2400 / KN2600
+/ PR54):
+
+```
+487055c4: movhu (0x98070000), d0
+487055ca: btst  0x02, d0     ; -> 0x487055e2 if set
+487055d5: btst  0x01, d0
+      bit1=0 bit0=0 -> 2      bit1=0 bit0=1 -> 1
+      bit1=1 bit0=0 -> 1      bit1=1 bit0=1 -> 0
+```
+
+The driver returns `0x8000 | 0x0006 | …` for this register. Reading `0x0006` as "bits 1 and 2
+set" makes the decode land on `clr d0` → 0 → `cmp 1` fails → bail, which would have been a
+tidy explanation for the missing text and a real driver bug.
+
+It is wrong. **MN10300 `btst` takes a MASK, not a bit number**: `btst 0x02` tests bit 1 and
+`btst 0x01` tests bit 0. `0x8006` has bit0 **clear** and bit1 set, so the decode reaches
+`mov 1, d0`, returns 1, matches `cmp 1`, and **does not bail**. (The driver's own comment uses
+the same mask convention — `btst 0x8000` for bit 15 — which confirms the reading.)
+
+So this path runs normally and then walks the descriptor with `0xFFFFFFFF` offsets, which is
+why it wanders over 113 unrelated blocks. No strap bug; nothing to fix here.
+
+### Disassembly provenance
+
+Because `movhu (0x98070000)` is the exact signature of a **historical `dis.sh` bug** — a stale
+shared temp file made unidasm emit that same phantom strap-read at every address — every
+instruction quoted in this note was verified byte-for-byte against the raw image before being
+believed:
+
+| address | bytes in `kn2400_flat.bin` | matches disassembly |
+|---|---|---|
+| `0x487055C4` | `fc ac 00 00 07 98 f8 ec 02 c9 15` | ✓ |
+| `0x486FA938` | `fc a6 18 00 00 48 dd 86 ac` | ✓ |
+| `0x4860C275` | `f0 60 20 02 f0 71 21 02 44 d9` | ✓ |
