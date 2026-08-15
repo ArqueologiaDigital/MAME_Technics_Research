@@ -300,9 +300,30 @@ Also recorded, because it corrects an address used above: the plane's true base 
 **`0x500ADE34`**, stride 320. The dump was taken from `0x500B0000`, i.e. `0x21CC` into the
 plane — near enough to render recognisably, but the base is the number to use from here.
 
-**Open:** find the routine that should draw glyphs over those boxes, and whether it runs at
-all. Two candidates from the writer list have not been chased: `0x5012306E` (library copy, 5
-distinct values, 2.4 % `0xFF`) and whatever calls `0x485FA547` with `0xFF`.
+### Nothing draws a single glyph pixel
+
+Two facts together, and they are strong:
+
+* **The bars are pure `0xFF`.** The whole plane holds five byte values, and the text
+  rectangles are uniformly one of them. If any glyph pass had run — even one drawing garbage —
+  there would be a second value inside those rectangles. There is not.
+* **No plane writer reads font data.** Of the eight writers, seven emit a constant colour
+  (`0xE0`, `0x07`, `0x00`, `0xFF`), and `0x485FA547` was confirmed twice — by disassembly and
+  by a read tap over its PC window — to read no ROM at all, only the `0x5039B700` lookup.
+
+So the KN2400 **draws its text boxes and never draws any glyphs into them.** That is a sharper
+statement than "text renders as bars", and it is the thing to explain.
+
+**Open:** whether the glyph pass bails (e.g. a font pointer that reads `0xFFFFFFFF` out of the
+undumped descriptor) or is never called at all. `tools/rigs/kn24_readfake.lua` attacks this by
+substituting the undumped region's contents over the real bus.
+
+⚠ That rig fabricates ROM contents. It is a causality probe and must never become a fix; no
+screenshot taken under it is the machine working, and nothing it produces is a dump.
+
+**Its positive control passes**, so a null result from it will mean something: forcing the UI
+plane to `0x00` substituted 460,944 reads and took the screen from `distinct=4` to
+`distinct=1`. Read taps really can rewrite data on this build.
 
 ### A methodology note worth more than the finding
 
