@@ -270,7 +270,7 @@ stripped: submission is under the project owner's authorship.
 | 15 | kn5000-15-floppy-dd-to-hd.patch | floppy drive type DD → HD |
 | 16 | kn5000-16-timer0-to-fdc-tc.patch | Timer 0 output (TO0) → FDC Terminal Count |
 | 17 | kn5000-17-code-style-cleanup.patch | upstream style compliance |
-| 18 | kn5000-18-sns-nmi-payload-checksum.patch | ⛔ **DO NOT SUBMIT — THIS PATCH WAS THE "Sound Name Error" BUG AND HAS BEEN REMOVED FROM OUR TREE** (by kn5000-29, commit `b1cf7db`, 2026-07-20). It added an SNS NMI payload checksum via a boot-time write tap on DRAM[0xFFD4]; the substituted checksum sent `SubCPU_Payload_Verify` down the "payload already valid, skip the transfer" path, so the SubCPU ran with no firmware and RIGHT1/RIGHT2/LEFT showed `Sound Name Error`. Current upstream mainline has no such tap and boots to real voice names. Kept in this directory as a **historical record only**. The problem it was trying to solve — MAME's exit path calling `eat_all_cycles()` before `nvram_save()`, so the ROM's power-down NMI transaction never runs — is **still open**, is the leading suspect for the KN5000 warm-boot `<Db>` transpose, and is scheduled as `KN7000/side-quests/pending/kn5000_splash_animation.txt`. See the `kn5000_power_off_nmi` bullet below: **the core-change approach it was rejected in favour of now needs revisiting.** |
+| 18 | kn5000-18-sns-nmi-payload-checksum.patch | ⛔ **DO NOT SUBMIT — THIS PATCH WAS THE "Sound Name Error" BUG AND HAS BEEN REMOVED FROM OUR TREE** (by kn5000-29, commit `b1cf7db`, 2026-07-20). It added an SNS NMI payload checksum via a boot-time write tap on DRAM[0xFFD4]; the substituted checksum sent `SubCPU_Payload_Verify` down the "payload already valid, skip the transfer" path, so the SubCPU ran with no firmware and RIGHT1/RIGHT2/LEFT showed `Sound Name Error`. Current upstream mainline has no such tap and boots to real voice names. Kept in this directory as a **historical record only**. The problem it was trying to solve — MAME's exit path calling `eat_all_cycles()` before `nvram_save()`, so the ROM's power-down NMI transaction never runs — is **SOLVED as of 2026-08-15**, and without any tap: a modelled POWER control pulses NMI and defers `schedule_exit()`, so the firmware's own handler runs and saves through the IC21 SRAM. The KN5000 boot splash is restored with sound names intact. See `notes/FINDINGS-kn5000-splash-restored.md`. See the `kn5000_power_off_nmi` bullet below: **the core-change approach it was rejected in favour of now needs revisiting.** |
 | 19 | kn5000-19-hdae5000-ata-intrq.patch | HD-AE5000: real `ata_interface_device` + INTRQ → INT9, CS0/CS1 split; drops `feature::DISK` |
 | 20 | kn5000-20-mn89304-vga-findings.patch | documents the MN89304 LCD controller (4-bit RAMDAC, 8x row-offset, extended SEQ/CRTC) |
 | 21-24 | kn5000-21…24 | tone-gen voice hold timer, DSP1 ready → SubCPU Port H bit 0, removal of the Feature Demo stuck-parts workaround, and the final voice-timing fix for the undumped waveform ROMs |
@@ -357,7 +357,18 @@ stripped: submission is under the project owner's authorship.
   and the `abandon_inta_cycle()` rewind. Kept, with its full adjudication and an applies-clean
   patch, at `notes/kn5000-cpserial-sender-handshake-candidate.{md,patch}`.
 - `kn5000_power_off_nmi` (2 commits) adds a **core** `MACHINE_NOTIFY_POWER_OFF` machine phase.
-  **★ REVISIT THIS (2026-07-21).** ~~Patch 18's write-tap achieves the same NVRAM result without
+  **✅ SUPERSEDED 2026-08-15 — NO CORE CHANGE IS NEEDED.** The same result is achieved entirely
+  inside the driver: a `PORT_START("POWER")` control whose `INPUT_CHANGED_MEMBER` pulses
+  `INPUT_LINE_NMI` and arms a timer, with `schedule_exit()` deferred until it expires. The
+  firmware's own power-down handler then runs and saves through the battery-backed IC21 SRAM.
+  Shipped in `kn5000.cpp`; the KN5000 **boot splash is restored** and sound names are intact,
+  verified against a cold-boot control (`tools/tests/test_kn5000_splash.sh`, gate 17/0/1).
+  See `notes/FINDINGS-kn5000-splash-restored.md`.
+  **This makes the branch unnecessary for submission** — a self-contained driver change is far
+  easier to land than a core machine-phase addition, and it does not ask upstream to accept new
+  core behaviour. The historical text below is kept for the reasoning trail.
+
+  (historical, 2026-07-21) **★ REVISIT THIS.** ~~Patch 18's write-tap achieves the same NVRAM result without
   touching core MAME, so the core change is left as a reference approach only, not staged for
   submission.~~ That justification is **dead**: patch 18's write tap did *not* achieve the same
   result — it was the root cause of the "Sound Name Error" and was removed by kn5000-29
