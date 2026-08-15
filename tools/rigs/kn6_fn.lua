@@ -1,7 +1,16 @@
--- kn6_text_bp.lua -- KN6000 text investigation: execution breakpoints on the 5
--- play-screen draw routines called from the redraw at 0x484064c6/0x48406529,
--- plus the widget-draw dispatcher 0x487f5d88. Logs entry args + return addr.
--- RUN WITH: kn6000 -debug -debugger none
+-- kn6_fn.lua -- KN6000 missing-text investigation: does the TEXT DRAWER ever run?
+-- rig-machine: kn6000
+--
+-- Sibling of kn6_blit.lua on the same kn6_text_bp.lua harness. Arms the KN6000 text-draw
+-- routine 0x48418112 and its two bus aliases (0x4c018112, 0x8c018112) -- the same routine seen
+-- through different mappings, all armed because it was not known which one executes.
+--
+-- The signal is presence/absence: if TXTFN never fires while the play screen is up, the text
+-- is missing because the drawer is never CALLED, not because it draws wrongly.
+--
+--   ./tools/rig.sh kn6_fn kn6000 -s 40 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn6_fn.log in the emulator directory (overwritten on publish).
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger

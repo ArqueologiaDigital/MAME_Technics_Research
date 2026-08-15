@@ -1,8 +1,22 @@
--- ballad_verify.lua -- Phase B install verification ("8 Beat 1" fix).
--- Boot to home (default cfg, ~t=20-26), snapshot home, read the 0x54E00000
--- window (mapped synthetic "Technics Rhythms" resource), press RHYTHM GROUP
--- BALLAD (:cpanel:CPL_SEG1 mask 0x10) for 0.4s, snapshot the style list.
--- SUCCESS = distinct per-slot names; FAILURE = ten rows of "8 Beat 1".
+-- latin_verify.lua -- the SECOND rhythm group, verifying the "8 Beat 1" fix generalises.
+-- rig-machine: kn7000
+--
+-- Identical to ballad_verify.lua except for the button, and that is the entire point: if only
+-- one group were checked, a fix that hard-coded that group's names would pass.
+--
+-- ⚠ Its header said "ballad_verify.lua ... press BALLAD" until 2026-08-15 -- a copy-paste that
+-- described the wrong script AND the wrong button. Verified against the driver ioports, which
+-- are the source of truth for these bindings:
+--     :cpanel:CPL_SEG1 mask 0x10 = "LATIN & WORLD (SW4)"   <- this rig
+--     :cpanel:CPL_SEG2 mask 0x08 = "BALLAD (SW3)"          <- ballad_verify.lua
+--
+-- Boots to home (~t=20-26), snapshots it, reads the 0x54E00000 window (the mapped synthetic
+-- "Technics Rhythms" resource) and checks 0x54E10000 does NOT repeat the magic, presses
+-- LATIN & WORLD for 0.4 s, then snapshots the style list.
+--
+-- SUCCESS = distinct per-slot names. FAILURE = ten rows of "8 Beat 1".
+--
+--   ./tools/rig.sh latin_verify kn7000 -s 32
 local pressed, released, snapped_home, snapped_list, probed = false, false, false, false, false
 emu.register_frame_done(function()
 	local m = manager.machine

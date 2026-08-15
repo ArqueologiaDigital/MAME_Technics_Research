@@ -1,7 +1,16 @@
--- kn6_text_bp.lua -- KN6000 text investigation: execution breakpoints on the 5
--- play-screen draw routines called from the redraw at 0x484064c6/0x48406529,
--- plus the widget-draw dispatcher 0x487f5d88. Logs entry args + return addr.
--- RUN WITH: kn6000 -debug -debugger none
+-- kn6_huff.lua -- KN6000 missing-text investigation: is the string decompressor running?
+-- rig-machine: kn6000
+--
+-- Sibling of kn6_blit.lua / kn6_fn.lua on the kn6_text_bp.lua harness. Arms 0x48405fb1 (the
+-- suspected Huffman/string decoder) plus its aliases 0x4c005fb1 and 0x8c005fb1.
+--
+-- Distinguishes two very different causes of a blank screen: strings never decompressed
+-- (this fires zero times) versus strings decompressed but never drawn (this fires, kn6_fn
+-- does not).
+--
+--   ./tools/rig.sh kn6_huff kn6000 -s 40 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn6_huff.log in the emulator directory (overwritten on publish).
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger

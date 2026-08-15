@@ -154,13 +154,30 @@ The header defects are now **counted rather than estimated**, by `tools/gen_rig_
 | defect | count | note |
 |---|---|---|
 | no description at all | **20** | 18 % — the earlier "about a fifth" was right |
-| header names a *different* script | **5** | `kn6_blit`, `kn6_fn`, `kn6_huff`, `kn7_fn` (all say `kn6_text_bp.lua`) and `latin_verify` (says `ballad_verify.lua`) |
-| no runnable command documented | **95** | fixed for 14 so far; the rest still need one |
-| machine declared via `rig-machine:` | **11** | the other 98 are guessed from the filename or default to kn7000 |
+| header names a *different* script | **0** | was 5 — all rewritten 2026-08-15, see below |
+| no runnable command documented | **90** | fixed for 19 so far; the rest still need one |
+| machine declared via `rig-machine:` | **16** | the other 93 are guessed from the filename or default to kn7000 |
 
 ⚠ The previous version of this note said **two** rigs carried a copy-pasted header and then
-listed **four**. Both figures were wrong: it is five, and `kn6_huff.lua` was missing from the
+listed **four**. Both figures were wrong: it was five, and `kn6_huff.lua` was missing from the
 list. Re-run `python3 tools/gen_rig_index.py` to re-measure rather than trusting this table.
+
+**All five are now fixed** (2026-08-15). They turned out to be four siblings sharing the
+`kn6_text_bp.lua` breakpoint harness, each arming a different routine, plus one rhythm-group
+check — and the copied headers were hiding two real errors, not just wrong names:
+
+| rig | it actually arms | the error the wrong header hid |
+|---|---|---|
+| `kn6_blit` | `0x484184e4` GRD / `0x484184fb` GWR — the blitter primitives | — |
+| `kn6_fn` | `0x48418112` — the KN6000 text drawer | — |
+| `kn6_huff` | `0x48405fb1` — the suspected string decompressor | was absent from the README's list entirely |
+| `kn7_fn` | `0x48425467` — the **KN7000** text drawer | said `RUN WITH: kn6000`, i.e. **the wrong machine**. It is the healthy-text CONTROL for `kn6_fn` |
+| `latin_verify` | `:cpanel:CPL_SEG1` `0x10` | said it pressed **BALLAD**; that is `CPL_SEG2` `0x08`. This one presses **LATIN & WORLD**, which is the whole reason it exists as a second group |
+
+The kn6 siblings each arm their routine at two or three **bus aliases** (`0x4c01…`, `0x8c01…`)
+because it was not known which mapping executes; whichever fires identifies the live one.
+Both bindings above were checked against the driver's `PORT_NAME`s, which are the source of
+truth for button bindings.
 
 Two more rigs are now re-run and verified through `rig.sh` (2026-08-15), bringing the re-run
 total to three of 109:
@@ -233,15 +250,15 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn6000_btn_verify` | kn6000 *(guessed)* |  | KN6000 panel verification: press a few buttons whose silk name predicts a VISIBLE effect, |
 | `kn6000_layout_clicktest` | kn6000 *(guessed)* |  | KN6000 layout click-through test. |
 | `kn6500_verify` | kn6500 *(guessed)* |  | — |
-| `kn6_blit` | kn6000 *(guessed)* |  | KN6000 text investigation: execution breakpoints on the 5 |
+| `kn6_blit` | kn6000 | ✔ | KN6000 missing-text investigation: WHO reads and writes the graphics plane? |
 | `kn6_boxwp` | kn6000 *(guessed)* |  | KN6000: who writes the widget-box interior in the UI index plane? |
 | `kn6_fbdump` | kn6000 *(guessed)* |  | — |
 | `kn6_fdesc` | kn6000 *(guessed)* |  | — |
-| `kn6_fn` | kn6000 *(guessed)* |  | KN6000 text investigation: execution breakpoints on the 5 |
+| `kn6_fn` | kn6000 | ✔ | KN6000 missing-text investigation: does the TEXT DRAWER ever run? |
 | `kn6_fontchk` | kn6000 *(guessed)* |  | — |
 | `kn6_g` | kn6000 *(guessed)* |  | — |
 | `kn6_gate` | kn6000 *(guessed)* |  | — |
-| `kn6_huff` | kn6000 *(guessed)* |  | KN6000 text investigation: execution breakpoints on the 5 |
+| `kn6_huff` | kn6000 | ✔ | KN6000 missing-text investigation: is the string decompressor running? |
 | `kn6_plane` | kn6000 *(guessed)* |  | KN6000: dump the UI index plane (0x5020042C), the companion plane, and the CLUT. |
 | `kn6_proof` | kn6000 *(guessed)* |  | DIAGNOSTIC ONLY (never shipped): prove that the KN6000's missing text is caused solely by |
 | `kn6_rdwp` | kn6000 *(guessed)* |  | kn6000: read-watch the queued string "  Modern E.P." at 0x50007B60 -> who consumes it? |
@@ -250,7 +267,7 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn6_txt` | kn6000 *(guessed)* |  | KN6000: does the TEXT DRAWER run, and what font pointer does it get? |
 | `kn6_wp` | kn6000 *(guessed)* |  | watchpoints on framebuffer pixels that DO receive content -> catch the blitter PC. |
 | `kn7000_regress` | kn7000 *(default)* |  | — |
-| `kn7_fn` | kn7000 *(default)* |  | KN6000 text investigation: execution breakpoints on the 5 |
+| `kn7_fn` | kn7000 | ✔ | the KN7000 control: its text drawer, on a machine whose text WORKS. |
 | `kn7_fontdump` | kn7000 *(default)* |  | — |
 | `kn7_fontrd` | kn7000 *(default)* |  | KN7000: who READS the font descriptor table at 0x50122DB8 ? -> the glyph fetch / text drawer |
 | `kn7_planedump` | kn7000 *(default)* |  | — |
@@ -261,7 +278,7 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn7_wp3` | kn7000 *(default)* |  | KN7000: watch a UI-plane glyph pixel to catch the text/glyph blitter PC. |
 | `kn7snap` | kn7000 *(default)* |  | — |
 | `late` | kn7000 *(default)* |  | — |
-| `latin_verify` | kn7000 *(default)* |  | Phase B install verification ("8 Beat 1" fix). |
+| `latin_verify` | kn7000 | ✔ | the SECOND rhythm group, verifying the "8 Beat 1" fix generalises. |
 | `ledtest_sweep` | kn7000 *(default)* |  | LED-test button->LED sweep (REAL test). Run MAME with this as -autoboot_script, then hold F3+F4 at |
 | `ledtest_sweep2` | kn7000 *(default)* |  | Find TEMPO/PROGRAM (PANEL MEMORY SET lights the whole CPR bank) + probe the SD LEDs. |
 | `liveness` | kn7000 *(default)* | ✔ | did this machine actually boot and draw its UI? |
@@ -289,6 +306,6 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `shot` | kn7000 *(default)* |  | — |
 | `sio_core_verify` | kn7000 *(default)* |  | SIO-in-CPU-core refactor live verification (Integrate stage). |
 
-**✔** = the header documents a runnable `rig.sh` command. 14 of 109 do; the rest still need one.
+**✔** = the header documents a runnable `rig.sh` command. 19 of 109 do; the rest still need one.
 
 <!-- END GENERATED RIG INDEX -->

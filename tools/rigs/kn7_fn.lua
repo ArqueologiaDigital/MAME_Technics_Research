@@ -1,7 +1,17 @@
--- kn6_text_bp.lua -- KN6000 text investigation: execution breakpoints on the 5
--- play-screen draw routines called from the redraw at 0x484064c6/0x48406529,
--- plus the widget-draw dispatcher 0x487f5d88. Logs entry args + return addr.
--- RUN WITH: kn6000 -debug -debugger none
+-- kn7_fn.lua -- the KN7000 control: its text drawer, on a machine whose text WORKS.
+-- rig-machine: kn7000
+--
+-- ⚠ THIS IS THE KN7000, not the KN6000. The header it carried until 2026-08-15 was a
+-- copy of kn6_text_bp.lua's and said "RUN WITH: kn6000", which points the rig at the wrong
+-- machine entirely -- 0x48425467 is the KN7000's text-draw routine.
+--
+-- That makes this the CONTROL for the kn6_fn.lua experiment: the KN7000 renders its text
+-- correctly, so whatever this rig logs is what a healthy call pattern looks like. A single
+-- breakpoint, no aliases -- on this machine the live mapping is already known.
+--
+--   ./tools/rig.sh kn7_fn kn7000 -s 40 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn7_fn.log in the emulator directory (overwritten on publish).
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger

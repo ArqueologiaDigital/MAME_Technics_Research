@@ -1,7 +1,20 @@
--- kn6_text_bp.lua -- KN6000 text investigation: execution breakpoints on the 5
--- play-screen draw routines called from the redraw at 0x484064c6/0x48406529,
--- plus the widget-draw dispatcher 0x487f5d88. Logs entry args + return addr.
--- RUN WITH: kn6000 -debug -debugger none
+-- kn6_blit.lua -- KN6000 missing-text investigation: WHO reads and writes the graphics plane?
+-- rig-machine: kn6000
+--
+-- One of four siblings that share the kn6_text_bp.lua breakpoint harness, each arming a
+-- different routine. This one takes the two blitter primitives:
+--     0x484184e4 GRD  (graphics read)      0x484184fb GWR  (graphics write)
+-- Logs entry args + return address, so the CALLERS of the blit primitives can be named.
+--
+-- Each breakpoint is also armed at its bus ALIASES (0x4c01…, and 0x8c01… in the siblings).
+-- The same routine is reachable through more than one mapping and it was not known which one
+-- actually executes, so all are armed and whichever fires identifies the live mapping.
+--
+--   ./tools/rig.sh kn6_blit kn6000 -s 40 -- -debug -debugger none
+--
+-- Needs the debugger: it uses mach.debugger breakpoints, not memory taps. Writes kn6_blit.log
+-- in the emulator directory (NOT the repo -- that directory is overwritten on every publish,
+-- so copy anything you want to keep).
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger
