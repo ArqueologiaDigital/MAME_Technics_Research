@@ -267,6 +267,43 @@ The poke result still constrains it: overwriting the two RAM buffers copied *fro
 ROM changed nothing, so if the ROM is implicated the text drawer reads it by some other route
 than those buffers. That is now the open question, and it is a narrow one.
 
+## Who writes the bars — and why it is probably not a glyph fetch at all
+
+`tools/rigs/kn24_planewriters.lua` over the **full** plane (`0x500B0000..0x500C2FFF`) finds
+eight writers. One stands out:
+
+```
+pc=0x50123086  192544 writes   1 distinct byte: 0xE0 (100%)      <- library memset, background
+pc=0x485FA547    3193 writes   top=0xF8 (49.1%), 0xFF 48.6%      <- draws BOTH icons and bars
+pc=0x485FC576    2808 writes   0x07 (100%)                       <- part-cell fill
+pc=0x48705C98   19456 writes   0x00 (100%)                       <- clear
+```
+
+`0x485FA547` writes the icons *and* the bars, so it looked like the glyph blitter. Disassembly
+says it is not:
+
+```
+485fa532: mov   0x140, d2          ; stride 320
+485fa537: mul   d2, d0             ; offset = y * 320
+485fa53d: movhu (0x6c, sp), d0     ; ★ the colour, taken as a PARAMETER
+485fa540: add   0x500ade34, a0     ; ★ plane base
+485fa546: movbu d0, (d3, a0)       ; ★ store it; no source bitmap is read anywhere
+485fa547: inc   d3
+```
+
+It is a **solid fill primitive**: colour in, rectangle out, no glyph data involved. So the bars
+are a filled rectangle somebody asked for on purpose — plausibly the text **background box**,
+which on a working machine would carry lighter glyphs on top. On that reading the boxes are
+correct and the missing thing is the glyph pass, not a corrupted one.
+
+Also recorded, because it corrects an address used above: the plane's true base is
+**`0x500ADE34`**, stride 320. The dump was taken from `0x500B0000`, i.e. `0x21CC` into the
+plane — near enough to render recognisably, but the base is the number to use from here.
+
+**Open:** find the routine that should draw glyphs over those boxes, and whether it runs at
+all. Two candidates from the writer list have not been chased: `0x5012306E` (library copy, 5
+distinct values, 2.4 % `0xFF`) and whatever calls `0x485FA547` with `0xFF`.
+
 ### A methodology note worth more than the finding
 
 The first version of `kn24_tabledest.lua` joined readers to writers on **exact PC equality**
