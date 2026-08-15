@@ -42,9 +42,48 @@ import sys
 DEFAULT_IMAGE = "/home/fsanches/compartilhado/kn7000_scratchpad_snapshot/kn7000_program_decompressed.bin"
 
 
+def decode_calls(d, base):
+    """Yield (site, target) for every direct call in the image."""
+    for i in range(len(d) - 6):
+        op = d[i]
+        if op == 0xCD:
+            disp = struct.unpack_from("<h", d, i + 1)[0]
+        elif op == 0xDD:
+            disp = struct.unpack_from("<i", d, i + 1)[0]
+        else:
+            continue
+        yield base + i, base + i + disp
+
+
+def do_range(image, base, lo, hi):
+    d = pathlib.Path(image).read_bytes()
+    calls = {}
+    for site, tgt in decode_calls(d, base):
+        if lo <= tgt <= hi:
+            calls.setdefault(tgt, []).append(site)
+    if not calls:
+        print(f"no direct calls land in 0x{lo:08X}..0x{hi:08X}")
+        return 0
+    print(f"{len(calls)} distinct call target(s) in 0x{lo:08X}..0x{hi:08X}:\n")
+    for tgt in sorted(calls):
+        sites = calls[tgt]
+        inside = sum(1 for s in sites if lo <= s <= hi)
+        note = f"   ({inside} of them from inside the window)" if inside else ""
+        print(f"  0x{tgt:08X}  <- {len(sites)} call site(s){note}")
+        for s in sorted(sites)[:6]:
+            print(f"        from 0x{s:08X}")
+        if len(sites) > 6:
+            print(f"        ... and {len(sites) - 6} more")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("target", help="routine address, e.g. 0x4849FD9E")
+    ap.add_argument("target", nargs="?", help="routine address, e.g. 0x4849FD9E")
+    ap.add_argument("--range", dest="rng",
+                    help="LO,HI instead of a single target: report every call target landing in "
+                         "that window, grouped by callee. Maps a family of routines and their "
+                         "callers in one pass -- useful when the entry addresses are unknown.")
     ap.add_argument("--image", default=DEFAULT_IMAGE)
     ap.add_argument("--base", default="0x48400000")
     ap.add_argument("--skew", default="0,2",
@@ -52,8 +91,14 @@ def main():
                          "commonly enter at +2, past the movm prologue)")
     args = ap.parse_args()
 
-    target = int(args.target, 0)
     base = int(args.base, 0)
+    if args.rng:
+        lo, hi = [int(x, 0) for x in args.rng.split(",")]
+        return do_range(args.image, base, lo, hi)
+    if not args.target:
+        print("give a target address or --range LO,HI", file=sys.stderr)
+        return 2
+    target = int(args.target, 0)
     skews = [int(x, 0) for x in args.skew.split(",")]
     wanted = {target + s: s for s in skews}
 

@@ -482,3 +482,28 @@ its stack arguments — a record of what a healthy text call looks like. `tools/
 does the per-stage hit-count version for the KN6000, where "the first stage with zero hits is
 where text drawing stops". The KN2400 has no equivalent yet, and building one — find its text
 entry, count hits — is the direct route to whether its glyph pass is called at all.
+
+## A map of the KN2400 drawing-primitive family (for whoever continues)
+
+`tools/mn10300_callers.py --range` decodes every direct call in an image and groups those landing
+in a window, which maps a family of routines and their callers without knowing any entry address
+in advance. Over `0x485FA000-0x485FA800` on the KN2400 image:
+
+| entry | direct callers | what it is |
+|---|---|---|
+| `0x485FA01F` | 2 | — |
+| `0x485FA033` | 14 | — |
+| `0x485FA087` | 2 | — |
+| `0x485FA10F` | 19 | — |
+| `0x485FA15C` | 2 | — |
+| `0x485FA165` | 29 | — |
+| `0x485FA1FE` | 9 | — |
+| **`0x485FA3CE`** | **159** | draw-rect **wrapper**: tail-calls the fill below when the flag at `0x5002F618` is set, otherwise allocates a record, stores handler `0x485FA422` and **queues** the command |
+| **`0x485FA44C`** | **54** | the routine containing the solid-fill store at `0x485FA546` — the one that paints the black bars |
+
+So the bars come from a heavily-used general rect primitive (54 direct callers, plus everything
+routed through the 159-caller wrapper), not from anything text-specific. Identifying *which*
+caller draws the title bars means narrowing those 54 — a runtime PC capture at `0x485FA44C`
+during the t=2–6 paint would do it in one run, and that is the obvious next step.
+
+⚠ The `—` rows are unexamined, not empty: the tool gives caller counts, not semantics.
