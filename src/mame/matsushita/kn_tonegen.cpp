@@ -140,6 +140,7 @@ void kn_tonegen_base_device::device_start()
 	save_item(NAME(m_ctx_key));
 	save_item(NAME(m_ctx_time));
 	save_item(NAME(m_tgwrites));
+	save_item(NAME(m_gain_save));
 }
 
 	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
@@ -156,6 +157,39 @@ void kn_tonegen_base_device::device_start()
 	// exponential DCY2 toward SUS2 (r2, the long-tail second stage), then exponential
 	// RELEASE to silence when the gate drops (r3=0x8000 / managed r0 burst / steal mute).
 	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
+
+// The effect-send gains are std::atomic<float>, which save_item() cannot register, so they
+// are shadowed into m_gain_save around a save/load. They are genuine runtime state: the
+// firmware writes all nine from its own register traffic (tg_write), and the driver writes
+// two more from the DSP bridge. Before this, a state saved with reverb engaged came back
+// with the boot-default mix -- silently, because nothing about the restored machine looked
+// wrong until you listened to it.
+void kn_tonegen_base_device::device_pre_save()
+{
+	m_gain_save[GAIN_DIRECT]    = m_gain_direct;
+	m_gain_save[GAIN_RETURN]    = m_gain_return;
+	m_gain_save[GAIN_SEND]      = m_gain_send;
+	m_gain_save[GAIN_DEPTH]     = m_gain_depth;
+	m_gain_save[GAIN_CHORUS]    = m_gain_chorus;
+	m_gain_save[GAIN_DSP]       = m_gain_dsp;
+	m_gain_save[GAIN_MULTI]     = m_gain_multi;
+	m_gain_save[GAIN_DSP_RET]   = m_gain_dsp_ret;
+	m_gain_save[GAIN_MULTI_RET] = m_gain_multi_ret;
+}
+
+void kn_tonegen_base_device::device_post_load()
+{
+	m_gain_direct    = m_gain_save[GAIN_DIRECT];
+	m_gain_return    = m_gain_save[GAIN_RETURN];
+	m_gain_send      = m_gain_save[GAIN_SEND];
+	m_gain_depth     = m_gain_save[GAIN_DEPTH];
+	m_gain_chorus    = m_gain_save[GAIN_CHORUS];
+	m_gain_dsp       = m_gain_save[GAIN_DSP];
+	m_gain_multi     = m_gain_save[GAIN_MULTI];
+	m_gain_dsp_ret   = m_gain_save[GAIN_DSP_RET];
+	m_gain_multi_ret = m_gain_save[GAIN_MULTI_RET];
+}
+
 void kn_tonegen_base_device::sound_stream_update(sound_stream &stream)
 {
 	for (int s = 0; s < stream.samples(); s++)

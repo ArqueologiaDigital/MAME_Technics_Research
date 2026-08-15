@@ -140,6 +140,15 @@ protected:
 	// device_t / device_sound_interface overrides
 	virtual void device_start() override ATTR_COLD;
 
+	// The nine effect-send gains below are std::atomic<float> (the driver polls them from
+	// its DSP bridge while the sound thread writes them), and save_item() cannot take an
+	// atomic. They ARE mutable state -- the firmware sets every one of them from its own
+	// register writes -- so leaving them out meant a state saved with, say, reverb engaged
+	// restored with the boot-default mix. These two hooks shadow them into a plain array
+	// that IS saved, which is the idiomatic MAME answer for non-trivially-copyable state.
+	virtual void device_pre_save() override;
+	virtual void device_post_load() override;
+
 	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
 	// pairs, resolved at note-on -- see tg_write and notes/tg-envelope-sweep-results.md).
 	// Full stage chain: linear ATTACK to PEAK (r0), exponential DCY1 toward SUS1 (r1),
@@ -183,6 +192,12 @@ protected:
 	std::atomic<float> m_gain_multi{ 0.0f };    // MULTI send (0x8298 low7); 0 = off (default)
 	std::atomic<float> m_gain_dsp_ret{ 0.0f };  // SOUND DSP own return (0x809A low7); 0 = off
 	std::atomic<float> m_gain_multi_ret{ 0.0f };// MULTI own return (0x806A low7); 0 = off
+
+	// Save-state shadow of the nine atomics above, in the order listed by GAIN_SLOT.
+	// Written by device_pre_save(), read back by device_post_load(); never used to render.
+	enum : int { GAIN_DIRECT, GAIN_RETURN, GAIN_SEND, GAIN_DEPTH, GAIN_CHORUS,
+				 GAIN_DSP, GAIN_MULTI, GAIN_DSP_RET, GAIN_MULTI_RET, GAIN_SLOTS };
+	float    m_gain_save[GAIN_SLOTS] = { };
 	double   m_wpos[128] = { };      // sample position (fractional)
 	uint8_t  m_srckey[128];          // keybed key index that caused this voice (0xFF = none)
 	uint8_t  m_ctx_key = 0xFF;       // most recent keybed MAKE (key index)
