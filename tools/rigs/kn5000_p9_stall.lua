@@ -40,8 +40,15 @@ _G.P9.h = emu.add_machine_frame_notifier(function()
     local t = mac.time.seconds + mac.time.attoseconds / 1e18
     local S = _G.P9
 
+    -- P9_PRESS_AT < 0 means: press NOTHING and just observe. That drives the AUTOMATED demo
+    -- path (the instrument's own idle demo timer) rather than the manual button sequence
+    -- DEMO -> LEFT 4 -> LEFT 2, which kn5000-docs/ssf-presentation.md says are different
+    -- paths through the code. Whether the manual path is meant to cycle songs at all is
+    -- exactly the open question.
+    if PRESS_AT < 0 then
+        if S.phase ~= "obs" then S.phase = "obs" log("P9 observing only -- no navigation") end
     -- navigation
-    if S.phase == "wait" and t >= PRESS_AT then btn("CPL_SEG3", 0x01, 1) S.phase = "d1" S.base = t
+    elseif S.phase == "wait" and t >= PRESS_AT then btn("CPL_SEG3", 0x01, 1) S.phase = "d1" S.base = t
     elseif S.phase == "d1" and t >= S.base + 0.3 then btn("CPL_SEG3", 0x01, 0) S.phase = "d2" S.base = t
     elseif S.phase == "d2" and t >= S.base + 1.5 then btn("CPL_SEG9", 0x02, 1) S.phase = "d3" S.base = t
     elseif S.phase == "d3" and t >= S.base + 0.3 then btn("CPL_SEG9", 0x02, 0) S.phase = "d4" S.base = t
