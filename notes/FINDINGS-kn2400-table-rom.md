@@ -507,3 +507,43 @@ caller draws the title bars means narrowing those 54 — a runtime PC capture at
 during the t=2–6 paint would do it in one run, and that is the obvious next step.
 
 ⚠ The `—` rows are unexamined, not empty: the tool gives caller counts, not semantics.
+
+## The full bar-drawing chain, captured at runtime
+
+`tools/rigs/kn24_barcaller.lua` taps the plane, and on every write of the bar colour (`0xFF`)
+dumps the stack looking for code addresses — the technique that cracked the KN5000 stop routine
+when static search could not. 4,513 bar-colour writes, and the same picture every time:
+
+```
++04: 0x485FA587      +08: 0x485FAC7A      +56: 0x485FACD1
+```
+
+Resolved by disassembly:
+
+```
+0x485FE6xx   UI widget draw -- repeated rect fills at INSET coordinates (border + interior),
+             i.e. a framed/bevelled panel
+  -> 0x485FABCF   rect fill
+       -> 0x50123064   library memset, one 320-byte scanline per iteration (a3 += 0x140)
+```
+
+⚠ **One assumption of mine was wrong and is worth recording.** I expected `0x485FAC7A` to be the
+return from the rect routine `0x485FA44C`; it is the return from `call 0x50123064`, the *library
+memset*. The fill is not a bespoke loop, it is per-scanline memset — which is exactly why the
+earlier plane-writer census attributed the bars to a library routine (`0x5012306E` / `0x50123086`)
+rather than to anything graphical.
+
+### Where this thread lands
+
+The KN2400 **draws its UI panels correctly** — bordered, inset, at the right coordinates — and
+then never issues a single glyph draw into them. Everything downstream of that is healthy: the
+plane, the compositor, the per-pixel lookup, the icon path. Everything upstream that has been
+examined is doing what it should.
+
+What is *not* established, after all of this: **why no glyph pass is issued.** The remaining
+candidates are a text routine that bails on an unresolved font (which would tie back to the
+undumped table ROM, still functionally live), or one that is never called for these widgets.
+Distinguishing them needs either the table-ROM dump, the service manual's test screens, or a
+deeper reverse of the widget/text system than static reading has reached.
+
+That is an honest stopping point, not a solved problem.
