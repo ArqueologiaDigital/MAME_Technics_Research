@@ -321,9 +321,33 @@ substituting the undumped region's contents over the real bus.
 ⚠ That rig fabricates ROM contents. It is a causality probe and must never become a fix; no
 screenshot taken under it is the machine working, and nothing it produces is a dump.
 
-**Its positive control passes**, so a null result from it will mean something: forcing the UI
+**Its positive control passes**, so a null result from it means something: forcing the UI
 plane to `0x00` substituted 460,944 reads and took the screen from `distinct=4` to
 `distinct=1`. Read taps really can rewrite data on this build.
+
+### Result: the contents change the firmware's behaviour, but not the picture
+
+| run | substituted reads | screen |
+|---|---|---|
+| baseline — region undumped, reads `0xFF` | — | `distinct=4  hash=571e1a45` |
+| region forced to `0x00` | **275,311** (against 164,300 at baseline) | `distinct=4  hash=571e1a45` — **identical** |
+| **control** — UI plane forced to `0x00` | 460,944 | `distinct=1  hash=33af6645` — **changed** |
+
+Two things follow, and they pull in opposite directions, so both are worth stating plainly.
+
+**The region is functionally live.** Read traffic rises by 68 % when its contents change, which
+means the firmware genuinely parses it and takes different paths depending on what it finds.
+It is not a region that is merely poked and ignored. Its absence is a real defect.
+
+**But its contents are not what withholds the text.** With a completely different fill the
+screen is bit-for-bit the same, on a metric sensitive enough to catch the control. So the
+mechanism "the glyph fetch returns `0xFF`, hence solid cells" is finished: no constant makes
+glyphs appear, and the bars are drawn by a fill primitive that reads nothing.
+
+⚠ **What this does not establish.** `0x00` is no more a valid ROM image than `0xFF` — a font
+pointer of zero is as broken as one of `0xFFFFFFFF`. This experiment cannot show that a *real*
+dump would leave the screen unchanged, and it is not evidence that the ROM is unnecessary. It
+rules out one mechanism, not the chip.
 
 ### A methodology note worth more than the finding
 
