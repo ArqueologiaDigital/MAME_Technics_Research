@@ -77,12 +77,39 @@ separate actor writes `0x10` at 139.64 from `0xEF0FA5`.
    `0x4A` and `0x04` side by side, not a mask.
 3. The docs' "the Demo Timer System (song cycling) works correctly in MAME" is not reproduced.
 
+## The arming path (traced 2026-08-15)
+
+```
+0xF843E6   call 0xf86b7c            demo-start path; around it, two event posts via
+                                    0xFA49B7 with 0x01e000ac / 0x01e000ad, and a write to 0x28A4
+  0xF86B7C  (reached by calr from here)
+    0xF86D86  ld (0x0d2f),0x0f      ← Demo_ResetCountdownTimer, all two instructions of it
+    0xF86D8B  ret                   ← what the write tap reports (prefetch offset)
+```
+
+Runtime stack at the arming write gives the return address `0x00F843EA`, i.e. the call at
+`0xF843E6`. This runs **once**, at t=23.72. The ticker that decrements is a different routine,
+`0xF86C01`.
+
+⚠ A static search for callers of `0xF86D86` returns **zero** — no absolute `call` and no 24-bit
+reference exists anywhere in the image, because it is entered by `calr`. That is the second
+routine in this investigation where static caller search was structurally useless.
+
 ## Next step
 
-Find what should re-arm `DRAM[0x0D2F]` when a song ends. The teardown at `0xF3CAC1` makes six
-calls (`f3dfff`, `fe118d`, `fdf5f5`, `f3f179`, `f6e63a`, `fc8dce`) — if one of them is meant to
-reset the countdown, it is either not running or failing a guard. Tap `0xF86C01`'s neighbourhood
-for the arming write (a store of 15) and see what condition precedes it.
+The arming routine and its caller are now known, and neither runs a second time. What remains is
+to find what *should* invoke `0xF86B7C` (or `0xF86D86` directly) when a song ends. Two concrete
+leads:
+
+1. The teardown at `0xF3CAC1` makes six calls — `f3dfff`, `fe118d`, `fdf5f5`, `f3f179`,
+   `f6e63a`, `fc8dce`. If one is meant to re-arm the countdown it is either not running or
+   failing a guard. Disassemble each and look for a path to `0xF86B7C`.
+2. `0xF843E6` sits beside two event posts through `0xFA49B7` (`0x01e000ac`, `0x01e000ad`). If
+   song-end is supposed to post a similar event that re-enters the demo-start path, tapping
+   `0xFA49B7`'s argument would show whether that event is ever posted.
+
+A note on stopping here: this is a good handoff point. The defect is stated, the arming path is
+traced end to end, and the remaining question is a bounded search over six known routines.
 
 ## Method notes worth keeping
 

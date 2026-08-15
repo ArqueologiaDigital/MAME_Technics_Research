@@ -35,7 +35,9 @@ local function pc() local ok,v = pcall(function() return cpu.state["PC"].value e
 -- 0x0D2E, so tap the word and select the high lane.
 _G.CD.tap = mp:install_write_tap(0x0D2E, 0x0D2F, "countdown", function(offset, data, mask)
     local S = _G.CD
-    if S.phase ~= "obs" then return nil end
+    -- Observe from t=0, NOT only after the navigation completes: the ARMING write (the
+    -- initial 15) happens during demo entry, and a tap gated on the "obs" phase misses it by
+    -- milliseconds -- the first value seen was already 12.
     if (mask & 0xFF00) == 0 then return nil end          -- only the 0x0D2F lane
     local v = (data >> 8) & 0xFF
     local t = mac.time.seconds + mac.time.attoseconds / 1e18
@@ -46,7 +48,27 @@ _G.CD.tap = mp:install_write_tap(0x0D2E, 0x0D2F, "countdown", function(offset, d
         S.seen[key] = true
         log(string.format("CD t=%7.2f 0x0D2F <- %3d  PC=0x%08X   (first time)", t, v, p))
     end
-    if S.n <= 40 then
+    -- On the ARMING write (value 15), dump the stack: Demo_ResetCountdownTimer is
+    -- 0xF86D86 (`ld (0x0d2f),0x0f ; ret`) and is entered by calr, so no absolute reference
+    -- to it exists anywhere in the ROM -- a static caller search returns zero. The live
+    -- stack is XSSP (system mode); TLCS-900 has no register called SP.
+    if v == 15 and not S.dumped then
+        S.dumped = true
+        local ok, err = pcall(function()
+            local spv = cpu.state["XSSP"].value
+            log(string.format("CD ★★ ARM at PC=0x%08X  XSSP=0x%08X -- stack:", p, spv))
+            for i = 0, 9 do
+                local a = spv + i * 4
+                local ok2, w = pcall(function() return mp:read_u32(a) end)
+                if ok2 and w then
+                    local tag = (w >= 0xE00000 and w <= 0xFFFFFF) and "  <- code" or ""
+                    log(string.format("    XSSP+%2d 0x%08X = 0x%08X%s", i * 4, a, w, tag))
+                end
+            end
+        end)
+        if not ok then log("CD stack dump ERROR: " .. tostring(err)) end
+    end
+    if S.n <= 60 then
         log(string.format("CD t=%7.2f write #%d value=%3d PC=0x%08X", t, S.n, v, p))
     end
     return nil
