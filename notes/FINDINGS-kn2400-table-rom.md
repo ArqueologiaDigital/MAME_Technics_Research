@@ -444,3 +444,41 @@ believed:
 | `0x487055C4` | `fc ac 00 00 07 98 f8 ec 02 c9 15` | ✓ |
 | `0x486FA938` | `fc a6 18 00 00 48 dd 86 ac` | ✓ |
 | `0x4860C275` | `f0 60 20 02 f0 71 21 02 44 d9` | ✓ |
+
+## The working reference: the KN7000's plane, side by side
+
+The KN7000 renders text correctly and uses the *same architecture* — an 8bpp UI plane consumed
+by a compositor. `tools/rigs/kn7_planedump.lua` dumps it (640×240 at `0x500D4080`) and the same
+renderer draws it:
+
+```
+./tools/rig.sh kn7_planedump kn7000 -s 28
+python3 tools/kn24_plane_to_png.py kn7_plane.bin -W 640 -H 240 --map eq -o kn7_plane.png
+```
+
+![the KN7000 UI source plane](kn7000-ui-plane-2026-08-15.png)
+
+Fully drawn text — patch names, `MEASURE = 1`, `♩=120`, the style list. Against the KN2400's
+plane above, the difference is one number:
+
+| | KN7000 (text works) | KN2400 (text absent) |
+|---|---|---|
+| plane | 640×240 8bpp @ `0x500D4080` | 320×240 8bpp @ `0x500ADE34` |
+| **distinct byte values** | **45** | **5** |
+| text areas | glyph shapes | solid `0xFF` rectangles |
+
+Five values is not a font rendered badly. It is a plane that had boxes drawn into it and
+nothing else — which is what every other measurement here has been saying.
+
+**This also validates the renderer**, and that matters for trusting the KN2400 picture: if
+`kn24_plane_to_png.py`'s 8bpp row-major reading of the format were wrong, this image would be
+noise. It is a legible screen. So the KN2400 plane showing solid bars is a fact about the
+machine, not an artefact of how it was decoded.
+
+### The next concrete step for whoever picks this up
+
+`tools/rigs/kn7_txtstk.lua` breakpoints the KN7000's text-drawer entry (`0x48425467`) and dumps
+its stack arguments — a record of what a healthy text call looks like. `tools/rigs/kn6_gate.lua`
+does the per-stage hit-count version for the KN6000, where "the first stage with zero hits is
+where text drawing stops". The KN2400 has no equivalent yet, and building one — find its text
+entry, count hits — is the direct route to whether its glyph pass is called at all.
