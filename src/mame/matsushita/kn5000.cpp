@@ -213,6 +213,9 @@ public:
 
 	void kn5000(machine_config &config) ATTR_COLD;
 
+	// PORT_CHANGED_MEMBER needs this public.
+	DECLARE_INPUT_CHANGED_MEMBER(power_switch);
+
 protected:
 	virtual void machine_start() override ATTR_COLD;
 	virtual void machine_reset() override ATTR_COLD;
@@ -317,6 +320,29 @@ private:
 	uint8_t m_keybed_prev[61];
 	emu_timer *m_keybed_timer;
 	TIMER_CALLBACK_MEMBER(keybed_scan);
+
+	// ---- modelled POWER switch -------------------------------------------------
+	// On real hardware, removing power asserts the CPU's NMI and the machine keeps running
+	// for a few milliseconds while NMI_StorePayloadChecksums (0xEF08D4) saves state. MAME's
+	// own exit cannot do this: schedule_exit() calls eat_all_cycles(), so no maincpu cycles
+	// execute afterwards and any EXIT notifier fires after NVRAM is already written.
+	//
+	// So power-off is modelled as a MACHINE control instead of the emulator's exit: pressing
+	// it pulses NMI, lets the firmware run for m_poweroff window, and only then exits. The
+	// firmware's own code does the saving -- nothing here writes checksums or NVRAM.
+	// Chain (all of it already modelled except this trigger; see
+	// side-quests/pending/kn5000_splash_animation.txt):
+	//   NMI -> checksums into DRAM 0xFFD4/0xFFD2 -> block 0xF980..0xFFEE copied to the
+	//   battery-backed IC21 SRAM at 0x1E8000 -> next boot restores it (0xEF0580, guarded by
+	//   the 0x5AA5 magic at 0xFFCA) -> SubCPU_Payload_Verify passes -> boot splash.
+	emu_timer *m_poweroff_timer;
+	TIMER_CALLBACK_MEMBER(poweroff_done);
+
+	// How long the CPU keeps running after power is pulled. NOT MEASURED against hardware --
+	// a deliberately generous upper bound: the handler does two checksums (0x800 and 0x280
+	// bytes) plus a 0x337-word copy, far under a millisecond at this clock. If a real
+	// measurement ever arrives, replace this and say so.
+	static constexpr int POWER_DOWN_MS = 100;
 	static constexpr uint8_t KEYBED_VELOCITY = 100; // fixed velocity for PC keyboard
 
 	// The key-bed FIFO's high byte is NOT a velocity — it is a key-travel TIME.
@@ -544,6 +570,29 @@ TIMER_CALLBACK_MEMBER(kn5000_state::keybed_scan)
 			m_keybed_prev[raw_note] = pressed;
 		}
 	}
+}
+
+// Pressing POWER OFF pulses the CPU's NMI and starts the power-down window. The firmware's
+// own NMI handler then saves its state; we only give it the cycles to do so. The NMI is
+// edge-triggered in tmp94c241_device::execute_set_input (CLEAR -> ASSERT), so a pulse is
+// enough and leaves the line clean.
+INPUT_CHANGED_MEMBER(kn5000_state::power_switch)
+{
+	if (!newval)
+		return;                       // act on the press, ignore the release
+	if (m_poweroff_timer->enabled())
+		return;                       // already powering down; a second press changes nothing
+	logerror("KN5000: POWER OFF -- NMI asserted, running the firmware's power-down for %d ms\n",
+			POWER_DOWN_MS);
+	m_maincpu->pulse_input_line(INPUT_LINE_NMI, attotime::zero);
+	m_poweroff_timer->adjust(attotime::from_msec(POWER_DOWN_MS));
+}
+
+TIMER_CALLBACK_MEMBER(kn5000_state::poweroff_done)
+{
+	// Now it is safe to stop: the firmware has had its power-down window, and MAME's exit
+	// path writes NVRAM after this returns.
+	machine().schedule_exit();
 }
 
 void kn5000_state::maincpu_mem(address_map &map)
@@ -811,6 +860,13 @@ static INPUT_PORTS_START(kn5000)
 	// It now lives as KN5000_EGFREE=on (see kn5000_tonegen.cpp), like every other diagnostic
 	// in this driver: no persistence, no UI affordance, gone when the process exits.
 
+	// The instrument's POWER switch. Deliberately NOT bound to a default key: this ends the
+	// session, and an accidental keypress doing that would be worse than needing a binding.
+	// Rigs drive it directly (see tools/rigs/kn5000_poweroff.lua).
+	PORT_START("POWER")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_OTHER) PORT_NAME("POWER OFF (run the firmware's power-down, then exit)")
+		PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn5000_state::power_switch), 0)
+
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
 	PORT_DIPSETTING(   0x02, "Thailand, Indonesia, Iran, U.A.E., Panama, Argentina, Peru, Brazil")
@@ -952,6 +1008,9 @@ void kn5000_state::machine_start()
 	std::fill(std::begin(m_keybed_prev), std::end(m_keybed_prev), 0);
 	m_keybed_timer = timer_alloc(FUNC(kn5000_state::keybed_scan), this);
 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
+
+	// Power-down window timer; started by the POWER control, not running otherwise.
+	m_poweroff_timer = timer_alloc(FUNC(kn5000_state::poweroff_done), this);
 
 	// NOTE: an earlier "SNS payload-checksum" write tap on DRAM[0xFFD4] was REMOVED
 	// here (2026-07-20) — it was the root cause of the KN5000 "Sound Name Error".
