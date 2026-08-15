@@ -45,9 +45,22 @@ into three groups:
 | derived / immutable | `m_sine_tab`, `m_dir`, `m_waveform_size` | built once from ROM |
 | **genuine runtime state** | **`m_keybed_queue`** (`std::queue`), **`m_pending_notes`** (`std::deque`), `m_eg_gain`, `m_eg_gate_latch`, `m_handoff_ctrl`, `m_mute_undumped`, `m_use_level080` | the two containers hold queued note events; the flags are live gates |
 
-The two containers are the ones that matter, and they need the same shadow pattern as the gains.
-The flags are cheap. **This is the KN5000 — the one driver that is upstream — so its save-state
-correctness matters more than the fork-only models'.**
+The two containers are the ones that matter. ✅ **Both shadowed 2026-08-15**, same pattern as the
+gains: `m_kq_save`/`m_kq_count` and `m_pn_time_save`/`m_pn_note_save`/`m_pn_count`, flattened in
+`device_pre_save()` and rebuilt in `device_post_load()`. `std::queue` has no iterator, so the
+live queue is copied and the copy drained. `m_pending_notes` is already capped at 64 by its
+producer; the keybed FIFO has no cap in code, so the shadow declares its own (256) and
+`logerror`s on truncation rather than dropping events quietly.
+
+**The flags are deliberately NOT saved.** `m_eg_gate_latch`, `m_use_level080`, `m_handoff_ctrl`
+and `m_mute_undumped` are each set once at `device_start` from an environment variable
+(`KN5000_EGSEG`, `KN5000_LVL080`, `KN5000_HANDOFF`, `KN5000_UNDUMPED`) — they are run
+configuration, not machine state, and a save state should not carry them. `m_eg_gain` is a table
+built once at start. Recording the reasoning because "unregistered" reads like an oversight.
+
+Verified with `tools/rigs/kn5000_saveload.lua`: save at t=26, load at t=30, machine still running
+at t=34. ⚠ That shows the round trip *completes*; it does not show the queue CONTENTS survive,
+which would need a state saved with notes genuinely in flight.
 
 ## Honest limits of the tool
 

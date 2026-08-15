@@ -104,6 +104,17 @@ public:
 
 protected:
 	virtual void device_start() override ATTR_COLD;
+
+	// m_keybed_queue and m_pending_notes are std::queue / std::deque, which save_item()
+	// cannot register. They ARE machine state -- the first is the keybed FIFO the firmware
+	// polls, the second correlates each voice key-on with the input event that caused it so
+	// absolute pitch can be recovered (the IC303 registers carry only a zone-RELATIVE pitch).
+	// Losing either across a load drops queued notes or mis-pitches held ones, so they are
+	// shadowed into plain arrays here. Everything else unregistered on this device is either
+	// instrumentation (census/glitch counters) or set once from an environment variable, and
+	// deliberately stays out: see notes/FINDINGS-savestate-audit.md.
+	virtual void device_pre_save() override;
+	virtual void device_post_load() override;
 	virtual void device_reset() override ATTR_COLD;
 	virtual void device_stop() override ATTR_COLD;
 
@@ -466,6 +477,17 @@ private:
 	// pitch cannot be derived from the registers alone. Instead we correlate each
 	// voice note-on with the real input event that caused it. See update_pitch().
 	std::deque<std::pair<double,int>> m_pending_notes;
+
+	// ---- save-state shadows for the two containers above ----
+	// m_pending_notes is already capped at 64 by its producer; the keybed FIFO has no cap in
+	// code, so the shadow states its own and reports truncation rather than dropping quietly.
+	static constexpr int SAVE_KQ_MAX = 256;
+	static constexpr int SAVE_PN_MAX = 64;
+	uint16_t m_kq_save[SAVE_KQ_MAX] = { };
+	uint32_t m_kq_count = 0;
+	double   m_pn_time_save[SAVE_PN_MAX] = { };
+	int32_t  m_pn_note_save[SAVE_PN_MAX] = { };
+	uint32_t m_pn_count = 0;
 	void assign_chord_notes(int ch);
 	uint32_t voice_pitch_index(int ch) const;
 

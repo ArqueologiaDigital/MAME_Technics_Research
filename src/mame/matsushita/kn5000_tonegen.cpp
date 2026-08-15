@@ -126,6 +126,50 @@ kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, cons
 }
 
 
+
+// ---------------------------------------------------------------------------
+// Save-state shadowing for the two STL containers that hold real machine state.
+// save_item() takes trivially-copyable storage only, so the queue and the deque are
+// flattened here and rebuilt on load. See notes/FINDINGS-savestate-audit.md for why the
+// other unregistered members on this device stay unregistered.
+// ---------------------------------------------------------------------------
+void kn5000_tonegen_device::device_pre_save()
+{
+	// std::queue has no iterator: copy it and drain the copy, leaving the live one alone.
+	std::queue<uint16_t> q = m_keybed_queue;
+	m_kq_count = 0;
+	while (!q.empty() && m_kq_count < SAVE_KQ_MAX)
+	{
+		m_kq_save[m_kq_count++] = q.front();
+		q.pop();
+	}
+	if (!q.empty())
+		logerror("kn5000_tonegen: keybed FIFO deeper than %d on save; %d event(s) NOT saved\n",
+				SAVE_KQ_MAX, int(q.size()));
+
+	m_pn_count = 0;
+	for (const auto &ev : m_pending_notes)
+	{
+		if (m_pn_count >= SAVE_PN_MAX)
+			break;
+		m_pn_time_save[m_pn_count] = ev.first;
+		m_pn_note_save[m_pn_count] = ev.second;
+		m_pn_count++;
+	}
+}
+
+void kn5000_tonegen_device::device_post_load()
+{
+	std::queue<uint16_t> empty;
+	m_keybed_queue.swap(empty);
+	for (uint32_t i = 0; i < m_kq_count && i < SAVE_KQ_MAX; i++)
+		m_keybed_queue.push(m_kq_save[i]);
+
+	m_pending_notes.clear();
+	for (uint32_t i = 0; i < m_pn_count && i < SAVE_PN_MAX; i++)
+		m_pending_notes.emplace_back(m_pn_time_save[i], int(m_pn_note_save[i]));
+}
+
 void kn5000_tonegen_device::device_start()
 {
 	// Create stereo output stream at 48kHz (matching DAC sample rate)
@@ -351,6 +395,11 @@ void kn5000_tonegen_device::device_start()
 	// Save state
 	save_item(NAME(m_addr_latch));
 	save_item(NAME(m_global_regs));
+	save_item(NAME(m_kq_save));
+	save_item(NAME(m_kq_count));
+	save_item(NAME(m_pn_time_save));
+	save_item(NAME(m_pn_note_save));
+	save_item(NAME(m_pn_count));
 	for (int i = 0; i < NUM_VOICES; i++)
 	{
 		save_item(NAME(m_voice[i].regs), i);
