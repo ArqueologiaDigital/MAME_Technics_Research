@@ -153,7 +153,7 @@ The header defects are now **counted rather than estimated**, by `tools/gen_rig_
 
 | defect | count | note |
 |---|---|---|
-| no description at all | **20** | 18 % — the earlier "about a fifth" was right |
+| no description at all | **0** | was 20 (18 %) — all written 2026-08-15 |
 | header names a *different* script | **0** | was 5 — all rewritten 2026-08-15, see below |
 | no runnable command documented | **90** | fixed for 19 so far; the rest still need one |
 | machine declared via `rig-machine:` | **16** | the other 93 are guessed from the filename or default to kn7000 |
@@ -208,7 +208,7 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `b2cap` | kn7000 *(default)* |  | B2 depth-bank capture: log EVERY group-0x20 (effect-bus) TG write |
 | `b2cap2` | kn7000 *(default)* |  | cold CHORUS/MULTI toggle: capture EVERYTHING (all sub+main TG writes, |
 | `b2dbg` | kn7000 *(default)* |  | sanity: bp on TgVoiceRegWrite_entry (hot on any TG write) + dump ALL console lines |
-| `b2dbg2` | kn7000 *(default)* |  | — |
+| `b2dbg2` | kn7000 *(default)* | ✔ | breakpoint sweep over the effect-send setters in the RAM library. |
 | `b2ram` | kn7000 *(default)* |  | locate the per-part effect DEPTH cache: dump main RAM before and |
 | `b2wp` | kn7000 *(default)* |  | watchpoint on the per-part depth shadow block 0x500CE340..47 to |
 | `ballad_verify` | kn7000 *(default)* |  | Phase B install verification ("8 Beat 1" fix). |
@@ -240,7 +240,7 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn24_probe` | kn2400 *(guessed)* |  | kn2400 boot probe: log PC samples + framebuffer fill, snapshot at end. |
 | `kn24_probe2` | kn2400 *(guessed)* |  | kn2400 probe 2: long run, scan lcdbuf (0x9C000000..0x9CFFFFFF) + vram for content. |
 | `kn24_readfake` | kn2400 | ✔ | force a memory region to read back a chosen value, and see what changes. |
-| `kn24_snap` | kn2400 *(guessed)* |  | — |
+| `kn24_snap` | kn2400 | ✔ | snapshot the KN2400 at 15, 30 and 40 s. |
 | `kn24_tabledest` | kn2400 | ✔ | where in RAM does the KN2400's table-ROM read land? |
 | `kn24_tableshape` | kn2400 | ✔ | what SHAPE of data does the KN2400 expect at 0x48000000? |
 | `kn5000_demo_capture` | kn5000 | ✔ | boot, start the Feature Presentation demo, hold it playing. |
@@ -257,15 +257,15 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn5000_wheel_test` | kn5000 *(guessed)* |  | KN5000 tempo-wheel driver-path test. |
 | `kn6000_btn_verify` | kn6000 *(guessed)* |  | KN6000 panel verification: press a few buttons whose silk name predicts a VISIBLE effect, |
 | `kn6000_layout_clicktest` | kn6000 *(guessed)* |  | KN6000 layout click-through test. |
-| `kn6500_verify` | kn6500 *(guessed)* |  | — |
+| `kn6500_verify` | kn6500 | ✔ | the KN6500 twin of kn7000_regress.lua (SOUND-PIANO, RHYTHM-POP). |
 | `kn6_blit` | kn6000 | ✔ | KN6000 missing-text investigation: WHO reads and writes the graphics plane? |
 | `kn6_boxwp` | kn6000 *(guessed)* |  | KN6000: who writes the widget-box interior in the UI index plane? |
-| `kn6_fbdump` | kn6000 *(guessed)* |  | — |
-| `kn6_fdesc` | kn6000 *(guessed)* |  | — |
+| `kn6_fbdump` | kn6000 | ✔ | dump the KN6000's composited FRAMEBUFFER for offline inspection. |
+| `kn6_fdesc` | kn6000 | ✔ | what font base and glyph pointer does the KN6000 text path resolve? |
 | `kn6_fn` | kn6000 | ✔ | KN6000 missing-text investigation: does the TEXT DRAWER ever run? |
-| `kn6_fontchk` | kn6000 *(guessed)* |  | — |
-| `kn6_g` | kn6000 *(guessed)* |  | — |
-| `kn6_gate` | kn6000 *(guessed)* |  | — |
+| `kn6_fontchk` | kn6000 | ✔ | is the KN6000's font table pointer valid, and what does it point at? |
+| `kn6_g` | kn6000 | ✔ | hexdump 0x5024F400..0x5024F7FF, the KN6000 UI/text descriptor block. |
+| `kn6_gate` | kn6000 | ✔ | which stage of the KN6000 text path runs, and what is the gate word? |
 | `kn6_huff` | kn6000 | ✔ | KN6000 missing-text investigation: is the string decompressor running? |
 | `kn6_plane` | kn6000 *(guessed)* |  | KN6000: dump the UI index plane (0x5020042C), the companion plane, and the CLUT. |
 | `kn6_proof` | kn6000 *(guessed)* |  | DIAGNOSTIC ONLY (never shipped): prove that the KN6000's missing text is caused solely by |
@@ -274,29 +274,29 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `kn6_text_bp` | kn6000 *(guessed)* |  | KN6000 text investigation: execution breakpoints on the 5 |
 | `kn6_txt` | kn6000 *(guessed)* |  | KN6000: does the TEXT DRAWER run, and what font pointer does it get? |
 | `kn6_wp` | kn6000 *(guessed)* |  | watchpoints on framebuffer pixels that DO receive content -> catch the blitter PC. |
-| `kn7000_regress` | kn7000 *(default)* |  | — |
+| `kn7000_regress` | kn7000 | ✔ | UI regression sweep from ONE settled boot, using SAVE STATES. |
 | `kn7_fn` | kn7000 | ✔ | the KN7000 control: its text drawer, on a machine whose text WORKS. |
-| `kn7_fontdump` | kn7000 *(default)* |  | — |
+| `kn7_fontdump` | kn7000 | ✔ | dump the KN7000's font descriptor area (the WORKING reference). |
 | `kn7_fontrd` | kn7000 *(default)* |  | KN7000: who READS the font descriptor table at 0x50122DB8 ? -> the glyph fetch / text drawer |
-| `kn7_planedump` | kn7000 *(default)* |  | — |
+| `kn7_planedump` | kn7000 | ✔ | dump the KN7000's UI source plane: a WORKING text render. |
 | `kn7_txtcall` | kn7000 *(default)* |  | KN7000: who CALLS the text drawer 0x48425467 ? |
-| `kn7_txtstk` | kn7000 *(default)* |  | — |
+| `kn7_txtstk` | kn7000 | ✔ | capture the KN7000 text drawer's ENTRY and its stack arguments. |
 | `kn7_wp` | kn7000 *(default)* |  | KN7000: watch a UI-plane glyph pixel to catch the text/glyph blitter PC. |
 | `kn7_wp2` | kn7000 *(default)* |  | KN7000: watch a UI-plane glyph pixel to catch the text/glyph blitter PC. |
 | `kn7_wp3` | kn7000 *(default)* |  | KN7000: watch a UI-plane glyph pixel to catch the text/glyph blitter PC. |
-| `kn7snap` | kn7000 *(default)* |  | — |
-| `late` | kn7000 *(default)* |  | — |
+| `kn7snap` | kn7000 | ✔ | snapshot the settled KN7000 home screen, then exit. |
+| `late` | kn7000 *(default)* | ✔ | press one named button AFTER the machine has settled, with before/after shots. |
 | `latin_verify` | kn7000 | ✔ | the SECOND rhythm group, verifying the "8 Beat 1" fix generalises. |
 | `ledtest_sweep` | kn7000 *(default)* |  | LED-test button->LED sweep (REAL test). Run MAME with this as -autoboot_script, then hold F3+F4 at |
 | `ledtest_sweep2` | kn7000 *(default)* |  | Find TEMPO/PROGRAM (PANEL MEMORY SET lights the whole CPR bank) + probe the SD LEDs. |
 | `liveness` | kn7000 *(default)* | ✔ | did this machine actually boot and draw its UI? |
-| `money` | kn7000 *(default)* |  | — |
-| `nopress` | kn7000 *(default)* |  | — |
+| `money` | kn7000 | ✔ | THE AUDIO ORACLE. Holds one keybed note so a capture can be hashed. |
+| `nopress` | kn7000 *(default)* | ✔ | the NULL for every button rig: boot, touch nothing, snapshot, exit. |
 | `note` | kn7000 *(default)* |  | At t>=16s (home screen reached) press PC key "C4" and hold it, so the first-cut |
-| `one` | kn7000 *(default)* |  | — |
+| `one` | kn7000 *(default)* | ✔ | press one named button EARLY (t=8 s), snapshot, exit. |
 | `probe` | kn7000 *(default)* |  | Probe every bit of the two SOUND GROUP segments. Stay on the SOUND screen so each |
-| `probe_late` | kn7000 *(default)* |  | — |
-| `progress` | kn7000 *(default)* |  | — |
+| `probe_late` | kn7000 | ✔ | sweep all eight SOUND GROUP buttons, snapshotting after each. |
+| `progress` | kn7000 *(default)* | ✔ | snapshot the BOOT SEQUENCE at 8, 12, 16, 20, 24 and 28 s, then exit. |
 | `sdload_rt` | kn7000 *(default)* |  | sdload_rt run E: fresh boot (default rhythm) -> SD LOAD browser -> LOAD folder01/song01 |
 | `sdnav_a` | kn7000 *(default)* |  | Run A: enter SD MENU via SD CARD LOAD, test re-press idempotency, then LCDL1-5 |
 | `sdnav_b1` | kn7000 *(default)* |  | Run B1: the 5 RIGHT soft keys, each from a verified SD MENU state |
@@ -311,9 +311,9 @@ The **machine** column is what `rig.sh` will pick: *declared* comes from a `-- r
 | `sdsave3` | kn7000 *(default)* |  | sdsave3 run B: reach the SD SAVE browser (TECHNICS FORMAT) and press SAVE (LCDR1). |
 | `sdsave4` | kn7000 *(default)* |  | sdsave4 run C: SAVE browser -> SAVE (LCDR1) -> confirm overwrite YES (LCDR3) -> watch the write. |
 | `sdsave5` | kn7000 *(default)* |  | sdsave5 run D: make the panel state distinguishable (RHYTHM GROUP BALLAD), then |
-| `shot` | kn7000 *(default)* |  | — |
+| `shot` | kn7000 *(default)* | ✔ | one snapshot at t=16 s. The smallest possible rig. |
 | `sio_core_verify` | kn7000 *(default)* |  | SIO-in-CPU-core refactor live verification (Integrate stage). |
 
-**✔** = the header documents a runnable `rig.sh` command. 27 of 117 do; the rest still need one.
+**✔** = the header documents a runnable `rig.sh` command. 47 of 117 do; the rest still need one.
 
 <!-- END GENERATED RIG INDEX -->

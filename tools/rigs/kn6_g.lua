@@ -1,3 +1,13 @@
+-- kn6_g.lua -- hexdump 0x5024F400..0x5024F7FF, the KN6000 UI/text descriptor block.
+-- rig-machine: kn6000
+--
+-- Prints hex + ASCII so pointers and embedded strings are both readable. This is the block
+-- that holds the font-table pointer kn6_fontchk.lua follows (at 0x5024F664).
+--
+--   ./tools/rig.sh kn6_g kn6000 -s 16
+--
+-- Writes kn6_g.log in the emulator directory and exits at t=14.
+
 local cpu = manager.machine.devices[":maincpu"]
 local mem = cpu.spaces["program"]
 local done=false

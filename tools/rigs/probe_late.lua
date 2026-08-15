@@ -1,3 +1,17 @@
+-- probe_late.lua -- sweep all eight SOUND GROUP buttons, snapshotting after each.
+-- rig-machine: kn7000
+--
+-- Presses PIANO, GUITAR, STRINGS & VOCAL, BRASS, FLUTE, SAX & REED, MALLET & ORCH PERC and
+-- WORLD PERC on :cpanel:CPR_SEG2 in turn from t=20 s, holding each 0.4 s and snapshotting 0.6 s
+-- after release. One run gives eight labelled captures, so a mis-mapped bit shows up as two
+-- buttons producing the same screen.
+--
+--   ./tools/rig.sh probe_late kn7000 -s 40
+--
+-- Prints PRESS/SNAP per button with its bit number; exits after the last.
+-- ⚠ Fields are matched by NAME, so it silently does nothing if a PORT_NAME changes -- check for
+--   eight PRESS lines before trusting a null.
+
 local M=manager.machine
 local function field(pt,nm) local p=M.ioport.ports[pt]; if not p then return nil end
   for k,f in pairs(p.fields) do if f.name==nm then return f end end return nil end

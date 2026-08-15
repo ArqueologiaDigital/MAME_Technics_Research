@@ -1,3 +1,18 @@
+-- kn6_fdesc.lua -- what font base and glyph pointer does the KN6000 text path resolve?
+-- rig-machine: kn6000
+--
+-- Breakpoints two points inside the RAM-library text routine:
+--   0x4C0181D3  K6_FONTBASE  -- after d1 = *(0x5024F664), d2 = font id
+--   0x4C0181DC  K6_GLYPHPTR  -- a2 = font record; (8,a2) = glyph base
+-- and logs the register values, capped at five hits each plus total counts.
+--
+-- The counts matter as much as the values: zero hits means the text path never runs, which is a
+-- different defect from it running with a bad pointer.
+--
+--   ./tools/rig.sh kn6_fdesc kn6000 -s 16 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn6_fdesc.log in the emulator directory; exits at t=14.
+
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger

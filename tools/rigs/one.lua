@@ -1,3 +1,13 @@
+-- one.lua -- press one named button EARLY (t=8 s), snapshot, exit.
+--
+-- The early half of the pair with late.lua (t=20.5, settled). Selected by BTN_TAG/BTN_NAME so
+-- one rig sweeps any binding. Compare against nopress.lua, or a press that changes nothing is
+-- indistinguishable from a press that never registered.
+--
+--   BTN_TAG=":cpanel:CPR_SEG4" BTN_NAME="PIANO (SW4)" ./tools/rig.sh one kn7000 -s 12
+--
+-- Prints PRESS <tag>/<name> or ⚠ NOFIELD <tag>/<name>; snapshots and exits at t=10.5.
+
 local M = manager.machine
 local tag = os.getenv("BTN_TAG")
 local name = os.getenv("BTN_NAME")

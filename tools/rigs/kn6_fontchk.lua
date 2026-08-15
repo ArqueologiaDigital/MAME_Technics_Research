@@ -1,3 +1,15 @@
+-- kn6_fontchk.lua -- is the KN6000's font table pointer valid, and what does it point at?
+-- rig-machine: kn6000
+--
+-- Reads the pointer at 0x5024F664, then dumps sixteen 0x14-byte font records from it. A base of
+-- 0 or 0xFFFFFFFF means the font was never resolved -- which is a completely different defect
+-- from a font that resolves but renders wrongly, and the two are indistinguishable from the
+-- screen alone.
+--
+--   ./tools/rig.sh kn6_fontchk kn6000 -s 16
+--
+-- Writes kn6_fontchk.log in the emulator directory and exits at t=14.
+
 local cpu = manager.machine.devices[":maincpu"]
 local mem = cpu.spaces["program"]
 local done=false

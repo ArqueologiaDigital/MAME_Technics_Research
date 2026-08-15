@@ -1,3 +1,16 @@
+-- kn7000_regress.lua -- UI regression sweep from ONE settled boot, using SAVE STATES.
+-- rig-machine: kn7000
+--
+-- Boots once to t=22, saves state "k7home", then for each button: reload the state, settle,
+-- press, hold, release, snapshot. Three screens (PROGRAM MENUS, DISK MENU LOAD, PIANO) for the
+-- price of one boot, and every press starts from a byte-identical machine -- so a difference
+-- between shots is the button, not drift.
+--
+--   ./tools/rig.sh kn7000_regress kn7000 -s 90
+--
+-- Prints "KN7000 AFTER <label>" per capture and exits after the last one.
+-- ⚠ Needs save-state support for this driver; a save/load failure shows up as identical shots.
+
 local B={{"cpanel:CPR_SEG0",0x04,"PROGRAM-MENUS"},{"cpanel:CPR_SEG1",0x04,"DISK-MENU-LOAD"},{"cpanel:CPR_SEG4",0x10,"PIANO"}}
 local i=1; local phase="boot"; local fc=0
 local function setbtn(p,mk,v)

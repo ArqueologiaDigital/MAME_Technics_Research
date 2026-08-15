@@ -1,3 +1,13 @@
+-- kn6500_verify.lua -- the KN6500 twin of kn7000_regress.lua (SOUND-PIANO, RHYTHM-POP).
+-- rig-machine: kn6500
+--
+-- Same save-state pattern: boot to t=20, save "k65home", then reload it before each press so
+-- every capture starts from an identical machine.
+--
+--   ./tools/rig.sh kn6500_verify kn6500 -s 80
+--
+-- Prints "KN6500 AFTER <label>" per capture and exits after the last one.
+
 local B={{"cpanel:CPR_SEG0",0x01,"SOUND-PIANO"},{"cpanel:CPL_SEG0",0x08,"RHYTHM-POP"}}
 local i=1; local phase="boot"; local fc=0
 local function setbtn(p,mk,v)

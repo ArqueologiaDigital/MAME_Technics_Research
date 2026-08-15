@@ -1,3 +1,18 @@
+-- kn6_gate.lua -- which stage of the KN6000 text path runs, and what is the gate word?
+-- rig-machine: kn6000
+--
+-- Arms four routines, each at both its program-ROM and its 0x4C library-alias address (it was
+-- not known which mapping executes, so both are armed and whichever fires identifies it):
+--   WRAP 0x484180DB · TXT 0x48418112 · SETCTX1 0x48414552 · SETCTX2 0x48415131
+-- Every hit also prints the gate word at 0x50010384, and the final value is written at the end.
+--
+-- The output is a per-stage hit COUNT, so the pipeline can be read off directly: the first
+-- stage with zero hits is where text drawing stops.
+--
+--   ./tools/rig.sh kn6_gate kn6000 -s 16 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn6_gate.log in the emulator directory; exits at t=14.
+
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local mem  = cpu.spaces["program"]

@@ -1,3 +1,14 @@
+-- kn7_txtstk.lua -- capture the KN7000 text drawer's ENTRY and its stack arguments.
+-- rig-machine: kn7000
+--
+-- Breakpoints 0x48425467 (the text-draw entry) and 0x484254FA inside it, dumping seven stack
+-- words at sp+0x188..sp+0x1A0. On the KN7000 text WORKS, so this records what a healthy call
+-- looks like -- the reference the KN6000/KN2400 investigations compare against.
+--
+--   ./tools/rig.sh kn7_txtstk kn7000 -s 18 -- -debug -debugger none
+--
+-- Needs the debugger. Writes kn7_txtstk.log (first 12 hits + total); exits at t=16.
+
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger

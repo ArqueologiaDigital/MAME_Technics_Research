@@ -1,3 +1,14 @@
+-- b2dbg2.lua -- breakpoint sweep over the effect-send setters in the RAM library.
+--
+-- Sibling of the b2* family (effect-bus unit feeds and per-part send setters). Arms seven
+-- breakpoints across 0x4C037D0F..0x4C037D8C -- addresses in the 0x4C library window -- and
+-- prints d0/d1 at each hit, to see which of the candidate entry points actually runs and with
+-- what arguments.
+--
+--   ./tools/rig.sh b2dbg2 kn7000 -s 30 -- -debug -debugger none
+--
+-- Needs the debugger. Output goes to stderr, tagged [b2d].
+
 local mach = manager.machine
 local cpu  = mach.devices[":maincpu"]
 local dbg  = mach.debugger
