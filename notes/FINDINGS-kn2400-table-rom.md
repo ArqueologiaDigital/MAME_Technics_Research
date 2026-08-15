@@ -112,11 +112,50 @@ matched a RAM writer 64 bytes away, which would have credited them with a 118 KB
 table-ROM data and those reads feed something else. The content check exists precisely to
 catch this; without it the write-up would have claimed 118 KB of damage that is not there.
 
-⚠ **Still inference: that these buffers are what the text drawer reads.** The buffer is
-`0xFF` and the glyph cells draw solid, which is consistent, but no measurement yet ties the
-two. The test that would settle it is to overwrite the buffer at runtime with a distinctive
-pattern and look for a change on screen — with a no-poke control, because a play screen that
-never redraws would produce "no change" for a reason that has nothing to do with the buffer.
+## Tested: these buffers are NOT what draws the black bars
+
+The obvious next inference — *the buffer is `0xFF`, the glyph cells draw solid, therefore the
+buffer is the glyph source* — was tested and **does not hold**. Rig:
+`tools/rigs/kn24_bufferpoke.lua`, comparing full-frame PNG snapshots between runs.
+
+| run | frame vs control |
+|---|---|
+| buffer 1 `0x502A5024..0x502ABF63` (28,480 B) overwritten with `0x00` | **bit-identical** |
+| buffer 2 `0x502AC108..0x502B0808` (18,177 B) overwritten with `0x00` | **bit-identical** |
+| **positive control** — the framebuffer at `0x9C800000` overwritten with `0xFF` | **differs** ✓ |
+
+The screenshot confirms the bars are genuinely on screen and would be sampled: four solid
+black rectangles where text belongs, beside cleanly-drawn grand-piano icons in the part cells.
+So the test had something to see, the method demonstrably reaches the display, and the answer
+is negative.
+
+### Getting the timing right was the entire experiment
+
+The first two attempts poked at t=20 and t=7 and both returned "no change" — **and both were
+worthless**. `tools/rigs/kn24_fbwrites.lua` measured why:
+
+```
+FB writes=67201 first=0.25s last=11.13s
+FB per second -- 0:38400 2:9600 6:19200 11:1
+```
+
+The KN2400 composites its screen at **t=6** (19,200 bytes = exactly the full 320×240 2bpp
+buffer) and never repaints after t=11.13. A poke at t=7 is already too late: the screen on
+display was drawn before it, so *no* buffer could have shown an effect. The valid test holds
+the buffer overwritten *across* the paint — here 45 repeated pokes spanning t=4…9 — and only
+that version is evidence.
+
+This is the same trap as the positive control passing for the wrong reason: poking the
+framebuffer "worked" precisely because it skips the drawing step, and its persistence from
+t=22 to t=30 is what revealed that nothing ever redraws.
+
+### So where do the glyphs come from?
+
+Open. What is now excluded: the two table-ROM-derived buffers, for the boot play screen as
+rendered. What is not excluded: that they feed content reached only by navigating (style or
+sound names on other screens), which this test never displays. The next move is to tap reads
+of the framebuffer-filling routine around t=6 and see what memory it sources — the same
+reader/writer correlation that found the copy loop, pointed at the compositor instead.
 
 ### A methodology note worth more than the finding
 
