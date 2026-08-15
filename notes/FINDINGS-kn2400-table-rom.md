@@ -67,22 +67,91 @@ The solid findings are the ones that do not depend on the contents: *there is a 
 0, it is about `0x40` bytes of dword fields, it is read before anything else, and the whole
 transaction is over by t=6.*
 
+## The copy loop, found and verified (same day)
+
+The "RAM copy" above was inference when first written. It is now located, disassembled and
+its output measured. Rig: `tools/rigs/kn24_tabledest.lua`.
+
+```
+4860c25e: mov   (0x500d7398), d1     ; destination base, from RAM
+4860c265: mov   0x2c8, d0            ; 712 = record stride
+4860c26a: mulu  d0, d2               ; d2 = record index * 712
+4860c26c: add   0x10, d1             ; records start at base+0x10
+4860c26e: add   d2, d1
+4860c26f: mov   d1, a1
+4860c271: mov   -0x164, d1           ; 356 halfwords = 712 bytes
+4860c274: setlb                      ; hardware loop
+4860c275: movhu (a0), d0             ; ★ read  from the table ROM
+4860c277: add   2, a0
+4860c279: movhu d0, (a1)             ; ★ write to RAM
+4860c27b: add   2, a1
+4860c27d: inc   d1
+4860c27e: lne
+...
+4860c282: cmp   0x28, d3             ; 40 records
+4860c284: blt   0x4860c258
+```
+
+Every number in that listing was then confirmed at runtime, independently:
+
+| predicted from the disassembly | measured |
+|---|---|
+| destination = `[0x500D7398] + 0x10` | pointer reads `0x502A5014` → **`0x502A5024`**, and the write tap's lowest destination is **`0x502A5024`** |
+| 40 records × 712 B = 28,480 B | **28,480 writes**, span `0x502A5024..0x502ABF60` |
+| source is the all-`0xFF` table ROM | destination sampled after the copy: **99.86 % `0xFF`** |
+
+That closes the chain end to end: **undumped ROM → `ROMREGION_ERASEFF` → a 28 KB RAM buffer
+of 40 fixed-size records that is essentially all `0xFF`.**
+
+A second, partly-affected buffer sits at `0x502AC108..0x502B0808` (~18 KB, **67.6 % `0xFF`**),
+filled by three sibling loops at `0x4860C05D`, `0x4860C0AC` and `0x4860C130`.
+
+⚠ **One attribution was rejected by measuring it.** The readers at `0x486FA939-0x486FA979`
+matched a RAM writer 64 bytes away, which would have credited them with a 118 KB buffer at
+`0x5038DCE0..0x503AAA84`. That buffer is **0.00 % `0xFF`** and 91 % zero, so it is not
+table-ROM data and those reads feed something else. The content check exists precisely to
+catch this; without it the write-up would have claimed 118 KB of damage that is not there.
+
+⚠ **Still inference: that these buffers are what the text drawer reads.** The buffer is
+`0xFF` and the glyph cells draw solid, which is consistent, but no measurement yet ties the
+two. The test that would settle it is to overwrite the buffer at runtime with a distinctive
+pattern and look for a change on screen — with a no-poke control, because a play screen that
+never redraws would produce "no change" for a reason that has nothing to do with the buffer.
+
+### A methodology note worth more than the finding
+
+The first version of `kn24_tabledest.lua` joined readers to writers on **exact PC equality**
+and reported *"OVERLAP: 0 — the reader and the writer are DIFFERENT routines"*. That is
+impossible to observe by construction: a copy loop's load and store are separate instructions,
+here four bytes apart (`0x4860C275` vs `0x4860C279`). The rig was answering a question nobody
+asked. It now joins on a ±64-byte window, and the disassembly is what revealed the bug — the
+measurement looked perfectly plausible and was wrong.
+
 ## Two things this makes possible without a dump
 
 * **A verification test.** A candidate dump must carry a plausible descriptor in its first
   `0x40` bytes, and mounting it must *change this access pattern* — traffic should extend well
   past 29 KB and stop looking like a walk over `0xFF`. Re-running this rig against a candidate
   is a cheap, honest first check before anything is declared good.
-* **A RAM-side investigation that can start now.** Since drawing works from a boot-time RAM
-  copy, the destination buffer can be found and inspected on the current build — no hardware
-  needed. Find where the t=0…6 reads are written to, and the glyph path can be characterised
-  end to end even while the source ROM is missing.
+* **A RAM-side investigation that can start now.** ✅ **Done, same day** — the copy loop and its
+  destination are above. What remains is the runtime-poke test that would prove the buffers
+  feed the display, and working out what a 40 × 712-byte record table actually *is*.
 
 ## Reproduce
 
 ```
-./tools/rig.sh kn24_tableshape kn2400 -s 32          # this note
-./tools/rig.sh kn24_fontsrc    kn2400 -s 32          # the whether-at-all check it builds on
+./tools/rig.sh kn24_fontsrc    kn2400 -s 32          # is the region read at all?
+./tools/rig.sh kn24_tableshape kn2400 -s 32          # what shape of data does it expect?
+TAP_UNTIL=10 ./tools/rig.sh kn24_tabledest kn2400 -s 12   # where does it land, and is it 0xFF?
+```
+
+Disassembly of the KN2400 image (a **different** firmware from the KN7000 — one shared LKG
+program, no separate table flash) needs its flat image built first, because the ROMs ship as
+an even/odd 16-bit interleave and disassembling either half alone produces confident nonsense:
+
+```
+python3 tools/make_kn2400_image.py -o /tmp/kn2400_flat.bin
+BIN=/tmp/kn2400_flat.bin ./tools/dis.sh 0x4860C250 80
 ```
 
 Both print a verdict line. `kn24_tableshape`'s first verdict logic classified on "was a block
