@@ -234,8 +234,38 @@ broken case cannot be the defect. Combined with the measurements above, that eli
 * the per-pixel lookup at `0x5039B700` (shared with the working icons).
 
 What is left is **upstream**: whatever draws text into the source plane is already writing
-solid bars. `tools/rigs/kn24_planewriters.lua` tests exactly that — it groups writes to the
-plane by PC and reports how solid each writer's output is.
+solid bars.
+
+## Looking at the plane settles it
+
+![the KN2400 UI source plane](kn2400-ui-plane-2026-08-15.png)
+
+`tools/rigs/kn24_planedump.lua` dumps the 320×240 8bpp plane at `0x500B0000`;
+`tools/kn24_plane_to_png.py` renders it. The picture matches the screen element for element —
+and it already contains **solid filled rectangles where text belongs**, beside **correctly
+drawn piano icons**. Five byte values only:
+
+| value | share | what it is |
+|---|---|---|
+| `0xE0` | 56.3 % | background |
+| `0x07` | 33.3 % | part-cell fill |
+| **`0xFF`** | **5.1 %** (3,934 B) | **the bars** — the area matches |
+| `0xF8` | 3.2 % | the icons |
+| `0x00` | 2.1 % | borders |
+
+So the text drawer does not render glyphs and fail to show them; it fills the text rectangles
+with `0xFF`. The icons prove the same plane, the same compositor and the same lookup all work.
+
+⚠ **This walks back part of the previous section, and the walk-back matters.** "The compositor
+never reads the table ROM" is measured and stands. "Therefore the table ROM is not the cause"
+does **not** follow, and I stated it too strongly. The compositor runs *after* the plane is
+drawn; the plane is drawn at t≈2–6, which is exactly the window in which the 164,300 table-ROM
+reads happen. A text drawer fetching all-`0xFF` glyph data and stamping it into the plane
+would produce precisely this picture, and would be invisible to a compositor-side tap.
+
+The poke result still constrains it: overwriting the two RAM buffers copied *from* the table
+ROM changed nothing, so if the ROM is implicated the text drawer reads it by some other route
+than those buffers. That is now the open question, and it is a narrow one.
 
 ### A methodology note worth more than the finding
 
