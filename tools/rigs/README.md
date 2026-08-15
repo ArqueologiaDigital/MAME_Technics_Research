@@ -113,6 +113,8 @@ reported as evidence of no regression. Each is now a separate red gate.
 | `ballad_verify`, `latin_verify` | 2 | the "8 Beat 1" style-name fix |
 | `note`, `keybed_trigger`, `one`, `nopress` | 4 | does a key press reach the firmware and emit voice writes |
 | `kn5000_note_capture` | 1 | hold one KNOWN keybed note so its pitch can be measured (used to close P10) |
+| `cpu_state_probe` | 1 | which registers does this CPU expose to Lua? (TLCS-900 has XNSP/XSSP and no SP) |
+| `kn5000_p9_stall`, `kn5000_p9_writer` | 2 | when the demo stops, and which instruction and call chain stop it |
 
 ## ⚠ `note.lua` was broken in two independent ways (found and fixed 2026-08-15)
 
