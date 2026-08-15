@@ -112,6 +112,20 @@ reported as evidence of no regression. Each is now a separate red gate.
 | `kn5000_*`, `kn6000_*`, `kn6500_verify` | 5 | per-model panel/wheel/layout checks |
 | `ballad_verify`, `latin_verify` | 2 | the "8 Beat 1" style-name fix |
 | `note`, `keybed_trigger`, `one`, `nopress` | 4 | does a key press reach the firmware and emit voice writes |
+| `kn5000_note_capture` | 1 | hold one KNOWN keybed note so its pitch can be measured (used to close P10) |
+
+## ⚠ `note.lua` was broken in two independent ways (found and fixed 2026-08-15)
+
+It produced a completely silent capture that looked exactly like a broken audio path:
+
+1. **The notifier handle was not held in a global**, so the Lua GC collected it and the callback
+   never fired — the very hazard listed at the top of this file.
+2. **It referenced port `:KEYS0`, which does not exist on the KN5000.** The keybed ports here are
+   `:KEY0`–`:KEY5` (`:KEY2` bit `0x001` = `C4`, MIDI 60). `KEYS0`/`KEYS1` are the KN7000's.
+
+With both fixed, holding `C4` gives rms 562/535 on ch1/ch2 against 0.00 before the press. This is
+the concrete case behind the honesty note below: a committed rig that had never been re-run did
+not merely rot, it had never worked on this driver.
 
 ## Honesty note
 

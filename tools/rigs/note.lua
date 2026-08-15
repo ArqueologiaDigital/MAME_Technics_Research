@@ -2,8 +2,13 @@
 -- sine synth sustains a 261.63 Hz tone that -wavwrite captures.
 local mac = manager.machine
 local sp  = mac.devices[":maincpu"].spaces["program"]
+-- ⚠ FIXED 2026-08-15: the handle must be held in a GLOBAL or the Lua GC collects it and the
+-- notifier never fires. As committed, this rig silently did nothing -- no key press, no
+-- "KEY C4 DOWN" line, and a completely silent capture that looks exactly like a broken audio
+-- path. The hazard is documented in tools/rigs/README.md; this rig predated the fix.
+_G.NOTE = _G.NOTE or {}
 local done=false
-emu.add_machine_frame_notifier(function()
+_G.NOTE.h = emu.add_machine_frame_notifier(function()
   if not done and mac.time.seconds >= 16 then
     done=true
     local hit=false
