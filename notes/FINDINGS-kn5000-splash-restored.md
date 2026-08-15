@@ -74,6 +74,35 @@ the `share("nvram1")` on the work DRAM — the two changes fit together rather t
   sampling the checksums once at t=32 when the verify runs at t≈4, which reported "cold path"
   from values that were merely stale.
 
+## Does the pattern transfer to the MN10300 models? Not on the evidence so far
+
+I claimed the technique is reusable "for any model with a power-fail routine". That is true as
+stated, but the antecedent has to be checked per model, and for the KN7000 it does **not**
+obviously hold.
+
+The KN7000's vector table has only two populated entries (everything from `0x48400010` is `0xFF`
+filler):
+
+```
+48400000: jmp 0x4840FF7E     reset
+4840000A: jmp 0x484D77CF     second vector
+```
+
+`0x484D77CF` is an **I/O initialisation** routine, not a state save — it writes on-chip I/O
+registers (`0x34001092` <- 0xFFFF, `0x34001082` <- 0x82, `0x9000000E` <- 0, bit clears on
+`0x36008004`) and calls into further setup. Nothing resembling the KN5000's
+"checksum-and-copy-to-battery-backed-SRAM" transaction.
+
+That fits the architectures being different: the KN5000's mechanism exists to serve its
+**sub-CPU payload** design (skip the transfer next boot if the checksums still match), and the
+KN7000 has no equivalent payload handshake. It also has no recorded symptom of a missing
+power-down transaction — no `<Db>`-style artefact, no missing splash.
+
+**So: no KN7000 work is implied by this.** The pattern is available if a power-fail routine is
+ever found in one of these firmwares, and the check is cheap (look at the vector table, see
+whether the handler saves state or configures hardware). Recorded so the "reusable" note above
+is not read as a to-do.
+
 ## Reproduce
 
 ```
