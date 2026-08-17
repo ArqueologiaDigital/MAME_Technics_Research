@@ -61,6 +61,7 @@ private:
 	// Response generation
 	void send_sync_packet();
 	void send_button_packet(int segment, bool is_left_panel);
+	void send_encoder_packet(int8_t detents);
 	void send_all_button_states(bool is_left_panel);
 
 	// LED control
@@ -120,15 +121,16 @@ private:
 	optional_ioport m_encoder_port;
 	int32_t m_encoder_prev;   // last adjuster value seen, for the wrap-aware per-scan delta
 	bool    m_encoder_synced; // false until the first scan adopts the knob (no startup detent)
-	ioport_field *m_encoder_field; // the ENCODER adjuster field (read RAW, bypassing analog interp)
-	uint8_t m_encoder_latch;  // direction bits reported in the segment 0x0B status byte
+	// Segment 0x0B's status byte. DELIBERATELY always 0: a wheel at rest is idle, and header
+	// 0xCB maps to value-translation index 0x1F = invalid, so segment 0x0B provably cannot
+	// produce an input record. The wheel reports through send_encoder_packet() instead.
+	uint8_t m_encoder_latch;
 
 	// Main-CPU handle used to deposit the wheel's scan-table entry into DRAM 0x8E94.
 	// The real panel wheel is read by the firmware's main-loop poll Encoder_ValueScanAndSync
 	// (not the CP serial protocol); this finder lets the HLE emit that entry directly.
 	// Absolute ":maincpu" tag resolves from the machine root -- see the .cpp for the full
 	// rationale and side-quests/findings/kn5000_data_wheel_findings.md.
-	required_device<cpu_device> m_maincpu;
 
 	// LED outputs
 	output_finder<50> m_cpl_leds;  // Left panel LEDs (CPL_0 through CPL_49)

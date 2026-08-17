@@ -28,6 +28,7 @@
 
 
 #define REG(x)      (m_core->r[x].r)
+#define UIREG(x)    uint32_t(m_core->r[x].r)   // unsigned view, for std::rotl/std::rotr
 #define FREG(x)     (m_core->r[x].f)
 
 #define UPDATE_CIRCULAR_BUFFER_PM(x)                        \
@@ -559,7 +560,7 @@ void adsp21062_device::SHIFT_OPERATION_IMM(int shiftop, int data, int rn, int rx
 
 		case 0x02:      /* ROT Rx BY <data8> */
 		{
-			REG(rn) = rotl_32(REG(rx), shift);
+			REG(rn) = std::rotl(UIREG(rx), shift);
 			SET_FLAG_SZ(REG(rn));
 			break;
 		}
@@ -1134,11 +1135,11 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
 						int const shift = REG(ry);
 						if (shift < 0)
 						{
-							REG(rn) = rotr_32(REG(rx), -shift);
+							REG(rn) = std::rotr(UIREG(rx), -shift);
 						}
 						else
 						{
-							REG(rn) = rotl_32(REG(rx), shift);
+							REG(rn) = std::rotl(UIREG(rx), shift);
 							if (shift > 0)
 							{
 								m_core->astat |= SV;
