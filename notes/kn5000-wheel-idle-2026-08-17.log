@@ -1,0 +1,603 @@
+kn5000_subcpu_boot.ic30 ROM NEEDS REDUMP
+kn5000_rhythm_data_rom.ic14 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+kn5000_waveform_rom.ic307 ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+[WIDLE] armed: list 0x8E94..0x8EA9 (7 slots x 3 B + terminator), candidate 0x8EB2, count 0x8EC4, read tap 0x8E94..0x8E95, settle 0x8E55, settled-line t=24. NOTHING is pressed or turned in this rig.
+[WIDLE] S t=  0.017 0x8E55 now reads 0x00   (CW bit7=0 CCW bit6=0)
+[WIDLE] === CENSUS t0 at t=0.02 =================================
+[WIDLE]     scan list 0x8E94..0x8EA9 = 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[WIDLE]       head byte 0x00 -- NON-EMPTY, an entry is staged ; entry count 0x8EC4 = 0 (max seen 0 of 7)
+[WIDLE]     candidate 0x8EB2 = 00 00 00 ; 0x8E55 (settling result) = 0x00
+[WIDLE]     RECORD IDS PROPOSED by the producer at 0x8EB2: 0 distinct
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     RECORD IDS STAGED into the list by the firmware itself: 0 distinct
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     writes to 0x8E94..0x8EA9 : 0 total, 0 distinct signatures
+[WIDLE]     reads  of 0x8E94..0x8E95 : 0 total, 0 distinct signatures
+[WIDLE]     writes to 0x8EC4 (entry count) : 0 distinct signatures
+[WIDLE]     writes to 0x8E55 : 0 distinct signatures
+[WIDLE]     0x8E55 sample history (1 changes): t=0.02 0x00
+[WIDLE] === END CENSUS t0 ===
+[WIDLE] S t=  0.052 0x8E55 <- 0x00  from PC=0x00EF0B9B   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E94]=00 [8E95]=00   (new signature)
+[WIDLE] A t=  0.052 boot   STAGED slot 0  id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2   (from PC=0x00EF0B9B)
+[WIDLE]     stack for append of record 0x00 (PC=0x00EF0B9B):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x00000BFC : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000   (* = looks like a code address)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E96]=00 [8E97]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E98]=00 [8E99]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E9A]=00 [8E9B]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E9C]=00 [8E9D]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8E9E]=00 [8E9F]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8EA0]=00 [8EA1]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8EA2]=00 [8EA3]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8EA4]=00 [8EA5]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8EA6]=00 [8EA7]=00   (new signature)
+[WIDLE] W t=  0.052 boot   PC=0x00EF0B9B  [8EA8]=00 [8EA9]=00   (new signature)
+[WIDLE] P t=  0.052 boot   PROPOSED  id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2   (producer PC=0x00EF0B9B)
+[WIDLE] C t=  0.052 boot   0x8EC4 (entry count) <- 0  from PC=0x00EF0B9B   (new signature)
+[WIDLE] S t=  0.477 0x8E55 <- 0x00  from PC=0x00FC49C5   (new signature)
+[WIDLE] W t=  5.343 boot   PC=0x00FC6C59  [8E94]=FF   (new signature)
+[WIDLE] C t=  5.343 boot   0x8EC4 (entry count) <- 0  from PC=0x00FC6C5E   (new signature)
+[WIDLE] P t=  7.693 boot   PROPOSED  id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7   (producer PC=0x00FC6B38)
+[WIDLE] C t=  7.693 boot   0x8EC4 (entry count) <- 1  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C37  [8E94]=1A   (new signature)
+[WIDLE] A t=  7.693 boot   STAGED slot 0  id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7   (from PC=0x00FC6C37)
+[WIDLE]     stack for append of record 0x1A (PC=0x00FC6C37):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x0001DC1C : 00008EB2 00FC6B46* 000200AD 00FC69ED* 00FC69C7* 00EF126B* 00000000 00000000   (* = looks like a code address)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C39  [8E95]=7F   (new signature)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C39  [8E96]=7F   (new signature)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C49  [8E97]=FF   (new signature)
+[WIDLE] P t=  7.693 boot   PROPOSED  id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332   (producer PC=0x00FC6B5D)
+[WIDLE] C t=  7.693 boot   0x8EC4 (entry count) <- 2  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C37  [8E97]=1B   (new signature)
+[WIDLE] A t=  7.693 boot   STAGED slot 1  id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332   (from PC=0x00FC6C37)
+[WIDLE]     stack for append of record 0x1B (PC=0x00FC6C37):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x0001DC1C : 00008EB2 00FC6B6B* 000200AD 00FC69ED* 00FC69C7* 00EF126B* 00000000 00000000   (* = looks like a code address)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C39  [8E98]=00 [8E99]=7F   (new signature)
+[WIDLE] W t=  7.693 boot   PC=0x00FC6C49  [8E9A]=FF   (new signature)
+[WIDLE] P t=  7.752 boot   PROPOSED  id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251   (producer PC=0x00FC6B06)
+[WIDLE] W t=  7.752 boot   PC=0x00FC6C37  [8E94]=1D   (new signature)
+[WIDLE] A t=  7.752 boot   STAGED slot 0  id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251   (from PC=0x00FC6C37)
+[WIDLE]     stack for append of record 0x1D (PC=0x00FC6C37):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x0001DC0E : 00008EB2 00FC6B17* 00020000 00008EB2 00008EBB 6A94880F 69EA00FC 69C700FC   (* = looks like a code address)
+[WIDLE] W t=  7.752 boot   PC=0x00FC6C39  [8E95]=00   (new signature)
+[WIDLE] W t=  7.752 boot   PC=0x00FC6C39  [8E96]=0F   (new signature)
+[WIDLE] P t=  7.752 boot   PROPOSED  id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874   (producer PC=0x00FC6B06)
+[WIDLE] W t=  7.752 boot   PC=0x00FC6C37  [8E97]=1E   (new signature)
+[WIDLE] A t=  7.752 boot   STAGED slot 1  id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874   (from PC=0x00FC6C37)
+[WIDLE]     stack for append of record 0x1E (PC=0x00FC6C37):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x0001DC12 : 00008EB2 00FC6B17* 00020000 00008EB2 00008EBF 69EA0000 69C700FC 126B00FC   (* = looks like a code address)
+[WIDLE] W t=  7.752 boot   PC=0x00FC6C39  [8E98]=01 [8E99]=01   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C37  [8E94]=00   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C39  [8E96]=00   (new signature)
+[WIDLE] P t=  7.915 boot   PROPOSED  id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C37  [8E97]=02   (new signature)
+[WIDLE] A t=  7.915 boot   STAGED slot 1  id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5   (from PC=0x00FC6C37)
+[WIDLE]     stack for append of record 0x02 (PC=0x00FC6C37):
+[WIDLE]       XNSP=0x00000000 : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000020   (* = looks like a code address)
+[WIDLE]       XSSP=0x0001DC1C : 00008EB2 00FC6A09* 000200AD 00FC69E7* 00FC69C7* 00EF126B* 00000000 00000000   (* = looks like a code address)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C39  [8E98]=00 [8E99]=00   (new signature)
+[WIDLE] P t=  7.915 boot   PROPOSED  id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152   (producer PC=0x00FC6A2E)
+[WIDLE] C t=  7.915 boot   0x8EC4 (entry count) <- 3  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C37  [8E9A]=04   (new signature)
+[WIDLE] A t=  7.915 boot   STAGED slot 2  id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C39  [8E9B]=00   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C39  [8E9C]=00   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C49  [8E9D]=FF   (new signature)
+[WIDLE] P t=  7.915 boot   PROPOSED  id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2   (producer PC=0x00FC6A2E)
+[WIDLE] C t=  7.915 boot   0x8EC4 (entry count) <- 4  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C37  [8E9D]=06   (new signature)
+[WIDLE] A t=  7.915 boot   STAGED slot 3  id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C39  [8E9E]=00 [8E9F]=00   (new signature)
+[WIDLE] W t=  7.915 boot   PC=0x00FC6C49  [8EA0]=FF   (new signature)
+[WIDLE] P t=  7.916 boot   PROPOSED  id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29   (producer PC=0x00FC6A2E)
+[WIDLE] C t=  7.916 boot   0x8EC4 (entry count) <- 5  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C37  [8EA0]=08   (new signature)
+[WIDLE] A t=  7.916 boot   STAGED slot 4  id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C39  [8EA1]=00   (new signature)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C39  [8EA2]=00   (new signature)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C49  [8EA3]=FF   (new signature)
+[WIDLE] P t=  7.916 boot   PROPOSED  id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0   (producer PC=0x00FC6A2E)
+[WIDLE] C t=  7.916 boot   0x8EC4 (entry count) <- 6  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C37  [8EA3]=0A   (new signature)
+[WIDLE] A t=  7.916 boot   STAGED slot 5  id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C39  [8EA4]=00 [8EA5]=00   (new signature)
+[WIDLE] W t=  7.916 boot   PC=0x00FC6C49  [8EA6]=FF   (new signature)
+[WIDLE] P t=  7.916 boot   PROPOSED  id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0   (producer PC=0x00FC6A2E)
+[WIDLE] C t=  7.917 boot   0x8EC4 (entry count) <- 7  from PC=0x00FC6C31   (new signature)
+[WIDLE] W t=  7.917 boot   PC=0x00FC6C37  [8EA6]=0B   (new signature)
+[WIDLE] A t=  7.917 boot   STAGED slot 6  id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.917 boot   PC=0x00FC6C39  [8EA7]=00   (new signature)
+[WIDLE] W t=  7.917 boot   PC=0x00FC6C39  [8EA8]=00   (new signature)
+[WIDLE] W t=  7.917 boot   PC=0x00FC6C49  [8EA9]=FF   (new signature)
+[WIDLE] P t=  7.928 boot   PROPOSED  id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.928 boot   PC=0x00FC6C37  [8E94]=0D   (new signature)
+[WIDLE] A t=  7.928 boot   STAGED slot 0  id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0   (from PC=0x00FC6C37)
+[WIDLE] P t=  7.928 boot   PROPOSED  id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.928 boot   PC=0x00FC6C37  [8E97]=0F   (new signature)
+[WIDLE] A t=  7.928 boot   STAGED slot 1  id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2   (from PC=0x00FC6C37)
+[WIDLE] P t=  7.928 boot   PROPOSED  id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.928 boot   PC=0x00FC6C37  [8E9A]=11   (new signature)
+[WIDLE] A t=  7.928 boot   STAGED slot 2  id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78   (from PC=0x00FC6C37)
+[WIDLE] P t=  7.928 boot   PROPOSED  id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.928 boot   PC=0x00FC6C37  [8E9D]=13   (new signature)
+[WIDLE] A t=  7.928 boot   STAGED slot 3  id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61   (from PC=0x00FC6C37)
+[WIDLE] P t=  7.928 boot   PROPOSED  id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  7.928 boot   PC=0x00FC6C37  [8EA0]=15   (new signature)
+[WIDLE] A t=  7.928 boot   STAGED slot 4  id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930   (from PC=0x00FC6C37)
+[WIDLE] W t=  7.929 boot   PC=0x00FC6C37  [8EA3]=00   (new signature)
+[WIDLE] P t=  9.770 boot   PROPOSED  id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D   (producer PC=0x00FC6A2E)
+[WIDLE] W t=  9.770 boot   PC=0x00FC6C37  [8E94]=0E   (new signature)
+[WIDLE] A t=  9.770 boot   STAGED slot 0  id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D   (from PC=0x00FC6C37)
+[WIDLE] === CENSUS t10 at t=10.02 =================================
+[WIDLE]     scan list 0x8E94..0x8EA9 = FF 00 00 FF 00 00 11 00 00 13 00 00 15 00 00 00 00 00 0B 00 00 FF
+[WIDLE]       head byte 0xFF -- 0xFF = EMPTY, nothing staged ; entry count 0x8EC4 = 0 (max seen 7 of 7)
+[WIDLE]     candidate 0x8EB2 = 0E 00 00 ; 0x8E55 (settling result) = 0x00
+[WIDLE]     RECORD IDS PROPOSED by the producer at 0x8EB2: 17 distinct
+[WIDLE]       n=3      id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~0.38/s  by 0x00EF0B9B x1, 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..9.77  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6B38 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6B5D x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     RECORD IDS STAGED into the list by the firmware itself: 17 distinct
+[WIDLE]       n=10     id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~1.27/s  by 0x00EF0B9B x8, 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..9.77  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     writes to 0x8E94..0x8EA9 : 1561 total, 53 distinct signatures
+[WIDLE]       W n=1482    PC=0x00FC6C59  [8E94]=FF                   t=5.34..10.02  boot
+[WIDLE]       W n=5       PC=0x00FC6C49  [8E97]=FF                   t=7.69..9.77  boot
+[WIDLE]       W n=4       PC=0x00FC6C39  [8E95]=00                   t=7.75..9.77  boot
+[WIDLE]       W n=4       PC=0x00FC6C49  [8E9A]=FF                   t=7.69..7.93  boot
+[WIDLE]       W n=3       PC=0x00FC6C39  [8E96]=00                   t=7.92..9.77  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9C]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9B]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA3]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C37  [8EA6]=0B                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8E9D]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA2]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA9]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA4]=00 [8EA5]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E98]=00 [8E99]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA6]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA0]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA1]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA7]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9E]=00 [8E9F]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA8]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=00                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=00                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=06                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=0D                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9E]=00 [8E9F]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=11                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=02                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E94]=00 [8E95]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9C]=00 [8E9D]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA0]=00 [8EA1]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA6]=00 [8EA7]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA8]=00 [8EA9]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=0A                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=04                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=15                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=13                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1B                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E98]=00 [8E99]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E95]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9A]=00 [8E9B]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=08                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1A                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=0F                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=0F                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=00 [8E99]=7F         t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E96]=00 [8E97]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA4]=00 [8EA5]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1D                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA2]=00 [8EA3]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1E                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=0E                   t=9.77..9.77  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=01 [8E99]=01         t=7.75..7.75  boot
+[WIDLE]     reads  of 0x8E94..0x8E95 : 1492 total, 4 distinct signatures
+[WIDLE]       R n=1481    PC=0x00FC5786  off=0x8E94 mask=00FF  t=7.70..10.02  boot  ~638 reads/s
+[WIDLE]       R n=5       PC=0x00FC57C6  off=0x8E94 mask=FF00  t=7.70..9.77  boot  ~2 reads/s
+[WIDLE]       R n=5       PC=0x00FC57C4  off=0x8E94 mask=00FF  t=7.70..9.77  boot  ~2 reads/s
+[WIDLE]       R n=1       PC=0x00EF0B9B  off=0x8E94 mask=FFFF  t=0.05..0.05  boot  
+[WIDLE]     writes to 0x8EC4 (entry count) : 9 distinct signatures
+[WIDLE]       C n=1482    PC=0x00FC6C5E  count<-0   t=5.34..10.02
+[WIDLE]       C n=5       PC=0x00FC6C31  count<-1   t=7.69..9.77
+[WIDLE]       C n=4       PC=0x00FC6C31  count<-2   t=7.69..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-5   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-7   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-6   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-3   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-4   t=7.92..7.93
+[WIDLE]       C n=1       PC=0x00EF0B9B  count<-0   t=0.05..0.05
+[WIDLE]     writes to 0x8E55 : 2 distinct signatures
+[WIDLE]       S n=2       PC=0x00FC49C5  value=0x00  t=0.48..0.49
+[WIDLE]       S n=1       PC=0x00EF0B9B  value=0x00  t=0.05..0.05
+[WIDLE]     0x8E55 sample history (1 changes): t=0.02 0x00
+[WIDLE] === END CENSUS t10 ===
+[WIDLE] === CENSUS t20 at t=20.00 =================================
+[WIDLE]     scan list 0x8E94..0x8EA9 = FF 00 00 FF 00 00 11 00 00 13 00 00 15 00 00 00 00 00 0B 00 00 FF
+[WIDLE]       head byte 0xFF -- 0xFF = EMPTY, nothing staged ; entry count 0x8EC4 = 0 (max seen 7 of 7)
+[WIDLE]     candidate 0x8EB2 = 0E 00 00 ; 0x8E55 (settling result) = 0x00
+[WIDLE]     RECORD IDS PROPOSED by the producer at 0x8EB2: 17 distinct
+[WIDLE]       n=3      id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~0.38/s  by 0x00EF0B9B x1, 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=5      id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..18.22  boot  ~0.59/s  by 0x00FC6A2E x5
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6B38 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6B5D x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     RECORD IDS STAGED into the list by the firmware itself: 17 distinct
+[WIDLE]       n=10     id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~1.27/s  by 0x00EF0B9B x8, 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=5      id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..18.22  boot  ~0.59/s  by 0x00FC6C37 x5
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     writes to 0x8E94..0x8EA9 : 10269 total, 53 distinct signatures
+[WIDLE]       W n=10174   PC=0x00FC6C59  [8E94]=FF                   t=5.34..20.00  boot
+[WIDLE]       W n=9       PC=0x00FC6C49  [8E97]=FF                   t=7.69..18.22  boot
+[WIDLE]       W n=8       PC=0x00FC6C39  [8E95]=00                   t=7.75..18.22  boot
+[WIDLE]       W n=7       PC=0x00FC6C39  [8E96]=00                   t=7.92..18.22  boot
+[WIDLE]       W n=5       PC=0x00FC6C37  [8E94]=0E                   t=9.77..18.22  boot
+[WIDLE]       W n=4       PC=0x00FC6C49  [8E9A]=FF                   t=7.69..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA3]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8E9D]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9B]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA4]=00 [8EA5]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9C]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA2]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E98]=00 [8E99]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA9]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA6]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C37  [8EA6]=0B                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA0]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA8]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9E]=00 [8E9F]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA7]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA1]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=00                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=06                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=00                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9E]=00 [8E9F]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=0D                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=11                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=02                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA6]=00 [8EA7]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9C]=00 [8E9D]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA0]=00 [8EA1]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E94]=00 [8E95]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA8]=00 [8EA9]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=0A                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=04                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=15                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=13                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E98]=00 [8E99]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E95]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9A]=00 [8E9B]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=08                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1A                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1B                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA4]=00 [8EA5]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=00 [8E99]=7F         t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E96]=00 [8E97]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=0F                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1D                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA2]=00 [8EA3]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1E                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=0F                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=01 [8E99]=01         t=7.75..7.75  boot
+[WIDLE]     reads  of 0x8E94..0x8E95 : 10192 total, 4 distinct signatures
+[WIDLE]       R n=10173   PC=0x00FC5786  off=0x8E94 mask=00FF  t=7.70..20.00  boot  ~827 reads/s
+[WIDLE]       R n=9       PC=0x00FC57C6  off=0x8E94 mask=FF00  t=7.70..18.22  boot  ~1 reads/s
+[WIDLE]       R n=9       PC=0x00FC57C4  off=0x8E94 mask=00FF  t=7.70..18.22  boot  ~1 reads/s
+[WIDLE]       R n=1       PC=0x00EF0B9B  off=0x8E94 mask=FFFF  t=0.05..0.05  boot  
+[WIDLE]     writes to 0x8EC4 (entry count) : 9 distinct signatures
+[WIDLE]       C n=10174   PC=0x00FC6C5E  count<-0   t=5.34..20.00
+[WIDLE]       C n=9       PC=0x00FC6C31  count<-1   t=7.69..18.22
+[WIDLE]       C n=4       PC=0x00FC6C31  count<-2   t=7.69..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-5   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-7   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-6   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-3   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-4   t=7.92..7.93
+[WIDLE]       C n=1       PC=0x00EF0B9B  count<-0   t=0.05..0.05
+[WIDLE]     writes to 0x8E55 : 2 distinct signatures
+[WIDLE]       S n=2       PC=0x00FC49C5  value=0x00  t=0.48..0.49
+[WIDLE]       S n=1       PC=0x00EF0B9B  value=0x00  t=0.05..0.05
+[WIDLE]     0x8E55 sample history (1 changes): t=0.02 0x00
+[WIDLE] === END CENSUS t20 ===
+[WIDLE] === CENSUS t30 at t=30.01 =================================
+[WIDLE]     scan list 0x8E94..0x8EA9 = FF 00 00 FF 00 00 11 00 00 13 00 00 15 00 00 00 00 00 0B 00 00 FF
+[WIDLE]       head byte 0xFF -- 0xFF = EMPTY, nothing staged ; entry count 0x8EC4 = 0 (max seen 7 of 7)
+[WIDLE]     candidate 0x8EB2 = 0E 00 00 ; 0x8E55 (settling result) = 0x00
+[WIDLE]     RECORD IDS PROPOSED by the producer at 0x8EB2: 17 distinct
+[WIDLE]       n=3      id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~0.38/s  by 0x00EF0B9B x1, 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=10     id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..28.79  both  ~0.53/s  by 0x00FC6A2E x10
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6B38 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6B5D x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     RECORD IDS STAGED into the list by the firmware itself: 17 distinct
+[WIDLE]       n=10     id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~1.27/s  by 0x00EF0B9B x8, 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=10     id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..28.79  both  ~0.53/s  by 0x00FC6C37 x10
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     writes to 0x8E94..0x8EA9 : 19887 total, 53 distinct signatures
+[WIDLE]       W n=19772   PC=0x00FC6C59  [8E94]=FF                   t=5.34..30.01  both
+[WIDLE]       W n=14      PC=0x00FC6C49  [8E97]=FF                   t=7.69..28.79  both
+[WIDLE]       W n=13      PC=0x00FC6C39  [8E95]=00                   t=7.75..28.79  both
+[WIDLE]       W n=12      PC=0x00FC6C39  [8E96]=00                   t=7.92..28.79  both
+[WIDLE]       W n=10      PC=0x00FC6C37  [8E94]=0E                   t=9.77..28.79  both
+[WIDLE]       W n=4       PC=0x00FC6C49  [8E9A]=FF                   t=7.69..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA3]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8E9D]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9B]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA4]=00 [8EA5]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9C]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA2]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E98]=00 [8E99]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA9]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA6]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C37  [8EA6]=0B                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA0]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA8]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9E]=00 [8E9F]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA7]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA1]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=00                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=06                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=00                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9E]=00 [8E9F]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=0D                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=11                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=02                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA6]=00 [8EA7]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9C]=00 [8E9D]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA0]=00 [8EA1]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E94]=00 [8E95]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA8]=00 [8EA9]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=0A                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=04                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=15                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=13                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E98]=00 [8E99]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E95]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9A]=00 [8E9B]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=08                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1A                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1B                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA4]=00 [8EA5]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=00 [8E99]=7F         t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E96]=00 [8E97]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=0F                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1D                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA2]=00 [8EA3]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1E                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=0F                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=01 [8E99]=01         t=7.75..7.75  boot
+[WIDLE]     reads  of 0x8E94..0x8E95 : 19800 total, 4 distinct signatures
+[WIDLE]       R n=19771   PC=0x00FC5786  off=0x8E94 mask=00FF  t=7.70..30.01  both  ~886 reads/s
+[WIDLE]       R n=14      PC=0x00FC57C6  off=0x8E94 mask=FF00  t=7.70..28.79  both  ~1 reads/s
+[WIDLE]       R n=14      PC=0x00FC57C4  off=0x8E94 mask=00FF  t=7.70..28.79  both  ~1 reads/s
+[WIDLE]       R n=1       PC=0x00EF0B9B  off=0x8E94 mask=FFFF  t=0.05..0.05  boot  
+[WIDLE]     writes to 0x8EC4 (entry count) : 9 distinct signatures
+[WIDLE]       C n=19772   PC=0x00FC6C5E  count<-0   t=5.34..30.01
+[WIDLE]       C n=14      PC=0x00FC6C31  count<-1   t=7.69..28.79
+[WIDLE]       C n=4       PC=0x00FC6C31  count<-2   t=7.69..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-5   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-7   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-6   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-3   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-4   t=7.92..7.93
+[WIDLE]       C n=1       PC=0x00EF0B9B  count<-0   t=0.05..0.05
+[WIDLE]     writes to 0x8E55 : 2 distinct signatures
+[WIDLE]       S n=2       PC=0x00FC49C5  value=0x00  t=0.48..0.49
+[WIDLE]       S n=1       PC=0x00EF0B9B  value=0x00  t=0.05..0.05
+[WIDLE]     0x8E55 sample history (1 changes): t=0.02 0x00
+[WIDLE] === END CENSUS t30 ===
+[WIDLE] === CENSUS t40 at t=40.02 =================================
+[WIDLE]     scan list 0x8E94..0x8EA9 = FF 00 00 FF 00 00 11 00 00 13 00 00 15 00 00 00 00 00 0B 00 00 FF
+[WIDLE]       head byte 0xFF -- 0xFF = EMPTY, nothing staged ; entry count 0x8EC4 = 0 (max seen 7 of 7)
+[WIDLE]     candidate 0x8EB2 = 0E 00 00 ; 0x8E55 (settling result) = 0x00
+[WIDLE]     RECORD IDS PROPOSED by the producer at 0x8EB2: 17 distinct
+[WIDLE]       n=3      id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~0.38/s  by 0x00EF0B9B x1, 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6A2E x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6A2E x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=15     id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..39.36  both  ~0.51/s  by 0x00FC6A2E x15
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6A2E x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6B38 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6B5D x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6B06 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     RECORD IDS STAGED into the list by the firmware itself: 17 distinct
+[WIDLE]       n=10     id 0x00 -> desc 0xED963E = 48 00 00 7F  handler 0xFC5CD2  t=0.05..7.93  boot  ~1.27/s  by 0x00EF0B9B x8, 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x02 -> desc 0xED96AE = 48 05 16 01  handler 0xFC58A5  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x04 -> desc 0xED973E = 48 07 00 0F  handler 0xFC6152  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x06 -> desc 0xED9796 = 48 00 00 FF  handler 0xFC5CD2  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x08 -> desc 0xED9846 = A9 0A 11 01  handler 0xFC5B29  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x0A -> desc 0xED98C6 = A9 09 00 01  handler 0xFC5AE0  t=7.92..7.92  boot  by 0x00FC6C37 x1
+[WIDLE]       n=2      id 0x0B -> desc 0xED9956 = A9 0E 05 20  handler 0xFC5AE0  t=7.92..7.93  boot  by 0x00FC6C37 x2
+[WIDLE]       n=1      id 0x0D -> desc 0xED999E = 00 00 00 FF  handler 0xFC5BB0  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=15     id 0x0E -> desc 0xED99BE = 00 04 13 01  handler 0xFC604D  t=9.77..39.36  both  ~0.51/s  by 0x00FC6C37 x15
+[WIDLE]       n=1      id 0x0F -> desc 0xED99FE = 90 10 00 07  handler 0xFC5EF2  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x11 -> desc 0xED9A76 = 98 01 00 FF  handler 0xFC5D78  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x13 -> desc 0xED9AC6 = 90 04 03 18  handler 0xFC5E61  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x15 -> desc 0xED9B1E = A9 20 02 04  handler 0xFC5930  t=7.93..7.93  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1A -> desc 0xED9BA6 = B0 01 00 7F  handler 0xFC62F7  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1B -> desc 0xED9BB6 = B4 00 00 7F  handler 0xFC6332  t=7.69..7.69  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1D -> desc 0xED9BDE = A9 34 00 01  handler 0xFC6251  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       n=1      id 0x1E -> desc 0xED9C06 = A8 41 00 01  handler 0xFC5874  t=7.75..7.75  boot  by 0x00FC6C37 x1
+[WIDLE]       -> record 0x19 (the data wheel) NEVER APPEARS in this set
+[WIDLE]     writes to 0x8E94..0x8EA9 : 29506 total, 53 distinct signatures
+[WIDLE]       W n=29371   PC=0x00FC6C59  [8E94]=FF                   t=5.34..40.01  both
+[WIDLE]       W n=19      PC=0x00FC6C49  [8E97]=FF                   t=7.69..39.36  both
+[WIDLE]       W n=18      PC=0x00FC6C39  [8E95]=00                   t=7.75..39.36  both
+[WIDLE]       W n=17      PC=0x00FC6C39  [8E96]=00                   t=7.92..39.36  both
+[WIDLE]       W n=15      PC=0x00FC6C37  [8E94]=0E                   t=9.77..39.36  both
+[WIDLE]       W n=4       PC=0x00FC6C49  [8E9A]=FF                   t=7.69..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA3]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8E9D]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9B]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA4]=00 [8EA5]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9C]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA2]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E98]=00 [8E99]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA9]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA6]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C37  [8EA6]=0B                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C49  [8EA0]=FF                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA8]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8E9E]=00 [8E9F]=00         t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA7]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=2       PC=0x00FC6C39  [8EA1]=00                   t=7.92..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=00                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=06                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=00                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9E]=00 [8E9F]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=0D                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=11                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=02                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA6]=00 [8EA7]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9C]=00 [8E9D]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA0]=00 [8EA1]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E94]=00 [8E95]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA8]=00 [8EA9]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA3]=0A                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9A]=04                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=15                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E9D]=13                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E98]=00 [8E99]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E95]=7F                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E9A]=00 [8E9B]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8EA0]=08                   t=7.92..7.92  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1A                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1B                   t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA4]=00 [8EA5]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=00 [8E99]=7F         t=7.69..7.69  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8E96]=00 [8E97]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E96]=0F                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E94]=1D                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00EF0B9B  [8EA2]=00 [8EA3]=00         t=0.05..0.05  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=1E                   t=7.75..7.75  boot
+[WIDLE]       W n=1       PC=0x00FC6C37  [8E97]=0F                   t=7.93..7.93  boot
+[WIDLE]       W n=1       PC=0x00FC6C39  [8E98]=01 [8E99]=01         t=7.75..7.75  boot
+[WIDLE]     reads  of 0x8E94..0x8E95 : 29409 total, 4 distinct signatures
+[WIDLE]       R n=29370   PC=0x00FC5786  off=0x8E94 mask=00FF  t=7.70..40.01  both  ~909 reads/s
+[WIDLE]       R n=19      PC=0x00FC57C6  off=0x8E94 mask=FF00  t=7.70..39.36  both  ~1 reads/s
+[WIDLE]       R n=19      PC=0x00FC57C4  off=0x8E94 mask=00FF  t=7.70..39.36  both  ~1 reads/s
+[WIDLE]       R n=1       PC=0x00EF0B9B  off=0x8E94 mask=FFFF  t=0.05..0.05  boot  
+[WIDLE]     writes to 0x8EC4 (entry count) : 9 distinct signatures
+[WIDLE]       C n=29371   PC=0x00FC6C5E  count<-0   t=5.34..40.01
+[WIDLE]       C n=19      PC=0x00FC6C31  count<-1   t=7.69..39.36
+[WIDLE]       C n=4       PC=0x00FC6C31  count<-2   t=7.69..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-5   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-7   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-6   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-3   t=7.92..7.93
+[WIDLE]       C n=2       PC=0x00FC6C31  count<-4   t=7.92..7.93
+[WIDLE]       C n=1       PC=0x00EF0B9B  count<-0   t=0.05..0.05
+[WIDLE]     writes to 0x8E55 : 2 distinct signatures
+[WIDLE]       S n=2       PC=0x00FC49C5  value=0x00  t=0.48..0.49
+[WIDLE]       S n=1       PC=0x00EF0B9B  value=0x00  t=0.05..0.05
+[WIDLE]     0x8E55 sample history (1 changes): t=0.02 0x00
+[WIDLE] === END CENSUS t40 ===
+Average speed: 54.18% (44 seconds)
