@@ -91,9 +91,28 @@ Runtime stack at the arming write gives the return address `0x00F843EA`, i.e. th
 `0xF843E6`. This runs **once**, at t=23.72. The ticker that decrements is a different routine,
 `0xF86C01`.
 
-⚠ A static search for callers of `0xF86D86` returns **zero** — no absolute `call` and no 24-bit
-reference exists anywhere in the image, because it is entered by `calr`. That is the second
-routine in this investigation where static caller search was structurally useless.
+⚠ A static search for callers of `0xF86D86` returned **zero** — no absolute `call` and no 24-bit
+reference exists anywhere in the image, because it is entered by `calr`.
+
+✅ **RESOLVED 2026-08-17 — that conclusion was a tooling limit, not a property of the firmware.**
+`calr` encodes a *displacement*, not an address, so searching for the target's bytes cannot find it;
+searching for the displacement can. `tools/tlcs900_callers.py` decodes both forms and reports:
+
+```
+callers of 0xF86D86
+  no absolute CALL sites
+  1 relative CALR site  [1e disp16]:  0xF86CB6   (disp +205)
+```
+
+This *refines* rather than contradicts the runtime stack dump above: `0xF86B7C` is the routine
+entered from `0xF843E6`, and `0xF86CB6` is the `calr` inside its body. The tool is validated on two
+known cases in each direction (absolute `0xEF08DB → 0xF86A9F`, relative `0xEF0580 → 0xEF083E`).
+
+★ **The lesson generalises beyond this note**: "static caller search does not work in these ROMs"
+has been recorded several times in this project and used to justify falling back to runtime stack
+dumps. It is half true — it does not work if you search for absolute addresses only. Decode `calr`
+and it works. (The MN10300 side has its own version of this trap: callers enter at *entry+2*
+because `call` performs the register save — see `notes/FINDINGS-mn10300-caller-search.md`.)
 
 ## Next step
 
