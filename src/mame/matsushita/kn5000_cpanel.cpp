@@ -285,6 +285,12 @@ static INPUT_PORTS_START(kn5000_cpanel)
 		PORT_POSITIONS(ENCODER_POSITIONS) PORT_WRAPS PORT_SENSITIVITY(20) PORT_KEYDELTA(1)
 		PORT_CODE_DEC(KEYCODE_OPENBRACE) PORT_CODE_INC(KEYCODE_CLOSEBRACE)
 		PORT_FULL_TURN_COUNT(ENCODER_POSITIONS)
+
+	// Dragged in a circle by the layout script, which writes it with user_value -- the only
+	// write path that does NOT latch the field away from the input system. It carries no key
+	// binding and needs none; the control above has those.
+	PORT_START("ENCODER_DRAG")
+	PORT_ADJUSTER(50, "Tempo / Program data wheel (mouse drag)")
 INPUT_PORTS_END
 
 ioport_constructor kn5000_cpanel_device::device_input_ports() const
@@ -321,8 +327,11 @@ kn5000_cpanel_device::kn5000_cpanel_device(const machine_config &mconfig, const 
 	m_cpl_ports(*this, "CPL_SEG%u", 0U),   // this device's own button ports (device_input_ports())
 	m_cpr_ports(*this, "CPR_SEG%u", 0U),
 	m_encoder_port(*this, "ENCODER"),
+	m_encoder_drag_port(*this, "ENCODER_DRAG"),
 	m_encoder_prev(0),
+	m_encoder_drag_prev(0),
 	m_encoder_synced(false),
+	m_encoder_drag_synced(false),
 	m_encoder_latch(0),
 	m_cpl_leds(*this, "cpl_led_%u", 0U),
 	m_cpr_leds(*this, "cpr_led_%u", 0U)
@@ -362,7 +371,9 @@ void kn5000_cpanel_device::device_start()
 	save_item(NAME(m_last_button_state));
 	save_item(NAME(m_pending_button_state));
 	save_item(NAME(m_encoder_prev));
+	save_item(NAME(m_encoder_drag_prev));
 	save_item(NAME(m_encoder_synced));
+	save_item(NAME(m_encoder_drag_synced));
 	save_item(NAME(m_encoder_latch));
 
 	// Initial state - line idle high
@@ -824,6 +835,30 @@ void kn5000_cpanel_device::send_button_packet(int segment, bool is_left_panel)
 	}
 }
 
+// Wrap-aware position delta for one wheel control, in detents. `modulus` is the control's full
+// turn: a jump of more than half of it is a wrap, not a real move. The first call adopts the
+// startup position silently, so a restored save state or a persisted adjuster cannot inject a
+// phantom detent.
+int32_t kn5000_cpanel_device::encoder_delta(optional_ioport &port, int32_t &prev, bool &synced, int32_t modulus)
+{
+	if (!port)
+		return 0;
+
+	int32_t const pos = port->read();
+	int32_t delta = pos - prev;
+	if (delta > modulus / 2) delta -= modulus;
+	else if (delta < -modulus / 2) delta += modulus;
+
+	prev = pos;
+	if (!synced)
+	{
+		synced = true;
+		return 0;
+	}
+	return delta;
+}
+
+
 void kn5000_cpanel_device::send_encoder_packet(int8_t detents)
 {
 	// [0xD7, count] -- see the scan for the derivation. Deliberately NOT routed through
@@ -1187,38 +1222,26 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 	// whereas the serial parser applies back-pressure by not advancing its RX read pointer;
 	// and the poke landed downstream of the firmware's own modal filter on record 0x19.
 	// See notes/kn5000-wheel-probes/ and mame-blog part 135.
-	if (m_encoder_port)
+	// Both controls are polled and their detents SUMMED: the keys move one, the layout's drag
+	// moves the other, and either may move between two scans.
+	int32_t detents = 0;
+	detents += encoder_delta(m_encoder_port, m_encoder_prev, m_encoder_synced, ENCODER_POSITIONS);
+	detents += encoder_delta(m_encoder_drag_port, m_encoder_drag_prev, m_encoder_drag_synced, 101);
+
+	if (detents != 0)
 	{
-		int32_t const pos = m_encoder_port->read();
-
-		// The knob is an INFINITE rotary encoder: a full-circle turn wraps the position past its
-		// end, which must read as motion onward rather than a full-scale jump back.
-		int32_t delta = pos - m_encoder_prev;
-		if (delta > ENCODER_POSITIONS / 2) delta -= ENCODER_POSITIONS;
-		else if (delta < -ENCODER_POSITIONS / 2) delta += ENCODER_POSITIONS;
-
-		if (!m_encoder_synced)
-		{
-			// Adopt the startup position without emitting a phantom detent.
-			m_encoder_prev = pos;
-			m_encoder_synced = true;
-		}
-		else if (delta != 0)
-		{
-			// Report every detent accumulated since the last scan, so the firmware's
-			// acceleration curve is actually reachable. The previous per-scan single step
-			// could only ever hit the two curve entries either side of zero.
-			m_encoder_prev = pos;
-			int32_t count = -delta;                       // CW (delta > 0) raises the value
-			// Hand-rolled rather than std::clamp: MAME compiles these files in unity blobs, and
-			// adding <algorithm> here broke an unrelated CPU core's include order.
-			if (count > 15) count = 15;                   // firmware does not bounds-check:
-			else if (count < -16) count = -16;            // sext8(count + 0x10) indexes 32 entries
-			send_encoder_packet(int8_t(count));
-			changed = true;
-			LOGMASKED(LOG_ENCODER, "data wheel %s: %d detent(s), wire [D7 %02X]\n",
-					(delta > 0) ? "CW" : "CCW", delta, uint8_t(int8_t(count)));
-		}
+		// Report every detent accumulated since the last scan, so the firmware's acceleration
+		// curve is actually reachable. The earlier per-scan single step could only ever hit the
+		// two curve entries either side of zero.
+		int32_t count = -detents;                     // CW (delta > 0) raises the value
+		// Hand-rolled rather than std::clamp: MAME compiles these files in unity blobs, and
+		// adding <algorithm> here broke an unrelated CPU core's include order.
+		if (count > 15) count = 15;                   // firmware does not bounds-check:
+		else if (count < -16) count = -16;            // sext8(count + 0x10) indexes 32 entries
+		send_encoder_packet(int8_t(count));
+		changed = true;
+		LOGMASKED(LOG_ENCODER, "data wheel %s: %d detent(s), wire [D7 %02X]\n",
+				(detents > 0) ? "CW" : "CCW", detents, uint8_t(int8_t(count)));
 	}
 
 	if (changed)

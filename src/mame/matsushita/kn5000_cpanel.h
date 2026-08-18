@@ -61,6 +61,7 @@ private:
 	// Response generation
 	void send_sync_packet();
 	void send_button_packet(int segment, bool is_left_panel);
+	int32_t encoder_delta(optional_ioport &port, int32_t &prev, bool &synced, int32_t modulus);
 	void send_encoder_packet(int8_t detents);
 	void send_all_button_states(bool is_left_panel);
 
@@ -118,9 +119,17 @@ private:
 	optional_ioport_array<11> m_cpr_ports;
 
 	// Program data wheel (rotary encoder next to the LCD) -- also owned by this device.
-	optional_ioport m_encoder_port;
-	int32_t m_encoder_prev;   // last adjuster value seen, for the wrap-aware per-scan delta
-	bool    m_encoder_synced; // false until the first scan adopts the knob (no startup detent)
+	// TWO controls feed one wheel, because no single MAME field can serve both routes: an
+	// analog field's only Lua write path is set_value(), which latches m_use_adjoverride
+	// permanently and detaches the field from the input system, while user_value writes are
+	// ignored on anything that is not an IPT_ADJUSTER (ioport.cpp:1048). So the keys get a
+	// positional and the layout's pointer drag gets an adjuster, and the device sums them.
+	optional_ioport m_encoder_port;        // IPT_POSITIONAL: keys and the mouse axis
+	optional_ioport m_encoder_drag_port;   // IPT_ADJUSTER: the layout's circular drag only
+	int32_t m_encoder_prev;        // last position seen, for the wrap-aware per-scan delta
+	int32_t m_encoder_drag_prev;   // ditto for the drag control
+	bool    m_encoder_synced;      // false until the first scan adopts the knob (no startup detent)
+	bool    m_encoder_drag_synced;
 	// Segment 0x0B's status byte. DELIBERATELY always 0: a wheel at rest is idle, and header
 	// 0xCB maps to value-translation index 0x1F = invalid, so segment 0x0B provably cannot
 	// produce an input record. The wheel reports through send_encoder_packet() instead.

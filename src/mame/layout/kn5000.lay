@@ -1380,16 +1380,27 @@ license:CC0-1.0
 		-- element around the knob centre and steps the attached relative encoder (a wrapping IPT_POSITIONAL the
 		-- device diffs wrap-aware). `finger_id` is repositioned every frame via set_bounds_callback; the running
 		-- angle accumulates without limit, so the finger just keeps going round and round.
-		function add_rotary_knob(view, clickarea_id, finger_id, port_name)
+		-- Every rotary knob, for the per-frame finger update. MUST be declared before
+		-- add_rotary_knob(): a Lua local is not visible to code written above it.
+		local rotary_widgets = {}
+
+		-- `drag_port_name` is written by this script; `key_port_name` is the control the KEYS and the
+		-- mouse axis drive, which the script only ever READS. They cannot be the same field: an
+		-- analog field's only Lua write path, set_value(), latches m_use_adjoverride permanently and
+		-- detaches the field from the input system, so one drag would kill the keys for the rest of
+		-- the session. An adjuster's user_value has no such side effect, and the device sums both.
+		function add_rotary_knob(view, clickarea_id, finger_id, drag_port_name, key_port_name)
 			local w = {
 				clickarea = get_layout_item(view, clickarea_id),
 				finger    = get_layout_item(view, finger_id),
-				field     = get_port_field(port_name),
+				field     = get_port_field(drag_port_name),
+				key_field = get_port_field(key_port_name),
 				is_rotary = true,
-				angle     = 0.0,   -- running finger angle (radians), unbounded
-				pos       = 0,     -- logical encoder position, 0..ROTARY_STEPS_PER_REV-1
+				angle     = 0.0,   -- running GESTURE angle (radians), unbounded: pointer input
+				display   = 0.0,   -- running DISPLAY angle: follows the value, whatever moved it
 				notch     = 0 }    -- last encoder notch emitted
 			table.insert(widget_list(view), w)
+			table.insert(rotary_widgets, w)
 			-- The finger orbits the knob centre at the current angle (0 = 12 o'clock, clockwise positive).
 			-- item.bounds is normalised PER-AXIS (x by view width, y by view height), so a screen-circular
 			-- orbit needs the x offset scaled by the click area's normalised WIDTH and the y offset by its
@@ -1402,8 +1413,8 @@ license:CC0-1.0
 				local cy = (b.y0 + b.y1) / 2
 				local wd = b.x1 - b.x0
 				local ht = b.y1 - b.y0
-				local fx = cx + wd * 0.24 * math.sin(w.angle)
-				local fy = cy - ht * 0.24 * math.cos(w.angle)
+				local fx = cx + wd * 0.24 * math.sin(w.display)
+				local fy = cy - ht * 0.24 * math.cos(w.display)
 				local fhx = wd * 0.148
 				local fhy = ht * 0.148
 				return emu.render_bounds(fx - fhx, fy - fhy, fx + fhx, fy + fhy)
@@ -1443,12 +1454,11 @@ license:CC0-1.0
 		local function rotary_emit(w)
 			local target = math.floor(w.angle * ROTARY_STEPS_PER_REV / (2 * math.pi) + 0.5)
 			if target ~= w.notch then
-				-- The control is a 24-position IPT_POSITIONAL with PORT_WRAPS, so the widget
-				-- keeps its own logical position and writes it with set_value(); an adjuster's
-				-- user_value does not apply here.
-				w.pos = (w.pos + (target - w.notch)) % ROTARY_STEPS_PER_REV
-				if w.pos < 0 then w.pos = w.pos + ROTARY_STEPS_PER_REV end
-				w.field:set_value(w.pos)
+				-- Writes the DRAG adjuster via user_value: the one route that does not latch the
+				-- field away from MAME's input system. The device diffs it wrap-aware at 101.
+				local v = (w.field.user_value + (target - w.notch)) % 101
+				if v < 0 then v = v + 101 end
+				w.field.user_value = v
 				w.notch = target
 			end
 		end
@@ -1484,6 +1494,36 @@ license:CC0-1.0
 			end
 			return nil
 		end
+		-- The knob graphic must turn for whatever moved the wheel -- keys, mouse axis, pointer drag or
+		-- scroll wheel -- so it is driven by the summed wrap-aware DELTA of both controls rather than
+		-- by the drag gesture. Driving it from either control's absolute value would make it jump
+		-- whenever the other one moved.
+		local function wrapped_delta(cur, prev, modulus)
+			local d = cur - prev
+			if d > modulus / 2 then d = d - modulus
+			elseif d < -modulus / 2 then d = d + modulus end
+			return d
+		end
+
+		local function follow_rotary_values()
+			local step = 2 * math.pi / ROTARY_STEPS_PER_REV
+			for i = 1, #rotary_widgets do
+				local w = rotary_widgets[i]
+				if w.field and w.key_field then
+					local kv = w.key_field.port:read() % ROTARY_STEPS_PER_REV
+					local dv = w.field.port:read() % 101
+					if not w.synced then
+						w.key_prev, w.drag_prev, w.synced = kv, dv, true
+					else
+						local d = wrapped_delta(kv, w.key_prev, ROTARY_STEPS_PER_REV)
+								+ wrapped_delta(dv, w.drag_prev, 101)
+						w.key_prev, w.drag_prev = kv, dv
+						if d ~= 0 then w.display = w.display + d * step end
+					end
+				end
+			end
+		end
+
 		function poll_rotary_wheels()
 			if not wheel_probed then wheel_item = find_wheel_item(); wheel_probed = true end
 			if wheel_item == nil or active_wl == nil then return end
@@ -1637,13 +1677,14 @@ license:CC0-1.0
 		file:set_resolve_tags_callback(function()
 			for vname, view in pairs(file.views) do
 				if view.items["tempo_program_encoder"] ~= nil and view.items["tempo_program_encoder_finger"] ~= nil then
-					add_rotary_knob(view, "tempo_program_encoder", "tempo_program_encoder_finger", "cpanel:ENCODER")
+					add_rotary_knob(view, "tempo_program_encoder", "tempo_program_encoder_finger",
+										"cpanel:ENCODER_DRAG", "cpanel:ENCODER")
 					install_slider_callbacks(view)
 				end
 			end
 		end)
 		-- The layout plugin invokes the returned table's frame() every video frame; use it to poll
 		-- the mouse wheel for the rotary wheel (the pointer API delivers no wheel event).
-		return { frame = poll_rotary_wheels }
+		return { frame = function() poll_rotary_wheels(); follow_rotary_values() end }
 	]]></script>
 </mamelayout>
