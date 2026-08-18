@@ -29,7 +29,12 @@ local function log(s) emu.print_error(s) end
 
 local DETENTS = tonumber(os.getenv("WHEEL_DETENTS") or "") or 12
 local EVERY   = tonumber(os.getenv("WHEEL_EVERY") or "") or 14
-local START   = tonumber(os.getenv("WHEEL_START") or "") or 24
+-- ⚠ 45s, not 24s. Turn the wheel ~24s after boot and the first THREE detents are silently
+--   dropped -- the machine is not consuming panel wheel packets yet. It hits whichever control
+--   moves first, which is why the rig looked like it had found a fault in one of them (prove it
+--   with W2F_ORDER=key-first: the loss follows the ORDER, not the control). Anything measuring
+--   detent counts must let the machine settle first.
+local START   = tonumber(os.getenv("WHEEL_START") or "") or 45
 
 -- The overlay puts both controls on the panel device; the upstream PR puts them on the driver
 -- root. Try both so this rig runs against either binary.
@@ -71,6 +76,16 @@ local PHASES = {
     { "drag adjuster CCW", step_drag,      -1 },
     { "positional CCW",    step_positional, -1 },
 }
+
+-- W2F_ORDER=key-first swaps the two CW phases. It separates "this CONTROL loses detents" from
+-- "the FIRST phase loses detents because the machine is not consuming them yet" -- two very
+-- different faults that look identical when the suspect control always goes first.
+if os.getenv("W2F_ORDER") == "key-first" then
+    PHASES[1], PHASES[2] = PHASES[2], PHASES[1]
+end
+
+-- W2F_TRACE=1 logs the tempo after every single detent, so a loss can be located exactly.
+local TRACE = os.getenv("W2F_TRACE") == "1"
 
 _G.W2F = _G.W2F or { frame = 0, phase = 0, step = 0, emitted = 0, fails = 0 }
 
@@ -117,5 +132,8 @@ _G.W2F.h = emu.add_machine_frame_notifier(function()
     if S.frame % EVERY == 0 then
         pcall(function() mover(sign) end)
         S.emitted = S.emitted + 1
+        if TRACE then
+            log(string.format("W2F   trace %-18s detent %2d -> bpm %d", name, S.emitted, bpm()))
+        end
     end
 end)
