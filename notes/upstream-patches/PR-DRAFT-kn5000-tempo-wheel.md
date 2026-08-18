@@ -2,7 +2,7 @@
 
 **Status:** READY, not yet submitted.
 **Branch:** `kn5000_tempo_program_wheel` (worktree `~/compartilhado/mame-pr-ic14`), off
-`upstream/master` @ `8789d0f0d48`. One commit, 3 files, +91 lines.
+`upstream/master` @ `8789d0f0d48`. One commit, 4 files, +402 lines (308 of them the layout script).
 **Build:** `make SUBTARGET=kn5000 SOURCES=src/mame/matsushita/kn5000.cpp USE_QTDEBUG=0 -j8`
 **Validated:** `./kn5000 -validate` → exit 0.
 **Test:** `tools/rigs/kn5000_wheel_pr_test.lua` in the kn7000_mame repo — ten detents give ten
@@ -44,6 +44,13 @@ The control is a wrapping positional input rather than an adjuster, since an end
 no absolute position to represent — following `src/mame/oberheim/xpander.cpp`, which has the
 same kind of control on a synthesiser front panel. Detents are handed to the control-panel
 device, which is what puts them on the wire.
+
+The layout gains a widget library (inlined, since MAME layouts cannot include external files) so
+the on-screen knob is draggable: a circular drag, or the mouse wheel while hovering, steps the
+control 24 notches per revolution. The two element anchors it attaches to
+(`tempo_program_encoder`, `tempo_program_encoder_finger`) were already in the layout. **This
+needs the `layout` plugin enabled** (`-plugin layout`); without it the graphic stays decorative
+and the keyboard/mouse bindings still work.
 
 Tested on the v5, v7 and v10 firmware revisions: ten detents give ten steps on each. Turning the
 wheel faster than the panel reports moves the value less per detent, which is the acceleration
