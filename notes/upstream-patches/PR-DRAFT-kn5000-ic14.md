@@ -1,6 +1,8 @@
 # PR draft — kn5000: four fixes, and the Feature Presentation demo runs
 
-**SUBMITTED: https://github.com/mamedev/mame/pull/15878** — open, not merged as of 2026-08-11.
+**✅ MERGED 2026-08-17: https://github.com/mamedev/mame/pull/15878** — squashed to one commit,
+upstream `8789d0f0d48`. Upstream took the CORRECTED IC14 dump (`aa4917ce`) rather than the
+descramble-at-load workaround our overlay carries. Kept for the reasoning trail.
 
 **Branch:** `kn5000_make_feature_presentation_demo_run` (worktree `~/compartilhado/mame-pr-ic14`),
 off `upstream/master` @ `a4f77431604`. Four commits, 37 insertions, two files.
