@@ -31,8 +31,10 @@ local DETENTS = tonumber(os.getenv("WHEEL_DETENTS") or "") or 12
 local EVERY   = tonumber(os.getenv("WHEEL_EVERY") or "") or 14
 local START   = tonumber(os.getenv("WHEEL_START") or "") or 24
 
-local key_port  = mac.ioport.ports[":cpanel:ENCODER"]
-local drag_port = mac.ioport.ports[":cpanel:ENCODER_DRAG"]
+-- The overlay puts both controls on the panel device; the upstream PR puts them on the driver
+-- root. Try both so this rig runs against either binary.
+local key_port  = mac.ioport.ports[":cpanel:ENCODER"]      or mac.ioport.ports[":ENCODER"]
+local drag_port = mac.ioport.ports[":cpanel:ENCODER_DRAG"] or mac.ioport.ports[":ENCODER_DRAG"]
 if key_port == nil or drag_port == nil then
     log(string.format("W2F FATAL -- missing port (ENCODER=%s ENCODER_DRAG=%s)",
         tostring(key_port ~= nil), tostring(drag_port ~= nil)))
