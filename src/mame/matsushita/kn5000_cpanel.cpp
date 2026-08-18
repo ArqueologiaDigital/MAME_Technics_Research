@@ -40,6 +40,11 @@ DEFINE_DEVICE_TYPE(KN5000_CPANEL, kn5000_cpanel_device, "kn5000_cpanel", "KN5000
 // ports live HERE (device_input_ports()) rather than in the driver's INPUT_PORTS. The layout
 // references them as "cpanel:CP{L,R}_SEG{col}". Each CP{L,R}_SEG{col} port is one scan segment
 // a panel MCU drives; each bit is one SW sense line it reads (segments 0-10, left + right PCB).
+// An IPT_ADJUSTER cannot carry a key binding: adjusters are driven from the Slider Controls
+// menu only, so the wheel was unturnable from the keyboard however it was rebound. A wrapping
+// IPT_POSITIONAL is the control MAME provides for an endless encoder.
+static constexpr int ENCODER_POSITIONS = 24;
+
 static INPUT_PORTS_START(kn5000_cpanel)
 	PORT_START("CPR_SEG0")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_UNUSED )
@@ -276,7 +281,10 @@ static INPUT_PORTS_START(kn5000_cpanel)
 	// ACCUMULATES, whereas the KN5000 firmware reads a signed per-detent delta from DRAM.
 	// Centre start so there is room to drag both ways.
 	PORT_START("ENCODER")
-	PORT_ADJUSTER(50, "Tempo / Program data wheel")
+	PORT_BIT(0x1f, 0x00, IPT_POSITIONAL) PORT_NAME("Tempo / Program data wheel")
+		PORT_POSITIONS(ENCODER_POSITIONS) PORT_WRAPS PORT_SENSITIVITY(20) PORT_KEYDELTA(1)
+		PORT_CODE_DEC(KEYCODE_OPENBRACE) PORT_CODE_INC(KEYCODE_CLOSEBRACE)
+		PORT_FULL_TURN_COUNT(ENCODER_POSITIONS)
 INPUT_PORTS_END
 
 ioport_constructor kn5000_cpanel_device::device_input_ports() const
@@ -1183,11 +1191,11 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 	{
 		int32_t const pos = m_encoder_port->read();
 
-		// The knob is an INFINITE rotary encoder: a full-circle drag wraps the 0..100 adjuster
-		// past its end, which must read as motion onward rather than a 100-step jump back.
+		// The knob is an INFINITE rotary encoder: a full-circle turn wraps the position past its
+		// end, which must read as motion onward rather than a full-scale jump back.
 		int32_t delta = pos - m_encoder_prev;
-		if (delta > 50) delta -= 101;
-		else if (delta < -50) delta += 101;
+		if (delta > ENCODER_POSITIONS / 2) delta -= ENCODER_POSITIONS;
+		else if (delta < -ENCODER_POSITIONS / 2) delta += ENCODER_POSITIONS;
 
 		if (!m_encoder_synced)
 		{

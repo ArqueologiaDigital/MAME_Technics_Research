@@ -1377,8 +1377,8 @@ license:CC0-1.0
 		end
 
 		-- An INFINITE rotary knob (e.g. the TEMPO/PROGRAM wheel). A circular drag rotates the `finger_id`
-		-- element around the knob centre and steps the attached relative encoder (an IPT_ADJUSTER the driver
-		-- diffs wrap-aware). `finger_id` is repositioned every frame via set_bounds_callback; the running
+		-- element around the knob centre and steps the attached relative encoder (a wrapping IPT_POSITIONAL the
+		-- device diffs wrap-aware). `finger_id` is repositioned every frame via set_bounds_callback; the running
 		-- angle accumulates without limit, so the finger just keeps going round and round.
 		function add_rotary_knob(view, clickarea_id, finger_id, port_name)
 			local w = {
@@ -1387,7 +1387,8 @@ license:CC0-1.0
 				field     = get_port_field(port_name),
 				is_rotary = true,
 				angle     = 0.0,   -- running finger angle (radians), unbounded
-				notch     = 0 }    -- last encoder notch emitted (for stepping the adjuster)
+				pos       = 0,     -- logical encoder position, 0..ROTARY_STEPS_PER_REV-1
+				notch     = 0 }    -- last encoder notch emitted
 			table.insert(widget_list(view), w)
 			-- The finger orbits the knob centre at the current angle (0 = 12 o'clock, clockwise positive).
 			-- item.bounds is normalised PER-AXIS (x by view width, y by view height), so a screen-circular
@@ -1436,15 +1437,18 @@ license:CC0-1.0
 			return field
 		end
 
-		-- Step the rotary encoder: map the accumulated angle to notches and nudge the adjuster by the
-		-- notch delta (wrapping 0..100). The driver diffs the adjuster wrap-aware into [0x17] encoder steps.
+		-- Step the rotary encoder: map the accumulated angle to notches and nudge the control by the
+		-- notch delta (wrapping). The device diffs the position wrap-aware into [0x17] encoder steps.
 		local ROTARY_STEPS_PER_REV = 24
 		local function rotary_emit(w)
 			local target = math.floor(w.angle * ROTARY_STEPS_PER_REV / (2 * math.pi) + 0.5)
 			if target ~= w.notch then
-				local v = (w.field.user_value + (target - w.notch)) % 101
-				if v < 0 then v = v + 101 end
-				w.field.user_value = v
+				-- The control is a 24-position IPT_POSITIONAL with PORT_WRAPS, so the widget
+				-- keeps its own logical position and writes it with set_value(); an adjuster's
+				-- user_value does not apply here.
+				w.pos = (w.pos + (target - w.notch)) % ROTARY_STEPS_PER_REV
+				if w.pos < 0 then w.pos = w.pos + ROTARY_STEPS_PER_REV end
+				w.field:set_value(w.pos)
 				w.notch = target
 			end
 		end
