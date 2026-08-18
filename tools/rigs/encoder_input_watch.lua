@@ -21,9 +21,19 @@ local mac = manager.machine
 local function log(s) emu.print_error(s) end
 local TAG = os.getenv("ENC_PORT") or ":ENCODER"
 
-local port = mac.ioport.ports[TAG] or mac.ioport.ports[":cpanel:ENCODER"]
+local port, found = mac.ioport.ports[TAG], TAG
+if not port then port, found = mac.ioport.ports[":cpanel:ENCODER"], ":cpanel:ENCODER" end
 if not port then log("EIW FATAL -- no port " .. TAG) return end
 local fld; for _, f in pairs(port.fields) do fld = f end
+
+-- Also watch the TEMPO the wheel is supposed to move: main-CPU DRAM 0xFC62, low 9 bits.
+-- Without this the probe can only say "the input moved", which does not distinguish
+-- "the driver never saw it" from "the driver saw it and did nothing useful".
+local prog = mac.devices[":maincpu"].spaces["program"]
+local function bpm()
+    local ok, v = pcall(function() return prog:read_u16(0xFC62) end)
+    return ok and (v & 0x1FF) or -1
+end
 
 _G.EIW = _G.EIW or { last = nil, lastlive = nil, n = 0, beat = -1 }
 
@@ -38,21 +48,23 @@ _G.EIW.h = emu.add_machine_frame_notifier(function()
 
     if S.last == nil then
         S.last, S.lastlive = rv, lv
-        log(string.format("EIW watching %s -- initial port:read()=%d field.live=%d", TAG, rv, lv))
+        S.bpm = bpm()
+        log(string.format("EIW watching %s -- initial port:read()=%d bpm=%d", found, rv, S.bpm))
         log("EIW press the wheel's keys now; every change prints a line")
         return
     end
 
     if rv ~= S.last or lv ~= S.lastlive then
         S.n = S.n + 1
-        log(string.format("EIW t=%6.2f  port:read() %d -> %d   field.live %d -> %d",
-            t, S.last, rv, S.lastlive, lv))
-        S.last, S.lastlive = rv, lv
+        local nb = bpm()
+        log(string.format("EIW t=%6.2f  port %d -> %d   bpm %d -> %d %s",
+            t, S.last, rv, S.bpm, nb, (nb ~= S.bpm) and "<-- TEMPO MOVED" or ""))
+        S.last, S.lastlive, S.bpm = rv, lv, nb
     end
 
     local b = math.floor(t / 5)
     if b ~= S.beat then
         S.beat = b
-        log(string.format("EIW t=%3d  (still watching; %d change(s) so far, value=%d)", t, S.n, rv))
+        log(string.format("EIW t=%3d  (watching; %d port change(s), value=%d, bpm=%d)", t, S.n, rv, bpm()))
     end
 end)
