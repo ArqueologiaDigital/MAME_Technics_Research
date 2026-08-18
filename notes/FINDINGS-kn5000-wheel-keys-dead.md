@@ -61,3 +61,47 @@ with `set_value()` (an adjuster's `user_value` does not exist on a positional fi
 3. **Check which implementation is in the binary before trusting a test of it.** The binary under
    test contained only the overlay's adjuster; the PR tree had never been built. `strings -a
    <binary> | grep 'Tempo / Program'` distinguishes them in one command.
+
+---
+
+# Second bug: dragging the knob killed the keys (same day)
+
+With the wheel changed to `IPT_POSITIONAL` the keys worked -- until the knob was dragged once with
+the mouse, after which they were dead again, permanently. The knob graphic also never moved when
+the keys were used.
+
+## Cause
+
+`ioport_field::set_value()` on an analog field sets a **sticky programmatic override**:
+
+```cpp
+void analog_field::set_value(s32 value)     // ioport.cpp:3820
+{
+    m_use_adjoverride = true;
+    m_adjoverride = std::clamp(value, m_adjmin, m_adjmax);
+}
+```
+
+`m_use_adjoverride` is set only there and cleared only by `clear_value()` -- nothing in
+`frame_update()` resets it -- and `analog_field::read()` (ioport.cpp:4002) returns the override
+instead of the accumulator whenever it is set. So the first layout drag detaches the field from
+the input system for the rest of the session.
+
+## The constraint behind it
+
+The two write paths are mutually exclusive **by type**:
+
+```cpp
+// ioport.cpp:1048, in ioport_field::set_user_settings
+if (!m_settinglist.empty() || m_type == IPT_ADJUSTER)
+    m_live->value = settings.value;
+```
+
+| control | layout drag via `user_value` | key bindings |
+|---|---|---|
+| `IPT_ADJUSTER`   | works, and does NOT latch | impossible (no sequences) |
+| `IPT_POSITIONAL` | silent no-op; only `set_value()` works, which latches | works |
+
+That is why the adjuster version dragged happily for months while being unturnable from the
+keyboard, and why swapping it for a positional traded one bug for the other. Neither type supports
+both routes on its own.
