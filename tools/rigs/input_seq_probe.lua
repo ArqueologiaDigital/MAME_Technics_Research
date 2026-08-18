@@ -3,6 +3,10 @@
 -- QUESTION ANSWERED: given a port tag, print the real input sequences MAME has assigned to each
 -- of its fields -- standard, increment and decrement.
 --
+-- ⚠ RUN IT WITH --user-cfg WHEN CHASING A USER-REPORTED BINDING PROBLEM. rig.sh defaults to a
+--   throwaway cfg directory, so it reports MAME's DEFAULT bindings and is blind to anything the
+--   user reassigned in the Input menu. That is RULE 20: a private cfg hides the user's bug.
+--
 -- ⚠ WHY THIS EXISTS RATHER THAN `-listxml`: listxml does NOT report default sequences for ANALOG
 --   ports. An IPT_POSITIONAL / IPT_DIAL / IPT_ADJUSTER port prints as a bare
 --   `<analog mask="31"/>` whether it has PORT_CODE_DEC/PORT_CODE_INC or nothing at all. That is
@@ -62,7 +66,7 @@ _G.SEQP.h = emu.add_machine_frame_notifier(function()
         return
     end
 
-    local p = mac.ioport.ports[TAG]
+    local p = mac.ioport.ports[TAG] or mac.ioport.ports[":cpanel:ENCODER"]
     if not p then
         log("SEQ no port " .. TAG .. " -- available ports:")
         local n = 0
