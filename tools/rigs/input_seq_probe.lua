@@ -78,15 +78,30 @@ _G.SEQP.h = emu.add_machine_frame_notifier(function()
         return
     end
 
+    local unbound = 0
     for _, f in pairs(p.fields) do
         log(string.format("SEQ field %q (type %s)", f.name or "?", tostring(f.type)))
+        local bound = 0
         for _, kind in ipairs({ "standard", "increment", "decrement" }) do
             local ok, s = pcall(function()
                 return mac.input:seq_to_tokens(f:input_seq(kind))
             end)
-            log(string.format("SEQ   %-10s = %s", kind,
-                (ok and s and s ~= "") and s or "(none)"))
+            local have = (ok and s and s ~= "")
+            if have then bound = bound + 1 end
+            log(string.format("SEQ   %-10s = %s", kind, have and s or "(none)"))
         end
+        -- A VERDICT, not just a table. The empty case is the whole reason this rig exists, and a
+        -- human reading three "(none)" lines has already missed it once.
+        if bound == 0 then
+            unbound = unbound + 1
+            log(string.format("SEQ FAIL -- %q has NO input sequence at all: it cannot be operated",
+                f.name or "?"))
+            log("SEQ   (an IPT_ADJUSTER always reports this -- adjusters live in the Slider")
+            log("SEQ    Controls menu and take no key binding. Use a wrapping IPT_POSITIONAL.)")
+        end
+    end
+    if unbound == 0 then
+        log("SEQ PASS -- every field on this port can be operated from an input device")
     end
     mac:exit()
 end)
