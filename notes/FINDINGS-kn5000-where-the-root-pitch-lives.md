@@ -80,3 +80,43 @@ Two honest sources for C, and only two:
 
 There is no third source, and there is no formula. The register stream is not one, and now we know
 why: the chip was never in the business of knowing what note it was playing.
+
+---
+
+# The unknown fields, traced to the instruction
+
+Follow-up, same day, in response to: *trace back where those unknown values come from and how they
+are computed; if they are indirectly derived from the ROM data we have a solution, otherwise we
+have a better understanding, which is also progress.*
+
+Both outcomes happened. Every one of them IS ROM-derived and processed on the way to the chip --
+the thesis was correct -- and none of them carries the multisample root.
+
+| latch | what it is | where the value comes from |
+|---|---|---|
+| `+0x0C0` | coarse level + expression pair, two 7-bit fields | `hi = clamp(patchrec[+0x0F] + (partrec[+0x0F] - 0x40) + sext(patchrec[+0x66]), 0, 0x7F) << 8`, dropped when `patchrec[+0x12] == 0` or global mode `0x04134C == 6`; `lo = 0x7F` in modes 5/6 else `patchrec[+0x12]`. **Patch/part derived.** `asm:10795-10943`, stores to `0x0451D2` |
+| `+0x140` | the SECOND TVF word -- depth / bias | `TVF_Lookup_Depth_Amount(VP[+0x50]) \| TVF_Bias_Clamp_Amount(VP[+0x4F])`; on one route it is a second independent cutoff from `tonerec[+0x13]`. **Voice-patch derived.** `asm:16938-16944`, `:8814-8893` |
+| `+0x4C0` | oscillator-config + stream slot | the literal `0x4400` seeded unconditionally by `Voice2_UpdatePitch` (`asm:19192`), OR'd with `(tone_record2[+0x1E] & 0x3300) \| slot` when that byte is non-zero; zeroed at teardown. **Carries no per-recording pitch data** |
+| `+0x500` | key-scaled descriptor pair | `hi = clamp(Detune_ScaleUnsigned(tonerec[+0x07]) + PitchBend_Scale(tonerec[+0x12], key), 0, 0x7F)`, `lo = clamp(0x7F + PitchBend_Scale(tonerec[+0x48], key), 0, 0x7F)` -- **both halves are ROM descriptor bytes scaled against the played note.** `asm:9612-9655` |
+| `+0x100` | TVF cutoff (already decoded) | `cutoff \| (tonerec[+78] << 13) \| (tonerec[+80] << 10) \| bit7` |
+| globals `0x0200-0x0205`, `0x0C00-0x0C05`, `0x0E00` | fixed config, written once at power-up | a 26-byte ROM block at `0x00F8BB`. **None is a ROM base address** -- checked specifically, since a chip-wide wave-ROM base would have had to live here |
+
+So the answer to "the program ROM has the data and nothing transfers it" is: **plenty is
+transferred, and all of it is processed rather than copied** -- levels, filter cutoff and depth,
+detune and bend scaling, all computed from patch and tone records and clamped before the write. The
+one thing not transferred is the multisample root, and now we know why: the chip plays a recording
+whose pitch is inherent to its audio, so it is never told what note it is playing.
+
+## ⚠ A defect this turned up in the FULL implementation
+
+`kn5000_tonegen.cpp:1549` tests bit `0x0400` of `+0x100` as a boolean "filter enabled". That bit is
+the **low bit of the 3-bit `tonerec[+80]` field** packed at `<< 10`, so the test reads one bit of a
+three-bit ROM field and will mis-classify any patch whose field is even. Worth fixing in the
+private tree independently of the PR.
+
+## Progress ledger
+
+Explained that were not before: `+0x0C0`, `+0x140`, `+0x4C0`, `+0x500`, and the thirteen global
+config words. Confirmed absent: any register carrying a sample address, and any carrying a wave-ROM
+base. Confirmed present but useless for pitch: three per-recording constants with 7, 2 and 1
+distinct values against C's 25.
