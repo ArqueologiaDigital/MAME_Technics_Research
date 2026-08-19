@@ -8,25 +8,31 @@ the guess from the bus alone.
 
     python3 tools/kn5000-rootpitch/aux_eg_probe.py /tmp/tg-burst.log
 
-THREE PIECES OF EVIDENCE, all from a 2182-burst capture of the built-in demo (2026-08-19):
+THREE PIECES OF EVIDENCE, from a 1705-burst capture of the built-in demo (2026-08-19):
 
 1. WORD SHAPE. The amplitude EG's words are (target << 8) | rate with rate in 0..0x7F. The group
-   9/A words have low bytes <= 0x7F in 85-100% of writes and are dominated by AE00 -- target 0xAE,
+   9/A words have low bytes <= 0x7F in 94-100% of writes and are dominated by AE00 -- target 0xAE,
    rate 0, which in the amplitude EG's own encoding means "hold at this level".
 
-2. WRITE COUNTS, which is the clincher. Per register, over 2182 bursts:
+2. WRITE COUNTS, which is the clincher. Per register, over 1705 gates:
 
-       amplitude EG   +0x800 6167   +0x840 6337   +0x880 2288
-       group 9        +0x900 3659   +0x940 3659   +0x980 2182
-       group 9/A      +0x9C0 3659   +0xA00 3659   +0xA40 2182
+       amplitude EG   +0x800 4870   +0x840 4878   +0x880 1713
+       group 9        +0x900 2854   +0x940 2854   +0x980 1705
+       group 9/A      +0x9C0 2854   +0xA00 2854   +0xA40 1705
 
-   The same shape three times: segments 0 and 1 take extra writes, segment 2 takes almost exactly
-   one per burst. That is three envelope generators of three segments each, not six unrelated
-   registers -- and it groups them as {900,940,980} and {9C0,A00,A40}.
+   The same shape three times: segments 0 and 1 take extra writes, segment 2 takes EXACTLY one per
+   gate. That is three envelope generators of three segments each, not six unrelated registers --
+   and it groups them as {900,940,980} and {9C0,A00,A40}.
 
-3. TIMING. Group 9/A words are programmed at the gate (about 90% within 1 ms of it), whereas the
-   amplitude EG's first two segments are heavily re-armed later in the note -- consistent with the
-   amplitude EG being the one that carries release and re-aim, and the other two being set up once.
+3. TIMING. Segment 2 is written at the gate in all three groups (+0x880 99.5%, +0x980 100%,
+   +0xA40 100%), while segments 0 and 1 are split between the gate and later in the note. The same
+   signature in all three.
+
+   ⚠ THIS LEG WAS WRONG THE FIRST TIME AND THE ERROR IS INSTRUCTIVE. The capture rig logged
+     `mac.time.seconds`, which is the INTEGER SECONDS FIELD of an attotime, not the elapsed time.
+     Every stamp was a whole second, so writes in the same second looked simultaneous and the
+     original run reported ~90% "at the gate" for everything. The counts and the word shape were
+     unaffected; the timing was pure artefact. Use mac.time:as_double().
 
 CONCLUSION: groups 9 and A are two further three-segment envelope generators in the same format as
 the amplitude EG. Their targets are mostly 0xAE at rate 0, i.e. flat -- most demo patches do not

@@ -13,6 +13,9 @@
 --   ./tools/rig.sh kn5000_tg_burst_capture kn5000 -s 90 > /tmp/burst.log
 --   (pair with the three-press demo start; this rig performs it itself)
 --
+-- ⚠ TIMESTAMPS: mac.time:as_double(), NOT mac.time.seconds -- the latter is the integer seconds
+--   field and yields whole-second stamps. Any delay measured from those is meaningless.
+--
 -- ⚠ HIGH VOLUME: ~137k writes over 140 s of the demo. That is the point -- the correlation needs
 --   every field, not a sample.
 
@@ -46,7 +49,10 @@ _G.TGB.tap = sub.spaces["program"]:install_write_tap(0x100000, 0x100003, "tgb", 
         S.latch = data
     else
         S.n = S.n + 1
-        log(string.format("TGB %.6f %04X %04X", mac.time.seconds, S.latch, data))
+        -- ⚠ mac.time.seconds is the INTEGER SECONDS FIELD of an attotime, not the time.
+        --   Logging it gave whole-second stamps and made every write look simultaneous with the
+        --   gate, which silently invalidated a timing analysis. Use as_double().
+        log(string.format("TGB %.6f %04X %04X", mac.time:as_double(), S.latch, data))
     end
     return data
 end)
