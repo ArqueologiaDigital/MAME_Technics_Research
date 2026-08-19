@@ -47,8 +47,12 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
 
 ## Tier 2 -- will draw comments; cheap
 
-- [ ] **4. Note-off heuristic** (`case 0x0900`, 1 ms wall-clock guard). Put the measurement that
-      justifies 1 ms in the comment, or decode the register properly.
+- [x] **4. Note-off heuristic** -- DONE 2026-08-19. The threshold is not a tuning choice: +0x900 is
+      written twice per note and the two writes are separated by an empty decade. Measured over 1705
+      demo notes: 1705 writes within 1 ms of the gate (exactly one per note, the programming pass),
+      **ZERO between 1 and 10 ms**, 1149 after that (the note-offs). Any threshold in the gap gives
+      identical behaviour, and no write was observed arriving after its voice was already freed. The
+      distribution is now in the source comment.
 - [x] **5. Hand-off mute** -- FIXED 2026-08-19, and it was a real defect rather than a caveat to
       document. F000 is the PERCUSSION hand-off (83.1% of class-5 hand-offs, ~0% elsewhere; that
       class plays at a single fixed pitch), so muting on a zero low byte silenced the drum kit. The
