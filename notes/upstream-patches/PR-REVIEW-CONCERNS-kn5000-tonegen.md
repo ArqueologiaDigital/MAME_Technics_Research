@@ -6,14 +6,18 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
 
 ## Tier 1 -- likely to block the PR
 
-- [ ] **1. The generated pitch table** (`kn5000_pitch_trim.hxx`, 1509 lines).
-  ROM-derived data checked into the source tree, when the machine already loads that same ROM at
-  runtime. Two objections: copyright, and "why is this not computed?".
-  **Plan:** derive it at start-up from the sub-CPU program region instead, with the DRIVER doing the
-  descriptor walk and handing the result to the device (keeps the sound device from reaching into
-  another chip's ROM). Deletes ~1500 lines and adapts to whichever BIOS is selected.
-  **Also:** find out what the numbers actually MEAN -- whether they reduce to something structural
-  (root note + a small correction) that needs neither a table nor a ROM walk.
+- [x] **1. The generated pitch table** -- DONE 2026-08-19. `kn5000_pitch_trim.hxx` deleted from both
+  trees. The driver walks the firmware's multisample SET descriptors in the `table_data` mask ROM at
+  `machine_start()` and hands the constants to the device, so nothing firmware-derived is checked in
+  and the table follows whichever firmware revision is running. The walk also honours the flags
+  bit-1 rule the generated table missed, correcting 112 of 1444 selectors that carried a fabricated
+  +49..+65 semitone offset; ambiguous selectors drop 77 -> 68. Verified: 1444 constants from 487
+  descriptors, checksum identical to the reference walker, boot silent, demo 4141 gates.
+  PR diff fell from 2092 to 824 insertions. Revert tags: `pre-romwalk-2026-08-19` (PR),
+  `pre-romwalk-overlay-2026-08-19` (overlay).
+  ⚠ FOLLOW-UP: the audit tooling (`kn5000_pitch_audit.py`, `gen_kn5000_pitch_trim.py`, the oracle
+  scripts) still reads the old tsv/hxx and therefore describes the PRE-FIX table. It will disagree
+  with the emulator on those 112 selectors until it is repointed at the walk.
 
 - [ ] **2. The synthesized sine.** The machine emits a timbre the hardware never produced. MAME's
   norm is silence when data is missing. **Plan:** restructure so PCM is the real path and the
