@@ -9,6 +9,8 @@ answer whether that table is necessary, whether it is correct, and where the dat
 |---|---|---|
 | `kn5000_pitch_C_derivability.py` | Is C derivable from anything the emulator already knows -- the selector's class/entry bits, the SET's root, its key range, its flags -- or is it irreducible per-recording data? Also: is the shipped table correct? | `python3 kn5000_pitch_C_derivability.py` |
 | `load.py` | helper: loads the extracted SET descriptor tsv | imported by the above |
+| `kn5000_walk_set_descriptors.py` | Can the whole table be rebuilt from the `table_data` mask ROM alone, with no checked-in firmware data? Mirrors what a C++ `machine_start()` would do against `memregion("table_data")`. | `python3 kn5000_walk_set_descriptors.py` |
+| `kn5000_verify_walk_vs_table.py` | Cross-check: walk the ROM both ways (unconditional, and honouring the flags bit-1 rule) and compare against the shipped `.hxx`. | `python3 kn5000_verify_walk_vs_table.py` |
 | `../kn5000_pitch_constant_analysis.py` | How big is the table really -- distinct values, how many are zero, how much key-span weight rides on the non-zero ones? | `python3 tools/kn5000_pitch_constant_analysis.py` |
 
 ## What they established (2026-08-19)
@@ -38,4 +40,13 @@ firmware never reads for them hold junk. Verify with:
       print({x['set_idx'] for x in r if int(x['flags'],16)&2} == {x['set_idx'] for x in r if x['root']!='42'})"
 
 **Do not use 'byte-identical to the shipped .hxx' as an acceptance gate for a new implementation.**
-That gate passes the bug.
+That gate passes the bug. `kn5000_walk_set_descriptors.py` currently prints
+
+    walker: n_sets=487  selectors=1444  ambiguous=77
+    shipped .hxx: selectors=1444  ambiguous=77
+    only-in-walker=0  only-in-hxx=0  C differs=0  ambiguous-flag differs=0
+    IDENTICAL
+
+which proves the ROM walk reads the right bytes -- and nothing about whether the VALUES are right,
+because the walker reproduces the extractor's unconditional subtraction. A bit-1-aware walk differs
+from the shipped table on 112 selectors, and those 112 are the ones that are currently WRONG.
