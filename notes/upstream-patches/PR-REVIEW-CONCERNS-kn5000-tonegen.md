@@ -95,27 +95,23 @@ PASS = 4141 note-on gates across all four banks, and every window above threshol
 
 ## Added 2026-08-19, from the register census
 
-- [ ] **11. The envelope has FOUR segments and the advance rule is wrong.**
-  `+0x8C0` is a fourth EG word in the same `(target << 8) | rate` format, written at the gate.
-  Measured over 1641 demo notes: 65 use it, and their shape is unambiguous --
-  `seg0 897F` (attack) / `seg1 FF00` / `seg2 4E00` (hold at a sustain level) / `seg3 00D4`
-  (**decay to zero**). The other 1576 have `seg3 = 0000` and do the decay in seg2 (`427F`).
-  The decode is now implemented (four segments, advance while `eg_seg < 3`).
+- [x] **11. The envelope** -- DONE 2026-08-19, both halves.
+  `+0x8C0` is a fourth EG word in the same `(target << 8) | rate` format; 65 of 1641 demo notes use
+  it to decay to zero while segment 2 holds a sustain level.
 
-  **But it is INERT, and that exposes a deeper problem.** Segments advance when the level reaches
-  the target, and rate 0 means hold. Nearly every note programs `seg1 = FF00` -- target 0xFF at
-  rate 0 -- so the envelope rises to seg0's target, loads seg1, cannot move with a zero step, and
-  PARKS THERE FOR THE WHOLE NOTE. Segments 2 and 3 are never reached by any note in the capture.
-  Adding the fourth segment changed the 140 s demo render bit-for-bit not at all.
+  The advance rule was also wrong, and that mattered more. Reading rate 0 as a HOLD parked every
+  note at its attack target -- segments 2 and 3 were unreachable on every note in the capture, and
+  adding the fourth segment changed the render bit-for-bit not at all.
 
-  So one of these is false, and the bus cannot say which:
-  * rate 0 means "hold" (the current model, inherited from the reference implementation);
-  * the advance is level-triggered rather than timed;
-  * `0000` means "segment unused" and the envelope stops at the last programmed one.
+  Resolved in favour of: **rate 0 means jump to the target now, and an all-zero word is an unused
+  segment the envelope stops at.** The argument is the firmware's own behaviour rather than taste:
+  the allocator reads each voice's envelope level back through status_r and tests
+  `(V & 0x3FFF) >> 5` against `0x80`. A note parked at its attack target (~0xCC) can never satisfy
+  that test, so under the old reading the firmware was polling for a condition its own envelope
+  shape made impossible. Under the new one the note decays to ~0x42 and crosses it.
 
-  Whichever it is, the current model sustains every note at its attack target instead of following
-  the programmed contour, which is a bigger inaccuracy than the missing fourth segment was.
-  Evidence: `tools/kn5000-rootpitch/` capture analysis; the shapes are in this file's history.
+  NOT verified against hardware -- the discriminator is internal consistency, not a measurement of
+  the instrument. Demo: 4141 gates, no stall, rms 946/853 -> 936/805 (the decay that was missing).
 
 ---
 
