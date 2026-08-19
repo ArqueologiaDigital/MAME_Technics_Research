@@ -55,13 +55,21 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
       firmware frees those voices itself, 457/457, so the mute was not protecting the allocator.
       Removed; SINE_PEAK cut 3 dB for headroom. Gates 4141 unchanged, rms 1361/1243 -> 4295/5017,
       clipping 0.21% -> 0.01%. Evidence: tools/kn5000-rootpitch/handoff_probe.py.
-- [ ] **6. `SILENT_HOLDOFF = 4720`** encodes the firmware's bank-poll period into the chip model.
-      Re-express as a time (~100 ms of inaudibility) justified as a decay threshold.
-- [ ] **7. Performance:** lambda constructed inside the per-sample loop; doubles throughout; two
-      `std::tanh` per output sample at 48 kHz x 64 voices. Hoist, use floats, cheaper clip curve.
-- [ ] **8. `int const ch = int(&v - m_voice);`** -- pointer arithmetic to recover a loop index.
-- [ ] **9. `STREAM_RATE = 48000` hardcoded** while the device is instantiated with clock 0 and the
-      real converters run at 44.1 kHz. Either derive from the clock or document why not.
+- [~] **6. `SILENT_HOLDOFF = 4720`** -- CANNOT be made principled without fixing the underlying
+      race. Re-expressing it as STREAM_RATE/10 (100 ms) STALLS the demo: note-ons fall 4141 -> 2796
+      and freeze at t=121. Freeing a voice at a different moment changes what the allocator sees,
+      which shifts firmware timing, which trips the inter-CPU link race. Value kept at 4720 with
+      that measurement in the source. Revisit when the race itself is understood.
+- [x] **7. Performance** -- DONE 2026-08-19, partly by measuring rather than changing. The lambda
+      is hoisted and the voice loop indexed (demo capture bit-identical, so provably a pure
+      refactor). The doubles and `tanh` STAY: measured cost of the whole device is 1.65 percentage
+      points of emulation speed (82.34% with sound, 83.99% with -sound none, same 140 s demo), so
+      trading exactness for a fraction of 2% is a bad deal.
+- [x] **8.** Pointer arithmetic for the loop index -- DONE, the loop is indexed.
+- [x] **9. `STREAM_RATE`** -- DONE. The header now states that IC303's clock is not established,
+      that the device is instantiated with clock 0, that the converters run at 44.1 kHz, and that
+      this should become a function of the clock once it is known. RELEASE_SAMPLES is expressed
+      against it so it keeps its meaning.
 - [ ] **10. Calibrated-by-ear constants** (EG rate law D = 4.0 and T127 = 0.0034, SINE_PEAK = 16384,
       soft-clip knee 0.85). Already labelled; expect to be asked to justify or derive them.
 
@@ -108,3 +116,13 @@ PASS = 4141 note-on gates across all four banks, and every window above threshol
   Whichever it is, the current model sustains every note at its attack target instead of following
   the programmed contour, which is a bigger inaccuracy than the missing fourth segment was.
   Evidence: `tools/kn5000-rootpitch/` capture analysis; the shapes are in this file's history.
+
+---
+
+## ⚠ About the "4141 note-on gates" figure
+
+It is a signal, not an invariant. Measured values across builds this session: 4141, 4363 (with
+-sound none), 2796 (with SILENT_HOLDOFF rounded to 4800). The demo's completion is timing-fragile,
+and changes with no musical meaning can move it. QUOTE IT AS A RANGE, and treat the real failure
+criterion as the STALL -- a gate count that freezes and never advances again -- rather than any
+particular total.
