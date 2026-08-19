@@ -24,13 +24,26 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
   oscillator is the documented fallback while IC304-306 are NO_DUMP; consider asking upstream in an
   issue first, before writing the PR twice.
 
-- [ ] **3. Scheduler manipulation in the latch handlers.**
-  - [ ] `perfect_quantum()` per write -> declare once in machine_config via `config.set_perfect_quantum()`.
-  - [ ] `abort_timeslice()` -- probably redundant (generic_latch::write already synchronizes). MEASURE
-        whether removing it changes the gate count; drop it if not.
-  - [ ] `acknowledge_w(0)` before `write()` -- papers over generic_latch's change-only callback from
-        outside. **Plan:** stop using generic_latch_8_device for IC22/IC23; implement the pair in the
-        driver as a u8 plus an explicit /INT0 pulse per write, which states the hardware claim honestly.
+- [~] **3. Scheduler manipulation in the latch handlers** -- PARTLY DONE 2026-08-19.
+  - [x] `abort_timeslice()` -- REMOVED. Measured: dropping both calls left the demo capture
+        bit-identical (4141 gates, same latch totals, same rms), so it was a no-op. generic_latch's
+        write already synchronizes.
+  - [x] `perfect_quantum()` per write -- KEPT, and now justified in the source. The idiomatic
+        `config.set_perfect_quantum(m_maincpu)` is NOT equivalent: measured over the demo it lets
+        the link wedge twice and loses 47% of the note-ons (4141 -> 2215, count frozen for the last
+        20 s). A reviewer asking "why not the normal way?" now gets a number.
+  - [ ] `acknowledge_w(0)` before `write()` -- ATTEMPTED AND REVERTED. Replacing IC22/IC23 with a
+        plain byte pair plus explicit `/INT0` assertion killed the link outright: 65 gates, silence.
+        What that established, which is useful for the PR discussion:
+          * `set_input_line()` acts only on a CHANGE, so "every write asserts" is silent after the
+            first byte -- the line is already high.
+          * `clear_int0_level()` and `set_input_line(CLEAR_LINE)` are not interchangeable: one
+            retires the CPU's internal flag immediately, the other updates the line state that
+            change-detection reads.
+          * doing BOTH on read still did not work, so generic_latch's `synchronize()` ordering is
+            doing something a direct model does not reproduce.
+        So the existing code is not merely a workaround -- it depends on ordering semantics that are
+        not trivially replaceable. Revisit only with a reason better than style.
 
 ## Tier 2 -- will draw comments; cheap
 
