@@ -18,20 +18,29 @@ FINDINGS (2026-08-19, 1705-gate capture):
     34% for the other classes -- 5049 is always 4C44, 507D and 5086 always 4D44. A voice that never
     transposes is a drum.
 
-⚠ CONSEQUENCE FOR THE HLE, and it is audible. Treating "low byte == 0" as a mute silences exactly
-  the F000 voices, i.e. the drum kit. The reference implementation ships that behaviour and its own
-  comment records that ~42% of demo note-ons, "including the entire drum part", never sound. This
-  probe says why: F000 is the PERCUSSION hand-off, not a mute command. A real KN5000 plays drums in
-  its own demo, so the mute reading cannot be right.
+⚠ THE CONCLUSION THIS PROBE ORIGINALLY DREW WAS WRONG, and the way it was wrong is worth keeping.
 
-  The counter-argument on record is that NOT muting is worse, because those voices then never fall
-  silent, are never returned to the free pool, and the allocator starves. If so, the fix is in the
-  voice-lifecycle model -- percussion presumably ends by running off the end of its sample -- and
-  not in pretending the note was never played.
+  From the facts above it concluded that F000 is a percussion MODE flag, that reading it as a mute
+  silences the drum kit, and that the mute could therefore be removed. Two of those are true. The
+  third is not, and Felipe caught it by ear within minutes of the change: the machine droned a
+  wrong note constantly, from boot onwards.
 
-  This also explains 8 of the 12 selectors that fail the +0x080 pitch oracle: they are class-5
-  percussion, so a check based on equal-tempered note recovery is meaningless for them. With those
-  8 and the 3 flags-bit-1 selectors accounted for, only one genuine ambiguity remains (409D).
+  WHAT THE PROBE COULD NOT SEE: it only looked at the demo. At the end of boot the firmware leaves
+  ONE voice gated and never freed, handed off with F000, with all three envelope segments
+  programmed to HOLD. The firmware is relying on F000 meaning silence. Any renderer that gives that
+  voice output drones for the rest of the session -- and a windowed RMS gate over a playing demo
+  cannot see a drone that is present in every window.
+
+  WHAT IT ACTUALLY IS: the low byte is an OUTPUT LEVEL, 0x00..0xFF. F0FF is full, F1D7 is 0.84,
+  F187 is 0.53, F000 is silent. That explains every observation including the boot voice, and it is
+  strictly better than the binary mute it replaced, which rendered F1D7 and F187 at full scale.
+
+  The "457 of 457 freed" measurement was correct and irrelevant: it showed the demo's F000 voices
+  are freed promptly, which says nothing about the one at boot that never is.
+
+  ALWAYS RE-RUN THE NULL CONTROL after touching anything in the render path. It was measured once,
+  early, and quoted for hours as though still valid.
+
 """
 import collections, sys
 
