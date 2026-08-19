@@ -32,9 +32,12 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
 
 - [ ] **4. Note-off heuristic** (`case 0x0900`, 1 ms wall-clock guard). Put the measurement that
       justifies 1 ms in the comment, or decode the register properly.
-- [ ] **5. Hand-off mute** `((data & 0x00ff) == 0)` silences ~42% of note-ons including the whole
-      drum part, on undecoded bits. Add a TODO naming exactly what is undecoded and why muting was
-      measured to be better than not muting.
+- [x] **5. Hand-off mute** -- FIXED 2026-08-19, and it was a real defect rather than a caveat to
+      document. F000 is the PERCUSSION hand-off (83.1% of class-5 hand-offs, ~0% elsewhere; that
+      class plays at a single fixed pitch), so muting on a zero low byte silenced the drum kit. The
+      firmware frees those voices itself, 457/457, so the mute was not protecting the allocator.
+      Removed; SINE_PEAK cut 3 dB for headroom. Gates 4141 unchanged, rms 1361/1243 -> 4295/5017,
+      clipping 0.21% -> 0.01%. Evidence: tools/kn5000-rootpitch/handoff_probe.py.
 - [ ] **6. `SILENT_HOLDOFF = 4720`** encodes the firmware's bank-poll period into the chip model.
       Re-express as a time (~100 ms of inaudibility) justified as a decay threshold.
 - [ ] **7. Performance:** lambda constructed inside the per-sample loop; doubles throughout; two
