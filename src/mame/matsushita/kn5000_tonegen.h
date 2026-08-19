@@ -31,6 +31,18 @@ public:
 	kn5000_tonegen_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	// Register-indirect interface (SubCPU memory-mapped)
+	// The per-recording pitch constants. Built by the driver at machine_start by walking the
+	// firmware's multisample SET descriptors in the table_data mask ROM, rather than shipped as
+	// a generated header: the ROM is loaded anyway, and walking it picks up whichever firmware
+	// revision is selected.
+	struct pitch_entry { uint16_t sel; int16_t c; uint8_t ambiguous; };
+	void set_pitch_constants(std::vector<pitch_entry> &&table, unsigned single, unsigned ambiguous)
+	{
+		m_pitch_c = std::move(table);
+		m_pitch_single = single;
+		m_pitch_ambiguous = ambiguous;
+	}
+
 	void addr_w(uint16_t data);    // 0x100000: register address latch
 	uint16_t status_r();           // 0x100000: active-voice bitmap readback (poll)
 	void data_w(uint16_t data);    // 0x100002: register data write
@@ -379,7 +391,7 @@ private:
 	// Returns false if the firmware's own multisample SET descriptors never produce that
 	// selector, in which case NOTHING is written to `c`/`ambiguous`. Pure table lookup over
 	// the generated kn5000_pitch_trim.hxx; no state, no ROM access.
-	static bool firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous);
+	bool firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous) const;
 	// +0x400 handling: a voice's log pitch REFERRED TO ITS OWN RECORDING (so it can be
 	// compared across chunks), and the per-key-press resolution of transpose + detune.
 	double voice_rho(int ch) const;
@@ -465,6 +477,9 @@ private:
 	uint16_t     m_addr_latch;           // Current register address
 	uint16_t     m_global_regs[NUM_GLOBAL_REGS]; // Global configuration
 	voice_t      m_voice[NUM_VOICES];
+	std::vector<pitch_entry> m_pitch_c;
+	unsigned m_pitch_single = 0;
+	unsigned m_pitch_ambiguous = 0;
 	sound_stream *m_stream;
 
 	// Keybed event queue

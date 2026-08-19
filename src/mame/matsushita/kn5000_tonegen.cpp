@@ -35,7 +35,6 @@
 // The firmware-derived per-selector absolute-pitch constant C, generated from
 // notes/data/kn5000-pitch-trim-table.tsv by tools/gen_kn5000_pitch_trim.py. See the
 // header of that file, and update_pitch() below, for what it is and what it is not.
-#include "kn5000_pitch_trim.hxx"
 
 #include <algorithm>
 #include <cmath>
@@ -655,8 +654,8 @@ void kn5000_tonegen_device::device_stop()
 		{
 			logerror("kn5000_tonegen: pitch-anchor census over %u note-ons "
 					"(C table: %u selectors, %u single-valued, %u ambiguous):\n",
-					uint32_t(total), kn5000_pitch_trim::COUNT,
-					kn5000_pitch_trim::COUNT_SINGLE_VALUED, kn5000_pitch_trim::COUNT_AMBIGUOUS);
+					uint32_t(total), uint32_t(m_pitch_c.size()),
+					m_pitch_single, m_pitch_ambiguous);
 			for (unsigned i = 0; i < unsigned(ANCHOR_COUNT); i++)
 				logerror("   %-24s %8u  (%5.1f%%)\n", anchor_name(i),
 						uint32_t(m_anchor_census[i]),
@@ -1758,13 +1757,11 @@ void kn5000_tonegen_device::resolve_note_group(double tchord, int note)
 // A selector NOT in it is one the traced tone tables never emit (the drawbar / drum-kit
 // selection paths are the known candidates, the same ones decode_wave_select() flags as
 // `undocumented`); there is no C for it and the caller must say so out loud.
-bool kn5000_tonegen_device::firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous)
+bool kn5000_tonegen_device::firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous) const
 {
-	const kn5000_pitch_trim::entry_t *const first = kn5000_pitch_trim::TABLE;
-	const kn5000_pitch_trim::entry_t *const last  = first + kn5000_pitch_trim::COUNT;
-	const kn5000_pitch_trim::entry_t *const it = std::lower_bound(first, last, sel,
-			[](const kn5000_pitch_trim::entry_t &e, uint16_t s) { return e.sel < s; });
-	if (it == last || it->sel != sel)
+	const auto it = std::lower_bound(m_pitch_c.begin(), m_pitch_c.end(), sel,
+			[](const pitch_entry &e, uint16_t s) { return e.sel < s; });
+	if (it == m_pitch_c.end() || it->sel != sel)
 		return false;
 	c = int32_t(it->c);
 	ambiguous = (it->ambiguous != 0);

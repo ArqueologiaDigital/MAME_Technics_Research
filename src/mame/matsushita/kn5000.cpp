@@ -50,6 +50,8 @@
 
 #include "screen.h"
 #include "speaker.h"
+#include <algorithm>
+#include <map>
 
 #include "kn5000.lh"
 
@@ -218,6 +220,7 @@ public:
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
+	void build_pitch_constants();
 	virtual void machine_reset() override ATTR_COLD;
 
 private:
@@ -989,8 +992,122 @@ static INPUT_PORTS_START(kn5000)
 INPUT_PORTS_END
 
 
+//-------------------------------------------------
+//  build_pitch_constants - the tone generator's per-recording pitch offsets
+//
+//  The sub-CPU folds a constant belonging to the chosen recording into the absolute
+//  pitch it writes to IC303:
+//
+//      +0x400 = (note << 8) + 0x80 + C(selector) + fine + detune
+//
+//  so recovering the played note means subtracting C back out. C is not on the tone
+//  generator's bus, and it is not in the wave ROMs: it comes from the firmware's own
+//  multisample SET descriptors, which sit verbatim in the table_data mask ROM at
+//  IC1/IC3 -- boot merely copies them into sub-CPU RAM. They are walked here rather
+//  than shipped as a generated header, which also means the table follows whichever
+//  firmware revision the machine is running.
+//
+//      C = (basepitch - ((root << 8) + 0x80)) + zone trim
+//
+//  ...unless the descriptor's flags bit 1 is set, when the firmware substitutes a
+//  constant for both the base pitch and the root pivot so their difference is
+//  identically zero and neither field is read (sub-CPU v142 asm 16216-16260). Thirteen
+//  of the 487 SETs are built that way and their root and basepitch hold junk -- all
+//  thirteen carry a root byte other than the universal 0x42, and the same impossible
+//  basepitch 0x417F. Subtracting them unconditionally, as the previous generated table
+//  did, fabricated a +49 to +65 semitone offset on 112 of the 1444 selectors.
+//-------------------------------------------------
+
+void kn5000_state::build_pitch_constants()
+{
+	memory_region *const region = memregion("table_data");
+	if (!region || region->bytes() < 0x40000)
+		return;
+
+	uint8_t const *const rom = region->base();
+	auto const u8 = [rom] (uint32_t a) -> uint32_t { return rom[a]; };
+	auto const u16 = [&u8] (uint32_t a) { return u8(a) | (u8(a + 1) << 8); };
+	auto const u32 = [&u16] (uint32_t a) { return u16(a) | (u16(a + 2) << 16); };
+
+	constexpr uint32_t ROOT = 0x30000;          // main-bus 0x830000
+	auto const rel = [] (uint32_t r) { return ROOT + r; };
+
+	uint32_t const set_base = rel(u32(ROOT + 0x30));
+	uint32_t const stride = u16(ROOT + 0xEC);
+	uint32_t limit = u32(ROOT + 0x24);
+	limit = std::min(limit, u32(ROOT + 0x28));
+	limit = std::min(limit, u32(ROOT + 0x2C));
+	if (!stride || limit <= u32(ROOT + 0x30))
+		return;
+	uint32_t const n_sets = (limit - u32(ROOT + 0x30)) / stride;
+	if (!n_sets || n_sets > 4096)
+		return;
+
+	std::map<uint16_t, std::map<int32_t, uint32_t> > weights;
+
+	for (uint32_t i = 0; i < n_sets; i++)
+	{
+		uint32_t const d = set_base + stride * i;
+		if (d + 0x0E >= region->bytes())
+			return;
+
+		uint8_t const flags = u8(d);
+		uint32_t const zstride = BIT(flags, 7) ? 6 : 4;
+		uint32_t const ptr_a = rel(u32(d + 1));
+		uint32_t const ptr_b = rel(u32(d + 5));
+		if (ptr_a + 4 >= region->bytes() || ptr_b >= region->bytes())
+			return;
+		uint32_t const ptr_c = rel(u32(ptr_a));
+		if (ptr_c + 127 >= region->bytes())
+			return;
+
+		int32_t const coarse = BIT(flags, 1)
+				? 0
+				: int32_t(u16(d + 0x0C)) - ((int32_t(u8(d + 0x0B)) << 8) + 0x80);
+
+		for (uint32_t key = 0; key < 128; key++)
+		{
+			uint32_t const rec = ptr_b + zstride * u8(ptr_a + 4 + u8(ptr_c + key));
+			if (rec + zstride > region->bytes())
+				return;
+			int32_t trim = 0;
+			if (zstride == 6)
+			{
+				trim = int32_t(u16(rec + 4));
+				if (trim >= 0x8000)
+					trim -= 0x10000;
+			}
+			weights[uint16_t(u16(rec))][coarse + trim]++;
+		}
+	}
+
+	// A selector reachable from more than one SET can carry more than one C. Take the value the
+	// most keys reach, and the numerically smallest on a tie so the result is deterministic;
+	// flag the selector as ambiguous either way, because which C is right depends on which SET
+	// the part was actually playing and that is not knowable here.
+	std::vector<kn5000_tonegen_device::pitch_entry> table;
+	unsigned single = 0, ambiguous = 0;
+	table.reserve(weights.size());
+	for (auto const &sel : weights)
+	{
+		auto const best = std::max_element(sel.second.begin(), sel.second.end(),
+				[] (auto const &a, auto const &b) { return a.second < b.second; });
+		bool const amb = (sel.second.size() > 1);
+		amb ? ambiguous++ : single++;
+		table.push_back({ sel.first, int16_t(best->first), uint8_t(amb ? 1 : 0) });
+	}
+
+	logerror("kn5000_tonegen: %d pitch constants from %d multisample descriptors "
+			"(%u single-valued, %u ambiguous)\n",
+			int(table.size()), int(n_sets), single, ambiguous);
+	m_tonegen->set_pitch_constants(std::move(table), single, ambiguous);
+}
+
+
 void kn5000_state::machine_start()
 {
+	build_pitch_constants();
+
 	save_item(NAME(m_mstat));
 	save_item(NAME(m_sstat));
 	save_item(NAME(m_cpanel_inta));
