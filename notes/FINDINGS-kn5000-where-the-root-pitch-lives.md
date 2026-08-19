@@ -120,3 +120,64 @@ Explained that were not before: `+0x0C0`, `+0x140`, `+0x4C0`, `+0x500`, and the 
 config words. Confirmed absent: any register carrying a sample address, and any carrying a wave-ROM
 base. Confirmed present but useless for pitch: three per-recording constants with 7, 2 and 1
 distinct values against C's 25.
+
+---
+
+# ⚠ CORRECTION: descriptor bits DO reach the chip, in +0x080's top three bits
+
+The census above concluded that no register carried per-recording data with enough distinct values
+to matter. That was wrong, and the error was one of GRANULARITY: it tested whole 16-bit registers.
+`+0x080`'s low twelve bits are the output level and change with nearly every note, so the word
+failed a "constant per recording" test while its top three bits were doing exactly that.
+
+`Voice_Build_OutputLevel` (ROM `0x0232C7`, `kn5000_subprogram_v142.asm:15687-15726`) fills
+`+0x080` bits[14:12] from the SELECTED ZONE RECORD:
+
+    bit 7 of zone_record[+0x02] SET   ->  field = (zone_record[+0x02] >> 4) & 7
+    bit 7 CLEAR                       ->  field = T[folded_note mod 12],  T[n] = floor(2*(n%12)/3)
+                                          (a 128-entry u16 table at sub-CPU 0x00FBE4)
+
+That is the same record whose word[0] is the `+0x040` selector and whose word at `stride-2` is C.
+
+**Verified** (`tools/kn5000-rootpitch/reg080_oracle.py`, 2182-burst capture): the override branch
+predicts the captured field **196/196 = 100.0%** for selectors mapping to a unique zone record.
+The field structure is visible in the data before any code is read -- the low nibble of that byte is
+zero across all 1444 records.
+
+⚠ Score only selectors with a unique record. A selector can appear in more than one SET; scoring all
+of them reads 204/211 = 96.7% and the seven "errors" are the mapping, not the theory.
+
+## The field audits the shipped pitch table
+
+On the note branch the field pins the note modulo 12, hence C to within a whole semitone, on every
+note-on. `tools/kn5000-rootpitch/reg080_note_oracle.py` over the same capture:
+
+* **53 of 67** note-branch selectors agree with the shipped C on every burst.
+* **2 are corrected** by a candidate the firmware tables already list, against a generator that
+  currently breaks ties by dictionary insertion order:
+  `0002` -> 2756 (shipped 0), 64/64 bursts; `508D` -> 3132 (shipped -1408), 24/24 bursts.
+* **12 remain open**, needing a whole-semitone offset no listed candidate provides.
+
+## Third line of evidence for the flags bit-1 bug
+
+`tools/kn5000-rootpitch/bit1_bus_test.py`: for the bit-1 selectors the demo plays on the note
+branch, dropping the coarse term fits every burst while the shipped value does not.
+
+| selector | shipped C | agrees | with C=0 |
+|---|---|---|---|
+| `00303C` | 12543 | 12/19 | **19/19** |
+| `00303D` | 12543 | 0/1 | **1/1** |
+| `00303E` | 12543 | 0/1 | **1/1** |
+
+3 support, 0 contradict. Independent of the disassembly and of the junk-root-byte observation.
+
+## What is still open
+
+The 12 selectors needing an unexplained whole-semitone offset. Two readings, both worth having: the
+derived C is a semitone out for them, or a post-fold term (part transpose, bend, master tune) is
+active -- it would move `+0x400` without moving this field, since the fold runs first.
+
+⚠ **A dead end, recorded so it is not repeated.** Recomputing C from the zone-record bytes, assuming
+the tsv's record column holds bytes `+0x02..+0x05`, gave WORSE agreement than the shipped table.
+That is evidence the byte-offset guess was wrong, not evidence about the table. Confirm the record
+layout in the disassembly before trying again.
