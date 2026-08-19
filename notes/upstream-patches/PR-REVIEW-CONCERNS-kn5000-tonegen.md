@@ -74,8 +74,16 @@ the 4141-gate / RMS 1361 measurement depends on several of these code paths.
       that the device is instantiated with clock 0, that the converters run at 44.1 kHz, and that
       this should become a function of the clock once it is known. RELEASE_SAMPLES is expressed
       against it so it keeps its meaning.
-- [ ] **10. Calibrated-by-ear constants** (EG rate law D = 4.0 and T127 = 0.0034, SINE_PEAK = 16384,
-      soft-clip knee 0.85). Already labelled; expect to be asked to justify or derive them.
+- [x] **10. Calibrated-by-ear constants** -- DONE 2026-08-19, as far as it can be without hardware.
+      * `SINE_PEAK` now has a measured justification (headroom: the demo peaks at 88% of full scale
+        and clips no samples).
+      * `SILENT_HOLDOFF` is honestly labelled load-bearing, with the stall it causes if rounded.
+      * The EG rate law's `D` and `T127` remain a fit -- the exponential FORM is the firmware's, the
+        seconds are in no ROM and the chip is undumped. What is now recorded is HOW MUCH THEY
+        MATTER: over 1279 complete demo notes, 87% reach their final envelope level in under a tenth
+        of the note's own length (median 3.7 ms), so the envelope is effectively instantaneous for
+        most of what the instrument plays and the fit shapes the remaining ~13%. A recording of the
+        real instrument settles it in one measurement.
 
 ## Administrative
 
