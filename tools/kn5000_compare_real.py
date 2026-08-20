@@ -20,6 +20,24 @@ the actual instrument.
 `--offset` shifts the real recording to align with ours: the emulator capture starts when the demo
 is triggered, the video starts whenever the uploader pressed record.
 
+RESULTS, 2026-08-20, against "Technics SX KN - 5000 (feature presentation)" (youtu.be/Er28aBmToDc),
+60 s of each aligned on the first sustained music (real 21.95 s, ours 53.95 s):
+
+    median MIDI note        real 48.0    ours 48.1
+    median cents off 12-TET real  5.8    ours  9.3
+    10-90% attack, 1 ms res real 26.0 ms ours 12.0 ms   (271 vs 22 isolated onsets)
+    median inter-onset      real  540 ms ours  340 ms
+
+  * THE PITCH DECODE IS VALIDATED IN THE LARGE. Our notes land in the same register as the
+    instrument's and are equally close to equal temperament. Everything else supporting the decode
+    -- the descriptor walk, the +0x080 oracle, the bit-1 correction -- is internally consistent
+    reasoning about the firmware's own data; this is the first check from outside it.
+  * ATTACKS ARE ROUGHLY TWICE AS FAST AS THE INSTRUMENT'S. Suggestive, NOT conclusive: the real
+    attack is the envelope AND the recording's own transient, which a sine does not have, and our
+    sample is 22 onsets against 271. Do not re-fit D and T127 on this alone.
+  * The pitch-class histograms differ (real C-heavy, ours D-heavy). With 60 pitched windows against
+    993, and monophonic autocorrelation applied to a polyphonic sine mix, that is not evidence.
+
 ⚠ WHAT THIS CANNOT DO: judge timbre. Our renderer synthesises a sine because the wave ROMs are
   undumped, so the spectra will not match and are not supposed to. Compare ONSET TIMES, PITCHES and
   ENVELOPE SHAPES -- never spectral similarity.
