@@ -134,3 +134,27 @@ It is a signal, not an invariant. Measured values across builds this session: 41
 and changes with no musical meaning can move it. QUOTE IT AS A RANGE, and treat the real failure
 criterion as the STALL -- a gate count that freezes and never advances again -- rather than any
 particular total.
+
+---
+
+## Added 2026-08-21, commit hygiene on the three PR branches
+
+Both items below were found by re-reading the series as a reviewer would, not by testing. Fixed by
+rebuilding all three branches in `~/compartilhado/mame-pr-tonegen`; the end tree of each branch is
+byte-identical to the tree that was tested (`git diff <old-tip> <new-tip>` empty on all three).
+
+- [x] **12. A false claim in the tone-generator commit message.** It said the pitch constants
+  "follow whichever firmware revision is selected". They do not. The constants are walked out of
+  the `table_data` mask ROM, which is declared with a plain `ROM_LOAD32_WORD` and carries no
+  `ROM_BIOS` -- it is the same image under all eight BIOS options, unlike `program` and
+  `subprogram`, which are per-revision. The sentence now ends "so nothing firmware-derived is
+  checked into the driver source", which is the part that is actually true.
+
+  This claim had been stated to Felipe twice before it was checked. The check is one grep:
+  `grep -n -A6 '"table_data"' src/mame/matsushita/kn5000.cpp`.
+
+- [x] **13. The latch commit added `abort_timeslice()` and the next commit silently removed it.**
+  A reviewer reading the series would see the second commit introduce two calls that the third
+  takes away with no explanation. The calls are gone from the latch commit, so they are never
+  introduced; `perfect_quantum()` is what actually holds the two CPUs in step, and it stays.
+  No commit in any of the three branches now touches `abort_timeslice` at all.
