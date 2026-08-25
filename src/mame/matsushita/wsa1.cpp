@@ -315,12 +315,13 @@ public:
 		, m_cpanel(*this, "cpanel")
 		, m_keybed(*this, "KEY%u", 0U)
 		, m_touch(*this, "TOUCH")
-		, m_variant(*this, "VARIANT")
 		, m_checkdev(*this, "CHECKDEV")
 		, m_check_led(*this, "check_led")
 	{ }
 
+	void wsa1_base(machine_config &config) ATTR_COLD;
 	void wsa1r(machine_config &config) ATTR_COLD;
+	void wsa1(machine_config &config) ATTR_COLD;
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
@@ -351,14 +352,30 @@ private:
 	void cpu1_p8_w(uint8_t data);
 	uint8_t cpu1_pb_r();
 
+public:
+	// The only thing that differs between the two declared systems, besides
+	// which inputs exist.  PB bit 0 is an input strap on the MAIN board
+	// (PBCR = 0x0C at 0xF826E5 makes only bits 2 and 3 outputs); the boot block
+	// samples it once at 0xF82884 and stores 1 or 2 in RAM (0xC4), and 111 sites
+	// across 27 blocks of prom_a branch on that byte.
+	void init_wsa1r() { m_model = 2; }      // PB.0 low
+	void init_wsa1()  { m_model = 1; }      // PB.0 high
+
+private:
+
 	// CPU 1's port 5 carries the service CHECKING DEVICE's switch and its LED.
 	uint8_t cpu1_p5_r();
 	void cpu1_p5_w(uint8_t data);
 
-	// 1 = SX-WSA1 (keyboard), 2 = SX-WSA1R (rack).  Read from the VARIANT config
-	// port, and pushed to the panel device at reset so the firmware's (0xC4) and
-	// the panel model can never disagree.
-	uint8_t variant() const { return BIT(m_variant->read(), 0) ? 1 : 2; }
+	// 1 = SX-WSA1 (keyboard), 2 = SX-WSA1R (rack).  Fixed per DRIVER, not chosen
+	// at runtime: the two are declared as separate systems below, because that is
+	// what they are - two products, one ROM set - and a MAME user picks a machine
+	// by name rather than by flipping a config bit inside one.
+	//
+	// The value is what PB bit 0 makes the firmware store in RAM (0xC4), and it
+	// is pushed to the panel device at reset so the firmware's own copy and the
+	// panel model can never disagree.
+	uint8_t variant() const { return m_model; }
 
 	// CPU 2's port 6 and port 8 carry the serial EEPROM.  See the block comment
 	// above the handler bodies.
@@ -432,9 +449,13 @@ private:
 	required_device<sed1330_device> m_lcdc;
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
 	required_device<wsa1_cpanel_device> m_cpanel;
-	required_ioport_array<6> m_keybed;    // 61 keys, 6 ports x 12 bits (the last holds 1)
-	required_ioport m_touch;
-	required_ioport m_variant;
+	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
+	// rack has no keybed, so declaring them required makes -validate fail on
+	// wsa1r with "Required I/O port ':KEY0' not found" - which is validation
+	// doing its job, and the reason the split is expressed here as well as in
+	// the port lists.
+	optional_ioport_array<6> m_keybed;    // 61 keys, 6 ports x 12 bits (the last holds 1)
+	optional_ioport m_touch;
 	required_ioport m_checkdev;
 	output_finder<> m_check_led;
 
@@ -452,6 +473,7 @@ private:
 	uint8_t  m_cpu1_p8 = 0xff;              // CPU 1's P8 output latch
 	uint8_t  m_panel_sclk = 1;              // P8 bit 5, the serial clock line: idle HIGH
 	uint8_t  m_panel_busy = 0;              // PB bit 4, the panel's busy line: idle LOW
+	uint8_t  m_model = 2;                   // set by init_wsa1() / init_wsa1r(), see variant()
 	uint8_t  m_strap = 2;                   // latched copy of variant(), sampled at reset
 
 	uint16_t m_tg_latch = 0;
@@ -1124,6 +1146,11 @@ void wsa1_state::keybed_push(uint8_t key, bool pressed)
 
 TIMER_CALLBACK_MEMBER(wsa1_state::keybed_scan)
 {
+	// The ports themselves are absent on the rack driver, so guard on that
+	// before the strap: an optional_ioport that was never found reads as null.
+	if (!m_keybed[0])
+		return;
+
 	// A RACK HAS NO KEYS.  The SX-WSA1R's own service manual describes a 2U
 	// module and its mechanical parts list has no keybed assembly, so in rack
 	// mode this scanner has nothing to scan and must never queue an event.
@@ -1301,13 +1328,18 @@ void wsa1_state::lcdc_map(address_map &map)
 
 void wsa1_state::palette_init(palette_device &palette)
 {
-	// Two pens, dark on light.  The panel's actual appearance - reflective or
-	// backlit, and in what colour - is NOT ESTABLISHED: the service manual scan
-	// available here gives the part number of the controller but says nothing
-	// about the module, and no photograph of a powered SX-WSA1R was consulted.
-	// A neutral monochrome pair is the honest placeholder.
-	palette.set_pen_color(0, rgb_t(0xc8, 0xc8, 0xc8));
-	palette.set_pen_color(1, rgb_t(0x20, 0x20, 0x20));
+	// Light on blue, the pen pair src/mame/yamaha/ympsr2000.cpp:46-47 uses for
+	// its own SED1330 panel - the same controller at the same 320x240 geometry
+	// on a contemporary instrument.
+	//
+	// This is still a DRIVER CHOICE, not a measurement.  The SX-WSA1R panel's
+	// actual appearance is NOT ESTABLISHED: the service manual scan available
+	// here names the controller but says nothing about the module, and no
+	// photograph of a powered unit was consulted.  Borrowing a sibling driver's
+	// palette makes it look like the class of part it is rather than like a
+	// neutral placeholder; it does not make it verified.
+	palette.set_pen_color(0, rgb_t(0x36, 0x41, 0xcf));
+	palette.set_pen_color(1, rgb_t(0xdb, 0xe9, 0xff));
 }
 
 
@@ -1646,12 +1678,6 @@ static INPUT_PORTS_START(wsa1r)
 	// behaviour, so it is the user's choice to make and to save, never a default
 	// this driver quietly writes into their cfg.
 	// ------------------------------------------------------------------------
-	PORT_START("VARIANT")
-	PORT_CONFNAME(0x01, 0x00, "Model")
-	PORT_CONFSETTING(   0x00, "SX-WSA1R (rack module)")
-	PORT_CONFSETTING(   0x01, "SX-WSA1 (keyboard)")
-	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
-
 	// ------------------------------------------------------------------------
 	// THE SERVICE CHECKING DEVICE, plugged into CN4 on the MAIN P.C.B.
 	// See the block comment above cpu1_p5_r() for the ROM and the manual page
@@ -1665,6 +1691,14 @@ static INPUT_PORTS_START(wsa1r)
 	PORT_CONFSETTING(   0x01, DEF_STR(On))
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 
+INPUT_PORTS_END
+
+
+// The keyboard adds one thing the rack cannot have.  Everything else - the panel,
+// the service checking device - comes in unchanged from the rack's port list.
+static INPUT_PORTS_START(wsa1)
+	PORT_INCLUDE(wsa1r)
+
 	// THE 61-KEY KEYBED, six ports of twelve bits with one key in the last.
 	// Key 0 is the lowest; the firmware adds 36 inside ToneGen_VelocityFromTouch
 	// (0xF995EC), so key 0..60 are MIDI 36..96 = C2..C7 and the octave numbers
@@ -1675,85 +1709,84 @@ static INPUT_PORTS_START(wsa1r)
 	// layout; nothing else in this driver claims a key, so there is no conflict
 	// to work around.  Assign the rest from MAME's input menu.
 	//
-	// EVERY KEY IS CONDITIONAL ON THE KEYBOARD VARIANT.  A rack module has no
-	// keys, so in the default configuration these fields are disabled: MAME skips
-	// a disabled field in ioport_field::frame_update(), so the port reads its
-	// default and keybed_scan() sees nothing.  The scan callback carries the same
-	// gate; see the comment there for why this is a claim about the BOX and not
-	// about the firmware, which scans unconditionally on both variants.
+	// These fields exist only on the SX-WSA1 driver, so a rack module has no way
+	// to press a key at all.  keybed_scan() carries the same gate as belt and
+	// braces; see the comment there for why this is a claim about the BOX and not
+	// about the firmware, which scans unconditionally on both variants - the
+	// strap is not tested anywhere in the keybed or the link code.
 
 	PORT_START("KEY0")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#2")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E2")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F2")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#2")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G2")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#2")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A2")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2")
 
 	PORT_START("KEY1")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#3")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E3")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F3")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#3")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G3")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#3")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A3")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3")
 
 	PORT_START("KEY2")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4") PORT_CODE(KEYCODE_Z) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4") PORT_CODE(KEYCODE_S) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4") PORT_CODE(KEYCODE_X) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#4") PORT_CODE(KEYCODE_D) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E4") PORT_CODE(KEYCODE_C) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F4") PORT_CODE(KEYCODE_V) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#4") PORT_CODE(KEYCODE_G) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G4") PORT_CODE(KEYCODE_B) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#4") PORT_CODE(KEYCODE_H) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A4") PORT_CODE(KEYCODE_N) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4") PORT_CODE(KEYCODE_J) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4") PORT_CODE(KEYCODE_M) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4") PORT_CODE(KEYCODE_Z)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4") PORT_CODE(KEYCODE_S)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4") PORT_CODE(KEYCODE_X)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#4") PORT_CODE(KEYCODE_D)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E4") PORT_CODE(KEYCODE_C)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F4") PORT_CODE(KEYCODE_V)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#4") PORT_CODE(KEYCODE_G)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G4") PORT_CODE(KEYCODE_B)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#4") PORT_CODE(KEYCODE_H)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A4") PORT_CODE(KEYCODE_N)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4") PORT_CODE(KEYCODE_J)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4") PORT_CODE(KEYCODE_M)
 
 	PORT_START("KEY3")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5") PORT_CODE(KEYCODE_Q) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5") PORT_CODE(KEYCODE_2) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5") PORT_CODE(KEYCODE_W) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#5") PORT_CODE(KEYCODE_3) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E5") PORT_CODE(KEYCODE_E) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F5") PORT_CODE(KEYCODE_R) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#5") PORT_CODE(KEYCODE_5) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G5") PORT_CODE(KEYCODE_T) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#5") PORT_CODE(KEYCODE_6) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A5") PORT_CODE(KEYCODE_Y) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5") PORT_CODE(KEYCODE_7) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5") PORT_CODE(KEYCODE_U) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5") PORT_CODE(KEYCODE_Q)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5") PORT_CODE(KEYCODE_2)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5") PORT_CODE(KEYCODE_W)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#5") PORT_CODE(KEYCODE_3)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E5") PORT_CODE(KEYCODE_E)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F5") PORT_CODE(KEYCODE_R)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#5") PORT_CODE(KEYCODE_5)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G5") PORT_CODE(KEYCODE_T)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#5") PORT_CODE(KEYCODE_6)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A5") PORT_CODE(KEYCODE_Y)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5") PORT_CODE(KEYCODE_7)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5") PORT_CODE(KEYCODE_U)
 
 	PORT_START("KEY4")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6")
 
 	PORT_START("KEY5")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7")
 
 	PORT_START("TOUCH")
 	// The touch measurement the scanner puts in the high byte of a key event is
@@ -1768,7 +1801,7 @@ static INPUT_PORTS_START(wsa1r)
 INPUT_PORTS_END
 
 
-void wsa1_state::wsa1r(machine_config &config)
+void wsa1_state::wsa1_base(machine_config &config)
 {
 	// fc = 28 MHz on both processors.  It is derived from the firmware, not
 	// from the book: prom_c[0xFFFFEF] = 0x1C = 28 is read at 0xF991A2 and
@@ -2118,8 +2151,39 @@ ROM_START(wsa1r)
 	ROM_LOAD("am29f400t.bin", 0x000000, 0x080000, NO_DUMP)
 ROM_END
 
+// The keyboard runs the same four images.  The redistributed set is documented as
+// working unmodified in both boxes, and nothing in the firmware selects ROMs by
+// strap - the strap picks code paths, not images.
+#define rom_wsa1 rom_wsa1r
+
+// The two variants share EVERY device.  One ROM set runs in both boxes, both
+// carry the same pair of TMP95C061s, the same panel link, the same LCD; the
+// firmware branches on a strap rather than being built twice.  So the machine
+// configuration is genuinely identical, and the difference lives where it
+// actually is: in the strap value each driver initialises, and in which inputs
+// the box physically has.
+void wsa1_state::wsa1r(machine_config &config)
+{
+	wsa1_base(config);
+}
+
+void wsa1_state::wsa1(machine_config &config)
+{
+	wsa1_base(config);
+}
+
+
 } // anonymous namespace
 
 
+// One ROM set, two products.  wsa1 is declared a clone of wsa1r and shares its
+// ROM definitions verbatim (rom_wsa1 is rom_wsa1r above) - not because the rack
+// matters more, but because every document this driver rests on is the rack's:
+// the service manual is SX-WSA1R only (ORDER NO. EMiD951604) and the redistributed
+// image set came out of a rack.  No SX-WSA1 material was available here, so which
+// strap arm is which model is corroborated from the rack's own specification
+// rather than decoded from a string - see the strap block comment above.
+//
 //   YEAR  NAME   PARENT  COMPAT  MACHINE  INPUT  CLASS       INIT        COMPANY     FULLNAME    FLAGS
-SYST(1995, wsa1r, 0,      0,      wsa1r,   wsa1r, wsa1_state, empty_init, "Technics", "SX-WSA1R", MACHINE_NOT_WORKING|MACHINE_NO_SOUND)
+SYST(1995, wsa1r, 0,      0,      wsa1r,   wsa1r, wsa1_state, init_wsa1r, "Technics", "SX-WSA1R", MACHINE_NOT_WORKING|MACHINE_NO_SOUND)
+SYST(1995, wsa1,  wsa1r,  0,      wsa1,    wsa1,  wsa1_state, init_wsa1,  "Technics", "SX-WSA1",  MACHINE_NOT_WORKING|MACHINE_NO_SOUND)

@@ -287,16 +287,19 @@ if '\nkn1500\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
     s = s.replace(anchor, anchor + '\n@source:matsushita/kn1500.cpp\nkn1500\n', 1)
     changed = True
-# Technics SX-WSA1R.  There is no wsa1 entry upstream on kn7000-base, so this
-# creates it; the driver is registered here rather than in ~/compartilhado/mame
-# so that the base tree stays untouched, exactly as with the cpu.lua edits above.
+# Technics SX-WSA1R and SX-WSA1.  Neither exists upstream on kn7000-base, so this
+# creates both; they are registered here rather than in ~/compartilhado/mame so
+# that the base tree stays untouched, exactly as with the cpu.lua edits above.
+# Two systems, one source file: the same ROM set runs in the rack module and in
+# the keyboard, and the firmware picks its code paths from a strap on PB bit 0.
+# The clone is listed under the parent, which is the order mame.lst uses.
 if '\nwsa1r\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
-    s = s.replace(anchor, anchor + '\n@source:matsushita/wsa1.cpp\nwsa1r\n', 1)
+    s = s.replace(anchor, anchor + '\n@source:matsushita/wsa1.cpp\nwsa1r\nwsa1\n', 1)
     changed = True
 if changed:
     open(p, 'w').write(s)
-    print("mame.lst: kn7000 family + kn1500 + wsa1r registered")
+    print("mame.lst: kn7000 family + kn1500 + wsa1r/wsa1 registered")
 else:
     print("mame.lst: already registered")
 PY
