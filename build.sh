@@ -127,6 +127,18 @@ ln -sf "$HERE/src/mame/matsushita/kn_cpanel.h"               "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
+# Technics SX-WSA1R (two TLCS-900/H TMP95C061 at 28 MHz).  The DEVELOPMENT copy of
+# this driver lives here; the upstream-PR copy is on branch technics-wsa1 in the
+# MAME checkout and the two deliberately diverge.
+#
+# sed1330 is overlaid alongside it: stock sed1330_device leaves update_graphics()
+# an empty function body, so the WSA1's all-graphics three-layer mode drives a
+# correctly-programmed but permanently blank panel.  See the note at the top of
+# the overlay copy of sed1330.h.
+ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/mame/matsushita/wsa1.cpp"
+mkdir -p "$BUILD_TREE/src/devices/video"
+ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
+ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
 # KN5000 (SX-KN5000): the driver itself is upstream, but a large body of work is not --
 # the tone generator (IC303), the DSP1 stub (IC311), FDC/UART/MIDI wiring, the SNS NMI
 # payload checksum and the Program data wheel. Those live here as overlay files exactly
@@ -260,9 +272,16 @@ if '\nkn1500\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
     s = s.replace(anchor, anchor + '\n@source:matsushita/kn1500.cpp\nkn1500\n', 1)
     changed = True
+# Technics SX-WSA1R.  There is no wsa1 entry upstream on kn7000-base, so this
+# creates it; the driver is registered here rather than in ~/compartilhado/mame
+# so that the base tree stays untouched, exactly as with the cpu.lua edits above.
+if '\nwsa1r\n' not in s:
+    anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
+    s = s.replace(anchor, anchor + '\n@source:matsushita/wsa1.cpp\nwsa1r\n', 1)
+    changed = True
 if changed:
     open(p, 'w').write(s)
-    print("mame.lst: kn7000 family + kn1500 registered")
+    print("mame.lst: kn7000 family + kn1500 + wsa1r registered")
 else:
     print("mame.lst: already registered")
 PY
@@ -306,6 +325,13 @@ SOURCES_LIST="src/mame/matsushita/kn7000.cpp,src/mame/matsushita/kn_tonegen.cpp,
 # compiled -- that is exactly the "only driver_kn5000 undefined" link failure seen before.
 # Listing the driver *and* every device .cpp it pulls in from src/mame keeps them in step.
 SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/kn5000_cpanel.cpp,src/mame/matsushita/kn5000_tonegen.cpp"
+# The SX-WSA1R rides in the same focused binary.  Its driver/@source: pair has to
+# stay in step with the mame.lst injection in step 4 for the same reason the
+# KN5000 comment above gives.  No cpu.lua or video.lua edit is needed: makedep
+# follows #include recursively, so "cpu/tlcs900/tmp95c061.h" keeps CPUS["TLCS900"]
+# on (kn5000.cpp already does) and "video/sed1330.h" turns VIDEOS["SED1330"] on
+# through the annotation at scripts/src/video.lua:1474.
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp"
 make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE/kn7000" 2>/dev/null || echo "(no binary — check $LOG)"
 echo "==> Qt debugger included. Run it with -debug:"
