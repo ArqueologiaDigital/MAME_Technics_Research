@@ -40,6 +40,9 @@ tmp95c061_device::tmp95c061_device(const machine_config &mconfig, const char *ta
 	m_serial_mode{ 0, 0 },
 	m_baud_rate{ 0, 0 },
 	m_od_enable(0),
+	m_sc1_txd_cb(*this),
+	m_sc1_mod_cb(*this),
+	m_sc1_rx_data(0),
 	m_ad_result{ 0, 0, 0, 0 },
 	m_ad_mode(0),
 	m_int_reg{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -237,6 +240,7 @@ void tmp95c061_device::device_start()
 	save_item(NAME(m_serial_mode));
 	save_item(NAME(m_baud_rate));
 	save_item(NAME(m_od_enable));
+	save_item(NAME(m_sc1_rx_data));
 	save_item(NAME(m_ad_result));
 	save_item(NAME(m_ad_mode));
 	save_item(NAME(m_int_reg));
@@ -904,6 +908,42 @@ void tmp95c061_device::execute_set_input(int input, int level)
 		m_level[TLCS900_INT5] = level;
 		break;
 
+	/* OVERLAY (kn7000_mame): INT6 and INT7, rising edge, UNGATED.
+	   Upstream implements neither, so set_input_line(TLCS900_INT6) was silently
+	   a no-op.  Both are real on the Technics SX-WSA1R: INT6 is the control
+	   panel's request line (prom_b's SC1 module arms INTE67 = 0x85 while it is
+	   idle and 0x8F while it transmits, and vector 0x34 reaches
+	   INT6_SC1_PeerRequest at 0xF5AC0A), and INT7 drives micro-DMA channel 0 for
+	   the floppy data phase (prom_a 0xFE5964 sets DMA0V = 0x0E, and
+	   (0x0E & 0x1f) << 2 = 0x38 = INT7).
+
+	   ⚠ DELIBERATELY NOT GATED on a port-B control bit, unlike INT4 and INT5
+	   above.  This header's own port table says PB2/PB3 carry INT6/INT7, but
+	   that CANNOT be right for this machine: its RESET writes PBCR = 0x0C
+	   (prom_a 0xF826E5), making PB2 and PB3 OUTPUTS, and prom_a 0xFE594C
+	   ("PortB3_Pulse") really does drive PB3 as an output strobe -- while the
+	   same firmware uses INT6 and INT7 as inputs.  Which pin carries them is a
+	   databook question nobody here can answer, so copying INT4/INT5's gate
+	   would be modelling a guess.  No upstream driver drives these lines, so
+	   leaving the gate out changes nothing outside this overlay. */
+	case TLCS900_INT6:
+		if ( m_level[TLCS900_INT6] == CLEAR_LINE && level == ASSERT_LINE )
+		{
+			m_halted = 0;
+			m_int_reg[INTE67] |= 0x08;
+		}
+		m_level[TLCS900_INT6] = level;
+		break;
+
+	case TLCS900_INT7:
+		if ( m_level[TLCS900_INT7] == CLEAR_LINE && level == ASSERT_LINE )
+		{
+			m_halted = 0;
+			m_int_reg[INTE67] |= 0x80;
+		}
+		m_level[TLCS900_INT7] = level;
+		break;
+
 	case TLCS900_TIO:   /* External timer input for timer 0 */
 		if ( ( m_trun & 0x01 ) && ( m_t8_mode[0] & 0x03 ) == 0x00 )
 		{
@@ -1184,7 +1224,9 @@ void tmp95c061_device::br0cr_w(uint8_t data)
 
 uint8_t tmp95c061_device::sc1buf_r()
 {
-	return 0;
+	// OVERLAY (kn7000_mame): whatever a connected device last handed us with
+	// sc1_rxd().  Still 0 for every machine that wires nothing.
+	return m_sc1_rx_data;
 }
 
 void tmp95c061_device::sc1buf_w(uint8_t data)
@@ -1192,6 +1234,26 @@ void tmp95c061_device::sc1buf_w(uint8_t data)
 	// Fake finish sending data
 	m_int_reg[INTES1] |= 0x80;
 	m_check_irqs = 1;
+
+	// OVERLAY (kn7000_mame): and hand the byte to whoever is listening -- but
+	// ONLY IF IT COULD ACTUALLY HAVE LEFT THE CHIP.
+	//
+	// In I/O-interface (synchronous) mode, SM = SC1MOD bits 3:2 = 00, the data is
+	// shifted against SCLK1, so with SCLK1's pin left as a plain port no clock is
+	// exchanged and NOTHING reaches the peer, whatever is written to SC1BUF.
+	// That is not a corner case here: the Technics SX-WSA1's panel driver writes
+	// SC1BUF eleven times, and only TWO of those sites carry payload --
+	// SC1_State08_TxFromRing (prom_b 0xF5ADC2) and SC1_State10_TxFromRing
+	// (0xF5AE27), both of which do `or (0x2A87),0x28` to assign TXD1 and SCLK1
+	// first.  The other nine are DUMMY writes made with the clock pin
+	// deassigned, and they do not even load a data byte: whatever the routine
+	// last had in A -- its own P8CR or P8FC shadow -- goes into SC1BUF, purely to
+	// step the INTTX1 state machine.  Passing those on would hand a listening
+	// device nine bytes of register shadow per message.
+	//
+	// UART modes need no clock pin, so they are not gated.
+	if (((m_serial_mode[1] & 0x0c) != 0) || (m_port_function[PORT_8] & 0x20))
+		m_sc1_txd_cb(data);
 }
 
 uint8_t tmp95c061_device::sc1cr_r()
@@ -1215,6 +1277,24 @@ uint8_t tmp95c061_device::sc1mod_r()
 void tmp95c061_device::sc1mod_w(uint8_t data)
 {
 	m_serial_mode[1] = data;
+
+	// OVERLAY (kn7000_mame): bit 5 is RXE.  A synchronous peer has to know when
+	// the CPU is willing to receive -- on the SX-WSA1R the panel's INT6 handler
+	// turns RXE on as its LAST act before setting the receive state
+	// (prom_b 0xF5AC2C `or (0x56),0x20`), and a byte delivered before that would
+	// be decoded in the wrong state.
+	m_sc1_mod_cb(data);
+}
+
+// OVERLAY (kn7000_mame): one byte arriving on SC1 from a connected device.
+// INTES1 bit 3 is INTRX1's request flag -- tmp95c061_irq_vector_map[] holds
+// { INTES1, 0x08, 0x68 } -- and tlcs900_check_irqs() clears it again when it
+// dispatches, so one call raises exactly one INTRX1.
+void tmp95c061_device::sc1_rxd(uint8_t data)
+{
+	m_sc1_rx_data = data;
+	m_int_reg[INTES1] |= 0x08;
+	m_check_irqs = 1;
 }
 
 uint8_t tmp95c061_device::br1cr_r()

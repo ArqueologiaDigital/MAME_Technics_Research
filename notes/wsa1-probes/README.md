@@ -549,3 +549,82 @@ read 0. That means PB bit 0 reads 0, `(0xC4)` becomes **2**, and the emulated
 machine is today running the **rack** code path through 111 strap gates — not
 just failing to transmit on SC1. P5.4 reads 0 for the same reason, so the
 CHECKING-DEVICE self-test blink at `0xF95137` runs on every boot.
+
+---
+
+## `wsa1_sc1_handshake.lua` and `wsa1_panel_link.lua` — ★ the panel link, wired and measured (2026-08-25)
+
+These two answer the question the panel HLE had to be judged on: **with
+`wsa1_cpanel` wired to CPU 1, does serial channel 1 actually carry traffic in
+both directions, and does the machine still boot to the same screen?**
+
+```
+cd ~/compartilhado/kn7000_mame_build
+DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 40 -window \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_sc1_handshake.lua
+DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 200 -window \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_panel_link.lua
+```
+
+`wsa1_sc1_handshake.lua` taps SC1BUF (SFR `0x54`), INTE67 (`0x72`) and the SC1
+state byte (RAM `0x2A80`). ⚠ `0x54` and `0x55` share one 16-bit word, so both
+scripts separate the byte lanes by the access mask — `0x00FF` is SC1BUF, `0xFF00`
+is SC1CR. Entering **state `0x20` is the proof that INT6 was dispatched**: that
+state is only ever written by `INT6_SC1_PeerRequest` (prom_b `0xF5AC0A`).
+
+### What they found, and the two bugs they found first
+
+**The result (40 emulated seconds, `-str 40`):** CPU 1 clocks out exactly the
+seven command frames the disassembly says the SC1 module sends first, **in ROM
+order**, with nothing else in between:
+
+```
+DF D2   DF 1A   DD 03   DE 80   E3 00   E2 08   E3 10
+```
+
+each is answered by the panel, the state machine enters `0x20` **seven times**,
+and INTRX1 hands back both reply bytes each time — `tx=49 rx=14`, `state-0x20
+entries = 7`. Later in the boot the firmware's LED want-buffer at RAM
+`0x20D0..0x20D7` stops being all-zero and its sent-shadow at `0x20F0..0x20F7`
+follows it (`wsa1_panel_link.lua`, `ledwant=0401000000000000
+ledsent=0401000000000000` from t≈75 s). ⚠ The shadow updating only proves the
+firmware QUEUED those frames; what proves they were clocked out is that the
+SC1BUF write count steps from 49 to 63 in the same five-second window — two
+registers changed, so two frames, and 14 register writes is what two frames cost
+once the dummies are counted.
+
+**Before the fixes, the same probe printed `tx=14 rx=0`, `state-0x20 entries=0`
+and this, seven times:**
+
+```
+5.2757  SC1 state <- 04
+5.2757  TX 21   (pc=F5AC06)      <- SC1_StartWordTx's write
+5.2757  TX 01   (pc=F5ACFF)      <- SC1_State04_TxByte1's write
+5.2757  SC1 state <- 08
+5.2757  SC1 state <- 00          <- ABORT
+```
+
+Two separate defects, both now fixed, and neither would have been visible
+without the byte-level log:
+
+1. **P8 bit 5 read LOW.** `cpu1_p8_r()` merged the unwired bits as `0xD6`, which
+   has bit 5 CLEAR, and then only ever *cleared* bit 5 again — it never set it.
+   `SC1_State04_TxByte1` samples that pin at `0xF5AD09` having just made it an
+   input, and takes `0xF5AD0E` — state and count zeroed, `INTES1 = 0xFF`,
+   `(0x2A84) |= 2` — when it reads low. Every frame aborted after two bytes.
+2. **Nine of the eleven SC1BUF writes are DUMMIES.** Only
+   `SC1_State08_TxFromRing` (`0xF5ADC2`) and `SC1_State10_TxFromRing`
+   (`0xF5AE27`) load a byte from the tx ring; the other nine write whatever the
+   routine last had in `A`, which is its own P8CR or P8FC shadow (hence the
+   `21` and `01` above), purely to step the INTTX1 state machine. The two real
+   ones do `or (0x2A87),0x28` — assign TXD1 and SCLK1 — immediately before, and
+   the dummies happen with SCLK1's pin function DESELECTED, so on real hardware
+   no clock is generated and nothing reaches the peer. The overlay
+   `tmp95c061.cpp` now gates its `sc1_txd()` callback on exactly that condition
+   in synchronous mode, which is why the panel sees `DF D2` and not
+   `21 01 DF 01 D2 01 01`.
+
+★ **The lesson worth carrying:** "the CPU wrote SC1BUF" is not "a byte left the
+chip". In I/O-interface mode the clock pin decides, and this firmware uses that
+deliberately — it writes SC1BUF with the clock pin parked to advance its own
+state machine without transmitting.

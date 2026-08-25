@@ -36,66 +36,145 @@ DEFINE_DEVICE_TYPE(WSA1_CPANEL, wsa1_cpanel_device, "wsa1_cpanel", "SX-WSA1 Cont
 //  bound there is inert on the rack instead of quietly injecting a packet
 //  the firmware would file under a group id of 0x20 ("no such control").
 //
-//  ⚠ The BIT-to-legend mapping is NOT ESTABLISHED and is not invented here.
-//  The three combinations below are the only bits the ROM itself names, and
-//  each is a power-on chord the boot block tests before the main loop starts
-//  (prom_a 0xF828D9, 0xF8294C, 0xF82A04).
+//  ⚠ The BIT-to-legend mapping is NOT ESTABLISHED and is not invented here, so
+//  every switch is named POSITIONALLY: "Panel SEG3 SW5" is a claim about the
+//  WIRE, which the ROM does establish, and about nothing else.  The four
+//  power-on chords marked below are the only bits the ROM itself names, and
+//  each is tested by the boot block before the main loop starts (prom_a
+//  0xF828D9, 0xF8294C, 0xF82A04) against the panel's own change-mask shadow at
+//  RAM 0x2B20 + ((wire & 0x0F) | ((wire & 0x40) >> 2)).
 //-------------------------------------------------
 
 static INPUT_PORTS_START(wsa1_cpanel)
 	PORT_START("CP_SEG0")
-	// (0xC4)=2 only: bits 4,5,6 held at power-on = the ROM-version LED display (0xF8295F)
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW3")
+	// v2 power-on chord: 0/4,0/5,0/6 held = ROM-version LED display (0xF8295F)
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW7")
 
 	PORT_START("CP_SEG1")
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW7")
 
 	PORT_START("CP_SEG2")
-	// (0xC4)=1 only: bits 0,1,2 held at power-on = the ROM-version LED display (0xF82952)
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	// v1 power-on chord: 2/0,2/1,2/2 held = ROM-version LED display (0xF82952)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG2 SW7")
 
 	PORT_START("CP_SEG3")
-	// (0xC4)=2 only: bits 5,6,7 held at power-on = the third service chord (0xF82A18)
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW4")
+	// v2 power-on chord: 3/5,3/6,3/7 held = the third service entry (0xF82A18)
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG3 SW7")
 
 	PORT_START("CP_SEG4")
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG4 SW7")
 
 	PORT_START("CP_SEG5")
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG5 SW7")
 
-	PORT_START("CP_SEG6")   // (0xC4)=1 only
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_START("CP_SEG6")   // wire 0xC6 -- VARIANT 1 ONLY (absent from the 0xF8A189 map)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG6 SW7")
 
 	PORT_START("CP_SEG7")
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG7 SW7")
 
 	PORT_START("CP_SEG8")
-	// held at power-on: bits 0,1,2 ((0xC4)=1) or 0,1 ((0xC4)=2) = FACTORY CLEAR.  The boot
-	// block zeroes 0x000080 up, zeroes both checksum words, writes the 0x5AA5 magic at
-	// 0x7FCA and jumps back to RESET (prom_a 0xF828D9-0xF8293D).
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	// power-on chord: FACTORY CLEAR.  v1 needs (0x2B38)==7 exactly, i.e. 8/0,8/1,8/2
+	//                and nothing else in the segment; v2 needs 8/0,8/1 (0xF828D9)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG8 SW7")
 
 	PORT_START("CP_SEG9")
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW4")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG9 SW7")
 
-	PORT_START("CP_SEG10")  // (0xC4)=1 only
-	// (0xC4)=1: bits 5,6,7 held at power-on = the third service chord (0xF82A0A)
-	PORT_BIT(0xff, IP_ACTIVE_HIGH, IPT_KEYBOARD)
-
+	PORT_START("CP_SEG10")  // wire 0xCA -- VARIANT 1 ONLY (absent from the 0xF8A189 map)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW0")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW1")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW2")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW3")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW4")
+	// v1 power-on chord: 10/5,10/6,10/7 held = the third service entry (0xF82A0A)
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW5")
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW6")
+	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG10 SW7")
 	// Wire 0xD3.  The handler at prom_a 0xF89A8B is the one analogue channel with no
-	// (0xC4) test at all, i.e. present on both variants, and it maps the byte through the
-	// plain 0..127 ramp at 0xF89AB4.  On the rack the manual's only continuous control
-	// besides the dial is VOLUME.
+	// (0xC4) test at all -- i.e. present on both variants -- and it maps the byte through
+	// the plain, strictly monotone 0..127 ramp at 0xF89AB4 (no plateau anywhere in it).
+	// The rack's mechanical parts list has exactly one VOLUME KNOB.
 	PORT_START("CP_VOLUME")
 	PORT_ADJUSTER(80, "VOLUME")
 
-	// Wire 0xD7.  Its dispatch slot (prom_a 0xF89825 entry 31) is a bare `scf` -- no curve,
-	// no previous-value compare -- so every packet is accepted.  A control that must never
-	// be de-duplicated is a RELATIVE encoder, and the KN5000's twin protocol uses the same
-	// wire address 0xD7 for its endless wheel as [0xD7, signed detent count]
-	// (kn5000_cpanel.cpp, send_encoder_packet).  ⚠ The signed-step reading is INFERRED from
-	// those two facts; nothing in prom_a's group-0x0F consumer has been read.
+	// Wire 0xD7.  Its dispatch slot (prom_a 0xF89825 entry 31 -> 0xF89AAD) is a bare
+	// `scf` -- no curve, no previous-value compare -- so every packet is accepted.  A
+	// control that must never be de-duplicated is a RELATIVE encoder, and the KN5000's
+	// twin protocol uses the same wire address 0xD7 for its endless wheel as
+	// [0xD7, signed detent count] (kn5000_cpanel.cpp:269-271).  The rack's parts list
+	// has exactly one DIAL WHEEL.  ⚠ The SIGNED-STEP ENCODING IS INFERRED from those
+	// two facts; nothing in prom_a's group-0x0F consumer has been read.
 	PORT_START("CP_DIAL")
 	PORT_BIT(0xff, 0x00, IPT_DIAL) PORT_SENSITIVITY(25) PORT_KEYDELTA(1) PORT_NAME("DATA ENTRY DIAL")
 INPUT_PORTS_END
@@ -113,7 +192,8 @@ wsa1_cpanel_device::wsa1_cpanel_device(const machine_config &mconfig, const char
 	m_pos(0), m_len(2),
 	m_resp_len(0), m_resp_pos(0),
 	m_rx_enabled(false),
-	m_scan_timer(nullptr), m_byte_timer(nullptr),
+	m_scan_timer(nullptr), m_byte_timer(nullptr), m_req_timer(nullptr),
+	m_requesting(false),
 	m_vol_prev(0), m_vol_synced(false),
 	m_dial_prev(0), m_dial_synced(false),
 	m_atn_cb(*this), m_busy_cb(*this), m_sclk_cb(*this), m_rxd_cb(*this),
@@ -131,9 +211,9 @@ wsa1_cpanel_device::wsa1_cpanel_device(const machine_config &mconfig, const char
 
 void wsa1_cpanel_device::device_start()
 {
-	m_led_out.resolve();
 	m_scan_timer = timer_alloc(FUNC(wsa1_cpanel_device::scan_tick), this);
 	m_byte_timer = timer_alloc(FUNC(wsa1_cpanel_device::deliver_byte), this);
+	m_req_timer  = timer_alloc(FUNC(wsa1_cpanel_device::request_tick), this);
 
 	save_item(NAME(m_variant));
 	save_item(NAME(m_frame));
@@ -143,6 +223,7 @@ void wsa1_cpanel_device::device_start()
 	save_item(NAME(m_resp_len));
 	save_item(NAME(m_resp_pos));
 	save_item(NAME(m_rx_enabled));
+	save_item(NAME(m_requesting));
 	save_item(NAME(m_seg_prev));
 	save_item(NAME(m_vol_prev));
 	save_item(NAME(m_vol_synced));
@@ -158,7 +239,9 @@ void wsa1_cpanel_device::device_reset()
 	m_len = 2;
 	m_resp_len = m_resp_pos = 0;
 	m_rx_enabled = false;
+	m_requesting = false;
 	m_byte_timer->reset();
+	m_req_timer->reset();
 	std::fill(std::begin(m_seg_prev), std::end(m_seg_prev), 0);
 	m_vol_synced = false;
 	m_dial_synced = false;
@@ -196,7 +279,7 @@ bool wsa1_cpanel_device::segment_is_wired(int seg) const
 //
 //  The frame length rule is the firmware's own, from the two places it sets
 //  the "bytes still expected" counter (0x2A81) after a first byte:
-//  prom_b 0xF5ADD7 (transmit, SC1_State08_TxFromRing) and 0xF5AF41
+//  prom_b 0xF5ADD7 (transmit, SC1_State08_TxFromRing) and 0xF5AF33
 //  (receive, SC1_State20_RxFirstByte).  Both are
 //      (0x2A81) = 2 ; if ((b & 0x3F) >= 0x30) (0x2A81) = (b & 0x0F) + 3
 //  which is exactly what SC1_TxOp3_Run emits (header + (n & 0x0F) + 2 more)
@@ -239,16 +322,23 @@ void wsa1_cpanel_device::frame_complete()
 		const int n = (hdr & 0x0f) + 1;
 		u8 addr = (hdr & 0xc0) | (m_frame[1] & 0x1f);
 		for (int i = 0; i < n && (2 + i) < m_len; i++, addr++)
-			if ((addr & 0xf0) == 0xc0)
-				led_frame(addr, m_frame[2 + i]);
+			led_frame(addr, m_frame[2 + i]);
 		return;
 	}
 
 	const u8 addr = hdr, data = m_frame[1];
 
+	// The LED wire table is the authority, not the shape of the address: in variant 2
+	// register 7 maps to wire address 0x00, and Panel_RefreshLeds walks all EIGHT
+	// registers in BOTH variants (`ld B,0x08` at prom_a 0xF8C456), so that frame really
+	// is emitted and it does not look like an LED address at all.
+	if (led_frame(addr, data))
+		return;
+
 	if ((addr & 0xf0) == 0xc0)
 	{
-		led_frame(addr, data);
+		LOGMASKED(LOG_LED, "LED frame for a wire address this variant does not map: %02X = %02X\n",
+				addr, data);
 		return;
 	}
 
@@ -265,9 +355,10 @@ void wsa1_cpanel_device::frame_complete()
 	// DISCARDED by SC1_RxOp3_Discard (0xF5B226) without entering the message queue --
 	// exactly the KN5000's TYPE 3 sync packet (kn5000_cpanel.cpp, send_sync_packet).
 	//
-	// ⚠ The header byte itself is a CHOICE: 0xD8 = panel id 11 (which every live address on
-	// this machine carries) + type 3.  The KN5000 sends 0x18, the same type with panel id
-	// 00.  Only the TYPE field is decoded; the exact byte the real M37471 sends is unknown.
+	// ⚠ The header byte itself is a CHOICE: 0xD8 is type 3 (bits 5:3) with bits 7:6 = 11,
+	// which is what every live address on THIS link carries.  The KN5000 sends 0x18, the
+	// same type with bits 7:6 = 00.  Only the TYPE field is decoded by the receiver, so
+	// both work; the exact byte a real M37471M2196S sends here is unknown.
 	static const u8 sync[2] = { 0xd8, 0x00 };
 	switch (addr)
 	{
@@ -291,9 +382,14 @@ void wsa1_cpanel_device::frame_complete()
 //  That routine maps the register INDEX through one of two tables --
 //  0xF8C8AC when (0xC4)==1, 0xF8C8B7 otherwise -- to the wire address, then
 //  pushes [ADDR][DATA] into the outbound queue at 0x2BA0.
+//
+//  ⚠ EIGHT in both variants.  Variant 2's table ends C1 C2 C9 CA CB CC C3 00,
+//  and the 0x00 is a wire address the loop still emits -- it is NOT a seven-
+//  register variant, and counting the non-zero entries (as an earlier version of
+//  this file did) gets that wrong.
 //-------------------------------------------------
 
-void wsa1_cpanel_device::led_frame(u8 addr, u8 data)
+bool wsa1_cpanel_device::led_frame(u8 addr, u8 data)
 {
 	// prom_a 0xF8C8AC and 0xF8C8B7, read out of the ROM by wsa1_panel_tables.py.
 	static const u8 wire_v1[8] = { 0xc0, 0xc1, 0xc2, 0xc4, 0xc5, 0xc9, 0xcc, 0xcd };
@@ -305,14 +401,14 @@ void wsa1_cpanel_device::led_frame(u8 addr, u8 data)
 		if (wire[reg] != addr)
 			continue;
 		if (m_led[reg] == data)
-			return;
+			return true;
 		m_led[reg] = data;
 		for (int bit = 0; bit < 8; bit++)
 			m_led_out[reg * 8 + bit] = BIT(data, bit);
 		LOGMASKED(LOG_LED, "LED reg %d (wire %02X) = %02X\n", reg, addr, data);
-		return;
+		return true;
 	}
-	LOGMASKED(LOG_LED, "LED frame for unmapped wire address %02X = %02X\n", addr, data);
+	return false;
 }
 
 
@@ -327,19 +423,77 @@ void wsa1_cpanel_device::led_frame(u8 addr, u8 data)
 //  enable RX, then push the message's bytes one at a time.
 //-------------------------------------------------
 
+//  EVERY MESSAGE THIS DEVICE SENDS IS EXACTLY TWO BYTES, and the queue is a FIFO
+//  of two-byte messages rather than a byte stream, because the CPU's receive
+//  state machine is per MESSAGE: INT6_SC1_PeerRequest accepts one request,
+//  SC1_State20_RxFirstByte takes the length from the first byte -- 2 for every
+//  address this device uses, since (addr & 0x3F) < 0x30 for 0xC0..0xD7 -- and
+//  SC1_State24_RxNextByte re-arms INT6 when the count runs out.  Concatenating
+//  two messages into one delivery would hand the second one to a state machine
+//  that has stopped expecting bytes.
 void wsa1_cpanel_device::queue_frame(const u8 *bytes, int n)
 {
-	if (m_resp_pos == m_resp_len)
+	if (m_resp_pos >= m_resp_len)
 		m_resp_pos = m_resp_len = 0;
 	if (m_resp_len + n > RESP_MAX)
 		return;                              // the real MCU's queue would drop it too
 	const bool was_idle = (m_resp_pos == m_resp_len);
 	for (int i = 0; i < n; i++)
 		m_resp[m_resp_len++] = bytes[i];
-	if (was_idle)
+	if (was_idle && !m_requesting)
+		start_request();
+}
+
+
+void wsa1_cpanel_device::start_request()
+{
+	m_requesting = true;
+	m_req_timer->adjust(attotime::zero, 0);
+}
+
+
+//-------------------------------------------------
+//  the attention line: A PULSE, AND A RETRY
+//
+//  ⚠ THIS IS A DRIVER POLICY, and it is here because holding the line high does
+//  not work.  INT6's request flag is bit 3 of INTE67, and the SC1 module writes
+//  that register with bit 3 CLEAR at eighteen sites -- 0x85 to arm INT6 at level
+//  5 and 0x8F to park it at level 7, which tlcs900_check_irqs() never dispatches
+//  (prom_b 0xF5A947, 0xF5ABD6 and sixteen more).  A request raised while the
+//  module is transmitting therefore latches into a masked flag and is then
+//  THROWN AWAY by the very write that re-arms INT6.  Measured: with the line
+//  held, CPU 1 transmitted its opening frames and then never entered state 0x20
+//  at all (notes/wsa1-probes/wsa1_sc1_handshake.lua).
+//
+//  So the panel asks again: a short pulse, repeated every 2 ms until the CPU
+//  turns RXE on.  A real peer that can lose an edge this way has to do the same
+//  thing; what is NOT established is the real part's pulse width or its retry
+//  interval, and neither number below is claimed to be the hardware's.
+//
+//  The busy line is NOT raised while merely asking.  PB bit 4 blocks CPU 1 from
+//  transmitting at all (prom_b 0xF5AB7B), so asserting it before the CPU has
+//  accepted the request would be the panel silencing the very conversation it is
+//  trying to join.  It goes high when the transfer actually starts, in
+//  rx_enable(), and low again when the last byte has been handed over.
+//-------------------------------------------------
+
+TIMER_CALLBACK_MEMBER(wsa1_cpanel_device::request_tick)
+{
+	if (!m_requesting)
 	{
-		m_busy_cb(1);                        // PB bit 4 high: the panel wants the link
-		m_atn_cb(1);                         // INT6
+		m_atn_cb(0);
+		return;
+	}
+
+	if (param == 0)
+	{
+		m_atn_cb(1);
+		m_req_timer->adjust(attotime::from_usec(50), 1);
+	}
+	else
+	{
+		m_atn_cb(0);
+		m_req_timer->adjust(attotime::from_usec(2000), 0);
 	}
 }
 
@@ -347,8 +501,16 @@ void wsa1_cpanel_device::queue_frame(const u8 *bytes, int n)
 void wsa1_cpanel_device::rx_enable(int state)
 {
 	m_rx_enabled = bool(state);
-	if (m_rx_enabled && m_resp_pos < m_resp_len)
-		m_byte_timer->adjust(attotime::from_usec(60));
+
+	if (!m_rx_enabled || m_resp_pos >= m_resp_len)
+		return;
+
+	// The CPU has accepted: stop asking, take the link, and start clocking bytes in.
+	m_requesting = false;
+	m_req_timer->reset();
+	m_atn_cb(0);
+	m_busy_cb(1);
+	m_byte_timer->adjust(attotime::from_usec(60), 0);
 }
 
 
@@ -359,17 +521,25 @@ TIMER_CALLBACK_MEMBER(wsa1_cpanel_device::deliver_byte)
 
 	m_rxd_cb(m_resp[m_resp_pos++]);
 
-	if (m_resp_pos < m_resp_len)
+	// param counts bytes within THIS message: 0 was the address, 1 was the data.
+	if (param == 0)
 	{
-		m_byte_timer->adjust(attotime::from_usec(120));
+		m_byte_timer->adjust(attotime::from_usec(120), 1);
+		return;
 	}
-	else
-	{
+
+	// Message complete: give the link back.  Anything still queued has to ask again,
+	// because the firmware re-arms INT6 at the end of a message and expects the next
+	// one to arrive the same way this one did.
+	m_busy_cb(0);
+	m_atn_cb(0);
+
+	if (m_resp_pos >= m_resp_len)
 		m_resp_pos = m_resp_len = 0;
-		m_busy_cb(0);
-		m_atn_cb(0);
-	}
+	else
+		start_request();
 }
+
 
 
 //-------------------------------------------------
@@ -379,7 +549,10 @@ TIMER_CALLBACK_MEMBER(wsa1_cpanel_device::deliver_byte)
 //  falls out of the segment number for free -- segments 0..7 give type 0 and
 //  8..15 type 1, which is exactly why SC1_RxOpTable entries [0] and [1] are
 //  the same handler.  SC1_RxOp0_ThreeByte then XORs the mask against its own
-//  shadow at RAM 0x2B20 + ((addr & 0x0F) + 0x10) and hands the foreground
+//  shadow at RAM 0x2B20 + ((addr & 0x0F) | ((addr & 0x40) >> 2)) -- the +0x10 is
+//  CONDITIONAL on address bit 6 (prom_b 0xF5B0FD does `and W,0x4F` and then
+//  `sub W,0x30` only when bit 6 is set), which is true of every 0xC0..0xCF
+//  address but is not the rule -- and hands the foreground
 //  {address, mask, CHANGED-bits} -- so sending the whole segment state, not
 //  just the change, is correct and is what the shadow table is there for.
 //

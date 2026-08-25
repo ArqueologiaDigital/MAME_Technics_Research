@@ -136,6 +136,11 @@ ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/ma
 # correctly-programmed but permanently blank panel.  See the note at the top of
 # the overlay copy of sed1330.h.
 ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/mame/matsushita/wsa1.cpp"
+# The control-panel microcontroller (M37471M2196S on CONTROL PANEL 1), HLE'd as a
+# device on CPU 1's serial channel 1 -- the same part and the same protocol as the
+# KN5000's panel.  See the byte evidence at the top of wsa1_cpanel.h.
+ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.cpp"           "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.cpp"
+ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.h"             "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.h"
 mkdir -p "$BUILD_TREE/src/devices/video"
 ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
 ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
@@ -150,7 +155,11 @@ mkdir -p "$BUILD_TREE/src/devices/cpu/tlcs900" "$BUILD_TREE/src/devices/bus/tech
 # write went to PORT_7.  The SX-WSA1R needs P6 bit 5 (the serial EEPROM's chip
 # select) to arrive, and CPU 1's `ldio P6,0x1B` was clobbering the link handshake
 # shadow on P7.  Keep the diff to that line; see the comment at it.
+# ⚠ tmp95c061.h IS ALSO OVERLAID NOW.  It carries the serial-channel-1 additions
+# the SX-WSA1R's control panel needs (sc1_txd / sc1_mod / sc1_rxd); the .h and the
+# .cpp have to move together, so symlink both or neither.
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.cpp"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.h"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.cpp"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.h"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"  "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"
@@ -337,7 +346,7 @@ SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/k
 # follows #include recursively, so "cpu/tlcs900/tmp95c061.h" keeps CPUS["TLCS900"]
 # on (kn5000.cpp already does) and "video/sed1330.h" turns VIDEOS["SED1330"] on
 # through the annotation at scripts/src/video.lua:1474.
-SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp"
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp"
 make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE/kn7000" 2>/dev/null || echo "(no binary — check $LOG)"
 echo "==> Qt debugger included. Run it with -debug:"

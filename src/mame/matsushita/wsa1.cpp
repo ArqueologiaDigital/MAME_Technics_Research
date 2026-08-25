@@ -41,9 +41,12 @@
                 RAM cleared, then into prom_b through the thunk table.
       t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (it counts
                 at 30 Hz here - see the prescaler note in the machine config).
-      t=0.00 s  the boot sequence at 0xF827C8 blinks an 8-bit diagnostic code
-                on P5 bit 3, because P5 bit 4 reads back 0.  This burns 3.13 s.
-      t=3.13 s  the battery-RAM checksum pair at 0xF82C80 runs: 0x100 words
+      t=0.00 s  the boot sequence at 0xF827C8 CAN blink an 8-bit RAM/ROM verdict
+                on P5 bit 3, and used to do it on every boot because P5 bit 4
+                read back 0 and that burned 3.13 s.  P5 bit 4 is now known to be
+                the service CHECKING DEVICE's switch (see cpu1_p5_r()); with
+                nothing on CN4 -- the default -- the routine returns at once.
+      t=0.013 s the battery-RAM checksum pair at 0xF82C80 runs: 0x100 words
                 summed from 0x007620 and complemented against (0x007FD2), then
                 the same from 0x617800 against (0x007FD4).  The helper at
                 0xF82CD3 returns carry CLEAR on a match (0xF82CE6 rcf) and the
@@ -53,9 +56,15 @@
                 answer for a machine with no battery-backed contents, and
                 0xF82CAB then takes its bit-0-clear arm at 0xF82CBD, which
                 forces the boot-mode byte (0x0097) |= 0x01.
-      t=10.39 s the SED1330 is initialised, from 0xF8E822 in LCD_Init_SED1330.
-      t=75.40 s SWI7's text services start drawing, first read back at
-                0xF8F2FE; 33623 writes and 821 reads to the panel in total.
+      t=5.01 s  the SC1 module opens the control panel link and the panel
+                answers - see the paragraph below.
+      t=7.21 s  the SED1330 is initialised, from 0xF8E822 in LCD_Init_SED1330.
+                (It was 10.39 s before the CHECKING DEVICE switch was modelled;
+                the difference is the 3.13 s blink that no longer runs.  Both
+                figures are from wsa1_boot_milestones.lua on the build of the
+                day; the SWI7 access counts quoted in earlier revisions of this
+                comment were measured with the blink and are NOT re-measured
+                here, so they are dropped rather than restated.)
       t=70.5 s  CPU 2 reaches MAIN and its key scanner goes live.  Both of the
                 firmware's own gates are open by then and both were measured
                 (notes/wsa1-probes/wsa1_cpu2_tick_and_keyscan.lua): the one-shot
@@ -63,15 +72,36 @@
                 (0x00F2F3) passes 1000, and from then on the status port at
                 0x108002 is polled about 34,500 times a second of emulated time.
                 So a key pressed after this point is seen.
-      t=90 s    the panel reads ALL INITIAL SETTING! and stops changing, while
+      t=75 s    the panel reads ALL INITIAL SETTING! and stops changing, while
                 CPU 1 keeps running ordinary code across prom_a and prom_b -
-                a live system sitting on the message, not a hang.  The message
+                a live system sitting on the message, not a hang.  Snapshots
+                every 15 s: blank at t=60, the message from t=75 through t=195,
+                unchanged (wsa1_panel_link.lua, -str 200).  The message
                 is consistent with the failed checksums above; the path from
                 (0x0097) to those particular glyphs has NOT been traced, so
                 read that as agreement, not as a proven causal chain.
 
-    So the machine boots to correct, legible screen content, and CPU 2 takes a
-    key.  How far the key gets is measured and stated exactly, because the two
+    THE CONTROL PANEL IS NOW WIRED, and the link works in both directions.
+    Measured on the same build (notes/wsa1-probes/wsa1_sc1_handshake.lua): CPU 1
+    clocks out exactly the seven command frames the disassembly says the SC1
+    module sends first, in ROM order --
+
+        (DF,D2) (DF,1A) (DD,03) (DE,80) (E3,00) (E2,08) (E3,10)
+
+    -- the panel answers each one, INT6 is dispatched (the SC1 state machine
+    enters state 0x20 seven times), INTRX1 hands both reply bytes back, and
+    later the firmware's LED want-buffer at RAM 0x20D0 stops being all-zero and
+    its sent-shadow at 0x20F0 follows it, while the SC1BUF write count steps from
+    49 to 63 in the same five-second window - two LED registers changed, so two
+    frames, and the shadows alone would only have proved they were QUEUED.
+    Two things had to be right for any of that: P8 bit 5 has to read HIGH (see
+    cpu1_p8_r()), and a byte must only reach the panel when SCLK1's pin function
+    is selected (see the gate in the overlay tmp95c061.cpp's sc1buf_w -- nine of
+    the firmware's eleven SC1BUF writes are dummies that carry a register shadow,
+    not payload).
+
+    So the machine boots to correct, legible screen content, has a front panel,
+    and CPU 2 takes a key.  How far the key gets is measured and stated exactly, because the two
     halves of that sentence are not the same claim:
 
       * the SCANNER works.  Press C4 after t=71 s and prom_c reads 0x5C98 off
@@ -247,6 +277,8 @@
 #include "emu.h"
 
 #include "cpu/tlcs900/tmp95c061.h"
+#include "wsa1_cpanel.h"
+
 #include "machine/eepromser.h"
 #include "video/sed1330.h"
 
@@ -280,8 +312,12 @@ public:
 		, m_cpu2(*this, "cpu2")
 		, m_lcdc(*this, "lcdc")
 		, m_eeprom(*this, "eeprom")
+		, m_cpanel(*this, "cpanel")
 		, m_keybed(*this, "KEY%u", 0U)
 		, m_touch(*this, "TOUCH")
+		, m_variant(*this, "VARIANT")
+		, m_checkdev(*this, "CHECKDEV")
+		, m_check_led(*this, "check_led")
 	{ }
 
 	void wsa1r(machine_config &config) ATTR_COLD;
@@ -308,6 +344,21 @@ private:
 	void cpu1_p7_w(uint8_t data);
 	uint8_t cpu2_pa_r();
 	void cpu2_pa_w(uint8_t data);
+
+	// CPU 1's port 8 and port B carry the control panel's serial link, and PB
+	// bit 0 carries the MODEL STRAP.  See the block comment above the bodies.
+	uint8_t cpu1_p8_r();
+	void cpu1_p8_w(uint8_t data);
+	uint8_t cpu1_pb_r();
+
+	// CPU 1's port 5 carries the service CHECKING DEVICE's switch and its LED.
+	uint8_t cpu1_p5_r();
+	void cpu1_p5_w(uint8_t data);
+
+	// 1 = SX-WSA1 (keyboard), 2 = SX-WSA1R (rack).  Read from the VARIANT config
+	// port, and pushed to the panel device at reset so the firmware's (0xC4) and
+	// the panel model can never disagree.
+	uint8_t variant() const { return BIT(m_variant->read(), 0) ? 1 : 2; }
 
 	// CPU 2's port 6 and port 8 carry the serial EEPROM.  See the block comment
 	// above the handler bodies.
@@ -380,8 +431,12 @@ private:
 	required_device<tmp95c061_device> m_cpu2;
 	required_device<sed1330_device> m_lcdc;
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
+	required_device<wsa1_cpanel_device> m_cpanel;
 	required_ioport_array<6> m_keybed;    // 61 keys, 6 ports x 12 bits (the last holds 1)
 	required_ioport m_touch;
+	required_ioport m_variant;
+	required_ioport m_checkdev;
+	output_finder<> m_check_led;
 
 	uint8_t  m_link_to_cpu2 = 0;            // the byte CPU 1 last wrote to 0x7C0000
 	uint8_t  m_link_to_cpu1 = 0;            // the byte CPU 2 last wrote to 0x100000
@@ -392,6 +447,12 @@ private:
 
 	uint8_t  m_cpu2_p6 = 0;                 // CPU 2's P6 output latch (bit 5 = EEPROM CS)
 	uint8_t  m_cpu2_p8 = 0;                 // CPU 2's P8 output latch (bits 3, 4 = SK, DI)
+
+	uint8_t  m_cpu1_p5 = 0xff;              // CPU 1's P5 output latch
+	uint8_t  m_cpu1_p8 = 0xff;              // CPU 1's P8 output latch
+	uint8_t  m_panel_sclk = 1;              // P8 bit 5, the serial clock line: idle HIGH
+	uint8_t  m_panel_busy = 0;              // PB bit 4, the panel's busy line: idle LOW
+	uint8_t  m_strap = 2;                   // latched copy of variant(), sampled at reset
 
 	uint16_t m_tg_latch = 0;
 	uint16_t m_tg_regs[TG_REG_COUNT]{};
@@ -607,6 +668,145 @@ uint8_t wsa1_state::cpu2_pa_r()
 void wsa1_state::cpu2_pa_w(uint8_t data)
 {
 	m_cpu2_pa = data;
+}
+
+
+/***************************************************************************
+
+    THE CONTROL PANEL LINK, AND THE MODEL STRAP -- CPU 1's PORT 8 AND PORT B
+
+    The panel microcontroller itself is HLE'd in wsa1_cpanel.cpp; that file's
+    header carries the byte evidence that serial channel 1 is the panel at all.
+    What lives here is only the four port bits the link needs.
+
+    ⚠ WITHOUT cpu1_p8_r() THE EMULATED MACHINE CANNOT TRANSMIT ON SC1 AT ALL,
+    and that is a measured statement about MAME rather than about the hardware:
+    SC1_WaitTxDrain (prom_b 0xF5AB7B) will not touch the link unless P8 bit 5
+    reads HIGH and PB bit 4 reads LOW, and an unbound MAME port read returns 0,
+    so P8 bit 5 read low, the four-way test never passed, its 200 retries burned
+    out and no command and no LED frame ever left CPU 1.
+
+    P8: P8CR = 0x09 and P8FC = 0x29 at RESET (0xF826D3, 0xF826D0), so bits 0 and
+    3 are outputs -- the two transmit-data lines -- and bit 5 is on its function.
+    The SC1 module then drives P8CR/P8FC bits 3 and 5 itself, and bit 5 is read
+    back at TWO points that between them fix what it means:
+
+      0xF5AB7B  SC1_WaitTxDrain will not start a transfer unless bit 5 reads
+                HIGH and PB bit 4 reads LOW.
+      0xF5AD09  SC1_State04_TxByte1, having just made bit 5 an INPUT
+                (`and (0x2A86),0xDF` then `ld (0x1A),A`), tests it: HIGH carries
+                on to the next state, LOW takes 0xF5AD0E, which ABORTS -- state
+                and byte count zeroed, INTES1 = 0xFF, (0x2A84) |= 2.
+
+    So the pin is released by both ends and sampled, and high means "nobody is
+    holding the clock down".  ⚠ THAT THE IDLE STATE IS HIGH IS AN INFERENCE: no
+    databook here names the pin and no schematic net has been read.  What is NOT
+    an inference is that 0 is not a neutral default -- MAME's unbound read gave 0,
+    and with 0 every single frame took the abort path at 0xF5AD0E.  Measured,
+    before and after: notes/wsa1-probes/wsa1_sc1_handshake.lua.
+
+    PB: PBCR = 0x0C (0xF826E5), so only bits 2 and 3 are outputs and every other
+    bit is an input.  Two of the inputs are known:
+
+      bit 0  THE MODEL STRAP.  prom_a 0xF82882 -- `ld A,1 / bit 0,(PB) / jr NZ /
+             ld A,2 / ld (0xC4),A` -- is called once from RESET at 0xF827D8 and
+             is the ONLY write to RAM (0xC4) in 512 KiB; 111 well-formed
+             `cp (0xC4),#imm` sites across 27 distinct 4 KiB blocks read it back.
+             HIGH gives (0xC4)=1, LOW gives (0xC4)=2.
+      bit 4  the panel MCU's busy line, tested together with P8 bit 5 above.
+
+    The other PB inputs read high, which is a driver choice for pins nobody has
+    read: bit 1 is INT5, the floppy controller's result-phase interrupt, and
+    that interrupt is asserted through set_input_line() rather than through this
+    port, so the level here does not matter to it.
+
+***************************************************************************/
+
+uint8_t wsa1_state::cpu1_p8_r()
+{
+	// P8 is six bits wide on this part.  Bits 1, 2 and 4 are the receive-data and
+	// handshake inputs; nothing is wired to them here, so they read high, and the
+	// output latch supplies bits 0 and 3 so that a `res`/`set` on P8 -- which is a
+	// read-modify-write -- does not clear the driven lines.
+	uint8_t data = (m_cpu1_p8 & 0x09) | 0xd6;
+
+	if (m_panel_sclk)
+		data |= 0x20;
+
+	return data;
+}
+
+void wsa1_state::cpu1_p8_w(uint8_t data)
+{
+	m_cpu1_p8 = data;
+}
+
+/***************************************************************************
+
+    THE SERVICE CHECKING DEVICE, ON CPU 1's PORT 5
+
+    ★ This closes gap L.  The routine at prom_a 0xF95137, reached from the boot
+    sequence at 0xF827D1 through prom_b thunk 0xF40144, is
+
+        ld C,(P5) / and C,0x10 / srl 4,C / and C,1 / jr NZ,ret
+
+    -- it RETURNS IMMEDIATELY if P5 bit 4 reads 1, and otherwise calls 0xF95158
+    twice (at 0xF95149 and 0xF95153, each after a `push WA`).  0xF95158 starts
+    `ld E,0x04`, so it is FOUR flashes, and each flash writes P5 bit 3 with
+    `stcf 3,(P5)` around a software delay of either 0x4000 or 0xC000 outer counts
+    chosen by bit 0 of (XIZ+0x08) -- a short or a long flash.
+
+    The SX-WSA1R service manual names all of it (OCR lines 793-801):
+
+        "Connect the CHECKING DEVICE to CN4 on the MAIN P.C.B., and turn on the
+         CHECKING DEVICE switch. ... the LED of the CHECKING DEVICE flashes 8
+         times.  The first 4 flashes are for the RAM check, and the latter 4
+         flashes are for the ROM check. ... If an IC is defective, the
+         corresponding flash time is longer."
+
+    Eight flashes as two calls of four, a long flash for a failure, and a switch
+    that decides whether any of it runs.  So P5 bit 4 is the CHECKING DEVICE
+    SWITCH -- low when it is on -- and P5 bit 3 is that device's LED.
+
+    ⚠ DEFAULT = NOT CONNECTED, and it changes behaviour from every build before
+    this one.  MAME's unbound port read returns 0, so bit 4 read low, the
+    emulated machine behaved as though a service jig were plugged into CN4 with
+    its switch on, and it spent the first 3.13 s of emulated time blinking a code
+    at nobody.  A machine with nothing on CN4 is the normal one.
+
+***************************************************************************/
+
+// P5CR = 0x2C and P5FC = 0x24 (0xF826C1, 0xF826BE): bits 2, 3 and 5 are outputs
+// and bit 4 is an input.  port_r<PORT_5>() returns this callback's value
+// verbatim, and the blink writes bit 3 with `stcf 3,(P5)`, a read-modify-write,
+// so the driven bits have to come back out of the latch.
+uint8_t wsa1_state::cpu1_p5_r()
+{
+	uint8_t data = (m_cpu1_p5 & 0x2c) | 0xc3;   // 0, 1, 6, 7 do not exist on this port
+
+	if (!BIT(m_checkdev->read(), 0))
+		data |= 0x10;                           // switch off / nothing on CN4
+
+	return data;
+}
+
+void wsa1_state::cpu1_p5_w(uint8_t data)
+{
+	m_cpu1_p5 = data;
+	m_check_led = BIT(data, 3);
+}
+
+uint8_t wsa1_state::cpu1_pb_r()
+{
+	uint8_t data = 0xef;                        // unwired inputs read high; bit 4 idles LOW
+
+	if (m_strap == 2)
+		data &= ~0x01;                          // PB.0 low  -> (0xC4) = 2, the rack
+
+	if (m_panel_busy)
+		data |= 0x10;
+
+	return data;
 }
 
 
@@ -924,6 +1124,20 @@ void wsa1_state::keybed_push(uint8_t key, bool pressed)
 
 TIMER_CALLBACK_MEMBER(wsa1_state::keybed_scan)
 {
+	// A RACK HAS NO KEYS.  The SX-WSA1R's own service manual describes a 2U
+	// module and its mechanical parts list has no keybed assembly, so in rack
+	// mode this scanner has nothing to scan and must never queue an event.
+	//
+	// ⚠ This gate is a statement about the BOX, not about the firmware: the model
+	// strap does NOT reach the keybed path.  prom_c -- the processor that owns
+	// the scanner -- contains no PB read at all, there is not one `cp (0xC4)` in
+	// the whole interprocessor-link block 0xF8E000-0xF8FFFF, and CPU 1 never
+	// sends the variant over the link in any code path that has been read.  The
+	// rack's firmware scans a keybed unconditionally; it simply finds none.  The
+	// KEY ioports carry the same condition, so they also grey out in rack mode.
+	if (m_strap != 1)
+		return;
+
 	uint64_t state = 0;
 
 	for (unsigned port = 0; port < 6; port++)
@@ -1016,6 +1230,11 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_cpu2_pa));
 	save_item(NAME(m_cpu2_p6));
 	save_item(NAME(m_cpu2_p8));
+	save_item(NAME(m_cpu1_p5));
+	save_item(NAME(m_cpu1_p8));
+	save_item(NAME(m_panel_sclk));
+	save_item(NAME(m_panel_busy));
+	save_item(NAME(m_strap));
 	save_item(NAME(m_tg_latch));
 	save_item(NAME(m_tg_regs));
 	save_item(NAME(m_synth2_latch));
@@ -1054,6 +1273,19 @@ void wsa1_state::machine_reset()
 	m_keybed_prev = 0;
 	m_key_fifo_read = 0;
 	m_key_fifo_count = 0;
+
+	// THE MODEL STRAP IS SAMPLED HERE AND NOWHERE ELSE, which is what a strap is:
+	// the firmware reads PB bit 0 exactly once, from RESET (prom_a 0xF827D8 ->
+	// 0xF82882), so flipping the configuration switch takes effect on the next
+	// machine reset and not in the middle of a run.  Latching it means the panel
+	// device and cpu1_pb_r() cannot end up describing different machines.
+	m_strap = variant();
+	m_cpanel->set_variant(m_strap);
+
+	m_cpu1_p5 = 0xff;
+	m_cpu1_p8 = 0xff;
+	m_panel_sclk = 1;
+	m_panel_busy = 0;
 }
 
 
@@ -1369,6 +1601,70 @@ void wsa1_state::cpu2_map(address_map &map)
 
 
 static INPUT_PORTS_START(wsa1r)
+	// ------------------------------------------------------------------------
+	// THE MODEL STRAP: SX-WSA1 (keyboard) or SX-WSA1R (rack)
+	//
+	// Technics shipped the same v2 ROM set in two boxes, and the firmware asks
+	// the board which one it is in.  prom_a 0xF82882, reached once from RESET at
+	// 0xF827D8, is the ONLY write to RAM (0xC4) in 512 KiB:
+	//
+	//     ld A,0x01 / bit 0,(PB) / jr NZ,+2 / ld A,0x02 / ld (0xC4),A / ret
+	//
+	// PB bit 0 is an input -- RESET writes PBCR = 0x0C at 0xF826E5, making only
+	// bits 2 and 3 outputs -- and PBCR is written exactly once in either image.
+	// ONE HUNDRED AND ELEVEN well-formed `cp (0xC4),#imm / jr cc` sites in 27
+	// distinct 4 KiB blocks read the answer back, and every one of them compares
+	// against 1 or 2 and nothing else.  What they switch is not cosmetic:
+	//
+	//   0xF8DC25  (0xC4)=2 skips all four A/D channel scans (the first skipped
+	//             call is 0xF8DC3E `ld WA,(0x60)`, and SFR 0x60 is ADREG0L)
+	//   0xFF42EE  (0xC4)=1 picks the display list at 0xF580B0 -- MIDI FILE LOAD /
+	//             MIDI FILE SAVE / LOAD SINGLE SOUND / LOAD SINGLE COMBI. --
+	//             while (0xC4)=2 picks 0xF58127, only the last two entries
+	//   0xF8A109 / 0xF8A189   the panel's wire-address -> group map
+	//   0xF8C8AC / 0xF8C8B7   the panel's LED-register -> wire-address map
+	//   0xF898AD + 6 more     (0xC4)=2 forces a controller value to 0x40
+	//
+	// WHICH ARM IS WHICH MODEL is corroboration and not decode.  No string in
+	// any of the four images names either model, and only the SX-WSA1R's service
+	// manual exists here -- there is no SX-WSA1 document to check the other arm
+	// against.  Two independent readings of the rack's own manual agree that the
+	// rack is (0xC4)=2: its specification page's disk menu has no MIDI FILE LOAD
+	// and no MIDI FILE SAVE, matching the shorter display list; and its
+	// mechanical parts list has one VOLUME KNOB and one DIAL WHEEL and no bender,
+	// matching the one pot (wire 0xD3) and one encoder (wire 0xD7) that variant 2
+	// keeps -- where variant 1 additionally carries 0xD0, 0xD1 and 0xD2, two of
+	// which have centre-detented curves (18 x 0x80 at index 120 of 256 in the
+	// table at 0xF89CB4; 13 x 0x40 at index 58 of 128 at 0xF89B34), i.e. sprung
+	// bipolar controls a rack module does not have.
+	//
+	// DEFAULT = RACK, deliberately.  It is what the dumped ROM set was read from,
+	// what the service manual documents, and what this machine already did before
+	// the strap was modelled at all: MAME's unbound port read returns 0, so PB
+	// bit 0 read low and the firmware has been taking the (0xC4)=2 arm of all 111
+	// gates since the driver was written.  Selecting the keyboard changes machine
+	// behaviour, so it is the user's choice to make and to save, never a default
+	// this driver quietly writes into their cfg.
+	// ------------------------------------------------------------------------
+	PORT_START("VARIANT")
+	PORT_CONFNAME(0x01, 0x00, "Model")
+	PORT_CONFSETTING(   0x00, "SX-WSA1R (rack module)")
+	PORT_CONFSETTING(   0x01, "SX-WSA1 (keyboard)")
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+
+	// ------------------------------------------------------------------------
+	// THE SERVICE CHECKING DEVICE, plugged into CN4 on the MAIN P.C.B.
+	// See the block comment above cpu1_p5_r() for the ROM and the manual page
+	// that between them name the switch (P5 bit 4) and the LED (P5 bit 3).
+	// Turn it on and the boot block blinks its eight-flash RAM/ROM verdict on
+	// the "check_led" output before doing anything else.
+	// ------------------------------------------------------------------------
+	PORT_START("CHECKDEV")
+	PORT_CONFNAME(0x01, 0x00, "Service checking device (CN4)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, DEF_STR(On))
+	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
+
 	// THE 61-KEY KEYBED, six ports of twelve bits with one key in the last.
 	// Key 0 is the lowest; the firmware adds 36 inside ToneGen_VelocityFromTouch
 	// (0xF995EC), so key 0..60 are MIDI 36..96 = C2..C7 and the octave numbers
@@ -1378,79 +1674,86 @@ static INPUT_PORTS_START(wsa1r)
 	// Two octaves carry a default PC-keyboard mapping, the usual tracker
 	// layout; nothing else in this driver claims a key, so there is no conflict
 	// to work around.  Assign the rest from MAME's input menu.
+	//
+	// EVERY KEY IS CONDITIONAL ON THE KEYBOARD VARIANT.  A rack module has no
+	// keys, so in the default configuration these fields are disabled: MAME skips
+	// a disabled field in ioport_field::frame_update(), so the port reads its
+	// default and keybed_scan() sees nothing.  The scan callback carries the same
+	// gate; see the comment there for why this is a claim about the BOX and not
+	// about the firmware, which scans unconditionally on both variants.
 
 	PORT_START("KEY0")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2")
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2")
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2")
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#2")
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E2")
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F2")
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#2")
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G2")
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#2")
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A2")
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2")
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("KEY1")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3")
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3")
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3")
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#3")
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E3")
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F3")
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#3")
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G3")
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#3")
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A3")
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3")
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("KEY2")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4") PORT_CODE(KEYCODE_Z)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4") PORT_CODE(KEYCODE_S)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4") PORT_CODE(KEYCODE_X)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#4") PORT_CODE(KEYCODE_D)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E4") PORT_CODE(KEYCODE_C)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F4") PORT_CODE(KEYCODE_V)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#4") PORT_CODE(KEYCODE_G)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G4") PORT_CODE(KEYCODE_B)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#4") PORT_CODE(KEYCODE_H)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A4") PORT_CODE(KEYCODE_N)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4") PORT_CODE(KEYCODE_J)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4") PORT_CODE(KEYCODE_M)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4") PORT_CODE(KEYCODE_Z) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4") PORT_CODE(KEYCODE_S) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4") PORT_CODE(KEYCODE_X) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#4") PORT_CODE(KEYCODE_D) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E4") PORT_CODE(KEYCODE_C) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F4") PORT_CODE(KEYCODE_V) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#4") PORT_CODE(KEYCODE_G) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G4") PORT_CODE(KEYCODE_B) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#4") PORT_CODE(KEYCODE_H) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A4") PORT_CODE(KEYCODE_N) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4") PORT_CODE(KEYCODE_J) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4") PORT_CODE(KEYCODE_M) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("KEY3")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5") PORT_CODE(KEYCODE_Q)
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5") PORT_CODE(KEYCODE_2)
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5") PORT_CODE(KEYCODE_W)
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#5") PORT_CODE(KEYCODE_3)
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E5") PORT_CODE(KEYCODE_E)
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F5") PORT_CODE(KEYCODE_R)
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#5") PORT_CODE(KEYCODE_5)
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G5") PORT_CODE(KEYCODE_T)
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#5") PORT_CODE(KEYCODE_6)
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A5") PORT_CODE(KEYCODE_Y)
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5") PORT_CODE(KEYCODE_7)
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5") PORT_CODE(KEYCODE_U)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5") PORT_CODE(KEYCODE_Q) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5") PORT_CODE(KEYCODE_2) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5") PORT_CODE(KEYCODE_W) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#5") PORT_CODE(KEYCODE_3) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E5") PORT_CODE(KEYCODE_E) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F5") PORT_CODE(KEYCODE_R) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#5") PORT_CODE(KEYCODE_5) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G5") PORT_CODE(KEYCODE_T) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#5") PORT_CODE(KEYCODE_6) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A5") PORT_CODE(KEYCODE_Y) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5") PORT_CODE(KEYCODE_7) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5") PORT_CODE(KEYCODE_U) PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("KEY4")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6")
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6")
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6")
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6")
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6")
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6")
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6")
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6")
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6")
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6")
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6")
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("KEY5")
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7") PORT_CONDITION("VARIANT", 0x01, EQUALS, 0x01)
 
 	PORT_START("TOUCH")
 	// The touch measurement the scanner puts in the high byte of a key event is
@@ -1492,6 +1795,13 @@ void wsa1_state::wsa1r(machine_config &config)
 	m_cpu1->set_addrmap(AS_PROGRAM, &wsa1_state::cpu1_map);
 	m_cpu1->port7_read().set(FUNC(wsa1_state::cpu1_p7_r));
 	m_cpu1->port7_write().set(FUNC(wsa1_state::cpu1_p7_w));
+	m_cpu1->port5_read().set(FUNC(wsa1_state::cpu1_p5_r));
+	m_cpu1->port5_write().set(FUNC(wsa1_state::cpu1_p5_w));
+	m_cpu1->port8_read().set(FUNC(wsa1_state::cpu1_p8_r));
+	m_cpu1->port8_write().set(FUNC(wsa1_state::cpu1_p8_w));
+	m_cpu1->portb_read().set(FUNC(wsa1_state::cpu1_pb_r));
+	m_cpu1->sc1_txd().set(m_cpanel, FUNC(wsa1_cpanel_device::tx_byte));
+	m_cpu1->sc1_mod().set([this] (uint8_t data) { m_cpanel->rx_enable(BIT(data, 5)); });
 
 	TMP95C061(config, m_cpu2, 28_MHz_XTAL);
 	m_cpu2->set_addrmap(AS_PROGRAM, &wsa1_state::cpu2_map);
@@ -1500,6 +1810,27 @@ void wsa1_state::wsa1r(machine_config &config)
 	m_cpu2->port6_write().set(FUNC(wsa1_state::cpu2_p6_w));
 	m_cpu2->port8_read().set(FUNC(wsa1_state::cpu2_p8_r));
 	m_cpu2->port8_write().set(FUNC(wsa1_state::cpu2_p8_w));
+
+	// --- the control panel microcontroller ---------------------------------
+	//
+	// M37471M2196S on CONTROL PANEL 1, HLE'd; wsa1_cpanel.h carries the evidence
+	// that this is what serial channel 1 talks to.  The four lines it needs are
+	// the two port bits above, INT6 and SC1BUF, and every one of them is quoted
+	// from the firmware in the block comment on cpu1_p8_r().
+	//
+	// ⚠ THE SERIAL CHANNEL AND INT6 BOTH REQUIRED CORE WORK, and the overlay copy
+	// of tmp95c061 carries it: upstream's device has no serial engine at all
+	// (sc1buf_r() returned 0, nothing ever set INTES1 bit 3, so INTRX1 could not
+	// be raised from outside and inte_w() refuses to set it from a register
+	// write), and execute_set_input() implemented neither INT6 nor INT7, so
+	// set_input_line(TLCS900_INT6) was silently a no-op.  Both additions are
+	// default-inert for every other tmp95c061 machine.
+	WSA1_CPANEL(config, m_cpanel);
+	m_cpanel->atn().set([this] (int state) {
+			m_cpu1->set_input_line(TLCS900_INT6, state ? ASSERT_LINE : CLEAR_LINE); });
+	m_cpanel->busy().set([this] (int state) { m_panel_busy = state; });
+	m_cpanel->sclk().set([this] (int state) { m_panel_sclk = state; });
+	m_cpanel->rxd().set([this] (uint8_t data) { m_cpu1->sc1_rxd(data); });
 
 	// The calibration EEPROM.  64 x 16 with a 6-bit address, which is a 93C46
 	// class part; the identification is from the protocol the driver at
@@ -1572,24 +1903,9 @@ void wsa1_state::wsa1r(machine_config &config)
 	// buy speed with a claim about the hardware that nobody has checked.  Enable
 	// it only as a labelled experiment, never as the default.
 	//
-	// ALSO DELIBERATELY NOT WIRED: P5 bit 4 on CPU 1.  The boot block makes
-	// bit 4 an input and bit 3 an output (P5 = 0xFF at 0xF826BB, P5FC = 0x24 at
-	// 0xF826BE, P5CR = 0x2C at 0xF826C1).  The routine at 0xF95137 reads P5, tests bit 4,
-	// and RETURNS IMMEDIATELY if it is 1; if it is 0 it falls into 0xF95158,
-	// which shifts a byte out of (XIZ+0x08) one bit at a time and toggles P5
-	// bit 3 around software delays of 0x4000 or 0xC000 outer counts depending
-	// on the bit - a long/short blink - and its caller does that twice
-	// (0xF95149, 0xF95153, each after a `push WA`), i.e. an 8-bit code as two
-	// nibbles.  It is reached from the boot sequence at 0xF827D1 through
-	// prom_b thunk 0xF40144.
-	//
-	// MAME's unbound port read returns 0, so the emulated machine always takes
-	// the blink path and spends its first 3.13 s of emulated time there
-	// (measured: notes/wsa1-probes/wsa1_boot_milestones.lua, and the PC
-	// histogram in wsa1_retry_loop.lua pins it to 0xF95184/0xF951A7).  A
-	// constant 0x10 on P5 would skip it.  NOT ENABLED: which way that pin
-	// actually sits is a schematic question, no net has been read, and the
-	// blink is bounded - it costs 3 s of boot, it does not block it.
+	// P5 bit 4 USED TO BE ON THIS LIST and is not any more: it is the service
+	// CHECKING DEVICE's switch, the service manual says so in as many words, and
+	// it is wired above.  See the block comment on cpu1_p5_r().
 	//
 	// ⚠ The 8-bit TIMER RATE IS 16x TOO SLOW, and it is a CPU-core issue, not
 	// a driver one.  The boot block programs timer 1 as TREG1 = 0x1C counts of
