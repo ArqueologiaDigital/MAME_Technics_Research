@@ -228,3 +228,95 @@ map comment as the evidence for sizing the CS1 RAM and the CS3 DRAM.  **That
 script was never written.**  The citations have been removed; the map now rests
 on the runtime milestones above and on the disassembly tree's committed
 `scripts/analysis/mamr_reading_elimination.py`.
+
+## Model-variant detection: is there a WSA1 / WSA1R strap?  (2026-08-25)
+
+Three ROM-side probes, no emulator needed.  They exist because the question
+"does one firmware serve both the keyboard and the rack?" can only be answered
+against the WHOLE image -- `wsa1-roms-disasm` is 23% substantive, so grepping
+the `.s` files would have missed the answer, which lives in `.incbin` regions.
+
+| script | question it answers |
+|---|---|
+| `wsa1_port_strap_census.py` | every TMP95C061 port-SFR access in all four images, and which reads feed a conditional branch |
+| `wsa1_directpage_census.py` | which RAM byte behaves like a mode flag -- few writes, many `cp (a),#imm` tests, wide spread.  `--wide` / `--wide24` repeat it for the 16- and 24-bit-direct forms |
+| `wsa1_dis.sh` | disassemble a window of any image, to check a byte-pattern hit is really an instruction |
+
+```
+python3 wsa1_port_strap_census.py --gated       # port reads that gate a branch
+python3 wsa1_port_strap_census.py --null        # the false-positive floor
+python3 wsa1_directpage_census.py --image prom_a --addr 0xc4
+python3 wsa1_directpage_census.py --wide24 --all
+sh wsa1_dis.sh a 0xF82882 40 0
+```
+
+**Both scanners are byte-pattern scanners and both have a measured noise floor**
+(`--null`: prom_d is data only, plus byte-shuffled copies of each image).  For
+the port census the floor is only ~3x below signal, so nothing from it may be
+quoted until `wsa1_dis.sh` has shown it decoding from an earlier instruction
+boundary.  22 of the 110 `(0xC4)` sites were checked that way; all 22 were real.
+
+**Answer: yes.**  `prom_a 0xF82882`
+
+```
+F82882  21 01        ld A,0x01
+F82884  f0 1f c8     bit 0,(PB)        ; PB = SFR 0x1F
+F82887  6e 02        jr NZ,0xF8288B
+F82889  21 02        ld A,0x02
+F8288B  f0 c4 41     ld (0xC4),A       ; the ONLY write to (0xC4) in 512 KiB
+F8288E  0e           ret
+```
+
+PB bit 0 is an **input**: RESET writes `PBCR = 0x0C` (0xF826xx), and this
+firmware's own usage settles the convention -- P7CR = 0x33 makes exactly the two
+P7 bits it drives (`set`/`res 1,(P7)`) outputs and the two it only reads
+(`bit 2`, `bit 3`) inputs.
+
+`(0x0000C4)` is then compared against **0x01 (37 sites) or 0x02 (72 sites)** and
+nothing else, at 109 sites in 17 clusters spanning 89.4% of prom_a.  Nothing
+else in the machine has that shape: across all three direct-addressing forms on
+both CPUs, no other RAM location has one producer and >100 consumers.  The
+runner-up in prom_a's direct page, `(0xC6)`, has 212 tests but 23 writes and is
+a bit-0 lock flag.  **prom_c has no mode flag at all**, in any addressing form.
+
+What the two arms do, verified by disassembly:
+
+| site | (0xC4)=1 | (0xC4)=2 |
+|---|---|---|
+| `0xF8DC25` | calls all four A/D channel scans, then the two software ones | **skips the four A/D scans** |
+| `0xF898AD` +6 more | table lookup into `0xF89BB4` | forces the value to a constant `0x40` |
+| `0xFF42EE` | display list `0xF580B0..0xF58127` -- MIDI FILE LOAD, MIDI FILE SAVE, LOAD SINGLE SOUND, LOAD SINGLE COMBI. | display list `0xF58127..0xF58162` -- **only** LOAD SINGLE SOUND, LOAD SINGLE COMBI. |
+| `0xF90B9F` | descriptor pair `0xF286B8`/`0xF286E4` | descriptor pair `0xF28724`/`0xF28750` |
+| `0xF8294C` | requires `(0x2B32) & 7 == 7` | requires `(0x2B30) & 0x70 == 0x70` |
+
+The identification of which arm is which model is **corroboration, not decode**:
+the SX-WSA1R service manual's own specification page lists the rack's disk menu
+as "DISK LOAD, DISK SAVE, MIDI FILE DIRECT PLAY, DISK FORMAT, LOAD SINGLE SOUND,
+LOAD SINGLE COMBINATION" -- no MIDI FILE LOAD or SAVE -- and its continuous
+controls as VOLUME plus the DATA ENTRY DIAL, which is two, not six.  Both match
+the `(0xC4)=2` arm.  Nothing in the ROM spells either model name.
+
+⚠ MAME's unbound port read returns 0, so the emulated machine reads PB bit 0 low
+and **is already running as `(0xC4)=2`**.  That is a testable prediction, not a
+setting: a `PORT_CONFNAME` on PB bit 0 would switch the machine between the two.
+
+### Ruled out, with the evidence
+
+* **P5 bit 4** (`0xF95137`) -- a genuine input (P5CR = 0x2C), but it gates one
+  call chain of four routines: the diagnostic blinker at `0xF95158`, which
+  shifts eight bits out on P5 bit 3.  One branch is not a model strap.
+* **P7 bit 1** -- an **output** (P7CR = 0x33 bit 1 set).  It cannot be a strap.
+  It is the link's receiver-busy line: `INT0_LinkByte` clears it at `0xF8E4CD`,
+  `0xF8E4EC` and `0xF8E522`, each right after `ldio DMA3V,0x0A`, and only
+  `INTTC3_LinkDmaDone` restores it (`0xF8E5A8` sel 1, `0xF8E5D6` sel 3,
+  `0xF8E5EB` sel 4) plus `Link_ServiceTask`'s abort path at `0xF8E663`.
+  Selector 2 deliberately does not restore it.  So it stays low iff INTTC3
+  never completes -- a stuck handshake, not a decision.  **There is not one
+  `cp (0xC4)` anywhere in `0xF8E000-0xF8FFFF`**, so the link is variant-blind
+  and "CPU 1 decided it is a rack and is refusing keybed traffic" is refuted.
+* **P8 bit 5 / P9 bit 3** on CPU 2 -- P8 bit 5 is the Microwire EEPROM's data
+  line (`0xFC8AE6` reads it inside a 16-iteration loop clocked by `set`/`res
+  3,(P8)`, framed by `res 5,(P6)`), i.e. the path this README already documents.
+* **prom_d and the EEPROM** -- prom_d is data only and is this project's null
+  control; the EEPROM's 62 bytes are per-key velocity trim, read by CPU 2 only,
+  and no code branches on any byte of it.
