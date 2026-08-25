@@ -668,3 +668,25 @@ motor on: what does it on the real board is CPU 1's PA bit 3, and that pin's
 function is NOT ESTABLISHED (`FINDINGS-prom_a-fdc.md` sec.9), so the driver logs
 it and refuses to act on it.  The firmware would report its own error `0x31`.
 See gap T in `../WSA1-EMULATION-DISASM-GAPS.md`.
+
+### The control that isolates the motor: attach a disk and nothing changes
+
+The drive slot is real -- `./kn7000 wsa1r -listmedia` reports a `floppydisk
+(flop)` accepting `.img`/`.ima` among others, and `-listslots` shows
+`fdc:0 -> 35hd`.  So "the firmware would see nothing anyway" is testable
+directly, and it was:
+
+```
+python3 -c "open('/tmp/blank144.img','wb').write(b'\xe5'*1474560)"
+cd ~/compartilhado/kn7000_mame_build
+DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 20 -window \
+    -flop /tmp/blank144.img \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_fdc_selftest.lua
+```
+
+The image loads without complaint and **`SENSE DRIVE STATUS -> ST3` is still
+`0x18`** -- byte for byte what it reads with an empty drive.  That is the
+control: the "not ready" is NOT "no disk", it is "no motor", so gap T is the
+whole of what is missing.  (The image itself is disposable, which is why only
+the one-line recipe is committed; 1,474,560 bytes of `0xE5` is the conventional
+format filler and any raw 720 KB or 1.44 MB image would do.)
