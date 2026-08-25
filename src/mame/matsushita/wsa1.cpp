@@ -15,8 +15,9 @@
 
     The two files WILL DIVERGE, and that is intentional.  Everything added
     here beyond the upstream copy is work in progress: the LCD controller and
-    its screen, the link between the two processors, and a set of write-only
-    register-file stubs for the devices on the second processor's chip-select
+    its screen, the link between the two processors, the 61-key keybed scanner
+    and the calibration EEPROM on the second processor, and a set of largely
+    write-only register-file stubs for the rest of that processor's chip-select
     zero cluster.  Several of those rest on inferences that a MAME reviewer
     would rightly refuse until a schematic or a real machine confirms them,
     and each such inference is marked where it is made.  Do not treat this
