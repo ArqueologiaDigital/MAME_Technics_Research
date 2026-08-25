@@ -757,6 +757,33 @@ static constexpr int PRESCALE_T16  = 7;    // fc/128
 static constexpr int PRESCALE_T256 = 11;   // fc/2048
 
 
+// ---------------------------------------------------------------------------
+// OVERLAY FIX 4 (kn7000_mame, 2026-08-25) -- AN 8-BIT TIMER MATCH NOW ASKS FOR
+// A DISPATCH SCAN.
+//
+// The four `m_check_irqs = 1;` lines beside the INTET10/INTET32 request bits
+// below are new.  tlcs900_device::execute_run() (tlcs900.cpp) only calls
+// tlcs900_check_irqs() when m_check_irqs is set, and upstream's 8-bit timer
+// paths set the request flip-flop without ever setting it -- so a timer
+// interrupt was delivered only when something ELSE happened to raise the flag.
+// The setters are op_EI, op_POPSR/op_POPWSR and op_RETI in 900tbl.hxx, plus
+// inte_w/iimc_w and the serial handlers: firmware sitting in a poll loop with
+// interrupts already enabled and no EI/RETI in it would never be interrupted at
+// all.  MAME's own tmp94c241.cpp already does this (its timer_8bits() lambda
+// sets m_check_irqs beside every m_int_reg write); this file was the odd one
+// out, and OVERLAY FIX 2's 16-bit path sets it too, so leaving the 8-bit timers
+// without it made one function internally inconsistent.
+//
+// ⚠ SHARED DEVICE -- this one is a LATENCY change for every TMP95C061 machine,
+// not an additive one, and it is the change in this file most likely to be felt
+// by ngp/namcos10/dvd-n5xx/kkcount.  It cannot introduce an interrupt that the
+// firmware had not enabled (tlcs900_check_irqs() still honours the level and
+// the CPU mask), but it can move an existing one earlier.  Measured effect on
+// the machines here: none visible -- see the per-machine table in
+// notes/WSA1-EMULATION-DISASM-GAPS.md.
+// ---------------------------------------------------------------------------
+
+
 void tmp95c061_device::tlcs900_handle_timers()
 {
 	uint32_t  old_pre = m_timer_pre;
@@ -798,6 +825,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 				{
 					m_timer_8[0] = 0;
 					m_int_reg[INTET10] |= 0x08;
+					m_check_irqs = 1;   /* OVERLAY FIX 4 -- see above this function */
 				}
 			}
 		}
@@ -828,6 +856,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 			{
 				m_timer_8[1] = 0;
 				m_int_reg[INTET10] |= 0x80;
+				m_check_irqs = 1;   /* OVERLAY FIX 4 -- see above this function */
 
 				if ( m_t8_invert & 0x02 )
 				{
@@ -875,6 +904,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 				{
 					m_timer_8[2] = 0;
 					m_int_reg[INTET32] |= 0x08;
+					m_check_irqs = 1;   /* OVERLAY FIX 4 -- see above this function */
 				}
 			}
 		}
@@ -905,6 +935,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 			{
 				m_timer_8[3] = 0;
 				m_int_reg[INTET32] |= 0x80;
+				m_check_irqs = 1;   /* OVERLAY FIX 4 -- see above this function */
 
 				if ( m_t8_invert & 0x20 )
 				{
@@ -1223,10 +1254,36 @@ void tmp95c061_device::trun_w(uint8_t data)
 		m_timer_8[3] = 0;
 		m_timer_change[3] = 0;
 	}
+	// OVERLAY FIX 3 (kn7000_mame, 2026-08-25) -- TRUN bits 4 and 5 stop and
+	// clear the SIXTEEN-bit counters.
+	//
+	// Upstream cleared m_timer_8[4] and m_timer_8[5].  Those are the last two
+	// slots of the shared uint8_t m_timer_8[6] (tlcs900.h) and this device does
+	// not use them for anything -- its 16-bit up-counters UC4/UC5 live in
+	// m_timer_16[], added with OVERLAY FIX 2 -- so stopping a 16-bit timer left
+	// its count standing and the next start resumed mid-period.
+	//
+	// Figure 3.9 (10) p.101 of the TMP95C061 databook, TRUN (0020H): b4 T4RUN,
+	// b5 T5RUN, function "0: Stop & Clear, 1: Run (Count up)", and the same
+	// figure's expansion spells out "Operation of 16-bit timer (Timer 4) --
+	// 0 Stop & clear".  The equivalent code on the sibling part is
+	// tmp94c241.cpp's t16run_w, which that part needs as a separate handler
+	// because its 16-bit run bits live in their own T16RUN register at 0x9E;
+	// on the TMP95C061 they are in this one TRUN, which is why the clear
+	// belongs here.
+	//
+	// SHARED DEVICE: this only bites a driver that stops and restarts a 16-bit
+	// timer, and before OVERLAY FIX 2 no TMP95C061 machine counted them at all.
 	if ( ! ( data & 0x10 ) )
-		m_timer_8[4] = 0;
+	{
+		m_timer_16[0] = 0;
+		m_timer_change[4] = 0;
+	}
 	if ( ! ( data & 0x20 ) )
-		m_timer_8[5] = 0;
+	{
+		m_timer_16[1] = 0;
+		m_timer_change[5] = 0;
+	}
 
 	m_trun = data;
 }

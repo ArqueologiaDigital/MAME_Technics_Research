@@ -1558,6 +1558,33 @@ void tmp94c241_device::tlcs900_handle_timers()
 
 				    TREG_HIGH match generates the upper interrupt (e.g., INTTR5).
 				    TREG_LOW match generates the lower interrupt (e.g., INTTR4).
+
+				    ⚠ TWO KNOWN GAPS HERE, LEFT ALONE ON PURPOSE (2026-08-25).
+				    The sibling TMP95C061 was fixed for both this session; this
+				    part was not, because neither is observable on any Technics
+				    machine and this is a working driver.  On the TMP95C061 the
+				    databook (Toshiba TMP95C061, Figure 3.9 (3) p.95 and section
+				    3.9 (5) p.103; quotes re-checkable with
+				    notes/wsa1-probes/tlcs900_datasheet_quotes.py) says:
+
+				      (a) T4MOD/T5MOD bit 2 <CLE> chooses whether the TREG_HIGH
+				          match CLEARS the up-counter.  CLE = 0 means a
+				          free-running counter.  The code below always clears,
+				          i.e. it assumes CLE = 1.
+				      (b) The two compares are INDEPENDENT comparators, not a
+				          chain.  The `else if` below means that when TREG_LOW
+				          and TREG_HIGH hold the same value the lower interrupt
+				          can never be raised at all.
+
+				    Why the KN5000 cannot see either: its boot programs only
+				    timer 4 (T16RUN bit 0, kn5000-roms-disasm
+				    v10/maincpu/shared/boot_hw_init.s:76-82) with T4MOD = 0x05 --
+				    bit 2 set, so (a) is moot -- and TREG4 = 1 against
+				    TREG5 = 0x3D09, which are different, so (b) is moot too.
+				    Fixing it here would be a no-op that could only cost a
+				    regression, so it is documented instead.  If this part ever
+				    gets a driver that free-runs a 16-bit timer, port the
+				    tmp95c061.cpp run16() lambda.
 				*/
 				uint8_t timer_index = (timer_id - 4)/2;
 
