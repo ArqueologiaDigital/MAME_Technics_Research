@@ -72,6 +72,15 @@ Result recorded 2026-08-25 (the numbers the C++ comments quote):
     kn5000 subprogram    cr 0x7C  0 reads, 6 writes   ** WRITE-ONLY **
     kn5000 subcpu boot   cr 0x7C  none
     hd-ae5000            cr 0x7C  none
+    kn1500 ic15          cr 0x3C  4 reads, 5 writes   ** THE SAME KERNEL **
+
+★ The KN1500 line was a surprise and is worth acting on.  Its 4-read/5-write
+signature is prom_c's exactly, and the spacing between the accesses matches, so
+the SX-KN1500 runs the same Toshiba-derived RTOS as the SX-WSA1R -- which means
+its kernel was ALSO never being entered.  MAME's kn1500 has no screen device, so
+the standing gate skips its liveness check and this cannot be seen from a
+snapshot; it is a lead for whoever next works on that driver, not a claim that
+anything about it now works.
 
 The KN5000 line is the decision this script was written for.  Its firmware runs
 the same RTOS as the SX-WSA1R but keeps the nesting depth in a RAM word at
@@ -109,6 +118,8 @@ DEFAULT_ROMS = [
     (SHARED + "/kn5000-roms-disasm/original_ROMs/kn5000_subprogram_v142.rom", "TMP94C241"),
     (SHARED + "/kn5000-roms-disasm/original_ROMs/kn5000_subcpu_boot.ic30",   "TMP94C241"),
     (SHARED + "/kn5000-roms-disasm/original_ROMs/hd-ae5000_v2_06i.ic4",      "TMP94C241"),
+    (SHARED + "/technics_roms/roms/kn1500/"
+              "technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15",           "TMP95C061"),
 ]
 
 

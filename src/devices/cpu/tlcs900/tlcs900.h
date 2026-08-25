@@ -123,7 +123,27 @@ protected:
 	   Kernel_Dispatch (0xF85715) refuses to reschedule unless it reads 0, and
 	   Kernel_ServiceSoftTimers brackets its callbacks with depth++/depth--.
 	   Before this register existed, every access landed in m_dummy -- the shared
-	   "illegal register reference" scratch -- and the kernel was never entered. */
+	   "illegal register reference" scratch -- and the kernel was never entered.
+
+	   ⚠ WHAT THIS MEANS FOR THE OTHER tlcs900 DRIVERS (for review).  These files
+	   are shared, so this changes three things for everyone:
+	     1. cr 0x3C/0x7C accessed with a 16-bit LDC no longer land in m_dummy.  That
+	        is strictly a bug fix: m_dummy is a single scratch word shared with every
+	        other undecoded control-register reference, so the old value was whatever
+	        the last unrelated access happened to leave there.
+	     2. INTNEST now COUNTS.  That can only change behaviour for firmware that
+	        READS the register; firmware that ignores it, or only writes it, cannot
+	        tell.  Reading it is a TLCS-900/H RTOS idiom, so the drivers to check are
+	        the ones running an OS: ngp, namcos10 (+ namcos10_exio), dvd-n5xx and
+	        kkcount on the TMP95C061, taitopjc and taitotz on the TMP95C063.  NONE of
+	        those ROM sets is in this project's trees, so none was measured here --
+	        run notes/wsa1-probes/tlcs900_intnest_evidence.py over them to settle it
+	        in one command.  Of the two that WERE measured, the SX-WSA1R reads it and
+	        needs it; the KN5000 writes it 6 times and reads it 0 times.
+	     3. op_RETI decrements it on EVERY tlcs900 device.  tmp96c141 has no
+	        interrupt-acceptance site at all -- its tlcs900_check_irqs() is empty --
+	        so on that part the counter can only sit at 0, which is what m_dummy
+	        effectively gave it before. */
 	uint16_t  m_intnest;
 
 	/* Internal timers, irqs, etc */

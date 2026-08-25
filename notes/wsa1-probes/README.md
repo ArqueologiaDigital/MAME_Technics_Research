@@ -865,6 +865,40 @@ change what it does. That is also positive evidence for the number: 0x7C is wher
 eight-channel DMA register map leaves INTNEST, and the KN5000 uses 0x7C and never 0x3C
 while the SX-WSA1R uses 0x3C and never 0x7C.
 
+### ★ The SX-WSA1 (non-R) reaches SOUND MODE too, with its OWN layout
+
+`screens/wsa1_intnest_sound_mode.png`, captured the same way with
+`tools/rigs/snap_at.lua`. It draws **two** parameter panes side by side where the
+SX-WSA1R draws one, which is the first screen-level confirmation that the two
+systems really are different machines and not a cosmetic split.
+
+### Regression: what this change was checked against
+
+The four files touched are shared by every tlcs900 driver in MAME, so the whole
+standing gate was re-run on the built binary (`./tools/gate.sh`):
+
+```
+17 passed, 0 failed, 1 skipped
+  liveness  kn7000 distinct=12   kn5000 distinct=20   kn6000 distinct=9
+            kn6500 distinct=8    kn2400 distinct=4    kn2600 distinct=4
+  oracle    kn7000 audio md5 780de131e33a4a0c99d092b57a074247   (unchanged)
+  oracle    kn5000 demo  md5 4c8671b68f446cd3f6c10c8784e7748f   (unchanged)
+  SKIP      liveness kn1500 -- no screen device
+```
+
+Every liveness figure equals the per-model value recorded on 2026-08-14, and the
+**KN5000 demo-audio capture is byte-identical to its pinned baseline** -- that is
+90 emulated seconds of the tone generator playing, i.e. tens of thousands of
+interrupts and RETIs on the TMP94C241, producing exactly the same wav as before.
+
+Machines not covered by the gate, checked by hand:
+
+| machine | CPU | result |
+|---|---|---|
+| `wsa1`, `wsa1r` | TMP95C061 | verifyroms OK; both now draw SOUND MODE |
+| `kn1500` | TMP95C061 | runs 30 s at 99% speed, exit 0, no new warning. MAME gives it no screen device, so there is no visual check -- and note its ROM DOES read cr 0x3C |
+| `kn2400`/`kn2600`/`kn6000`/`kn6500`/`kn7000` | MN10300 | not tlcs900 at all (confirmed from `-listdevices`), so these files cannot reach them |
+
 **With that in, the panel already works.** 72 of 88 positions produce
 2 INT6 dispatches and 2 writes to the button shadow per press-and-release -- the
 16 that do not are SEG6 and SEG10, which the variant-2 wire map omits. None of

@@ -571,6 +571,7 @@ void tmp95c061_device::tlcs900_check_irqs()
 		uint8_t vector = tmp95c061_irq_vector_map[irq].vector;
 
 		tlcs900_intnest_accept();   /* INTNEST: see tlcs900.h -- the frame op_RETI will unwind */
+
 		m_xssp.d -= 4;
 		WRMEML( m_xssp.d, m_pc.d );
 		m_xssp.d -= 2;
@@ -690,38 +691,65 @@ void tmp95c061_device::tlcs900_change_tff( int which, int change )
 // ---------------------------------------------------------------------------
 // OVERLAY FIX 1 (kn7000_mame, 2026-08-25) -- PRESCALER TAP SCALE.
 //
-// Upstream taps the prescaler at >>7, >>9, >>11 and >>15, i.e. fc/128, fc/512,
-// fc/2048 and fc/32768.  On the TLCS-900 family the prescaler is fed at fc/2
-// and divided by 4/16/64/1024, so the four taps are fc/8, fc/32, fc/128 and
-// fc/2048 -- shifts 3, 5, 7 and 11.  Upstream is therefore uniformly 16x SLOW.
+// Upstream taps the shared 9-bit prescaler at >>7, >>9, >>11 and >>15, i.e.
+// fc/128, fc/512, fc/2048 and fc/32768.  That is uniformly 16x SLOW.
 //
-// THREE INDEPENDENT WITNESSES, none of them this file:
+// PRIMARY SOURCE, and it is unambiguous.  Toshiba, "TLCS-900 Series CMOS 16-bit
+// Microcontrollers TMP95C061", 192pp, Table 3.8 (1) on page 81, "Setting the
+// Interrupt Period and Input Clock for 8 Bit Timer", column "Input clock",
+// verbatim:
 //
-//  1. MAME's own sibling part.  tmp94c241.cpp:1452-1455 declares
-//     `T1 = 3, T4 = 5, T16 = 7, T256 = 11` and uses exactly those.
+//         oT1 (8/fc)      oT4 (32/fc)      oT16 (128/fc)      oT256 (2048/fc)
 //
-//  2. The Technics SX-WSA1R firmware, measured.  prom_a's RESET programs
-//     T01MOD = 0x0D (0xF826EB), so timer 1 is clocked from phiT256, and
-//     TREG1 = 0x1C (0xF826F4).  At fc = 28 MHz, phiT256 = fc/2048 gives
-//     28e6/2048/28 = 488.28 Hz, which is the rate every delay routine in
-//     prom_b and the link's 500- and 2500-tick deadlines are written against.
-//     With upstream's >>15 the same registers give 28e6/32768/28 = 30.5 Hz,
-//     and 30.4 Hz is what the firmware's own tick counter at RAM 0x0080 was
-//     MEASURED advancing at (kn7000_mame/notes/wsa1-probes/wsa1_tick_counter.lua).
+// -- so shifts 3, 5, 7 and 11.  Page 73 (section 3.8 (1)) says the same 9-bit
+// prescaler generates "input clock for 8-bit Timer 0/1, Timer 4/5 and Serial
+// Interface 0/1", which is why the 16-bit timers below share these constants,
+// and page 95 (Figure 3.9 (3), T4MOD) repeats "01: oT1 (8 / fc)" in the 16-bit
+// timer's own clock-select table.
 //
-//  3. The same firmware, from the ROM alone and independent of fc.  Its
-//     sequencer tempo path divides 140,000,000 = 5*fc by 64*BPM to get TREG5
-//     (prom_a 0xFAA378), which is only consistent with phiT1 = fc/8 at 96 PPQN
-//     -- see wsa1-roms-disasm/notes/FINDINGS-system-clock.md, lever B, whose
-//     fc = 28 MHz agrees with lever A's separate derivation from prom_c's
-//     baud-rate rule at 0xF991A2.
+// ** THE TAPS ARE STATED AS RATIOS TO fc, NEVER AS FREQUENCIES.  That is what
+// closes the "residual x2" that every firmware-only derivation of this scale
+// was left with: the shift is 3 whatever the crystal turns out to be, and any
+// remaining doubt about the machine belongs to the driver's clock() line, not
+// to this file. **
 //
-// SHARED DEVICE.  tmp95c061 is also used by ngp/ngpc and namcos10.  Those
-// drivers were written against the 16x-slow behaviour, so anything in them
-// tuned by ear to MAME's timing may change.  Nothing here is tuned TO the
-// WSA1: these are the family taps, and if an SNK or Namco regression appears
-// the right fix is in that driver, not in restoring a tap scale that three
-// independent derivations reject.
+// Re-check every quote in one command:
+//     python3 notes/wsa1-probes/tlcs900_datasheet_quotes.py <the pdf>
+// (13 text-layer quotes, plus the six register bit-maps that are scanned
+// figures, transcribed with their page numbers.  The script carries the
+// bitsavers URL and the file's sha256; the PDF itself is not committed.)
+//
+// CORROBORATION, measured on the machine that found the bug: the SX-WSA1R's
+// prom_a programs T01MOD = 0x0D (0xF826EB) so timer 1 counts oT256, and
+// TREG1 = 0x1C = 28 (0xF826F4).  At fc = 28 MHz that is 28e6/2048/28 =
+// 488.28 Hz, and 488.0 Hz is what its millisecond counter at RAM 0x0080 is
+// MEASURED advancing at with these constants; with upstream's >>15 the same
+// registers gave 30.4 Hz (notes/wsa1-probes/wsa1_tick_counter.lua, and the
+// before/after pair in notes/wsa1-probes/tlcs900_prescaler_control.patch).
+//
+// ⚠ TWO EARLIER JUSTIFICATIONS FOR THIS CHANGE WERE WITHDRAWN and must not be
+// put back.  (a) "MAME's own sibling tmp94c241.cpp already uses 3/5/7/11" is
+// this project's own prior reading of the same question (MAME 2905f85348f, by
+// this repo's author), so it is one derivation counted twice.  (b) "prom_a's
+// tempo tracker multiplies timer-1 counts by 1750 at 0xFA5553" cannot
+// adjudicate at all: that ratio is oT256/oT1, which is 256 under BOTH the
+// datasheet scale (2048/8) and upstream's (32768/128), so it predicts the same
+// constant either way.  The published "16.4x off" figure came from pairing this
+// part's oT256 with the tmp94c241's oT1.
+//
+// ⚠ SHARED DEVICE -- what this means for the non-Technics users, for the later
+// review Felipe asked for rather than now.  Every 8-bit timer on every
+// TMP95C061 machine gets 16x faster: snk/ngp.cpp (6.144 MHz, the only other
+// driver where this part is the main CPU running game code, and by far the
+// best-exercised -- it is the one to A/B), namco/namcos10.cpp's memp3_mcu and
+// namcos10_exio, samsung/dvd-n5xx.cpp and skeleton/kkcount.cpp (the last two
+// instantiate TMP95C061 as a stand-in for a TMP91C219F and a TMP95C265P, so
+// "correct for the TMP95C061" is not even the right question there).  ngp is
+// evidence FOR the change, not against it: SNK's own NGP developer manual
+// states "T16 is 128/fc. 6144000/128 = 48000hz", which is this scale and not
+// upstream's fc/2048 = 3 kHz.  upstream tmp95c063.cpp carries the identical
+// wrong shifts (taitopjc, taitotz) and is deliberately NOT changed here -- same
+// treatment, separate change, separately tested.
 // ---------------------------------------------------------------------------
 static constexpr int PRESCALE_T1   = 3;    // fc/8
 static constexpr int PRESCALE_T4   = 5;    // fc/32
@@ -905,45 +933,90 @@ void tmp95c061_device::tlcs900_handle_timers()
 	// The TMP95C061 has two 16-bit units:
 	//   "timer 4": up-counter UC4, compare TREG4/TREG5, T4MOD, T4FFCR, INTET54
 	//   "timer 5": up-counter UC5, compare TREG6/TREG7, T5MOD, T5FFCR, INTET76
-	// TRUN bit 4 runs the first and bit 5 the second (bits 0-3 are the 8-bit
-	// timers, bit 7 the prescaler), and each unit's clock comes from T4MOD /
-	// T5MOD bits 1:0 = TIn pin / phiT1 / phiT4 / phiT16.
 	//
-	// Compare behaviour is modelled on MAME's own tmp94c241.cpp:1531-1571:
-	// a match on the HIGH register (TREG5 / TREG7) clears the counter and
-	// raises the upper interrupt (INTTR5 / INTTR7, flag 0x80); a match on the
-	// LOW register (TREG4 / TREG6) raises the lower one (INTTR4 / INTTR6,
-	// flag 0x08) and does not clear.
+	// EVERYTHING BELOW IS FROM THE DATABOOK, not from a sibling device.  Quotes
+	// are re-checkable with notes/wsa1-probes/tlcs900_datasheet_quotes.py;
+	// pages are Toshiba's "TLCS-900 Series CMOS 16-bit Microcontrollers
+	// TMP95C061".
 	//
-	// WHY THAT PAIRING IS RIGHT HERE, from the SX-WSA1R's own ROM: prom_a's
-	// RESET writes TREG4 = 0x0001 (0xF8270C/0xF8270F), TREG5 = 0x3D09 = 15625
-	// (0xF82712/0xF82715), T4MOD = 0x05 (phiT1) and TRUN = 0xB7 (0xF8272A),
-	// and enables ONLY the lower interrupt: INTET54 = 0x03 (0xF827CE) is
-	// INTTR4 at level 3 and INTTR5 at level 0.  With this model INTTR4 fires
-	// once per TREG5 period -- one count after each clear -- so the interrupt
-	// RATE is set by TREG5, which is exactly what the firmware's tempo setter
-	// at 0xFAA350 assumes when it stores 140,000,000/(64*BPM) into TREG5 and
-	// counts 96 ticks to the beat at 0xF82EB1.  At fc = 28 MHz and phiT1 =
-	// fc/8 the boot value 15625 gives 224 Hz = 96 PPQN at 140 BPM.
+	//  * TRUN (0020H), Figure 3.9 (10) p.101: b7 PRRUN, b5 T5RUN, b4 T4RUN,
+	//    b3..b0 T3..T0RUN, each "0: Stop & Clear, 1: Run (Count up)".
+	//  * T4MOD (0038H), Figure 3.9 (3) p.95 -- and T5MOD (0048H), Figure
+	//    3.9 (6) p.98, identical layout:
+	//        b2 CLE   0 = Clear disable, 1 = Clear by match with TREG5 (TREG7)
+	//        b1:b0    00 external TI4/TI6 pin, 01 phiT1, 10 phiT4, 11 phiT16
+	//  * Comparators, section 3.9 (5) p.103: "These are 16-bit comparators
+	//    which compare the up-counter UC4/UC5 value with the set value of
+	//    (TREG4, TREG5 / TREG6, TREG7) to detect the match.  When a match is
+	//    detected, the comparators generate an interrupt (INTTR4, INTTR5 /
+	//    INTTR6, INTTR7), respectively.  The up-counter UC4/UC5 is cleared only
+	//    when UC4/UC5 matches TREG5/TREG7.  (The clearing of up-counter UC4/UC5
+	//    can be disabled by setting T4MOD <CLE>/T5MOD <CLE> = 0)."
+	//  * Table 3.3 (1) p.12 names the pairing outright: INTTR4 is "16-bit
+	//    timer4 (TREG4)" at vector 0050H, INTTR5 is "(TREG5)" at 0054H, INTTR6
+	//    "(TREG6)" at 0058H, INTTR7 "(TREG7)" at 005CH.
 	//
-	// NOT MODELLED, deliberately: the TIn external clock sources, the capture
-	// registers (CAP1-CAP4 still read back whatever m_t16_cap holds),
-	// T4FFCR/T5FFCR flip-flop inversion and the T45CR PPG modes.  Nothing in
-	// the Technics firmware uses them and inventing them would be worse than
-	// leaving them visible as gaps.
+	// TWO CONSEQUENCES THAT tmp94c241.cpp GETS WRONG, so do not "simplify" this
+	// back towards it.  Its timer_16bits() (tmp94c241.cpp:1546-1585) ignores
+	// CLE and chains the two compares with an `else if`:
 	//
-	// SHARED DEVICE, but this half is ADDITIVE: on any machine whose firmware
+	//  (a) CLE.  The SX-WSA1R writes T5MOD = 0x02 at prom_a 0xF82718 -- clock
+	//      select 10 = phiT4, and CLE = 0 -- then starts timer 5 (TRUN = 0xB7
+	//      at 0xF8272A, bit 5).  UC5 is a FREE-RUNNING counter on that machine,
+	//      wrapping at 0x10000; clearing it on the TREG7 match would run it
+	//      4.4x fast.  The SX-KN1500 does the same (T5MOD = 0x02 at 0xFE5FB5+3,
+	//      TRUN = 0xFF at 0xFE5FCC).
+	//  (b) Two comparators, not a chain.  The SX-WSA1R writes TREG6 = TREG7 =
+	//      0x3A98 (0xF8271E..0xF82727).  With an `else if`, INTTR6 can never be
+	//      raised at all on that machine; the databook has two independent
+	//      comparators, so an equal pair raises both.
+	//
+	// Neither is observable on the SX-WSA1R today -- INTET76 is never written,
+	// so both of timer 5's levels stay 0 and neither interrupt is dispatched --
+	// but this device is shared by nine systems and the model should be right.
+	//
+	// WHAT THE SEQUENCER NEEDS, from the SX-WSA1R's own ROM: prom_a's RESET
+	// writes TREG4 = 0x0001 (0xF8270C/0xF8270F), TREG5 = 0x3D09 = 15625
+	// (0xF82712/0xF82715), T4MOD = 0x05 (phiT1, CLE = 1) and TRUN = 0xB7, and
+	// enables only the lower interrupt: INTET54 = 0x03 (0xF827CE) is INTTR4 at
+	// level 3, INTTR5 at level 0.  So INTTR4 fires once per TREG5 period -- one
+	// count after each clear -- and the RATE is set by TREG5, which is what the
+	// tempo setter at 0xFAA350 assumes when it stores 140,000,000/(64*BPM)
+	// there and counts 96 ticks to the beat at 0xF82EB1.  At fc = 28 MHz and
+	// phiT1 = fc/8 the boot value 15625 gives 224 Hz = 140 BPM -- but that is a
+	// BOOT TRANSIENT of about twelve seconds: prom_a then stores 18229
+	// (0xFA5559 ld WA,0x4735) and the steady state is 192.00 Hz = exactly
+	// 120.00 BPM.  Measured: notes/wsa1-probes/wsa1_treg5_audit.lua.
+	//
+	// NOT MODELLED, deliberately, and each is a real gap rather than a
+	// simplification: the TI4/TI6 external clock sources (T4MOD b1:b0 = 00,
+	// which is also the RESET default); the capture registers CAP1-CAP4, both
+	// the pin-triggered paths and the software capture at T4MOD <CAP1IN>
+	// (cap12_r/cap34_r keep returning whatever m_t16_cap holds, i.e. zero); and
+	// the TFF4/TFF5/TFF6 output flip-flops that T4FFCR/T5FFCR drive, which is
+	// also what the PPG output mode is built from.  Both Technics firmwares
+	// write T4FFCR = T5FFCR = 0x00, requesting no inversion at all.
+	// T45CR needs no decode: Figure 3.9 (9) p.101 shows it is b0 DB4EN /
+	// b1 DB6EN (TREG4/TREG6 double-buffer enable) and b2 PG0T / b3 PG1T
+	// (pattern-generator shift trigger width), and both firmwares write 0x00 --
+	// every field at its reset default -- so storing it unread is exact here.
+	//
+	// SHARED DEVICE, and this half is ADDITIVE: on any machine whose firmware
 	// leaves TRUN bits 4-5 clear, or leaves INTET54/INTET76 at 0, nothing
 	// changes at all, because tlcs900_check_irqs() will not dispatch a level-0
-	// interrupt.  Only a driver that programmed these timers and silently
-	// relied on them never firing could notice.
+	// interrupt.  What a driver COULD notice is (i) firmware that polls the
+	// INTET54/INTET76 request flags, which now get set, and (ii) micro-DMA:
+	// Table 3.3 (1) gives these four interrupts HDMA start vectors 14H-17H, so
+	// a channel programmed with one of those would now begin transferring.  On
+	// the SX-WSA1R the only DMA start vectors ever written are 0x0A, 0x0E and
+	// 0x12.
 	// -----------------------------------------------------------------------
 	{
 		auto const tap16 = [this, old_pre] (int unit, uint8_t mode)
 		{
 			switch( mode & 0x03 )
 			{
-			case 0x00:  /* TI4 / TI5 external pin -- not modelled */
+			case 0x00:  /* TI4 / TI6 external pin -- not modelled */
 				break;
 			case 0x01:  /* T1 */
 				m_timer_change[4 + unit] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
@@ -957,21 +1030,31 @@ void tmp95c061_device::tlcs900_handle_timers()
 			}
 		};
 
-		auto const run16 = [this] (int unit, int reg_lo, int reg_hi, int intreg)
+		auto const run16 = [this] (int unit, int reg_lo, int reg_hi, int intreg, uint8_t mode)
 		{
+			/* T4MOD/T5MOD <CLE>, bit 2: 1 = clear UC on the TREG5/TREG7 match,
+			   0 = clear disabled, i.e. a free-running 16-bit counter. */
+			const bool clear_enable = BIT( mode, 2 );
+
 			for( ; m_timer_change[4 + unit] > 0; m_timer_change[4 + unit]-- )
 			{
 				m_timer_16[unit] += 1;
-				if ( m_timer_16[unit] == m_t16_reg[reg_hi] )
-				{
-					m_timer_16[unit] = 0;
-					m_int_reg[intreg] |= 0x80;
-					m_check_irqs = 1;
-				}
-				else if ( m_timer_16[unit] == m_t16_reg[reg_lo] )
+
+				/* Two INDEPENDENT comparators -- not a chain.  When the two
+				   compare registers hold the same value both interrupts are
+				   requested, which is exactly what the SX-WSA1R's
+				   TREG6 == TREG7 == 0x3A98 asks for. */
+				if ( m_timer_16[unit] == m_t16_reg[reg_lo] )
 				{
 					m_int_reg[intreg] |= 0x08;
 					m_check_irqs = 1;
+				}
+				if ( m_timer_16[unit] == m_t16_reg[reg_hi] )
+				{
+					m_int_reg[intreg] |= 0x80;
+					m_check_irqs = 1;
+					if ( clear_enable )
+						m_timer_16[unit] = 0;
 				}
 			}
 		};
@@ -980,7 +1063,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 		if ( m_trun & 0x10 )
 		{
 			tap16( 0, m_t16_mode[0] );
-			run16( 0, 0, 1, INTET54 );
+			run16( 0, 0, 1, INTET54, m_t16_mode[0] );
 		}
 		else
 			m_timer_change[4] = 0;
@@ -989,7 +1072,7 @@ void tmp95c061_device::tlcs900_handle_timers()
 		if ( m_trun & 0x20 )
 		{
 			tap16( 1, m_t16_mode[1] );
-			run16( 1, 2, 3, INTET76 );
+			run16( 1, 2, 3, INTET76, m_t16_mode[1] );
 		}
 		else
 			m_timer_change[5] = 0;
