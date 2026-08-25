@@ -502,3 +502,48 @@ will not dispatch it.  INT6, P8 and PB need no core work.
 link unless **P8 bit 5 reads HIGH and PB bit 4 reads LOW**.  MAME's unbound port
 read returns 0, so P8.5 reads low, the four-way test never passes, the 200
 retries burn and no command and no LED frame ever leaves CPU 1.
+
+---
+
+## Adversarial re-check of the panel report — `wsa1_panel_report_refutation.py`
+
+```
+python3 wsa1_panel_report_refutation.py --selftest   # non-zero if any measurement moves
+```
+
+Re-derives the load-bearing numbers of the "SC1 is the control panel" report
+(`d2f173b`) from the ROM bytes without importing the report's own probes.
+The central claim survives and gets **stronger**; four numbers do not.
+
+**Survives, and is understated.** Over the whole 512 KiB of prom_b there are
+**4,399** common substrings ≥ 16 bytes with the KN5000 v10 ROM (126,327 bytes).
+Exactly **8** of them land in the KN5000 panel driver, and **all 8** come from
+the SC1 module. That is a bijection between the two objects, not a cluster, and
+it is a much better argument than "8 of 8 landed in 0.13 % of the ROM".
+⚠ The count 8 is window-sensitive: a 9th run ≥ 16 B begins at the module's
+*last* byte (`0xF5B44D` → KN5000 `0xFC3E4E`) and ends exactly where the panel
+driver begins.
+
+**Corrections.**
+
+| the report says | the ROM says |
+|---|---|
+| panel driver = 2,767 bytes, 0.13 % | `0xFC3E65-0xFC4C33` = **3,535 bytes, 0.169 %** — and `wsa1_kn5000_panel_bytediff.py` already prints 3535 |
+| Dev7A_StartDma: 10/10 opcodes, **9/10 directions** | 10/10 opcodes, **7/10 directions** — there are THREE SCAN commands (0xD1/0xD9/0xDD) in the device→RAM group, not one. Null added: only 59 of 256 byte values are legal uPD765 command bytes, so P(ten arbitrary bytes all legal) ≈ 4.2e-7 |
+| shadow at `0x2B20 + (addr&0x0F) + 0x10` | `0xF5B0FD` is `and W,0x4F / bit 6,W / jr Z / sub W,0x30 / add L,W`: index = `(addr&0x0F) \| ((addr&0x40)>>2)`. The `+0x10` is **conditional on address bit 6** — true for 0xC0..0xCF, not a rule |
+| 0xD1 is "**the one** curve with a dead zone" | 0xD1's 256-entry table has an 18-entry plateau at 0x80 (as reported) **and** 0xD2's 128-entry table has a 13-entry plateau at 0x40, its own midpoint. Variant 1 has **two** centre-detented controls |
+
+**Confirmed exactly, byte for byte:** the eight-run diff (8 / 154 B); the variant
+group tables (11 vs 9 button segments, 0xC6 and 0xCA absent in V2; D0-D3+D7 vs
+D3+D7); the LED wire tables (`C0 C1 C2 C4 C5 C9 CC CD` vs `C1 C2 C9 CA CB CC C3 00`);
+the length rule at `0xF5ADD7`; the RX/TX handler grouping 2/1/3/2 and 3/1 on both
+machines; the 10-byte dispatchers; 22 / 12 / 10 / 8 leading bytes at the claimed
+offsets; the 2/6/51 tick constants on both machines; the P8.5-HIGH/PB.4-LOW idle
+test at `0xF5AB7B`; `SENSE INTERRUPT STATUS` at `0xFE6894`.
+
+**What the report did not say, and should have.** CPU 1's ports 5, 8, 9, A and B
+are all unbound in `wsa1.cpp` (only `port7_read/write` is set at :1498), so they
+read 0. That means PB bit 0 reads 0, `(0xC4)` becomes **2**, and the emulated
+machine is today running the **rack** code path through 111 strap gates — not
+just failing to transmit on SC1. P5.4 reads 0 for the same reason, so the
+CHECKING-DEVICE self-test blink at `0xF95137` runs on every boot.
