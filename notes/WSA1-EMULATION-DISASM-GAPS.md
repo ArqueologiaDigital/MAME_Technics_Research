@@ -8,6 +8,15 @@ driver work that followed. **Gaps B, E and L are CLOSED**, gap C's leading hypot
 six new gaps (N to S) are added, and a section on the variant hypothesis records exactly what was
 and was not established so nobody repeats the search.
 
+**Revised again 2026-08-25 (evening), after the FLOPPY CONTROLLER WAS IMPLEMENTED.** `wsa1.cpp`
+now instantiates a `upd765a_device` with a 3.5 inch drive on it and wires INT5, INT7 and TC.
+Changes in this revision: **gap B is fully closed and gap J with it**; **gap A is HALF closed** and
+this file now says exactly which half; **gap D's question is answered NO, with a reason**, so it
+has to be re-asked differently; gap C gains one located caller; gap F gains a two-routine shortest
+path; and **six new gaps, T to Y, come out of the driver work itself** -- one of which (T) is now
+the single thing standing between "the floppy controller is emulated" and "the machine can read a
+disk".
+
 This is a **request list**, not a summary. Every entry is a question a disassembly wave could
 answer, with what the driver does instead today and where to start looking. It is deliberately
 short: only gaps that change what the emulator can *do*.
@@ -29,54 +38,90 @@ the six undumped wave ROMs, the DACs, the DSPs -- is downstream of knowing which
 pitch, which is a sample address and which is a level. Today the driver stores 4096 words and
 synthesises nothing, and it cannot do better, because no note anywhere names one register.
 
-**2. ~~What the 0x7B0004/0x7B0005 + 0x7A0000 subsystem is (gap B).~~ CLOSED: it is the FLOPPY
-CONTROLLER.** All ten direction codes are legal uPD765 command bytes carrying exactly the MT/MFM
-flags each command may take, and only 59 of the 256 byte values are legal commands, so ten
-arbitrary bytes all landing legal has probability ~4.2e-7. The control panel turned out to be
-somewhere else entirely -- serial channel 1, gap E, also now closed. See gap B below for what is
-still open inside it.
+**2. What drives the floppy drive's MOTOR -- i.e. what is CPU 1's PA bit 3 (gap T, NEW).** The
+floppy controller is now a real `upd765a_device` in the driver and it answers the firmware's own
+reset/SENSE-INTERRUPT/SPECIFY sequence correctly
+(`notes/wsa1-probes/wsa1_fdc_selftest.lua`, 5 checks, 0 failures). What it cannot do is READ
+anything: MAME's `floppy_image_device` only reports READY once its motor line has been driven, and
+the one output the FDC module owns outside its two device windows -- PA bit 3, set by operation 7
+and cleared by operation 6 -- is marked NOT ESTABLISHED, so the driver logs it and refuses to act
+on it. Consequence, measured: `SENSE DRIVE STATUS -> ST3 = 0x18`, RY clear, which is the firmware's
+error 0x31 "drive not ready". **One pin, and the whole disk subsystem turns on.**
 
-**2 (replacement). Which panel button is which bit (gap O).** The panel protocol is decoded and the
-device is wired, so the machine now HAS a front panel -- but the map from a legend to a
-(segment, bit) pair is not established, so the user can only press positions.
+~~**What the 0x7B0004/0x7B0005 + 0x7A0000 subsystem is (gap B).**~~ **CLOSED AND IMPLEMENTED.** It
+is the floppy controller; see gap B below, which now has nothing open in it that a disassembly wave
+can take.
 
-**3. Why CPU 1 never releases the link's receiver-busy line (gap C).** The emulated CPU 2 sends
+**3. Which panel button is which bit (gap O), which is now load-bearing twice over.** It was "the
+user can only press positions". It is now also **the only way anything in this machine can be made
+to use its disk drive**: measured, a 200-second boot of either variant never touches the FDC's
+registers at all, and a sweep that pressed all 88 declared panel positions one at a time, for half
+a second each, produced ZERO accesses to `0x7B0004`/`0x7B0005`/`0x7A0000`
+(`notes/wsa1-probes/wsa1_fdc_probe.lua`, `wsa1_fdc_button_sweep.lua`). `Fdc_Request` has eight call
+sites and none of them is on the boot path or one panel press away.
+
+Runner-up, and unchanged in substance: **why CPU 1 never releases the link's receiver-busy line
+(gap C).** The emulated CPU 2 sends
 exactly ONE packet per boot and is then locked out for good. That is measured, not suspected,
 and it is what stands between "the keybed model is read by the firmware" -- which is now
 demonstrated -- and "a key press reaches the tone generator". It is also the narrowest of the
 three: one interrupt handler on one side. ⚠ The tempting explanation -- "CPU 1 knows it is a rack
 and is refusing keybed traffic" -- is REFUTED; see the variant section below.
 
-Runner-up: **whether prom_d is the content of the flash at 0xE80000, tied to one instruction
-(gap D)**. prom_d is 512 KiB of tone data already in hand and mapped nowhere; CPU 1 reads remote
-banks 0xE8-0xEC over the link, so closing the tie makes the voice data path reachable end to end
-without dumping anything new.
+⚠ The old runner-up, **gap D**, has to be re-asked: the specific test it named was run and the
+answer is NO. See gap D below.
 
 ---
 
 ## The list
 
-### A. What does a 0x0010C000 register do? -- PRIORITY 1, blocks audio entirely
+### A. What does a 0x0010C000 register do? -- PRIORITY 1, HALF CLOSED, still blocks audio
 
-**Question.** For at least one register block of the device at CPU 2's `0x0010C000`: what
-physical quantity does it carry? Concretely -- which block holds a pitch/phase increment, which
-holds a wave start address, which holds an envelope level, and what are the units?
+**HALF CLOSED 2026-08-25** by `notes/FINDINGS-prom_c-dev10c-producers.md`, and the half that is
+closed is worth stating precisely because the note itself had to correct its own title over it.
 
-**Why it matters.** The driver models this port as an address latch plus a 4096-word register
-file that stores and never acts (`tg_addr_w` / `tg_data_w` in `wsa1.cpp`). That is all it can
-honestly do. A sound device needs one identified register to start from; with pitch and level
-alone a first audible note becomes possible even with placeholder waveforms.
+**WHAT IS NOW SETTLED.** All twenty-one routines this entry used to name as "still `.incbin`, so
+which staged word is which parameter is not established" -- `0xFA8347`, `0xFA83CC` and the rest --
+**are converted**, and there is now a per-register producer index:
+`python3 notes/prom_c_dev10c_field_sources.py`. `Dev10C_WriteAllChanRegs` (`0xFB713A`) moves 22
+words out of the staging struct at RAM `0x00D75E` into 22 register blocks of one channel, and
+**21 of the 22 words have a LOCATED producer**, 70 write sites in all. Word 0 has none, because
+block 0 is written with the literal `0x8100` inside the device writer itself.
 
-**Where to look.**
-* `notes/FINDINGS-prom_c-tone-generator.md` sec.10 names the unconverted fillers of the staging
-  struct at RAM `0x00D75E`: **`0xFA8347`** and **`0xFA83CC`**. The drivers below them only move
-  words; these are where a value is computed.
-* `notes/FINDINGS-prom_c-voice-module.md` sec.5: `VoiceParams_Compute_{A,B,C,D}` and the 17-26
-  small helpers each `VoiceRegs_Stage_*` calls, contiguous in **`0xFA81xx-0xFAB7xx`**, "the
-  obvious next target and every routine in it now has a named caller".
-* The float library is already decoded (`notes/FINDINGS-prom_c-eeprom-and-runtime.md` sec.2), so
-  a compute routine's arithmetic can be read rather than guessed -- and note `Float32_Multiply`
-  is really `a / (1/b)`, two roundings, which any re-implementation has to copy.
+The word -> block map is now in the driver too, in `tg_data_w()`'s log line: blocks 0-6, 0x10-0x14
+and 0x20-0x29 carry staging words 0-6, 7-11 and 12-21. So a trace can be joined to a producer list
+instead of being a bare register number. That is a DECODE improvement and nothing more.
+
+**WHAT IS STILL OPEN, and it is the whole original question.** *"Located, not named."* Every
+producer in that index is a bare `sub_XXXXXX` label. **Not one register in this device is called
+pitch, level, wave address or anything else, here, in the source, or in the driver.** No
+synthesis is possible on this, and the driver still stores 4096 words and acts on none of them.
+
+**So the next ask is NAMING, not locating**, and it is three concrete questions:
+1. **Which block is the PITCH / phase increment**, and in what units -- a phase increment per
+   sample, a semitone-and-fraction, a divisor?
+2. **Which block carries a WAVE START ADDRESS** (and is there a second for the loop point)? The
+   six wave mask ROMs are undumped, but an address-shaped register is recognisable by its width
+   and by arithmetic that shifts rather than adds.
+3. **Which block is a LEVEL / envelope target**, and is it linear or logarithmic?
+
+**Where to look, in the order the producer index makes cheapest.**
+* **Word 6 -> block `0x0180 + channel` first**, because it is the ONE register the firmware reads
+  back (gap F) and it has exactly **two** producers: `sub_FA96F7__FA9801` and `sub_FA9C60__FA9F06`.
+  Two routines, one register, and an emulator stub already waiting for the answer.
+* **Eleven of the 22 words have exactly two write sites** -- words 2, 3, 6, 10, 11 and 16-21. A
+  register with two producers is one routine-read away from a meaning.
+* Word 1 -> block `0x0040 + channel` has the most (nine sites, six routines), four of which are the
+  same shape stepping record arrays of stride 8, 6, 6 and 4 through the shared 28-byte callee
+  `sub_FC4D85` -- the strongest structural signal in the subsystem.
+* ⚠ **Do not import the `0x00104000` formula into this gap.** `FINDINGS-prom_c-dev10c-producers.md`
+  sec.3 derives `SAT(P[+0x0A] + P[+0x12] +/- delta)` for registers `0x0040`/`0x0080 + chan`, and
+  says in as many words that **those are `0x00104000` registers, not `0x0010C000` ones**. Both
+  devices have a block `0x0040 + chan`; the note has already had to retract one confusion of the
+  two peripheral bases.
+* The float library is decoded (`notes/FINDINGS-prom_c-eeprom-and-runtime.md` sec.2), so a compute
+  routine's arithmetic can be read rather than guessed -- and note `Float32_Multiply` is really
+  `a / (1/b)`, two roundings, which any re-implementation has to copy.
 * A note number reaches this path through `MidiNote_Dispatch` (`0xFB3F36`); the per-voice record
   array is at RAM `0x00003BCF`, stride `0x44`, index == hardware channel.
 
@@ -100,18 +145,44 @@ not by elimination:
   `DMA0V = 0x0E` and `(0x0E & 0x1F) << 2 = 0x38` = INT7), and PB bit 3 is pulsed at every channel-0
   completion (`PortB3_Pulse`, `0xFE594C`) -- the shape of a terminal-count or acknowledge strobe.
 
-⚠ **Two things inside it are still open, and they are what a disassembly wave should take.**
-1. **Direction: 7 of 10, not 10 of 10.** The three SCAN commands (`0xD1`, `0xD9`, `0xDD`) need a
-   CPU -> FDC data phase and sit in the device -> RAM group. Recorded, not explained.
-2. **The status classifier and the packet consumer are still `.incbin`**: `0xFE5A41` (masks `0xE0`,
-   compares `0x80`/`0xC0`) and `0xFE5B5E`. Until they are converted the driver cannot answer a
-   status byte honestly, so `0x7B0004`/`0x7B0005` and `0x7A0000` stay mapped `.noprw()` and INT5 and
-   INT7 stay unasserted -- `INT5_Dev7B_Receive` (`0xFE6866`) contains an UNBOUNDED poll that a
-   guessed status byte would either hang on or satisfy dishonestly.
+★ **AND IT IS NOW IMPLEMENTED (2026-08-25 evening).** The whole 4,794-byte driver module was
+converted (`notes/FINDINGS-prom_a-fdc.md`, 138 checks in `notes/prom_a_fdc_checks.py`), and
+`wsa1.cpp` now carries:
 
-**Where to look.** `notes/FINDINGS-dev7b-and-int5.md` throughout, and lines 107-109 of it for the
-argument that `0x7A0000` and `0x7B0004/5` are one device -- which the decode above assumes and does
-not itself establish.
+* `UPD765A(config, m_fdc, 8'000'000, true, true)` with a `FLOPPY_35_HD` on `fdc:0` and the PC
+  format set. **Why upd765a and not one of the upd7206x**: the firmware's own validator
+  (`Fdc_ClassifyCommandOpcode`, `0xFE5CE8`) accepts exactly the 15 of 32 five-bit opcode values
+  that `upd765_family_device::check_command()` accepts, i.e. the BASE command map; the
+  `ps2_fdc_device` line that `upd72065/6/7/9` derive from additionally accepts CONFIGURE, VERSION,
+  LOCK, PERPENDICULAR and DUMPREG. MAME has **no uPD72070 device**, and no firmware in this ROM
+  set can tell the two apart anyway, because the only CONFIGURE the ROM contains is unreachable
+  (`FINDINGS-prom_a-fdc.md` sec.8.2).
+* `0x7B0004` read -> `msr_r`, `0x7B0005` -> `fifo_r`/`fifo_w`, `0x7A0000` -> `dma_r`/`dma_w`.
+* `intrq` -> `TLCS900_INT5`, `drq` -> `TLCS900_INT7`. Both are the firmware's own statement:
+  `Fdc_EnableInterrupts` (`0xFE5C03`) arms INTE45 and INTETC01 and nothing else, and
+  `uDMA0_ArmOnINT7` (`0xFE5966`) sets `DMA0V = 0x0E`, `(0x0E & 0x1F) << 2 = 0x38` = INT7.
+* **PB bit 3 -> TC.** ⚠ This is the one INFERENCE the implementation costs, and it is written up as
+  such at the code and as gap U below.
+
+**The two things this entry used to list as open are both answered:**
+1. **The three SCANs in the device -> RAM group is not an anomaly after all.** A uPD765 SCAN
+   command's data phase moves bytes in BOTH directions -- the host supplies the pattern and the
+   controller compares -- and the DMA setup that matters for MAME is the one this driver picked,
+   because `dma_r()`/`dma_w()` are two ends of the same FIFO. It remains an oddity of the ROM's
+   own direction table, not of the model. *(Recorded as reconciled, not as proven: nothing was
+   measured, because the firmware never issues a SCAN.)*
+2. **Both routines are converted.** `0xFE5A41` is `Fdc_WaitRqm` and `0xFE5B5E` is
+   `Fdc_ClassifyResultStatus`, and the classifier tests ST0 bits 3 and 4 and all six DEFINED ST1
+   bits and neither undefined one -- which is a large part of why the identification stands.
+
+**Verified after wiring** (`notes/wsa1-probes/wsa1_fdc_selftest.lua`, which replays
+`Fdc_ResetAndIdentifyMedia`'s exact byte sequence through CPU 1's address space): MSR reads `0x80`
+and not `0xFF` (so the firmware's own "no controller" test, error `0xFC`, passes); the post-reset
+SENSE INTERRUPT STATUS drain terminates on `ST0 = 0x80` exactly as `0xFE563A` requires; SPECIFY
+consumes its two parameter bytes; SENSE DRIVE STATUS returns one byte. 0 checks failed.
+
+**What is NOT demonstrated, and it is not a disassembly gap:** the FIRMWARE has never been seen to
+drive it -- see the top-three list, gap O and gap V.
 
 ---
 
@@ -147,6 +218,15 @@ packet CPU 2 does get through is a channel-6 one, header `0xC0`, length 1, sent 
 `MIDI_Watchdogs_And_TransportSwitch` (`0xF99543`); whether CPU 1 has a channel-6 receive arm at
 all is worth checking first.
 
+★ **ONE CALLER LOCATED, 2026-08-25** (`notes/FINDINGS-prom_a-remote-flash.md` sec.4).
+`Link_WaitBlockDone` (`0xF8E66D`) -- the second of the two deadline loops below, the ~1 s one that
+ends in `set 1,(0x13)`, i.e. the one that WOULD release the line -- is called from exactly two
+places in converted prom_a, `0xFB24D7` and `0xFB256E`, and both are immediately after a
+remote-flash read request. So that release path is on the REMOTE-FLASH READ path specifically, and
+a machine that never runs one never reaches it. That is consistent with the measurement below and
+narrows the question to: **what releases the line for ORDINARY traffic?** `INTTC3_LinkDmaDone`'s
+three `set` sites remain the only other candidates.
+
 **Two corrections, both from the variant survey's adversarial re-check:**
 
 1. **P7 bit 1 has SIX `set` sites, not four, and two of them are TIMEOUTS.** The four that were
@@ -170,22 +250,36 @@ all is worth checking first.
 
 ---
 
-### D. Tie prom_d to an instruction -- PRIORITY 1
+### D. Tie prom_d to an instruction -- ★ THE QUESTION AS ASKED IS ANSWERED **NO**; RE-ASK IT
 
-**Question.** Does any instruction in prom_a/prom_b index prom_d's 44-entry offset header at
-file `0x000000`, or its 274-entry pointer directory at file `0x000B80`, with an address that
-comes back over the link from CPU 2's flash?
+**The old question was:** does any instruction in prom_a/prom_b index prom_d's 44-entry offset
+header at file `0x000000`, or its 274-entry pointer directory at file `0x000B80`, with an address
+that comes back over the link from CPU 2's flash?
 
-**Why it matters.** `notes/FINDINGS-memory-map.md` sec.5 grades prom_d "strongly supported, one
-link short" as the flash image. The driver therefore declares `prom_d` as a region and maps it
-**nowhere**, and leaves `0xE80000-0xEFFFFF` on CPU 2 unmapped, because mapping an undumped part
-from an inferred image would put invented bytes on the bus. Close the tie and the flash can be
-mapped (as `BAD_DUMP`, from the redistributed image), which makes 512 KiB of tone data reachable
-by the running firmware for the first time.
+**Answered 2026-08-25 by `notes/FINDINGS-prom_a-remote-flash.md` sec.3, and the answer is NO with a
+reason: nothing on that path indexes the remote image at all, because the firmware STREAMS it.**
+`Remote_E80000_Read32Blocks` (`0xFB24EC`) walks `XIX = 0x00E80000` in 32 fixed 8 KiB blocks through
+one staging buffer at RAM `0x60A000` -- 31 loop iterations plus one more block after the loop,
+`32 x 0x2000 = 0x40000`, i.e. remote **`0xE80000-0xEBFFFF`, 256 KiB, HALF the prom_d image**. No
+directory is consulted on CPU 1's side, so no directory reference can ever be found there.
 
-**Where to look.** The remote-read packet builder is `0xF8E0FE` on CPU 1; the caller that names
-the flash is **`0xFB24D3`** (dest `0x60A000`, remote `0xE80000`). What prom_a does with the
-bytes at `0x60A000` afterwards is the thread. `notes/FINDINGS-memory-map.md` sec.3 and sec.5.
+**What this changes for the driver.** Nothing yet, and that is the point. `prom_d` is still a
+region mapped **nowhere** and `0xE80000-0xEFFFFF` on CPU 2 is still unmapped, because a streamed
+read is satisfied by any 256 KiB of bytes: it is evidence about the READER, not about the CONTENT.
+Mapping an undumped flash from an inferred image would still put invented bytes on the bus, and
+now we also know the reader could not tell.
+
+**RE-ASKED, three ways, in decreasing cheapness:**
+1. **What CONSUMES a block?** `0xFB7649` and `0xFB6FB2` are converted but still `sub_`. If either
+   parses a structure whose shape matches prom_d's -- a 16-byte printable name at the head of every
+   record, say -- that is the tie, and it is a content argument rather than an address one.
+2. **What is in the OTHER 256 KiB?** The streamer covers `0xE80000-0xEBFFFF`; prom_d is 512 KiB and
+   its payload runs to file `0x050B08`. Does any other path read `0xEC0000-0xEFFFFF`?
+3. **The single-block sibling at `0xFB248A` passes count `0x0000`** and carries no label; a
+   zero-length read, a `0x10000` wrap and a position probe all fit the byte.
+
+**Where to look.** `notes/FINDINGS-prom_a-remote-flash.md` sec.3 throughout;
+`notes/FINDINGS-memory-map.md` sec.3 and sec.5 for the grading this supersedes.
 
 ---
 
@@ -248,6 +342,12 @@ as many words: answering 0 is a decision, safe only because nothing in prom_c wa
 to become busy. If the allocator would in fact behave differently -- steal a voice, wait for a
 release -- then every note-on path in the emulator is running on a false premise.
 
+★ **THE SHORTEST PATH IS NOW TWO ROUTINES LONG.** Register block `0x0180 + channel` is staging
+word 6, and `notes/FINDINGS-prom_c-dev10c-producers.md` sec.2 gives word 6 exactly **two**
+producers: `sub_FA96F7__FA9801` and `sub_FA9C60__FA9F06`. Read those two and this stub can be
+replaced with something true, or shown to need more. That note's own "what the next pass should do"
+puts the same pair first.
+
 **Where to look.** The whole reader is prom_c `0xFA68E0-0xFA69DE`; `0x0087CF` is the 0..3 bank
 counter it increments, `0x0087BF` and `0x0087C7` the two shadow arrays.
 `notes/FINDINGS-prom_c-tone-generator.md` sec.10 lists `0xFA68FC` as "the only READ located so
@@ -307,20 +407,33 @@ through a pointer.
 
 ---
 
-### J. What is the device at 0x7E0008 on CPU 1? -- PRIORITY 3
+### J. What is the device at 0x7E0008 on CPU 1? -- ROLE FOUND 2026-08-25, PART STILL UNKNOWN
 
-**Question.** The accessor at `0xFE4CE0` forms `0x7E0000 + ((n & 7) | 0x08)` or `| 0x10` -- two
-banks of eight 16-bit registers -- but the only traced caller (`0xFE50A0`) passes zero for both
-indices in all 256 iterations, so only `0x7E0008` is known to be reached. Are there really two
-banks, and what is transferred? The transfer is bracketed by a CS0 timing change
-(`0xFE509B ldio B0CS,0x10` ... `0xFE50D5 ldio B0CS,0x14`), which is a slow device.
+★ **It is the machine's SECOND STORAGE UNIT**, driven by the same block-device layer as the floppy.
+`Fdc_Request` (`0xFE66C7`) takes a `unit` field at request+`0x02`; every one of its twelve
+operations begins `cp (0x605A32),1`; and **all seven** unit-1 arms in `0xFE4CE0-0xFE544D` reach the
+four accessors of this port, which are the only `add Xrr,0x007E0000` instructions in the converted
+text of either image (`notes/FINDINGS-prom_a-fdc.md` sec.6, checked by
+`notes/prom_a_unit1_backend_check.py`).
 
-**Why it matters.** Two bytes of the driver's map are inert. Small, but it is a 512-byte bulk
-read at boot from a device that needs relaxed bus timing -- that is a real peripheral, not glue.
+**So the entry that used to read "two bytes of the driver's map are inert" now reads: two bytes of
+the driver's map are a storage device whose PART is unknown**, and it stays `.noprw()` for exactly
+that reason -- no part name, no register meaning, and "two banks of eight 16-bit registers" is read
+off the accessor's index construction alone, never off a sweep.
 
-**Where to look.** `notes/FINDINGS-memory-map.md` CPU 1 table, the `0x7E0008-0x7E0017` row. No
-findings note has anything else on it: I checked all ten prom_a/prom_b notes and the address does
-not appear.
+**Re-asked, and now much sharper because the twelve operations are named:**
+1. **Which of the twelve operations does the unit-1 back end actually implement?** The seven arms
+   are `0xFE4CE0-0xFE544D`; a per-operation table of "which registers does this arm touch" would
+   say whether it is a block device with tracks and sectors (a second FDD? a memory card?) or
+   something addressed flat.
+2. **Is `| 0x08` versus `| 0x10` two banks, or a command/data split?** In the only traced caller
+   both indices are zero for all 256 iterations, so `0x7E0008` is the only address known to be
+   reached and the `| 0x10` bank has never been observed at all.
+3. The transfer is bracketed by a CS0 timing change (`0xFE509B ldio B0CS,0x10` ...
+   `0xFE50D5 ldio B0CS,0x14`), i.e. a device that needs relaxed bus timing. Which is it?
+
+**Where to look.** `notes/FINDINGS-prom_a-fdc.md` sec.6; `notes/FINDINGS-memory-map.md` CPU 1
+table, the `0x7E0008-0x7E0017` row.
 
 ---
 
@@ -518,6 +631,130 @@ or a key-scan PCB would appear in one or the other. Nothing in the ROMs can answ
 
 ---
 
+### T. What does CPU 1's PA bit 3 drive? -- PRIORITY 1 (NEW), blocks every disk read
+
+**Question.** `Fdc_Op7_PortA3_On` (`0xFE661F`) sets PA bit 3; `Fdc_Op6_PortA3_Off` (`0xFE65EF`)
+clears it and then waits 5 ticks. They are its only writers in either image, and it is the floppy
+module's only output outside its two device windows. Is it the drive MOTOR, drive SELECT, drive
+POWER, or something else -- and is it active high or active low?
+
+**Why it matters.** This is now the single thing between "the floppy controller is emulated" and
+"the machine can read a disk". MAME's `floppy_image_device` reports READY only after its motor line
+has been driven (`mon_w()` off->on starts a spin-up counter and only then calls `set_ready(false)`),
+and `upd765a_device` does not drive that line itself -- a device with no DOR has nothing to drive it
+with, so a board pin must. The driver therefore LOGS PA bit 3 and refuses to act on it, and the
+measured consequence is `SENSE DRIVE STATUS -> ST3 = 0x18`: RY clear, which the firmware turns into
+its error `0x31`, "drive not ready", for any request whatever
+(`notes/wsa1-probes/wsa1_fdc_selftest.lua`).
+
+⚠ **And the obvious answer does not fit as neatly as it looks.** RESET writes `ldio PA,0xF9` with
+`PACR = 0x0E`, so PA bit 3 comes up **HIGH**, and operation 7 -- the one a caller issues *before* a
+transfer -- sets it high again. An active-high motor enable would then be asserted from power-on,
+which is not how a floppy drive is driven. Active low, or not a motor, both survive that; the
+disassembly's own verdict is "a drive-motor or drive-select line is the obvious reading and is NOT
+claimed here", and the driver keeps that refusal.
+
+**Where to look.** `notes/FINDINGS-prom_a-fdc.md` sec.5 and sec.9; the two operations in
+`prom_a/wsa1_prom_a.s`. The ROM may not be able to settle it -- the eight `Fdc_Request` call sites
+in the `0xFE3000` module are the only callers, so what the SEQUENCE of operations is around a real
+disk access (7 then 0 then 3? 6 after?) is the one thing the ROM *can* say, and it would decide
+between "motor" (asserted only around a transfer) and "drive power/select" (asserted permanently).
+Failing that, a legible schematic sheet for the FDD connector.
+
+---
+
+### U. Is PB bit 3 the floppy controller's TC? -- PRIORITY 2 (NEW), confirm or refute an inference
+
+**Question.** `PortB3_Pulse` (`0xFE594C`) drives PB bit 3 high for five NOPs and low again, from
+`INTTC0_uDMA0Done` (`0xFE6858`) and from nowhere else, and the programmed-I/O path
+`Fdc_ServiceDataByte` ends its transfer with the same pair. Is that pin the FDC's TC input?
+
+**Why it matters.** The driver **assumes it is** -- `cpu1_pb_w()` calls `m_fdc->tc_w()` -- and says
+so at the code as the one inference the floppy implementation costs. It is not idle: a uPD765
+multi-sector transfer runs to EOT unless TC ends it, so if the firmware ever asks for fewer sectors
+than the track holds, TC is what stops the data phase and lets the result phase start. Without it
+that request would hang until the firmware's own 500-tick INT5 timeout (error `0x09`).
+
+**What supports it, so a refutation knows what it has to beat:** it is pulsed exactly at
+micro-DMA channel 0's end of count and at no other time; two independent data paths pulse it at the
+same instant; RESET's `ldio PB,0xF3` leaves it idling LOW so the pulse is a real low-high-low,
+which is TC's active-high shape; and on a uPD765-family part no other input pin means "the transfer
+is over".
+
+**Where to look.** A schematic sheet, or any prom_a code outside the floppy module that touches PB
+bit 3 -- `notes/prom_a_addr_census.py` over SFR `0x1F` would settle whether the floppy module is
+really its only writer. If something else pulses it, the inference is wrong.
+
+---
+
+### V. How does a user reach `Fdc_Request` at all? -- PRIORITY 2 (NEW)
+
+**Question.** `Fdc_Request` (`0xFE66C7`) has exactly eight call sites -- `0xFE3034`, `0xFE30B2`,
+`0xFE3639`, `0xFE37B3`, `0xFE37E2`, `0xFE3868`, `0xFE444A`, `0xFE446E`. What reaches each of them,
+and from which UI action?
+
+**Why it matters.** Purely so the emulated machine can be MADE to use its disk drive. Measured, and
+this is a negative with the search named: a 200-second boot of `wsa1r` and of `wsa1` touches
+`0x7B0004`, `0x7B0005` and `0x7A0000` **zero** times
+(`notes/wsa1-probes/wsa1_fdc_probe.lua`), and a sweep that pressed each of the 88 declared panel
+positions on its own for half a second, after boot, produced **zero** accesses as well
+(`notes/wsa1-probes/wsa1_fdc_button_sweep.lua`). So the disk path is not one press away; it needs
+either a menu sequence, or a chord, or a machine that has got past `ALL INITIAL SETTING!`.
+
+**Where to look.** The `0xFE3000` module's entry directory, and whichever display list in prom_b
+carries the disk menu -- `0xF58127` for variant 2 and `0xF580B0` for variant 1, from the strap
+survey. This is the natural companion to gap O.
+
+---
+
+### W. Is the write side of 0x7B0004 the uPD765 DSR? -- PRIORITY 3 (NEW), an emulation-side ANSWER to check
+
+★ **This one is a proposed ANSWER, not a question, and it should be checked rather than
+re-derived.** `notes/FINDINGS-prom_a-fdc.md` sec.5 and sec.9 record the write side of `0x7B0004` as
+"a control register ... written with `0x80`, `0x02` and `0x00` ... ⚠ Which bit does what is NOT
+established." Reading it as the uPD765-family **Data Rate Select Register** accounts for all three
+values and for the register's offset at once:
+
+* the device is decoded at **base+4** (status / control) and **base+5** (data), which is exactly
+  MSR/DSR and the FIFO in the standard uPD765-family register layout;
+* `0x80` is DSR bit 7, **software reset**, and it must be self-clearing: `Fdc_ResetAndIdentifyMedia`
+  writes it at `0xFE55C5`, waits two ticks and then issues SENSE INTERRUPT STATUS and SPECIFY --
+  commands a part held in reset could not accept;
+* `0x00` and `0x02` are the **data rate**, and the ROM says which is which by WHICH GEOMETRY gets
+  it. After `Fdc_MediaTypeJumpTable` (`0xFE6E3A`) dispatches the media nibble: geometry 2 (1.2 MB,
+  1024 B x 8) and geometry 3 (1.44 MB, 512 B x 18) take `0xFE5690`, which pushes **`0x00`**;
+  geometries 0, 4 and 5 (720 KB, 512 B x 9) take `0xFE56B2`, which pushes **`0x02`**. The
+  uPD765-family rate table is `{500000, 300000, 250000, 1000000}`, so that is **500 kbps for both
+  high-density geometries and 250 kbps for the double-density one** -- two values, two correct
+  answers, and no other reading of a two-bit field produces that pairing.
+
+**Why it matters.** The driver acts on it (`fdc_ctrl_w` -> `dsr_w`), so if it is wrong the emulated
+data rate is wrong and any future disk read fails in a way that will look like a format problem.
+
+**What would refute it:** any fourth value ever written to `0x7B0004`, or a write of `0x00`/`0x02`
+on a path that has nothing to do with choosing a geometry. `notes/prom_a_fdc_checks.py` already
+parses these constants out of the ROM and is the place to add the assertion.
+
+---
+
+### X. Why are the three SCAN opcodes in the device -> RAM group? -- PRIORITY 4 (NEW, was inside gap B)
+
+**Question.** `Dev7A_StartDma` (`0xFE596A`) puts `0xD1`/`0xD9`/`0xDD` -- SCAN EQUAL, SCAN LOW OR
+EQUAL, SCAN HIGH OR EQUAL -- in the *device -> RAM* arm, but a SCAN's data phase needs the HOST to
+supply the pattern bytes. Is the direction table simply wrong for commands the firmware never
+issues, or does this controller's SCAN work the other way round?
+
+**Why it matters.** Almost not at all, which is why it is priority 4: the firmware has no reachable
+caller that issues a SCAN, and MAME's `dma_r`/`dma_w` are two ends of one FIFO so the model does not
+care. It is recorded because it is the one line of the identification that was never reconciled.
+
+**Where to look.** `Fdc_SendSectorIdParams` (`0xFE5DB6`) special-cases exactly these three opcodes
+to send STP instead of DTL, so the driver clearly knows they are SCANs; whatever sets `(0x605A18)`
+to one of them, if anything does, is the thread.
+
+---
+
+
 ## The model-variant hypothesis: SX-WSA1 vs SX-WSA1R -- SETTLED ENOUGH TO IMPLEMENT, and here is exactly how far
 
 Added 2026-08-25 after a survey, an adversarial re-check of that survey, and the driver work that
@@ -630,6 +867,20 @@ Recorded as vague on purpose, rather than dressed up as questions with false pre
   scan at `0xF8DC25` skips all four ADREG channels, and the two software channels are parked at
   `0x80` by `AnalogScan_InitSoftChannels` and written by the display-list interpreter at prom_b
   `0xF57C87`. What each of the six IS, on the variant that has them, is still unknown.
+* **What a disk written by this machine LOOKS like.** The firmware programmes three standard
+  geometries and formats with the conventional `0xE5` filler, so a disk it writes should be
+  readable by ordinary tools -- but no SX-WSA1 or SX-WSA1R disk image exists in these trees, and the
+  driver's floppy support has therefore never been tested against real media. I cannot frame this
+  as a ROM question at all; it needs a disk.
+* **Whether the SX-WSA1R has a SECOND drive fitted, or only the port for one.** Gap J establishes
+  that `Fdc_Request`'s unit 1 goes to `0x7E0008`, which is *not* the floppy controller. Whether that
+  is a second storage device on the board, an option, or a port that is empty on every machine ever
+  built, nothing here can say -- and the boot path never issues a unit-1 request, so the firmware
+  does not say either.
+* **Whether the floppy subsystem works at all on a machine stuck at `ALL INITIAL SETTING!`.** Both
+  variants sit on that message with the battery-RAM checksums failed. It is not known whether the
+  disk menu is even reachable from that state on real hardware, so gap V's negative measurement may
+  be measuring the wrong machine state rather than the wrong button.
 * **What `0x00E2E1` is for.** It starts at 1000 (ROM `0xFCB4EC`), and while it is positive
   `KeyEvents_ToLink` throws every key event away. So the keybed is deaf for the first 1000 MAIN
   passes after power-on -- harmless, and measured to clear in well under a second of emulated
@@ -641,6 +892,16 @@ Recorded as vague on purpose, rather than dressed up as questions with false pre
 ## Appendix: gaps that are MAME's, not the disassembly's
 
 Listed so a disassembly wave does not spend effort on something the emulator could not use yet.
+
+0. **MAME has no uPD72070 device.** The parts list gives the floppy controller as a NEC
+   D72070GF3BE; `src/devices/machine/upd765.h` declares uPD765A/B, uPD7265, i8272A, i82072,
+   uPD72065/6/7/9, FDC9266 and a dozen PC super-I/O parts, and nothing in that family is a
+   uPD72070. The driver instantiates `upd765a_device` and argues at the code why that is the right
+   member (the firmware's own validator implements the BASE command map, and the one enhanced
+   command the ROM contains -- CONFIGURE -- is unreachable). ⚠ This is a SUBSTITUTION and it is the
+   thing a MAME reviewer should push back on first. Nothing in this firmware can distinguish the
+   two, so it is not currently a defect; it would become one the moment a uPD72070-specific command
+   is found.
 
 1. **`tmp95c061` has no serial engine.** `sc0buf_r()` returns 0 and `sc0buf_w()` only sets the
    "transmit complete" interrupt flag (`tmp95c061.cpp:1131-1140`). MIDI IN/OUT cannot be wired to

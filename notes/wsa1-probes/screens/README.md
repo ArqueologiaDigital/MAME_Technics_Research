@@ -22,3 +22,23 @@ wiring `wsa1_cpanel` must not cost the machine its boot.
 
 ⚠ The colours are a DRIVER CHOICE, not a measurement — see `palette_init()` in
 `wsa1.cpp`. Only the glyphs are evidence.
+
+---
+
+## Third frame, added 2026-08-25 with the floppy controller
+
+`wsa1_t195_all_initial_setting.png` is the same t = 195 s frame from the
+**SX-WSA1 (keyboard)** driver, captured by `wsa1_fdc_probe.lua` on the build
+that instantiates the `upd765a_device`:
+
+```
+cd ~/compartilhado/kn7000_mame_build
+DISPLAY=:0 ./kn7000 wsa1 -rompath ./roms -skip_gameinfo -str 200 -window \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_fdc_probe.lua
+```
+
+It exists as the control for the FDC work: adding a floppy controller, a drive,
+two interrupt lines and a TC output must not cost either variant its boot, and
+both still reach the message on the same schedule (blank through t = 60 s, the
+message from t = 75 s, unchanged to t = 195 s).  `wsa1r` was re-captured in the
+same session and is byte-for-byte the frame already committed here.

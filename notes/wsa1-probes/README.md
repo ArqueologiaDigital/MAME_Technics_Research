@@ -628,3 +628,43 @@ without the byte-level log:
 chip". In I/O-interface mode the clock pin decides, and this firmware uses that
 deliberately — it writes SC1BUF with the clock pin parked to advance its own
 state machine without transmitting.
+
+---
+
+## The floppy controller: wired, answering, and never used by the firmware  (2026-08-25)
+
+Three scripts, written when `wsa1.cpp` gained a real `upd765a_device` after
+`wsa1-roms-disasm/notes/FINDINGS-prom_a-fdc.md` identified the device at
+`0x7B0004`/`0x7B0005` + `0x7A0000` as a uPD765-family floppy disk controller.
+Run them from `~/compartilhado/kn7000_mame_build` with
+`DISPLAY=:0 ./kn7000 <wsa1r|wsa1> -rompath ./roms -skip_gameinfo -window` and
+the `-str` given in each row.
+
+| script | question it answers | `-str` |
+|---|---|---|
+| `wsa1_fdc_probe.lua` | does the FIRMWARE ever touch the FDC?  Counts every access to both register windows, prints each control-register write with its value, and separately watches `Fdc_Request`'s own footprints in work DRAM.  Also snapshots the panel every 15 s | 200 |
+| `wsa1_fdc_selftest.lua` | is the controller REACHABLE and does it answer the firmware's own reset sequence?  Replays `Fdc_ResetAndIdentifyMedia` (prom_a `0xFE558B`) byte for byte from Lua through CPU 1's address space, then SPECIFY and SENSE DRIVE STATUS.  Prints PASS/FAIL per step | 20 |
+| `wsa1_fdc_button_sweep.lua` | can any single panel button make the firmware use the disk drive?  Presses each declared panel position in turn for half a second after boot, and reports which one (if any) was held when an FDC register was touched | 260 |
+
+**What they measured on the build of 2026-08-25:**
+
+* `wsa1_fdc_probe.lua`, both variants, 200 emulated seconds:
+  **`msr_r=0 fifo_r=0 fifo_w=0 ctrl_w=0 dma_r=0 dma_w=0`**.  The firmware never
+  touches the floppy controller during boot.  ⚠ The `guard=1 reqblk=8` the probe
+  also reports are NOT `Fdc_Request` — they are the boot block's DRAM clear loop
+  at `0xF827AF` writing through `0x605A08` and `0x605A30`, which is why the
+  probe prints the PC (`F827BC`) with them.
+* `wsa1_fdc_selftest.lua`: **5 checks, 0 failures.**  MSR reads `0x80`, not the
+  `0xFF` the firmware treats as "no controller" (error `0xFC`); the post-reset
+  SENSE INTERRUPT STATUS drain terminates on `ST0 = 0x80` exactly as `0xFE563A`
+  requires; SPECIFY consumes its two parameter bytes; SENSE DRIVE STATUS returns
+  `ST3 = 0x18`.
+* `wsa1_fdc_button_sweep.lua`, `wsa1r`: **88 panel positions swept, 0 FDC
+  accesses.**
+
+★ **`ST3 = 0x18` is the honest failure and it is worth knowing by sight.**  RY is
+clear, i.e. the drive is not ready, because nothing in the driver turns the
+motor on: what does it on the real board is CPU 1's PA bit 3, and that pin's
+function is NOT ESTABLISHED (`FINDINGS-prom_a-fdc.md` sec.9), so the driver logs
+it and refuses to act on it.  The firmware would report its own error `0x31`.
+See gap T in `../WSA1-EMULATION-DISASM-GAPS.md`.
