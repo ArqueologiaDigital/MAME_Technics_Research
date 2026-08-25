@@ -28,10 +28,46 @@
     128 preset combinations, a 320 x 240 dot LCD, two sets of MIDI IN/OUT/THRU
     and a built-in 3.5 inch floppy drive.
 
-    This driver does not run the machine yet, but both processors are now
-    instantiated, with the clock and the part of the memory map that could be
-    established.  Unlike the MN10300-based Technics keyboards in kn5000.cpp and
-    kn7000.cpp, the CPU core is not what is missing here: the two processors are
+    (*) fc/8 for phiT1 is the firmware's own arithmetic.  MAME's tmp95c061
+    prescaler is a uniform factor of 16 slower than that, which costs boot time
+    but nothing else; the measurement and the reasoning are in the machine
+    configuration, next to the LCD.
+
+    HOW FAR IT BOOTS, as measured on 2026-08-25 with the probes in
+    notes/wsa1-probes/ (each one names the question it answers):
+
+      t=0.00 s  RESET at 0xF826A9; watchdog off, ports, timers, chip selects,
+                RAM cleared, then into prom_b through the thunk table.
+      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (it counts
+                at 30 Hz here - see the prescaler note in the machine config).
+      t=0.00 s  the boot sequence at 0xF827C8 blinks an 8-bit diagnostic code
+                on P5 bit 3, because P5 bit 4 reads back 0.  This burns 3.13 s.
+      t=3.13 s  the battery-RAM checksum pair at 0xF82C80 runs: 0x100 words
+                summed from 0x007620 and complemented against (0x007FD2), then
+                the same from 0x617800 against (0x007FD4).  The helper at
+                0xF82CD3 returns carry CLEAR on a match (0xF82CE6 rcf) and the
+                callers only `set` their verdict bit on that path (0xF82C97,
+                0xF82CA8), so in (0x007FD1) a SET bit means PASS.  Measured:
+                0x00 - both FAIL (wsa1_checksum_result.lua).  That is the right
+                answer for a machine with no battery-backed contents, and
+                0xF82CAB then takes its bit-0-clear arm at 0xF82CBD, which
+                forces the boot-mode byte (0x0097) |= 0x01.
+      t=10.39 s the SED1330 is initialised, from 0xF8E822 in LCD_Init_SED1330.
+      t=75.40 s SWI7's text services start drawing, first read back at
+                0xF8F2FE; 33623 writes and 821 reads to the panel in total.
+      t=90 s    the panel reads ALL INITIAL SETTING! and stops changing, while
+                CPU 1 keeps running ordinary code across prom_a and prom_b -
+                a live system sitting on the message, not a hang.  The message
+                is consistent with the failed checksums above; the path from
+                (0x0097) to those particular glyphs has NOT been traced, so
+                read that as agreement, not as a proven causal chain.
+
+    So the machine boots to correct, legible screen content.  What it does NOT
+    do is go further: the sequencer clock cannot tick (see the machine config),
+    and the tone generator, DSPs, flash, floppy and panel microcontroller are
+    all still absent.  Unlike the MN10300-based Technics keyboards in
+    kn5000.cpp and kn7000.cpp, the CPU core is not what is missing here: the
+    two processors are
     Toshiba TLCS-900/H parts, TMP95C061, and MAME already implements that device
     in src/devices/cpu/tlcs900/tmp95c061.h.  What was missing was a clock and a
     memory map, and both were recovered from the images rather than from the
@@ -46,9 +82,8 @@
     comes out at 31250 for any M provided fc = 1,000,000 * M, so the byte is fc
     in MHz, and prom_c[0xFFFFEF] = 0x1C = 28.  Two constants that share nothing
     with it agree: the sequencer tempo divide at 0xFAA378 uses 140,000,000,
-    which is 5 * fc for timer 4 running at fc/8 with 96 ticks per beat, and the
-    (*) see the prescaler note below
-    MIDI init at 0xFA58F8 sets BR0CR = 0x0E, that is fc/896 = 31250 baud.  The
+    which is 5 * fc for timer 4 running at fc/8 with 96 ticks per beat (*), and
+    the MIDI init at 0xFA58F8 sets BR0CR = 0x0E, that is fc/896 = 31250 baud.  The
     MIDI divisor alone would not have settled it: both boot blocks first program
     a divide by 768 (0xF82754, 0xFFF078), which is self-consistent with a 24 MHz
     part, and the parts list has a 24 MHz ceramic oscillator as well as a 28 MHz
@@ -693,11 +728,39 @@ void wsa1_state::palette_init(palette_device &palette)
 
 void wsa1_state::cpu1_map(address_map &map)
 {
-	// Static RAM on CS1 (MSAR1 = 0x00, 0xF82730).  The boot block clears
-	// 0x1460 longwords upward from 0x000080 (0xF8278A), which is the only
-	// thing in the firmware that puts a size on this chip - and it is a lower
-	// bound, not the size, so only the cleared span is mapped.
-	map(0x000080, 0x0051ff).ram();
+	// Static RAM on CS1 (MSAR1 = 0x00, 0xF82730).  MAMR1 = 0x7F (0xF8273C) is
+	// the largest value that register takes, i.e. "everything left over", so
+	// unlike MAMR3 below it puts no size on the chip inside the window.  The
+	// chip is sized here from the firmware's own references instead, and comes
+	// out at 32 KiB:
+	//
+	//   - the boot block clears 0x1460 longwords upward from 0x000080
+	//     (0xF8278A).  That is a lower bound of 0x0051FF, and it is all the
+	//     previous revision of this map had;
+	//   - the boot path at 0xF82C80 works well above that bound.  It sums
+	//     0x100 words from 0x007620 and compares the complement with
+	//     (0x007FD2), then does the same over 0x617800 against (0x007FD4),
+	//     leaving the two results as bits 0 and 1 of (0x007FD1) for 0xF82CAB
+	//     to branch on.  What sits up there is the standard
+	//     top-of-a-preserved-chip furniture: a 0x5AA5 magic word at 0x007FCA
+	//     (0xF8292A) and the two checksum words (0xF8291D, 0xF82921).  The
+	//     highest address any of it names is 0x007FD4, 44 bytes below the top
+	//     of a 32 KiB device;
+	//   - and this is MEASURED, not just read out of the disassembly.  With
+	//     the chip mapped only to 0x0051FF every one of those accesses fell
+	//     off the end of the map.  Mapped to 0x007FFF,
+	//     notes/wsa1-probes/wsa1_boot_milestones.lua records the reads landing
+	//     at t=3.13 s -- cksum1 at 0x007620 from PC 0xF82CDB, the flag word
+	//     0x007FD0-0x007FD5 from 0xF82C88/0xF82CE2, cksum2 at 0x617800 -- and
+	//     boot then proceeds into prom_b.  Before this change it did not.
+	//
+	// No claim is made about 0x008000 and up: sizing the chip at exactly
+	// 32 KiB is an inference from the furniture sitting just under 0x008000,
+	// not something the firmware states.
+	//
+	// 0x008000-0x3FFFFF is deliberately left unmapped, so a stray access above
+	// the chip still shows up in the error log instead of silently aliasing.
+	map(0x000080, 0x007fff).ram();
 
 	// Work DRAM on CS3 (MSAR3 = 0x60, 0xF82736; P6FC = 0x1F at 0xF826B2 turns
 	// the CS3 pin into LCAS, which is what identifies CS3 as the DRAM area).
@@ -706,12 +769,26 @@ void wsa1_state::cpu1_map(address_map &map)
 	// prom_b reads it at 0xF440A5 - so it is the same DRAM, preserved across a
 	// warm restart, and the whole span is mapped as one.  The first stack
 	// pointer this machine has lands inside it, at 0x60EB80 (0xF85606).
-	map(0x600000, 0x60ffff).ram();
-
-	// Not mapped, deliberately: a 256-byte-record array based at 0x617800
-	// (0xF61F5B, and the inverse at 0xF5E2F4).  It is real work DRAM, but
-	// nothing in the reached code fixes how many records there are, so there
-	// is no honest end address for it.
+	//
+	// The mapped span is the whole CS3 window and not just the cleared part.
+	// Here, unlike CS1, the window size is a statement about the chip: the
+	// boot block writes MAMR3 = 0x0F (0xF82742), a specific value rather than
+	// the register's maximum, and under the 32 KiB-per-unit decode that the
+	// firmware's own elimination leaves standing that is 32 KiB x 16 =
+	// 512 KiB, 0x600000-0x67FFFF.  That decode is the one the disassembly
+	// tree's committed elimination leaves standing -- run
+	// wsa1-roms-disasm/scripts/analysis/mamr_reading_elimination.py, which
+	// kills 64 KiB-per-unit outright against eight facts taken from these
+	// ROMs.  The firmware backs the size up by using memory well past the
+	// cleared region: the 256-byte-record array based at 0x617800 (0xF61F5B,
+	// and the inverse at 0xF5E2F4) is read during boot, and 0x617800-0x6179FF
+	// is one of the two blocks the 0xF82C80 checksum pair covers -- the read
+	// at 0x617800 is one of the milestones the probe above records.
+	//
+	// 512 KiB is therefore the DECODED window, and is what is mapped; it is
+	// not a measured extent, because nothing in the reached code touches the
+	// top of it.
+	map(0x600000, 0x67ffff).ram();
 
 	// The devices below are all referenced directly by prom_a, and all sit in
 	// the CS0 area.  Which addresses that area covers is the one row of the
@@ -982,11 +1059,56 @@ void wsa1_state::wsa1r(machine_config &config)
 	// buy speed with a claim about the hardware that nobody has checked.  Enable
 	// it only as a labelled experiment, never as the default.
 	//
-	// Still absent, so neither program gets past its own hardware checks: the
-	// tone generator's actual synthesis, the three DSPs and their microcode
-	// upload path, the serial EEPROM, the AM29F400T flash (whose data-poll and
-	// erase-verify loops are unbounded and will spin if reached), the floppy
-	// controller and the panel microcontroller.
+	// ALSO DELIBERATELY NOT WIRED: P5 bit 4 on CPU 1.  The boot block makes
+	// bit 4 an input and bit 3 an output (P5 = 0xFF at 0xF826BB, P5FC = 0x24 at
+	// 0xF826BE, P5CR = 0x2C at 0xF826C1).  The routine at 0xF95137 reads P5, tests bit 4,
+	// and RETURNS IMMEDIATELY if it is 1; if it is 0 it falls into 0xF95158,
+	// which shifts a byte out of (XIZ+0x08) one bit at a time and toggles P5
+	// bit 3 around software delays of 0x4000 or 0xC000 outer counts depending
+	// on the bit - a long/short blink - and its caller does that twice
+	// (0xF95149, 0xF95153, each after a `push WA`), i.e. an 8-bit code as two
+	// nibbles.  It is reached from the boot sequence at 0xF827D1 through
+	// prom_b thunk 0xF40144.
+	//
+	// MAME's unbound port read returns 0, so the emulated machine always takes
+	// the blink path and spends its first 3.13 s of emulated time there
+	// (measured: notes/wsa1-probes/wsa1_boot_milestones.lua, and the PC
+	// histogram in wsa1_retry_loop.lua pins it to 0xF95184/0xF951A7).  A
+	// constant 0x10 on P5 would skip it.  NOT ENABLED: which way that pin
+	// actually sits is a schematic question, no net has been read, and the
+	// blink is bounded - it costs 3 s of boot, it does not block it.
+	//
+	// ⚠ The 8-bit TIMER RATE IS 16x TOO SLOW, and it is a CPU-core issue, not
+	// a driver one.  The boot block programs timer 1 as TREG1 = 0x1C counts of
+	// phiT256 (TREG1 at 0xF826F4; T01MOD = 0x0D at 0xF826EB selects that tap),
+	// which at fc = 28 MHz and phiT256 = fc/2048 is the
+	// 488.28 Hz tick that every prom_b delay routine and the link's 500-tick
+	// timeout are written against.  MAME's tmp95c061 implements that tap as
+	// `m_timer_pre >> 15` = fc/32768 (tmp95c061.cpp:726-728), giving
+	// 28e6/32768/28 = 30.5 Hz - and 30.4 Hz is exactly what the tick counter
+	// at RAM 0x0080 is measured advancing at
+	// (notes/wsa1-probes/wsa1_tick_counter.lua).  All four taps are shifted by
+	// the same factor of 16 (tmp95c061.cpp:682-690, 720-728), so the whole
+	// prescaler is uniformly scaled, and the disassembly tree's independent
+	// derivation of fc from the sequencer tempo constant needs phiT1 = fc/8
+	// where MAME uses fc/128 (wsa1-roms-disasm/notes/FINDINGS-system-clock.md,
+	// lever B).  NOT CHANGED HERE: tmp95c061 is shared with ngp, namcos10 and
+	// three other drivers, and no databook is present in these trees to settle
+	// the tap numbering.  The consequence is only that boot takes ~90 s of
+	// emulated time instead of ~6 s.
+	//
+	// Related, and also core-side: MAME's tmp95c061 never counts the 16-bit
+	// timers 4-7 at all - m_t16_reg is written by treg45_w/treg67_w and read
+	// by nothing (tmp95c061.cpp:1012-1063), and no code path sets INTET54 - so
+	// INTTR4, this machine's musical clock (vector 0x50 -> 0xF82EA2), cannot
+	// fire.  The sequencer cannot run until that is addressed.
+	//
+	// Still absent: the tone generator's actual synthesis, the three DSPs and
+	// their microcode upload path, the serial EEPROM, the AM29F400T flash
+	// (whose data-poll and erase-verify loops are unbounded and will spin if
+	// reached), the floppy controller and the panel microcontroller.  CPU 1
+	// nevertheless boots all the way to rendered text on the panel - see the
+	// boot walkthrough at the top of this file.
 }
 
 
