@@ -518,6 +518,8 @@ void tmp95c061_device::tlcs900_check_irqs()
 	/* Check for NMI */
 	if ( m_nmi_state == ASSERT_LINE )
 	{
+		tlcs900_intnest_accept();   /* INTNEST: see tlcs900.h -- NMI pushes an SR/PC frame too */
+
 		m_xssp.d -= 4;
 		WRMEML( m_xssp.d, m_pc.d );
 		m_xssp.d -= 2;
@@ -568,6 +570,7 @@ void tmp95c061_device::tlcs900_check_irqs()
 	{
 		uint8_t vector = tmp95c061_irq_vector_map[irq].vector;
 
+		tlcs900_intnest_accept();   /* INTNEST: see tlcs900.h -- the frame op_RETI will unwind */
 		m_xssp.d -= 4;
 		WRMEML( m_xssp.d, m_pc.d );
 		m_xssp.d -= 2;

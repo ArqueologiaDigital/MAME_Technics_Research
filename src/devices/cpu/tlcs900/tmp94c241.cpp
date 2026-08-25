@@ -1294,6 +1294,8 @@ void tmp94c241_device::tlcs900_check_irqs()
 	// Check for NMI
 	if (m_nmi_state == ASSERT_LINE)
 	{
+		tlcs900_intnest_accept();   // INTNEST: see tlcs900.h and the note below
+
 		m_xssp.d -= 4;
 		WRMEML(m_xssp.d, m_pc.d);
 		m_xssp.d -= 2;
@@ -1365,6 +1367,17 @@ void tmp94c241_device::tlcs900_check_irqs()
 		else if (vector == 0x28)
 			LOGMASKED(LOG_IRQ, "t=%.6f  IRQ: INT0 accepted level=%d retPC=%06X sr=%04X\n",
 				machine().time().as_double(), level, m_pc.d, m_sr.w.l);
+
+		// INTNEST (control register 0x7C on the /H1 -- see tlcs900.h).  Counting
+		// here is invisible to the KN5000: its firmware WRITES cr 0x7C six times
+		// and READS it zero times, in all of v7/v9/v10 and in the subprogram.
+		// It runs the same RTOS as the SX-WSA1R but keeps the nesting depth in
+		// RAM at (1475) instead -- TaskSched_TimerTick increments the RAM word
+		// and mirrors it here, INTT3_CheckNesting compares the RAM word against
+		// 1, and INTT3_EnterScheduler zeroes both -- so nothing on this machine
+		// can observe the counter.  Measured by
+		// notes/wsa1-probes/tlcs900_intnest_evidence.py.
+		tlcs900_intnest_accept();
 
 		m_xssp.d -= 4;
 		WRMEML(m_xssp.d, m_pc.d);

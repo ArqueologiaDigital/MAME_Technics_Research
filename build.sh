@@ -164,6 +164,23 @@ ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.cpp"         "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.h"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"  "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.h"    "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.h"
+# ⚠ THE TLCS-900 SHARED CORE IS OVERLAID TOO, for control register 0x3C/0x7C --
+# INTNEST, the interrupt nesting counter.  MAME had no such register: every
+# access fell through p_CR16's default into m_dummy, the scratch word that ALSO
+# absorbs every other undecoded control-register reference, and nothing ever
+# counted.  The SX-WSA1R's whole RTOS hangs off it (prom_a IRQ_Epilogue enters
+# the scheduler only when it reads 1) so without it the machine never got past
+# its splash.  tlcs900.h holds the storage and the accept helper, tlcs900.cpp the
+# save-state entry and the resets, 900tbl.hxx the decode and the RETI decrement,
+# and each device calls the helper where it accepts an interrupt.
+# ⚠ These four files are shared with EVERY tlcs900 driver, ours and upstream's
+# (ngp, namcos10, dvd-n5xx, kkcount on the TMP95C061; taitopjc/taitotz on the
+# TMP95C063).  tmp96c141.cpp is deliberately NOT overlaid: its check_irqs() is
+# empty, so it has no acceptance site to count at.
+ln -sf "$HERE/src/devices/cpu/tlcs900/tlcs900.h"             "$BUILD_TREE/src/devices/cpu/tlcs900/tlcs900.h"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tlcs900.cpp"           "$BUILD_TREE/src/devices/cpu/tlcs900/tlcs900.cpp"
+ln -sf "$HERE/src/devices/cpu/tlcs900/900tbl.hxx"            "$BUILD_TREE/src/devices/cpu/tlcs900/900tbl.hxx"
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c063.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c063.cpp"
 ln -sf "$HERE/src/devices/bus/technics/kn5000/hdae5000.cpp"  "$BUILD_TREE/src/devices/bus/technics/kn5000/hdae5000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn5000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn5000_cpanel.cpp"         "$BUILD_TREE/src/mame/matsushita/kn5000_cpanel.cpp"
