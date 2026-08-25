@@ -906,3 +906,120 @@ the 88 causes an LCD write on the SOUND MODE screen, which is gap O (no legend
 is known for any position), not a transport failure. ⚠ `dSC1` is 0 for every
 press and means nothing: that tap counts SC1BUF WRITES, i.e. transmits, and a
 button arrives on the receive side.
+
+---
+
+# The TMP95C061 timer fixes, and the databook that settles them (2026-08-25, night)
+
+★ **THE DATABOOK EXISTS.** Every note in these trees, this one included, said no TLCS-900
+databook was available and derived the timer scale, the 16-bit timer semantics and control
+register 0x3C from firmware alone. Toshiba's *TLCS-900 Series CMOS 16-bit Microcontrollers
+TMP95C061*, 192 pages, is on bitsavers with an intact text layer.
+
+`tlcs900_datasheet_quotes.py` — **what does the part's own databook say?**
+
+Re-checks 13 quotes against the PDF and prints the six register bit-maps that live in scanned
+figures, with their page numbers so a human can re-read them. The PDF is not committed (7.4 MB,
+and not ours to redistribute); the script carries its URL, byte size and sha256.
+
+```
+python3 notes/wsa1-probes/tlcs900_datasheet_quotes.py /tmp/TMP95c061-ds.pdf
+=> 13 PASS, 0 FAIL
+```
+
+| question | answer | where |
+|---|---|---|
+| prescaler taps | `oT1 (8/fc) · oT4 (32/fc) · oT16 (128/fc) · oT256 (2048/fc)` | Table 3.8 (1) p.81 |
+| do the 16-bit timers share that prescaler? | yes — one 9-bit prescaler for "8-bit Timer 0/1, Timer 4/5 and Serial Interface 0/1" | 3.8 (1) p.73 |
+| `T4MOD` bit 2 | `CLE`: 0 = clear disable, 1 = clear by match with TREG5 | Figure 3.9 (3) p.95 |
+| one comparator or two? | two, each generating its own interrupt | 3.9 (5) p.103 |
+| TRUN bits 4/5 | T4RUN/T5RUN, "0: Stop & Clear" | Figure 3.9 (10) p.101 |
+| which TREG is INTTR4? | "INTTR4 : 16-bit timer4 (TREG4)", V = 0050H | Table 3.3 (1) p.12 |
+| is INTNEST hardware-maintained? | "(4) The CPU increments the INTNEST" and RETI "decements" it | 3.3.1 p.11 |
+| is the baud tap really fc/4? | `φT0 = fc/4` | 3.11 p.135 |
+
+★ **Why the tap quote closes the argument and the firmware never could.** Three passes derived
+`φT1 = fc/8` from ROM constants and each was left with a residual factor of two, because every
+firmware constant fixes only the product `fc / D` — the tempo dividend, TREG5 = 15625, TREG1 = 28,
+the 1750 multiplier. The databook states the taps as **ratios to fc**, so the shift is 3 whatever
+the crystal is, and the remaining `×2` question belongs entirely to `wsa1.cpp`'s `clock()` line.
+
+⚠ **Two arguments that were used for this and must not come back.** "MAME's sibling tmp94c241
+already uses 3/5/7/11" is this project's own earlier reading of the same question (MAME
+`2905f85348f`), i.e. one derivation counted twice. And the 1750 tempo multiplier is a ratio
+between **two taps of one prescaler**, 2048/8 = 256 on the databook scale and 32768/128 = 256 on
+upstream's — the same prediction either way. The published "16.4× off" came from pairing this
+part's `oT256` with the TMP94C241's `oT1`.
+
+## `tlcs900_timer_control.sh` — the NULL BUILD
+
+**Question it answers:** how much of what was measured is the fix and how much is the machine?
+It puts `tmp95c061.cpp` back to upstream timer behaviour and nothing else, so the same probe runs
+against the same binary lineage with only the timer model changed.
+
+```
+notes/wsa1-probes/tlcs900_timer_control.sh null   && ./build.sh   # measure
+notes/wsa1-probes/tlcs900_timer_control.sh fixed  && ./build.sh   # put it back
+notes/wsa1-probes/tlcs900_timer_control.sh check                  # which am I in?
+```
+
+⚠ It edits the overlay source in place. Always finish with `fixed`; `git diff --stat` on that file
+must come back empty, and the rebuilt binary must have the md5 it had before the null cycle (it
+did: `c995056d80549b32eb62f6f99ce4212f`, twice).
+
+## `wsa1_inttr4_dispatch.lua` — is INTTR4 dispatched, and into what?
+
+Watches the **acceptance**, not the request flag: `tlcs900_check_irqs()` ends with
+`m_pc.d = RDMEML(0xffff00 + vector)`, so a read of 0xFFFF50 happens only when the CPU has accepted
+INTTR4, and the data it reads is the handler PC.
+
+```
+                        NULL (upstream)          FIXED
+  INTT1   FFFF44        30.5 Hz  -> F82D0B       488.3 Hz -> F82D0B
+  INTT3   FFFF4C        never in 45 s            first t=19.65 s -> F42D64
+  INTTR4  FFFF50        NEVER DISPATCHED         192.0 Hz -> F82EA2   <- the musical clock
+  INTTR5/6/7            0                        0     (must stay 0: those vectors are
+                                                        jr T,self hang loops at F82D09)
+```
+
+⚠ On the KN1500 the same trick is **contaminated** — its boot walks the ROM, so the vector
+addresses get read as plain data. The tell is that INTTR5, INTTR6 and INTTR7 all report their
+"first dispatch" at the identical timestamp and all resolve to one INTT0 stub. Those three rows are
+therefore a read-out of the contamination rate, and INTTR4 minus INTTR5 is the honest number. The
+SX-WSA1R has no such scan, which is why its INTTR5/6/7 rows sit at exactly 0.
+
+## `wsa1_boot_milestones.lua` re-run — boot got 4× shorter
+
+| milestone | NULL | FIXED |
+|---|---|---|
+| SED1330 first write (`pc=F8E822`) | t = 7.2095 s | **t = 0.5003 s** |
+| SWI7 text services drawing (`pc=F8F2FE`) | t = 72.2382 s | **t = 19.6181 s** |
+
+⚠ **One earlier claim is corrected by this.** "LCD writes 33623, frozen from t=20" was read as an
+INTNEST signature. It is not a clean one: this NULL build has INTNEST implemented and still ends at
+33623 LCD writes, because with the slow timers the drawing simply has not happened yet. Both
+explanations produce that number, so it does not discriminate.
+
+## `kn1500_timer_regression.lua` — the machine the gate cannot see
+
+`tools/gate.sh` SKIPs kn1500 ("no screen device"), so a timer change could break it silently.
+30 s, both builds: **same crt0 RAM test at 0xFA047F-0xFA04A3, same top PCs, same ~99.5% speed**, and
+its INTTR4 now dispatches into 0xFE6515 — the sequencer routine its own ROM names, with
+`cp (XHL),0x60` at 0xFE6522 for 96 PPQN, the same idiom as the SX-WSA1R's 0xF82EA2.
+
+## `kn1500_ic15_dump_defect.py` — why that machine never boots, and it is not the CPU
+
+Chasing the RAM test found it writing 0xA5/0x5A over the CPU's **own internal I/O registers**. The
+cause is in the ROM image: four of IC15's eight 256 KiB blocks are 0xFF in every odd byte, and each
+one's even stream is exactly the odd stream of the block 512 KiB above it — 131072/131072, four
+pairs, 4 PASS / 0 FAIL. The crt0 region table at 0xF38B24 is inside one of them, so the memory test
+walks the whole 24-bit space. Naive reassembly does not repair it. **IC15 needs a re-dump.**
+
+## `tlcs900_16bit_unmodelled_use.lua` — implement it, or write it down?
+
+Watches every 16-bit-timer feature still unmodelled, so the choice is measured rather than assumed:
+capture-register reads, software capture, pin capture mode, external clock select, non-zero
+`T*FFCR` and non-zero `T45CR`. On the SX-WSA1R over 60 s the only hit is **3 software captures**,
+both a side effect of the boot's own `ldio T4MOD,0x05` / `T5MOD,0x02` (bit 5 always reads 1; writing
+0 captures), and nothing ever reads CAP1-CAP4 back. Every KN1500 hit is the runaway RAM test above.
+So the capture path stays **documented, not invented** — see gaps-doc appendix items 7 and 8.
