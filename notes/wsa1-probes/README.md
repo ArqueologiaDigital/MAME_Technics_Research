@@ -690,3 +690,44 @@ control: the "not ready" is NOT "no disk", it is "no motor", so gap T is the
 whole of what is missing.  (The image itself is disposable, which is why only
 the one-line recipe is committed; 1,474,560 bytes of `0xE5` is the conventional
 format filler and any raw 720 KB or 1.44 MB image would do.)
+
+## `tlcs900_16bit_timer_evidence.py` — what does the firmware ask timer 4 for?
+
+Answers the question the INTTR4 work turns on: MAME's `tmp95c061.cpp` never
+counts the 16-bit timers, so `INTTR4` can never fire — what exactly is the
+firmware programming, and what rate must a correct implementation produce?
+
+```
+python3 notes/wsa1-probes/tlcs900_16bit_timer_evidence.py
+```
+
+41 byte-level assertions against the two original images, **0 failures**.
+Nothing is read out of the emulator.
+
+**WSA1** (IC12 / prom_a): the boot block at `0xF82703`–`0xF8272A` writes
+`T4MOD = 0x05` (clock select 01), `T4FFCR = 0x00`, `T45CR = 0x00`,
+`TREG4 = 0x0001`, `TREG5 = 0x3D09` = 15625, then `TRUN = 0xB7` (bit 7
+prescaler, bit 4 T4RUN, bit 5 T5RUN).  `0xF827CE ldio INTET54,0x03` enables
+**INTTR4 at priority 3 and leaves INTTR5 at 0**.  Vector 0x50 → `0xF82EA2`, the
+sequencer tick, whose beat length is `0xF82EB1 cp (XHL),0x60` = 96.
+Vectors 0x54/0x58/0x5C all point at `0xF82D09`, which is `jr T,0xF82D09` — a
+deliberate hang — so **a spurious INTTR5/6/7 would freeze the machine**; they
+are safe only because `INTET76` is never written (the single `08 76 xx` byte
+hit in the whole image, at `0xFA0C71`, is the middle of `and C,0x08` /
+`jrl z,…`, and the script pins those six bytes).
+
+**KN1500** (IC15): `0xFE5FB5`–`0xFE5FCC` programs the *same* registers with the
+*same* values — including `ldw (TREG5),0x3D09` — and `0xFE6078` writes the same
+`INTET54 = 0x03`.  Its INTTR4 handler at `0xFE6515` is the same routine down to
+the direct-page slots (`(0x94)`, `(0x95)`, `cp …,0x60`).
+
+★ **The cross-machine check on the tap.**  One register value, two clocks:
+
+| | fc | φT1 = fc/8 | ÷ TREG5 | ÷ 96 PPQN |
+|---|---|---|---|---|
+| WSA1 | 28 MHz | 3.5 MHz | 224.0 Hz | **140.0 BPM** |
+| KN1500 (`kn1500.cpp:56`, 24 MHz) | 24 MHz | 3.0 MHz | 192.0 Hz | **120.0 BPM** |
+
+Both land exactly on a round default tempo, and only do so if `T4MOD` bits[1:0]
+= 01 means φT1 = fc/8 and the counter's period is TREG5.  With MAME's present
+`m_timer_pre >> 7` the same registers give 14.0 Hz = 8.75 BPM.
