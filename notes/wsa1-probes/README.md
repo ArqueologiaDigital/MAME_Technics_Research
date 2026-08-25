@@ -131,6 +131,91 @@ either: it is the diagnostic blink at 0xF95158, entered because P5 bit 4 reads
 back 0 (an unbound input). It emits an 8-bit code as long/short pulses on P5
 bit 3 and then returns. Also deliberately not faked; see the same block.
 
+## `wsa1_cpu2_tick_and_keyscan.lua` — can the key scanner ever arm?
+
+`KeyScan_ReadEvent` (prom_c 0xF9973D) refuses to touch the port at 0x00108000
+until the one-shot latch at RAM 0x00F329 is set, and it only sets that once the
+INTT1 tick counter at RAM 0x00F2F3 has passed 1000 (0xF9974E `cp XBC,0x3E8`).
+This probe prints the counter, the latch, TRUN, and how often each half of the
+port has been read.
+
+**Result (2026-08-25, `-str 130`):** the counter advances at 30.5 Hz — the
+16x-slow prescaler again — so it passes 1000 at about t=33 s; the latch turns 1
+the moment CPU 2 reaches MAIN, at **t=70.5 s**, and from then on the status word
+at 0x108002 is read about **34,500 times per second** of emulated time.  Before
+MAIN the only traffic is **16** reads of 0x108000, which is
+`KeyScan_InitKeyStateBitmap`'s boot drain and its `cp (XIZ-7),0x10` bound.
+
+This is also the run that settles a question the disassembly tree lists as open:
+CPU 2 **does** program T01MOD, at `0xFFF06C  08 24 0d`, so timer 1 is clocked
+from phiT256 exactly as on CPU 1.
+
+## `wsa1_keybed_note.lua` — does a key press reach the firmware?
+
+Presses middle C (ioport `KEY2` bit 0 = key 24 = MIDI 60) at t=78 s and releases
+it at t=80 s, tapping the event port and the two parameter devices.
+
+**Result (2026-08-25, `-str 95`):** the firmware read **0x5C98** and then
+**0x5C18** off 0x108000 — touch 0x5C (the "Key touch" adjuster's default of 64,
+inverted: 255 - 64*255/100 = 92 = 0x5C), key 0x18 = 24, bit 7 set for the press
+and clear for the release.  That is exactly the word `keybed_push()` queued, so
+the port model and the firmware's decode agree.  ⚠ Writes to the tone generator
+at 0x10C000 did **not** jump measurably after the press (about 2-3 per second
+before and after), so this probe shows the event was *taken*, not that a note
+reached the synthesis registers.
+
+## `wsa1_link_traffic.lua` and `wsa1_link_handshake.lua` — ★ the link only sends ONCE
+
+`wsa1_link_traffic.lua` counts every byte written to 0x007C0000 (CPU 1 -> CPU 2)
+and 0x00100000 (CPU 2 -> CPU 1), and presses the same key at t=78 s.
+`wsa1_link_handshake.lua` then shows why the counts are what they are.
+
+**Result (2026-08-25, `-str 85` and `-str 82`):** CPU 1 -> CPU 2 works, 56 bytes
+over a boot.  CPU 2 -> CPU 1 sends **exactly two bytes, once, at t=72 s**, and
+never again — including after a key press, which should put a four-byte channel-5
+packet on the wire.
+
+The handshake probe pins it: `Link_SendChunk` (0xF999BE) refuses to write its
+header until PA bit 3 reads 1, and PA bit 3 is CPU 1's P7 bit 1.  CPU 1 writes
+P7 = 0xE7 (bit 1 set, idle) up to t=70, and from t=72 onwards P7 = 0xC5 with
+bit 1 **clear** — so every later send spins its full 0x4E20 bound and is dropped.
+Measured as 20000-and-more consecutive PA reads of 0xF5 / 0xF7.
+
+⚠ **Not a keybed problem and not a P6-fix problem.** Every CPU 1 port write the
+probe sees lands in the high byte of the 0x12/0x13 word, i.e. on P7 and never on
+P6, so CPU 1 makes no runtime P6 write at all.  The thing to look at is CPU 1's
+`INT0_LinkByte` (0xF8E47F) / `INTTC3_LinkDmaDone` (0xF8E54F): one of them arms
+micro-DMA channel 3, drops the busy line, and never raises it again.
+
+## `make_wsa1_eeprom.py` + `wsa1_eeprom_calibration.lua` — is the serial EEPROM wired?
+
+A blank EEPROM cannot answer that question: the firmware's checksum fails and it
+zeroes all 61 velocity trims, which is what an unwired device would also give.
+`make_wsa1_eeprom.py` writes a *valid* 64x16 image whose 62 calibration bytes are
+`0x4B + n`, so the trims sweep the whole of `ToneGen_VelCurve_Trim51`.
+
+```
+python3 make_wsa1_eeprom.py <build-tree>/nvram/wsa1r/eeprom
+./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 80 -window \
+    -autoboot_script .../wsa1_eeprom_calibration.lua
+```
+
+**Result (2026-08-25):** 66 chip-select edges and 1650 clock edges before t=5 s,
+and RAM 0x0084DA reads
+
+```
+-12 -12 -11 -10 -10 -9 -9 -8 -8 -7 -7 -6 -5 -5 -4 -4 -3 -3 -2 -2 -1 -1
+0 0 0 0 0 1 1 2 2 3 3 4 4 4 5 5 6 6 6 7 7 8 8 8 9 9 10 10 10 ... 10
+```
+
+byte for byte what `Trim51[min(n,50)]` predicts from the ROM at 0xFCC5C9.  So
+the Microwire path P6.5/P8.3/P8.4/P8.5 -> `EEPROM_LoadCalibration` (0xFC8B0B) ->
+`NoteTrim_BuildFromCalibration` (0xF997FA) works end to end.
+
+⚠ **Delete that nvram file afterwards.**  It is a test fixture, not a dump: a
+real SX-WSA1R's EEPROM has not been read, and leaving a seeded one in the build
+tree would silently make every later run behave like a calibrated machine.
+
 ## Not reproduced here
 
 The `spinscan` that produced the census of unbounded wait loops in prom_c lives

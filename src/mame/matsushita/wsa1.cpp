@@ -55,6 +55,13 @@
       t=10.39 s the SED1330 is initialised, from 0xF8E822 in LCD_Init_SED1330.
       t=75.40 s SWI7's text services start drawing, first read back at
                 0xF8F2FE; 33623 writes and 821 reads to the panel in total.
+      t=70.5 s  CPU 2 reaches MAIN and its key scanner goes live.  Both of the
+                firmware's own gates are open by then and both were measured
+                (notes/wsa1-probes/wsa1_cpu2_tick_and_keyscan.lua): the one-shot
+                latch at (0x00F329) is set once the INTT1 tick counter at
+                (0x00F2F3) passes 1000, and from then on the status port at
+                0x108002 is polled about 34,500 times a second of emulated time.
+                So a key pressed after this point is seen.
       t=90 s    the panel reads ALL INITIAL SETTING! and stops changing, while
                 CPU 1 keeps running ordinary code across prom_a and prom_b -
                 a live system sitting on the message, not a hang.  The message
@@ -62,10 +69,23 @@
                 (0x0097) to those particular glyphs has NOT been traced, so
                 read that as agreement, not as a proven causal chain.
 
-    So the machine boots to correct, legible screen content.  What it does NOT
-    do is go further: the sequencer clock cannot tick (see the machine config),
-    and the tone generator, DSPs, flash, floppy and panel microcontroller are
-    all still absent.  Unlike the MN10300-based Technics keyboards in
+    So the machine boots to correct, legible screen content, and CPU 2 takes a
+    key.  How far the key gets is measured and stated exactly, because the two
+    halves of that sentence are not the same claim:
+
+      * the SCANNER works.  Press C4 after t=71 s and prom_c reads 0x5C98 off
+        0x108000 and 0x5C18 on release -- touch 0x5C, key 24, bit 7 for down --
+        which is byte for byte what keybed_push() queued
+        (notes/wsa1-probes/wsa1_keybed_note.lua).
+      * the LINK does not carry it.  CPU 2 -> CPU 1 sends exactly one packet per
+        boot and then wedges on a handshake line CPU 1 never releases, so
+        KeyEvents_ToLink's channel-5 packet is dropped.  The measurement and
+        where to look are in the block comment on the link handlers.
+
+    So no note reaches the tone generator, and nothing makes a sound in any case:
+    nothing synthesises, the wave ROMs are undumped, and the sequencer clock
+    cannot tick (see the machine config).  The DSPs, flash, floppy and panel
+    microcontroller are still absent.  Unlike the MN10300-based Technics keyboards in
     kn5000.cpp and kn7000.cpp, the CPU core is not what is missing here: the
     two processors are
     Toshiba TLCS-900/H parts, TMP95C061, and MAME already implements that device
@@ -200,9 +220,11 @@
         bytes, all of them inside MAME's SED1330 instruction table, and its
         SYSTEM SET at 0xF8E81E describes a 320 x 240 single-bit panel with three
         OR-composited layers), which agrees with the SED1330FBA the parts list
-        puts at IC7.  Still unidentified: 0x7A0000, 0x7B0004/5, 0x7E0008 and
+        puts at IC7.  Still unidentified: 0x7A0000 and 0x7B0004/5 (one device,
+        a command/status pair plus a micro-DMA'd bulk port), 0x7E0008 and
         0x7F0000 on the first processor, and the register file at 0x104000 on
-        the second
+        the second.  0x7F0000 IS NOW MODELLED as the 4 x 32 register file its
+        driver shape says it is, without a part name
       - work out which processor is IC1 "MAIN" and which is IC2 "SUB".  The link
         between them IS NOW WIRED UP (byte port plus strobe/busy handshake plus
         micro-DMA channels 2 and 3, at 0x7C0000 on one side and 0x100000 on the
@@ -212,8 +234,9 @@
       - fix the base address of the fourth EPROM image, which is strongly
         supported as the content of the 512 KiB flash at 0xE80000 on the second
         processor but not proven
-      - dump the six 16 Mbit wave mask ROMs, the AM29F400T flash, and the
-        internal ROM of the control panel microcontroller
+      - dump the six 16 Mbit wave mask ROMs, the AM29F400T flash, the serial
+        EEPROM that holds the per-key touch calibration, and the internal ROM of
+        the control panel microcontroller
       - devices with no MAME implementation yet: the L7A1429 modeling LSI, the
         uPD6383GF-3BA DSP, the M37471M2196S panel MCU and the uPD72070 floppy
         disk controller
@@ -223,6 +246,7 @@
 #include "emu.h"
 
 #include "cpu/tlcs900/tmp95c061.h"
+#include "machine/eepromser.h"
 #include "video/sed1330.h"
 
 #include "emupal.h"
@@ -233,7 +257,9 @@
 #define LOG_TG       (1U << 3)   // tone generator, 0x10C000
 #define LOG_SYNTH2   (1U << 4)   // the second register file, 0x104000
 #define LOG_KEYBED   (1U << 5)   // keybed data/status, 0x108000
-#define LOG_CHANREG  (1U << 6)   // the 4 x 32 channel register file, 0xE00000
+#define LOG_CHANREG  (1U << 6)   // the 4 x 32 channel register files, 0x7F0000 / 0xE00000
+#define LOG_KEYS     (1U << 7)   // key presses queued for the scanner at 0x108000
+#define LOG_EEPROM   (1U << 8)   // the serial EEPROM's CS / SK / DI / DO lines
 
 // LOG_LINKLOST is on by default on purpose: the one-byte-deep model of the link
 // can only drop a byte silently, and this is how that shows up.  See risk (1)
@@ -252,6 +278,9 @@ public:
 		, m_cpu1(*this, "cpu1")
 		, m_cpu2(*this, "cpu2")
 		, m_lcdc(*this, "lcdc")
+		, m_eeprom(*this, "eeprom")
+		, m_keybed(*this, "KEY%u", 0U)
+		, m_touch(*this, "TOUCH")
 	{ }
 
 	void wsa1r(machine_config &config) ATTR_COLD;
@@ -279,6 +308,12 @@ private:
 	uint8_t cpu2_pa_r();
 	void cpu2_pa_w(uint8_t data);
 
+	// CPU 2's port 6 and port 8 carry the serial EEPROM.  See the block comment
+	// above the handler bodies.
+	void cpu2_p6_w(uint8_t data);
+	uint8_t cpu2_p8_r();
+	void cpu2_p8_w(uint8_t data);
+
 	// ---------------- CPU 2's CS0 device cluster: STUBS ----------------------
 	//
 	// MSAR0 = 0x10 / MAMR0 = 0x07 (0xFFF038, 0xFFF03B) put a 256 KiB window at
@@ -296,7 +331,19 @@ private:
 	// The reads are the load-bearing part.  A register file that answers 0 to
 	// the voice-status queries reports "no voice is sounding", so the firmware's
 	// allocator always finds a free voice and never waits for one.
-	static constexpr unsigned TG_REG_COUNT = 0x1000;   // register = (plane << 6) | voice
+	//
+	// A per-channel register number is `parameter_block * 0x40 + channel`, with
+	// 64 channels -- 64 from a literal loop counter (`ldb d,0x40` at 0xFB810E in
+	// Dev10C_ResetAllChannels), not from an address stride.  The highest
+	// per-channel block the firmware is known to use is 0x0A40, from the
+	// twenty-two-register unrolled writer Dev10C_WriteAllChanRegs (0xFB713A), so
+	// the per-channel ceiling is 0x0A7F.  The GLOBAL registers sit above it and
+	// are NOT of that form: Dev10C_WriteGlobalRegs (0xFB7715) takes no channel
+	// argument and writes 0x0200-0x0205, 0x0C00-0x0C05 and 0x0E00 as immediates.
+	// 0x1000 covers all of it.
+	// (wsa1-roms-disasm/notes/FINDINGS-prom_c-tone-generator.md sec.2, 3 and 7.)
+	static constexpr unsigned TG_REG_COUNT   = 0x1000;
+	static constexpr unsigned TG_CHAN_REG_TOP = 0x0a7f;   // 0x0A40 + 0x3F
 
 	// 0x10C000 -- the tone generator.  TC183C230002 (IC4), the same part number
 	// the KN5000 carries at IC303 (see kn5000_tonegen.h).
@@ -310,20 +357,30 @@ private:
 	void     synth2_data_w(uint16_t data);
 	uint16_t synth2_data_r();
 
-	// 0x108000 -- keybed DATA (+0) and STATUS (+2).
+	// 0x108000 -- the 61-key keybed scanner: event (+0) and status (+2).
 	uint16_t keybed_data_r();
 	uint16_t keybed_status_r();
 	void     keybed_data_w(uint16_t data);
 	void     keybed_status_w(uint16_t data);
 
-	// 0xE00000 -- the 4-channel x 32-register board-level file.
-	void     chanreg_addr_w(uint16_t data);
-	void     chanreg_data_w(uint16_t data);
-	uint16_t chanreg_data_r();
+	TIMER_CALLBACK_MEMBER(keybed_scan);
+	void     keybed_push(uint8_t key, bool pressed);
+
+	// 0x7F0000 on CPU 1 and 0xE00000 on CPU 2 -- two 4-channel x 32-register
+	// files with a byte-identical driver shape.
+	void     cpu1_chanreg_addr_w(uint16_t data);
+	void     cpu1_chanreg_data_w(uint16_t data);
+	uint16_t cpu1_chanreg_data_r();
+	void     cpu2_chanreg_addr_w(uint16_t data);
+	void     cpu2_chanreg_data_w(uint16_t data);
+	uint16_t cpu2_chanreg_data_r();
 
 	required_device<tmp95c061_device> m_cpu1;
 	required_device<tmp95c061_device> m_cpu2;
 	required_device<sed1330_device> m_lcdc;
+	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
+	required_ioport_array<6> m_keybed;    // 61 keys, 6 ports x 12 bits (the last holds 1)
+	required_ioport m_touch;
 
 	uint8_t  m_link_to_cpu2 = 0;            // the byte CPU 1 last wrote to 0x7C0000
 	uint8_t  m_link_to_cpu1 = 0;            // the byte CPU 2 last wrote to 0x100000
@@ -332,12 +389,28 @@ private:
 	uint8_t  m_cpu1_p7 = 0xff;              // CPU 1's P7 output latch
 	uint8_t  m_cpu2_pa = 0x03;              // CPU 2's PA output latch
 
+	uint8_t  m_cpu2_p6 = 0;                 // CPU 2's P6 output latch (bit 5 = EEPROM CS)
+	uint8_t  m_cpu2_p8 = 0;                 // CPU 2's P8 output latch (bits 3, 4 = SK, DI)
+
 	uint16_t m_tg_latch = 0;
 	uint16_t m_tg_regs[TG_REG_COUNT]{};
 	uint16_t m_synth2_latch = 0;
 	uint16_t m_synth2_regs[TG_REG_COUNT]{};
-	uint8_t  m_chanreg_addr = 0;
-	uint8_t  m_chanreg[0x100]{};
+	uint8_t  m_cpu1_chanreg_addr = 0;
+	uint8_t  m_cpu1_chanreg[0x100]{};
+	uint8_t  m_cpu2_chanreg_addr = 0;
+	uint8_t  m_cpu2_chanreg[0x100]{};
+
+	// The keybed model.  KEY_EVENTS is this driver's queue depth, not the
+	// hardware's: nothing establishes how deep the real scanner's queue is.
+	static constexpr unsigned KEY_COUNT  = 61;
+	static constexpr unsigned KEY_EVENTS = 32;
+
+	emu_timer *m_keybed_timer = nullptr;
+	uint64_t m_keybed_prev = 0;             // one bit per key, 1 = held
+	uint16_t m_key_fifo[KEY_EVENTS]{};
+	uint8_t  m_key_fifo_read = 0;
+	uint8_t  m_key_fifo_count = 0;
 };
 
 
@@ -398,6 +471,23 @@ private:
     legible schematic ever contradicts this, only the four lines in
     cpu1_p7_r() and cpu2_pa_r() have to change.
 
+    ** MEASURED 2026-08-25, AND IT IS A REAL LIMITATION: THE CPU 2 -> CPU 1
+    DIRECTION SENDS EXACTLY ONE PACKET AND THEN WEDGES.  CPU 1 -> CPU 2 carries
+    56 bytes over a boot and is fine.  CPU 2 -> CPU 1 writes two bytes -- one
+    header plus one payload -- at about t=72 s, and after that CPU 1 leaves P7
+    bit 1 LOW for good (it writes P7 = 0xE7 up to t=70 and P7 = 0xC5 from t=72),
+    so `Link_SendChunk`'s opening wait for PA bit 3 (0xF999D0) never passes and
+    every later packet burns its 0x4E20 spins and is dropped.  The visible
+    consequence is that a key press IS decoded by prom_c and its
+    { 0x90, note, velocity } packet never reaches CPU 1.
+    notes/wsa1-probes/wsa1_link_handshake.lua is the measurement.
+    NOT DIAGNOSED FURTHER HERE.  It is on CPU 1's side -- INT0_LinkByte
+    (0xF8E47F) arms micro-DMA channel 3 and drops the busy line, and either
+    INTTC3_LinkDmaDone (0xF8E54F) never runs or it does not raise the line -- and
+    that path is not converted in the disassembly tree yet.  It is not caused by
+    the keybed model and not by the P6 fix below: every port write the probe sees
+    on CPU 1 is to P7 (0x13), never to P6 (0x12).
+
     WHAT THIS MODEL DOES NOT GUARANTEE.  The latch is one byte deep, and real
     hardware has no per-byte handshake during a burst: the strobe is released
     BEFORE the body and the receiver's DMA is expected to keep up.  The model
@@ -408,12 +498,19 @@ private:
     on the KN5000 was a perfect_quantum() inside each write handler; see
     notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch.
 
-    NO CPU-CORE CHANGE IS PROPOSED, deliberately.  The KN5000 needed
-    tmp94c241_device::clear_int0_level() because that device re-asserts a
+    NO CPU-CORE CHANGE IS PROPOSED FOR THE LINK, deliberately.  The KN5000
+    needed tmp94c241_device::clear_int0_level() because that device re-asserts a
     level-detect INT0 flag from tlcs900_check_irqs(); tmp95c061 has no such
     code, so the deferred CLEAR_LINE is benign here.  If that re-assertion
     block is ever ported into tmp95c061, THIS DRIVER BREAKS and will need the
     same treatment.
+
+    (One unrelated core change IS made, in the overlay copy of tmp95c061.cpp: a
+    one-line fix so that a write to P6 reaches the PORT_6 write callback rather
+    than PORT_7's.  It matters here twice over - for the EEPROM's chip select on
+    CPU 2, and because CPU 1's `ldio P6,0x1B` at 0xF826AF was landing on
+    cpu1_p7_w() and overwriting the handshake shadow above.  See the comment at
+    the fixed line.)
 
 ***************************************************************************/
 
@@ -514,6 +611,103 @@ void wsa1_state::cpu2_pa_w(uint8_t data)
 
 /***************************************************************************
 
+    THE SERIAL EEPROM ON CPU 2's PORT 6 AND PORT 8
+
+    Ten routines at prom_c 0xFC89C5 bit-bang a Microwire device, and the four
+    command words they shift out are what identify the protocol -- each is nine
+    bits, MSB first (`ldb h,9`, test 0x0100, shift left):
+
+        0xFC89C5  0x130          1 00 110000   EWEN   erase/write enable
+        0xFC89F7  0x100          1 00 000000   EWDS   erase/write disable
+        0xFC8A29  0x180 | addr   1 10 aaaaaa   READ
+        0xFC8A62  0x140 | addr   1 01 aaaaaa   WRITE
+
+    One start bit, two opcode bits, six address bits, and 16 data bits in both
+    the write path and the read-back path (`ldb h,0x10`), i.e. a 64 x 16 organ-
+    isation -- a 93C46-class part.  THE PART NUMBER IS AN INFERENCE FROM THE
+    PROTOCOL: nothing in the ROM names it and the manual scan available here
+    does not resolve it.  See
+    wsa1-roms-disasm/notes/FINDINGS-prom_c-eeprom-and-runtime.md sec.1.
+
+    The pins, each read off the driver's own instructions:
+
+        P6 bit 5   CS   set 5,(P6) at 0xFC89CA opens every frame,
+                        res 5,(P6) at 0xFC89F1 closes it
+        P8 bit 3   SK   set 3,(P8) / res 3,(P8) once per bit (0xFC89DF/0xFC89E8)
+        P8 bit 4   DI   driven from the bit being sent, before SK rises
+                        (0xFC89D7 / 0xFC89DC)
+        P8 bit 5   DO   only ever read -- bit 5,(P8) at 0xFC8ACC.  There is no
+                        `set 5,(P8)` or `res 5,(P8)` anywhere in the driver
+
+    RESET corroborates from the other side: `ldio P6FC,0x1F` (0xFFF01A) leaves
+    P6 bit 5 a plain port pin, and `ldio P8CR,0x19` (0xFFF06F) makes bits 0, 3
+    and 4 outputs and leaves bit 5 an input.
+
+    WHAT IS IN IT.  EEPROM_LoadCalibration (0xFC8B0B) reads words 0..0x1E into
+    RAM 0x00E2A1, requires word 0x1F to equal their sum and word 0x20 to equal
+    0x5AA5, and hands the 62 bytes to NoteTrim_BuildFromCalibration (0xF997FA),
+    which turns each into a signed per-note velocity trim at 0x0084DA.  So this
+    device holds the factory per-key touch calibration.  It is NOT DUMPED, and
+    no default_data is supplied here: a blank device fails the firmware's own
+    checksum, 0xF997FA then takes its null-pointer arm and zeroes all 61 trims,
+    and the touch response is the untrimmed curve.  That is an honest "no
+    calibration stored", not a fake.
+
+    !! ONE MAME CORE DEFECT IS IN THE WAY, and it is worked around in the CPU
+    core rather than here.  tmp95c061.cpp mapped internal address 0x12 -- P6 --
+    with `port_w<PORT_7>`, so every write to P6 was delivered to the PORT_7
+    write callback.  The overlay copy of that file fixes it to `port_w<PORT_6>`;
+    without the fix the EEPROM never sees CS and CPU 1's link-handshake shadow
+    is clobbered by `ldio P6,0x1B` at 0xF826AF.  See the note at the top of
+    src/devices/cpu/tlcs900/tmp95c061.cpp in this overlay.
+
+***************************************************************************/
+
+// P6 has no control register on this part (there is no P6CR in the SFR map) and
+// MAME binds no read callback for it, so `set 5,(P6)` reads 0 and writes 0x20.
+// Only bit 5 is a plain port pin here -- P6FC = 0x1F (0xFFF01A) turns bits 0-4
+// into CS0, CS1, CS3/LCAS, RAS and REFOUT -- so only bit 5 is acted on.
+void wsa1_state::cpu2_p6_w(uint8_t data)
+{
+	if (BIT(data ^ m_cpu2_p6, 5))
+		LOGMASKED(LOG_EEPROM, "eeprom: CS %d\n", BIT(data, 5));
+
+	m_cpu2_p6 = data;
+	m_eeprom->cs_write(BIT(data, 5) ? ASSERT_LINE : CLEAR_LINE);
+}
+
+// P8CR = 0x19 (0xFFF06F): bits 0, 3 and 4 are outputs.  As with CPU 1's P7,
+// port_r<PORT_8>() returns this callback's value verbatim rather than merging
+// the output latch, and the EEPROM driver drives SK and DI with separate
+// read-modify-write bit instructions -- so the latch HAS to be handed back here
+// or `set 3,(P8)` would knock DI down again on every clock edge.
+uint8_t wsa1_state::cpu2_p8_r()
+{
+	uint8_t data = m_cpu2_p8 & 0x19;
+
+	data |= m_eeprom->do_read() << 5;           // 0xFC8ACC bit 5,(P8)
+
+	// Bit 2 is an input the firmware polls at 0xF99543: on a change it sends
+	// MIDI START (0xFA) or STOP (0xFB) on link channel 6.  WHAT IT IS WIRED TO
+	// IS NOT ESTABLISHED (wsa1-roms-disasm/prom_c/wsa1_prom_c.s, the
+	// MIDI_Watchdogs_And_TransportSwitch header), so it is left reading low --
+	// which is what MAME's unbound port read did before this callback existed,
+	// i.e. this is not a new claim about the hardware.  Bits 1, 6 and 7 are
+	// unknown and read low for the same reason.
+	return data;
+}
+
+void wsa1_state::cpu2_p8_w(uint8_t data)
+{
+	m_cpu2_p8 = data;
+
+	m_eeprom->di_write(BIT(data, 4));           // 0xFC89D7 / 0xFC89DC
+	m_eeprom->clk_write(BIT(data, 3));          // 0xFC89DF / 0xFC89E8
+}
+
+
+/***************************************************************************
+
     CPU 2's CS0 DEVICE CLUSTER - STUBS ONLY
 
 ***************************************************************************/
@@ -542,8 +736,13 @@ void wsa1_state::tg_data_w(uint16_t data)
 	if (m_tg_latch < TG_REG_COUNT)
 		m_tg_regs[m_tg_latch] = data;
 
-	LOGMASKED(LOG_TG, "tg: reg 0x%04X (plane 0x%03X voice %2d) = 0x%04X\n",
-		m_tg_latch, m_tg_latch >> 6, m_tg_latch & 0x3f, data);
+	// Only the per-channel range decodes as block/channel; the thirteen global
+	// registers do not, so they are not printed as though they did.
+	if (m_tg_latch <= TG_CHAN_REG_TOP)
+		LOGMASKED(LOG_TG, "tg: reg 0x%04X (block 0x%03X channel %2d) = 0x%04X\n",
+			m_tg_latch, m_tg_latch >> 6, m_tg_latch & 0x3f, data);
+	else
+		LOGMASKED(LOG_TG, "tg: global reg 0x%04X = 0x%04X\n", m_tg_latch, data);
 }
 
 uint16_t wsa1_state::tg_status_r()
@@ -583,7 +782,14 @@ void wsa1_state::synth2_data_w(uint16_t data)
 	if (m_synth2_latch < TG_REG_COUNT)
 		m_synth2_regs[m_synth2_latch] = data;
 
-	LOGMASKED(LOG_SYNTH2, "synth2: reg 0x%04X (plane 0x%03X slot %2d) = 0x%04X\n",
+	// Nineteen registers per channel, same `block * 0x40 + channel` numbering:
+	// Dev104_WriteAllChanRegs (0xFB77EF) writes block k for k = 1..0x12 from
+	// staging word 2*k and block 0 LAST.  Two of the smaller accessors in the
+	// same bank write block 0 FIRST (0xFB7983, 0xFB79E5), so "block 0 is a
+	// commit register" holds for the unrolled writer and is contradicted for
+	// those two -- it is a property of each routine, not of the register.
+	// (notes/FINDINGS-prom_c-tone-generator.md sec.4.)
+	LOGMASKED(LOG_SYNTH2, "synth2: reg 0x%04X (block 0x%03X channel %2d) = 0x%04X\n",
 		m_synth2_latch, m_synth2_latch >> 6, m_synth2_latch & 0x3f, data);
 }
 
@@ -597,40 +803,94 @@ uint16_t wsa1_state::synth2_data_r()
 	return 0;
 }
 
-// ---- 0x108000 / 0x108002: keybed data and status -------------------------
+// ---- 0x108000 / 0x108002: THE 61-KEY KEYBED SCANNER ----------------------
+//
+// The port is fully decoded, and the decode is not a resemblance argument: the
+// two bytes the firmware pulls out of it are pushed STRAIGHT into
+// ToneGen_VelocityFromTouch (0xF995DF), whose argument meanings were converted
+// before this block was.
+//
+//   +2  read   status word.  Bit 0 gates everything -- KeyScan_ReadEvent
+//              (0xF9973D) returns "no event" unless it is set
+//              (0xF9976F and BC,0x0001).  The whole word is separately compared
+//              against 2 at 0xF9979A; what value 2 MEANS is NOT ESTABLISHED, so
+//              this model never produces it.
+//   +0  read   one 16-bit key event:
+//                  low  byte   bit 7 = note ON, bits 6..0 = key number
+//                  high byte   the touch measurement
+//
+// (wsa1-roms-disasm/notes/FINDINGS-prom_c-keyboard-and-touch.md sec.1;
+//  prom_c/wsa1_prom_c.s, the block comment at 0xF9973D.)
+//
+// SIXTY-ONE KEYS, and the count comes out twice in the firmware:
+// KeyScan_InitKeyStateBitmap (0xF9988D) folds events into an 8-byte bitmap at
+// work RAM 0x0000FFF0, and NoteTrim_BuildFromCalibration (0xF997FA) walks note
+// 0..0x3C inclusive -- 61 -- which is the same index ToneGen_VelocityFromTouch
+// uses.  KeyEvents_ToLink (0xF98CB9) then packs each decoded event as
+// { 0x90, note, velocity } and sends up to ten of them to CPU 1 on link channel
+// 5 (0xF98D24 ld (XBC+0xde),0x90; 0xF98D45 push 0x0005), with the note
+// transposed by +36 inside ToneGen_VelocityFromTouch (0xF995EC), so key 0..60
+// become MIDI 36..96 = C2..C7.
+//
+// WHAT THIS MODEL CHOOSES, and it is a choice, not a hardware fact:
+//
+//  * the QUEUE.  The firmware polls a status bit and takes one event at a time,
+//    so the device plainly buffers at least one.  How deep the real queue is is
+//    NOT ESTABLISHED; KEY_EVENTS = 32 here, and an overflow is logged rather
+//    than silently dropped.
+//  * the SCAN RATE.  1 kHz, chosen so a human keypress cannot be missed.  The
+//    real scanner's rate is NOT ESTABLISHED.
+//  * the TOUCH byte.  The hardware measures a key-contact TRAVEL TIME, not a
+//    velocity: ToneGen_Velocity_Input_Curve (ROM 0xFCC61A) is non-increasing
+//    over all 256 entries, so a LARGER touch value means a SOFTER note.  A PC
+//    keyboard has no such measurement, so it comes from the "Key touch"
+//    adjuster, mapped so that 100 = hardest.  Index 144 is the curve's pivot --
+//    the only index at which it equals the 77 that 0xFCC5C5 subtracts -- and at
+//    the firmware's default curve mode 6 the adjuster's default of 64 lands on
+//    MIDI velocity 65.  0xFF is never sent: it is the firmware's "no travel
+//    time was measured" code (0xF99795), which makes it drop the note-on.
 
 uint16_t wsa1_state::keybed_status_r()
 {
-	// 0xF99762 reads here; 0xF9976F tests bit 0 ("an event is waiting") and
-	// 0xF9979A tests bit 1.  Returning 0 means "no key event", which is the
-	// honest state for a rack SX-WSA1R with no keybed attached, and it is what
-	// makes the reader at 0xF99740 return its 0xFFFF "queue empty" at once
-	// instead of running its 1000-tick timeout.
-	return 0;
+	// Read at 0xF99762, roughly 34,500 times a second of emulated time once
+	// MAIN is running, so nothing is logged here.
+	return m_key_fifo_count ? 1 : 0;
 }
 
 uint16_t wsa1_state::keybed_data_r()
 {
-	// The word is (touch << 8) | (note_on << 7) | note - 0xF99780..0xF99792
-	// splits it and the velocity decoder at 0xF995DF consumes it.  0 = note 0,
-	// key up, which is inert.
-	//
-	// The reader at 0xF99776 only gets here after the status bit says an event
-	// is waiting, so it never does; but the SECOND reader, the bounded drain at
-	// 0xF998C6, reads the data port unconditionally.  Measured: exactly 16
-	// reads, all from PC 0xF998CD, once per boot - which is the drain's 0x10
-	// iteration count, so it is expected traffic and not a surprise.  Hence
-	// LOGMASKED and not logerror.  (notes/wsa1-probes/, error.log census.)
-	LOGMASKED(LOG_KEYBED, "%s: keybed data read with no event pending\n",
-		machine().describe_context());
-	return 0;
+	if (m_key_fifo_count == 0)
+	{
+		// The reader at 0xF99776 only gets here after the status bit said an
+		// event was waiting, so it never does; but the SECOND reader, the
+		// bounded drain in KeyScan_InitKeyStateBitmap at 0xF998C6, reads the
+		// data port unconditionally, exactly 0x10 times, once per boot.  That
+		// is expected traffic, hence LOGMASKED and not logerror.
+		LOGMASKED(LOG_KEYBED, "%s: keybed data read with no event pending\n",
+			machine().describe_context());
+		return 0;
+	}
+
+	const uint16_t event = m_key_fifo[m_key_fifo_read];
+
+	if (!machine().side_effects_disabled())
+	{
+		m_key_fifo_read = (m_key_fifo_read + 1) % KEY_EVENTS;
+		m_key_fifo_count--;
+
+		LOGMASKED(LOG_KEYS, "keybed: -> 0x%04X (key %2d %s, touch 0x%02X)\n",
+			event, event & 0x7f, BIT(event, 7) ? "down" : "up  ", event >> 8);
+	}
+
+	return event;
 }
 
 void wsa1_state::keybed_status_w(uint16_t data)
 {
-	// The boot preload at 0xF99125 writes 0x0080..0x00BF here, 64 of them, from
-	// RESET (0xFFF081) and from the NMI handler (0xFFF0AE).  What they configure
-	// is NOT ESTABLISHED.
+	// The boot preload Dev108000_Preload_80toBF (0xF99125) writes 0x0080 + i
+	// here and then 0x8000 to +0, 64 pairs, from RESET (0xFFF081) and from the
+	// NMI handler (0xFFF0AE).  Note the order: +2 FIRST.  What it configures is
+	// NOT ESTABLISHED, so nothing is done with it.
 	LOGMASKED(LOG_KEYBED, "keybed: +2 <- 0x%04X\n", data);
 }
 
@@ -639,24 +899,109 @@ void wsa1_state::keybed_data_w(uint16_t data)
 	LOGMASKED(LOG_KEYBED, "keybed: +0 <- 0x%04X\n", data);
 }
 
-// ---- 0xE00000: the 4 x 32 channel register file --------------------------
-
-void wsa1_state::chanreg_addr_w(uint16_t data)
+void wsa1_state::keybed_push(uint8_t key, bool pressed)
 {
-	m_chanreg_addr = data & 0xff;
+	// 0..100 from the adjuster, inverted onto the firmware's travel-time scale
+	// and kept clear of 0xFF (see the block comment above).
+	const unsigned adjust = std::min<unsigned>(100, m_touch->read());
+	const uint8_t  touch  = std::min<unsigned>(0xfe, 255 - (adjust * 255) / 100);
+
+	if (m_key_fifo_count >= KEY_EVENTS)
+	{
+		logerror("keybed: event queue full, key %d %s dropped\n",
+			key, pressed ? "down" : "up");
+		return;
+	}
+
+	m_key_fifo[(m_key_fifo_read + m_key_fifo_count) % KEY_EVENTS] =
+		(uint16_t(touch) << 8) | (pressed ? 0x80 : 0x00) | key;
+	m_key_fifo_count++;
+
+	LOGMASKED(LOG_KEYS, "keybed: key %2d %s queued (touch 0x%02X)\n",
+		key, pressed ? "down" : "up  ", touch);
 }
 
-void wsa1_state::chanreg_data_w(uint16_t data)
+TIMER_CALLBACK_MEMBER(wsa1_state::keybed_scan)
 {
-	m_chanreg[m_chanreg_addr] = data & 0xff;
+	uint64_t state = 0;
 
-	LOGMASKED(LOG_CHANREG, "chanreg: ch %d reg 0x%02X = 0x%02X\n",
-		m_chanreg_addr >> 5, m_chanreg_addr & 0x1f, data & 0xff);
+	for (unsigned port = 0; port < 6; port++)
+		state |= uint64_t(m_keybed[port]->read() & 0xfff) << (port * 12);
+
+	const uint64_t changed = state ^ m_keybed_prev;
+
+	if (changed == 0)
+		return;
+
+	for (unsigned key = 0; key < KEY_COUNT; key++)
+		if (BIT(changed, key))
+			keybed_push(key, BIT(state, key));
+
+	m_keybed_prev = state;
 }
 
-uint16_t wsa1_state::chanreg_data_r()
+// ---- 0x7F0000 (CPU 1) and 0xE00000 (CPU 2): two 4 x 32 register files -----
+//
+// The same driver runs on both processors and on the KN5000's sub-CPU: an
+// address register at +0 and a data register at +2, eight writes per slot, and
+// a slot number formed as (channel << 5) | reg.  On CPU 1 the writer is
+// Dev7F_WriteSlot8 (0xF83197: ld XIX,0x007F0000 at 0xF8319A, ld (XIX),W at
+// 0xF831A8, ld (XIX+0x02),A at 0xF831AA) and DSP_Init_Channels (0xF85F0F) walks
+// four channels with a stride of 0x20, setting register (ch << 5) | 0x1F of
+// each to 1.  On CPU 2 it is 0xF98057 / 0xF98099, whose eighty-one bytes are
+// identical to the KN5000 sub-CPU routine at payload 0x1FD27 bar the base
+// address, and DSP_ChannelRegs_Write8 fills channels 0..3 from one 8-byte block
+// (0xFC8719).  (wsa1-roms-disasm/notes/FINDINGS-prom_a-tasks-and-dsp-refresh.md
+// sec. "DSP_Init_Channels"; notes/FINDINGS-prom_c-flash.md sec.5;
+// notes/FINDINGS-memory-map.md, the 0x7F0000 and 0xE00000 rows.)
+//
+// WHETHER THE TWO ARE ONE DUAL-PORTED CHIP OR TWO INSTANCES IS NOT ESTABLISHED,
+// so they are modelled as two independent register files with no connection
+// between them.  Neither synthesises anything: they are storage, so that the
+// debugger can see what the firmware programmed.  The KN5000 driver models its
+// twin the same way at 0x130000/0x130002, with the standing correction that it
+// is NOT the uPD6383GF host interface but a separate register file.
+
+void wsa1_state::cpu1_chanreg_addr_w(uint16_t data)
 {
-	return m_chanreg[m_chanreg_addr];
+	m_cpu1_chanreg_addr = data & 0xff;
+}
+
+void wsa1_state::cpu1_chanreg_data_w(uint16_t data)
+{
+	m_cpu1_chanreg[m_cpu1_chanreg_addr] = data & 0xff;
+
+	LOGMASKED(LOG_CHANREG, "chanreg1: ch %d reg 0x%02X = 0x%02X\n",
+		m_cpu1_chanreg_addr >> 5, m_cpu1_chanreg_addr & 0x1f, data & 0xff);
+}
+
+uint16_t wsa1_state::cpu1_chanreg_data_r()
+{
+	// No converted code reads this port; a read means an unreached path or a
+	// decode error, so it is logged unconditionally.
+	if (!machine().side_effects_disabled())
+		logerror("%s: UNEXPECTED read of 0x7F0002 (slot 0x%02X)\n",
+			machine().describe_context(), m_cpu1_chanreg_addr);
+
+	return m_cpu1_chanreg[m_cpu1_chanreg_addr];
+}
+
+void wsa1_state::cpu2_chanreg_addr_w(uint16_t data)
+{
+	m_cpu2_chanreg_addr = data & 0xff;
+}
+
+void wsa1_state::cpu2_chanreg_data_w(uint16_t data)
+{
+	m_cpu2_chanreg[m_cpu2_chanreg_addr] = data & 0xff;
+
+	LOGMASKED(LOG_CHANREG, "chanreg2: ch %d reg 0x%02X = 0x%02X\n",
+		m_cpu2_chanreg_addr >> 5, m_cpu2_chanreg_addr & 0x1f, data & 0xff);
+}
+
+uint16_t wsa1_state::cpu2_chanreg_data_r()
+{
+	return m_cpu2_chanreg[m_cpu2_chanreg_addr];
 }
 
 
@@ -668,12 +1013,25 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_link_to_cpu1_full));
 	save_item(NAME(m_cpu1_p7));
 	save_item(NAME(m_cpu2_pa));
+	save_item(NAME(m_cpu2_p6));
+	save_item(NAME(m_cpu2_p8));
 	save_item(NAME(m_tg_latch));
 	save_item(NAME(m_tg_regs));
 	save_item(NAME(m_synth2_latch));
 	save_item(NAME(m_synth2_regs));
-	save_item(NAME(m_chanreg_addr));
-	save_item(NAME(m_chanreg));
+	save_item(NAME(m_cpu1_chanreg_addr));
+	save_item(NAME(m_cpu1_chanreg));
+	save_item(NAME(m_cpu2_chanreg_addr));
+	save_item(NAME(m_cpu2_chanreg));
+	save_item(NAME(m_keybed_prev));
+	save_item(NAME(m_key_fifo));
+	save_item(NAME(m_key_fifo_read));
+	save_item(NAME(m_key_fifo_count));
+
+	// 1 kHz is this driver's choice, not the scanner's rate -- see the block
+	// comment above keybed_status_r().
+	m_keybed_timer = timer_alloc(FUNC(wsa1_state::keybed_scan), this);
+	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
 }
 
 void wsa1_state::machine_reset()
@@ -686,6 +1044,15 @@ void wsa1_state::machine_reset()
 	m_cpu2_pa = 0x03;
 	m_link_to_cpu2_full = false;
 	m_link_to_cpu1_full = false;
+
+	// CPU 2's P6 and P8 latches: EEPROM_PortInit (0xFC8B9D) drops CS, SK and DI
+	// as its first act, so all-zero is where the driver puts them anyway.
+	m_cpu2_p6 = 0;
+	m_cpu2_p8 = 0;
+
+	m_keybed_prev = 0;
+	m_key_fifo_read = 0;
+	m_key_fifo_count = 0;
 }
 
 
@@ -815,16 +1182,38 @@ void wsa1_state::cpu1_map(address_map &map)
 	map(0x790000, 0x790000).rw(m_lcdc, FUNC(sed1330_device::status_r), FUNC(sed1330_device::data_w));
 	map(0x790001, 0x790001).rw(m_lcdc, FUNC(sed1330_device::data_r),   FUNC(sed1330_device::command_w));
 
-	// A byte port, ring buffered in both directions through the pointer at
-	// (0x605A3E): 0xFE680F ld C,(0x7A0000) and 0xFE682B ld (0x7A0000),C.
+	// ONE byte-wide data register, not a range.  A census over prom_a and
+	// prom_b of the 24-bit memory-operand forms and the imm32 loads finds
+	// exactly four sites in 0x7A0000-0x7A000F and all four name 0x7A0000:
+	// programmed I/O at 0xFE680F ld C,(0x7A0000) and 0xFE682B ld (0x7A0000),C
+	// through the pointer at (0x605A3E), and micro-DMA channel 0 through the
+	// pointer at (0x605A3C) -- Dev7A_Dma_DeviceToRam (0xFE59BB) sets
+	// DMAS0 = 0x7A0000 fixed with DMAD0 walking, Dev7A_Dma_RamToDevice
+	// (0xFE59D2) is the mirror.  The per-byte request line is INT7
+	// (uDMA0_ArmOnINT7 at 0xFE5966, ldio DMA0V,0x0E, 0x0E << 2 = 0x38).  It is
+	// the bulk data half of the device whose command/status half is at
+	// 0x7B0004/5.  (wsa1-roms-disasm/notes/FINDINGS-dev7b-and-int5.md.)
+	//
+	// Mapped as the containing WORD only because a 16-bit space refuses a
+	// one-byte inert entry (-validate: "Wrong program memory read handler ...
+	// ALIGN = 2"); 0x7A0001 is not referenced by anything.
 	map(0x7a0000, 0x7a0001).noprw();
 
-	// Control/status and data of an unidentified byte-wide device.  A census
-	// of the 24-bit memory-operand form over prom_a and prom_b finds exactly
-	// five accesses to 0x7B0000-0x7B000F, all in one 54-byte block
+	// Control/status (+4) and data (+5) of an unidentified byte-wide device.  A
+	// census of the 24-bit memory-operand form over prom_a and prom_b finds
+	// exactly five accesses to 0x7B0000-0x7B000F, all in one 54-byte block
 	// (0xFE54B6, 0xFE54BC, 0xFE54C5, 0xFE54DD, 0xFE54E6), and the only
-	// consumer is the INT5 handler at 0xFE6866: it tests bit 7 and bit 6 of
-	// 0x7B0004 and reads a byte from 0x7B0005 for each one that arrives.
+	// consumer is the INT5 handler at 0xFE6866: it tests bit 7 of 0x7B0004
+	// ("a byte is ready") and bit 6 ("more follow"), and reads one byte from
+	// 0x7B0005 for each one that arrives.  0x7B0004 is write-only in the
+	// hardware's eyes -- Dev7B_WriteControl_Shadowed keeps the last value
+	// written at RAM (0x605B09) because software has to remember it.
+	//
+	// LEFT INERT ON PURPOSE.  Modelling the status bits would need a device to
+	// model, and the notes are explicit that what this is has not been
+	// established -- not a floppy controller, not a panel scanner, not
+	// anything.  It costs nothing: INT5 is never asserted here, so the handler
+	// that would spin on bit 7 is never entered.
 	map(0x7b0004, 0x7b0005).noprw();
 
 	// The data port of the link to the other processor.  Writing it hands one
@@ -847,12 +1236,14 @@ void wsa1_state::cpu1_map(address_map &map)
 	// 0xFE50D5), which is also what proves this device is on CS0.
 	map(0x7e0008, 0x7e0009).noprw();
 
-	// Address register and data register of an unidentified device, eight
-	// writes per slot: 0xF8319A ld XIX,0x007F0000, then
-	// 0xF831A8 ld (XIX),W and 0xF831AA ld (XIX+0x02),A.  The other processor
-	// drives something with a byte-identical shape at 0xE00000; whether that
-	// is one dual-ported chip or two instances is not established.
-	map(0x7f0000, 0x7f0003).noprw();
+	// Address register (+0) and data register (+2) of a 4-channel x 32-register
+	// file: 0xF8319A ld XIX,0x007F0000, then 0xF831A8 ld (XIX),W and
+	// 0xF831AA ld (XIX+0x02),A, eight writes per slot with the slot formed as
+	// (channel << 5) | reg.  The other processor drives a byte-identical shape
+	// at 0xE00000.  See the block comment on the handlers.
+	map(0x7f0000, 0x7f0001).w(FUNC(wsa1_state::cpu1_chanreg_addr_w));
+	map(0x7f0002, 0x7f0003).rw(FUNC(wsa1_state::cpu1_chanreg_data_r),
+	                           FUNC(wsa1_state::cpu1_chanreg_data_w));
 
 	// The two program EPROMs, on CS2 (MSAR2 = 0xE0, 0xF82733).  prom_a's
 	// vector table is at 0xFFFF00, where a TMP95C061 fetches vectors from, and
@@ -871,9 +1262,19 @@ void wsa1_state::cpu2_map(address_map &map)
 	// block clears 0x8000 words upward from 0x000080 (0xFFF085) and its stack
 	// starts at 0x00FFF0 (0xFFF006); the main entry moves the stack down to
 	// 0x00FA00 (0xF9816B) and a 0x10D8-byte RAM image is copied into 0x00E2DF
-	// (0xF989EF).  All of that is inside the cleared span, which as on the
-	// other processor is a lower bound on the chip rather than its size.
-	map(0x000080, 0x01007f).ram();
+	// (0xF989EF).
+	//
+	// The map now covers the WHOLE CS3 window, 0x000000-0x01FFFF, which both
+	// surviving decoders agree on, and not just the cleared 0x000080-0x01007F.
+	// The reason is a device the firmware puts above the clear: the FLASH
+	// STAGING BUFFER at 0x010000-0x01FFFF, one whole 64 KiB flash sector held
+	// in RAM.  Flash_ReadSectorToBuffer (0xFC89AF), Flash_ProgramSectorFromBuffer
+	// (0xFC88F9) and Flash_ProgramSlice1K (0xFC893B) all load 0x00010000
+	// literally (0xFC8903, 0xFC8945, 0xFC89B3), and the block writers form the
+	// destination as `flash address - 0x00E70000` (0xFC87AE, 0xFC881B,
+	// 0xFC8851), which is 0x00010000 + (address - 0x00E80000).
+	// (wsa1-roms-disasm/notes/FINDINGS-prom_c-flash.md sec.3.)
+	map(0x000080, 0x01ffff).ram();
 
 	// The CS0 device cluster.  MSAR0 = 0x10 (0xFFF038) is the one place in
 	// either image where the meaning of MSAR is proven rather than assumed:
@@ -902,13 +1303,21 @@ void wsa1_state::cpu2_map(address_map &map)
 	map(0x104000, 0x104001).w(FUNC(wsa1_state::synth2_addr_w));
 	map(0x104002, 0x104003).rw(FUNC(wsa1_state::synth2_data_r), FUNC(wsa1_state::synth2_data_w));
 
-	// Keybed: +0 data, +2 status with bit 0 = "an event is waiting".  0xF99762
-	// reads the status, 0xF99776 and 0xF998C6 read the data, and the consumer is
-	// the velocity decoder at 0xF995DF.  The KN5000 has the identical interface
-	// at 0x110000/0x110002, which MAME already models as kbd_data_r/kbd_status_r
-	// in kn5000.cpp.  The boot preload at 0xF99125 writes 64 pairs here.  The
-	// physical scanner part is NOT ESTABLISHED, and a rack SX-WSA1R has no
-	// keyboard, so this is presumably live only on the SX-WSA1.
+	// THE 61-KEY KEYBED SCANNER: +0 event, +2 status with bit 0 = "an event is
+	// waiting".  0xF99762 reads the status, 0xF99776 and 0xF998C6 read the
+	// event, and the consumer is the velocity decoder at 0xF995DF.  The KN5000
+	// has the identical interface at 0x110000/0x110002, which MAME already
+	// models as kbd_data_r/kbd_status_r in kn5000.cpp.  Note that this device
+	// is NOT the "+0 select / +2 data" pair the two rows either side of it are:
+	// the boot preload at 0xF99125 writes +2 first and +0 second.  See the
+	// block comment on the handlers.
+	//
+	// !! THE RACK SX-WSA1R HAS NO KEYBOARD.  The scanner is presumably live only
+	// on the keyboard model, the SX-WSA1, which this driver does not declare
+	// because no SX-WSA1 material was available to check the ROM set against.
+	// It is wired up anyway, because it is the only way anything in this
+	// machine can be made to play a note without a working MIDI IN, and because
+	// the firmware in these images is the firmware that reads it.
 	map(0x108000, 0x108001).rw(FUNC(wsa1_state::keybed_data_r),   FUNC(wsa1_state::keybed_data_w));
 	map(0x108002, 0x108003).rw(FUNC(wsa1_state::keybed_status_r), FUNC(wsa1_state::keybed_status_w));
 
@@ -946,8 +1355,9 @@ void wsa1_state::cpu2_map(address_map &map)
 	// way at 0x130000/0x130002 in kn5000.cpp, with the standing correction that
 	// it is NOT the uPD6383GF host interface but a separate register file.  Same
 	// driver shape as 0x7F0000 on the other CPU.
-	map(0xe00000, 0xe00001).w(FUNC(wsa1_state::chanreg_addr_w));
-	map(0xe00002, 0xe00003).rw(FUNC(wsa1_state::chanreg_data_r), FUNC(wsa1_state::chanreg_data_w));
+	map(0xe00000, 0xe00001).w(FUNC(wsa1_state::cpu2_chanreg_addr_w));
+	map(0xe00002, 0xe00003).rw(FUNC(wsa1_state::cpu2_chanreg_data_r),
+	                           FUNC(wsa1_state::cpu2_chanreg_data_w));
 
 	// This processor's program EPROM, also on CS2, with its own independent
 	// vector table at 0xFFFF00 giving reset = 0xFFF000.  The device also holds
@@ -958,6 +1368,99 @@ void wsa1_state::cpu2_map(address_map &map)
 
 
 static INPUT_PORTS_START(wsa1r)
+	// THE 61-KEY KEYBED, six ports of twelve bits with one key in the last.
+	// Key 0 is the lowest; the firmware adds 36 inside ToneGen_VelocityFromTouch
+	// (0xF995EC), so key 0..60 are MIDI 36..96 = C2..C7 and the octave numbers
+	// below are the MIDI ones.  61 is the firmware's own count, twice over --
+	// see the block comment above keybed_status_r().
+	//
+	// Two octaves carry a default PC-keyboard mapping, the usual tracker
+	// layout; nothing else in this driver claims a key, so there is no conflict
+	// to work around.  Assign the rest from MAME's input menu.
+
+	PORT_START("KEY0")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#2")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E2")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F2")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#2")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G2")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#2")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A2")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2")
+
+	PORT_START("KEY1")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#3")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E3")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F3")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#3")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G3")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#3")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A3")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3")
+
+	PORT_START("KEY2")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4") PORT_CODE(KEYCODE_Z)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4") PORT_CODE(KEYCODE_S)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4") PORT_CODE(KEYCODE_X)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#4") PORT_CODE(KEYCODE_D)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E4") PORT_CODE(KEYCODE_C)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F4") PORT_CODE(KEYCODE_V)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#4") PORT_CODE(KEYCODE_G)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G4") PORT_CODE(KEYCODE_B)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#4") PORT_CODE(KEYCODE_H)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A4") PORT_CODE(KEYCODE_N)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4") PORT_CODE(KEYCODE_J)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4") PORT_CODE(KEYCODE_M)
+
+	PORT_START("KEY3")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5") PORT_CODE(KEYCODE_Q)
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5") PORT_CODE(KEYCODE_2)
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5") PORT_CODE(KEYCODE_W)
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#5") PORT_CODE(KEYCODE_3)
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E5") PORT_CODE(KEYCODE_E)
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F5") PORT_CODE(KEYCODE_R)
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#5") PORT_CODE(KEYCODE_5)
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G5") PORT_CODE(KEYCODE_T)
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#5") PORT_CODE(KEYCODE_6)
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A5") PORT_CODE(KEYCODE_Y)
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5") PORT_CODE(KEYCODE_7)
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5") PORT_CODE(KEYCODE_U)
+
+	PORT_START("KEY4")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6")
+
+	PORT_START("KEY5")
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7")
+
+	PORT_START("TOUCH")
+	// The touch measurement the scanner puts in the high byte of a key event is
+	// a key-contact TRAVEL TIME, and the firmware's input curve at ROM 0xFCC61A
+	// is non-increasing, so a bigger number is a softer note.  This adjuster is
+	// inverted for the player's sake -- 100 is the hardest strike -- and mapped
+	// onto 0x00..0xFE in keybed_push().  IT IS A DRIVER CONTROL, NOT A HARDWARE
+	// REGISTER: a PC keyboard cannot measure a travel time, and no default is
+	// established.  64 is chosen because at the firmware's power-on curve mode 6
+	// (RAM 0x00F32A, boot value from ROM 0xFCC535) it lands on MIDI velocity 65.
+	PORT_ADJUSTER(64, "Key touch (100 = hardest strike)")
 INPUT_PORTS_END
 
 
@@ -993,6 +1496,15 @@ void wsa1_state::wsa1r(machine_config &config)
 	m_cpu2->set_addrmap(AS_PROGRAM, &wsa1_state::cpu2_map);
 	m_cpu2->porta_read().set(FUNC(wsa1_state::cpu2_pa_r));
 	m_cpu2->porta_write().set(FUNC(wsa1_state::cpu2_pa_w));
+	m_cpu2->port6_write().set(FUNC(wsa1_state::cpu2_p6_w));
+	m_cpu2->port8_read().set(FUNC(wsa1_state::cpu2_p8_r));
+	m_cpu2->port8_write().set(FUNC(wsa1_state::cpu2_p8_w));
+
+	// The calibration EEPROM.  64 x 16 with a 6-bit address, which is a 93C46
+	// class part; the identification is from the protocol the driver at
+	// prom_c 0xFC89C5 bit-bangs, not from a part number, and the device itself
+	// is not dumped.  See the block comment above cpu2_p6_w().
+	EEPROM_93C46_16BIT(config, m_eeprom);
 
 	// The link handshake is a pair of spin loops with a 0x4E20 iteration limit
 	// (0xF8E113, 0xF999D9), which is on the order of milliseconds of emulated
@@ -1104,11 +1616,14 @@ void wsa1_state::wsa1r(machine_config &config)
 	// fire.  The sequencer cannot run until that is addressed.
 	//
 	// Still absent: the tone generator's actual synthesis, the three DSPs and
-	// their microcode upload path, the serial EEPROM, the AM29F400T flash
-	// (whose data-poll and erase-verify loops are unbounded and will spin if
-	// reached), the floppy controller and the panel microcontroller.  CPU 1
-	// nevertheless boots all the way to rendered text on the panel - see the
-	// boot walkthrough at the top of this file.
+	// their microcode upload path, the AM29F400T flash (whose data-poll and
+	// erase-verify loops are unbounded and will spin if reached), the MIDI port
+	// (MAME's tmp95c061 has no serial engine at all - sc0buf_r returns 0 and
+	// sc0buf_w only fakes "transmit complete", so there is nothing to connect a
+	// midiin/midiout to), the floppy controller and the panel microcontroller.
+	// CPU 1 nevertheless boots all the way to rendered text on the panel, and
+	// CPU 2 will take a note from the keybed - see the boot walkthrough at the
+	// top of this file.
 }
 
 

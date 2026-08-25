@@ -145,6 +145,12 @@ ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/de
 # like the KN7000 ones, so this repo stays the single source of truth for every Technics
 # model. See notes/upstream-patches/README.md for the matching patch series.
 mkdir -p "$BUILD_TREE/src/devices/cpu/tlcs900" "$BUILD_TREE/src/devices/bus/technics/kn5000"
+# tmp95c061: a ONE LINE fix, and the file is overlaid only to carry it.  Internal
+# address 0x12 is P6 and its write side dispatched to port_w<PORT_7>, so every P6
+# write went to PORT_7.  The SX-WSA1R needs P6 bit 5 (the serial EEPROM's chip
+# select) to arrive, and CPU 1's `ldio P6,0x1B` was clobbering the link handshake
+# shadow on P7.  Keep the diff to that line; see the comment at it.
+ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.cpp"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.cpp"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.h"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"  "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241_serial.cpp"
