@@ -24,6 +24,20 @@ screen instead of sitting on `ALL INITIAL SETTING!`. Every gap below that was bl
 never repaints" is now testable on a live UI; nothing in the list is CLOSED by it, but gaps O, P, Q
 and R can finally be worked against a screen that answers.
 
+**Revised again 2026-08-25 (night), after THE TMP95C061 TIMERS WERE FIXED AND THE DATABOOK WAS
+FOUND.** Every note in these trees said no TLCS-900 databook was available, so the prescaler scale,
+the 16-bit timer semantics and control register 0x3C had all been derived from firmware, each with a
+residual caveat. **The databook is on bitsavers with an intact text layer**
+(`notes/wsa1-probes/tlcs900_datasheet_quotes.py` re-checks 13 quotes and prints the six register
+bit-maps that are scanned figures). It closes appendix item 2 outright, retires the "residual x2"
+worry on the tap scale, and -- the one nobody could establish from any ROM -- states that INTNEST is
+decremented by RETI, which appendix item 5 had implemented on inference alone. Three further defects
+it exposed are fixed in the same pass (T4MOD/T5MOD `<CLE>`, two independent comparators instead of
+an else-if chain, and TRUN's "Stop & Clear"). **Appendix item 2 is CLOSED.** Nothing in the A-Y list
+closes with it, but gap C's numbers all move (its 500-tick deadlines are 1.02 s now, not 16.4 s) and
+**three new MAME-side gaps, items 6 to 8, are added** -- one of which, the SX-KN1500's half-blank
+IC15 dump, is that machine's entire boot blocker.
+
 This is a **request list**, not a summary. Every entry is a question a disassembly wave could
 answer, with what the driver does instead today and where to start looking. It is deliberately
 short: only gaps that change what the emulator can *do*.
@@ -206,7 +220,15 @@ channel 5 -- the one thing in this machine a user can now cause -- is dropped 20
 The driver's one-byte INT0 latch model is a candidate cause, but the handler is not converted,
 so there is nothing to check it against.
 
-**Measured, so a fix has a target to hit** (`notes/wsa1-probes/wsa1_link_handshake.lua`):
+⚠ **RE-MEASURE THIS ONE.** The numbers below were taken with the 16x-slow prescaler (appendix
+item 2), so every wall-clock figure in them is meaningless now and the 500-tick deadlines they
+race against are 1.02 s of emulated time rather than 16.4 s. The *shape* of the failure survived
+the fix -- CPU 1 still burns a 0x4E20-spin wait on P7 bit 3 at `0xF8E086` -- but the timing changed
+by a factor of 16, which is exactly the sort of change that can turn a timeout race one way or the
+other. Nothing here should be quoted until the script is re-run.
+
+**Measured with the OLD timer model, so a fix has a target to hit**
+(`notes/wsa1-probes/wsa1_link_handshake.lua`):
 
 ```
 t=68  tx=0  CPU 1 last wrote P7 = 0xE7 (bit 1 SET)    PA reads 0xFD
@@ -917,6 +939,16 @@ Listed so a disassembly wave does not spend effort on something the emulator cou
    interrupt-acceptance site through `tlcs900_intnest_accept()`, and decremented in `op_RETI`.
    Both ends saturate rather than wrap. 16-bit only: no firmware in these trees uses an 8- or
    32-bit `ldc` on it, and the 8/32-bit CR paths deliberately do not decode it.
+   ★ **The half of this that was inference is now primary-sourced (2026-08-25).** The ROM evidence
+   only ever showed the INCREMENT -- prom_a reads the counter, and biases it across an `ei 0x00`
+   window at 0xF8576C -- and an adversarial pass named "cr 0x3C is auto-DECREMENTED by RETI" as the
+   single claim most likely to be wrong, since a wrong decrement would underflow on the firmware's
+   own leave-without-RETI paths. The databook settles it, section 3.3.1 p.11, verbatim: step "(4)
+   The CPU increments the INTNEST (Interrupt Nesting Counter)", and "Executing this instruction
+   [RETI] restores the contents of the program counter and the status registers and decements the
+   INTNEST (Interrupt Nesting Counter)" (sic). What the databook does NOT give is the
+   control-register NUMBER -- its CPU-control-register figure on p.15 lists only DMAS/DMAD/DMAC/DMAM
+   -- so 0x3C/0x7C still come from what these ROMs address, and only the mechanism is sourced.
    ⚠ `tlcs900.h`, `tlcs900.cpp`, `900tbl.hxx` and `tmp95c063.cpp` are now overlaid for this, and
    they are shared with every tlcs900 driver in MAME. See
    `notes/wsa1-probes/README.md` for the measurement and for what it means for the KN5000.
@@ -947,11 +979,110 @@ Listed so a disassembly wave does not spend effort on something the emulator cou
    `set_input_line(TLCS900_INT6, ...)` was silently a no-op even though the enum value exists. Both
    are added in this overlay, rising-edge and UNGATED -- see gap N for why they are not gated on a
    port-B control bit the way INT4 and INT5 are.
-2. **`tmp95c061`'s 8-bit timer prescaler taps are 16x slow**, and its 16-bit timers 4-7 do not
-   count at all, so `INTTR4` -- this machine's musical clock -- cannot fire. Boot takes ~90 s of
-   emulated time instead of ~6 s and the sequencer cannot run.
+2. **~~`tmp95c061`'s 8-bit timer prescaler taps are 16x slow, and its 16-bit timers 4-7 do not
+   count~~ -- CLOSED AND IMPLEMENTED 2026-08-25.** Six defects, all in the overlay's
+   `src/devices/cpu/tlcs900/tmp95c061.cpp`, each commented at the line with its databook page:
+
+   | # | defect | what the databook says |
+   |---|---|---|
+   | 1 | prescaler taps `>>7 >>9 >>11 >>15` = fc/128 … fc/32768 | Table 3.8 (1) p.81: `oT1 (8/fc) · oT4 (32/fc) · oT16 (128/fc) · oT256 (2048/fc)` -> shifts 3/5/7/11 |
+   | 2 | the 16-bit up-counters were never counted; `m_t16_reg` had no reader and nothing ever set `INTET54`/`INTET76` | 3.9 (5) p.103 for the compare behaviour, Table 3.3 (1) p.12 for `INTTR4 = 16-bit timer4 (TREG4)` at vector 0050H |
+   | 3 | `T4MOD`/`T5MOD` bit 2 `<CLE>` ignored, so a counter always cleared on the high match | Figure 3.9 (3) p.95: "0 Clear disable / 1 Clear by match with TREG5". The SX-WSA1R writes `T5MOD = 0x02` at 0xF82718, CLE = 0, and RUNS timer 5 -- UC5 free-runs on real hardware |
+   | 4 | the two compares chained with an `else if`, so an equal pair could raise only one interrupt | 3.9 (5) p.103: "These are 16-bit comparators … the comparators generate an interrupt (INTTR4, INTTR5 / INTTR6, INTTR7), respectively" -- two of them. The SX-WSA1R writes TREG6 == TREG7 == 0x3A98 |
+   | 5 | `trun_w` cleared `m_timer_8[4]`/`[5]`, two unused 8-bit slots, instead of the 16-bit counters | Figure 3.9 (10) p.101: TRUN b4/b5 are "0: Stop & Clear" |
+   | 6 | an 8-bit timer match set its request flag without setting `m_check_irqs`, so the interrupt waited for an unrelated EI/RETI | `tmp94c241.cpp` already does it; this file was the odd one out |
+
+   **Measured, same source tree, timers reverted vs fixed.**
+   `notes/wsa1-probes/tlcs900_timer_control.sh {null|fixed}` switches between the two builds and
+   `wsa1_inttr4_dispatch.lua` / `wsa1_boot_milestones.lua` do the counting:
+
+   | signal | reverted (upstream) | fixed | what the firmware asks for |
+   |---|---|---|---|
+   | INTT1, RAM 0x0080 tick | 30.5 Hz | **488.27 Hz** | 28e6/2048/28 = 488.281 |
+   | INTT1 dispatch | 30.5 Hz into 0xF82D0B | 488.3 Hz into 0xF82D0B | |
+   | INTT3, the RTOS tick | never dispatched in 45 s | first at t = 19.65 s, into 0xF42D64 | |
+   | **INTTR4, the musical clock** | **never dispatched** | **192.00 Hz into 0xF82EA2** | 3.5 MHz / TREG5 = 18229 = 96 PPQN at exactly 120.00 BPM |
+   | INTTR5/6/7 dispatches | 0 | 0 | must stay 0 -- their vectors are `jr T,self` hang loops at 0xF82D09 |
+   | SED1330 first write | t = 7.2095 s | **t = 0.5003 s** | |
+   | SWI7 text drawing | t = 72.2382 s | **t = 19.6181 s** | |
+   | `INTET76` readback | 0x80 | **0x88** | defect 4: INTTR6's request flag exists now |
+
+   ⚠ **224 Hz WAS A BOOT TRANSIENT and the earlier note saying INTTR4 "runs at 224 Hz" is
+   corrected.** The boot value TREG5 = 15625 gives 224 Hz = 140 BPM for about twelve seconds; prom_a
+   then stores 18229 (`0xFA5559 ld WA,0x4735`) and the steady state is 192.00 Hz.
+
+   **Per-machine regression, all nine systems, same binary.** `-validate` exits 0 with no output;
+   `-listfull` shows all nine; `tools/gate.sh` passes **17 / 0 / 1** with every liveness hash equal
+   to its recorded baseline (kn7000 `316cd785`, kn5000 `b1a48d45`, kn6000 `9e0b3785`, kn6500
+   `82075785`, kn2400/kn2600 `571e1a45`), the KN7000 audio oracle at `780de131…` and the KN5000 demo
+   oracle at `4c8671b6…` (rms 499.8).
+
+   | machine | CPU | what was checked | result |
+   |---|---|---|---|
+   | `wsa1r` | TMP95C061 x2 | the whole table above, plus a t = 45 s snapshot | reaches **SOUND MODE** with its parameter row |
+   | `wsa1` | TMP95C061 x2 | 25 s launch | runs at 99.10%, the three NO_DUMP warnings and nothing else |
+   | `kn1500` | TMP95C061 | `kn1500_timer_regression.lua`, 30 s, both builds | **unchanged**: same crt0 RAM test at 0xFA047F-0xFA04A3, same speed (99.4% vs 99.5%). Its INTTR4 now dispatches into 0xFE6515, the sequencer routine its own ROM names |
+   | `kn5000` | TMP94C241 | gate liveness + demo audio oracle + snapshot | play screen, both hashes unchanged. **This is the machine that could have been broken** -- it runs the sibling device off the same shared `tlcs900.{h,cpp}` / `900tbl.hxx` |
+   | `kn6000` `kn6500` `kn2400` `kn2600` `kn7000` | MN10300 | gate liveness + snapshots | unchanged; they share nothing with this work |
+
+   ⚠ **SHARED DEVICE, for the review Felipe asked to defer.** Defects 1 and 6 change behaviour for
+   every TMP95C061 machine in MAME -- `snk/ngp.cpp`, `namco/namcos10.cpp` (+ `namcos10_exio`),
+   `samsung/dvd-n5xx.cpp` and `skeleton/kkcount.cpp`. Defects 2-5 are additive: they do nothing
+   unless firmware sets TRUN bits 4/5. `ngp` is the one to A/B and it is evidence *for* the change
+   -- SNK's own NGP developer manual says "T16 is 128/fc. 6144000/128 = 48000hz", which is this
+   scale and not upstream's. **`ngp` is not in this binary** (`-listfull` shows nine Technics
+   systems and nothing else), so that A/B cannot be run here. `tmp95c063.cpp` carries the identical
+   wrong shifts and is deliberately NOT changed.
 3. **`tmp95c061` dispatched writes to P6 (internal address 0x12) to the PORT_7 callback.** Fixed
    in this overlay's copy; without it the EEPROM never sees chip select.
+
+6. **The SX-KN1500's IC15 program dump is HALF BLANK, and that is its whole boot blocker (NEW
+   2026-08-25).** Not a WSA1 gap, but it is on this list because kn1500 is the other TMP95C061
+   machine and `tools/gate.sh` SKIPS it ("no screen device"), so nothing was watching it. Split the
+   2 MiB image into eight 256 KiB blocks: four of them -- 0xE00000, 0xE40000, 0xF00000, 0xF40000 --
+   have **0xFF in every odd-offset byte**, and each one's even stream is **exactly** the odd stream
+   of the block 512 KiB above it, 131072 of 131072 bytes, all four pairs. Re-measure with
+   `notes/wsa1-probes/kn1500_ic15_dump_defect.py` (4 PASS / 0 FAIL).
+   It is load-bearing: the crt0 memory test at 0xFA0460 reads 10-byte region descriptors from a
+   table at **0xF38B24, inside a damaged block**, gets `start = 0xFFDEFFF2 / length = 0xFFF2FF00`,
+   and walks the entire 24-bit space -- which is how it ends up writing its 0xA5/0x5A pattern over
+   the CPU's own internal I/O registers (`tlcs900_16bit_unmodelled_use.lua` caught it scribbling on
+   T4MOD, T4FFCR and T45CR). The machine never leaves that loop.
+   The obvious repair does **not** work: treating the four undamaged blocks as the real 1 MiB ROM
+   leaves 0xF38B24 pointing at instrument-name ASCII. **IC15 needs a re-dump**; nothing should be
+   invented in the meantime, and `kn1500.cpp`'s ROM comment now says so instead of calling its
+   BAD_DUMP "conservative".
+
+7. **The 16-bit timers' capture path is still fabricated, and one machine already asks for it
+   (NEW).** `m_t16_cap[4]` is never written, so `cap12_r`/`cap34_r` (internal I/O 0x34-0x37 and
+   0x44-0x47) return zero forever -- a made-up value, not an unimplemented one. Measured with
+   `notes/wsa1-probes/tlcs900_16bit_unmodelled_use.lua` over a 60 s boot of both TMP95C061 machines:
+
+   | request | SX-WSA1R (cpu1) | SX-KN1500 |
+   |---|---|---|
+   | CAP1/CAP2 read | 0 | 24 (all from the runaway RAM test, pc = 0xFA0481) |
+   | CAP3/CAP4 read | 0 | 24 (same) |
+   | software capture (`T4MOD`/`T5MOD` bit 5 written 0) | **3** | 8 |
+   | external clock select (bits 1:0 = 00) | 0 | 0 |
+   | pin capture mode (bits 4:3 non-zero) | 0 | 6 (RAM test writing 0x5A) |
+   | `T4FFCR`/`T5FFCR` non-zero | 0 | 12 (RAM test writing 0xA5) |
+   | `T45CR` non-zero | 0 | 3 (RAM test writing 0x5A) |
+
+   So on the SX-WSA1R every gap is genuinely unreachable except the software capture, which its boot
+   issues three times as a side effect of `ldio T4MOD,0x05` / `ldio T5MOD,0x02` (databook Figure
+   3.9 (4) p.96: bit 5 always reads as 1, and writing 0 loads the up-counter into CAP1/CAP3) and
+   then never reads back. Every KN1500 column is the memory test of item 6, not real use.
+   **Documented rather than implemented, deliberately**: implementing capture would mean choosing
+   what CAP1 contains at a moment no firmware here observes. Re-run the probe on any new TMP95C061
+   machine before assuming that still holds.
+
+8. **`T45CR` is stored and never decoded, and that is now known to be exact rather than lucky
+   (NEW).** Figure 3.9 (9) p.101 gives it as b0 `DB4EN` / b1 `DB6EN` -- the TREG4/TREG6 double-buffer
+   enables -- and b2 `PG0T` / b3 `PG1T`, the pattern-generator shift-trigger widths. It is not an
+   operating-mode register, which is what the earlier note feared. Both Technics firmwares write
+   0x00, i.e. every field at its reset default, so ignoring it is correct here. It stops being
+   correct the moment a driver enables a double buffer: the databook says the buffer is transferred
+   into TREG4 at the TREG5 match, and nothing models that.
 
 Item 3 also **closes** a disassembly-side unknown found while doing this work, recorded here so
 it is not asked again: `Timer1_SetPeriodAndStart`'s header and
