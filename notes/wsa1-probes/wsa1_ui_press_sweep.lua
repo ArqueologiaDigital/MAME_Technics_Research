@@ -25,7 +25,7 @@
 --   DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 230 -window \
 --       -autoboot_script .../wsa1_ui_press_sweep.lua
 
-local START_S     = 100
+local START_S     = 30       -- with the prescaler fix the UI is up by t=25 s
 local HOLD_FRAMES = 24
 local GAP_FRAMES  = 24
 
@@ -37,6 +37,19 @@ _G.taps[1] = _G.sp:install_write_tap(0x790000, 0x790001, "lcd",
 	function (o, d, k) _G.lcd = _G.lcd + 1 return d end)
 _G.taps[2] = _G.sp:install_write_tap(0x000054, 0x000055, "sc1",
 	function (o, d, k) if (k & 0x00ff) ~= 0 then _G.sc1 = _G.sc1 + 1 end return d end)
+-- ⚠ THE SC1BUF TAP ABOVE COUNTS TRANSMITS ONLY.  A button arrives on the
+-- RECEIVE side, so two more signals are needed to tell "the firmware never saw
+-- it" from "it saw it and had nothing to draw":
+--   * SC1 state byte RAM 0x2A80 going to 0x20 -- only INT6_SC1_PeerRequest
+--     (prom_b 0xF5AC0A) writes that value, so it counts INT6 dispatches;
+--   * the panel's own button shadow at RAM 0x2B20..0x2B3F, which
+--     SC1_RxOp0_ThreeByte (0xF5B0FD) XORs each received segment mask against.
+_G.int6, _G.shadow = 0, 0
+_G.taps[3] = _G.sp:install_write_tap(0x002a80, 0x002a81, "st",
+	function (o, d, k) if (k & 0x00ff) ~= 0 and (d & 0xff) == 0x20 then
+		_G.int6 = _G.int6 + 1 end return d end)
+_G.taps[4] = _G.sp:install_write_tap(0x002b20, 0x002b3f, "shadow",
+	function (o, d, k) _G.shadow = _G.shadow + 1 return d end)
 
 local function scr()
 	return string.format("%02X/%02X %02X/%02X",
@@ -75,6 +88,7 @@ _G.sub = emu.add_machine_frame_notifier(function ()
 		end
 		local e = _G.list[_G.idx]
 		_G.baselcd, _G.basesc1, _G.basescr = _G.lcd, _G.sc1, scr()
+		_G.baseint6, _G.baseshadow = _G.int6, _G.shadow
 		e.field:set_value(1)
 		_G.phase, _G.timer = "hold", HOLD_FRAMES
 	elseif _G.phase == "hold" then
@@ -88,11 +102,14 @@ _G.sub = emu.add_machine_frame_notifier(function ()
 		if _G.timer <= 0 then
 			local e = _G.list[_G.idx]
 			local dl, ds, s = _G.lcd - _G.baselcd, _G.sc1 - _G.basesc1, scr()
-			local changed = (dl ~= 0) or (s ~= _G.basescr)
+			local di, dh = _G.int6 - _G.baseint6, _G.shadow - _G.baseshadow
+			local changed = (dl ~= 0) or (s ~= _G.basescr) or (dh ~= 0)
 			if changed then _G.acted = _G.acted + 1 end
-			print(string.format("PRESS t=%6.1f %-9s %-16s dLCD=%-6d dSC1=%-4d scr %s -> %s%s",
-				m.time:as_double(), e.tag, e.name, dl, ds, _G.basescr, s,
+			print(string.format(
+				"PRESS t=%6.1f %-9s %-16s dLCD=%-6d dSC1=%-4d dINT6=%-3d dSHADOW=%-3d scr %s -> %s%s",
+				m.time:as_double(), e.tag, e.name, dl, ds, di, dh, _G.basescr, s,
 				changed and "   *** ACTED" or ""))
+			if changed then m.video:snapshot() end
 			_G.phase = "wait"
 		end
 	end

@@ -731,3 +731,60 @@ the direct-page slots (`(0x94)`, `(0x95)`, `cp …,0x60`).
 Both land exactly on a round default tempo, and only do so if `T4MOD` bits[1:0]
 = 01 means φT1 = fc/8 and the counter's period is TREG5.  With MAME's present
 `m_timer_pre >> 7` the same registers give 14.0 Hz = 8.75 BPM.
+
+---
+
+## What stands between `ALL INITIAL SETTING!` and a real UI  (2026-08-25)
+
+Five probes, one answer, and the answer is a MISSING CPU CONTROL REGISTER.
+
+| script | question it answers | `-str` |
+|---|---|---|
+| `wsa1_ui_blockers.lua` | where does each processor spend its time, and does anything ever repaint? PC histogram for both CPUs, plus the tick counter, INTT1/INTT3/INTTR4 dispatch counts (taken at the vector fetch), the LCD, both link directions, the key scanner and the tone generator | 120-200 |
+| `wsa1_link_wait_callers.lua` | is `Link_WaitBlockDone` (0xF8E66D) spinning or exiting at once? Separates the `jr Z` fast exit at 0xF8E676 from the 500-tick deadline loop, and prints both screen-id pairs | 200 |
+| `wsa1_ui_press_sweep.lua` | can any of the 88 panel positions make the firmware repaint? Per press: LCD writes, SC1BUF writes (transmit only), INT6 dispatches (RAM 0x2A80 <- 0x20) and writes to the panel's button shadow at 0x2B20 | 130-230 |
+| `wsa1_draw_task.lua` | are the screen's display lists POSTED, and are they TAKEN? Watches the callback ring at 0x600416 -- read index 0x60040E, write index 0x600412, free count 0x600414 (⚠ the listing's +0xF8/+0xFC/+0xFE are SIGNED displacements, i.e. -8/-4/-2) | 60 |
+| `wsa1_kernel_state.lua` | is prom_a's RTOS running at all? Task states at 0x02F4+n*12+9, the eight semaphore counts at 0x035C and their wait queues at 0x033C, and the kernel's pending-tick counter at 0xBE. Snapshots every 10 s | 45 |
+
+**The message.** `ALL INITIAL SETTING!` is prom_a ROM `0xF9422C`, drawn by
+`ShowAllInitialSetting` (0xF94210) through SWI7 service 8. It is a
+**factory-reset notice on the success path**, not an error: `sub_F82CAB`
+(0xF82CAB) reads the two power-fail checksum verdict bits at (0x7FD1) and, when
+block 1 at 0x007620 fails, sets `(0x97) |= 0x01` and runs boot PHASE 2
+(0xF8283A) over all 25 modules instead of phase 1 (0xF82836). Screen 0xAA's
+enter method tests exactly that bit at 0xF94112 and prints the message instead
+of its normal content. Measured: `(0x0097)` goes 0x20 -> 0x21 -> 0x03, and
+0x7FD1 stays 0x00 -- both checksums fail, correctly, on a machine with no
+battery-backed RAM.
+
+**And the machine does NOT stay on it.** A dwell counter at (0x2073) runs down
+and the firmware moves family-B screen (0x207C) from 0xAA to 0x01 by itself --
+measured at t≈115 s without the timer fixes and t≈23 s with them, in runs where
+nothing was pressed.
+
+**Screen 0x01 posts its two display lists and nobody draws them.**
+`0xF90D58` enqueues 0x00F90DDB and 0x00F90E4B on the callback ring and signals
+semaphore 1 twice; the consumer is the draw task at 0xF8DA00 (task record 2 of
+`EntryPoint_Records`, 0xF85E96). Measured: ring write index 0x0008, **read index
+0x0000**, free 0x01F7, semaphore 1's count climbing to 02 with its wait queue
+EMPTY, task 2 stuck at state 04, and the kernel's pending-tick counter at 0xBE
+wrapping at 253 Hz and never drained.
+
+**Because the scheduler is never entered.** `IRQ_Epilogue` (0xF857B7) reads
+control register **0x3C** and enters the kernel only if it reads exactly 1;
+`Kernel_Dispatch` (0xF85715) reads it again and refuses to reschedule unless it
+is 0. MAME has no such register -- `900tbl.hxx`'s `p_CR16` decodes 0x20/0x24/
+0x28/0x2C plus the TMP94C241 aliases and sends everything else to
+`&m_dummy.w.l` -- and nothing increments it on interrupt acceptance or
+decrements it on RETI. Both CPUs' kernels use it: 10 accesses in prom_a, 9 in
+prom_c. `wsa1_intnest_experiment.patch` supplies the missing increment and the
+machine draws **SOUND MODE** (`screens/wsa1r_intnest_after_sound_mode.png`);
+the patch is NOT applied to the source.
+
+**With that patch in, the panel already works.** 72 of 88 positions produce
+2 INT6 dispatches and 2 writes to the button shadow per press-and-release -- the
+16 that do not are SEG6 and SEG10, which the variant-2 wire map omits. None of
+the 88 causes an LCD write on the SOUND MODE screen, which is gap O (no legend
+is known for any position), not a transport failure. ⚠ `dSC1` is 0 for every
+press and means nothing: that tap counts SC1BUF WRITES, i.e. transmits, and a
+button arrives on the receive side.
