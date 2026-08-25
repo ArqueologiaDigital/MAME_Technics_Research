@@ -310,11 +310,16 @@
 #define LOG_KEYS     (1U << 7)   // key presses queued for the scanner at 0x108000
 #define LOG_EEPROM   (1U << 8)   // the serial EEPROM's CS / SK / DI / DO lines
 #define LOG_FDC      (1U << 9)   // floppy: the control register, TC and CPU 1's PA bit 3
+#define LOG_TGVOICE  (1U << 10)  // one decoded dump of a channel's 22 tone-generator registers
 
 // LOG_LINKLOST is on by default on purpose: the one-byte-deep model of the link
 // can only drop a byte silently, and this is how that shows up.  See risk (1)
 // in the block comment on the link handlers.
 #define VERBOSE (LOG_LINKLOST)
+// Turn LOG_TG on to get the whole 0x0010C000 decode with a legend, and LOG_TGVOICE
+// to get one 22-register dump per channel at every falling edge of block 0x0080's
+// gate bit.  Both are compile-time; notes/wsa1-probes/wsa1_tg_lifecycle.lua taps
+// the same port from Lua when a rebuild is not worth it.
 #include "logmacro.h"
 
 
@@ -426,8 +431,12 @@ private:
 	// allocator always finds a free voice and never waits for one.
 	//
 	// A per-channel register number is `parameter_block * 0x40 + channel`, with
-	// 64 channels -- 64 from a literal loop counter (`ldb d,0x40` at 0xFB810E in
-	// Dev10C_ResetAllChannels), not from an address stride.  The highest
+	// 64 channels -- 64 from a literal loop counter, `ld D,0x40` at 0xFB8116 in
+	// Dev10C_ResetAllChannels, whose `dec 1,D` bottom is at 0xFB8140.  (This
+	// comment used to cite 0xFB8116's neighbour 0xFB810E, which is `ld HL,0x0840`
+	// -- a register-block base that merely CONTAINS the byte 0x40.  Re-derived by
+	// notes/wsa1-gapF-probes/gapF_refutation_probes.py, section P3.)  The count is
+	// not from an address stride.  The highest
 	// per-channel block the firmware is known to use is 0x0A40, from the
 	// twenty-two-register unrolled writer Dev10C_WriteAllChanRegs (0xFB713A), so
 	// the per-channel ceiling is 0x0A7F.  The GLOBAL registers sit above it and
@@ -437,12 +446,15 @@ private:
 	// (wsa1-roms-disasm/notes/FINDINGS-prom_c-tone-generator.md sec.2, 3 and 7.)
 	static constexpr unsigned TG_REG_COUNT   = 0x1000;
 	static constexpr unsigned TG_CHAN_REG_TOP = 0x0a7f;   // 0x0A40 + 0x3F
+	static constexpr unsigned TG_VOICES      = 64;        // `ld D,0x40`, 0xFB8116
 
 	// 0x10C000 -- the tone generator.  TC183C230002 (IC4), the same part number
 	// the KN5000 carries at IC303 (see kn5000_tonegen.h).
 	void     tg_addr_w(uint16_t data);
 	void     tg_data_w(uint16_t data);
 	uint16_t tg_status_r();
+	void     tg_log_legend() ATTR_COLD;
+	void     tg_dump_channel(unsigned chan);
 
 	// 0x104000 -- a second 64-slot register file of the same family.  Part NOT
 	// IDENTIFIED.  Write-only in every code path reached so far.
@@ -505,6 +517,22 @@ private:
 
 	uint16_t m_tg_latch = 0;
 	uint16_t m_tg_regs[TG_REG_COUNT]{};
+
+	// The tone generator's BUSY LATCH, in the firmware's own encoding: word
+	// `chan >> 4`, bit `chan & 15`.  That encoding is imposed twice by unrelated
+	// code -- by Dev10C_PollBankAndRetire on the word it reads (0xFA694A start
+	// channel, 0xFA695C walker, 0xFA69E7 sllw), and by Shift16_Left(1, chan & 15)
+	// stored at index chan >> 4 for the two RAM masks (0xFA6CE3-0xFA6CF6).  It is
+	// NOT derivable from m_tg_regs[chan]: on a note-on the computed word
+	// voicerec[+0x29] lands on block 0 AFTER the gate (Dev10C_WriteReg_c at
+	// 0xFB39AD / 0xFB371D), so the last value there is not 0x8100.  See the long
+	// comment in tg_data_w() for why joining block 0's write to block 0's read is
+	// a MODEL and what bounds it.
+	uint16_t m_tg_busy[4]{};
+
+	// Log aid only: block 0x0080's bit 15 per channel, as last written.  Nothing
+	// in the emulated machine reads it.
+	uint64_t m_tg_gate = 0;
 	uint16_t m_synth2_latch = 0;
 	uint16_t m_synth2_regs[TG_REG_COUNT]{};
 	uint8_t  m_cpu1_chanreg_addr = 0;
@@ -1194,114 +1222,539 @@ void wsa1_state::tg_addr_w(uint16_t data)
 	m_tg_latch = data;
 }
 
+/***************************************************************************
+
+    0x0010C000 -- THE PER-CHANNEL REGISTER DECODE, AND WHERE EACH NAME COMES FROM
+
+    Dev10C_WriteAllChanRegs (prom_c 0xFB713A) issues 23 register writes to ONE
+    channel out of a 0x2C-byte staging struct at CPU 2 work RAM 0x00D75E.  The
+    numbers matter and are measured, not paraphrased
+    (notes/wsa1-gapA-audit-probes/gapA_listing_checks.py, checks 1a-1d):
+
+      * 22 DISTINCT registers, numbered block * 0x40 + channel;
+      * 23 writes, because block 0x0080 is written twice (gate in, gate out);
+      * 21 staging WORDS are read, at struct offsets 0x02..0x2A.  Struct word 0
+        is never read: block 0 is written with the literal 0x8100 out of the
+        writer itself, at 0xFB7239.
+      * the burst is NOT issued in ascending register order (check 1d).
+
+    ⚠ THE THREE KINDS OF CLAIM BELOW ARE DELIBERATELY NOT FLATTENED.  Flattening
+    them is exactly how a borrowed name turns into a fact about this machine.
+
+      TG_LOCAL    the QUANTITY is established from the WSA1's own firmware.
+      TG_SHAPE    this firmware fixes the FIELD SPLIT and nothing more -- a byte
+                  pair, a payload width, a clamp bound.  True, and not a name.
+      TG_SIBLING  there is no local statement of any kind and the label printed
+                  is the KN5000's word.  Exactly ONE register is in this state.
+      TG_NONE     no statement anywhere, in either firmware.
+
+    Rows that carry a `sibling` string have a KN5000 name available with NO WSA1
+    EVIDENCE BEHIND THE QUANTITY, and every log line says so in as many words.
+    THE CORRESPONDENCE IS STRUCTURAL, NOT A CODE TRANSPLANT: the KN5000 sub-CPU's
+    ToneGen_WriteVoiceParams stages THE SAME WORD-INDEX -> REGISTER MAP
+    (kn5000-roms-disasm/v142/subcpu/kn5000_subprogram_v142.s:6938-6959), and the
+    same file at :24686-24690 carries a second, independent witness --
+    ToneGen_ProbeVoice_ParamBlock, which labels word 0 "TG reg 0x000" and words
+    1..21 as 0x040..0xA40.  But of the bytes the counterpart routines share,
+    19/20, 100/102 and 116/120 DIFFER, and the two machines do not even write the
+    registers in the same ORDER (the KN5000's burst is ascending, this one is
+    not).  Nothing was copied; a structure was recognised.
+
+    Its calibration is FIVE agreements out of five, on the registers this image
+    answers for itself: 0x0040's 4/12 split, 0x0080's level + 3-bit field + gate,
+    0x0400's pitch, 0x0800's (curve << 8) | ramp packing at tone offset 0x28, and
+    the 3-and-3 grouping of 0x0900-0x0A40.  No contradiction -- but these names
+    are the ones a measurement on real hardware would overturn FIRST.
+
+    (wsa1-roms-disasm/notes/FINDINGS-prom_c-dev10c-register-meanings.md,
+     .../FINDINGS-prom_c-dev10c-sibling-register-map.md,
+     .../FINDINGS-prom_c-dev10c-producers.md, .../FINDINGS-prom_c-voice-readback.md.
+     Re-derived from ROM bytes by notes/wsa1-gapA-audit-probes/, 0 failures.)
+
+***************************************************************************/
+
+enum tg_grade : uint8_t { TG_LOCAL, TG_SHAPE, TG_SIBLING, TG_NONE };
+
+// Printed on every write line, straight after the name, so that a single line
+// out of a trace is self-describing.
+static const char *const s_tg_grade_tag[] =
+{
+	" [WSA1]",              // the quantity is established in this machine's own firmware
+	" [SPLIT ONLY]",        // the field split is measured; the quantity is not named
+	" [KN5000 NAME ONLY]",  // no local statement at all
+	" [UNKNOWN]"            // no statement in either firmware
+};
+
+struct tg_regdesc
+{
+	uint16_t    block;      // register number of channel 0
+	int8_t      word;       // staging word that feeds it; -1 = not fed by the burst
+	tg_grade    grade;      // grade of `name`
+	const char *name;       // the label printed on every write
+	const char *sibling;    // the KN5000's name, when one exists and is not `name`
+};
+
+static const tg_regdesc s_tg_chanreg[] =
+{
+	// block   word  grade       name (what THIS firmware supports)    KN5000-only name
+	{ 0x0000,   -1, TG_SHAPE,   "lifecycle word",                     "control / gate" },
+	{ 0x0040,    1, TG_LOCAL,   "key-zone word 0",                    "recording selector, (class << 12) | entry" },
+	{ 0x0080,    2, TG_LOCAL,   "OUTPUT LEVEL + gate",                nullptr },
+	{ 0x00c0,    3, TG_SIBLING, "coarse level + expression",          nullptr },
+	{ 0x0100,    4, TG_SHAPE,   "7-bit value, clamp 36..120 (pair A)", "TVF cutoff" },
+	{ 0x0140,    5, TG_SHAPE,   "7-bit value, clamp 36..120 (pair B)", "TVF depth / bias" },
+	{ 0x0180,    6, TG_SHAPE,   "7-bit control",                      "pan, 0x0040 = centre" },
+	{ 0x0400,    7, TG_LOCAL,   "PITCH",                              "absolute log pitch" },
+	{ 0x0440,    8, TG_SHAPE,   "7-bit payload + 2-bit field",        nullptr },
+	{ 0x0480,    9, TG_SHAPE,   "6-bit payload",                      nullptr },
+	{ 0x04c0,   10, TG_SHAPE,   "base 0x4400 + 4-bit cfg + payload",  "oscillator config + slot" },
+	{ 0x0500,   11, TG_SHAPE,   "two 7-bit bytes, low biased +0x7F",  "detune / bend pair" },
+	// ⚠ 0x0800 is SHAPE, not LOCAL, and the reason is a trap worth naming: the two
+	// tables it is built from, Voice_LevelPair_AttackCurve (0xFDEF74) and
+	// Voice_EnvelopeRate_Table (0xFDF03E), carry KN5000 TRANSPLANTED LABELS
+	// (wsa1-roms-disasm/notes/kn5000-label-transplant-generated.md, rows 0xFDEF74
+	// and 0xFDF03E).  So "envelope", "level" and
+	// "rate" are the sibling's words too, and calling this row `(level<<8)|rate`
+	// with no tag would smuggle three borrowed names in under a local one.  What
+	// IS local: a byte pair, high from a 101-entry descending curve, low from a
+	// 101-entry monotone ramp indexed by tone offset 0x28.
+	{ 0x0800,   12, TG_SHAPE,   "byte pair, (curve << 8) | ramp",     "amplitude envelope segment 0" },
+	{ 0x0840,   13, TG_SHAPE,   "byte pair",                          "amplitude envelope segment 1" },
+	{ 0x0880,   14, TG_SHAPE,   "byte pair",                          "amplitude envelope segment 2" },
+	{ 0x08c0,   15, TG_SHAPE,   "byte pair, both detune-curve",       "amplitude envelope segment 3" },
+	{ 0x0900,   16, TG_SHAPE,   "byte pair",                          "second envelope, segment 0" },
+	{ 0x0940,   17, TG_SHAPE,   "byte pair",                          "second envelope, segment 1" },
+	{ 0x0980,   18, TG_SHAPE,   "byte pair",                          "second envelope, segment 2" },
+	{ 0x09c0,   19, TG_SHAPE,   "byte pair",                          "third envelope, segment 0" },
+	{ 0x0a00,   20, TG_SHAPE,   "byte pair",                          "third envelope, segment 1" },
+	{ 0x0a40,   21, TG_SHAPE,   "byte pair",                          "third envelope, segment 2" },
+
+	// NOT in the burst, but the same device and the same channel numbering: the
+	// three parallel gate/value SLOTS the first accessor bank writes out of the
+	// 0x44-byte struct at RAM 0x00D8DB (a DIFFERENT object from the 0x2C-byte
+	// staging struct above), fields 0x38..0x42, each pulsed bit-15 1-then-0.
+	// (FINDINGS-prom_c-tone-generator.md sec.5.)  ⚠ 0x8100 is the strobe word on
+	// three of these as well -- 0xFB7EFF, 0xFB7D13, 0xFB7E09, 0xFB80D6 -- which is
+	// why the busy latch in tg_data_w() is gated on `latch < TG_VOICES` and not
+	// on the value alone.
+	{ 0x0540,   -1, TG_NONE,    "slot 1 gate",                        nullptr },
+	{ 0x01c0,   -1, TG_NONE,    "slot 1 value",                       nullptr },
+	{ 0x0580,   -1, TG_NONE,    "slot 2 gate",                        nullptr },
+	{ 0x0600,   -1, TG_NONE,    "slot 2 value",                       nullptr },
+	{ 0x05c0,   -1, TG_NONE,    "slot 3 gate",                        nullptr },
+	{ 0x0640,   -1, TG_NONE,    "slot 3 value",                       nullptr }
+};
+
+static const tg_regdesc *tg_lookup(uint16_t reg)
+{
+	for (const tg_regdesc &d : s_tg_chanreg)
+		if (d.block == (reg & 0xffc0))
+			return &d;
+	return nullptr;
+}
+
+// Decode one register's VALUE.  Every constant here has a ROM address behind it;
+// nothing is invented to make a line read nicely, and where the firmware leaves
+// a reading undecided BOTH readings are printed rather than one being picked.
+static std::string tg_format_value(uint16_t reg, uint16_t value)
+{
+	switch (reg & 0xffc0)
+	{
+	case 0x0000:
+		// The two lifecycle literals, and the third thing that lands here.
+		return (value == 0x8100) ? "GATE (the 0x8100 literal, 0xFB7239)" :
+			(value == 0x7e00) ? "FREE (the 0x7E00 literal, 0xFB0AB5)" :
+			util::string_format("computed voicerec[+0x29] = 0x%04X -- NOT a lifecycle word", value);
+
+	case 0x0040:
+		// The firmware splits this 4 over 12 itself: Voice_SelectKeyZone_Reg0040's
+		// fix-up `cp HL,0x6000 / jr NC` is at 0xFA8248 (NOT at 0xFA82F0 -- the
+		// copy there has no 0x6000 in it at all and doubles the nibble
+		// unconditionally; gapA_listing_checks.py 5a/5b).
+		return util::string_format("top field %X, payload 0x%03X", value >> 12, value & 0x0fff);
+
+	case 0x0080:
+	{
+		// Bits 11..0 = 2 * Voice_OutputLevel_Table[idx] (table at 0xFDDE2B).  The
+		// closed form T[16e+m] = 128e + round(128*log2(1+m/16)) holds for ALL 256
+		// entries (gapA_rom_checks.py 1a, 0 mismatches), so the field is a base-2
+		// LOGARITHM with 256 counts per octave and a full span of 0x0FF4 counts.
+		//
+		// ⚠ NO SIGN AND NO REFERENCE ARE ASSERTED.  Whether the chip reads this
+		// as a level or as an attenuation at the pin is NOT established -- the
+		// same doubt the finding raises for 0x0800's descending curve applies
+		// here, one register earlier.  So a DISTANCE from the table's top value
+		// is printed, which is sign-free, and no decibel figure with a sign is
+		// emitted for anyone to believe.
+		const unsigned lvl = value & 0x0fff;
+		return util::string_format(
+			"gate %d, level field 0x%03X = %.3f octaves from the table's top (0x0FF4);"
+			" 256 counts/octave, SENSE AT THE PIN NOT ESTABLISHED; 3-bit field %u",
+			BIT(value, 15), lvl, (0x0ff4 - double(lvl)) / 256.0, (value >> 12) & 7);
+	}
+
+	case 0x0100:
+	case 0x0140:
+	{
+		// (voice_word & 0xFF80) | Clamp_36_to_120(...); the clamp's only two
+		// immediates are 0x78 and 0x24 (0xFA76B2), and all eight of that
+		// routine's callers are on this path.
+		//
+		// ⚠ 36..120 IS A PROPERTY OF THAT PRODUCER, NOT OF THE REGISTER.  The boot
+		// burst reaches these two registers with a staging struct the producer
+		// never touched, and 0x7C = 124 duly turns up on channel 0 at t = 0.  So
+		// the range is printed as a CHECK that can fail, not as a description --
+		// a value outside it is real information, and asserting the clamp would
+		// have buried it.
+		const unsigned v = value & 0x007f;
+		return util::string_format("7-bit value %u%s, bits 15..7 pass through as 0x%04X",
+			v, (v < 36 || v > 120) ? "  <- OUTSIDE the producer's 36..120 clamp" : " (within the producer's 36..120 clamp)",
+			value & 0xff80);
+	}
+
+	case 0x0180:
+		// Write side.  ⚠ The READ at this block is a DIFFERENT quantity -- see
+		// tg_status_r().  0x80 on the write side means "choose at random"
+		// (Rand_FromTickSquared, 0xFA978F / 0xFA9EDF), so two identical note-ons
+		// legitimately differ here: never treat a change in this register as a
+		// response to a stimulus without a no-stimulus control first.
+		return util::string_format("%u of 0..127%s", value & 0x007f,
+			(value & 0xff80) ? ", plus high-byte flags" : "");
+
+	case 0x0400:
+		// Seeded note*256 + 0x80 at 0xFA7F3A-0xFA7F48 and saturated to 0..0x7FFF.
+		// ⚠ THE HALF-STEP DATUM IS NOT ESTABLISHED: whether the device reads the
+		// field as value/256 or as (value-128)/256 turns on the seed's +0x80 being
+		// an offset or a rounding bias, and no instruction in prom_c settles it.
+		// Both are printed; neither is chosen.
+		return util::string_format("%.3f semitones (or %.3f if the seed's +0x80 is a rounding bias)",
+			value / 256.0, (int(value) - 128) / 256.0);
+
+	case 0x0440:
+		// sub_FA9915 has two arms: (record[+0x1E] & 0x00C0) | (v & 0x7F) at
+		// 0xFA99F0, and sub_FB5E39(...,1) | (v & 0x7F) at 0xFA9B23.  ⚠ The 0x00C0
+		// field and the 7-bit payload OVERLAP AT BIT 6, so bit 6 is printed in
+		// both places on purpose.  ⚠ The routine ZEROES words 8 and 9 first
+		// (0xFA991C / 0xFA9923), so 0x0000 here means "no arm fired", not "0".
+		return util::string_format("%spayload bits 6..0 = %u; bits 7..6 = %u (arm 1's 0x00C0 field, OVERLAPS at bit 6); rest 0x%04X",
+			value ? "" : "no arm fired -- ", value & 0x007f, (value >> 6) & 3, value & 0xff00);
+
+	case 0x0480:
+		// sub_FB5E39(...,0) | (v & 0x3F) at 0xFA9B90.  The SAME routine feeds
+		// 0x0440; the two call sites differ in exactly one pushed immediate,
+		// 1 versus 0 -- so that immediate, not two separate producers, is what
+		// discriminates these two registers.  (sub_FA78E8, which an earlier
+		// reading credited with 0x0440's high half, is a memset and returns
+		// nothing: it stores 0 into offsets 0..5 and 7 and push/pops both HL and
+		// DE.  gapA_listing_checks.py check 4.)
+		return util::string_format("%spayload %u (6 bits), high half 0x%04X",
+			value ? "" : "no arm fired -- ", value & 0x003f, value & 0xffc0);
+
+	case 0x04c0:
+		// sub_FA9F19 seeds the word with the literal 0x4400 (0xFA9F20) and ORs in
+		// (record_word[+0x22] & 0x3300) | (v & 0x7F) at 0xFA9FE5-0xFA9FEE.  ⚠ That
+		// record is (voice[+0x25])'s, NOT the tone record (voice[+0x17]) --
+		// 0xFA9F32 `ld IY,(XBC+0x25)`.  The same routine uses the low two bits of
+		// the same word as a FOUR-WAY selector (0xFA9F48), and its sibling field
+		// +0x1E has the identical shape on the 0x0440 path (0xFA9951-0xFA9967).
+		return util::string_format("%s, cfg %X, payload %u",
+			((value & 0x4400) == 0x4400) ? "base 0x4400 present" : "base 0x4400 ABSENT",
+			((value >> 12) & 3) << 2 | ((value >> 8) & 3), value & 0x007f);
+
+	case 0x0500:
+		// hi = Clamp(sub_FA75BA(...) + DetuneCurve_LookupUNSIGNED(|tone[+0x07]|)),
+		// lo = Clamp(sub_FA75BA(...) + 0x7F); packed `sll 8 / or` at
+		// 0xFA96AB-0xFA96B0 and stored to word 11 at 0xFA96B0.  ★ The wrapper is
+		// the UNSIGNED one (0xFA7654), not the signed one: BOTH results of
+		// DetuneCurve_LookupSIGNED (0xFA7602) are packed at 0xFA96BC-0xFA96C1 and
+		// stored to word 15 = register 0x08C0 at 0xFA96C3.  The evidence tree's
+		// own sibling-map note has these two swapped; it is corrected here and
+		// re-derived by gapA_listing_checks.py check 4 (HL survives both callees).
+		return util::string_format("hi %u, lo %u (both 7-bit; lo is centred on 0x7F)",
+			(value >> 8) & 0x7f, value & 0x7f);
+
+	case 0x0800:
+		// High byte from the 101-entry descending curve at 0xFDEF74 (0xFF..0x09),
+		// low byte from the 101-entry monotone ramp at 0xFDF03E (0x00..0x7F)
+		// indexed by tone[+0x28]; packed at 0xFAA640-0xFAA649.  Both table NAMES
+		// are KN5000 transplants, so "level" and "rate" are not printed here.
+		return util::string_format("curve 0x%02X, ramp 0x%02X%s", value >> 8, value & 0xff,
+			(value == 0xff80) ? "  [the quiescent pair Dev10C_ResetAllChannels writes, 0xFB8132]" : "");
+
+	case 0x0840:
+		return util::string_format("hi 0x%02X, lo 0x%02X%s", value >> 8, value & 0xff,
+			(value == 0xff00) ? "  [the quiescent pair Dev10C_ResetAllChannels writes, 0xFB811E]" : "");
+
+	case 0x0880: case 0x08c0: case 0x0900: case 0x0940:
+	case 0x0980: case 0x09c0: case 0x0a00: case 0x0a40:
+		// Every one of the ten registers fed by staging words 12..21 is assembled
+		// as two 8-bit fields: 22 computed stores over those words, two idioms,
+		// no third (gapA_listing_checks.py 3a).
+		return util::string_format("hi 0x%02X, lo 0x%02X", value >> 8, value & 0xff);
+
+	default:
+		return util::string_format("0x%04X", value);
+	}
+}
+
+// Printed once at machine_start, so that a captured trace carries its own legend
+// and nobody has to open the notes to tell a local name from a borrowed one.
+void wsa1_state::tg_log_legend()
+{
+	LOGMASKED(LOG_TG, "tg: 0x0010C000 per-channel registers.  register = block * 0x40 + channel.\n");
+	LOGMASKED(LOG_TG, "tg:   [WSA1]            the quantity is established in THIS machine's firmware\n");
+	LOGMASKED(LOG_TG, "tg:   [SPLIT ONLY]      the field split is measured here; the quantity is not named\n");
+	LOGMASKED(LOG_TG, "tg:   [KN5000 NAME ONLY] no local statement of any kind\n");
+	LOGMASKED(LOG_TG, "tg:   [UNKNOWN]         no statement in either firmware\n");
+	LOGMASKED(LOG_TG, "tg:   a `KN5000-only:` name has NO WSA1 EVIDENCE behind the quantity.\n");
+	LOGMASKED(LOG_TG, "tg:   0x0800's two source tables are themselves KN5000-transplanted labels,\n");
+	LOGMASKED(LOG_TG, "tg:   so 'envelope', 'level' and 'rate' are borrowed words there as well.\n");
+	for (const tg_regdesc &d : s_tg_chanreg)
+	{
+		char w[4];
+		if (d.word < 0) { w[0] = ' '; w[1] = '-'; w[2] = 0; }
+		else            snprintf(w, sizeof(w), "%2d", d.word);
+		LOGMASKED(LOG_TG, "tg:   0x%04X  word %s  %-38s%s%s%s\n",
+			d.block, w, d.name, s_tg_grade_tag[d.grade],
+			d.sibling ? "   KN5000-only: " : "", d.sibling ? d.sibling : "");
+	}
+}
+
+// One channel's 22 registers, as they stand right now.  See the caller for why
+// the trigger this hangs off is NOT "the parameters are complete".
+void wsa1_state::tg_dump_channel(unsigned chan)
+{
+	LOGMASKED(LOG_TGVOICE, "tg: ---- channel %2u, the 22 burst registers as they stand ----\n", chan);
+	for (const tg_regdesc &d : s_tg_chanreg)
+	{
+		if (d.word < 0)
+			continue;
+		const uint16_t v = m_tg_regs[d.block + chan];
+		LOGMASKED(LOG_TGVOICE, "tg:   0x%04X %-38s = 0x%04X  %s%s\n",
+			d.block + chan, d.name, v, tg_format_value(d.block, v).c_str(), s_tg_grade_tag[d.grade]);
+	}
+}
+
 void wsa1_state::tg_data_w(uint16_t data)
 {
-	// Register number = (plane << 6) | voice, 64 voices - the same field split
+	// Register number = (block << 6) | channel, 64 channels - the same field split
 	// MAME's KN5000 tone generator uses.  The identification of this port as the
 	// same part as the KN5000's IC303 rests on five agreements with that
-	// device's firmware, not on the parts list alone: the 64-voice boot reset at
-	// 0xFA6690 writes the same four planes with the same iteration count and two
-	// byte-identical values (plane 0x0C0 <- 0x0000, plane 0x000 <- 0x7E00, the
+	// device's firmware, not on the parts list alone: the 64-channel boot reset at
+	// 0xFA6690 writes the same four blocks with the same iteration count and two
+	// byte-identical values (block 0x0C0 <- 0x0000, block 0x000 <- 0x7E00, the
 	// KN5000's "voice free"); the damp pair 0xA200/0xA280 appears on the same
-	// two planes (0xFAC275, 0xFAC298); the +4 read-back has the same shape as
-	// the KN5000's AUDIO_HW_WRITE_READ; and two upper-plane bursts (0xFACE67,
+	// two blocks (0xFAC275, 0xFAC298); the +4 read-back has the same shape as
+	// the KN5000's AUDIO_HW_WRITE_READ; and two upper-block bursts (0xFACE67,
 	// 0xFACEA2) match the KN5000 note-on burst in BOTH register number and
 	// parameter-block word offset.  It is still an identification by twin: a
 	// register whose value was not compared could differ.
 	if (m_tg_latch < TG_REG_COUNT)
 		m_tg_regs[m_tg_latch] = data;
 
-	// Only the per-channel range decodes as block/channel; the thirteen global
-	// registers do not, so they are not printed as though they did.
-	//
-	// The decode now also names the STAGING WORD each per-channel block is fed
-	// from, which is the one thing about this device that IS established.
-	// Dev10C_WriteAllChanRegs (prom_c 0xFB713A) moves 22 words out of the struct
-	// at CPU 2 work RAM 0x00D75E into 22 blocks of one channel, and
-	// wsa1-roms-disasm/notes/FINDINGS-prom_c-dev10c-producers.md sec.2 lists,
-	// per word, the routines that write it -- 70 sites over 21 of the 22 words.
-	// So a trace that says "block 0x0A40" can be joined to a producer list, and
-	// a trace that says only "reg 0x0A7F" cannot.
-	//
-	// ⚠ NONE OF THIS IS A MEANING.  Every producer in that note is a bare
-	// sub_XXXXXX address; not one register is called pitch, level or wave there
-	// or here.  The table below is a wiring diagram inside the firmware, not a
-	// register description -- see gap A in notes/WSA1-EMULATION-DISASM-GAPS.md.
-	if (m_tg_latch <= TG_CHAN_REG_TOP)
+	// ⚠ THE GLOBAL TEST HAS TO COME FIRST, and this is a defect the decode exposed:
+	// Dev10C_WriteGlobalRegs (0xFB7715) writes 0x0200-0x0205, and 0x0200 is INSIDE
+	// the per-channel range (it would read as block 8, channels 0..5).  Block 8 is
+	// not one of the burst's 22, so the old ordering printed six global writes per
+	// boot as "a block NO converted routine is known to write" -- which is exactly
+	// backwards: the routine that writes them is named, and it takes no channel.
+	const bool is_global = ((m_tg_latch >= 0x0200) && (m_tg_latch <= 0x0205))
+		|| ((m_tg_latch >= 0x0c00) && (m_tg_latch <= 0x0c05))
+		|| (m_tg_latch == 0x0e00);
+
+	if (!is_global && (m_tg_latch <= TG_CHAN_REG_TOP))
 	{
-		// Indexed by block number (register >> 6).  -1 = a block the unrolled
-		// writer does not touch.  Blocks 0-6, 0x10-0x14 and 0x20-0x29 carry
-		// staging words 0-6, 7-11 and 12-21 respectively.
-		static const int8_t s_staging_word[0x2a] =
-		{
-			 0,  1,  2,  3,  4,  5,  6, -1,   -1, -1, -1, -1, -1, -1, -1, -1,
-			 7,  8,  9, 10, 11, -1, -1, -1,   -1, -1, -1, -1, -1, -1, -1, -1,
-			12, 13, 14, 15, 16, 17, 18, 19,   20, 21
-		};
+		const unsigned    chan = m_tg_latch & 0x3f;
+		const tg_regdesc *d    = tg_lookup(m_tg_latch);
 
-		const unsigned block = m_tg_latch >> 6;
-		const int word = (block < sizeof(s_staging_word)) ? s_staging_word[block] : -1;
-
-		// Word 0 is the exception and it is worth printing as one: it has no
-		// staging producer anywhere, because Dev10C_WriteAllChanRegs writes
-		// block 0 with the literal 0x8100 out of the writer itself.
-		const char *note =
-			(block == 0) ? " [literal 0x8100 in the writer, no staging word]" :
-			(block == 2) ? " [the bit-15 gate, pulsed 1 then 0]" :
-			(block == 6) ? " [the block 0xFA69B1 reads back -- see tg_status_r]" : "";
-
-		if (word >= 0)
-			LOGMASKED(LOG_TG, "tg: reg 0x%04X (block 0x%03X channel %2d) = 0x%04X"
-				" <- staging word %d%s\n",
-				m_tg_latch, block, m_tg_latch & 0x3f, data, word, note);
+		if (d)
+			LOGMASKED(LOG_TG, "tg: ch %2u  reg 0x%04X word %s  %s%s%s%s = 0x%04X  %s\n",
+				chan, m_tg_latch,
+				(d->word < 0) ? " -" : util::string_format("%2d", d->word).c_str(),
+				d->name, s_tg_grade_tag[d->grade],
+				d->sibling ? "  KN5000-only: " : "", d->sibling ? d->sibling : "",
+				data, tg_format_value(m_tg_latch, data).c_str());
 		else
-			LOGMASKED(LOG_TG, "tg: reg 0x%04X (block 0x%03X channel %2d) = 0x%04X"
-				" <- NO staging word (block outside Dev10C_WriteAllChanRegs)\n",
-				m_tg_latch, block, m_tg_latch & 0x3f, data);
+			LOGMASKED(LOG_TG, "tg: ch %2u  reg 0x%04X (block 0x%03X) = 0x%04X"
+				"  -- a block NO converted routine is known to write\n",
+				chan, m_tg_latch, m_tg_latch >> 6, data);
+
+		// ---------------- THE BUSY LATCH: A MODEL, NOT A FINDING --------------
+		//
+		// Block 0 per channel is the lifecycle register, and two literals move
+		// the latch that tg_status_r() answers block 0's READ out of:
+		//
+		//   0x8100  GATE   0xFB7239 (Dev10C_WriteAllChanRegs), 0xFB755E, 0xFB7663
+		//   0x7E00  FREE   0xFA66C7 (VoiceSubsystem_Init), 0xFB0AB5
+		//                  (Dev10C_ChanReset), 0xFB8211 (Dev10C_ResetAllChannels)
+		//
+		// Those two censuses are complete for prom_c: three `ld (Xrr),0x7E00`
+		// sites and no `ld r16,0x7E00` anywhere (notes/wsa1-gapF-probes/, P2/P2b).
+		//
+		// ⚠ TYING THE READ TO THE WRITE IS THIS DRIVER'S MODEL.  The disassembly
+		// note records block 0's read (select 0..3, per BANK) and its write
+		// (select 0..0x3F, per CHANNEL) separately and deliberately declines to
+		// argue from one to the other.  The warrant used here is the twin:
+		// kn5000_tonegen.cpp:1010-1018 records, MEASURED on that machine's live
+		// bus, that the same TC183C230002 accepts exactly two lifecycle commands
+		// on register 0x0000 + chan -- 0x81xx GATE and 0x7E00 FREE -- and answers
+		// block 0 out of the matching latch.  Three things weaken it and are
+		// written down rather than smoothed over:
+		//   (a) 0x8100 is the strobe word on FOUR register blocks in this ROM
+		//       (0x0000 and the three slot gates 0x0540/0x0580/0x05C0), so it
+		//       reads as a generic gate encoding.  Hence `latch < TG_VOICES`.
+		//   (b) the KN5000 text says 0x81xx, a family; this firmware emits
+		//       exactly 0x8100.  The agreement is one value wide.
+		//   (c) block 0 ALSO receives a computed word, voicerec[+0x29], whose
+		//       high byte is a shifted parameter -- DE = (p - 16) << 8 at
+		//       0xFAA395-0xFAA39C, and IX << 9 / DE << 12 at 0xFAA499/0xFAA4AA --
+		//       so 0x7E00 and 0x8100 are ARITHMETICALLY REACHABLE by a parameter
+		//       combination.  That collision is bounded rather than dismissed:
+		//       a spurious FREE puts that ONE channel back into the teardown the
+		//       stub used to inflict on EVERY channel, and a spurious GATE only
+		//       keeps a bit set that this model can never clear anyway.  The
+		//       worst case is therefore the OLD behaviour on a subset, never
+		//       something new -- but it is a value-dependent failure, and if a
+		//       voice is ever seen to die on one particular sound, look here.
+		//
+		// Anything except these two values is a parameter and MUST NOT move the
+		// latch.
+		if (m_tg_latch < TG_VOICES)
+		{
+			const uint16_t bit = uint16_t(1u << (chan & 15));
+			if (data == 0x8100)
+				m_tg_busy[chan >> 4] |= bit;
+			else if (data == 0x7e00)
+				m_tg_busy[chan >> 4] &= uint16_t(~bit);
+		}
+
+		// Block 0x0080 bit 15 is a gate the CPU pulses 1-then-0 around a
+		// parameter update: set at 0xFB717E, cleared at 0xFB7307, then shadowed
+		// to RAM 0x0000D85B + 2*chan at 0xFB7317-0xFB7322.
+		//
+		// ⚠ THE FALLING EDGE IS *NOT* "THIS CHANNEL'S PARAMETERS ARE COMPLETE",
+		// and the dump below is labelled accordingly.  Inside one burst for
+		// channel c, Dev10C_ChanMinus2_SetReg_0080_Bit15 runs twice (0xFB7148,
+		// 0xFB714C) and its clear counterpart once (0xFB729D) on channel
+		// (c - 2) & 0x3F; sub_FB6F2C does five sets then one clear; and
+		// Dev10C_SetChanReg_0080_ClrBit15 (0xFB7038) writes a bare clear.  So
+		// edges arrive mid-burst on OTHER channels.  describe_context() is
+		// printed with each dump precisely so a reader can tell which writer
+		// produced it instead of assuming.
+		//
+		// ⚠ WHAT THE PULSE DOES IS NOT ESTABLISHED -- "trigger", "latch" and
+		// "key-on" all fit the shape and nothing here distinguishes them.
+		if ((m_tg_latch & 0xffc0) == 0x0080)
+		{
+			const bool gate = BIT(data, 15);
+			if (!gate && BIT(m_tg_gate, chan))
+			{
+				LOGMASKED(LOG_TGVOICE, "tg: %s: block 0x0080 gate FELL on channel %u"
+					" (NOT necessarily the end of that channel's burst)\n",
+					machine().describe_context(), chan);
+				tg_dump_channel(chan);
+			}
+			m_tg_gate = (m_tg_gate & ~(uint64_t(1) << chan)) | (uint64_t(gate) << chan);
+		}
 	}
 	else
 	{
-		// Dev10C_WriteGlobalRegs (0xFB7715) writes 0x0200-0x0205, 0x0C00-0x0C05
-		// and 0x0E00 as immediates and takes no channel argument, so anything
-		// else up here is a register no converted routine is known to write.
-		const bool known = ((m_tg_latch >= 0x0200) && (m_tg_latch <= 0x0205))
-			|| ((m_tg_latch >= 0x0c00) && (m_tg_latch <= 0x0c05))
-			|| (m_tg_latch == 0x0e00);
-
+		// Dev10C_WriteGlobalRegs (0xFB7715) writes those thirteen as immediates and
+		// takes no channel argument, so anything else up here is a register no
+		// converted routine is known to write.
 		LOGMASKED(LOG_TG, "tg: global reg 0x%04X = 0x%04X%s\n", m_tg_latch, data,
-			known ? "" : " (NOT one of Dev10C_WriteGlobalRegs' thirteen)");
+			is_global ? "" : " (NOT one of Dev10C_WriteGlobalRegs' thirteen)");
 	}
 }
 
 uint16_t wsa1_state::tg_status_r()
 {
-	// Two queries reach this port, and both are answered "nothing is sounding":
+	// Two queries reach this port, both out of Dev10C_PollBankAndRetire (prom_c
+	// 0xFA68DC) -- the ONLY reader of 0x0010C000 in any of the four images: of
+	// 102 immediate loads of that address, exactly one is followed by the +4
+	// pointer step, at 0xFA68FC (notes/wsa1-gapF-probes/, P1).
+	const uint16_t latch = m_tg_latch;
+
+	// QUERY 1 -- select 0..3: the BUSY BITMAP of a bank of sixteen channels, bit
+	// `chan & 15` of word `chan >> 4`.  Select at 0xFA6901, read at 0xFA690A.
+	// The firmware then computes
+	//     ended = 0x0087BF[bank] & ~(word | 0x0087C7[bank])
+	// (0xFA6918-0xFA6931) and TEARS DOWN every channel in `ended`: ChanRec_Release
+	// + Dev10C_ChanReset + 0xFA5CE9, at 0xFA6989-0xFA6998.  A set bit means "still
+	// busy"; a bit that GOES AWAY is a note end.
 	//
-	//   latch 0x0180 + voice  -> that voice's envelope level.  0xFA69AF latches
-	//        it, 0xFA69B1 reads here, 0xFA69B6/0xFA69BA keep (V & 0x3FFF) >> 5.
-	//        0 = silent.
-	//   latch 0x0000..n       -> the active-voice bitmap of a bank of 16.
-	//        0xFA6901 latches, 0xFA690A reads, 0xFA6920 ORs it into a shadow.
-	//        0 = every voice free.
+	// ★ IT HAS TO BE A LATCH, NOT A LEVEL TEST, and the firmware itself is what
+	// says so: the allocator ARMS the teardown edge before the gate is even
+	// written.  sub_FA6BB5's not-held arm sets the channel's bit in 0x0087BF
+	// with `lda XBC,0x0087bf / add XBC,(XIZ+0xe3) / or (XBC),HL` at
+	// 0xFA6D39-0xFA6D41.  So a model that answers "is it loud yet" reports 0 on
+	// the first poll after the gate, while the attack is still ramping, and the
+	// firmware retires the brand-new note.  The KN5000 firmware pre-arms
+	// identically and kn5000_tonegen.cpp:1049-1054 gives that as its own reason.
 	//
-	// Both answers are 0, so one branch would do; they are written out so that
-	// the next person can see WHICH query is being answered and change one
-	// without the other.  Answering 0 is a DECISION, not a fact: it is safe only
-	// because nothing in prom_c waits for a voice to become busy.
+	// THE STUB THIS REPLACED WAS NOT NEUTRAL: answering 0 put every non-held
+	// channel into `ended` on the first sweep after it was allocated, so every
+	// voice was torn down within a few MAIN passes and a held voice died the
+	// instant its hold bit cleared, with no release at all.
+	if (latch < 4)
+		return m_tg_busy[latch];
+
+	// QUERY 2 -- select 0x0180 + chan: a per-channel MAGNITUDE.  Select at
+	// 0xFA69AF, read at 0xFA69B1, then `and BC,0x3fff / srl 0x05,BC / ld E,C`
+	// (0xFA69B6-0xFA69BD) keeps BITS 12..5 as an 8-bit field -- bit 13 is lost to
+	// the truncation, not to the mask -- caches it in the channel record's +0x15
+	// and only ever COMPARES it against 0x80.
 	//
-	// WHERE THE ANSWER WOULD COME FROM, now that the producers are located:
-	// block 0x0180 is staging word 6, and FINDINGS-prom_c-dev10c-producers.md
-	// sec.2 gives it exactly TWO producers, sub_FA96F7__FA9801 and
-	// sub_FA9C60__FA9F06.  Neither is named for what it computes, so this stub
-	// cannot be replaced yet -- but it is two routines away rather than a module
-	// away, and that is gap F's shortest path.
-	if ((m_tg_latch >= 0x0180) && (m_tg_latch < 0x0180 + 64))
+	// ⚠ CROSSING BELOW 0x80 DOES NOT RETIRE THE VOICE.  The retire path is the
+	// bitmap difference above, alone.  Below 0x80, and only with the record's
+	// flag bit 2 set (0xFA69D4), the record goes to sub_FA65BD -- a different
+	// action, which clears flag bits 2 and 3, sets bit 1 and calls 0xFA62DA.
+	//
+	// The firmware uses this read as a PREDICATE and never as a number, so a
+	// predicate is all this driver may answer.  0x1000 is the SMALLEST word whose
+	// bits 12..5 equal 0x80: the least this model can claim while still saying
+	// "not yet below half scale".
+	//
+	// ⚠ IT IS NOT A LEVEL, AND IT IS THE ONE FAKE IN THIS HANDLER.  Nothing in
+	// this driver knows a level -- there is no synthesis here, no sound device at
+	// all, and the six wave mask ROMs are undumped -- and this value must never
+	// be read as an amplitude or an envelope.  "Envelope" is not asserted by the
+	// disassembly either; the previous log line here called it an "envelope
+	// level" and that name had nothing behind it.
+	//
+	// What it buys: with the bitmap above answering, a voice survives the poll,
+	// so the poll's own guard `and A,0x81 / jr NZ` at 0xFA69A7 lets QUERY 2 run
+	// at all -- under the old stub it could not, because the record was already
+	// released.  At note-off sub_FA65F6 then takes its RELEASE arm (0xFA6621:
+	// clear flag bit 3, SET FLAG BIT 2 at 0xFA6632, call 0xFA62DA with the
+	// record's own +0x16) instead of its "this voice already died" arm.  Flag
+	// bit 2 has no other producer in the voice module -- 0xFA6632 is the only
+	// `set 0x02` in 0xFA6528-0xFA6EF9 -- so this is what makes the comparison at
+	// 0xFA69C7/0xFA69D4 reachable at all.  ⚠ Stage three (flag bit 1, "finished")
+	// stays unreachable, because 0x1000 never satisfies `< 0x80`.
+	if ((latch >= 0x0180) && (latch < 0x0180 + TG_VOICES))
 	{
-		LOGMASKED(LOG_TG, "tg: envelope level of voice %2d -> 0 (stub)\n", m_tg_latch - 0x0180);
-		return 0;
+		const unsigned chan = latch - 0x0180;
+		const bool     busy = BIT(m_tg_busy[chan >> 4], chan & 15);
+
+		LOGMASKED(LOG_TG, "tg: magnitude of channel %2u -> 0x%04X (%s)\n",
+			chan, busy ? 0x1000 : 0x0000, busy ? "busy: not below half scale" : "free");
+		return busy ? 0x1000 : 0x0000;
 	}
 
-	LOGMASKED(LOG_TG, "tg: status read, latch 0x%04X -> 0 (stub)\n", m_tg_latch);
+	// ⚠ THE ONE THING THIS MODEL STILL CANNOT DO, written here so nobody has to
+	// rediscover it: THE BUSY BIT NEVER FALLS BY ITSELF.  It clears only when the
+	// firmware writes 0x7E00, and the only per-note writer of 0x7E00 is
+	// Dev10C_ChanReset -- called ONLY from the retire path, which is driven by
+	// the bit falling.  Real hardware breaks that loop because the chip decides
+	// when the voice has ended; this driver has no voice to end.  Consequence:
+	// ChanRec_Release has exactly two call sites (0xFA6892, all 64 at boot, and
+	// 0xFA6989, the poll), so between one VoiceSubsystem_Init and the next, no
+	// channel record returns to the pool.  Whether the allocator then steals or
+	// refuses is NOT established -- 0xFA62DA and 0xFA643F are undecoded, and both
+	// are exactly the routines that could re-link a record.  Closing this needs a
+	// synthesis model, which is gap A's job, not a constant here.
+	LOGMASKED(LOG_TG, "tg: status read, latch 0x%04X -> 0 (no query is known at this select)\n", latch);
 	return 0;
 }
 
@@ -1578,6 +2031,8 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_strap));
 	save_item(NAME(m_tg_latch));
 	save_item(NAME(m_tg_regs));
+	save_item(NAME(m_tg_busy));
+	save_item(NAME(m_tg_gate));
 	save_item(NAME(m_synth2_latch));
 	save_item(NAME(m_synth2_regs));
 	save_item(NAME(m_cpu1_chanreg_addr));
@@ -1593,6 +2048,11 @@ void wsa1_state::machine_start()
 	// comment above keybed_status_r().
 	m_keybed_timer = timer_alloc(FUNC(wsa1_state::keybed_scan), this);
 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
+
+	// So that a captured -log carries its own legend and a reader can tell a
+	// locally established register name from a borrowed one without opening the
+	// notes.  Costs nothing unless LOG_TG is on.
+	tg_log_legend();
 }
 
 void wsa1_state::machine_reset()
@@ -1614,6 +2074,12 @@ void wsa1_state::machine_reset()
 	m_keybed_prev = 0;
 	m_key_fifo_read = 0;
 	m_key_fifo_count = 0;
+
+	// VoiceSubsystem_Init (0xFA66C7) and Dev10C_ResetAllChannels (0xFB8211) both
+	// write 0x7E00 to every channel out of RESET, so "all free" is where the
+	// firmware puts the device anyway.
+	std::fill(std::begin(m_tg_busy), std::end(m_tg_busy), 0);
+	m_tg_gate = 0;
 
 	// THE MODEL STRAP IS SAMPLED HERE AND NOWHERE ELSE, which is what a strap is:
 	// the firmware reads PB bit 0 exactly once, from RESET (prom_a 0xF827D8 ->
@@ -2052,6 +2518,63 @@ static INPUT_PORTS_START(wsa1)
 	// braces; see the comment there for why this is a claim about the BOX and not
 	// about the firmware, which scans unconditionally on both variants - the
 	// strap is not tested anywhere in the keybed or the link code.
+	//
+	// ------------------------------------------------------------------------
+	// ★ THE KEYBOARD MODEL ENTERS SERVICE MODE FROM THE KEYBED, not from the
+	// panel -- something no sibling in these trees does.
+	//
+	// On the (0xC4) == 1 arm, the RESET-path service test at prom_a 0xF827F8
+	// (-> 0xF40148 -> 0xF952FC) calls sub_F9530B, which does a LINK REMOTE READ
+	// of EIGHT BYTES from CPU 2's address 0x0000FFF0 (0xF95311-0xF9531E, through
+	// the 0xE2 remote-read op at 0xF8E0FE), pops all eight bytes, and does
+	// nothing unless EXACTLY TWO BITS ARE SET (`cps L,0x02 / jrl NZ`, 0xF95346).
+	//
+	// 0x0000FFF0 is CPU 2's 61-key key-state bitmap: KeyScan_InitKeyStateBitmap
+	// (prom_c 0xF9988D) clears eight bytes there and folds scanner events in at
+	// byte (key >> 3) & 7, bit key & 7, with the base as the 32-bit constant at
+	// ROM 0xFCC81A.  ★ That closes an open question in the disassembly tree,
+	// which had found no consumer of the bitmap in prom_c: the consumer is on the
+	// OTHER processor.
+	//
+	// The five bit pairs are all EXACTLY TWELVE KEYS APART -- a self-check on the
+	// bit -> key decode that could have failed and did not -- so every chord is
+	// two of the same note an octave apart.  Key 0 is MIDI 36, so:
+	//
+	//     C4 + C5   keys 24, 36   recognised and REJECTED (0xF95359)
+	//     D4 + D5   keys 26, 38   screen 0xD9  PANEL CPU CHECK      (0xF9536C)
+	//     E4 + E5   keys 28, 40   screen 0xDA  SINE WAVE CHECK      (0xF95383)
+	//     F4 + F5   keys 29, 41   screen 0xDB  PANEL SW&LED CHECK   (0xF953A7)
+	//     G4 + G5   keys 31, 43   screen 0xDC  the screen cycler    (0xF953BE)
+	//
+	// With the default PC mapping below those are Z+Q, X+W, C+E, V+R and B+T.
+	// Re-read from the ROM by notes/wsa1-probes/wsa1_service_screen_refutation.py
+	// section 2, and reachable in the emulator by
+	// notes/wsa1-probes/wsa1_service_entry.lua.
+	//
+	// ★ MEASURED, AND THE MEASUREMENT CONFIRMS THE DECODE WHILE THE CHORD STILL
+	// DOES NOT FIRE.  Holding D4 + D5 from t = 0 on `wsa1`, CPU 2's bitmap reads
+	//
+	//     0x0000FFF0 = 00 00 00 04 40 00 00 00      popcount 2
+	//
+	// steadily from t = 5 s onwards -- byte +3 bit 2 = key 26 = D4 and byte +4
+	// bit 6 = key 38 = D5, EXACTLY the pair sub_F9530B tests for screen 0xD9.  So
+	// the keybed model, the scanner, CPU 2's bitmap builder and the bit -> key
+	// decode above are all correct, live, against a criterion that could have
+	// failed.  And yet RAM (0x2070) is never written with 0xD9 and (0x207C) never
+	// leaves the play screen (notes/wsa1-probes/wsa1_service_entry.lua).
+	//
+	// That localises the failure to CPU 1's side of the remote read, and rules
+	// out the two other candidates: the bitmap is not empty, and nothing
+	// pre-empts a screen that was never requested.  The live hypothesis is
+	// ORDERING -- CPU 1 issues the read at 0xF827F8, very early in RESET, before
+	// even its own 0x384-tick wait at 0xF82804, while CPU 2 does not build the
+	// bitmap until MAIN's init chain reaches 0xF997FA, and until 0xF9816B moves
+	// XSP those same eight bytes are CPU 2's boot stack.  NOT YET PROVEN: the
+	// remote read could also simply be failing.
+	//
+	// The chords are documented here because they are established, not because
+	// they work.
+	// ------------------------------------------------------------------------
 
 	PORT_START("KEY0")
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2")

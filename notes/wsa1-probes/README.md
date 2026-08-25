@@ -1023,3 +1023,132 @@ capture-register reads, software capture, pin capture mode, external clock selec
 both a side effect of the boot's own `ldio T4MOD,0x05` / `T5MOD,0x02` (bit 5 always reads 1; writing
 0 captures), and nothing ever reads CAP1-CAP4 back. Every KN1500 hit is the runaway RAM test above.
 So the capture path stays **documented, not invented** — see gaps-doc appendix items 7 and 8.
+
+---
+
+## `wsa1_tg_lifecycle.lua` — is the tone generator's busy model observable at all?  (2026-08-25)
+
+Answers the question a modelled `tg_status_r()` has to answer before anyone believes it: **does
+any code path ever GATE a channel**, and does the one risk the model carries ever materialise?
+Taps the `0x0010C000` port itself, so it is independent of `VERBOSE`.
+
+```
+cd ~/compartilhado/kn7000-emulator
+DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 120 -window -nomax \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_tg_lifecycle.lua
+WSA1_TG_PRESS=1 DISPLAY=:0 ./kn7000 wsa1 ... -str 90 ...      # also holds C4 from t=60 to t=70
+```
+
+**Result, `wsa1r`, 120 emulated seconds:**
+
+| counter | value | what it is |
+|---|---|---|
+| block-0 writes | 192 | 64 `0x8100` GATE + 64 `0x7E00` FREE + 64 computed |
+| gates | 64, all at **t = 0.02** | the boot reset, channels 0..63 in order |
+| computed block-0 words | 64, **every one with high byte `0x18`** | `voicerec[+0x29]` |
+| **collisions with a lifecycle literal** | **0** | the bound on the model's one risk |
+| other per-channel writes | 2118 | |
+| globals | 7 | |
+| reads, select 0..3 (bank) | 1999 | the poll runs continuously |
+| reads, select `0x0180+chan` | 0 | no channel stays busy, so query 2 never fires |
+
+So the busy latch is **live and exercised** — and it ends the boot at zero, which is why the SOUND
+MODE screen is byte-identical to the pre-change reference.
+
+**Result, `wsa1`, 90 s, C4 held t = 60..70:** *identical counters*. **Zero additional gates.** A
+held key still does not reach a voice — a second, independent instrument for gap C, taken from the
+tone-generator end rather than from the link end, and not subject to gap C's own quarantine.
+
+---
+
+## `wsa1_service_entry.lua` — does a power-on SERVICE-MODE chord reach the dispatcher?  (2026-08-25)
+
+Holds the chord for whichever system it is running on from t = 0, releases and re-presses it after
+the boot, and reports **four stages** of the panel chain rather than "did the LCD change":
+
+1. `0x2B20..0x2B3F` the per-wire value shadow — did the press reach CPU 1 at all
+2. `0x2082` the control byte, `(pressed ? 0x80 : 0) | index` (prom_a `0xF8618F`)
+3. `0x2070`/`0x2071` was a screen REQUESTED
+4. `0x207C` is the dispatcher on it
+
+★ Using the right instrument is the whole point: 459 of the 654 dispatch-matrix handler slots are
+`0xFF42B1`, a bare `ret`, so a position that does nothing on the play screen is *expected*, and an
+LCD-write probe cannot tell that apart from a press that never arrived.
+
+```
+WSA1_SERVICE_SCREEN=D9 DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo \
+    -str 80 -window -nomax -autoboot_script .../wsa1_service_entry.lua
+```
+
+**Result (`wsa1r`, SEG1 bit 2 = PANEL CPU CHECK): FAIL, and the failure is informative.** The press
+and the release each produce exactly one store, at the right instants — so the link and the panel
+HLE both work — but the store lands at `0x2B20` carrying `0xC1` instead of at `0x2B31` carrying
+`0x04`. One byte out of position, deterministically. That is **gap Y** in
+`../WSA1-EMULATION-DISASM-GAPS.md`, and it is now the top item on that list.
+
+**Result (`wsa1`, keybed D4+D5 = PANEL CPU CHECK): FAIL, and it CONFIRMS the ROM decode on the way.**
+The script also prints CPU 2's 61-key state bitmap, because the chord's own criterion is a popcount:
+
+```
+cpu2 keybitmap 0x0000FFF0 = 00 00 00 04 40 00 00 00  popcount=2 (the chord needs 2)
+```
+
+Byte +3 bit 2 = key 26 = D4 and byte +4 bit 6 = key 38 = D5 — **exactly** the pair `sub_F9530B`
+tests for screen `0xD9`, held steadily from t = 5 s. So the keybed model, the scanner, CPU 2's
+bitmap builder and the whole bit -> key decode are right, measured against a criterion that could
+have failed. `(0x2070)` is nonetheless never written with `0xD9`, which puts the failure on CPU 1's
+side of the link remote read — see the `KEY0..KEY5` comment in `wsa1.cpp` for the two candidates
+that are ruled out and the one that is not.
+
+---
+
+## `screens/tgmodel/` — the four regression snapshots for the 2026-08-25 tone-generator work
+
+Captured with `tools/rigs/snap_at.lua` at `SNAP_AT=45`:
+
+```
+cd ~/compartilhado/kn7000-emulator
+SNAP_AT=45 DISPLAY=:0 ./kn7000 <machine> -rompath ./roms -skip_gameinfo -window -nomax \
+    -snapshot_directory ~/compartilhado/kn7000_mame/notes/wsa1-probes/screens/tgmodel \
+    -autoboot_script ~/compartilhado/kn7000_mame/tools/rigs/snap_at.lua
+```
+
+| machine | md5 | verdict |
+|---|---|---|
+| `wsa1r` | `491b27987a25e894eb44e322d72b465a` | **byte-identical** to `screens/wsa1r_timerfix_t45_sound_mode.png` |
+| `wsa1`  | `7ea521458d71732a9360f65611782a06` | **byte-identical** to `screens/wsa1_intnest_sound_mode.png` |
+| `kn5000`| `d015011bdc084fa1225eeb167b2dcdde` | **byte-identical** to `screens/kn5000_timerfix_t45_play_screen.png` |
+| `kn7000`| `7b8912d36fc43655866ad2fbbe15eed5` | LCD identical; **the four layout faders sit differently** |
+
+⚠ The kn7000 difference is NOT a driver change — `kn7000.cpp` was not touched, the md5 is stable
+across three consecutive runs, and the pixels that differ are the physical slider widgets in the
+bottom-left of the layout, which come from the cfg directory. The standing gate is the authority
+here and it passed 17/0/1 with the recorded `kn7000` liveness hash `316cd785` and the audio oracle
+md5 `780de131e33a4a0c99d092b57a074247` unchanged.
+
+---
+
+## `wsa1_rack_service_chord.py` — the four SX-WSA1R service entries, byte by byte  (2026-08-25)
+
+The four `CP_SEG1` `PORT_NAME`s in `wsa1_cpanel.cpp` are the first (position → function) pairs any
+panel bit on this machine has, so they get a script rather than a reading. 25 checks, 0 failures:
+
+```
+python3 notes/wsa1-probes/wsa1_rack_service_chord.py
+```
+
+It asserts the whole chain: RESET reaches the test (`call 0xF40148` at `0xF827F8`, thunked to
+`0xF952FC`); the strap splits rack from keyboard (`cp (0xC4),0x02`); `sub_F953CD` reads `(0x2B31)`
+and compares it for equality against `02/04/08/10/20`; the four `ld (XIX),0xD9..0xDC` stores and the
+two `ld (0x2071),0x80`; that `(0x2B31)` really is wire `0xC1` = SEG1 under the shadow-index formula;
+and the RESET **order** — this chord is the second of four, and the ROM-VERSION test that follows it
+never returns once matched (`jr T` backwards at `0xF829A3`), so a held ROM-version chord pre-empts a
+service screen this test already latched.
+
+| SEG1 bit | value | screen | title |
+|---|---|---|---|
+| SW1 | `0x02` | — | recognised, no screen |
+| SW2 | `0x04` | `0xD9` | PANEL CPU CHECK |
+| SW3 | `0x08` | `0xDA` | SINE WAVE CHECK |
+| SW4 | `0x10` | `0xDB` | PANEL SW&LED CHECK |
+| SW5 | `0x20` | `0xDC` | screen cycler |

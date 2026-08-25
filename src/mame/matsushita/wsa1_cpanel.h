@@ -284,6 +284,31 @@ private:
 	// 8 LED registers x 8 bits.  Named positionally on purpose: no schematic net has been
 	// read, so "led3_5" is a claim about the WIRE, which the ROM does establish, and not
 	// about the legend, which it does not.
+	//
+	// ★ ONLY 47 OF THE 64 ARE REAL LAMPS, and the firmware says so itself.  The PANEL
+	// SW&LED CHECK screen's all-on sweep (sub_F956B0, prom_a 0xF956B0) walks the word
+	// table at 0xF95C68 until 0xFFFF, writing register index and data as pairs, and that
+	// table is exactly eight entries:
+	//
+	//     reg0=FF reg1=FF reg2=FF reg3=FF reg4=FF reg5=03 reg6=0F reg7=02   -> 47 bits
+	//
+	// The driver's output index is reg*8 + bit, so the SEVENTEEN outputs the firmware's
+	// own all-lamps test never lights are led42-47, led52-56 and led58-63.  DO NOT wire a
+	// layout lamp to any of those.  Cross-checked, and this is what makes 47 a measurement
+	// rather than a reading: the union of every mask in the two switch->LED adjacency
+	// tables (0xF94F58 for variant 1, 0xF95088 for variant 2, read by the SW&LED CHECK
+	// decoder sub_F94E1C) is a SUBSET of that sweep, register by register.  Two unrelated
+	// tables agree.  Both are re-read from the ROM by
+	// notes/wsa1-probes/wsa1_service_screen_refutation.py, section 4 and section 10.
+	//
+	// The numbering is deliberately NOT compacted to 47: led%u is the wire position, and
+	// renumbering it would break the one thing these names do establish.
+	//
+	// ⚠ And the lamps have TWO writers on the firmware side, not one.  Panel_SetLedRegister's
+	// guarded front door at prom_a 0xF8C84A opens with `cp (0x207A),0xDB / jr Z` -- it REFUSES
+	// every normal LED write while the PANEL SW&LED CHECK screen (id 0xDB) is up -- while the
+	// service module reaches the unguarded entry at 0xF8C846 directly.  On that screen the
+	// lamps belong to the test, and a layout that assumes otherwise will look broken there.
 	u8 m_led[8];
 	output_finder<64> m_led_out;
 };

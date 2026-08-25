@@ -38,11 +38,24 @@ DEFINE_DEVICE_TYPE(WSA1_CPANEL, wsa1_cpanel_device, "wsa1_cpanel", "SX-WSA1 Cont
 //
 //  ⚠ The BIT-to-legend mapping is NOT ESTABLISHED and is not invented here, so
 //  every switch is named POSITIONALLY: "Panel SEG3 SW5" is a claim about the
-//  WIRE, which the ROM does establish, and about nothing else.  The four
-//  power-on chords marked below are the only bits the ROM itself names, and
-//  each is tested by the boot block before the main loop starts (prom_a
-//  0xF828D9, 0xF8294C, 0xF82A04) against the panel's own change-mask shadow at
+//  WIRE, which the ROM does establish, and about nothing else.  What the ROM
+//  itself names is a FUNCTION for a handful of bits, and those are marked below:
+//  three power-on chords tested by the boot block before the main loop starts
+//  (prom_a 0xF828D9, 0xF8294C, 0xF82A04), and -- new -- the SX-WSA1R's four
+//  SERVICE-SCREEN entries in SEG1 (0xF953CD).
+//
+//  All of them are read out of the panel's own per-wire shadow at
 //  RAM 0x2B20 + ((wire & 0x0F) | ((wire & 0x40) >> 2)).
+//
+//  ⚠ That shadow holds the LAST VALUE, not a change mask, and the difference
+//  decides how the chords behave.  SC1_RxOp0_ThreeByte (prom_b 0xF5B0FD) does
+//    and W,0x4F / ld XHL,0x2B20 / bit 6,W / sub W,0x30 / add L,W
+//    ex (XHL),A        <- the shadow TAKES the new value, A takes the old one
+//    xor A,(XHL)       <- and THAT is the change mask, which is what gets queued
+//  so the byte at 0x2B20 + idx is the segment's current switch value.  Every
+//  chord test below compares it for EQUALITY, which means an extra button held
+//  in the same segment silently kills the chord -- the same discipline the
+//  KN7000's debug chords use (notes/FINDINGS-kn7000-debug-screens.md sec.1).
 //-------------------------------------------------
 
 static INPUT_PORTS_START(wsa1_cpanel)
@@ -57,13 +70,41 @@ static INPUT_PORTS_START(wsa1_cpanel)
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW6")
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG0 SW7")
 
+	// ★ SEG1 IS THE SX-WSA1R's SERVICE-SCREEN KEYPAD, and these are the first
+	// four (position -> function) pairs any panel bit on this machine has had.
+	// sub_F953CD (prom_a 0xF953CD), reached from RESET at 0xF827F8 -> 0xF40148 ->
+	// 0xF952FC when the model strap says (0xC4) == 2, compares (0x2B31) -- which
+	// is wire 0xC1, i.e. THIS segment -- for equality:
+	//
+	//     0x02 -> falls through, no screen        0xF953D8
+	//     0x04 -> screen 0xD9  PANEL CPU CHECK    0xF953F4
+	//     0x08 -> screen 0xDA  SINE WAVE CHECK    0xF953F9   (+ 0xF407AC / 0xF407B0)
+	//     0x10 -> screen 0xDB  PANEL SW&LED CHECK 0xF9540B
+	//     0x20 -> screen 0xDC  the screen cycler  0xF95410
+	//
+	// then stores the id in RAM (0x2070) and sets (0x2071) = 0x80.  The screen
+	// titles are the display lists those ids dispatch to -- 0xF2C84D, 0xF2C88B,
+	// 0xF2CA54 -- re-read from the ROM by
+	// notes/wsa1-probes/wsa1_service_screen_refutation.py section 1, and EVERY
+	// byte of the table above is asserted by
+	// notes/wsa1-probes/wsa1_rack_service_chord.py (25 checks, 0 failures).
+	//
+	// ⚠ EQUALITY, so exactly one of them at a time.  ⚠ VARIANT 2 ONLY: on the
+	// SX-WSA1 the same call goes to sub_F9530B instead, which reads the KEYBED
+	// (see the block above the KEY0..KEY5 ports in wsa1.cpp).  The names below
+	// say "rack" for that reason.
+	// ⚠ AND THEY ARE NOT THE LAST WORD IN THE BOOT: the RESET block tests four
+	// chords in address order -- FACTORY CLEAR 0xF827E5, then THIS one 0xF827F8,
+	// then ROM VERSION 0xF8280E, then the third 0xF82813 -- and 0xF8294C's matched
+	// arm never returns (`jr T` backwards at 0xF829A3).  A held ROM-version chord
+	// therefore pre-empts a service screen this test already latched.
 	PORT_START("CP_SEG1")
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW0")
-	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW1")
-	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW2")
-	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW3")
-	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW4")
-	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW5")
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW1 (rack power-on: recognised, no screen)")
+	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW2 (rack power-on: PANEL CPU CHECK)")
+	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW3 (rack power-on: SINE WAVE CHECK)")
+	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW4 (rack power-on: PANEL SW&LED CHECK)")
+	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW5 (rack power-on: screen cycler)")
 	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW6")
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("Panel SEG1 SW7")
 

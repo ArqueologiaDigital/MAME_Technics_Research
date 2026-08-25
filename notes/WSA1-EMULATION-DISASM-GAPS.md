@@ -38,6 +38,16 @@ closes with it, but gap C's numbers all move (its 500-tick deadlines are 1.02 s 
 **three new MAME-side gaps, items 6 to 8, are added** -- one of which, the SX-KN1500's half-blank
 IC15 dump, is that machine's entire boot blocker.
 
+**Revised again 2026-08-25 (late night), after THE TONE-GENERATOR REGISTERS WERE NAMED IN THE
+DRIVER AND THE READ-BACK STUB WAS RETIRED.** `wsa1.cpp` now decodes all 22 per-channel registers
+of `0x0010C000` by name, prints the PROVENANCE of every name on the same log line, and answers
+block 0's read out of a modelled busy latch instead of a constant 0. **Gap F is CLOSED**; **gap A
+is closed on the emulation side** and its remaining question is narrowed to two registers; **gap O
+gains the first four (position -> function) pairs any panel bit on this machine has had**, plus a
+47-lamp LED population; and **one new gap, Y, comes out of the measurement** -- a panel button
+press reaches CPU 1 and lands in the WRONG shadow slot carrying the WRONG byte, which is why no
+panel position has ever been seen to do anything. The top-three ranking is rewritten again below.
+
 This is a **request list**, not a summary. Every entry is a question a disassembly wave could
 answer, with what the driver does instead today and where to start looking. It is deliberately
 short: only gaps that change what the emulator can *do*.
@@ -57,48 +67,45 @@ tags. `notes/X.md` means `wsa1-roms-disasm/notes/X.md`.
 rounds, *after* the driver work that this list was written to steer. Re-read this section before
 planning: the old ranking would send a session at questions that are closed.
 
-**1. Make the floppy drive READY -- gap T is ANSWERED and the wiring is one pin.**
-The firmware DOES drive PA bit 3, contrary to what this list said until now. Four writes exist in
-prom_a+prom_b, and PA bit 3 is *the only bit of PA the firmware changes after RESET*
+⚠ **REFRESHED AGAIN 2026-08-25 (late night).** Entries 2 and 3 of the previous ranking are now
+IMPLEMENTED, so they are no longer asks. What replaces them is the thing the implementation work
+measured on the way past.
+
+**1. Fix the panel receive framing -- gap Y (NEW), and it is one measurement away.**
+It blocks every panel button, and with them the disk menu (gap V), the service screens and the
+whole of gap O. MEASURED this session: with SEG1 bit 2 held, a packet DOES reach CPU 1 at exactly
+the press and release instants, but it lands at RAM **`0x2B20`** carrying the byte **`0xC1`** --
+the wire address -- where the decode says it must land at **`0x2B31`** carrying the switch value
+`0x04`. One byte out of position, deterministically, both directions
+(`notes/wsa1-probes/wsa1_service_entry.lua`, stage 1). The receiver is `SC1_RxOp0_ThreeByte`
+(prom_b `0xF5B0FD`); the panel HLE sends exactly two bytes, `[0xC0 | segment][mask]`.
+
+**2. Make the floppy drive READY -- gap T is ANSWERED and the wiring is one pin.**
+The firmware DOES drive PA bit 3, contrary to what this list said until recently. Four writes exist
+in prom_a+prom_b, and PA bit 3 is *the only bit of PA the firmware changes after RESET*
 (`notes/prom_a_pa3_census.py`, 19 checks, 0 failures, in the disassembly tree). The polarity is
 what the earlier pass got backwards: `res 3,(PA)` at `0xFE18EF` is followed by a **307 ms delay**,
-i.e. a motor spin-up, so the line is **ACTIVE LOW**. The old note reasoned "the pin comes up HIGH
-at RESET, wrong way round for an active-high enable" and concluded gap T was a hardware question;
-that is retracted at the source. Two of the four sites (`0xFE18EF`, `0xFE18F7`) are in the
-block-device layer above the FDC module and were missed by a narrower earlier scan.
-**The controller already answers the firmware's reset/SENSE/SPECIFY sequence correctly** -- this is
-the one pin between that and `ST3` reporting ready.
+i.e. a motor spin-up, so the line is **ACTIVE LOW**. **The controller already answers the
+firmware's reset/SENSE/SPECIFY sequence correctly** -- this is the one pin between that and `ST3`
+reporting ready. ⚠ It is second and not first now only because gap Y stands between a user and the
+disk menu that would issue a request.
 
-**2. Gap A is no longer the blocker it was: three registers are NAMED and twenty have a name
-available.** `0x0400` = **pitch** (units of 1/256 semitone), `0x0080` = **level**, `0x0040` = the
-key-zone word. `0x0100`/`0x0140` are established as a pair carrying a 7-bit field clamped to
-**36..120**, which is this machine's MIDI note range, and `0x0180`'s write side is decoded. ★ The
-KN5000 sub-CPU **stages the same 22 registers in the same order** and names twenty of them --
-and that is a structural correspondence, not a transplant: 100/102 and 116/120 of the bytes the
-two routines share actually differ. Only **four** registers now have no statement of any kind:
-`0x0440`, `0x0480`, `0x04C0`, `0x0500`. Synthesis remains a large separate job, but it is no
-longer blocked on naming.
+**3. Gap C, and it now has a second, independent instrument.**
+Why CPU 1 never releases the link's receiver-busy line. ⚠ The old 200-second measurement in section
+C is quarantined and must not be quoted -- but a FRESH one taken this session says the same thing
+from the other end of the chain: on `wsa1`, with C4 held from t = 60 s to t = 70 s, the tone
+generator's block 0 sees **zero** gates beyond the 64 the boot reset issues at t = 0.02
+(`notes/wsa1-probes/wsa1_tg_lifecycle.lua`, 90 s run). So a key still does not reach a voice.
 
-**3. Gap F is ANSWERED, and it retires the driver's last load-bearing stub.** Register block
-`0x0000` is a **16-channel-per-word busy bitmap**; `0x0180 + chan` is a magnitude the firmware
-acts on when it falls below half scale. The driver's `tg_status_r()` returns 0 for both queries
-and is labelled in the code as the only unjustified stub left -- it can now be modelled instead.
-⚠ Read the finding's own correction banner first: crossing below `0x80` does **not** retire the
-voice (the retire path is driven by the bitmap difference alone); it triggers a different action,
-and only when the record's flag bit 2 is set.
-
-Runner-up, unchanged and still narrow: **gap C**, why CPU 1 never releases the link's
-receiver-busy line. Measured, not suspected: the emulated CPU 2 sends exactly one packet per boot
-and is then locked out. It is what stands between "the firmware reads the keybed model" -- which is
-demonstrated -- and "a key reaches the tone generator". The tempting explanation, that CPU 1 knows
-it is a rack and refuses keybed traffic, is REFUTED: there is not one `cp (0xC4)` in the whole
+Gap C's own text is kept below with its quarantine banner. The tempting explanation, that CPU 1
+knows it is a rack and refuses keybed traffic, is REFUTED: there is not one `cp (0xC4)` in the whole
 transmit block.
 
 ---
 
 ## The list
 
-### A. What does a 0x0010C000 register do? -- PRIORITY 1, HALF CLOSED, still blocks audio
+### A. What does a 0x0010C000 register do? -- NAMED AND IN THE DRIVER; two registers left
 
 > ★★ **LARGELY ANSWERED 2026-08-25, after this entry was written.** Three registers are NAMED
 > (`0x0400` pitch, `0x0080` level, `0x0040` key-zone word), `0x0100`/`0x0140` are a pair carrying a
@@ -107,6 +114,69 @@ transmit block.
 > `0x0440`, `0x0480`, `0x04C0`, `0x0500`. See `FINDINGS-prom_c-dev10c-register-meanings.md` and
 > `FINDINGS-prom_c-dev10c-sibling-register-map.md` in the disassembly tree. The text below is the
 > question as it was asked and is kept for its evidence pointers.
+>
+> ⚠ **TWO SENTENCES IN THE PARAGRAPH ABOVE ARE SUPERSEDED BY THE NEXT ONE, and are left in place
+> only so this entry's history reads straight: "the same 22 registers IN THE SAME ORDER" is wrong
+> (the maps match, the write order does not), and "four remain with no statement" is now two.**
+
+> ★★ **IMPLEMENTED 2026-08-25 (late night).** `tg_data_w()` now carries the whole 22-register
+> table, decodes each value, and -- the part that matters for honesty -- prints on the SAME LINE
+> whether the name it just used is established HERE (`[WSA1]`), is only a field split
+> (`[SPLIT ONLY]`), is the KN5000's word with no local evidence (`[KN5000 NAME ONLY]` / a
+> `KN5000-only:` suffix), or is nothing at all (`[UNKNOWN]`). `machine_start()` prints a legend, so
+> a captured `-log` is self-describing. `LOG_TGVOICE` dumps one channel's 22 registers. **No
+> synthesis was implemented and none is claimed.**
+>
+> **Six things the study behind it got wrong were corrected before anything was written down**, all
+> re-derived from ROM bytes by `notes/wsa1-gapA-audit-probes/` (2 scripts, 0 failures):
+> 1. The burst issues **23 writes to 22 registers out of 21 staging words** -- not "22 words".
+>    Struct word 0 is never read and block 0x0080 is written twice.
+> 2. **The two machines do NOT write the registers in the same order.** The KN5000's burst is
+>    ascending; this one is not (check 1d). What matches is the *word-index -> register map*, which
+>    is the true and stronger claim. A second, free witness exists and was not being cited:
+>    `ToneGen_ProbeVoice_ParamBlock` at KN5000 `0xFF824C` (`kn5000_subprogram_v142.s:24686-24690`).
+> 3. **`0x0800` is grade SHAPE, not LOCAL.** `Voice_LevelPair_AttackCurve` and
+>    `Voice_EnvelopeRate_Table` are both KN5000 *transplanted labels*, so "envelope", "level" and
+>    "rate" are the sibling's words. What is local is: a byte pair, high from a 101-entry descending
+>    curve, low from a 101-entry ramp indexed by tone offset `0x28`. The driver prints
+>    `byte pair, (curve << 8) | ramp` for exactly that reason.
+> 4. **`sub_FA78E8` produces nothing** -- it is a memset that push/pops both HL and DE. `0x0440`'s
+>    high half comes from `sub_FB5E39`, the SAME routine that feeds `0x0480`; the two call sites
+>    differ in exactly one pushed immediate, **1 versus 0**. That immediate, not two producers, is
+>    the discriminator.
+> 5. The `< 0x6000` fix-up on `0x0040` is at **`0xFA8248`**, not `0xFA82F0`; the copy at `0xFA82F0`
+>    has no `0x6000` in it and is not identical to it (checks 5a/5b).
+> 6. `tone[+0x1E]` and `tone_word[+0x22]` belong to **`(voice[+0x25])`'s** record, not the tone
+>    record `voice[+0x17]`.
+>
+> ★ **AND ONE DRIVER DEFECT THE DECODE EXPOSED ON ITS FIRST RUN.** `tg_data_w()` tested the
+> per-channel range before the global list, and `0x0200` is INSIDE that range (it would read as
+> block 8, channels 0..5). So six *named* global writes per boot were being printed as "a block NO
+> converted routine is known to write" -- exactly backwards. The global test now comes first. This
+> was invisible until something decoded the registers, which is a fair argument for decoding them.
+>
+> ★ **AND ONE NUMBER FOR THE EVIDENCE TREE TO FIX WHEN IT UNPAUSES.** The header on
+> `Voice_StageLevel_Reg0080` says register `0x0080` has "a span of about 48 dB". `0x0FF4` counts at
+> 6.0206/256 dB per count is **96.05 dB** (`gapA_rom_checks.py` prints it). 48 dB is the span of the
+> *index*, 8 halvings x 32 counts.
+>
+> ⚠ **The driver deliberately does NOT print a signed decibel figure for `0x0080`.** The table is a
+> base-2 logarithm with 256 counts/octave -- that is measured, all 256 entries, 0 mismatches -- but
+> *whether the chip reads the field as a level or as an attenuation at the pin is not established*,
+> which is the same doubt the finding raises one register later for `0x0800`'s descending curve. A
+> sign-free DISTANCE in octaves is printed instead. Settling it needs a note held on Felipe's
+> hardware while one parameter is swept.
+>
+> **WHAT IS STILL OPEN IS NOW TWO REGISTERS, NOT FOUR.** `0x04C0` and `0x0500` have measured field
+> splits. `0x0440` and `0x0480` have nothing -- **and they are unnamed in the KN5000 as well**, so
+> the correspondence cannot help. ⚠ A third register is worth re-reading too: `0x0100`/`0x0140`'s
+> "clamped 36..120" is a property of the PRODUCER, not of the register -- the boot burst puts
+> `0x7C` = **124** on channel 0 at t = 0, outside the clamp, which the driver now prints as a check
+> that failed rather than as a description. The cheapest next read is `sub_FB5E39` plus the meaning of its
+> `1`/`0` argument, and then `sub_FA5ED3` (`0xFA5ED3`, 339 bytes, converted, never read), whose
+> bounds already name its three arguments: `cp (XIZ+0x08),0x21` = 33 parts, `cp (XIZ+0x0a),0x40` =
+> 64 channels, `and E,0x3f` = a 6-bit parameter index. Signature **(part, channel, parameter
+> index)** -- and `0x0180` is the built-in calibration, because the sibling already calls it *pan*.
 
 **HALF CLOSED 2026-08-25** by `notes/FINDINGS-prom_c-dev10c-producers.md`, and the half that is
 closed is worth stating precisely because the note itself had to correct its own title over it.
@@ -368,11 +438,55 @@ bit), **P** (what the seven command bytes mean) and **R** (what states 0x04 / 0x
 
 ---
 
-### F. What does the 0x10C004 read-back actually return? -- PRIORITY 2
+### F. ~~What does the 0x10C004 read-back actually return?~~ -- CLOSED 2026-08-25, and MODELLED
 
 > ★★ **ANSWERED 2026-08-25.** Block `0x0000` is a 16-channel-per-word busy bitmap; `0x0180 + chan`
 > is a magnitude acted on below half scale. See `FINDINGS-prom_c-voice-readback.md` -- and read its
 > correction banner: below `0x80` does NOT retire the voice, which the first version claimed.
+>
+> ★★ **AND IMPLEMENTED THE SAME DAY. `tg_status_r()` no longer returns 0, and the driver's last
+> unjustified stub is gone.**
+>
+> * **Query 1, select 0..3** is answered out of a real per-channel BUSY LATCH, `m_tg_busy[4]`, in
+>   the firmware's own encoding (word `chan >> 4`, bit `chan & 15`). It is set by the `0x8100` GATE
+>   literal and cleared by the `0x7E00` FREE literal on block 0, `latch < 64` only.
+> * **Query 2, select `0x0180 + chan`** answers `0x1000` for a busy channel and `0` for a free one.
+>   `0x1000` is the smallest word whose bits 12..5 equal `0x80`, i.e. the least a model can claim
+>   while still saying "not yet below half scale". ⚠ **It is a PREDICATE, not a level, and it is the
+>   one labelled fake in the handler** -- there is no synthesis in this driver at all.
+> * The old log line called query 2 an "envelope level" with "0 = silent". Neither name was
+>   supported by anything; both are gone.
+>
+> **WHY THE STUB WAS NOT NEUTRAL, which is the reason this was worth doing:** the allocator ARMS the
+> teardown edge itself, `lda XBC,0x0087bf / add XBC,(XIZ+0xe3) / or (XBC),HL` at
+> `0xFA6D39-0xFA6D41`, before the gate is even written. So `ended = old & ~new` put every non-held
+> channel into `ended` on the FIRST sweep after allocation. Answering 0 was not "nothing is
+> sounding"; it was "tear every voice down within a few MAIN passes".
+>
+> **THE ONE THING THE MODEL STILL CANNOT DO, and it is written at the code too:** the busy bit never
+> falls by itself. It clears only on `0x7E00`, whose only per-note writer is `Dev10C_ChanReset`,
+> which is called only from the retire path, which is driven by the bit falling. Real hardware
+> breaks that loop because the chip decides; this driver has no voice to end. Consequence:
+> `ChanRec_Release` has two call sites (`0xFA6892`, all 64 at boot; `0xFA6989`, the poll), so no
+> channel record returns to the pool between two `VoiceSubsystem_Init`s.
+>
+> **THE ONE RISK, BOUNDED BY MEASUREMENT RATHER THAN DISMISSED.** Block 0 also receives a computed
+> word, `voicerec[+0x29]`, whose high byte is a shifted parameter (`DE = (p - 16) << 8` at
+> `0xFAA395-0xFAA39C`; `IX << 9` / `DE << 12` at `0xFAA499`/`0xFAA4AA`), so `0x7E00` and `0x8100`
+> are arithmetically reachable by a parameter combination and a collision would silently free a
+> sounding voice. Two things bound it: (a) the worst case is the OLD behaviour on a SUBSET -- a
+> spurious FREE puts one channel back into the teardown the stub used to inflict on all of them,
+> and a spurious GATE only keeps a bit set the model can never clear anyway; and (b) MEASURED, a
+> 120 s `wsa1r` boot puts **64** computed words on block 0 and every one has high byte `0x18`, so
+> **0 collisions** (`notes/wsa1-probes/wsa1_tg_lifecycle.lua`). That is a bound on the observed
+> range, not a proof of unreachability, and if a voice is ever seen to die on one particular sound
+> this is the first place to look.
+>
+> **What the same run shows about observability:** 192 block-0 writes (64 GATE + 64 FREE + 64
+> computed), 1999 bank reads, 0 magnitude reads. All 64 gates are the boot reset at t = 0.02 and all
+> 64 frees follow it, so the latch ends at zero and the machine boots to a **byte-identical** SOUND
+> MODE screen. The model is live and exercised; it is not yet *visible*, because gap Y and gap C
+> stand between a user and a note.
 
 **Question.** Register block `0x0180 + channel` is read at `0xFA69B1` and kept as
 `(value & 0x3FFF) >> 5`; register `0x0000 + n` for n = 0..3 is read at `0xFA690A` and OR-ed into
@@ -587,10 +701,76 @@ own change-mask shadow at RAM `0x2B20 + ((wire & 0x0F) | ((wire & 0x40) >> 2))`.
 | FACTORY CLEAR | seg 8, `(0x2B38) == 7` exactly (`0xF828DF`) | seg 8 bits 0-1 (`0xF828E9`) | zeroes RAM, writes `0x5AA5` at `0x7FCA`, jumps to RESET |
 | third service entry | seg 10 bits 5-7 (`0xF82A0A`) | seg 3 bits 5-7 (`0xF82A18`) | not identified |
 
-**Where to look.** The service manual's self-diagnostic section maps six wave-ROM tests onto six
-buttons and the OCR loses the circled digits; a better scan of those pages would give six
-(legend, bit) pairs at once. Failing that, the display-list interpreter in prom_b consumes panel
-events by group id, so a converted display list that reacts to one group would name it.
+★★ **AND NOW FOUR MORE, WHICH ARE THE FIRST (position -> function) PAIRS ANY PANEL BIT ON THIS
+MACHINE HAS HAD** (2026-08-25 late night, in `wsa1_cpanel.cpp`'s `CP_SEG1` port). On the SX-WSA1R
+only, `sub_F953CD` (prom_a `0xF953CD`) -- reached once from RESET at `0xF827F8` -> `0xF40148` ->
+`0xF952FC` when the strap says `(0xC4) == 2` -- compares `(0x2B31)`, which is wire `0xC1` = SEG1,
+for **equality**:
+
+| SEG1 bit | value | screen | title |
+|---|---|---|---|
+| SW1 | `0x02` | -- | recognised, falls through without setting a screen |
+| SW2 | `0x04` | `0xD9` | **PANEL CPU CHECK** |
+| SW3 | `0x08` | `0xDA` | **SINE WAVE CHECK** (the (1)..(7) menu) |
+| SW4 | `0x10` | `0xDB` | **PANEL SW&LED CHECK** |
+| SW5 | `0x20` | `0xDC` | the automatic screen cycler |
+
+⚠ **Equality**, so a second button held in SEG1 kills it -- the same discipline the KN7000's chords
+use. ⚠ And the RESET block tests four chords in address order (FACTORY CLEAR `0xF827E5`, THIS one
+`0xF827F8`, ROM VERSION `0xF8280E`, the third `0xF82813`), and `0xF8294C`'s matched arm **never
+returns** (`jr T` backwards at `0xF829A3`) -- so a held ROM-version chord pre-empts a service screen
+this test already latched.
+
+★★ **On the SX-WSA1 the entry is on the KEYBED instead, which no sibling in these trees does.**
+`sub_F9530B` link-remote-reads eight bytes from CPU 2's `0x0000FFF0` -- the 61-key state bitmap
+`KeyScan_InitKeyStateBitmap` (prom_c `0xF9988D`) builds, whose consumer the disassembly tree had
+never found because it is on the OTHER processor -- and requires **exactly two bits set**. The five
+pairs are all **exactly twelve keys apart**: C4+C5 rejected, D4+D5 -> `0xD9`, E4+E5 -> `0xDA`,
+F4+F5 -> `0xDB`, G4+G5 -> `0xDC`. Documented in the `KEY0..KEY5` block in `wsa1.cpp`.
+
+★★ **AND THE DECODE IS NOW CONFIRMED LIVE, against a criterion that could have failed.** Holding
+D4+D5 from t = 0 on `wsa1`, CPU 2's bitmap reads `00 00 00 04 40 00 00 00`, **popcount 2**, steadily
+from t = 5 s — byte +3 bit 2 = key 26 = D4, byte +4 bit 6 = key 38 = D5, exactly the pair
+`sub_F9530B` tests for screen `0xD9`. The keybed model, the scanner, CPU 2's bitmap builder and the
+bit -> key decode are all right. ⚠ **The chord still does not fire**: `(0x2070)` is never written
+with `0xD9`. That localises the failure to CPU 1's side of the link remote read and rules out the
+two other candidates (the bitmap is not empty; nothing pre-empts a screen that was never requested).
+The live hypothesis is ORDERING — CPU 1 asks at `0xF827F8`, before even its own `0x384`-tick wait at
+`0xF82804`, while CPU 2 does not build the bitmap until `0xF997FA`, and until `0xF9816B` moves XSP
+those eight bytes are CPU 2's boot stack. NOT PROVEN: the remote read could simply be failing.
+
+★ **THE LED SIDE IS ANSWERED TOO: there are 47 lamps, not 64.** The PANEL SW&LED CHECK all-on sweep
+(`sub_F956B0`, prom_a `0xF956B0`) walks the word table at `0xF95C68` until `0xFFFF`, and that table
+is exactly `reg0=FF reg1=FF reg2=FF reg3=FF reg4=FF reg5=03 reg6=0F reg7=02`. At the driver's index
+`reg*8 + bit` the **seventeen outputs the firmware's own test never lights are `led42-47`,
+`led52-56` and `led58-63`** -- recorded in `wsa1_cpanel.h` so no layout wires a lamp to one of them.
+What makes 47 a measurement rather than a reading: the union of every mask in the two **switch ->
+LED adjacency tables** (`0xF94F58` variant 1, `0xF95088` variant 2, read by the SW&LED CHECK decoder
+`sub_F94E1C`) is a SUBSET of that sweep, register by register. Two unrelated tables agree.
+
+⚠ Those adjacency tables also correct a claim that was almost made here: the decoder's own wire ->
+segment maps (`0xF94ED8` / `0xF95008`) are **not** byte-identical to the ones the driver already
+uses (`0xF8A109` / `0xF8A189`) -- they are those maps **minus** the `0xD0`-block analogue wires
+(five for v1, two for v2). Over the switch segments `0xC0..0xCA` they agree exactly, including the
+11-versus-9 count and the `0xC6`/`0xCA` absence, so the corroboration is real and the word "exactly"
+was not.
+
+★ **AND CHANGE THE INSTRUMENT.** "Did an LCD write happen" is the wrong probe for a panel press: 459
+of the 654 dispatch-matrix handler slots are `0xFF42B1`, a bare `ret`, so most positions doing
+nothing on the play screen is EXPECTED. Probe the chain instead --
+`0x2B20..0x2B3F` (did it reach CPU 1) -> `0x2082` (control byte) -> `0x2070`/`0x2071` (was a screen
+requested) -> `0x207C` (is the dispatcher there) -- which is what
+`notes/wsa1-probes/wsa1_service_entry.lua` does, and what turned up gap Y.
+
+**Where to look, for the part still open -- the LEGENDS.** Nothing above attaches a front-panel WORD
+to a (segment, bit); what it attaches is FUNCTIONS and ADJACENCY. The service manual's
+self-diagnostic section maps the wave-ROM tests onto buttons and the OCR loses the circled digits; a
+better scan of those pages would give several (legend, bit) pairs at once. ⚠ It is **seven** tests,
+not six: `0xF95971` reads `H = (0x2267) & 0x0F` and rejects `H < 1` and `H > 7`, so the circled
+digits are (1)..(7) on a numeric entry rather than seven separate buttons. The single highest-value
+next step is `0xF869F0-0xF86A23`, which translates an inbound panel record into `(0x20B8)` = control
+index: resolving its `XIX`/`XIY` gives the complete **(segment, bit) -> control index** map, and
+with the per-screen control tables that turns all 88 positions into dispatch-matrix slots.
 
 ---
 
@@ -749,9 +929,21 @@ positions on its own for half a second, after boot, produced **zero** accesses a
 (`notes/wsa1-probes/wsa1_fdc_button_sweep.lua`). So the disk path is not one press away; it needs
 either a menu sequence, or a chord, or a machine that has got past `ALL INITIAL SETTING!`.
 
-**Where to look.** The `0xFE3000` module's entry directory, and whichever display list in prom_b
-carries the disk menu -- `0xF58127` for variant 2 and `0xF580B0` for variant 1, from the strap
-survey. This is the natural companion to gap O.
+★ **THE SCREEN-SIDE HALF IS ANSWERED (2026-08-25 late night).** The 1,024-byte object at
+`0xF86EC1` is **two** tables, not one: 32 entries indexed by `(0x2078)` abutting 224 entries indexed
+by `(0x2079+3)` = `(0x207C)` and ending at its own end, `0xF872C1`. The disk menu is
+**`(0x207C) = 0x40`**, corroborated from the other side by prom_a's disk module writing
+`ld (0x2070),0x40` at **25** sites (`0xFF443E` ... `0xFF7076`). Navigation is: write the id to RAM
+`0x2070` and set a request bit in `0x2071`. So the state is reachable by poking two RAM bytes, and
+`notes/wsa1-probes/wsa1_service_entry.lua` already watches exactly those addresses.
+
+⚠ The lever is not unconditional: `0xF86AE9` **cancels** a bit-6 request when `(0x2075)` bit 4 is
+set and `(0x207C)` is already `0x01` or `0xDA`, and bit 7's mover `0xF8639C` is gated on `(0x2095)`
+bit 0 / `(0x2075)` bit 4.
+
+**Where to look, for what is left.** The `0xFE3000` module's entry directory, and which control on
+screen `0x40` issues the request. ⚠ In practice this is now blocked by **gap Y**, not by the
+disassembly: no panel press currently reaches its shadow slot at all, so no menu can be driven.
 
 ---
 
@@ -799,6 +991,52 @@ care. It is recorded because it is the one line of the identification that was n
 **Where to look.** `Fdc_SendSectorIdParams` (`0xFE5DB6`) special-cases exactly these three opcodes
 to send STP instead of DTL, so the driver clearly knows they are SCANs; whatever sets `(0x605A18)`
 to one of them, if anything does, is the thread.
+
+---
+
+### Y. Why does a panel button land in the WRONG shadow slot? -- PRIORITY 1 (NEW), blocks every button
+
+**Question.** The panel HLE sends a button report as exactly two bytes, `[0xC0 | segment][mask]`.
+`SC1_RxOp0_ThreeByte` (prom_b `0xF5B0FD`) is supposed to take the ADDRESS byte in `W`, compute
+`0x2B20 + ((W & 0x0F) | ((W & 0x40) >> 2))` and `ex (XHL),A` the VALUE byte into that slot. It does
+neither. Which side is wrong -- the number of bytes the panel sends, the length the CPU's receive
+state machine takes from the first byte, or the ring index `RxOp0` starts from?
+
+**Why it matters.** It is the reason no panel position on this machine has ever been seen to do
+anything. It blocks the four SX-WSA1R service entries (gap O), the disk menu (gap V), and any future
+attempt to reach a UI screen by pressing something.
+
+**THE MEASUREMENT** (`notes/wsa1-probes/wsa1_service_entry.lua`, `wsa1r`, `-str 80`, SEG1 bit 2
+held from t = 0, released at t = 50.0, pressed again at t = 55.0):
+
+```
+  t= 50.02 pc=F5B111 (0x2B20)<-C1        <- release
+  t= 55.02 pc=F5B111 (0x2B20)<-C1        <- press
+  (0x2B31) reads 00 for the whole run;  (0x2082) is written once, at t=0, by the boot clear
+```
+
+So a packet **does** reach CPU 1, at exactly the two instants the button moved -- the SC1 link and
+the panel HLE are both alive. But the store lands at index **0** carrying **`0xC1`**, the WIRE
+ADDRESS, where the decode requires index **`0x11`** (`0x2B31`) carrying the switch VALUE `0x04`.
+Index 0 means `W & 0x4F == 0` (bit 6 clear, so the `sub W,0x30` arm was not taken), which `0xC1`
+is not — so the byte the handler took as the ADDRESS was some other byte entirely, and the byte it
+stored as the VALUE was `0xC1`. The receiver is one byte out of position, identically on both edges,
+so it is deterministic and not a race.
+
+⚠ The same run shows the boot handshake taking the same shape -- 26 stores of `00` and one of `D8`
+into `0x2B20`/`0x2B24` at t = 0.50, and again at t = 20.12 -- which is the seven command frames and
+their `{0xD8, 0x00}` sync answers landing in the wrong slots too. **Whatever this is, it is not
+specific to buttons.**
+
+**Where to look.** `SC1_State20_RxFirstByte` and `SC1_State24_RxNextByte` -- what LENGTH is taken
+from the first byte, and whether it is 2 for `0xC0..0xCF`. The driver's own comment in
+`wsa1_cpanel.cpp` reads it as "2 for every address this device uses, since `(addr & 0x3F) < 0x30`",
+and that reading has never been checked against the instructions. Then the dispatcher at
+`0xF5B09C-0xF5B0B3` (`ld L,(XDE+IY) / and L,0x38 / srl 1,L`, so type = `(byte >> 3) & 7`) and where
+`W` and the ring index `IX` come from on entry to `RxOp0`. ⚠ **Do not "fix" this in the panel HLE
+by sending a third byte until the firmware side is read** -- the analogue path already relies on the
+firmware appending its own `0xFF` third byte at `0xF5B163`, so the two directions do not have the
+same shape and a symmetric guess would break the one that works.
 
 ---
 
