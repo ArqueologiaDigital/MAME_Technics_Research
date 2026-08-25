@@ -108,6 +108,40 @@ protected:
 	   RETI, so a handler can ask "am I the outermost interrupt?" without keeping
 	   its own count.  Firmware may also write it, and does.
 
+	   ★ BOTH HALVES ARE FROM THE DATABOOK, and that matters, because the
+	   decrement was the part nobody could establish from firmware -- the ROM
+	   evidence only ever showed the increment, and an implementation that
+	   decremented wrongly would underflow on the SX-WSA1R's own
+	   leave-without-RETI paths.  Toshiba, "TLCS-900 Series CMOS 16-bit
+	   Microcontrollers TMP95C061", section 3.3.1 "General-Purpose Interrupt
+	   Processing", page 11, verbatim:
+
+	       "When accepting an interrupt, the CPU operates as follows:
+	        ...
+	        (4) The CPU increments the INTNEST (Interrupt Nesting Counter)."
+
+	       "To return to the main routine after completion of the interrupt
+	        processing, the RETI instruction is usually used.  Executing this
+	        instruction restores the contents of the program counter and the
+	        status registers and decements the INTNEST (Interrupt Nesting
+	        Counter)."  [sic -- "decements" is the databook's typo]
+
+	   Re-check with notes/wsa1-probes/tlcs900_datasheet_quotes.py.  Note what
+	   the databook does NOT say: it never gives INTNEST a control-register
+	   number, and the CPU-control-register figure on page 15 lists only
+	   DMAS/DMAD/DMAC/DMAM.  The numbers below come from the firmware -- from
+	   what these ROMs actually address with LDC -- not from the databook.
+
+	   Both guards in the implementation are deliberate and neither is in the
+	   databook: the increment saturates at 0xFFFF and the decrement stops at 0
+	   rather than wrapping.  A real 16-bit counter would wrap; a wrap here could
+	   only ever come from an emulation asymmetry (an accept we model without the
+	   matching RETI, or the other way round), and turning that into 0xFFFF would
+	   silently take the SX-WSA1R's scheduler apart in a way that looks nothing
+	   like its cause.  The firmware zeroes the counter by hand at prom_a
+	   0xF857C3 and 0xF8E9A8, precisely on the paths that leave an interrupt
+	   without a RETI, so it does not depend on the wrap either way.
+
 	   Control-register number, by core generation:
 	       0x3C  TLCS-900/H   -- TMP96C141, TMP95C061, TMP95C063
 	       0x7C  TLCS-900/H1  -- TMP94C241
@@ -220,15 +254,23 @@ protected:
 	/* Bump INTNEST (see m_intnest above).  Every device's tlcs900_check_irqs()
 	   calls this at the point it pushes the SR/PC frame, because that is the
 	   frame op_RETI will later unwind -- keeping the increment and the decrement
-	   paired is the whole point.  Saturates instead of wrapping: 0xFFFF -> 0
-	   would make a deeply nested state read as "not nested", the one answer that
-	   silently breaks a kernel.  NMI counts too, for the same pairing reason: it
-	   pushes SR/PC and is unwound by RETI.
+	   paired is the whole point.  Saturates instead of wrapping, for the reason
+	   given at m_intnest.  NMI counts too, for the same pairing reason: it
+	   pushes SR/PC and is unwound by RETI -- and the databook section quoted at
+	   m_intnest is titled "General-Purpose Interrupt Processing" and discusses
+	   non-maskable interrupts in the same breath, so it covers NMI too.
 	   NOT counted: SWI/TRAP.  On the SX-WSA1R those do NOT return through RETI
 	   (SWI7_ServiceCall_Dispatch leaves by `pop SR / ret` at 0xF8E9C4), so
-	   counting them would be a one-way leak.  Whether the real part counts them
-	   is not decidable from anything in these trees; if a databook ever settles
-	   it, op_SWI in 900tbl.hxx is the place. */
+	   counting them would be a one-way leak with nothing to unwind it.
+	   ⚠ The databook does not settle this.  It DOES list "Software interrupts,
+	   privileged violations, and Illegal instruction execution" among the CPU's
+	   own interrupt sources (3.3, page 11), which argues they take the same path
+	   -- but 3.3.1's step (1) is "reads the interrupt vector from the interrupt
+	   CONTROLLER", which an SWI does not do, so the section may simply not be
+	   about them.  It costs nothing to leave out: on both firmwares that read
+	   this register the SWI dispatcher zeroes it on entry, so counting SWI or not
+	   gives the same observable result.  If it is ever settled, op_SWI in
+	   900tbl.hxx is the place. */
 	void tlcs900_intnest_accept() { if ( m_intnest < 0xffff ) m_intnest++; }
 
 	virtual void tlcs900_check_hdma() = 0;

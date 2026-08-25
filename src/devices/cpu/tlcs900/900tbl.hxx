@@ -3036,7 +3036,10 @@ void tlcs900_device::op_RETD()
 void tlcs900_device::op_RETI()
 {
 	/* INTNEST (see tlcs900.h): RETI unwinds the SR/PC frame an accepted
-	   interrupt pushed, so the nesting counter counts back down here.  It
+	   interrupt pushed, so the nesting counter counts back down here -- the
+	   TMP95C061 databook, 3.3.1 page 11, says RETI "restores the contents of
+	   the program counter and the status registers and decements [sic] the
+	   INTNEST (Interrupt Nesting Counter)".  It
 	   SATURATES at zero rather than wrapping.  RETIs with no matching
 	   acceptance are NORMAL, not a bug to be trapped: firmware forces this
 	   register to a value of its own choosing all the time -- the SX-WSA1R's
