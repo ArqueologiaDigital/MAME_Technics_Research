@@ -191,6 +191,7 @@ private:
 	uint8_t   m_to1;
 	uint8_t   m_to3;
 	uint16_t  m_t16_reg[4];
+	uint16_t  m_timer_16[2];   // OVERLAY FIX 2: the two 16-bit up-counters UC4/UC5
 	uint16_t  m_t16_cap[4];
 	uint8_t   m_t16_mode[2];
 	uint8_t   m_t16_invert[2];

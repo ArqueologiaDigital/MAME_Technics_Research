@@ -29,6 +29,7 @@ tmp95c061_device::tmp95c061_device(const machine_config &mconfig, const char *ta
 	m_to1(0),
 	m_to3(0),
 	m_t16_reg{ 0, 0, 0, 0 },
+	m_timer_16{ 0, 0 },
 	m_t16_cap{ 0, 0, 0, 0 },
 	m_t16_mode{ 0, 0 },
 	m_t16_invert{ 0, 0 },
@@ -229,6 +230,7 @@ void tmp95c061_device::device_start()
 	save_item(NAME(m_to1));
 	save_item(NAME(m_to3));
 	save_item(NAME(m_t16_reg));
+	save_item(NAME(m_timer_16));
 	save_item(NAME(m_t16_cap));
 	save_item(NAME(m_t16_mode));
 	save_item(NAME(m_t16_invert));
@@ -267,6 +269,10 @@ void tmp95c061_device::device_reset()
 	m_timer_change[1] = 0;
 	m_timer_change[2] = 0;
 	m_timer_change[3] = 0;
+	m_timer_change[4] = 0;
+	m_timer_change[5] = 0;
+	m_timer_16[0] = 0;
+	m_timer_16[1] = 0;
 
 	m_port_latch[PORT_1] = 0x00;
 	m_port_latch[PORT_2] = 0xff;
@@ -578,6 +584,7 @@ void tmp95c061_device::tlcs900_check_irqs()
 
 		/* Clear taken IRQ */
 		m_int_reg[ tmp95c061_irq_vector_map[irq].reg ] &= ~ tmp95c061_irq_vector_map[irq].iff;
+
 	}
 }
 
@@ -677,6 +684,48 @@ void tmp95c061_device::tlcs900_change_tff( int which, int change )
 }
 
 
+// ---------------------------------------------------------------------------
+// OVERLAY FIX 1 (kn7000_mame, 2026-08-25) -- PRESCALER TAP SCALE.
+//
+// Upstream taps the prescaler at >>7, >>9, >>11 and >>15, i.e. fc/128, fc/512,
+// fc/2048 and fc/32768.  On the TLCS-900 family the prescaler is fed at fc/2
+// and divided by 4/16/64/1024, so the four taps are fc/8, fc/32, fc/128 and
+// fc/2048 -- shifts 3, 5, 7 and 11.  Upstream is therefore uniformly 16x SLOW.
+//
+// THREE INDEPENDENT WITNESSES, none of them this file:
+//
+//  1. MAME's own sibling part.  tmp94c241.cpp:1452-1455 declares
+//     `T1 = 3, T4 = 5, T16 = 7, T256 = 11` and uses exactly those.
+//
+//  2. The Technics SX-WSA1R firmware, measured.  prom_a's RESET programs
+//     T01MOD = 0x0D (0xF826EB), so timer 1 is clocked from phiT256, and
+//     TREG1 = 0x1C (0xF826F4).  At fc = 28 MHz, phiT256 = fc/2048 gives
+//     28e6/2048/28 = 488.28 Hz, which is the rate every delay routine in
+//     prom_b and the link's 500- and 2500-tick deadlines are written against.
+//     With upstream's >>15 the same registers give 28e6/32768/28 = 30.5 Hz,
+//     and 30.4 Hz is what the firmware's own tick counter at RAM 0x0080 was
+//     MEASURED advancing at (kn7000_mame/notes/wsa1-probes/wsa1_tick_counter.lua).
+//
+//  3. The same firmware, from the ROM alone and independent of fc.  Its
+//     sequencer tempo path divides 140,000,000 = 5*fc by 64*BPM to get TREG5
+//     (prom_a 0xFAA378), which is only consistent with phiT1 = fc/8 at 96 PPQN
+//     -- see wsa1-roms-disasm/notes/FINDINGS-system-clock.md, lever B, whose
+//     fc = 28 MHz agrees with lever A's separate derivation from prom_c's
+//     baud-rate rule at 0xF991A2.
+//
+// SHARED DEVICE.  tmp95c061 is also used by ngp/ngpc and namcos10.  Those
+// drivers were written against the 16x-slow behaviour, so anything in them
+// tuned by ear to MAME's timing may change.  Nothing here is tuned TO the
+// WSA1: these are the family taps, and if an SNK or Namco regression appears
+// the right fix is in that driver, not in restoring a tap scale that three
+// independent derivations reject.
+// ---------------------------------------------------------------------------
+static constexpr int PRESCALE_T1   = 3;    // fc/8
+static constexpr int PRESCALE_T4   = 5;    // fc/32
+static constexpr int PRESCALE_T16  = 7;    // fc/128
+static constexpr int PRESCALE_T256 = 11;   // fc/2048
+
+
 void tmp95c061_device::tlcs900_handle_timers()
 {
 	uint32_t  old_pre = m_timer_pre;
@@ -693,13 +742,13 @@ void tmp95c061_device::tlcs900_handle_timers()
 		case 0x00:  /* TIO */
 			break;
 		case 0x01:  /* T1 */
-			m_timer_change[0] += ( m_timer_pre >> 7 ) - ( old_pre >> 7 );
+			m_timer_change[0] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
 			break;
 		case 0x02:  /* T4 */
-			m_timer_change[0] += ( m_timer_pre >> 9 ) - ( old_pre >> 9 );
+			m_timer_change[0] += ( m_timer_pre >> PRESCALE_T4 ) - ( old_pre >> PRESCALE_T4 );
 			break;
 		case 0x03:  /* T16 */
-			m_timer_change[0] += ( m_timer_pre >> 11 ) - ( old_pre >> 11 );
+			m_timer_change[0] += ( m_timer_pre >> PRESCALE_T16 ) - ( old_pre >> PRESCALE_T16 );
 			break;
 		}
 
@@ -731,13 +780,13 @@ void tmp95c061_device::tlcs900_handle_timers()
 		case 0x00:  /* TO0TRG */
 			break;
 		case 0x01:  /* T1 */
-			m_timer_change[1] += ( m_timer_pre >> 7 ) - ( old_pre >> 7 );
+			m_timer_change[1] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
 			break;
 		case 0x02:  /* T16 */
-			m_timer_change[1] += ( m_timer_pre >> 11 ) - ( old_pre >> 11 );
+			m_timer_change[1] += ( m_timer_pre >> PRESCALE_T16 ) - ( old_pre >> PRESCALE_T16 );
 			break;
 		case 0x03:  /* T256 */
-			m_timer_change[1] += ( m_timer_pre >> 15 ) - ( old_pre >> 15 );
+			m_timer_change[1] += ( m_timer_pre >> PRESCALE_T256 ) - ( old_pre >> PRESCALE_T256 );
 			break;
 		}
 
@@ -770,13 +819,13 @@ void tmp95c061_device::tlcs900_handle_timers()
 		{
 		case 0x00:  /* invalid */
 		case 0x01:  /* T1 */
-			m_timer_change[2] += ( m_timer_pre >> 7 ) - ( old_pre >> 7 );
+			m_timer_change[2] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
 			break;
 		case 0x02:  /* T4 */
-			m_timer_change[2] += ( m_timer_pre >> 9 ) - ( old_pre >> 9 );
+			m_timer_change[2] += ( m_timer_pre >> PRESCALE_T4 ) - ( old_pre >> PRESCALE_T4 );
 			break;
 		case 0x03:  /* T16 */
-			m_timer_change[2] += ( m_timer_pre >> 11 ) - ( old_pre >> 11 );
+			m_timer_change[2] += ( m_timer_pre >> PRESCALE_T16 ) - ( old_pre >> PRESCALE_T16 );
 			break;
 		}
 
@@ -808,13 +857,13 @@ void tmp95c061_device::tlcs900_handle_timers()
 		case 0x00:  /* TO2TRG */
 			break;
 		case 0x01:  /* T1 */
-			m_timer_change[3] += ( m_timer_pre >> 7 ) - ( old_pre >> 7 );
+			m_timer_change[3] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
 			break;
 		case 0x02:  /* T16 */
-			m_timer_change[3] += ( m_timer_pre >> 11 ) - ( old_pre >> 11 );
+			m_timer_change[3] += ( m_timer_pre >> PRESCALE_T16 ) - ( old_pre >> PRESCALE_T16 );
 			break;
 		case 0x03:  /* T256 */
-			m_timer_change[3] += ( m_timer_pre >> 15 ) - ( old_pre >> 15 );
+			m_timer_change[3] += ( m_timer_pre >> PRESCALE_T256 ) - ( old_pre >> PRESCALE_T256 );
 			break;
 		}
 
@@ -838,6 +887,109 @@ void tmp95c061_device::tlcs900_handle_timers()
 				}
 			}
 		}
+	}
+
+
+	// -----------------------------------------------------------------------
+	// OVERLAY FIX 2 (kn7000_mame, 2026-08-25) -- THE 16-BIT TIMERS ARE COUNTED.
+	//
+	// Upstream stops after the four 8-bit timers.  m_t16_reg is written by
+	// treg45_w/treg67_w and read by NOTHING, and nothing ever set INTET54 or
+	// INTET76, so INTTR4..INTTR7 could not be raised at all -- even though the
+	// interrupt table above (irq_vector_map) already gives them vectors 0x50,
+	// 0x54, 0x58 and 0x5C.
+	//
+	// The TMP95C061 has two 16-bit units:
+	//   "timer 4": up-counter UC4, compare TREG4/TREG5, T4MOD, T4FFCR, INTET54
+	//   "timer 5": up-counter UC5, compare TREG6/TREG7, T5MOD, T5FFCR, INTET76
+	// TRUN bit 4 runs the first and bit 5 the second (bits 0-3 are the 8-bit
+	// timers, bit 7 the prescaler), and each unit's clock comes from T4MOD /
+	// T5MOD bits 1:0 = TIn pin / phiT1 / phiT4 / phiT16.
+	//
+	// Compare behaviour is modelled on MAME's own tmp94c241.cpp:1531-1571:
+	// a match on the HIGH register (TREG5 / TREG7) clears the counter and
+	// raises the upper interrupt (INTTR5 / INTTR7, flag 0x80); a match on the
+	// LOW register (TREG4 / TREG6) raises the lower one (INTTR4 / INTTR6,
+	// flag 0x08) and does not clear.
+	//
+	// WHY THAT PAIRING IS RIGHT HERE, from the SX-WSA1R's own ROM: prom_a's
+	// RESET writes TREG4 = 0x0001 (0xF8270C/0xF8270F), TREG5 = 0x3D09 = 15625
+	// (0xF82712/0xF82715), T4MOD = 0x05 (phiT1) and TRUN = 0xB7 (0xF8272A),
+	// and enables ONLY the lower interrupt: INTET54 = 0x03 (0xF827CE) is
+	// INTTR4 at level 3 and INTTR5 at level 0.  With this model INTTR4 fires
+	// once per TREG5 period -- one count after each clear -- so the interrupt
+	// RATE is set by TREG5, which is exactly what the firmware's tempo setter
+	// at 0xFAA350 assumes when it stores 140,000,000/(64*BPM) into TREG5 and
+	// counts 96 ticks to the beat at 0xF82EB1.  At fc = 28 MHz and phiT1 =
+	// fc/8 the boot value 15625 gives 224 Hz = 96 PPQN at 140 BPM.
+	//
+	// NOT MODELLED, deliberately: the TIn external clock sources, the capture
+	// registers (CAP1-CAP4 still read back whatever m_t16_cap holds),
+	// T4FFCR/T5FFCR flip-flop inversion and the T45CR PPG modes.  Nothing in
+	// the Technics firmware uses them and inventing them would be worse than
+	// leaving them visible as gaps.
+	//
+	// SHARED DEVICE, but this half is ADDITIVE: on any machine whose firmware
+	// leaves TRUN bits 4-5 clear, or leaves INTET54/INTET76 at 0, nothing
+	// changes at all, because tlcs900_check_irqs() will not dispatch a level-0
+	// interrupt.  Only a driver that programmed these timers and silently
+	// relied on them never firing could notice.
+	// -----------------------------------------------------------------------
+	{
+		auto const tap16 = [this, old_pre] (int unit, uint8_t mode)
+		{
+			switch( mode & 0x03 )
+			{
+			case 0x00:  /* TI4 / TI5 external pin -- not modelled */
+				break;
+			case 0x01:  /* T1 */
+				m_timer_change[4 + unit] += ( m_timer_pre >> PRESCALE_T1 ) - ( old_pre >> PRESCALE_T1 );
+				break;
+			case 0x02:  /* T4 */
+				m_timer_change[4 + unit] += ( m_timer_pre >> PRESCALE_T4 ) - ( old_pre >> PRESCALE_T4 );
+				break;
+			case 0x03:  /* T16 */
+				m_timer_change[4 + unit] += ( m_timer_pre >> PRESCALE_T16 ) - ( old_pre >> PRESCALE_T16 );
+				break;
+			}
+		};
+
+		auto const run16 = [this] (int unit, int reg_lo, int reg_hi, int intreg)
+		{
+			for( ; m_timer_change[4 + unit] > 0; m_timer_change[4 + unit]-- )
+			{
+				m_timer_16[unit] += 1;
+				if ( m_timer_16[unit] == m_t16_reg[reg_hi] )
+				{
+					m_timer_16[unit] = 0;
+					m_int_reg[intreg] |= 0x80;
+					m_check_irqs = 1;
+				}
+				else if ( m_timer_16[unit] == m_t16_reg[reg_lo] )
+				{
+					m_int_reg[intreg] |= 0x08;
+					m_check_irqs = 1;
+				}
+			}
+		};
+
+		/* Timer 4 (16-bit): TREG4/TREG5 -> INTTR4/INTTR5 */
+		if ( m_trun & 0x10 )
+		{
+			tap16( 0, m_t16_mode[0] );
+			run16( 0, 0, 1, INTET54 );
+		}
+		else
+			m_timer_change[4] = 0;
+
+		/* Timer 5 (16-bit): TREG6/TREG7 -> INTTR6/INTTR7 */
+		if ( m_trun & 0x20 )
+		{
+			tap16( 1, m_t16_mode[1] );
+			run16( 1, 2, 3, INTET76 );
+		}
+		else
+			m_timer_change[5] = 0;
 	}
 
 	m_timer_pre &= 0xffffff;

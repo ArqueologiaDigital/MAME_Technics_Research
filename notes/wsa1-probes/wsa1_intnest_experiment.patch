@@ -1,0 +1,81 @@
+# THE INTNEST EXPERIMENT -- apply, rebuild, and the SX-WSA1R draws its SOUND
+# MODE screen.  DO NOT COMMIT THIS INTO THE SOURCE: it is an approximation of a
+# real CPU register, kept here so the measurement below is reproducible.
+#
+# WHAT IT TESTS.  prom_a's whole RTOS hangs off TLCS-900 control register 0x3C,
+# the interrupt-nesting counter.  IRQ_Epilogue (0xF857B7) reads it and enters
+# the scheduler only if it reads exactly 1; Kernel_Dispatch (0xF85715) reads it
+# again and refuses to reschedule unless it is 0.  MAME has no such register:
+# 900tbl.hxx's p_CR16 decodes 0x20/0x24/0x28/0x2C (plus the TMP94C241 aliases)
+# and sends every other control-register number to &m_dummy.w.l, and nothing
+# ever increments it on interrupt acceptance or decrements it on RETI.
+# SWI7_ServiceCall_Dispatch zeroes it (0xF8E9A8) on every system call, so it is
+# 0 whenever IRQ_Epilogue looks -- and the kernel is never entered.
+#
+# WHAT IT IS NOT.  The decrement half belongs in op_RETI, which is in the shared
+# base class and unreachable from tmp95c061.cpp, so this derives the depth from
+# SR's IFF field instead of counting: this firmware's tasks run with SR = 0x8800
+# (IFF = 0, prom_a EntryPoint_Records 0xF85E8A), so IFF == 0 at acceptance time
+# means task context, i.e. the outermost interrupt.  A REAL fix implements cr
+# 0x3C as a register in tlcs900.{cpp,h}/900tbl.hxx with both halves.
+#
+# APPLY:    cd ~/compartilhado/kn7000_mame && patch -p1 < notes/wsa1-probes/wsa1_intnest_experiment.patch
+# REVERT:   patch -R -p1 < notes/wsa1-probes/wsa1_intnest_experiment.patch
+# MEASURE:  ./build.sh, then
+#   cd ~/compartilhado/kn7000_mame_build
+#   DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 45 -window \
+#       -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_kernel_state.lua
+#
+# MEASURED 2026-08-25, on top of the prescaler + 16-bit-timer fixes, at t = 45 s:
+#
+#            without the patch                with the patch
+#   (0xBE)   wraps at 253 Hz, never drained   00  (the kernel drains its ticks)
+#   sem 1    count 02, wait queue EMPTY       count 00, wait queue OCCUPIED
+#   task 2   state 04, never runs             state 03, blocked on the semaphore
+#   ring     rd=0000 wr=0008  (posted, never taken)   rd=0008 wr=0008 (taken)
+#   LCD      33623 writes, frozen from t=20   80460 writes
+#   screen   ALL INITIAL SETTING!             SOUND MODE, with its parameter row
+#
+#   screens/wsa1r_intnest_before_all_initial_setting.png
+#   screens/wsa1r_intnest_after_sound_mode.png
+#
+--- a/src/devices/cpu/tlcs900/tmp95c061.cpp
++++ b/src/devices/cpu/tlcs900/tmp95c061.cpp
+@@ -567,6 +567,7 @@
+ 	if ( irq >= 0 )
+ 	{
+ 		uint8_t vector = tmp95c061_irq_vector_map[irq].vector;
++		uint8_t sr_before = m_sr.b.h;   // EXPERIMENT-INTNEST: IFF before masking
+ 
+ 		m_xssp.d -= 4;
+ 		WRMEML( m_xssp.d, m_pc.d );
+@@ -585,6 +586,29 @@
+ 		/* Clear taken IRQ */
+ 		m_int_reg[ tmp95c061_irq_vector_map[irq].reg ] &= ~ tmp95c061_irq_vector_map[irq].iff;
+ 
++		// ======================= EXPERIMENT-INTNEST =======================
++		// NOT A FIX AND NOT TO BE SHIPPED.  Control register 0x3C is the
++		// TLCS-900/H interrupt-nesting counter, and MAME does not have it:
++		// 900tbl.hxx's p_CR16 decodes only 0x20/0x24/0x28/0x2C (and the
++		// TMP94C241 aliases) and sends everything else to &m_dummy.w.l.
++		// prom_a's IRQ_Epilogue (0xF857B7) reads it and enters the kernel
++		// only when it reads exactly 1, so with MAME's dummy -- which
++		// SWI7_ServiceCall_Dispatch zeroes on every system call at
++		// 0xF8E9A8 -- the scheduler is never entered.  This line supplies
++		// the missing hardware increment so the hypothesis can be TESTED.
++		// A real fix needs the register itself plus the matching
++		// decrement in op_RETI, and both live in the shared base class.
++		// Model INTNEST's DEPTH rather than a bare count, because the
++		// decrement half lives in op_RETI in the shared base class and
++		// cannot be reached from here.  Interrupts are only accepted when
++		// their level exceeds SR's IFF field, and this firmware's tasks run
++		// with SR = 0x8800 (IFF = 0, prom_a's EntryPoint_Records), so an
++		// IFF of 0 at acceptance time means TASK CONTEXT = outermost.
++		if ( ( ( sr_before >> 4 ) & 0x07 ) == 0 )
++			m_dummy.w.l = 1;
++		else
++			m_dummy.w.l++;
++		// ===================== end EXPERIMENT-INTNEST ====================
+ 	}
+ }
+ 
