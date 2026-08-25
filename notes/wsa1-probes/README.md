@@ -541,6 +541,8 @@ machines; the 10-byte dispatchers; 22 / 12 / 10 / 8 leading bytes at the claimed
 offsets; the 2/6/51 tick constants on both machines; the P8.5-HIGH/PB.4-LOW idle
 test at `0xF5AB7B`; `SENSE INTERRUPT STATUS` at `0xFE6894`.
 
+| address byte `7:6` = "panel id (always 11 here)" | bits 7:6 pick one of **four banks** of the curve dispatcher at `0xF89800`, and bank 00 is live: six prom_a callers (`0xF8DC63`/`0xF8DC96`/`0xF8DCC9`/`0xF8DCFC`/`0xF8DD54`/`0xF8DD69`) pass `W = 0..5`, the on-CPU A/D channels. Nothing in either ROM compares those two bits against a constant. They select the SOURCE, not an identity |
+
 **What the report did not say, and should have.** CPU 1's ports 5, 8, 9, A and B
 are all unbound in `wsa1.cpp` (only `port7_read/write` is set at :1498), so they
 read 0. That means PB bit 0 reads 0, `(0xC4)` becomes **2**, and the emulated

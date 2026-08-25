@@ -236,6 +236,35 @@ confirm(ok_dir == 7,
 
 print()
 print("=" * 74)
+print("G. bits 7:6 of the address byte are NOT a 'panel id'")
+print("=" * 74)
+# thunk 0xF405F0 -> 0xF89800, the curve dispatcher.  Its index is
+#   ((W & 0xC0) >> 1) | ((W & 7) << 2)   (prom_a 0xF89807-0xF89817)
+# so bits 7:6 pick one of FOUR banks of eight slots.  Enumerate the callers.
+thunk = B[0xF405F0-B_BASE:0xF405F0-B_BASE+4]
+confirm(thunk == bytes([0x1B, 0x00, 0x98, 0xF8]),
+        "thunk 0xF405F0 is `jp 0xF89800` -- the module's only call out of itself")
+callers = []
+for nm, rom, base in (('prom_a', A, A_BASE), ('prom_b', B, B_BASE)):
+    i = 0
+    while True:
+        i = rom.find(b'\x1d\xf0\x05\xf4', i)
+        if i < 0: break
+        pre = rom[i-2:i]
+        w = pre[1] if pre[0] == 0x20 else None      # `ld W,#imm8` = 20 nn
+        callers.append((nm, base+i, w)); i += 1
+for nm, a, w in callers:
+    print(f"    {nm} 0x{a:06X}  " + (f"immediately preceded by `ld W,0x{w:02X}`" if w is not None
+                                     else "W comes from the received frame"))
+imms = sorted({w for _, _, w in callers if w is not None})
+confirm(imms == [0, 1, 2, 3, 4, 5],
+        f"six prom_a callers pass W = {imms} -- the ON-CPU A/D channels, i.e. bank 00 of "
+        "the same dispatcher.  So bits 7:6 select the SOURCE (00 = on-CPU A/D, 11 = the "
+        "panel link), they are not a panel identity, and nothing in either ROM ever "
+        "compares them against a constant")
+
+print()
+print("=" * 74)
 print(f"REGRESSIONS: {len(fails)}   (0 = every measurement reproduced)")
 for f in fails: print("  - " + f)
 # The gate is REGRESSION, not agreement with the report: it fails if any measured
