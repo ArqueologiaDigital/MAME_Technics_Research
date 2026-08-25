@@ -1,0 +1,196 @@
+SX-WSA1 / SX-WSA1R CONTROL PANEL -- the three edits that wire wsa1_cpanel up
+===========================================================================
+
+The device itself is complete and committed:
+    src/mame/matsushita/wsa1_cpanel.h
+    src/mame/matsushita/wsa1_cpanel.cpp
+
+Everything it needs from the machine already exists EXCEPT one thing: a way for
+a device to hand CPU 1 a received byte on serial channel 1 and raise INTRX1.
+MAME's tmp95c061 has no serial engine at all -- sc1buf_r() returns 0, sc1buf_w()
+only fakes "transmit complete" by setting INTES1 bit 7, and nothing anywhere
+sets INTES1 bit 3.  It cannot be worked around from the driver, and here is the
+proof rather than the assertion:
+
+  * inte_w() (tmp95c061.cpp:1281-1290) PRESERVES bit 3 when a 1 is written to
+    it -- `if (data & 0x08) data = (data & 0xf7) | (m_int_reg[offset] & 0x08)`.
+    So a driver writing INTES1 through the CPU's own address space can clear
+    the INTRX1 request flag but can never set it.
+  * INTRX1 is not one of the TLCS900_* input lines (tlcs900.h:11-26), so
+    set_input_line() cannot reach it either.
+  * Routing the receive through INTTX1 instead does not work, even though the
+    two vectors run byte-identical dispatchers (they differ in 1 byte of 40,
+    a calr displacement, and both resolve to the same target): the firmware
+    writes INTES1 = 0x05 for a receive turn, which puts INTTX1 at LEVEL 0, and
+    tlcs900_check_irqs() only ever dispatches levels 1..6.
+
+INT6 (the panel's attention line) needs no core work -- TLCS900_INT6 is a real
+input line.  P8 bit 5 and PB bits 0 and 4 need no core work -- port8_read() and
+portb_read() already exist.
+
+------------------------------------------------------------------------------
+EDIT 1 of 3 -- src/devices/cpu/tlcs900/tmp95c061.h
+------------------------------------------------------------------------------
+
+⚠ POLICY CALL, NOT A MECHANICAL ONE.  This header lives only in the read-only
+`mame` tree today; the overlay carries the .cpp but not the .h.  Adding it means
+the overlay must keep a CPU header in sync with upstream.  The alternative is to
+send the same four lines upstream.  Either way the change is additive and
+default-inert: an unbound devcb write is a no-op, so ngp, namcos10 and every
+other tmp95c061 consumer is unaffected.
+
+    cp ../mame/src/devices/cpu/tlcs900/tmp95c061.h \
+       src/devices/cpu/tlcs900/tmp95c061.h
+
+then, in the `public:` configuration-helper block, after portb_write():
+
++	// Serial channel 1, byte granularity.  The Technics SX-WSA1's control panel
++	// MCU hangs off SC1 in I/O-interface mode; sc1_txd() is every byte the CPU
++	// clocks out, sc1_rxd() hands one byte back and raises INTRX1.
++	auto sc1_txd() { return m_sc1_txd_cb.bind(); }
++	void sc1_rxd(uint8_t data);
+
+and in the `private:` data block, next to the other Serial Channel members:
+
++	devcb_write8 m_sc1_txd_cb;
++	uint8_t   m_sc1_rx_data;
+
+and add one line to build.sh beside the existing tmp95c061.cpp link:
+
++ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.h"
+
+------------------------------------------------------------------------------
+EDIT 2 of 3 -- src/devices/cpu/tlcs900/tmp95c061.cpp
+------------------------------------------------------------------------------
+
+--- a/src/devices/cpu/tlcs900/tmp95c061.cpp
++++ b/src/devices/cpu/tlcs900/tmp95c061.cpp
+@@ -37,6 +37,8 @@ tmp95c061_device::tmp95c061_device(...)
+ 	m_serial_control{ 0, 0 },
+ 	m_serial_mode{ 0, 0 },
+ 	m_baud_rate{ 0, 0 },
++	m_sc1_txd_cb(*this),
++	m_sc1_rx_data(0),
+ 	m_od_enable(0),
+
+@@ in device_start(), beside the other save_item() calls
+ 	save_item(NAME(m_serial_control));
+ 	save_item(NAME(m_serial_mode));
++	save_item(NAME(m_sc1_rx_data));
+
+@@ -1185,6 +1187,21 @@
+ uint8_t tmp95c061_device::sc1buf_r()
+ {
+-	return 0;
++	// Whatever a connected device last handed us with sc1_rxd().  Still 0 for
++	// every machine that wires nothing: m_sc1_rx_data starts and stays 0.
++	return m_sc1_rx_data;
+ }
+
+ void tmp95c061_device::sc1buf_w(uint8_t data)
+ {
+ 	// Fake finish sending data
+ 	m_int_reg[INTES1] |= 0x80;
+ 	m_check_irqs = 1;
++	m_sc1_txd_cb(data);
+ }
++
++// One byte arriving on SC1 from a connected device.  INTES1 bit 3 is INTRX1's
++// request flag (tmp95c061_irq_vector_map[]: { INTES1, 0x08, 0x68 }), and
++// inte_w() refuses to set it from a register write, which is why this exists.
++void tmp95c061_device::sc1_rxd(uint8_t data)
++{
++	m_sc1_rx_data = data;
++	m_int_reg[INTES1] |= 0x08;
++	m_check_irqs = 1;
++}
+
+------------------------------------------------------------------------------
+EDIT 3 of 3 -- src/mame/matsushita/wsa1.cpp
+------------------------------------------------------------------------------
+
+#include "wsa1_cpanel.h"
+
+...in wsa1_state, beside the other required_device members:
+
++	required_device<wsa1_cpanel_device> m_cpanel;
++	uint8_t cpu1_p8_r();
++	uint8_t cpu1_pb_r();
++	uint8_t m_cpu1_p8 = 0;
++	uint8_t m_panel_sclk = 1;   // P8 bit 5, idle HIGH
++	uint8_t m_panel_busy = 0;   // PB bit 4, idle LOW
++	// 1 = SX-WSA1 keyboard, 2 = SX-WSA1R rack.  ONE constant drives both PB bit 0
++	// and the panel device, so the firmware's (0xC4) and the HLE's maps cannot
++	// disagree -- which is the whole failure mode this variable exists to prevent.
++	static constexpr uint8_t m_variant = 2;
+
+...and in the constructor's initialiser list:  , m_cpanel(*this, "cpanel")
+
+...two new port handlers.  BOTH LINE STATES MATTER: SC1_WaitTxDrain (prom_b
+0xF5AB7B) and SC1_TxFlush_Body will not touch the link unless P8 bit 5 reads
+HIGH *and* PB bit 4 reads LOW.  With MAME's unbound port read (0) the firmware
+sees "line busy" forever, burns its 200 retries and transmits nothing at all --
+no command, no LED frame.  That is the state the driver is in today.
+
++// P8CR = 0x09 / P8FC = 0x29 at RESET (0xF826D0-0xF826D3): bits 0 and 3 are the
++// TXD0 / TXD1 outputs, bit 5 is SCLK1 and the SC1 module switches it between an
++// output it drives low and a serial function (0xF5A977, 0xF5ADA1).  Read back it
++// is the state of the clock LINE, and idle is high.
++uint8_t wsa1_state::cpu1_p8_r()
++{
++	return (m_cpu1_p8 & 0xd7) | (m_panel_sclk ? 0x20 : 0x00);
++}
++
++// PBCR = 0x0C (0xF826E5): only bits 2 and 3 are outputs, so bits 0, 1, 4-7 are
++// inputs.  Two of them are known:
++//   bit 0  THE MODEL STRAP.  prom_a 0xF82882, called from RESET at 0xF827D8,
++//          is the only write to RAM (0xC4) in 512 KiB: high -> (0xC4)=1 (the
++//          SX-WSA1 keyboard's panel), low -> (0xC4)=2 (the SX-WSA1R rack's).
++//          109 sites branch on it, including both of the panel's own maps.
++//   bit 4  the panel MCU's busy line, tested with bit 5 of P8 above.
++uint8_t wsa1_state::cpu1_pb_r()
++{
++	uint8_t data = 0xef;                             // unwired bits read high
++	if (m_variant == 2) data &= ~0x01;               // PB.0 low  -> (0xC4) = 2
++	if (m_panel_busy)   data |=  0x10;
++	return data;
++}
+
+...in wsa1r(machine_config &config):
+
+ 	m_cpu1->port7_read().set(FUNC(wsa1_state::cpu1_p7_r));
+ 	m_cpu1->port7_write().set(FUNC(wsa1_state::cpu1_p7_w));
++	m_cpu1->port8_read().set(FUNC(wsa1_state::cpu1_p8_r));
++	m_cpu1->port8_write().set([this] (uint8_t data) { m_cpu1_p8 = data; });
++	m_cpu1->portb_read().set(FUNC(wsa1_state::cpu1_pb_r));
++	m_cpu1->sc1_txd().set(m_cpanel, FUNC(wsa1_cpanel_device::tx_byte));
++
++	WSA1_CPANEL(config, m_cpanel);
++	m_cpanel->set_variant(2);            // SX-WSA1R.  MUST match cpu1_pb_r()'s bit 0.
++	m_cpanel->atn().set([this] (int state) {
++			m_cpu1->set_input_line(TLCS900_INT6, state ? ASSERT_LINE : CLEAR_LINE); });
++	m_cpanel->busy().set([this] (int state) { m_panel_busy = state; });
++	m_cpanel->sclk().set([this] (int state) { m_panel_sclk = state; });
++	m_cpanel->rxd().set([this] (uint8_t data) { m_cpu1->sc1_rxd(data); });
+
+...and INT6 must be enabled in the CPU's IIMC before the edge counts -- check
+what prom_a writes to IIMC (0x7B) at boot before assuming an edge is taken.
+
+------------------------------------------------------------------------------
+WHAT TO EXPECT WHEN IT IS WIRED, and how to tell it worked
+------------------------------------------------------------------------------
+1. SC1_Vtable_0_Open (prom_b 0xF5A818) runs from the boot vtable walk at
+   prom_a 0xF827DD and sends (0xDF,0xD2) (0xDF,0x1A) (0xDD,0x03) (0xDE,0x80).
+   A tap on SC1BUF writes should show those eight bytes in that order.
+2. SC1_Cmd_E0_ReadStatus sets bit 3 of RAM (0x2A85) iff the panel answered.
+   Watch (0x002A85): 0x08 means the handshake completed.
+3. RAM 0x20D0..0x20D7 is the firmware's LED want-buffer.  Once the link is up
+   it should stop being all-zero, and every change should appear as a frame.
+4. A button press should land in RAM 0x2B20 + 0x10 + segment (the panel's own
+   shadow), then as a 3-byte record in the inbound queue at 0x2B4A.., then as
+   a {group, data, changed} triple in the event array at 0x2000 with the count
+   at (0x219A).
+5. The negative control: hold segment 8 bits 0 and 1 at power-on and the boot
+   block must take the FACTORY CLEAR path at prom_a 0xF828E9 -- it zeroes RAM,
+   writes 0x5AA5 at 0x7FCA and jumps back to RESET.  Nothing else in this
+   machine produces that signature, so seeing it proves the whole chain.

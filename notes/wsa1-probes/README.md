@@ -320,3 +320,185 @@ setting: a `PORT_CONFNAME` on PB bit 0 would switch the machine between the two.
 * **prom_d and the EEPROM** -- prom_d is data only and is this project's null
   control; the EEPROM's 62 bytes are per-key velocity trim, read by CPU 2 only,
   and no code branches on any byte of it.
+
+## The control panel: SC1 is the panel link, and the KN5000 is its twin  (2026-08-25)
+
+Three ROM-side scripts, no emulator needed.  Together they answer "which of
+CPU 1's two unclaimed subsystems is the front panel, and what does it carry?"
+
+| script | question it answers |
+|---|---|
+| `wsa1_kn5000_panel_bytediff.py` | does the WSA1's SC1 module share BYTES with the KN5000's control-panel driver, and how many? |
+| `wsa1_kn5000_panel_map.py` | do the two agree ROUTINE FOR ROUTINE, or only in scattered idioms?  Gates on the two packet dispatchers being the same instruction |
+| `wsa1_panel_tables.py` | every table the panel protocol is decoded from, read out of the ROMs rather than typed, with a self-test |
+
+```
+python3 wsa1_kn5000_panel_bytediff.py
+python3 wsa1_kn5000_panel_map.py          # exits non-zero if the dispatchers stop matching
+python3 wsa1_panel_tables.py --selftest   # exits non-zero if any table moves
+```
+
+**Answer: the panel is SERIAL CHANNEL 1**, prom_b `0xF5A800-0xF5B44D`.  Take
+that 3,150-byte module and the whole 2 MiB of the KN5000 v10 main program ROM
+and list every common substring of 16 bytes or more.  There are **eight, 154
+bytes in all, and all eight land inside the KN5000's control-panel driver**
+`0xFC3E65-0xFC4C33` — 2,767 bytes, 0.13% of that ROM.  Both machines carry the
+same Mitsubishi M37471M2196S panel MCU and both hang it off SERIAL CHANNEL 1.
+
+The correspondence is routine for routine, at the same offset *inside* the
+routine (`wsa1_kn5000_panel_map.py` prints all 29 runs ≥ 8 bytes):
+
+| WSA1 | KN5000 | bytes |
+|---|---|---|
+| `SC1_RxOp6_Run` 0xF5B179 | `CPanel_RX_MultiBytePacket` 0xFC4A40 | 22 of 22 from both entry points |
+| `SC1_RxOp6_Run+0x22` | `CPanel_RX_MultiBytePacket+0x22` | 15 |
+| `SC1_RxOp0_ThreeByte+0x2E` | `CPanel_RX_ButtonPacket+0x2E` | 12 |
+| `SC1_State20_RxFirstByte+0x2F` | `CPanel_SM_RXByte1+0x2F` | 10 |
+| `SC1_State04_TxByte1+0x1F` | `CPanel_SM_StartTX+0x1F` | 8 |
+| `INTTX1_SC1_Dispatch+0x10` | `INTTX1_HANDLER+0x10` | 8 |
+| `SC1_Spin2/6/10/100/500` | `DELAY_{2,6,10,300,1500}_LOOPS` | 10-12 each |
+| `SC1_WaitTicks2/6/51` | `DELAY_{2,6,51}_TICKS` | the same 2/6/51 constants |
+
+and the two packet dispatchers are **the same ten-byte instruction sequence
+with a different table pointer** — the four immediate bytes are the only
+difference, and each names the other machine's table:
+
+```
+WSA1  0xF5B0AB: eb c8 b5 b0 f5 00 a3 23 b3 d8   add XHL,SC1_RxOpTable   (0xF5B0B5)
+KN5K  0xFC4959: eb c8 65 49 fc 00 a3 23 b3 d8   add XHL,CPanel_RX_PacketHandlers
+WSA1  0xF5B28F: eb c8 99 b2 f5 00 a3 23 b3 d8   add XHL,SC1_TxOpTable   (0xF5B299)
+KN5K  0xFC4B79: eb c8 85 4b fc 00 a3 23 b3 d8   add XHL,CPanel_LED_PacketHandlers
+```
+
+and the two tables have the same size **and the same handler grouping**:
+
+| table | [0] | [1] | [2] | [3] | [4] | [5] | [6] | [7] |
+|---|---|---|---|---|---|---|---|---|
+| WSA1 RX | ThreeByte | ThreeByte | RxOp2 | Discard | Discard | Discard | Run | Run |
+| KN5000 RX | Button | Button | Encoder | Sync | Sync | Sync | MultiByte | MultiByte |
+| WSA1 TX | TwoByte | TwoByte | TwoByte | Run | | | | |
+| KN5000 TX | LED pkt2 | LED pkt2 | LED pkt2 | LED pktN | | | | |
+
+That names all four WSA1 receive handlers and both transmit handlers, closes
+**gap E** of `WSA1-EMULATION-DISASM-GAPS.md`, and settles the one thing
+`wsa1-roms-disasm/notes/FINDINGS-prom_b-sc1-link.md` said would settle it:
+the module's only external call, prom_a `0xF89800` through thunk `T_F405F0`,
+is a 32-entry analogue-control dispatcher indexed by
+`((addr & 0xC0) >> 1) | ((addr & 7) << 2)` — the same slot the six on-CPU
+analogue controls report through, which is the cross-note lead the gaps doc
+flagged as unfollowed.
+
+### and that closes gap B by its own evidence, not by elimination
+
+The ten direction codes `Dev7A_StartDma` (prom_a `0xFE596A`, verified by
+disassembly) selects on are **uPD765 command bytes with their MT/MFM flags**,
+ten for ten, with exactly the flags each command legitimately takes:
+
+```
+RAM -> device  0x4D = MFM|0x0D FORMAT TRACK   0xC5 = MT|MFM|0x05 WRITE DATA
+               0xC9 = MT|MFM|0x09 WRITE DELETED DATA
+device -> RAM  0xC6 = MT|MFM|0x06 READ DATA   0xCC = MT|MFM|0x0C READ DELETED DATA
+               0x42 = MFM|0x02 READ A TRACK   0x4A = MFM|0x0A READ ID
+               0xD1/0xD9/0xDD = MT|MFM| 0x11/0x19/0x1D SCAN EQ / LOW-EQ / HIGH-EQ
+```
+
+and `INT5_Dev7B_Receive` spins until `status & 0xF0 == 0x80` — RQM=1, DIO=0,
+EXM=0, CB=0, "ready for a command" — and then writes **0x08**, SENSE INTERRUPT
+STATUS, which is what an FDC interrupt service routine does and nothing else
+does (prom_a `0xFE6894`-`0xFE689F`).  The parts list has a **uPD72070GF3BE**.
+So `0x7B0004/5` is the floppy controller's MSR/FIFO pair and `0x7A0000` its
+DACK data window, with INT7 as DRQ.
+
+⚠ One thing does not fit and is recorded rather than smoothed: the three SCAN
+commands need a CPU→FDC data phase, but the firmware puts them in the
+device→RAM group.  Ten of ten opcodes match; one of ten directions does not.
+
+### the wire format
+
+```
+len = ((first & 0x3F) >= 0x30) ? (first & 0x0F) + 3 : 2     prom_b 0xF5ADD7 / 0xF5AF41
+
+address byte:  bits 7:6 panel id (always 11 on this machine)
+               bits 5:3 type  0/1 buttons  2 analogue  3/4/5 sync  6/7 run
+               bits 3:0 button SEGMENT 0..15, or, with bit 4 set, analogue SUB 0..7
+               => 0xC0..0xCF are segments, 0xD0..0xD7 are analogue controls
+```
+
+★ **That reconciles the open warning in `FINDINGS-prom_b-sc1-link.md` sec.6.**
+`SC1_TxOp3_Run` emits header + `(n & 0x0F) + 2` = **n+3** bytes; `SC1_RxOp6_Run`
+consumes header + address + `(n & 0x0F) + 1` = **n+3**; and the length counter
+`(0x2A81)` is set to `(n & 0x0F) + 3` by both state machines.  Three
+independent witnesses, one number: the two codecs ARE inverses.
+
+Buttons arrive as `[0xC0|seg][bitmask]`; `SC1_RxOp0_ThreeByte` XORs the mask
+against a 32-byte shadow at RAM `0x2B20 + ((addr & 0x0F) + 0x10)` and hands the
+foreground three bytes — address, mask, **changed bits**.  Analogue controls
+arrive as `[0xD0|sub][value]`; the firmware appends its own `0xFF` third byte.
+LEDs go the other way as `[0xC0|reg][bits]`: `Panel_RefreshLeds` (prom_a
+`0xF8C456`) walks eight registers, comparing a want-buffer at RAM
+`0x20D0..0x20D7` with a sent-shadow at `0x20F0..0x20F7` and sending only what
+changed, through `Panel_SetLedRegister` (`0xF8C84A`) into the outbound queue at
+`0x2BA0`.  `Panel_DrainInboundQueue` (`0xF8A088`) is the consumer on the other
+side, appending `{group, data, changed}` triples to an event array at RAM
+`0x2000` with the count at `(0x219A)`, max 7.
+
+### the strap has a panel side, and it agrees
+
+`PB bit 0` — already found from the port census above — reaches the panel
+twice: the wire-address→group map is `0xF8A109` for `(0xC4)=1` and `0xF8A189`
+for `(0xC4)=2`, and the LED-register→wire-address map is `0xF8C8AC` / `0xF8C8B7`.
+
+| | `(0xC4)=1` | `(0xC4)=2` |
+|---|---|---|
+| button segments | eleven, 0xC0-0xCA | **nine** — 0xC6 and 0xCA absent |
+| analogue over the link | four pots 0xD0-0xD3 + encoder 0xD7 | **one pot 0xD3** + encoder 0xD7 |
+| LED registers | eight: C0 C1 C2 C4 C5 C9 CC CD | **seven**: C1 C2 C9 CA CB CC C3 |
+| version-LED chord | segment 2 bits 0-2 | segment 0 bits 4-6 |
+| factory-clear chord | segment 8 bits 0-2 | segment 8 bits 0-1 |
+| third service chord | segment 10 bits 5-7 | segment 3 bits 5-7 |
+
+Two independent confirmations of the identification this README already made
+from the manual's specification page:
+
+* the `(0xC4)=2` panel sends **exactly two** analogue addresses, `0xD3` and
+  `0xD7`, and the rack's only continuous controls are VOLUME and the DATA
+  ENTRY DIAL;
+* the variant-1-only channel `0xD1` is the one of the ten whose curve
+  (`0xF89CB4`) is a full 8-bit 0..255 map with an **eighteen-entry flat dead
+  zone at 0x80** (raw 120..137) and a power-on default of `0x80` — a
+  centre-detented bipolar wheel, i.e. a bender, which a rack does not have.
+
+`0xD7`'s dispatch slot (`0xF89825` entry 31) is a bare `scf`: no curve, no
+previous-value compare, so every packet is accepted.  A control that must never
+be de-duplicated is a RELATIVE encoder, and the KN5000's twin protocol uses the
+**same wire address 0xD7** for its endless wheel, as `[0xD7, signed detents]`.
+⚠ The signed-step reading is inference from those two facts; the group-0x0F
+consumer in prom_a has not been read.
+
+### and one gap the SERVICE MANUAL closes, for free
+
+`WSA1-EMULATION-DISASM-GAPS.md` gap L asks what CPU 1's P5 bit 4 is.  The
+manual's self-diagnostic section answers it: *"Connect the CHECKING DEVICE to
+CN4 on the MAIN P.C.B. and turn on the CHECKING DEVICE switch … the LED of the
+CHECKING DEVICE flashes 8 times.  The first 4 flashes are for the RAM check and
+the latter 4 for the ROM check."*  That is exactly `0xF95137`: return at once if
+bit 4 is 1, otherwise blink an 8-bit code as **two nibbles** on P5 bit 3.
+**P5.4 = the CHECKING DEVICE switch (active low), P5.3 = its LED.**  One
+inference remains — the active-low polarity — but the 4+4 nibble structure is
+not a coincidence.
+
+### wiring it up
+
+`wsa1-panel-integration.patch` beside this file is the whole job: the HLE device
+is `src/mame/matsushita/wsa1_cpanel.{h,cpp}`, and it needs three edits — two of
+them to add a byte-level SC1 path to `tmp95c061`, because that core has no
+serial engine and **INTRX1 cannot be raised from a driver**: `inte_w()` refuses
+to set INTES1 bit 3 from a register write, INTRX1 is not a `TLCS900_*` input
+line, and the receive turn puts INTTX1 at level 0 where `tlcs900_check_irqs()`
+will not dispatch it.  INT6, P8 and PB need no core work.
+
+⚠ **Today the emulated machine cannot transmit at all**, and this is why:
+`SC1_WaitTxDrain` (prom_b `0xF5AB7B`) and `SC1_TxFlush_Body` will not touch the
+link unless **P8 bit 5 reads HIGH and PB bit 4 reads LOW**.  MAME's unbound port
+read returns 0, so P8.5 reads low, the four-way test never passes, the 200
+retries burn and no command and no LED frame ever leaves CPU 1.
