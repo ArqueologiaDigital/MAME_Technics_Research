@@ -66,9 +66,33 @@ void kn1500_state::kn1500(machine_config &config)
 	screen.set_size(600, 232);
 }
 
-// IC15 mask ROM -> program + rhythm halves. BAD_DUMP is a conservative
-// "unvalidated" marker (the program does boot coherently). The LCD SVG is a
-// preserved ROM asset (original artwork).
+// IC15 mask ROM -> program + rhythm halves.  The LCD SVG is a preserved ROM
+// asset (original artwork).
+//
+// ⚠ BAD_DUMP IS NOT "CONSERVATIVE" HERE ANY MORE.  This comment used to say
+// BAD_DUMP was an unvalidated marker and that "the program does boot
+// coherently".  Measured 2026-08-25, that is wrong on both counts.
+//
+// Split the 2 MiB program image into eight 256 KiB blocks.  Four of them --
+// 0xE00000, 0xE40000, 0xF00000, 0xF40000 -- have 0xFF in EVERY odd-offset
+// byte, and each one's even-offset stream is EXACTLY the odd-offset stream of
+// the block 512 KiB above it: 131072 of 131072 bytes, all four pairs, no
+// exceptions.  The odd bytes are not missing, they are displaced.  Measure it
+// again with notes/wsa1-probes/kn1500_ic15_dump_defect.py.
+//
+// It is load-bearing, and it is why this machine never boots.  The crt0 memory
+// test at 0xFA0460 fetches 10-byte region descriptors from a table at
+// 0xF38B24 -- inside one of the damaged blocks -- so it reads
+// start = 0xFFDEFFF2 / length = 0xFFF2FF00, walks the whole 24-bit space and
+// ends up writing its 0xA5/0x5A pattern over the CPU's own internal I/O
+// registers (caught live by notes/wsa1-probes/tlcs900_16bit_unmodelled_use.lua,
+// which saw the RAM test scribbling on T4MOD, T4FFCR and T45CR).  The machine
+// then spins there forever; a 30 s run never leaves 0xFA047F-0xFA04A3.
+//
+// The obvious repair does NOT work and is deliberately not applied: treating
+// the four undamaged blocks as the real 1 MiB ROM leaves 0xF38B24 pointing at
+// instrument-name ASCII, not at a descriptor.  IC15 needs a RE-DUMP.  Nothing
+// should be invented in the meantime.
 ROM_START(kn1500)
 	ROM_REGION16_LE(0x200000, "prog", 0)
 	ROM_LOAD("technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15", 0x000000, 0x200000, BAD_DUMP CRC(0f78da9a) SHA1(53d5c43d833fb005a7bd377583252b84b646253d))

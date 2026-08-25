@@ -135,7 +135,9 @@
     comes out at 31250 for any M provided fc = 1,000,000 * M, so the byte is fc
     in MHz, and prom_c[0xFFFFEF] = 0x1C = 28.  Two constants that share nothing
     with it agree: the sequencer tempo divide at 0xFAA378 uses 140,000,000,
-    which is 5 * fc for timer 4 running at fc/8 with 96 ticks per beat (*), and
+    which is 5 * fc for timer 4 running at fc/8 with 96 ticks per beat (*) --
+    an absolute frequency, so unlike the ratio retracted below this one really
+    does pin fc once the tap scale is known -- and
     the MIDI init at 0xFA58F8 sets BR0CR = 0x0E, that is fc/896 = 31250 baud.  The
     MIDI divisor alone would not have settled it: both boot blocks first program
     a divide by 768 (0xF82754, 0xFFF078), which is self-consistent with a 24 MHz
@@ -166,20 +168,24 @@
     vector 0xFFFF1C -> prom_b file 0x400A4, all land on sane instructions, and
     one byte of base error would destroy every one of those cross-references.
 
-    (*) A WARNING FOR ANYONE CHECKING THAT AGAINST THE INSTANTIATED DEVICE.
-    The fc/8 tap above is the TMP94C241 prescaler scale, not the one MAME's
-    tmp95c061 implements: src/devices/cpu/tlcs900/tmp95c061.cpp:683-689 gives
-    phi-T1 as m_timer_pre >> 7, that is fc/128, a factor of 16 away, and that
-    device does not implement the 16-bit timers 4-7 at all (treg45_w at :1012
-    and t4mod_r/w at :1028-1035 are register stubs with no counting logic).
-    The firmware itself adjudicates, with a ratio that does not depend on fc:
-    the tempo path multiplies by 1750 (muls WA,0x06D6 at 0xFA5553), which fits
-    the TMP94C241 tap scale to 2.3% and misses the tmp95c061 scale by 16.4x.
-    So the ROM picks the fc/8 reading, and the implication is that MAME's
-    tmp95c061 prescaler is probably wrong for this part.  Nothing in this
-    driver depends on it -- no timer is wired up here -- but it is the first
-    thing that will look inconsistent to a reader, so it is stated rather than
-    left to be rediscovered.
+    (*) WHERE THE fc/8 COMES FROM.  It is the part's own databook: Toshiba
+    "TLCS-900 Series CMOS 16-bit Microcontrollers TMP95C061", Table 3.8 (1)
+    p.81, "oT1 (8/fc)  oT4 (32/fc)  oT16 (128/fc)  oT256 (2048/fc)", repeated
+    for the 16-bit timers in Figure 3.9 (3) p.95.  MAME's tmp95c061 used to
+    implement those taps 16x slower and to not count the 16-bit timers at all;
+    both are fixed in src/devices/cpu/tlcs900/tmp95c061.cpp, which carries the
+    citation at the constants.  Re-check the quotes with
+    notes/wsa1-probes/tlcs900_datasheet_quotes.py.
+
+    ⚠ RETRACTED, and it must not come back: this paragraph used to argue the
+    tap scale from the tempo tracker's 1750 multiplier (muls WA,0x06D6 at
+    0xFA5553), claiming it fits fc/8 to 2.3% and misses fc/128 by 16.4x.  That
+    ratio is oT256 over oT1, i.e. 2048/8 = 256 on the databook scale and
+    32768/128 = 256 on the old one -- the SAME prediction either way.  It
+    cannot adjudicate anything, and the "16.4x" came from pairing this part's
+    oT256 with the sibling TMP94C241's oT1.  The same retraction is owed to
+    wsa1-roms-disasm/notes/FINDINGS-system-clock.md, lever B, which is
+    read-only from here.
 
     Still not established, and therefore not modelled: the part number of most
     devices on either processor's CS0 area (the notes mostly describe register
@@ -2314,30 +2320,28 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// CHECKING DEVICE's switch, the service manual says so in as many words, and
 	// it is wired above.  See the block comment on cpu1_p5_r().
 	//
-	// ⚠ The 8-bit TIMER RATE IS 16x TOO SLOW, and it is a CPU-core issue, not
-	// a driver one.  The boot block programs timer 1 as TREG1 = 0x1C counts of
-	// phiT256 (TREG1 at 0xF826F4; T01MOD = 0x0D at 0xF826EB selects that tap),
-	// which at fc = 28 MHz and phiT256 = fc/2048 is the
-	// 488.28 Hz tick that every prom_b delay routine and the link's 500-tick
-	// timeout are written against.  MAME's tmp95c061 implements that tap as
-	// `m_timer_pre >> 15` = fc/32768 (tmp95c061.cpp:726-728), giving
-	// 28e6/32768/28 = 30.5 Hz - and 30.4 Hz is exactly what the tick counter
-	// at RAM 0x0080 is measured advancing at
-	// (notes/wsa1-probes/wsa1_tick_counter.lua).  All four taps are shifted by
-	// the same factor of 16 (tmp95c061.cpp:682-690, 720-728), so the whole
-	// prescaler is uniformly scaled, and the disassembly tree's independent
-	// derivation of fc from the sequencer tempo constant needs phiT1 = fc/8
-	// where MAME uses fc/128 (wsa1-roms-disasm/notes/FINDINGS-system-clock.md,
-	// lever B).  NOT CHANGED HERE: tmp95c061 is shared with ngp, namcos10 and
-	// three other drivers, and no databook is present in these trees to settle
-	// the tap numbering.  The consequence is only that boot takes ~90 s of
-	// emulated time instead of ~6 s.
+	// ✅ THE TWO TIMER DEFECTS THIS COMMENT USED TO DESCRIBE ARE FIXED, in the
+	// CPU core where they belonged, and the paragraph is kept only so that the
+	// numbers it quoted are not left standing.  It said the 8-bit prescaler was
+	// 16x too slow and that the 16-bit timers were never counted, and that
+	// neither could be changed because "no databook is present in these trees
+	// to settle the tap numbering".  The databook turned up
+	// (notes/wsa1-probes/tlcs900_datasheet_quotes.py has the quotes and the
+	// URL) and settles it: Table 3.8 (1) p.81 gives phiT1 = 8/fc, phiT4 =
+	// 32/fc, phiT16 = 128/fc, phiT256 = 2048/fc.
 	//
-	// Related, and also core-side: MAME's tmp95c061 never counts the 16-bit
-	// timers 4-7 at all - m_t16_reg is written by treg45_w/treg67_w and read
-	// by nothing (tmp95c061.cpp:1012-1063), and no code path sets INTET54 - so
-	// INTTR4, this machine's musical clock (vector 0x50 -> 0xF82EA2), cannot
-	// fire.  The sequencer cannot run until that is addressed.
+	// Measured here, same source tree, timers reverted vs fixed
+	// (notes/wsa1-probes/tlcs900_timer_control.sh switches between them,
+	// notes/wsa1-probes/wsa1_inttr4_dispatch.lua does the counting):
+	//
+	//                              reverted        fixed
+	//   INTT1 (RAM 0x0080 tick)    30.5 Hz         488.3 Hz   firmware wants 488.28
+	//   INTTR4 (vector 0x50)       never fired     192.0 Hz   into 0xF82EA2
+	//   SED1330 first write        t = 7.21 s      t = 0.50 s
+	//   SWI7 text drawing          t = 72.24 s     t = 19.62 s
+	//
+	// so boot to a drawn screen is ~4x quicker in emulated time, and the
+	// machine's musical clock exists at all for the first time.
 	//
 	// Still absent: the tone generator's actual synthesis, the three DSPs and
 	// their microcode upload path, the AM29F400T flash (whose data-poll and
