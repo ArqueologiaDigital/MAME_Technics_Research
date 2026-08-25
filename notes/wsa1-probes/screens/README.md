@@ -84,14 +84,15 @@ were being taken, and is why the rig documents the flag.
 
 Three machines, one snapshot each at t = 45 s, from the build carrying OVERLAY
 FIX 1-4 in `src/devices/cpu/tlcs900/tmp95c061.cpp` plus the shared-core INTNEST
-register.  Captured with a two-line autoboot script that calls
-`manager.machine.video:snapshot()` once:
+register.  `tools/rigs/snap_at.lua` is the committed version of the one-shot
+snapshot script these were taken with:
 
 ```
 cd ~/compartilhado/kn7000_mame_build
 for m in wsa1r kn5000 kn7000; do
-    DISPLAY=:0 ./kn7000 $m -rompath ./roms -skip_gameinfo -str 47 -window \
-        -snapshot_directory /tmp/snaps -autoboot_script /tmp/snap.lua
+    SNAP_AT=45 DISPLAY=:0 ./kn7000 $m -rompath ./roms -skip_gameinfo -str 47 \
+        -window -snapshot_directory /tmp/snaps \
+        -autoboot_script ~/compartilhado/kn7000_mame/tools/rigs/snap_at.lua
 done
 ```
 

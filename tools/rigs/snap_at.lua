@@ -8,8 +8,12 @@
 --       -snapshot_directory <dir> -autoboot_script tools/rigs/snap_at.lua
 --
 -- SNAP_AT defaults to 30 emulated seconds. Give a model enough time to finish its
--- boot: the SX-WSA1R needs ~25 s (its 8-bit timer tap runs 16x slow), the KN5000 and
--- KN7000 reach their play screens well before 30 s.
+-- boot: the KN5000 and KN7000 reach their play screens well before 30 s, and the
+-- SX-WSA1R reaches SOUND MODE at ~20 s.
+-- (This note used to say the SX-WSA1R needed ~25 s "because its 8-bit timer tap runs
+-- 16x slow". That defect is fixed -- see OVERLAY FIX 1 in tmp95c061.cpp -- and the
+-- machine now draws its first LCD byte at t = 0.50 s instead of 7.21 s and its first
+-- SWI7 text at t = 19.62 s instead of 72.24 s.)
 --
 -- Prints exactly one line to stderr so a caller can tell a real capture from a
 -- timeout:  SNAP <machine> t=<seconds>
