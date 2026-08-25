@@ -773,15 +773,99 @@ wrapping at 253 Hz and never drained.
 **Because the scheduler is never entered.** `IRQ_Epilogue` (0xF857B7) reads
 control register **0x3C** and enters the kernel only if it reads exactly 1;
 `Kernel_Dispatch` (0xF85715) reads it again and refuses to reschedule unless it
-is 0. MAME has no such register -- `900tbl.hxx`'s `p_CR16` decodes 0x20/0x24/
-0x28/0x2C plus the TMP94C241 aliases and sends everything else to
-`&m_dummy.w.l` -- and nothing increments it on interrupt acceptance or
-decrements it on RETI. Both CPUs' kernels use it: 10 accesses in prom_a, 9 in
-prom_c. `wsa1_intnest_experiment.patch` supplies the missing increment and the
-machine draws **SOUND MODE** (`screens/wsa1r_intnest_after_sound_mode.png`);
-the patch is NOT applied to the source.
+is 0. MAME had no such register -- `900tbl.hxx`'s `p_CR16` decoded 0x20/0x24/
+0x28/0x2C plus the TMP94C241 aliases and sent everything else to
+`&m_dummy.w.l` -- and nothing incremented it on interrupt acceptance or
+decremented it on RETI. Both CPUs' kernels use it: 10 accesses in prom_a, 9 in
+prom_c.
 
-**With that patch in, the panel already works.** 72 of 88 positions produce
+## ★ cr 0x3C is NOW IMPLEMENTED, and the experiment patch is SUPERSEDED  (2026-08-25)
+
+`wsa1_intnest_experiment.patch` was the hypothesis test. **It is history now, kept
+only so the measurement below can be re-derived; do not apply it.** The register is
+implemented for real, in the shared CPU core:
+
+| where | what |
+|---|---|
+| `src/devices/cpu/tlcs900/tlcs900.h` | `uint16_t m_intnest`, and `tlcs900_intnest_accept()` |
+| `src/devices/cpu/tlcs900/tlcs900.cpp` | `save_item`, and the clear in BOTH `device_reset()` bodies |
+| `src/devices/cpu/tlcs900/900tbl.hxx` | the `p_CR16` decode (0x3C and 0x7C, p1 AND p2) and the `op_RETI` decrement |
+| `tmp95c061.cpp`, `tmp95c063.cpp`, `tmp94c241.cpp` | the increment at each interrupt-acceptance site |
+
+Why the experiment was not good enough, point by point:
+
+* it hijacked `m_dummy.w.l`, the shared **"illegal register reference"** scratch word
+  (`tlcs900.h:122`), so ANY other undecoded control-register access clobbered the count;
+* it had **no decrement** -- it inferred the depth from SR's IFF field at acceptance
+  time, because `op_RETI` lives in the shared base class and is unreachable from
+  `tmp95c061.cpp`;
+* so it was correct only while nothing else touched an undecoded CR.
+
+The real one counts, in both directions, and **saturates at both ends**. Underflow is
+not an error to trap: RETIs with no matching acceptance are NORMAL here, because the
+firmware forces the register to a value of its own choosing all the time --
+`IRQ_Epilogue` writes 0 at 0xF857C3 and then jumps into the scheduler instead of
+returning, and `SWI7_ServiceCall_Dispatch` writes 0 at 0xF8E9A8 and leaves by
+`pop SR / ret`. Wrapping 0 -> 0xFFFF would make a task-context read look like a deeply
+nested interrupt, which is the one answer that breaks these kernels. SWI/TRAP are
+deliberately NOT counted, for the same reason: on this firmware they do not return
+through RETI, so counting them would be a one-way leak.
+
+**Measured with the real implementation, `-str 45`** -- every row equals the
+experiment's, and the final screenshot is **byte-identical** to it
+(md5 `491b27987a25e894eb44e322d72b465a`):
+
+|              | no register (`m_dummy`)          | experiment patch          | IMPLEMENTED               |
+|--------------|----------------------------------|---------------------------|---------------------------|
+| `(0xBE)`     | wraps at 253 Hz, never drained   | `00`                      | `00`                      |
+| sem 1        | count `02`, wait queue EMPTY     | count `00`, queue OCCUPIED| count `00`, queue OCCUPIED|
+| task 2       | state `04`, never runs           | state `03`, blocked       | state `03`, blocked       |
+| ring         | rd=`0000` wr=`0008`              | rd=`0008` wr=`0008`       | rd=`0008` wr=`0008`       |
+| LCD writes   | 33623, frozen from t=20          | 80460                     | 80460                     |
+| screen       | `ALL INITIAL SETTING!`           | SOUND MODE                | SOUND MODE                |
+
+`screens/wsa1r_intnest_implemented_sound_mode.png`. Reproduce it with:
+
+```
+cd ~/compartilhado/kn7000_mame_build
+DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 45 -window \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_kernel_state.lua
+```
+
+⚠ The implemented run reaches that state **earlier** than the experiment's table
+suggests -- LCD 80460 and ring rd=wr=0008 by t=25, not t=45. Same values, sooner.
+
+### ★ The KN5000 is NOT affected, and that is a measurement, not a symmetry argument
+
+The register decode is harmless everywhere, but the INCREMENT changes behaviour for any
+machine whose firmware READS cr 0x3C/0x7C. `tlcs900_intnest_evidence.py` scans every
+`ldc` in all four SX-WSA1R ROMs and in the KN5000's, and answers it from the bytes:
+
+```
+python3 notes/wsa1-probes/tlcs900_intnest_evidence.py
+```
+
+```
+wsa1_prom_a.ic12   cr 0x3C   4 reads, 6 writes
+wsa1_prom_c.ic28   cr 0x3C   4 reads, 5 writes     (the same kernel, second CPU)
+wsa1_prom_b / _d   cr 0x3C   none
+kn5000 v7/v9/v10   cr 0x7C   0 reads, 6 writes     ** WRITE-ONLY **
+kn5000 subprogram  cr 0x7C   0 reads, 6 writes     ** WRITE-ONLY **
+kn5000 subcpu/hdae cr 0x7C   none
+```
+
+The 10-and-9 counts are exactly the ones the disassembly gives, which is what makes the
+scan trustworthy on the KN5000 side too. **The KN5000 runs the same RTOS but keeps the
+nesting depth in a RAM word at `(1475)` and only MIRRORS it into cr 0x7C** --
+`TaskSched_Init` seeds both, `TaskSched_TimerTick` increments the RAM word and writes the
+register, `INTT3_CheckNesting` compares the **RAM word** against 1, and
+`INTT3_EnterScheduler` zeroes both (`kn5000-roms-disasm/v10/maincpu/boot/system_handlers.s`).
+Nothing on that machine ever reads the register back, so a hardware increment cannot
+change what it does. That is also positive evidence for the number: 0x7C is where the /H1's
+eight-channel DMA register map leaves INTNEST, and the KN5000 uses 0x7C and never 0x3C
+while the SX-WSA1R uses 0x3C and never 0x7C.
+
+**With that in, the panel already works.** 72 of 88 positions produce
 2 INT6 dispatches and 2 writes to the button shadow per press-and-release -- the
 16 that do not are SEG6 and SEG10, which the variant-2 wire map omits. None of
 the 88 causes an LCD write on the SOUND MODE screen, which is gap O (no legend

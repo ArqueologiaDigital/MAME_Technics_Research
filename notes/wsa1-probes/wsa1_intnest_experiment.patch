@@ -1,3 +1,18 @@
+# ############################################################################
+# ##  SUPERSEDED 2026-08-25 -- DO NOT APPLY.  cr 0x3C IS IMPLEMENTED NOW.    ##
+# ############################################################################
+#
+# This was the HYPOTHESIS TEST.  The register it approximates is now real, in
+# tlcs900.h / tlcs900.cpp / 900tbl.hxx plus the increment in each device -- with
+# its own storage instead of m_dummy, and with the decrement in op_RETI that this
+# patch could not reach.  Applying this on top of that would DOUBLE-COUNT every
+# interrupt.  See the "cr 0x3C is NOW IMPLEMENTED" section of README.md, which
+# also carries the re-measured table and the byte-identical screenshot.
+#
+# The file is kept only because the measurement below is the null this project
+# grades the real implementation against.  Everything under this banner describes
+# the EXPERIMENT, not the shipped code.
+#
 # THE INTNEST EXPERIMENT -- apply, rebuild, and the SX-WSA1R draws its SOUND
 # MODE screen.  DO NOT COMMIT THIS INTO THE SOURCE: it is an approximation of a
 # real CPU register, kept here so the measurement below is reproducible.

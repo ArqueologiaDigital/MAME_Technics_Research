@@ -17,6 +17,13 @@ path; and **six new gaps, T to Y, come out of the driver work itself** -- one of
 the single thing standing between "the floppy controller is emulated" and "the machine can read a
 disk".
 
+**Revised again 2026-08-25 (late evening), after CONTROL REGISTER 0x3C WAS IMPLEMENTED.** The
+TLCS-900 interrupt nesting counter now exists as a real register in the CPU core (appendix item 5),
+so prom_a's kernel is entered, the draw task runs, and the machine reaches its **SOUND MODE**
+screen instead of sitting on `ALL INITIAL SETTING!`. Every gap below that was blocked on "the UI
+never repaints" is now testable on a live UI; nothing in the list is CLOSED by it, but gaps O, P, Q
+and R can finally be worked against a screen that answers.
+
 This is a **request list**, not a summary. Every entry is a question a disassembly wave could
 answer, with what the driver does instead today and where to start looking. It is deliberately
 short: only gaps that change what the emulator can *do*.
@@ -892,6 +899,27 @@ Recorded as vague on purpose, rather than dressed up as questions with false pre
 ## Appendix: gaps that are MAME's, not the disassembly's
 
 Listed so a disassembly wave does not spend effort on something the emulator could not use yet.
+
+5. **~~`tmp95c061` has no control register 0x3C~~ -- IMPLEMENTED IN THIS OVERLAY 2026-08-25.**
+   This was the single biggest MAME-side gap on this machine: it is the difference between a splash
+   screen and a working UI. Control register 0x3C on the TLCS-900/H (0x7C on the /H1) is **INTNEST**,
+   the interrupt NESTING COUNTER -- the CPU increments it when it accepts an interrupt and decrements
+   it on RETI. MAME had no such register: `900tbl.hxx`'s `p_CR16` decoded only the DMA counters and
+   sent every other control-register number to `&m_dummy.w.l`, the scratch word that ALSO absorbs
+   every other undecoded control-register reference, and nothing ever counted. prom_a's whole RTOS
+   hangs off it -- `IRQ_Epilogue` (0xF857B7) enters the scheduler only when it reads exactly 1,
+   `Kernel_Dispatch` (0xF85715) refuses to reschedule unless it reads 0, `Kernel_ServiceSoftTimers`
+   brackets its callbacks with depth++/depth--, and `SWI7_ServiceCall_Dispatch` zeroes it at
+   0xF8E9A8 -- so the kernel was never entered.
+   Now implemented properly, in both halves: real 16-bit storage in `tlcs900.h` (registered in save
+   state, cleared in BOTH `device_reset()` bodies -- `tlcs900h_device`'s does not chain to the base
+   one), decoded at 0x3C and 0x7C in both `p_CR16` operand positions, incremented at each device's
+   interrupt-acceptance site through `tlcs900_intnest_accept()`, and decremented in `op_RETI`.
+   Both ends saturate rather than wrap. 16-bit only: no firmware in these trees uses an 8- or
+   32-bit `ldc` on it, and the 8/32-bit CR paths deliberately do not decode it.
+   ⚠ `tlcs900.h`, `tlcs900.cpp`, `900tbl.hxx` and `tmp95c063.cpp` are now overlaid for this, and
+   they are shared with every tlcs900 driver in MAME. See
+   `notes/wsa1-probes/README.md` for the measurement and for what it means for the KN5000.
 
 0. **MAME has no uPD72070 device.** The parts list gives the floppy controller as a NEC
    D72070GF3BE; `src/devices/machine/upd765.h` declares uPD765A/B, uPD7265, i8272A, i82072,
