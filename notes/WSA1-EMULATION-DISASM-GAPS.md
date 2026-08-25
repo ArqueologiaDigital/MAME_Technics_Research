@@ -53,50 +53,60 @@ tags. `notes/X.md` means `wsa1-roms-disasm/notes/X.md`.
 
 ## The three that would change the most
 
-**1. What any 0x0010C000 register MEANS (gap A).** It is the difference between "the firmware
-programs a device" and "the emulator makes a sound". Everything else in the audio chain --
-the six undumped wave ROMs, the DACs, the DSPs -- is downstream of knowing which register is
-pitch, which is a sample address and which is a level. Today the driver stores 4096 words and
-synthesises nothing, and it cannot do better, because no note anywhere names one register.
+⚠ **REFRESHED 2026-08-26.** All three of the previous entries were answered by wave 6's later
+rounds, *after* the driver work that this list was written to steer. Re-read this section before
+planning: the old ranking would send a session at questions that are closed.
 
-**2. What drives the floppy drive's MOTOR -- i.e. what is CPU 1's PA bit 3 (gap T, NEW).** The
-floppy controller is now a real `upd765a_device` in the driver and it answers the firmware's own
-reset/SENSE-INTERRUPT/SPECIFY sequence correctly
-(`notes/wsa1-probes/wsa1_fdc_selftest.lua`, 5 checks, 0 failures). What it cannot do is READ
-anything: MAME's `floppy_image_device` only reports READY once its motor line has been driven, and
-the one output the FDC module owns outside its two device windows -- PA bit 3, set by operation 7
-and cleared by operation 6 -- is marked NOT ESTABLISHED, so the driver logs it and refuses to act
-on it. Consequence, measured: `SENSE DRIVE STATUS -> ST3 = 0x18`, RY clear, which is the firmware's
-error 0x31 "drive not ready". **One pin, and the whole disk subsystem turns on.**
+**1. Make the floppy drive READY -- gap T is ANSWERED and the wiring is one pin.**
+The firmware DOES drive PA bit 3, contrary to what this list said until now. Four writes exist in
+prom_a+prom_b, and PA bit 3 is *the only bit of PA the firmware changes after RESET*
+(`notes/prom_a_pa3_census.py`, 19 checks, 0 failures, in the disassembly tree). The polarity is
+what the earlier pass got backwards: `res 3,(PA)` at `0xFE18EF` is followed by a **307 ms delay**,
+i.e. a motor spin-up, so the line is **ACTIVE LOW**. The old note reasoned "the pin comes up HIGH
+at RESET, wrong way round for an active-high enable" and concluded gap T was a hardware question;
+that is retracted at the source. Two of the four sites (`0xFE18EF`, `0xFE18F7`) are in the
+block-device layer above the FDC module and were missed by a narrower earlier scan.
+**The controller already answers the firmware's reset/SENSE/SPECIFY sequence correctly** -- this is
+the one pin between that and `ST3` reporting ready.
 
-~~**What the 0x7B0004/0x7B0005 + 0x7A0000 subsystem is (gap B).**~~ **CLOSED AND IMPLEMENTED.** It
-is the floppy controller; see gap B below, which now has nothing open in it that a disassembly wave
-can take.
+**2. Gap A is no longer the blocker it was: three registers are NAMED and twenty have a name
+available.** `0x0400` = **pitch** (units of 1/256 semitone), `0x0080` = **level**, `0x0040` = the
+key-zone word. `0x0100`/`0x0140` are established as a pair carrying a 7-bit field clamped to
+**36..120**, which is this machine's MIDI note range, and `0x0180`'s write side is decoded. ★ The
+KN5000 sub-CPU **stages the same 22 registers in the same order** and names twenty of them --
+and that is a structural correspondence, not a transplant: 100/102 and 116/120 of the bytes the
+two routines share actually differ. Only **four** registers now have no statement of any kind:
+`0x0440`, `0x0480`, `0x04C0`, `0x0500`. Synthesis remains a large separate job, but it is no
+longer blocked on naming.
 
-**3. Which panel button is which bit (gap O), which is now load-bearing twice over.** It was "the
-user can only press positions". It is now also **the only way anything in this machine can be made
-to use its disk drive**: measured, a 200-second boot of either variant never touches the FDC's
-registers at all, and a sweep that pressed all 88 declared panel positions one at a time, for half
-a second each, produced ZERO accesses to `0x7B0004`/`0x7B0005`/`0x7A0000`
-(`notes/wsa1-probes/wsa1_fdc_probe.lua`, `wsa1_fdc_button_sweep.lua`). `Fdc_Request` has eight call
-sites and none of them is on the boot path or one panel press away.
+**3. Gap F is ANSWERED, and it retires the driver's last load-bearing stub.** Register block
+`0x0000` is a **16-channel-per-word busy bitmap**; `0x0180 + chan` is a magnitude the firmware
+acts on when it falls below half scale. The driver's `tg_status_r()` returns 0 for both queries
+and is labelled in the code as the only unjustified stub left -- it can now be modelled instead.
+⚠ Read the finding's own correction banner first: crossing below `0x80` does **not** retire the
+voice (the retire path is driven by the bitmap difference alone); it triggers a different action,
+and only when the record's flag bit 2 is set.
 
-Runner-up, and unchanged in substance: **why CPU 1 never releases the link's receiver-busy line
-(gap C).** The emulated CPU 2 sends
-exactly ONE packet per boot and is then locked out for good. That is measured, not suspected,
-and it is what stands between "the keybed model is read by the firmware" -- which is now
-demonstrated -- and "a key press reaches the tone generator". It is also the narrowest of the
-three: one interrupt handler on one side. ⚠ The tempting explanation -- "CPU 1 knows it is a rack
-and is refusing keybed traffic" -- is REFUTED; see the variant section below.
-
-⚠ The old runner-up, **gap D**, has to be re-asked: the specific test it named was run and the
-answer is NO. See gap D below.
+Runner-up, unchanged and still narrow: **gap C**, why CPU 1 never releases the link's
+receiver-busy line. Measured, not suspected: the emulated CPU 2 sends exactly one packet per boot
+and is then locked out. It is what stands between "the firmware reads the keybed model" -- which is
+demonstrated -- and "a key reaches the tone generator". The tempting explanation, that CPU 1 knows
+it is a rack and refuses keybed traffic, is REFUTED: there is not one `cp (0xC4)` in the whole
+transmit block.
 
 ---
 
 ## The list
 
 ### A. What does a 0x0010C000 register do? -- PRIORITY 1, HALF CLOSED, still blocks audio
+
+> ★★ **LARGELY ANSWERED 2026-08-25, after this entry was written.** Three registers are NAMED
+> (`0x0400` pitch, `0x0080` level, `0x0040` key-zone word), `0x0100`/`0x0140` are a pair carrying a
+> 7-bit value clamped to 36..120, `0x0180`'s write side is decoded, and the KN5000 sub-CPU stages
+> the same 22 registers in the same order with twenty named. Four remain with no statement:
+> `0x0440`, `0x0480`, `0x04C0`, `0x0500`. See `FINDINGS-prom_c-dev10c-register-meanings.md` and
+> `FINDINGS-prom_c-dev10c-sibling-register-map.md` in the disassembly tree. The text below is the
+> question as it was asked and is kept for its evidence pointers.
 
 **HALF CLOSED 2026-08-25** by `notes/FINDINGS-prom_c-dev10c-producers.md`, and the half that is
 closed is worth stating precisely because the note itself had to correct its own title over it.
@@ -359,6 +369,10 @@ bit), **P** (what the seven command bytes mean) and **R** (what states 0x04 / 0x
 ---
 
 ### F. What does the 0x10C004 read-back actually return? -- PRIORITY 2
+
+> ★★ **ANSWERED 2026-08-25.** Block `0x0000` is a 16-channel-per-word busy bitmap; `0x0180 + chan`
+> is a magnitude acted on below half scale. See `FINDINGS-prom_c-voice-readback.md` -- and read its
+> correction banner: below `0x80` does NOT retire the voice, which the first version claimed.
 
 **Question.** Register block `0x0180 + channel` is read at `0xFA69B1` and kept as
 `(value & 0x3FFF) >> 5`; register `0x0000 + n` for n = 0..3 is read at `0xFA690A` and OR-ed into
@@ -661,6 +675,11 @@ or a key-scan PCB would appear in one or the other. Nothing in the ROMs can answ
 ---
 
 ### T. What does CPU 1's PA bit 3 drive? -- PRIORITY 1 (NEW), blocks every disk read
+
+> ★★ **ANSWERED 2026-08-25, and the earlier answer here was WRONG.** This entry once concluded the
+> firmware never writes the pin and that gap T was "a hardware question". It is not: four writes
+> exist, PA bit 3 is the only bit of PA changed after RESET, and the line is ACTIVE LOW -- `res 3`
+> is followed by a 307 ms motor spin-up delay. See `FINDINGS-prom_a-gap-T-pa3.md`.
 
 **Question.** `Fdc_Op7_PortA3_On` (`0xFE661F`) sets PA bit 3; `Fdc_Op6_PortA3_Off` (`0xFE65EF`)
 clears it and then waits 5 ticks. They are its only writers in either image, and it is the floppy
