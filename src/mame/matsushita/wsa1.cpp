@@ -301,6 +301,14 @@
 #include "emupal.h"
 #include "screen.h"
 
+// The SX-WSA1R control panel, drawn from the service manual's own ARRANGEMENT OF
+// CONTROL PANEL page (I-4/I-5) and wired from the CP1/CP2 schematic (II-29/30).
+// See the header comment of src/mame/layout/wsa1r.lay for what is bound and what
+// is only drawn.  The SX-WSA1 KEYBOARD deliberately gets no layout: its panel is
+// a different board (two more scan columns, three more pots) and no document for
+// it exists in these trees, so reusing the rack's would be a fabrication.
+#include "wsa1r.lh"
+
 #define LOG_LINK     (1U << 1)   // every byte and handshake edge on the CPU link
 #define LOG_LINKLOST (1U << 2)   // a link latch overwritten before it was read
 #define LOG_TG       (1U << 3)   // tone generator, 0x10C000
@@ -3070,6 +3078,7 @@ ROM_END
 void wsa1_state::wsa1r(machine_config &config)
 {
 	wsa1_base(config);
+	config.set_default_layout(layout_wsa1r);
 }
 
 void wsa1_state::wsa1(machine_config &config)
