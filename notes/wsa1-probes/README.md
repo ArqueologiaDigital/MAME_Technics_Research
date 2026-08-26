@@ -1152,3 +1152,50 @@ service screen this test already latched.
 | SW3 | `0x08` | `0xDA` | SINE WAVE CHECK |
 | SW4 | `0x10` | `0xDB` | PANEL SW&LED CHECK |
 | SW5 | `0x20` | `0xDC` | screen cycler |
+
+---
+
+## SX-WSA1R panel switch matrix: schematic trace, and its ROM cross-check
+
+`wsa1_sch_TRACE.md` records the coordinates every net claim about the CP1/CP2
+schematic rests on, and `wsa1_sch_hscan.py` / `wsa1_sch_vscan.py` /
+`wsa1_sch_crop.py` are the three probes that produced them. They read a page
+rendered by `pdftoppm` and report black runs, so the manual stays the source and
+nothing is taken on eyeball.
+
+`wsa1_sch_vs_rom_matrix.py` then checks that reading against prom_a, and this is
+the part that could have failed:
+
+```
+python3 notes/wsa1-probes/wsa1_sch_vs_rom_matrix.py
+```
+
+The variant-2 switch->LED word table at prom_a `0xF95088` is 9 segments x 8 bits;
+a switch that does not exist stores `0x0000`. Relabelling its nine rows as the nine
+wired segments (0-5, 7-9; 6 and 10 are the dead stubs on IC1 pins 40 and 33), its
+zero pattern is **exactly** the schematic's empty cells:
+
+* `SEG2` bit 7 alone is zero -- the one missing cell in CP1's 6x8, `SW24`/`D24`,
+  absent from the parts list too (`S1~23, 25~48`);
+* `SEG7` keeps bits 0-3, `SEG8` bits 0-1, `SEG9` bits 0-4 -- CP2's three columns
+  of 4, 2 and 5 switches;
+* 58 populated positions = 47 on CP1 + 11 on CP2, the parts-list counts exactly.
+
+Those three also fix the **bit order**, which the four power-on service keys cannot:
+keys 2/3/4/5 sit on rows SW2..SW5, a set that survives reversal unchanged, whereas
+`SEG8`'s two switches at bits 0,1 would have to be at bits 6,7 and `SEG2`'s hole at
+bit 0. So `packet bit b = IC1 SWb`, from the ROM, against the paper.
+
+The table's two catch-all words split the panel exactly where the schematic's own
+printed legends change: `0x0608` covers keys 0-7, 8, 9, +/-, ENTER **and SEG3 bits
+5-7**, while `0x0604` covers PAGE v/^, COMPARE, both five-key LCD columns and the
+sixteen under-LCD keys. That is an independent ROM-side witness that SEG3 SW5-7 are
+the numeric-entry trio (-1, +1, EXIT) and SEG3 SW0-4 the LCD soft keys, which the
+board layout II-27 shows and the schematic does not label.
+
+It references 18 distinct lamp bits -- the rack's lamp count (D116-119, D120-123,
+D130, D131, D138-141, D160-163). `SEG0` splits 4+4 across two lamp registers,
+matching D116-119 (green, PLAY/EDIT MODE) against D120-123 (red, BANK); `SEG7`'s
+four MENU keys take reg4 bits 0-1 and reg5 bits 0-1, matching D160/D161 against
+D162/D163. `reg6 bit 3` is the lamp of the whole numeric group, i.e. the
+MIDI/NUMBER PAD indicator D131.
