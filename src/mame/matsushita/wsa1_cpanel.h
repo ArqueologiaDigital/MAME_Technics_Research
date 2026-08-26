@@ -187,14 +187,31 @@
     "others" row and not a control census; an earlier version of this note used
     it as a second independent match and it is not one.
 
-    ⚠ NOT ESTABLISHED: which physical button is which bit, and which LED is
-    which bit.  The service manual scan has the legends (PLAY MODE SOUND/COMBI,
-    EDIT MODE SOUND/COMBI, BANK USER1/USER2/ROM-EXT/RE-MAP, PAGE up/down, six
-    soft keys, a ten-key number pad, REALTIME CREATOR 1-6 + RESET, PART,
-    SYSTEM, MIDI, DISK, MENU, COMPARE, EXIT) but not the S-number -> SEG/SW
-    matrix, so this device declares the matrix POSITIONALLY.  The only bits
-    the ROM names are the three power-on service combinations, and they are
-    marked in the ioports below.
+    ★ THE RACK's MATRIX IS NOW READ.  An earlier version of this note said
+    "NOT ESTABLISHED: which physical button is which bit, and which LED is
+    which bit"; that was true of the manual's PANEL page alone.  The CP1/CP2
+    P.C. DIAGRAM (PDF p.32 = manual II-29/30) prints a legend beside 29 of the
+    58 switches and the P.C. BOARD page (p.31) places the other 29, and prom_a's
+    own switch->LED table at 0xF95088 agrees with both on segment, bit and
+    population (15/15, notes/wsa1-probes/wsa1_sch_vs_rom_matrix.py).  Every
+    ioport below now carries its rack legend, and src/mame/layout/wsa1r.lay
+    binds all 58 with a per-button provenance tier.
+
+    ★ AND THE LAST GEOMETRIC READING WAS SETTLED BY THE FIRMWARE.  Which of the
+    two mirror-image five-key columns beside the LCD is SEG3 and which is SEG9
+    rested on the board page's orientation alone.  The DISK menu (family-B screen
+    0x40) draws FOUR entries down the left of the LCD and TWO down the right;
+    pressing rows 1..5 of each column moves the screen to 47/4C/45/50/-- on SEG9
+    and 54/53/--/--/-- on SEG3.  Four live rows on SEG9, two on SEG3 -- SEG9 is
+    the LEFT column.  notes/wsa1-probes/wsa1_softkey_columns.sh.
+
+    ⚠ STILL NOT ESTABLISHED:
+      * which of {reg2 bit0, reg2 bit1, reg3 bit0, reg3 bit1} is which of the
+        four REALTIME CREATOR ring lamps.  The SET is fixed by the ROM; the
+        order is not, and the layout leaves those four unbound.
+    ⚠ And NONE of it transfers to the SX-WSA1 KEYBOARD (variant 1), which is a
+    different panel board with two more scan columns and three more pots, and
+    for which no document exists in these trees.
 
 ***************************************************************************/
 
@@ -246,6 +263,7 @@ private:
 	void frame_complete();
 	bool led_frame(u8 addr, u8 data);
 	bool segment_is_wired(int seg) const;
+	static s32 dial_delta(optional_ioport &port, s32 &prev, bool &synced, s32 modulus);
 
 	u8 m_variant;
 
@@ -263,6 +281,7 @@ private:
 	emu_timer *m_byte_timer;
 	emu_timer *m_req_timer;
 	bool m_requesting;            // a message is queued and INT6 has not been taken yet
+	attotime m_last_tx;           // when CPU 1 last put a byte on the wire (see request_tick)
 
 	// Scan shadows, so only CHANGED segments are reported -- which is what the firmware's
 	// own change-mask table at RAM 0x2B20 expects to be fed.
@@ -271,6 +290,8 @@ private:
 	bool m_vol_synced;
 	s32  m_dial_prev;
 	bool m_dial_synced;
+	s32  m_dial_drag_prev;
+	bool m_dial_drag_synced;
 
 	devcb_write_line m_atn_cb;
 	devcb_write_line m_busy_cb;
@@ -279,11 +300,31 @@ private:
 
 	optional_ioport_array<NUM_SEG> m_seg;
 	optional_ioport m_volume;   // wire 0xD3
-	optional_ioport m_dial;     // wire 0xD7, the DATA ENTRY DIAL
+	optional_ioport m_dial;      // wire 0xD7, the DATA ENTRY DIAL (keys / mouse axis)
+	optional_ioport m_dial_drag; // the SAME wheel, dragged in a circle by the layout
 
-	// 8 LED registers x 8 bits.  Named positionally on purpose: no schematic net has been
-	// read, so "led3_5" is a claim about the WIRE, which the ROM does establish, and not
-	// about the legend, which it does not.
+	// 8 LED registers x 8 bits, output led%u with %u = register*8 + bit.  The NAME stays
+	// positional because the wire position is what the ROM establishes for BOTH variants;
+	// which lamp sits there is a per-variant fact and belongs in the layout.
+	//
+	// ★ For the RACK, 14 of the 18 lamps are now identified, and from the firmware rather
+	// than from the schematic.  prom_a's variant-2 switch->LED table at 0xF95088 holds one
+	// u16 per switch, and that u16 is (register << 8) | bit mask: sub_F94E1C reads it with
+	// `ld WA,(XHL)` and calls 0xF40670, which is `jp 0xF8C846` -- the unguarded entry of
+	// Panel_SetLedRegister -- and that routine maps W through the register->wire table
+	// (0xF8C8B7 for variant 2) and queues [wire][A].  W is therefore the register and A the
+	// data byte.  A button with its own indicator lights its own indicator, so:
+	//
+	//   reg1 bits 0..3  PLAY MODE SOUND / COMBI, EDIT MODE SOUND / COMBI   (D116-119, green)
+	//   reg0 bits 0..3  BANK USER 1 / USER 2 / ROM-EXT / RE-MAP            (D120-123, red)
+	//   reg4 bits 0,1   MENU PART / MENU SYSTEM                            (D160, D161, green)
+	//   reg5 bits 0,1   MENU MIDI / MENU DISK                              (D162, D163, green)
+	//   reg6 bit 2      COMPARE          (D130, red)   -- the LCD-key family indicator
+	//   reg6 bit 3      MIDI/NUMBER PAD  (D131, green) -- the numeric family indicator
+	//
+	// and {reg2 bit0, reg2 bit1, reg3 bit0, reg3 bit1} are the four REALTIME CREATOR ring
+	// lamps as a SET, in an order nothing read so far pins down.
+	// Reproduce every line of that: notes/wsa1-probes/wsa1_lamp_identification.py.
 	//
 	// ★ ONLY 47 OF THE 64 ARE REAL LAMPS, and the firmware says so itself.  The PANEL
 	// SW&LED CHECK screen's all-on sweep (sub_F956B0, prom_a 0xF956B0) walks the word
