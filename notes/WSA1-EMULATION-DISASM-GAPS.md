@@ -38,6 +38,15 @@ closes with it, but gap C's numbers all move (its 500-tick deadlines are 1.02 s 
 **three new MAME-side gaps, items 6 to 8, are added** -- one of which, the SX-KN1500's half-blank
 IC15 dump, is that machine's entire boot blocker.
 
+**Revised 2026-08-26, after THE SX-WSA1R CONTROL PANEL WAS DRAWN, WIRED AND MADE TO WORK.**
+`src/mame/layout/wsa1r.lay` binds all 58 rack switches and 14 of its 18 lamps, generated from
+Felipe's artwork by `tools/gen_wsa1r_lay.py`. **Gap Y is CLOSED** -- the panel HLE was raising its
+attention line during CPU 1's own transmits, and `INT6_SC1_PeerRequest` responds to a mid-frame
+INT6 by rewinding the receive ring one byte (prom_b `0xF5AC3C`), which left the reader permanently
+one byte out of phase and is why no panel button had ever done anything. **Gap O is CLOSED for the
+rack** and its remaining holes are listed in the entry itself. Pressing MENU DISK now opens the DISK
+menu and lights the DISK lamp.
+
 **Revised again 2026-08-25 (late night), after THE TONE-GENERATOR REGISTERS WERE NAMED IN THE
 DRIVER AND THE READ-BACK STUB WAS RETIRED.** `wsa1.cpp` now decodes all 22 per-channel registers
 of `0x0010C000` by name, prints the PROVENANCE of every name on the same log line, and answers
@@ -681,10 +690,59 @@ the ROMs at all.
 
 ---
 
-### O. Which panel button is which bit, and which LED is which bit? -- PRIORITY 2
+### O. Which panel button is which bit, and which LED is which bit? -- ★ CLOSED FOR THE RACK 2026-08-26, still open for the keyboard
 
-**Question.** The wire protocol is settled (gap E, closed). What is not settled is the map from a
-legend on the front panel to a (segment, bit) pair, and from an LED register bit to a lamp.
+**★ STATUS.** All **58** SX-WSA1R switches now have a legend and a `(segment, bit)`, and **14 of
+the rack's 18 lamps** have a `led#` output. `src/mame/layout/wsa1r.lay` binds every one of them,
+`wsa1_cpanel.cpp`'s ioports carry the legends as `(rack: ...)`, and the mapping is confirmed live:
+pressing MENU DISK through the layout's own binding brings up the DISK menu and lights `led41`,
+BANK USER 1 lights `led0` and clears `led2`, PLAY MODE COMBI lights `led9` and clears `led8`.
+
+| what | how it was established |
+|---|---|
+| 29 switches | the CP1/CP2 P.C. Diagram (PDF p.32) PRINTS the legend beside the switch |
+| 19 switches | net traced; panel position read off the P.C. BOARD page (PDF p.31), whose orientation is fixed in both axes by silkscreen |
+| 10 switches (the LCD soft keys) | net traced; the LEFT/RIGHT column reading was settled by the FIRMWARE -- see below |
+| all 58, and the bit order | prom_a's variant-2 switch->LED table `0xF95088` stores `0x0000` for a position with no switch; its zero pattern reproduces the schematic exactly, 15/15 in `notes/wsa1-probes/wsa1_sch_vs_rom_matrix.py` |
+| 14 lamps | the same table's word is `(LED register << 8) | bit mask`, proven from the instructions in `notes/wsa1-probes/wsa1_lamp_identification.py` (25 checks, 0 failures) |
+
+**The soft-key columns, settled by the firmware rather than by geometry.** Neither five-key column
+beside the LCD is legended on either board and both carry the ROM family tag `0x0604`, so only the
+board page's left-right orientation separated them -- the one reading a photograph of a real rack
+could have overturned. Screen `0x40`, the DISK menu, draws FOUR entries down the left of the LCD
+and TWO down the right. Pressing rows 1..5 of each column moves the family-B screen to:
+
+| row | SEG9 | SEG3 |
+|---|---|---|
+| 1 | `47` DISK LOAD | `54` LOAD SINGLE SOUND |
+| 2 | `4C` DISK SAVE | `53` LOAD SINGLE COMBI. |
+| 3 | `45` MIDI FILE DIRECT PLAY | `40` no change |
+| 4 | `50` FLOPPY DISK FORMAT | `40` no change |
+| 5 | `40` no change | `40` no change |
+
+Four live rows on SEG9 and two on SEG3, exactly as the menu is drawn. **SEG9 is the LEFT column.**
+Reproduce: `notes/wsa1-probes/wsa1_softkey_columns.sh`.
+
+**WHAT IS STILL OPEN.**
+
+1. **Which of the four REALTIME CREATOR ring lamps is which.** The ROM pins the SET --
+   `{reg2 bit0, reg2 bit1, reg3 bit0, reg3 bit1}` = `led16`, `led17`, `led24`, `led25`, because
+   RESET lights `reg2` mask `0x03` and "1~6" lights `reg3` mask `0x03` -- but not the order.
+   The layout DRAWS all four and BINDS none.
+2. **The whole SX-WSA1 KEYBOARD panel.** It is a different board: `segment_is_wired()` gives it
+   SEG6 and SEG10 as well, and three extra pots (`0xD0`, `0xD1`, `0xD2`, two centre-detented).
+   No SX-WSA1 document exists in these trees, so its ioports stay positional and it deliberately
+   gets NO layout rather than a silently reused one.
+3. **The `(segment, bit) -> control index` map** at `0xF869F0-0xF86A23`, which is the dispatch side
+   rather than the identity side. Still the highest-value next step for turning positions into
+   per-screen dispatch-matrix slots.
+4. **The five REALTIME CREATOR / MB2 axes** are not panel-MCU controls at all (JOYX/JOYY to MAIN's
+   own A/D, PDF p.19) and have no ioport; the layout draws the ball inert.
+
+The rest of this entry is the material the closure was built from, kept for its addresses.
+
+**Question, as it stood.** The wire protocol is settled (gap E, closed). What is not settled is the
+map from a legend on the front panel to a (segment, bit) pair, and from an LED register bit to a lamp.
 
 **Why it matters.** `wsa1_cpanel.cpp` declares the matrix POSITIONALLY -- "Panel SEG3 SW5" -- and
 its 64 LED outputs are named `led0`..`led63` for the same reason. Every one of those names is a
@@ -994,52 +1052,66 @@ to one of them, if anything does, is the thread.
 
 ---
 
-### Y. Why does a panel button land in the WRONG shadow slot? -- PRIORITY 1 (NEW), blocks every button
+### Y. Why did a panel button land in the WRONG shadow slot? -- ★ CLOSED 2026-08-26
 
-**Question.** The panel HLE sends a button report as exactly two bytes, `[0xC0 | segment][mask]`.
-`SC1_RxOp0_ThreeByte` (prom_b `0xF5B0FD`) is supposed to take the ADDRESS byte in `W`, compute
-`0x2B20 + ((W & 0x0F) | ((W & 0x40) >> 2))` and `ex (XHL),A` the VALUE byte into that slot. It does
-neither. Which side is wrong -- the number of bytes the panel sends, the length the CPU's receive
-state machine takes from the first byte, or the ring index `RxOp0` starts from?
+**The question was.** The panel HLE sends a button report as exactly two bytes,
+`[0xC0 | segment][mask]`. `SC1_RxOp0_ThreeByte` (prom_b `0xF5B0FD`) is supposed to take the ADDRESS
+byte in `W`, compute `0x2B20 + ((W & 0x0F) | ((W & 0x40) >> 2))` and `ex (XHL),A` the VALUE byte
+into that slot. It did neither: a press of wire `0xC1` stored `0xC1` at index 0. Which side was
+wrong -- the byte count, the length rule, or the ring index?
 
-**Why it matters.** It is the reason no panel position on this machine has ever been seen to do
-anything. It blocks the four SX-WSA1R service entries (gap O), the disk menu (gap V), and any future
-attempt to reach a UI screen by pressing something.
-
-**THE MEASUREMENT** (`notes/wsa1-probes/wsa1_service_entry.lua`, `wsa1r`, `-str 80`, SEG1 bit 2
-held from t = 0, released at t = 50.0, pressed again at t = 55.0):
+**None of the three.** The receiver was correct and the panel's byte count was correct. What was
+wrong was **WHEN THE PANEL ASKED**. `INT6_SC1_PeerRequest` (prom_b `0xF5AC0A`) opens
 
 ```
-  t= 50.02 pc=F5B111 (0x2B20)<-C1        <- release
-  t= 55.02 pc=F5B111 (0x2B20)<-C1        <- press
-  (0x2B31) reads 00 for the whole run;  (0x2082) is written once, at t=0, by the boot clear
+    f5ac0b: cp (0x2a81),0x00        ; bytes still expected -- used for TRANSMIT too
+    f5ac10: jr NZ,0xf5ac3c
+    ... accept: RXE on, state 0x20 ...
+    f5ac3c: cp (0x2a92),0x0000      ; the RX RING'S WRITE INDEX
+    f5ac42: jr NZ,0xf5ac4a
+    f5ac44: ld (0x2a92),0x004c
+    f5ac4a: decw 1,(0x2a92)         ; ★ STEP THE WRITE INDEX BACK ONE
 ```
 
-So a packet **does** reach CPU 1, at exactly the two instants the button moved -- the SC1 link and
-the panel HLE are both alive. But the store lands at index **0** carrying **`0xC1`**, the WIRE
-ADDRESS, where the decode requires index **`0x11`** (`0x2B31`) carrying the switch VALUE `0x04`.
-Index 0 means `W & 0x4F == 0` (bit 6 clear, so the `sub W,0x30` arm was not taken), which `0xC1`
-is not — so the byte the handler took as the ADDRESS was some other byte entirely, and the byte it
-stored as the VALUE was `0xC1`. The receiver is one byte out of position, identically on both edges,
-so it is deterministic and not a race.
+so an INT6 that arrives while a frame is in flight is read as "the peer is re-synchronising" and the
+firmware **rewinds the ring by one byte**, expecting the peer to re-send. `wsa1_cpanel.cpp`'s
+attention line was an invented 50 us pulse repeated every 2 ms until the CPU accepted, and it kept
+pulsing straight through CPU 1's own opening transmits.
 
-⚠ The same run shows the boot handshake taking the same shape -- 26 stores of `00` and one of `D8`
-into `0x2B20`/`0x2B24` at t = 0.50, and again at t = 20.12 -- which is the seven command frames and
-their `{0xD8, 0x00}` sync answers landing in the wrong slots too. **Whatever this is, it is not
-specific to buttons.**
+**MEASURED, before** (`notes/wsa1-probes/wsa1_sc1_ring_phase.lua`, `wsa1r`): three such edges at
+t = 0.326 / 0.334 / 0.342 s walk the write index `0000 -> 004C -> 0049` while the read index is still
+`0000`. The reader then chews **27 empty slots** (each decoded as a `(0x00, 0x00)` pair, which is why
+`0x2B20` took 26 stores of `00`), meets the writer at `004A` at t = 20.12 s with **odd parity**, and
+from then on `RxOp0` pairs the PREVIOUS message's data byte with THIS message's address byte,
+for the rest of the session. That is the whole of the symptom, including the `0xD8` store the old
+note could not explain.
 
-**Where to look.** `SC1_State20_RxFirstByte` and `SC1_State24_RxNextByte` -- what LENGTH is taken
-from the first byte, and whether it is 2 for `0xC0..0xCF`. The driver's own comment in
-`wsa1_cpanel.cpp` reads it as "2 for every address this device uses, since `(addr & 0x3F) < 0x30`",
-and that reading has never been checked against the instructions. Then the dispatcher at
-`0xF5B09C-0xF5B0B3` (`ld L,(XDE+IY) / and L,0x38 / srl 1,L`, so type = `(byte >> 3) & 7`) and where
-`W` and the ring index `IX` come from on entry to `RxOp0`. ⚠ **Do not "fix" this in the panel HLE
-by sending a third byte until the firmware side is read** -- the analogue path already relies on the
-firmware appending its own `0xFF` third byte at `0xF5B163`, so the two directions do not have the
-same shape and a symmetric guess would break the one that works.
+**THE FIX** is in `wsa1_cpanel.cpp`'s `request_tick()`: do not assert the attention line while a
+CPU-to-panel frame is half-way in (`m_pos != 0`) or within 1 ms of the last `tx_byte`, and retry
+2 ms later instead. ⚠ The 1 ms is a DRIVER CHOICE, like the pulse width beside it -- the firmware
+sets `(0x2A81)` *before* it writes the first byte to `SC1BUF` and clears it *after* the last
+(`0xF5ADD7` / `0xF5AF82`), so "no frame half-way in" is necessary but not sufficient and the quiet
+window covers the rest.
+
+**MEASURED, after**: read index == write index == `0x0006`, every sync answer dispatched through
+`SC1_RxOp3_Discard` (`0xF5B23A`) instead of being chewed by `RxOp0`, and:
+
+| press (driven through the LAYOUT's own binding) | shadow while held | family-B screen | lamps |
+|---|---|---|---|
+| MENU DISK, `CP_SEG7` 0x08 | `(0x2B37) = 08` | `01 -> 40` (the DISK menu) | `led8` off, `led41` **on** |
+| BANK USER 1, `CP_SEG0` 0x10 | `(0x2B30) = 10` | `01 -> A1` | `led0` **on**, `led2` off |
+| PLAY MODE COMBI, `CP_SEG0` 0x02 | `(0x2B30) = 02` | `01 -> 02` | `led9` **on**, `led8` off |
+
+i.e. the exact bit, the right screen, and the lamp the schematic says belongs to that button.
+`tools/rigs/wsa1r_layout_button.lua` reproduces every row; the DISK menu is
+`notes/wsa1-probes/screens/wsa1r_layout_disk_menu.png`.
+
+⚠ The old note's advice -- "do not fix this in the panel HLE by sending a third byte" -- was right,
+and no third byte was sent. ⚠ Regression: `kn5000`, `kn7000` and `wsa1` snapshots at t = 45 are
+**byte-identical** to their recorded baselines after this change, and `wsa1r`'s 320x240 LCD region
+is byte-identical to `screens/wsa1r_timerfix_t45_sound_mode.png`.
 
 ---
-
 
 ## The model-variant hypothesis: SX-WSA1 vs SX-WSA1R -- SETTLED ENOUGH TO IMPLEMENT, and here is exactly how far
 

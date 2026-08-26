@@ -1199,3 +1199,77 @@ matching D116-119 (green, PLAY/EDIT MODE) against D120-123 (red, BANK); `SEG7`'s
 four MENU keys take reg4 bits 0-1 and reg5 bits 0-1, matching D160/D161 against
 D162/D163. `reg6 bit 3` is the lamp of the whole numeric group, i.e. the
 MIDI/NUMBER PAD indicator D131.
+
+---
+
+## ★ THE CONTROL PANEL, drawn and wired -- 2026-08-26
+
+`src/mame/layout/wsa1r.lay` is the SX-WSA1R's front panel: all 58 switches bound, 14 of its 18
+lamps bound, the emulated 320x240 SED1330 panel placed inside the drawn bezel at 1:1. It is
+GENERATED from Felipe's artwork (`~/compartilhado/KN7000/wsa1r_artwork/wsa1r_cpanel.svg`, which
+reproduces the service manual's ARRANGEMENT OF CONTROL PANEL drawing, PDF page 5) by
+`tools/gen_wsa1r_lay.py`; do not hand-edit it.
+
+```
+python3 tools/wsa1_svg_geometry.py --selftest    # 9 landmark bounds, incl. the 320x240 LCD
+python3 tools/gen_wsa1r_lay.py                   # write src/mame/layout/wsa1r.lay
+python3 tools/gen_wsa1r_lay.py --check           # fail if the .lay OR wsa1_cpanel.cpp's
+                                                 #   PORT_NAMEs have drifted from the table
+python3 tools/gen_wsa1r_lay.py --preview p.svg   # compose the art + the label boxes, to eyeball
+```
+
+### The three probes the bindings rest on
+
+| script | question it answers | run |
+|---|---|---|
+| `wsa1_lamp_identification.py` | which `led#` output is which panel lamp? Proves from the INSTRUCTIONS that prom_a's switch->LED word at `0xF95088` is `(register << 8) \| bit mask` -- `sub_F94E1C` does `ld WA,(XHL)` and calls `0xF40670` = `jp 0xF8C846`, whose `ld W,(XIX+W)` indexes the register->wire table -- then reads off the 14 one-to-one lamps. 25 checks | `python3 notes/wsa1-probes/wsa1_lamp_identification.py` |
+| `wsa1_sc1_ring_phase.lua` | is CPU 1's SC1 receive ring in phase? Logs every write to the read index `(0x2A90)` and write index `(0x2A92)` with the PC, so a mid-frame rewind at `0xF5AC4A` names itself | `-autoboot_script .../wsa1_sc1_ring_phase.lua` |
+| `wsa1_softkey_columns.sh` | which five-key column beside the LCD is SEG3 and which is SEG9? Puts the DISK menu up (4 entries left, 2 right) and presses all ten soft keys | `sh notes/wsa1-probes/wsa1_softkey_columns.sh` |
+
+and `tools/rigs/wsa1r_layout_button.lua` drives ONE button end to end, reading the `inputtag` /
+`inputmask` **out of the .lay** so a wrong binding shows up as a wrong result:
+
+```
+cd ~/compartilhado/kn7000-emulator
+BTN="MENU DISK" SNAP_AT=45 DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -window \
+    -nomax -resolution 1600x520 -snapshot_directory /tmp/o \
+    -autoboot_script ~/compartilhado/kn7000_mame/tools/rigs/wsa1r_layout_button.lua
+```
+
+`BTN2="LEFT column, 3rd"` adds a second press after the first has settled -- that is the form that
+settled the soft-key columns.
+
+### What it measured
+
+| press | shadow while held | family-B screen | lamps |
+|---|---|---|---|
+| MENU DISK (`CP_SEG7` 0x08) | `(0x2B37) = 08` | `01 -> 40`, the DISK menu | `led8` off, `led41` **on** |
+| BANK USER 1 (`CP_SEG0` 0x10) | `(0x2B30) = 10` | `01 -> A1` | `led0` **on**, `led2` off |
+| PLAY MODE COMBI (`CP_SEG0` 0x02) | `(0x2B30) = 02` | `01 -> 02` | `led9` **on**, `led8` off |
+
+Three independent agreements per row: the schematic's printed legend, the ROM's lamp map, and what
+the firmware actually does. `screens/wsa1r_layout_disk_menu.png` is the DISK menu;
+`screens/wsa1r_layout_t45_sound_mode.png` is the panel at t = 45 s.
+
+⚠ **None of this worked before the attention-line guard** in `wsa1_cpanel.cpp`'s `request_tick()`
+-- see gap Y in `notes/WSA1-EMULATION-DISASM-GAPS.md`, now closed. Regression after that change:
+`kn5000`, `kn7000` and `wsa1` t=45 snapshots are byte-identical to their recorded baselines, and
+`wsa1r`'s 320x240 LCD region (at 633,85 inside the 1600x500 layout) is byte-identical to
+`screens/wsa1r_timerfix_t45_sound_mode.png`.
+
+### Drawn but NOT bound, and why
+
+* the four REALTIME CREATOR ring lamps -- the ROM fixes the SET (`led16`, `led17`, `led24`,
+  `led25`) but not the order;
+* the floppy activity lamp and eject button -- they belong to the FDD, which exposes neither;
+* CONTRAST (VR2 is an LCD bias pot whose wiper goes back to MAIN as `VO`, not a panel-MCU input),
+  POWER, PHONES -- no ioport exists for any of them;
+* the REALTIME CREATOR ball itself -- board MB2's triple-gang VR2 reports JOYX/JOYY to MAIN's own
+  A/D (PDF p.19), so it is not a panel control at all.
+
+### The SX-WSA1 keyboard gets NO layout
+
+Its panel is a different board -- two more scan columns (SEG6, SEG10) and three more pots, two of
+them centre-detented -- and no SX-WSA1 document exists in these trees. Reusing the rack's artwork
+would be a fabrication, so `wsa1r(machine_config&)` sets the layout and `wsa1(machine_config&)`
+deliberately does not.
