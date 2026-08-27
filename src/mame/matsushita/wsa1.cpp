@@ -628,10 +628,23 @@ private:
     consequence is that a key press IS decoded by prom_c and its
     { 0x90, note, velocity } packet never reaches CPU 1.
     notes/wsa1-probes/wsa1_link_handshake.lua is the measurement.
-    NOT DIAGNOSED FURTHER HERE.  It is on CPU 1's side -- INT0_LinkByte
-    (0xF8E47F) arms micro-DMA channel 3 and drops the busy line, and either
-    INTTC3_LinkDmaDone (0xF8E54F) never runs or it does not raise the line -- and
-    that path is not converted in the disassembly tree yet.  It is not caused by
+    NARROWED 2026-08-27, and the sentence that used to stand here was half
+    wrong.  It said "either INTTC3_LinkDmaDone (0xF8E54F) never runs or it does
+    not raise the line -- and that path is not converted in the disassembly tree
+    yet".  Wave 6 converted it (339 bytes, with Link_ServiceTask and
+    Link_WaitBlockDone), and notes/wsa1-probes/wsa1_link_stage.lua MEASURES it:
+    over a 95 s boot, INT0_LinkByte runs 2 times, DMA3V is written 11 times, and
+    INTTC3_LinkDmaDone runs **12 times**.  So it RUNS, and the second horn is the
+    right one: it is not reaching a selector that raises the line.
+
+    P7 bit 1 is restored only at 0xF8E5A8 (selector 1), 0xF8E5D6 (selector 3) and
+    0xF8E5EB (selector 4).  INTTC3_Sel2_ArmPayload (0xF8E5AD-0xF8E5C5)
+    deliberately does NOT restore it -- it re-arms the DMA and expects selector 4
+    to release the line later.  Twelve entries with the line still low says the
+    handler keeps taking the arm-payload path and never advances to selector 4,
+    i.e. the PAYLOAD transfer never completes.  That is where to look next: what
+    the selector is read from, and why the payload micro-DMA does not reach
+    count zero.  STILL OPEN.  It is not caused by
     the keybed model and not by the P6 fix below: every port write the probe sees
     on CPU 1 is to P7 (0x13), never to P6 (0x12).
 

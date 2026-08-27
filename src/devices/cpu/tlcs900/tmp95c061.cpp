@@ -482,6 +482,31 @@ int tmp95c061_device::tlcs900_process_hdma( int channel )
 					m_int_reg[INTETC32] |= 0x80;
 					break;
 				}
+
+				// OVERLAY FIX 5 (kn7000_mame, 2026-08-27) -- A MICRO-DMA
+				// TRANSFER-COMPLETE NOW ASKS FOR A DISPATCH SCAN.
+				//
+				// Exactly the defect OVERLAY FIX 4 fixed for the 8-bit timers,
+				// in the one place it was missed.  The four cases above are the
+				// last sites in this file that set an INTETC request bit without
+				// setting m_check_irqs, and tlcs900_device::execute_run() only
+				// calls tlcs900_check_irqs() when that flag is set -- so INTTC0-3
+				// were REQUESTED and then never DISPATCHED unless some unrelated
+				// event (EI, RETI, POPSR, a serial or timer write) happened to
+				// raise the flag first.
+				//
+				// What it costs the SX-WSA1R: the inter-CPU link.  INT0_LinkByte
+				// (prom_a 0xF8E47F) arms micro-DMA channel 3 with DMA3V = 0x0A --
+				// vector (0x0A & 0x1F) << 2 = 0x28, INT0's own vector -- and drops
+				// P7 bit 1, the receiver-busy line.  Only INTTC3_LinkDmaDone
+				// (0xF8E54F) raises that line again, at 0xF8E5A8 / 0xF8E5D6 /
+				// 0xF8E5EB.  With INTTC3 requested but undispatched the line stays
+				// low for good, Link_SendChunk's wait on PA bit 3 (0xF999D0) never
+				// passes, and every packet after the first is dropped: the sound
+				// name is never fetched over command 0xE2 and keybed notes never
+				// arrive.  MAME's tmp94c241.cpp sets m_check_irqs beside its
+				// interrupt-request writes; this file was the odd one out.
+				m_check_irqs = 1;
 			}
 
 			/* Clear the interrupt flip-flop */
