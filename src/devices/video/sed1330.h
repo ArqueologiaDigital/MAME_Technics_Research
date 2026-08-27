@@ -15,7 +15,7 @@
 
       * update_graphics() is implemented (OR composition of pages 1,
         2 and optionally 3);
-      * draw_graphics_scanline() gained a `blend` argument and a clamp
+      * draw_graphics_scanline() gained a composition-op argument and a clamp
         against the bitmap width;
       * command_w() honours a bare DISP ON / DISP OFF with no
         parameter byte, which the WSA1's panel init ends with;
@@ -132,7 +132,10 @@ private:
 	inline void increment_csr();
 
 	void draw_text_scanline(bitmap_ind16 &bitmap, const rectangle &cliprect, int y, int r, uint16_t va, bool cursor);
-	void draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangle &cliprect, int y, uint16_t va, bool blend = false);
+	// LAYER_REPLACE is distinct from the MX_* values (0..3) that OVLAY defines.
+	static constexpr int LAYER_REPLACE = -1;
+
+	void draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangle &cliprect, int y, uint16_t va, int op = LAYER_REPLACE);
 	void update_graphics(bitmap_ind16 &bitmap, const rectangle &cliprect);
 	void update_text(bitmap_ind16 &bitmap, const rectangle &cliprect);
 

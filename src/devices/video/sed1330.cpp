@@ -49,9 +49,9 @@
 
 
 #define MX_OR                       0x00
-#define MX_XOR                      0x01    // unimplemented
-#define MX_AND                      0x02    // unimplemented
-#define MX_PRIORITY_OR              0x03    // unimplemented
+#define MX_XOR                      0x01
+#define MX_AND                      0x02
+#define MX_PRIORITY_OR              0x03
 
 
 #define FC_OFF                      0x00
@@ -660,12 +660,17 @@ void sed1330_device::draw_text_scanline(bitmap_ind16 &bitmap, const rectangle &c
 //  draw_graphics_scanline -
 //-------------------------------------------------
 
-void sed1330_device::draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangle &cliprect, int y, uint16_t va, bool blend)
+void sed1330_device::draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangle &cliprect, int y, uint16_t va, int op)
 {
-	// `blend` ORs into the pixel instead of replacing it, which is what layer
-	// composition in all-graphics mode needs.  The width clamp is a guard
-	// against a host that programs C/R wider than the screen it was configured
-	// with -- upstream would write past the end of the scanline.
+	// `op` is how this layer combines with what is already in the bitmap:
+	// LAYER_REPLACE for the first layer drawn, and thereafter the composition
+	// method the host selected in OVLAY (MX).  Previously every layer was OR-ed
+	// unconditionally and m_mx was decoded, logged and then ignored -- so a
+	// highlight plane that the host meant to INVERT the text under it painted a
+	// solid block instead.
+	//
+	// The width clamp is a guard against a host that programs C/R wider than the
+	// screen it was configured with -- upstream would write past the scanline.
 	int const width = bitmap.width();
 
 	for (int sx = 0; sx < m_cr; sx++)
@@ -679,10 +684,21 @@ void sed1330_device::draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangl
 			if (px >= width)
 				return;
 
-			if (blend)
-				bitmap.pix(y, px) |= BIT(data, 7);
-			else
-				bitmap.pix(y, px) = BIT(data, 7);
+			uint8_t const bit = BIT(data, 7);
+
+			switch (op)
+			{
+			case LAYER_REPLACE:     bitmap.pix(y, px)  = bit; break;
+			case MX_OR:             bitmap.pix(y, px) |= bit; break;
+			case MX_XOR:            bitmap.pix(y, px) ^= bit; break;
+			case MX_AND:            bitmap.pix(y, px) &= bit; break;
+
+			// Priority-OR: a set pixel in this layer wins outright; a clear one
+			// leaves the layer beneath showing.  For a 1bpp bitmap that is the
+			// same result as OR, and is spelled out rather than folded into it
+			// so the distinction survives if this ever grows more than one bit.
+			case MX_PRIORITY_OR:    if (bit) bitmap.pix(y, px) = 1; break;
+			}
 		}
 	}
 }
@@ -700,9 +716,19 @@ void sed1330_device::update_graphics(bitmap_ind16 &bitmap, const rectangle &clip
 	// three-layer composition (OV = 1); with OV = 0 the host does not even send
 	// SAD3, although its FP field in the DISP parameter may still read "solid".
 	//
-	// The layers are OR-composited.  OR is the only method MX offers for three
-	// layers and the only one this device implements; MX_XOR / MX_AND /
-	// MX_PRIORITY_OR remain unimplemented, as they are in text mode.
+	// COMPOSITION.  The first layer that draws REPLACES the scanline; every
+	// later layer combines with it using the method the host selected in OVLAY
+	// (m_mx).  This device used to OR unconditionally, which is why a host that
+	// asked for exclusive-OR got solid blocks where it wanted inverse video.
+	//
+	// ⚠ SOURCING.  The SED1330 short-form datasheet
+	// (technics_roms/sources/datasheets/SED1330.PDF) establishes the CAPABILITY
+	// -- it lists "3 layers of overlapping graphics" and "Selectable display
+	// synthesis: Inverse video" -- but it is the product brief, not the
+	// technical manual: it carries no instruction set and no OVLAY truth table.
+	// So which operand order the part uses for three layers is NOT sourced here.
+	// Applying MX between successive layers is the reading this driver adopts;
+	// if a full manual ever turns up, check it.
 	//
 	// Split-screen (SL1 < L/F) and the dual-panel page 4 (WS = 1, SAD4) are not
 	// modelled here: no driver in this tree exercises them in graphics mode.
@@ -714,14 +740,22 @@ void sed1330_device::update_graphics(bitmap_ind16 &bitmap, const rectangle &clip
 
 	for (int y = 0; y < lines; y++)
 	{
+		bool first = true;
+
 		if ((attr1 != FP_OFF) && (y < m_sl1))
-			draw_graphics_scanline(bitmap, cliprect, y, m_sad1 + (y * m_ap), true);
+		{
+			draw_graphics_scanline(bitmap, cliprect, y, m_sad1 + (y * m_ap), LAYER_REPLACE);
+			first = false;
+		}
 
 		if (attr2 != FP_OFF)
-			draw_graphics_scanline(bitmap, cliprect, y, m_sad2 + (y * m_ap), true);
+		{
+			draw_graphics_scanline(bitmap, cliprect, y, m_sad2 + (y * m_ap), first ? LAYER_REPLACE : m_mx);
+			first = false;
+		}
 
 		if (m_ov && (attr3 != FP_OFF))
-			draw_graphics_scanline(bitmap, cliprect, y, m_sad3 + (y * m_ap), true);
+			draw_graphics_scanline(bitmap, cliprect, y, m_sad3 + (y * m_ap), first ? LAYER_REPLACE : m_mx);
 	}
 }
 
