@@ -376,6 +376,7 @@ private:
 	void cpu1_p7_w(uint8_t data);
 	uint8_t cpu2_pa_r();
 	void cpu2_pa_w(uint8_t data);
+	uint8_t cpu2_p9_r();
 
 	// CPU 1's port 8 and port B carry the control panel's serial link, and PB
 	// bit 0 carries the MODEL STRAP.  See the block comment above the bodies.
@@ -872,6 +873,129 @@ void wsa1_state::cpu2_pa_w(uint8_t data)
 {
 	m_cpu2_pa = data;
 }
+
+
+/*  CPU 2's PORT 9 -- THE DSP READY LINE, AND WHY IT IDLES HIGH
+
+    ★ READ OFF THE SCHEMATIC, 2026-08-27, and it settles gap G.  Service manual
+    page 20 (MAIN (A)/MB2 P.C. Diagram, sheet II-9/10), IC2 TMP95C061AF
+    "MICROCOMPUTER (SUB)", left pin column:
+
+        pin 18  VREF   <- +5D through R38 220
+        pin 19  VCC    <- +5D
+        pin 20  AN0    <- +5D          (same node as pin 19; junction dots on both)
+        pin 21  AN1    <- JOYX through R180 1K, 0.1 uF to ground
+        pin 22  AN2    <- JOYY through R181 1K, 0.1 uF to ground
+        pin 23  P93    <- net DSPRDY, R79 4.7K UP to the VREF node, 0.22 uF to ground
+
+    and pins 2-9 of the same chip are P70-P77 carrying DSPD0-DSPD7.  Re-crop it
+    with notes/wsa1-probes/wsa1_sch_dsprdy.sh, which prints the two commands and
+    the coordinates.
+
+    So P9 bit 3 is a PULLED-UP net whose only other driver is the (undumped,
+    unemulated) uPD6383GF DSP, and P9 bit 0 is an analog input STRAPPED to +5D.
+    Both idle HIGH on the board.  MAME's unbound port read returns 0, which is
+    not "no information" -- it is the WRONG LEVEL, and the firmware notices:
+
+      * P9 bit 3 is polled at EIGHTEEN sites in prom_c, all of the shape
+        `ld C,(0x19) / and C,0x08 / srl 3,C / cp C,0` inside the DSP microcode
+        upload (0xF9A19F 0xF9A1DD 0xF9A219 0xF9A257 0xF9A293 0xF9A2D1 0xF9A347
+        0xF9A382 0xF9A3BB 0xF9A3F6 0xF9A42F 0xF9A46A 0xF9A4DD 0xF9A518 0xF9A551
+        0xF9A58C 0xF9A5C5 0xF9A600 -- census in wsa1_sch_dsprdy.sh).  Each poll
+        is bounded by 0x1F40 = 8000 iterations and sets the firmware's timeout
+        flag at (0x00F35C) when it expires.  Reading 0 made EVERY poll of EVERY
+        byte burn the full bound.
+      * P9 bit 0 is read once, `bit 0,(0x19)` at prom_c 0xFB050B, and picks
+        between `and (0x14FF),0xFFFB` (bit set) and `or (0x14FF),0x0004` (bit
+        clear).  prom_a, prom_b and prom_d contain no read of SFR 0x19 at all.
+
+    WHAT IT COST, and this is the measurement that found it
+    (notes/wsa1-probes/wsa1_cpu2_timeline.lua, 80 s boot, PC sampled per frame):
+    CPU 2's program counter never left 0xF9A347-0xF9A490 -- the upload's timeout
+    loops -- for the whole boot.  Its main loop therefore never ran, and the one
+    sound-name request CPU 1 posts (t = 6.876, `05 80 00 04 00 00 00` on link
+    stream 0, every byte of it read by CPU 2) was never answered: CPU 1 polled
+    ring 0x604800 65535 times, got nothing, and prom_a 0xFC1BAE substituted the
+    string "Sound Name *****".  See the SOUND NAME block comment below.
+
+    ⚠ BITS 1 AND 2 ARE ANALOG AND ARE NOT MODELLED.  They are the joystick's two
+    axes through a 1K/0.1uF network; no firmware in this set reads them as
+    digital bits, so returning 0 for them asserts nothing.  Port 9 is four bits
+    wide on this part.  */
+uint8_t wsa1_state::cpu2_p9_r()
+{
+	return 0x09;   // bit 0 = AN0 strapped to +5D; bit 3 = DSPRDY, R79 pull-up
+}
+
+
+/***************************************************************************
+
+    ★ THE SOUND NAME -- the whole chain, and the one thing that broke it
+
+    SYMPTOM (fixed 2026-08-27): the SOUND MODE screen printed `Sound Name
+    *****` where a voice name belongs, with `R1- 001` beside it -- so a sound
+    was selected and only its name was missing.
+
+    THE STRING IS THE FIRMWARE'S OWN FALLBACK, not corruption.  prom_a
+    0xFC1C49 holds sixteen bytes "Sound Name *****" (and 0xFC1CC1 holds "Combi
+    Name *****"), and exactly one instruction reaches it:
+
+        sub_FC1B81 (prom_a):
+          0xFC1B8E  ld XIY,0x00000800        the request/answer buffer
+          0xFC1B93  call sub_FC1BB9          build {0x80, W, 0x04, A, 0, 0} and
+                                             post it on link stream 0
+          0xFC1B97  ld DE,0x11 ; ld C,0x00   17 bytes expected
+          0xFC1B9C  call sub_FC1BDC          collect the answer
+          0xFC1BA6  cp XIY,0xffffffff
+          0xFC1BAE  ld XIY,0x00fc1c49  <---- THE FALLBACK
+
+    sub_FC1BDC reads the answer a byte at a time through Ring60480A_Get (prom_b
+    slot T_F41CF4 -> prom_a 0xF84382, ring at 0x604800), first re-syncing on the
+    six request bytes coming back (`cp (XIX),A` at 0xFC1BF5) and then copying 17
+    bytes to 0x000810.  sub_FC1C29 gives up after 0xFFFF empty polls and leaves
+    XIY = -1.
+
+    WHAT WAS MEASURED, and where it stopped
+    (notes/wsa1-probes/wsa1_soundname_path.lua and wsa1_name_request_window.lua,
+    110 s boot, before the fix):
+
+        t = 6.876   the six request bytes are written to 0x000800
+        t = 6.876   `05 80 00 04 00 00 00` crosses the wire; CPU 2 reads the
+                    header at prom_c 0xF99BD5 and its micro-DMA absorbs the
+                    other six -- so THE REQUEST ARRIVES, in full
+        t = 6.876 .. 7.576   CPU 1 polls ring 0x604800.  262140 reads, which is
+                    4 x 65535, and ZERO writes: nothing is ever put in it
+        t = 7.576   the fallback string is fetched, pc = 0xF8F20F (SWI7 text)
+        t = 70.88   CPU 2's FIRST transmission of the entire boot
+
+    So the link was not the blocker -- by then it carried 5080 bytes one way and
+    719 the other without loss.  CPU 2 simply never ran the code that answers.
+    notes/wsa1-probes/wsa1_cpu2_timeline.lua says why in one line: CPU 2's
+    program counter never left 0xF9A347-0xF9A490 for the whole 80 s sample.
+    That range is six copies of the DSP microcode upload's per-byte handshake,
+    each `ld C,(0x19) / and C,0x08` polling DSPRDY with a 0x1F40 = 8000
+    iteration bound -- and P9 was unbound, so every poll read 0 and burned the
+    whole bound.  cpu2_p9_r() above is the fix and carries the schematic.
+
+    THE A/B, same binary, no rebuild (notes/wsa1-probes/wsa1_p9_control.lua
+    masks bits 0 and 3 back off with a read tap, which is what an unbound port
+    used to give; ⚠ it needs -autoboot_delay 0, because with the fix in place
+    the upload is already finished by t = 1 s):
+
+        control (P9 forced to 0)   ring 0x604800  262140 r / 138 w   name buffer
+                                   untouched, t=95 screenshot byte-identical to
+                                   screens/wsa1r_udma3fix_t95_sound_mode.png
+        fixed                      ring 0x604800     322 r / 117 w   0x000810
+                                   receives "     Piano      " and the screen
+                                   prints `Piano`
+                                   (screens/wsa1r_p9fix_t95_sound_mode.png)
+
+    ⚠ THE KEYBED WAS ALREADY FIXED BEFORE THIS, and the same control proves it:
+    with P9 masked back to 0, a C4 press still crosses as `A2 90 3C 3C` and CPU
+    1 still answers `03 90 00 3C 3C` (notes/wsa1-probes/wsa1_keybed_note.lua).
+    The note path was cured by OVERLAY FIX 6 and the burst quantum, not by this.
+
+***************************************************************************/
 
 
 /***************************************************************************
@@ -2864,6 +2988,7 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_cpu2->port6_write().set(FUNC(wsa1_state::cpu2_p6_w));
 	m_cpu2->port8_read().set(FUNC(wsa1_state::cpu2_p8_r));
 	m_cpu2->port8_write().set(FUNC(wsa1_state::cpu2_p8_w));
+	m_cpu2->port9_read().set(FUNC(wsa1_state::cpu2_p9_r));
 
 	// --- the control panel microcontroller ---------------------------------
 	//
@@ -2968,24 +3093,15 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_lcdc->set_screen("screen");
 	m_lcdc->set_addrmap(0, &wsa1_state::lcdc_map);
 
-	// DELIBERATELY NOT WIRED, and here is the one that will tempt you.  CPU 2's
-	// uPD6383GF microcode upload polls the DSP's READY line on P9 bit 3
-	// (0xF9A19F ld C,(0x19) / and C,0x08) and does it at eighteen sites.  MAME's
-	// unbound port read returns 0, so every byte of the upload burns the poll's
-	// full 0x1F40 iteration bound and sets the firmware's timeout flag at
-	// (0x00F35C).  Measured: in a six second run, CPU 2's program counter is
-	// concentrated in 0xF9A347-0xF9A399, inside exactly that loop, so this is
-	// where its boot time goes (notes/wsa1-probes/wsa1_pc_sample.lua).
-	//
-	// One line would make the handshake complete instantly:
-	//
-	//     m_cpu2->port9_read().set_constant(0x08);
-	//
-	// IT IS NOT ENABLED, because it is a FAKE: no schematic net has been read
-	// for that pin, and the poll is bounded, so nothing hangs without it - it is
-	// only slow.  Turning a measured stall into a fabricated ready signal would
-	// buy speed with a claim about the hardware that nobody has checked.  Enable
-	// it only as a labelled experiment, never as the default.
+	// ✅ P9 IS NOW WIRED, AND IT WAS NOT A FAKE AFTER ALL -- 2026-08-27.
+	// This paragraph used to say that CPU 2's P9 bit 3 (the DSP READY poll, 18
+	// sites in prom_c) must be left unbound because "no schematic net has been
+	// read for that pin", and that the only cost was boot speed.  Both halves
+	// were wrong.  The net IS on the schematic -- IC2 pin 23, `DSPRDY`, with R79
+	// 4.7K pulling it UP -- so an unbound read of 0 was the wrong LEVEL rather
+	// than a neutral one; and the cost was not speed, it was the SOUND MODE
+	// screen's sound name.  cpu2_p9_r() above carries the evidence, the pin
+	// numbers and the measurement.
 	//
 	// P5 bit 4 USED TO BE ON THIS LIST and is not any more: it is the service
 	// CHECKING DEVICE's switch, the service manual says so in as many words, and
