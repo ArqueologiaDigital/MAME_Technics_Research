@@ -1469,8 +1469,18 @@ t= 70.843  SEL:= 4              and hands the completion to selector 4
 With FIX 6 in, **CPU 2 wrote 71 bytes and CPU 1 read 21**. The one-byte latch is being
 overwritten mid-burst: the sender's micro-DMA channel 2 empties a whole block into it inside a
 single MAME timeslice, while the receiver only drains it when its own timeslice runs. That is
-precisely the failure `wsa1.cpp`'s "WHAT THIS MODEL DOES NOT GUARANTEE" paragraph predicted, and
-the remedy it names is `abort_timeslice()` in each write handler, as
-`notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch` does for the KN5000.
+precisely the failure `wsa1.cpp`'s "WHAT THIS MODEL DOES NOT GUARANTEE" paragraph predicted.
 
-<!--ABORT-TIMESLICE-RESULT-->
+**⚠ The KN5000's remedy was tried and MEASURED, and it is not enough.** Adding
+`machine().scheduler().abort_timeslice()` to the end of both link write handlers — the fix
+`notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch` uses for the same kind of
+latch — moved CPU 1's reads from **21 to 24** out of the same 71 writes, and `DMAC3` was still
+armed from a corrupt record. It is therefore **not committed**; the negative result is recorded in
+`wsa1.cpp` so nobody spends the rebuild on it twice.
+
+`wsa1_link_burst_timing.lua` is the probe that decides what to do instead. It prints the emulated
+time of every latch access to microsecond resolution and separates two causes the counts cannot
+tell apart: the sender's bytes being correctly spaced but bunched inside MAME's 50 µs quantum
+(a driver/scheduling problem), versus timer 2 pacing micro-DMA channel 2 far faster than the real
+part does, so the bytes really are microseconds apart (a CPU-core problem, the same family as
+OVERLAY FIX 1). **Run it before changing anything.**

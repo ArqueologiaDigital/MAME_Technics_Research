@@ -618,8 +618,9 @@ private:
     legible schematic ever contradicts this, only the four lines in
     cpu1_p7_r() and cpu2_pa_r() have to change.
 
-    ** MEASURED 2026-08-25, AND IT IS A REAL LIMITATION: THE CPU 2 -> CPU 1
-    DIRECTION SENDS EXACTLY ONE PACKET AND THEN WEDGES.  CPU 1 -> CPU 2 carries
+    ** MEASURED 2026-08-25 -- ⚠ FIXED 2026-08-27, KEPT BECAUSE THE SYMPTOM IS
+    WORTH RECOGNISING: THE CPU 2 -> CPU 1 DIRECTION SENT EXACTLY ONE PACKET AND
+    THEN WEDGED.  CPU 1 -> CPU 2 carries
     56 bytes over a boot and is fine.  CPU 2 -> CPU 1 writes two bytes -- one
     header plus one payload -- at about t=72 s, and after that CPU 1 leaves P7
     bit 1 LOW for good (it writes P7 = 0xE7 up to t=70 and P7 = 0xC5 from t=72),
@@ -628,25 +629,53 @@ private:
     consequence is that a key press IS decoded by prom_c and its
     { 0x90, note, velocity } packet never reaches CPU 1.
     notes/wsa1-probes/wsa1_link_handshake.lua is the measurement.
-    NARROWED 2026-08-27, and the sentence that used to stand here was half
-    wrong.  It said "either INTTC3_LinkDmaDone (0xF8E54F) never runs or it does
-    not raise the line -- and that path is not converted in the disassembly tree
-    yet".  Wave 6 converted it (339 bytes, with Link_ServiceTask and
-    Link_WaitBlockDone), and notes/wsa1-probes/wsa1_link_stage.lua MEASURES it:
-    over a 95 s boot, INT0_LinkByte runs 2 times, DMA3V is written 11 times, and
-    INTTC3_LinkDmaDone runs **12 times**.  So it RUNS, and the second horn is the
-    right one: it is not reaching a selector that raises the line.
+    ★ CAUSE FOUND 2026-08-27, AND IT WAS IN THE CPU CORE.  Two earlier
+    paragraphs stood here and both were wrong, for the same reason: they quoted
+    notes/wsa1-probes/wsa1_link_stage.lua, whose three counters were all read
+    through taps that cover more than the thing they name.  "INTTC3_LinkDmaDone
+    runs 12 times" was INTTC2_uDMA2Done RETURNING six times -- its `reti` sits at
+    0xF8E54E, one byte below INTTC3's entry, and RDOP()'s four-byte prefetch
+    (tlcs900.cpp:81-99) reads both.  "DMA3V is written 11 times" counted DMA2V
+    (SFR 0x7E) too, which the transmit block arms from nine sites.
 
-    P7 bit 1 is restored only at 0xF8E5A8 (selector 1), 0xF8E5D6 (selector 3) and
-    0xF8E5EB (selector 4).  INTTC3_Sel2_ArmPayload (0xF8E5AD-0xF8E5C5)
-    deliberately does NOT restore it -- it re-arms the DMA and expects selector 4
-    to release the line later.  Twelve entries with the line still low says the
-    handler keeps taking the arm-payload path and never advances to selector 4,
-    i.e. the PAYLOAD transfer never completes.  That is where to look next: what
-    the selector is read from, and why the payload micro-DMA does not reach
-    count zero.  STILL OPEN.  It is not caused by
-    the keybed model and not by the P6 fix below: every port write the probe sees
-    on CPU 1 is to P7 (0x13), never to P6 (0x12).
+    The unaliased measurement is notes/wsa1-probes/wsa1_udma3_audit.lua, which
+    counts INTTC3 entries as reads of the selector word (0x6007DA) -- the one
+    read of it in prom_a, prom_b or prom_c is INTTC3's own, at 0xF8E555, proved
+    by notes/wsa1-probes/wsa1_udma3_xref.py.  Over a 100 s boot:
+
+        INTTC3 entries               0        (not twelve -- ZERO)
+        DMA3V arms                   5        1 x 0x0A, 4 x 0x00 (aborts)
+        CPU 1 reads of 0x7C0000      1
+        CPU 2 writes to 0x100000     2
+
+    The whole boot contains ONE received message, at t = 70.843: header 0xC0
+    arrives, INT0_LinkByte reads it, arms channel 3 (DMAC3 = 1, DMAD3 =
+    0x6007B3, DMAS3 = 0x7C0000, DMAM3 = 0x00), writes DMA3V = 0x0A and drops P7
+    bit 1.  CPU 2 then writes the payload byte 0xFB -- and nobody ever reads it.
+    DMAC3 stays at 1 for twelve Link_ServiceTask samples and the watchdog aborts
+    at t = 72.012.
+
+    notes/wsa1-probes/wsa1_int0_steal.lua says why, counting interrupt
+    dispatches the only unambiguous way there is -- reads of the vector table,
+    which nothing but a dispatch touches:
+
+        t=70.8434  CPU2 -> latch 0xC0
+        t=70.8434  DISPATCH INT0 #1        INTE0AD=0x89 (request bit set)
+        t=70.8434  CPU1 reads latch -> 0xC0
+        t=70.8434  DMA3V := 0x0A           DMAC3=1
+        t=70.8434  CPU2 -> latch 0xFB
+        t=70.8435  DISPATCH INT0 #2   <--  the CPU took the DMA's interrupt
+
+    On a TLCS-900/H the second INT0 belongs to micro-DMA channel 3, because
+    DMA3V points at INT0's vector.  MAME's tmp95c061.cpp dispatched it to the
+    CPU instead, and INT0_LinkByte's own `bit 2,(P7)` guard at 0xF8E489 then
+    returned WITHOUT reading the port, so the byte was neither delivered nor
+    consumed.  Fixed as OVERLAY FIX 6 in tmp95c061_device::tlcs900_check_irqs():
+    skip any interrupt a micro-DMA channel is armed for -- which is exactly what
+    MAME already does in tmp94c241_device::tlcs900_check_irqs() ("HDMA priority:
+    skip interrupts targeted by active HDMA channels").  tmp95c061 was the odd
+    one out.  ⚠ NOT a driver bug: this block's model of the link was right, and
+    the deferred CLEAR_LINE below was never the problem.
 
     WHAT THIS MODEL DOES NOT GUARANTEE.  The latch is one byte deep, and real
     hardware has no per-byte handshake during a burst: the strobe is released
@@ -654,9 +683,26 @@ private:
     relies on set_input_line() enqueuing on a zero-delay timer, which aborts
     the sending processor's timeslice, plus the shortened scheduling quantum in
     wsa1r().  That is a scheduling argument, not a proof, which is why
-    LOG_LINKLOST is compiled in by default.  If it ever fires, the remedy used
-    on the KN5000 was a perfect_quantum() inside each write handler; see
-    notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch.
+    LOG_LINKLOST is compiled in by default.
+
+    ** AND IT IS NOW THE OPEN PROBLEM, 2026-08-27.  With OVERLAY FIX 6 in place
+    the link runs -- but notes/wsa1-probes/wsa1_udma3_audit.lua measures CPU 2
+    writing 71 bytes to its port over a 100 s boot while CPU 1 reads its port
+    only 21 times.  47 bytes are overwritten in the one-byte latch mid-burst, so
+    the six-byte {LE32 dest, LE16 count} record of the 0xE1 answer comes out
+    corrupt and INTTC3_Sel2_ArmPayload arms DMAC3 with 0xFFEF instead of the real
+    count.  THAT is what still stops the sound name.
+
+    ⚠ THE KN5000's REMEDY WAS TRIED HERE AND MEASURED, AND IT IS NOT ENOUGH:
+    machine().scheduler().abort_timeslice() at the end of both write handlers
+    took CPU 1's reads from 21 to 24 out of the same 71 writes, so it is not
+    committed.  What has not been measured yet is whether the sender's bytes are
+    correctly SPACED at all -- micro-DMA channel 2 is paced by timer 2 (prom_c
+    0xF99A2A ldio DMA2V,0x12, vector 0x48 = INTT2), and if that timer runs fast
+    the bytes are microseconds apart and no quantum can help.  That is the same
+    family of defect as OVERLAY FIX 1 in tmp95c061.cpp and would belong in the
+    core.  notes/wsa1-probes/wsa1_link_burst_timing.lua is the probe that tells
+    the two apart; run it before changing anything here.
 
     NO CPU-CORE CHANGE IS PROPOSED FOR THE LINK, deliberately.  The KN5000
     needed tmp94c241_device::clear_int0_level() because that device re-asserts a
