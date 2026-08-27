@@ -272,6 +272,9 @@ def strip_ns(el):
             strip_ns(ch)
 
 
+_NSDECL = re.compile(r'\s+xmlns(?::xlink)?="[^"]*"')
+
+
 def ser(el):
     ET.register_namespace('', 'http://www.w3.org/2000/svg')
     ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
@@ -319,9 +322,18 @@ def shape_svg(art, ids, x0u, y0u, wu, hu, wpx, hpx, dark=False):
         body.append('<g transform="matrix(%s)">%s</g>'
                     % (','.join('%.9g' % v for v in m), ser(cp)))
     d = ''.join(ser(g) for g in grads)
-    return ('<svg width="%.3f" height="%.3f" viewBox="0 0 %.6f %.6f">'
+    # ET.tostring() stamps xmlns on the root of EVERY subtree it serialises, so
+    # each copied gradient and path carried its own declaration while the <svg>
+    # wrapper written here carried none.  Declaring them once, on the wrapper,
+    # is 3.4 KB smaller and makes each CDATA a standalone-valid SVG, which until
+    # now it only was by accident.
+    body = _NSDECL.sub('', ''.join(body))
+    d = _NSDECL.sub('', d)
+    return ('<svg xmlns="http://www.w3.org/2000/svg" '
+            'xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'width="%.3f" height="%.3f" viewBox="0 0 %.6f %.6f">'
             '<defs>%s</defs>%s</svg>'
-            % (wpx, hpx, wu, hu, d, ''.join(body)))
+            % (wpx, hpx, wu, hu, d, body))
 
 
 def control_images(art, ids, pressable=True):
@@ -878,12 +890,10 @@ def build():
 
     # knobs (no press state).  Each is unique, so each is its own element; they
     # go through control_images for the local-coordinate rebase all the same.
-    knob_bounds = {}
     for ids, iid, comment in KNOBS:
         imgs, (x, y, w, h), _ = control_images(art, ids, pressable=False)
         elems.append('\t<element name="%s"><!-- %s -->\n%s\n\t</element>'
                      % (iid, cmt(esc(comment)), '\n'.join(imgs)))
-        knob_bounds[iid] = (x, y, w, h)
         places.append('\t\t<element id="%s" ref="%s"><!-- %s -->'
                       '<bounds x="%.3f" y="%.3f" width="%.3f" height="%.3f"/></element>'
                       % (iid, iid, cmt(esc(comment)), x, y, w, h))
@@ -1072,7 +1082,9 @@ def build():
     out.append('\t</view>')
     out.append('')
     out.append('\t<view name="Screen close-up">')
-    out.append('\t\t<bounds x="548" y="44" width="488" height="313"/>')
+    cx, cy, cw, ch = art.bbox_px(['rect135'])
+    out.append('\t\t<bounds x="%.0f" y="%.0f" width="%.0f" height="%.0f"/>'
+               % (cx, cy, cw, ch))
     out.append('\t\t<group ref="panel"><bounds x="0" y="0" width="%d" height="%d"/></group>'
                % (VIEW_W, VIEW_H))
     out.append('\t</view>')
