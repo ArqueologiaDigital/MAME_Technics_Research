@@ -1836,3 +1836,30 @@ that turned out to be true of the *first* wedge only.
 | `wsa1_dspready_experiment.lua` | labelled FAKE: what changes if P9 bit 3 is held high? (the experiment that found it, superseded by the schematic) |
 | `wsa1_p9_control.lua` | the control: put port 9 back to an unbound read, then chain another probe |
 | `wsa1_sch_dsprdy.sh` | which net is IC2 pin 23, and who reads SFR 0x19? |
+
+## The layout-reuse pass (wsa1r.lay: declare each shape once)
+
+`src/mame/layout/wsa1r.lay` is 932 lines but 267 KB: the generator emits each of
+the 58 buttons as a COMPLETE inline SVG in absolute artwork coordinates, with a
+private copy of the gradient `<defs>`, cropped by a per-button `viewBox`.
+`kn5000.lay` instead declares a shape ONCE and places it many times with
+`<bounds>`. Deciding which of the 58 may share one `<element>` is a question
+about PIXELS, so it is answered with the renderer MAME actually uses.
+
+| script | question it answers |
+|---|---|
+| `nsvg_hash.c` + `build_nsvg_hash.sh` | do these two SVGs render identically, and if not, by how much? Uses MAME's OWN bundled nanosvg and reproduces `rendlay.cpp` `draw_svg()`'s scale arithmetic, so the answer is about what is displayed, not about what librsvg thinks. |
+| `wsa1r_lay_shape_classes.py` | how many DISTINCT shapes are really in the layout -- i.e. how many `<element>`s the rewritten file needs -- and is the absolute→local coordinate change loss-free? |
+
+```sh
+sh notes/wsa1-probes/build_nsvg_hash.sh          # once; header-only, no MAME build needed
+notes/wsa1-probes/nsvg_hash a.svg 42 25          # hash one SVG at 42x25 bounds
+notes/wsa1-probes/nsvg_hash -cmp a.svg b.svg 42 25
+python3 notes/wsa1-probes/wsa1r_lay_shape_classes.py
+```
+
+`-cmp` exists because a hash is all-or-nothing. Two buttons lifted from the same
+drawing differ by Inkscape duplication noise -- a gradient scale agreeing only to
+the sixth decimal -- and deciding whether they may share an element needs the
+MAGNITUDE of the disagreement, not just its existence. It prints
+`ndiff=<pixels> of <total> maxdelta=<0..255> meandelta=<f>`.

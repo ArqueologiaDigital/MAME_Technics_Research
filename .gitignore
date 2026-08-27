@@ -2,3 +2,4 @@
 *.a
 build/
 __pycache__/
+notes/wsa1-probes/nsvg_hash
