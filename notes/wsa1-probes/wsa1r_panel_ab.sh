@@ -62,6 +62,48 @@ compare)
 		-colorspace Gray "$2/../diffmap.png"
 	echo "difference map (x12) -> $2/../diffmap.png"
 	;;
+per-element)
+	# Break the whole-panel difference down by each placement's <bounds>, which
+	# is how the lift/keep figures in the generator's DECOR_NAMES were measured:
+	# a mark lifted out of the backdrop is re-rasterised into its own
+	# integer-pixel box and loses the sub-pixel phase it had inside the one big
+	# backdrop raster, and this says what that costs, mark by mark.
+	#   wsa1r_panel_ab.sh per-element /tmp/ab/old /tmp/ab/new [layout.lay]
+	A=$2/wsa1r/0000.png B=$3/wsa1r/0000.png LAY=${4:-$OVERLAY/src/mame/layout/wsa1r.lay} \
+	python3 - <<'PY'
+import os, re, subprocess, collections
+A, B, LAY = os.environ['A'], os.environ['B'], os.environ['LAY']
+lay = open(LAY, encoding='utf-8').read()
+place = collections.defaultdict(list)
+for m in re.finditer(r'<element (?:name="[^"]*" )?(?:id="[^"]*" )?ref="([^"]+)"[^>]*?>'
+                     r'.*?<bounds x="([-\d.]+)" y="([-\d.]+)" '
+                     r'width="([\d.]+)" height="([\d.]+)"/>', lay, re.S):
+    place[m.group(1)].append(tuple(float(v) for v in m.groups()[1:]))
+d = subprocess.run(['magick', A, B, '-compose', 'difference', '-composite',
+                    '-colorspace', 'Gray', '-depth', '8', 'gray:-'],
+                   capture_output=True).stdout
+W = H = None
+ident = subprocess.run(['magick', 'identify', '-format', '%w %h', A],
+                       capture_output=True, text=True).stdout.split()
+W, H = int(ident[0]), int(ident[1])
+print('%-30s %-5s %s' % ('element', 'xN', 'worst placement'))
+for name, places in sorted(place.items()):
+    worst = None
+    for (x, y, w, h) in places:
+        x0, y0 = max(0, int(x) - 2), max(0, int(y) - 2)
+        x1, y1 = min(W, int(x + w) + 2), min(H, int(y + h) + 2)
+        vals = [d[yy * W + xx] for yy in range(y0, y1) for xx in range(x0, x1)]
+        if not vals:
+            continue
+        s = (max(vals), sum(1 for v in vals if v), len(vals),
+             sum(vals) / float(len(vals)))
+        if worst is None or s > worst:
+            worst = s
+    if worst:
+        print('  %-30s x%-4d maxdelta=%3d  ndiff=%4d/%-6d mean=%.2f'
+              % (name, len(places), worst[0], worst[1], worst[2], worst[3]))
+PY
+	;;
 *)
 	sed -n '2,40p' "$0"; exit 2 ;;
 esac

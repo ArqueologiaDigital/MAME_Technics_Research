@@ -2010,3 +2010,36 @@ Two consequences are now encoded in the generator:
 |---|---|
 | `wsa1r_panel_ab.sh` | does the whole panel still look the same — composition included? |
 | `wsa1r_hold_one_of_each_shape.lua` | one key of every distinct shape held down, so the pressed artwork can be seen at all |
+
+#### The final accounting, per element, on the composed panel
+
+`wsa1r_panel_ab.sh per-element` against a MAME built from `c51e4e8`. Everything
+not listed renders **byte-identical** — every legend, both LEDs, all three
+knobs, `bank_button`, `numeric_button_large` and both REALTIME CREATOR keys:
+
+```
+  lcd_soft_key               x10   maxdelta= 23  ndiff= 136/1365   mean=0.79
+  lcd_soft_key_marker_left    x5   maxdelta= 25  ndiff=  93/288    mean=1.49
+  lcd_soft_key_marker_right   x5   maxdelta= 26  ndiff= 107/288    mean=1.98
+  menu_rule                   x2   maxdelta=  5  ndiff=   1/440    mean=0.01
+  mode_button                 x9   maxdelta= 22  ndiff= 102/1334   mean=0.87
+  numeric_button              x6   maxdelta= 23  ndiff=  99/966    mean=1.42
+  under_lcd_button_bottom     x9   maxdelta= 10  ndiff=  24/1064   mean=0.03
+  under_lcd_button_top        x9   maxdelta= 31  ndiff=  57/1064   mean=0.98
+  wide_button                 x3   maxdelta= 23  ndiff= 125/1239   mean=1.45
+  vector_art                  x1   maxdelta= 31  ndiff=2856/800000 mean=0.03
+```
+
+Whole panel: **2856 of 723200 artwork pixels (0.395%), worst 31/255, RMSE
+0.30%**, and **0 pixels inside the emulated screen**. The differences are one
+antialiased border row per key — the price of one drawn key standing in for its
+own copies, which disagree with it in the sixth decimal.
+
+⚠ **Run the null control first.** Two runs of the *same* binary at `-str 12`
+come back `AE 0`: the capture is deterministic, so a difference is real and not
+timing. A capture at a different `-str` is NOT comparable — the panel LEDs and
+the LCD move on.
+
+| script | question it answers |
+|---|---|
+| `wsa1r_lay_ab.py` | do two versions of the layout render each placement the same, without building MAME? (fast gate, blind to composition) |
