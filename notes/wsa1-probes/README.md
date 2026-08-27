@@ -1863,3 +1863,110 @@ drawing differ by Inkscape duplication noise -- a gradient scale agreeing only t
 the sixth decimal -- and deciding whether they may share an element needs the
 MAGNITUDE of the disagreement, not just its existence. It prints
 `ndiff=<pixels> of <total> maxdelta=<0..255> meandelta=<f>`.
+
+### `wsa1r_lay_shape_classes.py` — the equivalence probe, and what it found
+
+**The question.** Of the 58 buttons in `wsa1r.lay`, how many are genuinely
+different shapes? That number is how many `<element>`s the rewritten layout
+needs; `58 −` it is how many it deletes. And can the absolute→local coordinate
+change be made at all without moving a pixel?
+
+```sh
+python3 notes/wsa1-probes/wsa1r_lay_shape_classes.py               # full report
+python3 notes/wsa1-probes/wsa1r_lay_shape_classes.py --self-test   # the gates only
+python3 notes/wsa1-probes/wsa1r_lay_shape_classes.py --emit DIR    # dump 120 normalised SVGs
+```
+
+⚠ **Reproducing the numbers below.** They were measured against `wsa1r.lay` as
+of commit **`c51e4e8`** — 267 287 bytes, 62 inline-SVG `<element>`s, 58 of them
+buttons. The reuse pass this probe exists to justify *deletes* those private
+SVGs, so run it against the baseline, not against a rewritten file:
+
+```sh
+git show c51e4e8:src/mame/layout/wsa1r.lay > /tmp/wsa1r-baseline.lay
+python3 notes/wsa1-probes/wsa1r_lay_shape_classes.py --lay /tmp/wsa1r-baseline.lay
+```
+
+It parses every `<element>` carrying an inline SVG `<image>` (58 buttons × 2
+states, 3 knobs, `vector_art` = 120 images), normalises each to local
+coordinates, rasterises with librsvg at natural size **and at 4×**, hashes the
+RGBA, and groups. Then it re-asks the whole question of `nsvg_hash`, i.e. of
+MAME's own nanosvg.
+
+**Two normalisations, because one of them is a trap.**
+`T = (g.e − viewBox.x, g.f − viewBox.y)` is *position-invariant*: a copy of the
+same shape drawn elsewhere has `g.e` and `viewBox.x` shifted by the same amount.
+
+* **FOLD** wraps the body in one extra `<g transform="translate(−vbx,−vby)">`.
+  Not one artwork number changes, so it is exact — **gate A: 120/120
+  byte-identical to the original crop under librsvg.**
+* **BAKE** folds `T` into the geometry: absolute path coordinates, ellipse
+  centres, and the `userSpaceOnUse` **gradient** (`gradientTransform` e,f, or
+  x1,y1,x2,y2 when there is no transform — miss the gradient and the shading
+  slides off the shape). Ids are renumbered `a0,a1,…`. **Gates B and C
+  (round trip) pass within 1/255** on 109/117, the other 8 differing by exactly
+  one LSB of antialiasing: the bake moves the gradient's user-space origin from
+  ≈ −93 to ≈ −201 and librsvg loses a few low bits in the subtraction.
+
+⚠ **The bake is not optional for MAME.** nanosvg is `float`, so with FOLD the
+artwork's ~420-unit coordinates survive into its floats and **shatter the
+partition: 26 classes instead of 16.** BAKE reproduces librsvg's 16 exactly.
+A rewritten `wsa1r.lay` must carry *baked* local coordinates, not a wrapper
+translate. (Relatedly, 88 of the 120 controls render differently under nanosvg
+before and after normalisation, worst `maxdelta=35`; that is nanosvg's float
+error at big coordinates, and moving to the origin removes it.)
+
+**The answer: 58 buttons → 16 classes**, identically for state 0 and state 1,
+so one `<element>` per class serves both. **42 of the 58 are redundant (72 %).**
+The 116 button images are 139 628 of the file's 267 287 bytes; one image per
+class is 37 653 — a **73 % cut of the button payload**.
+
+| cls | n | size px | members |
+|---|---|---|---|
+| C0 | 10 | 35.000×31.000 | the ten LCD soft keys `btn_s3_b0..b4`, `btn_s9_b0..b4` |
+| C1 | 9 | 34.000×24.000 | under-LCD **bottom** row + `btn_s2_b4` |
+| C2 | 9 | 34.000×24.000 | under-LCD **top** row + `btn_s2_b5` |
+| C3 | 6 | 42.000×25.000 | `btn_s0_b0..b3`, `btn_s2_b6`, `btn_s7_b3` |
+| C4 | 6 | 42.389×17.234 | `btn_s1_b2 b3 b5 b6`, `btn_s2_b2 b3` |
+| C5 | 4 | 42.000×17.000 | `btn_s1_b0 b1 b4 b7` |
+| C6 | 3 | 42.389×24.635 | `btn_s0_b4 b5 b7` |
+| C7 | 2 | 42.000×17.000 | `btn_s2_b0 b1` |
+| C8 | 2 | 42.000×25.000 | `btn_s7_b0 b2` |
+| C9..C15 | 1 each | — | `btn_s0_b6`, `btn_s3_b5`, `btn_s3_b6`, `btn_s3_b7`, `btn_s7_b1`, `btn_s8_b0` (37.232²), `btn_s8_b1` (24.262²) |
+
+**What each merge actually costs MAME.** Seven of the nine multi-member classes
+are `ndiff=0` under nanosvg — collapsing them draws *the very same pixels*. Only
+two are not:
+
+| class | worst pair | ndiff | maxdelta | mean |
+|---|---|---|---|---|
+| C0 (n=10) | `btn_s3_b0` vs `btn_s3_b1` | 83 / 1085 | 26/255 | 0.97 |
+| C2 (n=9) | `btn_s2_b5` vs `btn_s5_b1` | 34 / 816 | 35/255 | 1.41 |
+
+**Stretching buys almost nothing.** No pair of classes is pixel-exact when one
+is stretched into the other's bounds. What the table does show is that six of
+the sixteen splits are *not about shape at all*: `C3=C8=C13` (42.000×25.000),
+`C5=C7` (42.000×17.000), `C6=C9` (42.389×24.635) and `C10=C11=C12`
+(55.000×17.000) each declare the **same** size and differ by ≤ 1/255, so with a
+one-LSB tolerance it is **16 → 10 classes with no stretching whatsoever** — and
+MAME's own nanosvg independently merges three of those groups outright
+(`C3=C8=C13`, `C5=C7`, `C6=C9`) plus two of the three 55×17 keys (`C10=C12`). The genuine
+stretch candidates are dearer: `C4→C5/C7` costs `dx +0.389, dy +0.234 px` for
+`maxdelta 44`, and `C3↔C6/C9` costs `dx −0.389, dy +0.365 px` for `maxdelta 127`
+on ~30 % of the bytes. Not worth it.
+
+**Text dedup would have found almost nothing.** After the bake and id
+renumbering there are still **56 distinct strings for 58 buttons** — a text
+compare finds 2 merges where pixels find 42. The residue is Inkscape
+duplication noise in the 6th–7th digit: `viewBox` `9.260417` vs `9.26042`,
+`stroke-width` `0.264583` vs `0.264584`, a gradient scale `1.1915839` vs
+`1.1915845`, and a *vertical* gradient (`x1==x2`) parked at a different and
+therefore invisible horizontal offset. Declared px size, by contrast, is
+identical inside every class. That is the whole reason this probe rasterises.
+
+**What resists normalisation.** Three of the 120 cannot be baked and fall back
+to FOLD, all for stated reasons: `data_wheel` and `data_wheel_finger` hang their
+geometry off `matrix(2.1441055,1.1335575,−1.1341853,2.1452869,…)`, a rotation
+and scale rather than a translation, so there is no translation to bake; and
+`vector_art` nests `<g>`/`<clipPath>` 14 deep — it needs nothing anyway, its
+viewBox already starts at `0,0`. `volume_knob` bakes normally.
