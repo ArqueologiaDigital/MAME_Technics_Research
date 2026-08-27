@@ -17,6 +17,13 @@ RUN
     git show c51e4e8:src/mame/layout/wsa1r.lay > /tmp/before.lay
     python3 notes/wsa1-probes/wsa1r_lay_ab.py /tmp/before.lay src/mame/layout/wsa1r.lay
 
+    # one named element, at a size of your choosing.  This is how the two
+    # subtractive steps were shown to be free -- dropping the <clipPath> blocks
+    # and garbage-collecting <defs> both come back ndiff=0, and at 4x too,
+    # where a moved edge would have nowhere to hide:
+    python3 notes/wsa1-probes/wsa1r_lay_ab.py A.lay B.lay vector_art 1600x500
+    python3 notes/wsa1-probes/wsa1r_lay_ab.py A.lay B.lay vector_art 6400x2000
+
 READING IT
     "bounds sets IDENTICAL" is the first thing to check: if a placement moved or
     vanished, nothing below it means anything.  Then every render should be
@@ -84,6 +91,18 @@ def svg_hash_cmp(a, b, w, h):
         os.unlink(fb.name)
 
 
+def one_element(a_path, b_path, name, size):
+    ea, _ = load(a_path)
+    eb, _ = load(b_path)
+    if name not in ea or name not in eb:
+        sys.exit("no element %r with inline SVG in both files" % name)
+    w, h = (float(v) for v in size.lower().split('x'))
+    for st in sorted(set(ea[name]) & set(eb[name])):
+        _, msg = svg_hash_cmp(ea[name][st], eb[name][st], w, h)
+        print("%s state%d at %gx%g: %s" % (name, st, w, h, msg))
+    return 0
+
+
 def main(a_path, b_path):
     if not os.path.exists(HASHER):
         sys.exit("build the oracle first:  sh %s/build_nsvg_hash.sh" % HERE)
@@ -125,6 +144,10 @@ def main(a_path, b_path):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 5:
+        if not os.path.exists(HASHER):
+            sys.exit("build the oracle first:  sh %s/build_nsvg_hash.sh" % HERE)
+        raise SystemExit(one_element(*sys.argv[1:5]))
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     raise SystemExit(main(sys.argv[1], sys.argv[2]))

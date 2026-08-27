@@ -356,8 +356,9 @@ def control_images(art, ids, pressable=True):
         #
         # That says the same thing only where the wash is UNIFORM.  A control
         # drawn from ONE shape washes evenly, and the substitution measures
-        # within 1/255 (3/255 for the two round keys, whose <disk> edge
-        # antialiases a little differently).  The ten LCD soft keys are drawn
+        # within 1/255 (3 and 4/255 for the two round keys, whose <disk> edge
+        # antialiases a little differently) -- wsa1r_shape_tolerance.py prints
+        # the table.  The ten LCD soft keys are drawn
         # from TWO overlapping shapes and the old code darkens each in turn, so
         # their centre lands at 1-0.66^2 = 56% and their border at 34%.  That is
         # an artefact of how the darkening was built rather than a decision, but
@@ -399,10 +400,16 @@ def control_images(art, ids, pressable=True):
 # scale as 1.1940374 here and 1.1940531 there, a stroke width as 0.264583 or
 # 0.264584.  The differences that MATTER are three orders of magnitude larger:
 # the two rows of under-LCD keys really do carry different gradient ramps
-# (1.2046874 against 1.2364906, a 2.6% difference visible side by side).  One
-# part in a thousand sits 26x above the largest rounding artefact measured and
-# 26x below the smallest real difference, so nothing rides on its exact value.
-# notes/wsa1-probes/wsa1r_lay_shape_classes.py re-measures both bounds.
+# (1.2046874 against 1.2364906), and the number pad is drawn at two sizes.
+#
+# Measured over all 577 comparable pairs by
+# notes/wsa1-probes/wsa1r_shape_tolerance.py:
+#
+#     worst disagreement among pairs MERGED    1.32e-05   = SHAPE_TOL / 76
+#     smallest among pairs kept APART          1.36e-02   = SHAPE_TOL x 14
+#
+# so the noise ceiling and the real floor are 1025x apart and one part in a
+# thousand falls in the empty middle.  Nothing rides on its exact value.
 
 # The ten keys.  Each is named after the artwork id of the copy the generator
 # reaches first, so the name is pinned to Felipe's drawing rather than to the
@@ -473,6 +480,8 @@ DECOR_NAMES = {
 }
 # mode_rule and rubber_foot would be refused by the z-order guard anyway; they
 # are marked False as well so the reason reads the same for every entry.
+
+KEEP_DEAD_DEFS = False      # --keep-dead-defs, for the A/B that gates the sweep
 
 WASH = '<color red="0.0" green="0.0" blue="0.0" alpha="0.34"/>'
 
@@ -1044,7 +1053,7 @@ def build():
     # gradients with it (shape_svg emits them inline), but the originals stayed
     # behind with nothing left to paint.  Walk url(#..) and xlink:href from what
     # actually survives, close the set, and drop the rest.
-    defs_nodes = [d for d in root.iter() if d.tag == SVG + 'defs']
+    defs_nodes = [] if KEEP_DEAD_DEFS else [d for d in root.iter() if d.tag == SVG + 'defs']
     defined = {}
     for d in defs_nodes:
         for ch in d:
@@ -1288,6 +1297,14 @@ def check_ports():
 
 
 if __name__ == '__main__':
+    # Leaves the orphaned gradients in place, so the sweep can be A/B'd against
+    # itself without commit archaeology:
+    #   python3 tools/gen_wsa1r_lay.py --keep-dead-defs --out /tmp/withdefs.lay
+    #   python3 notes/wsa1-probes/wsa1r_lay_ab.py /tmp/withdefs.lay \
+    #           src/mame/layout/wsa1r.lay vector_art 6400x2000
+    KEEP_DEAD_DEFS = '--keep-dead-defs' in sys.argv
+    if '--out' in sys.argv:
+        OUT = sys.argv[sys.argv.index('--out') + 1]
     if '--check-ports' in sys.argv:
         raise SystemExit(1 if check_ports() else 0)
     if '--preview' in sys.argv:

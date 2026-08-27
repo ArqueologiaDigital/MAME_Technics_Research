@@ -1985,7 +1985,7 @@ mattered was not always the obvious one.
 | legends share an element | 56 → 51 | `<text>` carries no geometry | free |
 | dead `<clipPath>` | 19 blocks, 12 of them the same A4 rect | `nsvg_hash` 1600×500 | `ndiff=0 of 800000` |
 | dead `<defs>` | 65 of 79 gradients, orphaned when the keys were lifted | `nsvg_hash` at 1× and 4× | `ndiff=0 of 12800000` |
-| pressed state as a component | the whole drawing, written twice per key | composite the wash in Python, compare | ≤1/255 (3/255 for the two disks) |
+| pressed state as a component | the whole drawing, written twice per key | `wsa1r_shape_tolerance.py` | ≤1/255 (3 and 4/255 for the two disks) |
 | namespaces on the wrapper | `xmlns` on all 83 copied subtrees | `nsvg_hash` | `ndiff=0`, 23 elements |
 | repeated marks share | 12 instances → 3 | **whole-panel A/B** | ≤26/255, the same envelope as the keys |
 
@@ -2043,3 +2043,62 @@ the LCD move on.
 | script | question it answers |
 |---|---|
 | `wsa1r_lay_ab.py` | do two versions of the layout render each placement the same, without building MAME? (fast gate, blind to composition) |
+
+
+#### The two thresholds the generator rests on
+
+`wsa1r_shape_tolerance.py` measures both, so neither is an argument.
+
+**Why `SHAPE_TOL = 1e-3`.** Over all 577 comparable button pairs:
+
+```
+worst disagreement among pairs the generator MERGES    1.32e-05  = SHAPE_TOL / 76
+smallest among the pairs it keeps APART               1.36e-02  = SHAPE_TOL x 14
+```
+
+Inkscape's per-copy rounding and the drawing's real distinctions are **1025×
+apart**, and one part in a thousand falls in the empty middle. ⚠ An earlier note
+put this at "26× either way" — that was arithmetic from the under-LCD gradient
+ramps, not a measurement over the pairs; the measured figures are 76× and 14×,
+and the conclusion is stronger, not weaker.
+
+**Why the pressed state may be a MAME component.** Rebuilding the old
+two-image form and compositing the new one the way MAME will:
+
+```
+mode_button / bank_button / numeric_button / numeric_button_large /
+under_lcd_button_top / under_lcd_button_bottom / wide_button   rect  maxdelta=1
+realtime_creator_button                                        disk  maxdelta=3
+realtime_creator_reset_button                                  disk  maxdelta=4
+lcd_soft_key                                                   rect  maxdelta=29  <- kept as two images
+```
+
+The soft key is two overlapping shapes, so the old code washes its middle to
+1−0.66² = 56% and its border to 34%. That is an artefact of how the darkening
+was built, but it is the artefact on screen, so it keeps the two-image form.
+
+#### Reproducing the two subtractive steps
+
+Both come back `ndiff=0`, and at 4× as well, where a moved edge has nowhere to
+hide. The `<defs>` sweep cannot be A/B'd across commit boundaries — that commit
+carries three changes — so the generator can leave the orphans in instead:
+
+```sh
+# dead <defs>: 121 803 -> 107 168 bytes, nothing moves
+python3 tools/gen_wsa1r_lay.py --keep-dead-defs --out /tmp/withdefs.lay
+python3 notes/wsa1-probes/wsa1r_lay_ab.py /tmp/withdefs.lay \
+        src/mame/layout/wsa1r.lay vector_art 6400x2000
+
+# dead <clipPath>: this one does sit on a commit boundary
+git show f964c33:src/mame/layout/wsa1r.lay > /tmp/a.lay
+git show 85931a5:src/mame/layout/wsa1r.lay > /tmp/b.lay
+python3 notes/wsa1-probes/wsa1r_lay_ab.py /tmp/a.lay /tmp/b.lay vector_art 6400x2000
+```
+
+⚠ The lift/keep figures in `DECOR_NAMES` were measured with those marks
+*lifted*. To re-measure one, flip its third field to `True`, regenerate, rebuild
+and run `wsa1r_panel_ab.sh per-element`.
+
+| script | question it answers |
+|---|---|
+| `wsa1r_shape_tolerance.py` | is the merge tolerance in the right place, and may MAME draw the pressed wash itself? |
