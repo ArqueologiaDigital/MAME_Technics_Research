@@ -685,24 +685,12 @@ private:
     wsa1r().  That is a scheduling argument, not a proof, which is why
     LOG_LINKLOST is compiled in by default.
 
-    ** AND IT IS NOW THE OPEN PROBLEM, 2026-08-27.  With OVERLAY FIX 6 in place
-    the link runs -- but notes/wsa1-probes/wsa1_udma3_audit.lua measures CPU 2
-    writing 71 bytes to its port over a 100 s boot while CPU 1 reads its port
-    only 21 times.  47 bytes are overwritten in the one-byte latch mid-burst, so
-    the six-byte {LE32 dest, LE16 count} record of the 0xE1 answer comes out
-    corrupt and INTTC3_Sel2_ArmPayload arms DMAC3 with 0xFFEF instead of the real
-    count.  THAT is what still stops the sound name.
-
-    ⚠ THE KN5000's REMEDY WAS TRIED HERE AND MEASURED, AND IT IS NOT ENOUGH:
-    machine().scheduler().abort_timeslice() at the end of both write handlers
-    took CPU 1's reads from 21 to 24 out of the same 71 writes, so it is not
-    committed.  What has not been measured yet is whether the sender's bytes are
-    correctly SPACED at all -- micro-DMA channel 2 is paced by timer 2 (prom_c
-    0xF99A2A ldio DMA2V,0x12, vector 0x48 = INTT2), and if that timer runs fast
-    the bytes are microseconds apart and no quantum can help.  That is the same
-    family of defect as OVERLAY FIX 1 in tmp95c061.cpp and would belong in the
-    core.  notes/wsa1-probes/wsa1_link_burst_timing.lua is the probe that tells
-    the two apart; run it before changing anything here.
+    ** AND IT BIT, 2026-08-27.  With OVERLAY FIX 6 in place the link runs -- and
+    then notes/wsa1-probes/wsa1_udma3_audit.lua measured CPU 2 writing 71 bytes
+    to its port over a 100 s boot while CPU 1 read its port 21 times.  The cure
+    is the per-burst perfect_quantum() in cpu2_link_w() below, and the number
+    that identifies it is in that function's comment: one byte-time is 6 us and
+    the quantum was 50 us.
 
     NO CPU-CORE CHANGE IS PROPOSED FOR THE LINK, deliberately.  The KN5000
     needed tmp94c241_device::clear_int0_level() because that device re-asserts a
@@ -720,6 +708,11 @@ private:
 
 ***************************************************************************/
 
+// How long each latch write holds the processors in lockstep.  One byte-time is
+// ~6 us (measured, see cpu2_link_w()), so this has to outlast the gap to the next
+// byte of the same burst without being so long that it slows the whole boot.
+static constexpr int BURST_QUANTUM_US = 20;
+
 void wsa1_state::cpu1_link_w(uint8_t data)
 {
 	if (m_link_to_cpu2_full)
@@ -731,6 +724,9 @@ void wsa1_state::cpu1_link_w(uint8_t data)
 	m_link_to_cpu2 = data;
 	m_link_to_cpu2_full = true;
 	m_cpu2->set_input_line(TLCS900_INT0, ASSERT_LINE);
+
+	// Interleave finely for the rest of the burst -- see cpu2_link_w().
+	machine().scheduler().perfect_quantum(attotime::from_usec(BURST_QUANTUM_US));
 }
 
 uint8_t wsa1_state::cpu1_link_r()
@@ -755,6 +751,37 @@ void wsa1_state::cpu2_link_w(uint8_t data)
 	m_link_to_cpu1 = data;
 	m_link_to_cpu1_full = true;
 	m_cpu1->set_input_line(TLCS900_INT0, ASSERT_LINE);
+
+	// A BURST NEEDS THE TWO PROCESSORS INTERLEAVED FINER THAN 6 us, 2026-08-27.
+	//
+	// The latch is one byte deep and a burst has no per-byte handshake: the
+	// sender's micro-DMA channel 2 pushes bytes paced by timer 2 alone and the
+	// receiver's channel 3 is expected to keep up, which on the real part it
+	// does -- a micro-DMA cycle is a handful of states.
+	//
+	// MEASURED, and this is the number that decides the fix
+	// (notes/wsa1-probes/wsa1_link_burst_timing.lua, 75 s boot):
+	//
+	//     SENDER GAPS  n=70  min=5.857 us  median=6.036 us  max=75.679 us
+	//
+	// 6 us is CORRECT, not a bug: prom_c arms the channel with T23MOD's phi-T16
+	// tap and TREG2 = 5, which at fFPH = 14 MHz is 5 x 16 x 71.4 ns = 5.71 us.
+	// The trouble is that wsa1r()'s scheduling quantum is 50 us, so CPU 1 runs up
+	// to EIGHT byte-times ahead, CPU 2 then fills the same one-byte latch eight
+	// times, and CPU 1 can only ever collect the last one -- measured 71 writes
+	// against 24 reads, with the reads landing 40 us after the byte they took.
+	// The 0xE1 answer's {LE32 dest, LE16 count} record therefore arrives corrupt
+	// and INTTC3_Sel2_ArmPayload arms DMAC3 with 0xFFEF.
+	//
+	// perfect_quantum() for one burst-length window is the cheap cure: the fine
+	// interleave costs emulation speed only while a message is actually moving,
+	// and a plain set_maximum_quantum() this small would pay it for the whole
+	// run.  ⚠ abort_timeslice() -- the KN5000's remedy,
+	// notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch -- was
+	// tried first and MEASURED at 21 -> 24 reads out of 71: it cannot help,
+	// because it only ends the SENDER's slice and the receiver is already ahead
+	// in local time.
+	machine().scheduler().perfect_quantum(attotime::from_usec(BURST_QUANTUM_US));
 }
 
 uint8_t wsa1_state::cpu2_link_r()

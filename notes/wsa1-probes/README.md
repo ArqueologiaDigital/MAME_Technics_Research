@@ -1478,9 +1478,41 @@ latch — moved CPU 1's reads from **21 to 24** out of the same 71 writes, and `
 armed from a corrupt record. It is therefore **not committed**; the negative result is recorded in
 `wsa1.cpp` so nobody spends the rebuild on it twice.
 
-`wsa1_link_burst_timing.lua` is the probe that decides what to do instead. It prints the emulated
-time of every latch access to microsecond resolution and separates two causes the counts cannot
-tell apart: the sender's bytes being correctly spaced but bunched inside MAME's 50 µs quantum
-(a driver/scheduling problem), versus timer 2 pacing micro-DMA channel 2 far faster than the real
-part does, so the bytes really are microseconds apart (a CPU-core problem, the same family as
-OVERLAY FIX 1). **Run it before changing anything.**
+### `wsa1_link_burst_timing.lua` — which of the two it is, and it is the quantum
+
+The probe prints the emulated time of every latch access to microsecond resolution, which
+separates two causes the counts cannot tell apart: the sender's bytes being correctly spaced but
+bunched inside MAME's 50 µs quantum (a driver problem), versus timer 2 pacing micro-DMA channel 2
+faster than the real part does (a CPU-core problem, the same family as OVERLAY FIX 1). Measured
+over a 75 s boot:
+
+```
+SENDER GAPS  n=70  min=5.857 us  median=6.036 us  mean=7.453 us  max=75.679 us
+TOTAL cpu2 writes=71  cpu1 reads=24   (quantum is 50 us; 28 MHz CPUs)
+```
+
+**6 µs is correct, so the timer is exonerated.** prom_c arms channel 2 with T23MOD's φT16 tap and
+`TREG2 = 5`, and at fFPH = 14 MHz that is 5 × 16 × 71.4 ns = **5.71 µs** — the measurement lands
+on the arithmetic. The defect is that the quantum is **50 µs = eight byte-times**: CPU 1 runs up
+to eight bytes ahead, CPU 2 then overwrites the one-byte latch eight times, and CPU 1 collects
+only the last. The reads bear it out — each one lands ~40 µs after the byte it took.
+
+That also explains why `abort_timeslice()` could not help: it ends the *sender's* slice, but the
+receiver is already ahead in local time and MAME cannot rewind it.
+
+**Fix:** `machine().scheduler().perfect_quantum(attotime::from_usec(20))` in both link write
+handlers, so the processors interleave per instruction for one burst-length window and pay for it
+only while a message is moving. 20 µs outlasts the 6 µs gap to the next byte, so each byte of a
+burst re-arms the window and the whole message stays in lockstep.
+
+**Measured with it in, same probe, same 100 s boot:**
+
+| counter | before FIX 6 | FIX 6 only | FIX 6 + perfect_quantum |
+|---|---|---|---|
+| CPU 1 → CPU 2 bytes written / read | 41 / — | 43 / — | **5070 / 5070** — no loss |
+| CPU 2 → CPU 1 bytes written / read | 2 / 1 | 71 / 21 | **711 / 706** |
+| `DMA2V` arms (messages sent) | 5 | 6 | **985** |
+| `INTTC3` entries | 0 | 1 | 1 |
+
+The link is no longer the bottleneck: both directions now carry thousands of bytes essentially
+without loss, where before the fix the machine managed one received message in a whole boot.
