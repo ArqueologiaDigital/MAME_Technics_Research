@@ -26,9 +26,14 @@
 -- ⚠ This is NOT caused by the keybed model, and not by the 2026-08-25 tmp95c061
 -- P6 fix: every write this probe sees on CPU 1 lands in the HIGH byte of the
 -- 0x12/0x13 word, i.e. on P7 (0x13) and never on P6 (0x12), so CPU 1 makes no
--- runtime P6 write at all.  What has to be looked at is CPU 1's INT0_LinkByte
--- (0xF8E47F) and INTTC3_LinkDmaDone (0xF8E54F): something on that side arms
--- micro-DMA channel 3, drops the busy line, and never raises it again.
+-- runtime P6 write at all.
+--
+-- ✅ ANSWERED 2026-08-27.  Channel 3 was armed and then STARVED: the CPU was
+-- taking the INT0 the DMA channel had claimed, because
+-- tmp95c061_device::tlcs900_check_irqs() knew nothing about micro-DMA.  See
+-- OVERLAY FIX 6 in tmp95c061.cpp and the wsa1_udma3_audit.lua /
+-- wsa1_int0_steal.lua sections of README.md.  With that fixed CPU 2 sends 71
+-- bytes over a boot instead of 2.
 _G.pa_hist = {}
 _G.p7_last = -1
 _G.tx = 0

@@ -1,3 +1,20 @@
+-- ⚠ SUPERSEDED 2026-08-27, AND ALL THREE OF ITS COUNTERS WERE WRONG.  Kept only
+-- because its numbers are quoted in older notes; use wsa1_udma3_audit.lua.
+--
+-- Every tap below covers more than the thing it names:
+--   * 0xF8E54E-0xF8E54F is called "INTTC3" but 0xF8E54E is INTTC2_uDMA2Done's
+--     `reti`, and tlcs900_device::RDOP() prefetches m_pc+3 (tlcs900.cpp:81-99),
+--     so INTTC2's last four bytes read BOTH addresses.  Its "12" was 6 INTTC2
+--     returns x 2 reads.  The exact count -- reads of the selector word
+--     0x6007DA, whose only reader in any of the three images is 0xF8E555 -- is
+--     ZERO: INTTC3_LinkDmaDone never ran at all.
+--   * 0xF8E47E-0xF8E47F is called "INT0" but 0xF8E47E is the previous routine's
+--     `ret`.
+--   * 0x7E-0x7F is called "DMA3V" but 0x7E is DMA2V, which the transmit block
+--     arms from nine sites (wsa1_udma3_xref.py lists them).  Its "11" was
+--     DMA2V + DMA3V.
+-- The measured, unaliased picture is in README.md under wsa1_udma3_audit.lua.
+--
 -- Where does CPU 1's receive chain stop?
 --   INT0_LinkByte 0xF8E47F -> arms uDMA ch3, drops busy
 --   INTTC3_LinkDmaDone 0xF8E54F -> should raise busy again
