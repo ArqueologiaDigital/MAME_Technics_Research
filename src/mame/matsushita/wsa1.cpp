@@ -708,25 +708,35 @@ private:
 
 ***************************************************************************/
 
-// How long each latch write holds the processors in lockstep.  One byte-time is
-// ~6 us (measured, see cpu2_link_w()), so this has to outlast the gap to the next
-// byte of the same burst without being so long that it slows the whole boot.
+// How long each latch write holds the processors in lockstep.
 //
-// ⚠ MEASURED TOO SHORT, 2026-08-27, and NOT changed here because the change has
-// not been reviewed -- notes/wsa1-probes/wsa1_wire_window.lua, and the section
-// on it in that directory's README.  The gap that decides the outcome is not the
-// 6 us BETWEEN payload bytes but the 42 us between the header byte (which arms
-// this window) and the first byte of the burst: the window expires in it,
-// device_scheduler::add_quantum() measures the expiry from the scheduler's
-// current time so a shortened quantum only takes effect from the NEXT timeslice,
-// and CPU 2 empties five byte-times into the one-byte latch first.  The record
-// CPU 1 then assembles is 02 78 10 20 20 44 -- dest 0x20107802, which a 24-pin
-// bus cannot even drive -- instead of 00 73 00 00 C0 02, dest 0x00007300,
-// count 704.  With WSA1_PQ_US=200 the same boot loses NOTHING (719 written /
-// 719 read against 711 / 706), INTTC3 sees selector 4, and the 704 bytes of name
-// text land in the static RAM.  The SOUND MODE screen is nonetheless
-// byte-identical, so this is not the last blocker either.
-static constexpr int BURST_QUANTUM_US = 20;
+// THE NUMBER THAT SETS IT IS 42 us, NOT 6 us.  One byte-time inside a burst is
+// ~6 us (measured, see cpu2_link_w()), and this constant was first chosen
+// against that.  Wrong gap: the window is armed by the HEADER byte, and the
+// sender takes 42 us to get from the header to the first byte of the burst
+// (notes/wsa1-probes/wsa1_wire_window.lua).  A 20 us window expires inside that
+// gap -- device_scheduler::add_quantum() measures expiry from the scheduler's
+// current time, so a shortened quantum only bites from the NEXT timeslice and
+// the slice already granted runs to its end -- and CPU 2 then empties five
+// byte-times into the one-byte latch before the receiver runs.
+//
+// MEASURED over the same 95 s boot, everything else equal:
+//
+//     window   {LE32 dest, LE16 count} record CPU 1 assembles   CPU2->CPU1 w/r
+//      20 us   02 78 10 20 20 44  dest 0x20107802 count 17440    711 / 706
+//     200 us   00 73 00 00 C0 02  dest 0x00007300 count 704      719 / 719
+//
+// 0x20107802 is not even drivable on a 24-address-pin part; 0x00007300 is inside
+// map(0x000080, 0x007fff).ram() and 1 + 6 + 704 = 711 accounts for every byte
+// the boot sends.  At 200 us the exchange is in lockstep from byte #2, INTTC3
+// reaches selector 4 (INTTC3_Sel4_BlockDone) instead of stalling in selector 2,
+// and the block of sound-name text lands where the record says.
+// notes/wsa1-probes/wsa1_e1_record.lua prints the record; wsa1_udma3_audit.lua
+// prints the counts.
+//
+// It buys accuracy, not speed: the fine interleave is paid only while a message
+// is actually moving.
+static constexpr int BURST_QUANTUM_US = 200;
 
 void wsa1_state::cpu1_link_w(uint8_t data)
 {
