@@ -1491,9 +1491,13 @@ SENDER GAPS  n=70  min=5.857 us  median=6.036 us  mean=7.453 us  max=75.679 us
 TOTAL cpu2 writes=71  cpu1 reads=24   (quantum is 50 us; 28 MHz CPUs)
 ```
 
-**6 µs is correct, so the timer is exonerated.** prom_c arms channel 2 with T23MOD's φT16 tap and
-`TREG2 = 5`, and at fFPH = 14 MHz that is 5 × 16 × 71.4 ns = **5.71 µs** — the measurement lands
-on the arithmetic. The defect is that the quantum is **50 µs = eight byte-times**: CPU 1 runs up
+**6 µs is a plausible hardware pacing, so the timer is not the suspect.** ⚠ Reading T23MOD = 0x0E
+as selecting the φT16 prescaler tap, `TREG2 = 5` at fFPH = 14 MHz gives 5 × 16 × 71.4 ns =
+**5.71 µs**, which is where the measurement lands — but that bit decode is taken from the
+TLCS-900/H convention and NOT from a databook this tree has, so treat the agreement as
+corroboration, not proof. Nothing below depends on it: what decides the fix is the ratio of the
+measured 6 µs byte-time to the quantum. The defect is that the quantum is **50 µs = eight
+byte-times**: CPU 1 runs up
 to eight bytes ahead, CPU 2 then overwrites the one-byte latch eight times, and CPU 1 collects
 only the last. The reads bear it out — each one lands ~40 µs after the byte it took.
 

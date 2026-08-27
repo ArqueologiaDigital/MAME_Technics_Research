@@ -764,8 +764,11 @@ void wsa1_state::cpu2_link_w(uint8_t data)
 	//
 	//     SENDER GAPS  n=70  min=5.857 us  median=6.036 us  max=75.679 us
 	//
-	// 6 us is CORRECT, not a bug: prom_c arms the channel with T23MOD's phi-T16
-	// tap and TREG2 = 5, which at fFPH = 14 MHz is 5 x 16 x 71.4 ns = 5.71 us.
+	// 6 us is a plausible HARDWARE pacing, not a bug -- reading T23MOD = 0x0E as
+	// the phi-T16 tap, TREG2 = 5 at fFPH = 14 MHz gives 5 x 16 x 71.4 ns =
+	// 5.71 us.  (⚠ that bit decode is the TLCS-900/H convention, not a databook
+	// this tree has; the fix does not depend on it, only on the 6 us : 50 us
+	// ratio.)
 	// The trouble is that wsa1r()'s scheduling quantum is 50 us, so CPU 1 runs up
 	// to EIGHT byte-times ahead, CPU 2 then fills the same one-byte latch eight
 	// times, and CPU 1 can only ever collect the last one -- measured 71 writes
