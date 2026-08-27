@@ -1734,3 +1734,105 @@ the block to the right address is *also* necessary and not sufficient. What is n
 not before: 704 bytes of name text ("Downtown Set" …) do arrive in CPU 1's SRAM at `0x00007300`,
 so the next question is no longer about the link at all — it is what CPU 1 does with `0x7300`
 after the block lands, and why the SOUND MODE screen keeps printing its fallback string.
+
+---
+
+# ★ `Sound Name *****` -- SOLVED, 2026-08-27, and it was CPU 2's PORT 9
+
+The link work above (OVERLAY FIX 6, the burst quantum) was necessary and was not
+sufficient; the section it ends with says so. This is the rest of it.
+
+## The chain, and the exact point it stopped
+
+`wsa1_soundname_path.lua` -- one run, four candidate stopping points separated by
+data taps alone. prom_a's fallback string at `0xFC1C49` is reached from exactly
+one instruction, `0xFC1BAE ld XIY,0x00fc1c49`, taken when `sub_FC1BDC` returns
+`XIY = -1`; so the question is only how far the request/answer got.
+
+**Before, 110 s boot:**
+
+```
+COUNTS  req0x80=1  ansbuf_writes=0  fallback_sound_reads=24
+COUNTS  ring604800 r=262140 w=0   wire cpu1 w=5080 r=719   cpu2 w=719 r=5080
+t=  6.87606  REQ (0x0800) := 0x80  pc=FC1BBC        ... 04 00 00 00, six bytes
+t=  7.57579  FALLBACK Sound Name read @0xFC1C48  pc=F8F20F
+```
+
+`262140 = 4 x 65535` is `sub_FC1C29`'s poll bound, four times over, against
+**zero** ring writes. And `wsa1_name_request_window.lua` shows the request is
+not the problem — it crosses the wire in full and CPU 2 reads every byte:
+
+```
+t=   6.876076  CPU1 WRITE 0x05  (#5057)  pc=F8E0B9      header, stream 0, 6 bytes
+t=   6.876078        CPU2 READ  0x05  (#5057)  pc=F99BD5
+t=   6.876091  CPU1 WRITE 0x80  (#5058)  ... 00 04 00 00 00, all read by CPU 2
+```
+
+CPU 2's first transmission of the whole boot is at t = 70.88 s. It was not
+answering because it was not running: `wsa1_cpu2_timeline.lua` samples its PC
+per frame and it never leaves `0xF9A347-0xF9A490` in 80 s — six copies of the
+DSP microcode upload's per-byte handshake, `ld C,(0x19) / and C,0x08`, each
+bounded by `0x1F40` = 8000 iterations, each one burning the full bound because
+P9 read 0.
+
+## The cause: an unbound port is not a neutral port
+
+`wsa1_sch_dsprdy.sh` re-renders the schematic and re-runs the census. Service
+manual page 20 (sheet II-9/10, MAIN (A)/MB2), **IC2 TMP95C061AF MICROCOMPUTER
+(SUB)**, left pin column:
+
+| pin | name | net |
+|---|---|---|
+| 19 | VCC | +5D |
+| 20 | AN0 | **+5D** (same node as pin 19, junction dot on both) |
+| 21 | AN1 | JOYX through R180 1K |
+| 22 | AN2 | JOYY through R181 1K |
+| 23 | **P93** | **`DSPRDY`, R79 4.7K UP to the VREF node** |
+
+and pins 2-9 are P70-P77 carrying `DSPD0-DSPD7`, which is the byte path the same
+routine writes with `ld (0x0013),(XIZ+0x08)`. So P9 bits 0 and 3 idle **high**
+on the board; MAME's unbound read of 0 was the wrong level, not a neutral one.
+Nineteen sites read SFR 0x19 and all nineteen are in prom_c (prom_a, prom_b and
+prom_d have none) — eighteen DSPRDY polls plus `bit 0,(0x19)` at `0xFB050B`.
+
+Fixed by `wsa1_state::cpu2_p9_r()` returning `0x09`.
+
+## The A/B, in one binary
+
+`wsa1_p9_control.lua` puts port 9 back the way it was with a read tap, so the
+control and the fix are the *same executable*. **⚠ it needs
+`-autoboot_delay 0`**: with the fix in place the upload finishes before t = 1 s,
+and a control installed at t = 1 measures the fixed machine (that mistake was
+made once here, and it looked like a refutation).
+
+| | control (P9 = 0) | fixed |
+|---|---|---|
+| ring `0x604800` reads / writes | 262140 / 138 | **322 / 117** |
+| `0x000810` contents | untouched | `"     Piano      "` |
+| CPU 2 -> CPU 1 bytes | 719 | 948 |
+| t = 95 s screenshot | md5 `24a7cc95…` = the old `Sound Name *****` frame, byte-identical | md5 `c0109f39…`, **`Piano`** |
+
+## ⚠ What this did NOT fix: the keybed
+
+The same control, chained onto `wsa1_keybed_note.lua` on `wsa1`, still delivers
+the note with P9 masked to 0:
+
+```
+cpu2->cpu1: A2 90 3C 3C A2 90 3C 00           header 0xA2 = stream 5, 3 bytes
+cpu1->cpu2: 03 90 00 3C 3C  03 90 00 3C 00  03 B0 00 7B 00
+```
+
+so the note path was already cured by OVERLAY FIX 6 and the burst quantum. It is
+recorded here because the original brief tied the two symptoms to one wedge, and
+that turned out to be true of the *first* wedge only.
+
+## The probes added by this pass
+
+| script | question it answers |
+|---|---|
+| `wsa1_soundname_path.lua` | where does the sound-name chain stop -- request, wire, ring, or copy? |
+| `wsa1_name_request_window.lua` | does the request reach CPU 2, byte for byte, and what does CPU 2 do next? |
+| `wsa1_cpu2_timeline.lua` | what is CPU 2 executing, per 2-second bucket, over the whole boot? |
+| `wsa1_dspready_experiment.lua` | labelled FAKE: what changes if P9 bit 3 is held high? (the experiment that found it, superseded by the schematic) |
+| `wsa1_p9_control.lua` | the control: put port 9 back to an unbound read, then chain another probe |
+| `wsa1_sch_dsprdy.sh` | which net is IC2 pin 23, and who reads SFR 0x19? |

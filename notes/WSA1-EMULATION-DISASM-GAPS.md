@@ -99,16 +99,17 @@ firmware's reset/SENSE/SPECIFY sequence correctly** -- this is the one pin betwe
 reporting ready. ⚠ It is second and not first now only because gap Y stands between a user and the
 disk menu that would issue a request.
 
-**3. Gap C, and it now has a second, independent instrument.**
-Why CPU 1 never releases the link's receiver-busy line. ⚠ The old 200-second measurement in section
-C is quarantined and must not be quoted -- but a FRESH one taken this session says the same thing
-from the other end of the chain: on `wsa1`, with C4 held from t = 60 s to t = 70 s, the tone
-generator's block 0 sees **zero** gates beyond the 64 the boot reset issues at t = 0.02
-(`notes/wsa1-probes/wsa1_tg_lifecycle.lua`, 90 s run). So a key still does not reach a voice.
+**3. ~~Gap C~~ -- ✅ CLOSED 2026-08-27, together with gap G; what replaces it is below.**
+CPU 1 never released the link's receiver-busy line because micro-DMA channel 3 never completed:
+the CPU was taking INT0 while `DMA3V` had it pointed at the DMA engine (OVERLAY FIX 6 in
+`tmp95c061.cpp`). A key now reaches CPU 1 -- `A2 90 3C 3C` on the wire, answered `03 90 00 3C 3C`.
+And the `Sound Name *****` fallback, which the link wedge was blamed for, turned out to be gap G:
+CPU 2 could not answer because P9 bit 3 (`DSPRDY`, a pulled-up net read as 0) had it stuck in the
+DSP microcode upload's timeout loops for the whole boot. Both are in the driver.
 
-Gap C's own text is kept below with its quarantine banner. The tempting explanation, that CPU 1
-knows it is a rack and refuses keybed traffic, is REFUTED: there is not one `cp (0xC4)` in the whole
-transmit block.
+**What replaces this slot:** gap G's remaining half -- what the DSP microcode stream *is*. It is
+now the only thing between this driver and the three D6383GF DSPs doing anything, and the byte
+path is known (P7 data, P5.4 / P5.5 / P2.7 selects, PB.5 latch, DSPRDY handshake).
 
 ---
 
@@ -296,7 +297,29 @@ drive it -- see the top-three list, gap O and gap V.
 
 ---
 
-### C. Why does CPU 1 stop releasing the link's receiver-busy line? -- PRIORITY 1
+### C. ~~Why does CPU 1 stop releasing the link's receiver-busy line?~~ -- ✅ CLOSED 2026-08-27
+
+**ANSWERED, AND IT WAS A CPU-CORE BUG, NOT A PROTOCOL ONE.** CPU 1 stopped releasing P7 bit 1
+because `INTTC3_LinkDmaDone` never ran, and `INTTC3` never ran because micro-DMA channel 3 never
+completed, and channel 3 never completed because **the CPU was taking the interrupt the channel was
+armed for**. `DMA3V = 0x0A` points channel 3 at `(0x0A & 0x1f) << 2 = 0x28`, INT0's own vector;
+`tlcs900_process_hdma()` implemented the DMA half of that rule and
+`tmp95c061_device::tlcs900_check_irqs()` knew nothing about it, so the CPU won every race, and
+`INT0_LinkByte`'s `bit 2,(P7)` guard then returned without reading the port -- the byte was neither
+delivered nor consumed. Fixed as **OVERLAY FIX 6** in
+`src/devices/cpu/tlcs900/tmp95c061.cpp` (`hdma_owns_vector()`); MAME already carried the same rule
+in `tmp94c241_device::tlcs900_check_irqs()`, and the databook states it (TMP95C061 3.3.2 p.14,
+3.4 for the HALT half). A second, smaller blocker sat behind it: the one-byte latch needs the two
+processors interleaved for the length of a burst, which is `BURST_QUANTUM_US` in `wsa1.cpp` --
+raised from 20 us to 200 us on 2026-08-27 because the gap that decides the outcome is the 42 us
+between the header and the first payload byte, not the 6 us between payload bytes.
+
+**The keybed symptom this gap was ranked for is gone**: on `wsa1`, C4 now crosses as
+`A2 90 3C 3C` and CPU 1 answers `03 90 00 3C 3C` (`notes/wsa1-probes/wsa1_keybed_note.lua`).
+⚠ The sound name was NOT downstream of this gap -- see gap G.
+
+**Everything below is the original text, kept for its measurements.**
+
 
 **Question.** After CPU 2 sends its first packet, CPU 1 leaves P7 bit 1 low forever. Which arm
 of `INT0_LinkByte` (prom_a `0xF8E47F`) drops it, which arm is supposed to raise it, and what
@@ -521,7 +544,36 @@ far" -- it is one routine with two reads, which is worth correcting there.
 
 ---
 
-### G. What does the DSP microcode upload do, and what answers READY? -- PRIORITY 2
+### G. ~~What does the DSP microcode upload do, and what answers READY?~~ -- ✅ HALF CLOSED 2026-08-27, and it was THE sound-name blocker
+
+**ANSWERED: nothing answers READY, because nothing has to.** `P93` is the net `DSPRDY` and
+**R79 4.7K pulls it UP** -- service manual page 20 (sheet II-9/10, MAIN (A)/MB2), IC2
+TMP95C061AF MICROCOMPUTER (SUB), pin 23. The DSP is an open-drain talker on a pulled-up line; with
+no DSP present the pin reads **1**, and MAME's unbound port read of 0 was the *wrong level*, not a
+neutral one. Two more nets on the same pin column settle the rest of the question:
+pin 20 `AN0` is strapped to **+5D** (so P9 bit 0, the `bit 0,(0x19)` at `0xFB050B`, reads 1 too),
+and pins 2-9 are `P70-P77` carrying **`DSPD0-DSPD7`** -- the microcode byte path, which is the
+`ld (0x0013),(XIZ+0x08)` in the same routine. Re-derive all of it with
+`notes/wsa1-probes/wsa1_sch_dsprdy.sh`.
+
+Implemented as `wsa1_state::cpu2_p9_r()` returning `0x09`.
+
+**Why it mattered far more than "boot time":** with P9 reading 0, every one of the eighteen polls
+burned its full `0x1F40` bound, and CPU 2's PC never left `0xF9A347-0xF9A490` for an 80 s sample
+(`notes/wsa1-probes/wsa1_cpu2_timeline.lua`). Its main loop therefore never ran, so the one
+sound-name request CPU 1 posts at t = 6.876 s was never answered, CPU 1 spun `4 x 65535` empty
+polls of ring `0x604800` and prom_a `0xFC1BAE` substituted **`Sound Name *****`**. With the pin
+wired, the SOUND MODE screen prints **`Piano`** (`screens/wsa1r_p9fix_t95_sound_mode.png`), and
+`SX-WSA1` prints `WSA Piano`. The A/B is `notes/wsa1-probes/wsa1_p9_control.lua`, in one binary.
+
+**STILL OPEN, and it is the interesting half:** what the uploaded microcode *is*. The byte path is
+now known (P7, strobed by P5 bit 4 / P5 bit 5 / P2 bit 7 for the three DSPs and PB bit 5 as the
+common latch, `0xF9A33F-0xF9A498` and the five sibling blocks), but nothing here says what the
+stream means or where in prom_c/prom_d it comes from. The DSPs are `IC5`, `IC6` and `IC30`,
+D6383GF-3BA, on service manual page 23 (MAIN (C)/HP).
+
+**Original text, kept:**
+
 
 **Question.** CPU 2 polls **P9 bit 3** at eighteen sites (`0xF9A19F ld C,(0x19) / and C,0x08`)
 during a microcode upload. Which port do the microcode *bytes* leave by -- `0x00E00000`, or

@@ -110,3 +110,33 @@ and shares nothing with any of it — it is in the set because the brief asked
 for every Technics system, and a change that somehow reached it would be a very
 loud alarm.  `tools/gate.sh` passed 17/0/1 on the same binary with every
 liveness hash equal to its recorded baseline.
+
+---
+
+## ★ THE SOUND NAME APPEARS, 2026-08-27
+
+The before/after pair for the `Sound Name *****` fix (`cpu2_p9_r()` in
+`src/mame/matsushita/wsa1.cpp` -- CPU 2's P9 bit 3 is the pulled-up `DSPRDY`
+net, and an unbound MAME port read gave it the wrong level).
+
+```
+cd ~/compartilhado/kn7000_mame_build
+for m in wsa1r wsa1; do
+    SNAP_AT=95 DISPLAY=:0 ./kn7000 $m -rompath ./roms -skip_gameinfo -window \
+        -snapshot_directory /tmp/snaps -autoboot_delay 1 \
+        -autoboot_script ~/compartilhado/kn7000_mame/tools/rigs/snap_at.lua
+done
+```
+
+| file | machine | t | what it shows |
+|---|---|---|---|
+| `wsa1r_udma3fix_t95_sound_mode.png` | SX-WSA1R | 95 s | **BEFORE** -- `Sound Name *****`, `R1- 001`, both REALTIME CREATOR labels empty. md5 `24a7cc95d6da10dd84e34ad532e6b5c5` |
+| `wsa1r_p9fix_t95_sound_mode.png`    | SX-WSA1R | 95 s | **AFTER** -- `Piano`, `R1- 001`, and `FITTING` / `POSITION` in the REALTIME CREATOR box. md5 `c0109f397fdb00b1a9479cc5c649a04b` |
+| `wsa1_p9fix_t95_sound_mode.png`     | SX-WSA1  | 95 s | the keyboard variant on the same build: `WSA Piano`, `R1- 002`, and all four REALTIME CREATOR labels drawn |
+
+⚠ THE "BEFORE" FILE IS ALSO THE CONTROL.  It is reproduced exactly by the fixed
+binary when `notes/wsa1-probes/wsa1_p9_control.lua` masks P9 bits 0 and 3 back
+off -- same md5, `24a7cc95d6da10dd84e34ad532e6b5c5` -- so the difference is that
+one port handler and nothing else.  Run the control with `-autoboot_delay 0`:
+with the fix in place the DSP microcode upload has already finished by t = 1 s,
+and a control that starts late measures nothing.
