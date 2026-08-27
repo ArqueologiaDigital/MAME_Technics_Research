@@ -367,6 +367,40 @@ static const struct {
 static constexpr u8 NUM_MASKABLE_IRQS = sizeof(tmp95c061_irq_vector_map) / 3;
 
 
+// OVERLAY FIX 6 (kn7000_mame, 2026-08-27) -- is this interrupt vector owned by
+// an armed micro-DMA channel?
+//
+// Writing DMAnV points micro-DMA channel n at one interrupt vector; from then on
+// THAT interrupt starts a DMA transfer INSTEAD of being dispatched to the CPU,
+// and the CPU only hears about it again through INTTCn when the count runs out.
+// TMP95C061 databook 3.3.2 p.14: "When the interrupt is generated in the
+// interrupt request source set by HDMA start vector resistors, the interrupt
+// controller sends the HDMA request to the CPU in level '6' ... irrelevant to
+// the set interrupt level."  p.21: "When the HDMA transfer counter value reaches
+// 0 ... the HDMA start vector is cleared" -- which tlcs900_process_hdma() below
+// already does.  (Quotes extractable with notes/wsa1-probes/tlcs900_datasheet_quotes.py.)
+//
+// ⚠ THE RANGE TEST MUST MATCH tlcs900_process_hdma()'S EXACTLY.  Only the
+// sources in databook table 3.3(1) are HDMA start sources; process_hdma serves
+// `vector >= 0x28 && vector != 0x3c && vector < 0x74` and nothing else.  Without
+// the same guard here, a DMAnV whose low five bits are 0x1D/0x1E/0x1F (vectors
+// 0x74/0x78/0x7C = INTTC0/1/2) would be masked from the CPU *and* refused by the
+// DMA engine -- the interrupt would simply be dead until DMAnV changed.  That is
+// reachable in this build: notes/wsa1-probes/tlcs900_dmav_census.lua measures
+// kn1500 writing DMA0V/DMA2V = 0x5A and DMA1V/DMA3V = 0xA5 during boot.
+bool tmp95c061_device::hdma_owns_vector( uint8_t vector ) const
+{
+	if ( ! ( vector >= 0x28 && vector != 0x3c && vector < 0x74 ) )
+		return false;
+
+	for ( int ch = 0; ch < 4; ch++ )
+		if ( ( ( m_dma_vector[ch] & 0x1f ) << 2 ) == vector )
+			return true;
+
+	return false;
+}
+
+
 int tmp95c061_device::tlcs900_process_hdma( int channel )
 {
 	uint8_t vector = ( m_dma_vector[channel] & 0x1f ) << 2;
@@ -587,11 +621,13 @@ void tmp95c061_device::tlcs900_check_irqs()
 			// tlcs900_check_hdma() runs at the BOTTOM.  So the CPU won every
 			// race and the DMA channel starved.
 			//
-			// MAME already does this correctly for the sibling part: see
-			// tmp94c241_device::tlcs900_check_irqs(), "HDMA priority: skip
-			// interrupts targeted by active HDMA channels".  This file was the
-			// odd one out; the loop below is the same rule with the trigger
-			// vector computed the way process_hdma computes it.
+			// The rule is in the databook (TMP95C061 3.3.2 p.14, quoted in
+			// hdma_owns_vector() above), and MAME already implements it for the
+			// sibling part: see tmp94c241_device::tlcs900_check_irqs(), "HDMA
+			// priority: skip interrupts targeted by active HDMA channels".  This
+			// file was the odd one out.  hdma_owns_vector() carries the same
+			// range test process_hdma() uses, so a DMAnV pointing outside the
+			// HDMA start sources cannot kill an interrupt neither side serves.
 			//
 			// What it costs the SX-WSA1R: the inter-processor link, and with it
 			// the SOUND MODE screen's sound name.  INT0_LinkByte (prom_a
@@ -609,16 +645,7 @@ void tmp95c061_device::tlcs900_check_irqs()
 			// emulated seconds), DMAC3 sticks at 1, INTTC3 is dispatched ZERO
 			// times, P7 bit 1 stays low and every later packet from CPU 2 is
 			// dropped -- which also loses keybed notes.
-			bool hdma_targeted = false;
-			for ( int ch = 0; ch < 4; ch++ )
-			{
-				if ( ( ( m_dma_vector[ch] & 0x1f ) << 2 ) == tmp95c061_irq_vector_map[i].vector )
-				{
-					hdma_targeted = true;
-					break;
-				}
-			}
-			if ( hdma_targeted )
+			if ( hdma_owns_vector( tmp95c061_irq_vector_map[i].vector ) )
 				continue;
 
 			switch( tmp95c061_irq_vector_map[i].iff )
@@ -1218,8 +1245,14 @@ void tmp95c061_device::execute_set_input(int input, int level)
 				/* Rising edge detect */
 				if ( m_level[TLCS900_INT0] == CLEAR_LINE && level == ASSERT_LINE )
 				{
-					/* Leave HALT state */
-					m_halted = 0;
+					/* Leave HALT state -- unless a micro-DMA channel owns this
+					   vector.  OVERLAY FIX 6, second half: databook 3.4, "The
+					   HALT state cannot be released by HDMA start."  Without
+					   this test the CPU would leave HALT and then dispatch
+					   nothing, because tlcs900_check_irqs() skips the same
+					   vector. */
+					if ( ! hdma_owns_vector( 0x28 ) )
+						m_halted = 0;
 					m_int_reg[INTE0AD] |= 0x08;
 				}
 			}
@@ -1278,7 +1311,8 @@ void tmp95c061_device::execute_set_input(int input, int level)
 	case TLCS900_INT6:
 		if ( m_level[TLCS900_INT6] == CLEAR_LINE && level == ASSERT_LINE )
 		{
-			m_halted = 0;
+			if ( ! hdma_owns_vector( 0x34 ) )   // OVERLAY FIX 6: HDMA start does not release HALT
+				m_halted = 0;
 			m_int_reg[INTE67] |= 0x08;
 		}
 		m_level[TLCS900_INT6] = level;
@@ -1287,7 +1321,8 @@ void tmp95c061_device::execute_set_input(int input, int level)
 	case TLCS900_INT7:
 		if ( m_level[TLCS900_INT7] == CLEAR_LINE && level == ASSERT_LINE )
 		{
-			m_halted = 0;
+			if ( ! hdma_owns_vector( 0x38 ) )   // OVERLAY FIX 6: HDMA start does not release HALT
+				m_halted = 0;
 			m_int_reg[INTE67] |= 0x80;
 		}
 		m_level[TLCS900_INT7] = level;

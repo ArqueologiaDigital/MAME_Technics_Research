@@ -93,6 +93,8 @@ protected:
 
 	void tlcs900_change_tff( int which, int change );
 	int tlcs900_process_hdma( int channel );
+	// OVERLAY FIX 6 (kn7000_mame) -- see the long comment in tmp95c061.cpp.
+	bool hdma_owns_vector( uint8_t vector ) const;
 	void update_porta();
 
 	// device_disasm_interface overrides
