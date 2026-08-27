@@ -1970,3 +1970,43 @@ geometry off `matrix(2.1441055,1.1335575,−1.1341853,2.1452869,…)`, a rotatio
 and scale rather than a translation, so there is no translation to bake; and
 `vector_art` nests `<g>`/`<clipPath>` 14 deep — it needs nothing anyway, its
 viewBox already starts at `0,0`. `volume_knob` bakes normally.
+
+### What the reuse pass actually shipped, and how each step was gated
+
+`wsa1r.lay` went from **267 287 to 107 162 bytes**, and from 58 button
+`<element>`s to **10 shapes placed 58 times** — the `kn5000.lay` idiom. Each
+step was gated on a measurement rather than an argument, and the gate that
+mattered was not always the obvious one.
+
+| step | what it removed | gate | result |
+|---|---|---|---|
+| keys share a shape | 58 inline SVGs → 10 | `nsvg_hash` per element at its own bounds | one antialiased border row, ≤35/255 |
+| local coordinates | — | `nsvg_hash` | **more** accurate: absolute coords ~350 lose float32 precision |
+| legends share an element | 56 → 51 | `<text>` carries no geometry | free |
+| dead `<clipPath>` | 19 blocks, 12 of them the same A4 rect | `nsvg_hash` 1600×500 | `ndiff=0 of 800000` |
+| dead `<defs>` | 65 of 79 gradients, orphaned when the keys were lifted | `nsvg_hash` at 1× and 4× | `ndiff=0 of 12800000` |
+| pressed state as a component | the whole drawing, written twice per key | composite the wash in Python, compare | ≤1/255 (3/255 for the two disks) |
+| namespaces on the wrapper | `xmlns` on all 83 copied subtrees | `nsvg_hash` | `ndiff=0`, 23 elements |
+| repeated marks share | 12 instances → 3 | **whole-panel A/B** | ≤26/255, the same envelope as the keys |
+
+**The gate that caught the real bug was the last one.** `nsvg_hash` compares one
+element against another and is blind to COMPOSITION. Lifting the two rubber feet
+out of the backdrop moved them from behind the panel body to in front of it —
+they climbed out and sat proud of the front panel — and every per-element check
+still passed. `wsa1r_panel_ab.sh` renders the whole panel from a MAME built at
+two commits and diffs the images; it is the only check that could see this.
+
+Two consequences are now encoded in the generator:
+
+* `repeated_decor()` refuses to lift a mark that anything drawn later in the
+  backdrop covers, or that a key drawn earlier overlaps. Document order is paint
+  order, and lifting moves a shape to the front of it.
+* Lifting also quantises away the sub-pixel phase a mark had inside the one big
+  backdrop raster. That cost follows hard-edged contrast, not size: 25/255 for
+  the soft-key arrows but **102/255 for a 3×3 volume dot**. `DECOR_NAMES` carries
+  a per-mark lift/keep decision with the measured figure beside it.
+
+| script | question it answers |
+|---|---|
+| `wsa1r_panel_ab.sh` | does the whole panel still look the same — composition included? |
+| `wsa1r_hold_one_of_each_shape.lua` | one key of every distinct shape held down, so the pressed artwork can be seen at all |
