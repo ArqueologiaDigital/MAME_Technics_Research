@@ -335,34 +335,38 @@ def control_images(art, ids, pressable=True):
     wu, hu = w / geo.SCALE, h / geo.SCALE
     imgs = []
     if pressable:
-        for st, dark in ((0, False), (1, True)):
-            svg = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=dark)
-            if dark:
-                # keep the unpressed art underneath the darkening overlay
-                base = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=False)
-                svg = base[:-len('</svg>')] + svg[svg.index('</defs>') + len('</defs>'):]
-            imgs.append('\t\t<image state="%d"><data><![CDATA[%s]]></data></image>' % (st, svg))
+        # The pressed state used to be the WHOLE unpressed drawing written out a
+        # second time with a 34%-black copy of the shapes laid over it -- one
+        # such copy per key, and the largest duplication left in the file.  MAME
+        # will draw that wash itself: a component with no <bounds> covers the
+        # element (rendlay.cpp:990), and an <image> with no state= draws in
+        # every state (rendlay.cpp:3141).
+        #
+        # That says the same thing only where the wash is UNIFORM.  A control
+        # drawn from ONE shape washes evenly, and the substitution measures
+        # within 1/255 (3/255 for the two round keys, whose <disk> edge
+        # antialiases a little differently).  The ten LCD soft keys are drawn
+        # from TWO overlapping shapes and the old code darkens each in turn, so
+        # their centre lands at 1-0.66^2 = 56% and their border at 34%.  That is
+        # an artefact of how the darkening was built rather than a decision, but
+        # it is the artefact currently on screen, so they keep the two-image
+        # form and go on looking exactly as they do now.
+        base = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=False)
+        if len(ids) == 1:
+            kind = geo.shape_points(art.by_id[ids[0]])[1]
+            tag = 'disk' if kind == 'ellipse' else 'rect'
+            imgs.append('\t\t<image><data><![CDATA[%s]]></data></image>' % base)
+            imgs.append('\t\t<%s state="1">%s</%s>' % (tag, WASH, tag))
+        else:
+            dk = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=True)
+            svg = base[:-len('</svg>')] + dk[dk.index('</defs>') + len('</defs>'):]
+            imgs.append('\t\t<image state="0"><data><![CDATA[%s]]></data></image>' % base)
+            imgs.append('\t\t<image state="1"><data><![CDATA[%s]]></data></image>' % svg)
     else:
         imgs.append('\t\t<image><data><![CDATA[%s]]></data></image>'
                     % shape_svg(art, ids, x0u, y0u, wu, hu, w, h))
     return imgs, (x, y, w, h), shape_signature(art, ids, x0u, y0u)
 
-
-# ------------------------------------------------- one shape, many instances
-#
-# Felipe drew the panel by duplicating a key and dragging the copy, so the 58
-# buttons are only a handful of DISTINCT keys.  The copies are not identical
-# byte for byte: Inkscape rewrites a gradient scale as 1.1940374 in one copy
-# and 1.1940531 in the next, and a stroke width as 0.264583 or 0.264584.  Those
-# are rounding, six decimal places down; the differences that MATTER are three
-# orders of magnitude larger (the under-LCD keys really do carry two different
-# gradient ramps, 1.2046874 against 1.2364906 -- a 2.6% difference the eye can
-# see side by side).
-#
-# So two controls share an <element> when their drawings agree STRUCTURALLY and
-# every number agrees to one part in a thousand.  That threshold sits 26x above
-# the largest rounding artefact measured and 26x below the smallest real
-# difference, so nothing is riding on where exactly it is put.
 
 # ------------------------------------------------- one shape, many instances
 #
@@ -416,6 +420,26 @@ SHAPE_NAMES = {
     "circle196":  ("realtime_creator_button", "REALTIME CREATOR 1~6"),
     "ellipse228": ("realtime_creator_reset_button", "REALTIME CREATOR RESET"),
 }
+
+# The marks the DRAWING repeats, as opposed to the keys.  Same naming rule as
+# SHAPE_NAMES: the artwork id of the first instance, so that renaming a shape
+# in Inkscape cannot silently rename a layout element, and an unrecognised
+# repeat stops the generator instead of appearing as "shape7".
+DECOR_NAMES = {
+    "ellipse209": ("volume_scale_dot",
+                   "one of the eleven dots ringing the VOLUME knob, MIN to MAX"),
+    "path99":     ("lcd_soft_key_marker_left",
+                   "the arrow beside an LCD soft key, left column"),
+    "path114":    ("lcd_soft_key_marker_right",
+                   "the arrow beside an LCD soft key, right column"),
+    "path40":     ("rack_ear_slot_left", "a mounting slot in the left rack ear"),
+    "path41":     ("rack_ear_slot_right", "a mounting slot in the right rack ear"),
+    "path1":      ("menu_rule", "one of the two rules flanking the MENU legend"),
+    "path291":    ("mode_rule", "the rule drawn over PLAY MODE and over EDIT MODE"),
+    "ellipse193": ("rubber_foot", "one of the two feet showing below the panel"),
+}
+
+WASH = '<color red="0.0" green="0.0" blue="0.0" alpha="0.34"/>'
 
 SHAPE_TOL = 1e-3
 
@@ -531,6 +555,70 @@ def same_shape(a, b):
         if abs(u - v) > SHAPE_TOL * max(1.0, abs(u), abs(v)):
             return False
     return True
+
+
+_DRAWABLE = {'path', 'rect', 'circle', 'ellipse'}
+
+
+def repeated_decor(art, extracted):
+    """Marks the drawing itself repeats, clustered the same way the keys are.
+
+    The static art is not only a backdrop: it carries the arrow beside each of
+    the ten LCD soft keys, the eleven dots ringing the VOLUME knob, the rack-ear
+    slots and the feet, each drawn out once per instance.  Anything that appears
+    more than once is lifted into a single <element> and placed, exactly as a
+    key is; anything unique is left in the backdrop where it was.
+
+    A candidate is either a <g> holding nothing but drawables -- the arrows are
+    three paths apiece -- or a lone drawable.  Returns
+    [(name, what, [(ids, bounds), ...]), ...] in document order."""
+    cands = []
+
+    def walk(node):
+        kids = [c for c in node if c.tag.replace(SVG, '')
+                not in ('defs', 'metadata', 'namedview')]
+        draw = [c for c in kids if c.tag.replace(SVG, '') in _DRAWABLE]
+        groups = [c for c in kids if c.tag == SVG + 'g']
+        if node.tag == SVG + 'g' and draw and not groups:
+            ids = [c.get('id') for c in draw if c.get('id')]
+            if ids and not (set(ids) & extracted):
+                cands.append(ids)
+                return
+        for c in draw:
+            i = c.get('id')
+            if i and i not in extracted:
+                cands.append([i])
+        for g in groups:
+            walk(g)
+
+    walk(art.root)
+
+    clusters = []
+    for ids in cands:
+        try:
+            x, y, w, h = art.bbox_px(ids)
+        except SystemExit:
+            continue                       # no geometry: leave it in the art
+        sig = shape_signature(art, ids, x / geo.SCALE, y / geo.SCALE)
+        for cl in clusters:
+            if same_shape(cl[0], sig):
+                cl[1].append((ids, (x, y, w, h)))
+                break
+        else:
+            clusters.append((sig, [(ids, (x, y, w, h))]))
+
+    out = []
+    for sig, members in clusters:
+        if len(members) < 2:
+            continue
+        first = members[0][0][0]
+        if first not in DECOR_NAMES:
+            sys.exit('the artwork repeats a mark this generator cannot name: %s '
+                     '(x%d, first at %.0f,%.0f).  Add it to DECOR_NAMES.'
+                     % (first, len(members), members[0][1][0], members[0][1][1]))
+        name, what = DECOR_NAMES[first]
+        out.append((name, what, members))
+    return out
 
 
 # MAME's draw_text() (src/emu/rendlay.cpp) renders the glyphs at bounds.HEIGHT
@@ -816,6 +904,21 @@ def build():
                                % (ref, cmt(esc(legend)), cmt(esc(why)), x, y, w, h))
         extracted.add(sid)
 
+    # ---- repeated decoration -------------------------------------------
+    # The backdrop repeats marks too, and they are shared on the same terms as
+    # the keys: one element, N placements.  Anything unique stays in the art.
+    decor_elems, decor_places = [], []
+    for name, what, members in repeated_decor(art, extracted):
+        ids0 = members[0][0]
+        imgs, _, _ = control_images(art, ids0, pressable=False)
+        decor_elems.append('\t<element name="%s"><!-- %s ; drawn %d times -->\n%s\n\t</element>'
+                           % (name, cmt(esc(what)), len(members), '\n'.join(imgs)))
+        for ids, (x, y, w, h) in members:
+            decor_places.append('\t\t<element ref="%s">'
+                                '<bounds x="%.3f" y="%.3f" width="%.3f" height="%.3f"/></element>'
+                                % (name, x, y, w, h))
+            extracted.update(ids)
+
     # ---- labels --------------------------------------------------------
     # ⚠ BEFORE the static-art prune below, which deletes every <text> node from
     # the tree.  Computing them afterwards silently yields an empty list and a
@@ -839,6 +942,47 @@ def build():
                 parent.remove(ch)
     for el in root.iter():
         el.attrib.pop('clip-path', None)
+
+    # Now sweep <defs>.  Every control lifted out above took a COPY of its
+    # gradients with it (shape_svg emits them inline), but the originals stayed
+    # behind with nothing left to paint.  Walk url(#..) and xlink:href from what
+    # actually survives, close the set, and drop the rest.
+    defs_nodes = [d for d in root.iter() if d.tag == SVG + 'defs']
+    defined = {}
+    for d in defs_nodes:
+        for ch in d:
+            if ch.get('id'):
+                defined[ch.get('id')] = (d, ch)
+
+    def refs_of(el):
+        blob = ' '.join(v for v in el.attrib.values())
+        out = set(re.findall(r'url\(#([^)]+)\)', blob))
+        for k in ('{http://www.w3.org/1999/xlink}href', 'href'):
+            v = el.get(k)
+            if v and v.startswith('#'):
+                out.add(v[1:])
+        return out
+
+    frontier = set()
+    for el in root.iter():
+        if any(el is c for _, c in defined.values()) or el.tag == SVG + 'defs':
+            continue
+        if any(el in list(d.iter()) for d in defs_nodes):
+            continue
+        frontier |= refs_of(el)
+    alive = set()
+    while frontier:
+        i = frontier.pop()
+        if i in alive or i not in defined:
+            continue
+        alive.add(i)
+        node = defined[i][1]
+        for sub in node.iter():
+            frontier |= refs_of(sub)
+    for i, (d, ch) in defined.items():
+        if i not in alive:
+            d.remove(ch)
+
     strip_ns(root)
     for k in ('width', 'height'):
         root.set(k, '1600' if k == 'width' else '500')
@@ -862,6 +1006,7 @@ def build():
     out.append('\t</element>')
     out.append('')
     out.extend(elems)
+    out.extend(decor_elems)
     out.append('')
 
     # ---- label elements ------------------------------------------------
@@ -873,11 +1018,21 @@ def build():
     for r in lbl:
         key = (r['text'], r['align'], r['rgb'])
         if key not in seen_lbl:
-            base = 'lbl_' + (re.sub(r'[^A-Za-z0-9]+', '_', r['text']).strip('_').upper()
+            # Spell the signs out.  Squeezing them away turns "+1" and "-1"
+            # into "1", which then collides with the real "1" legend and comes
+            # back as lbl_1_2 and lbl_1_3 -- names that read as variants of the
+            # wrong key.  A hyphen BETWEEN alphanumerics is a range, not a
+            # minus ("1-6"), so it stays a separator.
+            t = r['text'].replace('+', '_PLUS_')
+            t = re.sub(r'(?<![A-Za-z0-9])-|-(?![A-Za-z0-9])', '_MINUS_', t)
+            base = 'lbl_' + (re.sub(r'[^A-Za-z0-9]+', '_', t).strip('_').upper()
                              or 'TEXT')
-            n = used.get(base, 0)
-            used[base] = n + 1
-            seen_lbl[key] = base if not n else '%s_%d' % (base, n + 1)
+            if base in used:
+                sys.exit('two different legends both want the element name %s '
+                         '(%r and %r) -- give one of them a distinct name'
+                         % (base, used[base], r['text']))
+            used[base] = r['text']
+            seen_lbl[key] = base
             out.append('\t<element name="%s"><text string="%s" align="%d">'
                        '<color red="%.2f" green="%.2f" blue="%.2f"/></text></element>'
                        % (seen_lbl[key], esc(r['text']), r['align'], *r['rgb']))
@@ -890,6 +1045,10 @@ def build():
     out.append('\t\t<bounds left="0" right="%d" top="0" bottom="%d"/>' % (VIEW_W, VIEW_H))
     out.append('\t\t<element ref="vector_art"><bounds x="0" y="0" width="%d" height="%d"/></element>'
                % (VIEW_W, VIEW_H))
+    out.append('')
+    out.append('\t\t<!-- the marks the drawing repeats, on top of the backdrop they')
+    out.append('\t\t     were lifted out of and under everything else -->')
+    out.extend(decor_places)
     out.append('')
     out.append('\t\t<!-- The SED1330 panel, 320x240 (wsa1.cpp screen.set_size).  Felipe drew')
     out.append('\t\t     the LCD 1:1, so this lands inside his bezel with no scaling. -->')
