@@ -1273,3 +1273,41 @@ Its panel is a different board -- two more scan columns (SEG6, SEG10) and three 
 them centre-detented -- and no SX-WSA1 document exists in these trees. Reusing the rack's artwork
 would be a fabrication, so `wsa1r(machine_config&)` sets the layout and `wsa1(machine_config&)`
 deliberately does not.
+
+## `wsa1_name_path.lua` — why the SOUND MODE screen shows `Sound Name *****`
+
+**Question:** the screen shows a placeholder where a sound name belongs. Is that a
+failed inter-CPU exchange, or something else?
+
+    cd ~/compartilhado/kn7000-emulator
+    ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str 95 \
+        -autoboot_script wsa1_name_path.lua -autoboot_delay 1
+
+Counts CPU 2's reads of `prom_d` (0xF00000-0xF7FFFF), and every write to each
+side's link port, tallied by command byte.
+
+**Two things had to be true, and only one of them was.**
+
+1. `Sound Name *****` is **not corruption** — it is a literal string in
+   `prom_a` at `0x41C54`, with `Combi Name *****` at `0x41CCC`. It is the
+   firmware's own "no name available" fallback, so the machine is *choosing* to
+   print it. `R1-001` is displayed alongside, so a sound IS selected.
+2. The tone database `prom_d` was **never mapped** into either address space --
+   only declared as a `ROM_REGION`. Fixed: it is 512 KiB at `0x00F00000` on
+   CPU 2's bus, and this probe now measures **616 reads** of it, so that half is
+   live.
+
+**What still blocks it: the link.** Measured 2026-08-27, 95 s boot:
+
+    promd_reads = 616      CPU 2 is reading the database
+    cpu1_link_writes = 46  CPU 1 is talking
+    cpu2_link_writes = 2   CPU 2 answers twice, then nothing
+    CPU 1 commands include E2 x4 -- remote block read -- and E1 x1
+
+CPU 1 issues **four `0xE2` remote block reads** and CPU 2 never returns the
+blocks. That is emulation **gap C**: CPU 1 stops asserting P7 bit 1 (the
+receiver-busy line) after its first exchange because `INTTC3` never completes, so
+CPU 2 is locked out for the rest of the run.
+
+⚠ So the name is downstream of gap C, not of a missing ROM. Mapping `prom_d` was
+necessary and is not sufficient; the same wedge also drops keybed notes.

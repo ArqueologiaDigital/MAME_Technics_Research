@@ -2440,6 +2440,28 @@ void wsa1_state::cpu2_map(address_map &map)
 	// vector table at 0xFFFF00 giving reset = 0xFFF000.  The device also holds
 	// data: a "ZZZZ" headed bank at file 0x000000-0x0165BF, code from 0x018000
 	// to 0x0621E4, and the boot block and vectors from 0x07F000.
+	// --- the tone database, prom_d, on CPU 2's bus -------------------------
+	//
+	// 512 KiB at 0x00F00000.  The base is established twice over, and neither
+	// reading is this driver's:
+	//   * prom_a reads the image's build tag REMOTELY at 0x00F7FFF0 over the
+	//     inter-CPU link (wsa1-roms-disasm/notes/FINDINGS-memory-map.md sec.5).
+	//     0x00F7FFF0 - 0x00F00000 = 0x7FFF0, which is exactly where the tail tag
+	//     sits in the 512 KiB image -- the size and the base agree.
+	//   * prom_c's ExtBoard_ProbeAndInstallBases stores 0x00F00000 into RAM
+	//     0x00D7ED (0xFB051E / 0xFB0523), and Voice_SelectKeyZone_Reg0040
+	//     relocates three nested 32-bit 0-based offsets of a voice's tone object
+	//     against it.
+	//
+	// It was left unmapped until now because the base was NOT established when
+	// this driver was written -- the note then said so, and the driver refused
+	// to guess.  The disassembly corrected that on 2026-08-25; this maps it.
+	//
+	// ⚠ prom_d's own linker script in the disassembly tree still carries the
+	// superseded 0xE80000 hypothesis and says "BASE -- NOT ESTABLISHED".  That
+	// file is stale; the corrected reading is the one cited above.
+	map(0xf00000, 0xf7ffff).rom().region("prom_d", 0);           // tone database
+
 	map(0xf80000, 0xffffff).rom().region("prom_c", 0);           // IC28
 }
 
