@@ -711,6 +711,21 @@ private:
 // How long each latch write holds the processors in lockstep.  One byte-time is
 // ~6 us (measured, see cpu2_link_w()), so this has to outlast the gap to the next
 // byte of the same burst without being so long that it slows the whole boot.
+//
+// ⚠ MEASURED TOO SHORT, 2026-08-27, and NOT changed here because the change has
+// not been reviewed -- notes/wsa1-probes/wsa1_wire_window.lua, and the section
+// on it in that directory's README.  The gap that decides the outcome is not the
+// 6 us BETWEEN payload bytes but the 42 us between the header byte (which arms
+// this window) and the first byte of the burst: the window expires in it,
+// device_scheduler::add_quantum() measures the expiry from the scheduler's
+// current time so a shortened quantum only takes effect from the NEXT timeslice,
+// and CPU 2 empties five byte-times into the one-byte latch first.  The record
+// CPU 1 then assembles is 02 78 10 20 20 44 -- dest 0x20107802, which a 24-pin
+// bus cannot even drive -- instead of 00 73 00 00 C0 02, dest 0x00007300,
+// count 704.  With WSA1_PQ_US=200 the same boot loses NOTHING (719 written /
+// 719 read against 711 / 706), INTTC3 sees selector 4, and the 704 bytes of name
+// text land in the static RAM.  The SOUND MODE screen is nonetheless
+// byte-identical, so this is not the last blocker either.
 static constexpr int BURST_QUANTUM_US = 20;
 
 void wsa1_state::cpu1_link_w(uint8_t data)
@@ -783,7 +798,11 @@ void wsa1_state::cpu2_link_w(uint8_t data)
 	// notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch -- was
 	// tried first and MEASURED at 21 -> 24 reads out of 71: it cannot help,
 	// because it only ends the SENDER's slice and the receiver is already ahead
-	// in local time.
+	// in local time.  (Re-measured 2026-08-27 in the cell that was missing: with
+	// perfect_quantum() ALSO in, abort_timeslice() is a complete no-op -- the
+	// wire trace is timestamp-identical and the t=95 s screenshot byte-identical.
+	// The 21 -> 24 result reproduces exactly.  See BURST_QUANTUM_US above for
+	// what does move it.)
 	machine().scheduler().perfect_quantum(attotime::from_usec(BURST_QUANTUM_US));
 }
 

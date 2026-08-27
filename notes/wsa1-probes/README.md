@@ -1521,6 +1521,14 @@ burst re-arms the window and the whole message stays in lockstep.
 The link is no longer the bottleneck: both directions now carry thousands of bytes essentially
 without loss, where before the fix the machine managed one received message in a whole boot.
 
+⚠ **CORRECTED 2026-08-27 by the adversarial re-check at the end of this file.** That sentence
+reads more into the byte counters than they carry. In the same run CPU 1's `INT0_LinkByte` is
+dispatched **once** in 95 s and `INTTC3` runs **once**: 705 of the 706 reads of `0x7C0000` are one
+runaway micro-DMA transfer armed with a corrupt count. The CPU 2 → CPU 1 direction still delivers
+exactly ONE message per boot, the same as before the quantum change; what the quantum fixed is the
+CPU 1 → CPU 2 direction. See `wsa1_fix6_refutation.lua` / `wsa1_wire_window.lua` below — including
+the five bytes that are lost and the `BURST_QUANTUM_US` value that stops losing them.
+
 ### ⚠ AND THE SCREEN STILL SAYS `Sound Name *****`
 
 Captured at t = 95 s with `tools/rigs/snap_at.lua` on exactly this build —
@@ -1535,3 +1543,194 @@ that count is still being read from a bad record, or the block is sent in chunks
 is not being re-armed for. `wsa1_udma3_audit.lua` already prints everything needed to tell those
 apart — the selector writes, the `DMA3V` arms and the destination buffers — so start by dumping
 the six bytes at `0x6007D3` at the moment `INTTC3_Sel2_ArmPayload` reads them.
+
+---
+
+## `wsa1_fix6_refutation.lua`, `wsa1_e1_record.lua`, `tlcs900_dmav_census.lua` — the adversarial re-check of OVERLAY FIX 6
+
+**Question:** the section above claims (a) micro-DMA channel 3 completed *zero* times before FIX 6,
+(b) the cause is the CPU taking an interrupt the channel was armed for, (c) `perfect_quantum()`
+then made both directions "essentially lossless". Re-derived here with independent, dispatch-exact
+counters and a run-time A/B of both changes.
+
+### How the A/B is done — one binary, four cells
+
+`wsa1_fix6_ab.patch` (committed beside these probes, **not applied to the tree**) adds two
+environment switches, `TLCS_NO_FIX6` in `tmp95c061_device::tlcs900_check_irqs()` and `WSA1_NO_PQ`
+in both `wsa1_state::cpu*_link_w()`, so one build measures all four cells and no cell differs from
+another by anything except the change under test. Apply it, rebuild, then:
+
+```
+cd ~/compartilhado/kn7000_mame_build
+[TLCS_NO_FIX6=1] [WSA1_NO_PQ=1] DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo \
+    -str 100 -window -autoboot_delay 1 \
+    -autoboot_script ~/compartilhado/kn7000_mame/notes/wsa1-probes/wsa1_fix6_refutation.lua
+```
+
+Counters are **reads of the interrupt vector table** — a dispatch is the only thing that executes
+`m_pc.d = RDMEML(0xffff00 + vector)` — so they carry no prefetch shadow and no routine-entry
+aliasing. Checked against the ROM: `0xFFFF28 -> jp 0xF8E47F` (INT0_LinkByte), `0xFFFF7C ->
+jp 0xF8E52D`, `0xFFFF80 -> jp 0xF8E54F` (INTTC3_LinkDmaDone). The selector-word read count is
+carried alongside as a second, independent INTTC3 counter; the two agree in all four cells.
+
+### The grid, 95 s boot, same binary, same ROMs
+
+| counter | neither | quantum only | FIX 6 only | both |
+|---|---|---|---|---|
+| CPU 1 INT0 dispatches (`0xFFFF28`) | 2 | 2 | **1** | **1** |
+| CPU 1 INTTC3 dispatches (`0xFFFF80`) | **0** | **0** | 1 | 1 |
+| CPU 1 INTTC3 selector reads (`0x6007DA`) | **0** | **0** | 1 | 1 |
+| CPU 2 → CPU 1 bytes written / read | 2 / 1 | 2 / 1 | 71 / 21 | 711 / 706 |
+| CPU 1 → CPU 2 bytes written / read | 41 / 1 | 41 / 0 | 43 / 21 | 5070 / 5070 |
+| CPU 2 INT0 dispatches | 40 | 41 | 7 | 985 |
+| CPU 2 INTTC3 dispatches | 0 | 0 | 3 | 985 |
+| CPU 1 `DMA3V := 0x0A` arms | 1 | 1 | 2 | 2 |
+
+**FIX 6 is the change that moves the link, and `perfect_quantum()` alone does nothing** — the
+quantum-only cell is the baseline to within one byte. That is the cell the original report never
+measured, and it is the one that could have refuted it.
+
+### The rule FIX 6 implements is in the databook, not just in `tmp94c241.cpp`
+
+TMP95C061 datasheet (bitsavers, sha256 `ef644920…`, fetched by
+`tlcs900_datasheet_quotes.py`), §3.3.2 "High-Speed DMA (HDMA)", p.14:
+
+> When the interrupt is generated in the interrupt request source set by HDMA start vector
+> resistors, the interrupt controller sends the **HDMA request** to the CPU in level "6"
+> irrelevant to the set interrupt level.
+
+and p.21, "(3) HDMA Start Vector":
+
+> When the HDMA transfer counter value reaches 0, … **the HDMA start vector is cleared**, and the
+> HDMA start source of the channel is also cleared.
+
+So an interrupt named by a live `DMAnV` starts a transfer instead of a handler, and the register
+self-disarms at completion — which is what `tlcs900_process_hdma()` already did (`m_dma_vector[channel] = 0`)
+and what FIX 6 makes `tlcs900_check_irqs()` agree with.
+
+### Two narrow defects in the FIX 6 *implementation* (not in its premise)
+
+1. **No range guard.** `tlcs900_process_hdma()` serves a vector only when
+   `vector >= 0x28 && vector != 0x3c && vector < 0x74`; FIX 6 masks *any* matching map entry. For
+   `DMAnV & 0x1F` in {0x1D, 0x1E, 0x1F} — vectors 0x74/0x78/0x7C = INTTC0/1/2 — the interrupt is
+   then masked from the CPU **and** refused by the DMA, i.e. dead until `DMAnV` changes. The
+   datasheet is explicit that only the sources in Table 3.3 (1) are HDMA start sources, so the
+   guard belongs in both places. Reachable: `tlcs900_dmav_census.lua` measures **kn1500** writing
+   `DMA0V = 0x5A` / `DMA2V = 0x5A` (vector 0x68 = INTRX1) and `DMA1V/DMA3V = 0xA5` (vector 0x14,
+   below the map, harmless) — a `5A/A5` pattern that looks like the crt0 RAM test spilling into the
+   SFRs. Nothing in *that* set trips the mismatch today, but nothing prevents it either.
+2. **HALT.** The same datasheet page says "The HALT state cannot be released by HDMA start"
+   (§3.4). `execute_set_input()` clears `m_halted` for an edge-mode INT0/INT4..7 before FIX 6 gets
+   a say, so a halted CPU now leaves HALT and dispatches *nothing*. Level-mode INT0 — what the
+   SX-WSA1R uses — never touched `m_halted`, so this cannot bite here; an edge-mode user could.
+
+### Regression check on the other TMP95C061 machine in the build
+
+`kn1500` is the only other one (`grep -l TMP95C061 src/mame` = `kn1500.cpp`, `wsa1.cpp`; the KN5000
+family is TMP94C241, which already carries this rule). Its `snap_at.lua` capture at t = 20 s is
+**byte-identical** with and without FIX 6, md5 `e0c2a193f8a801ffa0e588aac1608927` — it writes
+`DMAnV`, but never reaches the serial traffic that would notice.
+
+### ⚠ What the grid refutes: "both directions now carry thousands of bytes essentially without loss"
+
+The byte counters that sentence rests on are **not** counting delivered messages. In the "both"
+cell CPU 1's `INT0_LinkByte` was dispatched **once** in 95 emulated seconds and `INTTC3_LinkDmaDone`
+ran **once**; `DMA3V` was armed twice. The other **705 of the 706** reads of `0x7C0000` are one
+runaway micro-DMA transfer: `INTTC3_Sel2_ArmPayload` (0xF8E5AD) armed channel 3 from the `{LE32
+dest, LE16 count}` record at `0x6007D3` with **count = 16741**, so channel 3 now swallows every
+byte CPU 2 sends — including the header of every later message — and will not raise `INTTC3` for
+another sixteen thousand of them. Selector 4 "never arrives" for that reason.
+
+The CPU 1 → CPU 2 direction is genuinely healthy (5070/5070, and CPU 2 dispatches 985 INT0s and
+completes 985 channel-3 transfers). The CPU 2 → CPU 1 direction — the one the sound name comes back
+on — delivers **one message per boot**, exactly as many as before the quantum change. The quantum
+fixed the *transmit* side; the receive side is where the name is stuck, and the corrupt record is
+still corrupt (it was `0xFFEF` before the quantum, `0x4165` after — different garbage, not less).
+
+### Where the sound name actually is — `wsa1_e1_record.lua` + `wsa1_wire_window.lua`
+
+The record CPU 1 assembles is `02 78 10 20 20 44` → dest `0x20107802`, count 17440. A TLCS-900 has
+**24 address pins**, so that destination cannot even be driven: the record is corrupt beyond
+argument. Putting the sender's writes and the receiver's reads on one timeline shows why, and what
+the record should have been:
+
+```
+t= 70.880476  CPU2 WRITE 0xE1  (#1)          the answer's header
+t= 70.880508          CPU1 READ 0xE1 (#1)    INT0_LinkByte takes it
+t= 70.880509                  SELECTOR := 2
+t= 70.880512                  DMA3V := 0x0A  channel 3 armed for the 6-byte record
+t= 70.880518  CPU2 WRITE 0x00  (#2)   \
+t= 70.880524  CPU2 WRITE 0x73  (#3)    |  FIVE BYTES WRITTEN AND NEVER READ --
+t= 70.880530  CPU2 WRITE 0x00  (#4)    |  47 us in which the receiver does not run,
+t= 70.880536  CPU2 WRITE 0x00  (#5)    |  at one byte every 6 us into a ONE-BYTE latch
+t= 70.880542  CPU2 WRITE 0xC0  (#6)   /
+t= 70.880548  CPU2 WRITE 0x02  (#7)
+t= 70.880559          CPU1 READ 0x02 (#2)    the DMA starts absorbing HERE
+                              RECORD := 02 78 10 20 20 44
+t= 70.880674                  SELECTOR := 4
+... and from here on writes and reads track each other within 0.5 us ...
+```
+
+The wire carries, in order: `E1 | 00 73 00 00 C0 02 | 78 10 20 20 44 6F 77 6E 74 6F 77 6E 20 53 65 74 …`
+
+* the true record is **`00 73 00 00 C0 02`** = dest **`0x00007300`** — inside CPU 1's 32 KiB static
+  RAM, `map(0x000080, 0x007fff).ram()` — and count **`0x02C0` = 704**;
+* **1 + 6 + 704 = 711**, which is *exactly* the measured `cpu2 writes` total for the whole 95 s
+  boot. Nothing else is ever sent;
+* and the payload's first bytes are `44 6F 77 6E 74 6F 77 6E 20 53 65 74` = **"Downtown Set"**.
+
+**So the sound name does cross the wire.** 704 bytes of name data are sent, read by micro-DMA, and
+written to `0x20107802` — nowhere — because the six-byte record that says where to put them was
+assembled from the wrong six bytes after five were lost at the head of the burst. `Sound Name
+*****` is downstream of those five bytes, not of anything else measured so far.
+
+The loss is a *burst-start* effect: after the lockstep engages, reads follow writes within 0.5 µs
+for all 704 payload bytes. What is missing is the sender yielding at the FIRST byte —
+`perfect_quantum()` only takes effect from the next scheduling boundary, so CPU 2 empties five
+byte-times of its already-granted slice into the one-byte latch first. That is exactly what
+`abort_timeslice()` addresses, and **the negative result recorded against it was measured in the
+wrong cell** — with FIX 6 but *without* `perfect_quantum()` (21 → 24 reads). The two together were
+never tried.
+
+### The window is too short, and that is a one-constant fix — measured
+
+`BURST_QUANTUM_US` was chosen against the 6 µs gap *between* payload bytes. The gap that decides
+the outcome is a different one: **42 µs** between the header byte (which arms the window) and the
+first byte of the burst. The window expires in that gap, `perfect_quantum()` only takes effect from
+the next timeslice — `device_scheduler::add_quantum()` measures the expiry from the scheduler's
+current time and the slice already granted runs to its end — and the receiver has meanwhile run
+ahead in local time.
+
+Measured with the same probes and a `WSA1_PQ_US` override in the A/B patch:
+
+| `perfect_quantum` window | record CPU 1 assembles | CPU 2 → CPU 1 written / read |
+|---|---|---|
+| 20 µs (as committed) | `02 78 10 20 20 44` → dest `0x20107802`, count 17440 | 711 / 706 |
+| **200 µs** | **`00 73 00 00 C0 02` → dest `0x00007300`, count 704** | **719 / 719, zero loss** |
+
+With 200 µs the whole exchange is in lockstep from byte #2, `INTTC3_Sel2_ArmPayload` arms channel 3
+with the real destination and the real count, and **selector 4 arrives** — the open item the
+previous section left. Same probe, same 95 s boot:
+
+| counter | 20 µs | 200 µs |
+|---|---|---|
+| CPU 1 INT0 dispatches | 1 | **4** |
+| CPU 1 INTTC3 dispatches | 1 | **5** |
+| selectors seen by INTTC3 | `sel2:1` | **`sel1:3 sel2:1 sel4:1`** |
+| CPU 2 → CPU 1 written / read | 711 / 706 | **719 / 719** |
+| CPU 1 → CPU 2 written / read | 5070 / 5070 | 5080 / 5080 |
+
+**And `abort_timeslice()` is a no-op here, which is now measured in both cells.** In the FIX-6-only
+cell it reproduces the recorded negative result exactly — 71 written, **24** read against 21
+without it — and on top of `perfect_quantum()` it changes *nothing*: the wire trace is
+timestamp-identical and the t = 95 s screenshot is byte-identical. The reason is the one already
+written in the README: it ends the sender's slice, and the receiver is ahead in local time.
+
+### ⚠ AND THE NAME STILL DOES NOT APPEAR
+
+`SNAP_AT=95` with `WSA1_PQ_US=200`: the capture is **byte-identical** to
+`screens/wsa1r_udma3fix_t95_sound_mode.png`, md5 `24a7cc95d6da10dd84e34ad532e6b5c5`. So delivering
+the block to the right address is *also* necessary and not sufficient. What is now known that was
+not before: 704 bytes of name text ("Downtown Set" …) do arrive in CPU 1's SRAM at `0x00007300`,
+so the next question is no longer about the link at all — it is what CPU 1 does with `0x7300`
+after the block lands, and why the SOUND MODE screen keeps printing its fallback string.
