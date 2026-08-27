@@ -49,7 +49,7 @@ hardware he owns. Frame all future work that way (see METHOD LESSON).
 
 ## DELIVERABLES (all on disk; commits in the noted repos)
 
-- Notes (kn7000_mame, branch phase-c-stage2): the three `FINDINGS-*` above +
+- Notes (kn7000_mame, branch `main` -- was `phase-c-stage2` until 2026-08-27): the three `FINDINGS-*` above +
   `HANDOFF-expansion-connectors.md` (updated).
 - Docs (kn5000-docs, **ahead 16 — needs push**): `kn7000-firmware-security.md`
   ("Firmware Robustness & ROM Archival") + `kn7000-program-rom-clip-read.md` ("Program-ROM Clip Read,

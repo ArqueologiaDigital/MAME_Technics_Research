@@ -2899,7 +2899,13 @@ DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWA
   4-byte units (`base..base+3`). Keybed: ports `:KEYS0`/`:KEYS1`, fields "Key C4"
   etc; `field:set_value(1/0)`.
 
-## Current branch: phase-c-stage2 (kn7000_mame)
+## Current branch: main (kn7000_mame)
+
+⚠ Was `phase-c-stage2` until 2026-08-27. That branch was cut on 2026-07-09 for one KN7000
+audio diagnostic and then simply stayed checked out; 1,187 commits accumulated on it,
+most of them unrelated to phase C. `main` was a strict ancestor the whole time, so it was
+fast-forwarded and development continues on `main`. `phase-c-stage2` still points at the
+same commit and is kept as a historical name.
 
 ## DONE
 - Phase A: effects-DSP host stub gated by PORT_CONFNAME (verified).
