@@ -22,6 +22,7 @@ verbatim into the .lay's header comment, so the file explains itself.
 """
 
 import copy
+import math
 import os
 import re
 import sys
@@ -278,7 +279,23 @@ def ser(el):
 
 
 def shape_svg(art, ids, x0u, y0u, wu, hu, wpx, hpx, dark=False):
-    """One control, cropped to its own bbox, in the ROOT user-space viewBox."""
+    """One control, in its OWN coordinates: bbox origin rebased to 0,0.
+
+    kn5000.lay declares each shape once in local coordinates and places it with
+    <bounds>; a shape cropped out of the artwork by an absolute viewBox cannot
+    be shared, because two copies of the same key differ in every number.
+
+    Rebasing is also strictly MORE accurate.  MAME rasterises through nanosvg in
+    float32 (rendlay.cpp:2083), and the artwork's absolute coordinates run to
+    ~350 user units, where a float32 ULP is already an appreciable fraction of
+    the sub-pixel position the antialiaser needs.  Feeding nanosvg numbers near
+    zero instead moves each edge by up to 26/255 of a level -- always towards
+    the exact answer.  notes/wsa1-probes/nsvg_hash.c measures it.
+
+    The rebase is a pure translation folded into each shape's own matrix, so it
+    carries the userSpaceOnUse gradients with it: nanosvg multiplies a gradient
+    by the referencing shape's transform (nanosvg.h nsvg__createGradient), the
+    same rule SVG itself states."""
     grads = []
     seen = set()
     body = []
@@ -291,6 +308,7 @@ def shape_svg(art, ids, x0u, y0u, wu, hu, wpx, hpx, dark=False):
                 strip_ns(gc)
                 grads.append(gc)
         m = art.xform[el]
+        m = (m[0], m[1], m[2], m[3], m[4] - x0u, m[5] - y0u)
         cp = copy.deepcopy(el)
         strip_ns(cp)
         if dark:
@@ -301,16 +319,21 @@ def shape_svg(art, ids, x0u, y0u, wu, hu, wpx, hpx, dark=False):
         body.append('<g transform="matrix(%s)">%s</g>'
                     % (','.join('%.9g' % v for v in m), ser(cp)))
     d = ''.join(ser(g) for g in grads)
-    return ('<svg width="%.3f" height="%.3f" viewBox="%.6f %.6f %.6f %.6f">'
+    return ('<svg width="%.3f" height="%.3f" viewBox="0 0 %.6f %.6f">'
             '<defs>%s</defs>%s</svg>'
-            % (wpx, hpx, x0u, y0u, wu, hu, d, ''.join(body)))
+            % (wpx, hpx, wu, hu, d, ''.join(body)))
 
 
-def control_element(art, name, ids, comment, pressable=True):
+def control_images(art, ids, pressable=True):
+    """One control: its <image> bodies in local coordinates, its bbox, and the
+    signature that says which other controls are the same key.
+
+    The images are returned separately from the <element> wrapper because the
+    wrapper is now written ONCE PER DISTINCT SHAPE, not once per control."""
     x, y, w, h = art.bbox_px(ids)
     x0u, y0u = x / geo.SCALE, y / geo.SCALE
     wu, hu = w / geo.SCALE, h / geo.SCALE
-    out = ['\t<element name="%s"><!-- %s -->' % (name, cmt(esc(comment)))]
+    imgs = []
     if pressable:
         for st, dark in ((0, False), (1, True)):
             svg = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=dark)
@@ -318,13 +341,196 @@ def control_element(art, name, ids, comment, pressable=True):
                 # keep the unpressed art underneath the darkening overlay
                 base = shape_svg(art, ids, x0u, y0u, wu, hu, w, h, dark=False)
                 svg = base[:-len('</svg>')] + svg[svg.index('</defs>') + len('</defs>'):]
-            out.append('\t\t<image state="%d"><data><![CDATA[%s]]></data></image>' % (st, svg))
+            imgs.append('\t\t<image state="%d"><data><![CDATA[%s]]></data></image>' % (st, svg))
     else:
-        out.append('\t\t<image><data><![CDATA[%s]]></data></image>'
-                   % shape_svg(art, ids, x0u, y0u, wu, hu, w, h))
-    out.append('\t</element>')
-    return '\n'.join(out), (x, y, w, h)
+        imgs.append('\t\t<image><data><![CDATA[%s]]></data></image>'
+                    % shape_svg(art, ids, x0u, y0u, wu, hu, w, h))
+    return imgs, (x, y, w, h), shape_signature(art, ids, x0u, y0u)
 
+
+# ------------------------------------------------- one shape, many instances
+#
+# Felipe drew the panel by duplicating a key and dragging the copy, so the 58
+# buttons are only a handful of DISTINCT keys.  The copies are not identical
+# byte for byte: Inkscape rewrites a gradient scale as 1.1940374 in one copy
+# and 1.1940531 in the next, and a stroke width as 0.264583 or 0.264584.  Those
+# are rounding, six decimal places down; the differences that MATTER are three
+# orders of magnitude larger (the under-LCD keys really do carry two different
+# gradient ramps, 1.2046874 against 1.2364906 -- a 2.6% difference the eye can
+# see side by side).
+#
+# So two controls share an <element> when their drawings agree STRUCTURALLY and
+# every number agrees to one part in a thousand.  That threshold sits 26x above
+# the largest rounding artefact measured and 26x below the smallest real
+# difference, so nothing is riding on where exactly it is put.
+
+# ------------------------------------------------- one shape, many instances
+#
+# Felipe drew the panel by duplicating a key and dragging the copy, so the 58
+# buttons are only ten DISTINCT keys.  Recognising the copies cannot be done on
+# the SVG text: Inkscape gives every copy its own ids, writes the attributes in
+# a different order, spells the same rectangle "v -6.61458 z" in one copy and
+# "V 41.39302 Z" in the next, and leaves each copy's absolute coordinates
+# cancelled by its own transform.  Two copies of one key share no numbers at
+# all.
+#
+# So a key is fingerprinted by its GEOMETRY, after the transform is applied and
+# the bbox origin is subtracted: the outline as points, the paint, and the
+# gradient resolved to local endpoints and stops.  What survives is the drawing
+# itself, which is the thing that has to match.
+#
+# The copies still disagree in the sixth decimal -- Inkscape writes a gradient
+# scale as 1.1940374 here and 1.1940531 there, a stroke width as 0.264583 or
+# 0.264584.  The differences that MATTER are three orders of magnitude larger:
+# the two rows of under-LCD keys really do carry different gradient ramps
+# (1.2046874 against 1.2364906, a 2.6% difference visible side by side).  One
+# part in a thousand sits 26x above the largest rounding artefact measured and
+# 26x below the smallest real difference, so nothing rides on its exact value.
+# notes/wsa1-probes/wsa1r_lay_shape_classes.py re-measures both bounds.
+
+# The ten keys.  Each is named after the artwork id of the copy the generator
+# reaches first, so the name is pinned to Felipe's drawing rather than to the
+# order of the BUTTONS table.  A shape that matches no entry is a HARD ERROR:
+# it means the artwork changed, and a human should find out whether a key
+# really grew a new look or merely drifted out of tolerance.
+SHAPE_NAMES = {
+    "path244": ("mode_button",
+                "42x25 key: the PLAY/EDIT MODE pair, the four MENU keys, COMPARE"),
+    "path240": ("bank_button",
+                "the four BANK keys -- the same key as mode_button, drawn 0.9% "
+                "larger in the artwork, so it is kept as its own shape rather "
+                "than stretched into these bounds"),
+    "path252": ("numeric_button",
+                "number pad, the keys drawn at 11.1125 x 4.4979 user units"),
+    "path254": ("numeric_button_large",
+                "number pad, the keys drawn 0.9% larger -- the same key, second "
+                "copy family in the drawing"),
+    "path94":  ("under_lcd_button_top",
+                "the upper row under the LCD, and PAGE up: gradient ramp 1.2047"),
+    "path45":  ("under_lcd_button_bottom",
+                "the lower row under the LCD, and PAGE down: a visibly different "
+                "ramp, 1.2365 against the upper row's 1.2047"),
+    "path16":  ("lcd_soft_key",
+                "the ten LCD soft keys, five down each side of the screen"),
+    "path267": ("wide_button", "-1, +1 and EXIT"),
+    "circle196":  ("realtime_creator_button", "REALTIME CREATOR 1~6"),
+    "ellipse228": ("realtime_creator_reset_button", "REALTIME CREATOR RESET"),
+}
+
+SHAPE_TOL = 1e-3
+
+_PAINT = ('fill', 'stroke', 'stroke-width', 'fill-opacity', 'stroke-opacity',
+          'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray')
+
+
+def _style_of(el):
+    st = dict(re.findall(r'([a-z-]+)\s*:\s*([^;]+)', el.get('style', '')))
+    for k in _PAINT:                      # presentation attributes lose to style
+        if el.get(k) is not None:
+            st.setdefault(k, el.get(k))
+    return {k: v.strip() for k, v in st.items()}
+
+
+def _stops(art, node):
+    """The stop list, following xlink:href the way SVG inherits it."""
+    seen = set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        stops = node.findall(SVG + 'stop')
+        if stops:
+            out = []
+            for st in stops:
+                sty = dict(re.findall(r'([a-z-]+)\s*:\s*([^;]+)', st.get('style', '')))
+                out.append((float(st.get('offset', 0)),
+                            sty.get('stop-color', st.get('stop-color', '#000')).strip(),
+                            float(sty.get('stop-opacity', st.get('stop-opacity', 1)))))
+            return out
+        href = node.get(XLINK + 'href') or node.get('href') or ''
+        node = art.by_id.get(href[1:]) if href.startswith('#') else None
+    return []
+
+
+def _grad_key(art, gid, m):
+    """A gradient as LOCAL geometry plus stops -- id and spelling discarded."""
+    node = art.by_id.get(gid)
+    if node is None:
+        return ['grad?'], []
+    tag = node.tag.replace(SVG, '')
+    units = node.get('gradientUnits', 'objectBoundingBox')
+    full = geo.mat_mul(m, geo.parse_transform(node.get('gradientTransform')))
+    skel, nums = [tag, units], []
+    num = lambda k, d='0': float(re.sub('[^0-9.eE+-]', '', node.get(k, d)) or d)
+    if tag == 'linearGradient':
+        pts = [(num('x1'), num('y1')), (num('x2'), num('y2'))]
+        if units == 'userSpaceOnUse':
+            pts = [geo.apply(full, x, y) for x, y in pts]
+        # What a linear gradient DOES is t(p) = (p-P1).d / |d|^2, so two of them
+        # paint identically when d matches and P1.d matches.  Sliding the axis
+        # sideways -- which Inkscape does to every copy, the ramp being vertical
+        # and its x therefore arbitrary -- must not read as a different key.
+        (x1, y1), (x2, y2) = pts
+        dx, dy = x2 - x1, y2 - y1
+        q = dx * dx + dy * dy
+        nums += [dx, dy, (x1 * dx + y1 * dy) / q if q else 0.0]
+    else:
+        pts = [(num('cx', '0.5'), num('cy', '0.5')), (num('fx', node.get('cx', '0.5')),
+                                                      num('fy', node.get('cy', '0.5')))]
+        nums.append(num('r', '0.5'))
+        for x, y in pts:
+            if units == 'userSpaceOnUse':
+                x, y = geo.apply(full, x, y)
+            nums += [x, y]
+    for off, col, op in _stops(art, node):
+        skel.append(col)
+        nums += [off, op]
+    return skel, nums
+
+
+def shape_signature(art, ids, x0u, y0u):
+    """What this control IS: outline, paint and gradients, in local units."""
+    skel, nums = [], []
+    for i in ids:
+        el = art.by_id[i]
+        m = art.xform[el]
+        m = (m[0], m[1], m[2], m[3], m[4] - x0u, m[5] - y0u)
+        pts, kind = geo.shape_points(el)
+        skel.append(kind or '?')
+        if kind == 'ellipse':
+            cx, cy, rx, ry = pts[0]
+            ox, oy = geo.apply(m, cx, cy)
+            nums += [ox, oy, math.hypot(m[0] * rx, m[2] * ry),
+                     math.hypot(m[1] * rx, m[3] * ry)]
+        elif pts:
+            for p in pts:
+                ox, oy = geo.apply(m, p[0], p[1])
+                nums += [ox, oy]
+        st = _style_of(el)
+        for k in _PAINT:
+            v = st.get(k)
+            if v is None:
+                continue
+            g = re.match(r'url\(#([^)]+)\)', v)
+            if g:
+                gs, gn = _grad_key(art, g.group(1), m)
+                skel.append(k + '=' + '/'.join(gs))
+                nums += gn
+                continue
+            try:
+                nums.append(float(v))
+                skel.append(k + '=#')
+            except ValueError:
+                skel.append('%s=%s' % (k, v))
+    return ('|'.join(skel), tuple(nums))
+
+
+def same_shape(a, b):
+    """Same drawing, and every number within SHAPE_TOL relative."""
+    if a[0] != b[0] or len(a[1]) != len(b[1]):
+        return False
+    for u, v in zip(a[1], b[1]):
+        if abs(u - v) > SHAPE_TOL * max(1.0, abs(u), abs(v)):
+            return False
+    return True
 
 
 # MAME's draw_text() (src/emu/rendlay.cpp) renders the glyphs at bounds.HEIGHT
@@ -535,24 +741,60 @@ def build():
     extracted = set()
 
     # ---- controls ------------------------------------------------------
+    #
+    # PASS 1: lift every button out of the drawing, in local coordinates.
+    # PASS 2: group the ones that are the same key.
+    # PASS 3: write each key ONCE, then place it wherever the panel has one.
     elems, places = [], []
 
+    lifted = []
     for seg, mask, ids, legend, tier in BUTTONS:
-        name = 'btn_s%d_b%d' % (seg, mask.bit_length() - 1)
-        e, (x, y, w, h) = control_element(art, name, ids, '%s  [%s]' % (legend, tier))
-        elems.append(e)
-        places.append('\t\t<element ref="%s" inputtag="cpanel:CP_SEG%d" inputmask="0x%02x">'
-                      '<!-- SEG%d/SW%d  %s  [%s] -->'
-                      '<bounds x="%.3f" y="%.3f" width="%.3f" height="%.3f"/></element>'
-                      % (name, seg, mask, seg, mask.bit_length() - 1, cmt(esc(legend)), tier,
-                         x, y, w, h))
+        imgs, box, sig = control_images(art, ids)
+        lifted.append(dict(ids=ids, imgs=imgs, box=box, sig=sig,
+                           seg=seg, mask=mask, legend=legend, tier=tier))
         extracted.update(ids)
 
-    # knobs (no press state)
+    shapes = []                      # [{sig, name, members:[lifted...]}]
+    for c in lifted:
+        for sh in shapes:
+            if same_shape(sh['sig'], c['sig']):
+                sh['members'].append(c)
+                break
+        else:
+            shapes.append(dict(sig=c['sig'], members=[c], first=c))
+
+    unnamed = [sh['first']['ids'][0] for sh in shapes
+               if sh['first']['ids'][0] not in SHAPE_NAMES]
+    if unnamed:
+        sys.exit('the artwork now has button shapes this generator cannot name: %s\n'
+                 'add them to SHAPE_NAMES, or find out why a key stopped matching '
+                 'its family (notes/wsa1-probes/wsa1r_lay_shape_classes.py says which)'
+                 % ', '.join(unnamed))
+
+    for sh in shapes:
+        name, what = SHAPE_NAMES[sh['first']['ids'][0]]
+        sh['name'] = name
+        legends = '; '.join(m['legend'] for m in sh['members'])
+        elems.append('\t<element name="%s"><!-- %s\n\t     x%d: %s -->\n%s\n\t</element>'
+                     % (name, cmt(esc(what)), len(sh['members']), cmt(esc(legends)),
+                        '\n'.join(sh['first']['imgs'])))
+        for m in sh['members']:
+            x, y, w, h = m['box']
+            places.append('\t\t<element ref="%s" inputtag="cpanel:CP_SEG%d" inputmask="0x%02x">'
+                          '<!-- SEG%d/SW%d  %s  [%s] -->'
+                          '<bounds x="%.3f" y="%.3f" width="%.3f" height="%.3f"/></element>'
+                          % (name, m['seg'], m['mask'], m['seg'], m['mask'].bit_length() - 1,
+                             cmt(esc(m['legend'])), m['tier'], x, y, w, h))
+    places.sort(key=lambda p: (int(re.search(r'SEG(\d+)/SW', p).group(1)),
+                               int(re.search(r'/SW(\d+)', p).group(1))))
+
+    # knobs (no press state).  Each is unique, so each is its own element; they
+    # go through control_images for the local-coordinate rebase all the same.
     knob_bounds = {}
     for ids, iid, comment in KNOBS:
-        e, (x, y, w, h) = control_element(art, iid, ids, comment, pressable=False)
-        elems.append(e)
+        imgs, (x, y, w, h), _ = control_images(art, ids, pressable=False)
+        elems.append('\t<element name="%s"><!-- %s -->\n%s\n\t</element>'
+                     % (iid, cmt(esc(comment)), '\n'.join(imgs)))
         knob_bounds[iid] = (x, y, w, h)
         places.append('\t\t<element id="%s" ref="%s"><!-- %s -->'
                       '<bounds x="%.3f" y="%.3f" width="%.3f" height="%.3f"/></element>'
