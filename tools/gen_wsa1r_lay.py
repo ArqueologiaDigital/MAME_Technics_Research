@@ -437,19 +437,42 @@ SHAPE_NAMES = {
 # SHAPE_NAMES: the artwork id of the first instance, so that renaming a shape
 # in Inkscape cannot silently rename a layout element, and an unrecognised
 # repeat stops the generator instead of appearing as "shape7".
+#
+# The third field says whether the mark is actually LIFTED, and that is a
+# measured decision, not a taste.  A mark drawn inside the backdrop is
+# rasterised as part of one 1600x500 image and lands at whatever sub-pixel
+# phase it has; lifted, it is rasterised into its own integer-pixel box and
+# that phase is quantised away.  How much this costs does not follow the mark's
+# size -- it follows how much hard-edged contrast the mark carries.  Measured
+# against the panel MAME draws from the original file:
+#
+#     lcd_soft_key_marker_left    maxdelta  25/255   mean 1.5    LIFT
+#     lcd_soft_key_marker_right   maxdelta  26/255   mean 2.0    LIFT
+#     menu_rule                   maxdelta   5/255   mean 0.0    LIFT
+#     rack_ear_slot_right         maxdelta  64/255   mean 4.7    keep
+#     rack_ear_slot_left          maxdelta  65/255   mean 5.2    keep
+#     volume_scale_dot            maxdelta 102/255   mean 12.9   keep
+#
+# The first three sit inside the envelope the keys already spend (26/255 on one
+# antialiased border row).  A 3x3 dot moving 40% of full scale does not, and no
+# amount of tidiness is worth repainting Felipe's drawing, so the ear slots and
+# the volume scale stay in the backdrop where they render exactly as before.
 DECOR_NAMES = {
-    "ellipse209": ("volume_scale_dot",
-                   "one of the eleven dots ringing the VOLUME knob, MIN to MAX"),
     "path99":     ("lcd_soft_key_marker_left",
-                   "the arrow beside an LCD soft key, left column"),
+                   "the arrow beside an LCD soft key, left column", True),
     "path114":    ("lcd_soft_key_marker_right",
-                   "the arrow beside an LCD soft key, right column"),
-    "path40":     ("rack_ear_slot_left", "a mounting slot in the left rack ear"),
-    "path41":     ("rack_ear_slot_right", "a mounting slot in the right rack ear"),
-    "path1":      ("menu_rule", "one of the two rules flanking the MENU legend"),
-    "path291":    ("mode_rule", "the rule drawn over PLAY MODE and over EDIT MODE"),
-    "ellipse193": ("rubber_foot", "one of the two feet showing below the panel"),
+                   "the arrow beside an LCD soft key, right column", True),
+    "path1":      ("menu_rule",
+                   "one of the two rules flanking the MENU legend", True),
+    "ellipse209": ("volume_scale_dot",
+                   "one of the eleven dots ringing the VOLUME knob", False),
+    "path40":     ("rack_ear_slot_left", "a mounting slot in the left rack ear", False),
+    "path41":     ("rack_ear_slot_right", "a mounting slot in the right rack ear", False),
+    "path291":    ("mode_rule", "the rule drawn over PLAY MODE and over EDIT MODE", False),
+    "ellipse193": ("rubber_foot", "one of the two feet showing below the panel", False),
 }
+# mode_rule and rubber_foot would be refused by the z-order guard anyway; they
+# are marked False as well so the reason reads the same for every entry.
 
 WASH = '<color red="0.0" green="0.0" blue="0.0" alpha="0.34"/>'
 
@@ -572,6 +595,24 @@ def same_shape(a, b):
 _DRAWABLE = {'path', 'rect', 'circle', 'ellipse'}
 
 
+def root_drawables(art):
+    """Every drawable in the artwork, in document = paint order."""
+    out = []
+
+    def walk(node):
+        for ch in node:
+            t = ch.tag.replace(SVG, '')
+            if t in ('defs', 'metadata', 'namedview', 'clipPath'):
+                continue
+            if t in _DRAWABLE:
+                out.append(ch)
+            else:
+                walk(ch)
+
+    walk(art.root)
+    return out
+
+
 def repeated_decor(art, extracted):
     """Marks the drawing itself repeats, clustered the same way the keys are.
 
@@ -619,17 +660,63 @@ def repeated_decor(art, extracted):
         else:
             clusters.append((sig, [(ids, (x, y, w, h))]))
 
+    # A mark may only be lifted if nothing DRAWN LATER covers it.  Lifting moves
+    # a shape from wherever it sat in the drawing to on top of the whole
+    # backdrop, and the two feet are drawn early and then half hidden by the
+    # panel body: lifted, they climb out from behind it and sit proud of the
+    # front panel.  Document order is the z order, so anything later whose bbox
+    # touches the candidate disqualifies the whole cluster.
+    order, boxes = {}, {}
+    for n, el in enumerate(root_drawables(art)):
+        i = el.get('id')
+        if not i:
+            continue
+        order[i] = n
+        try:
+            boxes[i] = art.bbox_px([i])
+        except SystemExit:
+            pass
+
+    def overdrawn(ids, box):
+        """Would lifting these shapes change what is painted over what?
+
+        The rewritten panel paints backdrop, then the lifted marks, then the
+        screen, the keys, the lamps and the legends.  So a mark changes places
+        with two kinds of neighbour: a BACKDROP shape that used to come after it
+        (which would now end up underneath), and a KEY or lamp that used to come
+        before it (which would now end up on top).  Either way the drawing
+        changes, and the mark stays where it is."""
+        first = min((order.get(i, 1 << 30) for i in ids), default=0)
+        last = max((order.get(i, -1) for i in ids), default=-1)
+        x, y, w, h = box
+        for i, n in order.items():
+            if i in ids or i not in boxes:
+                continue
+            later_backdrop = n > last and i not in extracted
+            earlier_control = n < first and i in extracted
+            if not (later_backdrop or earlier_control):
+                continue
+            bx, by, bw, bh = boxes[i]
+            if bx < x + w and x < bx + bw and by < y + h and y < by + bh:
+                return i
+        return None
+
     out = []
     for sig, members in clusters:
         if len(members) < 2:
             continue
+        blocked = [(ids, overdrawn(ids, box)) for ids, box in members]
+        blocked = [(ids, o) for ids, o in blocked if o]
+        if blocked:
+            continue                   # left in the backdrop, where its z is
         first = members[0][0][0]
         if first not in DECOR_NAMES:
             sys.exit('the artwork repeats a mark this generator cannot name: %s '
                      '(x%d, first at %.0f,%.0f).  Add it to DECOR_NAMES.'
                      % (first, len(members), members[0][1][0], members[0][1][1]))
-        name, what = DECOR_NAMES[first]
-        out.append((name, what, members))
+        name, what, lift = DECOR_NAMES[first]
+        if lift:
+            out.append((name, what, members))
     return out
 
 
