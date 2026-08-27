@@ -605,7 +605,7 @@ def labels(art):
         else:
             left, align = ax, 1
         n += 1
-        rows.append(dict(name='lbl%d' % n, text=s, x=left, y=top, w=w, h=h,
+        rows.append(dict(name=None, text=s, x=left, y=top, w=w, h=h,
                          align=align, rgb=hex_to_rgb(fill), src=t.get('id', '')))
     return rows
 
@@ -828,9 +828,17 @@ def build():
     for parent in list(root.iter()):
         for ch in list(parent):
             i = ch.get('id')
+            # <clipPath> goes too.  nanosvg -- the ONLY rasteriser the layout
+            # engine has (rendlay.cpp:2083) -- does not implement clipping at
+            # all, so the drawing MAME shows is already the unclipped one and
+            # these 19 blocks are 3.8 KB that nothing ever reads.  Twelve of
+            # them are the same A4 page rectangle, written out twelve times.
             if (i in extracted) or ch.tag == SVG + 'text' \
+                    or ch.tag == SVG + 'clipPath' \
                     or ch.tag.startswith('{http://sodipodi'):
                 parent.remove(ch)
+    for el in root.iter():
+        el.attrib.pop('clip-path', None)
     strip_ns(root)
     for k in ('width', 'height'):
         root.set(k, '1600' if k == 'width' else '500')
@@ -857,10 +865,23 @@ def build():
     out.append('')
 
     # ---- label elements ------------------------------------------------
+    # A legend is the same element wherever it is drawn: five of Felipe's 56
+    # are repeats (SOUND, COMBI and MODE each appear under both PLAY and EDIT,
+    # 1 and 2 under both USER banks).  Naming them after their own text also
+    # says rather more at the point of use than lbl1..lbl56 did.
+    seen_lbl, used = {}, {}
     for r in lbl:
-        out.append('\t<element name="%s"><text string="%s" align="%d">'
-                   '<color red="%.2f" green="%.2f" blue="%.2f"/></text></element>'
-                   % (r['name'], esc(r['text']), r['align'], *r['rgb']))
+        key = (r['text'], r['align'], r['rgb'])
+        if key not in seen_lbl:
+            base = 'lbl_' + (re.sub(r'[^A-Za-z0-9]+', '_', r['text']).strip('_').upper()
+                             or 'TEXT')
+            n = used.get(base, 0)
+            used[base] = n + 1
+            seen_lbl[key] = base if not n else '%s_%d' % (base, n + 1)
+            out.append('\t<element name="%s"><text string="%s" align="%d">'
+                       '<color red="%.2f" green="%.2f" blue="%.2f"/></text></element>'
+                       % (seen_lbl[key], esc(r['text']), r['align'], *r['rgb']))
+        r['name'] = seen_lbl[key]
     out.append('')
 
     # ---- group ---------------------------------------------------------
