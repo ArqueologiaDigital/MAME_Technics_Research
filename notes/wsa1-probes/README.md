@@ -1520,3 +1520,18 @@ burst re-arms the window and the whole message stays in lockstep.
 
 The link is no longer the bottleneck: both directions now carry thousands of bytes essentially
 without loss, where before the fix the machine managed one received message in a whole boot.
+
+### ⚠ AND THE SCREEN STILL SAYS `Sound Name *****`
+
+Captured at t = 95 s with `tools/rigs/snap_at.lua` on exactly this build —
+`screens/wsa1r_udma3fix_t95_sound_mode.png`. **So the link wedge was a real blocker but not the
+last one**, and nothing above should be read as having fixed the sound name.
+
+What the same run says about where to look next: CPU 2 answers CPU 1's `0xE2` with an `0xE1`
+block, `INTTC3_Sel2_ArmPayload` re-arms channel 3 and writes selector **4** — and **selector 4
+never arrives**. `INTTC3` entries stay at 1 for the whole boot and `DMAC3` sits at **16741**
+across all twelve `Link_ServiceTask` samples, while CPU 2 sends only ~700 bytes in total. Either
+that count is still being read from a bad record, or the block is sent in chunks the receive side
+is not being re-armed for. `wsa1_udma3_audit.lua` already prints everything needed to tell those
+apart — the selector writes, the `DMA3V` arms and the destination buffers — so start by dumping
+the six bytes at `0x6007D3` at the moment `INTTC3_Sel2_ArmPayload` reads them.
