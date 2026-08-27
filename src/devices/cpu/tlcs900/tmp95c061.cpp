@@ -495,17 +495,24 @@ int tmp95c061_device::tlcs900_process_hdma( int channel )
 				// event (EI, RETI, POPSR, a serial or timer write) happened to
 				// raise the flag first.
 				//
-				// What it costs the SX-WSA1R: the inter-CPU link.  INT0_LinkByte
-				// (prom_a 0xF8E47F) arms micro-DMA channel 3 with DMA3V = 0x0A --
-				// vector (0x0A & 0x1F) << 2 = 0x28, INT0's own vector -- and drops
-				// P7 bit 1, the receiver-busy line.  Only INTTC3_LinkDmaDone
-				// (0xF8E54F) raises that line again, at 0xF8E5A8 / 0xF8E5D6 /
-				// 0xF8E5EB.  With INTTC3 requested but undispatched the line stays
-				// low for good, Link_SendChunk's wait on PA bit 3 (0xF999D0) never
-				// passes, and every packet after the first is dropped: the sound
-				// name is never fetched over command 0xE2 and keybed notes never
-				// arrive.  MAME's tmp94c241.cpp sets m_check_irqs beside its
+				// MAME's tmp94c241.cpp sets m_check_irqs beside its
 				// interrupt-request writes; this file was the odd one out.
+				//
+				// ⚠ CORRECTED 2026-08-27.  This comment used to go on to blame
+				// the SX-WSA1R's wedged inter-CPU link on this defect --
+				// "INTTC3 requested but undispatched, so P7 bit 1 stays low".
+				// That was wrong, and the A/B said so at the time: the link
+				// counts were byte-identical before and after this fix.
+				// notes/wsa1-probes/wsa1_udma3_audit.lua then measured the
+				// exact number, reading the selector word 0x6007DA whose only
+				// reader is INTTC3_LinkDmaDone at prom_a 0xF8E555:
+				// INTTC3 was dispatched ZERO times in a 100 s boot, so it was
+				// never REQUESTED either and this line could not have been the
+				// cause.  The cause is OVERLAY FIX 6 in tlcs900_check_irqs()
+				// below -- the CPU was stealing the interrupt micro-DMA channel
+				// 3 was armed for.  This fix stays because it is still a real
+				// defect: with FIX 6 in place INTTC3 IS requested, and it needs
+				// this line to be dispatched promptly.
 				m_check_irqs = 1;
 			}
 
@@ -566,6 +573,54 @@ void tmp95c061_device::tlcs900_check_irqs()
 	{
 		if ( m_int_reg[tmp95c061_irq_vector_map[i].reg] & tmp95c061_irq_vector_map[i].iff )
 		{
+			// OVERLAY FIX 6 (kn7000_mame, 2026-08-27) -- MICRO-DMA TAKES THE
+			// INTERRUPT, THE CPU DOES NOT.
+			//
+			// On a TLCS-900/H, writing DMAnV points a micro-DMA channel at one
+			// interrupt vector, and from then on THAT interrupt starts a DMA
+			// transfer INSTEAD of being dispatched to the CPU; the CPU only
+			// hears about it again through INTTCn when the count runs out.
+			// tlcs900_process_hdma() implements the DMA half -- it computes the
+			// trigger as (DMAnV & 0x1F) << 2, and clears the request flip-flop
+			// itself -- but this function had no idea any of that existed, and
+			// it runs at the TOP of execute_run()'s loop while
+			// tlcs900_check_hdma() runs at the BOTTOM.  So the CPU won every
+			// race and the DMA channel starved.
+			//
+			// MAME already does this correctly for the sibling part: see
+			// tmp94c241_device::tlcs900_check_irqs(), "HDMA priority: skip
+			// interrupts targeted by active HDMA channels".  This file was the
+			// odd one out; the loop below is the same rule with the trigger
+			// vector computed the way process_hdma computes it.
+			//
+			// What it costs the SX-WSA1R: the inter-processor link, and with it
+			// the SOUND MODE screen's sound name.  INT0_LinkByte (prom_a
+			// 0xF8E47F) reads a message's header byte, arms micro-DMA channel 3
+			// for the payload and writes DMA3V = 0x0A -- (0x0A & 0x1F) << 2 =
+			// 0x28, INT0's own vector -- so the payload bytes are meant to be
+			// absorbed by the DMA engine.  MEASURED without this fix
+			// (notes/wsa1-probes/wsa1_int0_steal.lua, t = 70.8434):
+			//     CPU2 -> latch 0xC0 ; DISPATCH INT0 #1 ; CPU1 reads latch 0xC0 ;
+			//     DMA3V := 0x0A (DMAC3=1) ; CPU2 -> latch 0xFB ;
+			//     DISPATCH INT0 #2  <-- the CPU steals the payload byte's trigger
+			// and INT0_LinkByte's own `bit 2,(P7)` guard at 0xF8E489 then makes
+			// that second entry return WITHOUT reading the port.  The byte stays
+			// in the latch for the rest of the run (one read of 0x7C0000 in 100
+			// emulated seconds), DMAC3 sticks at 1, INTTC3 is dispatched ZERO
+			// times, P7 bit 1 stays low and every later packet from CPU 2 is
+			// dropped -- which also loses keybed notes.
+			bool hdma_targeted = false;
+			for ( int ch = 0; ch < 4; ch++ )
+			{
+				if ( ( ( m_dma_vector[ch] & 0x1f ) << 2 ) == tmp95c061_irq_vector_map[i].vector )
+				{
+					hdma_targeted = true;
+					break;
+				}
+			}
+			if ( hdma_targeted )
+				continue;
+
 			switch( tmp95c061_irq_vector_map[i].iff )
 			{
 			case 0x80:

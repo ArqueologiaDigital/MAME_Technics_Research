@@ -1306,8 +1306,171 @@ side's link port, tallied by command byte.
 
 CPU 1 issues **four `0xE2` remote block reads** and CPU 2 never returns the
 blocks. That is emulation **gap C**: CPU 1 stops asserting P7 bit 1 (the
-receiver-busy line) after its first exchange because `INTTC3` never completes, so
-CPU 2 is locked out for the rest of the run.
+receiver-busy line) after its first exchange, so CPU 2 is locked out for the rest
+of the run.
 
 ⚠ So the name is downstream of gap C, not of a missing ROM. Mapping `prom_d` was
 necessary and is not sufficient; the same wedge also drops keybed notes.
+
+✅ **Gap C's cause was found on 2026-08-27 and it was in the CPU core** —
+`tmp95c061_device::tlcs900_check_irqs()` dispatched to the CPU an INT0 that
+micro-DMA channel 3 was armed for, so the payload byte was thrown away and
+`INTTC3` never fired at all. The sentence that used to stand here, "because
+`INTTC3` never completes", was built on an aliased tap. See the
+`wsa1_udma3_audit.lua` section below.
+
+---
+
+## `wsa1_udma3_xref.py`, `wsa1_udma3_audit.lua`, `wsa1_int0_race.lua`, `wsa1_int0_steal.lua` — the link wedge, cause found
+
+**Question:** `wsa1_link_stage.lua` reported that micro-DMA channel 3 "completed twelve times"
+while no link message was in flight, each completion seeing selector `(0x6007DA) == 0` and doing
+nothing. Why?
+
+**Answer: it never completed at all. All three of that probe's counters were aliased.**
+
+### ⚠ The measurement lesson, first, because it is the reusable part
+
+A read tap placed on a routine's **entry address** is not a counter of that routine's entries.
+`tlcs900_device::RDOP()` keeps a four-byte prefetch queue and reads `m_pc + 3` on every opcode
+byte (`../mame/src/devices/cpu/tlcs900/tlcs900.cpp:81-99`), and all of those go through
+`m_program->read_byte()`, so **a tap fires while the CPU is still three bytes short of the
+address**. `INTTC2_uDMA2Done` ends with `reti` at `0xF8E54E` and `INTTC3_LinkDmaDone` begins at
+`0xF8E54F`: a tap on `0xF8E54E-0xF8E54F` counts two reads per INTTC2 *return*. Six INTTC2s ⇒
+"twelve INTTC3 entries".
+
+Same trap twice more in the same script: `0xF8E47E-0xF8E47F` names INT0's entry but `0xF8E47E` is
+the previous routine's `ret`, and `0x7E-0x7F` names DMA3V but `0x7E` is **DMA2V**, which the
+transmit block arms from nine sites.
+
+`wsa1_udma3_xref.py` is the byte census that fixes the counters, and it is the thing to run before
+trusting any of these numbers again:
+
+```
+python3 wsa1_udma3_xref.py
+```
+
+* every reference to `0x6007DA` in prom_a, prom_b and prom_c — **twelve, of which exactly one is a
+  read**, `ldw_da bc,(0x6007da)` at `0xF8E555` inside INTTC3. So a read tap on that word is an
+  exact INTTC3-entry counter with no prefetch shadow;
+* every `ldio DMAnV,imm8` site, DMA2V and DMA3V told apart. Inside the converted link block the
+  set is exact: **DMA3V at `0xF8E24F 0xF8E4CA 0xF8E4E9 0xF8E51F 0xF8E5BD 0xF8E65A 0xF8E683`**
+  (four arms with `0x0A`, three aborts with `0x00`) and **DMA2V at nine sites, all
+  `ldio DMA2V,0x12`**;
+* the `07 39` boundary bytes at `0xF8E54E/0xF8E54F` that make the aliasing concrete.
+
+The script exits non-zero if any of that drifts.
+
+### What is actually happening (`wsa1_udma3_audit.lua`, 100 s boot)
+
+```
+EXACT   DMA0V=0 DMA1V=0 DMA2V=5 DMA3V=5
+        arms: DMA2V=0x12 x5  DMA3V=0x00 x4  DMA3V=0x0A x1
+EXACT   INTTC3 entries (reads of 0x6007DA) = 0
+LEGACY  0xF8E47E-7F reads=2   0xF8E54E-4F reads=10   0x7E-7F writes=10
+PORT    cpu1 reads of 0x7C0000 = 1   cpu1 writes = 41
+PORT    cpu2 writes to 0x100000 = 2 (= INT0 asserts on cpu1)   cpu2 reads = 1
+DMAC3   12 samples via (0x6007DF): 1 1 1 1 1 1 1 1 1 1 1 1     (armed with 1, never decremented)
+ERRCNT  0x6007DC=1 0x6007E1=3
+```
+
+The legacy counters are printed **in the same run** as the exact ones, which is what pins the
+aliasing: `0xF8E54E-4F reads=10` against `INTTC2 dispatched 5 times` = two prefetch reads per
+INTTC2 return, and `0x7E-7F writes=10` = 5 DMA2V + 5 DMA3V.
+
+One message is received in the whole boot, at t = 70.843 s:
+
+```
+t= 70.843  CPU2  -> 0xC0          header, link channel 6
+t= 70.843  RD    port -> 0xC0     INT0_LinkByte reads it
+t= 70.843  SEL:= 1                (0x6007DA) = 1, "general command"
+t= 70.843  ARM   DMA3V=0x0A       DMAC3=1 DMAD3=6007B3 DMAS3=7C0000 DMAM3=00
+t= 70.843  P7:=  0xC1  (bit1=0)   receiver-busy asserted
+t= 70.843  CPU2  -> 0xFB          the payload byte ... and nothing ever reads it
+   ... twelve Link_ServiceTask samples, DMAC3 stuck at 1 ...
+t= 72.012  ARM   DMA3V=0x00       the eleven-equal-samples watchdog aborts
+t= 72.012  P7:=  0xCF  (bit1=1)   0x6007DC := 1
+```
+
+### Which of the two possible causes it is (`wsa1_int0_race.lua`)
+
+`tlcs900_process_hdma()` moves a byte only when the channel's trigger flip-flop is set; for
+`DMA3V = 0x0A` that is **INTE0AD bit 3**, INT0's own request bit. INTE0AD is readable at SFR
+`0x70` (`inte_r`, `tmp95c061.cpp:184`), and across the whole wedge it reads **`0x81` — bit 3
+clear**. So the request was raised and then *consumed by something that was not the DMA engine*.
+The driver's queued `set_input_line(CLEAR_LINE)` is exonerated: the byte is still in the latch and
+nothing ever reads it.
+
+### The cause (`wsa1_int0_steal.lua`)
+
+An interrupt dispatch is the only thing that reads the vector table
+(`m_pc.d = RDMEML(0xffff00 + vector)`), so a read tap on `0xFFFF28` counts INT0 dispatches to the
+CPU **exactly**, with no prefetch shadow. Measured:
+
+```
+t= 70.8434  CPU2 -> latch 0xC0   (#1)
+t= 70.8434  DISPATCH INT0   #1   P7=0xC3(b1=1 b2=0) INTE0AD=0x89(req=1) DMAC3=0
+t= 70.8434  CPU1 reads latch -> 0xC0   (#1)
+t= 70.8434  DMA3V := 0x0A        DMAC3=1
+t= 70.8434  CPU2 -> latch 0xFB   (#2)
+t= 70.8435  DISPATCH INT0   #2   P7=0xC5(b1=0 b2=1) INTE0AD=0x89(req=1) DMAC3=1
+======== dispatch totals ========
+  INT0     2      INTTC2   5      INTTC3   0      c1r 1      c2w 2
+```
+
+**The CPU took the interrupt that micro-DMA channel 3 was armed for.** On a TLCS-900/H, writing
+`DMAnV` hands one vector to a DMA channel and the CPU stops seeing it — which is exactly what
+prom_a's own comment at `INT0_LinkByte` assumes ("once this handler arms the DMA, the same
+interrupt goes to the DMA engine instead"). And because `INT0_LinkByte` opens with
+`bit 2,(P7)` / `jrl nz,return` at `0xF8E489`, and CPU 2's strobe had bit 2 set by then, that second
+entry returned **without reading the port at all**: the byte was neither delivered to the DMA nor
+consumed by the CPU. `DMAC3` sticks at 1, `INTTC3` never fires, `P7` bit 1 never rises, and every
+later CPU 2 → CPU 1 packet — the `0xE2` block answer that carries the sound name, and every keybed
+note — is dropped by `Link_SendChunk`'s wait at prom_c `0xF999D0`.
+
+### The fix: OVERLAY FIX 6 in `tmp95c061.cpp`
+
+`tmp95c061_device::tlcs900_check_irqs()` had no idea micro-DMA existed. It runs at the **top** of
+`execute_run()`'s loop while `tlcs900_check_hdma()` runs at the **bottom**, so the CPU won every
+race. The fix skips any interrupt a micro-DMA channel is currently armed for, with the trigger
+vector computed the way `tlcs900_process_hdma()` computes it, `(DMAnV & 0x1F) << 2`.
+
+**This is not a new idea and not a driver workaround — MAME already does it for the sibling
+part.** `tmp94c241_device::tlcs900_check_irqs()` carries the same loop under the comment "HDMA
+priority: skip interrupts targeted by active HDMA channels". `tmp95c061.cpp` was the odd one out,
+exactly as it was for `m_check_irqs` (OVERLAY FIX 4 and 5).
+
+### A/B, same probe, same 100 s boot
+
+| counter | before FIX 6 | after FIX 6 |
+|---|---|---|
+| `INTTC3` entries (reads of `0x6007DA`) | **0** | **1**, selector **2** |
+| CPU 1 reads of `0x7C0000` | 1 | **21** |
+| CPU 2 writes to `0x100000` | 2 | **71** |
+| `DMA3V := 0x0A` arms | 1 | 2 |
+| bytes landed in the `0xE1` header buffer | 9 | 16 |
+| `LEGACY 0xF8E54E-4F reads` | 10 (= 5 INTTC2 x 2) | 13 (= 6 INTTC2 x 2 + 1 real INTTC3) |
+
+and the exchange that used to die after two bytes now runs the protocol:
+
+```
+t= 70.843  CPU2  -> 0xE1        the remote-block ANSWER to CPU 1's 0xE2
+t= 70.843  RD    port -> 0xE1   INT0_LinkByte reads the header
+t= 70.843  SEL:= 2              (0x6007DA) = 2 = "arm the payload"
+t= 70.843  ARM   DMA3V=0x0A     six-byte {LE32 dest, LE16 count} record
+t= 70.843  ...six payload bytes absorbed by micro-DMA...
+t= 70.843  INTTC3 selector=2    ★ INTTC3_LinkDmaDone runs, for the first time ever
+t= 70.843  ARM   DMA3V=0x0A     INTTC3_Sel2_ArmPayload re-arms for the block
+t= 70.843  SEL:= 4              and hands the completion to selector 4
+```
+
+### ⚠ The next blocker, and it IS in the driver
+
+With FIX 6 in, **CPU 2 wrote 71 bytes and CPU 1 read 21**. The one-byte latch is being
+overwritten mid-burst: the sender's micro-DMA channel 2 empties a whole block into it inside a
+single MAME timeslice, while the receiver only drains it when its own timeslice runs. That is
+precisely the failure `wsa1.cpp`'s "WHAT THIS MODEL DOES NOT GUARANTEE" paragraph predicted, and
+the remedy it names is `abort_timeslice()` in each write handler, as
+`notes/upstream-patches/kn5000-26-intercpu-latch-int0-handshake.patch` does for the KN5000.
+
+<!--ABORT-TIMESLICE-RESULT-->
