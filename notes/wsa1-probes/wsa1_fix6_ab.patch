@@ -1,20 +1,29 @@
+# A/B hooks for the OVERLAY FIX 6 re-check (2026-08-27).  NOT APPLIED to the tree.
+#
+#   git apply notes/wsa1-probes/wsa1_fix6_ab.patch && ./build.sh
+#
+# then one binary measures every cell:
+#   TLCS_NO_FIX6=1   restores the pre-FIX-6 tlcs900_check_irqs()
+#   WSA1_NO_PQ=1     removes the per-burst perfect_quantum()
+#   WSA1_PQ_US=<n>   overrides its length (20 us is the committed value)
+#   WSA1_ABORT_TS=1  adds abort_timeslice() beside it
+#
+# Undo with `git apply -R`.  Verified to apply against 5487841.
 diff --git a/src/devices/cpu/tlcs900/tmp95c061.cpp b/src/devices/cpu/tlcs900/tmp95c061.cpp
-index 8e870bf..6fad26b 100644
+index 8e870bf..b74c24b 100644
 --- a/src/devices/cpu/tlcs900/tmp95c061.cpp
 +++ b/src/devices/cpu/tlcs900/tmp95c061.cpp
-@@ -609,6 +609,11 @@ void tmp95c061_device::tlcs900_check_irqs()
+@@ -609,6 +609,9 @@ void tmp95c061_device::tlcs900_check_irqs()
  			// emulated seconds), DMAC3 sticks at 1, INTTC3 is dispatched ZERO
  			// times, P7 bit 1 stays low and every later packet from CPU 2 is
  			// dropped -- which also loses keybed notes.
-+			// ⚠ TEMPORARY A/B HOOK (refutation pass 2026-08-27, NOT FOR COMMIT):
-+			// TLCS_NO_FIX6=1 in the environment restores the pre-FIX-6 core so
-+			// one binary can measure all four cells of the FIX 6 x quantum grid.
-+			// See notes/wsa1-probes/wsa1_fix6_ab.patch.
++			// ⚠ A/B HOOK, NOT FOR COMMIT: TLCS_NO_FIX6=1 restores the pre-FIX-6
++			// core so one binary measures every cell of the grid.
 +			static const bool s_no_fix6 = ( getenv( "TLCS_NO_FIX6" ) != nullptr );
  			bool hdma_targeted = false;
  			for ( int ch = 0; ch < 4; ch++ )
  			{
-@@ -618,7 +623,7 @@ void tmp95c061_device::tlcs900_check_irqs()
+@@ -618,7 +621,7 @@ void tmp95c061_device::tlcs900_check_irqs()
  					break;
  				}
  			}
@@ -24,30 +33,30 @@ index 8e870bf..6fad26b 100644
  
  			switch( tmp95c061_irq_vector_map[i].iff )
 diff --git a/src/mame/matsushita/wsa1.cpp b/src/mame/matsushita/wsa1.cpp
-index 810bde4..1f7c3d5 100644
+index e1a9d20..da37527 100644
 --- a/src/mame/matsushita/wsa1.cpp
 +++ b/src/mame/matsushita/wsa1.cpp
-@@ -712,6 +712,14 @@ private:
- // ~6 us (measured, see cpu2_link_w()), so this has to outlast the gap to the next
- // byte of the same burst without being so long that it slows the whole boot.
+@@ -728,6 +728,15 @@ private:
+ // byte-identical, so this is not the last blocker either.
  static constexpr int BURST_QUANTUM_US = 20;
-+// ⚠ TEMPORARY A/B HOOK (refutation pass 2026-08-27, NOT FOR COMMIT): WSA1_PQ_US
-+// overrides the window, to test whether 20 us is long enough to still be live
-+// when the burst starts ~42 us after the header byte.
+ 
++// ⚠ A/B HOOKS, NOT FOR COMMIT.  WSA1_NO_PQ=1 removes the per-burst
++// perfect_quantum(), WSA1_PQ_US=<n> overrides its length, WSA1_ABORT_TS=1 adds
++// the KN5000's abort_timeslice() beside it.
 +static int burst_quantum_us()
 +{
 +	static const int v = getenv("WSA1_PQ_US") ? atoi(getenv("WSA1_PQ_US")) : BURST_QUANTUM_US;
 +	return v;
 +}
- 
++
  void wsa1_state::cpu1_link_w(uint8_t data)
  {
-@@ -726,7 +734,11 @@ void wsa1_state::cpu1_link_w(uint8_t data)
+ 	if (m_link_to_cpu2_full)
+@@ -741,7 +750,10 @@ void wsa1_state::cpu1_link_w(uint8_t data)
  	m_cpu2->set_input_line(TLCS900_INT0, ASSERT_LINE);
  
  	// Interleave finely for the rest of the burst -- see cpu2_link_w().
 -	machine().scheduler().perfect_quantum(attotime::from_usec(BURST_QUANTUM_US));
-+	// ⚠ TEMPORARY A/B HOOK (refutation pass 2026-08-27, NOT FOR COMMIT).
 +	if (!getenv("WSA1_NO_PQ"))
 +		machine().scheduler().perfect_quantum(attotime::from_usec(burst_quantum_us()));
 +	if (getenv("WSA1_ABORT_TS"))
@@ -55,12 +64,11 @@ index 810bde4..1f7c3d5 100644
  }
  
  uint8_t wsa1_state::cpu1_link_r()
-@@ -784,7 +796,11 @@ void wsa1_state::cpu2_link_w(uint8_t data)
- 	// tried first and MEASURED at 21 -> 24 reads out of 71: it cannot help,
- 	// because it only ends the SENDER's slice and the receiver is already ahead
- 	// in local time.
+@@ -803,7 +815,10 @@ void wsa1_state::cpu2_link_w(uint8_t data)
+ 	// wire trace is timestamp-identical and the t=95 s screenshot byte-identical.
+ 	// The 21 -> 24 result reproduces exactly.  See BURST_QUANTUM_US above for
+ 	// what does move it.)
 -	machine().scheduler().perfect_quantum(attotime::from_usec(BURST_QUANTUM_US));
-+	// ⚠ TEMPORARY A/B HOOK (refutation pass 2026-08-27, NOT FOR COMMIT).
 +	if (!getenv("WSA1_NO_PQ"))
 +		machine().scheduler().perfect_quantum(attotime::from_usec(burst_quantum_us()));
 +	if (getenv("WSA1_ABORT_TS"))
