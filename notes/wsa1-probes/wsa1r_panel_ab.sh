@@ -32,9 +32,10 @@
 #   are not free are quoted in the commit that makes them, with these numbers.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(dirname "$(dirname "$HERE")")
-MAME=${MAME:-$ROOT/kn7000_mame_build/kn7000}
-ROMS=${ROMS:-$ROOT/kn7000-emulator/roms}
+OVERLAY=$(dirname "$(dirname "$HERE")")          # .../kn7000_mame
+SIBLINGS=$(dirname "$OVERLAY")                   # .../compartilhado
+MAME=${MAME:-$SIBLINGS/kn7000_mame_build/kn7000}
+ROMS=${ROMS:-$SIBLINGS/kn7000-emulator/roms}
 
 case "$1" in
 capture)
