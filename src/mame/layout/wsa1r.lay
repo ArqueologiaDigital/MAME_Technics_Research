@@ -2,7 +2,7 @@
 <!--
 	license:CC0-1.0
 
-	Technics SX-WSA1R - ACOUSTIC MODELING SYNTHESIZER MODULE, the 2U rack.
+	Technics SX-WSA1R - ACOUSTIC MODELING SYNTHESIZER MODULE
 
 	THE SWITCH MATRIX - where the bindings come from
 	================================================
@@ -88,7 +88,7 @@
 	than a silently reused one.
 -->
 <mamelayout version="2">
-	<!-- LN382G / LN282R, unlit fills taken from the artwork (#003000 / #440000). -->
+
 	<element name="led_green" defstate="0">
 		<disk state="0"><color red="0.00" green="0.19" blue="0.00"/></disk>
 		<disk state="1"><color red="0.15" green="1.00" blue="0.15"/></disk>
@@ -99,6 +99,10 @@
 		<disk state="1"><color red="1.00" green="0.13" blue="0.13"/></disk>
 	</element>
 
+	<element name="indicator">
+		<disk><color red="0.4" green="0.4" blue="0.4"/></disk>
+	</element>
+
 	<element name="floppy_drive">
 		<image><data><![CDATA[
 		<svg width="327" height="84">
@@ -106,22 +110,29 @@
 			<path stroke-width="1.1" stroke="black" fill="none" d="
 				m 109,11 c -1,0 -2,0.8 -2,1.8 v 8.2 h 109 v -8.2 c 0,-1 -0.8,-1.8 -2,-1.8 z
 				m -2,31 v 29 c 0,1 0.8,1.8 2,1.8 h 105 c 1,0 1.8,-0.8 1.8,-1.8 v -29 z
-				m 122,15 h 43 c 1,0 1.8,0.8 1.8,1.8 v 12 c 0,1 -0.8,1.8 -1.8,1.8 h -43 c -1,0 -1.8,-0.8 -1.8,-1.8 v -12 c 0,-1 0.8,-1.8 1.8,-1.8 z
-				m -164,1.7 h 17.4 c 1,0 1.8,0.8 1.8,1.8 v 5.9 c 0,1 -0.8,1.8 -1.8,1.8 h -17.4 c -1,0 -1.8,-0.8 -1.8,-1.8 v -5.9 c 0,-1 0.8,-1.8 1.8,-1.8 z
+				m 122,15 h 43 c 1,0 1.8,0.8 1.8,1.8 v 12 c 0,1 -0.8,1.8 -1.8,1.8 h -43
+				c -1,0 -1.8,-0.8 -1.8,-1.8 v -12 c 0,-1 0.8,-1.8 1.8,-1.8 z
+				m -164,1.7 h 17.4 c 1,0 1.8,0.8 1.8,1.8 v 5.9 c 0,1 -0.8,1.8 -1.8,1.8 h -17.4
+				c -1,0 -1.8,-0.8 -1.8,-1.8 v -5.9 c 0,-1 0.8,-1.8 1.8,-1.8 z
 				m 246,-47.7 c -2.2,5.3 -3.6,9.8 -7,13.7 0.4,0.3 0.7,0.9 0.7,1.4 v 8.7
 				c 0,0.7 -0.4,1.4 -1,1.7 2.8,1.8 6,3.9 7.8,7.8 0.4,-0.6 0.7,-1.3 0.7,-2 v -28.7 c 0,-1 -0.4,-2 -1.1,-2.6 z
-				m 0,0 c -0.6,-0.6 -1.5,-1 -2.5,-1 h -297.1 c -1.1,0 -2,0.5 -2.7,1.3 2.8,4.4 8.3,10 12.1,13.7 0.3,-0.4 0.9,-0.7 1.4,-0.7 h 52.8 v -1.8 h 31.6
-				v -9.2 c 0,-1 0.8,-1.8 1.8,-1.8 h 105.3 c 1,0 1.8,0.8 1.8,1.8 v 9.2 h 31 v 1.8 h 56.2 c 0.5,0 0.9,0.2 1.2,0.4 3.4,-3.9 4.8,-8.4 7,-13.7 z
-				m 0.4,33.4 c -1.8,-3.9 -4.9,-6.1 -7.8,-7.8 -0.3,0.1 -0.6,0.2 -0.9,0.2 h -56.2 v 1.8 h -31 v 7.4 h 92.9 c 1.2,0 2.2,-0.6 2.9,-1.6 z
-				m -302.7,-33.1 c -0.6,0.6 -0.9,1.4 -0.9,2.3 v 28.7 c 0,0.9 0.3,1.7 0.9,2.3 3.1,-5.1 7.8,-7.8 12,-8.8 -0.1,-0.3 -0.3,-0.6 -0.3,-1
+				m 0,0 c -0.6,-0.6 -1.5,-1 -2.5,-1 h -297.1
+				c -1.1,0 -2,0.5 -2.7,1.3 2.8,4.4 8.3,10 12.1,13.7 0.3,-0.4 0.9,-0.7 1.4,-0.7 h 52.8 v -1.8 h 31.6
+				v -9.2 c 0,-1 0.8,-1.8 1.8,-1.8 h 105.3 c 1,0 1.8,0.8 1.8,1.8 v 9.2 h 31 v 1.8 h 56.2
+				c 0.5,0 0.9,0.2 1.2,0.4 3.4,-3.9 4.8,-8.4 7,-13.7 z
+				m 0.4,33.4 c -1.8,-3.9 -4.9,-6.1 -7.8,-7.8 -0.3,0.1 -0.6,0.2 -0.9,0.2 h -56.2 v 1.8 h -31
+				v 7.4 h 92.9 c 1.2,0 2.2,-0.6 2.9,-1.6 z
+				m -302.7,-33.1 c -0.6,0.6 -0.9,1.4 -0.9,2.3 v 28.7
+				c 0,0.9 0.3,1.7 0.9,2.3 3.1,-5.1 7.8,-7.8 12,-8.8 -0.1,-0.3 -0.3,-0.6 -0.3,-1
 				v -8.7 c 0,-0.5 0.2,-0.9 0.5,-1.2 -3.8,-3.7 -9.3,-9.3 -12.1,-13.7 z
-				m 11.9,24.6 c -4.1,1 -8.8,3.7 -12,8.8 0.7,0.8 1.6,1.3 2.7,1.3 h 95.3 v -7.4 h -31.6 v -1.8 h -52.8 c -0.7,0 -1.3,-0.4 -1.6,-1 z
-				m 87.8,-24.4 c -1,0 -1.8,0.8 -1.8,1.8 v 9.2 h -31.6 v 1.8 h -52.8 c -1.1,0 -1.9,0.9 -1.9,1.9 v 8.7 c 0,1.1 0.9,1.9 1.9,1.9 h 52.8
+				m 11.9,24.6 c -4.1,1 -8.8,3.7 -12,8.8 0.7,0.8 1.6,1.3 2.7,1.3 h 95.3 v -7.4 h -31.6 v -1.8 h -52.8
+				c -0.7,0 -1.3,-0.4 -1.6,-1 z
+				m 87.8,-24.4 c -1,0 -1.8,0.8 -1.8,1.8 v 9.2 h -31.6 v 1.8 h -52.8 c -1.1,0 -1.9,0.9 -1.9,1.9 v 8.7
+				c 0,1.1 0.9,1.9 1.9,1.9 h 52.8
 				v 1.8 h 31.6 v 32.7 c 0,1 0.8,1.8 1.8,1.8" />
 		</svg>
 		]]></data></image>
 	</element>
-
 
 	<element name="button_42x17">
 		<image state="0"><data><![CDATA[
@@ -133,6 +144,22 @@
 		<image state="1"><data><![CDATA[
 			<svg width="42" height="17">
 				<rect stroke="#000" stroke-width="1" fill="#1b1b1b" x="0.5" y="0.5" width="41" height="16" />
+			</svg>
+		]]></data></image>
+	</element>
+
+	<element name="lcd_soft_key">
+		<image state="0"><data><![CDATA[
+			<svg width="36" height="32">
+				<rect stroke="#000" stroke-width="1" fill="#232323" x="0.5" y="0.5" width="35" height="31" />
+				<rect stroke="#000" stroke-width="1" fill="#232323" x="4.5" y="3.5" width="27" height="25" />
+			</svg>
+		]]></data></image>
+
+		<image state="1"><data><![CDATA[
+			<svg width="36" height="32">
+				<rect stroke="#000" stroke-width="1" fill="#232323" x="0.5" y="0.5" width="35" height="31" />
+				<rect stroke="#000" stroke-width="1" fill="#1b1b1b" x="4.5" y="3.5" width="27" height="25" />
 			</svg>
 		]]></data></image>
 	</element>
@@ -151,7 +178,6 @@
 		]]></data></image>
 	</element>
 
-
 	<element name="button_55x17">
 		<image state="0"><data><![CDATA[
 			<svg width="55" height="17">
@@ -166,26 +192,19 @@
 		]]></data></image>
 	</element>
 
-	<element name="under_lcd_button_bottom"><!-- the lower row under the LCD, and PAGE down: a visibly different ramp, 1.2365 against the upper row's 1.2047
-	     x9: PAGE down; under-LCD key, column 1, bottom; under-LCD key, column 2, bottom; under-LCD key, column 3, bottom; under-LCD key, column 4, bottom; under-LCD key, column 5, bottom; under-LCD key, column 6, bottom; under-LCD key, column 7, bottom; under-LCD key, column 8, bottom -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="34" height="24" viewBox="0 0 8.995830 6.350000"><defs><linearGradient xlink:href="#linearGradient59" id="linearGradient84" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.1941075,0,0,1.2364906,66.013702,-20.294474)" x1="60.747562" y1="116.79601" x2="60.747562" y2="120.52295" /><linearGradient id="linearGradient59"><stop style="stop-color:#90a0ac;stop-opacity:1" offset="0" id="stop59" /><stop style="stop-color:#7c8790;stop-opacity:1" offset="1" id="stop60" /></linearGradient></defs><g transform="matrix(1,0,0,1,-176.32327,-123.41385)"><path style="fill:url(#linearGradient84);fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none;stroke-opacity:1" d="m 176.32327,123.41385 v 6.35 h 8.99583 v -6.35 z" id="path45" /></g></svg>]]></data></image>
-		<rect state="1"><color red="0.0" green="0.0" blue="0.0" alpha="0.34"/></rect>
+	<element name="button_35x25_light">
+		<image state="0"><data><![CDATA[
+			<svg width="35" height="25">
+				<rect stroke="#000" stroke-width="1" fill="#667786" x="0.5" y="0.5" width="34" height="24" />
+			</svg>
+		]]></data></image>
+
+		<image state="1"><data><![CDATA[
+			<svg width="35" height="25">
+				<rect stroke="#000" stroke-width="1" fill="#434f59" x="0.5" y="0.5" width="34" height="24" />
+			</svg>
+		]]></data></image>
 	</element>
-
-
-	<element name="under_lcd_button_top"><!-- the upper row under the LCD, and PAGE up: gradient ramp 1.2047
-	     x9: PAGE up; under-LCD key, column 1, top; under-LCD key, column 2, top; under-LCD key, column 3, top; under-LCD key, column 4, top; under-LCD key, column 5, top; under-LCD key, column 6, top; under-LCD key, column 7, top; under-LCD key, column 8, top -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="34" height="24" viewBox="0 0 8.995830 6.350000"><defs><linearGradient xlink:href="#linearGradient59" id="linearGradient94" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.1941075,0,0,1.2046874,66.013702,-16.376391)" x1="60.747562" y1="116.79601" x2="60.747562" y2="120.52295" /><linearGradient id="linearGradient59"><stop style="stop-color:#90a0ac;stop-opacity:1" offset="0" id="stop59" /><stop style="stop-color:#7c8790;stop-opacity:1" offset="1" id="stop60" /></linearGradient></defs><g transform="matrix(1,0,0,1,-176.32327,-113.88885)"><path style="fill:url(#linearGradient94);fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none;stroke-opacity:1" d="m 176.32327,113.88885 v 6.35 h 8.99583 v -6.35 z" id="path94" /></g></svg>]]></data></image>
-		<rect state="1"><color red="0.0" green="0.0" blue="0.0" alpha="0.34"/></rect>
-	</element>
-
-
-	<element name="lcd_soft_key"><!-- the ten LCD soft keys, five down each side of the screen
-	     x10: LCD soft key, RIGHT column, 1st from top; LCD soft key, RIGHT column, 2nd; LCD soft key, RIGHT column, 3rd; LCD soft key, RIGHT column, 4th; LCD soft key, RIGHT column, 5th; LCD soft key, LEFT column, 1st from top; LCD soft key, LEFT column, 2nd; LCD soft key, LEFT column, 3rd; LCD soft key, LEFT column, 4th; LCD soft key, LEFT column, 5th -->
-		<image state="0"><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="35" height="31" viewBox="0 0 9.260420 8.202083"><defs><linearGradient xlink:href="#linearGradient197" id="linearGradient776" gradientUnits="userSpaceOnUse" x1="61.201115" y1="44.540188" x2="61.201115" y2="49.12603" gradientTransform="matrix(1.0046855,0,0,1.0348341,134.25259,-3.8160042)" /><linearGradient id="linearGradient197"><stop style="stop-color:#6f7b7f;stop-opacity:1;" offset="0" id="stop196" /><stop style="stop-color:#4c5256;stop-opacity:1;" offset="0.17078076" id="stop198" /><stop style="stop-color:#1f2224;stop-opacity:1;" offset="1" id="stop197" /></linearGradient></defs><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path16" style="fill:#1a1f23;fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none" d="m 191.40451,41.128435 v 8.202083 h 9.26042 v -8.202083 z" /></g><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path772" style="fill:url(#linearGradient776);fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none" d="m 192.46284,41.922187 v 6.614584 h 7.14375 v -6.614584 z" /></g></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="35" height="31" viewBox="0 0 9.260420 8.202083"><defs><linearGradient xlink:href="#linearGradient197" id="linearGradient776" gradientUnits="userSpaceOnUse" x1="61.201115" y1="44.540188" x2="61.201115" y2="49.12603" gradientTransform="matrix(1.0046855,0,0,1.0348341,134.25259,-3.8160042)" /><linearGradient id="linearGradient197"><stop style="stop-color:#6f7b7f;stop-opacity:1;" offset="0" id="stop196" /><stop style="stop-color:#4c5256;stop-opacity:1;" offset="0.17078076" id="stop198" /><stop style="stop-color:#1f2224;stop-opacity:1;" offset="1" id="stop197" /></linearGradient></defs><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path16" style="fill:#1a1f23;fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none" d="m 191.40451,41.128435 v 8.202083 h 9.26042 v -8.202083 z" /></g><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path772" style="fill:url(#linearGradient776);fill-opacity:1;stroke:#000000;stroke-width:0.264583;stroke-linecap:square;stroke-dasharray:none" d="m 192.46284,41.922187 v 6.614584 h 7.14375 v -6.614584 z" /></g><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path16" style="fill:#000000;fill-opacity:0.34;stroke:none" d="m 191.40451,41.128435 v 8.202083 h 9.26042 v -8.202083 z" /></g><g transform="matrix(1,0,0,1,-191.40451,-41.128435)"><path id="path772" style="fill:#000000;fill-opacity:0.34;stroke:none" d="m 192.46284,41.922187 v 6.614584 h 7.14375 v -6.614584 z" /></g></svg>]]></data></image>
-	</element>
-
 	
 	<element name="data_wheel">
 		<image><data><![CDATA[
@@ -202,26 +221,31 @@
 			</svg>
 		]]></data></image>
 	</element>
-	
 
-	<element name="volume_knob"><!-- VOLUME (wire 0xD3) -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="50.739" height="50.739" viewBox="0 0 13.424823 13.424820"><defs></defs><g transform="matrix(1,0,0,1,51.9707654,-53.066444)"><ellipse style="fill:#101211;fill-opacity:1;stroke:none;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="ellipse221" cx="-45.258354" cy="59.778854" rx="6.7124114" ry="6.71241" /></g><g transform="matrix(1,0,0,1,51.9707654,-53.066444)"><ellipse style="fill:#202626;fill-opacity:1;stroke:none;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1" id="ellipse222" cx="-45.258354" cy="59.778854" rx="5.4481902" ry="5.4481893" /></g><g transform="matrix(1,0,0,1,51.9707654,-53.066444)"><path style="fill:none;stroke:#000000;stroke-width:1.7;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1" d="m -45.601044,59.493342 3.852863,4.454872" id="path222" /></g></svg>]]></data></image>
+	<element name="lcd_soft_key_marker_left">
+		<image><data><![CDATA[
+			<svg width="13" height="14">
+				<g style="stroke-width:2; stroke-linejoin:round">
+					<path d="M 1,1 V 13 L 12,7 Z" stroke="#443530" fill="#443530" />
+					<path d="M 1,1 L 12,7" stroke="#6a5c59" fill="none" />
+					<path d="M 1,13 L 12,7" stroke="#3f2f27" fill="none" />
+				</g>
+			</svg>
+		]]></data></image>
 	</element>
 
-
-	<element name="menu_rule"><!-- one of the two rules flanking the MENU legend ; drawn 2 times -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="84" height="1" viewBox="0 0 22.225000 0.264583"><defs></defs><g transform="matrix(1,0,0,1,-8.7097193,-32.264895)"><path style="fill:#e2e8f4;fill-opacity:1;stroke-width:1" d="m 8.7097193,32.264895 v 0.264583 H 30.934719 v -0.264583 z" id="path1" /></g></svg>]]></data></image>
+	<element name="lcd_soft_key_marker_right">
+		<image><data><![CDATA[
+			<svg width="13" height="14">
+				<g style="stroke-width:2; stroke-linejoin:round">
+					<path d="M 12,1 V 13 L 1,7 Z" stroke="#443530" fill="#443530" />
+					<path d="M 12,1 L 1,7" stroke="#6a5c59" fill="none" />
+					<path d="M 12,13 L 1,7" stroke="#3f2f27" fill="none" />
+				</g>
+			</svg>
+		]]></data></image>
 	</element>
 
-
-	<element name="lcd_soft_key_marker_left"><!-- the arrow beside an LCD soft key, left column ; drawn 5 times -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="12.560" height="13.952" viewBox="0 0 3.323220 3.691448"><defs></defs><g transform="matrix(0.99944788,0,0,1,-74.0392124,-45.692697)"><path id="path99" style="fill:#443530;fill-opacity:1;stroke-linejoin:round" d="m 74.499913,45.942135 a 0.26468298,0.26468298 0 0 0 -0.0879,0.03049 0.26468298,0.26468298 0 0 0 -0.134433,0.232544 v 2.722314 a 0.26468298,0.26468298 0 0 0 0.386236,0.234611 l 2.40635,-1.257804 a 0.26468298,0.26468298 0 0 0 0.01603,-0.460954 l -2.406349,-1.465027 a 0.26468298,0.26468298 0 0 0 -0.179934,-0.03617 z" /></g><g transform="matrix(0.99944788,0,0,1,-74.0392124,-45.692697)"><path id="path96" style="fill:#3f2f27;fill-opacity:1;stroke-linejoin:round" d="m 74.806524,48.487716 c -0.197022,0.175527 -0.360805,0.372134 -0.479305,0.589111 a 0.26468298,0.26468298 0 0 0 0.336599,0.08527 l 2.40635,-1.257804 a 0.26468298,0.26468298 0 0 0 0.140637,-0.207223 c -0.323669,0.0617 -0.655179,0.08472 -0.975156,0.04599 l -1.429125,0.745174 z" /></g><g transform="matrix(0.99944788,0,0,1,-74.0392124,-45.692697)"><path id="path101" style="fill:#6a5c59;fill-opacity:1;stroke-linejoin:round" d="m 74.380475,45.998979 c 0.06818,0.30009 0.127666,0.565202 0.426049,0.676961 l 1.603888,0.976168 -0.174763,0.09095 c 0.319977,0.03873 0.651487,0.01571 0.975156,-0.04599 0.01089,-0.101533 -0.0376,-0.200272 -0.124609,-0.253731 L 74.679847,45.97831 c -0.08166,-0.05027 -0.184116,-0.05244 -0.267832,-0.0057 -0.01118,0.008 -0.02173,0.01677 -0.03154,0.02635 z" /></g></svg>]]></data></image>
-	</element>
-
-
-	<element name="lcd_soft_key_marker_right"><!-- the arrow beside an LCD soft key, right column ; drawn 5 times -->
-		<image><data><![CDATA[<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="12.560" height="13.952" viewBox="0 0 3.323220 3.691448"><defs></defs><g transform="matrix(-0.99944788,0,0,1,77.3624325,-45.692697)"><path id="path114" style="fill:#443530;fill-opacity:1;stroke-linejoin:round" d="m 74.499913,45.942135 a 0.26468298,0.26468298 0 0 0 -0.0879,0.03049 0.26468298,0.26468298 0 0 0 -0.134433,0.232544 v 2.722314 a 0.26468298,0.26468298 0 0 0 0.386236,0.234611 l 2.40635,-1.257804 a 0.26468298,0.26468298 0 0 0 0.01603,-0.460954 l -2.406349,-1.465027 a 0.26468298,0.26468298 0 0 0 -0.179934,-0.03617 z" /></g><g transform="matrix(-0.99944788,0,0,1,77.3624325,-45.692697)"><path id="path115" style="fill:#3f2f27;fill-opacity:1;stroke-linejoin:round" d="m 74.806524,48.487716 c -0.197022,0.175527 -0.360805,0.372134 -0.479305,0.589111 a 0.26468298,0.26468298 0 0 0 0.336599,0.08527 l 2.40635,-1.257804 a 0.26468298,0.26468298 0 0 0 0.140637,-0.207223 c -0.323669,0.0617 -0.655179,0.08472 -0.975156,0.04599 l -1.429125,0.745174 z" /></g><g transform="matrix(-0.99944788,0,0,1,77.3624325,-45.692697)"><path id="path116" style="fill:#6a5c59;fill-opacity:1;stroke-linejoin:round" d="m 74.380475,45.998979 c 0.06818,0.30009 0.127666,0.565202 0.426049,0.676961 l 1.603888,0.976168 -0.174763,0.09095 c 0.319977,0.03873 0.651487,0.01571 0.975156,-0.04599 0.01089,-0.101533 -0.0376,-0.200272 -0.124609,-0.253731 L 74.679847,45.97831 c -0.08166,-0.05027 -0.184116,-0.05244 -0.267832,-0.0057 -0.01118,0.008 -0.02173,0.01677 -0.03154,0.02635 z" /></g></svg>]]></data></image>
-	</element>
 
 	<element name="lbl_PART"><text string="PART" align="0"><color red="0.89" green="0.91" blue="0.96"/></text></element>
 	<element name="lbl_SYSTEM"><text string="SYSTEM" align="0"><color red="0.89" green="0.91" blue="0.96"/></text></element>
@@ -305,7 +329,7 @@
 	<element name="panel_sheet">
 		<image><data><![CDATA[
 			<svg width="1555" height="426">
-				<rect x="0.5" y="0.5" width="1554" height="425" rx="5" ry="5" stroke="black" fill="#2e3636" /> <!-- 282a2d -->
+				<rect x="0.5" y="0.5" width="1554" height="425" rx="5" ry="5" stroke="black" fill="#2e3636" />
 			</svg>
 		]]></data></image>
 	</element>
@@ -338,6 +362,12 @@
 		]]></data></image>
 	</element>
 
+	<element name="menu_rule">
+		<rect>
+			<color red="0.8" green="0.86" blue="0.84"/>
+		</rect>
+	</element>
+
 	<group name="panel">
 		<bounds left="0" right="1600" top="0" bottom="500"/>
 		<element ref="background_color"><bounds x="0" y="0" width="1600" height="500"/></element>
@@ -352,20 +382,16 @@
 
 		<element ref="floppy_drive"><bounds x="146" y="355" width="327" height="84"/></element>
 
-		<!-- the marks the drawing repeats, on top of the backdrop they
-		     were lifted out of and under everything else -->
-		<element ref="menu_rule"><bounds x="367" y="67" width="84" height="1"/></element>
-		<element ref="menu_rule"><bounds x="245" y="67" width="84" height="1"/></element>
-		<element ref="lcd_soft_key_marker_left"><bounds x="615.106" y="117.751" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_left"><bounds x="615.106" y="155.312" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_left"><bounds x="615.106" y="192.874" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_left"><bounds x="615.106" y="230.435" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_left"><bounds x="615.106" y="267.997" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_right"><bounds x="958.006" y="117.751" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_right"><bounds x="958.006" y="155.312" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_right"><bounds x="958.006" y="192.874" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_right"><bounds x="958.006" y="230.435" width="12.560" height="13.952"/></element>
-		<element ref="lcd_soft_key_marker_right"><bounds x="958.006" y="267.997" width="12.560" height="13.952"/></element>
+		<element ref="lcd_soft_key_marker_left"><bounds x="615" y="118" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_left"><bounds x="615" y="155" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_left"><bounds x="615" y="193" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_left"><bounds x="615" y="230" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_left"><bounds x="615" y="268" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_right"><bounds x="958" y="118" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_right"><bounds x="958" y="155" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_right"><bounds x="958" y="193" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_right"><bounds x="958" y="230" width="13" height="14"/></element>
+		<element ref="lcd_soft_key_marker_right"><bounds x="958" y="268" width="13" height="14"/></element>
 
 		<!-- The SED1330 panel -->
 		<screen index="0"><bounds x="633" y="85" width="320" height="240"/></screen>
@@ -391,8 +417,8 @@
 		<element ref="button_42x17" inputtag="cpanel:CP_SEG2" inputmask="0x04"><!-- + / - --><bounds x="1364" y="241" width="42" height="17"/></element>
 		<element ref="button_42x17" inputtag="cpanel:CP_SEG2" inputmask="0x08"><!-- ENTER --><bounds x="1427" y="241" width="42" height="17"/></element>
 
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG2" inputmask="0x10"><!-- PAGE DOWN --><bounds x="1000" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG2" inputmask="0x20"><!-- SEG2/SW5  PAGE UP --><bounds x="1000" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG2" inputmask="0x10"><!-- PAGE DOWN --><bounds x="1000" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG2" inputmask="0x20"><!-- PAGE UP --><bounds x="1000" y="375" width="34" height="24"/></element>
 
 		<element ref="button_42x25" inputtag="cpanel:CP_SEG2" inputmask="0x40"><!-- COMPARE --><bounds x="527" y="392" width="42" height="25"/></element>
 
@@ -406,115 +432,133 @@
 		<element ref="button_55x17" inputtag="cpanel:CP_SEG3" inputmask="0x40"><!-- +1 --><bounds x="1192" y="104" width="55" height="17"/></element>
 		<element ref="button_55x17" inputtag="cpanel:CP_SEG3" inputmask="0x80"><!-- EXIT --><bounds x="1158" y="353" width="55" height="17"/></element>
 
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG4" inputmask="0x01"><!-- Under-LCD 1, bottom --><bounds x="617" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG4" inputmask="0x02"><!-- Under-LCD 1, top --><bounds x="617" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG4" inputmask="0x04"><!-- Under-LCD 2, bottom --><bounds x="662" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG4" inputmask="0x08"><!-- Under-LCD 2, top --><bounds x="662" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG4" inputmask="0x10"><!-- Under-LCD 3, bottom --><bounds x="707" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG4" inputmask="0x20"><!-- Under-LCD 3, top --><bounds x="707" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG4" inputmask="0x40"><!-- Under-LCD 4, bottom --><bounds x="752" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG4" inputmask="0x80"><!-- Under-LCD 4, top --><bounds x="752" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG5" inputmask="0x01"><!-- Under-LCD 5, bottom --><bounds x="797" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG5" inputmask="0x02"><!-- Under-LCD 5, top --><bounds x="797" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG5" inputmask="0x04"><!-- Under-LCD 6, bottom --><bounds x="842" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG5" inputmask="0x08"><!-- Under-LCD 6, top --><bounds x="842" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG5" inputmask="0x10"><!-- Under-LCD 7, bottom --><bounds x="887" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG5" inputmask="0x20"><!-- Under-LCD 7, top --><bounds x="887" y="375" width="34" height="24"/></element>
-		<element ref="under_lcd_button_bottom" inputtag="cpanel:CP_SEG5" inputmask="0x40"><!-- Under-LCD 8, bottom --><bounds x="932" y="411" width="34" height="24"/></element>
-		<element ref="under_lcd_button_top" inputtag="cpanel:CP_SEG5" inputmask="0x80"><!-- Under-LCD 8, top --><bounds x="932" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x01"><!-- Under-LCD 1, bottom --><bounds x="617" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x02"><!-- Under-LCD 1, top --><bounds x="617" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x04"><!-- Under-LCD 2, bottom --><bounds x="662" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x08"><!-- Under-LCD 2, top --><bounds x="662" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x10"><!-- Under-LCD 3, bottom --><bounds x="707" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x20"><!-- Under-LCD 3, top --><bounds x="707" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x40"><!-- Under-LCD 4, bottom --><bounds x="752" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG4" inputmask="0x80"><!-- Under-LCD 4, top --><bounds x="752" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x01"><!-- Under-LCD 5, bottom --><bounds x="797" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x02"><!-- Under-LCD 5, top --><bounds x="797" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x04"><!-- Under-LCD 6, bottom --><bounds x="842" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x08"><!-- Under-LCD 6, top --><bounds x="842" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x10"><!-- Under-LCD 7, bottom --><bounds x="887" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x20"><!-- Under-LCD 7, top --><bounds x="887" y="375" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x40"><!-- Under-LCD 8, bottom --><bounds x="932" y="411" width="34" height="24"/></element>
+		<element ref="button_35x25_light" inputtag="cpanel:CP_SEG5" inputmask="0x80"><!-- Under-LCD 8, top --><bounds x="932" y="375" width="34" height="24"/></element>
+
+		<element ref="button_42x25"><!-- POWER BUTTON outer --><bounds x="133" y="77" width="59" height="43"/></element>
+		<element ref="button_42x25"><!-- POWER BUTTON inner --><bounds x="138" y="81" width="49" height="34"/></element>
+
+		<element ref="small_round_button"><!-- VOLUME knob body --><bounds x="138" y="146" width="51" height="51"/></element>
+		<element ref="indicator"><!-- VOLUME indicator (wire 0xD3) --><bounds x="170" y="180" width="6" height="6"/></element>
+
+		<element ref="small_round_button"><!-- CONTRAST knob body --><bounds x="149" y="226" width="27" height="27"/></element>
+		<element ref="indicator"><!-- CONTRAST indicator --><bounds x="164" y="232" width="6" height="6"/></element>
+
+		<element ref="small_round_button"><!-- PHONES outer --><bounds x="145" y="296" width="36" height="36"/></element>
+		<element ref="small_round_button"><!-- PHONES inner --><bounds x="152" y="304" width="22" height="22"/></element>
+
+		<element ref="menu_rule"><bounds x="367" y="67" width="84" height="1"/></element>
+		<element ref="menu_rule"><bounds x="245" y="67" width="84" height="1"/></element>
 
 		<element ref="button_42x25" inputtag="cpanel:CP_SEG7" inputmask="0x01"><!-- MENU PART --><bounds x="244" y="101" width="42" height="25"/></element>
 		<element ref="button_42x25" inputtag="cpanel:CP_SEG7" inputmask="0x02"><!-- MENU SYSTEM --><bounds x="299" y="101" width="42" height="25"/></element>
 		<element ref="button_42x25" inputtag="cpanel:CP_SEG7" inputmask="0x04"><!-- MENU MIDI --><bounds x="354" y="101" width="42" height="25"/></element>
 		<element ref="button_42x25" inputtag="cpanel:CP_SEG7" inputmask="0x08"><!-- MENU DISK --><bounds x="409" y="101" width="42" height="25"/></element>
 
-		<element ref="large_round_button" inputtag="cpanel:CP_SEG8" inputmask="0x01"><!-- SEG8/SW0  REALTIME CREATOR 1~6  [L] --><bounds x="411.283" y="297.009" width="37.232" height="37.253"/></element>
-		<element ref="small_round_button" inputtag="cpanel:CP_SEG8" inputmask="0x02"><!-- SEG8/SW1  REALTIME CREATOR RESET  [L] --><bounds x="417.427" y="160.380" width="24.262" height="24.276"/></element>
-		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x01"><!-- SEG9/SW0  LCD soft key, LEFT column, 1st from top  [F] --><bounds x="492" y="100" width="35" height="31"/></element>
-		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x02"><!-- SEG9/SW1  LCD soft key, LEFT column, 2nd  [F] --><bounds x="492" y="142" width="35" height="31"/></element>
-		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x04"><!-- SEG9/SW2  LCD soft key, LEFT column, 3rd  [F] --><bounds x="492" y="184" width="35" height="31"/></element>
-		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x08"><!-- SEG9/SW3  LCD soft key, LEFT column, 4th  [F] --><bounds x="492" y="227" width="35" height="31"/></element>
-		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x10"><!-- SEG9/SW4  LCD soft key, LEFT column, 5th  [F] --><bounds x="492" y="269" width="35" height="31"/></element>
+		<element ref="large_round_button" inputtag="cpanel:CP_SEG8" inputmask="0x01"><!-- REALTIME CREATOR 1-6 --><bounds x="411" y="297" width="37" height="37"/></element>
+		<element ref="small_round_button" inputtag="cpanel:CP_SEG8" inputmask="0x02"><!-- REALTIME CREATOR RESET --><bounds x="417" y="160" width="24" height="24"/></element>
+		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x01"><!-- LCD LEFT 1 (top) --><bounds x="492" y="100" width="35" height="31"/></element>
+		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x02"><!-- LCD LEFT 2 --><bounds x="492" y="142" width="35" height="31"/></element>
+		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x04"><!-- LCD LEFT 3 --><bounds x="492" y="184" width="35" height="31"/></element>
+		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x08"><!-- LCD LEFT 4 --><bounds x="492" y="227" width="35" height="31"/></element>
+		<element ref="lcd_soft_key" inputtag="cpanel:CP_SEG9" inputmask="0x10"><!-- LCD LEFT 5 --><bounds x="492" y="269" width="35" height="31"/></element>
 		<element id="data_wheel" ref="data_wheel"><!-- DATA ENTRY DIAL body --><bounds x="1110" y="164" width="154" height="154"/></element>
 		<element id="data_wheel_finger" ref="data_wheel_finger"><!-- DATA ENTRY DIAL finger dimple --><bounds x="1176" y="262" width="45" height="45"/></element>
-		<element id="volume_knob" ref="volume_knob"><!-- VOLUME (wire 0xD3) --><bounds x="138" y="146" width="50.739" height="50.739"/></element>
 
-		<element name="led8" ref="led_green"><!-- PLAY MODE SOUND (D116) ; reg1 bit0 &lt;- SEG0/SW0 --><bounds x="1276.300" y="297.300" width="6.400" height="6.400"/></element>
-		<element name="led9" ref="led_green"><!-- PLAY MODE COMBI (D117) ; reg1 bit1 &lt;- SEG0/SW1 --><bounds x="1333.300" y="297.300" width="6.400" height="6.400"/></element>
-		<element name="led10" ref="led_green"><!-- EDIT MODE SOUND (D118) ; reg1 bit2 &lt;- SEG0/SW2 --><bounds x="1389.300" y="297.300" width="6.400" height="6.400"/></element>
-		<element name="led11" ref="led_green"><!-- EDIT MODE COMBI (D119) ; reg1 bit3 &lt;- SEG0/SW3 --><bounds x="1445.300" y="297.300" width="6.400" height="6.400"/></element>
-		<element name="led0" ref="led_red"><!-- BANK USER 1 (D120) ; reg0 bit0 &lt;- SEG0/SW4 --><bounds x="1276.300" y="364.300" width="6.400" height="6.400"/></element>
-		<element name="led1" ref="led_red"><!-- BANK USER 2 (D121) ; reg0 bit1 &lt;- SEG0/SW5 --><bounds x="1333.300" y="364.300" width="6.400" height="6.400"/></element>
-		<element name="led2" ref="led_red"><!-- BANK ROM/EXT (D122) ; reg0 bit2 &lt;- SEG0/SW6 --><bounds x="1389.300" y="364.300" width="6.400" height="6.400"/></element>
-		<element name="led3" ref="led_red"><!-- BANK RE-MAP (D123) ; reg0 bit3 &lt;- SEG0/SW7 --><bounds x="1445.300" y="364.300" width="6.400" height="6.400"/></element>
-		<element name="led32" ref="led_green"><!-- MENU PART (D160) ; reg4 bit0 &lt;- SEG7/SW0 --><bounds x="263.300" y="77.300" width="6.400" height="6.400"/></element>
-		<element name="led33" ref="led_green"><!-- MENU SYSTEM (D161) ; reg4 bit1 &lt;- SEG7/SW1 --><bounds x="318.300" y="77.300" width="6.400" height="6.400"/></element>
-		<element name="led40" ref="led_green"><!-- MENU MIDI (D162) ; reg5 bit0 &lt;- SEG7/SW2 --><bounds x="372.300" y="77.300" width="6.400" height="6.400"/></element>
-		<element name="led41" ref="led_green"><!-- MENU DISK (D163) ; reg5 bit1 &lt;- SEG7/SW3 --><bounds x="427.300" y="77.300" width="6.400" height="6.400"/></element>
-		<element name="led50" ref="led_red"><!-- COMPARE (D130) ; reg6 bit2, the LCD-key family indicator --><bounds x="545.300" y="367.300" width="6.400" height="6.400"/></element>
-		<element name="led51" ref="led_green"><!-- MIDI / NUMBER PAD (D131) ; reg6 bit3, the numeric family indicator --><bounds x="1124.300" y="68.300" width="6.400" height="6.400"/></element>
-		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, top ; one of led16/17/24/25 - not decoded --><bounds x="318.300" y="143.300" width="6.400" height="6.400"/></element>
-		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, right ; one of led16/17/24/25 - not decoded --><bounds x="410.300" y="236.300" width="6.400" height="6.400"/></element>
-		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, bottom ; one of led16/17/24/25 - not decoded --><bounds x="318.300" y="329.300" width="6.400" height="6.400"/></element>
-		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, left ; one of led16/17/24/25 - not decoded --><bounds x="224.300" y="236.300" width="6.400" height="6.400"/></element>
-		<element name="check_led" ref="led_red"><!-- service checking device (CN4) ; driver output, wsa1.cpp P5 bit 3 --><bounds x="80.300" y="474.300" width="6.400" height="6.400"/></element>
+		<element id="realtime_creator_wheel" ref="data_wheel"><!-- REALTIME CREATOR body --><bounds x="244" y="164" width="154" height="154"/></element>
+		<element id="realtime_creator_ball" ref="data_wheel"><!-- REALTIME CREATOR ball --><bounds x="264" y="184" width="113" height="113"/></element>
+		<element id="realtime_creator_finger" ref="data_wheel_finger"><!-- REALTIME CREATOR dimple --><bounds x="304" y="223" width="33" height="33"/></element>
 
-		<element ref="lbl_PART"><!-- PART --><bounds x="252.961" y="84.781" width="26.008" height="12.774"/></element>
-		<element ref="lbl_SYSTEM"><!-- SYSTEM --><bounds x="299.293" y="85.001" width="42.755" height="12.312"/></element>
-		<element ref="lbl_MIDI"><!-- MIDI --><bounds x="362.934" y="84.781" width="24.131" height="12.774"/></element>
-		<element ref="lbl_DISK"><!-- DISK --><bounds x="415.966" y="85.001" width="24.813" height="12.312"/></element>
-		<element ref="lbl_MENU"><!-- MENU --><bounds x="330.874" y="60.823" width="34.123" height="12.530"/></element>
-		<element ref="lbl_ACOUSTIC_MODELING_SYNTHESIZER_MODULE"><!-- ACOUSTIC MODELING SYNTHESIZER MODULE --><bounds x="753.005" y="57.707" width="159.680" height="14.326"/></element>
-		<element ref="lbl_SX"><!-- SX --><bounds x="919.447" y="58.564" width="14.668" height="12.067"/></element>
-		<element ref="lbl_MINUS"><!--  --><bounds x="933.604" y="53.111" width="6.264" height="19.414"/></element>
-		<element ref="lbl_WSA1R"><!-- WSA1R --><bounds x="942.651" y="47.983" width="68.737" height="25.245"/></element>
-		<element ref="lbl_REALTIME"><!-- REALTIME --><bounds x="227.274" y="142.411" width="51.327" height="12.400"/></element>
-		<element ref="lbl_CREATOR"><!-- CREATOR --><bounds x="227.839" y="151.817" width="50.196" height="12.400"/></element>
-		<element ref="lbl_RESET"><!-- RESET --><bounds x="412.185" y="144.858" width="34.045" height="12.400"/></element>
-		<element ref="lbl_VOLUME"><!-- VOLUME --><bounds x="140.672" y="124.552" width="44.494" height="12.400"/></element>
-		<element ref="lbl_MIN"><!-- MIN --><bounds x="120.133" y="193.305" width="20.250" height="12.400"/></element>
-		<element ref="lbl_CONTRAST"><!-- CONTRAST --><bounds x="133.800" y="212.365" width="57.677" height="12.400"/></element>
-		<element ref="lbl_ON"><!-- ON --><bounds x="95.299" y="85.981" width="16.312" height="12.400"/></element>
-		<element ref="lbl_OFF"><!-- OFF --><bounds x="94.982" y="96.404" width="20.587" height="12.400"/></element>
-		<element ref="lbl_POWER"><!-- POWER --><bounds x="141.839" y="60.650" width="42.872" height="13.502"/></element>
-		<element ref="lbl_PHONES"><!-- PHONES --><bounds x="140.088" y="281.618" width="44.167" height="12.400"/></element>
-		<element ref="lbl_1_6"><!-- 1-6 --><bounds x="420.482" y="280.691" width="17.355" height="12.400"/></element>
-		<element ref="lbl_MAX"><!-- MAX --><bounds x="186.318" y="193.305" width="23.715" height="12.400"/></element>
-		<element ref="lbl_COMPARE"><!-- COMPARE --><bounds x="521.401" y="376.001" width="52.282" height="12.312"/></element>
-		<element ref="lbl_PAGE"><!-- PAGE --><bounds x="1039.959" y="398.001" width="27.720" height="12.312"/></element>
-		<element ref="lbl_EXIT"><!-- EXIT --><bounds x="1174.939" y="337.781" width="24.029" height="12.774"/></element>
-		<element ref="lbl_USER_1"><!-- USER 1 --><bounds x="1261.073" y="374.001" width="38.912" height="12.312"/></element>
-		<element ref="lbl_USER_2"><!-- USER 2 --><bounds x="1316.071" y="374.001" width="39" height="12.312"/></element>
-		<element ref="lbl_ROM_EXT"><!-- ROM/EXT --><bounds x="1366.952" y="374.189" width="49.016" height="11.153"/></element>
-		<element ref="lbl_RE_MAP"><!-- RE-MAP --><bounds x="1426.967" y="373.781" width="40.393" height="12.774"/></element>
-		<element ref="lbl_1"><!-- 1 --><bounds x="1276.734" y="414.781" width="7.328" height="12.774"/></element>
-		<element ref="lbl_2"><!-- 2 --><bounds x="1332.209" y="414.963" width="6.872" height="12.547"/></element>
-		<element ref="lbl_3_GM"><!-- 3(GM) --><bounds x="1376.184" y="415.258" width="32.738" height="11.763"/></element>
-		<element ref="lbl_COMBI"><!-- COMBI --><bounds x="1317.399" y="306.001" width="35.652" height="12.312"/></element>
-		<element ref="lbl_SOUND"><!-- SOUND --><bounds x="1260.294" y="306.001" width="39.339" height="12.312"/></element>
-		<element ref="lbl_ENTER"><!-- ENTER --><bounds x="1429.954" y="224.781" width="35.353" height="12.774"/></element>
-		<element ref="lbl_PLUS_MINUS"><!-- +/ --><bounds x="1375.849" y="225.032" width="16.681" height="11.332"/></element>
-		<element ref="lbl_0"><!-- 0 --><bounds x="1320.346" y="225.001" width="6.313" height="12.312"/></element>
-		<element ref="lbl_1"><!-- 1 --><bounds x="1319.734" y="179.781" width="7.328" height="12.774"/></element>
-		<element ref="lbl_2"><!-- 2 --><bounds x="1381.728" y="179.461" width="6.760" height="12.400"/></element>
-		<element ref="lbl_3"><!-- 3 --><bounds x="1445.131" y="179.687" width="6.760" height="12.400"/></element>
-		<element ref="lbl_6"><!-- 6 --><bounds x="1444.592" y="134.214" width="6.760" height="12.400"/></element>
-		<element ref="lbl_9"><!-- 9 --><bounds x="1445.374" y="89.001" width="6.325" height="12.312"/></element>
-		<element ref="lbl_8"><!-- 8 --><bounds x="1382.321" y="89.001" width="6.362" height="12.312"/></element>
-		<element ref="lbl_7"><!-- 7 --><bounds x="1320.125" y="88.781" width="6.786" height="12.774"/></element>
-		<element ref="lbl_4"><!-- 4 --><bounds x="1320.540" y="133.846" width="5.988" height="12.400"/></element>
-		<element ref="lbl_5"><!-- 5 --><bounds x="1382.489" y="134.375" width="6.760" height="12.400"/></element>
-		<element ref="lbl_PLUS_1"><!-- +1 --><bounds x="1210.837" y="87.781" width="16.175" height="12.774"/></element>
-		<element ref="lbl_MINUS_1"><!-- -1 --><bounds x="1149.487" y="87.781" width="10.484" height="12.774"/></element>
-		<element ref="lbl_MIDI_NUMBER_PAD"><!-- MIDI / NUMBER PAD --><bounds x="1135.130" y="65.786" width="87.393" height="12.748"/></element>
-		<element ref="lbl_COMBI"><!-- COMBI --><bounds x="1429.399" y="306.001" width="35.652" height="12.312"/></element>
-		<element ref="lbl_SOUND"><!-- SOUND --><bounds x="1372.294" y="306.001" width="39.339" height="12.312"/></element>
-		<element ref="lbl_EDIT"><!-- EDIT --><bounds x="1385.894" y="277.751" width="25.996" height="13.851"/></element>
-		<element ref="lbl_MODE"><!-- MODE --><bounds x="1418.342" y="277.751" width="34.379" height="13.851"/></element>
-		<element ref="lbl_MODE"><!-- MODE --><bounds x="1307.949" y="277.902" width="34.779" height="13.665"/></element>
-		<element ref="lbl_PLAY"><!-- PLAY --><bounds x="1273.881" y="277.626" width="27.356" height="13.665"/></element>
-		<element ref="lbl_BANK"><!-- BANK --><bounds x="1319.908" y="346.781" width="30.858" height="12.774"/></element>
-		<element ref="lbl_MAINCPU"><!-- MAINCPU --><bounds x="25.961" y="471.001" width="48.960" height="12.312"/></element>
+		<element name="led8" ref="led_green"><!-- PLAY MODE SOUND (D116) --><bounds x="1276" y="297" width="6" height="6"/></element>
+		<element name="led9" ref="led_green"><!-- PLAY MODE COMBI (D117) --><bounds x="1333" y="297" width="6" height="6"/></element>
+		<element name="led10" ref="led_green"><!-- EDIT MODE SOUND (D118) --><bounds x="1389" y="297" width="6" height="6"/></element>
+		<element name="led11" ref="led_green"><!-- EDIT MODE COMBI (D119) --><bounds x="1445" y="297" width="6" height="6"/></element>
+		<element name="led0" ref="led_red"><!-- BANK USER 1 (D120) --><bounds x="1276" y="364" width="6" height="6"/></element>
+		<element name="led1" ref="led_red"><!-- BANK USER 2 (D121) --><bounds x="1333" y="364" width="6" height="6"/></element>
+		<element name="led2" ref="led_red"><!-- BANK ROM/EXT (D122) --><bounds x="1389" y="364" width="6" height="6"/></element>
+		<element name="led3" ref="led_red"><!-- BANK RE-MAP (D123) --><bounds x="1445" y="364" width="6" height="6"/></element>
+		<element name="led32" ref="led_green"><!-- MENU PART (D160) --><bounds x="263" y="77" width="6" height="6"/></element>
+		<element name="led33" ref="led_green"><!-- MENU SYSTEM (D161) --><bounds x="318" y="77" width="6" height="6"/></element>
+		<element name="led40" ref="led_green"><!-- MENU MIDI (D162) --><bounds x="372" y="77" width="6" height="6"/></element>
+		<element name="led41" ref="led_green"><!-- MENU DISK (D163) --><bounds x="427" y="77" width="6" height="6"/></element>
+		<element name="led50" ref="led_red"><!-- COMPARE (D130) --><bounds x="545" y="367" width="6" height="6"/></element>
+		<element name="led51" ref="led_green"><!-- MIDI / NUMBER PAD (D131) --><bounds x="1124" y="68" width="6" height="6"/></element>
+		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, top ; one of led16/17/24/25 - not decoded --><bounds x="318" y="143" width="6" height="6"/></element>
+		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, right ; one of led16/17/24/25 - not decoded --><bounds x="410" y="236" width="6" height="6"/></element>
+		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, bottom ; one of led16/17/24/25 - not decoded --><bounds x="318" y="329" width="6" height="6"/></element>
+		<element ref="led_red"><!-- UNBOUND: REALTIME CREATOR ring, left ; one of led16/17/24/25 - not decoded --><bounds x="224" y="236" width="6" height="6"/></element>
+		<element name="check_led" ref="led_red"><!-- service checking device (CN4) --><bounds x="80" y="474" width="6" height="6"/></element>
+
+		<element ref="lbl_MENU"><!-- MENU --><bounds x="331" y="61" width="34" height="13"/></element>
+		<element ref="lbl_PART"><!-- PART --><bounds x="253" y="85" width="26" height="13"/></element>
+		<element ref="lbl_SYSTEM"><!-- SYSTEM --><bounds x="299" y="85" width="43" height="13"/></element>
+		<element ref="lbl_MIDI"><!-- MIDI --><bounds x="363" y="85" width="24" height="13"/></element>
+		<element ref="lbl_DISK"><!-- DISK --><bounds x="416" y="85" width="25" height="13"/></element>
+		<element ref="lbl_ACOUSTIC_MODELING_SYNTHESIZER_MODULE"><!-- ACOUSTIC MODELING SYNTHESIZER MODULE --><bounds x="753" y="58" width="160" height="14"/></element>
+		<element ref="lbl_SX"><!-- SX --><bounds x="919" y="59" width="15" height="12"/></element>
+		<element ref="lbl_MINUS"><!--  --><bounds x="934" y="53" width="6" height="19"/></element>
+		<element ref="lbl_WSA1R"><!-- WSA1R --><bounds x="943" y="48" width="69" height="25"/></element>
+		<element ref="lbl_REALTIME"><!-- REALTIME --><bounds x="227" y="142" width="51" height="12"/></element>
+		<element ref="lbl_CREATOR"><!-- CREATOR --><bounds x="228" y="152" width="50" height="12"/></element>
+		<element ref="lbl_RESET"><!-- RESET --><bounds x="412" y="145" width="34" height="12"/></element>
+		<element ref="lbl_VOLUME"><!-- VOLUME --><bounds x="141" y="125" width="44" height="12"/></element>
+		<element ref="lbl_MIN"><!-- MIN --><bounds x="120" y="193" width="20" height="12"/></element>
+		<element ref="lbl_CONTRAST"><!-- CONTRAST --><bounds x="134" y="212" width="58" height="12"/></element>
+		<element ref="lbl_ON"><!-- ON --><bounds x="95" y="86" width="16" height="12"/></element>
+		<element ref="lbl_OFF"><!-- OFF --><bounds x="95" y="96" width="21" height="12"/></element>
+		<element ref="lbl_POWER"><!-- POWER --><bounds x="142" y="61" width="43" height="14"/></element>
+		<element ref="lbl_PHONES"><!-- PHONES --><bounds x="140" y="282" width="44" height="12"/></element>
+		<element ref="lbl_1_6"><!-- 1-6 --><bounds x="420" y="281" width="17" height="12"/></element>
+		<element ref="lbl_MAX"><!-- MAX --><bounds x="186" y="193" width="24" height="12"/></element>
+		<element ref="lbl_COMPARE"><!-- COMPARE --><bounds x="521" y="376" width="52" height="12"/></element>
+		<element ref="lbl_PAGE"><!-- PAGE --><bounds x="1040" y="398" width="28" height="12"/></element>
+		<element ref="lbl_EXIT"><!-- EXIT --><bounds x="1175" y="338" width="24" height="13"/></element>
+		<element ref="lbl_USER_1"><!-- USER 1 --><bounds x="1261" y="374" width="39" height="12"/></element>
+		<element ref="lbl_USER_2"><!-- USER 2 --><bounds x="1316" y="374" width="39" height="12"/></element>
+		<element ref="lbl_ROM_EXT"><!-- ROM/EXT --><bounds x="1367" y="374" width="49" height="11"/></element>
+		<element ref="lbl_RE_MAP"><!-- RE-MAP --><bounds x="1427" y="374" width="40" height="13"/></element>
+		<element ref="lbl_1"><!-- 1 --><bounds x="1277" y="415" width="7" height="13"/></element>
+		<element ref="lbl_2"><!-- 2 --><bounds x="1332" y="415" width="7" height="13"/></element>
+		<element ref="lbl_3_GM"><!-- 3(GM) --><bounds x="1376" y="415" width="33" height="12"/></element>
+		<element ref="lbl_COMBI"><!-- COMBI --><bounds x="1317" y="306" width="36" height="12"/></element>
+		<element ref="lbl_SOUND"><!-- SOUND --><bounds x="1260" y="306" width="39" height="12"/></element>
+		<element ref="lbl_ENTER"><!-- ENTER --><bounds x="1430" y="225" width="35" height="13"/></element>
+		<element ref="lbl_PLUS_MINUS"><!-- +/ --><bounds x="1376" y="225" width="17" height="11"/></element>
+		<element ref="lbl_0"><!-- 0 --><bounds x="1320" y="225" width="6" height="12"/></element>
+		<element ref="lbl_1"><!-- 1 --><bounds x="1320" y="180" width="7" height="13"/></element>
+		<element ref="lbl_2"><!-- 2 --><bounds x="1382" y="179" width="7" height="12"/></element>
+		<element ref="lbl_3"><!-- 3 --><bounds x="1445" y="180" width="7" height="12"/></element>
+		<element ref="lbl_6"><!-- 6 --><bounds x="1445" y="134" width="7" height="12"/></element>
+		<element ref="lbl_9"><!-- 9 --><bounds x="1445" y="89" width="6" height="12"/></element>
+		<element ref="lbl_8"><!-- 8 --><bounds x="1382" y="89" width="6" height="12"/></element>
+		<element ref="lbl_7"><!-- 7 --><bounds x="1320" y="89" width="7" height="13"/></element>
+		<element ref="lbl_4"><!-- 4 --><bounds x="1321" y="134" width="6" height="12"/></element>
+		<element ref="lbl_5"><!-- 5 --><bounds x="1382" y="134" width="7" height="12"/></element>
+		<element ref="lbl_PLUS_1"><!-- +1 --><bounds x="1211" y="88" width="16" height="13"/></element>
+		<element ref="lbl_MINUS_1"><!-- -1 --><bounds x="1149" y="88" width="10" height="13"/></element>
+		<element ref="lbl_MIDI_NUMBER_PAD"><!-- MIDI / NUMBER PAD --><bounds x="1135" y="66" width="87" height="13"/></element>
+		<element ref="lbl_COMBI"><!-- COMBI --><bounds x="1429" y="306" width="36" height="12"/></element>
+		<element ref="lbl_SOUND"><!-- SOUND --><bounds x="1372" y="306" width="39" height="12"/></element>
+		<element ref="lbl_EDIT"><!-- EDIT --><bounds x="1386" y="278" width="26" height="14"/></element>
+		<element ref="lbl_MODE"><!-- MODE --><bounds x="1418" y="278" width="34" height="14"/></element>
+		<element ref="lbl_MODE"><!-- MODE --><bounds x="1308" y="278" width="35" height="14"/></element>
+		<element ref="lbl_PLAY"><!-- PLAY --><bounds x="1274" y="278" width="27" height="14"/></element>
+		<element ref="lbl_BANK"><!-- BANK --><bounds x="1320" y="347" width="31" height="13"/></element>
+		<element ref="lbl_MAINCPU"><!-- MAINCPU --><bounds x="26" y="471" width="49" height="12"/></element>
 	</group>
 
 	<view name="Control Panel">
@@ -523,7 +567,7 @@
 	</view>
 
 	<view name="Screen close-up">
-		<bounds x="548" y="44" width="488" height="313"/>
+		<bounds x="482" y="38" width="622" height="407"/>
 		<group ref="panel"><bounds x="0" y="0" width="1600" height="500"/></group>
 	</view>
 
