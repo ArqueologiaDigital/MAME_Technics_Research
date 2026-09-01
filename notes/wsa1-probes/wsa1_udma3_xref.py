@@ -24,7 +24,7 @@ Exit non-zero if any count drifts from what the notes claim.
 """
 import sys, pathlib
 
-ROMS = pathlib.Path.home() / "compartilhado/wsa1-roms-disasm/original_ROMs"
+ROMS = pathlib.Path.home() / "compartilhado/kn5000-roms-disasm/wsa1/original_ROMs"
 IMAGES = [("prom_a", "wsa1_prom_a.ic12", 0xF80000),
           ("prom_b", "wsa1_prom_b.ic13", 0xF00000),
           ("prom_c", "wsa1_prom_c.ic28", 0xF80000)]   # prom_c is CPU 2's, same window

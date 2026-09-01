@@ -2,7 +2,7 @@
 """Adversarial re-derivation of the GAP A (0x0010C000 register) claims, from ROM BYTES.
 
 Run:  python3 gapA_rom_checks.py [path/to/wsa1_prom_c.ic28]
-Default ROM path: ../../../wsa1-roms-disasm/original_ROMs/wsa1_prom_c.ic28  (READ ONLY)
+Default ROM path: ../../../kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_c.ic28  (READ ONLY)
 
 prom_c is CPU 2's program EPROM, loaded at 0xF80000, so file offset = addr - 0xF80000.
 
@@ -33,7 +33,7 @@ tile exactly" means.  Section 3 fixes the SIGN of the level (which way is loud).
 import struct, math, sys, os
 
 DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "../../../wsa1-roms-disasm/original_ROMs/wsa1_prom_c.ic28")
+                       "../../../kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_c.ic28")
 BASE = 0xF80000
 fails = 0
 

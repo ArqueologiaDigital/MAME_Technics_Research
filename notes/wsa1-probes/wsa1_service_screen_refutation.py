@@ -29,7 +29,7 @@ USAGE
 """
 import sys
 
-ROMS = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/"
+ROMS = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/"
 pa = open(ROMS + "wsa1_prom_a.ic12", "rb").read()
 pb = open(ROMS + "wsa1_prom_b.ic13", "rb").read()
 pc = open(ROMS + "wsa1_prom_c.ic28", "rb").read()

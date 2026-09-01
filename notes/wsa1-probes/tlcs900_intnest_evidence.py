@@ -47,7 +47,7 @@ then the control-register number:
     second byte 0x2F   ldc R,<cr>        -- READ from the control register
 
 Verified against the disassembly: prom_a 0xF85715 is `d8 2f 3c` (read) and
-0xF8E9A8 is `db 2e 3c` (write), matching wsa1-roms-disasm's
+0xF8E9A8 is `db 2e 3c` (write), matching kn5000-roms-disasm/wsa1's
 `m_ldc_reg_cr` / `m_ldc_cr_reg` at those addresses.
 
 This is a flat byte scan, so it can produce false positives inside data: a
@@ -108,10 +108,10 @@ INTNEST = {0x3C: "TLCS-900/H  (TMP96C141/TMP95C061/TMP95C063)",
 SHARED = os.path.expanduser("~/compartilhado")
 
 DEFAULT_ROMS = [
-    (SHARED + "/wsa1-roms-disasm/original_ROMs/wsa1_prom_a.ic12", "TMP95C061"),
-    (SHARED + "/wsa1-roms-disasm/original_ROMs/wsa1_prom_b.ic13", "TMP95C061"),
-    (SHARED + "/wsa1-roms-disasm/original_ROMs/wsa1_prom_c.ic28", "TMP95C061"),
-    (SHARED + "/wsa1-roms-disasm/original_ROMs/wsa1_prom_d.bin",  "TMP95C061"),
+    (SHARED + "/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_a.ic12", "TMP95C061"),
+    (SHARED + "/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_b.ic13", "TMP95C061"),
+    (SHARED + "/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_c.ic28", "TMP95C061"),
+    (SHARED + "/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_d.bin",  "TMP95C061"),
     (SHARED + "/kn5000-roms-disasm/original_ROMs/kn5000_v7_program.rom",     "TMP94C241"),
     (SHARED + "/kn5000-roms-disasm/original_ROMs/kn5000_v9_program.rom",     "TMP94C241"),
     (SHARED + "/kn5000-roms-disasm/original_ROMs/kn5000_v10_program.rom",    "TMP94C241"),

@@ -38,7 +38,7 @@ SIGNALS READ
 import sys
 from collections import defaultdict
 
-WSA1 = '/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/'
+WSA1 = '/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/'
 KN5K = '/home/fsanches/compartilhado/technics_roms/roms/kn5000/kn5000_v10_program.rom'
 A = open(WSA1 + 'wsa1_prom_a.ic12', 'rb').read(); A_BASE = 0xF80000
 B = open(WSA1 + 'wsa1_prom_b.ic13', 'rb').read(); B_BASE = 0xF00000

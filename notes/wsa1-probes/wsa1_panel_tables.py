@@ -36,8 +36,8 @@ USAGE
 """
 import sys
 
-PA = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/wsa1_prom_a.ic12"
-PB = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/wsa1_prom_b.ic13"
+PA = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_a.ic12"
+PB = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_b.ic13"
 
 pa = open(PA, "rb").read()
 pb = open(PB, "rb").read()

@@ -13,7 +13,7 @@ QUESTION IT ANSWERS
   ⚠ THE RATIO IS NOT THE ANSWER.  Both files use T1:T4:T16:T256 = 1:4:16:256, so
   any firmware check that only compares one tap against another cancels K and
   fits BOTH.  That includes the `muls WA,0x06D6` (1750) MIDI tempo-tracker
-  constant at WSA1 prom_a 0xFA5553, which wsa1-roms-disasm/notes/
+  constant at WSA1 prom_a 0xFA5553, which kn5000-roms-disasm/wsa1/notes/
   FINDINGS-system-clock.md quotes as adjudicating the scale: worked through
   self-consistently it predicts 64*TREG1 = 1792 under EITHER K.  (That table's
   "28672" mixes K=128 for timer 1 with K=8 for timer 4.)
@@ -188,7 +188,7 @@ def kn5000(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--wsa1", default="/home/fsanches/compartilhado/wsa1-roms-disasm/"
+    ap.add_argument("--wsa1", default="/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/"
                                       "original_ROMs/wsa1_prom_a.ic12")
     ap.add_argument("--kn1500", default="/home/fsanches/compartilhado/technics_roms/roms/"
                                         "kn1500/technics_qsigt3c16079_5y68-j079_japan_9649eai.ic15")

@@ -31,7 +31,7 @@ import sys
 BASE = 0xF80000
 START, END = 0xF826A9, 0xF82800          # RESET through the end of the port/timer block
 
-# TMP95C061 internal I/O addresses, from wsa1-roms-disasm/include/tmp95c061_sfr.inc
+# TMP95C061 internal I/O addresses, from kn5000-roms-disasm/wsa1/include/tmp95c061_sfr.inc
 SFR = {
     0x01: "P1",   0x04: "P1CR",  0x06: "P2",    0x09: "P2FC",
     0x0d: "P5",   0x0e: "P5CR",  0x0f: "P5FC",  0x10: "P6",

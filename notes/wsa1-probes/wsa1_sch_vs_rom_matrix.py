@@ -19,7 +19,7 @@ QUESTION IT ANSWERS
 RUN
   python3 notes/wsa1-probes/wsa1_sch_vs_rom_matrix.py
 """
-ROMS = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/"
+ROMS = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/"
 pa = open(ROMS + "wsa1_prom_a.ic12", "rb").read()
 A = lambda a, n=1: pa[a - 0xF80000:a - 0xF80000 + n]
 u16 = lambda b: int.from_bytes(b, "little")

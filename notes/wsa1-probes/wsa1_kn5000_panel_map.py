@@ -25,8 +25,8 @@ USAGE
 """
 import re, sys
 
-WSA1_S   = "/home/fsanches/compartilhado/wsa1-roms-disasm/prom_b/wsa1_prom_b.s"
-WSA1_BIN = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/wsa1_prom_b.ic13"
+WSA1_S   = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/prom_b/wsa1_prom_b.s"
+WSA1_BIN = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_b.ic13"
 KN5K_BIN = "/home/fsanches/compartilhado/kn5000-roms-disasm/original_ROMs/kn5000_v10_program.rom"
 KN5K_SYM = "/home/fsanches/compartilhado/kn5000-roms-disasm/symbols/maincpu_v10_symbols_reference.txt"
 

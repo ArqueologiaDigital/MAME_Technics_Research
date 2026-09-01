@@ -24,8 +24,8 @@ USAGE
 """
 import sys, os
 
-WSA1_PROM_B = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/wsa1_prom_b.ic13"
-WSA1_PROM_A = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs/wsa1_prom_a.ic12"
+WSA1_PROM_B = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_b.ic13"
+WSA1_PROM_A = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs/wsa1_prom_a.ic12"
 KN5000_MAIN = "/home/fsanches/compartilhado/kn5000-roms-disasm/original_ROMs/kn5000_v10_program.rom"
 
 # WSA1 prom_b is linked at 0xF00000; the SC1 module is 0xF5A800..0xF5B44D code.

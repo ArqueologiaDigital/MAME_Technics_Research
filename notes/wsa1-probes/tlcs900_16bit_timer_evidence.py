@@ -41,7 +41,7 @@ validated, so that a re-dump or a different image is caught immediately.
 
 import argparse, os, sys
 
-# TMP95C061 internal-I/O addresses (wsa1-roms-disasm/include/tmp95c061_sfr.inc)
+# TMP95C061 internal-I/O addresses (kn5000-roms-disasm/wsa1/include/tmp95c061_sfr.inc)
 TRUN, T01MOD, TREG0, TREG1 = 0x20, 0x24, 0x22, 0x23
 TREG4L, TREG4H, TREG5L, TREG5H = 0x30, 0x31, 0x32, 0x33
 T4MOD, T4FFCR, T45CR = 0x38, 0x39, 0x3a

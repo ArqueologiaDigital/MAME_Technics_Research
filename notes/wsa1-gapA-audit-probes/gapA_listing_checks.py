@@ -2,8 +2,21 @@
 """Adversarial re-derivation of the GAP A structural claims, from the CONVERTED LISTING.
 
 Run:  python3 gapA_listing_checks.py [path/to/wsa1_prom_c.s]
-Default: ../../../wsa1-roms-disasm/prom_c/wsa1_prom_c.s   (READ ONLY, byte-identical
+Default: ../../../kn5000-roms-disasm/wsa1/prom_c/wsa1_prom_c.s   (READ ONLY, byte-identical
          round-trip of the ROM -- see that tree's assert_byte_identical.py)
+
+⚠ KNOWN-FAILING SINCE THE prom_c SPLIT (diagnosed 2026-09-01). This probe
+reports 12 FAILURES, and they are the probe going BLIND, not its claims being
+refuted. It parses ONE file, but prom_c is now split into per-subject sources
+and `prom_c/wsa1_prom_c.s` is just the root that `.include`s them -- so most
+addressed instructions are no longer in the file this reads. Do NOT read these
+failures as evidence against the gap-A findings, and do NOT "fix" them by
+weakening the checks. The real fix is to resolve `.include`s when building the
+listing: the disassembly tree already has an include-resolving reader in
+`wsa1/notes/asm_source.py`, and this probe should use it.
+
+The path was also repointed on 2026-09-01 from the decommissioned
+`~/compartilhado/wsa1-roms-disasm/` to `kn5000-roms-disasm/wsa1/`.
 
 The listing is parsed by its per-line address comment (`; FB7161  ld (XBC),DE`),
 so what is read is an INSTRUCTION AT AN ADDRESS, never a header's prose.
@@ -36,7 +49,7 @@ does not preserve a register invalidates the read.
 import re, sys, os
 
 DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "../../../wsa1-roms-disasm/prom_c/wsa1_prom_c.s")
+                       "../../../kn5000-roms-disasm/wsa1/prom_c/wsa1_prom_c.s")
 fails = 0
 
 def check(name, ok, detail):

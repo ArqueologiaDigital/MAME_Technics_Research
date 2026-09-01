@@ -3,7 +3,7 @@
 
 Run:  python3 notes/wsa1-gapF-probes/gapF_refutation_probes.py
 
-SIGNAL BEING READ: raw bytes of wsa1-roms-disasm/original_ROMs/*.  BASE = 0xF80000,
+SIGNAL BEING READ: raw bytes of kn5000-roms-disasm/wsa1/original_ROMs/*.  BASE = 0xF80000,
 the same base the evidence base's own notes/prom_c_voice_sweep_checks.py uses.
 Nothing here reads prom_c/wsa1_prom_c.s, so a listing error cannot propagate.
 
@@ -54,7 +54,7 @@ WHAT EACH PROBE ANSWERS, and what a PASS looks like:
 """
 import os
 
-ROMS = "/home/fsanches/compartilhado/wsa1-roms-disasm/original_ROMs"
+ROMS = "/home/fsanches/compartilhado/kn5000-roms-disasm/wsa1/original_ROMs"
 IMGS = [("prom_a", "wsa1_prom_a.ic12"), ("prom_b", "wsa1_prom_b.ic13"),
         ("prom_c", "wsa1_prom_c.ic28"), ("prom_d", "wsa1_prom_d.bin")]
 BASE = 0xF80000
