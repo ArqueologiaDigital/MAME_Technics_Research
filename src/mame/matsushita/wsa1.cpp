@@ -344,6 +344,7 @@ public:
 		, m_eeprom(*this, "eeprom")
 		, m_cpanel(*this, "cpanel")
 		, m_fdc(*this, "fdc")
+		, m_floppy(*this, "fdc:0")
 		, m_keybed(*this, "KEY%u", 0U)
 		, m_touch(*this, "TOUCH")
 		, m_checkdev(*this, "CHECKDEV")
@@ -495,6 +496,7 @@ private:
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
 	required_device<wsa1_cpanel_device> m_cpanel;
 	required_device<upd765a_device> m_fdc;
+	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
 	// rack has no keybed, so declaring them required makes -validate fail on
 	// wsa1r with "Required I/O port ':KEY0' not found" - which is validation
@@ -1262,19 +1264,38 @@ uint8_t wsa1_state::cpu1_pb_r()
     If a legible schematic ever contradicts this, one line in cpu1_pb_w()
     changes.  Nothing here fabricates a status byte either way.
 
-    ⚠ WHAT IS DELIBERATELY *NOT* WIRED: CPU 1's PA BIT 3.  Operation 7 sets it
-    and operation 6 clears it and waits 5 ticks (0xFE661F, 0xFE65EF), and the
-    disassembly's verdict is "a drive-motor or drive-select line is the obvious
-    reading and is NOT claimed here".  A motor is exactly what MAME's
-    floppy_image_device needs before it will report READY, so wiring it would
-    make an attached image work -- and would be a hardware claim nobody has
-    checked, on a pin that RESET leaves HIGH (`ldio PA,0xF9` at 0xF826D6, with
-    `ldio PACR,0x0E` at 0xF826DC making bits 1-3 outputs) which is the wrong way
-    round for an active-high motor enable that operation 7 has to assert.  So it is LOGGED and not acted on, and the honest consequence is
-    stated where it bites: with no motor line modelled the drive never becomes
-    ready, so a read of an attached image will report the firmware's own "drive
-    not ready" (error 0x31).  That is a real gap, and it is written up as one in
-    notes/WSA1-EMULATION-DISASM-GAPS.md.
+    CPU 1's PA BIT 3 IS THE DRIVE MOTOR, active low -- wired in cpu1_pa_w(),
+    and marked there as the inference it is.  This paragraph used to say the
+    opposite, so the reasoning that changed is worth keeping.
+
+    The old refusal rested on operations 6 and 7 (0xFE65EF, 0xFE661F): op 7 SETS
+    the bit and op 6 clears it and waits 5 ticks, so the asserted direction
+    looked like HIGH -- and a pin that RESET leaves high (`ldio PA,0xF9` at
+    0xF826D6, `ldio PACR,0x0E` at 0xF826DC making bits 1-3 outputs) is the wrong
+    way round for an active-high enable.  That objection was sound on the
+    evidence it had.
+
+    A writer census over both CPU 1 images then found TWO MORE WRITERS
+    (notes/prom_a_pa3_census.py in the disassembly tree, 19 checks):
+    Disk_PortA3_ClearAndSettle (0xFE18E9) does `res 3,(PA)` then Delay_150Ticks,
+    and Disk_PortA3_Release (0xFE18F7) does `set 3,(PA)` with no wait, across 15
+    calr sites -- asserting at routine heads before disk requests, releasing on
+    exit paths.  Only the CLEAR direction is ever followed by a wait, and 150
+    ticks at this CPU's measured 488.28 Hz is 307 ms, which is a spin-up and not
+    a select.  Read active-low, RESET-high means the motor is OFF at reset, and
+    the old objection is answered rather than overruled.
+
+    ⚠ STILL NOT ESTABLISHED: what the pin is physically wired to.  The
+    disassembly refuses to claim it and renamed its own routine so the label
+    would not bake the reading in.  The FDD connector sheet (pin 16 /MOTOR ON,
+    active low) would settle it and is not in these trees.
+
+    ⚠ AND THIS MAKES A LATENT HANG REACHABLE.  With no motor the drive never
+    became ready, so a read reported the firmware's own error 0x31 and stopped.
+    A live drive lets the transfer proceed, which puts Fdc_WaitReadyForCommandByte
+    (0xFE5A8F, the unbounded drain described below) on a reachable path for the
+    first time.  If the machine wedges on a disk read rather than failing it,
+    that drain is the first place to look, not this line.
 
     THE GEOMETRIES the driver programmes, all three read off 30 immediates in
     Fdc_SelectFormatParameters (0xFE57FF), are the standard ones: 720 KB
@@ -1314,8 +1335,35 @@ void wsa1_state::cpu1_pb_w(uint8_t data)
 void wsa1_state::cpu1_pa_w(uint8_t data)
 {
 	if ((data ^ m_cpu1_pa) & 0x0e)
-		LOGMASKED(LOG_FDC, "%s: CPU 1 PA <- 0x%02X (bit 3 = %d, unmodelled)\n",
+		LOGMASKED(LOG_FDC, "%s: CPU 1 PA <- 0x%02X (bit 3 = %d)\n",
 			machine().describe_context(), data, BIT(data, 3));
+
+	// Bit 3 drives the drive motor.  mon_w takes 0 = motor on and the line is
+	// active low, so the bit goes straight through with no inversion.
+	//
+	// ⚠ AN INFERENCE, MARKED AS ONE.  What the pin is physically wired to is
+	// not established -- the disassembly refuses to claim it, and renamed its
+	// own routine from Disk_PortA3_AssertAndSettle to Disk_PortA3_ClearAndSettle
+	// so the label would not bake the reading in.  What IS established is a
+	// writer census over both CPU 1 images (that tree's notes/prom_a_pa3_census.py,
+	// 19 checks): bit 3 is the ONLY bit of PA the firmware changes after reset,
+	// and it has four writers, not the two this driver used to know.  The two
+	// new ones decide the polarity:
+	//     Disk_PortA3_ClearAndSettle 0xFE18E9   res 3,(PA) then Delay_150Ticks
+	//     Disk_PortA3_Release        0xFE18F7   set 3,(PA), no wait at all
+	// 15 calr sites, asserting at routine heads before disk requests and
+	// releasing on exit paths.  Only the CLEAR direction is followed by a wait,
+	// and 150 ticks at CPU 1's measured 488.28 Hz is 307 ms -- a spin-up, not a
+	// select, which would need no settle at all.  That also answers the
+	// objection this driver used to carry: RESET leaving the pin HIGH is the
+	// wrong way round for an active-HIGH enable, and exactly right for an
+	// active-LOW one -- high at reset means the motor is off.
+	//
+	// If the FDD connector sheet ever turns up (pin 16 /MOTOR ON, active low),
+	// it settles this line either way.
+	if (BIT(data ^ m_cpu1_pa, 3))
+		if (floppy_image_device *floppy = m_floppy->get_device())
+			floppy->mon_w(BIT(data, 3));
 
 	m_cpu1_pa = data;
 }
@@ -1441,7 +1489,11 @@ uint8_t wsa1_state::cpu2_p8_r()
 	data |= m_eeprom->do_read() << 5;           // 0xFC8ACC bit 5,(P8)
 
 	// Bit 2 is an input the firmware polls at 0xF99543: on a change it sends
-	// MIDI START (0xFA) or STOP (0xFB) on link channel 6.  WHAT IT IS WIRED TO
+	// MIDI START (0xFA) or CONTINUE (0xFB) on link channel 6.  (0xFB is
+	// CONTINUE; Stop is 0xFC, which this firmware does not send here.  The
+	// three literals sit together at prom_c 0xFCC5C2-C4 and read FF FA FB, so
+	// the same block also carries 0xFF SYSTEM RESET, sent on the
+	// active-sensing timeout.)  WHAT IT IS WIRED TO
 	// IS NOT ESTABLISHED (wsa1-roms-disasm/prom_c/wsa1_prom_c.s, the
 	// MIDI_Watchdogs_And_TransportSwitch header), so it is left reading low --
 	// which is what MAME's unbound port read did before this callback existed,
