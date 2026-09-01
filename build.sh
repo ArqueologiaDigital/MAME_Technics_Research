@@ -373,7 +373,34 @@ SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/k
 # on (kn5000.cpp already does) and "video/sed1330.h" turns VIDEOS["SED1330"] on
 # through the annotation at scripts/src/video.lua:1474.
 SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp"
-make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 -j"$JOBS" 2>&1 | tee "$LOG"
+# QT_HOME: pin where Qt lives instead of trusting `qmake6` on PATH.
+#
+# ⚠ WITHOUT THIS the build is at the mercy of PATH. genie's default is
+# "-I$(shell qmake6 -query QT_INSTALL_HEADERS)", evaluated at MAKE time, and a
+# ~/.local/bin/qmake6 that answers with anything else silently produces a Qt
+# debugger compiled with NO Qt include path -- which fails as
+# "qtmochelpers.h not found or too old" and "the moc has changed too much",
+# i.e. as a Qt VERSION error, nowhere near its real cause.  That happened on
+# 2026-09-01 on a machine carrying a leftover qmake6 stub from the days of the
+# USE_QTDEBUG=0 split.
+#
+# With QT_HOME set, genie resolves the header path ITSELF, at generation time,
+# and embeds it literally -- so the generated makefiles no longer depend on PATH
+# at all.  It also finds moc correctly on Debian: $QT_HOME/bin/moc does not
+# exist there, and scripts/src/osd/modules.lua falls back to
+# `$QT_HOME/bin/qmake -query QT_HOST_LIBEXECS` = /usr/lib/qt6/libexec.
+#
+# Override for a different Qt (a distro that puts it elsewhere, or a local build):
+#     QT_HOME=/path/to/qt make ...  or export it before running this script.
+QT_HOME="${QT_HOME:-/usr/lib/qt6}"
+if [ ! -x "$QT_HOME/bin/qmake" ]; then
+	echo "ERROR: no qmake at $QT_HOME/bin/qmake -- set QT_HOME to your Qt prefix." >&2
+	echo "       (Debian/Ubuntu with qt6-base-dev: /usr/lib/qt6)" >&2
+	exit 1
+fi
+export QT_HOME
+
+make SUBTARGET=kn7000 SOURCES="$SOURCES_LIST" REGENIE=1 USE_QTDEBUG=1 QT_HOME="$QT_HOME" -j"$JOBS" 2>&1 | tee "$LOG"
 echo "==> done. Binary:"; ls -la "$BUILD_TREE/kn7000" 2>/dev/null || echo "(no binary — check $LOG)"
 echo "==> Qt debugger included. Run it with -debug:"
 echo "    cd $HERE/../kn7000-emulator && ./kn7000 kn5000 -rompath ./roms -debug"
