@@ -263,7 +263,10 @@
         the data register, main status register and data-rate register of a
         uPD765-family FLOPPY DISK CONTROLLER, and both are wired to one.  Still
         unidentified: 0x7E0008 and 0x7F0000 on the first processor, and the
-        register file at 0x104000 on the second.  0x7F0000 IS NOW MODELLED as
+        register file at 0x104000 on the second -- the last of those IS NOW A
+        DEVICE, wsa1_modeling.cpp, but a PLACEHOLDER that makes no sound and
+        whose name states a ranked inference and no part number.
+        0x7F0000 IS NOW MODELLED as
         the 4 x 32 register file its driver shape says it is, without a part
         name; 0x7E0008 is known to be the SECOND UNIT of the same block-device
         layer that drives the floppy, which is a role and not a part, so it
@@ -280,9 +283,12 @@
       - dump the six 16 Mbit wave mask ROMs, the AM29F400T flash, the serial
         EEPROM that holds the per-key touch calibration, and the internal ROM of
         the control panel microcontroller
-      - devices with no MAME implementation yet: the L7A1429 modeling LSI and
-        the uPD6383GF-3BA DSP.  (The M37471M2196S panel MCU is HLE'd in
-        wsa1_cpanel.cpp.  The uPD72070 floppy controller has no MAME device of
+      - devices that synthesise nothing yet: the register file at 0x104000 --
+        which the parts list's L7A1429 "MODELING LSI" is the only unaccounted-for
+        candidate for, by elimination -- and the uPD6383GF-3BA DSP.  The first
+        of the two now has a placeholder device holding its registers,
+        wsa1_modeling.cpp; the second has none.  (The M37471M2196S panel MCU is
+        HLE'd in wsa1_cpanel.cpp.  The uPD72070 floppy controller has no MAME device of
         its own either, but the family does -- the driver instantiates
         upd765a_device and says at the code why that is the right member of it.)
 
@@ -292,6 +298,7 @@
 
 #include "cpu/tlcs900/tmp95c061.h"
 #include "wsa1_cpanel.h"
+#include "wsa1_modeling.h"
 
 #include "imagedev/floppy.h"
 #include "machine/eepromser.h"
@@ -312,7 +319,9 @@
 #define LOG_LINK     (1U << 1)   // every byte and handshake edge on the CPU link
 #define LOG_LINKLOST (1U << 2)   // a link latch overwritten before it was read
 #define LOG_TG       (1U << 3)   // tone generator, 0x10C000
-#define LOG_SYNTH2   (1U << 4)   // the second register file, 0x104000
+// (1U << 4) was LOG_SYNTH2, the second register file at 0x104000.  That device
+// now lives in wsa1_modeling.cpp and carries its own VERBOSE mask; the bit is
+// left unused rather than renumbered, so an old capture's mask still reads.
 #define LOG_KEYBED   (1U << 5)   // keybed data/status, 0x108000
 #define LOG_CHANREG  (1U << 6)   // the 4 x 32 channel register files, 0x7F0000 / 0xE00000
 #define LOG_KEYS     (1U << 7)   // key presses queued for the scanner at 0x108000
@@ -343,6 +352,7 @@ public:
 		, m_lcdc(*this, "lcdc")
 		, m_eeprom(*this, "eeprom")
 		, m_cpanel(*this, "cpanel")
+		, m_modeling(*this, "modeling")
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_keybed(*this, "KEY%u", 0U)
@@ -466,12 +476,6 @@ private:
 	void     tg_log_legend() ATTR_COLD;
 	void     tg_dump_channel(unsigned chan);
 
-	// 0x104000 -- a second 64-slot register file of the same family.  Part NOT
-	// IDENTIFIED.  Write-only in every code path reached so far.
-	void     synth2_addr_w(uint16_t data);
-	void     synth2_data_w(uint16_t data);
-	uint16_t synth2_data_r();
-
 	// 0x108000 -- the 61-key keybed scanner: event (+0) and status (+2).
 	uint16_t keybed_data_r();
 	uint16_t keybed_status_r();
@@ -495,6 +499,11 @@ private:
 	required_device<sed1330_device> m_lcdc;
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
 	required_device<wsa1_cpanel_device> m_cpanel;
+	// 0x104000 on CPU 2 -- the second 64-slot per-channel register file, a
+	// placeholder device that synthesises no audio.  The part is NOT identified
+	// and the device name is a ranked inference; wsa1_modeling.h grades every
+	// claim and carries the firmware citations.
+	required_device<wsa1_modeling_device> m_modeling;
 	required_device<upd765a_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
@@ -544,8 +553,6 @@ private:
 	// Log aid only: block 0x0080's bit 15 per channel, as last written.  Nothing
 	// in the emulated machine reads it.
 	uint64_t m_tg_gate = 0;
-	uint16_t m_synth2_latch = 0;
-	uint16_t m_synth2_regs[TG_REG_COUNT]{};
 	uint8_t  m_cpu1_chanreg_addr = 0;
 	uint8_t  m_cpu1_chanreg[0x100]{};
 	uint8_t  m_cpu2_chanreg_addr = 0;
@@ -2060,39 +2067,6 @@ uint16_t wsa1_state::tg_status_r()
 	return 0;
 }
 
-// ---- 0x104000: the second register file ----------------------------------
-
-void wsa1_state::synth2_addr_w(uint16_t data)
-{
-	m_synth2_latch = data;
-}
-
-void wsa1_state::synth2_data_w(uint16_t data)
-{
-	if (m_synth2_latch < TG_REG_COUNT)
-		m_synth2_regs[m_synth2_latch] = data;
-
-	// Nineteen registers per channel, same `block * 0x40 + channel` numbering:
-	// Dev104_WriteAllChanRegs (0xFB77EF) writes block k for k = 1..0x12 from
-	// staging word 2*k and block 0 LAST.  Two of the smaller accessors in the
-	// same bank write block 0 FIRST (0xFB7983, 0xFB79E5), so "block 0 is a
-	// commit register" holds for the unrolled writer and is contradicted for
-	// those two -- it is a property of each routine, not of the register.
-	// (notes/FINDINGS-prom_c-tone-generator.md sec.4.)
-	LOGMASKED(LOG_SYNTH2, "synth2: reg 0x%04X (block 0x%03X channel %2d) = 0x%04X\n",
-		m_synth2_latch, m_synth2_latch >> 6, m_synth2_latch & 0x3f, data);
-}
-
-uint16_t wsa1_state::synth2_data_r()
-{
-	// NOTHING in prom_c reads this device - all twelve literal-address sites are
-	// stores.  A read here therefore means either a code path the analysis has
-	// not reached or a decode error, so it is logged unconditionally.
-	logerror("%s: UNEXPECTED read of 0x104002 (latch 0x%04X)\n",
-		machine().describe_context(), m_synth2_latch);
-	return 0;
-}
-
 // ---- 0x108000 / 0x108002: THE 61-KEY KEYBED SCANNER ----------------------
 //
 // The port is fully decoded, and the decode is not a resemblance argument: the
@@ -2335,8 +2309,6 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_tg_regs));
 	save_item(NAME(m_tg_busy));
 	save_item(NAME(m_tg_gate));
-	save_item(NAME(m_synth2_latch));
-	save_item(NAME(m_synth2_regs));
 	save_item(NAME(m_cpu1_chanreg_addr));
 	save_item(NAME(m_cpu1_chanreg));
 	save_item(NAME(m_cpu2_chanreg_addr));
@@ -2667,12 +2639,19 @@ void wsa1_state::cpu2_map(address_map &map)
 	// data-register at +2 shape, strided 0x40 per plane.  0xFB7802
 	// ld XBC,0x00104000, then the fifteen-plane burst at 0xFB7807-0xFB791B,
 	// whose first six planes and block-word offsets are identical to the KN5000
-	// tone generator's note-on burst.  THE PART IS NOT IDENTIFIED: the only
-	// synthesis LSI in the parts list not otherwise accounted for is IC3
-	// L7A1429 "MODELING LSI", which is elimination and not evidence, so the
-	// stub is named synth2 rather than modeling.
-	map(0x104000, 0x104001).w(FUNC(wsa1_state::synth2_addr_w));
-	map(0x104002, 0x104003).rw(FUNC(wsa1_state::synth2_data_r), FUNC(wsa1_state::synth2_data_w));
+	// tone generator's note-on burst.
+	//
+	// THE PART IS NOT IDENTIFIED.  The only synthesis LSI in the parts list not
+	// otherwise accounted for is IC3 L7A1429 "MODELING LSI", which is
+	// elimination and not evidence.  The device is named `modeling` for the
+	// RANKED INFERENCE that this is the acoustic-modelling section -- graded,
+	// with the alternative that fits the same numbers and with what would refute
+	// it, in wsa1_modeling.h.  The name asserts no part number.  (Until
+	// 2026-09-01 the stub was called `synth2` for the same reason the header now
+	// states at length; naming the inference and grading it beats naming nothing.)
+	map(0x104000, 0x104001).w(m_modeling, FUNC(wsa1_modeling_device::addr_w));
+	map(0x104002, 0x104003).rw(m_modeling, FUNC(wsa1_modeling_device::data_r),
+	                                       FUNC(wsa1_modeling_device::data_w));
 
 	// THE 61-KEY KEYBED SCANNER: +0 event, +2 status with bit 0 = "an event is
 	// waiting".  0xF99762 reads the status, 0xF99776 and 0xF998C6 read the
@@ -3062,6 +3041,14 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_cpanel->busy().set([this] (int state) { m_panel_busy = state; });
 	m_cpanel->sclk().set([this] (int state) { m_panel_sclk = state; });
 	m_cpanel->rxd().set([this] (uint8_t data) { m_cpu1->sc1_rxd(data); });
+
+	// --- the second per-channel register file, 0x104000 on CPU 2 ------------
+	//
+	// A PLACEHOLDER: it holds the register file the firmware writes, and makes
+	// no sound.  It has no lines to wire -- CPU 2 reaches it through the address
+	// map alone, and nothing in prom_c reads it back.  What the part is, what it
+	// is not, and the grade of each claim are in wsa1_modeling.h.
+	WSA1_MODELING(config, m_modeling);
 
 	// --- the floppy disk controller ----------------------------------------
 	//

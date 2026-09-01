@@ -141,6 +141,12 @@ ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/ma
 # KN5000's panel.  See the byte evidence at the top of wsa1_cpanel.h.
 ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.cpp"           "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.h"             "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.h"
+# The second per-channel register file at 0x104000 on CPU 2, as a PLACEHOLDER device
+# that holds the registers and makes no sound.  The part is not identified; the name
+# states a ranked inference, and wsa1_modeling.h grades it.  Must also be listed in
+# SOURCES_LIST below, or the driver links against a device type nothing compiles.
+ln -sf "$HERE/src/mame/matsushita/wsa1_modeling.cpp"         "$BUILD_TREE/src/mame/matsushita/wsa1_modeling.cpp"
+ln -sf "$HERE/src/mame/matsushita/wsa1_modeling.h"           "$BUILD_TREE/src/mame/matsushita/wsa1_modeling.h"
 mkdir -p "$BUILD_TREE/src/devices/video"
 ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
 ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
@@ -372,7 +378,7 @@ SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/k
 # follows #include recursively, so "cpu/tlcs900/tmp95c061.h" keeps CPUS["TLCS900"]
 # on (kn5000.cpp already does) and "video/sed1330.h" turns VIDEOS["SED1330"] on
 # through the annotation at scripts/src/video.lua:1474.
-SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp"
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp,src/mame/matsushita/wsa1_modeling.cpp"
 # QT_HOME: pin where Qt lives instead of trusting `qmake6` on PATH.
 #
 # ⚠ WITHOUT THIS the build is at the mercy of PATH. genie's default is
