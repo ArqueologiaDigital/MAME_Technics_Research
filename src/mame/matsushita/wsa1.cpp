@@ -264,7 +264,7 @@
         uPD765-family FLOPPY DISK CONTROLLER, and both are wired to one.  Still
         unidentified: 0x7E0008 and 0x7F0000 on the first processor, and the
         register file at 0x104000 on the second -- the last of those IS NOW A
-        DEVICE, wsa1_modeling.cpp, but a PLACEHOLDER that makes no sound and
+        DEVICE, acoustic_modeling.cpp, but a PLACEHOLDER that makes no sound and
         whose name states a ranked inference and no part number.
         0x7F0000 IS NOW MODELLED as
         the 4 x 32 register file its driver shape says it is, without a part
@@ -287,7 +287,7 @@
         which the parts list's L7A1429 "MODELING LSI" is the only unaccounted-for
         candidate for, by elimination -- and the uPD6383GF-3BA DSP.  The first
         of the two now has a placeholder device holding its registers,
-        wsa1_modeling.cpp; the second has none.  (The M37471M2196S panel MCU is
+        acoustic_modeling.cpp; the second has none.  (The M37471M2196S panel MCU is
         HLE'd in wsa1_cpanel.cpp.  The uPD72070 floppy controller has no MAME device of
         its own either, but the family does -- the driver instantiates
         upd765a_device and says at the code why that is the right member of it.)
@@ -298,7 +298,7 @@
 
 #include "cpu/tlcs900/tmp95c061.h"
 #include "wsa1_cpanel.h"
-#include "wsa1_modeling.h"
+#include "acoustic_modeling.h"
 
 #include "imagedev/floppy.h"
 #include "machine/eepromser.h"
@@ -320,7 +320,7 @@
 #define LOG_LINKLOST (1U << 2)   // a link latch overwritten before it was read
 #define LOG_TG       (1U << 3)   // tone generator, 0x10C000
 // (1U << 4) was LOG_SYNTH2, the second register file at 0x104000.  That device
-// now lives in wsa1_modeling.cpp and carries its own VERBOSE mask; the bit is
+// now lives in acoustic_modeling.cpp and carries its own VERBOSE mask; the bit is
 // left unused rather than renumbered, so an old capture's mask still reads.
 #define LOG_KEYBED   (1U << 5)   // keybed data/status, 0x108000
 #define LOG_CHANREG  (1U << 6)   // the 4 x 32 channel register files, 0x7F0000 / 0xE00000
@@ -500,10 +500,10 @@ private:
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
 	required_device<wsa1_cpanel_device> m_cpanel;
 	// 0x104000 on CPU 2 -- the second 64-slot per-channel register file, a
-	// placeholder device that synthesises no audio.  The part is NOT identified
-	// and the device name is a ranked inference; wsa1_modeling.h grades every
-	// claim and carries the firmware citations.
-	required_device<wsa1_modeling_device> m_modeling;
+	// placeholder device that synthesises no audio.  Named for the service
+	// manual's IC3; that this window IS IC3 is an inference, and
+	// acoustic_modeling.h grades every claim and carries the firmware citations.
+	required_device<l7a1429_device> m_modeling;
 	required_device<upd765a_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
@@ -2641,17 +2641,18 @@ void wsa1_state::cpu2_map(address_map &map)
 	// whose first six planes and block-word offsets are identical to the KN5000
 	// tone generator's note-on burst.
 	//
-	// THE PART IS NOT IDENTIFIED.  The only synthesis LSI in the parts list not
-	// otherwise accounted for is IC3 L7A1429 "MODELING LSI", which is
-	// elimination and not evidence.  The device is named `modeling` for the
-	// RANKED INFERENCE that this is the acoustic-modelling section -- graded,
-	// with the alternative that fits the same numbers and with what would refute
-	// it, in wsa1_modeling.h.  The name asserts no part number.  (Until
-	// 2026-09-01 the stub was called `synth2` for the same reason the header now
-	// states at length; naming the inference and grading it beats naming nothing.)
-	map(0x104000, 0x104001).w(m_modeling, FUNC(wsa1_modeling_device::addr_w));
-	map(0x104002, 0x104003).rw(m_modeling, FUNC(wsa1_modeling_device::data_r),
-	                                       FUNC(wsa1_modeling_device::data_w));
+	// THE NAME ASSERTS THE PART; THE FIRMWARE DOES NOT.  The service manual's
+	// parts list gives IC3 = L7A1429, "MODELING LSI", and Felipe named the device
+	// for it on 2026-09-01.  What no ROM shows is that THIS WINDOW decodes to that
+	// part: the only synthesis LSI in the parts list not otherwise accounted for
+	// is IC3, which is elimination, not measurement.  acoustic_modeling.h grades
+	// that inference, states the alternative that fits the same numbers, and says
+	// what would refute it.  The disassembly deliberately keeps its routines under
+	// the address-stating prefix `Dev104_`, and this rename is not a reason to
+	// change them.  (The stub was `synth2` until 2026-09-01, then `modeling`.)
+	map(0x104000, 0x104001).w(m_modeling, FUNC(l7a1429_device::addr_w));
+	map(0x104002, 0x104003).rw(m_modeling, FUNC(l7a1429_device::data_r),
+	                                       FUNC(l7a1429_device::data_w));
 
 	// THE 61-KEY KEYBED SCANNER: +0 event, +2 status with bit 0 = "an event is
 	// waiting".  0xF99762 reads the status, 0xF99776 and 0xF998C6 read the
@@ -3047,8 +3048,8 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// A PLACEHOLDER: it holds the register file the firmware writes, and makes
 	// no sound.  It has no lines to wire -- CPU 2 reaches it through the address
 	// map alone, and nothing in prom_c reads it back.  What the part is, what it
-	// is not, and the grade of each claim are in wsa1_modeling.h.
-	WSA1_MODELING(config, m_modeling);
+	// is not, and the grade of each claim are in acoustic_modeling.h.
+	L7A1429(config, m_modeling);
 
 	// --- the floppy disk controller ----------------------------------------
 	//

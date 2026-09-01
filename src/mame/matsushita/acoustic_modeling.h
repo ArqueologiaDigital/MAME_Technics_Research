@@ -5,15 +5,26 @@
     Technics SX-WSA1 / SX-WSA1R -- the second per-channel register file
     at 0x00104000 on CPU 2.  PLACEHOLDER: no audio is synthesised.
 
-    ⚠ THE PART IS NOT IDENTIFIED, AND THE NAME OF THIS FILE IS AN INFERENCE.
+    THE PART NAME IS THE PROJECT OWNER'S CALL; THE DECODE IS STILL AN INFERENCE.
     ------------------------------------------------------------------------
-    No string in any of the four ROM images names a part number for this
-    device, and the disassembly deliberately refuses to rename its routines
-    away from the address-stating prefix `Dev104_` for exactly that reason.
-    That this is the machine's ACOUSTIC MODELLING SECTION is graded a RANKED
-    INFERENCE, not an established fact, in
-    wsa1-roms-disasm/notes/FINDINGS-sound-subsystem-boundary.md §3, and the
-    device name here reflects that inference without asserting a part.
+    This device is named L7A1429 by Felipe's decision of 2026-09-01.  He owns
+    the hardware and the service manual, and that outranks the grading below,
+    which is written from the firmware alone.  What the two sources each settle
+    is worth keeping separate, because they are different claims:
+
+      * The PART EXISTS AND IS NAMED.  The service manual's parts list gives
+        IC3 = L7A1429, "MODELING LSI".  That is documentation, not inference.
+      * That 0x00104000 DECODES TO IC3 is what the firmware cannot show.  No
+        string in any of the four ROM images names a part number, and the
+        disassembly deliberately keeps the address-stating prefix `Dev104_` for
+        that reason.  Renaming this device does not change that, and the
+        disassembly's prefix is not to be "brought into line" with it.
+
+    So: the name asserts the part, on the owner's authority.  The evidence that
+    this window IS that part remains a RANKED INFERENCE, graded in
+    wsa1-roms-disasm/notes/FINDINGS-sound-subsystem-boundary.md §3 and
+    reproduced below.  If a schematic ever shows 0x00104000 decoding elsewhere,
+    it is this file that is wrong, not §3.
 
     What §3 actually establishes, and what it does not:
 
@@ -39,9 +50,11 @@
                      parameter file.
 
     The parts list's only otherwise-unaccounted-for synthesis LSI is IC3,
-    L7A1429 "MODELING LSI".  That is ELIMINATION AND NOT EVIDENCE, it is
-    recorded here only so nobody re-derives it, and this device does not claim
-    to be that part.
+    L7A1429 "MODELING LSI".  ⚠ Reaching that part by elimination is NOT the same
+    as measuring it: the argument is "nothing else in the parts list is left",
+    which is only as strong as the parts list is complete.  The device carries
+    the name on the owner's authority (above); this paragraph records what the
+    firmware evidence for it is worth, which is less.
 
     ------------------------------------------------------------------------
     ★ IT IS A REGISTER FILE, NOT A PROGRAM LOADER
@@ -140,16 +153,16 @@
 
 ***************************************************************************/
 
-#ifndef MAME_MATSUSHITA_WSA1_MODELING_H
-#define MAME_MATSUSHITA_WSA1_MODELING_H
+#ifndef MAME_MATSUSHITA_ACOUSTIC_MODELING_H
+#define MAME_MATSUSHITA_ACOUSTIC_MODELING_H
 
 #pragma once
 
 
-class wsa1_modeling_device : public device_t
+class l7a1429_device : public device_t
 {
 public:
-	wsa1_modeling_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+	l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	// 0x104000 +0: the address latch (register select).
 	void addr_w(uint16_t data);
@@ -180,6 +193,6 @@ private:
 	uint16_t m_regs[REG_COUNT]{};
 };
 
-DECLARE_DEVICE_TYPE(WSA1_MODELING, wsa1_modeling_device)
+DECLARE_DEVICE_TYPE(L7A1429, l7a1429_device)
 
-#endif // MAME_MATSUSHITA_WSA1_MODELING_H
+#endif // MAME_MATSUSHITA_ACOUSTIC_MODELING_H

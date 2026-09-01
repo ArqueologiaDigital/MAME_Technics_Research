@@ -6,30 +6,30 @@
     at 0x00104000 on CPU 2.  PLACEHOLDER: no audio is synthesised.
 
     What this device is, what it is NOT, the firmware citations and the grade
-    of every claim are in wsa1_modeling.h.  This file is the machine, and the
+    of every claim are in acoustic_modeling.h.  This file is the machine, and the
     machine is small on purpose: a 64-channel parameter file with an address
     latch at +0 and data at +2, and nothing that makes a sound.
 
 ***************************************************************************/
 
 #include "emu.h"
-#include "wsa1_modeling.h"
+#include "acoustic_modeling.h"
 
 #define LOG_REG (1U << 1)   // every register write, decoded into block and channel
 
 #define VERBOSE 0
 #include "logmacro.h"
 
-DEFINE_DEVICE_TYPE(WSA1_MODELING, wsa1_modeling_device, "wsa1_modeling", "SX-WSA1 modelling section (placeholder)")
+DEFINE_DEVICE_TYPE(L7A1429, l7a1429_device, "l7a1429", "Technics Acoustic Modeling LSI")
 
 
-wsa1_modeling_device::wsa1_modeling_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
-	: device_t(mconfig, WSA1_MODELING, tag, owner, clock)
+l7a1429_device::l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
+	: device_t(mconfig, L7A1429, tag, owner, clock)
 {
 }
 
 
-void wsa1_modeling_device::device_start()
+void l7a1429_device::device_start()
 {
 	m_latch = 0;
 	std::fill(std::begin(m_regs), std::end(m_regs), 0);
@@ -43,7 +43,7 @@ void wsa1_modeling_device::device_start()
 //  addr_w - 0x104000, the register select
 //-------------------------------------------------
 
-void wsa1_modeling_device::addr_w(uint16_t data)
+void l7a1429_device::addr_w(uint16_t data)
 {
 	m_latch = data;
 }
@@ -53,7 +53,7 @@ void wsa1_modeling_device::addr_w(uint16_t data)
 //  data_w - 0x104002
 //-------------------------------------------------
 
-void wsa1_modeling_device::data_w(uint16_t data)
+void l7a1429_device::data_w(uint16_t data)
 {
 	if (m_latch < REG_COUNT)
 		m_regs[m_latch] = data;
@@ -74,7 +74,7 @@ void wsa1_modeling_device::data_w(uint16_t data)
 //  data_r - 0x104002
 //-------------------------------------------------
 
-uint16_t wsa1_modeling_device::data_r()
+uint16_t l7a1429_device::data_r()
 {
 	// NOTHING in prom_c reads this device - all twelve literal-address sites are
 	// stores.  A read here therefore means either a code path the analysis has
