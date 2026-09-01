@@ -392,6 +392,29 @@ SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa
 #
 # Override for a different Qt (a distro that puts it elsewhere, or a local build):
 #     QT_HOME=/path/to/qt make ...  or export it before running this script.
+# ⚠ NEVER INHERIT ANOTHER MACHINE'S moc OUTPUT.
+#
+# The build tree lives on shared storage (~/compartilhado is a shared mount), so a
+# build run on one machine leaves its generated .moc.cpp files where the next
+# machine's build will find them -- and make will NOT regenerate them, because
+# they are newer than the .h they come from.  moc stamps its own version into
+# every file it writes and the compiler checks it, so the next machine fails with
+#
+#     #error "This file was generated using the moc from <ver>. It"
+#     #error "cannot be used with the include files from this version of Qt."
+#     #error "qtmochelpers.h not found or too old."
+#
+# ★ THAT TEXT IS MISLEADING: it names a Qt VERSION problem, and the actual cause
+# is a file generated elsewhere.  The tell is what is ABSENT -- no
+# "QtCore/...: No such file or directory".  If the Qt headers were genuinely
+# missing you would see that first; if you only see the version guards, the Qt
+# headers are fine and the .moc.cpp is foreign.  (2026-09-01: this cost four
+# rounds of debugging, chasing a Qt install that was never broken.)
+#
+# Deleting them costs a few seconds of moc per build and makes every machine
+# generate its own.
+rm -f "$BUILD_TREE"/build/generated/osd/modules/debugger/qt/*.moc.cpp
+
 QT_HOME="${QT_HOME:-/usr/lib/qt6}"
 if [ ! -x "$QT_HOME/bin/qmake" ]; then
 	echo "ERROR: no qmake at $QT_HOME/bin/qmake -- set QT_HOME to your Qt prefix." >&2
