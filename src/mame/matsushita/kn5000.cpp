@@ -170,8 +170,13 @@ void kn5000_kbd_uart_device::device_reset()
 }
 
 
-namespace {
-
+// ⚠ logmacro.h MUST be included at GLOBAL SCOPE, above the anonymous namespace.
+// It declares `namespace emu::detail`, and inside `namespace { }` that becomes
+// <unnamed>::emu, which is ambiguous with the global ::emu that emufwd.h now
+// also declares -- every CONS()/GAME() line below then fails to compile with
+// "reference to 'emu' is ambiguous".  This was latent until upstream added
+// `namespace emu::detail` to emufwd.h.  wsa1.cpp in this repo has always had
+// the include above its namespace; this file did not.
 // Logging macros for inter-CPU communication debugging
 #define LOG_LATCH    (1U << 1)  // Latch read/write (command bytes only)
 #define LOG_LATCH_DATA (1U << 2) // Latch read/write (all data bytes - very verbose)
@@ -185,6 +190,8 @@ namespace {
 
 #define VERBOSE (LOG_LATCH | LOG_RESET)
 #include "logmacro.h"
+
+namespace {
 
 class kn5000_state : public driver_device
 {
