@@ -31,9 +31,23 @@ and select the half you want with `mask`.
 ## ⚠ Give it TIME: boot takes about 90 seconds of emulated time
 
 This is the single most important thing to know before running anything here.
-The 8-bit timer tick that every firmware delay is written against runs 16x slow
-in MAME (see below), so a short run measures nothing.  **A 6 second run stops
+Boot is genuinely long, so a short run measures nothing.  **A 6 second run stops
 before the LCD is even initialised.**  Use `-str 120` or more.
+
+⚠ **CORRECTED 2026-09-02: the 16x-slow prescaler is FIXED and this file's
+timings predate the fix.**  This section used to give the *reason* for the long
+boot as "the 8-bit timer tick that every firmware delay is written against runs
+16x slow in MAME".  That defect is real but no longer present: `OVERLAY FIX 1`
+in `src/devices/cpu/tlcs900/tmp95c061.cpp` (2026-08-25) sets the shared 9-bit
+prescaler taps to shifts 3/5/7/11 -- fc/8, fc/32, fc/128, fc/2048 -- against
+Toshiba's Table 3.8 (1) p.81, where upstream had 7/9/11/15 and was uniformly 16x
+slow.
+
+So **every wall-clock timing quoted in this file was measured under the slow
+prescaler and is not a prediction for the current build.**  Re-measure before
+quoting any of them; the `16x slow` remarks further down are kept as the record
+of what was diagnosed, not as a description of how the emulator behaves now.
+The advice to use a long `-str` still stands on its own merits.
 
 An earlier revision of this file drew exactly that wrong conclusion — it
 reported "0 LCD accesses, the boot never reaches the display" from a 6 second
