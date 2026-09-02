@@ -130,3 +130,33 @@ MRXD, the FS/FC pedals).
   `CPanel_InitHardware` (`ui/cpanel_routines.s:95-98`) writes PEFC=0x00 and
   PECR=0x46, which is what makes PE.5 an input. Reading only the boot value
   gives the opposite answer.
+
+---
+
+## `phtap.lua` — witness the Terminal Count strobe in the running machine
+
+**Question:** *the three tools above read the ROM. This one asks whether the pin
+actually moves when the emulated machine runs.*
+
+It is the evidence behind the claim that the FDC Terminal Count is main-CPU
+Port H bit 0 and is strobed **once per boot** — a static census can show that
+`FDC_Pulse_PH0` is the only writer, but only the running machine shows it fire.
+
+```
+mame kn5000 -skip_gameinfo -autoboot_script tools/kn5000-io-census/phtap.lua
+```
+
+Wrap any scripted launch in `timeout`, and keep video visible.
+
+⚠ **THE TAP IS HELD IN A GLOBAL, AND THAT IS NOT A STYLE CHOICE.** A MAME memory
+tap stored in a `local` is garbage-collected and **silently stops firing** —
+no error, no warning. The script runs, the machine runs, and the capture comes
+back empty, which reads exactly like *"the firmware never touches this
+address"*. For a port census that is the precise wrong conclusion, arrived at
+with no visible failure. If a tap reports nothing, verify it is rooted in a
+global before recording a negative.
+
+Prints `PH.0 strobe: N rising, M falling` at machine stop, so a run that never
+reaches the strobe is distinguishable from one where the tap died: a dead tap
+prints `0 rising, 0 falling` *and* so does a boot that never gets that far —
+which is why the count is printed rather than a bare "seen".
