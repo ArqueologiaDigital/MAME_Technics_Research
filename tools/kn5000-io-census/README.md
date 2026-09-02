@@ -133,17 +133,26 @@ MRXD, the FS/FC pedals).
 
 ---
 
-## `phtap.lua` — witness the Terminal Count strobe in the running machine
+## `probes/porth_tc_strobe.lua` — witness the strobe in the running machine
 
 **Question:** *the three tools above read the ROM. This one asks whether the pin
 actually moves when the emulated machine runs.*
 
 It is the evidence behind the claim that the FDC Terminal Count is main-CPU
-Port H bit 0 and is strobed **once per boot** — a static census can show that
-`FDC_Pulse_PH0` is the only writer, but only the running machine shows it fire.
+Port H bit 0 — a static census can show `FDC_Pulse_PH0` is the only writer, but
+only the running machine shows it fire. Measured with no floppy in the drive:
+**1 rising, 2 falling**. The rising edge and one falling edge are the two halves
+of `FDC_Pulse_PH0`; the other falling edge is `boot_hw_init.s:60` clearing the
+port. So the strobe reaches the FDC once even with no disk inserted — and before
+`porth_write()` was bound, it reached nothing at all.
+
+The script itself records that measurement and the command that produced it, so
+the number and its instrument cannot drift apart.
 
 ```
-mame kn5000 -skip_gameinfo -autoboot_script tools/kn5000-io-census/phtap.lua
+cd ~/compartilhado/kn7000-emulator && ./kn7000 kn5000 -rompath ./roms \
+    -skip_gameinfo -window -nomaximize -seconds_to_run 45 \
+    -autoboot_script ../kn7000_mame/tools/kn5000-io-census/probes/porth_tc_strobe.lua
 ```
 
 Wrap any scripted launch in `timeout`, and keep video visible.
