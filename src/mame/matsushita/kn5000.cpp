@@ -877,6 +877,29 @@ static INPUT_PORTS_START(kn5000)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_OTHER) PORT_NAME("POWER OFF (run the firmware's power-down, then exit)")
 		PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn5000_state::power_switch), 0)
 
+	// Rear-panel foot switches and foot controllers, read by the main CPU on
+	// PORT G.  ACTIVE LOW: the firmware's own idle test is "all four FC bits
+	// high means nothing engaged" -- MIDI_ProcessVoiceAssignment reads (PG),
+	// masks 0xF0, shifts, and compares against 0x0F before arming a 500-count
+	// debounce (v10 audio_control_engine.s, reached from Audio_PeriodicUpdate
+	// three times per periodic tick).  So the released state is 1 and the
+	// default must be 0xFC, not 0x00.
+	//
+	// ⚠ Until 2026-09-02 this port did not exist and portg_read() was unbound.
+	// tmp94c241's port_r returns (latch & dir) | (external & ~dir) with an
+	// unbound callback yielding 0, and Port G has no control register on this
+	// part (the SFR table jumps PG 0x40 -> PH 0x44), so dir is 0 and the
+	// firmware read 0x00 forever -- i.e. BOTH FOOT SWITCHES AND ALL FOUR FOOT
+	// CONTROLLERS PERMANENTLY ENGAGED.
+	PORT_START("PEDALS")
+	PORT_BIT(0x03, IP_ACTIVE_LOW, IPT_UNUSED)
+	PORT_BIT(0x04, IP_ACTIVE_LOW, IPT_BUTTON1) PORT_NAME("Foot Switch 1")
+	PORT_BIT(0x08, IP_ACTIVE_LOW, IPT_BUTTON2) PORT_NAME("Foot Switch 2")
+	PORT_BIT(0x10, IP_ACTIVE_LOW, IPT_BUTTON3) PORT_NAME("Foot Controller 1")
+	PORT_BIT(0x20, IP_ACTIVE_LOW, IPT_BUTTON4) PORT_NAME("Foot Controller 2")
+	PORT_BIT(0x40, IP_ACTIVE_LOW, IPT_BUTTON5) PORT_NAME("Foot Controller 3")
+	PORT_BIT(0x80, IP_ACTIVE_LOW, IPT_BUTTON6) PORT_NAME("Foot Controller 4")
+
 	PORT_START("AREA")
 	PORT_DIPNAME(0x06, 0x06, "Area Selection")
 	PORT_DIPSETTING(   0x02, "Thailand, Indonesia, Iran, U.A.E., Panama, Argentina, Peru, Brazil")
@@ -1268,9 +1291,21 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 5 (input) = INTA (control panel interrupt)
 	m_maincpu->porte_read().set(
 			[this] {
-				// Bit 0: +5v (always 1 when no HDD extension)
+				// Bit 0: extension-board present, ACTIVE LOW.  Boot_FlashAndExtensions
+				// does `bit_dd8 0,0x38 ; jr nz,<skip>` (SFR 0x38 = Port E), so
+				// PE.0 = 1 means "no board" and 0 means "fitted"; the init then
+				// additionally requires the region code not to be 4.  The boot
+				// programs PECR = 0x20, i.e. only PE.5 is an output, so PE.0 is
+				// an input and this callback's value is what the firmware sees.
+				//
+				// ⚠ Until 2026-09-02 this returned a constant 1, so the firmware
+				// was always told the slot was empty: HDAE5000_Parport_Setup never
+				// ran, the uPD71055 PPI was never programmed and the hard disk was
+				// never probed, even with the card selected.  Everything the card
+				// maps was reachable by the bus and unreachable by the software.
 				// Bit 5: INTA from control panel (active HIGH — firmware checks BIT 5,(PE); JR NZ)
-				return 0x01 | (m_cpanel_inta ? 0x20 : 0x00);
+				return (m_extension->get_card_device() ? 0x00 : 0x01)
+				     | (m_cpanel_inta ? 0x20 : 0x00);
 			});
 
 
@@ -1295,6 +1330,11 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 5 (input) = FC2
 	//   bit 6 (input) = FC3
 	//   bit 7 (input) = FC4
+	// Wired 2026-09-02.  It had never been bound, so port_r's unbound callback
+	// returned 0 and every one of these six inputs read as ENGAGED; the
+	// firmware's own idle test (compare the FC nibble against 0x0F) says they
+	// are active low.  See the PEDALS port for the evidence.
+	m_maincpu->portg_read().set_ioport("PEDALS");
 
 
 	// MAINCPU PORT H:
