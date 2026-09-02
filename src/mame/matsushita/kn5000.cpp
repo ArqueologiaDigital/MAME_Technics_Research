@@ -1240,8 +1240,11 @@ void kn5000_state::kn5000(machine_config &config)
 	// Interrupt 9: HDDINT
 	// Interrupt A <edge>: ~CPSCK "Control Panel Serial Clock"
 	// ~NMI: SNS
-	// TC0: FDCTC — Timer 0 match output pulses FDC Terminal Count
-	m_maincpu->to0_callback().set(m_fdc, FUNC(upd72067_device::tc_line_w));
+	//
+	// FDCTC is IC5 pin 145, PH0/TC0 -- see the Port H binding below.  It used to be
+	// bound here as `to0_callback().set(m_fdc, tc_line_w)', reading the schematic's
+	// pin name "TC0" as MAME's to0_callback.  They are different things: to0_callback
+	// fires on an 8-bit TIMER 0 match, and this firmware never starts timer 0.
 
 
 	// MAINCPU PORT 7:
@@ -1284,19 +1287,34 @@ void kn5000_state::kn5000(machine_config &config)
 	});
 
 
-	// MAINCPU PORT E:
-	//   bit 0 (input) = +5v
-	//   bit 2 (input) = HDDRDY
-	//   bit 4 (?) = MICSNS
-	//   bit 5 (input) = INTA (control panel interrupt)
+	// MAINCPU PORT E (IC5 pins 19..24 = PE0, PE1/INT9, PE2, PE4, PE5/INTA, PE6/TI8/INTB):
+	//   bit 0 (input)  = extension-board present strap, 4.7k pull-up to +5V
+	//   bit 2 (output) = net HDDRDY -- and the firmware NEVER READS IT
+	//   bit 4 (input)  = MICSNS
+	//   bit 5 (input)  = INTA (control panel interrupt), IC5 pin 23 "INTA <EDGE>"
+	//
+	// ⚠ THE DIRECTION REGISTER IS WRITTEN TWICE AND ONLY THE SECOND ONE COUNTS.
+	// Reset writes PECR = 0x20 (v10 shared/boot_hw_init.s:59, repeated at
+	// kn5000_v10_program.s:524), which on its own would make PE.5 the port's ONLY
+	// OUTPUT -- and tmp94c241's port_r returns the LATCH for output bits, so under
+	// that value the m_cpanel_inta term below would be discarded and this comment
+	// block would be describing the pin backwards.  It is not: CPanel_InitHardware
+	// (v10 ui/cpanel_routines.s:95-98) then writes PEFC = 0x00 and PECR = 0x46,
+	// i.e. outputs on PE.1/PE.2/PE.6 only, leaving PE.0 and PE.5 as INPUTS.  That
+	// routine runs on every boot -- kn5000_v10_program.s:584 calls through
+	// CPanel_InitDispatchTable[0] = CPanel_InitSequence (:2657), which calls it at
+	// :2662 -- and the same byte sequence is in v7 and v9.  So both callback bits
+	// below are live.  Read the boot value alone and you will conclude the opposite.
+	//
+	// (PECR = 0x46 also makes PE.1 an output and PEFC = 0x00 switches OFF its INT9
+	// alternate function, which is consistent with the extension IRQ being dead:
+	// INTE89 is never given a live priority and the INT9 vector is Empty_Handler.)
 	m_maincpu->porte_read().set(
 			[this] {
 				// Bit 0: extension-board present, ACTIVE LOW.  Boot_FlashAndExtensions
 				// does `bit_dd8 0,0x38 ; jr nz,<skip>` (SFR 0x38 = Port E), so
 				// PE.0 = 1 means "no board" and 0 means "fitted"; the init then
-				// additionally requires the region code not to be 4.  The boot
-				// programs PECR = 0x20, i.e. only PE.5 is an output, so PE.0 is
-				// an input and this callback's value is what the firmware sees.
+				// additionally requires the region code not to be 4.
 				//
 				// ⚠ Until 2026-09-02 this returned a constant 1, so the firmware
 				// was always told the slot was empty: HDAE5000_Parport_Setup never
@@ -1337,8 +1355,43 @@ void kn5000_state::kn5000(machine_config &config)
 	m_maincpu->portg_read().set_ioport("PEDALS");
 
 
-	// MAINCPU PORT H:
+	// MAINCPU PORT H (IC5 pins 144..148 = PH4..PH0 reading right to left):
+	//   bit 0 (output) = net FDCTC, the floppy controller's Terminal Count
+	//   bits 1,2 (input) = the region-code strap (Detect_Region_Code, v10
+	//                      shared/boot_routines.s:40-50) -- the "AREA" port
+	//   bit 3 (output), bit 4 = /INT0
+	//
+	// Boot programs PHCR = 0x09 (bits 0 and 3 out) and PHFC = 0x1E (bits 1..4 take
+	// their alternate function, bit 0 stays plain GPIO), v10 shared/boot_hw_init.s:61-62.
+	// So PH.0's own TC0 hardware function is switched OFF and the firmware pulses the
+	// pin by hand instead:
+	//
+	//   FDC_Pulse_PH0   v10 storage/fdc_routines.s:550   set 0,(PH) / ~10 x 10 nops / res 0,(PH)
+	//
+	// and its only two callers are INTTC3_HANDLER (fdc_routines.s:2302), the micro-DMA
+	// channel 3 transfer-end interrupt, and FDC_InitSequence_Full (fdc_routines.s:1326).
+	// Micro-DMA channel 3 IS the floppy channel: FDC_Setup_DMA_Ack_Dest /
+	// FDC_Setup_DMA_Src_Ack (fdc_routines.s:600-618) load DMAS3 (cr 0x0C) and DMAD3
+	// (cr 0x2C) with 0x120000, the FDC's DMA-acknowledge address (fdc_constants.s:17),
+	// FDC_Setup_DMA_Mode loads DMAC3 (cr 0x4C) with the byte count, and INT5_HANDLER
+	// ("FDCIRQ", fdc_routines.s:2314) writes DMAR = 0x08 to request that channel.
+	// Pulsing TC when the DMA count runs out is exactly what a uPD765-family controller
+	// needs to end a read/write command, so PH.0 is FDCTC and it is ACTIVE HIGH -- the
+	// pulse is set, wait, clear.
+	//
+	// Service manual p.32, "CPU SECTION (A) P.C. Diagram", agrees: tracing the sheet
+	// connectors into IC5 gives FDCTC -> pin 145 (PH0/TC0), FDCRST -> pin 12 (PD0),
+	// FDCINT -> pin 13 (INT4), FDCDRQ -> pin 14 (INT5), FD.H/D -> pin 16 (INT6),
+	// FD.I/O -> pin 17 (PD6), and pin 15 (PD4) not connected.  Those five all land
+	// where this driver already documents them, from an independent source -- which is
+	// the control the sixth reading needed.  A tracer that reproduces five known
+	// answers is worth believing on the one that was missing.  Reproduce with
+	// tools/kn5000-io-census/trace_schematic_net.py.
 	m_maincpu->porth_read().set_ioport("AREA"); // checked at EF083E (v10 ROM)
+	m_maincpu->porth_write().set(
+			[this] (u8 data) {
+				m_fdc->tc_w(BIT(data, 0));
+			});
 
 
 	// MAINCPU PORT Z:
@@ -1557,7 +1610,7 @@ void kn5000_state::kn5000(machine_config &config)
 	// Interrupt 7: FDC.I/O
 	//
 	// m_fdc->hdl_wr_callback().set_inputline(m_maincpu, TLCS900_INT6);
-	// TC is wired above via m_maincpu->to0_callback()
+	// TC is wired above, on main-CPU Port H bit 0 (net FDCTC, IC5 pin 145)
 	// m_fdc->??_wr_callback().set_inputline(m_maincpu, TLCS900_INT7);
 
 
