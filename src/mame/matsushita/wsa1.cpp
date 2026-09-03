@@ -129,7 +129,13 @@
     notes/FINDINGS-memory-map.md, and the two reset blocks themselves converted
     to assembly in prom_a/wsa1_prom_a.s and prom_c/wsa1_prom_c.s.
 
-    The clock is fc = 28 MHz, and the firmware is what says so.  prom_c does not
+    The clock is fc = 28 MHz.  ★ The schematic agrees: sheet II-9/II-10 draws
+    X1, a 28 MHz crystal, across IC16 (a T7WU04F inverter pack), and that
+    oscillator reaches both processors' X1 pins through 220 pF -- C198 into IC1,
+    C199 into IC2.  The other crystal on that sheet, X5 at 24 MHz, is the floppy
+    controller's, which is one reading of the parts list's second oscillator.
+    The firmware said 28 MHz first, and that argument is kept because it is the
+    one a reader without the book can check.  prom_c does not
     hard-code a serial divisor, it computes one: at 0xF991A2 it reads the byte at
     0xFFFFEF and writes BR0CR = (M >> 1) & 0x0F.  Under that rule the bit rate
     comes out at 31250 for any M provided fc = 1,000,000 * M, so the byte is fc
@@ -1441,9 +1447,9 @@ void wsa1_state::cpu1_pb_w(uint8_t data)
 // three: PA1 = FS1, PA2 = FS2, PA3 = FDMON, each through a 0 ohm link, and PA0
 // is grounded.  Bit 3 is the floppy module's only output outside its two device
 // windows (operations 6 and 7 are its only writers, prom_a 0xFE65EF /
-// 0xFE661F).  Bits 1 and 2 are the two drive selects; no writer of them has
-// been located in either image, and with one drive on the bus there is nothing
-// for them to select, so they are logged and not acted on.
+// 0xFE661F).  ⚠ WHAT FS1 AND FS2 SELECT IS NOT ESTABLISHED: drive select on the
+// FDD side is IC8's own DS0 pin, so they are not that, and no writer of either
+// bit has been located in prom_a or prom_b.  They are logged.
 void wsa1_state::cpu1_pa_w(uint8_t data)
 {
 	if ((data ^ m_cpu1_pa) & 0x0e)
@@ -1453,11 +1459,14 @@ void wsa1_state::cpu1_pa_w(uint8_t data)
 	// Bit 3 drives the drive motor.  mon_w takes 0 = motor on and the line is
 	// active low, so the bit goes straight through with no inversion.
 	//
-	// ★ THE NET IS FDMON (IC1 pin 35, sheet II-7/II-8), which sits between FS1
-	// and FS2 on PA1/PA2 -- a floppy drive's MOTOR ON beside its drive selects.
-	// The far end of the net, on the FDD connector sheet, is not in the pages
-	// rendered from this book, so the pin's DESTINATION is still read from its
-	// name.  What was established before the sheet turned up is a
+	// ★ THE NET IS FDMON (IC1 pin 35, sheet II-7/II-8), and the floppy
+	// controller is NOT what drives the drive's motor: IC8's four motor-enable
+	// outputs ME0-ME3 (pins 41-44) carry no net on sheet II-9/II-10, while its
+	// DS0, INDEX, DIR, STEP, SIDE, WDATA, WGATE, TRK0, WPRT, RDATA and READY
+	// pins all do.  A motor-on line therefore has to come from somewhere else,
+	// and FDMON is the only candidate on either sheet.  The far end of the net,
+	// on the FDD connector page, is not among the pages rendered from this
+	// book.  What was established before the sheet turned up is a
 	// writer census over both CPU 1 images (that tree's notes/prom_a_pa3_census.py,
 	// 19 checks): bit 3 is the ONLY bit of PA the firmware changes after reset,
 	// and it has four writers, not the two this driver used to know.  The two
@@ -2920,10 +2929,17 @@ void wsa1_state::cpu2_map(address_map &map)
 	// this driver was written -- the note then said so, and the driver refused
 	// to guess.  The disassembly corrected that on 2026-08-25; this maps it.
 	//
+	// ★ AND THE SCHEMATIC IS A THIRD, PHYSICAL WITNESS (sheet II-11/II-12,
+	// manual page 21): IC27's 2Y2 is PROMDCS, which is SA20 high and SA19 low
+	// inside CS2, i.e. 0xF00000-0xF7FFFF, and the part it enables is IC21
+	// QSIGCWSA1DX "4M BIT PROGRAMMED EP ROM" on SA1..SA18 with SD0..SD15.  So
+	// the fourth EPROM and the AM29F400T flash at SFLSHCS 0xE80000 are
+	// different chips, which is what the superseded hypothesis had wrong.
+	//
 	// ⚠ prom_d's own linker script in the disassembly tree still carries the
 	// superseded 0xE80000 hypothesis and says "BASE -- NOT ESTABLISHED".  That
 	// file is stale; the corrected reading is the one cited above.
-	map(0xf00000, 0xf7ffff).rom().region("prom_d", 0);           // tone database
+	map(0xf00000, 0xf7ffff).rom().region("prom_d", 0);           // IC21, tone database
 
 	map(0xf80000, 0xffffff).rom().region("prom_c", 0);           // IC28
 }
@@ -3246,11 +3262,12 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// uPD72070, and the one inference this costs are all in the block comment
 	// above fdc_ctrl_w().  Only the wiring is here.
 	//
-	// The clock is INERT: upd765.cpp contains no call to clock() at all, and the
-	// part's crystal is not established -- the manual's scan does not resolve a
-	// value and nothing in the ROM divides one.  8 MHz is written because that
-	// is the usual uPD765-family crystal, and nothing in this driver depends on
-	// it; the data rate comes from the DSR writes instead.
+	// The clock is INERT -- upd765.cpp contains no call to clock() at all -- but
+	// it is now the real one: sheet II-9/II-10 draws IC8 D72070GF3BE "FLOPPY
+	// DISK CONTROLLER" with X5, a 24 MHz crystal, across its XA1/XA2/XB pins
+	// (59-61).  It was 8 MHz here, which was only "the usual uPD765-family
+	// crystal".  Nothing in this driver depends on the value; the data rate
+	// comes from the DSR writes instead.
 	//
 	// ready and select are both left CONNECTED, which is the device's default:
 	// the firmware decodes ST3's RY bit in Fdc_Op11_SenseDriveStatus (0xFE6668)
@@ -3264,7 +3281,7 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// pin 41 INT7 = FDDRQ (sheet II-7/II-8).  Both were derived from the
 	// firmware first - see the block comment above fdc_ctrl_w() - and the sheet
 	// agrees with both.
-	UPD765A(config, m_fdc, 8'000'000, true, true);
+	UPD765A(config, m_fdc, 24'000'000, true, true);   // IC8's X5
 	m_fdc->intrq_wr_callback().set_inputline(m_cpu1, TLCS900_INT5);
 	m_fdc->drq_wr_callback().set_inputline(m_cpu1, TLCS900_INT7);
 
@@ -3385,34 +3402,38 @@ void wsa1_state::wsa1_base(machine_config &config)
 
     SX-WSA1R, MAIN board
 
-    IC1          TMP95C061AF    Toshiba TLCS-900/H, "MICROCOMPUTER (MAIN)"
-    IC2          TMP95C061AF    Toshiba TLCS-900/H, "MICROCOMPUTER (SUB)"
+    IC1          TMP95C061AF    Toshiba TLCS-900/H, "MICROCOMPUTER (MAIN)",
+                                on sheet II-7/II-8 with IC12 and IC13
+    IC2          TMP95C061AF    Toshiba TLCS-900/H, "MICROCOMPUTER (SUB)",
+                                on sheet II-9/II-10, and IC28 and IC21 are on
+                                its bus on sheet II-11/II-12
     IC3          L7A1429        "MODELING LSI"
-    IC4          TC183C230002   "TONE GENELATOR LSI" [sic].  Two uncertainties
-                                here.  The parts list reads TC183C230002 and
-                                the schematic reads TC1830230002, differing in
-                                one character, a C against a 0, which is the
-                                confusion this scan makes most often.  And the
-                                IC4 designator is a line away from the part
-                                label in an interleaved two-column render
-                                rather than beside it.
-    IC5, IC6,    D6383GF-3BA    NEC digital signal processor.  Only the IC30
-    IC30                        designator is printed cleanly; the other two
-                                schematic instances read as IC5 and IC6, and
-                                the block diagram shows three DSP blocks, so
-                                three is the count used here.
+    IC4          TC183C230002   "TONE GENELATOR LSI" [sic].  Sheet II-13/II-14
+                                prints the part label directly under the IC4
+                                designator and both readings now agree on
+                                TC183C230002.  It takes TWO chip selects,
+                                NSGCE <- SGCS (0x10C000) and NKSCE <- KSCS
+                                (0x108000), so the keybed port is a second port
+                                on this die; its crystal X4 is 33.8688 MHz =
+                                768 x 44100.
+    IC5, IC6,    D6383GF-3BA    NEC digital signal processor, three of them on
+    IC30                        sheet II-15/II-16, sharing one 8-bit host bus
+                                off CPU 2's ports: IC6 answers DSP0CS, IC5
+                                DSP1CS and IC30 DSP2CS, which are the three
+                                destinations of the firmware's effect-microcode
+                                transport.  See the block comment above
+                                cpu2_p9_r().
     IC7          SED1330FBA     LCD controller, for the 320 x 240 dot panel.
                                 MAME has a device for this part already, in
                                 src/devices/video/sed1330.h
     IC12         QSIGCWSA1AX    4 Mbit programmed EPROM, chip select PROMACS
     IC13         QSIGCWSA1BX    4 Mbit programmed EPROM, chip select PROMBCS
-    (derived)    QSIGCWSA1DX    4 Mbit programmed EPROM, chip select PROMDCS.
-                                The designator column is missing from both
-                                places this part is printed.  The redistributed
-                                set names the file after IC21 and the parts
-                                list row order agrees with that, but nothing in
-                                the scan available here confirms it, so no
-                                designator is asserted.
+    IC21         QSIGCWSA1DX    4 Mbit programmed EPROM, chip select PROMDCS,
+                                at 0xF00000 on CPU 2.  The designator column is
+                                missing from the parts list rows, but sheet
+                                II-11/II-12 prints IC21 twice beside this part,
+                                which is also the name the redistributed set
+                                gives the image.
     (derived)    AM29F400T      4 Mbit flash memory.  Same situation: the part
                                 is printed on the MAIN (B) sheet and in the
                                 parts list, the designator is not.  The parts
@@ -3426,7 +3447,15 @@ void wsa1_state::wsa1_base(machine_config &config)
     IC23,        LC321664AJ80   1 Mbit dynamic RAM
     IC31, IC32,
     IC51, IC61
-    IC27         D74HC139GS     decoder; it generates PROMCCS and PROMDCS
+    IC17         D74HC139GS     decoder on CPU 1's bus: CS1 with A19/A20 gives
+                                RAMCS, CS2 with A19/A20 gives EXTCS, PROMBCS
+                                and PROMACS
+    IC18         D74HC138GS     decoder on CPU 1's bus: A16/A17/A18 gated by
+                                A19 and CS0, giving LCDCS, FDDAK, FDCS, MIF and
+                                HDCS
+    IC27         D74HC139GS     decoder, both halves used: SCS0 with SA14/SA15
+                                gives SMIF, WFICS, KSCS and SGCS, and SCS2 with
+                                SA19/SA20 gives SFLSHCS, PROMDCS and PROMCCS
     IC28         QSIGCWSA1CX    4 Mbit programmed EPROM, chip select PROMCCS
     IC33, IC34   M5M44260AJ7S   4 Mbit dynamic RAM.  The parts list spells it
                                 M5M44260AJN7S.
@@ -3436,17 +3465,24 @@ void wsa1_state::wsa1_base(machine_config &config)
     IC47         QSIGH3C16DT7   16 Mbit wave mask ROM
     IC48         QSIGH3C16DT9   16 Mbit wave mask ROM
     IC49         QSIGH3C16EA1   16 Mbit wave mask ROM
+                                Sheet II-15/II-16 puts IC43-IC45 on the tone
+                                generator's Y address bus and IC47-IC49 on its
+                                X bus, and draws all six with A0..A19, a BYTE
+                                pin and TGD0..TGD15, i.e. 1M x 16 each.
     IC52 - IC54, PCM1702U       D/A converter, four of them
     IC59
     IC55 - IC58  M5218AFP       operational amplifier
     IC71         LH5P832N-10    256 kbit RAM.  The schematic calls it pseudo
                                 static, the parts list just static.
-    (unknown)    D72070GF3BE    NEC floppy disk controller, for the 3.5 inch
+    IC8          D72070GF3BE    NEC "FLOPPY DISK CONTROLLER", for the 3.5 inch
                                 2HD 1.44 MB / 2DD 720 KB drive.  Its row in
                                 the parts list falls outside the run of rows
-                                whose designators can be recovered, and the
-                                schematic label is not adjacent to a legible
-                                designator either.
+                                whose designators can be recovered, but sheet
+                                II-9/II-10 prints IC8 above the part label.
+                                Crystal X5 = 24 MHz on XA1/XA2/XB; /CS, A0-A2,
+                                D0-D7, /DMAAK, INT, DMARQ and TC on the CPU
+                                side; DS0 but none of ME0-ME3 on the drive
+                                side.
 
     SX-WSA1R, CONTROL PANEL 1 board
 
@@ -3475,11 +3511,20 @@ void wsa1_state::wsa1_base(machine_config &config)
 
 ROM_START(wsa1r)
 	// The regions below are named after the chip-select nets in the service
-	// manual rather than after processors.  There are certainly two CPUs, but
-	// which of IC1 ("MAIN") and IC2 ("SUB") fetches which pair of EPROMs is
-	// not established: both processors are drawn on the MAIN (A) sheet, next
-	// to the A and B EPROMs, while C and D are on the MAIN (B) sheet off the
-	// IC27 decoder.
+	// manual rather than after processors.  ★ WHICH PROCESSOR FETCHES WHICH
+	// PAIR IS NOW SETTLED, by the P.C. diagrams rather than the parts list:
+	// IC1 TMP95C061AF "MICROCOMPUTER (MAIN)" is drawn on sheet II-7/II-8 with
+	// IC12 QSIGCWSA1AX (/OE = PROMACS) and IC13 QSIGCWSA1BX (/OE = PROMBCS) on
+	// its unprefixed bus, while IC2 TMP95C061AF "MICROCOMPUTER (SUB)" is on
+	// sheet II-9/II-10 with the S-prefixed bus, and IC28 QSIGCWSA1CX (PROMCCS)
+	// and IC21 QSIGCWSA1DX (PROMDCS) are on that bus on sheet II-11/II-12.  So
+	// A and B belong to the MAIN processor and C and D to the SUB one.
+	//
+	// ★ THE x16 INFERENCE IS PROVEN TOO.  IC12 and IC13 are drawn with A1..A18
+	// on the EPROM's A0..A17 and D0..D15 on its data pins -- the CPU's A0 is
+	// not connected, which is what a x16 device on a byte-addressed bus looks
+	// like -- so the flat byte image per device that this map asserts is right.
+	// (See ONE INFERENCE THE MAP RESTS ON at the top of this file.)
 
 	// A and B share one address space and call into each other constantly.
 	// B sits at 0xF00000: its first 20 bytes are a five entry jump table (four
@@ -3511,24 +3556,33 @@ ROM_START(wsa1r)
 	// directory at 0x000B80 (256 sounds followed by 18 drum kit records, where
 	// the specification page advertises 16 preset kits), with a 16 byte
 	// printable name at the head of every record.  The payload ends at
-	// 0x050B08 and the rest of the device is erased.  The address the device
-	// is mapped at was not determined, which is why it is a region of its own
-	// rather than the other half of "prom_c".
+	// 0x050B08 and the rest of the device is erased.  It is a region of its own
+	// rather than the other half of "prom_c" because it is a separate chip on a
+	// separate chip select: IC27's 2Y2 = PROMDCS puts it at 0xF00000-0xF7FFFF,
+	// where cpu2_map maps it.
 	//
-	// The file is named after the part number alone because this device's
-	// reference designator is not legible anywhere in the manual scan
-	// available here.  See the parts list above.
+	// ⚠ THE FILE WAS RENAMED on 2026-09-03, from qsigcwsa1dx.bin.  The
+	// designator is legible after all -- sheet II-11/II-12 draws IC21
+	// QSIGCWSA1DX beside the IC27 decoder, printed twice on that sheet -- and
+	// it agrees with the name the redistributed set gives the image.
 	ROM_REGION16_LE(0x080000, "prom_d", 0)
-	ROM_LOAD("qsigcwsa1dx.bin", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))
+	ROM_LOAD("qsigcwsa1dx.ic21", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))
 
 	// The wave ROMs are not held here.  The self-diagnostic's wave ROM test
 	// covers IC43 to IC45 and IC47 to IC49, and maps them to six buttons; there
 	// is no IC46 in either the parts list or the self-diagnostic.  The OCR of
 	// the button map loses the circled digits, so which button drives which
-	// device is not reproduced here.  The manual gives the capacity of these
-	// devices as 16 Mbit but not their organisation, and the scan does not
-	// resolve which one sits on which of the tone generator's address buses, so
-	// each gets a region of its own rather than being concatenated into a bank.
+	// device is not reproduced here.
+	//
+	// ★ THE ORGANISATION AND THE BUSES ARE ON SHEET II-15/II-16 (manual page
+	// 23).  Each device is drawn with A0..A19, a BYTE pin, and sixteen data
+	// pins on TGD0..TGD15, so a 16 Mbit part is 1M x 16 = 2 MiB -- the size
+	// each region below already has.  IC43, IC44 and IC45 sit on the tone
+	// generator's Y address bus (YA0..YA20, chip enables YCS0..YCS3) and IC47,
+	// IC48 and IC49 on its X bus (XA0..XA20, XCS0..XCS3), which is why there
+	// are six devices on two buses of four selects each.  Each still gets a
+	// region of its own: nothing establishes which select each device answers,
+	// so concatenating them into a bank would assert an order.
 	ROM_REGION(0x200000, "waveform_ic43", 0)
 	ROM_LOAD("qsigh3c16dt8.ic43", 0x000000, 0x200000, NO_DUMP)
 
