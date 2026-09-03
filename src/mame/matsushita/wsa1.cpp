@@ -1148,11 +1148,17 @@ uint8_t wsa1_state::cpu2_p9_r()
                 and byte count zeroed, INTES1 = 0xFF, (0x2A84) |= 2.
 
     So the pin is released by both ends and sampled, and high means "nobody is
-    holding the clock down".  ⚠ THAT THE IDLE STATE IS HIGH IS AN INFERENCE: no
-    databook here names the pin and no schematic net has been read.  What is NOT
-    an inference is that 0 is not a neutral default -- MAME's unbound read gave 0,
-    and with 0 every single frame took the abort path at 0xF5AD0E.  Measured,
-    before and after: notes/wsa1-probes/wsa1_sc1_handshake.lua.
+    holding the clock down".  ★ AND THE PIN IS NOW NAMED: IC1 pin 16, SCLK1,
+    through R31 220 into CN3 and the panel's CN1, where the M37471M2196S's CLK
+    (CP1 board, sheet II-29/II-30) is the other end -- so it really is a clock
+    line both ends can drive, not an input of this processor's alone.  P83 and
+    P84, IC1 pins 14 and 15, are TXD1 and RXD1 on the same connector.
+    ⚠ THAT THE IDLE STATE IS HIGH IS STILL AN INFERENCE: no pull-up is drawn on
+    SCLK1 on either sheet at the resolution rendered here, and no databook is at
+    hand.  What is NOT an inference is that 0 is not a neutral default -- MAME's
+    unbound read gave 0, and with 0 every single frame took the abort path at
+    0xF5AD0E.  Measured, before and after:
+    notes/wsa1-probes/wsa1_sc1_handshake.lua.
 
     PB: PBCR = 0x0C (0xF826E5), so only bits 2 and 3 are outputs and every other
     bit is an input.  Two of the inputs are known:
@@ -3469,9 +3475,17 @@ void wsa1_state::wsa1_base(machine_config &config)
                                 destinations of the firmware's effect-microcode
                                 transport.  See the block comment above
                                 cpu2_p9_r().
-    IC7          SED1330FBA     LCD controller, for the 320 x 240 dot panel.
-                                MAME has a device for this part already, in
-                                src/devices/video/sed1330.h
+    IC7          SED1330FBA     LCD controller, for the 320 x 240 dot panel,
+                                with crystal X2 = 8 MHz on OSC1/OSC2 and IC71
+                                as its display RAM.  MAME has a device for this
+                                part already, in src/devices/video/sed1330.h
+    IC16         T7WU04F        inverter pack; X1, the 28 MHz crystal both
+                                processors are clocked from, is across it
+    IC24, IC25   D74HC374GS     the inter-processor mailbox: one octal latch
+                                per direction, CPU 1's bus to CPU 2's and back
+    IC26         D74HC32GS      OR gates that form the two mailbox interrupts,
+                                SIFINT = SMIF OR SWR and IFINT = MIF OR WR, and
+                                the two output enables
     IC12         QSIGCWSA1AX    4 Mbit programmed EPROM, chip select PROMACS
     IC13         QSIGCWSA1BX    4 Mbit programmed EPROM, chip select PROMBCS
     IC21         QSIGCWSA1DX    4 Mbit programmed EPROM, chip select PROMDCS,
@@ -3519,8 +3533,9 @@ void wsa1_state::wsa1_base(machine_config &config)
     IC52 - IC54, PCM1702U       D/A converter, four of them
     IC59
     IC55 - IC58  M5218AFP       operational amplifier
-    IC71         LH5P832N-10    256 kbit RAM.  The schematic calls it pseudo
-                                static, the parts list just static.
+    IC71         LH5P832N-10    256 kbit RAM, the SED1330's display memory
+                                (VD0-VD7, VA0-VA14).  The schematic calls it
+                                pseudo static, the parts list just static.
     IC8          D72070GF3BE    NEC "FLOPPY DISK CONTROLLER", for the 3.5 inch
                                 2HD 1.44 MB / 2DD 720 KB drive.  Its row in
                                 the parts list falls outside the run of rows

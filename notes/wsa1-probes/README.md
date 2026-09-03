@@ -2146,3 +2146,19 @@ test on bit 3.  Every table in the script's output uses that alignment.
 | script | question it answers |
 |---|---|
 | `wsa1_sch_cpu_ports.sh` | which net is on which pin of IC1 and IC2, and what does each chip-select output enable? |
+| `wsa1_lcd_frame_rate.lua` | what refresh rate does the SED1330 run at, once its 8 MHz crystal is passed to the device? |
+
+Three things the same crops settled that were open inferences in the driver:
+
+* **The floppy motor.** `FDMON` drives Q10 then Q9 and lands on the FDD
+  connector's `MOT` pin, and the controller's own `ME0`-`ME3` carry no net.
+  CPU 1's PA bit 3 is the motor, active low, and is no longer an inference.
+* **The mailbox.** `IC24` and `IC25`, two `D74HC374GS` octal latches, one per
+  direction, with `IC26` forming `SIFINT = SMIF OR SWR` and `IFINT = MIF OR WR`
+  and the two output enables.  One byte deep, no full/empty flag — which is
+  what the driver's one-byte latch plus `LOG_LINKLOST` already modelled.
+  ⚠ It also means the interrupt is a PULSE on the board where the driver holds
+  a level until the far read; that difference is written up at the link block
+  comment and is deliberately NOT changed.
+* **The LCD clock.** `X2` is 8 MHz across `IC7`'s oscillator pins, so
+  `sed1330_device` now derives 68.5871 Hz instead of keeping the nominal 60.

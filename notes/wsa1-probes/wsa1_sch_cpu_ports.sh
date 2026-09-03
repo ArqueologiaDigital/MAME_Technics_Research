@@ -65,6 +65,10 @@ crop 23 dsp_and_wave_roms.png 0.00 0.00 1.00 1.00 0.30
 crop 23 ic30_dsp2.png        0.47 0.55 0.60 0.83 2.4
 crop 23 ic5_dsp1.png         0.80 0.36 0.90 0.46 3.2
 crop 23 ic6_dsp0.png         0.81 0.66 0.90 0.83 3.2
+crop 20 link_latches.png     0.13 0.22 0.38 0.42 2.0
+crop 20 fdmon_driver.png     0.53 0.68 0.63 0.80 3.4
+crop 20 fdd_connector.png    0.60 0.50 0.72 0.72 2.6
+crop 20 ic1_sc1_serial.png   0.58 0.33 0.73 0.44 2.6
 
 cat <<'TXT'
 
@@ -137,6 +141,25 @@ ic4_tone_generator / ic4_host_port -- IC4 TC183C230002 "TONE GENELATOR LSI"
     DWFI0-DWFI12 on pins 25-40 are the input from IC3.  KS0-KS3, KF0-KF3,
     KB0-KB4, LEL, LER on the left edge are the key-scan matrix, and KBEVNT
     leaves this die for CPU 2's INT4.
+
+link_latches -- the inter-processor mailbox is two octal latches:
+    IC24 D74HC374GS  D <- SD0..SD7 (CPU 2)  Q -> D0..D7 (CPU 1)
+                     CK <- SIFINT           /OE <- MIF OR RD
+    IC25 D74HC374GS  D <- D0..D7 (CPU 1)    Q -> SD0..SD7 (CPU 2)
+                     CK <- IFINT            /OE <- SMIF OR SRD
+    IC26 D74HC32GS   SIFINT = SMIF OR SWR,  IFINT = MIF OR WR
+  So each direction is ONE BYTE deep with no full/empty flag, and each
+  interrupt is the far side's own write strobe.
+
+fdmon_driver / fdd_connector -- FDMON drives R57/R58 into Q10 (2SB709AR),
+    whose collector drives Q9 (2SD601AQ) through R59/R60; Q9's collector, with
+    R61 10K to +5D, is CN6 pin 3.  CN6 is the FDD: 1 INDEX, 2 DS0, 3 MOT,
+    4 DIR, 5 STP, 6 WDT, 7 WE, 8 TRKO, 9 WPRT, 10 RDT, 11 SIDE, 12 DCH,
+    13 +5D, 14/15 E.  Two inverting stages, so FDMON LOW = motor ON.
+
+ic1_sc1_serial -- IC1 pins 14/15/16 are TXD1/RXD1/SCLK1 through R29 220,
+    R30 1K and R31 220, the control panel link.  No pull-up is drawn on SCLK1
+    at this resolution.
 
 dsp_and_wave_roms / ic30_dsp2 / ic5_dsp1 / ic6_dsp0 -- MAIN (C)/HP.
     Three D6383GF-3BA on one shared 8-bit host bus: D0-D7 <- DSPD0-DSPD7,
