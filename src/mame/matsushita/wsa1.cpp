@@ -613,8 +613,21 @@ private:
         CPU 1 P7.0 -> CPU 2 PA.2      CPU 2 PA.0 -> CPU 1 P7.2
         CPU 1 P7.1 -> CPU 2 PA.3      CPU 2 PA.1 -> CPU 1 P7.3
 
-    (*) THAT CROSS-WIRING IS DERIVED FROM THE FIRMWARE, NOT FROM A SCHEMATIC,
-    and the manual scan available here does not resolve these nets.  It is the
+    (*) ★ THE CROSS-WIRING IS CONFIRMED BY THE SCHEMATIC, 2026-09-03.  It was
+    derived from the firmware first; the four nets are named on the P.C.
+    diagrams -- IC1 on sheet II-7/II-8 (manual page 19), IC2 on sheet
+    II-9/II-10 (page 20):
+
+        MSTAT0   IC1 pin 2  P70  --R149 1K-->  IC2 pin 34  PA2
+        MSTAT1   IC1 pin 3  P71  --R150 1K-->  IC2 pin 35  PA3
+        SSTAT0   IC2 pin 32 PA0  --R162 1K-->  IC1 pin 4   P72
+        SSTAT1   IC2 pin 33 PA1  --R163 1K-->  IC1 pin 5   P73
+
+    -- exactly the mapping below, and the two direction registers agree with it:
+    P7CR = 0x33 makes IC1's P7 bits 0 and 1 outputs and PACR = 0x03 makes IC2's
+    PA bits 0 and 1 outputs.  Re-render the crops with
+    notes/wsa1-probes/wsa1_sch_cpu_ports.sh.  The firmware argument below is
+    kept because it is the one a reader without the book can check.  It is the
     only assignment that satisfies all three uses at once: the sender waits for
     bit 3 to FALL after writing the header (0xF8E136), which under this mapping
     means "the far side has armed its DMA and can absorb the burst"; the INT0
@@ -624,9 +637,7 @@ private:
     is idle".  The one competing reading - that bits 2 and 3 are full/empty
     flags of a latch in glue logic - is rejected because a latch-empty flag
     would fall when the receiver READS the byte (0xF99BD3), which is BEFORE the
-    DMA is armed, and the sender would then start the burst too early.  If a
-    legible schematic ever contradicts this, only the four lines in
-    cpu1_p7_r() and cpu2_pa_r() have to change.
+    DMA is armed, and the sender would then start the burst too early.
 
     ** MEASURED 2026-08-25 -- ⚠ FIXED 2026-08-27, KEPT BECAUSE THE SYMPTOM IS
     WORTH RECOGNISING: THE CPU 2 -> CPU 1 DIRECTION SENT EXACTLY ONE PACKET AND
@@ -838,29 +849,48 @@ uint8_t wsa1_state::cpu2_link_r()
 }
 
 
-// P7CR = 0x33 (0xF826CA): bits 0, 1, 4 and 5 are outputs, 2, 3, 6 and 7 inputs.
+// CPU 1'S PORT 7, ALL SIX PINS NAMED BY THE SCHEMATIC (IC1, sheet II-7/II-8,
+// manual page 19; notes/wsa1-probes/wsa1_sch_cpu_ports.sh re-renders it):
+//
+//     pin 2  P70  MSTAT0   out, R149 1K, to IC2 PA2    the link strobe
+//     pin 3  P71  MSTAT1   out, R150 1K, to IC2 PA3    the link receiver-busy
+//     pin 4  P72  SSTAT0   in,  from IC2 PA0
+//     pin 5  P73  SSTAT1   in,  from IC2 PA1
+//     pin 6  P74  LCDOFF   out
+//     pin 7  P75  MUTE     out
+//     pins 8, 9  P76, P77  no net -- unconnected on the sheet
+//
+// P7CR = 0x33 (0xF826CA) makes exactly bits 0, 1, 4 and 5 outputs, which is the
+// four named output pins and nothing else.
 // port_r<PORT_7>() returns the callback's value verbatim - it does not merge in
 // the output latch - and `res 0,(P7)` is a read-modify-write, so this has to
 // hand back the driven bits too or the first bit instruction would clear them.
 uint8_t wsa1_state::cpu1_p7_r()
 {
-	uint8_t data = (m_cpu1_p7 & 0x33) | 0xc0;   // bits 6-7: nothing wired, read high
+	uint8_t data = (m_cpu1_p7 & 0x33) | 0xc0;   // bits 6-7: P76/P77, no net, read high
 
-	data |= BIT(m_cpu2_pa, 0) << 2;             // CPU 2's strobe
-	data |= BIT(m_cpu2_pa, 1) << 3;             // CPU 2's receiver-busy
+	data |= BIT(m_cpu2_pa, 0) << 2;             // SSTAT0, CPU 2's strobe
+	data |= BIT(m_cpu2_pa, 1) << 3;             // SSTAT1, CPU 2's receiver-busy
 
 	return data;
 }
 
 void wsa1_state::cpu1_p7_w(uint8_t data)
 {
-	// Bits 4 and 5 are also outputs, and the power-fail NMI handler sets them as
-	// its first act; what they drive is NOT ESTABLISHED, so they are stored and
-	// ignored rather than given an invented destination.
+	// Bit 4 is LCDOFF and bit 5 is MUTE (see the pin table above), and
+	// NMI_PowerFail_SaveAndHalt (0xF8306E) sets both as its first act - blank
+	// the panel and mute the audio on power fail.  Neither is modelled: there is
+	// no audio to mute, and blanking the SED1330 from outside its own registers
+	// would need the LCD module's own enable, which is not on this sheet.  They
+	// are stored so the debugger can see them.
 	m_cpu1_p7 = data;
 }
 
-// PACR = 0x03 (0xFFF02C): bits 0 and 1 are outputs.  Port A's write path is
+// CPU 2's PORT A is the other end of the same four nets (IC2, sheet II-9/II-10):
+// pin 32 PA0 = SSTAT0 out through R162 1K, pin 33 PA1 = SSTAT1 out through
+// R163 1K, pin 34 PA2 = MSTAT0 in, pin 35 PA3 = MSTAT1 in.
+// PACR = 0x03 (0xFFF02C) makes bits 0 and 1 outputs, which is those two nets.
+// Port A's write path is
 // already masked with PACR inside the CPU, so only those two bits arrive here.
 // Port A is four bits wide on this part; 4-7 do not exist and read high.
 //
@@ -872,8 +902,8 @@ uint8_t wsa1_state::cpu2_pa_r()
 {
 	uint8_t data = (m_cpu2_pa & 0x03) | 0xf0;
 
-	data |= BIT(m_cpu1_p7, 0) << 2;             // CPU 1's strobe
-	data |= BIT(m_cpu1_p7, 1) << 3;             // CPU 1's receiver-busy
+	data |= BIT(m_cpu1_p7, 0) << 2;             // MSTAT0, CPU 1's strobe
+	data |= BIT(m_cpu1_p7, 1) << 3;             // MSTAT1, CPU 1's receiver-busy
 
 	return data;
 }
