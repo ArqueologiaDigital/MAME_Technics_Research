@@ -323,7 +323,7 @@
 // now lives in acoustic_modeling.cpp and carries its own VERBOSE mask; the bit is
 // left unused rather than renumbered, so an old capture's mask still reads.
 #define LOG_KEYBED   (1U << 5)   // keybed data/status, 0x108000
-#define LOG_CHANREG  (1U << 6)   // the 4 x 32 channel register files, 0x7F0000 / 0xE00000
+#define LOG_CHANREG  (1U << 6)   // the 4 x 32 register files, 0x7F0000 / 0xE00000
 #define LOG_KEYS     (1U << 7)   // key presses queued for the scanner at 0x108000
 #define LOG_EEPROM   (1U << 8)   // the serial EEPROM's CS / SK / DI / DO lines
 #define LOG_FDC      (1U << 9)   // floppy: the control register, TC and CPU 1's PA bit 3
@@ -2347,6 +2347,19 @@ TIMER_CALLBACK_MEMBER(wsa1_state::keybed_scan)
 // debugger can see what the firmware programmed.  The KN5000 driver models its
 // twin the same way at 0x130000/0x130002, with the standing correction that it
 // is NOT the uPD6383GF host interface but a separate register file.
+//
+// ⚠ AND THE SCHEMATIC DOES NOT PUT A CHIP ON EITHER WINDOW.  Both decoder
+// outputs are unnamed: IC18's Y7 = 0x7F0000 on CPU 1 (the table in cpu1_map)
+// and IC27's 2Y0 = 0xE00000 on CPU 2.  They are the only decoder outputs in
+// this machine that the firmware writes and the schematic leaves without a net
+// -- every other unnamed output sits at an address no code touches.  Both
+// windows are also write-only in every path in every image.  The reading that
+// fits is that this is shared source inherited from the KN5000 sub-CPU, where
+// the twin at 0x130000 is fitted, recompiled here for two windows that are not.
+// An unlabelled stub on a photocopy is an absence, so nothing is removed on the
+// strength of it; storing the writes and logging a read is exactly the right
+// model for a window whose device is in doubt.  What would settle it is the
+// parts list for the MAIN (A)/(B) boards or the foil-side pages 25-28.
 
 void wsa1_state::cpu1_chanreg_addr_w(uint16_t data)
 {
@@ -2594,8 +2607,21 @@ void wsa1_state::cpu1_map(address_map &map)
 	// chip-select elimination that stays ambiguous - MSAR0 = 0x78 with
 	// MAMR0 = 0x3F reads either as 0x600000-0x7FFFFF or as 0x780000-0x97FFFF,
 	// and both readings survive - so no window is asserted; only the addresses
-	// the code touches are mapped.  None of these parts is identified, so none
-	// is modelled.
+	// the code touches are mapped.
+	//
+	// ★ WHAT SITS ON EACH OF THEM IS ON THE SCHEMATIC, though.  IC18, a
+	// D74HC138GS (sheet II-9/II-10, manual page 20), takes A = A16, B = A17,
+	// C = A18, G1 = A19 and /G2A = /G2B = CS0, so it only decodes with A19
+	// HIGH -- every output below is inside 0x780000-0x7FFFFF whichever reading
+	// of the CS0 window is right:
+	//
+	//     Y0  0x780000  (no net)      Y4  0x7C0000  MIF     the CPU link
+	//     Y1  0x790000  LCDCS         Y5  0x7D0000  (no net)
+	//     Y2  0x7A0000  FDDAK         Y6  0x7E0000  HDCS
+	//     Y3  0x7B0000  FDCS          Y7  0x7F0000  (no net)
+	//
+	// Five named outputs on the five addresses the firmware reaches, with the
+	// roles the disassembly gave them.
 
 	// LCD controller, the SED1330FBA the parts list puts at IC7.  The port
 	// pairing is read straight off the firmware and is the same asymmetric one
@@ -2663,7 +2689,8 @@ void wsa1_state::cpu1_map(address_map &map)
 
 	// A 16-bit port read as a FIFO -- and it now has a ROLE, which is gap J
 	// closed: it is the SECOND STORAGE UNIT of the same two-unit block-device
-	// layer that drives the floppy.  Fdc_Request (0xFE66C7) takes a `unit` field
+	// layer that drives the floppy, and the storage is an ATA hard disk.
+	// Fdc_Request (0xFE66C7) takes a `unit` field
 	// at request+0x02, every one of its twelve operations begins
 	// `cp (0x605A32),1`, and all seven unit-1 arms in 0xFE4CE0-0xFE544D reach
 	// the four accessors of this port (0xFE4C73 / 0xFE4C99 / 0xFE4CBF /
@@ -2671,15 +2698,37 @@ void wsa1_state::cpu1_map(address_map &map)
 	// converted text of either image.  (FINDINGS-prom_a-fdc.md sec.6, checked by
 	// that tree's notes/prom_a_unit1_backend_check.py.)
 	//
-	// STILL INERT, deliberately.  Knowing which block-device layer drives it is
-	// not knowing what the device IS: no part is named, no register in either
-	// bank has a meaning, and the accessor's index construction
-	// (0x7E0000 + ((n & 7) | 0x08) or | 0x10) is all that says there are two
-	// banks of eight -- in the only traced caller (0xFE50A0) both indices are
-	// zero for all 256 iterations, so 0x7E0008 is the only address the code is
-	// known to reach.  CS0 access timing is relaxed for the duration of that
-	// transfer (B0CS 0x14 -> 0x10 -> 0x14, 0xFE509B and 0xFE50D5), which is also
-	// what proves this device is on CS0.
+	// ★ AND IT IS AN ATA (IDE) HARD DISK.  IC18's Y6 is HDCS (the table above),
+	// IC1 carries HDINT on INT4 and HDIORDY on PB6, and the register protocol
+	// is the ATA task file: a census of the 41 accessor calls with a literal
+	// bank and register (wsa1-roms-disasm/notes/prom_a_census_round8.py --ata)
+	// puts the command block at 0x7E0008-0x7E000F -- data, features/error,
+	// sector count, sector number, cylinder low, cylinder high, device/head,
+	// command/status -- and device control at 0x7E0016, written 0x0C then 0x08
+	// (0xFE50E9 / 0xFE50F5), which is SRST asserted and released.  Seven
+	// opcodes are issued, each with the data phase its opcode demands: 0x20
+	// READ SECTOR(S), 0x30 WRITE SECTOR(S), 0xEC IDENTIFY DEVICE, 0x91
+	// INITIALIZE DEVICE PARAMETERS, 0xEF SET FEATURES, 0x94 and 0x95.  The
+	// status bits are used as ATA uses them: BSY polled with a 500-tick
+	// timeout, DRQ required before each 512-byte transfer, ERR after one, DRDY
+	// after a command that moves no data.  prom_a 0xFE69BF even holds a FAT16
+	// boot sector for a fixed disk (media 0xF8, drive 0x80, 60 sectors x 15
+	// heads x 568 cylinders = 261.7 MB) carrying the string "This is Technics
+	// HDD.", and INITIALIZE DEVICE PARAMETERS is issued with that geometry.
+	//
+	// STILL INERT, deliberately, and the reason is no longer the part: nothing
+	// traced sets a request block's unit field to 1, and the ROM's boot-sector
+	// image has no consumer at all, so whether a drive was ever fitted to a
+	// rack is open.  Wiring an ata_interface would put a drive on the bus of a
+	// machine that may never have had one.  Only the data register is silenced
+	// here; a reach into the rest of the task file stays unmapped so that it
+	// shows up in the log.  CS0 access timing is relaxed for the duration of a
+	// transfer (B0CS 0x14 -> 0x10 -> 0x14, 0xFE509B and 0xFE50D5), which is
+	// what proves the device is on CS0.
+	//
+	// ⚠ The opcode and register NAMES above are the ATA standard's; no image
+	// spells them, exactly as the floppy half of the same module declines to
+	// name its uPD765.
 	map(0x7e0008, 0x7e0009).noprw();
 
 	// Address register (+0) and data register (+2) of a 4-channel x 32-register
@@ -2726,7 +2775,20 @@ void wsa1_state::cpu2_map(address_map &map)
 	// either image where the meaning of MSAR is proven rather than assumed:
 	// 0x2F bytes further down the same routine, ld XIX,0x00100000 (0xFFF067)
 	// loads the base of the cluster the chip select has just been aimed at.
-	// Both surviving decoders agree on this processor's four windows.
+	//
+	// ★ AND THE DECODER IS ON THE SCHEMATIC, with all four outputs named
+	// (IC27, a D74HC139GS, sheet II-11/II-12, manual page 21; first half,
+	// 1E = SCS0, 1DA = SA14, 1DB = SA15):
+	//
+	//     1Y0  pin 4   SMIF    0x100000   the inter-processor link
+	//     1Y1  pin 5   WFICS   0x104000   IC3, the modelling LSI
+	//     1Y2  pin 6   KSCS    0x108000   the keybed port of IC4
+	//     1Y3  pin 7   SGCS    0x10C000   IC4, the tone generator
+	//
+	// - the four windows the firmware reaches, in the order the disassembly
+	// derived them.  The same package's second half decodes SCS2 on SA19/SA20
+	// into SFLSHCS 0xE80000, PROMDCS 0xF00000 and PROMCCS 0xF80000, with 2Y0
+	// (0xE00000) carrying no net.
 
 	// Data port of the link to the other processor, the mirror image of
 	// 0x7C0000 there: 0xF999F9 / 0xF99A6D ld XBC,0x00100000 then ld (XBC),A,
@@ -2744,15 +2806,23 @@ void wsa1_state::cpu2_map(address_map &map)
 	// whose first six planes and block-word offsets are identical to the KN5000
 	// tone generator's note-on burst.
 	//
-	// THE NAME ASSERTS THE PART; THE FIRMWARE DOES NOT.  The service manual's
-	// parts list gives IC3 = L7A1429, "MODELING LSI", and Felipe named the device
-	// for it on 2026-09-01.  What no ROM shows is that THIS WINDOW decodes to that
-	// part: the only synthesis LSI in the parts list not otherwise accounted for
-	// is IC3, which is elimination, not measurement.  acoustic_modeling.h grades
-	// that inference, states the alternative that fits the same numbers, and says
-	// what would refute it.  The disassembly deliberately keeps its routines under
-	// the address-stating prefix `Dev104_`, and this rename is not a reason to
-	// change them.  (The stub was `synth2` until 2026-09-01, then `modeling`.)
+	// ★ THE PART AND THE DECODE ARE SETTLED BY THE SCHEMATIC.  IC27's 1Y1 is
+	// WFICS at 0x104000 (the table above) and IC3, the L7A1429 "MODELING LSI",
+	// takes NSGCE <- WFICS, NWR <- SWR, MD0..MD15 <-> SD0..SD15 and NAD <- SA1
+	// -- that last one being this driver's +0 select / +2 data pair, off a
+	// single address line.  IC3's product leaves on RQWFI and IOWFI(0..12) into
+	// pins 25-40 of IC4 at 0x10C000, so the modelling LSI feeds the tone
+	// generator a 13-bit word on request: the two windows are two stages of ONE
+	// signal path, and this one's output is not audio.
+	//
+	// ⚠ WHAT IS STILL INFERENCE IS THE INTERNAL SIGNAL PATH -- series or
+	// parallel, where the excitation enters, how MAIN and SUB couple.  No ROM
+	// can close it: nothing reads the device, so there is no readback to
+	// calibrate against, and the KN5000 sub-CPU has no counterpart device to
+	// borrow meanings from.  acoustic_modeling.h grades each register claim.
+	// The disassembly deliberately keeps its routines under the address-stating
+	// prefix `Dev104_`, and the device name is not a reason to change them.
+	// (The stub was `synth2` until 2026-09-01, then `modeling`.)
 	map(0x104000, 0x104001).w(m_modeling, FUNC(l7a1429_device::addr_w));
 	map(0x104002, 0x104003).rw(m_modeling, FUNC(l7a1429_device::data_r),
 	                                       FUNC(l7a1429_device::data_w));
@@ -2765,6 +2835,14 @@ void wsa1_state::cpu2_map(address_map &map)
 	// is NOT the "+0 select / +2 data" pair the two rows either side of it are:
 	// the boot preload at 0xF99125 writes +2 first and +0 second.  See the
 	// block comment on the handlers.
+	//
+	// ★ IT IS NOT A SEPARATE PART.  IC4, the TC183C230002 tone generator at
+	// 0x10C000, takes TWO chip selects: NSGCE <- SGCS and NKSCE <- KSCS (sheet
+	// II-13/II-14, manual page 22).  So this window is a SECOND PORT ON THE
+	// TONE GENERATOR, and KS0-KS3 / KF0-KF3 / KB0-KB4 / LEL / LER on IC4's left
+	// edge are the key-scan matrix and its touch-sense lines.  The handlers
+	// below stay separate from tg_*: they are a different register pair with a
+	// different access order, on the same die.
 	//
 	// !! THE RACK SX-WSA1R HAS NO KEYBOARD.  The scanner is presumably live only
 	// on the keyboard model, the SX-WSA1, which this driver does not declare
@@ -2779,6 +2857,14 @@ void wsa1_state::cpu2_map(address_map &map)
 	// carries at IC303.  This processor's busiest device by far, 102 references:
 	// +0 address (0xFAC12D), +2 data (0xFAC132, followed by five nops for bus
 	// timing), +4 read back (0xFA6905 inc 4,XBC / 0xFA690A ld HL,(XBC)).
+	//
+	// What the sheet adds for whoever writes the sound device (page 22):
+	// crystal X4 = 33.8688 MHz = 768 x 44100, so the audio rate is 44.1 kHz;
+	// LRCK, BCK and SDO0-SDO7, i.e. EIGHT serial audio lanes; two independent
+	// 21-bit wave address buses ADX0-20 / ADY0-20 with four output enables each
+	// (XCS0-3, YCS0-3) reaching the six mask ROMs on sheet II-15/II-16; MD0-15
+	// on SD0-15 with NAD <- SA1; and the 13-bit RQWFI / DWFI0-DWFI12 input from
+	// IC3 on pins 25-40.
 	map(0x10c000, 0x10c001).w(FUNC(wsa1_state::tg_addr_w));
 	map(0x10c002, 0x10c003).w(FUNC(wsa1_state::tg_data_w));
 	map(0x10c004, 0x10c005).r(FUNC(wsa1_state::tg_status_r));
