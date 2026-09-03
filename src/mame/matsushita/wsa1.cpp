@@ -609,6 +609,33 @@ private:
     Both halves run the SAME driver, mirrored: the micro-DMA helper block at
     prom_a 0xF8E6A2-0xF8E6E1 is byte-identical to prom_c 0xF99FF8-0xF9A037.
 
+    ★ AND THE HARDWARE IS TWO OCTAL LATCHES, which is the strongest thing the
+    schematic says about this driver's model (sheet II-9/II-10, manual page 20):
+
+        IC24  D74HC374GS   D <- SD0..SD7 (CPU 2), Q -> D0..D7 (CPU 1)
+                           CK  <- SIFINT       /OE <- MIF OR RD      (IC26)
+        IC25  D74HC374GS   D <- D0..D7 (CPU 1), Q -> SD0..SD7 (CPU 2)
+                           CK  <- IFINT        /OE <- SMIF OR SRD    (IC26)
+        IC26  D74HC32GS    SIFINT = SMIF OR SWR,  IFINT = MIF OR WR
+
+    Three things follow, and the driver already models all three.  The latch is
+    ONE BYTE DEEP in each direction, so a second write before the far read
+    overwrites it with nothing to say so -- which is what LOG_LINKLOST exists
+    for.  There is no full/empty flag anywhere in the glue: the four handshake
+    pins above are the ONLY flow control, done in software.  And each interrupt
+    is the far side's own write strobe: SIFINT is asserted while CPU 2 is
+    writing SMIF, IFINT while CPU 1 is writing MIF.
+
+    ⚠ SO THE INTERRUPT IS A PULSE ON THE BOARD AND A HELD LEVEL HERE.  This
+    driver asserts INT0 on the write and clears it when the far side reads the
+    latch, because reading the latch is what the firmware's handler does and
+    the model has to end the request somewhere; the gates above end it when the
+    write cycle ends instead, and nothing in the glue notices the read at all
+    (a read only turns the latch's outputs on).  Changing the model to a pulse
+    is NOT proposed on this evidence: what a level-triggered INT0 does with a
+    one-bus-cycle pulse depends on when the core samples the line, and the held
+    level is what the measured traffic below was taken with.
+
     THE HANDSHAKE PINS.  P7CR = 0x33 (0xF826CA) makes CPU 1's P7 bits 0, 1, 4
     and 5 outputs; PACR = 0x03 (0xFFF02C) makes CPU 2's PA bits 0 and 1
     outputs.  Bit 0 is a strobe, held low from just before the header byte
@@ -1377,11 +1404,11 @@ uint8_t wsa1_state::cpu1_pb_r()
         pulse is a genuine low-high-low, which is TC's active-high shape.
     Nothing here fabricates a status byte either way.
 
-    CPU 1's PA BIT 3 IS THE DRIVE MOTOR, active low -- wired in cpu1_pa_w().
-    ★ The schematic calls the net FDMON, next to FS1 and FS2 on the two PA bits
-    below it, which is a floppy drive's MOTOR ON beside its two drive selects.
-    This paragraph used to say the opposite, so the reasoning that changed is
-    worth keeping.
+    CPU 1's PA BIT 3 IS THE DRIVE MOTOR, active low -- wired in cpu1_pa_w(),
+    and no longer an inference: the net FDMON reaches the FDD connector's MOT
+    pin through Q10 and Q9, and the controller's own ME0-ME3 outputs are not
+    connected.  The block comment on the handler traces it.  This paragraph
+    used to say the opposite, so the reasoning that changed is worth keeping.
 
     The old refusal rested on operations 6 and 7 (0xFE65EF, 0xFE661F): op 7 SETS
     the bit and op 6 clears it and waits 5 ticks, so the asserted direction
@@ -1400,9 +1427,9 @@ uint8_t wsa1_state::cpu1_pb_r()
     a select.  Read active-low, RESET-high means the motor is OFF at reset, and
     the old objection is answered rather than overruled.
 
-    ⚠ WHAT IS STILL NOT ESTABLISHED is the far end: FDMON leaves IC1 here, and
-    the sheet that carries the FDD connector (pin 16 /MOTOR ON, active low) is
-    not among the pages rendered from this book.
+    ⚠ WHAT IS STILL NOT ESTABLISHED here is only the drive's own behaviour:
+    with a motor line that works, Fdc_WaitReadyForCommandByte (0xFE5A8F, the
+    unbounded drain described below) is on a reachable path.
 
     ⚠ AND THIS MAKES A LATENT HANG REACHABLE.  With no motor the drive never
     became ready, so a read reported the firmware's own error 0x31 and stopped.
@@ -1456,17 +1483,20 @@ void wsa1_state::cpu1_pa_w(uint8_t data)
 		LOGMASKED(LOG_FDC, "%s: CPU 1 PA <- 0x%02X (bit 3 = %d)\n",
 			machine().describe_context(), data, BIT(data, 3));
 
-	// Bit 3 drives the drive motor.  mon_w takes 0 = motor on and the line is
-	// active low, so the bit goes straight through with no inversion.
+	// Bit 3 drives the drive motor, through two transistors, onto the FDD
+	// connector's MOT pin.  mon_w takes 0 = motor on and the line is active
+	// low, so the bit goes straight through with no inversion.
 	//
-	// ★ THE NET IS FDMON (IC1 pin 35, sheet II-7/II-8), and the floppy
-	// controller is NOT what drives the drive's motor: IC8's four motor-enable
-	// outputs ME0-ME3 (pins 41-44) carry no net on sheet II-9/II-10, while its
-	// DS0, INDEX, DIR, STEP, SIDE, WDATA, WGATE, TRK0, WPRT, RDATA and READY
-	// pins all do.  A motor-on line therefore has to come from somewhere else,
-	// and FDMON is the only candidate on either sheet.  The far end of the net,
-	// on the FDD connector page, is not among the pages rendered from this
-	// book.  What was established before the sheet turned up is a
+	// ★ SETTLED BY THE SCHEMATIC, END TO END.  The net is FDMON (IC1 pin 35,
+	// sheet II-7/II-8).  On sheet II-9/II-10 it drives the base divider
+	// R57/R58 of Q10, a 2SB709AR, whose collector drives Q9, a 2SD601AQ,
+	// through R59/R60; Q9's collector, with R61 10K pulling it up to +5D, is
+	// CN6 pin 3, and CN6 is the FDD connector -- 1 INDEX, 2 DS0, 3 MOT, 4 DIR,
+	// 5 STP, 6 WDT, 7 WE, 8 TRKO, 9 WPRT, 10 RDT, 11 SIDE, 12 DCH.  Two
+	// inverting stages, so FDMON LOW turns MOT on, which is the active-low
+	// sense this handler already uses.  IC8's own motor-enable outputs ME0-ME3
+	// carry no net at all, so the controller is not what spins the drive.
+	// The reasoning that got here without the sheet is kept: a
 	// writer census over both CPU 1 images (that tree's notes/prom_a_pa3_census.py,
 	// 19 checks): bit 3 is the ONLY bit of PA the firmware changes after reset,
 	// and it has four writers, not the two this driver used to know.  The two
@@ -3346,12 +3376,18 @@ void wsa1_state::wsa1_base(machine_config &config)
 	screen.set_visarea_full();
 	screen.set_palette(palette);
 
-	// Clock deliberately 0: the SED1330's own oscillator is a part this scan
-	// does not resolve, and sed1330_device only uses clock() to re-derive the
-	// frame rate from TC/R and L/F.  With 0 it leaves the screen's nominal 60 Hz
-	// alone rather than deriving a refresh rate from a crystal nobody has read.
-	// Fill it in if the part is ever identified; nothing else depends on it.
-	SED1330(config, m_lcdc, 0);
+	// ★ THE OSCILLATOR IS X2, 8 MHz, across IC7's OSC1/OSC2 (sheet II-9/II-10,
+	// manual page 20), so the frame rate is no longer left at the screen's
+	// nominal 60 Hz.  sed1330_device uses clock() for exactly one thing --
+	// `screen().configure(tcr*fx, lf, visible_area, clocks_to_attotime(tcr*lf*9))`
+	// when SYSTEM SET's L/F byte arrives (sed1330.cpp) -- so this makes the
+	// refresh rate the panel's own, derived from the firmware's TC/R and L/F:
+	// MEASURED 68.5871 Hz (notes/wsa1-probes/wsa1_lcd_frame_rate.lua), which is
+	// 8000000 / (54 * 240 * 9) exactly, so SYSTEM SET asks for 54 characters per
+	// line and 240 lines.  The rendered image does not change -- snapshots at
+	// the same boot point before and after are pixel-identical.
+	// This comment used to say the part was one the scan does not resolve.
+	SED1330(config, m_lcdc, 8'000'000);   // IC7's X2
 	m_lcdc->set_screen("screen");
 	m_lcdc->set_addrmap(0, &wsa1_state::lcdc_map);
 
