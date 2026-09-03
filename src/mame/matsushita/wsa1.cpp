@@ -618,7 +618,7 @@ private:
                            CK  <- IFINT        /OE <- SMIF OR SRD    (IC26)
         IC26  D74HC32GS    SIFINT = SMIF OR SWR,  IFINT = MIF OR WR
 
-    Three things follow, and the driver already models all three.  The latch is
+    Three things follow; the driver already models the first two.  The latch is
     ONE BYTE DEEP in each direction, so a second write before the far read
     overwrites it with nothing to say so -- which is what LOG_LINKLOST exists
     for.  There is no full/empty flag anywhere in the glue: the four handshake
