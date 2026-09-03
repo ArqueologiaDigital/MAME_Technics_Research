@@ -2,68 +2,49 @@
 // copyright-holders:Felipe Sanches
 /***************************************************************************
 
-    Technics SX-WSA1 / SX-WSA1R -- the second per-channel register file
-    at 0x00104000 on CPU 2.  PLACEHOLDER: no audio is synthesised.
+    Technics SX-WSA1 / SX-WSA1R -- IC3, the L7A1429 "MODELING LSI", the
+    per-channel register file at 0x00104000 on CPU 2 (IC2, the SUB processor).
+    PLACEHOLDER: no audio is synthesised.
 
-    THE PART NAME IS THE PROJECT OWNER'S CALL; THE DECODE IS STILL AN INFERENCE.
     ------------------------------------------------------------------------
-    This device is named L7A1429 by Felipe's decision of 2026-09-01.  He owns
-    the hardware and the service manual, and that outranks the grading below,
-    which is written from the firmware alone.  What the two sources each settle
-    is worth keeping separate, because they are different claims:
+    THE PART, THE DECODE AND THE PORT -- SETTLED BY THE SERVICE MANUAL
+    ------------------------------------------------------------------------
+    Sheets II-9..II-12 of the SX-WSA1R service manual (the P.C. diagrams; the
+    book has no text layer, so every text search of it had returned nothing):
 
-      * The PART EXISTS AND IS NAMED.  The service manual's parts list gives
-        IC3 = L7A1429, "MODELING LSI".  That is documentation, not inference.
-      * That 0x00104000 DECODES TO IC3 is what the firmware cannot show.  No
-        string in any of the four ROM images names a part number, and the
-        disassembly deliberately keeps the address-stating prefix `Dev104_` for
-        that reason.  Renaming this device does not change that, and the
-        disassembly's prefix is not to be "brought into line" with it.
+      * IC27, a D74HC139GS, decodes CPU 2's SCS0 with SA14/SA15 into four
+        selects: 1Y0 = SMIF (0x100000, the inter-processor link), 1Y1 = WFICS
+        (0x104000), 1Y2 = KSCS (0x108000, keybed), 1Y3 = SGCS (0x10C000, tone
+        generator) -- the four devices in the order the disassembly had derived
+        them from the firmware alone.
+      * IC3 takes NSGCE <- WFICS, NWR <- SWR, NRST <- +5MI, MD0..MD15 <-> SD0..SD15
+        and NAD <- SA1.  NAD off one address line IS this driver's port pair:
+        +0 selects, +2 carries data.
+      * IC3's product leaves on RQWFI and IOWFI(0..12) -- nets RQWFI,
+        DWFI0..DWFI12 -- into pins 25-40 of IC4, TC183C230002 "TONE GENELATOR
+        LSI" (the sheet's spelling), the device at 0x10C000.  IC3 hands the tone
+        generator a 13-bit word on request; the two are two stages of ONE signal
+        path, not two independent voices, and IC3's output is not audio.
+      * IC4's crystal X4 is 33.8688 MHz = 768 x 44100, so the pair's audio rate
+        is 44.1 kHz.  IC3's own memory is four private 16-bit DRAM ports M1, M2,
+        S1, S2, which the CPU never addresses.
 
-    So: the name asserts the part, on the owner's authority.  The evidence that
-    this window IS that part remains a RANKED INFERENCE, graded in
-    wsa1-roms-disasm/notes/FINDINGS-sound-subsystem-boundary.md §3 and
-    reproduced below.  If a schematic ever shows 0x00104000 decoding elsewhere,
-    it is this file that is wrong, not §3.
-
-    What §3 actually establishes, and what it does not:
-
-      ★ ESTABLISHED  0x00104000 is the only per-channel synthesis device CPU 2
-                     drives that has NO counterpart in the KN5000 sub-CPU -- a
-                     PCM sample-playback engine with closely related firmware
-                     and no physical modelling, used there as the control group.
-                     Its register file is also a different SHAPE from the tone
-                     generator's: 19 contiguous blocks against 22 sparse ones.
-      ⚠ INFERENCE   therefore it is the acoustic modelling section.  Supporting
-                     it: it is per-CHANNEL on the tone generator's own 64-channel
-                     numbering; it is reset channel by channel *inside*
-                     Dev10C_ResetAllChannels, so the two files are two halves of
-                     one voice; and all four note-on staging paths write BOTH
-                     devices for EVERY voice.
-      ⚠ ALTERNATIVE that fits every number: the two devices are the DRIVER and
-                     the RESONATOR halves of one modelling engine, rather than
-                     "the PCM part and the modelling part".  Nothing measured
-                     separates those readings -- and both put the modelling in
-                     this register file.
-      ⚠ REFUTED BY  a part number, or a KN5000 sub-CPU device below the
-                     detection threshold that turns out to be a 64-channel
-                     parameter file.
-
-    The parts list's only otherwise-unaccounted-for synthesis LSI is IC3,
-    L7A1429 "MODELING LSI".  ⚠ Reaching that part by elimination is NOT the same
-    as measuring it: the argument is "nothing else in the parts list is left",
-    which is only as strong as the parts list is complete.  The device carries
-    the name on the owner's authority (above); this paragraph records what the
-    firmware evidence for it is worth, which is less.
+    ⚠ WHAT IS STILL INFERENCE IS THE INTERNAL SIGNAL PATH.  The part, the
+    decode and the port are documented; a vocabulary and a coefficient set are
+    not a block diagram.  Series or parallel, where the excitation enters, how
+    MAIN and SUB are coupled, and whether MUTING's two coefficients are two
+    cascaded poles or one stage are all open, and no ROM can close them: the
+    device is never read (see below), so there is no readback to calibrate
+    against, and the KN5000 sub-CPU -- the control group that gave the tone
+    generator twenty-two of its register meanings -- has no counterpart device
+    to borrow from.
 
     ------------------------------------------------------------------------
     ★ IT IS A REGISTER FILE, NOT A PROGRAM LOADER
     ------------------------------------------------------------------------
-    Settled by CONTROLLED COMPARISON rather than by inspecting the traffic and
-    forming an opinion about it.  This firmware contains a KNOWN code-upload
-    path -- DSP effect microcode leaving CPU 2 through port P7, a byte at a
-    time, with strobes and a 0x1F40 timeout -- so every discriminant is scored
-    for both, and the answer is whichever column 0x104000 resembles:
+    Settled by controlled comparison against a KNOWN code-upload path in the
+    same firmware -- DSP effect microcode leaving CPU 2 through port P7, a byte
+    at a time, with strobes and a 0x1F40 timeout:
 
       discriminant                   P7 (known code upload)   0x104000
       ---------------------------------------------------------------------
@@ -86,70 +67,96 @@
     ------------------------------------------------------------------------
     THE INTERFACE
     ------------------------------------------------------------------------
-    +0 address latch (register select), +2 data.  0xFB7802 `ld XBC,0x00104000`,
-    then the fifteen-plane burst at 0xFB7807-0xFB791B, whose first six planes
-    and block-word offsets are identical to the KN5000 tone generator's note-on
-    burst.  All nine 32-bit-immediate load sites are inside 0xFB7715-0xFB7B62 or
-    inside Dev10C_ResetAllChannels.
+    +0 register select, +2 data.  Register number = block * 0x40 + channel, 64
+    channels, 19 blocks 0x0000 and 0x0040..0x0480, plus the single global 0x0800
+    that carries no channel field.  19 x 64 + 1 = 1217 registers.
 
-    REGISTER NUMBERING is `block * 0x40 + channel`, 64 channels.  ⚠ TWO
-    DIFFERENT COUNTS OF "the blocks" are quoted below and they measure
-    DIFFERENT THINGS -- do not quote one as the other:
+    Dev104_WriteAllChanRegs (prom_c 0xFB77EF) loads one whole channel:
+    `ld XBC,0x00104000` at 0xFB7802, then eighteen `add <rr>,imm16` block
+    offsets 0xFB77FE..0xFB794B, register (chan + k*0x40) taking staging word 2*k
+    of a 38-byte struct for all nineteen, block 0 written last.
 
-      * EIGHT distinct block numbers appear in the SETTER NAMES the disassembly
-        has converted so far -- 0x00C0, 0x0100, 0x0140, 0x0180, 0x01C0, 0x0200,
-        0x0240, 0x0280 -- spaced exactly 0x40 apart.  That is a property of the
-        named accessors, measured by dev104_payload_class.py.
-      * NINETEEN CONTIGUOUS BLOCKS, 0x000..0x480, are what the REGISTER FILE
-        itself spans, from the unrolled writer.
-        (FINDINGS-sound-subsystem-boundary.md §3.)
+    The whole bus surface is EIGHT driver routines plus one direct write inside
+    Dev10C_ResetAllChannels: nine 0x00104000 literals in the image, all stores.
+    (wsa1/notes/dev104_apply_regsyms.py --checks, section 3.)
 
-    Dev104_WriteAllChanRegs (prom_c 0xFB77EF) writes nineteen registers of one
-    channel in one run:
+    ⚠ NOTHING READS THIS DEVICE, so data_r() logs unconditionally rather than
+    under a VERBOSE mask -- a read is new information.  A tap on CPU 2's program
+    space over 45 emulated seconds of boot
+    (tools/rigs/wsa1_dev104_bus_trace.lua) saw 2,642 writes, ZERO reads and
+    1,217 distinct registers over 0x0000..0x0800, which is the count above.
 
-        register (chan + k*0x40) = staging word 2*k     for k = 1 .. 0x12
-        register (chan + 0)      = staging word 0       written LAST
+    NO WRITE-RECOVERY DELAY.  Every 0x0010C000 data write in this firmware is
+    followed by five nops of bus padding; that run occurs zero times in the
+    eight 0x00104000 routines.
 
-    and `field == 2 * (base / 0x40)` holds for all nineteen (0 failures,
-    notes/prom_c_tg_regmap.py --dev104).
+    THE ONLY ATOMIC UNIT IS THE (SELECT, DATA) PAIR.  Block 0 is written LAST in
+    1 routine, FIRST in 2, ALONE in 1 and is ABSENT from 4 -- and those four are
+    exactly the four with located callers, so every parameter change that
+    actually happens lands with no block-0 write after it.  A single register
+    write takes effect on its own.
+    (FINDINGS-l7a1429-write-sequencing.md secs. 2 and 7.)
 
-    ⚠ BLOCK 0 LAST IS THE SHAPE OF A COMMIT REGISTER, AND IT IS A PROPERTY OF
-    THE ROUTINE, NOT OF THE REGISTER.  Two of the small accessors in the same
-    bank -- Dev104_SetChanRegs_01C0_0200_0240 (0xFB796E, first write 0xFB7983)
-    and Dev104_SetChanRegs_0140_to_0240 (0xFB79D0, first write 0xFB79E5) --
-    write block 0 FIRST, before the registers they are named for.  Execution
-    order for all three was measured with
-    `notes/prom_c_tg_chanmap.py <addr> <len> --dev 0x00104000 --pairs`.  Two
-    routine headers used to claim the opposite and were corrected.
-    (FINDINGS-prom_c-tone-generator.md §4.)
-
-    ⚠ NOTHING IN prom_c READS THIS DEVICE.  Every literal-address site is a
-    store, so a read means either a code path the analysis has not reached or a
-    decode error -- which is why data_r() logs unconditionally rather than
-    under a VERBOSE mask.
-
-    The power-on image, from Dev10C_ResetAllChannels (0xFB80E1): register 0x0800
-    := the word at ROM 0xFE1313, then the per-channel loop that calls this
-    device's writer and the tone generator's once each per channel.  0x0800 is
-    ABOVE the 19-block per-channel span and is recorded as read, not explained.
-
-    ★ AND THAT IS EXACTLY WHAT THE BUS SHOWS.  A tap on CPU 2's program space at
-    0x104000-0x104003 over 45 emulated seconds of boot
-    (tools/rigs/wsa1_dev104_bus_trace.lua) sees 2,642 writes, ZERO reads, and a
-    file of 1,217 distinct registers spanning 0x0000..0x0800 -- which is
-    19 blocks x 64 channels = 1,216, plus 0x0800 alone.
-    ⚠ THIS CORRECTS A MISREADING THAT WAS IN THE FIRST DRAFT OF THIS HEADER:
-    FINDINGS-sound-subsystem-boundary.md §4.2 step 3's `for i = 0..0x3F:
-    0x0840+i := 0xFF00, 0x0800+i := 0xFF80` sweep does NOT land here -- no
-    register in 0x0801..0x087F is ever written in the window, so that step is
-    the TONE GENERATOR's.  Only the single 0x0800 write of step 2 is this
-    device's.
+    POWER-ON, from Dev10C_ResetAllChannels (0xFB80E1): register 0x0800 := the
+    word at ROM 0xFE1313 = 0x1100; then all 64 channels loaded from the 19-word
+    ROM image at 0xFE133B; then block 0 rewritten per channel with bit 2
+    cleared.  1 + 64*19 + 64 = 1281 register writes.
 
     ------------------------------------------------------------------------
-    PROVENANCE: every paragraph above moved here VERBATIM in substance from the
-    inline block comments in wsa1.cpp, where this device lived as synth2_addr_w
-    / synth2_data_w / synth2_data_r until it was promoted.  The firmware
-    citations are theirs.
+    THE REGISTERS
+    ------------------------------------------------------------------------
+    Twelve of the nineteen blocks are named by the tone editor's own MODELING
+    screens; the block names below are the disassembly's DEV104_* symbols
+    (prom_c/devices/dev10c_dev104_drivers.s) so a trace and a listing read
+    alike.  The others are logged by block NUMBER and are not given a name.
+
+      0x0000  --                    mode/enable word; bits 6..4 gate 0x0300  UNIDENTIFIED
+      0x0040  MAIN TUNE             MAIN RESONATOR KEY SHIFT + TUNE          STRONG
+      0x0080  SUB TUNE              SUB RESONATOR KEY SHIFT + TUNE           STRONG
+      0x00C0  POSITION              resonator POSITION, a log-domain period  STRONG
+      0x0100  --                    POSITION's table-pair companion          value PROVEN
+      0x0140  MAIN FITTING DECAY    MAIN FITTING, decay form                 STRONG
+      0x0180  SUB FITTING DECAY     SUB FITTING, decay form                  STRONG
+      0x01C0  MAIN FITTING RISE     MAIN FITTING, rise form                  STRONG
+      0x0200  SUB FITTING RISE      SUB FITTING, rise form                   STRONG
+      0x0240  --                    section C's rise-scaled coefficient      structure PROVEN
+      0x0280  SUB GAIN              0..100 percent with an explicit OFF      STRONG
+      0x02C0  --                    the literal 0xFF00 on every path         UNIDENTIFIED
+      0x0300  --                    an 8-bit gain, 0..127, in both halves    WEAK
+      0x0340  MAIN MUTING Q13       Q13 companion of 0x0400                  STRONG
+      0x0380  SUB MUTING Q13        Q13 companion of 0x0440                  STRONG
+      0x03C0  --                    section C's Q13 companion                structure PROVEN
+      0x0400  MAIN MUTING Q16       one-pole lowpass cutoff, bilinear        fit PROVEN
+      0x0440  SUB MUTING Q16        one-pole lowpass cutoff, bilinear        fit PROVEN
+      0x0480  --                    section C's Q16 cutoff                   fit PROVEN
+      0x0800  --                    global, no channel; 0x1100 at power-on   UNIDENTIFIED
+
+    ⚠ TWO SINGLE POINTS OF FAILURE travel with every MAIN/SUB label above.  The
+    MAIN/SUB direction rests solely on SUB GAIN being the sub side's level; if
+    it is the main side's, every MAIN and SUB label swaps.  The FITTING/MUTING
+    assignment rests solely on one drawn caption.  The pairing, the families and
+    the arithmetic are direction-blind either way.
+
+    Units, for the decoded view LOG_DECODE prints (wsa1/notes/
+    FINDINGS-l7a1429-curve-tables.md sec. 1; HLE-GUIDE-l7a1429.md secs. 2.2, 5):
+
+      fold(x)   = (x & 0x8000) ? 0x8000 - (x & 0x7FFF) : x + 0x8000, the
+                  firmware's own sign-magnitude -> offset-binary step at 0xFC5361
+      0x0400/0x0440/0x0480:  K = fold(v)/(65536 - fold(v)) is tan(pi*fc/fs), the
+                  bilinear prewarp; the ROM curve fits round(65536*K/(1+K)) to
+                  1 count, with the index a MIDI note minus 36 and an implied
+                  fs of 44,091 Hz -- 44,100 to 0.33 cent, agreeing with IC4's
+                  crystal by a wholly independent route
+      0x0340/0x0380/0x03C0:  the SAME cutoff in Q13: (1 - fold(v)/8192)*K = 1/128
+      0x0040/0x0080:  1/256 semitone, so v/256 is a MIDI note number
+      0x00C0:  log-domain PERIOD, 3072 counts per octave, pitch entering
+                  negated.  ⚠ THE ABSOLUTE SCALE IS UNIDENTIFIED -- only the
+                  ratio 2^(v/3072) is known, so no time is printed
+      0x0280, 0x0140/0x0180, 0x01C0/0x0200/0x0240:  Q15, v/32768
+
+    ⚠ THE DECODE IS A VIEW OF THE NUMBERS, NOT A MODEL OF THE CHIP.  What is
+    proven is that these words ARE bilinear one-pole coefficients and log-domain
+    pitches; that the die runs a one-pole with them is STRONG, not measured.
 
 ***************************************************************************/
 
@@ -164,7 +171,7 @@ class l7a1429_device : public device_t
 public:
 	l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
-	// 0x104000 +0: the address latch (register select).
+	// 0x104000 +0: the register select (IC3's NAD low).
 	void addr_w(uint16_t data);
 
 	// 0x104002 +2: the data register.  Write-only in every code path reached so
@@ -177,6 +184,11 @@ public:
 	// the real part does with a select above its file is not established.
 	uint16_t reg(unsigned n) const { return (n < REG_COUNT) ? m_regs[n] : 0; }
 
+	// The tone editor's name for a block, or nullptr where the block is
+	// unidentified.  Twelve of the nineteen are named; the rest deliberately
+	// are not, because a guessed name in a trace is worse than a number.
+	static const char *block_name(unsigned block);
+
 protected:
 	virtual void device_start() override ATTR_COLD;
 
@@ -185,9 +197,21 @@ private:
 	// 0x1000 is the tone generator's ceiling, carried over unchanged from the
 	// inline code so the bounds check behaves identically; this device's own
 	// per-channel span is only 0x000..0x4BF (19 blocks x 0x40 + 0x3F), plus the
-	// single register 0x0800 that Dev10C_ResetAllChannels writes on top of it.
+	// single global register 0x0800.
 	static constexpr unsigned REG_COUNT = 0x1000;
-	static constexpr unsigned VOICES    = 64;      // `ld D,0x40`, prom_c 0xFB8116
+
+	// Channel count, from THIS device's own writers: the two loops of
+	// Dev10C_ResetAllChannels that call a 0x104000 writer with HL as the channel
+	// are closed by `cp HL,0x0040` at prom_c 0xFB81B9 and 0xFB8281.  (The
+	// `ldb D,0x40` loop at 0xFB8116 belongs to the tone generator -- 0xFB8102
+	// reloads XIX with 0x0010C000 first.)
+	static constexpr unsigned VOICES = 64;
+
+	// IC4's crystal X4, 33.8688 MHz = 768 x 44100.  Used only by the decoded
+	// view: it is the rate at which the coefficient tables fit.
+	static constexpr double SAMPLE_RATE = 44100.0;
+
+	void log_decoded(unsigned block, uint16_t data) const;
 
 	uint16_t m_latch = 0;
 	uint16_t m_regs[REG_COUNT]{};
