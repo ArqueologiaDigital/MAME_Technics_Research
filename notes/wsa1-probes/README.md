@@ -19,7 +19,7 @@ with these four links (CRC32s verified to match the driver):
 | `qsigcwsa1ax.ic12` | `wsa1_os_v2.ic12`| 5f34af46 |
 | `qsigcwsa1bx.ic13` | `wsa1_os_v2.ic13`| f3f84441 |
 | `qsigcwsa1cx.ic28` | `wsa1_os_v2.ic28`| 855c8ac4 |
-| `qsigcwsa1dx.bin`  | `wsa1_os_v2.ic21`| 735ae465 |
+| `qsigcwsa1dx.ic21` | `wsa1_os_v2.ic21`| 735ae465 |
 
 ⚠ MAME's Lua GC silently collects a tap or a notifier that is not held in a
 global.  Every script here keeps its handles in `_G`.
@@ -2116,3 +2116,33 @@ and run `wsa1r_panel_ab.sh per-element`.
 | script | question it answers |
 |---|---|
 | `wsa1r_shape_tolerance.py` | is the merge tolerance in the right place, and may MAME draw the pressed wash itself? |
+
+## The schematic port-and-decoder pass, 2026-09-03
+
+`wsa1_sch_cpu_ports.sh` re-renders sixteen crops from pages 19-23 of the
+service manual and prints, per crop, the pin/net table the driver quotes.  It
+is the artefact behind every "sheet II-x/II-y" citation added to
+`src/mame/matsushita/wsa1.cpp` on that date: the inter-processor handshake nets
+(MSTAT0/MSTAT1/SSTAT0/SSTAT1), CPU 1's floppy and hard-disk pins
+(FS1/FS2/FDMON, HDINT, FDINT, FDRST/FDTC, FDDRQ, HDIORDY, SIFINT), CPU 2's DSP
+host bus (DSPD0-7, DSPCD, DSP0CS/DSP1CS/DSP2CS, DSPWR/DSPRD, DSPRDY and the
+four reset nets), both chip-select decoders (IC17/IC18 and IC27), IC8's 24 MHz
+X5, IC4's 33.8688 MHz X4 and its two chip selects, IC21 and IC22's designators,
+and which wave mask ROM sits on which of the tone generator's two address
+buses.
+
+```
+sh notes/wsa1-probes/wsa1_sch_cpu_ports.sh [outdir]
+```
+
+⚠ THE ONE TRAP IN READING THESE SHEETS is an off-by-one row.  IC1's left pin
+column starts at pin 1 = P65, whose line goes to IC39 and carries no net label,
+so the first LABEL in the column (MSTAT0) belongs to pin 2.  Reading it one row
+high makes P73 "LCDOFF" and contradicts the firmware, which uses P7 bit 3 as
+the link's busy input.  Three firmware facts pin the alignment: P7CR = 0x33
+(bits 0, 1, 4, 5 out), the power-fail NMI setting bits 4 and 5, and the busy
+test on bit 3.  Every table in the script's output uses that alignment.
+
+| script | question it answers |
+|---|---|
+| `wsa1_sch_cpu_ports.sh` | which net is on which pin of IC1 and IC2, and what does each chip-select output enable? |

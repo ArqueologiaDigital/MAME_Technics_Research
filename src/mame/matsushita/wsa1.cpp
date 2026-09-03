@@ -3444,10 +3444,11 @@ void wsa1_state::wsa1_base(machine_config &config)
                                 II-11/II-12 prints IC21 twice beside this part,
                                 which is also the name the redistributed set
                                 gives the image.
-    (derived)    AM29F400T      4 Mbit flash memory.  Same situation: the part
-                                is printed on the MAIN (B) sheet and in the
-                                parts list, the designator is not.  The parts
-                                list row order puts it at IC22.
+    IC22         AM29F400T      "4MBIT FLASH MEMORY", chip select SFLSHCS at
+                                0xE80000 on CPU 2, drawn SA1..SA18 with
+                                SD0..SD15, so x16 like the EPROMs.  Sheet
+                                II-11/II-12 prints the designator above the
+                                part label; the parts list does not carry it.
     IC14, IC15   M5256CFP70LL,  256 kbit static RAM and 4 Mbit dynamic RAM.
                  M5M44170AJ7S   The self-diagnostic calls the pair "RAM (IC14,
                                 15)"; only the IC15 designator is legible on
@@ -3611,12 +3612,13 @@ ROM_START(wsa1r)
 	ROM_REGION(0x200000, "waveform_ic49", 0)
 	ROM_LOAD("qsigh3c16ea1.ic49", 0x000000, 0x200000, NO_DUMP)
 
-	// A 4 Mbit flash device that the block diagram puts on the same address
-	// group as the program EPROMs.  Not held here, and the manual does not say
-	// what it holds.  Named after the part number because its designator is
-	// not legible either.
+	// IC22, a 4 Mbit flash device on CPU 2's SFLSHCS at 0xE80000, drawn with
+	// SA1..SA18 and SD0..SD15 (sheet II-11/II-12).  Not held here, and the
+	// manual does not say what it holds; the firmware's erase and program
+	// routines are described at the "Not mapped, deliberately" note in
+	// cpu2_map().
 	ROM_REGION(0x080000, "flash", 0)
-	ROM_LOAD("am29f400t.bin", 0x000000, 0x080000, NO_DUMP)
+	ROM_LOAD("am29f400t.ic22", 0x000000, 0x080000, NO_DUMP)
 ROM_END
 
 // The keyboard runs the same four images.  The redistributed set is documented as
