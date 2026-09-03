@@ -914,11 +914,58 @@ void wsa1_state::cpu2_pa_w(uint8_t data)
 }
 
 
-/*  CPU 2's PORT 9 -- THE DSP READY LINE, AND WHY IT IDLES HIGH
+/*  CPU 2's PORTS, AND THE HOST BUS OF THE THREE DSPs
 
-    ★ READ OFF THE SCHEMATIC, 2026-08-27, and it settles gap G.  Service manual
-    page 20 (MAIN (A)/MB2 P.C. Diagram, sheet II-9/10), IC2 TMP95C061AF
-    "MICROCOMPUTER (SUB)", left pin column:
+    ★ THE WHOLE PORT SIDE OF IC2 IS NAMED ON THE SCHEMATIC (sheet II-9/II-10,
+    manual page 20, plus the three DSPs on sheet II-15/II-16, page 23).  Every
+    net below was read off those two sheets on 2026-09-03; re-render them with
+    notes/wsa1-probes/wsa1_sch_cpu_ports.sh.
+
+        IC2 pin  port  net        IC2 pin  port  net
+        -------  ----  ---------  -------  ----  --------------------------
+         2- 9    P70-7 DSPD0-7      37     PB1   DSP2RST2
+        32       PA0   SSTAT0       38     PB2   DSPRST
+        33       PA1   SSTAT1       39     PB3   DSP0RST2
+        34       PA2   MSTAT0       40     PB4   DSP1RST2
+        35       PA3   MSTAT1       41     PB5   DSPWR
+        36       INT4  KBEVNT       42     PB6   DSPRD
+        11-13    TXD0/RXD0/P82      43     INT0  IFINT
+                 MIDI2OUT/IN/SNS    23     P93   DSPRDY
+        91       P53   DSPCD        64     P27   DSP2CS   (R189 1K pull-up)
+        92       P54   DSP0CS       93     P55   DSP1CS   (R167/R179 1K)
+
+    ★ THAT IS THE P7 EFFECT-MICROCODE TRANSPORT, PIN BY PIN.  prom_c drives a
+    byte to the DSPs as `ld (P7),byte` with P5 bit 3 low for a command byte and
+    high for data, one of P5.4 / P5.5 / P2.7 pulsed as the strobe for
+    destination 0 / 1 / 2, PB bit 5 pulsed around the byte, and P9 bit 3 polled
+    twice per byte with a 0x1F40 bound (the sequence is quoted in
+    wsa1-roms-disasm/notes/FINDINGS-prom_c-p7-group-and-naming.md sec. 0).
+    Each D6383GF-3BA takes /CS from its own DSPnCS, C/D from the shared DSPCD,
+    /WRITE from DSPWR, /READ from DSPRD, D0-D7 from DSPD0-DSPD7, RDY out on the
+    shared DSPRDY, /RST from the shared DSPRST and /RST2 from its own DSPnRST2:
+
+        destination 0  ->  IC6   DSP0CS = P5.4, DSP0RST2 = PB3
+        destination 1  ->  IC5   DSP1CS = P5.5, DSP1RST2 = PB4
+        destination 2  ->  IC30  DSP2CS = P2.7, DSP2RST2 = PB1
+
+    so the firmware's three destinations are the parts list's three DSPs and the
+    numbering matches the net names.  (⚠ P5.4 against P5.5: the two nets cross
+    other lines between the label row and IC2's pins 91-93 on this scan.  What
+    is unambiguous is that the pair lands on P54/P55; DSP0CS on the lower bit is
+    the reading the firmware's own destination index agrees with.)  None of the
+    three DSPs is emulated - the part has no MAME device - so a byte written to
+    P7 reaches the port latch and nothing else, which is why DSPRDY's idle level
+    below is what makes the upload finish at all.
+
+    ⚠ INT4 IS THE KEYBED'S EVENT LINE, NOT MODELLED.  KBEVNT leaves IC4, the
+    tone generator LSI, and arrives on IC2 pin 36.  prom_c's INT4 vector is a
+    bare RETI at 0xF995C2, so the interrupt exists to wake the processor and
+    the event is then read through the polled status port at 0x108002, which is
+    what this driver models.  Raising it would change when CPU 2 runs and
+    nothing else; the sheet does not give the pulse shape, so it is not raised.
+
+    Service manual page 20 (MAIN (A)/MB2 P.C. Diagram, sheet II-9/10), IC2
+    TMP95C061AF "MICROCOMPUTER (SUB)", left pin column, read 2026-08-27:
 
         pin 18  VREF   <- +5D through R38 220
         pin 19  VCC    <- +5D
@@ -929,10 +976,13 @@ void wsa1_state::cpu2_pa_w(uint8_t data)
 
     and pins 2-9 of the same chip are P70-P77 carrying DSPD0-DSPD7.  Re-crop it
     with notes/wsa1-probes/wsa1_sch_dsprdy.sh, which prints the two commands and
-    the coordinates.
+    the coordinates.  DSPRDY is the RDY output of all three DSPs, wired together
+    (sheet II-15/II-16), which is why it is a pulled-up net and not a driven
+    one.
 
-    So P9 bit 3 is a PULLED-UP net whose only other driver is the (undumped,
-    unemulated) uPD6383GF DSP, and P9 bit 0 is an analog input STRAPPED to +5D.
+    So P9 bit 3 is a PULLED-UP net whose only other drivers are the three
+    (undumped, unemulated) uPD6383GF DSPs, and P9 bit 0 is an analog input
+    STRAPPED to +5D.
     Both idle HIGH on the board.  MAME's unbound port read returns 0, which is
     not "no information" -- it is the WRONG LEVEL, and the firmware notices:
 
