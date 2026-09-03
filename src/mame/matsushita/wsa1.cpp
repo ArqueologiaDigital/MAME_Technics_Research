@@ -441,8 +441,9 @@ private:
 	// MSAR0 = 0x10 / MAMR0 = 0x07 (0xFFF038, 0xFFF03B) put a 256 KiB window at
 	// 0x100000-0x13FFFF, and the firmware touches exactly four 0x4000-aligned
 	// points inside it -- 0x100000, 0x104000, 0x108000, 0x10C000 -- which reads
-	// as A14/A15 driving a two-to-four decoder.  That is a READING of the
-	// address pattern; no decoder is legible in the manual scan available here.
+	// as A14/A15 driving a two-to-four decoder.  ★ IT IS ONE: IC27, a
+	// D74HC139GS, with 1E = SCS0, 1DA = SA14 and 1DB = SA15, and all four
+	// outputs named -- SMIF, WFICS, KSCS, SGCS.  The table is in cpu2_map().
 	//
 	// Each of the four is an address-latch plus data-register pair.  NOTHING
 	// BELOW SYNTHESISES ANYTHING: the register files are storage, so that the
@@ -504,8 +505,9 @@ private:
 	required_device<eeprom_serial_93c46_16bit_device> m_eeprom;
 	required_device<wsa1_cpanel_device> m_cpanel;
 	// 0x104000 on CPU 2 -- the second 64-slot per-channel register file, a
-	// placeholder device that synthesises no audio.  Named for the service
-	// manual's IC3; that this window IS IC3 is an inference, and
+	// placeholder device that synthesises no audio.  The window decodes to IC3,
+	// the L7A1429, on the schematic (IC27 1Y1 = WFICS -> IC3 NSGCE); what is
+	// still inference is the part's INTERNAL signal path, and
 	// acoustic_modeling.h grades every claim and carries the firmware citations.
 	required_device<l7a1429_device> m_modeling;
 	required_device<upd765a_device> m_fdc;
@@ -2179,6 +2181,13 @@ uint16_t wsa1_state::tg_status_r()
 
 // ---- 0x108000 / 0x108002: THE 61-KEY KEYBED SCANNER ----------------------
 //
+// ★ IT IS A PORT OF THE TONE GENERATOR, NOT A PART OF ITS OWN.  IC4, the
+// TC183C230002 at 0x10C000, takes a second chip select NKSCE <- KSCS, and the
+// key-scan matrix (KS0-KS3, KF0-KF3, KB0-KB4) and its touch-sense inputs LEL
+// and LER are on the same die (sheet II-13/II-14).  The event line KBEVNT
+// leaves IC4 for CPU 2's INT4.  The handlers stay separate from tg_* because
+// the register pair is a different one, with a different access order.
+//
 // The port is fully decoded, and the decode is not a resemblance argument: the
 // two bytes the firmware pulls out of it are pushed STRAIGHT into
 // ToneGen_VelocityFromTouch (0xF995DF), whose argument meanings were converted
@@ -3246,12 +3255,15 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_cpanel->sclk().set([this] (int state) { m_panel_sclk = state; });
 	m_cpanel->rxd().set([this] (uint8_t data) { m_cpu1->sc1_rxd(data); });
 
-	// --- the second per-channel register file, 0x104000 on CPU 2 ------------
+	// --- IC3, the L7A1429 modelling LSI, 0x104000 on CPU 2 ------------------
 	//
 	// A PLACEHOLDER: it holds the register file the firmware writes, and makes
-	// no sound.  It has no lines to wire -- CPU 2 reaches it through the address
-	// map alone, and nothing in prom_c reads it back.  What the part is, what it
-	// is not, and the grade of each claim are in acoustic_modeling.h.
+	// no sound.  It has no lines to wire HERE -- CPU 2 reaches it through the
+	// address map alone, and nothing in prom_c reads it back -- but it is not a
+	// leaf on the board: its product leaves on RQWFI/DWFI0-DWFI12 into the tone
+	// generator, so the two are two stages of one signal path.  What the part
+	// is, what it is not, and the grade of each claim are in
+	// acoustic_modeling.h.
 	L7A1429(config, m_modeling);
 
 	// --- the floppy disk controller ----------------------------------------
