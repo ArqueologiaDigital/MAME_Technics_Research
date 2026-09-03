@@ -142,10 +142,11 @@ ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.cpp"           "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.cpp"
 ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.h"             "$BUILD_TREE/src/mame/matsushita/wsa1_cpanel.h"
 # The second per-channel register file at 0x104000 on CPU 2, as a PLACEHOLDER device
-# that holds the registers and makes no sound.  Named for IC3 (L7A1429 "MODELING LSI"
-# in the service manual parts list) by Felipe's call; that 0x104000 decodes to IC3 is
-# still an inference, graded in acoustic_modeling.h.  Must also be listed in
-# SOURCES_LIST below, or the driver links against a device type nothing compiles.
+# that holds the registers and makes no sound.  It is IC3, the L7A1429 "MODELING LSI":
+# the service manual's CPU 2 decoder sheet gives IC27 1Y1 = WFICS = 0x104000 driving
+# IC3's NSGCE, so the decode is documented, not inferred.  See acoustic_modeling.h.
+# Must also be listed in SOURCES_LIST below, or the driver links against a device type
+# nothing compiles.
 ln -sf "$HERE/src/mame/matsushita/acoustic_modeling.cpp"         "$BUILD_TREE/src/mame/matsushita/acoustic_modeling.cpp"
 ln -sf "$HERE/src/mame/matsushita/acoustic_modeling.h"           "$BUILD_TREE/src/mame/matsushita/acoustic_modeling.h"
 mkdir -p "$BUILD_TREE/src/devices/video"
