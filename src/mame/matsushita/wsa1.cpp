@@ -1282,7 +1282,28 @@ uint8_t wsa1_state::cpu1_pb_r()
     0x38 pointing at the deliberate hang (0xF82D09) harmless.  The line exists
     only to feed the DMA engine.
 
-    ⚠ ONE INFERENCE, AND IT IS THE ONLY ONE HERE: PB BIT 3 IS TC.
+    ★ THE WHOLE PORT SIDE OF THIS DEVICE IS NAMED ON THE SCHEMATIC, and every
+    line the firmware argument below reached is on it.  IC1's bottom pin row
+    (sheet II-7/II-8, manual page 19; re-render with
+    notes/wsa1-probes/wsa1_sch_cpu_ports.sh):
+
+        pin 32  PA0    grounded            pin 38  PB2    FDRST
+        pin 33  PA1    FS1   (R151 0R)     pin 39  PB3    FDTC
+        pin 34  PA2    FS2   (R152 0R)     pin 40  INT6   tied to +5D
+        pin 35  PA3    FDMON (R153 0R)     pin 41  INT7   FDDRQ
+        pin 36  INT4   HDINT               pin 42  PB6    HDIORDY
+        pin 37  INT5   FDINT               pin 43  INT0   SIFINT
+
+    So intrq -> INT5 and drq -> INT7, which is how they are wired in the machine
+    configuration; PB bit 3 is FDTC; the three PA output bits PACR = 0x0E makes
+    are the three FDD control lines; and INT4/PB6 are the hard disk's, not this
+    device's.  The INT4 trap in the vector table is therefore the hard disk's
+    interrupt going nowhere.
+
+    ⚠ THE ONE INFERENCE THAT REMAINS: PB BIT 3 IS TC.  The net is FDTC, so the
+    pin's ROLE is now read rather than deduced; what a schematic net name does
+    not give is the controller pin it lands on, and the argument for TC is
+    unchanged.
     PortB3_Pulse (0xFE594C) drives PB bit 3 high for five NOPs and low again,
     and the disassembly says in as many words that WHAT IT IS WIRED TO IS NOT
     ESTABLISHED.  It is wired to the controller's terminal-count input below,
@@ -1298,12 +1319,13 @@ uint8_t wsa1_state::cpu1_pb_r()
         `ldio PB,0xF3` at 0xF826DF, six bytes before the `ldio PBCR,0x0C` at
         0xF826E5 that makes bits 2 and 3 outputs, so PB bit 3 IDLES LOW and the
         pulse is a genuine low-high-low, which is TC's active-high shape.
-    If a legible schematic ever contradicts this, one line in cpu1_pb_w()
-    changes.  Nothing here fabricates a status byte either way.
+    Nothing here fabricates a status byte either way.
 
-    CPU 1's PA BIT 3 IS THE DRIVE MOTOR, active low -- wired in cpu1_pa_w(),
-    and marked there as the inference it is.  This paragraph used to say the
-    opposite, so the reasoning that changed is worth keeping.
+    CPU 1's PA BIT 3 IS THE DRIVE MOTOR, active low -- wired in cpu1_pa_w().
+    ★ The schematic calls the net FDMON, next to FS1 and FS2 on the two PA bits
+    below it, which is a floppy drive's MOTOR ON beside its two drive selects.
+    This paragraph used to say the opposite, so the reasoning that changed is
+    worth keeping.
 
     The old refusal rested on operations 6 and 7 (0xFE65EF, 0xFE661F): op 7 SETS
     the bit and op 6 clears it and waits 5 ticks, so the asserted direction
@@ -1322,10 +1344,9 @@ uint8_t wsa1_state::cpu1_pb_r()
     a select.  Read active-low, RESET-high means the motor is OFF at reset, and
     the old objection is answered rather than overruled.
 
-    ⚠ STILL NOT ESTABLISHED: what the pin is physically wired to.  The
-    disassembly refuses to claim it and renamed its own routine so the label
-    would not bake the reading in.  The FDD connector sheet (pin 16 /MOTOR ON,
-    active low) would settle it and is not in these trees.
+    ⚠ WHAT IS STILL NOT ESTABLISHED is the far end: FDMON leaves IC1 here, and
+    the sheet that carries the FDD connector (pin 16 /MOTOR ON, active low) is
+    not among the pages rendered from this book.
 
     ⚠ AND THIS MAKES A LATENT HANG REACHABLE.  With no motor the drive never
     became ready, so a read reported the firmware's own error 0x31 and stopped.
@@ -1352,8 +1373,10 @@ uint8_t wsa1_state::cpu1_pb_r()
 
 ***************************************************************************/
 
-// PB bit 3 -> TC.  See the ⚠ INFERENCE paragraph above; this is the one line
-// that changes if it is ever contradicted.
+// PB bit 3 -> TC.  The net is FDTC (IC1 pin 39); see the ⚠ paragraph above for
+// what a net name does and does not settle.  PB bit 2 is FDRST and is NOT wired
+// to the controller's reset: the sheet names the net but not its polarity, and
+// getting that backwards would hold a working device in reset.
 void wsa1_state::cpu1_pb_w(uint8_t data)
 {
 	if (BIT(data ^ m_cpu1_pb, 3))
@@ -1364,11 +1387,13 @@ void wsa1_state::cpu1_pb_w(uint8_t data)
 }
 
 // PACR = 0x0E (0xF826DC): PA bits 1, 2 and 3 are outputs, and the latch RESET
-// writes is 0xF9 (0xF826D6), so bit 3 starts HIGH.  Bit 3 is the floppy module's only output outside
-// its two device windows (operations 6 and 7 are its only writers, prom_a
-// 0xFE65EF / 0xFE661F) and WHAT IT DRIVES IS NOT ESTABLISHED, so this handler
-// records the transition and does nothing else.  Bits 1 and 2 are outputs whose
-// writers have not been located at all; they are logged with it.
+// writes is 0xF9 (0xF826D6), so bit 3 starts HIGH.  The schematic names all
+// three: PA1 = FS1, PA2 = FS2, PA3 = FDMON, each through a 0 ohm link, and PA0
+// is grounded.  Bit 3 is the floppy module's only output outside its two device
+// windows (operations 6 and 7 are its only writers, prom_a 0xFE65EF /
+// 0xFE661F).  Bits 1 and 2 are the two drive selects; no writer of them has
+// been located in either image, and with one drive on the bus there is nothing
+// for them to select, so they are logged and not acted on.
 void wsa1_state::cpu1_pa_w(uint8_t data)
 {
 	if ((data ^ m_cpu1_pa) & 0x0e)
@@ -1378,10 +1403,11 @@ void wsa1_state::cpu1_pa_w(uint8_t data)
 	// Bit 3 drives the drive motor.  mon_w takes 0 = motor on and the line is
 	// active low, so the bit goes straight through with no inversion.
 	//
-	// ⚠ AN INFERENCE, MARKED AS ONE.  What the pin is physically wired to is
-	// not established -- the disassembly refuses to claim it, and renamed its
-	// own routine from Disk_PortA3_AssertAndSettle to Disk_PortA3_ClearAndSettle
-	// so the label would not bake the reading in.  What IS established is a
+	// ★ THE NET IS FDMON (IC1 pin 35, sheet II-7/II-8), which sits between FS1
+	// and FS2 on PA1/PA2 -- a floppy drive's MOTOR ON beside its drive selects.
+	// The far end of the net, on the FDD connector sheet, is not in the pages
+	// rendered from this book, so the pin's DESTINATION is still read from its
+	// name.  What was established before the sheet turned up is a
 	// writer census over both CPU 1 images (that tree's notes/prom_a_pa3_census.py,
 	// 19 checks): bit 3 is the ONLY bit of PA the firmware changes after reset,
 	// and it has four writers, not the two this driver used to know.  The two
@@ -1395,9 +1421,6 @@ void wsa1_state::cpu1_pa_w(uint8_t data)
 	// objection this driver used to carry: RESET leaving the pin HIGH is the
 	// wrong way round for an active-HIGH enable, and exactly right for an
 	// active-LOW one -- high at reset means the motor is off.
-	//
-	// If the FDD connector sheet ever turns up (pin 16 /MOTOR ON, active low),
-	// it settles this line either way.
 	if (BIT(data ^ m_cpu1_pa, 3))
 		if (floppy_image_device *floppy = m_floppy->get_device())
 			floppy->mon_w(BIT(data, 3));
@@ -3097,8 +3120,14 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// the firmware decodes ST3's RY bit in Fdc_Op11_SenseDriveStatus (0xFE6668)
 	// and builds a US1/US0 drive byte in Fdc_IssueCommand (0xFE5C81), so both
 	// lines are things this firmware expects to exist.  Note the unit field of a
-	// request selects the BACK END rather than a second drive -- unit 1 is the
-	// device at 0x7E0008, not a floppy -- so there is exactly one drive here.
+	// request selects the BACK END rather than a second drive -- unit 1 is an
+	// ATA hard disk at 0x7E0008, not a floppy -- so there is exactly one drive
+	// here.
+	//
+	// The two interrupt lines are the schematic's: IC1 pin 37 INT5 = FDINT and
+	// pin 41 INT7 = FDDRQ (sheet II-7/II-8).  Both were derived from the
+	// firmware first - see the block comment above fdc_ctrl_w() - and the sheet
+	// agrees with both.
 	UPD765A(config, m_fdc, 8'000'000, true, true);
 	m_fdc->intrq_wr_callback().set_inputline(m_cpu1, TLCS900_INT5);
 	m_fdc->drq_wr_callback().set_inputline(m_cpu1, TLCS900_INT7);
