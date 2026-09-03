@@ -150,27 +150,31 @@
     part, and the parts list has a 24 MHz ceramic oscillator as well as a 28 MHz
     one.  The tempo constant is what excludes that reading.
 
-    The memory map below is only what the code establishes: the chip-select
-    programming in the two boot blocks (0xF8272D onwards on the first processor,
-    0xFFF038 onwards on the second), the RAM those blocks clear, and the
-    peripheral addresses the firmware demonstrably reads or writes.  Everything
-    else is left unmapped on purpose.  The service manual scan available here
-    resolves the names of the ROM chip-select nets (PROMACS, PROMBCS, PROMCCS
-    and PROMDCS) without resolving the address ranges the decoders assign to
-    them, so the ranges come from the firmware alone; the MAMR window sizes in
-    particular rest on an elimination over eight candidate decoders fed this
-    machine's own register values, not on a databook, and one window, the first
-    processor's CS0, survives that elimination in two readings that differ.  The
-    devices on it are mapped because each address is referenced directly by the
-    code; the window itself is not asserted anywhere below.
+    The memory map below was derived from what the code establishes: the
+    chip-select programming in the two boot blocks (0xF8272D onwards on the
+    first processor, 0xFFF038 onwards on the second), the RAM those blocks
+    clear, and the peripheral addresses the firmware demonstrably reads or
+    writes.  Everything else is left unmapped on purpose.  ★ THE DECODERS ARE
+    NOW READ OFF THE SHEETS as well, and they agree with the firmware
+    everywhere: IC17 and IC18 on CPU 1, IC27 on CPU 2, with every output that
+    the firmware touches carrying a net name.  Both tables are at the maps.
+    What the sheets do NOT give is the MAMR window sizes; those still rest on
+    an elimination over eight candidate decoders fed this machine's own register
+    values, and one window, the first processor's CS0, survives that elimination
+    in two readings that differ.  The devices on it are mapped because each
+    address is referenced directly by the code, and because IC18 only decodes
+    with A19 high, which puts all of them in 0x780000-0x7FFFFF under either
+    reading; the window itself is not asserted anywhere below.
 
-    ONE INFERENCE THE MAP RESTS ON.  CPU 2's CS2 is proven 16 bits wide (the
-    flash unlock addresses at 0xFC8662/0xFC8672 are 0xAAAA/0x5554, twice the
-    AMD byte-mode pair).  CPU 1 carries the same B2CS = 0x1B, so prom_a and
-    prom_b are taken to be x16 as well -- inferred, not proven.  The mapping
-    below asserts a flat byte image per device, which is only correct under
-    that inference.  It is corroborated empirically rather than assumed: the
-    reset chain 0xF827C4 -> prom_b file 0x42D60 -> prom_a 0x5606, and the SWI7
+    ONE INFERENCE THE MAP USED TO REST ON, NOW PROVEN.  CPU 2's CS2 is proven
+    16 bits wide by the firmware (the flash unlock addresses at
+    0xFC8662/0xFC8672 are 0xAAAA/0x5554, twice the AMD byte-mode pair), and CPU
+    1 carries the same B2CS = 0x1B, so prom_a and prom_b were TAKEN to be x16 as
+    well.  ★ Sheet II-7/II-8 draws IC12 and IC13 with A1..A18 on the EPROM's
+    A0..A17 and D0..D15 on its data pins -- the CPU's A0 is not connected, which
+    is exactly what a x16 device on a byte-addressed bus looks like -- so the
+    flat byte image per device that the mapping below asserts is correct.  The
+    empirical corroboration is kept: the reset chain 0xF827C4 -> prom_b file 0x42D60 -> prom_a 0x5606, and the SWI7
     vector 0xFFFF1C -> prom_b file 0x400A4, all land on sane instructions, and
     one byte of base error would destroy every one of those cross-references.
 
@@ -193,15 +197,19 @@
     wsa1-roms-disasm/notes/FINDINGS-system-clock.md, lever B, which is
     read-only from here.
 
-    Still not established, and therefore not modelled: the part number of most
-    devices on either processor's CS0 area (the notes mostly describe register
-    interfaces rather than parts; the display controller at 0x790000 is the one
-    exception, see the TODO below), which of IC1 "MAIN" and IC2 "SUB" fetches
-    which pair of EPROMs, the bit layout of BnCS, BEXCS, DREFCR and DMEMCR, and
-    the base address of the fourth EPROM image.  Recursive descent from the
-    vectors currently reaches 36.7% of the first processor's two EPROMs and
-    42.6% of the second's, so a device touched only from code that has not been
-    reached would still be missing from the map.
+    ★ MUCH OF WHAT THIS PARAGRAPH USED TO LIST AS OPEN WAS SETTLED ON
+    2026-09-02/03, and not by the images: the service manual's P.C. diagrams on
+    pages 19-23 are legible, and every text search of that book had come back
+    empty only because it has no text layer.  Both chip-select decoders, the
+    MAIN/SUB assignment, the fourth EPROM's designator and base, the parts on
+    CPU 2's CS0 cluster and the whole port side of both processors are read off
+    those sheets and cited where each is used below.  Still not established, and
+    therefore not modelled: the bit layout of BnCS, BEXCS, DREFCR and DMEMCR,
+    and what is behind the two decoder outputs that carry no net (0x7F0000 and
+    0xE00000).  Recursive descent from the vectors currently reaches 36.7% of
+    the first processor's two EPROMs and 42.6% of the second's, so a device
+    touched only from code that has not been reached would still be missing from
+    the map.
 
     Hardware inventory below is taken from the SX-WSA1R service manual,
     ORDER NO. EMiD951604, (c) 1995 Matsushita Electric Industrial.  That book
@@ -259,44 +267,34 @@
     firmware carries are the three build tags above.
 
     TODO:
-      - identify the remaining devices on both processors' CS0 areas.  The
-        display controller at 0x790000 IS NOW WIRED UP: it is an SED1330-family
-        part, established from the images (the driver writes 13 distinct command
-        bytes, all of them inside MAME's SED1330 instruction table, and its
-        SYSTEM SET at 0xF8E81E describes a 320 x 240 single-bit panel with three
-        OR-composited layers), which agrees with the SED1330FBA the parts list
-        puts at IC7.  0x7A0000 AND 0x7B0004/5 ARE NOW IDENTIFIED TOO: they are
-        the data register, main status register and data-rate register of a
-        uPD765-family FLOPPY DISK CONTROLLER, and both are wired to one.  Still
-        unidentified: 0x7E0008 and 0x7F0000 on the first processor, and the
-        register file at 0x104000 on the second -- the last of those IS NOW A
-        DEVICE, acoustic_modeling.cpp, but a PLACEHOLDER that makes no sound and
-        whose name states a ranked inference and no part number.
-        0x7F0000 IS NOW MODELLED as
-        the 4 x 32 register file its driver shape says it is, without a part
-        name; 0x7E0008 is known to be the SECOND UNIT of the same block-device
-        layer that drives the floppy, which is a role and not a part, so it
-        stays inert
-      - work out which processor is IC1 "MAIN" and which is IC2 "SUB".  The link
-        between them IS NOW WIRED UP (byte port plus strobe/busy handshake plus
-        micro-DMA channels 2 and 3, at 0x7C0000 on one side and 0x100000 on the
-        other), but the cross-wiring of the four handshake pins is derived from
-        the firmware and not from a schematic -- see the block comment on the
-        handlers
-      - fix the base address of the fourth EPROM image, which is strongly
-        supported as the content of the 512 KiB flash at 0xE80000 on the second
-        processor but not proven
+      - THE DEVICES ON BOTH CS0 AREAS ARE IDENTIFIED.  IC18 splits CPU 1's into
+        LCDCS (IC7 SED1330FBA, wired), FDDAK and FDCS (IC8 D72070GF3BE, wired
+        as an upd765a_device), MIF (the CPU link, wired) and HDCS; IC27 splits
+        CPU 2's into SMIF (the link), WFICS (IC3 L7A1429), KSCS and SGCS (both
+        ports of IC4 TC183C230002).  What each entry in the two memory maps
+        below says about its device is now cited to a sheet.
+        Two things are still only PARTLY modelled and say so at the map: the
+        L7A1429 is a placeholder that holds its register file and makes no
+        sound (acoustic_modeling.cpp), and the tone generator is a set of
+        handlers with no synthesis behind them.
+      - 0x7E0008 IS AN ATA HARD DISK -- IC18's HDCS, an ATA task file, and a
+        FAT16 boot sector in prom_a for a 261.7 MB fixed disk.  It stays inert
+        because nothing traced reaches the unit-1 path and whether a drive was
+        ever fitted to a rack is open; see the map entry
+      - 0x7F0000 on CPU 1 and 0xE00000 on CPU 2 are the two decoder outputs
+        with no net on the schematic.  Both are modelled as the 4 x 32 register
+        file their shared driver shape says they are, written and never read,
+        with no part asserted
       - dump the six 16 Mbit wave mask ROMs, the AM29F400T flash, the serial
         EEPROM that holds the per-key touch calibration, and the internal ROM of
         the control panel microcontroller
-      - devices that synthesise nothing yet: the register file at 0x104000 --
-        which the parts list's L7A1429 "MODELING LSI" is the only unaccounted-for
-        candidate for, by elimination -- and the uPD6383GF-3BA DSP.  The first
-        of the two now has a placeholder device holding its registers,
-        acoustic_modeling.cpp; the second has none.  (The M37471M2196S panel MCU is
-        HLE'd in wsa1_cpanel.cpp.  The uPD72070 floppy controller has no MAME device of
-        its own either, but the family does -- the driver instantiates
-        upd765a_device and says at the code why that is the right member of it.)
+      - the three D6383GF-3BA DSPs (IC5, IC6, IC30) have no MAME device and no
+        model here.  Their host bus is fully mapped -- see the block comment
+        above cpu2_p9_r() -- so the byte stream CPU 2 uploads to them is
+        visible and goes nowhere.  (The M37471M2196S panel MCU is HLE'd in
+        wsa1_cpanel.cpp.  The uPD72070 has no MAME device of its own either,
+        but the family does -- the driver instantiates upd765a_device and says
+        at the code why that is the right member of it.)
 
 ***************************************************************************/
 
