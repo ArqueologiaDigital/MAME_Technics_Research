@@ -4025,6 +4025,15 @@ void upd6383_device::exec_alu(u64 word)
 	// convenience: on an ACTION-0x00 word hi12[3:1] == 0 and == 1 become
 	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
 	m_last_l = L;               // ★ §29: the bus operand actually selected
+	//  ★★★★★ §232 THE UNANCHORED SRC/ACTION CENSUS -- read-only, unconditional.
+	//  Placed HERE because this is the single point at which `L' is final and the
+	//  word's own post-increment has not yet run, so `m_dp'/`m_cursor' are the
+	//  indices the operand was actually resolved AT.  See upd6383.h `rc_record'
+	//  for the banner, the four index candidates and the two-sided control.
+	//  ⛔ It CLOSES codes (a constant index is dead end 4); it implements none.
+	rc_record(u16(m_cur_iw), src, act, upd6383_disassembler::addr8(word),
+			s32(m_dp), s32(m_cursor), s32(m_dsc),
+			s64(util::sext(m_acc, 44)) >> ACC_SHIFT, s64(L));
 	//  ★★★ §221 `§E1' -- THE OPERAND-PROVENANCE CENSUS.  Read-only, settled frames
 	//  only (rule 16: a census over a 1.44 M-frame run that includes boot measures
 	//  boot).  It fires at the ONE point where `L' is final, so it can never
@@ -6839,6 +6848,69 @@ void upd6383_device::dump_frame_report() const
 				S1_ARM_FRAME, rs.c_str(),
 				m_co_slots ? ss.c_str() : "  NONE REACHED -- the family does not execute here",
 				m_co_slots, m_co_overflow, ctl_ok ? "PASS 3 of 3" : "✘ FAILED");
+	}
+
+	//  ★★★★★ §232 -- THE UNANCHORED SRC/ACTION CENSUS.  Per unanchored code, per
+	//  resident slot: its SITES, its INDEX RANGE and its CONSUMER.  A code whose
+	//  every index candidate is degenerate in BOTH buckets is CLOSED by dead end 4
+	//  / rule 4, which forbid implementing a consumer whose index is constant.
+	{
+		static const char *const CONS[RC_C_NCONS] = {
+			"adder-bus", "store-mem", "tempA", "tempB", "sel0D/0E", "DROPPED" };
+		std::string cs;
+		for (u32 q = 0; q < m_rc_slots; q++)
+			for (u32 b = 0; b < 2; b++)
+			{
+				if (!m_rc_seen[b][q]) continue;
+				cs += string_format("\nupd6383:      %s 0x%02X  iw%-3u %-5s n=%-10llu | "
+						"dp %u..%u | cur %u..%u | dsc %u..%u | acc %lld..%lld | "
+						"addr8=%02X | consumer=%s | L %lld..%lld nz %llu%s",
+						m_rc_kind[q] ? "ACT" : "SRC", m_rc_code[q], m_rc_iw[q],
+						b ? "loud" : "quiet", (unsigned long long)m_rc_n[b][q],
+						m_rc_dplo[b][q], m_rc_dphi[b][q],
+						m_rc_culo[b][q], m_rc_cuhi[b][q],
+						m_rc_dslo[b][q], m_rc_dshi[b][q],
+						(long long)m_rc_aclo[b][q], (long long)m_rc_achi[b][q],
+						m_rc_addr8[q], CONS[m_rc_cons[q]],
+						(long long)m_rc_llo[b][q], (long long)m_rc_lhi[b][q],
+						(unsigned long long)m_rc_lnz[b][q],
+						(m_rc_dplo[b][q] == m_rc_dphi[b][q]
+						 && m_rc_culo[b][q] == m_rc_cuhi[b][q]
+						 && m_rc_dslo[b][q] == m_rc_dshi[b][q]
+						 && m_rc_aclo[b][q] == m_rc_achi[b][q])
+						? "  <- every index CONSTANT" : "");
+			}
+		std::string rf;
+		bool rc_ok = true;
+		for (u32 r = 0; r < 2; r++)
+		{
+			const bool moved = m_rc_ref_seen[r]
+					&& (m_rc_ref_dplo[r] != m_rc_ref_dphi[r]
+					    || m_rc_ref_culo[r] != m_rc_ref_cuhi[r]);
+			if (!moved) rc_ok = false;
+			rf += string_format("\nupd6383:      ANCHORED SRC 0x%02X  n=%-12llu dp %u..%u  "
+					"cur %u..%u   %s", r ? 0x10 : 0x07,
+					(unsigned long long)m_rc_ref_n[r],
+					m_rc_ref_dplo[r], m_rc_ref_dphi[r],
+					m_rc_ref_culo[r], m_rc_ref_cuhi[r],
+					moved ? "✔ the indices MOVE -- the census can see a varying index"
+					      : "✘ FAIL -- degenerate on an ANCHORED code: every CLOSED below is VOID");
+		}
+		logerror("upd6383: ★★★★★ §232 ROUTING CENSUS -- the UNANCHORED `SRC'/`ACTION' codes: "
+				"SITES, INDEX RANGE, CONSUMER.  §231 measured that this guard refuses 1139 "
+				"corpus words (60.6 %% of everything undecoded) against the operation "
+				"field's 106.  ⛔ CENSUS ONLY: dead end 4 / rule 4 forbid implementing a "
+				"consumer whose index is measured CONSTANT, so a constant index CLOSES a "
+				"code.  Armed at frame %u (`§S1'/`§104'/`§231' population -- NOT `§54's).  "
+				"⚠ `addr8' is a field of the word and is CONSTANT BY CONSTRUCTION -- never "
+				"count it as evidence.\nupd6383:    ★ RULE 20 CONTROL, two-sided (an "
+				"ANCHORED code whose indices are KNOWN to move):%s\nupd6383:    THE "
+				"UNANCHORED CODES, PER RESIDENT SLOT:%s\nupd6383:    (%u of %u slots used, "
+				"%u overflow)  CONTROL: %s\n",
+				S1_ARM_FRAME, rf.c_str(),
+				m_rc_slots ? cs.c_str() : "  NONE REACHED -- no unanchored code executes here",
+				m_rc_slots, RC_SLOTS, m_rc_overflow,
+				rc_ok ? "PASS 2 of 2" : "✘ FAILED");
 	}
 
 	//  ★★★★ §229 -- THE UPLOAD LEDGER, SUMMARISED.  Close any run still open,

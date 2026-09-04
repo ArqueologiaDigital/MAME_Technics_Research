@@ -1313,6 +1313,152 @@ private:
 		if (L)      m_co_lnz[b][q]++;
 	}
 
+	//  ★★★★★ §232 -- THE UNANCHORED `SRC'/`ACTION' CENSUS.  BUILD-LANE-QUEUE item 0,
+	//  pre-registered by §231 §7.2.  READ-ONLY, UNCONDITIONAL, NO DEFAULT CHANGE.
+	//
+	//  WHY.  `alu_decoded()' is a CONJUNCTION and only its FIRST failure is
+	//  observable.  Mirrored over the 3057-word corpus, its ROUTING conjunct
+	//  (`lo_src_anchored() / lo_act_anchored()') refuses **1139 words -- 60.6 % of
+	//  everything undecoded** -- against the whole operation switch's 106.  So the
+	//  routing guard, not the operation field, is where decode coverage lives.
+	//
+	//  WHAT IT PRINTS, per unanchored code and per resident `iw':  its SITES, its
+	//  INDEX RANGE, and its CONSUMER.  The index range is the load-bearing column:
+	//
+	//  ⛔ DEAD END 4 / STANDING RULE 4 FORBID IMPLEMENTING A CONSUMER WHOSE INDEX IS
+	//  MEASURED CONSTANT.  A code whose every index candidate is degenerate in BOTH
+	//  buckets is therefore CLOSED BY THIS CENSUS, not opened by it -- exactly as
+	//  `SRC 0x13' was already closed (`acc 0..0 | m_dp 12..12 | cursor 9..9', §162).
+	//  CLOSING CODES IS THE DELIVERABLE.  This census implements nothing.
+	//
+	//  THE FOUR INDEX CANDIDATES are the ones §162 used, plus the delay descriptor:
+	//    `m_dp'     the D-RAM data pointer      `m_cursor' the C-RAM coefficient cursor
+	//    `m_dsc'    the delay-descriptor pointer `acc'      the accumulator as a datum
+	//  ⚠ `acc' is taken as `sext(m_acc,44) >> ACC_SHIFT' and NOT through
+	//  `acc_to_datum()': that function feeds `§S1's clip counter, and a read-only
+	//  census must not move the falsifier it is graded against (`§S1' 4.924 %).
+	//
+	//  ⚠ `addr8' is a field of the word, so it is CONSTANT BY CONSTRUCTION at a
+	//  fixed `iw'.  It is printed for completeness and must never be counted as
+	//  evidence that an index is constant (rule 8: a column that cannot vary is not
+	//  a measurement).
+	//
+	//  ★ RULE 20 -- THE CONTROL, AND IT IS TWO-SIDED.  Two ANCHORED reference rows
+	//  are kept beside the unanchored ones, on the same hook and the same buckets:
+	//    `SRC 0x07' (mem[ptr]) and `SRC 0x10' (the accumulator).  Their index
+	//  columns are known to MOVE -- `m_dp' sweeps the D-RAM window every frame --
+	//  so if the reference rows come out degenerate the instrument is not reading
+	//  the pointers at all and every "CLOSED" below is void.
+	static constexpr u32 RC_SLOTS = 768;   // the resident images are 286 words; 2 rows each is the bound
+	mutable u8   m_rc_kind[RC_SLOTS] = {};    // 0 = SRC, 1 = ACTION
+	mutable u8   m_rc_code[RC_SLOTS] = {}, m_rc_addr8[RC_SLOTS] = {};
+	mutable u8   m_rc_cons[RC_SLOTS] = {};
+	mutable u16  m_rc_iw[RC_SLOTS] = {};
+	mutable u32  m_rc_slots = 0, m_rc_overflow = 0;
+	mutable u64  m_rc_n[2][RC_SLOTS] = {};
+	mutable bool m_rc_seen[2][RC_SLOTS] = {};
+	mutable s32  m_rc_dplo[2][RC_SLOTS] = {}, m_rc_dphi[2][RC_SLOTS] = {};
+	mutable s32  m_rc_culo[2][RC_SLOTS] = {}, m_rc_cuhi[2][RC_SLOTS] = {};
+	mutable s32  m_rc_dslo[2][RC_SLOTS] = {}, m_rc_dshi[2][RC_SLOTS] = {};
+	mutable s64  m_rc_aclo[2][RC_SLOTS] = {}, m_rc_achi[2][RC_SLOTS] = {};
+	mutable s64  m_rc_llo[2][RC_SLOTS] = {},  m_rc_lhi[2][RC_SLOTS] = {};
+	mutable u64  m_rc_lnz[2][RC_SLOTS] = {};
+	//  the two ANCHORED reference rows, [0] SRC 0x07, [1] SRC 0x10
+	mutable u64  m_rc_ref_n[2] = {};
+	mutable bool m_rc_ref_seen[2] = {};
+	mutable s32  m_rc_ref_dplo[2] = {}, m_rc_ref_dphi[2] = {};
+	mutable s32  m_rc_ref_culo[2] = {}, m_rc_ref_cuhi[2] = {};
+
+	//  the CONSUMER of the operand, as the DEVICE models it -- not as the ISA
+	//  notes wish it were.  This is the answer to "what reads the value this code
+	//  produces", and for an ACTION code it is the action's own destination.
+	enum { RC_C_BUS = 0, RC_C_ST, RC_C_TA, RC_C_TB, RC_C_SEL, RC_C_DROP, RC_C_NCONS };
+	static u8 rc_consumer(u8 act)
+	{
+		switch (act)
+		{
+		case 0x00: return RC_C_BUS;        // the adder's bus term (row 26)
+		case 0x07: return RC_C_ST;         // mem[ptr] <- bus
+		case 0x13: case 0x01: case 0x08: case 0x0C: case 0x11: case 0x16:
+			return RC_C_TA;                // the blanket temp capture
+		case 0x14: case 0x1A: return RC_C_TB;
+		case 0x0D: case 0x0E: return RC_C_SEL;   // §121/§133's enumerated selector
+		default: return RC_C_DROP;         // modelled NOWHERE: the operand is dropped
+		}
+	}
+
+	//  ★ §232: record one ALU operand resolution, at the single point where `L' is
+	//  final and BEFORE the word's own post-increment (the pre-increment trap has
+	//  cost this project three sections).  Armed at `S1_ARM_FRAME' so the population
+	//  is `§S1'/`§104'/`§231's, never `§54's.
+	void rc_record(u16 iw, u8 src, u8 act, u8 addr8, s32 dp, s32 cur, s32 dsc,
+			s64 acc, s64 L) const
+	{
+		if (m_frames_run <= S1_ARM_FRAME) return;
+		const u32 b = ((m_in_val[0] != 0) || (m_in_val[1] != 0)) ? 1 : 0;
+		//  the two-sided reference rows: ANCHORED codes whose indices MUST move
+		for (u32 r = 0; r < 2; r++)
+		{
+			if (src != (r ? 0x10 : 0x07)) continue;
+			m_rc_ref_n[r]++;
+			if (!m_rc_ref_seen[r])
+			{
+				m_rc_ref_seen[r] = true;
+				m_rc_ref_dplo[r] = m_rc_ref_dphi[r] = dp;
+				m_rc_ref_culo[r] = m_rc_ref_cuhi[r] = cur;
+			}
+			else
+			{
+				if (dp  < m_rc_ref_dplo[r]) m_rc_ref_dplo[r] = dp;
+				if (dp  > m_rc_ref_dphi[r]) m_rc_ref_dphi[r] = dp;
+				if (cur < m_rc_ref_culo[r]) m_rc_ref_culo[r] = cur;
+				if (cur > m_rc_ref_cuhi[r]) m_rc_ref_cuhi[r] = cur;
+			}
+		}
+		const bool su = !(src == 0x07 || src == 0x10 || src == 0x19 || src == 0x1A);
+		const bool au = !(act == 0x00 || act == 0x07 || act == 0x12 || act == 0x13
+				|| act == 0x14 || act == 0x15 || act == 0x19);
+		for (u32 k = 0; k < 2; k++)
+		{
+			if (k == 0 ? !su : !au) continue;
+			const u8 code = k ? act : src;
+			u32 q = 0;
+			for (; q < m_rc_slots; q++)
+				if (m_rc_iw[q] == iw && m_rc_kind[q] == k && m_rc_code[q] == code) break;
+			if (q == m_rc_slots)
+			{
+				if (m_rc_slots >= RC_SLOTS) { m_rc_overflow++; continue; }
+				q = m_rc_slots++;
+				m_rc_iw[q] = iw; m_rc_kind[q] = u8(k); m_rc_code[q] = code;
+				m_rc_addr8[q] = addr8; m_rc_cons[q] = rc_consumer(act);
+			}
+			m_rc_n[b][q]++;
+			if (!m_rc_seen[b][q])
+			{
+				m_rc_seen[b][q] = true;
+				m_rc_dplo[b][q] = m_rc_dphi[b][q] = dp;
+				m_rc_culo[b][q] = m_rc_cuhi[b][q] = cur;
+				m_rc_dslo[b][q] = m_rc_dshi[b][q] = dsc;
+				m_rc_aclo[b][q] = m_rc_achi[b][q] = acc;
+				m_rc_llo[b][q]  = m_rc_lhi[b][q]  = L;
+			}
+			else
+			{
+				if (dp  < m_rc_dplo[b][q]) m_rc_dplo[b][q] = dp;
+				if (dp  > m_rc_dphi[b][q]) m_rc_dphi[b][q] = dp;
+				if (cur < m_rc_culo[b][q]) m_rc_culo[b][q] = cur;
+				if (cur > m_rc_cuhi[b][q]) m_rc_cuhi[b][q] = cur;
+				if (dsc < m_rc_dslo[b][q]) m_rc_dslo[b][q] = dsc;
+				if (dsc > m_rc_dshi[b][q]) m_rc_dshi[b][q] = dsc;
+				if (acc < m_rc_aclo[b][q]) m_rc_aclo[b][q] = acc;
+				if (acc > m_rc_achi[b][q]) m_rc_achi[b][q] = acc;
+				if (L   < m_rc_llo[b][q])  m_rc_llo[b][q]  = L;
+				if (L   > m_rc_lhi[b][q])  m_rc_lhi[b][q]  = L;
+			}
+			if (L) m_rc_lnz[b][q]++;
+		}
+	}
+
 	//  ★★★★ §229's fabricated-zero census -- see the banner at `m_src_unread'.
 	u64  m_srcz_fetch = 0;                 // every operand resolution, all SRC codes
 	u64  m_srcz_total = 0;                 // ... of which FABRICATED (`default:' -> 0)
