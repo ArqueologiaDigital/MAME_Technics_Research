@@ -105,37 +105,49 @@
     ------------------------------------------------------------------------
     THE REGISTERS
     ------------------------------------------------------------------------
-    Twelve of the nineteen blocks are named by the tone editor's own MODELING
+    Fourteen of the nineteen blocks are named by the tone editor's own MODELING
     screens; the block names below are the disassembly's DEV104_* symbols
     (prom_c/devices/dev10c_dev104_drivers.s) so a trace and a listing read
     alike.  The others are logged by block NUMBER and are not given a name.
 
       0x0000  --                    mode/enable word; bits 6..4 gate 0x0300  UNIDENTIFIED
-      0x0040  MAIN TUNE             MAIN RESONATOR KEY SHIFT + TUNE          STRONG
-      0x0080  SUB TUNE              SUB RESONATOR KEY SHIFT + TUNE           STRONG
-      0x00C0  POSITION              resonator POSITION, a log-domain period  STRONG
+      0x0040  MAIN TUNE             MAIN RESONATOR KEY SHIFT + DETUNE        PROVEN
+      0x0080  SUB TUNE              SUB RESONATOR KEY SHIFT + DETUNE         PROVEN
+      0x00C0  POSITION              resonator POSITION, a log-domain period  PROVEN
       0x0100  --                    POSITION's table-pair companion          value PROVEN
-      0x0140  MAIN FITTING DECAY    MAIN FITTING, decay form                 STRONG
-      0x0180  SUB FITTING DECAY     SUB FITTING, decay form                  STRONG
-      0x01C0  MAIN FITTING RISE     MAIN FITTING, rise form                  STRONG
-      0x0200  SUB FITTING RISE      SUB FITTING, rise form                   STRONG
-      0x0240  --                    section C's rise-scaled coefficient      structure PROVEN
-      0x0280  SUB GAIN              0..100 percent with an explicit OFF      STRONG
+      0x0140  MAIN FITTING DECAY    MAIN FITTING, decay form                 PROVEN
+      0x0180  SUB FITTING DECAY     SUB FITTING, decay form                  PROVEN
+      0x01C0  MAIN FITTING RISE     MAIN FITTING, rise form                  PROVEN
+      0x0200  SUB FITTING RISE      SUB FITTING, rise form                   PROVEN
+      0x0240  DEPTH                 the register the DEPTH control scales    STRONG
+      0x0280  SUB GAIN              0..100 percent with an explicit OFF      PROVEN
       0x02C0  --                    the literal 0xFF00 on every path         UNIDENTIFIED
-      0x0300  --                    an 8-bit gain, 0..127, in both halves    WEAK
-      0x0340  MAIN MUTING Q13       Q13 companion of 0x0400                  STRONG
-      0x0380  SUB MUTING Q13        Q13 companion of 0x0440                  STRONG
-      0x03C0  --                    section C's Q13 companion                structure PROVEN
+      0x0300  INTERACTION GAIN      an 8-bit gain, 0..127, in both halves    STRONG
+      0x0340  MAIN MUTING Q13       Q13 companion of 0x0400                  PROVEN
+      0x0380  SUB MUTING Q13        Q13 companion of 0x0440                  PROVEN
+      0x03C0  --                    NO EDITOR NAME EXISTS; p15 is a preset   refused
       0x0400  MAIN MUTING Q16       one-pole lowpass cutoff, bilinear        fit PROVEN
       0x0440  SUB MUTING Q16        one-pole lowpass cutoff, bilinear        fit PROVEN
-      0x0480  --                    section C's Q16 cutoff                   fit PROVEN
+      0x0480  --                    NO EDITOR NAME EXISTS, as 0x03C0         refused
       0x0800  --                    global, no channel; 0x1100 at power-on   UNIDENTIFIED
 
-    ⚠ TWO SINGLE POINTS OF FAILURE travel with every MAIN/SUB label above.  The
-    MAIN/SUB direction rests solely on SUB GAIN being the sub side's level; if
-    it is the main side's, every MAIN and SUB label swaps.  The FITTING/MUTING
-    assignment rests solely on one drawn caption.  The pairing, the families and
-    the arithmetic are direction-blind either way.
+    0x0240 and 0x0300 are named on the tone editor's PAGE1/2: every value that
+    page draws carries its display-RAM address, and the SED1330's own C/R = 40
+    turns that into a screen row, putting all five of its values on a caption's
+    row against a null mean of 0.19 of 5.  0x0300 has a second, independent
+    argument -- it is a MODE-GATED gain, and DEPTH and FORMANT have no reason to
+    be mode-gated.  0x03C0 and 0x0480 are REFUSED a name rather than left open:
+    no editor ever writes p15, their only input, so the firmware has no caption
+    to give them.  (FINDINGS-l7a1429-editor-pages.md secs. 3a, 4, 4a, 4c.)
+
+    THE MAIN/SUB DIRECTION AND THE FITTING/MUTING SPLIT each now have a second,
+    independent route, so neither is a single point of failure.  On PAGE1/3 the
+    two value rows sit +4 display rows under the MAIN RESONATOR and SUB
+    RESONATOR labels the same paint routine draws, with equal offsets -- an
+    argument that never mentions SUB GAIN -- and that page's own column headers
+    stand over the FITTING and MUTING fields directly, without the caption block
+    the old argument rested on.
+    (FINDINGS-l7a1429-editor-pages.md secs. 3c, 5.4.)
 
     Units, for the decoded view LOG_DECODE prints (wsa1/notes/
     FINDINGS-l7a1429-curve-tables.md sec. 1; HLE-GUIDE-l7a1429.md secs. 2.2, 5):
@@ -185,7 +197,7 @@ public:
 	uint16_t reg(unsigned n) const { return (n < REG_COUNT) ? m_regs[n] : 0; }
 
 	// The tone editor's name for a block, or nullptr where the block is
-	// unidentified.  Twelve of the nineteen are named; the rest deliberately
+	// unidentified.  Fourteen of the nineteen are named; the rest deliberately
 	// are not, because a guessed name in a trace is worse than a number.
 	static const char *block_name(unsigned block);
 

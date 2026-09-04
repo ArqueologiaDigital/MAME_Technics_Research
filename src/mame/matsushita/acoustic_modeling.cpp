@@ -67,21 +67,24 @@ void l7a1429_device::device_start()
 
 const char *l7a1429_device::block_name(unsigned block)
 {
-	// Twelve of the nineteen blocks are drawn on the tone editor's MODELING
-	// pages under these names; the names are the machine's own words, in the
-	// same DEV104_* vocabulary the disassembly uses.  The other seven blocks,
-	// and the global 0x0800, return nullptr on purpose: they are UNIDENTIFIED or
-	// WEAK, and a guessed name in a bus trace is worse than a number.
+	// Fourteen of the nineteen blocks are named by the tone editor's MODELING
+	// pages; the names are the machine's own words, in the same DEV104_*
+	// vocabulary the disassembly uses.  The other five blocks, and the global
+	// 0x0800, return nullptr on purpose: they are UNIDENTIFIED, or the firmware
+	// has no name to give them, and a guessed name in a bus trace is worse than
+	// a number.
 	switch (block)
 	{
-	case 0x0040: return "MAIN TUNE";            // KEY SHIFT + TUNE, 1/256 semitone
+	case 0x0040: return "MAIN TUNE";            // KEY SHIFT + DETUNE, 1/256 semitone
 	case 0x0080: return "SUB TUNE";
 	case 0x00c0: return "POSITION";             // and its POSITION MOVEMENT page
 	case 0x0140: return "MAIN FITTING DECAY";
 	case 0x0180: return "SUB FITTING DECAY";
 	case 0x01c0: return "MAIN FITTING RISE";
 	case 0x0200: return "SUB FITTING RISE";
+	case 0x0240: return "DEPTH";                // the register the DEPTH control scales
 	case 0x0280: return "SUB GAIN";
+	case 0x0300: return "INTERACTION GAIN";     // gated by 0x0000 bits 6..4
 	case 0x0340: return "MAIN MUTING Q13";      // the Q13 companion of 0x0400
 	case 0x0380: return "SUB MUTING Q13";
 	case 0x0400: return "MAIN MUTING Q16";      // the bilinear one-pole cutoff
