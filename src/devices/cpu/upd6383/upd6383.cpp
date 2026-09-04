@@ -3319,7 +3319,10 @@ void upd6383_device::exec_alu(u64 word)
 	//               (mem[0x04] 1000 -> 1228, step +228 = coefficient 0x0000E4), and
 	//               11 of 19 such constants across the corpus.  The rival "unity"
 	//               saturates the accumulator on the LFO's first word.
-	//    SRC 0x00 = mem[ptr]   ⛔ 1 of 6 enumerated, no independent support
+	//    SRC 0x00 = mem[ptr]   ★ §233: 1 of SEVEN enumerated, and the other
+	//               six are REFUTED -- SINGLE DELAY's lag-1001 ROM product accepts
+	//               `mem' and only `mem'.  The old grade, "1 of 6 enumerated, no
+	//               independent support", is superseded; see case 0x00 below.
 	//    SRC 0x11 = ACCB       ★ §27 -- was mem[ptr] (1 of 7 enumerated); replaced
 	//  0x13, 0x1B and 0x1C have NO reading anywhere and keep reading zero; they are
 	//  counted so the next pass can see whether they matter.
@@ -3424,7 +3427,7 @@ void upd6383_device::exec_alu(u64 word)
 			//  "SRC 0x00 carries data."
 			//  ⚠ Item H states the limit precisely: mem[ptr] is NOT forced
 			//  absolutely, it is forced GIVEN THE LOADED COEFFICIENTS.
-			//  ⛔ The null-routing reading is attractive and WRONG: 572 of 599
+			//  ⛔ The null-routing reading is attractive and WRONG: 580 of 622
 			//  SRC-0x00 words are exactly lo12 == 0x000 and pair with ACTION 0x00,
 			//  where anchored SRC 0x07 appears with nine different actions -- which
 			//  is exactly what a null encoding looks like.  §122 re-derived that
@@ -3437,6 +3440,24 @@ void upd6383_device::exec_alu(u64 word)
 			//  ⚠ And the §123 comment above cites action00-discriminator.md item I,
 			//  which adjudication-round6.md:605 had already VOIDED -- at the forced
 			//  delay polarity EVERY src00 reading scores 0, so nothing is excluded.
+			//  ★★★★ §233 SUPPLIES THE REFUTATION ITEM I NO LONGER SUPPLIES, on the
+			//  harness §230 repaired.  a09 SINGLE DELAY carries NINE SRC-0x00 words
+			//  and one of them is the HEAD WRITE w46, so this reading decides what
+			//  enters the delay line at all.  Sweeping the kernel's input cell over
+			//  ALL 256 (which removes the harness's own circularity -- it otherwise
+			//  places w46's pointer on the driven cell, presupposing mem[ptr]):
+			//     mem   0x03  lag 1001  sample 45074  = the ROM three-factor product
+			//     P acc zero DR tA coef -- NO cell in the whole pointer space puts a
+			//     non-zero datum into the delay line, let alone an echo at 1001.
+			//  1 of 7, controls 4 of 4.  ⚠ The nulls matter: the same criterion
+			//  rejects three coefficient scrambles that DO put an echo at 1001.
+			//     python3 dsp/tools/sd_rerun.py src00
+			//  ⛔ AND PARAMETRIC EQ's 0.198 dB IS NOT A FALSIFIER FOR THIS CODE --
+			//  §232 §7.2 pre-registered it as one because a39 carries 8 SRC-0x00
+			//  words, but the criterion executes 9 of a39's 105 (its biquad section,
+			//  w5..w13) and NONE of them carries the code: fired count 0, all seven
+			//  readings 0.198 dB.  `gate_settle.py src00' prints that count and the
+			//  patched-excerpt control that shows the sweep is otherwise live.
 			//  THE CORPUS TWIN (§145, MEASURED here):
 			//    092.A.xx.200  SRC 0x08  n=29, successor 082.2.00.1C0 in 29/29
 			//    192.A.xx.000  SRC 0x00  n=29, successor 082.2.00.1C0 in 29/29
