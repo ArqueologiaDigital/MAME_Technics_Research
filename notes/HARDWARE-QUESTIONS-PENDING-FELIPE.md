@@ -74,6 +74,33 @@ question is answered.
 
 ---
 
+## Q4 — SINGLE DELAY at its default preset: does the echo return at ~11 ms or ~23 ms?
+
+**Asked 2026-09-04 (DSP §234).** Select the SINGLE DELAY effect with its
+factory default parameters, play one short staccato note into it with the
+dry/wet mix audible, and listen (or record) for the FIRST echo: is it a very
+short slap of roughly **11 ms** (500 samples at 44.1 kHz), or roughly **23 ms**
+(1001 samples)? If the DELAY TIME control is visible, note its displayed value
+as well.
+
+**Why it is asked.** The effect-DSP program a09 allocates two delay lines of
+500 and 501 samples in cascade (the second is written from the first's return).
+Which one the output presents is decided by two undecoded action codes
+(`ACT 0x0D`/`0x0E`) sitting immediately before the head write. The reading the
+emulator ships — confirmed from disk at PARAMETRIC EQ, 1 of 49 — makes the
+output present the **500**-sample tap and discard the second line's product;
+the reading every earlier SINGLE DELAY measurement assumed presents the
+**1001**-sample cascade. The corpus, the descriptors and the ROM's own
+coefficient product (the echo's gain is identical either way) cannot tell them
+apart. `dsp/tools/sd_rerun.py act0d0e` in kn5000-roms-disasm.
+
+**What the answer changes.** ~23 ms would refute the shipped `ACT 0x0D`/`0x0E`
+pair in the one delay context that reaches it and reopen §133; ~11 ms would
+corroborate it and retire §230's lag-1001 criterion as a statement about an
+inert model. Either answer is a decode result; the emulator cannot supply it.
+
+---
+
 ## How to use this file
 
 * Answers go **into this file** next to their question, dated, and then into the

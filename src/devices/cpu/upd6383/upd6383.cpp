@@ -4458,6 +4458,22 @@ void upd6383_device::exec_alu(u64 word)
 	//  scale.  Both are kept and enumerated so the scale is DECIDED, not assumed;
 	//  §131 makes this the load-bearing pair, since P is the only register that can
 	//  carry the sample across the entry.
+	//  ★★★ §234 (2026-09-04, static, no build): the shipped pair (sel0D 1, sel0E 7)
+	//  is CONFIRMED FROM DISK, 1 of 49 (2 of 49 before a junk-pre-load control).
+	//  PARAMETRIC EQ's ENTRY WINDOW (a39 w0..w13 /
+	//  w53..w67), with the sample injected in the cell the entry READS (0x05 / 0x0F)
+	//  instead of pre-loaded into acc and P, delivers BOTH channels to the designer's
+	//  biquad and keeps them apart under exactly this pair; the runner-up (6, 7) dies
+	//  on a junk-pre-load control.  dsp/tools/gate_settle.py act0d0e.
+	//  ⚠ AND THE SAME PAIR CHANGES WHAT SINGLE DELAY IS.  a09 carries the pair four
+	//  times, the last (w44/w45) immediately before its head write w46 (f31 = 0,
+	//  `acc <- P').  Under this pair 0x0E overwrites P with the stage-0 value, so the
+	//  output presents the ROM product 45074 at lag 500 -- NOT at §230's 1001, which
+	//  was derived with these two codes inert (the harness's old menu could not
+	//  execute this pair).  Line B (501) is still written and read; its product is
+	//  discarded at w46.  Which lag the chip presents is a HARDWARE question
+	//  (kn7000_mame/notes/HARDWARE-QUESTIONS-PENDING-FELIPE.md Q4); neither reading
+	//  is refuted by SINGLE DELAY.  dsp/tools/sd_rerun.py act0d0e.
 	case 0x0d:
 		if (m_speculative && (m_bx_sel0d || ((m_specmask >> 35) & 7)))
 		{
