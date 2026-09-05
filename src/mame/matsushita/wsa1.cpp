@@ -2207,10 +2207,19 @@ uint16_t wsa1_state::tg_status_r()
 	// when the voice has ended; this driver has no voice to end.  Consequence:
 	// ChanRec_Release has exactly two call sites (0xFA6892, all 64 at boot, and
 	// 0xFA6989, the poll), so between one VoiceSubsystem_Init and the next, no
-	// channel record returns to the pool.  Whether the allocator then steals or
-	// refuses is NOT established -- 0xFA62DA and 0xFA643F are undecoded, and both
-	// are exactly the routines that could re-link a record.  Closing this needs a
-	// synthesis model, which is gap A's job, not a constant here.
+	// channel record returns to the pool.
+	//
+	// But that does NOT starve the allocator, and it is now settled from the
+	// disassembly (prom_c note_engine.s; 0xFA62DA / 0xFA643F are the queue-relink
+	// helpers ChanRec_RelinkToPoolQueue / ChanRec_RelinkToPartQueue, not
+	// undecoded): ChanAlloc_ForNoteRequest asks ChanAlloc_FindVictim (0xFA69FD),
+	// which walks the per-part priority list at 0xFE1220 -- idle, then releasing,
+	// then SOUNDING (the list ends at the part's own queue 0) -- and STEALS the
+	// first non-empty queue.  It yields 0xFF (silent) only if every queue,
+	// sounding included, is empty.  So the pool never replenishing costs no
+	// polyphony: a note-on steals a sounding voice rather than being refused.
+	// The fake above is therefore benign for allocation; a faithful retire (and a
+	// true magnitude) still needs a synthesis model, which is gap A's job.
 	LOGMASKED(LOG_TG, "tg: status read, latch 0x%04X -> 0 (no query is known at this select)\n", latch);
 	return 0;
 }
