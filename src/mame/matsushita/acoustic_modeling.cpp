@@ -3,8 +3,8 @@
 /***************************************************************************
 
     Technics SX-WSA1 / SX-WSA1R -- IC3, the L7A1429 "MODELING LSI", the
-    per-channel register file at 0x00104000 on CPU 2.  PLACEHOLDER: no audio is
-    synthesised.
+    per-channel register file at 0x00104000 on CPU 2.  Models the register
+    interface and the decoded per-channel resonator state; no audio is synthesised.
 
     What this device is, what it is NOT, the firmware citations and the grade of
     every claim are in acoustic_modeling.h.  This file is the machine, and the
@@ -40,6 +40,23 @@ namespace {
 constexpr unsigned fold(uint16_t w)
 {
 	return (w & 0x8000) ? (0x8000 - (w & 0x7FFF)) : (unsigned(w) + 0x8000);
+}
+
+// The decode functions the register table's units column describes, factored out
+// so the logged view (log_decoded) and the modelled state (decoded_channel) can
+// never disagree.  Each is a VIEW of the number under a proven unit, not a claim
+// about what the die does with it.
+constexpr double note_of(uint16_t v)         { return double(v) / 256.0; }    // 0x0040/0x0080: 1/256 semitone
+constexpr double q15_of(uint16_t v)          { return double(v) / 32768.0; }  // Q15 blocks
+constexpr double position_oct_of(uint16_t v) { return double(v) / 3072.0; }   // 0x00C0: 3072 counts/octave
+
+// 0x0400/0x0440/0x0480: fold(v)/65536 = K/(1+K), K = tan(pi*fc/fs); invert for fc.
+// fold() lands in [1, 0xFFFE], so the denominator is never zero.
+inline double muting_cutoff_hz(uint16_t v, double fs)
+{
+	unsigned const f = fold(v);
+	double const k = double(f) / double(0x10000 - f);
+	return fs * std::atan(k) / M_PI;
 }
 
 } // anonymous namespace
@@ -107,13 +124,10 @@ void l7a1429_device::log_decoded(unsigned block, uint16_t data) const
 	switch (block)
 	{
 	case 0x0400: case 0x0440: case 0x0480:
-		{
-			// fold(v)/65536 = K/(1+K) with K = tan(pi*fc/fs), the bilinear
-			// prewarp; the curve fits that to 1 count over its live band.
-			double const k = double(fold(data)) / double(0x10000 - fold(data));
-			LOGMASKED(LOG_DECODE, "    derived: one-pole cutoff %.1f Hz\n",
-				SAMPLE_RATE * std::atan(k) / M_PI);
-		}
+		// fold(v)/65536 = K/(1+K) with K = tan(pi*fc/fs), the bilinear prewarp;
+		// the curve fits that to 1 count over its live band.
+		LOGMASKED(LOG_DECODE, "    derived: one-pole cutoff %.1f Hz\n",
+			muting_cutoff_hz(data, SAMPLE_RATE));
 		break;
 
 	case 0x0340: case 0x0380: case 0x03c0:
@@ -131,7 +145,7 @@ void l7a1429_device::log_decoded(unsigned block, uint16_t data) const
 
 	case 0x0040: case 0x0080:
 		{
-			double const note = double(data) / 256.0;
+			double const note = note_of(data);
 			LOGMASKED(LOG_DECODE, "    derived: note %.3f = %.2f Hz\n",
 				note, 440.0 * std::pow(2.0, (note - 69.0) / 12.0));
 		}
@@ -143,12 +157,12 @@ void l7a1429_device::log_decoded(unsigned block, uint16_t data) const
 		// the ratio is printed; inventing a scale here would be inventing a
 		// number the hardware has never been asked for.
 		LOGMASKED(LOG_DECODE, "    derived: period x%.4f (%.3f octaves; absolute scale unknown)\n",
-			std::pow(2.0, double(data) / 3072.0), double(data) / 3072.0);
+			std::pow(2.0, position_oct_of(data)), position_oct_of(data));
 		break;
 
 	case 0x0280:
 		{
-			double const g = double(data) / 32768.0;
+			double const g = q15_of(data);
 			if (g > 0.0)
 				LOGMASKED(LOG_DECODE, "    derived: gain %.5f (%.1f dB)\n", g, 20.0 * std::log10(g));
 			else
@@ -163,7 +177,7 @@ void l7a1429_device::log_decoded(unsigned block, uint16_t data) const
 		// in [0, 0.996); whether that reads as a lower cutoff or as an input
 		// gain premultiplied into the coefficient is undecided, so neither
 		// reading is printed.
-		LOGMASKED(LOG_DECODE, "    derived: Q15 %.5f\n", double(data) / 32768.0);
+		LOGMASKED(LOG_DECODE, "    derived: Q15 %.5f\n", q15_of(data));
 		break;
 
 	default:
@@ -224,4 +238,37 @@ uint16_t l7a1429_device::data_r()
 	logerror("%s: UNEXPECTED read of 0x104002 (latch 0x%04X)\n",
 		machine().describe_context(), m_latch);
 	return 0;
+}
+
+
+//-------------------------------------------------
+//  decoded_channel - the modelled resonator state of one channel
+//-------------------------------------------------
+
+l7a1429_resonator_params l7a1429_device::decoded_channel(unsigned ch) const
+{
+	// The register number of block B for this channel is B + ch (0..VOICES-1);
+	// the file is one flat array, so a channel's nineteen parameters are its
+	// nineteen strides of 0x40.  Same decode functions as log_decoded, so the
+	// modelled state and the logged view are one thing seen twice.
+	l7a1429_resonator_params p;
+	if (ch >= VOICES)
+		return p;   // zeroed; out-of-range channels are not part of the file
+
+	auto const r = [&](unsigned block) -> uint16_t { return m_regs[block + ch]; };
+
+	p.mode               = r(0x0000);
+	p.main_tune_note     = note_of(r(0x0040));
+	p.sub_tune_note      = note_of(r(0x0080));
+	p.position_octaves   = position_oct_of(r(0x00c0));   // ratio 2^x; absolute scale unknown
+	p.main_fitting_decay = q15_of(r(0x0140));
+	p.sub_fitting_decay  = q15_of(r(0x0180));
+	p.main_fitting_rise  = q15_of(r(0x01c0));
+	p.sub_fitting_rise   = q15_of(r(0x0200));
+	p.depth              = q15_of(r(0x0240));
+	p.sub_gain           = q15_of(r(0x0280));
+	p.interaction_gain   = r(0x0300) & 0x7f;             // 8-bit gain, same value in both halves
+	p.main_muting_hz     = muting_cutoff_hz(r(0x0400), SAMPLE_RATE);
+	p.sub_muting_hz      = muting_cutoff_hz(r(0x0440), SAMPLE_RATE);
+	return p;
 }

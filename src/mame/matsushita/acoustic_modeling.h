@@ -4,7 +4,9 @@
 
     Technics SX-WSA1 / SX-WSA1R -- IC3, the L7A1429 "MODELING LSI", the
     per-channel register file at 0x00104000 on CPU 2 (IC2, the SUB processor).
-    PLACEHOLDER: no audio is synthesised.
+    Models the register interface and the decoded per-channel resonator state
+    (decoded_channel / l7a1429_resonator_params); no audio is synthesised -- see
+    THE INTERNAL SIGNAL PATH note below for why that is correct, not unfinished.
 
     ------------------------------------------------------------------------
     THE PART, THE DECODE AND THE PORT -- SETTLED BY THE SERVICE MANUAL
@@ -178,6 +180,37 @@
 #pragma once
 
 
+// A decoded snapshot of one channel's resonator parameters, in engineering
+// units, computed from the raw register file.  This is the device's model of
+// the chip's PROGRAMMED STATE: every field is a register whose meaning is graded
+// PROVEN or STRONG in the table above, read in the unit the ROM curves fit.
+//
+// ⚠ IT IS THE INPUT SIDE ONLY.  These are the coefficients the firmware hands
+// the chip, not the chip's product: the internal signal path that would turn
+// them into IC3's 13-bit stream is unmeasured, and IC4's six wave mask ROMs are
+// undumped, so nothing here is rendered to audio.  It exists for the debugger
+// and as the drop-in the eventual synthesis reads, the same role reg() has -- a
+// faithful HLE of a coefficient-programmed part is its coefficient state, and
+// this is that state named and scaled.
+struct l7a1429_resonator_params
+{
+	uint16_t mode = 0;              // 0x0000 raw word; bits 6..4 gate interaction_gain
+	double   main_tune_note = 0.0;  // 0x0040, MIDI note number (1/256-semitone steps)
+	double   sub_tune_note = 0.0;   // 0x0080, MIDI note number
+	double   position_octaves = 0.0;// 0x00C0, log-domain period; ⚠ ABSOLUTE SCALE UNKNOWN,
+	                                //          only 2^position_octaves (a ratio) is meaningful
+	double   main_fitting_rise = 0.0;   // 0x01C0, Q15 [0,1)
+	double   main_fitting_decay = 0.0;  // 0x0140, Q15
+	double   sub_fitting_rise = 0.0;    // 0x0200, Q15
+	double   sub_fitting_decay = 0.0;   // 0x0180, Q15
+	double   depth = 0.0;               // 0x0240, Q15 (STRONG)
+	double   sub_gain = 0.0;            // 0x0280, Q15 linear gain (0.0 = the explicit OFF)
+	unsigned interaction_gain = 0;      // 0x0300, 0..127 (STRONG), effective only when mode gates it
+	double   main_muting_hz = 0.0;      // from 0x0400, the Q16 bilinear one-pole cutoff
+	double   sub_muting_hz = 0.0;       // from 0x0440
+};
+
+
 class l7a1429_device : public device_t
 {
 public:
@@ -195,6 +228,12 @@ public:
 	// selects return 0 rather than aliasing, which is this driver's choice: what
 	// the real part does with a select above its file is not established.
 	uint16_t reg(unsigned n) const { return (n < REG_COUNT) ? m_regs[n] : 0; }
+
+	// The decoded resonator state of one channel (0..VOICES-1), read from the
+	// raw register file in engineering units.  The HLE's model of what the
+	// firmware has programmed that voice to be; see l7a1429_resonator_params.
+	// Out-of-range channels return a zeroed struct.
+	l7a1429_resonator_params decoded_channel(unsigned ch) const;
 
 	// The tone editor's name for a block, or nullptr where the block is
 	// unidentified.  Fourteen of the nineteen are named; the rest deliberately
