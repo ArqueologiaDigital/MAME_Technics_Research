@@ -303,8 +303,10 @@
 #include "cpu/tlcs900/tmp95c061.h"
 #include "wsa1_cpanel.h"
 #include "acoustic_modeling.h"
+#include "wsa1_tonegen.h"
 
 #include "imagedev/floppy.h"
+#include "speaker.h"
 #include "machine/eepromser.h"
 #include "machine/upd765.h"
 #include "video/sed1330.h"
@@ -357,6 +359,7 @@ public:
 		, m_eeprom(*this, "eeprom")
 		, m_cpanel(*this, "cpanel")
 		, m_modeling(*this, "modeling")
+		, m_tonegen(*this, "tonegen")
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_keybed(*this, "KEY%u", 0U)
@@ -510,6 +513,10 @@ private:
 	// still inference is the part's INTERNAL signal path, and
 	// acoustic_modeling.h grades every claim and carries the firmware citations.
 	required_device<l7a1429_device> m_modeling;
+	// IC4 tone generator (TC183C230002).  A PLACEHOLDER SINE backend while the
+	// six wave mask ROMs are undumped -- just like the KN5000's RENDER_SINE.
+	// Fed by the real 0x0010C000 register writes in tg_data_w; wsa1_tonegen.h.
+	required_device<wsa1_tonegen_device> m_tonegen;
 	required_device<upd765a_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
@@ -2036,6 +2043,12 @@ void wsa1_state::tg_data_w(uint16_t data)
 				"  -- a block NO converted routine is known to write\n",
 				chan, m_tg_latch, m_tg_latch >> 6, data);
 
+		// Placeholder-sine pitch: chan + 0x0400 is the PITCH register (1/256
+		// semitone).  Push it to the sine backend as it is written, so a note that
+		// gates later already has its frequency.
+		if ((m_tg_latch & 0xffc0) == 0x0400)
+			m_tonegen->set_pitch(chan, data);
+
 		// ---------------- THE BUSY LATCH: A MODEL, NOT A FINDING --------------
 		//
 		// Block 0 per channel is the lifecycle register, and two literals move
@@ -2083,6 +2096,10 @@ void wsa1_state::tg_data_w(uint16_t data)
 				m_tg_busy[chan >> 4] |= bit;
 			else if (data == 0x7e00)
 				m_tg_busy[chan >> 4] &= uint16_t(~bit);
+
+			// Placeholder-sine gate: block 0's lifecycle latch IS the voice's
+			// note-on/off, so mirror the busy bit to the sine backend.
+			m_tonegen->set_gate(chan, (m_tg_busy[chan >> 4] & bit) != 0);
 		}
 
 		// Block 0x0080 bit 15 is a gate the CPU pulses 1-then-0 around a
@@ -3056,6 +3073,14 @@ static INPUT_PORTS_START(wsa1r)
 	PORT_CONFSETTING(   0x01, DEF_STR(On))
 	PORT_BIT(0xfe, IP_ACTIVE_HIGH, IPT_UNUSED)
 
+
+	// The tone generator's PLACEHOLDER sine, on by default: the six wave mask
+	// ROMs are undumped, so this stands in for real samples (wsa1_tonegen.h).
+	// Off silences it without disturbing the register file.
+	PORT_START("TGSINE")
+	PORT_CONFNAME(0x01, 0x01, "Placeholder sine (wave ROMs undumped)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, DEF_STR(On))
 INPUT_PORTS_END
 
 
@@ -3310,6 +3335,21 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// is, what it is not, and the grade of each claim are in
 	// acoustic_modeling.h.
 	L7A1429(config, m_modeling);
+
+	// --- IC4, the tone generator (TC183C230002), 0x10C000 on CPU 2 ---------
+	//
+	// PLACEHOLDER SINE backend while the six wave mask ROMs are undumped -- the
+	// same stand-in the KN5000 driver uses (kn5000_tonegen.cpp RENDER_SINE).  It
+	// is driven ONLY by the register writes tg_data_w already issues (PITCH
+	// chan+0x0400 and the block-0 gate latch), and routed to a stereo speaker.
+	// wsa1_tonegen.h explains why it is a sine, why it stays silent until the
+	// CPU2->CPU1 link carries a note, and how a real IC4 replaces it.
+	SPEAKER(config, "lspeaker").front_left();
+	SPEAKER(config, "rspeaker").front_right();
+	WSA1_TONEGEN(config, m_tonegen, 0);
+	m_tonegen->set_enable_port(":TGSINE");
+	m_tonegen->add_route(0, "lspeaker", 1.0);
+	m_tonegen->add_route(1, "rspeaker", 1.0);
 
 	// --- the floppy disk controller ----------------------------------------
 	//

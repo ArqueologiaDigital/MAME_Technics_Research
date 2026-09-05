@@ -149,6 +149,8 @@ ln -sf "$HERE/src/mame/matsushita/wsa1_cpanel.h"             "$BUILD_TREE/src/ma
 # nothing compiles.
 ln -sf "$HERE/src/mame/matsushita/acoustic_modeling.cpp"         "$BUILD_TREE/src/mame/matsushita/acoustic_modeling.cpp"
 ln -sf "$HERE/src/mame/matsushita/acoustic_modeling.h"           "$BUILD_TREE/src/mame/matsushita/acoustic_modeling.h"
+ln -sf "$HERE/src/mame/matsushita/wsa1_tonegen.cpp"              "$BUILD_TREE/src/mame/matsushita/wsa1_tonegen.cpp"
+ln -sf "$HERE/src/mame/matsushita/wsa1_tonegen.h"                "$BUILD_TREE/src/mame/matsushita/wsa1_tonegen.h"
 mkdir -p "$BUILD_TREE/src/devices/video"
 ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
 ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
@@ -380,7 +382,7 @@ SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/kn5000.cpp,src/mame/matsushita/k
 # follows #include recursively, so "cpu/tlcs900/tmp95c061.h" keeps CPUS["TLCS900"]
 # on (kn5000.cpp already does) and "video/sed1330.h" turns VIDEOS["SED1330"] on
 # through the annotation at scripts/src/video.lua:1474.
-SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp,src/mame/matsushita/acoustic_modeling.cpp"
+SOURCES_LIST="$SOURCES_LIST,src/mame/matsushita/wsa1.cpp,src/mame/matsushita/wsa1_cpanel.cpp,src/mame/matsushita/acoustic_modeling.cpp,src/mame/matsushita/wsa1_tonegen.cpp"
 # QT_HOME: pin where Qt lives instead of trusting `qmake6` on PATH.
 #
 # ⚠ WITHOUT THIS the build is at the mercy of PATH. genie's default is
