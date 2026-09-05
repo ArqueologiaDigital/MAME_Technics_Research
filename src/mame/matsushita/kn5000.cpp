@@ -186,6 +186,7 @@ void kn5000_kbd_uart_device::device_reset()
 #define LOG_FRAMING  (1U << 6)  // Inter-CPU framing forensics: every latch byte in and out,
                                 // with the receiver's micro-DMA count, plus every write that
                                 // lands on a byte the receiver has not consumed yet.
+#define LOG_AUDIOMIX (1U << 7)  // 0x150000 register file writes (AudioMix_Init), effect unknown
 #define LOG_ALL_LATCH (LOG_LATCH | LOG_LATCH_DATA)
 
 #define VERBOSE (LOG_LATCH | LOG_RESET)
@@ -311,6 +312,16 @@ private:
 	void dsp_reg_addr_w(uint16_t data);
 	void dsp_reg_data_w(uint16_t data);
 	uint16_t dsp_reg_data_r();
+
+	// A register file at 0x150000 on the MAIN bus, the structural twin of the sub-bus
+	// 0x130000 block: AudioMix_Init (v10 boot/system_handlers.s:1827) latches a register
+	// address at 0x150000 and writes data at 0x150002.  Writes captured; EFFECT NOT YET
+	// KNOWN and nothing here reads them back.  Chip identity needs service-manual p.32.
+	uint8_t m_audiomix_reg_addr = 0;
+	uint16_t m_audiomix_regs[0x100]{};
+	void audiomix_addr_w(uint16_t data);
+	void audiomix_data_w(uint16_t data);
+	uint16_t audiomix_data_r();
 
 	// IC311's EXTERNAL delay memory = IC309, a 4-Mbit DRAM.  The uPD6383GF's
 	// I-RAM, C-RAM and D-RAM are all on-die and are mapped by the device
@@ -625,6 +636,16 @@ void kn5000_state::maincpu_mem(address_map &map)
 	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
 	map(0x140000, 0x14ffff).r(FUNC(kn5000_state::maincpu_latch_r)); // @ IC23
 	map(0x140000, 0x14ffff).w(FUNC(kn5000_state::subcpu_latch_w)); // @ IC22 (logged wrapper)
+	// IC11 74VHC138 A16-A18 decode, output 101 (0x150000): an audio/mixer-adjacent register
+	// file, the main-bus twin of the sub-bus 0x130000 block.  AudioMix_Init
+	// (v10 boot/system_handlers.s:1827, called unconditionally via Seq_FullInit) latches a
+	// register address at 0x150000 and writes data at 0x150002 -- ~68 stores every boot
+	// (identical in v9/v7).  Captured here so the writes land somewhere defined instead of the
+	// unmapped-write log; EFFECT NOT YET KNOWN, nothing is applied to the audio path.  The chip
+	// identity needs service-manual p.32 (image-only PDF) at the IC11 decode -- a hardware/manual
+	// question, not something to invent.  Drop-in-replaceable once the part is named.
+	map(0x150000, 0x150001).w(FUNC(kn5000_state::audiomix_addr_w)); // register-address latch
+	map(0x150002, 0x150003).rw(FUNC(kn5000_state::audiomix_data_r), FUNC(kn5000_state::audiomix_data_w)); // register data
 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
 	map(0x1a0000, 0x1dffff).rw("vga", FUNC(mn89304_vga_device::mem_linear_r), FUNC(mn89304_vga_device::mem_linear_w));
 	map(0x1e0000, 0x1fffff).ram().share("nvram"); // 1Mbit SRAM @ IC21 (CS0)  Note: I think this is the message "ERROR in back-up SRAM"
@@ -650,7 +671,12 @@ void kn5000_state::subcpu_mem(address_map &map)
 	// uploads go over Sub CPU port PZ with the port 7 strobes (see machine config).
 	map(0x130000, 0x130001).w(FUNC(kn5000_state::dsp_reg_addr_w));   // register address
 	map(0x130002, 0x130003).rw(FUNC(kn5000_state::dsp_reg_data_r), FUNC(kn5000_state::dsp_reg_data_w)); // register data
-	map(0x1e0000, 0x1effff).noprw(); // Waveform/sample RAM (stub)
+	// No firmware basis for sample RAM here: the sub-CPU never accesses 0x1E0000 on its own bus.
+	// The three 0x1E0000 literals in the sub image (v142/subcpu/kn5000_subprogram_v142.s,
+	// `ld xde, 0x1E0000` at :41815/:41991/:42158) are the DST argument of
+	// InterCPU_E1_DMA_Transfer -- the MAIN CPU's IC21 battery-SRAM window (maincpu 0x1e0000),
+	// reached over the inter-CPU DMA, NOT memory decoded on this bus.
+	map(0x1e0000, 0x1effff).noprw(); // no sub-bus access to log; kept only to document the hole
 	map(0xfe0000, 0xffffff).rom().region("subcpu", 0); // 1Mbit MASK ROM @ IC30
 
 	// DSP2 @ IC310 (MN19413) uses GPIO serial: PF.0=SDA, PF.2=SCLK, PE.6=CS2.
@@ -720,6 +746,31 @@ void kn5000_state::dsp_reg_data_w(uint16_t data)
 uint16_t kn5000_state::dsp_reg_data_r()
 {
 	return m_dsp_regs[m_dsp_reg_addr];
+}
+
+
+// --- 0x150000 register file (AudioMix_Init) --------------------------------
+// Main-bus twin of the sub-bus 0x130000 block.  A 32-bit store of 0x0101001F to
+// 0x150000 lands as the low word 0x001F here (register address) and the high word
+// 0x0101 at 0x150002 (data), the same address/data shape as the byte stores.  The
+// full 16 bits of data are kept -- unlike the 0x130000 latch, this does not drop a
+// high byte.  Nothing reads these back yet; the handler exists so the writes are
+// captured rather than logged as unmapped, pending the chip's identity (SM p.32).
+void kn5000_state::audiomix_addr_w(uint16_t data)
+{
+	m_audiomix_reg_addr = data & 0xff;
+	LOGMASKED(LOG_AUDIOMIX, "AudioMix: reg addr = 0x%02x\n", m_audiomix_reg_addr);
+}
+
+void kn5000_state::audiomix_data_w(uint16_t data)
+{
+	m_audiomix_regs[m_audiomix_reg_addr] = data;
+	LOGMASKED(LOG_AUDIOMIX, "AudioMix: reg[0x%02x] = 0x%04x\n", m_audiomix_reg_addr, data);
+}
+
+uint16_t kn5000_state::audiomix_data_r()
+{
+	return m_audiomix_regs[m_audiomix_reg_addr];
 }
 
 
@@ -1253,8 +1304,11 @@ void kn5000_state::kn5000(machine_config &config)
 
 
 	// MAINCPU PORT 8:
-	//   bit 6 (~WAIT pin) (input): Something involving VGA.RDY, FDC.DMAACK
-	//                              and shift-register @ IC18
+	//   bit 6 = ~WAIT pin.  NO firmware samples P8.6: the raw-ROM bit-op census
+	//   (tools/kn5000-io-census/rom_bitop_census.py --all-bits P8) finds zero
+	//   BIT/SET/RES ops on bit 6 in v10/v9/v7 (the only P8 ops are P8.0 and P8.3).
+	//   Whatever the ~WAIT hardware gates (VGA.RDY / FDC.DMAACK / shift-register @
+	//   IC18), the firmware never reads it as a port bit.
 
 
 	// MAINCPU PORT A:
