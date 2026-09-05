@@ -44,6 +44,7 @@ tmp95c061_device::tmp95c061_device(const machine_config &mconfig, const char *ta
 	m_sc1_txd_cb(*this),
 	m_sc1_mod_cb(*this),
 	m_sc1_rx_data(0),
+	m_sc0_rx_data(0),
 	m_ad_result{ 0, 0, 0, 0 },
 	m_ad_mode(0),
 	m_int_reg{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -243,6 +244,7 @@ void tmp95c061_device::device_start()
 	save_item(NAME(m_baud_rate));
 	save_item(NAME(m_od_enable));
 	save_item(NAME(m_sc1_rx_data));
+	save_item(NAME(m_sc0_rx_data));
 	save_item(NAME(m_ad_result));
 	save_item(NAME(m_ad_mode));
 	save_item(NAME(m_int_reg));
@@ -1589,7 +1591,10 @@ void tmp95c061_device::wdcr_w(uint8_t data)
 
 uint8_t tmp95c061_device::sc0buf_r()
 {
-	return 0;
+	// OVERLAY (kn7000_mame): whatever a connected device last handed us with
+	// sc0_rxd() -- the MIDI byte on serial channel 0.  Still 0 for every machine
+	// that wires nothing, exactly as before.
+	return m_sc0_rx_data;
 }
 
 void tmp95c061_device::sc0buf_w(uint8_t data)
@@ -1704,6 +1709,16 @@ void tmp95c061_device::sc1_rxd(uint8_t data)
 {
 	m_sc1_rx_data = data;
 	m_int_reg[INTES1] |= 0x08;
+	m_check_irqs = 1;
+}
+
+void tmp95c061_device::sc0_rxd(uint8_t data)
+{
+	// OVERLAY (kn7000_mame): the SX-WSA1R's MIDI IN.  A received byte lands in
+	// SC0BUF and raises INTRX0 (INTES0 bit 3), the same shape as sc1_rxd for the
+	// control panel.  Default-inert for every other tmp95c061 machine.
+	m_sc0_rx_data = data;
+	m_int_reg[INTES0] |= 0x08;
 	m_check_irqs = 1;
 }
 

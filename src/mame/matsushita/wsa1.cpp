@@ -108,14 +108,22 @@
         0x108000 and 0x5C18 on release -- touch 0x5C, key 24, bit 7 for down --
         which is byte for byte what keybed_push() queued
         (notes/wsa1-probes/wsa1_keybed_note.lua).
-      * the LINK does not carry it.  CPU 2 -> CPU 1 sends exactly one packet per
-        boot and then wedges on a handshake line CPU 1 never releases, so
-        KeyEvents_ToLink's channel-5 packet is dropped.  The measurement and
-        where to look are in the block comment on the link handlers.
+      * the LINK carries it now.  The CPU 2 -> CPU 1 wedge (one packet, then stuck
+        on a handshake) was a CPU-core bug -- a micro-DMA channel's INT0 dispatched
+        to the CPU instead of the channel -- fixed as OVERLAY FIX 6 in tmp95c061
+        (2026-08-27); the block comment on the link handlers keeps the full
+        before/after measurement.
 
-    So no note reaches the tone generator, and nothing makes a sound in any case:
-    nothing synthesises, the wave ROMs are undumped, and the sequencer clock
-    cannot tick (see the machine config).  The three DSPs and the flash are still
+    So the path from a note to the tone generator is no longer blocked, and the
+    tone generator now makes a sound: a PLACEHOLDER SINE per gated voice, scaled
+    by the OUTPUT LEVEL register and silenced by the idle marker
+    (wsa1_tonegen.cpp), standing in until the six wave mask ROMs are dumped.  The
+    musical clock ticks (see the machine config), and MIDI IN is wired -- CPU 1's
+    serial channel 0 -> the link -> CPU 2's note dispatch (see the MIDI wiring in
+    the machine config).  ⚠ End-to-end host-MIDI playback has not been exercised
+    in every environment: MAME's PortMidi needs a host MIDI input to read from.
+    Real synthesis is still absent (the wave ROMs are undumped).  The three DSPs
+    and the flash are still
     absent; the panel microcontroller is HLE'd on serial channel 1 and the FLOPPY
     CONTROLLER IS NOW A REAL DEVICE, uPD765-family, with a 3.5 inch drive on it
     (see the block comment above fdc_ctrl_w).  Unlike the MN10300-based Technics keyboards in
@@ -307,6 +315,8 @@
 
 #include "imagedev/floppy.h"
 #include "speaker.h"
+#include "bus/midi/midi.h"
+#include "diserial.h"
 #include "machine/eepromser.h"
 #include "machine/upd765.h"
 #include "video/sed1330.h"
@@ -346,6 +356,45 @@
 #include "logmacro.h"
 
 
+// ----------------------------------------------------------------------------
+//  SX-WSA1R MIDI UART -- byte<->bit bridge between MAME's bit-serial midi_port
+//  and the CPU's byte-granular serial channel 0 (31250 baud, 8N1).  MAME's
+//  midiin delivers a serial bitstream; the tmp95c061 SC0 engine is byte-granular
+//  (sc0_rxd), so this assembles the bits into whole MIDI bytes.  Modelled on
+//  kn5000_kbd_uart_device.
+// ----------------------------------------------------------------------------
+class wsa1_midi_uart_device : public device_t, public device_serial_interface
+{
+public:
+	wsa1_midi_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+	auto rx_cb() { return m_rx_cb.bind(); }   // each fully-received MIDI byte -> driver
+
+protected:
+	virtual void device_start() override {}
+	virtual void device_reset() override ATTR_COLD;
+
+	virtual void rcv_complete() override { receive_register_extract(); m_rx_cb(get_received_char()); }
+
+	devcb_write8 m_rx_cb;
+};
+
+DEFINE_DEVICE_TYPE(WSA1_MIDI_UART, wsa1_midi_uart_device, "wsa1_midi_uart", "SX-WSA1R MIDI UART")
+
+wsa1_midi_uart_device::wsa1_midi_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+	device_t(mconfig, WSA1_MIDI_UART, tag, owner, clock),
+	device_serial_interface(mconfig, *this),
+	m_rx_cb(*this)
+{
+}
+
+void wsa1_midi_uart_device::device_reset()
+{
+	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);   // MIDI: 8N1
+	set_rate(31250);                                  // MIDI baud
+}
+
+
 namespace {
 
 class wsa1_state : public driver_device
@@ -360,6 +409,7 @@ public:
 		, m_cpanel(*this, "cpanel")
 		, m_modeling(*this, "modeling")
 		, m_tonegen(*this, "tonegen")
+		, m_midi_uart(*this, "midi_uart")
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_keybed(*this, "KEY%u", 0U)
@@ -389,6 +439,9 @@ private:
 	void cpu1_link_w(uint8_t data);
 	uint8_t cpu2_link_r();
 	void cpu2_link_w(uint8_t data);
+
+	// A fully-received MIDI IN byte -> CPU 1's serial channel 0 (INTRX0).
+	void midi1_rx(uint8_t data) { m_cpu1->sc0_rxd(data); }
 
 	uint8_t cpu1_p7_r();
 	void cpu1_p7_w(uint8_t data);
@@ -517,6 +570,8 @@ private:
 	// six wave mask ROMs are undumped -- just like the KN5000's RENDER_SINE.
 	// Fed by the real 0x0010C000 register writes in tg_data_w; wsa1_tonegen.h.
 	required_device<wsa1_tonegen_device> m_tonegen;
+	// MIDI IN bit->byte bridge for CPU 1's serial channel 0 (rear MIDI1 jack).
+	required_device<wsa1_midi_uart_device> m_midi_uart;
 	required_device<upd765a_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
@@ -3358,6 +3413,19 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
+	// --- MIDI IN (rear MIDI1 jack) -> CPU 1's serial channel 0 -------------
+	//
+	// CPU 1's TXD0/RXD0 are MIDI1 OUT/IN (schematic sheet II-7/II-8).  MAME's
+	// midiin is bit-serial, so wsa1_midi_uart assembles the bits into whole
+	// bytes at 31250 baud and hands each to sc0_rxd(), which raises INTRX0.
+	// CPU 1 (the master) parses MIDI and forwards note-ons to CPU 2 over the
+	// inter-processor link (channel 0), where MidiIn_ParseRingAndDispatch turns
+	// them into tone-generator voices -- heard as the placeholder sine until the
+	// wave mask ROMs are dumped.  Host: -mdin <port>.
+	WSA1_MIDI_UART(config, m_midi_uart, 0);
+	m_midi_uart->rx_cb().set(FUNC(wsa1_state::midi1_rx));
+	MIDI_PORT(config, "mdin", midiin_slot, "midiin").rxd_handler().set(m_midi_uart, FUNC(wsa1_midi_uart_device::rx_w));
+
 	// --- the floppy disk controller ----------------------------------------
 	//
 	// The evidence, the substitution of upd765a_device for the parts list's
@@ -3490,12 +3558,14 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// so boot to a drawn screen is ~4x quicker in emulated time, and the
 	// machine's musical clock exists at all for the first time.
 	//
-	// Still absent: the tone generator's actual synthesis, the three DSPs and
-	// their microcode upload path, the AM29F400T flash (whose data-poll and
-	// erase-verify loops are unbounded and will spin if reached) and the MIDI
-	// port (MAME's tmp95c061 has no serial engine at all on channel 0 -
-	// sc0buf_r returns 0 and sc0buf_w only fakes "transmit complete", so there
-	// is nothing to connect a midiin/midiout to).  The floppy controller and the
+	// Still absent: the tone generator's actual synthesis (a placeholder sine
+	// stands in, wsa1_tonegen.cpp), the three DSPs and their microcode upload
+	// path, and the AM29F400T flash (whose data-poll and erase-verify loops are
+	// unbounded and will spin if reached).  MIDI IN is no longer on this list:
+	// tmp95c061 now has a serial-channel-0 receive engine (sc0_rxd, mirroring the
+	// channel-1 one), and a wsa1_midi_uart bridges MAME's bit-serial midiin to
+	// it -- see the MIDI wiring in the machine config.  MIDI OUT (SC0 TX) is not
+	// wired: sc0buf_w still only fakes "transmit complete".  The floppy controller and the
 	// panel microcontroller are no longer on this list; the floppy's one
 	// remaining hole is that whatever drives the drive motor has not been
 	// identified, so an attached image never becomes READY - see the ⚠ paragraph
