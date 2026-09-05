@@ -48,6 +48,9 @@ public:
 	// Driven by the real 0x0010C000 register writes in wsa1_state::tg_data_w.
 	void set_pitch(unsigned ch, uint16_t reg0400);  // chan + 0x0400, 1/256 semitone
 	void set_gate(unsigned ch, bool on);            // block-0 lifecycle latch (0x8100/0x7E00)
+	void set_level(unsigned ch, uint16_t reg0080);  // chan + 0x0080, log amplitude (256/octave)
+	void set_env0(unsigned ch, uint16_t reg0800);   // chan + 0x0800, half of the idle marker
+	void set_env1(unsigned ch, uint16_t reg0840);   // chan + 0x0840, the other half
 
 	// A driver ioport whose bit 0 enables the placeholder sine (default: on).
 	// Clearing it silences the placeholder without disturbing the register file.
@@ -67,12 +70,17 @@ private:
 
 	struct voice
 	{
-		uint32_t phase = 0;    // 32-bit phase accumulator; index = phase >> (32 - SINE_BITS)
-		uint32_t inc   = 0;    // phase increment per output sample
-		uint16_t pitch = 0;    // last chan+0x0400 written, for save-state legibility
-		bool     gate  = false;// the block-0 lifecycle latch
-		float    env   = 0.0f; // current amplitude, ramped so gate edges do not click
+		uint32_t phase   = 0;      // 32-bit phase accumulator; index = phase >> (32 - SINE_BITS)
+		uint32_t inc     = 0;      // phase increment per output sample
+		uint16_t pitch   = 0;      // last chan+0x0400 written, for save-state legibility
+		uint16_t level   = 0;      // chan+0x0080: log amplitude, 0x0FF4 = unity, 0 = silent
+		uint16_t env0800 = 0xff80; // chan+0x0800 \  the two together are this channel's
+		uint16_t env0840 = 0xff00; // chan+0x0840 /  idle marker (0xFF80 / 0xFF00)
+		bool     gate    = false;  // the block-0 lifecycle latch
+		float    env     = 0.0f;   // current amplitude, ramped so gate/level edges do not click
 	};
+
+	float amp_of(const voice &v) const;   // target amplitude from gate, idle marker and level
 
 	sound_stream    *m_stream = nullptr;
 	optional_ioport  m_enable;

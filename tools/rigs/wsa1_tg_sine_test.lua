@@ -1,28 +1,33 @@
--- WSA1R placeholder-sine render test.
+-- WSA1R placeholder-sine render + amplitude-envelope test.
 --
 -- QUESTION THIS ANSWERS: does the tone generator's placeholder sine backend
--- (wsa1_tonegen.cpp) actually produce non-silent audio when a voice is gated?
+-- (wsa1_tonegen.cpp) render gated voices at the right pitch, scale them by the
+-- OUTPUT LEVEL register, and silence a channel left in its idle marker?
 --
--- Notes do not reach the tone generator on their own yet -- the CPU2->CPU1 link
--- wedges (see wsa1.cpp) -- so this injects a few note-ons the way the firmware
--- would, through the SAME port the driver hooks (0x0010C000 on CPU 2): the PITCH
--- register (chan+0x0400) and the block-0 gate latch (0x8100).  Pair it with
--- -wavwrite and the capture must be non-silent; -seconds_to_run bounds the run.
+-- Notes do not reach the tone generator on their own yet (the CPU2->CPU1 link
+-- wedges), so this injects a few note-ons the way the firmware would, through
+-- the SAME port the driver hooks (0x0010C000 on CPU 2): PITCH (chan+0x0400),
+-- OUTPUT LEVEL (chan+0x0080), the two envelope-marker halves (chan+0x0800 /
+-- chan+0x0840), and the block-0 gate (0x8100).  Pair it with -wavwrite.
+--
+-- THREE VOICES, EACH A CONTROL FOR THE ENVELOPE MODEL:
+--   voice 0  A4  unity level (0x0FF4), non-idle  -> LOUD
+--   voice 1  C#5 unity level BUT the idle marker -> SILENT (idle beats the gate)
+--   voice 2  E5  level 2 octaves down (0x0DF4)   -> ~1/4 amplitude
+-- So a correct capture has a strong 440 Hz, a much weaker 659 Hz, and NOTHING
+-- at 554 Hz; and the no-autoboot null is silent from ~2 s.
 --
 -- RUN (from the build tree, visible video, ~6 emulated seconds):
 --   ./kn7000 wsa1r -rompath <roms> -window -skip_gameinfo \
 --       -autoboot_script tools/rigs/wsa1_tg_sine_test.lua -autoboot_delay 2 \
 --       -wavwrite out.wav -seconds_to_run 6
--- PASS = out.wav has clearly non-zero RMS after the gate fires.
 --
--- MEASURED 2026-09-05 (48 kHz capture, 0.5 s RMS windows, left channel):
---   gated run:  boot 0..1.5 s ~8000, then the triad steady ~7220 from 2.5 s on;
---               Goertzel at 440/554/659 Hz ~4.24e8 each, off-target (300/750 Hz)
---               3-4 orders of magnitude lower -- the three gated pitches, nothing else.
---   null run (no autoboot_script): identical boot 0..1.5 s, then RMS 0 from 2.0 s.
--- So the placeholder is SILENT at idle and sounds the gated notes at the right
--- pitch; the 0..1.5 s boot transient is the firmware gating voices during init
--- (real hardware would silence those with the amplitude envelope, not modelled).
+-- MEASURED 2026-09-05 (48 kHz capture, steady window 3.5..5.5 s, left channel):
+--   A4 440 Hz (unity)      magnitude 2949   -- LOUD
+--   C#5 554 Hz (idle)      magnitude 2.5    -- SILENT (ratio 0.0008: idle beats gate)
+--   E5 659 Hz (-2 octaves) magnitude 740    -- ratio 0.2507 to A4 (expected 0.25)
+-- and with the level+idle model the boot init is SILENT (0..1.5 s RMS 0), where
+-- the fixed-amplitude placeholder had a loud 0..1.5 s transient.
 
 local fired  = false
 local frames = 0
@@ -40,13 +45,17 @@ _G._wsa1tg = emu.add_machine_frame_notifier(function()
 		sp:write_u16(0x10c002, val)   -- register data   (tg_data_w)
 	end
 
-	-- An A-major triad: A4, C#5, E5, in 1/256-semitone pitch units.
-	local notes = { 69, 73, 76 }
-	for i, n in ipairs(notes) do
-		local ch = i - 1
-		wr(0x0400 + ch, n * 256)   -- PITCH
-		wr(0x0080 + ch, 0x0800)    -- OUTPUT LEVEL (value not used by the placeholder)
-		wr(0x0000 + ch, 0x8100)    -- block-0 GATE on -> sets the busy latch
+	local defs = {
+		{ ch = 0, note = 69, level = 0x0ff4, e0 = 0x8000, e1 = 0x8000 }, -- LOUD
+		{ ch = 1, note = 73, level = 0x0ff4, e0 = 0xff80, e1 = 0xff00 }, -- IDLE -> silent
+		{ ch = 2, note = 76, level = 0x0df4, e0 = 0x8000, e1 = 0x8000 }, -- ~1/4
+	}
+	for _, d in ipairs(defs) do
+		wr(0x0400 + d.ch, d.note * 256)  -- PITCH
+		wr(0x0080 + d.ch, d.level)       -- OUTPUT LEVEL
+		wr(0x0800 + d.ch, d.e0)          -- envelope marker halves
+		wr(0x0840 + d.ch, d.e1)
+		wr(0x0000 + d.ch, 0x8100)        -- block-0 GATE on
 	end
-	print("WSA1R-TG-TEST: gated 3 voices (A major triad) via 0x0010C000")
+	print("WSA1R-TG-TEST: gated 3 voices (loud A4, idle C#5, quiet E5) via 0x0010C000")
 end)

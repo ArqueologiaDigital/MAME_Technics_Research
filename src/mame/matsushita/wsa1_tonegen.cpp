@@ -20,6 +20,12 @@
 
 DEFINE_DEVICE_TYPE(WSA1_TONEGEN, wsa1_tonegen_device, "wsa1_tonegen", "Technics SX-WSA1R Tone Generator (placeholder sine)")
 
+namespace {
+// Per-voice peak with headroom for many simultaneous voices; a voice at unity
+// output level (register field 0x0FF4) reaches this.
+constexpr float VOICE_PEAK = 0.18f;
+} // anonymous namespace
+
 
 wsa1_tonegen_device::wsa1_tonegen_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, WSA1_TONEGEN, tag, owner, clock)
@@ -45,6 +51,9 @@ void wsa1_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].phase), i);
 		save_item(NAME(m_voice[i].inc), i);
 		save_item(NAME(m_voice[i].pitch), i);
+		save_item(NAME(m_voice[i].level), i);
+		save_item(NAME(m_voice[i].env0800), i);
+		save_item(NAME(m_voice[i].env0840), i);
 		save_item(NAME(m_voice[i].gate), i);
 		save_item(NAME(m_voice[i].env), i);
 	}
@@ -98,6 +107,52 @@ void wsa1_tonegen_device::set_gate(unsigned ch, bool on)
 }
 
 
+void wsa1_tonegen_device::set_level(unsigned ch, uint16_t reg0080)
+{
+	if (ch >= NUM_VOICES) return;
+	m_stream->update();
+	m_voice[ch].level = reg0080;
+}
+
+void wsa1_tonegen_device::set_env0(unsigned ch, uint16_t reg0800)
+{
+	if (ch >= NUM_VOICES) return;
+	m_stream->update();
+	m_voice[ch].env0800 = reg0800;
+}
+
+void wsa1_tonegen_device::set_env1(unsigned ch, uint16_t reg0840)
+{
+	if (ch >= NUM_VOICES) return;
+	m_stream->update();
+	m_voice[ch].env0840 = reg0840;
+}
+
+
+//-------------------------------------------------
+//  amp_of - the voice's target amplitude from its gate, idle marker and level
+//-------------------------------------------------
+
+float wsa1_tonegen_device::amp_of(const voice &v) const
+{
+	// A channel whose two envelope-marker registers hold the reset/voice-clear
+	// quiescent pair (0xFF80 / 0xFF00) is idle and makes no sound; this is what
+	// silences the boot-init and freed voices instead of a fixed level would.
+	if (v.env0800 == 0xff80 && v.env0840 == 0xff00)
+		return 0.0f;
+	if (!v.gate)
+		return 0.0f;
+
+	// OUTPUT LEVEL: field = reg0080 & 0x0FFF, a base-2 logarithm with 256 counts
+	// per octave, 0x0FF4 = unity and larger = louder
+	// (FINDINGS-prom_c-dev10c-register-meanings.md sec.3/6).  The 3-bit field
+	// (bits 14..12) and the strobe (bit 15) are not amplitude and are ignored.
+	unsigned const field = v.level & 0x0fff;
+	float const gain = float(std::pow(2.0, (double(field) - double(0x0ff4)) / 256.0));
+	return VOICE_PEAK * gain;
+}
+
+
 //-------------------------------------------------
 //  sound_stream_update - sum the gated voices' sines
 //-------------------------------------------------
@@ -108,11 +163,10 @@ void wsa1_tonegen_device::sound_stream_update(sound_stream &stream)
 	// is bound.  Off => every voice's target is 0 and the bank fades to silence.
 	bool const enabled = (m_enable.read_safe(1) & 1) != 0;
 
-	// Per-voice peak, with headroom for many simultaneous voices, and gate-edge
-	// ramps (~4 ms attack, ~40 ms release) so note-on/off never clicks.
-	constexpr float PEAK    = 0.18f;
-	constexpr float ATTACK  = PEAK / (0.004f * float(STREAM_RATE));
-	constexpr float RELEASE = PEAK / (0.040f * float(STREAM_RATE));
+	// Gate/level-edge ramps (~4 ms attack, ~40 ms release), against full scale,
+	// so an amplitude step (note-on, note-off, or a level change) never clicks.
+	constexpr float ATTACK  = VOICE_PEAK / (0.004f * float(STREAM_RATE));
+	constexpr float RELEASE = VOICE_PEAK / (0.040f * float(STREAM_RATE));
 
 	for (int s = 0; s < stream.samples(); s++)
 	{
@@ -120,7 +174,9 @@ void wsa1_tonegen_device::sound_stream_update(sound_stream &stream)
 
 		for (voice &v : m_voice)
 		{
-			float const target = (enabled && v.gate) ? PEAK : 0.0f;
+			// Target amplitude from the real level + idle marker; the enable
+			// toggle forces silence.
+			float const target = enabled ? amp_of(v) : 0.0f;
 
 			if (v.env < target)
 				v.env = std::min(target, v.env + ATTACK);

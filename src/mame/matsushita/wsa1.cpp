@@ -2043,11 +2043,18 @@ void wsa1_state::tg_data_w(uint16_t data)
 				"  -- a block NO converted routine is known to write\n",
 				chan, m_tg_latch, m_tg_latch >> 6, data);
 
-		// Placeholder-sine pitch: chan + 0x0400 is the PITCH register (1/256
-		// semitone).  Push it to the sine backend as it is written, so a note that
-		// gates later already has its frequency.
-		if ((m_tg_latch & 0xffc0) == 0x0400)
-			m_tonegen->set_pitch(chan, data);
+		// Placeholder-sine parameters: push the registers the sine backend uses as
+		// they are written, so a voice that gates later already has them -- PITCH
+		// (chan+0x0400, 1/256 semitone), OUTPUT LEVEL (chan+0x0080, log amplitude),
+		// and the two envelope-marker halves (chan+0x0800 / chan+0x0840) whose
+		// quiescent pair marks the channel idle.
+		switch (m_tg_latch & 0xffc0)
+		{
+		case 0x0400: m_tonegen->set_pitch(chan, data); break;
+		case 0x0080: m_tonegen->set_level(chan, data); break;
+		case 0x0800: m_tonegen->set_env0(chan, data);  break;
+		case 0x0840: m_tonegen->set_env1(chan, data);  break;
+		}
 
 		// ---------------- THE BUSY LATCH: A MODEL, NOT A FINDING --------------
 		//
