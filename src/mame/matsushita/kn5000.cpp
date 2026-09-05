@@ -44,6 +44,7 @@
 #endif
 #include "diserial.h"                 // device_serial_interface (MIDI->keybed UART)
 #include "machine/gen_latch.h"
+#include "machine/intelfsh.h"       // IC19 custom-data flash (AMD Am29F800, 8 Mbit)
 #include "machine/nvram.h"
 #include "machine/upd765.h"
 #include "video/pc_vga.h"
@@ -207,6 +208,7 @@ public:
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_tonegen(*this, "tonegen")
+		, m_customdata(*this, "custom_data")
 		, m_kbd_uart(*this, "kbdmidi_uart")
 		, m_dsp1(*this, "dsp1")
 		, m_com_select(*this, "COM_SELECT")
@@ -240,6 +242,10 @@ private:
 	required_device<upd72067_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	required_device<kn5000_tonegen_device> m_tonegen;
+	// IC19, the custom-data flash at 0x300000 -- an 8 Mbit AMD Am29F800-class part
+	// (single x16, device ID 0x2258).  Flash_InitAllBanks (v10 boot/system_handlers.s:6466)
+	// runs the AMD autoselect on it at boot and stores the ID at DRAM 0x0205E0.
+	required_device<amd_29f800b_16bit_device> m_customdata;
 	required_device<kn5000_kbd_uart_device> m_kbd_uart;  // MIDI -> internal key bed (velocity)
 
 	// --- MIDI -> internal KEY BED bridge (velocity-sensitive) ------------------
@@ -649,7 +655,11 @@ void kn5000_state::maincpu_mem(address_map &map)
 	map(0x1703b0, 0x1703df).m("vga", FUNC(mn89304_vga_device::io_map)); // LCD controller @ IC206
 	map(0x1a0000, 0x1dffff).rw("vga", FUNC(mn89304_vga_device::mem_linear_r), FUNC(mn89304_vga_device::mem_linear_w));
 	map(0x1e0000, 0x1fffff).ram().share("nvram"); // 1Mbit SRAM @ IC21 (CS0)  Note: I think this is the message "ERROR in back-up SRAM"
-	map(0x300000, 0x3fffff).rom().region("custom_data", 0); // 8MBit FLASH ROM @ IC19 (CS5)
+	// 8 Mbit FLASH ROM @ IC19 (CS5).  A real AMD Am29F800-class flash device (not .rom()) so
+	// the AMD command set works: Flash_InitAllBanks (v10 boot/system_handlers.s:6466) unlocks
+	// at +0xAAAA/+0x5554, autoselects (0x90), reads maker/device (0x0001/0x2258) and stores the
+	// ID at DRAM 0x0205E0; the ID selects the erase-sector layout for a custom-data update.
+	map(0x300000, 0x3fffff).rw(m_customdata, FUNC(amd_29f800b_16bit_device::read), FUNC(amd_29f800b_16bit_device::write));
 	map(0x400000, 0x7fffff).rom().region("rhythm_data", 0); // 32MBit ROM @ IC14 (A22=1 and CS5)
 	// The subcpu payload is stored compressed in IC19 flash at 0x3E0000, which is part of the "custom_data" region above.
 	map(0x800000, 0x9fffff).mirror(0x200000).rom().region("table_data", 0); //2 * 8MBit ROMs @ IC1, IC3 (CS2)
@@ -1282,6 +1292,11 @@ void kn5000_state::kn5000(machine_config &config)
 {
 	// Note: The CPU has an internal clock doubler
 	TMP94C241(config, m_maincpu, 2 * 8_MHz_XTAL); // TMP94C241F @ IC5
+
+	// IC19 custom-data flash at 0x300000 (CS5).  A real AMD Am29F800-class device so the
+	// boot-time JEDEC autoselect (Flash_InitAllBanks) reads a valid ID instead of 0xFFFF;
+	// seeded from the "custom_data" ROM region.  P7.5 (the RY/~BY line) is held ready above.
+	AMD_29F800B_16BIT(config, m_customdata);
 	// Address bus is set to 32 bits by the pins AM1=+5v and AM0=GND
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn5000_state::maincpu_mem);
 	// Interrupt 4: FDCINT
