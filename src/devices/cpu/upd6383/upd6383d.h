@@ -708,7 +708,15 @@ public:
 	{
 		if (c_format(w))                        return false;
 		const u8 cl = class4(w);
-		if (cl != 2 && cl != 8 && cl != 0xa)    return false;
+		// ★ SPECULATIVE: also admit the register-file addressing modes class 1
+		//   and class 9 (= mode 1 + cursor fetch).  The disassembler already
+		//   renders these as "internal register file [XX]" (R2 sect. 1), so the
+		//   ADDRESSING is structurally understood; accepting them as a decoded
+		//   register-file-operand ALU op fits +105 words.  HI_ACC_HOLD stays
+		//   class-8-only, and the bit-4 store guard below still refuses stores
+		//   off mode 2, so only the non-store register-file ops are admitted.
+		if (cl != 1 && cl != 2 && cl != 8 && cl != 9 && cl != 0xa)
+			return false;
 		if (lo12(w) & 0x800)                    return false;
 		if (lo_ptrmode(w))                      return false;
 		if (!lo_src_anchored_spec(lo_src(w)) || !lo_act_anchored_spec(lo_act(w)))
