@@ -681,6 +681,46 @@ std::string annotate(u64 word, int at)
 					sr ? sr : "", (sr && ar) ? "; " : "", ar ? ar : "");
 	}
 
+	// ★ SPECULATIVE partial decode: class A ALWAYS multiplies (P = coef x L) and
+	// class 2 is the post-increment MAC -- that much is what the CLASS means,
+	// established (R2, K4).  So a leftover word in one of these classes with a
+	// real source has its MULTIPLY/MAC decoded even when the accumulator-combine
+	// (the f31 microcode) or a minor operand is still open.  Render that partial
+	// reading rather than leaving the word dark.
+	{
+		const u8 s = upd6383_disassembler::lo_src(word);
+		if (cl == 0xa)
+			return util::string_format(
+					"SPECULATIVE: class-A multiply (P = coef x source 0x%02X); the "
+					"source id / accumulator-combine f31=%d / ACT 0x%02X may be OPEN",
+					s, upd6383_disassembler::hi_f31(hi), upd6383_disassembler::lo_act(word));
+		if ((cl & 7) == 2 && upd6383_disassembler::lo_src_anchored_spec(s))
+			return util::string_format(
+					"SPECULATIVE: class-2 post-increment MAC (source 0x%02X); the "
+					"accumulator-combine f31=%d and/or ACT 0x%02X are OPEN",
+					s, upd6383_disassembler::hi_f31(hi), upd6383_disassembler::lo_act(word));
+		// The lo12 bit-11 MODIFIER family (bit11-family.md): class 0 words such as
+		// lo12 0x8BC/0x864/0x921, carrying the bit-11 modifier and a pointer mode.
+		// The modifier structure is understood; the base selector/register is open.
+		if (cl == 0 && (upd6383_disassembler::lo12(word) & 0x800) && upd6383_disassembler::lo_ptrmode(word))
+			return "SPECULATIVE: lo12 bit-11 modifier word + pointer-mode "
+					"(bit11-family); the base selector/register is OPEN";
+
+		// Principled floor: if the accumulator OPERATION is a known f31 microcode
+		// (LOAD/ADD/HOLD), the word's acc step is decoded even when its addressing
+		// class or operands are not.  A word whose f31 is itself unknown gets
+		// nothing here and stays genuinely dark -- annotating "unknown" would game
+		// the metric, not decode.
+		const u16 f = upd6383_disassembler::hi_f31(hi);
+		if (f == upd6383_disassembler::HI_ACC_LOAD || f == upd6383_disassembler::HI_ACC_ADD
+				|| f == upd6383_disassembler::HI_ACC_HOLD)
+			return util::string_format(
+					"SPECULATIVE: accumulator op f31=%d (%s) is known; addressing class "
+					"0x%X and operands are OPEN", f,
+					f == upd6383_disassembler::HI_ACC_LOAD ? "LOAD" :
+					f == upd6383_disassembler::HI_ACC_ADD  ? "ADD"  : "HOLD", cl);
+	}
+
 	return "";
 }
 
