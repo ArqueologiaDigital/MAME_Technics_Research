@@ -43,6 +43,7 @@ tmp95c061_device::tmp95c061_device(const machine_config &mconfig, const char *ta
 	m_od_enable(0),
 	m_sc1_txd_cb(*this),
 	m_sc1_mod_cb(*this),
+	m_sc0_txd_cb(*this),
 	m_sc1_rx_data(0),
 	m_sc0_rx_data(0),
 	m_ad_result{ 0, 0, 0, 0 },
@@ -1599,6 +1600,11 @@ uint8_t tmp95c061_device::sc0buf_r()
 
 void tmp95c061_device::sc0buf_w(uint8_t data)
 {
+	// Serial channel 0 is MIDI OUT on the machines that wire it (MIDI1 on CPU 1).
+	// Hand the byte to whoever bound sc0_txd() -- byte granularity, the TX twin of
+	// sc0_rxd().  Default-unbound, so a machine that wires nothing is unaffected.
+	m_sc0_txd_cb(data);
+
 	// Fake finish sending data
 	m_int_reg[INTES0] |= 0x80;
 	m_check_irqs = 1;

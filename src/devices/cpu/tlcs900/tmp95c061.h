@@ -78,6 +78,9 @@ public:
 	auto sc1_txd() { return m_sc1_txd_cb.bind(); }
 	auto sc1_mod() { return m_sc1_mod_cb.bind(); }
 	void sc1_rxd(uint8_t data);
+	// sc0_txd()  every byte the CPU writes to SC0BUF (MIDI OUT on channel 0), as
+	//            it is written -- byte granularity, the TX twin of sc0_rxd().
+	auto sc0_txd() { return m_sc0_txd_cb.bind(); }
 	// sc0_rxd()  serial channel 0 (MIDI1 on CPU 1, MIDI2 on CPU 2): hand the
 	//            CPU one received byte and raise INTRX0.
 	void sc0_rxd(uint8_t data);
@@ -216,6 +219,7 @@ private:
 	uint8_t   m_od_enable;
 	devcb_write8 m_sc1_txd_cb;
 	devcb_write8 m_sc1_mod_cb;
+	devcb_write8 m_sc0_txd_cb;
 	uint8_t   m_sc1_rx_data;
 	uint8_t   m_sc0_rx_data;
 
