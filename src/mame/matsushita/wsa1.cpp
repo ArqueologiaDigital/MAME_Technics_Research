@@ -344,6 +344,7 @@
 #define LOG_EEPROM   (1U << 8)   // the serial EEPROM's CS / SK / DI / DO lines
 #define LOG_FDC      (1U << 9)   // floppy: the control register, TC and CPU 1's PA bit 3
 #define LOG_TGVOICE  (1U << 10)  // one decoded dump of a channel's 22 tone-generator registers
+#define LOG_DSPUP    (1U << 11)  // the DSP host-bus upload, one line per captured byte
 
 // LOG_LINKLOST is on by default on purpose: the one-byte-deep model of the link
 // can only drop a byte silently, and this is how that shows up.  See risk (1)
@@ -668,6 +669,25 @@ private:
 	uint8_t  m_panel_busy = 0;              // PB bit 4, the panel's busy line: idle LOW
 	uint8_t  m_model = 2;                   // set by init_wsa1() / init_wsa1r(), see variant()
 	uint8_t  m_strap = 2;                   // latched copy of variant(), sampled at reset
+
+	// --- WSA1R DSP host-bus capture (CPU 2 bit-banged upload to IC5/6/30) -----
+	// The three uPD6383GF DSPs hang off CPU 2's P7 (DSPD0-7); P5.3 = C/D, per-DSP
+	// /CS on P5.4 (IC6/dest0) / P5.5 (IC5/dest1) / P2.7 (IC30/dest2), /WR on PB.5.
+	// A byte latches on the /CS falling edge while /WR is low (prom_c
+	// p7_module.s:83-89).  Capturing the upload lets it be checked against the
+	// statically-extracted microcode (kn5000-roms-disasm wsa1_dsp_isa_crossval.py)
+	// -- the first verifiable step toward a real DSP device
+	// (notes/HANDOFF-wsa1-dsp-device-build.md).  Capture-only; drives nothing.
+	uint8_t  m_cpu2_p7  = 0;                 // DSPD0-7 (the data byte)
+	uint8_t  m_cpu2_p5  = 0xff;             // P5.3 = C/D, P5.4/P5.5 = DSP0/1 /CS
+	uint8_t  m_cpu2_p2  = 0xff;             // P2.7 = DSP2 /CS
+	uint8_t  m_cpu2_pb  = 0xff;             // PB.5 = /WR
+	uint32_t m_dsp_cap_count[3]{};          // captured bytes per destination
+	void     dsp_bus_w(uint8_t data);       // cpu2 P7
+	void     cpu2_p5_w(uint8_t data);
+	void     cpu2_p2_w(uint8_t data);
+	void     cpu2_pb_w(uint8_t data);
+	void     dsp_capture(unsigned dest, bool cd, uint8_t byte);
 
 	uint16_t m_tg_latch = 0;
 	uint16_t m_tg_regs[TG_REG_COUNT]{};
@@ -1807,6 +1827,55 @@ void wsa1_state::cpu2_p8_w(uint8_t data)
 }
 
 
+// ---- the DSP host bus: capture the bit-banged upload to the three DSPs -------
+//
+// prom_c drives one byte with P5.3 (C/D) set, the byte on P7, then pulses /WR
+// (PB.5) low and the destination's /CS (P5.4=IC6, P5.5=IC5, P2.7=IC30) low; the
+// byte latches on that /CS falling edge while /WR is low (p7_module.s:83-89).
+// Capture-only: this reads nothing back and drives no device -- it records the
+// stream so it can be checked against the statically-extracted microcode.
+
+void wsa1_state::dsp_capture(unsigned dest, bool cd, uint8_t byte)
+{
+	if (dest > 2)
+		return;
+	m_dsp_cap_count[dest]++;
+	LOGMASKED(LOG_DSPUP, "dspup: dest%u %s %02X  (#%u)\n",
+		dest, cd ? "DAT" : "CMD", byte, m_dsp_cap_count[dest]);
+}
+
+void wsa1_state::dsp_bus_w(uint8_t data)
+{
+	m_cpu2_p7 = data;                           // DSPD0-7, set before the strobe
+}
+
+void wsa1_state::cpu2_p5_w(uint8_t data)
+{
+	const uint8_t old = m_cpu2_p5;
+	m_cpu2_p5 = data;
+	// A /CS falling edge (P5.4=dest0, P5.5=dest1) while /WR (PB.5) is low latches
+	// the byte; C/D is P5.3 as it now stands.
+	if (!BIT(m_cpu2_pb, 5))
+	{
+		if (BIT(old, 4) && !BIT(data, 4)) dsp_capture(0, BIT(data, 3), m_cpu2_p7);
+		if (BIT(old, 5) && !BIT(data, 5)) dsp_capture(1, BIT(data, 3), m_cpu2_p7);
+	}
+}
+
+void wsa1_state::cpu2_p2_w(uint8_t data)
+{
+	const uint8_t old = m_cpu2_p2;
+	m_cpu2_p2 = data;
+	if (!BIT(m_cpu2_pb, 5) && BIT(old, 7) && !BIT(data, 7))
+		dsp_capture(2, BIT(m_cpu2_p5, 3), m_cpu2_p7);
+}
+
+void wsa1_state::cpu2_pb_w(uint8_t data)
+{
+	m_cpu2_pb = data;                           // PB.5 = /WR, tracked for the latch
+}
+
+
 /***************************************************************************
 
     CPU 2's CS0 DEVICE CLUSTER - STUBS ONLY
@@ -2767,6 +2836,11 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_cpu2_pa));
 	save_item(NAME(m_cpu2_p6));
 	save_item(NAME(m_cpu2_p8));
+	save_item(NAME(m_cpu2_p7));
+	save_item(NAME(m_cpu2_p5));
+	save_item(NAME(m_cpu2_p2));
+	save_item(NAME(m_cpu2_pb));
+	save_item(NAME(m_dsp_cap_count));
 	save_item(NAME(m_cpu1_p5));
 	save_item(NAME(m_cpu1_p8));
 	save_item(NAME(m_cpu1_pa));
@@ -3601,6 +3675,13 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_cpu2->port8_read().set(FUNC(wsa1_state::cpu2_p8_r));
 	m_cpu2->port8_write().set(FUNC(wsa1_state::cpu2_p8_w));
 	m_cpu2->port9_read().set(FUNC(wsa1_state::cpu2_p9_r));
+
+	// The DSP host bus (P7 data, P5 = C/D + DSP0/1 /CS, P2.7 = DSP2 /CS, PB.5 =
+	// /WR): capture the bit-banged upload to IC5/IC6/IC30.  See dsp_capture().
+	m_cpu2->port7_write().set(FUNC(wsa1_state::dsp_bus_w));
+	m_cpu2->port5_write().set(FUNC(wsa1_state::cpu2_p5_w));
+	m_cpu2->port2_write().set(FUNC(wsa1_state::cpu2_p2_w));
+	m_cpu2->portb_write().set(FUNC(wsa1_state::cpu2_pb_w));
 
 	// --- the control panel microcontroller ---------------------------------
 	//
