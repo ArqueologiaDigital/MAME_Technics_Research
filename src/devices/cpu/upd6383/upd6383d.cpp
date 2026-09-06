@@ -646,6 +646,14 @@ std::string annotate(u64 word, int at)
 	// (The C-format rule that used to sit beside it is now at the TOP of this
 	// function, where its precedence is load-bearing.)
 
+	// ★ SPECULATIVE (k5-output-stage.md, dark-words.md): `A3C.D.9F.287' at I-RAM
+	// 78 is the machine's ONLY class-D word and sits in the OUTPUT STAGE -- its
+	// established structural role is unit 1 -> DO2 -> IC303.SDIB, a DO-write
+	// candidate.  Its exact OPERATION is open (f31=6), but the role is known.
+	if (word == 0xa3cd9f287ULL)
+		return "output-stage word (unit 1 -> DO2 -> IC303.SDIB); the only class-D word, "
+				"a DO-write candidate; its operation (f31=6) is OPEN";
+
 	// ★ SPECULATIVE (S-5, CORPUS-PATTERNS-SPECULATIVE.md): `A00.0.00.041' heads a
 	// FIXED 3-word template (the third word's reach is a tight negative band).
 	// Its operands (SRC 0x01 / ACT 0x01) stay dark, but the STRUCTURAL role is
