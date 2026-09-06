@@ -3833,5 +3833,5 @@ void wsa1_state::wsa1(machine_config &config)
 // rather than decoded from a string - see the strap block comment above.
 //
 //   YEAR  NAME   PARENT  COMPAT  MACHINE  INPUT  CLASS       INIT        COMPANY     FULLNAME    FLAGS
-SYST(1995, wsa1r, 0,      0,      wsa1r,   wsa1r, wsa1_state, init_wsa1r, "Technics", "SX-WSA1R", MACHINE_NOT_WORKING|MACHINE_NO_SOUND)
-SYST(1995, wsa1,  wsa1r,  0,      wsa1,    wsa1,  wsa1_state, init_wsa1,  "Technics", "SX-WSA1",  MACHINE_NOT_WORKING|MACHINE_NO_SOUND)
+SYST(1995, wsa1r, 0,      0,      wsa1r,   wsa1r, wsa1_state, init_wsa1r, "Technics", "SX-WSA1R", MACHINE_NOT_WORKING|MACHINE_IMPERFECT_SOUND)
+SYST(1995, wsa1,  wsa1r,  0,      wsa1,    wsa1,  wsa1_state, init_wsa1,  "Technics", "SX-WSA1",  MACHINE_NOT_WORKING|MACHINE_IMPERFECT_SOUND)
