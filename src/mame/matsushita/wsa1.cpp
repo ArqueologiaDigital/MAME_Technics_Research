@@ -313,6 +313,20 @@
 #include "acoustic_modeling.h"
 #include "wsa1_tonegen.h"
 
+// WSA1R_ENABLE_DSP -- compile-time switch for INSTANTIATING the three uPD6383GF
+// effects DSPs (IC5/IC6/IC30).  DEFAULT OFF, exactly like the KN5000's
+// KN5000_ENABLE_DSP1: the instruction set is not measured-decoded, so the core
+// must not execute (a partially-correct effects DSP is the KN7000 wave-ROM
+// failure mode).  With it on, the driver adds the devices and feeds them the real
+// upload via host_w so their I-RAM can be inspected and checked against the static
+// microcode -- which is what this switch is for today.  The device type is always
+// compiled in (UPD6383 is registered); only the machine-config instantiation is
+// gated.  Build:  make ... CPPFLAGS=-DWSA1R_ENABLE_DSP=1
+#ifndef WSA1R_ENABLE_DSP
+#define WSA1R_ENABLE_DSP 0
+#endif
+#include "cpu/upd6383/upd6383.h"
+
 #include "imagedev/floppy.h"
 #include "speaker.h"
 #include "bus/midi/midi.h"
@@ -467,6 +481,7 @@ public:
 		, m_modeling(*this, "modeling")
 		, m_tonegen(*this, "tonegen")
 		, m_midi_uart(*this, "midi_uart")
+		, m_dsp(*this, "dsp%u", 0U)
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
 		, m_keybed(*this, "KEY%u", 0U)
@@ -635,6 +650,12 @@ private:
 	required_device<wsa1_tonegen_device> m_tonegen;
 	// MIDI IN bit->byte bridge for CPU 1's serial channel 0 (rear MIDI1 jack).
 	required_device<wsa1_midi_uart_device> m_midi_uart;
+	// The three uPD6383GF effects DSPs (IC6=dsp0, IC5=dsp1, IC30=dsp2).  OPTIONAL:
+	// present only when WSA1R_ENABLE_DSP is set; fed the real upload via host_w.
+	optional_device_array<upd6383_device, 3> m_dsp;
+#if WSA1R_ENABLE_DSP
+	void wsa1_dsp_delay_map(address_map &map) ATTR_COLD;
+#endif
 	required_device<upd765a_device> m_fdc;
 	required_device<floppy_connector> m_floppy;
 	// OPTIONAL, not required: these ports exist only on the SX-WSA1 driver.  A
@@ -1844,9 +1865,27 @@ void wsa1_state::dsp_capture(unsigned dest, bool cd, uint8_t byte)
 	if (dest > 2)
 		return;
 	m_dsp_cap_count[dest]++;
+	// Feed the byte to the real device when instantiated (WSA1R_ENABLE_DSP).  The
+	// WSA1R program-word framing IS the uPD6383 host_w cmd-0x01 protocol
+	// (SendCmd(0x01) + addr + N.SendData payload), verified 63/63 against the
+	// static corpus, so this loads the right I-RAM.  (Coefficients use the WSA1R's
+	// own 5-byte groups, which host_w ignores -- a documented follow-on.)
+	if (m_dsp[dest].found())
+		m_dsp[dest]->host_w(cd, byte);
 	LOGMASKED(LOG_DSPUP, "dspup: dest%u %s %02X  (#%u)\n",
 		dest, cd ? "DAT" : "CMD", byte, m_dsp_cap_count[dest]);
 }
+
+#if WSA1R_ENABLE_DSP
+void wsa1_state::wsa1_dsp_delay_map(address_map &map)
+{
+	// The external digital-delay DRAM each uPD6383GF drives.  The WSA1R's part and
+	// its addressable extent are not established here; use the KN5000's 128K-word
+	// default (upd6383's own AS_DELAY space is 18 bits).  Irrelevant while the core
+	// does not execute -- this exists so the device has a legal map.
+	map(0x00000, 0x1ffff).ram();
+}
+#endif
 
 void wsa1_state::dsp_bus_w(uint8_t data)
 {
@@ -3686,6 +3725,21 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_cpu2->port5_write().set(FUNC(wsa1_state::cpu2_p5_w));
 	m_cpu2->port2_write().set(FUNC(wsa1_state::cpu2_p2_w));
 	m_cpu2->portb_write().set(FUNC(wsa1_state::cpu2_pb_w));
+
+#if WSA1R_ENABLE_DSP
+	// The three uPD6383GF effects DSPs, fed the real upload via host_w from
+	// dsp_capture().  HELD OUT OF EXECUTION on purpose (as on the KN5000): the
+	// instruction set is not measured-decoded.  What this buys today is a real,
+	// addressable I-RAM loaded with the actual microcode, for inspection and for
+	// checking against the static corpus.  The clock is the WSA1R main crystal as
+	// a nominal value; the DSP's own clock is not established and does not matter
+	// while the core does not run.
+	for (auto &dsp : m_dsp)
+	{
+		UPD6383(config, dsp, 33.8688_MHz_XTAL);
+		dsp->set_addrmap(AS_DELAY, &wsa1_state::wsa1_dsp_delay_map);
+	}
+#endif
 
 	// --- the control panel microcontroller ---------------------------------
 	//
