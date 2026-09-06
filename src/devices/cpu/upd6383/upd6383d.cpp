@@ -368,39 +368,40 @@ std::string annotate(u64 word, int at)
 	// ---- C-FORMAT FIRST.  bits [24:12] are ONE 13-bit immediate -------------
 	if (upd6383_disassembler::c_format(word))
 	{
-		const u8 a = upd6383_disassembler::c_a(word);
-		const u8 b = upd6383_disassembler::c_b(word);
+		const u8  a  = upd6383_disassembler::c_a(word);
+		const u8  b  = upd6383_disassembler::c_b(word);
+		const u16 op = upd6383_disassembler::c_opcode(word);   // bits[35:25], MEASURED
 
 		if (upd6383_disassembler::is_setvec(word))
 			return "";                      // decoded(); never reaches here
 
-		// THE PAYLOAD RULE IS FAMILY-LOCAL (K3 sect. 5.3): `A = imm13 >> 5' is
-		// MEASURED 57/57 inside (hi12 & 0xFFE) == 0xC40 and 2/11 outside, so the
-		// A/B split is asserted only here.  It is NOT extended to
-		// C00/C04/C0A/C16/C42/C4A/C64.
+		// THE PAYLOAD RULE IS THE OPCODE (bits[35:25]): is_c40 <=> opcode 0x620,
+		// 57/57 both ways -- so "imm13 is a multiple of 32" is exactly opcode
+		// 0x620, and `A = imm13 >> 5' is that opcode's 8-bit payload.  Still
+		// FAMILY-LOCAL: NOT extended to the other opcodes.
 		if (upd6383_disassembler::is_c40(word))
 			return util::string_format(
-					"C-format IMMEDIATE LOAD: A=%d B=%d (imm13 0x%04X = %d*32, MEASURED 57/57 in "
-					"this sub-family); destination register lo12=%03X UNKNOWN",
-					a, b, upd6383_disassembler::c_imm13(word), a, lo);
+					"C-format opcode 0x%03X IMMEDIATE LOAD: A=%d B=%d (imm13 0x%04X = %d*32, "
+					"MEASURED 57/57 for this opcode); destination register lo12=%03X UNKNOWN",
+					op, a, b, upd6383_disassembler::c_imm13(word), a, lo);
 
 		if (hi == 0xc00)
 		{
 			const char *own = (at >= 0 && a == at) ? "= its own I-RAM address" : "(I-RAM index?)";
 			return util::string_format(
-					"WAIT / SYNC (INFERRED): A=%d %s, B=%d = the event; both C00 words in the "
-					"machine encode their own address (2/2)", a, own, b);
+					"WAIT / SYNC (INFERRED), C-format opcode 0x%03X: A=%d %s, B=%d = the event; "
+					"both C00 words in the machine encode their own address (2/2)", op, a, own, b);
 		}
 
 		if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
 			return util::string_format(
-					"C-format word with a pointer-load lo12; the A/B split is NOT established for "
-					"this sub-family (B in {0,17,18,23}) -- residue A=%d B=%d shown for the record",
-					a, b);
+					"C-format opcode 0x%03X, pointer-load lo12; the five lo12=0x820 words carry "
+					"FOUR opcodes (602/605/621/625) -- they share a DESTINATION, not an instruction, "
+					"so no lo12 rule fits all five; A=%d B=%d for the record", op, a, b);
 
 		return util::string_format(
-				"C-format: bits [24:12] are one 13-bit IMMEDIATE reaching into hi12 bit 0, not "
-				"class+addr; A=%d B=%d", a, b);
+				"C-format opcode 0x%03X: bits [24:12] are one 13-bit IMMEDIATE reaching into hi12 "
+				"bit 0, not class+addr; A=%d B=%d", op, a, b);
 	}
 
 	// END OF PROGRAM is hi12 bit 10 (bit 11 clear), and the halting word STILL

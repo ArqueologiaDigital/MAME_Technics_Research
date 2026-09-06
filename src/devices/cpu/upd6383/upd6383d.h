@@ -76,6 +76,18 @@ public:
 	static constexpr u8   c_a(u64 w)      { return u8((w >> 17) & 0xff); }   // payload
 	static constexpr u8   c_b(u64 w)      { return u8((w >> 12) & 0x1f); }   // 5-bit sub-field
 
+	//    c_opcode()  bits[35:25]                THE C-FORMAT OPCODE.  11 bits.
+	//        There IS a real enumerated opcode in the C-format family, at [35:25]
+	//        (dsp/analysis/output-stage-decode.md sect. 5).  MEASURED over the 68
+	//        C-format words: 0x620 x57, 0x605 x3, 0x632 x2, 0x600 x2, and 0x602 /
+	//        0x621 / 0x625 / 0x60B once each.  ★ THE PAYLOAD RULE is_c40() IS THIS
+	//        OPCODE: is_c40 <=> opcode == 0x620, 57/57 both ways -- so "imm13 is a
+	//        multiple of 32" is the opcode 0x620, not a mysterious sub-family.  And
+	//        the five lo12==0x820 "header" words carry FOUR distinct opcodes
+	//        (0x602/0x605/0x621/0x625): they share a DESTINATION, not an
+	//        instruction, which is why no lo12/class rule ever fitted all five.
+	static constexpr u16  c_opcode(u64 w) { return u16((w >> 25) & 0x7ff); }
+
 	// ---------------------------------------------------------------
 	//  hi12 IS NOT AN OPCODE.  It is a HORIZONTAL MICROWORD of independent
 	//  enable bits (MEASURED, notes/kn5000-dsp-hi12.md sect. 2): the 54
