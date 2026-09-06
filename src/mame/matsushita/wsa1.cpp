@@ -471,6 +471,7 @@ public:
 		, m_keybed(*this, "KEY%u", 0U)
 		, m_touch(*this, "TOUCH")
 		, m_checkdev(*this, "CHECKDEV")
+		, m_livesync(*this, "LIVESYNC")
 		, m_check_led(*this, "check_led")
 	{ }
 
@@ -602,6 +603,11 @@ private:
 	TIMER_CALLBACK_MEMBER(keybed_scan);
 	void     keybed_push(uint8_t key, bool pressed);
 
+	// Live parameter mirror (the "special mode"): watch this machine's own tempo
+	// store and transmit the equivalent SysEx, so a real WSA1R kept on MIDI IN
+	// tracks the tempo the operator sets on the emulated one.  See livesync_poll().
+	TIMER_CALLBACK_MEMBER(livesync_poll);
+
 	// 0x7F0000 on CPU 1 and 0xE00000 on CPU 2 -- two 4-channel x 32-register
 	// files with a byte-identical driver shape.
 	void     cpu1_chanreg_addr_w(uint16_t data);
@@ -638,7 +644,11 @@ private:
 	optional_ioport_array<6> m_keybed;    // 61 keys, 6 ports x 12 bits (the last holds 1)
 	optional_ioport m_touch;
 	required_ioport m_checkdev;
+	optional_ioport m_livesync;           // the live-parameter-mirror special mode (default off)
 	output_finder<> m_check_led;
+
+	emu_timer *m_livesync_timer = nullptr;
+	int        m_last_synced_tempo = -1;  // last BPM emitted by the mirror (-1 = none yet)
 
 	uint8_t  m_link_to_cpu2 = 0;            // the byte CPU 1 last wrote to 0x7C0000
 	uint8_t  m_link_to_cpu1 = 0;            // the byte CPU 2 last wrote to 0x100000
@@ -2614,6 +2624,61 @@ TIMER_CALLBACK_MEMBER(wsa1_state::keybed_scan)
 	m_keybed_prev = state;
 }
 
+
+// ---------------------------------------------------------------------------
+//  THE LIVE PARAMETER MIRROR (a special mode, default OFF)
+// ---------------------------------------------------------------------------
+//
+// The task this answers: keep a REAL WSA1R, patched into the emulator's MIDI
+// OUT, in step with the emulated one as the operator works it -- "any value
+// edit on the virtual one live-synced to the real one".  Its scope is set by
+// the firmware, not by ambition (see the docs' live-sync analysis):
+//
+//   * PERFORMANCE parameters need NOTHING here -- the firmware already transmits
+//     them as ordinary MIDI CC / aftertouch / pitch-bend, so wiring MIDI OUT
+//     (above) already mirrors them to a real unit.
+//   * A real unit cannot be driven by button-press SysEx, and does not transmit
+//     its own screen/edits, so reverse and UI-level sync are NOT possible.
+//   * What is left, and what this mode adds, is the handful of CONFIG values the
+//     unit accepts as SysEx on receive but never emits on edit.  TEMPO is the
+//     one whose whole path is proven end to end (store 0x7EE2/0x7EE3, the
+//     receive handler 0xFB33FE, and the exact wire message).
+//
+// So this mode watches THIS machine's tempo store and, on a change, transmits
+// the very SysEx the WSA1R's own receive parser accepts for a live tempo set --
+// bytes read out of the firmware, not invented:
+//
+//     F0 50 25 <BPM & 0x0F> <BPM >> 4> F7        (BPM 40..300; 120 -> 08 07)
+//
+// command 0x25 -> live-dispatch slot 9 -> 0xFB33FE, value = (H<<4)|L.  Because
+// the receive parser is the SAME firmware a real unit runs, a message this
+// builds and the real unit accepts change the identical store -- the correctness
+// argument that stands in for hardware we cannot test against.  The operator is
+// the emulated panel, so every tempo change here is a local edit; the real unit
+// does not echo, so there is no loop to break.
+TIMER_CALLBACK_MEMBER(wsa1_state::livesync_poll)
+{
+	if (!m_livesync || !(m_livesync->read() & 1))
+		return;
+
+	// 9-bit BPM: low 8 bits at 0x7EE2, bit 8 at 0x7EE3 bit 0 (sub_FB57ED, prom_c
+	// 0xFB5801).  A side-effect-free RAM read of CPU 1's work RAM.
+	address_space &prog = m_cpu1->space(AS_PROGRAM);
+	const unsigned bpm = prog.read_byte(0x7ee2) | ((prog.read_byte(0x7ee3) & 1) << 8);
+
+	if (bpm < 0x28 || bpm > 0x12c)      // the firmware's own 40..300 range check
+		return;
+	if (int(bpm) == m_last_synced_tempo)
+		return;
+	m_last_synced_tempo = int(bpm);
+
+	const uint8_t msg[] = { 0xf0, 0x50, 0x25,
+		uint8_t(bpm & 0x0f), uint8_t(bpm >> 4), 0xf7 };
+	for (uint8_t b : msg)
+		m_midi_uart->tx_byte(b);
+}
+
+
 // ---- 0x7F0000 (CPU 1) and 0xE00000 (CPU 2): two 4 x 32 register files -----
 //
 // The same driver runs on both processors and on the KN5000's sub-CPU: an
@@ -2724,10 +2789,18 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_key_fifo_read));
 	save_item(NAME(m_key_fifo_count));
 
+	save_item(NAME(m_last_synced_tempo));
+
 	// 1 kHz is this driver's choice, not the scanner's rate -- see the block
 	// comment above keybed_status_r().
 	m_keybed_timer = timer_alloc(FUNC(wsa1_state::keybed_scan), this);
 	m_keybed_timer->adjust(attotime::from_msec(1), 0, attotime::from_msec(1));
+
+	// The live parameter mirror polls the tempo store at ~30 Hz (tempo changes
+	// slowly; polling avoids the read-modify-write timing of a memory tap).  It
+	// costs nothing until the LIVESYNC port is switched on.
+	m_livesync_timer = timer_alloc(FUNC(wsa1_state::livesync_poll), this);
+	m_livesync_timer->adjust(attotime::from_hz(30), 0, attotime::from_hz(30));
 
 	// So that a captured -log carries its own legend and a reader can tell a
 	// locally established register name from a borrowed one without opening the
@@ -2759,7 +2832,10 @@ void wsa1_state::machine_reset()
 	// write 0x7E00 to every channel out of RESET, so "all free" is where the
 	// firmware puts the device anyway.
 	std::fill(std::begin(m_tg_busy), std::end(m_tg_busy), 0);
+	m_tg_noteon_burst = 0;
+	m_tg_released = 0;
 	m_tg_gate = 0;
+	m_last_synced_tempo = -1;
 
 	// THE MODEL STRAP IS SAMPLED HERE AND NOWHERE ELSE, which is what a strap is:
 	// the firmware reads PB bit 0 exactly once, from RESET (prom_a 0xF827D8 ->
@@ -3291,6 +3367,16 @@ static INPUT_PORTS_START(wsa1r)
 	// Off silences it without disturbing the register file.
 	PORT_START("TGSINE")
 	PORT_CONFNAME(0x01, 0x01, "Placeholder sine (wave ROMs undumped)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, DEF_STR(On))
+
+	// The live parameter mirror: off by default.  On, the driver transmits the
+	// config values the firmware accepts as SysEx but never emits on edit (tempo),
+	// out MIDI OUT, so a real WSA1R on the far end tracks the emulated one.
+	// Performance parameters need no mode -- the firmware transmits those as CC
+	// already.  See livesync_poll() and the docs' live-sync analysis.
+	PORT_START("LIVESYNC")
+	PORT_CONFNAME(0x01, 0x00, "Live parameter mirror to MIDI OUT (tempo)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x01, DEF_STR(On))
 INPUT_PORTS_END
