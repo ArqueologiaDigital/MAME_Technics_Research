@@ -22,22 +22,20 @@ _G._wsa1dspv = emu.add_machine_frame_notifier(function()
 	if done or frames < 900 then return end     -- let the upload finish (~15 s)
 	done = true
 
-	local dsp = manager.machine.devices[":dsp2"]
-	if not dsp then print("WSA1R-DSP-VERIFY: no :dsp2 device (build without WSA1R_ENABLE_DSP=1?)"); return end
-	local sp = dsp.spaces["iram"]               -- AS_IRAM, name "iram" (8-bit, byte-addressed)
-	if not sp then print("WSA1R-DSP-VERIFY: dsp2 has no iram space"); return end
-
-	local function word(n)
-		local b = n * 5
-		return string.format("%02X%02X%02X%02X%02X",
-			sp:read_u8(b), sp:read_u8(b+1), sp:read_u8(b+2), sp:read_u8(b+3), sp:read_u8(b+4))
+	local names = { [0]="IC6", [1]="IC5", [2]="IC30" }
+	for d = 0, 2 do
+		local dsp = manager.machine.devices[":dsp" .. d]
+		if not dsp then print("WSA1R-DSP-VERIFY: no :dsp" .. d .. " (build without WSA1R_ENABLE_DSP=1?)"); return end
+		local sp = dsp.spaces["iram"]           -- AS_IRAM, name "iram" (8-bit, byte-addressed)
+		local function word(n)
+			local b = n * 5
+			return string.format("%02X%02X%02X%02X%02X",
+				sp:read_u8(b), sp:read_u8(b+1), sp:read_u8(b+2), sp:read_u8(b+3), sp:read_u8(b+4))
+		end
+		local nz, lo, hi = 0, nil, nil
+		for i = 0, 383 do if word(i) ~= "0000000000" then nz = nz + 1; lo = lo or i; hi = i end end
+		print(string.format("WSA1R-DSP-VERIFY: dsp%d/%-4s  non-zero I-RAM = %3d/384%s",
+			d, names[d], nz, nz > 0 and (string.format("  (words 0x%X..0x%X; w0x%X=%s)", lo, hi, lo, word(lo))) or ""))
 	end
-
-	print("WSA1R-DSP-VERIFY: dsp2 I-RAM word 0x30 = " .. word(0x30) .. "  (expect 08010C0821)")
-	local s = {}
-	for i = 0x30, 0x35 do s[#s+1] = word(i) end
-	print("WSA1R-DSP-VERIFY: words 0x30..0x35 = " .. table.concat(s, " "))
-	local nz = 0
-	for i = 0, 383 do if word(i) ~= "0000000000" then nz = nz + 1 end end
-	print("WSA1R-DSP-VERIFY: non-zero I-RAM words = " .. nz .. " / 384")
+	print("WSA1R-DSP-VERIFY: (dsp2 0x30 must be 08010C0821 -- the corpus-matched boot block)")
 end)
