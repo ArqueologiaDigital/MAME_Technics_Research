@@ -55,6 +55,7 @@ void wsa1_tonegen_device::device_start()
 		save_item(NAME(m_voice[i].env0800), i);
 		save_item(NAME(m_voice[i].env0840), i);
 		save_item(NAME(m_voice[i].gate), i);
+		save_item(NAME(m_voice[i].released), i);
 		save_item(NAME(m_voice[i].env), i);
 	}
 }
@@ -102,8 +103,39 @@ void wsa1_tonegen_device::set_gate(unsigned ch, bool on)
 		return;
 	m_stream->update();
 	if (on && !m_voice[ch].gate)
+	{
 		m_voice[ch].phase = 0;          // start each note at zero phase, click-free with the env ramp
+		m_voice[ch].released = false;   // a fresh gate cancels any pending note-off decay
+	}
 	m_voice[ch].gate = on;
+	if (!on)
+		m_voice[ch].released = false;   // the voice is FREE now; clear release state for reuse
+}
+
+
+//-------------------------------------------------
+//  set_release - the firmware's note-off: decay this voice while it stays gated
+//-------------------------------------------------
+
+void wsa1_tonegen_device::set_release(unsigned ch)
+{
+	if (ch >= NUM_VOICES)
+		return;
+	m_stream->update();
+	m_voice[ch].released = true;        // amp_of() now targets 0; env ramps down at the release rate
+}
+
+
+//-------------------------------------------------
+//  amplitude - the voice's current modelled amplitude (0 == silent)
+//-------------------------------------------------
+
+float wsa1_tonegen_device::amplitude(unsigned ch)
+{
+	if (ch >= NUM_VOICES)
+		return 0.0f;
+	m_stream->update();          // advance env to now, so a poll sees the real decay
+	return m_voice[ch].env;
 }
 
 
@@ -141,6 +173,12 @@ float wsa1_tonegen_device::amp_of(const voice &v) const
 	if (v.env0800 == 0xff80 && v.env0840 == 0xff00)
 		return 0.0f;
 	if (!v.gate)
+		return 0.0f;
+	// Note-off: the firmware re-staged this channel's envelope with a release
+	// profile but left the gate up (the chip decays and the poll frees it).  Model
+	// that as a decay to silence; the driver watches amplitude() to drop the busy
+	// bit once the decay finishes, so the firmware's own retire path can run.
+	if (v.released)
 		return 0.0f;
 
 	// OUTPUT LEVEL: field = reg0080 & 0x0FFF, a base-2 logarithm with 256 counts

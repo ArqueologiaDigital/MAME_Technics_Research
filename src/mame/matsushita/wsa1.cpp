@@ -369,14 +369,31 @@ public:
 	wsa1_midi_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	auto rx_cb() { return m_rx_cb.bind(); }   // each fully-received MIDI byte -> driver
+	auto tx_cb() { return m_tx_cb.bind(); }   // each transmitted BIT -> midi_port txd
+
+	// tx_byte()  queue one whole MIDI byte (from SC0BUF) for bit-serial output.
+	// The CPU's SC0 engine is byte-granular and fakes instant completion, so bytes
+	// can arrive faster than 31250 baud can shift them; the FIFO preserves order.
+	void tx_byte(uint8_t data);
 
 protected:
-	virtual void device_start() override {}
+	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
 
 	virtual void rcv_complete() override { receive_register_extract(); m_rx_cb(get_received_char()); }
+	virtual void tra_callback() override { m_tx_cb(transmit_register_get_data_bit()); }
+	virtual void tra_complete() override { start_next_tx(); }
 
-	devcb_write8 m_rx_cb;
+private:
+	void start_next_tx();
+
+	static constexpr unsigned TX_FIFO = 256;   // ring size (power of two)
+	devcb_write8      m_rx_cb;
+	devcb_write_line  m_tx_cb;
+	uint8_t           m_tx_ring[TX_FIFO];
+	unsigned          m_tx_head = 0;           // next write slot
+	unsigned          m_tx_tail = 0;           // next read slot
+	bool              m_tx_busy = false;
 };
 
 DEFINE_DEVICE_TYPE(WSA1_MIDI_UART, wsa1_midi_uart_device, "wsa1_midi_uart", "SX-WSA1R MIDI UART")
@@ -384,14 +401,53 @@ DEFINE_DEVICE_TYPE(WSA1_MIDI_UART, wsa1_midi_uart_device, "wsa1_midi_uart", "SX-
 wsa1_midi_uart_device::wsa1_midi_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, WSA1_MIDI_UART, tag, owner, clock),
 	device_serial_interface(mconfig, *this),
-	m_rx_cb(*this)
+	m_rx_cb(*this),
+	m_tx_cb(*this)
 {
+}
+
+void wsa1_midi_uart_device::device_start()
+{
+	save_item(NAME(m_tx_ring));
+	save_item(NAME(m_tx_head));
+	save_item(NAME(m_tx_tail));
+	save_item(NAME(m_tx_busy));
 }
 
 void wsa1_midi_uart_device::device_reset()
 {
 	set_data_frame(1, 8, PARITY_NONE, STOP_BITS_1);   // MIDI: 8N1
 	set_rate(31250);                                  // MIDI baud
+	transmit_register_reset();
+	receive_register_reset();
+	m_tx_head = m_tx_tail = 0;
+	m_tx_busy = false;
+	m_tx_cb(1);                                        // TXD idles high (mark)
+}
+
+void wsa1_midi_uart_device::tx_byte(uint8_t data)
+{
+	unsigned const next = (m_tx_head + 1) & (TX_FIFO - 1);
+	if (next != m_tx_tail)                             // drop on overflow rather than corrupt
+	{
+		m_tx_ring[m_tx_head] = data;
+		m_tx_head = next;
+	}
+	if (!m_tx_busy)
+		start_next_tx();
+}
+
+void wsa1_midi_uart_device::start_next_tx()
+{
+	if (m_tx_head == m_tx_tail)                        // empty
+	{
+		m_tx_busy = false;
+		return;
+	}
+	m_tx_busy = true;
+	uint8_t const b = m_tx_ring[m_tx_tail];
+	m_tx_tail = (m_tx_tail + 1) & (TX_FIFO - 1);
+	transmit_register_setup(b);
 }
 
 
@@ -617,6 +673,19 @@ private:
 	// comment in tg_data_w() for why joining block 0's write to block 0's read is
 	// a MODEL and what bounds it.
 	uint16_t m_tg_busy[4]{};
+
+	// Note-off release tracking, 64-channel bitmaps (bit = channel number).
+	//
+	// The firmware never writes 0x7E00 by itself: it frees a voice only after the
+	// CHIP's amplitude has decayed, which it learns from the busy readback (QUERY 1
+	// in tg_status_r).  So a voice released by the operator would sound forever
+	// unless the busy bit falls on its own.  These two bitmaps let the driver drop
+	// that bit when the modelled placeholder voice has finished its note-off decay,
+	// so the firmware's OWN retire path runs (writes 0x7E00) -- exactly as the chip
+	// makes it run on real hardware.  How note-off is detected at the register
+	// interface is documented at the detection site in tg_data_w().
+	uint64_t m_tg_noteon_burst = 0;   // channel is inside its note-on register burst
+	uint64_t m_tg_released     = 0;   // channel has had note-off staged, now decaying
 
 	// Log aid only: block 0x0080's bit 15 per channel, as last written.  Nothing
 	// in the emulated machine reads it.
@@ -2154,14 +2223,68 @@ void wsa1_state::tg_data_w(uint16_t data)
 		if (m_tg_latch < TG_VOICES)
 		{
 			const uint16_t bit = uint16_t(1u << (chan & 15));
+			const uint64_t cbit = uint64_t(1) << chan;
 			if (data == 0x8100)
+			{
 				m_tg_busy[chan >> 4] |= bit;
+				// A note-on begins the full register burst (see the note-off
+				// detection below) and cancels any pending release.
+				m_tg_noteon_burst |= cbit;
+				m_tg_released     &= ~cbit;
+			}
 			else if (data == 0x7e00)
+			{
 				m_tg_busy[chan >> 4] &= uint16_t(~bit);
+				m_tg_noteon_burst &= ~cbit;
+				m_tg_released     &= ~cbit;
+			}
 
 			// Placeholder-sine gate: block 0's lifecycle latch IS the voice's
 			// note-on/off, so mirror the busy bit to the sine backend.
 			m_tonegen->set_gate(chan, (m_tg_busy[chan >> 4] & bit) != 0);
+		}
+
+		// ---------------- NOTE-OFF RELEASE DETECTION --------------------------
+		//
+		// There is NO note-off gate bit at this interface.  On a MIDI note-off the
+		// firmware leaves block 0 at its gate value and, from the retire walk
+		// (MidiNote_Dispatch's velocity-0 arm -> VoiceList_RetireByMode ->
+		// Voice_Retire_Mode20, prom_c 0xFB3D26), RE-STAGES this channel's amplitude
+		// envelope with a RELEASE profile via Dev10C_WriteSixChanRegs_FromD78A
+		// (0xFB7345): writes to registers chan + { 0x0800, 0x0840, 0x0900, 0x0940,
+		// 0x09C0, 0x0A00 } -- and, notably, NOT chan + 0x0A40.  The note-ON burst,
+		// Dev10C_WriteAllChanRegs (0xFB713A), is the ONLY writer of chan + 0x0A40
+		// (its last register; the order ...0x0A00 then 0x0A40 is measured at
+		// 0xFB7278/0xFB728B).  So the two are told apart at the register interface
+		// by exactly one fact: the note-off envelope re-stage reaches chan + 0x0A00
+		// but never re-writes chan + 0x0A40.
+		//
+		// Hence: chan + 0x0A40 marks the end of a note-on burst; a later write to
+		// chan + 0x0A00 on a still-gated channel, once that burst has ended, is the
+		// note-off release.  (A note-on's own 0x0A00 write lands while the burst
+		// flag is still set -- 0x0A00 precedes 0x0A40 -- so it is not mistaken for a
+		// release.)  ⚠ MODEL, with two bounds worth naming: a note-on arm that does
+		// not reach 0x0A40 leaves the voice undetectable and it retires as before
+		// (no regression); and a mid-note re-stage that writes 0x0A00 would read as
+		// a release -- 0x0A00 is "third envelope segment 1", an unlikely live target,
+		// but if a held sound is heard to release early, look here.
+		{
+			const uint64_t cbit = uint64_t(1) << chan;
+			switch (m_tg_latch & 0xffc0)
+			{
+			case 0x0a40:                       // last register of the note-on burst
+				m_tg_noteon_burst &= ~cbit;
+				break;
+			case 0x0a00:                       // in the note-off release burst
+				if ((m_tg_busy[chan >> 4] & (1u << (chan & 15)))
+					&& !(m_tg_noteon_burst & cbit)
+					&& !(m_tg_released & cbit))
+				{
+					m_tg_released |= cbit;
+					m_tonegen->set_release(chan);
+				}
+				break;
+			}
 		}
 
 		// Block 0x0080 bit 15 is a gate the CPU pulses 1-then-0 around a
@@ -2233,7 +2356,32 @@ uint16_t wsa1_state::tg_status_r()
 	// voice was torn down within a few MAIN passes and a held voice died the
 	// instant its hold bit cleared, with no release at all.
 	if (latch < 4)
+	{
+		// ---- the note-off release completing: drop the busy bit ourselves ----
+		//
+		// This is the poll the firmware's retire path reads (it tears down every
+		// channel whose bit is set in the armed mask 0x0087BF but CLEAR here and in
+		// the hold mask 0x0087C7, then writes 0x7E00 via Dev10C_ChanReset).  On real
+		// hardware the chip clears its own busy bit when a voice's amplitude reaches
+		// zero; this driver has to do the same for the placeholder voice, or a
+		// released note sounds forever because nothing ever writes 0x7E00.
+		//
+		// So: for a channel this bank whose note-off has been staged (m_tg_released,
+		// detected in tg_data_w) and whose modelled amplitude has now decayed to
+		// silence, clear its busy bit.  The next thing that happens is the firmware's
+		// OWN retire -- it writes 0x7E00, which set_gate(false) then applies.  No
+		// 0x7E00 is fabricated here and no envelope shape is invented; the only model
+		// is "busy falls when the voice goes quiet", which is what the chip does.
+		// A still-held voice never has m_tg_released set, so it is never touched.
+		for (unsigned i = 0; i < 16; i++)
+		{
+			const unsigned chan = latch * 16 + i;
+			const uint64_t cbit = uint64_t(1) << chan;
+			if ((m_tg_released & cbit) && m_tonegen->amplitude(chan) <= 0.0009f)
+				m_tg_busy[latch] &= uint16_t(~(1u << i));
+		}
 		return m_tg_busy[latch];
+	}
 
 	// QUERY 2 -- select 0x0180 + chan: a per-channel MAGNITUDE.  Select at
 	// 0xFA69AF, read at 0xFA69B1, then `and BC,0x3fff / srl 0x05,BC / ld E,C`
@@ -2564,6 +2712,8 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_tg_latch));
 	save_item(NAME(m_tg_regs));
 	save_item(NAME(m_tg_busy));
+	save_item(NAME(m_tg_noteon_burst));
+	save_item(NAME(m_tg_released));
 	save_item(NAME(m_tg_gate));
 	save_item(NAME(m_cpu1_chanreg_addr));
 	save_item(NAME(m_cpu1_chanreg));
@@ -3425,6 +3575,19 @@ void wsa1_state::wsa1_base(machine_config &config)
 	WSA1_MIDI_UART(config, m_midi_uart, 0);
 	m_midi_uart->rx_cb().set(FUNC(wsa1_state::midi1_rx));
 	MIDI_PORT(config, "mdin", midiin_slot, "midiin").rxd_handler().set(m_midi_uart, FUNC(wsa1_midi_uart_device::rx_w));
+
+	// --- MIDI OUT (rear MIDI1 jack) <- CPU 1's serial channel 0 ------------
+	//
+	// The TX twin of the block above.  Until now sc0buf_w only faked "send
+	// complete"; the tmp95c061 now also hands each SC0BUF byte to sc0_txd().  The
+	// same UART shifts those bytes out at 31250 baud (byte -> bits) into MAME's
+	// bit-serial midiout.  This is what the firmware itself transmits (bulk/group
+	// SysEx dumps, GM on/off, request replies) and the carrier the driver's live
+	// parameter mirror (see below) uses.  Host: -mdout <port>.
+	m_cpu1->sc0_txd().set(m_midi_uart, FUNC(wsa1_midi_uart_device::tx_byte));
+	auto &mdout(MIDI_PORT(config, "mdout"));
+	midiout_slot(mdout);
+	m_midi_uart->tx_cb().set("mdout", FUNC(midi_port_device::write_txd));
 
 	// --- the floppy disk controller ----------------------------------------
 	//

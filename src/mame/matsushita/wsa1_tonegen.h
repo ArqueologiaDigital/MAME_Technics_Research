@@ -52,6 +52,16 @@ public:
 	void set_env0(unsigned ch, uint16_t reg0800);   // chan + 0x0800, half of the idle marker
 	void set_env1(unsigned ch, uint16_t reg0840);   // chan + 0x0840, the other half
 
+	// The firmware's note-OFF release: it re-stages the envelope registers with a
+	// release profile (Voice_Retire_Mode20 -> Dev10C_WriteSixChanRegs_FromD78A,
+	// prom_c 0xFB7345) WITHOUT re-gating -- the block-0 gate stays until the chip's
+	// own envelope decays and the poll frees the voice.  set_release() puts the
+	// voice into that decay while it is still gated.  amplitude() lets the driver
+	// see when the decay has finished, so it can drop the busy bit the firmware's
+	// retire path polls (wsa1.cpp tg_status_r, QUERY 1).
+	void set_release(unsigned ch);                  // begin note-off decay (still gated)
+	float amplitude(unsigned ch);                   // current voice amplitude, 0 == silent
+
 	// A driver ioport whose bit 0 enables the placeholder sine (default: on).
 	// Clearing it silences the placeholder without disturbing the register file.
 	template <typename T> void set_enable_port(T &&tag) { m_enable.set_tag(std::forward<T>(tag)); }
@@ -77,6 +87,7 @@ private:
 		uint16_t env0800 = 0xff80; // chan+0x0800 \  the two together are this channel's
 		uint16_t env0840 = 0xff00; // chan+0x0840 /  idle marker (0xFF80 / 0xFF00)
 		bool     gate    = false;  // the block-0 lifecycle latch
+		bool     released = false; // note-off decay armed while still gated (see set_release)
 		float    env     = 0.0f;   // current amplitude, ramped so gate/level edges do not click
 	};
 
