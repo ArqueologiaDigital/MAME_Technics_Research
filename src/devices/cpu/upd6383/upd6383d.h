@@ -213,6 +213,9 @@ public:
 		                        //   into the MAC (acc <- bus), not a bus-less MAC.
 		LO_SRC_LFO = 0x08,      // ★ SPECULATIVE: the LFO / per-unit modulation source.
 		                        //   Appears class-A + ACT 0x00 in the LFO-publish idiom.
+		LO_SRC_LFOOUT = 0x1c,   // ★ SPECULATIVE: the LFO OUTPUT (action00-discriminator.md
+		                        //   :468, `092.2.00.700`).  ⚠ UNPROVEN -- LEDGER dead end
+		                        //   #6 records no anchor; adopted as the prospective read.
 		LO_SRC_MEM = 0x07,      // mem[ptr]
 		LO_SRC_ACC = 0x10,      // the accumulator
 		LO_SRC_ACCB = 0x11,     // ★ §27 SPECULATIVE: the SECOND accumulator (ACCB).
@@ -418,7 +421,8 @@ public:
 	static constexpr bool lo_src_anchored_spec(u8 s)
 	{
 		return lo_src_anchored(s) || s == LO_SRC_ACCB || s == LO_SRC_DRD
-				|| s == LO_SRC_TABLE || s == LO_SRC_MEM0 || s == LO_SRC_LFO;
+				|| s == LO_SRC_TABLE || s == LO_SRC_MEM0 || s == LO_SRC_LFO
+				|| s == LO_SRC_LFOOUT;
 	}
 
 	static constexpr bool lo_act_anchored_spec(u8 a)
