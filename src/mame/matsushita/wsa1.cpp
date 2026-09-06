@@ -673,10 +673,14 @@ private:
 	// --- WSA1R DSP host-bus capture (CPU 2 bit-banged upload to IC5/6/30) -----
 	// The three uPD6383GF DSPs hang off CPU 2's P7 (DSPD0-7); P5.3 = C/D, per-DSP
 	// /CS on P5.4 (IC6/dest0) / P5.5 (IC5/dest1) / P2.7 (IC30/dest2), /WR on PB.5.
-	// A byte latches on the /CS falling edge while /WR is low (prom_c
-	// p7_module.s:83-89).  Capturing the upload lets it be checked against the
-	// statically-extracted microcode (kn5000-roms-disasm wsa1_dsp_isa_crossval.py)
-	// -- the first verifiable step toward a real DSP device
+	// A byte latches on the SECOND /CS falling edge (the one while /WR is low --
+	// the first, pre-data, has /WR high).  ★ C/D IS READ AT THAT EDGE and it is
+	// CORRECT: a trace of P7Byte_SendCmd/SendData/SendArg (prom_c 0xF9A163/
+	// 0xF9A31A/0xF9A4B0) shows `res 3,(P5)` lives only in SendCmd, so P5.3 low at
+	// the latch == command and high == data/arg (kn5000-roms-disasm wsa1/notes/
+	// FINDINGS-dsp-upload-deframed.md).  Capturing the upload lets it be checked
+	// against the statically-extracted microcode (wsa1_dsp_isa_crossval.py) -- the
+	// first verifiable step toward a real DSP device
 	// (notes/HANDOFF-wsa1-dsp-device-build.md).  Capture-only; drives nothing.
 	uint8_t  m_cpu2_p7  = 0;                 // DSPD0-7 (the data byte)
 	uint8_t  m_cpu2_p5  = 0xff;             // P5.3 = C/D, P5.4/P5.5 = DSP0/1 /CS
