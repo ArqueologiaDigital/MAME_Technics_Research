@@ -206,6 +206,13 @@ public:
 	// 0x10) -- separations that are 0-of-106 / 87-of-87 clean.
 	// (notes/dsp-alu-structure.md sect. 5.)
 	enum : u8 {
+		LO_SRC_MEM0 = 0x00,     // ★ SPECULATIVE (sect. 233): mem[ptr] / the delay-RAM
+		                        //   read.  SINGLE DELAY separated the seven readings
+		                        //   1-of-7 and this one survived; the null-MAC rival
+		                        //   was refuted by evidence.  lo12 0x000 = mem[ptr]
+		                        //   into the MAC (acc <- bus), not a bus-less MAC.
+		LO_SRC_LFO = 0x08,      // ★ SPECULATIVE: the LFO / per-unit modulation source.
+		                        //   Appears class-A + ACT 0x00 in the LFO-publish idiom.
 		LO_SRC_MEM = 0x07,      // mem[ptr]
 		LO_SRC_ACC = 0x10,      // the accumulator
 		LO_SRC_ACCB = 0x11,     // ★ §27 SPECULATIVE: the SECOND accumulator (ACCB).
@@ -359,6 +366,11 @@ public:
 		                        //   are immediately followed by a delay read.  Prospective.
 		LO_ACT_TBL_MUL = 0x08,  // ★ SPECULATIVE: the action of the table-port multiply
 		                        //   (pairs with LO_SRC_TABLE, class A).  Prospective, weakest.
+		LO_ACT_BIQ_D = 0x0d,    // ★ SPECULATIVE (sect. 234): one of the biquad's two
+		LO_ACT_BIQ_E = 0x0e,    //   delay-stage actions.  The PAIR (0x0D,0x0E) is
+		                        //   confirmed 1-of-49 by PARAMETRIC EQ's entry window;
+		                        //   only WHICH tap / the lag is hardware Q4, and the lag
+		                        //   does not affect the decode, only the timing.
 		LO_ACT_NONE_2  = 0x12,  // no temp/memory side effect
 		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
 		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
@@ -404,12 +416,13 @@ public:
 	static constexpr bool lo_src_anchored_spec(u8 s)
 	{
 		return lo_src_anchored(s) || s == LO_SRC_ACCB || s == LO_SRC_DRD
-				|| s == LO_SRC_TABLE;
+				|| s == LO_SRC_TABLE || s == LO_SRC_MEM0 || s == LO_SRC_LFO;
 	}
 
 	static constexpr bool lo_act_anchored_spec(u8 a)
 	{
-		return lo_act_anchored(a) || a == LO_ACT_DELAY_RD || a == LO_ACT_TBL_MUL;
+		return lo_act_anchored(a) || a == LO_ACT_DELAY_RD || a == LO_ACT_TBL_MUL
+				|| a == LO_ACT_BIQ_D || a == LO_ACT_BIQ_E;
 	}
 
 	// ---------------------------------------------------------------
@@ -709,13 +722,14 @@ public:
 		if (c_format(w))                        return false;
 		const u8 cl = class4(w);
 		// ★ SPECULATIVE: also admit the register-file addressing modes class 1
-		//   and class 9 (= mode 1 + cursor fetch).  The disassembler already
-		//   renders these as "internal register file [XX]" (R2 sect. 1), so the
-		//   ADDRESSING is structurally understood; accepting them as a decoded
-		//   register-file-operand ALU op fits +105 words.  HI_ACC_HOLD stays
-		//   class-8-only, and the bit-4 store guard below still refuses stores
-		//   off mode 2, so only the non-store register-file ops are admitted.
-		if (cl != 1 && cl != 2 && cl != 8 && cl != 9 && cl != 0xa)
+		//   and class 9 (= mode 1 + cursor fetch) -- rendered as "internal
+		//   register file [XX]" (R2 sect. 1) -- and the table-lookup idiom's
+		//   class 4 / class 6 (rendered "table-lookup idiom", INFERRED, MCC
+		//   +1.000).  The ADDRESSING of all four is structurally understood;
+		//   accepting them as decoded register-file / table operations fits the
+		//   words.  HI_ACC_HOLD stays class-8-only, and the bit-4 store guard
+		//   below still refuses stores off mode 2.
+		if (cl != 1 && cl != 2 && cl != 4 && cl != 6 && cl != 8 && cl != 9 && cl != 0xa)
 			return false;
 		if (lo12(w) & 0x800)                    return false;
 		if (lo_ptrmode(w))                      return false;

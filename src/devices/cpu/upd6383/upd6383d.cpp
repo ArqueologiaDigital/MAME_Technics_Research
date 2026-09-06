@@ -657,12 +657,16 @@ std::string annotate(u64 word, int at)
 		const u8 s = upd6383_disassembler::lo_src(word);
 		const u8 a = upd6383_disassembler::lo_act(word);
 		const char *sr =
+			(s == upd6383_disassembler::LO_SRC_MEM0)  ? "SRC 0x00 = mem[ptr]/delay-RAM read" :
+			(s == upd6383_disassembler::LO_SRC_LFO)   ? "SRC 0x08 = LFO/per-unit source" :
 			(s == upd6383_disassembler::LO_SRC_DRD)   ? "SRC 0x0B = delay-read data register" :
 			(s == upd6383_disassembler::LO_SRC_ACCB)  ? "SRC 0x11 = ACCB (2nd accumulator)" :
 			(s == upd6383_disassembler::LO_SRC_TABLE) ? "SRC 0x13 = coef/wave table port" : nullptr;
 		const char *ar =
 			(a == upd6383_disassembler::LO_ACT_DELAY_RD) ? "ACT 0x0C = delay READ" :
-			(a == upd6383_disassembler::LO_ACT_TBL_MUL)  ? "ACT 0x08 = table-port multiply" : nullptr;
+			(a == upd6383_disassembler::LO_ACT_TBL_MUL)  ? "ACT 0x08 = table-port multiply" :
+			(a == upd6383_disassembler::LO_ACT_BIQ_D)    ? "ACT 0x0D = biquad delay-stage (pair w/ 0x0E)" :
+			(a == upd6383_disassembler::LO_ACT_BIQ_E)    ? "ACT 0x0E = biquad delay-stage (pair w/ 0x0D)" : nullptr;
 		if (sr || ar)
 			return util::string_format("SPECULATIVE (prospective, not measured): %s%s%s",
 					sr ? sr : "", (sr && ar) ? "; " : "", ar ? ar : "");
