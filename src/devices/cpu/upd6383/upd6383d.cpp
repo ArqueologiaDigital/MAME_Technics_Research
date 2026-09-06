@@ -645,6 +645,29 @@ std::string annotate(u64 word, int at)
 	// packets belong to a host-stream viewer, not to an instruction decoder.
 	// (The C-format rule that used to sit beside it is now at the TOP of this
 	// function, where its precedence is load-bearing.)
+
+	// ★ SPECULATIVE TIER (goal 2026-09-06): a word that reached here carries no
+	// idiom, but its SRC/ACT may be one of the prospective codes we now accept so
+	// the decode "fits in place".  Render the adopted reading, LABELLED
+	// SPECULATIVE so it is never mistaken for a measured one.  These readings are
+	// what alu_decoded_spec() anchors; their basis is at each enum line in the
+	// header (SRC 0x0B delay-read reg / 0x11 ACCB / 0x13 table port; ACT 0x0C
+	// delay read / 0x08 table-port multiply).
+	{
+		const u8 s = upd6383_disassembler::lo_src(word);
+		const u8 a = upd6383_disassembler::lo_act(word);
+		const char *sr =
+			(s == upd6383_disassembler::LO_SRC_DRD)   ? "SRC 0x0B = delay-read data register" :
+			(s == upd6383_disassembler::LO_SRC_ACCB)  ? "SRC 0x11 = ACCB (2nd accumulator)" :
+			(s == upd6383_disassembler::LO_SRC_TABLE) ? "SRC 0x13 = coef/wave table port" : nullptr;
+		const char *ar =
+			(a == upd6383_disassembler::LO_ACT_DELAY_RD) ? "ACT 0x0C = delay READ" :
+			(a == upd6383_disassembler::LO_ACT_TBL_MUL)  ? "ACT 0x08 = table-port multiply" : nullptr;
+		if (sr || ar)
+			return util::string_format("SPECULATIVE (prospective, not measured): %s%s%s",
+					sr ? sr : "", (sr && ar) ? "; " : "", ar ? ar : "");
+	}
+
 	return "";
 }
 

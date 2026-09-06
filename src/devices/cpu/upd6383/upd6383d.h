@@ -211,6 +211,12 @@ public:
 		LO_SRC_ACCB = 0x11,     // ★ §27 SPECULATIVE: the SECOND accumulator (ACCB).
 		                        //   Adjacent to LO_SRC_ACC, and the CDJ-500 block
 		                        //   diagram (PROVEN) gives this ALU two accumulators.
+		LO_SRC_DRD = 0x0b,      // ★ SPECULATIVE (LEDGER sect. 215): the delay-RAM READ
+		                        //   data register -- its consumer follows a delay READ
+		                        //   13/13.  Prospective, adopted for the speculative tier.
+		LO_SRC_TABLE = 0x13,    // ★ SPECULATIVE (CORPUS-PATTERNS-SPECULATIVE S-6): the
+		                        //   coefficient/wave TABLE port -- 102.A.**.4C8 is the
+		                        //   table-port multiply.  Prospective.
 		LO_SRC_TA  = 0x19,      // temporary register A
 		LO_SRC_TB  = 0x1a       // temporary register B
 	};
@@ -349,6 +355,10 @@ public:
 	enum : u8 {
 		LO_ACT_ACC_BUS = 0x00,  // the accumulator's input term comes from the BUS
 		LO_ACT_ST_BUS  = 0x07,  // mem[ptr] <- bus
+		LO_ACT_DELAY_RD = 0x0c, // ★ SPECULATIVE: delay-RAM READ action -- 12/12 sites
+		                        //   are immediately followed by a delay read.  Prospective.
+		LO_ACT_TBL_MUL = 0x08,  // ★ SPECULATIVE: the action of the table-port multiply
+		                        //   (pairs with LO_SRC_TABLE, class A).  Prospective, weakest.
 		LO_ACT_NONE_2  = 0x12,  // no temp/memory side effect
 		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
 		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
@@ -380,6 +390,26 @@ public:
 		return a == LO_ACT_ACC_BUS || a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2
 				|| a == LO_ACT_CAP_TA || a == LO_ACT_CAP_TB || a == LO_ACT_NONE_5
 				|| a == LO_ACT_CAP_TA2;
+	}
+
+	// ---------------------------------------------------------------
+	//  ★ THE SPECULATIVE TIER (goal 2026-09-06: "accept some prospective
+	//  hypotheses so things fit in place").  These predicates ADD prospective
+	//  SRC/ACT readings on top of the strict anchored set.  They are kept
+	//  SEPARATE so the rigorous baseline (lo_*_anchored / alu_decoded) is
+	//  untouched and reversible; nothing here is graded MEASURED.  Each added
+	//  code carries its own basis at its enum line above.  Adopting them lets
+	//  +224 corpus words route-anchor (measured, tools/spec_coverage.py).
+	// ---------------------------------------------------------------
+	static constexpr bool lo_src_anchored_spec(u8 s)
+	{
+		return lo_src_anchored(s) || s == LO_SRC_ACCB || s == LO_SRC_DRD
+				|| s == LO_SRC_TABLE;
+	}
+
+	static constexpr bool lo_act_anchored_spec(u8 a)
+	{
+		return lo_act_anchored(a) || a == LO_ACT_DELAY_RD || a == LO_ACT_TBL_MUL;
 	}
 
 	// ---------------------------------------------------------------
@@ -658,6 +688,35 @@ public:
 				return false;
 		}
 
+		switch (hi_f31(hi12(w)))
+		{
+		case HI_ACC_LOAD: case HI_ACC_ADD: return true;
+		case HI_ACC_HOLD: return cl == 8;
+		default: return false;
+		}
+	}
+
+	// ---------------------------------------------------------------
+	//  ★ THE SPECULATIVE DECODE (goal 2026-09-06).  A MIRROR of alu_decoded()
+	//  that anchors the prospective SRC/ACT codes as well (lo_*_anchored_spec).
+	//  Everything it admits BEYOND alu_decoded() rests on a prospective reading,
+	//  never a MEASURED one, and the strict predicate above is left untouched.
+	//  Use it to report how much "fits in place" once the prospective readings
+	//  are accepted (tools/spec_coverage.py); it is not the device's execution
+	//  gate.
+	static constexpr bool alu_decoded_spec(u64 w)
+	{
+		if (c_format(w))                        return false;
+		const u8 cl = class4(w);
+		if (cl != 2 && cl != 8 && cl != 0xa)    return false;
+		if (lo12(w) & 0x800)                    return false;
+		if (lo_ptrmode(w))                      return false;
+		if (!lo_src_anchored_spec(lo_src(w)) || !lo_act_anchored_spec(lo_act(w)))
+			return false;
+		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)          return false;
+		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2) return false;
+		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2)
+			return false;
 		switch (hi_f31(hi12(w)))
 		{
 		case HI_ACC_LOAD: case HI_ACC_ADD: return true;
