@@ -124,6 +124,35 @@ public:
 	void host_w(bool cd, u8 data);
 
 	// ---------------------------------------------------------------
+	//  THE WSA1R HOST FRAMING for coefficient / descriptor / register loads.
+	//
+	//  The SAME chip is driven by two products.  The KN5000 loads these three
+	//  on-chip parameter spaces through host_w (cmd-0x02 for C-RAM, the cmd-0x01
+	//  poke port 0x0160 for all three); the WSA1R serialises them as its own
+	//  5-byte P7 groups (kn5000-roms-disasm wsa1/dsp/analysis/dsp_deframe.py).
+	//  Feeding those raw groups to host_w would require m_speculative (the poke
+	//  DATA path's value x2 / LSB-restore is gated on it) and the exact
+	//  0x01+0x0160 prefix framing, so the wsa1 driver de-frames the groups and
+	//  calls these instead.  They apply the IDENTICAL writes the chip's poke path
+	//  applies (upd6383.cpp:1858-1927) -- an 8-bit auto-incrementing pointer per
+	//  space, each pointer set by its address/ldptr word and NOT reset per
+	//  transfer.  The three spaces are selected by the VALUE group's K tag, which
+	//  the firmware pairs 1:1 with the address-group tag (wf_dec61ab4-b19,
+	//  adversarially verified 2026-09-06):
+	//     tag 0x21 / lo12 0x821  (ldptr)   + value K 0x26 -> C-RAM       (24-bit)
+	//     tag 0x25 / lo12 0x825  (ldptr.d) + value K 0x4C -> descriptor  (16-bit)
+	//     `00 00' class4 1/lo12 0          + value K 0x15 -> D-RAM reg    (24-bit)
+	//  These only WRITE storage; they do not run the core.  The driver decodes the
+	//  full 24-bit value (== the poke path's value with spec bits 31+63 set), so
+	//  these store it verbatim and do NOT re-apply the speculative x2/LSB fix.
+	void cram_ptr_w(u8 addr)   { m_cram_wp = addr; m_cram_wp_set = true; }
+	void cram_data_w(u32 v)    { if (m_cram_wp_set) { m_cram.write_dword(m_cram_wp, v & 0xffffff); m_cram_wp = u8(m_cram_wp + 1); } }
+	void dsc_ptr_w(u8 addr)    { m_dsc_wp = addr; }
+	void dsc_data_w(u16 v)     { m_dscbank[m_dsc_wp] = v; m_dsc_wp = u8(m_dsc_wp + 1); }
+	void dram_ptr_w(u8 addr)   { m_dram_wp = addr; }
+	void dram_data_w(u32 v)    { m_dram.write_dword(m_dram_wp, v & 0xffffff); m_dram_wp = u8(m_dram_wp + 1); }
+
+	// ---------------------------------------------------------------
 	//  THE SERIAL AUDIO PORTS -- ONE LRCK PERIOD (see upd6383.cpp).
 	//
 	//  di[port][ch] / do_[port][ch]: port 0..2 = DI1..DI3 / DO1..DO3,

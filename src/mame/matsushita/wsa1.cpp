@@ -713,6 +713,16 @@ private:
 	void     cpu2_p2_w(uint8_t data);
 	void     cpu2_pb_w(uint8_t data);
 	void     dsp_capture(unsigned dest, bool cd, uint8_t byte);
+	// Coefficient de-framer state (one per destination).  The WSA1R streams the
+	// C-RAM / descriptor / D-RAM-register loads as 5-byte P7 groups (08 01 ..
+	// address, 0A .. value); a sliding 5-byte window matches a group lead and
+	// consumes 5 bytes, else skips one -- the exact logic proven in dsp_deframe.py.
+	// m_dsp_grp holds the pending bytes.  Values are routed to the device's
+	// cram_*/dsc_*/dram_* host methods by the value group's own K tag.  See
+	// dsp_deframe(dest, byte).
+	uint8_t  m_dsp_grp[3][5]{};
+	uint8_t  m_dsp_grp_len[3]{};
+	void     dsp_deframe(unsigned dest, uint8_t byte);
 
 	uint16_t m_tg_latch = 0;
 	uint16_t m_tg_regs[TG_REG_COUNT]{};
@@ -1868,12 +1878,70 @@ void wsa1_state::dsp_capture(unsigned dest, bool cd, uint8_t byte)
 	// Feed the byte to the real device when instantiated (WSA1R_ENABLE_DSP).  The
 	// WSA1R program-word framing IS the uPD6383 host_w cmd-0x01 protocol
 	// (SendCmd(0x01) + addr + N.SendData payload), verified 63/63 against the
-	// static corpus, so this loads the right I-RAM.  (Coefficients use the WSA1R's
-	// own 5-byte groups, which host_w ignores -- a documented follow-on.)
+	// static corpus, so this loads the right I-RAM.  Coefficients use the WSA1R's
+	// own 5-byte groups (which host_w does not parse); dsp_deframe() below loads
+	// C-RAM / descriptor / D-RAM-register from them.
 	if (m_dsp[dest].found())
+	{
 		m_dsp[dest]->host_w(cd, byte);
+		// host_w loads I-RAM from the cmd-0x01 program records but IGNORES the
+		// WSA1R's own 5-byte coefficient groups (they arrive as no-op commands).
+		// De-frame those separately and load C-RAM / the descriptor bank.  C/D is
+		// deliberately not consulted -- the groups are matched by byte value, the
+		// exact rule proven in dsp_deframe.py.
+		dsp_deframe(dest, byte);
+	}
 	LOGMASKED(LOG_DSPUP, "dspup: dest%u %s %02X  (#%u)\n",
 		dest, cd ? "DAT" : "CMD", byte, m_dsp_cap_count[dest]);
+}
+
+// De-frame the WSA1R coefficient/descriptor/register upload for one destination
+// and load the device.  A sliding 5-byte window (dsp_deframe.py / dsp_cram_map.py
+// logic): if the window is a group lead it is consumed whole, else the oldest byte
+// is dropped and the window slides on.  This mirrors the chip's own poke path
+// (upd6383.cpp:1858-1927): three ADDRESS/ldptr forms each aim one of three write
+// pointers, and a VALUE group is routed BY ITS OWN K TAG -- K 0x26 -> C-RAM,
+// 0x4C -> descriptor, 0x15 -> D-RAM register file -- each auto-incrementing.
+// (Routing by K, not by the last address group, is what keeps the three spaces
+// apart: the boot stream is K=0x15-dominated, so active-target routing would leak
+// D-RAM values into C-RAM.  wf_dec61ab4-b19, verified 2026-09-06.)
+void wsa1_state::dsp_deframe(unsigned dest, uint8_t byte)
+{
+	if (dest > 2 || !m_dsp[dest].found())
+		return;
+	uint8_t (&g)[5] = m_dsp_grp[dest];
+	uint8_t &n = m_dsp_grp_len[dest];
+	g[n++] = byte;
+	if (n < 5)
+		return;
+
+	const uint8_t a = ((g[2] & 0x0f) << 4) | ((g[3] & 0xf0) >> 4);   // addr8 of the word
+	if (g[0] == 0x08 && g[1] == 0x01 && g[4] == 0x21)
+		m_dsp[dest]->cram_ptr_w(a);                     // ldptr   -> C-RAM pointer
+	else if (g[0] == 0x08 && g[1] == 0x01 && g[4] == 0x25)
+		m_dsp[dest]->dsc_ptr_w(a);                      // ldptr.d -> descriptor pointer
+	else if (g[0] == 0x00 && g[1] == 0x00 && (g[2] & 0xf0) == 0x10 && g[4] == 0x00)
+		m_dsp[dest]->dram_ptr_w(a);                     // class4 1/lo12 0 -> D-RAM-reg ptr
+	else if ((g[0] & 0xfe) == 0x0a)                     // 0A/0B value packet
+	{
+		const uint32_t v = (uint32_t(g[1] & 0x7f) << 17) | (uint32_t(g[2]) << 9)
+				| (uint32_t(g[3]) << 1) | ((g[4] & 0x80) >> 7);
+		switch (g[4] & 0x7f)
+		{
+		case 0x26: m_dsp[dest]->cram_data_w(v);                     break;   // C-RAM
+		case 0x4c: m_dsp[dest]->dsc_data_w(uint16_t(v & 0xffff));   break;   // descriptor
+		case 0x15: m_dsp[dest]->dram_data_w(v);                     break;   // D-RAM reg
+		default: break;                                                      // unknown tag
+		}
+	}
+	else
+	{
+		// not a group lead: drop the oldest byte and slide the window on.
+		g[0] = g[1]; g[1] = g[2]; g[2] = g[3]; g[3] = g[4];
+		n = 4;
+		return;
+	}
+	n = 0;                                              // consumed the whole group
 }
 
 #if WSA1R_ENABLE_DSP
@@ -2884,6 +2952,8 @@ void wsa1_state::machine_start()
 	save_item(NAME(m_cpu2_p2));
 	save_item(NAME(m_cpu2_pb));
 	save_item(NAME(m_dsp_cap_count));
+	save_item(NAME(m_dsp_grp));
+	save_item(NAME(m_dsp_grp_len));
 	save_item(NAME(m_cpu1_p5));
 	save_item(NAME(m_cpu1_p8));
 	save_item(NAME(m_cpu1_pa));
