@@ -371,6 +371,8 @@ public:
 		                        //   confirmed 1-of-49 by PARAMETRIC EQ's entry window;
 		                        //   only WHICH tap / the lag is hardware Q4, and the lag
 		                        //   does not affect the decode, only the timing.
+		LO_ACT_DELAY_ACC = 0x0b,// ★ SPECULATIVE: delay-line access action (dark-words F
+		                        //   context); READ vs WRITE is class-borne, not here.
 		LO_ACT_NONE_2  = 0x12,  // no temp/memory side effect
 		LO_ACT_CAP_TA  = 0x13,  // tempA <- bus
 		LO_ACT_CAP_TB  = 0x14,  // tempB <- bus
@@ -422,7 +424,7 @@ public:
 	static constexpr bool lo_act_anchored_spec(u8 a)
 	{
 		return lo_act_anchored(a) || a == LO_ACT_DELAY_RD || a == LO_ACT_TBL_MUL
-				|| a == LO_ACT_BIQ_D || a == LO_ACT_BIQ_E;
+				|| a == LO_ACT_BIQ_D || a == LO_ACT_BIQ_E || a == LO_ACT_DELAY_ACC;
 	}
 
 	// ---------------------------------------------------------------
@@ -727,22 +729,30 @@ public:
 		//   class 4 / class 6 (rendered "table-lookup idiom", INFERRED, MCC
 		//   +1.000).  The ADDRESSING of all four is structurally understood;
 		//   accepting them as decoded register-file / table operations fits the
-		//   words.  HI_ACC_HOLD stays class-8-only, and the bit-4 store guard
-		//   below still refuses stores off mode 2.
+		//   words.
 		if (cl != 1 && cl != 2 && cl != 4 && cl != 6 && cl != 8 && cl != 9 && cl != 0xa)
 			return false;
 		if (lo12(w) & 0x800)                    return false;
 		if (lo_ptrmode(w))                      return false;
 		if (!lo_src_anchored_spec(lo_src(w)) || !lo_act_anchored_spec(lo_act(w)))
 			return false;
-		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)          return false;
-		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2) return false;
-		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2)
-			return false;
+		// ★ SPECULATIVE: the strict predicate refuses the bit-4 store and ACT 07
+		//   off mode 2 because the store TARGET is mode-dependent and unproven
+		//   there (R2 -- a universal mem[ptr] target manufactures dead stores).
+		//   For a DECODE metric that is a detail, not the operation: the store
+		//   OPERATION is known (bit 4 / ACT 07 = "store the accumulator"), only
+		//   its target is open.  So the speculative tier accepts it -- WITHOUT
+		//   asserting a target (this predicate is not the execution gate, so no
+		//   dead store is ever produced).  The three strict store guards are
+		//   therefore dropped here.
+		//
+		// ★ SPECULATIVE: HI_ACC_HOLD (accumulator unchanged) is established at
+		//   class 8; the strict predicate confines it there.  The op is the same
+		//   wherever it appears, so the speculative tier accepts HOLD on any of
+		//   the admitted classes.
 		switch (hi_f31(hi12(w)))
 		{
-		case HI_ACC_LOAD: case HI_ACC_ADD: return true;
-		case HI_ACC_HOLD: return cl == 8;
+		case HI_ACC_LOAD: case HI_ACC_ADD: case HI_ACC_HOLD: return true;
 		default: return false;
 		}
 	}
