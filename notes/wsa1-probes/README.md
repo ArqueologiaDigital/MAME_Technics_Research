@@ -2162,3 +2162,32 @@ Three things the same crops settled that were open inferences in the driver:
   comment and is deliberately NOT changed.
 * **The LCD clock.** `X2` is 8 MHz across `IC7`'s oscillator pins, so
   `sed1330_device` now derives 68.5871 Hz instead of keeping the nominal 60.
+
+## The runtime effect-upload pass, 2026-09-07
+
+With the three `upd6383` devices instantiated (`WSA1R_ENABLE_DSP=1`), these drive
+per-effect DSP re-uploads at runtime and measure what each one changes.  Effects are
+selected deterministically by poking the CPU-2 link "twin" program byte
+(`0x7E7E`/`0x7E98`/`0x7EB2`, +0x1A·unit) and the change flag `0x7ECC` (bit `1<<(unit+1)`)
+— the exact RAM CPU 1's link handler writes, so the ensuing `P7Stream_Run` upload is
+real firmware.  Full write-up + the numbers: `kn5000-roms-disasm/wsa1/notes/
+FINDINGS-dsp-runtime-effect-uploads.md`; the coverage tool + measured-resident baseline
+are `kn5000-roms-disasm/wsa1/dsp/analysis/dsp_runtime_resident_vs_corpus.py` and
+`runtime-resident-iram-words.txt`.  Slow: run FOREGROUND, `-str 150`+.
+
+| script | question it answers |
+|---|---|
+| `wsa1_effect_trigger_verify.lua` | does the twin-poke trigger actually re-upload?  (IC6 C-RAM 79→94 as effect goes 1→9→8; live/record follow every poke) |
+| `wsa1_effect_iram_exhaustive.lua` | sweep ALL 128 programs on IC30 — 55 distinct real records; does I-RAM ever change?  (no: distinct words stay 45) |
+| `wsa1_effect_iram_worddump.lua` | dump the distinct runtime-resident I-RAM words (produces `runtime-resident-iram-words.txt`, 45 words) |
+| `wsa1_effect_ic6_cram_sweep.lua` | how much of IC6's C-RAM do the 55 effects exercise?  (37→47 distinct 24-bit values, 79→91 cells; I-RAM stays 0) |
+| `wsa1_effect_group_reload.lua` | does a GROUP / 3-unit combi reload upload I-RAM to IC6/IC5?  (no — I-RAM unchanged on all three) |
+| `wsa1_effect_preamble_clear.lua` | does clearing the per-unit preamble latch (0xF354+2u) + reload upload I-RAM?  (no — C-RAM moves, I-RAM does not) |
+| `wsa1_lcd_sig.lua` | read the SED1330 LCD content (`:lcdc` "videoram") for a screen fingerprint + the CPU-1 effect-editor state (0x2796) |
+
+**What they settled:** runtime effect selection is COEFFICIENT-driven — it re-uploads
+C-RAM but never re-programs I-RAM.  IC30 holds a single resident 63-word / 45-distinct
+kernel (invariant across every effect, group, combi and preamble-clear); IC6/IC5 carry
+no program.  So effect selection fills more C-RAM but does NOT exercise more of the
+918-word I-RAM corpus — only 45 of 918 static "program words" (4.9%) are ever resident.
+This CORRECTED the earlier "the rest of IC30's I-RAM loads when effects are selected".
