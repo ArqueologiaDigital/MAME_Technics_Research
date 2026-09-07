@@ -2191,3 +2191,23 @@ kernel (invariant across every effect, group, combi and preamble-clear); IC6/IC5
 no program.  So effect selection fills more C-RAM but does NOT exercise more of the
 918-word I-RAM corpus — only 45 of 918 static "program words" (4.9%) are ever resident.
 This CORRECTED the earlier "the rest of IC30's I-RAM loads when effects are selected".
+
+### Follow-up 2026-09-07: is the body-upload gated in firmware or the driver?
+
+After the record classifier showed the ~873 non-resident words are real programs (field
++12 of each PoolDir record, verified `dsp/analysis/dsp_record_field_opcodes.py`: +12 is
+the op3 I-RAM body for 48/56 effects; +0/+4/+8 are coefficient streams), these two
+execution/write taps localise why effect selection still does not fill I-RAM.
+
+| script | question it answers |
+|---|---|
+| `wsa1_effect_exec_taps.lua` | do the reload routines RUN on an effect change?  (yes: `P7Units_ServiceTask` 0xFA5177, `ResolveProgramsAndReload` 0xFA5535 and `sub_FA3A3C` 0xFA3A3C all fire; `sub_FA3A3C` +2 on a program change) |
+| `wsa1_effect_iram_writetap.lua` | does host_w WRITE any DSP I-RAM on an effect change?  (NO: 0 I-RAM writes on all three DSPs; C-RAM writes DO happen — IC6 +12) |
+
+**Settled:** the firmware reload path executes on an effect change (`sub_FA3A3C` runs),
+but it produces **zero I-RAM writes** to the emulated DSPs — only C-RAM. So runtime
+effect selection does not fill I-RAM, confirmed at the write level, not just the
+non-zero count. Whether the op3 body is never put on the bus (firmware treats it as
+already-resident from boot) or is emitted in a framing host_w does not parse as a
+cmd-0x01 program (a driver interleaving gap) needs a raw-byte capture (LOG_DSPUP) around
+the change to distinguish — the one open next step.
