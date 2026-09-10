@@ -363,15 +363,21 @@ void l7a1429_device::excite_voice(unsigned ch, const l7a1429_resonator_params &p
 		return;
 	hle_voice &vo = m_voice[ch];
 
-	// pitch: MAIN from its tune (MIDI note), SUB from its own tune -- a detune that produces
-	// the audible coupling (the firmware's sub_FC4269 solver; INTERACTION GAIN widens it).
+	// The one named time constant for FITTING (plan 3.3).  ⚠ INFERENCE: the register refresh
+	// rate is MEASURED only for the POSITION/DEPTH trio (~24.576 ms); FITTING's absolute time
+	// mapping is not proven, so this scales the DECODED rise/decay relatively, not absolutely.
+	constexpr double FITTING_SPAN_S = 0.0246;
+
+	// pitch: MAIN and SUB each from their OWN decoded tune.  ★ plan 3.2 (correctness): the
+	// MAIN<->SUB coupling detune is ALREADY in the SUB TUNE word -- the firmware's sub_FC4269
+	// solver computes it and adds it to chan+0x0080 before it reaches us -- so we do NOT apply
+	// any extra INTERACTION-GAIN nudge here (the old ad-hoc 2^(-kappa*0.03) is removed; it
+	// double-counted a detune the register already carries, and hid the coupling on the poke
+	// rig where 0x0080 is static).
 	double const f_main = 440.0 * std::pow(2.0, (p.main_tune_note - 69.0) / 12.0);
 	double f_sub = 440.0 * std::pow(2.0, (p.sub_tune_note - 69.0) / 12.0);
 	if (f_sub < 1.0)
-		f_sub = f_main * std::pow(2.0, -6.0 / 1200.0);   // default -6 cent if SUB tune unset
-	// INTERACTION GAIN nudges the SUB pitch (normal-mode split, scaled by the 0..127 gain)
-	double const kappa = double(p.interaction_gain) / 127.0;
-	f_sub *= std::pow(2.0, (-kappa * 0.03));     // small gain-scaled detune, in octaves
+		f_sub = f_main * std::pow(2.0, -6.0 / 1200.0);   // fallback only if SUB tune is unset
 
 	double const muting = (p.main_muting_hz > 0.0) ? p.main_muting_hz : 4000.0;
 	double const muting_s = (p.sub_muting_hz > 0.0) ? p.sub_muting_hz : muting;
@@ -383,22 +389,30 @@ void l7a1429_device::excite_voice(unsigned ch, const l7a1429_resonator_params &p
 	setup_waveguide(vo.sub,  f_sub,  muting_s, pos, fb);
 	vo.sub_gain = (p.sub_gain > 0.0) ? p.sub_gain : 0.0;   // 0 = the explicit OFF
 
-	// excitation: a synthetic shaped burst (STAND-IN for the undumped DRIVER wave sample),
-	// shaped by FITTING rise/decay, seeded into both delay lines.
-	double const rise  = 0.0005 + p.main_fitting_rise  * 0.02;
-	double const decay = 0.005  + p.main_fitting_decay * 0.05;
-	int    const blen  = std::min(vo.main.n, int((rise + decay) * SAMPLE_RATE) + 4);
-	for (int k = 0; k < blen; k++)
+	// ★ plan 3.3: shape the excitation from the DECODED FITTING, per waveguide -- MAIN from its
+	// FITTING rise/decay (regs 0x01C0/0x0140), SUB from its own (0x0200/0x0180) -- instead of
+	// arbitrary constants.  The rise/decay are Q15 [0,1); FITTING_SPAN maps them to a time.
+	// ⚠ GRADE INFERENCE: the absolute time scale is not the PROVEN one (the refresh rate is
+	// measured only for the POSITION/DEPTH trio, not FITTING); only the RELATIVE shaping from
+	// the decoded values is faithful.  The burst itself remains a STAND-IN for IC4's undumped
+	// DRIVER wave sample.
+	auto seed = [&](waveguide &w, double f_rise, double f_decay)
 	{
-		m_exc_seed = m_exc_seed * 1103515245u + 12345u;
-		double const noise = (double((m_exc_seed >> 16) & 0x7fff) / 16384.0) - 1.0;
-		double const tt = double(k) / SAMPLE_RATE;
-		double const env = std::min(tt / (rise > 1e-5 ? rise : 1e-5), 1.0)
-		                 * std::exp(-tt / (decay > 1e-4 ? decay : 1e-4));
-		double const s = noise * env * 0.9;
-		vo.main.buf[k] += s;
-		if (k < vo.sub.n) vo.sub.buf[k] += s;
-	}
+		double const rise  = 1e-4 + f_rise  * FITTING_SPAN_S;   // [INFERENCE] time scale
+		double const decay = 1e-3 + f_decay * FITTING_SPAN_S;
+		int const blen = std::min(w.n, int((rise + decay) * SAMPLE_RATE) + 4);
+		for (int k = 0; k < blen; k++)
+		{
+			m_exc_seed = m_exc_seed * 1103515245u + 12345u;
+			double const noise = (double((m_exc_seed >> 16) & 0x7fff) / 16384.0) - 1.0;
+			double const tt = double(k) / SAMPLE_RATE;
+			double const env = std::min(tt / (rise > 1e-5 ? rise : 1e-5), 1.0)
+			                 * std::exp(-tt / (decay > 1e-4 ? decay : 1e-4));
+			w.buf[k] += noise * env * 0.9;
+		}
+	};
+	seed(vo.main, p.main_fitting_rise, p.main_fitting_decay);
+	seed(vo.sub,  p.sub_fitting_rise,  p.sub_fitting_decay);
 	vo.active   = true;
 	vo.env_peak = 1.0;
 }
