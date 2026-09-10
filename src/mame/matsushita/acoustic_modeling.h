@@ -179,6 +179,23 @@
 
 #pragma once
 
+// WSA1R_ENABLE_ACOUSTIC_HLE -- compile-time switch for the RESEARCH HLE audio path.
+//
+// DEFAULT 0: the device is a register file with a decoded, inspectable parameter view and
+// synthesises NO audio -- exactly as documented above.  This is the shipped behaviour.
+//
+// 1: the device additionally becomes a device_sound_interface and RUNS the documented
+// coupled digital-waveguide resonator model (ported from kn5000-roms-disasm wsa1/hle/
+// l7a1429_hle.py, itself validated against wsa1/notes/HLE-GUIDE-l7a1429.md).  ⚠ This is a
+// realization of the DOCUMENTED model, NOT the chip's real audio: the excitation is a
+// synthetic stand-in for IC4's UNDUMPED wave ROMs and the POSITION absolute scale is unknown
+// (both flagged at their use).  It is opt-in for research, wired to the speakers only under
+// this switch (wsa1.cpp), so the default machine is unchanged.  Build:
+//   make ... CPPFLAGS=-DWSA1R_ENABLE_ACOUSTIC_HLE=1
+#ifndef WSA1R_ENABLE_ACOUSTIC_HLE
+#define WSA1R_ENABLE_ACOUSTIC_HLE 0
+#endif
+
 
 // A decoded snapshot of one channel's resonator parameters, in engineering
 // units, computed from the raw register file.  This is the device's model of
@@ -212,6 +229,9 @@ struct l7a1429_resonator_params
 
 
 class l7a1429_device : public device_t
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	, public device_sound_interface
+#endif
 {
 public:
 	l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
@@ -242,6 +262,9 @@ public:
 
 protected:
 	virtual void device_start() override ATTR_COLD;
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	virtual void sound_stream_update(sound_stream &stream) override;
+#endif
 
 private:
 	// The file is sized to cover every select the firmware is known to form.
@@ -266,6 +289,40 @@ private:
 
 	uint16_t m_latch = 0;
 	uint16_t m_regs[REG_COUNT]{};
+
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	// ---- the RESEARCH HLE resonator model (ported from l7a1429_hle.py) --------------
+	// One digital-waveguide resonator: a delay of `n` samples with a one-pole loss filter
+	// (the MUTING damping) in the loop and a feedback gain, plus a POSITION pickup tap.
+	static constexpr int WG_MAX = 2048;             // >= fs / lowest note period
+	struct waveguide
+	{
+		double buf[WG_MAX] = { 0 };
+		int    n = 2;                               // delay length = the pitch period
+		int    i = 0;                               // ring cursor
+		double d = 0.0;                             // MUTING one-pole loss coeff (0..1)
+		double y1 = 0.0;                            // one-pole state
+		double fb = 0.999;                          // loop feedback
+		int    tap = 0;                             // POSITION pickup tap (samples)
+	};
+	// One channel's voice: MAIN + SUB waveguides, mixed by SUB GAIN.  No key-off: it decays
+	// autonomously (HLE-GUIDE 7.5).  `age` retires a voice once it has rung down to silence.
+	struct hle_voice
+	{
+		waveguide main, sub;
+		double    sub_gain = 0.0;
+		bool      active = false;
+		double    env_peak = 0.0;                   // running |output| estimate, for retirement
+	};
+	hle_voice     m_voice[VOICES];
+	sound_stream *m_stream = nullptr;
+	uint32_t      m_exc_seed = 1;                   // deterministic excitation PRNG state
+
+	void  excite_voice(unsigned ch, const l7a1429_resonator_params &p);
+	void  setup_waveguide(waveguide &w, double freq_hz, double muting_hz,
+	                      double position, double feedback);
+	double run_waveguide(waveguide &w);             // one output sample
+#endif
 };
 
 DECLARE_DEVICE_TYPE(L7A1429, l7a1429_device)

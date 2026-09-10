@@ -64,6 +64,9 @@ inline double muting_cutoff_hz(uint16_t v, double fs)
 
 l7a1429_device::l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, L7A1429, tag, owner, clock)
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	, device_sound_interface(mconfig, *this)
+#endif
 {
 }
 
@@ -75,6 +78,13 @@ void l7a1429_device::device_start()
 
 	save_item(NAME(m_latch));
 	save_item(NAME(m_regs));
+
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	// stereo research HLE output at the pair's audio rate (IC4 X4 = 768 x 44100)
+	m_stream = stream_alloc(0, 2, int(SAMPLE_RATE));
+	for (auto &v : m_voice)
+		v = hle_voice();
+#endif
 }
 
 
@@ -221,6 +231,19 @@ void l7a1429_device::data_w(uint16_t data)
 			int(m_latch & (VOICES - 1)));
 
 	log_decoded(block, data);
+
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	// A write to MAIN TUNE (block 0x0040) is this channel's note event: (re-)excite its
+	// resonator from the freshly decoded parameters.  ⚠ RESEARCH stand-in -- the real chip has
+	// no key-on register (see "There is no key-off register"); this stands for "the firmware
+	// just (re)programmed this voice's pitch", the moment a note is struck on this channel.
+	if (block == 0x0040)
+	{
+		unsigned const ch = m_latch & (VOICES - 1);
+		m_stream->update();                          // sync before mutating voice state
+		excite_voice(ch, decoded_channel(ch));
+	}
+#endif
 }
 
 
@@ -272,3 +295,139 @@ l7a1429_resonator_params l7a1429_device::decoded_channel(unsigned ch) const
 	p.sub_muting_hz      = muting_cutoff_hz(r(0x0440), SAMPLE_RATE);
 	return p;
 }
+
+
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+//**************************************************************************
+//  THE RESEARCH HLE RESONATOR MODEL
+//
+//  A faithful C++ port of kn5000-roms-disasm wsa1/hle/l7a1429_hle.py (validated against
+//  wsa1/notes/HLE-GUIDE-l7a1429.md): per channel a pair of coupled digital-waveguide
+//  resonators (MAIN + SUB), each a delay of the pitch period with a one-pole MUTING loss and
+//  a feedback gain, plus a POSITION pickup tap; mixed by SUB GAIN; no key-off, so a struck
+//  voice sustains and decays on its own.
+//
+//  ⚠ TWO HONEST STAND-INS, each a documented unknown, NOT the chip's real behaviour:
+//    * the excitation is a synthetic shaped burst standing in for IC4's UNDUMPED wave ROMs;
+//    * the POSITION absolute scale is unknown (only the 2^v ratio is), so the pickup tap uses
+//      a fixed fraction of the loop and position_octaves is not yet mapped to an absolute time.
+//**************************************************************************
+
+static constexpr double TWO_PI = 6.283185307179586;
+
+//  one-pole lowpass loss coefficient d for y = (1-d)x + d*y1, -3 dB at fc (l7a1429_hle.onepole_coeff)
+static double onepole_d(double fc, double fs)
+{
+	if (fc >= fs / 2.0)
+		return 0.0;
+	double const x = std::cos(TWO_PI * fc / fs);
+	double const t = 2.0 - x;
+	double const r = t * t - 1.0;
+	return t - std::sqrt(r > 0.0 ? r : 0.0);
+}
+
+void l7a1429_device::setup_waveguide(waveguide &w, double freq_hz, double muting_hz,
+                                     double position, double feedback)
+{
+	double period = (freq_hz > 1.0) ? (SAMPLE_RATE / freq_hz) : double(WG_MAX - 1);
+	int n = int(period + 0.5);
+	if (n < 2)        n = 2;
+	if (n > WG_MAX)   n = WG_MAX;                 // clamp: lowest resolvable pitch
+	w.n   = n;
+	w.i   = 0;
+	w.y1  = 0.0;
+	w.d   = onepole_d(muting_hz, SAMPLE_RATE);
+	w.fb  = feedback;
+	double pos = position < 0.0 ? 0.0 : (position > 0.999 ? 0.999 : position);
+	w.tap = int(pos * n);
+	std::fill(std::begin(w.buf), std::end(w.buf), 0.0);
+}
+
+//  one output sample of the Karplus-Strong / waveguide loop with the POSITION pickup comb
+double l7a1429_device::run_waveguide(waveguide &w)
+{
+	int const n = w.n;
+	double const v = w.buf[w.i];
+	w.y1 = (1.0 - w.d) * v + w.d * w.y1;         // MUTING loss filter in the loop
+	w.buf[w.i] = w.fb * w.y1;                     // feed back around the delay
+	int t = w.i - w.tap;
+	t %= n; if (t < 0) t += n;
+	double const out = v - w.buf[t];             // POSITION pickup: comb of current and tapped
+	w.i = (w.i + 1) % n;
+	return out;
+}
+
+void l7a1429_device::excite_voice(unsigned ch, const l7a1429_resonator_params &p)
+{
+	if (ch >= VOICES)
+		return;
+	hle_voice &vo = m_voice[ch];
+
+	// pitch: MAIN from its tune (MIDI note), SUB from its own tune -- a detune that produces
+	// the audible coupling (the firmware's sub_FC4269 solver; INTERACTION GAIN widens it).
+	double const f_main = 440.0 * std::pow(2.0, (p.main_tune_note - 69.0) / 12.0);
+	double f_sub = 440.0 * std::pow(2.0, (p.sub_tune_note - 69.0) / 12.0);
+	if (f_sub < 1.0)
+		f_sub = f_main * std::pow(2.0, -6.0 / 1200.0);   // default -6 cent if SUB tune unset
+	// INTERACTION GAIN nudges the SUB pitch (normal-mode split, scaled by the 0..127 gain)
+	double const kappa = double(p.interaction_gain) / 127.0;
+	f_sub *= std::pow(2.0, (-kappa * 0.03));     // small gain-scaled detune, in octaves
+
+	double const muting = (p.main_muting_hz > 0.0) ? p.main_muting_hz : 4000.0;
+	double const muting_s = (p.sub_muting_hz > 0.0) ? p.sub_muting_hz : muting;
+	// POSITION: the absolute scale is unknown; use the ratio to move the pickup fraction only.
+	double const pos = 0.5;                       // ⚠ stand-in fraction (absolute scale unknown)
+	double const fb  = 0.999;                     // near-lossless loop; MUTING sets the timbre
+
+	setup_waveguide(vo.main, f_main, muting,   pos, fb);
+	setup_waveguide(vo.sub,  f_sub,  muting_s, pos, fb);
+	vo.sub_gain = (p.sub_gain > 0.0) ? p.sub_gain : 0.0;   // 0 = the explicit OFF
+
+	// excitation: a synthetic shaped burst (STAND-IN for the undumped DRIVER wave sample),
+	// shaped by FITTING rise/decay, seeded into both delay lines.
+	double const rise  = 0.0005 + p.main_fitting_rise  * 0.02;
+	double const decay = 0.005  + p.main_fitting_decay * 0.05;
+	int    const blen  = std::min(vo.main.n, int((rise + decay) * SAMPLE_RATE) + 4);
+	for (int k = 0; k < blen; k++)
+	{
+		m_exc_seed = m_exc_seed * 1103515245u + 12345u;
+		double const noise = (double((m_exc_seed >> 16) & 0x7fff) / 16384.0) - 1.0;
+		double const tt = double(k) / SAMPLE_RATE;
+		double const env = std::min(tt / (rise > 1e-5 ? rise : 1e-5), 1.0)
+		                 * std::exp(-tt / (decay > 1e-4 ? decay : 1e-4));
+		double const s = noise * env * 0.9;
+		vo.main.buf[k] += s;
+		if (k < vo.sub.n) vo.sub.buf[k] += s;
+	}
+	vo.active   = true;
+	vo.env_peak = 1.0;
+}
+
+void l7a1429_device::sound_stream_update(sound_stream &stream)
+{
+	int const ns = stream.samples();
+	for (int s = 0; s < ns; s++)
+	{
+		double mix = 0.0;
+		for (auto &vo : m_voice)
+		{
+			if (!vo.active)
+				continue;
+			double y = run_waveguide(vo.main);
+			if (vo.sub_gain > 0.0)
+				y += vo.sub_gain * run_waveguide(vo.sub);
+			mix += y;
+			// track a slow peak estimate; retire the voice once it has rung down
+			double const a = std::abs(y);
+			vo.env_peak += (a - vo.env_peak) * 0.0005;
+			if (vo.env_peak < 1e-5)
+				vo.active = false;
+		}
+		mix *= 0.2;                              // headroom for up to 64 voices
+		if (mix >  1.0) mix =  1.0;
+		if (mix < -1.0) mix = -1.0;
+		stream.put(0, s, sound_stream::sample_t(mix));
+		stream.put(1, s, sound_stream::sample_t(mix));
+	}
+}
+#endif // WSA1R_ENABLE_ACOUSTIC_HLE

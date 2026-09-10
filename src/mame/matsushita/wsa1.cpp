@@ -3858,6 +3858,15 @@ void wsa1_state::wsa1_base(machine_config &config)
 	m_tonegen->add_route(0, "lspeaker", 1.0);
 	m_tonegen->add_route(1, "rspeaker", 1.0);
 
+#if WSA1R_ENABLE_ACOUSTIC_HLE
+	// RESEARCH HLE: route the L7A1429's documented resonator model to the speakers.
+	// Default-off (the macro is 0), so the shipped machine is unchanged; this is the
+	// documented model, NOT the chip's real audio (its output really leaves on RQWFI
+	// into IC4, whose wave ROMs are undumped).  See acoustic_modeling.h.
+	m_modeling->add_route(0, "lspeaker", 0.6);
+	m_modeling->add_route(1, "rspeaker", 0.6);
+#endif
+
 	// --- MIDI IN (rear MIDI1 jack) -> CPU 1's serial channel 0 -------------
 	//
 	// CPU 1's TXD0/RXD0 are MIDI1 OUT/IN (schematic sheet II-7/II-8).  MAME's
