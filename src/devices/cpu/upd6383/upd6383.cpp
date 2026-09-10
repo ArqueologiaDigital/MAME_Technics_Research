@@ -1625,14 +1625,23 @@ void upd6383_device::device_stop()
 		if (m_trace_n)
 		{   // ★★★ THE TIME-ORDERED FRAME TRACE, in execution order
 			logerror("upd6383: ==== TIME-ORDERED FRAME TRACE, %d slots ====\n", m_trace_n);
-			logerror("upd6383:   n  iw   word         dp  mem[dp]        acc            P         tA        tB cur   coef  MUL          L\n");
+			//  Machine-parseable (kn5000-roms-disasm dsp/hle/lle_trace_diff.py): one
+			//  row per executed word, in execution order.  mem/coef/tA/tB are 24-bit
+			//  Q0.23 hex; acc/accb/P are signed 44-bit decimals; u1 = unit-1 body.
+			//  This is the LLE side of the HLE oracle -- confronted word-for-word with
+			//  dsp/hle/lle_oracle.py to pin the hi12 "+=" op and the D-RAM origin m_dp.
+			//  The header and the row share one column order on purpose (they used to
+			//  disagree: the header named mem[dp]/tA/tB the row never printed).
+			logerror("upd6383:   n  iw u1  word         dp  mem    acc            accb           P              cur coef   tA     tB     MUL       L\n");
 			for (u32 q = 0; q < m_trace_n; q++)
 			{
 				const trace_t &t = m_trace[q];
-				logerror("upd6383:  %3d %3d  %d %010llX %02X %14lld %14lld %14lld %02X %06X  %c %8d\n",
+				logerror("upd6383:  %3d %3d  %d  %010llX %02X %06X %14lld %14lld %14lld  %02X %06X %06X %06X   %c %8d\n",
 						q, t.iw, t.u1 ? 1 : 0, (unsigned long long)t.word, t.dp,
+						u32(t.mem) & 0xffffff,
 						(long long)t.acc, (long long)t.accb, (long long)t.p,
-						t.cur, t.coef, t.mul ? 'Y' : '.', t.l);
+						t.cur, t.coef, u32(t.ta) & 0xffffff, u32(t.tb) & 0xffffff,
+						t.mul ? 'Y' : '.', t.l);
 			}
 		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
