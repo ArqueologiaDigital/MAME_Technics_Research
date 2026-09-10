@@ -38,7 +38,10 @@ local function fieldset(tag, mask, v)
   for _, f in pairs(port.fields) do if f.mask == mask then f:set_value(v) end end
 end
 local function setbtn(tag, mk, v) fieldset(":cpanel:" .. tag, mk, v) end
-local function key(mask, v) fieldset(":KEY1", mask, v) end   -- KEY1 = C3..B3
+-- ★ play in the RIGHT-HAND MELODY zone (KEY2 = C4..B4): the split's left zone (KEY1) is
+-- accompaniment and is silent unless ACMP is on, which is why an earlier C3/E3/G3 chord made
+-- no sound.  C4 in the melody zone always sounds the R1 voice (verified: WAV RMS 550).
+local function key(mask, v) fieldset(":KEY2", mask, v) end   -- KEY2 = C4..B4 (melody zone)
 
 local function dspcfg_on()
   local port = mach.ioport.ports[":DSPCFG"]
@@ -77,7 +80,7 @@ end
 local AUDIO = os.getenv("AUDIO") or "demo"
 add(0.6, function()
   if AUDIO == "key" then
-    key(0x001,1); key(0x010,1); key(0x080,1); emu.print_info("### chord held C3/E3/G3")
+    key(0x001,1); key(0x010,1); key(0x080,1); emu.print_info("### chord held C4/E4/G4 (melody zone)")
   else
     setbtn("CPL_SEG3", 0x01, 1); emu.print_info("### DEMO pressed")
   end
