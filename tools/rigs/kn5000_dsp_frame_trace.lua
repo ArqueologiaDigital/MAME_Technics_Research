@@ -43,11 +43,13 @@ local function setbtn(tag, mk, v) fieldset(":cpanel:" .. tag, mk, v) end
 -- no sound.  C4 in the melody zone always sounds the R1 voice (verified: WAV RMS 550).
 local function key(mask, v) fieldset(":KEY2", mask, v) end   -- KEY2 = C4..B4 (melody zone)
 
+local DSPVAL = tonumber(os.getenv("DSPVAL") or "1")   -- 1=decoded-only, 3=+speculative ISA
 local function dspcfg_on()
   local port = mach.ioport.ports[":DSPCFG"]
   if not port then emu.print_info("### NO DSPCFG PORT (build without KN5000_ENABLE_DSP1=1?)"); return end
-  for _, f in pairs(port.fields) do if f.mask == 0x03 then f:set_value(0x01) end end
-  emu.print_info("### DSPCFG = 0x01 (decoded ISA, silent)")
+  for _, f in pairs(port.fields) do if f.mask == 0x03 then f:set_value(DSPVAL) end end
+  emu.print_info(string.format("### DSPCFG = 0x%02X (%s)", DSPVAL,
+    DSPVAL >= 3 and "decoded + SPECULATIVE ISA" or "decoded ISA only"))
 end
 
 local steps = {}
