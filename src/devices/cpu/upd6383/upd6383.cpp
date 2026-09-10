@@ -6168,6 +6168,20 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					m_bx_inj_n++;
 				}
 
+				//  ★ DIAGNOSTIC (UPD6383_BIQSEED): seed the band-0 biquad STATE cells 0x64..0x67
+				//  with known distinct values at the unit-0 body entry, so the biquad computes with
+				//  a controlled stimulus and its datapath can be validated against the HLE oracle
+				//  (Phase 4.4).  The biquad words are UNMODIFIED -- this is a test stimulus into the
+				//  state it reads, not a rig of the audio path, and it is env-gated + off by default.
+				static const bool biqseed = getenv("UPD6383_BIQSEED") != nullptr;
+				if (biqseed && !unit1)
+				{
+					m_dram.write_dword(0x64, 0x100000);   // 0.125
+					m_dram.write_dword(0x65, 0x200000);   // 0.250
+					m_dram.write_dword(0x66, 0x300000);   // 0.375
+					m_dram.write_dword(0x67, 0x400000);   // 0.500
+				}
+
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
 				//  with SRC 0x1A, because P = coef * tempB and the COEFFICIENT is
