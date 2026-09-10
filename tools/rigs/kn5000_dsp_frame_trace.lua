@@ -53,7 +53,10 @@ end
 local steps = {}
 local function add(dt, fn) steps[#steps+1] = {dt, fn} end
 
-add(0.0, function() dspcfg_on() end)
+-- ⚠ Do NOT turn the DSP on yet: running it through the whole ~38 s boot+nav is very slow
+-- (285 words/frame x 44100/s of heavy instrumented execution).  DSPCFG is flipped ON just
+-- before the chord/dwell below, so the core executes only during the short armed window.
+add(0.0, function() emu.print_info("### boot settle done") end)
 if NAV then
   add(0.4, function() setbtn("CPR_SEG3", 0x04, 1) end)     -- DSP EFFECT toggle
   add(0.3, function() setbtn("CPR_SEG3", 0x04, 0) end)
@@ -61,23 +64,24 @@ if NAV then
   add(0.4, function() setbtn("CPR_SEG10", 0x04, 0) end)
   add(1.5, function() setbtn("CPL_SEG7", 0x02, 1) end)     -- DSP EFFECT editor
   add(0.4, function() setbtn("CPL_SEG7", 0x02, 0) end)
+  add(1.5, function() emu.print_info("### editor opened") end)
   for i=1,40 do
-    add(0.08, function() setbtn("CPL_SEG10", 0x10, 1) end) -- saturate DOWN -> CHORUS
-    add(0.08, function() setbtn("CPL_SEG10", 0x10, 0) end)
+    add(0.10, function() setbtn("CPL_SEG10", 0x10, 1) end) -- saturate DOWN -> CHORUS
+    add(0.10, function() setbtn("CPL_SEG10", 0x10, 0) end)
   end
+  add(1.2, function() emu.print_info("### saturated DOWN -> CHORUS") end)
   for i=1,TYPEIDX do
-    add(0.10, function() setbtn("CPL_SEG10", 0x20, 1) end) -- UP -> type
-    add(0.10, function() setbtn("CPL_SEG10", 0x20, 0) end)
+    add(0.12, function() setbtn("CPL_SEG10", 0x20, 1) end) -- UP -> type (origincap timing)
+    add(0.12, function() setbtn("CPL_SEG10", 0x20, 0) end)
   end
-  -- leave the editor so the keybed plays notes (an edit dialog can swallow keys)
-  add(0.5, function() setbtn("CPR_SEG10", 0x04, 1) end)
-  add(0.4, function() setbtn("CPR_SEG10", 0x04, 0) end)
+  add(1.5, function() emu.print_info("### landed on target"); mach.video:snapshot() end)
 end
 -- ★ RULE 12: real audio into the DSP.  The DEMO song is self-driving audio (a
 -- factory performance), far more reliable than scripted keybed voice allocation,
 -- and drives the whole mix -> the tonegen feeds di[] non-zero -> the biquad gets
 -- non-zero operands.  AUDIO=key falls back to holding a chord on the keybed.
 local AUDIO = os.getenv("AUDIO") or "demo"
+add(0.3, function() dspcfg_on() end)   -- ★ turn the DSP on only now (after the effect is selected)
 add(0.6, function()
   if AUDIO == "key" then
     key(0x001,1); key(0x010,1); key(0x080,1); emu.print_info("### chord held C4/E4/G4 (melody zone)")
