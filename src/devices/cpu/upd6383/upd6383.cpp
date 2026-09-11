@@ -296,6 +296,8 @@ void upd6383_device::device_start()
 	}
 	if (const char *e = getenv("UPD6383_TRACE_FRAME"))
 		m_trace_frame = u64(strtoull(e, nullptr, 10));
+	if (const char *e = getenv("UPD6383_TRACE_DETAIL"))
+		m_trace_detail = u32(strtoul(e, nullptr, 10));   // N2: re-arm per-word detail at the arm
 	//  ★ §133: unpack the bank-entry demultiplexer's mask fields ONCE, and say every
 	//  one of them out loud.  A silent selector is how §121 ran seven arms that were
 	//  all the same arm.
@@ -2247,7 +2249,8 @@ void upd6383_device::latch_inputs_to_dram()
 	//  default (CHORUS) and calls it the selected effect.  UPD6383_TRACE_FRAME sets
 	//  it; the default is unchanged so every existing harness traces what it did.
 	if (!m_trace_done && !m_trace_armed && m_frames_run > m_trace_frame)
-	{ m_trace_armed = true; m_trace_n = 0; }
+	{ m_trace_armed = true; m_trace_n = 0;
+	  if (m_trace_detail) m_frame_detail_left = m_trace_detail; }   // N2: per-word detail at the arm
 	m_dram.write_dword(m_in_addr[0], u32(m_in_val[0]) & 0xffffff);
 	m_dram.write_dword(m_in_addr[1], u32(m_in_val[1]) & 0xffffff);
 	//  ★ §221 §E1: the audio entry point gets its OWN provenance tag, so an operand

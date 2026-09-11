@@ -763,6 +763,12 @@ private:
 	//  UPD6383_TRACE_FRAME so a panel-SELECTED effect (which cannot load before the
 	//  boot settles, ~19 s) can be traced instead of the cold-boot default.
 	u64  m_trace_frame = 420000;
+	//  ★ N2: UPD6383_TRACE_DETAIL (default 0 = off) re-arms the per-word frame-detail
+	//  dump for this many frames AT the trace-frame arm, so the cursor-walk state cells
+	//  can be captured on consecutive frames DURING note-play (the detail window is
+	//  otherwise re-armed only on an effect upload, which closes before notes sound).
+	//  Diagnostic only: with the env unset this is 0 and nothing changes.
+	u32  m_trace_detail = 0;
 	//  ★ §130 fired-count for the per-unit coefficient-cursor rebase (mask bit 38).
 	//  Every gate must log one: it is what distinguishes a real null arm from a
 	//  gate that silently never ran.
