@@ -369,11 +369,16 @@ public:
 		                        //   are immediately followed by a delay read.  Prospective.
 		LO_ACT_TBL_MUL = 0x08,  // ★ SPECULATIVE: the action of the table-port multiply
 		                        //   (pairs with LO_SRC_TABLE, class A).  Prospective, weakest.
-		LO_ACT_BIQ_D = 0x0d,    // ★ SPECULATIVE (sect. 234): one of the biquad's two
-		LO_ACT_BIQ_E = 0x0e,    //   delay-stage actions.  The PAIR (0x0D,0x0E) is
-		                        //   confirmed 1-of-49 by PARAMETRIC EQ's entry window;
-		                        //   only WHICH tap / the lag is hardware Q4, and the lag
-		                        //   does not affect the decode, only the timing.
+		LO_ACT_BIQ_D = 0x0d,    // ★ the delay-line / state I/O MIXING pair (0x0D reads
+		LO_ACT_BIQ_E = 0x0e,    //   mem, 0x0E reads acc onto the bus).  ⚠ NAME KEPT for
+		                        //   ABI, but the "biquad delay-stage" reading is CORRECTED
+		                        //   (2026-09-11): the pair is UNIVERSAL -- it appears in
+		                        //   EVERY family incl. plain delay and AM, which have no
+		                        //   biquad (idiom census, analysis/DSP-TOPOLOGY-INSTRUCTION
+		                        //   -INSIGHT-2026-09-11.md; the true 2nd-order-section state
+		                        //   ops are 0x13/0x14 below).  The exact ALU reading
+		                        //   (sel0D/sel0E) is still hardware Q4; only the ROLE
+		                        //   (general mixing, not biquad-specific) is now settled.
 		LO_ACT_DELAY_ACC = 0x0b,// ★ SPECULATIVE: delay-line access action (dark-words F
 		                        //   context); READ vs WRITE is class-borne, not here.
 		LO_ACT_NONE_2  = 0x12,  // no temp/memory side effect

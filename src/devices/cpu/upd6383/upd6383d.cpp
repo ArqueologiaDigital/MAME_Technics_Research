@@ -682,8 +682,8 @@ std::string annotate(u64 word, int at)
 			(a == upd6383_disassembler::LO_ACT_DELAY_RD) ? "ACT 0x0C = delay READ" :
 			(a == upd6383_disassembler::LO_ACT_TBL_MUL)  ? "ACT 0x08 = table-port multiply" :
 			(a == upd6383_disassembler::LO_ACT_DELAY_ACC)? "ACT 0x0B = delay-line access (READ/WRITE class-borne)" :
-			(a == upd6383_disassembler::LO_ACT_BIQ_D)    ? "ACT 0x0D = biquad delay-stage (pair w/ 0x0E)" :
-			(a == upd6383_disassembler::LO_ACT_BIQ_E)    ? "ACT 0x0E = biquad delay-stage (pair w/ 0x0D)" : nullptr;
+			(a == upd6383_disassembler::LO_ACT_BIQ_D)    ? "ACT 0x0D = delay/state MIXING: mem onto bus (universal; pair w/ 0x0E)" :
+			(a == upd6383_disassembler::LO_ACT_BIQ_E)    ? "ACT 0x0E = delay/state MIXING: acc onto bus (universal; pair w/ 0x0D)" : nullptr;
 		if (sr || ar)
 			return util::string_format("SPECULATIVE (prospective, not measured): %s%s%s",
 					sr ? sr : "", (sr && ar) ? "; " : "", ar ? ar : "");
