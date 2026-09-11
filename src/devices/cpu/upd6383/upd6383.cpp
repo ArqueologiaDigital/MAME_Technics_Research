@@ -6276,7 +6276,13 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				static const bool revseed = getenv("UPD6383_REVSEED") != nullptr;
 				static const int revshift = []{ const char *e = getenv("UPD6383_REVSEED");
 					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
-				if (revseed && unit1)
+				//  ★ N4: UPD6383_REVSEED_ONCE=F seeds only at frame F, so the reverb
+				//  delay line then decays freely -- the impulse-decay test (does the
+				//  echo train decay per loop tracking the gains?).  Unset (0) keeps the
+				//  original every-frame seeding.  The BIQSEED_ONCE analogue for unit 1.
+				static const u64 revseedonce = []{ const char *e = getenv("UPD6383_REVSEED_ONCE");
+					return e ? u64(strtoull(e, nullptr, 10)) : 0ull; }();
+				if (revseed && unit1 && (!revseedonce || m_frames_run == revseedonce))
 				{
 					m_dram.write_dword(0xD0, u32(0x100000) >> revshift);   // reverb tap / feedback
 					m_dram.write_dword(0x94, u32(0x200000) >> revshift);   // most-read reverb cell
