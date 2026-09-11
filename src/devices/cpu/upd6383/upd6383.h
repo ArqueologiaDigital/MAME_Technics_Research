@@ -2524,6 +2524,9 @@ private:
 	bool m_row13 = true;       // ★ was RETIRED -- see the double-count check            // ★ A/B switch: do the class C/D presentation
 	                                //   words ALSO write m_do?  (double-count check)
 	s64  m_mulmax = 0; s32 m_mul_coef = 0, m_mul_L = 0; u8 m_mul_src = 0; u32 m_mul_iw = 0;
+	// ★ SUBFB diagnostic (speculation plan S4): did the operand negation fire for
+	// this word, how often overall, and how many multiply-site logs were emitted.
+	bool m_subfb_hit = false; u32 m_subfb_n = 0, m_subfb_log = 0;
 	s64  m_pprof[25] = {};
 	u32  m_curprof[25] = {}; u8 m_curprof_seen[25] = {}; u32 m_curprof_n = 0;                   //   an `801.0.NN.821' ldptr word                               //   sequential C-RAM write pointer
 	u8   m_delay_ix = 0;            // ★ SPECULATIVE: which descriptor cell the next

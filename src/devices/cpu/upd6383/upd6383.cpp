@@ -1625,6 +1625,8 @@ void upd6383_device::device_stop()
 		if (m_trace_n)
 		{   // ★★★ THE TIME-ORDERED FRAME TRACE, in execution order
 			logerror("upd6383: ==== TIME-ORDERED FRAME TRACE, %d slots ====\n", m_trace_n);
+			logerror("upd6383: SUBFB negation fired %u times total (multiply-site logs %u)\n",
+					m_subfb_n, m_subfb_log);
 			//  Machine-parseable (kn5000-roms-disasm dsp/hle/lle_trace_diff.py): one
 			//  row per executed word, in execution order.  mem/coef/tA/tB are 24-bit
 			//  Q0.23 hex; acc/accb/P are signed 44-bit decimals; u1 = unit-1 body.
@@ -3283,6 +3285,7 @@ void upd6383_device::exec_alu(u64 word)
 	// deliberately no default case that guesses at the other fourteen the
 	// corpus contains.
 	s32 L = 0;
+	m_subfb_hit = false;        // SUBFB diagnostic: per-word, set by the negated read
 	//  ★ §224 `§S2sq': "no C-RAM cell reached the bus on THIS word" is the default,
 	//  cleared here and set only by the SRC-0x08 case.  A stale value would make the
 	//  squaring counter fire on a word that never read C-RAM -- the exact shape of
@@ -3798,7 +3801,11 @@ void upd6383_device::exec_alu(u64 word)
 		//  saturating and matches the probe's peaking response.
 		static const bool spec_subfb = getenv("UPD6383_SPEC_SUBFB") != nullptr;
 		if (spec_subfb && rdsrc >= 0x64 && rdsrc <= 0x77 && ((rdsrc - 0x64) & 3) >= 2)
+		{
 			L = -L;
+			m_subfb_hit = true;      // diagnostic: tell the multiply site this operand was negated
+			m_subfb_n++;
+		}
 		//  ★ §221 §E1: `regfile' names the ADDRESSING MODE, bit 23 names the ARRAY.
 		//  Both are recorded, because the epilogue's `w63'/`w65' resolve to mode-1
 		//  indices (0x05, 0x8F) that COLLIDE with live mode-2 cells -- §5.1's trap.
@@ -5042,6 +5049,19 @@ void upd6383_device::exec_alu(u64 word)
 			}
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
 			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
+			//  ★ SUBFB DIAGNOSTIC: what did THE MULTIPLY actually consume when the
+			//  operand was negated at the read?  (The accept test showed the product
+			//  kept its sign while the recorded latch flipped -- resolve it empirically.)
+			//  Gate on the ARMED (traced) frame, not the first hits at boot -- at boot the
+			//  state cells are still empty (L=0), which says nothing about the saturated
+			//  frame the trace rows come from.
+			if (m_subfb_hit && m_trace_armed && m_subfb_log < 12)
+			{
+				m_subfb_log++;
+				logerror("upd6383: SUBFB@MUL iw=%u coef=%06X L=%d (sext) m_p=%lld pw=6\n",
+						u32(m_pc / upd6383_disassembler::WORD_BYTES), coef & 0xffffff,
+						int(L), (long long)util::sext(m_p, 44));
+			}
 			//==============================================================
 			//  ★★★ §174 PROBE (read-only): WHICH OPERAND IS ZERO?
 			//
@@ -6215,6 +6235,25 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				static const bool spec_inject = getenv("UPD6383_SPEC_INJECT") != nullptr;
 				if (spec_inject && !unit1)
 					m_dram.write_dword(0x64, m_dram.read_dword(0x01) & 0xffffff);
+
+				//  ★ SPECULATIVE (UPD6383_SPEC_SHIFT): the delay-line SHIFT the LLE lacks.
+				//  MEASURED: in the EQ block only in+1 is ever stored (the band's y) and the
+				//  cells the -a1/-a2 words read (in+2/in+3) are never written -- they sit at a
+				//  stuck rail, so the recursion is dead and the cascade saturates whatever the
+				//  feedback sign.  A working IIR needs y->y1->y2 to rotate each frame; the chip
+				//  must do it (circular pointer or shift) and the LLE's fixed per-frame pointer
+				//  does not.  This rotates each band's history at unit-0 entry so the recursive
+				//  reads hit LIVE y1/y2.  Env-gated, default OFF, labelled speculative.
+				static const bool spec_shift = getenv("UPD6383_SPEC_SHIFT") != nullptr;
+				if (spec_shift && !unit1)
+				{
+					for (int k = 0; k < 5; k++)
+					{
+						const u8 b = u8(0x64 + 4 * k);
+						m_dram.write_dword(b + 3, m_dram.read_dword(b + 2) & 0xffffff);   // y2 <- y1
+						m_dram.write_dword(b + 2, m_dram.read_dword(b + 1) & 0xffffff);   // y1 <- y
+					}
+				}
 
 				//  ★ DIAGNOSTIC (UPD6383_REVSEED): the unit-1 analogue of BIQSEED --
 				//  seed the reverb's D-RAM state cells (measured operand cells of the
