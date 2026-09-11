@@ -6254,8 +6254,14 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  guess (x0 = 0x64), the biquad that processes it is measured; env-gated,
 				//  default OFF, LABELLED speculative, never the shipped path.
 				static const bool spec_inject = getenv("UPD6383_SPEC_INJECT") != nullptr;
+				//  ★ P2: the env VALUE (>1) right-shifts the injected sample, so a real
+				//  (varying) audio input can drive x0 SMALL enough not to saturate the
+				//  recursion -- the TRANSIENT the topology null needs (a constant input
+				//  is topology-invariant). SPEC_INJECT=1 = unshifted (original).
+				static const int inj_shift = []{ const char *e = getenv("UPD6383_SPEC_INJECT");
+					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
 				if (spec_inject && !unit1)
-					m_dram.write_dword(0x64, m_dram.read_dword(0x01) & 0xffffff);
+					m_dram.write_dword(0x64, (u32(s32(m_dram.read_dword(0x01) << 8) >> 8) >> inj_shift) & 0xffffff);
 
 				//  ★ SPECULATIVE (UPD6383_SPEC_SHIFT): the delay-line SHIFT the LLE lacks.
 				//  MEASURED: in the EQ block only in+1 is ever stored (the band's y) and the
