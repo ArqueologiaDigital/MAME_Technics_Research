@@ -527,6 +527,12 @@ private:
 	//  @44.1k). Default = dry (feedback/mix left at 0 until the DSPHLE delay bit is on).
 	upd6383_hle::DelayLine          m_dly_l{35000};
 	upd6383_hle::DelayLine          m_dly_r{35000};
+	//  ★ HLE CHORUS insert: a short modulated delay line per channel with a shared LFO
+	//  phase (persists across updates so the sweep is continuous). Sized for base+depth of
+	//  a short chorus (~2048 samples is far more than the ~500 needed).
+	upd6383_hle::DelayLine          m_cho_l{2048};
+	upd6383_hle::DelayLine          m_cho_r{2048};
+	double                          m_cho_phase = 0.0;   // LFO phase in cycles [0,1)
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;

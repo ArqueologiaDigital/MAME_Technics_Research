@@ -911,7 +911,7 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x01, "Parametric EQ (5-band biquad)")
 	PORT_CONFSETTING(   0x02, "Single Delay (feedback delay line)")
-	PORT_CONFSETTING(   0x03, "Parametric EQ + Single Delay")
+	PORT_CONFSETTING(   0x03, "Chorus (quadrature LFO-swept delay)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------

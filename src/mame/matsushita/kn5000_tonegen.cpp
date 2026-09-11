@@ -2649,15 +2649,17 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// is bit-identical to today's `mix_l'.
 	const u8 dspcfg = u8(m_dsp1_enable.read_safe(0));
 	const bool dsp_on = m_dsp1.found() && (dspcfg & 1);
+	// ---- HLE audible-effect SELECTOR (DSPHLE port) ------------------------------------
+	// EXPERIMENTAL, default OFF. The DSPHLE port is a SINGLE-SELECT, not a bitmask: the
+	// panel loads exactly one effect at a time, and each insert reads that effect's own
+	// decoded C-RAM layout, so only one may run. 1 = parametric EQ, 2 = single delay,
+	// 3 = chorus. When 0 the per-sample paths are skipped and the output is byte-identical.
+	const u8 dsphle = m_dsp1.found() ? u8(m_dsp_hle.read_safe(0)) : 0;
 	// ---- HLE PARAMETRIC-EQ INSERT (audible decoded EQ) --------------------------------
-	// EXPERIMENTAL, default OFF (DSPHLE port bit 0). When off, eq_hle is false and the
-	// per-sample path below is skipped, so the output is byte-identical to today's. When
-	// on, the 5-band DF-I biquad cascade (kn5000_dsp_hle.h, the validated kernels) filters
-	// the mix using coefficients read from the effects DSP's decoded C-RAM. The C-RAM
-	// coefficient ORDER/SIGN/SCALE are still contested (§7b b1,b0,b2,-a1,-a2,makeup vs the
-	// N1' subtractive-positive reading) -- which is exactly what a spectral A/B on this
-	// path settles; hence DEFAULT OFF until that check passes. See PORTING-TO-MAME.md.
-	const bool eq_hle = m_dsp1.found() && ((u8(m_dsp_hle.read_safe(0)) & 1) != 0);
+	// The 5-band DF-I biquad cascade (kn5000_dsp_hle.h) filters the mix using RBJ design
+	// parameters reconstructed from the effects DSP's decoded C-RAM (see the per-sample
+	// block below and N1-EQ-COEFFICIENT-MEMORY). Validated by an in-emulator spectral A/B.
+	const bool eq_hle = (dsphle == 1);
 	if (eq_hle)
 	{
 		// The raw C-RAM cells are NOT direct-form biquad coefficients: eq_spectral_ab.py
@@ -2752,7 +2754,7 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	//     operand (the actual gain) is half that. With bit 1 OFF it is already the operand.
 	// MIX is the SINGLE-DELAY internal designed constant ~0.5 (STRONG). HIGH DAMP not yet
 	// pinned -> no in-loop damping (repeats keep their tone) until a damp intervention lands.
-	const bool dly_hle = m_dsp1.found() && ((u8(m_dsp_hle.read_safe(0)) & 2) != 0);
+	const bool dly_hle = (dsphle == 2);
 	int    dly_N   = 0;
 	double dly_gl  = 0.0, dly_gr = 0.0;
 	const double dly_mix = 0.5;
@@ -2773,6 +2775,34 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		const double fscale = bit1 ? 0.5 : 1.0;                  // cell -> operand (actual gain)
 		dly_gl = std::clamp(q22d(m_dsp1->cram_read(0x00)) * fscale, -0.97, 0.97);
 		dly_gr = std::clamp(q22d(m_dsp1->cram_read(0x09)) * fscale, -0.97, 0.97);
+	}
+	// ---- HLE CHORUS INSERT: read the pinned params (once per update) -------------------
+	// EXPERIMENTAL, default OFF (DSPHLE == 3). A quadrature LFO-swept delay. Pinned by
+	// intervention on CHORUS (TYPEIDX 0): RATE = C-RAM cell 0x00 (the phase increment: it
+	// tracked the live D-RAM ramp 114->494 exactly when LFO SPEED was driven), WET GAIN =
+	// C-RAM cell 0x09 (moved 0.303->0.505 when the panel DEPTH was driven). Cell 0x02 is a
+	// fixed constant 240 = the modulation SWEEP amplitude in 44.1k samples (not panel-
+	// driven; the "settled modulation value is constant"). Cell 0x01 = wrap 0x7FFFFF (2^23).
+	// LFO rate: f_Hz = inc * 44100 / 2^23 (inc = the applied increment, cell scale 114).
+	// The two voices are quadrature (sin/cos) reads of one phase. Base delay not separately
+	// pinned -> use the sweep amplitude as the base so the tap stays positive (short chorus).
+	// Same DSPCFG-bit-1 scale rule as the delay (cell vs operand half).
+	const bool cho_hle = (dsphle == 3);
+	double cho_inc = 0.0, cho_depth = 0.0, cho_base = 0.0, cho_wet = 0.0;
+	if (cho_hle)
+	{
+		auto q22c = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;                       // operand -> cell scale
+		const double inc = double(m_dsp1->cram_read(0x00) & 0xffffff) * cs;   // phase incr (cell scale)
+		const double f_hz = inc * 44100.0 / 8388608.0;           // 2^23 modulus
+		cho_inc   = std::clamp(f_hz, 0.05, 12.0) / double(STREAM_RATE);       // cycles per output sample
+		const double sweep44 = double(m_dsp1->cram_read(0x02) & 0xffffff) * cs;   // sweep amp, 44.1k samples
+		cho_depth = std::clamp(sweep44, 4.0, 1500.0) * double(STREAM_RATE) / 44100.0;  // -> stream samples
+		cho_base  = cho_depth;                                    // keep read tap >= 0 (short chorus)
+		cho_wet   = std::clamp(q22c(m_dsp1->cram_read(0x09)) * cs, 0.0, 0.95); // wet gain (panel DEPTH)
 	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
@@ -3453,6 +3483,29 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			m_dly_r.write(sr + dly_gr * tr);
 			mix_l = int32_t(((1.0 - dly_mix) * sl + dly_mix * tl) * 32768.0);
 			mix_r = int32_t(((1.0 - dly_mix) * sr + dly_mix * tr) * 32768.0);
+		}
+
+		// ---- HLE CHORUS INSERT: quadrature LFO-swept delay, replaces mix in place ---------
+		// EXPERIMENTAL, default OFF (dsphle == 3). Per channel: write the dry into a short
+		// line, read it back at two taps whose delay is swept by one LFO's sine and cosine
+		// (the chip's two quadrature table reads of one phase accumulator), sum the two wet
+		// voices, and crossfade with the dry by the decoded wet gain. The shared phase and
+		// the line state persist across updates so the sweep is continuous. cho_* were read
+		// once per update above; the LFO advances once per output sample here.
+		if (cho_hle)
+		{
+			m_cho_phase += cho_inc;
+			if (m_cho_phase >= 1.0) m_cho_phase -= 1.0;
+			const double s = std::sin(2.0 * M_PI * m_cho_phase);
+			const double c = std::cos(2.0 * M_PI * m_cho_phase);
+			const double dA = cho_base + cho_depth * (0.5 + 0.5 * s);
+			const double dB = cho_base + cho_depth * (0.5 + 0.5 * c);
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			m_cho_l.write(sl); m_cho_r.write(sr);
+			const double wl = 0.5 * (m_cho_l.read(dA) + m_cho_l.read(dB));
+			const double wr = 0.5 * (m_cho_r.read(dA) + m_cho_r.read(dB));
+			mix_l = int32_t(((1.0 - cho_wet) * sl + cho_wet * wl) * 32768.0);
+			mix_r = int32_t(((1.0 - cho_wet) * sr + cho_wet * wr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);
