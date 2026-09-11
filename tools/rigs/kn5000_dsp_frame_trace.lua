@@ -47,8 +47,13 @@ local DSPVAL = tonumber(os.getenv("DSPVAL") or "1")   -- 1=decoded-only, 3=+spec
 local function dspcfg_on()
   local port = mach.ioport.ports[":DSPCFG"]
   if not port then emu.print_info("### NO DSPCFG PORT (build without KN5000_ENABLE_DSP1=1?)"); return end
-  for _, f in pairs(port.fields) do if f.mask == 0x03 then f:set_value(DSPVAL) end end
-  emu.print_info(string.format("### DSPCFG = 0x%02X (%s)", DSPVAL,
+  local nset = 0
+  for _, f in pairs(port.fields) do if f.mask == 0x03 then f:set_value(DSPVAL); nset = nset + 1 end end
+  local readback = -1
+  local ok, v = pcall(function() return port:read() end)
+  if ok then readback = v end
+  emu.print_info(string.format("### DSPCFG set=0x%02X fields_matched=%d port:read()=0x%X (%s)",
+    DSPVAL, nset, readback,
     DSPVAL >= 3 and "decoded + SPECULATIVE ISA" or "decoded ISA only"))
 end
 
