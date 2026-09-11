@@ -6284,12 +6284,18 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					return e ? u64(strtoull(e, nullptr, 10)) : 0ull; }();
 				if (revseed && unit1 && (!revseedonce || m_frames_run == revseedonce))
 				{
+					//  ★ N4 (2026-09-11): target the MEASURED delay-line cells
+					//  (reverb_active_cells_probe.py, DIGITAL REVERB page 0x0A) -- the
+					//  cells the reverb actually writes each frame -- not the earlier set
+					//  which included dead COEFFICIENT cells (0x85/0x8C, 0 stores) that
+					//  stayed frozen and produced no decay.  Live state cells by store
+					//  count: 0x94 (hub), 0x8B, 0xD0, 0xD1, 0xD2, 0x8A.
+					m_dram.write_dword(0x94, u32(0x200000) >> revshift);   // hub (45 reads / 5 stores)
+					m_dram.write_dword(0x8B, u32(0x300000) >> revshift);   // 30 reads / 4 stores
 					m_dram.write_dword(0xD0, u32(0x100000) >> revshift);   // reverb tap / feedback
-					m_dram.write_dword(0x94, u32(0x200000) >> revshift);   // most-read reverb cell
-					m_dram.write_dword(0x8A, u32(0x300000) >> revshift);
-					m_dram.write_dword(0x85, u32(0x080000) >> revshift);   // unit-1 input twin
-					m_dram.write_dword(0x8C, u32(0x0C0000) >> revshift);
-					m_dram.write_dword(0x8F, u32(0x140000) >> revshift);
+					m_dram.write_dword(0xD1, u32(0x180000) >> revshift);
+					m_dram.write_dword(0xD2, u32(0x0C0000) >> revshift);
+					m_dram.write_dword(0x8A, u32(0x140000) >> revshift);
 				}
 
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
