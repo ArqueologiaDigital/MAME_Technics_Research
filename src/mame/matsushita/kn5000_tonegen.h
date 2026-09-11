@@ -521,6 +521,12 @@ private:
 	//  refreshed from the effects DSP's decoded C-RAM. Default = unity passthrough.
 	upd6383_hle::BiquadDF1          m_eq_l[5];
 	upd6383_hle::BiquadDF1          m_eq_r[5];
+	//  ★ HLE SINGLE-DELAY insert: one feedback delay line per channel, delay length from
+	//  the effects DSP's descriptor bank (cell 0x26) and feedback gain from C-RAM (cell
+	//  0x00 L / 0x09 R), both pinned by intervention. Sized to the unit-0 region (~793 ms
+	//  @44.1k). Default = dry (feedback/mix left at 0 until the DSPHLE delay bit is on).
+	upd6383_hle::DelayLine          m_dly_l{35000};
+	upd6383_hle::DelayLine          m_dly_r{35000};
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;

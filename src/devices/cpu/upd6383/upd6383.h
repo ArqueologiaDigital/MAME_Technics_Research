@@ -152,6 +152,10 @@ public:
 	u32 cram_read(u8 addr)     { return m_cram.read_dword(addr) & 0xffffff; }
 	void dsc_ptr_w(u8 addr)    { m_dsc_wp = addr; }
 	void dsc_data_w(u16 v)     { m_dscbank[m_dsc_wp] = v; m_dsc_wp = u8(m_dsc_wp + 1); }
+	//  ★ Read a delay-descriptor cell (16-bit) for the HLE effect audio path (delay
+	//  line length). Read-only; mirrors cram_read. The value is the raw descriptor as
+	//  the host wrote it; the tonegen normalises the operand/x2 scale like the EQ does.
+	u16 dsc_read(u8 addr)      { return m_dscbank[addr]; }
 	void dram_ptr_w(u8 addr)   { m_dram_wp = addr; }
 	void dram_data_w(u32 v)    { m_dram.write_dword(m_dram_wp, v & 0xffffff); m_dram_wp = u8(m_dram_wp + 1); }
 

@@ -2740,6 +2740,40 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			m_eq_r[band].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
 		}
 	}
+	// ---- HLE SINGLE-DELAY INSERT: read the pinned params (once per update) -------------
+	// EXPERIMENTAL, default OFF (DSPHLE port bit 1). Pinned by intervention (drive one panel
+	// param, diff the C-RAM/descriptor dumps -- the EQ method): FEEDBACK L = C-RAM cell 0x00,
+	// FEEDBACK R = cell 0x09 (only 0x00 moved when FEEDBACK L was driven), DELAY L length =
+	// descriptor cell 0x26 (= 15437 samples = 350 ms at the ROM default, matching the decode).
+	// Two scale rules keyed on DSPCFG bit 1 (m_speculative), which is what doubles both banks:
+	//   * descriptor: with bit 1 ON the device already wrote the TRUE sample count (R3 x2);
+	//     with it OFF the bank holds half, so double it.
+	//   * C-RAM feedback: with bit 1 ON cram_read returns the CELL scale (2x); the multiplier
+	//     operand (the actual gain) is half that. With bit 1 OFF it is already the operand.
+	// MIX is the SINGLE-DELAY internal designed constant ~0.5 (STRONG). HIGH DAMP not yet
+	// pinned -> no in-loop damping (repeats keep their tone) until a damp intervention lands.
+	const bool dly_hle = m_dsp1.found() && ((u8(m_dsp_hle.read_safe(0)) & 2) != 0);
+	int    dly_N   = 0;
+	double dly_gl  = 0.0, dly_gr = 0.0;
+	const double dly_mix = 0.5;
+	if (dly_hle)
+	{
+		auto q22d = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const u16 draw = m_dsp1->dsc_read(0x26);
+		// The descriptor counts samples at the DSP's 44.1 kHz; the delay line runs at the
+		// tonegen STREAM_RATE (48 kHz), so convert or the echo lands ~8% early. With DSPCFG
+		// bit 1 ON the bank holds the true 44.1k count (R3 x2 applied at write); with it OFF
+		// it holds half. Use bit 1 ON (DSPCFG=3) for a correct delay time.
+		const double n441 = bit1 ? double(draw) : 2.0 * double(draw);
+		dly_N = int(n441 * double(STREAM_RATE) / 44100.0 + 0.5); // 44.1k samples -> stream samples
+		dly_N = std::clamp(dly_N, 1, 34999);                     // fit the delay line
+		const double fscale = bit1 ? 0.5 : 1.0;                  // cell -> operand (actual gain)
+		dly_gl = std::clamp(q22d(m_dsp1->cram_read(0x00)) * fscale, -0.97, 0.97);
+		dly_gr = std::clamp(q22d(m_dsp1->cram_read(0x09)) * fscale, -0.97, 0.97);
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3404,6 +3438,21 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			}
 			mix_l = int32_t(yl * 32768.0);
 			mix_r = int32_t(yr * 32768.0);
+		}
+
+		// ---- HLE SINGLE-DELAY INSERT: feedback delay line, replaces mix in place ----------
+		// EXPERIMENTAL, default OFF (see dly_hle above). Standard feedback delay per channel:
+		//   tap = line[n-N];  line[n] = s + g*tap;  out = (1-mix)*s + mix*tap.
+		// N/g/mix were read once per update above; the line state persists across updates so
+		// the echoes ring continuously. Runs AFTER the EQ insert (EQ -> delay), same scale.
+		if (dly_hle)
+		{
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			const double tl = m_dly_l.read(double(dly_N)), tr = m_dly_r.read(double(dly_N));
+			m_dly_l.write(sl + dly_gl * tl);
+			m_dly_r.write(sr + dly_gr * tr);
+			mix_l = int32_t(((1.0 - dly_mix) * sl + dly_mix * tl) * 32768.0);
+			mix_r = int32_t(((1.0 - dly_mix) * sr + dly_mix * tr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

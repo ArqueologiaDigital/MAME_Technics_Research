@@ -893,6 +893,11 @@ static INPUT_PORTS_START(kn5000)
 	//  is heard with them is NOT known to be right.  See upd6383d.h
 	//  alu_decoded_speculative().
 	PORT_CONFSETTING(   0x03, "On + SPECULATIVE ISA (guessed semantics)")
+	//  ★ bit 1 WITHOUT bit 0: the speculative descriptor decode (delay-tap addresses at
+	//  their true x2 scale, R3) is applied, but the LLE return is discarded (dsp_on off).
+	//  This is what the HLE SINGLE-DELAY path (DSPHLE) needs for a correct delay TIME with
+	//  no LLE audio contaminating the mix.
+	PORT_CONFSETTING(   0x02, "SPECULATIVE descriptor only (for the HLE delay; no LLE audio)")
 
 	// ---- HLE parametric-EQ insert (EXPERIMENTAL, default OFF) ----------------------
 	// A SEPARATE path from DSPCFG above.  Where DSPCFG runs the decoded microcode on
@@ -902,9 +907,11 @@ static INPUT_PORTS_START(kn5000)
 	// decoded C-RAM.  It is OFF by default because the C-RAM coefficient order/sign/
 	// scale is not yet confirmed against a spectral A/B -- see kn5000_tonegen.cpp.
 	PORT_START("DSPHLE")
-	PORT_CONFNAME(0x01, 0x00, "Effects EQ, HLE-audible (EXPERIMENTAL - unvalidated coeffs)")
+	PORT_CONFNAME(0x03, 0x00, "Effects, HLE-audible (EXPERIMENTAL - decoded from C-RAM)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
-	PORT_CONFSETTING(   0x01, "On (HLE biquad cascade from C-RAM)")
+	PORT_CONFSETTING(   0x01, "Parametric EQ (5-band biquad)")
+	PORT_CONFSETTING(   0x02, "Single Delay (feedback delay line)")
+	PORT_CONFSETTING(   0x03, "Parametric EQ + Single Delay")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------
