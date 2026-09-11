@@ -6217,7 +6217,14 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  BIQSEED=1 (shift 0) is bit-identical to the original seeds.
 				static const int biqshift = []{ const char *e = getenv("UPD6383_BIQSEED");
 					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
-				if (biqseed && !unit1)
+				//  ★ N2: UPD6383_BIQSEED_ONCE=F seeds ONLY at frame F, so the recursion
+				//  then evolves freely (a zero-input natural response) instead of being
+				//  re-forced to the seed every frame -- that gives the NON-degenerate
+				//  cross-frame state trajectory the differential null needs.  Unset (0)
+				//  keeps the original every-frame behaviour.
+				static const u64 seedonce = []{ const char *e = getenv("UPD6383_BIQSEED_ONCE");
+					return e ? u64(strtoull(e, nullptr, 10)) : 0ull; }();
+				if (biqseed && !unit1 && (!seedonce || m_frames_run == seedonce))
 				{
 					m_dram.write_dword(0x64, u32(0x100000) >> biqshift);   // 0.125 >> s
 					m_dram.write_dword(0x65, u32(0x200000) >> biqshift);   // 0.250 >> s
