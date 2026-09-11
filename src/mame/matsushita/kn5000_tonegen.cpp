@@ -2804,6 +2804,33 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		cho_base  = cho_depth;                                    // keep read tap >= 0 (short chorus)
 		cho_wet   = std::clamp(q22c(m_dsp1->cram_read(0x09)) * cs, 0.0, 0.95); // wet gain (panel DEPTH)
 	}
+	// ---- HLE FLANGER INSERT: read the pinned params (once per update) ------------------
+	// EXPERIMENTAL, default OFF (DSPHLE == 4). The chorus topology PLUS a feedback path.
+	// Its C-RAM layout DIFFERS from the chorus (probed separately). Pinned by intervention
+	// on FLANGER (TYPEIDX 3): RATE = C-RAM cell 0x05 (phase increment; drove 38->418 with
+	// LFO SPEED -> f = inc*44100/2^23 = 0.20 Hz at rest), RESONANCE/FEEDBACK = cell 0x00
+	// (0.594 cell -> 0.30 operand, the documented flanger feedback; rose with RESONANCE),
+	// panel DEPTH = cell 0x08 (0.808->1.0; scales the LFO sweep amplitude). Cell 0x06 = wrap
+	// 0x7FFFFF. Same DSPCFG-bit-1 cell/operand scale rule as the chorus/delay. Base + sweep
+	// are short (a flanger's whole point); a fixed max sweep is scaled by the DEPTH cell.
+	const bool fl_hle = (dsphle == 4);
+	double fl_inc = 0.0, fl_depth = 0.0, fl_base = 0.0, fl_fb = 0.0;
+	if (fl_hle)
+	{
+		auto q22f = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;                        // operand -> cell scale
+		const double inc = double(m_dsp1->cram_read(0x05) & 0xffffff) * cs;   // phase incr (cell scale)
+		const double f_hz = inc * 44100.0 / 8388608.0;
+		fl_inc = std::clamp(f_hz, 0.02, 12.0) / double(STREAM_RATE);
+		// DEPTH cell (0..1) scales a max LFO sweep of ~5 ms (240 samples @44.1k), -> stream rate
+		const double depth01 = std::clamp(q22f(m_dsp1->cram_read(0x08)) * cs, 0.0, 1.0);
+		fl_depth = depth01 * 240.0 * double(STREAM_RATE) / 44100.0;
+		fl_base  = 2.0;                                            // very short base (high notches)
+		fl_fb    = std::clamp(q22f(m_dsp1->cram_read(0x00)) * cs * 0.5, -0.95, 0.95);  // feedback = operand
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3506,6 +3533,23 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const double wr = 0.5 * (m_cho_r.read(dA) + m_cho_r.read(dB));
 			mix_l = int32_t(((1.0 - cho_wet) * sl + cho_wet * wl) * 32768.0);
 			mix_r = int32_t(((1.0 - cho_wet) * sr + cho_wet * wr) * 32768.0);
+		}
+
+		// ---- HLE FLANGER INSERT: LFO-swept delay WITH feedback, replaces mix in place -----
+		// EXPERIMENTAL, default OFF (dsphle == 4). Like the chorus but a SINGLE swept tap fed
+		// back into the line (resonance = the decoded feedback), which is what turns the
+		// moving comb into the deep, resonant flange sweep. 50/50 dry/wet for deep notches.
+		if (fl_hle)
+		{
+			m_fl_phase += fl_inc;
+			if (m_fl_phase >= 1.0) m_fl_phase -= 1.0;
+			const double d = fl_base + fl_depth * (0.5 + 0.5 * std::sin(2.0 * M_PI * m_fl_phase));
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			const double tl = m_fl_l.read(d), tr = m_fl_r.read(d);
+			m_fl_l.write(sl + fl_fb * tl);
+			m_fl_r.write(sr + fl_fb * tr);
+			mix_l = int32_t((0.5 * sl + 0.5 * tl) * 32768.0);
+			mix_r = int32_t((0.5 * sr + 0.5 * tr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

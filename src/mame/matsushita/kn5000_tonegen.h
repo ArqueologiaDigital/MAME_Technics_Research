@@ -533,6 +533,11 @@ private:
 	upd6383_hle::DelayLine          m_cho_l{2048};
 	upd6383_hle::DelayLine          m_cho_r{2048};
 	double                          m_cho_phase = 0.0;   // LFO phase in cycles [0,1)
+	//  ★ HLE FLANGER insert: an LFO-swept delay per channel WITH feedback (resonance) --
+	//  the chorus topology plus a feedback path. Its own delay lines + shared LFO phase.
+	upd6383_hle::DelayLine          m_fl_l{2048};
+	upd6383_hle::DelayLine          m_fl_r{2048};
+	double                          m_fl_phase = 0.0;    // LFO phase in cycles [0,1)
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
