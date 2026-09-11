@@ -2831,6 +2831,30 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		fl_base  = 2.0;                                            // very short base (high notches)
 		fl_fb    = std::clamp(q22f(m_dsp1->cram_read(0x00)) * cs * 0.5, -0.95, 0.95);  // feedback = operand
 	}
+	// ---- HLE PHASER INSERT: read the pinned params (once per update) -------------------
+	// EXPERIMENTAL, default OFF (DSPHLE == 5). A cascade of first-order all-pass stages whose
+	// one shared coefficient is swept by an LFO, with feedback (resonance) -- the classic
+	// phaser. Pinned by intervention on PHASER (TYPEIDX 4): RATE = C-RAM cell 0x00 (phase
+	// increment; drove 76->456 with LFO SPEED -> 0.40 Hz at rest), MANUAL = cell 0x06 (the
+	// all-pass CENTRE coefficient), DEPTH = cell 0x05 (the coefficient sweep amplitude),
+	// RESONANCE = cell 0x02 (feedback ~0.3 operand). One shared MANUAL cell => a cascade of
+	// identical all-pass stages. Coefficients read at the operand scale (cell/2) like the
+	// biquad/feedback; the RATE increment is used at cell scale (the applied P<<1 value).
+	const bool ph_hle = (dsphle == 5);
+	double ph_inc = 0.0, ph_ac = 0.0, ph_ad = 0.0, ph_fb = 0.0;
+	if (ph_hle)
+	{
+		auto q22p = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		const double inc = double(m_dsp1->cram_read(0x00) & 0xffffff) * cs;
+		ph_inc = std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE);
+		ph_ac  = std::clamp(q22p(m_dsp1->cram_read(0x06)) * cs * 0.5, -0.95, 0.95);  // centre a (operand)
+		ph_ad  = std::clamp(q22p(m_dsp1->cram_read(0x05)) * cs * 0.5,  0.0, 0.40);   // sweep amplitude
+		ph_fb  = std::clamp(q22p(m_dsp1->cram_read(0x02)) * cs * 0.5, -0.95, 0.95);  // feedback (resonance)
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3550,6 +3574,25 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			m_fl_r.write(sr + fl_fb * tr);
 			mix_l = int32_t((0.5 * sl + 0.5 * tl) * 32768.0);
 			mix_r = int32_t((0.5 * sr + 0.5 * tr) * 32768.0);
+		}
+
+		// ---- HLE PHASER INSERT: swept all-pass cascade + feedback, replaces mix in place --
+		// EXPERIMENTAL, default OFF (dsphle == 5). All PH_STAGES all-pass sections share one
+		// coefficient a swept by the LFO around the MANUAL centre; the cascade output is fed
+		// back into its input (resonance) and mixed 50/50 with the dry, so the frequency-
+		// dependent phase shift creates notches that sweep at the LFO rate.
+		if (ph_hle)
+		{
+			m_ph_phase += ph_inc;
+			if (m_ph_phase >= 1.0) m_ph_phase -= 1.0;
+			const double a = std::clamp(ph_ac + ph_ad * std::sin(2.0 * M_PI * m_ph_phase), -0.98, 0.98);
+			for (int i = 0; i < PH_STAGES; i++) { m_ph_l[i].set_a(a); m_ph_r[i].set_a(a); }
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			double xl = sl + ph_fb * m_ph_fbl, xr = sr + ph_fb * m_ph_fbr;
+			for (int i = 0; i < PH_STAGES; i++) { xl = m_ph_l[i].process_one(xl); xr = m_ph_r[i].process_one(xr); }
+			m_ph_fbl = xl; m_ph_fbr = xr;
+			mix_l = int32_t((0.5 * sl + 0.5 * xl) * 32768.0);
+			mix_r = int32_t((0.5 * sr + 0.5 * xr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

@@ -538,6 +538,13 @@ private:
 	upd6383_hle::DelayLine          m_fl_l{2048};
 	upd6383_hle::DelayLine          m_fl_r{2048};
 	double                          m_fl_phase = 0.0;    // LFO phase in cycles [0,1)
+	//  ★ HLE PHASER insert: a cascade of first-order all-pass stages per channel whose one
+	//  shared coefficient (the MANUAL cell) is swept by an LFO, with feedback (RESONANCE).
+	static constexpr int            PH_STAGES = 6;       // 6 all-pass stages -> 3 swept notches
+	upd6383_hle::AllPass1           m_ph_l[PH_STAGES];
+	upd6383_hle::AllPass1           m_ph_r[PH_STAGES];
+	double                          m_ph_phase = 0.0;    // LFO phase in cycles [0,1)
+	double                          m_ph_fbl = 0.0, m_ph_fbr = 0.0;  // feedback state (last wet)
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;

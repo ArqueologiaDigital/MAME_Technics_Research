@@ -76,6 +76,20 @@ private:
 	double m_y1 = 0.0;
 };
 
+// First-order (Schroeder) all-pass: y = -a*x + s ; s = x + a*y. The coefficient a in (-1,1)
+// sets the frequency at which the phase is 90 deg; cascading N of these and sweeping a with an
+// LFO (+ feedback) is a phaser. Flat magnitude, frequency-dependent phase.
+class AllPass1
+{
+public:
+	AllPass1() = default;
+	void reset() { m_s = 0.0; }
+	void set_a(double a) { m_a = a; }
+	double process_one(double x) { const double y = -m_a * x + m_s; m_s = x + m_a * y; return y; }
+private:
+	double m_a = 0.0, m_s = 0.0;
+};
+
 // LFO phase accumulator -> shaped table (the 0x092 word), phase in cycles [0,1).
 class LFO
 {
