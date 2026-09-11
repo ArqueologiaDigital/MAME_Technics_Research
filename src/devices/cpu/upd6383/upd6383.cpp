@@ -6188,6 +6188,20 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					m_dram.write_dword(0x67, u32(0x400000) >> biqshift);   // 0.500 >> s
 				}
 
+				//  ★ SPECULATIVE (UPD6383_SPEC_INJECT): S1 of the speculation-friendly
+				//  plan.  The external audio is deposited by latch_inputs_to_dram into the
+				//  DI-latch cells (0x01 left / 0x04 right); the exact microcode that carries
+				//  it into the unit-0 body's biquad input (x0 at 0x64) is undecoded (the
+				//  input-route gate).  This SPECULATIVELY bridges that last mile by copying
+				//  the deposited audio into band-0 x0 at unit-0 entry, so the MEASURED biquad
+				//  datapath runs on real audio and the chip's own EQ microcode produces
+				//  output.  It is "fake with the real mechanism": the injection POINT is a
+				//  guess (x0 = 0x64), the biquad that processes it is measured; env-gated,
+				//  default OFF, LABELLED speculative, never the shipped path.
+				static const bool spec_inject = getenv("UPD6383_SPEC_INJECT") != nullptr;
+				if (spec_inject && !unit1)
+					m_dram.write_dword(0x64, m_dram.read_dword(0x01) & 0xffffff);
+
 				//  ★ DIAGNOSTIC (UPD6383_REVSEED): the unit-1 analogue of BIQSEED --
 				//  seed the reverb's D-RAM state cells (measured operand cells of the
 				//  unit-1 one-pole: 0xD0, 0x94, 0x8A, 0x85..0x8F) with known distinct
