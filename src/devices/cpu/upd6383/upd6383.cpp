@@ -6188,6 +6188,27 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					m_dram.write_dword(0x67, u32(0x400000) >> biqshift);   // 0.500 >> s
 				}
 
+				//  ★ DIAGNOSTIC (UPD6383_REVSEED): the unit-1 analogue of BIQSEED --
+				//  seed the reverb's D-RAM state cells (measured operand cells of the
+				//  unit-1 one-pole: 0xD0, 0x94, 0x8A, 0x85..0x8F) with known distinct
+				//  values at unit-1 body entry, so the reverb computes with a controlled
+				//  stimulus and its one-pole datapath can be decoded WITHOUT the (blocked)
+				//  input route -- exactly as BIQSEED let the biquad be decoded.  The
+				//  reverb words are UNMODIFIED; env-gated, off by default.  The env VALUE
+				//  (>1) right-shifts, as in BIQSEED, to keep the output in range.
+				static const bool revseed = getenv("UPD6383_REVSEED") != nullptr;
+				static const int revshift = []{ const char *e = getenv("UPD6383_REVSEED");
+					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
+				if (revseed && unit1)
+				{
+					m_dram.write_dword(0xD0, u32(0x100000) >> revshift);   // reverb tap / feedback
+					m_dram.write_dword(0x94, u32(0x200000) >> revshift);   // most-read reverb cell
+					m_dram.write_dword(0x8A, u32(0x300000) >> revshift);
+					m_dram.write_dword(0x85, u32(0x080000) >> revshift);   // unit-1 input twin
+					m_dram.write_dword(0x8C, u32(0x0C0000) >> revshift);
+					m_dram.write_dword(0x8F, u32(0x140000) >> revshift);
+				}
+
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
 				//  with SRC 0x1A, because P = coef * tempB and the COEFFICIENT is
