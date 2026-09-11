@@ -3785,6 +3785,20 @@ void upd6383_device::exec_alu(u64 word)
 		L = (regfile && m_speculative && (m_specmask & 0x800000) && !xb_rd)
 				? s32(util::sext(m_rf[rdsrc] & 0xffffff, 24))
 				: s32(util::sext(m_dram.read_dword(rdsrc) & 0xffffff, 24));
+		//  ★ SPECULATIVE (UPD6383_SPEC_SUBFB): S4 of the speculation-friendly plan.
+		//  The unit-0 EQ biquad's recursive coefficients are stored POSITIVE and the
+		//  recursive MACs are f31=1 (ADD), which makes the feedback a positive-feedback
+		//  runaway (pole 1.001) -- the S1 saturation.  The captured coefficients are a
+		//  STABLE, sensible peaking EQ (poles 0.710) ONLY with SUBTRACTIVE feedback
+		//  (dsp/tools/biquad_stability_probe.py).  The chip achieves that with an
+		//  adding MAC by a NEGATED y-state.  So negate the operand when it is read from
+		//  a y-state cell (band_input+2/+3 in the 0x64..0x77 EQ block).  rdsrc is the
+		//  pre-increment source cell here, so no post-increment trap.  Env-gated,
+		//  default OFF, LABELLED speculative; accept test = S1(SPEC_INJECT)+SUBFB stops
+		//  saturating and matches the probe's peaking response.
+		static const bool spec_subfb = getenv("UPD6383_SPEC_SUBFB") != nullptr;
+		if (spec_subfb && rdsrc >= 0x64 && rdsrc <= 0x77 && ((rdsrc - 0x64) & 3) >= 2)
+			L = -L;
 		//  ★ §221 §E1: `regfile' names the ADDRESSING MODE, bit 23 names the ARRAY.
 		//  Both are recorded, because the epilogue's `w63'/`w65' resolve to mode-1
 		//  indices (0x05, 0x8F) that COLLIDE with live mode-2 cells -- §5.1's trap.
