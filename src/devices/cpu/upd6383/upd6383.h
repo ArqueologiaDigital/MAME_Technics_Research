@@ -769,6 +769,10 @@ private:
 	//  otherwise re-armed only on an effect upload, which closes before notes sound).
 	//  Diagnostic only: with the env unset this is 0 and nothing changes.
 	u32  m_trace_detail = 0;
+	//  ★ P1: UPD6383_WATCH_CELL=0xNN logs every D-RAM write to cell NN (site + iw +
+	//  frame), to find who writes the biquad +2/+3 y-history (no bit-4 store targets
+	//  it). 0xFFFFFFFF = off. Diagnostic only.
+	u32  m_watch_cell = 0xFFFFFFFF;
 	//  ★ §130 fired-count for the per-unit coefficient-cursor rebase (mask bit 38).
 	//  Every gate must log one: it is what distinguishes a real null arm from a
 	//  gate that silently never ran.

@@ -298,6 +298,8 @@ void upd6383_device::device_start()
 		m_trace_frame = u64(strtoull(e, nullptr, 10));
 	if (const char *e = getenv("UPD6383_TRACE_DETAIL"))
 		m_trace_detail = u32(strtoul(e, nullptr, 10));   // N2: re-arm per-word detail at the arm
+	if (const char *e = getenv("UPD6383_WATCH_CELL"))
+		m_watch_cell = u32(strtoul(e, nullptr, 0)) & 0xff;   // P1: log writes to this D-RAM cell
 	//  ★ §133: unpack the bank-entry demultiplexer's mask fields ONCE, and say every
 	//  one of them out loud.  A silent selector is how §121 ran seven arms that were
 	//  all the same arm.
@@ -1392,6 +1394,9 @@ void upd6383_device::store_mode(u8 mode, u8 dest, u32 v, u8 site, bool force_dra
 	}
 	else
 	{
+		if ((dest & 0xff) == m_watch_cell && m_frames_run >= m_trace_frame && m_frames_run <= m_trace_frame + 4)
+			logerror("WATCH 0x%02X <- %d  site=store_mode(%u) iw=%u frame=%u\n",
+					u32(m_watch_cell), s32(v & 0xffffff), u32(site), u32(m_cur_iw), u32(m_frames_run));
 		m_dram.write_dword(dest, v & 0xffffff);
 		pv_wr_dram(dest, v);                                  // ★ §221 §E1
 		pk_write(dest, v, site, false, m_cur_iw);             // ★ §222 §E-D0
@@ -1902,6 +1907,9 @@ void upd6383_device::host_w(bool cd, u8 data)
 						//  transient -- a different answer, so it is counted, not
 						//  assumed.
 						if ((m_dram_wp & 0xff) == 0x06) m_s3_host_wr++;
+						if ((m_dram_wp & 0xff) == m_watch_cell && m_frames_run >= m_trace_frame && m_frames_run <= m_trace_frame + 4)
+							logerror("WATCH 0x%02X <- %d  site=HOST(dram_wp) iw=%u frame=%u\n",
+									u32(m_watch_cell), s32(v & 0xffffff), u32(m_cur_word), u32(m_frames_run));
 						m_dram.write_dword(m_dram_wp, v & 0xffffff);
 						pv_wr_dram_tag(u8(m_dram_wp), v, E1_PV_HOST);  // ★ §221 §E1
 						pk_write(u8(m_dram_wp), v, 4, false, PK_IW_HOST);  // §222
@@ -2363,6 +2371,9 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 		if ((hi & upd6383_disassembler::HI_ST)
 				&& !st_suppressed_live(word))           // ★ §109 bit 29
 		{
+			if ((cell & 0xff) == m_watch_cell && m_frames_run >= m_trace_frame && m_frames_run <= m_trace_frame + 4)
+				logerror("WATCH 0x%02X <- %d  site=acc_store iw=%u frame=%u\n",
+						u32(m_watch_cell), s32(m_acc & 0xffffff), u32(m_cur_iw), u32(m_frames_run));
 			m_dram.write_dword(cell, u32(m_acc & 0xffffff));
 			pv_wr_dram(u8(cell), u32(m_acc));                          // ★ §221 §E1
 			pk_write(u8(cell), u32(m_acc), 1, false, m_cur_iw);        // ★ §222 §E-D0
