@@ -2668,19 +2668,20 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		//   * FREQUENCY  (SOLID, MEASURED, N1'): cell 0x03 == 2*cos w0  ->  w0 = acos(c3/2).
 		//     Cross-checked: cell 0x00 == -c3/2 == -cos w0 in every capture, and band 1's
 		//     0x03 gives 966 Hz (== N1' band-1 centre).  Universal across bands.
-		//   * GAIN       (STRONG for band 0, single-point-calibrated): A^2 == 1 + G*(c1-0.5),
-		//     G = 455.7.  Cell base+1 is EXACTLY 0.5 (0x200000) at 0 dB -- for band 0, band 1,
-		//     AND under a frequency-only edit -- and deviates only under a gain edit; so
-		//     (c1-0.5) is the pure, frequency-INDEPENDENT gain signal (unlike (c1-c2), which
-		//     an FC edit would misread as +31 dB).  G fits the band-0 +12 dB capture to
-		//     A^2=3.98; SPECULATIVE that the same G holds for bands 1-4 (only band 0 was
-		//     driven), though the 0.5 baseline is confirmed shared.
+		//   * GAIN       (MEASURED per band): A^2 == 1 + G[band]*(c1-0.5).  Cell base+1 is
+		//     EXACTLY 0.5 (0x200000) at 0 dB -- for every band, and under a frequency-only edit
+		//     -- and deviates only under a gain edit; so (c1-0.5) is the pure, frequency-
+		//     INDEPENDENT gain signal (unlike (c1-c2), which an FC edit would misread as
+		//     +31 dB).  Each band's slope G was fit by driving THAT band's gain +12 dB on the
+		//     panel and reading its cell (dsp/tools/eq_band_gain_calibrate.py): the slope is
+		//     NOT uniform -- it roughly HALVES per band (the gain cell moves ~2x further per dB
+		//     as the band centre rises), so a single constant is wrong for bands 1-4.
 		//   * Q          (ASSUMED): 2.0.  Q sets bandwidth only; the peak height that the
 		//     spectral A/B checks == the designed dB regardless of Q.
-		// Coefficients are RBJ (Audio EQ Cookbook), normalised by a0.  Default OFF until the
-		// in-emulator spectral A/B confirms freq+gain.  Validated offline against all three
-		// captures by dsp/tools/eq_rbj_reconstruct_ab.py; see N1-EQ-COEFFICIENT-MEMORY note.
-		constexpr double GAIN_G = 455.7;    // band-0 A^2 slope: A^2 = 1 + G*(c1 - 0.5)
+		// Coefficients are RBJ (Audio EQ Cookbook), normalised by a0.  Default OFF; validated
+		// offline (eq_rbj_reconstruct_ab.py) and by in-emulator spectral A/B at bands 0 and 2
+		// (+~11 dB at the band centre, flat elsewhere).  See N1-EQ-COEFFICIENT-MEMORY note.
+		constexpr double GAIN_G[5] = { 465.8, 225.8, 114.2, 58.3, 30.5 };  // per-band A^2 slope
 		constexpr double QVAL   = 2.0;      // assumed band Q (documented)
 		auto q22 = [](uint32_t v) -> double {
 			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
@@ -2705,13 +2706,14 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const double norm = (std::fabs(c3) <= 1.0) ? 2.0 : 1.0;
 			c1 *= norm; c3 *= norm;
 			const double cosw0 = std::clamp(c3 * 0.5, -0.9995, 0.9995);
-			const double asq   = 1.0 + GAIN_G * (c1 - 0.5);       // A^2; >1 boost, <1 cut
-			if (KN5000_EQHLE_DEBUG && band == 0)
+			const double asq   = 1.0 + GAIN_G[band] * (c1 - 0.5); // A^2; >1 boost, <1 cut
+			if (KN5000_EQHLE_DEBUG)
 			{
-				static u32 dbgcall = 0; static int dbgn = 0;
-				if ((dbgcall++ % 400) == 0 && dbgn < 60) { dbgn++;
-					fprintf(stderr, "### EQHLE t=%.2f b0 r1=%06X r3=%06X c1=%.4f c3=%.4f asq=%.3f\n",
-							machine().time().as_double(), r1, r3, c1, c3, asq); }
+				static u32 dbgcall = 0; static int dbgn = 0; static bool dbgthis = false;
+				if (band == 0) { dbgthis = ((dbgcall++ % 400) == 0 && dbgn < 40); if (dbgthis) dbgn++; }
+				if (dbgthis)
+					fprintf(stderr, "### EQHLE t=%.2f b%d r1=%06X r3=%06X c1=%.4f c3=%.4f asq=%.3f\n",
+							machine().time().as_double(), band, r1, r3, c1, c3, asq);
 			}
 			// A band is ACTIVE only if its cells are a plausible peaking design: c3 is a
 			// real 2*cos w0 (|c3|<=2) and asq is a sane gain (about -17..+34 dB). Zeroed or
