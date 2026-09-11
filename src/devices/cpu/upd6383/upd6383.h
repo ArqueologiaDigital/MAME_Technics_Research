@@ -147,6 +147,9 @@ public:
 	//  these store it verbatim and do NOT re-apply the speculative x2/LSB fix.
 	void cram_ptr_w(u8 addr)   { m_cram_wp = addr; m_cram_wp_set = true; }
 	void cram_data_w(u32 v)    { if (m_cram_wp_set) { m_cram.write_dword(m_cram_wp, v & 0xffffff); m_cram_wp = u8(m_cram_wp + 1); } }
+	//  ★ Read a decoded coefficient cell (24-bit) for a consumer (the HLE effect
+	//  audio path in the tonegen). Read-only; does not touch execution state.
+	u32 cram_read(u8 addr)     { return m_cram.read_dword(addr) & 0xffffff; }
 	void dsc_ptr_w(u8 addr)    { m_dsc_wp = addr; }
 	void dsc_data_w(u16 v)     { m_dscbank[m_dsc_wp] = v; m_dsc_wp = u8(m_dsc_wp + 1); }
 	void dram_ptr_w(u8 addr)   { m_dram_wp = addr; }

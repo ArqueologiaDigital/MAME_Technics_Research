@@ -44,6 +44,12 @@
 #include <vector>
 
 // Logging
+// One-shot diagnostic for the HLE-EQ insert: dumps band-0 raw C-RAM cells and the
+// computed gain. Compile with -DKN5000_EQHLE_DEBUG=1 to enable; default off.
+#ifndef KN5000_EQHLE_DEBUG
+#define KN5000_EQHLE_DEBUG 0
+#endif
+
 #define LOG_REG_W    (1U << 1)
 #define LOG_KEY      (1U << 2)
 #define LOG_VOICE    (1U << 3)
@@ -120,6 +126,7 @@ kn5000_tonegen_device::kn5000_tonegen_device(const machine_config &mconfig, cons
 	, m_waveform_size(0)
 	, m_dsp1(*this, finder_base::DUMMY_TAG)
 	, m_dsp1_enable(*this, finder_base::DUMMY_TAG)
+	, m_dsp_hle(*this, finder_base::DUMMY_TAG)
 	, m_render_mode(*this, finder_base::DUMMY_TAG)
 {
 }
@@ -2642,6 +2649,95 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	// is bit-identical to today's `mix_l'.
 	const u8 dspcfg = u8(m_dsp1_enable.read_safe(0));
 	const bool dsp_on = m_dsp1.found() && (dspcfg & 1);
+	// ---- HLE PARAMETRIC-EQ INSERT (audible decoded EQ) --------------------------------
+	// EXPERIMENTAL, default OFF (DSPHLE port bit 0). When off, eq_hle is false and the
+	// per-sample path below is skipped, so the output is byte-identical to today's. When
+	// on, the 5-band DF-I biquad cascade (kn5000_dsp_hle.h, the validated kernels) filters
+	// the mix using coefficients read from the effects DSP's decoded C-RAM. The C-RAM
+	// coefficient ORDER/SIGN/SCALE are still contested (§7b b1,b0,b2,-a1,-a2,makeup vs the
+	// N1' subtractive-positive reading) -- which is exactly what a spectral A/B on this
+	// path settles; hence DEFAULT OFF until that check passes. See PORTING-TO-MAME.md.
+	const bool eq_hle = m_dsp1.found() && ((u8(m_dsp_hle.read_safe(0)) & 1) != 0);
+	if (eq_hle)
+	{
+		// The raw C-RAM cells are NOT direct-form biquad coefficients: eq_spectral_ab.py
+		// proved no permutation of {cell0..5} -> {b0,b1,b2,a1,a2} yields a valid peaking
+		// response (that needs the undecoded x/y-history realization, walled N2). But the
+		// DESIGN PARAMETERS are recoverable from the cells, and building textbook RBJ
+		// peaking biquads from them is the validated HLE route (dsp/hle/). Per band:
+		//   * FREQUENCY  (SOLID, MEASURED, N1'): cell 0x03 == 2*cos w0  ->  w0 = acos(c3/2).
+		//     Cross-checked: cell 0x00 == -c3/2 == -cos w0 in every capture, and band 1's
+		//     0x03 gives 966 Hz (== N1' band-1 centre).  Universal across bands.
+		//   * GAIN       (STRONG for band 0, single-point-calibrated): A^2 == 1 + G*(c1-0.5),
+		//     G = 455.7.  Cell base+1 is EXACTLY 0.5 (0x200000) at 0 dB -- for band 0, band 1,
+		//     AND under a frequency-only edit -- and deviates only under a gain edit; so
+		//     (c1-0.5) is the pure, frequency-INDEPENDENT gain signal (unlike (c1-c2), which
+		//     an FC edit would misread as +31 dB).  G fits the band-0 +12 dB capture to
+		//     A^2=3.98; SPECULATIVE that the same G holds for bands 1-4 (only band 0 was
+		//     driven), though the 0.5 baseline is confirmed shared.
+		//   * Q          (ASSUMED): 2.0.  Q sets bandwidth only; the peak height that the
+		//     spectral A/B checks == the designed dB regardless of Q.
+		// Coefficients are RBJ (Audio EQ Cookbook), normalised by a0.  Default OFF until the
+		// in-emulator spectral A/B confirms freq+gain.  Validated offline against all three
+		// captures by dsp/tools/eq_rbj_reconstruct_ab.py; see N1-EQ-COEFFICIENT-MEMORY note.
+		constexpr double GAIN_G = 455.7;    // band-0 A^2 slope: A^2 = 1 + G*(c1 - 0.5)
+		constexpr double QVAL   = 2.0;      // assumed band Q (documented)
+		auto q22 = [](uint32_t v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		for (int band = 0; band < 5; band++)
+		{
+			const uint8_t base = uint8_t(band * 6);
+			const u32 r1 = m_dsp1->cram_read(base + 1);
+			const u32 r3 = m_dsp1->cram_read(base + 3);
+			double c1 = q22(r1);   // gain cell
+			double c3 = q22(r3);   // frequency cell
+			// m_cram is read at one of two scales that differ by exactly 2x (N1':
+			// "operand = C-RAM cell >> 1"). The capture dumps recorded the CELL scale
+			// (0x03 = 2*cos w0, gain baseline 0.5); at runtime, when the EQ insert reads
+			// m_cram without the LLE having executed (the normal HLE case, DSPCFG off),
+			// m_cram holds the firmware-uploaded OPERAND scale -- exactly half (0x03 =
+			// cos w0, baseline 0.25). Detect via the frequency cell: all five fixed band
+			// centres (673..3219 Hz) have cos w0 in 0.89..0.995, so |c3|<=1 is operand
+			// scale (double both cells back to the cell scale the formula is calibrated on);
+			// |c3|>1 is already cell scale. MEASURED: runtime c3=0.9954, c1=0.2532 (+12 dB)
+			// == exactly half the dump's 1.9908 / 0.50654.
+			const double norm = (std::fabs(c3) <= 1.0) ? 2.0 : 1.0;
+			c1 *= norm; c3 *= norm;
+			const double cosw0 = std::clamp(c3 * 0.5, -0.9995, 0.9995);
+			const double asq   = 1.0 + GAIN_G * (c1 - 0.5);       // A^2; >1 boost, <1 cut
+			if (KN5000_EQHLE_DEBUG && band == 0)
+			{
+				static u32 dbgcall = 0; static int dbgn = 0;
+				if ((dbgcall++ % 400) == 0 && dbgn < 60) { dbgn++;
+					fprintf(stderr, "### EQHLE t=%.2f b0 r1=%06X r3=%06X c1=%.4f c3=%.4f asq=%.3f\n",
+							machine().time().as_double(), r1, r3, c1, c3, asq); }
+			}
+			// A band is ACTIVE only if its cells are a plausible peaking design: c3 is a
+			// real 2*cos w0 (|c3|<=2) and asq is a sane gain (about -17..+34 dB). Zeroed or
+			// not-yet-uploaded C-RAM (c1=c3=0 -> asq=-226) or garbage -> unity passthrough,
+			// so a missing/idle EQ can never turn into the broadband cut that a raw A=0.1
+			// cascade would produce.
+			if (std::fabs(c3) > 2.001 || asq < 0.02 || asq > 50.0 ||
+			    std::fabs(asq - 1.0) < 1e-4)   // out-of-range / 0 dB / unused -> passthrough
+			{
+				m_eq_l[band].set_coeffs(1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+				m_eq_r[band].set_coeffs(1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+				continue;
+			}
+			const double A     = std::sqrt(std::max(asq, 0.01));
+			const double w0    = std::acos(cosw0);
+			const double alpha = std::sin(w0) / (2.0 * QVAL);
+			const double b0 = 1.0 + alpha * A;
+			const double b1 = -2.0 * cosw0;
+			const double b2 = 1.0 - alpha * A;
+			const double a0 = 1.0 + alpha / A;
+			const double a1 = -2.0 * cosw0;
+			const double a2 = 1.0 - alpha / A;
+			m_eq_l[band].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+			m_eq_r[band].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+		}
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3288,6 +3384,24 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		{
 			wet_l = m_dsp1_wet[0];
 			wet_r = m_dsp1_wet[1];
+		}
+
+		// ---- HLE EQ INSERT: filter the dry mix through the 5-band cascade ----------------
+		// EXPERIMENTAL, default OFF (see eq_hle above). The panel EQ is an INSERT (not a
+		// send/return), so it replaces mix_l/mix_r in place with the filtered signal. The
+		// biquads run in double at the mix's own normalised scale (int32 / 32768 == the same
+		// scale softclip uses). State (z^-1) persists across stream updates in m_eq_l/r.
+		if (eq_hle)
+		{
+			double yl = double(mix_l) / 32768.0;
+			double yr = double(mix_r) / 32768.0;
+			for (int band = 0; band < 5; band++)
+			{
+				yl = m_eq_l[band].process_one(yl);
+				yr = m_eq_r[band].process_one(yr);
+			}
+			mix_l = int32_t(yl * 32768.0);
+			mix_r = int32_t(yr * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

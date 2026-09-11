@@ -15,6 +15,7 @@
 #pragma once
 
 #include "cpu/upd6383/upd6383.h"
+#include "kn5000_dsp_hle.h"   // validated HLE effect kernels (audible-EQ path)
 
 #include <cstdio>
 #include <deque>
@@ -69,6 +70,7 @@ public:
 	// thing; unset or 0 means the DSP is never called at all.
 	template <typename T> void set_dsp1(T &&tag) { m_dsp1.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_dsp1_enable_port(T &&tag) { m_dsp1_enable.set_tag(std::forward<T>(tag)); }
+	template <typename T> void set_dsp_hle_port(T &&tag) { m_dsp_hle.set_tag(std::forward<T>(tag)); }
 
 	// ---- DIAGNOSTIC render mode ---------------------------------------------
 	// set_render_mode_port() names a driver ioport whose low two bits choose how a
@@ -514,6 +516,11 @@ private:
 	// ---- IC311 effects-DSP send/return (see set_dsp1 above) -----------------
 	optional_device<upd6383_device> m_dsp1;
 	optional_ioport                 m_dsp1_enable;
+	optional_ioport                 m_dsp_hle;   // HLE audible-effect path gate (DSPHLE port)
+	//  ★ HLE parametric-EQ insert: 5 cascaded DF-I biquad bands per channel, coefficients
+	//  refreshed from the effects DSP's decoded C-RAM. Default = unity passthrough.
+	upd6383_hle::BiquadDF1          m_eq_l[5];
+	upd6383_hle::BiquadDF1          m_eq_r[5];
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;

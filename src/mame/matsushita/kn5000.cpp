@@ -893,6 +893,18 @@ static INPUT_PORTS_START(kn5000)
 	//  is heard with them is NOT known to be right.  See upd6383d.h
 	//  alu_decoded_speculative().
 	PORT_CONFSETTING(   0x03, "On + SPECULATIVE ISA (guessed semantics)")
+
+	// ---- HLE parametric-EQ insert (EXPERIMENTAL, default OFF) ----------------------
+	// A SEPARATE path from DSPCFG above.  Where DSPCFG runs the decoded microcode on
+	// the LLE core (silent, because the return is discarded), this gate makes the
+	// panel EQ AUDIBLE by filtering the dry mix through the validated HLE biquad
+	// cascade (kn5000_dsp_hle.h), using coefficients read live from the effects DSP's
+	// decoded C-RAM.  It is OFF by default because the C-RAM coefficient order/sign/
+	// scale is not yet confirmed against a spectral A/B -- see kn5000_tonegen.cpp.
+	PORT_START("DSPHLE")
+	PORT_CONFNAME(0x01, 0x00, "Effects EQ, HLE-audible (EXPERIMENTAL - unvalidated coeffs)")
+	PORT_CONFSETTING(   0x00, DEF_STR(Off))
+	PORT_CONFSETTING(   0x01, "On (HLE biquad cascade from C-RAM)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------
@@ -1760,6 +1772,7 @@ void kn5000_state::kn5000(machine_config &config)
 #if KN5000_ENABLE_DSP1
 	m_tonegen->set_dsp1(m_dsp1);
 	m_tonegen->set_dsp1_enable_port(":DSPCFG");
+	m_tonegen->set_dsp_hle_port(":DSPHLE");
 #endif
 	// With the insert absent, kn5000_tonegen's m_dsp1.found() is false, so dsp_on is
 	// false unconditionally: IC303's mix reaches the speakers with nothing added.
