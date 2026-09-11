@@ -6174,12 +6174,18 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  (Phase 4.4).  The biquad words are UNMODIFIED -- this is a test stimulus into the
 				//  state it reads, not a rig of the audio path, and it is env-gated + off by default.
 				static const bool biqseed = getenv("UPD6383_BIQSEED") != nullptr;
+				//  The env VALUE (>1) right-shifts the seeds, so a large value gives
+				//  a SMALL stimulus whose biquad output does not saturate at the
+				//  makeup/store -- needed to decode the acc->datum store constant.
+				//  BIQSEED=1 (shift 0) is bit-identical to the original seeds.
+				static const int biqshift = []{ const char *e = getenv("UPD6383_BIQSEED");
+					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
 				if (biqseed && !unit1)
 				{
-					m_dram.write_dword(0x64, 0x100000);   // 0.125
-					m_dram.write_dword(0x65, 0x200000);   // 0.250
-					m_dram.write_dword(0x66, 0x300000);   // 0.375
-					m_dram.write_dword(0x67, 0x400000);   // 0.500
+					m_dram.write_dword(0x64, u32(0x100000) >> biqshift);   // 0.125 >> s
+					m_dram.write_dword(0x65, u32(0x200000) >> biqshift);   // 0.250 >> s
+					m_dram.write_dword(0x66, u32(0x300000) >> biqshift);   // 0.375 >> s
+					m_dram.write_dword(0x67, u32(0x400000) >> biqshift);   // 0.500 >> s
 				}
 
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
