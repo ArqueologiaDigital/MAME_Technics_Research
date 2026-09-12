@@ -2782,7 +2782,22 @@ void upd6383_device::exec_alu(u64 word)
 			//  0x64 must start moving and the rows after iw143 must stop being frame-identical.
 			static const int lo12cap = []{ const char *e = getenv("UPD6383_LO12CAP");
 				return e ? atoi(e) : 0; }();
-			if (lo12cap && (word & 0x1f) == upd6383_disassembler::LO_ACT_CAP_TA2)
+			//  ★ LO12CAP=4 (the SOURCE arm): =1 captures the ACCUMULATOR, and a bisect
+			//  measured the cost -- with =1 the chorus's LFO phase cell stops advancing by
+			//  114 per frame (it jumps ~1.36 M), while `ACT 0x0E = mem[ptr]` leaves it at
+			//  114 and the baseline is 114.  So the gate arm opens the body AND breaks the
+			//  one modulation quantity that matched the HLE exactly.  ACT 0x19's captured
+			//  SOURCE is the open half of the code ({bus, acc, P}), so =4 takes the word's
+			//  own BUS operand instead -- `SRC 0x00' = mem[ptr] on this word.
+			//  Two-sided: the body must be live AND the phase must stay at 114.
+			if (lo12cap == 4 && (word & 0x1f) == upd6383_disassembler::LO_ACT_CAP_TA2)
+			{
+				m_ta = m_dram.read_dword(m_dp) & 0xffffff;
+				pv_wr_ta(m_ta);
+				m_lo12cap_n++;
+			}
+			else if (lo12cap && lo12cap != 4
+					&& (word & 0x1f) == upd6383_disassembler::LO_ACT_CAP_TA2)
 			{
 				m_ta = u32(acc_to_datum(m_acc)) & 0xffffff;
 				pv_wr_ta(m_ta);
