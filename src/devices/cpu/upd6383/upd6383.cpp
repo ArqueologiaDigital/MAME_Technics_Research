@@ -3064,6 +3064,24 @@ void upd6383_device::exec_alu(u64 word)
 				m_dly_noalu++;
 			if (dir == 'R')
 			{
+				//  ★ DIAGNOSTIC (UPD6383_DLYSEED2): seed the EXTERNAL delay DRAM at the tap
+				//  address the chip ITSELF just computed (`addr' above), immediately before
+				//  the fetch, so the genuine read -> per-line latch -> publish -> ALU pipeline
+				//  carries a known impulse.  v1 (UPD6383_DLYSEED) seeded the D-RAM state
+				//  block 0x50..0x53, which the body zeroes mid-frame and which is NOT the
+				//  delay's signal path -- the single delay's signal is this external tap
+				//  (dsp/analysis/N-DLYSEED-SINGLE-DELAY-TRACE-2026-09-12.md).  No address is
+				//  re-derived here.  Unit-0 only; env-gated, OFF by default; the delay words
+				//  are UNMODIFIED.  Datum 0x4000 = 0x400000 (0.5 FS) after the <<8 below.
+				//  DLYSEED2_ONCE=F seeds only at frame F: one impulse enters the line and
+				//  then recirculates/decays = the echo-decay test lle_oracle_delay.py
+				//  predicts; unset = every tap read returns the impulse (a steady input,
+				//  for the per-word damping/feedback arithmetic confrontation).
+				static const bool dlyseed2 = getenv("UPD6383_DLYSEED2") != nullptr;
+				static const u64 dlyseed2once = []{ const char *e = getenv("UPD6383_DLYSEED2_ONCE");
+					return e ? u64(strtoull(e, nullptr, 10)) : 0ull; }();
+				if (dlyseed2 && !m_cur_unit1 && (!dlyseed2once || m_frames_run == dlyseed2once))
+					m_delay.write_word(addr, 0x4000);
 				const u32 datum = u32(m_delay.read_word(addr)) << 8;
 				if (m_dly_dbg < 6 && m_frames_run > 420000)
 				{
