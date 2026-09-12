@@ -4456,6 +4456,22 @@ void upd6383_device::exec_alu(u64 word)
 				m_bx_supp_n++;
 				break;
 			}
+			{
+				//  ★ DIAGNOSTIC (UPD6383_NOTA0C, default OFF): exclude ACT 0x0C from this
+				//  blanket tempA capture.  MEASURED on the seeded FLANGER trace: its WRITE
+				//  word `900.1.60.2D9' (ACT 0x19) lands the tap datum in tempA -- the single
+				//  delay's proven route -- and the `44C' word (ACT 0x0C) then overwrites
+				//  tempA with the tap offset, four words before `mac ta' (w12, SRC 0x19)
+				//  reads it (dsp/analysis/N-DLYSEED2-CHORUS-CONFRONT-2026-09-12.md §7).
+				//  Prediction: with the arm on, tempA holds the datum through w12 and
+				//  w12's operand L = 0x400000.  Observation-only; nothing else changes.
+				//  ★ RUN, prediction HELD (seeded flanger trace, both channels: w12 reads
+				//  L = 0x400000 at iw96 and iw142 with the arm, 194 without; §8 of the
+				//  note).  The blanket capture is wrong for ACT 0x0C at least; the other
+				//  four codes in this case list are untested by that run.
+				static const bool nota0c = getenv("UPD6383_NOTA0C") != nullptr;
+				if (nota0c && act == 0x0C) { m_nota0c_n++; break; }
+			}
 			m_ta = u32(L) & 0xffffff;
 			pv_wr_ta(u32(L));                                  // ★ §221 §E1
 			break;
@@ -8329,6 +8345,8 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★ UPD6383_DLY07DRAM = %d: re-aimed delay-word ACT-07 stores sent to "
 				"D-RAM instead of the mode-1 register file: FIRED %u times\n",
 				getenv("UPD6383_DLY07DRAM") ? 1 : 0, u32(m_dly07dram_n));
+		logerror("upd6383: ★ UPD6383_NOTA0C = %d: ACT-0x0C words excused from the blanket tempA "
+				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
 					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
 			std::string rf;
