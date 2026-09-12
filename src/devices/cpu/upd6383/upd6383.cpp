@@ -2790,9 +2790,24 @@ void upd6383_device::exec_alu(u64 word)
 			}
 			else if (lo12cap >= 2 && (word & 0x1f) == upd6383_disassembler::LO_ACT_ST_BUS)
 			{
+				//  ⛔ FIRED 0 TIMES: these words carry lo12 == 0x827 and §116 catches them
+				//  first ("a register aimed").  Kept with its record; see note §8.
 				m_dram.write_dword(upd6383_disassembler::addr8(word),
 						u32(acc_to_datum(m_acc)) & 0xffffff);
 				m_lo12st_n++;
+			}
+			else if (lo12cap >= 3 && (word & 0x1f) == 0x05)
+			{
+				//  ★ LO12CAP=3 (note §8's two remaining handoffs): ACT 0x05 on a bit-11 word
+				//  stores the accumulator UNDER THE POINTER.  Why that target: the kernel's
+				//  input triplet ends with `w44 0801025825' whose pointer is `dp = 0x05' --
+				//  exactly the body's L pickup -- and the output triplet's twin `w52' sits at
+				//  `dp = 0x75', the cell the body's last three words address.  So mem[ptr] is
+				//  the one target that makes both twins deposit where their stage's consumer
+				//  reads.  Two-sided: the epilogue must stop being frame-identical (it is
+				//  0 of 22 rows today), and/or the second pickup 0x0F must start moving.
+				m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
+				m_lo12st5_n++;
 			}
 			return;
 		}
@@ -8481,6 +8496,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_LO12CAP>=3: bit-11 ACT-0x05 stores under the pointer: FIRED %u\n",
+				u32(m_lo12st5_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
 				u32(m_lo12st_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
