@@ -4439,6 +4439,31 @@ void upd6383_device::exec_alu(u64 word)
 		s2_record(m_cur_iw, s2_carry, s2_bus, p_term, accum,
 				src, act == upd6383_disassembler::LO_ACT_ACC_BUS);
 		}
+		//  ★ DIAGNOSTIC (UPD6383_C8SHIFT=n, default 0 = off): let the CLASS-8 word scale the
+		//  accumulated sum down by n bits.  MEASURED from the corpus: `0804816415' appears at
+		//  35 sites and EVERY ONE has the identical neighbours -- `01022FF687' before it (the
+		//  last MAC of the biquad's five-term sum) and `0212AFF407' after it (the makeup
+		//  multiply + store).  It occurs only in the 17 programs that carry a biquad/tone
+		//  section, ten times in PARAMETRIC EQ = once per band per channel.  Its fields say
+		//  the same thing: SRC 0x10 takes the ACCUMULATOR as its operand and ACT 0x15 writes
+		//  no memory, so it transforms the accumulator in place, exactly where a fixed-point
+		//  biquad puts its post-sum scaling.  The device models it as a no-op, on evidence
+		//  ("the biquad reproduces to 0.094 dB with class 8 doing no multiply") that is a
+		//  RATIO and therefore blind to a uniform gain.
+		//  The EQ needs a per-band gain of 1 and the trace measures 2, once per band, so
+		//  n = 1 is the hypothesis this exists to test (dsp/analysis/N-EQ-TOPOLOGY-FROM-
+		//  BYTECODE-2026-09-12.md).  Two-sided: with n = 1 the per-band gain must fall to ~1,
+		//  the y-history must stop railing and movement must reach all five bands; if it does
+		//  not, class 8 is not a post-sum scale.  ⚠ addr8 is 0x16 at 42 of 44 sites and is NOT
+		//  used as the shift here -- 22 bits would annihilate the sum; if this arm succeeds,
+		//  what addr8 encodes is the next question, not an assumption baked in now.
+		static const int c8shift = []{ const char *e = getenv("UPD6383_C8SHIFT");
+			return e ? std::clamp(atoi(e), 0, 23) : 0; }();
+		if (c8shift && upd6383_disassembler::class4(word) == 8)
+		{
+			accum = u64(s64(util::sext(accum, 44)) >> c8shift) & 0xfffffffffffULL;
+			m_c8shift_n++;
+		}
 		pv_wr_acc(use_b, accum);                              // ★ §221 §E1
 	}
 
@@ -8440,6 +8465,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
+				"FIRED %u times\n", getenv("UPD6383_C8SHIFT") ? getenv("UPD6383_C8SHIFT") : "0", u32(m_c8shift_n));
 		logerror("upd6383: ★ UPD6383_EQSCALE = %d: EQ products rescaled by band position (FITTED PROBE, "
 				"never ships): FIRED %u times\n", getenv("UPD6383_EQSCALE") ? 1 : 0, u32(m_eqscale_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP = %d: lo12-bit-11 words that still performed their ACT-0x19 "
