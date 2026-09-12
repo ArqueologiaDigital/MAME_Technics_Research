@@ -2771,12 +2771,28 @@ void upd6383_device::exec_alu(u64 word)
 			//  input-dependent quantity at iw38, and the HLE's input stage wants exactly
 			//  "scale the kernel's accumulated audio and deposit it", which is what iw39/iw44
 			//  then do.  Two-sided: with the arm the body must STOP being frame-identical.
-			static const bool lo12cap = getenv("UPD6383_LO12CAP") != nullptr;
+			//  ★ LO12CAP=2 (the SECOND CHANNEL, note §8): with =1 the L channel comes alive
+			//  and the frame-pair diff shows the live rows stopping DEAD at iw142/143 -- the
+			//  L→R boundary of the EQ body (`w58 rstcur', `w57 ld.st acc,(p)+84' moving the
+			//  pointer from the L state block to the R one at 0x64).  The R channel's input
+			//  cell 0x64 is static, and the kernel carries TWO matching bit-11 triplets whose
+			//  addr8 values are (0x70, 0x6C, 0x25) and (0x50, 0x64, 0x25) -- one per channel,
+			//  the second naming exactly that cell.  All six are suppressed by this branch.
+			//  =2 additionally performs the ACT-0x07 STORE on a bit-11 word.  Two-sided: cell
+			//  0x64 must start moving and the rows after iw143 must stop being frame-identical.
+			static const int lo12cap = []{ const char *e = getenv("UPD6383_LO12CAP");
+				return e ? atoi(e) : 0; }();
 			if (lo12cap && (word & 0x1f) == upd6383_disassembler::LO_ACT_CAP_TA2)
 			{
 				m_ta = u32(acc_to_datum(m_acc)) & 0xffffff;
 				pv_wr_ta(m_ta);
 				m_lo12cap_n++;
+			}
+			else if (lo12cap >= 2 && (word & 0x1f) == upd6383_disassembler::LO_ACT_ST_BUS)
+			{
+				m_dram.write_dword(upd6383_disassembler::addr8(word),
+						u32(acc_to_datum(m_acc)) & 0xffffff);
+				m_lo12st_n++;
 			}
 			return;
 		}
@@ -8465,6 +8481,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
+				u32(m_lo12st_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
 				"FIRED %u times\n", getenv("UPD6383_C8SHIFT") ? getenv("UPD6383_C8SHIFT") : "0", u32(m_c8shift_n));
 		logerror("upd6383: ★ UPD6383_EQSCALE = %d: EQ products rescaled by band position (FITTED PROBE, "

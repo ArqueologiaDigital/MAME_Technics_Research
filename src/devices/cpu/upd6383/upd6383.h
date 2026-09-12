@@ -1606,6 +1606,7 @@ private:
 	u64  m_nota0c_n = 0;            // UPD6383_NOTA0C: ACT-0x0C words excused from the blanket tempA capture
 	u64  m_mulall_n = 0;            // UPD6383_MULALL: body class-2 words that also formed a product
 	u64  m_fmtbit_n = 0;            // UPD6383_FMTBIT: products formed at shift 7 (word bit 12 clear = Q0.23)
+	u64  m_lo12st_n = 0;            // UPD6383_LO12CAP=2: bit-11 ACT-0x07 stores performed
 	u64  m_lo12cap_n = 0;           // UPD6383_LO12CAP: bit-11 words that still performed their tempA capture
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied
 	u64  m_eqscale_n = 0;           // UPD6383_EQSCALE: EQ products rescaled by band position (FITTED probe)
