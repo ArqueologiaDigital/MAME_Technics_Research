@@ -2918,6 +2918,37 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		cmb_cinc = std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE);
 		cmb_csweep = 120.0 * double(STREAM_RATE) / 44100.0;   // fixed chorus sweep (not pinned in combo)
 	}
+	// ---- HLE COMBOS 2: S.DELAY + {FLANGER, VIBRATO, PHASER, S.DELAY} -------------------
+	// Each = a delay stage chained with a second block, pinned by intervention (each combo
+	// has its OWN layout): +FLANGER (9, TYPEIDX 25) mod RATE=cell 0x00 (0.2 Hz), delay
+	// feedback=0x04; +VIBRATO (10, TYPEIDX 26) RATE=cell 0x00 (0.6 Hz), delay feedback=0x04;
+	// +PHASER (11, TYPEIDX 27) RATE=cell 0x03 (0.4 Hz), MANUAL=0x0A, DEPTH=0x09, delay
+	// feedback=0x00; +S.DELAY (12, TYPEIDX 24) delay1 feedback=0x00, delay2 feedback=0x05.
+	// Delay length = descriptor 0x26 for all. Reuse the standalone mod-block delay lines /
+	// all-pass stages; +s.delay uses a second long delay line (m_dly2). Second-stage feedback
+	// / all-pass coeffs read at operand scale; rates at cell scale (applied increment).
+	const int cmb2 = (dsphle >= 9 && dsphle <= 12) ? dsphle : 0;
+	int    c2_dN = 0;
+	double c2_gfb = 0.0, c2_gfb2 = 0.0, c2_minc = 0.0, c2_ac = 0.0, c2_ad = 0.0;
+	if (cmb2)
+	{
+		auto q22b = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		const double n441 = (bit1 ? 1.0 : 2.0) * double(m_dsp1->dsc_read(0x26));
+		c2_dN = std::clamp(int(n441 * double(STREAM_RATE) / 44100.0 + 0.5), 1, 34999);
+		auto rate_of = [&](u8 cell) { const double inc = double(m_dsp1->cram_read(cell) & 0xffffff) * cs;
+			return std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE); };
+		auto fb_of = [&](u8 cell) { return std::clamp(q22b(m_dsp1->cram_read(cell)) * cs * 0.5, -0.95, 0.95); };
+		if (cmb2 == 9)  { c2_gfb = fb_of(0x04); c2_minc = rate_of(0x00); }                      // +flanger
+		if (cmb2 == 10) { c2_gfb = fb_of(0x04); c2_minc = rate_of(0x00); }                      // +vibrato
+		if (cmb2 == 11) { c2_gfb = fb_of(0x00); c2_minc = rate_of(0x03);                        // +phaser
+			c2_ac = std::clamp(q22b(m_dsp1->cram_read(0x0A)) * cs * 0.5, -0.95, 0.95);          // manual (centre)
+			c2_ad = std::clamp(q22b(m_dsp1->cram_read(0x09)) * cs * 0.5,  0.0, 0.40); }          // sweep
+		if (cmb2 == 12) { c2_gfb = fb_of(0x00); c2_gfb2 = fb_of(0x05); }                        // +s.delay (two)
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3721,6 +3752,57 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const double wr = 0.5 * (m_cho_r.read(cmb_csweep * (1.0 + 0.5 * cs2)) + m_cho_r.read(cmb_csweep * (1.0 + 0.5 * cc2)));
 			mix_l = int32_t((0.6 * dl + 0.4 * wl) * 32768.0);
 			mix_r = int32_t((0.6 * dr + 0.4 * wr) * 32768.0);
+		}
+
+		// ---- HLE COMBOS 2: S.DELAY + {FLANGER, VIBRATO, PHASER, S.DELAY} ------------------
+		// EXPERIMENTAL, default OFF (dsphle 9..12). Stage 1 is the shared feedback delay; stage
+		// 2 is the second block run on the delayed signal, reusing that block's own state (only
+		// one effect is ever selected). Fixed feedback/sweep are used where the combo layout
+		// does not separately expose them; the validated per-combo quantity is the mod RATE.
+		if (cmb2)
+		{
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			const double dtl = m_dly_l.read(double(c2_dN)), dtr = m_dly_r.read(double(c2_dN));
+			m_dly_l.write(sl + c2_gfb * dtl);
+			m_dly_r.write(sr + c2_gfb * dtr);
+			double dl = 0.5 * sl + 0.5 * dtl, dr = 0.5 * sr + 0.5 * dtr;
+			double ol = dl, orr = dr;
+			if (cmb2 == 9)             // + FLANGER (feedback delay, resonance ~0.3)
+			{
+				m_fl_phase += c2_minc; if (m_fl_phase >= 1.0) m_fl_phase -= 1.0;
+				const double sw = 200.0 * double(STREAM_RATE) / 44100.0;
+				const double d = 2.0 + sw * (0.5 + 0.5 * std::sin(2.0 * M_PI * m_fl_phase));
+				const double tl = m_fl_l.read(d), tr = m_fl_r.read(d);
+				m_fl_l.write(dl + 0.3 * tl); m_fl_r.write(dr + 0.3 * tr);
+				ol = 0.5 * dl + 0.5 * tl; orr = 0.5 * dr + 0.5 * tr;
+			}
+			else if (cmb2 == 10)       // + VIBRATO (single swept tap, mostly wet)
+			{
+				m_vib_phase += c2_minc; if (m_vib_phase >= 1.0) m_vib_phase -= 1.0;
+				const double sw = 120.0 * double(STREAM_RATE) / 44100.0;
+				const double d = sw + sw * (0.5 + 0.5 * std::sin(2.0 * M_PI * m_vib_phase));
+				m_vib_l.write(dl); m_vib_r.write(dr);
+				ol = 0.4 * dl + 0.6 * m_vib_l.read(d); orr = 0.4 * dr + 0.6 * m_vib_r.read(d);
+			}
+			else if (cmb2 == 11)       // + PHASER (swept all-pass cascade + feedback)
+			{
+				m_ph_phase += c2_minc; if (m_ph_phase >= 1.0) m_ph_phase -= 1.0;
+				const double a = std::clamp(c2_ac + c2_ad * std::sin(2.0 * M_PI * m_ph_phase), -0.98, 0.98);
+				for (int i = 0; i < PH_STAGES; i++) { m_ph_l[i].set_a(a); m_ph_r[i].set_a(a); }
+				double xl = dl + 0.3 * m_ph_fbl, xr = dr + 0.3 * m_ph_fbr;
+				for (int i = 0; i < PH_STAGES; i++) { xl = m_ph_l[i].process_one(xl); xr = m_ph_r[i].process_one(xr); }
+				m_ph_fbl = xl; m_ph_fbr = xr;
+				ol = 0.5 * dl + 0.5 * xl; orr = 0.5 * dr + 0.5 * xr;
+			}
+			else if (cmb2 == 12)       // + S.DELAY (a second feedback delay in series)
+			{
+				const double t2l = m_dly2_l.read(double(c2_dN)), t2r = m_dly2_r.read(double(c2_dN));
+				m_dly2_l.write(dl + c2_gfb2 * t2l);
+				m_dly2_r.write(dr + c2_gfb2 * t2r);
+				ol = 0.5 * dl + 0.5 * t2l; orr = 0.5 * dr + 0.5 * t2r;
+			}
+			mix_l = int32_t(ol * 32768.0);
+			mix_r = int32_t(orr * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

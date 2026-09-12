@@ -554,6 +554,9 @@ private:
 	upd6383_hle::DelayLine          m_vib_l{2048};
 	upd6383_hle::DelayLine          m_vib_r{2048};
 	double                          m_vib_phase = 0.0;
+	//  ★ HLE COMBO second delay line (S.DELAY+S.DELAY needs two long delays).
+	upd6383_hle::DelayLine          m_dly2_l{35000};
+	upd6383_hle::DelayLine          m_dly2_r{35000};
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
