@@ -6337,6 +6337,20 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			if (m_sp == 0)
 			{
 				const bool unit1 = (upd6383_disassembler::addr8(raw) != 0x0e);
+				//  ★ DIAGNOSTIC (UPD6383_CALLFLUSH, default OFF): clear the PRODUCT register at
+				//  the block CALL.  MEASURED motivation: the chorus's LFO block opens at the
+				//  body's first words and its entry word `iw88' is `f31 = 0' -- a LOAD from P.
+				//  With the kernel starved P is 0 there, so the block computes `increment +
+				//  phase' and the cell advances by exactly 114 (the HLE's value).  With the
+				//  kernel live P carries the kernel's product (3.19e11) and the phase is
+				//  destroyed (N-INPUT-GATE-OPENED §17).  A one-deep product register that
+				//  survives a block CALL is what makes the body inherit it; a pipeline that
+				//  flushes at a block boundary is the obvious hardware alternative, and it is
+				//  the reading this tests.  Two-sided: with the body LIVE the chorus's phase
+				//  cell must advance by the increment (114 at rest) -- today it only does so
+				//  with the body dead, which is no test at all.
+				static const bool callflush = getenv("UPD6383_CALLFLUSH") != nullptr;
+				if (callflush) { m_p = 0; m_pw = 0; m_callflush_n++; }
 				m_stack[m_sp++] = m_pc;     // return to the word after this one
 				m_pc = (unit1 ? UNIT1_ENTRY : UNIT0_ENTRY)
 						* upd6383_disassembler::WORD_BYTES;
@@ -8569,6 +8583,8 @@ void upd6383_device::dump_frame_report() const
 				u32(m_lo12st5_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
 				u32(m_lo12st_n));
+		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d: product register cleared at the block CALL: "
+				"FIRED %u times\n", getenv("UPD6383_CALLFLUSH") ? 1 : 0, u32(m_callflush_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "

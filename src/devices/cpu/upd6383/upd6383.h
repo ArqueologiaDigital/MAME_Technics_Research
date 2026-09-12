@@ -1609,6 +1609,7 @@ private:
 	u64  m_lo12st5_n = 0;           // UPD6383_LO12CAP=3: bit-11 ACT-0x05 stores under the pointer
 	u64  m_lo12st_n = 0;            // UPD6383_LO12CAP=2: bit-11 ACT-0x07 stores performed
 	u64  m_lo12cap_n = 0;           // UPD6383_LO12CAP: bit-11 words that still performed their tempA capture
+	u64  m_callflush_n = 0;         // UPD6383_CALLFLUSH: product register cleared at the block CALL
 	u64  m_c6lut_n = 0;             // UPD6383_C6LUT: class-6 table lookups actually performed
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied
 	u64  m_eqscale_n = 0;           // UPD6383_EQSCALE: EQ products rescaled by band position (FITTED probe)
