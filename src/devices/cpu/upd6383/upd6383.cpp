@@ -6377,6 +6377,24 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  with the body dead, which is no test at all.
 				static const bool callflush = getenv("UPD6383_CALLFLUSH") != nullptr;
 				if (callflush) { m_p = 0; m_pw = 0; m_callflush_n++; }
+				//  ★ DIAGNOSTIC (UPD6383_CALLACC, default OFF): clear the ACCUMULATOR
+				//  at the block CALL, and leave the product register alone.
+				//  MEASURED motivation, N-INPUT-GATE-OPENED §24.  The chorus's LFO
+				//  needs an EMPTY ACCUMULATOR at body entry, and that is an
+				//  ARCHITECTURAL requirement, not a quirk: `iw89' LOADs the
+				//  increment (acc <- 114 << 16) and `iw90' adds the phase cell
+				//  (acc += mem << 16), so the sum `phase + increment' is formed
+				//  across two words and the first of them must start from zero.
+				//  Read off the callflush trace to the unit:
+				//      iw89  acc = 0 + 0 + (114 << 16)          =       7 471 104
+				//      iw90  acc = 7 471 104 + (2 800 486 << 16) = 183 540 121 701
+				//      iw91  store -> cell 0x2ABB66 + 114 = 0x2ABBD8
+				//  UPD6383_CALLFLUSH reaches that state only INDIRECTLY -- it empties
+				//  P, and `iw88' (f31 = 0) then loads the zero.  Clearing the
+				//  accumulator says what is actually required and leaves the EQ's
+				//  product path untouched, which is the half CALLFLUSH destroys.
+				static const bool callacc = getenv("UPD6383_CALLACC") != nullptr;
+				if (callacc) { m_acc = 0; m_callacc_n++; }
 				m_stack[m_sp++] = m_pc;     // return to the word after this one
 				m_pc = (unit1 ? UNIT1_ENTRY : UNIT0_ENTRY)
 						* upd6383_disassembler::WORD_BYTES;
@@ -8613,6 +8631,8 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_CALLFLUSH") ? 1 : 0, u32(m_callflush_n));
 		logerror("upd6383: ★ UPD6383_PCLR = %d: P cleared on words that drive no multiply: "
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
+		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
+				"FIRED %u times\n", getenv("UPD6383_CALLACC") ? 1 : 0, u32(m_callacc_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "

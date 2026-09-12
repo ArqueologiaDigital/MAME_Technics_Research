@@ -1622,6 +1622,7 @@ private:
 	//  EQ's back-to-back multiply words, which is exactly the discrimination §20
 	//  says is needed.  m_ptouch is set by every site that writes m_p.
 	bool m_ptouch = false;          // did THIS word write the product register?
+	u64  m_callacc_n = 0;           // UPD6383_CALLACC: accumulator cleared at the block CALL
 	u64  m_pclr_n = 0;              // UPD6383_PCLR: words that cleared an undriven P
 	u64  m_c6lut_n = 0;             // UPD6383_C6LUT: class-6 table lookups actually performed
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied
