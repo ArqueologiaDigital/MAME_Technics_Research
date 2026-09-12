@@ -5177,13 +5177,36 @@ void upd6383_device::exec_alu(u64 word)
 			//  only bit-clear FULL one, and its ACT is 0x13).  Ad hoc by construction;
 			//  its job is to test the CONSEQUENCE -- the EQ band comes out flat (y == x)
 			//  with a finite state block -- not to claim the mechanism.
+			//  ★ DIAGNOSTIC (UPD6383_EQSCALE, default OFF): a deliberately FITTED probe that
+			//  tests §10's arithmetic RESULT, not a mechanism.  Reading the PARAMETRIC EQ's own ROM
+			//  cells against the RBJ identity `b1 == a1' shows its five coefficients need three
+			//  different scales -- b0 and b2 x4, b1 x2, the a-path x1 -- and only then is every band
+			//  flat to 0.00 dB (dsp/analysis/N-SINGLE-DELAY-RECURRENCE §10).  No field of the
+			//  instruction word partitions them that way (bit 12 and the ACT code were both built as
+			//  arms and both refuted), so this probe applies the scaling BY THE COEFFICIENT'S
+			//  POSITION IN THE BAND -- cursor % 6, with the EQ's known cell order b1, b0, b2, -a1,
+			//  -a2, makeup -- which the chip cannot possibly do.
+			//  ⛔ IT IS THEREFORE NOT A DECODE AND MUST NEVER SHIP.  Its only job is to answer one
+			//  question the arithmetic cannot: fed those scales, does the device actually produce a
+			//  working filter?  §10's solve assumes a DF-I biquad; if the device's topology is
+			//  something else, the EQ stays broken even with the "right" numbers.
+			//  Pre-registered: the y-history stops railing, the per-band gain falls from the
+			//  measured 2.0 to ~1, and the frame-pair diff shows movement reaching all five bands.
+			static const bool eqscale = getenv("UPD6383_EQSCALE") != nullptr;
+			s64 eqmul = 1;
+			if (eqscale && !m_cur_unit1 && ccur <= 0x1d)
+			{
+				const u32 slot = ccur % 6;
+				eqmul = (slot == 0) ? 2 : (slot == 1 || slot == 2) ? 4 : 1;
+				if (eqmul != 1) m_eqscale_n++;
+			}
 			static const int fmtbit = []{ const char *e = getenv("UPD6383_FMTBIT"); return e ? atoi(e) : 0; }();
 			const bool half_w = fmtbit == 2
 					? (!(word & (u64(1) << 12)) && (word & 0x1f) != 0x13)
 					: (fmtbit == 1 && !(word & (u64(1) << 12)));
 			const int pshift_w = half_w ? 7 : P_SHIFT;
 			if (half_w && pshift_w != P_SHIFT) m_fmtbit_n++;
-			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> pshift_w) & 0xfffffffffffULL;
+			m_p = u64(((s64(util::sext(coef, 24)) * s64(L)) * eqmul) >> pshift_w) & 0xfffffffffffULL;
 			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
 			//  ★ SUBFB DIAGNOSTIC: what did THE MULTIPLY actually consume when the
 			//  operand was negated at the read?  (The accept test showed the product
@@ -8417,6 +8440,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_EQSCALE = %d: EQ products rescaled by band position (FITTED PROBE, "
+				"never ships): FIRED %u times\n", getenv("UPD6383_EQSCALE") ? 1 : 0, u32(m_eqscale_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP = %d: lo12-bit-11 words that still performed their ACT-0x19 "
 				"tempA capture (acc): FIRED %u times\n", getenv("UPD6383_LO12CAP") ? 1 : 0, u32(m_lo12cap_n));
 		logerror("upd6383: ★ UPD6383_FMTBIT = %s: per-word coefficient format (1 = bit 12 clear -> shift 7; "

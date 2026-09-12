@@ -1607,6 +1607,7 @@ private:
 	u64  m_mulall_n = 0;            // UPD6383_MULALL: body class-2 words that also formed a product
 	u64  m_fmtbit_n = 0;            // UPD6383_FMTBIT: products formed at shift 7 (word bit 12 clear = Q0.23)
 	u64  m_lo12cap_n = 0;           // UPD6383_LO12CAP: bit-11 words that still performed their tempA capture
+	u64  m_eqscale_n = 0;           // UPD6383_EQSCALE: EQ products rescaled by band position (FITTED probe)
 	//  §164 read-only probe: per-D-RAM-cell ramp census (range AND change count --
 	//  a range alone cannot distinguish a ramp from two alternating constants).
 	s32  m_rampmin[0x100] = {}, m_rampmax[0x100] = {}, m_rampprev[0x100] = {};
