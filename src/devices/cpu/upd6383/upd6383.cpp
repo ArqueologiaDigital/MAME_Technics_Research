@@ -3349,6 +3349,37 @@ void upd6383_device::exec_alu(u64 word)
 			// addressing and leave the ALU alone.
 			if (upd6383_disassembler::coeff_consumer(word))
 				m_cursor++;
+			//  ★ DIAGNOSTIC (UPD6383_C6LUT, default OFF): PERFORM the class-6 table lookup.
+			//  Until now this block only censused and returned, so the modulation family's
+			//  tap never swept.  Two things changed that (dsp/analysis/
+			//  N-CLASS6-LOOKUP-BLOCKED-ON-INDEX-2026-09-12.md):
+			//    * the TABLE was never missing -- §160 prints 36 of 36 non-zero in the
+			//      register file at 0x1D..0x40, the 24-entry sine §188 matched to 1 LSB;
+			//    * the INDEX was, and the session's three gate arms deliver it: the device's
+			//      own §162 census flips from "acc 0..0 (CONSTANT -- phase is NOT here)" to
+			//      "acc 0..977106 (VARIES)" at both chorus sites.
+			//  So: index = acc as a datum, modulo the entry count the word itself carries
+			//  (addr8 = 0x18 = 24 at every LFO site, §160), table = m_rf[0x1D + index], and
+			//  the value lands in P at the multiply's scale -- the slot §175's "who last
+			//  wrote P at the lookup" census watches.
+			//  ⛔ NOT A DECODE: the index's scale is lfo-ramp.md §10's `(coef x phase) >> 23'
+			//  reading and is NOT verified here; the base 0x1D is §160's measured window.
+			//  Two-sided: the chorus's §157 TAPMOD per-slot census must stop reporting a
+			//  CONSTANT 240 and start spanning a range at the LFO rate.
+			static const bool c6lut = getenv("UPD6383_C6LUT") != nullptr;
+			if (c6lut)
+			{
+				const u32 n = upd6383_disassembler::addr8(word);
+				if (n)
+				{
+					const s32 d = acc_to_datum(m_cur_unit1 ? m_accb : m_acc);
+					const u32 k = u32(((d % s32(n)) + s32(n)) % s32(n));
+					const u32 v = m_rf[(0x1d + k) & 0xff] & 0xffffff;
+					m_p = u64(s64(util::sext(v, 24))) << ACC_SHIFT;
+					m_pw = 7;
+					m_c6lut_n++;
+				}
+			}
 			return;
 		}
 		if (word == 0 || cl == 5 || (hi_esc && lo == 0x015) || (hi_esc && lo == 0x041))
@@ -8500,6 +8531,8 @@ void upd6383_device::dump_frame_report() const
 				u32(m_lo12st5_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
 				u32(m_lo12st_n));
+		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
+				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
 				"FIRED %u times\n", getenv("UPD6383_C8SHIFT") ? getenv("UPD6383_C8SHIFT") : "0", u32(m_c8shift_n));
 		logerror("upd6383: ★ UPD6383_EQSCALE = %d: EQ products rescaled by band position (FITTED PROBE, "
