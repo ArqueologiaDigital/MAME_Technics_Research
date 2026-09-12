@@ -2949,6 +2949,43 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			c2_ad = std::clamp(q22b(m_dsp1->cram_read(0x09)) * cs * 0.5,  0.0, 0.40); }          // sweep
 		if (cmb2 == 12) { c2_gfb = fb_of(0x00); c2_gfb2 = fb_of(0x05); }                        // +s.delay (two)
 	}
+	// ---- HLE COMBO: PEQ + S.DELAY (DSPHLE == 13, TYPEIDX 30) ---------------------------
+	// A single emphasis peaking band chained into the delay. Pinned by intervention, and it
+	// reuses the STANDALONE EQ cell layout exactly: FREQ = cell 0x03 (2cos w0, moved by FC),
+	// GAIN = cell 0x01 (moved by G; 0x05 = -2.0 the same EQ structural constant), DELAY
+	// FEEDBACK L = cell 0x06, delay length = descriptor 0x26. Reconstruct one RBJ peaking
+	// biquad (as the standalone EQ does) onto m_eq_l[0]/m_eq_r[0], with the per-band gain
+	// slope picked by the detected centre frequency; the delay stage reuses m_dly.
+	const bool peqsd = (dsphle == 13);
+	int    pq_dN = 0;
+	double pq_gfb = 0.0;
+	if (peqsd)
+	{
+		auto q22e = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		double c1 = q22e(m_dsp1->cram_read(0x01)) * cs;
+		double c3 = q22e(m_dsp1->cram_read(0x03)) * cs;
+		const double norm = (std::fabs(c3) <= 1.0) ? 2.0 : 1.0;   // operand -> cell scale
+		c1 *= norm; c3 *= norm;
+		const double cosw0 = std::clamp(c3 * 0.5, -0.9995, 0.9995);
+		// per-band gain slope G by nearest decoded band centre (same table as the 5-band EQ)
+		const double bc[5] = { 0.9954, 0.99055, 0.98, 0.95595, 0.89665 };
+		const double bg[5] = { 465.8, 225.8, 114.2, 58.3, 30.5 };
+		double G = bg[4]; double best = 1e9;
+		for (int i = 0; i < 5; i++) { const double d = std::fabs(cosw0 - bc[i]); if (d < best) { best = d; G = bg[i]; } }
+		const double asq = std::max(1.0 + G * (c1 - 0.5), 0.02);
+		const double A = std::sqrt(asq), w0 = std::acos(cosw0), al = std::sin(w0) / 4.0;  // Q=2
+		const double b0 = 1.0 + al * A, b1 = -2.0 * cosw0, b2 = 1.0 - al * A;
+		const double a0 = 1.0 + al / A, a1 = -2.0 * cosw0, a2 = 1.0 - al / A;
+		m_eq_l[0].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+		m_eq_r[0].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+		const double n441 = (bit1 ? 1.0 : 2.0) * double(m_dsp1->dsc_read(0x26));
+		pq_dN = std::clamp(int(n441 * double(STREAM_RATE) / 44100.0 + 0.5), 1, 34999);
+		pq_gfb = std::clamp(q22e(m_dsp1->cram_read(0x06)) * cs * 0.5, -0.95, 0.95);
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3803,6 +3840,21 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			}
 			mix_l = int32_t(ol * 32768.0);
 			mix_r = int32_t(orr * 32768.0);
+		}
+
+		// ---- HLE COMBO: PEQ + S.DELAY (emphasis biquad -> feedback delay) -----------------
+		// EXPERIMENTAL, default OFF (dsphle == 13). Stage 1 = the single emphasis peaking band
+		// (reconstructed onto m_eq_l[0]), stage 2 = the feedback delay (reusing m_dly). So the
+		// delayed signal carries the EQ emphasis, and the echoes repeat the emphasised tone.
+		if (peqsd)
+		{
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			const double el = m_eq_l[0].process_one(sl), er = m_eq_r[0].process_one(sr);
+			const double dtl = m_dly_l.read(double(pq_dN)), dtr = m_dly_r.read(double(pq_dN));
+			m_dly_l.write(el + pq_gfb * dtl);
+			m_dly_r.write(er + pq_gfb * dtr);
+			mix_l = int32_t((0.5 * el + 0.5 * dtl) * 32768.0);
+			mix_r = int32_t((0.5 * er + 0.5 * dtr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);
