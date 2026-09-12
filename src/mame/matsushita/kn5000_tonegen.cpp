@@ -2752,8 +2752,9 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 	//     with it OFF the bank holds half, so double it.
 	//   * C-RAM feedback: with bit 1 ON cram_read returns the CELL scale (2x); the multiplier
 	//     operand (the actual gain) is half that. With bit 1 OFF it is already the operand.
-	// MIX is the SINGLE-DELAY internal designed constant ~0.5 (STRONG). HIGH DAMP not yet
-	// pinned -> no in-loop damping (repeats keep their tone) until a damp intervention lands.
+	// MIX is the SINGLE-DELAY internal designed constant ~0.5 (STRONG). HIGH DAMP: the bytecode
+	// (prog09) PROVES an in-loop damping filter at C-RAM 0x03..0x05 (role damping, PROVEN), so a
+	// one-pole low-pass on the fed-back tap now darkens each repeat (coefficient from cell 0x03).
 	const bool dly_hle = (dsphle == 2);
 	int    dly_N   = 0;
 	double dly_gl  = 0.0, dly_gr = 0.0;
@@ -2775,6 +2776,11 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		const double fscale = bit1 ? 0.5 : 1.0;                  // cell -> operand (actual gain)
 		dly_gl = std::clamp(q22d(m_dsp1->cram_read(0x00)) * fscale, -0.97, 0.97);
 		dly_gr = std::clamp(q22d(m_dsp1->cram_read(0x09)) * fscale, -0.97, 0.97);
+		// ★ in-loop HIGH DAMP (prog09 PROVES it: C-RAM 0x03..0x05 = damping filter, role PROVEN).
+		// Read cell 0x03 (operand scale) as a one-pole low-pass coefficient so the fed-back tap
+		// darkens each repeat, as the bytecode's damping section does. |coeff|->[0,0.7] damping.
+		const double damp = std::clamp(std::fabs(q22d(m_dsp1->cram_read(0x03))) * fscale, 0.0, 0.7);
+		m_dly_dmp_l.set_damping(damp); m_dly_dmp_r.set_damping(damp);
 	}
 	// ---- HLE CHORUS INSERT: read the pinned params (once per update) -------------------
 	// EXPERIMENTAL, default OFF (DSPHLE == 3). A quadrature LFO-swept delay. Pinned by
@@ -3904,8 +3910,9 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		{
 			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
 			const double tl = m_dly_l.read(double(dly_N)), tr = m_dly_r.read(double(dly_N));
-			m_dly_l.write(sl + dly_gl * tl);
-			m_dly_r.write(sr + dly_gr * tr);
+			// in-loop HIGH DAMP (prog09 cells 0x03..0x05): low-pass the fed-back tap so repeats darken
+			m_dly_l.write(sl + dly_gl * m_dly_dmp_l.process_one(tl));
+			m_dly_r.write(sr + dly_gr * m_dly_dmp_r.process_one(tr));
 			mix_l = int32_t(((1.0 - dly_mix) * sl + dly_mix * tl) * 32768.0);
 			mix_r = int32_t(((1.0 - dly_mix) * sr + dly_mix * tr) * 32768.0);
 		}

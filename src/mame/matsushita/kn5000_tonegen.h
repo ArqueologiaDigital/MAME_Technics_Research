@@ -527,6 +527,11 @@ private:
 	//  @44.1k). Default = dry (feedback/mix left at 0 until the DSPHLE delay bit is on).
 	upd6383_hle::DelayLine          m_dly_l{35000};
 	upd6383_hle::DelayLine          m_dly_r{35000};
+	//  ★ HLE SINGLE-DELAY in-loop HIGH DAMP: prog09 PROVES a damping filter in the feedback
+	//  path (C-RAM 0x03..0x05, "damping filter tap 0/1/2", role damping PROVEN in the disasm) --
+	//  the bytecode (source of truth) shows the repeats darken; the earlier HLE omitted it. One
+	//  one-pole low-pass per channel on the fed-back tap, coefficient from the decoded cell 0x03.
+	upd6383_hle::OnePole            m_dly_dmp_l, m_dly_dmp_r;
 	//  ★ HLE CHORUS insert: a short modulated delay line per channel with a shared LFO
 	//  phase (persists across updates so the sweep is continuous). Sized for base+depth of
 	//  a short chorus (~2048 samples is far more than the ~500 needed).
