@@ -4999,8 +4999,27 @@ void upd6383_device::exec_alu(u64 word)
 	// immediate happens to read `class4 == 0xA' -- e.g. the frame terminator
 	// C00.A.47.407 -- can never reach here.
 	//  ★ §29: FETCH (the multiply) and CONSUME (the cursor advance) are separate.
-	if ((m_speculative && (m_specmask & 4)) ? upd6383_disassembler::coeff_fetch(word)
-					  : upd6383_disassembler::coeff_consumer(word))
+	//  ★ DIAGNOSTIC (UPD6383_MULALL, default OFF): ALSO form the product on the BODY's
+	//  class-2 words (never C-format, never the kernel), with the cursor's coefficient
+	//  and NO cursor advance (the advance stays keyed on coeff_consumer).  The biquad's
+	//  27/27 (handoff §1) was measured on class-A words only, so whether the multiplier
+	//  runs on every word is OPEN; the single delay's fixed-point reading
+	//  (dsp/analysis/N-SINGLE-DELAY-RECURRENCE-2026-09-12 §4) names it as one of two
+	//  readings under which section A's output feeds section B instead of being
+	//  discarded.  Falsifiers: the EQ trace must still satisfy lle_trace_diff.py's
+	//  biquad oracle, and the delay frame must stay self-consistent under
+	//  dlyseed_recurrence.py.  Observation-only.
+	//  ⛔ RUN (N-SINGLE-DELAY-RECURRENCE §5): DISFAVOURED.  The seeded delay's fixed
+	//  point RAILS (cells 0x08/0x50/0x51 -> 0x7FFFFF, 5 unexplained accumulator rows
+	//  vs 0 without), so the reading does not give a stable damping loop at unity
+	//  input.  The EQ falsifier was INCONCLUSIVE in the fx_ab/DSPCFG=3 rig (both arms
+	//  railed) -- it needs the handoff's original biquad rig.  Kept with its record.
+	static const bool mulall = getenv("UPD6383_MULALL") != nullptr;
+	const bool mulall_hit = mulall && m_cur_iw >= 84 && !m_in_k6
+			&& upd6383_disassembler::class4(word) == 2 && !upd6383_disassembler::c_format(word);
+	if (mulall_hit) m_mulall_n++;
+	if (((m_speculative && (m_specmask & 4)) ? upd6383_disassembler::coeff_fetch(word)
+					  : upd6383_disassembler::coeff_consumer(word)) || mulall_hit)
 	{
 		//  ★★★★ §72 SPECULATIVE (mask bit 17): THE BODY'S COEFFICIENT BANK IS 0x90+,
 		//  NOT THE RAMP AT 0x50..0x8B.
@@ -8347,6 +8366,8 @@ void upd6383_device::dump_frame_report() const
 				getenv("UPD6383_DLY07DRAM") ? 1 : 0, u32(m_dly07dram_n));
 		logerror("upd6383: ★ UPD6383_NOTA0C = %d: ACT-0x0C words excused from the blanket tempA "
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
+		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
+				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
 					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
 			std::string rf;
