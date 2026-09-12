@@ -923,6 +923,7 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFSETTING(   0x0c, "S.Delay + S.Delay (combo: two delays)")
 	PORT_CONFSETTING(   0x0d, "PEQ + S.Delay (combo: emphasis biquad -> delay)")
 	PORT_CONFSETTING(   0x0e, "Reverb (reconstructed from decoded C-RAM; preview)")
+	PORT_CONFSETTING(   0x0f, "Distortion (AGC waveshaper; measured gains, speculative curve; preview)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------

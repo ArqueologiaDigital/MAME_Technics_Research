@@ -3014,6 +3014,31 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		rv_apg[1] = std::clamp(q22v(m_dsp1->cram_read(0xA1)) * cs * 0.5, 0.3, 0.75);
 		rv_wet = std::clamp(q22v(m_dsp1->cram_read(0xA9)) * cs, 0.15, 0.6);   // output-tail mix
 	}
+	// ---- HLE DISTORTION INSERT: AGC waveshaper (DSPHLE == 15) --------------------------
+	// prog32_distortion.dsm: DRIVE pre-gain (C-RAM 0x00), a class-6 waveshaper nonlinearity,
+	// output VOLUME (C-RAM 0x02), plus an AGC/envelope control source (SRC 0x1C). The DRIVE
+	// and VOLUME gains are MEASURED from the decoded C-RAM; the clip curve is a labelled
+	// SPECULATIVE stand-in (tanh) -- the class-6 table base is an OPEN decode, not undumped
+	// (N-DISTORTION-NOT-UNDUMPED-2026-09-12.md). Default OFF.
+	const bool dist_hle = (dsphle == 15);
+	double dist_drive = 0.0, dist_vol = 0.0;
+	if (dist_hle)
+	{
+		auto q22d = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		const double c0 = std::fabs(q22d(m_dsp1->cram_read(0x00)) * cs);   // DRIVE (measured)
+		const double c2 = std::fabs(q22d(m_dsp1->cram_read(0x02)) * cs);   // VOLUME (measured)
+		// Map the decoded DRIVE coeff (cell 0x00) to the shaper pre-gain. The AGC normalises the
+		// signal toward unity, so this directly sets how hard it hits tanh: DISTORTION (curve A)
+		// is the HARDEST clip of the family, so the floor clips aggressively (a near-square tone)
+		// and a larger decoded DRIVE pushes it further toward a full square wave.
+		dist_drive = std::clamp(4.0 + 9.0 * c0, 4.0, 13.0);
+		// VOLUME: the decoded output-level, kept in a sane makeup range.
+		dist_vol = std::clamp(0.25 + 0.75 * c2, 0.25, 1.0);
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3919,6 +3944,32 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			}
 			mix_l = int32_t(((1.0 - rv_wet) * sl + rv_wet * xl) * 32768.0);
 			mix_r = int32_t(((1.0 - rv_wet) * sr + rv_wet * xr) * 32768.0);
+		}
+
+		// ---- HLE DISTORTION INSERT: AGC waveshaper, replaces mix in place -----------------
+		// EXPERIMENTAL, default OFF (dsphle == 15). DRIVE pre-gain and VOLUME are MEASURED from
+		// the decoded C-RAM (see refresh above); the clip curve is a labelled SPECULATIVE tanh
+		// stand-in (the class-6 table base is an open decode, NOT undumped). A slow peak-envelope
+		// follower per channel gives the AGC (SRC 0x1C in the program): it normalises the pre-gain
+		// so the shaper compresses/sustains rather than only railing, which is what "AGC waveshaper"
+		// means. Harmonic generation from the tanh is the validating A/B.
+		if (dist_hle)
+		{
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			// AGC: a slow peak-envelope follower NORMALISES the signal to a roughly constant
+			// level before the shaper (this is what an "AGC waveshaper" does -- it is why the
+			// effect sustains and clips consistently regardless of how loud the note is). A
+			// small floor keeps true silence silent (no noise pumping).
+			m_dist_env_l = std::max(std::fabs(sl), m_dist_env_l * 0.9993);
+			m_dist_env_r = std::max(std::fabs(sr), m_dist_env_r * 0.9993);
+			const double norm_l = sl / (m_dist_env_l + 0.02);   // peak ~1 during a sustained note
+			const double norm_r = sr / (m_dist_env_r + 0.02);
+			// DRIVE (decoded) sets how hard the normalised signal hits the shaper; tanh is the
+			// labelled SPECULATIVE clip curve. VOLUME (decoded) is the output makeup gain.
+			const double wl = std::tanh(norm_l * dist_drive) * dist_vol;
+			const double wr = std::tanh(norm_r * dist_drive) * dist_vol;
+			mix_l = int32_t(std::clamp(wl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(wr, -1.0, 1.0) * 32767.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

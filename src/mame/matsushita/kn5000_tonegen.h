@@ -571,6 +571,14 @@ private:
 	upd6383_hle::DelayLine          m_rv_a_r[2]{ {579}, {241} };
 	upd6383_hle::DelayLine          m_rv_pre_l{2400};
 	upd6383_hle::DelayLine          m_rv_pre_r{2400};
+	//  ★ HLE DISTORTION insert (DSPHLE == 15): the DISTORTION program is an "AGC waveshaper"
+	//  (prog32_distortion.dsm): DRIVE pre-gain (C-RAM 0x00), a class-6 waveshaper nonlinearity,
+	//  output VOLUME (C-RAM 0x02), with an AGC/envelope control source (SRC 0x1C). The DRIVE and
+	//  VOLUME gains are MEASURED from the decoded C-RAM; the clip transfer curve is a labelled
+	//  SPECULATIVE stand-in (the class-6 table base is an open decode -- see
+	//  N-DISTORTION-NOT-UNDUMPED-2026-09-12.md: it is NOT undumped, just not yet pinned). These
+	//  per-channel peak-envelope followers implement the AGC.
+	double                          m_dist_env_l = 0.0, m_dist_env_r = 0.0;
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
