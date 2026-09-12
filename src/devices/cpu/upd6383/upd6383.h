@@ -1602,6 +1602,7 @@ private:
 	u64  m_src00_coef_n = 0;
 	//  §161: delay words whose ACT-07 store was re-aimed off the direction field.
 	u64  m_dlystore_fix_n = 0;
+	u64  m_dly07dram_n = 0;         // UPD6383_DLY07DRAM: re-aimed delay-word ACT-07 stores sent to D-RAM
 	//  §164 read-only probe: per-D-RAM-cell ramp census (range AND change count --
 	//  a range alone cannot distinguish a ramp from two alternating constants).
 	s32  m_rampmin[0x100] = {}, m_rampmax[0x100] = {}, m_rampprev[0x100] = {};

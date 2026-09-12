@@ -4928,7 +4928,27 @@ void upd6383_device::exec_alu(u64 word)
 			//  word and cannot leak into the five sites mask bit 23 controls.
 			const bool xb_wr = xb_route() && src == 0x03 && mode07 == 1;
 			if (xb_wr) m_xb_wr_dram_n++;
-			store_mode(mode07, u8(d07), u32(L), 3, xb_wr);             // §99, site 3
+			//  ★ DIAGNOSTIC (UPD6383_DLY07DRAM, default OFF): a delay-escape word's
+			//  ACT-07 store, once §161 has re-aimed its INDEX at the pointer, still
+			//  lands in the mode-1 REGISTER FILE (mask bit 23), which no operand fetch
+			//  reads -- L = mem[ptr] reads D-RAM.  So CHORUS's four `880.1.20.2C7'
+			//  READs store their published tap datum into m_rf[0x50..0x53] and the
+			//  next word reads m_dram[0x50..0x53] = 0: the datum is DEAD on the READ
+			//  word (dsp/analysis/N-DLYSEED2-CHORUS-CONFRONT-2026-09-12.md §4), and the
+			//  HLE chorus needs it at the following words.  The pointer names a D-RAM
+			//  cell everywhere else in this device, so with the arm on the re-aimed
+			//  store goes to D-RAM.  Observation-only; nothing else changes.
+			//  ⛔ RUN AND REFUTED the same day (chorus + flanger seeded traces, arm
+			//  on/off, N-DLYSEED2-CHORUS-CONFRONT §7): the datum does persist in
+			//  0x50..0x53, but the word after each READ is `102.A.xx.4C8' = SRC 0x13
+			//  (the TABLE source), which reads 0 in both arms, and the cell is program
+			//  STATE -- the chorus's next-frame w11 (`082.2.00.1C0', SRC 0x07) adds it
+			//  into the TAP-OFFSET accumulator, and the flanger's 0x51 normally holds
+			//  0x7FFFFF, which the arm overwrites.  Kept as a diagnostic with its record.
+			static const bool dly07dram = getenv("UPD6383_DLY07DRAM") != nullptr;
+			const bool dly07 = dly07dram && esc_dly && mode07 == 1 && d07_ptr;
+			if (dly07) m_dly07dram_n++;
+			store_mode(mode07, u8(d07), u32(L), 3, xb_wr || dly07);   // §99, site 3
 		}
 		//  ★★★ §213: THE BOOKKEEPING NOW FOLLOWS THE STORE, NOT THE VISIT.
 		//  These four lines used to sit outside the `else' with no braces around it,
@@ -8306,6 +8326,9 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
 				"(mask bit 61 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
+		logerror("upd6383: ★ UPD6383_DLY07DRAM = %d: re-aimed delay-word ACT-07 stores sent to "
+				"D-RAM instead of the mode-1 register file: FIRED %u times\n",
+				getenv("UPD6383_DLY07DRAM") ? 1 : 0, u32(m_dly07dram_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
 					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
 			std::string rf;
