@@ -3039,6 +3039,196 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		// VOLUME: the decoded output-level, kept in a sane makeup range.
 		dist_vol = std::clamp(0.25 + 0.75 * c2, 0.25, 1.0);
 	}
+	// ==== HLE EXTRA EFFECTS (DSPHLE 0x10..0x19): refresh decoded params once per update ====
+	// Each reconstructs a program's decoded TOPOLOGY driven by its C-RAM cells. Unlike the 15
+	// intervention-pinned effects, most panel->cell ROLE mappings here are position-decoded
+	// (INFERRED) per the disassembly, so these are labelled PREVIEWS; cells/lengths that ARE
+	// measured (LFO/osc rates, multi-tap delay times, gated-reverb line lengths) are used directly.
+	auto q22x = [](u32 v) -> double {
+		int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+		return double(s) / 4194304.0; };
+	const bool   x_bit1 = (dspcfg & 2) != 0;
+	const double x_cs   = x_bit1 ? 1.0 : 2.0;                 // operand -> cell scale
+	const double sr48   = double(STREAM_RATE) / 44100.0;      // 44.1k sample counts -> stream rate
+	const double TWO_PI = 6.283185307179586, PI_C = 3.141592653589793;
+	auto rate_hz = [&](u8 cell) -> double {                   // LFO/osc rate: inc*44100/2^23
+		return double(m_dsp1->cram_read(cell) & 0xffffff) * x_cs * 44100.0 / 8388608.0; };
+
+	// --- EXCITER (0x11, prog35): high band -> tanh (adds upper harmonics) -> +dry. DRIVE=0x00,
+	//     +dry mix=0x09 (INFERRED). One-pole LP splits the band; tanh is the speculative shaper.
+	const bool exc_hle = (dsphle == 0x11);
+	double exc_drive = 0.0, exc_mix = 0.0;
+	if (exc_hle)
+	{
+		exc_drive = std::clamp(3.0 + 24.0 * std::fabs(q22x(m_dsp1->cram_read(0x00)) * x_cs), 3.0, 30.0);
+		exc_mix   = std::clamp(0.30 + 0.70 * std::fabs(q22x(m_dsp1->cram_read(0x09)) * x_cs), 0.30, 1.0);
+		m_exc_lp_l.set_damping(0.64); m_exc_lp_r.set_damping(0.64);   // ~3.5 kHz band split
+	}
+	// --- ENHANCER (0x10, prog03): high-shelf emphasis + all-pass phase + the decoded ~350 ms slap
+	//     (DELAY L = C-RAM 0x0B = 15435 samp, PROVEN). HIGH MIX=0x09 (INFERRED). Preview.
+	const bool enh_hle = (dsphle == 0x10);
+	int    enh_dN = 0; double enh_hi = 0.0, enh_wet = 0.0;
+	if (enh_hle)
+	{
+		enh_dN  = std::clamp(int(double(m_dsp1->cram_read(0x0B) & 0xffffff) * x_cs * sr48 + 0.5), 1, 34999);
+		enh_hi  = std::clamp(0.5 + 2.0 * std::fabs(q22x(m_dsp1->cram_read(0x09)) * x_cs), 0.5, 3.0);  // HIGH MIX boost
+		enh_wet = 0.25;                                           // modest slap blend (DELAY is the anchor)
+		m_enh_lp_l.set_damping(0.64); m_enh_lp_r.set_damping(0.64);
+		m_enh_ap_l.set_a(0.6); m_enh_ap_r.set_a(0.6);
+	}
+	// --- AUTO WAH (0x12, prog52): NO LFO -- input envelope sweeps a resonant SVF cutoff. RESONANCE,
+	//     MANUAL, SWEEP are SPECULATIVE (not pinned), so fixed musical defaults. Preview.
+	const bool wah_hle = (dsphle == 0x12);
+	double wah_q = 0.0;
+	if (wah_hle) { wah_q = 0.85; }                               // resonance (SVF feedback)
+	// --- AUTO PAN (0x13, prog48): quadrature LFO (rate = C-RAM 0x01, MEASURED ~1.2 Hz) pans L/R.
+	const bool pan_hle = (dsphle == 0x13);
+	double pan_inc = 0.0, pan_depth = 0.0;
+	if (pan_hle)
+	{
+		pan_inc   = std::clamp(rate_hz(0x01), 0.05, 12.0) / double(STREAM_RATE);
+		pan_depth = std::clamp(0.4 + 0.6 * std::fabs(q22x(m_dsp1->cram_read(0x00)) * x_cs), 0.4, 1.0);
+	}
+	// --- RING MODULATOR (0x14, prog54): carrier osc (rate = C-RAM 0x00, MEASURED ~1 kHz) x signal.
+	const bool ring_hle = (dsphle == 0x14);
+	double ring_inc = 0.0;
+	if (ring_hle) { ring_inc = std::clamp(rate_hz(0x00), 20.0, 4000.0) / double(STREAM_RATE); }
+	// --- MULTI TAP DELAY (0x15, prog10): 4 taps at the MEASURED host delays 6000/12000/18000/24000
+	//     samp @44.1k, each panned; feedback 0x00, HIGH DAMP 0x08, tap gains 0x03..0x06 (INFERRED).
+	const bool mtap_hle = (dsphle == 0x15);
+	double mtap_fb = 0.0, mtap_g[4] = { 0, 0, 0, 0 }; int mtap_t[4] = { 0, 0, 0, 0 };
+	if (mtap_hle)
+	{
+		const double base[4] = { 6000.0, 12000.0, 18000.0, 24000.0 };
+		for (int i = 0; i < 4; i++) mtap_t[i] = std::clamp(int(base[i] * sr48 + 0.5), 1, 27999);
+		mtap_fb = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x00)) * x_cs), 0.0, 0.7);
+		for (int i = 0; i < 4; i++)
+			mtap_g[i] = std::clamp(0.4 + 0.6 * std::fabs(q22x(m_dsp1->cram_read(u8(0x03 + i))) * x_cs), 0.2, 1.0);
+		m_mtap_dmp_l.set_damping(0.35); m_mtap_dmp_r.set_damping(0.35);
+	}
+	// --- COMPRESSOR (0x16, prog36): square-law detector -> attack/release one-pole -> gain computer.
+	//     THRESHOLD/RATIO = 0x04 (gain-computer op0x72), ATTACK/RELEASE = 0x02 smoother (INFERRED).
+	const bool comp_hle = (dsphle == 0x16);
+	double comp_thr = 0.0, comp_slope = 0.0, comp_atk = 0.0, comp_rel = 0.0, comp_makeup = 0.0;
+	if (comp_hle)
+	{
+		comp_thr   = std::clamp(0.03 + 0.25 * std::fabs(q22x(m_dsp1->cram_read(0x04)) * x_cs), 0.03, 0.5);
+		comp_slope = 0.75;                                       // 1 - 1/ratio (RATIO ~4:1); SPECULATIVE
+		const double tc = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x02)) * x_cs), 0.0, 1.0);
+		comp_atk   = std::exp(-1.0 / (double(STREAM_RATE) * (0.002 + 0.02 * tc)));   // 2..22 ms
+		comp_rel   = std::exp(-1.0 / (double(STREAM_RATE) * 0.15));                  // 150 ms
+		comp_makeup = 1.0 / (comp_thr + 0.2);                   // bring level back up after compression
+		comp_makeup = std::clamp(comp_makeup, 1.0, 4.0);
+	}
+	// --- GATED REVERB (0x17, prog08): reverb tank (MEASURED line lengths) + envelope gate on the tail.
+	//     HIGH DAMP = 0x07, GATE TIME = 0x15 (INFERRED). Dedicated comb/all-pass lines (own lengths).
+	const bool grev_hle = (dsphle == 0x17);
+	double grev_fb = 0.0, grev_apg = 0.0; int grev_cd[4] = { 0, 0, 0, 0 }, grev_ad[2] = { 0, 0 };
+	double grev_gatethr = 0.0, grev_rel = 0.0;
+	if (grev_hle)
+	{
+		const double cb[4] = { 680.0, 800.0, 1440.0, 1800.0 }, ab[2] = { 458.0, 100.0 };  // measured @44.1k
+		for (int i = 0; i < 4; i++) grev_cd[i] = std::clamp(int(cb[i] * sr48 + 0.5), 1, 2099);
+		for (int i = 0; i < 2; i++) grev_ad[i] = std::clamp(int(ab[i] * sr48 + 0.5), 1, 559);
+		grev_fb  = 0.78;                                         // fixed short-tail feedback (gate cuts it)
+		grev_apg = 0.5;
+		const double damp = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x07)) * x_cs) * 0.5, 0.0, 0.7);
+		for (int i = 0; i < 4; i++) { m_grev_d_l[i].set_damping(damp); m_grev_d_r[i].set_damping(damp); }
+		grev_gatethr = 0.02;                                    // input level that holds the gate open
+		// GATE TIME cell 0x15 -> gate release time (how fast the tail is chopped)
+		const double gt = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x15)) * x_cs), 0.0, 1.0);
+		grev_rel = std::exp(-1.0 / (double(STREAM_RATE) * (0.02 + 0.15 * gt)));        // 20..170 ms
+	}
+	// --- MIX UP (0x18, prog56): three LFOs (MEASURED 3.0/5.2/7.4 Hz = cells 0x00/0x02/0x04) modulate
+	//     a short (~9 ms) delay; DEPTH = op0x66 0x0A (INFERRED). Rich multi-LFO chorus.
+	const bool mix_hle = (dsphle == 0x18);
+	double mix_inc[3] = { 0, 0, 0 }, mix_depth = 0.0, mix_base = 0.0, mix_wet = 0.0;
+	if (mix_hle)
+	{
+		mix_inc[0] = std::clamp(rate_hz(0x00), 0.05, 12.0) / double(STREAM_RATE);
+		mix_inc[1] = std::clamp(rate_hz(0x02), 0.05, 12.0) / double(STREAM_RATE);
+		mix_inc[2] = std::clamp(rate_hz(0x04), 0.05, 12.0) / double(STREAM_RATE);
+		mix_depth  = 120.0 * sr48;                              // ~2.7 ms sweep (short chorus)
+		mix_base   = 400.0 * sr48;                              // ~9 ms base (the decoded line length)
+		mix_wet    = std::clamp(0.3 + 0.6 * std::fabs(q22x(m_dsp1->cram_read(0x0A)) * x_cs), 0.3, 0.9);
+	}
+	// --- ROTARY SPEAKER (0x19, prog15): crossover (bass/treble) + two Doppler-swept+AM rotors. The
+	//     rotor ROTATION RATE is NOT in the program (host-supplied, undecoded), so CANONICAL Leslie
+	//     speeds are used (SPECULATIVE); the Doppler delays (7.26/3.63 ms) are MEASURED. DRIVE=0x00.
+	const bool rot_hle = (dsphle == 0x19);
+	double rot_tinc = 0.0, rot_binc = 0.0, rot_tdep = 0.0, rot_bdep = 0.0; int rot_tbase = 0, rot_bbase = 0;
+	if (rot_hle)
+	{
+		rot_tinc  = 6.8 / double(STREAM_RATE);                  // treble horn ~6.8 Hz (fast), canonical
+		rot_binc  = 5.7 / double(STREAM_RATE);                  // bass drum ~5.7 Hz (fast), canonical
+		rot_tbase = int(320.0 * sr48 + 0.5);                    // measured Doppler line (7.26 ms)
+		rot_bbase = int(320.0 * sr48 + 0.5);
+		rot_tdep  = 40.0 * sr48;                                // Doppler depth (vibrato)
+		rot_bdep  = 24.0 * sr48;
+		m_rot_lp_l.set_damping(0.88); m_rot_lp_r.set_damping(0.88);   // ~800 Hz crossover
+	}
+	// ==== HLE PEQ+X and AUTO-WAH+DELAY combos (DSPHLE 0x1a..0x22) ======================
+	// Each chains a PEQ emphasis biquad with a 2nd block (the disasm pins the PEQ section base:
+	// FREQ = base+3, GAIN = base+1). Reuses the single-select members (m_eq[0]=PEQ, m_eq[1]=tone,
+	// the delay/chorus/flanger/vibrato lines, the compressor/distortion state). Labelled previews.
+	const bool pc_hle   = (dsphle == 0x1a);   // PEQ + chorus (prog71, PEQ base 0x02)
+	const bool pf_hle   = (dsphle == 0x1b);   // PEQ + flanger (prog73, base 0x04)
+	const bool pv_hle   = (dsphle == 0x1c);   // PEQ + vibrato (prog74, base 0x04)
+	const bool pcmp_hle = (dsphle == 0x1d);   // PEQ + compressor (prog75, base 0x00)
+	const bool pcd_hle  = (dsphle == 0x1e);   // PEQ + compr + distortion (prog96)
+	const bool pco_hle  = (dsphle == 0x1f);   // PEQ + compr + overdrive (prog97)
+	const bool pdd_hle  = (dsphle == 0x20);   // PEQ + distortion + delay (prog98)
+	const bool pod_hle  = (dsphle == 0x21);   // PEQ + overdrive + delay (prog99)
+	const bool awd_hle  = (dsphle == 0x22);   // auto-wah + delay (prog70, no PEQ)
+	const bool cmbx = pc_hle || pf_hle || pv_hle || pcmp_hle || pcd_hle || pco_hle || pdd_hle || pod_hle || awd_hle;
+	double cx_cinc = 0.0, cx_depth = 0.0, cx_wet = 0.0, cx_fb = 0.0;        // modulation 2nd-block
+	double cx_drive = 0.0, cx_vol = 0.0; bool cx_tone = false;             // dist/overdrive 2nd-block
+	double cx_thr = 0.0, cx_slope = 0.0, cx_atk = 0.0, cx_rel = 0.0, cx_mk = 0.0;  // compressor
+	int    cx_dN = 0; double cx_dfb = 0.0; bool cx_peq = false, cx_wah = false;
+	if (cmbx)
+	{
+		// PEQ emphasis biquad design (same RBJ reconstruction as the standalone PEQ / PEQ+S.DELAY),
+		// loaded into m_eq[0]; section base differs per program.
+		auto design_peq = [&](u8 base) {
+			double c1 = q22x(m_dsp1->cram_read(u8(base + 1))) * x_cs;   // GAIN = base+1
+			double c3 = q22x(m_dsp1->cram_read(u8(base + 3))) * x_cs;   // FREQ = base+3 (2cos w0)
+			const double nrm = (std::fabs(c3) <= 1.0) ? 2.0 : 1.0; c1 *= nrm; c3 *= nrm;
+			const double cw = std::clamp(c3 * 0.5, -0.9995, 0.9995);
+			const double bc[5] = { 0.9954, 0.99055, 0.98, 0.95595, 0.89665 };
+			const double bg[5] = { 465.8, 225.8, 114.2, 58.3, 30.5 };
+			double G = bg[4], best = 1e9;
+			for (int i = 0; i < 5; i++) { const double d = std::fabs(cw - bc[i]); if (d < best) { best = d; G = bg[i]; } }
+			const double asq = std::max(1.0 + G * (c1 - 0.5), 0.02);
+			const double A = std::sqrt(asq), w0 = std::acos(cw), al = std::sin(w0) / 4.0;
+			const double b0 = 1.0 + al * A, b1 = -2.0 * cw, b2 = 1.0 - al * A;
+			const double a0 = 1.0 + al / A, a1 = -2.0 * cw, a2 = 1.0 - al / A;
+			m_eq_l[0].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+			m_eq_r[0].set_coeffs(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0, 1.0);
+		};
+		auto comp_setup = [&](u8 thrcell) {
+			cx_thr = std::clamp(0.03 + 0.25 * std::fabs(q22x(m_dsp1->cram_read(thrcell)) * x_cs), 0.03, 0.5);
+			cx_slope = 0.75;
+			cx_atk = std::exp(-1.0 / (double(STREAM_RATE) * 0.006));
+			cx_rel = std::exp(-1.0 / (double(STREAM_RATE) * 0.15));
+			cx_mk = std::clamp(1.0 / (cx_thr + 0.2), 1.0, 4.0);
+		};
+		auto delay_setup = [&]() {   // delay from descriptor 0x26 (single-delay convention)
+			const double draw = double(m_dsp1->dsc_read(0x26));
+			const double n441 = x_bit1 ? draw : 2.0 * draw;
+			cx_dN = std::clamp(int(n441 * double(STREAM_RATE) / 44100.0 + 0.5), 1, 34999);
+			cx_dfb = 0.35;
+		};
+		if (pc_hle)   { cx_peq = true; design_peq(0x02); cx_cinc = std::clamp(rate_hz(0x00),0.05,12.0)/double(STREAM_RATE); cx_depth = 200.0*sr48; cx_wet = 0.5; }
+		if (pf_hle)   { cx_peq = true; design_peq(0x04); cx_cinc = std::clamp(rate_hz(0x00),0.02,12.0)/double(STREAM_RATE); cx_depth = 120.0*sr48; cx_fb = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x0E))*x_cs)*0.5,0.0,0.9); }
+		if (pv_hle)   { cx_peq = true; design_peq(0x04); cx_cinc = std::clamp(rate_hz(0x00),0.02,12.0)/double(STREAM_RATE); cx_depth = 180.0*sr48; cx_wet = 1.0; }
+		if (pcmp_hle) { cx_peq = true; design_peq(0x00); comp_setup(0x0A); }
+		if (pcd_hle)  { cx_peq = true; design_peq(0x00); comp_setup(0x0A); cx_drive = std::clamp(4.0+9.0*std::fabs(q22x(m_dsp1->cram_read(0x0F))*x_cs),4.0,13.0); cx_vol = 0.8; }
+		if (pco_hle)  { cx_peq = true; design_peq(0x00); comp_setup(0x0A); cx_drive = std::clamp(3.0+7.0*std::fabs(q22x(m_dsp1->cram_read(0x0F))*x_cs),3.0,10.0); cx_vol = 0.8; cx_tone = true; }
+		if (pdd_hle)  { cx_peq = true; design_peq(0x00); cx_drive = std::clamp(4.0+9.0*std::fabs(q22x(m_dsp1->cram_read(0x06))*x_cs),4.0,13.0); cx_vol = 0.8; delay_setup(); }
+		if (pod_hle)  { cx_peq = true; design_peq(0x00); cx_drive = std::clamp(3.0+7.0*std::fabs(q22x(m_dsp1->cram_read(0x06))*x_cs),3.0,10.0); cx_vol = 0.8; cx_tone = true; delay_setup(); }
+		if (awd_hle)  { cx_wah = true; delay_setup(); }
+		if (cx_tone) { m_eq_l[1].set_coeffs(0.30,0.30,0.0,-0.40,0.0,1.0); m_eq_r[1].set_coeffs(0.30,0.30,0.0,-0.40,0.0,1.0); }  // ~4 kHz tone LP
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3970,6 +4160,204 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const double wr = std::tanh(norm_r * dist_drive) * dist_vol;
 			mix_l = int32_t(std::clamp(wl, -1.0, 1.0) * 32767.0);
 			mix_r = int32_t(std::clamp(wr, -1.0, 1.0) * 32767.0);
+		}
+		// ==== HLE EXTRA EFFECTS inserts (DSPHLE 0x10..0x19): reconstruct each decoded topology ====
+		// Default OFF; labelled previews (see the refresh blocks above for the decode/grading).
+		if (exc_hle)   // EXCITER: high band -> tanh (upper harmonics) -> added to the dry signal
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double hl = xl - m_exc_lp_l.process_one(xl), hr = xr - m_exc_lp_r.process_one(xr);
+			const double yl = xl + exc_mix * std::tanh(hl * exc_drive);
+			const double yr = xr + exc_mix * std::tanh(hr * exc_drive);
+			mix_l = int32_t(std::clamp(yl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(yr, -1.0, 1.0) * 32767.0);
+		}
+		if (enh_hle)   // ENHANCER: high-shelf emphasis + all-pass phase + decoded ~350 ms slap
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double ehl = xl + (enh_hi - 1.0) * (xl - m_enh_lp_l.process_one(xl));
+			const double ehr = xr + (enh_hi - 1.0) * (xr - m_enh_lp_r.process_one(xr));
+			const double phl = m_enh_ap_l.process_one(ehl), phr = m_enh_ap_r.process_one(ehr);
+			const double dl = m_enh_l.read(double(enh_dN)), dr = m_enh_r.read(double(enh_dN));
+			m_enh_l.write(phl); m_enh_r.write(phr);
+			mix_l = int32_t(std::clamp(phl + enh_wet * dl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(phr + enh_wet * dr, -1.0, 1.0) * 32767.0);
+		}
+		if (wah_hle)   // AUTO WAH: input envelope sweeps a resonant state-variable filter cutoff
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			m_wah_env_l = std::max(std::fabs(xl), m_wah_env_l * 0.9995);
+			m_wah_env_r = std::max(std::fabs(xr), m_wah_env_r * 0.9995);
+			const double fcl = 300.0 + std::clamp(m_wah_env_l, 0.0, 1.0) * 3500.0;
+			const double fcr = 300.0 + std::clamp(m_wah_env_r, 0.0, 1.0) * 3500.0;
+			const double fl = 2.0 * std::sin(PI_C * std::min(fcl, 0.45 * STREAM_RATE) / double(STREAM_RATE));
+			const double fr = 2.0 * std::sin(PI_C * std::min(fcr, 0.45 * STREAM_RATE) / double(STREAM_RATE));
+			const double dmp = 1.0 - wah_q;
+			m_wah_lp_l += fl * m_wah_bp_l; const double hpl = xl - m_wah_lp_l - dmp * m_wah_bp_l; m_wah_bp_l += fl * hpl;
+			m_wah_lp_r += fr * m_wah_bp_r; const double hpr = xr - m_wah_lp_r - dmp * m_wah_bp_r; m_wah_bp_r += fr * hpr;
+			mix_l = int32_t(std::clamp(m_wah_bp_l, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(m_wah_bp_r, -1.0, 1.0) * 32767.0);
+		}
+		if (pan_hle)   // AUTO PAN: quadrature LFO pans L/R in antiphase
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double s = std::sin(TWO_PI * m_pan_phase);
+			m_pan_phase += pan_inc; if (m_pan_phase >= 1.0) m_pan_phase -= 1.0;
+			const double gl = 1.0 - pan_depth * 0.5 * (1.0 - s), gr = 1.0 - pan_depth * 0.5 * (1.0 + s);
+			mix_l = int32_t(std::clamp(xl * gl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr * gr, -1.0, 1.0) * 32767.0);
+		}
+		if (ring_hle)  // RING MODULATOR: multiply by a carrier oscillator (~1 kHz) -> sidebands
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double c = std::sin(TWO_PI * m_ring_phase);
+			m_ring_phase += ring_inc; if (m_ring_phase >= 1.0) m_ring_phase -= 1.0;
+			mix_l = int32_t(std::clamp(xl * c, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr * c, -1.0, 1.0) * 32767.0);
+		}
+		if (mtap_hle)  // MULTI TAP DELAY: 4 taps at the measured 136/272/408/544 ms, alternately panned
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			double sl = 0.0, sr = 0.0;
+			for (int i = 0; i < 4; i++)
+			{
+				const double t = m_mtap_l.read(double(mtap_t[i])), u = m_mtap_r.read(double(mtap_t[i]));
+				const double panl = (i & 1) ? 0.4 : 1.0, panr = (i & 1) ? 1.0 : 0.4;   // alternate L/R
+				sl += mtap_g[i] * panl * t; sr += mtap_g[i] * panr * u;
+			}
+			m_mtap_l.write(xl + mtap_fb * m_mtap_dmp_l.process_one(m_mtap_l.read(double(mtap_t[3]))));
+			m_mtap_r.write(xr + mtap_fb * m_mtap_dmp_r.process_one(m_mtap_r.read(double(mtap_t[3]))));
+			mix_l = int32_t(std::clamp(xl + 0.5 * sl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr + 0.5 * sr, -1.0, 1.0) * 32767.0);
+		}
+		if (comp_hle)  // COMPRESSOR: square-law detector -> attack/release smoother -> gain computer
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double rl = xl * xl, rr = xr * xr;
+			const double cl = (rl > m_comp_env_l) ? comp_atk : comp_rel;
+			m_comp_env_l = rl + cl * (m_comp_env_l - rl);
+			const double cr = (rr > m_comp_env_r) ? comp_atk : comp_rel;
+			m_comp_env_r = rr + cr * (m_comp_env_r - rr);
+			auto gain = [&](double e2) -> double {
+				const double e = std::sqrt(std::max(e2, 0.0));
+				if (e <= comp_thr || e < 1e-6) return comp_makeup;
+				return comp_makeup * std::pow(comp_thr / e, comp_slope); };
+			mix_l = int32_t(std::clamp(xl * gain(m_comp_env_l), -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr * gain(m_comp_env_r), -1.0, 1.0) * 32767.0);
+		}
+		if (grev_hle)  // GATED REVERB: reverb tank (measured lengths) + envelope gate chopping the tail
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double ein = std::max(std::fabs(xl), std::fabs(xr));
+			m_grev_env = std::max(ein, m_grev_env * 0.999);
+			const double target = (m_grev_env > grev_gatethr) ? 1.0 : 0.0;
+			if (target >= m_grev_gain) m_grev_gain = target;                      // open instantly
+			else m_grev_gain = target + grev_rel * (m_grev_gain - target);        // GATE TIME release
+			double wl = 0.0, wr = 0.0;
+			for (int c = 0; c < 4; c++)
+			{
+				const double tl = m_grev_c_l[c].read(double(grev_cd[c])), tr = m_grev_c_r[c].read(double(grev_cd[c]));
+				m_grev_c_l[c].write(xl + grev_fb * m_grev_d_l[c].process_one(tl));
+				m_grev_c_r[c].write(xr + grev_fb * m_grev_d_r[c].process_one(tr));
+				wl += tl; wr += tr;
+			}
+			for (int a = 0; a < 2; a++)
+			{
+				const double dl = m_grev_a_l[a].read(double(grev_ad[a])), dr = m_grev_a_r[a].read(double(grev_ad[a]));
+				const double yl = -grev_apg * wl + dl, yr = -grev_apg * wr + dr;
+				m_grev_a_l[a].write(wl + grev_apg * yl); m_grev_a_r[a].write(wr + grev_apg * yr);
+				wl = yl; wr = yr;
+			}
+			mix_l = int32_t(std::clamp(xl + 0.6 * m_grev_gain * wl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr + 0.6 * m_grev_gain * wr, -1.0, 1.0) * 32767.0);
+		}
+		if (mix_hle)   // MIX UP: three LFOs (3.0/5.2/7.4 Hz) modulate a short delay -- rich chorus
+		{
+			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			const double s0 = std::sin(TWO_PI * m_mix_ph[0]), s1 = std::sin(TWO_PI * m_mix_ph[1]), s2 = std::sin(TWO_PI * m_mix_ph[2]);
+			for (int i = 0; i < 3; i++) { m_mix_ph[i] += mix_inc[i]; if (m_mix_ph[i] >= 1.0) m_mix_ph[i] -= 1.0; }
+			const double tapl = mix_base + mix_depth * (s0 + s1) * 0.5, tapr = mix_base + mix_depth * (s0 + s2) * 0.5;
+			const double dl = m_mix_l.read(tapl), dr = m_mix_r.read(tapr);
+			m_mix_l.write(xl); m_mix_r.write(xr);
+			mix_l = int32_t(std::clamp(xl * (1.0 - mix_wet) + dl * mix_wet, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr * (1.0 - mix_wet) + dr * mix_wet, -1.0, 1.0) * 32767.0);
+		}
+		if (rot_hle)   // ROTARY SPEAKER: crossover + two Doppler-swept, amplitude-modulated rotors
+		{
+			const double x = 0.5 * (double(mix_l) + double(mix_r)) / 32768.0;
+			const double low = m_rot_lp_l.process_one(x), high = x - low;
+			const double ts = std::sin(TWO_PI * m_rot_tph), bs = std::sin(TWO_PI * m_rot_bph);
+			m_rot_tph += rot_tinc; if (m_rot_tph >= 1.0) m_rot_tph -= 1.0;
+			m_rot_bph += rot_binc; if (m_rot_bph >= 1.0) m_rot_bph -= 1.0;
+			const double ttap = rot_tbase + rot_tdep * 0.5 * (1.0 + ts), btap = rot_bbase + rot_bdep * 0.5 * (1.0 + bs);
+			m_rot_t_l.write(high); m_rot_t_r.write(high); m_rot_b_l.write(low); m_rot_b_r.write(low);
+			const double thl = m_rot_t_l.read(ttap), thr = m_rot_t_r.read(ttap + 18.0);
+			const double bl = m_rot_b_l.read(btap), br = m_rot_b_r.read(btap + 10.0);
+			const double yl = thl * (0.6 + 0.4 * ts) + bl * (0.7 + 0.3 * bs);
+			const double yr = thr * (0.6 - 0.4 * ts) + br * (0.7 - 0.3 * bs);
+			mix_l = int32_t(std::clamp(yl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(yr, -1.0, 1.0) * 32767.0);
+		}
+		if (cmbx)      // PEQ+X / auto-wah+delay combos: emphasis biquad -> 2nd block(s), chained
+		{
+			double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
+			if (cx_peq) { xl = m_eq_l[0].process_one(xl); xr = m_eq_r[0].process_one(xr); }   // PEQ stage
+			if (pc_hle)          // chorus (quadrature LFO-swept delay)
+			{
+				const double s = std::sin(TWO_PI * m_cho_phase), cq = std::cos(TWO_PI * m_cho_phase);
+				m_cho_phase += cx_cinc; if (m_cho_phase >= 1.0) m_cho_phase -= 1.0;
+				const double dl = m_cho_l.read(cx_depth * (1.0 + s) + 2.0), dr = m_cho_r.read(cx_depth * (1.0 + cq) + 2.0);
+				m_cho_l.write(xl); m_cho_r.write(xr);
+				xl = xl * (1.0 - cx_wet) + dl * cx_wet; xr = xr * (1.0 - cx_wet) + dr * cx_wet;
+			}
+			else if (pf_hle)     // flanger (swept delay + feedback)
+			{
+				const double s = std::sin(TWO_PI * m_fl_phase); m_fl_phase += cx_cinc; if (m_fl_phase >= 1.0) m_fl_phase -= 1.0;
+				const double tap = cx_depth * (1.0 + s) + 2.0;
+				const double dl = m_fl_l.read(tap), dr = m_fl_r.read(tap);
+				m_fl_l.write(xl + cx_fb * dl); m_fl_r.write(xr + cx_fb * dr);
+				xl = 0.5 * (xl + dl); xr = 0.5 * (xr + dr);
+			}
+			else if (pv_hle)     // vibrato (100% wet swept delay = pitch modulation)
+			{
+				const double s = std::sin(TWO_PI * m_vib_phase); m_vib_phase += cx_cinc; if (m_vib_phase >= 1.0) m_vib_phase -= 1.0;
+				const double tap = cx_depth * (1.0 + s) + 2.0;
+				const double dl = m_vib_l.read(tap), dr = m_vib_r.read(tap);
+				m_vib_l.write(xl); m_vib_r.write(xr);
+				xl = dl; xr = dr;
+			}
+			if (pcmp_hle || pcd_hle || pco_hle)    // compressor
+			{
+				const double rl = xl * xl, rr = xr * xr;
+				const double cl = (rl > m_comp_env_l) ? cx_atk : cx_rel; m_comp_env_l = rl + cl * (m_comp_env_l - rl);
+				const double cr = (rr > m_comp_env_r) ? cx_atk : cx_rel; m_comp_env_r = rr + cr * (m_comp_env_r - rr);
+				auto g = [&](double e2) -> double { const double e = std::sqrt(std::max(e2, 0.0)); return (e <= cx_thr || e < 1e-6) ? cx_mk : cx_mk * std::pow(cx_thr / e, cx_slope); };
+				xl *= g(m_comp_env_l); xr *= g(m_comp_env_r);
+			}
+			if (pcd_hle || pco_hle || pdd_hle || pod_hle)    // distortion / overdrive waveshaper
+			{
+				xl = std::tanh(xl * cx_drive) * cx_vol; xr = std::tanh(xr * cx_drive) * cx_vol;
+				if (cx_tone) { xl = m_eq_l[1].process_one(xl); xr = m_eq_r[1].process_one(xr); }   // overdrive tone
+			}
+			if (cx_wah)    // auto-wah: envelope-swept resonant SVF
+			{
+				m_wah_env_l = std::max(std::fabs(xl), m_wah_env_l * 0.9995);
+				m_wah_env_r = std::max(std::fabs(xr), m_wah_env_r * 0.9995);
+				const double fcl = 300.0 + std::clamp(m_wah_env_l, 0.0, 1.0) * 3500.0, fcr = 300.0 + std::clamp(m_wah_env_r, 0.0, 1.0) * 3500.0;
+				const double fl = 2.0 * std::sin(PI_C * std::min(fcl, 0.45 * STREAM_RATE) / double(STREAM_RATE));
+				const double fr = 2.0 * std::sin(PI_C * std::min(fcr, 0.45 * STREAM_RATE) / double(STREAM_RATE));
+				m_wah_lp_l += fl * m_wah_bp_l; const double hpl = xl - m_wah_lp_l - 0.15 * m_wah_bp_l; m_wah_bp_l += fl * hpl;
+				m_wah_lp_r += fr * m_wah_bp_r; const double hpr = xr - m_wah_lp_r - 0.15 * m_wah_bp_r; m_wah_bp_r += fr * hpr;
+				xl = m_wah_bp_l; xr = m_wah_bp_r;
+			}
+			if (pdd_hle || pod_hle || awd_hle)    // feedback delay stage
+			{
+				const double dl = m_dly_l.read(double(cx_dN)), dr = m_dly_r.read(double(cx_dN));
+				m_dly_l.write(xl + cx_dfb * dl); m_dly_r.write(xr + cx_dfb * dr);
+				xl = 0.6 * xl + 0.5 * dl; xr = 0.6 * xr + 0.5 * dr;
+			}
+			mix_l = int32_t(std::clamp(xl, -1.0, 1.0) * 32767.0);
+			mix_r = int32_t(std::clamp(xr, -1.0, 1.0) * 32767.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

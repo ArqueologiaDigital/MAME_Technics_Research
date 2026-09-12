@@ -579,6 +579,70 @@ private:
 	//  N-DISTORTION-NOT-UNDUMPED-2026-09-12.md: it is NOT undumped, just not yet pinned). These
 	//  per-channel peak-envelope followers implement the AGC.
 	double                          m_dist_env_l = 0.0, m_dist_env_r = 0.0;
+	//  ★ HLE EXCITER insert (DSPHLE == 0x11): prog35 is structurally OVERDRIVE (DRIVE ->
+	//  class-6 waveshaper -> tone biquad -> +dry). As an aural exciter it isolates the HIGH
+	//  band, waveshapes it to add upper harmonics, and mixes the result back onto the dry
+	//  signal. One-pole per channel splits off the high band; tanh is the (speculative) shaper.
+	upd6383_hle::OnePole            m_exc_lp_l, m_exc_lp_r;   // LP; high band = x - LP(x)
+	//  ★ HLE ENHANCER insert (DSPHLE == 0x10): prog03 = emphasis/damping filters + an all-pass
+	//  phase chain + two ~350 ms DRAM delay lines (DELAY L = C-RAM 0x0B = 15435 samp = 350 ms,
+	//  PROVEN by construction) + output level. A high-shelf emphasis + all-pass phase + the
+	//  decoded slap delay; most panel->cell mappings are INFERRED, so this is a labelled preview.
+	upd6383_hle::DelayLine          m_enh_l{35000};
+	upd6383_hle::DelayLine          m_enh_r{35000};
+	upd6383_hle::AllPass1           m_enh_ap_l, m_enh_ap_r;
+	upd6383_hle::OnePole            m_enh_lp_l, m_enh_lp_r;   // for the high-shelf emphasis split
+	//  ★ HLE AUTO PAN insert (DSPHLE == 0x13): prog48, family am. A quadrature LFO (rate = C-RAM
+	//  cell 0x01, MEASURED ~1.2 Hz) drives L/R gains in antiphase. One shared phase (cycles).
+	double                          m_pan_phase = 0.0;
+	//  ★ HLE RING MODULATOR insert (DSPHLE == 0x14): prog54, family am. Same oscillator kernel as
+	//  auto-pan but at audio rate (carrier = C-RAM cell 0x00, MEASURED ~1 kHz); carrier x signal.
+	double                          m_ring_phase = 0.0;
+	//  ★ HLE AUTO WAH insert (DSPHLE == 0x12): prog52, family filter. NO LFO -- the input ENVELOPE
+	//  sweeps a resonant filter's cutoff (biquad cells 0x00..0x06). Implemented as a state-variable
+	//  filter whose cutoff tracks a per-channel peak envelope; mapping is a labelled preview.
+	double                          m_wah_env_l = 0.0, m_wah_env_r = 0.0;
+	double                          m_wah_lp_l = 0.0, m_wah_lp_r = 0.0;   // SVF low-pass state
+	double                          m_wah_bp_l = 0.0, m_wah_bp_r = 0.0;   // SVF band-pass state
+	//  ★ HLE COMPRESSOR insert (DSPHLE == 0x16): prog36, family dynamics. Square-law level
+	//  detector -> attack/release one-pole smoother (cells 0x02/0x07) -> gain computer
+	//  (THRESHOLD/RATIO cells 0x04/0x09) -> VCA. No delay, no LUT. Per-channel RMS envelope.
+	double                          m_comp_env_l = 0.0, m_comp_env_r = 0.0;
+	//  ★ HLE GATED REVERB insert (DSPHLE == 0x17): prog08. A reverb tank (its 9 DRAM comb/all-pass
+	//  line lengths are MEASURED: 100/458/1258/1846/680/800/1440/1760/1800 samp @44.1k) with two
+	//  HIGH-DAMP one-poles, then an ENVELOPE GATE on the tail (GATE TIME = cell 0x15) -- the
+	//  gated-reverb "chopped tail". Dedicated lines (own lengths); gate holds then cuts the wet.
+	upd6383_hle::DelayLine          m_grev_c_l[4]{ {820}, {1000}, {1700}, {2100} };  // scaled @48k headroom
+	upd6383_hle::DelayLine          m_grev_c_r[4]{ {840}, {1020}, {1720}, {2120} };
+	upd6383_hle::OnePole            m_grev_d_l[4];
+	upd6383_hle::OnePole            m_grev_d_r[4];
+	upd6383_hle::DelayLine          m_grev_a_l[2]{ {560}, {140} };
+	upd6383_hle::DelayLine          m_grev_a_r[2]{ {572}, {152} };
+	double                          m_grev_env = 0.0;   // input envelope that opens the gate
+	double                          m_grev_gain = 0.0;  // smoothed gate gain (0..1), applied to wet
+	//  ★ HLE MULTI TAP DELAY insert (DSPHLE == 0x15): prog10. One write, four read taps at the
+	//  MEASURED host-named delays 6000/12000/18000/24000 samp @44.1k (136/272/408/544 ms), each
+	//  panned, with a one-pole HIGH-DAMP feedback. Line sized for the longest tap @48k + headroom.
+	upd6383_hle::DelayLine          m_mtap_l{28000};
+	upd6383_hle::DelayLine          m_mtap_r{28000};
+	upd6383_hle::OnePole            m_mtap_dmp_l, m_mtap_dmp_r;
+	//  ★ HLE MIX UP insert (DSPHLE == 0x18): prog56. Three phase-accum LFOs (MEASURED rates
+	//  3.0/5.2/7.4 Hz = cells 0x00/0x02/0x04) modulate short stereo delay lines (~9 ms) -- a rich
+	//  multi-LFO chorus. Three LFO phases (cycles); one short line per channel.
+	upd6383_hle::DelayLine          m_mix_l{1024};
+	upd6383_hle::DelayLine          m_mix_r{1024};
+	double                          m_mix_ph[3] = { 0.0, 0.0, 0.0 };
+	//  ★ HLE ROTARY SPEAKER insert (DSPHLE == 0x19): prog15 (rock rotary). Leslie = crossover
+	//  (bass drum + treble horn), each rotor Doppler-swept (measured delay lines 7.26/3.63 ms) and
+	//  amplitude-modulated. ⚠ the rotor ROTATION RATE is NOT in the program (host-supplied, not
+	//  decoded) -- canonical Leslie speeds are used, labelled SPECULATIVE. Crossover one-pole +
+	//  per-rotor Doppler lines + rotor phases.
+	upd6383_hle::OnePole            m_rot_lp_l, m_rot_lp_r;      // crossover: low band = LP(x)
+	upd6383_hle::DelayLine          m_rot_t_l{1024};
+	upd6383_hle::DelayLine          m_rot_t_r{1024};
+	upd6383_hle::DelayLine          m_rot_b_l{1024};
+	upd6383_hle::DelayLine          m_rot_b_r{1024};
+	double                          m_rot_tph = 0.0, m_rot_bph = 0.0;  // treble/bass rotor phases
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
