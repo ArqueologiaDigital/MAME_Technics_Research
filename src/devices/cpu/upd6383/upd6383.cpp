@@ -5134,7 +5134,25 @@ void upd6383_device::exec_alu(u64 word)
 				{ m_s2sq_iw[q] = u16(m_cur_iw); m_s2sq_slots++; }
 				if (q < 16) m_s2sq_cnt[q]++;
 			}
-			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
+			//  ★ DIAGNOSTIC (UPD6383_FMTBIT, default OFF): the coefficient FORMAT is per word.
+			//  The register's §71-era finding -- word bit 12 (addr8 bit 0) set = Q1.22, clear =
+			//  Q0.23 -- was never implemented; one shift (P_SHIFT) serves every word.  The
+			//  seeded traces measure the bit-CLEAR words at Q0.23 (the delay's damping cascade
+			//  damps, the EQ's a2 stays < 1 and its state block stops railing, only at total
+			//  23; dsp/analysis/N-SINGLE-DELAY-RECURRENCE-2026-09-12 §6-§8), while the shipped
+			//  22 fits the bit-SET words (the EQ's b0 = 0x400000 = 1.0).  So: shift 7 on a
+			//  bit-clear word, P_SHIFT (6) on a bit-set one.  The bit is read from THIS word,
+			//  the one that reads C-RAM[cursor] and multiplies (the trace's "coef[N-1]" is the
+			//  print order, not a second word).  Observation-only; the datum shift is unchanged.
+			//  ⛔ RUN (note §9): NOT a complete account.  The delay's sections check 6/6, but
+			//  the EQ still rails -- its b1 word (0000A001D3, bit clear) must be at the b0/a1
+			//  scale for an RBJ band, so bit 12 explains every word except that one; and the
+			//  delay's cell 0x08 comes out at 2x cell 0x07 under this arm.  A datum-path
+			//  factor on some words is the live hypothesis.  Kept with its record.
+			static const bool fmtbit = getenv("UPD6383_FMTBIT") != nullptr;
+			const int pshift_w = (fmtbit && !(word & (u64(1) << 12))) ? 7 : P_SHIFT;
+			if (fmtbit && pshift_w != P_SHIFT) m_fmtbit_n++;
+			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> pshift_w) & 0xfffffffffffULL;
 			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
 			//  ★ SUBFB DIAGNOSTIC: what did THE MULTIPLY actually consume when the
 			//  operand was negated at the read?  (The accept test showed the product
@@ -8368,6 +8386,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_FMTBIT = %d: per-word coefficient format (bit 12 clear -> Q0.23, "
+				"shift 7): FIRED %u times\n", getenv("UPD6383_FMTBIT") ? 1 : 0, u32(m_fmtbit_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
 					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
 			std::string rf;
