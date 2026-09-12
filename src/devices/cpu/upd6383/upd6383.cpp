@@ -4472,6 +4472,15 @@ void upd6383_device::exec_alu(u64 word)
 		//  test something other than what it claims.
 		const bool stale83 = m_speculative && (m_specmask & 0x400000) && m_in_dram
 				&& !upd6383_disassembler::coeff_fetch(word);
+		//  ⛔⛔ §138 IS REFUTED ON THE TWO-SIDED GATE (N-INPUT-GATE-OPENED §27/§28),
+		//  alone and in combination: the parametric EQ goes BIT-IDENTICAL across a
+		//  frame pair and the chorus's increment comes out 168 353.  MECHANISM: with
+		//  `iw85's LOAD turned into a HOLD the EQ's body entry counts the same bus
+		//  datum THREE times -- loaded by ACT 0x0D at iw84, added by ACT 0x00 at iw86,
+		//  added again at iw87 -- and `iw88's store then rails the pickup cell at
+		//  0x7FFFFF.  The erasure this guard removes was also what kept the input from
+		//  being triple-counted.  Blast radius, measured from the listings: 1 084 of
+		//  3 057 words, 35.5 % of the corpus.  Keep default OFF.
 		const bool stale138 = m_speculative && (m_specmask & (1ull << 55))
 				&& op == upd6383_disassembler::HI_ACC_LOAD
 				&& !upd6383_disassembler::coeff_fetch(word);
