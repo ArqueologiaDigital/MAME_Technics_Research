@@ -2855,6 +2855,43 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		ph_ad  = std::clamp(q22p(m_dsp1->cram_read(0x05)) * cs * 0.5,  0.0, 0.40);   // sweep amplitude
 		ph_fb  = std::clamp(q22p(m_dsp1->cram_read(0x02)) * cs * 0.5, -0.95, 0.95);  // feedback (resonance)
 	}
+	// ---- HLE ENSEMBLE + VIBRATO INSERTS: read the pinned params (once per update) ------
+	// Both are chorus-family (LFO-swept delay), pinned by intervention:
+	//   ENSEMBLE (DSPHLE==6, TYPEIDX 5): RATE = cell 0x00 (76 -> 0.40 Hz); panel DEPTH moves
+	//     SIX small-integer cells 0x02/0x04/0x06 (L) and 0x09/0x0B/0x0D (R) = the per-voice
+	//     tap delays in 44.1k samples (a genuine multi-voice ensemble), scaled by DEPTH.
+	//   VIBRATO (DSPHLE==7, TYPEIDX 17): RATE = cell 0x02 (760 -> ~4 Hz, faster as a vibrato
+	//     should be); panel DEPTH = cell 0x05 (0.202) scaling the pitch sweep; mix cell 0x0C.
+	// Same DSPCFG-bit-1 scale rule; rate increments read at cell scale, coeffs at operand.
+	const bool ens_hle = (dsphle == 6);
+	const bool vib_hle = (dsphle == 7);
+	double ens_inc = 0.0, ens_tap[3] = { 0, 0, 0 };
+	double vib_inc = 0.0, vib_depth = 0.0, vib_wet = 0.0;
+	if (ens_hle || vib_hle)
+	{
+		auto q22m = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		const double sr48 = double(STREAM_RATE) / 44100.0;
+		if (ens_hle)
+		{
+			const double inc = double(m_dsp1->cram_read(0x00) & 0xffffff) * cs;
+			ens_inc = std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE);
+			// three per-channel voice tap delays (L cells 0x02/0x04/0x06), in 44.1k samples
+			ens_tap[0] = std::clamp(double(m_dsp1->cram_read(0x02) & 0xffffff) * cs, 2.0, 1500.0) * sr48;
+			ens_tap[1] = std::clamp(double(m_dsp1->cram_read(0x04) & 0xffffff) * cs, 2.0, 1500.0) * sr48;
+			ens_tap[2] = std::clamp(double(m_dsp1->cram_read(0x06) & 0xffffff) * cs, 2.0, 1500.0) * sr48;
+		}
+		if (vib_hle)
+		{
+			const double inc = double(m_dsp1->cram_read(0x02) & 0xffffff) * cs;
+			vib_inc = std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE);
+			vib_depth = std::clamp(q22m(m_dsp1->cram_read(0x05)) * cs, 0.0, 1.0) * 240.0 * sr48;  // sweep
+			vib_wet   = std::clamp(q22m(m_dsp1->cram_read(0x0C)) * cs, 0.0, 1.0);                  // mix
+		}
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3593,6 +3630,46 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			m_ph_fbl = xl; m_ph_fbr = xr;
 			mix_l = int32_t((0.5 * sl + 0.5 * xl) * 32768.0);
 			mix_r = int32_t((0.5 * sr + 0.5 * xr) * 32768.0);
+		}
+
+		// ---- HLE ENSEMBLE INSERT: 3-voice LFO-swept delay, replaces mix in place ----------
+		// EXPERIMENTAL, default OFF (dsphle == 6). One line per channel read at three taps
+		// (the decoded per-voice delays), each swept by the LFO at a staggered phase so the
+		// three detuned voices spread -- the ensemble shimmer. Summed and mixed 50/50 dry.
+		if (ens_hle)
+		{
+			m_ens_phase += ens_inc;
+			if (m_ens_phase >= 1.0) m_ens_phase -= 1.0;
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			m_ens_l.write(sl); m_ens_r.write(sr);
+			double wl = 0.0, wr = 0.0;
+			for (int v = 0; v < 3; v++)
+			{
+				const double ph = m_ens_phase + double(v) / 3.0;   // stagger the voices
+				const double m = 0.75 + 0.25 * std::sin(2.0 * M_PI * ph);
+				wl += m_ens_l.read(std::max(2.0, ens_tap[v] * m));
+				wr += m_ens_r.read(std::max(2.0, ens_tap[v] * m));
+			}
+			wl /= 3.0; wr /= 3.0;
+			mix_l = int32_t((0.5 * sl + 0.5 * wl) * 32768.0);
+			mix_r = int32_t((0.5 * sr + 0.5 * wr) * 32768.0);
+		}
+
+		// ---- HLE VIBRATO INSERT: single LFO-swept delay tap (pitch modulation) ------------
+		// EXPERIMENTAL, default OFF (dsphle == 7). A single swept read tap; a mostly-wet mix
+		// so the ear hears the pitch wobble (a vibrato), not the dry-vs-wet beating of a
+		// chorus. Rate is faster (~4 Hz), matching a vibrato.
+		if (vib_hle)
+		{
+			m_vib_phase += vib_inc;
+			if (m_vib_phase >= 1.0) m_vib_phase -= 1.0;
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			m_vib_l.write(sl); m_vib_r.write(sr);
+			const double d = vib_depth + vib_depth * (0.5 + 0.5 * std::sin(2.0 * M_PI * m_vib_phase));
+			const double tl = m_vib_l.read(std::max(2.0, d)), tr = m_vib_r.read(std::max(2.0, d));
+			const double w = std::max(vib_wet, 0.5);               // vibrato is mostly wet
+			mix_l = int32_t(((1.0 - w) * sl + w * tl) * 32768.0);
+			mix_r = int32_t(((1.0 - w) * sr + w * tr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

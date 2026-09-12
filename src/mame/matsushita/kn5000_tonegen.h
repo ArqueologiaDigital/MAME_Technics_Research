@@ -545,6 +545,15 @@ private:
 	upd6383_hle::AllPass1           m_ph_r[PH_STAGES];
 	double                          m_ph_phase = 0.0;    // LFO phase in cycles [0,1)
 	double                          m_ph_fbl = 0.0, m_ph_fbr = 0.0;  // feedback state (last wet)
+	//  ★ HLE ENSEMBLE insert: a multi-voice LFO-swept delay (one line per channel read at
+	//  several swept taps), and VIBRATO: a single LFO-swept tap (pitch modulation). Both
+	//  are chorus-family; each keeps its own delay lines + LFO phase.
+	upd6383_hle::DelayLine          m_ens_l{2048};
+	upd6383_hle::DelayLine          m_ens_r{2048};
+	double                          m_ens_phase = 0.0;
+	upd6383_hle::DelayLine          m_vib_l{2048};
+	upd6383_hle::DelayLine          m_vib_r{2048};
+	double                          m_vib_phase = 0.0;
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;

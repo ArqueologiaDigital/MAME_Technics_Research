@@ -907,13 +907,15 @@ static INPUT_PORTS_START(kn5000)
 	// decoded C-RAM.  It is OFF by default because the C-RAM coefficient order/sign/
 	// scale is not yet confirmed against a spectral A/B -- see kn5000_tonegen.cpp.
 	PORT_START("DSPHLE")
-	PORT_CONFNAME(0x07, 0x00, "Effects, HLE-audible (EXPERIMENTAL - decoded from C-RAM)")
+	PORT_CONFNAME(0x1f, 0x00, "Effects, HLE-audible (EXPERIMENTAL - decoded from C-RAM)")
 	PORT_CONFSETTING(   0x00, DEF_STR(Off))
 	PORT_CONFSETTING(   0x01, "Parametric EQ (5-band biquad)")
 	PORT_CONFSETTING(   0x02, "Single Delay (feedback delay line)")
 	PORT_CONFSETTING(   0x03, "Chorus (quadrature LFO-swept delay)")
 	PORT_CONFSETTING(   0x04, "Flanger (LFO-swept delay + feedback)")
 	PORT_CONFSETTING(   0x05, "Phaser (swept all-pass cascade + feedback)")
+	PORT_CONFSETTING(   0x06, "Ensemble (multi-voice LFO-swept delay)")
+	PORT_CONFSETTING(   0x07, "Vibrato (LFO-swept delay, pitch modulation)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------
