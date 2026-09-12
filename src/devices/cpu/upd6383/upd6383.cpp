@@ -6395,14 +6395,22 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//         phaser, ensemble), not one;
 				//    §36  ZERO regressions across ten programs spanning four families -- no
 				//         body dies and no cell rails anywhere.
-				//  ⚠ THE STANDING ARGUMENT AGAINST IT, kept here so it is not lost: the
-				//  ENHANCER's non-zero product rows drop 46 -> 10 and NOTHING EXPLAINS THAT.
-				//  It is not an LFO program and it does not rail.  Look there before treating
-				//  this as settled.
-				//  ⚠ The PARAMETRIC EQ's 100 -> 9 is NOT that kind of flag: §23/§29 measured
-				//  that the baseline's EQ activity is the KERNEL'S RESIDUE being filtered, and
-				//  this removes the residue.  The bands are then correctly fed at cell 0x10 --
-				//  which nothing reads (§30).  Known, and the EQ thread's next step.
+				//  ✅ THE STANDING OBJECTION IS WITHDRAWN, §37.  The ENHANCER's non-zero
+				//  product rows drop 46 -> 10, and that is the SAME open problem, unmasked:
+				//  its entry assembles the input in the accumulator (`iw85' bus-load, `iw87'
+				//  bus term), the pointer moves 0x10 -> 0x50, and `iw89' reads cell 0x50 --
+				//  which nothing writes.  Every operand from there is zero.  The BASELINE runs
+				//  the same words and makes the same discard; it merely loads the KERNEL'S
+				//  RESIDUE instead of 0, so it has a number to multiply.  ⇒ the flush did not
+				//  break the enhancer, it removed the residue standing in for its input.
+				//  The PARAMETRIC EQ's 100 -> 9 is the same thing (§23/§29): the baseline's
+				//  EQ activity is the KERNEL'S RESIDUE being filtered.
+				//  ⇒ ★ THE ONE REMAINING BODY-SIDE GAP, now stated on TWO programs: nothing
+				//  writes cell 0x50, the cell both bodies read at `iw89'.  The EQ has a store
+				//  at `iw88' aimed at the PRE-increment pointer (0x10, unread); the enhancer's
+				//  `iw88' carries no store bit at all.  §109 bit 28 moves the EQ's store to
+				//  0x50 and every band then gets one clean copy -- but it freezes every LFO in
+				//  the catalogue (§35), so it is not the answer.  N-INPUT-GATE-OPENED §30/§37.
 				static const bool callflush = []{ const char *e = getenv("UPD6383_CALLFLUSH");
 						return e ? (atoi(e) != 0) : true; }();
 				if (callflush) { m_p = 0; m_pw = 0; m_callflush_n++; }
