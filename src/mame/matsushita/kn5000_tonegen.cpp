@@ -2986,6 +2986,34 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		pq_dN = std::clamp(int(n441 * double(STREAM_RATE) / 44100.0 + 0.5), 1, 34999);
 		pq_gfb = std::clamp(q22e(m_dsp1->cram_read(0x06)) * cs * 0.5, -0.95, 0.95);
 	}
+	// ---- HLE REVERB INSERT: reconstructed from the decoded reverb C-RAM (DSPHLE == 14) -
+	// The unit-1 reverb coefficients are present in C-RAM every frame and are fully decoded
+	// (reverb_listing.tsv): input scaling 0x90, damping 0x93, the REVERB-TIME/decay coeff
+	// 0x97, diffuser-ladder gains 0x98..0x9C (5) and 0xA1..0xA4 (4), output-tail mix 0xA9.
+	// The exact micro-topology is narrowed (comb-family) but not closed, so this is a
+	// PREVIEW: the diffusion uses the DECODED ladder gains; the loop feedback tracks the
+	// DECODED decay coeff 0x97 (so driving REVERB TIME changes the tail) mapped to a plausible
+	// RT60 range -- the absolute RT60 awaits the topology/length decode. Default OFF.
+	const bool rv_hle = (dsphle == 14);
+	double rv_fb = 0.0, rv_wet = 0.0, rv_apg[2] = { 0.5, 0.5 };
+	if (rv_hle)
+	{
+		auto q22v = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		// decay coeff 0x97 (REVERB TIME) -> a plausible comb feedback 0.6..0.92 that rises with it
+		const double decay = std::clamp(q22v(m_dsp1->cram_read(0x97)) * cs, 0.0, 1.0);   // ~0.4 default
+		rv_fb = std::clamp(0.55 + 0.6 * decay, 0.55, 0.84);   // bounded for a stable decay
+		// damping one-pole from the decoded HIGH-DAMP cell 0x93 (darker tails as it rises)
+		const double damp = std::clamp(q22v(m_dsp1->cram_read(0x93)) * cs * 0.5, 0.0, 0.7);
+		for (int i = 0; i < 4; i++) { m_rv_d_l[i].set_damping(damp); m_rv_d_r[i].set_damping(damp); }
+		// two all-pass diffuser gains from the decoded ladder (operand scale, kept in range)
+		rv_apg[0] = std::clamp(q22v(m_dsp1->cram_read(0x98)) * cs * 0.5, 0.3, 0.75);
+		rv_apg[1] = std::clamp(q22v(m_dsp1->cram_read(0xA1)) * cs * 0.5, 0.3, 0.75);
+		rv_wet = std::clamp(q22v(m_dsp1->cram_read(0xA9)) * cs, 0.15, 0.6);   // output-tail mix
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3855,6 +3883,42 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			m_dly_r.write(er + pq_gfb * dtr);
 			mix_l = int32_t((0.5 * el + 0.5 * dtl) * 32768.0);
 			mix_r = int32_t((0.5 * er + 0.5 * dtr) * 32768.0);
+		}
+
+		// ---- HLE REVERB INSERT: four PARALLEL combs -> two all-pass diffusers -------------
+		// EXPERIMENTAL, default OFF (dsphle == 14). A reconstruction from the DECODED reverb
+		// coefficients (see refresh above). Four damped comb filters IN PARALLEL (Freeverb
+		// form) give a stable decaying tail -- feedback tracks the decoded REVERB-TIME coeff
+		// 0x97; the two Schroeder all-pass stages (decoded diffuser gains) smear it. Parallel
+		// (not series) to stay unconditionally stable; the chip's exact comb-family topology
+		// is the open decode, so this is a PREVIEW, not a topology claim. Decoded mix 0xA9.
+		if (rv_hle)
+		{
+			const int CD_L[4] = { 1557, 1617, 1693, 1781 }, CD_R[4] = { 1579, 1639, 1711, 1801 };
+			const int AD_L[2] = { 556, 225 }, AD_R[2] = { 579, 241 };
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			// small input gain into the comb bank so the combs' recirculation gain 1/(1-fb)
+			// does not blow the level up (Freeverb's fixed-gain trick)
+			const double il = 1.2 * m_rv_pre_l.read(1800.0), ir = 1.2 * m_rv_pre_r.read(1800.0);
+			m_rv_pre_l.write(sl); m_rv_pre_r.write(sr);
+			double xl = 0.0, xr = 0.0;
+			for (int c = 0; c < 4; c++)   // parallel comb bank (each recirculates the input)
+			{
+				const double tl = m_rv_c_l[c].read(double(CD_L[c])), tr = m_rv_c_r[c].read(double(CD_R[c]));
+				m_rv_c_l[c].write(il + rv_fb * m_rv_d_l[c].process_one(tl));
+				m_rv_c_r[c].write(ir + rv_fb * m_rv_d_r[c].process_one(tr));
+				xl += tl; xr += tr;
+			}
+			for (int a = 0; a < 2; a++)   // unity-gain Schroeder all-pass diffusers
+			{
+				const double dl = m_rv_a_l[a].read(double(AD_L[a])), dr = m_rv_a_r[a].read(double(AD_R[a]));
+				const double yl = -rv_apg[a] * xl + dl, yr = -rv_apg[a] * xr + dr;
+				m_rv_a_l[a].write(xl + rv_apg[a] * yl);
+				m_rv_a_r[a].write(xr + rv_apg[a] * yr);
+				xl = yl; xr = yr;
+			}
+			mix_l = int32_t(((1.0 - rv_wet) * sl + rv_wet * xl) * 32768.0);
+			mix_r = int32_t(((1.0 - rv_wet) * sr + rv_wet * xr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

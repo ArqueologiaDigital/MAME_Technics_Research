@@ -70,6 +70,7 @@ class OnePole
 public:
 	explicit OnePole(double damping = 0.0) : m_d(damping) {}
 	void reset() { m_y1 = 0.0; }
+	void set_damping(double d) { m_d = d; }   // reload without clearing state (live refresh)
 	double process_one(double x) { m_y1 = (1.0 - m_d) * x + m_d * m_y1; return m_y1; }
 private:
 	double m_d;
@@ -119,7 +120,7 @@ private:
 class DelayLine
 {
 public:
-	explicit DelayLine(int max_samples) : m_buf(max_samples > 1 ? max_samples : 2, 0.0) {}
+	DelayLine(int max_samples = 2) : m_buf(max_samples > 1 ? max_samples : 2, 0.0) {}
 	void write(double x) { m_buf[m_head] = x; m_head = (m_head + 1) % int(m_buf.size()); }
 	double read(double delay_samples) const
 	{

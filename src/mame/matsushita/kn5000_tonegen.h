@@ -557,6 +557,20 @@ private:
 	//  ★ HLE COMBO second delay line (S.DELAY+S.DELAY needs two long delays).
 	upd6383_hle::DelayLine          m_dly2_l{35000};
 	upd6383_hle::DelayLine          m_dly2_r{35000};
+	//  ★ HLE REVERB insert: a reconstruction from the DECODED reverb C-RAM coefficients
+	//  (input/ladder/decay/damping/output, all dumped + role-assigned in reverb_listing.tsv).
+	//  The chip's exact micro-topology is narrowed (comb-family) but not closed, so this uses
+	//  ONE surviving structure: four series comb filters (feedbacks = the decoded diffuser
+	//  ladder gains, damped) into two Schroeder all-pass diffusers. Proves the reverb is
+	//  audible from dumped data; the exact RT60 still awaits the topology/length decode.
+	upd6383_hle::DelayLine          m_rv_c_l[4]{ {1557}, {1617}, {1693}, {1781} };
+	upd6383_hle::DelayLine          m_rv_c_r[4]{ {1579}, {1639}, {1711}, {1801} };
+	upd6383_hle::OnePole            m_rv_d_l[4];
+	upd6383_hle::OnePole            m_rv_d_r[4];
+	upd6383_hle::DelayLine          m_rv_a_l[2]{ {556}, {225} };
+	upd6383_hle::DelayLine          m_rv_a_r[2]{ {579}, {241} };
+	upd6383_hle::DelayLine          m_rv_pre_l{2400};
+	upd6383_hle::DelayLine          m_rv_pre_r{2400};
 	// bit 0: 0 = PCM from the wave ROM (default), 1 = diagnostic sine. Read ONCE per
 	// stream update, never cached in a member -- see set_render_mode_port above.
 	optional_ioport                 m_render_mode;
