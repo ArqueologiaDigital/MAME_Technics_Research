@@ -6384,7 +6384,27 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  the reading this tests.  Two-sided: with the body LIVE the chorus's phase
 				//  cell must advance by the increment (114 at rest) -- today it only does so
 				//  with the body dead, which is no test at all.
-				static const bool callflush = getenv("UPD6383_CALLFLUSH") != nullptr;
+				//  ★★★★ PROMOTED TO DEFAULT-ON, N-INPUT-GATE-OPENED §36.  `UPD6383_CALLFLUSH=0'
+				//  restores the old behaviour so the A/B stays available (the treatment §225
+				//  gave UPD6383_LFOWRAP).  FOUR independent lines of evidence, one change:
+				//    §29  the ONLY configuration delivering ONE CLEAN COPY of the EQ's input
+				//         (ratio 0.999 where the baseline gives 1.589 and others RAIL);
+				//    §34  the only family giving the chorus a CONSTANT +114/frame phase, read
+				//         from the §119 eight-frame witness -- the baseline's phase wanders;
+				//    §36  FIVE programs gain that ramp (chorus, modulated chorus, flanger,
+				//         phaser, ensemble), not one;
+				//    §36  ZERO regressions across ten programs spanning four families -- no
+				//         body dies and no cell rails anywhere.
+				//  ⚠ THE STANDING ARGUMENT AGAINST IT, kept here so it is not lost: the
+				//  ENHANCER's non-zero product rows drop 46 -> 10 and NOTHING EXPLAINS THAT.
+				//  It is not an LFO program and it does not rail.  Look there before treating
+				//  this as settled.
+				//  ⚠ The PARAMETRIC EQ's 100 -> 9 is NOT that kind of flag: §23/§29 measured
+				//  that the baseline's EQ activity is the KERNEL'S RESIDUE being filtered, and
+				//  this removes the residue.  The bands are then correctly fed at cell 0x10 --
+				//  which nothing reads (§30).  Known, and the EQ thread's next step.
+				static const bool callflush = []{ const char *e = getenv("UPD6383_CALLFLUSH");
+						return e ? (atoi(e) != 0) : true; }();
 				if (callflush) { m_p = 0; m_pw = 0; m_callflush_n++; }
 				//  ★ DIAGNOSTIC (UPD6383_CALLACC, default OFF): clear the ACCUMULATOR
 				//  at the block CALL, and leave the product register alone.
@@ -8636,8 +8656,10 @@ void upd6383_device::dump_frame_report() const
 				u32(m_lo12st5_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
 				u32(m_lo12st_n));
-		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d: product register cleared at the block CALL: "
-				"FIRED %u times\n", getenv("UPD6383_CALLFLUSH") ? 1 : 0, u32(m_callflush_n));
+		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d (DEFAULT IS NOW 1, §36): product register "
+				"cleared at the block CALL: FIRED %u times\n",
+				getenv("UPD6383_CALLFLUSH") ? (atoi(getenv("UPD6383_CALLFLUSH")) != 0) : 1,
+				u32(m_callflush_n));
 		logerror("upd6383: ★ UPD6383_PCLR = %d: P cleared on words that drive no multiply: "
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
