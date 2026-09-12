@@ -3366,7 +3366,22 @@ void upd6383_device::exec_alu(u64 word)
 			//  reading and is NOT verified here; the base 0x1D is §160's measured window.
 			//  Two-sided: the chorus's §157 TAPMOD per-slot census must stop reporting a
 			//  CONSTANT 240 and start spanning a range at the LFO rate.
-			static const bool c6lut = getenv("UPD6383_C6LUT") != nullptr;
+			//  ★ C6LUT=2 (the DESTINATION arm): =1 put the value in P and the tap did not
+			//  sweep -- the two sweep slots stayed at a constant 240 while one slot took a
+			//  full-scale excursion, i.e. the value reached the tap path at the wrong place
+			//  and scale (§6 of the note).  The chorus's sweep word is `192.A.40.000',
+			//  `SRC 0x00' = mem[ptr]: for its product to be depth x waveform = ±240 the
+			//  WAVEFORM has to be in a D-RAM cell it reads, not in P.  So =2 stores the
+			//  looked-up value under the class-6 word's own pointer instead.
+			//  ⛔ =2 RUN AND IT FAILS TOO: the §157 census is IDENTICAL to =1
+			//  (`iw96:0..240 iw105:0..240 iw137:-4194544..0`), so the destination was not
+			//  the defect either.  Both arms put a FULL-SCALE waveform value into the chain
+			//  and neither produces a ±240 sweep ⇒ what is missing is the SCALING step
+			//  between the table and the tap, not the route.  Kept, default-off, with both
+			//  records; the remaining candidates are the index FORM
+			//  (`(coef x phase) >> 23`, not acc-as-datum) and the depth multiply's position.
+			static const int c6lut = []{ const char *e = getenv("UPD6383_C6LUT");
+				return e ? atoi(e) : 0; }();
 			if (c6lut)
 			{
 				const u32 n = upd6383_disassembler::addr8(word);
@@ -3375,8 +3390,16 @@ void upd6383_device::exec_alu(u64 word)
 					const s32 d = acc_to_datum(m_cur_unit1 ? m_accb : m_acc);
 					const u32 k = u32(((d % s32(n)) + s32(n)) % s32(n));
 					const u32 v = m_rf[(0x1d + k) & 0xff] & 0xffffff;
-					m_p = u64(s64(util::sext(v, 24))) << ACC_SHIFT;
-					m_pw = 7;
+					if (c6lut >= 2)
+					{
+						m_dram.write_dword(m_dp, v);
+						pv_wr_dram(m_dp, v);
+					}
+					else
+					{
+						m_p = u64(s64(util::sext(v, 24))) << ACC_SHIFT;
+						m_pw = 7;
+					}
 					m_c6lut_n++;
 				}
 			}
