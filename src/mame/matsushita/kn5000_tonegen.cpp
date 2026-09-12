@@ -2808,7 +2808,12 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 		const double sweep44 = double(m_dsp1->cram_read(0x02) & 0xffffff) * cs;   // sweep amp, 44.1k samples
 		cho_depth = std::clamp(sweep44, 4.0, 1500.0) * double(STREAM_RATE) / 44100.0;  // -> stream samples
 		cho_base  = cho_depth;                                    // keep read tap >= 0 (short chorus)
-		cho_wet   = std::clamp(q22c(m_dsp1->cram_read(0x09)) * cs, 0.0, 0.95); // wet gain (panel DEPTH)
+		// wet gain (panel DEPTH). The chip's coefficient field is Q23 (unity 0x7FFFFF): the seeded
+		// LLE traces damp the delay and keep the EQ biquad finite only at that scale
+		// (dsp/analysis/N-SINGLE-DELAY-RECURRENCE-2026-09-12 §6-§7), and the program header reads
+		// this cell as "wet 0.15" (0x1364D9 / 2^23). q22c * cs is the chip cell at Q22 -- the right
+		// convention for the INTEGER cells above, 2x hot for a gain -- so halve it.
+		cho_wet   = std::clamp(q22c(m_dsp1->cram_read(0x09)) * cs * 0.5, 0.0, 0.95);
 	}
 	// ---- HLE FLANGER INSERT: read the pinned params (once per update) ------------------
 	// EXPERIMENTAL, default OFF (DSPHLE == 4). The chorus topology PLUS a feedback path.
