@@ -1610,6 +1610,19 @@ private:
 	u64  m_lo12st_n = 0;            // UPD6383_LO12CAP=2: bit-11 ACT-0x07 stores performed
 	u64  m_lo12cap_n = 0;           // UPD6383_LO12CAP: bit-11 words that still performed their tempA capture
 	u64  m_callflush_n = 0;         // UPD6383_CALLFLUSH: product register cleared at the block CALL
+	//  ★ UPD6383_PCLR (default OFF): the FINER-GRAINED alternative to CALLFLUSH.
+	//  N-INPUT-GATE-OPENED §20 MEASURED that a flush at the block CALL fixes the
+	//  chorus's LFO phase and STARVES the EQ (42 cells / 149 rows moving -> 2 / 9),
+	//  so "flush on CALL" cannot be the chip's rule -- the two programs want
+	//  opposite things from it at the same site.  This reading is per-WORD instead:
+	//  the multiplier's output register holds the result of THIS word's multiply,
+	//  and a word that issues no multiply leaves it undriven (= 0) rather than
+	//  holding the previous product.  That clears P at the chorus's LFO block entry
+	//  (whose preceding words issue no multiply) WITHOUT clearing it between the
+	//  EQ's back-to-back multiply words, which is exactly the discrimination §20
+	//  says is needed.  m_ptouch is set by every site that writes m_p.
+	bool m_ptouch = false;          // did THIS word write the product register?
+	u64  m_pclr_n = 0;              // UPD6383_PCLR: words that cleared an undriven P
 	u64  m_c6lut_n = 0;             // UPD6383_C6LUT: class-6 table lookups actually performed
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied
 	u64  m_eqscale_n = 0;           // UPD6383_EQSCALE: EQ products rescaled by band position (FITTED probe)

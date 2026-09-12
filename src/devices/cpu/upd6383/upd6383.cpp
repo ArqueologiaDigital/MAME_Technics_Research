@@ -3413,7 +3413,7 @@ void upd6383_device::exec_alu(u64 word)
 					else
 					{
 						m_p = u64(s64(util::sext(v, 24))) << ACC_SHIFT;
-						m_pw = 7;
+						m_pw = 7; m_ptouch = true;
 					}
 					m_c6lut_n++;
 				}
@@ -4723,9 +4723,9 @@ void upd6383_device::exec_alu(u64 word)
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff);
 			        pv_wr_dram(m_dp, u32(L));
 			        pk_write(m_dp, u32(L), 6, false, m_cur_iw); break;   // -> mem[ptr]
-			case 5: m_p = u32(L) & 0xffffff; m_pw = 1; break;            // -> P, RAW (suspect scale)
+			case 5: m_p = u32(L) & 0xffffff; m_pw = 1; m_ptouch = true; break;            // -> P, RAW (suspect scale)
 			case 6: bx_acc_w(L, true); break;                  // -> accumulator (add)
-			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 2; break;     // -> P at the MULTIPLY's scale
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 2; m_ptouch = true; break;     // -> P at the MULTIPLY's scale
 			default: break;
 			}
 		}
@@ -4758,9 +4758,9 @@ void upd6383_device::exec_alu(u64 word)
 			case 4: m_dram.write_dword(m_dp, u32(L) & 0xffffff);
 			        pv_wr_dram(m_dp, u32(L));
 			        pk_write(m_dp, u32(L), 6, false, m_cur_iw); break;
-			case 5: m_p = u32(L) & 0xffffff; m_pw = 3; break;
+			case 5: m_p = u32(L) & 0xffffff; m_pw = 3; m_ptouch = true; break;
 			case 6: bx_acc_w(L, true); break;
-			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 4; break;
+			case 7: m_p = u64(s64(L)) << ACC_SHIFT; m_pw = 4; m_ptouch = true; break;
 			default: break;
 			}
 		}
@@ -5079,7 +5079,7 @@ void upd6383_device::exec_alu(u64 word)
 			else
 			{
 				m_p = u32(L) & 0xffffff;    // the PRODUCT register (§112 as shipped)
-				m_pw = 5; /* §175: who last wrote P -- "§112 classA-ACT07" */
+				m_pw = 5; m_ptouch = true; /* §175: who last wrote P -- "§112 classA-ACT07" */
 				m_act07_latchp_n++;
 			}
 		}
@@ -5332,7 +5332,7 @@ void upd6383_device::exec_alu(u64 word)
 			const int pshift_w = half_w ? 7 : P_SHIFT;
 			if (half_w && pshift_w != P_SHIFT) m_fmtbit_n++;
 			m_p = u64(((s64(util::sext(coef, 24)) * s64(L)) * eqmul) >> pshift_w) & 0xfffffffffffULL;
-			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
+			m_pw = 6; m_ptouch = true; /* §175: who last wrote P -- "THE MULTIPLY" */
 			//  ★ SUBFB DIAGNOSTIC: what did THE MULTIPLY actually consume when the
 			//  operand was negated at the read?  (The accept test showed the product
 			//  kept its sign while the recorded latch flipped -- resolve it empirically.)
@@ -5441,7 +5441,7 @@ void upd6383_device::exec_alu(u64 word)
 		m_mul_issued = true;
 		m_l = u32(L) & 0xffffff;
 		m_p = u64((s64(util::sext(m_k, 24)) * s64(L)) >> P_SHIFT) & 0xfffffffffffULL;
-		m_pw = 7; /* §175: who last wrote P -- "§40 m_k multiply" */
+		m_pw = 7; m_ptouch = true; /* §175: who last wrote P -- "§40 m_k multiply" */
 	}
 
 	//  ⚠⚠ §223: THIS PRINT WAS A LATENT RUNAWAY, and the nop-guard narrowing set it
@@ -6001,6 +6001,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 			m_epi_ptr[prof_iw - 60] = m_dp;
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
+		m_ptouch = false;           // ★ UPD6383_PCLR: per-word "did anything drive P?"
 
 		//  ★ the speculative gate widens what counts as executable; with
 		//  m_speculative clear this is EXACTLY decoded(), bit for bit.
@@ -6329,6 +6330,31 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		{
 			m_sprobe[m_sprobe_cur].dp_post = m_dp;
 			m_sprobe_cur = -1;
+		}
+
+		//  ★ DIAGNOSTIC (UPD6383_PCLR, default OFF): the multiplier output register
+		//  is DRIVEN, not held.  A word that issues no multiply and writes no P
+		//  leaves it at zero for the next word's `f31 = 0' LOAD.  This is the
+		//  finer-grained alternative to UPD6383_CALLFLUSH, which N-INPUT-GATE-OPENED
+		//  §20 MEASURED to be program-destructive (it cures the chorus's LFO phase
+		//  and starves the EQ's filter at the same setting).  Two-sided by
+		//  construction: the chorus's phase must still advance by 114 AND the EQ's
+		//  body must stay as live as it is without any flush (42 of 52 cells).
+		//  ⛔⛔ REFUTED, N-INPUT-GATE-OPENED §22, by the two-sided gate on ONE binary:
+		//      no flush        phase 3 129 519   EQ 39 of 44 cells, 105 of 105 rows
+		//      + CALLFLUSH     phase 114         EQ  2 cells,   9 of 105 rows
+		//      + PCLR          phase 114         EQ  0 cells,   0 of 105 rows  <- STATIC
+		//  The prediction was that the EQ's back-to-back `mac's would be untouched
+		//  because each writes P.  Measured: the body goes bit-identical across a
+		//  frame pair, i.e. worse than the flush, not better.
+		//  ★ And the THREE points together are the finding: every rule that gets the
+		//  chorus's phase right does it by taking product away from the EQ, and the
+		//  more it takes the more completely the EQ dies.  That is a trade, not a
+		//  decode -- so the contamination is NOT a retention policy on this register.
+		//  Kept default-off with its refutation, like the other refuted arms.
+		{
+			static const bool pclr = getenv("UPD6383_PCLR") != nullptr;
+			if (pclr && !m_ptouch) { m_p = 0; m_pw = 0; m_pclr_n++; }
 		}
 
 		// ---- the transfer, AFTER the word has done its datapath work -------
@@ -8585,6 +8611,8 @@ void upd6383_device::dump_frame_report() const
 				u32(m_lo12st_n));
 		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d: product register cleared at the block CALL: "
 				"FIRED %u times\n", getenv("UPD6383_CALLFLUSH") ? 1 : 0, u32(m_callflush_n));
+		logerror("upd6383: ★ UPD6383_PCLR = %d: P cleared on words that drive no multiply: "
+				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
