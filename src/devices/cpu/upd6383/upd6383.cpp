@@ -2757,6 +2757,27 @@ void upd6383_device::exec_alu(u64 word)
 				m_cursor++;
 			if ((upd6383_disassembler::class4(word) & 7) == 2)
 				m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+			//  ★ DIAGNOSTIC (UPD6383_LO12CAP, default OFF): let a bit-11 word still perform a
+			//  tempA CAPTURE.  MEASURED why this matters: with a frame-pair diff (frame F vs
+			//  F+1, dsp/tools/frame_pair_diff.py) the audio reaches D-RAM 0x01/0x04 and the
+			//  kernel is live through iw38 -- and iw39 onward, including the WHOLE body, is
+			//  bit-identical.  `iw38' is `809.0.00.839': lo12 bit 11 set, so this branch
+			//  returns before its ACT 0x19 runs, tempA stays frozen at 0xF65100, and iw39
+			//  (SRC 0x19 = tempA) reads that frozen value.  The corpus carries only 95 bit-11
+			//  words and just TWO with a capture action, so this touches almost nothing --
+			//  but one of the two is in the SHARED kernel, on every effect's audio path.
+			//  The captured SOURCE is the open half of ACT 0x19 (upd6383d.h grades it
+			//  "tempA <- ??? : ships on the OWNER'S DECISION"); the accumulator is the only
+			//  input-dependent quantity at iw38, and the HLE's input stage wants exactly
+			//  "scale the kernel's accumulated audio and deposit it", which is what iw39/iw44
+			//  then do.  Two-sided: with the arm the body must STOP being frame-identical.
+			static const bool lo12cap = getenv("UPD6383_LO12CAP") != nullptr;
+			if (lo12cap && (word & 0x1f) == upd6383_disassembler::LO_ACT_CAP_TA2)
+			{
+				m_ta = u32(acc_to_datum(m_acc)) & 0xffffff;
+				pv_wr_ta(m_ta);
+				m_lo12cap_n++;
+			}
 			return;
 		}
 		//==================================================================
@@ -8396,6 +8417,8 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
+		logerror("upd6383: ★ UPD6383_LO12CAP = %d: lo12-bit-11 words that still performed their ACT-0x19 "
+				"tempA capture (acc): FIRED %u times\n", getenv("UPD6383_LO12CAP") ? 1 : 0, u32(m_lo12cap_n));
 		logerror("upd6383: ★ UPD6383_FMTBIT = %s: per-word coefficient format (1 = bit 12 clear -> shift 7; "
 				"2 = bit 12 clear AND ACT != 0x13 -> shift 7): FIRED %u times\n",
 				getenv("UPD6383_FMTBIT") ? getenv("UPD6383_FMTBIT") : "0", u32(m_fmtbit_n));
