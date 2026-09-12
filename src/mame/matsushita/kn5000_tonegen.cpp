@@ -2892,6 +2892,32 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			vib_wet   = std::clamp(q22m(m_dsp1->cram_read(0x0C)) * cs, 0.0, 1.0);                  // mix
 		}
 	}
+	// ---- HLE COMBO INSERTS: SINGLE DELAY chained with a modulation effect --------------
+	// The combi effects are the union of two sub-effect topologies (delay -> modulation),
+	// packed into one C-RAM layout that differs from the standalones, so pinned separately.
+	// They reuse the standalone delay/chorus delay lines (only one effect runs at a time).
+	//   S.DELAY+CHORUS (DSPHLE==8, TYPEIDX 23): pinned by intervention -- delay FEEDBACK L =
+	//     C-RAM cell 0x02, chorus RATE = C-RAM cell 0x00 (114 -> 0.6 Hz, moved with LFO SPEED),
+	//     delay length = descriptor 0x26 (~300 ms). The chorus sweep/wet are not separately
+	//     pinned in the combo layout -> a modest fixed sweep + a fixed wet are used (the
+	//     validated quantities are the delay echo time and the chorus modulation RATE).
+	const bool cmb_sdcho = (dsphle == 8);
+	int    cmb_dN = 0;
+	double cmb_gfb = 0.0, cmb_cinc = 0.0, cmb_csweep = 0.0;
+	if (cmb_sdcho)
+	{
+		auto q22b = [](u32 v) -> double {
+			int32_t s = (v & 0x800000) ? int32_t(v) - 0x1000000 : int32_t(v);
+			return double(s) / 4194304.0; };
+		const bool bit1 = (dspcfg & 2) != 0;
+		const double cs = bit1 ? 1.0 : 2.0;
+		const double n441 = (bit1 ? 1.0 : 2.0) * double(m_dsp1->dsc_read(0x26));
+		cmb_dN = std::clamp(int(n441 * double(STREAM_RATE) / 44100.0 + 0.5), 1, 34999);
+		cmb_gfb = std::clamp(q22b(m_dsp1->cram_read(0x02)) * cs * 0.5, -0.95, 0.95);  // delay feedback
+		const double inc = double(m_dsp1->cram_read(0x00) & 0xffffff) * cs;           // chorus rate
+		cmb_cinc = std::clamp(inc * 44100.0 / 8388608.0, 0.02, 12.0) / double(STREAM_RATE);
+		cmb_csweep = 120.0 * double(STREAM_RATE) / 44100.0;   // fixed chorus sweep (not pinned in combo)
+	}
 	// ---- DIAGNOSTIC RENDER MODE ------------------------------------------------------
 	// bit 0 of the driver's "TGMODE" port: 0 = real PCM (normal), 1 = synthesised sine.
 	// Read ONCE per update for the same reason as dspcfg above -- it costs nothing per
@@ -3670,6 +3696,31 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			const double w = std::max(vib_wet, 0.5);               // vibrato is mostly wet
 			mix_l = int32_t(((1.0 - w) * sl + w * tl) * 32768.0);
 			mix_r = int32_t(((1.0 - w) * sr + w * tr) * 32768.0);
+		}
+
+		// ---- HLE COMBO: S.DELAY + CHORUS (delay stage -> chorus stage) --------------------
+		// EXPERIMENTAL, default OFF (dsphle == 8). Reuses the standalone delay line (m_dly)
+		// then the chorus line (m_cho); only one effect is ever selected, so sharing is safe.
+		// Delay: feedback delay at the combo's descriptor length + feedback cell, 50/50 mix.
+		// Chorus: the delay output run through a 2-voice quadrature LFO-swept delay (rate cell
+		// 0x00), then mixed with the delayed signal. Proves the combi chaining end to end.
+		if (cmb_sdcho)
+		{
+			const double sl = double(mix_l) / 32768.0, sr = double(mix_r) / 32768.0;
+			// stage 1: single delay
+			const double dtl = m_dly_l.read(double(cmb_dN)), dtr = m_dly_r.read(double(cmb_dN));
+			m_dly_l.write(sl + cmb_gfb * dtl);
+			m_dly_r.write(sr + cmb_gfb * dtr);
+			const double dl = 0.5 * sl + 0.5 * dtl, dr = 0.5 * sr + 0.5 * dtr;
+			// stage 2: chorus on the delayed signal
+			m_cho_phase += cmb_cinc;
+			if (m_cho_phase >= 1.0) m_cho_phase -= 1.0;
+			const double cs2 = std::sin(2.0 * M_PI * m_cho_phase), cc2 = std::cos(2.0 * M_PI * m_cho_phase);
+			m_cho_l.write(dl); m_cho_r.write(dr);
+			const double wl = 0.5 * (m_cho_l.read(cmb_csweep * (1.0 + 0.5 * cs2)) + m_cho_l.read(cmb_csweep * (1.0 + 0.5 * cc2)));
+			const double wr = 0.5 * (m_cho_r.read(cmb_csweep * (1.0 + 0.5 * cs2)) + m_cho_r.read(cmb_csweep * (1.0 + 0.5 * cc2)));
+			mix_l = int32_t((0.6 * dl + 0.4 * wl) * 32768.0);
+			mix_r = int32_t((0.6 * dr + 0.4 * wr) * 32768.0);
 		}
 
 		const float fin_l = softclip(mix_l + wet_l);

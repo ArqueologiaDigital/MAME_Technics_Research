@@ -916,6 +916,7 @@ static INPUT_PORTS_START(kn5000)
 	PORT_CONFSETTING(   0x05, "Phaser (swept all-pass cascade + feedback)")
 	PORT_CONFSETTING(   0x06, "Ensemble (multi-voice LFO-swept delay)")
 	PORT_CONFSETTING(   0x07, "Vibrato (LFO-swept delay, pitch modulation)")
+	PORT_CONFSETTING(   0x08, "S.Delay + Chorus (combo: delay -> chorus)")
 #endif // KN5000_ENABLE_DSP1 -- with the device gone the port would gate nothing
 
 	// ---- tone-generator render mode (DIAGNOSTIC) ----------------------------------
