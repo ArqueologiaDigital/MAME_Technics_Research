@@ -4902,6 +4902,40 @@ void upd6383_device::exec_alu(u64 word)
 			}
 		}
 		//======================================================================
+		//  ★★★ §38 DIAGNOSTIC (env UPD6383_ST07SIGN, default OFF): the ACT-0x07 store
+		//  target depends on the SIGN of the post-increment -- POST when `addr8 > 0',
+		//  PRE otherwise.  This is NOT a reading; it is the one hypothesis that the
+		//  measured constraint leaves open, and it exists to be falsified.
+		//
+		//  THE CONSTRAINT IT ANSWERS (N-INPUT-GATE-OPENED §38, MEASURED): a UNIFORM
+		//  store target cannot satisfy both reference programs.
+		//      CHORUS `iw88' = 000.2.F4.407   ACT 07 SRC 10 f31 0   addr8 = -12
+		//      P.EQ   `iw88' = 000.2.40.407   ACT 07 SRC 10 f31 0   addr8 = +64
+		//  Identical but for that field.  The EQ needs its store on the POST cell
+		//  (0x50, which `iw89' reads); the chorus needs its own on the PRE cell,
+		//  because mask bit 28 moves EVERY such store and that freezes the LFO in
+		//  every modulation program in the catalogue (§35).
+		//
+		//  Corpus census of ACT-0x07 words carrying no bit-4 store: 181 with
+		//  addr8 > 0, 155 with addr8 < 0, 54 with addr8 == 0 -- so this rule moves
+		//  roughly half of them, not a handful, and the ten-program catalogue
+		//  regression is the instrument that grades it.
+		//  ⚠ Two-sided by construction: the chorus's phase must STILL be a constant
+		//  +114/frame across the §119 eight-frame witness AND the EQ's band cells
+		//  must receive one clean copy.  If either fails, the sign is not the rule.
+		//  ⚠ K6 excluded for the same reason bit 28 excludes it.
+		if (!(m_specmask & 0x10000000) && mode07 == 2
+				&& upd6383_disassembler::ptr_postinc(word) && !m_in_k6
+				&& s8(upd6383_disassembler::addr8(word)) > 0)
+		{
+			static const bool st07sign = getenv("UPD6383_ST07SIGN") != nullptr;
+			if (st07sign)
+			{
+				d07 = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+				m_st07sign_n++;
+			}
+		}
+		//======================================================================
 		//  ★★★ §119 SPECULATIVE (mask bit 34, 0x400000000): THE MEMORY-TO-MEMORY MOVE.
 		//
 		//  Same geometry as bit 28 but restricted to the two sources that read the
@@ -8672,6 +8706,9 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
 				"FIRED %u times\n", getenv("UPD6383_CALLACC") ? 1 : 0, u32(m_callacc_n));
+		logerror("upd6383: ★ §38 UPD6383_ST07SIGN = %d: ACT-07 store on the POST cell when "
+				"addr8 > 0: FIRED %u times\n",
+				getenv("UPD6383_ST07SIGN") ? 1 : 0, u32(m_st07sign_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
