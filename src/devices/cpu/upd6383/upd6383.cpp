@@ -6315,6 +6315,29 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 					m_dram.write_dword(0x8A, u32(0x140000) >> revshift);
 				}
 
+				//  ★ DIAGNOSTIC (UPD6383_DLYSEED): the SINGLE DELAY analogue of BIQSEED/REVSEED.
+				//  Seed the single-delay's unit-0 STATE block 0x50..0x53 (MEASURED: algo 9
+				//  instantiates its filter/damping block once on each of 0x50/0x51/0x52/0x53 --
+				//  CORPUS-PATTERNS-SPECULATIVE-2 §, the unit-0 state base 0x50 = E0+75) with a known
+				//  IMPULSE, so the delay's one-pole + feedback datapath computes on a controlled
+				//  stimulus and can be confronted against dsp/hle/lle_oracle_delay.py WITHOUT the
+				//  (blocked) input route -- exactly as BIQSEED decoded the biquad and REVSEED the
+				//  reverb one-pole.  The delay words are UNMODIFIED; env-gated, OFF by default.  The
+				//  env VALUE (>1) right-shifts to keep the output in range; DLYSEED_ONCE=F seeds only
+				//  at frame F (impulse then free decay = the echo-decay test, the DelayOracle target).
+				static const bool dlyseed = getenv("UPD6383_DLYSEED") != nullptr;
+				static const int dlyshift = []{ const char *e = getenv("UPD6383_DLYSEED");
+					const int n = e ? atoi(e) : 0; return (n > 1) ? (n - 1) : 0; }();
+				static const u64 dlyseedonce = []{ const char *e = getenv("UPD6383_DLYSEED_ONCE");
+					return e ? u64(strtoull(e, nullptr, 10)) : 0ull; }();
+				if (dlyseed && !unit1 && (!dlyseedonce || m_frames_run == dlyseedonce))
+				{
+					m_dram.write_dword(0x50, u32(0x400000) >> dlyshift);   // state cell 0 -- the impulse
+					m_dram.write_dword(0x51, u32(0x000000) >> dlyshift);
+					m_dram.write_dword(0x52, u32(0x000000) >> dlyshift);
+					m_dram.write_dword(0x53, u32(0x000000) >> dlyshift);
+				}
+
 				//  ★★★ SEED THE COEFFICIENT CURSOR AT THE CALL, register row 24.
 				//  MEASURED defect: the reverb dies at I-RAM 302, a class-A multiply
 				//  with SRC 0x1A, because P = coef * tempB and the COEFFICIENT is
