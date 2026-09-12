@@ -5149,9 +5149,19 @@ void upd6383_device::exec_alu(u64 word)
 			//  scale for an RBJ band, so bit 12 explains every word except that one; and the
 			//  delay's cell 0x08 comes out at 2x cell 0x07 under this arm.  A datum-path
 			//  factor on some words is the live hypothesis.  Kept with its record.
-			static const bool fmtbit = getenv("UPD6383_FMTBIT") != nullptr;
-			const int pshift_w = (fmtbit && !(word & (u64(1) << 12))) ? 7 : P_SHIFT;
-			if (fmtbit && pshift_w != P_SHIFT) m_fmtbit_n++;
+			//  ★ FMTBIT=2 (note §10): the CONSTRAINT-SET arm.  A flat (0 dB) EQ band in the
+			//  trace has b = 0.5·[1, a1, a2] only if b0, b1, b2, a1 sit at one scale and the
+			//  a2 word at HALF of it; the delay's c2 is half too.  The single rule that
+			//  fits all six is "half iff bit 12 clear AND ACT != 0x13" (b1's word is the
+			//  only bit-clear FULL one, and its ACT is 0x13).  Ad hoc by construction;
+			//  its job is to test the CONSEQUENCE -- the EQ band comes out flat (y == x)
+			//  with a finite state block -- not to claim the mechanism.
+			static const int fmtbit = []{ const char *e = getenv("UPD6383_FMTBIT"); return e ? atoi(e) : 0; }();
+			const bool half_w = fmtbit == 2
+					? (!(word & (u64(1) << 12)) && (word & 0x1f) != 0x13)
+					: (fmtbit == 1 && !(word & (u64(1) << 12)));
+			const int pshift_w = half_w ? 7 : P_SHIFT;
+			if (half_w && pshift_w != P_SHIFT) m_fmtbit_n++;
 			m_p = u64((s64(util::sext(coef, 24)) * s64(L)) >> pshift_w) & 0xfffffffffffULL;
 			m_pw = 6; /* §175: who last wrote P -- "THE MULTIPLY" */
 			//  ★ SUBFB DIAGNOSTIC: what did THE MULTIPLY actually consume when the
@@ -8386,8 +8396,9 @@ void upd6383_device::dump_frame_report() const
 				"capture: FIRED %u times\n", getenv("UPD6383_NOTA0C") ? 1 : 0, u32(m_nota0c_n));
 		logerror("upd6383: ★ UPD6383_MULALL = %d: body class-2 words that also formed a product: "
 				"FIRED %u times\n", getenv("UPD6383_MULALL") ? 1 : 0, u32(m_mulall_n));
-		logerror("upd6383: ★ UPD6383_FMTBIT = %d: per-word coefficient format (bit 12 clear -> Q0.23, "
-				"shift 7): FIRED %u times\n", getenv("UPD6383_FMTBIT") ? 1 : 0, u32(m_fmtbit_n));
+		logerror("upd6383: ★ UPD6383_FMTBIT = %s: per-word coefficient format (1 = bit 12 clear -> shift 7; "
+				"2 = bit 12 clear AND ACT != 0x13 -> shift 7): FIRED %u times\n",
+				getenv("UPD6383_FMTBIT") ? getenv("UPD6383_FMTBIT") : "0", u32(m_fmtbit_n));
 		logerror("upd6383: ★★ §160 REGISTER FILE, LFO WAVETABLE WINDOW 0x1D..0x40 "
 					"(%u of 36 non-zero):%s\n", wnz, wt.c_str());
 			std::string rf;
