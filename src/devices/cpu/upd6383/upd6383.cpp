@@ -4940,8 +4940,12 @@ void upd6383_device::exec_alu(u64 word)
 			//         FLANGER gaining a product, and every LFO preserved at +114/frame.
 			//  The hypothesis was written BEFORE the run, from the measured constraint that
 			//  a uniform store target cannot satisfy both programs (§38).
-			static const bool st07sign = []{ const char *e = getenv("UPD6383_ST07SIGN");
-					return e ? (atoi(e) != 0) : true; }();
+			//  ⛔⛔ REVERTED TO DEFAULT-OFF with UPD6383_CALLFLUSH, N-INPUT-GATE-OPENED §56 --
+			//  same reason: validated at ACT 0x0E selector 4, the device ships selector 7, and
+			//  at the shipped mask the pair adds 6 railed cells to the PARAMETRIC EQ.
+			//  Re-enable with UPD6383_ST07SIGN=1; its evidence at selector 4 stands (§40).
+			static const bool st07sign = getenv("UPD6383_ST07SIGN") != nullptr
+					&& atoi(getenv("UPD6383_ST07SIGN")) != 0;
 			if (st07sign)
 			{
 				d07 = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
@@ -6535,8 +6539,16 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  `iw88' carries no store bit at all.  §109 bit 28 moves the EQ's store to
 				//  0x50 and every band then gets one clean copy -- but it freezes every LFO in
 				//  the catalogue (§35), so it is not the answer.  N-INPUT-GATE-OPENED §30/§37.
-				static const bool callflush = []{ const char *e = getenv("UPD6383_CALLFLUSH");
-						return e ? (atoi(e) != 0) : true; }();
+				//  ⛔⛔ REVERTED TO DEFAULT-OFF, N-INPUT-GATE-OPENED §56.  The promotion was
+				//  validated with `UPD6383_SPEC=B9108446A39B440F` -- ACT 0x0E selector 4 --
+				//  but the DEVICE'S OWN DEFAULT is `0xb910e446a39b440f`, selector 7.  At the
+				//  SHIPPED mask these arms ADD RAILING to the reference program: PARAMETRIC
+				//  EQ goes 22 cells / 59 rows / **0 railed** with them off to 24 / 105 /
+				//  **6 railed** with them on.  A promotion validated under a configuration
+				//  that is not the shipped one is NOT validated.  Re-enable with
+				//  UPD6383_CALLFLUSH=1 (its evidence at selector 4 stands, §36).
+				static const bool callflush = getenv("UPD6383_CALLFLUSH") != nullptr
+						&& atoi(getenv("UPD6383_CALLFLUSH")) != 0;
 				if (callflush) { m_p = 0; m_pw = 0; m_callflush_n++; }
 				//  ★ DIAGNOSTIC (UPD6383_CALLACC, default OFF): clear the ACCUMULATOR
 				//  at the block CALL, and leave the product register alone.
@@ -8788,9 +8800,9 @@ void upd6383_device::dump_frame_report() const
 				u32(m_lo12st5_n));
 		logerror("upd6383: ★ UPD6383_LO12CAP>=2: bit-11 ACT-0x07 stores performed: FIRED %u times\n",
 				u32(m_lo12st_n));
-		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d (DEFAULT IS NOW 1, §36): product register "
+		logerror("upd6383: ★ UPD6383_CALLFLUSH = %d (§56: DEFAULT 0 again): product register "
 				"cleared at the block CALL: FIRED %u times\n",
-				getenv("UPD6383_CALLFLUSH") ? (atoi(getenv("UPD6383_CALLFLUSH")) != 0) : 1,
+				getenv("UPD6383_CALLFLUSH") ? (atoi(getenv("UPD6383_CALLFLUSH")) != 0) : 0,
 				u32(m_callflush_n));
 		logerror("upd6383: ★ UPD6383_PCLR = %d: P cleared on words that drive no multiply: "
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
@@ -8800,9 +8812,9 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_EPIREBASE") ? 1 : 0, u32(m_epirebase_n));
 		logerror("upd6383: ★ §45 UPD6383_ST2A = %d: hi12 0x02A with addr8 != 0 stores at the "
 				"POST cell: FIRED %u times\n", getenv("UPD6383_ST2A") ? 1 : 0, u32(m_st2a_n));
-		logerror("upd6383: ★ §38/§40 UPD6383_ST07SIGN = %d (DEFAULT IS NOW 1): ACT-07 store on "
+		logerror("upd6383: ★ §38/§40 UPD6383_ST07SIGN = %d (§56: DEFAULT 0 again): ACT-07 store on "
 				"the POST cell when addr8 > 0: FIRED %u times\n",
-				getenv("UPD6383_ST07SIGN") ? (atoi(getenv("UPD6383_ST07SIGN")) != 0) : 1,
+				getenv("UPD6383_ST07SIGN") ? (atoi(getenv("UPD6383_ST07SIGN")) != 0) : 0,
 				u32(m_st07sign_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
