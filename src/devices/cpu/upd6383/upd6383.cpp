@@ -1641,16 +1641,16 @@ void upd6383_device::device_stop()
 			//  dsp/hle/lle_oracle.py to pin the hi12 "+=" op and the D-RAM origin m_dp.
 			//  The header and the row share one column order on purpose (they used to
 			//  disagree: the header named mem[dp]/tA/tB the row never printed).
-			logerror("upd6383:   n  iw u1  word         dp  mem    acc            accb           P              cur coef   tA     tB     MUL       L\n");
+			logerror("upd6383:   n  iw u1  word         dp  mem    acc            accb           P              cur coef   tA     tB     MUL       L LW\n");
 			for (u32 q = 0; q < m_trace_n; q++)
 			{
 				const trace_t &t = m_trace[q];
-				logerror("upd6383:  %3d %3d  %d  %010llX %02X %06X %14lld %14lld %14lld  %02X %06X %06X %06X   %c %8d\n",
+				logerror("upd6383:  %3d %3d  %d  %010llX %02X %06X %14lld %14lld %14lld  %02X %06X %06X %06X   %c %8d  %c\n",
 						q, t.iw, t.u1 ? 1 : 0, (unsigned long long)t.word, t.dp,
 						u32(t.mem) & 0xffffff,
 						(long long)t.acc, (long long)t.accb, (long long)t.p,
 						t.cur, t.coef, u32(t.ta) & 0xffffff, u32(t.tb) & 0xffffff,
-						t.mul ? 'Y' : '.', t.l);
+						t.mul ? 'Y' : '.', t.l, t.lw ? 'W' : '.');
 			}
 		}
 		{   // ★ WHERE DOES THE SIGNAL DIE?  peak |acc| per I-RAM slot.
@@ -4228,7 +4228,7 @@ void upd6383_device::exec_alu(u64 word)
 	// A CONSEQUENCE, stated because it is a testable prediction and not a
 	// convenience: on an ACTION-0x00 word hi12[3:1] == 0 and == 1 become
 	// INDISTINGUISHABLE (both give `bus + P'), and the corpus does emit both.
-	m_last_l = L;               // ★ §29: the bus operand actually selected
+	m_last_l = L; m_ltouch = true;   // ★ §29: the bus operand actually selected (§9: LW)
 	//  ★★★★★ §232 THE UNANCHORED SRC/ACTION CENSUS -- read-only, unconditional.
 	//  Placed HERE because this is the single point at which `L' is final and the
 	//  word's own post-increment has not yet run, so `m_dp'/`m_cursor' are the
@@ -6094,6 +6094,15 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		m_pc += upd6383_disassembler::WORD_BYTES;
 		slots++;
 		m_ptouch = false;           // ★ UPD6383_PCLR: per-word "did anything drive P?"
+		//  ★ §9 OBSERVATION-ONLY (no behaviour change): did THIS word drive the operand
+		//  latch?  N-COVERAGE-WORKLIST §8/§9 measured that on `hi12=000 cls2 SRC00 ACT00'
+		//  the latch is HELD in 347 of 363 rows and RELOADED in 16, and that neither the
+		//  unit nor `addr8' nor the preceding word's class/ACT discriminates -- only a
+		//  NECESSARY condition survives (a load follows only a multiply or an ACT 0x07).
+		//  The remaining candidate is a state the trace does not print, so print it: the
+		//  `LW' column says whether `m_last_l' was written on this row, which separates
+		//  "held because nothing drove it" from "reloaded with the same value".
+		m_ltouch = false;
 
 		//  ★ the speculative gate widens what counts as executable; with
 		//  m_speculative clear this is EXACTLY decoded(), bit for bit.
@@ -6300,7 +6309,7 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 				//  two is empty.  These two columns say which.
 				t.ta = s32(util::sext(m_ta, 24)); t.tb = s32(util::sext(m_tb, 24));
 				t.cur = u8(m_cursor); t.coef = m_cram.read_dword(m_cursor) & 0xffffff;
-				t.l = m_last_l; t.mul = m_mul_issued;
+				t.l = m_last_l; t.mul = m_mul_issued; t.lw = m_ltouch;
 				t.accb = util::sext(m_accb, 44); t.u1 = m_cur_unit1;   // ★ §65
 			}
 			if (prof_iw <= 24 && m_curprof_n < 25)

@@ -762,7 +762,7 @@ private:
 	s32  m_last_l = 0; bool m_mul_issued = false;
 	struct trace_t { u16 iw; u64 word; u8 dp; s32 mem; s64 acc; s64 p;
 	                 s32 ta; s32 tb; u8 cur; u32 coef; s32 l; bool mul;
-	                 s64 accb; bool u1; };
+	                 s64 accb; bool u1; bool lw; };   // lw = §9: this word drove the operand latch
 	trace_t m_trace[400] = {};
 	u32  m_trace_n = 0;
 	bool m_trace_armed = false, m_trace_done = false;
@@ -1626,6 +1626,7 @@ private:
 	u64  m_st07sign_n = 0;          // UPD6383_ST07SIGN: ACT-07 store moved to POST on addr8 > 0
 	u64  m_st2a_n = 0;              // UPD6383_ST2A: the hi12 0x02A family storing at POST
 	u64  m_epirebase_n = 0;         // UPD6383_EPIREBASE: pointer rebased at the epilogue entry
+	bool m_ltouch = false;          // §9: did THIS word drive the operand latch? (trace column LW)
 	u64  m_pclr_n = 0;              // UPD6383_PCLR: words that cleared an undriven P
 	u64  m_c6lut_n = 0;             // UPD6383_C6LUT: class-6 table lookups actually performed
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied
