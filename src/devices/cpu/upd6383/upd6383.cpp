@@ -4902,6 +4902,7 @@ void upd6383_device::exec_alu(u64 word)
 			}
 		}
 		//======================================================================
+		//======================================================================
 		//  ★★★ §38 DIAGNOSTIC (env UPD6383_ST07SIGN, default OFF): the ACT-0x07 store
 		//  target depends on the SIGN of the post-increment -- POST when `addr8 > 0',
 		//  PRE otherwise.  This is NOT a reading; it is the one hypothesis that the
@@ -6385,6 +6386,38 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		{
 			m_sprobe[m_sprobe_cur].dp_post = m_dp;
 			m_sprobe_cur = -1;
+		}
+
+		//  ★★★ §45 DIAGNOSTIC (env UPD6383_ST2A, default OFF): the `hi12 = 0x02A' family
+		//  STORES the accumulator when its pointer delta is non-zero.
+		//
+		//  ⚠⚠ PLACED HERE, ON THE PER-WORD PATH, AND THAT TOOK THREE ATTEMPTS.
+		//    1. `m_dp + addr8' -- the pointer walk has ALREADY run by then, so the store
+		//       landed on 0x9B (= 0x50 + 75), a cell nothing addresses.  Fired 10 487 times,
+		//       changed nothing.
+		//    2. aimed at `m_dp' but left inside `exec_alu()'s `case LO_ACT_ST_BUS' -- the
+		//       starved word is `002A24B000', `lo12 = 0x000', so its ACT is 0x00 and it
+		//       never reaches that switch arm at all.  IDENTICAL fired count gave it away.
+		//    3. here: this runs for EVERY executed word.
+		//  ⇒ a null from an arm that never fired on the target word is not a refutation.
+		//  Check the FIRED COUNT and the target cell before reading any verdict.
+		//
+		//  THE MEASURED SPLIT (N-INPUT-GATE-OPENED §45): the starved programs and the
+		//  working one use THE SAME INSTRUCTION, differing only in `addr8' --
+		//      PARAMETRIC EQ   w3 002A200000  addr8 = +0   works
+		//      PEQ+COMPR+DIST  w1 002A24B000  addr8 = +75  starved
+		//  and over all 42 `hi12 = 0x02A' words the `addr8 != 0' instances run 9 STARVED to
+		//  1 LIVE.  ★★ BOTH of the EQ's instances carry `addr8 = 0', so this rule cannot
+		//  move the reference program -- a control that is a property of the corpus.
+		{
+			static const bool st2a = getenv("UPD6383_ST2A") != nullptr;
+			if (st2a && upd6383_disassembler::hi12(raw) == 0x02a
+					&& s8(upd6383_disassembler::addr8(raw)) != 0)
+			{
+				m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
+				pv_wr_dram(m_dp, u32(acc_to_datum(m_acc)));
+				m_st2a_n++;
+			}
 		}
 
 		//  ★ DIAGNOSTIC (UPD6383_PCLR, default OFF): the multiplier output register
@@ -8718,6 +8751,8 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
 				"FIRED %u times\n", getenv("UPD6383_CALLACC") ? 1 : 0, u32(m_callacc_n));
+		logerror("upd6383: ★ §45 UPD6383_ST2A = %d: hi12 0x02A with addr8 != 0 stores at the "
+				"POST cell: FIRED %u times\n", getenv("UPD6383_ST2A") ? 1 : 0, u32(m_st2a_n));
 		logerror("upd6383: ★ §38/§40 UPD6383_ST07SIGN = %d (DEFAULT IS NOW 1): ACT-07 store on "
 				"the POST cell when addr8 > 0: FIRED %u times\n",
 				getenv("UPD6383_ST07SIGN") ? (atoi(getenv("UPD6383_ST07SIGN")) != 0) : 1,
