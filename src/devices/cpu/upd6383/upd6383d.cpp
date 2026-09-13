@@ -856,6 +856,9 @@ bool upd6383_disassembler::decoded(u64 word)
 	//  says to make before admitting anything on a format escape.
 	//  ⚠ NOT claimed: the call/return itself, which upd6383.cpp calls "the frame SEQUENCER's
 	//  model, not the ISA's".  This says the WORD is executable, not that the jump is derived.
+	if (is_c40(word))       // ★ sect. 115
+		return true;
+
 	if (is_terminator(word))
 		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
@@ -983,6 +986,16 @@ std::string upd6383_disassembler::text(u64 word, int at)
 		//  executable, and only the PREDICATE was mirrored here -- so two corpus
 		//  rows rendered `ld.ta2 ?' against the Python `dly.w dsc[k],p+96' and the
 		//  "MIRRORS AGREE -- 3057/3057" invariant was quietly false.
+		//  ★★★★★ sect. 115: the `is_c40' IMMEDIATE LOAD.  One opcode (0x620; the payload rule
+		//  holds 57 of 57 inside it and 2 of 11 outside), and its DESTINATION is selected by
+		//  `lo12' -- which is what is_setvec() PROVES for lo12 0x445 / 0x446, the per-unit CALL
+		//  VECTOR registers.  `acc' or `tempB' would mean one opcode writes a register for two
+		//  lo12 values and the accumulator for the others, which is not how a destination field
+		//  works.  ★ And the register is never read back: UPD6383_CFMTDST=7 is BIT-IDENTICAL to
+		//  the shipped latch on 8 of 8 programs.  ⛔ NOT extended past opcode 0x620.
+		else if (is_c40(word))
+			util::stream_format(s, "ldreg   r%02X,#%d          ; immediate -> the register "
+					"lo12 selects", u32(lo12(word) & 0xff), u32(c_a(word)));
 		else if (is_terminator(word))
 			util::stream_format(s, "endblk  unit%d          ; END OF BLOCK -- the image's "
 					"last word", addr8(word) == 0x0E ? 0 : 1);

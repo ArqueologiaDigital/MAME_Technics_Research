@@ -290,11 +290,18 @@ void upd6383_device::device_start()
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
 	m_cfmtdst = getenv("UPD6383_CFMTDST")
-			? u32(std::clamp(atoi(getenv("UPD6383_CFMTDST")), 0, 6)) : 0u;   // ★ §109
+			? u32(std::clamp(atoi(getenv("UPD6383_CFMTDST")), 0, 7)) : 7u;   // ★ §115 DEFAULT 7
+	//  ★★★★★ §115 PROMOTED TO DEFAULT (2026-09-14): the C-format immediate goes to the REGISTER
+	//  `lo12' SELECTS.  `is_setvec()' proves exactly that for lo12 0x445 / 0x446 (the per-unit
+	//  call vectors), and one opcode's destination field selects among registers -- `acc' and
+	//  `tempB' would have it write a register for two values and the accumulator for the rest.
+	//  ⚠ ZERO-RISK: mode 7 is BIT-IDENTICAL to the old latch behaviour on 8 of 8 programs (the
+	//  register is never read back), with the arm firing ~28 M times in each, so this default
+	//  changes no observable.  `UPD6383_CFMTDST=0' restores the latch as the control.
 	if (m_cfmtdst)
 		logerror("upd6383: ★★★ §109 UPD6383_CFMTDST = %u -- the C-format immediate goes to %s\n",
 				m_cfmtdst, (const char *[]){"the latch", "acc", "P", "tempA", "tempB",
-										   "mem[ptr]", "reg[addr8]"}[m_cfmtdst]);
+										   "mem[ptr]", "reg[addr8]", "reg[lo12 & 0xFF]"}[m_cfmtdst]);
 	m_census_perprog = getenv("UPD6383_CENSUS_PERPROG") != nullptr;   // ★ §103, default OFF
 	if (m_census_perprog)
 		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
@@ -2818,6 +2825,14 @@ void upd6383_device::exec_alu(u64 word)
 				case 4: m_tb = d24; break;                                  // tempB
 				case 5: m_dram.write_dword(m_dp, d24); break;               // mem[ptr]
 				case 6: m_rf[upd6383_disassembler::addr8(word) & 0xff] = d24; break;  // reg[addr8]
+				//  ★★★ §114: reg[lo12 & 0xFF] -- the destination selected by `lo12', which is
+				//  what `is_setvec()' PROVES for two members of this very family: `lo12 = 0x445'
+				//  and `0x446' are the per-unit CALL VECTOR registers (K5, DETERMINED
+				//  destination), and `is_setvec(w) = is_c40(w) && is_vector_lo12(lo12(w))'.
+				//  ⇒ on a C40 word `lo12' SELECTS THE DESTINATION.  Mode 6 indexed by `addr8',
+				//  which is the field that carries the PAYLOAD under the same family's payload
+				//  rule -- so it was the wrong half of the word, and this is the right one.
+				case 7: m_rf[upd6383_disassembler::lo12(word) & 0xff] = d24; break;
 				default: break;
 				}
 			}
