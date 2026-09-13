@@ -8264,9 +8264,21 @@ void upd6383_device::dump_frame_report() const
 			//  per-unit base/input cells 05 / 07 / 85 / 87 are flagged: a clip landing there
 			//  hands the body a rail, and a body fed a rail cannot do anything but sit still
 			//  (N-INPUT-GATE-OPENED §70-§73 -- 8 of 8 programs sampled, at the DEVICE DEFAULT).
-			logerror("upd6383: ★★★★★ §74 §S1C SATURATION BY TARGET CELL -- %llu clipped "
-					"conversions total.  ⚠ counts every clipping conversion, not only stores: "
-					"read it as \"clipped datums addressed at this cell\".\n",
+			logerror("upd6383: ★★★★★ §74 §S1C CLIPPED CONVERSIONS BY POINTER RESIDENCE -- %llu "
+					"total.  ⚠⚠ READ THE NAME LITERALLY.  This is indexed by `m_dp' at the moment "
+					"of the conversion, so it counts EVERY clipping conversion that happened while "
+					"the pointer rested on a cell -- NOT the clipped datums that cell actually "
+					"RECEIVED.  MEASURED in one auto-wah frame: cell 0x94 has 45 rows and only 5 "
+					"carry a store; cell 0x06 has 20 and 10.  A cell the pointer merely PASSES "
+					"THROUGH during heavy arithmetic therefore accumulates counts it never took.\n"
+					"upd6383:    ⇒ USE IT AS A CANDIDATE FINDER, NOT AS A VERDICT.  It earned that "
+					"much: it independently named cell 0x12 in prog52_auto_wah, which IS a real "
+					"store target and IS railed (N-INPUT-GATE-OPENED §88).  A store-accurate "
+					"census needs a central D-RAM write helper -- there are 33 write sites today "
+					"-- which is a refactor, not a counter.\n"
+					"upd6383:    ⚠ `m_dp' is the D-RAM pointer.  It is NOT the internal REGISTER "
+					"FILE index (that is `addr8' on a class-1 non-escape word), so \"cell 06\" "
+					"here is D-RAM 0x06 and NOT register [06], the per-unit output level.\n",
 					(unsigned long long)m_satcell_n);
 			if (!m_satcell_n)
 				logerror("upd6383:    (none -- nothing clipped)\n");
