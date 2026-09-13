@@ -852,7 +852,8 @@ bool upd6383_disassembler::decoded(u64 word)
 	if (is_dram(word) && dram_dir(word))
 		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
-				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7) && hi_f31(hi12(word)) != 2)
+				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7)                 // ★ sect. 106
+					&& hi_f31(hi12(word)) != 1 && hi_f31(hi12(word)) != 2)
 				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
 					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
 
@@ -996,6 +997,12 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			case LO_SRC_ACC: sname = "acc"; break;
 			case LO_SRC_TA:  sname = "ta";  break;
 			case LO_SRC_TB:  sname = "tb";  break;
+			//  ★ 2026-09-13: the three codes anchored this session had no name, so a
+			//  decoded word printed `?' for its source and read as undecoded.  Caught
+			//  when sect. 106 admitted 82 words and they came out as `mac.b ?,c+'.
+			case LO_SRC_MEM0: sname = "(p)0"; break;    // sect. 233: mem[ptr] / delay-RAM read
+			case LO_SRC_DRD:  sname = "dr";   break;    // the delay-read data register
+			case LO_SRC_LFO:  sname = "c";    break;    // C-RAM[cursor] -- THE COEFFICIENT
 			default:         sname = "?";   break;      // unreachable: decoded()
 			}
 

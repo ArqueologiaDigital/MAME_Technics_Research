@@ -1740,7 +1740,23 @@ private:
 		m_census_epoch = m_frames_run;
 		m_census_resets++;
 	}
-	bool m_gateclr = false;
+	//  ★ §104: `UPD6383_GATECLR=2' selects the OTHER clear placement -- `clr:after',
+	//  the accumulator left at ZERO after the gate word's ALU.  §102's re-test (P2')
+	//  showed `clr:before' halves the LFO's rate error and does not fix it, and the
+	//  frame trace says why: with the feedback dropped the gate word still LOADS the
+	//  one-slot product `m_p', which at the LFO ramp word is the PREVIOUS word's
+	//  product -- junk.  `clr:after' removes that too, and the increment then enters
+	//  at the NEXT word (`082.2.00.1C0', SRC 0x07 + ACT 0x00, f31 == 1) where the
+	//  pipeline actually delivers it.  Both placements are `store-gate.md' §4
+	//  survivors; this is the second one, not a new hypothesis.
+	//  ★★★ §105: modes 3 and 4 are item D's THIRD family -- `LD', the memory access
+	//  read INTO the accumulator (bit 7 as a memory-port DIRECTION bit), at its two
+	//  placements.  With `clr:before' forced by §104, these are the last rivals: if
+	//  both fall on the same anchored criteria, the two survivors left (`none' and
+	//  `ST(acc->else)') are THE SAME MACHINE -- `gate_settle.py:70' makes the `else'
+	//  key unreadable by construction -- and the gate stops being an open axis for
+	//  EXECUTION even though "is there a store at all" stays unanswerable.
+	u32  m_gateclr = 0;             // 0 off | 1 clr:before | 2 clr:after | 3 LD@before | 4 LD@after
 	u64  m_gateclr_n = 0;
 	bool m_cls46ptr = false;
 	u64  m_cls46_n = 0;

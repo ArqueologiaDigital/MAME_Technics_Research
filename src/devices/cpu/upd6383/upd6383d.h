@@ -767,11 +767,25 @@ public:
 
 		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7))
 		{
-			// guard 7 -- the ONLY case the surviving gates settle is
-			// hi12[3:1] == 2.  The ACTION-0x00 escape at hi12[3:1] == 1 was
-			// withdrawn 2026-07-27: a clear deferred past the ALU is visible
-			// there too, so the case is not settled.  See above.
-			if (hi_f31(hi12(w)) != 2)
+			// guard 7.  ★★★★★ 2026-09-13 (N-INPUT-GATE-OPENED sect. 106):
+			// `f31 == 1' IS NOW ADMITTED.  The gate's three-way openness was
+			// closed by ELIMINATION on criteria the ROM and the FIRMWARE
+			// supply, each of which demonstrably CAN fail because a different
+			// arm made it fail: `clr:never' rails and churns the VOLUME cell
+			// 0x06 (proven by construction in 49 of 49 algorithms, written once
+			// by EFF_VolumeLoop) in 5 of 5 out-of-sample programs; `clr:after'
+			// and `LD@after' stop the LFO phase cell moving at all; `LD@before'
+			// runs the LFO at a 4.0-frame period against a ROM constant of 114
+			// per frame.  `clr:before' survives all of them -- VOLUME written
+			// ONCE and unrailed 5 of 5, the LFO alive with its minimum step
+			// exactly 114, 10 KEPT / 0 BROKEN on the hand-off regression, and
+			// re-verified with NO ENV SET AT ALL.  The two remaining survivors
+			// (`none' and `ST(acc->else)') are THE SAME MACHINE, because
+			// gate_settle.py:70 makes the `else' key unreadable by
+			// construction.  Shipped as upd6383.cpp `m_gateclr' default 1.
+			// ⚠ `f31 == 0' still traps: there the two surviving GATE CONDITIONS
+			// disagree about whether mem[ptr] is written at all.
+			if (hi_f31(hi12(w)) != 1 && hi_f31(hi12(w)) != 2)
 				return false;
 		}
 
@@ -877,7 +891,8 @@ public:
 			return 23;
 		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)          return 5;
 		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2) return 6;
-		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2)
+		if ((hi12(w) & HI_ST) && (hi12(w) & HI_B7)
+				&& hi_f31(hi12(w)) != 1 && hi_f31(hi12(w)) != 2)        // ★ sect. 106
 			return 7;
 		switch (hi_f31(hi12(w)))
 		{
@@ -893,7 +908,8 @@ public:
 	//  guard 7 is the FIRST guard that refuses it.
 	static constexpr bool guard7_would_refuse(u64 w)
 	{
-		return (hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2;
+		return (hi12(w) & HI_ST) && (hi12(w) & HI_B7)
+				&& hi_f31(hi12(w)) != 1 && hi_f31(hi12(w)) != 2;        // ★ sect. 106
 	}
 
 	// ---------------------------------------------------------------

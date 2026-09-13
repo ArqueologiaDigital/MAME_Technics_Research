@@ -293,10 +293,39 @@ void upd6383_device::device_start()
 	if (m_census_perprog)
 		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
 				"are cleared on every I-RAM program upload, so they describe ONE program\n");
-	m_gateclr  = getenv("UPD6383_GATECLR") != nullptr;     // ★ §102, default OFF
+	//  ★★★★★ §106 PROMOTED TO DEFAULT (2026-09-13): the store gate's clear is taken
+	//  BEFORE the ALU.  Mode 1 is the DEFAULT; `UPD6383_GATECLR=0' is the control
+	//  (the pre-§106 behaviour).  Every rival in store-gate.md item D's enumeration
+	//  falls on a criterion the ROM or the firmware supplies, and each of those
+	//  criteria demonstrably CAN fail because a different arm made it fail:
+	//    clr:never  ⛔ the VOLUME cell 0x06 -- PROVEN BY CONSTRUCTION as the user's
+	//                  effect depth in 49 of 49 algorithms, written once by
+	//                  EFF_VolumeLoop -- is RAILED in 5 of 5 out-of-sample programs
+	//                  and churned 11 .. 177 316 times.
+	//    clr:after  ⛔ the LFO phase cell stops moving entirely: absent from the
+	//                  non-zero census and with no row in the rise census.
+	//    LD@before  ⛔ the LFO runs at a 4.0-frame period (step 36 .. 4 194 103,
+	//                  mean 2 082 744) against a ROM constant of 114 per frame.
+	//    LD@after   ⛔ the phase cell is dead, as with clr:after.
+	//    clr:before ✔  VOLUME written ONCE and unrailed 5 of 5; the LFO alive with
+	//                  its minimum step exactly the ROM's 114; 10-program hand-off
+	//                  regression 10 KEPT / 0 BROKEN at the true default.
+	//  ⇒ `none' and `ST(acc->else)' are the only survivors and they are THE SAME
+	//  MACHINE (gate_settle.py:70 makes the `else' key unreadable by construction).
+	//  "Is there a store at all" stays unanswerable and stops mattering for
+	//  EXECUTION, which is what decoded() asks.
+	//  ⚠ The LFO's RATE is still wrong under the survivor (81 Hz vs the ROM's
+	//  0.599 Hz).  §102 measured that the gate is not its only cause; that defect is
+	//  open and is NOT claimed fixed here.
+	m_gateclr  = getenv("UPD6383_GATECLR") ? u32(std::clamp(atoi(getenv("UPD6383_GATECLR")), 0, 4))
+										  : 1u;           // ★ §106 DEFAULT = clr:before
 	if (m_gateclr)
-		logerror("upd6383: ★★★ §102 UPD6383_GATECLR ON -- the store gate's `clr:before' "
-				"survivor: bit-4 store + bit 7 + f31 == 1 drops the accumulator feedback\n");
+		logerror("upd6383: ★★★ §102/§104 UPD6383_GATECLR = %u -- the store gate's %s survivor "
+				"on bit-4 store + bit 7 + f31 == 1\n", m_gateclr,
+				m_gateclr == 1 ? "`clr:before' (feedback dropped)" :
+				m_gateclr == 2 ? "`clr:after' (accumulator left at ZERO)" :
+				m_gateclr == 3 ? "`LD@before' (acc <- mem[ptr], then the ALU)"
+							   : "`LD@after' (acc <- mem[ptr], replacing the result)");
 	m_cls46ptr = getenv("UPD6383_CLS46PTR") != nullptr;    // ★ §100, default OFF
 	if (m_cls46ptr)
 		logerror("upd6383: ★★★ §100 UPD6383_CLS46PTR ON -- classes 4 and 6 post-increment "
@@ -4484,11 +4513,21 @@ void upd6383_device::exec_alu(u64 word)
 		//  zeroed BEFORE the ALU, which for `f31 == 1' is exactly "drop the feedback
 		//  term".  Narrow on purpose: only the gate's own family (bit-4 store + bit 7
 		//  + f31 == 1), never the global `f31 == 1' that §227's NOCARRY covers.
-		const bool gateclr = m_gateclr
-				&& (hi & upd6383_disassembler::HI_ST)
+		const bool gateword = (hi & upd6383_disassembler::HI_ST)
 				&& (hi & upd6383_disassembler::HI_B7)
 				&& upd6383_disassembler::hi_f31(hi) == 1;
-		if (gateclr) m_gateclr_n++;
+		const bool gateclr  = (m_gateclr == 1) && gateword;   // clr:before
+		const bool gateclr2 = (m_gateclr == 2) && gateword;   // ★ §104 clr:after
+		const bool gateld1  = (m_gateclr == 3) && gateword;   // ★ §105 LD@before
+		const bool gateld2  = (m_gateclr == 4) && gateword;   // ★ §105 LD@after
+		if (gateclr || gateclr2 || gateld1 || gateld2) m_gateclr_n++;
+		//  ★ §105 `LD@before': the memory read lands in the accumulator BEFORE the
+		//  ALU, so the ALU's feedback term is `mem[ptr]' rather than the resident
+		//  accumulator.  Implemented as a substitution in the feedback term itself,
+		//  which is what "before" means here and keeps every other path identical.
+		const u64 ldval = (gateld1 || gateld2)
+				? (u64(u32(m_dram.read_dword(m_dp) & 0xffffff)) << ACC_SHIFT) : 0;
+		if (gateld1) accum = ldval;
 		const u64 src_term =
 				((op == upd6383_disassembler::HI_ACC_LOAD || nocarry || gateclr) ? 0 : accum)
 				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS
@@ -4653,6 +4692,11 @@ void upd6383_device::exec_alu(u64 word)
 			accum = u64(s64(util::sext(accum, 44)) >> c8shift) & 0xfffffffffffULL;
 			m_c8shift_n++;
 		}
+		//  ★ §104: `clr:after' -- the accumulator is ZERO once the gate word is done.
+		//  Placed after every other accumulator write in this function so it is the
+		//  last word on the subject, which is what "after the ALU" means.
+		if (gateclr2) accum = 0;
+		if (gateld2) accum = ldval;                           // ★ §105 LD@after
 		pv_wr_acc(use_b, accum);                              // ★ §221 §E1
 	}
 
@@ -8312,8 +8356,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
-		logerror("upd6383: ★ §102 GATECLR (%s): gate words with the feedback dropped: %llu\n",
-				m_gateclr ? "ON" : "off", (unsigned long long)m_gateclr_n);
+		logerror("upd6383: ★ §102/§104 GATECLR (mode %u): gate words affected: %llu\n",
+				m_gateclr, (unsigned long long)m_gateclr_n);
 		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",
 				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
 		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
