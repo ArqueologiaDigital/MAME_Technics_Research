@@ -4928,7 +4928,19 @@ void upd6383_device::exec_alu(u64 word)
 				&& upd6383_disassembler::ptr_postinc(word) && !m_in_k6
 				&& s8(upd6383_disassembler::addr8(word)) > 0)
 		{
-			static const bool st07sign = getenv("UPD6383_ST07SIGN") != nullptr;
+			//  ★★★★ PROMOTED TO DEFAULT-ON, N-INPUT-GATE-OPENED §40.  `UPD6383_ST07SIGN=0'
+			//  restores the old uniform PRE target.  EVIDENCE:
+			//    §39  all four gate criteria on both reference programs -- the chorus keeps
+			//         a free-running +114/frame ramp on the §119 eight-frame witness AND the
+			//         EQ's five band blocks each receive ONE CLEAN COPY of the input;
+			//    §40  ZERO regressions across ten programs, isolated against the flush-only
+			//         baseline, with the PARAMETRIC EQ going 2 -> 30 moving cells and
+			//         9 -> 90 non-zero products, the ENSEMBLE losing a railed cell, the
+			//         FLANGER gaining a product, and every LFO preserved at +114/frame.
+			//  The hypothesis was written BEFORE the run, from the measured constraint that
+			//  a uniform store target cannot satisfy both programs (§38).
+			static const bool st07sign = []{ const char *e = getenv("UPD6383_ST07SIGN");
+					return e ? (atoi(e) != 0) : true; }();
 			if (st07sign)
 			{
 				d07 = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
@@ -8706,9 +8718,10 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
 				"FIRED %u times\n", getenv("UPD6383_CALLACC") ? 1 : 0, u32(m_callacc_n));
-		logerror("upd6383: ★ §38 UPD6383_ST07SIGN = %d: ACT-07 store on the POST cell when "
-				"addr8 > 0: FIRED %u times\n",
-				getenv("UPD6383_ST07SIGN") ? 1 : 0, u32(m_st07sign_n));
+		logerror("upd6383: ★ §38/§40 UPD6383_ST07SIGN = %d (DEFAULT IS NOW 1): ACT-07 store on "
+				"the POST cell when addr8 > 0: FIRED %u times\n",
+				getenv("UPD6383_ST07SIGN") ? (atoi(getenv("UPD6383_ST07SIGN")) != 0) : 1,
+				u32(m_st07sign_n));
 		logerror("upd6383: ★ UPD6383_C6LUT = %d: class-6 table lookups performed: FIRED %u times\n",
 				getenv("UPD6383_C6LUT") ? 1 : 0, u32(m_c6lut_n));
 		logerror("upd6383: ★ UPD6383_C8SHIFT = %s: class-8 post-sum accumulator scalings applied: "
