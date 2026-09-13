@@ -361,9 +361,11 @@ void upd6383_device::device_start()
 	//  against the wrong arm.  See upd6383.h `m_src0b2' and data/PREDICT_215.md.
 	if (const char *e7 = getenv("UPD6383_SRC0B2"))
 		m_src0b2 = (strtoul(e7, nullptr, 10) != 0);
-	logerror("upd6383: §215 UPD6383_SRC0B2 = %d  (0 = SHIPPED: SRC 0x0B is the delay-read "
-			"register everywhere; 1 = RIVAL: on a word with no delay access it is "
-			"mem[ptr])\n", m_src0b2 ? 1 : 0);
+	logerror("upd6383: §215/§76 UPD6383_SRC0B2 = %d  (DEFAULT IS NOW 1.  1 = SHIPPED: on a "
+			"word with no delay access SRC 0x0B is mem[ptr] -- promoted 2026-09-13 on 8 FIXED "
+			"/ 0 BROKEN at the device default, blast radius 7 words; 0 = the PRE-2026-09-13 "
+			"reading, the delay-read register everywhere, kept as the two-sided control)\n",
+			m_src0b2 ? 1 : 0);
 	//  ★★★ §217: the publish schedule.  DEFAULT OFF, announced UNCONDITIONALLY so a log
 	//  can never be read against the wrong arm.  See upd6383.h `m_drpub' and
 	//  data/PREDICT_217.md, committed before this build.

@@ -653,10 +653,35 @@ private:
 	//  class 2, addr8 0x00, and it is UNIQUE in the 3057-word corpus.  Under the shipped
 	//  reading it captures a register measured ZERO on 24 922 560 of 24 922 560 reads,
 	//  which is exactly what zeroes tempA and silences the send (§213 §4).
-	//  ⚠ DEFAULT OFF (UPD6383_SRC0B2=1 to arm).  The u64 spec mask is EXHAUSTED.
+	//  ★★★★★ PROMOTED TO DEFAULT-ON 2026-09-13 (N-INPUT-GATE-OPENED §73/§76).  Set
+	//  UPD6383_SRC0B2=0 to restore the old reading as a two-sided control.
+	//
+	//  WHAT PROMOTED IT.  The argument above was static and had stood unarmed.  Measured at
+	//  the DEVICE DEFAULT (the first catalogue sweep ever taken there -- every earlier one
+	//  carried `UPD6383_PSHIFT=2', which halves the datum and hid this), the shipped reading
+	//  leaves the per-unit HAND-OFF cell 0x05 -- the cell each effect body reads its input
+	//  from -- RAILED or ZERO in 8 of 8 programs, `prog00_no_operation' among them.  A dry
+	//  pass-through cannot legitimately saturate its own input, so that is a defect of ours.
+	//  With the rival: 8 FIXED, 0 BROKEN, 0 unchanged (dsp/tools/src0b2_regression.py).
+	//
+	//    TYPE  0 chorus    0 -> 113541     TYPE  8 multitap  -8388608 -> -143401
+	//    TYPE  2 enhancer  8388607 -> 145244   TYPE 13 compressor -8388608 -> -347997
+	//    TYPE  3 flanger   8388607 -> -21382   TYPE 14 no_op      -8388608 -> -239616
+	//    TYPE  5 ensemble  0 -> -33547         TYPE 22 mix_up     -8388608 -> 270950
+	//
+	//  ★ And it is right for a SEMANTIC reason, not just a better number: under the rival,
+	//  `iw25' loads tempA with EXACTLY each program's own DI1 input-latch cell (0x04) --
+	//  -23 296 / 188 160 / -14 848 for ensemble / mix_up / flanger.  The input stage reads
+	//  the input.  Under the shipped reading it read a leftover.
+	//
+	//  ⚠ BLAST RADIUS, measured before promoting (the test §138 was refused by): the rival
+	//  touches SEVEN words of the 3 057-word corpus -- 0.23 %, two distinct shapes, two
+	//  images: kernel `iw25' (000.2.00.2D9, run by every program every frame) and six
+	//  `020.2.00.2C7' in prog06_ensemble.  BOTH shapes are exercised by the regression above.
 	//  ⚠ It changes ONLY class4 != 1 words: the 22 521 600 delay-word evaluations
-	//  (§77) are untouched in both arms.
-	bool m_src0b2 = false;          // arm the rival reading (mem[ptr])
+	//  (§77) are untouched in both arms, and the 99 class-1 delay words the original
+	//  `delay-read register' reading was built from keep it.
+	bool m_src0b2 = true;           // §73/§76: the rival reading (mem[ptr]) is the default
 	u64  m_src0b2_fired = 0;        // times the substitution actually happened
 	u64  m_src0b2_n = 0;            // class-2 SRC 0x0B evaluations (BOTH arms)
 	u64  m_src0b2_memnz = 0;        // ... of which mem[m_dp] was non-zero (BOTH arms)
