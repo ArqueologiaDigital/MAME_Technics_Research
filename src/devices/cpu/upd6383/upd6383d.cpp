@@ -395,9 +395,12 @@ std::string annotate(u64 word, int at)
 
 		if (lo == 0x820 || lo == 0x825 || lo == 0x827 || lo == 0x822)
 			return util::string_format(
+					//  ⚠ MIRROR: this string is compared verbatim against dsp_disasm.py by
+					//  tools/upd6383d_diff.sh.  Keep the two identical or the check fails on
+					//  wording, which hides a real disagreement in the noise.
 					"C-format opcode 0x%03X, pointer-load lo12; the five lo12=0x820 words carry "
-					"FOUR opcodes (602/605/621/625) -- they share a DESTINATION, not an instruction, "
-					"so no lo12 rule fits all five; A=%d B=%d for the record", op, a, b);
+					"FOUR opcodes (602/605/621/625) -- a shared DESTINATION, not an instruction; "
+					"A=%d B=%d", op, a, b);
 
 		return util::string_format(
 				"C-format opcode 0x%03X: bits [24:12] are one 13-bit IMMEDIATE reaching into hi12 "
@@ -673,11 +676,20 @@ std::string annotate(u64 word, int at)
 		const u8 a = upd6383_disassembler::lo_act(word);
 		const char *sr =
 			(s == upd6383_disassembler::LO_SRC_MEM0)  ? "SRC 0x00 = mem[ptr]/delay-RAM read" :
-			(s == upd6383_disassembler::LO_SRC_LFO)   ? "SRC 0x08 = LFO/per-unit source" :
+			//  ⚠ MIRROR: verbatim against dsp_disasm.py.  The old text here was
+			//  "SRC 0x08 = LFO/per-unit source", a name that note CORRECTED to the
+			//  coefficient port; the correction was made on one side only.
+			(s == upd6383_disassembler::LO_SRC_LFO)   ?
+					"SRC 0x08 = C-RAM[cursor] (the COEFFICIENT), MEASURED: the chorus LFO at iw89 "
+					"reads L = 114 and acc = 114<<16 exactly, and 114 = C-RAM[0x00] = "
+					"floor(0.5993*2^23/44100), the ROM's own ramp constant; the rival \"sample "
+					"source\" is REFUTED from disk (SQUARING-MULTIPLY item B)" :
 			(s == upd6383_disassembler::LO_SRC_DRD)   ? "SRC 0x0B = delay-read data register" :
 			(s == upd6383_disassembler::LO_SRC_ACCB)  ? "SRC 0x11 = ACCB (2nd accumulator)" :
 			(s == upd6383_disassembler::LO_SRC_TABLE) ? "SRC 0x13 = coef/wave table port" :
-			(s == upd6383_disassembler::LO_SRC_LFOOUT)? "SRC 0x1C = LFO output (UNPROVEN)" : nullptr;
+			(s == upd6383_disassembler::LO_SRC_LFOOUT)? "SRC 0x1C = control/mod source into MAC (100% MAC-consumed; LFO in mod fx, "
+					"envelope/AGC in dynamics) -- NOT LFO-only: present in 19 non-LFO programs "
+					"(dsp_datapath_fingerprint)" : nullptr;
 		const char *ar =
 			(a == upd6383_disassembler::LO_ACT_DELAY_RD) ? "ACT 0x0C = delay READ" :
 			(a == upd6383_disassembler::LO_ACT_TBL_MUL)  ? "ACT 0x08 = table-port multiply" :
@@ -940,6 +952,29 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			util::stream_format(s, "ldptr.d #$%02x", ad);
 		else if (is_rstcur(word))
 			s << "rstcur";
+		//  ★ THE WRAP WORD RENDERS AS ITS OWN OPERATION.  It is `f31 == 2' like a
+		//  HOLD but it does something else entirely -- `acc <- (datum(acc) & L)
+		//  << ACC_SHIFT', the LFO's modulus.  Rendering it as an ordinary
+		//  accumulator op would hide the one instruction in the corpus that wraps.
+		else if (is_wrapword(word))
+			s << "wrap    acc,c+          ; acc <- datum(acc) & coef  (LFO modulus)";
+		//  ★ THE DELAY ESCAPE names the port, not an ALU source: `k' is the index
+		//  of this escape within its own body and the address is
+		//  DESCRIPTOR_CELL[k] + G by the IDENTITY map, which is why no address
+		//  appears in the word.
+		//  ⚠ MIRROR DEBT, found by tools/upd6383d_diff.sh on 2026-09-13: these two
+		//  forms were added to dsp_disasm.py's text() when the delay escape became
+		//  executable, and only the PREDICATE was mirrored here -- so two corpus
+		//  rows rendered `ld.ta2 ?' against the Python `dly.w dsc[k],p+96' and the
+		//  "MIRRORS AGREE -- 3057/3057" invariant was quietly false.
+		else if (is_dram(word) && dram_dir(word))
+		{
+			if (dd == 0)
+				util::stream_format(s, "dly.%c  dsc[k]", dram_dir(word) == 'R' ? 'r' : 'w');
+			else
+				util::stream_format(s, "dly.%c  dsc[k],p%+d",
+						dram_dir(word) == 'R' ? 'r' : 'w', int(dd));
+		}
 		else
 		{
 			// THE ALU, rendered as the two fields it really is: the OPERATION
