@@ -821,19 +821,28 @@ bool upd6383_disassembler::decoded(u64 word)
 	// trapping, as does any member carrying the bit-4 store (859.0.86.822).
 	if (is_ldptr(word) || is_rstcur(word) || is_ldptrd(word)) return true;
 
-	//  ★★★★★ 2026-09-13: THE DELAY ESCAPE IS EXECUTABLE, and this predicate had been asking it
-	//  the wrong questions.  A class-1 format escape is an external delay-DRAM access whose
-	//  semantics are FORCED: the direction from `addr8' bit 6 (adjudication-round5 sect. 3) and
-	//  the address = DESCRIPTOR_CELL[k] + G by the IDENTITY map, PROVEN BY CONSTRUCTION.  It
-	//  never reaches the ALU -- this device's own `is_dram' branch RETURNS BEFORE IT -- so
-	//  grading these words on an anchored SRC/ACT/f31, fields they do not use, counted 276
-	//  fully-determined corpus words as undecoded.
-	//  ⚠ Scoped to the addr8 values the direction rule was VALIDATED on; `dram_dir' answers 0
-	//  outside them and this keeps trapping there.  MEASURED: all 276 corpus escapes are inside
-	//  the set (0x20 x106, 0x30 x58, 0x60 x112), so the restriction costs nothing today and
-	//  still refuses to answer for an addr8 nobody validated.
-	//  Mirrors dsp/tools/dsp_disasm.py `decoded()'.  Coverage 58.6 % -> 67.8 %.
-	if (is_dram(word) && dram_dir(word)) return true;
+	//  ★★★★★ 2026-09-13: THE DELAY ESCAPE IS EXECUTABLE **WHEN BOTH ITS HALVES ARE**.
+	//  Its ADDRESSING is FORCED -- direction from `addr8' bit 6 (adjudication-round5 sect. 3),
+	//  address = DESCRIPTOR_CELL[k] + G by the IDENTITY map, PROVEN BY CONSTRUCTION -- so grading
+	//  it on the CLASS test, which the escape itself explains, was wrong.
+	//  ⛔⛔ BUT THE FIRST VERSION OF THIS WAS TOO STRONG.  It admitted all 276 on the grounds that
+	//  such a word "never reaches the ALU -- the `is_dram' branch RETURNS BEFORE IT".  IT DOES
+	//  NOT: that branch calls exec_alu(word) with m_in_dram = true under SPEC bit 19, which is SET
+	//  IN THE DEFAULT MASK.  The delay word runs its datapath half deliberately, so the delay
+	//  datum reaches the chain -- and its SRC/ACT/f31 therefore DO apply.  MEASURED consequence:
+	//  iw331, a delay WRITE, leaves unit 1's accumulator at exactly the positive rail, which
+	//  "an external delay write" does not describe.
+	//  ⇒ decoded when the addressing is forced AND the ALU half is anchored.  MEASURED: 201 of
+	//  276 qualify; the other 75 are refused on their ALU half (ACT 0x0B on class 1 x50,
+	//  ACT 0x1C x17, ACT 0x1A x6, ACT 0x07 x2).
+	//  ⚠ `dram_dir' still answers 0 outside the validated addr8 set and this keeps trapping there.
+	//  Mirrors dsp/tools/dsp_disasm.py `decoded()'.  Coverage 76.4 % -> 74.0 % (a CORRECTION).
+	if (is_dram(word) && dram_dir(word))
+		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
+				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
+				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7) && hi_f31(hi12(word)) != 2)
+				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
+					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
 
 	// setvec -- the per-unit CALL VECTOR write.  DETERMINED destination (K5);
 	// the SOURCE field of the canned boot-default form is OPEN, which is why
