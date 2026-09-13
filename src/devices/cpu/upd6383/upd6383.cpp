@@ -289,6 +289,12 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	m_cfmtdst = getenv("UPD6383_CFMTDST")
+			? u32(std::clamp(atoi(getenv("UPD6383_CFMTDST")), 0, 6)) : 0u;   // ★ §109
+	if (m_cfmtdst)
+		logerror("upd6383: ★★★ §109 UPD6383_CFMTDST = %u -- the C-format immediate goes to %s\n",
+				m_cfmtdst, (const char *[]){"the latch", "acc", "P", "tempA", "tempB",
+										   "mem[ptr]", "reg[addr8]"}[m_cfmtdst]);
 	m_census_perprog = getenv("UPD6383_CENSUS_PERPROG") != nullptr;   // ★ §103, default OFF
 	if (m_census_perprog)
 		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
@@ -2796,6 +2802,25 @@ void upd6383_device::exec_alu(u64 word)
 			//  latch tests whether it is the clobber without inventing a new
 			//  destination.
 			m_cimm = s64(imm) << 11;
+			//  ★★★ §109: the enumerated destinations.  0 keeps the latch (the shipped
+			//  behaviour and the control); the rest are the six this file has named as
+			//  candidates since row 5 was written.
+			if (m_cfmtdst)
+			{
+				m_cfmtdst_n++;
+				const u64 v = u64(m_cimm) & 0xfffffffffffULL;
+				const u32 d24 = u32(m_cimm >> ACC_SHIFT) & 0xffffff;
+				switch (m_cfmtdst)
+				{
+				case 1: (m_cur_unit1 ? m_accb : m_acc) = v; break;          // acc
+				case 2: m_p = v; m_pw = 9; m_ptouch = true; break;          // the product
+				case 3: m_ta = d24; break;                                  // tempA
+				case 4: m_tb = d24; break;                                  // tempB
+				case 5: m_dram.write_dword(m_dp, d24); break;               // mem[ptr]
+				case 6: m_rf[upd6383_disassembler::addr8(word) & 0xff] = d24; break;  // reg[addr8]
+				default: break;
+				}
+			}
 			return;
 		}
 		//  THE ALTERNATE lo12 ENCODING (bit 11).  sect. 9 of bit11-family.md
@@ -8356,6 +8381,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★ §109 CFMTDST (mode %u): C-format immediates redirected: %llu\n",
+				m_cfmtdst, (unsigned long long)m_cfmtdst_n);
 		logerror("upd6383: ★ §102/§104 GATECLR (mode %u): gate words affected: %llu\n",
 				m_gateclr, (unsigned long long)m_gateclr_n);
 		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",

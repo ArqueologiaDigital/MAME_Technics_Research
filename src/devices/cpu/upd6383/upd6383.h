@@ -753,6 +753,26 @@ private:
 	bool m_cur_unit1 = false;       // ★ which unit body is executing (row 27)
 	bool m_in_k6 = false;           // ★ re-entrancy guard for exec_alu_k6()
 	s64  m_cimm = 0;                              //   c-format immediate latch (row 5 test)
+	//======================================================================
+	//  ★★★ §109 DIAGNOSTIC (env UPD6383_CFMTDST, default 0 = the latch): the
+	//  C-FORMAT IMMEDIATE'S DESTINATION, enumerated.
+	//
+	//  `status()' has called the C-format operation MEASURED with the destination
+	//  OPEN since it was written -- 68 words, every one of them trapping, and the
+	//  largest single entry in `decode_leverage.py' now that the store gate is
+	//  closed.  The destination was always "1 of 6 enumerated" and nobody ever ran
+	//  the six.  §106's method says to: sweep, and ask the censuses.
+	//
+	//  ★ Two outcomes are useful and they are opposite.  If EVERY destination
+	//  leaves the machine bit-identical, the immediate is never read and the words
+	//  are EXECUTABLE whatever it lands on (§96's lemma, the §108 form).  If only
+	//  one leaves the machine healthy, that one is the destination.
+	//  ⚠ `acc' is known NOT to be inert: the comment at the site records a stuck
+	//  presentation value of 4 988 928 = 2436 << 11, exactly this line's shape.  So
+	//  the sweep has power before it runs.
+	//======================================================================
+	u32  m_cfmtdst = 0;
+	u64  m_cfmtdst_n = 0;
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
 	bool m_cram_wp_set = false;
 	u32  m_cwr_runlen = 0, m_cwr_start = 0, m_nruns = 0;
