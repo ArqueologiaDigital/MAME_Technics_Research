@@ -2767,6 +2767,7 @@ void upd6383_device::exec_alu(u64 word)
 		}
 		if (upd6383_disassembler::lo12(word) & 0x800)
 		{
+			note_alt11(upd6383_disassembler::lo12(word));   // ★ §97 the swallow census
 			if (upd6383_disassembler::coeff_consumer(word))
 				m_cursor++;
 			if ((upd6383_disassembler::class4(word) & 7) == 2)
@@ -3316,6 +3317,18 @@ void upd6383_device::exec_alu(u64 word)
 					//  53 in BOTH directions, against a base-rate null of 0.94 -- and
 					//  C63 is `SRC 0x11 / ACT 0x03' = `m_tb = L'.  So the shape is
 					//  "load the index register, then read the table indexed by it".
+					//  ⛔⛔ §97 (2026-09-13) RETRACTS THE SECOND HALF OF THAT.  `C63'
+					//  carries lo12 bit 11, so it has NO SRC and NO ACTION field
+					//  (bit11-family.md sect. 9, and the branch comment at the
+					//  alternate-encoding return says so in this file).  MEASURED by
+					//  the §97 SWALLOW CENSUS: `lo12 C63' leaves exec_alu() at that
+					//  return 3 150 504 times in a chorus run -- twice per frame, every
+					//  frame -- so no SOURCE and no ACTION decode ever runs for it and
+					//  `m_tb', written only in the ACTION switch below, can never be
+					//  written by a `C63' word.  §166's 53/53 bijection STANDS; its
+					//  identification of the index register does not.  What the probe
+					//  below reads is therefore a `m_tb' that this idiom never touches,
+					//  which is exactly why it has always come back constant.
 					//  ⚠ BEFORE implementing `table[m_tb]', measure that m_tb VARIES.
 					//  §162 censused acc/m_dp/cursor and never looked at the temps; if
 					//  m_tb is constant the lookup is frozen and building it
@@ -3849,6 +3862,19 @@ void upd6383_device::exec_alu(u64 word)
 		//  cell 0x00..0x1F that moves -- 01 02 04 06 07 0E and nothing else.  Cell
 		//  0x0C is not among them.  `C63' reads cell 0x0C; the LFO phase is in cell
 		//  0x07.  It is reading the wrong cell.
+		//  ⛔⛔ §97 (2026-09-13): THAT DIAGNOSIS IS WRONG AND THE TEST WAS VOID.
+		//  Re-run at the corrected default with predictions written first: the gate
+		//  fires 12 760 530 times and `m_tb' at the class-6 site is BIT-IDENTICAL to
+		//  the control, as are m_dp, cursor, L, acc and cell 0x0C.  It could not have
+		//  been otherwise -- `C63' carries lo12 bit 11, so exec_alu() RETURNS at the
+		//  alternate-encoding branch long before this switch, and the §97 SWALLOW
+		//  CENSUS measures it leaving there 3 150 504 times per chorus run.  Bit 18
+		//  cannot reach that word under any setting.
+		//  ★ A FIRED-COUNT PROVES THE ARM RAN SOMEWHERE, NOT THAT IT RAN AT THE SITE
+		//  THE CONCLUSION IS ABOUT.  §116 hit this exact trap on lo12 0x827 and caught
+		//  it only because its count was per-site; §168's was not.
+		//  ⚠ And cell 0x0C is no longer still: §176 reports 0C:1(-17..19/chg19520).
+		//  The bit stays OFF -- this changes why, not whether.
 		//  ⚠ NOT inert and still NOT shipped: one cell differs from the control
 		//  (`06: chg 1100 -> 2'), everything else bit-identical.  Too small to
 		//  overturn §27's live ACCB reading.  This bit is now TESTED-and-recorded,
@@ -8228,6 +8254,20 @@ void upd6383_device::dump_frame_report() const
 				u32((m_specmask >> 35) & 7), m_act0d_n);
 		logerror("            §114 accumulator stores WRAPPED mod 2^23: %u\n", m_wrap_n);
 		logerror("            §113 SRC 0x11 read as mem[ptr]: %u\n", m_src11_mem_n);
+	{
+		//  ★★★ §97: and the census that says whether a SOURCE arm could have reached a
+		//  given word at all.  Anything listed here left exec_alu() at the alternate-
+		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
+		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
+				"lo12-bit-11 return (no SOURCE, no ACTION decode ran for them):\n");
+		if (!m_alt11_k)
+			logerror("            (none -- the alternate-encoding branch never fired)\n");
+		for (u32 i = 0; i < m_alt11_k; i++)
+			logerror("            lo12 %03X : %llu times%s\n", m_alt11_lo[i],
+					(unsigned long long)m_alt11_n[i],
+					m_alt11_lo[i] == 0xC63 ? "   <- the C63 idiom's first word" : "");
+	}
 		logerror("            §112 class-A ACT-07 latched P instead of storing: %u\n",
 				m_act07_latchp_n);
 		logerror("            §111 host payload x2 applied to %u packets\n", m_pk_x2_n);

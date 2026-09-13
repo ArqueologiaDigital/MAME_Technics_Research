@@ -1653,6 +1653,30 @@ private:
 		if (v > 0x7fffff || v < -0x800000) { m_s1_clip[b][i]++; m_s1_total_clip[b]++; }
 	}
 	u32  m_src11_mem_n = 0;     // §113: SRC 0x11 reads honoured as mem[ptr]
+	//======================================================================
+	//  ★★★ §97 THE SWALLOW CENSUS -- which words leave exec_alu() at the
+	//  ALTERNATE-ENCODING (lo12 bit 11) return, and therefore NEVER reach the
+	//  SOURCE or the ACTION stage at all.
+	//
+	//  WHY THIS EXISTS.  §168 tested SPEC bit 18 (`SRC 0x11 = mem[ptr]') against
+	//  the `C63' idiom, watched its gate fire 9 279 912 times, saw `m_tb'
+	//  unchanged and concluded the defect was ADDRESSING -- "C63 reads cell 0x0C
+	//  and cell 0x0C never moves".  ⛔ `C63' carries lo12 bit 11, so exec_alu()
+	//  returns at the alternate-encoding branch BEFORE the SOURCE switch: bit 18
+	//  could not have reached that word under any setting, and `m_tb' is written
+	//  only in the ACTION switch downstream of the same return.  The fired-count
+	//  was real and it was counting OTHER words -- ★ a fired-count proves the arm
+	//  ran somewhere, NOT that it ran at the site the conclusion is about.
+	//  §116 hit the identical trap on lo12 0x827 and caught it with a per-site
+	//  count; this makes the swallowed set visible for every shape at once.
+	//======================================================================
+	u16  m_alt11_lo[8] = {}; u64 m_alt11_n[8] = {}; u32 m_alt11_k = 0;
+	void note_alt11(u16 lo)
+	{
+		for (u32 i = 0; i < m_alt11_k; i++)
+			if (m_alt11_lo[i] == lo) { m_alt11_n[i]++; return; }
+		if (m_alt11_k < 8) { m_alt11_lo[m_alt11_k] = lo; m_alt11_n[m_alt11_k++] = 1; }
+	}
 	u32  m_act07_latchp_n = 0;  // §112: class-A ACT-07 words that latched P
 	//  §136: the same words routed to the MULTIPLIER INPUT latch instead (mask bit 54).
 	//  m_k/m_l (:451) are the input latches and m_p (:450) is the product register --
