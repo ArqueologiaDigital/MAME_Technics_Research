@@ -402,9 +402,21 @@ public:
 		                        // capture-signature.md (tools/capture_sig.py)
 	};
 
+	//  ★★★★★ 2026-09-13: LO_SRC_MEM0 (SRC 0x00) ANCHORED.  The corpus's largest open axis --
+	//  648 occurrences, the sole reason 348 of them were refused -- and BOTH its populations
+	//  already had evidenced, SHIPPED readings; this predicate was lagging the decode.
+	//    class A & hi12[9:8] == 1 -> C-RAM[cursor] (the coefficient): §145/§148, shipped behind
+	//      SPEC bit 59 which is SET in the default mask, three pre-registered predictions
+	//      including a known-answer control, 20 of 20 on the live corpus.
+	//    everything else          -> mem[ptr]: §233 enumerated SEVEN readings and REFUTED SIX --
+	//      the SINGLE DELAY's lag-1001 ROM product accepts `mem' and only `mem'.
+	//  ⚠ Two readings for one code is legitimate here: the split is a function of the word's OWN
+	//  fields (class4, hi12[9:8]), so it is computable without context.
+	//  Mirrors dsp/tools/dsp_disasm.py `_ANCHORED_SRC'.  Coverage 49.2 % -> 58.6 %.
 	static constexpr bool lo_src_anchored(u8 s)
 	{
-		return s == LO_SRC_MEM || s == LO_SRC_ACC || s == LO_SRC_TA || s == LO_SRC_TB;
+		return s == LO_SRC_MEM || s == LO_SRC_ACC || s == LO_SRC_TA || s == LO_SRC_TB
+				|| s == LO_SRC_MEM0;
 	}
 
 	//  ★★★★★ 2026-09-13: LO_ACT_BIQ_D / _E PROMOTED OUT OF THE SPECULATIVE TIER.
