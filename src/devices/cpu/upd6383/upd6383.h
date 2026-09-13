@@ -1670,6 +1670,36 @@ private:
 	//  §116 hit the identical trap on lo12 0x827 and caught it with a per-site
 	//  count; this makes the swallowed set visible for every shape at once.
 	//======================================================================
+	//======================================================================
+	//  ★★★ §100 DIAGNOSTIC (env UPD6383_CLS46PTR, default OFF): classes 4 and 6
+	//  POST-INCREMENT the pointer by (s8)addr8, exactly as class 2 does.
+	//
+	//  WHY.  `dsp/tools/class_twins.py' pools the KN5000 and SX-WSA1R corpora --
+	//  the same uPD6383 ISA, 7558 occurrences of 1129 words -- and finds the
+	//  minimal pair `dark-words.md' sect. 4.4 asked for and the KN5000 corpus does
+	//  not contain: `012.2.01.1CE' (WSA1R pitch shifter, DECODED) against
+	//  `012.4.01.1CE' (99 occurrences), IDENTICAL in hi12, addr8 and lo12.  The
+	//  same program is the only one in either product spelling the `C63' macro in
+	//  class 2 throughout, and the two spellings agree on a net pointer
+	//  displacement of +27 ONLY if classes 4 and 6 carry the delta; under the
+	//  shipped model they differ by 25 cells and the class-2 spelling is an outlier
+	//  three times beyond the whole class-4/6 range.
+	//
+	//  ⛔ NOT A DECODE and NOT A FIX -- a diagnostic with a fired count, default
+	//  OFF, to be graded by the catalogue regression at the TRUE DEVICE DEFAULT the
+	//  way `UPD6383_SRC0B2' was.  It touches 53 + 53 KN5000 words, all of them in
+	//  one macro, and nothing else in the machine carries class 4 or 6.
+	//======================================================================
+	bool m_cls46ptr = false;
+	u64  m_cls46_n = 0;
+	bool ptr_moves(u64 word) const
+	{
+		if (upd6383_disassembler::ptr_postinc(word))
+			return true;
+		return m_cls46ptr && !upd6383_disassembler::c_format(word)
+				&& (upd6383_disassembler::class4(word) == 4
+					|| upd6383_disassembler::class4(word) == 6);
+	}
 	u16  m_alt11_lo[8] = {}; u64 m_alt11_n[8] = {}; u32 m_alt11_k = 0;
 	void note_alt11(u16 lo)
 	{

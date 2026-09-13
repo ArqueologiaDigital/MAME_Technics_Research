@@ -289,6 +289,10 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	m_cls46ptr = getenv("UPD6383_CLS46PTR") != nullptr;    // ★ §100, default OFF
+	if (m_cls46ptr)
+		logerror("upd6383: ★★★ §100 UPD6383_CLS46PTR ON -- classes 4 and 6 post-increment "
+				"the pointer by (s8)addr8, as class 2 does\n");
 	if (const char *e = getenv("UPD6383_SPEC"))
 	{
 		m_specmask = u64(strtoull(e, nullptr, 16));
@@ -2399,8 +2403,11 @@ void upd6383_device::exec_addressing_only(u64 word, bool k6)
 	if (upd6383_disassembler::coeff_consumer(word))
 		m_cursor++;
 
-	if (upd6383_disassembler::ptr_postinc(word) && !ptrd_a_suppressed(word))
+	if (ptr_moves(word) && !ptrd_a_suppressed(word))           // ★ §100
+	{
+		if (!upd6383_disassembler::ptr_postinc(word)) m_cls46_n++;
 		m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+	}
 }
 
 
@@ -3444,6 +3451,16 @@ void upd6383_device::exec_alu(u64 word)
 					}
 					m_c6lut_n++;
 				}
+			}
+			//  ★★★ §100 run 2: the class-6 branch RETURNS here, so the arm at the end
+			//  of exec_alu() never saw a class-6 word -- run 2 advanced only the two
+			//  class-4 words (3 150 504 = exactly 2 per frame) and therefore tested
+			//  HALF the hypothesis.  A fired count that is non-zero is still not the
+			//  count you predicted: P1 said ~4 per frame.
+			if (m_cls46ptr)
+			{
+				m_cls46_n++;
+				m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
 			}
 			return;
 		}
@@ -5559,8 +5576,18 @@ void upd6383_device::exec_alu(u64 word)
 				cl, (int)dd, m_dp);
 	}
 	// ---- the pointer post-increment (classes 2 and A) -----------------------
+	//  ★★★ §100: and, under UPD6383_CLS46PTR, classes 4 and 6.  THIS is the site
+	//  that runs for every word -- exec_addressing_only() covers only the twelve
+	//  K6 whitelist words and exec_decoded()'s copy sits inside the nop branch, so
+	//  patching those two left the arm's fired count at 0 and the first run of the
+	//  gate said nothing.  Which is what P1 is for.
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
+	else if (m_cls46ptr && !upd6383_disassembler::c_format(word) && (cl == 4 || cl == 6))
+	{
+		m_cls46_n++;
+		m_dp = u8(m_dp + dd);
+	}
 
 	//  ★ §222 `§E-D0': the AFTER half -- the parked pointer and the accumulators the
 	//  word actually left behind.  Deliberately AFTER the post-increment, which is the
@@ -5714,8 +5741,11 @@ void upd6383_device::exec_decoded(u64 word)
 		//  exactly -133 -- and that single omission displaced the whole input
 		//  window by 0x46, put the kernel's audio deposit at 0x4C where no body
 		//  word can address it, and left the reverb unexcited and silent.
-		if (upd6383_disassembler::ptr_postinc(word) && !ptrd_a_suppressed(word))
+		if (ptr_moves(word) && !ptrd_a_suppressed(word))           // ★ §100
+		{
+			if (!upd6383_disassembler::ptr_postinc(word)) m_cls46_n++;
 			m_dp = u8(m_dp + s8(upd6383_disassembler::addr8(word)));
+		}
 	}
 	else
 	{
@@ -8259,6 +8289,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",
+				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
 		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
 				"lo12-bit-11 return (no SOURCE, no ACTION decode ran for them):\n");
 		if (!m_alt11_k)
