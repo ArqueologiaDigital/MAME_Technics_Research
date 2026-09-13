@@ -8285,9 +8285,15 @@ void upd6383_device::dump_frame_report() const
 					if (!best) break;
 					t[bi] = 0;
 					const bool handoff = (bi == 0x05 || bi == 0x07 || bi == 0x85 || bi == 0x87);
-					logerror("upd6383:    cell %02X  %10u  %5.1f %%%s\n", bi, best,
+					std::string who;
+					for (u32 k = 0; k < 4; k++)
+						if (m_railrecv_ic[bi][k])
+							who += util::string_format(" iw%u:%u", m_railrecv_iw[bi][k],
+									m_railrecv_ic[bi][k]);
+					logerror("upd6383:    cell %02X  %10u  %5.1f %%%s   by%s\n", bi, best,
 							100.0 * double(best) / double(m_railrecv_n),
-							handoff ? "   ★ PER-UNIT HAND-OFF CELL -- a body reads this" : "");
+							handoff ? "   ★ PER-UNIT HAND-OFF CELL -- a body reads this" : "",
+							who.empty() ? " (no iw recorded)" : who.c_str());
 				}
 			}
 		}

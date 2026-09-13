@@ -1623,11 +1623,22 @@ private:
 	//  a body downstream.
 	u32  m_railrecv[256] = {};
 	u64  m_railrecv_n = 0, m_store_n = 0;
+	//  ★ and WHICH WORD does it: up to four (iw, count) slots per cell.  A ranked list of cells
+	//  says where the damage lands; this says who causes it, which is the thing you can act on.
+	u16  m_railrecv_iw[256][4] = {};
+	u32  m_railrecv_ic[256][4] = {};
 	void note_store(u32 cell, u32 v)
 	{
 		m_store_n++;
 		const u32 d = v & 0xffffff;
-		if (d == 0x7fffff || d == 0x800000) { m_railrecv[cell & 0xff]++; m_railrecv_n++; }
+		if (d != 0x7fffff && d != 0x800000) return;
+		const u8 c = cell & 0xff;
+		m_railrecv[c]++; m_railrecv_n++;
+		for (u32 k = 0; k < 4; k++)
+		{
+			if (m_railrecv_ic[c][k] && m_railrecv_iw[c][k] != u16(m_cur_iw)) continue;
+			m_railrecv_iw[c][k] = u16(m_cur_iw); m_railrecv_ic[c][k]++; return;
+		}
 	}
 	void s1_record(s64 v) const
 	{
