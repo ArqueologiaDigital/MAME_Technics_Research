@@ -424,7 +424,16 @@ public:
 				//  confirmed semantically: the kernel's iw25 then loads tempA with exactly each
 				//  program's own DI1 input-latch cell.  The 7 words this admits are exactly the
 				//  blast radius that gate measured.
-				|| s == LO_SRC_DRD;
+				|| s == LO_SRC_DRD
+				//  ★ SRC 0x08 = C-RAM[cursor], the COEFFICIENT.  MEASURED with its rival REFUTED
+				//  FROM DISK: the chorus LFO at iw89 reads L = 114 with acc = 114 << 16 exactly,
+				//  and 114 = C-RAM[0x00] = floor(0.5993 * 2^23 / 44100), the ROM's own ramp
+				//  constant; the rival needs this to be a SAMPLE source and a sample gives no
+				//  ramp.  Null: P(SRC 0x08 | not multiply-gated) = 0.05 %, 1 of 2096.
+				//  ⚠ The "LFO / per-unit source" gloss is wrong and is corrected in the
+				//  disassembler text: it is the coefficient port; the LFO's ramp CONSTANT is what
+				//  anchored it, not an LFO signal.
+				|| s == LO_SRC_LFO;
 	}
 
 	//  ★★★★★ 2026-09-13: LO_ACT_BIQ_D / _E PROMOTED OUT OF THE SPECULATIVE TIER.
