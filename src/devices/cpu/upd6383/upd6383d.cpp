@@ -821,6 +821,20 @@ bool upd6383_disassembler::decoded(u64 word)
 	// trapping, as does any member carrying the bit-4 store (859.0.86.822).
 	if (is_ldptr(word) || is_rstcur(word) || is_ldptrd(word)) return true;
 
+	//  ★★★★★ 2026-09-13: THE DELAY ESCAPE IS EXECUTABLE, and this predicate had been asking it
+	//  the wrong questions.  A class-1 format escape is an external delay-DRAM access whose
+	//  semantics are FORCED: the direction from `addr8' bit 6 (adjudication-round5 sect. 3) and
+	//  the address = DESCRIPTOR_CELL[k] + G by the IDENTITY map, PROVEN BY CONSTRUCTION.  It
+	//  never reaches the ALU -- this device's own `is_dram' branch RETURNS BEFORE IT -- so
+	//  grading these words on an anchored SRC/ACT/f31, fields they do not use, counted 276
+	//  fully-determined corpus words as undecoded.
+	//  ⚠ Scoped to the addr8 values the direction rule was VALIDATED on; `dram_dir' answers 0
+	//  outside them and this keeps trapping there.  MEASURED: all 276 corpus escapes are inside
+	//  the set (0x20 x106, 0x30 x58, 0x60 x112), so the restriction costs nothing today and
+	//  still refuses to answer for an addr8 nobody validated.
+	//  Mirrors dsp/tools/dsp_disasm.py `decoded()'.  Coverage 58.6 % -> 67.8 %.
+	if (is_dram(word) && dram_dir(word)) return true;
+
 	// setvec -- the per-unit CALL VECTOR write.  DETERMINED destination (K5);
 	// the SOURCE field of the canned boot-default form is OPEN, which is why
 	// only the C-format `is_setvec' spelling is decoded and the ROM's own
