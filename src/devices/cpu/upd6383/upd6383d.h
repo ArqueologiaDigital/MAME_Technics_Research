@@ -462,6 +462,21 @@ public:
 				|| a == LO_ACT_CAP_TA2 || a == LO_ACT_BIQ_D || a == LO_ACT_BIQ_E;
 	}
 
+	//  ★★★ 2026-09-13: `ACT 0x0B' ON CLASS A is the all-pass core's fourth MULTIPLICAND ROUTE.
+	//  All 16 class-A occurrences are the same shape `lo12 = 0x64B' with `SRC 0x19' (tempA), and
+	//  the disassembly grades it FORCED: a class-A multiply whose multiplicand is a SUM OF TWO
+	//  REGISTERS, so 0x64B is a fourth route beside mac (0x1D5) and mulst (0x407), forced under a
+	//  2-input ALU -- and that premise is itself forced (the multiplier has a coefficient port
+	//  hardwired to C-RAM[ccur] and ONE operand bus; there is no third port).
+	//  ⛔ NOT on any other class: there 0x0B is the DELAY-ACCESS reading, which adjudication-round5
+	//  records as DEGENERATE with the addr8 rule -- "it adds nothing and it is not independent
+	//  evidence.  0x0B stays OPEN."  The 16 class-2 words keep trapping.
+	static constexpr bool act_anchored_for(u64 w)
+	{
+		return lo_act_anchored(lo_act(w))
+				|| (lo_act(w) == LO_ACT_DELAY_ACC && class4(w) == 0xA);
+	}
+
 	// ---------------------------------------------------------------
 	//  ★ THE SPECULATIVE TIER (goal 2026-09-06: "accept some prospective
 	//  hypotheses so things fit in place").  These predicates ADD prospective
@@ -743,7 +758,7 @@ public:
 			return false;                       // Not part of the code -- simply not
 		if (lo_ptrmode(w))                      // modelled on an ALU route yet.
 			return false;
-		if (!lo_src_anchored(lo_src(w)) || !lo_act_anchored(lo_act(w)))
+		if (!lo_src_anchored(lo_src(w)) || !act_anchored_for(w))
 			return false;
 		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)
 			return false;                       // bit-4 target unproven off mode 2
@@ -858,7 +873,7 @@ public:
 		if (cl != 2 && cl != 8 && cl != 0xa)    return 1;
 		if (lo12(w) & 0x800)                    return 21;
 		if (lo_ptrmode(w))                      return 22;
-		if (!lo_src_anchored(lo_src(w)) || !lo_act_anchored(lo_act(w)))
+		if (!lo_src_anchored(lo_src(w)) || !act_anchored_for(w))
 			return 23;
 		if ((hi12(w) & HI_ST) && (class4(w) & 7) != 2)          return 5;
 		if (lo_act(w) == LO_ACT_ST_BUS && (class4(w) & 7) != 2) return 6;
