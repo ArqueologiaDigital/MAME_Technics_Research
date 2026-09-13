@@ -1567,6 +1567,24 @@ private:
 	mutable u64 m_s1_total_calls[2] = {};
 	mutable u64 m_s1_total_clip [2] = {};
 	mutable u32 m_s1_offrange_n = 0;   // conversions with m_cur_iw >= 384 (uncounted)
+
+	//  ★★★★★ §74 `§S1C' -- THE SATURATION CENSUS, BY TARGET CELL.  READ-ONLY, UNCONDITIONAL.
+	//
+	//  WHY THIS EXISTS.  `§S1' above counts clips per INSTRUCTION, and by that census the defect
+	//  N-INPUT-GATE-OPENED §70-§73 found had been visible all along -- nobody could see it, because
+	//  the question that mattered was not "which WORD clips" but "which CELL receives a clipped
+	//  datum".  Measured at the device default, the kernel's input stage drives the per-unit
+	//  HAND-OFF cell `0x05' to full scale in 8 of 8 programs sampled, so every body in the
+	//  catalogue is handed a rail or a zero -- and §54/§55's "14 of 16 bodies leave a constant
+	//  accumulator" was measuring the CONSEQUENCE of it.
+	//
+	//  `m_dp' is in scope at the one point where "this value does not fit the datum" is knowable,
+	//  so the cell costs nothing to record.  ⚠ It counts EVERY conversion that clips, not only
+	//  stores, so read it as "clipped datums that were addressed at this cell" -- the per-unit
+	//  base/input cells 05 / 07 / 85 / 87 are flagged in the report because a clip there is the
+	//  one that silences a body.
+	mutable u32 m_satcell[256] = {};
+	mutable u64 m_satcell_n = 0;
 	void s1_record(s64 v) const
 	{
 		if (m_frames_run <= S1_ARM_FRAME) return;

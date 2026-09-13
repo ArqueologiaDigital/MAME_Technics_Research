@@ -2444,6 +2444,15 @@ s32 upd6383_device::acc_to_datum(u64 acc) const
 	//  and it cannot change anything, so every arm can carry it.  See upd6383.h.
 	s1_record(v);
 
+	//  ★★★★★ §74 `§S1C': the same event, indexed by the CELL the pointer is on.  See upd6383.h --
+	//  `§S1' answers "which word clips", this answers "which cell receives a clipped datum", which
+	//  is the question that exposes a silenced body.  Read-only; every arm can carry it.
+	if (v > 0x7fffff || v < -0x800000)
+	{
+		m_satcell[m_dp & 0xff]++;
+		m_satcell_n++;
+	}
+
 	//  ★★★ §114 SPECULATIVE (mask bit 32): WRAP mod 2^23 instead of saturating.
 	//  The comment above states the choice was UNKNOWN and saturation was picked as
 	//  the safe default.  lfo-ramp.md §11 settles it for at least one datapath, in
@@ -8246,6 +8255,39 @@ void upd6383_device::dump_frame_report() const
 					"%u distinct slots (cap 16)%s |%s\n",
 					m_ng_n, m_ng_slots, m_ng_slots >= 16 ? " ⚠ CAPPED" : "",
 					r.empty() ? " (none -- UNTESTED in this vehicle)" : r.c_str());
+		}
+		{   //  ★★★★★ §74 `§S1C': THE SATURATION CENSUS, BY TARGET CELL.
+			//  `§S1' below answers "which WORD clips"; this answers "which CELL receives a
+			//  clipped datum", and that is the question that exposes a SILENCED BODY.  The
+			//  per-unit base/input cells 05 / 07 / 85 / 87 are flagged: a clip landing there
+			//  hands the body a rail, and a body fed a rail cannot do anything but sit still
+			//  (N-INPUT-GATE-OPENED §70-§73 -- 8 of 8 programs sampled, at the DEVICE DEFAULT).
+			logerror("upd6383: ★★★★★ §74 §S1C SATURATION BY TARGET CELL -- %llu clipped "
+					"conversions total.  ⚠ counts every clipping conversion, not only stores: "
+					"read it as \"clipped datums addressed at this cell\".\n",
+					(unsigned long long)m_satcell_n);
+			if (!m_satcell_n)
+				logerror("upd6383:    (none -- nothing clipped)\n");
+			else
+			{
+				//  Top 12 cells by clipped-conversion count.  Selection sort over a copy: the
+				//  counters are `mutable' bookkeeping and this report must not consume them.
+				u32 tally[256];
+				std::copy(std::begin(m_satcell), std::end(m_satcell), std::begin(tally));
+				for (u32 shown = 0; shown < 12; shown++)
+				{
+					u32 best = 0, bi = 0;
+					for (u32 c = 0; c < 256; c++)
+						if (tally[c] > best) { best = tally[c]; bi = c; }
+					if (!best) break;
+					tally[bi] = 0;
+					const bool handoff = (bi == 0x05 || bi == 0x07 || bi == 0x85 || bi == 0x87);
+					logerror("upd6383:    cell %02X  %10u  %5.1f %%%s\n", bi, best,
+							100.0 * double(best) / double(m_satcell_n),
+							handoff ? "   ★ PER-UNIT HAND-OFF CELL -- a clip here silences a body"
+									: "");
+				}
+			}
 		}
 		{   //  ★★★★ §223 `§S1': THE SATURATION CENSUS.
 			//  `§54' can only see a DC that reaches the OUTPUT.  This sees the
