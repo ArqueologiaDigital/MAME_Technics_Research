@@ -1690,6 +1690,24 @@ private:
 	//  way `UPD6383_SRC0B2' was.  It touches 53 + 53 KN5000 words, all of them in
 	//  one macro, and nothing else in the machine carries class 4 or 6.
 	//======================================================================
+	//======================================================================
+	//  ★★★ §102 DIAGNOSTIC (env UPD6383_GATECLR, default OFF): the store gate's
+	//  `clr:before' survivor.  On a word carrying the bit-4 store AND bit 7 AND
+	//  `f31 == 1' -- `store-gate.md' item D's open family, and nothing else -- the
+	//  accumulator's FEEDBACK term is zero, which is a clear taken BEFORE the ALU.
+	//
+	//  WHY THIS IS GRADEABLE WHERE THE GATE HAS NEVER BEEN: `092.A.00.200', the LFO
+	//  RAMP WORD, IS ONE OF THESE WORDS (46 occurrences, 26 images), and the LFO's
+	//  increment is anchored NINE-FOLD as floor(f x 2^23 / 44100).  §228's read-only
+	//  RISE CENSUS reports the chorus phase cell stepping `114..4190812, mean 29098'
+	//  -- the MINIMUM is exactly the ROM's constant and the mean is 255x larger, so
+	//  the shipped LFO runs at 153 Hz where the ROM says 0.599 Hz.  With the clear
+	//  the sum is exactly `increment + phase' and the step must become 114 flat.
+	//  ⛔ NOT A DECODE: a diagnostic with a fired count, default OFF, pre-registered
+	//  in dsp/analysis/data/PREDICT_GATECLR_2026-09-13.md.
+	//======================================================================
+	bool m_gateclr = false;
+	u64  m_gateclr_n = 0;
 	bool m_cls46ptr = false;
 	u64  m_cls46_n = 0;
 	bool ptr_moves(u64 word) const

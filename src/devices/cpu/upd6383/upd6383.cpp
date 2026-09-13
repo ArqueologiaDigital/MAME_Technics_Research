@@ -289,6 +289,10 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	m_gateclr  = getenv("UPD6383_GATECLR") != nullptr;     // ★ §102, default OFF
+	if (m_gateclr)
+		logerror("upd6383: ★★★ §102 UPD6383_GATECLR ON -- the store gate's `clr:before' "
+				"survivor: bit-4 store + bit 7 + f31 == 1 drops the accumulator feedback\n");
 	m_cls46ptr = getenv("UPD6383_CLS46PTR") != nullptr;    // ★ §100, default OFF
 	if (m_cls46ptr)
 		logerror("upd6383: ★★★ §100 UPD6383_CLS46PTR ON -- classes 4 and 6 post-increment "
@@ -4466,8 +4470,17 @@ void upd6383_device::exec_alu(u64 word)
 		//  from disk before it runs.
 		const bool nocarry = m_nocarry && (op == upd6383_disassembler::HI_ACC_ADD);
 		if (nocarry) m_nocarry_n++;
+		//  ★★★ §102: the store gate's `clr:before' survivor -- the accumulator is
+		//  zeroed BEFORE the ALU, which for `f31 == 1' is exactly "drop the feedback
+		//  term".  Narrow on purpose: only the gate's own family (bit-4 store + bit 7
+		//  + f31 == 1), never the global `f31 == 1' that §227's NOCARRY covers.
+		const bool gateclr = m_gateclr
+				&& (hi & upd6383_disassembler::HI_ST)
+				&& (hi & upd6383_disassembler::HI_B7)
+				&& upd6383_disassembler::hi_f31(hi) == 1;
+		if (gateclr) m_gateclr_n++;
 		const u64 src_term =
-				((op == upd6383_disassembler::HI_ACC_LOAD || nocarry) ? 0 : accum)
+				((op == upd6383_disassembler::HI_ACC_LOAD || nocarry || gateclr) ? 0 : accum)
 				+ ((act == upd6383_disassembler::LO_ACT_ACC_BUS
 					//  ★★★★ §82 SPECULATIVE (mask bit 21): A DELAY WORD'S ACTION PUTS
 					//  ITS DATUM ON THE ACCUMULATOR.
@@ -8289,6 +8302,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★ §102 GATECLR (%s): gate words with the feedback dropped: %llu\n",
+				m_gateclr ? "ON" : "off", (unsigned long long)m_gateclr_n);
 		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",
 				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
 		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
