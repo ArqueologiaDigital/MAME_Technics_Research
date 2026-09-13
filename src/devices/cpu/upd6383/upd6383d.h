@@ -1019,6 +1019,16 @@ public:
 	//  WRITE.  Applied ONLY over the addr8 values the rule was validated on --
 	//  0x20 and 0x30 are READ, 0x60 is WRITE, anything else keeps trapping.
 	// ---------------------------------------------------------------
+	//  ★★★★★ sect. 112: THE BLOCK TERMINATOR -- the last word of every body image.
+	//  `class4 == 1' with the END bit and `addr8' in {0x0E, 0x0F}.  MEASURED as the
+	//  final word of 37 of 37 unit-0 images and the one unit-1 image (host-side.md
+	//  item B1); the form is already published in instruction-set.md.  Disjoint from
+	//  is_dram() by construction: is_end() needs hi12 bit 10 SET with bit 11 CLEAR,
+	//  the escape needs bit 11 SET.
+	static constexpr bool is_terminator(u64 w)
+	{ return !c_format(w) && class4(w) == 1 && is_end(w)
+			&& (addr8(w) == 0x0E || addr8(w) == 0x0F); }
+
 	static constexpr bool is_dram(u64 w)
 	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }
 

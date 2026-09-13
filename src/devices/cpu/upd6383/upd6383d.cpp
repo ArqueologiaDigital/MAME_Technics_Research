@@ -849,6 +849,21 @@ bool upd6383_disassembler::decoded(u64 word)
 	//  ACT 0x1C x17, ACT 0x1A x6, ACT 0x07 x2).
 	//  ⚠ `dram_dir' still answers 0 outside the validated addr8 set and this keeps trapping there.
 	//  Mirrors dsp/tools/dsp_disasm.py `decoded()'.  Coverage 76.4 % -> 74.0 % (a CORRECTION).
+	//  ★★★★★ sect. 112: THE BLOCK TERMINATOR, on sect. 90's argument -- the CLASS TEST is what
+	//  refuses it and the word's own form explains the class.  Its `addr8' is the unit index
+	//  (MEASURED 37/37 + 1) and its ALU HALF RUNS: upd6383.cpp's sequencer is explicit,
+	//  "the transfer, AFTER the word has done its datapath work".  That is the check sect. 91
+	//  says to make before admitting anything on a format escape.
+	//  ⚠ NOT claimed: the call/return itself, which upd6383.cpp calls "the frame SEQUENCER's
+	//  model, not the ISA's".  This says the WORD is executable, not that the jump is derived.
+	if (is_terminator(word))
+		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
+				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
+				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7)
+					&& hi_f31(hi12(word)) != 1 && hi_f31(hi12(word)) != 2)
+				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
+					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
+
 	if (is_dram(word) && dram_dir(word))
 		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
@@ -968,6 +983,9 @@ std::string upd6383_disassembler::text(u64 word, int at)
 		//  executable, and only the PREDICATE was mirrored here -- so two corpus
 		//  rows rendered `ld.ta2 ?' against the Python `dly.w dsc[k],p+96' and the
 		//  "MIRRORS AGREE -- 3057/3057" invariant was quietly false.
+		else if (is_terminator(word))
+			util::stream_format(s, "endblk  unit%d          ; END OF BLOCK -- the image's "
+					"last word", addr8(word) == 0x0E ? 0 : 1);
 		else if (is_dram(word) && dram_dir(word))
 		{
 			if (dd == 0)
