@@ -407,11 +407,23 @@ public:
 		return s == LO_SRC_MEM || s == LO_SRC_ACC || s == LO_SRC_TA || s == LO_SRC_TB;
 	}
 
+	//  ★★★★★ 2026-09-13: LO_ACT_BIQ_D / _E PROMOTED OUT OF THE SPECULATIVE TIER.
+	//  The pair was CLOSED as `ACT 0x0E' selector 7 by TWO INDEPENDENT ROUTES -- FROM DISK
+	//  (the EQ's entry window against the designer's biquad, 1 of 49, with a junk-pre-load
+	//  control that kills the runner-up) and FROM THE HLE ORACLE (`parametric_eq' is a SERIES
+	//  CASCADE, so only the FIRST band may receive a clean copy of the input; only selector 7
+	//  delivers that).  It was still carried as "for the EQ, not a global decode" for ONE
+	//  stated reason: at selector 7 `prog32_distortion' read STATIC.
+	//  ⇒ THAT REASON IS REFUTED.  The distortion's deadness was its INPUT CELL BEING RAILED,
+	//  not the selector; with the input-stage decode fixed (`m_src0b2') it runs -- 42 of 42
+	//  body rows move frame to frame, hand-off cell -102 851.  The caveat rested on a defect
+	//  somewhere else entirely.
+	//  Mirrors dsp/tools/dsp_disasm.py `_ANCHORED_ACT'.  Coverage 41.5 % -> 49.2 %.
 	static constexpr bool lo_act_anchored(u8 a)
 	{
 		return a == LO_ACT_ACC_BUS || a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2
 				|| a == LO_ACT_CAP_TA || a == LO_ACT_CAP_TB || a == LO_ACT_NONE_5
-				|| a == LO_ACT_CAP_TA2;
+				|| a == LO_ACT_CAP_TA2 || a == LO_ACT_BIQ_D || a == LO_ACT_BIQ_E;
 	}
 
 	// ---------------------------------------------------------------
