@@ -416,7 +416,15 @@ public:
 	static constexpr bool lo_src_anchored(u8 s)
 	{
 		return s == LO_SRC_MEM || s == LO_SRC_ACC || s == LO_SRC_TA || s == LO_SRC_TB
-				|| s == LO_SRC_MEM0;
+				|| s == LO_SRC_MEM0
+				//  ★ SRC 0x0B, 2026-09-13: one code, two readings, split by the word's own class.
+				//  class 1 (the delay escape) keeps the delay-read data register; any other class
+				//  is mem[ptr], PROMOTED to this device's default the same day (`m_src0b2') on a
+				//  pre-registered gate -- 8 programs, 8 FIXED / 0 BROKEN at the true default, and
+				//  confirmed semantically: the kernel's iw25 then loads tempA with exactly each
+				//  program's own DI1 input-latch cell.  The 7 words this admits are exactly the
+				//  blast radius that gate measured.
+				|| s == LO_SRC_DRD;
 	}
 
 	//  ★★★★★ 2026-09-13: LO_ACT_BIQ_D / _E PROMOTED OUT OF THE SPECULATIVE TIER.
