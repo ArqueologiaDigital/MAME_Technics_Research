@@ -1610,6 +1610,25 @@ private:
 	//  one that silences a body.
 	mutable u32 m_satcell[256] = {};
 	mutable u64 m_satcell_n = 0;
+
+	//  ★★★★★ §89 `§S1R' -- WHAT EACH CELL ACTUALLY RECEIVES, as opposed to §S1C's pointer
+	//  residence.  §S1C fires inside acc_to_datum(), where the destination is not knowable, so it
+	//  charges every clipping conversion to wherever `m_dp' happened to rest -- one auto-wah cell
+	//  showed 45 such rows against 5 stores.  This counts at the STORE instead, and only at the
+	//  SIX sites that are microcode stores (the other 27 `m_dram.write_dword' calls are diagnostic
+	//  seeders, host input deposits and boot clears, which must not be charged to the microcode).
+	//  ⚠ It counts a stored datum that IS the rail, which is a fact about the value, not an
+	//  inference about clipping -- a legitimately full-scale sample is counted too.  That is the
+	//  honest reading: "this cell was handed full scale N times", which is exactly what silences
+	//  a body downstream.
+	u32  m_railrecv[256] = {};
+	u64  m_railrecv_n = 0, m_store_n = 0;
+	void note_store(u32 cell, u32 v)
+	{
+		m_store_n++;
+		const u32 d = v & 0xffffff;
+		if (d == 0x7fffff || d == 0x800000) { m_railrecv[cell & 0xff]++; m_railrecv_n++; }
+	}
 	void s1_record(s64 v) const
 	{
 		if (m_frames_run <= S1_ARM_FRAME) return;

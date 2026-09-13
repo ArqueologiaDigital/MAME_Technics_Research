@@ -1337,6 +1337,9 @@ void upd6383_device::s3_boot(u8 dest, s32 val, u8 site)
 
 void upd6383_device::store_mode(u8 mode, u8 dest, u32 v, u8 site, bool force_dram)
 {
+	//  ★★★★★ §89 m_dram.write_dword' call
+	//  sites and counted 0 of 0, because the microcode's stores do not reach D-RAM that way.
+	note_store(dest, v);
 	//  ★★★ §106 DIAGNOSTIC (mask bit 26): mirror the kernel's 0x06 result into 0x05
 	//  -- ⛔ RUN IN §220 AND REFUTED.  DEAD-END 30.  DO NOT FLIP IT.
 	//  §220 armed it for the first time (arm `data/B_mirror06_220.log.gz'): it FIRED
@@ -8257,6 +8260,36 @@ void upd6383_device::dump_frame_report() const
 					"%u distinct slots (cap 16)%s |%s\n",
 					m_ng_n, m_ng_slots, m_ng_slots >= 16 ? " ⚠ CAPPED" : "",
 					r.empty() ? " (none -- UNTESTED in this vehicle)" : r.c_str());
+		}
+		{   //  ★★★★★ §89 `§S1R': WHAT EACH CELL ACTUALLY RECEIVED.  §S1C below charges a clipping
+			//  conversion to wherever the pointer rested; this counts at the STORE, so it answers
+			//  "which cell was handed FULL SCALE", which is the thing that silences a body.
+			logerror("upd6383: ★★★★★ §89 §S1R FULL-SCALE DATUMS RECEIVED, BY CELL -- %llu of %llu "
+					"microcode stores (%.3f %%).  Counted at the 5 LIVE microcode store sites "
+					"only; the other D-RAM writes are diagnostic seeders, host input deposits and "
+					"boot clears, and a 6th store site is recorded as FIRED 0 TIMES.  ⚠ It counts "
+					"a stored datum that IS the rail -- a fact about the value, not an inference "
+					"about clipping; a legitimately full-scale sample is counted too.\n",
+					(unsigned long long)m_railrecv_n, (unsigned long long)m_store_n,
+					m_store_n ? 100.0 * double(m_railrecv_n) / double(m_store_n) : 0.0);
+			if (!m_railrecv_n)
+				logerror("upd6383:    (none -- no cell was handed full scale)\n");
+			else
+			{
+				u32 t[256];
+				std::copy(std::begin(m_railrecv), std::end(m_railrecv), std::begin(t));
+				for (u32 shown = 0; shown < 10; shown++)
+				{
+					u32 best = 0, bi = 0;
+					for (u32 c = 0; c < 256; c++) if (t[c] > best) { best = t[c]; bi = c; }
+					if (!best) break;
+					t[bi] = 0;
+					const bool handoff = (bi == 0x05 || bi == 0x07 || bi == 0x85 || bi == 0x87);
+					logerror("upd6383:    cell %02X  %10u  %5.1f %%%s\n", bi, best,
+							100.0 * double(best) / double(m_railrecv_n),
+							handoff ? "   ★ PER-UNIT HAND-OFF CELL -- a body reads this" : "");
+				}
+			}
 		}
 		{   //  ★★★★★ §74 `§S1C': THE SATURATION CENSUS, BY TARGET CELL.
 			//  `§S1' below answers "which WORD clips"; this answers "which CELL receives a
