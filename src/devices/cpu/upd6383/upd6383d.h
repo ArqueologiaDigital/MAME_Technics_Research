@@ -778,7 +778,13 @@ public:
 		//  modulus operand is absent and the `AND' candidate is not expressible on them.
 		//  ⚠ The 29 wrap-words stay refused -- a different operation, and open on SRC 0x08 anyway.
 		//  Mirrors dsp/tools/dsp_disasm.py.  Coverage 68.0 % -> 74.6 %.
-		case HI_ACC_HOLD: return cl == 8 || !is_wrapword(w);
+		//  ★ SECOND PASS the same day: the WRAP FAMILY is admitted too, so this is
+		//  unconditional.  It was excluded on two grounds and both expired: "a different
+		//  operation" (true, but this predicate asks whether the semantics is DETERMINED, and for
+		//  those 29 it is -- the modulus, §224/§225, SHIPPED as this device's default, anchored on
+		//  the ROM's ramp constant through four passing falsifiers), and "open on SRC 0x08 anyway"
+		//  (no longer true -- SRC 0x08 was anchored in the same pass).
+		case HI_ACC_HOLD: return true;
 		default: return false;
 		}
 	}
