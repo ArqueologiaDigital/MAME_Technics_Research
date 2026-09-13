@@ -439,6 +439,13 @@ public:
 	//  body rows move frame to frame, hand-off cell -102 851.  The caveat rested on a defect
 	//  somewhere else entirely.
 	//  Mirrors dsp/tools/dsp_disasm.py `_ANCHORED_ACT'.  Coverage 41.5 % -> 49.2 %.
+	//  §224/§225's LFO WRAP family, the six fields together, exactly as the device gates it.
+	static constexpr bool is_wrapword(u64 w)
+	{
+		return (hi12(w) & HI_ST) && (hi12(w) & HI_B7) && hi_f31(hi12(w)) == HI_ACC_HOLD
+				&& lo_act(w) == LO_ACT_ACC_BUS && lo_src(w) == 0x08 && class4(w) == 0xA;
+	}
+
 	static constexpr bool lo_act_anchored(u8 a)
 	{
 		return a == LO_ACT_ACC_BUS || a == LO_ACT_ST_BUS || a == LO_ACT_NONE_2
@@ -747,7 +754,22 @@ public:
 		switch (hi_f31(hi12(w)))
 		{
 		case HI_ACC_LOAD: case HI_ACC_ADD: return true;
-		case HI_ACC_HOLD: return cl == 8;
+		//  ★★★★★ 2026-09-13: ADMITTED OFF CLASS 8, EXCEPT ON THE WRAP-WORD FAMILY.
+		//  This was `return cl == 8' because the joint solve left two candidates alive -- a plain
+		//  no-op and `AND 2^23-1' -- and on class 8 the biquad forces the sum in range, where both
+		//  are the identity.  MEASURED over 10 live captures, they DO differ somewhere: 9 of 216
+		//  executions leave datum range by up to 1.3x the rail, so "mostly identity" was never
+		//  going to be enough.
+		//  ⇒ What settles it is that the RIVAL HAS ITS OWN PREDICATE and these words fail it.  The
+		//  `AND' reading is shipped (§224/§225, default on) as the LFO WRAP, anchored on the ROM's
+		//  own ramp constant; its arithmetic is `acc <- datum(acc) & L' with `L' the SRC 0x08
+		//  operand, MEASURED as C-RAM[0x01] = 0x7FFFFF.  The family needs six fields together
+		//  (bit-4 store + bit 7 + f31 == 2 + ACT 0x00 + SRC 0x08 + class A) and is 29 words.
+		//  MEASURED: of the 215 off-class-8 f31 == 2 words outside it, ZERO carry SRC 0x08, so the
+		//  modulus operand is absent and the `AND' candidate is not expressible on them.
+		//  ⚠ The 29 wrap-words stay refused -- a different operation, and open on SRC 0x08 anyway.
+		//  Mirrors dsp/tools/dsp_disasm.py.  Coverage 68.0 % -> 74.6 %.
+		case HI_ACC_HOLD: return cl == 8 || !is_wrapword(w);
 		default: return false;
 		}
 	}
