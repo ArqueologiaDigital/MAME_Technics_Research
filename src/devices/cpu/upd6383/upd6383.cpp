@@ -289,6 +289,10 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	m_census_perprog = getenv("UPD6383_CENSUS_PERPROG") != nullptr;   // ★ §103, default OFF
+	if (m_census_perprog)
+		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
+				"are cleared on every I-RAM program upload, so they describe ONE program\n");
 	m_gateclr  = getenv("UPD6383_GATECLR") != nullptr;     // ★ §102, default OFF
 	if (m_gateclr)
 		logerror("upd6383: ★★★ §102 UPD6383_GATECLR ON -- the store gate's `clr:before' "
@@ -2030,6 +2034,12 @@ void upd6383_device::host_w(bool cd, u8 data)
 				// per-word trap accounting for a window of frames (see the
 				// FRAME_DETAIL_FRAMES comment in the header).
 				m_frame_detail_left = FRAME_DETAIL_FRAMES;
+				//  ★ §103: and, under UPD6383_CENSUS_PERPROG, clear the cumulative
+				//  censuses so they describe THIS program and not the walk that
+				//  reached it.  Only on the FIRST word of a run, so a 380-word
+				//  upload resets once rather than 380 times.
+				if (m_census_perprog && word_index == m_upl_base)
+					census_reset();
 			}
 			else
 			{
@@ -8786,8 +8796,15 @@ void upd6383_device::dump_frame_report() const
 						"machine's own time, so the Hz below is NOT circular):%s%s\n",
 						rs.empty() ? "  NO CELL EVER RISES" : "", rs.c_str());
 			}
-			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames:%s\n",
-					(unsigned long long)m_frames_run, rr.c_str());
+			logerror("upd6383: ★★ §176 D-RAM CENSUS, ALL 32 CELLS, over %llu frames%s:%s\n",
+					(unsigned long long)(m_frames_run - m_census_epoch),
+					m_census_perprog
+						? string_format(" SINCE THE LAST PROGRAM UPLOAD at frame %llu (§103 "
+								"PER-PROGRAM, %u resets) -- NOT comparable with a whole-walk census",
+								(unsigned long long)m_census_epoch, m_census_resets).c_str()
+						: " FROM BOOT (⚠ CUMULATIVE over every program the harness walked through;"
+						  " set UPD6383_CENSUS_PERPROG=1 for a per-program census)",
+					rr.c_str());
 		}
 		for (int i = 0; i < m_c6_n; i++)
 			logerror("upd6383: ★★ §162 CLASS-6 SITE %010llX addr8=%02X lo12=%03X : hits %llu | "

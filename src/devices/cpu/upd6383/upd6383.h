@@ -1706,6 +1706,40 @@ private:
 	//  ⛔ NOT A DECODE: a diagnostic with a fired count, default OFF, pre-registered
 	//  in dsp/analysis/data/PREDICT_GATECLR_2026-09-13.md.
 	//======================================================================
+	//======================================================================
+	//  ★★★ §103 INSTRUMENT (env UPD6383_CENSUS_PERPROG, default OFF): make the
+	//  CUMULATIVE censuses PER-PROGRAM.
+	//
+	//  WHY.  `fx_ab.lua' steps UP from TYPE 0, so a capture of TYPE n has walked
+	//  through n+1 program loads, and §176's D-RAM census and §228's rise census
+	//  both accumulate from BOOT.  Diffing either between two arms therefore
+	//  conflates every program walked through.  N-INPUT-GATE-OPENED §100 documented
+	//  that, and §102 then wrote THREE criteria that ignored it -- a per-program
+	//  threshold against a whole-walk quantity, twice, plus a range that cannot
+	//  localise.  ⇒ the fix is not more care; it is an instrument that cannot be
+	//  read the wrong way.
+	//
+	//  WITH THIS ON, every census below is cleared when a NEW I-RAM PROGRAM ARRIVES,
+	//  so a capture's numbers describe the program it actually traced.  READ-ONLY:
+	//  it resets counters and touches no state the microcode can see.
+	//  ⚠ It changes what every census MEANS, so it is default OFF and every number
+	//  taken with it must say so.  `m_census_epoch' is printed beside them.
+	//======================================================================
+	bool m_census_perprog = false;
+	u64  m_census_epoch = 0;        // frame at which the censuses were last cleared
+	u32  m_census_resets = 0;
+	void census_reset()
+	{
+		for (u32 i = 0; i < 0x100; i++)
+		{
+			m_rampmin[i] = m_rampmax[i] = m_rampprev[i] = 0;
+			m_rampchg[i] = m_rampwrap[i] = 0;
+			m_rampinc_min[i] = m_rampinc_max[i] = 0;
+			m_rampinc_n[i] = m_rampinc_sum[i] = m_rampfirst[i] = 0;
+		}
+		m_census_epoch = m_frames_run;
+		m_census_resets++;
+	}
 	bool m_gateclr = false;
 	u64  m_gateclr_n = 0;
 	bool m_cls46ptr = false;
