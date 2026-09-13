@@ -3117,17 +3117,49 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			mtap_g[i] = std::clamp(0.4 + 0.6 * std::fabs(q22x(m_dsp1->cram_read(u8(0x03 + i))) * x_cs), 0.2, 1.0);
 		m_mtap_dmp_l.set_damping(0.35); m_mtap_dmp_r.set_damping(0.35);
 	}
-	// --- COMPRESSOR (0x16, prog36): square-law detector -> attack/release one-pole -> gain computer.
-	//     THRESHOLD/RATIO = 0x04 (gain-computer op0x72), ATTACK/RELEASE = 0x02 smoother (INFERRED).
+	// --- COMPRESSOR (0x16, prog36): 2/pi RECTIFY-AND-SMOOTH detector -> gain computer.
+	//     ★ CORRECTED 2026-09-13 FROM THE BYTECODE.  This block used to say "square-law detector"
+	//     and to invent its time constants (attack 2..22 ms from cell 0x02 through an arbitrary
+	//     map, release fixed at 150 ms).  All three are wrong, and the ROM says so:
+	//
+	//       * THE DETECTOR IS A RECTIFIER, NOT SQUARE-LAW.  C-RAM[0x00] = 0x517CC1 =
+	//         floor(2/pi * 2^23) EXACTLY -- 2/pi is the mean of |sin|, the calibration a
+	//         MEAN-ABSOLUTE detector needs.  An RMS detector's sine constant is 1/sqrt(2) =
+	//         0.7071, which appears nowhere.  `programs.tsv' names the cell "2/pi env" from the
+	//         ROM's own role table.  Corroborating: the corpus's only squaring is
+	//         coefficient-by-coefficient (a word routing C-RAM onto the multiplier's single
+	//         operand bus) -- adjudicated FAITHFUL and numerically negligible in
+	//         SQUARING-MULTIPLY_findings.md -- so there is no x*x of the SIGNAL anywhere.
+	//       * THE TIME CONSTANTS ARE UPLOADED, NOT INVENTED.  At ROM 0x84CD the host's own
+	//         upload script holds five consecutive Q0.23 coefficients and prog36's coefficient
+	//         cursor consumes them in that order: 2/pi, 0.5, 009DAD = 0.004812, 003F29 =
+	//         0.001927, 0.05.  The two middle ones are one-pole coefficients with tau = 1/(a*fs)
+	//         = 4.712 ms and 11.764 ms -- which is exactly why the instrument's parameter list
+	//         gives COMPRESSOR an ATTACK SENS.(s) and a RELEASE SENS.(s).  Cell 0x03 is the
+	//         RELEASE and this code was ignoring it.
+	//
+	//     Full account: kn5000-roms-disasm dsp/analysis/N-INPUT-GATE-OPENED-2026-09-12.md §67-§68
+	//     and SPECULATIVE-APPLIED-REGISTER.md §147.  The Python reference is dsp/hle/kernels.py
+	//     `LevelDetector'.
 	const bool comp_hle = (dsphle == 0x16);
 	double comp_thr = 0.0, comp_slope = 0.0, comp_atk = 0.0, comp_rel = 0.0, comp_makeup = 0.0;
+	double comp_rect = 0.0;
 	if (comp_hle)
 	{
+		//  C-RAM[0x00] = 2/pi, the rectifier calibration.  Fall back to the ROM's own value if
+		//  the cell has not been uploaded yet, so the detector is never silently scaled by zero.
+		comp_rect = std::fabs(q22x(m_dsp1->cram_read(0x00)) * x_cs);
+		if (comp_rect < 1e-6) comp_rect = 5340353.0 / 8388608.0;          // 0x517CC1
 		comp_thr   = std::clamp(0.03 + 0.25 * std::fabs(q22x(m_dsp1->cram_read(0x04)) * x_cs), 0.03, 0.5);
 		comp_slope = 0.75;                                       // 1 - 1/ratio (RATIO ~4:1); SPECULATIVE
-		const double tc = std::clamp(std::fabs(q22x(m_dsp1->cram_read(0x02)) * x_cs), 0.0, 1.0);
-		comp_atk   = std::exp(-1.0 / (double(STREAM_RATE) * (0.002 + 0.02 * tc)));   // 2..22 ms
-		comp_rel   = std::exp(-1.0 / (double(STREAM_RATE) * 0.15));                  // 150 ms
+		//  tau = 1/(a * 44100) with `a' the uploaded one-pole coefficient, converted to a
+		//  retention factor at this stream's own rate so the TIME is preserved, not the
+		//  coefficient.  Clamped to a musically sane span in case the cells are unloaded.
+		auto tau_from = [&](u8 cell, double dflt) -> double {
+			const double a = std::fabs(q22x(m_dsp1->cram_read(cell)) * x_cs);
+			return (a < 1e-9) ? dflt : std::clamp(1.0 / (a * 44100.0), 0.0005, 0.5); };
+		comp_atk   = std::exp(-1.0 / (double(STREAM_RATE) * tau_from(0x02, 0.004712)));
+		comp_rel   = std::exp(-1.0 / (double(STREAM_RATE) * tau_from(0x03, 0.011764)));
 		comp_makeup = 1.0 / (comp_thr + 0.2);                   // bring level back up after compression
 		comp_makeup = std::clamp(comp_makeup, 1.0, 4.0);
 	}
@@ -4242,16 +4274,23 @@ void kn5000_tonegen_device::sound_stream_update(sound_stream &stream)
 			mix_l = int32_t(std::clamp(xl + 0.5 * sl, -1.0, 1.0) * 32767.0);
 			mix_r = int32_t(std::clamp(xr + 0.5 * sr, -1.0, 1.0) * 32767.0);
 		}
-		if (comp_hle)  // COMPRESSOR: square-law detector -> attack/release smoother -> gain computer
+		if (comp_hle)  // COMPRESSOR: 2/pi rectify-and-smooth detector -> gain computer
 		{
 			const double xl = double(mix_l) / 32768.0, xr = double(mix_r) / 32768.0;
-			const double rl = xl * xl, rr = xr * xr;
+			//  ★ RECTIFY and scale by the ROM's 2/pi -- NOT square-law; see the setup block.
+			//  The envelope is therefore already an amplitude, so the gain computer below no
+			//  longer takes a square root (it used to, to undo the squaring).
+			const double rl = std::fabs(xl) * comp_rect, rr = std::fabs(xr) * comp_rect;
 			const double cl = (rl > m_comp_env_l) ? comp_atk : comp_rel;
 			m_comp_env_l = rl + cl * (m_comp_env_l - rl);
 			const double cr = (rr > m_comp_env_r) ? comp_atk : comp_rel;
 			m_comp_env_r = rr + cr * (m_comp_env_r - rr);
-			auto gain = [&](double e2) -> double {
-				const double e = std::sqrt(std::max(e2, 0.0));
+			//  ⚠ THE GAIN LAW IS STILL SPECULATIVE and is deliberately left alone: what the
+			//  corpus establishes is only the NEGATIVE constraint that there is no comparator
+			//  opcode (the bodies are branchless), so THRESHOLD and RATIO must enter as
+			//  coefficients.  Nothing measured chooses between this knee and the linear
+			//  `g = clip(1 - k*env, 1/ratio, 1)' the Python reference uses.
+			auto gain = [&](double e) -> double {
 				if (e <= comp_thr || e < 1e-6) return comp_makeup;
 				return comp_makeup * std::pow(comp_thr / e, comp_slope); };
 			mix_l = int32_t(std::clamp(xl * gain(m_comp_env_l), -1.0, 1.0) * 32767.0);
