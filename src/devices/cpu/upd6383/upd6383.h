@@ -1625,6 +1625,7 @@ private:
 	u64  m_callacc_n = 0;           // UPD6383_CALLACC: accumulator cleared at the block CALL
 	u64  m_st07sign_n = 0;          // UPD6383_ST07SIGN: ACT-07 store moved to POST on addr8 > 0
 	u64  m_st2a_n = 0;              // UPD6383_ST2A: the hi12 0x02A family storing at POST
+	u64  m_epirebase_n = 0;         // UPD6383_EPIREBASE: pointer rebased at the epilogue entry
 	u64  m_pclr_n = 0;              // UPD6383_PCLR: words that cleared an undriven P
 	u64  m_c6lut_n = 0;             // UPD6383_C6LUT: class-6 table lookups actually performed
 	u64  m_c8shift_n = 0;           // UPD6383_C8SHIFT: class-8 post-sum scalings applied

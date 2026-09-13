@@ -6051,6 +6051,42 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		//  epilogue ARRIVES with the pointer at 0x46, immediately below the live
 		//  cells 0x47/0x48/0x4B/0x4C/0x4D the bodies deposit in.  The arrival is
 		//  RIGHT; the walk from there to the store words is what loses it.
+		//  ★★★ §52 DIAGNOSTIC (env UPD6383_EPIREBASE, default OFF): RE-TEST of register
+		//  row 23 above, on evidence its withdrawal did not have.
+		//  The withdrawal reads *"rebasing here moved the stores from ptr 0x00 to ptr 0x05
+		//  and THEY STILL READ ZERO"*.  That premise is gone: N-INPUT-GATE-OPENED §50
+		//  measured EVERY body live under the promoted defaults, and §51's census shows
+		//  **cell 0x05 MOVES in all 16 programs** -- it is now the most reliably non-zero
+		//  cell in the catalogue, and it is exactly the cell this rebase lands on.
+		//  ⚠ Same failure mode as §43-§46: a hypothesis refuted while the bodies were dead
+		//  is not refuted.  This re-tests an EXISTING withdrawn candidate; it is not a new
+		//  guess, and the value/rule are the ones the per-unit CALL already applies
+		//  (DRAM_UNIT_BASE, FORCED to exist and in its value -- only its SITE is open, and
+		//  the epilogue is the one place in the frame that never gets it).
+		//  ⚠ STRUCTURAL check first: §51 measured the epilogue's cells as {0x00,0xFF} with
+		//  ZERO overlap against the bodies' moving cells in all 16 programs.  That overlap
+		//  must stop being zero, or the arm did not do what it claims.
+		//  ⚠ REGRESSION BOUND: the 38-live tally must not fall.
+		//  ⛔⛔ REFUTED, N-INPUT-GATE-OPENED §53 -- AND THE BOUND ABOVE IS WHAT CAUGHT IT.
+		//  Structurally the arm works (epilogue cells 0x00/0xFF -> 0x04/0x05) but it still
+		//  gives NO overlap with the bodies' moving cells in 3 of 4 programs, leaves the
+		//  output stage at `loud max 0', and BREAKS THREE OF FOUR BODIES including the
+		//  PARAMETRIC EQ (30 moving cells -> STATIC).
+		//  MECHANISM, and it is structural rather than circumstantial: `m_dp' is THREADED
+		//  ACROSS FRAMES.  `run_frame()' resets the PC and nothing else -- words 0..41 run
+		//  on the pointer the PREVIOUS frame's epilogue left.  Forcing it here therefore
+		//  sets where the NEXT frame's kernel starts walking.  ⇒ the epilogue's 0x00 is not
+		//  a missing rebase; it is the value the previous frame legitimately left there,
+		//  and row 23's premise is wrong for a second and better reason.
+		if (prof_iw == 60)
+		{
+			static const bool epirebase = getenv("UPD6383_EPIREBASE") != nullptr;
+			if (epirebase)
+			{
+				m_dp = u8(DRAM_UNIT_BASE | (m_cur_unit1 ? 0x80 : 0x00));
+				m_epirebase_n++;
+			}
+		}
 		if (m_speculative && prof_iw == 60)
 			m_epi_ptr_before = m_dp;
 		if (m_speculative && prof_iw >= 60 && prof_iw <= 82)
@@ -8751,6 +8787,8 @@ void upd6383_device::dump_frame_report() const
 				"FIRED %u times\n", getenv("UPD6383_PCLR") ? 1 : 0, u32(m_pclr_n));
 		logerror("upd6383: ★ UPD6383_CALLACC = %d: accumulator cleared at the block CALL: "
 				"FIRED %u times\n", getenv("UPD6383_CALLACC") ? 1 : 0, u32(m_callacc_n));
+		logerror("upd6383: ★ §52 UPD6383_EPIREBASE = %d: pointer rebased at the epilogue entry: "
+				"FIRED %u times\n", getenv("UPD6383_EPIREBASE") ? 1 : 0, u32(m_epirebase_n));
 		logerror("upd6383: ★ §45 UPD6383_ST2A = %d: hi12 0x02A with addr8 != 0 stores at the "
 				"POST cell: FIRED %u times\n", getenv("UPD6383_ST2A") ? 1 : 0, u32(m_st2a_n));
 		logerror("upd6383: ★ §38/§40 UPD6383_ST07SIGN = %d (DEFAULT IS NOW 1): ACT-07 store on "
