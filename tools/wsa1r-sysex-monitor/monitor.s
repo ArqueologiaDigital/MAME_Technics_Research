@@ -8,8 +8,11 @@
 ;; ASSEMBLER llvm-mc -triple=tlcs900 (the project's own backend).  Every encoding this file
 ;;          relies on has been checked byte-for-byte against the ROM's own listing:
 ;;            call 0xf41e3c -> 1d 3c 1e f4   (as at 0xFA5860 / 0xFA5867 / 0xFA587D)
-;;            pushw de      -> 2a            inc 2,xsp -> ef 62
-;;            pushw 0x0002  -> 0b 02 00      push xbc  -> 39
+;;            call 0xf41df8 -> 1d f8 1d f4   (as at 0xFA5BCD, MIDI_SendBankAndProgram)
+;;            call 0xfa590f -> 1d 0f 59 fa   (as at 0xFA5BD1, the instruction after it)
+;;            push sr -> 02   ei 6 -> 06 06   pop sr -> 03   (as at 0xFA590F-0xFA591B)
+;;            pushw de      -> 2a            inc 2,xsp -> ef 62   inc 6,xsp -> ef 66
+;;            push xbc      -> 39
 ;;
 ;; ---------------------------------------------------------------------------------------------
 ;; WHERE IT LIVES
@@ -38,9 +41,9 @@
 ;;   monitor's marker.  Once the marker is seen the monitor CLAIMS the message and stops
 ;;   forwarding it to the stock ring, so our traffic never reaches the stock parser.
 ;;
-;; ⚠ NOT YET PROVEN, and the emulator is where it gets tested: calling the transmit primitive
-;;   0xF40ED4 from inside the MIDI receive interrupt.  Its 47 callers look like main-loop code.
-;;   If it turns out not to be re-entrant the reply must move to a main-loop hook instead.
+;; ⛔ CORRECTED 2026-09-14: the reply used to go through 0xF40ED4, which is the CPU1<->CPU2 LINK
+;;   sender, not MIDI at all.  See the block above `MIDI_PUTBLOCK'.  Replies now go into the
+;;   0x601432 ring that the INTTX0 handler drains into SC0BUF.
 ;; ---------------------------------------------------------------------------------------------
 
 	.set	MON_BASE,   0xFBA236		; start of the padding
@@ -50,7 +53,30 @@
 	.set	SYSEX_ST,   0xA9		; firmware SysEx state byte
 	.set	MIDI_ACT,   0x216F		; "MIDI activity" bit the original sets
 	.set	RING_PUT,   0xF41E3C		; T_Ring601646_Put -- the stock SysEx sink
-	.set	MIDI_SEND,  0xF40ED4		; transmit: (port, len, ptr) pushed, 8 bytes cleaned
+
+;; ---------------------------------------------------------------------------------------------
+;; HOW A BYTE ACTUALLY LEAVES THIS MACHINE ON MIDI OUT.
+;;
+;; ⛔ 0xF40ED4 IS NOT THE MIDI TRANSMITTER.  The first two versions of this file sent through it
+;; and nothing ever appeared on the wire.  prom_a names it `Link_SendBlockIn32ByteChunks'
+;; (0xF8E02C): it chops a buffer into 0x20-byte pieces and hands each to `Link_SendCountedBlock',
+;; which writes a header byte to **0x007C0000** -- the CPU1<->CPU2 link port -- and then micro-DMAs
+;; the body there.  Its third argument, the one I was calling a "port", is the three-bit selector
+;; that goes into bits 7..5 of that link header.  Every reply this monitor sent went to CPU 2.
+;;
+;; The real path is a 256-byte ring at 0x601432.  `MIDI_TX_Ready' (0xFA542F, the INTTX0 handler)
+;; drains it: after the five System Real Time request bits in (0xA0) it calls Ring601432_Get
+;; (0xF41DF0), and writes whatever is not 0xFFFF straight into SC0BUF at 0xFA547E.  So:
+;;
+;;   Ring601432_PutBlock  0xF41DF8   push <buffer:4>, pushw <count:2>, call, clean 6
+;;                                   (frame read as `ld BC,(XIZ+8)' count, `ld XIY,(XIZ+0x0a)' buf)
+;;   MIDI_PostSendWork    0xFA590F   no arguments; sets the (0x77) mailbox to 0xDD, which is what
+;;                                   restarts a transmitter that has already run dry
+;;
+;; This is `MIDI_SendBankAndProgram's own bit-4-clear arm, 0xFA5BC6-0xFA5BD5, instruction for
+;; instruction -- the arm prom_a's header calls "port A".
+	.set	MIDI_PUTBLOCK, 0xF41DF8		; T_Ring601432_PutBlock -- the MIDI OUT queue
+	.set	MIDI_POSTWORK, 0xFA590F		; MIDI_PostSendWork -- wake the transmitter
 
 	.set	MARKER,     0x7D		; our sub-id
 	.set	CMD_IDENT,  0x01
@@ -247,14 +273,10 @@ MON_ENTRY:
 	jr	nz, .Lploop
 	ld	a, 0xF7
 	ld	(xhl), a
-	;; hand the whole thing to the firmware's transmitter: (port, len, ptr)
+	;; hand the whole thing to the MIDI OUT queue
 	ld	xbc, MST_BUF
-	push	xbc
 	ldw	de, REPLY_LEN
-	pushw	de
-	pushw	0x0002
-	call	MIDI_SEND
-	inc	0, xsp
+	calr	.Lsend
 	pop	xhl
 	pop	xde
 	pop	xbc
@@ -266,12 +288,25 @@ MON_ENTRY:
 	push	xde			;   so the parser's registers live in RAM at 0x0900 --
 					;   clobbering one corrupts persistent parser state.
 	lda	xbc, (IDENT_TBL)
-	push	xbc			; ptr
 	ldw	de, 0x0007
-	pushw	de			; len
-	pushw	0x0002			; port
-	call	MIDI_SEND
-	inc	0, xsp			; clean the 8 bytes pushed (4 + 2 + 2)
+	calr	.Lsend
 	pop	xde
 	pop	xbc
+	ret
+
+;; ---- .Lsend: XBC = buffer, DE = byte count.  Queues the block and wakes the transmitter ----
+;; ⚠ THE CRITICAL SECTION IS THE FIRMWARE'S OWN IDIOM, and the save-and-restore form matters
+;; here: we are inside INTRX0, so `ei 0x00' (which `MIDI_SendBankAndProgram' uses, being main-loop
+;; code) would unmask everything including a re-entrant MIDI receive.  `push sr' / `ei 6' /
+;; `pop sr' is what `MIDI_PostSendWork' itself does, and it restores the mask we were called with.
+;; Level 6 masks INTTX0, which is the other writer of this ring.
+.Lsend:
+	push	sr
+	ei	6
+	push	xbc			; buffer  -> (XIZ+0x0a)
+	pushw	de			; count   -> (XIZ+0x08)
+	call	MIDI_PUTBLOCK
+	call	MIDI_POSTWORK
+	inc	6, xsp			; clean the 6 bytes pushed (4 + 2)
+	pop	sr
 	ret

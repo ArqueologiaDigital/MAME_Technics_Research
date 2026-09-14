@@ -15,7 +15,7 @@ rule. Nothing in the right-hand column may ever reach a PR.
 | commit | what | PR-worthy? |
 |---|---|---|
 | `5b32b3a` | **`l7a1429` startup SEGFAULT fixed + ABI guard.** `wsa1r` crashed on every start in the device constructor (`rep stos` overrunning) because `WSA1R_ENABLE_ACOUSTIC_HLE` changes `sizeof` from 8952 to 2112880 and MAME's build system does not treat `-D` flags as a dependency, so two objects disagreed. The guard turns a silent crash into a `fatalerror` naming the cause. | ★★ **Yes** — a real crash fix. The guard is defensive and self-contained. ⚠ Its comment references research macros; reword for upstream. |
-| *(uncommitted at time of writing)* | **`wsa1_midi_uart` receive diagnostic**, `WSA1R_MIDI_LOG=1`, default off: logs assembled RX bytes and RXD transitions. | ★ **Maybe** — a small, gated debug aid. Upstream may not want it; harmless if dropped. |
+| *(uncommitted at time of writing)* | **`wsa1_midi_uart` RX/TX diagnostic**, `WSA1R_MIDI_LOG=1`, default off: logs assembled RX bytes, RXD transitions, and every byte handed to the TX FIFO. | ★ **Maybe** — a small, gated debug aid. Upstream may not want it; harmless if dropped. |
 
 ⚠ **There is NO MIDI driver bug to upstream.** An earlier reading of mine — "the MIDI receive path
 is broken" — was **wrong**, and the correction is the useful part: MAME's own `midiin` deliberately
@@ -68,3 +68,20 @@ message, dispatched the command and handed a reply to the firmware's transmitter
 ⚠ Two rig lessons worth keeping: MAME's Lua address-space taps must be **bus-width aligned** (an
 odd start address is rejected outright), and TLCS-900 registers are exposed **bank-qualified**
 (`XDE0`…`XDE3`, never plain `DE`).
+
+★ **And now in the other direction too, with no Lua at all** (`tools/wsa1r-sysex-monitor/midi_roundtrip.sh`):
+
+```
+   ✅ ident  F0 7E 7D 7F 01 00 F7
+   ✅ peek   F0 7E 7D 7E 0F 00 07 0E 07 0D 07 0F 00 01 00 00 0F 07 00 00 F7
+   ✅ stock  (control: no SysEx, as required)
+```
+
+`-midiin <file>` → UART → firmware ISR → monitor → ring `0x601432` → INTTX0 → SC0BUF → `-midiout`
+→ ALSA → `aseqdump`. **MAME's MIDI is validated in both directions, against an external program.**
+That is column-A knowledge even though the monitor is column B: any future MIDI-touching PR can
+cite it.
+
+⚠ The bug that hid this for a round was **entirely in our ROM patch, not in MAME**: the monitor was
+sending through `0xF40ED4`, which is the CPU1↔CPU2 link sender, not the MIDI transmitter. Nothing
+about it implicates the driver.

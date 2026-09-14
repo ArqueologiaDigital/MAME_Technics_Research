@@ -26,7 +26,8 @@ remaining ~321 distinct shapes into an automatable sweep.
 | Patched ROM boots | ✅ `wsa1r` runs (expected WRONG CHECKSUMS notice) |
 | **End-to-end over MIDI** | ✅ **PASS** — file on `-midiin` → UART at 31250 baud → firmware ISR → monitor → reply |
 | **Milestone 2: PEEK** | ✅ **PASS** — reads CPU-1 memory back over MIDI, self-verified |
-| Transmit-from-ISR safety | ⛔ unproven |
+| **Reply captured OFF the machine, MIDI only** | ✅ **PASS** — `aseqdump` on ALSA, no Lua, negative control included |
+| Transmit-from-ISR safety | ✅ proven in the emulator — see below |
 
 ## What was built
 
@@ -112,6 +113,85 @@ so the monitor's state block sits at `0x67FF00`. ⚠ **Twelve seconds of boot is
 whole life** — loading a disk or entering an unvisited mode could touch it. Re-run the census under
 more activity before trusting this on hardware.
 
+---
+
+## ⛔ The reply went to the WRONG CHIP for two days — `0xF40ED4` is not MIDI
+
+Felipe, 2026-09-14: *"the results must be read via midi as well. The real device does not let us
+inspect its internals as easily as we do with lua scripting."* Fair, and the moment that constraint
+was applied the monitor stopped working: `aseqdump` saw the firmware's own Active Sensing, Pitch
+bend and Control changes on `mdout`, and **not one byte of ours**.
+
+The cause was a misidentified primitive, and it was mine. `0xF40ED4` is a prom_b directory slot
+whose body is prom_a **`Link_SendBlockIn32ByteChunks` (`0xF8E02C`)**: it chops a buffer into
+0x20-byte pieces and hands each to `Link_SendCountedBlock`, which writes a header byte to
+**`0x007C0000`** — the CPU1↔CPU2 link port — and micro-DMAs the body there. The argument I had
+been calling a *port selector*, and had spent a round flipping between `0x02` and `0x00`, is the
+**three-bit field that goes into bits 7..5 of that link header**. Every reply the monitor ever
+sent went to CPU 2, correctly and invisibly.
+
+⚠ The tell was there to be read: the routine's own header in the disassembly says
+*"the block sender that carries port B's stream to the other CPU"*. I had read the call sites
+instead of the callee.
+
+### What actually puts a byte on MIDI OUT
+
+`MIDI_TX_Ready` (`0xFA542F`) is the INTTX0 handler. After the five System Real Time request bits
+in `(0xA0)` it calls **`Ring601432_Get`** (`0xF41DF0`) and writes anything that is not `0xFFFF`
+straight into **SC0BUF** at `0xFA547E`. So the MIDI OUT queue is the 256-byte ring at `0x601432`,
+and the send sequence is `MIDI_SendBankAndProgram`'s own bit-4-clear arm (`0xFA5BC6`–`0xFA5BD5`),
+the one prom_a's header calls *"port A"*:
+
+| | |
+|---|---|
+| `Ring601432_PutBlock` | **`0xF41DF8`** — `push <buffer:4>`, `pushw <count:2>`, call, clean 6 |
+| `MIDI_PostSendWork` | **`0xFA590F`** — no arguments; sets the `(0x77)` mailbox to `0xDD`, which restarts a transmitter that has already run dry |
+
+The critical section is `push sr` / `ei 6` / … / `pop sr` — the **save-and-restore** form, not the
+`ei 0x00` the ROM's own main-loop caller uses. We are inside INTRX0; forcing the mask to 0 would
+unmask a re-entrant MIDI receive. Level 6 masks INTTX0, the ring's other writer.
+
+★ **That also settles the transmit-from-ISR question** that this file listed as unproven: the ISR
+does not transmit at all. It appends to a ring under a mask the ROM itself uses for that ring, and
+the transmit happens later in INTTX0. Nothing re-entrant is called.
+
+---
+
+## ✅ Read off the wire by a program that knows nothing about MAME
+
+`tools/wsa1r-sysex-monitor/midi_roundtrip.sh` — **no Lua, no taps, no debugger**, exactly the
+instrument that will exist when the EPROM is in the real machine.
+
+```
+   $ ./midi_roundtrip.sh
+   === 3. drive it over MIDI and read the answers back over MIDI
+     ✅ ident  F0 7E 7D 7F 01 00 F7
+     ✅ peek   F0 7E 7D 7E 0F 00 07 0E 07 0D 07 0F 00 01 00 00 0F 07 00 00 F7
+   === 4. negative control: the same stimulus against the STOCK prom_a
+     ✅ stock  (control: no SysEx, as required)
+```
+
+* **in** a Standard MIDI File on `-midiin` (deterministic, replays identically)
+* **out** ALSA `Midi Through Port-0` on `-midiout`, captured by `aseqdump`
+* the PEEK payload nibble-decodes to `F0 7E 7D 7F 01 00 F7 00` — the eight bytes at `0xFBA236`,
+  which is the monitor's **own reply table**, so the right answer was known before the run
+
+Three things make the ✅s mean something:
+
+1. **The negative control.** The same stimulus against the unpatched ROM must produce no SysEx —
+   and `0x7E` *is* an identifier the stock parser accepts, so "the firmware answered by itself" was
+   a live alternative, not a straw man.
+2. **The instrument is checked before it is read.** An empty capture is not a result; the machine
+   emits Active Sensing continuously, so the harness fails the run outright if the capture contains
+   none. Otherwise a disconnected `aseqdump` would make the control pass for the wrong reason.
+3. **It has been seen to fail.** The first run of this harness reported ❌❌ — see the timing note
+   below — which is what a criterion that can fail looks like.
+
+⚠ **`midiin`'s ten seconds is an OFFSET, not a deadline.** `m_sequence_start =
+std::max(machine().time(), attotime(10,0))`, then the file plays *from there*: a timestamp of T
+seconds arrives at 10 + T. Placing the SysEx at T = 12 s in a 16-second run plays nothing, and
+looks exactly like a run that is too short. The harness uses T = 1 s.
+
 ## Next, in order
 
 1. **End-to-end over MIDI.** MAME's `midiin` image device either parses its argument as a
@@ -124,10 +204,13 @@ more activity before trusting this on hardware.
      `posixptty.cpp`), but `midiin_device::call_load` tries to *parse* its file as a Standard MIDI
      File before falling back to a named port, so a raw byte stream never reaches it. Raw PTY
      access would need the UART bridged to an rs232-style image instead — a driver change.
-2. **Settle the transmit-from-ISR question.** Tap `0xF40ED4` and confirm the reply is queued and
-   the machine survives. If it is not re-entrant, move the reply to a main-loop hook.
-3. **Milestone 2**: a byte counter (needs RAM — none is allocated yet), then `LOAD`, `POKE`,
-   `RUN`, `DUMP`, and the `RQ`/`GF` commands that §A5 argues could locate the chip's COND field
-   and its GF-setting instruction.
+2. ~~Settle the transmit-from-ISR question.~~ ✅ Done, and the answer was that the premise was
+   wrong: see the `0xF40ED4` section above.
+3. **Milestone 3**: `LOAD`, `POKE`, `RUN`, `DUMP`, and the `RQ`/`GF` commands that §A5 argues
+   could locate the chip's COND field and its GF-setting instruction.
+   ⚠ **The blocker is known and is not MIDI.** The µPD6383 host port belongs to **CPU 2**, so every
+   one of those commands has to cross the inter-processor link — the very link `0xF40ED4` drives.
+   PEEK needed none of it, which is why PEEK came first.
+4. **A variable read length.** PEEK returns a fixed 8 bytes; a DSP sweep wants a count argument.
 
-⚠ Nothing here has been near the hardware, and nothing should be until step 1 passes.
+⚠ Nothing here has been near the hardware yet.
