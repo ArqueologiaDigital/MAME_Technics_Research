@@ -326,6 +326,9 @@ void upd6383_device::device_start()
 				"P <- accb", "P <- mem[ptr]", "P <- the immediate", "P <- the payload A",
 				"acc <- 0", "accb <- 0", "P <- tempA", "P <- tempB", "P <- 0 AND acc <- 0"}[m_hi6c]);
 	m_census_perprog = getenv("UPD6383_CENSUS_PERPROG") != nullptr;   // ★ §103, default OFF
+	//  ★★★★★ §199: which cell the writer census attributes.  Default 0x07 -- the cell §183
+	//  named as the phase and §190–§192 showed has a second, audio-rate writer.
+	if (const char *e = getenv("UPD6383_WHOCELL")) m_whocell = u32(strtoul(e, nullptr, 0)) & 0xff;
 	if (m_census_perprog)
 		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
 				"are cleared on every I-RAM program upload, so they describe ONE program\n");
@@ -3010,6 +3013,46 @@ void upd6383_device::exec_alu(u64 word)
 				m_dram.write_dword(m_dp, u32(acc_to_datum(m_acc)) & 0xffffff);
 				m_lo12st5_n++;
 			}
+			//  ★★★★★ §197 (UPD6383_ALT11ALU, default OFF): RUN THE BIT-11 WORD'S ALU HALF.
+			//
+			//  §190–§196 measured something that should not be true of a machine running a
+			//  CHORUS: **no cell in it is a clean ramp.**  §228's rise census reports VARIES for
+			//  every cell that moves at all (01, 04, 05, 07, 0C, 0F, F1), and §191 measured the
+			//  cell §183 named as the phase changing EVERY frame and wrapping 87 564 times.  A
+			//  chorus must have an LFO; if none is present, the phase generator is what is
+			//  broken, not the six index forms that were graded against it.
+            //
+			//  ★ The suspect is this branch.  `bit11-family.md' §9 proves a bit-11 word has no
+			//  SRC and no ACTION field -- but it still has an `hi12', and `hi12[3:1]' is `f31',
+			//  the ACCUMULATOR function.  §196's part D measured `C63' over the pooled corpus:
+			//  99 occurrences, `class4 = 0' and `addr8 = 0x00' in every one, and exactly TWO
+			//  full-word forms differing ONLY in `hi12' -- `040' (f31 = 0, LOAD) x87 and `142'
+			//  (f31 = 1, ADD) x12.  A word whose only variable field is "load or accumulate" is
+			//  an ALU-half instruction, and `phase += increment' is an accumulate.  This branch
+			//  returns before any of it runs, 3 150 504 times per chorus run (§97).
+			//
+			//  ⇒ apply ONLY the ALU half -- the product as the term, `f31' as the function --
+			//  and nothing of the SRC/ACT half, which genuinely is not encoded in the word.
+			//
+			//  ⚠ TWO-SIDED, PRE-REGISTERED, AND IT CAN FAIL: with the arm ON, §228's rise
+			//  census must report **CONSTANT -- a clean ramp** for at least one cell.  Today it
+			//  reports VARIES for all seven.  If every cell still VARIES, the ALU half is not
+			//  the missing phase generator and this arm says so.
+			//  ⚠ And the standing rule: re-run with NO env set at all and confirm the shipped
+			//  device is unchanged, before reading anything into an arm-ON run.
+			static const int alt11alu = []{ const char *e = getenv("UPD6383_ALT11ALU");
+				return e ? atoi(e) : 0; }();
+			if (alt11alu)
+			{
+				const u32 f31 = upd6383_disassembler::hi_f31(upd6383_disassembler::hi12(word));
+				u64 &acc = m_cur_unit1 ? m_accb : m_acc;
+				if (f31 == upd6383_disassembler::HI_ACC_LOAD)      acc = m_p;
+				else if (f31 == upd6383_disassembler::HI_ACC_ADD)  acc = acc + m_p;
+				//  HI_ACC_HOLD and the unanchored f31 3..7 contribute nothing: holding is what
+				//  the shipped device already does for every bit-11 word, so they are the
+				//  control built into the arm.
+				if (f31 <= upd6383_disassembler::HI_ACC_ADD) m_alt11alu_n++;
+			}
 			return;
 		}
 		//==================================================================
@@ -3698,6 +3741,7 @@ void upd6383_device::exec_alu(u64 word)
 						if (k > m_c6kn_hi[n]) m_c6kn_hi[n] = k;
 						if (k != m_c6kn_last[n]) { m_c6kn_chg[n]++; m_c6kn_last[n] = k; }
 					}
+					if (k < 64) m_c6knhist[n][k]++;   // §196
 					m_c6kn_n[n]++;
 					//  ★★★ §190: the phase AS SEEN AT THIS SITE, so the prediction stops resting on an
 					//  inherited period count.  `down' IS the number of LFO periods; n * down is then the
@@ -7466,6 +7510,29 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 		}
 		m_rampprev[i] = v;
 	}
+	//  ★★★★★ §198: and the SAME census on the REGISTER FILE, which §228 never walked.
+	for (u32 i = 0; i < 0x100; i++)
+	{
+		const s32 v = s32(util::sext(m_rf[i] & 0xffffff, 24));
+		if (!m_frames_run) { m_rfmin[i] = m_rfmax[i] = v; }
+		else
+		{
+			if (v < m_rfmin[i]) m_rfmin[i] = v;
+			if (v > m_rfmax[i]) m_rfmax[i] = v;
+			if (v != m_rfprev[i]) m_rfchg[i]++;
+			if (v < m_rfprev[i] && (m_rfprev[i] - v) > 0x400000) m_rfwrap[i]++;
+			const s32 d = v - m_rfprev[i];
+			if (d > 0 && d < 0x400000)
+			{
+				if (!m_rfinc_n[i]) { m_rfinc_min[i] = m_rfinc_max[i] = d; }
+				else { if (d < m_rfinc_min[i]) m_rfinc_min[i] = d;
+					   if (d > m_rfinc_max[i]) m_rfinc_max[i] = d; }
+				m_rfinc_n[i]++;
+				m_rfinc_sum[i] += u64(d);
+			}
+		}
+		m_rfprev[i] = v;
+	}
 	m_frames_run++;
 	m_last_slots = slots;
 	m_last_traps = traps;
@@ -8684,6 +8751,21 @@ void upd6383_device::dump_frame_report() const
 			//  LFO periods.  A short span, or changes at the lookup rate, REFUTES the form.
 			for (u32 i = 0; i < 256; i++)
 				if (m_c6kn_n[i])
+				{
+					//  ★★★★★ §196: the SHAPE of k, which the change count cannot show.
+					std::string kh;
+					u32 vis = 0;
+					for (u32 v = 0; v < 64; v++)
+						if (m_c6knhist[i][v]) { kh += string_format(" %u:%llu", v,
+								(unsigned long long)m_c6knhist[i][v]); vis++; }
+					logerror("upd6383: ★★★★★ §196 k DISTRIBUTION at n=%u: %u of %u entries "
+							"visited%s\nupd6383:       hist:%s\n", i, vis, i,
+							(vis == i) ? "  -- EVERY entry, as a table sweep must"
+									   : "  <- NOT every entry: not a sweep of this table",
+							kh.empty() ? " (none)" : kh.c_str());
+				}
+			for (u32 i = 0; i < 256; i++)
+				if (m_c6kn_n[i])
 					logerror("upd6383: ★★★ §189 C6LUT k PER TABLE LENGTH n=%u (0x%02X): "
 							"k = %u .. %u (span %u of %u), changed %llu of %llu lookups "
 							"-- a monotonic sweep predicts span %u and ~%u changes\n",
@@ -9191,6 +9273,35 @@ void upd6383_device::dump_frame_report() const
 							inc, u32(m_rampfirst[i]), per,
 							per / double(m_frame_hz), double(m_frame_hz) / per, m_frame_hz);
 				}
+				{
+					std::string rs2;
+					for (u32 i = 0; i < 0x100; i++)
+					{
+						if (m_rfinc_n[i] < 1000) continue;      // not a ramp
+						const double inc = double(m_rfinc_sum[i]) / double(m_rfinc_n[i]);
+						const double per = (inc > 0.0) ? 8388608.0 / inc : 0.0;
+						rs2 += string_format("\nupd6383:    rf[%02X]: rises %u of %u frames, "
+								"step %d..%d (%s) mean %.4f | wraps %llu | range %d..%d | "
+								"period 2^23/step = %.1f frames = %.6f Hz at the declared %u Hz",
+								i, u32(m_rfinc_n[i]), u32(m_frames_run),
+								m_rfinc_min[i], m_rfinc_max[i],
+								//  ⚠ A CONSTANT STEP IS NOT A RAMP (RULE 15).  A cell that
+								//  toggles between two values has a constant positive step
+								//  trivially -- rf[50] does exactly that, step 256 over a
+								//  range of 256.  A ramp needs a range MANY steps wide.
+								(m_rfinc_min[i] != m_rfinc_max[i]) ? "VARIES"
+									: ((m_rfmax[i] - m_rfmin[i]) <= 2 * m_rfinc_min[i])
+										? "TOGGLE, not a ramp -- range is one step wide"
+										: "CONSTANT -- a clean ramp",
+								inc, (unsigned long long)m_rfwrap[i], m_rfmin[i], m_rfmax[i],
+								per, double(m_frame_hz) / per, m_frame_hz);
+					}
+					logerror("upd6383: ★★★★★ §198 REGISTER-FILE RISE CENSUS -- the memory §228 "
+							"never walked, and the one §179 proved the class-6 table lives "
+							"in:%s%s\n", rs2.empty()
+								? "  NO REGISTER-FILE CELL EVER RISES (>= 1000 frames)" : "",
+							rs2.c_str());
+				}
 				logerror("upd6383: ★★★★ §228 LFO RISE CENSUS (rate-invariant STEP x "
 						"independently-graded CLOCK; §228 T4 grades the clock against the "
 						"machine's own time, so the Hz below is NOT circular):%s%s\n",
@@ -9426,6 +9537,39 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★ §161 delay-word ACT-07 store re-aimed off addr8 "
 				"(mask bit 61 = %d): FIRED %u times\n",
 				(m_specmask & (1ull << 61)) ? 1 : 0, u32(m_dlystore_fix_n));
+		{
+			std::string wh;
+			for (u32 k = 0; k < 8; k++)
+				if (m_who_n[k])
+					wh += string_format("\nupd6383:    iw%-4u wrote it %llu times, step %d..%d"
+							"%s", m_who_iw[k], (unsigned long long)m_who_n[k],
+							m_who_dmin[k], m_who_dmax[k],
+							m_who_d114[k] ? string_format("  <- %llu of them by EXACTLY +114, "
+									"the anchored LFO increment",
+									(unsigned long long)m_who_d114[k]).c_str() : "");
+			logerror("upd6383: ★★★★★ §199 WHO WRITES CELL 0x%02X (UPD6383_WHOCELL) -- the step "
+					"each writer produced:%s%s\n", m_whocell,
+					wh.empty() ? "  NOBODY WROTE IT through store_mode()" : "", wh.c_str());
+			//  ★★★★★ §200: AND THE WRITER THAT DOES NOT GO THROUGH store_mode() AT ALL.
+			//  §199 accounts for ~12 400 writes of cell 0x07 while §176 counts 1 570 842
+			//  changes, so the dominant writer is elsewhere -- and it is the FRAME-START INPUT
+			//  DEPOSIT (`m_dram.write_dword(m_in_addr[..], m_in_val[..])'), whose addresses are
+			//  `m_in_base + IN_LATCH_L_OFF/R_OFF'.  Both offsets are marked FORCED in the
+			//  header.  Print the addresses the device actually deposits at, so the
+			//  identification of cell 0x07 is the device's statement and not my arithmetic.
+			logerror("upd6383: ★★★★★ §200 FRAME-START INPUT DEPOSIT went to D-RAM 0x%02X (L) and "
+					"0x%02X (R), from base 0x%02X + IN_LATCH_L_OFF %u / R_OFF %u.\n"
+					"upd6383:    ⇒ if that L address is the cell §183 called \"the LFO phase\", "
+					"the cell is the AUDIO INPUT LATCH and §183 is refuted structurally, not "
+					"statistically: it is written with the incoming sample EVERY frame, which "
+					"is exactly the 1 570 842 changes §176 reports.\n",
+					m_in_addr[0], m_in_addr[1], m_in_base,
+					unsigned(IN_LATCH_L_OFF), unsigned(IN_LATCH_R_OFF));
+		}
+		logerror("upd6383: ★★★★★ §197 UPD6383_ALT11ALU = %d: bit-11 words whose ALU HALF was "
+				"executed (f31 LOAD or ADD, product as the term): %llu\n",
+				getenv("UPD6383_ALT11ALU") ? atoi(getenv("UPD6383_ALT11ALU")) : 0,
+				(unsigned long long)m_alt11alu_n);
 		logerror("upd6383: ★ UPD6383_DLY07DRAM = %d: re-aimed delay-word ACT-07 stores sent to "
 				"D-RAM instead of the mode-1 register file: FIRED %u times\n",
 				getenv("UPD6383_DLY07DRAM") ? 1 : 0, u32(m_dly07dram_n));

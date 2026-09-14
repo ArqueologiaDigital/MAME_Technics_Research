@@ -1710,6 +1710,38 @@ private:
 	void note_store(u32 cell, u32 v)
 	{
 		m_store_n++;
+		//  ★★★★★ §199: WHO WRITES THE PHASE CELL, and what step each writer produces.
+		//  §228 reports cell 0x07 rising 1 480 377 of 1 783 404 frames with step
+		//  114 .. 3 470 859.  The MINIMUM is exactly the anchored LFO increment
+		//  (`lfo-ramp.md' item C, 114/frame) -- so the ramp IS there and something else is
+		//  writing the same cell on the other frames, which is why §228 calls it VARIES and
+		//  why §183 read an audio-rate signal as a phase.  This attributes each write to the
+		//  instruction that made it, with the step it produced, so "two writers" stops being
+		//  an inference.  ⚠ Must sit BEFORE the rail filter below, which returns on any value
+		//  that is not +-full scale -- a phase increment never is.
+		{
+			const u8 wc = u8(m_whocell);
+			if ((cell & 0xff) == wc)
+			{
+				const s32 nv = s32(util::sext(v & 0xffffff, 24));
+				const s32 dl = m_who_seen ? (nv - m_who_last) : 0;
+				for (u32 k = 0; k < 8; k++)
+				{
+					if (m_who_n[k] && m_who_iw[k] != u16(m_cur_iw)) continue;
+					if (!m_who_n[k]) { m_who_iw[k] = u16(m_cur_iw);
+						m_who_dmin[k] = m_who_dmax[k] = dl; }
+					else if (m_who_seen)
+					{
+						if (dl < m_who_dmin[k]) m_who_dmin[k] = dl;
+						if (dl > m_who_dmax[k]) m_who_dmax[k] = dl;
+						if (dl == 114) m_who_d114[k]++;
+					}
+					m_who_n[k]++;
+					break;
+				}
+				m_who_last = nv; m_who_seen = true;
+			}
+		}
 		const u32 d = v & 0xffffff;
 		if (d != 0x7fffff && d != 0x800000) return;
 		const u8 c = cell & 0xff;
@@ -1913,6 +1945,32 @@ private:
 	u32  m_c6phn_last[512]{}, m_c6phn_dmin[512]{}, m_c6phn_dmax[512]{};
 	u64  m_c6phn_up[512]{}, m_c6phn_dn[512]{}, m_c6phn_eq[512]{};
 	bool m_c6phn_seen[512]{};
+	//  ★★★★★ §196: `k' AS A DISTRIBUTION, per table length.  §189's change count is the only
+	//  discriminating half of that census (the span is forced -- RULE 15), and a count cannot
+	//  tell a sweep from noise.  The SHAPE can: an index walking a 24-entry sine visits every
+	//  entry, densest at the turning points; a quantity that merely lands in range does not.
+	//  ★ This is also the FIRST DIRECT instrument for the index, so it is the first one
+	//  `C6LUT=1' and `=3' have ever faced -- both were graded on the §157 TAPMOD census (blind,
+	//  §180) and §186's ranking (void, §187), and their verdicts died with their instruments.
+	u64  m_c6knhist[256][64]{};
+	u64  m_alt11alu_n = 0;          // §197
+	//  ★★★★★ §198: THE SAME RISE CENSUS, ON THE REGISTER FILE.  §228 walks D-RAM and only
+	//  D-RAM, and its verdict -- VARIES for every cell, no ramp anywhere in a machine running a
+	//  CHORUS -- is what §190–§197 kept colliding with.  But §179 established that the class-6
+	//  table port IS the mode-1 REGISTER FILE at 0x1D, so the register file is the memory this
+	//  whole idiom lives in, and it has never been rise-censused at all.  A phase accumulator
+	//  there would be invisible to every measurement taken so far.
+	//  ⚠ Pure measurement, no arm: a cell rising on nearly every frame with a CONSTANT step is
+	//  a phase accumulator; anything else is not, and the census says which.
+	s32  m_rfprev[256]{}, m_rfmin[256]{}, m_rfmax[256]{};
+	u64  m_rfchg[256]{}, m_rfinc_n[256]{}, m_rfinc_sum[256]{}, m_rfwrap[256]{};
+	s32  m_rfinc_min[256]{}, m_rfinc_max[256]{};
+	//  §199 state.  `UPD6383_WHOCELL' selects the cell (default 0x07, the one §183 named).
+	u32  m_whocell = 0x07;
+	u16  m_who_iw[8]{};
+	u64  m_who_n[8]{}, m_who_d114[8]{};
+	s32  m_who_dmin[8]{}, m_who_dmax[8]{}, m_who_last = 0;
+	bool m_who_seen = false;
 	//  ★ sect. 162: mode-4 bit-4 stores SEEN (unconditional, whatever UPD6383_ST4DEST is).
 	u64  m_st4_n = 0;
 	bool ptr_moves(u64 word) const
