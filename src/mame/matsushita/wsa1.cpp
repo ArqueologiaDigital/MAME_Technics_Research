@@ -475,6 +475,8 @@ void wsa1_midi_uart_device::device_reset()
 
 void wsa1_midi_uart_device::tx_byte(uint8_t data)
 {
+	if (midi_log())
+		logerror("wsa1_midi_uart: TX byte %02X (t=%s)\n", data, machine().time().to_string());
 	unsigned const next = (m_tx_head + 1) & (TX_FIFO - 1);
 	if (next != m_tx_tail)                             // drop on overflow rather than corrupt
 	{
