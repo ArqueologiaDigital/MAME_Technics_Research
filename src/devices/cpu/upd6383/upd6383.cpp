@@ -4409,6 +4409,9 @@ void upd6383_device::exec_alu(u64 word)
 			//  is why `alu_decoded()' refuses a bit-4 word outside mode 2 at all.
 			//  THREE-WAY so it can fail: 0 = shipped (D-RAM at the pointer), 1 = the register
 			//  file at `addr8' (the mode-1 target, which R2 PROVES for that mode), 2 = suppressed.
+			//  ⛔⛔ §164: THIS CRITERION DOES NOT REPLICATE -- on prog71_peq_chorus, 5 433 347
+			//  suppressed stores leave the band byte-identical.  The four-way elimination below is
+			//  EXCITER-only and establishes nothing.  Original rationale kept:
 			//  CRITERION, the same one that settled the pointer: EXCITER's `op0x70' biquad band
 			//  four words downstream must stay two LIVE four-cell blocks whose offset-2/3 cells
 			//  change together.  If only one setting preserves it, the target is established by
@@ -4425,7 +4428,14 @@ void upd6383_device::exec_alu(u64 word)
 			}
 			else
 			{
+			//  ★ =3 (sect. 164): the FOURTH reading -- D-RAM indexed by `addr8' rather than by the
+			//  pointer.  Needed because =1 and =2 came back BYTE-IDENTICAL: neither touches D-RAM,
+			//  so the band census cannot separate them, and neither tests a DIFFERENT D-RAM
+			//  address.  Without this arm "the target is the pointer" rests on there being no
+			//  other D-RAM address to try, which is an assumption, not an elimination.
 			const u8 sd = (m4st && st4dest == 1)
+					? u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00))
+					: (m4st && st4dest == 3)
 					? u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00))
 					: u8(stdest);
 			store_mode((m4st && st4dest == 1) ? 1 : stmode, sd, u32(acc_to_datum(sacc)), 2);   // §99, site 2

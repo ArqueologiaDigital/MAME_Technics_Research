@@ -1851,6 +1851,11 @@ private:
 	//  an arm.  MEASURED, pooled over both products: class 4 is 99 words carrying the SINGLE
 	//  `addr8' value 0x01, so the field cannot separate "advance by one" from "no move" and an
 	//  execution difference is the only thing that can.
+	//  ⛔⛔ MEASURED AND IT DOES NOT REPLICATE (§164): the EXCITER effect is absent on
+	//  prog71_peq_chorus, which carries the same words with a band downstream and no pointer
+	//  reload between.  §160's criterion measured DOWNSTREAM IN PROGRAM ORDER and treated it as
+	//  data dependence.  The arm is correctly placed and fires; what it lacks is a criterion that
+	//  means the same thing in more than one program.  Original rationale below.
 	//  ⚠ Two-sided, and the criterion EXISTS -- which is what §149 could not find for `f31=3'.
 	//  Asked with `f31_oracle_pin.py's own selection (algorithms carrying an `op0x70' biquad
 	//  band): 11 carry one, 8 contain a class-4 word, and 8 of 8 have a band consumed

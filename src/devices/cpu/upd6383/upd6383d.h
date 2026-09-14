@@ -1081,7 +1081,9 @@ public:
 	//      class 6's addr8 is the table ENTRY COUNT, anchored at 24, and V8's residue delta is
 	//      +56 == 24 + 32, the two class-6 addr8 values of the walked image.  V8/V10/V12 die; V7
 	//      survives and had never had an arm.
-	//   3. V7 IS FALSIFIED BY A TWO-SIDED RUN -- dsp/tools/cls4_arm.sh, evidence committed in
+	//   3. ⛔⛔ THE RUN DOES NOT REPLICATE (sect. 164).  On prog71_peq_chorus -- same class-4
+	//      words, an op0x70 band downstream, and no pointer reload between -- 3 547 234 advances
+	//      move the band not at all.  Mode 4's pointer behaviour is OPEN.  What EXCITER showed:
 	//      kn5000-roms-disasm/dsp/analysis/data/cls4/.  UPD6383_CLS4PTR fired 3 346 456 times ON
 	//      against 0 OFF, both runs fingerprint prog35_exciter (sect. 193), and EXCITER was chosen
 	//      because an op0x70 biquad band sits FOUR WORDS DOWNSTREAM of its class-4 word.  D-RAM
