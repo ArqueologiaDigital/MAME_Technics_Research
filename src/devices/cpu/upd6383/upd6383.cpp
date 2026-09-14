@@ -289,6 +289,12 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	if (const char *e = getenv("UPD6383_PCLRIW"))
+	{
+		m_pclriw = u32(strtoul(e, nullptr, 10));
+		logerror("upd6383: ★★★ §120 UPD6383_PCLRIW = %u -- the C-format word at THAT I-RAM slot, "
+				"and only that one, invalidates the one-slot PRODUCT\n", m_pclriw);
+	}
 	m_cfmtpclr = getenv("UPD6383_CFMTPCLR")
 			? u32(std::clamp(atoi(getenv("UPD6383_CFMTPCLR")), 0, 2)) : 0u;   // ★ §117/§118
 	if (m_cfmtpclr)
@@ -2820,6 +2826,9 @@ void upd6383_device::exec_alu(u64 word)
 			if (m_cfmtpclr == 1
 					|| (m_cfmtpclr == 2 && upd6383_disassembler::is_c40(word)))
 			{ m_p = 0; m_pw = 0; m_ptouch = false; m_cfmtpclr_n++; }
+			//  ★★★ §120 the PER-SITE form -- one I-RAM slot, named by the caller.
+			if (m_cur_iw == m_pclriw)
+			{ m_p = 0; m_pw = 0; m_ptouch = false; m_pclriw_n++; }
 			//  ★★★ §109: the enumerated destinations.  0 keeps the latch (the shipped
 			//  behaviour and the control); the rest are the six this file has named as
 			//  candidates since row 5 was written.
@@ -8407,6 +8416,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★ §120 PCLRIW (iw %u): product invalidated at that slot: %llu\n",
+				m_pclriw, (unsigned long long)m_pclriw_n);
 		logerror("upd6383: ★ §117/§118 CFMTPCLR (mode %u): words that invalidated P: %llu\n",
 				m_cfmtpclr, (unsigned long long)m_cfmtpclr_n);
 		logerror("upd6383: ★ §109 CFMTDST (mode %u): C-format immediates redirected: %llu\n",

@@ -799,6 +799,16 @@ private:
 	//  a body's are all 0x620.  So mode 2 cannot touch the kernel's input stage, which
 	//  is what mode 1 was emptying when it took the hand-off cell to zero -- the
 	//  kernel's C-format words sit at iw1..iw40, BEFORE the iw45 that writes it.
+	//  ★★★ §120: the PER-SITE form.  §118/§119 bracketed the LFO's contaminant to the
+	//  KERNEL's OWN C-format words -- clearing there fixes the ramp to 0.6 % of the
+	//  ROM's constant and starves the input stage.  They sit at iw 1, 15, 22, 29, 31,
+	//  40, 48, 56, SPANNING BOTH SIDES of the iw45 that writes the hand-off cell.  If
+	//  the word the input stage consumes and the word the LFO inherits are DIFFERENT,
+	//  clearing at one and not the other fixes both -- and that is a per-word question
+	//  with a known answer at each end (the ROM's 114, and a live hand-off).
+	//  `UPD6383_PCLRIW=<iw>' clears `P' at exactly one I-RAM slot.
+	u32  m_pclriw = 0xffff;         // the I-RAM slot to clear at; 0xffff = none
+	u64  m_pclriw_n = 0;
 	u32  m_cfmtpclr = 0;            // 0 off | 1 every C-format word | 2 `is_c40' only
 	u64  m_cfmtpclr_n = 0;
 	u32  m_cfmtdst = 0;
