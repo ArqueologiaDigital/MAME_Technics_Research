@@ -17,11 +17,24 @@ a `fix` as a claim to check, not as a finding. What follows is the shape, not an
 |---|---|---|---|
 | `bit11` | 99 | ✗ | the stimulus does not exist — two pairs of the eleven body words are *the same word*, and nothing moves the pointer, so the input never sweeps and `A1 == A0` follows for every true reading |
 | `src11` | 110 | ✗ | the A/B logic is inverted; in unit 1 both arms read `accb` and predict the identical capture |
-| `modes` | 106 | ✗ | the criterion cannot come out negative — the DSP is a send/return insert, so the dry note reaches the output at the same frequency in *every* run, NOP null included |
+| `modes` | 106 | ✗ | the criterion cannot come out negative — the dry note reaches the output at the same frequency in *every* run, NOP null included ⚠ |
 | `class6` | 18 | ✗ | the vehicle does not exist on the only machine we have: `kernel.dsm`, the one program that ever executes in play, has **zero** class-6 words |
 | `act` | 45 | ✗ | the word under test has no ACTION field — both candidates set `hi12` bit 11, the format escape — and the body is built from the KN5000's kernel, not the WSA1R's |
 | `rqgf` | 4 | ✗ | wrong CPU (below), and GF has no readback path even in principle |
 | `f31` | 9 | ✗ | the success case *is* the status quo: the adopted ALU already treats f31 1,3,4,5,6,7 as ADD, so the headline outcome re-confirms rather than decodes |
+
+⚠ **One word in that table was wrong, corrected 2026-09-15.** The `modes` row said *"the DSP is a
+send/return insert"*. That is the **KN5000's** topology, carried over by a reviewer who had the
+KN5000 analysis in front of them. On the SX-WSA1R the block diagram (sheet II-5/II-6) draws the
+DSPs **in-line**: the tone generator's `SDO1`-`SDO3` go into IC30's `DI1`-`DI3` and IC30's
+`DO1`-`DO3` come back out as `SUBOUT1`-`SUBOUT3`. The row's *conclusion* survives — the wet/dry
+crossfade is a parameter inside the microprogram, so the lane is already mixed either way — but
+the reason given for it was the wrong machine's.
+
+★ And it has a consequence the review missed: `SUBOUT2` and `SUBOUT3` reach **connector CN14 and
+nowhere else**, so they are program-DSP outputs with nothing summed into them. Objection 2 below
+("no audio readback") is therefore weaker than stated for a machine with a CN14 tap — though it
+stands for MAME, where the wave ROMs are undumped and there is no audio at all.
 
 ## The three objections that recur in all seven
 

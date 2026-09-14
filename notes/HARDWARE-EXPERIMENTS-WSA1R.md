@@ -12,9 +12,20 @@ the ROMs contain*, not for want of effort.
 
 1. **No audio input.** All excitation must come from the machine's own tone generator. Nothing here
    asks you to feed a signal in.
-2. **No digital output** (it needs an extension board you don't have). So **bit-exact capture is off
-   the table**, and nothing below depends on it. Every measurement here is *parametric* — a rate, a
-   delay in samples, a curve, a decay time — and those survive the DAC intact.
+2. **No digital output** — the machine's own jacks are analogue only. So **bit-exact capture is off
+   the table for everything in this file**, and nothing below depends on it. Every measurement here
+   is *parametric* — a rate, a delay in samples, a curve, a decay time — and those survive the DAC
+   intact.
+   ★ **UPDATED 2026-09-15, and it is cheaper than "buy the extension board".** The board is the
+   **SY-ES1** (S/PDIF, 44.1 kHz, 20-bit), and it is *passive*: no ROM, no bus buffer, no address
+   decoder, so the firmware cannot even detect it. Everything that makes it work is already on
+   connector **CN14** of a stock machine — `MCK`, `BCK`, `LRCK` plus three independent data lanes.
+   A four-wire tap into any I²S receiver gets the same bits without sourcing two discontinued
+   parts. ★★ And tap `SUBOUT2`/`SUBOUT3` (CN14 pins 6/7), not the main output: those are IC30's
+   `DO2`/`DO3`, **program-DSP outputs with nothing summed into them that a stock machine never
+   listens to** — the un-mixed wet signal these experiments have had to do without.
+   ⚠ Unchecked: whether the shipped microprogram ever writes `DO2`/`DO3`. Details in
+   `kn5000-roms-disasm/dsp/hardware/upd6383-pinout.md`.
 3. **MIDI in and out.** Worth more than it looks: it gives *repeatable* excitation (exact note,
    exact velocity, exact timing, no hand-playing), and the machine will dump its own state.
 
@@ -234,11 +245,19 @@ that the **recipe** must be, and this file is it. What must be written down and 
 sample rate and bit depth, and the output-gain position. I will add the analysis scripts beside
 this file as each measurement arrives, so every number they produce can be re-derived.
 
-## ★★ THE ACTIVE COUNTERPART: `HARDWARE-CUSTOM-DSP-PROGRAMS-WSA1R.md` — ⛔ DOCUMENTED, NOT TO BE BUILT
+## ★★ THE ACTIVE COUNTERPART: `HARDWARE-CUSTOM-DSP-PROGRAMS-WSA1R.md` — ✅ BUILT
 
-⚠ **Felipe, 2026-09-14: the custom ROM code is NOT to be implemented.** That document is a design
-record. **Everything in THIS file remains live** — the eight audio experiments need nothing but a
-MIDI cable, an audio interface and the stock instrument, and none of them touches a ROM.
+⚠ **SUPERSEDED.** This heading used to read *"⛔ DOCUMENTED, NOT TO BE BUILT"*, citing Felipe's
+2026-09-14 instruction. He **reversed it the same day** (`/goal implement the custom rom`), and the
+monitor now exists: 397 bytes in prom_a's padding behind a four-byte hook, answering `IDENT` and
+`PEEK` over real MIDI with a stock-ROM negative control —
+`WSA1R-SYSEX-MONITOR-BUILD.md` and `tools/wsa1r-sysex-monitor/midi_roundtrip.sh`.
+
+⛔ What it still cannot do is reach the **DSP**: the µPD6383s hang off **CPU 2**'s ports, so
+`LOAD`/`POKE`/`RUN` must cross the inter-processor mailbox. That, not the ROM patch, is the
+remaining work. **Everything in THIS file remains live** — the eight audio experiments need
+nothing but a MIDI cable, an audio interface and the stock instrument, and none of them touches
+a ROM.
 
 Everything in this file is **passive** — it measures what the stock firmware already does. The
 third document asks the stronger question: can we put **our own microcode** into IC30? That reaches
