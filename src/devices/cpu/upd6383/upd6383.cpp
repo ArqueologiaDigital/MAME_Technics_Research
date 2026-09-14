@@ -3527,6 +3527,7 @@ void upd6383_device::exec_alu(u64 word)
 						m_c6_tamin[slot] = m_c6_tamax[slot] = ta;
 						m_c6_kmin[slot]  = m_c6_kmax[slot]  = kk;
 						m_c6_lmin[slot]  = m_c6_lmax[slot]  = ll;
+						m_c6_kprev[slot] = kk;                            // §193
 					}
 					else
 					{
@@ -3545,6 +3546,17 @@ void upd6383_device::exec_alu(u64 word)
 						m_c6_lmin[slot]  = std::min(m_c6_lmin[slot],  ll);
 						m_c6_lmax[slot]  = std::max(m_c6_lmax[slot],  ll);
 					}
+					//  ★★★★★ §193: the SHAPE of m_k at this site, not its endpoints.
+					if (kk >= 0 && kk < 64) m_c6_khist[slot][kk]++; else m_c6_kout[slot]++;
+					//  ★★★★★ §194: the product as an INTEGER (descaled by ACC_SHIFT), offset by
+					//  48 so a signed index is visible.  Bucket b means index b - 48.
+					{
+						const s64 ix = pp >> ACC_SHIFT;
+						if (ix >= -48 && ix < 48) m_c6_ixhist[slot][ix + 48]++;
+						else m_c6_ixout[slot]++;
+					}
+					if (m_c6_hits[slot] && kk != m_c6_kprev[slot]) m_c6_kchg[slot]++;
+					m_c6_kprev[slot] = kk;
 					if (!m_c6_hits[slot]) { m_c6_pmin2[slot] = m_c6_pmax2[slot] = pp; }
 					else
 					{
@@ -3673,6 +3685,43 @@ void upd6383_device::exec_alu(u64 word)
 					if (k < m_c6k_lo) m_c6k_lo = k;
 					if (k > m_c6k_hi) m_c6k_hi = k;
 					if (k != m_c6k_last) { m_c6k_chg++; m_c6k_last = k; }
+					//  ★★★ §189: AND PER TABLE LENGTH, because the pooled census above cannot see the
+					//  claim it is supposed to test.  CHORUS runs class-6 sites with addr8 = 24 AND 32
+					//  (`lut_idiom.py', read off the .dsm tree), so pooling makes the span 0..31 BY
+					//  CONSTRUCTION whatever the formula is, and makes `k' flip between the two sites on
+					//  nearly every lookup.  Keyed on `n', each site's sweep is its own and the
+					//  prediction is sharp: span 0..n-1, and ~21.3*n changes over this run.
+					if (m_c6kn_n[n] == 0) { m_c6kn_lo[n] = m_c6kn_hi[n] = m_c6kn_last[n] = k; }
+					else
+					{
+						if (k < m_c6kn_lo[n]) m_c6kn_lo[n] = k;
+						if (k > m_c6kn_hi[n]) m_c6kn_hi[n] = k;
+						if (k != m_c6kn_last[n]) { m_c6kn_chg[n]++; m_c6kn_last[n] = k; }
+					}
+					m_c6kn_n[n]++;
+					//  ★★★ §190: the phase AS SEEN AT THIS SITE, so the prediction stops resting on an
+					//  inherited period count.  `down' IS the number of LFO periods; n * down is then the
+					//  predicted change count for `k' with nothing assumed.
+						if (c6lut == 4)
+						{
+							//  ⚠ §191: PER UNIT.  `0x87 : 0x07' alternates between two cells, so keyed on `n'
+							//  alone this census differenced unit 1's cell against unit 0's and reported the
+							//  INTERLEAVE as wraps: 87 564 of them, with positive steps 114 .. 8 383 192 at a
+							//  site whose own increment is 114.  Key it the way the read is addressed.
+							const u32 j = n + (m_cur_unit1 ? 256u : 0u);
+							const u32 ph2 = m_dram.read_dword(m_cur_unit1 ? 0x87 : 0x07) & 0xffffff;
+							if (!m_c6phn_seen[j]) { m_c6phn_seen[j] = true; m_c6phn_last[j] = ph2; }
+							else if (ph2 > m_c6phn_last[j])
+							{
+								const u32 dlt = ph2 - m_c6phn_last[j];
+								if (!m_c6phn_up[j] || dlt < m_c6phn_dmin[j]) m_c6phn_dmin[j] = dlt;
+								if (dlt > m_c6phn_dmax[j]) m_c6phn_dmax[j] = dlt;
+								m_c6phn_up[j]++;
+							}
+							else if (ph2 < m_c6phn_last[j]) m_c6phn_dn[j]++;
+							else m_c6phn_eq[j]++;
+							m_c6phn_last[j] = ph2;
+						}
 					const u32 v = m_rf[(0x1d + k) & 0xff] & 0xffffff;
 					if (c6lut == 2)
 					{
@@ -8626,6 +8675,37 @@ void upd6383_device::dump_frame_report() const
 			logerror("upd6383: ★★ §188 C6LUT INDEX k: %u .. %u, changed %llu times"
 					"  -- a monotonic 24-entry sweep over 21.3 LFO periods predicts ~512\n",
 					m_c6k_lo, m_c6k_hi, (unsigned long long)m_c6k_chg);
+		if (m_c6k_chg)
+		{
+			//  ★★★ §189: the census that can actually see the claim -- PER TABLE LENGTH.
+			//  Pooled, the span is 0..31 by construction (CHORUS runs addr8 24 and 32) and the
+			//  change count measures the interleave.  Per `n' the prediction is arithmetic:
+			//  span 0..n-1, and ~21.3*n changes for a monotonic phase over this run's 21.3
+			//  LFO periods.  A short span, or changes at the lookup rate, REFUTES the form.
+			for (u32 i = 0; i < 256; i++)
+				if (m_c6kn_n[i])
+					logerror("upd6383: ★★★ §189 C6LUT k PER TABLE LENGTH n=%u (0x%02X): "
+							"k = %u .. %u (span %u of %u), changed %llu of %llu lookups "
+							"-- a monotonic sweep predicts span %u and ~%u changes\n",
+							i, i, m_c6kn_lo[i], m_c6kn_hi[i],
+							m_c6kn_hi[i] - m_c6kn_lo[i] + 1, i,
+							(unsigned long long)m_c6kn_chg[i],
+							(unsigned long long)m_c6kn_n[i],
+							i, u32(21.3 * double(i)));
+			for (u32 j = 0; j < 512; j++)
+				if (m_c6phn_up[j] || m_c6phn_dn[j])
+					logerror("upd6383: ★★★ §191 PHASE AS SEEN AT THE n=%u SITE, UNIT %u "
+							"(cell 0x%02X): up %llu, DOWN %llu (= wraps), same %llu; positive "
+							"step %u .. %u  -- a clean ramp predicts n*down = %llu changes in "
+							"`k'; measured over both units %llu\n",
+							j & 0xff, j >> 8, (j >> 8) ? 0x87 : 0x07,
+							(unsigned long long)m_c6phn_up[j],
+							(unsigned long long)m_c6phn_dn[j],
+							(unsigned long long)m_c6phn_eq[j],
+							m_c6phn_dmin[j], m_c6phn_dmax[j],
+							(unsigned long long)(u64(j & 0xff) * m_c6phn_dn[j]),
+							(unsigned long long)m_c6kn_chg[j & 0xff]);
+		}
 		if (m_c6ph_chg)
 			logerror("upd6383: ★ §187 C6LUT=4 PHASE AS READ: %u .. %u (span %u), changed %llu times"
 					"  -- compare cell 0x07's own census: 0..8388602, 1570842 updates\n",
@@ -9305,6 +9385,38 @@ void upd6383_device::dump_frame_report() const
 				logerror("upd6383: ★★ §175 WHO LAST WROTE P AT THE LOOKUP:%s\n",
 						who.empty() ? " (never observed)" : who.c_str());
 			}
+		}
+		for (int i = 0; i < m_c6_n; i++)
+		{
+			//  ★★★★★ §193: m_k's DISTRIBUTION at the class-6 site.  A table index sweeping a
+			//  24-entry table visits every one of 0..23 and changes ~24 times per LFO period;
+			//  a scale constant sits on one value.  §169 called it a constant from a max.
+			std::string kh;
+			u32 vis = 0;
+			for (u32 v = 0; v < 64; v++)
+				if (m_c6_khist[i][v]) { kh += string_format(" %u:%llu", v,
+						(unsigned long long)m_c6_khist[i][v]); vis++; }
+			{
+				std::string ih;
+				u32 iv = 0;
+				for (u32 v = 0; v < 96; v++)
+					if (m_c6_ixhist[i][v]) { ih += string_format(" %d:%llu", int(v) - 48,
+							(unsigned long long)m_c6_ixhist[i][v]); iv++; }
+				logerror("upd6383: ★★★★★ §194 (P >> ACC_SHIFT) AT CLASS-6 SITE %010llX "
+						"(addr8=%02X): %u distinct values, %llu outside -48..47\n"
+						"upd6383:       hist:%s\n",
+						(unsigned long long)m_c6_word[i],
+						unsigned((m_c6_word[i] >> 12) & 0xff), iv,
+						(unsigned long long)m_c6_ixout[i], ih.empty() ? " (none)" : ih.c_str());
+			}
+			logerror("upd6383: ★★★★★ §193 m_k AT CLASS-6 SITE %010llX (addr8=%02X): %u distinct "
+					"values, changed %llu times, %llu outside 0..63 -- %s\nupd6383:       hist:%s\n",
+					(unsigned long long)m_c6_word[i],
+					unsigned((m_c6_word[i] >> 12) & 0xff), vis,
+					(unsigned long long)m_c6_kchg[i], (unsigned long long)m_c6_kout[i],
+					(vis <= 1) ? "ONE VALUE -- a scale constant, NOT an index"
+							   : "VARIES -- test it as the index",
+					kh.empty() ? " (none)" : kh.c_str());
 		}
 		for (int i = 0; i < m_c6_n; i++)
 			logerror("upd6383:    §169 SAME SITE, THE PRODUCT: P %lld..%lld chg %llu (%s)\n",

@@ -1817,6 +1817,18 @@ private:
 			m_rampinc_min[i] = m_rampinc_max[i] = 0;
 			m_rampinc_n[i] = m_rampinc_sum[i] = m_rampfirst[i] = 0;
 		}
+		//  ★★★ §192: the §189/§191 counters reset WITH the epoch.  They did not, and that is
+		//  a confound of exactly the kind §176's own banner warns about: the TYPE walk passes
+		//  through every program on the way to the target, so a from-boot census pools class-6
+		//  sites belonging to DIFFERENT effects and then reports "VARIES" for all of them.
+		for (u32 i = 0; i < 0x200; i++)
+		{
+			m_c6phn_up[i] = m_c6phn_dn[i] = m_c6phn_eq[i] = 0;
+			m_c6phn_dmin[i] = m_c6phn_dmax[i] = 0;
+			m_c6phn_seen[i] = false;
+			if (i < 0x100) { m_c6kn_chg[i] = m_c6kn_n[i] = 0; }
+		}
+		m_c6k_lo = 0xffffffffu; m_c6k_hi = 0; m_c6k_last = 0xffffffffu; m_c6k_chg = 0;
 		m_census_epoch = m_frames_run;
 		m_census_resets++;
 	}
@@ -1876,6 +1888,31 @@ private:
 	//  measured the consumer, not the index.  Census `k' directly instead.
 	u32  m_c6k_lo = 0xffffffffu, m_c6k_hi = 0, m_c6k_last = 0xffffffffu;
 	u64  m_c6k_chg = 0;
+	//  ★★★ §189: AND THAT POOLED CENSUS IS BLIND, the same defect as §162 and §186 -- the quantity
+	//  fed to the test is not the quantity the claim is about.  `lut_idiom.py' reads CHORUS's
+	//  class-6 `addr8' values off the .dsm tree as 24 AND 32.  Pool them and the span is 0..31 BY
+	//  CONSTRUCTION whatever the formula is, and `k' flips between the two sites' values on nearly
+	//  every lookup, so the change count measures the INTERLEAVE, not the sweep.
+	//  MEASURED pooled (§188 run): k = 0..31, 2 953 525 changes in 3 150 504 lookups (93.7 %).
+	//  The prediction is PER TABLE LENGTH: for a monotonic phase over 21.3 LFO periods,
+	//  `(n*phase)>>23' must span 0..n-1 and change ~21.3*n times -- ~512 at n=24, ~682 at n=32.
+	//  A site whose `k' spans a SHORTER range, or changes at the lookup rate, refutes it.
+	u32  m_c6kn_lo[256]{}, m_c6kn_hi[256]{}, m_c6kn_last[256]{};
+	u64  m_c6kn_chg[256]{}, m_c6kn_n[256]{};
+	//  ★★★ §190: and the PREDICTION's own input, measured instead of inherited.  "~21.3 LFO
+	//  periods" comes from a `+114 per frame' ramp recorded under a different config; every
+	//  time this session fed a test a quantity it had not checked, the test was blind (§162,
+	//  §186, §189).  So census the phase AS SEEN AT EACH SITE: a clean ramp is `up' almost
+	//  always, `down' exactly once per period, and its positive step is constant.  Then the
+	//  prediction for `k' is arithmetic with no free parameter: n x down changes.
+	//  ⚠ §191: indexed `n + 256*unit', NOT `n'.  The read is `0x87 : 0x07' -- it alternates
+	//  between the two UNITS' cells, so a census keyed on `n' alone pools two different cells
+	//  and manufactures the jumps it then reports.  Pooled, §190 measured 87 564 "wraps" and
+	//  positive steps 114 .. 8 383 192 at a site whose own increment is 114.  Same defect as
+	//  §189, one level down: check what the quantity IS before predicting from it.
+	u32  m_c6phn_last[512]{}, m_c6phn_dmin[512]{}, m_c6phn_dmax[512]{};
+	u64  m_c6phn_up[512]{}, m_c6phn_dn[512]{}, m_c6phn_eq[512]{};
+	bool m_c6phn_seen[512]{};
 	//  ★ sect. 162: mode-4 bit-4 stores SEEN (unconditional, whatever UPD6383_ST4DEST is).
 	u64  m_st4_n = 0;
 	bool ptr_moves(u64 word) const
@@ -2006,6 +2043,36 @@ private:
 	s64  m_c6_tamin[8] = {}, m_c6_tamax[8] = {};
 	s64  m_c6_kmin[8]  = {}, m_c6_kmax[8]  = {};
 	s64  m_c6_lmin[8]  = {}, m_c6_lmax[8]  = {};
+	//  ★★★ §193: THE PRODUCT, at the class-6 site.  §169 named `m_p' as "the one register
+	//  §167 did not read, and the one the arithmetic points at" -- the idiom reads as
+	//  `(coef x phase) >> 23' and §167 MEASURED m_k = 24 there, i.e. the table length is
+	//  already sitting in the multiplier's coefficient latch.  Four C6LUT arms were then built
+	//  on OTHER index sources and all four failed; this one was named and never censused.
+	//  ⚠ It is a CENSUS, not an arm: report the range, decide afterwards.
+	//  §193: `m_k' AT THE CLASS-6 SITE, AS A DISTRIBUTION.  §167 reports it as `K 0..24' and I
+	//  read that as a VARYING quantity -- an index sweeping a 24-entry table -- against §169's
+	//  reading that it is the scale constant 24 sitting in the multiplier's coefficient latch.
+	//  ⛔ THE HISTOGRAM REFUTES MY READING AND CONFIRMS §169's:  `0:882  24:1574370', ONE
+	//  change in the entire run.  m_k is 0 while the program primes and 24 for ever after, at
+	//  BOTH sites -- including the one whose `addr8' is 32, so the 24 is a microcode constant
+	//  and not this site's table length.  `K 0..24' was a min/max spanning the priming period.
+	//  ★ Kept because it is the census that stopped a seventh arm being built on a misreading,
+	//  and because the endpoints-vs-shape distinction is the one this branch keeps failing.
+	u64  m_c6_khist[8][64] = {};
+	u64  m_c6_kchg[8] = {};
+	s64  m_c6_kprev[8] = {};
+	u64  m_c6_kout[8] = {};        // values outside 0..63, which the histogram cannot hold
+	//  §194: the SAME census on the PRODUCT, descaled.  m_p at the site is only +-1.2e6, which
+	//  at ACC_SHIFT = 16 is an INTEGER in -16..+19 -- the range §176 reports for D-RAM cell
+	//  0x0C (-17..19), the one cell whose step is 1..4 rather than audio-sized.  A 24-entry
+	//  table wants an index of that shape.
+	//  ⛔ THE HISTOGRAM REFUTES IT: 1 431 090 of 1 575 252 hits (90.9 %) are ZERO and the rest
+	//  fall away as a bell (-1:30 730, 1:35 764, 2:13 731, ... 19:3).  A table index visits its
+	//  entries; this is a small signal concentrated at zero.  Not the index either.
+	//  ⇒ with §193 this closes the register search: acc, the ACT destination, (n x acc) >> 23,
+	//  (n x cell 0x07) >> 23, m_k and m_p >> ACC_SHIFT are all measured and all refused.
+	u64  m_c6_ixhist[8][96] = {};
+	u64  m_c6_ixout[8] = {};
 	//  §175: identity of the last writer of m_p, so "P is zero at the lookup" can
 	//  name WHICH site left it that way rather than being attributed by reasoning.
 	//  §180 PTRD-A: lo12 == 0x1C0 does not move the pointer (mask bit 62).
