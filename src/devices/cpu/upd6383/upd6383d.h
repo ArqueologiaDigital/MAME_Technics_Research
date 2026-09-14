@@ -1067,6 +1067,35 @@ public:
 	static constexpr bool is_mode1(u64 w)
 	{ return !c_format(w) && (class4(w) & 7) == 1 && !(hi12(w) & HI_ESC); }
 
+	//  ★★★★★ sect. 161: MODE 4 on the same footing -- `class4 & 7 == 4' with the escape CLEAR.
+	//  The class test is what refused these 99 words (ONE shape, `0124011CE', the C63 table-lookup
+	//  idiom's third word, in 47+ images across both products) and their ALU half was already
+	//  anchored.  What made mode 4 harder than mode 1 is that its ADDRESSING had a genuinely open
+	//  axis -- closure_pointer.py carried a variant (V7) in which class 4 post-increments the
+	//  pointer by (s8)addr8, as class 2 does -- and sect. 112's standard needs the addressing
+	//  explained too.  Closed in three steps:
+	//   1. THE FIELD CANNOT DECIDE IT.  Pooled over both products, class 4 is 99 words carrying the
+	//      SINGLE addr8 value 0x01, so it expresses one displacement in eight bits under one
+	//      reading and nothing under the other.  Only execution could separate them.
+	//   2. THE VARIANTS THAT BUNDLED CLASS 6 ARE EXCLUDED ON THE MEANING OF THE FIELD (sect. 158):
+	//      class 6's addr8 is the table ENTRY COUNT, anchored at 24, and V8's residue delta is
+	//      +56 == 24 + 32, the two class-6 addr8 values of the walked image.  V8/V10/V12 die; V7
+	//      survives and had never had an arm.
+	//   3. V7 IS FALSIFIED BY A TWO-SIDED RUN -- dsp/tools/cls4_arm.sh, evidence committed in
+	//      kn5000-roms-disasm/dsp/analysis/data/cls4/.  UPD6383_CLS4PTR fired 3 346 456 times ON
+	//      against 0 OFF, both runs fingerprint prog35_exciter (sect. 193), and EXCITER was chosen
+	//      because an op0x70 biquad band sits FOUR WORDS DOWNSTREAM of its class-4 word.  D-RAM
+	//      census over 259 308 frames -- OFF: 50:32699 51:56868 52:9836 53:9836 | 54:33065
+	//      55:57855 56:9941 57:9941, two LIVE four-cell bands whose offset-2/3 cells change
+	//      together (the DF-I y-states this device's own SPEC_SUBFB encodes), mirrored per channel.
+	//      ON: ten of the twelve written ONCE in 259 308 frames, state sprayed to 0x58..0x5E -- the
+	//      filter stops running.  ⇒ the pointer does NOT advance on class 4.
+	//  ⚠ `class4 & 7': class 4 and class C are one mode.  Class C's 7 words carry addr8 = 0 and
+	//  fail the ALU-half test, so they stay undecoded for the right reason.
+	//  ⚠ NOT claimed: what addr8 = 0x01 is FOR.  Only that it is not a pointer displacement.
+	static constexpr bool is_mode4(u64 w)
+	{ return !c_format(w) && (class4(w) & 7) == 4 && !(hi12(w) & HI_ESC); }
+
 	static constexpr bool is_dram(u64 w)
 	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }
 

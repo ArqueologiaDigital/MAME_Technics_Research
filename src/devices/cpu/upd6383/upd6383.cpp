@@ -366,6 +366,15 @@ void upd6383_device::device_start()
 	if (m_cls46ptr)
 		logerror("upd6383: ★★★ §100 UPD6383_CLS46PTR ON -- classes 4 and 6 post-increment "
 				"the pointer by (s8)addr8, as class 2 does\n");
+	//  ★★★ §158/§160: CLASS 4 ALONE.  The arm above is variant V12, which is EXCLUDED
+	//  together with V8 and V10 -- class 6's `addr8' is the table ENTRY COUNT (anchored at 24),
+	//  not a displacement, and V8's residue delta of +56 is literally 24 + 32, the two class-6
+	//  `addr8' values of the walked image.  V7 -- class 4 alone -- is the surviving reading and
+	//  has never had an arm.  See upd6383.h `ptr_moves()' for the criterion.
+	m_cls4ptr = getenv("UPD6383_CLS4PTR") != nullptr;      // ★ §160, default OFF
+	if (m_cls4ptr)
+		logerror("upd6383: ★★★ §160 UPD6383_CLS4PTR ON -- CLASS 4 ONLY post-increments the "
+				"pointer by (s8)addr8 (= closure_pointer.py variant V7); class 6 does NOT\n");
 	if (const char *e = getenv("UPD6383_SPEC"))
 	{
 		m_specmask = u64(strtoull(e, nullptr, 16));
@@ -5777,6 +5786,13 @@ void upd6383_device::exec_alu(u64 word)
 	//  gate said nothing.  Which is what P1 is for.
 	if ((cl & 7) == 2)
 		m_dp = u8(m_dp + dd);
+	else if (m_cls4ptr && !upd6383_disassembler::c_format(word) && cl == 4)
+	{
+		//  ★ §160 V7.  Deliberately BEFORE the CLS46PTR arm so that setting both is not a
+		//  silent double-advance: class 4 is counted once, here.
+		m_cls4_n++;
+		m_dp = u8(m_dp + dd);
+	}
 	else if (m_cls46ptr && !upd6383_disassembler::c_format(word) && (cl == 4 || cl == 6))
 	{
 		m_cls46_n++;
@@ -8495,6 +8511,8 @@ void upd6383_device::dump_frame_report() const
 				m_gateclr, (unsigned long long)m_gateclr_n);
 		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",
 				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
+		logerror("upd6383: ★ §160 CLS4PTR (%s): class-4-ONLY pointer advances performed: %llu\n",
+				m_cls4ptr ? "ON" : "off", (unsigned long long)m_cls4_n);
 		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
 				"lo12-bit-11 return (no SOURCE, no ACTION decode ran for them):\n");
 		if (!m_alt11_k)

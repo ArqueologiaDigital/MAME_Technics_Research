@@ -1840,13 +1840,36 @@ private:
 	u64  m_gateclr_n = 0;
 	bool m_cls46ptr = false;
 	u64  m_cls46_n = 0;
+	//  ★★★ UPD6383_CLS4PTR (dsp/analysis/N-INPUT-GATE-OPENED §158, §160): CLASS 4 ALONE.
+	//  `m_cls46ptr' moves classes 4 AND 6 together, which is `closure_pointer.py' variant V12,
+	//  and V12 is now EXCLUDED -- along with V8 and V10 -- on the MEANING of the field:
+	//  class 6's `addr8' is the table ENTRY COUNT, anchored at 24 by a table independently
+	//  proven to have 24 entries, so it is not a pointer displacement.  The walk measures the
+	//  incoherence: V0 residue +121, V8 +177, and the +56 is 24 + 32, the two class-6 `addr8'
+	//  values of the very image `closure_pointer.py' walks.  ⇒ the existing arm can only test
+	//  a reading that is already dead, and the LIVE reading (V7, class 4 alone) has never had
+	//  an arm.  MEASURED, pooled over both products: class 4 is 99 words carrying the SINGLE
+	//  `addr8' value 0x01, so the field cannot separate "advance by one" from "no move" and an
+	//  execution difference is the only thing that can.
+	//  ⚠ Two-sided, and the criterion EXISTS -- which is what §149 could not find for `f31=3'.
+	//  Asked with `f31_oracle_pin.py's own selection (algorithms carrying an `op0x70' biquad
+	//  band): 11 carry one, 8 contain a class-4 word, and 8 of 8 have a band consumed
+	//  DOWNSTREAM of it.  EXCITER is the sharpest -- class-4 at w14, band at w18..w22.  With
+	//  the arm ON that band must read DIFFERENT D-RAM cells; if it does not, the arm is not
+	//  where I think it is.  (A cell change is not a rounding, so the oracle's float-model
+	//  caveat does not apply.)
+	bool m_cls4ptr = false;
+	u64  m_cls4_n = 0;
 	bool ptr_moves(u64 word) const
 	{
 		if (upd6383_disassembler::ptr_postinc(word))
 			return true;
-		return m_cls46ptr && !upd6383_disassembler::c_format(word)
-				&& (upd6383_disassembler::class4(word) == 4
-					|| upd6383_disassembler::class4(word) == 6);
+		if (upd6383_disassembler::c_format(word))
+			return false;
+		const u8 cl = u8(upd6383_disassembler::class4(word));
+		if (m_cls4ptr && cl == 4)
+			return true;
+		return m_cls46ptr && (cl == 4 || cl == 6);
 	}
 	u16  m_alt11_lo[8] = {}; u64 m_alt11_n[8] = {}; u32 m_alt11_k = 0;
 	void note_alt11(u16 lo)

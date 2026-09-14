@@ -899,6 +899,18 @@ bool upd6383_disassembler::decoded(u64 word)
 				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
 					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
 
+	//  ★★★★★ sect. 161: MODE 4 on the same footing.  The class test is what refuses these words;
+	//  their ALU half was already anchored; and the pointer question that kept the ADDRESSING open
+	//  was settled by a two-sided run that could have gone the other way.  See is_mode4() in
+	//  upd6383d.h.  ⚠ Disjoint from is_dram() by the escape bit and from is_mode1() by the mode.
+	if (is_mode4(word))
+		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
+				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
+				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7)
+					&& hi_f31(hi12(word)) != 1 && hi_f31(hi12(word)) != 2)
+				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
+					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
+
 	if (is_dram(word) && dram_dir(word))
 		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
