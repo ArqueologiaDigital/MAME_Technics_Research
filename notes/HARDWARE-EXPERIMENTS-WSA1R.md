@@ -241,9 +241,17 @@ third document asks the stronger question: can we put **our own microcode** into
 what no audio measurement can, including the **bit-11 block (169 words)** this file cannot touch,
 and it would decode `f31` 3…7 (189 words) and `SRC 0x11` (139) almost directly.
 
-Its one request of you is in **E0.1** above and takes five minutes: **is IC28 socketed or
-soldered, and what is its exact marking?** That single answer decides whether the EPROM route is
-on the table. The other two routes — triggering the 57 body records the firmware already has, and
+★ Its centrepiece is Felipe's own proposal: **a custom SysEx debug monitor in ROM** — burn once,
+then load probe microcode and read results back over MIDI forever, in exact integers instead of
+analogue levels. That turns the remaining decode into an automatable sweep over all ~321 undecoded
+word shapes, and it is the only route that can locate the chip's **COND field** and its
+**GF-setting instruction**, because RQ1–3 and GF1–3 are host-side lines that ROM analysis cannot
+see.
+
+Its requests of you are two, both by looking, both five minutes: **is IC28 socketed or soldered
+(and its exact marking)?** and **does the schematic bring the DSP's GF1–3 / RQ1–3, pins 83–88, to a
+CPU port or to a jumper/pull-up?** The first decides whether the monitor can be delivered; the
+second decides whether its readback is digital or has to go through the DAC. The other two routes — triggering the 57 body records the firmware already has, and
 decoding the SysEx ring consumer — are mine to do and either could make opening the instrument
 unnecessary.
 

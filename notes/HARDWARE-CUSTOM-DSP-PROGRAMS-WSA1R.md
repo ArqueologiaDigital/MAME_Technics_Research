@@ -38,9 +38,110 @@ Established, and it constrains every route below:
 ★ **That last point is the insertion point.** We do not need to displace the kernel. The machine
 already expects a program at `0x6E` and never puts one there.
 
-## A1 — ★★★★★ Replace IC28 (`prom_c`) with a burned, socketed equivalent
+## A5 — ★★★★★ A CUSTOM SysEx DEBUG MONITOR IN ROM — Felipe's proposal, and it dominates A1
 
-**The reliable route, and the only one that is fully specifiable today.**
+**Burn once, then iterate over MIDI forever.** This is the right architecture and it supersedes A1
+as the *goal*; A1 becomes merely the delivery mechanism for it.
+
+Why it dominates every other route:
+
+* **One burn, unlimited experiments.** A1 as written needs a re-burn per probe program. A monitor
+  needs one, ever.
+* **Exact integers, not analogue levels.** Results come back as bytes over MIDI instead of DC
+  levels through a DAC — no measurement error, no gain staging, no `notes.txt`.
+* **Milliseconds per probe, not a 60-second recording.** Which changes the *kind* of work possible:
+  a script can walk **all ~321 distinct undecoded word shapes** automatically. 1397 undecoded words
+  stops being a hand-decode and becomes a sweep.
+
+### The CPU split, stated honestly
+
+MIDI is on **CPU 1** (`MIDI_RX_Byte`, `0xFA5496`, prom_a). The DSP host port is on **CPU 2**
+(`P7Stream_Run`, `0xF9A646`, prom_c). So a SysEx→DSP path must cross the inter-processor link.
+
+* **(ii) preferred — patch prom_a only, and reuse the link primitive that already exists.** The
+  flash download path already does exactly "CPU 1 pushes arbitrary bytes into CPU 2's 64 KiB RAM
+  staging buffer at `0x00010000`" (§A2). If our handler borrows that, the *only* prom_c-side
+  addition is "run `P7Stream_Run` on the buffer instead of burning it" — a handful of bytes.
+* **(i) fallback — patch both ROMs.** More capable, two chips to socket.
+
+### Where the code goes — measured, not guessed
+
+`FINDINGS-prom_a-remote-flash.md` §2 documents four modules in prom_a delimited by the ROM's own
+padding, **uniform `0x0E` (RET), verified byte by byte**, each running to the next boundary:
+
+| module | pad range | free bytes |
+|---|---|---:|
+| `0xFB2000` | `0xFB8CA6-0xFB8FFF` | 858 |
+| **`0xFB9000`** | **`0xFBA236-0xFBABFF`** | **2 506** |
+| `0xFBAC00` | `0xFBB42E-0xFBB7FF` | 978 |
+| `0xFBB800` | `0xFBFFD4-0xFBFFFF` | 44 |
+
+**2 506 contiguous unused bytes is ample for a monitor.** Hook it by patching one call in the
+SysEx path; if no SysEx of ours arrives, the machine is bit-for-bit stock.
+
+### The protocol — keep it dumb, length-prefixed and checksummed
+
+| command | does | notes |
+|---|---|---|
+| `IDENT` | returns monitor version + build hash | so we always know what is running |
+| `LOAD addr, words[]` | writes I-RAM | wraps the native `01 UU AA` container |
+| `POKE space, addr, val` | C-RAM / D-RAM-reg / descriptor | the three write paths are already decoded — tags `0x26`/`0x4C`/`0x15` |
+| `RUN n` | let the DSP run *n* frames, then report | bounded; never an unbounded spin |
+| `RQ set` | host-writes RQ1–3 | ★ see below |
+| `GF read` | host-reads GF1–3 | ★ see below |
+| `DUMP addr, len` | reads CPU 2 RAM back | anything CPU 2 can see, we can see |
+
+Every message carries a length and a checksum; every reply echoes the command and a status byte.
+
+### ★★★★★ The two host-side lines, and why they are self-bootstrapping
+
+This is the part of your idea that reaches further than I had realised. `upd6383.h` records, from
+the **CDJ-500 pin table** (pins 83–88), that the chip has:
+
+* **RQ1–RQ3** — *host-written*, and **testable by an instruction's COND field**
+* **GF1–GF3** — *set by instructions*, and **host-readable**
+
+…followed by the admission that matters: *"neither the COND field nor the instructions that touch
+GF have been located, so these are storage only."* Both are unlocatable from ROM alone — and a
+monitor locates them **by search**:
+
+* **RQ → finds the COND field.** RQ is ours to set. Load a program that branches, sweep RQ across
+  its 8 values, and observe which words change behaviour. **That locates the conditional field of
+  the instruction word** — an ISA discovery no static analysis or audio measurement can reach.
+* **GF → becomes a digital output port.** Brute-force candidate words: load a probe containing
+  one, run, read GF. **The word that moves GF is the GF-setting instruction.** Once found, every
+  probe in Part B reports its answer as bits instead of through the DAC.
+
+⚠ **Check this first, and it is a schematic question:** does the WSA1R board actually route GF1–3
+and RQ1–3 to a CPU-readable/writable port? Neither MAME driver wires them, so nobody here knows.
+If the board leaves them unconnected, readback falls back to Part B's audio encoding — the monitor
+is still worth it, GF is an **upgrade, not a prerequisite**.
+
+### Risk, and how it is contained
+
+* **Additive by construction:** lives in padding, hooks one call, stock behaviour without our
+  messages.
+* **Emulator first:** MAME runs both ROMs and has the I-RAM write-tap, so the whole monitor —
+  protocol included — is debugged in emulation before a chip is burned.
+* ⚠ **The one real hazard:** a defect in the handler could hang CPU 1's MIDI interrupt and the
+  machine would appear dead. Mitigations, non-negotiable: hook as late in the path as possible,
+  bound every loop, and never block waiting on CPU 2.
+* Originals stay in a drawer (§A1 step 2).
+
+### ⚠ A5b — the chip's own emulator-mode pins: noted, and NOT recommended
+
+The CDJ-500 pin table calls IC311 pins 13/14 (`Fs-RST`, `Fs-MASK`) **emulator-mode overrides**,
+"pull up in regular modes", and on the KN5000 both are strapped to `+5D` — which is why the
+per-frame PC restart cannot be inhibited there. A chip-level emulator mode able to hold or
+single-step the program counter would be a superb probe.
+
+⛔ **But it needs pins driven on a rare instrument's DSP, and I am not recommending it.** Do not cut
+traces or lift pins. It is recorded here only so that *if* the WSA1R schematic happens to bring
+those pins to a jumper or a pull-up resistor, we know what they are.
+
+## A1 — ★★★★ Replace IC28 (`prom_c`) with a burned, socketed equivalent
+
+**The delivery mechanism for A5, and on its own the only fully specifiable route today.**
 
 The DSP stream pool lives in `prom_c` = **`qsigcwsa1cx.ic28`, 512 KiB**
 (`prom_c/p7/p7_stream_pool.s`). Patch a stream there and the boot upload carries our words into
@@ -258,16 +359,24 @@ word, read every candidate destination.
 
 1. **A3** — find the body trigger. No hardware, no risk, and may deliver 873 executing words on its
    own. *(mine)*
-2. **A4/A2** — decode the SysEx ring consumer and the CPU-1 link side. If a load path exists, A1's
-   soldering becomes optional. *(mine)*
-3. **E0.1** — photograph IC28 and friends, and tell me whether it is socketed. *(yours, five
-   minutes, and it decides whether A1 is even on the table)*
-4. **A1** — only if 1 and 2 come up dry, and only after the patched image has been seen loading
-   correctly in MAME.
-5. **B2 → B1 → B3 → B4** — in that order: `f31` is the most words per program, bit-11 is the
+2. **A4/A2** — decode the SysEx ring consumer and the CPU-1 link side. Either could let **A5** ride
+   an *existing* command instead of a new ROM, which would remove the burn entirely. *(mine)*
+3. **Two things from you, both by looking, both five minutes:** is **IC28 socketed**, and does the
+   schematic bring the DSP's **GF1–3 / RQ1–3** (pins 83–88) to a CPU port or to a
+   jumper/pull-up? The first decides whether A5 can be delivered at all; the second decides whether
+   its readback is digital or has to go through the DAC.
+4. **A5, built and debugged entirely in MAME** — monitor, protocol and probe harness — *before* any
+   chip is burned. This is the bulk of the work and none of it needs the hardware.
+5. **A1** — burn and install, only once A5 runs correctly in emulation.
+6. **B2 → B1 → B3 → B4** — in that order: `f31` is the most words per program, bit-11 is the
    largest block, `SRC 0x11` breaks a cycle, and the class-6 index closes the oldest question.
+   ★ With A5 in place these stop being one-off experiments and become a **sweep over all ~321
+   distinct undecoded shapes**.
 
-⚠ **The honest summary of A:** today, only **A1** is fully specifiable, and it needs a socket. A3
-and A4 are cheap, are mine to do, and either could remove the need to open the instrument at all.
-Part B is worth the trouble precisely because it does not depend on which of them wins — the probe
-designs are identical whichever way the microcode arrives.
+⚠ **The honest summary of A:** **A5 is the right target** — a debug monitor turns the whole
+remaining decode into an automatable sweep, and it is the only route that can locate the COND field
+and the GF-setting instruction, because both are host-side lines invisible to ROM analysis. It needs
+a delivery mechanism, and today that is **A1** (a socket). **A3** and **A4** are cheap, are mine, and
+either could deliver A5 over an existing path with no burn at all. Part B is worth the trouble
+whichever wins — the probe designs are identical however the microcode arrives, and only the
+*readback* differs: bits over MIDI if the board wires GF, DC levels through the DAC if not.
