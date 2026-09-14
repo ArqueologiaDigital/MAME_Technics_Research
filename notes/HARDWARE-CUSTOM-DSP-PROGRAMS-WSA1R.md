@@ -17,12 +17,21 @@ the answer off a scope or a WAV. That reaches blocks no audio experiment can, in
 
 # ⛔ STATUS AND STANDING DECISIONS — read this first
 
-**Felipe, 2026-09-14: DO NOT IMPLEMENT THE CUSTOM ROM CODE.**
+## ★★★ REVERSED, 2026-09-14 (same day): **IMPLEMENT THE CUSTOM ROM.**
 
-This document is a **design record**, not a work order. The SysEx debug monitor of §A5 is written
-down so the reasoning is not lost and so it can be picked up deliberately later — **it is not to be
-built**, and no session should start writing monitor code, patching a ROM image, or preparing a
-burn on the strength of this file. If that changes, it changes here, in writing, with a date.
+Felipe set the goal *"implement the custom rom"*. **§A5 is now authorised work** and this document
+is a work order again. The superseded decision is kept immediately below, because this file promised
+that a change would be recorded here in writing with a date, and because the reasoning for caution
+still governs *how* it is built — emulator first, originals preserved, additive by construction.
+
+⇒ Build status and the implementation log live in **`WSA1R-SYSEX-MONITOR-BUILD.md`**.
+
+### ~~Superseded: Felipe, 2026-09-14 — DO NOT IMPLEMENT THE CUSTOM ROM CODE~~
+
+~~This document is a design record, not a work order. The SysEx debug monitor of §A5 is written
+down so the reasoning is not lost and so it can be picked up deliberately later — it is not to be
+built, and no session should start writing monitor code, patching a ROM image, or preparing a burn
+on the strength of this file.~~ **Superseded by the goal above the same day.**
 
 | item | status |
 |---|---|
@@ -34,9 +43,9 @@ burn on the strength of this file. If that changes, it changes here, in writing,
 | Schematic: are GF1–3 / RQ1–3 (pins 83–88) brought to a CPU port? | **open question** *(Felipe)* |
 | §A3 — find the body-upload trigger | open, analysis only *(mine)* |
 | §A4 — decode the SysEx ring consumer at `0x601646` | open, analysis only *(mine)* |
-| §A5 — build the monitor | ⛔ **NOT TO BE IMPLEMENTED** (Felipe, 2026-09-14) |
-| §A1 — burn and install a ROM | ⛔ **not on the table** while A5 is not to be built |
-| Part B — the probe experiments | ⛔ blocked on A5; kept as design |
+| §A5 — build the monitor | ★ **AUTHORISED 2026-09-14** — see `WSA1R-SYSEX-MONITOR-BUILD.md` |
+| §A1 — burn and install a ROM | open, *after* A5 is proven in MAME |
+| Part B — the probe experiments | unblocked once A5 runs |
 
 ★ **What is still live and needs no ROM work at all:** §A1.0 (dumping, which is pure data
 recovery), the two schematic/socket questions, §A3 and §A4 (both pure analysis of ROMs we already
@@ -430,10 +439,7 @@ word, read every candidate destination.
 
 ---
 
-## Order of work — ⛔ SUSPENDED at step 3 by Felipe's decision of 2026-09-14
-
-Recorded as originally planned, so that the shape is legible if it is ever resumed. **Steps 4, 5
-and 6 are not to be started.**
+## Order of work — ★ RESUMED 2026-09-14
 
 1. **A3** — find the body trigger. No hardware, no risk, and may deliver 873 executing words on its
    own. *(mine)*
@@ -445,10 +451,10 @@ and 6 are not to be started.**
    question: does it bring the DSP's **GF1–3 / RQ1–3** (pins 83–88) to a CPU port or to a
    jumper/pull-up? That one decides whether the monitor's readback is digital or has to go through
    the DAC.
-4. ⛔ ~~**A5, built and debugged entirely in MAME**~~ — monitor, protocol and probe harness.
-   **NOT TO BE IMPLEMENTED.**
-5. ⛔ ~~**A1** — burn and install~~. **Not on the table** while A5 is not to be built.
-6. ⛔ ~~**B2 → B1 → B3 → B4**~~ — `f31` is the most words per program, bit-11 is the largest block,
+4. ★ **A5, built and debugged entirely in MAME** — monitor, protocol and probe harness. IN
+   PROGRESS; log in `WSA1R-SYSEX-MONITOR-BUILD.md`.
+5. **A1** — burn and install, only once A5 runs correctly in emulation.
+6. **B2 → B1 → B3 → B4** — `f31` is the most words per program, bit-11 is the largest block,
    `SRC 0x11` breaks a cycle, and the class-6 index closes the oldest question. ★ With A5 in place
    these would stop being one-off experiments and become a **sweep over all ~321 distinct undecoded
    shapes** — which is what makes A5 worth documenting even unbuilt. Kept as design.
