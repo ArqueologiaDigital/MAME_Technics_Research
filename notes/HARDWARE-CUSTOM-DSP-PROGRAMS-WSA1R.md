@@ -15,6 +15,46 @@ the answer off a scope or a WAV. That reaches blocks no audio experiment can, in
 
 ---
 
+# ⛔ STATUS AND STANDING DECISIONS — read this first
+
+**Felipe, 2026-09-14: DO NOT IMPLEMENT THE CUSTOM ROM CODE.**
+
+This document is a **design record**, not a work order. The SysEx debug monitor of §A5 is written
+down so the reasoning is not lost and so it can be picked up deliberately later — **it is not to be
+built**, and no session should start writing monitor code, patching a ROM image, or preparing a
+burn on the strength of this file. If that changes, it changes here, in writing, with a date.
+
+| item | status |
+|---|---|
+| Program ROMs socketed (IC12/13/21/28) | ✅ **CONFIRMED** by Felipe, 2026-09-14 |
+| §A1.0 — dump the four sockets, verify hashes | **open, zero risk, do this first** *(Felipe)* |
+| Is IC22 (`AM29F400T` flash) socketed? | **open question** *(Felipe)* |
+| Are any wave mask ROMs socketed? | **open question** *(Felipe)* |
+| ROM package / exact markings | open, not a blocker *(Felipe)* |
+| Schematic: are GF1–3 / RQ1–3 (pins 83–88) brought to a CPU port? | **open question** *(Felipe)* |
+| §A3 — find the body-upload trigger | open, analysis only *(mine)* |
+| §A4 — decode the SysEx ring consumer at `0x601646` | open, analysis only *(mine)* |
+| §A5 — build the monitor | ⛔ **NOT TO BE IMPLEMENTED** (Felipe, 2026-09-14) |
+| §A1 — burn and install a ROM | ⛔ **not on the table** while A5 is not to be built |
+| Part B — the probe experiments | ⛔ blocked on A5; kept as design |
+
+★ **What is still live and needs no ROM work at all:** §A1.0 (dumping, which is pure data
+recovery), the two schematic/socket questions, §A3 and §A4 (both pure analysis of ROMs we already
+have), and **everything in `HARDWARE-EXPERIMENTS-WSA1R.md`** — the eight passive audio experiments,
+which need nothing but a MIDI cable, an audio interface and the stock instrument.
+
+## What a reader needs to know, in one paragraph
+
+The µPD6383's microcode is 80.8 % decoded (**1397 undecoded of 7273 pooled words**) and every large
+remaining block is shut *because the ROMs do not contain the discriminating evidence*. Real hardware
+could supply it three ways, in rising order of power and of intrusiveness: **passive audio
+measurement** (the other document — live, no risk); **triggering programs the firmware already has
+but never uploads** (§A3 — analysis only); and **running our own microcode** (§A1/§A5 — needs a
+burned ROM, and is *not* being pursued). This file documents the third so that the option is
+understood rather than rediscovered.
+
+---
+
 # PART A — how custom microcode could get in
 
 ## A0 — What the firmware actually does, measured
@@ -390,7 +430,10 @@ word, read every candidate destination.
 
 ---
 
-## Order of work
+## Order of work — ⛔ SUSPENDED at step 3 by Felipe's decision of 2026-09-14
+
+Recorded as originally planned, so that the shape is legible if it is ever resumed. **Steps 4, 5
+and 6 are not to be started.**
 
 1. **A3** — find the body trigger. No hardware, no risk, and may deliver 873 executing words on its
    own. *(mine)*
@@ -402,13 +445,13 @@ word, read every candidate destination.
    question: does it bring the DSP's **GF1–3 / RQ1–3** (pins 83–88) to a CPU port or to a
    jumper/pull-up? That one decides whether the monitor's readback is digital or has to go through
    the DAC.
-4. **A5, built and debugged entirely in MAME** — monitor, protocol and probe harness — *before* any
-   chip is burned. This is the bulk of the work and none of it needs the hardware.
-5. **A1** — burn and install, only once A5 runs correctly in emulation.
-6. **B2 → B1 → B3 → B4** — in that order: `f31` is the most words per program, bit-11 is the
-   largest block, `SRC 0x11` breaks a cycle, and the class-6 index closes the oldest question.
-   ★ With A5 in place these stop being one-off experiments and become a **sweep over all ~321
-   distinct undecoded shapes**.
+4. ⛔ ~~**A5, built and debugged entirely in MAME**~~ — monitor, protocol and probe harness.
+   **NOT TO BE IMPLEMENTED.**
+5. ⛔ ~~**A1** — burn and install~~. **Not on the table** while A5 is not to be built.
+6. ⛔ ~~**B2 → B1 → B3 → B4**~~ — `f31` is the most words per program, bit-11 is the largest block,
+   `SRC 0x11` breaks a cycle, and the class-6 index closes the oldest question. ★ With A5 in place
+   these would stop being one-off experiments and become a **sweep over all ~321 distinct undecoded
+   shapes** — which is what makes A5 worth documenting even unbuilt. Kept as design.
 
 ⚠ **The honest summary of A:** **A5 is the right target** — a debug monitor turns the whole
 remaining decode into an automatable sweep, and it is the only route that can locate the COND field

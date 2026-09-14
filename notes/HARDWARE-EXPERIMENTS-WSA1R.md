@@ -234,7 +234,11 @@ that the **recipe** must be, and this file is it. What must be written down and 
 sample rate and bit depth, and the output-gain position. I will add the analysis scripts beside
 this file as each measurement arrives, so every number they produce can be re-derived.
 
-## ★★ THE ACTIVE COUNTERPART: `HARDWARE-CUSTOM-DSP-PROGRAMS-WSA1R.md`
+## ★★ THE ACTIVE COUNTERPART: `HARDWARE-CUSTOM-DSP-PROGRAMS-WSA1R.md` — ⛔ DOCUMENTED, NOT TO BE BUILT
+
+⚠ **Felipe, 2026-09-14: the custom ROM code is NOT to be implemented.** That document is a design
+record. **Everything in THIS file remains live** — the eight audio experiments need nothing but a
+MIDI cable, an audio interface and the stock instrument, and none of them touches a ROM.
 
 Everything in this file is **passive** — it measures what the stock firmware already does. The
 third document asks the stronger question: can we put **our own microcode** into IC30? That reaches
