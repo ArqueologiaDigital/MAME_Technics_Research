@@ -3631,8 +3631,28 @@ void upd6383_device::exec_alu(u64 word)
 					//  ⚠ Two-sided: the §157 TAPMOD per-slot census must stop reporting a CONSTANT
 					//  240 and start spanning a range at the LFO rate.  If it does not move, the
 					//  index form is not the defect either and this arm says so.
+					//  ★★★★★ C6LUT=4 (§183): THE INDEX, WITH THE PHASE THAT IS ACTUALLY A PHASE.
+					//  §182 showed `acc' here cannot be it -- at the two chorus sites it spans
+					//  -1 076 061..+1 307 335 and -2 152 122..+2 614 670, SIGNED and symmetric
+					//  about zero, a seventh of full scale, so `(n * acc) >> 23' reaches index 3.
+					//  §183 found the phase in the §176 census: **D-RAM cell 0x07**, UNSIGNED,
+					//  0 .. 8 388 602 (six short of 2^23) and changing 1 570 842 times against
+					//  ~176 000 for every other live cell.  With it the arithmetic is exact:
+					//      (24 * 8 388 602) >> 23 = 23   and  phase 0 -> index 0
+					//  i.e. `lfo-ramp.md' §10's `(coef x phase) >> 23' lands in 0..n-1 BY
+					//  CONSTRUCTION, which is why no modulo appears in the microcode, and §179's
+					//  eight-cell wrap-guard covers a windowed read past the base index.
+					//  ⚠ Two-sided, on the criterion §181 established (cell 0x0F's swept range,
+					//  which moves when the arm is off -- NOT the §157 TAPMOD census, blind per
+					//  §180): with the real phase the sweep must reach the sine's FULL amplitude,
+					//  about ±7 969 177, where `=1' manages a symmetric but small ±2 402 840.
 					u32 k;
-					if (c6lut == 3)
+					if (c6lut == 4)
+					{
+						const u32 ph = m_dram.read_dword(m_cur_unit1 ? 0x87 : 0x07) & 0xffffff;
+						k = u32((u64(n) * u64(ph)) >> 23) & 0xff;
+					}
+					else if (c6lut == 3)
 						k = u32((s64(n) * s64(d)) >> 23) & 0xff;
 					else
 						k = u32(((d % s32(n)) + s32(n)) % s32(n));
