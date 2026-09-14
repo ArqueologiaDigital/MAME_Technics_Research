@@ -771,6 +771,29 @@ private:
 	//  presentation value of 4 988 928 = 2436 << 11, exactly this line's shape.  So
 	//  the sweep has power before it runs.
 	//======================================================================
+	//======================================================================
+	//  ★★★ §117 DIAGNOSTIC (env UPD6383_CFMTPCLR, default OFF): a C-FORMAT word
+	//  INVALIDATES THE PRODUCT REGISTER.
+	//
+	//  §109 measured that giving the C-format immediate the destination `P' takes
+	//  the chorus LFO from 153 Hz to **0.674 Hz** against a ROM constant of 0.5993 --
+	//  the only thing all session to put that number in the right order of magnitude
+	//  -- while destroying the per-unit hand-off cell.  §115 then settled the
+	//  destination as `reg[lo12]' on a proven sub-case, so `P' is NOT where the
+	//  immediate goes.  ⇒ the LFO improvement came from a SIDE EFFECT: writing `P'
+	//  overwrote the STALE PRODUCT, which §102's trace named as the contaminant --
+	//  "the gate word still LOADS the one-slot product, and at the LFO ramp word
+	//  that product is the PREVIOUS word's".
+	//
+	//  A C-format word issues no multiply, so after it the one-slot product is not
+	//  something this instruction produced.  CLEARING it (rather than writing the
+	//  immediate into it) tests the side effect without the injection that wrecked
+	//  the hand-off.
+	//  ⚠ NOT `UPD6383_PCLR', which is the GLOBAL policy "clear P on any word that
+	//  did not drive it" and is REFUTED and default-off.  This is one word FORM.
+	//======================================================================
+	bool m_cfmtpclr = false;
+	u64  m_cfmtpclr_n = 0;
 	u32  m_cfmtdst = 0;
 	u64  m_cfmtdst_n = 0;
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by

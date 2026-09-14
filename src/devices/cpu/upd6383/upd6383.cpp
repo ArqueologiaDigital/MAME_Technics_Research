@@ -289,6 +289,10 @@ void upd6383_device::device_start()
 	save_item(NAME(m_rf));          // §97: the mode-1 register file
 	if (const char *e = getenv("UPD6383_LAND"))
 		m_land = std::clamp<u32>(u32(strtoul(e, nullptr, 10)), 1, 7);
+	m_cfmtpclr = getenv("UPD6383_CFMTPCLR") != nullptr;    // ★ §117, default OFF
+	if (m_cfmtpclr)
+		logerror("upd6383: ★★★ §117 UPD6383_CFMTPCLR ON -- a C-format word invalidates the "
+				"one-slot PRODUCT register\n");
 	m_cfmtdst = getenv("UPD6383_CFMTDST")
 			? u32(std::clamp(atoi(getenv("UPD6383_CFMTDST")), 0, 7)) : 7u;   // ★ §115 DEFAULT 7
 	//  ★★★★★ §115 PROMOTED TO DEFAULT (2026-09-14): the C-format immediate goes to the REGISTER
@@ -2809,6 +2813,9 @@ void upd6383_device::exec_alu(u64 word)
 			//  latch tests whether it is the clobber without inventing a new
 			//  destination.
 			m_cimm = s64(imm) << 11;
+			//  ★★★ §117: a C-format word issues no multiply, so the one-slot product
+			//  after it is not this instruction's.  Invalidate it.  Counted always.
+			if (m_cfmtpclr) { m_p = 0; m_pw = 0; m_ptouch = false; m_cfmtpclr_n++; }
 			//  ★★★ §109: the enumerated destinations.  0 keeps the latch (the shipped
 			//  behaviour and the control); the rest are the six this file has named as
 			//  candidates since row 5 was written.
@@ -8396,6 +8403,8 @@ void upd6383_device::dump_frame_report() const
 		//  given word at all.  Anything listed here left exec_alu() at the alternate-
 		//  encoding return, so NO SOURCE and NO ACTION decode ran for it -- including
 		//  `C63' (lo12 0xC63), the word §166/§168 aimed `SRC 0x11' at.
+		logerror("upd6383: ★ §117 CFMTPCLR (%s): C-format words that invalidated P: %llu\n",
+				m_cfmtpclr ? "ON" : "off", (unsigned long long)m_cfmtpclr_n);
 		logerror("upd6383: ★ §109 CFMTDST (mode %u): C-format immediates redirected: %llu\n",
 				m_cfmtdst, (unsigned long long)m_cfmtdst_n);
 		logerror("upd6383: ★ §102/§104 GATECLR (mode %u): gate words affected: %llu\n",
