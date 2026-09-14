@@ -3586,6 +3586,20 @@ void upd6383_device::exec_alu(u64 word)
 			//  `SRC 0x00' = mem[ptr]: for its product to be depth x waveform = ±240 the
 			//  WAVEFORM has to be in a D-RAM cell it reads, not in P.  So =2 stores the
 			//  looked-up value under the class-6 word's own pointer instead.
+			//  ⛔⛔⛔ AND THE §157 CENSUS IS BLIND -- §180, 2026-09-14.  A third index form was
+			//  implemented (=3 below) and run with an ARM-OFF CONTROL, and all three agree:
+			//     C6LUT=0 fired 0          iw96:0..240(r240) iw105:0..240(r240) iw137/146:-240..0
+			//     C6LUT=1 fired 3 150 504  IDENTICAL
+			//     C6LUT=3 fired 3 150 504  IDENTICAL
+			//  The arms reach their words (2 per frame) and the census does not move for ANY of
+			//  them, INCLUDING when the lookup does not happen at all.  ⇒ this criterion cannot
+			//  distinguish performing the lookup from not performing it, so the conclusion drawn
+			//  from it just below -- "what is missing is the SCALING step, not the route" -- rests
+			//  on a blind instrument and MUST NOT be relied on.  The scaling step may still be
+			//  missing; this census was never evidence for it.
+			//  ⇒ BEFORE A FOURTH ARM: build an observable that demonstrably MOVES when C6LUT=0.
+			//  That is the positive control every arm here should have had to pass, and nothing in
+			//  the project currently passes it.  The original text follows.
 			//  ⛔ =2 RUN AND IT FAILS TOO: the §157 census is IDENTICAL to =1
 			//  (`iw96:0..240 iw105:0..240 iw137:-4194544..0`), so the destination was not
 			//  the defect either.  Both arms put a FULL-SCALE waveform value into the chain
@@ -3601,9 +3615,29 @@ void upd6383_device::exec_alu(u64 word)
 				if (n)
 				{
 					const s32 d = acc_to_datum(m_cur_unit1 ? m_accb : m_acc);
-					const u32 k = u32(((d % s32(n)) + s32(n)) % s32(n));
+					//  ★★★★★ C6LUT=3 (§180): THE INDEX FORM THIS FILE'S OWN COMMENT NAMED AND
+					//  NOBODY RAN.  Both failed arms used `d % n', acc-as-datum.  `lfo-ramp.md'
+					//  §10 says the idiom computes `(coef x phase) >> 23' with the scale
+					//  coefficient 0x18 = 24 at 8 of 8 LFO sites -- and `addr8' IS that 24.  For a
+					//  24-bit fractional phase `(n * phase) >> 23' lands in 0..n-1 WITH NO MODULO
+					//  AT ALL, which is why a modulo never appears in the microcode.
+					//  ★ §179 measured the memory layout that makes this concrete: the table port
+					//  is the register file at 0x1D, 32 cells, per effect -- and for the LFO it is
+					//  a 24-entry sine (0.95 sin(2 pi k/24 + 0.1), max err 0.0000) with THE FIRST
+					//  EIGHT ENTRIES REPEATED at 0x35..0x3C.  Eight spare copies are a WRAP-GUARD,
+					//  and a guard is only needed if the read is WINDOWED -- several consecutive
+					//  entries from a base index.  That is what interpolation looks like, and it
+					//  is why `d % n' (which can never exceed the table) was the wrong shape.
+					//  ⚠ Two-sided: the §157 TAPMOD per-slot census must stop reporting a CONSTANT
+					//  240 and start spanning a range at the LFO rate.  If it does not move, the
+					//  index form is not the defect either and this arm says so.
+					u32 k;
+					if (c6lut == 3)
+						k = u32((s64(n) * s64(d)) >> 23) & 0xff;
+					else
+						k = u32(((d % s32(n)) + s32(n)) % s32(n));
 					const u32 v = m_rf[(0x1d + k) & 0xff] & 0xffffff;
-					if (c6lut >= 2)
+					if (c6lut == 2)
 					{
 						m_dram.write_dword(m_dp, v);
 						pv_wr_dram(m_dp, v);
