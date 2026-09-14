@@ -387,6 +387,16 @@ void upd6383_device::device_start()
 	m_bx_sel0e    = u32((m_specmask >> 45) & 7);
 	m_bx_f4       = u32((m_specmask >> 48) & 3);
 	m_bx_f5       = u32((m_specmask >> 50) & 3);
+	//  ★★★ sect. 148: the three BIT-5-ONLY codes get ENV arms, not SPEC bits -- the mask's
+	//  low half is crowded and these are a separate question from f4/f5 (which are reachable
+	//  with bit 5 either way).  1 = LOAD, 2 = ADD, 3 = HOLD; unset/0 = the shipped collapse.
+	m_bx_f3 = getenv("UPD6383_BX_F3") ? u32(std::clamp(atoi(getenv("UPD6383_BX_F3")), 0, 3)) : 0u;
+	m_bx_f6 = getenv("UPD6383_BX_F6") ? u32(std::clamp(atoi(getenv("UPD6383_BX_F6")), 0, 3)) : 0u;
+	m_bx_f7 = getenv("UPD6383_BX_F7") ? u32(std::clamp(atoi(getenv("UPD6383_BX_F7")), 0, 3)) : 0u;
+	if (m_bx_f3 || m_bx_f6 || m_bx_f7)
+		logerror("upd6383: ★★★ sect.148 BX_F3=%u BX_F6=%u BX_F7=%u -- the BIT-5-ONLY codes "
+				"(1=LOAD 2=ADD 3=HOLD, 0=the shipped `f31 & 3' collapse)\n",
+				m_bx_f3, m_bx_f6, m_bx_f7);
 	m_bx_supp_ta  = (m_specmask & (1ull << 52)) != 0;
 	if (m_bx_on || m_bx_sweep)
 		logerror("upd6383: ★ §133 DEMUX injector=%d distinct=%d sweep=%d "
@@ -4612,6 +4622,12 @@ void upd6383_device::exec_alu(u64 word)
 		u16 op = sel ? u16(f31 & 3) : f31;
 		if (sel && f31 == 4) { m_bx_f4_n++; if (m_bx_f4) op = bx_f31_op(m_bx_f4); }
 		if (sel && f31 == 5) { m_bx_f5_n++; if (m_bx_f5) op = bx_f31_op(m_bx_f5); }
+		//  ★★★ sect. 148: the three BIT-5-ONLY codes.  Counted UNCONDITIONALLY so "nothing
+		//  moved" can be told from "the code never ran" -- sect. 97 and sect. 100 each spent a
+		//  run on an arm that never reached its word.
+		if (sel && f31 == 3) { m_bx_f3_n++; if (m_bx_f3) op = bx_f31_op(m_bx_f3); }
+		if (sel && f31 == 6) { m_bx_f6_n++; if (m_bx_f6) op = bx_f31_op(m_bx_f6); }
+		if (sel && f31 == 7) { m_bx_f7_n++; if (m_bx_f7) op = bx_f31_op(m_bx_f7); }
 		u64 &accum = use_b ? m_accb : m_acc;
 		//  ★★★ §227 `UPD6383_NOCARRY' (DEFAULT OFF, DIAGNOSTIC).  §226 pre-registered
 		//  "iw33's f31 = 1 should not carry".  hi12[3:1] == 1 IS HI_ACC_ADD, so the
@@ -9063,6 +9079,12 @@ void upd6383_device::dump_frame_report() const
 		logerror("upd6383: ★★ §205 f31 alias counts: f31=4 %u | f31=5 %u  "
 				"(mask bits 48-51 = %u; default runs 4 as LOAD, 5 as ADD)\n",
 				m_bx_f4_n, m_bx_f5_n, u32((m_specmask >> 48) & 0xf));
+		//  ★★★ sect. 148: the three BIT-5-ONLY codes, with their arms' settings beside the
+		//  counts so a null row can be read against whether the arm was even armed.
+		logerror("upd6383: ★★ sect.148 f31 BIT-5-ONLY counts: f31=3 %llu | f31=6 %llu | "
+				"f31=7 %llu  (arms BX_F3=%u BX_F6=%u BX_F7=%u; 0 = the shipped `f31 & 3')\n",
+				(unsigned long long)m_bx_f3_n, (unsigned long long)m_bx_f6_n,
+				(unsigned long long)m_bx_f7_n, m_bx_f3, m_bx_f6, m_bx_f7);
 		//  ★★★ §209: THE PER-UNIT DESCRIPTOR RING.  Two independent gates, each with
 		//  its own fired count -- a null with no fired count cannot distinguish
 		//  "did nothing" from "never ran", and this project has been bitten by that.

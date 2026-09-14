@@ -899,12 +899,24 @@ private:
 	static constexpr u32 BX_TRIALS       = 1024;   // 8 x 8 x 4 x 4
 	bool m_bx_on = false, m_bx_distinct = false, m_bx_sweep = false, m_bx_supp_ta = false;
 	u32  m_bx_sel0d = 0, m_bx_sel0e = 0, m_bx_f4 = 0, m_bx_f5 = 0;
+	//  ★★★ sect. 148: the arm sect. 146 said this axis needs.  `f31' 3/6/7 are BIT-5-ONLY --
+	//  0 words carry them with bit 5 clear, in EITHER product (73 / 3 / 44 pooled) -- and
+	//  upd6383.cpp records the speculative reading that `(bit 5, f31)' is a 4-bit operation
+	//  field whose upper codes are those three.  The shipped model collapses them with
+	//  `op = f31 & 3' (3 -> 3, 6 -> 2, 7 -> 3).  ★ sect. 146 measured the RULE-4 precondition:
+	//  they ARE reachable, 4.9-5.8 M / 1.9 M / 2.0-3.0 M firings per program, 3 of 3.  ★ And
+	//  sect. 147 measured WHERE a change could show: at the four RESIDENT sites the discarded
+	//  product AND the accumulator on entry are identically zero, so nothing can move there;
+	//  the observable sites are the body ones sect. 231 records with a non-zero discard.
+	//  1 = LOAD, 2 = ADD, 3 = HOLD; 0 = keep the shipped collapse (the control).
+	u32  m_bx_f3 = 0, m_bx_f6 = 0, m_bx_f7 = 0;
 	bool m_bx_armed = false;
 	u32  m_bx_trial = 0, m_bx_tframe = 0;
 	u32  m_bx_prev[40] = {};
 	u32  m_bx_nz = 0, m_bx_chg = 0, m_bx_f1s = 0, m_bx_f1t = 0;
 	u32  m_bx_f2s = 0, m_bx_f2t = 0, m_bx_shift = 0, m_bx_shmax = 0;
 	u64  m_bx_inj_n = 0, m_bx_act0e_n = 0, m_bx_f4_n = 0, m_bx_f5_n = 0, m_bx_supp_n = 0;
+	u64  m_bx_f3_n = 0, m_bx_f6_n = 0, m_bx_f7_n = 0;   // ★ sect. 148, counted UNCONDITIONALLY
 	static u32 bx_stim(u32 n, bool second)
 	{   //  non-repeating over the 64-frame trial, and the two streams never collide,
 		//  so "which cell did the entry feed from" is decidable bit-exactly.  Small
