@@ -144,6 +144,21 @@ codes above stay OPEN and the decode number stays at 81.2 %.
 
 ---
 
+## ★ COMPANION, and it is LIVE: `HARDWARE-EXPERIMENTS-WSA1R.md`
+
+Everything in *this* file is parked on the KN5000. But Felipe **has** the SX-WSA1R, and it carries
+**three** `D6383GF-3BA` DSPs (IC5, IC6, IC30) — the same part as the KN5000's IC311 and the
+KN1500's IC3. Constraints, from Felipe 2026-09-14: **no audio input**, **no digital output** (needs
+an extension board he lacks), analogue out and **MIDI** only.
+
+`notes/HARDWARE-EXPERIMENTS-WSA1R.md` is the queue for that machine — eight experiments, ranked by
+what they unblock, all designed to need no audio input and no bit-exact capture. The top three bear
+on the `SRC 0x13`/class-6 table index (171 words), `f31` 3…7 (189 words), and an outright numerical
+contradiction in the waveshaper's entry count (`addr8` says 40, the register-file window is 32).
+
+⚠ It cannot touch the **bit-11** block (169 words): those are control words, and no audio
+measurement sees them.
+
 ## How to use this file
 
 * Answers go **into this file** next to their question, dated, and then into the
