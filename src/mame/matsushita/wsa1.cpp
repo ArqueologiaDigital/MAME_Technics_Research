@@ -3841,6 +3841,10 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// generator, so the two are two stages of one signal path.  What the part
 	// is, what it is not, and the grade of each claim are in
 	// acoustic_modeling.h.
+	//  ⚠ BEFORE constructing it: catch a stale-object ABI mismatch as a message rather than as a
+	//  segfault in the constructor's own member-initialiser memset.  See the ABI GUARD note in
+	//  acoustic_modeling.h -- this exact crash cost a debugging session on 2026-09-14.
+	l7a1429_abi_check();
 	L7A1429(config, m_modeling);
 
 	// --- IC4, the tone generator (TC183C230002), 0x10C000 on CPU 2 ---------

@@ -62,6 +62,16 @@ inline double muting_cutoff_hz(uint16_t v, double fs)
 } // anonymous namespace
 
 
+//  ★ The ABI guard's other half: this is compiled with THIS file's view of
+//  WSA1R_ENABLE_ACOUSTIC_HLE, so comparing it against a caller's own `sizeof' detects a stale
+//  object file before the constructor can memset past the end of the object.  See the note in
+//  acoustic_modeling.h.
+size_t l7a1429_abi_size()
+{
+	return sizeof(l7a1429_device);
+}
+
+
 l7a1429_device::l7a1429_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, L7A1429, tag, owner, clock)
 #if WSA1R_ENABLE_ACOUSTIC_HLE

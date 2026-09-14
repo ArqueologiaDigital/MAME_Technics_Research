@@ -327,4 +327,47 @@ private:
 
 DECLARE_DEVICE_TYPE(L7A1429, l7a1429_device)
 
+
+//**************************************************************************
+//  ⚠⚠ ABI GUARD -- read this before toggling WSA1R_ENABLE_ACOUSTIC_HLE
+//**************************************************************************
+//
+//  `WSA1R_ENABLE_ACOUSTIC_HLE' changes `sizeof(l7a1429_device)' by about ONE MEGABYTE: with the
+//  HLE on, the class gains `m_voice[VOICES]' and each voice carries `double buf[WG_MAX]'
+//  (64 x 2048 x 8 bytes), and it also gains `device_sound_interface' as a base.  With it off the
+//  object is ~8 KiB.
+//
+//  ⛔ WHAT THAT COST, MEASURED 2026-09-14.  `wsa1r' SEGFAULTED on every start, deterministically,
+//  in `l7a1429_device::l7a1429_device' -- the faulting instruction a `rep stos', i.e. a memset
+//  running off the end of the object.  Cause: the build tree is INCREMENTAL and MAME's build
+//  system does not treat ARCHOPTS/CPPFLAGS as a dependency, so `acoustic_modeling.o' (built
+//  2026-09-11) and `wsa1.o' (rebuilt 2026-09-14) disagreed about the macro -- one translation
+//  unit allocated the small object, the other ran the big object's member initialisers.
+//  A `touch' on this file plus a rebuild fixed it, but nothing PREVENTED it.
+//
+//  ⇒ This guard turns that silent crash into a message that names the cause.  Any translation
+//  unit that configures the device calls `l7a1429_abi_check()' BEFORE the device is constructed;
+//  it compares its own `sizeof' against the one the device's own translation unit computed, and
+//  a mismatch is a `fatalerror' instead of a segfault.
+//
+//  ⚠ It DETECTS rather than prevents.  The layout could be made macro-independent by putting the
+//  HLE state behind a `unique_ptr' and making the sound-interface base unconditional; that is a
+//  bigger change to a driver, and it is recorded here as the proper fix rather than done in
+//  passing.  The remedy when this fires is a clean rebuild of both files.
+
+// implemented in acoustic_modeling.cpp -- i.e. with THAT file's view of the macro
+size_t l7a1429_abi_size();
+
+inline void l7a1429_abi_check()
+{
+	if (l7a1429_abi_size() != sizeof(l7a1429_device))
+		fatalerror("l7a1429_device ABI mismatch: this translation unit says sizeof = %u, "
+				"acoustic_modeling.cpp says %u.  WSA1R_ENABLE_ACOUSTIC_HLE disagrees between "
+				"them -- almost certainly a STALE OBJECT FILE, because MAME's build system does "
+				"not treat -D flags as a dependency.  Rebuild acoustic_modeling.cpp and wsa1.cpp "
+				"together (touch both, then rebuild).  See the ABI GUARD note in "
+				"acoustic_modeling.h.\n",
+				unsigned(sizeof(l7a1429_device)), unsigned(l7a1429_abi_size()));
+}
+
 #endif // MAME_MATSUSHITA_ACOUSTIC_MODELING_H
