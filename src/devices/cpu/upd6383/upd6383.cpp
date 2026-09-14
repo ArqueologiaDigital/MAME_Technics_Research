@@ -4121,10 +4121,19 @@ void upd6383_device::exec_alu(u64 word)
 		//  1 560 839 -- yet it was reading mem[m_dp] and getting nothing.  This is
 		//  the link between 0x8F and the presentations that read 0x8C/0x8D.
 		//
-		//  ⛔ GUESSED: symmetry.  The store side is documented; the read side is not,
-		//  and no note in this project states it.  It is applied because the two
-		//  halves of one addressing mode disagreeing would be the odd claim, not
-		//  because anything proves it.
+		//  ⛔ ONE ANCHORED INSTANCE, GENERALISED BY SYMMETRY.  The store side is
+		//  documented (r2-output.md sect. 1.1/1.2: class 1 without the escape bit is
+		//  the register file, `addr8' the index, 48 of 48).  The read side rests on
+		//  symmetry PLUS one witness, and sect. 126 found the witness:
+		//    the corpus contains EXACTLY ONE word addressing mode-1 index 0x06 --
+		//    epilogue w12, I-RAM 72, in the output stage -- and register-space.md
+		//    item A1 proves BY CONSTRUCTION, 49 of 49 algorithms, that register
+		//    0x06/0x86 is the VOLUME, written once per algorithm by the host's
+		//    EFF_VolumeLoop and never by microcode.  Under this route that word reads
+		//    the volume where a volume multiply belongs; under the rival it reads
+		//    D-RAM[m_dp] and the host's volume never reaches the datapath at all.
+		//  ⚠ That is ONE instance, not the general route, which is why alu_decoded()
+		//  still refuses class 1 -- 88 words in the pooled corpus wait on anchoring it.
 		const u8 rdmode = upd6383_disassembler::c_format(word)
 				? 2 : u8(upd6383_disassembler::class4(word) & 7);
 		const bool regfile = (rdmode == 1) && !(hi & 0x800);
