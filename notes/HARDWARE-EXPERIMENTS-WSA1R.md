@@ -234,6 +234,19 @@ that the **recipe** must be, and this file is it. What must be written down and 
 sample rate and bit depth, and the output-gain position. I will add the analysis scripts beside
 this file as each measurement arrives, so every number they produce can be re-derived.
 
+## ★★ THE ACTIVE COUNTERPART: `HARDWARE-CUSTOM-DSP-PROGRAMS-WSA1R.md`
+
+Everything in this file is **passive** — it measures what the stock firmware already does. The
+third document asks the stronger question: can we put **our own microcode** into IC30? That reaches
+what no audio measurement can, including the **bit-11 block (169 words)** this file cannot touch,
+and it would decode `f31` 3…7 (189 words) and `SRC 0x11` (139) almost directly.
+
+Its one request of you is in **E0.1** above and takes five minutes: **is IC28 socketed or
+soldered, and what is its exact marking?** That single answer decides whether the EPROM route is
+on the table. The other two routes — triggering the 57 body records the firmware already has, and
+decoding the SysEx ring consumer — are mine to do and either could make opening the instrument
+unnecessary.
+
 ## How to use this file
 
 Each entry states what to do without reading any code, why it is asked, and what changes depending
