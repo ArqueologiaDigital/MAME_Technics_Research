@@ -4399,10 +4399,40 @@ void upd6383_device::exec_alu(u64 word)
 			}
 			else
 			{
-			store_mode(stmode, u8(stdest), u32(acc_to_datum(sacc)), 2);   // §99, site 2
-			kwatch(stdest, s32(u32(acc_to_datum(sacc)) & 0xffffff));
-			watch_store(stdest, s32(acc_to_datum(sacc)) & 0xffffff, 2);
-			store_probe(u8(stdest), s32(acc_to_datum(sacc)) & 0xffffff, 2);   // §109
+			//  ★★★★★ UPD6383_ST4DEST (sect. 162, default 0 = shipped): WHERE DOES A MODE-4
+			//  BIT-4 STORE LAND?  sect. 161 settled mode 4's POINTER (it does not advance) and
+			//  promoted its 99 words on that -- which was an OVER-REACH, caught by
+			//  `acc_blind.open_axes()': the word carries TWO axes and the run closed one.  The
+			//  second is this store's TARGET.  `store_mode()' routes every non-mode-1 store to
+			//  `m_dram[dest]' with `dest = m_dp', i.e. the MODE-2 target applied class-
+			//  independently -- exactly the reading `r2-output.md' sect. 1/4.4 FALSIFIED, which
+			//  is why `alu_decoded()' refuses a bit-4 word outside mode 2 at all.
+			//  THREE-WAY so it can fail: 0 = shipped (D-RAM at the pointer), 1 = the register
+			//  file at `addr8' (the mode-1 target, which R2 PROVES for that mode), 2 = suppressed.
+			//  CRITERION, the same one that settled the pointer: EXCITER's `op0x70' biquad band
+			//  four words downstream must stay two LIVE four-cell blocks whose offset-2/3 cells
+			//  change together.  If only one setting preserves it, the target is established by
+			//  elimination; if all three do, this store reaches nothing the band observes and the
+			//  99 words stay undecoded on an axis nothing can see.
+			static const int st4dest = []{ const char *e = getenv("UPD6383_ST4DEST");
+				return e ? atoi(e) : 0; }();
+			const bool m4st = (stmode == 4) && !upd6383_disassembler::c_format(word);
+			if (m4st) m_st4_n++;
+			if (m4st && st4dest == 2)
+			{
+				/* suppressed -- the accumulator is still cleared below, as it is for any
+				   bit-4 word; only the DESTINATION write is withheld. */
+			}
+			else
+			{
+			const u8 sd = (m4st && st4dest == 1)
+					? u8(upd6383_disassembler::addr8(word) | (m_cur_unit1 ? 0x80 : 0x00))
+					: u8(stdest);
+			store_mode((m4st && st4dest == 1) ? 1 : stmode, sd, u32(acc_to_datum(sacc)), 2);   // §99, site 2
+			kwatch(sd, s32(u32(acc_to_datum(sacc)) & 0xffffff));
+			watch_store(sd, s32(acc_to_datum(sacc)) & 0xffffff, 2);
+			store_probe(sd, s32(acc_to_datum(sacc)) & 0xffffff, 2);   // §109
+			}
 			}
 		}
 		{ m_dwr[stdest]++; if (m_dram.read_dword(stdest) & 0xffffff) m_dwr_nz[stdest]++; }
@@ -8513,6 +8543,9 @@ void upd6383_device::dump_frame_report() const
 				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
 		logerror("upd6383: ★ §160 CLS4PTR (%s): class-4-ONLY pointer advances performed: %llu\n",
 				m_cls4ptr ? "ON" : "off", (unsigned long long)m_cls4_n);
+		logerror("upd6383: ★ §162 ST4DEST (mode %s): mode-4 bit-4 stores seen: %llu\n",
+				getenv("UPD6383_ST4DEST") ? getenv("UPD6383_ST4DEST") : "0 (shipped)",
+				(unsigned long long)m_st4_n);
 		logerror("upd6383: ★★★ §97 SWALLOW CENSUS -- words that left exec_alu() at the "
 				"lo12-bit-11 return (no SOURCE, no ACTION decode ran for them):\n");
 		if (!m_alt11_k)

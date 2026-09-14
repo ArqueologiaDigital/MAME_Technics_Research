@@ -903,8 +903,19 @@ bool upd6383_disassembler::decoded(u64 word)
 	//  their ALU half was already anchored; and the pointer question that kept the ADDRESSING open
 	//  was settled by a two-sided run that could have gone the other way.  See is_mode4() in
 	//  upd6383d.h.  ⚠ Disjoint from is_dram() by the escape bit and from is_mode1() by the mode.
+	//  ⛔⛔ THE BIT-4 STORE GUARD.  My first version of this clause omitted it, by analogy with
+	//  is_mode1().  That was an OVER-REACH: acc_blind.open_axes() says `0124011CE' carries TWO
+	//  axes, `class 4' AND `bit-4 store on class 4', and sect. 161's run closed only the first.
+	//  The guard `(hi12 & HI_ST) && (class4 & 7) != 2' is a STORE-TARGET guard merely PHRASED as a
+	//  class test: r2-output.md sect. 1/4.4 falsified the class-independent reading, so the bit-4
+	//  destination is MODE-DEPENDENT and mem[ptr] is the MODE-2 target.  Legitimate to drop for
+	//  is_mode1() (R2 proves that target, 48 of 48) and for is_dram() (addressing forced); NOT
+	//  legitimate here.  ⇒ all 99 mode-4 words carry hi12 bit 4, so this clause admits nothing
+	//  today.  Kept because the POINTER half IS settled; the open half is the store TARGET, and
+	//  UPD6383_ST4DEST (sect. 162) is the arm built to settle it.
 	if (is_mode4(word))
-		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
+		return !(hi12(word) & HI_ST)
+				&& lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
 				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7)
 					&& hi_f31(hi12(word)) != 1 && hi_f31(hi12(word)) != 2)

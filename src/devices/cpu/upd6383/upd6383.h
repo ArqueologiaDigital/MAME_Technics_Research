@@ -1860,6 +1860,8 @@ private:
 	//  caveat does not apply.)
 	bool m_cls4ptr = false;
 	u64  m_cls4_n = 0;
+	//  ★ sect. 162: mode-4 bit-4 stores SEEN (unconditional, whatever UPD6383_ST4DEST is).
+	u64  m_st4_n = 0;
 	bool ptr_moves(u64 word) const
 	{
 		if (upd6383_disassembler::ptr_postinc(word))
