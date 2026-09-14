@@ -1020,14 +1020,22 @@ public:
 	//  0x20 and 0x30 are READ, 0x60 is WRITE, anything else keeps trapping.
 	// ---------------------------------------------------------------
 	//  ★★★★★ sect. 112: THE BLOCK TERMINATOR -- the last word of every body image.
-	//  `class4 == 1' with the END bit and `addr8' in {0x0E, 0x0F}.  MEASURED as the
-	//  final word of 37 of 37 unit-0 images and the one unit-1 image (host-side.md
-	//  item B1); the form is already published in instruction-set.md.  Disjoint from
-	//  is_dram() by construction: is_end() needs hi12 bit 10 SET with bit 11 CLEAR,
-	//  the escape needs bit 11 SET.
+	//  `class4 == 1' with the END bit.  MEASURED as the final word of 37 of 37 unit-0
+	//  images and the one unit-1 image (host-side.md item B1); the form is already
+	//  published in instruction-set.md.  Disjoint from is_dram() by construction:
+	//  is_end() needs hi12 bit 10 SET with bit 11 CLEAR, the escape needs bit 11 SET.
+	//  ⛔⛔ sect. 124: THE `addr8 in {0x0E, 0x0F}' CLAUSE WAS OVER-FITTED TO ONE PRODUCT
+	//  AND IS GONE.  Pooled with the SX-WSA1R, which runs the same ISA:
+	//      KN5000   40 terminator-shaped words, addr8 0x0E x38 / 0x0F x2  -- all admitted
+	//      SX-WSA1R 53 terminator-shaped words, addr8 0x4F x53            -- ZERO admitted
+	//  The SHAPE is confirmed by the second product, not weakened by it: 93 of 93 class-1
+	//  END words are the last word of a BLOCK (the one non-image-final case is kernel w49,
+	//  which ends the unit-0 CALL block 42..49 -- what a block terminator does).  What the
+	//  second product refutes is the VALUE SET, and the `addr8 = unit index' reading with
+	//  it: 53 WSA1R images cannot all be unit 1.  `addr8' is the terminator's operand and
+	//  its meaning is OPEN across products.
 	static constexpr bool is_terminator(u64 w)
-	{ return !c_format(w) && class4(w) == 1 && is_end(w)
-			&& (addr8(w) == 0x0E || addr8(w) == 0x0F); }
+	{ return !c_format(w) && class4(w) == 1 && is_end(w); }
 
 	static constexpr bool is_dram(u64 w)
 	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }

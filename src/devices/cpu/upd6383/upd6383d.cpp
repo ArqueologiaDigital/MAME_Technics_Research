@@ -1022,9 +1022,12 @@ std::string upd6383_disassembler::text(u64 word, int at)
 		else if (c_format(word))
 			util::stream_format(s, "ldreg   r%02X,#iw%d,%d       ; I-RAM address + a second "
 					"field (B)", u32(lo12(word) & 0xff), u32(c_a(word)), u32(c_b(word)));
+		//  ⛔ sect. 124: NOT `unit%d' any more.  `addr8' is 0x0E/0x0F in the KN5000 and 0x4F in
+		//  all 53 SX-WSA1R images, so the unit-index reading cannot be an ISA rule -- it was one
+		//  product's value set.  Print the operand; name nothing the word cannot tell us.
 		else if (is_terminator(word))
-			util::stream_format(s, "endblk  unit%d          ; END OF BLOCK -- the image's "
-					"last word", addr8(word) == 0x0E ? 0 : 1);
+			util::stream_format(s, "endblk  #%02X             ; END OF BLOCK -- the last word "
+					"of a block", u32(addr8(word)));
 		else if (is_dram(word) && dram_dir(word))
 		{
 			if (dd == 0)
