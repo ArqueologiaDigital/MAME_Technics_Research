@@ -468,9 +468,19 @@ public:
 	//  REGISTERS, so 0x64B is a fourth route beside mac (0x1D5) and mulst (0x407), forced under a
 	//  2-input ALU -- and that premise is itself forced (the multiplier has a coefficient port
 	//  hardwired to C-RAM[ccur] and ONE operand bus; there is no third port).
-	//  ⛔ NOT on any other class: there 0x0B is the DELAY-ACCESS reading, which adjudication-round5
-	//  records as DEGENERATE with the addr8 rule -- "it adds nothing and it is not independent
-	//  evidence.  0x0B stays OPEN."  The 16 class-2 words keep trapping.
+	//  ⛔ NOT on any other class, and 0x0B stays OPEN -- but ⛔⛔ THE REASON THIS COMMENT USED TO
+	//  GIVE IS FALSE (sect. 129, dsp/tools/act0b_scope.py).  It recorded round 5 as making 0x0B
+	//  DEGENERATE with the addr8 direction rule, on the sentence "every ACT-0x0B delay word
+	//  carries addr8 0x20/0x30" -- which drops that measurement's own population
+	//  (dram-matching.md item J: "203 slots over the 83 algorithms where #cells == #consumers").
+	//  Over the FULL delay corpus: SIX ACT-0x0B delay words carry addr8 0x60, the FORCED WRITE
+	//  (kernel w46/w54, prog06_ensemble w0/w39, WSA1R eff20_ensemble w0/w51) -- two of them in the
+	//  KN5000's own algorithm images, so it fails inside ONE product.  The CONVERSE fails harder:
+	//  463 WRITE-side delay words carry EIGHT distinct ACTIONs and 0x0B is 1.3 % of them.  And the
+	//  control: 4 of the 9 ACTIONs here ARE one-sided, so one-sidedness is the norm and says little.
+	//  ⇒ the SCOPED measurement is untouched; the universal and the "adds nothing" inference are
+	//  withdrawn.  0x0B stays open on its own merits -- act0b-reverb.md item D leaves THREE
+	//  survivors and sd_act0b.py measured that SINGLE DELAY cannot separate them.  Class-2 traps.
 	static constexpr bool act_anchored_for(u64 w)
 	{
 		return lo_act_anchored(lo_act(w))
