@@ -1865,6 +1865,17 @@ private:
 	//  caveat does not apply.)
 	bool m_cls4ptr = false;
 	u64  m_cls4_n = 0;
+	//  ★ §187: what `C6LUT=4' ACTUALLY reads as the phase, so the formula can be argued about
+	//  separately from the addressing.  See upd6383.cpp's §187 block.
+	u32  m_c6ph_lo = 0xffffffffu, m_c6ph_hi = 0, m_c6ph_last = 0xffffffffu;
+	u64  m_c6ph_chg = 0;
+	//  ★★ §188: the INDEX itself.  §186 ranked the index forms on cell 0x0F's change count, but
+	//  §187 proved the phase read is correct, and a correct phase makes `(24*ph)>>23' change
+	//  EXACTLY 512 times by arithmetic -- while 0x0F changed 102 331 times.  So 0x0F is NOT the
+	//  table value: the arm writes m_p, and 0x0F is written by whatever CONSUMES P.  Ranking on it
+	//  measured the consumer, not the index.  Census `k' directly instead.
+	u32  m_c6k_lo = 0xffffffffu, m_c6k_hi = 0, m_c6k_last = 0xffffffffu;
+	u64  m_c6k_chg = 0;
 	//  ★ sect. 162: mode-4 bit-4 stores SEEN (unconditional, whatever UPD6383_ST4DEST is).
 	u64  m_st4_n = 0;
 	bool ptr_moves(u64 word) const

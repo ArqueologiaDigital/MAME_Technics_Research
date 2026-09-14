@@ -3650,12 +3650,29 @@ void upd6383_device::exec_alu(u64 word)
 					if (c6lut == 4)
 					{
 						const u32 ph = m_dram.read_dword(m_cur_unit1 ? 0x87 : 0x07) & 0xffffff;
+						//  ★ §187 INSTRUMENT CHECK, and it must come before any further reasoning
+						//  about the FORMULA.  §186 measured that this arm changes cell 0x0F 102 331
+						//  times where a monotonic 24-entry sweep should manage ~512 -- 200x too
+						//  many -- which means the quantity read here moves ~200x more often than
+						//  the §176 census says cell 0x07 does (1 570 842 updates, range
+						//  0..8 388 602).  Either this read is not that cell, or the census is not
+						//  this array.  Record what is ACTUALLY read so the next pass argues about
+						//  the chip rather than about my addressing.
+						if (ph < m_c6ph_lo) m_c6ph_lo = ph;
+						if (ph > m_c6ph_hi) m_c6ph_hi = ph;
+						if (ph != m_c6ph_last) { m_c6ph_chg++; m_c6ph_last = ph; }
 						k = u32((u64(n) * u64(ph)) >> 23) & 0xff;
 					}
 					else if (c6lut == 3)
 						k = u32((s64(n) * s64(d)) >> 23) & 0xff;
 					else
 						k = u32(((d % s32(n)) + s32(n)) % s32(n));
+					//  ★★ §188: census the INDEX, whichever form produced it.  This is the
+					//  quantity the anchored expectation is about -- 21.3 LFO periods x 24 entries
+					//  = ~512 steps for a monotonic sweep -- and cell 0x0F is not (§187).
+					if (k < m_c6k_lo) m_c6k_lo = k;
+					if (k > m_c6k_hi) m_c6k_hi = k;
+					if (k != m_c6k_last) { m_c6k_chg++; m_c6k_last = k; }
 					const u32 v = m_rf[(0x1d + k) & 0xff] & 0xffffff;
 					if (c6lut == 2)
 					{
@@ -8605,6 +8622,15 @@ void upd6383_device::dump_frame_report() const
 				m_gateclr, (unsigned long long)m_gateclr_n);
 		logerror("upd6383: ★ §100 CLS46PTR (%s): class-4/6 pointer advances performed: %llu\n",
 				m_cls46ptr ? "ON" : "off", (unsigned long long)m_cls46_n);
+		if (m_c6k_chg)
+			logerror("upd6383: ★★ §188 C6LUT INDEX k: %u .. %u, changed %llu times"
+					"  -- a monotonic 24-entry sweep over 21.3 LFO periods predicts ~512\n",
+					m_c6k_lo, m_c6k_hi, (unsigned long long)m_c6k_chg);
+		if (m_c6ph_chg)
+			logerror("upd6383: ★ §187 C6LUT=4 PHASE AS READ: %u .. %u (span %u), changed %llu times"
+					"  -- compare cell 0x07's own census: 0..8388602, 1570842 updates\n",
+					m_c6ph_lo, m_c6ph_hi, m_c6ph_hi - m_c6ph_lo,
+					(unsigned long long)m_c6ph_chg);
 		logerror("upd6383: ★ §160 CLS4PTR (%s): class-4-ONLY pointer advances performed: %llu\n",
 				m_cls4ptr ? "ON" : "off", (unsigned long long)m_cls4_n);
 		logerror("upd6383: ★ §162 ST4DEST (mode %s): mode-4 bit-4 stores seen: %llu\n",
