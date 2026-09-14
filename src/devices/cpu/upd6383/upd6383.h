@@ -1000,8 +1000,15 @@ private:
 	//  ★★★ §109 mask bit 29 (0x20000000): THE OTHER SURVIVING STORE GATE.
 	//  store-gate.md item C ran all nine conditions of its enumeration against both
 	//  known-mathematics witnesses and exactly TWO survive:
-	//      b7 && f31 == 1   (SHIPPED, st_suppressed())
-	//      b7 && f31 != 2   (co-equal, never applied)
+	//      b7 && f31 == 1   (was st_suppressed() -- ⛔ REFUTED 2026-09-14)
+	//      b7 && f31 != 2   (⇒ PROMOTED: st_suppressed() now returns THIS)
+	//  ⚠⚠ THE "DEFAULT OFF" BELOW WAS STALE: bit 29 IS SET in this file's own default mask
+	//  `0xb910e446a39b440f', and the run log says so -- "§109 bit-4 store gate = b7 && f31 != 2
+	//  (the CO-EQUAL survivor) (mask bit 29 = 1)".  The device has been running the co-equal
+	//  survivor all along; the DISASSEMBLER was the half that disagreed, on 7 966 224 store-gate
+	//  evaluations per chorus run.  Separated on `pair_gate.sh' (A1): `== 1' FREEZES the chorus
+	//  LFO (phase 0 on eight consecutive frames), `!= 2' gives a free-running ramp at the ROM's
+	//  own 114.  With `upd6383d.h' fixed this bit is a NO-OP and m_stgate_alt_n must read 0.
 	//  They differ on exactly 13 corpus words, and kernel iw30 (f31 = 5) is one of
 	//  them: under the shipped arm it stores, under the co-equal arm it does not.
 	//  ⛔ NOT A FIX and NOT A TIE-BREAK -- it makes the OTHER arm of an open tie

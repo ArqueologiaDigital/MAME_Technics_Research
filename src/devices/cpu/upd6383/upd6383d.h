@@ -593,9 +593,25 @@ public:
 	//  says -- alu_decoded() refuses this whole region, so the decoded core is
 	//  bit-identical either way. This settles the CONDITION, not what the suppressed
 	//  case does (item 2 remains open: "no store, no clear" is one point in a set).
+	//  ★★★★★ 2026-09-14: THE BIT-4 STORE GATE, PROMOTED -- the co-equal tie is BROKEN.
+	//  `store-gate.md' item C left two survivors and they have been recorded as co-equal ever
+	//  since: `b7 && f31 == 1' (what this returned) and `b7 && f31 != 2'.  They disagree on
+	//  7 966 224 store-gate evaluations in one chorus run (§109's own probe counts them).
+	//  ⇒ SEPARATED on `dsp/tools/pair_gate.sh' criterion (A1), the LFO phase over EIGHT
+	//  CONSECUTIVE FRAMES -- the criterion §34 rebuilt so that starvation cannot pass it:
+	//      b7 && f31 != 2   ✅ FREE-RUNNING RAMP, 8 frames, step CONSTANT at 114, which is the
+	//                          ROM's own increment (29 LFO blocks in 16 programs)
+	//      b7 && f31 == 1   ⛔ FROZEN -- phase 0 on all eight frames
+	//  Item C could not see this because its LFO witness was the WITHIN-FRAME delta, and §34
+	//  measured that one as unable to fail in the way that matters (it reads 114 even with the
+	//  phase reset to zero every frame).
+	//  ★ The DEVICE has been running this gate all along: §109 mask bit 29 is SET in
+	//  `upd6383.h's default mask, so every bit-exact result the project holds was obtained under
+	//  it and only the disassembler disagreed.  With this fix bit 29 becomes a NO-OP and
+	//  `m_stgate_alt_n' must report 0 -- which is the promotion's own two-sided check.
 	static constexpr bool st_suppressed(u64 w)
 	{
-		return (hi12(w) & HI_B7) && hi_f31(hi12(w)) == 1;
+		return (hi12(w) & HI_B7) && hi_f31(hi12(w)) != 2;
 	}
 
 	// ---------------------------------------------------------------
