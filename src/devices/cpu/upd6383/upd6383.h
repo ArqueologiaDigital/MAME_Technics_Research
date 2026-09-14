@@ -792,7 +792,14 @@ private:
 	//  ⚠ NOT `UPD6383_PCLR', which is the GLOBAL policy "clear P on any word that
 	//  did not drive it" and is REFUTED and default-off.  This is one word FORM.
 	//======================================================================
-	bool m_cfmtpclr = false;
+	//  ★★★ §118: mode 2 restricts the invalidate to `is_c40' -- the ONE opcode (0x620)
+	//  sect. 115 decoded as the immediate load.  MEASURED why that is the right cut:
+	//  the resident KERNEL and the OUTPUT STAGE carry **zero** `is_c40' words (their
+	//  eight and three C-format words are opcodes 605/602/621/625/632/60B/600), while
+	//  a body's are all 0x620.  So mode 2 cannot touch the kernel's input stage, which
+	//  is what mode 1 was emptying when it took the hand-off cell to zero -- the
+	//  kernel's C-format words sit at iw1..iw40, BEFORE the iw45 that writes it.
+	u32  m_cfmtpclr = 0;            // 0 off | 1 every C-format word | 2 `is_c40' only
 	u64  m_cfmtpclr_n = 0;
 	u32  m_cfmtdst = 0;
 	u64  m_cfmtdst_n = 0;
