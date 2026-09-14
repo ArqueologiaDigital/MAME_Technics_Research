@@ -151,13 +151,49 @@ IC30.
 probe body, so the machine boots and sounds exactly as before except at `0x6E`. That is the
 lowest-risk possible edit — it fills a slot the firmware already leaves empty.
 
-**What I need from you before this is actionable — three answers, all by looking:**
+### ★★★★★ ANSWERED 2026-09-14: **the program ROMs are SOCKETED** (Felipe)
 
-1. **Is IC28 socketed, or soldered?** If soldered, what package (DIP-32? SOP-44?).
-2. **The exact marking** on IC28, and whether it says anything beyond `QSIGCWSA1CX`.
-3. Same for **IC12, IC13, IC21** — so we know whether the set is uniform.
+That removes the single biggest obstacle in this file. No desoldering, no socket to fit, no
+irreversible board work — the chips come out, a burned copy goes in, and the original goes back
+whenever we like. **A1 is on the table, and with it A5.**
 
-**If socketed and DIP-32**, the drop-in candidates are 4 Mbit byte-wide 5 V parts:
+Still to confirm, but none of it is a blocker any more:
+
+1. **The package**, so the programmer adapter is right — 512 KiB byte-wide is almost always
+   **DIP-32**, but confirm by counting pins.
+2. **The exact marking** on IC28 (and IC12/IC13/IC21), in case it says anything beyond
+   `QSIGCWSA1CX`.
+3. **Is IC22 socketed too?** That is the `AM29F400T` flash, and it is `NO_DUMP` in the driver —
+   see §A1.0.
+
+### ★ A1.0 — do this first, and it costs nothing: DUMP the sockets
+
+Now that they lift out, the zero-risk first step is to **read all four program ROMs and check them
+against the hashes the project already has**:
+
+| socket | file | CRC32 | SHA1 |
+|---|---|---|---|
+| IC12 | `qsigcwsa1ax.ic12` | `5f34af46` | `90a2369f8e4d2fcdf26875272267624b07bc200d` |
+| IC13 | `qsigcwsa1bx.ic13` | `f3f84441` | `93adec2a04b7d93a2ec2bfb059227ff3959906e0` |
+| IC28 | `qsigcwsa1cx.ic28` | `855c8ac4` | `9b2911e4b21a08d9744b91844630489f54dde856` |
+| IC21 | `qsigcwsa1dx.ic21` | `735ae465` | `82df50816c20cd8f2d29551326d2633e7791f306` |
+
+**Why this matters more than it looks.** It is not about the data — we have it. It **validates your
+reader, adapter and settings against a known-good answer before anything is ever written.** Four
+matching hashes means the toolchain is trustworthy; a mismatch means stop, and we find out why on a
+read instead of on a burn.
+
+★ **And two things that would be genuinely new dumps, if those chips are socketed too:**
+
+* **IC22, the `AM29F400T` flash (512 KiB) — `NO_DUMP`.** Nobody knows what it holds. It is the
+  target of the whole flash-download path in §A2, so its contents decide whether that route can
+  ever reach DSP microcode. Dumping it answers a question this project cannot otherwise touch.
+* **The six 16 Mbit wave mask ROMs** (`ic43/44/45/47/48/49`) — all `NO_DUMP`, and the reason the
+  WSA1R emulation has **no audio at all**. Almost certainly soldered surface-mount, so probably not
+  available — but if any one of them is in a socket, say so, because that is a far bigger prize
+  than anything in this document.
+
+**Drop-in candidates** — 4 Mbit byte-wide 5 V parts:
 
 | part | type | why |
 |---|---|---|
@@ -168,16 +204,15 @@ lowest-risk possible edit — it fills a slot the firmware already leaves empty.
 
 ⚠ Verify pinout against the original before anything: 4 Mbit DIP-32 is *usually* consistent, but
 `/OE`, `/CE` and the `A18` position must be checked, and the board may drive `/OE` in a way an
-EPROM tolerates and a flash does not.
+EPROM tolerates and a flash does not. ★ With sockets this is cheap to get wrong safely — a
+mismatched part simply will not work, and the original goes straight back in.
 
 **The safety procedure, in order — do not reorder it:**
 
-1. **Read the original chip first** and check the dump against the known hash:
-   `qsigcwsa1cx.ic28`, CRC32 `855c8ac4`, SHA1 `9b2911e4b21a08d9744b91844630489f54dde856`. If your
-   read does not match, stop — the reader or the adapter is wrong, and everything after depends on
-   this.
-2. **Keep the original chip.** Socket the board, run experiments on a burned copy, and the original
-   goes back in at the end.
+1. **Read the originals first** and check every dump against the hashes in §A1.0. If a read does
+   not match, stop — the reader or the adapter is wrong, and everything after depends on this.
+2. **Keep the original chips.** They are socketed, so experiments run on burned copies and the
+   originals go back in whenever you want the instrument stock again.
 3. ★ **Test every image in MAME first.** The emulator runs this exact ROM, so a patched image can be
    booted, and the DSP's I-RAM write-tap will show whether our words actually land at `0x6E`. **No
    image goes into the hardware until it has been observed loading correctly in emulation.** This is
@@ -361,10 +396,12 @@ word, read every candidate destination.
    own. *(mine)*
 2. **A4/A2** — decode the SysEx ring consumer and the CPU-1 link side. Either could let **A5** ride
    an *existing* command instead of a new ROM, which would remove the burn entirely. *(mine)*
-3. **Two things from you, both by looking, both five minutes:** is **IC28 socketed**, and does the
-   schematic bring the DSP's **GF1–3 / RQ1–3** (pins 83–88) to a CPU port or to a
-   jumper/pull-up? The first decides whether A5 can be delivered at all; the second decides whether
-   its readback is digital or has to go through the DAC.
+3. ✅ **Sockets: ANSWERED — the program ROMs are socketed.** So the remaining asks of you are
+   **A1.0** (dump all four and check the hashes — this validates your toolchain before anything is
+   written, and tells us whether IC22 and the wave ROMs are reachable too) and the schematic
+   question: does it bring the DSP's **GF1–3 / RQ1–3** (pins 83–88) to a CPU port or to a
+   jumper/pull-up? That one decides whether the monitor's readback is digital or has to go through
+   the DAC.
 4. **A5, built and debugged entirely in MAME** — monitor, protocol and probe harness — *before* any
    chip is burned. This is the bulk of the work and none of it needs the hardware.
 5. **A1** — burn and install, only once A5 runs correctly in emulation.

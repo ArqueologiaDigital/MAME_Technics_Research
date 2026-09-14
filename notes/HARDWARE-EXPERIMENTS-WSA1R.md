@@ -248,10 +248,13 @@ word shapes, and it is the only route that can locate the chip's **COND field** 
 **GF-setting instruction**, because RQ1–3 and GF1–3 are host-side lines that ROM analysis cannot
 see.
 
-Its requests of you are two, both by looking, both five minutes: **is IC28 socketed or soldered
-(and its exact marking)?** and **does the schematic bring the DSP's GF1–3 / RQ1–3, pins 83–88, to a
-CPU port or to a jumper/pull-up?** The first decides whether the monitor can be delivered; the
-second decides whether its readback is digital or has to go through the DAC. The other two routes — triggering the 57 body records the firmware already has, and
+✅ **The blocking question is answered: the program ROMs are SOCKETED** (Felipe, 2026-09-14), so
+the monitor can be delivered with no soldering. What it asks of you now is **A1.0** in that file —
+lift all four program ROMs and dump them, checking against the hashes recorded there. That costs
+nothing, validates your reader before anything is ever written, and would tell us whether **IC22**
+(the `AM29F400T` flash, `NO_DUMP`) and the six **wave mask ROMs** (`NO_DUMP`, and the reason this
+emulation has no audio) are reachable too. The one remaining question is the schematic's: does it
+bring the DSP's **GF1–3 / RQ1–3**, pins 83–88, to a CPU port or to a jumper/pull-up? The other two routes — triggering the 57 body records the firmware already has, and
 decoding the SysEx ring consumer — are mine to do and either could make opening the instrument
 unnecessary.
 
