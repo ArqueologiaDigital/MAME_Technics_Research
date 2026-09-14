@@ -15,8 +15,14 @@
 # 3057-word microprogram corpus extracted from the Sub CPU ROM, and diffs the
 # output line for line.  Exit 0 and "MIRRORS AGREE" iff every line matches.
 #
-#     tools/upd6383d_diff.sh                 # build + compare
+#     tools/upd6383d_diff.sh                 # build + compare (KN5000, 3057 words)
 #     tools/upd6383d_diff.sh -k              # keep the two dumps for inspection
+#     tools/upd6383d_diff.sh -p              # ★ POOLED: add the SX-WSA1R's 4946 words
+#
+# ★ WHY -p EXISTS (sect. 128).  The KN5000 corpus is the wrong invariant for any decode whose
+# words live mostly in the other product.  Mode 1 decoded 143 words and ONE of them is a KN5000
+# word: a green "MIRRORS AGREE -- 3057/3057" said nothing at all about the other 142.  The WSA1R
+# runs the same ISA and its listings carry their own slot indices, so pooling costs one flag.
 #
 # Env: BUILD_TREE (default ../kn7000_mame_build), DISASM_REPO (default
 # ../kn5000-roms-disasm), WORK (default a mktemp dir).
@@ -27,7 +33,11 @@ OVERLAY="$(dirname "$HERE")"
 BUILD_TREE="${BUILD_TREE:-$OVERLAY/../kn7000_mame_build}"
 DISASM_REPO="${DISASM_REPO:-$OVERLAY/../kn5000-roms-disasm}"
 KEEP=0
-[ "${1:-}" = "-k" ] && KEEP=1
+POOLED=0
+for a in "$@"; do
+	[ "$a" = "-k" ] && KEEP=1
+	[ "$a" = "-p" ] && POOLED=1
+done
 WORK="${WORK:-$(mktemp -d)}"
 
 [ -d "$BUILD_TREE/src/emu" ] || { echo "ERROR: no MAME build tree at $BUILD_TREE" >&2; exit 1; }
@@ -50,9 +60,9 @@ g++ -std=c++20 -O1 -DCRLF=2 -DLSB_FIRST -DPUGIXML_HEADER_ONLY \
 #    and all 38 distinct effect-body images, with their real I-RAM indices (the
 #    C00 self-address annotation depends on them).
 echo "==> extracting the corpus ..."
-python3 - "$HERE" "$DISASM_REPO" > "$WORK/words.txt" <<'PY'
+python3 - "$HERE" "$DISASM_REPO" "$POOLED" > "$WORK/words.txt" <<'PY'
 import sys, os
-tools, repo = sys.argv[1], sys.argv[2]
+tools, repo, pooled = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
 sys.path.insert(0, tools)
 import kn5000_dsp_extract as E
 rom = E.Rom(os.path.join(repo, "original_ROMs", "kn5000_subprogram_v142.rom"))
@@ -70,6 +80,15 @@ for a in range(100):
 for ws, a in sorted(seen.items(), key=lambda kv: kv[1]):
     base = 200 if a == 16 else 84          # the reverb is the one unit-1 image
     for i, w in enumerate(ws): print("%d %010X" % (base + i, w))
+#  ★ sect. 128: the SECOND PRODUCT's words, read from its committed listings (which carry their
+#  own slot indices -- the C00 self-address annotation needs them).  Same ISA, same mirror.
+if pooled:
+    import glob, re
+    ROW = re.compile(r"^\s*w(\d+)\s+([0-9A-Fa-f]{10})")
+    for f in sorted(glob.glob(os.path.join(repo, "wsa1", "dsp", "disasm", "*.dsm"))):
+        for ln in open(f, errors="replace"):
+            m = ROW.match(ln)
+            if m: print("%s %s" % (m.group(1), m.group(2).upper()))
 PY
 
 # 3. run both and compare

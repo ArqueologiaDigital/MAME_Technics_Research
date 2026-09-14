@@ -887,6 +887,18 @@ bool upd6383_disassembler::decoded(u64 word)
 				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
 					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
 
+	//  ★★★★★ sect. 128: MODE 1 on the same footing -- the class test is what refuses these words
+	//  and the word's own form explains the class.  See is_mode1() in upd6383d.h for the four
+	//  measurements that anchor the read half.  ⚠ Must follow is_terminator(), which is itself a
+	//  mode-1 word with its own rendering; disjoint from is_dram() by the escape bit.
+	if (is_mode1(word))
+		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
+				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
+				&& !((hi12(word) & HI_ST) && (hi12(word) & HI_B7)
+					&& hi_f31(hi12(word)) != 1 && hi_f31(hi12(word)) != 2)
+				&& (hi_f31(hi12(word)) == HI_ACC_LOAD || hi_f31(hi12(word)) == HI_ACC_ADD
+					|| hi_f31(hi12(word)) == HI_ACC_HOLD);
+
 	if (is_dram(word) && dram_dir(word))
 		return lo_src_anchored(lo_src(word)) && act_anchored_for(word)
 				&& !(lo12(word) & 0x800) && lo_ptrmode(word) == 0
@@ -1065,6 +1077,17 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			case LO_SRC_LFO:  sname = "c";    break;    // C-RAM[cursor] -- THE COEFFICIENT
 			default:         sname = "?";   break;      // unreachable: decoded()
 			}
+			//  ★ sect. 128: a MODE-1 word's memory operand is `reg[addr8]', not `mem[ptr]' -- the
+			//  device routes it that way (upd6383.cpp `regfile') -- so the mnemonic must say so,
+			//  or a decoded word prints an operand it does not use.  Same lesson as the delay
+			//  escape's `ld ?'.
+			char m1buf[8];
+			const bool m1 = is_mode1(word);
+			if (m1 && (lo_src(word) == LO_SRC_MEM || lo_src(word) == LO_SRC_MEM0))
+			{
+				snprintf(m1buf, sizeof(m1buf), "r%02X", u32(addr8(word)));
+				sname = m1buf;
+			}
 
 			const char *mn;
 			switch (hi_f31(hi))
@@ -1108,8 +1131,16 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			if ((cl & 7) == 2)
 				util::stream_format(s, ",(p)%+d", dd);
 			if (hi & HI_ST)
-				s << (st_suppressed(word) ? " ; store SUPPRESSED (bit7)"
-										  : " ; mem[p]<-acc, acc=0");
+			{
+				//  ★ sect. 128: a mode-1 store targets reg[addr8], not mem[ptr]
+				//  (upd6383.cpp stmode == 1), so name the destination it writes.
+				if (st_suppressed(word))
+					s << " ; store SUPPRESSED (bit7)";
+				else if (m1)
+					util::stream_format(s, " ; r%02X<-acc, acc=0", u32(addr8(word)));
+				else
+					s << " ; mem[p]<-acc, acc=0";
+			}
 
 			// ★ END OF BLOCK SURVIVES THE DECODE.  A decoded word prints no
 			// [annotation], and MEASURED that costs nothing on 381 of the 384
@@ -1121,8 +1152,10 @@ std::string upd6383_disassembler::text(u64 word, int at)
 			// remaining three are END-OF-BLOCK words, and that is a CONTROL-FLOW
 			// fact orthogonal to the ALU: the word still performs its datapath
 			// work AND ends the block.  Dropping it would lose a landmark.
-			// (class 1 cannot reach here -- alu_decoded() admits only 2/8/A --
-			// so the unit-tagged CALL/RETURN form is unreachable by construction.)
+			// (⛔ sect. 128 CORRECTS this: mode-1 words DO reach this renderer
+			// now -- decoded() admits them on the is_dram/is_terminator footing --
+			// which is why the source and store operands above are register-named
+			// for them.  The unit-tagged CALL/RETURN form is still not claimed.)
 			if (is_end(word))
 				s << ((hi & HI_ST) ? "; " : " ; ") << "END OF BLOCK (falls through)";
 		}

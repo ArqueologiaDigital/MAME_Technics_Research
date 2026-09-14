@@ -1037,6 +1037,26 @@ public:
 	static constexpr bool is_terminator(u64 w)
 	{ return !c_format(w) && class4(w) == 1 && is_end(w); }
 
+	//  ★★★★★ sect. 128: MODE 1 -- THE REGISTER FILE.  `class4 & 7 == 1' with the format escape
+	//  CLEAR.  r2-output.md sect. 1.1 splits class 1 on the escape bit (all 324 KN5000 class-1
+	//  words classified correctly, where `addr8' bit 7 misclassifies three) and sect. 1.2 names
+	//  the escape-0 side "a REGISTER FILE -- and the host uses the same space", `addr8' the index,
+	//  48 of 48 for the STORE half.  ⇒ the ADDRESSING is explained by the word's own form, which
+	//  is the condition is_dram() and is_terminator() are admitted on.
+	//  ★ `class4 & 7', not `class4 == 1' -- upd6383.cpp derives rdmode/stmode that way, so class 1
+	//  and class 9 are ONE mode: 247 undecoded words across the two products, not 25.
+	//  ★★★ AND THE READ HALF IS NO LONGER A GUESS (dsp/tools/mode1_index.py).  This file used to
+	//  say of the read route "⛔ GUESSED: symmetry ... no note in this project states it".  Four
+	//  measurements state it: (1) 327 of 327 mode-1 words carry a NON-ZERO `addr8', including all
+	//  228 with no store and so no documented use for it, against a mode-2 control that is 42.6 %
+	//  zero where zero is legal; (2) 35 distinct values, varying inside one image (the constant
+	//  control); (3) one WSA1R image's 32 indices contain a run of 26 CONSECUTIVE values,
+	//  p <= 7.6e-28, walked `n, n+2, n+1, n+3' on a STRIDE OF 4 -- a DF-I biquad's four state
+	//  cells per section; (4) reads sit at lag <= 1 from a WRITE OF THE SAME INDEX in 51 of 95
+	//  cases against a shuffled null of 29.4 +- 2.1, max 37 of 2000.
+	static constexpr bool is_mode1(u64 w)
+	{ return !c_format(w) && (class4(w) & 7) == 1 && !(hi12(w) & HI_ESC); }
+
 	static constexpr bool is_dram(u64 w)
 	{ return (hi12(w) & HI_ESC) && class4(w) == 1 && !c_format(w); }
 
