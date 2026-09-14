@@ -101,6 +101,49 @@ inert model. Either answer is a decode result; the emulator cannot supply it.
 
 ---
 
+## Q. THE DECODE QUEUE HAS RUN OUT OF ANCHORS — this is now a hardware question (2026-09-14)
+
+**Why it is being parked rather than pursued.** 1501 of the 8003 pooled uPD6383 words are
+undecoded, and every remaining open code has now been checked against **both** anchors this project
+owns — the parametric EQ's designed response and SINGLE DELAY's lag-1001 ROM product — by
+**membership** (does the model's own section read a cell this word writes, on the relative pointer
+walk) rather than by position:
+
+```
+   ACT 0x0B          191 words     no anchored carrier
+   SRC 0x11          171           documented dependency cycle
+   ACT 0x01..0x06    109, 1 decoded   no anchored carrier
+   f31 = 3            56           no anchored carrier
+   op 0x72 route     (would unblock 247)  shut statically AND dynamically
+```
+
+`SINGLE DELAY` contains **0** of these codes, `ROOM REVERB 1` **0**, `PARAMETRIC EQ` **1**. And
+`dsp/tools/decoded_selfcheck.py` proves 0 forward / 0 reverse inconsistencies, so none of the 1501
+is blocked by a defect in the predicate. **The corpus does not contain a discriminating consumer for
+these codes.** That is a fact about the ROM, not about the tooling.
+
+### What would actually settle it, in order of cheapness
+
+1. ★ **Record the KN5000's EFFECT OUT (or DO3 / HD-AE5000 extension out, never the speaker mix) for
+   ONE effect that carries an open code, at two settings of one parameter.** COMPRESSOR, ENHANCER
+   or ROTARY SPEAKER would each do — all three carry `ACT 0x01..0x06`, none is modelled bit-exactly,
+   and none is reachable from the ROM. A single before/after pair gives the first anchored
+   quantity in a NONLINEAR effect the project has ever had, which is exactly what §135 and §149 both
+   name as the missing ingredient.
+2. **Does moving the COMPRESSOR's THRESHOLD audibly change anything?** MEASURED here: its `op 0x72`
+   C-RAM cells are rewritten `0x600000` (exactly 0.75) unchanged however the knob moves — both in
+   the stored presets and in a live capture with the parameter driven. Either the parameter reaches
+   the chip by a path this project has not found, or THRESHOLD does very little on real hardware.
+   **Felipe's ear settles which**, and the two readings are not close.
+3. **SLOW ATTACKER on real hardware** — still open from the twelve-stub finding, and now more
+   pointed: it ships a program byte-identical to NO OPERATION.
+
+⚠ Hardware is stored in another country with no date (`kn5000-hardware-inaccessible`), so this is
+parked deliberately. **The absence of an answer is not licence to promote an inference**: the four
+codes above stay OPEN and the decode number stays at 81.2 %.
+
+---
+
 ## How to use this file
 
 * Answers go **into this file** next to their question, dated, and then into the
