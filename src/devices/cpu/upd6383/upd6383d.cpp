@@ -856,7 +856,27 @@ bool upd6383_disassembler::decoded(u64 word)
 	//  says to make before admitting anything on a format escape.
 	//  ⚠ NOT claimed: the call/return itself, which upd6383.cpp calls "the frame SEQUENCER's
 	//  model, not the ISA's".  This says the WORD is executable, not that the jump is derived.
-	if (is_c40(word))       // ★ sect. 115
+	//  ★★★★★ sect. 122: AND THE OTHER ELEVEN C-FORMAT WORDS.  This used to read `is_c40(word)'
+	//  with a note that extending it was not safe -- `k3-pointers.md' sect. 8 item 3 says the
+	//  `A = imm13 >> 5' payload rule is measured on opcode 0x620 only.  That was right while the
+	//  extension was UNMEASURED.  It is measured now, by two routes, NEITHER of which carries the
+	//  0xC40 family's rule outward:
+	//    ROUTE 1 -- THE REGION TEST (dsp/tools/cfmt_addr.py).  All ELEVEN payloads land inside the
+	//    image that carries them (kernel I-RAM 0..59, epilogue 60..82).  `A' is 8 bits, so the
+	//    uniform null is explicit: p = 6.6e-9.  Two are SELF-REFERENCES (epilogue w76 -> 76,
+	//    w82 -> 82) and the two 0x632 words both land at `block start + 3' of their own per-unit
+	//    CALL block.
+	//    ROUTE 2 -- THE RELOCATION TEST (dsp/tools/kernel_homolog.py --reloc), which needs no null.
+	//    The SX-WSA1R ships a byte-homologous copy of this kernel header at a different offset
+	//    (34 of 42 words identical and in order; best unrelated image 2, mean 0.4).  An ADDRESS
+	//    must shift by the number of words inserted before it; DATA must not.  MEASURED: `A'
+	//    tracks the relocation EXACTLY in 4 of 4 comparable pairs, while `B = imm13 & 0x1F' and
+	//    `f31' are IDENTICAL across the two products at all five positions.
+	//  ⇒ ONE instruction: destination from `lo12', payload = an I-RAM address `A' plus a second
+	//  field `B'.  ⚠ ENCODING, NOT PURPOSE: closure-pointer.md item B has FALSIFIED the `0x820'
+	//  family as the frame-closing D-RAM pointer load ON SITING, and kernel w40 -> 14 is a
+	//  backward reference to an END-OF-BLOCK word that nothing explains.
+	if (c_format(word))     // ★ sect. 115 (is_c40) widened by sect. 122
 		return true;
 
 	if (is_terminator(word))
@@ -996,6 +1016,12 @@ std::string upd6383_disassembler::text(u64 word, int at)
 		else if (is_c40(word))
 			util::stream_format(s, "ldreg   r%02X,#%d          ; immediate -> the register "
 					"lo12 selects", u32(lo12(word) & 0xff), u32(c_a(word)));
+		//  ★★★★★ sect. 122: the other eleven.  `A' is an I-RAM address here too (region test
+		//  p = 6.6e-9; relocation against the WSA1R's homologous header 4 of 4) and `B' is a
+		//  second field that is NOT an address -- printed because it is real and unexplained.
+		else if (c_format(word))
+			util::stream_format(s, "ldreg   r%02X,#iw%d,%d       ; I-RAM address + a second "
+					"field (B)", u32(lo12(word) & 0xff), u32(c_a(word)), u32(c_b(word)));
 		else if (is_terminator(word))
 			util::stream_format(s, "endblk  unit%d          ; END OF BLOCK -- the image's "
 					"last word", addr8(word) == 0x0E ? 0 : 1);

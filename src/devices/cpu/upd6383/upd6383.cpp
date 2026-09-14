@@ -314,6 +314,17 @@ void upd6383_device::device_start()
 		logerror("upd6383: ★★★ §109 UPD6383_CFMTDST = %u -- the C-format immediate goes to %s\n",
 				m_cfmtdst, (const char *[]){"the latch", "acc", "P", "tempA", "tempB",
 										   "mem[ptr]", "reg[addr8]", "reg[lo12 & 0xFF]"}[m_cfmtdst]);
+	//  ★★★ §121: `hi12' bit 6 on a C-format word.  `dsp/tools/kernel_homolog.py' shows the
+	//  SX-WSA1R carries a byte-homologous copy of this kernel header (34 of 42 words identical
+	//  and in order; best unrelated image 2, mean 0.4) and that the two copies of sect. 120's
+	//  slot differ ONLY in the 13-bit payload and in this bit.  Default OFF -- bit 6 unmodelled.
+	m_hi6c = getenv("UPD6383_HI6C")
+			? u32(std::clamp(atoi(getenv("UPD6383_HI6C")), 0, 11)) : 0u;
+	if (m_hi6c)
+		logerror("upd6383: ★★★ §121 UPD6383_HI6C = %u -- a C-format word with `hi12' bit 6 set "
+				"does %s\n", m_hi6c, (const char *[]){"nothing", "P <- 0", "P <- acc",
+				"P <- accb", "P <- mem[ptr]", "P <- the immediate", "P <- the payload A",
+				"acc <- 0", "accb <- 0", "P <- tempA", "P <- tempB", "P <- 0 AND acc <- 0"}[m_hi6c]);
 	m_census_perprog = getenv("UPD6383_CENSUS_PERPROG") != nullptr;   // ★ §103, default OFF
 	if (m_census_perprog)
 		logerror("upd6383: ★★★ §103 UPD6383_CENSUS_PERPROG ON -- the D-RAM and rise censuses "
@@ -2829,6 +2840,37 @@ void upd6383_device::exec_alu(u64 word)
 			//  ★★★ §120 the PER-SITE form -- one I-RAM slot, named by the caller.
 			if (m_cur_iw == m_pclriw)
 			{ m_p = 0; m_pw = 0; m_ptouch = false; m_pclriw_n++; }
+			//  ★★★ §121: `hi12' BIT 6, the flag the two products disagree about at sect. 120's
+			//  slot.  Counted UNCONDITIONALLY (rule 15: sect. 97 and sect. 100 each cost a run
+			//  to an arm that never reached its word), and the menu is the same enumerate-and-
+			//  eliminate shape `sd_act0b.py' uses -- surviving is not a decode.
+			//  ⚠ MODE 1 IS A POSITIVE CONTROL: bit 6 is set at kernel w29/w40/w48/w56, and
+			//  sect. 120 measured 29/48/56 INERT, so mode 1 must reproduce `PCLRIW=40' exactly.
+			//  If it does not, the arm is not firing where this comment says it is.
+			if (m_hi6c && ((upd6383_disassembler::hi12(word) >> 6) & 1))
+			{
+				m_hi6c_n++;
+				const u64 v = u64(m_cimm) & 0xfffffffffffULL;
+				const u32 d24 = u32(m_cimm >> ACC_SHIFT) & 0xffffff;
+				switch (m_hi6c)
+				{
+				case 1:  m_p = 0; m_pw = 0; m_ptouch = false; break;             // clear P
+				case 2:  m_p = (m_cur_unit1 ? m_accb : m_acc); m_pw = 9; m_ptouch = true; break;
+				case 3:  m_p = (m_cur_unit1 ? m_acc : m_accb); m_pw = 9; m_ptouch = true; break;
+				case 4:  m_p = u64(m_dram.read_dword(m_dp)) & 0xffffffULL;
+					 m_pw = 9; m_ptouch = true; break;                       // mem[ptr]
+				case 5:  m_p = v; m_pw = 9; m_ptouch = true; break;              // the immediate
+				case 6:  m_p = u64(u32(upd6383_disassembler::c_imm13(word) >> 5)) << ACC_SHIFT;
+					 m_pw = 9; m_ptouch = true; break;                       // the payload A
+				case 7:  (m_cur_unit1 ? m_accb : m_acc) = 0; break;              // clear acc
+				case 8:  (m_cur_unit1 ? m_acc : m_accb) = 0; break;              // clear accb
+				case 9:  m_p = u64(m_ta) << ACC_SHIFT; m_pw = 9; m_ptouch = true; break;
+				case 10: m_p = u64(m_tb) << ACC_SHIFT; m_pw = 9; m_ptouch = true; break;
+				case 11: (void)d24; m_p = 0; m_pw = 0; m_ptouch = false;
+					 (m_cur_unit1 ? m_accb : m_acc) = 0; break;              // both
+				default: break;
+				}
+			}
 			//  ★★★ §109: the enumerated destinations.  0 keeps the latch (the shipped
 			//  behaviour and the control); the rest are the six this file has named as
 			//  candidates since row 5 was written.
@@ -8420,6 +8462,8 @@ void upd6383_device::dump_frame_report() const
 				m_pclriw, (unsigned long long)m_pclriw_n);
 		logerror("upd6383: ★ §117/§118 CFMTPCLR (mode %u): words that invalidated P: %llu\n",
 				m_cfmtpclr, (unsigned long long)m_cfmtpclr_n);
+		logerror("upd6383: ★ §121 HI6C (mode %u): C-format words with `hi12' bit 6 set: %llu\n",
+				m_hi6c, (unsigned long long)m_hi6c_n);
 		logerror("upd6383: ★ §109 CFMTDST (mode %u): C-format immediates redirected: %llu\n",
 				m_cfmtdst, (unsigned long long)m_cfmtdst_n);
 		logerror("upd6383: ★ §102/§104 GATECLR (mode %u): gate words affected: %llu\n",

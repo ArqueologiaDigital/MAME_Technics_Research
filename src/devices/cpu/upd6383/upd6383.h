@@ -813,6 +813,14 @@ private:
 	u64  m_cfmtpclr_n = 0;
 	u32  m_cfmtdst = 0;
 	u64  m_cfmtdst_n = 0;
+	//  ★★★ §121: `hi12' BIT 6 on a C-format word -- the one flag separating the KN5000
+	//  kernel's `w40' (sect. 120's word) from the SX-WSA1R's byte-homologous copy of the
+	//  same header slot.  `dsp/tools/kernel_homolog.py' finds 34 of 42 kernel-header words
+	//  byte-identical inside `wsa1/.../struct_00_fd4093.dsm' (best unrelated image: 2), and
+	//  the two copies of THAT slot differ only in the 13-bit payload and in this bit.
+	//  0 = off (the shipped behaviour and the control).
+	u32  m_hi6c = 0;
+	u64  m_hi6c_n = 0;
 	u8   m_cram_wp = 0;                           //   the C-RAM write pointer, set by
 	bool m_cram_wp_set = false;
 	u32  m_cwr_runlen = 0, m_cwr_start = 0, m_nruns = 0;
