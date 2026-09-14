@@ -24,7 +24,8 @@ remaining ~321 distinct shapes into an automatable sweep.
 | Cross-checked, second toolchain | ✅ MAME's own `unidasm` reads back the intended code |
 | Patch live in the running machine | ✅ read out of CPU 1's address space by Lua |
 | Patched ROM boots | ✅ `wsa1r` runs (expected WRONG CHECKSUMS notice) |
-| **End-to-end over MIDI** | ⛔ **not yet** — needs a MIDI source, see below |
+| **End-to-end over MIDI** | ✅ **PASS** — file on `-midiin` → UART at 31250 baud → firmware ISR → monitor → reply |
+| **Milestone 2: PEEK** | ✅ **PASS** — reads CPU-1 memory back over MIDI, self-verified |
 | Transmit-from-ISR safety | ⛔ unproven |
 
 ## What was built
@@ -69,6 +70,47 @@ self-diagnosing — see the ABI GUARD note in `acoustic_modeling.h` and commit `
 
 ⚠ Worth keeping in mind: an incremental tree will re-create this whenever the macro is toggled.
 The guard now says so in words instead of crashing.
+
+## Milestone 2 — PEEK, and it works
+
+`F0 7E 7D 02 <6 address nibbles> F7` → `F0 7E 7D 7E <8 bytes as 16 nibbles> F7`.
+
+MIDI data bytes carry only 7 bits, so every payload byte travels as two bytes of one nibble each —
+wasteful and completely unambiguous, the right trade for a debug channel.
+
+**Self-verifying test**: the monitor was asked to read 8 bytes at `0xFBA236`, which is *its own
+reply table*, so the right answer was known in advance.
+
+```
+   MST_ADDR = 36 A2 FB 00          -> 0x00FBA236, exactly as sent
+   MST_BUF  = F0 7E 7D 7E 0F 00 07 0E 07 0D 07 0F 00 01 00 00 0F 07 00 00 F7
+   expected = F0 7E 7D 7E 0F 00 07 0E 07 0D 07 0F 00 01 00 00 0F 07 00 00 F7
+   source   = F0 7E 7D 7F 01 00 F7 00
+```
+
+Byte for byte. **CPU 1's memory is now readable over MIDI.**
+
+⚠ Two things caught by reading the code rather than by a wrong answer: only six address nibbles
+arrive, so byte `+3` of the 32-bit accumulator had to be cleared explicitly (`ld xde,(MST_ADDR)`
+reads all four); and the per-message state reset rides on `(0xA9)` bit 5 being cleared by
+`MIDI_RX_SysExStart` at every `F0`, so `.Lclaim` is the natural place to do it.
+
+### The RAM, and how it was chosen
+
+Milestone 1 used none. PEEK needs a little, and the address is **measured, not assumed**: a
+write-tap census over a full 12-second boot (`ramscan.lua`) found
+
+```
+   0x007F00..0x007FFF   227 writes
+   0x640000..0x6400FF     6
+   0x660000..0x6600FF     6
+   0x67F000..0x67F0FF     0      <- UNTOUCHED
+   0x67FF00..0x67FFFF     0      <- UNTOUCHED
+```
+
+so the monitor's state block sits at `0x67FF00`. ⚠ **Twelve seconds of boot is not the machine's
+whole life** — loading a disk or entering an unvisited mode could touch it. Re-run the census under
+more activity before trusting this on hardware.
 
 ## Next, in order
 
