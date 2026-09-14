@@ -15,7 +15,7 @@ rule. Nothing in the right-hand column may ever reach a PR.
 | commit | what | PR-worthy? |
 |---|---|---|
 | `5b32b3a` | **`l7a1429` startup SEGFAULT fixed + ABI guard.** `wsa1r` crashed on every start in the device constructor (`rep stos` overrunning) because `WSA1R_ENABLE_ACOUSTIC_HLE` changes `sizeof` from 8952 to 2112880 and MAME's build system does not treat `-D` flags as a dependency, so two objects disagreed. The guard turns a silent crash into a `fatalerror` naming the cause. | ★★ **Yes** — a real crash fix. The guard is defensive and self-contained. ⚠ Its comment references research macros; reword for upstream. |
-| *(uncommitted at time of writing)* | **`wsa1_midi_uart` RX/TX diagnostic**, `WSA1R_MIDI_LOG=1`, default off: logs assembled RX bytes, RXD transitions, and every byte handed to the TX FIFO. | ★ **Maybe** — a small, gated debug aid. Upstream may not want it; harmless if dropped. |
+| `5d76514` | **`wsa1_midi_uart` RX/TX diagnostic**, `WSA1R_MIDI_LOG=1`, default off: logs assembled RX bytes, RXD transitions, and every byte handed to the TX FIFO. | ★ **Maybe** — a small, gated debug aid. Upstream may not want it; harmless if dropped. |
 
 ⚠ **There is NO MIDI driver bug to upstream.** An earlier reading of mine — "the MIDI receive path
 is broken" — was **wrong**, and the correction is the useful part: MAME's own `midiin` deliberately
@@ -79,6 +79,18 @@ odd start address is rejected outright), and TLCS-900 registers are exposed **ba
 
 `-midiin <file>` → UART → firmware ISR → monitor → ring `0x601432` → INTTX0 → SC0BUF → `-midiout`
 → ALSA → `aseqdump`. **MAME's MIDI is validated in both directions, against an external program.**
+
+The same run seen at the UART, with `WSA1R_MIDI_LOG=1 … -log` (`error.log`), five bytes in and
+seven out, 320 µs apart in each direction — 31250 baud, as it should be:
+
+```
+   RX byte F0 (t=0011.000,319)   TX byte F0 (t=0011.0…)
+   RX byte 7E                    TX byte 7E
+   RX byte 7D                    TX byte 7D
+   RX byte 01                    TX byte 7F
+   RX byte F7                    TX byte 01 / 00 / F7
+                                 TX byte FE …   <- Active Sensing resumes
+```
 That is column-A knowledge even though the monitor is column B: any future MIDI-touching PR can
 cite it.
 
