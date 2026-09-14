@@ -391,11 +391,42 @@ public:
 	// can arrive faster than 31250 baud can shift them; the FIFO preserves order.
 	void tx_byte(uint8_t data);
 
+	void rx_line_w(int state)
+	{
+		if (midi_log() && state != m_rx_last)
+		{
+			m_rx_last = state;
+			if (m_rx_edges < 40)
+				logerror("wsa1_midi_uart: RXD -> %d (t=%s)\n", state, machine().time().to_string());
+			++m_rx_edges;
+		}
+		rx_w(state);
+	}
+
+	static bool midi_log()
+	{
+		static const bool on = getenv("WSA1R_MIDI_LOG") != nullptr;
+		return on;
+	}
+
 protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
 
-	virtual void rcv_complete() override { receive_register_extract(); m_rx_cb(get_received_char()); }
+	//  ★ DIAGNOSTIC (WSA1R_MIDI_LOG=1, default off): what the MIDI receive path actually does.
+	//  Added 2026-09-14 when a SysEx fed in with `-midiin' never reached the firmware's parser,
+	//  while MIDI_RX_Byte was nevertheless entered 102 times WITH NO INPUT MOUNTED AT ALL -- so
+	//  the bytes were spurious and the real ones were absent.  Logging both the assembled bytes
+	//  and the RXD line transitions separates "midiin sends nothing" from "the bridge mangles it".
+	virtual void rcv_complete() override
+	{
+		receive_register_extract();
+		const u8 b = get_received_char();
+		if (midi_log())
+			logerror("wsa1_midi_uart: RX byte %02X (t=%s)\n", b, machine().time().to_string());
+		m_rx_cb(b);
+	}
+
 	virtual void tra_callback() override { m_tx_cb(transmit_register_get_data_bit()); }
 	virtual void tra_complete() override { start_next_tx(); }
 
@@ -406,6 +437,8 @@ private:
 	devcb_write8      m_rx_cb;
 	devcb_write_line  m_tx_cb;
 	uint8_t           m_tx_ring[TX_FIFO];
+	int               m_rx_last = -1;          // last RXD level seen (diagnostic)
+	unsigned          m_rx_edges = 0;          // how many transitions (diagnostic)
 	unsigned          m_tx_head = 0;           // next write slot
 	unsigned          m_tx_tail = 0;           // next read slot
 	bool              m_tx_busy = false;
@@ -3882,7 +3915,7 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// wave mask ROMs are dumped.  Host: -mdin <port>.
 	WSA1_MIDI_UART(config, m_midi_uart, 0);
 	m_midi_uart->rx_cb().set(FUNC(wsa1_state::midi1_rx));
-	MIDI_PORT(config, "mdin", midiin_slot, "midiin").rxd_handler().set(m_midi_uart, FUNC(wsa1_midi_uart_device::rx_w));
+	MIDI_PORT(config, "mdin", midiin_slot, "midiin").rxd_handler().set(m_midi_uart, FUNC(wsa1_midi_uart_device::rx_line_w));
 
 	// --- MIDI OUT (rear MIDI1 jack) <- CPU 1's serial channel 0 ------------
 	//
