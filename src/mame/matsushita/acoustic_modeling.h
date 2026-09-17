@@ -350,6 +350,13 @@ DECLARE_DEVICE_TYPE(L7A1429, l7a1429_device)
 //  it compares its own `sizeof' against the one the device's own translation unit computed, and
 //  a mismatch is a `fatalerror' instead of a segfault.
 //
+//  ⚠ THE GUARD ONLY PROTECTS THE BINARY THAT CONTAINS IT.  On 2026-09-17 `wsa1r' segfaulted
+//  again, with this exact backtrace and no guard message: `kn7000-emulator/kn7000' was the
+//  binary published at 07:40 on 2026-09-14, i.e. BEFORE the 20:57 fix -- the rebuild was done
+//  but never published.  So the remedy has TWO steps: rebuild both files, then
+//  `bash tools/publish-binary.sh'.  A crash with NO guard message means you are running a
+//  binary older than this comment; check the published binary's mtime before debugging code.
+//
 //  ⚠ It DETECTS rather than prevents.  The layout could be made macro-independent by putting the
 //  HLE state behind a `unique_ptr' and making the sound-interface base unconditional; that is a
 //  bigger change to a driver, and it is recorded here as the proper fix rather than done in
