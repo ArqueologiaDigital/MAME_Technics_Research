@@ -109,9 +109,28 @@ Broadly:
 * `rt_dispon.lua` -- which code issues the final `DISP ON` and with what parameter byte, logging
   the CPU 1 PC for every DISP ON/OFF. The parameter is what turns the three layer attributes on,
   so this names the routine that makes the panel show anything.
+* `rt_who54.lua` -- who calls the DISP-attribute routine at prom_a 0xF8F7B8 with all three layers
+  on (parameter 0x54), by dumping the stack above SP when the parameter byte goes out.
 * `sfr.lua`, `tap.lua`, `linktap.lua`, `long*.lua`, `rt_probe.lua`, `waitjob.sh` -- earlier or
   narrower variants kept for provenance.
 
 ⚠ Run them with `-window` and a `-seconds_to_run` that is LONG ENOUGH. That is the whole lesson of
 this directory: the extraction's milestones land at t=85-135 s, and every conclusion drawn from a
 20-second window in this session was wrong.
+
+
+## ⚠ Late addition: the extraction's renderer never draws a pixel
+
+Instrumenting `draw_graphics_scanline()` at frame 8000 (t ~ 133 s, just after the UI lands):
+
+    UG#8000  vram_nonzero=5070  bytes_in_layers=5070     <- the content IS where the code reads
+    UG#8000  px_seen=0  px_set=0  mx=1                   <- and the drawing loop never runs
+
+So the extraction's `update_graphics()` is entered with all three pages enabled, correct geometry
+(`fp=15 lf=240 sl1=241 ap=40 ov=1 dm=3 d=1 sad1=0000 sad2=2600 sad3=4C00 cr=40 fx=8`), and every
+one of the 5070 non-zero display-RAM bytes inside the windows it reads -- and examines no pixels.
+
+★ `mx=1` is `MX_XOR`, **not** the `MX_OR` the device's own command log reports and not the `MX=0`
+that `wsa1r_lcd_command_census.py` reads out of all three of the firmware's immediate OVLAY writes.
+So `m_mx` is being set from a path not accounted for. That is the next thread to pull, and it is a
+defect in the upstream-candidate `sed1330` change, not in the machine.
