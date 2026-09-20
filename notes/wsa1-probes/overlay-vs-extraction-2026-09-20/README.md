@@ -182,3 +182,38 @@ sites, four taps.
 Kernel_Dispatch only when control register 0x3C (INTNEST) reads exactly 1, so counting opcode
 fetches at 0xF857D2 counts scheduler entries and 0xF857BE counts epilogue arrivals. A ratio of zero
 means INTNEST never reads 1.
+
+## ★★★ ROOT CAUSE: INTNEST is not implemented, so the RTOS never runs
+
+The six-axis comparison ranked this first, and it is measured, not argued.
+
+prom_a's `IRQ_Epilogue` at 0xF857B7 reads control register **0x3C (INTNEST)** and enters
+`Kernel_Dispatch` only when it reads exactly 1:
+
+    f857b8 ldc WA,cr3C / f857bb cp WA,1 / f857bd jr Z,0xf857c1
+
+Upstream's tlcs900 does not decode CR 0x3C at all -- `grep -ric intnest` over all five files is
+**zero**, and `900tbl.hxx` routes 0x3C to the shared `m_dummy`. So the comparison never matches and
+the scheduler is never entered:
+
+    epilogue arrivals / scheduler entries
+      overlay      35150 / 35127   (22 s)
+      extraction    9708 /     0   (147 s)
+
+**Zero, not late.** Everything that demonstrably works in the extraction -- the link latch, the
+SED1330 init, the 32 KiB clear, the bare DISP ON -- is straight-line boot and ISR code that needs
+no scheduler. The user interface is task work, so it never runs, and the panel keeps the boot
+message `ALL INITIAL SETTING!`.
+
+⚠ That message is NOT a blank-EEPROM prompt. Running the WORKING build with an empty
+`-nvram_directory` boots straight to SOUND MODE, so fresh settings are not what distinguishes the
+two builds. (An earlier note here guessed otherwise; it was wrong and is corrected.)
+
+⚠ It also means "the CPU core is exonerated" was wrong for a second reason beyond the 20-second
+window: the swap experiment cannot be trusted, because the shipped extraction binary contains
+neither `hdma_owns_vector` nor any INTNEST, and no binary survives that demonstrates the swap
+linked.
+
+Next after INTNEST: `hdma_owns_vector()` (micro-DMA steals INT0's own vector 0x28, so INTTC3 never
+clears bit 7 of RAM 0x8A and `Link_WaitBlockDone` can only time out -- this is the 492-byte
+shortfall), then `BURST_QUANTUM_US` 50 -> 200, which must land WITH the HDMA guard and never alone.
