@@ -85,3 +85,30 @@ Earlier pass: per-frame PC histogram for both CPUs; tick/flag/timeout sampler;
 return-value probe for every window that is noprw() in one build and unmapped in
 the other (all 00 in both); mechanical address-map row extractor for the two
 drivers.
+
+---
+
+## The rest of the probes in this directory
+
+Collected from the six-axis comparison run of 2026-09-20. The ones named in the sections above are
+the ones whose numbers are quoted; the remainder are the supporting instruments from the same pass,
+kept because a measurement whose scaffolding is gone cannot be repeated.
+
+Broadly:
+
+* `ticktap.lua`, `linkread*.lua`, `linkstate.lua`, `vram*.lua` -- the four quoted measurements.
+* `pcprobe.lua`, `pcsample.lua`, `pcs*.lua` -- per-frame PC histograms for both processors, used to
+  establish that neither CPU is wedged in a single loop.
+* `unmapval.lua` -- what every window that is `noprw()` in one build and unmapped in the other
+  actually returns. All `00` in both, which is what rules the open-bus theory out.
+* `hstap.lua`, `hs2.lua`, `hs3.lua`, `kern.lua`, `after.lua` -- handshake and kernel-entry taps.
+* `rows.py` -- mechanical address-map row extractor, so the two drivers' maps compare as ranges
+  rather than as text.
+* `cmp_strip.py`, `cmp_fnsplit.py` -- comment-stripping and per-function splitting, so "is this
+  file the same apart from comments" is answered by a diff rather than by eye.
+* `sfr.lua`, `tap.lua`, `linktap.lua`, `long*.lua`, `rt_probe.lua`, `waitjob.sh` -- earlier or
+  narrower variants kept for provenance.
+
+⚠ Run them with `-window` and a `-seconds_to_run` that is LONG ENOUGH. That is the whole lesson of
+this directory: the extraction's milestones land at t=85-135 s, and every conclusion drawn from a
+20-second window in this session was wrong.
