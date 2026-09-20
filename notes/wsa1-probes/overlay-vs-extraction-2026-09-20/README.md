@@ -134,3 +134,35 @@ one of the 5070 non-zero display-RAM bytes inside the windows it reads -- and ex
 that `wsa1r_lcd_command_census.py` reads out of all three of the firmware's immediate OVLAY writes.
 So `m_mx` is being set from a path not accounted for. That is the next thread to pull, and it is a
 defect in the upstream-candidate `sed1330` change, not in the machine.
+
+## ⛔ CORRECTION: the renderer is NOT at fault
+
+The section above reports `px_seen=0` with `m_fp=00` and `m_mx=1`, and reads as a bug in the
+upstream-candidate `sed1330` change. **It is not.** `rt_dispon.lua` on both builds settles it:
+
+    step                     overlay    extraction
+    DISP OFF  param 54       t=0.50     t=7.21
+    DISP ON   bare           t=0.51     t=7.22
+    DISP ON   param 04       t=1.94     t=72.17
+    DISP ON   param 00       t=4.69     t=116.39     <- fp = 0x00, all layers off
+    DISP OFF  bare           t=4.69     t=116.39
+    DISP ON   bare           t=4.70     t=116.40
+    DISP ON   param 54       t=4.76     NEVER        <- fp = 0x15, layers back on
+
+Same commands, same parameter bytes, **same program counters** (F8E8FA, F8E901, F8E99E, F8F7DD,
+F8F7EE, F8FC26, F8FCB1) -- the firmware walks one code path in both builds, 15-37x slower in the
+extraction, and the run ends before the step that re-enables the layers.
+
+`data_w` latches `m_fp = data >> 2` from the DISP parameter, so `fp = 0x00` is the firmware's own
+transient: the overlay sits in it for 60 ms. The renderer is reporting the register state it was
+given. `m_mx = 1` is the same story -- it comes from the fourth OVLAY write, the register-sourced
+one `wsa1r_lcd_command_census.py` cannot read statically, and the firmware has not yet reached
+whatever restores it.
+
+★ **So there are TWO faults, not three**: the 16x timebase and the undrained link latch. The blank
+panel is their visible consequence.
+
+⚠ Worth recording why this mattered. The obvious "fix" -- forcing the draw when `m_fp` says the
+layers are off -- would have made a generic device used by five other drivers ignore the hardware
+register it exists to obey, in order to paper over a Technics timing bug. The screen would have lit
+up and it would have looked like a success.
