@@ -106,6 +106,9 @@ Broadly:
   rather than as text.
 * `cmp_strip.py`, `cmp_fnsplit.py` -- comment-stripping and per-function splitting, so "is this
   file the same apart from comments" is answered by a diff rather than by eye.
+* `rt_dispon.lua` -- which code issues the final `DISP ON` and with what parameter byte, logging
+  the CPU 1 PC for every DISP ON/OFF. The parameter is what turns the three layer attributes on,
+  so this names the routine that makes the panel show anything.
 * `sfr.lua`, `tap.lua`, `linktap.lua`, `long*.lua`, `rt_probe.lua`, `waitjob.sh` -- earlier or
   narrower variants kept for provenance.
 
