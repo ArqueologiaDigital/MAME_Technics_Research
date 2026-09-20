@@ -217,3 +217,45 @@ linked.
 Next after INTNEST: `hdma_owns_vector()` (micro-DMA steals INT0's own vector 0x28, so INTTC3 never
 clears bit 7 of RAM 0x8A and `Link_WaitBlockDone` can only time out -- this is the 492-byte
 shortfall), then `BURST_QUANTUM_US` 50 -> 200, which must land WITH the HDMA guard and never alone.
+
+---
+
+## Later the same day: the branch was reordered, and one constant nearly went with it
+
+`technics-wsa1-driver` was rebuilt into 21 commits in two blocks — seven fixes under
+`src/devices`, then the machine — by cherry-pick replay, because `git rebase -i` is not available
+here. The measurements above are what the branch is *supposed* to reproduce, so the replay was
+checked against them rather than trusted.
+
+**The replay changed a measured number by accident.** The link commit had two scheduling values
+that happened to look like one:
+
+```
+config.set_maximum_quantum(attotime::from_usec(50));     // machine-wide slice
+static constexpr int BURST_QUANTUM_US = 200;             // perfect_quantum around a transfer
+```
+
+Folding the literal onto the named constant read as tidying and silently moved the machine-wide
+quantum 50 -> 200 us. **Only the pair 50/200 was ever measured to reach SOUND MODE.** They are now
+`BASE_QUANTUM_US` and `BURST_QUANTUM_US`, named separately, with the comment stating that neither
+is from a datasheet.
+
+**How it was caught, and what it means for the numbers above.** Diffing the replayed tip against
+the last verified tip, filtered to non-comment lines, and reading every surviving entry. After the
+fix, the whole behavioural delta between the reordered branch and the state these probes measured
+is:
+
+| change | effect on the machine |
+|---|---|
+| the keybed FIFO deleted | nothing ever wrote it; both readers returned 0 before and return 0 now |
+| `wsa1_cpanel` variant-1 support deleted | the rack is variant 2; `m_variant` defaulted to 2 and the two SEG6/SEG10 ports were already refused by `segment_is_wired()` |
+| `SPEAKER("speaker", 2)` for `lspeaker`/`rspeaker` | routing shape only |
+| `MACHINE_IMPERFECT_SOUND` for `MACHINE_NO_SOUND` | a flag |
+| `M_PI` -> `std::numbers::pi` | same value |
+
+So the "reaches SOUND MODE" result carries over **by construction**, not by re-running. Gates that
+were re-run: build (0 errors), `-validate` (exit 0), `-verifyroms wsa1r` (*"best available,
+1 were OK"*), `pr-gates.sh` (all pass), and the patch zip rebuilding the branch exactly.
+
+⚠ **Two constants that happen to be equal are not the same constant.** Before folding one into
+the other, ask which measurement each came from.
