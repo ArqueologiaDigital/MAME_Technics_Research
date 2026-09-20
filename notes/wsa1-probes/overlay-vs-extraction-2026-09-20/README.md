@@ -166,3 +166,19 @@ panel is their visible consequence.
 layers are off -- would have made a generic device used by five other drivers ignore the hardware
 register it exists to obey, in order to paper over a Technics timing bug. The screen would have lit
 up and it would have looked like a success.
+
+## ✅ The prescaler fix, restored and measured
+
+Correcting the four 8-bit timer prescaler taps in `tmp95c061.cpp` (T1 fc/8, T4 fc/32, T16 fc/128,
+T256 fc/2048 -- each was four bits too many) takes the extraction's timebase from **305** writes of
+RAM 0x0080 per ten emulated seconds to **~4880**, against the overlay's 4879. Measured with
+`ticktap.lua`; 5855 of 5857 writes come from PC 0xF82D14, the INTT1 handler, in both builds.
+
+Rewrite the shifts **by the tap its case label names**, not by the shift value: 11 means T16 in
+timers 0 and 2 and also in 1 and 3, and a value-based substitution can catch the wrong case. Twelve
+sites, four taps.
+
+`rt2_sched.lua` -- is the RTOS scheduler entered at all?  prom_a's IRQ_Epilogue at 0xF857B7 enters
+Kernel_Dispatch only when control register 0x3C (INTNEST) reads exactly 1, so counting opcode
+fetches at 0xF857D2 counts scheduler entries and 0xF857BE counts epilogue arrivals. A ratio of zero
+means INTNEST never reads 1.
