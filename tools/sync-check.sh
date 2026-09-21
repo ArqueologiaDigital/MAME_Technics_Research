@@ -39,7 +39,6 @@ C="${OVERLAY_SRC:-$HOME/compartilhado/kn7000_mame/src}"
 PATCHED=(
 	"src/devices/machine/intelfsh.h|FUJITSU_29LV160B"
 	"src/devices/machine/intelfsh.cpp|fujitsu_29lv160b_device"
-	"src/devices/machine/intelfsh.h|MACRONIX_29LV160B"
 	"scripts/src/bus.lua|TECHNICS_KN6000"
 )
 
