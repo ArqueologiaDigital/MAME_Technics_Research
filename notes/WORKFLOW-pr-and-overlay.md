@@ -8,7 +8,7 @@ Both jobs run continuously and in parallel. Neither waits for the other.
 | | path | branch | what it is |
 |---|---|---|---|
 | **A** | `~/compartilhado/mame` | `kn7000-base` | the overlay's MAME **base tree** |
-| **B** | `~/compartilhado/mame-pr` | `technics-rom-record` | upstream **PR staging** |
+| **B** | `~/compartilhado/mame-pr` | `technics-kn6000-expansion` | upstream **PR staging** |
 | **C** | `~/compartilhado/kn7000_mame/src` | (own repo) | overlay-only files, copied over the build tree |
 
 **A and B are git worktrees of one clone.** Both are checked out simultaneously, sharing one
@@ -40,7 +40,7 @@ Copying never commits — review with `git diff`, then commit in that worktree.
 ## Why it does not diff byte-for-byte
 
 A and B sit on **different upstream bases**: `kn7000-base` is a long-lived fork point,
-`technics-rom-record` is cut from current `upstream/master`. Shared upstream files therefore
+`technics-kn6000-expansion` is cut from current `upstream/master`. Shared upstream files therefore
 differ by a hundred-odd commits of history that has nothing to do with us. Demanding
 byte-equality would report permanent drift — **a check that can never pass is a check nobody
 runs**, and we have been bitten by exactly that failure mode elsewhere in this project.

@@ -4,7 +4,7 @@
 # THE LAYOUT (three places, never fewer):
 #
 #   A  ~/compartilhado/mame           @ kn7000-base           the overlay's MAME base tree
-#   B  ~/compartilhado/mame-pr        @ technics-rom-record    upstream PR staging
+#   B  ~/compartilhado/mame-pr        @ technics-kn6000-expansion    upstream PR staging
 #   C  ~/compartilhado/kn7000_mame/src                         overlay-only files, copied
 #                                                              over the build tree by build.sh
 #
@@ -16,7 +16,7 @@
 # WHY THIS DOES NOT DIFF FILES BYTE-FOR-BYTE
 # -----------------------------------------
 # A and B sit on DIFFERENT upstream bases (kn7000-base is a long-lived fork point;
-# technics-rom-record is cut from current upstream/master). Shared upstream files therefore
+# technics-kn6000-expansion is cut from current upstream/master). Shared upstream files therefore
 # differ by a hundred-odd commits of history that has nothing to do with us. Demanding
 # byte-equality would report permanent drift -- a check that can never pass, which nobody runs.
 #
@@ -74,7 +74,7 @@ ylw() { printf '\033[33m%s\033[0m\n' "$*"; }
 
 check_branches() {
 	local bad=0
-	for pair in "$A:kn7000-base" "$B:technics-rom-record"; do
+	for pair in "$A:kn7000-base" "$B:technics-kn6000-expansion"; do
 		local dir="${pair%%:*}" want="${pair##*:}" got
 		if [ ! -d "$dir" ]; then
 			red "MISSING worktree: $dir"
