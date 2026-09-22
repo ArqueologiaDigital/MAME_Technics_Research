@@ -2,7 +2,7 @@
 # Generator for src/mame/layout/kn7000.lay -- KN5000-style SVG-snippet layout,
 # arranged pixel-perfectly to the mockup (4000x3000 = 2x the 2000x1500 layout;
 # all measured coords are the mockup's /2). Three reusable blocks + two views.
-import io, math, os, re
+import io, json, math, os, re
 # Palette + element/label emitters are shared with the KN6000 generator: see tools/lay_kit.py
 # (PANEL/BTN/SILVER/... colours, E/TXTS registries, elem/two/label/P/L/panel_bg, the split-pill
 # helpers _hhalf/_gapseam/pair_h and wrap2).
@@ -196,7 +196,6 @@ two("pill_ring",70,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x
 # pill_ring_pair: ONE stadium ring enclosing the DIGITAL DRAWBAR + ORGAN TABS pair. Width = outer-circle
 # diameter (37) + centre-to-centre distance (56) = 93 (Felipe), so each rounded end hugs one button.
 two("pill_ring_pair",93,40,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="none" x="0.75" y="0.75" width="91.5" height="38.5" rx="19.25"/>')
-two("bank_wing",90,26,f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>',f'<path stroke="{STROKE}" stroke-width="1.5" fill="{BTN_D}" d="M 3,20 C 25,7 65,7 87,20 L 87,24 C 65,11 25,11 3,24 Z"/>')
 elem("big_ring",f'<image><data><![CDATA[<svg width="200" height="200"><circle cx="100" cy="100" r="97" fill="{SILVER_D}" stroke="#4a4a52" stroke-width="1.5"/></svg>]]></data></image>')   # silver ring around CUSTOM PANEL/FAVORITES/CUSTOMIZE (Felipe)
 # DEMO: grey body with the metal_btn dark recess ring (Felipe: external circle = metallic recess fill).
 two("demo_btn",42,42,f'<circle stroke="{STROKE}" fill="#2c2c32" cx="21" cy="21" r="20.5"/><circle stroke="#4a4a50" stroke-width="0.5" fill="{BTN}" cx="21" cy="21" r="16"/>',f'<circle stroke="{STROKE}" fill="#1e1e23" cx="21" cy="21" r="20.5"/><circle stroke="#34343a" stroke-width="0.5" fill="{BTN_D}" cx="21" cy="21" r="16"/>')
@@ -219,9 +218,39 @@ two("tempo_knob",100,100,f'<circle cx="50" cy="50" r="48" fill="{SILVER}" stroke
 # can orbit it around the knob centre -- it moves in a circle as the wheel is turned. Darker so it reads on
 # the silver disc. KN5000 dimensions (27px finger / 91px wheel).
 elem("tempo_finger", f'<image><data><![CDATA[<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#6e6e76" stroke="{STROKE}" stroke-width="1"/></svg>]]></data></image>')
-sp="".join(f'<line x1="80" y1="80" x2="{80+72*math.cos(a)}" y2="{80+72*math.sin(a)}" stroke="{STROKE}" stroke-width="1.5"/>' for a in [i*math.pi/4 for i in range(8)])
-two("panel_memory_dial",160,160,f'<circle cx="80" cy="80" r="77" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="24" fill="#4a5c5e" stroke="{STROKE}" stroke-width="2"/>',
-                                f'<circle cx="80" cy="80" r="77" fill="{SILVER}" stroke="{STROKE}" stroke-width="2"/>{sp}<circle cx="80" cy="80" r="73" fill="none" stroke="{STROKE}" stroke-width="7"/><circle cx="80" cy="80" r="24" fill="#33454a" stroke="{STROKE}" stroke-width="2"/>')
+# ---- PANEL MEMORY / BANK VIEW assembly ---------------------------------------------------
+# Every shape is Felipe's Inkscape trace of the real panel, extracted to tools/pm_shapes.json
+# by tools/pm_extract.py -- no geometry is typed in this file, so a re-trace is re-run, not
+# re-typed. Each canvas is 1:1 with its placement (a stroke width is in layout pixels) and
+# pm_extract pads it by 1.5px so a centred stroke is not clipped.
+# Colours: the cream face, its outline and the recess black are the values Felipe painted the
+# bank wings with; the SET cap keeps the slate of the dial centre it replaces.
+PM=json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"pm_shapes.json")))
+PMS=PM["shapes"]; PML=PM["labels"]
+CREAM="#d5cbb2"; CREAM_D="#b3aa96"; CREAM_EDGE="#6b635b"; RECESS="#231f18"
+SET_CAP="#4a5c5e"; SET_CAP_D="#33454a"
+def _pm_path(nm,f0,f1,stroke=CREAM_EDGE,sw=1.0):
+    d=PMS[nm]; w,h=d["canvas"]
+    g=lambda f:f'<path d="{d["d"]}" fill="{f}" stroke="{stroke}" stroke-width="{sw}"/>'
+    two(nm,f"{w:g}",f"{h:g}",g(f0),g(f1))
+def _pm_path1(nm,fill,stroke,sw=1.0):
+    d=PMS[nm]; w,h=d["canvas"]
+    elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">'
+            f'<path d="{d["d"]}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"/></svg>]]></data></image>')
+def _pm_circ(nm,fill,stroke,sw=1.0,pressed=None):
+    d=PMS[nm]; w,h=d["canvas"]; c=w/2.0
+    g=lambda f:f'<circle cx="{c:g}" cy="{c:g}" r="{d["r"]:g}" fill="{f}" stroke="{stroke}" stroke-width="{sw}"/>'
+    if pressed: two(nm,f"{w:g}",f"{h:g}",g(fill),g(pressed))
+    else: elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">{g(fill)}</svg>]]></data></image>')
+_pm_path1("pm_recess",RECESS,STROKE)                      # trough the two bank wings sit in
+_pm_path("pm_wing_l",CREAM,CREAM_D)                       # BANK VIEW
+_pm_path("pm_wing_r",CREAM,CREAM_D)                       # NEXT BANK
+_pm_circ("pm_rim","none",RECESS,2.5)                      # rosette rim      (decorative)
+_pm_circ("pm_hub",CREAM,CREAM_EDGE)                       # hub under SET    (decorative)
+_pm_circ("pm_set",SET_CAP,STROKE,1.5,pressed=SET_CAP_D)   # SET cap
+for _n in range(1,9):
+    _pm_path("pm_btn%d"%_n,CREAM,CREAM_D)                              # wedge button
+    _pm_path("pm_led%d"%_n,"#003a00","#20ff20",stroke=RECESS,sw=0.6)   # its LED window
 # reused KN5000 MSP performance-pad buttons (same shape on KN7000)
 two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
 two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
@@ -544,32 +573,32 @@ for j,cx in enumerate([360,425,485]): tg,mk=CONDUCT[j]; RB += [P("red_led",cx+12
 RB.append(L("CONDUCTOR",393,454,92,9,TXTH)); RB += [P("hline",360,458,26,3), P("hline",470,458,26,3)]
 # bank A (empirical screen sweep 2026-07-10): BANK VIEW = SEG10 0x80 (ev2013, PANEL MEMORY BANK
 # SELECT screen); NEXT BANK = SEG0F 0x80 (ev2012, advances the bank).
-RB += [L("BANK VIEW",583,220,72,8), P("green_led",585,230,8,8,name=PANEL_LED.get(("SEG10","0x80"))), P("bank_wing",580,238,90,26,tag="SEG10",mask="0x80"),
-       L("NEXT BANK",690,220,72,8), P("bank_wing",685,238,90,26,tag="SEG0F",mask="0x80"), L("PANEL MEMORY",608,255,172,10,TXTH),
-       P("panel_memory_dial",565,268,190,190),
-       # PANEL MEMORY SET : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG13 0x40 (ev2011 --
-       # fits the ev2010 recall / ev2011 SET / ev2012 NEXT BANK / ev2013 BANK VIEW pattern; a store test
-       # was inconclusive, maybe blocked by DATA PROTECTION). Transparent clickable over the dial centre.
-       P("inv_rect",639,342,42,42,tag="SEG13",mask="0x40"), L("SET",638,354,44,12,'<color red="0" green="0" blue="0"/>')]
-# PANEL MEMORY = an 8-way pie-slice dial (center 660,363) with a central SET. Each numbered slice
-# recalls a registration -- bank A ev2010 arg-mid = PM number - 1 (empirically confirmed: pressing
-# each opens "PMEM x-N"). Draw the number labels (r=88) + a clickable round button per slice (r=62).
-import math as _m
 # PM number -> its ev2010 recall bit (arg-mid = PM# - 1; verified: SEG0C 0x02 recalls PMEM A-1).
 PM_BY_NUM={1:("SEG0C","0x02"),2:("SEG12","0x40"),3:("SEG11","0x40"),4:("SEG10","0x40"),
            5:("SEG0F","0x40"),6:("SEG11","0x80"),7:("SEG12","0x80"),8:("SEG13","0x80")}
-# Physical slice order corrected per Felipe (2026-07-10; my earlier angular order was scrambled):
-# angular slot i shows PM_ORDER[i], recalls that registration, and lights its own LED.
-PM_ORDER=[2,1,8,7,6,5,4,3]
-for _i,_num in enumerate(PM_ORDER):
-    _a=_m.radians(-90+ (_i)*45 +200)
-    _lx=660+int(88*_m.cos(_a)); _ly=363+int(88*_m.sin(_a))
-    RB.append(L(str(_num),_lx-4,_ly-4,8,8,TXTH))
-    _bx=660+int(58*_m.cos(_a)); _by=363+int(58*_m.sin(_a))
-    _tg,_mk=PM_BY_NUM[_num]
-    RB.append(P("round_btn_silver",_bx-16,_by-16,32,32,tag=_tg,mask=_mk))   # PANEL MEMORY buttons = silver (Felipe)
-    _ex=660+int(80*_m.cos(_a)); _ey=363+int(80*_m.sin(_a))
-    RB.append(P("green_led",_ex-4,_ey-4,8,8,name=PANEL_LED.get((_tg,_mk))))
+_pb=lambda k:PMS[k]["bounds"]; _lb=lambda k:PML[k]["bounds"]
+RB += [P("pm_recess",*_pb("pm_recess")),
+       P("pm_wing_l",*_pb("pm_wing_l"),tag="SEG10",mask="0x80"),
+       P("pm_wing_r",*_pb("pm_wing_r"),tag="SEG0F",mask="0x80"),
+       P("green_led",*_pb("pm_bank_led"),name=PANEL_LED.get(("SEG10","0x80"))),
+       L("BANK VIEW",*_lb("bank_view")), L("NEXT BANK",*_lb("next_bank")),
+       L("PANEL MEMORY",*_lb("panel_memory"),TXTH),
+       P("pm_rim",*_pb("pm_rim")), P("pm_hub",*_pb("pm_hub"))]
+# The 8 wedges each recall a registration (bank A ev2010 arg-mid = PM number - 1, confirmed by the
+# "PMEM x-N" screen each one opens); the LED window at a wedge's inner end is that wedge's lamp.
+# Wedge -> number is NOT assigned here: pm_extract.py derives it by pairing each traced sector's
+# mid-angle with the nearest traced digit label, and the result agrees with the slot order Felipe
+# corrected on 2026-07-10 -- 4 at 22.5 deg, then 3/2/1/8/7/6/5 every 45 deg clockwise.
+for _n in range(1,9):
+    _tg,_mk=PM_BY_NUM[_n]
+    RB += [P("pm_led%d"%_n,*_pb("pm_led%d"%_n),name=PANEL_LED.get((_tg,_mk))),
+           P("pm_btn%d"%_n,*_pb("pm_btn%d"%_n),tag=_tg,mask=_mk),
+           L(str(_n),*_lb("num%d"%_n),TXTH)]
+# PANEL MEMORY SET : EDUCATED GUESS (Felipe 2026-07-11, will test+refine). SEG13 0x40 (ev2011 --
+# fits the ev2010 recall / ev2011 SET / ev2012 NEXT BANK / ev2013 BANK VIEW pattern; a store test
+# was inconclusive, maybe blocked by DATA PROTECTION).
+RB += [P("pm_set",*_pb("pm_set"),tag="SEG13",mask="0x40"),
+       L("SET",*_lb("set"),'<color red="0" green="0" blue="0"/>')]
 RB.append(P("big_ring",809,327,130,130))
 # CUSTOM PANEL = SEG0D 0x40 (CPR_SEG1 SW6, ev2016) -- physical position confirmed by Felipe 2026-07-14
 # (the driver bit that panel-driver-fixlist.md had flagged "Fn 2016 unused"). LED = cpr_led1.
@@ -768,8 +797,23 @@ LB,  _perms['left_block']   = _reorder_group(LB,  *_GDIM['left_block'])
 # perturbs the element indices that layout_nudges.json ref-checks (a mid-group cluster would drift them).
 _finger = [l for l in RB if 'id="tempo_finger"' in l]
 RB = [l for l in RB if 'id="tempo_finger"' not in l]
+# Pin the whole PANEL MEMORY / BANK VIEW assembly out of the reorder too, and re-append it as one
+# contiguous block in DECLARED order. Its stacking is load-bearing -- the recess under the wings,
+# the rim and hub under the wedges, the SET cap over the hub and under the SET legend -- and the
+# clustering pass is free to split it: it put the SET legend in the wedge cluster and the SET cap
+# 51 placements later, so the cap painted over its own legend. Identified by bounds, straight from
+# pm_shapes.json, because the refs of the labels ("set_2_text", the digits) are shared with other
+# parts of the panel. Nothing else in right_block overlaps this region, so being declared last --
+# i.e. hit-tested first -- takes no clicks from anything.
+_PMB={tuple(v["bounds"]) for v in PMS.values()} | {tuple(v["bounds"]) for v in PML.values()}
+def _is_pm(l):
+    _m=re.search(r'<bounds x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"',l)
+    return bool(_m) and tuple(float(x) for x in _m.groups()) in _PMB
+_pmblk = [l for l in RB if _is_pm(l)]
+assert len(_pmblk)==len(_PMB), f"PANEL MEMORY block: {len(_pmblk)} placements for {len(_PMB)} bounds"
+RB = [l for l in RB if not _is_pm(l)]
 RB,  _perms['right_block']  = _reorder_group(RB,  *_GDIM['right_block'])
-RB = RB[:-1] + _finger + [RB[-1]]   # insert before the closing </group> footer
+RB = RB[:-1] + [''] + _pmblk + _finger + [RB[-1]]   # insert before the closing </group> footer
 SDB, _perms['sd_block']     = _reorder_group(SDB, *_GDIM['sd_block'])
 import json as _json_perm
 open('/tmp/reorder_perms.json','w').write(_json_perm.dumps(_perms))
@@ -787,7 +831,9 @@ print(f"WROTE kn7000.lay: {len(E)} elements, {len(TXTS)} labels")
 # silently mis-moving. To refresh: re-export the SVG, re-run svg_semantic_diff, regenerate.
 import os as _os
 _nud=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),"layout_nudges.json")
-if _os.path.exists(_nud):
+# GEN_LAY_NO_NUDGE=1 writes the UN-NUDGED base .lay. Used by tools/migrate_nudges.py, which has
+# to compare the base before and after a structural edit to re-key layout_nudges.json.
+if _os.path.exists(_nud) and not _os.environ.get("GEN_LAY_NO_NUDGE"):
     import apply_nudges
     _by=apply_nudges.load_nudges(_nud)
     _patched,_st,_mism=apply_nudges.patch(open(_LAY_PATH).read(),_by)

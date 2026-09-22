@@ -55,23 +55,30 @@ def uscale(ctm):
 def xform_path(d, s, tx, ty, nd=4):
     """Rewrite a path's data under (x,y) -> (s*x+tx, s*y+ty). Uniform scale only.
 
-    SVG quirk that bit once: a LEADING relative moveto is absolute for its first coordinate
-    pair only -- the pairs after it are relative lineto. Promoting the whole command to M
-    turns those into absolute linetos and scatters the shape across the canvas, which is what
-    the --verify round trip caught (2263 px deviation on four of eight wedges).
+    Two SVG quirks, both of which produced broken output before they were handled:
+
+    * A LEADING relative moveto is absolute for its FIRST coordinate pair only; the pairs
+      after it are relative lineto. Promoting the whole command to M made those absolute and
+      scattered the shape across the canvas (2263 px, caught by verify()).
+    * The implicit lineto that follows a moveto must only be WRITTEN when the input actually
+      continues with bare coordinates. Emitting it unconditionally put a bare "L" in front of
+      the next explicit command ("M 70.5664 1.5 L A 143 ..."), which every renderer rejects --
+      and the coordinate round trip could not see it, because a command with no operands is a
+      no-op to a parser that only collects points. validate() exists for that.
     """
     out, i = [], 0
     toks = re.findall(r'[MmLlHhVvCcSsQqTtAaZz]|-?\d*\.?\d+(?:[eE]-?\d+)?', d)
-    cmd, cont, first = None, None, True
+    cmd, orig, pending, first = None, None, None, True
     f = lambda v: ('%.*f' % (nd, v)).rstrip('0').rstrip('.') or '0'
     while i < len(toks):
         t = toks[i]
         if re.match(r'[A-Za-z]', t):
-            if first and t == 'm':
-                cmd, cont = 'M', 'l'          # absolute first pair, relative afterwards
-            else:
-                cmd, cont = t, ('l' if t.islower() else 'L')
+            orig = t
+            cmd = 'M' if (first and t == 'm') else t     # leading m: absolute first pair
+            pending = None
             out.append(cmd); i += 1; continue
+        if pending:
+            out.append(pending); cmd = pending; pending = None
         c = cmd.upper(); rel = cmd.islower()
         n = {'M': 2, 'L': 2, 'H': 1, 'V': 1, 'C': 6, 'S': 4, 'Q': 4, 'T': 2, 'A': 7}[c]
         v = [float(x) for x in toks[i:i + n]]; i += n
@@ -87,12 +94,34 @@ def xform_path(d, s, tx, ty, nd=4):
             for k in range(0, n, 2):
                 out += ([f(s * v[k]), f(s * v[k + 1])] if rel
                         else [f(s * v[k] + tx), f(s * v[k + 1] + ty)])
-        first = False
         if c == 'M':
-            cmd = cont
-            if cmd != 'M' and cmd != 'm':
-                out.append(cmd)
+            # the implicit continuation is relative iff the ORIGINAL moveto was lowercase
+            pending = 'l' if orig.islower() else 'L'
+        first = False
     return ' '.join(out)
+
+
+ARITY = {'M': 2, 'L': 2, 'H': 1, 'V': 1, 'C': 6, 'S': 4, 'Q': 4, 'T': 2, 'A': 7, 'Z': 0}
+
+
+def validate(d):
+    """Every command must be followed by a whole number of operand groups, and no command may
+    be left with none. Returns the command sequence; raises on malformed data."""
+    toks = re.findall(r'[MmLlHhVvCcSsQqTtAaZz]|-?\d*\.?\d+(?:[eE]-?\d+)?', d)
+    seq, i = [], 0
+    while i < len(toks):
+        t = toks[i]
+        assert re.match(r'[A-Za-z]', t), "stray operand at token %d in %r" % (i, d[:60])
+        i += 1
+        n = ARITY[t.upper()]
+        got = 0
+        while i < len(toks) and not re.match(r'[A-Za-z]', toks[i]):
+            got += 1; i += 1
+        assert n == 0 or (got and got % n == 0), \
+            "command %r has %d operands, not a multiple of %d, in %r" % (t, got, n, d[:60])
+        assert n != 0 or got == 0, "command %r takes no operands but got %d" % (t, got)
+        seq.append(t)
+    return seq
 
 
 def inside(b, r):
@@ -270,6 +299,7 @@ def verify(svg=None, js=None):
         if e['kind'] != 'path':
             continue
         s = src[e['src']]
+        validate(e['d'])                     # syntax, which a point-only compare cannot see
         want = [apply(s[3], *p) for p in path_points(s[4]['d'])]
         bx, by = e['bounds'][0] + BLOCK[0], e['bounds'][1] + BLOCK[1]
         got = [(x + bx, y + by) for x, y in path_points(e['d'])]
