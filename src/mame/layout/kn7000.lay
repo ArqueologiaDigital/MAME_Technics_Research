@@ -205,18 +205,37 @@
 		<image state="0"><data><![CDATA[<svg width="21.737" height="33.704"><path d="M 20.2369 7.5206 l -6.0206 -6.0206 a 54.5866 54.5866 0 0 0 -12.7163 30.7039 h 8.5111 a 46.1115 46.1115 0 0 1 10.2258 -24.6833 z" fill="#303030" stroke="#231f18" stroke-width="0.6"/></svg>]]></data></image>
 		<image state="1"><data><![CDATA[<svg width="21.737" height="33.704"><path d="M 20.2369 7.5206 l -6.0206 -6.0206 a 54.5866 54.5866 0 0 0 -12.7163 30.7039 h 8.5111 a 46.1115 46.1115 0 0 1 10.2258 -24.6833 z" fill="#20ff20" stroke="#231f18" stroke-width="0.6"/></svg>]]></data></image>
 	</element>
-	<element name="msp_corner">
-		<image state="0"><data><![CDATA[<svg width="63" height="39"><path stroke="#000" fill="#909097" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="63" height="39"><path stroke="#000" fill="#7a7a82" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/></svg>]]></data></image>
+	<element name="perf_pad1">
+		<image state="0"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-33.18,-1341.51)"><path d="m 130.78881,1342.2615 a 239.19189,79.542613 0 0 0 -96.85614,14.3753 v 44.9341 h 96.85614 z" fill="#5f6367" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-33.18,-1341.51)"><path d="m 130.78881,1342.2615 a 239.19189,79.542613 0 0 0 -96.85614,14.3753 v 44.9341 h 96.85614 z" fill="#494d51" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
 	</element>
-	<element name="msp_corner_r">
-		<image state="0"><data><![CDATA[<svg width="63" height="39"><path transform="translate(63,0) scale(-1,1)" stroke="#000" fill="#909097" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="63" height="39"><path transform="translate(63,0) scale(-1,1)" stroke="#000" fill="#7a7a82" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/></svg>]]></data></image>
+	<element name="perf_pad2">
+		<image state="0"><data><![CDATA[<svg width="95.23" height="62.42"><g transform="translate(-130.04,-1339.90)"><path d="m 176.99489,1340.646 a 239.5692,79.597518 0 0 0 -46.20651,1.5747 v 59.3502 h 93.73175 v -59.25 a 239.5692,79.597518 0 0 0 -47.52524,-1.6749 z" fill="#5f6367" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="95.23" height="62.42"><g transform="translate(-130.04,-1339.90)"><path d="m 176.99489,1340.646 a 239.5692,79.597518 0 0 0 -46.20651,1.5747 v 59.3502 h 93.73175 v -59.25 a 239.5692,79.597518 0 0 0 -47.52524,-1.6749 z" fill="#494d51" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
 	</element>
-	<element name="msp_middle">
-		<image state="0"><data><![CDATA[<svg width="61" height="40"><path stroke="#000" fill="#909097" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/></svg>]]></data></image>
-		<image state="1"><data><![CDATA[<svg width="61" height="40"><path stroke="#000" fill="#7a7a82" d="M 30.1,0.5 C 20.1,0.5 10.2,0.9 0.5,1.5 V 39.5 H 60.5 V 1.6 C 50.5,0.9 40.3,0.5 30.1,0.5 Z"/></svg>]]></data></image>
+	<element name="perf_pad3">
+		<image state="0"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-223.77,-1341.51)"><path d="m 224.5197,1342.2631 v 59.3078 h 96.85613 v -44.6691 a 239.2026,79.674846 0 0 0 -96.85613,-14.6387 z" fill="#5f6367" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-223.77,-1341.51)"><path d="m 224.5197,1342.2631 v 59.3078 h 96.85613 v -44.6691 a 239.2026,79.674846 0 0 0 -96.85613,-14.6387 z" fill="#494d51" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
 	</element>
+	<element name="perf_pad4">
+		<image state="0"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-33.18,-1400.82)"><path d="M 130.78881,1401.5713 H 33.93267 v 44.9353 a 239.19189,79.536756 0 0 0 96.85614,14.3743 z" fill="#5f6367" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-33.18,-1400.82)"><path d="M 130.78881,1401.5713 H 33.93267 v 44.9353 a 239.19189,79.536756 0 0 0 96.85614,14.3743 z" fill="#494d51" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+	</element>
+	<element name="perf_pad5">
+		<image state="0"><data><![CDATA[<svg width="95.23" height="62.43"><g transform="translate(-130.04,-1400.82)"><path d="m 224.52013,1401.5713 h -93.73175 v 59.3506 a 239.5692,79.591768 0 0 0 46.20651,1.5745 239.5692,79.591768 0 0 0 47.52524,-1.679 z" fill="#5d6369" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="95.23" height="62.43"><g transform="translate(-130.04,-1400.82)"><path d="m 224.52013,1401.5713 h -93.73175 v 59.3506 a 239.5692,79.591768 0 0 0 46.20651,1.5745 239.5692,79.591768 0 0 0 47.52524,-1.679 z" fill="#474d53" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+	</element>
+	<element name="perf_pad6">
+		<image state="0"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-223.77,-1400.82)"><path d="M 321.37583,1401.5713 H 224.5197 v 59.308 a 239.2026,79.67474 0 0 0 96.85613,-14.6387 z" fill="#5f6367" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+		<image state="1"><data><![CDATA[<svg width="98.36" height="60.81"><g transform="translate(-223.77,-1400.82)"><path d="M 321.37583,1401.5713 H 224.5197 v 59.308 a 239.2026,79.67474 0 0 0 96.85613,-14.6387 z" fill="#494d51" stroke="#000" stroke-width="1.5"/></g></svg>]]></data></image>
+	</element>
+	<element name="pad_num1"><text string="1"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_num2"><text string="2"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_num3"><text string="3"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_num4"><text string="4"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_num5"><text string="5"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_num6"><text string="6"><color red="0.796" green="0.643" blue="0.490"/></text></element>
+	<element name="pad_solo"><text string="SOLO"><color red="0.796" green="0.643" blue="0.490"/></text></element>
 	<element name="music_note"><image><data><![CDATA[<svg width="20" height="24"><circle cx="6" cy="19" r="5" fill="#e0e0e0"/><rect x="10" y="2" width="2.5" height="17" fill="#e0e0e0"/><path d="M10,2 q8,2 8,8 q-3,-5 -8,-4 Z" fill="#e0e0e0"/></svg>]]></data></image></element>
 	<element name="screen_frame"><image><data><![CDATA[<svg width="1418" height="595"><rect x="3.5" y="3.5" width="1411" height="588" fill="none" stroke="#909097" stroke-width="5"/><rect x="8" y="8" width="1402" height="579" fill="#050505" stroke="#000" stroke-width="2"/></svg>]]></data></image></element>
 	<element name="bg_top"><image><data><![CDATA[<svg width="2000" height="997"><rect width="2000" height="997" fill="#38383a"/></svg>]]></data></image></element>
@@ -275,9 +294,7 @@
 	<element name="2_text"><text string="2"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="3_text"><text string="3"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="4_text"><text string="4"><color red="0.90" green="0.90" blue="0.90"/></text></element>
-	<element name="5_text"><text string="5"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="solo_text"><text string="SOLO"><color red="0.72" green="0.72" blue="0.74"/></text></element>
-	<element name="6_text"><text string="6"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="music_style_text"><text string="MUSIC STYLE"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="arranger_text"><text string="ARRANGER"><color red="0.90" green="0.90" blue="0.90"/></text></element>
 	<element name="one_touch_text"><text string="ONE TOUCH"><color red="0.90" green="0.90" blue="0.90"/></text></element>
@@ -716,20 +733,20 @@
 		<element ref="pill_wide" inputtag="cpanel:CPL_SEG0" inputmask="0x80"><!-- SYNCHRO & BREAK --><bounds x="855.8" y="352.4" width="105" height="28"/></element>
 		<element ref="red_led" name="cpl_led16"><!-- SYNCHRO & BREAK --><bounds x="904.2" y="327.0" width="8" height="8"/></element>
 
-		<element ref="msp_corner" inputtag="cpanel:CPL_SEG6" inputmask="0x10"><!-- PAD 1 --><bounds x="35" y="368" width="94" height="41"/></element>
-		<element ref="1_text"><bounds x="72" y="380" width="20" height="12"/></element>
-		<element ref="msp_middle" inputtag="cpanel:CPL_SEG4" inputmask="0x80"><!-- PAD 2 --><bounds x="129" y="368" width="100" height="41"/></element>
-		<element ref="2_text"><bounds x="169" y="380" width="20" height="12"/></element>
-		<element ref="msp_corner" inputtag="cpanel:CPL_SEG4" inputmask="0x20"><!-- PAD 3 --><orientation flipx="yes"/><bounds x="229" y="368" width="94" height="41"/></element>
-		<element ref="3_text"><bounds x="266" y="380" width="20" height="12"/></element>
-		<element ref="msp_corner" inputtag="cpanel:CPL_SEG6" inputmask="0x04"><!-- PAD 4 --><orientation flipy="yes"/><bounds x="35" y="409" width="94" height="51"/></element>
-		<element ref="4_text"><bounds x="72" y="426" width="20" height="12"/></element>
-		<element ref="msp_middle" inputtag="cpanel:CPL_SEG6" inputmask="0x01"><!-- PAD 5/SOLO --><orientation flipy="yes"/><bounds x="129" y="409" width="100" height="51"/></element>
-		<element ref="5_text"><bounds x="169" y="426" width="20" height="12"/></element>
-		<element ref="solo_text"><bounds x="165" y="438" width="28" height="7"/></element>
-		<element ref="msp_corner" inputtag="cpanel:CPL_SEG4" inputmask="0x40"><!-- PAD 6/SOLO --><orientation flipx="yes" flipy="yes"/><bounds x="229" y="409" width="94" height="51"/></element>
-		<element ref="6_text"><bounds x="266" y="426" width="20" height="12"/></element>
-		<element ref="solo_text"><bounds x="262" y="438" width="28" height="7"/></element>
+		<element ref="perf_pad1" inputtag="cpanel:CPL_SEG6" inputmask="0x10"><!-- PAD 1 --><bounds x="33.18" y="348.94" width="98.36" height="60.81"/></element>
+		<element ref="pad_num1"><bounds x="71.45" y="373.02" width="20" height="14"/></element>
+		<element ref="perf_pad2" inputtag="cpanel:CPL_SEG4" inputmask="0x80"><!-- PAD 2 --><bounds x="130.04" y="347.33" width="95.23" height="62.42"/></element>
+		<element ref="pad_num2"><bounds x="165.49" y="373.22" width="20" height="14"/></element>
+		<element ref="perf_pad3" inputtag="cpanel:CPL_SEG4" inputmask="0x20"><!-- PAD 3 --><bounds x="223.77" y="348.94" width="98.36" height="60.81"/></element>
+		<element ref="pad_num3"><bounds x="265.32" y="373.17" width="20" height="14"/></element>
+		<element ref="perf_pad4" inputtag="cpanel:CPL_SEG6" inputmask="0x04"><!-- PAD 4 --><bounds x="33.18" y="408.25" width="98.36" height="60.81"/></element>
+		<element ref="pad_num4"><bounds x="72.41" y="429.22" width="20" height="14"/></element>
+		<element ref="perf_pad5" inputtag="cpanel:CPL_SEG6" inputmask="0x01"><!-- PAD 5/SOLO --><bounds x="130.04" y="408.25" width="95.23" height="62.43"/></element>
+		<element ref="pad_num5"><bounds x="166.18" y="428.79" width="20" height="14"/></element>
+		<element ref="pad_solo"><bounds x="161.65" y="444.28" width="28" height="8"/></element>
+		<element ref="perf_pad6" inputtag="cpanel:CPL_SEG4" inputmask="0x40"><!-- PAD 6/SOLO --><bounds x="223.77" y="408.25" width="98.36" height="60.81"/></element>
+		<element ref="pad_num6"><bounds x="266.02" y="429.00" width="20" height="14"/></element>
+		<element ref="pad_solo"><bounds x="261.32" y="444.28" width="28" height="8"/></element>
 		<element ref="red_led" name="cpl_led56"><!-- SPLIT POINT G2 --><bounds x="202" y="478" width="8" height="8"/></element>
 		<element ref="split_arrow"><bounds x="200" y="489" width="12" height="10"/></element>
 
