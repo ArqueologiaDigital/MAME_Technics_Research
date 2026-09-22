@@ -104,12 +104,26 @@ def fidelity(text, js):
         want = tuple(round(v, 3) for v in lb['bounds'])
         if want not in labels:
             bad.append("label %s (%r): nothing placed at %s" % (key, lb['text'], list(want)))
+    # Felipe 2026-09-22: the SET cap and the START/STOP button are the same colour on the real
+    # instrument. gen_lay.py paints both from one constant; this proves they did not drift.
+    def fills(name):
+        m = re.search(r'<element name="%s">(.*?)</element>' % name, text, re.S)
+        return re.findall(r'fill="([^"]*)"', m.group(1)) if m else None
+    if fills('pm_set') != fills('pill_greycyan'):
+        bad.append("pm_set %s != pill_greycyan %s -- SET and START/STOP must match"
+                   % (fills('pm_set'), fills('pill_greycyan')))
+    for w in ('pm_wing_l', 'pm_wing_r'):
+        if any(f.startswith('url(') for f in fills(w) or []):
+            bad.append("%s is gradient-filled; Felipe asked for solid grey" % w)
+
     print("PART 1 -- FIDELITY")
     for msg in bad:
         print("  FAIL %s" % msg)
     if not bad:
         print("  OK: %d shapes and %d labels in the .lay match pm_shapes.json exactly"
               % (len(js['shapes']), len(js['labels'])))
+        print("      SET and START/STOP share one colour (%s); both wings are solid"
+              % ','.join(fills('pm_set')))
         print("      path round trip to absolute coordinates: worst deviation %.6f px" % worst)
     return not bad
 

@@ -145,7 +145,11 @@ two("pill_btn",37,21,f'<rect stroke="{STROKE}" fill="{BTN}" x="0.5" y="0.5" widt
 # 60x22 SVG scaled up ~1.75x, giving an oval outline with a heavy contour).
 two("pill_wide",105,28,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{SILVER_D}" x="0.75" y="0.75" width="103.5" height="26.5" rx="13.25"/>')
 two("pill_orange",60,22,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#b0561a" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#6f360c" x="0.75" y="0.75" width="58.5" height="20.5" rx="10.25"/>')
-two("pill_greycyan",105,50,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#4a5c5e" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="#33454a" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>')
+# GREYCYAN: the grey-green cap shared by START/STOP and the PANEL MEMORY SET button -- Felipe
+# 2026-09-22, "the PANEL MEMORY SET button has the same color as the START/STOP button". Named
+# here so the two cannot drift apart; both are flat-coloured plastic, not metal.
+GREYCYAN="#4a5c5e"; GREYCYAN_D="#33454a"
+two("pill_greycyan",105,50,f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{GREYCYAN}" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>',f'<rect stroke="{STROKE}" stroke-width="1.5" fill="{GREYCYAN_D}" x="0.75" y="0.75" width="103.5" height="48.5" rx="24.25"/>')
 two("round_red",29,29,f'<circle stroke="{STROKE}" fill="#98202e" cx="14.5" cy="14.5" r="14"/>',f'<circle stroke="{STROKE}" fill="#641a28" cx="14.5" cy="14.5" r="14"/>')
 two("red_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#3a0000"/>','<circle cx="4" cy="4" r="3.5" fill="#ff2020"/>')
 two("green_led",8,8,'<circle cx="4" cy="4" r="3.5" fill="#003a00"/>','<circle cx="4" cy="4" r="3.5" fill="#20ff20"/>')
@@ -265,28 +269,24 @@ def _pm_path1(nm,fill,stroke,sw=1.0):
     elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">'
             f'<path d="{d["d"]}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"/></svg>]]></data></image>')
 def _pm_wing(nm):
-    """Both wings are the same chrome as the wedges, lit from above: a vertical gradient.
-    userSpaceOnUse with the canvas height, NOT the objectBoundingBox default -- MAME's nanosvg
-    renders an objectBoundingBox gradient clamped to its last stop, which painted both wings a
-    flat #60554f (measured #5f544e in a screenshot). The same bug flattens metal_btn and sd_bg,
-    which still use the default."""
-    d=PMS[nm]; w,h=d["canvas"]
-    def g(f):
-        st=(f'<linearGradient id="wg" gradientUnits="userSpaceOnUse" '
-            f'x1="0" y1="0" x2="0" y2="{h:g}">'
-            f'<stop offset="0" stop-color="{_shade(_c("wing","light"),f)}"/>'
-            f'<stop offset="0.55" stop-color="{_shade(_c("wing"),f)}"/>'
-            f'<stop offset="1" stop-color="{_shade(_c("wing","dark"),f)}"/></linearGradient>')
-        return (f'<defs>{st}</defs><path d="{d["d"]}" fill="url(#wg)" '
-                f'stroke="{PM_EDGE}" stroke-width="1"/>')
-    two(nm,f"{w:g}",f"{h:g}",g(1.0),g(0.82))
-def _pm_circ(nm,stops,press=None,stroke=PM_EDGE,sw=1.0):
+    """BANK VIEW / NEXT BANK: a SOLID grey, per Felipe 2026-09-22 -- the photo's top-lit gradient
+    read too light. SILVER is the panel's unified button grey, the one he chose for every other
+    grey button here; the wings' own measured flat median is #b3b3b3 if a lighter one is wanted.
+    (These used to carry a linearGradient, and finding out why it rendered flat is how the
+    objectBoundingBox trap in metal_btn and sd_bg came to light -- see notes.)"""
+    _pm_path(nm,SILVER,SILVER_D)
+def _pm_circ(nm,stops,press=None,stroke=PM_EDGE,sw=1.0,flat=None):
+    """One circle of the rosette. `stops` shades it radially; `press` gives a pressed state by
+    darkening every stop; `flat` gives a pressed state as one explicit colour, for a plastic cap
+    whose pressed shade is a named panel colour rather than a multiple of its face."""
     d=PMS[nm]; w,h=d["canvas"]; c=w/2.0; R=d["r"]
-    def g(f):
-        return (f'<defs>{_rgrad(nm+"g",[(o,_shade(col,f)) for o,col in stops],c,c,R)}</defs>'
-                f'<circle cx="{c:g}" cy="{c:g}" r="{R:g}" fill="url(#{nm}g)" '
+    def g(f,solid=None):
+        fill=solid if solid else f'url(#{nm}g)'
+        defs='' if solid else f'<defs>{_rgrad(nm+"g",[(o,_shade(col,f)) for o,col in stops],c,c,R)}</defs>'
+        return (f'{defs}<circle cx="{c:g}" cy="{c:g}" r="{R:g}" fill="{fill}" '
                 f'stroke="{stroke}" stroke-width="{sw}"/>')
-    if press: two(nm,f"{w:g}",f"{h:g}",g(1.0),g(press))
+    if flat:  two(nm,f"{w:g}",f"{h:g}",g(1.0,stops[0][1]),g(1.0,flat))
+    elif press: two(nm,f"{w:g}",f"{h:g}",g(1.0),g(press))
     else: elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">{g(1.0)}</svg>]]></data></image>')
 # pm_rim is FILLED rather than an outline: the wedges and the hub paint over it, so what stays
 # visible is the recess -- the eight grooves between the wedges, and the ring round the rosette.
@@ -296,7 +296,7 @@ _pm_wing("pm_wing_l")                                     # BANK VIEW
 _pm_wing("pm_wing_r")                                     # NEXT BANK
 _pm_circ("pm_rim",[(0.0,_c("rim","dark")),(1.0,_c("rim","dark"))],stroke=STROKE)
 _pm_circ("pm_hub",[(0.0,_c("hub","light")),(0.62,_c("hub")),(1.0,_c("hub","dark"))])
-_pm_circ("pm_set",[(0.0,_c("set","light")),(1.0,_c("set","dark"))],press=0.82,sw=1.5)
+_pm_circ("pm_set",[(0.0,GREYCYAN),(1.0,GREYCYAN)],press=None,sw=1.5,flat=GREYCYAN_D)
 for _n in range(1,9):
     _d=PMS["pm_btn%d"%_n]
     two("pm_btn%d"%_n,f'{_d["canvas"][0]:g}',f'{_d["canvas"][1]:g}',
