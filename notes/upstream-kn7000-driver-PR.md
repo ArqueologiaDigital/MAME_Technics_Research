@@ -2,22 +2,42 @@
 
 Worktree `~/compartilhado/mame-pr-kn7000drv`, cut from `upstream/master` `ae30b778cae`.
 
-## Final state — four branches, all verified
+## Final state — the DSP is a placeholder
 
-| branch | files | +/- | verification |
+| branch | files | +/- | state |
 |---|---:|---|---|
-| `technics-cpulua-drc-token` | 1 | +1/-1 | the fix that makes the SHARC link |
-| `technics-mn10300-core` | 4 | +2023/-1 | builds; `-validate kn7000` exits 0 |
-| `technics-sharc-21065l` | 5 | +931/-86 | builds as part of the stack |
-| `technics-kn7000-driver-final` | 24 | +9277/-183 | builds; all five machines validate; **boots to the play screen** |
+| `technics-mn10300-core` | 4 | +2023/-1 | builds; validates |
+| `technics-kn7000-driver-skel` | 19 | +8113/-96 | builds; five machines validate; **boots to the play screen** |
+| `technics-cpulua-drc-token` | 1 | +1/-1 | independent bug fix, not needed by the driver |
+| `technics-sharc-21065l` | 5 | +931/-86 | **parked** — see below |
 
-The driver branch is the other three merged plus the driver commit. Every commit carries the
-AI-disclosure line; all four patch zips regenerate and were verified to rebuild their branch
-exactly (`tools/mame-pr-planning/refresh-patch-zip.sh`).
+### Why the SHARC work is parked
+
+The instruction was that the DSP chips stay as placeholders while research continues.
+An earlier cut of this PR shipped a full ADSP-21065L implementation instead, which is the
+opposite. The driver now carries **IC306 as a skeleton**, in exactly the shape the merged
+`wsa1.cpp` uses for its uPD6383GF DSPs:
+
+    DEFINE_DEVICE_TYPE(KN7000_DSP, kn7000_dsp_device, "kn7000_dsp", "ADSP-21065L (skeleton)")
+
+That is the part of the WSA1R that is genuinely reusable here — the *pattern*, not the
+device. The chips differ: the KN7000's effects DSP is an ADSP-21065L, the WSA1R's are
+uPD6383GF, and `grep -c 6383` over every KN7000 source returns 0.
+
+What the skeleton keeps is the host-port upload protocol, which is the driver's own decode
+of how the MN10300 talks to the DSP: the block framing, the PM/DM modes and the word
+counting all still run, they simply do not deliver into a core. What went with the DSP is
+the audio bridge that existed only to exchange frames with it; the tone generator now
+routes to the speakers directly, with the front-panel volume applied through
+`set_output_gain`.
+
+Dropping the DSP also dropped two dependencies. The driver no longer needs the ADSP-21065L
+device, and therefore no longer needs the `DRC_CPUS` fix that a SHARC-only build requires.
+Both stay as separate branches for when the DSP research lands.
 
 Boot check: `./kn kn7000 -str 45` reaches `PMEM: A-`, `8 Beat 1`, tempo 120, the three part
-names and the panel layout. `8 Beat 1` for every style is the expected consequence of
-excluding the synthetic rhythms resource.
+names and the panel layout — the same screen as with the DSP running, since the effects were
+never audible in a still frame.
 
 ## Where the RE archaeology lives
 
