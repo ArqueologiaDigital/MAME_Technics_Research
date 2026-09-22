@@ -1,7 +1,23 @@
 # Upstream PR: the KN7000 driver
 
-Branch `technics-kn7000-driver`, worktree `~/compartilhado/mame-pr-kn7000drv`, cut from
-`upstream/master`.
+Worktree `~/compartilhado/mame-pr-kn7000drv`, cut from `upstream/master` `ae30b778cae`.
+
+## Final state — four branches, all verified
+
+| branch | files | +/- | verification |
+|---|---:|---|---|
+| `technics-cpulua-drc-token` | 1 | +1/-1 | the fix that makes the SHARC link |
+| `technics-mn10300-core` | 4 | +2023/-1 | builds; `-validate kn7000` exits 0 |
+| `technics-sharc-21065l` | 5 | +931/-86 | builds as part of the stack |
+| `technics-kn7000-driver-final` | 24 | +9277/-183 | builds; all five machines validate; **boots to the play screen** |
+
+The driver branch is the other three merged plus the driver commit. Every commit carries the
+AI-disclosure line; all four patch zips regenerate and were verified to rebuild their branch
+exactly (`tools/mame-pr-planning/refresh-patch-zip.sh`).
+
+Boot check: `./kn kn7000 -str 45` reaches `PMEM: A-`, `8 Beat 1`, tempo 120, the three part
+names and the panel layout. `8 Beat 1` for every style is the expected consequence of
+excluding the synthetic rhythms resource.
 
 ## Where the RE archaeology lives
 
