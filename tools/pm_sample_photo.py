@@ -4,7 +4,8 @@
 Question it answers: "what colours should the traced PANEL MEMORY shapes be painted?"
 Felipe supplied the photo (2026-09-22) and asked for the button colours to be picked from it.
 
-    python3 tools/pm_sample_photo.py PHOTO.jpg [--centre CX CY] [--rset R]
+    python3 tools/pm_sample_photo.py [PHOTO.jpg] [--centre CX CY] [--rset R]
+    default: ~/compartilhado/KN7000/side-quests/findings/panel_memory_photo.jpg
 
 Registration: the SET cap is the darkest compact blob in the middle of the frame, so its
 centroid gives the rosette centre and its radius gives the photo's scale against
@@ -102,8 +103,12 @@ def stats(px, name, trim=0.04):
     return dict(median=hexof(med), dark=hexof(p15), light=hexof(p85))
 
 
+DEFAULT_PHOTO = os.path.expanduser(
+    '~/compartilhado/KN7000/side-quests/findings/panel_memory_photo.jpg')
+
+
 def main():
-    photo = sys.argv[1]
+    photo = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else DEFAULT_PHOTO
     js = json.load(open(os.path.join(HERE, 'pm_shapes.json')))
     rad = js['radii']; span = js['wedge']['span']
     a = np.asarray(Image.open(photo).convert('RGB')).astype(float)
