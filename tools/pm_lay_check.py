@@ -92,7 +92,8 @@ def fidelity(text, js):
             src = [(x + bx, y + by) for x, y in path_points(md.group(1))]
             worst = max([worst] + [math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in zip(pts, src)])
         else:
-            mr = re.search(r'\br="([\d.]+)"', body)
+            # the CIRCLE's own r -- a bare r=" also matches the radialGradient that shades it
+            mr = re.search(r'<circle\b[^>]*?\br="([\d.]+)"', body)
             if not mr or abs(float(mr.group(1)) - e['r']) > 1e-6:
                 bad.append("%s: radius differs from pm_shapes.json" % name)
     labels = {}

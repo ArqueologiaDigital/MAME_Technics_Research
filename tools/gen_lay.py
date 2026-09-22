@@ -223,13 +223,40 @@ elem("tempo_finger", f'<image><data><![CDATA[<svg width="16" height="16"><circle
 # by tools/pm_extract.py -- no geometry is typed in this file, so a re-trace is re-run, not
 # re-typed. Each canvas is 1:1 with its placement (a stroke width is in layout pixels) and
 # pm_extract pads it by 1.5px so a centred stroke is not clipped.
-# Colours: the cream face, its outline and the recess black are the values Felipe painted the
-# bank wings with; the SET cap keeps the slate of the dial centre it replaces.
+#
+# Every COLOUR is measured off Felipe's photograph of the assembly (2026-09-22) by
+# tools/pm_sample_photo.py -> tools/pm_colours.json, which registers the photo on the SET cap
+# and addresses each region in layout units. These parts are chrome over a dark recess, so they
+# are painted with gradients rather than flat fills: a wedge face is a toroidal bevel -- dark at
+# its inner edge, bright across the middle, dark again at the rim -- which a radialGradient
+# about the ROSETTE centre reproduces directly. Only the lit-LED green is a layout convention
+# rather than a measurement, since an unlit lamp is all a photograph can show.
 PM=json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"pm_shapes.json")))
 PMS=PM["shapes"]; PML=PM["labels"]
-CREAM="#d5cbb2"; CREAM_D="#b3aa96"; CREAM_EDGE="#6b635b"; RECESS="#231f18"
-SET_CAP="#4a5c5e"; SET_CAP_D="#33454a"
-def _pm_path(nm,f0,f1,stroke=CREAM_EDGE,sw=1.0):
+PMC=json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"pm_colours.json")))["regions"]
+def _c(region,which="median"): return PMC[region][which]
+def _shade(h,f):
+    _v=[int(h[i:i+2],16) for i in (1,3,5)]
+    return "#%02x%02x%02x"%tuple(min(255,max(0,int(round(x*f)))) for x in _v)
+PM_LED_ON="#20ff20"        # layout convention for a lit lamp; the photo can only show it unlit
+PM_EDGE="#231f18"          # the dark line between a chrome face and its groove
+_PMR=PM["radii"]; _PMCEN=PM["centre_local"]
+def _rgrad(gid,stops,cx,cy,r):
+    _st="".join(f'<stop offset="{o:.4f}" stop-color="{c}"/>' for o,c in stops)
+    return (f'<radialGradient id="{gid}" gradientUnits="userSpaceOnUse" '
+            f'cx="{cx:.3f}" cy="{cy:.3f}" r="{r:.3f}">{_st}</radialGradient>')
+def _pm_wedge_svg(nm,f=1.0):
+    """One wedge face, lit as the photo has it: the gradient is centred on the ROSETTE (which
+    lies outside this canvas, hence userSpaceOnUse) with a stop at the mid-radius of each of the
+    three bands pm_sample_photo.py measured across the face."""
+    d=PMS[nm]; b=d["bounds"]
+    cx=_PMCEN[0]-b[0]; cy=_PMCEN[1]-b[1]
+    r0,r1=_PMR["btn_in"],_PMR["btn_out"]; t=(r1-r0)/3.0
+    stops=[((r0+t*(k+0.5))/r1, _shade(_c("wedge_"+n),f))
+           for k,n in enumerate(("inner","middle","outer"))]
+    return (f'<defs>{_rgrad(nm+"g",stops,cx,cy,r1)}</defs>'
+            f'<path d="{d["d"]}" fill="url(#{nm}g)" stroke="{PM_EDGE}" stroke-width="1"/>')
+def _pm_path(nm,f0,f1,stroke=PM_EDGE,sw=1.0):
     d=PMS[nm]; w,h=d["canvas"]
     g=lambda f:f'<path d="{d["d"]}" fill="{f}" stroke="{stroke}" stroke-width="{sw}"/>'
     two(nm,f"{w:g}",f"{h:g}",g(f0),g(f1))
@@ -237,20 +264,39 @@ def _pm_path1(nm,fill,stroke,sw=1.0):
     d=PMS[nm]; w,h=d["canvas"]
     elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">'
             f'<path d="{d["d"]}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"/></svg>]]></data></image>')
-def _pm_circ(nm,fill,stroke,sw=1.0,pressed=None):
-    d=PMS[nm]; w,h=d["canvas"]; c=w/2.0
-    g=lambda f:f'<circle cx="{c:g}" cy="{c:g}" r="{d["r"]:g}" fill="{f}" stroke="{stroke}" stroke-width="{sw}"/>'
-    if pressed: two(nm,f"{w:g}",f"{h:g}",g(fill),g(pressed))
-    else: elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">{g(fill)}</svg>]]></data></image>')
-_pm_path1("pm_recess",RECESS,STROKE)                      # trough the two bank wings sit in
-_pm_path("pm_wing_l",CREAM,CREAM_D)                       # BANK VIEW
-_pm_path("pm_wing_r",CREAM,CREAM_D)                       # NEXT BANK
-_pm_circ("pm_rim","none",RECESS,2.5)                      # rosette rim      (decorative)
-_pm_circ("pm_hub",CREAM,CREAM_EDGE)                       # hub under SET    (decorative)
-_pm_circ("pm_set",SET_CAP,STROKE,1.5,pressed=SET_CAP_D)   # SET cap
+def _pm_wing(nm):
+    """Both wings are the same chrome as the wedges, lit from above: a vertical gradient."""
+    d=PMS[nm]; w,h=d["canvas"]
+    def g(f):
+        st=('<linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{_shade(_c("wing","light"),f)}"/>'
+            f'<stop offset="0.55" stop-color="{_shade(_c("wing"),f)}"/>'
+            f'<stop offset="1" stop-color="{_shade(_c("wing","dark"),f)}"/></linearGradient>')
+        return (f'<defs>{st}</defs><path d="{d["d"]}" fill="url(#wg)" '
+                f'stroke="{PM_EDGE}" stroke-width="1"/>')
+    two(nm,f"{w:g}",f"{h:g}",g(1.0),g(0.82))
+def _pm_circ(nm,stops,press=None,stroke=PM_EDGE,sw=1.0):
+    d=PMS[nm]; w,h=d["canvas"]; c=w/2.0; R=d["r"]
+    def g(f):
+        return (f'<defs>{_rgrad(nm+"g",[(o,_shade(col,f)) for o,col in stops],c,c,R)}</defs>'
+                f'<circle cx="{c:g}" cy="{c:g}" r="{R:g}" fill="url(#{nm}g)" '
+                f'stroke="{stroke}" stroke-width="{sw}"/>')
+    if press: two(nm,f"{w:g}",f"{h:g}",g(1.0),g(press))
+    else: elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">{g(1.0)}</svg>]]></data></image>')
+# pm_rim is FILLED rather than an outline: the wedges and the hub paint over it, so what stays
+# visible is the recess -- the eight grooves between the wedges, and the ring round the rosette.
+# That is what makes the grooves the colour the photo measures instead of the panel's colour.
+_pm_path1("pm_recess",_c("rim","dark"),STROKE)            # trough the two bank wings sit in
+_pm_wing("pm_wing_l")                                     # BANK VIEW
+_pm_wing("pm_wing_r")                                     # NEXT BANK
+_pm_circ("pm_rim",[(0.0,_c("rim","dark")),(1.0,_c("rim","dark"))],stroke=STROKE)
+_pm_circ("pm_hub",[(0.0,_c("hub","light")),(0.62,_c("hub")),(1.0,_c("hub","dark"))])
+_pm_circ("pm_set",[(0.0,_c("set","light")),(1.0,_c("set","dark"))],press=0.82,sw=1.5)
 for _n in range(1,9):
-    _pm_path("pm_btn%d"%_n,CREAM,CREAM_D)                              # wedge button
-    _pm_path("pm_led%d"%_n,"#003a00","#20ff20",stroke=RECESS,sw=0.6)   # its LED window
+    _d=PMS["pm_btn%d"%_n]
+    two("pm_btn%d"%_n,f'{_d["canvas"][0]:g}',f'{_d["canvas"][1]:g}',
+        _pm_wedge_svg("pm_btn%d"%_n),_pm_wedge_svg("pm_btn%d"%_n,0.80))
+    _pm_path("pm_led%d"%_n,_c("collar","dark"),PM_LED_ON,stroke=PM_EDGE,sw=0.6)
 # reused KN5000 MSP performance-pad buttons (same shape on KN7000)
 two("msp_corner",63,39,f'<path stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')
 two("msp_corner_r",63,39,f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>',f'<path transform="translate(63,0) scale(-1,1)" stroke="{STROKE}" fill="{MSP_D}" d="M 62.5,0.5 C 40,2 18.8,5.2 0.5,9.7 V 38.5 H 62.5 Z"/>')

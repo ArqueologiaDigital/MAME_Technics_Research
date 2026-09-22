@@ -1,0 +1,75 @@
+{
+ "centre": [
+  698.6885521885522,
+  550.9095117845118
+ ],
+ "px_per_unit": 3.1580941954228687,
+ "regions": {
+  "collar": {
+   "dark": "#362f27",
+   "light": "#938c7a",
+   "median": "#5a5147"
+  },
+  "groove": {
+   "dark": "#190703",
+   "light": "#c7bbad",
+   "median": "#8b8276"
+  },
+  "hub": {
+   "dark": "#62554d",
+   "light": "#e5dac8",
+   "median": "#948779"
+  },
+  "left_wing": {
+   "dark": "#635e5a",
+   "light": "#f9faf5",
+   "median": "#c6bbac"
+  },
+  "panel": {
+   "dark": "#5d5145",
+   "light": "#908373",
+   "median": "#746557"
+  },
+  "right_wing": {
+   "dark": "#584e45",
+   "light": "#dad2c5",
+   "median": "#b6aa9b"
+  },
+  "rim": {
+   "dark": "#312927",
+   "light": "#9a8a7b",
+   "median": "#6e6155"
+  },
+  "set": {
+   "dark": "#495049",
+   "light": "#6a6e60",
+   "median": "#525650"
+  },
+  "wedge": {
+   "dark": "#62564a",
+   "light": "#cec6bb",
+   "median": "#a59787"
+  },
+  "wedge_inner": {
+   "dark": "#5a4d47",
+   "light": "#cac0b4",
+   "median": "#847668"
+  },
+  "wedge_middle": {
+   "dark": "#a18f81",
+   "light": "#d7cbbb",
+   "median": "#bcb09f"
+  },
+  "wedge_outer": {
+   "dark": "#473a34",
+   "light": "#cfc2b2",
+   "median": "#877a6c"
+  },
+  "wing": {
+   "dark": "#60554f",
+   "light": "#ebe2d1",
+   "median": "#beb2a2"
+  }
+ },
+ "source": "2.jpg"
+}
