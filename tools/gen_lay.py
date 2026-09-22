@@ -265,10 +265,15 @@ def _pm_path1(nm,fill,stroke,sw=1.0):
     elem(nm,f'<image><data><![CDATA[<svg width="{w:g}" height="{h:g}">'
             f'<path d="{d["d"]}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"/></svg>]]></data></image>')
 def _pm_wing(nm):
-    """Both wings are the same chrome as the wedges, lit from above: a vertical gradient."""
+    """Both wings are the same chrome as the wedges, lit from above: a vertical gradient.
+    userSpaceOnUse with the canvas height, NOT the objectBoundingBox default -- MAME's nanosvg
+    renders an objectBoundingBox gradient clamped to its last stop, which painted both wings a
+    flat #60554f (measured #5f544e in a screenshot). The same bug flattens metal_btn and sd_bg,
+    which still use the default."""
     d=PMS[nm]; w,h=d["canvas"]
     def g(f):
-        st=('<linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">'
+        st=(f'<linearGradient id="wg" gradientUnits="userSpaceOnUse" '
+            f'x1="0" y1="0" x2="0" y2="{h:g}">'
             f'<stop offset="0" stop-color="{_shade(_c("wing","light"),f)}"/>'
             f'<stop offset="0.55" stop-color="{_shade(_c("wing"),f)}"/>'
             f'<stop offset="1" stop-color="{_shade(_c("wing","dark"),f)}"/></linearGradient>')
