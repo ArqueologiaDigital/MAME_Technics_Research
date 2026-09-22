@@ -4,7 +4,7 @@
 Question it answers: "what colours should the traced PANEL MEMORY shapes be painted?"
 Felipe supplied the photo (2026-09-22) and asked for the button colours to be picked from it.
 
-    python3 tools/pm_sample_photo.py [PHOTO.jpg] [--centre CX CY] [--rset R]
+    python3 tools/pm_sample_photo.py [PHOTO.jpg] [--centre CX CY] [--rset R] [--desat F]
     default: ~/compartilhado/KN7000/side-quests/findings/panel_memory_photo.jpg
 
 Registration: the SET cap is the darkest compact blob in the middle of the frame, so its
@@ -85,8 +85,25 @@ def check_registration(a, cx, cy, s, rad):
           % (100 * (1 - rim / face), 100 * (1 - rim / panel)))
 
 
+DESAT = 1.0          # overridden by --desat
+
+
 def hexof(c):
-    return '#%02x%02x%02x' % tuple(int(round(v)) for v in c)
+    """Format a sampled colour, pulled toward neutral by DESAT.
+
+    The photograph carries a warm illuminant: the panel around the assembly samples #746557.
+    Felipe, who owns the instrument, says the assembly reads GREY, and his testimony outranks a
+    white balance nobody measured -- so the chroma is removed and only the RELATIVE brightness
+    the photo establishes is kept, which is the part worth measuring in the first place.
+
+    Neutralising on a known grey was tried first and over-corrects: scaling the channels so the
+    PANEL becomes neutral swings the chrome to #a4b0b9, a clear blue, because the panel's warm
+    paint and the buttons' bright metal do not share a spectrum. Blending toward each colour's
+    own Rec. 709 luma cannot overshoot. DESAT=1.0 is fully neutral; lower it to keep some hue.
+    """
+    y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    c = [v + (y - v) * DESAT for v in c]
+    return '#%02x%02x%02x' % tuple(int(round(min(255, max(0, v)))) for v in c)
 
 
 def stats(px, name, trim=0.04):
@@ -109,6 +126,9 @@ DEFAULT_PHOTO = os.path.expanduser(
 
 def main():
     photo = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else DEFAULT_PHOTO
+    global DESAT
+    if '--desat' in sys.argv:
+        DESAT = float(sys.argv[sys.argv.index('--desat') + 1])
     js = json.load(open(os.path.join(HERE, 'pm_shapes.json')))
     rad = js['radii']; span = js['wedge']['span']
     a = np.asarray(Image.open(photo).convert('RGB')).astype(float)
@@ -186,6 +206,7 @@ def main():
     js2 = os.path.join(HERE, 'pm_colours.json')
     with open(js2, 'w') as fh:
         json.dump(dict(source=os.path.basename(photo), centre=[cx, cy], px_per_unit=s,
+                       desat=DESAT,
                        regions={k: v for k, v in out.items() if v}), fh, indent=1, sort_keys=True)
         fh.write('\n')
     print("\nwrote %s" % js2)

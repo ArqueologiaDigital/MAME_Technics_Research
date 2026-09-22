@@ -3,72 +3,73 @@
   698.6885521885522,
   550.9095117845118
  ],
+ "desat": 1.0,
  "px_per_unit": 3.1580941954228687,
  "regions": {
   "collar": {
-   "dark": "#362f27",
-   "light": "#938c7a",
-   "median": "#5a5147"
+   "dark": "#303030",
+   "light": "#8c8c8c",
+   "median": "#525252"
   },
   "groove": {
-   "dark": "#190703",
-   "light": "#c7bbad",
-   "median": "#8b8276"
+   "dark": "#0b0b0b",
+   "light": "#bdbdbd",
+   "median": "#838383"
   },
   "hub": {
-   "dark": "#62554d",
-   "light": "#e5dac8",
-   "median": "#948779"
+   "dark": "#575757",
+   "light": "#dbdbdb",
+   "median": "#898989"
   },
   "left_wing": {
-   "dark": "#635e5a",
-   "light": "#f9faf5",
-   "median": "#c6bbac"
+   "dark": "#5f5f5f",
+   "light": "#f9f9f9",
+   "median": "#bcbcbc"
   },
   "panel": {
-   "dark": "#5d5145",
-   "light": "#908373",
-   "median": "#746557"
+   "dark": "#535353",
+   "light": "#858585",
+   "median": "#676767"
   },
   "right_wing": {
-   "dark": "#584e45",
-   "light": "#dad2c5",
-   "median": "#b6aa9b"
+   "dark": "#4f4f4f",
+   "light": "#d3d3d3",
+   "median": "#ababab"
   },
   "rim": {
-   "dark": "#312927",
-   "light": "#9a8a7b",
-   "median": "#6e6155"
+   "dark": "#2b2b2b",
+   "light": "#8c8c8c",
+   "median": "#636363"
   },
   "set": {
-   "dark": "#495049",
-   "light": "#6a6e60",
-   "median": "#525650"
+   "dark": "#4e4e4e",
+   "light": "#6c6c6c",
+   "median": "#555555"
   },
   "wedge": {
-   "dark": "#62564a",
-   "light": "#cec6bb",
-   "median": "#a59787"
+   "dark": "#585858",
+   "light": "#c7c7c7",
+   "median": "#999999"
   },
   "wedge_inner": {
-   "dark": "#5a4d47",
-   "light": "#cac0b4",
-   "median": "#847668"
+   "dark": "#4f4f4f",
+   "light": "#c1c1c1",
+   "median": "#787878"
   },
   "wedge_middle": {
-   "dark": "#a18f81",
-   "light": "#d7cbbb",
-   "median": "#bcb09f"
+   "dark": "#929292",
+   "light": "#cccccc",
+   "median": "#b1b1b1"
   },
   "wedge_outer": {
-   "dark": "#473a34",
-   "light": "#cfc2b2",
-   "median": "#877a6c"
+   "dark": "#3c3c3c",
+   "light": "#c4c4c4",
+   "median": "#7c7c7c"
   },
   "wing": {
-   "dark": "#60554f",
-   "light": "#ebe2d1",
-   "median": "#beb2a2"
+   "dark": "#575757",
+   "light": "#e3e3e3",
+   "median": "#b3b3b3"
   }
  },
  "source": "panel_memory_photo.jpg"
