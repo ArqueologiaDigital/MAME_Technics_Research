@@ -60,8 +60,32 @@ do not share the part, so there is no WSA1R placeholder to reuse here.
 What the KN7000 does have unresearched is the pair of custom tone generators IC201/IC205,
 whose wave ROMs are undumped — see the exclusions above.
 
-## Dependency
+## Dependencies — four PRs, not one
 
-Upstream has only the MN10300 **disassembler**. The driver needs the execution core
-(`src/devices/cpu/mn10300/mn10300.*`, ~2000 lines) plus its `scripts/src/cpu.lua`
-promotion, so that goes first and the driver PR sits on top of it.
+Building the driver against `upstream/master` surfaced three prerequisites, two of them
+missing devices and one a real build-script bug.
+
+| # | PR | files | state |
+|---|---|---|---|
+| 1 | `scripts/src/cpu.lua: DRC_CPUS names a CPU token that does not exist` | 1 | one token |
+| 2 | `cpu/mn10300: add an execution core` | 4 | builds, `-validate kn7000` exits 0 |
+| 3 | `cpu/sharc: add the ADSP-21065L` | 5 | ~1000 lines |
+| 4 | `matsushita/kn7000: the driver` | 15 | needs 1-3 |
+
+**1 is a bug we can now prove.** `DRC_CPUS` lists `"ADSP21062"`; the SHARC's actual token,
+declared at `cpu.lua:252` and tested at `:255`, is `"ADSP2106X"`. No CPU named `ADSP21062`
+exists, so a SHARC never sets `CPU_INCLUDE_DRC`, and any build whose only DRC-using CPU is
+the SHARC fails to link with ~1700 undefined references into `drcuml`/`uml`. A full MAME
+build hides it because MIPS3, POWERPC and friends pull the DRC in anyway. Reproduce:
+
+    make SUBTARGET=kn SOURCES=src/mame/matsushita/kn7000.cpp REGENIE=1
+
+The 2026-09-19 plan already listed this at position 5 from a static reading. This is the
+first time it has been made to fail.
+
+**3 is not just a new device type.** The ADSP-21065L has its internal RAM at 0x8000 rather
+than 0x20000, does not populate `m_blocks`, and therefore needs its own memory maps and DRC
+memory routing — which is most of the ~550 changed lines in `sharcdrc.cpp`.
+
+Upstream has only the MN10300 **disassembler**, so 2 ships the execution core plus its
+`cpu.lua` promotion.
