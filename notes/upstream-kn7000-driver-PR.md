@@ -2,42 +2,39 @@
 
 Worktree `~/compartilhado/mame-pr-kn7000drv`, cut from `upstream/master` `ae30b778cae`.
 
-## Final state — the DSP is a placeholder
+## Final state
+
+The rule, from Felipe: **a chip documented by its manufacturer gets emulated; a chip that
+still needs reverse engineering gets a placeholder.**
 
 | branch | files | +/- | state |
 |---|---:|---|---|
+| `technics-cpulua-drc-token` | 1 | +1/-1 | one token; the SHARC cannot link without it |
 | `technics-mn10300-core` | 4 | +2023/-1 | builds; validates |
-| `technics-kn7000-driver-skel` | 19 | +8113/-96 | builds; five machines validate; **boots to the play screen** |
-| `technics-cpulua-drc-token` | 1 | +1/-1 | independent bug fix, not needed by the driver |
-| `technics-sharc-21065l` | 5 | +931/-86 | **parked** — see below |
+| `technics-sharc-21065l` | 5 | +931/-86 | the ADSP-21065L |
+| `technics-kn7000-driver-final` | 24 | +9277/-183 | the other three merged plus the driver; five machines validate; **boots to the play screen** |
 
-### Why the SHARC work is parked
+### What is emulated, and what is a placeholder
 
-The instruction was that the DSP chips stay as placeholders while research continues.
-An earlier cut of this PR shipped a full ADSP-21065L implementation instead, which is the
-opposite. The driver now carries **IC306 as a skeleton**, in exactly the shape the merged
-`wsa1.cpp` uses for its uPD6383GF DSPs:
+**Emulated — the ADSP-21065L (IC306).** Written against Analog Devices' own Technical
+Reference, which the code cites throughout (`TRM B-6`, `TRM B-57`, `TRM Table B-5`, "per the
+21065L Technical Reference"); the manual is in `KN7000/ADSP-21065L_SHARC_DSP_Technical_
+Reference.pdf`. A documented part is not the kind of thing this project holds back.
 
-    DEFINE_DEVICE_TYPE(KN7000_DSP, kn7000_dsp_device, "kn7000_dsp", "ADSP-21065L (skeleton)")
+**Placeholder — the tone generators IC201/IC205** (`C1BB00000709`). Custom Panasonic parts
+whose wave ROMs are undumped, so the device is named for what it is: *"KN7000 Tone Generator
+(firmware-driven, placeholder timbre)"*.
 
-That is the part of the WSA1R that is genuinely reusable here — the *pattern*, not the
-device. The chips differ: the KN7000's effects DSP is an ADSP-21065L, the WSA1R's are
-uPD6383GF, and `grep -c 6383` over every KN7000 source returns 0.
+For the record, the chips this rule holds back elsewhere are the WSA1R's **L7A1429 acoustic
+modelling** LSIs and its **uPD6383GF** DSPs — parts with no public documentation, still
+under reverse engineering, and already skeletons in the merged `wsa1.cpp`.
 
-What the skeleton keeps is the host-port upload protocol, which is the driver's own decode
-of how the MN10300 talks to the DSP: the block framing, the PM/DM modes and the word
-counting all still run, they simply do not deliver into a core. What went with the DSP is
-the audio bridge that existed only to exchange frames with it; the tone generator now
-routes to the speakers directly, with the front-panel volume applied through
-`set_output_gain`.
-
-Dropping the DSP also dropped two dependencies. The driver no longer needs the ADSP-21065L
-device, and therefore no longer needs the `DRC_CPUS` fix that a SHARC-only build requires.
-Both stay as separate branches for when the DSP research lands.
+An earlier cut of this PR had the DSP as a skeleton on the mistaken reasoning that any DSP
+should wait for research. The distinction that matters is not "is it a DSP" but "is it
+documented", and the ADSP-21065L is.
 
 Boot check: `./kn kn7000 -str 45` reaches `PMEM: A-`, `8 Beat 1`, tempo 120, the three part
-names and the panel layout — the same screen as with the DSP running, since the effects were
-never audible in a still frame.
+names and the panel layout.
 
 ## Where the RE archaeology lives
 
