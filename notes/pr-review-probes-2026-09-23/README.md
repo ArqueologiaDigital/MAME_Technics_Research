@@ -67,6 +67,31 @@ them, so this closes a pre-existing divergence for Model 2/3, Hornet and Taito J
 | `cdens.py` | comment-line density per header | the measurement the reviewer used on #15919 and #16204 |
 | `null.py` | what does that figure look like on comparable merged code? | the null, without which the density number means nothing |
 
+**The null, measured with `cdens.py` itself, 2026-09-23.** Every
+`src/devices/cpu/*/*.h` of 150+ lines in `upstream/master`, n=238, column
+`pct_nobanner` (comment-only lines as a fraction of non-blank lines, excluding
+the mandatory licence banner):
+
+| median | p75 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| 6.1% | 12.4% | 18.3% | 24.3% | 46.0% | 73.8% |
+
+`mn10300.h` sat at **27.6%** — the 95th percentile — and is now **19.7%**, the
+92nd. Reproduce with:
+
+```sh
+git archive upstream/master src/devices/cpu | tar -x -C <scratch>
+python3 cdens.py <scratch>/src/devices/cpu/*/*.h    # then filter to >=150 lines
+```
+
+⚠ An earlier pass in the same session quoted median 6.3 / p75 10.3 / p90 14.4 /
+p95 19.3 and put the header at 17.6%. Those came from a different definition of
+a comment line (every line whose first non-space characters are `//`, `/*` or
+`*`, over ALL lines including blanks) and are not comparable to the table above.
+The conclusion — the file was in the extreme tail and no longer is — holds under
+both. The figures to quote are `cdens.py`'s, because that is the probe that is
+committed.
+
 ## Include order
 
 | probe | question | answer |
