@@ -2190,6 +2190,9 @@ void kn7000_state::kn6500(machine_config &config)
 // that window must alias work RAM instead of being a separate share (see maincpu_mem).
 void kn7000_state::kn2400(machine_config &config)
 {
+	// PLACEHOLDER: this inherits the KN7000's control panel and artwork. The
+	// SX-KN2400/KN2600 front panel is a different and smaller one, and neither
+	// its scan matrix nor its layout has been drawn.
 	kn7000(config);
 	m_ram90_workram = true;
 	m_lcd_kn24 = true;
