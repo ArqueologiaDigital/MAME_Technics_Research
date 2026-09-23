@@ -1,0 +1,2 @@
+
+| `interleave_roms.py` | "what bytes does the CPU actually see?" — weaves the even/odd program ROM halves back into a flat image, as `ROM_LOAD32_WORD` does inside MAME, so the firmware can be searched or disassembled without the emulator. Its `--set kn7000` check that the image opens with the reset jump is a positive control on the halves being the right way round. | `python3 tools/interleave_roms.py --set kn7000 -C <romdir>` |

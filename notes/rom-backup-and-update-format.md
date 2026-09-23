@@ -95,7 +95,7 @@ Corroborating evidence that the resident **PROGRAM updater is absent from `kn700
 - **INSTALL (erase+flash):** insert disk 1, hold **PANEL MEMORY 1-2-3-4** during power-on → LCD shows `Flash Memory Update`, release keys, it auto-writes, prompts `Change Disk 2/2`, finishes `Completed!!`, then "turn power off and on" (SM §9.4.1, lines 943-960; install.pdf §4).
 - **Post-update re-init (wipes user data except Custom):** hold RHYTHM `[60s & 70s]+[MODERN DANCE]+[SOUL & R&B]` at power-on (install.pdf).
 
-Entry is therefore a **power-on key combo**, not automatic-on-disk-insert. The panel-memory combo is read at boot; the boot/kernel-init path (reset vector 0x48400000 → `jmp 0x4840FF7E` hardware init → `call 0x484D7111` kernel init, all in the dumped image) is where that check must branch into the resident updater.
+Entry is therefore a **power-on key combo**, not automatic-on-disk-insert. The panel-memory combo is read at boot; the boot/kernel-init path (reset vector 0x48400000 → `jmp 0x48407EFF` hardware init → `call 0x484D7111` kernel init, all in the dumped image) is where that check must branch into the resident updater.
 
 ### 2.4 What a hand-built update disk must contain
 Reproduce the shipped structure exactly and regenerate the derived fields: (1) two floppies, each with `JKn.SLD` (magic `JKPRG4K\0` + 24-bit BE decompressed size + valid LZSS stream), `TECHNICS.PRn` catalog (byte-for-byte from the originals), `SMCKPRn.INF` (regenerated: 32-bit total + 16×0x40000 block sums of the *new* image), and `DUMMY.2`; (2) split at the 0x200000 boundary (disk 1 = 0x000000-0x1FFFFF → 0x200000 raw; disk 2 = remainder). The extractor already contains the inverse of every step, so a packager is a small addition (LZSS-compress + emit `.INF`).
@@ -211,7 +211,7 @@ void backup_all(void)
 1. img = extractor.decompress(JK1)+decompress(JK2)         # 0x3F6F01, verified
 2. place backup_routine into a >=256B 0xFF gap in img       # ~71 KB slack available
 3. patch ONE service-menu pointer (0x4874AD34..0x4874AFF0) -> routine addr
-   (leave reset vector 0x48400000, boot 0x4840FF7E, kernel-init 0x484D7111,
+   (leave reset vector 0x48400000, boot 0x48407EFF, kernel-init 0x484D7111,
     and the panel-combo->updater path byte-identical)
 4. JK1' = "JKPRG4K\0" + BE24(0x200000) + LZSS(img[0:0x200000])
    JK2' = "JKPRG4K\0" + BE24(len-0x200000) + LZSS(img[0x200000:])

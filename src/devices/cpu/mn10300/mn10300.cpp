@@ -175,7 +175,7 @@ void mn10300_device::device_start()
 void mn10300_device::device_reset()
 {
 	// KN7000: program flash maps at 0x48400000 and file offset 0 is
-	// "jmp 0x4840FF7E", so the first fetched instruction is at the flash base.
+	// "jmp 0x48407EFF", so the first fetched instruction is at the flash base.
 	// TODO: if the boot/library ROM @0x4C000000 is dumped, the true reset PC
 	// may originate there instead.
 	m_pc  = 0x48400000;

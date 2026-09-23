@@ -564,7 +564,7 @@ the real-hardware step is a single well-rehearsed action.
      test's own address walk before trusting either.
 3. **Trigger**: repoint ONE service-menu function pointer
    (`0x4874AD34–0x4874AFF0`, e.g. the WAVE ROM test slot) to the backup routine.
-   Leave the reset vector, boot (`0x4840FF7E`), kernel-init (`0x484D7111`) and
+   Leave the reset vector, boot (`0x48407EFF`), kernel-init (`0x484D7111`) and
    the panel-combo→updater path **byte-identical** — this bounds the risk to the
    level of an official firmware update.
 4. **Validate in emulation — the wave-read half only.** Once Phase A/I make the

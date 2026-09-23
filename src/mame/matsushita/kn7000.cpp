@@ -72,7 +72,7 @@
         0x500D3C5C / 0x500D3C60  per-task (AP / main) focused-object id
 
     Reset behavior: file offset 0 of the program flash (i.e. CPU address
-    0x48400000) contains "jmp 0x4840FF7E", so the reset vector of the AM33 core
+    0x48400000) contains "jmp 0x48407EFF", so the reset vector of the AM33 core
     is expected to land at the base of the program flash region. The boot then
     programs the GPIO/timer banks and enters the MILK kernel; mn10300_sim runs
     ~4.59 M instructions before it must call into the undumped 0x4C000000 ROM.
@@ -790,7 +790,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// --- Program flash --------------------------------------------------
 	// kn7000_program.rom, decompressed size 0x3F6F01 bytes (~4 MiB).
 	// Held in program ROMs IC16 / IC17. CPU begins execution here
-	// (0x48400000 -> "jmp 0x4840FF7E").
+	// (0x48400000 -> "jmp 0x48407EFF").
 	map(0x48400000, 0x487fffff).rom().region("maincpu", 0);
 
 	// --- Work RAM -------------------------------------------------------

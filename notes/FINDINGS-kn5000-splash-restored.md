@@ -84,7 +84,7 @@ The KN7000's vector table has only two populated entries (everything from `0x484
 filler):
 
 ```
-48400000: jmp 0x4840FF7E     reset
+48400000: jmp 0x48407EFF     reset
 4840000A: jmp 0x484D77CF     second vector
 ```
 
