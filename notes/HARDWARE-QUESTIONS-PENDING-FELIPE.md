@@ -169,6 +169,25 @@ measurement sees them.
   inference, disassembly and live measurement.** Its absence is not licence to
   promote an inference — leave the item open and say so.
 
+## Do the KN6000 and KN6500 have a floppy drive and an SD slot? (2026-09-23)
+
+The driver configures an SD card and an N82077AA floppy controller for every
+model that reuses `kn7000_base()`, which is all five. Two of the five are settled
+by the driver's own header, read off the service manuals:
+
+- the **KN7000** has both;
+- all three SX-KN2400 sources show a **floppy controller**, and IC404, the SD
+  sub-CPU program, is listed **"KN2600 only"** — so the KN2400 has a floppy and
+  no SD slot, and the KN2600 has both.
+
+Nothing in the material here settles the **KN6000/KN6500**. Felipe owns a KN6000:
+does it have a 3.5" floppy drive? An SD slot? If the answer splits them from the
+KN7000, `kn6000()` should `device_remove()` what is not there, the way it already
+does for the tone generator and the control panel — and the KN2400 needs its SD
+removed regardless, which needs kn2600 to stop sharing kn2400's machine config.
+
+Nothing here misbehaves today; an absent slot merely shows an empty media entry.
+
 ## MN10300 vector base: what re-decodes 0x40000000 (2026-09-23, sharpened)
 
 *The earlier form of this question — "what is the vector base?" — is answered.*
