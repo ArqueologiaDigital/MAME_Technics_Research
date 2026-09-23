@@ -1,0 +1,8 @@
+cpu/sharc: run an unimplemented compute op through the interpreter
+
+The DRC aborted the whole emulation on any compute or immediate-shift operation
+it had no inline generator for. Call the interpreter's COMPUTE() for that one
+instruction instead, flushing the fast register file around it, so a block that
+contains such an op still compiles.
+
+AI disclosure: assisted by Claude Opus 5

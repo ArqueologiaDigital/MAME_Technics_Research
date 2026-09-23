@@ -1,0 +1,288 @@
+######## src/mame/matsushita/kn7000.cpp 41 hits
+  LINE 82: //  KN7000 SIO UART -- byte<->bit bridge between a byte-oriented SIO channel and
+      OVERLAY+: //  MAME's bit-serial midi_port. One instance per MIDI channel (31250 baud, 8N1).
+      OVERLAY+: //  Modelled on src/mame/misc/vocalizer.cpp's UART.
+      OVERLAY+: // ----------------------------------------------------------------------------
+  LINE 386: // note events from the key bed (KN5000-shared "keyboard input"; 16-bit word,
+      OVERLAY+: // low byte = KEY code, high byte = velocity; 0xFFFF = empty). MAKE/BREAK is
+      OVERLAY+: // encoded in BIT 7 of the key byte, NOT in the velocity: the firmware decoder
+      OVERLAY+: // does btst 0x80 on the key byte (0x484480e5 routes the event; 0x48448151 gates
+      OVERLAY+: // the voice: bit7=0 -> compute pitch / gate ON, bit7=1 -> clear gate / key up).
+      OVERLAY+: ... +7 more
+  LINE 400: // A MIDI controller wired here plays the machine's OWN key bed (the voice-
+      OVERLAY+: // event FIFO the firmware polls at 0x98050004), NOT the rear MIDI IN jacks:
+      OVERLAY+: // note-on/off become key-bed events with the MIDI velocity, so the firmware
+      OVERLAY+: // treats them exactly like physical key presses (self-tests that watch the
+      OVERLAY+: // key bed see them, and dynamics/velocity are honoured). The key bed's FIFO
+      OVERLAY+: ... +4 more
+  LINE 426: // Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
+      OVERLAY+: // write-only from the firmware. Address latched at base+0, data written at
+      OVERLAY+: // base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
+      OVERLAY+: // (< 0x1000); the 0xFC0x system-refresh group is accepted but not stored.
+      OVERLAY+: // See notes/tone-generator.md. (State capture; synthesis is future work.)
+  LINE 433: // firmware's service-mode WAVE ROM test (checksum core 0x484839A1) reads the
+      OVERLAY+: // four PCM wave ROMs THROUGH the tone generator: it latches a bank at base+6,
+      OVERLAY+: // a word address within the bank at base+8, then reads each 16-bit sample word
+      OVERLAY+: // back at base+A and sums (hi+lo) across the full 16 MiB of each device. So the
+      OVERLAY+: // wave ROMs -- on the TG's private bus -- ARE reachable by the CPU (main TG,
+      OVERLAY+: ... +7 more
+  LINE 440: // The CPU host-boots the SHARC through an index register at 0x98000000 and a
+      OVERLAY+: // data register at 0x9C000000 (the 0x9C bank the driver otherwise treats as
+      OVERLAY+: // LCD RAM). At boot the firmware probes DSP register 0 expecting 0x20; if it
+      OVERLAY+: // reads anything else it sets a "DSP dead" flag (work-RAM 0x500066CC) and
+      OVERLAY+: // SUPPRESSES the whole effect engine (see notes/dsp-host-interface.md +
+      OVERLAY+: ... +8 more
+  LINE 524: // card-detect line (cover closed + card in = accessible; cover open => the
+      OVERLAY+: // firmware refuses access with "ERROR 93: SD lid is open"). Model it as a
+      OVERLAY+: // user switch (SDCOVER, default CLOSED) plus the attached image: card-detect
+      OVERLAY+: // "present" = cover CLOSED and an image is mounted. Toggling the cover live
+      OVERLAY+: // produces the debounced edge -- closing (with a card) fires the insert /
+      OVERLAY+: ... +1 more
+  LINE 556: // The SD card is reached over SIO ch2. Delivery model (RE 2026-07-08): the
+      OVERLAY+: // The CPSD link (ch2) speaks MIDI FRAMING (RE 2026-07-10): the RX classifier
+      OVERLAY+: // 0x484b28ee + real-time dispatcher 0x484b2454 route >=0xF8 bytes as MIDI
+      OVERLAY+: // real-time (0xF8 Clock -> tempo module 0x48447366, 0xFA/0xFB/0xFC Start/
+      OVERLAY+: // Continue/Stop -> transport, 0xFE ActiveSense -> alive bit6 @0x50150f55 with
+      OVERLAY+: ... +6 more
+  LINE 572: // --- Program flash --------------------------------------------------
+      OVERLAY+: // kn7000_program.rom, decompressed size 0x3F6F01 bytes (~4 MiB).
+      OVERLAY+: // Held in program ROMs IC16 / IC17. CPU begins execution here
+      OVERLAY+: // (0x48400000 -> "jmp 0x48407EFF").
+  LINE 575: // --- Work RAM -------------------------------------------------------
+      OVERLAY+: // The firmware sets the initial SP to 0x50021CF8 and, when single-stepped
+      OVERLAY+: // through boot with the mn10300_sim interpreter, touches RAM past 0x50298000
+      OVERLAY+: // (>2.5 MB), so the real work RAM (IC12/IC13) is larger than the ~1.5 MB BSS.
+      OVERLAY+: // TODO: confirm the exact size; mapping 4 MB here as a working estimate.
+  LINE 579: // The boot code writes to 0x90000000 and 0x8C000000 (copying from the top of
+      OVERLAY+: // the program ROM). Neither is in the static I/O map (notes/io-map.md); they
+      OVERLAY+: // are almost certainly the LCD V-RAM / video / wave-DMA windows. Mapped as RAM
+      OVERLAY+: // placeholders so bring-up can proceed past them.
+      OVERLAY+: // TODO: identify the real devices (LCD V-RAM = IC104?).
+      OVERLAY+: ... +8 more
+  LINE 584: // 0x50000000 work RAM (the same one-bit window pair as 0x4C/0x8C and 0x44/0x84). The
+      OVERLAY+: // KN2400's boot-time block loader (0x4870587E, descriptor list at 0x487965BB -- the
+      OVERLAY+: // relocated twin of the KN7000's InitializeBlock27 loader) copies its ~147 KB library
+      OVERLAY+: // from program ROM 0x487285BE to logical 0x50120000; the loader's `cmp 0x80000000 /
+      OVERLAY+: // add 0x40000000` dest adjust makes the bytes land at 0x90120000, and the code is then
+      OVERLAY+: ... +7 more
+  LINE 588: // (IC21), not RAM. It is carved back out here -- a later map() entry overrides an
+      OVERLAY+: // earlier one -- and handed to a real flash device so the firmware's erase and program
+      OVERLAY+: // command sequences are decoded instead of being stored as stray bytes. Contents come
+      OVERLAY+: // from the "customflash" region, which holds what the "Initial Data" disk installs.
+      OVERLAY+: // See notes/initial-data-disk-and-custom-flash.md.
+      OVERLAY+: ... +4 more
+  LINE 607: // --- Stubs for regions whose behavior is still unknown --------------
+      OVERLAY+: // TODO: Library / boot ROM (undumped) at 0x4C000000. The firmware calls
+      OVERLAY+: //       into it (e.g. a printf-like renderer at 0x4C001A48), so this is
+      OVERLAY+: //       real code, not just data.
+      OVERLAY+: //map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
+  LINE 625: // (TMnBC at 0x340010a4+, beyond the TM4/TM5 pair the core models) as
+      OVERLAY+: // busy-wait delays. Return an advancing (down-counting) value so those
+      OVERLAY+: // loops progress; placeholder until TM6+ are modeled in the core. The
+      OVERLAY+: // TM5BC half the boot's 0x4847b21c poll reads (0x340010a2) is the core's
+      OVERLAY+: // real counter now. The KN7000 keeps the generic 0x34000000 handler.
+  LINE 629: // 0x34000800-0x3400082f) and TM4/TM5 timer windows (0x34001080/0x34001090/
+      OVERLAY+: // 0x340010a0) are modeled inside the MN10300 core: the core's internal
+      OVERLAY+: // address map is appended AFTER this driver map (addrmap.cpp: "construct
+      OVERLAY+: // the internal device map (last so it takes priority)"), so its windows
+      OVERLAY+: // override the 0x34000000-wide logger above -- nothing to map here.
+  LINE 646: // of the io window above (must come AFTER it so this narrower entry wins). Confirmed by the service-
+      OVERLAY+: // manual schematic (chip-select decoder IC1 = TC74VHC138F: Y2 of the 0x98000000 CS region = FDC.CS =
+      OVERLAY+: // 0x98020000; Y4=0x98040000 TG fixes the base) AND by the firmware, which drives PC/AT registers here:
+      OVERLAY+: // +4=DOR (boot reset seq @0x484000B5), +8=MSR/DSR, +A=data FIFO, +E=DIR/CCR (disk-change @0x48402623).
+      OVERLAY+: // Data is on the D16-D23 byte lane (8-bit region) so the firmware byte-accesses these offsets directly.
+      OVERLAY+: ... +2 more
+  LINE 678: // bit12 (= data-bus D28) = rear-panel MIDI IN / BASS PEDAL selector SW701 (0x484A2CB1 ->
+      OVERLAY+: // 0x484b2615 reads bit12 -> MIDI-in mode flag 0x5006bfd2 bit1). bits1..2 = the TG-present
+      OVERLAY+: // strap (0x484d7713): bit1 clear -> "no TG" leaves the TG-enable gate closed (silent),
+      OVERLAY+: // so report the TGs present (bit1|bit2). bit15 = moot (gates dead code, see above).
+  LINE 682: // the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
+      OVERLAY+: // low byte = KEY code with bit 7 = make/break flag, high byte = velocity). The
+      OVERLAY+: // firmware polls it for note on/off from the physical key bed (parallel to
+      OVERLAY+: // MIDI-in); bit7=0 -> note-on, bit7=1 -> note-off (see kbd_push). Boot init reads it in a
+      OVERLAY+: // loop until it yields 0xFFFF (empty / end marker; also the floating-bus value).
+      OVERLAY+: ... +3 more
+  LINE 691: // wrote (setlb/lne with a 2-tick timeout) -- a readback latch unblocks it.
+      OVERLAY+: (no continuation found)
+  LINE 771: // F.2 host-boot: decode the upload protocol and write the streamed program/data into
+      OVERLAY+: // the SHARC's internal memory. Register writes to 0x9C000000 carry their reg number as
+      OVERLAY+: // the index (32-bit value = 2x16, low then high); the actual program/data streams via
+      OVERLAY+: // index 0x04 (the external-port DMA buffer), 3x16 per 48-bit PM word / 2x16 per 32-bit
+      OVERLAY+: // DM word, auto-incrementing from the reg-0x40 target. See notes/sharc-lle-assessment.md.
+  LINE 796: // Start the audio frame tick: the kernel's reset handler enables IRQ0 and then
+      OVERLAY+: // IDLEs (PM 0x8076) waiting for the first IRQ0, which drives its main loop one
+      OVERLAY+: // audio frame per edge. On real hardware IRQ0 comes from the SPORT/codec frame
+      OVERLAY+: // sync; here a periodic pulse stands in until F.3 models the serial audio path.
+      OVERLAY+: // Provisional rate -- see notes/sound-subsystem-plan.md (F.3).
+  LINE 830: // The INTC register model lives in the MN10300 core (mn10300.cpp intc_*). The
+      OVERLAY+: // board keeps three policy hooks, bound to the core's callbacks in
+      OVERLAY+: // kn7000(machine_config):
+      OVERLAY+: //  * intc_ack_cb: the panel transfer-complete (group 0x11) is level-like until
+      OVERLAY+: //    serviced -- the firmware's ISR-exit ack (full-word 0x0101 at 0x484AC736)
+      OVERLAY+: ... +10 more
+  LINE 834: // Audio frame tick: pulse the effects DSP's IRQ0 (the kernel's frame interrupt). We only
+      OVERLAY+: // ASSERT: the SHARC core clears the pending bit when it *takes* the interrupt, so one edge
+      OVERLAY+: // is delivered per tick without a matching CLEAR. IRQ0 is edge-configured by the kernel
+      OVERLAY+: // (MODE2 0x18011) and its ISR (PM 0x8020) sets R13=1 to hand a frame to the main loop.
+  LINE 846: // notes/dsp-unit-roles-live-capture.md -- DspEffectSelect + download-port taps):
+      OVERLAY+: //   u0 = REVERB (in 0xC362/3, ret 0xC342/3)      -- wired, verified
+      OVERLAY+: //   u9 = CHORUS (in 0xC376/7, ret 0xC356/7)      -- the hold-CHORUS screen's unit
+      OVERLAY+: //   u1 = MULTI  (in 0xC364/5, ret 0xC344/5)      -- captured state (boot + PMEM recalls)
+      OVERLAY+: //   u2..u6 = per-part Sound-DSP insert pool; RIGHT1 = u2 (in 0xC366/7, ret 0xC346/7)
+      OVERLAY+: ... +15 more
+  LINE 961: // First-cut audio: also key the bring-up sine synth directly, so a PC key is
+      OVERLAY+: // audible now (independent of the firmware's dormant voice engine). This is a
+      OVERLAY+: // monitor tap of the key bed, NOT the real TG path (Stage 2 will drive the
+      OVERLAY+: // synth from the firmware's tone-generator voice writes instead).
+  LINE 978: // CPSD (SD sub-CPU) frame delivery on SIO ch2. Simpler than the panel path: the
+      OVERLAY+: // firmware has already seen bit7 of the status set (cpsd_queue makes it read set)
+      OVERLAY+: // and enabled the ch2 RX interrupt; each timer tick clocks one byte into the ch2
+      OVERLAY+: // RX FIFO and fires group 0x14, which the firmware's ISR reads from +9.
+  LINE 981: // Deliver the whole frame into the ch2 RX FIFO at once; the status bits (bit7 +
+      OVERLAY+: // bit4, both from the core's RxRDY) then reflect it and the firmware clocks the
+      OVERLAY+: // bytes out via its bit4-gated reads of +9 (0x34000829). The core fires the ch2
+      OVERLAY+: // rx-rdy callback (-> group 0x14) per byte, matching the DETECT the firmware
+      OVERLAY+: // sets at 0x484b206f.
+  LINE 1032: // Rear-panel MIDI IN / BASS PEDAL selector switch (SW701 on the JACK board). The
+      OVERLAY+: // firmware reads it as bit12 (data-bus D28) of the config strap 0x98070000 via the
+      OVERLAY+: // EXP-port output-enable. Set to BASS PEDAL and the firmware routes MIDI-in to the
+      OVERLAY+: // bass-pedal part and disables normal MIDI input (the "ATTENTION! -1 / Midi is not
+      OVERLAY+: // working ... set the switch ... to Midi" warning). Default MIDI IN so MIDI works.
+  LINE 1134: // controller scans. The firmware's software compositor blends the UI plane and the
+      OVERLAY+: // 12-bit direct-colour picture planes (see notes/display-dual-plane-direct-color.md)
+      OVERLAY+: // into a 640x240 RGB565 buffer at 0x9CE00000 (linear, top-to-bottom). Reading it
+      OVERLAY+: // directly gives a pixel-perfect display (gamma-correct UI colours, pictures
+      OVERLAY+: // composited by the machine itself) and supersedes reconstructing it from the work-
+      OVERLAY+: ... +4 more
+  LINE 1137: // KN2400/KN2600: a 320x240 FOUR-LEVEL GRAYSCALE panel. The firmware composites into a
+      OVERLAY+: // 2bpp buffer at 0x9C800000 (stride 80 bytes, MSB-first pixel pairs, 0 = lightest).
+      OVERLAY+: // Found empirically: after the 0x90-alias fix the boot paints exactly this region and
+      OVERLAY+: // a 2bpp/320-wide decode shows the play screen (title bar, menus, sound-group tiles).
+  LINE 1235: // Populate the aliased libram from the program ROM so the boot finds it.
+      OVERLAY+: (no continuation found)
+  LINE 1281: // 1 = no card / 0 = card present (raw read 0x4854bce0: btst bit4). The
+      OVERLAY+: // SD state machine is edge-driven -- a static level never fires the
+      OVERLAY+: // card-insert message -- so we always boot "no card" (bit4=1) and, if a
+      OVERLAY+: // card image is attached AND the cover is closed, produce the 1->0 INSERT
+      OVERLAY+: // EDGE a few seconds after boot: that both fires the firmware's insert
+      OVERLAY+: ... +6 more
+  LINE 1295: // Confirmed by the SX-KN7000 service-manual schematic (chip-select decoder IC1 TC74VHC138F, page 101:
+      OVERLAY+: // Y2 of the 0x98000000 CS region = FDC.CS = 0x98020000) AND by the firmware, which drives the standard
+      OVERLAY+: // PC/AT FDC register file here. Register = (byteoffset>>1)&7 (FDC A0-A2 <- system A1-A3), on the D16-D23
+      OVERLAY+: // byte lane, so the firmware byte-accesses:
+      OVERLAY+: //   +4 = reg2 DOR  (read/write; boot does the DOR /RESET pulse @0x484000B5)
+      OVERLAY+: ... +6 more
+  LINE 1388: // On-chip SIO routing (the register model lives in the core, as does the
+      OVERLAY+: // INTC now; IRQ events still come OUT of the core through these callbacks
+      OVERLAY+: // and are routed back into the core's INTC by group number -- the group
+      OVERLAY+: // assignment is board wiring). ch0 = control panel (synchronous link):
+  LINE 1411: // LCD panel. Exact geometry is uncertain: the KN7000 front-panel LCD is
+      OVERLAY+: // reported as either 320x240 or 640x240. Using 640x240 as a placeholder.
+      OVERLAY+: // TODO: confirm resolution, pixel clock and the LCD controller feeding
+      OVERLAY+: //       the V-RAM at IC104.
+  LINE 1420: // --- MIDI ports (SIO channels 1 & 2 at 0x34000810 / 0x34000820) ---------
+      OVERLAY+: // Each channel has a byte<->bit UART bridge feeding a standard MAME MIDI
+      OVERLAY+: // IN/OUT port pair. TX = firmware -> core SIO -> tx_cb -> UART -> MIDI OUT;
+      OVERLAY+: // RX = MIDI IN -> UART -> midi_rx -> core sio_rx_push (rx-rdy raises the
+      OVERLAY+: // channel's INTC group, bound above).
+  LINE 1447: // shared front-panel analog controls stay in the driver's INPUT_PORTS and are handed over by tag:
+      OVERLAY+: (no continuation found)
+  LINE 1452: // --- Sound (first cut): a bring-up sine synth keyed by the PC key bed, so
+      OVERLAY+: //     notes are audible now. Real dual-TG PCM synthesis + effects DSP is future
+      OVERLAY+: //     work (see notes/audio-output-implementation-plan.md). Shared by all the
+      OVERLAY+: //     models that reuse this config; only kn7000 drops MACHINE_NO_SOUND for now.
+  LINE 1536: // (one D82398GD001 tone generator, same 64 voices, same register numbering), but the
+      OVERLAY+: // build's RAM layout shifted, so the driver-side voice-record binding has to follow it:
+      OVERLAY+: // the per-TG-slot voice record sits at 0x5027AF1C rather than the KN6000's 0x5027AF28.
+      OVERLAY+: // Both were located the same way, by the firmware's own note-on record copy (a 0x2D-word
+      OVERLAY+: // block copy preceded by the destination base -- KN6000 at 0x48492F3D, KN6500 at
+      OVERLAY+: ... +1 more
+  LINE 1593: // programmed at the factory: the firmware inflates the CTMINI payload from an
+      OVERLAY+: (no continuation found)
+######## src/mame/matsushita/kn_tonegen.h 4 hits
+  LINE 114: // event FIFO (the firmware reads it at 0x98050004 = the TG's own +4 register), so the
+      OVERLAY+: // hardware plausibly key-gates certain voice classes with NO CPU write: the sound
+      OVERLAY+: // sweep found aux word (latch 0x1C02+blk*0x10) bit15 set for exactly the sustaining
+      OVERLAY+: // families that receive no key-up TG writes (brass/sax/organ; 8/8 blocks, no false
+      OVERLAY+: // positives). Model: tag each voice with the key that caused it (the most recent MAKE
+      OVERLAY+: ... +3 more
+  LINE 125: // its DSP bridge while the sound thread writes them), and save_item() cannot take an
+      OVERLAY+: // atomic. They ARE mutable state -- the firmware sets every one of them from its own
+      OVERLAY+: // register writes -- so leaving them out meant a state saved with, say, reverb engaged
+      OVERLAY+: // restored with the boot-default mix. These two hooks shadow them into a plain array
+      OVERLAY+: // that IS saved, which is the idiomatic MAME answer for non-trivially-copyable state.
+  LINE 137: // class decodes its own register numbering into these.
+      OVERLAY+: (no continuation found)
+  LINE 180: // the AMPLITUDE EDIT -> ENVELOPE screen sweep (notes/tg-envelope-sweep-results.md):
+      OVERLAY+: // r0 = [ATK rate | PEAK level], r1 = [DCY1 rate | SUS1 level], r2 = [DCY2 rate | SUS2
+      OVERLAY+: // level] (rate bytes: higher = faster; levels 0..0x7F), r3 = gate (0x87FF on / 0x8000
+      OVERLAY+: // key-up). r4..rA DECODED 2026-07-20 (FILTER/PITCH ENVELOPE screen sweeps, see
+      OVERLAY+: // tg-envelope-sweep-results.md RESULT 4): r4/r5/r6 = the PITCH ENVELOPE ([ATK|PEAK]
+      OVERLAY+: ... +10 more
+######## src/mame/matsushita/kn_tonegen.cpp 2 hits
+  LINE 87: // it never zone-matches a real voice, so unmapped voices adopt it.
+      OVERLAY+: (no continuation found)
+  LINE 166: // wrong until you listened to it.
+      OVERLAY+: (no continuation found)
+######## src/mame/matsushita/kn_cpanel.h 4 hits
+  LINE 41: // The shared front-panel analog controls the panel sub-CPUs also scan stay in the
+      OVERLAY+: // driver's INPUT_PORTS (the layout faders / audio path reference them too) and are
+      OVERLAY+: // handed to this device by tag via these setters. The BUTTON matrix, by contrast, is
+      OVERLAY+: // owned by the concrete panel device (device_input_ports()).
+  LINE 46: // Callbacks to the main CPU (its interrupt controller / SIO channel 0):
+      OVERLAY+: (no continuation found)
+  LINE 50: // From the main CPU (SIO / INTC bridge):
+      OVERLAY+: (no continuation found)
+  LINE 68: // ---- per-model geometry, supplied by the derived panel device ----
+      OVERLAY+: // The scan matrix: how many ioports this panel declares, what each one reads, and which
+      OVERLAY+: // NORMALIZED SEGMENT (the firmware's normSeg space) it drives. Keeping the ioport finder
+      OVERLAY+: // in the derived class lets each model size and tag its own array.
+######## src/mame/matsushita/kn7000_tonegen.cpp 5 hits
+  LINE 29: // A REAL note-on always programs the 7-halfword amplitude EG (r4..rA) for the
+      OVERLAY+: // voice immediately before this pitch write (live capture). Boot/init sweeps
+      OVERLAY+: // also hit pitch registers but leave the EG all-zero -- gating those produced
+      OVERLAY+: // faint junk voices ringing for ~20 s after boot (audible now that the dry TG
+      OVERLAY+: // is the default listening tap). Require a programmed EG to key a voice on.
+  LINE 45: //  - GATE_FOLLOW: aux bit15 (brass/sax/organ) -- no firmware key-up write; the
+      OVERLAY+: //    TG (which hosts the key-bed FIFO) gates them off itself on key release.
+      OVERLAY+: //  - MANAGED: firmware voice-record type (rec+0x02 & 0x7C) in {04,08,10,20,40}
+      OVERLAY+: //    -- the firmware sends the 6-write release ramp at key-up (piano, strings,
+      OVERLAY+: //    pad, synth, bass, world). Hold at SUS1 until it arrives.
+      OVERLAY+: ... +3 more
+  LINE 99: // the firmware rewrites regs 0,1,4,5,8,9 of the note's ODD companion block with
+      OVERLAY+: // a ramp-down (r0=0x9180: rate 0x91 toward level 0) -- aimed at the companion
+      OVERLAY+: // even when only the even block sounds. A reg0 rewrite below full scale on
+      OVERLAY+: // EITHER block of a pair releases every gated/releasing voice of the pair
+      OVERLAY+: // {v&~1, v|1} gated >20 ms (the note-on's own r0 programming happens BEFORE
+      OVERLAY+: ... +3 more
+  LINE 145: // 0x4C037D0F..0x4C037F10 + live setter/arg traps -- see notes/per-part-depth-bank.md):
+      OVERLAY+: // the group-0x20 register space is a PER-PART SEND MATRIX, addr = 0x8000 |
+      OVERLAY+: // row<<8 | part<<4 | reg, i.e. "channel" 0xRP = row R (0-3) of mixer part P:
+      OVERLAY+: //   row0 (0x80P8)  = part P's send-to-REVERB-bus   [hi byte 0x03 = dest = the
+      OVERLAY+: //                    reverb-return mixer part 3; low7 = level]
+      OVERLAY+: ... +21 more
+  LINE 174: // bus). Live-captured per-effect toggle map (2026-07-12, notes/effect-return-routing.md):
+      OVERLAY+: // each effect owns a distinct return register -- REVERB=ch03.rA (m_gain_return above),
+      OVERLAY+: // SOUND DSP=ch09.rA, MULTI=ch06.rA -- and toggling one effect changes ONLY its own
+      OVERLAY+: // register. The old model scaled chorus/sound-dsp/multi by the REVERB return (gret), so
+      OVERLAY+: // turning reverb off wrongly muted them; using each effect's own return decouples them.
+      OVERLAY+: ... +2 more
+######## src/mame/matsushita/kn6000_tonegen.cpp 2 hits
+  LINE 51: // KN7000's class 0x1C02 gate-follow marker) is NOT yet identified, and the
+      OVERLAY+: // record's type field is not yet decoded either, so every voice is treated
+      OVERLAY+: // as MANAGED: hold at the sustain level until the firmware's own key-up
+      OVERLAY+: // arrives. That is the safe default here because the KN6000 writes a
+      OVERLAY+: // UNIVERSAL key-up gate (0x8000 to cls 0x0000) for every voice class, so no
+      OVERLAY+: ... +1 more
+  LINE 107: // rewrites the first two registers of each envelope bank ({4,5,8,9,C,D}) with a
+      OVERLAY+: // ramp-down toward level 0, and the ramp's own rate byte is the real release
+      OVERLAY+: // rate. Mirrors the KN7000's reg0-rewrite rule -- but WITHOUT its even/odd
+      OVERLAY+: // companion-block pairing, which has no confirmed KN6000 counterpart (spec
+      OVERLAY+: // section 2): release only this voice, so an unrelated neighbour cannot be cut.
+######## src/mame/matsushita/kn7000_tonegen.h 1 hits
+  LINE 34: // TGs) is routed here from io_w. Once the TG-enable gate is open (see the
+      OVERLAY+: // 0x98070000 strap in io_r) the firmware programs a full per-voice block on each
+      OVERLAY+: // note and we render audio from these registers:
+      OVERLAY+: //   * class 0x2400/0x2401 = the pitch register: an 18-bit SAMPLE-ZONE-RELATIVE
+      OVERLAY+: //     log-pitch, pitch18 = ((class bit0)<<16) | data, at 0x400/semitone. It is
+      OVERLAY+: ... +18 more

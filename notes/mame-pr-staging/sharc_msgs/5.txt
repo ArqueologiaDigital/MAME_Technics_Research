@@ -1,0 +1,10 @@
+cpu/sharc: add the ADSP-21065L
+
+The low-cost SHARC variant, used as the Technics SX-KN7000's effects DSP. Same
+2106x instruction set, but a smaller internal SRAM that is not block-interleaved
+and an I/O register set the base core does not model.
+
+Also adds notify_pm_written(), so a host that uploads a program into internal PM
+can tell the recompiler its cache is stale.
+
+AI disclosure: assisted by Claude Opus 5

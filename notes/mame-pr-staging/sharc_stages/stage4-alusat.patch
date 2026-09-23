@@ -1,0 +1,1120 @@
+diff --git a/src/devices/cpu/sharc/sharc.cpp b/src/devices/cpu/sharc/sharc.cpp
+index 790baf64150..844ba75a865 100644
+--- a/src/devices/cpu/sharc/sharc.cpp
++++ b/src/devices/cpu/sharc/sharc.cpp
+@@ -564,8 +634,9 @@ void adsp21062_device::external_dma_write(offs_t address, uint64_t data)
+ 
+ void adsp21062_device::device_start()
+ {
+-	assert(m_blocks[0].length() == m_blocks[1].length());
+-	assert(std::has_single_bit(m_blocks[0].length()));
++	// The 21065L declares no memory blocks, so it reaches here with length 0.
++	assert(!m_blocks[0] || (m_blocks[0].length() == m_blocks[1].length()
++			&& std::has_single_bit(m_blocks[0].length())));
+ 
+ 	space(AS_PROGRAM).specific(m_program);
+ 	space(AS_DATA).specific(m_data);
+@@ -964,7 +1035,7 @@ void adsp21062_device::device_reset()
+ 			throw emu_fatalerror("SHARC: Unimplemented boot mode %d\n", m_boot_mode);
+ 	}
+ 
+-	m_core->pc = 0x20004;
++	m_core->pc = reset_pc();
+ 	m_core->extdma_shift = 0;
+ 	m_core->daddr = m_core->pc + 1;
+ 	m_core->faddr = m_core->daddr + 1;
+@@ -1216,7 +1287,7 @@ void adsp21062_device::check_interrupts()
+ 		if (which >= 6 && which <= 8)
+ 			PUSH_STATUS_STACK();
+ 
+-		CHANGE_PC(0x20000 + (which * 0x4));
++		CHANGE_PC(irq_vector_base() + (which * 0x4));
+ 
+ 		/* TODO: alter IMASKP */
+ 
+diff --git a/src/devices/cpu/sharc/sharc.h b/src/devices/cpu/sharc/sharc.h
+index f78c7e11fde..4f03dbda3c2 100644
+--- a/src/devices/cpu/sharc/sharc.h
++++ b/src/devices/cpu/sharc/sharc.h
+@@ -97,6 +109,26 @@ protected:
+ 			address_map_constructor internal_pgm,
+ 			address_map_constructor internal_data);
+ 
++	// Reset PC (boot entry). The 2106x reset vector is at internal-RAM-base + 4
++	// (0x20004 for the 2M/4M parts); the 21065L variant overrides this for its own
++	// internal-RAM layout.
++	virtual uint32_t reset_pc() const { return 0x20004; }
++
++	// Base address of the interrupt vector table (internal-RAM base). check_interrupts()
++	// vectors a taken interrupt N to irq_vector_base() + N*4. 0x20000 for the 2M/4M parts;
++	// the 21065L overrides this to 0x8000 to match its smaller internal-RAM layout.
++	// Base of internal memory. The interrupt vector table sits here on every
++	// variant, and it is also the 128 KiB page the DRC frontend's loop map covers.
++	virtual uint32_t internal_ram_base() const { return 0x20000; }
++	uint32_t irq_vector_base() const { return internal_ram_base(); }
++
++	// Lowest address the DRC memory accessors treat as internal-SRAM (served from m_blocks,
++	// the block-interleaved fast path). The 2M/4M parts put internal SRAM at 0x20000-0x3FFFF;
++	// the 21065L has a different layout and does not populate m_blocks, so it overrides this to
++	// an out-of-range value, forcing every access through the address map (space_access) which
++	// serves its plain-RAM internal SRAM (0x8000-0x1FFFF) and external SDRAM (0x20000+).
++	virtual uint32_t drc_sram_base() const { return 0x20000; }
++
+ 	// device_t implementation
+ 	virtual void device_start() override ATTR_COLD;
+ 	virtual void device_reset() override ATTR_COLD;
+@@ -297,7 +329,7 @@ private:
+ 
+ 	devcb_write8::array<4> m_flag_out_cb;
+ 
+-	required_shared_ptr_array<uint32_t, 2> m_blocks;
++	optional_shared_ptr_array<uint32_t, 2> m_blocks;   // 21062/21060 populate these; the 21065L variant uses plain-RAM maps instead
+ 
+ 	opcode_func m_sharc_op[512];
+ 
+@@ -407,6 +439,7 @@ private:
+ 	// ALU fixed-point
+ 	inline void compute_add(int rn, int rx, int ry);
+ 	inline void compute_sub(int rn, int rx, int ry);
++	inline void compute_avg(int rn, int rx, int ry);   // op 0x09: Rn = (Rx + Ry) / 2
+ 	inline void compute_add_ci(int rn, int rx, int ry);
+ 	inline void compute_sub_ci(int rn, int rx, int ry);
+ 	inline void compute_comp(int rx, int ry);
+@@ -519,10 +552,12 @@ private:
+ 	void save_fast_iregs(drcuml_block &block);
+ 	void update_az_an_fixed(drcuml_block &block, const opcode_desc *desc);
+ 	void update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub);
++	void generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags);
+ 	void generate_sequence_instruction(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, bool last_delayslot);
+ 	void generate_update_cycles(drcuml_block &block, compiler_state &compiler, uml::parameter param, bool allow_exception);
+ 	bool generate_opcode(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_unimplemented_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
++	void generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc);
+ 	void generate_if_condition(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int condition, int skip_label);
+ 	void generate_shift_imm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, int data, int shiftop, int rn, int rx);
+diff --git a/src/devices/cpu/sharc/sharcdrc.cpp b/src/devices/cpu/sharc/sharcdrc.cpp
+index a26eefeeff4..b81392cba3f 100644
+--- a/src/devices/cpu/sharc/sharcdrc.cpp
++++ b/src/devices/cpu/sharc/sharcdrc.cpp
+@@ -153,6 +153,36 @@ struct adsp21062_device::cfuncs
+ 				sharc.tag(), sharc.m_core->pc, sharc.m_core->arg64, disassemble_one(sharc.m_core->pc, sharc.m_core->arg64));
+ 	}
+ 
++	// Fallback for compute operations the DRC doesn't yet generate inline (notably the
++	// fixed-point multiplier / MAC family): run the interpreter's COMPUTE() for exactly this
++	// one instruction. The generator wraps this in save_fast_iregs / load_fast_iregs so the
++	// register file in memory is current; here we round-trip the flags between the DRC's
++	// unpacked astat_drc and the packed astat that COMPUTE() reads and writes. COMPUTE() still
++	// throws for a genuinely-unknown opcode, so nothing is silently ignored.
++	static void compute_fallback(adsp21062_device &sharc)
++	{
++		auto *core = sharc.m_core;
++		core->astat = (core->astat & (FLG0 | FLG1 | FLG2 | FLG3)) | core->astat_drc.pack();
++		sharc.COMPUTE(uint32_t(core->arg64));
++		core->astat_drc.unpack(core->astat);
++	}
++
++	// Same idea as compute_fallback, but for immediate-shift ops the DRC has no inline generator
++	// for (e.g. the field-deposit/extract SE variants used by the KN7000 effects kernel): run the
++	// interpreter's SHIFT_OPERATION_IMM() for this one instruction, round-tripping the flags.
++	static void shiftimm_fallback(adsp21062_device &sharc)
++	{
++		auto *core = sharc.m_core;
++		uint32_t const opcode  = uint32_t(core->arg64);
++		int const data    = ((opcode >> 8) & 0xff) | ((opcode >> 19) & 0xf00);
++		int const shiftop = (opcode >> 16) & 0x3f;
++		int const rn      = (opcode >> 4) & 0xf;
++		int const rx      = (opcode & 0xf);
++		core->astat = (core->astat & (FLG0 | FLG1 | FLG2 | FLG3)) | core->astat_drc.pack();
++		sharc.SHIFT_OPERATION_IMM(shiftop, data, rn, rx);
++		core->astat_drc.unpack(core->astat);
++	}
++
+ 	[[noreturn]] static void unimplemented_shiftimm(adsp21062_device &sharc) ATTR_COLD
+ 	{
+ 		throw emu_fatalerror("%s: PC=%08X: Unimplemented shiftimm %012X: %s",
+@@ -249,6 +279,32 @@ void adsp21062_device::update_az_an_fixed(drcuml_block &block, const opcode_desc
+ 	if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
+ }
+ 
++// MODE1 ALUSAT tail for fixed-point ALU results (TRM B-6): expects the WRAPPED result
++// in I8 and the captured overflow flag (0/1) in I9; writes dst, then clamps it to
++// 0x7FFFFFFF / 0x80000000 when saturation mode is on and the op overflowed. Every
++// interpreter compute_* fixed ALU op saturates, so every native DRC emission must too.
++void adsp21062_device::generate_fixed_alusat_tail(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc, uml::parameter dst, bool fix_flags)
++{
++	UML_MOV(block, dst, I8);
++	// MODE1.ALUSAT is read at RUNTIME, like the interpreter does. Baking it in at
++	// translation time would need every path that rewrites MODE1 to invalidate the
++	// cache, and the status-stack pop does not -- nor could it usefully, since
++	// cache_dirty is only examined once per timeslice.
++	uml::code_label const no_sat = compiler.labelnum++;
++	UML_TEST(block, MODE1, MODE1_ALUSAT);
++	UML_JMPc(block, uml::COND_Z, no_sat);
++	UML_TEST(block, I9, 1);
++	UML_JMPc(block, uml::COND_Z, no_sat);
++	UML_SAR(block, I8, I8, 31);
++	UML_XOR(block, dst, I8, 0x80000000);                       // wrapped<0 -> 0x7FFFFFFF else 0x80000000
++	if (fix_flags)
++	{
++		if (AN_CALC_REQUIRED) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);   // AN = sign of the SATURATED value
++		if (AZ_CALC_REQUIRED) UML_MOV(block, ASTAT_AZ, 0);             // a saturated value is never zero
++	}
++	UML_LABEL(block, no_sat);
++}
++
+ void adsp21062_device::update_az_av_an_ac_fixed(drcuml_block &block, const opcode_desc *desc, bool sub)
+ {
+ 	// expects Z, V, S and C flags to be set appropriately
+@@ -280,7 +336,7 @@ void adsp21062_device::static_generate_memory_accessors()
+ 	alloc_handle(m_pm_write48, "pm_write48");
+ 	UML_HANDLE(block, *m_pm_write48);
+ 	UML_DWRITE(block, I1, I0, SIZE_QWORD, SPACE_PROGRAM);
+-	UML_CMP(block, I1, 0x20000);
++	UML_CMP(block, I1, drc_sram_base());
+ 	UML_RETc(block, COND_B);
+ 	UML_CMP(block, I1, 0x40000);
+ 	UML_RETc(block, COND_AE);
+@@ -304,7 +360,7 @@ void adsp21062_device::static_generate_memory_accessors()
+ 	UML_HANDLE(block, *m_pm_write32);
+ 	UML_DSHL(block, I0, I0, 16);
+ 	UML_DWRITE(block, I1, I0, SIZE_QWORD, SPACE_PROGRAM);
+-	UML_CMP(block, I1, 0x20000);
++	UML_CMP(block, I1, drc_sram_base());
+ 	UML_RETc(block, COND_B);
+ 	UML_CMP(block, I1, 0x40000);
+ 	UML_RETc(block, COND_AE);
+@@ -328,7 +384,7 @@ void adsp21062_device::static_generate_memory_accessors()
+ 		uml::code_label const sram_short_sext = label++;
+ 
+ 		UML_HANDLE(block, *m_dm_read32);
+-		UML_CMP(block, I1, 0x20000);
++		UML_CMP(block, I1, drc_sram_base());
+ 		UML_JMPc(block, COND_B, space_access);
+ 		UML_CMP(block, I1, 0x40000);
+ 		UML_JMPc(block, COND_AE, check_short);
+@@ -378,7 +434,7 @@ void adsp21062_device::static_generate_memory_accessors()
+ 		uml::code_label const sram_short_block1 = label++;
+ 
+ 		UML_HANDLE(block, *m_dm_write32);
+-		UML_CMP(block, I1, 0x20000);
++		UML_CMP(block, I1, drc_sram_base());
+ 		UML_JMPc(block, COND_B, space_access);
+ 		UML_CMP(block, I1, 0x40000);
+ 		UML_JMPc(block, COND_AE, check_short);
+@@ -921,7 +977,7 @@ void adsp21062_device::static_generate_exception(uint8_t exception, const char *
+ 
+ 	UML_LABEL(block, label_nopush);                                         // label_nopush:
+ 	UML_SHL(block, I0, I3, 2);                                              // shl     i0,i3,2
+-	UML_ADD(block, I0, I0, 0x20000);                                        // add     i0,0x20000
++	UML_ADD(block, I0, I0, irq_vector_base());                             // add     i0,irq_vector_base (0x20000; 0x8000 on 21065L)
+ 	UML_HASHJMP(block, 0, I0, *m_nocode);                                   // hashjmp i0,m_nocode
+ 
+ 	block.end();
+@@ -3182,7 +3238,28 @@ bool adsp21062_device::generate_opcode(drcuml_block &block, compiler_state &comp
+ 									compiler.mode1_delay.mode = MODE1_TOGGLE;
+ 									break;
+ 								case 0xc: // ASTAT
+-									return false;
++									// Toggle each selected flag: the arithmetic flags live one-per-byte
++									// in astat_drc, the FLG output bits in the packed astat. (Modelled on
++									// the SET ASTAT case above; the KN7000 kernel toggles FLG1 as a
++									// ping-pong bank flag in its main loop.)
++									if (AZ_CALC_REQUIRED && (data & AZ)) UML_XOR(block, ASTAT_AZ, ASTAT_AZ, 1);
++									if (AV_CALC_REQUIRED && (data & AV)) UML_XOR(block, ASTAT_AV, ASTAT_AV, 1);
++									if (AN_CALC_REQUIRED && (data & AN)) UML_XOR(block, ASTAT_AN, ASTAT_AN, 1);
++									if (AC_CALC_REQUIRED && (data & AC)) UML_XOR(block, ASTAT_AC, ASTAT_AC, 1);
++									if (AS_CALC_REQUIRED && (data & AS)) UML_XOR(block, ASTAT_AS, ASTAT_AS, 1);
++									if (AI_CALC_REQUIRED && (data & AI)) UML_XOR(block, ASTAT_AI, ASTAT_AI, 1);
++									if (MN_CALC_REQUIRED && (data & MN)) UML_XOR(block, ASTAT_MN, ASTAT_MN, 1);
++									if (MV_CALC_REQUIRED && (data & MV)) UML_XOR(block, ASTAT_MV, ASTAT_MV, 1);
++									if (MU_CALC_REQUIRED && (data & MU)) UML_XOR(block, ASTAT_MU, ASTAT_MU, 1);
++									if (MI_CALC_REQUIRED && (data & MI)) UML_XOR(block, ASTAT_MI, ASTAT_MI, 1);
++									if (AF_CALC_REQUIRED && (data & AF)) UML_XOR(block, ASTAT_AF, ASTAT_AF, 1);
++									if (SV_CALC_REQUIRED && (data & SV)) UML_XOR(block, ASTAT_SV, ASTAT_SV, 1);
++									if (SZ_CALC_REQUIRED && (data & SZ)) UML_XOR(block, ASTAT_SZ, ASTAT_SZ, 1);
++									if (SS_CALC_REQUIRED && (data & SS)) UML_XOR(block, ASTAT_SS, ASTAT_SS, 1);
++									if (BTF_CALC_REQUIRED && (data & BTF)) UML_XOR(block, ASTAT_BTF, ASTAT_BTF, 1);
++									if (data & (FLG0 | FLG1 | FLG2 | FLG3))
++										UML_XOR(block, mem(&m_core->astat), mem(&m_core->astat), data & (FLG0 | FLG1 | FLG2 | FLG3));
++									break;
+ 								case 0xd: // IMASK
+ 									UML_XOR(block, IMASK, IMASK, data);
+ 									break;
+@@ -3887,9 +3964,28 @@ bool adsp21062_device::generate_opcode(drcuml_block &block, compiler_state &comp
+ 
+ void adsp21062_device::generate_unimplemented_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
+ {
++	// Rather than abort, run this one compute op through the interpreter's COMPUTE(). This lets
++	// the DRC compile blocks that contain compute ops it has no inline generator for (the SHARC
++	// DRC never implemented the fixed-point multiplier / MAC family, which the KN7000 effects
++	// kernel leans on) instead of forcing the whole device back to the interpreter. The register
++	// file lives partly in fast host registers inside a block, so flush it to / from memory
++	// around the call; compute_fallback handles the flag round-trip.
+ 	UML_MOV(block, mem(&m_core->pc), desc->pc);
+ 	UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+-	UML_CALLC(block, cfuncs::unimplemented_compute, this);
++	save_fast_iregs(block);
++	UML_CALLC(block, cfuncs::compute_fallback, this);
++	load_fast_iregs(block);
++}
++
++void adsp21062_device::generate_unimplemented_shiftimm(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
++{
++	// As generate_unimplemented_compute, but for immediate-shift ops with no inline generator:
++	// run this one op through the interpreter's SHIFT_OPERATION_IMM() instead of aborting.
++	UML_MOV(block, mem(&m_core->pc), desc->pc);
++	UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
++	save_fast_iregs(block);
++	UML_CALLC(block, cfuncs::shiftimm_fallback, this);
++	load_fast_iregs(block);
+ }
+ 
+ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &compiler, const opcode_desc *desc)
+@@ -3981,24 +4077,109 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 				return;
+ 			}
+ 
+-			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry
+-			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy
+-			case 0x06:          // Rm = R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
+-			case 0x08:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
+-			case 0x09:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
+-			case 0x0a:          // MRF = MRF + R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
+-			case 0x0c:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
+-			case 0x0d:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
+-			case 0x0e:          // Rm = MRF + R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
+-			case 0x10:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 + R15-12
+-			case 0x11:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = R11-8 - R15-12
+-			case 0x12:          // MRF = MRF - R3-0 * R7-4 (SSF),   Ra = (R11-8 + R15-12) / 2
+-			case 0x14:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12
+-			case 0x15:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = R11-8 - R15-12
+-			case 0x16:          // Rm = MRF - R3-0 * R7-4 (SSFR),   Ra = (R11-8 + R15-12) / 2
++			case 0x07:          // Ra = Rx + Ry,   Rs = Rx - Ry   (fixed dual add/sub, not a MAC)
++			case 0x0f:          // Fa = Fx + Fy,   Fs = Fx - Fy   (float dual add/sub, not a MAC)
+ 				generate_unimplemented_compute(block, compiler, desc);
+ 				return;
+ 
++			// Fixed-point multiply / multiply-accumulate in parallel with an ALU add/sub/avg.
++			// multiop groups as grp=(multiop>>2): 1=Rm=Rxm*Rym, 2=MRF+=Rxm*Rym, 3=Rm=MRF+Rxm*Rym,
++			// 4=MRF-=Rxm*Rym, 5=Rm=MRF-Rxm*Rym; alu=(multiop&3): 0=add, 1=sub, 2=average. Native
++			// emission (previously an interpreter fallback -- save/restore + C call per op -- in the
++			// effect kernel's per-frame hot path; the reverb's coupled-form sine oscillators live
++			// here). Mirrors the interpreter compute_* exactly; verified by a bit-identical reverb
++			// WAV A/B (DRC-with-fallback == DRC-native). Product aligned 1.63 (<<1); Rm = MR1 (63:32).
++			case 0x06:          // Rm = Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			case 0x08:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa + Rya
++			case 0x09:          // MRF = MRF + Rxm*Rym (SSF),   Ra = Rxa - Rya
++			case 0x0a:          // MRF = MRF + Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
++			case 0x0c:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa + Rya
++			case 0x0d:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = Rxa - Rya
++			case 0x0e:          // Rm = MRF + Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			case 0x10:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa + Rya
++			case 0x11:          // MRF = MRF - Rxm*Rym (SSF),   Ra = Rxa - Rya
++			case 0x12:          // MRF = MRF - Rxm*Rym (SSF),   Ra = (Rxa + Rya) / 2
++			case 0x14:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa + Rya
++			case 0x15:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = Rxa - Rya
++			case 0x16:          // Rm = MRF - Rxm*Rym (SSFR),   Ra = (Rxa + Rya) / 2
++			{
++				const int grp = multiop >> 2;
++				const int alu = multiop & 3;
++				// p = (Rxm * Rym) << 1   (64-bit signed product, in I0)
++				UML_DSEXT(block, I0, REG(fxm), SIZE_DWORD);
++				UML_DSEXT(block, I1, REG(fym), SIZE_DWORD);
++				UML_DMULS(block, I0, I0, I0, I1);
++				UML_DSHL(block, I0, I0, 1);
++				// MR accumulate / register result
++				switch (grp)
++				{
++					case 1: UML_DSHR(block, I2, I0, 32); UML_MOV(block, REG(fm), I2); break;
++					case 2: UML_DADD(block, MRF, MRF, I0); break;
++					case 3: UML_DADD(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
++					case 4: UML_DSUB(block, MRF, MRF, I0); break;
++					case 5: UML_DSUB(block, I2, MRF, I0); UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(fm), I2); break;
++				}
++				// Multiplier flags: interpreter clears MN/MV/MU/MI and sets MN from Rm for the
++				// register-destination groups (1,3,5); MRF-only groups (2,4) leave MN clear.
++				// Gate each write on its liveness (as the rest of the DRC does) so dead flags cost
++				// nothing -- the bit-identical WAV A/B holds because a non-required flag is unread.
++				if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
++				if (MU_CALC_REQUIRED) UML_MOV(block, ASTAT_MU, 0);
++				if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++				if (MN_CALC_REQUIRED)
++				{
++					if (grp == 1 || grp == 3 || grp == 5)
++					{
++						UML_TEST(block, REG(fm), REG(fm));
++						UML_SETc(block, uml::COND_S, ASTAT_MN);
++					}
++					else
++						UML_MOV(block, ASTAT_MN, 0);
++				}
++				// Parallel ALU
++				if (alu == 2)   // signed average (Rxa+Rya)/2, overflow-free: (a>>1)+(b>>1)+(a&b&1)
++				{
++					UML_SAR(block, I3, REG(fxa), 1);
++					UML_SAR(block, I8, REG(fya), 1);
++					UML_ADD(block, I3, I3, I8);
++					UML_AND(block, I8, REG(fxa), REG(fya));
++					UML_AND(block, I8, I8, 1);
++					UML_ADD(block, REG(fa), I3, I8);
++				}
++				else
++				{
++					if (alu == 0) UML_ADD(block, I8, REG(fxa), REG(fya));
++					else          UML_SUB(block, I8, REG(fxa), REG(fya));
++					UML_MOV(block, I9, 0);
++					UML_SETc(block, uml::COND_V, I9);      // overflow, for ALUSAT
++					UML_MOV(block, REG(fa), I8);
++					{
++						uml::code_label const nsat = compiler.labelnum++;
++						UML_TEST(block, MODE1, MODE1_ALUSAT);
++						UML_JMPc(block, uml::COND_Z, nsat);
++						UML_TEST(block, I9, 1);
++						UML_JMPc(block, uml::COND_Z, nsat);
++						UML_SAR(block, I8, I8, 31);
++						UML_XOR(block, REG(fa), I8, 0x80000000);   // wrapped<0 -> 0x7FFFFFFF else 0x80000000
++						UML_LABEL(block, nsat);
++					}
++				}
++				// ALU flags: interpreter clears all ALU flags then sets AN/AZ from the final Ra.
++				// Gated on liveness (dead flags unread -> WAV stays bit-identical).
++				if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++				if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
++				if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
++				if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++				if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++				if (AZ_CALC_REQUIRED || AN_CALC_REQUIRED)
++				{
++					UML_TEST(block, REG(fa), REG(fa));
++					if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++					if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
++				}
++				return;
++			}
++
+ 			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+ 			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
+ 				// Rm = R3-0 * R7-4 (SSFR),   Ra = R11-8 + R15-12,   Rs = R11-8 - R15-12
+@@ -4372,38 +4553,122 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 			{
+ 				switch (operation)
+ 				{
+-					case 0x09:      // Rn = (Rx + Ry) / 2
++					case 0x09:      // Rn = (Rx + Ry) / 2  -- fixed-point signed average
++					{
++						// The last hot single-function op the DRC left to the interpreter (the
++						// 21065L effect microprograms use it for reverb/filter interpolation).
++						// Mirrors compute_avg (sharcops.hxx): value = (Rx>>1)+(Ry>>1)+(Rx&Ry&1)
++						// (overflow-free signed average == uint32((int64)(Rx+Ry) >> 1)); flags =
++						// clear all, AC = carry-out of the 32-bit Rx+Ry, AV = 0 (an average cannot
++						// overflow), AN/AZ from the result, AF/AS/AI cleared. Gated on liveness.
++						// AC first (captured before the value adds clobber the host carry):
++						if (AC_CALC_REQUIRED)
++						{
++							UML_ADD(block, I2, REG(rx), REG(ry));
++							UML_SETc(block, uml::COND_C, ASTAT_AC);
++						}
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++						if (AS_CALC_REQUIRED) UML_MOV(block, ASTAT_AS, 0);
++						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++						UML_SAR(block, I0, REG(rx), 1);
++						UML_SAR(block, I1, REG(ry), 1);
++						UML_ADD(block, I0, I0, I1);
++						UML_AND(block, I2, REG(rx), REG(ry));
++						UML_AND(block, I2, I2, 1);
++						UML_ADD(block, I0, I0, I2);      // I0 = result; host Z/S reflect it
++						if (AZ_CALC_REQUIRED) UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++						if (AN_CALC_REQUIRED) UML_SETc(block, uml::COND_S, ASTAT_AN);
++						UML_MOV(block, REG(rn), I0);
++						return;
++					}
++
+ 					case 0x92:      // Fn = ABS(Fx - Fy)
+ 					case 0xdd:      // Rn = TRUNC Fx BY Ry
+ 					case 0xe0:      // Fn = Fx COPYSIGN Fy
+-					case 0x30:      // Rn = ABS Rx
+ 					case 0xa5:      // Fn = RND Fx
+ 					case 0xad:      // Rn = MANT Fx
+ 					case 0xcd:      // Rn = TRUNC Fx
+ 						generate_unimplemented_compute(block, compiler, desc);
+ 						return;
+ 
+-					case 0x01:      // Rn = Rx + Ry
+-						UML_ADD(block, REG(rn), REG(rx), REG(ry));
+-						update_az_av_an_ac_fixed(block, desc, false);
++					case 0x30:      // Rn = ABS Rx
++					{
++						// Mirrors interpreter compute_abs exactly: overflow only for
++						// Rx == 0x80000000 (AV + sticky AOS, clamped to 0x7FFFFFFF in ALUSAT
++						// mode); AS = sign of the INPUT, AZ/AN from the (possibly saturated)
++						// result, AC/AI/AF cleared.
++						uml::code_label const no_ovf = compiler.labelnum++;
++						uml::code_label const done = compiler.labelnum++;
++						if (AS_CALC_REQUIRED)
++						{
++							UML_TEST(block, REG(rx), 0x80000000);
++							UML_SETc(block, uml::COND_NZ, ASTAT_AS);
++						}
++						// I0 = abs((int32)Rx):  I1 = Rx >> 31 (arithmetic);  I0 = (Rx ^ I1) - I1
++						UML_SAR(block, I1, REG(rx), 31);
++						UML_XOR(block, I0, REG(rx), I1);
++						UML_SUB(block, I0, I0, I1);
++						UML_CMP(block, REG(rx), 0x80000000);
++						UML_JMPc(block, uml::COND_NE, no_ovf);
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 1);
++						UML_OR(block, STKY, STKY, AOS);
++						UML_TEST(block, MODE1, MODE1_ALUSAT);
++						UML_MOVc(block, uml::COND_NZ, I0, 0x7fffffff);
++						UML_JMP(block, done);
++						UML_LABEL(block, no_ovf);
++						if (AV_CALC_REQUIRED) UML_MOV(block, ASTAT_AV, 0);
++						UML_LABEL(block, done);
++						if (AZ_CALC_REQUIRED)
++						{
++							UML_TEST(block, I0, 0xffffffff);
++							UML_SETc(block, uml::COND_Z, ASTAT_AZ);
++						}
++						if (AN_CALC_REQUIRED)
++						{
++							UML_TEST(block, I0, 0x80000000);
++							UML_SETc(block, uml::COND_NZ, ASTAT_AN);
++						}
++						if (AC_CALC_REQUIRED) UML_MOV(block, ASTAT_AC, 0);
++						if (AI_CALC_REQUIRED) UML_MOV(block, ASTAT_AI, 0);
++						if (AF_CALC_REQUIRED) UML_MOV(block, ASTAT_AF, 0);
++						UML_MOV(block, REG(rn), I0);
+ 						return;
++					}
+ 
++					case 0x01:      // Rn = Rx + Ry
+ 					case 0x02:      // Rn = Rx - Ry
+-						UML_SUB(block, REG(rn), REG(rx), REG(ry));
+-						update_az_av_an_ac_fixed(block, desc, true);
++					{
++						// See generate_fixed_alusat_tail: hardware saturates in ALUSAT mode.
++						const bool is_sub = (operation == 0x02);
++						if (is_sub)
++							UML_SUB(block, I8, REG(rx), REG(ry));
++						else
++							UML_ADD(block, I8, REG(rx), REG(ry));
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
++						update_az_av_an_ac_fixed(block, desc, is_sub);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
++					}
+ 
+ 					case 0x05:      // Rn = Rx + Ry + CI
+ 						UML_CARRY(block, ASTAT_AC, 0);
+-						UML_ADDC(block, REG(rn), REG(rx), REG(ry));
++						UML_ADDC(block, I8, REG(rx), REG(ry));
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x06:      // Rn = Rx - Ry + CI - 1
+ 						UML_XOR(block, I0, ASTAT_AC, 0xffffffff);
+ 						UML_CARRY(block, I0, 0);
+-						UML_SUBB(block, REG(rn), REG(rx), REG(ry));
++						UML_SUBB(block, I8, REG(rx), REG(ry));
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x0a:      // COMP(Rx, Ry)
+@@ -4441,29 +4706,44 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 						return;
+ 
+ 					case 0x22:      // Rn = -Rx
+-						UML_SUB(block, REG(rn), 0, REG(rx));
++						UML_SUB(block, I8, 0, REG(rx));
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x25:      // Rn = Rx + CI
+-						UML_ADD(block, REG(rn), REG(rx), ASTAT_AC);
++						UML_ADD(block, I8, REG(rx), ASTAT_AC);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x26:      // Rn = Rx + CI - 1
+ 						UML_XOR(block, I0, ASTAT_AC, 1);
+-						UML_SUB(block, REG(rn), REG(rx), I0);
++						UML_SUB(block, I8, REG(rx), I0);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x29:      // Rn = Rx + 1
+-						UML_ADD(block, REG(rn), REG(rx), 1);
++						UML_ADD(block, I8, REG(rx), 1);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, false);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x2a:      // Rn = Rx - 1
+-						UML_SUB(block, REG(rn), REG(rx), 1);
++						UML_SUB(block, I8, REG(rx), 1);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, true);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rn), true);
+ 						return;
+ 
+ 					case 0x40:      // Rn = Rx AND Ry
+@@ -4527,12 +4807,21 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 
+ 					case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
+ 					case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7e: case 0x7f:
+-						// Fixed-point Dual Add/Subtract
++						// Fixed-point Dual Add/Subtract (both halves saturate under ALUSAT;
++						// flags are OR-merged across the two results as before -- the
++						// saturated-value AN/AZ micro-corrections are skipped here since the
++						// merged flags cannot express per-half fixes; matches interpreter
++						// behavior closely enough for the flag consumers seen in the wild).
+ 						UML_MOV(block, I0, REG(rx));
+ 						UML_MOV(block, I1, REG(ry));
+-						UML_ADD(block, REG(ra), I0, I1);
++						UML_ADD(block, I8, I0, I1);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						update_az_av_an_ac_fixed(block, desc, false);
+-						UML_SUB(block, REG(rs), I0, I1);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(ra), false);
++						UML_SUB(block, I8, I0, I1);
++						UML_MOV(block, I9, 0);
++						UML_SETc(block, uml::COND_V, I9);
+ 						if (AZ_CALC_REQUIRED) UML_SETc(block, COND_Z, I0);
+ 						if (AV_CALC_REQUIRED) UML_SETc(block, COND_V, I1);
+ 						if (AN_CALC_REQUIRED) UML_SETc(block, COND_S, I2);
+@@ -4541,6 +4830,7 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 						if (AV_CALC_REQUIRED) UML_OR(block, ASTAT_AV, ASTAT_AV, I1);
+ 						if (AN_CALC_REQUIRED) UML_OR(block, ASTAT_AN, ASTAT_AN, I2);
+ 						if (AC_CALC_REQUIRED) UML_OR(block, ASTAT_AC, ASTAT_AC, I3);
++						generate_fixed_alusat_tail(block, compiler, desc, REG(rs), false);
+ 						return;
+ 
+ 					case 0x81:      // Fn = Fx + Fy
+@@ -5071,6 +5361,142 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 
+ 			case 1:             // multiplier operations
+ 			{
++				// Native single-function fixed-point multiplier / MAC, SIGNED x SIGNED forms
++				// (0x70-0x7f = Rx*Ry, 0xb0-0xbf = MR + Rx*Ry, 0xf0-0xff = MR - Rx*Ry). This is the
++				// Technics KN7000 effects kernel's hot path: without these it took ~66M
++				// interpreter fallbacks per reverb run, since the existing native MAC covered
++				// only the MULTI-function forms. Mirrors the interpreter's general fixed
++				// multiplier (sharcops.hxx). Unsigned/mixed-sign and the RND (0x18-0x1F) forms
++				// still fall back; the SAT family (0x00-0x0F) is native below. Op byte:
++				//   [7:6] oper (1=Rx*Ry, 2=MR+, 3=MR-)  [5]xsgn [4]ysgn  [3]frac  [2]dest=MR  [1]MRB  [0]round
++				if ((operation & 0x30) == 0x30 && (operation & 0xc0) != 0)   // xsgn && ysgn && oper!=0
++				{
++					const int  mac_oper = (operation >> 6) & 3;
++					const bool frac     = (operation >> 3) & 1;
++					const bool dest_mr  = (operation >> 2) & 1;
++					const bool use_mrb  = (operation >> 1) & 1;
++					const bool round    = (operation >> 0) & 1;
++					// p = (int64)Rx * (int64)Ry ; frac aligns the product to 1.63 (<<1)
++					UML_DSEXT(block, I0, REG(rx), SIZE_DWORD);
++					UML_DSEXT(block, I1, REG(ry), SIZE_DWORD);
++					UML_DMULS(block, I0, I0, I0, I1);          // I0 = low 64 of the signed product
++					if (frac) UML_DSHL(block, I0, I0, 1);
++					if (mac_oper == 1)      UML_DMOV(block, I2, I0);
++					else if (mac_oper == 2) UML_DADD(block, I2, use_mrb ? MRB : MRF, I0);
++					else                    UML_DSUB(block, I2, use_mrb ? MRB : MRF, I0);
++					if (round && frac)      UML_DADD(block, I2, I2, 0x80000000ULL);
++					// Multiplier flags, mirroring the interpreter's SET_FLAG_* bit for bit --
++					// including their 64-bit-MR approximation, since MAME models MR without the
++					// MR2 stage. Liveness-gated, so only the last definer in a sequence pays.
++					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++					// MV = the high half is neither 0 nor all-ones, i.e. uint32_t(high + 1) > 1.
++					if (MV_CALC_REQUIRED)
++					{
++						UML_DSHR(block, I0, I2, 32);
++						UML_ADD(block, I0, I0, 1);
++						UML_CMP(block, I0, 1);
++						UML_SETc(block, uml::COND_A, ASTAT_MV);
++					}
++					// MU = high half zero and low half non-zero.
++					if (MU_CALC_REQUIRED)
++					{
++						UML_DTEST(block, I2, 0xffffffff00000000ULL);
++						UML_SETc(block, uml::COND_Z, I0);
++						UML_TEST(block, I2, 0xffffffff);
++						UML_SETc(block, uml::COND_NZ, I1);
++						UML_AND(block, ASTAT_MU, I0, I1);
++					}
++					// MN is the sign of the delivered half -- bits 63:32 for fractional.
++					if (MN_CALC_REQUIRED)
++					{
++						UML_DTEST(block, I2, 1ULL << (frac ? 63 : 31));
++						UML_SETc(block, uml::COND_NZ, ASTAT_MN);
++					}
++					if (dest_mr)
++						UML_DMOV(block, use_mrb ? MRB : MRF, I2);
++					else if (frac)
++					{ UML_DSHR(block, I2, I2, 32); UML_MOV(block, REG(rn), I2); }
++					else
++						UML_MOV(block, REG(rn), I2);
++					return;
++				}
++				// SAT MRx family (op 0x00-0x0F, TRM B-57): saturate the accumulator to the
++				// destination format's range.  Mirrors the interpreter exactly: MR is modelled
++				// as 64 bits (no MR2 stage), so only the integer forms can actually clamp --
++				// the fractional forms pass MR through (the MAC path itself wraps at 64 bits).
++				// Op byte: [3] fractional  [2] dest = MR  [1] MRB select  [0] signed.
++				if ((operation & 0xf0) == 0x00)
++				{
++					const bool frac    = BIT(operation, 3);
++					const bool dest_mr = BIT(operation, 2);
++					const bool use_mrb = BIT(operation, 1);
++					const bool sgn     = BIT(operation, 0);
++
++					UML_DMOV(block, I0, use_mrb ? MRB : MRF);
++					if (!frac)
++					{
++						uml::code_label const done = compiler.labelnum++;
++						if (sgn)
++						{
++							uml::code_label const not_high = compiler.labelnum++;
++							UML_DCMP(block, I0, 0x000000007fffffffLL);
++							UML_JMPc(block, uml::COND_LE, not_high);
++							UML_DMOV(block, I0, 0x000000007fffffffLL);
++							UML_JMP(block, done);
++							UML_LABEL(block, not_high);
++							UML_DCMP(block, I0, 0xffffffff80000000LL);
++							UML_JMPc(block, uml::COND_GE, done);
++							UML_DMOV(block, I0, 0xffffffff80000000LL);
++						}
++						else
++						{
++							UML_DCMP(block, I0, 0x00000000ffffffffLL);
++							UML_JMPc(block, uml::COND_BE, done);
++							UML_DMOV(block, I0, 0x00000000ffffffffLL);
++						}
++						UML_LABEL(block, done);
++					}
++					// TRM B-57 flags, mirroring the interpreter: MN = sign of the result in
++					// its format (signed forms only), MV/MI cleared, MU = fractional underflow
++					// only ("integer results do not underflow").  Gated on liveness.
++					if (MI_CALC_REQUIRED) UML_MOV(block, ASTAT_MI, 0);
++					if (MV_CALC_REQUIRED) UML_MOV(block, ASTAT_MV, 0);
++					if (MN_CALC_REQUIRED)
++					{
++						if (sgn)
++						{
++							UML_DTEST(block, I0, 1ULL << (frac ? 63 : 31));
++							UML_SETc(block, uml::COND_NZ, ASTAT_MN);
++						}
++						else
++							UML_MOV(block, ASTAT_MN, 0);
++					}
++					if (MU_CALC_REQUIRED)
++					{
++						if (frac)
++						{
++							// MU = (bits 63:32 == 0) && (bits 31:0 != 0)  [SET_FLAG_MU]
++							UML_DTEST(block, I0, 0xffffffff00000000ULL);
++							UML_SETc(block, uml::COND_Z, I1);
++							UML_TEST(block, I0, 0xffffffff);
++							UML_SETc(block, uml::COND_NZ, I2);
++							UML_AND(block, ASTAT_MU, I1, I2);
++						}
++						else
++							UML_MOV(block, ASTAT_MU, 0);
++					}
++					if (dest_mr)
++						UML_DMOV(block, use_mrb ? MRB : MRF, I0);
++					else if (frac)
++					{
++						// fractional destination takes MR1 (bits 63:32), integer takes MR0
++						UML_DSHR(block, I0, I0, 32);
++						UML_MOV(block, REG(rn), I0);
++					}
++					else
++						UML_MOV(block, REG(rn), I0);
++					return;
++				}
+ 				switch (operation)
+ 				{
+ 					case 0x48:      // Rn = Rx * Ry (UUF)
+@@ -5201,22 +5627,6 @@ void adsp21062_device::generate_compute(drcuml_block &block, compiler_state &com
+ 					case 0xf6:      // MRB = MRB - Rx * Ry (SSI)
+ 					case 0xfe:      // MRB = MRB - Rx * Ry (SSF)
+ 					case 0xff:      // MRB = MRB - Rx * Ry (SSFR)
+-					case 0x00:      // Rn = SAT MRF (UI)
+-					case 0x01:      // Rn = SAT MRF (SI)
+-					case 0x08:      // Rn = SAT MRF (UF)
+-					case 0x09:      // Rn = SAT MRF (SF)
+-					case 0x02:      // Rn = SAT MRB (UI)
+-					case 0x03:      // Rn = SAT MRB (SI)
+-					case 0x0a:      // Rn = SAT MRB (UF)
+-					case 0x0b:      // Rn = SAT MRB (SF)
+-					case 0x04:      // MRF = SAT MRF (UI)
+-					case 0x05:      // MRF = SAT MRF (SI)
+-					case 0x0c:      // MRF = SAT MRF (UF)
+-					case 0x0d:      // MRF = SAT MRF (SF)
+-					case 0x06:      // MRB = SAT MRB (UI)
+-					case 0x07:      // MRB = SAT MRB (SI)
+-					case 0x0e:      // MRB = SAT MRB (UF)
+-					case 0x0f:      // MRB = SAT MRB (SF)
+ 					case 0x18:      // Rn = RND MRF (U)
+ 					case 0x19:      // Rn = RND MRF (S)
+ 					case 0x1a:      // Rn = RND MRB (U)
+@@ -5693,13 +6103,38 @@ void adsp21062_device::generate_shift_imm(drcuml_block &block, compiler_state &c
+ 
+ 	switch (shiftop)
+ 	{
+-		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
+ 		case 0x1b:      // Rn = Rn OR FDEP Rx BY <bit6>:<len6> (SE)
+-			UML_MOV(block, mem(&m_core->pc), desc->pc);
+-			UML_DMOV(block, mem(&m_core->arg64), desc->opptr);
+-			UML_CALLC(block, cfuncs::unimplemented_shiftimm, this);
++			generate_unimplemented_shiftimm(block, compiler, desc);
+ 			break;
+ 
++		case 0x13:      // FDEP Rx BY <bit6>:<len6> (SE)
++			// Mirrors the interpreter: Rn = sext(Rx, min(len,32)) << bit (0 when len == 0
++			// or bit >= 32); SZ from the result, SV = (bit+len > 32), SS cleared.  This is
++			// the LFO phase-accumulator wrap op in the chorus/flanger/phaser families.
++			// Shift-by-zero is routed to flag-generating ops (AND/BFXS) so the requested
++			// Z flag is always produced.
++			if (bit >= 32 || len == 0)
++				UML_AND(block, REG(rn), REG(rn), 0);
++			else if (len >= 32)
++			{
++				if (bit == 0)
++					UML_AND(block, REG(rn), REG(rx), 0xffffffff);   // sext(x, 32) = x
++				else
++					UML_SHL(block, REG(rn), REG(rx), bit);
++			}
++			else if (bit == 0)
++				UML_BFXS(block, REG(rn), REG(rx), 0, len);
++			else
++			{
++				UML_BFXS(block, I0, REG(rx), 0, len);
++				UML_SHL(block, REG(rn), I0, bit);
++			}
++			if (SZ_CALC_REQUIRED) UML_SETc(block, COND_Z, ASTAT_SZ);
++			if (SV_CALC_REQUIRED && (bit + len) > 32) UML_MOV(block, ASTAT_SV, 1);
++			if (SV_CALC_REQUIRED && (bit + len) <= 32) UML_MOV(block, ASTAT_SV, 0);
++			if (SS_CALC_REQUIRED) UML_MOV(block, ASTAT_SS, 0);
++			return;
++
+ 		case 0x00:      // LSHIFT Rx BY <data8>
+ 			if (abs(shift) >= 32)
+ 			{
+diff --git a/src/devices/cpu/sharc/sharcfe.cpp b/src/devices/cpu/sharc/sharcfe.cpp
+index 84ad10eaab8..5a5c8db2e68 100644
+--- a/src/devices/cpu/sharc/sharcfe.cpp
++++ b/src/devices/cpu/sharc/sharcfe.cpp
+@@ -145,6 +145,7 @@ void adsp21062_device::opcode_desc::log_register_list(std::ostream &stream, cons
+ adsp21062_device::frontend::frontend(adsp21062_device *sharc, uint32_t window_start, uint32_t window_end, uint32_t max_sequence)
+ 	: drc_frontend_base(sharc->space_config(AS_PROGRAM)->page_shift(), window_start, window_end, max_sequence)
+ 	, m_sharc(sharc)
++	, m_pm_page(sharc->internal_ram_base() >> 17)
+ {
+ 	m_loopmap = std::make_unique<LOOP_ENTRY[]>(0x20000);
+ }
+@@ -173,7 +174,7 @@ void adsp21062_device::frontend::add_loop_entry(uint32_t pc, uint8_t type, opcod
+ 	uint32_t const l2 = pc >> 17;
+ 	uint32_t const l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != m_pm_page)
+ 		fatalerror("adsp21062_device::frontend::add_loop_entry: PC = %08X", pc);
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -237,7 +238,7 @@ bool adsp21062_device::frontend::is_loop_evaluation(uint32_t pc)
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != m_pm_page)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -252,7 +253,7 @@ bool adsp21062_device::frontend::is_loop_start(uint32_t pc)
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != m_pm_page)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+@@ -267,7 +268,7 @@ bool adsp21062_device::frontend::is_astat_delay_check(uint32_t pc)
+ 	uint32_t l2 = pc >> 17;
+ 	uint32_t l1 = pc & 0x1ffff;
+ 
+-	if (l2 != 0x1)
++	if (l2 != m_pm_page)
+ 		return false;
+ 
+ 	LOOP_ENTRY* map = m_loopmap.get();
+diff --git a/src/devices/cpu/sharc/sharcfe.h b/src/devices/cpu/sharc/sharcfe.h
+index 4f411863170..c9f8ed1bf5e 100644
+--- a/src/devices/cpu/sharc/sharcfe.h
++++ b/src/devices/cpu/sharc/sharcfe.h
+@@ -308,6 +308,9 @@ private:
+ 	bool is_astat_delay_check(uint32_t pc);
+ 
+ 	adsp21062_device *m_sharc;
++	// Which 128 KiB page holds internal program memory: 0x20000 on the 2M/4M
++	// parts, 0x8000 on the 21065L. The loop map is indexed by pc & 0x1ffff.
++	uint32_t const m_pm_page;
+ 
+ 	std::unique_ptr<LOOP_ENTRY[]> m_loopmap;
+ };
+diff --git a/src/devices/cpu/sharc/sharcops.hxx b/src/devices/cpu/sharc/sharcops.hxx
+index 4107d35487a..c38ede0f084 100644
+--- a/src/devices/cpu/sharc/sharcops.hxx
++++ b/src/devices/cpu/sharc/sharcops.hxx
+@@ -728,6 +728,28 @@ void adsp21062_device::SHIFT_OPERATION_IMM(int shiftop, int data, int rn, int rx
+ 
+ #include "compute.hxx"
+ 
++/* Rn = (Rx + Ry) / 2   -- fixed-point average (ALU single-function op 0x09).
++   This is the fixed-point twin of the floating-point FAVG (op 0x89) and is used
++   heavily by the ADSP-21065L effect microprograms (reverb/filter interpolation),
++   so leaving it unimplemented makes those effects compute nothing. Modelled as a
++   signed 33-bit add shifted right one bit (so it cannot overflow -> AV always 0);
++   the carry-out of the 32-bit adder sets AC, matching the hardware adder. */
++void adsp21062_device::compute_avg(int rn, int rx, int ry)
++{
++	int64_t const sum   = (int64_t)(int32_t)REG(rx) + (int64_t)(int32_t)REG(ry);
++	uint32_t const radd = REG(rx) + REG(ry);          // 32-bit adder result (for the carry flag)
++	uint32_t const r    = (uint32_t)(sum >> 1);       // (Rx + Ry) / 2, arithmetic (signed) shift
++
++	CLEAR_ALU_FLAGS();
++	SET_FLAG_AC_ADD(radd, REG(rx), REG(ry));           // AC = carry out of the add
++	// AV stays clear: an average can never overflow the destination.
++	SET_FLAG_AN(r);
++	SET_FLAG_AZ(r);
++
++	REG(rn) = r;
++	m_core->astat &= ~AF;
++}
++
+ void adsp21062_device::COMPUTE(uint32_t opcode)
+ {
+ 	int const op = (opcode >> 12) & 0xff;
+@@ -762,6 +784,82 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
+ 				compute_mul_ssfr_sub(fm, fxm, fym, fa, fxa, fya);
+ 				break;
+ 
++			case 0x06:                                                      /* Rm = Rxm*Rym (SSFR),  Ra = (Rxa+Rya)/2 */
++			case 0x08: case 0x09: case 0x0a:                                /* MRF = MRF + Rxm*Rym (SSF),  ALU */
++			case 0x0c: case 0x0d: case 0x0e:                                /* Rm  = MRF + Rxm*Rym (SSFR), ALU */
++			case 0x10: case 0x11: case 0x12:                                /* MRF = MRF - Rxm*Rym (SSF),  ALU */
++			case 0x14: case 0x15: case 0x16:                                /* Rm  = MRF - Rxm*Rym (SSFR), ALU */
++			{
++				// Fixed-point multiplier/MAC in parallel with an ALU add/sub/avg. The multiop
++				// field groups as (multiop>>2): 1 = Rm=Rxm*Rym, 2 = MRF+=Rxm*Rym,
++				// 3 = Rm=MRF+Rxm*Rym, 4 = MRF-=Rxm*Rym, 5 = Rm=MRF-Rxm*Rym; and (multiop&3):
++				// 0 = add, 1 = sub, 2 = average. All signed fractional (product aligned to 1.63);
++				// the Rm result takes MR1 (bits 63:32), matching compute_mul_ssfr_* above.
++				const int grp = multiop >> 2;
++				const int alu = multiop & 3;
++				const int64_t p = int64_t(mul_32x32(int32_t(REG(fxm)), int32_t(REG(fym)))) << 1;
++
++				CLEAR_MULTIPLIER_FLAGS();
++				switch (grp)
++				{
++					case 1:  REG(fm)     = uint32_t(uint64_t(p) >> 32); break;                                  // Rm = Rxm*Rym
++					case 2:  m_core->mrf = uint64_t(int64_t(m_core->mrf) + p); break;                            // MRF += Rxm*Rym
++					case 3:  REG(fm)     = uint32_t(uint64_t(int64_t(m_core->mrf) + p) >> 32); break;            // Rm = MRF + Rxm*Rym
++					case 4:  m_core->mrf = uint64_t(int64_t(m_core->mrf) - p); break;                            // MRF -= Rxm*Rym
++					case 5:  REG(fm)     = uint32_t(uint64_t(int64_t(m_core->mrf) - p) >> 32); break;            // Rm = MRF - Rxm*Rym
++				}
++				if (grp != 2 && grp != 4)
++					SET_FLAG_MN(REG(fm));
++
++				uint32_t r_alu;
++				bool alu_ov = false;
++				if (alu == 0)
++				{
++					r_alu = REG(fxa) + REG(fya);
++					alu_ov = (~(REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
++				}
++				else if (alu == 1)
++				{
++					r_alu = REG(fxa) - REG(fya);
++					alu_ov = ((REG(fxa) ^ REG(fya)) & (REG(fxa) ^ r_alu)) >> 31;
++				}
++				else               r_alu = uint32_t((int64_t(int32_t(REG(fxa))) + int64_t(int32_t(REG(fya)))) >> 1);
++				// MODE1 ALUSAT: clamp on overflow (matches compute_add/compute_sub; the KN7000
++				// effects kernel runs with saturation enabled).
++				if (alu_ov && (m_core->mode1 & MODE1_ALUSAT))
++					r_alu = (int32_t(r_alu) < 0) ? 0x7FFFFFFF : 0x80000000;
++				REG(fa) = r_alu;
++
++				CLEAR_ALU_FLAGS();
++				SET_FLAG_AN(r_alu);
++				SET_FLAG_AZ(r_alu);
++				m_core->astat &= ~AF;
++				break;
++			}
++
++			case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
++			case 0x28: case 0x29: case 0x2a: case 0x2b: case 0x2c: case 0x2d: case 0x2e: case 0x2f:
++			{
++				/* Rm = Rxm*Rym (SSFR),  Ra = Rxa + Rya,  Rs = Rxa - Rya */
++				const int rs = (opcode >> 16) & 0xf;
++				const int64_t p = int64_t(mul_32x32(int32_t(REG(fxm)), int32_t(REG(fym)))) << 1;
++				const uint32_t r_add = REG(fxa) + REG(fya);
++				const uint32_t r_sub = REG(fxa) - REG(fya);
++
++				CLEAR_MULTIPLIER_FLAGS();
++				REG(fm) = uint32_t(uint64_t(p) >> 32);
++				SET_FLAG_MN(REG(fm));
++
++				CLEAR_ALU_FLAGS();
++				m_core->astat |= ((r_add == 0) || (r_sub == 0)) ? AZ : 0;
++				m_core->astat |= ((r_add | r_sub) & 0x80000000) ? AN : 0;
++				m_core->astat &= ~AF;
++
++				REG(fa) = r_add;
++				REG(rs) = r_sub;
++				break;
++			}
++
+ 			case 0x18:      /* Fm = Fxm * Fym,   Fa = Fxa + Fya */
+ 				compute_fmul_fadd(fm, fxm, fym, fa, fxa, fya);
+ 				break;
+@@ -819,6 +917,7 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
+ 				{
+ 					case 0x01:      compute_add(rn, rx, ry); break;
+ 					case 0x02:      compute_sub(rn, rx, ry); break;
++					case 0x09:      compute_avg(rn, rx, ry); break;
+ 					case 0x05:      compute_add_ci(rn, rx, ry); break;
+ 					case 0x06:      compute_sub_ci(rn, rx, ry); break;
+ 					case 0x0a:      compute_comp(rx, ry); break;
+@@ -900,7 +999,109 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
+ 					case 0xb2:      REG(rn) = compute_mrb_plus_mul_ssin(rx, ry); break;
+ 
+ 					default:
+-						throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++					{
++						// General fixed-point multiplier / MAC. The op byte decodes as:
++						//   [7:6] operation: 1 = Rx*Ry, 2 = MR + Rx*Ry, 3 = MR - Rx*Ry
++						//   [5]   Rx signed    [4] Ry signed
++						//   [3]   fractional (result << 1)   [2] destination: 0 = Rn, 1 = MR
++						//   [1]   MR select: 0 = MRF, 1 = MRB   [0] round-to-nearest
++						// (The specific cases above are fast-paths for the same decode; op 0 =
++						// clear/saturate/round forms are handled by their own cases / below.)
++						const int oper = (op >> 6) & 3;
++						if (oper == 0)
++						{
++							// SAT MRx (op 0x00-0x0F, TRM B-57): saturate the accumulator to the
++							// destination format's range.  Op byte: [3] fractional  [2] dest = MR
++							// [1] MRB select  [0] signed (mod1, TRM Table B-5).  Our MR model is
++							// 64-bit (no MR2 stage), so the fractional forms can never observe
++							// overflow -- the MAC path itself wraps at 64 bits; only the integer
++							// forms (32-bit destination range) can actually clamp here.
++							// RND MRx (0x18-0x1F) remains unimplemented (unused by the KN7000 pool).
++							if ((op & 0x30) != 0x00)
++								throw emu_fatalerror("%s: compute: multiplier operation %02X not implemented ! (%08X, %08X)", tag(), op, m_core->pc, opcode);
++
++							const bool frac    = BIT(op, 3);
++							const bool dest_mr = BIT(op, 2);
++							const bool use_mrb = BIT(op, 1);
++							const bool sgn     = BIT(op, 0);
++
++							uint64_t &mr = use_mrb ? m_core->mrb : m_core->mrf;
++							uint64_t result = mr;
++							if (!frac)
++							{
++								if (sgn)
++								{
++									if (int64_t(result) > 0x7fffffffLL)
++										result = 0x7fffffffULL;
++									else if (int64_t(result) < -0x80000000LL)
++										result = 0xffffffff80000000ULL;
++								}
++								else if (result > 0xffffffffULL)
++									result = 0xffffffffULL;
++							}
++
++							// TRM B-57 flags: MN = sign of the result in its format (unsigned
++							// results are never negative), MV/MI cleared, MU = fractional
++							// underflow only ("integer results do not underflow").
++							CLEAR_MULTIPLIER_FLAGS();
++							if (sgn && BIT(result, frac ? 63 : 31))
++								m_core->astat |= MN;
++							if (frac)
++								SET_FLAG_MU(result);
++
++							if (dest_mr)
++								mr = result;
++							else
++								REG(rn) = frac ? uint32_t(result >> 32) : uint32_t(result);
++							break;
++						}
++
++						const bool xsigned = BIT(op, 5);
++						const bool ysigned = BIT(op, 4);
++						const bool frac    = BIT(op, 3);
++						const bool dest_mr = BIT(op, 2);
++						const bool use_mrb = BIT(op, 1);
++						const bool round   = BIT(op, 0);
++
++						int64_t prod;
++						if (xsigned && ysigned)
++							prod = mul_32x32(int32_t(REG(rx)), int32_t(REG(ry)));
++						else if (!xsigned && !ysigned)
++							prod = int64_t(mulu_32x32(REG(rx), REG(ry)));
++						else
++						{
++							const int64_t a = xsigned ? int64_t(int32_t(REG(rx))) : int64_t(uint32_t(REG(rx)));
++							const int64_t b = ysigned ? int64_t(int32_t(REG(ry))) : int64_t(uint32_t(REG(ry)));
++							prod = a * b;
++						}
++						if (frac)
++							prod <<= 1;   // fractional multiply aligns the product to 1.63
++
++						uint64_t &mr = use_mrb ? m_core->mrb : m_core->mrf;
++						int64_t result;
++						if (oper == 1)      result = prod;                       // Rx*Ry
++						else if (oper == 2) result = int64_t(mr) + prod;         // MR + Rx*Ry
++						else                result = int64_t(mr) - prod;         // MR - Rx*Ry
++
++						if (round && frac)
++							result += 0x80000000LL;   // round the 1.31 result at the MR1/MR0 boundary
++
++						CLEAR_MULTIPLIER_FLAGS();
++						// MN is the sign of the DELIVERED value: the fractional forms hand
++						// over MR1, bits 63:32. Upstream's own fractional multipliers pass
++						// the already-shifted word to SET_FLAG_MN for the same reason.
++						SET_FLAG_MN(uint32_t(frac ? (uint64_t(result) >> 32) : uint64_t(result)));
++						SET_FLAG_MV(result);
++						SET_FLAG_MU(result);
++
++						if (dest_mr)
++							mr = uint64_t(result);                              // MRF/MRB = result (accumulate)
++						else
++							// Rn destination leaves MR unchanged; fractional takes MR1 (bits 63:32),
++							// integer takes MR0 (bits 31:0).
++							REG(rn) = frac ? uint32_t(uint64_t(result) >> 32) : uint32_t(result);
++						break;
++					}
+ 				}
+ 				break;
+ 			}
