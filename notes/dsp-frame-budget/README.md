@@ -48,6 +48,47 @@ through.
 (The 65% steady-state stale figure is not a defect: the chord decays, and a
 decayed-to-zero output is identical frame to frame by definition.)
 
+## Re-used 2026-09-23 to check that a round of review fixes changed no audio
+
+After an adversarial review of the MAME PR stack, ~200 lines were changed in
+response to it: the driver's five-window `io_r`/`io_w` pair was split so the
+0x98000000 sound window has its own handlers, the MN10300 core's `device_reset`
+gained clearing of the interrupt-delivery state, the SHARC's fixed-point dual
+add/subtract gained the ALUSAT flag correction on its add half, and nine ROM
+images were marked BAD_DUMP. Build, boot-screen pixel count and `-validate` all
+stayed green — which is exactly the set that stayed green while the data-region
+regression below was silencing the DSP.
+
+So the same harness was re-run on the PR branch tip:
+
+```sh
+PRESS_AT=18 STOP_AT=27 ./kn kn7000 -rompath <romsets> -window -nothrottle \
+    -autoboot_script chord_harness.lua -str 30 -wavwrite out.wav
+```
+
+| | value |
+|---|---|
+| WAV md5 | **`ecde0b33`** — identical to the 60 MHz reference above |
+| notes window 18.5-27.0 s | RMS 618.2 |
+| silence window 0.5-17.5 s | RMS 46.6 (the null) |
+
+Byte-identical output is the strongest available form of "the audio path is
+untouched", and the 13x RMS ratio confirms the capture is real signal rather than
+a noise floor — the harness reported `3 key field(s)` and `chord down at
+t=18.02`, so the stimulus demonstrably happened.
+
+⚠ **The RMS figures are not comparable with the 305.9 / 33.3 quoted earlier on
+this page.** Identical md5 means identical samples, so any difference is in how
+the numbers were taken, not in the signal: different window bounds, and this pass
+averaged over all channels. Use the md5 for comparison; quote RMS only with its
+window.
+
+The capture has **3 channels**, which is not a driver defect: the machine holds
+two speaker devices, `:speaker` (2 inputs) and
+`:fdc:0:35hd:floppysound:output` (1), and `sound_manager` sums
+`dev.inputs()` across all of them (`src/emu/sound.cpp:247`). Every MAME machine
+with a modelled floppy records the drive-sound channel.
+
 ## Found while doing this: two mapping defects
 
 1. **A regression this session introduced.** Shrinking the 21065L's internal data
