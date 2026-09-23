@@ -1,0 +1,26 @@
+== controls ==
+  determinism   gticlub twice on the base binary: MATCH (6 frames)
+  discrimination gticlub vs slrasslt: DIFFERS at f0300 f0900 f1800 f2700 f3600 f4500
+
+== base vs pr, 4500 frames each, marks 300,900,1800,2700,3600,4500 ==
+  gticlub    base_exit=0   pr_exit=0    MATCH (6 frames)
+  slrasslt   base_exit=0   pr_exit=0    MATCH (6 frames)
+  gradius4   base_exit=0   pr_exit=0    MATCH (6 frames)
+  nbapbp     base_exit=0   pr_exit=0    MATCH (6 frames)
+  jetwave    base_exit=0   pr_exit=0    MATCH (6 frames)
+  midnrun    base_exit=0   pr_exit=0    MATCH (6 frames)
+  windheat   base_exit=0   pr_exit=0    MATCH (6 frames)
+  doa        base_exit=0   pr_exit=0    MATCH (6 frames)
+  gunblade   base_exit=0   pr_exit=0    MATCH (6 frames)
+  pltkids    base_exit=0   pr_exit=0    MATCH (6 frames)
+  rchase2    base_exit=0   pr_exit=0    MATCH (6 frames)
+  vstriker   base_exit=0   pr_exit=0    MATCH (6 frames)
+  zerogun    base_exit=0   pr_exit=0    MATCH (6 frames)
+  hangplt    base_exit=0   pr_exit=0    MATCH (6 frames)
+  daytona    base_exit=0   pr_exit=0    MATCH (6 frames)
+  motoraid   base_exit=0   pr_exit=0    MATCH (6 frames)
+  vcop       base_exit=0   pr_exit=0    MATCH (6 frames)
+  vcop2      base_exit=0   pr_exit=0    MATCH (6 frames)
+  vf2        base_exit=0   pr_exit=0    MATCH (6 frames)
+
+ALL MATCH

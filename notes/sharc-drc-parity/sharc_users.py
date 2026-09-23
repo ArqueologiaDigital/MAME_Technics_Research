@@ -8,6 +8,18 @@ WHY
   radius is "every machine with an ADSP2106x", and the useful split is by whether
   that machine runs the RECOMPILER, since most of the changes are recompiler-side.
 
+⚠ CORRECTED 2026-09-24. The first version of this script attributed every machine in
+a FILE that instantiates a SHARC to the SHARC. That is wrong for src/mame/sega/model2.cpp,
+which holds four board generations: only **Model 2B** has an ADSP21062 (one
+`ADSP21062(config, ...)` call, model2.cpp:2840, in a model2b_state config). Model 2O and
+2A use a Fujitsu TGP and Model 2C a TGPx4. 55 of that file's 90 machines have no SHARC at
+all, and the old totals counted every one of them.
+  Caught by measurement, not by re-reading: alusat_probe.lua reported "NO DEVICE EXPOSES
+MODE1" on daytona, motoraid, vcop, vcop2 and vf2 -- which is exactly why the probe says
+that instead of printing nothing.
+  A machine is now counted only if its machine_config instantiates ADSP21062, closed
+transitively, the same way the recompiler set is closed.
+
 METHOD, and the three traps it exists to avoid
   1. An in-class DECLARATION (`void foo(machine_config &) ATTR_COLD;`) looks like
      a definition to a naive regex; brace-matching from it then captures the NEXT
@@ -79,13 +91,21 @@ for path in FILES:
             j += 1
         bodies[m.group(1)] = clean[i:j]
 
+    def close(seed):
+        cur = set(seed)
+        while True:
+            add = {n for n, b in bodies.items() if n not in cur
+                   and any(re.search(r'\b%s\s*\(\s*config\s*\)' % o, b) for o in cur)}
+            if not add: return cur
+            cur |= add
+
     direct = {n for n, b in bodies.items() if 'enable_recompiler()' in b}
-    drc = set(direct)
-    while True:
-        add = {n for n, b in bodies.items() if n not in drc
-               and any(re.search(r'\b%s\s*\(\s*config\s*\)' % o, b) for o in drc)}
-        if not add: break
-        drc |= add
+    drc = close(direct)
+
+    # A machine has a SHARC only if its config instantiates one. In model2.cpp that is
+    # a small minority of the file.
+    sharc_direct = {n for n, b in bodies.items() if 'ADSP21062(' in b or 'ADSP21065L(' in b}
+    sharc = close(sharc_direct)
 
     # cross-check: number of stripped call sites must equal len(direct)
     sites = len(re.findall(r'enable_recompiler\(\)', clean))
@@ -101,11 +121,18 @@ for path in FILES:
         rows.append((m.group(1), m.group(2), m.group(3),
                      'NOT_WORKING' not in text))
     by = collections.defaultdict(list)
+    skipped = 0
     for name, parent, cfg, works in rows:
+        if cfg not in sharc:
+            skipped += 1
+            continue
         by['DRC' if cfg in drc else 'INTERP'].append((name, parent, cfg, works))
+    grand['no_sharc'] += skipped
 
     print('== %s   %d machines   %d enable_recompiler() call site(s) in %d config(s)'
           % (path, len(rows), sites, len(direct)))
+    print('   %d of %d machines have a SHARC (%d configs instantiate one)'
+          % (len(rows) - skipped, len(rows), len(sharc)))
     print('   direct: %s' % (sorted(direct) or 'none'))
     if drc - direct:
         print('   inherited: %s' % sorted(drc - direct))
@@ -131,6 +158,7 @@ for path in FILES:
 print('TOTAL  DRC %d machines / %d parent sets (%d working)   INTERP %d machines / %d parent sets (%d working)'
       % (grand['DRC'], grand['DRC_parents'], grand['DRC_working'],
          grand['INTERP'], grand['INTERP_parents'], grand['INTERP_working']))
+print('       %d machines in these files have NO SHARC and are excluded' % grand['no_sharc'])
 
 if ROSTER:
     print()

@@ -1,0 +1,21 @@
+gticlub	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+slrasslt	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+gradius4	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+nbapbp	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+jetwave	:dsp	samples=4500	MODE1_or=00001078	ALUSAT_frames=0
+midnrun	:dsp	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+windheat	:dsp	samples=4500	MODE1_or=00001078	ALUSAT_frames=0
+doa	:copro_adsp	samples=4500	MODE1_or=00018000	ALUSAT_frames=0
+gunblade	:copro_adsp	samples=4500	MODE1_or=00018000	ALUSAT_frames=0
+pltkids	:copro_adsp	samples=4500	MODE1_or=00010000	ALUSAT_frames=0
+rchase2	:copro_adsp	samples=4500	MODE1_or=00018000	ALUSAT_frames=0
+vstriker	:copro_adsp	samples=4500	MODE1_or=00018000	ALUSAT_frames=0
+zerogun	:copro_adsp	samples=4500	MODE1_or=00010000	ALUSAT_frames=0
+hangplt	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+hangplt	:dsp2	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+daytona	NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
+motoraid	NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
+vcop	NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
+vcop2	NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
+vf2	NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
+ALUSAT-19-DONE

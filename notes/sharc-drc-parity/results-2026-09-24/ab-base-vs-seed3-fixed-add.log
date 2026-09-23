@@ -1,0 +1,27 @@
+== controls ==
+  determinism   gticlub twice on the base binary: MATCH (6 frames)
+  discrimination gticlub vs slrasslt: DIFFERS at f0300 f0900 f1800 f2700 f3600 f4500
+
+== base vs seed3, 4500 frames each, marks 300,900,1800,2700,3600,4500 ==
+  gticlub    base_exit=0   seed3_exit=0    DIFFERS at f0900 f1800 f2700 f3600 f4500
+  slrasslt   base_exit=0   seed3_exit=0    DIFFERS at f0900 f1800 f2700 f3600 f4500
+  gradius4   base_exit=0   seed3_exit=0    DIFFERS at f0300 missing:f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  nbapbp     base_exit=0   seed3_exit=0    DIFFERS at f0300 f0900 f1800 f2700 f3600 f4500
+  jetwave    base_exit=0   seed3_exit=0    DIFFERS at f0300 f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  midnrun    base_exit=0   seed3_exit=0    DIFFERS at f0300 f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  windheat   base_exit=0   seed3_exit=0    DIFFERS at f0300 f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  doa        base_exit=0   seed3_exit=0    DIFFERS at f1800 f2700 f3600 f4500
+  gunblade   base_exit=0   seed3_exit=0    DIFFERS at f0900 f3600 f4500
+  pltkids    base_exit=0   seed3_exit=0    MATCH (6 frames)
+  rchase2    base_exit=0   seed3_exit=0    DIFFERS at f2700 f4500
+  vstriker   base_exit=0   seed3_exit=3    DIFFERS at f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  zerogun    base_exit=0   seed3_exit=0    DIFFERS at f0900 f2700 f3600
+  hangplt    base_exit=0   seed3_exit=0    DIFFERS at f0300 f0900 f1800 f2700 f3600 f4500
+  daytona    base_exit=0   seed3_exit=0    MATCH (6 frames)
+  motoraid   base_exit=0   seed3_exit=0    MATCH (6 frames)
+  vcop       base_exit=0   seed3_exit=0    MATCH (6 frames)
+  vcop2      base_exit=0   seed3_exit=0    MATCH (6 frames)
+  vf2        base_exit=0   seed3_exit=0    MATCH (6 frames)
+
+SOME DIFFER -- see above
+SEED3-19-DONE

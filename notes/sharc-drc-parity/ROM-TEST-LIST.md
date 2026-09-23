@@ -1,6 +1,8 @@
 # Which existing MAME machines does the KN7000 submission put at risk?
 
-Generated: 2026-09-23, branch `technics-kn7000-driver-final` vs `upstream/master` (ae30b778cae).
+Generated 2026-09-24 from `machines-2026-09-24.txt`; branch `technics-kn7000-driver-final`
+vs `upstream/master` (`ae30b778cae`). Every table below is produced from that file, so the
+counts cannot drift from its totals line.
 
 ## The blast radius is exactly two things
 
@@ -15,83 +17,84 @@ references them. Two pieces are shared:
    `CPU_INCLUDE_DRC = false` and failed to link. Full builds were never affected —
    MIPS3/POWERPC/SH pull the DRC in regardless. No machine's behaviour changes.
 
-So: **the machines to test are every machine with a SHARC.** 220 of them, in five
-driver files.
+## ⚠ Correction, 2026-09-24: not every machine in these files has a SHARC
 
-    src/mame/konami/gticlub.cpp    11 machines
-    src/mame/konami/hornet.cpp     72
-    src/mame/konami/nwk-tr.cpp     36   (enables the recompiler nowhere)
-    src/mame/konami/zr107.cpp      11
-    src/mame/sega/model2.cpp       90
+An earlier revision of this file said 220 machines. That counted every machine in a FILE
+that instantiates a SHARC. `src/mame/sega/model2.cpp` holds four board generations and
+`ADSP21062(config, ...)` appears **once** in it (model2.cpp:2840, a `model2b_state`
+config): Model 2O and 2A use a Fujitsu TGP, Model 2C a TGPx4. Only Model 2B has a SHARC.
 
-Most of the change is recompiler-side, so the split that matters is DRC vs interpreter:
-**83 machines run the DRC, 137 the interpreter.** A `machine_config` that calls another
-inherits its `enable_recompiler()`, so that set is closed transitively.
+This was caught by measurement, not by re-reading. `alusat_probe.lua` reported
 
-## What is in hand (2026-09-23)
+    daytona  NO DEVICE EXPOSES MODE1 -- the probe saw nothing, which is not a negative result
 
-`~/compartilhado/mame-roms` holds **12 of the 13 working DRC sets** — `doa`, `gradius4`, `gticlub`, `gunblade`, `jetwave`, `midnrun`, `nbapbp`, `pltkids`, `rchase2`, `slrasslt`, `vstriker`, `zerogun`.
-Missing: `windheat`. None of the six working interpreter sets are present yet, so the
-interpreter half of `sharcops.hxx` is still untested against a real machine.
+on `daytona`, `motoraid`, `vcop`, `vcop2` and `vf2` — which is why the probe prints that
+instead of nothing. `sharc_users.py` now requires the machine's own config to instantiate
+an ADSP21062, closed transitively, and the seeded-defect run agrees independently: a
+defect in SHARC arithmetic leaves all five of those machines untouched.
 
-## The sets actually worth obtaining
+    == src/mame/konami/gticlub.cpp   11 machines   1 enable_recompiler() call site(s) in 1 config(s)
+    == src/mame/konami/hornet.cpp   72 machines   3 enable_recompiler() call site(s) in 3 config(s)
+    == src/mame/konami/nwk-tr.cpp   36 machines   0 enable_recompiler() call site(s) in 0 config(s)
+    == src/mame/konami/zr107.cpp   11 machines   1 enable_recompiler() call site(s) in 1 config(s)
+    == src/mame/sega/model2.cpp   90 machines   1 enable_recompiler() call site(s) in 1 config(s)
+
+    TOTAL  DRC 83 machines / 24 parent sets (13 working)   INTERP 82 machines / 6 parent sets (1 working)
+    55 machines in these files have NO SHARC and are excluded
+
+## The sets worth obtaining
 
 Only these are marked working upstream — a NOT_WORKING set cannot tell you whether a
-regression is yours. Tick the box when you have the ROMs.
+regression is yours. `[x]` = ROMs in hand as of 2026-09-24.
 
 ### DRC — 13 parent sets (these exercise the changed code hardest)
 
-| | set | year | manufacturer | title | driver file |
+| have ROMs | set | year | manufacturer | title | driver file |
 |---|---|---|---|---|---|
-| [ ] | `doa` | 1996 | Tecmo | Dead or Alive (Model 2B, Revision C) | `model2.cpp` |
-| [ ] | `gradius4` | 1998 | Konami | Gradius IV: Fukkatsu (ver JAC) | `hornet.cpp` |
-| [ ] | `gticlub` | 1996 | Konami | GTI Club: Rally Cote D'Azur (ver EAA) | `gticlub.cpp` |
-| [ ] | `gunblade` | 1995 | Sega | Gunblade NY (Revision A) | `model2.cpp` |
-| [ ] | `jetwave` | 1996 | Konami | Jet Wave (EAB, Euro v1.04) | `zr107.cpp` |
-| [ ] | `midnrun` | 1995 | Konami | Midnight Run: Road Fighter 2 (EAA, Euro v1.11) | `zr107.cpp` |
-| [ ] | `nbapbp` | 1998 | Konami | NBA Play By Play (ver UAB) | `hornet.cpp` |
-| [ ] | `pltkids` | 1998 | Psikyo | Pilot Kids (Model 2B, Revision A) | `model2.cpp` |
-| [ ] | `rchase2` | 1994 | Sega | Rail Chase 2 (Revision A) | `model2.cpp` |
-| [ ] | `slrasslt` | 1997 | Konami | Solar Assault (ver UAA) | `gticlub.cpp` |
-| [ ] | `vstriker` | 1994 | Sega | Virtua Striker (Revision A) | `model2.cpp` |
-| [ ] | `windheat` | 1996 | Konami | Winding Heat (EAA, Euro v2.11) | `zr107.cpp` |
-| [ ] | `zerogun` | 1997 | Psikyo | Zero Gunner (Export, Model 2B) | `model2.cpp` |
+| [x] | `doa` | 1996 | Tecmo | Dead or Alive (Model 2B, Revision C) | `model2.cpp` |
+| [x] | `gradius4` | 1998 | Konami | Gradius IV: Fukkatsu (ver JAC) | `hornet.cpp` |
+| [x] | `gticlub` | 1996 | Konami | GTI Club: Rally Cote D'Azur (ver EAA) | `gticlub.cpp` |
+| [x] | `gunblade` | 1995 | Sega | Gunblade NY (Revision A) | `model2.cpp` |
+| [x] | `jetwave` | 1996 | Konami | Jet Wave (EAB, Euro v1.04) | `zr107.cpp` |
+| [x] | `midnrun` | 1995 | Konami | Midnight Run: Road Fighter 2 (EAA, Euro v1.11) | `zr107.cpp` |
+| [x] | `nbapbp` | 1998 | Konami | NBA Play By Play (ver UAB) | `hornet.cpp` |
+| [x] | `pltkids` | 1998 | Psikyo | Pilot Kids (Model 2B, Revision A) | `model2.cpp` |
+| [x] | `rchase2` | 1994 | Sega | Rail Chase 2 (Revision A) | `model2.cpp` |
+| [x] | `slrasslt` | 1997 | Konami | Solar Assault (ver UAA) | `gticlub.cpp` |
+| [x] | `vstriker` | 1994 | Sega | Virtua Striker (Revision A) | `model2.cpp` |
+| [x] | `windheat` | 1996 | Konami | Winding Heat (EAA, Euro v2.11) | `zr107.cpp` |
+| [x] | `zerogun` | 1997 | Psikyo | Zero Gunner (Export, Model 2B) | `model2.cpp` |
 
-### Interpreter — 6 parent sets (cover the non-DRC half of `sharcops.hxx`)
+### Interpreter — 1 parent set
 
-| | set | year | manufacturer | title | driver file |
+| have ROMs | set | year | manufacturer | title | driver file |
 |---|---|---|---|---|---|
-| [ ] | `daytona` | 1994 | Sega | Daytona USA (Revision A) | `model2.cpp` |
-| [ ] | `hangplt` | 1997 | Konami | Hang Pilot (ver JAB) | `gticlub.cpp` |
-| [ ] | `motoraid` | 1997 | Sega | Motor Raid - Twin | `model2.cpp` |
-| [ ] | `vcop` | 1994 | Sega | Virtua Cop (Revision B) | `model2.cpp` |
-| [ ] | `vcop2` | 1995 | Sega | Virtua Cop 2 | `model2.cpp` |
-| [ ] | `vf2` | 1994 | Sega | Virtua Fighter 2 (Version 2.1) | `model2.cpp` |
+| [x] | `hangplt` | 1997 | Konami | Hang Pilot (ver JAB) | `gticlub.cpp` |
 
-**Correction, twice over.** An earlier revision of this file said the Model 2A/B boards
-need a `model2` / `model2b` BIOS set and the Konami boards their own. There is no such
-BIOS set: every listed set is declared with parent `0`, and model2.cpp's only
-`ROM_SYSTEM_BIOS` entries pick a drive-board ROM *inside* a set (model2.cpp:6798).
+`hangplt` is the *only* working machine that runs a SHARC through the interpreter, and it
+carries two of them (`:dsp1`, `:dsp2`). It is therefore the entire interpreter data point.
 
-But "nothing here needs a second zip", which is what I wrote next, is also wrong, and
-`-verifyroms` said so:
+Three **device** romsets are needed on top of the game sets, and none is a BIOS, which is
+why none appears as a parent and why reading `GAME(...)` lines cannot find them — only
+`-verifyroms` can:
 
-    doa         : epr-18022.ic2 (65536 bytes) - NOT FOUND (segabill)
+| device set | needed by | file |
+|---|---|---|
+| `segabill`  | the six Model 2B sets | `epr-18022.ic2` |
+| `model1io`  | `daytona` | `epr-14869*.25` |
+| `model1io2` | `vcop` | `epr-16891.6` / `epr-18021.6` / `epr-17181.6` |
 
-All six Model 2 sets pull in the **`segabill`** device romset — the Sega Billboard
-board — which is a device ROM, not a BIOS, and so does not show up as a parent. One
-file, `epr-18022.ic2`, 65536 bytes. With `segabill.zip` present all six verify; the six
-Konami sets verify as they stand.
+(`daytona` and `vcop` turned out to have no SHARC, so those two are not needed for this
+PR after all — recorded because they were obtained for it.)
 
 ## The rest of the roster, for completeness
 
-These are the SHARC parent sets MAME already marks NOT_WORKING. They are listed so the
-roster is complete, not because they are useful evidence — a machine that does not run
-before the change cannot show that it still runs after it.
+These are marked NOT_WORKING upstream. A machine that does not run before the change
+cannot show that it still runs after it.
 
 ### DRC, NOT_WORKING — 11 sets
 
-| | set | year | manufacturer | title | driver file |
+| have ROMs | set | year | manufacturer | title | driver file |
 |---|---|---|---|---|---|
 | [ ] | `dynabb` | 1996 | Sega | Dynamite Baseball | `model2.cpp` |
 | [ ] | `dynabb97` | 1997 | Sega | Dynamite Baseball 97 (Revision A) | `model2.cpp` |
@@ -105,57 +108,29 @@ before the change cannot show that it still runs after it.
 | [ ] | `thunderh` | 1997 | Konami | Operation Thunder Hurricane (ver EAA) | `gticlub.cpp` |
 | [ ] | `von` | 1995 | Sega | Cyber Troopers Virtual-On - Twin (Export) | `model2.cpp` |
 
-### Interpreter, NOT_WORKING — 21 sets
+### Interpreter, NOT_WORKING — 5 sets
 
-| | set | year | manufacturer | title | driver file |
+| have ROMs | set | year | manufacturer | title | driver file |
 |---|---|---|---|---|---|
-| [ ] | `airwlkrs` | 1997 | Data East Corporation | Air Walkers | `model2.cpp` |
-| [ ] | `bel` | 1997 | Sega / EPL Productions | Behind Enemy Lines | `model2.cpp` |
-| [ ] | `desert` | 1994 | Sega / Martin Marietta | Desert Tank | `model2.cpp` |
-| [ ] | `dynamcop` | 1998 | Sega | Dynamite Cop (Export, Model 2A) | `model2.cpp` |
-| [ ] | `hotd` | 1997 | Sega | The House of the Dead (Revision A) | `model2.cpp` |
-| [ ] | `hpyagu98` | 1998 | Deniam | Hanguk Pro Yagu 98 | `model2.cpp` |
-| [ ] | `manxtt` | 1995 | Sega | Manx TT Superbike - DX/Twin (Revision D) | `model2.cpp` |
-| [ ] | `overrev` | 1997 | Jaleco | Over Rev (Model 2C, Revision A) | `model2.cpp` |
 | [ ] | `racingj` | 1998 | Konami | Racing Jam (GQ676UAC) | `nwk-tr.cpp` |
 | [ ] | `racingj2` | 1998 | Konami | Racing Jam: Chapter II (GQ888UAA) | `nwk-tr.cpp` |
-| [ ] | `rascot2` | 1997 | Sega | Royal Ascot II | `model2.cpp` |
-| [ ] | `segawski` | 1997 | Sega | Sega Water Ski (Japan, Revision A) | `model2.cpp` |
-| [ ] | `skisuprg` | 1996 | Sega | Sega Ski Super G | `model2.cpp` |
-| [ ] | `skytargt` | 1995 | Sega | Sky Target | `model2.cpp` |
-| [ ] | `srallyc` | 1995 | Sega | Sega Rally Championship - Twin/DX (Revision C) | `model2.cpp` |
 | [ ] | `sscope` | 1999 | Konami | Silent Scope (ver UAD, Ver 1.33) | `hornet.cpp` |
 | [ ] | `sscope2` | 2000 | Konami | Silent Scope 2 : Dark Silhouette (ver UAD, Ver 1.03) | `hornet.cpp` |
-| [ ] | `stcc` | 1996 | Sega | Sega Touring Car Championship (newer) | `model2.cpp` |
 | [ ] | `thrilld` | 1998 | Konami | Thrill Drive (UDE) | `nwk-tr.cpp` |
-| [ ] | `topskatr` | 1997 | Sega | Top Skater (Export, Revision A) | `model2.cpp` |
-| [ ] | `waverunr` | 1996 | Sega | Wave Runner (Japan, Revision A) | `model2.cpp` |
 
-## Result, 2026-09-23
+## Result
 
-The six Konami sets that verify were run on an `upstream/master` binary and on the
-submission's, 4500 frames each, framebuffers compared byte for byte:
+See [`results-2026-09-24/README.md`](results-2026-09-24/README.md): all 19 machines run
+(14 of which have a SHARC) are byte-identical between upstream and the submission, with
+three seeded-defect controls and a direct MODE1 read establishing what that is worth.
 
-    base vs PR   gticlub slrasslt gradius4 nbapbp jetwave midnrun   6 of 6 MATCH
-
-Two seeded-defect binaries say what that match is worth, and a register probe says why
-it happens: **MODE1.ALUSAT is never set on any of them**, so the one commit that could
-alter an existing ADSP-21062 never fires. Full write-up, controls and raw logs in
-[`results-2026-09-23/`](results-2026-09-23/README.md).
-
-## Reproducing this table
+## Reproducing this
 
     python3 sharc_users.py ~/compartilhado/mame-pr-kn7000drv upstream/master --roster
 
-Raw output kept beside it as `machines-2026-09-23.txt`; every table above is generated
-from that file, so the counts cannot drift from the totals line:
-
-    TOTAL  DRC 83 machines / 24 parent sets (13 working)   INTERP 137 machines / 27 parent sets (6 working)
-
 The script strips comments before searching (`//m_dsp[0]->enable_recompiler();` is
-commented out at hornet.cpp:1622), counts only `Type::name(machine_config &`
-definitions (an in-class declaration otherwise captures the next function's body and
-mis-attributes everything after it), reads each macro to its matching paren rather than
-to end of line (a wrapped `GAMEL()` would otherwise lose its title), and closes the
-recompiler config set transitively. It prints totals so a miscount is visible: the
-roster's 51 parent sets must equal the 24 + 27 in the totals line.
+commented out at hornet.cpp:1622), counts only `Type::name(machine_config &` definitions
+(an in-class declaration otherwise captures the next function's body), reads each macro to
+its matching paren rather than to end of line (a wrapped `GAMEL()` would otherwise lose
+its title), and closes both the recompiler set and the has-a-SHARC set transitively. The
+roster's 30 parent sets must equal the 24 + 6 in the totals line.
