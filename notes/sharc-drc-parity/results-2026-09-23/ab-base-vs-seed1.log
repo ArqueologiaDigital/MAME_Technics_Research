@@ -1,0 +1,13 @@
+== controls ==
+  determinism   gticlub twice on the base binary: MATCH (6 frames)
+  discrimination gticlub vs slrasslt: DIFFERS at f0300 f0900 f1800 f2700 f3600 f4500
+
+== base vs PR, 4500 frames each, marks 300,900,1800,2700,3600,4500 ==
+  gticlub    base_exit=0   pr_exit=0    DIFFERS at f0900 f1800 f2700 f3600 f4500
+  slrasslt   base_exit=0   pr_exit=0    DIFFERS at f0900 f1800 f2700 f3600 f4500
+  gradius4   base_exit=0   pr_exit=0    MATCH (6 frames)
+  nbapbp     base_exit=0   pr_exit=0    MATCH (6 frames)
+  jetwave    base_exit=0   pr_exit=0    DIFFERS at f0300 f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+  midnrun    base_exit=0   pr_exit=0    DIFFERS at f0300 f0900 missing:f1800 missing:f2700 missing:f3600 missing:f4500
+
+SOME DIFFER -- see above

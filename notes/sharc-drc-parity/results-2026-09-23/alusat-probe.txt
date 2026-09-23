@@ -1,0 +1,6 @@
+gticlub	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+slrasslt	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+gradius4	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+nbapbp	:dsp1	samples=4500	MODE1_or=00001000	ALUSAT_frames=0
+jetwave	:dsp	samples=4500	MODE1_or=00001078	ALUSAT_frames=0
+midnrun	:dsp	samples=4500	MODE1_or=00001000	ALUSAT_frames=0

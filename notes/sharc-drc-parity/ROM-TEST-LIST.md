@@ -28,6 +28,12 @@ Most of the change is recompiler-side, so the split that matters is DRC vs inter
 **83 machines run the DRC, 137 the interpreter.** A `machine_config` that calls another
 inherits its `enable_recompiler()`, so that set is closed transitively.
 
+## What is in hand (2026-09-23)
+
+`~/compartilhado/mame-roms` holds **12 of the 13 working DRC sets** — `doa`, `gradius4`, `gticlub`, `gunblade`, `jetwave`, `midnrun`, `nbapbp`, `pltkids`, `rchase2`, `slrasslt`, `vstriker`, `zerogun`.
+Missing: `windheat`. None of the six working interpreter sets are present yet, so the
+interpreter half of `sharcops.hxx` is still untested against a real machine.
+
 ## The sets actually worth obtaining
 
 Only these are marked working upstream — a NOT_WORKING set cannot tell you whether a
@@ -62,8 +68,20 @@ regression is yours. Tick the box when you have the ROMs.
 | [ ] | `vcop2` | 1995 | Sega | Virtua Cop 2 | `model2.cpp` |
 | [ ] | `vf2` | 1994 | Sega | Virtua Fighter 2 (Version 2.1) | `model2.cpp` |
 
-Several of these need a BIOS set as well: the Model 2A/B boards expect `model2` /
-`model2b`, and the Konami boards want their own.
+**Correction, twice over.** An earlier revision of this file said the Model 2A/B boards
+need a `model2` / `model2b` BIOS set and the Konami boards their own. There is no such
+BIOS set: every listed set is declared with parent `0`, and model2.cpp's only
+`ROM_SYSTEM_BIOS` entries pick a drive-board ROM *inside* a set (model2.cpp:6798).
+
+But "nothing here needs a second zip", which is what I wrote next, is also wrong, and
+`-verifyroms` said so:
+
+    doa         : epr-18022.ic2 (65536 bytes) - NOT FOUND (segabill)
+
+All six Model 2 sets pull in the **`segabill`** device romset — the Sega Billboard
+board — which is a device ROM, not a BIOS, and so does not show up as a parent. One
+file, `epr-18022.ic2`, 65536 bytes. With `segabill.zip` present all six verify; the six
+Konami sets verify as they stand.
 
 ## The rest of the roster, for completeness
 
@@ -112,6 +130,18 @@ before the change cannot show that it still runs after it.
 | [ ] | `thrilld` | 1998 | Konami | Thrill Drive (UDE) | `nwk-tr.cpp` |
 | [ ] | `topskatr` | 1997 | Sega | Top Skater (Export, Revision A) | `model2.cpp` |
 | [ ] | `waverunr` | 1996 | Sega | Wave Runner (Japan, Revision A) | `model2.cpp` |
+
+## Result, 2026-09-23
+
+The six Konami sets that verify were run on an `upstream/master` binary and on the
+submission's, 4500 frames each, framebuffers compared byte for byte:
+
+    base vs PR   gticlub slrasslt gradius4 nbapbp jetwave midnrun   6 of 6 MATCH
+
+Two seeded-defect binaries say what that match is worth, and a register probe says why
+it happens: **MODE1.ALUSAT is never set on any of them**, so the one commit that could
+alter an existing ADSP-21062 never fires. Full write-up, controls and raw logs in
+[`results-2026-09-23/`](results-2026-09-23/README.md).
 
 ## Reproducing this table
 
