@@ -45,8 +45,9 @@ capture of its input is a RECONSTRUCTION, not a dump. Grade: **ESTABLISHED**.
    mechanism, if it exists, would cover four instruments.
 
 2. WARNING: **the KN7000 result does NOT transfer.** The KN7000's proven wave-read port
-   (main `0x9804` / sub `0x9805`) belongs to a *different* tone generator — KN6000/KN7000
-   use NEC `D82398GD001`. Do not reason from one to the other.
+   (main `0x9804` / sub `0x9805`) belongs to a *different* tone generator — the KN7000 uses
+   two `C1BB00000709` (IC201/IC205), the KN6000/KN6500 one NEC `D82398GD001` (IC213). Do
+   not reason from either to the KN5000's TC183C230002.
 
 3. **IC303 has what look like external-access pins.** Along its bottom edge, adjacent to
    the CPU address lines `SA2-SA8`, sheets II-15/II-16 show **`EXADL1`..`EXADL7`,

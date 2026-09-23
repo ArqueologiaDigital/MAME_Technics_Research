@@ -22,7 +22,7 @@ mode that cost this project a week on the KN7000 (plausible-but-wrong audio).
 
 | | KN5000 | KN6000/KN6500 | KN7000 |
 |---|---|---|---|
-| TG part | Toshiba **TC183C230002** (IC303) | NEC **D82398GD001** (IC213) | **2× D82398GD001** (IC201/205) |
+| TG part | Toshiba **TC183C230002** (IC303) | NEC **D82398GD001** (IC213) | **2× `C1BB00000709`** (IC201/205) |
 | Voices | 64 | 64 | 128 (two chips) |
 | Host interface | **register-indirect**: SubCPU latches a 16-bit reg *address* @0x100000, then data @0x100002 (P6.7 = CS strobe) | **plane-based** write primitive | same plane-based primitive |
 | Firmware write primitive | (its own, register-indirect) | 0x4849465B | 0x4C036F7C — **byte-identical to KN6000** |

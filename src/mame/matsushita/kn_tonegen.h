@@ -57,12 +57,9 @@
         register index means what, i.e. the tg_write() decode itself, plus
         the chip/window count.
 
-    A kn6000_tonegen_device is therefore a small, obvious addition -- a
-    second tg_write() decode over this same base. It is deliberately NOT
-    written yet: the KN6000 plane map has only three points pinned so far,
-    and its audio is blocked on the undumped IC13/IC14 table ROMs and on its
-    un-reversed note->pitch routine. notes/kn6000-tonegen-spec.md records
-    exactly what matched, what is still provisional, and what is missing.
+    kn6000_tonegen_device is that second decode. Its plane map is only
+    partly pinned, and its audio is blocked on the undumped IC13/IC14 table
+    ROMs; notes/kn6000-tonegen-spec.md records what matched and what did not.
 
 ***************************************************************************/
 
