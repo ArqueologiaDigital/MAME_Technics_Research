@@ -59,9 +59,22 @@ of the three core variants into one unreadable stream.
 ## Run it
 
 ```sh
-python3 notes/irq-vector-probes/irq_vector_mechanism.py ~/compartilhado/technics_romsets
-python3 notes/irq-vector-probes/vector_table_layout.py  ~/compartilhado/technics_romsets
-python3 notes/irq-vector-probes/vector_table_layout.py --selftest
+python3 notes/irq-vector-probes/irq_vector_mechanism.py  ~/compartilhado/technics_romsets
+python3 notes/irq-vector-probes/vector_table_layout.py   ~/compartilhado/technics_romsets
+python3 notes/irq-vector-probes/vector_table_layout.py   --selftest
+python3 notes/irq-vector-probes/peripheral_page_probe.py ~/compartilhado/technics_romsets
+python3 notes/irq-vector-probes/peripheral_page_probe.py --selftest
+python3 notes/irq-vector-probes/io_window_offset0_alias.py
+```
+
+`extract_for_unidasm.py` produces every disassembly quoted here — it
+de-interleaves a romset and writes one address window to a file, because unidasm
+does not seek and neither ROM half disassembles alone:
+
+```sh
+python3 notes/irq-vector-probes/extract_for_unidasm.py \
+        ~/compartilhado/technics_romsets/kn7000.zip 0x484100A0 0x30 /tmp/w.bin
+~/compartilhado/mame/unidasm /tmp/w.bin -arch mn10300 -basepc 0x484100A0
 ```
 
 Both de-interleave each romset the way `ROM_LOAD32_WORD` does (even half supplies
@@ -200,13 +213,23 @@ without a change of decode between reset and run:
 
 The candidate mechanism is in these images and is not decoded: a 16-bit register
 at **`0x20000070`** — inside the on-chip peripheral page but past the block GNU's
-model covers — is written `0x30` then `0x03` early in reset, has **bit 7 set on
-the instruction immediately before `IVAR0..IVAR6` are cleared**, and later has
-bits 0 and 1 cleared individually, each inside a short `setlb` delay loop. That
-shape (bit set/clear either side of code being written through the uncachable
-view and executed through the cachable one) fits a cache or memory-mode control.
-Naming it needs hardware or a part-specific manual; the instruction manual covers
-the core, not the MN103002A's peripheral complement.
+model covers. `peripheral_page_probe.py` reports what every firmware does to it,
+and also establishes the boundary the single-vector model needs: **`0x20000070`
+is the only address in `0x20000000-0x200000FF` that any of the five images ever
+loads into a pointer register**, so no pointer-relative write to IVAR can be
+hiding from the absolute-addressing scan. On the KN7000, nine sites:
+
+```
+4840FFA0  write 0x30; write 0x3                  <- early in reset
+48410098  SET bits 0x80   ** the IVAR0..IVAR6 run starts here **
+4841015B  CLEAR bits 0x0001; setlb loop
+48410182  CLEAR bits 0x0002; setlb loop          <- and five more of the same
+```
+
+That shape — a bit set immediately before the vectors are installed, and bits
+cleared one at a time each inside a short delay loop — fits a cache or
+memory-mode control. Naming it needs hardware or a part-specific manual; the
+instruction manual covers the core, not the MN103002A's peripheral complement.
 
 Nothing here blocks the driver: only thunk 0 — offset 0 — is the maskable vector,
 and offset 0 is invariant under any base. The driver states the base once, in
