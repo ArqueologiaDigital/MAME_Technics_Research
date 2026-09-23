@@ -1,0 +1,40 @@
+== src/mame/konami/gticlub.cpp   11 machines   1 enable_recompiler() call site(s) in 1 config(s)
+   direct: ['gticlub']
+   inherited: ['slrasslt', 'thunderh']
+   DRC      9 machines (3 parent, 6 clone)
+          WORKING parent sets : gticlub slrasslt
+          NOT_WORKING parents : thunderh
+   INTERP   2 machines (1 parent, 1 clone)
+          WORKING parent sets : hangplt
+
+== src/mame/konami/hornet.cpp   72 machines   3 enable_recompiler() call site(s) in 3 config(s)
+   direct: ['hornet_lan', 'hornet_x76', 'terabrst']
+   inherited: ['nbapbp']
+   DRC     28 machines (3 parent, 25 clone)
+          WORKING parent sets : gradius4 nbapbp
+          NOT_WORKING parents : terabrst
+   INTERP  44 machines (2 parent, 42 clone)
+          NOT_WORKING parents : sscope sscope2
+
+== src/mame/konami/nwk-tr.cpp   36 machines   0 enable_recompiler() call site(s) in 0 config(s)
+   direct: none
+   INTERP  36 machines (3 parent, 33 clone)
+          NOT_WORKING parents : racingj racingj2 thrilld
+
+== src/mame/konami/zr107.cpp   11 machines   1 enable_recompiler() call site(s) in 1 config(s)
+   direct: ['zr107']
+   inherited: ['jetwave', 'midnrun']
+   DRC     11 machines (3 parent, 8 clone)
+          WORKING parent sets : jetwave midnrun windheat
+
+== src/mame/sega/model2.cpp   90 machines   1 enable_recompiler() call site(s) in 1 config(s)
+   direct: ['model2b']
+   inherited: ['dynabb', 'gunblade', 'indy500', 'model2b_0229', 'model2b_5881', 'powsled', 'rchase2', 'zerogun']
+   DRC     35 machines (15 parent, 20 clone)
+          WORKING parent sets : doa gunblade pltkids rchase2 vstriker zerogun
+          NOT_WORKING parents : dynabb dynabb97 fvipers indy500 lastbrnx powsled schamp sgt24h von
+   INTERP  55 machines (21 parent, 34 clone)
+          WORKING parent sets : daytona motoraid vcop vcop2 vf2
+          NOT_WORKING parents : airwlkrs bel desert dynamcop hotd hpyagu98 manxtt overrev rascot2 segawski skisuprg skytargt srallyc stcc topskatr waverunr
+
+TOTAL  DRC 83 machines / 24 parent sets (13 working)   INTERP 137 machines / 27 parent sets (6 working)
