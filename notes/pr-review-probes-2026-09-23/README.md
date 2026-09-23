@@ -177,6 +177,31 @@ grep -rl "copyright-holders:" <scratch> --include="*.lay" | wc -l
 is whether any is false. Two were, naming work the same file had since gained;
 both corrected.
 
+## ROM-definition nulls, and the three changes they prevented
+
+A second-pass adversarial review filed three findings against the KN7000 ROM
+definitions. Its own subagent then measured whether each shape is unusual in
+MAME. All three are ordinary, so nothing was changed:
+
+| probe | question | null over upstream `src/mame` |
+|---|---|---|
+| `rom_name_split_across_regions.py` | several files sharing one chip's `.icNN` suffix in a set | **1275 sets** |
+| `rom_region_erase_no_entries.py` | `ROM_REGION` with an ERASE flag and no entries | **2447 of 108045** (2.3%) |
+| `rom_file_in_multiple_regions.py` | one file loaded into more than one region in a set | **420 sets** |
+
+```sh
+git archive upstream/master src/mame | tar -x -C <scratch>
+cd <scratch> && python3 <probe>.py
+```
+
+So `kn7000_program_even.ic17` and `kn7000_table_even.ic17` being two files for one
+32 Mbit device is how MAME routinely represents a part whose halves serve
+different buses, and kn2400's empty `ROMREGION_ERASEFF table_data` is one of
+2447 such regions.
+
+These were written by a review subagent and kept because they **changed what I
+did** — without them all three would have been "fixed" into non-conformance.
+
 ## Include order
 
 | probe | question | answer |
