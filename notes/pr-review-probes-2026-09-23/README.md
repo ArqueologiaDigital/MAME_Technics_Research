@@ -92,6 +92,39 @@ The conclusion — the file was in the extreme tail and no longer is — holds u
 both. The figures to quote are `cdens.py`'s, because that is the probe that is
 committed.
 
+### The driver's own density, and why it is not trimmed
+
+The header measurement above is for `src/devices/cpu/*/*.h`. The driver belongs to a
+different population. Measured the same way, `cdens.py` over every
+`src/mame/*/*.cpp` of 1000+ lines in `upstream/master`, **n=857**:
+
+| | median | p75 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| `pct_all` | 19.8% | 27.7% | 36.1% | 42.7% | 56.8% | 82.4% |
+| `pct_nobanner` | 13.1% | 19.6% | 26.2% | 32.4% | 46.6% | 65.2% |
+
+`kn7000.cpp` is at **33.7% / 31.5%** — the 86th percentile including the licence
+banner, the **94th** excluding it. High, and it is the exact metric a maintainer
+raised on #15919 and #16204.
+
+`comment_run_profile.py` answers what to do about it, and the answer is nothing.
+The remedy that worked for `mn10300.h` was relocating multi-page peripheral
+documentation beside the handlers it describes. This file has no such blocks:
+
+```
+423 comment-only lines in 177 runs
+  runs of 1-3 lines   159 runs = 326 lines = 77% of all comment lines
+  runs of 4-7 lines    17 runs =  83 lines
+  runs of 8+           1 run   =  14 lines
+```
+
+One block of 14 lines, one of 7. The density is one to three lines of explanation
+next to the code they explain, throughout — which is what annotating an
+instrument with no datasheet looks like. Reaching the median would mean deleting
+roughly 230 short comments: the blanket trim that, earlier in this project,
+removed already-merged upstream documentation and left 48 sentences cut off
+mid-clause. Measured and left alone, deliberately.
+
 ## Include order
 
 | probe | question | answer |
