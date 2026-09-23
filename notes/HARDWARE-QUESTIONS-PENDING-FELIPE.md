@@ -169,25 +169,50 @@ measurement sees them.
   inference, disassembly and live measurement.** Its absence is not licence to
   promote an inference — leave the item open and say so.
 
-## MN10300 interrupt vector base (2026-09-23)
+## MN10300 vector base: what re-decodes 0x40000000 (2026-09-23, sharpened)
 
-The MN103002 vectors a maskable interrupt of level L to `vector_base + IVR[L]`,
-and every Technics firmware programs `IVR0..IVR6 = 0` (verified on all five
-romsets, `notes/irq-vector-probes/`). So the vector is `vector_base + 0`. What is
-`vector_base` on these boards?
+*The earlier form of this question — "what is the vector base?" — is answered.*
+Matsushita's *MN1030/MN103S Series Instruction Manual* states the reset vector
+"is always at 0x40000000", equates `IVAR0..IVAR6` to `0x20000000..0x20000018`
+holding the low 16 bits of each level's entry point, and assembles the
+nonmaskable handler at `org 0x40000008`. GNU's simulator for the part
+(`sim/mn10300/dv-mn103cpu.c:250`) independently applies
+`0x40000000 + interrupt_vector[level]`. The base is architectural, not a board
+constant, and the CPU core now models the registers instead of being handed a
+table.
 
-- The GPL GDB simulator for this part uses `0x40000000`, but that is only where
-  that simulator's board loads its image, not a stated chip constant.
-- The firmware's own arithmetic pins the thunk's execution address at
-  `0x50000000` (`mov 0x50000001, d1`, the address of the `jmp` itself).
-- The driver currently vectors at `0x90000000`, the window the firmware writes
-  the thunk through.
+**What is left is a board question.** Three measurements (all five romsets,
+`notes/irq-vector-probes/vector_table_layout.py`) constrain it and cannot all
+hold at once under one fixed decode:
 
-Related: the simulator puts NMI at `base+8`, but thunk 1 sits at `+6`. The ROM
-padding is `nop`-filled across +5..+9, so it cannot arbitrate.
+1. The program flash answers `0x40000000` at reset — its first sixteen bytes are
+   that region's vector table, laid out for it: `jmp` to the reset routine at +0,
+   `nop` padding, and a second `jmp` positioned so entering at +8 executes it.
+2. `IVAR0..IVAR6 = 0` on every machine, written once from a just-cleared
+   register and never reachable again, so the maskable vector is the base exactly.
+3. The firmware builds a `nop ; jmp handler` thunk at work-RAM offset 0 with its
+   displacement computed for execution there, and nothing in the 4 MB image
+   branches or calls it — so hardware enters it.
 
-**Would settle it:** the MN10300 user's manual section on the CPU control block at
-`0x20000000` (the simulator cites it for the IVR layout), or the GPL Linux
-MN10300 port's `arch/mn10300/include/asm/intctl-regs.h` and `kernel/entry.S`.
-Neither needs the instrument. Nothing here blocks the driver: only thunk 0 at
-offset 0 is the maskable vector, and offset 0 is invariant under any base.
+So the decode of `0x40000000` must change between reset and run.
+
+**Candidate, already in the images, not decoded:** a 16-bit register at
+`0x20000070` — inside the on-chip peripheral page but past the block GNU's model
+covers — written `0x30` then `0x03` early in reset, with **bit 7 set on the
+instruction immediately before `IVAR0..IVAR6` are cleared**, and bits 0 and 1
+cleared later, each inside a short `setlb` delay loop.
+
+**Questions for the instrument:**
+- With a logic probe on the SDRAM and flash chip selects, does the flash still
+  answer an access to `0x40000000` after boot, or does work RAM?
+- Is there a service-manual page naming the MN103002A's register at
+  `0x20000070`? (The instruction manual documents the core, not this part's
+  peripheral complement.)
+
+**Related loose end:** the work-RAM copy packs its second entry at **+6** where
+the ROM table and the documented nonmaskable entry are at **+8**. If the base is
+remapped to RAM and a nonmaskable source is live, that entry is entered two bytes
+into its own displacement. Is anything wired to the NMI pin on these boards?
+
+Nothing here blocks the driver: only thunk 0 — offset 0 — is the maskable vector,
+and offset 0 is invariant under any base.

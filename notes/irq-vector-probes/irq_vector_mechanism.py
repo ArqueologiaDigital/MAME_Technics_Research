@@ -21,9 +21,9 @@
 #   half bytes 2,3.  The image loads at 0x48400000.
 #
 # PASS CRITERION
-#   For every image: exactly two thunk builders, and IVR0..IVR6 all written zero
+#   For every image: exactly two thunk builders, and IVAR0..IVAR6 all written zero
 #   at one site.  Exit 1 otherwise.  A machine that grew a third thunk, or that
-#   wrote a non-zero IVR, would invalidate the single-vector model the driver
+#   wrote a non-zero IVAR, would invalidate the single-vector model the driver
 #   now relies on -- which is the whole point of checking all of them.
 #
 import glob
@@ -77,14 +77,14 @@ def report(name, img):
     if len(thunks) != 2:
         print('    FAIL: expected exactly 2'); ok = False
 
-    # IVR0..IVR6 are 16-bit at 0x20000000 + L*4.  `movhu d1,(abs32)` = fc 87 <abs32>
+    # IVAR0..IVAR6 are 16-bit at 0x20000000 + L*4.  `movhu d1,(abs32)` = fc 87 <abs32>
     ivr = []
     for lvl in range(7):
         pat = b'\xfc\x87' + struct.pack('<I', 0x20000000 + lvl * 4)
         ivr.append([BASE + m.start() for m in re.finditer(re.escape(pat), img)])
-    print('  IVR0..IVR6 write sites: %s' % [len(x) for x in ivr])
+    print('  IVAR0..IVAR6 write sites: %s' % [len(x) for x in ivr])
     if not all(len(x) == 1 for x in ivr):
-        print('    FAIL: expected exactly one write per IVR'); ok = False
+        print('    FAIL: expected exactly one write per IVAR'); ok = False
     else:
         print('    all seven written once, at 0x%08X-0x%08X' % (ivr[0][0], ivr[6][0]))
 
