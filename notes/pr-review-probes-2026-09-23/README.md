@@ -1,0 +1,76 @@
+# Probes behind the 2026-09-23 KN7000 PR review
+
+Twelve measurements taken while settling the last open questions on the MAME
+pull request. Each answers one question and each carries the number it produced,
+so the PR's claims can be re-derived rather than believed.
+
+Where a count is quoted, a **null** was computed for it. That is not ceremony:
+this project has twice published a figure that meant nothing because nobody
+measured what a clean result looks like.
+
+## The memory window
+
+| probe | question | answer |
+|---|---|---|
+| `alias_census.py` | is `+0x40000000` a systematic second view of the same address space, or a coincidence? | Systematic. The firmware uses write-uncached / execute-cached three times: library written at `0x8C000000` and run at `0x4C000000`; KN2400 library written at `0x90120000`, run at `0x50120000`; vector thunk written at `0x90000000`, run at `0x50000000`. |
+
+The decisive line is the thunk builder's own arithmetic: it computes the jump
+displacement against `0x50000001`, which is correct at exactly one execution
+address. The firmware itself asserts that `0x90000000` and `0x50000000` are the
+same storage.
+
+Consequences, all corrections to what the driver says today:
+
+- `0x90000000` is **not** an LCD window. Across all five images the only values
+  in `0x90000000-0x903FFFFF` a real instruction dereferences are five: the two
+  thunks, a `0x5AA5` warm-boot flag at `+0x0E`, and a clear of work RAM's exact
+  4 MiB extent from `+0x10`. The other 26 `0x90`-topped values — bit-identical
+  across three unrelated firmwares — are loaded into data registers and passed
+  as call arguments, i.e. ID constants, never dereferenced.
+- The KN2400/KN2600-only aliasing is an **artefact**. The builder is
+  byte-identical in all five firmwares. What differs is only where each
+  firmware's handler happens to live.
+- The `.share("vram")` entry allocates 128 MiB nothing reads, and swallows the
+  picture flash at `0x97800000` that the driver's own comment says is left
+  unmapped.
+
+## The tone generator
+
+| probe | question | answer |
+|---|---|---|
+| `tg_voice_shadow_classes.py` | do the discarded register classes `0x1000`-`0x2000` name the sample, so the voice-record reads could go? | see the PR notes — this is the one dependency that could not be removed |
+
+## The SHARC multiplier
+
+| probe | question | answer |
+|---|---|---|
+| `count_mult.py` | does the effects kernel ever read MV/MU? | **No** — 0 uses in 6499 PM words, against a positive control that finds `IF MS` ×20, `IF AV` ×7, `IF GE` ×40, `IF LT` ×34 |
+
+So the flags are unobservable *for the KN7000*. The reason to emit them anyway
+is other drivers: op bytes `0x70`/`0xb0`/`0xb2` were already live upstream with
+the DRC emitting no multiplier flags at all against an interpreter that computed
+them, so this closes a pre-existing divergence for Model 2/3, Hornet and Taito JC.
+
+## Device naming
+
+| probe | question | answer |
+|---|---|---|
+| `cpu_device_type_census.sh` | across `src/devices/cpu/*`, is a lone device named for a part or a family? | the precedent, and the whole argument |
+| `ddt_token_vs_class.sh` | how often does a `DEFINE_DEVICE_TYPE` token differ from its class? | — |
+| `mk_split.py` | cost in lines of the full abstract-base + concrete split | — |
+| `mk_rename.py` | cost in lines of the cheap rename only | — |
+
+## Comment density
+
+| probe | question | answer |
+|---|---|---|
+| `cdens.py` | comment-line density per header | the measurement the reviewer used on #15919 and #16204 |
+| `null.py` | what does that figure look like on comparable merged code? | the null, without which the density number means nothing |
+
+## Include order
+
+| probe | question | answer |
+|---|---|---|
+| `incorder.py` | adherence to MAME's documented include-group order across `src/mame` | — |
+| `inc_lh_stdlib.py` | where `.lh` and stdlib headers actually sit | two more nulls |
+| `incsort.py` | within a group, are includes sorted? | companion null |
