@@ -217,6 +217,37 @@ instruction-boundary decoding, so every count includes data bytes. 209 means
 "the encoding is present in the image", not "209 instructions execute wrongly".
 The script says so itself; keep the caveat attached to the number.
 
+## When the simulator and the manual disagree, render the manual
+
+Three second-pass findings rested on GNU's mn10300 simulator, which this core
+cites elsewhere. Two of them dissolved against the manufacturer's own flag
+tables, and the third turned into a better-founded fix. The tables are figures —
+`pdftotext` gives the prose but not the `V C N Z` row, so the page has to be
+rendered.
+
+```sh
+# find the instruction's page, then render it
+for p in $(seq 2 212); do pdftotext -f $p -l $p mn103s_manual.pdf - \
+    | grep -q "^div Dm,Dn" && echo "page $p"; done
+pdftoppm -f 68 -l 68 -r 130 -png mn103s_manual.pdf divpage
+```
+
+| instruction | manual | consequence |
+|---|---|---|
+| `ASL`, `ASL2` | `V C N Z` = `? ? ● ●` | V and C **undefined** — the simulator's untouched carry and this core's computed one are both conformant. No change. |
+| `MUL`, `MULU` | "VF: Undefined. CF: Undefined." | already correct. No change. |
+| `DIV`, `DIVU` | Normal: "VF: Always 0." Divisor not representable as signed, or zero-division: "VF: Always 1", other flags and Dn/MDR undefined | **specified behaviour the core did not implement** — V untouched in both cases, and neither condition detected. Fixed. |
+
+The `DIV` page also says "After the operation, if V flag is '1', the other flag
+will be undefined. Also the divisor and the remainder will be undefined", which
+is what licenses leaving Dn and MDR alone on the V=1 path.
+
+⚠ The same guard has to decide the no-result cases **before** either `/` or `%`
+runs: `INT64_MIN / -1` traps on the host, and so does the matching `%`. My first
+version computed a dummy quotient of 0 for that case, which then passed the
+range check and reached the `%`. It was the exact trap the guard existed to
+prevent, in the guard.
+
 ## Include order
 
 | probe | question | answer |
