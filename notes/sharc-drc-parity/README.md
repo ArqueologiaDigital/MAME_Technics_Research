@@ -73,6 +73,61 @@ wholly different workload — an arranger keyboard's effects kernel rather than 
 racing game's 3D pipeline — with the compute path excluded by construction rather
 than by inspection. Offered to that discussion as data.
 
+## Which existing machines execute the code this PR modifies
+
+`sharc_users.py` enumerates them. The submission MODIFIES exactly one piece of
+shared code -- `sharc.cpp/.h`, `sharcdrc.cpp`, `sharcfe.cpp/.h`, `sharcops.hxx`
+-- so the blast radius is every machine with an ADSP2106x. Five driver files:
+`konami/gticlub.cpp`, `konami/hornet.cpp`, `konami/nwk-tr.cpp`,
+`konami/zr107.cpp`, `sega/model2.cpp`. **220 machines, 51 parent sets.**
+
+```sh
+python3 notes/sharc-drc-parity/sharc_users.py ~/compartilhado/mame-pr-kn7000drv upstream/master
+```
+
+The split that matters is whether the machine runs the RECOMPILER, since most of
+the changes are recompiler-side. `enable_recompiler()` is opt-in per machine
+config and inherited by configs that chain to one.
+
+| | machines | parent sets | of which working |
+|---|---:|---:|---:|
+| DRC | 83 | 24 | **13** |
+| interpreter only | 137 | 27 | 6 |
+
+**The 13 working DRC parent sets** — the only ones where a regression would show
+as changed behaviour rather than as an already-broken machine:
+
+| driver | sets |
+|---|---|
+| `konami/gticlub.cpp` | `gticlub` `slrasslt` |
+| `konami/hornet.cpp` | `gradius4` `nbapbp` |
+| `konami/zr107.cpp` | `jetwave` `midnrun` `windheat` |
+| `sega/model2.cpp` | `doa` `gunblade` `pltkids` `rchase2` `vstriker` `zerogun` |
+
+Working interpreter-only sets, for the `sharcops.hxx` side: `hangplt`,
+`daytona`, `motoraid`, `vcop`, `vcop2`, `vf2`.
+
+`nwk-tr.cpp` calls `enable_recompiler()` **nowhere** — which is consistent with
+[#257](https://github.com/orgs/mamedev/discussions/257), where the maintainer
+turns it on by hand for Racing Jam to see the bug.
+
+### Three traps the script exists to avoid
+
+Each of these produced a wrong list before it was handled, and the wrong list
+would have sent somebody hunting the wrong ROMs:
+
+1. An in-class **declaration** `void foo(machine_config &) ATTR_COLD;` matches a
+   naive "definition" regex; brace-matching from it then captures the *next*
+   function's body and mis-attributes every call in it. Only `Type::name(` counts.
+2. `hornet.cpp:1622` is `//m_dsp[0]->enable_recompiler();` -- **commented out**.
+   Counting it moved the whole `sscope` family into the DRC column.
+3. A config that calls another config inherits its recompiler setting, so the set
+   must be closed transitively -- that is how `gradius4` (via `hornet_x76`) and
+   nine `model2b` variants get there.
+
+The script cross-checks itself: the number of stripped `enable_recompiler()` call
+sites must equal the number of configs it found them in, per file.
+
 ## Consequence for the submission's wording
 
 The two commits make the recompiler's **arithmetic** agree with the interpreter.
