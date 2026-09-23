@@ -33,13 +33,28 @@ Arithmetic the probe derives:
     one semitone = 0x400 in pitch18; one octave = 0x3000 = 12288
     rate = zone_native_rate * 2 ** ((pitch18 - 0x16A00) / 12288)
 
-**What would remove the dependency.** The per-sample root lives in wave ROMs that
-have no dump, so the absolute pitch cannot be recovered from the raw index alone.
-The register classes that *name* the sample (0x1000/0x1400/0x1800/0x1C00/0x2000,
-blitted from the voice shadow at +0x34..+0x44) are on the bus and the driver
-currently discards them. Decoding those would let the root be keyed on the sample
-identity and the work-RAM read would go. Until then the three constants stay, and
-the driver says so rather than claiming the machine offers no other route.
+⚠ **CORRECTED 2026-09-23.** This section previously said "the per-sample root
+lives in wave ROMs that have no dump". **That is false**, and it was published
+here, in the driver's source comment and in a report. The root data is in the
+**dumped table ROM**, and it re-derives from `kn7000_table_{even,odd}` without
+any note:
+
+- zone table at `0x48131DF0`, 864 records of 16 bytes: `+9`/`+0xA` low/high key,
+  `+0xB` centre key, `+0xC` fixed pitch16, `+0xF` scale-tune index. Centre-key
+  histogram: 66 x851, 16 x5, 0 x5, 8 x3.
+- per-sample pitch corrections behind `zone+4` — e.g. zone 0's subrecord at
+  `0x4811051C` gives {sample 1, −3378}, {sample 2, −1714}, {sample 3, −2883}.
+
+**What actually keeps the dependency.** Not missing data — indirection. What
+reaches the chip is a zone-relative rate (`pitch18 = (pitch16 + 0x1800) << 2`,
+0x400 per semitone, `0x4280` meaning "zone centre at native rate"), so recovering
+the sounding note from the bus needs the zone and element tables, and the
+firmware reaches those through pointers it builds in work RAM. Removing the three
+constants means following that indirection in the driver, which is a larger piece
+of work than a register decode — not an impossibility.
+
+The register classes the driver discards (`0x1000`/`0x1400`/`0x1800`/`0x1C00`/
+`0x2000`) are still the route in; see `pr-review-probes-2026-09-23/`.
 
 Related: `notes/irq-vector-probes/` — the interrupt vector, reset stack pointer
 and SD lamp dependencies from the same block, all of which *were* replaceable.
