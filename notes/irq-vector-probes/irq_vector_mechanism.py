@@ -37,6 +37,13 @@ BASE = 0x48400000
 NOPJMP = b'\xfc\xcc\xcb\xdc\x00\x00'          # mov 0x0000dccb,d0 -- the `nop ; jmp` prologue
 BUILDER = re.compile(rb'\xfc\xdc(.)\x00\x00\x90', re.S)   # mov 0x900000NN,a0
 
+# Addresses the driver used to hardcode that turn out to be reachable from
+# nowhere.  Keeping the check here means a future firmware that DOES use one
+# would be noticed rather than assumed away.
+DEAD = {
+    'kn7000.zip': [('the "quick dispatcher" the driver used to name,', 0x4C03DDA0)],
+}
+
 
 def deinterleave(zpath):
     with zipfile.ZipFile(zpath) as z:
@@ -80,6 +87,24 @@ def report(name, img):
         print('    FAIL: expected exactly one write per IVR'); ok = False
     else:
         print('    all seven written once, at 0x%08X-0x%08X' % (ivr[0][0], ivr[6][0]))
+
+    # The claim that retired the KN7000 special case: the "quick dispatcher" the
+    # driver used to name is referenced by NOTHING.  Check it the only way the
+    # image allows -- as a 32-bit literal, and as the target of a DC/DD disp32
+    # branch.  Library-space addresses (0x4C......) cannot appear as branch
+    # targets in ROM space, so for those the literal scan is the whole test.
+    for label, addr in DEAD.get(name, []):
+        lit = len(re.findall(re.escape(struct.pack('<I', addr)), img))
+        brn = 0
+        for m in re.finditer(rb'[\xdc\xdd]', img):
+            i = m.start()
+            if i + 5 > len(img):
+                continue
+            if BASE + i + struct.unpack('<I', img[i + 1:i + 5])[0] == addr:
+                brn += 1
+        print('  %s 0x%08X: %d literal(s), %d branch(es)' % (label, addr, lit, brn))
+        if lit or brn:
+            print('    FAIL: expected it to be unreachable'); ok = False
 
     return ok
 

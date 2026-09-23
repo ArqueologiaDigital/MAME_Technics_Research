@@ -53,6 +53,28 @@ pixels non-black**. Moved 0x100 bytes off the thunk — same build, one constant
 changed — it is **0 of 169,600**. So the vector is load-bearing and the machine
 really does reach its handler through memory the firmware wrote.
 
+## The reset stack pointer, same block
+
+`find_reset_sp_idiom.py` answers the neighbouring question: does each firmware set
+SP itself, so the CPU needs no `set_reset_sp()`?
+
+```sh
+python3 notes/irq-vector-probes/find_reset_sp_idiom.py <prog.bin> [<prog.bin> ...]
+```
+
+It finds the `mov imm32,a0 / mov a0,sp / add -0xc,sp` idiom in the reset path.
+Measured 2026-09-23:
+
+| image | reset vector | sets SP at | to |
+|---|---|---|---|
+| kn7000 | `0x4840FF7E` | `0x4840FFF9` | `0x50021CF8` |
+| kn6000 | `0x484002E3` | `0x48400350` | `0x5000778C` |
+| kn2400 | `0x48705BDF` | `0x48705C5A` | `0x5006908C` |
+
+All three set it before their first push or call, so the driver's
+`set_reset_sp()` was unnecessary — and note the three values DIFFER, so the single
+constant the driver carried was the KN7000's applied to all five machines.
+
 ## What this does NOT settle
 
 The **board decode of the vector base**. The GPL GDB simulator for this part
