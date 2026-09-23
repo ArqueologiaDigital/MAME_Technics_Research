@@ -125,6 +125,58 @@ roughly 230 short comments: the blanket trim that, earlier in this project,
 removed already-merged upstream documentation and left 48 sentences cut off
 mid-clause. Measured and left alone, deliberately.
 
+## Pre-submission checks upstream will run anyway
+
+Two that found real things, and two nulls, all 2026-09-23.
+
+**`srcclean`.** MAME ships the normaliser as `src/tools/srcclean.cpp` and the
+maintainers run it; a PR with unnormalised whitespace collects a comment. Run it
+over every file the branch touches, on COPIES, and diff:
+
+```sh
+for f in $(git diff --name-only upstream/master..<branch>); do
+    mkdir -p "$SCRATCH/$(dirname $f)"; git show <branch>:"$f" > "$SCRATCH/$f"
+done
+find "$SCRATCH" -type f -print0 | xargs -0 -n 20 ./srcclean
+```
+
+It found **7 files**: six with comment-continuation alignment in spaces where
+MAME uses tabs (`kn6000_cpanel.cpp`, `kn6000_tonegen.cpp`, `kn7000_cpanel.cpp`,
+`kn7000_tonegen.cpp`, `kn_tonegen.h`, `mn10300.cpp`) and the layout, where three
+tabs needed expanding to spaces because MAME's XML convention is the opposite of
+its C++ one. Applied; a second pass reports nothing, which is the convergence
+check.
+
+⚠ I missed `mn10300.cpp` on the first pass by piping srcclean through `head -20`
+— two `xargs` batches, and the truncation hid the second. Don't truncate the
+output of a check.
+
+**A clang build.** `-Wunused-private-field` is a hard error under clang and GCC
+never emits it; MAME builds under both.
+
+```sh
+OVERRIDE_CC=clang OVERRIDE_CXX=clang++ OVERRIDE_LD=clang++ \
+    make SUBTARGET=kn SOURCES=<driver> REGENIE=1 -j8
+```
+
+It uses its own `build/linux_clang` tree, so it does not disturb the GCC build.
+
+**Null: layout licence headers.** Of 2025 `.lay` files in `upstream/master`,
+1399 carry `license:` and only **232** carry `copyright-holders:`. Of the 1376
+CC0-licensed ones, 211 (15%) also name a copyright holder — so a CC0 layout
+without one is the majority convention, not an omission.
+
+```sh
+git archive upstream/master src/mame/layout | tar -x -C <scratch>
+grep -rl "license:" <scratch> --include="*.lay" | wc -l
+grep -rl "copyright-holders:" <scratch> --include="*.lay" | wc -l
+```
+
+**Null: TODO markers.** The branch adds 15. `upstream/master` carries 1810 across
+326 files in `src/devices/cpu` alone, so the count is unremarkable — what matters
+is whether any is false. Two were, naming work the same file had since gained;
+both corrected.
+
 ## Include order
 
 | probe | question | answer |
