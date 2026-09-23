@@ -123,6 +123,44 @@ So the vector is load-bearing and the machine really does reach its handler
 through memory the firmware wrote. All five machines boot (kn6000 77,809,
 kn6500 77,132, kn2400/kn2600 72,521 of 76,800) and `-validate` passes.
 
+## Is the decode live? (and what it was hiding)
+
+"The machine still boots" does not show the CPU is reading its own IVARs: the
+firmware writes zero, so a vector of `base + IVAR[L]` and a vector of `base`
+are the same number. The discriminating measurement is where the writes land.
+
+```sh
+./kn kn7000 -rompath <roms> -str 20 -nothrottle -log
+grep -cE '\(484100(A5|AB|B1|B7|BD|C3|C9)\): io_w' error.log   # IVAR stores in the driver's logger
+grep -cE '\(4841009F|484100A3\)' error.log                    # the 0x20000070 accesses beside them
+```
+
+(The PC in a MAME log is the instruction address **+1**, which is why grepping
+for the instruction addresses themselves finds nothing.)
+
+| build | IVAR stores logged by the driver | 0x20000070 accesses logged |
+|---|---|---|
+| core decodes `0x20000000-0x1B` | **0** | 4 |
+| same build, that one `map()` line commented out | **6** | 4 |
+
+The second row is the control: with the decode removed the stores appear, so the
+zero in the first row means the core took them, not that the log is blind. The
+0x20000070 column is the in-run control — an address in the same window that the
+core does *not* decode, logged either way.
+
+Six, not seven: **IVAR0's write was never logged even without the decode**,
+because the driver hangs five address windows off one `io_r`/`io_w` pair and
+dispatches on an offset MAME measures from each window's own base, so
+`case 0x00000` — the effects DSP's host register index at `0x98000000` — also
+swallowed offset 0 of `0x20000000`. The firmware's write of IVAR0 was being
+taken as a DSP register index.
+
+`io_window_offset0_alias.py` measures how far that reached: across all five
+images the only addresses ever accessed at offset 0 of any of the five windows
+are `0x20000000` (one site each) and `0x98000000` (one to five sites, which is
+what the case is for). `0x32000000`, `0x34000000` and `0x36008000` are never
+touched there, so moving IVAR into the CPU closes the whole of it.
+
 ## The reset stack pointer, same block
 
 `find_reset_sp_idiom.py` answers the neighbouring question: does each firmware set
