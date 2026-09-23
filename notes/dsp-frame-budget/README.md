@@ -59,10 +59,33 @@ decayed-to-zero output is identical frame to frame by definition.)
    assumed geometry. Neither the per-commit build sweep nor a boot test can catch
    this: it compiles, and the machine boots fine with dead effects.
 
-2. **A pre-existing gap, not from this session.** The kernel makes **1,566,833**
-   accesses to DM `0x42A9` and 19,619 to `0x434B`, both below `0x08000` and
-   unmapped in every version of this device. A further 122 distinct addresses
-   land at `0x20000+`, including some at `0x48xxxxxx` and `0x54E0xxxx` that look
-   like wild pointers. Recorded, not diagnosed — the SHARC's short-word and
-   long-word address views are the obvious suspects and nothing here establishes
-   which.
+2. **A pre-existing gap, not from this session, and it has a clean explanation.**
+   The kernel hammers DM addresses below `0x08000`, which are unmapped in every
+   version of this device — `0x42A9` alone took 1,566,833 accesses in the long
+   run. Those are not wild pointers. **Double them and they land inside the
+   mapped internal region:**
+
+   | address | accesses | x2 | |
+   |---|---:|---|---|
+   | `0x042A9` | 154,534 | `0x08552` | inside the code region |
+   | `0x0434B` | 3,790 | `0x08696` | inside the code region |
+   | `0x00020`/`0x00024` | 102 each | — | IOP registers, `<0x100` |
+
+   Weighted by access count over one run: **99.63% of the sub-`0x8000` traffic is
+   explained by the x2 relation, 0.37% is IOP register access below `0x100`, and
+   nothing is left over.** By distinct address it is 126 of 134.
+
+   The control matters, because x2 is not a demanding test on its own: the mapped
+   span `0x8000-0x1FFFF` halves to `0x4000-0x7FFF`, so an address drawn at random
+   from `0..0x7FFF` would satisfy it 50% of the time. 99.63% by traffic against a
+   50% baseline is a mechanism, not a coincidence.
+
+   That points at an address VIEW the device map does not model — on a SHARC,
+   long-word addressing covers two normal words per address, which is exactly
+   this relation. It is **not** diagnosed further here and it is **not** part of
+   this PR: these ranges have been unmapped since the device was written, and the
+   effects work regardless. Recorded so the next person starts from the
+   arithmetic rather than from "wild pointers".
+
+   A further 122 distinct addresses land at `0x20000+`, including some at
+   `0x48xxxxxx` and `0x54E0xxxx`. Those are not explained by anything here.
