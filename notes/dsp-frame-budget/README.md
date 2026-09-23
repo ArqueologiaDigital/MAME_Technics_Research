@@ -80,12 +80,27 @@ decayed-to-zero output is identical frame to frame by definition.)
    from `0..0x7FFF` would satisfy it 50% of the time. 99.63% by traffic against a
    50% baseline is a mechanism, not a coincidence.
 
-   That points at an address VIEW the device map does not model — on a SHARC,
-   long-word addressing covers two normal words per address, which is exactly
-   this relation. It is **not** diagnosed further here and it is **not** part of
-   this PR: these ranges have been unmapped since the device was written, and the
-   effects work regardless. Recorded so the next person starts from the
-   arithmetic rather than from "wild pointers".
+   That points at an address VIEW the device map does not model, and MAME already
+   models exactly that shape one size up: `adsp21062_device::data_2m` puts normal-word
+   internal memory at `0x20000` and a SHORT-WORD view of the same storage at
+   `0x40000` — twice the normal-word base — reached through `dm_short_r`/`dm_short_w`
+   handlers that scale the index. The 21065L's normal-word internal memory is at
+   `0x8000`, and `0x8000 / 2 = 0x4000`, which is exactly where the unexplained
+   traffic sits. So the family precedent for a second, scaled view of the same
+   memory is in the tree; what is NOT established is that the 21065L has a
+   long-word window at that position, and nothing here names one.
+
+   **Measured: mapping it changes nothing.** With `0x04000-0x07FFF` mapped as plain
+   RAM the 1,566,833 unmapped accesses drop to **0** and the captured audio is
+   byte-identical — md5 `56022f1a1978` either way, notes RMS 305.9, silence null
+   33.3. So this is log noise and documentation debt, not an emulation defect, and
+   whatever is written there is never read back in a way that reaches the output.
+
+   **Left unmapped deliberately.** Adding a window to a CPU device shared by eight
+   drivers, on a correlation and a family analogy rather than a datasheet, is the
+   kind of speculative modelling this PR exists to avoid. The one-line change and
+   the evidence for it are both recorded here, so it is cheap to do the moment the
+   21065L's memory map is in hand.
 
    A further 122 distinct addresses land at `0x20000+`, including some at
    `0x48xxxxxx` and `0x54E0xxxx`. Those are not explained by anything here.
