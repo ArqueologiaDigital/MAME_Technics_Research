@@ -137,6 +137,6 @@ ALU diverges. The PR description says that, in those terms.
 One arithmetic divergence remains and is documented at its site: Fixed-point
 Dual Add/Subtract under ALUSAT OR-merges the two halves' flags before the
 subtract half saturates, so its AN/AZ can read the unsaturated sign
-(`Rx=0x7FFFFFFF, Ry=1` gives AN=1 against the interpreter's 0). The forced-
+(`Rx=0x7FFFFFFF, Ry=0xFFFFFFFF` gives AN=1 against the interpreter's 0). The forced-
 fallback row shows this workload does not exercise it — otherwise that row could
 not have matched native DRC to the byte.
