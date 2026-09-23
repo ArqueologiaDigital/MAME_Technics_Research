@@ -17,14 +17,19 @@ METHOD, and the three traps it exists to avoid
   3. A config that calls another config INHERITS its recompiler setting, so the
      set has to be closed transitively.
 
-RUN   python3 sharc_users.py <mame-worktree> [git-ref]
+RUN   python3 sharc_users.py <mame-worktree> [git-ref] [--roster]
+      --roster additionally prints one TSV line per PARENT set (the only sets you
+      can actually acquire and launch): file, engine, set, status, year,
+      manufacturer, title.
 PASS  every machine line parses; the DRC config set matches the stripped call
       sites; totals are printed so a miscount is visible.
 """
 import re, subprocess, sys, collections
 
-ROOT = sys.argv[1] if len(sys.argv) > 1 else '.'
-REF = sys.argv[2] if len(sys.argv) > 2 else 'upstream/master'
+ARGV = [a for a in sys.argv[1:] if not a.startswith('--')]
+ROSTER = '--roster' in sys.argv
+ROOT = ARGV[0] if len(ARGV) > 0 else '.'
+REF = ARGV[1] if len(ARGV) > 1 else 'upstream/master'
 FILES = ['src/mame/konami/gticlub.cpp', 'src/mame/konami/hornet.cpp',
          'src/mame/konami/nwk-tr.cpp', 'src/mame/konami/zr107.cpp',
          'src/mame/sega/model2.cpp']
@@ -42,7 +47,19 @@ GAME = re.compile(
 # definitions only: Type::name(machine_config
 DEF = re.compile(r'^\s*(?:void|static\s+void)\s+\w+::(\w+)\s*\(\s*machine_config\s*&', re.M)
 
+def macro_text(src, start):
+    i = src.find('(', start)
+    depth, j = 0, i
+    while j < len(src):
+        if src[j] == '(': depth += 1
+        elif src[j] == ')':
+            depth -= 1
+            if depth == 0: return src[i:j]
+        j += 1
+    return src[i:]
+
 grand = collections.Counter()
+roster = []
 for path in FILES:
     src = show(path)
     if not src:
@@ -72,8 +89,17 @@ for path in FILES:
 
     # cross-check: number of stripped call sites must equal len(direct)
     sites = len(re.findall(r'enable_recompiler\(\)', clean))
-    rows = [(m.group(1), m.group(2), m.group(3),
-              'NOT_WORKING' not in m.group(4)) for m in GAME.finditer(src)]
+    rows = []
+    meta = {}
+    for m in GAME.finditer(src):
+        text = macro_text(src, m.start())
+        quoted = re.findall(r'"((?:[^"\\]|\\.)*)"', text)
+        year = re.match(r'\(\s*([^,]+?)\s*,', text)
+        meta[m.group(1)] = (year.group(1) if year else '?',
+                            quoted[-2] if len(quoted) >= 2 else '?',
+                            quoted[-1] if len(quoted) >= 1 else '?')
+        rows.append((m.group(1), m.group(2), m.group(3),
+                     'NOT_WORKING' not in text))
     by = collections.defaultdict(list)
     for name, parent, cfg, works in rows:
         by['DRC' if cfg in drc else 'INTERP'].append((name, parent, cfg, works))
@@ -89,6 +115,10 @@ for path in FILES:
         ok = sorted({n for n, p, c, w in lst if p == '0' and w})
         bad = sorted({n for n, p, c, w in lst if p == '0' and not w})
         clones = sorted({n for n, p, c, w in lst if p != '0'})
+        for n in ok + bad:
+            y, co, title = meta.get(n, ('?', '?', '?'))
+            roster.append((path.split('/')[-1], grp, n,
+                           'WORKING' if n in ok else 'NOT_WORKING', y, co, title))
         grand[grp] += len(lst); grand[grp + '_parents'] += len(ok) + len(bad)
         grand[grp + '_working'] += len(ok)
         print('   %-6s %3d machines (%d parent, %d clone)' % (grp, len(lst), len(ok) + len(bad), len(clones)))
@@ -101,3 +131,10 @@ for path in FILES:
 print('TOTAL  DRC %d machines / %d parent sets (%d working)   INTERP %d machines / %d parent sets (%d working)'
       % (grand['DRC'], grand['DRC_parents'], grand['DRC_working'],
          grand['INTERP'], grand['INTERP_parents'], grand['INTERP_working']))
+
+if ROSTER:
+    print()
+    print('-- parent-set roster (file, engine, set, status, year, manufacturer, title)')
+    for r in sorted(roster, key=lambda r: (r[1], r[3] != 'WORKING', r[2])):
+        print('\t'.join(r))
+    print('-- %d parent sets' % len(roster))

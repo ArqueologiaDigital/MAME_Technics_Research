@@ -38,3 +38,57 @@
           NOT_WORKING parents : airwlkrs bel desert dynamcop hotd hpyagu98 manxtt overrev rascot2 segawski skisuprg skytargt srallyc stcc topskatr waverunr
 
 TOTAL  DRC 83 machines / 24 parent sets (13 working)   INTERP 137 machines / 27 parent sets (6 working)
+
+-- parent-set roster (file, engine, set, status, year, manufacturer, title)
+model2.cpp	DRC	doa	WORKING	1996	Tecmo	Dead or Alive (Model 2B, Revision C)
+hornet.cpp	DRC	gradius4	WORKING	1998	Konami	Gradius IV: Fukkatsu (ver JAC)
+gticlub.cpp	DRC	gticlub	WORKING	1996	Konami	GTI Club: Rally Cote D'Azur (ver EAA)
+model2.cpp	DRC	gunblade	WORKING	1995	Sega	Gunblade NY (Revision A)
+zr107.cpp	DRC	jetwave	WORKING	1996	Konami	Jet Wave (EAB, Euro v1.04)
+zr107.cpp	DRC	midnrun	WORKING	1995	Konami	Midnight Run: Road Fighter 2 (EAA, Euro v1.11)
+hornet.cpp	DRC	nbapbp	WORKING	1998	Konami	NBA Play By Play (ver UAB)
+model2.cpp	DRC	pltkids	WORKING	1998	Psikyo	Pilot Kids (Model 2B, Revision A)
+model2.cpp	DRC	rchase2	WORKING	1994	Sega	Rail Chase 2 (Revision A)
+gticlub.cpp	DRC	slrasslt	WORKING	1997	Konami	Solar Assault (ver UAA)
+model2.cpp	DRC	vstriker	WORKING	1994	Sega	Virtua Striker (Revision A)
+zr107.cpp	DRC	windheat	WORKING	1996	Konami	Winding Heat (EAA, Euro v2.11)
+model2.cpp	DRC	zerogun	WORKING	1997	Psikyo	Zero Gunner (Export, Model 2B)
+model2.cpp	DRC	dynabb	NOT_WORKING	1996	Sega	Dynamite Baseball
+model2.cpp	DRC	dynabb97	NOT_WORKING	1997	Sega	Dynamite Baseball 97 (Revision A)
+model2.cpp	DRC	fvipers	NOT_WORKING	1995	Sega	Fighting Vipers (Revision D)
+model2.cpp	DRC	indy500	NOT_WORKING	1995	Sega	INDY 500 Twin (Revision A, Newer)
+model2.cpp	DRC	lastbrnx	NOT_WORKING	1996	Sega	Last Bronx (Export, Revision A)
+model2.cpp	DRC	powsled	NOT_WORKING	1996	Sega	Power Sled (Slave, Revision A)
+model2.cpp	DRC	schamp	NOT_WORKING	1996	Sega	Sonic Championship (USA)
+model2.cpp	DRC	sgt24h	NOT_WORKING	1996	Jaleco	Super GT 24h
+hornet.cpp	DRC	terabrst	NOT_WORKING	1998	Konami	Teraburst (1998/07/17 ver UEL)
+gticlub.cpp	DRC	thunderh	NOT_WORKING	1997	Konami	Operation Thunder Hurricane (ver EAA)
+model2.cpp	DRC	von	NOT_WORKING	1995	Sega	Cyber Troopers Virtual-On - Twin (Export)
+model2.cpp	INTERP	daytona	WORKING	1994	Sega	Daytona USA (Revision A)
+gticlub.cpp	INTERP	hangplt	WORKING	1997	Konami	Hang Pilot (ver JAB)
+model2.cpp	INTERP	motoraid	WORKING	1997	Sega	Motor Raid - Twin
+model2.cpp	INTERP	vcop	WORKING	1994	Sega	Virtua Cop (Revision B)
+model2.cpp	INTERP	vcop2	WORKING	1995	Sega	Virtua Cop 2
+model2.cpp	INTERP	vf2	WORKING	1994	Sega	Virtua Fighter 2 (Version 2.1)
+model2.cpp	INTERP	airwlkrs	NOT_WORKING	1997	Data East Corporation	Air Walkers
+model2.cpp	INTERP	bel	NOT_WORKING	1997	Sega / EPL Productions	Behind Enemy Lines
+model2.cpp	INTERP	desert	NOT_WORKING	1994	Sega / Martin Marietta	Desert Tank
+model2.cpp	INTERP	dynamcop	NOT_WORKING	1998	Sega	Dynamite Cop (Export, Model 2A)
+model2.cpp	INTERP	hotd	NOT_WORKING	1997	Sega	The House of the Dead (Revision A)
+model2.cpp	INTERP	hpyagu98	NOT_WORKING	1998	Deniam	Hanguk Pro Yagu 98
+model2.cpp	INTERP	manxtt	NOT_WORKING	1995	Sega	Manx TT Superbike - DX/Twin (Revision D)
+model2.cpp	INTERP	overrev	NOT_WORKING	1997	Jaleco	Over Rev (Model 2C, Revision A)
+nwk-tr.cpp	INTERP	racingj	NOT_WORKING	1998	Konami	Racing Jam (GQ676UAC)
+nwk-tr.cpp	INTERP	racingj2	NOT_WORKING	1998	Konami	Racing Jam: Chapter II (GQ888UAA)
+model2.cpp	INTERP	rascot2	NOT_WORKING	1997	Sega	Royal Ascot II
+model2.cpp	INTERP	segawski	NOT_WORKING	1997	Sega	Sega Water Ski (Japan, Revision A)
+model2.cpp	INTERP	skisuprg	NOT_WORKING	1996	Sega	Sega Ski Super G
+model2.cpp	INTERP	skytargt	NOT_WORKING	1995	Sega	Sky Target
+model2.cpp	INTERP	srallyc	NOT_WORKING	1995	Sega	Sega Rally Championship - Twin/DX (Revision C)
+hornet.cpp	INTERP	sscope	NOT_WORKING	1999	Konami	Silent Scope (ver UAD, Ver 1.33)
+hornet.cpp	INTERP	sscope2	NOT_WORKING	2000	Konami	Silent Scope 2 : Dark Silhouette (ver UAD, Ver 1.03)
+model2.cpp	INTERP	stcc	NOT_WORKING	1996	Sega	Sega Touring Car Championship (newer)
+nwk-tr.cpp	INTERP	thrilld	NOT_WORKING	1998	Konami	Thrill Drive (UDE)
+model2.cpp	INTERP	topskatr	NOT_WORKING	1997	Sega	Top Skater (Export, Revision A)
+model2.cpp	INTERP	waverunr	NOT_WORKING	1996	Sega	Wave Runner (Japan, Revision A)
+-- 51 parent sets
