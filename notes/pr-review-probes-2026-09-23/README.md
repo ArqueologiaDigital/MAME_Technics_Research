@@ -202,6 +202,21 @@ different buses, and kn2400's empty `ROMREGION_ERASEFF table_data` is one of
 These were written by a review subagent and kept because they **changed what I
 did** — without them all three would have been "fixed" into non-conformance.
 
+## An MN10300 decode finding, and its upper bound
+
+`f9_op2_bit3_scan.py` backs a surviving finding: `mn10300.cpp`'s F9/FB/FD fast
+path tests `(op2 >> 4) == 0 && !BIT(op2, 2)`, which lets op2 `0x08-0x0B`
+through. Per binutils `mn10300-opc.c` those encode AM33 `mov`, and the fast path
+executes them as a signed multiply-by-immediate.
+
+Measured on `kn7000.zip`: **3615** byte-pairs matching the implemented
+`mulq`-immediate range, **209** matching the misdecoded one.
+
+⚠ Both are **upper bounds**. It is an unframed byte-pair scan with no
+instruction-boundary decoding, so every count includes data bytes. 209 means
+"the encoding is present in the image", not "209 instructions execute wrongly".
+The script says so itself; keep the caveat attached to the number.
+
 ## Include order
 
 | probe | question | answer |
