@@ -168,3 +168,26 @@ measurement sees them.
 * ⚠ Standing project rule: **Felipe's hardware testimony outranks agent
   inference, disassembly and live measurement.** Its absence is not licence to
   promote an inference — leave the item open and say so.
+
+## MN10300 interrupt vector base (2026-09-23)
+
+The MN103002 vectors a maskable interrupt of level L to `vector_base + IVR[L]`,
+and every Technics firmware programs `IVR0..IVR6 = 0` (verified on all five
+romsets, `notes/irq-vector-probes/`). So the vector is `vector_base + 0`. What is
+`vector_base` on these boards?
+
+- The GPL GDB simulator for this part uses `0x40000000`, but that is only where
+  that simulator's board loads its image, not a stated chip constant.
+- The firmware's own arithmetic pins the thunk's execution address at
+  `0x50000000` (`mov 0x50000001, d1`, the address of the `jmp` itself).
+- The driver currently vectors at `0x90000000`, the window the firmware writes
+  the thunk through.
+
+Related: the simulator puts NMI at `base+8`, but thunk 1 sits at `+6`. The ROM
+padding is `nop`-filled across +5..+9, so it cannot arbitrate.
+
+**Would settle it:** the MN10300 user's manual section on the CPU control block at
+`0x20000000` (the simulator cites it for the IVR layout), or the GPL Linux
+MN10300 port's `arch/mn10300/include/asm/intctl-regs.h` and `kernel/entry.S`.
+Neither needs the instrument. Nothing here blocks the driver: only thunk 0 at
+offset 0 is the maskable vector, and offset 0 is invariant under any base.
