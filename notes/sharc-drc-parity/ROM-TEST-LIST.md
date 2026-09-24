@@ -1,6 +1,6 @@
 # Which existing MAME machines does the KN7000 submission put at risk?
 
-Generated 2026-09-24 from `machines-2026-09-24.txt`; branch `technics-kn7000-driver-final`
+Generated 2026-09-24 from `machines-2026-09-24.txt`; branch `technics-kn7000-driver`
 vs `upstream/master` (`ae30b778cae`). Every table below is produced from that file, so the
 counts cannot drift from its totals line.
 

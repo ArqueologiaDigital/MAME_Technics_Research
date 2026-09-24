@@ -10,7 +10,7 @@ All built from the same worktree with the same five drivers
 | binary | what it is | built by |
 |---|---|---|
 | base   | `upstream/master` = `ae30b778cae` | `build_pair.sh` |
-| pr     | `technics-kn7000-driver-final` = `743f631e796` | `build_pair.sh` |
+| pr     | `technics-kn7000-driver` = `743f631e796` | `build_pair.sh` |
 | seed 1 | pr, MODE1.ALUSAT **gate inverted** (fires when the bit is clear) | `build_seed1.sh` |
 | seed 2 | pr, ALUSAT **clamp value** corrupted, gate untouched | `build_seed2.sh` |
 | seed 3 | `Rn = Rx + Ry` **+1 in both engines** — an instrument test, not a change test | `build_seed3.sh` |

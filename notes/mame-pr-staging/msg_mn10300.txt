@@ -1,0 +1,7 @@
+cpu/mn10300: add an execution core
+
+Implements the subset the Technics SX-KN firmware uses, plus the on-chip
+interrupt vector registers, interrupt controller, timers and serial channels.
+Promotes MN10300 from disassembler-only.
+
+AI disclosure: assisted by Claude Opus 5

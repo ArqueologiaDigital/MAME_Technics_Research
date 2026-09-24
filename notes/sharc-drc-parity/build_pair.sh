@@ -4,7 +4,7 @@
 set -uo pipefail
 cd ~/compartilhado/mame-pr-kn7000drv
 SRC=src/mame/konami/gticlub.cpp,src/mame/konami/hornet.cpp,src/mame/konami/nwk-tr.cpp,src/mame/konami/zr107.cpp,src/mame/sega/model2.cpp
-TIP=technics-kn7000-driver-final
+TIP=technics-kn7000-driver
 
 build () {   # $1 = git ref, $2 = subtarget, $3 = output binary
 	git checkout -q --detach "$1" || return 1

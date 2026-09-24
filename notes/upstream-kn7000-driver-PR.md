@@ -12,7 +12,7 @@ still needs reverse engineering gets a placeholder.**
 | `technics-cpulua-drc-token` | 1 | +1/-1 | one token; the SHARC cannot link without it |
 | `technics-mn10300-core` | 4 | +2023/-1 | builds; validates |
 | `technics-sharc-21065l` | 5 | +931/-86 | the ADSP-21065L |
-| `technics-kn7000-driver-final` | 24 | +9277/-183 | the other three merged plus the driver; five machines validate; **boots to the play screen** |
+| `technics-kn7000-driver` | 24 | +9277/-183 | the other three merged plus the driver; five machines validate; **boots to the play screen** |
 
 ### What is emulated, and what is a placeholder
 
