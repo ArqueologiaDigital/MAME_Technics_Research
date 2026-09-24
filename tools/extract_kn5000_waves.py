@@ -12,7 +12,7 @@ PURPOSE
   dump. It is legitimate preservation-adjacent fabrication from the same
   manufacturer's previous flagship, and every output is labeled as such.
 
-ROM FORMAT (per kn5000-docs/waveform-rom-format.md, verified against dumps)
+ROM FORMAT (per technics-docs/waveform-rom-format.md, verified against dumps)
   Each 4 MB chip is a self-describing bank:
     0x0000        198-entry index: {uint16 param_ptr, uint16 wave_offset} LE
                   (first param_ptr == 0x318 == 198*4, confirming entry count)
@@ -46,13 +46,13 @@ import wave as wavmod
 import zlib
 from array import array
 
-# CRC32s of ROMs with verified provenance (per kn5000-docs/waveform-rom-format.md)
+# CRC32s of ROMs with verified provenance (per technics-docs/waveform-rom-format.md)
 KNOWN_DUMPS = {
     0x20FF4629: "IC307 QS6GX3C32008 -- genuine dump",
 }
 # IC304/305/306 are NO_DUMP; the files sometimes present alongside IC307 are
 # the KN5000 project's own SYNTHETIC sine/saw/triangle banks (per
-# kn5000-docs/tone-generator.md "synthetic approximations available").
+# technics-docs/tone-generator.md "synthetic approximations available").
 # They are NOT donor material.
 
 INDEX_ENTRIES = 198

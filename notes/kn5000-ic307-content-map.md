@@ -11,7 +11,7 @@ Author: autonomous ROM-byte analysis pass, 2026-07-23. Requested by Felipe Sanch
 stdlib Python over the raw dump (helper scripts kept in scratchpad, not committed).
 
 Builds on and refines `notes/kn5000-waveform-rom-banking.md`, `notes/kn5000-wave-number.md`,
-and `kn5000-docs/waveform-rom-format.md`. Where this note **corrects or sharpens** those, it
+and `technics-docs/waveform-rom-format.md`. Where this note **corrects or sharpens** those, it
 is called out.
 
 Evidence labels: **MEASURED** (read directly from the bytes), **INFERRED** (deduction from
@@ -182,7 +182,7 @@ docs' 0x40/0x80/0xC0 marker scheme. (MEASURED.)
 * **Root note (absolute):** there is no per-record byte or word that reads as a single MIDI root.
   The only note-valued field (flag 0x00) is a *list* of split boundaries, and a waveform is reused
   under *different* boundaries by different entries (§4) — incompatible with a fixed root. Pitch
-  origin therefore comes from the firmware semitone pitch table (`kn5000-docs` §Sample Rate),
+  origin therefore comes from the firmware semitone pitch table (`technics-docs` §Sample Rate),
   not IC307.
 * **Loop start/end:** would need ≥21-bit sample offsets (waves reach 0xFEF60+ region, 1.5 M
   samples). **Every field in every record is a single byte**; there is no 2-, 3- or 4-byte field
@@ -466,7 +466,7 @@ z0/z1 (starts/ends on zero-crossing), dup (shares a wave_offset with the previou
 ---
 
 ### Corrections to prior docs this note makes
-* `kn5000-docs/waveform-rom-format.md` should note: (a) the "very long wave" shared by 7 entries
+* `technics-docs/waveform-rom-format.md` should note: (a) the "very long wave" shared by 7 entries
   is really the **un-indexed 3 MB page tail**, not one 1.5 M-sample instrument; (b) the param
   records **do** carry per-key fine-tune (records 180/181 are pure detune tables) — the "does the
   format encode tuning?" open question is answered *yes for fine-tune, no for root/loop*; (c) the

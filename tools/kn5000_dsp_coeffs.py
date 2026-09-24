@@ -145,7 +145,7 @@ def effect_names(path):
     """{algo_id: name} from the main-CPU program ROM's descending name table.
 
     Anchor check: index 20 must read "CONCERT REVERB 1", which is the one
-    algorithm-ID<->name pair independently documented (kn5000-docs
+    algorithm-ID<->name pair independently documented (technics-docs
     audio-subsystem.md, "0x0014 = algorithm 20 = CONCERT REVERB 1").
     """
     d = open(path, "rb").read()

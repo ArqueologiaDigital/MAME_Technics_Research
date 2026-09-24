@@ -1,7 +1,7 @@
 -- kn5000_democountdown.lua -- does the demo countdown timer ever get armed?
 -- rig-machine: kn5000
 --
--- kn5000-docs/ssf-presentation.md: entering the Feature Presentation (state 0xE4) calls
+-- technics-docs/ssf-presentation.md: entering the Feature Presentation (state 0xE4) calls
 -- Demo_ResetCountdownTimer, which sets DRAM[0x0D2F] = 15; the timer ticks down and at 10 it
 -- parses the next slide and calls Demo_SelectEntry_PlaySong.
 --

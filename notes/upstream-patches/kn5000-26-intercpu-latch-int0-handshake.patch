@@ -12,7 +12,7 @@ Felipe reported "Sound Name Error" had regressed. Root cause: the overlay was
 taken from the cleaned-up PR branches (kn5000_pr6 / _research_tonegen), and the
 upstream-cleanup rebase dropped three load-bearing driver-side inter-CPU-latch
 workarounds that the working kn5000_aided_by_claude branch had (documented as
-fixes 10 and 12 in kn5000-docs/subcpu-payload-loading.md):
+fixes 10 and 12 in technics-docs/subcpu-payload-loading.md):
 
   * the latch READ wrappers that synchronously clear the receiver's /INT0
     (generic_latch::read() de-asserts /INT0 through a deferred synchronize(),

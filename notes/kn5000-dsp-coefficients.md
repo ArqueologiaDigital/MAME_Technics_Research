@@ -31,7 +31,7 @@ strikingly uniform opcode sequence across all 100 slots:
 
 one or two type-0 records, then type-5, type-1, and finally one type-2 record,
 each separated by a bare type-4 command byte, terminated by 0xF. This matches
-`kn5000-docs/audio-subsystem.md`'s independent description ("the number of
+`technics-docs/audio-subsystem.md`'s independent description ("the number of
 H0/H5/H2 groups varies by effect type"). Two payload shapes:
 
 * **type 0 / 1 / 5** — 3-byte header, then a run of **5-byte entries**
@@ -93,7 +93,7 @@ coefficients are the type-2 record. Both are handled by the tool.
 (`NAME 0x00 0xFF`), last entry (index 0, " NO OPERATION ") at file offset
 **0x33568**. Anchor check: index 20 reads `CONCERT REVERB 1`, which is the single
 algorithm-ID↔name pair independently documented in
-`kn5000-docs/audio-subsystem.md` ("Word[0] … 0x0014 = algorithm 20 = CONCERT
+`technics-docs/audio-subsystem.md` ("Word[0] … 0x0014 = algorithm 20 = CONCERT
 REVERB 1"). `tools/kn5000_dsp_coeffs.py --names` asserts on that anchor.
 
 The name table cross-validates the whole parse in a way that is hard to fake:
@@ -148,7 +148,7 @@ address, but I have not proved that — it is INFERRED and flagged. The tool's
 
 I take **fs = 48 kHz**. Reasons, in order of strength:
 1. The KN5000 tone generator is documented at 48 kHz stereo
-   (`kn5000-docs/tone-generator.md`: "Sound output | Stereo 48kHz"; the waveform
+   (`technics-docs/tone-generator.md`: "Sound output | Stereo 48kHz"; the waveform
    engine is described as 64-voice PCM at 48 kHz). The effects DSP sits on the
    same serial audio bus.
 2. The CDJ-500 manual (pins 17–19, 26–29) shows BCLK/LRCK/XFs as *programmable

@@ -129,7 +129,7 @@ per tick  LABEL_026F4A  asm L21561-21578
 `chan[+0x26]` (= `0x04138E + ch*0x11F`) is set **only** by proprietary **CC 0x9D**
 (`LABEL_028ACB`, asm L23662) and is reset to 0 for all 26 channels at init (asm L25793-25795).
 MEASURED live: it is `0x00` on the running machine, so the two "force to the end" branches are
-not what live traffic takes. (This also **corrects** `kn5000-docs/sound-parameter-protocol.md`,
+not what live traffic takes. (This also **corrects** `technics-docs/sound-parameter-protocol.md`,
 which names CC 0x9D `Voice_CC_SetDelayFeedback`; the offset +0x8E is right, the name is wrong —
 it is the `+0x180` hard-pan override.)
 
@@ -253,7 +253,7 @@ voice 1  (+0x181 = 007F)   0841 484C   0881 4000   08C1 00B0
   buses per voice fed from one 12-byte block, leaving `+0x880/+0x980/+0xA40/+0x8C0` homeless;
   under "3 EG domains × 4 segments" all ten registers are accounted for.
 
-**Consequence for the docs:** `kn5000-docs/tone-generator.md:107-108, 135-136, 481-482`
+**Consequence for the docs:** `technics-docs/tone-generator.md:107-108, 135-136, 481-482`
 ("Pan Left / Pan Right, 0x00=silent, 0x3C=center, 0x78=full") is **FALSIFIED** — the measured
 values reach `0xFF`, the low byte is a rate, and hard-panned voices share them. So is the
 derived claim in `notes/tg-voice-register-semantics.md:107` ("KN5000 analog: grp0x08 bank1/2,
@@ -395,7 +395,7 @@ IC304-307 wave ROMs -> IC303 TC183C230002 (64 voices)
   sample-rate/format converter on the path.
 * **There is NO digital master volume.** The 13 global registers are written exactly once at
   boot and never again (MEASURED live, `kn5000-audit-output.md` §1.5), and the KN5000's
-  `MAIN VOLUME` is documented as **analog** (`kn5000-docs/hardware-architecture.md:83`) — i.e.
+  `MAIN VOLUME` is documented as **analog** (`technics-docs/hardware-architecture.md:83`) — i.e.
   downstream of the DAC. **The digital domain therefore has a fixed full scale that the
   firmware and chip must live inside.** That is the whole reason a headroom rule is needed at
   all, and it is why the rule must not be a global attenuation: attenuating digitally would
@@ -489,13 +489,13 @@ stuck voices, so they are an upper bound on the real density.)
 
 | where | claim | status |
 |---|---|---|
-| `kn5000-docs/tone-generator.md:107-108,135-136,481-482` | `+0x840`/`+0x880` = "Pan Left/Right, 0=silent, 0x3C=center, 0x78=full" | **FALSIFIED** (§1.6). They are EG segments 1 and 2. |
+| `technics-docs/tone-generator.md:107-108,135-136,481-482` | `+0x840`/`+0x880` = "Pan Left/Right, 0=silent, 0x3C=center, 0x78=full" | **FALSIFIED** (§1.6). They are EG segments 1 and 2. |
 | `notes/tg-voice-register-semantics.md:107,123,151` | "KN5000 analog: grp0x08 bank1/2, 0=silent/0x3C=center/0x78=full" | **FALSIFIED**; the KN7000 pan hunt should not use it as a template. |
 | `kn5000-audit-output.md` §0.1 / §4.1 | "There is no per-voice PAN in the IC303 register stream … hard-centre pan is CORRECT" | **CORRECTED**: no pan in *group 8/9/10*, right — but pan exists, in `+0x180`. Hard-centre is a defect, not a correct model. |
 | `kn5000-audit-registers.md` GAP 6 | `+0x180` = "7-bit centred parameter, pan is the leading reading, INFERRED" | **UPGRADED to MEASURED** (§1.2-§1.4), with the source byte and the CC-10 path identified. |
 | `notes/kn5000-firmware-sample-tables.md` §2.2 | `partial_block[+0x01]` = "partial flags {00,18,40,58,7f,…}" | **DECODED**: it is the patch's PAN (§1.3). |
-| `kn5000-docs/sound-parameter-protocol.md:140` | CC 0x9D = `Voice_CC_SetDelayFeedback` @ +0x8E | offset right, **name wrong**: it is the `+0x180` hard-pan override (0 = use pan, 1/2 = force the ends). |
-| `kn5000-docs/audio-subsystem.md:1068` | "Pan … written to channel offset +0x08 … via `EnvTranspose_UpdateLoop`" | **WRONG**: CC 10 is stored at chan `+0x76` (`0x041376`) and applied by `LABEL_032E1E`. |
+| `technics-docs/sound-parameter-protocol.md:140` | CC 0x9D = `Voice_CC_SetDelayFeedback` @ +0x8E | offset right, **name wrong**: it is the `+0x180` hard-pan override (0 = use pan, 1/2 = force the ends). |
+| `technics-docs/audio-subsystem.md:1068` | "Pan … written to channel offset +0x08 … via `EnvTranspose_UpdateLoop`" | **WRONG**: CC 10 is stored at chan `+0x76` (`0x041376`) and applied by `LABEL_032E1E`. |
 | `kn5000-tonegen.cpp:560-568` pan comment | "There is no evidence-based per-voice pan source yet" | **SUPERSEDED** — there is one, and this note is it. |
 
 ---

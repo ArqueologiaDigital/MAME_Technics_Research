@@ -50,7 +50,7 @@ firmware claim is tagged **MEASURED** (read from disassembly/source), **INFERRED
 code path), or **SPECULATIVE**.
 
 Sources: KN5000 SUB CPU disasm `kn5000-roms-disasm/v142/subcpu/kn5000_subprogram_v142.s`;
-KN5000 docs `kn5000-docs/{tone-generator,audio-subsystem,waveform-rom-format,sound-parameter-protocol,sound-categories,table-data-rom}.md`;
+KN5000 docs `technics-docs/{tone-generator,audio-subsystem,waveform-rom-format,sound-parameter-protocol,sound-categories,table-data-rom}.md`;
 KN7000 notes `tg-voice-register-semantics.md`, `tg-envelope-implementation-plan.md`,
 `tg-envelope-sweep-results.md`; both HLEs in `src/mame/matsushita/`.
 

@@ -11,7 +11,7 @@ together: this note supplies the pin/net facts that note's §B3/§B4 were reason
 Everything below is labelled **MEASURED** (read directly off a schematic/pin table/source file),
 **INFERRED** (a conclusion forced by measured facts), or **SPECULATIVE**. Primary sources:
 
-* **KN5000 service manual**, `kn5000-docs/service_manual/technics_sx-kn5000.pdf`
+* **KN5000 service manual**, `technics-docs/service_manual/technics_sx-kn5000.pdf`
   * PDF p.28 = manual **II-3/II-4**, "BLOCK (A) Diagram" — functional audio flow, thick line =
     *Tone Signal*, thin = *Control Signal* (the legend is printed on the page).
   * PDF p.29 = manual **II-5/II-6**, "BLOCK (B) Diagram" — the analog amplifier chain.
@@ -294,7 +294,7 @@ Against that, the firmware evidence for 44,100 is direct and hard to argue with 
 `kn5000-dsp-parameters.md` §3.1 shows the resulting chorus/rotary tap times are the musically
 correct ones at 44.1 kHz. Meanwhile **MAME's tone generator currently runs its stream at
 48,000 Hz** (`kn5000_tonegen.cpp:76`, and `SAMPLE_RATE = 48000.0` at :710 in the envelope-rate
-maths), and `kn5000-docs/tone-generator.md` quotes "Stereo 48 kHz".
+maths), and `technics-docs/tone-generator.md` quotes "Stereo 48 kHz".
 
 **This is unresolved and it is load-bearing** — it sets the DSP's frame rate, hence every delay
 tap and reverb time. It does **not** block wiring the path (both ends simply use whatever rate
@@ -512,7 +512,7 @@ a working insert effect, the part will be heard dry **plus** wet. Say so in the 
 | `dsp-critical-path-coverage.md` §B3 | "the chip has three serial input ports and **this board uses one stereo pair**" | **FALSIFIED.** All three DI and all three DO are wired (§1.1). The two opening blocks may be two *ports*, not an L/R pair. |
 | `instruction-set.md` "Control flow"; `kn5000-dsp-INDEX.md` | "the PC sweeps I-RAM once per sample frame (**Fs-RST / PC-RST pins**)" | Substance stands; mechanism corrected — `Fs-RST` and `Fs-MASK` are both strapped to +5D and inactive. It is the **internal PC-RST** off the TIMING block, cadenced by LRCKI, which **IC303** drives (§3.1). |
 | `kn5000.cpp:546-552`, `:600-613` | "the DSP's bus is A0-A16, 17 lines, exactly half the part; either one bit is left unconnected or the KN5000 wires something the diagram does not show" | Superseded: **A9-A16 are not connected at all**; only A0-A8 reach IC309 and the chip multiplexes internally. The open question is now "8 or 9 column bits", and **MD1-MD4 = 0b1111** is the deciding strap (§4). |
-| `kn5000-docs/tone-generator.md` ("Waveform RAM: IC308 …, IC309 …") | lists IC308/IC309 as *waveform* RAM for IC303 | **WRONG.** IC308 is **IC310's** delay DRAM and IC309 is **IC311's** delay DRAM (BLOCK (A), p.28; schematic p.35). Neither is connected to IC303. Worth fixing on the docs site. |
+| `technics-docs/tone-generator.md` ("Waveform RAM: IC308 …, IC309 …") | lists IC308/IC309 as *waveform* RAM for IC303 | **WRONG.** IC308 is **IC310's** delay DRAM and IC309 is **IC311's** delay DRAM (BLOCK (A), p.28; schematic p.35). Neither is connected to IC303. Worth fixing on the docs site. |
 | general | the DSP is "the effects processor" | It is *an* effects processor: **units 0-1**. Units 2-4 are IC310, which is also the **final output stage feeding the DAC**. Nothing reaches the DAC without IC310 (§2.1). |
 
 ---

@@ -97,7 +97,7 @@ in MAME and see which fields read OK/NG.
   strong evidence that for internal sounds, too, **start/loop/pitch parameters are delivered to the TG via
   register writes from CPU-side tables, not read from an in-ROM directory by the CPU**.
 - Whether the **TG chip itself** dereferences an in-ROM index (KN5000-style) cannot be proven from firmware.
-  The KN5000 template (`/home/fsanches/compartilhado/kn5000-docs/waveform-rom-format.md`): 198-entry index at
+  The KN5000 template (`/home/fsanches/compartilhado/technics-docs/waveform-rom-format.md`): 198-entry index at
   ROM offset 0 `{param_ptr, wave_offset×16 bytes}`, variable-length key-zone/loop param records
   (flags 0x40 = possible loop marker, 0x80 = end), signed 16-bit LE PCM, and **entry 0 = a perfect 256-sample
   sine** (lines 34–121). Under the integrity policy this is a **cross-model hypothesis only**.
@@ -111,7 +111,7 @@ interface: writes are 32-bit {addr16→base+0, data16→base+2} pairs (helper 0x
 at word bits 20–25); boot init writes register groups 0x04/0x0C across all 64 channels; the 0xFC0x group is a
 periodic system refresh; +4 = keybed event FIFO; +6/8/A = readback window; +0xE = routing latch. The
 waveform-select / start-address / loop registers are **unidentified** — the KN5000 map (pitch-increment,
-velocity-latch, waveform-control groups; `kn5000-docs/waveform-rom-format.md:123–139`) is the working
+velocity-latch, waveform-control groups; `technics-docs/waveform-rom-format.md:123–139`) is the working
 template. The first captured note-on (Chord-Finder plan, sound-subsystem-plan.md Phase C) or a SOUND SYSTEM
 test run in MAME will pin them.
 

@@ -18,7 +18,7 @@ Sources (all line numbers 1-based):
 * HLE model: `src/mame/matsushita/kn5000_tonegen.{cpp,h}`
 * Sub-CPU disasm: `kn5000-roms-disasm/archive/asl/subcpu/kn5000_subprogram_v142.asm`
 * Register semantics: `notes/kn5000-tonegen-register-semantics.md`
-* Authoritative format docs: `kn5000-docs/waveform-rom-format.md`, `kn5000-docs/tone-generator.md`
+* Authoritative format docs: `technics-docs/waveform-rom-format.md`, `technics-docs/tone-generator.md`
 * KN7000 reference mechanism: `tools/make_wave_pack.py`, `tools/extract_kn5000_waves.py`,
   `src/mame/matsushita/kn_tonegen.{cpp,h}`, `notes/kn7000-tonegen-pcm-mechanism.md`
 
@@ -29,7 +29,7 @@ Sources (all line numbers 1-based):
 * **(A) shortlist verdict: NO panel instrument can be *proven* IC307-only from the data
   we have.** The wave-number → physical-chip decode lives **inside** the custom
   Matsushita LSI (TC183C230002) and is absent from the firmware, the Table Data ROM, and
-  the single IC307 dump. `kn5000-docs/waveform-rom-format.md` lists this exact question as
+  the single IC307 dump. `technics-docs/waveform-rom-format.md` lists this exact question as
   an **Open Question** ("How does the tone generator's address bus map to the 4-chip ROM
   layout?"). This is the honest answer and it saves a fruitless blind test. **But** the
   situation is favourable and there IS a concrete way to hear real IC307 PCM — see §3.
@@ -91,7 +91,7 @@ Enumerating all 198 entries (python over the dump): every `wave_offset*16` lies 
 **fully self-contained**: all 198 waveforms it names live inside IC307, in its first
 ~1.04 MB. **No index entry points outside IC307's own 4 MB.** (MEASURED.)
 
-Per `kn5000-docs/waveform-rom-format.md`: **186 unique waveforms** (some entries share a
+Per `technics-docs/waveform-rom-format.md`: **186 unique waveforms** (some entries share a
 `wave_offset`), index 0 = a 256-sample perfect sine (test/fallback tone), and the tail
 entries are long multi-cycle samples (e.g. wave 0xFEF6 ≈ 1.5 M samples shared by 7
 entries). Most are multi-cycle PCM recordings → the KN5000 is **PCM sample-based**, not

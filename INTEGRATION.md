@@ -96,7 +96,7 @@ What *is* mapped and understood, for building out the peripherals:
   (timers `0x32000000`, GPIO `0x36008000`, the 58-register LCD/panel block
   `0x34000000`, the **dual tone generators** `0x98040000`/`0x98050000`).
 * **Subsystems** — the firmware's event/dispatch, tasks/scheduler, display and
-  storage layers are documented from the disassembly on the kn5000-docs site
+  storage layers are documented from the disassembly on the technics-docs site
   (KN7000 section), with the relevant work-RAM globals listed in the driver
   header.
 

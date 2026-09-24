@@ -12,7 +12,7 @@ Every port claim in `src/mame/matsushita/kn5000.cpp` should be reproducible from
 one of these. If a claim cannot be, it is a guess wearing a comment.
 
 They read the disassembly at `~/compartilhado/kn5000-roms-disasm` and the
-service-manual PDF at `~/compartilhado/kn5000-docs/service_manual/`. They write
+service-manual PDF at `~/compartilhado/technics-docs/service_manual/`. They write
 nothing.
 
 ---
@@ -83,7 +83,7 @@ the ink.
 
 ```
 pdftoppm -f 32 -l 32 -r 600 -png \
-    ~/compartilhado/kn5000-docs/service_manual/technics_sx-kn5000.pdf p
+    ~/compartilhado/technics-docs/service_manual/technics_sx-kn5000.pdf p
 
 ./trace_schematic_net.py p-32.png --pins left --band 4150,4236 --range 2600,2960
 ./trace_schematic_net.py p-32.png --labels --band 2900,3050 --range 1900,2450

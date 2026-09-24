@@ -16,7 +16,7 @@
 | Wave ROMs | **UNDUMPED** (4 chips, see §2) | **UNDUMPED** (6 chips) |
 | MAME driver | Shared `kn7000.cpp`: `kn6000()` machine config at `kn7000_mame/src/mame/matsushita/kn7000.cpp:1502-1507`; systems at :1606-1607, both `MACHINE_NOT_WORKING | MACHINE_NO_SOUND`. Boot notes: `kn7000_mame/notes/kn6000-kn6500-boot.md` | same |
 | Disassembly repo | **None.** `kn7000_disassembly/` is KN7000-only (no kn6000 sym/Makefile targets). Only scratch artifacts (`kn7000_scratchpad_snapshot/kn6000_prog.bin`, name dumps) | none |
-| Docs site (local mirror) | `/home/fsanches/compartilhado/kn5000-docs/kn6000-hardware.md` (hardware architecture incl. audio path), `kn6000-roadmap.md`, `kn6000-names.md` | covered by the same pages |
+| Docs site (local mirror) | `/home/fsanches/compartilhado/technics-docs/kn6000-hardware.md` (hardware architecture incl. audio path), `kn6000-roadmap.md`, `kn6000-names.md` | covered by the same pages |
 
 There is **no KN6000/KN6500-specific sound note** in `kn7000_mame/notes/` — everything sound there is KN7000. This report is the first sound-focused pass on these two models.
 

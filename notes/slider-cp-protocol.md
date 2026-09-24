@@ -182,7 +182,7 @@ Then the DECISIVE sound test (/tmp/dial_tg.lua): played a sustained note, let th
 controller (modwheel/pitch/etc.).** Net: 0x10 generates events (latch follows; queued to 0x5006bcf8, same as
 the working APC/SEQ pot) that affect NEITHER the screen NOR the sound in any tested context.
 
-**KN5000 CROSS-REFERENCE (kn5000-docs/data-wheel-investigation.md) -- the sister product's design pattern:**
+**KN5000 CROSS-REFERENCE (technics-docs/data-wheel-investigation.md) -- the sister product's design pattern:**
 the KN5000's data wheel is a NAVIGATION control that ends up posting a UI event (0x1C0001F); crucially, its
 transport is SEGMENT-0x0B BUTTON PACKETS (bit7=CW, bit6=CCW), and that doc's "Previous Approaches (Failed)"
 explicitly records that TYPE-2 encoder packets were the WRONG system there (the firmware treated them as MIDI

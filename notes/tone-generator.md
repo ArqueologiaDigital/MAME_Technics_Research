@@ -51,7 +51,7 @@ in midi-rx.md that an injected MIDI note did not produce a distinct voice write.
 ## KN5000 voice-register map (the likely KN7000 template)
 
 The KN5000 TG (also 64-voice wavetable, register-indirect) is documented in
-kn5000-docs/tone-generator.md. Its register ADDRESS = `group<<8 | bank<<6 |
+technics-docs/tone-generator.md. Its register ADDRESS = `group<<8 | bank<<6 |
 channel(0..63)`; offset = group*0x100 + bank*0x40 + channel. Key per-voice
 registers (a MIDI note-on writes roughly these, then a key-on strobe):
 

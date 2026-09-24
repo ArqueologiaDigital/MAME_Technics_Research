@@ -33,7 +33,7 @@ in-ROM directory; for MAME we use runtime anchors (above) and can extend by capt
 tools/extract_kn5000_waves.py extracts 186 unique waves (3.99MB PCM, 198 index entries, entry 0 =
 bit-perfect 256-sample sine) with zones/loopflags/pitch manifest. ★ PROVENANCE FLAG: the ic304/305/306
 files in kn5000_original_roms/kn5000/ are NOT dumps -- they are the KN5000 project's own synthetic
-sine/saw/triangle banks (kn5000-docs/tone-generator.md line 372 confirms NO_DUMP); only IC307
+sine/saw/triangle banks (technics-docs/tone-generator.md line 372 confirms NO_DUMP); only IC307
 (CRC32 20ff4629) is genuine. Recommend renaming that directory's synthetic files (Felipe's call).
 Donor classification (acoustic): piano w69/w64/w182-184; organ w11-33 drawbar families; strings
 w75-77/w121/w130-132; brass w40-53; sax/woodwind w82-97; flute w62-63; guitar/pluck w99-101/114-119/

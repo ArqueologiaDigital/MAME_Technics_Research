@@ -555,7 +555,7 @@ until each stage is proved:
    `upd6383.cpp:554-557,581-586`, not observed.
 7. **DSP2 (IC310, MN19413) is out of scope** and unexamined, as is the question of whether the
    KN5000 routes the tone generator through IC311 as an insert or a send/return — the service
-   documentation available here (`kn5000-docs/tone-generator.md`) still lists "trace the PCM audio
+   documentation available here (`technics-docs/tone-generator.md`) still lists "trace the PCM audio
    serial bus (BCK/SDOR/SDOF) connections" as an open item, and B3/B4 cannot be finished without
    it.
 

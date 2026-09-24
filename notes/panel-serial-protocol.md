@@ -3,7 +3,7 @@
 Reverse-engineered from the firmware (ROM-grounded, instruction-cited) to drive
 the MAME HLE of the panel sub-CPUs and the MIDI ports. The SIO ASIC has three
 channels at 0x34000800 / 0x34000810 / 0x34000820 (+0x10 stride): channel 0 =
-control panel, channels 1 & 2 = MIDI. See kn5000-docs Control Panel Protocol.
+control panel, channels 1 & 2 = MIDI. See technics-docs Control Panel Protocol.
 
 ## SIO channel model (all three channels)
 

@@ -264,7 +264,7 @@ bit-by-bit interpretation would be invention, so none is offered here.
 
 ### 1.6 The real DAC path and the SAMPLE RATE
 
-Board (service-manual chip list, `kn5000-docs/tone-generator.md` §"IC Inventory"):
+Board (service-manual chip list, `technics-docs/tone-generator.md` §"IC Inventory"):
 
 ```
 IC304-307 wave ROMs -> IC303 TC183C230002 (tone gen)
@@ -282,7 +282,7 @@ IC304-307 wave ROMs -> IC303 TC183C230002 (tone gen)
 Those measure the **DSP**. IC303 feeds the DSPs, which feed one PCM69AU on one serial audio
 bus with one LRCK — there is no sample-rate converter anywhere on the path. So **IC303's
 output frame rate is 44 100 Hz: INFERRED (strong)**. The `48 kHz` in
-`kn5000-docs/audio-subsystem.md` L1959 and `tone-generator.md` L365/L371 is a description of
+`technics-docs/audio-subsystem.md` L1959 and `tone-generator.md` L365/L371 is a description of
 the *HLE*, not a hardware measurement — it is circular and should be corrected.
 
 ---
@@ -451,7 +451,7 @@ signature (`+0x840, +0x940, +0xA00, +0x800, +0x900, +0x9C0` in that exact order,
 live), which is a far stronger match than "a write to one register".
 
 ### GAP 11 — Two doc pages assert a 48 kHz hardware sample rate that is really the HLE's. **[MEASURED]**
-`kn5000-docs/audio-subsystem.md:1959` and `tone-generator.md:365/371` state "48 kHz" as a
+`technics-docs/audio-subsystem.md:1959` and `tone-generator.md:365/371` state "48 kHz" as a
 hardware property. It is circular (it describes `kn5000_tonegen.cpp:76`) and contradicts the
 driver's own comment at `kn5000.cpp:1094-1097` ("the sample rate is 44,100 Hz"). Fix the
 docs with GAP 3.

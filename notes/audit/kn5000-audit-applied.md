@@ -246,7 +246,7 @@ again part-way through its release. Now guarded on `key_on`.
   anti-clip work: the C-E-G chord peaks at 97.9 % FS *with* it), only the comment.
 * `notes/kn5000-tonegen-register-semantics.md` item 3 (`gain_L = reg[20]>>8, gain_R = reg[21]>>8`) is
   **struck**, with the evidence, so nobody implements it later.
-* `kn5000-docs/audio-subsystem.md` — the tone-generator bullet list still described a pan model, a
+* `technics-docs/audio-subsystem.md` — the tone-generator bullet list still described a pan model, a
   pitch model and a waveform register that the device has not used for months. Rewritten.
 
 ---

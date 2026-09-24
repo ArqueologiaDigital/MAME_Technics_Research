@@ -41,7 +41,7 @@ _G.P9.h = emu.add_machine_frame_notifier(function()
 
     -- P9_PRESS_AT < 0 means: press NOTHING and just observe. That drives the AUTOMATED demo
     -- path (the instrument's own idle demo timer) rather than the manual button sequence
-    -- DEMO -> LEFT 4 -> LEFT 2, which kn5000-docs/ssf-presentation.md says are different
+    -- DEMO -> LEFT 4 -> LEFT 2, which technics-docs/ssf-presentation.md says are different
     -- paths through the code. Whether the manual path is meant to cycle songs at all is
     -- exactly the open question.
     if PRESS_AT < 0 then

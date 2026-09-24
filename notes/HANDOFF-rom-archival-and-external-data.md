@@ -51,7 +51,7 @@ hardware he owns. Frame all future work that way (see METHOD LESSON).
 
 - Notes (kn7000_mame, branch `main` -- was `phase-c-stage2` until 2026-08-27): the three `FINDINGS-*` above +
   `HANDOFF-expansion-connectors.md` (updated).
-- Docs (kn5000-docs, **ahead 16 — needs push**): `kn7000-firmware-security.md`
+- Docs (technics-docs, **ahead 16 — needs push**): `kn7000-firmware-security.md`
   ("Firmware Robustness & ROM Archival") + `kn7000-program-rom-clip-read.md` ("Program-ROM Clip Read,
   IC16/IC17 — draft"); both in nav.
 - Blog (mame-blog, **ahead 88 — needs push**): Part 126 "The card that can't run code"; Part 127 "The
@@ -73,7 +73,7 @@ hardware he owns. Frame all future work that way (see METHOD LESSON).
 3. **Simpler non-destructive routes** (checked, mostly negative): confirmed no service diagnostic emits
    program-flash bytes and the update path is write-only — so clip-read or code-exec are the only
    full-content routes. In-circuit clip read is the pragmatic one.
-4. **Pending pushes (USER action):** `git -C ~/compartilhado/kn5000-docs push` and
+4. **Pending pushes (USER action):** `git -C ~/compartilhado/technics-docs push` and
    `git -C ~/compartilhado/mame-blog push` (sandbox has no push creds).
 
 ## ★ METHOD LESSON (critical, don't relearn the hard way)

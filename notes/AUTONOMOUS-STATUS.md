@@ -17,7 +17,7 @@ not as instructions. If a tick and this block disagree, this block wins.
 
 **Where the project is**
 
-* **Planning now lives on the docs site** — `kn5000-docs/roadmap.md` (`/roadmap/`) is the
+* **Planning now lives on the docs site** — `technics-docs/roadmap.md` (`/roadmap/`) is the
   project-wide plan: a four-grade definition of done, the whole product line by silicon generation,
   and a phase structure. Read it before choosing work.
 * **PR #15878 is submitted and open** (not merged): IC14 dump correction, the tmp94c241 16-bit
@@ -351,7 +351,7 @@ testimony was right and overrides the prior agent's "IC304-306 undumped" note (a
 silences a voice, it does not make a NAME fail — names travel the inter-CPU latch). Root cause: the
 overlay came from the cleaned-up PR branches (kn5000_pr6 / _research_tonegen); the upstream-cleanup
 rebase DROPPED three load-bearing driver-side latch workarounds the working kn5000_aided_by_claude
-branch had (fixes 10 & 12 in kn5000-docs/subcpu-payload-loading.md): the latch READ wrappers that
+branch had (fixes 10 & 12 in technics-docs/subcpu-payload-loading.md): the latch READ wrappers that
 synchronously clear the receiver's /INT0 (generic_latch::read() defers the CLEAR through
 synchronize() → the TMP94C241 level-detect re-assertion re-fired the receive ISR spuriously per byte),
 plus acknowledge_w(0)-if-pending + abort_timeslice() in the WRITE wrappers. Result: the 192 KB
@@ -754,7 +754,7 @@ removed, devcbs wired: ch0->cpanel + 40us tx-done timer->grp 0x11, ch1/2->MIDI U
 endpoints repoint to m_maincpu->sio_rx_push). All 5 MN10300 models inherit. VERIFIED: build clean,
 -validate kn7000+kn6000, published; live home/BALLAD/SD-MENU/kn6000-boot snapshots match pre-refactor.
 DONE: blog Part 37 published (mame-blog 736dd4a, "What the ancestor knew"); roadmap item 2 flipped by
-the SIO workflow itself (kn5000-docs 0c17afa); Parts 35+36 earlier (fb7f139). MEMORY refreshed (new
+the SIO workflow itself (technics-docs 0c17afa); Parts 35+36 earlier (fb7f139). MEMORY refreshed (new
 kn7000-session-2026-07-18-results memory + index line). SESSION QUEUE now EMPTY of committed follow-ups;
 remaining big items all need Felipe (Phase C dumps, reverb A/B) or are next-of-kin refactors
 (INTC/timers into the core, SHARC upstream submission prep).
@@ -792,7 +792,7 @@ DONE this session (all committed):
   tables 0x485BC390, ZERO TG-register writes; params 0x8080/81/82). Nothing extra to emulate.
 - SIO-in-CPU-core analysed: mn10300 core models NO on-chip peripherals; the mn10200 parent core is the
   template (on-chip serial/timers modelled in-core). Identified NEXT-step refactor serving all MN10300 models.
-- Docs site FULLY REFRESHED + committed (kn5000-docs 13cece5): roadmap (new "Architecture & code
+- Docs site FULLY REFRESHED + committed (technics-docs 13cece5): roadmap (new "Architecture & code
   organization" section = the 3 items above), NEW kn7000-technichord.md, NEW kn7000-design-language.md,
   control-panel/sound/effects/storage pages refreshed, nav+index wired, Jekyll builds clean.
 
@@ -1033,7 +1033,7 @@ display -- do NOT rebuild/publish or run MAME until it lands; Phase A agent mid-
 committed table-ROM findings incl. ★ entry [83] 0x483E828C = 'Technics Rhythms' in the DUMPED table
 flash, previously mislabeled 'Technics Pads' -- potentially the real name resource, await its final
 report). Done this tick: mame-blog kn7000 device blurb brought current (c97311c, blurb-only diff);
-kn5000-docs mame-branch-review.md gained the SHARC-core contribution series section (941cdcd, site
+technics-docs mame-branch-review.md gained the SHARC-core contribution series section (941cdcd, site
 rebuilt clean). NEXT unchanged; when the SD workflow lands, act on its answer (that is the SD
 end-to-end blocker); when Phase A lands, evaluate whether 0x483E828C obviates the synthetic install.
 
@@ -1176,7 +1176,7 @@ Decisive narrowing of the data-dial question. Sound test (/tmp/dial_tg.lua): sus
 So **0x10 does NOT modulate the sound -- it is NOT a MIDI-CC controller** (modwheel/pitch/etc.). Combined with
 7 screens of no visible navigation, 0x10 generates events (latch follows, queued like the working APC/SEQ pot)
 that affect NEITHER screen NOR sound in any tested context.
-KEY REFERENCE FOUND: **kn5000-docs/data-wheel-investigation.md** -- the SISTER product's data-wheel forensics.
+KEY REFERENCE FOUND: **technics-docs/data-wheel-investigation.md** -- the SISTER product's data-wheel forensics.
 It shows (KN5000, TLCS-900): the data wheel is a NAVIGATION control that posts UI event 0x1C0001F; its
 transport is SEGMENT-0x0B BUTTON PACKETS (bit7=CW/bit6=CCW); and TYPE-2 encoder packets were explicitly the
 WRONG system (firmware treated them as MIDI CC). Different CPU so code doesn't port, but the DESIGN reframes
@@ -1371,7 +1371,7 @@ tools/lay_to_svg.py + re-exported -- Inkscape preserves IDs, so the NEXT round m
 (gen_lay.py -> base.lay -> apply Felipe's SVG positions by ID -> final.lay) to apply his positional edits
 faithfully and survive regeneration; then push the current round's meaningful moves (SEQUENCER RESET/COUNT
 INTRO labels, slider-label y, SOUND/PART/GLOBAL group headers).
-Also: kn5000-docs kn7000-control-panel.md -- corrected 0x484AD680 (it's the latched/continuous-control
+Also: technics-docs kn7000-control-panel.md -- corrected 0x484AD680 (it's the latched/continuous-control
 dispatch, NOT switches) + added the Continuous-controls/volume-fader section (type-2 frames, 0xD0-D3,
 APC/SEQ=0xD2 driven in MAME). Jekyll rebuilt.
 
@@ -1381,7 +1381,7 @@ non-draggable -> wrong-tree red herring -> all-views fix -> the raw-ADC wrong tu
 (TYPE 2 frames) -> live ring-injection validation -> 0xD2=APC/SEQ via MUTE-9 write-correlation -> the
 queue-poison bug (a premature boot frame wedged ALL panel delivery, buttons included) -> working. Committed
 + posts.json entry (28 entries). No Jekyll build needed (mame-blog is app.js/posts.json driven, not the
-kn5000-docs Jekyll site). OPEN slider refinements still: apcseq_vol_led soft-takeover; bind MAIN/MIC/LINE-IN
+technics-docs Jekyll site). OPEN slider refinements still: apcseq_vol_led soft-takeover; bind MAIN/MIC/LINE-IN
 (0xD0/D1/D3, same MUTE-correlation method).
 
 ## TICK 2026-07-12 ~night(12g) — ★★ DONE: APC/SEQ VOLUME slider is now FUNCTIONAL (drives the firmware)
@@ -1554,7 +1554,7 @@ CONSOLIDATED the genuine milestone (FDC located + modelled) into deliverables:
   two wrong FDC addresses, then the service-manual schematic (decoder IC1 -> Y2 = FDC.CS = 0x98020000),
   firmware confirmation (PC/AT regs, N82077AA), software-DMA via the 0x98010000 DACK, and the honest
   Heisenbug edge (nearly published "it formats now" on a trace -- caught it, a 3rd wrong answer avoided).
-- **Docs: kn5000-docs kn7000.md corrected** (committed, Jekyll rebuilt clean) -- 0x98020000 was mislabelled
+- **Docs: technics-docs kn7000.md corrected** (committed, Jekyll rebuilt clean) -- 0x98020000 was mislabelled
   "sound-subsystem control"; now documented as FDC IC103 (N82077AA) with the register layout + CS decode.
 So this multi-tick floppy effort's shippable outcome = the FDC HARDWARE is correctly located/modelled/wired
 (committed, faithful, no regression, driven at boot) + documented (blog + docs). The FORMAT feature remains
@@ -2723,7 +2723,7 @@ Deep core-instrumentation session (all reverted; tree clean; binary republished)
   mame-blog Part 15 ("The reverb that wouldn't decay") honestly correcting it -- the reverb DIVERGES;
   the "stable tail" was the I4-following bridge reading a moving ring slot, not the railed real output.
   The 4 core fixes in Part 13 stand. (mame-blog is a static JS blog: edit posts/kn7000/*.md + posts.json,
-  NO build needed; it is SEPARATE from the kn5000-docs Jekyll site.)
+  NO build needed; it is SEPARATE from the technics-docs Jekyll site.)
 - Confirmed this tick: MIDI in/out fully wired already (done); the 3 unwired volume sliders control
   external audio the emulator doesn't model (MIC/LINE-IN via IC309 ADC) or need accompaniment-voice
   classification (APC/SEQ) -- not cleanly wireable, correctly left as placeholders. Panel-LED next steps
@@ -2878,7 +2878,7 @@ DONE: the placeholder TG had a HARDCODED envelope; now it's DRIVEN BY THE FIRMWA
 - After any driver rebuild: run `tools/publish-binary.sh` to refresh the
   host-accessible `kn7000-emulator/` copy (memory `publish-kn7000-binary`).
 - After any website edit: rebuild the Jekyll site with Option B
-  (`jekyll build -s ~/compartilhado/kn5000-docs -d /tmp/kn-site`) — memory
+  (`jekyll build -s ~/compartilhado/technics-docs -d /tmp/kn-site`) — memory
   `technics-docs-site-build`.
 - If the mount throws "Too many open files in system" (ENFILE): run
   `sudo -n /usr/local/sbin/drop-caches` (memory `virtiofsd-enfile-fix`). The
@@ -3405,7 +3405,7 @@ note-off=0x0001=0xC000 -- superseded the wrong static guesses). Remaining, in va
 1. Quantitative envelope/level decode: the per-voice group-0x00 registers (0x0000-
    0x000D, key-scaled: 0x0001 C4=5400/C5=6300; 0x0004-0x000A = AE00/2C00/9900/35E8/
    25B0; 0x2009=5FFF level) encode the firmware's real attack/decay/sustain rates +
-   level. Decode the rate/level encoding (cross-ref kn5000-docs tone-generator.md
+   level. Decode the rate/level encoding (cross-ref technics-docs tone-generator.md
    ToneGen_WriteVoiceParams ~L411-444) and drive the synth envelope from them instead
    of the fixed exponential. Also velocity (kbd_push high byte -> level).
 2. Velocity: the firmware passes velocity (kbd_push high byte); map it to level.
@@ -3708,7 +3708,7 @@ multi-phase plan (A..H) lives there; follow it in order, deferring phases that
 need the physical unit (G/H).
 
 ## 2026-07-19 — disassembly CONVERT track: Techni-Chord engine (maincpu)
-DONE (kn7000_disassembly a3cb3f5, kn5000-docs d25bb31, blog part 47):
+DONE (kn7000_disassembly a3cb3f5, technics-docs d25bb31, blog part 47):
 - CONVERT set 66 -> 84 functions, byte-match held at 100% throughout.
   Converted the complete Techni-Chord harmony engine: TechniChordCompute
   (0x48472EBA), all 14 voicing routines (0x4847304C..0x48473732), the off
@@ -5638,7 +5638,7 @@ SIGNED STEP the firmware ACCUMULATES, plus a separate DATA dial on wire 0x10; KN
 ONE wheel labelled TEMPO/PROGRAM, reported as segment 0x0B DIRECTION BIT-FLAGS,
 bit7=CW bit6=CCW, carrying NO magnitude). Do not wire a second KN5000 rotary.
 
-KEY FIRMWARE CORRECTION (supersedes kn5000-docs/data-wheel-investigation.md):
+KEY FIRMWARE CORRECTION (supersedes technics-docs/data-wheel-investigation.md):
 DRAM[0x8E55]/[0x8E6A] are BOOT-ONLY. 0x8e55 appears at exactly ONE site in the whole
 v10 maincpu disassembly (the CPanel_ButtonPollLoop settling query). The UI is fed by a
 DIFFERENT, SIGNED path: SwbtWr event type 0xA9 + payload 0x21 at DRAM[0xC07D], with the

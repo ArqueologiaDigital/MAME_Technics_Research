@@ -3,7 +3,7 @@
 
 # KN7000 sound-work knowledge & infrastructure inventory (2026-07-09)
 
-All paths absolute. "notes/" = `/home/fsanches/compartilhado/kn7000_mame/notes/`. "driver" = `/home/fsanches/compartilhado/kn7000_mame/src/mame/matsushita/kn7000.cpp` (1611 lines, current). "kn5000-docs/" = `/home/fsanches/compartilhado/kn5000-docs/`.
+All paths absolute. "notes/" = `/home/fsanches/compartilhado/kn7000_mame/notes/`. "driver" = `/home/fsanches/compartilhado/kn7000_mame/src/mame/matsushita/kn7000.cpp` (1611 lines, current). "technics-docs/" = `/home/fsanches/compartilhado/technics-docs/`.
 
 ---
 
@@ -35,16 +35,16 @@ All paths absolute. "notes/" = `/home/fsanches/compartilhado/kn7000_mame/notes/`
 - **Curiosity with plan value**: the service **SOUND SYSTEM test emits pure sine waves per key — needs no sample ROM** — the only path to any diagnostic-only tone (tone-generator.md:170-173).
 
 ### 1.6 KN5000 transferable knowledge (shared codebase)
-From kn5000-docs/tone-generator.md (KN5000 TG = IC303 TC183C230002, 64-voice, register-indirect — the KN7000's template):
+From technics-docs/tone-generator.md (KN5000 TG = IC303 TC183C230002, 64-voice, register-indirect — the KN7000's template):
 - **Full per-voice register map** (32 regs = 8 groups × 4 banks): group0.0 Voice Control (state machine `0x7E00` idle / `0x8100` key-on / `0x1200` transition), 0.1 pitch increment (0x8000=1.0×), 0.2 voice-mode/velocity (bit15 latch strobe), 0.3 waveform control, 1.x pitch/portamento, **4.0 note key info (`note<<8 | bit15`)**, 5.x modulation/extended (bit15 strobes), **8.0 main volume (0xFF80=mute)**, 8.1/8.2 pan L/R (0x3C=center), 8.3 + 9.0-9.3 DSP/effect sends, A.x aux (lines 82-112).
 - **`ToneGen_WriteVoiceParams` exact 22-write note-on sequence with KEY-ON (`0x8100` to reg 0) in the middle** (lines 411-445); **note-off = `+0xC0`←0 then `+0x00`←`0x7E00`** (lines 464-468); mute idiom `0x840=0xFF00`, `0x800=0xFF80` (line 477).
 - **Global registers with init values**: `0x0200-0x0205`, `0x0C00-0x0C05`, `0x0E00` (lines 183-197); init writes 2,317 register pairs (line 212).
 - **Keyboard-input interface format** (0x110000/0x110002) — already ported to the KN7000 FIFO (§1.3).
 - **A working MAME TG device exists**: `kn5000_tonegen_device` in `kn5000_tonegen.cpp` — register-indirect latch, 64-voice state, 48 kHz `sound_stream`, pitch/pan/volume/interpolation/release from the register file + waveform region (lines 345-374). **This is the code template for a future KN7000 TG device.**
-- **Waveform ROM format** (kn5000-docs/waveform-rom-format.md): dumped IC307 = 198-entry index (param_ptr + wave_offset×16 bytes) + signed 16-bit PCM. Plausible (unverified) template for the KN7000 C3CBQD ROMs once dumped.
-- **DSP caution — chips do NOT transfer**: KN5000 uses DSP1 IC311 DS3613GF-3BA (8-bit parallel) + DSP2 IC310 MN19413 (bit-bang serial); the KN7000 uses an **ADSP-21065L SHARC (IC306)** — a completely different device. What may transfer is the *firmware-side effect architecture*: 5 EFF slots, 56-byte parameter blocks (word[0] = algorithm ID, e.g. 0x0014 = CONCERT REVERB 1), a bytecode interpreter batching register writes, 12-bit effect parameters (kn5000-docs/audio-subsystem.md:425-742). But note kn5000-docs/technics-shared-codebase.md:157: the KN5000 tone-init helper `SwbtWr` is **absent in the KN7000 — "sound-init layer reworked"** — so expect divergence.
-- kn5000-docs/**kn7000-sequencer.md** (KN7000-specific): sequencer engine API `MT_Seq_PlayRequest`, `EV_PlayRequest`/`EV_PlayStartIni` events, engine runs in the **AP task** — directly relevant to triggering `MainSeqRun`.
-- kn5000-docs/audio-subsystem.md MIDI dispatch: CC handler map (CC#91 reverb depth → voice struct +0x7F, CC#95 chorus +0x72, etc., lines 205-219 + sound-parameter-protocol.md) — useful naming/semantics reference for the KN7000's part parameters.
+- **Waveform ROM format** (technics-docs/waveform-rom-format.md): dumped IC307 = 198-entry index (param_ptr + wave_offset×16 bytes) + signed 16-bit PCM. Plausible (unverified) template for the KN7000 C3CBQD ROMs once dumped.
+- **DSP caution — chips do NOT transfer**: KN5000 uses DSP1 IC311 DS3613GF-3BA (8-bit parallel) + DSP2 IC310 MN19413 (bit-bang serial); the KN7000 uses an **ADSP-21065L SHARC (IC306)** — a completely different device. What may transfer is the *firmware-side effect architecture*: 5 EFF slots, 56-byte parameter blocks (word[0] = algorithm ID, e.g. 0x0014 = CONCERT REVERB 1), a bytecode interpreter batching register writes, 12-bit effect parameters (technics-docs/audio-subsystem.md:425-742). But note technics-docs/technics-shared-codebase.md:157: the KN5000 tone-init helper `SwbtWr` is **absent in the KN7000 — "sound-init layer reworked"** — so expect divergence.
+- technics-docs/**kn7000-sequencer.md** (KN7000-specific): sequencer engine API `MT_Seq_PlayRequest`, `EV_PlayRequest`/`EV_PlayStartIni` events, engine runs in the **AP task** — directly relevant to triggering `MainSeqRun`.
+- technics-docs/audio-subsystem.md MIDI dispatch: CC handler map (CC#91 reverb depth → voice struct +0x7F, CC#95 chorus +0x72, etc., lines 205-219 + sound-parameter-protocol.md) — useful naming/semantics reference for the KN7000's part parameters.
 
 ### 1.7 Supporting solved context
 - **I/O map of the whole 0x98 sound bank** (notes/io-map.md:132-159): `0x98000000`(16b×1), `0x98010000`(8b×3), `0x98020004/8/A/E`(8b), `0x9804xxxx`/`0x9805xxxx` sets incl. `0x9805000C/E`, `0x98060000`(8b×6, boot writes 0xFF), `0x98070000`(16b×14, boot reads = strap). Boot hardware-init order at io-map.md:177-184.

@@ -1,7 +1,7 @@
 -- kn5000_demotimer.lua -- why does no NEXT song start after the first one ends?
 -- rig-machine: kn5000
 --
--- Per kn5000-docs/ssf-presentation.md the Feature Presentation drives itself:
+-- Per technics-docs/ssf-presentation.md the Feature Presentation drives itself:
 --     enter state 0xE4 -> Demo_ResetCountdownTimer sets DRAM[0x0D2F] = 15
 --     -> timer ticks down -> at 10: parse slide, Demo_SelectEntry_PlaySong
 --     -> FDemo_MultiGuardCheck, which FAILS if state != 0xE4

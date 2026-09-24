@@ -27,8 +27,8 @@ Execution log (2026-07-09):
   scripts — `machine:add_notifier` → `emu.add_machine_frame_notifier` — masked
   by the virtiofs mount instability; neither getenv nor the stub was at fault.)
 - **Phase E** (Programming Guide) — delivered as the public docs pages
-  ([sound-subsystem](https://arqueologiadigital.github.io/KN5000-docs/kn7000-sound-subsystem/),
-  [effects-dsp](https://arqueologiadigital.github.io/KN5000-docs/kn7000-effects-dsp/))
+  ([sound-subsystem](https://arqueologiadigital.github.io/technics-docs/kn7000-sound-subsystem/),
+  [effects-dsp](https://arqueologiadigital.github.io/technics-docs/kn7000-effects-dsp/))
   + `notes/dsp-effect-catalog.md`.
 - **Stretch** (GUI flow-chart) — DONE for the sound cluster (docs-site
   `kn7000-sound-gui-map`).

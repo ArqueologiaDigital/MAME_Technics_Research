@@ -5,7 +5,7 @@
 # KN5000 Sound Subsystem — Reverse-Engineering State Inventory
 (for the KN7000 sound-plan cross-model comparison section)
 
-Sources: `/home/fsanches/compartilhado/kn5000-docs/` (tone-generator.md, audio-subsystem.md, waveform-rom-format.md, dsp-bytecode-interpreter.md, swbwr-tone-init.md, sound-parameter-protocol.md, technics-shared-codebase.md), MAME mainline `/home/fsanches/compartilhado/mame/src/mame/matsushita/kn5000.cpp`, and git branch `kn5000_research_tonegen` of `/home/fsanches/compartilhado/mame` (`kn5000_tonegen.cpp`, `kn5000_dsp.cpp` — these device files exist **only on that branch**).
+Sources: `/home/fsanches/compartilhado/technics-docs/` (tone-generator.md, audio-subsystem.md, waveform-rom-format.md, dsp-bytecode-interpreter.md, swbwr-tone-init.md, sound-parameter-protocol.md, technics-shared-codebase.md), MAME mainline `/home/fsanches/compartilhado/mame/src/mame/matsushita/kn5000.cpp`, and git branch `kn5000_research_tonegen` of `/home/fsanches/compartilhado/mame` (`kn5000_tonegen.cpp`, `kn5000_dsp.cpp` — these device files exist **only on that branch**).
 
 ---
 

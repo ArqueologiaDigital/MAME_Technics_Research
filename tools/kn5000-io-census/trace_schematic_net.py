@@ -10,7 +10,7 @@ the wire ends or hits a junction.
 Render the page first (poppler):
 
     pdftoppm -f 32 -l 32 -r 600 -png \
-        ~/compartilhado/kn5000-docs/service_manual/technics_sx-kn5000.pdf p
+        ~/compartilhado/technics-docs/service_manual/technics_sx-kn5000.pdf p
 
 Then, e.g. the result quoted in kn5000.cpp's Port H comment -- start on the
 IC5 pin-12..17 leads at x=4145 and walk LEFT to the sheet's net labels:

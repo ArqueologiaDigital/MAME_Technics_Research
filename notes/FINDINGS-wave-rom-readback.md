@@ -17,7 +17,7 @@ do not trust the OCR text for wiring.
 
 * **WSA1R**, `KN7000/service_manual/SX-WSA1R Service Manual.pdf`
   PDF page 18 = BLOCK Diagram, sheets II-5/II-6.
-* **KN5000**, `kn5000-docs/service_manual/technics_sx-kn5000.pdf`
+* **KN5000**, `technics-docs/service_manual/technics_sx-kn5000.pdf`
   PDF page 34 = `TONE GENERATOR SECTION (A)`, sheets II-15/II-16;
   PDF page 35 = `TONE GENERATOR SECTION (B)`, sheets II-17/II-18;
   PDF page 33 = `CPU SECTION (B)`, sheets II-13/II-14.
@@ -120,7 +120,7 @@ KN5000 MIDI implementation chart (sheet I-26) confirms `System Exclusive: O`.
 
 Capture can also be *digital*, avoiding any ADC: the **SY-ES1 Output Expansion Board**
 gives the WSA1/WSA1R a coaxial S/PDIF out at 44.1 kHz / 20 bits carrying the main pair
-(see `kn5000-docs/wsa1.md`). The KN5000 equivalent is `DO3`, but our notes place that on
+(see `technics-docs/wsa1.md`). The KN5000 equivalent is `DO3`, but our notes place that on
 the HD-AE5000 extension rather than the main mix, so it needs that board.
 
 ## The test that should come first

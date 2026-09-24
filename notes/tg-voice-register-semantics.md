@@ -120,7 +120,7 @@ The KN7000 note→voice path could **not** be fully driven statically (prior fin
 3. Group-0x40 level/pan/send: **0x4028 / 0x4059 / 0x4070**.
 4. **Key-on strobe on 0x4014**: write with addr bit15 SET (0xc014|ch<<4) then CLEAR (0x4014|ch<<4) — 0x487E6999 then 0x487E6959.
 
-**The KN5000 documented order is the template to match** (`kn5000-docs/tone-generator.md:411-444`, `ToneGen_WriteVoiceParams`): pitch(+0x40) → velocity-latch SET(+0x80) → waveform(+0xC0) → note-info(+0x400) → main-volume(+0x800) → **KEY-ON(+0x000)=0x8100** → pan L/R(+0x840/+0x880) → sends → velocity-latch CLEAR(+0x80). Key point mirrored on KN7000: **volume/params are written first, key-on/strobe last.**
+**The KN5000 documented order is the template to match** (`technics-docs/tone-generator.md:411-444`, `ToneGen_WriteVoiceParams`): pitch(+0x40) → velocity-latch SET(+0x80) → waveform(+0xC0) → note-info(+0x400) → main-volume(+0x800) → **KEY-ON(+0x000)=0x8100** → pan L/R(+0x840/+0x880) → sends → velocity-latch CLEAR(+0x80). Key point mirrored on KN7000: **volume/params are written first, key-on/strobe last.**
 
 Phase C should log every `(TG#, addr, data)` for one note (e.g. C4=note 0x3C) and align it to this order. Expect: a burst of 0x04xx + 0x2000/0x3000 + 0x40xx writes for one channel, terminated by the 0x4014↔0xc014 strobe.
 
@@ -128,7 +128,7 @@ Phase C should log every `(TG#, addr, data)` for one note (e.g. C4=note 0x3C) an
 
 ## 3. WAVEFORM ADDRESSING — index, not a CPU-provided start address
 
-**Finding: the CPU never hands the TG a raw wave-ROM byte address.** No register write in the KN7000 driver carries a 24-bit ROM pointer; the pitch registers carry 13-bit values and the group-0x04 registers 14-bit values — far too small for a 16M-word (24-bit) address. This matches the documented KN5000 behavior exactly (`kn5000-docs/waveform-rom-format.md:124-155`): the SubCPU writes a compact **waveform/tone index** to a per-voice register (KN5000 `+0x0C0`, group0 bank3), and the **TG chip resolves index→ROM address internally** by reading an index/parameter table stored at the very start of the wave ROM.
+**Finding: the CPU never hands the TG a raw wave-ROM byte address.** No register write in the KN7000 driver carries a 24-bit ROM pointer; the pitch registers carry 13-bit values and the group-0x04 registers 14-bit values — far too small for a 16M-word (24-bit) address. This matches the documented KN5000 behavior exactly (`technics-docs/waveform-rom-format.md:124-155`): the SubCPU writes a compact **waveform/tone index** to a per-voice register (KN5000 `+0x0C0`, group0 bank3), and the **TG chip resolves index→ROM address internally** by reading an index/parameter table stored at the very start of the wave ROM.
 
 KN5000 wave-ROM index format (the model to implement) [KN5000]:
 - 4-byte entries `{uint16 param_ptr, uint16 wave_offset}` at ROM offset 0.

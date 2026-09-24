@@ -2,7 +2,7 @@
 
 # First-cut TG→audio mapping: keyed voice → audible placeholder samples
 
-Sources: `kn7000_disassembly/tools/make_placeholder_waveroms.py` (bank layout), `kn7000_mame/notes/placeholder-wave-rom-spec.md` §2–3 (tiling + MAME loading), `kn7000_mame/notes/tone-generator.md` (register groups, dormancy), `kn5000-docs/waveform-rom-format.md:129,137-141` and `kn5000-docs/tone-generator.md:119,364` (pitch convention `0x8000 = 1.0×`, sample rate). Driver refs are `kn7000_mame/src/mame/matsushita/kn7000.cpp`.
+Sources: `kn7000_disassembly/tools/make_placeholder_waveroms.py` (bank layout), `kn7000_mame/notes/placeholder-wave-rom-spec.md` §2–3 (tiling + MAME loading), `kn7000_mame/notes/tone-generator.md` (register groups, dormancy), `technics-docs/waveform-rom-format.md:129,137-141` and `technics-docs/tone-generator.md:119,364` (pitch convention `0x8000 = 1.0×`, sample rate). Driver refs are `kn7000_mame/src/mame/matsushita/kn7000.cpp`.
 
 ## 0. Ground facts to build on (verified)
 
@@ -10,7 +10,7 @@ Sources: `kn7000_disassembly/tools/make_placeholder_waveroms.py` (bank layout), 
 - **A bank is `MASTER_WORDS // NBANKS = 16M // 16 = 1,048,576 window words`** (`build_master`, `bank_words = MASTER_WORDS // NBANKS`). Bank 0 spans window words `0x000000..0x0FFFFF` = 4096 back-to-back copies of the 256-sample sine.
 - **Untransposed root pitch of the tile ≈ 172.3 Hz** = `Fs/256 = 44100/256` (spec §2.2 "≈172 Hz root"). The frequency the tile plays at ratio `1.0×`.
 - **Samples are signed 16-bit little-endian.** `array('h')` on x86 → LE `tobytes()`; loaded `ROM_REGION16_LE`, so **window word `W` == `region_u16[W]`** as host `int16_t` (spec §3.2).
-- **Sample rate uncertain; assume 44100 Hz** first cut (`kn5000-docs/waveform-rom-format.md:141`: "likely 48 kHz or 44.1 kHz" — not found definitively). Retargetable to 48000.
+- **Sample rate uncertain; assume 44100 Hz** first cut (`technics-docs/waveform-rom-format.md:141`: "likely 48 kHz or 44.1 kHz" — not found definitively). Retargetable to 48000.
 - **The firmware playback engine is dormant** (`tone-generator.md`: MainSoundAdd/MainSeqRun never ran on blind stimulus). A synth that only reads `m_tg_reg` stays silent until Phase C — forces the staging in §3.
 
 ## 1. Synthesis mapping: note → Hz → phase step into the sine tile
@@ -42,7 +42,7 @@ for (int s = 0; s < outputs[0].samples(); ++s) {
 }
 ```
 - **Chip/parity/byte order:** read the reassembled full region `\"wave_a\"` (both chips interleaved by `ROM_LOAD32_WORD` @0/@2) — no parity math, `wav[idx]` is the window-word sample, host `int16_t`, already LE. `wave_a`=master TG @0x98040000, `wave_b`=sub TG @0x98050000 (provisional, self-correcting; spec §2.4).
-- **Optional (only once firmware drives voices):** `0x8000=1.0×` (`kn5000-docs/tone-generator.md:119`) collapses to `inc = m_tg_reg[tg][0x40+channel] / 32768.0` since 1.0× = one tile-entry/output-sample at 44100 (`256·172.27/44100=1.0`). Pitch reg offset = group0·0x100+bank1·0x40+ch = `0x40+ch` (`kn7000.cpp` `group<<8|bank<<6|channel`). Keep behind a flag until Phase C confirms KN7000 uses KN5000 encoding.
+- **Optional (only once firmware drives voices):** `0x8000=1.0×` (`technics-docs/tone-generator.md:119`) collapses to `inc = m_tg_reg[tg][0x40+channel] / 32768.0` since 1.0× = one tile-entry/output-sample at 44100 (`256·172.27/44100=1.0`). Pitch reg offset = group0·0x100+bank1·0x40+ch = `0x40+ch` (`kn7000.cpp` `group<<8|bank<<6|channel`). Keep behind a flag until Phase C confirms KN7000 uses KN5000 encoding.
 
 ## 2. Mapping onto the MAME region
 

@@ -60,7 +60,7 @@ separate actor writes `0x10` at 139.64 from `0xEF0FA5`.
 * **Not stuck audio.** Active voices go `0x1CE0` → `0x0000` exactly at the stop and stay clear
   for 59 s (`notes/p9-parts-vs-voices-2026-08-15.log`). The firmware keeps polling the tone
   generator 36,000 times. **P9 and P3 ("stuck EG voices") are different bugs.**
-* **Not blocked on the undumped waveform ROMs.** `kn5000-docs/ssf-presentation.md` attributes
+* **Not blocked on the undumped waveform ROMs.** `technics-docs/ssf-presentation.md` attributes
   the stall to parts that never finish *because* waveform ROMs are missing. Contradicted: zero
   active voices, and the timer — not the parts — is what fails to restart.
 * **Not an idle-demo problem.** There is no idle-triggered demo; the timer lives *inside* the
