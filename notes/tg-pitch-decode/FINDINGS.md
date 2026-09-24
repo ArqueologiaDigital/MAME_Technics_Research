@@ -195,3 +195,94 @@ no route produced today.
    MIDI bridge feeds the same FIFO, so `-kbdmidi` will not help by itself.
 3. Only then decide the anchor. Until it is measured, replacing the RAM read with an
    estimate would swap a documented layering violation for an undocumented guess.
+
+---
+
+# ★ THE DESIGN, DECODED (2026-09-24, from the KN5000 sub-CPU disassembly)
+
+The KN5000's own firmware settles what the pitch register carries, and the KN7000
+shares the encoding. This is what makes a chip-boundary-respecting implementation
+possible.
+
+## The register carries an ABSOLUTE LOG PITCH
+
+`kn5000_subprogram_v142.s:7262`, from the staged per-voice register block:
+
+    0x0451DA -> +0x400   absolute log pitch          (Pitch_Emit_Reg400)
+    0x0451CE -> +0x040   recording selector, (class << 12) | entry
+
+and the same file states the firmware never walks the wave ROMs at all --
+"IC304-IC307 hang off IC303 and are in no CPU's address space", with a traffic
+census over the whole payload to back it. The chip resolves the sample AND its
+tuning itself. The CPU sends a pitch and an index; that is the whole interface.
+
+## The value is built by ADDITION in a log domain
+
+`Pitch_Emit_Reg400` (0x023A4A):
+
+    +0x400 = saturate15( (rec+0x0A) + [0x041347]          ; global fine tune
+                                    +/- (rec+0x23)->[0x1D] ; detune, optional
+                                    + [0x04135A] )         ; glide, conditional
+
+    (rec+0x0A) = (rec+0x06) + [0x293E] + (rec+0x17)->[0x05]*2
+                            + (rec+0x27)->[0x21] + (rec+0x23)->[0x14]
+
+Every term is additive, so note -> register is affine.
+
+## The units are 8.8 SEMITONES, and keys map as key*256 + 0x80
+
+`Pitch_Fold_Octaves_Into_Range` (0x006059) says it outright:
+
+    In: WA = signed 16-bit pitch (8.8 semitones), C = low key limit, E = high key
+    limit. Adds or subtracts 0x0C00 (twelve semitones) until the value lies inside
+    [C*256+0x80, E*256+0x80].
+
+256 units per semitone; a key K sits at `K*256 + 0x80`. The fine-tune stage confirms
+it independently: signed semitone bytes are `exts` then `sla 8` before being added.
+
+**This is the KN7000's encoding too.** Its firmware's `notePitch16 = (note<<8) + 0x80`
+is the same 8.8 form, and the constant `0x4280` that the KN7000 driver calls "the
+formula constant" for unpitched drums is the KN5000's literal `ldw iz, 0x4280`
+snap-to-centre value -- note 0x42 = 66 with the +0x80 half-step. Same family, same
+constant. The KN7000's chip register is 1024/semitone, exactly 4x finer.
+
+## ★ WHAT THE WAVE ROM IS ACTUALLY NEEDED FOR: THE OCTAVE, AND ONLY THE OCTAVE
+
+The pitch written to the chip is the musical pitch **folded by a whole number of
+octaves** into the sample zone's key range, and it is folded only "when a sample zone
+cannot cover the played key". The zone limits are wave-ROM data -- precisely the
+key-zone boundary words measured in IC307 (flags 0x00 / 0xC0, low byte = MIDI key).
+
+Consequences for a driver with NO_DUMP wave ROMs:
+
+* **pitch class (note mod 12) is EXACT** from the register alone;
+* **the octave is ambiguous** by an integer number of octaves, and resolving it needs
+  the zone limits, i.e. the dump;
+* an octave-wrong note is therefore the EXPECTED failure mode, not a sign of a broken
+  decode. `notes/kn7000-demo-playback-status` already records "P10 ~octave sharp".
+
+That is a far smaller gap than "the pitch is unrecoverable", and it is the whole
+justification for dropping the RAM read: the register gives everything except an
+integer octave, and the RAM read was buying exactly that one integer.
+
+## Implementation this licenses (no chip-boundary crossing)
+
+    note_x256 = (p18 - ANCHOR) * 256 / 1024        // chip constants only
+    // octave fold is a wave-ROM property; with the ROMs absent, assume the zone
+    // covers the played key (no fold) and accept an octave error on zones that
+    // would have folded.
+
+The only hardcoded numbers become the chip's scale (1024 units/semitone, measured)
+and its anchor -- properties of the tone generator, not addresses in someone's
+firmware build. ANCHOR is still unsettled: the driver's fallback implies 0x4838
+(from `96.0 + (p18-0x1C838)/1024`), the design note's "C4 = 0x0000C838" implies
+something 28 semitones away, and no note-on with a known key was captured to decide.
+Taking the driver's existing value changes nothing audible today, because it is
+already what every voice uses (the record array is empty in every reachable state).
+
+## The falsifiable prediction
+
+The record array was measured empty in every state reachable in either build, so
+`tg_pitch_resolve`/`tg_type_resolve` always return -1 and the fallback always runs.
+**Deleting both RAM reads must therefore leave the audio hash bit-identical.** If it
+does not, the measurement was incomplete and the deletion is not safe.
