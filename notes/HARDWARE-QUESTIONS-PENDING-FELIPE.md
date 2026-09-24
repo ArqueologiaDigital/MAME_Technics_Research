@@ -169,24 +169,36 @@ measurement sees them.
   inference, disassembly and live measurement.** Its absence is not licence to
   promote an inference — leave the item open and say so.
 
-## Do the KN6000 and KN6500 have a floppy drive and an SD slot? (2026-09-23)
+## ✅ ANSWERED 2026-09-24 — the KN6000 and KN6500 have a floppy drive and NO SD slot
 
-The driver configures an SD card and an N82077AA floppy controller for every
-model that reuses `kn7000_base()`, which is all five. Two of the five are settled
-by the driver's own header, read off the service manuals:
+**Felipe, looking at his instruments:** the KN6000 has a 3.5" floppy drive and no
+SD card slot; asked separately about the KN6500, the same. Neither was inferred
+from the other.
 
-- the **KN7000** has both;
-- all three SX-KN2400 sources show a **floppy controller**, and IC404, the SD
-  sub-CPU program, is listed **"KN2600 only"** — so the KN2400 has a floppy and
-  no SD slot, and the KN2600 has both.
+This closes the question as it was posed on 2026-09-23. What it changes, and what
+was already settled:
 
-Nothing in the material here settles the **KN6000/KN6500**. Felipe owns a KN6000:
-does it have a 3.5" floppy drive? An SD slot? If the answer splits them from the
-KN7000, `kn6000()` should `device_remove()` what is not there, the way it already
-does for the tone generator and the control panel — and the KN2400 needs its SD
-removed regardless, which needs kn2600 to stop sharing kn2400's machine config.
+| model | floppy | SD slot | source |
+|---|---|---|---|
+| KN7000 | yes | yes | service manual |
+| KN6000 | yes | **no** | Felipe, 2026-09-24 |
+| KN6500 | yes | **no** | Felipe, 2026-09-24 |
+| KN2400 | yes | **no** | IC404, the SD sub-CPU program, listed "KN2600 only" |
+| KN2600 | yes | yes | same |
 
-Nothing here misbehaves today; an absent slot merely shows an empty media entry.
+The driver gave all five an SD card, because every model reuses `kn7000_base()`.
+The fix is `config.device_remove("sdcard")` in `kn6000()` (which `kn6500()` calls)
+and in `kn2400()` — the last of which needs `kn2600` to stop sharing `kn2400`'s
+machine config, so the shared part moves to a `kn24_base()`.
+
+Written as `tools/mame-pr-planning/kn7000-driver-pr/kn6000_no_sdcard.{py,sh}` in the
+KN7000 repo. It is **not** a tip commit: `kn7000_base()` gains the SD card in the
+commit "matsushita/kn7000: add the SD card", and a `device_remove` of a tag that
+does not exist yet fatalerrors at machine-config time, so the wrapper amends that
+commit and rebases the stack onto it.
+
+Nothing misbehaved before the fix — an absent slot merely showed an empty media
+entry — which is why this was a fidelity item rather than a bug.
 
 ## MN10300 vector base: what re-decodes 0x40000000 (2026-09-23, sharpened)
 
