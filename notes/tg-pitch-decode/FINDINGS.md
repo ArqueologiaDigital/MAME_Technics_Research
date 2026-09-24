@@ -69,8 +69,14 @@ measurement rather than a dead read path.
 
 ⚠ What this does NOT show: that the lookup is inert in general. The record is
 populated *before the first pitch write of a note*, and no note ever played, so
-the empty array is downstream of that. The PR branch is an extract and a machine
-that never sounds a note is the wrong tree to measure in.
+the empty array is downstream of that.
+
+⚠ CORRECTION (later the same day): I first blamed the PR extract for this and said
+the overlay, which has working audio, was the tree to measure in. **That was wrong.**
+Running the identical scale probe on `kn7000_mame_build/kn7000` (2026-09-23, the
+overlay) gives the SAME result: 256 pitch writes, 0 with a key held. Whatever state
+the firmware needs before it polls the key FIFO, neither build reaches it under this
+harness, and the extract is not the cause.
 
 ## A subtlety worth keeping: the KN6000 has TWO record arrays
 
@@ -109,3 +115,83 @@ plays a note.
 
 `analyse_pitch.py` was written before the data arrived, so its criterion could not
 be tuned to the answer. It has never been run on a non-empty capture.
+
+
+---
+
+# Follow-up (2026-09-24): can the anchor be grounded in the KN5000 instead?
+
+Felipe's proposal: if something must be hardcoded, hardcode an estimate of the chip
+pitch word (or a formula for it), not the firmware's answer read out of RAM. That is
+the right shape -- it keeps `p18` coming from the register bus and confines the
+estimate to the genuinely missing data. Three questions followed.
+
+## 1. How does the KN5000 store playback rate -- explicit metadata, or implicit? ANSWERED
+
+Measured from IC307, the one hardware-rooted wave-ROM dump (`crc32 20ff4629`), with
+`kn5000_wave_tuning.py`. The parse self-checks: **198 of 198 parameter records
+terminate on a bit-7 flag**. (An earlier version ran each record to the next record's
+pointer instead of its terminator, swept PCM bytes in as "parameters", and invented
+undocumented flags and impossible offsets -- the termination rate is what caught it.)
+
+* **No per-sample base-rate or root-key field exists.** The PCM is recorded at one
+  fixed base rate and the chip pitch-shifts from there.
+* What IS explicit: key-zone boundaries, and small per-key tuning trims --
+  **1177 tuning words across 43 of 198 records, range -16..-1**, overwhelmingly -1
+  (628) or -2 (199).
+
+**So the design supports exactly what Felipe proposed: one global anchor plus small
+corrections, not a per-sample table.**
+
+## 2. What is the typical pitch value? NOT OBTAINED
+
+Two routes, both empty, and neither is evidence about the hardware:
+
+* **KN5000 register tap** (`kn5000_pitch_probe.lua`, latch 0x100000 / data 0x100002 on
+  `:subcpu`): **0 TG writes captured, total.** The tone generator is certainly written
+  during boot, so the tap did not fire -- a harness fault, not a measurement. The
+  device lookup has a fallback that can also match `:subcpu_latch`.
+* **KN7000 scale** on both the PR build and the overlay: 256 pitch writes, 0 with a key
+  held, because the firmware never polls the key FIFO (measured: 0 reads of
+  0x98050004 against 12458 TG writes).
+
+## 3. The prior RE for the KN5000 pitch encoding does not hold ⚠
+
+`kn5000-vs-kn7000-tonegen-design.md` §4 states the KN5000 computes pitch in
+`ToneGen_Calc_Pitch` at 0x03D11F, taking a 16-bit semitone ratio (0x8000 = 1.0x) from
+a 12-entry table at 0x01217D. Two independent checks say otherwise:
+
+* The project's own symbol reconciliation renames that routine:
+  `0x03D11F  CURATED  ToneGen_Calc_Pitch -> Keybed_Decode_Event`, and flags the old
+  name as appearing "only in comments and in symbols/proposals/". It decodes key
+  presses, not pitch.
+* A **scale-free** search for twelve consecutive words whose ratios follow 2^(k/12)
+  (any base, both endiannesses) across the sub-CPU program ROM, both table-data ROMs,
+  the sub-CPU boot ROM and IC307 finds **zero** such runs.
+
+That section of the design note is already marked "SUPERSEDED IN PART" for its
+envelope verdict; its §4 pitch claim needs the same treatment.
+
+## The open discrepancy this was meant to settle
+
+    driver fallback   96.0 + (p18 - 0x1C838)/1024      -> C7 (MIDI 96) at 0x1C838
+    design note §4    "+0x400 per semitone, C4 = 0x0000C838"
+
+At 0x400 per semitone these cannot both hold: C7 = 0x1C838 puts C4 at 0x13838, not
+0xC838. They share the digits C838 attached to notes 36 semitones apart, which looks
+like a dropped leading 1 plus a mislabelled note rather than two measurements. The
+driver's own reading is at least self-consistent -- the KN7000 keybed is C2..C7, C2 =
+MIDI 36, so C7 = MIDI 96 really is "the keybed top-C reference".
+
+**Unresolved.** Settling it needs one note-on with a known key, which is exactly what
+no route produced today.
+
+## What to do next, in order of cost
+
+1. Fix `kn5000_pitch_probe.lua`'s device lookup (explicit `:subcpu`, assert the tap
+   installed) and re-run. The KN5000 is the better subject anyway: it has a real wave
+   ROM, so its register value can be checked against sample data.
+2. Find what state makes the KN7000 firmware poll the key FIFO at 0x98050004. The
+   MIDI bridge feeds the same FIFO, so `-kbdmidi` will not help by itself.
+3. Only then decide the anchor. Until it is measured, replacing the RAM read with an
+   estimate would swap a documented layering violation for an undocumented guess.
