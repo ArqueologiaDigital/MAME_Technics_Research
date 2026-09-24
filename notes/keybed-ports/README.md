@@ -31,15 +31,33 @@ cd ~/compartilhado/mame-pr-kn7000drv
 **Measured 2026-09-25** (tip `2e1b616adcb`):
 
 ```
-KEYBED: :KEYS0 mask=0x0001 name="C2"     key index 0x00
-KEYBED: :KEYS0 mask=0x0002 name="C2#"    key index 0x01
-KEYBED: :KEYS1 mask=0x0200 name="C4#"    key index 0x19
-KEYBED: :KEYS1 mask=0x8000 name="G4"     key index 0x1F
-KEYBED: :KEYS2 mask=0x0001 name="G4#"    key index 0x20
-KEYBED: :KEYS2 mask=0x0008 name="B4"     key index 0x23
-KEYBED: :KEYS3 mask=0x0010 name="E6"     key index 0x34
+KEYBED: :KEYS0 mask=0x0001 name="C2"      key index 0x00
+KEYBED: :KEYS0 mask=0x0004 name="D2"      key index 0x02
+KEYBED: :KEYS1 mask=0x0004 name="F3#"     key index 0x12
+KEYBED: :KEYS2 mask=0x8000 name="B5"      key index 0x2F
+KEYBED: :KEYS3 mask=0x1000 name="C7"      key index 0x3C
 KEYBED: fields=61 unnamed=0
+KEYBED: control C4 pressed=0x0100 released=0x0000 -> READ CAN MOVE
+KEYBED: :KEYS0..3 read 0x0000 at reset
+KEYBED: ports-asserted-at-reset=0 control=VALID
 ```
 
-MAME spells sharps after the octave (`C2#`, not `C#2`); the old hand-written
-`PORT_NAME`s said `Key C#2`. Same note, MAME's own spelling, applied uniformly.
+MAME spells sharps after the octave (`F3#`, not `F#3`); the old hand-written
+`PORT_NAME`s said `Key F#3`. Same note, MAME's own spelling, applied uniformly.
+
+## The reset check needed a control, and failed without one
+
+The second question — `IPT_KEYBOARD` became `IPT_OTHER`, so does any field read as
+asserted at reset and inject a phantom note? — first came back "all four ports read
+0x0000", which is what a correct result looks like *and* what a port that can never
+read anything looks like.
+
+The control settles it: press `C4`, read, release, read. The first attempt printed
+`pressed=0x0000 released=0x0000 -> READ IS STUCK`, because `set_value` lands on the
+next input update and the read ran in the same instant. With an `emu.wait(0.2)`
+between them it reads `0x0100` pressed and `0x0000` released — `0x0100` being the
+mask the key index 0x18 is assigned, so the control checks the mapping too.
+
+Only with `control=VALID` does `ports-asserted-at-reset=0` mean anything. It does
+here, which is why this change needs no audio A/B: with no key asserted, the port
+type cannot reach the tone generator.
