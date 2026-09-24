@@ -35,7 +35,7 @@ Injected a note-on `90 3C 64` then note-off `80 3C 40` into MIDI-1 after boot
   an audible tone-generator voice in this test.
 
   Most likely cause: the note-to-voice path depends on the sound subsystem being
-  up, which it is not -- the sound init "spins on the 0x9805000E readback latch"
+  up, which it is not -- what "spins on the 0x9805000E readback latch" is the SD
   (io-map.md) and the tone generators / DSP are not emulated yet. The MIDI note
   handler probably gates voice allocation on tone-generator readiness. (Other
   possibilities: default MIDI receive-channel/part routing not enabling

@@ -67,7 +67,7 @@ Whole bank mapped to catch-all handlers: `map(0x98000000, 0x9807ffff).rw(io_r, i
 | `0x98040004` | W | **Stubbed**: accepted, discarded ("main TG control") | case `0x20002`, line 481 |
 | `0x98040010` | W | **Stubbed**: accepted, discarded | case `0x20008`, line 481 |
 | `0x98050004` | R | **Modeled**: keyboard/voice-event FIFO pop (`m_kbd_fifo[16]`, head/tail), returns 0xFFFF when empty | io_r offset `0x28002`, lines 444-449 |
-| `0x9805000E` | R/W | **Modeled as readback latch** `m_snd_500e` (init loop at fw `0x4854BC59` writes d1\|0x80 and spins until it reads it back) | lines 453-454 (R), 463-467 (W) |
+| `0x9805000E` | R/W | **SD SPI clock-rate latch** `m_sdspi_rate` -- NOT a sound register. `SdSpiClockSet` (`0x4854BB84`) latches `rate\|0x80` and re-reads to verify; it stalls boot because `SdHwInit` runs there. | lines 453-454 (R), 463-467 (W) |
 | `0x98070000` | R | **Modeled as strap**: returns `0x8000 \| (REARSW & 0x1000)` — bit15 = skip factory diagnostic, bit12 = MIDI-IN/BASS-PEDAL switch SW701 | lines 429-435 |
 | `0x98000000`, `0x98010000`, `0x98020004/8/A/E`, `0x98040006/8/A`, `0x98050006/8/A/C`, `0x98050010`, `0x98060000` | — | **Unmodeled**: fall through to `logerror` (reads return 0) | io_r line 455-458, io_w line 484-485 |
 
