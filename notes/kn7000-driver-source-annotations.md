@@ -4871,3 +4871,39 @@ around them.
 							// Rn destination leaves MR unchanged; fractional takes MR1 (bits 63:32),
 							// integer takes MR0 (bits 31:0).
 ```
+
+
+---
+
+# Part 3: the comments that stayed (2026-09-24)
+
+The trim decides *how much* stays. This pass decides *how it reads*: a source comment
+should state what the code is, not what it replaced, and should not cite evidence that
+lives outside the file.
+
+Two were rewritten, each folded into the commit that introduced it:
+
+| file | was | is |
+|---|---|---|
+| `sharcdrc.cpp` `generate_unimplemented_shiftimm` | "run this one op through the interpreter's `SHIFT_OPERATION_IMM()` **instead of aborting**" | "Immediate-shift ops with no inline generator: call the interpreter's `SHIFT_OPERATION_IMM()` for this one instruction, as `generate_unimplemented_compute` does for compute ops." |
+| `sharcdrc.cpp` fixed-point ALU flags | "Gated on liveness (dead flags unread -> **WAV stays bit-identical**)" | "ALU flags: the interpreter clears all of them, then sets AN/AZ from the final Ra. A flag no later instruction reads is not emitted." |
+
+"Instead of aborting" only parses for a reader who knows the previous version.
+"WAV stays bit-identical" is a fact about a test run in this project, not about the
+code, and means nothing to someone opening `sharcdrc.cpp` for the first time.
+
+Sweeps over every comment line the series adds now return nothing for change-narrative
+phrasing (`previously`, `used to`, `instead of the old`, `earlier version`),
+measurement citations (`md5`, `bit-identical`, `we ran`), or meta-references to the
+submission (`this PR`, `reviewer`). The only surviving first-person is "our" meaning
+*this device's own*, which is ordinary MAME phrasing.
+
+## ⚠ A claim of mine, retracted
+
+I reported that the SHARC files were left deliberately uneven because "a comment of
+ours abutting an upstream one was skipped rather than risked". **There are no such
+blocks** -- measured: zero comment blocks in the six SHARC files mix upstream lines
+with ours. The residual density in `sharc.cpp` (15.8%) and `sharc.h` (17.5%) is simply
+the blocks of two lines or fewer that the rule keeps everywhere, which come to 9 and 7
+absolute lines. The explanation was reasoned from how the tool works rather than from
+what the files contain, and it was wrong.
