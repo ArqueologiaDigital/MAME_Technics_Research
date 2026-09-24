@@ -286,3 +286,51 @@ The record array was measured empty in every state reachable in either build, so
 `tg_pitch_resolve`/`tg_type_resolve` always return -1 and the fallback always runs.
 **Deleting both RAM reads must therefore leave the audio hash bit-identical.** If it
 does not, the measurement was incomplete and the deletion is not safe.
+
+---
+
+# ✅ IMPLEMENTED AND VERIFIED (2026-09-24)
+
+The register-only decode is folded into the two commits that own the code, so no
+commit in the PR stack ever contains the layering violation.
+
+**Removed:** `KN7000_VOICE_RECORDS` / `KN6000_VOICE_RECORDS` / `KN6500_VOICE_RECORDS`,
+`m_tg_recbase`, `m_tg_one_chip`, `m_tg_pitch_cls`, `m_tg_pitch_mask`, `tg_slot()`,
+`tg_pitch_resolve()`, `tg_type_resolve()`, and the two out-of-band parameters of
+`tg_write()` -- which now reads
+
+    virtual void tg_write(int tg, uint16_t addr, uint16_t data) = 0;
+
+so the device cannot be handed anything the chip is not given.
+
+**Kept:** the register-only decode, documented with what the KN5000 settled --
+absolute log pitch, 0x400 units per semitone, octave-folded into the sample zone's
+range by the firmware, so the pitch class is exact and only the octave depends on the
+undumped wave ROMs.
+
+## The prediction held
+
+The record array was measured empty in every reachable state, so the resolves always
+returned -1 and the fallback always ran. The prediction was therefore that deleting
+them leaves the audio bit-identical:
+
+    before (pre-pitch-fix)      wav md5 5d45998db116   7200050 bytes
+    after  (register-only)      wav md5 5d45998db116   7200050 bytes
+
+Identical. The RAM read was carrying no behaviour -- only risk.
+
+## Two process failures worth recording
+
+1. **The rebase conflicts were not mechanical.** The effects-DSP commit legitimately
+   reroutes the tone generator through `m_dspbridge`; resolving with "ours" wholesale
+   would have silently reverted that. Each conflict had to be read.
+2. **An over-greedy resolution deleted nine DSP member declarations.** The assertion
+   checked that the conflicting hunk *contained* the resolve code, not that it
+   contained *only* it, and `m_dsp_index`..`m_dsp_running` sat in the same hunk. The
+   build caught it -- but a build only catches deletions that break compilation. The
+   check that catches the rest is
+
+       git diff pre-pitch-fix technics-kn7000-driver -- src/mame/matsushita/
+
+   read for removals unrelated to the intended change. Worth running after every
+   stack surgery, not only when something fails to compile.
