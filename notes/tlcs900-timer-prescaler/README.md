@@ -122,3 +122,46 @@ constants resolved.
   (libretro/beetle-ngp-libretro).
 - FluBBaOfWard/TLCS900H, `TLCS900H.i`.
 - nesdev forum thread 18326, "Toshiba TLCS900/H instruction timings?"
+
+## Where the factor of 16 is NOT
+
+Felipe asked whether the crystal might be divided before the internal clocks are
+derived, which would explain the gap between the datasheet's phiT1 = fc/8 and the
+fc/128 the ngp behaves as if it has. It would, but the evidence rules it out:
+
+- **No on-chip clock gear.** The TMP95C061 datasheet has no programmable clock
+  divider, no SYSCR, no "clock gear". Its only clock features are the RUN / IDLE
+  / STOP standby modes and the oscillation warm-up counter.
+- **phiT1 = fc/8 is confirmed three times over.** The prescaler table [3, p.91];
+  the serial chapter independently giving phiT0 = fc/4, phiT2 = fc/16,
+  phiT8 = fc/64, phiT32 = fc/256, which fits phiTn = fc/8n exactly; and the
+  block diagram feeding the 9-bit prescaler from fc/4.
+- **The selector really does mean phiT1.** "When T01MOD7,6 = 00 and
+  T01MOD3,2 = 01, oT1 becomes the input of timer 1 (8 bit timer mode)" -- so
+  MAME's selector-to-tap mapping is right, and T23MOD = 0x04 really is phiT1.
+- **The clock really is 6.144 MHz.** Published NGP hardware summaries give the
+  TLCS-900H at 6.144 MHz and the Z80 at 3.072 MHz, and ngp.cpp's own screen
+  timing corroborates it: 6.144 MHz / (515 x 199) = 59.95 Hz.
+
+So fc is right, the tap is right, and the tap's meaning is right -- yet
+fc/8 with TREG3 = 0x62 gives 7837 Hz where ~490 Hz is what sounds correct.
+
+## Where it therefore must be
+
+Not in the clock tree, and not in the prescaler. What remains is the path
+between the timer and the sound:
+
+- MAME raises the Z80 interrupt on the **rising edge of TO3**
+  (`ngp_state::tlcs900_porta`), and TFF3 toggles once per timer-3 match, so the
+  Z80 sees match/2. If the hardware divides further between TFF3 and the Z80,
+  that is where the missing factor lives. TFFCR is written 0x0C, 0xFC, 0xCC and
+  0xB0 by the BIOS and is only partly modelled.
+- Or the ngp BIOS's rate routine does not mean what its constants suggest. The
+  reading here -- that dividing a requested period by 20.48 us implies one phiT1
+  count is 20.48 us -- is an inference from `mul WA,1000; div WA,0x5000`, not a
+  proven unit.
+
+Settling it needs real hardware (measure the Z80 interrupt rate on a running
+console) or NGP-specific documentation of the TO3 path. Until then the shipped
+divisors preserve the rates that are known to sound right, and the submitted
+change does not depend on the answer: it changes the CPU's unit, not any timer.
