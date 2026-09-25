@@ -5,6 +5,19 @@ Settles the divergence left open after the ngp/ngpc regression
 prescaler shifts 7/9/11/15 while `tmp94c241` uses 3/5/7/11, for three devices
 that are all `tlcs900h_device` with no per-variant clock division.
 
+## Status: confirmed by users
+
+The revert (#16255) is confirmed to have restored ngp/ngpc sound -- Felipe
+relayed user reports on 2026-09-25 that it is back in good condition. That
+matters for this note's argument, which otherwise rested only on the divisor
+being byte-identical to what stood for twenty years: the calibrated value is now
+empirically the one ngp/ngpc needs, not merely the one that used to be there.
+
+Nobody involved in the fix ever reproduced the fault locally. The captures taken
+here never got the BIOS to play (see `../dsp-noise-split/` for why a null from an
+idle machine is not evidence), so the confirmation came from users running the
+release.
+
 ## The hardware value is not in doubt
 
 TMP95C061B datasheet, page 91 (`tmp95c061b-p91-prescaler.png`), the
