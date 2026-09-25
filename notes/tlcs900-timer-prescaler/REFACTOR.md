@@ -60,3 +60,63 @@ pdftoppm -png -r 200 -f 165 -l 174 TLCS900hv-is.pdf pages/p
 
 See README.md in this directory. Each variant currently keeps a different one of
 two ratios that cannot both be right while the cycle counts are invented.
+
+---
+
+## Result: the refactor is right in isolation and not shippable as one commit
+
+Implemented on `tlcs900-real-timings` (cycles become states via
+`execute_clocks_to_cycles`, 185 opcodes corrected, all three variants taking the
+datasheet taps). It builds, validates, boots all five machines — and **ngp sound
+plays far too fast**, confirmed by ear.
+
+### What the NGP actually asks for
+
+Tapping the TMP95C061's write-only timer registers while the BIOS runs
+(`ngp/ngp_timer_log.lua`) shows it programming, at reset and not changing after:
+
+```
+TRUN   <- 80   prescaler on
+T23MOD <- 04   timer 3 clock = phiT1
+TREG3  <- 62   compare = 98
+TRUN   <- 88   timer 3 running
+```
+
+so the tick is phiT1/98:
+
+| | φT1 | IRQ | verdict |
+|---|---|---|---|
+| master | 48 kHz | 490 Hz | sounds right |
+| refactor | 768 kHz | 7837 Hz | 16× too fast |
+| hardware (fc/8 at fc = 6.144 MHz) | 768 kHz | 7837 Hz | — |
+
+**The refactor's rate is the hardware rate.** And for the known-good 490 Hz to
+be hardware-correct, fc would have to be 384 kHz, which is not a real NGP clock.
+So master is not faithful either; it is 16× slow on the timer and about 2× fast
+on the CPU, and the NGP emulation as a whole has been tuned around that.
+
+### Why it cannot ship
+
+Making the TLCS-900 honest changes CPU speed for every machine using it, and at
+least ngp has other clocks — the Z80 at fc/2, the T6W28 at fc/2, the K1GE at fc
+— chosen while the CPU ran twice too fast. Correcting one end alone moves the
+machine further from hardware, not closer. The same risk applies unexamined to
+namcos10, namcond1, namcops2, naomi, dvd-n5xx, kkcount, taitopjc and taitotz.
+
+### What would finish it
+
+1. Establish the NGP's true sound-engine rate from hardware or a
+   known-faithful reference, rather than from what MAME currently does.
+2. If 7837 Hz is right, find what in the ngp driver compensates for the old 2×
+   CPU and fix it in the same change.
+3. Only then land the core change, with each affected driver tested.
+
+Steps 1 and 2 are NGP emulation work, not TLCS-900 work, and they gate the rest.
+
+### What is safe to take from this now
+
+- The transcribed timings and the 100% join (`timing/`), which stand on their own.
+- The finding that NeoPop's counts are the databook's — 2599 of 2784 exact — so
+  the table was never the problem; the unit was.
+- The documentation-only change on `tlcs900-prescaler-doc`, which records why the
+  divisors differ and changes no behaviour.
