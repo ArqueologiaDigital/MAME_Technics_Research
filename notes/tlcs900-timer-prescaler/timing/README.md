@@ -74,3 +74,43 @@ python3 gen_p172a.py <out.jsonl>
 Kept because it is the provenance of 18 of the 227 rows: the regularity it
 encodes is itself a claim about the book, and a reader should be able to check it
 against the scan.
+
+## Mapping onto MAME's tables
+
+`extract_mame_tables.py` pulls the fifteen opcode tables out of `900tbl.hxx`
+(3840 entries, of which 1055 are prefix dispatchers or invalid encodings), and
+`map_states.py` joins them to the databook rows:
+
+```
+python3 extract_mame_tables.py <mame>/src/devices/cpu/tlcs900/900tbl.hxx mame-tables.jsonl
+python3 map_states.py mame-tables.jsonl tlcs900-states.jsonl mapped-states.jsonl
+```
+
+The join is on MAME's own handler names, which encode mnemonic, size and operand
+kinds — `op_ADCBMI` is ADC, byte, memory, immediate. Nothing parses the book's
+opcode patterns, which would be far easier to get subtly wrong.
+
+**Coverage: 2784 of 2785 real opcodes (100.0%).** The one exception is
+`op_POPWSR`; the book lists no `POP SR` form, so it is left unmapped rather than
+given an invented value. Coverage is the number that matters here — an entry the
+join cannot reach is an entry whose timing would have to be made up, which is the
+whole thing being removed.
+
+Cases the join has to handle, each a real feature of the book rather than a hack:
+condition-code operands written `cc` and optional operands in brackets
+(`JP [cc,]mem`); the jump group writing bare `mem` where others write `(mem)`;
+`op_SWI900` being SWI in 900 mode; `DJNZ` timed by branch taken rather than size;
+the shift group's `8+2n`; and `CPL` being both a mnemonic and `CP`+long.
+
+### The finding that reframes the refactor
+
+    mean MAME cycles 7.55  ->  mean databook states 7.66   (x1.02)
+
+NeoPop's invented per-instruction counts are, on average, almost exactly the real
+state counts. What is wrong is the unit they are charged in: MAME clocks these
+devices at fc and spends one "cycle" per clock, but **a state is fc/2**. So the
+CPU runs about twice too fast, and the headline fix is
+`execute_clocks_to_cycles()`, not a wholesale retiming. The per-opcode table
+still matters — it fixes the distribution, and the mean hides instructions that
+are individually well out — but the refactor is far smaller than "replace every
+number".
