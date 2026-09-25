@@ -57,3 +57,20 @@ signature of a transcription slip. Current state: 227 rows, range 2..32, mode 4,
 The mapping from these mnemonic-indexed forms onto MAME's opcode-indexed tables
 in `900tbl.hxx`, and the addressing-mode adders on page 174 which the `+M`
 lengths refer to. That is the next phase.
+
+## `gen_p172a.py`
+
+The rotate/shift group on page 172 is perfectly regular — six mnemonics × three
+operand forms, with opcodes marching in step — so that half-page was transcribed
+by writing the generator rather than eighteen near-identical lines by hand. It
+emits `rows/p172a.jsonl`, which merges into the dataset like any other page, and
+it went through the same independent verify pass (which corrected errors on this
+page among others).
+
+```
+python3 gen_p172a.py <out.jsonl>
+```
+
+Kept because it is the provenance of 18 of the 227 rows: the regularity it
+encodes is itself a claim about the book, and a reader should be able to check it
+against the scan.
