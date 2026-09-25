@@ -125,7 +125,7 @@ for completeness; the amplitude engine is elsewhere.
 ## 2. The periodic envelope PROCESSOR (task item 2, the crux) — MEASURED / PROVEN-BY-CONSTRUCTION
 
 ### The clock
-- **Timer ISR** `0x01FB76` (dispatched via `OFFSETS_F460`) sets **bit1 of 0x103E**
+- **Timer ISR** `0x01FB76` (dispatched via `AudioTick_CaseOffsets` (formerly `OFFSETS_F460`)) sets **bit1 of 0x103E**
   periodically (`SCF / STCF A,(103Eh)` with A=1, L38-area / L9490-9510). MEASURED.
 - **`Audio_Main_Loop` (0x01FAE3)**: `BIT 1,(103Eh) → RES 1 → CALL Audio_Process_Init`
   (L9428-9433). MEASURED.
