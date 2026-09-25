@@ -62,17 +62,42 @@ garbled ngp/ngpc music.
 
 ## What the correct implementation is
 
-1. **Today:** 7/9/11/15 on every TLCS-900/H variant. That keeps the timer
-   consistent with the CPU speed the software actually perceives, which is the
-   only thing that matters while the timings are invented.
-2. **`tmp94c241` is currently the odd one out** and, by the same arithmetic,
-   the KN5000's 8-bit timers run 16× fast relative to its CPU. This is a
-   prediction from the shared instruction table, not an observation — the
-   KN5000 was not run for this note. Worth confirming before changing it.
-3. **The real fix** is honest instruction timings: give `tlcs900h_device` cycle
-   counts in real fc clocks, then *all three* variants become 3/5/7/11 and the
-   calibration disappears. That is a large, separately testable piece of work,
-   and it must be done together with the shift change, never before it.
+**The overlay's own KN5000 disassembly settles what the earlier draft of this
+note got wrong.** It named the consumer: on the sub-CPU, timer 3 is the task
+scheduler's tick (`TaskSched_ConfigAndDispatch` stops timer 3, sets
+`TREG3 = 0x1D`, sets the timer-3 interrupt level and restarts it), and
+`T23MOD = 0x1D` selects φT256 — which matches the live reading from a running
+kn5000 (`T8RUN` 0x02→0x0A, `T01MOD`/`T23MOD` = 0x1D).
+
+That makes the tick period computable, and it decides the question:
+
+| taps | KN5000 scheduler tick (TREG3 = 0x1D, φT256, fc = 20 MHz) |
+|---|---|
+| datasheet 3/5/7/11, as `tmp94c241` has | **~3.0 ms (337 Hz)** |
+| calibrated 7/9/11/15, as the siblings have | ~47.5 ms (21 Hz) |
+
+~3 ms is an ordinary RTOS tick; 47 ms is not. So `tmp94c241` is **right as it
+stands**, and aligning it to its siblings — which this note's first draft
+proposed, and which was implemented and then withdrawn — would have run the
+KN5000's scheduler 16× slow.
+
+So neither value is universally correct, and the divergence is not a mistake to
+be tidied away:
+
+- A divisor fixes two ratios at once: the timer's rate in emulated real time,
+  and its rate relative to how fast the core retires instructions. With the
+  cycle counts invented, the two cannot both be right.
+- `tmp95c061`/`tmp95c063` keep the second, which is what ngp/ngpc music needs.
+- `tmp94c241` keeps the first, which is what the KN5000's scheduler needs.
+- **Change neither.** The real fix is honest instruction timings for
+  `tlcs900h_device`; once `m_cycles` counts clocks, both ratios coincide and
+  every variant takes the datasheet values. That has to land as one piece of
+  work, never as a divisor change on its own.
+
+What went into MAME from this is documentation only: the reasoning beside all
+three variants, and named constants in `tmp95c063` in place of bare shifts. No
+value moved — the timer functions are byte-identical to master with the
+constants resolved.
 
 ## Sources
 
