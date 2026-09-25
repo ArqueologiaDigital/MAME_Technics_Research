@@ -1,0 +1,25 @@
+Test-only instrumentation for measure_prescaler.lua. Apply to a scratch build,
+never commit it: it counts timer 3 matches, which are the ngp's music clock.
+
+--- a/src/devices/cpu/tlcs900/tmp95c061.cpp
++++ b/src/devices/cpu/tlcs900/tmp95c061.cpp
+@@ timer 3 match, inside tlcs900_handle_timers()
+ 			m_timer_8[3] += 1;
+ 			if ( m_timer_8[3] == m_t8_reg[3] )
+ 			{
+ 				m_timer_8[3] = 0;
+ 				m_int_reg[INTET32] |= 0x80;
++				if (getenv("NGP_T3RATE"))
++				{
++					static int hits = 0;
++					static double t0 = -1.0;
++					const double now = machine().time().as_double();
++					if (t0 < 0.0) t0 = now;
++					hits++;
++					if (now - t0 >= 10.0)
++					{
++						logerror("T3RATE: %d matches in %.3f s = %.1f Hz (TREG3=0x%02X)\n",
++								hits, now - t0, hits / (now - t0), m_t8_reg[3]);
++						hits = 0; t0 = now;
++					}
++				}
