@@ -161,9 +161,9 @@ fi
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
-# Launch a Technics keyboard emulator. An optional first argument selects the model
-# (kn7000 / kn6000 / kn6500 / kn2400 / kn2600 / kn5000; default kn7000); everything else passes
-# through to MAME.
+# Launch a Technics instrument emulator. An optional first argument selects the model
+# (kn7000 / kn6000 / kn6500 / kn2400 / kn2600 / kn5000 / kn1500 / wsa1r / wsa1; default
+# kn7000); everything else passes through to MAME.
 #   ./run.sh                  # KN7000, fullscreen
 #   ./run.sh -window          # KN7000, windowed
 #   ./run.sh kn6000 -window   # KN6000, windowed (boots to its play screen)
@@ -171,6 +171,12 @@ cat > "$DEST/run.sh" <<'SH'
 #   ./run.sh kn2400 -window   # KN2400, windowed (boots to its play screen)
 #   ./run.sh kn2600 -window   # KN2600, windowed (same firmware as the KN2400)
 #   ./run.sh kn5000 -window   # KN5000, windowed (boots to its main play screen)
+#   ./run.sh kn1500 -window   # KN1500 (stops in its crt0 RAM test; IC15 is a BAD_DUMP)
+#   ./run.sh wsa1r -window    # SX-WSA1R, the rack module
+#   ./run.sh wsa1 -window     # SX-WSA1, the keyboard -- same ROMs, PORT B bit 0 strap
+#
+# The two SX-WSA1 systems are MACHINE_NOT_WORKING and their wave ROMs are undumped, so
+# there is no audio; what they do is boot and drive the LCD and the control panel.
 cd "$(dirname "$(readlink -f "$0")")"
 MODEL=kn7000
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then MODEL="$1"; shift; fi
