@@ -19,17 +19,21 @@ set -uo pipefail
 
 OVERLAY="${OVERLAY:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MAME="${MAME:-$HOME/compartilhado/mame}"
-BASE="${BASE:-kn7000-base}"
 REF="${REF:-upstream/master}"
+# The range must start at the point up to which overlay-shared files have been RECONCILED,
+# not at the base branch. Rebasing the base empties `kn7000-base..upstream/master` and the
+# sweep then reports nothing at all -- a clean bill of health it has not earned, and a gate
+# that cannot fail is not a gate. SYNCED-AT is that point, advanced by hand only when every
+# file this sweep flags has been dealt with.
+BASE="${BASE:-$(cat "$(dirname "${BASH_SOURCE[0]}")/SYNCED-AT")}"
 
 echo "overlay: $OVERLAY"
-echo "base:    $BASE   = $(git -C "$MAME" rev-parse --short=11 "$BASE")"
+echo "synced:  $BASE  = $(git -C "$MAME" log --oneline -1 "$BASE")"
 echo "ref:     $REF    = $(git -C "$MAME" rev-parse --short=11 "$REF")"
-echo "fork:    $(git -C "$MAME" log --oneline -1 "$(git -C "$MAME" merge-base "$BASE" "$REF")")"
-echo "behind:  $(git -C "$MAME" rev-list --count "$BASE".."$REF")   ahead: $(git -C "$MAME" rev-list --count "$REF".."$BASE")"
+echo "unreconciled upstream commits: $(git -C "$MAME" rev-list --count "$BASE".."$REF")"
 echo
 
-printf "%-52s %-9s %-7s %s\n" FILE UPSTREAM DIFF "COMMITS-SINCE-BASE (the finding)"
+printf "%-52s %-9s %-7s %s\n" FILE UPSTREAM DIFF "UNRECONCILED (the finding)"
 cd "$OVERLAY"
 # every tracked source extension, .hxx included
 find src -type f | sort | while read -r f; do
