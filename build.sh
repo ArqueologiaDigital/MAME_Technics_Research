@@ -1,8 +1,10 @@
 #!/bin/bash
 # Build a MAME with the KN7000 driver + MN10300 CPU core from this overlay repo.
 #
-# This overlay holds only the KN7000-specific files (src/devices/cpu/mn10300/
-# mn10300.* and src/mame/matsushita/kn7000.cpp). To compile them they must sit
+# This overlay holds 58 files, each at its MAME path: four CPU cores (mn10300, sharc,
+# tlcs900, upd6383), the KN5000/KN6000/KN7000/KN1500 and SX-WSA1 drivers with their
+# control-panel and tone-generator devices, spi_sdcard, sed1330, hdae5000 and four
+# layouts -- step 2 below is the authoritative list. To compile them they must sit
 # inside a full MAME source tree with the CPU + driver registered in the build
 # system. This script assembles a *disposable* build tree next to the overlay,
 # SYMLINKS the overlay's source files into it (so this git repo stays the single
@@ -15,7 +17,8 @@
 # Overridable environment variables:
 #   MAME_SRC   full MAME checkout to copy the tree from   (default: ../mame)
 #   BUILD_TREE where the build tree lives (non-volatile!) (default: ../kn7000_mame_build)
-#   ROM_SRC    dir holding kn7000_program.rom/kn7000_table.rom for a run test
+#   ROM_SRC    dir holding the kn7000 even/odd program+table .rom images for a run test
+#              (tools/make-roms.sh restores the whole set from the technics_roms repo)
 #   JOBS       parallel compile jobs                       (default: nproc)
 #
 # THE BUILD ALWAYS INCLUDES MAME'S Qt DEBUGGER (USE_QTDEBUG=1). Run it with -debug:
@@ -37,9 +40,9 @@ JOBS="${JOBS:-$(nproc)}"
 # GUARD: the base tree must be on kn7000-base.
 #
 # MAME_SRC is rsynced wholesale into the build tree, so whatever branch it sits on becomes
-# the build.  The upstream-PR branch (technics-rom-record) carries its OWN
-# src/mame/matsushita/kn7000.cpp -- a ROM-record skeleton with no CPU -- plus its own
-# mame.lst entries.  Building from it silently produces a driver that is not this project's.
+# the build.  Upstream's own src/mame/matsushita/kn7000.cpp is a ROM-record skeleton with no
+# CPU (#15911), and a PR branch carries only the single feature it extracts, plus its own
+# mame.lst entries.  Building from one silently produces a driver that is not this project's.
 # That happened on 2026-08-02 and is exactly what this check prevents.
 #
 # PR work belongs in the sibling worktree ~/compartilhado/mame-pr.  Neither tree should ever
@@ -132,13 +135,13 @@ ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.cpp"         "$BUILD_TREE/src/ma
 ln -sf "$HERE/src/mame/matsushita/kn6000_cpanel.h"           "$BUILD_TREE/src/mame/matsushita/kn6000_cpanel.h"
 ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/mame/matsushita/kn1500.cpp"
 # Technics SX-WSA1R (two TLCS-900/H TMP95C061 at 28 MHz).  The DEVELOPMENT copy of
-# this driver lives here; the upstream-PR copy is on branch technics-wsa1 in the
-# MAME checkout and the two deliberately diverge.
+# this driver lives here; the smaller copy merged as #16204 is the one in MAME
+# itself, and the two deliberately diverge.
 #
-# sed1330 is overlaid alongside it: stock sed1330_device leaves update_graphics()
-# an empty function body, so the WSA1's all-graphics three-layer mode drives a
-# correctly-programmed but permanently blank panel.  See the note at the top of
-# the overlay copy of sed1330.h.
+# sed1330 is overlaid alongside it: MAME's sed1330_device renders all-graphics mode
+# since #16204, and this copy is the pre-review form of that work plus a default
+# initialiser on every scalar member.  See the note at the top of the overlay copy
+# of sed1330.h.
 ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/mame/matsushita/wsa1.cpp"
 # The control-panel microcontroller (M37471M2196S on CONTROL PANEL 1), HLE'd as a
 # device on CPU 1's serial channel 1 -- the same part and the same protocol as the
@@ -158,20 +161,21 @@ ln -sf "$HERE/src/mame/matsushita/wsa1_tonegen.h"                "$BUILD_TREE/sr
 mkdir -p "$BUILD_TREE/src/devices/video"
 ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
 ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
-# KN5000 (SX-KN5000): the driver itself is upstream, but a large body of work is not --
-# the tone generator (IC303), the DSP1 stub (IC311), FDC/UART/MIDI wiring, the SNS NMI
-# payload checksum and the Program data wheel. Those live here as overlay files exactly
+# KN5000 (SX-KN5000): the driver itself is upstream, as is the Program data wheel (#15919),
+# but a large body of work is not -- the tone generator (IC303), the IC311 effects-DSP work,
+# FDC/UART/MIDI wiring and the SNS NMI payload checksum. Those live here as overlay files exactly
 # like the KN7000 ones, so this repo stays the single source of truth for every Technics
 # model. See notes/upstream-patches/README.md for the matching patch series.
 mkdir -p "$BUILD_TREE/src/devices/cpu/tlcs900" "$BUILD_TREE/src/devices/bus/technics/kn5000"
-# tmp95c061: a ONE LINE fix, and the file is overlaid only to carry it.  Internal
-# address 0x12 is P6 and its write side dispatched to port_w<PORT_7>, so every P6
-# write went to PORT_7.  The SX-WSA1R needs P6 bit 5 (the serial EEPROM's chip
-# select) to arrive, and CPU 1's `ldio P6,0x1B` was clobbering the link handshake
-# shadow on P7.  Keep the diff to that line; see the comment at it.
-# ⚠ tmp95c061.h IS ALSO OVERLAID NOW.  It carries the serial-channel-1 additions
-# the SX-WSA1R's control panel needs (sc1_txd / sc1_mod / sc1_rxd); the .h and the
-# .cpp have to move together, so symlink both or neither.
+# tmp95c061: the P6 write-side map fix this file was first overlaid to carry is in MAME
+# itself since #16204.  What this copy carries is the byte-granularity serial channel 1
+# and the six numbered OVERLAY FIXes, each marked at its site: the databook prescaler
+# tap scale, the 16-bit timers being counted, TRUN bits 4 and 5 stopping and clearing
+# them, a dispatch scan on an 8-bit timer match and on micro-DMA transfer-complete, and
+# micro-DMA interrupt-vector ownership.
+# ⚠ tmp95c061.h IS ALSO OVERLAID.  It declares that channel (sc1_txd / sc1_mod /
+# sc1_rxd), which predates MAME's own tmp95c061_serial device; the .h and the .cpp have
+# to move together, so symlink both or neither.
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.cpp"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp95c061.h"           "$BUILD_TREE/src/devices/cpu/tlcs900/tmp95c061.h"
 ln -sf "$HERE/src/devices/cpu/tlcs900/tmp94c241.cpp"         "$BUILD_TREE/src/devices/cpu/tlcs900/tmp94c241.cpp"
@@ -314,10 +318,15 @@ if '\nkn7000\n' not in s:
     s = s.replace(anchor, anchor + '\n@source:matsushita/kn7000.cpp\nkn7000\n', 1)
     changed = True
 # KN6000 / KN6500 / KN2400 / KN2600 draft drivers live in the same source file as kn7000.
+# Upstream's own mame.lst lists the whole family, with kn7000 LAST in the block
+# (kn2400 / kn2600 / kn6000 / kn6500 / kn7000), so the anchor is the `@source:` line
+# alone.  Anchoring on the line PAIR matches only a block this script wrote itself, and
+# a driver missing from upstream's block is then silently never registered -- the same
+# failure the wsa1/wsa1r comment below records.
 for drv in ('kn6000', 'kn6500', 'kn2400', 'kn2600'):
     if '\n' + drv + '\n' not in s:
-        s = s.replace('@source:matsushita/kn7000.cpp\nkn7000\n',
-                      '@source:matsushita/kn7000.cpp\nkn7000\n' + drv + '\n', 1)
+        anchor = '@source:matsushita/kn7000.cpp\n'
+        s = s.replace(anchor, anchor + drv + '\n', 1)
         changed = True
 if '\nkn1500\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
@@ -368,9 +377,9 @@ else:
 PY
 
 # 5. Stage ROMs for a run test, if provided.
-if [ -n "$ROM_SRC" ] && [ -f "$ROM_SRC/kn7000_program.rom" ]; then
+if [ -n "$ROM_SRC" ] && [ -f "$ROM_SRC/kn7000_program_even.rom" ]; then
 	mkdir -p "$BUILD_TREE/roms/kn7000"
-	cp -f "$ROM_SRC/kn7000_program.rom" "$ROM_SRC/kn7000_table.rom" "$BUILD_TREE/roms/kn7000/"
+	cp -f "$ROM_SRC"/kn7000_{program,table}_{even,odd}.rom "$BUILD_TREE/roms/kn7000/"
 	echo "==> ROMs staged into roms/kn7000/"
 fi
 

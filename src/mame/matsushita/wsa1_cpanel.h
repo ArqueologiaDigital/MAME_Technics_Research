@@ -84,8 +84,10 @@
     P8.4 = RXD1 <- panel SOUT       INT6 <- the panel's attention/request line
     PB.4 <- the panel's busy line   (idle: P8.5 high AND PB.4 LOW -- 0xF5AB7B)
 
-    ⚠ The PIN NAMES are the databook's, and no databook is in these trees.  What
-    IS established is that the SC1 module owns bits 3 and 5 of P8CR/P8FC, reads
+    The PIN NAMES are the databook's and check out against it: p.570 gives P84 as
+    RXD1 and p.740 gives P80/P83 as TXD0/TXD1 (fetch it per the header of
+    notes/wsa1-probes/tlcs900_datasheet_quotes.py).  What the FIRMWARE
+    establishes independently is that the SC1 module owns bits 3 and 5 of P8CR/P8FC, reads
     P8 bit 5 and PB bit 4 as inputs, and will not transmit unless P8.5 reads
     HIGH and PB.4 reads LOW (0xF5AB7B `bit 5,(P8)` / `bit 4,(PB)`).
 

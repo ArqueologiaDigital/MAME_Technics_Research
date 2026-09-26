@@ -1,6 +1,7 @@
 # PR draft — KN5000 TEMPO/PROGRAM data wheel
 
-**Status:** READY, not yet submitted.
+**Status:** ✅ MERGED as https://github.com/mamedev/mame/pull/15919 — "kn5000: emulate the
+TEMPO/PROGRAM data wheel", upstream `13fd3ea396a`.  Kept for the reasoning trail.
 **Branch:** `kn5000_tempo_program_wheel` (worktree `~/compartilhado/mame-pr-ic14`), off
 `upstream/master` @ `8789d0f0d48`. One commit, 4 files, +402 lines (308 of them the layout script).
 **Build:** `make SUBTARGET=kn5000 SOURCES=src/mame/matsushita/kn5000.cpp USE_QTDEBUG=0 -j8`

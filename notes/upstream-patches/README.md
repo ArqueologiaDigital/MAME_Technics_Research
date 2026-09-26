@@ -7,14 +7,15 @@ SHARC series (below); non-SHARC patches use a device-name prefix instead of the 
 
 | file | device | what |
 |---|---|---|
-| mn10300-01-dasm-f4-length.patch | cpu/mn10300 | disassembler: the F4 page is **2 bytes**, not 1 — `disassemble_f4` reads `opcodes.r8(pc + 1)` and prints its operands but returns length 1, so linear disassembly desynchronises after every F4 and invents 1-2 phantom instructions before resyncing. One-character fix (`return 2 | SUPPORTED;`); every sibling F-page handler (f0/f1/f2/f3/f5/f6) already returns 2. |
+| mn10300-01-dasm-f4-length.patch | cpu/mn10300 | **Merged as #16190.** Disassembler: the F4 page is **2 bytes**, not 1 — `disassemble_f4` read `opcodes.r8(pc + 1)` and printed its operands but returned length 1, so linear disassembly desynchronised after every F4 and invented 1-2 phantom instructions before resyncing. One-character fix (`return 2 | SUPPORTED;`), which is what upstream `mn103dasm.cpp` now ends `disassemble_f4` with; every sibling F-page handler (f0/f1/f2/f3/f5/f6) already returned 2. |
 
-`mn10300-01` is a standalone one-liner, independent of the SHARC series, and applies cleanly to the
-pristine mn103dasm.cpp in kn7000_mame_build (verified 2026-07-20 with `patch --dry-run -p1`).
+`mn10300-01` was a standalone one-liner, independent of the SHARC series, and is upstream as
+#16190: `disassemble_f4` now returns `2 | SUPPORTED`. It applied cleanly to the then-pristine
+mn103dasm.cpp in kn7000_mame_build (verified 2026-07-20 with `patch --dry-run -p1`).
 Concrete misread cited in the commit message: KN7000 firmware 0x484357C7 `f4 02` + `fa c8 f5 00`
-comes out as three instructions instead of two. 3,440 F4 instructions in that ROM's main code
-region alone; this bug has bitten the kn7000_disassembly CONVERT track nine times, and
-`kn7000_disassembly/tools/dis_view.py` exists only to work around it. Submission is Felipe's.
+came out as three instructions instead of two. 3,440 F4 instructions in that ROM's main code
+region alone; the bug bit the kn7000_disassembly CONVERT track nine times, and
+`kn7000_disassembly/tools/dis_view.py` exists to work around it.
 
 # SHARC core fixes
 
@@ -96,9 +97,10 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 - Interpreter-fallback plumbing for the DRC (compute_fallback/shiftimm_fallback cfuncs): the fork
   routes unimplemented DRC compute/shift-imm ops through the interpreter instead of aborting. A good
   future patch 10, but it changes generate_unimplemented_* semantics — maintainer call.
-- SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), circular-buffer wrap off-by-one
-  (`>` vs `>=`: TRM-correct but changes the KN7000 reverb by 2 samples — held), AVG/SSFR rounding,
-  FIX-overflow UB, pre-modify circular wrap: all catalogued with TRM citations.
+- SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), AVG/SSFR rounding, FIX-overflow UB,
+  pre-modify circular wrap: all catalogued with TRM citations.  The circular-buffer wrap
+  off-by-one (`>` vs `>=`, which changes the KN7000 reverb by 2 samples) is upstream as #16016
+  and ported into the overlay by 34ba4ef.
 
 # KN5000 driver series (kn5000-01 … kn5000-30)
 
@@ -106,8 +108,10 @@ published binary, money.lua, fresh default cfg, pristine SD image, -seconds_to_r
 > It supersedes the "Suggested split into PRs" section below (PR 6–10). That split was
 > organised by what was on the branch; the new one is organised by what a maintainer can
 > review in one sitting and see a result from, and it adds the item this queue never had:
-> **the IC14 rhythm-ROM correction**, which is not in patches 01–30 at all and is priority 1.
-> Upstream currently ships the scrambled IC14 dump as if it were good.
+> **the IC14 rhythm-ROM correction**, which is not in patches 01–30 at all and was priority 1.
+> That correction is upstream as #15878: MAME's IC14 record names the corrected image, CRC
+> `aa4917ce` / SHA1 `fef7f1927935d8fdada2afbdbfac29aac56e1c3c`, not the scrambled read's
+> `e4b572d3...`.
 
 ## ⛔⛔ 2026-07-22 — THE HOLD ON kn5000-30 IS NOW A **REVERT RECOMMENDATION**
 

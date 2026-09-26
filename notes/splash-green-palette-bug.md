@@ -64,7 +64,7 @@ to chase next tick:
   screen_update only reads the workram CLUT seed at 0x50031490 -- in which case
   the fix is to model that palette port and have screen_update honour it, OR
 - the load executes but via an aliased address / an instruction the core
-  mis-runs (watch for the unidasm 0xF4 desync in that routine).
+  mis-runs.
 Find the routine that SHOULD write CLUT[0x1D+] (search for code that reads a BMP
 color table / the picture resource and stores 4-byte entries at 0x50031490+idx*4
 or an alias), and trace why it is skipped or mis-targeted.

@@ -8,17 +8,19 @@
 
     It lives in the kn7000_mame overlay repository and is built by that
     repository's build.sh, alongside kn5000, kn7000, kn6000, kn6500, kn2400,
-    kn2600 and kn1500.  A second, deliberately smaller copy of this file is
-    the one offered upstream: it sits on the branch `technics-wsa1` in the
-    MAME checkout, and it carries only the two processors, the clock and the
-    part of the memory map that is evidence-complete enough to submit.
+    kn2600 and kn1500.  A second, deliberately smaller copy of this file is in
+    MAME itself, merged as #16204: two processors and the byte link between
+    them, the control panel, the LCD and its screen, the floppy, MIDI, the
+    calibration EEPROM, the tone generator, and skeletons for the modeling LSI
+    and the three effects DSPs.
 
-    The two files WILL DIVERGE, and that is intentional.  Everything added
-    here beyond the upstream copy is work in progress: the LCD controller and
-    its screen, the link between the two processors, the 61-key keybed scanner
-    and the calibration EEPROM on the second processor, and a set of largely
-    write-only register-file stubs for the rest of that processor's chip-select
-    zero cluster.  Several of those rest on inferences that a MAME reviewer
+    The two files WILL DIVERGE, and that is intentional.  What this copy adds
+    beyond the merged one is work in progress: the SX-WSA1 keyboard as a second
+    declared system, the byte<->bit MIDI UART bridge, the 61-key keybed scanner
+    (the merged copy is the rack module, and answers its keybed queue empty),
+    and the three uPD6383GF effects DSPs as an executing core behind
+    WSA1R_ENABLE_DSP where the merged copy holds inert skeletons.  Several of
+    those rest on inferences that a MAME reviewer
     would rightly refuse until a schematic or a real machine confirms them,
     and each such inference is marked where it is made.  Do not treat this
     file as the submission candidate, and do not "sync" one from the other
@@ -29,18 +31,28 @@
     128 preset combinations, a 320 x 240 dot LCD, two sets of MIDI IN/OUT/THRU
     and a built-in 3.5 inch floppy drive.
 
-    (*) fc/8 for phiT1 is the firmware's own arithmetic.  MAME's tmp95c061
-    prescaler is a uniform factor of 16 slower than that, which costs boot time
-    but nothing else; the measurement and the reasoning are in the machine
-    configuration, next to the LCD.
+    (*) fc/8 for phiT1 is both the firmware's own arithmetic and the databook's
+    (Table 3.8 (1) p.81), and this tree's tmp95c061 taps there.  The measurement
+    and the reasoning are in the machine configuration, next to the LCD; the
+    citation is in the WHERE THE fc/8 COMES FROM footnote below.
 
-    HOW FAR IT BOOTS, as measured on 2026-08-25 with the probes in
-    notes/wsa1-probes/ (each one names the question it answers):
+    HOW FAR IT BOOTS.  Measured on 2026-08-25 with the probes in
+    notes/wsa1-probes/ (each one names the question it answers), on a build whose
+    8-bit prescaler taps were the 16x slower ones, so every time below is longer
+    than this tree now takes and no single factor converts them.  The two
+    milestones re-measured against the databook taps are in the timer table in
+    the machine configuration: the first SED1330 write at t = 0.50 s, where the
+    walkthrough below has 7.21 s, and SWI7 text drawing at t = 19.62 s.  Every
+    ROM address below stands as measured; re-run the probes to restate the times:
 
       t=0.00 s  RESET at 0xF826A9; watchdog off, ports, timers, chip selects,
                 RAM cleared, then into prom_b through the thunk table.
-      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (it counts
-                at 30 Hz here - see the prescaler note in the machine config).
+      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting.  ⚠ The
+                timestamps in this walkthrough were measured with that tick
+                running at 30 Hz, on the slow prescaler; with the databook taps
+                the same milestones arrive ~4x sooner in emulated time (SED1330
+                init 0.50 s, SWI7 text 19.62 s - the reverted/fixed table in the
+                machine configuration).
       t=0.00 s  the boot sequence at 0xF827C8 CAN blink an 8-bit RAM/ROM verdict
                 on P5 bit 3, and used to do it on every boot because P5 bit 4
                 read back 0 and that burned 3.13 s.  P5 bit 4 is now known to be
@@ -221,10 +233,13 @@
 
     Hardware inventory below is taken from the SX-WSA1R service manual,
     ORDER NO. EMiD951604, (c) 1995 Matsushita Electric Industrial.  That book
-    covers the rack module only.  A keyboard version of this instrument
-    exists, the SX-WSA1, and it is not declared in this driver: the only claim
-    that it runs the same ROM set is the redistributor's, and no SX-WSA1
-    material was available here to check it against.
+    covers the rack module only.  The keyboard version, the SX-WSA1, is declared
+    here too, as a clone of wsa1r sharing its ROM definitions, and the claim that
+    it runs the same ROM set is no longer only the redistributor's: first-hand
+    testimony recorded on 2026-09-21 says the keyboard ships the exact same set,
+    and the firmware picks the model from the PB.0 strap read once at reset
+    rather than from a different image.  No SX-WSA1 service material was
+    available here, so every citation in the inventory below is the rack's.
 
     The scan available here is photocopy grade.  Several part numbers are
     printed differently on the schematic sheets and in the parts list, and a
@@ -296,13 +311,17 @@
       - dump the six 16 Mbit wave mask ROMs, the AM29F400T flash, the serial
         EEPROM that holds the per-key touch calibration, and the internal ROM of
         the control panel microcontroller
-      - the three D6383GF-3BA DSPs (IC5, IC6, IC30) have no MAME device and no
-        model here.  Their host bus is fully mapped -- see the block comment
-        above cpu2_p9_r() -- so the byte stream CPU 2 uploads to them is
-        visible and goes nowhere.  (The M37471M2196S panel MCU is HLE'd in
-        wsa1_cpanel.cpp.  The uPD72070 has no MAME device of its own either,
-        but the family does -- the driver instantiates upd765a_device and says
-        at the code why that is the right member of it.)
+      - the three D6383GF-3BA DSPs (IC5, IC6, IC30) have a device here, the
+        uPD6383 core in src/devices/cpu/upd6383/, instantiated when
+        WSA1R_ENABLE_DSP is set.  The core is held out of execution even then,
+        because the instruction set is not measured-decoded.  Their host bus is
+        fully mapped -- see the block comment above cpu2_p9_r() -- so the byte
+        stream CPU 2 uploads lands in a real, addressable I-RAM that can be
+        checked against the static microcode, and produces no audio.  Finish the
+        measured decode and the switch can default on.  (The M37471M2196S panel
+        MCU is HLE'd in wsa1_cpanel.cpp.  The uPD72070 has no MAME device of its
+        own, but the family does -- the driver instantiates upd765a_device and
+        says at the code why that is the right member of it.)
 
 ***************************************************************************/
 
@@ -3853,13 +3872,15 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// the two port bits above, INT6 and SC1BUF, and every one of them is quoted
 	// from the firmware in the block comment on cpu1_p8_r().
 	//
-	// ⚠ THE SERIAL CHANNEL AND INT6 BOTH REQUIRED CORE WORK, and the overlay copy
-	// of tmp95c061 carries it: upstream's device has no serial engine at all
-	// (sc1buf_r() returned 0, nothing ever set INTES1 bit 3, so INTRX1 could not
-	// be raised from outside and inte_w() refuses to set it from a register
-	// write), and execute_set_input() implemented neither INT6 nor INT7, so
-	// set_input_line(TLCS900_INT6) was silently a no-op.  Both additions are
-	// default-inert for every other tmp95c061 machine.
+	// ⚠ THE SERIAL CHANNEL AND INT6 BOTH REQUIRED CORE WORK, and both are in MAME
+	// proper now: tmp95c061 owns a serial device per channel (tmp95c061_serial.cpp,
+	// a required_device_array of two) with SC0BUF and SC1BUF routed to it, so
+	// INTRX1 can be raised from outside, and execute_set_input() dispatches INT6
+	// (INTE67 bit 3, vector 0x34) and INT7 (bit 7, vector 0x38), so
+	// set_input_line(TLCS900_INT6) reaches the interrupt controller.  Both are
+	// default-inert for every other tmp95c061 machine.  The entry points differ:
+	// this copy keeps byte-granular sc1_rxd() / sc0_rxd() where the merged one
+	// takes rxd<N>() / rx_byte<N>().
 	WSA1_CPANEL(config, m_cpanel);
 	m_cpanel->atn().set([this] (int state) {
 			m_cpu1->set_input_line(TLCS900_INT6, state ? ASSERT_LINE : CLEAR_LINE); });
@@ -4230,8 +4251,8 @@ ROM_START(wsa1r)
 	// this file.  B holds most of the user interface text, in English, German
 	// and French, plus the service test screens.
 	ROM_REGION16_LE(0x100000, "prom_ab", 0)
-	ROM_LOAD("qsigcwsa1bx.ic13", 0x000000, 0x080000, CRC(f3f84441) SHA1(93adec2a04b7d93a2ec2bfb059227ff3959906e0)) // B, at 0xf00000
-	ROM_LOAD("qsigcwsa1ax.ic12", 0x080000, 0x080000, CRC(5f34af46) SHA1(90a2369f8e4d2fcdf26875272267624b07bc200d)) // A, at 0xf80000
+	ROM_LOAD("qsigcwsa1bx_v2.ic13", 0x000000, 0x080000, CRC(f3f84441) SHA1(93adec2a04b7d93a2ec2bfb059227ff3959906e0)) // B, at 0xf00000
+	ROM_LOAD("qsigcwsa1ax_v2.ic12", 0x080000, 0x080000, CRC(5f34af46) SHA1(90a2369f8e4d2fcdf26875272267624b07bc200d)) // A, at 0xf80000
 
 	// C is the program of the other processor, at 0xF80000 in its own address
 	// space: it has a second, independent vector table at 0xFFFF00 giving
@@ -4242,7 +4263,7 @@ ROM_START(wsa1r)
 	// combinations of 704 bytes each.  Code runs from 0x018000 to 0x0621E4,
 	// and the boot code and vectors sit from 0x07F000.
 	ROM_REGION16_LE(0x080000, "prom_c", 0)
-	ROM_LOAD("qsigcwsa1cx.ic28", 0x000000, 0x080000, CRC(855c8ac4) SHA1(9b2911e4b21a08d9744b91844630489f54dde856)) // at 0xf80000
+	ROM_LOAD("qsigcwsa1cx_v2.ic28", 0x000000, 0x080000, CRC(855c8ac4) SHA1(9b2911e4b21a08d9744b91844630489f54dde856)) // at 0xf80000
 
 	// D holds no executable content at all: no vector table, and essentially
 	// no branch structure.  It is a tone bank, addressed through a table of
@@ -4255,12 +4276,14 @@ ROM_START(wsa1r)
 	// separate chip select: IC27's 2Y2 = PROMDCS puts it at 0xF00000-0xF7FFFF,
 	// where cpu2_map maps it.
 	//
-	// ⚠ THE FILE WAS RENAMED on 2026-09-03, from qsigcwsa1dx.bin.  The
-	// designator is legible after all -- sheet II-11/II-12 draws IC21
-	// QSIGCWSA1DX beside the IC27 decoder, printed twice on that sheet -- and
-	// it agrees with the name the redistributed set gives the image.
+	// The designator is legible: sheet II-11/II-12 draws IC21 QSIGCWSA1DX beside
+	// the IC27 decoder, printed twice on that sheet, and it agrees with the name
+	// the redistributed set gives the image.  All four program images carry the
+	// OS revision in their file names, because a v1 OS shipped, is not dumped,
+	// and it is not known whether Technics gave it different factory part
+	// numbers.
 	ROM_REGION16_LE(0x080000, "prom_d", 0)
-	ROM_LOAD("qsigcwsa1dx.ic21", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))
+	ROM_LOAD("qsigcwsa1dx_v2.ic21", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))
 
 	// The wave ROMs are not held here.  The self-diagnostic's wave ROM test
 	// covers IC43 to IC45 and IC47 to IC49, and maps them to six buttons; there

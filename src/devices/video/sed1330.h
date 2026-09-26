@@ -7,27 +7,27 @@
     ----------------------------------------------------------------
     OVERLAY COPY -- kn7000_mame development tree.
 
-    Stock MAME's sed1330_device leaves update_graphics() an empty
-    function body, so a host that puts the part in all-graphics mode
-    (OVLAY DM1 = DM3 = 1) drives a correctly-programmed but
-    permanently blank panel.  The Technics SX-WSA1R does exactly that,
-    so this copy implements it.  Three changes against upstream:
+    MAME's sed1330_device renders all-graphics mode since #16204,
+    which took this work upstream: update_graphics() composes pages 1,
+    2 and optionally 3, draw_graphics_scanline() carries a
+    composition-op argument, and command_w() honours a bare DISP ON /
+    DISP OFF with no parameter byte, which the Technics SX-WSA1R's
+    panel init ends with.
 
-      * update_graphics() is implemented (OR composition of pages 1,
-        2 and optionally 3);
-      * draw_graphics_scanline() gained a composition-op argument and a clamp
-        against the bitmap width;
-      * command_w() honours a bare DISP ON / DISP OFF with no
-        parameter byte, which the WSA1's panel init ends with;
+    One change is still only here:
+
       * every scalar member has a default initialiser, so the frames
         rendered before the host programs the chip cannot read
-        indeterminate geometry.
+        indeterminate geometry.  Upstream initialises m_bf alone, in
+        the constructor, and its device_reset() is empty.
 
-    Nothing here changes behaviour for a host that uses text mode and
-    always sends the DISP parameter byte, which is every other
-    consumer of this device in tree.  Upstreaming these is a separate
-    job and would need pc8401a / pc8500 / textelcomp / psr2000
-    regression runs; none of those drivers is in this focused build.
+    The rest of this copy is the pre-review form of that merged work:
+    a bitmap-width clamp in draw_graphics_scanline() and raw scanline
+    pointers in draw_text_scanline() where upstream tests the cliprect
+    in both, and MX_PRIORITY_OR spelled out separately from MX_OR.
+    The other drivers that instantiate this device -- px8, pc8401a /
+    pc8500, roland_sc8850, textelcomp and ympsr2000 -- are the
+    regression set for any change to it.
     ----------------------------------------------------------------
 
 **********************************************************************/

@@ -13,10 +13,13 @@
 --
 --   0xFE5F9D  ldio T01MOD,0xED   timer 1 <- phiT256
 --   0xFE5FA9  ldio TREG1,0x18    = 24, so at fc = 24 MHz (kn1500.cpp:56)
---                                INTT1 = 24e6/2048/24 = 488.28 Hz -- the SAME
---                                488 Hz design tick as the SX-WSA1R, reached
---                                from a different crystal and a different
---                                TREG1.  Upstream's >>15 gives 30.52 Hz.
+--                                INTT1 = 24e6/2048/24 = 488.28 Hz -- the same
+--                                design tick as the SX-WSA1R, because both
+--                                firmwares set TREG1 to fc in MHz and that
+--                                makes the tick 1e6/2048 for any crystal
+--                                (1e6/32768 = 30.52 Hz under upstream's >>15).
+--                                A firmware convention, not a reading of the
+--                                tap scale.
 --   0xFE5FB5  ldio T4MOD,0x05    timer 4 <- phiT1, CLE = 1
 --   0xFE5FC4  ldw (TREG4),0x0001
 --   0xFE5FC8  ldw (TREG5),0x3D09 = 15625, so INTTR4 = 24e6/8/15625 = 192.0 Hz

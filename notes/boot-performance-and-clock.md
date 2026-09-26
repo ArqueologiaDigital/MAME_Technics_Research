@@ -25,9 +25,10 @@ Conclusion: the green screen and the multi-second boot are both normal firmware
 behaviour (background clear + a lot of real resource decompression), NOT a bug
 from a wrong image address or an invalid-data decode loop.
 
-(Caveat on tooling: `unidasm` mis-decodes MN10300 opcode 0xF4 `movbu (di,am),dn`
-as 1 byte instead of 2, desyncing addresses after it -- so the loop's internal
-disassembly is unreliable; the measurements above come from live execution.)
+(Caveat on tooling: the measurements above come from live execution, not from
+disassembly -- `unidasm` mis-decoded MN10300 opcode 0xF4 `movbu (di,am),dn` as 1
+byte instead of 2 and desynced addresses after it, so the loop's internal
+disassembly was unreliable.  MAME returns the correct length 2 since #16190.)
 
 ## Why it *looked* slow: the CPU clock was a 10 MHz placeholder
 

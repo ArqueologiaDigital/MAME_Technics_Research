@@ -122,15 +122,15 @@ void tmp95c061_device::internal_mem(address_map &map)
 	map(0x00000d, 0x00000d).rw(FUNC(tmp95c061_device::port_r<PORT_5>), FUNC(tmp95c061_device::port_w<PORT_5>));
 	map(0x000010, 0x000010).w(FUNC(tmp95c061_device::port_cr_w<PORT_5>));
 	map(0x000011, 0x000011).w(FUNC(tmp95c061_device::port_fc_w<PORT_5>));
-	// OVERLAY FIX (kn7000_mame, 2026-08-25).  Internal address 0x12 is P6, and
-	// its write side dispatched to port_w<PORT_7>, so every write to P6 landed
-	// in PORT_7's latch and on the PORT_7 write callback.  Two consequences on
-	// the Technics SX-WSA1R: the serial EEPROM's chip select, which prom_c
-	// drives with `set 5,(P6)` / `res 5,(P6)`, never reached a port6_write()
-	// handler at all; and CPU 1's `ldio P6,0x1B` (prom_a 0xF826AF) clobbered
-	// the driver's shadow of the inter-processor link handshake on P7.  See
-	// src/mame/matsushita/wsa1.cpp.  The rest of this file is upstream's; keep
-	// the diff to this one line.
+	// This P6 mapping began as an overlay fix (kn7000_mame, 2026-08-25) and is in
+	// MAME itself as of #16204.  Internal address 0x12 is P6, and its write side
+	// dispatched to port_w<PORT_7>, so every write to P6 landed in PORT_7's latch
+	// and on the PORT_7 write callback.  Two consequences on the Technics
+	// SX-WSA1R: the serial EEPROM's chip select, which prom_c drives with
+	// `set 5,(P6)` / `res 5,(P6)`, never reached a port6_write() handler at all;
+	// and CPU 1's `ldio P6,0x1B` (prom_a 0xF826AF) clobbered the driver's shadow
+	// of the inter-processor link handshake on P7.  See
+	// src/mame/matsushita/wsa1.cpp.
 	map(0x000012, 0x000012).rw(FUNC(tmp95c061_device::port_r<PORT_6>), FUNC(tmp95c061_device::port_w<PORT_6>));
 	map(0x000013, 0x000013).rw(FUNC(tmp95c061_device::port_r<PORT_7>), FUNC(tmp95c061_device::port_w<PORT_7>));
 	map(0x000015, 0x000015).w(FUNC(tmp95c061_device::port_fc_w<PORT_6>));
@@ -829,13 +829,22 @@ void tmp95c061_device::tlcs900_change_tff( int which, int change )
 // figures, transcribed with their page numbers.  The script carries the
 // bitsavers URL and the file's sha256; the PDF itself is not committed.)
 //
-// CORROBORATION, measured on the machine that found the bug: the SX-WSA1R's
-// prom_a programs T01MOD = 0x0D (0xF826EB) so timer 1 counts oT256, and
-// TREG1 = 0x1C = 28 (0xF826F4).  At fc = 28 MHz that is 28e6/2048/28 =
-// 488.28 Hz, and 488.0 Hz is what its millisecond counter at RAM 0x0080 is
-// MEASURED advancing at with these constants; with upstream's >>15 the same
-// registers gave 30.4 Hz (notes/wsa1-probes/wsa1_tick_counter.lua, and the
-// before/after pair in notes/wsa1-probes/tlcs900_prescaler_control.patch).
+// WHAT THE MACHINE SHOWS, AND WHAT IT CANNOT.  The SX-WSA1R's prom_a programs
+// T01MOD = 0x0D (0xF826EB) so timer 1 counts oT256, and TREG1 = 0x1C = 28
+// (0xF826F4).  Its millisecond counter at RAM 0x0080 is MEASURED advancing at
+// 488.0 Hz with these constants and at 30.4 Hz with upstream's >>15
+// (notes/wsa1-probes/wsa1_tick_counter.lua, and the before/after pair in
+// notes/wsa1-probes/tlcs900_prescaler_control.patch).  Each figure is the rate
+// those registers predict under its own tap, so that pair measures the
+// implementation and leaves the scale to the databook above: with TREG1 set to
+// fc in MHz, which every Technics firmware does, fc/2048/TREG1 is 1e6/2048 =
+// 488.28 Hz for any crystal, and upstream's ladder collapses just as roundly to
+// 1e6/32768 = 30.52 Hz.  The firmware constants that DO choose a scale are the
+// sequencer tempo divide -- TREG5 = C/(64*BPM) with a per-machine C = 40*fc/K,
+// which solves K = 8 exactly on all three Technics machines -- and the KN5000
+// MAIN CPU's fc, an 8 MHz crystal through the documented internal doubler with
+// no UART inference in it.  Both are worked machine by machine in
+// notes/wsa1-probes/tlcs900_prescaler_scale.py.
 //
 // ⚠ TWO EARLIER JUSTIFICATIONS FOR THIS CHANGE WERE WITHDRAWN and must not be
 // put back.  (a) "MAME's own sibling tmp94c241.cpp already uses 3/5/7/11" is

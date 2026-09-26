@@ -272,8 +272,8 @@ void sed1330_device::command_w(uint8_t data)
 	case INSTRUCTION_DISP_OFF:
 		// The parameter byte is optional: a bare DISP ON / DISP OFF toggles the
 		// display and leaves the FC / FP fields at whatever the last parameter
-		// latched.  Upstream assigns m_d only inside data_w, so a host that
-		// sends the bare form leaves the panel dark forever.  The Technics
+		// latched.  Assigning m_d here, and not only in data_w, is what lets a
+		// host that sends the bare form light the panel at all.  The Technics
 		// SX-WSA1R's panel init ends with exactly that -- prom_a 0xF8E99A
 		// ld (XIY+0x01),0x59 followed by RET.
 		m_d = BIT(m_ir, 0);
@@ -664,13 +664,14 @@ void sed1330_device::draw_graphics_scanline(bitmap_ind16 &bitmap, const rectangl
 {
 	// `op` is how this layer combines with what is already in the bitmap:
 	// LAYER_REPLACE for the first layer drawn, and thereafter the composition
-	// method the host selected in OVLAY (MX).  Previously every layer was OR-ed
-	// unconditionally and m_mx was decoded, logged and then ignored -- so a
-	// highlight plane that the host meant to INVERT the text under it painted a
-	// solid block instead.
+	// method the host selected in OVLAY (MX).  Honouring MX is what makes a
+	// highlight plane the host meant to INVERT the text under it come out as
+	// inverse video instead of a solid block.
 	//
-	// The width clamp is a guard against a host that programs C/R wider than the
-	// screen it was configured with -- upstream would write past the scanline.
+	// The width clamp guards against a host that programs C/R wider than the
+	// screen it was configured with.  The copy in MAME proper spends a
+	// cliprect.contains() per pixel there instead, which also respects a partial
+	// cliprect; this one stops the scanline at bitmap.width().
 	int const width = bitmap.width();
 
 	for (int sx = 0; sx < m_cr; sx++)
@@ -718,8 +719,8 @@ void sed1330_device::update_graphics(bitmap_ind16 &bitmap, const rectangle &clip
 	//
 	// COMPOSITION.  The first layer that draws REPLACES the scanline; every
 	// later layer combines with it using the method the host selected in OVLAY
-	// (m_mx).  This device used to OR unconditionally, which is why a host that
-	// asked for exclusive-OR got solid blocks where it wanted inverse video.
+	// (m_mx), so a host that asks for exclusive-OR gets inverse video rather than
+	// solid blocks.
 	//
 	// ⚠ SOURCING.  The SED1330 short-form datasheet
 	// (technics_roms/sources/datasheets/SED1330.PDF) establishes the CAPABILITY

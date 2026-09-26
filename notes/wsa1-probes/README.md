@@ -11,15 +11,16 @@ DISPLAY=:0 ./kn7000 wsa1r -rompath ./roms -skip_gameinfo -str <sec> -window \
 ```
 
 ⚠ The ROM filenames in `technics_roms/roms/wsa1/` are `wsa1_os_v2.icNN`, but the
-driver's `ROM_LOAD` names are the factory part numbers.  Stage a `roms/wsa1r/`
-with these four links (CRC32s verified to match the driver):
+driver's `ROM_LOAD` names are the factory part numbers with the OS revision
+appended.  Stage a `roms/wsa1r/` with these four links (CRC32s verified to match
+the driver):
 
-| link name          | file             | CRC32    |
-|--------------------|------------------|----------|
-| `qsigcwsa1ax.ic12` | `wsa1_os_v2.ic12`| 5f34af46 |
-| `qsigcwsa1bx.ic13` | `wsa1_os_v2.ic13`| f3f84441 |
-| `qsigcwsa1cx.ic28` | `wsa1_os_v2.ic28`| 855c8ac4 |
-| `qsigcwsa1dx.ic21` | `wsa1_os_v2.ic21`| 735ae465 |
+| link name             | file             | CRC32    |
+|-----------------------|------------------|----------|
+| `qsigcwsa1ax_v2.ic12` | `wsa1_os_v2.ic12`| 5f34af46 |
+| `qsigcwsa1bx_v2.ic13` | `wsa1_os_v2.ic13`| f3f84441 |
+| `qsigcwsa1cx_v2.ic28` | `wsa1_os_v2.ic28`| 855c8ac4 |
+| `qsigcwsa1dx_v2.ic21` | `wsa1_os_v2.ic21`| 735ae465 |
 
 ⚠ MAME's Lua GC silently collects a tap or a notifier that is not held in a
 global.  Every script here keeps its handles in `_G`.
@@ -92,17 +93,25 @@ bit-0-clear arm at 0xF82CBD.
 
 Samples the counter at RAM 0x0080 and counts writes to it.
 
-**Result: it advances, at 30.4 Hz.**  The firmware is written against
-**488.28 Hz** (TREG1 = 0x1C at 0xF826F4, counts of phiT256 selected by
-T01MOD = 0x0D at 0xF826EB, at fc = 28 MHz with
-phiT256 = fc/2048).  MAME's `tmp95c061` implements that tap as
-`m_timer_pre >> 15` = fc/32768 (`tmp95c061.cpp:726-728`), i.e. 28e6/32768/28 =
-30.5 Hz — matching the measurement, and **16x slow**.  All four taps carry the
-same factor of 16 (`tmp95c061.cpp:682-690, 720-728`).
+**Result: it advances, at 30.4 Hz.**  prom_a sets TREG1 = 0x1C at 0xF826F4 and
+selects phiT256 with T01MOD = 0x0D at 0xF826EB, so at fc = 28 MHz the tick is
+28e6/2048/28 = **488.28 Hz** under the databook tap (phiT256 = fc/2048, Table
+3.8 (1) p.81) and 28e6/32768/28 = 30.5 Hz under the `m_timer_pre >> 15` this
+measurement ran against (upstream's `PRESCALE_T256 = 15`).  The 30.4 Hz says
+which of the two the build implements; it cannot say which is right, because the
+firmware sets TREG1 to fc in MHz and both expressions then collapse to a round
+rate (1e6/2048 and 1e6/32768) for any crystal.  What settles it is the databook
+page, quoted by `tlcs900_datasheet_quotes.py`, and the clock-independent
+firmware constants in `tlcs900_prescaler_scale.py`.  All four taps carry the
+same factor of 16 between the two ladders.
 
-Not fixed here: `tmp95c061` is shared with `ngp`, `namcos10` and three other
-drivers, and no databook is in these trees to settle the tap numbering.  The
-only consequence for this driver is that boot takes ~90 s instead of ~6 s.
+In this overlay `tmp95c061` taps at 3/5/7/11, the databook values, and this tick
+runs at 488.3 Hz (`tlcs900_timer_control.sh` switches between the two ladders,
+`wsa1_inttr4_dispatch.lua` does the counting).  Under the slow taps this
+driver's boot took ~90 s instead of ~6 s.  The device is shared with `ngp`,
+`namcos10` and three other drivers, and `ngp` runs 16x fast on the databook
+taps, so upstream keeps 7/9/11/15 there (#16255) -- the thread and its
+real-hardware datapoint are in `notes/overlay-upstream-sync/ngp-evidence/`.
 
 Related, found the same way: MAME never counts the **16-bit timers 4-7** at all
 — `m_t16_reg` is written by `treg45_w`/`treg67_w` and read by nothing

@@ -2,18 +2,24 @@
 // copyright-holders:Wilbert Pol
 /***************************************************************************
 
-    OVERLAY COPY (kn7000_mame).  Upstream's header, plus SERIAL CHANNEL 1 at
-    BYTE GRANULARITY.  The .cpp beside it is also an overlay copy; keep both
-    diffs small and keep them together.
+    OVERLAY COPY (kn7000_mame).  SERIAL CHANNEL 1 at BYTE GRANULARITY, where
+    MAME's own header binds a full serial channel device.  The .cpp beside it is
+    also an overlay copy; the .h and the .cpp move together.
 
-    Why the addition exists: upstream's tmp95c061 has no serial engine at all.
-    sc1buf_r() returns 0, sc1buf_w() only fakes "transmit complete" by setting
-    INTES1 bit 7, and nothing anywhere sets INTES1 bit 3, so INTRX1 can never
-    be raised.  It cannot be worked around from a driver either -- inte_w()
-    PRESERVES bit 3 when a 1 is written to it (tmp95c061.cpp, "if (data & 0x08)
-    data = (data & 0xf7) | (m_int_reg[offset] & 0x08)"), so a driver writing
-    INTES1 through the CPU's address space can CLEAR the INTRX1 request flag
-    but can never SET it, and INTRX1 is not one of the TLCS900_* input lines.
+    Why the byte-granularity channel is here: the tmp95c061 it was written
+    against had no serial engine.  sc1buf_r() returned 0, sc1buf_w() only faked
+    "transmit complete" by setting INTES1 bit 7, and nothing anywhere set
+    INTES1 bit 3, so INTRX1 could never be raised.  Nor could a driver work
+    around that -- inte_w() PRESERVES bit 3 when a 1 is written to it
+    (tmp95c061.cpp, "if (data & 0x08) data = (data & 0xf7) | (m_int_reg[offset]
+    & 0x08)"), so a driver writing INTES1 through the CPU's address space can
+    CLEAR the INTRX1 request flag but never SET it, and INTRX1 is not one of
+    the TLCS900_* input lines.
+
+    MAME has had a real tmp95c061 serial channel since #16204,
+    src/devices/cpu/tlcs900/tmp95c061_serial.{h,cpp}: it shifts bits at the
+    BRxCR rate once a driver binds txd(), and keeps byte granularity otherwise.
+    This copy predates it and carries the byte-granularity SC1 below.
 
     The Technics SX-WSA1R needs it: its control-panel microcontroller hangs off
     SC1 in I/O-interface (synchronous) mode -- see

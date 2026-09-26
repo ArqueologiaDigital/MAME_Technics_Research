@@ -35,7 +35,7 @@ SHARC DSP Technical Reference (508pp). Grouped by confidence/readiness.
 2. **Fixed-point AVG (op 0x09) in the DRC** (commit 630c68d): was falling back to the interpreter;
    now emitted natively (with the round-to-nearest caveat noted below).
 
-## C. Correctness fixes — identified, NOT yet applied (low-risk, want a MAME A/B first)
+## C. Correctness fixes — item 1 is applied and upstream; 2-5 identified, not applied (want a MAME A/B first)
 These were found in the TRM conformance review (workflow wf_c6d2e140-eec). Each is a genuine spec
 deviation; none is the KN7000 reverb-divergence cause (that was B.1), but all are worth upstreaming.
 Apply + A/B a reverb WAV (the reverb exercises circular delay buffers and MACs heavily) before commit.
@@ -44,13 +44,14 @@ Apply + A/B a reverb WAV (the reverb exercises circular delay buffers and MACs h
    wrap only when `I > B+L`, but the buffer is `[B, B+L-1]`, so `I == B+L` must also wrap. One
    foreign-word access whenever the post-modified pointer lands exactly on the boundary. Fix: `>` →
    `>=` (interp) and `COND_LE` → `COND_L` at the wrap test (DRC).
-   ★ VERIFIED + APPLIED-then-REVERTED 2026-07-11: the fix builds clean on both engines and the reverb
-   WAV changes by exactly **2 samples / 2,112,002** (a single note) -- so the KN7000 reverb delay
-   lines DO hit the exact boundary (the earlier "unchanged" belief was WRONG). The change is
-   TRM-correct and inaudible on this test, but it MODIFIES the user-praised reverb, and denser/longer
-   tails could differ by more, so it was reverted pending Felipe's OK rather than shipped unsupervised
-   (rule g). READY TO RE-APPLY in one edit (both files, identical `>=`/`COND_L` change) when approved
-   -- it is a genuine correctness fix. Both engines must be changed together to keep DRC==interpreter.
+   ★ VERIFIED 2026-07-11: the fix builds clean on both engines and the reverb WAV changes by exactly
+   **2 samples / 2,112,002** (a single note) -- so the KN7000 reverb delay lines DO hit the exact
+   boundary (the earlier "unchanged" belief was WRONG). It is TRM-correct and inaudible on this test,
+   and it MODIFIES the user-praised reverb, which is why it sat here for a round under rule g.
+   ★ It is **upstream as #16016** ("cpu/sharc: Fixed off-by-one errors in circular buffer wrapping",
+   666893f2eb9, both engines) and **ported into the overlay by 34ba4ef** -- two comparisons in
+   sharcops.hxx and the four branch conditions that mirror them in sharcdrc.cpp, so DRC and
+   interpreter still agree.
 2. **Pre-modify addressing never applies circular wrap** (sharcops.hxx pre-modify DM/PM paths).
    MAME wraps only post-modify. Whether HW wraps a pre-modified circular address is specified in the
    User's Manual §4-9 (not in this TRM volume); in the KN7000 all circular delay traffic is

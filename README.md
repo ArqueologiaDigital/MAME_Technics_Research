@@ -11,12 +11,16 @@ copying the files in and registering them in the build (see
 
 - `src/mame/matsushita/` — machine drivers and devices for the Technics
   keyboards: KN5000, KN6000/KN6500, KN7000, KN1500 and KN2400/KN2600, plus the
-  shared control-panel (`kn_cpanel`) and tone-generator (`kn_tonegen`) device
-  bases they build on.
+  SX-WSA1/WSA1R synthesizer, and the shared control-panel (`kn_cpanel`) and
+  tone-generator (`kn_tonegen`) device bases they build on.
 - `src/devices/cpu/mn10300/` — a Panasonic MN10300/AM33 execution core
   (upstream MAME ships only the disassembler). Overlay work also touches
-  `tlcs900/` (TMP94C241), `sharc/` and a `upd6383/` DSP core.
-- `src/mame/layout/` — internal layouts for kn5000/kn6000/kn7000.
+  `tlcs900/` (the shared core, TMP94C241, TMP95C061 and TMP95C063), `sharc/`
+  and a `upd6383/` DSP core.
+- `src/devices/machine/`, `src/devices/video/`, `src/devices/bus/technics/` —
+  overlaid copies of `spi_sdcard` (the KN7000's SD card), `sed1330` (the WSA1's
+  all-graphics panel) and the KN5000's `hdae5000` expansion board.
+- `src/mame/layout/` — internal layouts for kn5000/kn6000/kn7000 and wsa1r.
 - `notes/` — investigation write-ups and findings; the bulk of the research
   record. Start here for the current state of any given topic.
 - `tools/` — capture rigs, Lua probes, oracles and disassembly helpers.
@@ -26,10 +30,11 @@ copying the files in and registering them in the build (see
 ## Building
 
 `./build.sh` assembles a disposable build tree from a full MAME checkout
-(default `../mame`), symlinks this overlay's files into it and compiles a
-focused MAME binary with the Qt debugger included. Overridable environment
-variables: `MAME_SRC`, `BUILD_TREE`, `ROM_SRC`, `JOBS`. The manual steps it
-automates are documented in [`INTEGRATION.md`](INTEGRATION.md).
+(default `../mame`, which has to be on the `kn7000-base` branch), symlinks this
+overlay's files into it and compiles a focused MAME binary with the Qt debugger
+included. Overridable environment variables: `MAME_SRC`, `BUILD_TREE`, `ROM_SRC`,
+`JOBS`, `QT_HOME`. The manual steps it automates are documented in
+[`INTEGRATION.md`](INTEGRATION.md).
 
 ## Status and caveats
 

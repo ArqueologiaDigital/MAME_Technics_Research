@@ -1,6 +1,8 @@
 # PR draft — Technics SX-KN series ROM records
 
-**Status:** READY, not yet submitted.
+**Status:** ✅ MERGED as https://github.com/mamedev/mame/pull/15911 — "matsushita/kn7000.cpp:
+add ROM records for the Technics SX-KN series", upstream `1b1ec018340`.  Kept for the reasoning
+trail.
 **Branch:** `technics-rom-record-v2` (worktree `~/compartilhado/mame-pr-romrec`), off
 `upstream/master` @ `8789d0f0d48`. One commit, 2 files, +403 lines.
 **Build:** `make SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp USE_QTDEBUG=0 -j8`

@@ -1409,11 +1409,18 @@ Listed so a disassembly wave does not spend effort on something the emulator cou
    ⚠ **SHARED DEVICE, for the review Felipe asked to defer.** Defects 1 and 6 change behaviour for
    every TMP95C061 machine in MAME -- `snk/ngp.cpp`, `namco/namcos10.cpp` (+ `namcos10_exio`),
    `samsung/dvd-n5xx.cpp` and `skeleton/kkcount.cpp`. Defects 2-5 are additive: they do nothing
-   unless firmware sets TRUN bits 4/5. `ngp` is the one to A/B and it is evidence *for* the change
-   -- SNK's own NGP developer manual says "T16 is 128/fc. 6144000/128 = 48000hz", which is this
-   scale and not upstream's. **`ngp` is not in this binary** (`-listfull` shows nine Technics
-   systems and nothing else), so that A/B cannot be run here. `tmp95c063.cpp` carries the identical
-   wrong shifts and is deliberately NOT changed.
+   unless firmware sets TRUN bits 4/5. **`ngp` points the other way, and upstream keeps 7/9/11/15
+   for it** (#16255, user-confirmed). The "T16 is 128/fc. 6144000/128 = 48000hz" line is byuu's on
+   NESdev thread 18579, restating Toshiba's own four ratios rather than an SNK manual, and the same
+   thread carries mic_'s real-hardware measurement: timer 0 on phiT4, TREG0 = 0x32, an interrupt
+   every ~12800 states at 3,072,000 states/s, i.e. a tap of 12 kHz where the databook's phiT4 is
+   fc/32 = 192 kHz -- 12 kHz is fc/512, upstream's value. The thread is saved at
+   `notes/overlay-upstream-sync/ngp-evidence/`. **`ngp` is not in this binary** (`-listfull` shows
+   nine Technics systems and nothing else), so that A/B cannot be run here. The databook shifts
+   stay for the parts this tree runs, wsa1/wsa1r and kn1500, where the sequencer tempo constants
+   and 96 PPQN close on fc/8 independently of any tap assumption
+   (`notes/wsa1-probes/tlcs900_prescaler_scale.py`). `tmp95c063.cpp` (taitopjc, taitotz) carries
+   the shifts upstream has and is deliberately NOT changed.
 3. **`tmp95c061` dispatched writes to P6 (internal address 0x12) to the PORT_7 callback.** Fixed
    in this overlay's copy; without it the EEPROM never sees chip select.
 

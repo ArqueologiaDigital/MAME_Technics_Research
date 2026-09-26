@@ -51,8 +51,8 @@ grep -E "gate [0-9] (PASSED|FAILED)" "$OUT/build.log"
 
 echo "=== 2. assemble a rompath: the patched prom_a, everything else the stock dump"
 mkdir -p "$OUT/roms/wsa1r"
-cp "$OUT/patched_ic12.bin" "$OUT/roms/wsa1r/qsigcwsa1ax.ic12"
-for f in qsigcwsa1bx.ic13 qsigcwsa1cx.ic28 qsigcwsa1dx.ic21; do
+cp "$OUT/patched_ic12.bin" "$OUT/roms/wsa1r/qsigcwsa1ax_v2.ic12"
+for f in qsigcwsa1bx_v2.ic13 qsigcwsa1cx_v2.ic28 qsigcwsa1dx_v2.ic21; do
     ln -sf "$STOCK/$f" "$OUT/roms/wsa1r/$f"
 done
 

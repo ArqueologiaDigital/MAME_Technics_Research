@@ -230,14 +230,22 @@ def main():
     * the KN5000 MAIN CPU's fc is an 8 MHz crystal through the documented
       internal doubler -- a board fact, not a UART inference -- and with
       C = 80,000,000 that alone forces K = 8.
-    * TREG1 = fc in MHz holds on all three machines (28 / 24 / 16), which only
-      makes design sense if it normalises the INTT1 tick to a round rate:
-      1e6/(256*K) = 488.28 Hz at K = 8, and 488.28 Hz is the rate the WSA1's
-      own `muls WA,0x06D6` (1750) tempo tracker rounds to 500.  At K = 4 or 16
-      that becomes 976.6 or 244.1 Hz, and the 1750 constant no longer follows.
-  A databook page for either the timer prescaler or the baud-rate generator, or
-  one stopwatch on real hardware (set the metronome to 120 BPM and time 60
-  beats), would settle U directly.
+    * TREG1 = fc in MHz holds on all three machines (28 / 24 / 16), so the INTT1
+      tick is 1e6/(256*K) whatever the crystal -- a deliberately
+      clock-independent design tick, 488.28 Hz at K = 8.  It does NOT pin K:
+      K = 4 and K = 16 give 1e6/1024 = 976.6 Hz and 1e6/4096 = 244.1 Hz, no
+      less round, and the `muls WA,0x06D6` (1750) tempo tracker cancels K
+      exactly as the docstring above says.  The same "the round values refit at
+      every power of two" is printed for tempo, rather than for the tick, by
+      tlcs900_tap_ratio_and_intet76_audit.py.
+  The timer-prescaler databook page is now in hand and gives K = 8 directly --
+  Table 3.8 (1) p.81, phiT256 = 2048/fc, quoted with twelve others by
+  notes/wsa1-probes/tlcs900_datasheet_quotes.py -- and with K = 2U that puts U at
+  4, the value tmp94c241_serial.cpp implements.  One stopwatch on real hardware
+  (set the metronome to 120 BPM and time 60 beats) would confirm it from outside
+  this tree.  (For the same part in the NeoGeo Pocket a real-hardware
+  measurement on NESdev thread 18579 lands on fc/512 instead, and upstream MAME
+  keeps its own shifts for that machine: notes/overlay-upstream-sync/ngp-evidence/.)
 """)
     print("FAILURES: %d" % len(fails))
     for f in fails:

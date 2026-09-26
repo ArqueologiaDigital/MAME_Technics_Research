@@ -62,7 +62,7 @@ static inline int mn10300_insn_length(uint8_t op, uint8_t op2)
 	switch (op)
 	{
 	case 0xF0: case 0xF1: case 0xF2: case 0xF3:
-	case 0xF4: case 0xF5: case 0xF6: return 2;   // (F4 really is 2; unidasm bug says 1)
+	case 0xF4: case 0xF5: case 0xF6: return 2;   // (F4 really is 2; MAME's dasm agrees since #16190)
 	case 0xF8: case 0xF9: return 3;
 	case 0xFA: case 0xFB: return 4;
 	case 0xFC: case 0xFD: return 6;
