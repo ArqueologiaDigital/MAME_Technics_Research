@@ -39,10 +39,15 @@ HOW TO RUN
 ----------
     python3 notes/wsa1-probes/tlcs900_datasheet_quotes.py [path/to/TMP95c061-ds.pdf]
 
-The PDF is NOT committed (7.4 MB, and it is not ours to redistribute).  Fetch it:
+The PDF is NOT committed (7.4 MB, and it is not ours to redistribute).  Fetch it into
+$TMPDIR, which is ~/compartilhado/tmp here -- NOT /tmp, which is a small tmpfs wiped on
+reboot.  This default used to be /tmp and the file was duly gone when it was next wanted:
 
-    curl -o /tmp/TMP95c061-ds.pdf \
-        http://www.bitsavers.org/components/toshiba/_dataSheet/TMP95c061-ds.pdf
+    curl -sSL -o "${TMPDIR:-/tmp}/TMP95c061-ds.pdf" \
+        http://bitsavers.org/components/toshiba/_dataSheet/TMP95c061-ds.pdf
+
+(http://www.bitsavers.org/... now 301-redirects, so -L is required or you get a 363-byte
+HTML page named like a PDF.)
 
     sha256  ef644920c6cfc20ea7eb88f529510ab5777849a93c8c7e8f75d6fc0947657eaf
     size    7405537 bytes
@@ -60,7 +65,7 @@ import re
 import subprocess
 import sys
 
-DEFAULT_PDF = "/tmp/TMP95c061-ds.pdf"
+DEFAULT_PDF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "TMP95c061-ds.pdf")
 EXPECT_SHA = "ef644920c6cfc20ea7eb88f529510ab5777849a93c8c7e8f75d6fc0947657eaf"
 
 # (tag, page-in-document, substring that must appear in the text layer, meaning)
