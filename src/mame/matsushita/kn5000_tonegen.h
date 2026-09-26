@@ -391,8 +391,8 @@ private:
 	void update_pitch(int ch);
 	// The firmware's per-selector absolute-pitch constant C, for the +0x040 word `sel`.
 	// Returns false if the firmware's own multisample SET descriptors never produce that
-	// selector, in which case NOTHING is written to `c`/`ambiguous`. Pure table lookup over
-	// the generated kn5000_pitch_trim.hxx; no state, no ROM access.
+	// selector, in which case NOTHING is written to `c`/`ambiguous`. Pure lookup over
+	// m_pitch_c, which machine_start built from the mask ROM; no state, no ROM access here.
 	bool firmware_pitch_trim(uint16_t sel, int32_t &c, bool &ambiguous) const;
 	// +0x400 handling: a voice's log pitch REFERRED TO ITS OWN RECORDING (so it can be
 	// compared across chunks), and the per-key-press resolution of transpose + detune.

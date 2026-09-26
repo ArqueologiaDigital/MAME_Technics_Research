@@ -32,9 +32,11 @@
 #include "emu.h"
 #include "kn5000_tonegen.h"
 
-// The firmware-derived per-selector absolute-pitch constant C, generated from
-// notes/data/kn5000-pitch-trim-table.tsv by tools/gen_kn5000_pitch_trim.py. See the
-// header of that file, and update_pitch() below, for what it is and what it is not.
+// The firmware-derived per-selector absolute-pitch constant C is built at machine_start
+// by walking the sub-CPU's own multisample SET descriptors in the table_data mask ROM,
+// so it follows whichever firmware revision is loaded. See update_pitch() below for what
+// it is and what it is not. tools/gen_kn5000_pitch_trim.py --check cross-checks the walk
+// against notes/data/kn5000-pitch-trim-table.tsv.
 
 #include <algorithm>
 #include <cmath>
@@ -1759,8 +1761,9 @@ void kn5000_tonegen_device::resolve_note_group(double tchord, int note)
 
 // Look up the firmware's per-selector absolute-pitch constant C for a +0x040 word.
 //
-// kn5000_pitch_trim::TABLE is sorted by selector and holds 1444 entries — every
-// (class, entry) pair the firmware's own 487 multisample SET descriptors can produce.
+// m_pitch_c, built at machine_start from the mask ROM, is sorted by selector and holds
+// 1444 entries — every (class, entry) pair the firmware's own 487 multisample SET
+// descriptors can produce.
 // A selector NOT in it is one the traced tone tables never emit (the drawbar / drum-kit
 // selection paths are the known candidates, the same ones decode_wave_select() flags as
 // `undocumented`); there is no C for it and the caller must say so out loud.
@@ -1842,7 +1845,7 @@ void kn5000_tonegen_device::update_pitch(int ch)
 		//     note = (regs[8] - 0x80 - C(regs[1])) / 256
 		//
 		// C is FIRMWARE-DERIVED, not fitted to audio: it is arithmetic on the sub-CPU's own
-		// 487 multisample SET descriptors (kn5000_pitch_trim.hxx, generated). MEASURED over
+		// 487 multisample SET descriptors, read from the table_data mask ROM. MEASURED over
 		// 5384 captured demo note-ons: this decode lands on an integer MIDI note 70.4% of
 		// the time against a C-permuted null of 15.1 ± 6.9%, and 0.9% for the bare 0x3524
 		// constant it replaces — and the residual non-integer part is the traced

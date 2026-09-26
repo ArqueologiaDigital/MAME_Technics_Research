@@ -212,10 +212,6 @@ ln -sf "$HERE/src/mame/matsushita/kn5000_tonegen.h"          "$BUILD_TREE/src/ma
 # HLE effect kernels (audible-EQ path), #included by kn5000_tonegen.h. Overlay-only, so a
 # missing symlink here is a hard compile error (fatal: kn5000_dsp_hle.h: No such file).
 ln -sf "$HERE/src/mame/matsushita/kn5000_dsp_hle.h"          "$BUILD_TREE/src/mame/matsushita/kn5000_dsp_hle.h"
-# GENERATED (tools/gen_kn5000_pitch_trim.py) -- the firmware's per-selector absolute-pitch
-# constant C, #included by kn5000_tonegen.cpp. It exists only in this overlay, so a missing
-# symlink here is a hard compile error, not a silent behaviour change.
-ln -sf "$HERE/src/mame/matsushita/kn5000_pitch_trim.hxx"     "$BUILD_TREE/src/mame/matsushita/kn5000_pitch_trim.hxx"
 mkdir -p "$BUILD_TREE/src/mame/layout"
 ln -sf "$HERE/src/mame/layout/kn7000.lay"                    "$BUILD_TREE/src/mame/layout/kn7000.lay"
 ln -sf "$HERE/src/mame/layout/kn6000.lay"                    "$BUILD_TREE/src/mame/layout/kn6000.lay"
