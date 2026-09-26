@@ -1,0 +1,672 @@
+
+
+html { background: #000; color: #EEE }
+body { max-width: 40em; margin: 0 auto; padding: .5em 1em; background: #335; color: #EEE; line-height: 1.5em }
+nav.breadcrumbs { display: block; margin: .5em; padding: .5em 1em; background: #557 }
+div.subforum { margin: .25em 1.5em 0; border-top: 1px solid #99A; padding-top: .25em }
+#topic-list dt { margin-top: .5em }
+div.post { margin: 1em 0 }
+div.post-header { padding: .25em .5em; background: #446; border: 1px solid #99A; border-top-width: .25em }
+div.postbody { margin: .5em }
+a:link, a:visited { color: #FA3 }
+h1, h2, h3, h4, h5, h6, .codecontent { line-height: 1.2em }
+.quotecontent, { background: #446; border: 1px solid #99A; padding: .5em .5em .5em 1em; font-size: .875rem }
+.codecontent { background: #353; color: #AFA; border: 1px solid #8A8; padding: .5em; font-size: .75rem; font-family: monospace }
+p { margin: .5em 0 }
+
+Neo Geo Pocket emulation - NESdev BBS
+
+Neo Geo Pocket emulation
+This is an archive of a topic from NESdev BBS, taken in mid-October 2019 before a server upgrade.
+View original topicNESdev BBS > Other > Other Retro Dev
+Neo Geo Pocket emulation
+
+by byuu on 2019-03-08 (#235779)
+I'm still trying to create a Neo Geo Pocket emulator; figured I could pool the information here in case anyone else ever wants to try emulating this system.
+
+Current questions:
+
+I can get to this part of the NGPC BIOS:
+
+Code:   00FF1E8A : 0606          : EI 6
+   00FF1E8C : E961          : INC 1,XBC
+   00FF1E8E : E9CFFFFF0200  : CP XBC,0x0002FFFF
+   00FF1E94 : 6611          : JR Z,0x00FF1EA7         ====> Done
+   00FF1E96 : F1896FCF      : BIT 7,(0x006F89)
+   00FF1E9A : 6EF0          : JR NZ,0x00FF1E8C         ===> Loop
+   00FF1E9C : F1616C0000    : LD (0x006C61),0x00
+   00FF1EA1 : 59            : POP XBC
+   00FF1EA2 : 48            : POP WA
+   00FF1EA3 : 0607          : DI
+   00FF1EA5 : 03            : POP SR
+   00FF1EA6 : 0E            : RET
+
+   ===>
+
+   00FF1EA7 : F1806F020000  : LDW (0x006F80),0x0000
+   00FF1EAD : F1616C0000    : LD (0x006C61),0x00
+   00FF1EB2 : 59            : POP XBC
+   00FF1EB3 : 48            : POP WA
+   00FF1EB4 : 0607          : DI
+   00FF1EB6 : 03            : POP SR
+   00FF1EB7 : 0E            : RET
+
+My code ends up taking the branch to FF1EA7, whereas MAME returns at FF1E9C.
+
+The BIOS runs in a deadloop polling 6F89.d7, which is an undocumented system RAM variable.
+
+The only interrupt that modifies this variable to bypass this loop is at FFFF70, which is INTAD, or apparently some kind of analog to digital conversion interrupt? What is this interrupt, and what causes it to fire?
+
+...
+
+Reading through MAME, I see how the Z80 can trigger TLCS900H interrupts, but for the TLCS900H to trigger Z80 interrupts, it apparently happens on writes to "porta". What are these ports? The MAME core has ports 1,2,5,6,7,8,9,a,b,c,d,e.
+
+On the topic of the Z80 ... is the port at 0xBC just a single byte that both the TLCS900H and Z80 can read and write to? Or is it more like the SNES where each side gets its own port values? MAME's code makes it look like the former.
+
+Is the shared Z80 RAM truly shared (with some kind of bus conflict handler or access cycle interleaving in place), or is it the case where only one CPU can access it at any given moment? If the latter, it would seem you'd have to stop and restart the CPU in order to share RAM, since the Z80 only has the little 4K RAM block and that's it to execute code out of ...
+
+...
+
+Hblank IRQs are said to share the TIO interrupt, which is timer 0 ... but which interrupt is that from 0xffffxx in the BIOS? Eg Vblank / INT4 is FFFF2C. The APU->CPU interrupt is INT5 / FFFF30.
+
+...
+
+The TMP95C061 manual states that on power-on, the CPU reads the reset vector from FFFF00, but this does not point at FF1800. Yet MAME starts execution at FF1800 anyway (from its debugger), even though tlcs900.c does read from FFFF00. Not sure which is more correct as a result.
+
+...
+
+Still at a total loss as to how micro DMA is supposed to work. For starters, does this DMA run in parallel with the CPU, or does it take precedence over executing CPU instructions (eg blocks the CPU until the DMA transfer has completed.)
+
+...
+
+On the whole, MAME's emulation of the TLCS900H is *terrifyingly* low-level, beyond anything I've seen in a CPU core before. It's filled with around 100+ internal registers that do all kinds of bit-twiddling all over the core.
+
+Are these things documented somewhere? The values like this:
+
+Code:#define TMP95C061_P7FC        0x17
+#define TMP95C061_P8          0x18
+#define TMP95C061_P9          0x19
+#define TMP95C061_P8CR        0x1a
+#define TMP95C061_P8FC        0x1b
+#define TMP95C061_PA          0x1e
+#define TMP95C061_PB          0x1f
+#define TMP95C061_TRUN        0x20
+#define TMP95C061_TREG0       0x22
+#define TMP95C061_TREG1       0x23
+#define TMP95C061_T01MOD      0x24
+#define TMP95C061_TFFCR       0x25
+#define TMP95C061_TREG2       0x26
+#define TMP95C061_TREG3       0x27
+#define TMP95C061_T23MOD      0x28
+#define TMP95C061_TRDC        0x29
+#define TMP95C061_PACR        0x2c
+#define TMP95C061_PAFC 0x2d
+
+They seem to be related to the CPU memory map addresses 00-7f.
+
+You end up with code like this:
+Code:m_reg[TMP95C061_PACR] = 0x0c; // HACK ngpc needs this but should be zero
+m_reg[TMP95C061_PAFC] = 0x0c; // HACK ngpc needs this but should be zero
+
+void tmp95c061_device::update_porta()
+{
+   int fc = (m_to1 << 2) | (m_to3 << 3);
+
+   m_porta_write(0, ((fc & m_reg[TMP95C061_PAFC]) | (m_reg[TMP95C061_PA] & ~m_reg[TMP95C061_PAFC])) & m_reg[TMP95C061_PACR], 0xff);
+}
+
+And ... oh boy >_>
+Re: Neo Geo Pocket emulation
+
+by JamesHall7 on 2019-03-09 (#235789)
+byuu wrote:It's filled with around 100+ internal registers that do all kinds of bit-twiddling all over the core. Are these things documented somewhere?
+When going through datasheets for the TLCS900H, I found that the addresses of the CPU's internal registers were inconsistent between different datasheets. (I can't recall if the names or bits were also different in some cases.)
+A datasheet that seemed to match MAME can be found at http://pdf.datasheetcatalog.com/datashe ... 1434_1.pdf
+
+byuu wrote:The only interrupt that modifies this variable to bypass this loop is at FFFF70, which is INTAD, or apparently some kind of analog to digital conversion interrupt? What is this interrupt, and what causes it to fire?
+Information about the A/D converter is on page 148 of the PDF I linked above. I think it can fire either 160 or 320 states (adjustable by bit 3 of 0x6D) after A/D conversion is started (by setting bit 2 of 0x6D).
+The SNK "SYSTEM PROGRAM REFERENCE MANUAL" states that an A/D channel is used for power management. The battery voltage is available at 0x6F80, and it appears that this is what it is sampling:
+Code:FF2DDC : D06020           : ld WA,(0x60)      ;0x60 ADREG0L - "AD Result Reg 0 low" (0x61 is ADREG0H - "AD Result Reg 0 high")
+FF2DDF : D8EF06           : srl 0x06,WA
+FF2DE2 : F1806F50         : ld (0x6F80),WA
+
+byuu wrote:The TMP95C061 manual states that on power-on, the CPU reads the reset vector from FFFF00, but this does not point at FF1800. Yet MAME starts execution at FF1800 anyway (from its debugger), even though tlcs900.c does read from FFFF00. Not sure which is more correct as a result.
+When starting the NGPC in MAME for the first time (or without the NVRAM file), it will use the reset vector. Once there is an NVRAM file, MAME will ignore the vector and start execution at FF1800 (see ngp_state::machine_reset()).
+
+When MAME starts without the NVRAM file, nothing gets displayed and the CPU ends up in a deadloop at 0xFF1128 (I don't know why 0xFF1128 is shown executing here):
+Code:FF110D: ld XSP,0x00006c00
+FF1112: ei 0x05
+FF1114: set 2,(0xb3)
+FF1117: ld (0x6c7a),0xa5a5
+FF111D: ld (0x6e95),0x4e50
+FF1123: ld (0xb4),0x00a0
+FF1127: halt
+FF1128: res 7,(0x6f86)
+FF1128: res 7,(0x6f86)
+
+I imagine that setting the PC to 0xFF1800 is a hack to get around this.
+
+byuu wrote:Hblank IRQs are said to share the TIO interrupt, which is timer 0 ... but which interrupt is that from 0xffffxx in the BIOS? Eg Vblank / INT4 is FFFF2C. The APU->CPU interrupt is INT5 / FFFF30.
+Timer 0 is at 0xFFFF40.
+In case it is handy to have... (interrupt sources gleaned from MAME)
+Code:NGPC
+   handlerAddress   vectorAddress   irq
+   FF204A         FFFF00         Reset or [SWI0] instruction
+   FF2772         FFFF04         [SW1] instruction
+   FF2305         FFFF08         Illegal or [SW2] instruction
+   FF2202         FFFF0C         [SW3] instruction
+   FF220B         FFFF10         [SW4] instruction
+   FF2214         FFFF14         [SW5] instruction
+   FF221D         FFFF18         [SW6] instruction
+   FF2226         FFFF1C         [SW7] instruction
+   FF1898         FFFF20         NMI    : /NMI Pin (Power Button)
+   FF2D98         FFFF24         INTWD  : Watchdog timer
+   FF2856         FFFF28         INT0   : INT0 Pin (Alarm/RTC)
+   FF2163         FFFF2C         INT4   : INT4 Pin (VBlank)
+   FF2282         FFFF30         INT5   : INT5 Pin (Z80)
+   FF2B25         FFFF34         INT6   : INT6 Pin
+   FF2DB6         FFFF38         INT7   : INT7 Pin
+   FF22A4         FFFF3C         (Reserved)
+   FF22A5         FFFF40         INTT0  : 8-bit Timer 0 (HBlank)
+   FF22AE         FFFF44         INTT1  : 8-bit Timer 1
+   FF22B7         FFFF48         INTT2  : 8-bit Timer 2
+   FF22C0         FFFF4C         INTT3  : 8-bit Timer 3
+   FF22C9         FFFF50         INTTR4 : 16-bit Timer 4 (TREG4)
+   FF22CA         FFFF54         INTTR5 : 16-bit Timer 4 (TREG5)
+   FF22CB         FFFF58         INTTR6 : 16-bit Timer 5 (TREG6)
+   FF22CC         FFFF5C         INTTR7 : 16-bit Timer 5 (TREG7)
+   FF22CD         FFFF60         INTRX0 : Serial RX (Channel 0) (Serial RX)
+   FF22D6         FFFF64         INTTX0 : Serial TX (Channel 0) (Serial TX)
+   FF22DF         FFFF68         INTRX1 : Serial RX (Channel 1)
+   FF22E0         FFFF6C         INTTX1 : Serial TX (Channel 1)
+   FF2DCE         FFFF70         INTAD  : A/D Conversion End
+   FF22E1         FFFF74         INTTC0 : Micro DMA End (Ch. 0)
+   FF22EA         FFFF78         INTTC1 : Micro DMA End (Ch. 1)
+   FF22F3         FFFF7C         INTTC2 : Micro DMA End (Ch. 2)
+   FF22FC         FFFF80         INTTC3 : Micro DMA End (Ch. 3)
+
+NGP
+   handlerAddress   vectorAddress   irq
+   FF1DE8         FFFF00         Reset or [SWI0] instruction
+   FF2426         FFFF04         [SW1] instruction
+   FF200F         FFFF08         Illegal or [SW2] instruction
+   FF1F31         FFFF0C         [SW3] instruction
+   FF1F3A         FFFF10         [SW4] instruction
+   FF1F43         FFFF14         [SW5] instruction
+   FF1F4C         FFFF18         [SW6] instruction
+   FF1F55         FFFF1C         [SW7] instruction
+   FF1898         FFFF20         NMI    : /NMI Pin (Power Button)
+   FF29BE         FFFF24         INTWD  : Watchdog timer
+   FF24E3         FFFF28         INT0   : INT0 Pin (Alarm/RTC)
+   FF1E92         FFFF2C         INT4   : INT4 Pin (VBlank)
+   FF1F8C         FFFF30         INT5   : INT5 Pin (Z80)
+   FF274B         FFFF34         INT6   : INT6 Pin
+   FF29D7         FFFF38         INT7   : INT7 Pin
+   FF1FAE         FFFF3C         (Reserved)
+   FF1FAF         FFFF40         INTT0  : 8-bit Timer 0 (HBlank)
+   FF1FB8         FFFF44         INTT1  : 8-bit Timer 1
+   FF1FC1         FFFF48         INTT2  : 8-bit Timer 2
+   FF1FCA         FFFF4C         INTT3  : 8-bit Timer 3
+   FF1FD3         FFFF50         INTTR4 : 16-bit Timer 4 (TREG4)
+   FF1FD4         FFFF54         INTTR5 : 16-bit Timer 4 (TREG5)
+   FF1FD5         FFFF58         INTTR6 : 16-bit Timer 5 (TREG6)
+   FF1FD6         FFFF5C         INTTR7 : 16-bit Timer 5 (TREG7)
+   FF1FD7         FFFF60         INTRX0 : Serial RX (Channel 0) (Serial RX)
+   FF1FE0         FFFF64         INTTX0 : Serial TX (Channel 0) (Serial TX)
+   FF1FE9         FFFF68         INTRX1 : Serial RX (Channel 1)
+   FF1FEA         FFFF6C         INTTX1 : Serial TX (Channel 1)
+   FF29EF         FFFF70         INTAD  : A/D Conversion End
+   FF1FEB         FFFF74         INTTC0 : Micro DMA End (Ch. 0)
+   FF1FF4         FFFF78         INTTC1 : Micro DMA End (Ch. 1)
+   FF1FFD         FFFF7C         INTTC2 : Micro DMA End (Ch. 2)
+   FF2006         FFFF80         INTTC3 : Micro DMA End (Ch. 3)
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-09 (#235791)
+Oh wow, thank you so much! This helps a ton.
+
+Quote:I found that the addresses of the CPU's internal registers were inconsistent between different datasheets. (I can't recall if the names or bits were also different in some cases.)
+
+Yeah, these appear to be little SoC-like devices. MAME tries to support both the TMP95C061 (NGP/C) and TMP95C063 (Taito Type-Zero), but I'm guessing the latter is only barely supported since it's just an I/O controller. Probably the best real way to emulate the TLCS900(/H,/H2) is to have a each model inherit from a base TLCS900 class. Emulating MIN mode is probably not worth it since no game systems use it.
+
+Quote:When starting the NGPC in MAME for the first time (or without the NVRAM file), it will use the reset vector. Once there is an NVRAM file, MAME will ignore the vector and start execution at FF1800 (see ngp_state::machine_reset()).
+
+When MAME starts without the NVRAM file, nothing gets displayed and the CPU ends up in a deadloop at 0xFF1128 (I don't know why 0xFF1128 is shown executing here):
+
+Ah, I thought MAME wasn't working at first because all I got was a solid white screen on first run. How peculiar. It feels like MAME should force FF1800 then, or if (FFFF00) does some critical setup, then there's a bug there that it won't reach FF1800.
+
+On my real NGPC, the CR2032 is dead, and so when I put in batteries and run it, it goes right into the setup screen like you get when MAME runs from FF1800.
+
+Quote:Timer 0 is at 0xFFFF40.
+
+Ah, thank you. So Hblank IRQs share the same (FFFF40) vector as timer 0 (TIO), then? Seems a strangely conservative choice given the obscene number of IRQs this chip has available.
+Re: Neo Geo Pocket emulation
+
+by JamesHall7 on 2019-03-09 (#235800)
+You're welcome! I'm glad that it was helpful.
+byuu wrote:So Hblank IRQs share the same (FFFF40) vector as timer 0 (TIO), then? Seems a strangely conservative choice given the obscene number of IRQs this chip has available.
+If you have the SNK "8 BIT TIMER REFERENCE MANUAL", they give an example at the end of how to set up the timer for usage as an Hblank IRQ.
+What they do is set timer 0 to use an external clock (which happens to be the Hblank interrupt from the graphic controller), then set the counter to the desired number of lines between each interrupt. Timer 0 is the only timer that can use an external clock.
+Re: Neo Geo Pocket emulation
+
+by JamesHall7 on 2019-03-09 (#235820)
+JamesHall7 wrote:When MAME starts without the NVRAM file, nothing gets displayed and the CPU ends up in a deadloop at 0xFF1128
+It just dawned on me why the deadloop at 0xFF1128 occurs: When the NGPC is off, the CPU seems to park there while waiting for the NMI from the power button.
+Pressing the power button in MAME will make it toggle between regular operation and staying in that loop.
+(also, I get a strong feeling that MAME is showing inaccurate information here -- it would make far more sense to me if it was stopped at 0xFF1127 (halt))
+Re: Neo Geo Pocket emulation
+
+by tepples on 2019-03-09 (#235823)
+If the program counter is already incremented after fetching the halt, the CPU will halt with PC pointed at the next instruction to execute.
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-09 (#235830)
+https://twitter.com/byuu_san/status/1104545144253034496
+https://twitter.com/byuu_san/status/1104574115183190016
+
+I got the NGP and NGPC BIOSes running. I'm ignoring sprite priorities, Hblank interrupts, timers, micro/H DMA, ports, interrupt internal register settings, CPU instruction timings, the RTC, etc, but ... oh well.
+
+It currently hangs at the last BIOS screen, the logo keeps fading in and out. Wish I knew what was causing that ... if I can get in-game, then I can start running through Hidden Asbestos' test ROMs.
+
+I'm still just floored that I've gotten this far with only one CPU bug so far.
+
+...
+
+There's some real craziness right now with sprite coordinates needing to be offset by 7 ... I must be doing something wrong.
+spritePos-screenPos should get me a value from 0-7 when in range, but it seems to be backward and so I have to invert the tile flipping logic as well.
+
+Code:auto VPU::renderSprite() -> maybe<uint12> {
+  maybe<Sprite&> p;
+  for(auto& s : sprites) {
+    s.x = s.hoffset;
+    s.y = s.voffset;
+    if(s.hchain && p) s.x += p->x;
+    if(s.vchain && p) s.y += p->y;
+    p = s;
+
+    uint8 x = 7 + s.x + sprite.hscroll - io.hcounter;  //hcounter = 0-159
+    if(x >= 8) continue;  //out of range?
+    uint8 y = 7 + s.y + sprite.vscroll - io.vcounter;  //vcounter = 0-151
+    if(y >= 8) continue;  //out of range?
+
+    if(s.hflip == 1) x ^= 7;
+    if(s.vflip == 0) y ^= 7;
+
+Quote:It just dawned on me why the deadloop at 0xFF1128 occurs: When the NGPC is off, the CPU seems to park there while waiting for the NMI from the power button.
+
+Yeah. It sets (0xb3).d2 which seems to need INT0/NMI to fire (it's the only interrupt that's been configured), and then it polls the battery level and power button repeatedly.
+
+The Neo Geo Pocket breaks even my newer, more extreme tree-based emulation core design by being a system that's technically always on, but just idling. My GUI expects to have a toggle to power the system on and off, not a button that triggers an NMI. I don't yet know how I'm going to handle this one. I would prefer the system to not be running before you power on the system in the menu.
+
+Also, there are a ton of registers in the 0x80-0xff space that are being written to, but not emulated at all in MAME. Fun. I get it, they're all undocumented.
+Re: Neo Geo Pocket emulation
+
+by tepples on 2019-03-09 (#235831)
+Off: make a save state and halt emulation
+On: restore the save state and fire an NMI
+Re: Neo Geo Pocket emulation
+
+by TascoDLX on 2019-03-09 (#235832)
+FYI, 0xFF1800 is the prescribed point of entry when using SNK's dev tools (the debugger): 
+
+Also, if you're not already aware, you may want to check out this book:
+
+http://bitsavers.trailing-edge.com/components/toshiba/_dataBook/1995_Toshiba_TLCS-900_16bit_Microcontroller.pdf
+
+Despite it being for the TLCS-900 (not the 900/H), it's very comprehensive in its coverage of the 900 series' register set and functionality. An equivalent data book for the 900/H should exist, but I wasn't able to find it in my admittedly brief search.
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-13 (#235995)
+I have some games running now, but most games hang right away, and only DAC sound works.
+
+I'm currently missing: proper TLCS900H instruction timings, micro DMA, internal I/O ports, serial communication, and some undocumented registers between 0x80 and 0xff.
+
+The Z80 gets far enough to run instructions and do a few initializing writes to the PSG, but then nothing. It's either the missing micro DMA, or my timers are broken, or the interrupt mechanism between the CPU and Z80 cores is broken.
+
+The timers on this system ... oh my god. Of the ~20ish systems I emulate, nothing even comes remotely close to this level of complexity. Not even a little. Four 8-bit ports that can be lined into sets of two. Or you can use programmable pulse generation mode, or pulse width modulation mode (which has its own frequency setting, and a value of 0 is undocumented.) You can clock them off of a prescaler against the main oscillator (which you can disable) at various frequencies, or off of an external pin (hblank for this system). The timer firing goes through flip-flops (which you can drive manually or choose which timers can toggle them) which can drive timer out pins that are multiplexed with interrupt and port lines. There's a double-buffering system to reload comparators on PPG/PWM events. So you can use this to acknowledge Z80 interrupts, for example.
+
+Then there's two more 16-bit counters, this time with one pin taking in vblank. These timers work completely differently. There's two comparators and two capture registers for each timer. You can set the counters to clear on a comparator match or not. You can configure whether INT4 fires on rising or falling edges of INT1/INT6 input (which is multiplexed with TI4/TI6.) There's a manual counter capture method. Both timers have a very configurable flip-flop that can optionally trigger on either/both comparator matches or when the counters are latched into either/both of the capture registers. They both have double-buffering as well. You can end up implementing all of the functionality (PPG, PWM) of the 8-bit counters through these anyway, but in completely different ways. Plus you can implement event counters, one-shot timers, frequency measurements, pulse width measurements, time difference measurements, etc. Then finally there's PG0T/PG1T, that selects "shift triggers" based on timers 0/1 or 4 (PG0) or timers 2/3 or 5 (PG1), and a mystery T45CR.d7 bit that even this elaborate 200-page manual just says "always write zero, and it always reads as zero." so ... who knows what happens if you write 1 there.
+
+PG0T/PG1T powers a stepping motor control / pattern generator that outputs to port 7. I haven't implemented this yet, but with gems in the manual like, (circuit diagram) "Figure 3.10 (8).  Output Waveforms of 4-Phase 1-Step Excitation (Normal Rotation and Reverse Rotation)", I know I'm in for a really good time.
+
+As for the FF1800 thing: it's basically the case that you don't turn this system off. It starts at (FFFF00) and soon goes into HALT state. The only thing that wakes it up from there is pressing down the power button to trigger an NMI. Since it's /NMI, the value in the I/O port and the NMI line value seem to be inverted. MAME's code doesn't show this is the case, but things just don't work at all if the I/O port treats the power button being pressed as 1 like the other buttons. Once the NMI fires, the system boots up. To turn the system off, you have to hold the power button for a few seconds. The last problem I'm having is that, when I set the sub-battery failure bit, it shows the warning only for a brief second and then turns the system off anyway. On my real NGPC, you have to press another button to acknowledge it, so as always, more research needed there.
+
+An important BIOS discovery for any future emudevs: it reads back the K1GE palette colors (0x8103, etc) and doesn't mask the unmapped bits. The manual doesn't specify what those return, and being used to floating high systems, I returned 1s. This was wrong and needs to be 0s. I don't know if the general case should be 1s or 0s, but at least for these registers, d3-d7=0.
+
+Well, I guess people who implement I/O registers as RAM blocks will neatly avoid the issue, but then there are a lot of write-only bits that always read back 1s per the dev manuals.
+Re: Neo Geo Pocket emulation
+
+by Shonumi on 2019-03-13 (#236050)
+Just stopping by to say it's great that you're taking a serious swing at the NGP. It's about time someone took a closer, finer look at how this handheld works. I looked into it late last year out of boredom, and I share the sentiments about system complexity. Your progress looks awesome so far, so keep it up!
+
+I did have a question for you, byuu. Any interest in emulating some of the additional hardware for the NGP? Of particular note would be the Wireless Communication Unit. It looks quite exotic, but I'm guessing it boils down to simply transmitting the correct bytes back to the game via the link port, so nothing too extreme (once you understand how the Wireless Communication Unit works, of course). General emulation of the link port and link cable would be outstanding as well, as no current NGP emulator seems to support multiplayer. If I recall correctly, however, that you're not too keen on network programming, right? So not pursuing netplay is completely understandable. I'm pretty sure the Setsuzoku Cable (NGP-to-Dreamcast Cable) is probably too much to hope for at this time, since it sounds like a lot of work (needing at least 1 or 2 people pretty familiar with NGP and/or DC emulation and willing to bridge together two emulators), but I'll mention it anyway. You know, just in case, maybe one day...  
+
+Even if you don't implement any of the above or even dream about touching them, it'd still be immensely helpful to have solid NGP emulation in Higan, should anyone want to tackle those devices on their own. I'll admit, the only reason I took an interest in the NGP was to gauge how feasible emulating its obscure hardware would be. Making sure weird and otherwise forgotten gaming hardware is preserved through emulation has become a bit of an obsession of mine, and it's already spreading beyond the Game Boy.
+
+Anyway, good luck!
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-14 (#236069)
+Audio works. The callbacks trigger Z80 IRQs. There is also a separate Z80 NMI trigger, of course. But mostly IRQs are used.
+
+I implemented the RTC, and it works, and yet ... as soon as the "set time and date" BIOS screen appears, it seems to auto-activate the default January 1st, 1999 00:00 time. I'm suspecting it's not an RTC nor an input bug, but possibly a CPU bug.
+
+Lots of games were hanging because I missed the register fetch for ld to and from control registers, whoops.
+
+I am now saving the CPU RAM to disk and loading it on startup, but it still goes into the BIOS setup every single time. Not sure what's wrong. MAME has the same problem, and nothing else emulates the BIOS at all.
+
+I added ports 1, 2, A, and B. Although ports 1 (d8-d15) and 2 (a16-a23) are ... strange. They're likely emulated very wrong. I don't even understand how one can change the direction of the data bus. I'm ... suspecting that ports have their own latch values, but the manual isn't very clear on this. Also not sure how I'm going to implement most ports, like the analog input port pins into the ADC. But I can at least stop ADC from working if you reverse the port direction like it would on real hardware.
+
+I implemented the memory and bus chip select components and their associated waitstates. This one's kind of cool. We say 200000-3fffff is cartridge flash chip 1, and 800000-9fffff is cartridge flash chip 2. But in actuality, you can configure them to appear anywhere you want on the bus, and be any size you want (well, sort of ... it's like x86 MTRR in a way.) There's also two other chip selects that aren't used by the NGPC. Then there's wait state timing for "external chip selects", which is anything not matched by /CS0-3 but ... it is unclear to me what happens when it's an internal access, eg CPU RAM, APU RAM, VRAM, I/O registers, BIOS reads, etc. If that *doesn't* use external chip select wait states, then ... what does? Unmapped addresses?
+
+Still lots more to do.
+
+> It's about time someone took a closer, finer look at how this handheld works.
+
+Much appreciated. I confess I knew nothing about it before. When I saw the TLCS900/H in the past, I nope'd strongly out of it.
+
+I'd been told MAME had really faithful emulation of it, but in actuality most games don't run at all. It was the only one that could run the BIOS, and the only one to really attempt to have a go at the internal SoC registers, but it's extremely incomplete.
+
+Of all the systems I've emulated, this one is by far the least well emulated to date. Nothing else even comes close.
+
+> Any interest in emulating some of the additional hardware for the NGP?
+
+I'm always up for emulating anything and everything possible. I adore all your work on strange peripherals.
+
+The problem is just my limited time and too many systems.
+
+Just offering ... if you ever feel like you want to work on peripherals, but don't want to dive into the absolute insanity that is the NGPC CPU core, I'd fully welcome you to work with me on emulating this system ^-^
+
+> Wireless Communication Unit
+
+"Dousing" to scan radio frequencies to give you cards ... wow. Not quite fish sonar, but ... move over, Soul Dollz and Barcode Battler. Sounds cool!
+
+> General emulation of the link port and link cable would be outstanding as well, as no current NGP emulator seems to support multiplayer.
+
+That is currently missing from every handheld system in higan (and the SGB2.)
+
+I'm very open to it, but I'm not sure how to go about writing the IPC necessary. higan's cores can't be instantiated, so you can't have two instances in the same process. Plus, ideally we'd want to allow it to work over LAN anyway (I understand over the internet is impractical due to them expecting super fast responses.)
+
+I don't know that I have the time to do it, but if anyone were interested, I'd wholly welcome teaming up with them to make this happen.
+
+> I'm pretty sure the Setsuzoku Cable (NGP-to-Dreamcast Cable) is probably too much to hope for at this time
+
+I always wanted to be able to link up with Dolphin for GBA emulation, but my GBA core is just too slow I guess.
+
+NGP<>Dreamcast is similarly a really cool idea. Are there ... active open source Dreamcast emulators, currently? I don't keep up with the more modern gen emulators.
+
+It would be really fun to devise some kind of inter-community standard for all emulators to talk to other emulators for things like GBA<>GC and NGP<>DC, and perhaps even GB<>GB. How cool would it be to link higan and mGBA together?
+
+> it'd still be immensely helpful to have solid NGP emulation in Higan
+
+The main issue right now is my NGP core is rather demanding, about on par with the SNES accuracy core, because of the ridiculous ADC and 26-interrupts that are nested and have priorities. And the lack of clear CPU timings so the MIPS rating is probably 4-8x higher than it should be. And of course, like all my stuff, it has a pixel-based renderer.
+
+I've always been willing to put more care into non-SNES cores, it just never worked out that way. I really thought with the WonderSwan I might get there, but my WS efforts have been pretty much ignored by the world. If NGP support ends up being popular with people like my SNES support is, I'd be willing to add in a scanline video renderer, and to break it out to a standalone GUI ala bsnes (so I guess, calling dibs on bngp now?)
+
+> Making sure weird and otherwise forgotten gaming hardware is preserved through emulation has become a bit of an obsession of mine
+
+You're an absolute hero for that. Thank you so much for your efforts!
+Re: Neo Geo Pocket emulation
+
+by Shonumi on 2019-03-14 (#236090)
+I'd definitely want to help Higan emulate those peripherals. That would probably have to be one of those "eventually" kinda plans. I just have so much on my plate right now and in the short-term future, but the NGP has really caught my eye. When I saw a video of the Wireless Communication Unit in action, I just couldn't get it out of my head. Working with an existing emulator would the best path forward (least resistance), so I'm all for teaming up once the time comes. I believe you once said that getting emudevs together was like 'herding cats', and endrift recently said something to the effect that we all basically work in "silos", so it may be time to break that cycle (at least, I'm guilty of doing it myself).
+
+Thanks for the kind words as well! I'll be watching what happens from here on out. You've already posted a lot of interesting development notes, which have been fascinating to read so far. Like I said, keep it up, this is great work!
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-15 (#236104)
+> it may be time to break that cycle (at least, I'm guilty of doing it myself)
+
+Myself as well.
+
+The temptation is really high to be in control of decisions, and for these older systems it's very possible for one person to implement the entire systems alone. It's also a great learning experience, and really rewarding.
+
+But when groups are required to do things, you can watch the progress of Dolphin, Yuzu, Citra, RPCS3, etc and just kind of feel in awe as to the amount of great work they are doing. It makes me envious to imagine the kinds of 2D emulators we could have if we all worked together like that.
+
+While emulating an entire 2D system alone is practical for one person, emulating every mapper variant, every obscure peripheral, every coprocessor, every new test ROM gitch, etc ... is not. Then throw on needing to have a good solid GUI on every major OS, to have a great understanding of multipass pixel shaders, audio filtering and DRC, etc. That can easily take ten years to do. There's a few people like us so the NES, SNES, Game Boy gets done. But there's just not nearly enough of us for systems like the PC Engine, Neo Geo Pocket, WonderSwan, and Virtual Boy.
+
+In my own case, I've always had great difficulty working in teams and not getting my way on things. It's a habit I am going to try my best to work on. I think if I ever work on a 3D system, it will be as part of a team. Presuming anyone would have me, hahah ^^;
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-15 (#236123)
+If (0x6c14)=0xdd, (0x6c15)=0x00, then the NGP(C) BIOSes boot without going through the setup procedures again.
+They're 0xff,0xff normally with MAME and higan.
+
+I actually found this by a fluke. I think what has to happen is you have to power off the system with the system button to trigger the NMI in order to actually write out that the setup completed? Not entirely sure yet.
+
+Still having issues with turning the system back on after having turned it off, it doesn't seem to want to boot correctly again after that.
+
+Not being able to set the BIOS RTC time was due to a bug in ZCF. It's not CF=ZF, it's CF=!ZF.
+
+The ports on this CPU are truly insane. You can literally force certain address/data bus lines to certain values on a bit-by-bit basis if you want. Every single port is for a totally different, totally insane to emulate function.
+
+The BIOS seems to read and write (0xb4) and (0xb5) internal registers, but I've no idea what they are since they're not documented.
+
+...
+
+Non-bump edit:
+
+I implemented all instruction cycle timings, along with all penalties for the ALU shifter, memory addressing modes, interrupts, and HDMA. Also improved an issue that was preventing INTTCx from firing repeatedly. That gets http://jiggawatt.org/badc0de/nymp.html running, but unfortunately the audio runs about twice as fast as it should. The pitch is correct though, so anything easy like halving the interrupt firing rate or somesuch will throw off the pitch. Not sure what's going on here, and I can't really get a trace log of this running somewhere else to compare it to. Shoot.
+
+...
+
+Another non-bump edit:
+
+Fixed a major CPU bug in "ld xix,(xix+)". It loads (xix), then increments xix, then stores the loaded value into xix. Pretty standard, just missed it before. That fixes corrupt graphics in Card Fighters.
+
+Also, it turns out incw #3,r and incl #3,r will not update flags, but incw #3,(mem) will. What the hell. That fixes input in Sonic Pocket Adventure and Rockman Battle Fighters.
+
+The sound chip in the Neo Geo Pocket is quite weird. Turns out only the volume registers are unique, and the tone/noise pitch/control registers are unique. They took the time to decouple the sharing of tone 2 pitch and noise period as well, cool. Supposedly it's a 15-bit LFSR with taps on d0 and d2, although that's apparently not 100% right either. Doesn't seem anyone knows exactly how it works. I'm not even sure how anyone was able to analyze it since the registers are write-only, and there's no digital audio output.
+
+There's a few serious bugs here and there still, but overall things are progressing quite nicely now. I did implement the two 16-bit timers because they tie into Vblank interrupts and the BIOS configures them as such, but I don't know if I want to attempt to support the stepping motor, DRAM refresh, or using ports as outputs to control things like chip select, address/data bus bits. The serial interface is definitely not happening until I figure out how to do linking between multiple higan instances.
+
+I couldn't find any games that use the "D" button (from the SNK manual), so I unmapped binding it as an input for now, since having it would mean that "Option" would have to be named either "C" or "C/Option", both of which are super ugly.
+
+Nymp still doesn't sound nice. I have a feeling that it's not synchronizing the DAC value generation and the NGPC audio playback, and is instead cycle timing things perfectly. If that's the case, then being off at all would result in the two desyncing and the CPU code overwriting DAC samples before they are played. So short of some heroic third-party assistance, it looks like this one's going to sadly remain out of reach for now.
+Re: Neo Geo Pocket emulation
+
+by JamesHall7 on 2019-03-19 (#236249)
+byuu wrote:I couldn't find any games that use the "D" button (from the SNK manual), so I unmapped binding it as an input for now, since having it would mean that "Option" would have to be named either "C" or "C/Option", both of which are super ugly.
+At least Card Fighters 2 makes use of it (it brings up a debug menu).
+[There was an SNK board that provided TV output and took an AES control, so perhaps that's where it could be used? A video of it can be seen here.]
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-21 (#236352)
+It turns out there's three separate checks to get the BIOS to skip the setup on subsequent runs, it's a huge mess. I have to hack around all three for now. I'll mark this as lower priority for now.
+
+The much bigger problem is this nightmare cycle timing.
+
+The CPU itself can perform 8-bit, 16-bit, and 32-bit memory reads. These reads go through the bus handler logic to choose between chip selects 0,1,2,3,external or an internal access to I/O or RAM. Each selected chip can be configured as an 8-bit or as a 16-bit bus, and can have four different wait state modes (1,2,1+/WAIT,0). The flash ROMs are 8-bit. I have no idea what all the internal memory is. If the CPU tries to read a 16-bit or 32-bit value with A0 set (eg an odd memory address), it splits things up. 16-bit reads become two 8-bit reads. 32-bit reads become two 8-bit reads plus one 16-bit read.
+
+And now we have the 4-byte CPU instruction prefetch. I have no idea how this one works, but my guess is that it tries to do 16-bit accesses wherever possible, and will also try to run in parallel with program execution, eg performing fetches during bus idle cycles.
+
+If I simply fetch 8-bits at a time to the prefetch, and honor the 0-states setting on flash ROM accesses the BIOS sets up, then executing code out of ROM is running twice as fast as it's supposed to. To get ROM to operate at the correct speed, I have to insert two additional wait states per 8-bit ROM access, beyond what the manual says is needed. This feels like nonsense... yet B0CS and B1CS are each set to 0x17, which is 8-bit mode, 0-wait states per the TMP95C061 manual. I also looked at several other TLCS900 SoCs, and although many shuffle the bits around or add extra state modes ... it's always the case that 0b00 is 0-wait states.
+
+There is the possibility that B0CS is different for the NGPC, and 0x17 ends up setting a two-wait state mode. But after this, now code executing out of RAM is still running twice as fast as it should. Inserting the same penalties as ROM makes it slow down to ROM speeds, which is about 5-10% faster than it's supposed to be. But RAM is internal, so why in the world would it need additional wait states at all?
+
+Even if we end up with additional wait states, then there's the question of how those factor into prefetch and DMA timings: does it just add to the amount of cycles needed per access? Then how would the instruction prefetch work if it tried to nab something during a two-state idle period, but it turns out that you need four states to load ROM? Would the idle cycle just get extended two more cycles? Sigh ...
+
+So, yeah ... I don't know. There's far too many possible implementations and variables to try and brute force this timing. It's the same limitation I hit in trying to emulate the GBA ROM prefetch, or the SA-1 bus conflict timing. I'll keep trying to guess values until I get something as close as I can get to the real timings, but it's very unlikely I'll be able to get these timings correct through guessing.
+
+> At least Card Fighters 2 makes use of it (it brings up a debug menu).
+
+Fun, it prints gibberish tiles for me for the debug menu, even when 0x20001f is set to 0xff.
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-21 (#236406)
+Well, I've hit my limit. Unless someone can shed more light, this is about as good as it's going to get.
+
+There's a fantastically evil test ROM here: https://forum.freeplaytech.com/showthread.php?tid=85
+
+The first test runs a loop that is "daa" repeated ten times (40 states), plus another ten states to increment a counter and loop.
+I confirm that my emulation core performs exactly 50 states for each iteration of this loop.
+It sets up timer 0 into "T16" mode (mode bits = %10), with a compare value of 0x32 (or 50.)
+mic_ states that the interrupt fires every approximately 12800 states.
+Given an input frequency of 6144000hz ... the TMP95C061 diagram shows the prescaler gets clock rate / 4.
+SysPro.pdf is vague here in telling you the input clock to the prescaler is always 384KHz, but that's wrong.
+The value into the prescaler is based on the clock gear setting. So it's 6144000/(4,8,16,32,64).
+Everything on this system pretty much runs at the fastest clock rate, so the prescaler input is 1536000hz.
+
+In order to fire the timer at 12800 states, then the timer has to increment every 256 states. 256 * 50 = 12800.
+In order for T16 to fire every 256 states, T16 has to run at a frequency of 24000hz.
+
+But if we go off of the dev manual, T16 is 128/fc. 6144000/128 = 48000hz.
+And indeed, if I don't use the dev manual values for T1 (8/fc), T4 (32/fc), T16 (128/fc), T256 (2048/fc), then the audio in every runs twice as slow as it's supposed to. I've checked and triple checked things. It affects both the BIOS intro music (which uses FF3 invert on T3 compare match to fire Z80 IRQs) and Sonic Pocket's PSG playback (which runs on a regular T1 clock off of timer 0.)
+
+I've checked and confirmed my Z80 is running at the proper 3072000hz.
+I run my PSG at 192000hz instead of 3072000hz because the counters are stepped every 16 clocks, and nothing runs faster than that. It would be wasteful to synchronize when the internal state cannot change.
+To be sure, I tried adjusting the Z80 and PSG frequencies anyway, and it does not produce the correct sound.
+
+However, circling back to ngp_bus ... it's clear that higan is emulating the loops twice as fast.
+My only conclusion is that the main loop is not in fact taking 50 steps, and the cycle timings mic_ lists are not accurate.
+
+This is in fact very possible to be the case. Prefetch plays a heavy role here. If the loop truly took 50 states, then the output value would be 0xfe.  And yet the value is 0xea for mic_ on real hardware.
+
+I can match a value of 0xea if I force ROM accesses to always incur an extra 2-state penalty on every read. The problem is, the BIOS very clearly sets up the ROM to incur no extra state penalties on accesses by writing B0CS, B1CS = 0x17.
+
+But now we look at the RAM test, and we see 0xfc with an aligned program counter, 0xf7 with an unaligned program counter. RAM is 16-bit instead of 8-bit. Specifically, this test is running out of the APU RAM, not the CPU RAM, for whatever that's worth, but the Z80 is not active during the second test.
+
+I get 0x1fe with no extra waits on RAM. If I add in a wait of 1, it drops to 0x144. A wait of 2 drops to 0x0ea, which is too slow.
+
+In order to get the second value to not be the same as the first value, I have to make my prefetch reload fetch 16-bit words, so that the timing is different between aligned and unaligned loop starting points.
+
+...
+
+So my final takeaway is: there are too many variables at play.
+
+The first test I need performed on hardware is to determine the true wait state penalties of each memory area:
+I/O registers
+BIOS ROM
+CPU RAM
+APU RAM (Z80)
+VPU RAM (K1GE,K2GE)
+Cartridge Flash 0 (CS0 -- CS1 should be the same)
+for:
+8-bit reads
+16-bit aligned reads
+16-bit unaligned reads
+32-bit aligned reads
+32-bit unaligned reads
+And for the cartridge flash, I need these values for every B0CS value:
+%000 - %111
+If d2 really is the 8-bit select mode, then I need the values for %00-%11. %10 will likely hang the system waiting on the /WAIT pin then.
+
+The test should basically be a loop sets one of the requested chip select timings (for flash ROM/CS0 only), and performs one of the reads types, and loops for a few seconds. The test should also run "dry" without a read, and that value should be subtracted from all of the other tests. The results will be biased by the amount of additional states it takes to execute the read instruction we choose, but I don't know any way around that.
+
+Once I have these numbers, I can deduce the core timings for each memory access. Once I have those numbers, the next step will be a huge amount of investigation into the prefetch behavior. I am particularly stuck at understanding if and how the prefetcher runs in parallel to the rest of the CPU. Emulating that will be monstrously expensive. My best guess is that it'll suck up idle cycles where it can, but the second it needs the result of a prefetch, it'll block the instruction for additional states until the prefetcher is done. It also seems pretty clear the prefetcher favors word accesses, but if you jump to an unaligned memory address, a penalty is incurred. My guess is this only applies to the very first prefetch. I don't know if it will try to pull in just one byte here, or try and fetch a word and discard the low byte. The byte mode would be faster for 8-bit buses, so that's more likely the case.
+
+Once we have the bus access timings and the prefetcher timed correctly, then we will basically have to write test loops for every instruction possible to suss out the amount of idle states that each instruction actually takes.
+
+Once that is done, then we get to take on the true behemoth ... when the TLCS900 and Z80 share the APU RAM (0x7000-0x7fff), the chips stall each other out. That will be a world of pain as well, but ngp_bus is a good start once we can pass the non-Z80 tests.
+
+...
+
+So, if anyone's up for writing test ROMs, please let me know. I don't have the hardware for this, so I'm stuck.
+If no one's interested then well, this is the end of my NGPC emulation progress. Hopefully someone will take this up in the future.
+
+I spent today creating abstracted bus handlers for all memory types (I/O registers, BIOS ROM, CPU RAM, APU RAM, VPU RAM, flash 0, flash 1, and the unused CS2, CS3, CSX.) The bus width and wait penalties of each can be modified freely. The flexibility is there to adjust this as new discoveries are found. All CPU instructions have their state counts easily modifiable. There's a rudimentary prefetcher that always tries to stay full and will reload completely on jumps, which is definitely wrong. So I've provided all the tools and support to implement correct timing, should the correct values become known later.
+Re: Neo Geo Pocket emulation
+
+by ccovell on 2019-03-22 (#236409)
+Your posts are all interesting, but they just add to my horror at the CPU thing inside of the NGP.  WHY did they use this thing, in lieu of the more sensible ARMs or low-power MCUs/CPUs coming onto the market???
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-22 (#236412)
+The best theory I've heard is they had a boatload of these sitting around from some other project of theirs. But they went on to sell two million of these. It's ... a really good question.
+
+I may have managed to find a bit more information by chance.
+
+So right now, my prefetch doesn't really save any cycles at all. It always keeps the buffer filled, so we can essentially call it a wash (actually a bit slower than not having one if there are BnCS wait states, heh.) And I execute four states for DAA. Right now, I treat one state as one cycle @ 6.144MHz. This results in the ROM timing test running twice as fast as it should.
+
+If we go off of the diagram here:
+https://www.dataman.com/media/datasheet ... C061BF.pdf
+
+Each state is shown as X1 transitioning low,high,low,high. Considering that the prescaler is said to take a 1/4 clock input, perhaps the 6MHz is a lie, and it's really four clocks per state. That will make the ROM timing test run twice as slow as it should.
+
+But now what if we consider that DAA being four states, two of them are filling the prefetch buffer? Since ROM is an 8-bit bus, it'll take two states per 8-bit read. Thus if we skip the penalty for the next DAA instruction fetch, it ends up taking two states. And now we have roughly the correct timing.
+
+Even more interesting in the micro DMA timing break down ... the first three states perform one prefetch operation. But does it really need three states to do a single prefetch? Maybe ... the read cycle of the DMA is two states plus one dummy cycle but with the read address still on the bus A0-23 pins. Curious. You'd think if they could, they'd have it be:
+* first two cycles is a prefetch
+* next two cycles is a read
+* next two cycles is a write
+Instead of:
+* first three cycles is a prefetch
+* next two cycles is a read
+* next cycle is a dummy cycle with the read address still on the bus
+* next two cycles is a write
+25% faster. Has to be a good reason.
+
+Next, it says micro DMA does not occur if the instruction queue has three or more (four) bytes available. You'd think it would try and fill in that last byte if it were an 8-bit design. I'm still not entirely sure about this one. Performing 16-bit accesses to an 8-bit bus is going to be wasteful as a lot of times you'll branch and not need the prefetched byte. But then again, if it doesn't fetch when there's three bytes, it's probably intending to fetch 16-bits, which would put you at five bytes, so obviously it wouldn't want to do that. Hmm.
+
+Finally, it talks about how if the source and target are 8-bit buses, then an extra two states are inccured for each. Wrap this in with it saying that the timing diagrams assumes zero added wait states from BnCS.
+
+So now we're getting somewhere ... I'm going to guess the TLCS900 prefetch is just really simple like with the 68K and the opportunity points to perform prefetches are hard-coded into each instruction's idle timings. It looks like, on the whole, bus accesses incur two states plus whatever additional wait states BnCS asks for. The entire chip likely stalls when prefetch happens and there's extra wait states, but generally we don't have to worry about that as the NGPC never uses additional BnCS wait states.
+
+Figuring out what's actually happening during each cycle of each instruction of the TLCS900/H will require a logic analyzer to single-step and watch the pins. That's way beyond my abilities, I'm afraid. Best I can do is guess, and mic_'s test ROM only has four instructions per loop so ... it's a good starting point, I suppose.
+Re: Neo Geo Pocket emulation
+
+by FitzRoy on 2019-03-22 (#236414)
+byuu wrote:So, if anyone's up for writing test ROMs, please let me know. I don't have the hardware for this, so I'm stuck.
+If no one's interested then well, this is the end of my NGPC emulation progress. Hopefully someone will take this up in the future.
+
+Well, you had to know you were going to hit a wall without test roms. Seems like each system has already been emulated up to that wall, and that the only thing left to do in the scene is exactly this kind of nailing down of details. It's probably also true that if you were going to do it, it would be easier now while things are fresh in your mind. Flashmasta sells NGP and WSC flash carts. If you really needed a 21fx style device over these, why not throw some money at qm to make one?
+
+p.s. is your forum coming back dude?
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-22 (#236433)
+NES could be better, I just really don't want to rewrite all the mappers first. Game Boy only got worse every time I emulated a new test ROM, so I'm very averse to touching that anymore. Genesis is held back because I'm not able to understand a single VDP FIFO explanation out there -- my fault, others have figured it out. FM chips are nightmare fuel, don't expect much progress from me on those. Everything else other than the SNES is held back by a lack of software testing on real hardware. The SNES is held back by a lack of PPU logic analyzer traces. The WonderSwan is held back by the undumped IPLROMs.
+
+I have no plans to open another general public forum, sorry. A development only forum may happen later.
+Re: Neo Geo Pocket emulation
+
+by lidnariq on 2019-03-22 (#236434)
+byuu wrote:The SNES is held back by a lack of PPU logic analyzer traces.
+What do you need there?
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-22 (#236436)
+I need detailed information on what's on the two PPU buses during each clock cycle of a scanline (at 10.74MHz frequency) in all video modes. All BG layers and features that can be enabled, should be. It would also help to have individual layers enabled one by one to see if it changes timings. Sprites will be toughest because there's a lot of sprite settings that will affect fetch patterns, so I don't have a clear answer for what tests are needed. But we could start with just filling a line with sequential 8x8 sprites and go from there.
+
+From this, we need to work out at which cycle the PPU performs memory reads. It's critical for OAM, a bit less important but still useful for CGRAM, and for VRAM it only matters for edge cases like toggling the PPU display disable bit or changing the video mode mid-scanline.
+
+Once we have the external fetch pattern timings correct, then I can start trying to determine internal latch points for the various I/O registers, which I can do visually with carefully constructed software tests and observing the screen output.
+Re: Neo Geo Pocket emulation
+
+by lidnariq on 2019-03-22 (#236438)
+By "two PPU buses" do you mean the the [edit: PPU] RAM bus and the inter-PPU bus?
+Re: Neo Geo Pocket emulation
+
+by byuu on 2019-03-22 (#236439)
+No, there's two PPU chips. PPU2 only talks to PPU1, but I still need to know what gets sent between them and when.
+Re: Neo Geo Pocket emulation
+
+by Rahsennor on 2019-03-22 (#236451)
+byuu wrote:NES could be better, I just really don't want to rewrite all the mappers first. Game Boy only got worse every time I emulated a new test ROM, so I'm very averse to touching that anymore. Genesis is held back because I'm not able to understand a single VDP FIFO explanation out there -- my fault, others have figured it out. FM chips are nightmare fuel, don't expect much progress from me on those. Everything else other than the SNES is held back by a lack of software testing on real hardware. The SNES is held back by a lack of PPU logic analyzer traces. The WonderSwan is held back by the undumped IPLROMs.
+I feel like a kid interrupting the adults at work here, but I'd just like to chime in and thank you for all the hard work you've poured into emulating so many crazy systems. The way people treat old hardware these days it's going to be all we have left a lot sooner than we think. I wish there was something I could do to contribute, but I wouldn't know a logic analyzer from a hole in the ground, so all I can do is wish you luck.
+Re: Neo Geo Pocket emulation
+
+by mic_ on 2019-05-16 (#238925)
+Quote:I have a feeling that it's not synchronizing the DAC value generation and the NGPC audio playback, and is instead cycle timing things perfectly. If that's the case, then being off at all would result in the two desyncing and the CPU code overwriting DAC samples before they are played.
+My YM emulation code writes the sample data in 640-byte chunks into a 4kB circular buffer, and a uDMA channel is set up to transfer 2 bytes (left & right sample) from this buffer to the audio DAC @ 16000 Hz.
+Initially, 6 chunks (3840 bytes) of sample data are generated before the uDMA channel is started.
+After that there's an infinite loop which first waits until DMAS0 is at least half a chunk (320 bytes) ahead of the next write position, and then generates another chunk of sample data. I don't think it should be possible to get any buffer overruns, but I can't swear on it since I don't remember what the best-case cycle count for my YM emulation is.
+
+Quote:It sets up timer 0 into "T16" mode (mode bits = %10), with a compare value of 0x32 (or 50.)
+mic_ states that the interrupt fires every approximately 12800 states.
+I don't have my documents handy right now, but in the terminology I'm used to I'm using the T4 clock source. That is, 48000/4 == 12000 Hz.
+With the TLCS-900/H being clocked at 6,144,000 Hz and each state being two clock cycles, you've got 3,072,000 states/second.
+The timer interrupt is set to trigger an interrupt after 50 ticks, i.e. 12000/50 == 240 times per second. So there should be approximately 3072000/240 == 12800 CPU states until the interrupt fires.
+
+Quote:Supposedly it's a 15-bit LFSR with taps on d0 and d2, although that's apparently not 100% right either. Doesn't seem anyone knows exactly how it works. I'm not even sure how anyone was able to analyze it since the registers are write-only, and there's no digital audio output.
+I'm going off vague memories now since this was many years ago. But what I think I did was write a program that ran on the NGPC and played some white noise at a relatively low frequency. I then recorded the output from the headphone jack (so yeah, analogue audio) and wrote a program on my PC which tried all possible two-bit tap combinations and compared the result against the recording. In this experiment I did not consider the possibility of more than two bits being tapped.
+
+Quote:WHY did they use this thing
+While it may have been obsolete even in 1998, it's actually a pretty nice CPU to write code for.
+Re: Neo Geo Pocket emulation
+
+by Bretmi on 2019-07-03 (#240493)
+Did someone succeed to make his own emulator and did it works. I play Neo Games for a long time and now I'm using RetroArch Emulator but I want to change to other Emulator, I hope I will find some good graphic on other emulators.
+
+[Third ROM site link from this account. B&. --MOD]
+

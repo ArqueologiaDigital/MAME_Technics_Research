@@ -854,12 +854,34 @@ void tmp95c061_device::tlcs900_change_tff( int which, int change )
 // best-exercised -- it is the one to A/B), namco/namcos10.cpp's memp3_mcu and
 // namcos10_exio, samsung/dvd-n5xx.cpp and skeleton/kkcount.cpp (the last two
 // instantiate TMP95C061 as a stand-in for a TMP91C219F and a TMP95C265P, so
-// "correct for the TMP95C061" is not even the right question there).  ngp is
-// evidence FOR the change, not against it: SNK's own NGP developer manual
-// states "T16 is 128/fc. 6144000/128 = 48000hz", which is this scale and not
-// upstream's fc/2048 = 3 kHz.  upstream tmp95c063.cpp carries the identical
-// wrong shifts (taitopjc, taitotz) and is deliberately NOT changed here -- same
-// treatment, separate change, separately tested.
+// "correct for the TMP95C061" is not even the right question there).
+//
+// ⚠ A CITATION THAT USED TO STAND HERE IS WITHDRAWN.  This comment said "SNK's
+// own NGP developer manual states 'T16 is 128/fc. 6144000/128 = 48000hz'" and
+// concluded that ngp is evidence FOR this scale.  Neither half survives.
+//
+//   * The sentence is byuu's, on NESdev thread 18579 (2019), writing "if we go
+//     off of the dev manual, T16 is 128/fc" -- a forum paraphrase of a document
+//     nobody here holds, not a manual quote.  Worse, the four ratios he lists
+//     are verbatim Toshiba Table 3.8 (1), so citing it alongside the databook
+//     double-counts one source as two.
+//   * In that same thread mic_ reports a REAL-HARDWARE measurement pointing the
+//     other way: timer 0, mode bits %10, TREG0 = 0x32, interrupting every ~12800
+//     states at 3,072,000 states/s, i.e. a tap of 12 kHz.  The databook's phiT4
+//     is fc/32 = 192 kHz; 12 kHz is fc/512, upstream's value.
+//
+// So the ngp does not corroborate this scale; it contradicts it, by 16x, and
+// upstream restored its own shifts for that reason (#16255, user-confirmed).
+// What is NOT explained is the mechanism.  SNK's part has a BIOS-managed clock
+// gear that the TMP95C061 does not have and MAME does not model, and SysPro's
+// range for it -- 384 kHz to 6.144 MHz -- is a ratio of exactly 16.  That is the
+// open question; see notes/overlay-upstream-sync/.
+//
+// These shifts stay at the databook values because they are right for the parts
+// THIS tree runs, wsa1/wsa1r and kn1500, where the tempo constants, the MIDI
+// baud rate and 96 PPQN all close on fc/8 independently of any tap assumption.
+// upstream tmp95c063.cpp carries the same shifts upstream has here (taitopjc,
+// taitotz) and is deliberately NOT changed.
 // ---------------------------------------------------------------------------
 static constexpr int PRESCALE_T1   = 3;    // fc/8
 static constexpr int PRESCALE_T4   = 5;    // fc/32
