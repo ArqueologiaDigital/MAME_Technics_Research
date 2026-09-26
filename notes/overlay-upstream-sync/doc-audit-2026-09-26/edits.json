@@ -1,0 +1,637 @@
+[
+ {
+  "file": "src/devices/cpu/tlcs900/tmp95c061.cpp",
+  "line": 832,
+  "old": "// CORROBORATION, measured on the machine that found the bug: the SX-WSA1R's\n// prom_a programs T01MOD = 0x0D (0xF826EB) so timer 1 counts oT256, and\n// TREG1 = 0x1C = 28 (0xF826F4).  At fc = 28 MHz that is 28e6/2048/28 =\n// 488.28 Hz, and 488.0 Hz is what its millisecond counter at RAM 0x0080 is\n// MEASURED advancing at with these constants; with upstream's >>15 the same\n// registers gave 30.4 Hz (notes/wsa1-probes/wsa1_tick_counter.lua, and the\n// before/after pair in notes/wsa1-probes/tlcs900_prescaler_control.patch).",
+  "new": "// WHAT THE MACHINE SHOWS, AND WHAT IT CANNOT.  The SX-WSA1R's prom_a programs\n// T01MOD = 0x0D (0xF826EB) so timer 1 counts oT256, and TREG1 = 0x1C = 28\n// (0xF826F4).  Its millisecond counter at RAM 0x0080 is MEASURED advancing at\n// 488.0 Hz with these constants and at 30.4 Hz with upstream's >>15\n// (notes/wsa1-probes/wsa1_tick_counter.lua, and the before/after pair in\n// notes/wsa1-probes/tlcs900_prescaler_control.patch).  Each figure is the rate\n// those registers predict under its own tap, so that pair measures the\n// implementation and leaves the scale to the databook above: with TREG1 set to\n// fc in MHz, which every Technics firmware does, fc/2048/TREG1 is 1e6/2048 =\n// 488.28 Hz for any crystal, and upstream's ladder collapses just as roundly to\n// 1e6/32768 = 30.52 Hz.  The firmware constants that DO choose a scale are the\n// sequencer tempo divide -- TREG5 = C/(64*BPM) with a per-machine C = 40*fc/K,\n// which solves K = 8 exactly on all three Technics machines -- and the KN5000\n// MAIN CPU's fc, an 8 MHz crystal through the documented internal doubler with\n// no UART inference in it.  Both are worked machine by machine in\n// notes/wsa1-probes/tlcs900_prescaler_scale.py.",
+  "why": "The paragraph is headed CORROBORATION and offers 488.28 Hz in support of the tap scale set 54 lines below at PRESCALE_T256 = 11. It cannot support it: prom_a sets TREG1 = 0x1C = 28 = fc in MHz (0xF826F4), so fc/2048/TREG1 is 1e6/2048 for any crystal, and under upstream's >>15 the identical registers give 1e6/32768 = 30.52 Hz -- which is the other figure in the same paragraph. Measuring 488.0 Hz in a build already taking that shift is a tautology (notes/overlay-upstream-sync/FINDINGS-2026-09-26.md:50-54 records the withdrawal). Both measurements are kept and re-labelled as the implementation A/B they are. The non-circular constants are the ones tlcs900_prescaler_scale.py solves: C = 40*fc/K gives K = 8.0 exactly at C = 140e6/120e6/80e6 against fc = 28/24/16 MHz, and the KN5000 MAIN fc comes from the board's 8 MHz crystal and the documented doubler (script line 195, kn5000.cpp:1203) with no UART tap assumed. I dropped the MIDI baud rate from the list of independent legs: that script's own THE NULL section shows 31250 = fc/(16*U*N) leaves only K = 2U, so the baud rate fixes fc only once U = 4 is taken from tmp94c241_serial.cpp.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/WSA1-EMULATION-DISASM-GAPS.md",
+  "line": 1412,
+  "old": "   unless firmware sets TRUN bits 4/5. `ngp` is the one to A/B and it is evidence *for* the change\n   -- SNK's own NGP developer manual says \"T16 is 128/fc. 6144000/128 = 48000hz\", which is this\n   scale and not upstream's. **`ngp` is not in this binary** (`-listfull` shows nine Technics\n   systems and nothing else), so that A/B cannot be run here. `tmp95c063.cpp` carries the identical\n   wrong shifts and is deliberately NOT changed.",
+  "new": "   unless firmware sets TRUN bits 4/5. **`ngp` points the other way, and upstream keeps 7/9/11/15\n   for it** (#16255, user-confirmed). The \"T16 is 128/fc. 6144000/128 = 48000hz\" line is byuu's on\n   NESdev thread 18579, restating Toshiba's own four ratios rather than an SNK manual, and the same\n   thread carries mic_'s real-hardware measurement: timer 0 on phiT4, TREG0 = 0x32, an interrupt\n   every ~12800 states at 3,072,000 states/s, i.e. a tap of 12 kHz where the databook's phiT4 is\n   fc/32 = 192 kHz -- 12 kHz is fc/512, upstream's value. The thread is saved at\n   `notes/overlay-upstream-sync/ngp-evidence/`. **`ngp` is not in this binary** (`-listfull` shows\n   nine Technics systems and nothing else), so that A/B cannot be run here. The databook shifts\n   stay for the parts this tree runs, wsa1/wsa1r and kn1500, where the sequencer tempo constants\n   and 96 PPQN close on fc/8 independently of any tap assumption\n   (`notes/wsa1-probes/tlcs900_prescaler_scale.py`). `tmp95c063.cpp` (taitopjc, taitotz) carries\n   the shifts upstream has and is deliberately NOT changed.",
+  "why": "The surviving twin of the citation withdrawn today in src/devices/cpu/tlcs900/tmp95c061.cpp:861-874. Three things in it are false. (1) The quote is not from an SNK manual: notes/overlay-upstream-sync/ngp-evidence/t18579.txt:513 is byuu writing \"if we go off of the dev manual, T16 is 128/fc\", and the four ratios he lists at :514 are verbatim Toshiba Table 3.8 (1), so citing it beside the databook counts one source twice. (2) `ngp` is not evidence FOR the change: the same thread (:504, :659) carries mic_'s hardware measurement -- 3,072,000 states/s / ~12800 states = 240 Hz, times TREG0 = 0x32 = 50, is a 12 kHz tap, i.e. fc/512 where the databook's phiT4 is fc/32 = 192 kHz -- which is why upstream restored 7/9/11/15 in #16255 and it stays merged. (3) \"identical wrong shifts\" for tmp95c063.cpp is no longer this project's position; grep of src/mame confirms its only users are taitopjc and taitotz.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/wsa1-probes/tlcs900_prescaler_scale.py",
+  "line": 233,
+  "old": "    * TREG1 = fc in MHz holds on all three machines (28 / 24 / 16), which only\n      makes design sense if it normalises the INTT1 tick to a round rate:\n      1e6/(256*K) = 488.28 Hz at K = 8, and 488.28 Hz is the rate the WSA1's\n      own `muls WA,0x06D6` (1750) tempo tracker rounds to 500.  At K = 4 or 16\n      that becomes 976.6 or 244.1 Hz, and the 1750 constant no longer follows.\n  A databook page for either the timer prescaler or the baud-rate generator, or\n  one stopwatch on real hardware (set the metronome to 120 BPM and time 60\n  beats), would settle U directly.",
+  "new": "    * TREG1 = fc in MHz holds on all three machines (28 / 24 / 16), so the INTT1\n      tick is 1e6/(256*K) whatever the crystal -- a deliberately\n      clock-independent design tick, 488.28 Hz at K = 8.  It does NOT pin K:\n      K = 4 and K = 16 give 1e6/1024 = 976.6 Hz and 1e6/4096 = 244.1 Hz, no\n      less round, and the `muls WA,0x06D6` (1750) tempo tracker cancels K\n      exactly as the docstring above says.  The same \"the round values refit at\n      every power of two\" is printed for tempo, rather than for the tick, by\n      tlcs900_tap_ratio_and_intet76_audit.py.\n  The timer-prescaler databook page is now in hand and gives K = 8 directly --\n  Table 3.8 (1) p.81, phiT256 = 2048/fc, quoted with twelve others by\n  notes/wsa1-probes/tlcs900_datasheet_quotes.py -- and with K = 2U that puts U at\n  4, the value tmp94c241_serial.cpp implements.  One stopwatch on real hardware\n  (set the metronome to 120 BPM and time 60 beats) would confirm it from outside\n  this tree.  (For the same part in the NeoGeo Pocket a real-hardware\n  measurement on NESdev thread 18579 lands on fc/512 instead, and upstream MAME\n  keeps its own shifts for that machine: notes/overlay-upstream-sync/ngp-evidence/.)",
+  "why": "This is the file cited as the independent argument for fc/8, and this one bullet is not independent, twice over. (1) Roundness does not discriminate: 1e6/1024 = 976.6 Hz and 1e6/4096 = 244.1 Hz are as round as 1e6/2048 -- exactly what the sibling probe tlcs900_tap_ratio_and_intet76_audit.py:144-146 already prints for tempo (\"fc/4 and fc/16 also land on round tempos ... the round-tempo argument pins the tap only up to a power of two. What excludes those is fc itself\"). (2) It leans on the 1750 tempo-tracker constant, which THIS FILE's own docstring at lines 16-20 says cancels K (\"worked through self-consistently it predicts 64*TREG1 = 1792 under EITHER K\"), and which src/mame/matsushita/wsa1.cpp:198-206 retracts by name. The closing paragraph is also out of date: the timer-prescaler page is in the tree (tlcs900_datasheet_quotes.py:73-85, sha256-pinned), and since it fixes K = 8 while the firmware fixes K = 2U, it settles U = 4 as well. The main C = 40*fc/K solve above is untouched -- it never used 488.28.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 32,
+  "old": "    (*) fc/8 for phiT1 is the firmware's own arithmetic.  MAME's tmp95c061\n    prescaler is a uniform factor of 16 slower than that, which costs boot time\n    but nothing else; the measurement and the reasoning are in the machine\n    configuration, next to the LCD.",
+  "new": "    (*) fc/8 for phiT1 is both the firmware's own arithmetic and the databook's\n    (Table 3.8 (1) p.81), and this tree's tmp95c061 taps there.  The measurement\n    and the reasoning are in the machine configuration, next to the LCD; the\n    citation is in the WHERE THE fc/8 COMES FROM footnote below.",
+  "why": "Stale, and self-contradicting inside one file: the overlay's src/devices/cpu/tlcs900/tmp95c061.cpp:886-889 sets PRESCALE_T1..T256 = 3/5/7/11, and this same driver's fuller footnote at lines 189-196 says so (\"MAME's tmp95c061 used to implement those taps 16x slower ... both are fixed\"). A reader of the header currently comes away believing the driver still runs a 16x-slow prescaler. The 16x figure and its boot cost are kept where they are measured, in the reverted/fixed table at lines 4055-4065.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 42,
+  "old": "      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (it counts\n                at 30 Hz here - see the prescaler note in the machine config).",
+  "new": "      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting.  \u26a0 The\n                timestamps in this walkthrough were measured with that tick\n                running at 30 Hz, on the slow prescaler; with the databook taps\n                the same milestones arrive ~4x sooner in emulated time (SED1330\n                init 0.50 s, SWI7 text 19.62 s - the reverted/fixed table in the\n                machine configuration).",
+  "why": "\"it counts at 30 Hz here\" is false for this tree: the overlay taps PRESCALE_T256 = 11 and this same file's table at line 4059 measures the tick at 488.3 Hz. The walkthrough's own numbers identify which build produced them -- its t=7.21 s SED1330 is the \"reverted\" column of that table exactly (fixed: 0.50 s), and its t=75 s panel message is impossible in a build whose SWI7 text drawing lands at 19.62 s -- so the honest fix is to state that provenance and keep every timestamp, rather than leave a live \"30 Hz here\" that contradicts the machine configuration 4000 lines down.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/wsa1-probes/README.md",
+  "line": 95,
+  "old": "**Result: it advances, at 30.4 Hz.**  The firmware is written against\n**488.28 Hz** (TREG1 = 0x1C at 0xF826F4, counts of phiT256 selected by\nT01MOD = 0x0D at 0xF826EB, at fc = 28 MHz with\nphiT256 = fc/2048).  MAME's `tmp95c061` implements that tap as\n`m_timer_pre >> 15` = fc/32768 (`tmp95c061.cpp:726-728`), i.e. 28e6/32768/28 =\n30.5 Hz \u2014 matching the measurement, and **16x slow**.  All four taps carry the\nsame factor of 16 (`tmp95c061.cpp:682-690, 720-728`).",
+  "new": "**Result: it advances, at 30.4 Hz.**  prom_a sets TREG1 = 0x1C at 0xF826F4 and\nselects phiT256 with T01MOD = 0x0D at 0xF826EB, so at fc = 28 MHz the tick is\n28e6/2048/28 = **488.28 Hz** under the databook tap (phiT256 = fc/2048, Table\n3.8 (1) p.81) and 28e6/32768/28 = 30.5 Hz under the `m_timer_pre >> 15` this\nmeasurement ran against (upstream's `PRESCALE_T256 = 15`).  The 30.4 Hz says\nwhich of the two the build implements; it cannot say which is right, because the\nfirmware sets TREG1 to fc in MHz and both expressions then collapse to a round\nrate (1e6/2048 and 1e6/32768) for any crystal.  What settles it is the databook\npage, quoted by `tlcs900_datasheet_quotes.py`, and the clock-independent\nfirmware constants in `tlcs900_prescaler_scale.py`.  All four taps carry the\nsame factor of 16 between the two ladders.",
+  "why": "\"The firmware is written against 488.28 Hz ... and **16x slow**\" is the circular form: the 488.28 premise already contains the fc/2048 tap, and with TREG1 = fc in MHz both candidate taps produce equally round rates (1e6/2048, 1e6/32768), so this probe's 30.4 Hz can only say which tap the build implements. The 16x verdict is right, but it rests on Table 3.8 (1) p.81 and on the clock-independent firmware constants, not on this probe. Both measured figures are kept. The line references are also dead in both trees now -- in the overlay, 682-690 is interrupt-accept code and 720-728 is the A/D channel sweep; in upstream 96016fbe55c the constants sit at 687-690 and timer 1's phiT256 tap at 752 -- so the citation becomes the symbol name, which cannot go stale.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/wsa1-probes/README.md",
+  "line": 103,
+  "old": "Not fixed here: `tmp95c061` is shared with `ngp`, `namcos10` and three other\ndrivers, and no databook is in these trees to settle the tap numbering.  The\nonly consequence for this driver is that boot takes ~90 s instead of ~6 s.",
+  "new": "In this overlay `tmp95c061` taps at 3/5/7/11, the databook values, and this tick\nruns at 488.3 Hz (`tlcs900_timer_control.sh` switches between the two ladders,\n`wsa1_inttr4_dispatch.lua` does the counting).  Under the slow taps this\ndriver's boot took ~90 s instead of ~6 s.  The device is shared with `ngp`,\n`namcos10` and three other drivers, and `ngp` runs 16x fast on the databook\ntaps, so upstream keeps 7/9/11/15 there (#16255) -- the thread and its\nreal-hardware datapoint are in `notes/overlay-upstream-sync/ngp-evidence/`.",
+  "why": "Both halves are false now. The taps are fixed in this overlay (tmp95c061.cpp:886-889), and a databook IS in these trees: Table 3.8 (1) p.81, with 13 text-layer quotes re-checkable through notes/wsa1-probes/tlcs900_datasheet_quotes.py:73-85 against a recorded sha256. The ~90 s / ~6 s boot measurement is kept, attributed to the slow taps.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/wsa1-probes/kn1500_timer_regression.lua",
+  "line": 16,
+  "old": "--                                INTT1 = 24e6/2048/24 = 488.28 Hz -- the SAME\n--                                488 Hz design tick as the SX-WSA1R, reached\n--                                from a different crystal and a different\n--                                TREG1.  Upstream's >>15 gives 30.52 Hz.",
+  "new": "--                                INTT1 = 24e6/2048/24 = 488.28 Hz -- the same\n--                                design tick as the SX-WSA1R, because both\n--                                firmwares set TREG1 to fc in MHz and that\n--                                makes the tick 1e6/2048 for any crystal\n--                                (1e6/32768 = 30.52 Hz under upstream's >>15).\n--                                A firmware convention, not a reading of the\n--                                tap scale.",
+  "why": "\"the SAME 488 Hz design tick ... reached from a different crystal and a different TREG1\" reads as cross-machine corroboration of the tap, and it is the opposite: TREG1 = 0x18 = 24 = fc in MHz here and 0x1C = 28 there, so fc/2048/TREG1 is 1e6/2048 on both by construction, and under upstream's >>15 both machines would agree on 30.52 Hz just as neatly. The useful observation -- the TREG1 = fc-in-MHz convention holding across products -- is kept, with both numbers.",
+  "severity": "minor",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "notes/overlay-upstream-sync/FINDINGS-2026-09-26.md",
+  "line": 54,
+  "old": "a build that already uses the databook taps is a tautology, not a test. Other occurrences to\nstrike: `tmp95c061.cpp`, `notes/wsa1-probes/wsa1_timer_rate_audit.lua`,\n`notes/WSA1-EMULATION-DISASM-GAPS.md`, `notes/audit/kn5000-eg-calibration.md`,\n`notes/wsa1-probes/kn1500_timer_regression.lua`.",
+  "new": "a build that already uses the databook taps is a tautology, not a test. The circular form appears\nin `tmp95c061.cpp`'s CORROBORATION paragraph, in `notes/wsa1-probes/README.md`, in\n`notes/wsa1-probes/kn1500_timer_regression.lua` (\"the same tick from a different crystal\") and in\nthe third NULL bullet of `notes/wsa1-probes/tlcs900_prescaler_scale.py`. Two files quote the figure\nsoundly and stand as written: `notes/wsa1-probes/wsa1_timer_rate_audit.lua` states the tap from the\ndatabook first and then measures against it, and `notes/audit/kn5000-eg-calibration.md` scores a\nTMP94C241 handler identification -- which of the four 8-bit timers drives `INT_HANDLER_14` -- which\nits 488.307 Hz measurement can and does discriminate.",
+  "why": "This is a standing instruction to a future pass, and two of the five files it names are correct as written, so following it would delete true documentation. notes/wsa1-probes/wsa1_timer_rate_audit.lua:12-31 quotes the datasheet's verbatim \"Cycle\" table (phiT1 (8/fc) 320 ns @ 25 MHz, ... phiT256 (2048/fc) 81.92 us) and derives the expected 488.28 Hz FROM it before measuring -- prediction from a primary source, the right direction -- and its discriminating row is INTTR4 = 192.00 Hz = 96 PPQN at exactly 120.00 BPM. notes/audit/kn5000-eg-calibration.md:415-426 is the KN5000 SUB CPU (TMP94C241, fSYS = 20 MHz, TREG1 = 0x14 = 20) and the prediction being scored is that handler-table entry INT_HANDLER_14 -> LABEL_01FB41 is driven by timer 1, the only 8-bit timer whose run bit is set (asm L9330; TREG0/2/3 loaded and never started); a different handler, another timer, phiT16 instead of phiT256, or fSYS without the doubler would all have shown a visibly different rate than the measured 488.307/488.307/488.276 Hz. The corrected list names the four sites where the figure is actually doing evidentiary work it cannot do.",
+  "severity": "misleads-a-reader",
+  "_cluster": "circular-488",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 11,
+  "old": "    kn2600 and kn1500.  A second, deliberately smaller copy of this file is\n    the one offered upstream: it sits on the branch `technics-wsa1` in the\n    MAME checkout, and it carries only the two processors, the clock and the\n    part of the memory map that is evidence-complete enough to submit.",
+  "new": "    kn2600 and kn1500.  A second, deliberately smaller copy of this file is in\n    MAME itself, merged as #16204: two processors and the byte link between\n    them, the control panel, the LCD and its screen, the floppy, MIDI, the\n    calibration EEPROM, the tone generator, and skeletons for the modeling LSI\n    and the three effects DSPs.",
+  "why": "Two separate errors. The branch: `git -C ~/compartilhado/mame branch -a` has no `technics-wsa1`; it is `MERGED_technics-wsa1_via_PR16204`, and upstream/master carries an 835-line wsa1.cpp with `wsa1r` declared in mame.lst. The CONTENT claim is also wrong and the other auditor's replacement kept it: `git show upstream/master:src/mame/matsushita/wsa1.cpp` configures SED1330 + SCREEN(320x240), UPD765A + FLOPPY_CONNECTOR, MIDI_PORT mdin/mdout on `txd<0>()`, EEPROM_93C46_16BIT, WSA1R_CPANEL, WSA1_TONEGEN with speaker routes, L7A1429 and three UPD6383 skeletons, and maps 0x100000/0x104000/0x108000/0x10c000 -- far more than \"the two processors, the clock and part of the memory map\".",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 16,
+  "old": "    The two files WILL DIVERGE, and that is intentional.  Everything added\n    here beyond the upstream copy is work in progress: the LCD controller and\n    its screen, the link between the two processors, the 61-key keybed scanner\n    and the calibration EEPROM on the second processor, and a set of largely\n    write-only register-file stubs for the rest of that processor's chip-select\n    zero cluster.  Several of those rest on inferences that a MAME reviewer",
+  "new": "    The two files WILL DIVERGE, and that is intentional.  What this copy adds\n    beyond the merged one is work in progress: the SX-WSA1 keyboard as a second\n    declared system, the byte<->bit MIDI UART bridge, the 61-key keybed scanner\n    (the merged copy is the rack module, and answers its keybed queue empty),\n    and the three uPD6383GF effects DSPs as an executing core behind\n    WSA1R_ENABLE_DSP where the merged copy holds inert skeletons.  Several of\n    those rest on inferences that a MAME reviewer",
+  "why": "The other auditor missed this paragraph, which is the one a reader acts on. Four of the five items it calls overlay-only are upstream: `git show upstream/master:src/mame/matsushita/wsa1.cpp` has the SED1330 plus a 320x240 screen, cpu1_link_r/cpu1_link_w/cpu2_link_r/cpu2_link_w, `m_eeprom->cs_write/do_read/di_write/clk_write`, and all four CS0 decoder outputs mapped (0x100000 link, 0x104000 l7a1429, 0x108000 keybed, 0x10c000 tonegen). What IS still overlay-only, checked the same way: the second SYST line for `wsa1` (upstream declares `wsa1r` alone and says the keyboard \"is not declared here\"), `wsa1_midi_uart_device` (0 hits upstream), a real keybed scanner (upstream's keybed_data_r has no input ports and the comment \"no keybed is connected\"), and `#include \"cpu/upd6383/upd6383.h\"` behind WSA1R_ENABLE_DSP against upstream's empty `upd6383_device : public device_t`.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 134,
+  "old": "# Technics SX-WSA1R (two TLCS-900/H TMP95C061 at 28 MHz).  The DEVELOPMENT copy of\n# this driver lives here; the upstream-PR copy is on branch technics-wsa1 in the\n# MAME checkout and the two deliberately diverge.\n#\n# sed1330 is overlaid alongside it: stock sed1330_device leaves update_graphics()\n# an empty function body, so the WSA1's all-graphics three-layer mode drives a\n# correctly-programmed but permanently blank panel.  See the note at the top of\n# the overlay copy of sed1330.h.",
+  "new": "# Technics SX-WSA1R (two TLCS-900/H TMP95C061 at 28 MHz).  The DEVELOPMENT copy of\n# this driver lives here; the smaller copy merged as #16204 is the one in MAME\n# itself, and the two deliberately diverge.\n#\n# sed1330 is overlaid alongside it: MAME's sed1330_device renders all-graphics mode\n# since #16204, and this copy is the pre-review form of that work plus a default\n# initialiser on every scalar member.  See the note at the top of the overlay copy\n# of sed1330.h.",
+  "why": "Both halves are merged facts. The driver: upstream/master carries wsa1.cpp and mame.lst declares `wsa1r`; no branch `technics-wsa1` exists. The sed1330: `git show upstream/master:src/devices/video/sed1330.cpp` has a full `update_graphics()` body composing pages 1/2/3, and `git log -5 upstream/master -- src/devices/video/sed1330.cpp` names 6756074d978 \"Technics WSA1R driver ... (#16204)\" as what put it there. Diffing the two copies, the default initialisers are the only overlay-only change.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 161,
+  "old": "# KN5000 (SX-KN5000): the driver itself is upstream, but a large body of work is not --\n# the tone generator (IC303), the DSP1 stub (IC311), FDC/UART/MIDI wiring, the SNS NMI\n# payload checksum and the Program data wheel. Those live here as overlay files exactly",
+  "new": "# KN5000 (SX-KN5000): the driver itself is upstream, as is the Program data wheel (#15919),\n# but a large body of work is not -- the tone generator (IC303), the IC311 effects-DSP work,\n# FDC/UART/MIDI wiring and the SNS NMI payload checksum. Those live here as overlay files exactly",
+  "why": "`git show upstream/master:src/mame/matsushita/kn5000.cpp` carries the wheel: `PORT_BIT(0x1f, 0x00, IPT_POSITIONAL) PORT_NAME(\"Tempo / Program Data Wheel\")` plus `PORT_ADJUSTER(50, \"Tempo / Program Data Wheel (mouse drag)\")`, landed as 13fd3ea396a \"kn5000: emulate the TEMPO/PROGRAM data wheel (#15919)\". The other items stay: no kn5000_tonegen in `git ls-tree upstream/master src/mame/matsushita/`, the FDC map lines are still `//FIXME:`, no checksum code. I changed the other auditor's \"the DSP1 stub (IC311)\" to \"the IC311 effects-DSP work\", because upstream does have a stub there -- `map(0x130000, 0x130003).noprw(); // DSP1 @ IC311 (stub)` -- while what this repo holds is a draft uPD6383 core plus the 0x130000 register file.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 167,
+  "old": "# tmp95c061: a ONE LINE fix, and the file is overlaid only to carry it.  Internal\n# address 0x12 is P6 and its write side dispatched to port_w<PORT_7>, so every P6\n# write went to PORT_7.  The SX-WSA1R needs P6 bit 5 (the serial EEPROM's chip\n# select) to arrive, and CPU 1's `ldio P6,0x1B` was clobbering the link handshake\n# shadow on P7.  Keep the diff to that line; see the comment at it.\n# \u26a0 tmp95c061.h IS ALSO OVERLAID NOW.  It carries the serial-channel-1 additions\n# the SX-WSA1R's control panel needs (sc1_txd / sc1_mod / sc1_rxd); the .h and the\n# .cpp have to move together, so symlink both or neither.",
+  "new": "# tmp95c061: the P6 write-side map fix this file was first overlaid to carry is in MAME\n# itself since #16204.  What this copy carries is the byte-granularity serial channel 1\n# and the six numbered OVERLAY FIXes, each marked at its site: the databook prescaler\n# tap scale, the 16-bit timers being counted, TRUN bits 4 and 5 stopping and clearing\n# them, a dispatch scan on an 8-bit timer match and on micro-DMA transfer-complete, and\n# micro-DMA interrupt-vector ownership.\n# \u26a0 tmp95c061.h IS ALSO OVERLAID.  It declares that channel (sc1_txd / sc1_mod /\n# sc1_rxd), which predates MAME's own tmp95c061_serial device; the .h and the .cpp have\n# to move together, so symlink both or neither.",
+  "why": "`git log -S'map(0x000012, 0x000012).rw(FUNC(tmp95c061_device::port_r<PORT_6>), FUNC(tmp95c061_device::port_w<PORT_6>));' upstream/master` returns 6756074d978 (#16204), and upstream/master's tmp95c061.cpp line 118 is that line, so \"a ONE LINE fix, overlaid only to carry it\" and \"keep the diff to that line\" are both wrong -- `grep 'OVERLAY FIX' src/devices/cpu/tlcs900/tmp95c061.cpp` shows FIX 1-6, and `diff` against upstream is 669 changed lines. I added the SC1 engine to the first sentence, which the other auditor's version dropped: the .cpp itself carries it (9 hits for m_sc1_rx_data / sc1_rxd / m_sc1_txd_cb), not just the .h.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 40,
+  "old": "# the build.  The upstream-PR branch (technics-rom-record) carries its OWN\n# src/mame/matsushita/kn7000.cpp -- a ROM-record skeleton with no CPU -- plus its own\n# mame.lst entries.  Building from it silently produces a driver that is not this project's.",
+  "new": "# the build.  Upstream's own src/mame/matsushita/kn7000.cpp is a ROM-record skeleton with no\n# CPU (#15911), and a PR branch carries only the single feature it extracts, plus its own\n# mame.lst entries.  Building from one silently produces a driver that is not this project's.",
+  "why": "No branch `technics-rom-record` exists: `git branch -a | grep rom-record` gives only `MERGED_technics-add-many-rom-records_PR15911` and `remotes/origin/technics-add-many-rom-records`, and the staged draft names `technics-rom-record-v2`. The skeleton is also no longer PR-branch-only -- upstream/master's kn7000.cpp is it (\"MAME has a Panasonic MN10300 disassembler but no execution core\", CONS lines for kn6000/kn2400/kn2600/kn6500/kn7000), landed as 1b1ec018340 (#15911). I kept the final sentence's mechanism claim as written rather than rewriting the guard's rationale.",
+  "severity": "minor",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/video/sed1330.h",
+  "line": 10,
+  "old": "    Stock MAME's sed1330_device leaves update_graphics() an empty\n    function body, so a host that puts the part in all-graphics mode\n    (OVLAY DM1 = DM3 = 1) drives a correctly-programmed but\n    permanently blank panel.  The Technics SX-WSA1R does exactly that,\n    so this copy implements it.  Three changes against upstream:\n\n      * update_graphics() is implemented (OR composition of pages 1,\n        2 and optionally 3);\n      * draw_graphics_scanline() gained a composition-op argument and a clamp\n        against the bitmap width;\n      * command_w() honours a bare DISP ON / DISP OFF with no\n        parameter byte, which the WSA1's panel init ends with;\n      * every scalar member has a default initialiser, so the frames\n        rendered before the host programs the chip cannot read\n        indeterminate geometry.\n\n    Nothing here changes behaviour for a host that uses text mode and\n    always sends the DISP parameter byte, which is every other\n    consumer of this device in tree.  Upstreaming these is a separate\n    job and would need pc8401a / pc8500 / textelcomp / psr2000\n    regression runs; none of those drivers is in this focused build.",
+  "new": "    MAME's sed1330_device renders all-graphics mode since #16204,\n    which took this work upstream: update_graphics() composes pages 1,\n    2 and optionally 3, draw_graphics_scanline() carries a\n    composition-op argument, and command_w() honours a bare DISP ON /\n    DISP OFF with no parameter byte, which the Technics SX-WSA1R's\n    panel init ends with.\n\n    One change is still only here:\n\n      * every scalar member has a default initialiser, so the frames\n        rendered before the host programs the chip cannot read\n        indeterminate geometry.  Upstream initialises m_bf alone, in\n        the constructor, and its device_reset() is empty.\n\n    The rest of this copy is the pre-review form of that merged work:\n    a bitmap-width clamp in draw_graphics_scanline() and raw scanline\n    pointers in draw_text_scanline() where upstream tests the cliprect\n    in both, and MX_PRIORITY_OR spelled out separately from MX_OR.\n    The other drivers that instantiate this device -- px8, pc8401a /\n    pc8500, roland_sc8850, textelcomp and ympsr2000 -- are the\n    regression set for any change to it.",
+  "why": "`diff -u <(git show upstream/master:src/devices/video/sed1330.h) <this file>` leaves the default initialisers as the ONLY functional overlay-only change: upstream's header already declares `LAYER_REPLACE` and `draw_graphics_scanline(..., int op = LAYER_REPLACE)`, and the .cpp has the full update_graphics() body and the `INSTRUCTION_DISP_ON/OFF` case with upstream's own comment \"the parameter byte is optional\" (6756074d978, #16204). I dropped the other auditor's retained sentence \"Nothing here changes behaviour for a host that uses text mode\": upstream's draw_text_scanline now guards every write with `cliprect.contains(sox + x, y)` while this copy writes through `uint16_t *p = &bitmap.pix(y)` unguarded, so that sentence is no longer safe to assert. The consumer list is corrected from `git grep -l 'SED1330(' upstream/master -- 'src/mame/*'`, which returns six drivers, not the four named.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/cpu/tlcs900/tmp95c061.h",
+  "line": 5,
+  "old": "    OVERLAY COPY (kn7000_mame).  Upstream's header, plus SERIAL CHANNEL 1 at\n    BYTE GRANULARITY.  The .cpp beside it is also an overlay copy; keep both\n    diffs small and keep them together.\n\n    Why the addition exists: upstream's tmp95c061 has no serial engine at all.\n    sc1buf_r() returns 0, sc1buf_w() only fakes \"transmit complete\" by setting\n    INTES1 bit 7, and nothing anywhere sets INTES1 bit 3, so INTRX1 can never\n    be raised.  It cannot be worked around from a driver either -- inte_w()\n    PRESERVES bit 3 when a 1 is written to it (tmp95c061.cpp, \"if (data & 0x08)\n    data = (data & 0xf7) | (m_int_reg[offset] & 0x08)\"), so a driver writing\n    INTES1 through the CPU's address space can CLEAR the INTRX1 request flag\n    but can never SET it, and INTRX1 is not one of the TLCS900_* input lines.",
+  "new": "    OVERLAY COPY (kn7000_mame).  SERIAL CHANNEL 1 at BYTE GRANULARITY, where\n    MAME's own header binds a full serial channel device.  The .cpp beside it is\n    also an overlay copy; the .h and the .cpp move together.\n\n    Why the byte-granularity channel is here: the tmp95c061 it was written\n    against had no serial engine.  sc1buf_r() returned 0, sc1buf_w() only faked\n    \"transmit complete\" by setting INTES1 bit 7, and nothing anywhere set\n    INTES1 bit 3, so INTRX1 could never be raised.  Nor could a driver work\n    around that -- inte_w() PRESERVES bit 3 when a 1 is written to it\n    (tmp95c061.cpp, \"if (data & 0x08) data = (data & 0xf7) | (m_int_reg[offset]\n    & 0x08)\"), so a driver writing INTES1 through the CPU's address space can\n    CLEAR the INTRX1 request flag but never SET it, and INTRX1 is not one of\n    the TLCS900_* input lines.\n\n    MAME has had a real tmp95c061 serial channel since #16204,\n    src/devices/cpu/tlcs900/tmp95c061_serial.{h,cpp}: it shifts bits at the\n    BRxCR rate once a driver binds txd(), and keeps byte granularity otherwise.\n    This copy predates it and carries the byte-granularity SC1 below.",
+  "why": "`git ls-tree upstream/master src/devices/cpu/tlcs900/` lists tmp95c061_serial.cpp and .h (\"TOSHIBA TLCS900 - TMP95C061 SERIAL CHANNEL\", copyright-holders:Felipe Sanches), whose header exposes `txd<N>()`/`tx_byte<N>()`/`rxd<N>()`/`rx_byte<N>()` and states the bit-rate/byte-granularity split quoted here; upstream's `sc1buf_r()` is `return m_serial[1]->scbuf_r();`, not \"returns 0\". Landed with 6756074d978 (#16204). This overlay .h also omits upstream's `#include \"tmp95c061_serial.h\"`, so it is the older fork, not \"upstream's header plus\".",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/cpu/tlcs900/tmp95c061.cpp",
+  "line": 125,
+  "old": "\t// OVERLAY FIX (kn7000_mame, 2026-08-25).  Internal address 0x12 is P6, and\n\t// its write side dispatched to port_w<PORT_7>, so every write to P6 landed\n\t// in PORT_7's latch and on the PORT_7 write callback.  Two consequences on\n\t// the Technics SX-WSA1R: the serial EEPROM's chip select, which prom_c\n\t// drives with `set 5,(P6)` / `res 5,(P6)`, never reached a port6_write()\n\t// handler at all; and CPU 1's `ldio P6,0x1B` (prom_a 0xF826AF) clobbered\n\t// the driver's shadow of the inter-processor link handshake on P7.  See\n\t// src/mame/matsushita/wsa1.cpp.  The rest of this file is upstream's; keep\n\t// the diff to this one line.",
+  "new": "\t// This P6 mapping began as an overlay fix (kn7000_mame, 2026-08-25) and is in\n\t// MAME itself as of #16204.  Internal address 0x12 is P6, and its write side\n\t// dispatched to port_w<PORT_7>, so every write to P6 landed in PORT_7's latch\n\t// and on the PORT_7 write callback.  Two consequences on the Technics\n\t// SX-WSA1R: the serial EEPROM's chip select, which prom_c drives with\n\t// `set 5,(P6)` / `res 5,(P6)`, never reached a port6_write() handler at all;\n\t// and CPU 1's `ldio P6,0x1B` (prom_a 0xF826AF) clobbered the driver's shadow\n\t// of the inter-processor link handshake on P7.  See\n\t// src/mame/matsushita/wsa1.cpp.",
+  "why": "Upstream/master's tmp95c061.cpp line 118 already reads `map(0x000012, 0x000012).rw(FUNC(tmp95c061_device::port_r<PORT_6>), FUNC(tmp95c061_device::port_w<PORT_6>));`, and `git log -S` on that exact line returns 6756074d978 (#16204). \"The rest of this file is upstream's; keep the diff to this one line\" also contradicts the six OVERLAY FIX 1-6 blocks now in the file and its 669-line diff against upstream.",
+  "severity": "minor",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/README.md",
+  "line": 10,
+  "old": "| mn10300-01-dasm-f4-length.patch | cpu/mn10300 | disassembler: the F4 page is **2 bytes**, not 1 \u2014 `disassemble_f4` reads `opcodes.r8(pc + 1)` and prints its operands but returns length 1, so linear disassembly desynchronises after every F4 and invents 1-2 phantom instructions before resyncing. One-character fix (`return 2 | SUPPORTED;`); every sibling F-page handler (f0/f1/f2/f3/f5/f6) already returns 2. |",
+  "new": "| mn10300-01-dasm-f4-length.patch | cpu/mn10300 | **Merged as #16190.** Disassembler: the F4 page is **2 bytes**, not 1 \u2014 `disassemble_f4` read `opcodes.r8(pc + 1)` and printed its operands but returned length 1, so linear disassembly desynchronised after every F4 and invented 1-2 phantom instructions before resyncing. One-character fix (`return 2 | SUPPORTED;`), which is what upstream `mn103dasm.cpp` now ends `disassemble_f4` with; every sibling F-page handler (f0/f1/f2/f3/f5/f6) already returned 2. |",
+  "why": "The file's opening line calls this directory \"the single index of everything staged for upstream MAME\", so a present-tense entry reads as unsubmitted. `git show upstream/master:src/devices/cpu/mn10300/mn103dasm.cpp` line 342 is `return 2 | SUPPORTED;` inside `disassemble_f4`, put there by 6efbfe9427f \"cpu/mn10300: Fix instruction length for the F4 page (#16190)\".",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/README.md",
+  "line": 12,
+  "old": "`mn10300-01` is a standalone one-liner, independent of the SHARC series, and applies cleanly to the\npristine mn103dasm.cpp in kn7000_mame_build (verified 2026-07-20 with `patch --dry-run -p1`).\nConcrete misread cited in the commit message: KN7000 firmware 0x484357C7 `f4 02` + `fa c8 f5 00`\ncomes out as three instructions instead of two. 3,440 F4 instructions in that ROM's main code\nregion alone; this bug has bitten the kn7000_disassembly CONVERT track nine times, and\n`kn7000_disassembly/tools/dis_view.py` exists only to work around it. Submission is Felipe's.",
+  "new": "`mn10300-01` was a standalone one-liner, independent of the SHARC series, and is upstream as\n#16190: `disassemble_f4` now returns `2 | SUPPORTED`. It applied cleanly to the then-pristine\nmn103dasm.cpp in kn7000_mame_build (verified 2026-07-20 with `patch --dry-run -p1`).\nConcrete misread cited in the commit message: KN7000 firmware 0x484357C7 `f4 02` + `fa c8 f5 00`\ncame out as three instructions instead of two. 3,440 F4 instructions in that ROM's main code\nregion alone; the bug bit the kn7000_disassembly CONVERT track nine times, and\n`kn7000_disassembly/tools/dis_view.py` exists to work around it.",
+  "why": "\"Submission is Felipe's\" names an action already taken: upstream/master's `disassemble_f4` ends `return 2 | SUPPORTED;` via 6efbfe9427f (#16190). I kept the other auditor's re-tensing but restored the dated `patch --dry-run -p1` verification they deleted, re-tensed so it reads as the record it is; the 3,440 count, the 0x484357C7 misread and the nine CONVERT hits are all kept.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/README.md",
+  "line": 99,
+  "old": "- SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), circular-buffer wrap off-by-one\n  (`>` vs `>=`: TRM-correct but changes the KN7000 reverb by 2 samples \u2014 held), AVG/SSFR rounding,\n  FIX-overflow UB, pre-modify circular wrap: all catalogued with TRM citations.",
+  "new": "- SET/TOGGLE-ASTAT bit emission in the DRC (fork addition), AVG/SSFR rounding, FIX-overflow UB,\n  pre-modify circular wrap: all catalogued with TRM citations.  The circular-buffer wrap\n  off-by-one (`>` vs `>=`, which changes the KN7000 reverb by 2 samples) is upstream as #16016\n  and ported into the overlay by 34ba4ef.",
+  "why": "This sits under \"Not included ... want a maintainer's call\", but the fix is merged: `git show 666893f2eb9` is \"cpu/sharc: Fixed off-by-one errors in circular buffer wrapping. (#16016)\", changing `>` to `>=` in `UPDATE_CIRCULAR_BUFFER_{PM,DM}` (sharcops.hxx) and the mirrored branch conditions in sharcdrc.cpp. Overlay commit 34ba4ef, \"sharc: port the circular-buffer wrap fix from upstream #16016\", ports the same lines. The 2-sample measurement is kept.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/README.md",
+  "line": 109,
+  "old": "> **the IC14 rhythm-ROM correction**, which is not in patches 01\u201330 at all and is priority 1.\n> Upstream currently ships the scrambled IC14 dump as if it were good.",
+  "new": "> **the IC14 rhythm-ROM correction**, which is not in patches 01\u201330 at all and was priority 1.\n> That correction is upstream as #15878: MAME's IC14 record names the corrected image, CRC\n> `aa4917ce` / SHA1 `fef7f1927935d8fdada2afbdbfac29aac56e1c3c`, not the scrambled read's\n> `e4b572d3...`.",
+  "why": "Upstream/master's kn5000.cpp declares `ROM_LOAD(\"kn5000_rhythm_data_rom.ic14\", 0x000000, 0x400000, CRC(aa4917ce) SHA1(fef7f1927935d8fdada2afbdbfac29aac56e1c3c))`, put there by 8789d0f0d48 \"KN5000: Make `Feature Presentation` demo run (#15878)\". The sibling PR-DRAFT-kn5000-ic14.md already carries a \"\u2705 MERGED 2026-08-17\" banner and records the same hash change, so this line contradicts its own directory.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/PR-DRAFT-kn5000-tempo-wheel.md",
+  "line": 3,
+  "old": "**Status:** READY, not yet submitted.",
+  "new": "**Status:** \u2705 MERGED as https://github.com/mamedev/mame/pull/15919 \u2014 \"kn5000: emulate the\nTEMPO/PROGRAM data wheel\", upstream `13fd3ea396a`.  Kept for the reasoning trail.",
+  "why": "Upstream/master's kn5000.cpp carries the wheel as an `IPT_POSITIONAL` named \"Tempo / Program Data Wheel\" plus the `PORT_ADJUSTER(50, ...)` drag control, which is what this draft describes; `git log --grep 15919` gives 13fd3ea396a, authored from branch `kn5000_tempo_program_wheel` (now `MERGED_kn5000_tempo_program_wheel_PR15919`) -- the branch this file's line 4 names. Banner wording mirrors PR-DRAFT-kn5000-ic14.md's.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/PR-DRAFT-technics-rom-record.md",
+  "line": 3,
+  "old": "**Status:** READY, not yet submitted.",
+  "new": "**Status:** \u2705 MERGED as https://github.com/mamedev/mame/pull/15911 \u2014 \"matsushita/kn7000.cpp:\nadd ROM records for the Technics SX-KN series\", upstream `1b1ec018340`.  Kept for the reasoning\ntrail.",
+  "why": "Upstream/master has src/mame/matsushita/kn7000.cpp declaring all five machines this draft lists (CONS lines for kn6000, kn2400, kn2600, kn6500, kn7000) with mame.lst entries under `@source:matsushita/kn7000.cpp`; `git log --grep 15911` gives 1b1ec018340. The draft's own line 37 marks KN1500 \"Deliberately excluded\", so nothing it describes is left unmerged.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/PR-PLAN-2026-08-11.md",
+  "line": 41,
+  "old": "| 1 | **IC14 rhythm ROM: correct the address-line transposition** \u2705 *branch ready* | 2 lines | \u2014 | two thirds of the factory rhythms stop being broken |\n| 2 | **PROGRAM/DATA wheel** | ~100 lines | \u2014 | turn the wheel, the on-screen tempo changes |",
+  "new": "| 1 | **IC14 rhythm ROM: correct the address-line transposition** \u2705 *merged, #15878* | 2 lines | \u2014 | two thirds of the factory rhythms stop being broken |\n| 2 | **PROGRAM/DATA wheel** \u2705 *merged, #15919* | ~100 lines | \u2014 | turn the wheel, the on-screen tempo changes |",
+  "why": "Row 1: upstream/master's IC14 record names the corrected image's SHA1 fef7f19..., put there by 8789d0f0d48 (#15878). Row 2: upstream/master's kn5000.cpp carries the positional data wheel, put there by 13fd3ea396a (#15919). Rows 3-11 are untouched; I re-checked that none of them is upstream (no kn5000_tonegen in `git ls-tree`, FDC lines still `//FIXME:`, no clear_int0_level in upstream tmp94c241.cpp).",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/PR-PLAN-2026-08-11.md",
+  "line": 68,
+  "old": "**Status: prepared.** Branch `kn5000_ic14_transposed_dump` off `upstream/master` @ `a4f77431604`,\nworktree `~/compartilhado/mame-pr-ic14`, commit `40ce9f12b5e` (2-line diff, authored as Felipe).",
+  "new": "**Status: the IC14 correction is upstream as #15878**, merged 2026-08-17 and squashed onto\n`8789d0f0d48`; it went out together with three other kn5000 fixes, from branch\n`kn5000_make_feature_presentation_demo_run`.  The IC14-only branch prepared here stands beside it:\n`kn5000_ic14_transposed_dump` off `upstream/master` @ `a4f77431604`, worktree\n`~/compartilhado/mame-pr-ic14`, commit `40ce9f12b5e` (2-line diff, authored as Felipe).",
+  "why": "The other auditor's replacement said the PR \"went out from branch `kn5000_ic14_transposed_dump`\", which is false and would plant a wrong attribution. `git show --stat 8789d0f0d48` is \"KN5000: Make `Feature Presentation` demo run (#15878)\" over tmp94c241.cpp + kn5000.cpp, and the sibling PR-DRAFT-kn5000-ic14.md names its branch `kn5000_make_feature_presentation_demo_run` (four commits, \"four fixes\"); `git branch -a` has `MERGED_kn5000_feature_presentation_demo_PR15878` and `remotes/origin/kn5000_make_feature_presentation_demo_run`, and no `kn5000_ic14_transposed_dump` at all. The prepared IC14-only branch and its commit id are kept as the record they are.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/upstream-patches/PR-PLAN-2026-08-11.md",
+  "line": 73,
+  "old": "**What upstream has today.** MAME already declares IC14 as a single, flat, unflagged load:",
+  "new": "**What upstream had before this PR.** MAME declared IC14 as a single, flat, unflagged load:",
+  "why": "The code block immediately below quotes `CRC(76d11a5e) SHA1(e4b572d3...)` as what upstream declares \"today\"; upstream/master now declares `CRC(aa4917ce) SHA1(fef7f19...)`. Re-tensing keeps the scrambled hash as the evidence of what was fixed and drops the false present-tense claim.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/sharc-upstream-patch-series.md",
+  "line": 38,
+  "old": "## C. Correctness fixes \u2014 identified, NOT yet applied (low-risk, want a MAME A/B first)",
+  "new": "## C. Correctness fixes \u2014 item 1 is applied and upstream; 2-5 identified, not applied (want a MAME A/B first)",
+  "why": "Item 1 under this heading (circular-buffer wrap off-by-one) is upstream as 666893f2eb9, \"cpu/sharc: Fixed off-by-one errors in circular buffer wrapping. (#16016)\", and ported into the overlay by 34ba4ef. Items 2-5 (pre-modify wrap, AVG rounding, SSFR rounding, FIX-overflow UB) are the rest of the section and are still unapplied.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/sharc-upstream-patch-series.md",
+  "line": 47,
+  "old": "   \u2605 VERIFIED + APPLIED-then-REVERTED 2026-07-11: the fix builds clean on both engines and the reverb\n   WAV changes by exactly **2 samples / 2,112,002** (a single note) -- so the KN7000 reverb delay\n   lines DO hit the exact boundary (the earlier \"unchanged\" belief was WRONG). The change is\n   TRM-correct and inaudible on this test, but it MODIFIES the user-praised reverb, and denser/longer\n   tails could differ by more, so it was reverted pending Felipe's OK rather than shipped unsupervised\n   (rule g). READY TO RE-APPLY in one edit (both files, identical `>=`/`COND_L` change) when approved\n   -- it is a genuine correctness fix. Both engines must be changed together to keep DRC==interpreter.",
+  "new": "   \u2605 VERIFIED 2026-07-11: the fix builds clean on both engines and the reverb WAV changes by exactly\n   **2 samples / 2,112,002** (a single note) -- so the KN7000 reverb delay lines DO hit the exact\n   boundary (the earlier \"unchanged\" belief was WRONG). It is TRM-correct and inaudible on this test,\n   and it MODIFIES the user-praised reverb, which is why it sat here for a round under rule g.\n   \u2605 It is **upstream as #16016** (\"cpu/sharc: Fixed off-by-one errors in circular buffer wrapping\",\n   666893f2eb9, both engines) and **ported into the overlay by 34ba4ef** -- two comparisons in\n   sharcops.hxx and the four branch conditions that mirror them in sharcdrc.cpp, so DRC and\n   interpreter still agree.",
+  "why": "\"READY TO RE-APPLY ... when approved\" describes work done twice over. `git show 666893f2eb9` is the merged upstream fix (`>` to `>=` in both UPDATE_CIRCULAR_BUFFER macros; COND_LE/COND_G to COND_L/COND_GE in the DRC), and overlay commit 34ba4ef, \"sharc: port the circular-buffer wrap fix from upstream #16016\", states \"Two comparisons in sharcops.hxx and the four branch conditions that mirror them in sharcdrc.cpp\". The 2-sample measurement is kept; I dropped the other auditor's \"held out ... because\" phrasing, which reads as the \"we did not do X because Y\" form Felipe has asked twice to avoid.",
+  "severity": "misleads-a-reader",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/cpu/mn10300/mn10300_insn_length.h",
+  "line": 65,
+  "old": "\tcase 0xF4: case 0xF5: case 0xF6: return 2;   // (F4 really is 2; unidasm bug says 1)",
+  "new": "\tcase 0xF4: case 0xF5: case 0xF6: return 2;   // (F4 really is 2; MAME's dasm agrees since #16190)",
+  "why": "The parenthetical tells a reader MAME's disassembler still disagrees with this table, which would make them distrust correct unidasm output. `git show upstream/master:src/devices/cpu/mn10300/mn103dasm.cpp` ends `disassemble_f4` with `return 2 | SUPPORTED;` (line 342), merged as 6efbfe9427f (#16190), and kn7000-base is rebased onto that master, so this build's unidasm has the fix.",
+  "severity": "minor",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/boot-performance-and-clock.md",
+  "line": 28,
+  "old": "(Caveat on tooling: `unidasm` mis-decodes MN10300 opcode 0xF4 `movbu (di,am),dn`\nas 1 byte instead of 2, desyncing addresses after it -- so the loop's internal\ndisassembly is unreliable; the measurements above come from live execution.)",
+  "new": "(Caveat on tooling: the measurements above come from live execution, not from\ndisassembly -- `unidasm` mis-decoded MN10300 opcode 0xF4 `movbu (di,am),dn` as 1\nbyte instead of 2 and desynced addresses after it, so the loop's internal\ndisassembly was unreliable.  MAME returns the correct length 2 since #16190.)",
+  "why": "Present tense makes this read as live tooling advice. Upstream/master's `disassemble_f4` returns `2 | SUPPORTED` (6efbfe9427f, #16190), so unidasm no longer desyncs. The provenance of the measurements -- live execution, not disassembly -- is kept and moved to the front, where it is the part that still matters.",
+  "severity": "minor",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "notes/splash-green-palette-bug.md",
+  "line": 66,
+  "old": "- the load executes but via an aliased address / an instruction the core\n  mis-runs (watch for the unidasm 0xF4 desync in that routine).",
+  "new": "- the load executes but via an aliased address / an instruction the core\n  mis-runs.",
+  "why": "This is forward-looking instruction for whoever picks the bug up (\"Candidates to chase next tick\"), so \"watch for the unidasm 0xF4 desync\" sends them hunting a tool bug that no longer exists: upstream/master's mn103dasm.cpp returns length 2 for the F4 page (#16190). The hypothesis itself is unaffected and stays.",
+  "severity": "minor",
+  "_cluster": "merged-prs",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 11,
+  "old": "    kn2600 and kn1500.  A second, deliberately smaller copy of this file is\n    the one offered upstream: it sits on the branch `technics-wsa1` in the\n    MAME checkout, and it carries only the two processors, the clock and the\n    part of the memory map that is evidence-complete enough to submit.\n\n    The two files WILL DIVERGE, and that is intentional.  Everything added\n    here beyond the upstream copy is work in progress: the LCD controller and\n    its screen, the link between the two processors, the 61-key keybed scanner\n    and the calibration EEPROM on the second processor, and a set of largely\n    write-only register-file stubs for the rest of that processor's chip-select\n    zero cluster.  Several of those rest on inferences that a MAME reviewer\n    would rightly refuse until a schematic or a real machine confirms them,\n    and each such inference is marked where it is made.  Do not treat this\n    file as the submission candidate, and do not \"sync\" one from the other\n    mechanically -- move a piece across only once its evidence is complete.",
+  "new": "    kn2600 and kn1500.  A smaller copy of this file is in MAME proper: it merged\n    as PR #16204, upstream commit 6756074d978, and that copy carries the two\n    processors, the clock, the LCD controller and its screen, the floppy\n    controller, the link between the two processors, the calibration EEPROM, the\n    control panel, the tone generator and the two unnamed register files, plus\n    skeletons for the L7A1429 and the three uPD6383GF DSPs.\n\n    The two files WILL DIVERGE, and that is intentional.  What this one adds\n    beyond the merged copy is work in progress: the SX-WSA1 keyboard as a second\n    system behind the PB.0 model strap, a real 61-key keybed scanner where the\n    merged copy has an empty queue, the L7A1429 model in acoustic_modeling.cpp\n    where it has a 19-line register-file skeleton, the real uPD6383 core behind\n    WSA1R_ENABLE_DSP, and the ATA task file at 0x7E0008.  Several of those rest\n    on inferences that a MAME reviewer would rightly refuse until a schematic or\n    a real machine confirms them, and each such inference is marked where it is\n    made.  Do not treat this file as the submission candidate, and do not \"sync\"\n    one from the other mechanically -- move a piece across only once its evidence\n    is complete.",
+  "why": "Both factual claims are false. (1) The branch is gone: `git branch -a --list \"*technics-wsa1*\"` in ~/compartilhado/mame returns only MERGED_technics-wsa1_via_PR16204 and MERGED_technics-wsa1-driver_PR16204, and `git log upstream/master --grep=wsa1 -i` gives 6756074d978 \"Technics WSA1R driver (rack-mount version of WSA1) (#16204)\". (2) Upstream's copy is not \"only the two processors, the clock and the part of the memory map\": upstream/master:src/mame/matsushita/wsa1.cpp includes video/sed1330.h, machine/upd765.h, machine/eepromser.h, wsa1r_cpanel.h and wsa1_tonegen.h (lines 52-60), declares required_device<sed1330_device>/<upd765a_device>/<eeprom_serial_93cxx_device>/<wsa1r_cpanel_device>/<wsa1_tonegen_device>/<l7a1429_device> (146-154), instantiates UPD6383 three times (699-701), maps cpu1_link_r/cpu2_link_r (561, 578) and both chanreg files (567, 594). Each overlay-only item was counted against upstream's file: 0x7E0008 0 hits, acoustic_modeling 0, \"61-key\" 0, and its keybed_w is `void keybed_w(uint16_t data) { }   // the firmware arms the queue; nothing to arm` at line 180. The strap exists upstream only hard-wired (`data &= ~0x01; // PB.0 low: the rack`, line 433) with empty_init and one SYST line, so the SECOND SYSTEM is the addition. The L7A1429 clause is stated as a comparison rather than as an absence, because upstream's l7a1429_device (lines 73-101) is itself a register file; the overlay's acoustic_modeling.{cpp,h} is 457+380 lines against those 19.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "not-applied",
+  "not_applied_because": "its anchor no longer existed (that region had been rewritten earlier the same day)"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 224,
+  "old": "    covers the rack module only.  A keyboard version of this instrument\n    exists, the SX-WSA1, and it is not declared in this driver: the only claim\n    that it runs the same ROM set is the redistributor's, and no SX-WSA1\n    material was available here to check it against.",
+  "new": "    covers the rack module only.  The keyboard version, the SX-WSA1, is declared\n    here too, as a clone of wsa1r sharing its ROM definitions, and the claim that\n    it runs the same ROM set is no longer only the redistributor's: first-hand\n    testimony recorded on 2026-09-21 says the keyboard ships the exact same set,\n    and the firmware picks the model from the PB.0 strap read once at reset\n    rather than from a different image.  No SX-WSA1 service material was\n    available here, so every citation in the inventory below is the rack's.",
+  "why": "\"it is not declared in this driver\" is contradicted by this same file 4100 lines later: line 4343 is `SYST(1995, wsa1,  wsa1r,  0,      wsa1,    wsa1,  wsa1_state, init_wsa1,  \"Technics\", \"SX-WSA1\",  ...)`, line 4309 is `#define rom_wsa1 rom_wsa1r` and line 4324 is `void wsa1_state::wsa1(machine_config &config)`. \"the only claim ... is the redistributor's\" is also no longer true: memory/wsa1-keyboard-and-rack-same-roms.md records first-hand hardware testimony of 2026-09-21 -- \"The keyboard used the exact same ROMs as the rack-mount version\" -- together with the decode that RAM (0xC4) is loaded from PORT B bit 0 once at reset and selects between the feature tables at 0xF4FE6A (keyboard) and 0xF4FE76 (rack). The paragraph was inherited verbatim from the pre-merge copy that declared wsa1r only (upstream/master still carries it, its SYST at line 835) and was never updated when the second SYST line was added. Deliberately NOT attributed to a named owner of both boxes: the testimony establishes the ROM identity, not who owns an SX-WSA1 keyboard.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 299,
+  "old": "      - the three D6383GF-3BA DSPs (IC5, IC6, IC30) have no MAME device and no\n        model here.  Their host bus is fully mapped -- see the block comment\n        above cpu2_p9_r() -- so the byte stream CPU 2 uploads to them is\n        visible and goes nowhere.  (The M37471M2196S panel MCU is HLE'd in\n        wsa1_cpanel.cpp.  The uPD72070 has no MAME device of its own either,\n        but the family does -- the driver instantiates upd765a_device and says\n        at the code why that is the right member of it.)",
+  "new": "      - the three D6383GF-3BA DSPs (IC5, IC6, IC30) have a device here, the\n        uPD6383 core in src/devices/cpu/upd6383/, instantiated when\n        WSA1R_ENABLE_DSP is set.  The core is held out of execution even then,\n        because the instruction set is not measured-decoded.  Their host bus is\n        fully mapped -- see the block comment above cpu2_p9_r() -- so the byte\n        stream CPU 2 uploads lands in a real, addressable I-RAM that can be\n        checked against the static microcode, and produces no audio.  Finish the\n        measured decode and the switch can default on.  (The M37471M2196S panel\n        MCU is HLE'd in wsa1_cpanel.cpp.  The uPD72070 has no MAME device of its\n        own, but the family does -- the driver instantiates upd765a_device and\n        says at the code why that is the right member of it.)",
+  "why": "\"have no MAME device and no model here\" is contradicted three times in this same file: line 328 `#include \"cpu/upd6383/upd6383.h\"`, line 690 `optional_device_array<upd6383_device, 3> m_dsp;`, and lines 3835-3847, which instantiate all three with `UPD6383(config, dsp, 33.8688_MHz_XTAL)` plus an AS_DELAY map under `#if WSA1R_ENABLE_DSP`. The overlay owns the core at src/devices/cpu/upd6383/ (upd6383.cpp, upd6383d.cpp, upd6383.h, upd6383d.h). The switch defaults to 0 (lines 325-327), which the replacement states rather than hides. Upstream's merged copy also defines a upd6383_device skeleton (line 106) and instantiates dsp1/dsp2/dsp3 (699-701), so the claim is false on both sides. \"either\" after uPD72070 loses its antecedent once the first clause is corrected, hence the one-word change there.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 3856,
+  "old": "\t// \u26a0 THE SERIAL CHANNEL AND INT6 BOTH REQUIRED CORE WORK, and the overlay copy\n\t// of tmp95c061 carries it: upstream's device has no serial engine at all\n\t// (sc1buf_r() returned 0, nothing ever set INTES1 bit 3, so INTRX1 could not\n\t// be raised from outside and inte_w() refuses to set it from a register\n\t// write), and execute_set_input() implemented neither INT6 nor INT7, so\n\t// set_input_line(TLCS900_INT6) was silently a no-op.  Both additions are\n\t// default-inert for every other tmp95c061 machine.",
+  "new": "\t// \u26a0 THE SERIAL CHANNEL AND INT6 BOTH REQUIRED CORE WORK, and both are in MAME\n\t// proper now: tmp95c061 owns a serial device per channel (tmp95c061_serial.cpp,\n\t// a required_device_array of two) with SC0BUF and SC1BUF routed to it, so\n\t// INTRX1 can be raised from outside, and execute_set_input() dispatches INT6\n\t// (INTE67 bit 3, vector 0x34) and INT7 (bit 7, vector 0x38), so\n\t// set_input_line(TLCS900_INT6) reaches the interrupt controller.  Both are\n\t// default-inert for every other tmp95c061 machine.  The entry points differ:\n\t// this copy keeps byte-granular sc1_rxd() / sc0_rxd() where the merged one\n\t// takes rxd<N>() / rx_byte<N>().",
+  "why": "\"upstream's device has no serial engine at all\" is false. `git ls-tree upstream/master src/devices/cpu/tlcs900/` lists tmp95c061_serial.cpp and tmp95c061_serial.h; upstream/master:tmp95c061.h line 10 includes it and line 191 declares `required_device_array<tmp95c061_serial_device, 2> m_serial;` with rxd<N>()/rx_byte<N>()/txd<N>()/tx_byte<N>() at 54-57; tmp95c061.cpp lines 1173-1187 route sc0buf_r/w, sc0cr, sc0mod, br0cr and sc1buf_r/w to `m_serial[N]`. INT6/INT7 are implemented as rising-edge inputs at lines 928-937, with the `{ INTE67, 0x80, 0x38 }` / `{ INTE67, 0x08, 0x34 }` rows at 335-336. That work reached upstream with #16204 (6756074d978). The API difference is the part that is still real, so it is what the comment now states; the overlay's entry points are declared at src/devices/cpu/tlcs900/tmp95c061.h:80,86.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 4233,
+  "old": "\tROM_LOAD(\"qsigcwsa1bx.ic13\", 0x000000, 0x080000, CRC(f3f84441) SHA1(93adec2a04b7d93a2ec2bfb059227ff3959906e0)) // B, at 0xf00000",
+  "new": "\tROM_LOAD(\"qsigcwsa1bx_v2.ic13\", 0x000000, 0x080000, CRC(f3f84441) SHA1(93adec2a04b7d93a2ec2bfb059227ff3959906e0)) // B, at 0xf00000",
+  "why": "upstream/master:src/mame/matsushita/wsa1.cpp:781 is the same record named qsigcwsa1bx_v2.ic13 with the SAME CRC(f3f84441) SHA1(93adec2a04b7d93a2ec2bfb059227ff3959906e0), so this is a label change over unchanged bytes: `sha1sum ~/compartilhado/technics_roms/roms/wsa1/wsa1_os_v2.ic13` = 93adec2a04b7d93a2ec2bfb059227ff3959906e0. The divergence is a recorded defect, not a preference: notes/overlay-upstream-sync/PLAN-2026-09-26.md, under step 5, says \"The overlay's wsa1.cpp names the four program ROMs without the _v2 suffix that upstream's merged #16204 uses ... belongs with the step 6 sweep\". Build-safe: /home/fsanches/compartilhado/kn7000-emulator/roms/wsa1r/ holds both qsigcwsa1bx.ic13 and qsigcwsa1bx_v2.ic13 as symlinks to that one file (the _v2 set dated 2026-09-22), and `grep -rl qsigcwsa1` shows no script in the tree that generates those symlinks, so nothing recreates the old names. \u26a0 ATOMIC GROUP: ship with the three sibling ROM_LOADs, the 4258 comment, notes/wsa1-probes/README.md and tools/wsa1r-sysex-monitor/midi_roundtrip.sh in ONE commit.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 4234,
+  "old": "\tROM_LOAD(\"qsigcwsa1ax.ic12\", 0x080000, 0x080000, CRC(5f34af46) SHA1(90a2369f8e4d2fcdf26875272267624b07bc200d)) // A, at 0xf80000",
+  "new": "\tROM_LOAD(\"qsigcwsa1ax_v2.ic12\", 0x080000, 0x080000, CRC(5f34af46) SHA1(90a2369f8e4d2fcdf26875272267624b07bc200d)) // A, at 0xf80000",
+  "why": "upstream/master:src/mame/matsushita/wsa1.cpp:782 carries qsigcwsa1ax_v2.ic12 with the identical CRC(5f34af46) SHA1(90a2369f8e4d2fcdf26875272267624b07bc200d); `sha1sum ~/compartilhado/technics_roms/roms/wsa1/wsa1_os_v2.ic12` = 90a2369f8e4d2fcdf26875272267624b07bc200d. Same bytes, same hash, label only; no provenance statement is touched. Upstream's own rationale for the suffix is at its lines 768-770: \"The OS v2.0 set.  A v1 OS shipped and is not dumped; whether it used different factory part numbers is not known, so the revision is carried in the file names rather than left to the part number.\" Both spellings are already symlinked in the working rompath.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 4245,
+  "old": "\tROM_LOAD(\"qsigcwsa1cx.ic28\", 0x000000, 0x080000, CRC(855c8ac4) SHA1(9b2911e4b21a08d9744b91844630489f54dde856)) // at 0xf80000",
+  "new": "\tROM_LOAD(\"qsigcwsa1cx_v2.ic28\", 0x000000, 0x080000, CRC(855c8ac4) SHA1(9b2911e4b21a08d9744b91844630489f54dde856)) // at 0xf80000",
+  "why": "upstream/master:src/mame/matsushita/wsa1.cpp:790 carries qsigcwsa1cx_v2.ic28 with the identical CRC(855c8ac4) SHA1(9b2911e4b21a08d9744b91844630489f54dde856); `sha1sum ~/compartilhado/technics_roms/roms/wsa1/wsa1_os_v2.ic28` = 9b2911e4b21a08d9744b91844630489f54dde856. Label only, and /home/fsanches/compartilhado/kn7000-emulator/roms/wsa1r/ already holds both spellings.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 4263,
+  "old": "\tROM_LOAD(\"qsigcwsa1dx.ic21\", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))",
+  "new": "\tROM_LOAD(\"qsigcwsa1dx_v2.ic21\", 0x000000, 0x080000, CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306))",
+  "why": "upstream/master:src/mame/matsushita/wsa1.cpp:799 carries qsigcwsa1dx_v2.ic21 with the identical CRC(735ae465) SHA1(82df50816c20cd8f2d29551326d2633e7791f306); `sha1sum ~/compartilhado/technics_roms/roms/wsa1/wsa1_os_v2.ic21` = 82df50816c20cd8f2d29551326d2633e7791f306. Label only, both spellings already symlinked. The IC21 designator is NOT in question and is unchanged -- sheet II-11/II-12 draws IC21 QSIGCWSA1DX beside the IC27 decoder, which upstream's own comment at line 798 repeats.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 4258,
+  "old": "\t// \u26a0 THE FILE WAS RENAMED on 2026-09-03, from qsigcwsa1dx.bin.  The\n\t// designator is legible after all -- sheet II-11/II-12 draws IC21\n\t// QSIGCWSA1DX beside the IC27 decoder, printed twice on that sheet -- and\n\t// it agrees with the name the redistributed set gives the image.",
+  "new": "\t// The designator is legible: sheet II-11/II-12 draws IC21 QSIGCWSA1DX beside\n\t// the IC27 decoder, printed twice on that sheet, and it agrees with the name\n\t// the redistributed set gives the image.  All four program images carry the\n\t// OS revision in their file names, because a v1 OS shipped, is not dumped,\n\t// and it is not known whether Technics gave it different factory part\n\t// numbers.",
+  "why": "Two reasons. (1) The paragraph documents this file's own edit history (\"THE FILE WAS RENAMED on 2026-09-03, from qsigcwsa1dx.bin\"), the form memory/state-what-was-done-not-what-was-avoided.md records Felipe asking be dropped; the evidence it carries -- sheet II-11/II-12, IC21, printed twice, agreeing with the redistributed set -- is kept word for word. (2) It becomes flatly wrong the moment the rename above lands, since the name would then be neither qsigcwsa1dx.bin nor qsigcwsa1dx.ic21. The replacement's last sentence is upstream's own rationale for the suffix, quoted from upstream/master:src/mame/matsushita/wsa1.cpp:768-770, so the two files then agree on why the name looks like that. \u26a0 Must ship in the same commit as the four ROM_LOAD renames.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/video/sed1330.h",
+  "line": 10,
+  "old": "    Stock MAME's sed1330_device leaves update_graphics() an empty\n    function body, so a host that puts the part in all-graphics mode\n    (OVLAY DM1 = DM3 = 1) drives a correctly-programmed but\n    permanently blank panel.  The Technics SX-WSA1R does exactly that,\n    so this copy implements it.  Three changes against upstream:\n\n      * update_graphics() is implemented (OR composition of pages 1,\n        2 and optionally 3);\n      * draw_graphics_scanline() gained a composition-op argument and a clamp\n        against the bitmap width;\n      * command_w() honours a bare DISP ON / DISP OFF with no\n        parameter byte, which the WSA1's panel init ends with;\n      * every scalar member has a default initialiser, so the frames\n        rendered before the host programs the chip cannot read\n        indeterminate geometry.\n\n    Nothing here changes behaviour for a host that uses text mode and\n    always sends the DISP parameter byte, which is every other\n    consumer of this device in tree.  Upstreaming these is a separate\n    job and would need pc8401a / pc8500 / textelcomp / psr2000\n    regression runs; none of those drivers is in this focused build.",
+  "new": "    All-graphics mode (OVLAY DM1 = DM3 = 1), which the Technics\n    SX-WSA1R programs, works in MAME proper as of PR #16204 (upstream\n    commit 6756074d978): update_graphics() composes pages 1, 2 and\n    optionally 3, draw_graphics_scanline() takes a composition-op\n    argument, and command_w() honours a bare DISP ON / DISP OFF with\n    no parameter byte, which the WSA1's panel init ends with.\n\n    Two differences are still only in this copy:\n\n      * every scalar member has a default initialiser, so the frames\n        rendered before the host programs the chip cannot read\n        indeterminate geometry;\n      * draw_graphics_scanline() clamps against bitmap.width(), where\n        the merged copy tests cliprect.contains() per pixel and so\n        also respects a partial cliprect.\n\n    Neither changes what a correctly-programmed host renders -- one\n    replaces indeterminate startup geometry with inert values, the\n    other only bounds the scanline -- and that covers every other\n    consumer of this device in tree.",
+  "why": "Three of the four bullets are upstream, all in the commit that merged the driver: `git log upstream/master -- src/devices/video/sed1330.cpp src/devices/video/sed1330.h` has 6756074d978 \"Technics WSA1R driver (#16204)\" as its newest entry. upstream/master:sed1330.cpp's update_graphics() has a full body (attr1/attr2/attr3 from m_fp, `std::min<int>(m_lf, bitmap.height())` lines, three draw_graphics_scanline calls at 696/702/707); command_w() lines 269-274 carry the bare DISP arm under \"the parameter byte is optional\"; sed1330.h:107-108 declare `static constexpr int LAYER_REPLACE = -1;` and `draw_graphics_scanline(..., int op = LAYER_REPLACE)`. What did NOT go up is the default initialisers -- upstream's header still has `int m_bf;` at line 51, only m_bf set in the constructor, device_reset() empty -- and the clamp, since upstream guards with `const int px = (sx * m_fx) + x; if (!cliprect.contains(px, y)) continue;`. I corrected the auditor's closing line: \"Neither changes behaviour\" is not true as written of the default initialisers, which do change what is rendered before the host programs the chip (from indeterminate to inert); the claim is restated as what it can actually support. The dropped final sentence is also a \"we did not do X because Y\" construction of the kind memory/state-what-was-done-not-what-was-avoided.md records, and is moot now that the work merged. The separate default-initialiser note at sed1330.h:77-81 is still accurate and is deliberately left alone.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "not-applied",
+  "not_applied_because": "its anchor no longer existed (that region had been rewritten earlier the same day)"
+ },
+ {
+  "file": "src/devices/video/sed1330.cpp",
+  "line": 273,
+  "old": "\t\t// The parameter byte is optional: a bare DISP ON / DISP OFF toggles the\n\t\t// display and leaves the FC / FP fields at whatever the last parameter\n\t\t// latched.  Upstream assigns m_d only inside data_w, so a host that\n\t\t// sends the bare form leaves the panel dark forever.  The Technics\n\t\t// SX-WSA1R's panel init ends with exactly that -- prom_a 0xF8E99A\n\t\t// ld (XIY+0x01),0x59 followed by RET.",
+  "new": "\t\t// The parameter byte is optional: a bare DISP ON / DISP OFF toggles the\n\t\t// display and leaves the FC / FP fields at whatever the last parameter\n\t\t// latched.  Assigning m_d here, and not only in data_w, is what lets a\n\t\t// host that sends the bare form light the panel at all.  The Technics\n\t\t// SX-WSA1R's panel init ends with exactly that -- prom_a 0xF8E99A\n\t\t// ld (XIY+0x01),0x59 followed by RET.",
+  "why": "\"Upstream assigns m_d only inside data_w\" is false. upstream/master:src/devices/video/sed1330.cpp lines 269-274 carry this exact arm in command_w(): `case INSTRUCTION_DISP_ON: case INSTRUCTION_DISP_OFF:` with the comment \"the parameter byte is optional; a bare command just toggles the display and leaves FC/FP as last latched\", then `m_d = BIT(m_ir, 0);` and the same LOG line. It merged in 6756074d978 (#16204). The evidence for why the branch is needed -- the WSA1R's prom_a 0xF8E99A init -- is kept verbatim.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/video/sed1330.cpp",
+  "line": 665,
+  "old": "\t// `op` is how this layer combines with what is already in the bitmap:\n\t// LAYER_REPLACE for the first layer drawn, and thereafter the composition\n\t// method the host selected in OVLAY (MX).  Previously every layer was OR-ed\n\t// unconditionally and m_mx was decoded, logged and then ignored -- so a\n\t// highlight plane that the host meant to INVERT the text under it painted a\n\t// solid block instead.\n\t//\n\t// The width clamp is a guard against a host that programs C/R wider than the\n\t// screen it was configured with -- upstream would write past the scanline.",
+  "new": "\t// `op` is how this layer combines with what is already in the bitmap:\n\t// LAYER_REPLACE for the first layer drawn, and thereafter the composition\n\t// method the host selected in OVLAY (MX).  Honouring MX is what makes a\n\t// highlight plane the host meant to INVERT the text under it come out as\n\t// inverse video instead of a solid block.\n\t//\n\t// The width clamp guards against a host that programs C/R wider than the\n\t// screen it was configured with.  The copy in MAME proper spends a\n\t// cliprect.contains() per pixel there instead, which also respects a partial\n\t// cliprect; this one stops the scanline at bitmap.width().",
+  "why": "\"upstream would write past the scanline\" is false: upstream/master:src/devices/video/sed1330.cpp guards the same loop with `// the character pitch need not divide the panel width` / `const int px = (sx * m_fx) + x;` / `if (!cliprect.contains(px, y)) continue;`, and its draw_graphics_scanline() already takes the op argument (`int op = LAYER_REPLACE` in upstream's sed1330.h:108). Both merged in 6756074d978 (#16204). The remaining difference is which guard is used, which the replacement states plainly -- worth stating, because upstream's is the stricter of the two and is where this copy should eventually move.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/devices/video/sed1330.cpp",
+  "line": 721,
+  "old": "\t// (m_mx).  This device used to OR unconditionally, which is why a host that\n\t// asked for exclusive-OR got solid blocks where it wanted inverse video.",
+  "new": "\t// (m_mx), so a host that asks for exclusive-OR gets inverse video rather than\n\t// solid blocks.",
+  "why": "Same point as the draw_graphics_scanline() note 50 lines above, in the retrospective form memory/state-what-was-done-not-what-was-avoided.md records Felipe asking be dropped, and \"used to\" no longer distinguishes this copy from anything: upstream/master's sed1330.cpp composes with MX too (draw_graphics_scanline's op switch, and update_graphics passing `first ? LAYER_REPLACE : m_mx` at lines 702 and 707), merged in 6756074d978 (#16204). No measurement is lost; the sentence carried none.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 32,
+  "old": "    (*) fc/8 for phiT1 is the firmware's own arithmetic.  MAME's tmp95c061\n    prescaler is a uniform factor of 16 slower than that, which costs boot time\n    but nothing else; the measurement and the reasoning are in the machine\n    configuration, next to the LCD.",
+  "new": "    (*) phiT1 = fc/8 is the part's own databook value, and this tree's tmp95c061\n    taps the 9-bit prescaler there (shifts 3/5/7/11); the footnote below gives\n    the table and the page, and the timer table in the machine configuration\n    carries the measured rates.",
+  "why": "\"MAME's tmp95c061 prescaler is a uniform factor of 16 slower than that\" is not true of this tree and is contradicted 160 lines later in this same file: lines 192-195 read \"MAME's tmp95c061 used to implement those taps 16x slower and to not count the 16-bit timers at all; both are fixed in src/devices/cpu/tlcs900/tmp95c061.cpp\". The overlay's src/devices/cpu/tlcs900/tmp95c061.cpp documents shifts 3/5/7/11 at lines 800-830 and has carried them since commit 8ec12c6 \"tmp95c061: real prescaler taps, and count the 16-bit timers\", 2026-08-25 18:16. The replacement also drops \"the firmware's own arithmetic\" in favour of the databook, which is the primary source the footnote at line 189 already cites (Toshiba TMP95C061, Table 3.8 (1) p.81, \"oT1 (8/fc) oT4 (32/fc) oT16 (128/fc) oT256 (2048/fc)\", re-checkable with notes/wsa1-probes/tlcs900_datasheet_quotes.py) -- not the firmware, whose 488.28 Hz derivation is circular. \u26a0 CLUSTER OVERLAP: lines 32, 37 and 42 are prescaler text; if the prescaler auditor covers them, take theirs, not both.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "not-applied",
+  "not_applied_because": "its anchor no longer existed (that region had been rewritten earlier the same day)"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 37,
+  "old": "    HOW FAR IT BOOTS, as measured on 2026-08-25 with the probes in\n    notes/wsa1-probes/ (each one names the question it answers):",
+  "new": "    HOW FAR IT BOOTS.  Measured on 2026-08-25 with the probes in\n    notes/wsa1-probes/ (each one names the question it answers), on a build whose\n    8-bit prescaler taps were the 16x slower ones, so every time below is longer\n    than this tree now takes and no single factor converts them.  The two\n    milestones re-measured against the databook taps are in the timer table in\n    the machine configuration: the first SED1330 write at t = 0.50 s, where the\n    walkthrough below has 7.21 s, and SWI7 text drawing at t = 19.62 s.  Every\n    ROM address below stands as measured; re-run the probes to restate the times:",
+  "why": "The walkthrough predates the tap correction and nothing has re-measured it. `git log -L 37,90:src/mame/matsushita/wsa1.cpp` shows its last four touches all on 2026-08-25, the newest 1a96510 at 12:09:24; the taps were corrected in 8ec12c6 at 18:16:18 the same day, six hours later, and no commit has touched the block since. The identity is exact rather than inferred: the walkthrough's \"t=7.21 s the SED1330 is initialised\" is the same event and the same number as the \"reverted\" column of the table at wsa1.cpp:4059-4062, whose \"fixed\" column reads 0.50 s; the same table gives SWI7 text drawing 72.24 s reverted / 19.62 s fixed. No number is deleted and none invented -- both post-fix figures already exist in this file -- and no single scale factor is claimed, because the measured ratios are not uniform (14.4x and 3.7x). I REMOVED the other auditor's claim that \"the ORDER of the milestones stands as measured\": it is unverified and probably false, since the walkthrough puts the panel link at 5.01 s BEFORE the SED1330 at 7.21 s while the post-fix SED1330 figure is 0.50 s. \u26a0 CLUSTER OVERLAP with the prescaler audit.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "src/mame/matsushita/wsa1.cpp",
+  "line": 42,
+  "old": "      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (it counts\n                at 30 Hz here - see the prescaler note in the machine config).",
+  "new": "      t=0.00 s  the 488 Hz timer tick at RAM 0x0080 starts counting (measured\n                at 488.3 Hz - see the timer table in the machine config).",
+  "why": "\"it counts at 30 Hz here\" is no longer true of this tree: the measurement table at wsa1.cpp:4059 reads \"INTT1 (RAM 0x0080 tick)    30.5 Hz         488.3 Hz   firmware wants 488.28\", reverted vs fixed, and the overlay's tmp95c061.cpp has carried the databook taps since 8ec12c6 (2026-08-25). The 488 Hz figure in the first half of the sentence is CORRECT and is left byte-for-byte as it stands; the replacement substitutes the measured rate for the stale one and does not use either number to argue anything about the tap scale. Pointer retargeted from \"the prescaler note\" to \"the timer table\", which is the block at 4058-4062 that carries the numbers. \u26a0 CLUSTER OVERLAP with the prescaler audit.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "not-applied",
+  "not_applied_because": "its anchor no longer existed (that region had been rewritten earlier the same day)"
+ },
+ {
+  "file": "notes/WSA1-EMULATION-DISASM-GAPS.md",
+  "line": 1412,
+  "old": "   unless firmware sets TRUN bits 4/5. `ngp` is the one to A/B and it is evidence *for* the change\n   -- SNK's own NGP developer manual says \"T16 is 128/fc. 6144000/128 = 48000hz\", which is this\n   scale and not upstream's. **`ngp` is not in this binary** (`-listfull` shows nine Technics\n   systems and nothing else), so that A/B cannot be run here. `tmp95c063.cpp` carries the identical\n   wrong shifts and is deliberately NOT changed.",
+  "new": "   unless firmware sets TRUN bits 4/5. `ngp` points the other way. The line \"T16 is 128/fc.\n   6144000/128 = 48000hz\" is byuu's, on NESdev thread 18579, restating Toshiba's own Table 3.8 (1)\n   rather than quoting a manual, and in that same thread mic_ reports a real-hardware measurement\n   of a phiT4 around 12 kHz = fc/512, which is upstream's value; upstream restored its own shifts\n   for that reason (#16255, user-confirmed). The thread is saved at\n   `notes/overlay-upstream-sync/ngp-evidence/`. **`ngp` is not in this binary** (`-listfull` shows\n   nine Technics systems and nothing else), so that A/B cannot be run here. `tmp95c063.cpp` carries\n   upstream's shifts and is deliberately NOT changed.",
+  "why": "MISSED BY THE OTHER AUDITOR, and it is the surviving twin of the citation withdrawn today. Two false claims. (1) The quote is not from \"SNK's own NGP developer manual\": the same retraction already applied in src/devices/cpu/tlcs900/tmp95c061.cpp:859-871 identifies it as byuu on NESdev thread 18579 (2019) writing \"if we go off of the dev manual, T16 is 128/fc\", a forum paraphrase whose four ratios are verbatim Toshiba Table 3.8 (1) -- so citing it beside the databook double-counts one source as two. (2) \"`ngp` ... is evidence *for* the change\" is the opposite of what that thread contains: mic_ reports timer 0, mode bits %10, TREG0 = 0x32 interrupting every ~12800 states at 3,072,000 states/s, a tap of 12 kHz = fc/512, upstream's value and not the databook's fc/32; upstream restored its shifts on that basis as #16255, which notes/overlay-upstream-sync/FINDINGS-2026-09-26.md records and which stays merged. \"the identical wrong shifts\" is also an overclaim now: the overlay's src/devices/cpu/tlcs900/tmp95c063.cpp carries 7/9/11/15, and tmp95c061.cpp's own comment calls those \"the same shifts upstream has here (taitopjc, taitotz)\" and deliberately leaves them.",
+  "severity": "misleads-a-reader",
+  "_cluster": "wsa1-rom-names",
+  "status": "not-applied",
+  "not_applied_because": "its anchor no longer existed (that region had been rewritten earlier the same day)"
+ },
+ {
+  "file": "notes/wsa1-probes/README.md",
+  "line": 13,
+  "old": "\u26a0 The ROM filenames in `technics_roms/roms/wsa1/` are `wsa1_os_v2.icNN`, but the\ndriver's `ROM_LOAD` names are the factory part numbers.  Stage a `roms/wsa1r/`\nwith these four links (CRC32s verified to match the driver):\n\n| link name          | file             | CRC32    |\n|--------------------|------------------|----------|\n| `qsigcwsa1ax.ic12` | `wsa1_os_v2.ic12`| 5f34af46 |\n| `qsigcwsa1bx.ic13` | `wsa1_os_v2.ic13`| f3f84441 |\n| `qsigcwsa1cx.ic28` | `wsa1_os_v2.ic28`| 855c8ac4 |\n| `qsigcwsa1dx.ic21` | `wsa1_os_v2.ic21`| 735ae465 |",
+  "new": "\u26a0 The ROM filenames in `technics_roms/roms/wsa1/` are `wsa1_os_v2.icNN`, but the\ndriver's `ROM_LOAD` names are the factory part numbers with the OS revision\nappended.  Stage a `roms/wsa1r/` with these four links (CRC32s verified to match\nthe driver):\n\n| link name             | file             | CRC32    |\n|-----------------------|------------------|----------|\n| `qsigcwsa1ax_v2.ic12` | `wsa1_os_v2.ic12`| 5f34af46 |\n| `qsigcwsa1bx_v2.ic13` | `wsa1_os_v2.ic13`| f3f84441 |\n| `qsigcwsa1cx_v2.ic28` | `wsa1_os_v2.ic28`| 855c8ac4 |\n| `qsigcwsa1dx_v2.ic21` | `wsa1_os_v2.ic21`| 735ae465 |",
+  "why": "MISSED BY THE OTHER AUDITOR (they listed it as out of scope). This is the staging instruction every probe in that README depends on -- \"Stage a roms/wsa1r/ with these four links\" -- so the moment the four ROM_LOAD renames land, following it produces a rompath MAME will reject. The four CRC32s and the wsa1_os_v2.icNN targets are unchanged and still correct: sha1sum of ~/compartilhado/technics_roms/roms/wsa1/wsa1_os_v2.ic{12,13,21,28} gives 90a2369f.../93adec2a.../82df5081.../9b2911e4..., matching the driver's SHA1s. The name column is widened by three characters so the table stays aligned. \u26a0 Must ship in the same commit as the four ROM_LOAD renames.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "tools/wsa1r-sysex-monitor/midi_roundtrip.sh",
+  "line": 54,
+  "old": "cp \"$OUT/patched_ic12.bin\" \"$OUT/roms/wsa1r/qsigcwsa1ax.ic12\"\nfor f in qsigcwsa1bx.ic13 qsigcwsa1cx.ic28 qsigcwsa1dx.ic21; do",
+  "new": "cp \"$OUT/patched_ic12.bin\" \"$OUT/roms/wsa1r/qsigcwsa1ax_v2.ic12\"\nfor f in qsigcwsa1bx_v2.ic13 qsigcwsa1cx_v2.ic28 qsigcwsa1dx_v2.ic21; do",
+  "why": "MISSED BY THE OTHER AUDITOR, and this one is functional, not prose. The script builds its own rompath from scratch at $OUT/roms/wsa1r -- `mkdir -p`, then `cp` the patched prom_a under one hard-coded name and `ln -sf` the other three -- so it does not benefit from the dual symlinks in kn7000-emulator/roms/wsa1r, and after the ROM_LOAD renames every one of its four MAME invocations fails to find a ROM. Renaming here keeps the committed harness working. (Its `STOCK` default, $HOME/compartilhado/kn7000_mame_build/roms/wsa1r, does not exist -- that tree has no wsa1r directory -- so the script already needs STOCK pointed at kn7000-emulator/roms/wsa1r, where both spellings are present; that is a separate pre-existing defect, not caused by this rename.) \u26a0 Must ship in the same commit as the four ROM_LOAD renames.",
+  "severity": "minor",
+  "_cluster": "wsa1-rom-names",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 12,
+  "old": "## 1. Copy the files in\n\n```\ncp -r src/devices/cpu/mn10300/mn10300.{h,cpp}  <mame>/src/devices/cpu/mn10300/\ncp    src/mame/matsushita/kn7000.cpp           <mame>/src/mame/matsushita/\n```\n\n`src/devices/cpu/mn10300/mn103dasm.{cpp,h}` (the disassembler) already exists in\nMAME and is reused unchanged.",
+  "new": "## 1. Copy the files in\n\nThe overlay is 58 files across nine directories, each already at the path it\noccupies inside MAME, so one recursive copy places them all:\n\n```\ncp -r src/. <mame>/src/\n```\n\n`build.sh` step 2 does the same with symlinks, one `ln -sf` per file, and that\nstep is the authoritative inventory: the CPU cores `mn10300/`, `sharc/`,\n`tlcs900/` and `upd6383/`, `machine/spi_sdcard`, `video/sed1330`,\n`bus/technics/kn5000/hdae5000`, the KN5000/KN6000/KN7000/KN1500 and SX-WSA1\ndrivers with their control-panel and tone-generator devices, and four layouts.\n29 of the 58 replace a file MAME already ships, so an upstream fix to one of\nthose is inert here until it is ported across \u2014\n`notes/overlay-upstream-sync/overlay_vs_upstream.sh` is the gate that catches it.\n\n`src/devices/cpu/mn10300/mn103dasm.{cpp,h}` (the disassembler) already exists in\nMAME and is reused unchanged.",
+  "why": "The inventory names 2 files. Measured: `git ls-files src/ | wc -l` = 58 and `grep -c '^ln -sf' build.sh` = 58, over the same nine directories -- mn10300 (3), sharc (5), tlcs900 (10), upd6383 (4), machine (2), video (2), bus/technics/kn5000 (1), mame/matsushita (27), mame/layout (4). Of the 58, exactly 29 also exist in the base tree (tested file-by-file against ~/compartilhado/mame at kn7000-base b6f2b32aa66, which has upstream/master 96016fbe55c as an ancestor), which is what makes notes/overlay-upstream-sync/overlay_vs_upstream.sh necessary; that script exists.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 44,
+  "old": "## 3. Register the driver\n\nAdd the KN7000 to `src/mame/mame.lst` (in the `matsushita` section, next to\n`kn5000`):\n\n```\nkn7000\n```\n\nand, if your MAME version uses per-folder source lists, ensure\n`src/mame/matsushita/kn7000.cpp` is picked up the same way `kn5000.cpp` is.",
+  "new": "## 3. Register the driver\n\nUpstream's `src/mame/mame.lst` already carries most of this overlay's systems, in\nthe `matsushita` section:\n\n```\n@source:matsushita/kn5000.cpp\nkn5000\n\n@source:matsushita/kn7000.cpp\nkn2400\nkn2600\nkn6000\nkn6500\nkn7000\n\n@source:matsushita/wsa1.cpp\nwsa1r\n```\n\nThe two it does not carry are `kn1500`, which gets its own\n`@source:matsushita/kn1500.cpp` block, and `wsa1`, listed under its `wsa1r`\nparent. `build.sh` step 4 inserts exactly those, testing for each system\nseparately so that a system upstream already lists is left untouched.",
+  "why": "~/compartilhado/mame/src/mame/mame.lst:27009-27025 (kn7000-base b6f2b32aa66, with upstream/master 96016fbe55c as an ancestor) already lists kn5000, the whole kn7000 block in the order kn2400/kn2600/kn6000/kn6500/kn7000, and wsa1r. Only kn1500 and wsa1 are absent, which is what build.sh step 4 inserts: I replayed step 4's logic on a copy of upstream's file and the output is byte-identical except for those two. A bare `kn7000` line pasted under the kn5000 block, as this section instructs, would attribute the driver to kn5000.cpp -- a mame.lst entry belongs under its own `@source:` header.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 56,
+  "old": "## 4. Provide the ROM images\n\nMAME will look for a `kn7000` romset containing `kn7000_program.rom` and\n`kn7000_table.rom` \u2014 the decompressed `.SLD` images produced by the\n`kn7000_extraction` tool. Place them in a `kn7000.zip` (or a `roms/kn7000/`\nfolder) on your ROM path. Their CRC/SHA1 are already filled in the driver\n(flagged `BAD_DUMP` because they are reconstructed from the update disks rather\nthan read from the physical flash).",
+  "new": "## 4. Provide the ROM images\n\nMAME will look for a `kn7000` romset holding the even and odd halves of both\nflash pairs \u2014 `kn7000_program_even.rom`, `kn7000_program_odd.rom`,\n`kn7000_table_even.rom`, `kn7000_table_odd.rom`, 2 MB each, split even/odd from\nthe decompressed `.SLD` images. Place them in a `kn7000.zip` (or a\n`roms/kn7000/` folder) on your ROM path. Their CRC/SHA1 are already filled in the\ndriver and they load as good dumps: the `.SLD`/`.INF` block checksums verify the\ndecompression. The rest of the set is optional \u2014 the synthetic wave and rhythm\nimages, flagged `BAD_DUMP` because they are generated rather than read from the\nphysical chips, and the four Initial Data disk payloads for the custom-data flash.\n`tools/make-roms.sh` rebuilds the whole set from the preserved sources, checks it\nagainst its md5 manifest, or restores it from the private `technics_roms` repo\nthat holds the authoritative copies.",
+  "why": "ROM_START(kn7000) (src/mame/matsushita/kn7000.cpp:2210-2216) loads kn7000_program_even/odd.rom and kn7000_table_even/odd.rom, 0x200000 each, via ROM_LOAD32_WORD with no BAD_DUMP flag; no ROM_LOAD anywhere names kn7000_program.rom or kn7000_table.rom, so a set built to this instruction is rejected. The driver header at :30-31 states the images are \"from the checksum-verified .SLD firmware-update images and loaded as good dumps (the .SLD/.INF block checksums verify the decompression)\". BAD_DUMP appears only on kn7000_waves_synthetic.rom (:2239) and kn7000_rhythms_synthetic.rom (:2256); the four custom-flash images (:2290-2293) are ROM_OPTIONAL and not BAD_DUMP, so a blanket \"the optional images are BAD_DUMP\" would be a new error. tools/make-roms.sh's own header documents check|generate|restore|list and names technics_roms as the source of truth.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 67,
+  "old": "```\nmake SUBTARGET=kn7000 SOURCES=src/mame/matsushita/kn7000.cpp USE_QTDEBUG=0   # focused build\n./kn7000 kn7000                                     # boots the firmware (headless-safe)\n./kn7000 kn7000 -debug                              # step the boot code\n./kn7000 -validate kn7000                           # driver definition check (0 errors)\n```\n\n(`USE_QTDEBUG=0` avoids needing Qt's `moc`. `build.sh` does all of this.) The CPU\nstarts fetching at `0x48400000` (`jmp 0x4840FF7E`) and boots into the MILK kernel;\nthe boot then reaches the undumped `0x4C000000` ROM (see \u00a76). The driver ships a\nclickable front-panel layout (`src/mame/layout/kn7000.lay`, from\n`tools/gen_layout.py`): all 184 buttons and the board LED strips.",
+  "new": "```\n./build.sh                                          # focused build, Qt debugger included\n./kn7000 kn7000 -skip_gameinfo                      # boots the firmware to its home screen\n./kn7000 kn7000 -debug                              # step the boot code\n./kn7000 -validate kn7000                           # driver definition check (0 errors)\n```\n\n`build.sh` runs `make SUBTARGET=kn7000 SOURCES=<list> REGENIE=1 USE_QTDEBUG=1\nQT_HOME=/usr/lib/qt6 -j<nproc>`, where `<list>` is the driver *and* every\n`src/mame` device `.cpp` it pulls in \u2014 `kn7000_cpanel`, `kn7000_tonegen`, the\nKN6000 and KN5000 pairs, the WSA1 set. Each of those carries the\n`DEFINE_DEVICE_TYPE` for a device `kn7000.cpp` instantiates, so naming only\n`kn7000.cpp` compiles the driver and leaves those types undefined at link time.\n`-skip_gameinfo` also skips the red warnings screen, which the build patches into\n`ui.cpp`. The CPU starts fetching at `0x48400000` (`jmp 0x4840FF7E`) and boots\ninto the MILK kernel, which loads its library code out of the program flash into\nthe RAM window aliased at `0x4C000000`/`0x8C000000` (see \u00a76). The driver ships a\nclickable front-panel layout (`src/mame/layout/kn7000.lay`, from\n`tools/gen_lay.py`): 164 bound panel controls and 101 indicator LEDs, in a\nCompact and a Full Unit view plus four per-block views.",
+  "why": "Four claims here are wrong today. (1) USE_QTDEBUG=0 is not a mode any more: build.sh:21-27 documents one build with Qt and :445 passes USE_QTDEBUG=1 REGENIE=1 QT_HOME (default /usr/lib/qt6, :437) -j\"$JOBS\". (2) SOURCES=src/mame/matsushita/kn7000.cpp alone cannot link: kn7000.cpp instantiates KN7000_CPANEL (:2061), KN7000_TONEGEN (:2093), KN6000_TONEGEN (:2147) and KN6000_CPANEL (:2159), whose DEFINE_DEVICE_TYPEs sit in kn7000_cpanel.cpp:30, kn7000_tonegen.cpp:18, kn6000_tonegen.cpp:19 and kn6000_cpanel.cpp:63 -- hence SOURCES_LIST at :381-394. (The undefined `driver_*` symbol build.sh:382-386 warns about is a different failure, about kn5000.cpp, so it is not what to cite here.) (3) kn7000.lay is generated by tools/gen_lay.py, as the .lay's own header line 4 says; tools/gen_layout.py still emits the older \"segment x bit grid\" layout (its docstring) and would overwrite the artwork one. Counted on the current .lay: 164 distinct inputtag+inputmask bindings (not 184 buttons), 101 distinct cp[lcr]_ledN outputs, views Compact / Full Unit / Screen Block / Left Block / Right Block / SD Block. (4) The boot does not stop at 0x4C000000 (notes/library-rom-loading.md; kn7000.cpp:812-818). `./kn7000 -validate kn7000` does still exit 0 with no output -- re-ran against /home/fsanches/compartilhado/kn7000_mame_build/kn7000 -- so that line is kept verbatim. \"home screen\" is the wording the KN7000's own status notes use (notes/AUTONOMOUS-STATUS.md:3461, :3477, :4278); \"play screen\" belongs to the KN5000.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 86,
+  "old": "boot instructions coherently \u2014 through hardware init and BSS setup and into the\nMILK kernel \u2014 before the boot **calls into the undumped library/kernel ROM at\n`0x4C000000`**. That undumped ROM (~6 MB, the C runtime + kernel; 7,965 calls to\n298 entry points) is therefore the true frontier: the machine cannot boot to a UI\nin MAME until it is dumped, or its hot entry points are high-level emulated. See\n`notes/library-rom-api.md`.",
+  "new": "boot instructions coherently \u2014 through hardware init and BSS setup and into the\nMILK kernel \u2014 and on into the **library/kernel code at `0x4C000000`** (the C\nruntime + kernel; 7,965 calls to 298 entry points). That code is **not a separate\nchip**: early in kernel init, `InitializeBlock27` (`0x484D7BBD`) copies ~253,720\nbytes out of the program flash at `0x487B8FD1` to `0x8C000000`, and `0x4C000000`\nis the same RAM seen through bit 30, so the driver maps both windows onto one\nshare and the boot runs real library code with no dump and no HLE. See\n`notes/library-rom-loading.md`; `notes/library-rom-api.md` catalogues the entry\npoints.",
+  "why": "This repo's own notes/library-rom-loading.md settles it: the boot loads that code at runtime from the program flash (InitializeBlock27 @0x484D7BBD copies ~253,720 bytes from 0x487B8FD1 into 0x8C000000, the first library call `call 0x4C03CC4E` landing at boot instruction ~4,589,920, which is where the 4.59 M figure comes from), and 0x4C000000 is the same RAM through bit 30. The driver implements exactly that: kn7000.cpp:817-818 map 0x4c000000 and 0x8c000000 onto share \"libram\", with the reason in the comment at :812-816. notes/library-rom-api.md already carries a CORRECTION banner retracting the \"separate undumped ROM, >= ~6 MiB, blocked on a hardware dump\" premise. The KN7000 boots to its home screen (notes/AUTONOMOUS-STATUS.md:3461, :3477, :4278), so \"cannot boot to a UI until it is dumped\" is the sentence that has to go; every measurement is kept.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "INTEGRATION.md",
+  "line": 103,
+  "old": "So the productive next steps are (a) obtaining/HLE-ing the `0x4C000000` ROM, and\n(b) replacing the logging I/O handlers with real device models (LCD, tone\ngenerators, panel sub-CPUs, FDC/SD) using the register map and subsystem docs.",
+  "new": "So the productive next step is to keep moving I/O out of the driver's catch-all\n`io_r`/`io_w` \u2014 still the handler for `0x20000000`, the timers at `0x32000000`,\nthe LCD/panel block at `0x34000000` and the GPIO at `0x36008000` \u2014 into device\nmodels, using the register map and subsystem docs. The tone generators, control\npanel, SD card, FDC and the MIDI UARTs are already devices in the machine config;\nthe rear USB co-processor is not, and its own firmware is undumped\n(`notes/FINDINGS-usb-subsystem.md`).",
+  "why": "Step (a) rests on the premise notes/library-rom-loading.md retracts. Step (b)'s list is stale: kn7000.cpp's machine config instantiates KN7000_TONEGEN (:2093), KN7000_CPANEL (:2061), SPI_SDCARD (:2077), N82077AA (:2085) + FLOPPY_CONNECTOR (:2091), three KN7000_SIO_UART MIDI UARTs (:2040, :2048, :2052 -- one of them the MIDI-to-keybed bridge, so \"three MIDI ports\" would be wrong) and a SCREEN with a driver screen_update (:2023-2029). What IS still a catch-all is io_r/io_w, mapped over 0x20000000, 0x32000000, 0x34000000 and 0x36008000 at :926-928 and :943. The rear USB subsystem is a dedicated co-processor whose own firmware is undumped (notes/FINDINGS-usb-subsystem.md).",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "README.md",
+  "line": 12,
+  "old": "- `src/mame/matsushita/` \u2014 machine drivers and devices for the Technics\n  keyboards: KN5000, KN6000/KN6500, KN7000, KN1500 and KN2400/KN2600, plus the\n  shared control-panel (`kn_cpanel`) and tone-generator (`kn_tonegen`) device\n  bases they build on.\n- `src/devices/cpu/mn10300/` \u2014 a Panasonic MN10300/AM33 execution core\n  (upstream MAME ships only the disassembler). Overlay work also touches\n  `tlcs900/` (TMP94C241), `sharc/` and a `upd6383/` DSP core.\n- `src/mame/layout/` \u2014 internal layouts for kn5000/kn6000/kn7000.",
+  "new": "- `src/mame/matsushita/` \u2014 machine drivers and devices for the Technics\n  keyboards: KN5000, KN6000/KN6500, KN7000, KN1500 and KN2400/KN2600, plus the\n  SX-WSA1/WSA1R synthesizer, and the shared control-panel (`kn_cpanel`) and\n  tone-generator (`kn_tonegen`) device bases they build on.\n- `src/devices/cpu/mn10300/` \u2014 a Panasonic MN10300/AM33 execution core\n  (upstream MAME ships only the disassembler). Overlay work also touches\n  `tlcs900/` (the shared core, TMP94C241, TMP95C061 and TMP95C063), `sharc/`\n  and a `upd6383/` DSP core.\n- `src/devices/machine/`, `src/devices/video/`, `src/devices/bus/technics/` \u2014\n  overlaid copies of `spi_sdcard` (the KN7000's SD card), `sed1330` (the WSA1's\n  all-graphics panel) and the KN5000's `hdae5000` expansion board.\n- `src/mame/layout/` \u2014 internal layouts for kn5000/kn6000/kn7000 and wsa1r.",
+  "why": "The \"what lives where\" map omits parts of the tree it describes. src/mame/matsushita/ holds wsa1.cpp, wsa1_cpanel.*, wsa1_tonegen.* and acoustic_modeling.* (the SX-WSA1/WSA1R, upstream since #16204). The tlcs900 overlay is 10 files, not just TMP94C241: tlcs900.{cpp,h}, 900tbl.hxx, tmp94c241{,_serial}.{cpp,h}, tmp95c061.{cpp,h}, tmp95c063.cpp. src/devices/machine/ (spi_sdcard), src/devices/video/ (sed1330) AND src/devices/bus/technics/kn5000/ (hdae5000.cpp) are overlaid and unlisted -- that third directory is the ninth of the nine, and listing only the first two would leave the map still incomplete. src/mame/layout/ also holds wsa1r.lay. All counted with `git ls-files src/`.",
+  "severity": "minor",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "README.md",
+  "line": 28,
+  "old": "`./build.sh` assembles a disposable build tree from a full MAME checkout\n(default `../mame`), symlinks this overlay's files into it and compiles a\nfocused MAME binary with the Qt debugger included. Overridable environment\nvariables: `MAME_SRC`, `BUILD_TREE`, `ROM_SRC`, `JOBS`. The manual steps it\nautomates are documented in [`INTEGRATION.md`](INTEGRATION.md).",
+  "new": "`./build.sh` assembles a disposable build tree from a full MAME checkout\n(default `../mame`, which has to be on the `kn7000-base` branch), symlinks this\noverlay's files into it and compiles a focused MAME binary with the Qt debugger\nincluded. Overridable environment variables: `MAME_SRC`, `BUILD_TREE`, `ROM_SRC`,\n`JOBS`, `QT_HOME`. The manual steps it automates are documented in\n[`INTEGRATION.md`](INTEGRATION.md).",
+  "why": "build.sh:48-56 exits unless MAME_SRC is on branch kn7000-base (ALLOW_ANY_BASE=1 overrides), and :437-443 reads QT_HOME (default /usr/lib/qt6) and exits if there is no qmake under it. Neither the branch requirement nor QT_HOME is in the README's list, so a first build against a checkout on another branch stops with an error the README never mentions.",
+  "severity": "minor",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 4,
+  "old": "# This overlay holds only the KN7000-specific files (src/devices/cpu/mn10300/\n# mn10300.* and src/mame/matsushita/kn7000.cpp). To compile them they must sit",
+  "new": "# This overlay holds 58 files, each at its MAME path: four CPU cores (mn10300, sharc,\n# tlcs900, upd6383), the KN5000/KN6000/KN7000/KN1500 and SX-WSA1 drivers with their\n# control-panel and tone-generator devices, spi_sdcard, sed1330, hdae5000 and four\n# layouts -- step 2 below is the authoritative list. To compile them they must sit",
+  "why": "The header names 2 of the 58 files this script symlinks in step 2 (:103-224; `grep -c '^ln -sf'` = 58, matching `git ls-files src/`), and the binary it builds carries kn5000, kn7000, kn6000, kn6500, kn2400, kn2600, kn1500, wsa1r and wsa1 (SOURCES_LIST at :381-394 plus the mame.lst registration at :308-347).",
+  "severity": "minor",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 18,
+  "old": "#   ROM_SRC    dir holding kn7000_program.rom/kn7000_table.rom for a run test",
+  "new": "#   ROM_SRC    dir holding the kn7000 even/odd program+table .rom images for a run test\n#              (tools/make-roms.sh restores the whole set from the technics_roms repo)",
+  "why": "The romset the driver loads is the even/odd half of each flash (kn7000.cpp:2212-2216, ROM_LOAD32_WORD); kn7000_program.rom and kn7000_table.rom are intermediates no ROM_LOAD names. The documented path to a ROM set is tools/make-roms.sh (check|generate|restore|list) over the technics_roms repo, which that script's own header calls the source of truth. Pairs with the step-5 edit at :371 so the comment and the code name the same files.",
+  "severity": "misleads-a-reader",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 316,
+  "old": "# KN6000 / KN6500 / KN2400 / KN2600 draft drivers live in the same source file as kn7000.\nfor drv in ('kn6000', 'kn6500', 'kn2400', 'kn2600'):\n    if '\\n' + drv + '\\n' not in s:\n        s = s.replace('@source:matsushita/kn7000.cpp\\nkn7000\\n',\n                      '@source:matsushita/kn7000.cpp\\nkn7000\\n' + drv + '\\n', 1)\n        changed = True",
+  "new": "# KN6000 / KN6500 / KN2400 / KN2600 draft drivers live in the same source file as kn7000.\n# Upstream's own mame.lst lists the whole family, with kn7000 LAST in the block\n# (kn2400 / kn2600 / kn6000 / kn6500 / kn7000), so the anchor is the `@source:` line\n# alone.  Anchoring on the line PAIR matches only a block this script wrote itself, and\n# a driver missing from upstream's block is then silently never registered -- the same\n# failure the wsa1/wsa1r comment below records.\nfor drv in ('kn6000', 'kn6500', 'kn2400', 'kn2600'):\n    if '\\n' + drv + '\\n' not in s:\n        anchor = '@source:matsushita/kn7000.cpp\\n'\n        s = s.replace(anchor, anchor + drv + '\\n', 1)\n        changed = True",
+  "why": "Verified against ~/compartilhado/mame/src/mame/mame.lst:27012-27017: upstream's block is kn2400/kn2600/kn6000/kn6500/kn7000, so the string '@source:matsushita/kn7000.cpp\\nkn7000\\n' does not occur in it and the replace() is a no-op. Today the file still comes out right only because the outer guard short-circuits -- all four drivers are already listed, so the loop body never runs. I replayed both versions on copies of upstream's file: on the pristine file both leave it byte-identical with changed=False; with kn6000 deleted, the current anchor sets changed=True but ends with 0 occurrences of kn6000 (compiled, never registered), while the @source:-only anchor ends with exactly 1. The applied script still passes `bash -n`, and the step-4 heredoc still parses as Python (ast.parse).",
+  "severity": "minor",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ },
+ {
+  "file": "build.sh",
+  "line": 371,
+  "old": "if [ -n \"$ROM_SRC\" ] && [ -f \"$ROM_SRC/kn7000_program.rom\" ]; then\n\tmkdir -p \"$BUILD_TREE/roms/kn7000\"\n\tcp -f \"$ROM_SRC/kn7000_program.rom\" \"$ROM_SRC/kn7000_table.rom\" \"$BUILD_TREE/roms/kn7000/\"",
+  "new": "if [ -n \"$ROM_SRC\" ] && [ -f \"$ROM_SRC/kn7000_program_even.rom\" ]; then\n\tmkdir -p \"$BUILD_TREE/roms/kn7000\"\n\tcp -f \"$ROM_SRC\"/kn7000_{program,table}_{even,odd}.rom \"$BUILD_TREE/roms/kn7000/\"",
+  "why": "The driver's ROM_LOAD32_WORDs name kn7000_program_even/odd.rom and kn7000_table_even/odd.rom (kn7000.cpp:2212-2216). kn7000_program.rom is an intermediate no ROM_LOAD names, so a ROM_SRC holding only what the driver loads skips this step entirely, while a directory that also has the old linear images passes the test and stages two files MAME never reads (both are present in the live build tree's roms/kn7000/). I ran the replacement in a scratch dir: `bash -n` clean, all four images copied, and the all-or-nothing behaviour of the original is preserved.",
+  "severity": "minor",
+  "_cluster": "integration-docs",
+  "status": "applied"
+ }
+]
