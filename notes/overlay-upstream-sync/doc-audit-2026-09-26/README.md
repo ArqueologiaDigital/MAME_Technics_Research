@@ -9,7 +9,7 @@ was derived from. This is the sweep that fixed them and the ledger of what it di
 
 | file | what it is |
 |---|---|
-| `edits.json` | all 63 reviewed proposals — `file`, `line`, `old`, `new`, `why`, `severity`, and whether it was applied |
+| `edits.json` | all 63 reviewed proposals — `file`, `line`, `old`, `new`, `why`, `severity`, plus `replacement_present`: whether that proposal's replacement text is in the tree now |
 | `apply_edits.py` | the applier, which is also the gate: anchors must match byte-for-byte or the edit is dropped |
 
 ## How the proposals were produced
@@ -27,7 +27,14 @@ missed and dropped others.
 
 Seven were dropped: two whose anchor no longer existed (that region had been
 rewritten earlier the same day) and five that overlapped a rival edit at the same
-site. All five concerns were re-checked afterwards by hand and found already covered
+site.
+
+**That run is the authoritative count, not `replacement_present`.** The flag counts
+63 minus 5 = 58 true, which is two more than the applier changed: for two proposals
+the replacement text was already in the file, because the auditor read that region
+after it had been rewritten that morning and proposed what was largely already
+there. The flag answers "is this text in the tree?", which is the useful question
+when re-reading the ledger; it is not a count of what this script did. All five concerns were re-checked afterwards by hand and found already covered
 by the winning edit. One further correction was made by hand after a residue sweep
 (`wsa1_cpanel.h`, which claimed "no databook is in these trees" — untrue since the
 TMP95C061 databook was located). **57 changes over 23 files in total.**
