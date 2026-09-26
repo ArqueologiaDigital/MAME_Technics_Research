@@ -327,15 +327,21 @@ if '\nkn1500\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
     s = s.replace(anchor, anchor + '\n@source:matsushita/kn1500.cpp\nkn1500\n', 1)
     changed = True
-# Technics SX-WSA1R and SX-WSA1.  Neither exists upstream on kn7000-base, so this
-# creates both; they are registered here rather than in ~/compartilhado/mame so
-# that the base tree stays untouched, exactly as with the cpu.lua edits above.
-# Two systems, one source file: the same ROM set runs in the rack module and in
-# the keyboard, and the firmware picks its code paths from a strap on PB bit 0.
-# The clone is listed under the parent, which is the order mame.lst uses.
+# Technics SX-WSA1R and SX-WSA1.  Two systems, one source file: the same ROM set runs
+# in the rack module and in the keyboard, and the firmware picks its code paths from a
+# strap on PB bit 0.  The clone is listed under the parent, the order mame.lst uses.
+#
+# Upstream carries wsa1r since #16204 but not the wsa1 keyboard, so the two are guarded
+# SEPARATELY, as the kn6000 loop above does.  One guard covering both used to test for
+# wsa1r and insert the pair; once #16204 merged, upstream's own mame.lst satisfied that
+# test and the whole block was skipped, so wsa1 was compiled and never registered.
 if '\nwsa1r\n' not in s:
     anchor = '@source:matsushita/kn5000.cpp\nkn5000\n'
-    s = s.replace(anchor, anchor + '\n@source:matsushita/wsa1.cpp\nwsa1r\nwsa1\n', 1)
+    s = s.replace(anchor, anchor + '\n@source:matsushita/wsa1.cpp\nwsa1r\n', 1)
+    changed = True
+if '\nwsa1\n' not in s:
+    # under the parent, whichever of the two paths above put it there
+    s = s.replace('\nwsa1r\n', '\nwsa1r\nwsa1\n', 1)
     changed = True
 if changed:
     open(p, 'w').write(s)
