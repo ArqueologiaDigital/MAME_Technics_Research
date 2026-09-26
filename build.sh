@@ -104,7 +104,11 @@ ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.h"             "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.h"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_insn_length.h"
 # Effects-DSP LLE (Phase F): the SHARC core is forked here to add the adsp21065l_device variant
-# (KN7000 IC306). Only sharc.h/sharc.cpp are overlaid; the rest of the SHARC core is stock.
+# (KN7000 IC306). FIVE files are overlaid, listed below -- sharcops.hxx, sharcdrc.cpp and
+# sharcfe.cpp among them, not just the header and the device. Each one REPLACES MAME's, so an
+# upstream fix to any of them is silently reverted in this build until it is ported across.
+# notes/overlay-upstream-sync/overlay_vs_upstream.sh is the gate that catches that; it is what
+# found #16016 reverted here (merged upstream 2026-09-25, ported across 2026-09-26).
 ln -sf "$HERE/src/devices/cpu/sharc/sharc.h"                 "$BUILD_TREE/src/devices/cpu/sharc/sharc.h"
 ln -sf "$HERE/src/devices/cpu/sharc/sharc.cpp"               "$BUILD_TREE/src/devices/cpu/sharc/sharc.cpp"
 ln -sf "$HERE/src/devices/cpu/sharc/sharcops.hxx"            "$BUILD_TREE/src/devices/cpu/sharc/sharcops.hxx"

@@ -40,6 +40,23 @@ find src -type f | sort | while read -r f; do
 	d=$(git -C "$MAME" show "$REF:$f" | diff -u - "$f" | grep -c '^[+-]')
 	n=$(git -C "$MAME" log --oneline "$BASE..$REF" -- "$f" | wc -l)
 	mark=""
-	[ "$n" -gt 0 ] && mark="  <== REVERTS: $(git -C "$MAME" log --oneline -1 "$BASE..$REF" -- "$f")"
+	if [ "$n" -gt 0 ]; then
+		# Upstream touched this file after our fork, so the overlay's copy MIGHT revert
+		# the change. Decide which by testing whether the commit's own added lines are
+		# present in the overlay -- "upstream touched it" is the smoke, this is the fire.
+		c=$(git -C "$MAME" log --format=%h -1 "$BASE..$REF" -- "$f")
+		missing=0; total=0
+		while IFS= read -r l; do
+			l=${l#+}
+			[ -z "${l// }" ] && continue
+			total=$((total+1))
+			grep -qF -- "$l" "$f" || missing=$((missing+1))
+		done < <(git -C "$MAME" show "$c" -- "$f" | grep '^+' | grep -v '^++')
+		if [ "$missing" -gt 0 ]; then
+			mark="  <== REVERTS $missing/$total lines of: $(git -C "$MAME" log --oneline -1 "$c")"
+		else
+			mark="  (ported: all $total lines of $c present)"
+		fi
+	fi
 	printf "%-52s %-9s %-7s %s%s\n" "$f" "present" "$d" "$n" "$mark"
 done
