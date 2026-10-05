@@ -412,7 +412,7 @@ lets a held note sustain** (§4) and it is derived, not chosen.
 
 | what | rate | period |
 |---|---|---|
-| timer ISR — payload handler-table entry `INT_HANDLER_14` → `LABEL_01FB41` (asm L295, L9454) | **488.28 Hz** | 2.048 ms |
+| timer ISR — payload handler-table entry `INT_HANDLER_14` → `LABEL_01FB41` (asm L295, L9454; names since 2026-10-06: `IntTramp_INTT1` → `Timer_AudioTick_Handler`) | **488.28 Hz** | 2.048 ms |
 | audio tick — `SET 1,(103Eh)`, 1 of the 6 round-robin phases (`OFFSETS_F460` asm L562) | **81.38 Hz** | 12.288 ms |
 | `Audio_Process_Init` path A / path B (alternating, asm L38151-38160) | **40.69 Hz** | 24.576 ms |
 
