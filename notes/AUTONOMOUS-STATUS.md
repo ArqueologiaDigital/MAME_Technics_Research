@@ -230,7 +230,7 @@ full adjudication: `notes/kn5000-cpserial-livelock-guard-candidate.{md,patch}`. 
 ## TICK 2026-07-21 — ★ KN5000 TEMPO/PROGRAM WHEEL DONE: turning it edits the on-screen tempo
 Implemented the resume point from `side-quests/findings/kn5000_data_wheel_findings.md` ADDENDUM 2.
 The KN5000 wheel is NOT a control-panel-serial input in steady state — the firmware reads it with a
-main-loop poll (`Encoder_ValueScanAndSync` 0xFC5761) from an encoder scan table at MainCPU DRAM
+main-loop poll (`Encoder_ValueScanAndSync` (now `PanelButton_ProcessChanges`) 0xFC5761) from an encoder scan table at MainCPU DRAM
 0x8E94 (3-byte entries `[record_id, delta, mask]`). HOOKUP (`kn5000_cpanel.{cpp,h}`): the cpanel got
 a `required_device<cpu_device> m_maincpu{*this, ":maincpu"}`; on each detent (the existing wrap-aware
 one-detent-per-scan slew) it now writes `[0x19, -step, 0xFF] + 0xFF` at 0x8E94 via
@@ -5700,7 +5700,7 @@ DESCRIPTOR, 0xED9B86 = {A9,21,00,FF}, entry 0x19 of the table at 0xED9C1E,
 copied into the event by the GENERIC emitter FileIO_ProcessMaskAndShift
 (0xFC580A) which stages {A9,21,delta,mask} at DRAM 0x8E7C. The byte pair A9 21
 occurs EXACTLY ONCE in the 2 MB image. Full chain: CP serial -> RX_MultiBytePacket
-(0xFC4A40) -> ring 0x200AD -> scan table 0x8E94 -> Encoder_ValueScanAndSync
+(0xFC4A40) -> ring 0x200AD -> scan table 0x8E94 -> Encoder_ValueScanAndSync (now PanelButton_ProcessChanges)
 (0xFC5761) -> descriptor -> emitter -> queue 0xC039 -> dispatcher 0xFDB328
 (writes 0xC080=A9, 0xC07D=21, 0xC07E=signed delta) -> CtrlPanel_HandleSerialPort
 -> accel table 0xEA98E2 -> PostEvent 0x1C0001F -> GroupBox_HandleCursorNav.
