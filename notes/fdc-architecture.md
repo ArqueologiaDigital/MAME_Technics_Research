@@ -722,8 +722,12 @@ firmware reads the FDC ~420-430k times and never takes the interrupt, against ~3
 group-0x19 acknowledge within 3-4.5 s, on all four sets. On the KN7000 the acknowledging handler is at
 0x48402234, next to the DRQ ISR 0x48402140 named above. Evidence, probe and schematic crops:
 `KN7000/tools/mame-pr-planning/kn6000-expansion-pr/fdc-irq2/` and `.../crops/`. Upstream fix branch:
-`technics-kn-fdc-irq2`. **This overlay still asserts group 0x18 in `fdc_irq_w`/`fdc_drq_w`; not changed
-yet.**
+`technics-kn-fdc-irq2`. ~~This overlay still asserts group 0x18 in `fdc_irq_w`/`fdc_drq_w`; not changed
+yet.~~ **Changed in `0b90e69`:** `fdc_irq_w` (INTRQ) now raises group 0x19. DRQ is a separate line
+and stays on group 0x18: the KN7000 ISR at 0x48402109 acknowledges 0x34000160 and moves one byte
+through 0x98010000, while INTRQ's ISR at 0x4840221D acknowledges 0x34000164 (the KN6000/6500
+firmware takes DRQ in group 0x0f instead). A/B and the DISK MENU -> LOAD probe: `fdc-irq2-ab/` —
+the polling collapses, but LOAD still reads no sector, so the floppy's remaining blocker is elsewhere.
 
 ## 2026-10-08 (addendum): CORRECTION to addenda 10 and 11 — 0x484A4FBA is the factory self-test
 

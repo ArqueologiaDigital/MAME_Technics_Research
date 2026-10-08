@@ -1,0 +1,19 @@
+Overlay A/B, 2026-10-08: kn7000_mame 183e0ef (before) vs 0b90e69 (after), built by build.sh; ROMS=technics_roms/roms.
+run_fdc_ab.sh (12 s boot, fdc_irq_probe.lua):
+set      before                                             after
+kn6000   FDC register reads 418906, group-0x19 acks 0       FDC register reads 2427, group-0x19 acks 6
+kn6500   FDC register reads 428318, group-0x19 acks 0       FDC register reads 2423, group-0x19 acks 6
+kn2400   FDC register reads 419894, group-0x19 acks 0       FDC register reads 4536, group-0x19 acks 6
+kn7000   FDC register reads 428923, group-0x19 acks 0       FDC register reads 3144, group-0x19 acks 6
+kn6000 after: [fdc] first group-0x19 ack at 6.000 s, pc=4c112578
+kn6500 after: [fdc] first group-0x19 ack at 6.016 s, pc=4c1123cc
+kn2400 after: [fdc] first group-0x19 ack at 2.908 s, pc=485e6442
+kn7000 after: [fdc] first group-0x19 ack at 5.685 s, pc=48402234
+
+floppy_load_probe.lua on kn7000 (floptest_fat12.img; DISK MENU at 26 s, LOAD at 29 s, report at 38 s):
+  overlay-before: [ 26.02] DISK MENU press (boot so far: FDC 444495, DACK 0) [ 38.02] FDC register accesses 877852, DACK data reads 0 (after DISK MENU: FDC 433357, DACK 0) 
+  overlay-after: [ 26.02] DISK MENU press (boot so far: FDC 20211, DACK 0) [ 38.02] FDC register accesses 30821, DACK data reads 0 (after DISK MENU: FDC 10610, DACK 0) 
+  master: [ 26.02] DISK MENU press (boot so far: FDC 445811, DACK 0) [ 38.02] FDC register accesses 879251, DACK data reads 0 (after DISK MENU: FDC 433440, DACK 0) 
+  v4tip: [ 26.02] DISK MENU press (boot so far: FDC 21447, DACK 0) [ 38.02] FDC register accesses 32097, DACK data reads 0 (after DISK MENU: FDC 10650, DACK 0) 
+  screen at 38 s identical before/after in each tree (overlay 76d85fdf, PR tree 461d9fb4): LOAD still reads no sector (DACK 0).
+  The original floppy_kn7000.lua reports 0 FDC accesses on all four: its taps are locals and get garbage-collected.
