@@ -706,3 +706,21 @@ side-quests/findings/floppy_self_test_findings.md.
 NEXT: (A faithful) find+model the raw boot combo read (candidates 0x9CC00000 GPIO / panel SIO 0x34000809->
 0x5006BDB0); (B pragmatic hack) pin the "goto screen ID" var in the screen manager, poke to idx 0x104, map
 START/STOP panel buttons.
+
+## 2026-10-08 (addendum): the FDC interrupt is IRQ2 = INTC group 0x19, not 0x18
+
+The "REMAINING UNKNOWN" of the fix list above (which IRQn the FDC uses) is answered, and addendum 19's
+choice of group 0x18 is the wrong group. On the KN2400, KN6000, KN6500 and KN7000 the schematics wire
+the floppy controller's interrupt to the MN103002A's **IRQ2, pin 43** (net FDC.INT; FBC.INT on the
+KN7000 sheet). ⚠ The KN7000 (p.100) and KN2400 sheets **misprint pin 41 as "IRQ1"** (it is IRQ0), so
+reading the edge labels in order puts every IRQ one pin early; follow the drawn wire to the pin. The
+firmware agrees: on the KN6000 its floppy handler (0x485124AA, reads the 82077 status) is registered on
+group 0x19, and nothing enables group 0x18 unless an HD-SX3 is fitted.
+
+Measured on upstream's driver (FDC on IRQ1) against the same driver with IRQ2, 12 s of boot: the
+firmware reads the FDC ~420-430k times and never takes the interrupt, against ~3.4-4.5k reads and a
+group-0x19 acknowledge within 3-4.5 s, on all four sets. On the KN7000 the acknowledging handler is at
+0x48402234, next to the DRQ ISR 0x48402140 named above. Evidence, probe and schematic crops:
+`KN7000/tools/mame-pr-planning/kn6000-expansion-pr/fdc-irq2/` and `.../crops/`. Upstream fix branch:
+`technics-kn-fdc-irq2`. **This overlay still asserts group 0x18 in `fdc_irq_w`/`fdc_drq_w`; not changed
+yet.**
