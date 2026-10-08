@@ -422,7 +422,7 @@ private:
 	void    fdc_w(offs_t off, uint8_t data);
 	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (software-DMA transfer)
 	void    fdc_dma_w(offs_t off, uint8_t data);
-	void    fdc_irq_w(int state);                  // FDC INTRQ -> INTC group 0x18
+	void    fdc_irq_w(int state);                  // FDC INTRQ -> INTC group 0x19 (IRQ2)
 	void    fdc_drq_w(int state);                  // FDC DRQ  -> INTC group 0x18 (per-byte software-DMA)
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
@@ -1890,16 +1890,17 @@ void kn7000_state::fdc_w(offs_t off, uint8_t data)
 	}
 }
 
-// FDC interrupt / DMA-request lines -> MN10300 on-chip INTC group 0x18 (GxICR at 0x34000160, which the
-// FDC interrupt ISR 0x48402109 acknowledges). The FDC sector-data phase is SOFTWARE-DMA: the FDC asserts
-// DRQ per byte -> this raises the group-0x18 interrupt -> the ISR (0x48402140) transfers one byte between
-// the RAM buffer and the FDC.DACK slot at 0x98010000 (mapped to m_fdc->dma_r()/dma_w()). INTRQ (command
-// complete) shares the group; the ISR dispatches by the current op. (Rising edge asserts; the ISR clears
-// the GxICR REQUEST bit via its 0x34000160 write.) See notes/fdc-architecture.md addendum 18.
+// FDC interrupt lines. INTRQ (command complete) is IRQ2 = INTC group 0x19 (GxICR 0x34000164, acknowledged
+// by the ISR at 0x4840221D) on every KN board; the schematics wire FDC.INT/FBC.INT to pin 43. DRQ is a
+// separate line, IRQ1 = group 0x18 (GxICR 0x34000160): the FDC sector-data phase is SOFTWARE-DMA, the FDC
+// asserts DRQ per byte -> the ISR at 0x48402109 acknowledges group 0x18 and transfers one byte between the
+// RAM buffer and the FDC.DACK slot at 0x98010000 (mapped to m_fdc->dma_r()/dma_w()). That is the KN7000
+// and KN2400 firmware; the KN6000/KN6500 firmware takes DRQ in group 0x0f instead (not modelled). (Rising
+// edge asserts.) See notes/fdc-architecture.md addendum 18 and the 2026-10-08 addendum.
 void kn7000_state::fdc_irq_w(int state)
 {
 	if (state)
-		intc_assert(0x18);
+		intc_assert(0x19);
 }
 void kn7000_state::fdc_drq_w(int state)
 {
@@ -2083,7 +2084,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// 15; see fdc_r/fdc_w). Full FORMAT nav: DISK=SEG0D 0x04 -> FORMAT=SEG11 0x10 -> confirm=PAGE UP ->
 	// YES=SEG13 0x01. Clocked at 24 MHz (the FDC crystal on MAIN 2/5).
 	N82077AA(config, m_fdc, 24'000'000);
-	m_fdc->intrq_wr_callback().set(FUNC(kn7000_state::fdc_irq_w));   // FDC INTRQ (logging stub -- firmware polls MSR)
+	m_fdc->intrq_wr_callback().set(FUNC(kn7000_state::fdc_irq_w));   // FDC INTRQ -> group 0x19 (IRQ2)
 	m_fdc->drq_wr_callback().set(FUNC(kn7000_state::fdc_drq_w));     // FDC DRQ  (logging stub -- DMA not yet modelled)
 	// PC floppy formats: KN7000 disks are FAT12 and "interchangeable with a PC" (standard IBM-PC MFM),
 	// so use default_pc_floppy_formats -- it adds FLOPPY_PC_FORMAT (raw .img round-trip) on top of the
