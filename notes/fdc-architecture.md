@@ -724,3 +724,13 @@ group-0x19 acknowledge within 3-4.5 s, on all four sets. On the KN7000 the ackno
 `KN7000/tools/mame-pr-planning/kn6000-expansion-pr/fdc-irq2/` and `.../crops/`. Upstream fix branch:
 `technics-kn-fdc-irq2`. **This overlay still asserts group 0x18 in `fdc_irq_w`/`fdc_drq_w`; not changed
 yet.**
+
+## 2026-10-08 (addendum): CORRECTION to addenda 10 and 11 — 0x484A4FBA is the factory self-test
+
+Addendum 11 called 0x484A4FBA dead code ("zero callers of any kind"); addendum 10 called its bit-15
+path FDC init. Both are wrong. The routine is entered past its prologue at **0x484A4FBF**, called
+from **0x484D7272** (itself called from 0x48447F7B) — the entry+N skew that `tools/mn10300_callers.py`
+exists for. Its bit-15-clear path is the **factory self-test**, shared with the KN6000/6500/2400
+(0x9CC000xx is the LCD controller, 0x9CE00000 its video RAM, 0x484A506B the self-test's final
+loop). On the KN7000 bit 15 has only a pull-up, so production units never take it. Forcing it low in
+MAME diverts boot (FDC reads 0, 0x98070000 read 3 times). Details: `FINDINGS-test-jig-port.md`.

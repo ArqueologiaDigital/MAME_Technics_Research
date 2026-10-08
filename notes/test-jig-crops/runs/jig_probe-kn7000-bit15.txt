@@ -1,0 +1,6 @@
+[jig_probe] installed, JIG_FORCE=bit15
+[jig_probe] frame 300 force=bit15 PC=484a4ed9 jig_r=0 jig_w=0 fdc=0 strap=3 gpio8004_w=29
+[jig_probe] frame 600 force=bit15 PC=484a4f32 jig_r=0 jig_w=0 fdc=0 strap=3 gpio8004_w=36
+[jig_probe] frame 900 force=bit15 PC=4847f718 jig_r=0 jig_w=0 fdc=0 strap=3 gpio8004_w=37
+[jig_probe] frame 1200 force=bit15 PC=484a4f46 jig_r=0 jig_w=0 fdc=0 strap=3 gpio8004_w=45
+Average speed: 68.48% (19 seconds)

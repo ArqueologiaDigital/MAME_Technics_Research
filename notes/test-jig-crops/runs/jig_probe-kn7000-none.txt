@@ -1,0 +1,6 @@
+[jig_probe] installed, JIG_FORCE=none
+[jig_probe] frame 300 force=none PC=4840faa7 jig_r=0 jig_w=0 fdc=260 strap=612 gpio8004_w=154
+[jig_probe] frame 600 force=none PC=4840f342 jig_r=0 jig_w=0 fdc=2760 strap=8218 gpio8004_w=206
+[jig_probe] frame 900 force=none PC=4c01d5c0 jig_r=0 jig_w=0 fdc=5258 strap=15814 gpio8004_w=259
+[jig_probe] frame 1200 force=none PC=4c014f3e jig_r=0 jig_w=0 fdc=7758 strap=23420 gpio8004_w=311
+Average speed: 59.84% (19 seconds)

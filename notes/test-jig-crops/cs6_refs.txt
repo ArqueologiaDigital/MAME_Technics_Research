@@ -1,0 +1,16 @@
+== lst/kn6000.lst
+  0x5800:12  0x9800:1  0x9801:3  0x9802:13  0x9803:0  0x9804:2  0x9805:17  0x9806:98  0x9807:9
+  bare CS6 base register loads: 0
+  JIGU.CS window operands: 0
+== lst/kn6500.lst
+  0x5800:12  0x9800:1  0x9801:4  0x9802:13  0x9803:0  0x9804:2  0x9805:17  0x9806:98  0x9807:9
+  bare CS6 base register loads: 0
+  JIGU.CS window operands: 0
+== lst/kn7000.lst
+  0x9800:1  0x9801:7  0x9802:32  0x9803:0  0x9804:22  0x9805:30  0x9806:6  0x9807:14
+  bare CS6 base register loads: 0
+  JIGU.CS window operands: 0
+== lst/kn2400.lst
+  0x5801:1  0x5807:1  0x9800:5  0x9801:7  0x9802:32  0x9803:0  0x9804:23  0x9805:22  0x9806:5  0x9807:27
+  bare CS6 base register loads: 0
+  JIGU.CS window operands: 0
