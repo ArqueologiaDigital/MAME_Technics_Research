@@ -43,7 +43,10 @@ Os números:
   mais 82 correções entre páginas;
 - rodada 2 (o que a varredura e os próprios editores deixaram anotado): 568 achados,
   562 confirmados; 261 pistas foram descartadas porque já estavam resolvidas ou
-  estavam erradas.
+  estavam erradas;
+- rodada 3 (o que a rodada 2 achou em páginas de outras faixas): 67 achados, 41
+  confirmados — os outros 26 já tinham sido corrigidos. A série 1.335 → 562 → 41 é
+  o sinal de que a revisão secou.
 
 Uma taxa de confirmação de 99 % parece boa demais para um verificador que tinha
 ordem de refutar na dúvida. Acho que diz mais sobre o site do que sobre os agentes:
@@ -94,7 +97,7 @@ Todo número publicado precisa de um produtor commitado — o script que o gerou
 repositório, com a pergunta que responde e o comando para rodar. Os agentes mediram
 muita coisa com scripts de rascunho; cada vez que um desses números ia para uma
 página, o script ia para `tools/` no repositório do site antes do commit. Foram
-dezoito scripts de medição assim, além de três verificadores (links e âncoras, menu,
+vinte scripts de medição assim, além de três verificadores (links e âncoras, menu,
 alinhamento de tabelas). Onde o produtor não existia, a correção esperou.
 
 ## O que ficou para o dono
