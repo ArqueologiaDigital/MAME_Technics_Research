@@ -4060,7 +4060,7 @@ verify 100% byte-identical, encoder fallbacks still 5. All static RE.
   0x4C031330 are the NOTE LEVEL chain (they only FOLLOW TgPitchRuntime-
   Calc in program order). TgNoteLevelVariationCalc = per-note level
   humanization (desc mode bits 15..14: velocity-sense offset from tone
-  block +0x91 / PSEUDO-RANDOM level off the 1 kHz tick 0x50151BFC /
+  block +0x91 / PSEUDO-RANDOM level off the 2 ms time base 0x50151BFC [500 Hz, not 1 kHz: corrected 2026-10-16] /
   set level-word bit15-bit16 + neutral 0x40) -> librec+0x50;
   TgVoiceNoteLevelCalc folds it with part level + expression into the
   7-bit level at shadow +0x24; TgElemLevelBaseCalc computes librec+0x12

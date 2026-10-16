@@ -234,7 +234,7 @@ From the kn7000_disassembly conversion (86f0350; all static, byte-match verified
 follows `TgPitchRuntimeCalc` in program order): `TgNoteLevelVariationCalc`
 0x4C0311F3 is a per-note level humanizer — desc mode bits 15..14 select a
 velocity-sense offset (tone block +0x91), a **pseudo-random level drawn from the
-1 kHz tick 0x50151BFC** (tick²>>2·0x83, low16·0x7F>>16), or set level-word
+2 ms time base 0x50151BFC** (tick²>>2·0x83, low16·0x7F>>16; 500 Hz, not 1 kHz -- measured 2026-10-16, kn7000_disassembly notes/sp7001-probes/rate_probe.lua), or set level-word
 bit15/bit16 with neutral 0x40. `TgVoiceNoteLevelCalc` 0x4C0312A2 folds it with the
 part level term (0x4C006A17) + expression (partrec+0x0A−0x40) into the 7-bit note
 level at shadow +0x24; mute/solo part states short-circuit to 0/0x7F.
