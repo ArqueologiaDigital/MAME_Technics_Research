@@ -425,6 +425,9 @@ private:
 	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (the DMA channel's peripheral end)
 	void    fdc_dma_w(offs_t off, uint8_t data);
 	void    fdc_irq_w(int state);                  // FDC INTRQ -> INTC group 0x19 (IRQ2)
+	void    fdc_drq_w(int state);                  // FDC DRQ -> DMA channel 0, and IRQ1's request flag (KN7000)
+	void    fdc_tc_gpio(uint16_t gpio);            // FDC TC <- GPIO 0x36008004 bit 4 (active low)
+	uint16_t m_gpio8004_kn6 = 0xffff;               // KN6000/KN6500 GPIO latch 0x36008004 (bit 4 = FDC TC, active low)
 	// The drive's INDEX line also goes to the CPU, on IRQ7 = INTC group 0x1E (schematic MAIN
 	// 1/5, net HDD.INDEX -> pin 48). It is how the firmware tells an inserted disk; see
 	// fdd_index_poll.
@@ -970,6 +973,18 @@ void kn7000_state::maincpu_mem(address_map &map)
 				COMBINE_DATA(&m_gpio8004);
 				if (m_sdcard)
 					m_sdcard->spi_ss_w((m_gpio8004 & 0x0002) ? 0 : 1);   // active-low CS
+				fdc_tc_gpio(m_gpio8004);                                 // bit 4 = FDC TC (active low)
+			}));
+	else
+		// KN6000/KN6500: the same output latch (bits 0-7 set and cleared, never tested; whole
+		// byte written at boot 0x484002F6). It reads back its value -- the generic io window read
+		// 0, so every bset/bclr of another bit wrote bit 4 low, which would now assert TC.
+		map(0x36008004, 0x36008005).lrw16(
+			NAME([this](offs_t) -> uint16_t { return m_gpio8004_kn6; }),
+			NAME([this](offs_t, uint16_t data, uint16_t mem_mask)
+			{
+				COMBINE_DATA(&m_gpio8004_kn6);
+				fdc_tc_gpio(m_gpio8004_kn6);
 			}));
 	map(0x98000000, 0x9807ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	// Floppy disk controller IC103 (C1DB00000607, N82077AA/PC-AT-compatible) at 0x98020000 -- carved out
@@ -1810,6 +1825,7 @@ void kn7000_state::machine_start()
 			fdd_loaded(fd);
 	}
 	save_item(NAME(m_fdd_index));
+	save_item(NAME(m_gpio8004_kn6));
 
 	// (INTC + TM5 timer state is save_item'd by the MN10300 core now.)
 	save_item(NAME(m_c11_unserviced));
@@ -1934,6 +1950,26 @@ void kn7000_state::fdc_irq_w(int state)
 {
 	if (state)
 		intc_assert(0x19);
+}
+
+// DRQ runs the DMA channel. On the KN7000/KN2400 boards it also latches IRQ1's request flag
+// (group 0x18): the firmware keeps that interrupt disabled while the channel runs, and its
+// DMA-end ISR (0x4840219C) clears the flag and polls it for the DRQ of the last byte, which it
+// moves by CPU (see dmac in the MN10300 core). The KN6000 firmware does not use IRQ1 for this.
+void kn7000_state::fdc_drq_w(int state)
+{
+	m_maincpu->dma_req_w(state);
+	if (state && !m_lib_mirror)
+		intc_assert(0x18);
+}
+
+// The FDC's TC line is GPIO 0x36008004 bit 4, active low. Both firmwares assert it themselves at
+// the end of a transfer: the KN6000 around a dummy DACK read (0x48510D63), the KN7000 after
+// moving the last byte (0x4840210C).
+void kn7000_state::fdc_tc_gpio(uint16_t gpio)
+{
+	if (m_fdc)
+		m_fdc->tc_w(!BIT(gpio, 4));
 }
 // The drive's INDEX pulse, on IRQ7 = INTC group 0x1E. The schematic (MAIN 1/5, PDF page 100) runs net
 // HDD.INDEX into CPU pin 48, IRQ7, beside FBC.INT on pin 43, IRQ2 (the FDC interrupt above). This is how
@@ -2145,8 +2181,8 @@ void kn7000_state::kn7000(machine_config &config)
 	// YES=SEG13 0x01. Clocked at 24 MHz (the FDC crystal on MAIN 2/5).
 	N82077AA(config, m_fdc, 24'000'000);
 	m_fdc->intrq_wr_callback().set(FUNC(kn7000_state::fdc_irq_w));   // FDC INTRQ -> group 0x19 (IRQ2)
-	m_fdc->drq_wr_callback().set(m_maincpu, FUNC(mn10300_device::dma_req_w));   // FDC DRQ -> DMA channel 0
-	m_maincpu->dma_tc_cb().set([this] (int state) { m_fdc->tc_w(state); });   // DMA terminal count -> FDC TC
+	m_fdc->drq_wr_callback().set(FUNC(kn7000_state::fdc_drq_w));     // FDC DRQ -> DMA channel 0 (+ IRQ1 request)
+	// FDC TC is GPIO 0x36008004 bit 4 (fdc_tc_gpio), not the DMA channel's terminal count.
 	// PC floppy formats: KN7000 disks are FAT12 and "interchangeable with a PC" (standard IBM-PC MFM),
 	// so use default_pc_floppy_formats -- it adds FLOPPY_PC_FORMAT (raw .img round-trip) on top of the
 	// MFM containers, unlike the KN5000's default_mfm_floppy_formats which cannot load a raw PC image.

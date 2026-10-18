@@ -584,12 +584,26 @@ TIMER_CALLBACK_MEMBER(mn10300_device::tm5_tick)
 //**************************************************************************
 //
 // The control register (0x800) starts the channel when its low nibble reads 0xf;
-// 0x804 and 0x808 are the source and destination, and 0x80c is a 16-bit count
-// that holds (length - 2). The transfer moves bytes between the memory buffer and
-// the peripheral data port it is pointed at, with the peripheral end held at a
-// fixed address and the memory end advancing. The address modes are not yet
-// decoded from the control register, so the peripheral is taken to be the end
-// that lies in the I/O region.
+// 0x804 and 0x808 are the source and destination, and 0x80c is a 16-bit count.
+// The transfer moves bytes between the memory buffer and the peripheral data port
+// it is pointed at, with the peripheral end held at a fixed address and the memory
+// end advancing. The address modes are not yet decoded from the control register,
+// so the peripheral is taken to be the end that lies in the I/O region.
+//
+// The channel moves (count + 1) bytes and then raises its end-of-transfer interrupt,
+// INTC group 0x0F (GxICR 0x3400013C). Upstream's version (#16394) moves (count + 2)
+// and pulses terminal count itself; that fits the KN7000 firmware by coincidence and
+// overruns every KN6000 sector by one byte. The two firmwares agree only with
+// (count + 1) and the group-0x0F interrupt:
+//  - KN6000 (0x48510DEE): count = length - 1, so the channel moves the whole sector;
+//    its group-0x0F ISR (0x48512476) then asserts the FDC's TC on GPIO 0x36008004
+//    bit 4 around one dummy read of the DACK port (0x48510D63).
+//  - KN7000 (941: 0x484009BE): count = length - 2, so the channel leaves the last
+//    byte; its group-0x0F ISR (0x4840219C) waits for the FDC's DRQ on IRQ1 (group
+//    0x18), moves that byte by CPU and then asserts TC (0x4840210C).
+// With (count + 2) the KN6000's extra byte overwrote the next heap block's header
+// and the file system's memory pool failed (2026-10-18, notes/kn6000-feature-
+// presentation.md). dma_tc_cb still pulses at the end for boards that wire it.
 uint32_t mn10300_device::dmac_r(offs_t offset)
 {
 	switch (offset)
@@ -637,7 +651,7 @@ TIMER_CALLBACK_MEMBER(mn10300_device::dma_transfer)
 		return;
 	if (!m_dma_started)
 	{
-		m_dma_remain = uint32_t(m_dma_count) + 2;
+		m_dma_remain = uint32_t(m_dma_count) + 1;
 		m_dma_started = true;
 	}
 	const bool src_is_memory = m_dma_src < 0x80000000;
@@ -653,6 +667,7 @@ TIMER_CALLBACK_MEMBER(mn10300_device::dma_transfer)
 			m_dma_tc_cb(1);
 			m_dma_tc_cb(0);
 			m_dma_active = false;
+			intc_assert(0x0f);   // DMA channel 0 end of transfer
 		}
 	}
 }
