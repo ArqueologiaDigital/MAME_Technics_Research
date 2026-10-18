@@ -61,7 +61,7 @@ static INPUT_PORTS_START(kn7000_cpanel)
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("SYNCHRO & BREAK (SW7)")
 	PORT_START("CPL_SEG1")   // CPL scan seg 0x01  (wire ADDR 0xC1)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MEMORY/LOAD (SW0)")
-	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x02, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ORGANIST (SW1)")   // was IPT_UNUSED: the layout's button was dead (upstream has it)
 	PORT_BIT(0x04, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("CUSTOM (SW2)")
 	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ENTERTAINER (SW3)")
 	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("LATIN & WORLD (SW4)")
@@ -75,7 +75,7 @@ static INPUT_PORTS_START(kn7000_cpanel)
 	PORT_BIT(0x08, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("BALLAD (SW3)")
 	PORT_BIT(0x10, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("MODERN DANCE (SW4)")
 	PORT_BIT(0x20, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("ROCK & POP (SW5)")
-	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_UNUSED)
+	PORT_BIT(0x40, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("60s & 70s (SW6)")  // was IPT_UNUSED: the layout's button was dead (upstream has it)
 	PORT_BIT(0x80, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("8 & 16 BEAT (SW7)")
 	PORT_START("CPL_SEG3")   // CPL scan seg 0x03  (wire ADDR 0xC3)
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_KEYBOARD) PORT_NAME("INTRO & ENDING 1 (SW0)")
@@ -460,9 +460,7 @@ void kn7000_cpanel_device::panel_led_frame(uint8_t addr, uint8_t data)
 		const int creg = addr & 0x1f;
 		for (int bit = 0; bit < 8; bit++)
 		{
-			const int led = creg * 8 + bit;
-			if (led < 512)
-				m_cpc_leds[led] = BIT(data, bit);
+			m_cpc_leds[creg * 8 + bit] = BIT(data, bit);   // creg <= 0x1f: up to cpc_led255
 		}
 	}
 	else

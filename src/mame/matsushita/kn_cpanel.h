@@ -87,7 +87,7 @@ protected:
 	TIMER_CALLBACK_MEMBER(panel_scan);    // periodic button + analog scan
 
 	// Append panel->main reply bytes and kick the ATN delivery dance if idle.
-	void panel_queue(const uint8_t *bytes, int n);
+	bool panel_queue(const uint8_t *bytes, int n);   // false: queue full, nothing queued
 
 private:
 	// Serial frame parse (7-byte TX frames from the main CPU).

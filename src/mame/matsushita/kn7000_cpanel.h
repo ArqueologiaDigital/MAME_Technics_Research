@@ -63,7 +63,7 @@ private:
 
 	// LED outputs (the three panel PCBs: left / center / right).
 	output_finder<512> m_cpl_leds;
-	output_finder<64>  m_cpc_leds;
+	output_finder<256> m_cpc_leds;   // 32 registers (ADDR 0xE0-0xFF) x 8 bits
 	output_finder<512> m_cpr_leds;
 };
 

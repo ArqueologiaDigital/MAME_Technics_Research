@@ -123,17 +123,24 @@ void kn_cpanel_base_device::tx_byte(uint8_t data)
 
 // The panel raises ATN, the main CPU's group-0x1A ISR switches the link to RX and
 // clocks the bytes in one group-0x10 interrupt at a time.
-void kn_cpanel_base_device::panel_queue(const uint8_t *bytes, int n)
+// Returns false when the queue is full and nothing was queued; the scan then keeps its old
+// state for that control, so the change is sent again on the next scan instead of being lost
+// (a lost button release left the button held). Ported from upstream (#16250 review).
+bool kn_cpanel_base_device::panel_queue(const uint8_t *bytes, int n)
 {
 	if (m_panel_resp_pos == m_panel_resp_len)
 		m_panel_resp_pos = m_panel_resp_len = 0;          // queue fully drained: reset
 	if (m_panel_resp_len + n > int(sizeof(m_panel_resp)))
-		return;                                           // overflow: drop (panel would too)
+	{
+		logerror("reply queue full, %d bytes dropped\n", n);
+		return false;
+	}
 	const bool was_idle = (m_panel_resp_pos == m_panel_resp_len);
 	for (int i = 0; i < n; i++)
 		m_panel_resp[m_panel_resp_len++] = bytes[i];
 	if (was_idle)
 		m_panel_evt->adjust(attotime::from_usec(60), 1);  // ATN edge 1
+	return true;
 }
 
 // Deferred panel events (one-shot; scheduled from ISR-context register writes so
@@ -191,9 +198,9 @@ TIMER_CALLBACK_MEMBER(kn_cpanel_base_device::panel_scan)
 		}
 		else if (data != m_vol_apcseq_prev)
 		{
-			m_vol_apcseq_prev = data;
 			const uint8_t pkt[2] = { 0xd2, data };
-			panel_queue(pkt, 2);
+			if (panel_queue(pkt, 2))
+				m_vol_apcseq_prev = data;
 		}
 	}
 
@@ -211,9 +218,9 @@ TIMER_CALLBACK_MEMBER(kn_cpanel_base_device::panel_scan)
 		}
 		else if (pos != m_dial_prev)
 		{
-			m_dial_prev = pos;
 			const uint8_t pkt[2] = { 0x10, pos };
-			panel_queue(pkt, 2);
+			if (panel_queue(pkt, 2))
+				m_dial_prev = pos;
 		}
 	}
 
@@ -243,9 +250,9 @@ TIMER_CALLBACK_MEMBER(kn_cpanel_base_device::panel_scan)
 			if (delta > 50) delta -= 101;
 			else if (delta < -50) delta += 101;
 			const int step = (delta > 0) ? 1 : -1;                          // one detent toward the adjuster
-			m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);
 			const uint8_t pkt[2] = { 0x17, uint8_t(int8_t(step)) };         // +/-1 = ~1 BPM/detent; firmware ADDS it
-			panel_queue(pkt, 2);
+			if (panel_queue(pkt, 2))
+				m_tempoknob_prev = uint8_t((int(m_tempoknob_prev) + step + 101) % 101);
 		}
 	}
 
@@ -271,8 +278,8 @@ TIMER_CALLBACK_MEMBER(kn_cpanel_base_device::panel_scan)
 			continue;
 		if (seg_state[seg] == m_btn_prev[seg])
 			continue;
-		m_btn_prev[seg] = seg_state[seg];
 		const uint8_t pkt[2] = { addr, seg_state[seg] };
-		panel_queue(pkt, 2);
+		if (panel_queue(pkt, 2))
+			m_btn_prev[seg] = seg_state[seg];
 	}
 }
