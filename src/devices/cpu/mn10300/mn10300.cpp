@@ -71,6 +71,7 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_intc_extmd_cb(*this)
 	, m_iagr_latch(0), m_intc_280(0)
 	, m_tm5_mode(0), m_tm5_base(0), m_tm5_timer(nullptr)
+	, m_tm6_mode(0), m_tm6_mda(0), m_tm6_ca(0), m_tm6_timer(nullptr)
 	, m_dma_tc_cb(*this), m_dma_timer(nullptr)
 	, m_dma_ctrl(0), m_dma_src(0), m_dma_dst(0), m_dma_count(0), m_dma_remain(0)
 	, m_dma_active(false), m_dma_started(false), m_dma_drq(false)
@@ -108,6 +109,10 @@ void mn10300_device::internal_map(address_map &map)
 	map(0x34001080, 0x34001083).rw(FUNC(mn10300_device::tm45_mode_r), FUNC(mn10300_device::tm45_mode_w));
 	map(0x34001090, 0x34001093).rw(FUNC(mn10300_device::tm45_base_r), FUNC(mn10300_device::tm45_base_w));
 	map(0x340010a0, 0x340010a3).r(FUNC(mn10300_device::tm45_count_r));
+	// Timer 6: mode, compare/capture mode, compare A (the KN6000/KN6500 tempo timer).
+	map(0x34001084, 0x34001087).rw(FUNC(mn10300_device::tm6_mode_r), FUNC(mn10300_device::tm6_mode_w));
+	map(0x340010b4, 0x340010b7).rw(FUNC(mn10300_device::tm6_mda_r), FUNC(mn10300_device::tm6_mda_w));
+	map(0x340010c4, 0x340010c7).rw(FUNC(mn10300_device::tm6_ca_r), FUNC(mn10300_device::tm6_ca_w));
 	// DMA controller channel 0: control/start, source, destination, byte count.
 	// Takes priority over the KN7000 driver's generic 0x32000000 io_r/io_w window.
 	map(0x32000800, 0x3200080f).rw(FUNC(mn10300_device::dmac_r), FUNC(mn10300_device::dmac_w));
@@ -157,6 +162,10 @@ void mn10300_device::device_start()
 	// is a device-allocated emu_timer and is save-stated automatically.)
 
 	m_tm5_timer = timer_alloc(FUNC(mn10300_device::tm5_tick), this);
+	m_tm6_timer = timer_alloc(FUNC(mn10300_device::tm6_tick), this);
+	save_item(NAME(m_tm6_mode));
+	save_item(NAME(m_tm6_mda));
+	save_item(NAME(m_tm6_ca));
 
 	m_dma_timer = timer_alloc(FUNC(mn10300_device::dma_transfer), this);
 	save_item(NAME(m_dma_ctrl));
@@ -222,6 +231,10 @@ void mn10300_device::device_reset()
 	m_tm5_mode = 0;
 	m_tm5_base = 0;
 	m_tm5_timer->adjust(attotime::never);
+	m_tm6_mode = 0;
+	m_tm6_mda = 0;
+	m_tm6_ca = 0;
+	m_tm6_timer->adjust(attotime::never);
 
 	m_dma_ctrl = 0;
 	m_dma_active = false;
@@ -576,6 +589,84 @@ void mn10300_device::tm5_rearm(bool restart_phase)
 TIMER_CALLBACK_MEMBER(mn10300_device::tm5_tick)
 {
 	intc_assert(0x07);      // GxICR 0x3400011C -> KN7000: the 96-PPQN sequencer tick ISR 0x48447084
+}
+
+
+//**************************************************************************
+//  16-bit timer 6 -- the KN6000/KN6500 tempo timer
+//**************************************************************************
+//
+// The KN6000/KN6500 sequencer is clocked by timer 6, not TM5 (which their firmware uses for
+// its millisecond counter). Its 96-PPQN tick ISR (KN6000 0x48468A69: beat phase mod 0x60 at
+// 0x50276E0C, stop flag 0x50276DFE, the same five clock lanes as the KN7000's 0x48447084) is
+// registered on INTC group 9 (GxICR 0x34000124) at 0x48469289. The firmware's own driver:
+//   setup   (0x4846919E): mode low bits = 1 (clock source), bit 4 set, MDA bits cleared, stop,
+//            pulse bit 14 (load), MDA bits 7:6 = 01, set bit 15 (count), compare A = 0x28B0
+//   tempo   (0x484692EB / 0x4846930E): compare A = 1,250,000 / BPM (40..300), while running
+//   restart (0x48469345): clear bit 15, pulse bit 14, set bit 15
+// The registers are never read back and the count register is never read. Compare A is the
+// period: 1,250,000 / BPM at 96 PPQN is a 2 MHz count clock, IOCLK / 8 -- the same clock as
+// the KN7000's TM5 tempo math -- so the source select in the low mode bits is not decoded.
+// Until this existed the timer never ran, the sequencer never ticked, and a feature
+// presentation (FEATURE.PRE) loaded and then held its first slide forever, as the KN7000 did
+// before its TM5 was modelled.
+uint16_t mn10300_device::tm6_mode_r(offs_t offset)
+{
+	return offset ? 0 : m_tm6_mode;
+}
+
+void mn10300_device::tm6_mode_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (offset)
+		return;                                        // 0x34001086: timer 7, not modelled
+	const uint16_t old = m_tm6_mode;
+	COMBINE_DATA(&m_tm6_mode);
+	const uint16_t rising = m_tm6_mode & ~old;
+	if (!(m_tm6_mode & 0x8000))
+		m_tm6_timer->adjust(attotime::never);          // count disabled
+	else if (rising & (0x8000 | 0x4000))
+		tm6_rearm(true);                               // enabled, or load pulse while enabled
+}
+
+uint16_t mn10300_device::tm6_mda_r(offs_t offset)
+{
+	return offset ? 0 : m_tm6_mda;
+}
+
+void mn10300_device::tm6_mda_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (!offset)
+		COMBINE_DATA(&m_tm6_mda);
+}
+
+uint16_t mn10300_device::tm6_ca_r(offs_t offset)
+{
+	return offset ? 0 : m_tm6_ca;
+}
+
+void mn10300_device::tm6_ca_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	if (offset)
+		return;
+	COMBINE_DATA(&m_tm6_ca);
+	// While running, the new compare value sets the period from the next match on.
+	if ((m_tm6_mode & 0x8000) && !m_tm6_timer->remaining().is_never())
+		tm6_rearm(false);
+}
+
+void mn10300_device::tm6_rearm(bool restart_phase)
+{
+	static constexpr unsigned PRESCALE = 8;           // IOCLK / 8 = 2 MHz, from the tempo math above
+	const attotime period = attotime::from_ticks(uint64_t(m_tm6_ca + 1) * PRESCALE, clock() / 2);
+	if (restart_phase)
+		m_tm6_timer->adjust(period, 0, period);
+	else
+		m_tm6_timer->adjust(m_tm6_timer->remaining(), 0, period);
+}
+
+TIMER_CALLBACK_MEMBER(mn10300_device::tm6_tick)
+{
+	intc_assert(0x09);      // GxICR 0x34000124 -> KN6000/KN6500: the 96-PPQN sequencer tick ISR 0x48468A69
 }
 
 

@@ -263,9 +263,24 @@ private:
 	void tm5_rearm(bool restart_phase);
 	TIMER_CALLBACK_MEMBER(tm5_tick);
 
+	// ---- 16-bit timer 6 (mode 0x34001084, 0x340010B4, compare A 0x340010C4) ----
+	// The KN6000/KN6500 tempo timer (see tm6_mode_w).
+	uint16_t tm6_mode_r(offs_t offset);
+	void tm6_mode_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t tm6_mda_r(offs_t offset);
+	void tm6_mda_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t tm6_ca_r(offs_t offset);
+	void tm6_ca_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void tm6_rearm(bool restart_phase);
+	TIMER_CALLBACK_MEMBER(tm6_tick);
+
 	uint8_t   m_tm5_mode;        // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
 	uint16_t  m_tm5_base;        // 16-bit reload (underflow period)
 	emu_timer *m_tm5_timer;
+	uint16_t  m_tm6_mode;        // bit15 = count enable, bit14 = load pulse, low bits = clock source
+	uint16_t  m_tm6_mda;         // 0x340010B4 (low byte): compare/capture mode, stored only
+	uint16_t  m_tm6_ca;          // compare A: the counter clears on a match (the period)
+	emu_timer *m_tm6_timer;
 
 	// ---- on-chip DMA controller, channel 0 (registers at 0x32000800) --------
 	uint32_t dmac_r(offs_t offset);
