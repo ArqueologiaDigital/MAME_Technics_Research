@@ -251,3 +251,24 @@ are the ones about the screen itself, all in EMULATED frames so they are host-sp
   emulator, and with the file API steered to SD the firmware wrote valid BMPs, shifted up by one
   row against the screen. `CaptureLcdCheck` (`0x4848886E`) would capture with no gate but has no
   user in 941.
+
+## 12. DEBUG TOOLS: DEBUG MODE, the mode enumerator and BITMAP LOAD (2026-10-18)
+
+Reached only where the gate byte is `0xFF` (chord 1/4/5/8 -> Panel Simulator 2.1 -> LCDR5). On a
+stock 941 the chord's MEMORY DUMP exits to the home screen, not to DEBUG TOOLS (measured).
+
+* **DEBUG MODE : OFF/ON** (DbModeEditBox, proc `0x4848831D`; u32 `0x5015080C`, in .bss, zeroed by
+  crt0 at every reset): balance column 2 or 3 UP = ON, DOWN = OFF (measured; not a flip-flop). A change
+  is broadcast as MT_SetDebugMode (`0x600E4`) to every mode and title. Effects, each seen in MAME:
+  PART SETTING's PART SELECT list grows from 22 to 32 parts (ACCOMP 1-5, BASS, DRUM 1/2, PADS 1/2);
+  APC REVERB SETTING gets a second DEPTH column for the accompaniment parts; the blank LCDL2 of
+  REVERB & EFFECT opens a hidden EFFECT DEBUG screen (title 0x3E); APC SELECT shows four editable
+  APC wait times (u32 `0x50007874..80`); HELP text pages show a page-number box (u16 `0x5009E726`),
+  stepped by column 16. Poking `0x5015080C` alone enables only the last three. Nothing else reads it.
+* **"015 : _MD_SONG"** is a separate tool (DbVariableMenu, proc `0x48488AB5`, u32 `0x500012C0`): a
+  hexadecimal list of the 32 modes and 320 titles by their developer names (tables `0x485AEE14`,
+  `0x485AFD94`), stepped with column 11; LCDR5 jumps to the selected mode or title.
+* **BITMAP LOAD** (LCDR3): a preview of a `.BMP` from the floppy root (pattern `*.BMP`, first ten
+  only), chosen with columns 5/6, LOAD = LCDR4, read up to 0x18000 bytes into `0x502B8000` and drawn by
+  `Draw2BpFile` at the top-left like the firmware's own BMP pictures (palette slots 0x20..0xCF). Probes
+  and results: `tools/debugtools/`.
