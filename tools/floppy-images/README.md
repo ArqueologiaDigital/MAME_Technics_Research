@@ -13,8 +13,7 @@ software-list entry's name, the way a user would type it on the instrument's DIS
 Why: the installers (`ca6fp01.exe`, `idd7000.exe`, ...) never write a disk layout. All 79 in
 the CA software mirror are ZIP archives behind a self-extractor stub (WinZip Self-Extractor, a
 16-bit Windows program, for 70; Mijenix ZipMagic, 32-bit, for 9; `unzip -t` checks every member's
-CRC-32). Run on a PC they
-copy their members onto an already formatted HD disk ("Please insert a formatted HD-disk"). The
+CRC-32). Run on a PC they copy their members onto an already formatted HD disk ("Please insert a formatted HD-disk"). The
 bytes of every file are therefore fixed by the archive, and the rest of the disk (boot sector,
 FATs, label, unused sectors) by whatever formatted it. Running them under Wine would only write
 the same files into a host folder; DOSBox would need a Windows install and would still take the
@@ -39,6 +38,9 @@ SHA-1 `32d74744faf9d0648663fd29b13338a2267c7193` with the name left empty (`base
 
 - The label is the typed name padded with `_` to 11 characters; an empty name is eleven `_`.
   Typing "KN" on the KN6000 changed exactly two bytes (`base/kn6000_formatted_named_KN.img.gz`).
+  Pressing EXIT on DISK NAMING instead writes **no label at all**: the root stays zeros
+  (`base/kn5000_formatted_unnamed.img.gz`, SHA-1 `15f888af...`, 12 bytes from the named one). The
+  KN7000 disk ejected before its naming step is byte-identical to it.
 - All three issue FORMAT TRACK with N=2 (512 bytes), 18 sectors, gap 0x6C, fill `E5` on all 80
   cylinders and both heads (`runs-2026-10-18/*_format.fdc.txt`). The KN5000 and KN7000 traces then
   match command for command: WRITE DATA to sectors 0-32 in order, two more writes to sector 19
@@ -77,6 +79,36 @@ all 28 checks; `fsck.fat` reports only the label note above
 the published overlay build it loads directly, with no relayout step: 1,589 DMA sector transfers,
 then the Weserbergland slides from t=69 s onwards (`ca6fp01_kn6000_play.log`, `.jpg`).
 
+## What official Technics disks look like
+
+`runs-2026-10-18/official_update_disks_compared.md` compares six official KN5000 system-update
+images (the archive.org item `technics-kn5000-system-update-disks`; v5-v8 untouched since
+1997-98: v5/v6 as `.IMG` files shipped with `DOSIMAGE.EXE`, v7/v8 appended to
+`KN5KPV7/8.EXE`, Matsushita's DOS "Self executable Image file to FD V0.1") with the formatter
+output and a rebuilt disk (`compare_disks.py`, `dissect_disk.py`). All six:
+
+- carry the instruments' boot head (Technics template, no `55 AA`): they were formatted on an
+  instrument; on v5 and v6 Windows 95 later replaced the OEM name with its `?????IHC` marker;
+- have **no volume label**, as an instrument formats a disk when its naming is skipped;
+- hold their files contiguously from cluster 2 in directory order, upper-case 8.3 names,
+  creation and access fields zero, write dates kept: the layout `technics_floppy.py` writes;
+- leave whatever the writing PC had in the slack after end of file (`E5`, `00`, stray bytes),
+  where our builds write zeros;
+- have `E5` free space (v7-v10), or `F6` and leftovers (v5, v6: those master disks had been used).
+
+v9 and v10, as uploaded, also show a dirty flag at byte 0x25, access dates 2023-02-26 and
+creation dates 1980-01-01, which a read-write mount (most likely Linux) writes; v5-v8 have none
+of these.
+
+## The rebuilt software lists (2026-10-18)
+
+`build_all.py` rebuilt all 40 entries that have an installer (`manifest.tsv`; `idd5000` has
+none) on their own instruments' disks, labelled with the entry names. Every image passes
+`verify_floppy.py` and carries the same files as the image it replaces. Two runs gave identical
+zips and lists. Staged, not installed, in
+`~/compartilhado/technics_romsets/floppy-rebuild-2026-10-18/` (private); the new lists and
+hashes are also in `rebuild-2026-10-18/`. How to test them: `TESTING.md`.
+
 ## Files
 
 | file                 | question it answers                                                                                               | command                                                                               |
@@ -86,6 +118,11 @@ then the Weserbergland slides from t=69 s onwards (`ca6fp01_kn6000_play.log`, `.
 | `fat12_summary.py`   | what is in each region of a raw 1.44 MB image?                                                                    | `python3 -I fat12_summary.py IMAGE.img`                                               |
 | `find_bpb.py`        | where does a ROM keep the boot sector its FORMAT writes?                                                          | `python3 -I find_bpb.py ROM` or `--pair EVEN ODD`                                     |
 | `decode_fdc_log.py`  | what did the firmware send the FDC, and what came back? (from tap lines in a rig log)                             | `python3 -I decode_fdc_log.py RIG.log [--from MARKTEXT]`                              |
+| `build_all.py`       | the whole rebuild: images, zips, MAME lists with new hashes, summary (stops on any failed check)                  | `python3 -I build_all.py OUT`                                                         |
+| `manifest.tsv`       | which installer and which base disk each software-list entry is built from                                        |                                                                                       |
+| `dissect_disk.py`    | everything a real disk records about how it was written (dates, chains, slack, fill)                              | `python3 -I dissect_disk.py IMAGE.img [--zip INSTALLER.exe]`                          |
+| `compare_disks.py`   | the same traits for several disks, side by side                                                                   | `python3 -I compare_disks.py IMAGE.img ...`                                           |
+| `TESTING.md`         | how to test the rebuilt set in the emulator                                                                       |                                                                                       |
 | `step.sh`            | run a few `remote.lua` commands, wait for them, crop the newest snapshot (for walking menus by eye)               | `step.sh DIR "press PORT MASK;wait 3"`                                                |
 | `base/*.img.gz`      | the blank disks the formatters wrote (`gzip -dc`); `SHA1SUMS` is of the uncompressed images                       |                                                                                       |
 | `runs-2026-10-18/`   | the command files `remote.lua` ran for each format (`*_format.cmd`, with the rig's `.log`), FDC traces, the trial |                                                                                       |
