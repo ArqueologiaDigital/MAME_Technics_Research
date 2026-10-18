@@ -264,3 +264,14 @@ A3.14 and A2.19. All 34 images still to be rebuilt; WSA1 untouched.
 - **A1.5.** Which side's flag semantics match the AM33 manual.
 - **B.2.** Whether the KN7000 firmware reaches the opcodes the overlay core skips.
 - **A1.9.** The interrupt-latency effect of FIX 4-6 on the non-Technics TMP95C061 drivers.
+
+## E — the floppy fixes extracted to a PR branch (later on 2026-10-18)
+
+A2.17 (DMA count + 1, end interrupt, TC from GPIO bit 4, DRQ on IRQ1), A2.19 (DACK gated on DRQ),
+the INDEX-on-IRQ7 part of `a0117eb`, A3.6 and A3.14 are now on `technics-kn-flop-rebuild` in
+`~/compartilhado/mame` (worktree `~/compartilhado/mame-pr-kn-flop-rebuild`), together with the
+rebuilt `kn5000_flop`/`kn6000_flop`/`kn7000_flop` hashes (§D). They were adapted to upstream's core:
+IRQ pins instead of the overlay's direct group asserts. The firmware sets IRQ7 to high level, so
+INDEX now stamps throughout each pulse rather than once per edge. Not pushed. Evidence and board
+row: KN7000 repo `MAME-PR-QUEUE.md` #8, `tools/mame-pr-planning/kn-flop-pr/README.md`. The overlay
+sources are unchanged.
