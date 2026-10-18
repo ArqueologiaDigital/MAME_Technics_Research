@@ -7,10 +7,11 @@
 #   kn7000-emulator/ folder are DERIVED copies. See its README for full provenance,
 #   the integrity manifest, and the do-not-publish privacy guard.
 #
-# Every .rom file the kn7000/kn6000/kn6500/kn2400 drivers load is either
-#   (a) REGENERABLE -- rebuilt bit-identically by this script from a preserved source, or
-#   (b) DERIVED     -- a copy of another file in the set (the KN6xxx table placeholder).
-# Verified 2026-07-20: all 14 rebuild bit-identically. Nothing is unreconstructable.
+# Every .rom file the kn7000/kn6000/kn6500/kn2400 drivers load is REGENERABLE -- rebuilt
+# bit-identically by this script from a preserved source or by a deterministic generator
+# (the 'synth' kind, which includes the KN6xxx font placeholders built from the KN7000
+# table ROM). Verified 2026-07-20: all 14 rebuild bit-identically; the two font
+# placeholders were added 2026-10-18. Nothing is unreconstructable.
 #
 # WHY THIS EXISTS: the build tree (kn7000_mame_build/) is DISPOSABLE -- build.sh recreates
 # it and it is not version-controlled -- while tools/publish-binary.sh copies ROMs ONE WAY
@@ -64,19 +65,15 @@ aaae68589e59f98bc2a521be1c851dec kn7000 kn7000_table.rom             sld
 291b6caee074bdeef26db51673e7062d kn6000 kn6000_program_odd.rom       sld
 5a6cb22b70f61ac7ffc6f37ec3f9432d kn6500 kn6500_program_even.rom      sld
 d2442b2c68024da9dd2d0bdb731212b3 kn6500 kn6500_program_odd.rom       sld
+6d08fdb9be95d6c701c9d9618eb765b3 kn6000 kn6000_table_fontph.rom      synth
+8be6134c7599447dd239dcf06b40bb48 kn6500 kn6500_table_fontph.rom      synth
 8d9c67eab4d1067c96395f0069493fc7 kn2400 kn2400_program_even.rom      sld
 ed67066933a236cfb569890a847f09a2 kn2400 kn2400_program_odd.rom       sld
 EOF
 
-# Files publish-binary.sh DERIVES into the KN6xxx set (deliberate BAD_DUMP placeholder --
-# the KN7000's table/font ROM standing in for the never-dumped KN6xxx IC13/IC14).
-# Documented here so nobody "cleans up" what looks like a stray KN7000 file.
-read -r -d '' DERIVED <<'EOF' || true
-ccdfdad619d6740f6f1754d0432d22eb kn6000 kn7000_table_even.rom
-cda9079ed33867454745903f91addc6d kn6000 kn7000_table_odd.rom
-ccdfdad619d6740f6f1754d0432d22eb kn6500 kn7000_table_even.rom
-cda9079ed33867454745903f91addc6d kn6500 kn7000_table_odd.rom
-EOF
+# (Until 2026-10-18 publish-binary.sh also copied the KN7000's whole table ROM into the
+# KN6000/KN6500 sets as their font placeholder. The generated *_table_fontph.rom files
+# above replace it; the driver no longer references kn7000_table_*.rom for them.)
 
 fail=0
 note() { printf '  %s\n' "$*"; }
@@ -88,12 +85,6 @@ cmd_list() {
     [ -n "${md5:-}" ] || continue
     printf '%-32s %-7s %-6s %s\n' "$file" "$model" "$kind" "$md5"
   done <<< "$MANIFEST"
-  echo
-  echo "DERIVED by publish-binary.sh (KN7000 table ROM as the KN6xxx BAD_DUMP font placeholder):"
-  while read -r md5 model file; do
-    [ -n "${md5:-}" ] || continue
-    printf '%-32s %-7s %-6s %s\n' "$file" "$model" derived "$md5"
-  done <<< "$DERIVED"
 }
 
 # ---------------------------------------------------------------------------
@@ -228,6 +219,18 @@ gen_synthetics() {
   fi
   python3 "$HERE/make_wave_pack.py" --waves "$WAVES_DIR" \
     --out "$ROMS/kn7000/kn7000_waves_synthetic.rom"
+
+  # KN6000/KN6500 table/font ROM placeholder: only the KN7000's bitmap fonts, at the
+  # offsets each model's firmware reads, pointers relocated to its table-ROM base. Their
+  # own IC13/IC14 are undumped; the driver loads these as BAD_DUMP. See the generator's
+  # docstring and notes/kn6000-kn6500-boot.md.
+  local m
+  for m in kn6000 kn6500; do
+    echo "== $m table/font PLACEHOLDER (the KN7000's fonts; NOT a dump)"
+    mkdir -p "$ROMS/$m"
+    python3 "$HERE/kn6xxx_font_placeholder.py" --model "$m" \
+      --table "$ROMS/kn7000/kn7000_table.rom" --out "$ROMS/$m/${m}_table_fontph.rom" | tail -1
+  done
 }
 
 cmd_generate() {
