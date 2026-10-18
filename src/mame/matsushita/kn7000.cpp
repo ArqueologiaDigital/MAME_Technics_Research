@@ -433,6 +433,7 @@ private:
 	// fdd_index_poll.
 	emu_timer *m_fdd_index_timer = nullptr;
 	int m_fdd_index = 0;
+	int m_fdc_drq = 0;                            // FDC.DRQ as last driven (gates DACK cycles)
 	TIMER_CALLBACK_MEMBER(fdd_index_poll);
 	void fdd_loaded(floppy_image_device *fd);
 	void fdd_unloaded(floppy_image_device *fd);
@@ -1825,6 +1826,7 @@ void kn7000_state::machine_start()
 			fdd_loaded(fd);
 	}
 	save_item(NAME(m_fdd_index));
+	save_item(NAME(m_fdc_drq));
 	save_item(NAME(m_gpio8004_kn6));
 
 	// (INTC + TM5 timer state is save_item'd by the MN10300 core now.)
@@ -1958,6 +1960,7 @@ void kn7000_state::fdc_irq_w(int state)
 // moves by CPU (see dmac in the MN10300 core). The KN6000 firmware does not use IRQ1 for this.
 void kn7000_state::fdc_drq_w(int state)
 {
+	m_fdc_drq = state;
 	m_maincpu->dma_req_w(state);
 	if (state && !m_lib_mirror)
 		intc_assert(0x18);
@@ -2005,13 +2008,17 @@ void kn7000_state::fdd_unloaded(floppy_image_device *fd)
 }
 // FDC.DACK byte slot at 0x98010000 (decoder Y1). A read/write here transfers one FIFO byte to/from the
 // FDC in the current DMA operation (asserts DACK); the DMA channel reads or writes it once per FDC.DRQ.
+// A DACK cycle the controller has not requested moves no data. The KN6000's DMA-end ISR makes one: a
+// dummy read of this slot while it raises TC (0x48510D63). After a read that is harmless, DRQ is
+// already low; during FORMAT TRACK it took the last sector-ID byte (sector 18's N) out of the FIFO,
+// the controller underran (ST1 0x10), and sector 18 of every track was written with a broken header.
 uint8_t kn7000_state::fdc_dma_r(offs_t)
 {
-	return m_fdc ? m_fdc->dma_r() : 0xff;
+	return (m_fdc && m_fdc_drq) ? m_fdc->dma_r() : 0xff;
 }
 void kn7000_state::fdc_dma_w(offs_t, uint8_t data)
 {
-	if (m_fdc)
+	if (m_fdc && m_fdc_drq)
 		m_fdc->dma_w(data);
 }
 
