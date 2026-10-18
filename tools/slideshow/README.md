@@ -90,6 +90,7 @@ standard layout (`make_fat12.py`) loads.
 | `kn6000_pres_insert.lua` | does the disk load, and what does the screen show; logs the disk state byte, INDEX stamps, DMA starts | env `PRES_IMG`, `PRES_RUN` (s after insert), `PRES_PRESS`, `FORCE_DSKCHG` |
 | `kn6000_pres_trace.lua`  | where does the insert path stop: event, screen check, media probe, mount, find (each step), FS pool   | same, plus `-debug -debugger none`                                        |
 | `fat12_relayout.py`      | the listed image's files on a standard-layout floppy (or, `--fatid-only`, just its FAT start fixed)   | `python3 -I fat12_relayout.py [--fatid-only] SRC.img OUT.img`             |
+| `changed_screens.py`     | which snapshots differ from the one before (one LCD crop each, on a contact sheet)                    | `python3 -I changed_screens.py SNAPDIR OUT.png COLS`                      |
 
 | image                                       | md5                                |
 |---------------------------------------------|------------------------------------|
@@ -97,23 +98,27 @@ standard layout (`make_fat12.py`) loads.
 | `fat12_relayout.py --fatid-only` of it      | `b291b8413a3f626c76ec26d61893b115` |
 | `fat12_relayout.py` of it (standard layout) | `a06b15c5a36d18a3df8bce56310a93ca` |
 
-| run | binary (md5)            | disk                        | result                                                                                            |
-|-----|-------------------------|-----------------------------|---------------------------------------------------------------------------------------------------|
-| B1  | B `8c85ba51…`           | `ca6fp01.img` as listed     | insert seen: disk state 0 → 1, INDEX stamps, 19 DMA reads; screen unchanged                       |
-| B5  | B                       | as listed                   | media probe `0x4853312E` → 0 (FAT start), mount −7, find −1                                       |
-| B6  | B                       | FAT start set to `F0 FF FF` | probe 3 (HD), mount 0, find −1                                                                    |
-| B10 | B                       | FAT start patched           | FS pool: a 0x21C block freed then not allocatable; free of `0x6005004F` (heap overrun)            |
-| D1  | D `d398d07c…`           | FAT start patched           | pool healthy; directory scan finds nothing (12-sector FATs)                                       |
-| D2  | D                       | standard layout             | FEATURE.PRE found, `0x018F0026` (open) posted                                                     |
-| D3  | D                       | standard layout             | WESERBERGLAND button; 1599 DMA reads to t=69; slide 1 drawn from t≈74 and held to t=264           |
-| D4  | D                       | standard layout             | as D3; LCDR 5 at t=84, START/STOP at t=114 → back to the DEMONSTRATION menu with WESERBERGLAND    |
-| E01 | D (published, `run.sh`) | `ca6fp01_std.img`           | insert seen at t=24, 1599 DMA reads, first slide (Weserbergland) held to t=174                    |
-| E02 | D (published, `run.sh`) | `ca6fp02_std.img`           | 1279 DMA reads, first slide (Sexy Girls title)                                                    |
-| E03 | D (published, `run.sh`) | `ca6fp03_std.img`           | 709 DMA reads, first slide (CA Software / Die Freisprecheinrichtung)                              |
-| E04 | D (published, `run.sh`) | `ca6fp04_std.img`           | 1569 DMA reads, then the DEMONSTRATION menu with LETS GET BACK highlighted; no slide (not traced) |
+| run | binary (md5)              | disk                        | result                                                                                                             |
+|-----|---------------------------|-----------------------------|--------------------------------------------------------------------------------------------------------------------|
+| B1  | B `8c85ba51…`             | `ca6fp01.img` as listed     | insert seen: disk state 0 → 1, INDEX stamps, 19 DMA reads; screen unchanged                                        |
+| B5  | B                         | as listed                   | media probe `0x4853312E` → 0 (FAT start), mount −7, find −1                                                        |
+| B6  | B                         | FAT start set to `F0 FF FF` | probe 3 (HD), mount 0, find −1                                                                                     |
+| B10 | B                         | FAT start patched           | FS pool: a 0x21C block freed then not allocatable; free of `0x6005004F` (heap overrun)                             |
+| D1  | D `d398d07c…`             | FAT start patched           | pool healthy; directory scan finds nothing (12-sector FATs)                                                        |
+| D2  | D                         | standard layout             | FEATURE.PRE found, `0x018F0026` (open) posted                                                                      |
+| D3  | D                         | standard layout             | WESERBERGLAND button; 1599 DMA reads to t=69; slide 1 drawn from t≈74 and held to t=264                            |
+| D4  | D                         | standard layout             | as D3; LCDR 5 at t=84, START/STOP at t=114 → back to the DEMONSTRATION menu with WESERBERGLAND                     |
+| E01 | D (published, `run.sh`)   | `ca6fp01_std.img`           | insert seen at t=24, 1599 DMA reads, first slide (Weserbergland) held to t=174                                     |
+| E02 | D (published, `run.sh`)   | `ca6fp02_std.img`           | 1279 DMA reads, first slide (Sexy Girls title)                                                                     |
+| E03 | D (published, `run.sh`)   | `ca6fp03_std.img`           | 709 DMA reads, first slide (CA Software / Die Freisprecheinrichtung)                                               |
+| E04 | D (published, `run.sh`)   | `ca6fp04_std.img`           | 1569 DMA reads, then the DEMONSTRATION menu with LETS GET BACK highlighted; no slide (not traced)                  |
+| F01 | F `f88039d7…` (+ timer 6) | `ca6fp01_std.img`           | the slide show plays: 26 distinct screens in 200 s, the towns then the lyric slides; audio from t≈70 s (rms ~5000) |
+| F02 | F                         | `ca6fp02_std.img`           | title, then a new picture every 5-10 s (24 distinct screens)                                                       |
+| F03 | F                         | `ca6fp03_std.img`           | the whole show, then back to the DEMONSTRATION menu (14 distinct screens)                                          |
+| F04 | F                         | `ca6fp04_std.img`           | title and pictures (26 distinct screens); under D it never left the menu                                           |
 
-Still open: whether the song plays (the KN6000 driver's audio is silent here, and the slides do not
-advance), and what in a KN6000 `I KD` song cues `<ACT NO=n>`.
+Runs B1-E04 stopped at the first slide: the KN6000's tempo timer (MN10300 timer 6) was not
+emulated, so the song never ticked. With it (binary F) all four disks play, with sound.
 
 KN7000 runs with `pres_probe.lua` (its header has the recipe; use `-window`, not `-video none`):
 

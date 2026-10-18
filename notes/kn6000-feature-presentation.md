@@ -4,8 +4,9 @@ Question: what stops a KN6000 "feature presentation" disk (CA-6FP01 *Weserbergla
 `kn6000_flop` software list) from loading when it is inserted on the DEMONSTRATION screen, as the
 instrument's users did ("press DEMO, then insert the disk")?
 
-Answer: four things, one after the other. Three were emulation defects, fixed in the overlay
-driver and MN10300 core. The fourth is the software-list images themselves.
+Answer: five things, one after the other. Four were emulation defects, fixed in the overlay
+driver and MN10300 core. The fifth is the software-list images themselves. With all five
+addressed, all four CA-6FP disks play their slide shows (2026-10-18).
 
 | # | stage                                   | what was wrong                                                                                   | fixed by                                                         |
 |---|-----------------------------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------|
@@ -13,6 +14,7 @@ driver and MN10300 core. The fourth is the software-list images themselves.
 | 2 | the insertion was never noticed         | the drive's INDEX pulse (IRQ7, INTC group 0x1E) was not delivered                                | `fdd_index_poll` in `kn7000.cpp`                                 |
 | 3 | the file system's memory pool corrupted | the DMA channel moved one byte too many per sector (upstream's count + 2)                        | count + 1, DMA-end interrupt on group 0x0F, FDC TC from GPIO     |
 | 4 | the disk was rejected, then not found   | the list's images are not laid out like a DOS-formatted floppy (FAT ID bytes, 12-sector FATs)    | not fixed: the images need rebuilding (see below)                |
+| 5 | the show stopped at its first slide     | the KN6000's tempo timer (MN10300 timer 6, INTC group 9) was not emulated: the song never ticked | timer 6 in the core (`tm6_*`)                                    |
 
 ## The insert path in the KN6000 firmware
 
@@ -95,15 +97,39 @@ All four disks, through the published folder's `run.sh` (runs E01-E04, logs in
 04 reads its files (1569 DMA transfers) and then stays on the DEMONSTRATION menu with its
 LETS GET BACK button highlighted, the drive still turning. Not traced yet.
 
-## Still open
+## Defect 5: the tempo timer
 
-The presentation loads and draws its first slide (ACT 1, `PIC01.JPG`), then holds it: over 190 s
-the slides never advance. The KN6000 driver's audio output is silent throughout (the recorded WAV
-is digital silence after t=10 s), so whether the `I KD` song is actually playing could not be
-heard; START/STOP returns to the DEMONSTRATION menu with WESERBERGLAND as an ordinary entry. Two
-questions remain: does the sequencer run the external song, and which event in a KN6000 `I KD`
-song selects `<ACT NO=n>` (the KN7000-style `0x8A` picture events are absent from these songs,
-`tools/slideshow/kn6000_sqt_pic_scan.py`).
+With defects 1-4 addressed the presentation loaded and drew its first slide, then held it: over
+190 s the slides never advanced (runs D3, D4). The same symptom had been the KN7000's before its
+on-chip tempo timer was modelled (kn7000_mame 60d5392, `notes/demo-and-sequencer-engine.md`): the
+slide show follows the song, and the song advances only on the tempo interrupt.
+
+The KN6000 does not use the KN7000's TM5 for tempo (it programs TM5 for its millisecond counter).
+Its tempo routine (`0x484692C4` sets the constant 1,250,000 at `0x50033758`; `0x484692EB` divides it
+by the BPM, clamped 40..300) writes **`0x340010C4`**, compare A of **MN10300 16-bit timer 6**. The
+setup at `0x4846919E` programs its mode word `0x34001084` (low bits = 1, then a load pulse on bit 14
+and count enable on bit 15) and `0x340010B4` (bits 7:6 = 01); the restart at `0x48469345` is
+stop / load / start. Its tick ISR `0x48468A69` (registered at `0x48469289` on INTC group 9, GxICR
+`0x34000124`) is the KN7000's `0x48447084` in other registers: a 96-PPQN phase counter at
+`0x50276E0C` (mod 0x60), a stop flag at `0x50276DFE`, and the same five clock lanes. 1,250,000 / BPM
+at 96 PPQN is a 2 MHz count, IOCLK / 8, the KN7000 TM5's clock too. The overlay core had no timer 6
+at all, so the writes went nowhere and the ISR never ran.
+
+Modelled in `mn10300.cpp` (`tm6_*`): compare A is the period at IOCLK / 8, bit 15 counts, bit 14
+reloads, group 9 on every match. The firmware never reads these registers back or reads the count,
+and the KN7000 firmware does not touch them.
+
+Result (binary F, md5 `f88039d7908c07715d38044e1c1cd927`, runs F01-F04, 200 s after the insert):
+
+| disk                       | what plays                                                                                                       |
+|----------------------------|------------------------------------------------------------------------------------------------------------------|
+| 01 *Weserbergland*         | the river towns one by one (Hann. Münden … Holzminden), then the lyric slides over the river, at the song's pace |
+| 02 *Sexy Girls*            | the title, then a new picture every 5-10 s                                                                       |
+| 03 *Freisprecheinrichtung* | the title and the story slides to "Euer Christian", then back to the DEMONSTRATION menu (the show ends)          |
+| 04 *Let's Get Back to Bed* | the title and its pictures (before the timer it did not get past the menu)                                       |
+
+So the KN6000 `I KD` songs do carry the slide cues; how they are encoded was not needed and was
+not decoded (they are not the KN7000's `0x8A` picture events, `tools/slideshow/kn6000_sqt_pic_scan.py`).
 
 Binaries: B (md5 `8c85ba51ae8027841251966f61aa9532`) is the resync build with DMA + INDEX
 (count + 2); D (md5 `d398d07ca975241dc4c969270dca1a4a`) adds count + 1, the group-0x0F end
