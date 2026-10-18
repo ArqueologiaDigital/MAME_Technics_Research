@@ -1,0 +1,69 @@
+[0.02] OK 1 wait 30
+[30.02] OK 2 lua local sp=manager.machine.devices[":maincpu"].spaces["program"]; local T=function() return manager.machine.time:as_double() end; _G.FT={}; _G.FT.w=sp:install_write_tap(0x98020000,0x9802000f,"fdcw",function(o,d,m) emu.print_error(string.format("FDCW t=%.3f %X %X/%X",T(),o,d,m)); return d end)
+[30.02] OK 3 create $HOME/compartilhado/tmp/flop-exe-trial/fmt7k2/kn7000_blank.img
+[30.02] OK 4 wait 6
+[36.02] OK 5 press CPR_SEG1 04
+[36.32] OK 6 wait 4
+[40.32] OK 7 press CPL_SEG0 02
+[40.62] OK 8 wait 5
+[45.62] OK 9 snap
+[45.62] OK 10 press CPR_SEG7 01
+[45.92] OK 11 wait 3
+[48.92] OK 12 snap
+[48.92] OK 13 lua emu.print_error("MARK yes")
+[48.92] OK 14 press CPR_SEG7 01
+[49.22] OK 15 wait 5
+[54.22] OK 16 snap
+[54.22] OK 17 wait 5
+[59.22] OK 18 snap
+[59.22] OK 19 wait 5
+[64.22] OK 20 snap
+[64.22] OK 21 wait 5
+[69.22] OK 22 snap
+[69.22] OK 23 wait 5
+[74.22] OK 24 snap
+[74.22] OK 25 wait 5
+[79.22] OK 26 snap
+[79.22] OK 27 wait 5
+[84.22] OK 28 snap
+[84.22] OK 29 wait 5
+[89.22] OK 30 snap
+[89.22] OK 31 wait 5
+[94.22] OK 32 snap
+[94.22] OK 33 wait 5
+[99.22] OK 34 snap
+[99.22] OK 35 wait 5
+[104.22] OK 36 snap
+[104.22] OK 37 wait 5
+[109.22] OK 38 snap
+[109.22] OK 39 wait 5
+[114.22] OK 40 snap
+[114.22] OK 41 wait 5
+[119.22] OK 42 snap
+[119.22] OK 43 wait 5
+[124.22] OK 44 snap
+[124.22] OK 45 wait 5
+[129.22] OK 46 snap
+[129.22] OK 47 wait 5
+[134.22] OK 48 snap
+[134.22] OK 49 wait 5
+[139.22] OK 50 snap
+[139.22] OK 51 wait 5
+[144.22] OK 52 snap
+[144.22] OK 53 wait 5
+[149.22] OK 54 snap
+[157.80] OK 55 lua emu.print_error("MARK r4")
+[157.80] OK 56 press CPR_SEG6 01
+[158.10] OK 57 wait 4
+[162.10] OK 58 snap
+[162.10] OK 59 lua emu.print_error("MARK exit")
+[162.10] OK 60 press CPC_SEG11 80
+[162.40] OK 61 wait 4
+[166.40] OK 62 snap
+[171.57] OK 63 lua emu.print_error("MARK ok")
+[171.57] OK 64 press CPR_SEG6 01
+[171.88] OK 65 wait 6
+[177.88] OK 66 snap
+[177.88] OK 67 unload
+[177.88] INFO :fdc:0:35hd exists=false filename=nil
+[177.88] OK 68 info

@@ -1,0 +1,74 @@
+[0.02] OK 1 wait 30
+[30.03] OK 2 lua local sp=manager.machine.devices[":maincpu"].spaces["program"]; local T=function() return manager.machine.time:as_double() end; _G.FT={}; _G.FT.w=sp:install_write_tap(0x11000a,0x11000b,"fdcw",function(o,d,m) emu.print_error(string.format("FDCW t=%.3f %02X",T(),d&0xff)); return d end); _G.FT.r=sp:install_read_tap(0x11000a,0x11000b,"fdcr",function(o,d,m) emu.print_error(string.format("FDCR t=%.3f %02X",T(),d&0xff)); return d end); _G.FT.a=sp:install_write_tap(0x110008,0x110009,"fdca",function(o,d,m) emu.print_error(string.format("FDCA t=%.3f %02X",T(),d&0xff)); return d end)
+[30.03] OK 3 create $HOME/compartilhado/tmp/flop-exe-trial/fmt5k6/kn5000_blank.img
+[30.03] OK 4 wait 6
+[36.04] OK 5 press CPR_SEG10 20
+[36.36] OK 6 wait 3
+[39.38] OK 7 snap
+[40.63] OK 8 press CPR_SEG10 20
+[40.95] OK 9 wait 3
+[43.97] OK 10 snap
+[49.74] OK 11 press CPL_SEG10 02
+[50.06] OK 12 wait 5
+[55.06] OK 13 snap
+[55.06] OK 14 press CPL_SEG8 01
+[55.38] OK 15 wait 3
+[58.40] OK 16 snap
+[58.40] OK 17 lua emu.print_error("MARK yes")
+[58.40] OK 18 press CPL_SEG8 01
+[58.72] OK 19 wait 5
+[63.72] OK 20 snap
+[63.72] OK 21 wait 5
+[68.72] OK 22 snap
+[68.72] OK 23 wait 5
+[73.73] OK 24 snap
+[73.73] OK 25 wait 5
+[78.73] OK 26 snap
+[78.73] OK 27 wait 5
+[83.73] OK 28 snap
+[83.73] OK 29 wait 5
+[88.73] OK 30 snap
+[88.73] OK 31 wait 5
+[93.74] OK 32 snap
+[93.74] OK 33 wait 5
+[98.74] OK 34 snap
+[98.74] OK 35 wait 5
+[103.74] OK 36 snap
+[103.74] OK 37 wait 5
+[108.75] OK 38 snap
+[108.75] OK 39 wait 5
+[113.75] OK 40 snap
+[113.75] OK 41 wait 5
+[118.75] OK 42 snap
+[118.75] OK 43 wait 5
+[123.76] OK 44 snap
+[123.76] OK 45 wait 5
+[128.76] OK 46 snap
+[128.76] OK 47 wait 5
+[133.76] OK 48 snap
+[133.76] OK 49 wait 5
+[138.76] OK 50 snap
+[138.76] OK 51 wait 5
+[143.77] OK 52 snap
+[143.77] OK 53 wait 5
+[148.77] OK 54 snap
+[148.77] OK 55 wait 5
+[153.77] OK 56 snap
+[153.77] OK 57 wait 5
+[158.78] OK 58 snap
+[158.78] OK 59 wait 5
+[163.78] OK 60 snap
+[163.78] OK 61 wait 5
+[168.78] OK 62 snap
+[168.78] OK 63 wait 5
+[173.79] OK 64 snap
+[173.79] OK 65 wait 5
+[178.79] OK 66 snap
+[190.24] OK 67 lua emu.print_error("MARK nameok")
+[190.24] OK 68 press CPL_SEG7 02
+[190.56] OK 69 wait 6
+[196.58] OK 70 snap
+[196.58] OK 71 unload
+[196.58] INFO :fdc:1:35hd exists=false filename=nil
+[196.58] OK 72 info
+[218.57] OK 73 exit

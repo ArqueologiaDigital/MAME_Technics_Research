@@ -1,0 +1,91 @@
+$ python3 -I technics_floppy.py base/kn6000_formatted.img ca6fp01.exe ca6fp01.img --label ca6fp01
+ca6fp01.img: 22 files, 1191 of 2847 clusters
+$ sha1sum ca6fp01.img
+e5f4f3d28ab9cb70621fc17f609f8f707bfeed03  ca6fp01.img
+$ python3 -I verify_floppy.py base/kn6000_formatted.img ca6fp01.exe ca6fp01.img ca6fp01
+PASS size: 1474560 bytes
+PASS boot
+PASS fats identical
+PASS fat head F0 FF FF
+PASS label: b'CA6FP01____'
+PASS label entry rest
+PASS file  1 FEATURE.PRE: 1 clusters from 2, attr 20, 80 bytes
+PASS file  2 weserl.act: 4 clusters from 3, attr 20, 1988 bytes
+PASS file  3 pic19.jpg: 89 clusters from 7, attr 20, 45128 bytes
+PASS file  4 pic18r2.jpg: 32 clusters from 96, attr 20, 16270 bytes
+PASS file  5 pic17.jpg: 63 clusters from 128, attr 20, 32097 bytes
+PASS file  6 pic16.jpg: 54 clusters from 191, attr 20, 27173 bytes
+PASS file  7 pic15.jpg: 89 clusters from 245, attr 20, 45065 bytes
+PASS file  8 pic14.jpg: 51 clusters from 334, attr 20, 25780 bytes
+PASS file  9 pic13.jpg: 57 clusters from 385, attr 20, 28723 bytes
+PASS file 10 pic12r1.jpg: 41 clusters from 442, attr 20, 20636 bytes
+PASS file 11 pic11.jpg: 58 clusters from 483, attr 20, 29303 bytes
+PASS file 12 pic10.jpg: 53 clusters from 541, attr 20, 26636 bytes
+PASS file 13 pic09.jpg: 64 clusters from 594, attr 20, 32427 bytes
+PASS file 14 pic08.jpg: 67 clusters from 658, attr 20, 33943 bytes
+PASS file 15 pic07.jpg: 56 clusters from 725, attr 20, 28247 bytes
+PASS file 16 pic06.jpg: 50 clusters from 781, attr 20, 25277 bytes
+PASS file 17 pic05.jpg: 83 clusters from 831, attr 20, 42102 bytes
+PASS file 18 pic04.jpg: 46 clusters from 914, attr 20, 23105 bytes
+PASS file 19 pic03.jpg: 44 clusters from 960, attr 20, 22445 bytes
+PASS file 20 pic02.jpg: 67 clusters from 1004, attr 20, 34244 bytes
+PASS file 21 pic01.jpg: 88 clusters from 1071, attr 20, 44751 bytes
+PASS file 22 WESERL.SQT: 34 clusters from 1159, attr 20, 17319 bytes
+PASS no other root entries
+PASS no stray clusters: 1191 clusters in use
+PASS free sectors untouched
+rc=0
+$ /usr/sbin/fsck.fat -n -v ca6fp01.img
+fsck.fat 4.2 (2021-01-31)
+Checking we can access the last sector of the filesystem
+Boot sector contents:
+System ID "Technics"
+Media byte 0xf0 (5.25" or 3.5" HD floppy)
+       512 bytes per logical sector
+       512 bytes per cluster
+         1 reserved sector
+First FAT starts at byte 512 (sector 1)
+         2 FATs, 12 bit entries
+      4608 bytes per FAT (= 9 sectors)
+Root directory starts at byte 9728 (sector 19)
+       224 root directory entries
+Data area starts at byte 16896 (sector 33)
+      2847 data clusters (1457664 bytes)
+18 sectors/track, 2 heads
+4276813824 hidden sectors
+      2880 sectors total
+Volume label 'CA6FP01____' stored in root directory and label '' stored in boot sector and different.
+  Auto-copying volume label from root directory to boot sector.
+Checking for unused clusters.
+
+Leaving filesystem unchanged.
+ca6fp01.img: 23 files, 1191/2847 clusters
+rc=1
+
+# the same check on the untouched base disk (as the KN6000 formatted it):
+$ /usr/sbin/fsck.fat -n -v kn6000_formatted.img
+fsck.fat 4.2 (2021-01-31)
+Checking we can access the last sector of the filesystem
+Boot sector contents:
+System ID "Technics"
+Media byte 0xf0 (5.25" or 3.5" HD floppy)
+       512 bytes per logical sector
+       512 bytes per cluster
+         1 reserved sector
+First FAT starts at byte 512 (sector 1)
+         2 FATs, 12 bit entries
+      4608 bytes per FAT (= 9 sectors)
+Root directory starts at byte 9728 (sector 19)
+       224 root directory entries
+Data area starts at byte 16896 (sector 33)
+      2847 data clusters (1457664 bytes)
+18 sectors/track, 2 heads
+4276813824 hidden sectors
+      2880 sectors total
+Volume label '___________' stored in root directory and label '' stored in boot sector and different.
+  Auto-copying volume label from root directory to boot sector.
+Checking for unused clusters.
+
+Leaving filesystem unchanged.
+kn6000_formatted.img: 1 files, 0/2847 clusters
+rc=1

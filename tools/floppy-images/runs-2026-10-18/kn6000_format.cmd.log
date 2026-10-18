@@ -1,0 +1,101 @@
+[0.02] OK 1 wait 30
+[30.02] OK 2 create $HOME/compartilhado/tmp/flop-exe-trial/fmt6k3/kn6000_blank.img
+[30.02] OK 3 wait 6
+[36.02] OK 4 press CPR_SEG6 80
+[36.32] OK 5 wait 4
+[40.32] OK 6 press CPL_SEG3 08
+[40.62] OK 7 wait 5
+[45.62] OK 8 snap
+[45.62] OK 9 press CPR_SEG3 10
+[45.92] OK 10 wait 3
+[48.92] OK 11 snap
+[53.52] OK 12 press CPR_SEG3 10
+[53.82] OK 13 wait 10
+[63.82] OK 14 snap
+[63.82] OK 15 wait 10
+[73.82] OK 16 snap
+[73.82] OK 17 wait 10
+[83.82] OK 18 snap
+[83.82] OK 19 wait 10
+[93.82] OK 20 snap
+[93.82] OK 21 wait 10
+[103.82] OK 22 snap
+[103.82] OK 23 wait 10
+[113.82] OK 24 snap
+[113.82] OK 25 wait 10
+[123.82] OK 26 snap
+[123.82] OK 27 wait 10
+[133.82] OK 28 snap
+[133.82] OK 29 wait 10
+[143.82] OK 30 snap
+[143.82] OK 31 wait 10
+[153.82] OK 32 snap
+[159.38] OK 33 press CPR_SEG3 20
+[159.68] OK 34 wait 6
+[165.68] OK 35 snap
+[165.68] OK 36 unload
+[165.68] INFO :fdc:0:35hd exists=false filename=nil
+[165.68] OK 37 info
+[177.30] OK 38 press CPL_SEG8 20
+[177.60] OK 39 wait 3
+[180.60] OK 40 create $HOME/compartilhado/tmp/flop-exe-trial/fmt6k3/kn6000_named.img
+[180.60] OK 41 wait 6
+[186.60] OK 42 press CPR_SEG6 80
+[186.90] OK 43 wait 4
+[190.90] OK 44 press CPL_SEG3 08
+[191.22] OK 45 wait 5
+[196.22] OK 46 press CPR_SEG3 10
+[196.53] OK 47 wait 3
+[199.53] OK 48 press CPR_SEG3 10
+[199.85] OK 49 wait 10
+[209.85] OK 50 wait 10
+[219.85] OK 51 wait 10
+[229.85] OK 52 wait 10
+[239.85] OK 53 wait 10
+[249.85] OK 54 wait 10
+[259.87] OK 55 wait 10
+[269.87] OK 56 wait 10
+[279.87] OK 57 wait 10
+[289.87] OK 58 wait 10
+[299.87] OK 59 snap
+[299.87] OK 60 press CPL_SEG6 40
+[300.18] OK 61 wait 1
+[301.18] OK 62 press CPL_SEG4 08
+[301.48] OK 63 wait 1
+[302.48] OK 64 snap
+[302.48] OK 65 press CPR_SEG3 20
+[302.80] OK 66 wait 6
+[308.80] OK 67 snap
+[308.80] OK 68 unload
+[308.80] INFO :fdc:0:35hd exists=false filename=nil
+[308.80] OK 69 info
+[317.27] OK 70 press CPL_SEG8 20
+[317.57] OK 71 wait 3
+[320.57] OK 72 press CPL_SEG8 20
+[320.87] OK 73 wait 3
+[323.87] OK 74 create $HOME/compartilhado/tmp/flop-exe-trial/fmt6k3/kn6000_named.img
+[323.87] OK 75 wait 6
+[329.87] OK 76 press CPR_SEG6 80
+[330.18] OK 77 wait 4
+[334.18] OK 78 snap
+[336.62] OK 79 press CPL_SEG3 08
+[336.93] OK 80 wait 5
+[341.93] OK 81 snap
+[344.32] OK 82 press CPR_SEG3 10
+[344.62] OK 83 wait 3
+[347.62] OK 84 snap
+[350.95] OK 85 press CPR_SEG3 10
+[351.25] OK 86 wait 100
+[451.25] OK 87 snap
+[453.92] OK 88 press CPL_SEG6 40
+[454.22] OK 89 wait 1.5
+[455.72] OK 90 press CPL_SEG4 08
+[456.02] OK 91 wait 1.5
+[457.52] OK 92 snap
+[461.72] OK 93 press CPR_SEG3 20
+[462.02] OK 94 wait 6
+[468.02] OK 95 unload
+[468.02] INFO :fdc:0:35hd exists=false filename=nil
+[468.02] OK 96 info
+[468.02] OK 97 snap
+[474.98] OK 98 exit
