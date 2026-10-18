@@ -225,3 +225,29 @@ are the ones about the screen itself, all in EMULATED frames so they are host-sp
   start page and not accuracy: a 5 s pre-delay left the same page's decode errors in place, and
   four pixel-identical frames of it decode identically wrong, so those errors are an extractor
   fault rather than a repaint artefact.
+
+## 11. The gate byte is the release number, and LCD capture has two chords (2026-10-18)
+
+* **`0x4840000F` is the release in hex digits**, printed by the class `AcMPVer` as
+  `"%s    Ver%1X.%1X"` (941 reads it at `0x4848A8E1`): `0x13` on the owner's PROGRAM 893
+  (photo transcription of row `0x48400000`, re-read by the owner on 2026-10-18), `0x15` in v1.5
+  (935), `0x16` in v1.6 (941), `0xFF` in the SP7001 build 942. So 893 is v1.3, the owner's
+  1/4/5/8 chord came through the direct door (§2), and both capture chords are dead on his unit
+  unless 893's gate code differs (it has not been transcribed). Only 942 among the builds held has
+  them live. Build 929's byte was on the lost v1.4 disk 1.
+* **Chord A buttons settled**: bits 16 and 20 are index switches 0x10 and 0x14, produced only by
+  the four corner soft keys LCDL1 + LCDL5 (event 0x702000, `0x50021FDC`) and LCDR1 + LCDR5
+  (0x702001, `0x50021FD8`); names from the edit-switch table at `0x485B0C68` (ES_Left1..5 =
+  0x90..0x94, ES_Right1..5 = 0x10..0x14). It fires when the fourth key goes down, and again on
+  every press or release of another index key while the four are held. The soft keys keep their
+  normal function, so the screen may change first.
+* **Chord B, new**: DISPLAY HOLD (0x7020A0) + PAD 1 + PAD 2 (0x702030 args 0 and 1), state in
+  `0x50021FF0`, handlers `0x484149BB` / `0x484149F1`, the same `0xFF` gate at `0x48414A27`. The
+  `== 7` test runs on a pad press; DISPLAY HOLD also toggles hold mode.
+* **What is written**: `LCDCAPnn.BMP` on the current drive (floppy `A:\` outside SD operations),
+  640x240, 24 bpp, 460,854 bytes, from the RGB565 buffer `0x9CE00000`; no message, no beep;
+  numbering restarts at 00 on every boot and an existing file is replaced. In MAME (941 with the
+  byte patched; `tools/lcdcap/`) both chords ran `CaptureLcd`; the floppy write failed in the
+  emulator, and with the file API steered to SD the firmware wrote valid BMPs, shifted up by one
+  row against the screen. `CaptureLcdCheck` (`0x4848886E`) would capture with no gate but has no
+  user in 941.
