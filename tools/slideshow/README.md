@@ -70,3 +70,12 @@ Pictures: `SD1_contact.png` (MAME LCD, one frame per event), `SD2_ram_render_con
 `real01001_part1.bin` is part 1 of 01001KN7.SQT decoded from the real card
 (`sqt_jkd.py info ../featurepre/sdB_files/HANDY.SQT demosongs/real01001`).
 The real card image itself (md5 c3bcea2346cb3bb7d803e8c48aebce78) was only copied, never written.
+
+## KN6000: the presentation disks themselves (2026-10-18)
+
+`kn6000_pres_insert.lua` asks whether a KN6000 feature-presentation floppy (CA-6FP01, the image in
+`technics_romsets/kn6000_flop/ca6fp01.zip`) loads when inserted on the DEMONSTRATION screen. Result:
+it does not, in the overlay build (`kn7000-emulator/kn7000`, fonts placeholder) nor in the `mame-pr`
+build: 13 identical snapshots over 60 s after the insert, also with `FORCE_DSKCHG=1`. Why the
+firmware never sees the disk was not traced.
+
