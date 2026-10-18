@@ -11,7 +11,7 @@ build them into a MAME checkout:
 
 ## 1. Copy the files in
 
-The overlay is 58 files across nine directories, each already at the path it
+The overlay is 55 files across eight directories, each already at the path it
 occupies inside MAME, so one recursive copy places them all:
 
 ```
@@ -20,37 +20,23 @@ cp -r src/. <mame>/src/
 
 `build.sh` step 2 does the same with symlinks, one `ln -sf` per file, and that
 step is the authoritative inventory: the CPU cores `mn10300/`, `sharc/`,
-`tlcs900/` and `upd6383/`, `machine/spi_sdcard`, `video/sed1330`,
+`tlcs900/` and `upd6383/`, `video/sed1330.h`,
 `bus/technics/kn5000/hdae5000`, the KN5000/KN6000/KN7000/KN1500 and SX-WSA1
 drivers with their control-panel and tone-generator devices, and four layouts.
-29 of the 58 replace a file MAME already ships, so an upstream fix to one of
+37 of the 55 replace a file MAME already ships, so an upstream fix to one of
 those is inert here until it is ported across —
 `notes/overlay-upstream-sync/overlay_vs_upstream.sh` is the gate that catches it.
 
 `src/devices/cpu/mn10300/mn103dasm.{cpp,h}` (the disassembler) already exists in
 MAME and is reused unchanged.
 
-## 2. Promote the MN10300 from disassembler-only to a full CPU
+## 2. The MN10300 CPU registration
 
-In `scripts/src/cpu.lua`, the MN10300 is currently registered as a disassembler
-only. Replace that block with a full-CPU block (mirroring the MN10200 one):
-
-```lua
---------------------------------------------------
--- Panasonic MN10300
---@src/devices/cpu/mn10300/mn10300.h,CPUS["MN10300"] = true
---------------------------------------------------
-if CPUS["MN10300"] then
-	files {
-		MAME_DIR .. "src/devices/cpu/mn10300/mn10300.cpp",
-		MAME_DIR .. "src/devices/cpu/mn10300/mn10300.h",
-	}
-end
-if opt_tool(CPUS, "MN10300") then
-	table.insert(disasm_files, MAME_DIR .. "src/devices/cpu/mn10300/mn103dasm.cpp")
-	table.insert(disasm_files, MAME_DIR .. "src/devices/cpu/mn10300/mn103dasm.h")
-end
-```
+Upstream MAME has registered the MN10300 as a full CPU since the core was
+merged, so `scripts/src/cpu.lua` needs no change: the overlay's `mn10300.cpp`
+and `mn10300.h` simply replace upstream's. (Before that merge this step
+promoted the disassembler-only block to a full-CPU one; `build.sh` step 3 still
+checks for it and leaves an already-registered core alone.)
 
 ## 3. Register the driver
 

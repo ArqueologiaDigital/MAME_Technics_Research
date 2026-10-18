@@ -356,6 +356,7 @@
 
 #include "emupal.h"
 #include "screen.h"
+#include "softlist_dev.h"
 
 // The SX-WSA1R control panel, drawn from the service manual's own ARRANGEMENT OF
 // CONTROL PANEL page (I-4/I-5) and wired from the CP1/CP2 schematic (II-29/30).
@@ -3994,6 +3995,8 @@ void wsa1_state::wsa1_base(machine_config &config)
 	// class part; the identification is from the protocol the driver at
 	// prom_c 0xFC89C5 bit-bangs, not from a part number, and the device itself
 	// is not dumped.  See the block comment above cpu2_p6_w().
+	SOFTWARE_LIST(config, "flop_list").set_original("wsa1_flop");
+
 	EEPROM_93C46_16BIT(config, m_eeprom);
 
 	// The link handshake is a pair of spin loops with a 0x4E20 iteration limit

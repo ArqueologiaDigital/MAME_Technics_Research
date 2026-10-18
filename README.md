@@ -13,13 +13,15 @@ copying the files in and registering them in the build (see
   keyboards: KN5000, KN6000/KN6500, KN7000, KN1500 and KN2400/KN2600, plus the
   SX-WSA1/WSA1R synthesizer, and the shared control-panel (`kn_cpanel`) and
   tone-generator (`kn_tonegen`) device bases they build on.
-- `src/devices/cpu/mn10300/` — a Panasonic MN10300/AM33 execution core
-  (upstream MAME ships only the disassembler). Overlay work also touches
+- `src/devices/cpu/mn10300/` — the Panasonic MN10300/AM33 execution core.
+  Upstream MAME now ships a core too, merged from this one; the overlay copy
+  keeps the parts not yet submitted. Overlay work also touches
   `tlcs900/` (the shared core, TMP94C241, TMP95C061 and TMP95C063), `sharc/`
   and a `upd6383/` DSP core.
-- `src/devices/machine/`, `src/devices/video/`, `src/devices/bus/technics/` —
-  overlaid copies of `spi_sdcard` (the KN7000's SD card), `sed1330` (the WSA1's
-  all-graphics panel) and the KN5000's `hdae5000` expansion board.
+- `src/devices/video/`, `src/devices/bus/technics/` — overlaid copies of
+  `sed1330.h` (default initialisers for the WSA1's panel controller) and the
+  KN5000's `hdae5000` expansion board. (The `spi_sdcard` copy was retired at the 2026-10-18 resync:
+  its SD fixes are upstream.)
 - `src/mame/layout/` — internal layouts for kn5000/kn6000/kn7000 and wsa1r.
 - `notes/` — investigation write-ups and findings; the bulk of the research
   record. Start here for the current state of any given topic.

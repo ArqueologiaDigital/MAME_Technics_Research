@@ -28,32 +28,49 @@ enum tlcs900_inputs
 };
 
 
-enum
-{
-	TLCS900_PC=1, TLCS900_SR,
-	TLCS900_XWA0, TLCS900_XBC0, TLCS900_XDE0, TLCS900_XHL0,
-	TLCS900_XWA1, TLCS900_XBC1, TLCS900_XDE1, TLCS900_XHL1,
-	TLCS900_XWA2, TLCS900_XBC2, TLCS900_XDE2, TLCS900_XHL2,
-	TLCS900_XWA3, TLCS900_XBC3, TLCS900_XDE3, TLCS900_XHL3,
-	TLCS900_XIX, TLCS900_XIY, TLCS900_XIZ, TLCS900_XNSP, TLCS900_XSSP,
-	TLCS900_DMAS0, TLCS900_DMAS1, TLCS900_DMAS2, TLCS900_DMAS3,
-	TLCS900_DMAD0, TLCS900_DMAD1, TLCS900_DMAD2, TLCS900_DMAD3,
-	TLCS900_DMAC0, TLCS900_DMAC1, TLCS900_DMAC2, TLCS900_DMAC3,
-	TLCS900_DMAM0, TLCS900_DMAM1, TLCS900_DMAM2, TLCS900_DMAM3
-};
-
-
 class tlcs900_device : public cpu_device
 {
 public:
+	enum
+	{
+		TLCS900_PC=1, TLCS900_SR,
+		TLCS900_XWA0, TLCS900_XBC0, TLCS900_XDE0, TLCS900_XHL0,
+		TLCS900_XWA1, TLCS900_XBC1, TLCS900_XDE1, TLCS900_XHL1,
+		TLCS900_XWA2, TLCS900_XBC2, TLCS900_XDE2, TLCS900_XHL2,
+		TLCS900_XWA3, TLCS900_XBC3, TLCS900_XDE3, TLCS900_XHL3,
+		TLCS900_XIX, TLCS900_XIY, TLCS900_XIZ, TLCS900_XNSP, TLCS900_XSSP,
+		TLCS900_DMAS0, TLCS900_DMAS1, TLCS900_DMAS2, TLCS900_DMAS3,
+		TLCS900_DMAD0, TLCS900_DMAD1, TLCS900_DMAD2, TLCS900_DMAD3,
+		TLCS900_DMAC0, TLCS900_DMAC1, TLCS900_DMAC2, TLCS900_DMAC3,
+		TLCS900_DMAM0, TLCS900_DMAM1, TLCS900_DMAM2, TLCS900_DMAM3
+	};
+
+
 	// configuration helpers
 	void set_am8_16(int am8_16) { m_am8_16 = am8_16; }
 
 protected:
+	/* Storage locations that are not registers.  m_reg1 and m_reg2 hold one of
+	   these values, or the selector byte of a register in the encoding that
+	   get_reg8/get_reg16/get_reg32 accept; values below 0x100 always select a
+	   register. */
+	enum e_regsel : uint16_t
+	{
+		regsel_sr = 0x100,  /* status register - F is its low byte */
+		regsel_f2,          /* alternate flag register F' */
+		regsel_intnest,     /* interrupt nesting count */
+		regsel_dmam0, regsel_dmam1, regsel_dmam2, regsel_dmam3,
+		regsel_dmac0, regsel_dmac1, regsel_dmac2, regsel_dmac3,
+		regsel_dmas0, regsel_dmas1, regsel_dmas2, regsel_dmas3,
+		regsel_dmad0, regsel_dmad1, regsel_dmad2, regsel_dmad3,
+		regsel_dummy         /* illegal/unknown register references */
+	};
+
+
 	// construction/destruction
 	tlcs900_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
-	// device-level overrides
+	// device_t implementation
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
 
@@ -77,12 +94,12 @@ protected:
 	int m_am8_16;
 	address_space_config m_program_config;
 
-	uint8_t RDMEM(offs_t addr) { return m_program->read_byte( addr ); }
-	uint16_t RDMEMW(offs_t addr) { return m_program->read_word_unaligned( addr ); }
-	uint32_t RDMEML(offs_t addr) { return m_program->read_dword_unaligned( addr ); }
-	void WRMEM(offs_t addr, uint8_t data) { m_program->write_byte( addr, data ); }
-	void WRMEMW(offs_t addr,uint16_t data) { m_program->write_word_unaligned( addr, data ); }
-	void WRMEML(offs_t addr,uint32_t data) { m_program->write_dword_unaligned( addr, data ); }
+	uint8_t RDMEM(offs_t addr) { return m_program->read_byte(addr); }
+	uint16_t RDMEMW(offs_t addr) { return m_program->read_word_unaligned(addr); }
+	uint32_t RDMEML(offs_t addr) { return m_program->read_dword_unaligned(addr); }
+	void WRMEM(offs_t addr, uint8_t data) { m_program->write_byte(addr, data); }
+	void WRMEMW(offs_t addr,uint16_t data) { m_program->write_word_unaligned(addr, data); }
+	void WRMEML(offs_t addr,uint32_t data) { m_program->write_dword_unaligned(addr, data); }
 
 	/* registers */
 	PAIR    m_xwa[4];
@@ -103,81 +120,11 @@ protected:
 	PAIR    m_dmac[4];
 	PAIR    m_dmam[4];
 
-	/* INTNEST -- the interrupt NESTING COUNTER, a real 16-bit control register.
-	   The CPU increments it when it accepts an interrupt and decrements it on
-	   RETI, so a handler can ask "am I the outermost interrupt?" without keeping
-	   its own count.  Firmware may also write it, and does.
-
-	   ★ BOTH HALVES ARE FROM THE DATABOOK, and that matters, because the
-	   decrement was the part nobody could establish from firmware -- the ROM
-	   evidence only ever showed the increment, and an implementation that
-	   decremented wrongly would underflow on the SX-WSA1R's own
-	   leave-without-RETI paths.  Toshiba, "TLCS-900 Series CMOS 16-bit
-	   Microcontrollers TMP95C061", section 3.3.1 "General-Purpose Interrupt
-	   Processing", page 11, verbatim:
-
-	       "When accepting an interrupt, the CPU operates as follows:
-	        ...
-	        (4) The CPU increments the INTNEST (Interrupt Nesting Counter)."
-
-	       "To return to the main routine after completion of the interrupt
-	        processing, the RETI instruction is usually used.  Executing this
-	        instruction restores the contents of the program counter and the
-	        status registers and decements the INTNEST (Interrupt Nesting
-	        Counter)."  [sic -- "decements" is the databook's typo]
-
-	   Re-check with notes/wsa1-probes/tlcs900_datasheet_quotes.py.  Note what
-	   the databook does NOT say: it never gives INTNEST a control-register
-	   number, and the CPU-control-register figure on page 15 lists only
-	   DMAS/DMAD/DMAC/DMAM.  The numbers below come from the firmware -- from
-	   what these ROMs actually address with LDC -- not from the databook.
-
-	   Both guards in the implementation are deliberate and neither is in the
-	   databook: the increment saturates at 0xFFFF and the decrement stops at 0
-	   rather than wrapping.  A real 16-bit counter would wrap; a wrap here could
-	   only ever come from an emulation asymmetry (an accept we model without the
-	   matching RETI, or the other way round), and turning that into 0xFFFF would
-	   silently take the SX-WSA1R's scheduler apart in a way that looks nothing
-	   like its cause.  The firmware zeroes the counter by hand at prom_a
-	   0xF857C3 and 0xF8E9A8, precisely on the paths that leave an interrupt
-	   without a RETI, so it does not depend on the wrap either way.
-
-	   Control-register number, by core generation:
-	       0x3C  TLCS-900/H   -- TMP96C141, TMP95C061, TMP95C063
-	       0x7C  TLCS-900/H1  -- TMP94C241
-	   Both are 16-bit only; there is no 8- or 32-bit view, and no firmware in
-	   these trees uses one (see notes/wsa1-probes/tlcs900_intnest_evidence.py,
-	   which scans every LDC in all four SX-WSA1R ROMs and the KN5000's).  The
-	   decode is in 900tbl.hxx's p_CR16 cases, the increment is at each device's
-	   interrupt-acceptance site via tlcs900_intnest_accept(), and the decrement
-	   is in op_RETI.
-
-	   Why it matters: the SX-WSA1R's RTOS is built on it.  prom_a's
-	   IRQ_Epilogue (0xF857B7) enters the scheduler only when it reads exactly 1,
-	   Kernel_Dispatch (0xF85715) refuses to reschedule unless it reads 0, and
-	   Kernel_ServiceSoftTimers brackets its callbacks with depth++/depth--.
-	   Before this register existed, every access landed in m_dummy -- the shared
-	   "illegal register reference" scratch -- and the kernel was never entered.
-
-	   ⚠ WHAT THIS MEANS FOR THE OTHER tlcs900 DRIVERS (for review).  These files
-	   are shared, so this changes three things for everyone:
-	     1. cr 0x3C/0x7C accessed with a 16-bit LDC no longer land in m_dummy.  That
-	        is strictly a bug fix: m_dummy is a single scratch word shared with every
-	        other undecoded control-register reference, so the old value was whatever
-	        the last unrelated access happened to leave there.
-	     2. INTNEST now COUNTS.  That can only change behaviour for firmware that
-	        READS the register; firmware that ignores it, or only writes it, cannot
-	        tell.  Reading it is a TLCS-900/H RTOS idiom, so the drivers to check are
-	        the ones running an OS: ngp, namcos10 (+ namcos10_exio), dvd-n5xx and
-	        kkcount on the TMP95C061, taitopjc and taitotz on the TMP95C063.  NONE of
-	        those ROM sets is in this project's trees, so none was measured here --
-	        run notes/wsa1-probes/tlcs900_intnest_evidence.py over them to settle it
-	        in one command.  Of the two that WERE measured, the SX-WSA1R reads it and
-	        needs it; the KN5000 writes it 6 times and reads it 0 times.
-	     3. op_RETI decrements it on EVERY tlcs900 device.  tmp96c141 has no
-	        interrupt-acceptance site at all -- its tlcs900_check_irqs() is empty --
-	        so on that part the counter can only sit at 0, which is what m_dummy
-	        effectively gave it before. */
+	/* Control register 0x3c (0x7c on the TMP94C241), INTNEST: how many interrupt
+	   frames are currently stacked.  Incremented where each device accepts an
+	   interrupt and pushes SR/PC, decremented in op_RETI, so the two stay paired.
+	   Decoded on the 16-bit CR paths.  Saturates at zero, so an unmatched RETI
+	   leaves it reading "not nested". */
 	uint16_t  m_intnest;
 
 	/* Internal timers, irqs, etc */
@@ -201,9 +148,15 @@ protected:
 	PAIR    m_ea1, m_ea2;
 	PAIR    m_imm1, m_imm2;
 	int m_cycles;
-	uint8_t   *m_p1_reg8, *m_p2_reg8;
-	uint16_t  *m_p1_reg16, *m_p2_reg16;
-	uint32_t  *m_p1_reg32, *m_p2_reg32;
+
+	/* Storage locations of the two instruction operands.  Each holds either
+	   the selector byte for a register, in the encoding that get_reg8,
+	   get_reg16 and get_reg32 accept - the views that reg8, reg16 and reg32
+	   derive from it all address the same register - or one of the e_regsel
+	   values for the locations that are not registers (SR, F', the DMA
+	   control registers, INTNEST and the dummy location). */
+	uint16_t m_reg1;
+	uint16_t m_reg2;
 
 	int m_halted;
 	int m_icount;
@@ -233,45 +186,27 @@ protected:
 	static const tlcs900inst s_mnemonic_e8[256];
 	static const tlcs900inst s_mnemonic_f0[256];
 	static const tlcs900inst s_mnemonic[256];
-	const tlcs900inst *m_mnemonic_80;
-	const tlcs900inst *m_mnemonic_88;
-	const tlcs900inst *m_mnemonic_90;
-	const tlcs900inst *m_mnemonic_98;
-	const tlcs900inst *m_mnemonic_a0;
-	const tlcs900inst *m_mnemonic_b0;
-	const tlcs900inst *m_mnemonic_b8;
-	const tlcs900inst *m_mnemonic_c0;
-	const tlcs900inst *m_mnemonic_c8;
-	const tlcs900inst *m_mnemonic_d0;
-	const tlcs900inst *m_mnemonic_d8;
-	const tlcs900inst *m_mnemonic_e0;
-	const tlcs900inst *m_mnemonic_e8;
-	const tlcs900inst *m_mnemonic_f0;
-	const tlcs900inst *m_mnemonic;
+	const tlcs900inst (*m_mnemonic_80)[256];
+	const tlcs900inst (*m_mnemonic_88)[256];
+	const tlcs900inst (*m_mnemonic_90)[256];
+	const tlcs900inst (*m_mnemonic_98)[256];
+	const tlcs900inst (*m_mnemonic_a0)[256];
+	const tlcs900inst (*m_mnemonic_b0)[256];
+	const tlcs900inst (*m_mnemonic_b8)[256];
+	const tlcs900inst (*m_mnemonic_c0)[256];
+	const tlcs900inst (*m_mnemonic_c8)[256];
+	const tlcs900inst (*m_mnemonic_d0)[256];
+	const tlcs900inst (*m_mnemonic_d8)[256];
+	const tlcs900inst (*m_mnemonic_e0)[256];
+	const tlcs900inst (*m_mnemonic_e8)[256];
+	const tlcs900inst (*m_mnemonic_f0)[256];
+	const tlcs900inst (*m_mnemonic)[256];
 
 	inline uint8_t RDOP();
-
-	/* Bump INTNEST (see m_intnest above).  Every device's tlcs900_check_irqs()
-	   calls this at the point it pushes the SR/PC frame, because that is the
-	   frame op_RETI will later unwind -- keeping the increment and the decrement
-	   paired is the whole point.  Saturates instead of wrapping, for the reason
-	   given at m_intnest.  NMI counts too, for the same pairing reason: it
-	   pushes SR/PC and is unwound by RETI -- and the databook section quoted at
-	   m_intnest is titled "General-Purpose Interrupt Processing" and discusses
-	   non-maskable interrupts in the same breath, so it covers NMI too.
-	   NOT counted: SWI/TRAP.  On the SX-WSA1R those do NOT return through RETI
-	   (SWI7_ServiceCall_Dispatch leaves by `pop SR / ret` at 0xF8E9C4), so
-	   counting them would be a one-way leak with nothing to unwind it.
-	   ⚠ The databook does not settle this.  It DOES list "Software interrupts,
-	   privileged violations, and Illegal instruction execution" among the CPU's
-	   own interrupt sources (3.3, page 11), which argues they take the same path
-	   -- but 3.3.1's step (1) is "reads the interrupt vector from the interrupt
-	   CONTROLLER", which an SWI does not do, so the section may simply not be
-	   about them.  It costs nothing to leave out: on both firmwares that read
-	   this register the SWI dispatcher zeroes it on entry, so counting SWI or not
-	   gives the same observable result.  If it is ever settled, op_SWI in
-	   900tbl.hxx is the place. */
-	void tlcs900_intnest_accept() { if ( m_intnest < 0xffff ) m_intnest++; }
+	/* Bump INTNEST.  Called where a device pushes the SR/PC frame that op_RETI
+	   will later unwind.  NMI counts, because it pushes and unwinds the same way;
+	   SWI/TRAP do not, because they need not return through RETI. */
+	void tlcs900_intnest_accept() { if (m_intnest < 0xffff) m_intnest++; }
 
 	virtual void tlcs900_check_hdma() = 0;
 	virtual void tlcs900_check_irqs() = 0;
@@ -293,71 +228,43 @@ protected:
 	virtual int tlcs900_djnz_true_cycles() const { return 4; }
 	virtual int tlcs900_shift_cycles(uint8_t n) const { return 2 * n; }
 
-	int condition_true( uint8_t cond );
-	uint8_t *get_reg8_current( uint8_t reg );
-	uint16_t *get_reg16_current( uint8_t reg );
-	uint32_t *get_reg32_current( uint8_t reg );
-	PAIR *get_reg( uint8_t reg );
-	uint8_t *get_reg8( uint8_t reg );
-	uint16_t *get_reg16( uint8_t reg );
-	uint32_t *get_reg32( uint8_t reg );
-	void parity8( uint8_t a );
-	void parity16( uint16_t a );
-	void parity32( uint32_t a );
-	uint8_t adc8( uint8_t a, uint8_t b);
-	uint16_t adc16( uint16_t a, uint16_t b);
-	uint32_t adc32( uint32_t a, uint32_t b);
-	uint8_t add8( uint8_t a, uint8_t b);
-	uint16_t add16( uint16_t a, uint16_t b);
-	uint32_t add32( uint32_t a, uint32_t b);
-	uint8_t sbc8( uint8_t a, uint8_t b);
-	uint16_t sbc16( uint16_t a, uint16_t b);
-	uint32_t sbc32( uint32_t a, uint32_t b);
-	uint8_t sub8( uint8_t a, uint8_t b);
-	uint16_t sub16( uint16_t a, uint16_t b);
-	uint32_t sub32( uint32_t a, uint32_t b);
-	uint8_t and8( uint8_t a, uint8_t b);
-	uint16_t and16( uint16_t a, uint16_t b);
-	uint32_t and32( uint32_t a, uint32_t b);
-	uint8_t or8( uint8_t a, uint8_t b);
-	uint16_t or16( uint16_t a, uint16_t b);
-	uint32_t or32( uint32_t a, uint32_t b);
-	uint8_t xor8( uint8_t a, uint8_t b);
-	uint16_t xor16( uint16_t a, uint16_t b);
-	uint32_t xor32( uint32_t a, uint32_t b);
-	void ldcf8( uint8_t a, uint8_t b );
-	void ldcf16( uint8_t a, uint16_t b );
-	void andcf8( uint8_t a, uint8_t b );
-	void andcf16( uint8_t a, uint16_t b );
-	void orcf8( uint8_t a, uint8_t b );
-	void orcf16( uint8_t a, uint16_t b );
-	void xorcf8( uint8_t a, uint8_t b );
-	void xorcf16( uint8_t a, uint16_t b );
-	uint8_t rl8( uint8_t a, uint8_t s );
-	uint16_t rl16( uint16_t a, uint8_t s );
-	uint32_t rl32( uint32_t a, uint8_t s );
-	uint8_t rlc8( uint8_t a, uint8_t s );
-	uint16_t rlc16( uint16_t a, uint8_t s );
-	uint32_t rlc32( uint32_t a, uint8_t s );
-	uint8_t rr8( uint8_t a, uint8_t s );
-	uint16_t rr16( uint16_t a, uint8_t s );
-	uint32_t rr32( uint32_t a, uint8_t s );
-	uint8_t rrc8( uint8_t a, uint8_t s );
-	uint16_t rrc16( uint16_t a, uint8_t s );
-	uint32_t rrc32( uint32_t a, uint8_t s );
-	uint8_t sla8( uint8_t a, uint8_t s );
-	uint16_t sla16( uint16_t a, uint8_t s );
-	uint32_t sla32( uint32_t a, uint8_t s );
-	uint8_t sra8( uint8_t a, uint8_t s );
-	uint16_t sra16( uint16_t a, uint8_t s );
-	uint32_t sra32( uint32_t a, uint8_t s );
-	uint8_t srl8( uint8_t a, uint8_t s );
-	uint16_t srl16( uint16_t a, uint8_t s );
-	uint32_t srl32( uint32_t a, uint8_t s );
-	uint16_t div8( uint16_t a, uint8_t b );
-	uint32_t div16( uint32_t a, uint16_t b );
-	uint16_t divs8( int16_t a, int8_t b );
-	uint32_t divs16( int32_t a, int16_t b );
+	bool condition_true(uint8_t cond);
+	uint32_t &get_reg32_current(uint8_t reg);
+	PAIR &get_reg(uint8_t reg);
+	uint8_t &get_reg8(uint8_t reg);
+	uint16_t &get_reg16(uint8_t reg);
+	uint32_t &get_reg32(uint8_t reg);
+	uint8_t get_reg8_current_sel(uint8_t reg);
+	uint8_t get_reg16_current_sel(uint8_t reg);
+	uint8_t get_reg32_current_sel(uint8_t reg);
+	uint8_t &reg8(uint16_t sel);
+	uint16_t &reg16(uint16_t sel);
+	uint32_t &reg32(uint16_t sel);
+	template <typename T> void parity(T a);
+	template <typename T> T adc(T a, T b);
+	template <typename T> T add(T a, T b);
+	template <typename T> T sbc(T a, T b);
+	template <typename T> T sub(T a, T b);
+	template <typename T> T and_(T a, T b);
+	template <typename T> T or_(T a, T b);
+	template <typename T> T xor_(T a, T b);
+	template <typename T> void ldcf(uint8_t a, T b);
+	template <typename T> void andcf(uint8_t a, T b);
+	template <typename T> void orcf(uint8_t a, T b);
+	template <typename T> void xorcf(uint8_t a, T b);
+	template <typename T> T rl(T a, uint8_t s);
+	template <typename T> T rlc(T a, uint8_t s);
+	template <typename T> T rr(T a, uint8_t s);
+	template <typename T> T rrc(T a, uint8_t s);
+	template <typename T> T sla(T a, uint8_t s);
+	template <typename T> T sra(T a, uint8_t s);
+	template <typename T> T srl(T a, uint8_t s);
+	template <typename T, int Direction, bool Repeat> void ldxx();
+	template <typename T, int Direction> void cpx();
+	uint16_t div8(uint16_t a, uint8_t b);
+	uint32_t div16(uint32_t a, uint16_t b);
+	uint16_t divs8(int16_t a, int8_t b);
+	uint32_t divs16(int32_t a, int16_t b);
 	void op_ADCBMI();
 	void op_ADCBMR();
 	void op_ADCBRI();
@@ -723,7 +630,8 @@ protected:
 	void op_XORCFWIR();
 	void op_XORCFWRR();
 	void op_ZCF();
-	void prepare_operands(const tlcs900inst *inst);
+	void prepare_operands(const tlcs900inst &inst);
+	void execute_op(const tlcs900inst (&mnemonic)[256]);
 	void op_80();
 	void op_88();
 	void op_90();

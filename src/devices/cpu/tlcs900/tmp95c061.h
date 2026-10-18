@@ -103,10 +103,11 @@ protected:
 	virtual void tlcs900_handle_ad() override;
 	virtual void tlcs900_handle_timers() override;
 
-	void tlcs900_change_tff( int which, int change );
-	int tlcs900_process_hdma( int channel );
-	// OVERLAY FIX 6 (kn7000_mame) -- see the long comment in tmp95c061.cpp.
-	bool hdma_owns_vector( uint8_t vector ) const;
+	void tlcs900_change_tff(int which, int change);
+	int tlcs900_process_hdma(int channel);
+	// A micro-DMA channel that owns a vector consumes the request itself, so
+	// the CPU must neither dispatch it nor leave HALT for it.
+	bool hdma_owns_vector(uint8_t vector) const;
 	void update_porta();
 
 	// device_disasm_interface overrides

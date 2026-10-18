@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build a MAME with the KN7000 driver + MN10300 CPU core from this overlay repo.
 #
-# This overlay holds 58 files, each at its MAME path: four CPU cores (mn10300, sharc,
+# This overlay holds 55 files, each at its MAME path: four CPU cores (mn10300, sharc,
 # tlcs900, upd6383), the KN5000/KN6000/KN7000/KN1500 and SX-WSA1 drivers with their
-# control-panel and tone-generator devices, spi_sdcard, sed1330, hdae5000 and four
+# control-panel and tone-generator devices, sed1330.h, hdae5000 and four
 # layouts -- step 2 below is the authoritative list. To compile them they must sit
 # inside a full MAME source tree with the CPU + driver registered in the build
 # system. This script assembles a *disposable* build tree next to the overlay,
@@ -40,9 +40,9 @@ JOBS="${JOBS:-$(nproc)}"
 # GUARD: the base tree must be on kn7000-base.
 #
 # MAME_SRC is rsynced wholesale into the build tree, so whatever branch it sits on becomes
-# the build.  Upstream's own src/mame/matsushita/kn7000.cpp is a ROM-record skeleton with no
-# CPU (#15911), and a PR branch carries only the single feature it extracts, plus its own
-# mame.lst entries.  Building from one silently produces a driver that is not this project's.
+# the build.  Upstream's own src/mame/matsushita/kn7000.cpp carries only the parts already
+# merged (no tone generators, no DSP, no LCD capture tools), and a PR branch carries only the
+# single feature it extracts, plus its own mame.lst entries.  Building from one silently produces a driver that is not this project's.
 # That happened on 2026-08-02 and is exactly what this check prevents.
 #
 # PR work belongs in the sibling worktree ~/compartilhado/mame-pr.  Neither tree should ever
@@ -117,9 +117,6 @@ ln -sf "$HERE/src/devices/cpu/sharc/sharc.cpp"               "$BUILD_TREE/src/de
 ln -sf "$HERE/src/devices/cpu/sharc/sharcops.hxx"            "$BUILD_TREE/src/devices/cpu/sharc/sharcops.hxx"
 ln -sf "$HERE/src/devices/cpu/sharc/sharcdrc.cpp"            "$BUILD_TREE/src/devices/cpu/sharc/sharcdrc.cpp"
 ln -sf "$HERE/src/devices/cpu/sharc/sharcfe.cpp"             "$BUILD_TREE/src/devices/cpu/sharc/sharcfe.cpp"
-mkdir -p "$BUILD_TREE/src/devices/machine"
-ln -sf "$HERE/src/devices/machine/spi_sdcard.cpp"            "$BUILD_TREE/src/devices/machine/spi_sdcard.cpp"
-ln -sf "$HERE/src/devices/machine/spi_sdcard.h"              "$BUILD_TREE/src/devices/machine/spi_sdcard.h"
 ln -sf "$HERE/src/mame/matsushita/kn7000.cpp"                "$BUILD_TREE/src/mame/matsushita/kn7000.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn_tonegen.cpp"            "$BUILD_TREE/src/mame/matsushita/kn_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/kn_tonegen.h"              "$BUILD_TREE/src/mame/matsushita/kn_tonegen.h"
@@ -138,10 +135,12 @@ ln -sf "$HERE/src/mame/matsushita/kn1500.cpp"                "$BUILD_TREE/src/ma
 # this driver lives here; the smaller copy merged as #16204 is the one in MAME
 # itself, and the two deliberately diverge.
 #
-# sed1330 is overlaid alongside it: MAME's sed1330_device renders all-graphics mode
-# since #16204, and this copy is the pre-review form of that work plus a default
-# initialiser on every scalar member.  See the note at the top of the overlay copy
-# of sed1330.h.
+# sed1330.h is overlaid alongside it: upstream's header plus a default initialiser on
+# every scalar member (see the note at its top). sed1330.cpp is upstream's: the
+# overlay's pre-review copy lacked upstream's cliprect tests and was retired 2026-10-18.
+# A retired file comes back from MAME_SRC on the next rsync, but with an mtime older
+# than the object built from the overlay copy -- touch it in MAME_SRC once, or make
+# keeps the stale object.
 ln -sf "$HERE/src/mame/matsushita/wsa1.cpp"                  "$BUILD_TREE/src/mame/matsushita/wsa1.cpp"
 # The control-panel microcontroller (M37471M2196S on CONTROL PANEL 1), HLE'd as a
 # device on CPU 1's serial channel 1 -- the same part and the same protocol as the
@@ -159,11 +158,10 @@ ln -sf "$HERE/src/mame/matsushita/acoustic_modeling.h"           "$BUILD_TREE/sr
 ln -sf "$HERE/src/mame/matsushita/wsa1_tonegen.cpp"              "$BUILD_TREE/src/mame/matsushita/wsa1_tonegen.cpp"
 ln -sf "$HERE/src/mame/matsushita/wsa1_tonegen.h"                "$BUILD_TREE/src/mame/matsushita/wsa1_tonegen.h"
 mkdir -p "$BUILD_TREE/src/devices/video"
-ln -sf "$HERE/src/devices/video/sed1330.cpp"                 "$BUILD_TREE/src/devices/video/sed1330.cpp"
 ln -sf "$HERE/src/devices/video/sed1330.h"                   "$BUILD_TREE/src/devices/video/sed1330.h"
 # KN5000 (SX-KN5000): the driver itself is upstream, as is the Program data wheel (#15919),
 # but a large body of work is not -- the tone generator (IC303), the IC311 effects-DSP work,
-# FDC/UART/MIDI wiring and the SNS NMI payload checksum. Those live here as overlay files exactly
+# FDC/UART/MIDI wiring. Those live here as overlay files exactly
 # like the KN7000 ones, so this repo stays the single source of truth for every Technics
 # model. See notes/upstream-patches/README.md for the matching patch series.
 mkdir -p "$BUILD_TREE/src/devices/cpu/tlcs900" "$BUILD_TREE/src/devices/bus/technics/kn5000"
