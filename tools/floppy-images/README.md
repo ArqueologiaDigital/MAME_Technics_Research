@@ -109,6 +109,18 @@ zips and lists. Staged, not installed, in
 `~/compartilhado/technics_romsets/floppy-rebuild-2026-10-18/` (private); the new lists and
 hashes are also in `rebuild-2026-10-18/`. How to test them: `TESTING.md`.
 
+**`scd7000` before and after, on the KN7000 (2026-10-18).** The same command file, run in the
+published overlay build with MAME's debugger, breaks on the converter call `0x48479929` after
+DISK MENU > STYLE CONVERT > OK:
+
+| image                                   | FAT starts | STYLE CONVERT                                   |
+|-----------------------------------------|------------|-------------------------------------------------|
+| upstream `scd7000` (crc `3e588db0`)     | `F0 0F FF` | an empty box; the converter is never called (0) |
+| rebuilt `scd7000` (crc `13a03dd1`)      | `F0 FF FF` | a converter is loaded and called (3 calls)      |
+
+The command file and runner are in kn5000-anotherworld `kn7000/probes/cnv/` (`taskprobe.cmd`,
+`run_probe.sh`); the rebuilt run adds `-rompath "$S/roms;./roms" -hashpath "$S/hash;hash"`.
+
 ## Files
 
 | file                 | question it answers                                                                                               | command                                                                               |
