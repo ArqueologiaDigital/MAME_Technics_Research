@@ -37,7 +37,8 @@ done
 cd "$EMU_DIR" || { echo "gate: no emulator at $EMU_DIR"; exit 1; }
 [ -x ./kn7000 ] || { echo "gate: no binary at $EMU_DIR/kn7000"; exit 1; }
 
-# Per-model expectations, measured 2026-08-14 on binary 74035784 B.
+# Per-model expectations, measured 2026-08-14 on binary 74035784 B; kn6000 re-measured
+# 2026-10-18 (see below).
 #   model:min_distinct
 # min_distinct is a FLOOR just under the observed value, so a real regression trips it
 # while ordinary UI variation does not. Observed: kn7000 12, kn5000 20, kn6000 9,
@@ -45,15 +46,25 @@ cd "$EMU_DIR" || { echo "gate: no emulator at $EMU_DIR"; exit 1; }
 #   ⚠ kn2400/kn2600 sit at 4 because they render almost nothing -- a known defect, not a
 #   healthy baseline. Raise their floor when the text path is fixed.
 #   kn1500 has no screen device (SVG/HD44780) so the probe reports SKIP.
-MODELS="kn7000:11 kn5000:18 kn6000:8 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
+#   kn6000 draws 7 since its table ROM became the fonts-only placeholder (921bbdd; the earlier
+#   borrowed KN7000 table also drew KN7000 bitmaps). Same value with the pre-resync build
+#   (notes/overlay-upstream-sync/SYNC-2026-10-18.md); the screen at t=25 is a correct play
+#   screen. Floor 6.
+MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 
-ORACLE_MD5="780de131e33a4a0c99d092b57a074247"
+# Re-baselined 2026-10-18 from 780de131e33a4a0c99d092b57a074247: the old value had already
+# drifted before the upstream resync (the pre-resync build gives this one too), and nothing in the
+# resync changed it. Evidence: notes/overlay-upstream-sync/SYNC-2026-10-18.md, "Gate attribution".
+ORACLE_MD5="4c3a522a63f4e86fe9f7d7c8d94f5dbe"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
 # and its kn5000 liveness check sits at the home screen with no notes playing.
 # Baseline measured on the binary with the N>256 bound; deterministic across two runs.
-KN5000_DEMO_MD5="4c8671b68f446cd3f6c10c8784e7748f"
+# Re-baselined 2026-10-18 from 4c8671b68f446cd3f6c10c8784e7748f (rms 499.8). It had drifted to
+# 6e7c3531... before the resync, and the rebase onto upstream ec20df4a93b moved it to this value
+# (rms 500.1): upstream core changes, not overlay ones (same SYNC notes section).
+KN5000_DEMO_MD5="8bbe54f787f43c4fd82ea25b9486f38d"
 
 PASS=0; FAIL=0; SKIP=0
 FAILED=""

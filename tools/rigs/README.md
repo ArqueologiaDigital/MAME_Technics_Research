@@ -55,11 +55,12 @@ cp -f sdcard_from_real_kn7000.img /tmp/sd_pristine.img && chmod u+w /tmp/sd_pris
 md5sum out.wav
 ```
 
-| | |
-|---|---|
-| **current md5** | `780de131e33a4a0c99d092b57a074247` (6,336,050 B; 1,056,001 frames, 3 ch, 48 kHz) |
-| binary | `kn7000-emulator/kn7000`, 74,035,784 B, 2026-08-11 20:17 |
-| determinism | **verified** — two identical runs produced the identical hash |
+|                 |                                                                                                                                                                                                    |
+|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **current md5** | `4c3a522a63f4e86fe9f7d7c8d94f5dbe` (re-baselined 2026-10-18)                                                                                                                                       |
+| binary          | the 2026-10-18 resync builds, e.g. md5 `d398d07ca975241dc4c969270dca1a4a` (75,515,736 B)                                                                                                           |
+| determinism     | **verified** — the same hash from five builds that differ only off this path (`notes/overlay-upstream-sync/SYNC-2026-10-18.md`)                                                                    |
+| previous        | `780de131e33a4a0c99d092b57a074247` (6,336,050 B; 1,056,001 frames, 3 ch, 48 kHz), binary 74,035,784 B of 2026-08-11 20:17; last confirmed 2026-08-25, already drifted before the 2026-10-18 resync |
 
 ⚠ **Both previously recorded baselines are stale, and they disagree with each other**:
 `44b09b9d0eaae59d9a65e5b4f4e72ec0` (`notes/sharc-upstream-patch-series.md:223`) and
@@ -90,11 +91,12 @@ tone-generator change it structurally could not see. This arm closes that.
     -autoboot_script notes/kn5000-demo-probes/demo_max.lua
 ```
 
-| | |
-|---|---|
-| baseline md5 | `4c8671b68f446cd3f6c10c8784e7748f` |
-| determinism | **verified** — identical across two runs of the same binary |
-| level | max rms 499.8 on ch1/ch2, against 0.00 before the demo starts |
+|              |                                                                                                                                                               |
+|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| baseline md5 | `8bbe54f787f43c4fd82ea25b9486f38d` (re-baselined 2026-10-18; rms 500.1)                                                                                       |
+| determinism  | **verified** — identical across two runs of the same binary, and across the four 2026-10-18 builds on the new base                                            |
+| level        | max rms 499.8 on ch1/ch2, against 0.00 before the demo starts (2026-08-15)                                                                                    |
+| previous     | `4c8671b68f446cd3f6c10c8784e7748f`; drifted to `6e7c35319ea1fc8dab8ba16e43bbdcec` before the resync, then moved by the upstream rebase (`SYNC-2026-10-18.md`) |
 
 ⚠ **Two preconditions, both fault-injected on 2026-08-15**, because each corresponds to a
 mistake that already happened here:
