@@ -208,7 +208,7 @@ public:
 		, m_maincpu_latch(*this, "maincpu_latch")
 		, m_subcpu_latch(*this, "subcpu_latch")
 		, m_fdc(*this, "fdc")
-		, m_floppy(*this, "fdc:0")
+		, m_floppy(*this, "fdc:1")
 		, m_tonegen(*this, "tonegen")
 		, m_customdata(*this, "custom_data")
 		, m_kbd_uart(*this, "kbdmidi_uart")
@@ -639,7 +639,16 @@ void kn5000_state::maincpu_mem(address_map &map)
 	// Floppy Controller @ IC208 (UPD72068GF)
 	// Register layout matches PC AT (smc37c78-style) with offsets doubled for 16-bit data bus:
 	// MSR at offset 4 (address 0x110008), FIFO at offset 5 (address 0x11000A)
-	map(0x110008, 0x110008).rw(m_fdc, FUNC(upd72067_device::msr_r), FUNC(upd72067_device::auxcmd_w));
+	map(0x110008, 0x110008).r(m_fdc, FUNC(upd72067_device::msr_r));
+	map(0x110008, 0x110008).lw8(NAME([this] (u8 data) {
+		// The firmware selects the data rate with the "control internal mode" auxiliary
+		// command: 0x4B before trying a 1.44 MB disk, 0x0B before trying a 720 KB one.
+		// MAME's uPD72067 acknowledges that command without changing its rate, so every
+		// track was read, and formatted, at 250 kbit/s.
+		if ((data & 0xbf) == 0x0b)
+			m_fdc->set_rate(BIT(data, 6) ? 500'000 : 250'000);
+		m_fdc->auxcmd_w(data);
+	}));
 	map(0x11000a, 0x11000a).rw(m_fdc, FUNC(upd72067_device::fifo_r), FUNC(upd72067_device::fifo_w));
 	map(0x120000, 0x12ffff).rw(m_fdc, FUNC(upd72067_device::dma_r), FUNC(upd72067_device::dma_w)); // Floppy DMA Acknowledge
 	map(0x140000, 0x14ffff).r(FUNC(kn5000_state::maincpu_latch_r)); // @ IC23
@@ -1399,11 +1408,15 @@ void kn5000_state::kn5000(machine_config &config)
 	//   bit 6 (input) = FD.I/O
 	m_maincpu->portd_write().set(m_fdc, FUNC(upd72067_device::reset_w)).bit(0);
 	m_maincpu->portd_read().set([this] {
-		// bit 6 = FD.I/O: floppy disk change signal (active low on hardware)
-		// MAME's dskchg_r() returns 1 = "change detected" (active high), so
-		// invert for the active-low hardware signal the firmware expects.
+		// bit 6 = FD.I/O: low while a disk is in the drive. The firmware reads it as a level,
+		// not as a disk-change latch: GetMediaType reports "no disk" on 1 without touching
+		// the drive, and Reset_Floppy_Disk_Controller skips its seek sweep on 1 (v10
+		// storage/fdc_routines.s, sequencer/smf_event_processor.s). Fed from MAME's
+		// dskchg_r(), which a step clears, a disk inserted while the machine ran was never
+		// seen ("ERROR 02! There is no disk in the disk drive."): the firmware never steps
+		// while the line says no disk. At boot both readings give the same value.
 		floppy_image_device *floppy = m_floppy->get_device();
-		return floppy ? ((!floppy->dskchg_r()) << 6) : 0x00;
+		return floppy ? ((floppy->exists() ? 0 : 1) << 6) : 0x00;
 	});
 
 
@@ -1718,6 +1731,12 @@ void kn5000_state::kn5000(machine_config &config)
 	m_subcpu_latch->data_pending_callback().set_inputline(m_subcpu, TLCS900_INT0);
 
 	UPD72067(config, m_fdc, 32'000'000); // actual controller is UPD72068GF-3B9 at IC208
+	// RDY is taken to be tied active: the firmware sends motor-on (FDC_CMD_ENABLE: aux command
+	// 0xFE) and issues its first SEEK about 5 ms later, far too soon for a drive to report
+	// ready, and the drive's own status line reaches the CPU instead, as FD.I/O (Port D bit 6).
+	// With RDY following the drive, every command came back "not ready" (ST0 0x49/0x69).
+	// The schematic net for the controller's RDY pin has not been traced.
+	m_fdc->set_ready_line_connected(false);
 	m_fdc->intrq_wr_callback().set_inputline(m_maincpu, TLCS900_INT4);
 	m_fdc->drq_wr_callback().set_inputline(m_maincpu, TLCS900_INT5);
 	// Review:
@@ -1734,7 +1753,15 @@ void kn5000_state::kn5000(machine_config &config)
 	// m_fdc->??_wr_callback().set_inputline(m_maincpu, TLCS900_INT7);
 
 
-	FLOPPY_CONNECTOR(config, "fdc:0", kn5000_floppies, "35hd", floppy_image_device::default_mfm_floppy_formats).enable_sound(true);
+	// default_pc_floppy_formats, not default_mfm_floppy_formats: only the PC set includes
+	// FLOPPY_PC_FORMAT, the raw 1.44 MB sector image (.img) that the kn5000_flop software list
+	// and users' disk dumps are. With the MFM set every .img failed to load ("Unable to
+	// identify image file format").
+	// The drive answers to unit 1: every command the firmware sends carries US = 1 (SEEK
+	// 0F 01 nn, RECALIBRATE 07 01, READ DATA C6 01 ..., FORMAT TRACK 4D 01 ...; observed on the FDC
+	// data register 0x11000A, 2026-10-18). On unit 0 every command came back "not ready"
+	// (ST0 0x49/0x69), so no disk could be read and every disk looked unformatted.
+	FLOPPY_CONNECTOR(config, "fdc:1", kn5000_floppies, "35hd", floppy_image_device::default_pc_floppy_formats).enable_sound(true);
 
 	SOFTWARE_LIST(config, "flop_list").set_original("kn5000_flop");
 
