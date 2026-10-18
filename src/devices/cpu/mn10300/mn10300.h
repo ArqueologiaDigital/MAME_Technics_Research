@@ -149,6 +149,13 @@ public:
 	template <unsigned Ch> auto sio_rx_rdy_cb() { return m_sio_rx_rdy_cb[Ch].bind(); }
 	template <unsigned Ch> auto sio_rx_enable_cb() { return m_sio_rx_enable_cb[Ch].bind(); }
 
+	// The on-chip DMA controller's channel 0 is driven by an external request
+	// (the floppy controller's DRQ); when its byte count runs out the channel
+	// pulses terminal count back to the requesting device. Ported from upstream
+	// MAME (#16394, cpu/mn10300 + matsushita/kn7000).
+	auto dma_tc_cb() { return m_dma_tc_cb.bind(); }
+	void dma_req_w(int state);
+
 	// Endpoint devices (panel HLE, MIDI UART bridges) deliver received bytes
 	// here; each successful push fires sio_rx_rdy_cb for that channel.
 	void sio_rx_push(int ch, uint8_t data);
@@ -259,6 +266,22 @@ private:
 	uint8_t   m_tm5_mode;        // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
 	uint16_t  m_tm5_base;        // 16-bit reload (underflow period)
 	emu_timer *m_tm5_timer;
+
+	// ---- on-chip DMA controller, channel 0 (registers at 0x32000800) --------
+	uint32_t dmac_r(offs_t offset);
+	void dmac_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
+	TIMER_CALLBACK_MEMBER(dma_transfer);
+
+	devcb_write_line m_dma_tc_cb;
+	emu_timer *m_dma_timer;
+	uint32_t m_dma_ctrl;
+	uint32_t m_dma_src;
+	uint32_t m_dma_dst;
+	uint16_t m_dma_count;
+	uint32_t m_dma_remain;
+	bool m_dma_active;
+	bool m_dma_started;
+	bool m_dma_drq;
 
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)

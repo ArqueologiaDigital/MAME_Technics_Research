@@ -100,6 +100,7 @@
 #include "machine/spi_sdcard.h"     // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 #include "machine/intelfsh.h"      // IC21 custom-data flash (16 Mbit bottom boot)
 #include "imagedev/floppy.h"        // IC103 floppy drive
+#include "softlist_dev.h"           // kn7000_flop / kn6000_flop software lists
 #include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
@@ -421,10 +422,17 @@ private:
 	optional_device<floppy_connector> m_floppy;    // the 3.5" floppy drive
 	uint8_t fdc_r(offs_t off);                     // FDC (IC103) PC/AT registers at 0x98020000 (schematic-confirmed)
 	void    fdc_w(offs_t off, uint8_t data);
-	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (software-DMA transfer)
+	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (the DMA channel's peripheral end)
 	void    fdc_dma_w(offs_t off, uint8_t data);
 	void    fdc_irq_w(int state);                  // FDC INTRQ -> INTC group 0x19 (IRQ2)
-	void    fdc_drq_w(int state);                  // FDC DRQ  -> INTC group 0x18 (per-byte software-DMA)
+	// The drive's INDEX line also goes to the CPU, on IRQ7 = INTC group 0x1E (schematic MAIN
+	// 1/5, net HDD.INDEX -> pin 48). It is how the firmware tells an inserted disk; see
+	// fdd_index_poll.
+	emu_timer *m_fdd_index_timer = nullptr;
+	int m_fdd_index = 0;
+	TIMER_CALLBACK_MEMBER(fdd_index_poll);
+	void fdd_loaded(floppy_image_device *fd);
+	void fdd_unloaded(floppy_image_device *fd);
 	required_ioport m_sdcover;             // SD slot cover switch (open/closed)
 	required_ioport m_volmain;             // front-panel MAIN VOLUME slider (0-100 adjuster)
 	required_ioport m_volapcseq;           // front-panel APC/SEQ VOLUME slider (0-100 adjuster)
@@ -973,8 +981,9 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// The io window returned 0 here (the region was mislabelled "sound control"; sound is TG 0x98040000 /
 	// snd 0x98060000). See notes/fdc-architecture.md addendum 15.
 	map(0x98020000, 0x9802000f).rw(FUNC(kn7000_state::fdc_r), FUNC(kn7000_state::fdc_w));
-	// FDC.DACK byte slot at 0x98010000 (decoder Y1). The software-DMA ISR (0x48402140), invoked per FDC.DRQ
-	// (INTC group 0x18), reads/writes one FIFO byte here to feed/drain the FDC during read/write/format.
+	// FDC.DACK byte slot at 0x98010000 (decoder Y1). The DMA channel reads/writes one FIFO byte here per
+	// FDC.DRQ during read/write/format. (The firmware's group-0x18 ISR at 0x48402109 also moves a single
+	// byte through it, at buffer index count-1; it is not raised by this driver.)
 	map(0x98010000, 0x98010003).rw(FUNC(kn7000_state::fdc_dma_r), FUNC(kn7000_state::fdc_dma_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
@@ -1792,6 +1801,15 @@ void kn7000_state::machine_start()
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
+	m_fdd_index_timer = timer_alloc(FUNC(kn7000_state::fdd_index_poll), this);
+	if (floppy_image_device *const fd = m_floppy ? m_floppy->get_device() : nullptr)
+	{
+		fd->setup_load_cb(floppy_image_device::load_cb(&kn7000_state::fdd_loaded, this));
+		fd->setup_unload_cb(floppy_image_device::unload_cb(&kn7000_state::fdd_unloaded, this));
+		if (fd->exists())
+			fdd_loaded(fd);
+	}
+	save_item(NAME(m_fdd_index));
 
 	// (INTC + TM5 timer state is save_item'd by the MN10300 core now.)
 	save_item(NAME(m_c11_unserviced));
@@ -1874,8 +1892,8 @@ void kn7000_state::machine_reset()
 //   +A = reg5 data FIFO (command/result/data bytes)
 //   +E = reg7 DIR (read: bit7 = DSKCHG / disk-change) / CCR (write: data rate)
 // (regs 0/1/3/6 = SRA/SRB/TDR/reserved, not touched by this firmware.) Full RE: notes/fdc-architecture.md
-// addenda 14-15. NOTE: the FDC INTRQ/DRQ are not yet wired to the MN10300 (the firmware polls MSR for the
-// command/result phases); DMA for the sector data phase is still a stub -- see fdc_irq_w/fdc_drq_w.
+// addenda 14-15. The firmware polls MSR for the command/result phases; the sector-data phase runs on the
+// MN10300's on-chip DMA channel 0 -- see fdc_irq_w and the FDC wiring in kn7000().
 uint8_t kn7000_state::fdc_r(offs_t off)
 {
 	if (!m_fdc) return 0xff;
@@ -1902,25 +1920,55 @@ void kn7000_state::fdc_w(offs_t off, uint8_t data)
 	}
 }
 
-// FDC interrupt lines. INTRQ (command complete) is IRQ2 = INTC group 0x19 (GxICR 0x34000164, acknowledged
-// by the ISR at 0x4840221D) on every KN board; the schematics wire FDC.INT/FBC.INT to pin 43. DRQ is a
-// separate line, IRQ1 = group 0x18 (GxICR 0x34000160): the FDC sector-data phase is SOFTWARE-DMA, the FDC
-// asserts DRQ per byte -> the ISR at 0x48402109 acknowledges group 0x18 and transfers one byte between the
-// RAM buffer and the FDC.DACK slot at 0x98010000 (mapped to m_fdc->dma_r()/dma_w()). That is the KN7000
-// and KN2400 firmware; the KN6000/KN6500 firmware takes DRQ in group 0x0f instead (not modelled). (Rising
+// FDC interrupt line. INTRQ (command complete) is IRQ2 = INTC group 0x19 (GxICR 0x34000164, acknowledged
+// by the ISR at 0x4840221D) on every KN board; the schematics wire FDC.INT/FBC.INT to pin 43. (Rising
 // edge asserts.) See notes/fdc-architecture.md addendum 18 and the 2026-10-08 addendum.
+//
+// DRQ goes to the MN10300's DMA channel 0, not to the interrupt controller. The firmware programs the
+// channel (0x32000800..0x3200080C: KN7000 941 at 0x484009BE, KN6000 at 0x110DF0 in its linear image)
+// with the RAM buffer at one end and the FDC.DACK slot at 0x98010000 at the other; each DRQ moves one
+// byte, and the channel's terminal count ends the FDC's data phase. Until 2026-10-18 the overlay raised
+// INTC group 0x18 per DRQ instead (a software-DMA reading of the ISR at 0x48402109); no sector data
+// reached RAM that way. The wiring matches upstream MAME #16394.
 void kn7000_state::fdc_irq_w(int state)
 {
 	if (state)
 		intc_assert(0x19);
 }
-void kn7000_state::fdc_drq_w(int state)
+// The drive's INDEX pulse, on IRQ7 = INTC group 0x1E. The schematic (MAIN 1/5, PDF page 100) runs net
+// HDD.INDEX into CPU pin 48, IRQ7, beside FBC.INT on pin 43, IRQ2 (the FDC interrupt above). This is how
+// the firmware detects an inserted disk. Its presence check (KN7000 0x484025DD, KN6000 0x485128A3) reads
+// DIR: with DSKCHG clear the disk is present; with DSKCHG set it counts the disk as present only if an
+// index interrupt arrived in the last 0x6E ticks (KN7000: of 0x50151BFC, a 2 ms time base, so 220 ms --
+// a little over one revolution at 300 rpm). A state machine polls it (KN6000 0x4851299D) and posts
+// 0x10708000 with 1 on insertion and 0 on removal. The ISR (KN7000 0x484025A1, KN6000 0x48512866) only stamps the time. A disk
+// inserted while the instrument runs leaves DSKCHG set until the next seek, so without these pulses the
+// firmware never sees the insertion and never posts its disk-in event 0x10708000 -- which is what the
+// DEMONSTRATION screen's feature-presentation loader (FEATURE.PRE) waits for.
+//
+// MAME's FDC owns the floppy's one index callback (it re-registers it on every drive select), so the
+// line is sampled instead: every 500 us, against MAME's 2 ms pulse; a rising edge asserts the group.
+// The sampling runs only while a disk is in the drive (no disk, no index pulse), so a machine without
+// a floppy schedules exactly as before -- the audio oracles in tools/gate.sh depend on that.
+TIMER_CALLBACK_MEMBER(kn7000_state::fdd_index_poll)
 {
-	if (state)
-		intc_assert(0x18);
+	floppy_image_device *const fd = m_floppy ? m_floppy->get_device() : nullptr;
+	const int idx = fd ? fd->idx_r() : 0;
+	if (idx && !m_fdd_index)
+		intc_assert(0x1e);
+	m_fdd_index = idx;
+}
+void kn7000_state::fdd_loaded(floppy_image_device *fd)
+{
+	m_fdd_index_timer->adjust(attotime::from_usec(500), 0, attotime::from_usec(500));
+}
+void kn7000_state::fdd_unloaded(floppy_image_device *fd)
+{
+	m_fdd_index_timer->adjust(attotime::never);
+	m_fdd_index = 0;
 }
 // FDC.DACK byte slot at 0x98010000 (decoder Y1). A read/write here transfers one FIFO byte to/from the
-// FDC in the current DMA operation (asserts DACK); the software-DMA ISR uses it per FDC.DRQ.
+// FDC in the current DMA operation (asserts DACK); the DMA channel reads or writes it once per FDC.DRQ.
 uint8_t kn7000_state::fdc_dma_r(offs_t)
 {
 	return m_fdc ? m_fdc->dma_r() : 0xff;
@@ -2097,11 +2145,13 @@ void kn7000_state::kn7000(machine_config &config)
 	// YES=SEG13 0x01. Clocked at 24 MHz (the FDC crystal on MAIN 2/5).
 	N82077AA(config, m_fdc, 24'000'000);
 	m_fdc->intrq_wr_callback().set(FUNC(kn7000_state::fdc_irq_w));   // FDC INTRQ -> group 0x19 (IRQ2)
-	m_fdc->drq_wr_callback().set(FUNC(kn7000_state::fdc_drq_w));     // FDC DRQ  (logging stub -- DMA not yet modelled)
+	m_fdc->drq_wr_callback().set(m_maincpu, FUNC(mn10300_device::dma_req_w));   // FDC DRQ -> DMA channel 0
+	m_maincpu->dma_tc_cb().set([this] (int state) { m_fdc->tc_w(state); });   // DMA terminal count -> FDC TC
 	// PC floppy formats: KN7000 disks are FAT12 and "interchangeable with a PC" (standard IBM-PC MFM),
 	// so use default_pc_floppy_formats -- it adds FLOPPY_PC_FORMAT (raw .img round-trip) on top of the
 	// MFM containers, unlike the KN5000's default_mfm_floppy_formats which cannot load a raw PC image.
 	FLOPPY_CONNECTOR(config, "fdc:0", kn7000_floppies, "35hd", floppy_image_device::default_pc_floppy_formats).enable_sound(true);
+	SOFTWARE_LIST(config, "flop_list").set_original("kn7000_flop");
 
 	KN7000_TONEGEN(config, m_tonegen, 0);
 	// F.3: route the tone-generator audio through the effects-DSP bridge, then to the speakers.
@@ -2134,6 +2184,7 @@ void kn7000_state::kn7000(machine_config &config)
 void kn7000_state::kn6000(machine_config &config)
 {
 	kn7000(config);
+	SOFTWARE_LIST(config.replace(), "flop_list").set_original("kn6000_flop");
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
@@ -2209,6 +2260,7 @@ void kn7000_state::kn2400(machine_config &config)
 	// SX-KN2400/KN2600 front panel is a different and smaller one, and neither
 	// its scan matrix nor its layout has been drawn.
 	kn7000(config);
+	config.device_remove("flop_list");   // no KN2400 software list yet
 	m_ram90_workram = true;
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).

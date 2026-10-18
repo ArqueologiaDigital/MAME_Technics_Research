@@ -71,6 +71,9 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_intc_extmd_cb(*this)
 	, m_iagr_latch(0), m_intc_280(0)
 	, m_tm5_mode(0), m_tm5_base(0), m_tm5_timer(nullptr)
+	, m_dma_tc_cb(*this), m_dma_timer(nullptr)
+	, m_dma_ctrl(0), m_dma_src(0), m_dma_dst(0), m_dma_count(0), m_dma_remain(0)
+	, m_dma_active(false), m_dma_started(false), m_dma_drq(false)
 	, m_pc(0), m_sp(0), m_mdr(0), m_mdrq(0), m_mcrh(0), m_mcrl(0), m_mcvf(0), m_psw(0), m_lir(0), m_lar(0)
 	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
@@ -105,6 +108,9 @@ void mn10300_device::internal_map(address_map &map)
 	map(0x34001080, 0x34001083).rw(FUNC(mn10300_device::tm45_mode_r), FUNC(mn10300_device::tm45_mode_w));
 	map(0x34001090, 0x34001093).rw(FUNC(mn10300_device::tm45_base_r), FUNC(mn10300_device::tm45_base_w));
 	map(0x340010a0, 0x340010a3).r(FUNC(mn10300_device::tm45_count_r));
+	// DMA controller channel 0: control/start, source, destination, byte count.
+	// Takes priority over the KN7000 driver's generic 0x32000000 io_r/io_w window.
+	map(0x32000800, 0x3200080f).rw(FUNC(mn10300_device::dmac_r), FUNC(mn10300_device::dmac_w));
 }
 
 device_memory_interface::space_config_vector mn10300_device::memory_space_config() const
@@ -151,6 +157,16 @@ void mn10300_device::device_start()
 	// is a device-allocated emu_timer and is save-stated automatically.)
 
 	m_tm5_timer = timer_alloc(FUNC(mn10300_device::tm5_tick), this);
+
+	m_dma_timer = timer_alloc(FUNC(mn10300_device::dma_transfer), this);
+	save_item(NAME(m_dma_ctrl));
+	save_item(NAME(m_dma_src));
+	save_item(NAME(m_dma_dst));
+	save_item(NAME(m_dma_count));
+	save_item(NAME(m_dma_remain));
+	save_item(NAME(m_dma_active));
+	save_item(NAME(m_dma_started));
+	save_item(NAME(m_dma_drq));
 
 	state_add(MN10300_PC,  "PC",  m_pc ).formatstr("%08X");
 	state_add(MN10300_SP,  "SP",  m_sp ).formatstr("%08X");
@@ -206,6 +222,12 @@ void mn10300_device::device_reset()
 	m_tm5_mode = 0;
 	m_tm5_base = 0;
 	m_tm5_timer->adjust(attotime::never);
+
+	m_dma_ctrl = 0;
+	m_dma_active = false;
+	m_dma_started = false;
+	m_dma_drq = false;
+	m_dma_timer->adjust(attotime::never);
 }
 
 void mn10300_device::state_import(const device_state_entry &entry) { }
@@ -554,6 +576,85 @@ void mn10300_device::tm5_rearm(bool restart_phase)
 TIMER_CALLBACK_MEMBER(mn10300_device::tm5_tick)
 {
 	intc_assert(0x07);      // GxICR 0x3400011C -> KN7000: the 96-PPQN sequencer tick ISR 0x48447084
+}
+
+
+//**************************************************************************
+//  on-chip DMA controller, channel 0 @ 0x32000800 (ported from upstream #16394)
+//**************************************************************************
+//
+// The control register (0x800) starts the channel when its low nibble reads 0xf;
+// 0x804 and 0x808 are the source and destination, and 0x80c is a 16-bit count
+// that holds (length - 2). The transfer moves bytes between the memory buffer and
+// the peripheral data port it is pointed at, with the peripheral end held at a
+// fixed address and the memory end advancing. The address modes are not yet
+// decoded from the control register, so the peripheral is taken to be the end
+// that lies in the I/O region.
+uint32_t mn10300_device::dmac_r(offs_t offset)
+{
+	switch (offset)
+	{
+	case 0: return m_dma_ctrl;
+	case 1: return m_dma_src;
+	case 2: return m_dma_dst;
+	case 3: return m_dma_count;
+	}
+	return 0;
+}
+
+void mn10300_device::dmac_w(offs_t offset, uint32_t data, uint32_t mem_mask)
+{
+	switch (offset)
+	{
+	case 0:
+	{
+		COMBINE_DATA(&m_dma_ctrl);
+		const bool go = (m_dma_ctrl & 0x0f) == 0x0f;
+		if (go && !m_dma_active)
+			m_dma_started = false;   // new transfer; latch the length at the first byte
+		m_dma_active = go;
+		break;
+	}
+	case 1: COMBINE_DATA(&m_dma_src); break;
+	case 2: COMBINE_DATA(&m_dma_dst); break;
+	case 3: if (ACCESSING_BITS_0_15) m_dma_count = data & 0xffff; break;
+	}
+}
+
+// An external request on the channel (the floppy controller's DRQ). The byte
+// moves run from a timer so that reading the peripheral port and pulsing terminal
+// count happen outside the requesting device's own request callback.
+void mn10300_device::dma_req_w(int state)
+{
+	m_dma_drq = state;
+	if (state && m_dma_active)
+		m_dma_timer->adjust(attotime::zero);
+}
+
+TIMER_CALLBACK_MEMBER(mn10300_device::dma_transfer)
+{
+	if (!m_dma_active)
+		return;
+	if (!m_dma_started)
+	{
+		m_dma_remain = uint32_t(m_dma_count) + 2;
+		m_dma_started = true;
+	}
+	const bool src_is_memory = m_dma_src < 0x80000000;
+	while (m_dma_active && m_dma_drq)
+	{
+		m_program->write_byte(m_dma_dst, m_program->read_byte(m_dma_src));
+		if (src_is_memory)
+			m_dma_src++;
+		else
+			m_dma_dst++;
+		if (--m_dma_remain == 0)
+		{
+			m_dma_tc_cb(1);
+			m_dma_tc_cb(0);
+			m_dma_active = false;
+		}
+	}
 }
 
 

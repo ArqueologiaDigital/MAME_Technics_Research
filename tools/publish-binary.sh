@@ -147,6 +147,27 @@ else
   echo "warning: no plugins dir at $BUILD/plugins -- layout <script> (draggable sliders) will NOT work"
 fi
 
+# 2c) Floppy software lists. The kn5000/kn6000/kn6500/kn7000/wsa1 machines declare
+#     kn5000_flop / kn6000_flop / kn7000_flop / wsa1_flop (upstream hash/*.xml, in the base
+#     tree since the 2026-10-18 resync). MAME looks for the lists in ./hash (its default
+#     -hashpath, and run.sh runs from this folder) and for each list's zips in
+#     roms/<list>/. The zips come from the romsets folder, which the softlist work built
+#     from technics_roms; a list whose zips are missing still loads, its entries just
+#     report missing files.
+ROMSETS="${TECHNICS_ROMSETS:-/home/fsanches/compartilhado/technics_romsets}"
+mkdir -p "$DEST/hash"
+for l in kn5000_flop kn6000_flop kn7000_flop wsa1_flop; do
+  if [ -f "$BUILD/hash/$l.xml" ]; then
+    cp -u "$BUILD/hash/$l.xml" "$DEST/hash/"
+  else
+    echo "warning: no $l.xml in $BUILD/hash -- the $l software list will be unavailable"
+  fi
+  if [ -d "$ROMSETS/$l" ]; then
+    mkdir -p "$DEST/roms/$l"
+    cp -u "$ROMSETS/$l"/*.zip "$DEST/roms/$l/" 2>/dev/null || true
+  fi
+done
+
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
