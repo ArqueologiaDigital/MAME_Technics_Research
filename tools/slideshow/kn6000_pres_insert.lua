@@ -11,12 +11,15 @@
 --   INDEX  the first few INDEX-ISR stamps (0x48512866 sets byte 0x50005B4C = 1 per group-0x1E IRQ);
 --   DMA    a count of DMA channel-0 starts (writes to 0x32000800 with low nibble 0xF), i.e. sector
 --          transfers; printed with each snapshot.
--- PRES_RUN (default 60) sets how many seconds (60 frames each) to run after the insert.
+-- PRES_RUN (default 60) sets how many seconds (60 frames each) to run after the insert; 0 = keep
+-- running until the window is closed. PRES_SNAP=0 takes no snapshots. For watching it by hand:
+--   PRES_RUN=0 PRES_SNAP=0 PRES_IMG=... ./run.sh kn6000 -window -autoboot_script kn6000_pres_insert.lua
 -- Run: kn7000 kn6000 -rompath ROMS -window -nothrottle -snapshot_directory OUT \
 --        -autoboot_script kn6000_pres_insert.lua     (env PRES_IMG=/path/ca6fp01.img; use a copy)
 local IMG = os.getenv("PRES_IMG")
 local FORCE = os.getenv("FORCE_DSKCHG") == "1"
 local RUN = tonumber(os.getenv("PRES_RUN") or "60")     -- seconds to keep running after the insert
+local SNAP = os.getenv("PRES_SNAP") ~= "0"
 -- PRES_PRESS="secs:PORT:MASK,..." presses cpanel PORT bit MASK for 0.5 s at secs after the insert,
 -- e.g. "60:CPR_SEG3:0x40,90:CPR_SEG6:0x08" = LCDR 5 (the presentation's title button), START/STOP
 local PRESSES = {}
@@ -37,7 +40,7 @@ _G.t_dma = sp:install_write_tap(0x32000800, 0x32000803, "dma", function(off, dat
 local function setbtn(p, mk, v)
   for _, f in pairs(manager.machine.ioport.ports[":" .. p].fields) do if f.mask == mk then f:set_value(v) end end
 end
-local function snap(l) shots = shots + 1; manager.machine.video:snapshot()
+local function snap(l) shots = shots + 1; if SNAP then manager.machine.video:snapshot() end
   print(string.format("SHOT %d t=%.1f %s  (dma starts %d, index stamps %d)", shots,
     manager.machine.time.seconds, l, dma_starts, index_seen)) end
 _G.p_sub = emu.add_machine_frame_notifier(function()
@@ -60,6 +63,6 @@ _G.p_sub = emu.add_machine_frame_notifier(function()
       if fc == pr.at + 30 then setbtn(pr.port, pr.mask, 0) end
     end
     if fc % 300 == 0 then snap("after insert") end
-    if fc >= RUN * 60 then m:exit() end
+    if RUN > 0 and fc >= RUN * 60 then m:exit() end
   end
 end)

@@ -90,6 +90,11 @@ The archives' payloads are unchanged; only the container differs.
 | D3  | D      | standard layout                   | WESERBERGLAND button; 1599 DMA reads to t=69; slide 1 from t≈74 to 264 |
 | D4  | D      | standard layout                   | as D3; LCDR 5 at t=84, START/STOP at t=114 → back to the DEMO menu     |
 
+All four disks, through the published folder's `run.sh` (runs E01-E04, logs in
+`tools/slideshow/runs-2026-10-18/kn6000_E_*.log`): 01, 02 and 03 draw their first slide;
+04 reads its files (1569 DMA transfers) and then stays on the DEMONSTRATION menu with its
+LETS GET BACK button highlighted, the drive still turning. Not traced yet.
+
 ## Still open
 
 The presentation loads and draws its first slide (ACT 1, `PIC01.JPG`), then holds it: over 190 s
