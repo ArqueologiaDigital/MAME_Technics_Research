@@ -74,8 +74,50 @@ The real card image itself (md5 c3bcea2346cb3bb7d803e8c48aebce78) was only copie
 ## KN6000: the presentation disks themselves (2026-10-18)
 
 `kn6000_pres_insert.lua` asks whether a KN6000 feature-presentation floppy (CA-6FP01, the image in
-`technics_romsets/kn6000_flop/ca6fp01.zip`) loads when inserted on the DEMONSTRATION screen. Result:
-it does not, in the overlay build (`kn7000-emulator/kn7000`, fonts placeholder) nor in the `mame-pr`
-build: 13 identical snapshots over 60 s after the insert, also with `FORCE_DSKCHG=1`. Why the
-firmware never sees the disk was not traced.
+`technics_romsets/kn6000_flop/ca6fp01.zip`) loads when inserted on the DEMONSTRATION screen.
 
+**First result (morning):** it did not, in the overlay build nor in the `mame-pr` build: 13
+identical snapshots over 60 s after the insert, also with `FORCE_DSKCHG=1`.
+
+**After the resync work (afternoon): it loads.** Four causes, traced stage by stage with
+`kn6000_pres_trace.lua`; the write-up is `notes/kn6000-feature-presentation.md`. Three were
+emulation defects (no floppy DMA, no INDEX interrupt, DMA one byte long); the fourth is the listed
+image's layout (pyfatfs FAT start `F0 0F FF` and 12-sector FATs). A copy with the same files on a
+standard layout (`make_fat12.py`) loads.
+
+| script                   | question it answers                                                                                   | run                                                                       |
+|--------------------------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `kn6000_pres_insert.lua` | does the disk load, and what does the screen show; logs the disk state byte, INDEX stamps, DMA starts | env `PRES_IMG`, `PRES_RUN` (s after insert), `PRES_PRESS`, `FORCE_DSKCHG` |
+| `kn6000_pres_trace.lua`  | where does the insert path stop: event, screen check, media probe, mount, find (each step), FS pool   | same, plus `-debug -debugger none`                                        |
+| `fat12_relayout.py`      | the listed image's files on a standard-layout floppy (or, `--fatid-only`, just its FAT start fixed)   | `python3 -I fat12_relayout.py [--fatid-only] SRC.img OUT.img`             |
+
+| image                                       | md5                                |
+|---------------------------------------------|------------------------------------|
+| `ca6fp01.img` as listed (`kn6000_flop`)     | `43acee0cb6bf5b09155fb6cab3d15169` |
+| `fat12_relayout.py --fatid-only` of it      | `b291b8413a3f626c76ec26d61893b115` |
+| `fat12_relayout.py` of it (standard layout) | `a06b15c5a36d18a3df8bce56310a93ca` |
+
+| run | binary (md5)  | disk                                 | result                                                                                         |
+|-----|---------------|--------------------------------------|------------------------------------------------------------------------------------------------|
+| B1  | B `8c85ba51…` | `ca6fp01.img` as listed              | insert seen: disk state 0 → 1, INDEX stamps, 19 DMA reads; screen unchanged                    |
+| B5  | B             | as listed                            | media probe `0x4853312E` → 0 (FAT start), mount −7, find −1                                    |
+| B6  | B             | FAT start set to `F0 FF FF`          | probe 3 (HD), mount 0, find −1                                                                 |
+| B10 | B             | FAT start patched                    | FS pool: a 0x21C block freed then not allocatable; free of `0x6005004F` (heap overrun)         |
+| D1  | D `d398d07c…` | FAT start patched                    | pool healthy; directory scan finds nothing (12-sector FATs)                                    |
+| D2  | D             | standard layout                      | FEATURE.PRE found, `0x018F0026` (open) posted                                                  |
+| D3  | D             | standard layout                      | WESERBERGLAND button; 1599 DMA reads to t=69; slide 1 drawn from t≈74 and held to t=264        |
+| D4  | D             | standard layout                      | as D3; LCDR 5 at t=84, START/STOP at t=114 → back to the DEMONSTRATION menu with WESERBERGLAND |
+
+Still open: whether the song plays (the KN6000 driver's audio is silent here, and the slides do not
+advance), and what in a KN6000 `I KD` song cues `<ACT NO=n>`.
+
+KN7000 runs with `pres_probe.lua` (its header has the recipe; use `-window`, not `-video none`):
+
+| tag | binary | disk                                          | result                                                                                                |
+|-----|--------|-----------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| FL2 | B      | `weserl_floppy.img` (md5 97ce6a44…), unforced | full load from the floppy: FEATURE.PRE, song, script, 19 pictures; song plays, PIC events draw slides |
+| FL3 | B      | `kn7000_flop/ca7001.img` as listed            | floppy check `func_4854DAA5` → −7 (FAT start rejected)                                                |
+| FL4 | B      | the same with FAT start `F0 FF FF`            | floppy check 0; FEATURE.PRE absent (correct for that disk)                                            |
+| FL5 | D      | `weserl_floppy.img`                           | identical to FL2, to the timestamp                                                                    |
+
+The run logs are in `runs-2026-10-18/` (the pictures are not committed: they are CA-software's).

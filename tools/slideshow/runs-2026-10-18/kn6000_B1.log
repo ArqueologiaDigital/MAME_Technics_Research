@@ -1,0 +1,23 @@
+kn6000_table_fontph.rom ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+STATE t=0.00 0x50004AB8 <- FF
+STATE t=2.00 0x50004AB8 <- 00
+SHOT 1 t=24.0 DEMO screen  (dma starts 0, index stamps 0)
+LOAD nil
+INDEX t=24.00 isr stamp #1
+STATE t=24.00 0x50004AB8 <- 01
+INDEX t=24.00 isr stamp #2
+INDEX t=24.00 isr stamp #3
+SHOT 2 t=29.0 after insert  (dma starts 19, index stamps 10)
+SHOT 3 t=34.0 after insert  (dma starts 19, index stamps 10)
+SHOT 4 t=39.0 after insert  (dma starts 19, index stamps 10)
+SHOT 5 t=44.0 after insert  (dma starts 19, index stamps 10)
+SHOT 6 t=49.0 after insert  (dma starts 19, index stamps 10)
+SHOT 7 t=54.0 after insert  (dma starts 19, index stamps 10)
+SHOT 8 t=59.0 after insert  (dma starts 19, index stamps 10)
+SHOT 9 t=64.0 after insert  (dma starts 19, index stamps 10)
+SHOT 10 t=69.0 after insert  (dma starts 19, index stamps 10)
+SHOT 11 t=74.0 after insert  (dma starts 19, index stamps 10)
+SHOT 12 t=79.0 after insert  (dma starts 19, index stamps 10)
+SHOT 13 t=84.0 after insert  (dma starts 19, index stamps 10)
+Average speed: 49.19% (83 seconds)

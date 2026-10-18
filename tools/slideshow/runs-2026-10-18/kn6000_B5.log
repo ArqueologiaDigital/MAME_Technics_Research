@@ -1,0 +1,48 @@
+kn6000_table_fontph.rom ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+DBG MAME debugger version 0.289 (unknown)
+DBG Currently targeting kn6000 (SX-KN6000)
+DBG Breakpoint 1 set
+DBG Breakpoint 2 set
+DBG Breakpoint 3 set
+DBG Breakpoint 4 set
+DBG Breakpoint 5 set
+DBG Breakpoint 6 set
+DBG Breakpoint 7 set
+DBG Breakpoint 8 set
+DBG Breakpoint 9 set
+DBG Breakpoint A set
+DBG Breakpoint B set
+DBG Breakpoint C set
+DBG Breakpoint D set
+DBG Breakpoint E set
+DBG Breakpoint F set
+DBG Breakpoint 10 set
+DBG Breakpoint 11 set
+DBG Breakpoint 12 set
+DBG Breakpoint 13 set
+DBG Breakpoint 14 set
+DBG Watchpoint 1 set
+DBG WP 0x500605FD <- FF00 pc=4C14CD01
+DBG WP 0x500605FD <- FF00 pc=4C14CD01
+DBG EV ev=40002023 sub=01
+DBG EV ev=40002041 sub=00
+DBG EV ev=10702040 sub=00
+SHOT 1 t=24.0 DEMO screen
+LOAD nil
+DBG EV ev=10708000 sub=01
+DBG SCREEN id=01F000CF
+DBG SCRCHK d0=1
+DBG PROBE 0x4853312E -> d0=0
+DBG WP 0x500605FD <- 00 pc=4C14CDBB
+DBG MEDIA d0=0
+DBG MOUNTCHK d0=FFFFFFF9
+DBG FIND d0=FFFFFFFF
+DBG PRECHK d0=0
+SHOT 2 t=29.0 after insert
+SHOT 3 t=34.0 after insert
+SHOT 4 t=39.0 after insert
+SHOT 5 t=44.0 after insert
+SHOT 6 t=49.0 after insert
+SHOT 7 t=54.0 after insert
+Average speed: 28.86% (53 seconds)

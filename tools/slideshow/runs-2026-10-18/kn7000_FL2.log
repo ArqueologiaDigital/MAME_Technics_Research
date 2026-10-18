@@ -1,0 +1,299 @@
+breakpoints armed: 26 image=/home/fsanches/compartilhado/tmp/kn6000-pres/run-K1/weserl_floppy.img FORCE_SD=false
+pres_probe.lua armed
+[0.02] MAME debugger version 0.289 (unknown)
+[0.02] Currently targeting kn7000 (SX-KN7000)
+press DEMO
+[24.00] snap #1 DEMONSTRATION menu before insert
+insert floppy into :fdc:0:35hd
+load -> nil /home/fsanches/compartilhado/tmp/kn6000-pres/run-K1/weserl_floppy.img
+[25.02] BP floppy present -> LibParamSet(0x10708000,1)
+[25.02] BP MdDemo 0x50014 with code 0x708000
+[25.02] BP  ... title == 0xF00CF (DEMO)
+[25.98] BP  ... floppy check func_4854DAA5 -> d0=0
+[26.00] snap #2 periodic t=26
+[26.17] BP  ... FEATURE .PRE exists -> d0=1
+[26.17] BP  ... calling FeaturePreLoad, ext mode=0
+[26.58] BP FeaturePreLoad d0=0 sqt=45534557532E4C52500054515038DF38 act=45534557412E4C52500054435000757C title=45534557524542524E414C474C030044
+[26.58] BP AcDemoFdSelect EV_DEMOSONGNAME title=45534557524542524E414C4700000044
+[30.00] snap #3 periodic t=30
+[31.08] BP FeatureDemoSqtLoad -> d0=0  (0x5008294C=502C0000 len=D7C0 pool=502CD7C0 size=B2840)
+[32.23] BP SswActScriptLoad -> d3=0
+[32.23] BP ACT tag mode=1
+[32.23] BP IMG tag mode=1
+[32.23] BP SswImageFileLoad name=30434950504A2E310000004700000000
+state t33: 0x5008294C=502C0000 len=0000D7C0 poolbase=502CD7C0 poolsize=000B2840 0x5009CED4=00000000 0x5009CED0=00000000
+dump t33_pool_hdr.bin 0x502CD7C0 len 0x1000
+  pool+0x20 script=502CE5B4 'SSW-ACT-V01
+<ACTION>
+'
+  pool+0x24 slideshow=502CED8C  pool+0x28 action=502CED94 '<ACT NO=1><IMG SRC="PIC01.JPG"></ACT><AC'
+  ACT[1] -> 502CED94 '<ACT NO=1><IMG SRC="PIC01.JPG"></ACT'
+dump t33_song_502C0000.bin 0x502C0000 len 0x100
+[34.00] snap #4 periodic t=34
+[35.37] BP ACT tag mode=1
+[35.37] BP IMG tag mode=1
+[35.37] BP SswImageFileLoad name=30434950504A2E320000004700000000
+[37.72] BP ACT tag mode=1
+[37.72] BP IMG tag mode=1
+[37.72] BP SswImageFileLoad name=30434950504A2E330000004700000000
+[38.00] snap #5 periodic t=38
+[39.00] BP ACT tag mode=1
+[39.00] BP IMG tag mode=1
+[39.00] BP SswImageFileLoad name=30434950504A2E340000004700000000
+[40.72] BP ACT tag mode=1
+[40.72] BP IMG tag mode=1
+[40.72] BP SswImageFileLoad name=30434950504A2E350000004700000000
+[42.00] snap #6 periodic t=42
+[43.23] BP ACT tag mode=1
+[43.23] BP IMG tag mode=1
+[43.23] BP SswImageFileLoad name=30434950504A2E360000004700000000
+[44.98] BP ACT tag mode=1
+[44.98] BP IMG tag mode=1
+[44.98] BP SswImageFileLoad name=30434950504A2E370000004700000000
+[46.00] snap #7 periodic t=46
+[46.82] BP ACT tag mode=1
+[46.82] BP IMG tag mode=1
+[46.82] BP SswImageFileLoad name=30434950504A2E380000004700000000
+[49.15] BP ACT tag mode=1
+[49.15] BP IMG tag mode=1
+[49.15] BP SswImageFileLoad name=30434950504A2E390000004700000000
+[50.00] snap #8 periodic t=50
+[51.27] BP ACT tag mode=1
+[51.27] BP IMG tag mode=1
+[51.27] BP SswImageFileLoad name=31434950504A2E300000004700000000
+[53.05] BP ACT tag mode=1
+[53.05] BP IMG tag mode=1
+[53.05] BP SswImageFileLoad name=31434950504A2E310000004700000000
+[54.00] snap #9 periodic t=54
+[54.90] BP ACT tag mode=1
+[54.90] BP IMG tag mode=1
+[54.90] BP SswImageFileLoad name=314349502E3152320047504A00000000
+[56.55] BP ACT tag mode=1
+[56.55] BP IMG tag mode=1
+[56.55] BP ACT tag mode=1
+[56.55] BP IMG tag mode=1
+[56.55] BP ACT tag mode=1
+[56.55] BP IMG tag mode=1
+[56.55] BP ACT tag mode=1
+[56.55] BP IMG tag mode=1
+[56.55] BP SswImageFileLoad name=31434950504A2E330000004700000000
+[58.00] snap #10 periodic t=58
+[58.38] BP ACT tag mode=1
+[58.38] BP IMG tag mode=1
+[58.38] BP SswImageFileLoad name=31434950504A2E340000004700000000
+[60.15] BP ACT tag mode=1
+[60.15] BP IMG tag mode=1
+[60.15] BP SswImageFileLoad name=31434950504A2E350000004700000000
+[62.00] snap #11 periodic t=62
+[63.13] BP ACT tag mode=1
+[63.15] BP IMG tag mode=1
+[63.15] BP SswImageFileLoad name=31434950504A2E360000004700000000
+[65.33] BP ACT tag mode=1
+[65.35] BP IMG tag mode=1
+[65.35] BP SswImageFileLoad name=31434950504A2E370000004700000000
+[66.00] snap #12 periodic t=66
+[67.85] BP ACT tag mode=1
+[67.85] BP IMG tag mode=1
+[67.85] BP SswImageFileLoad name=314349502E3252380047504A00000000
+[69.20] BP ACT tag mode=1
+[69.20] BP IMG tag mode=1
+[69.20] BP ACT tag mode=1
+[69.20] BP IMG tag mode=1
+[69.20] BP ACT tag mode=1
+[69.20] BP IMG tag mode=1
+[69.20] BP ACT tag mode=1
+[69.20] BP IMG tag mode=1
+[69.20] BP SswImageFileLoad name=31434950504A2E390000004700000000
+[70.00] snap #13 periodic t=70
+[72.38] BP FeatureDemoActLoad -> d0=0
+[72.38] BP func_4854E1FE start external demo, song data 502C0000
+[72.38] BP SrtExtDemo d0=502C0000
+[72.40] BP DemoSongLoad d0=D
+[72.42] BP StartFeatureDemo d0=D
+[73.35] BP PicParam 0x600014 param=40600014
+[73.35] BP PicEvent d0=0
+[73.35] BP PicDispatch d0=0
+[73.37] BP PicDispatch end
+[73.95] snap #14 after PicDispatch 0
+dump disp01_fb.bin 0x500D4080 len 0x25800
+dump disp01_plane2.bin 0x500F9880 len 0x25800
+dump disp01_pal565.bin 0x50122AAC len 0x200
+[74.00] snap #15 periodic t=74
+[78.00] snap #16 periodic t=78
+[82.00] snap #17 periodic t=82
+[86.00] snap #18 periodic t=86
+[90.00] snap #19 periodic t=90
+[91.68] BP PicParam 0x600014 param=40600014
+[91.68] BP PicEvent d0=1
+[91.68] BP PicDispatch d0=1
+[91.68] BP ACT tag mode=0
+[91.68] BP IMG tag mode=0
+[91.68] BP SswDrawImage_entry a0=502CF420 (first bytes E0FFD8FF)
+[91.68] BP PicDispatch end
+[92.28] snap #20 after PicDispatch 1
+dump disp02_fb.bin 0x500D4080 len 0x25800
+dump disp02_plane2.bin 0x500F9880 len 0x25800
+dump disp02_pal565.bin 0x50122AAC len 0x200
+[94.00] snap #21 periodic t=94
+[96.03] BP PicParam 0x600014 param=40600014
+[96.03] BP PicEvent d0=2
+[96.03] BP PicDispatch d0=2
+[96.03] BP ACT tag mode=0
+[96.03] BP IMG tag mode=0
+[96.03] BP SswDrawImage_entry a0=502DA2F4 (first bytes E0FFD8FF)
+[96.03] BP PicDispatch end
+[96.63] snap #22 after PicDispatch 2
+dump disp03_fb.bin 0x500D4080 len 0x25800
+dump disp03_plane2.bin 0x500F9880 len 0x25800
+dump disp03_pal565.bin 0x50122AAC len 0x200
+[98.00] snap #23 periodic t=98
+[100.28] BP PicParam 0x600014 param=40600014
+[100.28] BP PicEvent d0=3
+[100.28] BP PicDispatch d0=3
+[100.28] BP ACT tag mode=0
+[100.28] BP IMG tag mode=0
+[100.28] BP SswDrawImage_entry a0=502E28BC (first bytes E0FFD8FF)
+[100.28] BP PicDispatch end
+[100.88] snap #24 after PicDispatch 3
+dump disp04_fb.bin 0x500D4080 len 0x25800
+dump disp04_plane2.bin 0x500F9880 len 0x25800
+dump disp04_pal565.bin 0x50122AAC len 0x200
+[102.00] snap #25 periodic t=102
+[104.52] BP PicParam 0x600014 param=40600014
+[104.52] BP PicEvent d0=4
+[104.53] BP PicDispatch d0=4
+[104.53] BP ACT tag mode=0
+[104.53] BP IMG tag mode=0
+[104.53] BP SswDrawImage_entry a0=502E8070 (first bytes E0FFD8FF)
+[104.53] BP PicDispatch end
+[105.13] snap #26 after PicDispatch 4
+dump disp05_fb.bin 0x500D4080 len 0x25800
+dump disp05_plane2.bin 0x500F9880 len 0x25800
+dump disp05_pal565.bin 0x50122AAC len 0x200
+[106.00] snap #27 periodic t=106
+[109.83] BP PicParam 0x600014 param=40600014
+[109.83] BP PicEvent d0=5
+[109.83] BP PicDispatch d0=5
+[109.83] BP ACT tag mode=0
+[109.85] BP IMG tag mode=0
+[109.85] BP SswDrawImage_entry a0=502EDAB8 (first bytes E0FFD8FF)
+[109.85] BP PicDispatch end
+[110.00] snap #28 periodic t=110
+[110.43] snap #29 after PicDispatch 5
+dump disp06_fb.bin 0x500D4080 len 0x25800
+dump disp06_plane2.bin 0x500F9880 len 0x25800
+dump disp06_pal565.bin 0x50122AAC len 0x200
+[114.00] snap #30 periodic t=114
+[116.52] BP PicParam 0x600014 param=40600014
+[116.52] BP PicEvent d0=6
+[116.52] BP PicDispatch d0=6
+[116.52] BP ACT tag mode=0
+[116.53] BP IMG tag mode=0
+[116.53] BP SswDrawImage_entry a0=502F7F34 (first bytes E0FFD8FF)
+[116.53] BP PicDispatch end
+[117.12] snap #31 after PicDispatch 6
+dump disp07_fb.bin 0x500D4080 len 0x25800
+dump disp07_plane2.bin 0x500F9880 len 0x25800
+dump disp07_pal565.bin 0x50122AAC len 0x200
+[118.00] snap #32 periodic t=118
+[120.27] BP PicParam 0x600014 param=40600014
+[120.27] BP PicEvent d0=7
+[120.27] BP PicDispatch d0=7
+[120.27] BP ACT tag mode=0
+[120.27] BP IMG tag mode=0
+[120.27] BP SswDrawImage_entry a0=502FE1F8 (first bytes E0FFD8FF)
+[120.28] BP PicDispatch end
+[120.87] snap #33 after PicDispatch 7
+dump disp08_fb.bin 0x500D4080 len 0x25800
+dump disp08_plane2.bin 0x500F9880 len 0x25800
+dump disp08_pal565.bin 0x50122AAC len 0x200
+[122.00] snap #34 periodic t=122
+[124.02] BP PicParam 0x600014 param=40600014
+[124.02] BP PicEvent d0=8
+[124.02] BP PicDispatch d0=8
+[124.02] BP ACT tag mode=0
+[124.02] BP IMG tag mode=0
+[124.03] BP SswDrawImage_entry a0=50305054 (first bytes E0FFD8FF)
+[124.03] BP PicDispatch end
+[124.62] snap #35 after PicDispatch 8
+dump disp09_fb.bin 0x500D4080 len 0x25800
+dump disp09_plane2.bin 0x500F9880 len 0x25800
+dump disp09_pal565.bin 0x50122AAC len 0x200
+[126.00] snap #36 periodic t=126
+[127.77] BP PicParam 0x600014 param=40600014
+[127.77] BP PicEvent d0=9
+[127.77] BP PicDispatch d0=9
+[127.77] BP ACT tag mode=0
+[127.78] BP IMG tag mode=0
+[127.78] BP SswDrawImage_entry a0=5030D4F0 (first bytes E0FFD8FF)
+[127.78] BP PicDispatch end
+[128.37] snap #37 after PicDispatch 9
+dump disp10_fb.bin 0x500D4080 len 0x25800
+dump disp10_plane2.bin 0x500F9880 len 0x25800
+dump disp10_pal565.bin 0x50122AAC len 0x200
+[130.00] snap #38 periodic t=130
+state tend: 0x5008294C=502C0000 len=0000D7C0 poolbase=502CD7C0 poolsize=000B2840 0x5009CED4=00000009 0x5009CED0=00000009
+dump tend_pool_hdr.bin 0x502CD7C0 len 0x1000
+  pool+0x20 script=502CE5B4 'SSW-ACT-V01
+<ACTION>
+'
+  pool+0x24 slideshow=502CED8C  pool+0x28 action=502CED94 '<ACT NO=1><IMG SRC="PIC01.JPG"></ACT><AC'
+  ACT[1] -> 502CED94 '<ACT NO=1><IMG SRC="PIC01.JPG"></ACT'
+  ACT[2] -> 502CEDB9 '<ACT NO=2><IMG SRC="PIC02.JPG"></ACT'
+  ACT[3] -> 502CEDDE '<ACT NO=3><IMG SRC="PIC03.JPG"></ACT'
+  ACT[4] -> 502CEE03 '<ACT NO=4><IMG SRC="PIC04.JPG"></ACT'
+  ACT[5] -> 502CEE28 '<ACT NO=5><IMG SRC="PIC05.JPG"></ACT'
+  ACT[6] -> 502CEE4D '<ACT NO=6><IMG SRC="PIC06.JPG"></ACT'
+  ACT[7] -> 502CEE72 '<ACT NO=7><IMG SRC="PIC07.JPG"></ACT'
+  ACT[8] -> 502CEE97 '<ACT NO=8><IMG SRC="PIC08.JPG"></ACT'
+  ACT[9] -> 502CEEBC '<ACT NO=9><IMG SRC="PIC09.JPG"></ACT'
+  ACT[10] -> 502CEEE1 '<ACT NO=10><IMG SRC="PIC10.JPG"></AC'
+  ACT[11] -> 502CEF07 '<ACT NO=11><IMG SRC="PIC11.JPG"></AC'
+  ACT[12] -> 502CEF2D '<ACT NO=12><IMG SRC="PIC12R1.JPG"><C'
+  ACT[13] -> 502CEFB2 '<ACT NO=13><IMG SRC="PIC12R1.JPG"><C'
+  ACT[14] -> 502CF036 '<ACT NO=14><IMG SRC="PIC12R1.JPG"><C'
+  ACT[15] -> 502CF0B7 '<ACT NO=15><IMG SRC="PIC12R1.JPG"><C'
+  ACT[16] -> 502CF132 '<ACT NO=16><IMG SRC="PIC13.JPG"></AC'
+  ACT[17] -> 502CF158 '<ACT NO=17><IMG SRC="PIC14.JPG"></AC'
+  ACT[18] -> 502CF17E '<ACT NO=18><IMG SRC="PIC15.JPG"></AC'
+  ACT[19] -> 502CF1A4 '<ACT NO=19><IMG SRC="PIC16.JPG"></AC'
+  ACT[20] -> 502CF1CA '<ACT NO=20><IMG SRC="PIC17.JPG"></AC'
+  ACT[21] -> 502CF1F0 '<ACT NO=21><IMG SRC="PIC18R2.JPG"><C'
+  ACT[22] -> 502CF275 '<ACT NO=22><IMG SRC="PIC18R2.JPG"><C'
+  ACT[23] -> 502CF2F9 '<ACT NO=23><IMG SRC="PIC18R2.JPG"><C'
+  ACT[24] -> 502CF37A '<ACT NO=24><IMG SRC="PIC18R2.JPG"><C'
+  ACT[25] -> 502CF3F5 '<ACT NO=25><IMG SRC="PIC19.JPG"></AC'
+  named[0] @502CDDB0 'PIC01.JPG' words 502CF420 0000AECF 00000000 00000000
+  named[1] @502CDDD0 'PIC02.JPG' words 502DA2F4 000085C4 00000000 00000000
+  named[2] @502CDDF0 'PIC03.JPG' words 502E28BC 000057AD 00000000 00000000
+  named[3] @502CDE10 'PIC04.JPG' words 502E8070 00005A41 00000000 00000000
+  named[4] @502CDE30 'PIC05.JPG' words 502EDAB8 0000A476 00000000 00000000
+  named[5] @502CDE50 'PIC06.JPG' words 502F7F34 000062BD 00000000 00000000
+  named[6] @502CDE70 'PIC07.JPG' words 502FE1F8 00006E57 00000000 00000000
+  named[7] @502CDE90 'PIC08.JPG' words 50305054 00008497 00000000 00000000
+  named[8] @502CDEB0 'PIC09.JPG' words 5030D4F0 00007EAB 00000000 00000000
+  named[9] @502CDED0 'PIC10.JPG' words 503153A0 0000680C 00000000 00000000
+  named[10] @502CDEF0 'PIC11.JPG' words 5031BBB0 00007277 00000000 00000000
+  named[11] @502CDF10 'PIC12R1.JPG' words 50322E2C 0000509C 00000000 00000000
+  named[12] @502CDF30 'PIC13.JPG' words 50327ECC 00007033 00000000 00000000
+  named[13] @502CDF50 'PIC14.JPG' words 5032EF04 000064B4 00000000 00000000
+  named[14] @502CDF70 'PIC15.JPG' words 503353BC 0000B009 00000000 00000000
+  named[15] @502CDF90 'PIC16.JPG' words 503403CC 00006A25 00000000 00000000
+  named[16] @502CDFB0 'PIC17.JPG' words 50346DF8 00007D61 00000000 00000000
+  named[17] @502CDFD0 'PIC18R2.JPG' words 5034EB60 00003F8E 00000000 00000000
+  named[18] @502CDFF0 'PIC19.JPG' words 50352AF4 0000B048 00000000 00000000
+dump tend_song_502C0000.bin 0x502C0000 len 0x100
+dump tend_fb.bin 0x500D4080 len 0x25800
+dump tend_plane2.bin 0x500F9880 len 0x25800
+dump tend_pal565.bin 0x50122AAC len 0x200
+[131.52] BP PicParam 0x600014 param=40600014
+[131.52] BP PicEvent d0=A
+[131.52] BP PicDispatch d0=A
+[131.52] BP ACT tag mode=0
+[131.53] BP IMG tag mode=0
+[131.53] BP SswDrawImage_entry a0=503153A0 (first bytes E0FFD8FF)
+[131.53] BP PicDispatch end
+[132.12] snap #39 after PicDispatch A
+dump disp11_fb.bin 0x500D4080 len 0x25800
+dump disp11_plane2.bin 0x500F9880 len 0x25800
+dump disp11_pal565.bin 0x50122AAC len 0x200

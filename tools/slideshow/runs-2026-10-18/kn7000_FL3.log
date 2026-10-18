@@ -1,0 +1,18 @@
+breakpoints armed: 26 image=/home/fsanches/compartilhado/tmp/kn6000-pres/run-K2/ca7001.img FORCE_SD=false
+pres_probe.lua armed
+[0.02] MAME debugger version 0.289 (unknown)
+[0.02] Currently targeting kn7000 (SX-KN7000)
+press DEMO
+[24.00] snap #1 DEMONSTRATION menu before insert
+insert floppy into :fdc:0:35hd
+load -> nil /home/fsanches/compartilhado/tmp/kn6000-pres/run-K2/ca7001.img
+[25.02] BP floppy present -> LibParamSet(0x10708000,1)
+[25.02] BP MdDemo 0x50014 with code 0x708000
+[25.02] BP  ... title == 0xF00CF (DEMO)
+[25.43] BP  ... floppy check func_4854DAA5 -> d0=FFFFFFF9
+[26.00] snap #2 periodic t=26
+[30.00] snap #3 periodic t=30
+state t33: 0x5008294C=00000000 len=00000000 poolbase=00000000 poolsize=00000000 0x5009CED4=00000000 0x5009CED0=00000000
+dump t33_song_502C0000.bin 0x502C0000 len 0x100
+[34.00] snap #4 periodic t=34
+[38.00] snap #5 periodic t=38

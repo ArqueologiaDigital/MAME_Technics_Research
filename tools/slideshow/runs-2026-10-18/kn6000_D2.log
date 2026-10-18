@@ -1,0 +1,208 @@
+kn6000_table_fontph.rom ROM NEEDS REDUMP
+WARNING: the machine might not run correctly.
+DBG MAME debugger version 0.289 (unknown)
+DBG Currently targeting kn6000 (SX-KN6000)
+DBG Breakpoint 1 set
+DBG Breakpoint 2 set
+DBG Breakpoint 3 set
+DBG Breakpoint 4 set
+DBG Breakpoint 5 set
+DBG Breakpoint 6 set
+DBG Breakpoint 7 set
+DBG Breakpoint 8 set
+DBG Breakpoint 9 set
+DBG Breakpoint A set
+DBG Breakpoint B set
+DBG Breakpoint C set
+DBG Breakpoint D set
+DBG Breakpoint E set
+DBG Breakpoint F set
+DBG Breakpoint 10 set
+DBG Breakpoint 11 set
+DBG Breakpoint 12 set
+DBG Breakpoint 13 set
+DBG Breakpoint 14 set
+DBG Breakpoint 15 set
+DBG Breakpoint 16 set
+DBG Breakpoint 17 set
+DBG Breakpoint 18 set
+DBG Breakpoint 19 set
+DBG Breakpoint 1A set
+DBG Breakpoint 1B set
+DBG Breakpoint 1C set
+DBG Breakpoint 1D set
+DBG Breakpoint 1E set
+DBG Watchpoint 1 set
+DBG WP 0x500605FD <- FF00 pc=4C14CD01
+DBG WP 0x500605FD <- FF00 pc=4C14CD01
+DBG EV ev=40002023 sub=01
+DBG EV ev=40002041 sub=00
+DBG EV ev=10702040 sub=00
+SHOT 1 t=24.0 DEMO screen
+LOAD nil
+DBG Breakpoint 1F set
+DBG Breakpoint 20 set
+DBG Breakpoint 21 set
+DBG Breakpoint 22 set
+DBG Breakpoint 23 set
+DBG Breakpoint 24 set
+DBG Breakpoint 25 set
+DBG EV ev=10708000 sub=01
+DBG SCREEN id=01F000CF
+DBG SCRCHK d0=1
+DBG   alloc req 400 bytes (caller 4C13313F)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C13323F)
+DBG PROBE 0x4853312E -> d0=3
+DBG WP 0x500605FD <- 03 pc=4C14CDBB
+DBG MEDIA d0=3
+DBG   find: fs mode 0x50004B5D=3
+DBG   alloc req 8 bytes (caller 4C13347F)
+DBG   alloc -> 501C943C
+DBG   alloc req 104 bytes (caller 4C133494)
+DBG   alloc -> 501C9450
+DBG   find: parse 0x485333DF -> 0
+DBG   alloc req 4 bytes (caller 4C12FD08)
+DBG   alloc -> 501C9560
+DBG   free 501C9560 (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C9560
+DBG   alloc req 21C bytes (caller 4C12FD08)
+DBG   alloc -> 501C95C0
+DBG   free 501C95C0 (caller 4C12FCF9)
+DBG   find: open dir 0x4853008C -> 501C9560
+DBG   free 501C9450 (caller 4C1334FA)
+DBG   find: scan 0x485302BD -> E0
+DBG   alloc req 4 bytes (caller 4C133537)
+DBG   alloc -> 501C9450
+DBG   find: match 0x485335B5 -> 0
+DBG   free 501C9560 (caller 4C12FCF9)
+DBG   free 501C9450 (caller 4C1335A4)
+DBG   free 501C943C (caller 4C1335AC)
+DBG MOUNT d0=0
+DBG MOUNTCHK d0=0
+DBG   find: fs mode 0x50004B5D=3
+DBG   alloc req 8 bytes (caller 4C13347F)
+DBG   alloc -> 501C943C
+DBG   alloc req 104 bytes (caller 4C133494)
+DBG   alloc -> 501C9450
+DBG   find: parse 0x485333DF -> 0
+DBG   alloc req 4 bytes (caller 4C12FD08)
+DBG   alloc -> 501C9560
+DBG   free 501C9560 (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C9560
+DBG   find: open dir 0x4853008C -> 501C9560
+DBG   free 501C9450 (caller 4C1334FA)
+DBG   find: scan 0x485302BD -> E0
+DBG   alloc req D bytes (caller 4C133537)
+DBG   alloc -> 501C9450
+DBG   find: match 0x485335B5 -> 0
+DBG FIND d0=501C943C
+DBG   free 501C9560 (caller 4C12FCF9)
+DBG   free 501C9450 (caller 4C1335A4)
+DBG   free 501C943C (caller 4C1335AC)
+DBG PRECHK d0=1
+DBG OPEN posted d1=018F0026
+DBG   alloc req 10 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 10 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 10 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 2 t=29.0 after insert
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 3 t=34.0 after insert
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 4 t=39.0 after insert
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 5 t=44.0 after insert
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 6 t=49.0 after insert
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req F bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req D bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+DBG   free 501C943C (caller 4C12FCF9)
+DBG   alloc req 54 bytes (caller 4C12FD08)
+DBG   alloc -> 501C943C
+SHOT 7 t=54.0 after insert
+Average speed: 22.43% (53 seconds)
