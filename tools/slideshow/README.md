@@ -85,12 +85,14 @@ emulation defects (no floppy DMA, no INDEX interrupt, DMA one byte long); the fo
 image's layout (pyfatfs FAT start `F0 0F FF` and 12-sector FATs). A copy with the same files on a
 standard layout (`make_fat12.py`) loads.
 
-| script                   | question it answers                                                                                   | run                                                                       |
-|--------------------------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `kn6000_pres_insert.lua` | does the disk load, and what does the screen show; logs the disk state byte, INDEX stamps, DMA starts | env `PRES_IMG`, `PRES_RUN` (s after insert), `PRES_PRESS`, `FORCE_DSKCHG` |
-| `kn6000_pres_trace.lua`  | where does the insert path stop: event, screen check, media probe, mount, find (each step), FS pool   | same, plus `-debug -debugger none`                                        |
-| `fat12_relayout.py`      | the listed image's files on a standard-layout floppy (or, `--fatid-only`, just its FAT start fixed)   | `python3 -I fat12_relayout.py [--fatid-only] SRC.img OUT.img`             |
-| `changed_screens.py`     | which snapshots differ from the one before (one LCD crop each, on a contact sheet)                    | `python3 -I changed_screens.py SNAPDIR OUT.png COLS`                      |
+| script                   | question it answers                                                                                                    | run                                                                       |
+|--------------------------|------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `kn6000_pres_insert.lua` | does the disk load, and what does the screen show; logs the disk state byte, INDEX stamps, DMA starts                  | env `PRES_IMG`, `PRES_RUN` (s after insert), `PRES_PRESS`, `FORCE_DSKCHG` |
+| `kn6000_pres_trace.lua`  | where does the insert path stop: event, screen check, media probe, mount, find (each step), FS pool                    | same, plus `-debug -debugger none`                                        |
+| `fat12_relayout.py`      | the listed image's files on a standard-layout floppy (or, `--fatid-only`, just its FAT start fixed)                    | `python3 -I fat12_relayout.py [--fatid-only] SRC.img OUT.img`             |
+| `changed_screens.py`     | which snapshots differ from the one before (one LCD crop each, on a contact sheet)                                     | `python3 -I changed_screens.py SNAPDIR OUT.png COLS`                      |
+| `show_probe_disk.py`     | a KN7000 FEATURE.PRE floppy whose slide n is `<SHOW OBJ="name n">` (the converted WESERL song supplies the PIC points) | `python3 -I show_probe_disk.py PRESENTATION_DIR OUT.img NAME ...`         |
+| `show_probe.lua`         | for each slide: the OBJ name SHOW looks up, the lookup result (object id or -1), a snapshot 1 s later                  | env `FEATURE_IMG`, `RUN_END`; `-debug -debugger none`                     |
 
 | image                                       | md5                                |
 |---------------------------------------------|------------------------------------|
@@ -130,3 +132,17 @@ KN7000 runs with `pres_probe.lua` (its header has the recipe; use `-window`, not
 | FL5 | D      | `weserl_floppy.img`                           | identical to FL2, to the timestamp                                                                    |
 
 The run logs are in `runs-2026-10-18/` (the pictures are not committed: they are CA-software's).
+
+## KN7000: what `<SHOW OBJ>` can put on the screen (2026-10-18)
+
+`SHOW` (handler `0x4857FB88`) looks the name up over every GUI view slot (`0x48580EE6`) and sends
+the object `EV_PAINT` (`0x00050009`). Runs on the published build (md5 `f88039d7…`):
+
+| run   | slides (name per slide)                                                                           | result                                                                                                                                                                |
+|-------|---------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| SHOW1 | fdemo_a1, PPanelSimulator, simulator1, DbMemoryDump, DbVariableMenu, DbBitmapLoad, DbColorList    | the slides after the first came out black; the lookup result was not logged                                                                                           |
+| SHOW2 | fdemo_a1, fdemo_a1, PPanelSimulator, fdemo_a5, simulator1, DbMemoryDump, DbVariableMenu, fdemo_b1 | demo screens found (`0x2900002`, `0x290000D`, `0x2900025`, slot 0x29) and painted ("Welcome to SX-KN7000", "128 Polyphony…", the SD screen); every debug candidate -1 |
+
+The debug-screen strings are class names, not names of objects in the table, and a found
+object is only painted, not made the active screen. Logs: `runs-2026-10-18/kn7000_SHOW*.log`.
+

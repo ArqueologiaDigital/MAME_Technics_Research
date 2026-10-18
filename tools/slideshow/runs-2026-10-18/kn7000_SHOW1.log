@@ -1,0 +1,262 @@
+breakpoints armed: 26 image=/home/fsanches/compartilhado/tmp/kn7000-showprobe/show1.img FORCE_SD=false
+pres_probe.lua armed
+[0.02] MAME debugger version 0.289 (unknown)
+[0.02] Currently targeting kn7000 (SX-KN7000)
+press DEMO
+[24.00] snap #1 DEMONSTRATION menu before insert
+insert floppy into :fdc:0:35hd
+load -> nil /home/fsanches/compartilhado/tmp/kn7000-showprobe/show1.img
+[25.02] BP floppy present -> LibParamSet(0x10708000,1)
+[25.02] BP MdDemo 0x50014 with code 0x708000
+[25.02] BP  ... title == 0xF00CF (DEMO)
+[25.97] BP  ... floppy check func_4854DAA5 -> d0=0
+[26.00] snap #2 periodic t=26
+[26.17] BP  ... FEATURE .PRE exists -> d0=1
+[26.17] BP  ... calling FeaturePreLoad, ext mode=0
+[26.58] BP FeaturePreLoad d0=0 sqt=45534557532E4C52500054515038DF38 act=45534557412E4C52500054435000757C title=45534557524542524E414C474C030044
+[26.58] BP AcDemoFdSelect EV_DEMOSONGNAME title=45534557524542524E414C4700000044
+[30.00] snap #3 periodic t=30
+[30.83] BP FeatureDemoSqtLoad -> d0=0  (0x5008294C=502C0000 len=D7C0 pool=502CD7C0 size=B2840)
+[31.57] BP SswActScriptLoad -> d3=0
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.57] BP ACT tag mode=1
+[31.58] BP ACT tag mode=1
+[31.58] BP ACT tag mode=1
+[31.58] BP FeatureDemoActLoad -> d0=0
+[31.58] BP func_4854E1FE start external demo, song data 502C0000
+[31.58] BP SrtExtDemo d0=502C0000
+[31.60] BP DemoSongLoad d0=D
+[31.62] BP StartFeatureDemo d0=D
+[32.55] BP PicParam 0x600014 param=40600014
+[32.55] BP PicEvent d0=0
+[32.55] BP PicDispatch d0=0
+[32.55] BP ACT tag mode=0
+[32.65] BP PicDispatch end
+state t33: 0x5008294C=502C0000 len=0000D7C0 poolbase=502CD7C0 poolsize=000B2840 0x5009CED4=00000000 0x5009CED0=00000000
+dump t33_pool_hdr.bin 0x502CD7C0 len 0x1000
+  pool+0x20 script=502CE5B4 'SSW-ACT-V01
+<ACTION>
+'
+  pool+0x24 slideshow=502CE930  pool+0x28 action=502CE938 '<ACT NO=0><SHOW OBJ="fdemo_a1"></ACT><AC'
+  ACT[0] -> 502CE938 '<ACT NO=0><SHOW OBJ="fdemo_a1"></ACT'
+  ACT[1] -> 502CE95D '<ACT NO=1><SHOW OBJ="PPanelSimulator'
+  ACT[2] -> 502CE989 '<ACT NO=2><SHOW OBJ="simulator1"></A'
+  ACT[3] -> 502CE9B0 '<ACT NO=3><SHOW OBJ="DbMemoryDump"><'
+  ACT[4] -> 502CE9D9 '<ACT NO=4><SHOW OBJ="DbVariableMenu"'
+  ACT[5] -> 502CEA04 '<ACT NO=5><SHOW OBJ="DbBitmapLoad"><'
+  ACT[6] -> 502CEA2D '<ACT NO=6><SHOW OBJ="DbColorList"></'
+  ACT[7] -> 502CEA55 '<ACT NO=7><SHOW OBJ="DbModeEditBox">'
+  ACT[8] -> 502CEA7F '<ACT NO=8><SHOW OBJ="simulator2"></A'
+  ACT[9] -> 502CEAA6 '<ACT NO=9><SHOW OBJ="fdemo_a1"></ACT'
+  ACT[10] -> 502CEACB '<ACT NO=10><SHOW OBJ="fdemo_a1"></AC'
+  ACT[11] -> 502CEAF1 '<ACT NO=11><SHOW OBJ="fdemo_a1"></AC'
+  ACT[12] -> 502CEB17 '<ACT NO=12><SHOW OBJ="fdemo_a1"></AC'
+  ACT[13] -> 502CEB3D '<ACT NO=13><SHOW OBJ="fdemo_a1"></AC'
+  ACT[14] -> 502CEB63 '<ACT NO=14><SHOW OBJ="fdemo_a1"></AC'
+  ACT[15] -> 502CEB89 '<ACT NO=15><SHOW OBJ="fdemo_a1"></AC'
+  ACT[16] -> 502CEBAF '<ACT NO=16><SHOW OBJ="fdemo_a1"></AC'
+  ACT[17] -> 502CEBD5 '<ACT NO=17><SHOW OBJ="fdemo_a1"></AC'
+dump t33_song_502C0000.bin 0x502C0000 len 0x100
+[33.15] snap #4 after PicDispatch 0
+dump disp01_fb.bin 0x500D4080 len 0x25800
+dump disp01_plane2.bin 0x500F9880 len 0x25800
+dump disp01_pal565.bin 0x50122AAC len 0x200
+[34.00] snap #5 periodic t=34
+[38.00] snap #6 periodic t=38
+[42.00] snap #7 periodic t=42
+[46.00] snap #8 periodic t=46
+[50.00] snap #9 periodic t=50
+[50.88] BP PicParam 0x600014 param=40600014
+[50.88] BP PicEvent d0=1
+[50.88] BP PicDispatch d0=1
+[50.88] BP ACT tag mode=0
+[51.17] BP GetSswObjectID NOT FOUND
+[51.17] BP PicDispatch end
+[51.48] snap #10 after PicDispatch 1
+dump disp02_fb.bin 0x500D4080 len 0x25800
+dump disp02_plane2.bin 0x500F9880 len 0x25800
+dump disp02_pal565.bin 0x50122AAC len 0x200
+[54.00] snap #11 periodic t=54
+[55.23] BP PicParam 0x600014 param=40600014
+[55.23] BP PicEvent d0=2
+[55.23] BP PicDispatch d0=2
+[55.23] BP ACT tag mode=0
+[55.50] BP GetSswObjectID NOT FOUND
+[55.50] BP PicDispatch end
+[55.85] snap #12 after PicDispatch 2
+dump disp03_fb.bin 0x500D4080 len 0x25800
+dump disp03_plane2.bin 0x500F9880 len 0x25800
+dump disp03_pal565.bin 0x50122AAC len 0x200
+[58.00] snap #13 periodic t=58
+[59.48] BP PicParam 0x600014 param=40600014
+[59.48] BP PicEvent d0=3
+[59.48] BP PicDispatch d0=3
+[59.48] BP ACT tag mode=0
+[59.75] BP GetSswObjectID NOT FOUND
+[59.75] BP PicDispatch end
+[60.10] snap #14 after PicDispatch 3
+dump disp04_fb.bin 0x500D4080 len 0x25800
+dump disp04_plane2.bin 0x500F9880 len 0x25800
+dump disp04_pal565.bin 0x50122AAC len 0x200
+[62.00] snap #15 periodic t=62
+[63.72] BP PicParam 0x600014 param=40600014
+[63.72] BP PicEvent d0=4
+[63.73] BP PicDispatch d0=4
+[63.73] BP ACT tag mode=0
+[64.00] BP GetSswObjectID NOT FOUND
+[64.00] BP PicDispatch end
+[64.33] snap #16 after PicDispatch 4
+dump disp05_fb.bin 0x500D4080 len 0x25800
+dump disp05_plane2.bin 0x500F9880 len 0x25800
+dump disp05_pal565.bin 0x50122AAC len 0x200
+[66.00] snap #17 periodic t=66
+[69.03] BP PicParam 0x600014 param=40600014
+[69.03] BP PicEvent d0=5
+[69.03] BP PicDispatch d0=5
+[69.03] BP ACT tag mode=0
+[69.33] BP GetSswObjectID NOT FOUND
+[69.33] BP PicDispatch end
+[69.63] snap #18 after PicDispatch 5
+dump disp06_fb.bin 0x500D4080 len 0x25800
+dump disp06_plane2.bin 0x500F9880 len 0x25800
+dump disp06_pal565.bin 0x50122AAC len 0x200
+[70.00] snap #19 periodic t=70
+[74.00] snap #20 periodic t=74
+[75.72] BP PicParam 0x600014 param=40600014
+[75.72] BP PicEvent d0=6
+[75.72] BP PicDispatch d0=6
+[75.72] BP ACT tag mode=0
+[76.00] BP GetSswObjectID NOT FOUND
+[76.00] BP PicDispatch end
+[76.32] snap #21 after PicDispatch 6
+dump disp07_fb.bin 0x500D4080 len 0x25800
+dump disp07_plane2.bin 0x500F9880 len 0x25800
+dump disp07_pal565.bin 0x50122AAC len 0x200
+[78.00] snap #22 periodic t=78
+[79.47] BP PicParam 0x600014 param=40600014
+[79.47] BP PicEvent d0=7
+[79.47] BP PicDispatch d0=7
+[79.47] BP ACT tag mode=0
+[79.75] BP GetSswObjectID NOT FOUND
+[79.75] BP PicDispatch end
+[80.07] snap #23 after PicDispatch 7
+dump disp08_fb.bin 0x500D4080 len 0x25800
+dump disp08_plane2.bin 0x500F9880 len 0x25800
+dump disp08_pal565.bin 0x50122AAC len 0x200
+[82.00] snap #24 periodic t=82
+[83.22] BP PicParam 0x600014 param=40600014
+[83.22] BP PicEvent d0=8
+[83.22] BP PicDispatch d0=8
+[83.22] BP ACT tag mode=0
+[83.50] BP GetSswObjectID NOT FOUND
+[83.50] BP PicDispatch end
+[83.82] snap #25 after PicDispatch 8
+dump disp09_fb.bin 0x500D4080 len 0x25800
+dump disp09_plane2.bin 0x500F9880 len 0x25800
+dump disp09_pal565.bin 0x50122AAC len 0x200
+[86.00] snap #26 periodic t=86
+[86.97] BP PicParam 0x600014 param=40600014
+[86.97] BP PicEvent d0=9
+[86.97] BP PicDispatch d0=9
+[86.97] BP ACT tag mode=0
+[87.07] BP PicDispatch end
+[87.57] snap #27 after PicDispatch 9
+dump disp10_fb.bin 0x500D4080 len 0x25800
+dump disp10_plane2.bin 0x500F9880 len 0x25800
+dump disp10_pal565.bin 0x50122AAC len 0x200
+[90.00] snap #28 periodic t=90
+[90.72] BP PicParam 0x600014 param=40600014
+[90.72] BP PicEvent d0=A
+[90.72] BP PicDispatch d0=A
+[90.72] BP ACT tag mode=0
+[90.82] BP PicDispatch end
+[91.32] snap #29 after PicDispatch A
+dump disp11_fb.bin 0x500D4080 len 0x25800
+dump disp11_plane2.bin 0x500F9880 len 0x25800
+dump disp11_pal565.bin 0x50122AAC len 0x200
+[94.00] snap #30 periodic t=94
+[94.47] BP PicParam 0x600014 param=40600014
+[94.47] BP PicEvent d0=B
+[94.47] BP PicDispatch d0=B
+[94.47] BP ACT tag mode=0
+[94.57] BP PicDispatch end
+[95.07] snap #31 after PicDispatch B
+dump disp12_fb.bin 0x500D4080 len 0x25800
+dump disp12_plane2.bin 0x500F9880 len 0x25800
+dump disp12_pal565.bin 0x50122AAC len 0x200
+[98.00] snap #32 periodic t=98
+[98.22] BP PicParam 0x600014 param=40600014
+[98.22] BP PicEvent d0=C
+[98.22] BP PicDispatch d0=C
+[98.22] BP ACT tag mode=0
+[98.32] BP PicDispatch end
+[98.82] snap #33 after PicDispatch C
+dump disp13_fb.bin 0x500D4080 len 0x25800
+dump disp13_plane2.bin 0x500F9880 len 0x25800
+dump disp13_pal565.bin 0x50122AAC len 0x200
+[101.97] BP PicParam 0x600014 param=40600014
+[101.97] BP PicEvent d0=D
+[101.97] BP PicDispatch d0=D
+[101.97] BP ACT tag mode=0
+[102.00] snap #34 periodic t=102
+[102.07] BP PicDispatch end
+[102.57] snap #35 after PicDispatch D
+dump disp14_fb.bin 0x500D4080 len 0x25800
+dump disp14_plane2.bin 0x500F9880 len 0x25800
+dump disp14_pal565.bin 0x50122AAC len 0x200
+[106.00] snap #36 periodic t=106
+[107.60] BP PicParam 0x600014 param=40600014
+[107.60] BP PicEvent d0=E
+[107.60] BP PicDispatch d0=E
+[107.60] BP ACT tag mode=0
+[107.70] BP PicDispatch end
+[108.20] snap #37 after PicDispatch E
+dump disp15_fb.bin 0x500D4080 len 0x25800
+dump disp15_plane2.bin 0x500F9880 len 0x25800
+dump disp15_pal565.bin 0x50122AAC len 0x200
+[110.00] snap #38 periodic t=110
+[111.35] BP PicParam 0x600014 param=40600014
+[111.35] BP PicEvent d0=F
+[111.35] BP PicDispatch d0=F
+[111.35] BP ACT tag mode=0
+[111.45] BP PicDispatch end
+[111.95] snap #39 after PicDispatch F
+dump disp16_fb.bin 0x500D4080 len 0x25800
+dump disp16_plane2.bin 0x500F9880 len 0x25800
+dump disp16_pal565.bin 0x50122AAC len 0x200
+[114.00] snap #40 periodic t=114
+[116.97] BP PicParam 0x600014 param=40600014
+[116.97] BP PicEvent d0=10
+[116.97] BP PicDispatch d0=10
+[116.97] BP ACT tag mode=0
+[117.07] BP PicDispatch end
+[117.57] snap #41 after PicDispatch 10
+dump disp17_fb.bin 0x500D4080 len 0x25800
+dump disp17_plane2.bin 0x500F9880 len 0x25800
+dump disp17_pal565.bin 0x50122AAC len 0x200
+[118.00] snap #42 periodic t=118
+[122.00] snap #43 periodic t=122
+[124.47] BP PicParam 0x600014 param=40600014
+[124.47] BP PicEvent d0=11
+[124.47] BP PicDispatch d0=11
+[124.47] BP ACT tag mode=0
+[124.57] BP PicDispatch end
+[125.07] snap #44 after PicDispatch 11
+dump disp18_fb.bin 0x500D4080 len 0x25800
+dump disp18_plane2.bin 0x500F9880 len 0x25800
+dump disp18_pal565.bin 0x50122AAC len 0x200
+[126.00] snap #45 periodic t=126
