@@ -1,7 +1,7 @@
 # KN7000 effects-DSP catalog — what each SHARC program does
 
 Companion to the committed disassembly tree at
-`kn7000_disassembly/dsp/` + `kn7000_disassembly/disasm/dsp/` (regenerate with
+`technics-roms-disasm/kn7000/dsp/` + `technics-roms-disasm/kn7000/disasm/dsp/` (regenerate with
 `make disasm-dsp`). This note is the human-readable synthesis: the DSP's runtime
 model, how the CPU selects/downloads effects, the **confirmed** effect-type →
 record map, and per-record algorithm identifications.
@@ -19,7 +19,7 @@ host-booted by the MN10300 — it has no boot ROM of its own. Its programs live 
 the MN10300 program flash as **80 download records** at CPU
 `0x486BCEC4..0x486CE68D`, streamed to the DSP host port (index `0x98000000`,
 data `0x9C000000`). Record/block format and the verified PM repack recipe are in
-`kn7000_disassembly/dsp/README.md`.
+`technics-roms-disasm/kn7000/dsp/README.md`.
 
 Roles: **1 kernel** (rec04), **4 SDRAM self-tests** (rec00–03, *not* audio),
 **72 effect microprograms** (rec05–76), **3 LFO-waveform data records**
@@ -66,7 +66,7 @@ the GUI's "up to 5 SOUND DSP + reverb + chorus + EQ" effect structure.
 
 ## 3. Host-side select / download mechanism (MN10300) — confirmed
 
-Names added to `kn7000_disassembly/kn7000_manual.sym`. The GUI changes an effect
+Names added to `technics-roms-disasm/kn7000/kn7000_manual.sym`. The GUI changes an effect
 via `DspEffectSelect(unit, type)` at **`0x48405815`** — note the argument pair is
 **(unit 0..9, type 0..0x91)**, *not* (MIDI bank, program) as an earlier note
 guessed (proven at the EQ init `0x484102A7`: `unit 8, type 0x4F`). It validates
@@ -254,7 +254,7 @@ the plan's Phase A must answer). They contain no audio DSP.
 ## 7.5 ★ 2026-07-19 UPDATE — the GUI preset-descriptor table: names are ROM fact now
 
 The deferred "descriptor-table walk" of §5 is done, statically
-(`kn7000_disassembly/dsp/tremolo-rotary-family.md` §1). The firmware holds
+(`technics-roms-disasm/kn7000/dsp/tremolo-rotary-family.md` §1). The firmware holds
 **~600 preset descriptors** (region CPU `0x4858FB8C..0x48597200`) of the form
 `{u16 params[n]; char name[16]; u16 0; u16 type; u16 nparams; u16 0; u32 ptr;
 u32 id}` plus group tables (`{ptr,count,name16}`, Sound-DSP list ≈`0x4870FE00`,
@@ -287,7 +287,7 @@ correct or settle rows above:
   rec15**, beat-synced **For 2/3/4Beat = rec46 (LFO filter) / rec48 (wah)**.
 
 The §5 algorithm column remains the 2026-07-09 pass; where it disagrees with
-`kn7000_disassembly/dsp/records.tsv` (regularly, after the reverb/chorus/
+`technics-roms-disasm/kn7000/dsp/records.tsv` (regularly, after the reverb/chorus/
 insert/rotary annotation passes), **records.tsv is authoritative**.
 
 ## 7.6 ★ 2026-07-19 UPDATE 2 — the GUI GROUP table decoded (name -> type -> record, complete)
@@ -297,7 +297,7 @@ The *group* tables (SOUND DSP list ~`0x4870FDF6`, REVERB & EFFECT MENU list
 `{u16 count, char name[16], u16 0, u32 preset_list_ptr}` (the §7.5 pass had
 paired some names with the neighboring entry's list; those "descriptor bank
 0xNN" attributions are superseded). Full walk + per-record consequences:
-`kn7000_disassembly/dsp/modulation-pitch-family.md` §1. Highlights:
+`technics-roms-disasm/kn7000/dsp/modulation-pitch-family.md` §1. Highlights:
 
 - **Auto Wah (Wah1–5) = type 0x34 = rec28** (envelope-driven) vs
   **Pedal Wah (Wah1–3) = 0x33 = rec29** (host/pedal-driven — its audio
@@ -323,7 +323,7 @@ paired some names with the neighboring entry's list; those "descriptor bank
 The KN6000/KN6500 carry the same ADSP-21065L and a **byte-identical** record
 pool to each other (80/80). Vs the KN7000, **all 80 records' DM (coefficient)
 blocks are byte-identical but the PM (code) was revised — only 3/80 PM match**
-(byte-verified; `kn7000_disassembly/dsp/cross-model/`). So this catalogue and its
+(byte-verified; `technics-roms-disasm/kn7000/dsp/cross-model/`). So this catalogue and its
 DM-level facts transfer directly to the KN6xxx; only the code differs.
 `gen_dsp_records.py` takes pool bounds as CLI args — the KN6000 listings are
 already generated at `dsp/cross-model/kn6000/` (== KN6500).

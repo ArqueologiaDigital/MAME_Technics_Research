@@ -106,7 +106,7 @@ Compact and a Full Unit view plus four per-block views.
 The MN10300 execute core now implements **~99.94% of the instruction forms the
 firmware actually uses** (the remainder are unused `udf*` coprocessor ops). Its
 semantics were cross-checked by an independent Python interpreter
-(`kn7000_disassembly/tools/mn10300_sim.py`) that executes **4.59 million** real
+(`technics-roms-disasm/kn7000/tools/mn10300_sim.py`) that executes **4.59 million** real
 boot instructions coherently — through hardware init and BSS setup and into the
 MILK kernel — and on into the **library/kernel code at `0x4C000000`** (the C
 runtime + kernel; 7,965 calls to 298 entry points). That code is **not a separate
