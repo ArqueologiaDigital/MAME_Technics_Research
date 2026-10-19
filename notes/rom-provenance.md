@@ -169,6 +169,10 @@ reproducible state.
 
 ### 4. `kn7000_rhythms_synthetic.rom` — synthetic, deterministic
 
+**Retired from the driver on 2026-10-19:** the real rhythm ROM IC18 (`c3cbnd000046.ic18`) was
+dumped and replaced it. The file and its generator are kept as the record of that work; nothing
+loads it any more.
+
 ```
 python3 tools/gen_technics_rhythms.py \
   --table <roms>/kn7000/kn7000_table.rom \

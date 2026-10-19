@@ -30,6 +30,10 @@
     from the checksum-verified .SLD firmware-update images and loaded as good dumps
     (the .SLD/.INF block checksums verify the decompression); real chip dumps would
     supersede them. Per-model details live on the kn5000-docs site.
+    The KN7000 set takes upstream's ROM records: firmware versions as BIOS options
+    (sp7001, v16 default, v15, v14, v13), and the wave (IC203/IC204/IC207/IC208),
+    rhythm (IC18) and picture (IC19) ROMs read from an instrument by its own CPU
+    (mamedev/mame #16517, #16520, #16523, #16524, not merged when ported here).
 
     Memory layout (from firmware static analysis, the mn10300_sim boot trace,
     and the service-test IC map; see the kn5000-docs "Technics KN7000" pages and
@@ -44,22 +48,26 @@
                                      largest block; see Display subsystem doc)
         0x36008000  bit-mapped control / GPIO (8 regs, all bset/bclr/btst;
                                      0x36008004 toggled 125x = chip selects)
-        0x48000000  Table / rhythm flash               (kn7000_table.rom, ~4 MB)
+        0x40000000  Rhythm data ROM IC18 (4 MB, repeats at 0x40400000); its first
+                                     64 KB is the boot code and flash updater
+        0x48000000  Table flash                        (kn7000_table.rom, ~4 MB)
         0x48400000  Program flash                      (kn7000_program.rom, ~4 MB)
         0x4C000000  Library / kernel ROM (undumped, >= ~6 MB): the C runtime +
                                      MILK kernel; 7,965 calls to 298 entry points
                                      (printf @0x4C001A48, memcpy @0x4C003051, ...)
         0x50000000  Work RAM (>2.5 MB used; initial SP = 0x50021CF8)
-        0x57800000  Picture flash (undumped; only lightly referenced)
+        0x57800000  Picture ROM IC19 (2 MB, repeats through 0x57FFFFFF): the Slide
+                                     Show's 100 PRESET pictures
         0x8C000000  device window / video path (boot copies ROM data here)
         0x90000000  framebuffer / LCD V-RAM window (IC104?)
-        0x98040000  tone generator (synth LSI IC205, C1BB00000709) - 16-bit register set
-        0x98050000  2nd TG register set (parallel 16-bit)
+        0x98040000  sub tone generator (synth LSI IC205, C1BB00000709) - 16-bit register set
+        0x98050000  main tone generator (IC201), the same register set; the firmware's
+                     wave ROM test names it main and reads IC203/IC204 through it
         0x9804/50004  VOICE-EVENT (keyboard) FIFO reads -- the KN5000-shared "keyboard
                      input" interface (KN5000 0x110000: 16-bit, low byte = key code with
                      bit7 = make/break, high byte = velocity; empty = 0xFFFF). This is how physical key presses
                      reach the firmware (parallel to MIDI-in); see notes/tone-generator.md.
-                     wave/sample data in undumped ROMs IC203/204/207/208 (C3CBQD00000x)
+                     wave/sample data in ROMs IC203/204/207/208 (C3CBQD00000x)
         0x98020000  sound control (byte regs); 0x98060000/0x98070000 more sound
 
     Notable work-RAM globals recovered from the disassembly (constants below):
@@ -81,7 +89,8 @@
         - Program ROMs IC16 / IC17
         - Table / rhythm ROMs
         - Dual tone generators: master TG IC201, sub TG IC205 (both C1BB00000709)
-        - Wave/sample ROMs IC203/IC204 (master) + IC207/IC208 (sub), undumped
+        - Wave/sample ROMs IC203/IC204 (master) + IC207/IC208 (sub), dumped; only
+          the wave ROM test reads them, the voices still play the synthetic pack
         - Effects DSP IC306 (ADSP-21065L SHARC) + its SDRAM IC307/IC308
         - Floppy Disk Controller IC103
         - LCD V-RAM IC104
@@ -399,6 +408,9 @@ private:
 	bool m_ram90_workram = false;                // KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
+	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
+	offs_t m_sd_aud_state = 0x500063e6;          // SD audio play-state byte (v16's; 0 = unknown)
+	offs_t m_sd_snd_state = 0x500063d9;          // SD sound play-state byte (v16's; 0 = unknown)
 	offs_t m_table_alt_base = 0;                 // KN6500: the table/font ROM is (also) decoded at 0x40010000, where its firmware reads it
 	required_region_ptr<uint32_t> m_progrom;     // program flash (holds the CLUT)
 	required_device_array<kn7000_sio_uart_device, 2> m_midi_uart;
@@ -485,8 +497,8 @@ private:
 	{
 		m_kbd_fifo[m_kbd_head & 63] = uint16_t(note) | (uint16_t(vel) << 8); m_kbd_head++;
 		// Keybed coupling for the tone generator's GATE-FOLLOW voices (brass/sax/organ
-		// classes): tell it which key is being made/broken -- the real sub TG hosts this
-		// FIFO itself, so it sees these events natively. See key_context()/key_break().
+		// classes): tell it which key is being made/broken -- the real main TG (0x98050000)
+		// hosts this FIFO itself, so it sees these events natively. See key_context()/key_break().
 		if (note & 0x80) m_tonegen->key_break(note & 0x7F);
 		else             m_tonegen->key_context(note);
 	}
@@ -526,31 +538,37 @@ private:
 		// key-up. A note-on passes the MIDI velocity straight through.
 		kbd_push(on ? idx : uint8_t(idx | 0x80), on ? vel : 0xff);
 	}
-	// Tone generators (main 0x98040000 / sub 0x98050000): register-indirect,
-	// write-only from the firmware. Address latched at base+0, data written at
-	// base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
+	// Tone generators (index 0 = sub 0x98040000 / index 1 = main 0x98050000):
+	// register-indirect, write-only from the firmware. Address latched at base+0,
+	// data written at base+2 -> reg[address]. Voice registers are group<<8|bank<<6|channel
 	// (< 0x1000); the 0xFC0x system-refresh group is accepted but not stored.
 	// See notes/tone-generator.md. (State capture; synthesis is future work.)
-	uint16_t m_tg_addr[2] = { 0, 0 };          // latched register address, [0]=main [1]=sub
+	// Which one is main: the firmware's WAVE ROM test calls 0x98050000 the main tone
+	// generator, the one with IC203/IC204 (mamedev/mame #16520). This driver had the
+	// names the other way round; the indices are unchanged.
+	uint16_t m_tg_addr[2] = { 0, 0 };          // latched register address, [0]=sub [1]=main
 	uint16_t m_tg_reg[2][0x10000] = { };       // captured voice-register file (FULL 16-bit address
 	                                           // space -- the old [0x1000] + <0x1000 gate silently
 	                                           // dropped the per-voice pitch/key-on writes at 0x2000+)
 
-	// Wave-memory READ port (main 0x9804 / sub 0x9805, offsets +6/+8/+A). The
+	// Wave-memory READ port (sub 0x9804 / main 0x9805, offsets +6/+8/+A). The
 	// firmware's service-mode WAVE ROM test (checksum core 0x484839A1) reads the
 	// four PCM wave ROMs THROUGH the tone generator: it latches a bank at base+6,
 	// a word address within the bank at base+8, then reads each 16-bit sample word
 	// back at base+A and sums (hi+lo) across the full 16 MiB of each device. So the
-	// wave ROMs -- on the TG's private bus -- ARE reachable by the CPU (main TG,
-	// index 0 = IC207/208; sub TG, index 1 = IC203/204). Composed word address per
+	// wave ROMs -- on the TG's private bus -- ARE reachable by the CPU (sub TG,
+	// index 0 = IC207/208; main TG, index 1 = IC203/204). Composed word address per
 	// 0x484839A1: bank = (base+6 & 0x1FF); the two ROMs on a side are selected by
 	// bit0 of (base+8); word = ((base+8) >> 1) & 0x3FFF; linear = bank*0x4000 + word
-	// (0..0x7FFFFF within one 16 MiB ROM). Data comes from the synthetic "wavepack"
-	// placeholder until IC203/204/207/208 are dumped (real data drops straight in;
-	// the §8.9 checksum then matches the firmware's golden values 0x485CFD18).
+	// (0..0x7FFFFF within one 16 MiB ROM). This is how the ROM dumper read the four
+	// chips (technics-roms-disasm kn7000/tools/cnv_romdump, select 0 = IC203/IC207,
+	// select 1 = IC204/IC208), so the dumps are served here as they were read and
+	// the §8.9 checksums match the firmware's golden values (0x485CFD18). Without
+	// the dumps the port falls back to the synthetic "wavepack".
 	// See docs kn7000-expansion-and-wave-dump / notes/FINDINGS-expansion-buses-and-code-exec.md.
-	uint16_t m_tg_wave_bank[2] = { 0, 0 };     // latched bank register  (base+6), [0]=main [1]=sub
+	uint16_t m_tg_wave_bank[2] = { 0, 0 };     // latched bank register  (base+6), [0]=sub [1]=main
 	uint16_t m_tg_wave_addr[2] = { 0, 0 };     // latched word-address   (base+8)
+	const uint8_t *m_waverom[2][2] = { };      // [tg index][select]: IC207/IC208, IC203/IC204 (nullptr if absent)
 	const uint8_t *m_wavepack = nullptr;       // cached "wavepack" region base (nullptr if absent)
 	uint32_t m_wavepack_size = 0;
 	uint16_t tg_wave_read(int tg);             // compose the address and return the sample word
@@ -892,11 +910,10 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//       real code, not just data.
 	//map(0x4c000000, 0x4c0fffff).rom().region("library", 0);
 
-	// SYNTHETIC "Technics Rhythms" name resource: the "rhythms" region (kn7000 set
-	// only) is installed at 0x54E00000 from machine_start(), NOT here -- this map is
-	// shared with the KN6000/6500 sets which lack the region, and memregion() must
-	// not run during the validity check (no machine yet -> crash). See machine_start
-	// for the full rationale.
+	// IC18, the rhythm data ROM (0x40000000, repeating at 0x40400000), and IC19, the
+	// picture ROM (0x57800000), are kn7000-set regions, installed from machine_start()
+	// rather than here: this map is shared with the KN6000/6500/2400 sets, which lack
+	// them, and memregion() must not run during the validity check (no machine yet).
 
 	// --- EXP.CS "SOUND RAM" expansion slots ---------------------------------
 	// The firmware's 4-slot detector (the SoundRam probe at 0x48449EF4) validates
@@ -921,8 +938,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x41000000, 0x41ffffff).lr8(NAME([](offs_t) -> uint8_t { return 0x00; })).nopw();
 	map(0x56000000, 0x577fffff).lr8(NAME([](offs_t) -> uint8_t { return 0x00; })).nopw();
 
-	// TODO: Picture flash (splash / bitmap graphics), separate device.
-	//map(0x57800000, 0x57ffffff).rom().region("picture", 0);
+	// (0x57800000-0x57FFFFFF: the picture ROM IC19, installed from machine_start().)
 
 	// --- I/O register banks -------------------------------------------------
 	// 112 I/O registers were recovered by static analysis of the firmware (see
@@ -934,7 +950,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	//   0x34000000  large peripheral block, 58 regs (likely LCD/display + key/panel)
 	//   0x36008000  bit-mapped control / GPIO (0x36008004 toggled 125x)
 	//   0x98040000 & 0x98050000  parallel 16-bit sets = the DUAL tone generators
-	//                            (main TG IC203/204 + sub TG IC207/208); plus
+	//                            (sub TG, wave ROMs IC207/208 + main TG, IC203/204); plus
 	//                            0x98020000/0x98060000/0x98070000 sound control
 	map(0x20000000, 0x2000ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
 	map(0x32000000, 0x3200ffff).rw(FUNC(kn7000_state::io_r), FUNC(kn7000_state::io_w));
@@ -1016,16 +1032,22 @@ void kn7000_state::maincpu_mem(address_map &map)
 // decoded per-register list is in notes/io-map.md.
 // Tone-generator wave-memory read port. The firmware's WAVE ROM test drives this
 // (checksum core 0x484839A1): bank latched at base+6, word address at base+8, the
-// 16-bit sample word read here. Composition follows the firmware exactly; the four
-// real wave ROMs are undumped, so sample data is sourced from the synthetic
-// "wavepack" placeholder (mapped modulo its size) until the dumps arrive.
+// 16-bit sample word read here. Composition follows the firmware exactly. The four
+// wave ROMs are served as the dumper read them through this port, word n at bytes
+// 2n (low) and 2n+1 (high); without them sample data comes from the synthetic
+// "wavepack" placeholder (mapped modulo its size).
 uint16_t kn7000_state::tg_wave_read(int tg)
 {
-	if (!m_wavepack || !m_wavepack_size)
-		return 0xFFFF;                                       // no wave data -> open bus (test reports NG)
 	const uint32_t bank = m_tg_wave_bank[tg] & 0x1FF;        // base+6: 512 banks (bit15 = enable, masked off)
 	const uint32_t chip = m_tg_wave_addr[tg] & 1;            // base+8 bit0: which of the two ROMs on this side
 	const uint32_t word = (m_tg_wave_addr[tg] >> 1) & 0x3FFF;// base+8 bits1..14: word within the bank
+	if (const uint8_t *const w = m_waverom[tg][chip])
+	{
+		const uint32_t a = (bank * 0x4000u + word) * 2u;
+		return uint16_t(w[a] | (w[a + 1] << 8));
+	}
+	if (!m_wavepack || !m_wavepack_size)
+		return 0xFFFF;                                       // no wave data -> open bus (test reports NG)
 	const uint32_t rom  = (uint32_t(tg) << 1) | chip;        // 0..3: one of the four 16 MiB wave ROMs
 	const uint32_t byteaddr = rom * 0x1000000u + (bank * 0x4000u + word) * 2u;
 	const uint32_t a = byteaddr % m_wavepack_size;
@@ -1077,7 +1099,7 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		return m_sdmbx_out;
 	if (offset == 0x28007)
 		return m_snd_500e;
-	// Wave-memory read port DATA (main 0x9804000A / sub 0x9805000A): return the
+	// Wave-memory read port DATA (sub 0x9804000A / main 0x9805000A): return the
 	// sample word for the latched (bank, address). See tg_wave_read().
 	if (offset == 0x20005) return tg_wave_read(0);
 	if (offset == 0x28005) return tg_wave_read(1);
@@ -1106,26 +1128,26 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		cpsd_mbx_write(data);
 		return;
 	case 0x00000: m_dsp_index = data; return;                     // 0x98000000: effects-DSP host register index
-	case 0x20000: m_tg_addr[0] = data; return;                    // main TG: address latch (0x98040000)
-	case 0x20001:                                                 // main TG: data (0x98040002) -> reg[addr]
+	case 0x20000: m_tg_addr[0] = data; return;                    // sub TG: address latch (0x98040000)
+	case 0x20001:                                                 // sub TG: data (0x98040002) -> reg[addr]
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
 		m_tonegen->tg_write(0, m_tg_addr[0], data,                // Stage 2: feed the real TG voice engine
 			tg_pitch_resolve(0, m_tg_addr[0]), tg_type_resolve(0, m_tg_addr[0]));
 		return;
-	case 0x28000: m_tg_addr[1] = data; return;                    // sub TG: address latch (0x98050000)
-	case 0x28001:                                                 // sub TG: data (0x98050002) -> reg[addr]
+	case 0x28000: m_tg_addr[1] = data; return;                    // main TG: address latch (0x98050000)
+	case 0x28001:                                                 // main TG: data (0x98050002) -> reg[addr]
 		m_tg_reg[1][m_tg_addr[1]] = data;
 		m_tonegen->tg_write(1, m_tg_addr[1], data,
 			tg_pitch_resolve(1, m_tg_addr[1]), tg_type_resolve(1, m_tg_addr[1]));
 		return;
-	case 0x20002: case 0x20008:                                   // main TG control (0x98040004 / 0x98040010)
+	case 0x20002: case 0x20008:                                   // sub TG control (0x98040004 / 0x98040010)
 		return;
 	// Wave-memory read port: the service-mode WAVE ROM test latches a bank at
 	// base+6 and a word address at base+8, then reads the sample word at base+A.
-	case 0x20003: m_tg_wave_bank[0] = data; return;              // main TG wave bank    (0x98040006)
-	case 0x20004: m_tg_wave_addr[0] = data; return;              // main TG wave address (0x98040008)
-	case 0x28003: m_tg_wave_bank[1] = data; return;              // sub  TG wave bank    (0x98050006)
-	case 0x28004: m_tg_wave_addr[1] = data; return;              // sub  TG wave address (0x98050008)
+	case 0x20003: m_tg_wave_bank[0] = data; return;              // sub  TG wave bank    (0x98040006)
+	case 0x20004: m_tg_wave_addr[0] = data; return;              // sub  TG wave address (0x98040008)
+	case 0x28003: m_tg_wave_bank[1] = data; return;              // main TG wave bank    (0x98050006)
+	case 0x28004: m_tg_wave_addr[1] = data; return;              // main TG wave address (0x98050008)
 	}
 	// (The FDC registers at 0x98020000-0f are carved out of this window -> fdc_r/fdc_w; see io_r note.)
 	logerror("%s: io_w  +%06X = %04X mask %04X\n", machine().describe_context(),
@@ -1481,9 +1503,10 @@ TIMER_CALLBACK_MEMBER(kn7000_state::volume_scan)
 	// SD PLAY/PAUSE lamp (sd_led1): lit while SD-Audio or SD-Song playback is engaged. The play-state
 	// getters GetSDAudPlay_PLAYPAUSEFunc (0x48575084) / GetSDSndPlay_PLAYPAUSEFunc (0x485756E7) read these
 	// state bytes via 0x485793b8 / 0x4857b33f: 1 = playing, 2 = paused, 0 = stopped. Light on play or pause.
+	// (Those are v16's; the bytes move between versions, see kn7000_bios_info.)
 	address_space &prg = m_maincpu->space(AS_PROGRAM);
-	const uint8_t sd_aud = prg.read_byte(0x500063e6);
-	const uint8_t sd_snd = prg.read_byte(0x500063d9);
+	const uint8_t sd_aud = m_sd_aud_state ? prg.read_byte(m_sd_aud_state) : 0;
+	const uint8_t sd_snd = m_sd_snd_state ? prg.read_byte(m_sd_snd_state) : 0;
 	m_sd_leds[1] = (sd_aud == 1 || sd_aud == 2 || sd_snd == 1 || sd_snd == 2) ? 1 : 0;
 }
 
@@ -1742,6 +1765,26 @@ void kn7000_state::customflash_w(offs_t offset, uint32_t data, uint32_t mem_mask
 		m_customflash->write(offset * 2 + 1, (data >> 16) & 0xffff);
 }
 
+// The firmware addresses this driver depends on, per KN7000 firmware version,
+// indexed by ROM_SYSTEM_BIOS number. The driver was written against v16 (build 941).
+//   quick, sched  the two interrupt entry points in the library the boot copies
+//                 out of the program flash to 0x8C000000 and runs at 0x4C000000;
+//                 the scheduler entry is 0x86 bytes past the quick dispatcher in
+//                 every build
+//   tg_recbase    the per-slot voice-record array (tg_pitch_resolve)
+//   sd_aud/snd    the SD audio and sound play-state bytes (the SD play lamp)
+// tools/kn7000_bios_addresses.py finds them in each image: the handlers by v16's
+// bytes, the work-RAM addresses by the code around each place v16 names them (every
+// matched site agrees). v14 survives only from its upper half, so it cannot boot and
+// its SD bytes are unknown (0).
+static const struct { uint32_t quick, sched, tg_recbase, sd_aud, sd_snd; } kn7000_bios_info[] = {
+	{ 0x4C03E2C6, 0x4C03E34C, 0x500AF950, 0x500063EE, 0x500063E1 },   // sp7001  build 942
+	{ 0x4C03DDA0, 0x4C03DE26, 0x500AF940, 0x500063E6, 0x500063D9 },   // v16     build 941
+	{ 0x4C03DDA0, 0x4C03DE26, 0x500A1104, 0x500063E6, 0x500063D9 },   // v15     build 935
+	{ 0x4C03DD8B, 0x4C03DE11, 0x500A1104, 0,          0          },   // v14     build 929
+	{ 0x4C03DD8D, 0x4C03DE13, 0x500A10E0, 0x500063DE, 0x500063D1 },   // v13     build 893
+};
+
 void kn7000_state::machine_start()
 {
 	// output_finders auto-resolve in this MAME version (see kn5000_cpanel) --
@@ -1758,8 +1801,16 @@ void kn7000_state::machine_start()
 		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
 	}
 
-	// Cache the synthetic wave pack so the TG wave-read port can source sample
-	// words without a region lookup per read (the §8.9 sweep does millions).
+	// Cache the wave ROMs (and the synthetic wave pack the voices still play) so the
+	// TG wave-read port can source sample words without a region lookup per read (the
+	// §8.9 sweep does millions). Index 0 is the sub TG at 0x98040000, 1 the main one.
+	static const char *const waverom_tags[2][2] = {
+		{ "waveform_sub_y", "waveform_sub_x" },     // IC207, IC208
+		{ "waveform_main_y", "waveform_main_x" } }; // IC203, IC204
+	for (int tg = 0; tg < 2; tg++)
+		for (int sel = 0; sel < 2; sel++)
+			if (memory_region *wr = memregion(waverom_tags[tg][sel]))
+				m_waverom[tg][sel] = wr->base();
 	if (memory_region *wp = memregion("wavepack"))
 	{
 		m_wavepack = wp->base();
@@ -1778,24 +1829,41 @@ void kn7000_state::machine_start()
 	m_vol_timer = timer_alloc(FUNC(kn7000_state::volume_scan), this);
 
 	// (The AM33 maskable-interrupt vectors are configured per level on the core
-	// in kn7000/kn6000(machine_config) -- set_maskable_vector.)
+	// in kn7000/kn6000(machine_config) -- set_maskable_vector.) The KN7000's depend
+	// on the firmware version, as do the work-RAM variables the voice engine and the
+	// SD lamp read, so they are set here, once the BIOS is known.
+	if (m_bios_vectors && system_bios() >= 1 && system_bios() <= std::size(kn7000_bios_info))
+	{
+		const auto &b = kn7000_bios_info[system_bios() - 1];
+		for (int level = 0; level < 8; level++)
+			m_maincpu->set_maskable_vector(level, level == 6 ? b.sched : b.quick);
+		m_tg_recbase = b.tg_recbase;
+		m_sd_aud_state = b.sd_aud;
+		m_sd_snd_state = b.sd_snd;
+		logerror("BIOS %d: interrupt vectors quick %08X, scheduler %08X; voice records %08X\n",
+				system_bios(), b.quick, b.sched, b.tg_recbase);
+	}
 
-	// SYNTHETIC "Technics Rhythms" name resource (kn7000 set only; the KN6000/6500
-	// sets have no "rhythms" region, so nothing is installed for them -- runtime
-	// install rather than a maincpu_mem entry because the map is shared and is also
-	// constructed during the validity check, where regions don't exist).
-	// 0x54E00000 is the firmware's LAST-RESORT software probe window for the rhythm
-	// name resource (prober 0x4843D6DC, selector 0x4843385E). Per the Phase A
-	// hardware survey (notes/table-rom-structure.md) it is NOT a real KN7000 chip
-	// select -- the real resource lives on the undumped data flash -- so serving the
-	// clearly-labeled synthetic container here is the honest emulator fix for the
-	// "every style row says 8 Beat 1" fallback. The prober strncmps 0x54E10000
-	// BEFORE 0x54E00000; that first probe lands mid-resource (image offset 0x10000
-	// holds record payload, no magic -- verified), so the match lands at 0x54E00000
-	// and all directory offsets resolve from the right base. Region tail beyond the
-	// 0x3EB07F image is ERASEFF (reads as erased flash).
-	if (memory_region *rr = memregion("rhythms"))
-		m_maincpu->space(AS_PROGRAM).install_rom(0x54e00000, 0x54e00000 + rr->bytes() - 1, rr->base());
+	// IC18, the rhythm data ROM, answers on CS0 (kn7000 set only; runtime install
+	// rather than a maincpu_mem entry because the map is shared and is also
+	// constructed during the validity check, where regions don't exist). Its address
+	// pins take A1-A21 and its top one is set by JP7, so 4 MB of the 64 Mbit part is
+	// visible and repeats at 0x40400000. The firmware's rhythm probe (941 0x4843D6DC)
+	// tries 0x48010000, 0x40610000, then 0x40010000, where it finds the "Technics
+	// Rhythms" resource: 220 styles, RHYTHM 33 on the SP7001 DEBUG TOOLS screen. The
+	// first 64 KB is the instrument's boot code and flash updater: the CPU starts there
+	// at reset and is sent on to 0x48400000, where this driver starts it directly.
+	// (This replaces the synthetic resource tools/gen_technics_rhythms.py built, which
+	// was served at the probe's last resort, 0x54E00000.)
+	if (memory_region *rr = memregion("rhythm_data"))
+		m_maincpu->space(AS_PROGRAM).install_rom(0x40000000, 0x403fffff, 0x400000, rr->base());
+
+	// IC19, the picture ROM: the Slide Show's 100 PRESET pictures. Its top address pin
+	// is grounded through JP10, and the half the CPU can reach holds one 2 MB image, so
+	// the 8 MB window shows it four times. The first word is the offset of its version,
+	// "7", which the DEBUG TOOLS screen prints as PICTURE.
+	if (memory_region *pr = memregion("picture"))
+		m_maincpu->space(AS_PROGRAM).install_rom(0x57800000, 0x579fffff, 0x600000, pr->base());
 
 	// KN6500: its firmware reads the table/font ROM at 0x40010000, not 0x48000000 -- the
 	// font-table initialiser at 0x48420433 is the KN6000's 0x48420312 byte for byte except
@@ -2064,10 +2132,13 @@ void kn7000_state::kn7000(machine_config &config)
 	// vectors -- the firmware installs two distinct handlers in its self-loaded
 	// library: 0x4C03DDA0 = quick dispatch (no stack switch) for the device
 	// levels, 0x4C03DE26 = the SCHEDULER entry, used only by the level-6 system
-	// tick (see mn10300.cpp intc_recompute for why the split matters). The
-	// KN6000/KN6500 override these in kn6000(machine_config) below.
+	// tick (see mn10300.cpp intc_recompute for why the split matters). Those are
+	// v16's; machine_start() replaces them with the selected BIOS's own
+	// (kn7000_bios_info). The KN6000/KN6500 and KN2400 override these in their
+	// machine configs below.
 	for (int level = 0; level < 8; level++)
 		m_maincpu->set_maskable_vector(level, level == 6 ? 0x4C03DE26 : 0x4C03DDA0);
+	m_bios_vectors = true;
 	// Board policy hooks out of the core INTC (see the "board-policy hooks"
 	// comment block above the FDC section):
 	// group 0x11 (panel transfer-complete) is level-like until serviced --
@@ -2238,6 +2309,7 @@ void kn7000_state::kn6000(machine_config &config)
 	// hang). See notes/kn6000-kn6500-boot.md.
 	for (int level = 0; level < 8; level++)
 		m_maincpu->set_maskable_vector(level, 0x90000000);
+	m_bios_vectors = false;
 
 	// The KN6000/KN6500 front panel speaks the SAME CP wire protocol as the KN7000 (which is
 	// why these models already accepted button traffic, and why their TEMPO/PROGRAM wheel
@@ -2314,56 +2386,108 @@ void kn7000_state::kn2400(machine_config &config)
 	// KN7000's library handler addresses (which don't exist on this firmware).
 	for (int level = 0; level < 8; level++)
 		m_maincpu->set_maskable_vector(level, 0x90000000);
+	m_bios_vectors = false;
 }
 
 
 ROM_START(kn7000)
+	// The program (IC16/IC17) and table (same pair, A22 selects) flash are
+	// reconstructed from Panasonic's system-update floppies and verified against
+	// the checksums shipped on them (SMCK*.INF), except the SP7001 set (see below)
+	// and v13, which was read from an instrument's flash. These are upstream's
+	// records (file names included), with this driver's region tags.
+	//
+	// Each version carries the PROGRAM and TABLE build numbers the instrument
+	// prints on its hidden SOFT VERSION screen:
+	//     sp7001  PROGRAM 942 / TABLE 83   Key Soft Service SD PLUG-iN
+	//     v16     PROGRAM 941 / TABLE 84   fully SMCK-verified
+	//     v15     PROGRAM 935 / TABLE 84   fully SMCK-verified
+	//     v14     PROGRAM 929 / TABLE 84   only update floppy 2 survives (floppy 1 NO_DUMP)
+	//     v13     PROGRAM 893 / TABLE 80   read from an instrument's flash
+	// Each version's library puts its interrupt handlers and the work-RAM
+	// variables this driver reads somewhere else; see kn7000_bios_info[].
 	ROM_REGION32_LE(0x400000, "maincpu", ROMREGION_ERASEFF)   // program IC16/IC17 -> 0x48400000
-	ROM_LOAD32_WORD("kn7000_program_even.rom", 0x000000, 0x200000, CRC(529b87ce) SHA1(f198fd9a9ea31a454acfe7be0eb935beca6771b1))
-	ROM_LOAD32_WORD("kn7000_program_odd.rom",  0x000002, 0x200000, CRC(a36e6222) SHA1(721d4469dc5f692f7a2c16c556b2e21115df19f6))
+	ROM_DEFAULT_BIOS("v16")
+
+	// Its SMCK checksum predates the final payload and does not match, so this set is
+	// declared as distributed rather than SMCK-verified.
+	ROM_SYSTEM_BIOS(0, "sp7001", "Program v1.6 PLUG-iN (build 942, SP7001 V1.0 2003-08-23) / Table (build 83)")
+	ROMX_LOAD("kn7000_program_even_sp7001_b942.ic17", 0x000000, 0x200000, CRC(4c91678f) SHA1(a436c851fe6514047b0c5496d394880a9894889c), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(0))
+	ROMX_LOAD("kn7000_program_odd_sp7001_b942.ic16", 0x000002, 0x200000, CRC(7a7990ec) SHA1(3020ed66636674c67a456bfd8f2fb80a7196f2e1), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(0))
+
+	ROM_SYSTEM_BIOS(1, "v16", "Program v1.6 (build 941) / Table (build 84)")
+	ROMX_LOAD("kn7000_program_even_v1.6_b941.ic17", 0x000000, 0x200000, CRC(529b87ce) SHA1(f198fd9a9ea31a454acfe7be0eb935beca6771b1), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(1))
+	ROMX_LOAD("kn7000_program_odd_v1.6_b941.ic16", 0x000002, 0x200000, CRC(a36e6222) SHA1(721d4469dc5f692f7a2c16c556b2e21115df19f6), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(1))
+
+	ROM_SYSTEM_BIOS(2, "v15", "Program v1.5 (build 935) / Table (build 84)")
+	ROMX_LOAD("kn7000_program_even_v1.5_b935.ic17", 0x000000, 0x200000, CRC(b0e97495) SHA1(a3be879b855add10b9f4aa922e753593d3a48883), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(2))
+	ROMX_LOAD("kn7000_program_odd_v1.5_b935.ic16", 0x000002, 0x200000, CRC(6f26836d) SHA1(aa9175097ae5e0d2395da1353702f24cf6c839a7), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(2))
+
+	ROM_SYSTEM_BIOS(3, "v14", "Program v1.4 (build 929, floppy 1 undumped) / Table (build 84)")
+	ROMX_LOAD("kn7000_program_even_v1.4_b929_lower.ic17", 0x000000, 0x100000, NO_DUMP, ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+	ROMX_LOAD("kn7000_program_odd_v1.4_b929_lower.ic16",  0x000002, 0x100000, NO_DUMP, ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+	ROMX_LOAD("kn7000_program_even_v1.4_b929_upper.ic17", 0x200000, 0x100000, CRC(787d3781) SHA1(86c0dc56e7b7671e83bf59ff6b88feebe2f55b5c), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+	ROMX_LOAD("kn7000_program_odd_v1.4_b929_upper.ic16",  0x200002, 0x100000, CRC(5f951af4) SHA1(1752a82e75b064fba8facf3c159ac0d8f827b944), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+
+	ROM_SYSTEM_BIOS(4, "v13", "Program v1.3 (build 893) / Table (build 80)")
+	ROMX_LOAD("kn7000_program_even_v1.3_b893.ic17", 0x000000, 0x200000, CRC(e30502d3) SHA1(3c4e91c8473ca5ca7170fdb00bb45972255c1f85), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(4))
+	ROMX_LOAD("kn7000_program_odd_v1.3_b893.ic16", 0x000002, 0x200000, CRC(4233c444) SHA1(276fe9c7bf8f5eabdbec66895e87d7dee928af8c), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(4))
+
 	ROM_REGION32_LE(0x400000, "table", ROMREGION_ERASEFF)
-	ROM_LOAD32_WORD("kn7000_table_even.rom", 0x000000, 0x200000, CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6))
-	ROM_LOAD32_WORD("kn7000_table_odd.rom",  0x000002, 0x200000, CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5))
+	ROMX_LOAD("kn7000_table_even_sp7001_b83.ic17", 0x000000, 0x200000, CRC(ce5abecd) SHA1(1557acfbe5e887a661be9269050b1d14031a8afa), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(0))
+	ROMX_LOAD("kn7000_table_odd_sp7001_b83.ic16", 0x000002, 0x200000, CRC(7c953378) SHA1(f535d3c2e4d3dd2aa9ef854636b582795b1df821), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(0))
+	ROMX_LOAD("kn7000_table_even_b84.ic17", 0x000000, 0x200000, CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(1))
+	ROMX_LOAD("kn7000_table_odd_b84.ic16", 0x000002, 0x200000, CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(1))
+	ROMX_LOAD("kn7000_table_even_b84.ic17", 0x000000, 0x200000, CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(2))
+	ROMX_LOAD("kn7000_table_odd_b84.ic16", 0x000002, 0x200000, CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(2))
+	ROMX_LOAD("kn7000_table_even_b84.ic17", 0x000000, 0x200000, CRC(005a6db2) SHA1(2f4112ea9b039b17b5ada6952b7646adae8d9dd6), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+	ROMX_LOAD("kn7000_table_odd_b84.ic16", 0x000002, 0x200000, CRC(7e1a312e) SHA1(435b597b926ebac56d4710bcae25b635a59a9ce5), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3))
+	ROMX_LOAD("kn7000_table_even_b80.ic17", 0x000000, 0x200000, CRC(d09d32a5) SHA1(2d7e02370fbcdf79c64f7f5720f412d28d05174f), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(4))
+	ROMX_LOAD("kn7000_table_odd_b80.ic16", 0x000002, 0x200000, CRC(946dac36) SHA1(c86abfc6880523414facafe21f8f4ab32cae1c7d), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(4))
 
 	// TODO: Library / boot ROM at 0x4C000000 - currently undumped.
 	//ROM_REGION(0x100000, "library", ROMREGION_ERASEFF)
 	//ROM_LOAD("kn7000_library.rom", 0x000000, 0x100000, NO_DUMP)
 
-	// TODO: Picture flash at 0x57800000 - not dumped yet.
-	//ROM_REGION(0x800000, "picture", ROMREGION_ERASEFF)
-	//ROM_LOAD("kn7000_picture.rom", 0x000000, 0x800000, NO_DUMP)
+	// The four wave ROMs (C3CBQD00000x) on the tone generators' private buses, read
+	// through the wave ROM test port as the firmware's own test reads them: byte 2n
+	// and 2n+1 are the low and high byte of word n, and each byte sum matches the one
+	// that test expects. Main TG (0x98050000): IC203 select 0, IC204 select 1; sub TG
+	// (0x98040000): IC207, IC208. Only that port reads them so far (tg_wave_read);
+	// the voice engine still plays the synthetic pack below.
+	ROM_REGION(0x1000000, "waveform_main_y", 0)
+	ROM_LOAD("c3cbqd000002.ic203", 0x000000, 0x1000000, CRC(77211876) SHA1(f2d01ffd020c39a3f5b9d6c3275b1855c5a3d1a6))
 
-	// Tone-generator waveform / sample ROMs -- UNDUMPED. The synth LSI IC205
-	// (C1BB00000709, "TONE GENERATOR" in the service manual) plays PCM samples
-	// from four custom Panasonic mask ROMs on the sound board: IC203
-	// (C3CBQD000002), IC204 (C3CBQD000001), IC207 (C3CBQD000004), IC208
-	// (C3CBQD000003). These are physically separate chips, NOT part of the
-	// firmware update disks this driver's ROMs come from, so audible sound is
-	// impossible until they are dumped from the board (see the service manual
-	// "8.9 WAVE ROM test" / "8.10 SOUND SYSTEM test"; sizes below are placeholders).
+	ROM_REGION(0x1000000, "waveform_main_x", 0)
+	ROM_LOAD("c3cbqd000001.ic204", 0x000000, 0x1000000, CRC(e8c00b73) SHA1(f6da330c14cd3bdfc7c19092bd20d188e3ef0600))
+
+	ROM_REGION(0x1000000, "waveform_sub_y", 0)
+	ROM_LOAD("c3cbqd000004.ic207", 0x000000, 0x1000000, CRC(bc2cb635) SHA1(729bb2dd6aebd2932de6960363a554b89ffc171a))
+
+	ROM_REGION(0x1000000, "waveform_sub_x", 0)
+	ROM_LOAD("c3cbqd000003.ic208", 0x000000, 0x1000000, CRC(9ac58de0) SHA1(fb48cbc5334f5221ea882d63a58a22f9466e78c7))
+
 	// SYNTHETIC wave pack (optional): donor samples from the GENUINE KN5000 IC307 dump,
 	// keyed by the runtime (bank,zone) sample select -- built by tools/make_wave_pack.py,
-	// clearly labeled NOT-A-DUMP (embedded provenance block). When absent the tone
-	// generator falls back to the sine placeholder. Rebuild + update hashes with the tool.
+	// clearly labeled NOT-A-DUMP (embedded provenance block). The voice engine plays it;
+	// when absent the tone generator falls back to the sine placeholder. Rebuild + update
+	// hashes with the tool.
 	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
 	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(bc94e4ba) SHA1(66543485ac7ba53126a765168555b525b38d87b2))
 
-	// SYNTHETIC "Technics Rhythms" style-name resource (optional) -- built by
-	// tools/gen_technics_rhythms.py, NOT a dump (hence BAD_DUMP). The real ~4.1MB
-	// rhythm-data flash (IC21 factory flash / IC18+IC20 custom flash per
-	// notes/table-rom-structure.md) is UNDUMPED; without a resource the firmware's
-	// name resolver falls back to its count=1 program-ROM stub and every style row
-	// renders as "8 Beat 1". This container is deterministic from the two dumped
-	// ROMs: the REAL intact directory prefix (a born-truncated copy survives in the
-	// table flash at 0x483E828C), the REAL 8 aux records + record-0 payload from the
-	// program-ROM stub, and REAL names for the 52 styles resolved via the intact
-	// secondary catalog (table flash 0x48244F78). The remaining 168 factory display
-	// names existed only on the undumped flash and are UNRECOVERABLE until it is
-	// dumped: they are emitted as self-announcing placeholders ("BALLAD 04 ?" --
-	// genre/slot from the byte-verified reverse map at 0x48734EE4). Mapped at the
-	// firmware's last-resort probe window 0x54E00000 (see maincpu_mem).
-	ROM_REGION32_LE(0x400000, "rhythms", ROMREGION_ERASEFF)
-	ROM_LOAD_OPTIONAL("kn7000_rhythms_synthetic.rom", 0x000000, 0x3eb07f, BAD_DUMP CRC(1fff54c5) SHA1(c6c9615c40745096b436ec98e9c61d83295b7ebb))
+	// IC18, the rhythm data ROM: the half of the chip that JP7 selects, as the CPU
+	// reads it. The dumped instrument was not opened, so the part is assumed: early
+	// units fit the IC20 flash at this site instead, which the CPU sees as the same
+	// 4 MB. Installed at 0x40000000 by machine_start(). It replaces the synthetic
+	// "Technics Rhythms" resource (kn7000_rhythms_synthetic.rom), whose 168 placeholder
+	// style names only the real chip could supply.
+	ROM_REGION32_LE(0x400000, "rhythm_data", 0)
+	ROM_LOAD("c3cbnd000046.ic18", 0x000000, 0x400000, CRC(a0c23466) SHA1(2dc71f5082063cd6b21e4ed16acd67e9d326a79f))
+
+	// IC19, the picture ROM: the 2 MB the CPU sees; the chip's other half is out of
+	// its reach. Installed at 0x57800000 by machine_start().
+	ROM_REGION32_LE(0x200000, "picture", 0)
+	ROM_LOAD("c3cbmd000098.ic19", 0x000000, 0x200000, CRC(3372cb5c) SHA1(9631dedfc501b8c11bb93efa2d99750e3c84465a))
 
 	// IC21, the writable custom-data flash at 0x96800000 (2 MB, 16 Mbit bottom boot).
 	// NOT a chip dump: this is the payload the "Initial Data" disk installs, which the
@@ -2401,12 +2525,6 @@ ROM_START(kn7000)
 	ROMX_LOAD("kn7000_favini.rom",      0x010000, 0x000198, CRC(959fdc3c) SHA1(93ae80f5ba737c229cb93edc1e3f3d630bba5599), ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)
 	ROMX_LOAD("kn7000_hpgini.rom",      0x011000, 0x004442, CRC(d56caae3) SHA1(931b35afe46942744b37abb64898c4524fe75a6f), ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)
 	ROM_LOAD_OPTIONAL("kn7000_custom_data.rom", 0x020000, 0x1e0000, CRC(2a133ea7) SHA1(67b2a0fe8154c4d15557399a86bf0d0b49813ced))
-
-	//ROM_REGION(0x400000, "wave", ROMREGION_ERASEFF)
-	//ROM_LOAD("kn7000_wave_ic203.rom", 0x000000, 0x400000, NO_DUMP)  // C3CBQD000002
-	//ROM_LOAD("kn7000_wave_ic204.rom", 0x400000, 0x400000, NO_DUMP)  // C3CBQD000001
-	//ROM_LOAD("kn7000_wave_ic207.rom", 0x800000, 0x400000, NO_DUMP)  // C3CBQD000004
-	//ROM_LOAD("kn7000_wave_ic208.rom", 0xc00000, 0x400000, NO_DUMP)  // C3CBQD000003
 ROM_END
 
 

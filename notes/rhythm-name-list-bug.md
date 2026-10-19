@@ -1,5 +1,11 @@
 # Rhythm style-list bug ("all slots show 8 Beat 1") — traced to the table ROM
 
+> **Resolved 2026-10-19.** The names live in the rhythm data ROM IC18, which was dumped
+> (mamedev/mame #16523) and is mapped at `0x40000000` in the overlay driver. The firmware's
+> probe now finds its "Technics Rhythms" resource at `0x40010000` (220 styles), and the main
+> screen shows "8Bt Standard". The synthetic resource described below is no longer loaded.
+> Checks: `notes/pr-port-2026-10-19/`.
+
 The rhythm-selection screen (e.g. RHYTHM / BALLAD) shows every style slot as
 "8 Beat 1" instead of distinct names. Earlier work proved this is **not** a udf /
 CPU-core bug (implementing udf00 did not change it; udf07 is math-only). This note

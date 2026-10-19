@@ -154,7 +154,15 @@ fi
 #     roms/<list>/. The zips come from the romsets folder, which the softlist work built
 #     from technics_roms; a list whose zips are missing still loads, its entries just
 #     report missing files.
+#     The kn5000/kn6000/kn7000 lists were rebuilt with each instrument's own disk layout
+#     (PR branch technics-kn-flop-rebuild, not yet submitted); kn7000-base carries their
+#     new hash/*.xml, and FLOP_REBUILD holds the matching zips, so those come first.
+#     Zips are compared by content, not mtime, so a rebuilt image always replaces the old.
 ROMSETS="${TECHNICS_ROMSETS:-/home/fsanches/compartilhado/technics_romsets}"
+FLOP_REBUILD="${FLOP_REBUILD:-$ROMSETS/floppy-rebuild-2026-10-18/roms}"
+copy_changed() {   # copy_changed SRC DESTDIR: copy SRC unless DESTDIR already holds the same bytes
+  cmp -s "$1" "$2/$(basename "$1")" || cp -p "$1" "$2/"
+}
 mkdir -p "$DEST/hash"
 for l in kn5000_flop kn6000_flop kn7000_flop wsa1_flop; do
   if [ -f "$BUILD/hash/$l.xml" ]; then
@@ -162,11 +170,29 @@ for l in kn5000_flop kn6000_flop kn7000_flop wsa1_flop; do
   else
     echo "warning: no $l.xml in $BUILD/hash -- the $l software list will be unavailable"
   fi
-  if [ -d "$ROMSETS/$l" ]; then
+  for src in "$FLOP_REBUILD/$l" "$ROMSETS/$l"; do
+    [ -d "$src" ] || continue
     mkdir -p "$DEST/roms/$l"
-    cp -u "$ROMSETS/$l"/*.zip "$DEST/roms/$l/" 2>/dev/null || true
-  fi
+    for z in "$src"/*.zip; do [ -f "$z" ] && copy_changed "$z" "$DEST/roms/$l"; done
+    break
+  done
 done
+
+# 2d) KN7000 BIOS sets and dumped chips. The kn7000 set takes upstream's ROM records:
+#     every firmware version as a -bios option, under upstream's file names, and the
+#     wave (IC203/IC204/IC207/IC208), rhythm (IC18) and picture (IC19) ROMs, read from
+#     the owner's instrument by its own CPU (PRs #16517, #16520, #16523, #16524).
+#     Those files live in the romsets folder, not in technics_roms/roms/kn7000 (which
+#     holds the v16 set under its older names), so copy them from there.
+if [ -d "$ROMSETS/kn7000" ]; then
+  mkdir -p "$DEST/roms/kn7000"
+  for f in "$ROMSETS"/kn7000/kn7000_program_*_*.ic1[67] "$ROMSETS"/kn7000/kn7000_table_*_*.ic1[67] \
+           "$ROMSETS"/kn7000/c3cb*.ic*; do
+    [ -f "$f" ] && copy_changed "$f" "$DEST/roms/kn7000"
+  done
+else
+  echo "warning: no $ROMSETS/kn7000 -- the kn7000 BIOS sets and dumped chips will be missing"
+fi
 
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
@@ -317,14 +343,21 @@ be produced (binary + its own copies of the libraries + loader).
   fixed, and this is the exposed remainder. Three candidate fixes have been built and rejected;
   investigation notes are in `kn7000_mame/notes/kn5000-cpserial-INDEX.md`.
 
-The four PCM **wave ROMs are undumped**, so the sound uses a placeholder sine rather than the real
-samples — the notes are in tune and firmware-timed, they just don't have the KN7000's actual voices
-yet. A few built-in mask ROMs (icon graphics) are also still undumped, so some icons use
-placeholders. See the project notes.
+The four PCM **wave ROMs are dumped now**, but the voice engine does not read them yet: the sound
+uses a synthetic wave pack (or a placeholder sine) rather than the real samples — the notes are in
+tune and firmware-timed, they just don't have the KN7000's actual voices yet. See the project notes.
 
 ## ROMs
-`roms/kn7000/` holds the two dumped flash images. MAME flags them "NEEDS REDUMP" (a hash
-note) but they load and run fine.
+`roms/kn7000/` holds every KN7000 firmware version, selected with `-bios`:
+`v16` (the default, program 941 / table 84), `v15` (935/84), `v13` (893/80), `sp7001`
+(942/83, the Key Soft Service SD PLUG-iN, whose DEBUG TOOLS screen opens from the panel),
+and `v14`, of which only the upper half survives, so it does not boot. For example:
+`./run.sh kn7000 -bios v13 -window`.
+
+It also holds the chips read from a real instrument: the four wave ROMs, the rhythm ROM
+(IC18: the 220 built-in rhythms and their names) and the picture ROM (IC19: the Slide Show's
+100 pictures). The voices still play the synthetic wave pack; only the service menu's WAVE
+ROM test reads the real wave ROMs so far.
 MD
 
 SZ=$(du -h "$DEST/kn7000" | cut -f1)

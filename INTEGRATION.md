@@ -65,18 +65,30 @@ separately so that a system upstream already lists is left untouched.
 
 ## 4. Provide the ROM images
 
-MAME will look for a `kn7000` romset holding the even and odd halves of both
-flash pairs — `kn7000_program_even.rom`, `kn7000_program_odd.rom`,
-`kn7000_table_even.rom`, `kn7000_table_odd.rom`, 2 MB each, split even/odd from
-the decompressed `.SLD` images. Place them in a `kn7000.zip` (or a
-`roms/kn7000/` folder) on your ROM path. Their CRC/SHA1 are already filled in the
-driver and they load as good dumps: the `.SLD`/`.INF` block checksums verify the
-decompression. The rest of the set is optional — the synthetic wave and rhythm
-images, flagged `BAD_DUMP` because they are generated rather than read from the
-physical chips, and the four Initial Data disk payloads for the custom-data flash.
-`tools/make-roms.sh` rebuilds the whole set from the preserved sources, checks it
-against its md5 manifest, or restores it from the private `technics_roms` repo
+The `kn7000` romset uses upstream's ROM records (since 2026-10-19), file names
+included. Every firmware version is a BIOS option: `v16` (the default, program
+941 / table 84), `v15`, `v14` (its lower half undumped, so it does not boot),
+`v13` and `sp7001`. Each is the even and odd halves of the program and table
+flash pairs, 2 MB each, e.g. `kn7000_program_even_v1.6_b941.ic17` and
+`kn7000_table_odd_b84.ic16`. The set also needs the chips read from an
+instrument: the wave ROMs `c3cbqd00000[1-4].ic20[3478]`, the rhythm ROM
+`c3cbnd000046.ic18` and the picture ROM `c3cbmd000098.ic19`. All of these are in
+`~/compartilhado/technics_romsets/kn7000/`, and `tools/publish-binary.sh` copies them
+into the published folder. Place them in a `kn7000.zip` (or a `roms/kn7000/`
+folder) on your ROM path.
+
+The rest of the set is optional: the synthetic wave pack the voices play, flagged
+`BAD_DUMP` because it is generated rather than read from the physical chips, and
+the four Initial Data disk payloads for the custom-data flash.
+`tools/make-roms.sh` rebuilds those and the v16 set under its older
+names (`kn7000_program_even.rom`, ...) from the preserved sources, checks them
+against its md5 manifest, or restores them from the private `technics_roms` repo
 that holds the authoritative copies.
+
+The driver was written against v16. Five firmware addresses it uses move between
+versions (the two interrupt entry points, the voice-record array, the SD play-state
+bytes), so `kn7000_bios_info` in `kn7000.cpp` holds them per BIOS;
+`tools/kn7000_bios_addresses.py` produces that table.
 
 ## 5. Build and run
 
