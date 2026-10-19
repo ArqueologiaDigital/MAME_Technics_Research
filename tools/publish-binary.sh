@@ -194,6 +194,18 @@ else
   echo "warning: no $ROMSETS/kn7000 -- the kn7000 BIOS sets and dumped chips will be missing"
 fi
 
+# 2e) HD-SX6 hard disk unit for the KN6000/KN6500 (-exp hdsx6), carried from PR #16220 (v5).
+#     Its flash image is the decompressed payload of Key Soft Service's update disk, kept in
+#     technics_roms as hdsx3/hd-sx3_v1_1.bin (CRC 83b8a6f1, the bytes the PR's ROM_START names).
+#     The device looks for it as hdsx6/hd-sx6_v1_1_rev3.bin, so it is published under that name.
+if [ -f "$ROMREPO/roms/hdsx3/hd-sx3_v1_1.bin" ]; then
+  mkdir -p "$DEST/roms/hdsx6"
+  cmp -s "$ROMREPO/roms/hdsx3/hd-sx3_v1_1.bin" "$DEST/roms/hdsx6/hd-sx6_v1_1_rev3.bin" \
+    || cp -p "$ROMREPO/roms/hdsx3/hd-sx3_v1_1.bin" "$DEST/roms/hdsx6/hd-sx6_v1_1_rev3.bin"
+else
+  echo "warning: no $ROMREPO/roms/hdsx3/hd-sx3_v1_1.bin -- -exp hdsx6 will lack its firmware"
+fi
+
 # 3) Launcher: self-contained, resolves ROMs relative to this folder.
 cat > "$DEST/run.sh" <<'SH'
 #!/usr/bin/env bash
@@ -204,6 +216,10 @@ cat > "$DEST/run.sh" <<'SH'
 #   ./run.sh -window          # KN7000, windowed
 #   ./run.sh kn6000 -window   # KN6000, windowed (boots to its play screen)
 #   ./run.sh kn6500 -window   # KN6500, windowed
+#   ./run.sh kn6000 -window -exp hdsx6 -harddisk2 disk.chd
+#                             # KN6000 with the HD-SX6 hard disk unit, on a blank disk of at least
+#                             # 641 MiB (2 GB: chdman createhd -o disk.chd -chs 4161,16,63 -ss 512 -c none).
+#                             # harddisk1 is the SD card slot the KN6000 shares with the KN7000 here.
 #   ./run.sh kn2400 -window   # KN2400, windowed (boots to its play screen)
 #   ./run.sh kn2600 -window   # KN2600, windowed (same firmware as the KN2400)
 #   ./run.sh kn5000 -window   # KN5000, windowed (boots to its main play screen)

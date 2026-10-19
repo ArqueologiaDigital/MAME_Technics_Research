@@ -4,7 +4,7 @@
 # THE LAYOUT (three places, never fewer):
 #
 #   A  ~/compartilhado/mame           @ kn7000-base           the overlay's MAME base tree
-#   B  ~/compartilhado/mame-pr        @ technics-kn6000-expansion    upstream PR staging
+#   B  ~/compartilhado/mame-pr        @ technics-kn6000-expansion-v5 upstream PR staging (#16220)
 #   C  ~/compartilhado/kn7000_mame/src                         overlay-only files, copied
 #                                                              over the build tree by build.sh
 #
@@ -16,7 +16,7 @@
 # WHY THIS DOES NOT DIFF FILES BYTE-FOR-BYTE
 # -----------------------------------------
 # A and B sit on DIFFERENT upstream bases (kn7000-base is a long-lived fork point;
-# technics-kn6000-expansion is cut from current upstream/master). Shared upstream files therefore
+# technics-kn6000-expansion-v5 is cut from a newer upstream/master). Shared upstream files therefore
 # differ by a hundred-odd commits of history that has nothing to do with us. Demanding
 # byte-equality would report permanent drift -- a check that can never pass, which nobody runs.
 #
@@ -33,6 +33,7 @@ set -uo pipefail
 
 A="${MAME_BASE:-$HOME/compartilhado/mame}"
 B="${MAME_PR:-$HOME/compartilhado/mame-pr}"
+B_BRANCH="${MAME_PR_BRANCH:-technics-kn6000-expansion-v5}"
 C="${OVERLAY_SRC:-$HOME/compartilhado/kn7000_mame/src}"
 
 # Upstream files we patched:  <path>|<marker that proves our change is in>
@@ -40,13 +41,16 @@ PATCHED=(
 	"src/devices/machine/intelfsh.h|FUJITSU_29LV160B"
 	"src/devices/machine/intelfsh.cpp|fujitsu_29lv160b_device"
 	"scripts/src/bus.lua|TECHNICS_KN6000"
+	"src/devices/machine/atahle.h|IDE_SET_FEATURES_DISABLE_READ_LOOK_AHEAD"
+	"src/devices/machine/atahle.cpp|IDE_SET_FEATURES_DISABLE_READ_LOOK_AHEAD"
 )
 
 # Files we authored outright. "optional" = the overlay does not need it yet; its ABSENCE from A
-# is fine, but if both trees have it they must match.
+# is fine, but if both trees have it they must match. (Since 2026-10-19 kn7000-base carries all
+# four, PR #16220 v5, and the overlay's KN6000/KN6500 fit the HD-SX6 on CN105.)
 AUTHORED_OPTIONAL=(
-	src/devices/bus/technics/kn6000/hdsx3.cpp
-	src/devices/bus/technics/kn6000/hdsx3.h
+	src/devices/bus/technics/kn6000/hdsx6.cpp
+	src/devices/bus/technics/kn6000/hdsx6.h
 	src/devices/bus/technics/kn6000/kn6000_expansion.cpp
 	src/devices/bus/technics/kn6000/kn6000_expansion.h
 )
@@ -74,7 +78,7 @@ ylw() { printf '\033[33m%s\033[0m\n' "$*"; }
 
 check_branches() {
 	local bad=0
-	for pair in "$A:kn7000-base" "$B:technics-kn6000-expansion"; do
+	for pair in "$A:kn7000-base" "$B:$B_BRANCH"; do
 		local dir="${pair%%:*}" want="${pair##*:}" got
 		if [ ! -d "$dir" ]; then
 			red "MISSING worktree: $dir"

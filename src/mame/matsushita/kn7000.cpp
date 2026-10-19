@@ -113,6 +113,7 @@
 #include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
 #include "bus/midi/midiinport.h"
 #include "bus/midi/midioutport.h"
+#include "bus/technics/kn6000/kn6000_expansion.h"   // KN6000/KN6500 CN105 hard disk connector (HD-SX6)
 #include "kn7000_tonegen.h"       // tone-generator HLE (IC201 master + IC205 sub)
 #include "kn6000_tonegen.h"       // ... and its KN6000/KN6500 sibling (IC213, one chip, 64 voices)
 #include "kn7000_cpanel.h"        // control-panel HLE (buttons, LEDs, analog controls)
@@ -376,6 +377,7 @@ public:
 		, m_sdcard(*this, "sdcard")
 		, m_fdc(*this, "fdc")
 		, m_floppy(*this, "fdc:0")
+		, m_exp(*this, "exp")
 		, m_sdcover(*this, "SDCOVER")
 		, m_volmain(*this, "VOL_MAIN")
 		, m_volapcseq(*this, "VOL_APCSEQ")
@@ -432,6 +434,7 @@ private:
 	optional_device<spi_sdcard_device> m_sdcard;   // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 	optional_device<n82077aa_device> m_fdc;        // IC103 floppy disk controller (C1DB00000607, N82077AA/PC-AT-compatible)
 	optional_device<floppy_connector> m_floppy;    // the 3.5" floppy drive
+	optional_device<kn6000_expansion_connector> m_exp;   // KN6000/KN6500 CN105 hard disk connector (#16220)
 	uint8_t fdc_r(offs_t off);                     // FDC (IC103) PC/AT registers at 0x98020000 (schematic-confirmed)
 	void    fdc_w(offs_t off, uint8_t data);
 	uint8_t fdc_dma_r(offs_t off);                 // FDC.DACK byte slot at 0x98010000 (the DMA channel's peripheral end)
@@ -1904,6 +1907,12 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tg_reg));
+
+	// KN6000/KN6500: the unit on CN105 (the HD-SX6, or nothing) takes over its two chip-select
+	// windows, ISOROM at 0x97800000 and HDDCS at 0x98060000, from the vram share and io_r/io_w
+	// mapped there. Carried from PR #16220 (v5) before it merges.
+	if (m_exp)
+		m_exp->program_map(m_maincpu->space(AS_PROGRAM));
 }
 
 void kn7000_state::machine_reset()
@@ -2341,6 +2350,10 @@ void kn7000_state::kn6000(machine_config &config)
 	m_cpanel->set_dial_port(m_dial);
 	m_cpanel->set_volapcseq_port(m_volapcseq);
 	m_cpanel->set_tempoknob_port(m_tempoknob);
+
+	// CN105, the 70-pin "TO HDD" connector, for the HD-SX6 hard disk unit (-exp hdsx6).
+	// Empty by default; machine_start installs the fitted unit's maps.
+	KN6000_EXPANSION(config, m_exp, kn6000_expansion_intf, nullptr);
 
 	// ...and its OWN artwork.  Installing the matrix alone was not enough: the default layout was
 	// still layout_kn7000, so every clickable element on screen sat at a KN7000 position, carried a
