@@ -23,6 +23,8 @@ copying the files in and registering them in the build (see
   KN5000's `hdae5000` expansion board. (The `spi_sdcard` copy was retired at the 2026-10-18 resync:
   its SD fixes are upstream.)
 - `src/mame/layout/` — internal layouts for kn5000/kn6000/kn7000 and wsa1r.
+- `OVERLAY-GAPS.md` — research and branch work the overlay does not have yet: a living
+  list, updated in the same commit as any change that ports, finds or disproves an item.
 - `notes/` — investigation write-ups and findings; the bulk of the research
   record. Start here for the current state of any given topic.
 - `tools/` — capture rigs, Lua probes, oracles and disassembly helpers.
