@@ -185,6 +185,16 @@ Branch B uses 60. Same trade-off as the ALUSAT item in G4.
 The overlay maps 16 MB of plain RAM there with no NVRAM (`kn7000.cpp:884-885`), so panel memories are
 lost on every restart. Small, and the most noticeable item here.
 
+- The firmware's `BackupSramTest` (0x484A0055) walks exactly 256 KB from 0x44000000, and the region carries a
+  one's-complement checksum (`SumU32Words`, 0x484D78A6) (`technics-roms-disasm/kn7000/kn7000_manual.sym`).
+  Whether the chip repeats across the rest of the 16 MB window has not been measured on the unit; a read-only
+  dumper pass over 0x44000000 would answer it and back up Felipe's settings at the same time (2026-10-20).
+- **Another World depends on today's wrong model.** Both of its KN7000 builds (`kn5000-anotherworld/kn7000`,
+  the SP7001 ride-along and AW.CNV) keep their VM state and page buffers at 0x44050000-0x4413FFFF
+  (`src/vm.inc:43-73`, `src/platform.inc:51-60`, which calls the window "scratch the firmware does not use").
+  On the real unit that is IC23, so the game would overwrite the panel memories or crash. Modelling IC23
+  properly here will make the game fail in the emulator, which is what it would do on the instrument.
+
 ### G7. 0x90000000-0x97FFFFFF is the uncached view of 0x50000000-0x57FFFFFF — open
 
 The overlay maps it as one 128 MB "vram" share that nothing reads (`kn7000.cpp:850`); the work-RAM alias
@@ -389,7 +399,8 @@ From the sweep, not re-checked:
 
 ## History
 
-| date       | change                                                                     |
-|------------|----------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                   |
+| date       | change                                                                      |
+|------------|-----------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request  |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                    |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window |
