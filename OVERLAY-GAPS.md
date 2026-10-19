@@ -18,8 +18,8 @@ unless it says otherwise. File and line references are as of `5e0a58a`, and move
 The five PRs carried on 2026-10-19 (#16517, #16520, #16523, #16524 and the floppy-list rebuild) are not
 listed: they are in (`notes/pr-port-2026-10-19/`).
 
-States: `open`, `in progress`, `done` (with the commit), `decision` (needs Felipe's call before any
-work), `blocked`, `wontfix` (with the reason).
+States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `done` (with the commit),
+`decision` (needs Felipe's call before any work), `blocked`, `wontfix` (with the reason).
 
 | #   | item                                                   | area           | size         | state    |
 |-----|--------------------------------------------------------|----------------|--------------|----------|
@@ -35,12 +35,14 @@ work), `blocked`, `wontfix` (with the reason).
 | G10 | CS5 mirrors and open-bus reads                         | KN7000 driver  | small        | open     |
 | G11 | IC21 custom data probably halfword-swapped             | KN7000 driver  | small        | open     |
 | G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload        | ROM records    | small        | open     |
-| G13 | Voices on the real wave ROMs                           | tone generator | large        | blocked  |
+| G13 | Voices on the real wave ROMs                           | tone generator | large        | planned  |
 | G14 | SD SPI with the card deselected reads 0x00             | KN7000 driver  | small        | open     |
 | G15 | Smaller KN7000 items                                   | KN7000 driver  | small        | open     |
 | G16 | KN5000 branch work                                     | KN5000         | mixed        | open     |
 | G17 | KN5000 research findings                               | KN5000         | mixed        | open     |
 | G18 | Notes and comments that newer findings contradict      | docs           | small        | open     |
+| G19 | Effects DSP bypass switch (noisy sound)                | KN7000 driver  | small        | planned  |
+| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE     | medium-large | planned  |
 
 ## Work already written on branches, not in the overlay
 
@@ -266,7 +268,11 @@ The remainder of B.6 in the UNSUBMITTED inventory: upstream has a `NO_DUMP` reco
 IC414 (`c3fbkd000162`, unreachable from the main CPU) and a `custom_data` region for the KN6000/KN6500
 (`01ctmini.ic18`, BAD_DUMP, CRC f108e4c7). The overlay has neither. Small.
 
-### G13. Voices on the real wave ROMs — blocked
+### G13. Voices on the real wave ROMs — planned (blocked on decoding the sample selection)
+
+Felipe asked for this on 2026-10-20 (KN7000 only; the other machines keep a placeholder). Sequence and method:
+`notes/PLAN-2026-10-20-sound-and-hardware-probes.md`, step 3 (offline decoding first, real-unit probes only if
+needed).
 
 The format is settled: 16-bit samples, low byte first, Y and X interleaved as even and odd samples
 (`technics_roms/roms/kn7000/real_dump_v1.3_b893/wave-analysis/README.md:15-28`). How a voice selects its
@@ -307,6 +313,20 @@ From the sweep, not re-checked:
 - Also: the DSP1 latch keeps only 8 bits; sub-CPU port writes are not wired; the 0x100004/0x110002 holes;
   no way to select region 4; the data-wheel clamp should be ±16.
 - `tmp94c241.h:126-131` still describes the /INT0 re-assertion the overlay removed.
+
+### G19. Effects DSP bypass switch — planned
+
+The overlay's KN7000 sound is very noisy, and the DSP is the prime suspect. Felipe wants it off for now without
+losing the code: a machine-configuration switch (Bypassed by default, Emulated for DSP research) that keeps
+the SHARC halted, so the bridge passes the tone generator through. The gate keeps a DSP-path oracle with the
+switch on. Plan step 1.
+
+### G20. Probe the DSP (and the tone generators) on the real unit — planned
+
+The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
+registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
+decoding leaves open. Emulator first on `-bios v13`, same probe files from MAME and the unit, compared byte for
+byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13.
 
 ## Notes and comments that newer findings contradict
 
@@ -399,8 +419,9 @@ From the sweep, not re-checked:
 
 ## History
 
-| date       | change                                                                      |
-|------------|-----------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request  |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                    |
-| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window |
+| date       | change                                                                               |
+|------------|--------------------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request           |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                             |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window          |
+| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md` |
