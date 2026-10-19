@@ -274,6 +274,8 @@ private:
 	void tm6_rearm(bool restart_phase);
 	TIMER_CALLBACK_MEMBER(tm6_tick);
 
+	static constexpr unsigned TM5_PRESCALE = 8;  // IOCLK / 8 = 2 MHz on the KN7000 (see tm5_rearm)
+
 	uint8_t   m_tm5_mode;        // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
 	uint16_t  m_tm5_base;        // 16-bit reload (underflow period)
 	emu_timer *m_tm5_timer;

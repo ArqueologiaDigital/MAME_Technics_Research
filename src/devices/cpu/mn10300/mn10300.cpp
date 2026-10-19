@@ -27,6 +27,10 @@
 #include "mn103dasm.h"           // reuse the existing MN10300 disassembler
 #include "mn10300_insn_length.h" // validated length table (shared with tests/)
 
+#include <algorithm>
+#include <bit>
+#include <limits>
+
 
 // PSW flag bits. The low nibble (Z,N,C,V) is definite and load-bearing; IE/IM
 // are confirmed from the firmware (every ICR update brackets `and 0xf7ff,psw` /
@@ -148,6 +152,7 @@ void mn10300_device::device_start()
 	save_item(NAME(m_possible_irq));
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_irq_vector));
+	save_item(NAME(m_irq_level));   // check_irq reads it every instruction (from upstream)
 	save_item(NAME(m_sio_config));
 	save_item(NAME(m_sio_control));
 	save_item(NAME(m_sio_rx_fifo));
@@ -216,6 +221,9 @@ void mn10300_device::device_reset()
 	// HLE state (config/control cleared, RX rings emptied by head=tail).
 	for (unsigned ch = 0; ch < NUM_SIO; ch++)
 	{
+		// reset turns the receiver off: tell the peer (from upstream)
+		if (BIT(m_sio_config[ch], 14))
+			m_sio_rx_enable_cb[ch](0);
 		m_sio_config[ch] = 0;
 		m_sio_control[ch] = 0;
 		m_sio_rx_head[ch] = m_sio_rx_tail[ch] = 0;
@@ -535,19 +543,21 @@ uint16_t mn10300_device::tm45_base_r(offs_t offset)
 
 void mn10300_device::tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
+	// a byte write changes only its own half of the reload (from upstream)
 	if (offset)
-		tm5_base_w(data);
+		tm5_base_w((m_tm5_base & ~mem_mask) | (data & mem_mask));
 }
 
 uint16_t mn10300_device::tm45_count_r(offs_t offset)
 {
-	if (!offset || !(m_tm5_mode & 0x80))
+	if (!offset || !(m_tm5_mode & 0x80) || m_tm5_timer->remaining().is_never())
 		return 0;
-	// live down-count derived from the emu_timer phase
-	const attotime period = m_tm5_timer->period();
-	if (period.is_never() || period.is_zero())
-		return 0;
-	return uint16_t(uint64_t(m_tm5_base + 1) * m_tm5_timer->remaining().as_attoseconds() / period.as_attoseconds());
+	// live down-count from the timer's remaining IOCLK ticks: base just after a
+	// reload, 0 just before the underflow. Counting in ticks (from upstream) keeps
+	// the product in range; the old (base + 1) * remaining-attoseconds overflowed
+	// 64 bits for any reload above about 6074 and read back out of order.
+	const uint64_t ticks = m_tm5_timer->remaining().as_ticks(clock() / 2);
+	return uint16_t(ticks ? ((ticks - 1) / TM5_PRESCALE) : 0);
 }
 
 void mn10300_device::tm5_mode_w(uint8_t data)
@@ -578,8 +588,7 @@ void mn10300_device::tm5_rearm(bool restart_phase)
 	// = 31250 => 16 MHz). PRESCALE: the KN7000 tick ISR counts 96 PPQN, so at
 	// the boot default of q=120 the rate must be 192 Hz; the observed reload
 	// confirms the divider (logged above).
-	static constexpr unsigned PRESCALE = 8;
-	const attotime period = attotime::from_ticks(uint64_t(m_tm5_base + 1) * PRESCALE, clock() / 2);
+	const attotime period = attotime::from_ticks(uint64_t(m_tm5_base + 1) * TM5_PRESCALE, clock() / 2);
 	if (restart_phase)
 		m_tm5_timer->adjust(period, 0, period);
 	else
@@ -863,6 +872,12 @@ void mn10300_device::sio_tx_byte(int ch, uint8_t data)
 // paths see RxRDY regardless).
 void mn10300_device::sio_rx_push(int ch, uint8_t data)
 {
+	// Config bit 14 enables the receiver: a byte arriving while it is off is lost,
+	// not latched as a stale request (from upstream, review round 3). The firmware
+	// sets it on both MIDI channels (research-scratch/kn7000-pr16250-fixes/
+	// probe_sio_rx_enable.lua) and on ch0 before each panel reply (sio_w).
+	if (!BIT(m_sio_config[ch], 14))
+		return;
 	const uint8_t next = (m_sio_rx_head[ch] + 1) % std::size(m_sio_rx_fifo[ch]);
 	if (next == m_sio_rx_tail[ch])
 		return;                  // FIFO full -- drop (overrun)
@@ -985,6 +1000,19 @@ void mn10300_device::execute_run()
 			m_psw = (m_psw & ~(FLAG_NF | FLAG_CF | FLAG_VF)) | FLAG_ZF;
 			break;
 
+		// ---- mov/movbu/movhu dM,(abs16) (M = bits[3:2], type = bits[1:0]) ----
+		// (from upstream; these were skipped as no-ops, so the stores never happened)
+		case 0x01: case 0x05: case 0x09: case 0x0D:
+		case 0x02: case 0x06: case 0x0A: case 0x0E:
+		case 0x03: case 0x07: case 0x0B: case 0x0F:
+			typed_load_store(op & 3, false, src, read_arg16(m_pc), true); m_pc += 2; break;
+
+		// ---- mov/movbu/movhu (abs16),dD (type = bits[3:2]: 0 mov, 1 movbu, 2 movhu) ----
+		case 0x30: case 0x31: case 0x32: case 0x33:
+		case 0x34: case 0x35: case 0x36: case 0x37:
+		case 0x38: case 0x39: case 0x3A: case 0x3B:
+			typed_load_store(src ? (src + 1) : 0, false, dst, read_arg16(m_pc), false); m_pc += 2; break;
+
 		// ---- extb/extbu/exth/exthu dD ----
 		case 0x10: case 0x11: case 0x12: case 0x13: m_d[dst] = (int32_t)(int8_t)m_d[dst]; break;
 		case 0x14: case 0x15: case 0x16: case 0x17: m_d[dst] &= 0x000000FF; break;
@@ -1103,23 +1131,22 @@ void mn10300_device::execute_run()
 		case 0xCF: store_regs(read_arg8(m_pc)); m_pc += 1; break;
 
 		// ---- loop cache: setlb / Lcc (MN10300 hardware loop) ----
-		// setlb records the loop top (LAR = the instruction after setlb) and
-		// caches its first word (LIR). Lcc, at the loop bottom, branches back to
-		// LAR while its condition holds. We re-fetch from LAR rather than model
-		// the instruction-cache micro-op, which is functionally identical since
-		// the loop body in memory does not change.
+		// setlb caches the loop's first four bytes in LIR and points LAR past
+		// them (the instruction after setlb + 4, as the GDB simulator and upstream
+		// do). Lcc, at the loop bottom, branches back to the loop top, LAR - 4,
+		// while its condition holds. We re-fetch from there rather than model the
+		// instruction-cache micro-op, which is functionally identical since the
+		// loop body in memory does not change.
 		case 0xDB: // setlb
-			m_lar = m_pc;
 			m_lir = read_arg32(m_pc);
+			m_lar = start_pc + 5;
 			break;
 		case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4:
 		case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9: // Lcc
-			if (test_cond(op & 0x0F)) m_pc = m_lar;
+			if (test_cond(op & 0x0F)) m_pc = m_lar - 4;
 			break;
-		// lra: unconditional branch back to the loop top (the setlb hardware loop).
-		// The sim computes PC = LAR-4; this core stores the loop top directly in
-		// m_lar (= that value), so a plain jump is correct -- same as Lcc taken.
-		case 0xDA: m_pc = m_lar; break;
+		// lra: unconditional branch back to the loop top (the setlb hardware loop)
+		case 0xDA: m_pc = m_lar - 4; break;
 
 		// ---- jmp disp32 (reset vector uses this) ----
 		case 0xDC:
@@ -1185,8 +1212,8 @@ void mn10300_device::execute_run()
 		case 0xFC: execute_fc(); break;   // imm32 / disp32 forms (mov imm32,reg etc.)
 		case 0xFE: execute_fe(); break;   // bit ops on absolute address
 
-		// TODO(MN10300): 0xF9,0xFB,0xFD (udf imm) still unimplemented --
-		// these fall through to the length-correct skip below until needed.
+		// 0xF9,0xFB,0xFD (udf imm): only mulq and mulqu are implemented; the rest
+		// fall through to the length-correct skip below until needed.
 		default:
 			// Not implemented yet. Advance PC by the (validated) real length so
 			// the fetch stream stays aligned and the machine remains steppable
@@ -1199,8 +1226,9 @@ void mn10300_device::execute_run()
 				// already implements (low 32 -> Dn, high 32 -> MDRQ). Verified by RE of
 				// the firmware's fixed-point coefficient-multiply usage
 				// (e.g. `udf00 0x59ba,d1 ; add 0x2000,d1 ; asr 14,d1`, coeffs signed).
-				// See notes/mn10300-udf-instructions-unimplemented.md.
-				if ((op == 0xF9 || op == 0xFB || op == 0xFD) && (op2 >> 4) == 0 && !BIT(op2, 2))
+				// See notes/mn10300-udf-instructions-unimplemented.md. Only op2 0x00-0x03
+				// is udf00: 0x08-0x0B is udf20 (the GDB simulator and upstream agree).
+				if ((op == 0xF9 || op == 0xFB || op == 0xFD) && op2 <= 0x03)
 				{
 					const int dn = op2 & 3;
 					int32_t s;
@@ -1210,8 +1238,22 @@ void mn10300_device::execute_run()
 					const int64_t t = (int64_t)(int32_t)m_d[dn] * (int64_t)s;
 					m_d[dn] = uint32_t(t);
 					m_mdrq  = uint32_t(uint64_t(t) >> 32);
-					set_nz32(m_d[dn]);
-					m_psw &= ~(FLAG_CF | FLAG_VF);
+					set_logic_flags(m_d[dn]);
+					m_pc = start_pc + mn10300_insn_length(op, op2);
+				}
+				// udfu01 imm (op2 0x14-0x17): mulqu, unsigned multiply by the
+				// sign-extended immediate, high 32 -> MDRQ (GDB simulator; from upstream)
+				else if ((op == 0xF9 || op == 0xFB || op == 0xFD) && (op2 & 0xFC) == 0x14)
+				{
+					const int dn = op2 & 3;
+					uint32_t u;
+					if (op == 0xF9)      u = uint32_t((int32_t)(int8_t) read_arg8 (start_pc + 2));
+					else if (op == 0xFB) u = uint32_t((int32_t)(int16_t)read_arg16(start_pc + 2));
+					else                 u = read_arg32(start_pc + 2);
+					const uint64_t t = (uint64_t)m_d[dn] * u;
+					m_d[dn] = uint32_t(t);
+					m_mdrq  = uint32_t(t >> 32);
+					set_logic_flags(m_d[dn]);
 					m_pc = start_pc + mn10300_insn_length(op, op2);
 				}
 				else
@@ -1302,7 +1344,7 @@ void mn10300_device::execute_fc()
 		case 0xE0: m_d[dst] &= imm; set_logic_flags(m_d[dst]); break; // and
 		case 0xE4: m_d[dst] |= imm; set_logic_flags(m_d[dst]); break; // or
 		case 0xE8: m_d[dst] ^= imm; set_logic_flags(m_d[dst]); break; // xor
-		case 0xEC: m_psw = (m_psw & ~FLAG_ZF) | ((m_d[dst] & imm) ? 0 : FLAG_ZF); break; // btst imm32,dD
+		case 0xEC: set_logic_flags(m_d[dst] & imm); break;            // btst imm32,dD
 		case 0xFC:
 			if (op2 == 0xFE)      { m_sp += imm; }               // add imm32,sp (SP arith, no flags)
 			else if (op2 == 0xFF) { write_mem32(m_sp, start_pc + 6); m_mdr = start_pc + 6; m_pc = start_pc + imm; return; } // calls (disp32): PC->[SP], SP unchanged
@@ -1351,19 +1393,29 @@ void mn10300_device::execute_f6()
 	case 0x1: { uint64_t t = (uint64_t)m_d[dst] * (uint64_t)m_d[src];         // mulqu
 	            m_d[dst] = uint32_t(t); m_mdrq = uint32_t(t >> 32);
 	            set_nz32(m_d[dst]); m_psw &= ~(FLAG_CF | FLAG_VF); } break;
+	// sat16/sat24: Z and N from the 16-/24-bit result, C and V unchanged (GDB simulator; from upstream)
 	case 0x4: { int32_t v = (int32_t)m_d[src];                               // sat16
-	            v = std::clamp(v, -0x8000, 0x7fff); m_d[dst] = uint32_t(v); } break;
+	            v = std::clamp(v, -0x8000, 0x7fff); m_d[dst] = uint32_t(v);
+	            m_psw = (m_psw & ~(FLAG_ZF | FLAG_NF)) | (v ? 0 : FLAG_ZF) | (BIT(m_d[dst], 15) ? FLAG_NF : 0); } break;
 	case 0x5: { int32_t v = (int32_t)m_d[src];                               // sat24
-	            v = std::clamp(v, -0x800000, 0x7fffff); m_d[dst] = uint32_t(v); } break;
+	            v = std::clamp(v, -0x800000, 0x7fffff); m_d[dst] = uint32_t(v);
+	            m_psw = (m_psw & ~(FLAG_ZF | FLAG_NF)) | (v ? 0 : FLAG_ZF) | (BIT(m_d[dst], 23) ? FLAG_NF : 0); } break;
 	case 0xC: m_d[dst] = m_mcrh; break;                                      // getchx MCRH -> Dn
 	case 0xD: m_d[dst] = m_mcrl; break;                                      // getclx MCRL -> Dn
-	case 0xF: m_d[dst] = m_mdrq; break;                                     // getx MDRQ -> Dn (no flag change: the ISR context-save re-reads PSW after this, so it must not touch flags)
-	case 0x7: {  // udf07 Dm,Dn -- BSCH (bit search): Dn = position (0..15) of the most-significant
-		// set bit in Dm's low 16 bits (0 if none). RE-CONFIRMED: this is the sole unimplemented
-		// op in the software JPEG decoder (Huffman leading-run decode @0x4840FBB9); with it the
-		// boot splash decodes pixel-clean (music notes / KN7000 logo) instead of noise.
-		const uint32_t v = m_d[src] & 0xffff;
-		m_d[dst] = v ? uint32_t(31 - __builtin_clz(v)) : 0u;
+	// getx MDRQ -> Dn: Z and N from MDRQ, C and V cleared, as the GDB simulator
+	// (mn10300.igen "getx") and upstream. An older note here said the ISR context
+	// save needs the flags untouched; the hardware pushes PSW before the handler
+	// runs and rti pops it, and upstream's review boots every set with the flags set.
+	case 0xF: m_d[dst] = m_mdrq; set_logic_flags(m_d[dst]); break;
+	case 0x7: {  // udf07 Dm,Dn -- bsch (bit search), the AM33 form (am33.igen "bsch"; from
+		// upstream): Dn = the highest set bit of Dm below bit Dn (searching from bit 31 when Dn
+		// is 0), or 0 if none; C if one was found. The software JPEG decoder (Huffman leading-
+		// run decode @0x4840FBB9) is its only user, and its calls give the same results as the
+		// 16-bit search used here before; the boot splash decodes pixel-clean with either.
+		const unsigned start = m_d[dst] & 0x1f;
+		const uint32_t v = start ? (m_d[src] & util::make_bitmask<uint32_t>(start)) : m_d[src];
+		m_d[dst] = v ? uint32_t(31 - std::countl_zero(v)) : 0u;
+		m_psw = (m_psw & ~FLAG_CF) | (v ? FLAG_CF : 0);
 	} break;
 	default:  logerror("MN10300: unimplemented F6 %02X @ %08X\n", op2, start_pc); break;
 	}
@@ -1403,7 +1455,7 @@ void mn10300_device::execute_f8()
 			const int lop = (op2 >> 2) & 3;          // 0=and 1=or 3=btst
 			if (lop == 0)      { m_d[d] &= b; set_logic_flags(m_d[d]); }
 			else if (lop == 1) { m_d[d] |= b; set_logic_flags(m_d[d]); }
-			else               { m_psw = (m_psw & ~FLAG_ZF) | ((m_d[d] & b) ? 0 : FLAG_ZF); } // btst
+			else               { set_logic_flags(m_d[d] & b); }      // btst: Z, N; C, V cleared
 			break;
 		}
 		case 0xE8:                                   // ext-branch bvc/bvs/bnc/bns
@@ -1458,8 +1510,9 @@ void mn10300_device::execute_f0()
 		case 0x1: write_mem32(m_a[am], m_a[r]); break;                 // mov aS,(aM)
 		case 0x5: write_mem8 (m_a[am], m_d[r]); break;                 // movbu dS,(aM)
 		case 0x7: write_mem16(m_a[am], m_d[r]); break;                 // movhu dS,(aM)
-		case 0x8: { uint8_t v = read_mem8(m_a[am]); m_psw = (m_psw & ~FLAG_ZF) | ((v & m_d[r]) ? 0 : FLAG_ZF); write_mem8(m_a[am], v | m_d[r]); break; } // bset
-		case 0x9: { uint8_t v = read_mem8(m_a[am]); m_psw = (m_psw & ~FLAG_ZF) | ((v & m_d[r]) ? 0 : FLAG_ZF); write_mem8(m_a[am], v & ~m_d[r]); break; } // bclr
+		// bset/bclr: Z from the old bits, N clear (a byte), C and V cleared (GDB simulator; from upstream)
+		case 0x8: { uint8_t v = read_mem8(m_a[am]); set_logic_flags(v & m_d[r]); write_mem8(m_a[am], v | m_d[r]); break; } // bset
+		case 0x9: { uint8_t v = read_mem8(m_a[am]); set_logic_flags(v & m_d[r]); write_mem8(m_a[am], v & ~m_d[r]); break; } // bclr
 		case 0xF:
 			// control-flow, selected by the whole op2 value
 			if (op2 <= 0xF3)      { write_mem32(m_sp, start_pc + 2); m_mdr = start_pc + 2; m_pc = m_a[am]; return; } // calls (aM): PC->[SP], SP unchanged
@@ -1492,11 +1545,13 @@ void mn10300_device::execute_f1()
 		case 0x1: m_d[dst] = do_sub(m_d[dst], m_a[src], 0); break; // sub aS,dD
 		case 0x2: m_a[dst] = do_sub(m_a[dst], m_d[src], 0); break; // sub dS,aD
 		case 0x3: m_a[dst] = do_sub(m_a[dst], m_a[src], 0); break; // sub aS,aD
-		case 0x4: m_d[dst] = do_add(m_d[dst], m_d[src], C); break; // addc dS,dD
+		// addc/subc: Z stays set only if it was already set, so a multi-word
+		// result tests as zero only when every word is (GDB simulator; from upstream)
+		case 0x4: { const uint16_t z = m_psw & FLAG_ZF; m_d[dst] = do_add(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // addc dS,dD
 		case 0x5: m_d[dst] = do_add(m_d[dst], m_a[src], 0); break; // add aS,dD
 		case 0x6: m_a[dst] = do_add(m_a[dst], m_d[src], 0); break; // add dS,aD
 		case 0x7: m_a[dst] = do_add(m_a[dst], m_a[src], 0); break; // add aS,aD
-		case 0x8: m_d[dst] = do_sub(m_d[dst], m_d[src], C); break; // subc dS,dD
+		case 0x8: { const uint16_t z = m_psw & FLAG_ZF; m_d[dst] = do_sub(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // subc dS,dD
 		case 0x9: do_sub(m_d[dst], m_a[src], 0); break;            // cmp aS,dD
 		case 0xA: do_sub(m_a[dst], m_d[src], 0); break;            // cmp dS,aD
 		case 0xD: m_d[dst] = m_a[src]; break;                      // mov aS,dD
@@ -1523,22 +1578,53 @@ void mn10300_device::execute_f2()
 			if (op2 < 0x34) { m_d[dst] = ~m_d[dst]; set_logic_flags(m_d[dst]); } // not dD
 			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
 			break;
-		case 0x4: { int64_t p = (int64_t)(int32_t)m_d[src] * (int32_t)m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_nz32(m_d[dst]); break; } // mul
-		case 0x5: { uint64_t p = (uint64_t)m_d[src] * m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_nz32(m_d[dst]); break; } // mulu
-		case 0x6: // div (signed): (MDR:dD) / dS
-			if (m_d[src]) { int64_t num = ((int64_t)m_mdr << 32) | m_d[dst]; int32_t dv = (int32_t)m_d[src]; m_d[dst] = (uint32_t)(num / dv); m_mdr = (uint32_t)(num % dv); set_nz32(m_d[dst]); }
-			else logerror("MN10300: div by zero @ %08X\n", start_pc); // TODO: real div-zero trap
-			break;
-		case 0x7: // divu (unsigned)
-			if (m_d[src]) { uint64_t num = ((uint64_t)m_mdr << 32) | m_d[dst]; m_d[dst] = (uint32_t)(num / m_d[src]); m_mdr = (uint32_t)(num % m_d[src]); set_nz32(m_d[dst]); }
-			else logerror("MN10300: divu by zero @ %08X\n", start_pc);
-			break;
-		case 0x8: // rol / ror dD (rotate through carry)
+		// mul/mulu: Z, N; C and V cleared (GDB simulator; from upstream)
+		case 0x4: { int64_t p = (int64_t)(int32_t)m_d[src] * (int32_t)m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_logic_flags(m_d[dst]); break; } // mul
+		case 0x5: { uint64_t p = (uint64_t)m_d[src] * m_d[dst]; m_d[dst] = (uint32_t)p; m_mdr = (uint32_t)(p >> 32); set_logic_flags(m_d[dst]); break; } // mulu
+		// div/divu: (MDR:dD) / dS. A zero divisor or a quotient that does not fit in
+		// 32 bits sets V and leaves dD and MDR alone; otherwise Z, N and C, V cleared
+		// (GDB simulator; from upstream). INT64_MIN / -1 is decided before the host
+		// divides, because it traps (SIGFPE) on x86.
+		case 0x6: // div (signed)
 		{
-			uint32_t c = (m_psw & FLAG_CF) ? 1 : 0;
-			if (op2 < 0x84) { uint32_t nc = m_d[dst] >> 31; m_d[dst] = (m_d[dst] << 1) | c; m_psw = (m_psw & ~FLAG_CF) | (nc ? FLAG_CF : 0); } // rol
-			else            { uint32_t nc = m_d[dst] & 1;   m_d[dst] = (m_d[dst] >> 1) | (c << 31); m_psw = (m_psw & ~FLAG_CF) | (nc ? FLAG_CF : 0); } // ror
-			set_nz32(m_d[dst]);
+			const int64_t num = int64_t((uint64_t(m_mdr) << 32) | m_d[dst]);
+			const int32_t dv = int32_t(m_d[src]);
+			const bool no_result = !dv || (num == std::numeric_limits<int64_t>::min() && dv == -1);
+			const int64_t q = no_result ? 0 : num / dv;
+			if (!no_result && q >= std::numeric_limits<int32_t>::min() && q <= std::numeric_limits<int32_t>::max())
+			{
+				m_d[dst] = uint32_t(q);
+				m_mdr = uint32_t(num % dv);
+				set_logic_flags(m_d[dst]);
+			}
+			else
+				m_psw |= FLAG_VF;
+			break;
+		}
+		case 0x7: // divu (unsigned)
+		{
+			const uint64_t num = (uint64_t(m_mdr) << 32) | m_d[dst];
+			const uint32_t dv = m_d[src];
+			if (dv && (num / dv) <= 0xffffffffu)
+			{
+				m_d[dst] = uint32_t(num / dv);
+				m_mdr = uint32_t(num % dv);
+				set_logic_flags(m_d[dst]);
+			}
+			else
+				m_psw |= FLAG_VF;
+			break;
+		}
+		case 0x8: // rol / ror dD (rotate through carry): Z, N, C = the bit out, V cleared;
+		          // op2 0x88 and up is illegal (GDB simulator; from upstream)
+		{
+			if (op2 >= 0x88) { logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc); break; }
+			const uint32_t c = (m_psw & FLAG_CF) ? 1 : 0;
+			const bool left = op2 < 0x84;
+			const bool out = left ? BIT(m_d[dst], 31) : BIT(m_d[dst], 0);
+			m_d[dst] = left ? ((m_d[dst] << 1) | c) : ((m_d[dst] >> 1) | (c << 31));
+			set_logic_flags(m_d[dst]);
+			if (out) m_psw |= FLAG_CF;
 			break;
 		}
 		case 0x9: case 0xA: case 0xB: // asl / lsr / asr dS,dD (shift dD by dS)
@@ -1645,7 +1731,24 @@ void mn10300_device::execute_fa()
 			case 0xE0: m_d[dst] &= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // and imm16,dD (zx)
 			case 0xE4: m_d[dst] |= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // or
 			case 0xE8: m_d[dst] ^= (uint32_t)imm16; set_logic_flags(m_d[dst]); break;  // xor
-			case 0xEC: m_psw = (m_psw & ~FLAG_ZF) | ((m_d[dst] & (uint32_t)imm16) ? 0 : FLAG_ZF); break; // btst imm16,dD (zx)
+			case 0xEC: set_logic_flags(m_d[dst] & (uint32_t)imm16); break;            // btst imm16,dD (zx)
+			// mov aM,(abs16): op2 = 1000_MM00 (from upstream; was skipped as a no-op)
+			case 0x80: case 0x84: case 0x88: case 0x8C:
+				if (op2 & 3) logerror("MN10300: illegal FA %02X @ %08X\n", op2, start_pc);
+				else write_mem32(imm16, m_a[(op2 >> 2) & 3]);
+				break;
+			// bset/bclr/btst imm8,(d8,aN): the low operand byte is d8, the high one the
+			// mask; flags as the bit ops on (aN) (from upstream; was skipped as a no-op)
+			case 0xF0: case 0xF4: case 0xF8:
+			{
+				const uint32_t ea = m_a[dst] + (int32_t)(int8_t)(imm16 & 0xff);
+				const uint8_t mask = imm16 >> 8;
+				const uint8_t v = read_mem8(ea);
+				set_logic_flags(v & mask);
+				if ((op2 & 0xFC) == 0xF0)      write_mem8(ea, v | mask);
+				else if ((op2 & 0xFC) == 0xF4) write_mem8(ea, v & ~mask);
+				break;
+			}
 			case 0xB0: m_a[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),aD
 			case 0xB4: m_d[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),dD
 			case 0xB8: m_d[dst] = read_mem8 (m_sp + imm16); break;                     // movbu (disp16,sp),dD
@@ -1693,7 +1796,7 @@ void mn10300_device::execute_fe()
 	else { logerror("MN10300: illegal FE %02X @ %08X\n", op2, start_pc); m_pc = start_pc + 2; return; }
 
 	const uint8_t v = read_mem8(addr);
-	m_psw = (m_psw & ~FLAG_ZF) | ((v & imm8) ? 0 : FLAG_ZF);
+	set_logic_flags(v & imm8);                        // Z; N, C, V cleared (from upstream)
 	const int kind = op2 & 0x0F;
 	if (kind == 0x00)      write_mem8(addr, v | imm8);    // bset
 	else if (kind == 0x01) write_mem8(addr, v & ~imm8);   // bclr

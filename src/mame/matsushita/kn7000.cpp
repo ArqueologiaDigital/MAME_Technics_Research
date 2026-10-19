@@ -2181,7 +2181,7 @@ void kn7000_state::kn7000(machine_config &config)
 	m_maincpu->sio_rx_rdy_cb<0>().set([this](int state) { intc_assert(0x10); });
 	// Config bit14 written set (group-0x1A ISR pass 2): the panel may now send
 	// its queued reply.
-	m_maincpu->sio_rx_enable_cb<0>().set([this](int state) { m_cpanel->rx_enable(); });
+	m_maincpu->sio_rx_enable_cb<0>().set([this](int state) { if (state) m_cpanel->rx_enable(); });
 	// ch1/ch2 = MIDI 1 / MIDI 2: TX bytes serialize out through the UART
 	// bridges below; each received byte raises the channel's RX group
 	// (MIDI-1 0x12, MIDI-2 0x14 -- see notes/panel-serial-protocol.md #6).
