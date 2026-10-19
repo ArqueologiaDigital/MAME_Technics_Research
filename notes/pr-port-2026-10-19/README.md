@@ -73,18 +73,19 @@ reads are in its header. `wave_port_check.lua` is a copy of KN7000
 Results on 2026-10-19, overlay binary built from this commit's source, ROM path = the published
 folder's `roms/kn7000` plus `~/compartilhado/technics_romsets/kn7000`:
 
-| check                               | result                                                                                                                                               |
-|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `build.sh`                          | 0 errors; `kn7000 -validate` and `-validate` (all systems) exit 0                                                                                    |
-| `-verifyroms kn7000`                | best available: only v14's undumped lower half and the synthetic wave pack are flagged                                                               |
-| boot v16                            | `release=0x16 table=84 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                  |
-| boot v15                            | `release=0x15 table=84 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                  |
-| boot v13                            | `release=0x13 table=80 window=40010000 styles=220 rhythm=33 picture=7`, main screen (`boot-v13.png`)                                                 |
-| boot sp7001                         | `release=0xFF table=83 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                  |
-| wave                                | 4 of 4 OK: IC203 `8164C77C`, IC204 `815CFC83`, IC207 `8331EF0B`, IC208 `83254F9D`, the firmware's own sums                                           |
-| debug (sp7001)                      | DEBUG TOOLS: PROGRAM 942, TABLE 83, RHYTHM 33, PICTURE 7 (`debugtools-sp7001.png`)                                                                   |
-| ablation: v13 with v16's vectors    | black screen at 45 s, `window=00000000 styles=0`: the rhythm probe never ran (`ablation-v13-with-v16-vectors.png`)                                   |
-| `-verifysoftlist`, published folder | kn5000_flop 14/14, kn6000_flop 21/21, kn7000_flop 6/6, wsa1_flop 9/9; the three rebuilt lists' hash files and all 40 zips equal the rebuild folder's |
+| check                               | result                                                                                                                                                                  |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `build.sh`                          | 0 errors; `kn7000 -validate` and `-validate` (all systems) exit 0                                                                                                       |
+| `-verifyroms kn7000`                | best available: only v14's undumped lower half and the synthetic wave pack are flagged                                                                                  |
+| boot v16                            | `release=0x16 table=84 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                                     |
+| boot v15                            | `release=0x15 table=84 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                                     |
+| boot v13                            | `release=0x13 table=80 window=40010000 styles=220 rhythm=33 picture=7`, main screen (`boot-v13.png`)                                                                    |
+| boot sp7001                         | `release=0xFF table=83 window=40010000 styles=220 rhythm=33 picture=7`, main screen                                                                                     |
+| wave                                | 4 of 4 OK: IC203 `8164C77C`, IC204 `815CFC83`, IC207 `8331EF0B`, IC208 `83254F9D`, the firmware's own sums                                                              |
+| published folder                    | `checks.sh .../kn7000-emulator/kn7000 OUT .../kn7000-emulator/roms boot` (binary md5 `c663ae88…`): the same four PROBE lines; the four main screens are pixel-identical |
+| debug (sp7001)                      | DEBUG TOOLS: PROGRAM 942, TABLE 83, RHYTHM 33, PICTURE 7 (`debugtools-sp7001.png`)                                                                                      |
+| ablation: v13 with v16's vectors    | black screen at 45 s, `window=00000000 styles=0`: the rhythm probe never ran (`ablation-v13-with-v16-vectors.png`)                                                      |
+| `-verifysoftlist`, published folder | kn5000_flop 14/14, kn6000_flop 21/21, kn7000_flop 6/6, wsa1_flop 9/9; the three rebuilt lists' hash files and all 40 zips equal the rebuild folder's                    |
 
 **The gate** (`tools/gate.sh` on the published folder): 16 passed, 1 failed, 1 skipped. Static checks,
 `verifyroms` for every model and liveness for every model pass, and so does the KN5000 demo oracle
