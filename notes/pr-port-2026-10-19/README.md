@@ -86,6 +86,21 @@ folder's `roms/kn7000` plus `~/compartilhado/technics_romsets/kn7000`:
 | ablation: v13 with v16's vectors    | black screen at 45 s, `window=00000000 styles=0`: the rhythm probe never ran (`ablation-v13-with-v16-vectors.png`)                                   |
 | `-verifysoftlist`, published folder | kn5000_flop 14/14, kn6000_flop 21/21, kn7000_flop 6/6, wsa1_flop 9/9; the three rebuilt lists' hash files and all 40 zips equal the rebuild folder's |
 
+**The gate** (`tools/gate.sh` on the published folder): 16 passed, 1 failed, 1 skipped. Static checks,
+`verifyroms` for every model and liveness for every model pass, and so does the KN5000 demo oracle
+(`8bbe54f7…`). The KN7000 audio oracle (`tools/rigs/money.lua`) moved from `4c3a522a…` to `bd02a9c1…`.
+`oracle_attribution.sh` runs the gate's recipe three ways, each with its own copy of `nvram/kn7000`:
+
+| run                                                                           | md5                                | rms  |
+|-------------------------------------------------------------------------------|------------------------------------|------|
+| old binary (published 2026-10-18, md5 `0f9dbc85…`)                            | `4c3a522a63f4e86fe9f7d7c8d94f5dbe` | 48.2 |
+| new binary                                                                    | `bd02a9c15b580d6b4b4c0a42f78a1fcb` | 48.2 |
+| new binary, IC18/IC19 windows read 0 and the synthetic resource at 0x54E00000 | `4c3a522a63f4e86fe9f7d7c8d94f5dbe` | 48.2 |
+
+The firmware seeing the real rhythm and picture ROMs accounts for the whole change; the BIOS table,
+the wave port and the relabelling move nothing on this path. The oracle is re-baselined to
+`bd02a9c1…` in its own commit.
+
 Every boot shows "8Bt Standard" in the RHYTHM field; until now the overlay showed the synthetic
 resource's "8&16BT 01 ?". The large "KN7000" drawn green behind the main screen is not new (it is in
 `../kn7000-ui-plane-2026-08-15.png`).

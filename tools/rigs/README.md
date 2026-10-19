@@ -55,12 +55,13 @@ cp -f sdcard_from_real_kn7000.img /tmp/sd_pristine.img && chmod u+w /tmp/sd_pris
 md5sum out.wav
 ```
 
-|                 |                                                                                                                                                                                                    |
-|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **current md5** | `4c3a522a63f4e86fe9f7d7c8d94f5dbe` (re-baselined 2026-10-18)                                                                                                                                       |
-| binary          | the 2026-10-18 resync builds, e.g. md5 `d398d07ca975241dc4c969270dca1a4a` (75,515,736 B)                                                                                                           |
-| determinism     | **verified** — the same hash from five builds that differ only off this path (`notes/overlay-upstream-sync/SYNC-2026-10-18.md`)                                                                    |
-| previous        | `780de131e33a4a0c99d092b57a074247` (6,336,050 B; 1,056,001 frames, 3 ch, 48 kHz), binary 74,035,784 B of 2026-08-11 20:17; last confirmed 2026-08-25, already drifted before the 2026-10-18 resync |
+|                 |                                                                                                                                                                                                                                                            |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **current md5** | `bd02a9c15b580d6b4b4c0a42f78a1fcb` (re-baselined 2026-10-19: the real rhythm ROM IC18 replaced the synthetic resource; `notes/pr-port-2026-10-19/oracle_attribution.sh`)                                                                                   |
+| binary          | the 2026-10-19 build that carries #16517/#16520/#16523/#16524, md5 `c663ae8838866c8c8b691cf6b2041fe7` (75,525,520 B)                                                                                                                                       |
+| determinism     | **verified** — the same hash from five builds that differ only off this path (`notes/overlay-upstream-sync/SYNC-2026-10-18.md`); on 2026-10-19 the new binary with the old rhythm/picture windows restored by Lua taps gives the previous hash bit for bit |
+| previous        | `4c3a522a63f4e86fe9f7d7c8d94f5dbe` (2026-10-18 resync builds, e.g. md5 `d398d07ca975241dc4c969270dca1a4a`, 75,515,736 B)                                                                                                                                   |
+| before that     | `780de131e33a4a0c99d092b57a074247` (6,336,050 B; 1,056,001 frames, 3 ch, 48 kHz), binary 74,035,784 B of 2026-08-11 20:17; last confirmed 2026-08-25, already drifted before the 2026-10-18 resync                                                         |
 
 ⚠ **Both previously recorded baselines are stale, and they disagree with each other**:
 `44b09b9d0eaae59d9a65e5b4f4e72ec0` (`notes/sharc-upstream-patch-series.md:223`) and

@@ -55,7 +55,11 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # Re-baselined 2026-10-18 from 780de131e33a4a0c99d092b57a074247: the old value had already
 # drifted before the upstream resync (the pre-resync build gives this one too), and nothing in the
 # resync changed it. Evidence: notes/overlay-upstream-sync/SYNC-2026-10-18.md, "Gate attribution".
-ORACLE_MD5="4c3a522a63f4e86fe9f7d7c8d94f5dbe"
+# Re-baselined 2026-10-19 from 4c3a522a63f4e86fe9f7d7c8d94f5dbe: the firmware now finds the real
+# rhythm ROM IC18 (and IC19) instead of the synthetic rhythm resource. The new binary with the old
+# memory picture there restored by Lua taps gives 4c3a522a again, bit for bit, so nothing else moved.
+# Evidence: notes/pr-port-2026-10-19/oracle_attribution.sh and that folder's README.
+ORACLE_MD5="bd02a9c15b580d6b4b4c0a42f78a1fcb"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
