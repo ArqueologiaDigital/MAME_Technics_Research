@@ -1215,13 +1215,13 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 	// (m_dsp_host8). SYSCON itself: the boot probe (fw 0x48405028) writes 0x91919191 then 0x20
 	// as four bytes and reads it back as four bytes, requiring byte 0 = 0x20 (its 4x8 read
 	// 0x48405229 masks the rest with byte 0); then 0x48407A56 writes 0x410, 16-bit host bus,
-	// and reads it back unchecked. Two registers keep the answers the boot protocol was
-	// brought up against: 0x0B (MSGR3) is the ID readback after each probe record; 0x37
-	// (DMASTAT) bit 7 is polled as busy. The DSP probes (cnv_romdump) read the rest.
+	// and reads it back unchecked. 0x0B (MSGR3), the ID readback after each probe record, keeps
+	// the answer the boot protocol was brought up against. 0x37 (DMASTAT; bit 7 is polled as
+	// busy) reads the SHARC's live SPORT DMA state, plus EPB0 (bit 6) while a probe readback is
+	// armed. The DSP probes (cnv_romdump) read the rest.
 	switch (m_dsp_index)
 	{
 	case 0x0B: return 0x1065;    // ID/version readback (plausible 21065L id; exact value TBD)
-	case 0x37: return 0x0000;    // status: busy (bit7) clear
 	case 0x04:                   // EPB0: phase-2 readback, if armed (else the FIFO is empty)
 		return m_dsp_rb_on ? dsp_epb_read() : 0x0000;
 	case 0x05: return 0x0000;    // EPB1: unused
@@ -1230,6 +1230,8 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 		uint32_t v = m_dsp->host_iop_r(m_dsp_index & 0xff);
 		if ((m_dsp_index & 0xff) == 0x1c && m_dsp_rb_on)
 			v |= 0xc000;         // DMAC0 FS (bits 14-15) = 11: EPB0 full while the readback has words
+		if ((m_dsp_index & 0xff) == 0x37 && m_dsp_rb_on)
+			v |= 0x0040;         // DMASTAT: EPB0 (channel 8) active while the readback runs
 		const uint16_t r = m_dsp_host8 ? uint16_t((v >> (8 * (m_dsp_rd_n & 3))) & 0xff)
 				: (m_dsp_rd_n & 1) ? uint16_t(v >> 16) : uint16_t(v);
 		if (!machine().side_effects_disabled())
@@ -1416,7 +1418,12 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	// scheduler ends each timeslice at a timer). Before the kernel runs, the core's self-ack
 	// answers at once instead (set_dsp_handshake_selfack), as the DSP does in host boot.
 	if (m_kn7000_timing)
+	{
 		intc_assert(0x17);
+		// The SPORT DMA registers (DMASTAT, each channel's index and count) move through the frame
+		// from here; the data the channels carry is the rings this tick reads and writes below.
+		m_dsp->sport_frame(attotime::from_hz(DSP_FRAME_HZ));
+	}
 
 	// FLAG3, an input the kernel polls once per frame (PM 0x8098: IF FLAG3_IN, MODIFY(I3, M3 = -1),
 	// stepping its ring-3 pointer): on the unit it is high on exactly every other frame (pass 8: I3

@@ -242,3 +242,31 @@ notes (rows 110-316) are caught at another point of their dithered fade-in, whic
 unimplemented-opcode or divide-by-zero lines in either. Passes 6 and 7 in MAME on this build: 5 of 5 (with MSGR2
 counted as live, cnv_romdump `dda79f943`) and 4 of 4. Published as `kn7000-emulator/kn7000` md5 `2a8e2fce…`;
 `tools/gate.sh` with the new oracle: 17 passed, 0 failed, 1 skipped (kn1500).
+
+## The SPORT DMA registers, live (2026-10-20)
+
+`sharc.cpp` (21065L): DMASTAT, each SPORT DMA channel's index (IIxx) and count (Cxx), and the transmit
+buffer status in STCTLx now read the channels' live state, for the host and for the kernel (which never reads
+them). The board calls `sport_frame()` at each frame tick (`kn7000.cpp` `dsp_audio_tick`). A channel runs when its
+control half has SPEN, SDEN and SCHEN set and its chain pointer names a TCB (at 0x8000 | CP: II, IM one below, C two
+below). Each frame moves one whole ring (8 words) evenly across the frame. The phase is the unit's: at the
+handshake, receive rings at base + 3 and transmit rings at base + 5. The data itself still moves through the
+driver's fixed ring slots, as before. The host's DMASTAT reads lose their constant 0 stand-in, and EPB0 (bit 6)
+shows while a probe readback is armed.
+
+Pass 6 in MAME on this build (`run_test.sh --dsp --bios v13`), against the unit:
+
+| register(s)                   | unit (pass 6)                       | MAME, this build                                                |
+|-------------------------------|-------------------------------------|-----------------------------------------------------------------|
+| DMASTAT                       | `0x33F`                             | `0x33F`                                                         |
+| IIR0A / IIR0B / IIR1A / IIR1B | `0xC365` `0xC36D` `0xC375` `0xC37D` | the same                                                        |
+| CR0A, CR0B, CR1A, CR1B        | 5                                   | 5                                                               |
+| IIT0A / IIT0B / IIT1A / IIT1B | `0xC347` `0xC34F` `0xC357` `0xC35F` | the same                                                        |
+| CT0A, CT0B, CT1A, CT1B        | 3                                   | 3                                                               |
+| SRCTL0, SRCTL1                | `0x013C3173`                        | `0x013C3173`                                                    |
+| STCTL1                        | `0xD93CB173`                        | `0xD93CB173`                                                    |
+| STCTL0                        | `0xF93CB173`                        | `0xD93CB173`: TUVF_A, a sticky start-up underflow, not modelled |
+
+Pass 8 in MAME: the phase check finds CR0A 5 and IIR0A `0xC365` on all 240 samples, as the unit did, and the verdict
+stays (b). The audio oracle stays `8a1fe2a44e064f94ff935242fd717cb4` (`oracle_ab.sh`): the kernel never reads these
+registers.
