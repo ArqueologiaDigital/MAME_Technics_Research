@@ -193,7 +193,9 @@ included. The checksum covers only the 0x7A0-byte header, so a damaged byte in t
 unnoticed and stays (`check_ic23.sh`). Today's Another World SP7001 build, run once under this model, overwrote
 1,945 header bytes and 65,676 panel-memory bytes, hung in its loader (its own data aliases through the repeat),
 and POWER OFF then stamped the damage valid (`aw_ic23_check.sh`). The KN6000/KN6500/KN2400 keep the placeholder (their backup SRAM is not
-identified). Still to confirm on the unit: that IC23 repeats every 256 KB (the SURVEY2 dump reads 2 MB of it).
+identified). **Confirmed on the unit on 2026-10-20** (SURVEY2, pass 5): IC23 repeats every 256 KB, so the Another
+World hazard is real. Felipe's own IC23 boots in this emulator (`-bios v13`, `nvram/kn7000_4/ic23`) without a
+factory reset.
 
 What was known before:
 
@@ -266,8 +268,9 @@ From the ROM survey (`technics_roms/roms/kn7000/real_dump_v1.3_b893/README.md:98
 - The overlay maps none of these: 0x56800000 reads 0 (`kn7000.cpp:939`), unmapped space reads 0, and the
   IC21 mirrors at 0x96A00000-0x96FFFFFF are missing.
 - The expansion windows 0x41000000, 0x41800000, 0x56000000 and 0x57000000 are empty slots in the overlay,
-  consistent with the research, but they read 0x00 where open bus elsewhere reads 0xFF. The windows
-  themselves were never surveyed, so what an empty slot reads is undetermined. The boot ROM updater
+  consistent with the research, but they read 0x00. **Measured 2026-10-20** (SURVEY2, pass 5, 64 KB of each):
+  an empty slot reads 99.9% 0xFF, with a few residue bytes at the start (`5A F8 5A F8 5A ...`). The same run
+  read IC21 at 0x56800000 byte for byte, and the library at 0x4C000000 as program flash from 0x487B76B1. The boot ROM updater
   writes through 0x96000000/0x97000000 (and 0x81000000), which the "zero stores" scan did not cover.
 - Impact low: the firmware only names 0x54E00000/0x54E10000, and its rhythm probe matches 0x40010000
   first. Small.
@@ -471,3 +474,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window          |
 | 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md` |
 | 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes              |
+| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)   |

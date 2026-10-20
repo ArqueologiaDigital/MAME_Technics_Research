@@ -8,8 +8,11 @@ MAME and check that a later session is still intact, before trying anything on h
 - C3BBJG000011, a 2 Mbit ×16 SRAM on A1-A17: 256 KB (`notes/table-rom-structure.md:40`). Its chip select, CS1
   (CPU pin 52), goes to IC23 alone, through the power-fail transistor Q3
   (`technics-roms-disasm/kn7000/tools/cnv_romdump/probes/cs1_trace.py`). With only A1-A17 wired it repeats
-  every 256 KB through the window; that is inferred, and the SURVEY2 dump (`cnv_romdump`, releases/2026-10-20-survey2)
-  reads 2 MB there to confirm it.
+  every 256 KB through the window. **Confirmed on Felipe's unit on 2026-10-20**: the SURVEY2 dump (`cnv_romdump`,
+  releases/2026-10-20-survey2) read 2 MB at 0x84000000, and all 7 copies after the first equal it, with no shorter
+  period (private `technics_roms` `real_dump_v1.3_b893/pass5-run1/`). Its header checksum is valid, and this
+  emulator, `-bios v13`, boots that image (as `nvram/kn7000_4/ic23`) without a factory reset: after a boot and
+  POWER OFF only header byte 0x728 and the stamp differ, the PANEL MEMORY store is untouched.
 - The firmware addresses it at 0x44000000 and through the uncached view 0x84000000. Its RAM DEVICE TEST walks
   exactly 256 KB (`BackupSramTest`, 0x484A0055 in 941).
 - Layout (`technics-roms-disasm/kn7000/kn7000_manual.sym` ~2423-2440, 941): a 0x7A0-byte header holding the live

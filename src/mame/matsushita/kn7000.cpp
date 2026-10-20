@@ -1959,8 +1959,8 @@ void kn7000_state::machine_start()
 	// KN7000: IC23, the battery-backed backup SRAM (C3BBJG000011, 2 Mbit x16 on A1-A17), holds
 	// the panel memories and settings. The firmware's RAM DEVICE TEST (BackupSramTest,
 	// 0x484A0055 in 941) walks exactly 256 KB from 0x44000000, and SumU32Words checksums it.
-	// With only A1-A17 wired the chip repeats every 256 KB through the chip select; that repeat
-	// is inferred, not yet read from a unit (the next cnv_romdump survey reads 2 MB there). An
+	// With only A1-A17 wired the chip repeats every 256 KB through the chip select, as the
+	// cnv_romdump SURVEY2 run read on Felipe's unit (2 MB at 0x84000000, 2026-10-20). An
 	// nvram device keeps it across runs. The firmware only trusts it if its power-fail handler
 	// stamped the checksum, so end a session with the machine's POWER OFF (power_switch). After
 	// a plain MAME exit the stamp is the previous one: if any setting changed in between, the next
