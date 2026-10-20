@@ -72,7 +72,9 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # strap reports hardware subtype 1 (G13, 595d83a). The held C4 is 262.31 Hz (+4.5 cents, was 260.13, -9.9), 3.4 dB
 # louder, starts 9.4 ms earlier and has a tail; no clipping; only seconds 0 and 16-21 differ. The merge with the SPORT
 # DMA registers (58175d5) gives the same hash as G13 alone. Evidence: notes/g13-waves-2026-10-20/README.md.
-ORACLE_MD5="dbe3683b25d0e26f823ddbb1fa78bb56"
+# Re-baselined 2026-10-20 from dbe3683b25d0e26f823ddbb1fa78bb56: the strap answers the unit's 0xF8F7 (pass 9): at most
+# one LSB in 439 of 3,168,003 samples differs, seconds 17-19, same onset. Evidence: notes/dsp-probe-2026-10-20/README.md.
+ORACLE_MD5="e415cb0c15ac74ada6bcfc5f7e4ef909"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
