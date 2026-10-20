@@ -103,5 +103,9 @@ emulator (`-bios v13`, the same probe in MAME):
 **The frame rate is still open.** The firmware's DSP accesses ran at 24.15 us each (41.4 per ms): every one
 waits for the DSP's handshake. MSGR2 (I3, stepped once per frame while FLAG3 is high) moved 111 words in about
 4.93 ms, 22.5 per ms. Either frames at about 22.5 kHz with FLAG3 always high, or 41.4 kHz or more with FLAG3 high
-on about half of them. The overlay's IRQ0 tick (`kn7000.cpp`, the provisional frame rate) stays a placeholder
-until a probe separates the two.
+on about half of them. The first would put about two accesses in each frame, 24 us apart, and those would find the
+8-word rings at different positions; every one of about 2,000 reads found them at the same place. So the data
+favours one handshake per frame and frames of 41.4 kHz or more (44.1 kHz, with about 6% of handshakes missed,
+fits), FLAG3 high on alternate frames and ring 3 stepping at half rate. That is an argument, not a measurement: the
+overlay's IRQ0 tick (`kn7000.cpp`, the provisional frame rate) stays a placeholder until pass 8 (cnv_romdump,
+in preparation) times the handshakes with the main CPU's TM4 (2,000 counts per ms).
