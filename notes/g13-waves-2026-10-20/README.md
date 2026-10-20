@@ -115,7 +115,14 @@ In the emulator, the new build plays the notes at their keys (`wavpitch.py`, cap
 piano C3/C4/A4/C5 +2.1/+4.5/+1.5/+4.5 cents, organ -0.9/-0.3/+0.9/+2.1, brass -0.3/-0.3/+0.3/+0.3,
 strings +13.5/+14.7/-6.9/+4.5, bass and mallet within 10 cents except where the previous note's
 tail is still ringing (A4: the estimator locks onto the C4 that is still sounding; the spectra
-show 440 Hz and, for the bass, 220 Hz, its octave-down sound).
+show 440 Hz and, for the bass, 220 Hz, its octave-down sound). That capture (`traces.sh play`, v16)
+gave trace md5 `0142effa3455ffcc209c07355496005d`, WAV `2190015dc1a8a16a022776c25097d6c7`.
+
+Felipe's firmware (893, `BIOS=v13 ./traces.sh play ...`) does the same: the piano's C4 again on both
+TGs (selects 0x0A00F and 0x08023), all 48 voices pass `pitchcheck.py`, and `wavpitch.py` gives the
+same pitches within 2 cents except where a previous note's tail overlaps (bass C4 -4.5 against
++10.5 cents, and the A4s above) (trace md5 `4575449db08c0a44c35759d862e35042`, WAV
+`36dd19521c005e7d46ca93a96a2d42c0`).
 
 ## What changed in the overlay
 
