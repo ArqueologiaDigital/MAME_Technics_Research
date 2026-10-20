@@ -21,29 +21,30 @@ listed: they are in (`notes/pr-port-2026-10-19/`).
 States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `done` (with the commit),
 `decision` (needs Felipe's call before any work), `blocked`, `wontfix` (with the reason).
 
-| #   | item                                                   | area               | size         | state       |
-|-----|--------------------------------------------------------|--------------------|--------------|-------------|
-| G1  | KN6000 expansion: CN105 connector + HD-SX6, PR #16220  | KN6000 driver      | ~230 lines   | done        |
-| G2  | Main CPU core fixes upstream has                       | mn10300 core       | ~200 lines   | done        |
-| G3  | Effects DSP save state freezes the effects             | KN7000 driver      | trivial      | open        |
-| G4  | Effects DSP branch B fixes                             | SHARC core         | small-medium | open        |
-| G5  | Effects DSP clock, 60 or 66 MHz                        | KN7000 driver      | one line     | decision    |
-| G6  | IC23 battery-backed SRAM (panel memories) as NVRAM     | KN7000 driver      | small        | done        |
-| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx   | KN7000 driver      | small        | in progress |
-| G8  | Interrupt vectors through IVAR, not per-BIOS addresses | mn10300 core       | small-medium | open        |
-| G9  | Real power-on path from IC18, and the flash updater    | KN7000 driver      | small/large  | open        |
-| G10 | CS5 mirrors and open-bus reads                         | KN7000 driver      | small        | open        |
-| G11 | IC21 custom data probably halfword-swapped             | KN7000 driver      | small        | open        |
-| G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload        | ROM records        | small        | open        |
-| G13 | Voices on the real wave ROMs                           | tone generator     | large        | in progress |
-| G14 | SD SPI with the card deselected reads 0x00             | KN7000 driver      | small        | open        |
-| G15 | Smaller KN7000 items                                   | KN7000 driver      | small        | open        |
-| G16 | KN5000 branch work                                     | KN5000             | mixed        | open        |
-| G17 | KN5000 research findings                               | KN5000             | mixed        | open        |
-| G18 | Notes and comments that newer findings contradict      | docs               | small        | open        |
-| G19 | Effects DSP bypass switch (noisy sound)                | KN7000 driver      | small        | planned     |
-| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE         | medium-large | in progress |
-| G21 | SD sub-CPU IC401: SDMODE switch, untried read commands | KN7000 driver / RE | medium       | open        |
+| #   | item                                                    | area               | size         | state       |
+|-----|---------------------------------------------------------|--------------------|--------------|-------------|
+| G1  | KN6000 expansion: CN105 connector + HD-SX6, PR #16220   | KN6000 driver      | ~230 lines   | done        |
+| G2  | Main CPU core fixes upstream has                        | mn10300 core       | ~200 lines   | done        |
+| G3  | Effects DSP save state freezes the effects              | KN7000 driver      | trivial      | open        |
+| G4  | Effects DSP branch B fixes                              | SHARC core         | small-medium | open        |
+| G5  | Effects DSP clock, 60 or 66 MHz                         | KN7000 driver      | one line     | decision    |
+| G6  | IC23 battery-backed SRAM (panel memories) as NVRAM      | KN7000 driver      | small        | done        |
+| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx    | KN7000 driver      | small        | in progress |
+| G8  | Interrupt vectors through IVAR, not per-BIOS addresses  | mn10300 core       | small-medium | open        |
+| G9  | Real power-on path from IC18, and the flash updater     | KN7000 driver      | small/large  | open        |
+| G10 | CS5 mirrors and open-bus reads                          | KN7000 driver      | small        | open        |
+| G11 | IC21 custom data probably halfword-swapped              | KN7000 driver      | small        | open        |
+| G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload         | ROM records        | small        | open        |
+| G13 | Voices on the real wave ROMs                            | tone generator     | large        | in progress |
+| G14 | SD SPI with the card deselected reads 0x00              | KN7000 driver      | small        | open        |
+| G15 | Smaller KN7000 items                                    | KN7000 driver      | small        | open        |
+| G16 | KN5000 branch work                                      | KN5000             | mixed        | open        |
+| G17 | KN5000 research findings                                | KN5000             | mixed        | open        |
+| G18 | Notes and comments that newer findings contradict       | docs               | small        | open        |
+| G19 | Effects DSP bypass switch (noisy sound)                 | KN7000 driver      | small        | planned     |
+| G20 | Probe the DSP and TG on the real unit via .CNV          | tools / RE         | medium-large | in progress |
+| G21 | SD sub-CPU IC401: SDMODE switch, untried read commands  | KN7000 driver / RE | medium       | open        |
+| G22 | CPU and bus timing: 64 MHz, cycle counts, caches, waits | mn10300 core       | large        | in progress |
 
 ## Work already written on branches, not in the overlay
 
@@ -420,6 +421,27 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
   IC401's replies (0x5016066C-0x5016068F, 0x50093400-0x50093497, 0x5008291C-0x5008291F, 0x50007EFC): the first
   bytes ever seen from IC401, possibly a version string.
 
+### G22. CPU and bus timing — in progress (branch `cpu-timing`, not published)
+
+The core charged one cycle per instruction at 32 MHz and nothing for memory, so code that touches slow memory
+ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN7000). Done on branch
+`cpu-timing` (2026-10-20; evidence, tables and scripts: `notes/cpu-timing-2026-10-20/`):
+
+- **64 MHz**, confirmed by the unit's pass 9 (ADD = one cycle at 64.02 MHz); IOCLK stays 16 MHz.
+- **One table**, `src/devices/cpu/mn10300/mn10300_timing.h`: per-instruction cycles (manual, or the unit's where
+  they differ), a fetch queue, 4 KB 2-way I and D caches with 16-byte lines (geometry from the firmware's purge),
+  per-chip-select costs measured by pass 9, on-chip register costs, load-use stalls, posted CS6/CS7 stores.
+- **Against the unit:** pass 9, 99 of 109 tests within 3 % (every memory test within 1.2 %); pass 8, 194 samples
+  per tick (unit 197, before 206), the DSP index write 1.67 us (1.69).
+- **CHCTR, MEMCTR0-7 and 0x32000010/40/42 read back** what the firmware wrote, as on the unit (CHCTR 0x8F).
+- **A floppy fix it needed:** MAME's 82077 gives no DRQ edge for a sector's last byte, so the firmware's DMA-end ISR
+  timed out; at the real speed too late for TC. The driver re-raises IRQ1 (`kn7000.cpp`).
+- **Effects:** boot screens as before from 20 s on all eight cases; Another World's intro 17 fps (was 38), its old
+  blit 2.2 (was 8.7); the audio oracle moves (the held note's voices start about 2 ms later): `5069aeda`, not
+  re-baselined; gate otherwise green.
+- **Open:** the firmware tasks' share of the CPU while a task runs (the unit's `AWPERF0.TXT` from Another World's
+  speed build will test it), LCD costs in a real loop, the classes pass 9 did not time, MEMCTR's field meanings.
+
 ## Notes and comments that newer findings contradict
 
 ### G18 — open
@@ -466,6 +488,10 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
   `kn7000.cpp` near 735 ("LEDs are not CPU outputs": the firmware sets 0x40/0xC0 at 0x9CC00008); the names of the
   `0x9CC00009` and `0x98060000` bits in `technics-roms-disasm/kn7000/kn7000_manual.sym` ~384-405, ~484-501 (bit 1
   is SD PON, which also resets IC401; 0x98060000 bit 2 is SDMODE).
+- **The main CPU clock** (2026-10-20, G22): upstream's driver, and `notes/kn7000-driver-source-annotations.md`'s copy
+  of its comments (`:1255`, `:3593`), give 32 MHz and IOCLK = fc/2; the unit runs 64 MHz, IOCLK = fc/4
+  (`notes/boot-performance-and-clock.md` now carries the correction). Its `:60` infers the KN7000's clock from the
+  KN6000's 32 MHz X1; the KN7000's X1 is 16 MHz. The KN6000/KN6500/KN2400 share the 64 MHz configuration, unmeasured.
 - **Outside the overlay**: `technics_roms/…/ic19-analysis/README.md`,
   `technics-roms-disasm/kn7000/src/picture.s:124` and `tools/gen_picture_s.py:92` say SOFT VERSION shows
   PICTURE. It is a DEBUG TOOLS row; the overlay's comment at `kn7000.cpp:1862` is right.
@@ -535,3 +561,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)      |
 | 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them          |
 | 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c     |
+| 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)     |

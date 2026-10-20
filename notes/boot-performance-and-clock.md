@@ -1,5 +1,11 @@
 # Boot performance & the main-CPU clock
 
+> **Corrected 2026-10-20: the core runs at 64 MHz, not 32.** Felipe's unit timed it (the CPU timing probe, pass 9:
+> ADD = one cycle at 64.02 MHz): the 16 MHz reference x 4, the MN103002A's "4-fold" mode. IOCLK = 16 MHz (below)
+> still holds, as fc / 4. The "400M cycles / 32 MHz = 12.5 s" match below counted instructions at one cycle each;
+> with the real cycle counts and memory costs the boot still reaches the home screen by about 12 s. Model and
+> evidence: `notes/cpu-timing-2026-10-20/` (OVERLAY-GAPS G22).
+
 Investigation of the "slow boot / screen slowly fills with green" behaviour.
 
 ## The green fill is NOT a failed image decode
