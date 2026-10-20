@@ -390,8 +390,10 @@ MN10300's timer 4 to settle the rate. It showed two emulator gaps that keep it f
 **Pass 8 ran on the unit (2026-10-20): verdict (b).** One handshake per DSP frame, every 22.682 us of the firmware's
 tick: 44.1 kHz nominal. FLAG3 is high on every other frame. All three are now modelled for the KN7000: TM4 drives
 its 1 kHz tick, the handshake comes once per frame, FLAG3 alternates. Pass 8 in MAME gives verdict (b) at
-44,100.0 Hz (`notes/dsp-probe-2026-10-20/README.md`, "The unit's timing in the emulator"). Not modelled: the SPORT
-DMA itself (DMASTAT, the counts and the ring positions read 0), so the phase check finds nothing in MAME.
+44,100.0 Hz (`notes/dsp-probe-2026-10-20/README.md`, "The unit's timing in the emulator"). The SPORT DMA registers
+are live too (2026-10-20, "The SPORT DMA registers, live"): DMASTAT `0x33F`, the eight rings' indexes and counts and
+STCTL1 read as on the unit; the phase check in MAME finds the unit's ring position. Not modelled: STCTL0's sticky
+start-up underflow (TUVF_A), and the transfers themselves (the driver still reads and writes fixed ring slots).
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
@@ -531,3 +533,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000) |
 | 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1     |
 | 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)      |
+| 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them          |

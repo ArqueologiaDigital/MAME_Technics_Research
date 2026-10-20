@@ -194,6 +194,9 @@ void adsp21065l_device::device_start()
 	save_item(NAME(m_sport_tx));
 	save_item(NAME(m_sport_rx));
 	save_item(NAME(m_iop));
+	save_item(NAME(m_sport_frame_start));
+	save_item(NAME(m_sport_frame_period));
+	save_item(NAME(m_sport_clocked));
 }
 
 void adsp21065l_device::device_reset()
@@ -203,6 +206,9 @@ void adsp21065l_device::device_reset()
 	m_iop[0x00] = 0x00000020;   // SYSCON (Table E-15; the KN7000 firmware's boot probe expects it)
 	m_iop[0x01] = 0x00008014;   // VIRPT
 	m_iop[0x02] = 0x21ad6b5a;   // WAIT
+	m_sport_clocked = false;    // the SPORT DMA state stays 0 until the board clocks a frame
+	m_sport_frame_start = attotime::zero;
+	m_sport_frame_period = attotime::zero;
 }
 
 // 21065L IOP register bank. The base 2106x core fatalerrors on the 21065L-specific
@@ -213,14 +219,124 @@ void adsp21065l_device::device_reset()
 // what was written: KN7000 effects 58-61 park the ring-3 pointer I3 in MSGR2 and take it
 // back with I3 = DM(0x0A), and with 0 they ran on a zero pointer and the kernel's ring-3
 // scrub then zeroed a SPORT TCB (DM 0xC329). On Felipe's unit MSGR2 reads back and that TCB
-// survives (kn7000_mame notes/dsp-probe-2026-10-20, passes 6 and 7). Every other register
-// still reads 0 to the kernel: several carry status bits the chip sets and this model does
-// not (OVERLAY-GAPS G4). Nothing behind the registers runs yet: timers, SPORT and DMA status
-// do not move. Real SPORT/DMA modelling is F.3.
+// survives (kn7000_mame notes/dsp-probe-2026-10-20, passes 6 and 7). DMASTAT, the SPORT DMA
+// index and count registers and STCTLx's transmit status read live (sport_frame; the kernel
+// itself never reads them). Every other register still reads 0 to the kernel: several carry
+// status bits the chip sets and this model does not (OVERLAY-GAPS G4). Timers do not count.
 uint32_t adsp21065l_device::iop65l_r(offs_t offset)
 {
 	offset &= 0xff;
-	return (offset >= 0x08 && offset <= 0x0f) ? m_iop[offset] : 0;
+	if (offset >= 0x08 && offset <= 0x0f)
+		return m_iop[offset];
+	return sport_live(offset) ? iop_value(offset) : 0;   // the SPORT DMA state, else 0 as above
+}
+
+// The SPORT DMA channels: index (II; IM is II + 1, the count C is II + 2) and chain pointer (CP)
+// registers (TRM Table E-15), the control register (STCTLx/SRCTLx) and which half of it (A/B),
+// direction, and the channel's DMASTAT bit (Table E-18).
+namespace {
+struct sport_dma_ch { uint8_t ii, cp, ctl; bool b, tx; uint8_t dmastat; };
+constexpr sport_dma_ch SPORT_DMA[8] = {
+	{ 0x60, 0x63, 0xe1, false, false, 0 },   // RX0 A
+	{ 0x68, 0x6b, 0xf1, false, false, 1 },   // RX1 A
+	{ 0x70, 0x73, 0xe0, false, true,  2 },   // TX0 A
+	{ 0x78, 0x7b, 0xf0, false, true,  3 },   // TX1 A
+	{ 0x30, 0x33, 0xe1, true,  false, 4 },   // RX0 B
+	{ 0x38, 0x3b, 0xf1, true,  false, 5 },   // RX1 B
+	{ 0x50, 0x53, 0xe0, true,  true,  8 },   // TX0 B
+	{ 0x58, 0x5b, 0xf0, true,  true,  9 },   // TX1 B
+};
+}
+
+void adsp21065l_device::sport_frame(const attotime &period)
+{
+	m_sport_frame_start = machine().time();
+	m_sport_frame_period = period;
+	m_sport_clocked = true;
+}
+
+uint32_t adsp21065l_device::internal_dm(offs_t addr) const
+{
+	return (m_data_sram && addr >= DATA_SRAM_BASE && addr - DATA_SRAM_BASE < DATA_SRAM_WORDS) ? m_data_sram[addr - DATA_SRAM_BASE] : 0;
+}
+
+// How many words of its ring channel ch has moved in this frame round, or -1 when it does not
+// run: its control half must have SPEN, SDEN and SCHEN set (bits 0/18/19 for A, 24/20/21 for B)
+// and its chain pointer must name a TCB, at internal address 0x8000 | CP (II at the TCB, IM one
+// below, C two below). Each frame moves one whole ring (the KN7000's: 8 words, "8 words per line
+// per sample"), evenly across the frame. The phase is Felipe's unit's: at the main CPU's DSP
+// handshake (here, the frame start, where the board raises it) every receive ring stood at
+// base + 3 with a count of 5 and every transmit ring at base + 5 with 3 (DSP probe passes 6 and 8,
+// kn7000_mame notes/dsp-probe-2026-10-20): the transmitter runs two words ahead, its buffer and
+// shift register full.
+int adsp21065l_device::sport_words_done(int ch) const
+{
+	const sport_dma_ch &d = SPORT_DMA[ch];
+	const uint32_t ctl = m_iop[d.ctl];
+	const int en = d.b ? 20 : 18;
+	if (!m_sport_clocked || !BIT(ctl, d.b ? 24 : 0) || !BIT(ctl, en) || !BIT(ctl, en + 1) || !(m_iop[d.cp] & 0x7fff))
+		return -1;
+	const offs_t tcb = 0x8000 | (m_iop[d.cp] & 0x7fff);
+	const int n = int(internal_dm(tcb - 2));
+	if (n <= 0 || n > 0x100)
+		return -1;
+	double frac = 0.0;
+	if (!m_sport_frame_period.is_zero())
+		frac = (machine().time() - m_sport_frame_start).as_double() / m_sport_frame_period.as_double();
+	const int step = std::clamp(int(frac * n), 0, n - 1);
+	return ((d.tx ? 5 : 3) + step) % n;
+}
+
+// DMASTAT, the transmit status in STCTLx, and each channel's II and C read live (iop_value).
+bool adsp21065l_device::sport_live(offs_t reg)
+{
+	if (reg == 0x37 || reg == 0xe0 || reg == 0xf0)
+		return true;
+	for (const sport_dma_ch &d : SPORT_DMA)
+		if (reg == d.ii || reg == d.ii + 2)
+			return true;
+	return false;
+}
+
+uint32_t adsp21065l_device::sport_dmastat() const
+{
+	uint32_t v = 0;
+	for (int ch = 0; ch < 8; ch++)
+		if (sport_words_done(ch) >= 0)
+			v |= 1U << SPORT_DMA[ch].dmastat;
+	return v;
+}
+
+uint32_t adsp21065l_device::iop_value(offs_t reg)
+{
+	reg &= 0xff;
+	if (reg == 0x37)
+		return sport_dmastat();                   // DMASTAT: the SPORT channels (the board adds EPB0)
+	if (reg == 0xe0 || reg == 0xf0)
+	{
+		// STCTLx: TXS_A (bits 31-30) and TXS_B (28-27) read 11, buffer full, while the channel's
+		// DMA keeps it filled (on the unit: STCTL1 0xD93CB173 for 0x013CB173 written; STCTL0 also
+		// shows a sticky underflow, TUVF_A, from before its DMA started, which is not modelled).
+		uint32_t v = m_iop[reg];
+		for (int ch = 0; ch < 8; ch++)
+			if (SPORT_DMA[ch].ctl == reg && sport_words_done(ch) >= 0)
+				v |= SPORT_DMA[ch].b ? (3U << 27) : (3U << 30);
+		return v;
+	}
+	for (int ch = 0; ch < 8; ch++)
+	{
+		const sport_dma_ch &d = SPORT_DMA[ch];
+		if (reg != d.ii && reg != d.ii + 2)
+			continue;
+		const int done = sport_words_done(ch);
+		if (done < 0)
+			break;
+		const offs_t tcb = 0x8000 | (m_iop[d.cp] & 0x7fff);
+		if (reg == d.ii)
+			return internal_dm(tcb) + uint32_t(done) * internal_dm(tcb - 1);   // II = base + done x IM
+		return internal_dm(tcb - 2) - uint32_t(done);                          // C = n - done
+	}
+	return m_iop[reg];
 }
 
 uint32_t adsp21062_device::dm_index_reg(int n) const

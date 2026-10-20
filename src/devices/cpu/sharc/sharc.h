@@ -606,11 +606,18 @@ public:
 
 	// An external host's view of the IOP registers (the KN7000's MN10300 reaches them through
 	// its index/data port pair): the value the register file holds, as the DSP's own code or
-	// the host last wrote it, or its reset value. No register computes anything yet (timers do
-	// not count, DMASTAT and the SPORT counts do not move), and the side effects of reading
-	// the FIFO buffers are not modelled; the host glue handles EPB0/EPB1 itself.
-	uint32_t host_iop_r(offs_t reg) const { return m_iop[reg & 0xff]; }
+	// the host last wrote it, or its reset value; for the SPORT DMA registers, their live state
+	// (see sport_frame). Timers do not count, and the side effects of reading the FIFO buffers
+	// are not modelled; the host glue handles EPB0/EPB1 itself.
+	uint32_t host_iop_r(offs_t reg) { return iop_value(reg & 0xff); }
 	void host_iop_w(offs_t reg, uint32_t data) { m_iop[reg & 0xff] = data; }
+
+	// SPORT DMA. The eight SPORT DMA channels run chained, each round its 8-word ring: the board
+	// calls sport_frame() at the start of every audio frame (the KN7000: its 44.1 kHz IRQ0 tick),
+	// and from then on DMASTAT, each channel's index (IIxx) and count (Cxx), and the transmit
+	// buffer status in STCTLx read as the channels move through the frame. The data itself is
+	// moved by the board (which reads and writes the rings), not here.
+	void sport_frame(const attotime &period);
 
 protected:
 	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
@@ -639,6 +646,16 @@ private:
 	void data_65l(address_map &map) ATTR_COLD;
 	uint32_t iop65l_r(offs_t offset);
 	void iop65l_w(offs_t offset, uint32_t data);
+	uint32_t iop_value(offs_t reg);             // the stored value, or the live SPORT DMA state
+	uint32_t internal_dm(offs_t addr) const;    // a word of internal data memory (0 outside it)
+	int sport_words_done(int ch) const;          // -1: channel ch not running
+	uint32_t sport_dmastat() const;
+	static bool sport_live(offs_t reg);
+
+	// SPORT DMA (see sport_frame): the start of the current audio frame and its period.
+	attotime m_sport_frame_start;
+	attotime m_sport_frame_period;
+	bool m_sport_clocked = false;
 
 	// The IOP register file (0x00-0xFF), so what the kernel programs (SPORT control, DMA
 	// chains, timers) reads back. Reset values from the ADSP-21065L Technical Reference,
