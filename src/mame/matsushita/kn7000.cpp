@@ -474,6 +474,8 @@ private:
 	emu_timer *m_fdd_index_timer = nullptr;
 	int m_fdd_index = 0;
 	int m_fdc_drq = 0;                            // FDC.DRQ as last driven (gates DACK cycles)
+	emu_timer *m_fdc_lastbyte = nullptr;          // IRQ1 for the sector's last byte (see the intc_ack_cb binding)
+	TIMER_CALLBACK_MEMBER(fdc_lastbyte_cb) { if (m_fdc_drq) intc_assert(0x18); }
 	TIMER_CALLBACK_MEMBER(fdd_index_poll);
 	void fdd_loaded(floppy_image_device *fd);
 	void fdd_unloaded(floppy_image_device *fd);
@@ -2093,6 +2095,7 @@ void kn7000_state::machine_start()
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
 	m_fdd_index_timer = timer_alloc(FUNC(kn7000_state::fdd_index_poll), this);
+	m_fdc_lastbyte = timer_alloc(FUNC(kn7000_state::fdc_lastbyte_cb), this);
 	if (floppy_image_device *const fd = m_floppy ? m_floppy->get_device() : nullptr)
 	{
 		fd->setup_load_cb(floppy_image_device::load_cb(&kn7000_state::fdd_loaded, this));
@@ -2397,6 +2400,18 @@ void kn7000_state::kn7000(machine_config &config)
 	m_maincpu->intc_ack_cb().set([this](uint8_t group) {
 		if (group == 0x11 && m_c11_unserviced)
 			m_panel_txdone->adjust(attotime::from_usec(40), 3);
+		// The floppy's last byte. The DMA channel moves all but the sector's last byte; the
+		// DMA-end ISR (941 0x4840219C) clears IRQ1 (group 0x18, positive edge: EXTMD 0xFFFF),
+		// polls it 88 times for that byte's DRQ, then takes the byte and raises TC. MAME's
+		// 82077 hands the last two bytes over in one burst (DRQ rises once and stays high),
+		// so that edge never comes: the poll ran out every time. At 32 MHz and one cycle per
+		// instruction that took 30 us, just inside the controller's window for TC (the CRC,
+		// 32 us); at the instrument's speed it takes 55 us and every read ending on the last
+		// sector failed with ST0 0x44 ST1 0x80 (notes/cpu-timing-2026-10-20/). Re-raise the
+		// request when the ISR clears it while DRQ is still high, for the edge the last byte
+		// would have given; the timer fires after the clear.
+		if (group == 0x18 && m_fdc_drq && !m_lib_mirror)
+			m_fdc_lastbyte->adjust(attotime::from_usec(1));
 	});
 	// group 0x11 latched into the IAGR at accept -> it has been serviced.
 	m_maincpu->intc_accept_cb().set([this](uint8_t group) {
