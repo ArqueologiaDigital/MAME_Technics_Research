@@ -172,6 +172,12 @@ donor; it is 3.4 dB louder, starts 9.4 ms earlier (wav_shift: onset 16.0795 s ag
 and leaves a tail where the donor was silent after the release. Every second but 16-21 is
 identical, except second 0, where the old binary has a 4-unit blip (rms 0.5) and the new one none.
 
+Boot, published binary (`2a8e2fce`) against this one (`ed65537d`), `notes/core-port-2026-10-19/ab_boot.sh`
+(no media, fresh settings, snapshots at 2 3 4 5 6 8 12 20 45 s): all nine snapshots identical for
+kn7000 v16, v15, v13 and sp7001, kn6000, kn6500, kn2400 and kn2600, and no unimplemented-opcode or
+divide-by-zero lines in either. The strap's other readers (the SD worker's subtype-4 tests and the
+SPI clock) show nothing at boot without a card.
+
 ## Open
 
 - **The strap value on the real unit.** Bits 11:10 of `0x98070000` read 01 or 10 on Felipe's unit if this

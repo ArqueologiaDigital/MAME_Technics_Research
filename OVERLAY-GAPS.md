@@ -319,8 +319,9 @@ real-unit run; evidence and scripts: `notes/g13-waves-2026-10-20/README.md`.
 - **Built** on the build tree (binary md5 `ed65537d`), KN7000 only; without the four ROM regions the
   voices keep the synthetic pack. Gate on that binary: 16 passed, 1 skipped, 1 failed: the KN7000
   audio oracle, now `dbe3683b25d0e26f823ddbb1fa78bb56` (the held C4 at 262.31 Hz, +4.5 cents, 3.4 dB
-  louder, no clipping; README "The gate, the audio oracle, the boot"). Not published, `ORACLE_MD5`
-  not re-baselined: both wait for review.
+  louder, no clipping; README "The gate, the audio oracle, the boot"). `ab_boot.sh` against the
+  published binary: all nine snapshots identical for the four KN7000 BIOSes, kn6000, kn6500, kn2400
+  and kn2600. Not published, `ORACLE_MD5` not re-baselined: both wait for review.
 - **Open**: the real unit's strap bits 11:10 (a read-only .CNV read of 0x98070000); the 8-bit
   sample gain law, fitted as 3 dB per code step (a line-out recording of STRINGS would settle it);
   the split lists and the post-loop data are not modelled.
@@ -529,3 +530,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db         |
 | 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000) |
 | 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1     |
+| 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)      |
