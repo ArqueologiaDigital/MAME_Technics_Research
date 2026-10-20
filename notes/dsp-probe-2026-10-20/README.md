@@ -109,3 +109,52 @@ favours one handshake per frame and frames of 41.4 kHz or more (44.1 kHz, with a
 fits), FLAG3 high on alternate frames and ring 3 stepping at half rate. That is an argument, not a measurement: the
 overlay's IRQ0 tick (`kn7000.cpp`, the provisional frame rate) stays a placeholder until pass 8 (cnv_romdump,
 in preparation) times the handshakes with the main CPU's TM4 (2,000 counts per ms).
+
+## The DSP's memory, chip against emulator (pass 7, 2026-10-20)
+
+Phase 2 ran on Felipe's unit (files private: `technics_roms` `real_dump_v1.3_b893/pass7-run1/`, report
+`pass7-check-2026-10-20.txt`). Every word came back (3,584 PM, 3,456 DM), FS showed data at the first look each
+time, the four channel-8 registers were left as found, and the dead flag stayed 0.
+
+`compare_dspmem.py CHIP_DIR MAME_DIR` compares it with the same probe in MAME. The MAME side ran with
+`cnv_romdump/test/run_test.sh --dspmem --bios v13` and, as its NVRAM, a copy of the unit's IC23 (pass 5,
+`R8400000.BIN`, first 256 KB), so that the firmware loads the same effects:
+
+| range            | what                                   | words | equal | differ, MAME 0 |
+|------------------|----------------------------------------|-------|-------|----------------|
+| PM 0x8000-0x8077 | interrupt vectors, reset handler       | 120   | 120   | 0              |
+| PM 0x8078-0x80A5 | main loop, the host-patched CALL slots | 46    | 46    | 0              |
+| PM 0x80A6-0x82FF | kernel                                 | 602   | 92    | 510            |
+| PM 0x8300-0x83FF | shared filter helpers                  | 256   | 64    | 192            |
+| PM 0x8400-0x8CFF | effect programs, nine slots            | 2304  | 653   | 1651           |
+| PM 0x8D00-0x8DFF | boot-init, recycled by slot 9          | 256   | 147   | 109            |
+| DM 0x9800-0x9C3F | per-unit state                         | 1088  | 124   | 962            |
+| DM 0x9C40-0x9FFF | scrub countdown table and the rest     | 960   | 20    | 940            |
+| DM 0xC000-0xC301 | per-unit parameters                    | 770   | 489   | 271            |
+| DM 0xC302-0xC341 | slot I/O descriptors, SPORT TCBs       | 64    | 63    | 1              |
+| DM 0xC342-0xC381 | SPORT DMA rings                        | 64    | 64    | 0              |
+| DM 0xC382-0xC4FF | the rest                               | 382   | 376   | 6              |
+
+- **Everything the firmware downloads is identical.** That covers the kernel (0x8000-0x8101), the helpers
+  (0x8300-0x833F), boot-init (0x8D00-0x8D92), the ten CALL slots, and the nine effect programs at 0x8400 + 0x100·k,
+  each for exactly its downloaded length. Every differing PM word is one MAME never wrote: 0 in MAME, power-on SRAM
+  contents on the chip (0x8102-0x82FF: 510 distinct values in 510 words, 60% one-bits).
+- **DM**: besides never-written words, 12 differ with both sides non-zero: run-time state and parameters easing
+  toward their targets (0x9AD1/2, 0xC003, 0xC058, 0xC0A5, 0xC0EB, 0xC138, 0xC2B9-0xC2BE).
+- **One emulator bug: DM 0xC329**, the first receive channel's TCB index (II), is 0xC362 on the chip and 0 in MAME.
+  `tap_c329.lua` (run with `-nodrc` for exact PCs) shows the host's download writing 0xC362 there at 0.98 s. Then the
+  kernel's ring-3 scrub stub (PC 0x80CC, reached from CALL slot 0x8097) writes 0 with I3 = 0xC329, R4 (the saved I3) =
+  0, M7 = 0x3688. `tap_i3.lua` samples I3 at every frame boundary (the kernel's IOSTAT writes): it is 0x656F0 (B3)
+  until t = 1.990 s, then 0. The cause:
+  - Effects 58-61 save I3 into MSGR2 at their entry (`DM(0x0A) = I3`, 0x8403) and take it back with
+    `I3 = DM(0x0A)` (0x845E).
+  - The overlay's 21065L returns 0 for the kernel's own IOP reads (`iop65l_r`, held back as G4), so I3 becomes 0.
+  - The scrub's hop and the circular-buffer wrap (B3 0x656F0, L3 0x4650) then send its 41-word zero-fill to 0x7CD8,
+    0xC329, 0x1097A, and on in steps of 0x4651.
+
+  On the chip MSGR2 reads back what was written (pass 6 saw it move: 0x686EB, then 0x6867C), so I3 stays in ring 3
+  and the TCB survives. **So G4 has chip evidence now: at least the MSGR registers must read back their stored value**,
+  or the ring-3 effects run on a zero pointer.
+- **A second gap in the same trace: FLAG3.** In MAME I3 never moves before t = 1.990 s (0x656F0 at every frame), so
+  the emulated FLAG3 input is always low. On the chip I3 steps (pass 6), about once per two frames if the frame rate
+  is 44.1 kHz. Ring 3 does not scroll in the emulator.

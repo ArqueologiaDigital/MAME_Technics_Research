@@ -135,8 +135,12 @@ All SHARC/DSP-side; none touches the MN10300 interrupt model.
   channels with chained transfer blocks and per-slot `sport_tx`/`sport_rx` callbacks; IOP registers
   read back. The overlay only caches each block's buffer address, IOP reads return 0, and the driver
   reads and writes fixed DSP addresses (0xC342…/0xC362…). Medium: take B's SHARC hunks, rewrite the
-  tick to feed slots. The audio oracle would need a re-baseline. Whether the effect kernel reads an
-  IOP register back was not checked.
+  tick to feed slots. The audio oracle would need a re-baseline. **The effects do read an IOP register
+  back** (answered 2026-10-20 by pass 7 on the unit, `notes/dsp-probe-2026-10-20/README.md`): effects
+  58-61 save I3 to MSGR2 and restore it with `I3 = DM(0x0A)`. In the overlay that read gives 0, so the
+  ring-3 effects run on a zero pointer and the kernel's ring-3 scrub zeroes DM 0xC329 (a SPORT TCB). On
+  the chip the TCB survives and MSGR2 moves. Minimum fix: the kernel's reads of MSGR0-7 return the
+  stored value. Also: the emulated FLAG3 input is never high, so ring 3 never scrolls.
 - **MODE1.ALUSAT read at run time in the recompiler** (`38f4bca2b3a`). The overlay compiles it in
   (`b1028bd`) and only invalidates on immediate MODE1 writes. Latent for this firmware (set once,
   RTI restores the same MODE1). Trade-off: `b1028bd` credits this, with the 66 MHz clock, for the
@@ -492,3 +496,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)     |
 | 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME |
 | 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings   |
+| 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high    |
