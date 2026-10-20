@@ -128,6 +128,10 @@ Phase C should log every `(TG#, addr, data)` for one note (e.g. C4=note 0x3C) an
 
 ## 3. WAVEFORM ADDRESSING — index, not a CPU-provided start address
 
+> **SOLVED 2026-10-20 (G13, `g13-waves-2026-10-20/README.md`):** the select is plane 0x1C (20 bits:
+> page 19:12, entry 11:0), each TG reads its own ROM pair, and every 1 Mi-word page of a pair starts
+> with a directory of {record, format/exponent/granule, start/16, -} entries. The wave ROMs are dumped.
+
 **Finding: the CPU never hands the TG a raw wave-ROM byte address.** No register write in the KN7000 driver carries a 24-bit ROM pointer; the pitch registers carry 13-bit values and the group-0x04 registers 14-bit values — far too small for a 16M-word (24-bit) address. This matches the documented KN5000 behavior exactly (`technics-docs/waveform-rom-format.md:124-155`): the SubCPU writes a compact **waveform/tone index** to a per-voice register (KN5000 `+0x0C0`, group0 bank3), and the **TG chip resolves index→ROM address internally** by reading an index/parameter table stored at the very start of the wave ROM.
 
 KN5000 wave-ROM index format (the model to implement) [KN5000]:

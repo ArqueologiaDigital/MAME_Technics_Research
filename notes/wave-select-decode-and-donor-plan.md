@@ -2,6 +2,12 @@
 
 Three-agent research grounding the "better placeholder wave ROM" (Felipe's request).
 
+> **CORRECTED 2026-10-20 (G13, `g13-waves-2026-10-20/README.md`):** the select is 20 bits (plane 0x1C,
+> index nibble = bits 19:16): bits 19:12 = wave ROM page, 11:0 = directory entry, read by the TG
+> from its own ROM pair's directory. The values below were captured with the driver reporting
+> hardware subtype 5, under which the firmware remaps the page (0x0A -> 0x22 ...): "bank" bits 13:12
+> are page bits 1:0, and "bit 15 = gate-follow" is page bit 2 of that remap, not a flag.
+
 ## 1. THE WAVE SELECT (runtime, CONFIRMED by chromatic sweep)
 No wave start/loop/length addresses EVER cross the CPU->TG bus (exhaustive boot capture, 17.8k writes
 all accounted for). Sample selection is the AUX WORD (reg 0x1C02+ch*0x10, already captured as m_aux):
