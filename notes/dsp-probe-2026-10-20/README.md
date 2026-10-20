@@ -100,7 +100,7 @@ emulator (`-bios v13`, the same probe in MAME):
 | SPORT rings (`IIxxx`, `Cxxx`)             | receive base + 3, count 5; transmit base + 5, count 3, at every read | counts 0                    | the DMA is not modelled; on the chip every read lands at the same point of the frame |
 | `TPERIODx`, `TCOUNTx`                     | 0                                                                    | 0                           | the kernel does not use the timers                                                   |
 
-**The frame rate is still open.** The firmware's DSP accesses ran at 24.15 us each (41.4 per ms): every one
+**The frame rate was still open after pass 6** (pass 8 settled it: 44.1 kHz, one handshake per frame, below). The firmware's DSP accesses ran at 24.15 us each (41.4 per ms): every one
 waits for the DSP's handshake. MSGR2 (I3, stepped once per frame while FLAG3 is high) moved 111 words in about
 4.93 ms, 22.5 per ms. Either frames at about 22.5 kHz with FLAG3 always high, or 41.4 kHz or more with FLAG3 high
 on about half of them. The first would put about two accesses in each frame, 24 us apart, and those would find the
@@ -185,3 +185,53 @@ attribution run shows the read-back is the only thing that moved it, so the orac
 of 9 identical snapshots over 45 s, with no unimplemented-opcode or divide-by-zero lines. Published as
 `kn7000-emulator/kn7000` md5 `b2d669c2…`; `tools/gate.sh` with the new oracle: 17 passed, 0 failed, 1 skipped
 (kn1500).
+
+## The unit's timing in the emulator: TM4, the per-frame handshake, FLAG3 (2026-10-20)
+
+Pass 8 measured three things the overlay did not model. All three are now modelled, for the KN7000 only
+(`m_kn7000_timing`; the KN6000/KN6500/KN2400 keep the fixed tick and the immediate handshake, as nothing on them is
+measured):
+
+| change                                                                                                   | where                                                                     |
+|----------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| TM4 counts like TM5 (IOCLK/8, period reload + 1, live TM4BC); its underflow asserts a board-chosen group | `mn10300.cpp` `tm4_*`, `tm45_*`; `set_tm4_irq_group`                      |
+| the KN7000's 1 kHz tick is TM4 as the firmware programs it (0x7D0, 0x81: 1.0005 ms), not a fixed timer   | `kn7000.cpp` machine_start/machine_reset (`sys_tick` kept for the others) |
+| the group-0x17 handshake: immediate during host boot, then once per DSP frame, raised on the frame tick  | `mn10300.cpp` `set_dsp_handshake_selfack`; `kn7000.cpp` `dsp_audio_tick`  |
+| FLAG3 high on every other frame                                                                          | `kn7000.cpp` `dsp_audio_tick`                                             |
+
+The handshake is raised on the frame tick (a timer), not at the kernel's FLAG4 edge. A first build raised it at the
+FLAG4 fall (IOSTAT, end of each compute). The main CPU then saw it only at its next timeslice, and pass 8 in MAME
+found no lattice (spread 15-21 us). The scheduler ends every CPU's timeslice at a timer, so on the tick the stamps
+lie on a 0.20 us lattice, as on the unit.
+
+**Checks.** `tm4_check.lua` (`-bios v16`): the firmware programs TM4MD 0x81 and TM4BR 0x7D0, TM4BC reads live, and the
+firmware's counter at 0x50151BFC runs 499.80 per s (500.00 with the fixed timer), the 1.0005 ms period. Pass 8 in
+MAME (`cnv_romdump/test/run_test.sh --dsprate --bios v13`, the released binary `c8334f68…`), against the unit:
+
+| measurement                         | unit (pass 8) | MAME, this build           |
+|-------------------------------------|---------------|----------------------------|
+| handshake period, in tick units     | 22.68231 us   | 22.66440 us                |
+| frame rate, tick taken as 1 ms      | 44,087.2 Hz   | 44,122.1 Hz                |
+| frame rate, TM4 at exactly 2 MHz    | 44,065.2 Hz   | 44,100.0 Hz                |
+| spread of the stamps on the lattice | 0.28 us       | 0.20 us                    |
+| accesses taking one frame           | 96.8%         | 98.0%                      |
+| commonest access pair               | 45.34 us      | 45.33 us                   |
+| I3 steps per ms                     | 22.04361      | 22.06102                   |
+| FLAG3 share                         | 0.5000        | 0.5000                     |
+| ring position at every read         | one (CR0A 5)  | 0 (SPORT DMA not modelled) |
+| verdict                             | (b)           | (b)                        |
+
+The emulator's clocks are exact, so its 2 MHz figure is 44,100.0 Hz. Against its own tick, the unit's DSP runs
+0.08% slower; the two clocks come from separate crystals.
+
+**The audio oracle**, one build per step (`oracle_ab.sh`), and `wav_shift.py` against the published `028bb1db…`:
+
+| build                 | oracle md5                         | the held note against `028bb1db…`                       |
+|-----------------------|------------------------------------|---------------------------------------------------------|
+| + TM4 tick            | `3c2f89d60213a9e58f6a9b8452e33048` | starts 0.271 ms earlier; aligned, 0.01% residual energy |
+| + per-frame handshake | `f99f85219598b58c743c31e6ef72cd4f` | the same shift, 0.01% residual                          |
+| + FLAG3 (this build)  | `8a1fe2a44e064f94ff935242fd717cb4` | starts 0.188 ms earlier; aligned, 0.21% residual        |
+
+So TM4 and the handshake only move the note's start by a quarter of a millisecond: the firmware runs on the
+slightly slower tick. FLAG3 changes the sound itself a little: ring 3 now scrolls, as on the chip. Peaks and
+per-second levels are unchanged (`tools/kn5000_wav_ab.py`: 179.0 against 179.0 in second 16).

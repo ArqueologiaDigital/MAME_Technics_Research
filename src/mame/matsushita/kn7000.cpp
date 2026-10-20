@@ -424,6 +424,9 @@ private:
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
 	bool m_ram90_workram = false;                // KN7000, KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
+	// KN7000 only: timing measured on Felipe's unit (kn7000_mame notes/dsp-probe-2026-10-20, pass 8). The 1 kHz
+	// system tick is the core's TM4 as the firmware programs it, instead of the fixed sys_tick timer.
+	bool m_kn7000_timing = false;
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
@@ -734,9 +737,11 @@ private:
 	uint8_t  m_dsp_wcnt = 0;
 	bool     m_dsp_block_open = false;         // a PM/DM block is open (0xA1/0x41 seen, awaiting its 0xA0)
 	bool     m_dsp_running = false;            // released from host-boot to run (set at first end/sync)
-	// Provisional effects-DSP audio frame rate: drives the IRQ0 tick that steps the SHARC
-	// kernel's main loop one frame per edge. Stands in for the SPORT/codec frame sync until
-	// F.3 models the real serial audio path; value is a plausible placeholder, not measured.
+	bool     m_dsp_flag3 = false;              // the DSP's FLAG3 input, toggled every frame (dsp_audio_tick)
+	// Effects-DSP audio frame rate: drives the IRQ0 tick that steps the SHARC kernel's main
+	// loop one frame per edge, standing in for the SPORT/codec frame sync until F.3 models the
+	// serial audio path. Measured on Felipe's unit (DSP probe pass 8, notes/dsp-probe-2026-10-20):
+	// one frame every 22.682 us of the firmware's 1 ms tick, the nominal 44.1 kHz.
 	static constexpr int DSP_FRAME_HZ = 44100;
 	emu_timer *m_dsp_irq_timer = nullptr;      // periodic: pulse the SHARC's IRQ0 (audio frame tick)
 	TIMER_CALLBACK_MEMBER(dsp_audio_tick);
@@ -1335,6 +1340,8 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			else if (!m_dsp_running && m_dsp_dl_words > 0)        // bare 0xA0 after the last block = "go"
 			{
 				m_dsp_running = true;
+				if (m_kn7000_timing)
+					m_maincpu->set_dsp_handshake_selfack(false);   // from now on, once per frame (dsp_audio_tick)
 				logerror("DSP: kernel loaded (%u words); releasing SHARC (entry 0x8005)\n", m_dsp_dl_words);
 				m_dsp->set_input_line(INPUT_LINE_HALT, CLEAR_LINE);   // reset_pc()=0x8004 -> first-executed 0x8005 (JUMP init)
 				// Start the audio frame tick: the kernel's reset handler enables IRQ0 and then
@@ -1401,6 +1408,25 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 	// (MODE2 0x18011) and its ISR (PM 0x8020) sets R13=1 to hand a frame to the main loop.
 	if (!m_dsp_running)
 		return;
+
+	// The main CPU's DSP handshake (group 0x17, which every firmware data-port access clears and
+	// then waits for): on the unit it comes once per frame, at one fixed point of it (DSP probe
+	// pass 8, notes/dsp-probe-2026-10-20: every 22.682 us, the SPORT rings at the same position at
+	// every read). Raised here, on the frame tick, so every CPU sees it at this exact time (the
+	// scheduler ends each timeslice at a timer). Before the kernel runs, the core's self-ack
+	// answers at once instead (set_dsp_handshake_selfack), as the DSP does in host boot.
+	if (m_kn7000_timing)
+		intc_assert(0x17);
+
+	// FLAG3, an input the kernel polls once per frame (PM 0x8098: IF FLAG3_IN, MODIFY(I3, M3 = -1),
+	// stepping its ring-3 pointer): on the unit it is high on exactly every other frame (pass 8: I3
+	// steps on 0.5000 of the frames, 22.04 per ms), so ring 3 runs at half rate. The kernel keeps
+	// FLAG2/3 as inputs (MODE2 0x18011 sets FLAG0/1 as outputs only).
+	if (m_kn7000_timing)
+	{
+		m_dsp_flag3 = !m_dsp_flag3;
+		m_dsp->set_flag_input(3, m_dsp_flag3);
+	}
 
 	// F.3 audio path -- REAL TOPOLOGY (SPORT DMA-chain RE, workflow wf_b58b1fda-df3):
 	// none of the DSP's TX slots feeds a DAC directly. All four SPORT TX pins loop back
@@ -1974,6 +2000,7 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_dsp_host8));
 	save_item(NAME(m_dsp_wr_n));
 	save_item(NAME(m_dsp_hostw));
+	save_item(NAME(m_dsp_flag3));
 	save_item(NAME(m_dsp_rb_on));
 	save_item(NAME(m_dsp_rb_pm));
 	save_item(NAME(m_dsp_rb_addr));
@@ -2045,6 +2072,8 @@ void kn7000_state::machine_start()
 	if (m_lib_mirror)
 		memcpy(memshare("libram")->ptr(), memregion("maincpu")->base(), memregion("maincpu")->bytes());
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
+	if (m_kn7000_timing)
+		m_maincpu->set_tm4_irq_group(IRQGRP_TIMER);   // the 1 kHz tick: TM4 underflow -> group 6
 	m_poweroff_timer = timer_alloc(FUNC(kn7000_state::poweroff_done), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
@@ -2110,6 +2139,8 @@ void kn7000_state::machine_reset()
 	// memory is empty). It is released only once the firmware finishes the host-boot upload.
 	m_dsp->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
 	m_dsp_running = false;
+	m_dsp_flag3 = false;
+	m_maincpu->set_dsp_handshake_selfack(true);
 	m_dsp_dl_words = 0; m_dsp_mode = 0; m_dsp_wcnt = 0; m_dsp_cur = 0; m_dsp_dl_addr = 0;
 	m_dsp_block_open = false;
 	m_dsp_irq_timer->adjust(attotime::never);   // audio frame tick starts only once the kernel is loaded
@@ -2129,6 +2160,10 @@ void kn7000_state::machine_reset()
 		// The KN6000 ms counter is driven by the core's real TM5 now (the boot
 		// programs it itself). See notes/kn6000-kn6500-boot.md.
 		m_sys_timer->adjust(attotime::from_seconds(2), 0, attotime::from_hz(1000));
+	else if (m_kn7000_timing)
+		// KN7000: the tick is the core's TM4, from when the firmware programs it (reload 0x7D0,
+		// mode 0x81: 2001 counts at 2 MHz, 1.0005 ms), as on the unit.
+		m_sys_timer->adjust(attotime::never);
 	else
 		m_sys_timer->adjust(attotime::from_hz(1000), 0, attotime::from_hz(1000));
 
@@ -2304,6 +2339,7 @@ void kn7000_state::kn7000(machine_config &config)
 	NVRAM(config, m_ic23_nvram, nvram_device::DEFAULT_ALL_0);
 	// 0x90000000 is the +0x40000000 view of work RAM: the NMI's RAM stub is written there.
 	m_ram90_workram = true;
+	m_kn7000_timing = true;              // cleared by the machines built on this one
 
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
@@ -2499,6 +2535,7 @@ void kn7000_state::kn6000(machine_config &config)
 	SOFTWARE_LIST(config.replace(), "flop_list").set_original("kn6000_flop");
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = false;             // its IRQ trampolines are verified with the separate share
+	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
@@ -2582,6 +2619,7 @@ void kn7000_state::kn2400(machine_config &config)
 	config.device_remove("flop_list");   // no KN2400 software list yet
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = true;
+	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).
 	m_screen->set_size(320, 240);

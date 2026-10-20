@@ -82,6 +82,11 @@ public:
 	// trampoline 0x90000000 for every level). That mapping is board policy:
 	// the machine fills the per-level table with set_maskable_vector().
 	void intc_assert(int group);                  // set DETECT bit0 + REQUEST, recompute delivery
+	// The KN7000 effects-DSP handshake on group 0x17 (see intc_w): with the self-ack on (the
+	// default), a firmware write that clears the group answers at once, as a DSP that grants
+	// the bus immediately does (host boot). With it off, the write clears DETECT like any other
+	// group, and the board raises the request itself (intc_assert) when the DSP lets the host in.
+	void set_dsp_handshake_selfack(bool on) { m_g17_selfack = on; }
 	// Raw ICR access for POLLED lines a board drives directly (e.g. the KN7000
 	// SD card-detect pin on group 0x1B). Deliberately NO recompute -- byte-
 	// exact with the driver HLE's direct m_gxicr pokes (such polled lines never
@@ -168,12 +173,20 @@ public:
 	// the AM33 TM5: mode byte @0x34001082, 16-bit reload @0x34001092, down-
 	// counter @0x340010A2). TM5 underflow asserts INTC group 7 = the KN7000
 	// firmware's 96-PPQN sequencer tick (and the KN6000/KN6500 firmware's
-	// ms-counter tick -- both program THIS timer). The TM4 half of each
-	// register word (offset 0 of each window) keeps the driver behaviour:
-	// reads 0, writes dropped; TM5BC writes fall through to the machine map
-	// (the driver mapped the counter window read-only). Full RE in the
-	// members' comments and kn7000_mame notes/sequenced-playback-and-style-
-	// data-rootcause.md.
+	// ms-counter tick -- both program THIS timer). TM5BC writes fall through
+	// to the machine map (the driver mapped the counter window read-only).
+	// Full RE in the members' comments and kn7000_mame notes/sequenced-
+	// playback-and-style-data-rootcause.md.
+	//
+	// TM4, the other half of each register word (offset 0 of each window:
+	// mode @0x34001080, reload @0x34001090, down-counter @0x340010A0), counts
+	// the same way. The KN7000 firmware programs it for its 1 kHz system tick
+	// (893 0x484D707F, 941 0x484D728C: reload 0x7D0, mode 0x81, so a period of
+	// 2001 counts at 2 MHz) and never reads it; on Felipe's unit the DSP
+	// probe's pass 8 read its counter as a fine clock (2,000 down to 0 between
+	// ticks). Its underflow asserts the INTC group the board sets here (the
+	// KN7000: group 6, the scheduler tick); -1, the default, asserts nothing.
+	void set_tm4_irq_group(int group) { m_tm4_irq_group = group; }
 
 protected:
 	// device_t overrides
@@ -249,6 +262,7 @@ private:
 	devcb_write16 m_intc_extmd_cb;
 
 	uint16_t m_gxicr[NUM_INTC_GROUPS];
+	bool     m_g17_selfack = true;   // see set_dsp_handshake_selfack
 	int      m_iagr_latch;       // group latched at interrupt accept
 	uint16_t m_intc_280;         // 0x34000280 (EXTMD) latched control fields
 	uint32_t m_level_vector[8];  // per-level maskable vector (board-configured)
@@ -259,6 +273,10 @@ private:
 	uint16_t tm45_base_r(offs_t offset);
 	void tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 	uint16_t tm45_count_r(offs_t offset);
+	void tm4_mode_w(uint8_t data);
+	void tm4_base_w(uint16_t data);
+	void tm4_rearm(bool restart_phase);
+	TIMER_CALLBACK_MEMBER(tm4_tick);
 	void tm5_mode_w(uint8_t data);
 	void tm5_base_w(uint16_t data);
 	void tm5_rearm(bool restart_phase);
@@ -277,6 +295,10 @@ private:
 
 	static constexpr unsigned TM5_PRESCALE = 8;  // IOCLK / 8 = 2 MHz on the KN7000 (see tm5_rearm)
 
+	uint8_t   m_tm4_mode;        // TM4: as TM5
+	uint16_t  m_tm4_base;
+	emu_timer *m_tm4_timer;
+	int       m_tm4_irq_group = -1;  // board configuration (set_tm4_irq_group), not runtime state
 	uint8_t   m_tm5_mode;        // bit7 = count enable, bit6 = load pulse, low bits = source/prescale
 	uint16_t  m_tm5_base;        // 16-bit reload (underflow period)
 	emu_timer *m_tm5_timer;

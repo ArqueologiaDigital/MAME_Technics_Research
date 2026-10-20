@@ -142,7 +142,8 @@ All SHARC/DSP-side; none touches the MN10300 interrupt model.
   the chip the TCB survives and MSGR2 moves. **Done for the MSGR registers** (2026-10-20): the kernel's
   reads of MSGR0-7 return the stored value; the oracle moved only through that (attribution run) and was
   re-baselined. The other IOP registers still read 0 to the kernel (several hold status bits not
-  modelled). Still open: the emulated FLAG3 input is never high, so ring 3 never scrolls.
+  modelled). FLAG3 is driven too (2026-10-20): high on every other frame, as pass 8 measured, so ring 3
+  scrolls at half rate.
 - **MODE1.ALUSAT read at run time in the recompiler** (`38f4bca2b3a`). The overlay compiles it in
   (`b1028bd`) and only invalidates on immediate MODE1 writes. Latent for this firmware (set once,
   RTI restores the same MODE1). Trade-off: `b1028bd` credits this, with the 66 MHz clock, for the
@@ -361,12 +362,18 @@ without test-side stand-ins. The probe builds themselves are in `technics-roms-d
 **Pass 6 ran on the unit (2026-10-20).** The set-up matches the emulator's (SYSCON `0x410`, chain pointers, SPORT
 control bits). The chip also shows state the emulator lacks: DMASTAT `0x33F`, SYSTAT, IOSTAT, the STCTLx status bits,
 IOCTL bits 31/15 reading 0, MSGR3 `0`, the rings' positions (`notes/dsp-probe-2026-10-20/README.md`, "What the chip
-said"). The timers are unused; the SPORT counts are frame-locked to the firmware's handshake. The frame rate is still
-open: about 22.5 kHz, or 41.4 kHz or more (a 44.1 kHz reading fits). Pass 7 ran (the downloaded DSP code matches;
+said"). The timers are unused; the SPORT counts are frame-locked to the firmware's handshake. After pass 6 the frame rate
+was still open: about 22.5 kHz, or 41.4 kHz or more (pass 8 settled it, below). Pass 7 ran (the downloaded DSP code matches;
 see G4 for the bug it found). Pass 8 (cnv_romdump `releases/2026-10-20-dsprate/`) times the handshakes with the
 MN10300's timer 4 to settle the rate. It showed two emulator gaps that keep it from measuring anything in MAME:
-- TM4 is not modelled (the core models TM5 only; the 1 kHz tick comes from a driver timer), so TM4BC reads 0;
-- the group-0x17 handshake is answered at once instead of once per DSP frame.
+- TM4 was not modelled (the core modelled TM5 only; the 1 kHz tick came from a driver timer), so TM4BC read 0;
+- the group-0x17 handshake was answered at once instead of once per DSP frame.
+
+**Pass 8 ran on the unit (2026-10-20): verdict (b).** One handshake per DSP frame, every 22.682 us of the firmware's
+tick: 44.1 kHz nominal. FLAG3 is high on every other frame. All three are now modelled for the KN7000: TM4 drives
+its 1 kHz tick, the handshake comes once per frame, FLAG3 alternates. Pass 8 in MAME gives verdict (b) at
+44,100.0 Hz (`notes/dsp-probe-2026-10-20/README.md`, "The unit's timing in the emulator"). Not modelled: the SPORT
+DMA itself (DMASTAT, the counts and the ring positions read 0), so the phase check finds nothing in MAME.
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
@@ -490,16 +497,17 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 
 ## History
 
-| date       | change                                                                                                     |
-|------------|------------------------------------------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                                 |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                                   |
-| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                                |
-| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                       |
-| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                    |
-| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                         |
-| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)     |
-| 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME |
-| 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings   |
-| 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high    |
-| 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db       |
+| date       | change                                                                                                       |
+|------------|--------------------------------------------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                                   |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                                     |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                                  |
+| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                         |
+| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                      |
+| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                           |
+| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)       |
+| 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME   |
+| 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings     |
+| 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high      |
+| 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db         |
+| 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000) |

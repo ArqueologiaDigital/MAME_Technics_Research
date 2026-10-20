@@ -74,6 +74,7 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_intc_accept_cb(*this)
 	, m_intc_extmd_cb(*this)
 	, m_iagr_latch(0), m_intc_280(0)
+	, m_tm4_mode(0), m_tm4_base(0), m_tm4_timer(nullptr)
 	, m_tm5_mode(0), m_tm5_base(0), m_tm5_timer(nullptr)
 	, m_tm6_mode(0), m_tm6_mda(0), m_tm6_ca(0), m_tm6_timer(nullptr)
 	, m_dma_tc_cb(*this), m_dma_timer(nullptr)
@@ -163,11 +164,15 @@ void mn10300_device::device_start()
 	save_item(NAME(m_gxicr));
 	save_item(NAME(m_iagr_latch));
 	save_item(NAME(m_intc_280));
+	save_item(NAME(m_g17_selfack));
+	save_item(NAME(m_tm4_mode));
+	save_item(NAME(m_tm4_base));
 	save_item(NAME(m_tm5_mode));
 	save_item(NAME(m_tm5_base));
-	// (m_level_vector is machine configuration, not runtime state; m_tm5_timer
-	// is a device-allocated emu_timer and is save-stated automatically.)
+	// (m_level_vector and m_tm4_irq_group are machine configuration, not runtime
+	// state; the timers are device-allocated emu_timers, save-stated automatically.)
 
+	m_tm4_timer = timer_alloc(FUNC(mn10300_device::tm4_tick), this);
 	m_tm5_timer = timer_alloc(FUNC(mn10300_device::tm5_tick), this);
 	m_tm6_timer = timer_alloc(FUNC(mn10300_device::tm6_tick), this);
 	save_item(NAME(m_tm6_mode));
@@ -238,6 +243,10 @@ void mn10300_device::device_reset()
 	// card-detect bits on group 0x1B) happens in the driver's machine_reset,
 	// which runs AFTER this (device_reset_after_children ordering).
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
+	m_g17_selfack = true;
+	m_tm4_mode = 0;
+	m_tm4_base = 0;
+	m_tm4_timer->adjust(attotime::never);
 	m_tm5_mode = 0;
 	m_tm5_base = 0;
 	m_tm5_timer->adjust(attotime::never);
@@ -463,7 +472,9 @@ void mn10300_device::intc_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	// is registered against it; its only refs are this handshake + the INTC bulk-clear).
 	// (The driver gated this on dsp_present(), which was constant-true on every machine
 	// sharing the config -- so the quirk is unconditional here.)
-	if (group == 0x17 && (data & mem_mask & 0x000f))
+	// (With the self-ack off -- set_dsp_handshake_selfack, the KN7000 while its DSP kernel runs --
+	// the board raises the request once per DSP frame instead, as the unit does.)
+	if (group == 0x17 && m_g17_selfack && (data & mem_mask & 0x000f))
 	{
 		m_gxicr[0x17] = uint16_t((data & mem_mask & 0xff00) | 0x0011);   // DETECT+REQUEST; ENABLE as written
 		intc_recompute();
@@ -551,23 +562,27 @@ void mn10300_device::intc_recompute()
 // registers (mode 0x81, base 0xFA0) for its ms-counter tick, also on group 7.
 //
 // The handlers are 16-bit on the word pairs 0x1080/0x1090/0x10A0; offset 0 =
-// the TM4 half (kept at the driver behaviour: reads 0, writes dropped),
-// offset 1 = TM5.
+// TM4, offset 1 = TM5. Both count alike (see the public section): TM4 is the
+// KN7000's 1 kHz system tick.
 
 uint16_t mn10300_device::tm45_mode_r(offs_t offset)
 {
-	return offset ? m_tm5_mode : 0;
+	return offset ? m_tm5_mode : m_tm4_mode;
 }
 
 void mn10300_device::tm45_mode_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
-	if (offset && ACCESSING_BITS_0_7)
+	if (!ACCESSING_BITS_0_7)
+		return;
+	if (offset)
 		tm5_mode_w(data & 0xff);
+	else
+		tm4_mode_w(data & 0xff);
 }
 
 uint16_t mn10300_device::tm45_base_r(offs_t offset)
 {
-	return offset ? m_tm5_base : 0;
+	return offset ? m_tm5_base : m_tm4_base;
 }
 
 void mn10300_device::tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask)
@@ -575,18 +590,58 @@ void mn10300_device::tm45_base_w(offs_t offset, uint16_t data, uint16_t mem_mask
 	// a byte write changes only its own half of the reload (from upstream)
 	if (offset)
 		tm5_base_w((m_tm5_base & ~mem_mask) | (data & mem_mask));
+	else
+		tm4_base_w((m_tm4_base & ~mem_mask) | (data & mem_mask));
 }
 
 uint16_t mn10300_device::tm45_count_r(offs_t offset)
 {
-	if (!offset || !(m_tm5_mode & 0x80) || m_tm5_timer->remaining().is_never())
+	const uint8_t mode = offset ? m_tm5_mode : m_tm4_mode;
+	emu_timer *const timer = offset ? m_tm5_timer : m_tm4_timer;
+	if (!(mode & 0x80) || timer->remaining().is_never())
 		return 0;
 	// live down-count from the timer's remaining IOCLK ticks: base just after a
 	// reload, 0 just before the underflow. Counting in ticks (from upstream) keeps
 	// the product in range; the old (base + 1) * remaining-attoseconds overflowed
 	// 64 bits for any reload above about 6074 and read back out of order.
-	const uint64_t ticks = m_tm5_timer->remaining().as_ticks(clock() / 2);
+	const uint64_t ticks = timer->remaining().as_ticks(clock() / 2);
 	return uint16_t(ticks ? ((ticks - 1) / TM5_PRESCALE) : 0);
+}
+
+// TM4: the same register semantics and clock as TM5 below (the KN7000 programs mode
+// 0x81 and reload 0x7D0 for its 1 kHz tick, the same mode TM5 is given).
+void mn10300_device::tm4_mode_w(uint8_t data)
+{
+	const uint8_t rising = data & ~m_tm4_mode;
+	m_tm4_mode = data;
+	logerror("tm4: mode=%02X base=%04X\n", data, m_tm4_base);
+	if (!(data & 0x80))
+		m_tm4_timer->adjust(attotime::never);          // count disabled
+	else if (rising & (0x80 | 0x40))
+		tm4_rearm(true);                               // enabled, or load pulse while enabled
+}
+
+void mn10300_device::tm4_base_w(uint16_t data)
+{
+	m_tm4_base = data;
+	logerror("tm4: base=%04X (mode=%02X)\n", data, m_tm4_mode);
+	if ((m_tm4_mode & 0x80) && !m_tm4_timer->remaining().is_never())
+		tm4_rearm(false);
+}
+
+void mn10300_device::tm4_rearm(bool restart_phase)
+{
+	const attotime period = attotime::from_ticks(uint64_t(m_tm4_base + 1) * TM5_PRESCALE, clock() / 2);
+	if (restart_phase)
+		m_tm4_timer->adjust(period, 0, period);
+	else
+		m_tm4_timer->adjust(m_tm4_timer->remaining(), 0, period);
+}
+
+TIMER_CALLBACK_MEMBER(mn10300_device::tm4_tick)
+{
+	if (m_tm4_irq_group >= 0)
+		intc_assert(m_tm4_irq_group);   // KN7000: group 6 (GxICR 0x34000118), the scheduler's 1 kHz tick
 }
 
 void mn10300_device::tm5_mode_w(uint8_t data)
