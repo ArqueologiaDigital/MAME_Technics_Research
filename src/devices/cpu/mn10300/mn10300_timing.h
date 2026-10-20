@@ -59,15 +59,15 @@ constexpr int C_1        = Q(1);    // ALU, mov reg/imm, ext*, shifts, inc, cmp,
 constexpr int C_LONG     = Q(2);    // the 6-byte imm32/d32/abs32 forms [M pp.26-65]; with the
                                     //   fetch they take 2.75 [P9 MI32 LDAB]
 constexpr int C_ST_INDEX = Q(2);    // stores to (Di,An) [M pp.28, 31, 35]
-constexpr int C_BCC      = Q(1.75); // Bcc not taken [P9 BEQ 1.75; M p.81: 1, "depends on the queue"]
+constexpr int C_BCC      = Q(1);    // Bcc not taken [M p.81: 1, "depends on the queue"]; + fetch, section 3
 constexpr int C_BCC_T    = Q(3);    // Bcc taken, bra [P9 BNE BRA; M p.81]
-constexpr int C_BEXT     = Q(2.75); // bvc/bvs/bnc/bns not taken [M p.81: 2] + 0.75 as Bcc. GUESS
+constexpr int C_BEXT     = Q(2);    // bvc/bvs/bnc/bns not taken [M p.81]; + fetch as Bcc
 constexpr int C_BEXT_T   = Q(4);    //   taken [M p.81]
 constexpr int C_LCC_T    = Q(1);    // Lcc taken [P9 LBUF: add + lne = 2; M p.82]
 constexpr int C_LCC      = Q(2);    // Lcc not taken [M p.82]
 constexpr int C_LRA      = Q(1);    // [M p.82]
 constexpr int C_SETLB    = Q(1);    // [M p.83]
-constexpr int C_JMP_D16  = Q(3);    // jmp (d16,PC): [P9 JMP 3.5] with the queue refill; [M p.84] 2
+constexpr int C_JMP_D16  = Q(3);    // jmp (d16,PC): 3.4 with the queue refill [P9 JMP 3.5]; [M p.84] 2
 constexpr int C_JMP_D32  = Q(4);    // [M p.84] 3; + 1 as jmp d16. GUESS
 constexpr int C_JMP_AN   = Q(3);    // [M p.84]
 // call: [P9 CAL0 call + ret = 10, CAL4 with 4 registers = 13]; [M p.85] gives 2 + n (d16)
@@ -115,13 +115,20 @@ constexpr int LU_SUBWORD  = Q(2);   // other memory, byte or halfword [M p.128].
 //
 // The fetch unit reads 8-byte aligned blocks [M p.125]. Fitted to the straight-line tests
 // (notes/cpu-timing-2026-10-20/fetch_fit.py): the queue holds 8 bytes and refills at 2.1
-// bytes per cycle; a taken branch (or any jump) leaves it holding the target's block from
-// the target to its end. An instruction waits until all its bytes are there. That gives
-// 1-2 byte instructions 1 cycle, a run of 3-byte ones 1.25 and of 6-byte ones 2.75
-// [P9 LSRI MI16 1.25, MI32 LDAB 2.75], and a lone 4-byte one 1 [P9 LPW5].
+// bytes per cycle. An instruction waits until all its bytes are there. That gives 1-2 byte
+// instructions 1 cycle, a run of 3-byte ones 1.25 and of 6-byte ones 2.75 [P9 LSRI MI16
+// 1.25, MI32 LDAB 2.75], and a lone 4-byte one 1 [P9 LPW5].
+// Control flow, fitted to [P9 JMP CAL0 CALF CALS CRET FLLG FLSH BEQ] (fetch_fit.py, part 2):
+// a taken jump leaves the queue holding the target's 8-byte block from the target on, plus
+// what a transfer slower than a taken branch (call, return: 4-5 cycles) fetched in its extra
+// cycles; the next block arrives FQ_HOLD later. An untaken Bcc costs 1 cycle and FQ_UNTAKEN
+// bytes of fetch (it fetched its target): a run of them takes 1.75 each [P9 BEQ], a lone one 1.
+// Lcc refills from LIR, the loop's first 4 bytes [M p.107; P9 LBUF].
 constexpr int FQ_UNIT = 40;         // queue bytes are counted in 1/40 byte
 constexpr int FQ_RATE = 21;         // per quarter cycle: 2.1 bytes per cycle
 constexpr int FQ_CAP  = 8 * FQ_UNIT;
+constexpr int FQ_HOLD = Q(0.75);    // the block after a jump target's
+constexpr int FQ_UNTAKEN = 2 * FQ_UNIT;
 
 //**************************************************************************
 //  4. Caches  [M p.11, p.25; D; FW; P9]
@@ -196,6 +203,15 @@ constexpr std::array<cs_cost, 8> CS = {{
 	//   The DSP data port is taken to cost what the LCD does. GUESS
 	{ Q(43.41), Q(87.82), Q(27.13), Q(55.88), Q(347), Q(347), -1, 8 },
 }};
+// Stores to the I/O chip selects (CS6, CS7) are posted: the CPU goes on while the bus carries
+// the store, and the next external access (load, line fill or write-back, another store) waits
+// for it. Back to back, as pass 9 timed them, each store costs its full bus time either way.
+// Inferred from pass 8: the firmware's DSP index write (a CS6 store, then cached code) re-latches
+// in 1.69 us on the unit; with the store's 36 cycles paid in line it took 2.17 us here, posted
+// 1.67. Work RAM's uncached stores are not: posted, the loop after [P9 RUS1-4 RUY4] would hide
+// part of the last one, and the unit shows no such overlap (5.78 per store; 5.51 posted). GUESS
+// beyond those two measurements.
+constexpr unsigned POSTED_CS = 0xc0;          // chip selects whose uncached stores are posted
 constexpr int FILL_TABLE_FLASH = Q(28.56);   // CS2 below 0x48400000 [P9 TBW4]
 constexpr int FILL_IC19        = Q(57.44);   // CS5 at 0x57xxxxxx [P9 PIW4]
 // The values pass 9 read; also the registers' reset values, which are unknown except that

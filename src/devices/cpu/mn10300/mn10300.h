@@ -345,6 +345,10 @@ private:
 	void dcache_invalidate();
 	inline void charge(int quarters);
 	inline void timing_pre(uint32_t pc, uint8_t op);
+	inline void xfer(int cost);
+	inline void xfer_loop();
+	inline void untaken();
+	inline void bus_wait();
 	inline int data_cost(uint32_t a, bool wide, bool write);   // charges; returns the load-use latency
 	inline void loaded(unsigned regs);                         // a single load wrote these registers
 	inline int dcache_access(uint32_t a, bool wide, bool write, int cs);
@@ -354,6 +358,7 @@ private:
 	static constexpr unsigned NSETS = 128;          // mn10300_timing::SETS
 	uint16_t m_memctr[8];          // MEMCTR0-7 (0x32000020 + 2n), as the firmware wrote them
 	uint16_t m_chctr;              // CHCTR (0x20000070)
+	uint16_t m_busctl[3];          // 0x32000010, 0x32000040, 0x32000042 (latched, no timing)
 	int      m_cs_rd16[8], m_cs_rd32[8];   // quarter cycles beyond a hit: one uncached load,
 	int      m_cs_wr16[8], m_cs_wr32[8];   //   one uncached store, of 8/16 and of 32 bits on CSn,
 	int      m_cs_fill[8], m_cs_wb[8];     //   a line fill, and a dirty line's write-back
@@ -361,6 +366,10 @@ private:
 	uint64_t m_qclock;             // quarter cycles charged since start (the queue and load-use clock)
 	int      m_fq;                 // fetch queue fill, in 1/FQ_UNIT bytes
 	uint64_t m_fq_qclock;          // m_qclock when the current instruction started executing
+	int      m_fq_hold;            // quarter cycles before the queue refills again (after a jump)
+	int      m_fq_bonus;           // bytes (1/FQ_UNIT) a slow transfer fetched beyond the target block
+	bool     m_fq_loop;            // the last transfer was Lcc/lra (LIR holds the loop's first 4 bytes)
+	uint64_t m_wb_free;            // m_qclock when a posted store leaves the external bus
 	uint32_t m_seq_pc;             // where the next instruction starts if nothing jumps
 	unsigned m_ld_dst;             // registers the last single load wrote (0: none pending)
 	uint64_t m_ld_ready;           // m_qclock when that load's data can be used
