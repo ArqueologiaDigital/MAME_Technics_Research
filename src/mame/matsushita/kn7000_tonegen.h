@@ -16,11 +16,13 @@
     live in the base class (kn_tonegen.h / kn_tonegen.cpp), which documents
     the firmware evidence for that split.
 
-    The four PCM wave ROMs (IC203/4/7/8) are undumped, so the timbre is a
-    placeholder (a sine, or a donor sample from the optional synthetic wave
-    pack). Everything else -- pitch, polyphony, note timing, the 7-parameter
-    amplitude envelope, the per-part effect-send matrix -- comes from the
-    firmware's own register writes and is authentic.
+    The voices play the four dumped wave ROMs (IC203/IC204 on the TG at
+    0x98050000, IC207/IC208 on the one at 0x98040000): the sample selected by
+    the 20-bit select in plane 0x1C, at the rate pitch18 asks for. Without
+    those ROMs they fall back to the optional synthetic wave pack. The wave
+    format and the select/pitch rules: notes/g13-waves-2026-10-20. Pitch,
+    polyphony, note timing, the 7-parameter amplitude envelope and the per-part
+    effect-send matrix come from the firmware's own register writes.
 
     Register semantics: notes/tg-voice-register-semantics.md
     Envelope decode:    notes/tg-envelope-sweep-results.md
@@ -42,14 +44,13 @@ DECLARE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device)
 // ---------------------------------------------------------------------------
 // kn7000_tonegen_device -- FIRMWARE-DRIVEN audio output (Phase C, Stage 2).
 //
-// The real tone generators (IC201/IC205) play PCM from the four undumped wave ROMs.
-// This device does not have those samples, but it IS driven by the real firmware
-// voice engine: every tone-generator register write is routed to tg_write(), and we
-// render a placeholder sine per voice using the firmware's own pitch (class 0x2401)
-// and note-on/off gating (0x2401 write / 0x0001=0xC000 mute). So pitch, polyphony,
-// timing and note events are authentic; only the timbre is a stand-in until the wave
-// ROMs are dumped. The path (stream, speakers, DAC) is proven; the machine is
-// MACHINE_IMPERFECT_SOUND. See notes/tg-voice-register-semantics.md.
+// The real tone generators (IC201/IC205) play PCM from the four wave ROMs, and so does
+// this device: every tone-generator register write is routed to tg_write(), and each
+// voice plays the ROM sample its select names, at the rate of the firmware's own pitch
+// (class 0x2401), gated by its note-on/off writes (0x2401 write / 0x0001=0xC000 mute).
+// The amplitude envelope is a model of the firmware's EG writes and the filter is not
+// emulated, so the machine stays MACHINE_IMPERFECT_SOUND. See
+// notes/tg-voice-register-semantics.md and notes/g13-waves-2026-10-20.
 // ---------------------------------------------------------------------------
 class kn7000_tonegen_device : public kn_tonegen_base_device
 {
@@ -79,13 +80,23 @@ public:
 	//     a bend, not a retrigger (new notes are always preceded by the mute).
 	//   * class 0x0001 = 0xC000 = the voice mute the firmware writes on note-off /
 	//     voice-steal -> gate the voice OFF (release).
-	// Timbre is a placeholder sine: the real PCM wave ROMs (IC203/4/7/8) are undumped,
-	// so authentic samples are not yet possible. addr = [group:6][channel:6][index:4].
+	// Timbre: the wave ROM sample of the plane-0x1C select (synthetic pack without the
+	// ROMs). addr = [group:6][channel:6][index:4].
 	// note_x256: musical pitch in 1/256-semitone units resolved from the firmware's
 	// voice record by the caller, or -1 if unavailable (fall back to the legacy
 	// keybed-anchored absolute decode of pitch18).
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
 
+protected:
+	// Finds the four wave ROMs (IC203/IC204, IC207/IC208) and, when they are all there,
+	// plays every voice from them instead of the synthetic wave pack.
+	virtual void device_start() override ATTR_COLD;
+
+private:
+	// Plane 0x1C carries a 20-bit sample select: the register index (address bits 3:0) is
+	// select bits 19:16, the data its low 16 bits. Bits 19:12 are the ROM page, 11:0 the
+	// directory entry (notes/g13-waves-2026-10-20).
+	uint8_t m_auxidx[128] = { };
 };
 
 #endif // MAME_MATSUSHITA_KN7000_TONEGEN_H

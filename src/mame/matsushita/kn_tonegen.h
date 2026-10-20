@@ -69,6 +69,7 @@
 #pragma once
 
 #include <atomic>
+#include <utility>
 #include <vector>
 
 
@@ -124,7 +125,9 @@ public:
 	// hardware plausibly key-gates certain voice classes with NO CPU write: the sound
 	// sweep found aux word (latch 0x1C02+blk*0x10) bit15 set for exactly the sustaining
 	// families that receive no key-up TG writes (brass/sax/organ; 8/8 blocks, no false
-	// positives). Model: tag each voice with the key that caused it (the most recent MAKE
+	// positives). That bit turned out to be wave ROM page bit 2 as the firmware remaps it
+	// for hardware subtype 5 (notes/g13-waves-2026-10-20); the KN7000 decode keeps the class
+	// by testing that page bit. Model: tag each voice with the key that caused it (the most recent MAKE
 	// within 60 ms), and on that key's BREAK release the gate-follow voices it started.
 	// (Chord edge case: keys pressed near-simultaneously could mis-tag; acceptable for
 	// the placeholder.)
@@ -163,14 +166,15 @@ protected:
 	sound_stream *m_stream = nullptr;
 	double   m_phase[128] = { };     // per-voice oscillator phase
 	double   m_ton[128]   = { };     // note-on machine time (s) -- release detection
-	uint16_t m_aux[128]   = { };     // per-voice aux/mode word (latch class 0x1C02; bit15 = gate-follow)
+	uint16_t m_aux[128]   = { };     // per-voice sample select, low 16 bits (plane 0x1C data)
 	uint8_t  m_mode[128]  = { };     // 0=MANAGED (firmware key-up burst) 1=GATE_FOLLOW 2=ONESHOT
 	// SYNTHETIC wave-pack playback (kn7000_waves_synthetic.rom, optional). Entries map the
 	// runtime sample select -- aux word bank (bits13:12) + zone (bits7:0) -- to donor PCM.
 	struct wentry { uint8_t bank, zlo, zhi; const int16_t *pcm; uint32_t len, lstart, llen; double root_hz; };
 	std::vector<wentry> m_wentries;
-	// FABRICATED DEFAULT SINE (Felipe Sanches' faithful-MECHANISM principle): the wave
-	// ROMs are undumped, so a voice that maps to no donor zone plays a fabricated sine
+	// FABRICATED DEFAULT SINE (Felipe Sanches' faithful-MECHANISM principle): where no wave
+	// ROMs are loaded (the KN6000/KN6500/KN2400 here, or a KN7000 without its dumps), a voice
+	// that maps to no donor zone plays a fabricated sine
 	// PCM sample through the SAME sample-playback datapath the real chip uses -- there is
 	// NO sin() oscillator, exactly as on hardware. m_wdefault indexes that pack entry
 	// (pack bank 0xFF); if the optional pack ROM is absent we synthesize the identical
@@ -234,6 +238,40 @@ protected:
 	                                  // overridden by the managed key-up burst's r0 rate)
 	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 	int      m_num_voices;           // 128 (KN7000) or 64 (KN6000/KN6500)
+
+	// ---- playback from the dumped wave ROMs (KN7000; notes/g13-waves-2026-10-20) ----
+	// Each tone generator owns one ROM pair, read as one stream of 16-bit words: word 2i is
+	// word i of the Y ROM, word 2i+1 word i of the X ROM. The stream is 16 pages of 1 Mi
+	// words, each starting with its own directory {A record, P format, B start/16, Q}. A
+	// derived device that has the ROMs calls set_wave_pair() at start and rom_voice_start()
+	// at note-on; voices started that way play the ROM instead of the wave pack.
+	struct rom_sample
+	{
+		int      pair;                        // which ROM pair
+		uint32_t base;                        // stream word of the sample's first word
+		uint32_t ls, le;                      // loop start / end, in samples from the start
+		int      exponent;                    // P bits 11:4: a period of 2^(E-9) samples sounds at p18's note
+		bool     is8;                         // P bit 3: two 8-bit samples per word, low byte first
+		std::vector<std::pair<uint32_t, float>> gain;  // 8-bit: (segment end, gain) in order
+	};
+	void set_wave_pair(int pair, const uint8_t *y, const uint8_t *x, uint32_t bytes);
+	bool has_wave_roms() const { return m_wave[0][0] && m_wave[1][0]; }
+	// select the sample for (pair, 20-bit select) and key voice v at pitch p18; false = none
+	bool rom_voice_start(int v, int pair, uint32_t sel20, uint32_t p18);
+	void rom_voice_pitch(int v, uint32_t p18);           // held voice: new pitch, same sample
+	static double rom_rate(uint32_t p18, int exponent);  // source samples per output sample
+
+	const uint8_t *m_wave[2][2] = { };   // [pair][Y, X] ROM bytes; pair 0 = 0x98040000, 1 = 0x98050000
+	uint32_t m_wave_bytes = 0;           // bytes per ROM
+	std::vector<rom_sample> m_rsamples;                  // samples resolved so far
+	std::vector<std::pair<uint32_t, int>> m_rindex;      // (key, m_rsamples index), sorted
+	int      m_rsel[128];                // m_rsamples index per voice (-1 = not a ROM voice); derived from m_rkey
+	int32_t  m_rkey[128];                // pair<<20 | page<<12 | entry per voice, -1 = none (saved)
+	double   m_rpos[128]  = { };         // sample position in the ROM voice
+	double   m_rrate[128] = { };         // source samples per output sample
+	int      rom_sample_index(uint32_t key);             // resolve (and cache) a sample, -1 = none
+	int32_t  rom_word(int pair, uint32_t word) const;    // one 16-bit stream word, signed
+	double   rom_fetch(const rom_sample &rs, uint32_t i) const;  // decoded sample i
 };
 
 #endif // MAME_MATSUSHITA_KN_TONEGEN_H

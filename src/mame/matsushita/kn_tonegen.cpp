@@ -18,6 +18,8 @@
 #include "emu.h"
 #include "kn_tonegen.h"
 
+#include <algorithm>
+#include <climits>
 #include <cmath>
 
 
@@ -63,6 +65,8 @@ void kn_tonegen_base_device::device_start()
 	std::fill(std::begin(m_rlsc),  std::end(m_rlsc),  0.0);
 	std::fill(std::begin(m_srckey), std::end(m_srckey), 0xFF);
 	std::fill(std::begin(m_wsel), std::end(m_wsel), int16_t(-1));
+	std::fill(std::begin(m_rsel), std::end(m_rsel), -1);
+	std::fill(std::begin(m_rkey), std::end(m_rkey), int32_t(-1));
 	// Parse the optional synthetic wave pack (magic KN7WVSY2; tools/make_wave_pack.py).
 	if (memory_region *wr = machine().root_device().memregion("wavepack"))
 	{
@@ -141,6 +145,143 @@ void kn_tonegen_base_device::device_start()
 	save_item(NAME(m_ctx_time));
 	save_item(NAME(m_tgwrites));
 	save_item(NAME(m_gain_save));
+	save_item(NAME(m_rkey));
+	save_item(NAME(m_rpos));
+	save_item(NAME(m_rrate));
+}
+
+
+// ---------------------------------------------------------------------------
+// Playback from the dumped wave ROMs. The format and the rules below are measured from
+// the KN7000's four ROMs; the evidence and the producing scripts are in
+// notes/g13-waves-2026-10-20 (wavedir.py is the reference implementation of this code).
+// ---------------------------------------------------------------------------
+
+void kn_tonegen_base_device::set_wave_pair(int pair, const uint8_t *y, const uint8_t *x, uint32_t bytes)
+{
+	m_wave[pair][0] = y;
+	m_wave[pair][1] = x;
+	m_wave_bytes = bytes;
+}
+
+int32_t kn_tonegen_base_device::rom_word(int pair, uint32_t word) const
+{
+	// stream word 2i is word i of the Y ROM, 2i+1 word i of the X ROM, low byte first
+	const uint8_t *const p = m_wave[pair][word & 1];
+	const uint32_t a = (word >> 1) * 2;
+	if (!p || a + 1 >= m_wave_bytes)
+		return 0;
+	return int16_t(p[a] | (p[a + 1] << 8));
+}
+
+// A sample is selected by (pair, page, entry). Page p's directory starts at stream word
+// p * 0x100000: entry j is the four words {A, P, B, Q} at 4j, and A of entry 0 is 4 * the
+// entry count. P = 0x1000 | E<<4 | F<<3 | K: E the pitch exponent, F set for 8-bit samples,
+// granule L = 2^(K+4) samples. The sample starts at word B*16 of the page. The record at
+// word A is B again, then [flags:2][code:6][value:8] words: a value >= 0x80 is a segment of
+// (256 - value) granules; flag 0x40 marks the loop start at the end of its segment, flag
+// 0x80 the loop end; with no loop end the loop is the one granule after the segments.
+// Values below 0x80 are not segments, and the word with both flags ends the record. An
+// 8-bit segment's code (a,b) scales its samples by 2^(-b/2) (fitted; code8fit.py).
+int kn_tonegen_base_device::rom_sample_index(uint32_t key)
+{
+	auto it = std::lower_bound(m_rindex.begin(), m_rindex.end(), std::make_pair(key, INT_MIN));
+	if (it != m_rindex.end() && it->first == key)
+		return it->second;
+
+	int result = -1;
+	const int pair = (key >> 20) & 1;
+	const uint32_t page = (key >> 12) & 0xFF, entry = key & 0xFFF;
+	if (m_wave[pair][0] && page < 16)
+	{
+		const uint32_t pbase = page * 0x100000;
+		const uint32_t count = uint16_t(rom_word(pair, pbase)) / 4;
+		if (entry < count)
+		{
+			const uint32_t A = uint16_t(rom_word(pair, pbase + 4 * entry));
+			const uint32_t P = uint16_t(rom_word(pair, pbase + 4 * entry + 1));
+			const uint32_t B = uint16_t(rom_word(pair, pbase + 4 * entry + 2));
+			rom_sample rs;
+			rs.pair = pair;
+			rs.base = pbase + B * 16;
+			rs.is8 = BIT(P, 3);
+			rs.exponent = (P >> 4) & 0xFF;
+			const uint32_t L = 1U << ((P & 7) + 4);
+			uint32_t pos = 0, ls = 0, le = 0;
+			bool have_ls = false, have_le = false;
+			float gain = 1.0f;
+			for (int k = 1; k < 1024; k++)
+			{
+				const uint16_t w = uint16_t(rom_word(pair, pbase + A + k));
+				const int flags = w >> 14;
+				if ((w & 0xFF) >= 0x80)
+				{
+					pos += (0x100 - (w & 0xFF)) * L;
+					gain = float(pow(2.0, -double(BIT(w, 8, 3)) / 2.0));
+					if (rs.is8)
+						rs.gain.emplace_back(pos, gain);
+					if ((flags & 1) && !have_ls) { ls = pos; have_ls = true; }
+					if (flags & 2) { le = pos; have_le = true; break; }
+				}
+				if (flags == 3)
+					break;
+			}
+			if (!have_ls) ls = pos;
+			if (!have_le || le <= ls) le = ls + L;
+			if (rs.is8)
+				rs.gain.emplace_back(~0U, gain);          // past the segments: the last segment's gain
+			rs.ls = ls;
+			rs.le = le;
+			const uint32_t words = rs.is8 ? (le + 1) / 2 : le;
+			if (uint64_t(rs.base) + words + 1 < uint64_t(m_wave_bytes))  // stream words = 2 * bytes / 2
+			{
+				result = int(m_rsamples.size());
+				m_rsamples.push_back(std::move(rs));
+			}
+		}
+	}
+	m_rindex.insert(it, std::make_pair(key, result));
+	return result;
+}
+
+double kn_tonegen_base_device::rom_fetch(const rom_sample &rs, uint32_t i) const
+{
+	if (!rs.is8)
+		return double(rom_word(rs.pair, rs.base + i));
+	const int32_t w = rom_word(rs.pair, rs.base + (i >> 1));
+	const int8_t b = int8_t(BIT(i, 0) ? (w >> 8) : w);
+	auto g = std::upper_bound(rs.gain.begin(), rs.gain.end(), i,
+			[] (uint32_t x, const std::pair<uint32_t, float> &s) { return x < s.first; });
+	return double(b) * 256.0 * (g != rs.gain.end() ? g->second : 1.0f);
+}
+
+// Source samples per 44.1 kHz output sample. p18 0x1E200 is note 96 (C7), 0x400 per
+// semitone, and a waveform with a period of 2^(E-9) samples sounds at p18's note: checked
+// against the firmware's own notes for piano, bass, mallet, organ, brass and strings
+// voices (pitchcheck.py).
+double kn_tonegen_base_device::rom_rate(uint32_t p18, int exponent)
+{
+	constexpr double C7 = 2093.004522404789;   // 440 * 2^(27/12)
+	return pow(2.0, (double(p18) - double(0x1E200)) / double(0x3000) + double(exponent - 9)) * C7 / 44100.0;
+}
+
+bool kn_tonegen_base_device::rom_voice_start(int v, int pair, uint32_t sel20, uint32_t p18)
+{
+	const uint32_t key = (uint32_t(pair & 1) << 20) | (sel20 & 0xFFFFF);
+	const int idx = rom_sample_index(key);
+	m_rsel[v] = idx;
+	m_rkey[v] = (idx >= 0) ? int32_t(key) : -1;
+	m_rpos[v] = 0.0;
+	if (idx < 0)
+		return false;
+	m_rrate[v] = rom_rate(p18, m_rsamples[idx].exponent);
+	return true;
+}
+
+void kn_tonegen_base_device::rom_voice_pitch(int v, uint32_t p18)
+{
+	if (m_rsel[v] >= 0)
+		m_rrate[v] = rom_rate(p18, m_rsamples[m_rsel[v]].exponent);
 }
 
 	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
@@ -188,6 +329,9 @@ void kn_tonegen_base_device::device_post_load()
 	m_gain_multi     = m_gain_save[GAIN_MULTI];
 	m_gain_dsp_ret   = m_gain_save[GAIN_DSP_RET];
 	m_gain_multi_ret = m_gain_save[GAIN_MULTI_RET];
+	// the ROM sample table is derived from the ROMs, so only the keys are saved
+	for (int v = 0; v < MAX_VOICES; v++)
+		m_rsel[v] = (m_rkey[v] >= 0) ? rom_sample_index(uint32_t(m_rkey[v])) : -1;
 }
 
 void kn_tonegen_base_device::sound_stream_update(sound_stream &stream)
@@ -217,6 +361,30 @@ void kn_tonegen_base_device::sound_stream_update(sound_stream &stream)
 				break;
 			}
 			if (m_env[v] <= 0.0) continue;
+			if (m_rsel[v] >= 0)
+			{
+				// A voice keyed from the dumped wave ROMs: linear interpolation, loop [ls, le).
+				const rom_sample &rs = m_rsamples[m_rsel[v]];
+				double pos = m_rpos[v];
+				if (!std::isfinite(pos) || pos < 0.0 || pos >= double(rs.le))
+					pos = double(rs.ls);
+				const uint32_t i0 = uint32_t(pos);
+				const double fr = pos - double(i0);
+				const uint32_t i1 = (i0 + 1 < rs.le) ? i0 + 1 : rs.ls;
+				const double smp = rom_fetch(rs, i0) * (1.0 - fr) + rom_fetch(rs, i1) * fr;
+				acc += (smp / 32768.0) * m_env[v] * m_level[v];
+				double step = m_rrate[v];
+				if (!std::isfinite(step) || step < 0.0) step = 0.0;
+				pos += step;
+				if (pos >= double(rs.le))
+				{
+					double rel = fmod(pos - double(rs.ls), double(rs.le - rs.ls));
+					if (!std::isfinite(rel) || rel < 0.0) rel = 0.0;
+					pos = double(rs.ls) + rel;
+				}
+				m_rpos[v] = pos;
+				continue;
+			}
 			if (m_wsel[v] < 0) continue;   // no wave selected (unkeyed voice) -> silent
 			// SINGLE, FAITHFUL DATAPATH: every voice reads PCM from the wave pack, exactly
 			// as the real chip reads its wave ROM -- donor zones where a KN5000 sample was

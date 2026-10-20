@@ -35,7 +35,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G10 | CS5 mirrors and open-bus reads                         | KN7000 driver      | small        | open        |
 | G11 | IC21 custom data probably halfword-swapped             | KN7000 driver      | small        | open        |
 | G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload        | ROM records        | small        | open        |
-| G13 | Voices on the real wave ROMs                           | tone generator     | large        | planned     |
+| G13 | Voices on the real wave ROMs                           | tone generator     | large        | in progress |
 | G14 | SD SPI with the card deselected reads 0x00             | KN7000 driver      | small        | open        |
 | G15 | Smaller KN7000 items                                   | KN7000 driver      | small        | open        |
 | G16 | KN5000 branch work                                     | KN5000             | mixed        | open        |
@@ -297,16 +297,33 @@ The remainder of B.6 in the UNSUBMITTED inventory: upstream has a `NO_DUMP` reco
 IC414 (`c3fbkd000162`, unreachable from the main CPU) and a `custom_data` region for the KN6000/KN6500
 (`01ctmini.ic18`, BAD_DUMP, CRC f108e4c7). The overlay has neither. Small.
 
-### G13. Voices on the real wave ROMs — planned (blocked on decoding the sample selection)
+### G13. Voices on the real wave ROMs — in progress (decoded and built, not published)
 
-Felipe asked for this on 2026-10-20 (KN7000 only; the other machines keep a placeholder). Sequence and method:
-`notes/PLAN-2026-10-20-sound-and-hardware-probes.md`, step 3 (offline decoding first, real-unit probes only if
-needed).
+Felipe asked for this on 2026-10-20 (KN7000 only; the other machines keep a placeholder). Plan:
+`notes/PLAN-2026-10-20-sound-and-hardware-probes.md`, step 3. Decoded offline the same day, with no
+real-unit run; evidence and scripts: `notes/g13-waves-2026-10-20/README.md`.
 
-The format is settled: 16-bit samples, low byte first, Y and X interleaved as even and odd samples
-(`technics_roms/roms/kn7000/real_dump_v1.3_b893/wave-analysis/README.md:15-28`). How a voice selects its
-sample start is not decoded, so the voice engine still plays the synthetic pack (`kn7000_tonegen.cpp:65-72`);
-only the wave ROM test reads the dumps. Large.
+- **Sample select.** Each TG plays its own ROM pair (0x98050000: IC203/IC204; 0x98040000: IC207/IC208).
+  The firmware writes a 20-bit select to plane 0x1C (the old "aux word"; index nibble = bits 19:16):
+  bits 19:12 the ROM page, 11:0 the entry of that page's directory. Each 1 Mi-word page starts with
+  its own directory {record, P, start/16, -}; P holds the pitch exponent E, the 8-bit flag and the
+  loop granule; the record holds the segments and the loop flags. Nothing about addresses or loops
+  crosses the bus.
+- **Pitch.** rate = 2^((pitch18 - 0x1E200)/0x3000 + E - 9) x C7/44100. With the select rule it puts
+  478 of 556 traced voices at the firmware's own note; the rest are footage and noise layers whose
+  note is not the key (`pitchcheck.py`).
+- **The driver's strap was wrong.** 0x98070000 bits 11:10 gave hardware subtype 5, under which the
+  firmware remaps every wave page onto the expansion range and assigns voices to the TGs by a table:
+  none of 488 traced selects named an internal sample. The driver now reports subtype 1 for the
+  KN7000 (subtypes 1 and 2 behave alike in the firmware), and every voice lands on its own pair.
+- **Built** on the build tree (binary md5 `ed65537d`), KN7000 only; without the four ROM regions the
+  voices keep the synthetic pack. Gate on that binary: 16 passed, 1 skipped, 1 failed: the KN7000
+  audio oracle, now `dbe3683b25d0e26f823ddbb1fa78bb56` (the held C4 at 262.31 Hz, +4.5 cents, 3.4 dB
+  louder, no clipping; README "The gate, the audio oracle, the boot"). Not published, `ORACLE_MD5`
+  not re-baselined: both wait for review.
+- **Open**: the real unit's strap bits 11:10 (a read-only .CNV read of 0x98070000); the 8-bit
+  sample gain law, fitted as 3 dB per code step (a line-out recording of STRINGS would settle it);
+  the split lists and the post-loop data are not modelled.
 
 ### G14. SD SPI with the card deselected — open
 
@@ -435,8 +452,8 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
   on 2026-10-19. `HANDOFF…:47` also calls IC18/19 "table mask-ROM".
 - **Stale `kn7000.cpp` comments**: `:55-57,86,908-911,2448-2450` (the 0x4C000000 library or boot ROM as
   "undumped"), `:61-62` (0x8C/0x90 as video windows), `:878-879` (0x44000000 "TODO identify": IC23),
-  `:2494-2495` ("nothing written below 0x20000"). `kn7000_tonegen.h:19,45,82` and `kn_tonegen.h:173` say
-  the wave ROMs are undumped; `kn_tonegen.h:93` has main and sub swapped.
+  `:2494-2495` ("nothing written below 0x20000"). `kn7000_tonegen.h:19,45,82` and `kn_tonegen.h:173` said
+  the wave ROMs are undumped (corrected with G13); `kn_tonegen.h:93` has main and sub swapped.
 - **KN5000 notes**, about 20, the main ones: `kn5000-port-census-2026-09-03.md:275-277` (ADREG never read),
   `:104-170`, `:213-225`; the kn5000-30 revert (done in `83264d1`); IC14 "must be re-dumped";
   `kn5000-dsp-reverb.md:216-221` (reverb lengths at half their value); the 48 kHz assumption.
@@ -511,3 +528,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high      |
 | 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db         |
 | 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000) |
+| 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1     |

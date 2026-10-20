@@ -15,7 +15,34 @@
 
 #include <cmath>
 
-DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (firmware-driven, placeholder timbre)")
+DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (firmware-driven)")
+
+void kn7000_tonegen_device::device_start()
+{
+	kn_tonegen_base_device::device_start();
+	save_item(NAME(m_auxidx));
+
+	// Each tone generator reads its own ROM pair: the one at 0x98040000 (the firmware's SUB
+	// TG, our index 0) IC207 + IC208, the one at 0x98050000 (MAIN TG, index 1) IC203 + IC204
+	// -- the pairing the firmware's WAVE ROM test reads through each TG's port, and the one
+	// under which every traced voice finds its own sample at the right pitch.
+	static const char *const tags[2][2] = {
+		{ "waveform_sub_y", "waveform_sub_x" }, { "waveform_main_y", "waveform_main_x" } };
+	memory_region *r[2][2];
+	for (int p = 0; p < 2; p++)
+		for (int c = 0; c < 2; c++)
+			r[p][c] = machine().root_device().memregion(tags[p][c]);
+	if (r[0][0] && r[0][1] && r[1][0] && r[1][1])
+	{
+		const uint32_t bytes = r[0][0]->bytes();
+		if (bytes >= 0x100000 && r[0][1]->bytes() == bytes && r[1][0]->bytes() == bytes && r[1][1]->bytes() == bytes)
+		{
+			for (int p = 0; p < 2; p++)
+				set_wave_pair(p, r[p][0]->base(), r[p][1]->base(), bytes);
+			osd_printf_info("kn7000 tonegen: playing the wave ROMs (IC203/204, IC207/208)\n");
+		}
+	}
+}
 
 void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256, int rec_type)
 {
@@ -56,7 +83,12 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			//    continues past SUS1 to silence at the r8 rate.
 			const bool managed_type = (rec_type == 0x04 || rec_type == 0x08 || rec_type == 0x10
 			                        || rec_type == 0x20 || rec_type == 0x40);
-			if (m_aux[v] & 0x8000)      m_mode[v] = 1;             // gate-follow
+			// The sweep's "aux bit15" was measured with the driver reporting hardware subtype 5,
+			// under which the firmware remaps the ROM page (TgVoiceRouteFieldSet, tables at
+			// 0x48587774) and select bit 15 is page bit 2. The driver now reports the subtype the
+			// dumped ROMs need (pages unmapped), so the same voice class is page bit 2 here.
+			const uint32_t page = (uint32_t(m_auxidx[v]) << 4) | (m_aux[v] >> 12);
+			if (BIT(page, 2))           m_mode[v] = 1;             // gate-follow
 			else if (managed_type)      m_mode[v] = 0;             // firmware-managed release
 			else if (rec_type >= 0)     m_mode[v] = 2;             // one-shot (pluck classes)
 			else                        m_mode[v] = 0;             // unknown record: safest = managed
@@ -65,7 +97,18 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			// Sample select: (bank,zone) from the aux word -> donor wave, else the
 			// fabricated default sine (m_wdefault). Never -1 -> the voice always plays
 			// PCM through the single sample-playback datapath (no sin() oscillator).
+			if (has_wave_roms())
 			{
+				// The dumped wave ROMs: this TG's own pair, page and entry from the 20-bit
+				// select, rate from pitch18 and the sample's exponent. A select with no sample
+				// (an expansion-board page, with no board) plays nothing, as the chip would.
+				rom_voice_start(v, tg, (uint32_t(m_auxidx[v]) << 16) | m_aux[v], p18);
+				m_wsel[v] = -1;
+			}
+			else
+			{
+				m_rsel[v] = -1;
+				m_rkey[v] = -1;
 				const int bank = (m_aux[v] >> 12) & 3, zone = m_aux[v] & 0xFF;
 				m_wsel[v] = int16_t(m_wdefault);
 				for (size_t i = 0; i < m_wentries.size(); i++)
@@ -111,6 +154,7 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			// the note-on reference, 0x400 pitch18 units per semitone.
 			const double note = m_note[v] + (double(p18) - double(m_p18ref[v])) / 1024.0;
 			m_freq[v] = 440.0 * pow(2.0, (note - 69.0) / 12.0);
+			rom_voice_pitch(v, p18);
 		}
 		m_tgwrites++;
 	}
@@ -248,10 +292,13 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		if (tg == 1 && ch == 0x06 && reg == 0x0A)
 			m_gain_multi_ret = float(data & 0x7F) / 127.0f; // MULTI return (0x806A low7)
 	}
-	else if (cls == 0x1C02)                           // per-voice aux/mode word
+	else if ((addr & 0xFC00) == 0x1C00)               // plane 0x1C: the 20-bit sample select
 	{
-		// bit15 marks the gate-follow voice classes (see key_context/key_break above).
+		// select bits 19:16 travel in the register index, bits 15:0 in the data; bits 19:12
+		// are the wave ROM page, 11:0 the directory entry. Page bit 2 also marks the
+		// gate-follow voice classes (see key_context/key_break and the note-on above).
 		m_aux[v] = data;
+		m_auxidx[v] = addr & 0x0F;
 	}
 	else if (cls >= 0x0004 && cls <= 0x000A)          // amplitude-envelope params r4..rA
 	{

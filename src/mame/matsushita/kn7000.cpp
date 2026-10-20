@@ -89,8 +89,8 @@
         - Program ROMs IC16 / IC17
         - Table / rhythm ROMs
         - Dual tone generators: master TG IC201, sub TG IC205 (both C1BB00000709)
-        - Wave/sample ROMs IC203/IC204 (master) + IC207/IC208 (sub), dumped; only
-          the wave ROM test reads them, the voices still play the synthetic pack
+        - Wave/sample ROMs IC203/IC204 (master) + IC207/IC208 (sub), dumped; read by
+          the wave ROM test and played by the voices (notes/g13-waves-2026-10-20)
         - Effects DSP IC306 (ADSP-21065L SHARC) + its SDRAM IC307/IC308
         - Floppy Disk Controller IC103
         - LCD V-RAM IC104
@@ -427,6 +427,12 @@ private:
 	// KN7000 only: timing measured on Felipe's unit (kn7000_mame notes/dsp-probe-2026-10-20, pass 8). The 1 kHz
 	// system tick is the core's TM4 as the firmware programs it, instead of the fixed sys_tick timer.
 	bool m_kn7000_timing = false;
+	// KN7000 only: strap 0x98070000 bits 11:10, the firmware's hardware subtype (PanelSubTypeGet
+	// 0x484D7751: 00 -> 5, 01 -> 1, 10 -> 2, 11 -> 3). The dumped wave ROMs are laid out for
+	// subtype 1 or 2: under 5 the firmware remaps every wave page and assigns voices to the
+	// tone generators by a table, so voices reach the wrong ROM pair (notes/g13-waves-2026-10-20).
+	// 1 and 2 behave alike in every place the firmware reads the subtype.
+	uint16_t m_strap_subtype = 0;
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
@@ -1123,7 +1129,8 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		// 0x484b2615 reads bit12 -> MIDI-in mode flag 0x5006bfd2 bit1). bits1..2 = the TG-present
 		// strap (0x484d7713): bit1 clear -> "no TG" leaves the TG-enable gate closed (silent),
 		// so report the TGs present (bit1|bit2). bit15 = moot (gates dead code, see above).
-		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
+		// bits 11:10 = the hardware subtype (m_strap_subtype; KN7000 only).
+		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000) | m_strap_subtype;
 	}
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
@@ -1979,7 +1986,7 @@ void kn7000_state::machine_start()
 		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
 	}
 
-	// Cache the wave ROMs (and the synthetic wave pack the voices still play) so the
+	// Cache the wave ROMs (and the synthetic wave pack, the port's fallback) so the
 	// TG wave-read port can source sample words without a region lookup per read (the
 	// §8.9 sweep does millions). Index 0 is the sub TG at 0x98040000, 1 the main one.
 	static const char *const waverom_tags[2][2] = {
@@ -2340,6 +2347,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// 0x90000000 is the +0x40000000 view of work RAM: the NMI's RAM stub is written there.
 	m_ram90_workram = true;
 	m_kn7000_timing = true;              // cleared by the machines built on this one
+	m_strap_subtype = 0x0400;            // hardware subtype 1 (see the member); cleared likewise
 
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
@@ -2536,6 +2544,7 @@ void kn7000_state::kn6000(machine_config &config)
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = false;             // its IRQ trampolines are verified with the separate share
 	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
+	m_strap_subtype = 0;                 // its strap is not known: keep the value the driver always gave
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
@@ -2620,6 +2629,7 @@ void kn7000_state::kn2400(machine_config &config)
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = true;
 	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
+	m_strap_subtype = 0;                 // its strap is not known: keep the value the driver always gave
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).
 	m_screen->set_size(320, 240);
@@ -2696,8 +2706,8 @@ ROM_START(kn7000)
 	// through the wave ROM test port as the firmware's own test reads them: byte 2n
 	// and 2n+1 are the low and high byte of word n, and each byte sum matches the one
 	// that test expects. Main TG (0x98050000): IC203 select 0, IC204 select 1; sub TG
-	// (0x98040000): IC207, IC208. Only that port reads them so far (tg_wave_read);
-	// the voice engine still plays the synthetic pack below.
+	// (0x98040000): IC207, IC208. The tone generator's voices play them too
+	// (kn7000_tonegen, notes/g13-waves-2026-10-20).
 	ROM_REGION(0x1000000, "waveform_main_y", 0)
 	ROM_LOAD("c3cbqd000002.ic203", 0x000000, 0x1000000, CRC(77211876) SHA1(f2d01ffd020c39a3f5b9d6c3275b1855c5a3d1a6))
 
@@ -2712,9 +2722,9 @@ ROM_START(kn7000)
 
 	// SYNTHETIC wave pack (optional): donor samples from the GENUINE KN5000 IC307 dump,
 	// keyed by the runtime (bank,zone) sample select -- built by tools/make_wave_pack.py,
-	// clearly labeled NOT-A-DUMP (embedded provenance block). The voice engine plays it;
-	// when absent the tone generator falls back to the sine placeholder. Rebuild + update
-	// hashes with the tool.
+	// clearly labeled NOT-A-DUMP (embedded provenance block). The voice engine plays it only
+	// when the four wave ROMs above are missing; when it is absent too the tone generator
+	// falls back to the sine placeholder. Rebuild + update hashes with the tool.
 	ROM_REGION(0x1000000, "wavepack", ROMREGION_ERASE00)
 	ROM_LOAD_OPTIONAL("kn7000_waves_synthetic.rom", 0x000000, 0x1000000, BAD_DUMP CRC(bc94e4ba) SHA1(66543485ac7ba53126a765168555b525b38d87b2))
 
