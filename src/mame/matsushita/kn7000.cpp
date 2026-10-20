@@ -1962,9 +1962,10 @@ void kn7000_state::machine_start()
 	// With only A1-A17 wired the chip repeats every 256 KB through the chip select; that repeat
 	// is inferred, not yet read from a unit (the next cnv_romdump survey reads 2 MB there). An
 	// nvram device keeps it across runs. The firmware only trusts it if its power-fail handler
-	// stamped the checksum, so the panel memories survive a restart only when the session ends
-	// with the machine's POWER OFF (power_switch); a plain MAME exit leaves it unstamped and the
-	// next boot starts from factory settings. Delete nvram/kn7000/ic23 to start blank.
+	// stamped the checksum, so end a session with the machine's POWER OFF (power_switch). After
+	// a plain MAME exit the stamp is the previous one: if any setting changed in between, the next
+	// boot rejects IC23 and resets everything to factory, panel memories included. Delete
+	// nvram/kn7000/ic23 (nvram/kn7000_<n>/ic23 for a non-default -bios) to start blank.
 	// (OVERLAY-GAPS G6; notes/ic23-nvram-2026-10-20/.)
 	if (m_ic23_nvram)
 	{

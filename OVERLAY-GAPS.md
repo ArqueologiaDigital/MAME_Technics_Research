@@ -21,28 +21,29 @@ listed: they are in (`notes/pr-port-2026-10-19/`).
 States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `done` (with the commit),
 `decision` (needs Felipe's call before any work), `blocked`, `wontfix` (with the reason).
 
-| #   | item                                                   | area           | size         | state    |
-|-----|--------------------------------------------------------|----------------|--------------|----------|
-| G1  | KN6000 expansion: CN105 connector + HD-SX6, PR #16220  | KN6000 driver  | ~230 lines   | done     |
-| G2  | Main CPU core fixes upstream has                       | mn10300 core   | ~200 lines   | done     |
-| G3  | Effects DSP save state freezes the effects             | KN7000 driver  | trivial      | open     |
-| G4  | Effects DSP branch B fixes                             | SHARC core     | small-medium | open     |
-| G5  | Effects DSP clock, 60 or 66 MHz                        | KN7000 driver  | one line     | decision |
-| G6  | IC23 battery-backed SRAM: panel memories lost          | KN7000 driver  | small        | open     |
-| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx   | KN7000 driver  | small        | open     |
-| G8  | Interrupt vectors through IVAR, not per-BIOS addresses | mn10300 core   | small-medium | open     |
-| G9  | Real power-on path from IC18, and the flash updater    | KN7000 driver  | small/large  | open     |
-| G10 | CS5 mirrors and open-bus reads                         | KN7000 driver  | small        | open     |
-| G11 | IC21 custom data probably halfword-swapped             | KN7000 driver  | small        | open     |
-| G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload        | ROM records    | small        | open     |
-| G13 | Voices on the real wave ROMs                           | tone generator | large        | planned  |
-| G14 | SD SPI with the card deselected reads 0x00             | KN7000 driver  | small        | open     |
-| G15 | Smaller KN7000 items                                   | KN7000 driver  | small        | open     |
-| G16 | KN5000 branch work                                     | KN5000         | mixed        | open     |
-| G17 | KN5000 research findings                               | KN5000         | mixed        | open     |
-| G18 | Notes and comments that newer findings contradict      | docs           | small        | open     |
-| G19 | Effects DSP bypass switch (noisy sound)                | KN7000 driver  | small        | planned  |
-| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE     | medium-large | planned  |
+| #   | item                                                   | area               | size         | state       |
+|-----|--------------------------------------------------------|--------------------|--------------|-------------|
+| G1  | KN6000 expansion: CN105 connector + HD-SX6, PR #16220  | KN6000 driver      | ~230 lines   | done        |
+| G2  | Main CPU core fixes upstream has                       | mn10300 core       | ~200 lines   | done        |
+| G3  | Effects DSP save state freezes the effects             | KN7000 driver      | trivial      | open        |
+| G4  | Effects DSP branch B fixes                             | SHARC core         | small-medium | open        |
+| G5  | Effects DSP clock, 60 or 66 MHz                        | KN7000 driver      | one line     | decision    |
+| G6  | IC23 battery-backed SRAM (panel memories) as NVRAM     | KN7000 driver      | small        | done        |
+| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx   | KN7000 driver      | small        | in progress |
+| G8  | Interrupt vectors through IVAR, not per-BIOS addresses | mn10300 core       | small-medium | open        |
+| G9  | Real power-on path from IC18, and the flash updater    | KN7000 driver      | small/large  | open        |
+| G10 | CS5 mirrors and open-bus reads                         | KN7000 driver      | small        | open        |
+| G11 | IC21 custom data probably halfword-swapped             | KN7000 driver      | small        | open        |
+| G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload        | ROM records        | small        | open        |
+| G13 | Voices on the real wave ROMs                           | tone generator     | large        | planned     |
+| G14 | SD SPI with the card deselected reads 0x00             | KN7000 driver      | small        | open        |
+| G15 | Smaller KN7000 items                                   | KN7000 driver      | small        | open        |
+| G16 | KN5000 branch work                                     | KN5000             | mixed        | open        |
+| G17 | KN5000 research findings                               | KN5000             | mixed        | open        |
+| G18 | Notes and comments that newer findings contradict      | docs               | small        | open        |
+| G19 | Effects DSP bypass switch (noisy sound)                | KN7000 driver      | small        | planned     |
+| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE         | medium-large | planned     |
+| G21 | SD sub-CPU IC401: SDMODE switch, untried read commands | KN7000 driver / RE | medium       | open        |
 
 ## Work already written on branches, not in the overlay
 
@@ -181,7 +182,21 @@ Branch B uses 60. Same trade-off as the ALUSAT item in G4.
 
 ## Research findings the overlay does not reflect yet
 
-### G6. IC23, the 256 KB battery-backed SRAM at 0x44000000 — open
+### G6. IC23, the 256 KB battery-backed SRAM at 0x44000000 — done 2026-10-20
+
+**Done** (`notes/ic23-nvram-2026-10-20/`): IC23 is a 256 KB nvram device on the KN7000, repeating every 256 KB
+through 0x44000000 and 0x84000000; the CPU core takes the NMI; a POWER OFF machine control runs the firmware's
+power-fail handler (which stamps IC23's checksum) and then exits; 0x90000000-0x903FFFFF became the work-RAM view
+the handler's RAM stub needs (part of G7). Panel memories survive a restart **when the session ends with POWER
+OFF**; after a plain exit following any change, the next boot resets everything to factory, panel memories
+included. The checksum covers only the 0x7A0-byte header, so a damaged byte in the PANEL MEMORY store goes
+unnoticed and stays (`check_ic23.sh`). Today's Another World SP7001 build, run once under this model, overwrote
+1,945 header bytes and 65,676 panel-memory bytes, hung in its loader (its own data aliases through the repeat),
+and POWER OFF then stamped the damage valid (`aw_ic23_check.sh`). The KN6000/KN6500/KN2400 keep the placeholder (their backup SRAM is not
+identified). Still to confirm on the unit: that IC23 repeats every 256 KB (the SURVEY2 dump reads 2 MB of it).
+
+What was known before:
+
 
 `technics-roms-disasm/kn7000/tools/cnv_romdump/README.md:149`; the service SRAM test walks exactly 256 KB.
 The overlay maps 16 MB of plain RAM there with no NVRAM (`kn7000.cpp:884-885`), so panel memories are
@@ -197,7 +212,11 @@ lost on every restart. Small, and the most noticeable item here.
   On the real unit that is IC23, so the game would overwrite the panel memories or crash. Modelling IC23
   properly here will make the game fail in the emulator, which is what it would do on the instrument.
 
-### G7. 0x90000000-0x97FFFFFF is the uncached view of 0x50000000-0x57FFFFFF — open
+### G7. 0x90000000-0x97FFFFFF is the uncached view of 0x50000000-0x57FFFFFF — in progress
+
+Partly done 2026-10-20 with G6: on the KN7000, 0x90000000-0x903FFFFF is now the work-RAM view, as on the KN2400,
+because the NMI's RAM stub is written there. The rest of the window (the IC21 and IC19 views at 0x96800000 and
+0x97800000, the expansion windows) is still the separate share, and the KN6000/KN6500 keep it whole.
 
 The overlay maps it as one 128 MB "vram" share that nothing reads (`kn7000.cpp:850`); the work-RAM alias
 is enabled only for the KN2400.
@@ -328,6 +347,26 @@ registers through the host port, its frame rate, the group-0x17 handshake; for t
 decoding leaves open. Emulator first on `-bios v13`, same probe files from MAME and the unit, compared byte for
 byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13.
 
+### G21. IC401, the SD sub-CPU: the SDMODE switch and the commands nobody sends — open
+
+From the 2026-10-20 study of dumping the SD and USB processors (`research-scratch/sdusb-dump-viability/`,
+service manual p.116, p.118). **No software route to IC414 (IC401's program flash), IC403 (its EEPROM) or the USB
+MCUs IC407/IC408 is known.** The main CPU can reset IC401 (SD PON, `0x9CC00009` bit 1, through C476 to its RST) but
+not set its MODE pin; IC414 and IC403 sit on IC401's private bus; both USB MCUs have CNVSS grounded and no
+main-CPU reset line. The hardware routes (clip or reader on IC414/IC403 with IC401 held in reset) are for when
+the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any dump private.
+
+- **The one software lead:** IC401's command dispatcher handles letters the firmware never sends: 0x41 (block
+  read), 0x48, 0x49, 0x4D, 0x4E (variable-length reads). Never 0x44 (block write) or 0x50-0x7F. Emulator first.
+- **What the overlay gets wrong:** `0x98060000` bit 2 is SDMODE, which switches the card between the main CPU's
+  SPI (1) and IC402's native bus with the main CPU talking to IC401 (0). `cpsd_mbx_write` shifts every byte into
+  the card model whatever SDMODE says, so the firmware's IC401 frames (0x40, 0x42, 0x45, 0x7C, playback control)
+  hit the emulated card. A stub IC401 with the SD.BUSY handshake (`0x9CC00009` bit 0) and SDMODE routing would
+  model the SD-AUDIO path and give the probe something to be debugged against.
+- **The first, harmless real-unit step:** after an SD-AUDIO session, a .CNV saves the RAM the firmware fills from
+  IC401's replies (0x5016066C-0x5016068F, 0x50093400-0x50093497, 0x5008291C-0x5008291F, 0x50007EFC): the first
+  bytes ever seen from IC401, possibly a version string.
+
 ## Notes and comments that newer findings contradict
 
 ### G18 — open
@@ -368,6 +407,12 @@ byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13.
 - **KN5000 notes**, about 20, the main ones: `kn5000-port-census-2026-09-03.md:275-277` (ADREG never read),
   `:104-170`, `:213-225`; the kn5000-30 revert (done in `83264d1`); IC14 "must be re-dumped";
   `kn5000-dsp-reverb.md:216-221` (reverb lengths at half their value); the 48 kHz assumption.
+- **SD board** (2026-10-20, from the service manual, `research-scratch/sdusb-dump-viability/`):
+  `notes/sd-card-emulation-plan.md:4-21` (a "CPSD" panel sub-CPU on SIO channel 0, mask-ROM claims: there is no
+  SD panel CPU; the SD PLAY/VOL board is switches and LEDs on the LCD controller's GPIO at 0x9CC00008);
+  `kn7000.cpp` near 735 ("LEDs are not CPU outputs": the firmware sets 0x40/0xC0 at 0x9CC00008); the names of the
+  `0x9CC00009` and `0x98060000` bits in `technics-roms-disasm/kn7000/kn7000_manual.sym` ~384-405, ~484-501 (bit 1
+  is SD PON, which also resets IC401; 0x98060000 bit 2 is SDMODE).
 - **Outside the overlay**: `technics_roms/…/ic19-analysis/README.md`,
   `technics-roms-disasm/kn7000/src/picture.s:124` and `tools/gen_picture_s.py:92` say SOFT VERSION shows
   PICTURE. It is a DEBUG TOOLS row; the overlay's comment at `kn7000.cpp:1862` is right.
@@ -425,3 +470,4 @@ byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13.
 | 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                             |
 | 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window          |
 | 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md` |
+| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes              |

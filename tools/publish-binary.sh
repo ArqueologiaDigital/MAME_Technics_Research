@@ -285,8 +285,9 @@ fi
 # nvram/kn7000/ic23 (nvram/kn7000_<n>/ic23 with a non-default -bios: v13 is kn7000_4). The
 # firmware only trusts it if its own power-down stamped it, so END A SESSION WITH THE MACHINE'S
 # "POWER OFF" input (Input settings for this machine; it has no default key -- bind one): it runs
-# the firmware's power-down and then exits. Closing the window instead skips the power-down, and the
-# next start comes up with factory settings. Delete that ic23 file to start blank.
+# the firmware's power-down and then exits. Closing the window instead skips the power-down: if you
+# changed anything in that session, the next start resets EVERYTHING to factory settings, panel
+# memories included. Delete that ic23 file to start blank.
 # -skip_gameinfo skips the game-info AND (via our ui.cpp patch) the red "known problems"
 # warnings screen, so the emulator boots straight in without needing a click to dismiss it.
 # -pluginspath ./plugins ensures MAME finds the bundled "layout" plugin, which runs the
