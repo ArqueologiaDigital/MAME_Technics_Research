@@ -362,8 +362,11 @@ without test-side stand-ins. The probe builds themselves are in `technics-roms-d
 control bits). The chip also shows state the emulator lacks: DMASTAT `0x33F`, SYSTAT, IOSTAT, the STCTLx status bits,
 IOCTL bits 31/15 reading 0, MSGR3 `0`, the rings' positions (`notes/dsp-probe-2026-10-20/README.md`, "What the chip
 said"). The timers are unused; the SPORT counts are frame-locked to the firmware's handshake. The frame rate is still
-open: about 22.5 kHz, or 41.4 kHz or more (a 44.1 kHz reading fits). Next: pass 7 (memory readback), and a probe that
-separates the two rates.
+open: about 22.5 kHz, or 41.4 kHz or more (a 44.1 kHz reading fits). Pass 7 ran (the downloaded DSP code matches;
+see G4 for the bug it found). Pass 8 (cnv_romdump `releases/2026-10-20-dsprate/`) times the handshakes with the
+MN10300's timer 4 to settle the rate. It showed two emulator gaps that keep it from measuring anything in MAME:
+- TM4 is not modelled (the core models TM5 only; the 1 kHz tick comes from a driver timer), so TM4BC reads 0;
+- the group-0x17 handshake is answered at once instead of once per DSP frame.
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
