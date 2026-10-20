@@ -158,3 +158,25 @@ time, the four channel-8 registers were left as found, and the dead flag stayed 
 - **A second gap in the same trace: FLAG3.** In MAME I3 never moves before t = 1.990 s (0x656F0 at every frame), so
   the emulated FLAG3 input is always low. On the chip I3 steps (pass 6), about once per two frames if the frame rate
   is 44.1 kHz. Ring 3 does not scroll in the emulator.
+
+## The fix: the kernel's MSGR reads return the stored value (2026-10-20)
+
+`sharc.cpp` `iop65l_r`: the 21065L's own reads of MSGR0-7 (IOP 0x08-0x0F) return what was written. The message
+registers are plain storage on the chip. Every other IOP register still reads 0 to the kernel, because several carry
+status bits the chip sets and this model does not (the table above). Build md5 `b2d669c2c9be254fd3ea4ecea0442198`,
+against the published `97d2f383…`:
+
+| check                                                                     | before (`97d2f383…`)                     | after (`b2d669c2…`)                             |
+|---------------------------------------------------------------------------|------------------------------------------|-------------------------------------------------|
+| `tap_i3.lua`, 8 s, `-nodrc`, `-bios v13`, blank IC23                      | I3 leaves ring 3 (0 from t = 1.990 s)    | in ring 3 at all 284,759 frame-boundary samples |
+| the same, the unit's IC23                                                 | the same                                 | in ring 3 at all 293,194 samples                |
+| `tap_c329.lua`, the same two cases                                        | 0xC362 written at 0.98 s, then zeroed    | one write (0xC362), kept                        |
+| pass 7 in MAME with the unit's IC23, `compare_dspmem.py`                  | DM 0xC302-0xC341: 63 of 64 = the chip    | 64 of 64; downloaded PM still identical         |
+| gate audio oracle (`oracle_ab.sh`)                                        | `bd02a9c15b580d6b4b4c0a42f78a1fcb`, 48.2 | `028bb1dbead8b06d04f565cb30dc9a32`, 48.1        |
+| `oracle_attribution_msgr.sh`: new binary, MSGR reads forced to 0 by a tap | -                                        | `bd02a9c15b580d6b4b4c0a42f78a1fcb`, bit for bit |
+
+The oracle's capture differs only in seconds 16-17, the held note (`tools/kn5000_wav_ab.py`): 3.89% of samples,
+peak delta 176, difference RMS 25.6 against a signal RMS of about 180 in second 16. The ring-3 effect now reads
+its own delay memory. Peaks are 971/957 against 972/954 before, with no sample at full scale in either. The
+attribution run shows the read-back is the only thing that moved it, so the oracle is re-baselined to
+`028bb1db…` (tools/gate.sh, in its own commit).

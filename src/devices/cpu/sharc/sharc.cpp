@@ -209,13 +209,18 @@ void adsp21065l_device::device_reset()
 // SPORT/SDRAM/DMA offsets the effect programs touch (0x28-0x3C, 0x53-0x7B, 0xE0-0xFC per
 // notes/sharc-lle-assessment.md). Writes are kept in a register file, so the kernel's set-up
 // is visible to the host (host_iop_r: the KN7000's DSP probes read it back). The kernel's
-// OWN reads still return 0, as before: returning the stored value is the more faithful
-// choice (branch B does it) but it can change what the effects compute, so it is left to
-// OVERLAY-GAPS G4, with the audio oracle. Nothing behind the registers runs yet: timers,
-// SPORT and DMA status do not move. Real SPORT/DMA modelling is F.3.
+// own reads of the message registers MSGR0-7 (0x08-0x0F), plain storage on the chip, return
+// what was written: KN7000 effects 58-61 park the ring-3 pointer I3 in MSGR2 and take it
+// back with I3 = DM(0x0A), and with 0 they ran on a zero pointer and the kernel's ring-3
+// scrub then zeroed a SPORT TCB (DM 0xC329). On Felipe's unit MSGR2 reads back and that TCB
+// survives (kn7000_mame notes/dsp-probe-2026-10-20, passes 6 and 7). Every other register
+// still reads 0 to the kernel: several carry status bits the chip sets and this model does
+// not (OVERLAY-GAPS G4). Nothing behind the registers runs yet: timers, SPORT and DMA status
+// do not move. Real SPORT/DMA modelling is F.3.
 uint32_t adsp21065l_device::iop65l_r(offs_t offset)
 {
-	return 0;
+	offset &= 0xff;
+	return (offset >= 0x08 && offset <= 0x0f) ? m_iop[offset] : 0;
 }
 
 uint32_t adsp21062_device::dm_index_reg(int n) const
