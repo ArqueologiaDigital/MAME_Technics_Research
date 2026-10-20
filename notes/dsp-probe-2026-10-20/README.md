@@ -235,3 +235,10 @@ The emulator's clocks are exact, so its 2 MHz figure is 44,100.0 Hz. Against its
 So TM4 and the handshake only move the note's start by a quarter of a millisecond: the firmware runs on the
 slightly slower tick. FLAG3 changes the sound itself a little: ring 3 now scrolls, as on the chip. Peaks and
 per-second levels are unchanged (`tools/kn5000_wav_ab.py`: 179.0 against 179.0 in second 16).
+
+`ab_boot.sh` (published `b2d669c2…` against this build), 9 snapshots over 45 s per case: kn6000, kn6500, kn2400 and
+kn2600 identical at every time; kn7000 v16, v15, v13 and sp7001 identical except at 6 s. There the boot splash's
+notes (rows 110-316) are caught at another point of their dithered fade-in, which the firmware's timers pace. No
+unimplemented-opcode or divide-by-zero lines in either. Passes 6 and 7 in MAME on this build: 5 of 5 (with MSGR2
+counted as live, cnv_romdump `dda79f943`) and 4 of 4. Published as `kn7000-emulator/kn7000` md5 `2a8e2fce…`;
+`tools/gate.sh` with the new oracle: 17 passed, 0 failed, 1 skipped (kn1500).

@@ -63,7 +63,12 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # stored value (sharc.cpp iop65l_r, e04a567), as on Felipe's unit (passes 6 and 7), so effects 58-61 keep their ring-3
 # pointer. The new binary with those reads forced back to 0 by a Lua tap gives bd02a9c1 again, bit for bit; only
 # seconds 16-17, the held note, differ. Evidence: notes/dsp-probe-2026-10-20/oracle_attribution_msgr.sh and README.md.
-ORACLE_MD5="028bb1dbead8b06d04f565cb30dc9a32"
+# Re-baselined 2026-10-20 from 028bb1dbead8b06d04f565cb30dc9a32: the KN7000's timing as measured on Felipe's unit (DSP
+# probe pass 8, 5dd2c40): TM4 drives the 1 kHz tick (1.0005 ms), the DSP handshake comes once per frame, FLAG3
+# alternates. One build per step (3c2f89d6, f99f8521, 8a1fe2a4); wav_shift.py: the held note starts 0.19-0.27 ms
+# earlier and, aligned, matches to 0.01% (TM4, handshake) and 0.21% (FLAG3: ring 3 now scrolls). Evidence:
+# notes/dsp-probe-2026-10-20/README.md, "The unit's timing in the emulator".
+ORACLE_MD5="8a1fe2a44e064f94ff935242fd717cb4"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
