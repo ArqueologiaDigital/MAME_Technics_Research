@@ -79,3 +79,29 @@ reads the registers that changed, so nothing it does changes.
   all equal to the SHARC's memory) and DM (3,317 of 3,328 equal; the kernel's variables move). It leaves DMAC0
   `0xA0`, IIEP0 `0x8093`, IMEP0 1 and CEP0 1, as found. `check_dsp_probe.py` says "everything checks out" for
   both, with phase 2 compared against the kernel record in the v1.3 program dump.
+
+## What the chip said (pass 6 on Felipe's KN7000, 2026-10-20)
+
+Phase 1 of the probe ran on the unit (files private: `technics_roms` `roms/kn7000/real_dump_v1.3_b893/pass6-run1/`;
+decoded by `technics-roms-disasm` `kn7000/tools/cnv_romdump/check_dsp_probe.py`, `88c15e9b6`). Against this
+emulator (`-bios v13`, the same probe in MAME):
+
+| register                                  | chip                                                                 | emulator                    | for the emulator                                                                     |
+|-------------------------------------------|----------------------------------------------------------------------|-----------------------------|--------------------------------------------------------------------------------------|
+| SYSCON                                    | `0x410`                                                              | `0x410`                     | as the chip (this build)                                                             |
+| chain pointers, `DMAC0`, `WAIT`, `SDRDIV` | as the kernel wrote them                                             | the same                    | as the chip                                                                          |
+| `STCTLx` / `SRCTLx`                       | `0xF93CB173`, `0xD93CB173` / `0x013C3173`                            | `0x013CB173` / `0x013C3173` | the top byte of `STCTLx` holds status bits the emulator does not set                 |
+| `DMASTAT`                                 | `0x33F`: all eight SPORT DMA channels                                | `0`                         | not modelled (F.3)                                                                   |
+| SYSTAT                                    | `0x13`                                                               | `0`                         | not modelled                                                                         |
+| IOSTAT                                    | `0x80000000`                                                         | `0` (`1` after a probe run) | not modelled                                                                         |
+| `IOCTL`                                   | `0x0852205B`                                                         | `0x8852A05B`, as written    | bits 31 and 15 read 0 on the chip                                                    |
+| MSGR3                                     | `0`                                                                  | `0x1065` (boot stand-in)    | the stand-in is not the chip's run-time value                                        |
+| MSGR2                                     | `0x686EB`, then `0x6867C`: it moves                                  | `0x656F0`, fixed            | I3, the ring-3 pointer; moves only if the kernel's frames and FLAG3 do               |
+| SPORT rings (`IIxxx`, `Cxxx`)             | receive base + 3, count 5; transmit base + 5, count 3, at every read | counts 0                    | the DMA is not modelled; on the chip every read lands at the same point of the frame |
+| `TPERIODx`, `TCOUNTx`                     | 0                                                                    | 0                           | the kernel does not use the timers                                                   |
+
+**The frame rate is still open.** The firmware's DSP accesses ran at 24.15 us each (41.4 per ms): every one
+waits for the DSP's handshake. MSGR2 (I3, stepped once per frame while FLAG3 is high) moved 111 words in about
+4.93 ms, 22.5 per ms. Either frames at about 22.5 kHz with FLAG3 always high, or 41.4 kHz or more with FLAG3 high
+on about half of them. The overlay's IRQ0 tick (`kn7000.cpp`, the provisional frame rate) stays a placeholder
+until a probe separates the two.

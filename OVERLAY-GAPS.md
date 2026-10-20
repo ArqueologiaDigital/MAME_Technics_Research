@@ -350,8 +350,14 @@ writes land in it, and an external-port transmit DMA hands internal memory back 
 (`notes/dsp-probe-2026-10-20/`). SYSCON reads back what the firmware wrote (`0x410` after boot, packed per its
 HBW bits), and DMAC0's FS bits show EPB0 full while a readback has words, so the phase-2 probe runs in MAME
 without test-side stand-ins. The probe builds themselves are in `technics-roms-disasm`
-`kn7000/tools/cnv_romdump/` (releases `2026-10-20-dspprobe`, pass 6, and `2026-10-20-dspmem`, pass 7), not yet
-run on the unit. Not modelled: timers, DMASTAT and the SPORT counts do not move; pass 6 measures them.
+`kn7000/tools/cnv_romdump/` (releases `2026-10-20-dspprobe`, pass 6, and `2026-10-20-dspmem`, pass 7).
+
+**Pass 6 ran on the unit (2026-10-20).** The set-up matches the emulator's (SYSCON `0x410`, chain pointers, SPORT
+control bits). The chip also shows state the emulator lacks: DMASTAT `0x33F`, SYSTAT, IOSTAT, the STCTLx status bits,
+IOCTL bits 31/15 reading 0, MSGR3 `0`, the rings' positions (`notes/dsp-probe-2026-10-20/README.md`, "What the chip
+said"). The timers are unused; the SPORT counts are frame-locked to the firmware's handshake. The frame rate is still
+open: about 22.5 kHz, or 41.4 kHz or more (a 44.1 kHz reading fits). Next: pass 7 (memory readback), and a probe that
+separates the two rates.
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
@@ -485,3 +491,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                         |
 | 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)     |
 | 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME |
+| 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings   |
