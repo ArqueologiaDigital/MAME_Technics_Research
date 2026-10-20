@@ -42,7 +42,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G17 | KN5000 research findings                               | KN5000             | mixed        | open        |
 | G18 | Notes and comments that newer findings contradict      | docs               | small        | open        |
 | G19 | Effects DSP bypass switch (noisy sound)                | KN7000 driver      | small        | planned     |
-| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE         | medium-large | planned     |
+| G20 | Probe the DSP and TG on the real unit via .CNV         | tools / RE         | medium-large | in progress |
 | G21 | SD sub-CPU IC401: SDMODE switch, untried read commands | KN7000 driver / RE | medium       | open        |
 
 ## Work already written on branches, not in the overlay
@@ -343,7 +343,13 @@ losing the code: a machine-configuration switch (Bypassed by default, Emulated f
 the SHARC halted, so the bridge passes the tone generator through. The gate keeps a DSP-path oracle with the
 switch on. Plan step 1.
 
-### G20. Probe the DSP (and the tone generators) on the real unit — planned
+### G20. Probe the DSP (and the tone generators) on the real unit — in progress
+
+Started 2026-10-20. Emulator side done: the 21065L keeps an IOP register file, host reads return it, host
+writes land in it, and an external-port transmit DMA hands internal memory back through EPB0
+(`notes/dsp-probe-2026-10-20/`). The probe builds themselves are in `technics-roms-disasm`
+`kn7000/tools/cnv_romdump/`.
+
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
@@ -467,11 +473,12 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 
 ## History
 
-| date       | change                                                                               |
-|------------|--------------------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request           |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                             |
-| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window          |
-| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md` |
-| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes              |
-| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)   |
+| date       | change                                                                                                 |
+|------------|--------------------------------------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                             |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                               |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                            |
+| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                   |
+| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                |
+| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                     |
+| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`) |

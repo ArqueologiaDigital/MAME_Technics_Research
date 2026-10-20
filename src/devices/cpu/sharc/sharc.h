@@ -604,6 +604,14 @@ public:
 	uint32_t sport_tx_buffer(int sport, int ab) const { return m_sport_tx[sport & 1][ab & 1]; }
 	uint32_t sport_rx_buffer(int sport, int ab) const { return m_sport_rx[sport & 1][ab & 1]; }
 
+	// An external host's view of the IOP registers (the KN7000's MN10300 reaches them through
+	// its index/data port pair): the value the register file holds, as the DSP's own code or
+	// the host last wrote it, or its reset value. No register computes anything yet (timers do
+	// not count, DMASTAT and the SPORT counts do not move), and the side effects of reading
+	// the FIFO buffers are not modelled; the host glue handles EPB0/EPB1 itself.
+	uint32_t host_iop_r(offs_t reg) const { return m_iop[reg & 0xff]; }
+	void host_iop_w(offs_t reg, uint32_t data) { m_iop[reg & 0xff] = data; }
+
 protected:
 	// The 21065L's internal RAM base is 0x8000, so its interrupt vector table sits at 0x8000
 	// (vector N at 0x8000 + N*4; e.g. IRQ0 = vector 8 = 0x8020).
@@ -624,12 +632,18 @@ protected:
 	virtual uint32_t reset_pc() const override { return 0x8004; }
 
 	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	void pgm_65l(address_map &map) ATTR_COLD;
 	void data_65l(address_map &map) ATTR_COLD;
 	uint32_t iop65l_r(offs_t offset);
 	void iop65l_w(offs_t offset, uint32_t data);
+
+	// The IOP register file (0x00-0xFF), so what the kernel programs (SPORT control, DMA
+	// chains, timers) reads back. Reset values from the ADSP-21065L Technical Reference,
+	// Table E-15; registers it marks "not initialized" start at 0.
+	uint32_t m_iop[0x100] = { };
 
 	// F.3 SPORT audio DMA autobuffer bases (see sport_tx_buffer/sport_rx_buffer).
 	uint32_t m_sport_tx[2][2] = { };

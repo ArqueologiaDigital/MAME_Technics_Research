@@ -607,6 +607,7 @@ private:
 	// modeled (group 0x17, see the core's intc_w), the firmware keeps 0x500066CC="present" and the
 	// runtime effect-upload gate stays open, so selecting a reverb/chorus reaches the DSP.
 	uint16_t dsp_data_r(offs_t offset, uint16_t mem_mask);
+	uint16_t dsp_epb_read();
 	void     dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask);
 	bool     dsp_present() { return true; }        // IC306 ADSP-21065L is always fitted
 	bool     tg_sound_enabled() { return true; }   // IC201/IC205 tone generators are always fitted
@@ -703,6 +704,21 @@ private:
 		return int32_t(np16) - 0x80;                         // 1/256-semitone units
 	}
 	uint16_t m_dsp_index = 0;                  // latched host register index (0x98000000)
+	// Host register traffic other than the download stream (see dsp_data_r/dsp_data_w): a
+	// 32-bit IOP register goes through the 16-bit data port as two halves, low first, counted
+	// from the last index write. Phase-2 DSP probe readback: a DMAC0 write with DEN and TRAN
+	// (transmit, internal -> external) arms external-port DMA channel 8 from IIEP0/IMEP0/CEP0,
+	// and host reads of EPB0 then return internal memory, 16 bits at a time, low first.
+	uint8_t  m_dsp_rd_n = 0;                   // data-port reads since the last index write
+	uint8_t  m_dsp_wr_n = 0;                   // data-port writes since the last index write
+	uint32_t m_dsp_hostw = 0;                  // the 32-bit value being written (low, then high)
+	bool     m_dsp_rb_on = false;              // readback DMA armed
+	bool     m_dsp_rb_pm = false;              // 48-bit (PM) words, else 32-bit (DM)
+	uint32_t m_dsp_rb_addr = 0;                // next internal address
+	int32_t  m_dsp_rb_mod = 1;                 // IMEP0
+	uint32_t m_dsp_rb_count = 0;               // words left (CEP0)
+	uint8_t  m_dsp_rb_part = 0;                // which 16-bit part of the current word is next
+	uint16_t m_dsp_rb_w[3] = { };              // the current word, split into 16-bit parts
 	uint32_t m_dsp_dl_words = 0;               // count of download words written to the SHARC
 	// F.2 host-boot upload state (see dsp_data_w): the firmware sets a target address (reg
 	// 0x40), commits a PM/DM block (reg 0x1C = 0xA1/0x41), then streams words to the DMA
@@ -1150,7 +1166,7 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x28006:                                                 // 0x9805000C: SD mailbox data latch
 		cpsd_mbx_write(data);
 		return;
-	case 0x00000: m_dsp_index = data; return;                     // 0x98000000: effects-DSP host register index
+	case 0x00000: m_dsp_index = data; m_dsp_rd_n = 0; m_dsp_wr_n = 0; return;   // 0x98000000: effects-DSP host register index
 	case 0x20000: m_tg_addr[0] = data; return;                    // sub TG: address latch (0x98040000)
 	case 0x20001:                                                 // sub TG: data (0x98040002) -> reg[addr]
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
@@ -1182,15 +1198,61 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 {
 	if (!dsp_present())
 		return 0;
-	// Answer the host register read selected by the latched index. The boot probe
-	// (fw 0x48405028) reads register 0 and requires 0x20 to consider the DSP alive.
+	// Answer the host register read selected by the latched index. The firmware's own
+	// protocol registers keep the answers its boot sequence was brought up against: the boot
+	// probe (fw 0x48405028) writes SYSCON 0x9191 then 0x20 and reads register 0 back, four
+	// 8-bit reads, requiring 0x20; register 0x0B (MSGR3) is the ID readback after each probe
+	// record; 0x37 (DMASTAT) bit 7 is polled as busy. Every other IOP register reads the
+	// SHARC's register file (what the kernel or the host wrote, or its reset value), as two
+	// 16-bit halves, low first (fw 0x4840531E). The DSP probes (cnv_romdump) read them.
 	switch (m_dsp_index)
 	{
 	case 0x00: return 0x0020;    // probe: "DSP present / ready"
 	case 0x0B: return 0x1065;    // ID/version readback (plausible 21065L id; exact value TBD)
 	case 0x37: return 0x0000;    // status: busy (bit7) clear
-	default:   return 0x0000;
+	case 0x04:                   // EPB0: phase-2 readback, if armed (else the FIFO is empty)
+		return m_dsp_rb_on ? dsp_epb_read() : 0x0000;
+	case 0x05: return 0x0000;    // EPB1: unused
+	default:
+	{
+		const uint32_t v = m_dsp->host_iop_r(m_dsp_index & 0xff);
+		const uint16_t r = (m_dsp_rd_n & 1) ? uint16_t(v >> 16) : uint16_t(v);
+		if (!machine().side_effects_disabled())
+			m_dsp_rd_n++;
+		return r;
 	}
+	}
+}
+
+// Phase-2 readback: the next 16 bits of internal memory through EPB0 (see m_dsp_rb_on).
+uint16_t kn7000_state::dsp_epb_read()
+{
+	if (m_dsp_rb_part == 0)
+	{
+		if (m_dsp_rb_pm)
+		{
+			const uint64_t w = m_dsp->space(AS_PROGRAM).read_qword(m_dsp_rb_addr);
+			m_dsp_rb_w[0] = uint16_t(w); m_dsp_rb_w[1] = uint16_t(w >> 16); m_dsp_rb_w[2] = uint16_t(w >> 32);
+		}
+		else
+		{
+			const uint32_t w = m_dsp->space(AS_DATA).read_dword(m_dsp_rb_addr);
+			m_dsp_rb_w[0] = uint16_t(w); m_dsp_rb_w[1] = uint16_t(w >> 16);
+		}
+	}
+	const uint16_t r = m_dsp_rb_w[m_dsp_rb_part];
+	if (machine().side_effects_disabled())
+		return r;
+	if (++m_dsp_rb_part == (m_dsp_rb_pm ? 3 : 2))
+	{
+		m_dsp_rb_part = 0;
+		m_dsp_rb_addr += m_dsp_rb_mod;
+		m_dsp->host_iop_w(0x40, m_dsp_rb_addr);           // IIEP0 advances
+		m_dsp->host_iop_w(0x42, --m_dsp_rb_count);        // CEP0 counts down
+		if (m_dsp_rb_count == 0)
+			m_dsp_rb_on = false;                          // the channel completes
+	}
+	return r;
 }
 
 void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
@@ -1202,12 +1264,39 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	// the index (32-bit value = 2x16, low then high); the actual program/data streams via
 	// index 0x04 (the external-port DMA buffer), 3x16 per 48-bit PM word / 2x16 per 32-bit
 	// DM word, auto-incrementing from the reg-0x40 target. See notes/sharc-lle-assessment.md.
+	// Keep the SHARC's IOP register file in step with what the host writes (two halves, low
+	// first), so the DSP probes read back the firmware's own set-up. The download stream
+	// (EPB0/EPB1) is data, not a register.
+	if (m_dsp_index != 0x04 && m_dsp_index != 0x05 && m_dsp_wr_n < 2)
+	{
+		m_dsp_hostw = m_dsp_wr_n ? (m_dsp_hostw | (uint32_t(data) << 16)) : data;
+		m_dsp->host_iop_w(m_dsp_index & 0xff, m_dsp_hostw);
+		m_dsp_wr_n++;
+	}
 	switch (m_dsp_index)
 	{
 	case 0x40:  // download target address (low then high)
 		m_dsp_dl_addr = (m_dsp_dl_addr >> 16) | (uint32_t(data) << 16);
 		return;
 	case 0x1c:  // block command strobe (low half = command)
+		// Phase-2 DSP probe readback: DEN + TRAN (transmit) runs channel 8 from internal memory
+		// to EPB0, from IIEP0 (reg 0x40) stepping by IMEP0 (0x41) for CEP0 (0x42) words, 48-bit
+		// words if DTYPE (bit 5). The firmware itself never transmits; DEN clear stops it.
+		// (Only the low half is the command: m_dsp_wr_n is 1 after it, 2 after the high half.)
+		if (m_dsp_wr_n == 1 && (data & 0x0005) == 0x0005)
+		{
+			m_dsp_rb_on = true;
+			m_dsp_rb_pm = BIT(data, 5);
+			m_dsp_rb_addr = m_dsp_dl_addr;
+			m_dsp_rb_mod = int32_t(m_dsp->host_iop_r(0x41)) ? int32_t(m_dsp->host_iop_r(0x41)) : 1;
+			m_dsp_rb_count = m_dsp->host_iop_r(0x42) & 0xffff;
+			m_dsp_rb_part = 0;
+			if (m_dsp_rb_count == 0)
+				m_dsp_rb_on = false;
+			return;
+		}
+		if (m_dsp_wr_n == 1 && !BIT(data, 0))
+			m_dsp_rb_on = false;
 		// Upload framing: 0xA1/0x41 opens a PM/DM block (target = reg-0x40 addr), words stream
 		// via index 0x04, then 0xA0 closes the block. The whole download is bracketed by two
 		// "bare" 0xA0s (no block open): the first (before any block) is a reset handshake; the
@@ -1868,6 +1957,16 @@ void kn7000_state::machine_start()
 	}
 
 	save_item(NAME(m_dsp_index));
+	save_item(NAME(m_dsp_rd_n));
+	save_item(NAME(m_dsp_wr_n));
+	save_item(NAME(m_dsp_hostw));
+	save_item(NAME(m_dsp_rb_on));
+	save_item(NAME(m_dsp_rb_pm));
+	save_item(NAME(m_dsp_rb_addr));
+	save_item(NAME(m_dsp_rb_mod));
+	save_item(NAME(m_dsp_rb_count));
+	save_item(NAME(m_dsp_rb_part));
+	save_item(NAME(m_dsp_rb_w));
 	save_item(NAME(m_dsp_dl_words));
 	save_item(NAME(m_tg_wave_bank));
 	save_item(NAME(m_tg_wave_addr));

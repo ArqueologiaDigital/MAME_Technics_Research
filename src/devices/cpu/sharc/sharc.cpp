@@ -193,12 +193,26 @@ void adsp21065l_device::device_start()
 	save_pointer(NAME(m_data_sram), DATA_SRAM_WORDS);
 	save_item(NAME(m_sport_tx));
 	save_item(NAME(m_sport_rx));
+	save_item(NAME(m_iop));
 }
 
-// 21065L IOP register bank -- stubbed for F.1. The base 2106x core fatalerrors on the
-// 21065L-specific SPORT/SDRAM/DMA offsets the effect programs touch (0x28-0x3C, 0x53-0x7B,
-// 0xE0-0xFC per notes/sharc-lle-assessment.md); returning 0 / accepting writes lets the
-// program run without crashing. Real SPORT/SDRAM/DMA modelling is F.3.
+void adsp21065l_device::device_reset()
+{
+	adsp21062_device::device_reset();
+	std::fill(std::begin(m_iop), std::end(m_iop), 0);
+	m_iop[0x00] = 0x00000020;   // SYSCON (Table E-15; the KN7000 firmware's boot probe expects it)
+	m_iop[0x01] = 0x00008014;   // VIRPT
+	m_iop[0x02] = 0x21ad6b5a;   // WAIT
+}
+
+// 21065L IOP register bank. The base 2106x core fatalerrors on the 21065L-specific
+// SPORT/SDRAM/DMA offsets the effect programs touch (0x28-0x3C, 0x53-0x7B, 0xE0-0xFC per
+// notes/sharc-lle-assessment.md). Writes are kept in a register file, so the kernel's set-up
+// is visible to the host (host_iop_r: the KN7000's DSP probes read it back). The kernel's
+// OWN reads still return 0, as before: returning the stored value is the more faithful
+// choice (branch B does it) but it can change what the effects compute, so it is left to
+// OVERLAY-GAPS G4, with the audio oracle. Nothing behind the registers runs yet: timers,
+// SPORT and DMA status do not move. Real SPORT/DMA modelling is F.3.
 uint32_t adsp21065l_device::iop65l_r(offs_t offset)
 {
 	return 0;
@@ -211,6 +225,7 @@ uint32_t adsp21062_device::dm_index_reg(int n) const
 
 void adsp21065l_device::iop65l_w(offs_t offset, uint32_t data)
 {
+	m_iop[offset & 0xff] = data;
 	// F.3: the kernel programs the SPORT-DMA chain-pointer (CP) registers with a value CP; the
 	// transfer-control block lives at internal address 0x8000 + (CP & 0x1FFFF), whose II
 	// (internal index) field is the audio buffer base. Derive and cache those bases so the audio
