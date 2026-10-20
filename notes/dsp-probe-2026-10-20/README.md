@@ -69,6 +69,10 @@ reads the registers that changed, so nothing it does changes.
 
 - the self-test above passes on v16 and v13;
 - the gate's audio oracle (`oracle_ab.sh`) gives `bd02a9c15b580d6b4b4c0a42f78a1fcb` on both;
+- `ab_boot.sh`: kn7000 v16, v15, v13 and sp7001, kn6000, kn6500, kn2400 and kn2600 each give 9 of 9 identical
+  snapshots over 45 s, with no unimplemented-opcode or divide-by-zero lines on either binary;
+- published (`tools/publish-binary.sh`, `kn7000-emulator/kn7000` md5 `97d2f383…`), `tools/gate.sh` gives 17
+  passed, 0 failed, 1 skipped (kn1500);
 - the DSP probe in MAME, `-bios v13`, with no test-side stand-ins (`cnv_romdump/test/run_test.sh --dsp`, then
   `--dspmem`): phase 1 gives 5 of 5 files as expected and decodes SYSCON as `0x410`, 16-bit host bus, LSW first.
   Phase 2 passes its pre-check, finds FS full at the first look for every word (0 repeat polls), and reads PM `0x8000`-`0x8DFF` (3,584 words,
