@@ -153,6 +153,8 @@ void mn10300_device::device_start()
 	save_item(NAME(m_irq_state));
 	save_item(NAME(m_irq_vector));
 	save_item(NAME(m_irq_level));   // check_irq reads it every instruction (from upstream)
+	save_item(NAME(m_nmi_state));
+	save_item(NAME(m_nmi_pending));
 	save_item(NAME(m_sio_config));
 	save_item(NAME(m_sio_control));
 	save_item(NAME(m_sio_rx_fifo));
@@ -249,6 +251,8 @@ void mn10300_device::device_reset()
 	m_dma_started = false;
 	m_dma_drq = false;
 	m_dma_timer->adjust(attotime::never);
+
+	m_nmi_pending = false;
 }
 
 void mn10300_device::state_import(const device_state_entry &entry) { }
@@ -279,6 +283,31 @@ void mn10300_device::execute_set_input(int inputnum, int state)
 		if (state != CLEAR_LINE)
 			m_possible_irq = true;
 	}
+	// The NMI pin is edge-triggered: a rising edge is latched and taken before the
+	// next instruction (take_nmi).
+	else if (inputnum == INPUT_LINE_NMI)
+	{
+		const bool asserted = state != CLEAR_LINE;
+		if (asserted && !m_nmi_state)
+			m_nmi_pending = true;
+		m_nmi_state = asserted;
+	}
+}
+
+// Non-maskable interrupt: PC and PSW are pushed as for any interrupt, IE is cleared, and
+// execution continues at the NMI vector, 0x40000008 (reset is 0x40000000). On the KN7000
+// that is IC18's `mov 0x50000006,a0 ; jmp (a0)`, which forwards to the RAM stub the
+// firmware installs: its power-fail handler (0x484D77CF in 941), entered when the power
+// supply pulls NMI as the instrument is switched off.
+void mn10300_device::take_nmi()
+{
+	m_nmi_pending = false;
+	standard_irq_callback(INPUT_LINE_NMI, m_pc);
+	push32(m_pc);
+	push32(m_psw);
+	m_psw &= ~FLAG_IE;
+	m_pc = 0x40000008;
+	m_icount -= 7;
 }
 
 // Accept a maskable interrupt: the AM33 pushes the return PC and PSW to the
@@ -981,6 +1010,8 @@ void mn10300_device::execute_run()
 		// The on-chip INTC line is LEVEL-triggered, so this is checked every
 		// instruction (not just on the assert edge) -- it must fire the moment the
 		// firmware sets PSW.IE while a source is still pending.
+		if (m_nmi_pending)
+			take_nmi();
 		check_irq();
 
 		debugger_instruction_hook(m_pc);

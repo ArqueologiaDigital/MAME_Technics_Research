@@ -188,6 +188,7 @@ protected:
 	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
+	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == INPUT_LINE_NMI; }
 	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks
 	// for its internal /2 divider. Only add those if the KN7000 MN10300 clocking
 	// requires it; otherwise the 1:1 base-class defaults are correct.
@@ -326,6 +327,8 @@ private:
 	int      m_irq_state;    // latched maskable IRQ line (execute_set_input)
 	uint32_t m_irq_vector;   // where the maskable interrupt vectors to
 	int      m_irq_level = 7; // priority level of the pending interrupt (0 = highest)
+	bool     m_nmi_state = false;   // NMI pin level (execute_set_input)
+	bool     m_nmi_pending = false; // a rising NMI edge not yet taken
 
 	int m_icount;     // remaining cycles this timeslice (MN10200 named this m_cycles)
 
@@ -389,6 +392,7 @@ private:
 	// ---- interrupts (stubs) ------------------------------------------------
 	void check_irq();
 	void take_irq(int level, int group);
+	void take_nmi();
 };
 
 DECLARE_DEVICE_TYPE(MN10300, mn10300_device)

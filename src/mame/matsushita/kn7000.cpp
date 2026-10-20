@@ -108,6 +108,7 @@
 #include "bus/midi/midi.h"          // pulls in BUSES["MIDI"] for the focused build
 #include "machine/spi_sdcard.h"     // the SD card (SPI protocol via the 0x9805000C byte mailbox)
 #include "machine/intelfsh.h"      // IC21 custom-data flash (16 Mbit bottom boot)
+#include "machine/nvram.h"         // IC23 battery-backed backup SRAM
 #include "imagedev/floppy.h"        // IC103 floppy drive
 #include "softlist_dev.h"           // kn7000_flop / kn6000_flop software lists
 #include "machine/upd765.h"         // IC103 floppy disk controller (uPD765-family, C1DB00000607)
@@ -364,6 +365,7 @@ public:
 		, m_workram(*this, "workram")
 		, m_vram(*this, "vram")
 		, m_customflash(*this, "customflash")
+		, m_ic23_nvram(*this, "ic23")
 		, m_lcdbuf(*this, "lcdbuf")
 		, m_progrom(*this, "maincpu")
 		, m_midi_uart(*this, "midi_uart%u", 0U)
@@ -392,6 +394,7 @@ public:
 	void kn2400(machine_config &config) ATTR_COLD;
 	DECLARE_INPUT_CHANGED_MEMBER(kbd_key);     // PC-key note -> voice-event FIFO (public: PORT_CHANGED_MEMBER)
 	DECLARE_INPUT_CHANGED_MEMBER(sd_cover_changed);   // SD slot cover toggle (public: PORT_CHANGED_MEMBER)
+	DECLARE_INPUT_CHANGED_MEMBER(power_switch);       // KN7000 POWER OFF: NMI, power-down, exit
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
@@ -403,11 +406,24 @@ private:
 	required_shared_ptr<uint32_t> m_workram;
 	required_shared_ptr<uint32_t> m_vram;        // LCD V-RAM window at 0x90000000
 	optional_device<fujitsu_29lv160b_device> m_customflash;  // IC21 @ 0x96800000
+	optional_device<nvram_device> m_ic23_nvram;   // KN7000 IC23, the battery-backed backup SRAM @ 0x44000000
+	std::unique_ptr<uint8_t[]> m_ic23;           // its 256 KB (see machine_start)
+	// POWER OFF (KN7000). On the instrument, switching off pulls the CPU's NMI and the
+	// firmware's power-fail handler runs before the supply dies: it stamps IC23's checksum,
+	// which the next boot checks; without the stamp the firmware throws IC23 away and
+	// starts from factory settings. MAME's own exit runs no more CPU cycles, so, as on
+	// the KN5000, power-off is a machine control: pulse NMI, give the handler
+	// POWER_DOWN_MS, then exit (MAME then writes the nvram files).
+	emu_timer *m_poweroff_timer = nullptr;
+	TIMER_CALLBACK_MEMBER(poweroff_done);
+	// The handler waits 7000 TM5 counts (3.5 ms at its 2 MHz) before releasing the power
+	// latch (GPIO 0x36008004 bit 3); 100 ms is a generous bound, not a measurement.
+	static constexpr int POWER_DOWN_MS = 100;
 	uint32_t customflash_r(offs_t offset, uint32_t mem_mask = ~0);
 	void customflash_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
 	required_shared_ptr<uint32_t> m_lcdbuf;      // firmware's composited RGB565 LCD image @0x9CE00000
 	bool m_lib_mirror = false;                   // KN6000/KN6500: library @0x4C/0x8C mirrors the program ROM
-	bool m_ram90_workram = false;                // KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
+	bool m_ram90_workram = false;                // KN7000, KN2400/KN2600: 0x90000000 = +0x40000000 alias of work RAM (library self-loads via it)
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
@@ -860,10 +876,13 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// EXECUTED at 0x5012xxxx / builds dispatch tables into 0x5018xxxx. With 0x90000000
 	// mapped as a separate "vram" share the copy went into the wrong RAM and the boot
 	// called into zeroed work RAM (the long-standing KN2400 derail at 0x5018CCF4 -- see
-	// notes/kn2400-boot.md). Gated to the kn2400 machine for now: the KN7000/KN6000 only
-	// use this window for the IRQ trampolines+LCD regs and are already verified working
-	// with the separate share (their trampoline disp math ALSO assumes this alias, so the
-	// alias is probably faithful family-wide -- revisit when the LCD regs are modeled).
+	// notes/kn2400-boot.md). The KN7000 needs it too (2026-10-20): its firmware writes the
+	// RAM stubs at 0x50000000/0x50000006 through this window, and the NMI vector in IC18
+	// (0x40000008: mov 0x50000006,a0 ; jmp (a0)) jumps to the second one, the power-fail
+	// handler that stamps IC23's checksum. Without the alias the stubs read zero and a
+	// POWER OFF ran off into empty RAM (notes/ic23-nvram-2026-10-20/). The KN6000/KN6500
+	// keep the separate share (their trampoline disp math also assumes this alias, so it
+	// is probably faithful family-wide -- revisit with OVERLAY-GAPS G7).
 	if (m_ram90_workram)
 		map(0x90000000, 0x903fffff).ram().share("workram");
 	// 0x96800000-0x969FFFFF inside the window above is the WRITABLE custom-data FLASH
@@ -878,12 +897,13 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// RAM window above. Same reason the rhythm name resource is installed at runtime.)
 
 	// Further windows the boot reaches only AFTER the library ROM loads and runs
-	// (found by execution). 0x44000000 is a heavily read/written ~1 MB block
-	// (RAM/buffer); 0x9C000000 holds an unidentified peripheral at 0x9CC00000.
-	// Mapped as RAM placeholders so bring-up proceeds. TODO: identify these.
-	// 0x44000000 and its +0x40000000 alias 0x84000000 are the same RAM (the same
+	// (found by execution). 0x9C000000 holds an unidentified peripheral at 0x9CC00000.
+	// 0x44000000 and its +0x40000000 alias 0x84000000 are the same memory (the same
 	// one-bit window pair as the library ROM 0x4c/0x8c). Boot init copies record
 	// arrays to 0x84030FF8..; without the alias those writes were dropped.
+	// On the KN7000 this window is IC23, the 256 KB battery-backed backup SRAM; machine_start
+	// replaces this 16 MB placeholder with it there. The KN6000/KN6500/KN2400 keep the
+	// placeholder until their own backup SRAM is identified.
 	map(0x44000000, 0x44ffffff).ram().share("ram44");
 	map(0x84000000, 0x84ffffff).ram().share("ram44");
 	map(0x9c000000, 0x9cffffff).ram().share("lcdbuf");   // firmware's composited LCD image (RGB565) lives at 0x9CE00000
@@ -1439,6 +1459,26 @@ INPUT_CHANGED_MEMBER(kn7000_state::sd_cover_changed)
 // FIFO note in the header): a release sets bit 7 (key | 0x80) with velocity 0xFF for
 // a clean key-up -- NOT velocity 0, which the firmware reads as a NOTE-ON (the old
 // "stuck notes" bug). Confirmed end-to-end: the firmware reads each event once.
+// POWER OFF: pulse NMI and start the power-down window (see m_poweroff_timer). Only the
+// KN7000's power-fail path is traced (IC18's NMI vector to the RAM stub to 0x484D77CF), and
+// only the KN7000 has IC23 modelled, so the other machines ignore the switch.
+INPUT_CHANGED_MEMBER(kn7000_state::power_switch)
+{
+	if (!newval || !m_ic23_nvram)
+		return;                       // act on the press; KN7000 only
+	if (m_poweroff_timer->enabled())
+		return;                       // already powering down
+	logerror("KN7000: POWER OFF -- NMI asserted, running the firmware's power-down for %d ms\n", POWER_DOWN_MS);
+	m_maincpu->pulse_input_line(INPUT_LINE_NMI, attotime::zero);
+	m_poweroff_timer->adjust(attotime::from_msec(POWER_DOWN_MS));
+}
+
+TIMER_CALLBACK_MEMBER(kn7000_state::poweroff_done)
+{
+	logerror("KN7000: power-down window over (GPIO 0x36008004 = %04X; bit 3 is the power latch)\n", m_gpio8004);
+	machine().schedule_exit();
+}
+
 INPUT_CHANGED_MEMBER(kn7000_state::kbd_key)
 {
 	kbd_push(newval ? uint8_t(param) : uint8_t(param | 0x80), newval ? 0x64 : 0xff);
@@ -1548,6 +1588,13 @@ static INPUT_PORTS_START(kn7000)
 	// The tone generators (IC201/IC205) and the effects DSP (IC306, ADSP-21065L) are
 	// always fitted on the KN7000, so the firmware voices notes and processes effects
 	// unconditionally -- there are no machine-configuration switches for them.
+
+	// The instrument's POWER switch (KN7000 only; see power_switch). Deliberately NOT bound
+	// to a default key: it ends the session. It saves the panel memories in IC23, which a
+	// plain MAME exit does not. Rigs drive it directly.
+	PORT_START("POWER")
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_OTHER) PORT_NAME("POWER OFF (run the firmware's power-down, then exit)")
+		PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(kn7000_state::power_switch), 0)
 
 	// Front-panel BUTTON matrix (CP{board}_SEG{col}) is now declared by the control-panel
 	// device itself (kn7000_cpanel_device::device_input_ports(), in kn7000_cpanel.cpp) -- the
@@ -1885,6 +1932,7 @@ void kn7000_state::machine_start()
 	if (m_lib_mirror)
 		memcpy(memshare("libram")->ptr(), memregion("maincpu")->base(), memregion("maincpu")->bytes());
 	m_sys_timer = timer_alloc(FUNC(kn7000_state::sys_tick), this);
+	m_poweroff_timer = timer_alloc(FUNC(kn7000_state::poweroff_done), this);
 	m_dsp_irq_timer = timer_alloc(FUNC(kn7000_state::dsp_audio_tick), this);
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
@@ -1907,6 +1955,27 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_snd_500e));
 	save_item(NAME(m_tg_addr));
 	save_item(NAME(m_tg_reg));
+
+	// KN7000: IC23, the battery-backed backup SRAM (C3BBJG000011, 2 Mbit x16 on A1-A17), holds
+	// the panel memories and settings. The firmware's RAM DEVICE TEST (BackupSramTest,
+	// 0x484A0055 in 941) walks exactly 256 KB from 0x44000000, and SumU32Words checksums it.
+	// With only A1-A17 wired the chip repeats every 256 KB through the chip select; that repeat
+	// is inferred, not yet read from a unit (the next cnv_romdump survey reads 2 MB there). An
+	// nvram device keeps it across runs. The firmware only trusts it if its power-fail handler
+	// stamped the checksum, so the panel memories survive a restart only when the session ends
+	// with the machine's POWER OFF (power_switch); a plain MAME exit leaves it unstamped and the
+	// next boot starts from factory settings. Delete nvram/kn7000/ic23 to start blank.
+	// (OVERLAY-GAPS G6; notes/ic23-nvram-2026-10-20/.)
+	if (m_ic23_nvram)
+	{
+		constexpr offs_t IC23_SIZE = 0x40000;
+		m_ic23 = std::make_unique<uint8_t[]>(IC23_SIZE);
+		m_ic23_nvram->set_base(m_ic23.get(), IC23_SIZE);
+		save_pointer(NAME(m_ic23), IC23_SIZE);
+		address_space &prog = m_maincpu->space(AS_PROGRAM);
+		prog.install_ram(0x44000000, 0x4403ffff, 0x00fc0000, m_ic23.get());
+		prog.install_ram(0x84000000, 0x8403ffff, 0x00fc0000, m_ic23.get());
+	}
 
 	// KN6000/KN6500: the unit on CN105 (the HD-SX6, or nothing) takes over its two chip-select
 	// windows, ISOROM at 0x97800000 and HDDCS at 0x98060000, from the vram share and io_r/io_w
@@ -2116,6 +2185,12 @@ void kn7000_state::kn7000(machine_config &config)
 	// runs -- which is the point of modelling it rather than leaving the window as RAM.
 	FUJITSU_29LV160B(config, m_customflash);
 
+	// IC23, the battery-backed backup SRAM (panel memories, settings); mapped in machine_start.
+	// Blank (all zero, as the RAM placeholder read before) until the firmware first saves.
+	NVRAM(config, m_ic23_nvram, nvram_device::DEFAULT_ALL_0);
+	// 0x90000000 is the +0x40000000 view of work RAM: the NMI's RAM stub is written there.
+	m_ram90_workram = true;
+
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
 	// reference crystal X1 (part H0J160500026 -- the H0J<freq*10> code family:
@@ -2308,6 +2383,8 @@ void kn7000_state::kn6000(machine_config &config)
 {
 	kn7000(config);
 	SOFTWARE_LIST(config.replace(), "flop_list").set_original("kn6000_flop");
+	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
+	m_ram90_workram = false;             // its IRQ trampolines are verified with the separate share
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
@@ -2389,6 +2466,7 @@ void kn7000_state::kn2400(machine_config &config)
 	// its scan matrix nor its layout has been drawn.
 	kn7000(config);
 	config.device_remove("flop_list");   // no KN2400 software list yet
+	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = true;
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).

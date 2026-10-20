@@ -95,13 +95,21 @@ done
 
 [ "$STATIC" -eq 1 ] && { echo; echo "static only: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ] || exit 1; exit 0; }
 
+# The KN7000's IC23 backup SRAM is an nvram device since 2026-10-20 (nvram/kn7000/ic23): left in
+# place, whatever the previous run (or Felipe) saved there would carry into the next run. The
+# emulator runs below use a throwaway copy of nvram/ without it, so IC23 starts blank as the RAM
+# placeholder did when the baselines were measured, and the published folder is not written.
+NV=$(mktemp -d)
+cp -r nvram/. "$NV/" 2>/dev/null
+rm -f -- "${NV:?}/kn7000/ic23"
+
 echo
 echo "== liveness (does it boot and draw?) =="
 for entry in $MODELS; do
 	m="${entry%%:*}"; min="${entry##*:}"
 	[ -n "$ONLY" ] && [ "$m" != "$ONLY" ] && continue
 	line=$(LIVENESS_AT=25 LIVENESS_MIN="$min" timeout 260 ./run.sh "$m" \
-		-window -nothrottle -seconds_to_run 27 \
+		-window -nothrottle -seconds_to_run 27 -nvram_directory "$NV" \
 		-autoboot_script "$RIGS/liveness.lua" 2>&1 | grep -m1 '^LIVENESS')
 	case "$line" in
 		*PASS*) ok "liveness $m  (${line#LIVENESS $m })" ;;
@@ -120,9 +128,10 @@ else
 	# copying it costs 121 MB per run and has filled the scratch filesystem before.
 	W=$(mktemp -d)/o.wav
 	C=$(mktemp -d)
+	rm -f -- "${NV:?}/kn7000/ic23"   # the liveness run above saved one; start blank again
 	timeout 500 ./run.sh kn7000 -window -nothrottle -seconds_to_run 22 \
 		-autoboot_script "$RIGS/money.lua" -wavwrite "$W" \
-		-cfg_directory "$C" -harddisk sdcard_from_real_kn7000.img >/dev/null 2>&1
+		-cfg_directory "$C" -nvram_directory "$NV" -harddisk sdcard_from_real_kn7000.img >/dev/null 2>&1
 	if [ ! -s "$W" ]; then
 		bad "oracle -- no wav produced"
 	else
@@ -179,6 +188,8 @@ else
 	fi
 	rm -rf "$D"
 fi
+
+rm -rf -- "${NV:?}"
 
 echo
 echo "== $PASS passed, $FAIL failed, $SKIP skipped =="
