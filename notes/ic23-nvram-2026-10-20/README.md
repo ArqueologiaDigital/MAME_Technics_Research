@@ -99,7 +99,8 @@ binary `7ee415f7…` against this build):
 | kn2400        | 9 of 9 identical                   |
 | kn2600        | 9 of 9 identical                   |
 
-The gate's KN7000 audio oracle gives `bd02a9c15b580d6b4b4c0a42f78a1fcb` on both binaries. The binary built
+The gate's KN7000 audio oracle gives `bd02a9c15b580d6b4b4c0a42f78a1fcb` on both binaries. `tools/gate.sh` on the
+published build: 17 passed, 0 failed, 1 skipped (kn1500, no screen device). The binary built
 from the commit (`ed41d01b5f443b0ddba4b30264631d71`) is byte-identical to the one these runs used.
 
 ## Scripts
