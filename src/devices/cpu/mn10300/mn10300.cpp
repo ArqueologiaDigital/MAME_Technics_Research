@@ -80,7 +80,10 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	, m_dma_tc_cb(*this), m_dma_timer(nullptr)
 	, m_dma_ctrl(0), m_dma_src(0), m_dma_dst(0), m_dma_count(0), m_dma_remain(0)
 	, m_dma_active(false), m_dma_started(false), m_dma_drq(false)
-	, m_chctr(0), m_ic_line(~0u)
+	, m_chctr(0)
+	, m_qacc(0), m_qclock(0), m_fq(0), m_fq_qclock(0), m_seq_pc(0), m_ld_dst(0), m_ld_ready(0), m_ld_lu(0)
+	, m_ic_line(~0u)
+	, m_cnt_insn(0), m_cnt_mem(0), m_cnt_icmiss(0), m_cnt_dcmiss(0)
 	, m_pc(0), m_sp(0), m_mdr(0), m_mdrq(0), m_mcrh(0), m_mcrl(0), m_mcvf(0), m_psw(0), m_lir(0), m_lar(0)
 	, m_possible_irq(false), m_irq_state(CLEAR_LINE), m_irq_vector(0)
 	, m_icount(0)
@@ -96,10 +99,13 @@ mn10300_device::mn10300_device(const machine_config &mconfig, const char *tag, d
 	std::fill(std::begin(m_sio_rx_tail), std::end(m_sio_rx_tail), 0);
 	std::fill(std::begin(m_gxicr), std::end(m_gxicr), 0);
 	std::fill(std::begin(m_level_vector), std::end(m_level_vector), 0);
-	std::fill(std::begin(m_memctr), std::end(m_memctr), mn10300_timing::MEMCTR_RESET);
-	std::fill(std::begin(m_cs_acc), std::end(m_cs_acc), 0);
-	std::fill(std::begin(m_cs_acc32), std::end(m_cs_acc32), 0);
+	std::copy(mn10300_timing::MEMCTR_INIT.begin(), mn10300_timing::MEMCTR_INIT.end(), std::begin(m_memctr));
+	std::fill(std::begin(m_cs_rd16), std::end(m_cs_rd16), 0);
+	std::fill(std::begin(m_cs_rd32), std::end(m_cs_rd32), 0);
+	std::fill(std::begin(m_cs_wr16), std::end(m_cs_wr16), 0);
+	std::fill(std::begin(m_cs_wr32), std::end(m_cs_wr32), 0);
 	std::fill(std::begin(m_cs_fill), std::end(m_cs_fill), 0);
+	std::fill(std::begin(m_cs_wb), std::end(m_cs_wb), 0);
 	std::fill(std::begin(m_ic_tag), std::end(m_ic_tag), ~0u);
 	std::fill(std::begin(m_ic_lru), std::end(m_ic_lru), 0);
 	std::fill(std::begin(m_dc_tag), std::end(m_dc_tag), ~0u);
@@ -216,6 +222,14 @@ void mn10300_device::device_start()
 	save_item(NAME(m_dc_dirty));
 	save_item(NAME(m_dc_lru));
 	save_item(NAME(m_ic_line));
+	save_item(NAME(m_qacc));
+	save_item(NAME(m_qclock));
+	save_item(NAME(m_fq));
+	save_item(NAME(m_fq_qclock));
+	save_item(NAME(m_seq_pc));
+	save_item(NAME(m_ld_dst));
+	save_item(NAME(m_ld_ready));
+	save_item(NAME(m_ld_lu));
 
 	state_add(MN10300_PC,  "PC",  m_pc ).formatstr("%08X");
 	state_add(MN10300_SP,  "SP",  m_sp ).formatstr("%08X");
@@ -229,6 +243,11 @@ void mn10300_device::device_start()
 	state_add(MN10300_A2,  "A2",  m_a[2]).formatstr("%08X");
 	state_add(MN10300_A3,  "A3",  m_a[3]).formatstr("%08X");
 	state_add(MN10300_PSW, "PSW", m_psw).formatstr("%04X");
+
+	state_add(MN10300_TINSN,   "TINSN",   m_cnt_insn).formatstr("%016X");
+	state_add(MN10300_TMEM,    "TMEM",    m_cnt_mem).formatstr("%016X");
+	state_add(MN10300_TICMISS, "TICMISS", m_cnt_icmiss).formatstr("%016X");
+	state_add(MN10300_TDCMISS, "TDCMISS", m_cnt_dcmiss).formatstr("%016X");
 
 	state_add(STATE_GENPC,     "GENPC",    m_pc).noshow();
 	state_add(STATE_GENPCBASE, "CURPC",    m_pc).noshow();
@@ -291,8 +310,11 @@ void mn10300_device::device_reset()
 
 	m_nmi_pending = false;
 
-	// Timing model: chip selects at their reset timing, caches off and empty.
-	std::fill(std::begin(m_memctr), std::end(m_memctr), mn10300_timing::MEMCTR_RESET);
+	// Timing model: chip selects as the unit reads them (their reset values are unknown, but
+	// for MEMCTR0 bit 15, which the boot code keeps and the unit reads set), caches off and empty.
+	std::copy(mn10300_timing::MEMCTR_INIT.begin(), mn10300_timing::MEMCTR_INIT.end(), std::begin(m_memctr));
+	m_seq_pc = ~0u;
+	m_ld_dst = 0;
 	for (int cs = 0; cs < 8; cs++)
 		timing_recompute_cs(cs);
 	m_chctr = 0;
@@ -358,7 +380,7 @@ void mn10300_device::take_nmi()
 	push32(m_psw);
 	m_psw &= ~FLAG_IE;
 	m_pc = 0x40000008;
-	m_icount -= mn10300_timing::C_IRQ;
+	charge(mn10300_timing::C_IRQ);
 }
 
 // Accept a maskable interrupt: the AM33 pushes the return PC and PSW to the
@@ -381,7 +403,7 @@ void mn10300_device::take_irq(int level, int group)
 	push32(m_psw);
 	m_psw = ((m_psw & ~FLAG_IM) | (level << IM_SHIFT)) & ~FLAG_IE;
 	m_pc = m_irq_vector;
-	m_icount -= mn10300_timing::C_IRQ;
+	charge(mn10300_timing::C_IRQ);
 }
 
 void mn10300_device::check_irq()
@@ -1024,31 +1046,35 @@ uint8_t mn10300_device::sio_rx_pop(int ch)
 
 
 //**************************************************************************
-//  timing model: caches, chip selects, peripherals (numbers: mn10300_timing.h)
+//  timing model (the numbers: mn10300_timing.h)
 //**************************************************************************
 //
-// The manual's instruction cycles assume every cachable access hits [M p.25]; these
-// add what memory costs beyond that. Caches keep tags only (line addresses), so
-// they change when things happen and never what is read or written.
+// Time is charged in quarter cycles (charge()), so the fractional costs pass 9 measured add
+// up exactly. Per instruction: the instruction cache (a miss fills the line from its chip
+// select), the fetch queue (an instruction waits until its bytes are in), a load-use stall
+// when it reads a register the previous load is still writing, and its own execute cost.
+// Data accesses add cache misses and write-backs, uncached bus time and on-chip register
+// time. Caches keep tags only (line addresses): they change when things happen, never what
+// is read or written.
 
 uint32_t mn10300_device::ioclk() const
 {
 	return clock() / mn10300_timing::IOCLK_DIV;
 }
 
-// One chip select's costs from its MEMCTR (hypothesis H1 in mn10300_timing.h).
+// One chip select's costs: the measured ones, moved by MEMCTR bits 12:8 for CS0-CS3.
 void mn10300_device::timing_recompute_cs(int cs)
 {
 	using namespace mn10300_timing;
-	const uint16_t v = m_memctr[cs];
-	const int transfer = BUS_DIV * (BUS_BASE + memctr_wait(v) + (memctr_extwait(v) ? EXTWAIT : 0)) + CS_EXTRA[cs];
-	const int burst = memctr_dram(v) ? BUS_DIV * DRAM_BURST + CS_EXTRA[cs] : transfer;
-	const bool bus32 = memctr_bus32(v);
-	// a data access's base cycle is in the instruction's count: charge the rest
-	m_cs_acc[cs] = std::max(0, transfer - 1);
-	m_cs_acc32[cs] = std::max(0, (bus32 ? transfer : 2 * transfer) - 1);
-	const int n = bus32 ? int(LINE_WORDS) : 2 * int(LINE_WORDS);
-	m_cs_fill[cs] = transfer + (n - 1) * burst;
+	const cs_cost &c = CS[cs];
+	const int delta = (c.wait_ref < 0) ? 0 : (memctr_wait(m_memctr[cs]) - c.wait_ref) * MEMCTR_STEP;
+	const int x32 = (c.xfers == 8) ? 2 : 1;      // transfers in a 32-bit access
+	m_cs_rd16[cs] = std::max(0, c.rd16 + delta);
+	m_cs_rd32[cs] = std::max(0, c.rd32 + x32 * delta);
+	m_cs_wr16[cs] = std::max(0, c.wr16 + delta);
+	m_cs_wr32[cs] = std::max(0, c.wr32 + x32 * delta);
+	m_cs_fill[cs] = std::max(0, c.fill + c.xfers * delta);
+	m_cs_wb[cs]   = std::max(0, c.wb + c.xfers * delta);
 }
 
 void mn10300_device::icache_invalidate()
@@ -1065,11 +1091,12 @@ void mn10300_device::dcache_invalidate()
 	std::fill(std::begin(m_dc_lru), std::end(m_dc_lru), 0);
 }
 
-// CHCTR (0x20000070): bits 0/1 enable the instruction/data cache, 4/5 invalidate them
-// (and read 0), 2/3 are the busy flags (never busy here), 6 selects write-through.
+// CHCTR (0x20000070): bits 0/1 enable the instruction/data cache, 4/5 invalidate them (and
+// read 0), 6 selects write-through. Bits 2/3 read 1 while the cache is on (the firmware waits
+// for them to clear after turning one off; pass 9 read 0x8F on the unit).
 uint16_t mn10300_device::chctr_r(offs_t offset)
 {
-	return offset ? 0 : m_chctr;
+	return offset ? 0 : (m_chctr | ((m_chctr & 3) << 2));
 }
 
 void mn10300_device::chctr_w(offs_t offset, uint16_t data, uint16_t mem_mask)
@@ -1108,56 +1135,118 @@ uint32_t mn10300_device::dcache_purge_r(offs_t offset)
 		const unsigned i = ((offset >> 10) & 1) | (((offset >> 2) & (NSETS - 1)) << 1);
 		if (m_dc_dirty[i])
 		{
-			m_icount -= line_writeback_cost(m_dc_tag[i]);
+			const int c = line_writeback_cost(m_dc_tag[i]);
+			charge(c);
+			m_cnt_mem += c;
 			m_dc_dirty[i] = 0;
 		}
 	}
 	return 0;
 }
 
+inline void mn10300_device::charge(int q)
+{
+	m_qclock += q;
+	m_qacc += q;
+	m_icount -= m_qacc >> 2;
+	m_qacc &= 3;
+}
+
+inline int mn10300_device::line_fill_cost(uint32_t a, int cs)
+{
+	using namespace mn10300_timing;
+	if (cs == 2 && !BIT(a, 22))
+		return FILL_TABLE_FLASH + (m_cs_fill[2] - CS[2].fill);
+	if (cs == 5 && BIT(a, 24))
+		return FILL_IC19;
+	return m_cs_fill[cs];
+}
+
 inline int mn10300_device::line_writeback_cost(uint32_t tag)
 {
 	const int cs = mn10300_timing::REGIONS[(tag << mn10300_timing::LINE_SHIFT) >> 26] & 0x0f;
-	return (cs < 8) ? m_cs_fill[cs] : 0;
+	return (cs < 8) ? m_cs_wb[cs] : 0;
 }
 
-// The instruction at m_pc: a new 16-byte line costs a cache lookup (a miss fills the line
-// from its chip select), or with the cache off or uncached memory the bus words the queue
-// reads from there to the end of the line.
-inline void mn10300_device::fetch_cost()
+// Everything an instruction costs before it executes: the instruction cache, the fetch
+// queue, a load-use stall, and its fixed execute cost. op2 is read only when needed.
+inline void mn10300_device::timing_pre(uint32_t pc, uint8_t op)
 {
 	using namespace mn10300_timing;
-	const uint32_t line = m_pc >> LINE_SHIFT;
-	if (line == m_ic_line)
-		return;
-	m_ic_line = line;
-	const uint8_t r = REGIONS[m_pc >> 26];
-	const unsigned cs = r & 0x0f;
-	switch (r >> 4)
+	m_cnt_insn++;
+
+	// the fetch queue refills during the previous instruction; a jump leaves it holding the
+	// target's 8-byte block from the target on
+	if (pc != m_seq_pc)
+		m_fq = (8 - (pc & 7)) * FQ_UNIT;
+	else
+		m_fq = int(std::min<uint64_t>(FQ_CAP, m_fq + (m_qclock - m_fq_qclock) * FQ_RATE));
+
+	// instruction cache, one lookup per new 16-byte line
+	const uint32_t line = pc >> LINE_SHIFT;
+	if (line != m_ic_line)
 	{
-	case R_CACHED:
-		if (m_chctr & CHCTR_ICEN)
+		m_ic_line = line;
+		const uint8_t r = REGIONS[pc >> 26];
+		const unsigned cs = r & 0x0f;
+		int c = 0;
+		switch (r >> 4)
 		{
-			const unsigned set = line & (NSETS - 1);
-			uint32_t *const t = &m_ic_tag[set << 1];
-			if (t[0] == line) { m_ic_lru[set] = 1; return; }
-			if (t[1] == line) { m_ic_lru[set] = 0; return; }
-			const unsigned way = m_ic_lru[set];
-			t[way] = line;
-			m_ic_lru[set] = way ^ 1;
+		case R_CACHED:
+			if (m_chctr & CHCTR_ICEN)
+			{
+				const unsigned set = line & (NSETS - 1);
+				uint32_t *const t = &m_ic_tag[set << 1];
+				if (t[0] == line) { m_ic_lru[set] = 1; break; }
+				if (t[1] == line) { m_ic_lru[set] = 0; break; }
+				const unsigned way = m_ic_lru[set];
+				t[way] = line;
+				m_ic_lru[set] = way ^ 1;
+				m_cnt_icmiss++;
+				if (cs < 8)
+					c = line_fill_cost(pc, cs) + IFILL_EXTRA;
+				m_fq = (8 - (pc & 7)) * FQ_UNIT;
+				break;
+			}
+			[[fallthrough]];
+		case R_UNCACHED:   // no cache: the queue reads the line's remaining words over the bus
 			if (cs < 8)
-				m_icount -= m_cs_fill[cs];
-			return;
+				c = (4 - ((pc >> 2) & 3)) * (m_cs_rd32[cs] + Q(1));
+			break;
+		case R_IO:
+			c = io_cost(pc);
+			break;
 		}
-		[[fallthrough]];
-	case R_UNCACHED:
-		if (cs < 8)
-			m_icount -= (LINE_WORDS - ((m_pc >> 2) & (LINE_WORDS - 1))) * (m_cs_acc32[cs] + 1);
-		return;
-	case R_IO:
-		m_icount -= io_cost(m_pc);
-		return;
+		if (c)
+		{
+			charge(c);
+			m_cnt_mem += c;
+		}
 	}
+
+	// the queue: wait for the instruction's bytes
+	const uint8_t op2 = (op == 0xfe || m_ld_dst) ? read_arg8(pc + 1) : 0;
+	const int len = mn10300_insn_length(op, op2);
+	const int need = len * FQ_UNIT;
+	if (m_fq < need)
+	{
+		const int stall = (need - m_fq + FQ_RATE - 1) / FQ_RATE;
+		charge(stall);
+		m_fq += stall * FQ_RATE;
+	}
+	m_fq -= need;
+	m_seq_pc = pc + len;
+
+	// load-use: this instruction reads a register the previous load has not written back yet
+	if (m_ld_dst)
+	{
+		if (m_qclock < m_ld_ready && (src_regs(op, op2) & m_ld_dst))
+			charge(int(m_ld_ready - m_qclock));
+		m_ld_dst = 0;
+	}
+
+	charge(BASE[op]);
+	m_fq_qclock = m_qclock;
 }
 
 inline int mn10300_device::dcache_access(uint32_t a, bool wide, bool write, int cs)
@@ -1167,24 +1256,24 @@ inline int mn10300_device::dcache_access(uint32_t a, bool wide, bool write, int 
 	const unsigned set = line & (NSETS - 1);
 	uint32_t *const t = &m_dc_tag[set << 1];
 	const bool wt = m_chctr & CHCTR_DCWT;
-	const int bus = (cs < 8) ? (wide ? m_cs_acc32[cs] : m_cs_acc[cs]) : 0;
 	for (unsigned way = 0; way < 2; way++)
 		if (t[way] == line)
 		{
 			m_dc_lru[set] = way ^ 1;
 			if (write)
 			{
-				if (wt)
-					return bus;                       // write-through: the bus write as well
+				if (wt)                                // write-through: the bus write as well
+					return (cs < 8) ? (wide ? m_cs_wr32[cs] : m_cs_wr16[cs]) : 0;
 				m_dc_dirty[(set << 1) | way] = 1;
 			}
 			return 0;
 		}
-	if (write && wt)
-		return bus;                                   // write-through: no allocation on a write miss
+	if (write && wt)                                  // write-through: no allocation on a write miss
+		return (cs < 8) ? (wide ? m_cs_wr32[cs] : m_cs_wr16[cs]) : 0;
 	const unsigned way = m_dc_lru[set];
 	const unsigned i = (set << 1) | way;
-	int cost = (cs < 8) ? m_cs_fill[cs] : 0;
+	m_cnt_dcmiss++;
+	int cost = (cs < 8) ? line_fill_cost(a, cs) : 0;
 	if (m_dc_dirty[i])
 		cost += line_writeback_cost(t[way]);
 	t[way] = line;
@@ -1193,38 +1282,54 @@ inline int mn10300_device::dcache_access(uint32_t a, bool wide, bool write, int 
 	return cost;
 }
 
-inline void mn10300_device::data_cost(uint32_t a, bool wide, bool write)
+// One data access: charge its time, and for a load return the load-use latency of its data.
+inline int mn10300_device::data_cost(uint32_t a, bool wide, bool write)
 {
 	using namespace mn10300_timing;
 	const uint8_t r = REGIONS[a >> 26];
 	const int cs = r & 0x0f;
+	int c = 0, lu = wide ? LU_WORD : LU_SUBWORD;
 	switch (r >> 4)
 	{
 	case R_CACHED:
 		if (m_chctr & CHCTR_DCEN)
 		{
-			m_icount -= dcache_access(a, wide, write, cs);
-			return;
+			c = dcache_access(a, wide, write, cs);
+			lu = LU_CACHED;
+			break;
 		}
 		[[fallthrough]];
 	case R_UNCACHED:
 		if (cs < 8)
-			m_icount -= wide ? m_cs_acc32[cs] : m_cs_acc[cs];
-		return;
+			c = write ? (wide ? m_cs_wr32[cs] : m_cs_wr16[cs]) : (wide ? m_cs_rd32[cs] : m_cs_rd16[cs]);
+		break;
 	case R_IO:
-		m_icount -= io_cost(a);
-		return;
+		c = io_cost(a);
+		break;
 	}
+	if (c)
+	{
+		charge(c);
+		m_cnt_mem += c;
+	}
+	return lu;
+}
+
+// A single load (read_mem*) arms the load-use check; the instruction's handler names the
+// register it loaded (loaded()) right after.
+inline void mn10300_device::loaded(unsigned regs)
+{
+	m_ld_dst = regs;
+	m_ld_ready = m_qclock + m_ld_lu;
 }
 
 
-// Data accessors. Each charges the access's time (data_cost) before it happens, so a
-// device sees it at the end of its bus cycle. read_mem* are single loads (they add the
-// load-use average); read_stack32 is a load inside movm/ret/rti/pop and read_rmw8 the read
-// of a bit operation, whose counts include their loads.
-inline uint8_t  mn10300_device::read_mem8 (uint32_t a) { data_cost(a, false, false); m_icount -= mn10300_timing::C_LOADUSE; return m_program->read_byte(a); }
-inline uint16_t mn10300_device::read_mem16(uint32_t a) { data_cost(a, false, false); m_icount -= mn10300_timing::C_LOADUSE; return m_program->read_word(a); }
-inline uint32_t mn10300_device::read_mem32(uint32_t a) { data_cost(a, true, false); m_icount -= mn10300_timing::C_LOADUSE; return m_program->read_dword(a); }
+// Data accessors. Each charges the access's time before it happens, so a device sees it at
+// the end of its bus cycle. read_stack32 is a load inside movm/ret/rti/pop and read_rmw8
+// the read of a bit operation, whose counts include their loads.
+inline uint8_t  mn10300_device::read_mem8 (uint32_t a) { m_ld_lu = data_cost(a, false, false); return m_program->read_byte(a); }
+inline uint16_t mn10300_device::read_mem16(uint32_t a) { m_ld_lu = data_cost(a, false, false); return m_program->read_word(a); }
+inline uint32_t mn10300_device::read_mem32(uint32_t a) { m_ld_lu = data_cost(a, true, false); return m_program->read_dword(a); }
 inline uint32_t mn10300_device::read_stack32(uint32_t a) { data_cost(a, true, false); return m_program->read_dword(a); }
 inline uint8_t  mn10300_device::read_rmw8(uint32_t a) { data_cost(a, false, false); return m_program->read_byte(a); }
 inline void mn10300_device::write_mem8 (uint32_t a, uint8_t  data) { data_cost(a, false, true); m_program->write_byte(a, data); }
@@ -1321,12 +1426,11 @@ void mn10300_device::execute_run()
 		check_irq();
 
 		debugger_instruction_hook(m_pc);
-		fetch_cost();                     // instruction cache (or bus) for this instruction's line
 
 		const uint32_t start_pc = m_pc;   // PC-relative targets use the insn start
 		const uint8_t op = read_arg8(m_pc);
+		timing_pre(start_pc, op);         // fetch, load-use stall, fixed cost (mn10300_timing.h)
 		m_pc += 1;
-		m_icount -= mn10300_timing::BASE[op];   // fixed cost; 0 where the handler charges
 
 		const int dst = op & 3;           // low field
 		const int src = (op >> 2) & 3;    // bits[3:2]
@@ -1389,9 +1493,9 @@ void mn10300_device::execute_run()
 
 		// ---- mov (disp8,sp),dD / (disp8,sp),aD  (disp8 unsigned) ----
 		case 0x58: case 0x59: case 0x5A: case 0x5B:
-			m_d[dst] = read_mem32(m_sp + read_arg8(m_pc)); m_pc += 1; break;
+			{ m_d[dst] = read_mem32(m_sp + read_arg8(m_pc)); loaded(mn10300_timing::RD(dst)); } m_pc += 1; break;
 		case 0x5C: case 0x5D: case 0x5E: case 0x5F:
-			m_a[dst] = read_mem32(m_sp + read_arg8(m_pc)); m_pc += 1; break;
+			{ m_a[dst] = read_mem32(m_sp + read_arg8(m_pc)); loaded(mn10300_timing::RA(dst)); } m_pc += 1; break;
 
 		// ---- mov dS,(aM) (0x60-0x6F) / mov (aM),dD (0x70-0x7F), 32-bit ----
 		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
@@ -1399,7 +1503,7 @@ void mn10300_device::execute_run()
 			write_mem32(m_a[dst], m_d[src]); break;
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
 		case 0x78: case 0x79: case 0x7A: case 0x7B: case 0x7C: case 0x7D: case 0x7E: case 0x7F:
-			m_d[src] = read_mem32(m_a[dst]); break;
+			{ m_d[src] = read_mem32(m_a[dst]); loaded(mn10300_timing::RD(src)); } break;
 
 		// ---- mov imm8,dD (src==dst) / mov dS,dD ----
 		case 0x80: case 0x85: case 0x8A: case 0x8F:
@@ -1434,13 +1538,13 @@ void mn10300_device::execute_run()
 		case 0xC5: case 0xC6: case 0xC7: case 0xC8: case 0xC9:
 		{
 			int8_t disp = (int8_t)read_arg8(m_pc); m_pc += 1;
-			if (test_cond(op & 0x0F)) { m_pc = start_pc + disp; m_icount -= mn10300_timing::C_BCC_T; }
-			else m_icount -= mn10300_timing::C_BCC;
+			if (test_cond(op & 0x0F)) { m_pc = start_pc + disp; charge(mn10300_timing::C_BCC_T); }
+			else charge(mn10300_timing::C_BCC);
 			break;
 		}
 		case 0xCA: // bra
 		{
-			int8_t disp = (int8_t)read_arg8(m_pc); m_pc = start_pc + disp; m_icount -= mn10300_timing::C_BCC_T; break;
+			int8_t disp = (int8_t)read_arg8(m_pc); m_pc = start_pc + disp; charge(mn10300_timing::C_BCC_T); break;
 		}
 
 		// ---- nop ----
@@ -1457,7 +1561,7 @@ void mn10300_device::execute_run()
 			uint8_t regs = read_arg8(m_pc + 2);
 			uint8_t adj  = read_arg8(m_pc + 3);
 			uint32_t ret = m_pc + 4;      // return past this 5-byte instruction
-			m_icount -= mn10300_timing::C_CALL_D16 + mn10300_timing::mask_regs(regs);
+			charge(std::max(mn10300_timing::C_CALL_D16_MIN, mn10300_timing::C_CALL_D16 + mn10300_timing::Q(mn10300_timing::mask_regs(regs))));
 			// imm8-total frame convention: return PC at [SP], regs below, SP -= imm8.
 			write_mem32(m_sp, ret);
 			store_regs_at(m_sp, regs);
@@ -1471,7 +1575,7 @@ void mn10300_device::execute_run()
 		case 0xCE:
 		{
 			const uint8_t mask = read_arg8(m_pc); m_pc += 1;
-			m_icount -= mn10300_timing::C_MOVM_POP + mn10300_timing::mask_regs(mask);
+			charge(std::max(mn10300_timing::C_MOVM_POP_MIN, mn10300_timing::C_MOVM_POP + mn10300_timing::Q(mn10300_timing::mask_regs(mask))));
 			load_regs(mask);
 			break;
 		}
@@ -1479,7 +1583,7 @@ void mn10300_device::execute_run()
 		{
 			const uint8_t mask = read_arg8(m_pc); m_pc += 1;
 			// one cycle per word stored; the {D0..LAR} group stores a dummy word too [M p.39]
-			m_icount -= std::max(mn10300_timing::C_MOVM_PUSH_MIN, mn10300_timing::mask_regs(mask) + ((mask & 0x08) ? 1 : 0));
+			charge(std::max(mn10300_timing::C_MOVM_PUSH_MIN, mn10300_timing::Q(mn10300_timing::mask_regs(mask) + ((mask & 0x08) ? 1 : 0))));
 			store_regs(mask);
 			break;
 		}
@@ -1497,8 +1601,8 @@ void mn10300_device::execute_run()
 			break;
 		case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4:
 		case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9: // Lcc
-			if (test_cond(op & 0x0F)) { m_pc = m_lar - 4; m_icount -= mn10300_timing::C_LCC_T; }
-			else m_icount -= mn10300_timing::C_LCC;
+			if (test_cond(op & 0x0F)) { m_pc = m_lar - 4; charge(mn10300_timing::C_LCC_T); }
+			else charge(mn10300_timing::C_LCC);
 			break;
 		// lra: unconditional branch back to the loop top (the setlb hardware loop)
 		case 0xDA: m_pc = m_lar - 4; break;
@@ -1514,7 +1618,7 @@ void mn10300_device::execute_run()
 			uint8_t regs = read_arg8(m_pc + 4);
 			uint8_t adj  = read_arg8(m_pc + 5);
 			uint32_t ret = m_pc + 6;
-			m_icount -= std::max(mn10300_timing::C_CALL_D32_MIN, mn10300_timing::C_CALL_D32 + mn10300_timing::mask_regs(regs));
+			charge(std::max(mn10300_timing::C_CALL_D32_MIN, mn10300_timing::C_CALL_D32 + mn10300_timing::Q(mn10300_timing::mask_regs(regs))));
 			// imm8-total frame convention (see 0xCD).
 			write_mem32(m_sp, ret);
 			store_regs_at(m_sp, regs);
@@ -1533,7 +1637,7 @@ void mn10300_device::execute_run()
 		{
 			uint8_t regs = read_arg8(m_pc);
 			uint8_t adj  = read_arg8(m_pc + 1);
-			m_icount -= std::max(mn10300_timing::C_RETF_MIN, mn10300_timing::C_RETF + mn10300_timing::mask_regs(regs));
+			charge(std::max(mn10300_timing::C_RETF_MIN, mn10300_timing::C_RETF + mn10300_timing::Q(mn10300_timing::mask_regs(regs))));
 			m_sp += adj;
 			m_pc = m_mdr;
 			load_regs_at(m_sp, regs);
@@ -1545,7 +1649,7 @@ void mn10300_device::execute_run()
 		{
 			uint8_t regs = read_arg8(m_pc);
 			uint8_t adj  = read_arg8(m_pc + 1);
-			m_icount -= std::max(mn10300_timing::C_RET_MIN, mn10300_timing::C_RET + mn10300_timing::mask_regs(regs));
+			charge(std::max(mn10300_timing::C_RET_MIN, mn10300_timing::C_RET + mn10300_timing::Q(mn10300_timing::mask_regs(regs))));
 			m_sp += adj;
 			load_regs_at(m_sp, regs);
 			m_pc = read_stack32(m_sp);   // return PC sits at [SP] (the frame top)
@@ -1588,7 +1692,7 @@ void mn10300_device::execute_run()
 				// is udf00: 0x08-0x0B is udf20 (the GDB simulator and upstream agree).
 				if ((op == 0xF9 || op == 0xFB || op == 0xFD) && op2 <= 0x03)
 				{
-					m_icount -= mn10300_timing::C_UDF_MUL;
+					charge(mn10300_timing::C_UDF_MUL);
 					const int dn = op2 & 3;
 					int32_t s;
 					if (op == 0xF9)      s = (int32_t)(int8_t) read_arg8 (start_pc + 2);
@@ -1604,7 +1708,7 @@ void mn10300_device::execute_run()
 				// sign-extended immediate, high 32 -> MDRQ (GDB simulator; from upstream)
 				else if ((op == 0xF9 || op == 0xFB || op == 0xFD) && (op2 & 0xFC) == 0x14)
 				{
-					m_icount -= mn10300_timing::C_UDF_MUL;
+					charge(mn10300_timing::C_UDF_MUL);
 					const int dn = op2 & 3;
 					uint32_t u;
 					if (op == 0xF9)      u = uint32_t((int32_t)(int8_t) read_arg8 (start_pc + 2));
@@ -1618,7 +1722,7 @@ void mn10300_device::execute_run()
 				}
 				else
 				{
-					m_icount -= mn10300_timing::C_UDF;
+					charge(mn10300_timing::C_UDF);
 					m_pc = start_pc + mn10300_insn_length(op, op2);
 					logerror("MN10300: unimplemented opcode %02X op2=%02X @ PC=%08X (skipped %d bytes)\n",
 						op, op2, start_pc, (int)(m_pc - start_pc));
@@ -1639,11 +1743,11 @@ inline void mn10300_device::typed_load_store(int type, bool a_reg, int reg, uint
 	switch (type)
 	{
 		case 0: case 1:  // 32-bit mov (a-reg iff a_reg)
-			if (a_reg) { if (store) write_mem32(ea, m_a[reg]); else m_a[reg] = read_mem32(ea); }
-			else       { if (store) write_mem32(ea, m_d[reg]); else m_d[reg] = read_mem32(ea); }
+			if (a_reg) { if (store) write_mem32(ea, m_a[reg]); else { m_a[reg] = read_mem32(ea); loaded(mn10300_timing::RA(reg)); } }
+			else       { if (store) write_mem32(ea, m_d[reg]); else { m_d[reg] = read_mem32(ea); loaded(mn10300_timing::RD(reg)); } }
 			break;
-		case 2:  if (store) write_mem8 (ea, m_d[reg]); else m_d[reg] = read_mem8 (ea); break; // movbu
-		case 3:  if (store) write_mem16(ea, m_d[reg]); else m_d[reg] = read_mem16(ea); break; // movhu
+		case 2:  if (store) write_mem8 (ea, m_d[reg]); else { m_d[reg] = read_mem8 (ea); loaded(mn10300_timing::RD(reg)); } break; // movbu
+		case 3:  if (store) write_mem16(ea, m_d[reg]); else { m_d[reg] = read_mem16(ea); loaded(mn10300_timing::RD(reg)); } break; // movhu
 	}
 }
 
@@ -1670,7 +1774,7 @@ void mn10300_device::execute_fc()
 	const uint8_t  op2 = read_arg8(m_pc);          // start+1
 	const uint32_t imm = read_arg32(m_pc + 1);     // start+2 : imm32 / disp32 / abs32
 	const int dst = op2 & 3;
-	m_icount -= mn10300_timing::FC[op2];
+	charge(mn10300_timing::FC[op2]);
 
 	if (op2 < 0x80)                                 // mov/movbu/movhu (disp32,aM)
 	{
@@ -1726,7 +1830,7 @@ void mn10300_device::execute_f5()
 	const uint32_t start_pc = m_pc - 1;
 	const uint8_t op2 = read_arg8(m_pc);
 	const int dst = op2 & 3, src = (op2 >> 2) & 3;
-	m_icount -= mn10300_timing::C_UDF;
+	charge(mn10300_timing::C_UDF);
 	switch (op2 >> 4)
 	{
 	case 0x0: m_mdrq = m_d[dst]; break;                       // putx     Dn   -> MDRQ
@@ -1745,7 +1849,7 @@ void mn10300_device::execute_f6()
 	const uint32_t start_pc = m_pc - 1;
 	const uint8_t op2 = read_arg8(m_pc);
 	const int dst = op2 & 3, src = (op2 >> 2) & 3;
-	m_icount -= ((op2 >> 4) <= 1) ? mn10300_timing::C_UDF_MUL : mn10300_timing::C_UDF;   // mulq/mulqu, the rest
+	charge(((op2 >> 4) <= 1) ? mn10300_timing::C_UDF_MUL : mn10300_timing::C_UDF);   // mulq/mulqu, the rest
 	switch (op2 >> 4)
 	{
 	case 0x0: { int64_t t = (int64_t)(int32_t)m_d[dst] * (int32_t)m_d[src];   // mulq
@@ -1791,7 +1895,7 @@ void mn10300_device::execute_f8()
 	const uint8_t  op2   = read_arg8(m_pc);        // start+1
 	const uint8_t  b     = read_arg8(m_pc + 1);    // start+2 : disp8 / imm8 / shift count
 	const int8_t   sdisp = (int8_t)b;
-	m_icount -= mn10300_timing::F8[op2];
+	charge(mn10300_timing::F8[op2]);
 
 	if (op2 < 0x80)                                 // mov/movbu/movhu (disp8,aM)
 	{
@@ -1830,8 +1934,8 @@ void mn10300_device::execute_f8()
 				case 2: take = !(m_psw & FLAG_NF); break; // bnc
 				case 3: take =  (m_psw & FLAG_NF); break; // bns
 			}
-			if (take) { m_pc = start_pc + sdisp; m_icount -= mn10300_timing::C_BEXT_T; return; }
-			m_icount -= mn10300_timing::C_BEXT;
+			if (take) { m_pc = start_pc + sdisp; charge(mn10300_timing::C_BEXT_T); return; }
+			charge(mn10300_timing::C_BEXT);
 			break;
 		}
 		case 0xF0: m_sp = read_mem32(m_a[op2 & 3] + sdisp); break;  // mov (disp8,aM),sp
@@ -1864,13 +1968,13 @@ void mn10300_device::execute_f0()
 	const uint8_t op2 = read_arg8(m_pc);
 	const int r  = (op2 >> 2) & 3;   // data/addr register field
 	const int am = op2 & 3;          // base address register (aM)
-	m_icount -= mn10300_timing::F0[op2];
+	charge(mn10300_timing::F0[op2]);
 
 	switch (op2 >> 4)
 	{
-		case 0x0: m_a[r] = read_mem32(m_a[am]); break;                 // mov (aM),aD
-		case 0x4: m_d[r] = read_mem8 (m_a[am]); break;                 // movbu (aM),dD
-		case 0x6: m_d[r] = read_mem16(m_a[am]); break;                 // movhu (aM),dD
+		case 0x0: { m_a[r] = read_mem32(m_a[am]); loaded(mn10300_timing::RA(r)); } break;                 // mov (aM),aD
+		case 0x4: { m_d[r] = read_mem8 (m_a[am]); loaded(mn10300_timing::RD(r)); } break;                 // movbu (aM),dD
+		case 0x6: { m_d[r] = read_mem16(m_a[am]); loaded(mn10300_timing::RD(r)); } break;                 // movhu (aM),dD
 		case 0x1: write_mem32(m_a[am], m_a[r]); break;                 // mov aS,(aM)
 		case 0x5: write_mem8 (m_a[am], m_d[r]); break;                 // movbu dS,(aM)
 		case 0x7: write_mem16(m_a[am], m_d[r]); break;                 // movhu dS,(aM)
@@ -1902,7 +2006,7 @@ void mn10300_device::execute_f1()
 	const uint8_t op2 = read_arg8(m_pc);
 	const int dst = op2 & 3, src = (op2 >> 2) & 3;
 	const uint32_t C = (m_psw & FLAG_CF) ? 1 : 0;
-	m_icount -= mn10300_timing::C_1;
+	charge(mn10300_timing::C_1);
 
 	switch (op2 >> 4)
 	{
@@ -1937,12 +2041,12 @@ void mn10300_device::execute_f2()
 	// dividend {MDR,Dn}, with any MDR but a sign extension counting as four or more [M pp.52-55]
 	switch (op2 >> 4)
 	{
-	case 0x4: m_icount -= mn10300_timing::C_MUL[mn10300_timing::sig_bytes_s(int32_t(m_d[dst]))]; break;
-	case 0x5: m_icount -= mn10300_timing::C_MUL[mn10300_timing::sig_bytes_u(m_d[dst])]; break;
-	case 0x6: m_icount -= mn10300_timing::C_DIV[(m_mdr == 0 || (m_mdr == ~0u && BIT(m_d[dst], 31)))
-			? mn10300_timing::sig_bytes_s(int32_t(m_d[dst])) : 4]; break;
-	case 0x7: m_icount -= mn10300_timing::C_DIV[m_mdr ? 4 : mn10300_timing::sig_bytes_u(m_d[dst])]; break;
-	default:  m_icount -= mn10300_timing::C_1; break;
+	case 0x4: charge(mn10300_timing::C_MUL[mn10300_timing::sig_bytes_s(int32_t(m_d[dst]))]); break;
+	case 0x5: charge(mn10300_timing::C_MUL[mn10300_timing::sig_bytes_u(m_d[dst])]); break;
+	case 0x6: charge(mn10300_timing::C_DIV[(m_mdr == 0 || (m_mdr == ~0u && BIT(m_d[dst], 31)))
+			? mn10300_timing::sig_bytes_s(int32_t(m_d[dst])) : 4]); break;
+	case 0x7: charge(mn10300_timing::C_DIV[m_mdr ? 4 : mn10300_timing::sig_bytes_u(m_d[dst])]); break;
+	default:  charge(mn10300_timing::C_1); break;
 	}
 
 	switch (op2 >> 4)
@@ -2048,10 +2152,10 @@ void mn10300_device::execute_f3()
 	const int     dI     = (op2 >> 2) & 3;
 	const int     am     = op2 & 3;
 	const uint32_t ea    = m_a[am] + m_d[dI];
-	m_icount -= store ? mn10300_timing::C_ST_INDEX : mn10300_timing::C_1;
+	charge(store ? mn10300_timing::C_ST_INDEX : mn10300_timing::C_1);
 
 	if (store) write_mem32(ea, a_reg ? m_a[reg] : m_d[reg]);
-	else      (a_reg ? m_a[reg] : m_d[reg]) = read_mem32(ea);
+	else      { (a_reg ? m_a[reg] : m_d[reg]) = read_mem32(ea); loaded(a_reg ? mn10300_timing::RA(reg) : mn10300_timing::RD(reg)); }
 	m_pc = start_pc + 2;
 }
 
@@ -2067,10 +2171,10 @@ void mn10300_device::execute_f4()
 	const int     dI     = (op2 >> 2) & 3;
 	const int     am     = op2 & 3;
 	const uint32_t ea    = m_a[am] + m_d[dI];
-	m_icount -= store ? mn10300_timing::C_ST_INDEX : mn10300_timing::C_1;
+	charge(store ? mn10300_timing::C_ST_INDEX : mn10300_timing::C_1);
 
 	if (store) { if (half) write_mem16(ea, m_d[reg]); else write_mem8(ea, m_d[reg]); }
-	else       { m_d[reg] = half ? read_mem16(ea) : read_mem8(ea); }
+	else       { m_d[reg] = half ? read_mem16(ea) : read_mem8(ea); loaded(mn10300_timing::RD(reg)); }
 	m_pc = start_pc + 2;
 }
 
@@ -2082,7 +2186,7 @@ void mn10300_device::execute_fa()
 	const uint8_t op2 = read_arg8(m_pc);
 	const uint16_t imm16 = read_arg16(m_pc + 1);   // operand at start+2
 	const int dst = op2 & 3;
-	m_icount -= mn10300_timing::FA[op2];
+	charge(mn10300_timing::FA[op2]);
 
 	if (op2 < 0x80)
 	{
@@ -2093,10 +2197,10 @@ void mn10300_device::execute_fa()
 		const uint32_t ea = m_a[am] + (int32_t)(int16_t)imm16;
 		switch (type)
 		{
-			case 0: if (store) write_mem32(ea, m_d[r]); else m_d[r] = read_mem32(ea); break;
-			case 1: if (store) write_mem32(ea, m_a[r]); else m_a[r] = read_mem32(ea); break;
-			case 2: if (store) write_mem8 (ea, m_d[r]); else m_d[r] = read_mem8 (ea); break;
-			case 3: if (store) write_mem16(ea, m_d[r]); else m_d[r] = read_mem16(ea); break;
+			case 0: if (store) write_mem32(ea, m_d[r]); else { m_d[r] = read_mem32(ea); loaded(mn10300_timing::RD(r)); } break;
+			case 1: if (store) write_mem32(ea, m_a[r]); else { m_a[r] = read_mem32(ea); loaded(mn10300_timing::RA(r)); } break;
+			case 2: if (store) write_mem8 (ea, m_d[r]); else { m_d[r] = read_mem8 (ea); loaded(mn10300_timing::RD(r)); } break;
+			case 3: if (store) write_mem16(ea, m_d[r]); else { m_d[r] = read_mem16(ea); loaded(mn10300_timing::RD(r)); } break;
 		}
 	}
 	else
@@ -2128,10 +2232,10 @@ void mn10300_device::execute_fa()
 				else if ((op2 & 0xFC) == 0xF4) write_mem8(ea, v & ~mask);
 				break;
 			}
-			case 0xB0: m_a[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),aD
-			case 0xB4: m_d[dst] = read_mem32(m_sp + imm16); break;                     // mov (disp16,sp),dD
-			case 0xB8: m_d[dst] = read_mem8 (m_sp + imm16); break;                     // movbu (disp16,sp),dD
-			case 0xBC: m_d[dst] = read_mem16(m_sp + imm16); break;                     // movhu (disp16,sp),dD
+			case 0xB0: { m_a[dst] = read_mem32(m_sp + imm16); loaded(mn10300_timing::RA(dst)); } break;                     // mov (disp16,sp),aD
+			case 0xB4: { m_d[dst] = read_mem32(m_sp + imm16); loaded(mn10300_timing::RD(dst)); } break;                     // mov (disp16,sp),dD
+			case 0xB8: { m_d[dst] = read_mem8 (m_sp + imm16); loaded(mn10300_timing::RD(dst)); } break;                     // movbu (disp16,sp),dD
+			case 0xBC: { m_d[dst] = read_mem16(m_sp + imm16); loaded(mn10300_timing::RD(dst)); } break;                     // movhu (disp16,sp),dD
 			// store reg -> (disp16,sp): op2 = 1001_rrtt, reg=bits[3:2], tt=bits[1:0]
 			// (0 mov aM / 1 mov dM / 2 movbu dM / 3 movhu dM). binutils 0xfa90..0xfa93.
 			case 0x90: case 0x94: case 0x98: case 0x9C:
@@ -2147,7 +2251,7 @@ void mn10300_device::execute_fa()
 				}
 				break;
 			}
-			case 0xA0: m_a[dst] = read_mem32(imm16); break;                            // mov (abs16),aD
+			case 0xA0: { m_a[dst] = read_mem32(imm16); loaded(mn10300_timing::RA(dst)); } break;                            // mov (abs16),aD
 			case 0xFC:
 				if (op2 == 0xFE)      { m_sp += (int32_t)(int16_t)imm16; }             // add imm16,sp
 				else if (op2 == 0xFF) { write_mem32(m_sp, start_pc + 4); m_mdr = start_pc + 4; m_pc = start_pc + (int32_t)(int16_t)imm16; return; } // calls (disp16): PC->[SP], SP unchanged
@@ -2171,10 +2275,10 @@ void mn10300_device::execute_fe()
 	uint32_t addr; uint8_t imm8; int len;
 
 	if (op2 <= 0x02)      { addr = read_arg32(m_pc + 1); imm8 = read_arg8(m_pc + 5); len = 7;
-	                        m_icount -= (op2 == 0x02) ? mn10300_timing::C_BTST_ABS : mn10300_timing::C_BIT_ABS; }
+	                        charge((op2 == 0x02) ? mn10300_timing::C_BTST_ABS : mn10300_timing::C_BIT_ABS); }
 	else if (op2 >= 0x80 && op2 <= 0x82) { addr = read_arg16(m_pc + 1); imm8 = read_arg8(m_pc + 3); len = 5;
-	                        m_icount -= (op2 == 0x82) ? mn10300_timing::C_BTST_ABS16 : mn10300_timing::C_BIT_ABS16; }
-	else { m_icount -= mn10300_timing::C_1; logerror("MN10300: illegal FE %02X @ %08X\n", op2, start_pc); m_pc = start_pc + 2; return; }
+	                        charge((op2 == 0x82) ? mn10300_timing::C_BTST_ABS16 : mn10300_timing::C_BIT_ABS16); }
+	else { charge(mn10300_timing::C_1); logerror("MN10300: illegal FE %02X @ %08X\n", op2, start_pc); m_pc = start_pc + 2; return; }
 
 	const uint8_t v = read_rmw8(addr);
 	set_logic_flags(v & imm8);                        // Z; N, C, V cleared (from upstream)

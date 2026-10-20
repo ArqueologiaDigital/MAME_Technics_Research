@@ -24,7 +24,8 @@ enum
 	MN10300_MDR,
 	MN10300_SP,
 	MN10300_D0, MN10300_D1, MN10300_D2, MN10300_D3,
-	MN10300_A0, MN10300_A1, MN10300_A2, MN10300_A3
+	MN10300_A0, MN10300_A1, MN10300_A2, MN10300_A3,
+	MN10300_TINSN, MN10300_TMEM, MN10300_TICMISS, MN10300_TDCMISS   // timing-model counters
 	// TODO(MN10300/AM33): E0..E7, MDRQ, LIR/LAR, MCRH/MCRL/MCVF, SSP/MSP/USP, ...
 };
 
@@ -329,12 +330,11 @@ private:
 	bool m_dma_drq;
 
 	// ---- timing model (the numbers: mn10300_timing.h) ------------------------
-	// Instruction cycles come from per-opcode tables plus what each handler adds for
-	// control flow and data-dependent instructions. Memory adds, on top of the manual's
-	// cache-hit counts: instruction-cache misses (or the bus, uncached), data-cache misses
-	// and write-backs, uncached external accesses at their chip select's MEMCTR timing,
-	// and on-chip peripheral accesses. Caches hold tags only: data always comes from the
-	// address space, so the model changes timing and nothing else.
+	// Time is charged in quarter cycles. Per instruction (timing_pre): the instruction
+	// cache, the fetch queue, a load-use stall, and the fixed execute cost; handlers add
+	// control flow and data-dependent costs. Data accesses add cache misses and write-backs,
+	// uncached bus time per chip select (measured on the unit, pass 9), and on-chip register
+	// time. Caches hold tags only: data always comes from the address space.
 	uint16_t chctr_r(offs_t offset);
 	void chctr_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 	uint16_t memctr_r(offs_t offset);
@@ -343,23 +343,40 @@ private:
 	void timing_recompute_cs(int cs);
 	void icache_invalidate();
 	void dcache_invalidate();
-	inline void fetch_cost();                         // instruction fetch at m_pc
-	inline void data_cost(uint32_t a, bool wide, bool write);  // one data access, extra cycles
+	inline void charge(int quarters);
+	inline void timing_pre(uint32_t pc, uint8_t op);
+	inline int data_cost(uint32_t a, bool wide, bool write);   // charges; returns the load-use latency
+	inline void loaded(unsigned regs);                         // a single load wrote these registers
 	inline int dcache_access(uint32_t a, bool wide, bool write, int cs);
+	inline int line_fill_cost(uint32_t a, int cs);
 	inline int line_writeback_cost(uint32_t tag);
 
 	static constexpr unsigned NSETS = 128;          // mn10300_timing::SETS
 	uint16_t m_memctr[8];          // MEMCTR0-7 (0x32000020 + 2n), as the firmware wrote them
 	uint16_t m_chctr;              // CHCTR (0x20000070)
-	int      m_cs_acc[8];          // extra cycles for one 8/16-bit access on CSn
-	int      m_cs_acc32[8];        // ... one 32-bit access (two transfers on a 16-bit CS)
-	int      m_cs_fill[8];         // ... filling (or writing back) one 16-byte line
+	int      m_cs_rd16[8], m_cs_rd32[8];   // quarter cycles beyond a hit: one uncached load,
+	int      m_cs_wr16[8], m_cs_wr32[8];   //   one uncached store, of 8/16 and of 32 bits on CSn,
+	int      m_cs_fill[8], m_cs_wb[8];     //   a line fill, and a dirty line's write-back
+	int      m_qacc;               // quarter cycles not yet taken from m_icount (0-3)
+	uint64_t m_qclock;             // quarter cycles charged since start (the queue and load-use clock)
+	int      m_fq;                 // fetch queue fill, in 1/FQ_UNIT bytes
+	uint64_t m_fq_qclock;          // m_qclock when the current instruction started executing
+	uint32_t m_seq_pc;             // where the next instruction starts if nothing jumps
+	unsigned m_ld_dst;             // registers the last single load wrote (0: none pending)
+	uint64_t m_ld_ready;           // m_qclock when that load's data can be used
+	int      m_ld_lu;              // load-use latency of the last data read (set by read_mem*)
 	uint32_t m_ic_tag[NSETS * 2];  // line address (addr >> 4) per set and way; ~0 = invalid
 	uint8_t  m_ic_lru[NSETS];      // the way to replace next
 	uint32_t m_dc_tag[NSETS * 2];
 	uint8_t  m_dc_dirty[NSETS * 2];
 	uint8_t  m_dc_lru[NSETS];
 	uint32_t m_ic_line;            // the line the last instruction was fetched from (~0: none)
+	// Counters for measuring the model (debugger state TINSN, TMEM, TICMISS, TDCMISS; Lua
+	// reads them as manager.machine.devices[":maincpu"].state["TMEM"].value). Not saved.
+	uint64_t m_cnt_insn;           // instructions executed
+	uint64_t m_cnt_mem;            // QUARTER cycles memory added beyond the cache-hit counts
+	uint64_t m_cnt_icmiss;         // instruction-cache line fills
+	uint64_t m_cnt_dcmiss;         // data-cache line fills
 
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)
