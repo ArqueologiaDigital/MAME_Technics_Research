@@ -118,7 +118,7 @@ constexpr int LU_SUBWORD  = Q(2);   // other memory, byte or halfword [M p.128].
 // bytes per cycle. An instruction waits until all its bytes are there. That gives 1-2 byte
 // instructions 1 cycle, a run of 3-byte ones 1.25 and of 6-byte ones 2.75 [P9 LSRI MI16
 // 1.25, MI32 LDAB 2.75], and a lone 4-byte one 1 [P9 LPW5].
-// Control flow, fitted to [P9 JMP CAL0 CALF CALS CRET FLLG FLSH BEQ] (fetch_fit.py, part 2):
+// Control flow, fitted to [P9 JMP CAL0 CALF CALS CRET FLLG FLSH BEQ] (fetch_fit_control.py):
 // a taken jump leaves the queue holding the target's 8-byte block from the target on, plus
 // what a transfer slower than a taken branch (call, return: 4-5 cycles) fetched in its extra
 // cycles; the next block arrives FQ_HOLD later. An untaken Bcc costs 1 cycle and FQ_UNTAKEN
