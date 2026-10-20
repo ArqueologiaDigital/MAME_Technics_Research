@@ -478,6 +478,8 @@ private:
 	emu_timer *m_fdd_index_timer = nullptr;
 	int m_fdd_index = 0;
 	int m_fdc_drq = 0;                            // FDC.DRQ as last driven (gates DACK cycles)
+	emu_timer *m_fdc_lastbyte = nullptr;          // IRQ1 for the sector's last byte (see the intc_ack_cb binding)
+	TIMER_CALLBACK_MEMBER(fdc_lastbyte_cb) { if (m_fdc_drq) intc_assert(0x18); }
 	TIMER_CALLBACK_MEMBER(fdd_index_poll);
 	void fdd_loaded(floppy_image_device *fd);
 	void fdd_unloaded(floppy_image_device *fd);
@@ -1020,7 +1022,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// TM5BC half the boot's 0x4847b21c poll reads (0x340010a2) is the core's
 	// real counter now. The KN7000 keeps the generic 0x34000000 handler.
 	if (m_lib_mirror)
-		map(0x340010a4, 0x340010af).lr16(NAME([this](offs_t o) { return uint16_t(-(m_maincpu->total_cycles() >> 4)); }));
+		map(0x340010a4, 0x340010af).lr16(NAME([this](offs_t o) { return uint16_t(-(m_maincpu->total_cycles() / (m_maincpu->clock() / 2'000'000))); }));   // 2 MHz, IOCLK / 8
 	// The on-chip INTC (0x34000100-0x340002ff), SIO (panel + two MIDI channels,
 	// 0x34000800-0x3400082f) and TM4/TM5 timer windows (0x34001080/0x34001090/
 	// 0x340010a0) are modeled inside the MN10300 core: the core's internal
@@ -2097,6 +2099,7 @@ void kn7000_state::machine_start()
 	m_sd_insert_timer = timer_alloc(FUNC(kn7000_state::sd_insert), this);
 	m_sd_inuse_off = timer_alloc(FUNC(kn7000_state::sd_inuse_off), this);
 	m_fdd_index_timer = timer_alloc(FUNC(kn7000_state::fdd_index_poll), this);
+	m_fdc_lastbyte = timer_alloc(FUNC(kn7000_state::fdc_lastbyte_cb), this);
 	if (floppy_image_device *const fd = m_floppy ? m_floppy->get_device() : nullptr)
 	{
 		fd->setup_load_cb(floppy_image_device::load_cb(&kn7000_state::fdd_loaded, this));
@@ -2360,25 +2363,27 @@ void kn7000_state::kn7000(machine_config &config)
 	m_kn7000_timing = true;              // cleared by the machines built on this one
 	m_strap_fixed = 0xE8F1;              // the unit's strap, 0xF8F7 less the live bits (see the member); reset likewise
 
-	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
+	// Panasonic MN103002A (MN10300 family, AM31 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
 	// reference crystal X1 (part H0J160500026 -- the H0J<freq*10> code family:
 	// X102 H0J177=17.73, X103 H0J240=24.0, X104 H0J143=14.32 MHz) drives clock
 	// generator IC6 (C02BZ0000667: XIN/XOUT/FRSEL/S1/S2 -> SSCLK). SSCLK also
 	// feeds a divide-by-2 flip-flop IC11 (TC7WH74) that clocks peripherals, so
-	// the CPU itself is NOT the /2 branch (an 8 MHz AM33 is implausible for a
-	// 2003 flagship that boots in ~12-15 s). The AM33 core runs the 16 MHz
-	// reference through its internal PLL; x2 = 32 MHz matches the measured boot
-	// work (~400M cycles / 32 MHz ~= 12.5 s, i.e. real-hardware boot time).
-	// CONFIRMED via firmware MIDI-baud cross-check: the MIDI UARTs (SC1/SC2 at
-	// 0x34000810/0x34000820) are set to 8N1 with the baud clock = Timer-3
-	// underflow / 8 (SC1CTR CK field = 0x5), and TM3 counts at IOCLK with reload
-	// TM3BR = 0x3F (63). MIDI baud is exactly 31250, so
-	//   31250 = IOCLK / (8 * (0x3F + 1)) = IOCLK / 512  =>  IOCLK = 16.000 MHz.
-	// The AM33 core runs at 2x IOCLK (schematic /2 peripheral branch via IC11;
-	// MN10300 IOCLK = fc/2 convention) => fc = 32.000 MHz. Only 16 MHz IOCLK
-	// reproduces TM3BR=0x3F (32 MHz would need 0x7F); 40/48 excluded likewise.
-	MN10300(config, m_maincpu, 16_MHz_XTAL * 2);
+	// the CPU itself is NOT the /2 branch.
+	// The core runs the 16 MHz reference through its PLL x4 = 64 MHz: the
+	// MN103002A's "4-fold" mode, 66 MHz maximum (datasheet), and the only rate at
+	// which the instruction manual's cycle counts give the time pass 8 measured on
+	// the instrument for its calibration loop (notes/cpu-timing-2026-10-20/; the
+	// cycle counts and the memory timing are in cpu/mn10300/mn10300_timing.h). Until
+	// 2026-10-20 this was 32 MHz at one cycle per instruction, which ran simple code
+	// at about the right speed and everything touching slow memory far too fast.
+	// IOCLK, the peripheral clock, is fc / 4 = 16 MHz, CONFIRMED via the firmware's
+	// MIDI baud: the MIDI UARTs (SC1/SC2 at 0x34000810/0x34000820) are 8N1 with the
+	// baud clock = Timer-3 underflow / 8 (SC1CTR CK field = 0x5), and TM3 counts at
+	// IOCLK with reload TM3BR = 0x3F (63). MIDI baud is exactly 31250, so
+	//   31250 = IOCLK / (8 * (0x3F + 1)) = IOCLK / 512  =>  IOCLK = 16.000 MHz,
+	// and the 1 kHz tick (TM4BR 0x7D0 at IOCLK / 8) agrees, as pass 8 measured.
+	MN10300(config, m_maincpu, 16_MHz_XTAL * 4);
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
 
 	// On-chip INTC (now modeled in the core): configure the per-level maskable
@@ -2399,6 +2404,18 @@ void kn7000_state::kn7000(machine_config &config)
 	m_maincpu->intc_ack_cb().set([this](uint8_t group) {
 		if (group == 0x11 && m_c11_unserviced)
 			m_panel_txdone->adjust(attotime::from_usec(40), 3);
+		// The floppy's last byte. The DMA channel moves all but the sector's last byte; the
+		// DMA-end ISR (941 0x4840219C) clears IRQ1 (group 0x18, positive edge: EXTMD 0xFFFF),
+		// polls it 88 times for that byte's DRQ, then takes the byte and raises TC. MAME's
+		// 82077 hands the last two bytes over in one burst (DRQ rises once and stays high),
+		// so that edge never comes: the poll ran out every time. At 32 MHz and one cycle per
+		// instruction that took 30 us, just inside the controller's window for TC (the CRC,
+		// 32 us); at the instrument's speed it takes 55 us and every read ending on the last
+		// sector failed with ST0 0x44 ST1 0x80 (notes/cpu-timing-2026-10-20/). Re-raise the
+		// request when the ISR clears it while DRQ is still high, for the edge the last byte
+		// would have given; the timer fires after the clear.
+		if (group == 0x18 && m_fdc_drq && !m_lib_mirror)
+			m_fdc_lastbyte->adjust(attotime::from_usec(1));
 	});
 	// group 0x11 latched into the IAGR at accept -> it has been serviced.
 	m_maincpu->intc_accept_cb().set([this](uint8_t group) {

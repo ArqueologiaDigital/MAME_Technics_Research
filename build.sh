@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build a MAME with the KN7000 driver + MN10300 CPU core from this overlay repo.
 #
-# This overlay holds 55 files, each at its MAME path: four CPU cores (mn10300, sharc,
+# This overlay holds 56 files, each at its MAME path: four CPU cores (mn10300, sharc,
 # tlcs900, upd6383), the KN5000/KN6000/KN7000/KN1500 and SX-WSA1 drivers with their
 # control-panel and tone-generator devices, sed1330.h, hdae5000 and four
 # layouts -- step 2 below is the authoritative list. To compile them they must sit
@@ -116,6 +116,7 @@ fi
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.cpp"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.h"             "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.h"
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_insn_length.h" "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_insn_length.h"
+ln -sf "$HERE/src/devices/cpu/mn10300/mn10300_timing.h"      "$BUILD_TREE/src/devices/cpu/mn10300/mn10300_timing.h"
 # Effects-DSP LLE (Phase F): the SHARC core is forked here to add the adsp21065l_device variant
 # (KN7000 IC306). FIVE files are overlaid, listed below -- sharcops.hxx, sharcdrc.cpp and
 # sharcfe.cpp among them, not just the header and the device. Each one REPLACES MAME's, so an

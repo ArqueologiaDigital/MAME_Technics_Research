@@ -11,7 +11,7 @@ build them into a MAME checkout:
 
 ## 1. Copy the files in
 
-The overlay is 55 files across eight directories, each already at the path it
+The overlay is 56 files across eight directories, each already at the path it
 occupies inside MAME, so one recursive copy places them all:
 
 ```
@@ -23,7 +23,7 @@ step is the authoritative inventory: the CPU cores `mn10300/`, `sharc/`,
 `tlcs900/` and `upd6383/`, `video/sed1330.h`,
 `bus/technics/kn5000/hdae5000`, the KN5000/KN6000/KN7000/KN1500 and SX-WSA1
 drivers with their control-panel and tone-generator devices, and four layouts.
-37 of the 55 replace a file MAME already ships, so an upstream fix to one of
+37 of the 56 replace a file MAME already ships, so an upstream fix to one of
 those is inert here until it is ported across —
 `notes/overlay-upstream-sync/overlay_vs_upstream.sh` is the gate that catches it.
 

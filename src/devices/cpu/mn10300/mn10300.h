@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "mn10300_timing.h"
+
 // Debugger/state-table indices (unique, non-zero; value order is cosmetic)
 enum
 {
@@ -22,7 +24,8 @@ enum
 	MN10300_MDR,
 	MN10300_SP,
 	MN10300_D0, MN10300_D1, MN10300_D2, MN10300_D3,
-	MN10300_A0, MN10300_A1, MN10300_A2, MN10300_A3
+	MN10300_A0, MN10300_A1, MN10300_A2, MN10300_A3,
+	MN10300_TINSN, MN10300_TMEM, MN10300_TICMISS, MN10300_TDCMISS   // timing-model counters
 	// TODO(MN10300/AM33): E0..E7, MDRQ, LIR/LAR, MCRH/MCRL/MCVF, SSP/MSP/USP, ...
 };
 
@@ -192,19 +195,21 @@ protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual void device_post_load() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }
-	virtual uint32_t execute_max_cycles() const noexcept override { return 24; } // TODO(MN10300): real worst-case opcode+IRQ cycles
+	// worst single instruction: a 38-cycle div, or a movm of the whole register set whose
+	// stack lines all miss to slow memory (mn10300_timing.h). A hint for the scheduler only.
+	virtual uint32_t execute_max_cycles() const noexcept override { return 400; }
 	// (device_execute_interface::execute_input_lines() was removed from MAME;
 	//  the input-line count is implicit. MN10300_MAX_EXT_IRQ lines are still used
 	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == INPUT_LINE_NMI; }
-	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks
-	// for its internal /2 divider. Only add those if the KN7000 MN10300 clocking
-	// requires it; otherwise the 1:1 base-class defaults are correct.
+	// The device clock is the core clock fc (the KN7000: 16 MHz x 4 = 64 MHz), one cycle per
+	// clock; the peripherals run on IOCLK = fc / mn10300_timing::IOCLK_DIV (ioclk()).
 
 	// device_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
@@ -294,6 +299,7 @@ private:
 	TIMER_CALLBACK_MEMBER(tm6_tick);
 
 	static constexpr unsigned TM5_PRESCALE = 8;  // IOCLK / 8 = 2 MHz on the KN7000 (see tm5_rearm)
+	uint32_t ioclk() const;                      // the peripheral clock (16 MHz on the KN7000)
 
 	uint8_t   m_tm4_mode;        // TM4: as TM5
 	uint16_t  m_tm4_base;
@@ -322,6 +328,64 @@ private:
 	bool m_dma_active;
 	bool m_dma_started;
 	bool m_dma_drq;
+
+	// ---- timing model (the numbers: mn10300_timing.h) ------------------------
+	// Time is charged in quarter cycles. Per instruction (timing_pre): the instruction
+	// cache, the fetch queue, a load-use stall, and the fixed execute cost; handlers add
+	// control flow and data-dependent costs. Data accesses add cache misses and write-backs,
+	// uncached bus time per chip select (measured on the unit, pass 9), and on-chip register
+	// time. Caches hold tags only: data always comes from the address space.
+	uint16_t chctr_r(offs_t offset);
+	void chctr_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t memctr_r(offs_t offset);
+	void memctr_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint32_t dcache_purge_r(offs_t offset);
+	void timing_recompute_cs(int cs);
+	void icache_invalidate();
+	void dcache_invalidate();
+	inline void charge(int quarters);
+	inline void timing_pre(uint32_t pc, uint8_t op);
+	inline void xfer(int cost);
+	inline void xfer_loop();
+	inline void untaken();
+	inline void bus_wait();
+	inline int data_cost(uint32_t a, bool wide, bool write);   // charges; returns the load-use latency
+	inline void loaded(unsigned regs);                         // a single load wrote these registers
+	inline int dcache_access(uint32_t a, bool wide, bool write, int cs);
+	inline int line_fill_cost(uint32_t a, int cs);
+	inline int line_writeback_cost(uint32_t tag);
+
+	static constexpr unsigned NSETS = 128;          // mn10300_timing::SETS
+	uint16_t m_memctr[8];          // MEMCTR0-7 (0x32000020 + 2n), as the firmware wrote them
+	uint16_t m_chctr;              // CHCTR (0x20000070)
+	uint16_t m_busctl[3];          // 0x32000010, 0x32000040, 0x32000042 (latched, no timing)
+	int      m_cs_rd16[8], m_cs_rd32[8];   // quarter cycles beyond a hit: one uncached load,
+	int      m_cs_wr16[8], m_cs_wr32[8];   //   one uncached store, of 8/16 and of 32 bits on CSn,
+	int      m_cs_fill[8], m_cs_wb[8];     //   a line fill, and a dirty line's write-back
+	int      m_qacc;               // quarter cycles not yet taken from m_icount (0-3)
+	uint64_t m_qclock;             // quarter cycles charged since start (the queue and load-use clock)
+	int      m_fq;                 // fetch queue fill, in 1/FQ_UNIT bytes
+	uint64_t m_fq_qclock;          // m_qclock when the current instruction started executing
+	int      m_fq_hold;            // quarter cycles before the queue refills again (after a jump)
+	int      m_fq_bonus;           // bytes (1/FQ_UNIT) a slow transfer fetched beyond the target block
+	bool     m_fq_loop;            // the last transfer was Lcc/lra (LIR holds the loop's first 4 bytes)
+	uint64_t m_wb_free;            // m_qclock when a posted store leaves the external bus
+	uint32_t m_seq_pc;             // where the next instruction starts if nothing jumps
+	unsigned m_ld_dst;             // registers the last single load wrote (0: none pending)
+	uint64_t m_ld_ready;           // m_qclock when that load's data can be used
+	int      m_ld_lu;              // load-use latency of the last data read (set by read_mem*)
+	uint32_t m_ic_tag[NSETS * 2];  // line address (addr >> 4) per set and way; ~0 = invalid
+	uint8_t  m_ic_lru[NSETS];      // the way to replace next
+	uint32_t m_dc_tag[NSETS * 2];
+	uint8_t  m_dc_dirty[NSETS * 2];
+	uint8_t  m_dc_lru[NSETS];
+	uint32_t m_ic_line;            // the line the last instruction was fetched from (~0: none)
+	// Counters for measuring the model (debugger state TINSN, TMEM, TICMISS, TDCMISS; Lua
+	// reads them as manager.machine.devices[":maincpu"].state["TMEM"].value). Not saved.
+	uint64_t m_cnt_insn;           // instructions executed
+	uint64_t m_cnt_mem;            // QUARTER cycles memory added beyond the cache-hit counts
+	uint64_t m_cnt_icmiss;         // instruction-cache line fills
+	uint64_t m_cnt_dcmiss;         // data-cache line fills
 
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)
@@ -363,12 +427,15 @@ private:
 	// ---- data-side memory accessors (32-bit bus) ---------------------------
 	// TODO(MN10300): decide alignment policy; read_word/read_dword on a byte-
 	// granular little-endian space handle any offset. MN10200 forced (addr & ~1).
-	inline uint8_t  read_mem8 (uint32_t address) { return m_program->read_byte(address); }
-	inline uint16_t read_mem16(uint32_t address) { return m_program->read_word(address); }
-	inline uint32_t read_mem32(uint32_t address) { return m_program->read_dword(address); }
-	inline void write_mem8 (uint32_t address, uint8_t  data) { m_program->write_byte(address, data); }
-	inline void write_mem16(uint32_t address, uint16_t data) { m_program->write_word(address, data); }
-	inline void write_mem32(uint32_t address, uint32_t data) { m_program->write_dword(address, data); }
+	// Each charges the access's time first (data_cost; defined in mn10300.cpp).
+	inline uint8_t  read_mem8 (uint32_t address);
+	inline uint16_t read_mem16(uint32_t address);
+	inline uint32_t read_mem32(uint32_t address);
+	inline uint32_t read_stack32(uint32_t address);
+	inline uint8_t  read_rmw8(uint32_t address);   // bset/bclr/btst
+	inline void write_mem8 (uint32_t address, uint8_t  data);
+	inline void write_mem16(uint32_t address, uint16_t data);
+	inline void write_mem32(uint32_t address, uint32_t data);
 
 	inline void change_pc(uint32_t pc) { m_pc = pc; } // TODO(MN10300): full 32-bit PC, no 0xffffff mask
 
