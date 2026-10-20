@@ -74,7 +74,12 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # DMA registers (58175d5) gives the same hash as G13 alone. Evidence: notes/g13-waves-2026-10-20/README.md.
 # Re-baselined 2026-10-20 from dbe3683b25d0e26f823ddbb1fa78bb56: the strap answers the unit's 0xF8F7 (pass 9): at most
 # one LSB in 439 of 3,168,003 samples differs, seconds 17-19, same onset. Evidence: notes/dsp-probe-2026-10-20/README.md.
-ORACLE_MD5="e415cb0c15ac74ada6bcfc5f7e4ef909"
+# Re-baselined 2026-10-20 from e415cb0c15ac74ada6bcfc5f7e4ef909: the MN103002A's real timing (G22, cpu-timing merged as
+# a9e822a): 64 MHz, the manual's cycles, caches and bus waits calibrated to the unit's pass 9. The held note starts at the
+# same sample but lines up best 1.94 ms later; the slower key-on writes to the tone generators change its attack (43% of
+# its energy left once aligned, first second 12% quieter), the decay from second 18 is the same.
+# Evidence: notes/cpu-timing-2026-10-20/README.md.
+ORACLE_MD5="5069aedab573b1c63ef6df7689382bd9"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
