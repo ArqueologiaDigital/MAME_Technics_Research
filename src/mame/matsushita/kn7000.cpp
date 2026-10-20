@@ -709,8 +709,12 @@ private:
 	// from the last index write. Phase-2 DSP probe readback: a DMAC0 write with DEN and TRAN
 	// (transmit, internal -> external) arms external-port DMA channel 8 from IIEP0/IMEP0/CEP0,
 	// and host reads of EPB0 then return internal memory, 16 bits at a time, low first.
+	// The host packing follows SYSCON's HBW bits (4-5): 8-bit (10, the reset value) moves a
+	// register as four bytes, 16-bit (01, the firmware's 0x410) as two halves, low first. The
+	// mode is taken at the index write, so a SYSCON write that changes it completes in the old one.
 	uint8_t  m_dsp_rd_n = 0;                   // data-port reads since the last index write
 	uint8_t  m_dsp_wr_n = 0;                   // data-port writes since the last index write
+	bool     m_dsp_host8 = true;               // SYSCON HBW was 8-bit at the last index write
 	uint32_t m_dsp_hostw = 0;                  // the 32-bit value being written (low, then high)
 	bool     m_dsp_rb_on = false;              // readback DMA armed
 	bool     m_dsp_rb_pm = false;              // 48-bit (PM) words, else 32-bit (DM)
@@ -1166,7 +1170,10 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	case 0x28006:                                                 // 0x9805000C: SD mailbox data latch
 		cpsd_mbx_write(data);
 		return;
-	case 0x00000: m_dsp_index = data; m_dsp_rd_n = 0; m_dsp_wr_n = 0; return;   // 0x98000000: effects-DSP host register index
+	case 0x00000:                                                 // 0x98000000: effects-DSP host register index
+		m_dsp_index = data; m_dsp_rd_n = 0; m_dsp_wr_n = 0;
+		m_dsp_host8 = dsp_present() && (m_dsp->host_iop_r(0x00) & 0x30) == 0x20;
+		return;
 	case 0x20000: m_tg_addr[0] = data; return;                    // sub TG: address latch (0x98040000)
 	case 0x20001:                                                 // sub TG: data (0x98040002) -> reg[addr]
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
@@ -1198,16 +1205,16 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 {
 	if (!dsp_present())
 		return 0;
-	// Answer the host register read selected by the latched index. The firmware's own
-	// protocol registers keep the answers its boot sequence was brought up against: the boot
-	// probe (fw 0x48405028) writes SYSCON 0x9191 then 0x20 and reads register 0 back, four
-	// 8-bit reads, requiring 0x20; register 0x0B (MSGR3) is the ID readback after each probe
-	// record; 0x37 (DMASTAT) bit 7 is polled as busy. Every other IOP register reads the
-	// SHARC's register file (what the kernel or the host wrote, or its reset value), as two
-	// 16-bit halves, low first (fw 0x4840531E). The DSP probes (cnv_romdump) read them.
+	// Answer the host register read selected by the latched index from the SHARC's register
+	// file (what the kernel or the host wrote, or its reset value), packed as SYSCON's HBW says
+	// (m_dsp_host8). SYSCON itself: the boot probe (fw 0x48405028) writes 0x91919191 then 0x20
+	// as four bytes and reads it back as four bytes, requiring byte 0 = 0x20 (its 4x8 read
+	// 0x48405229 masks the rest with byte 0); then 0x48407A56 writes 0x410, 16-bit host bus,
+	// and reads it back unchecked. Two registers keep the answers the boot protocol was
+	// brought up against: 0x0B (MSGR3) is the ID readback after each probe record; 0x37
+	// (DMASTAT) bit 7 is polled as busy. The DSP probes (cnv_romdump) read the rest.
 	switch (m_dsp_index)
 	{
-	case 0x00: return 0x0020;    // probe: "DSP present / ready"
 	case 0x0B: return 0x1065;    // ID/version readback (plausible 21065L id; exact value TBD)
 	case 0x37: return 0x0000;    // status: busy (bit7) clear
 	case 0x04:                   // EPB0: phase-2 readback, if armed (else the FIFO is empty)
@@ -1215,8 +1222,11 @@ uint16_t kn7000_state::dsp_data_r(offs_t offset, uint16_t mem_mask)
 	case 0x05: return 0x0000;    // EPB1: unused
 	default:
 	{
-		const uint32_t v = m_dsp->host_iop_r(m_dsp_index & 0xff);
-		const uint16_t r = (m_dsp_rd_n & 1) ? uint16_t(v >> 16) : uint16_t(v);
+		uint32_t v = m_dsp->host_iop_r(m_dsp_index & 0xff);
+		if ((m_dsp_index & 0xff) == 0x1c && m_dsp_rb_on)
+			v |= 0xc000;         // DMAC0 FS (bits 14-15) = 11: EPB0 full while the readback has words
+		const uint16_t r = m_dsp_host8 ? uint16_t((v >> (8 * (m_dsp_rd_n & 3))) & 0xff)
+				: (m_dsp_rd_n & 1) ? uint16_t(v >> 16) : uint16_t(v);
 		if (!machine().side_effects_disabled())
 			m_dsp_rd_n++;
 		return r;
@@ -1267,9 +1277,12 @@ void kn7000_state::dsp_data_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	// Keep the SHARC's IOP register file in step with what the host writes (two halves, low
 	// first), so the DSP probes read back the firmware's own set-up. The download stream
 	// (EPB0/EPB1) is data, not a register.
-	if (m_dsp_index != 0x04 && m_dsp_index != 0x05 && m_dsp_wr_n < 2)
+	if (m_dsp_index != 0x04 && m_dsp_index != 0x05 && m_dsp_wr_n < (m_dsp_host8 ? 4 : 2))
 	{
-		m_dsp_hostw = m_dsp_wr_n ? (m_dsp_hostw | (uint32_t(data) << 16)) : data;
+		if (m_dsp_host8)
+			m_dsp_hostw = (m_dsp_wr_n ? m_dsp_hostw : 0) | (uint32_t(data & 0xff) << (8 * m_dsp_wr_n));
+		else
+			m_dsp_hostw = m_dsp_wr_n ? (m_dsp_hostw | (uint32_t(data) << 16)) : data;
 		m_dsp->host_iop_w(m_dsp_index & 0xff, m_dsp_hostw);
 		m_dsp_wr_n++;
 	}
@@ -1958,6 +1971,7 @@ void kn7000_state::machine_start()
 
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_rd_n));
+	save_item(NAME(m_dsp_host8));
 	save_item(NAME(m_dsp_wr_n));
 	save_item(NAME(m_dsp_hostw));
 	save_item(NAME(m_dsp_rb_on));

@@ -347,9 +347,11 @@ switch on. Plan step 1.
 
 Started 2026-10-20. Emulator side done: the 21065L keeps an IOP register file, host reads return it, host
 writes land in it, and an external-port transmit DMA hands internal memory back through EPB0
-(`notes/dsp-probe-2026-10-20/`). The probe builds themselves are in `technics-roms-disasm`
-`kn7000/tools/cnv_romdump/`.
-
+(`notes/dsp-probe-2026-10-20/`). SYSCON reads back what the firmware wrote (`0x410` after boot, packed per its
+HBW bits), and DMAC0's FS bits show EPB0 full while a readback has words, so the phase-2 probe runs in MAME
+without test-side stand-ins. The probe builds themselves are in `technics-roms-disasm`
+`kn7000/tools/cnv_romdump/` (releases `2026-10-20-dspprobe`, pass 6, and `2026-10-20-dspmem`, pass 7), not yet
+run on the unit. Not modelled: timers, DMASTAT and the SPORT counts do not move; pass 6 measures them.
 
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
@@ -473,12 +475,13 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 
 ## History
 
-| date       | change                                                                                                 |
-|------------|--------------------------------------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                             |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                               |
-| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                            |
-| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                   |
-| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                |
-| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                     |
-| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`) |
+| date       | change                                                                                                     |
+|------------|------------------------------------------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                                 |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                                   |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                                |
+| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                       |
+| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                    |
+| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                         |
+| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)     |
+| 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME |
