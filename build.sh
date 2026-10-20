@@ -99,7 +99,9 @@ echo "build tree: $BUILD_TREE"
 # 'build' is excluded so object files and the generated project survive, and the overlay's own
 # files are re-symlinked in step 2 (rsync replaces a symlink with the base-tree copy).
 echo "==> syncing build tree from $MAME_SRC ..."
-rsync -a --exclude='.git' --exclude='/build/' --exclude='/kn7000' --exclude='/kn7000_build.log' \
+# (/.claude is session state of tools working in that tree -- 17 GB of agent worktrees on
+# 2026-10-20 -- not MAME source: mirroring it filled the disk once.)
+rsync -a --exclude='.git' --exclude='/.claude' --exclude='/build/' --exclude='/kn7000' --exclude='/kn7000_build.log' \
 	"$MAME_SRC"/ "$BUILD_TREE"/
 
 # 2. Symlink the overlay's source files in (single source of truth = this repo).
