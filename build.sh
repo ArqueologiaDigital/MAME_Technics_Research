@@ -99,10 +99,18 @@ echo "build tree: $BUILD_TREE"
 # 'build' is excluded so object files and the generated project survive, and the overlay's own
 # files are re-symlinked in step 2 (rsync replaces a symlink with the base-tree copy).
 echo "==> syncing build tree from $MAME_SRC ..."
-# (/.claude is session state of tools working in that tree -- 17 GB of agent worktrees on
-# 2026-10-20 -- not MAME source: mirroring it filled the disk once.)
-rsync -a --exclude='.git' --exclude='/.claude' --exclude='/build/' --exclude='/kn7000' --exclude='/kn7000_build.log' \
-	"$MAME_SRC"/ "$BUILD_TREE"/
+# Only what git tracks in MAME_SRC (plus any untracked file it does not ignore). Everything else
+# there -- its owner's binaries (fs_mamed, 2 GB), disk images, logs, tool output, the .claude
+# state of tools working in that tree (17 GB of agent worktrees on 2026-10-20) -- stays in that
+# tree alone; mirroring it all once filled the disk. A MAME_SRC that is not a git checkout falls
+# back to the old whole-tree mirror.
+if git -C "$MAME_SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	git -C "$MAME_SRC" ls-files -z --cached --others --exclude-standard |
+		rsync -a --from0 --files-from=- --ignore-missing-args "$MAME_SRC"/ "$BUILD_TREE"/
+else
+	rsync -a --exclude='.git' --exclude='/.claude' --exclude='/build/' --exclude='/kn7000' --exclude='/kn7000_build.log' \
+		"$MAME_SRC"/ "$BUILD_TREE"/
+fi
 
 # 2. Symlink the overlay's source files in (single source of truth = this repo).
 ln -sf "$HERE/src/devices/cpu/mn10300/mn10300.cpp"           "$BUILD_TREE/src/devices/cpu/mn10300/mn10300.cpp"
