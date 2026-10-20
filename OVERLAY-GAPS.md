@@ -314,16 +314,16 @@ real-unit run; evidence and scripts: `notes/g13-waves-2026-10-20/README.md`.
   note is not the key (`pitchcheck.py`).
 - **The driver's strap was wrong.** 0x98070000 bits 11:10 gave hardware subtype 5, under which the
   firmware remaps every wave page onto the expansion range and assigns voices to the TGs by a table:
-  none of 488 traced selects named an internal sample. The driver now reports subtype 1 for the
+  none of 488 traced selects named an internal sample. The driver reported subtype 1 for the
   KN7000 (subtypes 1 and 2 behave alike in the firmware), and every voice lands on its own pair.
+  Since pass 9 read Felipe's unit (`0xF8F7`, subtype 2) it reports that halfword, live bits aside.
 - **Built** on the build tree (binary md5 `ed65537d`), KN7000 only; without the four ROM regions the
   voices keep the synthetic pack. Gate on that binary: 16 passed, 1 skipped, 1 failed: the KN7000
   audio oracle, now `dbe3683b25d0e26f823ddbb1fa78bb56` (the held C4 at 262.31 Hz, +4.5 cents, 3.4 dB
   louder, no clipping; README "The gate, the audio oracle, the boot"). `ab_boot.sh` against the
   published binary: all nine snapshots identical for the four KN7000 BIOSes, kn6000, kn6500, kn2400
   and kn2600. Not published, `ORACLE_MD5` not re-baselined: both wait for review.
-- **Open**: the real unit's strap bits 11:10 (a read-only .CNV read of 0x98070000); the 8-bit
-  sample gain law, fitted as 3 dB per code step (a line-out recording of STRINGS would settle it);
+- **Open**: the 8-bit sample gain law, fitted as 3 dB per code step (a line-out recording of STRINGS would settle it);
   the split lists and the post-loop data are not modelled.
 
 ### G14. SD SPI with the card deselected — open
@@ -534,3 +534,4 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
 | 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1     |
 | 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)      |
 | 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them          |
+| 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c     |

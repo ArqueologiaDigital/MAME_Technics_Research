@@ -272,3 +272,13 @@ stays (b). The audio oracle stays `8a1fe2a44e064f94ff935242fd717cb4` (`oracle_ab
 registers.
 `ab_boot.sh` against the published `2a8e2fce…`: kn7000 v16, v13 and sp7001 and kn6000 give 9 of 9 identical snapshots
 over 45 s.
+
+## The board strap, as the unit reads it (pass 9, 2026-10-20)
+
+Pass 9 read `0x98070000` on Felipe's unit: `0xF8F7`. The driver now answers that halfword for the KN7000
+(`kn7000.cpp` `m_strap_fixed` = `0xE8F1`, plus the live TG-present bits 1-2 and the rear switch bit 12, whose
+defaults give the unit's value). `strap_check.lua` reads it in MAME at 10 s: `0xF8F7`, board class 1, bit 0 set,
+bits 7:4 = `0xF`, subtype 2, bit 12 set. Against the published `5dfebca3…` (which answered `0x9406`): the audio
+oracle moves from `dbe3683b…` to `e415cb0c15ac74ada6bcfc5f7e4ef909` by at most one LSB in 439 of 3,168,003
+samples, seconds 17-19, the same onset (`kn5000_wav_ab.py`, `wav_shift.py`); `ab_boot.sh`: kn7000 v16, v13 and
+sp7001 and kn6000 give 9 of 9 identical snapshots.

@@ -427,12 +427,16 @@ private:
 	// KN7000 only: timing measured on Felipe's unit (kn7000_mame notes/dsp-probe-2026-10-20, pass 8). The 1 kHz
 	// system tick is the core's TM4 as the firmware programs it, instead of the fixed sys_tick timer.
 	bool m_kn7000_timing = false;
-	// KN7000 only: strap 0x98070000 bits 11:10, the firmware's hardware subtype (PanelSubTypeGet
-	// 0x484D7751: 00 -> 5, 01 -> 1, 10 -> 2, 11 -> 3). The dumped wave ROMs are laid out for
-	// subtype 1 or 2: under 5 the firmware remaps every wave page and assigns voices to the
-	// tone generators by a table, so voices reach the wrong ROM pair (notes/g13-waves-2026-10-20).
-	// 1 and 2 behave alike in every place the firmware reads the subtype.
-	uint16_t m_strap_subtype = 0;
+	// The strap bits of 0x98070000 that are fixed by the board (io_r adds the live ones: bits 1-2,
+	// TG present, and bit 12, the rear MIDI IN / BASS PEDAL switch). KN7000: Felipe's unit reads
+	// 0xF8F7 (DSP probe pass 9, kn7000_mame notes/dsp-probe-2026-10-20), so 0xE8F1 here. What the
+	// firmware makes of it: bits 11:10 = 10, hardware subtype 2 (PanelSubTypeGet 0x484D7751: 00 -> 5,
+	// 01 -> 1, 10 -> 2, 11 -> 3; the dumped wave ROMs are laid out for 1 or 2, which behave alike;
+	// under 5 voices reach the wrong ROM pair, notes/g13-waves-2026-10-20); bit 0 set, so
+	// TgStrapProbeSideB (0x484D773A) answers 1; bits 7-4 = 0xF, which the hardware-info routine
+	// 0x484AD8E5 takes as "not fitted"; bit 3 clear and bits 9-8 = 00, as the driver always gave;
+	// bit 15 set (as always); bits 14-13 set, read nowhere. Other models: 0x8000, as before.
+	uint16_t m_strap_fixed = 0x8000;
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
@@ -1129,8 +1133,8 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 		// 0x484b2615 reads bit12 -> MIDI-in mode flag 0x5006bfd2 bit1). bits1..2 = the TG-present
 		// strap (0x484d7713): bit1 clear -> "no TG" leaves the TG-enable gate closed (silent),
 		// so report the TGs present (bit1|bit2). bit15 = moot (gates dead code, see above).
-		// bits 11:10 = the hardware subtype (m_strap_subtype; KN7000 only).
-		return 0x8000 | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000) | m_strap_subtype;
+		// The board's fixed bits (m_strap_fixed: the KN7000's as measured on Felipe's unit).
+		return m_strap_fixed | (tg_sound_enabled() ? 0x0006 : 0) | (m_rearsw->read() & 0x1000);
 	}
 	// 0x98050004 (offset 0x28002): the VOICE-EVENT / keyboard FIFO -- the interface
 	// the KN5000 firmware calls "keyboard input" (KN5000 0x110000: read voice events,
@@ -2354,7 +2358,7 @@ void kn7000_state::kn7000(machine_config &config)
 	// 0x90000000 is the +0x40000000 view of work RAM: the NMI's RAM stub is written there.
 	m_ram90_workram = true;
 	m_kn7000_timing = true;              // cleared by the machines built on this one
-	m_strap_subtype = 0x0400;            // hardware subtype 1 (see the member); cleared likewise
+	m_strap_fixed = 0xE8F1;              // the unit's strap, 0xF8F7 less the live bits (see the member); reset likewise
 
 	// Panasonic MN103002A (MN10300/AM33 core), IC4 on MAIN 1/5.
 	// Clock tree (SX-KN7000 service manual, SCHEMATIC DIAGRAM-1): a 16.0 MHz
@@ -2551,7 +2555,7 @@ void kn7000_state::kn6000(machine_config &config)
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = false;             // its IRQ trampolines are verified with the separate share
 	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
-	m_strap_subtype = 0;                 // its strap is not known: keep the value the driver always gave
+	m_strap_fixed = 0x8000;              // its strap is not known: keep the value the driver always gave
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
@@ -2636,7 +2640,7 @@ void kn7000_state::kn2400(machine_config &config)
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
 	m_ram90_workram = true;
 	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
-	m_strap_subtype = 0;                 // its strap is not known: keep the value the driver always gave
+	m_strap_fixed = 0x8000;              // its strap is not known: keep the value the driver always gave
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).
 	m_screen->set_size(320, 240);
