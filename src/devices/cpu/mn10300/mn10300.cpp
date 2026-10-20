@@ -152,9 +152,9 @@ void mn10300_device::internal_map(address_map &map)
 	// in its bus set-up; 0x32000040/42 = the DRAM control and refresh values, 0x287 and 0x7D0
 	// on a class-1 board) read back what was written, as pass 9 read them on the unit. No
 	// timing hangs on them here.
-	map(0x32000010, 0x32000011).lrw16(NAME([this]() { return m_busctl[0]; }), NAME([this](uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[0]); }));
-	map(0x32000040, 0x32000041).lrw16(NAME([this]() { return m_busctl[1]; }), NAME([this](uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[1]); }));
-	map(0x32000042, 0x32000043).lrw16(NAME([this]() { return m_busctl[2]; }), NAME([this](uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[2]); }));
+	map(0x32000010, 0x32000011).lrw16(NAME([this]() { return m_busctl[0]; }), NAME([this](offs_t, uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[0]); }));
+	map(0x32000040, 0x32000041).lrw16(NAME([this]() { return m_busctl[1]; }), NAME([this](offs_t, uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[1]); }));
+	map(0x32000042, 0x32000043).lrw16(NAME([this]() { return m_busctl[2]; }), NAME([this](offs_t, uint16_t data, uint16_t mem_mask) { COMBINE_DATA(&m_busctl[2]); }));
 }
 
 device_memory_interface::space_config_vector mn10300_device::memory_space_config() const
