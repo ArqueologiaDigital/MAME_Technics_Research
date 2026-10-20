@@ -39,7 +39,10 @@ With bits 11:10 = 01 the routes are the pages themselves, each voice lands on th
 holds its sample (both layers of the stereo piano land on different TGs, one per pair), and the
 pitch tests below pass. Subtypes 1 and 2 behave the same everywhere the firmware reads the
 subtype (the SD worker and SPI clock, the side select, the route remap), so the driver now
-reports 1 for the KN7000 only. **The real unit's strap has not been read**; see "Open" below.
+reported 1 for the KN7000 only. **The real unit's strap was read later** (DSP probe pass 9,
+2026-10-20): `0xF8F7`, bits 11:10 = 10, subtype 2. The driver now reports that whole halfword
+(`m_strap_fixed`, `notes/dsp-probe-2026-10-20/strap_check.lua`); the KN7000 audio oracle moves by at most
+one LSB in 439 of 3,168,003 samples (seconds 17-19), the same onset.
 
 ## The wave ROM format
 
@@ -180,10 +183,7 @@ SPI clock) show nothing at boot without a card.
 
 ## Open
 
-- **The strap value on the real unit.** Bits 11:10 of `0x98070000` read 01 or 10 on Felipe's unit if this
-  is right; 00 (what the driver gave) would put every internal sound on the expansion pages. A
-  read-only .CNV probe can read the halfword at `0x98070000` and the subtype the firmware derived (call
-  `0x484D7751`).
+- **The strap value on the real unit: read** (pass 9): `0xF8F7`, subtype 2, as predicted (01 or 10).
 - **The 8-bit gain law** is fitted, not derived: 2^(-b/2) brings the segment boundaries close to the
   inside-segment floor (median |log2 jump| 0.384 against 0.348; no gain 0.629; 2^-b 0.516), and the
   free fit leaves about 0.2 octave unexplained, correlated with a. A line-out recording of a sound
