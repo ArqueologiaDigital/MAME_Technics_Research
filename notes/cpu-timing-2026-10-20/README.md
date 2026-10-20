@@ -222,7 +222,8 @@ their phase against each other. The KN5000 demo oracle (TLCS-900) is unchanged.
 
 **Host speed** (`-bench 30`, kn7000 `-bios v13`, 29 emulated seconds, run twice each, host load 5-7 on 8 cores from
 other work): published 47.7 % and 50.8 %, this model 60.7 % and 65.5 %. The model's per-instruction work is more than
-paid for by running fewer instructions per emulated second; the effects DSP is what keeps both below full speed.
+paid for by running fewer instructions per emulated second. Both are below full speed on this host while other
+work loads it; an idle host was not available to measure on.
 
 ## Not modelled, or not measured
 
