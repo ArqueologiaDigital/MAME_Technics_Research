@@ -59,7 +59,11 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # rhythm ROM IC18 (and IC19) instead of the synthetic rhythm resource. The new binary with the old
 # memory picture there restored by Lua taps gives 4c3a522a again, bit for bit, so nothing else moved.
 # Evidence: notes/pr-port-2026-10-19/oracle_attribution.sh and that folder's README.
-ORACLE_MD5="bd02a9c15b580d6b4b4c0a42f78a1fcb"
+# Re-baselined 2026-10-20 from bd02a9c15b580d6b4b4c0a42f78a1fcb: the effects DSP's own reads of MSGR0-7 now return the
+# stored value (sharc.cpp iop65l_r, e04a567), as on Felipe's unit (passes 6 and 7), so effects 58-61 keep their ring-3
+# pointer. The new binary with those reads forced back to 0 by a Lua tap gives bd02a9c1 again, bit for bit; only
+# seconds 16-17, the held note, differ. Evidence: notes/dsp-probe-2026-10-20/oracle_attribution_msgr.sh and README.md.
+ORACLE_MD5="028bb1dbead8b06d04f565cb30dc9a32"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,

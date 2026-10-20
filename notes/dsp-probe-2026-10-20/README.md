@@ -180,3 +180,8 @@ peak delta 176, difference RMS 25.6 against a signal RMS of about 180 in second 
 its own delay memory. Peaks are 971/957 against 972/954 before, with no sample at full scale in either. The
 attribution run shows the read-back is the only thing that moved it, so the oracle is re-baselined to
 `028bb1db…` (tools/gate.sh, in its own commit).
+
+`ab_boot.sh` (published `97d2f383…` against this build): kn7000 v16, v13 and sp7001, kn6000 and kn2400 each give 9
+of 9 identical snapshots over 45 s, with no unimplemented-opcode or divide-by-zero lines. Published as
+`kn7000-emulator/kn7000` md5 `b2d669c2…`; `tools/gate.sh` with the new oracle: 17 passed, 0 failed, 1 skipped
+(kn1500).
