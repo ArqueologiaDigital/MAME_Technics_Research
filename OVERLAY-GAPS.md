@@ -35,7 +35,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G10 | CS5 mirrors and open-bus reads                          | KN7000 driver      | small        | open        |
 | G11 | IC21 custom data probably halfword-swapped              | KN7000 driver      | small        | open        |
 | G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload         | ROM records        | small        | open        |
-| G13 | Voices on the real wave ROMs                            | tone generator     | large        | in progress |
+| G13 | Voices on the real wave ROMs                            | tone generator     | large        | done        |
 | G14 | SD SPI with the card deselected reads 0x00              | KN7000 driver      | small        | open        |
 | G15 | Smaller KN7000 items                                    | KN7000 driver      | small        | open        |
 | G16 | KN5000 branch work                                      | KN5000             | mixed        | open        |
@@ -44,7 +44,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G19 | Effects DSP bypass switch (noisy sound)                 | KN7000 driver      | small        | planned     |
 | G20 | Probe the DSP and TG on the real unit via .CNV          | tools / RE         | medium-large | in progress |
 | G21 | SD sub-CPU IC401: SDMODE switch, untried read commands  | KN7000 driver / RE | medium       | open        |
-| G22 | CPU and bus timing: 64 MHz, cycle counts, caches, waits | mn10300 core       | large        | in progress |
+| G22 | CPU and bus timing: 64 MHz, cycle counts, caches, waits | mn10300 core       | large        | done        |
 
 ## Work already written on branches, not in the overlay
 
@@ -298,7 +298,7 @@ The remainder of B.6 in the UNSUBMITTED inventory: upstream has a `NO_DUMP` reco
 IC414 (`c3fbkd000162`, unreachable from the main CPU) and a `custom_data` region for the KN6000/KN6500
 (`01ctmini.ic18`, BAD_DUMP, CRC f108e4c7). The overlay has neither. Small.
 
-### G13. Voices on the real wave ROMs — in progress (decoded and built, not published)
+### G13. Voices on the real wave ROMs — done (published; the 8-bit gain law is still open)
 
 Felipe asked for this on 2026-10-20 (KN7000 only; the other machines keep a placeholder). Plan:
 `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`, step 3. Decoded offline the same day, with no
@@ -421,7 +421,7 @@ the unit is opened; the parts probably hold SD-Jukebox CPRM keys, so keep any du
   IC401's replies (0x5016066C-0x5016068F, 0x50093400-0x50093497, 0x5008291C-0x5008291F, 0x50007EFC): the first
   bytes ever seen from IC401, possibly a version string.
 
-### G22. CPU and bus timing — in progress (branch `cpu-timing`, not published)
+### G22. CPU and bus timing — done (merged `a9e822a`, published)
 
 The core charged one cycle per instruction at 32 MHz and nothing for memory, so code that touches slow memory
 ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN7000). Done on branch
@@ -562,3 +562,4 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them          |
 | 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c     |
 | 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)     |
+| 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)          |
