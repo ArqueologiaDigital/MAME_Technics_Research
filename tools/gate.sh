@@ -68,7 +68,11 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # alternates. One build per step (3c2f89d6, f99f8521, 8a1fe2a4); wav_shift.py: the held note starts 0.19-0.27 ms
 # earlier and, aligned, matches to 0.01% (TM4, handshake) and 0.21% (FLAG3: ring 3 now scrolls). Evidence:
 # notes/dsp-probe-2026-10-20/README.md, "The unit's timing in the emulator".
-ORACLE_MD5="8a1fe2a44e064f94ff935242fd717cb4"
+# Re-baselined 2026-10-20 from 8a1fe2a44e064f94ff935242fd717cb4: the KN7000's voices play the dumped wave ROMs and the
+# strap reports hardware subtype 1 (G13, 595d83a). The held C4 is 262.31 Hz (+4.5 cents, was 260.13, -9.9), 3.4 dB
+# louder, starts 9.4 ms earlier and has a tail; no clipping; only seconds 0 and 16-21 differ. The merge with the SPORT
+# DMA registers (58175d5) gives the same hash as G13 alone. Evidence: notes/g13-waves-2026-10-20/README.md.
+ORACLE_MD5="dbe3683b25d0e26f823ddbb1fa78bb56"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,
