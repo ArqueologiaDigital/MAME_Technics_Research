@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "mn10300_timing.h"
+
 // Debugger/state-table indices (unique, non-zero; value order is cosmetic)
 enum
 {
@@ -192,19 +194,21 @@ protected:
 	// device_t overrides
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+	virtual void device_post_load() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }
-	virtual uint32_t execute_max_cycles() const noexcept override { return 24; } // TODO(MN10300): real worst-case opcode+IRQ cycles
+	// worst single instruction: a 38-cycle div, or a movm of the whole register set whose
+	// stack lines all miss to slow memory (mn10300_timing.h). A hint for the scheduler only.
+	virtual uint32_t execute_max_cycles() const noexcept override { return 400; }
 	// (device_execute_interface::execute_input_lines() was removed from MAME;
 	//  the input-line count is implicit. MN10300_MAX_EXT_IRQ lines are still used
 	//  via set_input_line/execute_set_input.)
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == INPUT_LINE_NMI; }
-	// TODO(MN10300): the MN10200 overrides execute_clocks_to_cycles/cycles_to_clocks
-	// for its internal /2 divider. Only add those if the KN7000 MN10300 clocking
-	// requires it; otherwise the 1:1 base-class defaults are correct.
+	// The device clock is the core clock fc (the KN7000: 16 MHz x 4 = 64 MHz), one cycle per
+	// clock; the peripherals run on IOCLK = fc / mn10300_timing::IOCLK_DIV (ioclk()).
 
 	// device_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
@@ -294,6 +298,7 @@ private:
 	TIMER_CALLBACK_MEMBER(tm6_tick);
 
 	static constexpr unsigned TM5_PRESCALE = 8;  // IOCLK / 8 = 2 MHz on the KN7000 (see tm5_rearm)
+	uint32_t ioclk() const;                      // the peripheral clock (16 MHz on the KN7000)
 
 	uint8_t   m_tm4_mode;        // TM4: as TM5
 	uint16_t  m_tm4_base;
@@ -322,6 +327,39 @@ private:
 	bool m_dma_active;
 	bool m_dma_started;
 	bool m_dma_drq;
+
+	// ---- timing model (the numbers: mn10300_timing.h) ------------------------
+	// Instruction cycles come from per-opcode tables plus what each handler adds for
+	// control flow and data-dependent instructions. Memory adds, on top of the manual's
+	// cache-hit counts: instruction-cache misses (or the bus, uncached), data-cache misses
+	// and write-backs, uncached external accesses at their chip select's MEMCTR timing,
+	// and on-chip peripheral accesses. Caches hold tags only: data always comes from the
+	// address space, so the model changes timing and nothing else.
+	uint16_t chctr_r(offs_t offset);
+	void chctr_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint16_t memctr_r(offs_t offset);
+	void memctr_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	uint32_t dcache_purge_r(offs_t offset);
+	void timing_recompute_cs(int cs);
+	void icache_invalidate();
+	void dcache_invalidate();
+	inline void fetch_cost();                         // instruction fetch at m_pc
+	inline void data_cost(uint32_t a, bool wide, bool write);  // one data access, extra cycles
+	inline int dcache_access(uint32_t a, bool wide, bool write, int cs);
+	inline int line_writeback_cost(uint32_t tag);
+
+	static constexpr unsigned NSETS = 128;          // mn10300_timing::SETS
+	uint16_t m_memctr[8];          // MEMCTR0-7 (0x32000020 + 2n), as the firmware wrote them
+	uint16_t m_chctr;              // CHCTR (0x20000070)
+	int      m_cs_acc[8];          // extra cycles for one 8/16-bit access on CSn
+	int      m_cs_acc32[8];        // ... one 32-bit access (two transfers on a 16-bit CS)
+	int      m_cs_fill[8];         // ... filling (or writing back) one 16-byte line
+	uint32_t m_ic_tag[NSETS * 2];  // line address (addr >> 4) per set and way; ~0 = invalid
+	uint8_t  m_ic_lru[NSETS];      // the way to replace next
+	uint32_t m_dc_tag[NSETS * 2];
+	uint8_t  m_dc_dirty[NSETS * 2];
+	uint8_t  m_dc_lru[NSETS];
+	uint32_t m_ic_line;            // the line the last instruction was fetched from (~0: none)
 
 	// ---- architectural state ----------------------------------------------
 	uint32_t m_pc;    // full 32-bit PC (MN10200 was 24-bit, masked to 0xffffff)
@@ -363,12 +401,15 @@ private:
 	// ---- data-side memory accessors (32-bit bus) ---------------------------
 	// TODO(MN10300): decide alignment policy; read_word/read_dword on a byte-
 	// granular little-endian space handle any offset. MN10200 forced (addr & ~1).
-	inline uint8_t  read_mem8 (uint32_t address) { return m_program->read_byte(address); }
-	inline uint16_t read_mem16(uint32_t address) { return m_program->read_word(address); }
-	inline uint32_t read_mem32(uint32_t address) { return m_program->read_dword(address); }
-	inline void write_mem8 (uint32_t address, uint8_t  data) { m_program->write_byte(address, data); }
-	inline void write_mem16(uint32_t address, uint16_t data) { m_program->write_word(address, data); }
-	inline void write_mem32(uint32_t address, uint32_t data) { m_program->write_dword(address, data); }
+	// Each charges the access's time first (data_cost; defined in mn10300.cpp).
+	inline uint8_t  read_mem8 (uint32_t address);
+	inline uint16_t read_mem16(uint32_t address);
+	inline uint32_t read_mem32(uint32_t address);
+	inline uint32_t read_stack32(uint32_t address);
+	inline uint8_t  read_rmw8(uint32_t address);   // bset/bclr/btst
+	inline void write_mem8 (uint32_t address, uint8_t  data);
+	inline void write_mem16(uint32_t address, uint16_t data);
+	inline void write_mem32(uint32_t address, uint32_t data);
 
 	inline void change_pc(uint32_t pc) { m_pc = pc; } // TODO(MN10300): full 32-bit PC, no 0xffffff mask
 
