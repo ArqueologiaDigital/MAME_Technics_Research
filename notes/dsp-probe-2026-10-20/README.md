@@ -270,3 +270,5 @@ Pass 6 in MAME on this build (`run_test.sh --dsp --bios v13`), against the unit:
 Pass 8 in MAME: the phase check finds CR0A 5 and IIR0A `0xC365` on all 240 samples, as the unit did, and the verdict
 stays (b). The audio oracle stays `8a1fe2a44e064f94ff935242fd717cb4` (`oracle_ab.sh`): the kernel never reads these
 registers.
+`ab_boot.sh` against the published `2a8e2fce…`: kn7000 v16, v13 and sp7001 and kn6000 give 9 of 9 identical snapshots
+over 45 s.
