@@ -161,26 +161,22 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	else if (cls == 0x0000)                           // r0 = [ATK rate | PEAK level]
 	{
 		m_eg012[v][0] = data;                         // cache for the next note-on resolve
-		// KEY-RELEASE, path 2 (firmware-managed sounds): after the r3=0x8000 gate-off
-		// the firmware rewrites regs 0,1,4,5,8,9 of the note's ODD companion block with
-		// a ramp-down (r0=0x9180: rate 0x91 toward level 0) -- aimed at the companion
-		// even when only the even block sounds. A reg0 rewrite below full scale on
-		// EITHER block of a pair releases every gated/releasing voice of the pair
-		// {v&~1, v|1} gated >20 ms (the note-on's own r0 programming happens BEFORE
-		// the pitch-write gate, and boot resets are 0xFF80, so the guard+threshold
-		// skip them) and OVERRIDES the release coefficient with the burst's own rate
-		// byte -- the piano damp 0x91 -> ~85 ms under the provisional law.
-		if (data != 0 && (data >> 8) < 0xFF)
+		// KEY-RELEASE. The low byte is [release flag | level]: the note-on programs r0 with
+		// bit 7 clear (0xD27F, 0x557F: attack rate | PEAK), while every key-off and reset
+		// write has it set with level 0 (0x9180, 0xAA80, 0xC280, the 0xFF80 reset; the
+		// KN5000's damp pairs 0x7F80/0xA280 too). At key-off the firmware sends that r0 in
+		// a 6-write burst (r0, r1, r4, r5, r8, r9: TgVoiceEgBurstWrite) to EVERY voice of
+		// the note (notes/tg-release-2026-10-21). So the flag releases this voice, at the
+		// write's own rate byte -- the piano damp 0x91 -> ~85 ms under the provisional law.
+		// (It used to release the even/odd pair after a 20 ms guard: that matched what the
+		// firmware sent while the status reads below answered 0, which made the firmware
+		// drop all but one voice of a note within 0.1 s of its note-on.)
+		if (BIT(data, 7))
 		{
-			const double now = machine().time().as_double();
-			for (int y = (v & ~1); y <= (v | 1); y++)
-				if ((m_gate[y] || m_stage[y] == ST_RELEASE) && (now - m_ton[y]) > 0.020)
-				{
-					m_stream->update();
-					m_gate[y]  = 0;
-					m_stage[y] = ST_RELEASE;
-					m_rlsc[y]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
-				}
+			m_stream->update();
+			m_gate[v]  = 0;
+			m_stage[v] = ST_RELEASE;
+			m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
 		}
 	}
 	else if (cls == 0x0001)                           // r1 = [DCY1 rate | SUS1 level];
@@ -192,23 +188,9 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	{
 		m_eg012[v][2] = data;
 	}
-	else if (cls == 0x0003)                           // r3 = GATE (sweep result 3):
-	{                                                 // 0x87FF at note-on, 0x8000 at key-up
-		// UNIVERSAL key-release trigger -- written for EVERY class on key-up (verified
-		// on the managed piano AND the gate-follow organ, falsifying the earlier "no
-		// key-up write for organ/brass" reading). Release at the voice's default rate
-		// (rA damp law); managed sounds refine it with the r0 burst that follows.
-		if ((data >> 8) == 0x80)
-		{
-			const double now = machine().time().as_double();
-			if (m_gate[v] && (now - m_ton[v]) > 0.020)
-			{
-				m_stream->update();
-				m_gate[v]  = 0;
-				m_stage[v] = ST_RELEASE;
-			}
-		}
-	}
+	// r3 is not a gate: TgVoiceGateOn writes 0x87FF and TgVoiceGateOff the voice's cached word
+	// (0x8000-0xF000) about 0.1 ms later, inside every note-on, with class 0x3000 bit 14 set
+	// and cleared around them -- a key-on strobe. Neither is written at key-off.
 	else if (cls == 0x2009)                           // per-voice level (best-effort)
 	{
 		// The firmware writes this once at note-on; in the default full-velocity
@@ -307,4 +289,30 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// note-on resolves them into a decay/sustain/release. (See notes/tg-envelope-*.)
 		m_envreg[v][cls - 0x0004] = data;
 	}
+}
+
+// The firmware's voice sweep (TgVoiceStatusSweep, lib 0x4C03AA86 in v16; notes/tg-release-2026-10-21) reads
+// this chip once per pass for each group of 16 voices: it writes the address 0xFC08 + g, a 0, then reads the
+// data port. It ORs the answer with its own mask of held keys, and a voice whose bit falls from 1 to 0 has
+// ended: its node is retired. For the voices still sounding and not held it reads 0xFC02 | ch<<4 and keeps
+// (x & 0x1FFF) >> 5 as the voice's level; a released voice below 0x80 becomes the first to be stolen.
+// Answering 0 to all of this (as before) told the firmware that every voice it had just keyed was silent: it
+// retired them at its next pass, 43-82 ms after the note-on, and at the note-off it found no voice to release.
+uint16_t kn7000_tonegen_device::tg_read(int tg, uint16_t addr)
+{
+	if ((addr & 0xFC00) != 0xFC00)
+		return 0;
+	m_stream->update();
+	const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
+	if (ch == 0 && reg >= 0x8 && reg <= 0xB)
+	{
+		uint16_t bits = 0;
+		for (int i = 0; i < 16; i++)
+			if (voice_sounding((tg << 6) | ((reg - 0x8) << 4) | i))
+				bits |= 1 << i;
+		return bits;
+	}
+	if (reg == 0x1 || reg == 0x2)
+		return voice_level13((tg << 6) | ch);
+	return 0;
 }

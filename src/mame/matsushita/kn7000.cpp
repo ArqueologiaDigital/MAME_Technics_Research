@@ -1164,6 +1164,10 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	// sample word for the latched (bank, address). See tg_wave_read().
 	if (offset == 0x20005) return tg_wave_read(0);
 	if (offset == 0x28005) return tg_wave_read(1);
+	// Tone-generator data port read (sub 0x98040002 / main 0x98050002): the chip's answer to the latched
+	// status address -- which voices still sound, and how loud (kn7000_tonegen_device::tg_read).
+	if (offset == 0x20001) return m_tonegen->tg_read(0, m_tg_addr[0]);
+	if (offset == 0x28001) return m_tonegen->tg_read(1, m_tg_addr[1]);
 	// (The FDC is IC103 at 0x98020000 = decoder slot Y2; 0x98010000 = Y1 = FDC.DACK, the DMA-ack strobe,
 	// not the register base -- that is why the old 0x98010000 probe never saw register traffic. The FDC
 	// registers are carved out of this io window at 0x98020000-0f -> fdc_r/fdc_w.)

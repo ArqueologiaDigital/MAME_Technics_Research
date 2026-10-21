@@ -264,3 +264,13 @@ classes 0x0401/0x0405 (librec+0x28/+0x2A low-14) on sounding voices. **Open**:
 which panel feature drives partrec bit12 — candidate is the part sustain/damper
 response of sustaining (type-7) tones; a live session should toggle SUSTAIN and
 watch 0x50009D38.
+
+## 2026-10-21: CORRECTED — the "odd companion" burst and the "no key-up write" classes were an emulator artefact
+
+The driver answered every tone-generator status read with 0, so the firmware's voice sweep (`TgVoiceStatusSweep`,
+`tg-voice-allocator.md`) saw each fresh voice at level 0 and dropped it 43-82 ms after its note-on. A note's first
+voice was gone before its key-up, and so were the only voices of most MIDI and single-voice notes. That is why the
+burst seemed to go "to the odd companion block even when only the even block sounds", and why some families seemed to
+get no key-up write. With the reads answered (notes/tg-release-2026-10-21), the firmware sends the 6-write burst to
+every voice of every note, and CC 123/120 as well. The release is now that voice's own r0 write with low-byte bit 7
+set (`0x9180`, `0xFF80`, ...); the pair rule, its 20 ms guard and the r3 rule are gone.

@@ -45,6 +45,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G20 | Probe the DSP and TG on the real unit via .CNV          | tools / RE         | medium-large | in progress |
 | G21 | SD sub-CPU IC401: SDMODE switch, untried read commands  | KN7000 driver / RE | medium       | open        |
 | G22 | CPU and bus timing: 64 MHz, cycle counts, caches, waits | mn10300 core       | large        | done        |
+| G23 | Notes do not stop: the TG status reads                  | tone generator     | small        | done        |
 
 ## Work already written on branches, not in the overlay
 
@@ -469,6 +470,32 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 - **Open:** the firmware tasks' share of the CPU while a task runs (the unit's `AWPERF0.TXT` from Another World's
   speed build will test it), LCD costs in a real loop, the classes pass 9 did not time, MEMCTR's field meanings.
 
+### G23. Notes that do not stop: the tone generators' status reads — done 2026-10-21 (published)
+
+Was a side finding (`notes/listen-2026-10-21/`): notes on MIDI IN rang on after their note-offs for piano, strings
+and pad, the church organ fell 9 dB and held, CC 123/120 stopped nothing, only GM 80 ended. Evidence, scripts and
+figures: `notes/tg-release-2026-10-21/README.md`.
+
+- **Cause.** The firmware's voice sweep (`TgVoiceStatusSweep`, library `0x4C03AA86` in v16) reads each tone
+  generator's status: `0xFC08 + g` gives 16 "still sounding" bits, `0xFC02 | slot<<4` a voice's level. The driver
+  answered every read of `0x98040002`/`0x98050002` with 0, so 43-82 ms after each note-on the firmware saw the new
+  voice silent and dropped it (`NodeKeyOff(slot, 0x0F)`, traced under the debugger). At the note-off it found no voice
+  to release and wrote nothing: one-voice notes held for good, two-voice notes lost one voice early and released the
+  other. The old even/odd pair rule hid this for GM 80 (both voices in one pair) and for the keybed piano (its second
+  voice decays by itself).
+- **Fix** (`kn7000_tonegen.cpp`, `kn_tonegen.h`, `kn7000.cpp`): `tg_read()` answers the status reads from the voice
+  state (sounding bits, a 13-bit level in the EG's level domain). The release follows the firmware's write: an r0
+  write with low-byte bit 7 set (the key-off burst `0x9180`..., the `0xFF80` reset, CC 120's `0xA280`) releases that
+  voice at its rate byte. The pair rule, its 20 ms guard and the r3 "gate" rule are gone (r3 is a key-on strobe).
+- **Checked** (binary md5 `06334896`, published): every voice of the probe falls 40 dB within 0.04-0.89 s of its
+  note-off, CC 123 in 0.52 s, CC 120 in 0.13 s (before: never, except GM 80); the firmware now sends its burst to
+  every voice of every note. Another World in the tone-generator mode: at most 32 voices sounding and 10 keyed in any
+  second (before: up to 102 and 99). The gate's audio oracle moves (the keybed piano's second voice now ends): see
+  the history.
+- **Inferred, not measured on the unit:** the sense of the sounding bits (read from the code) and the level's scale
+  (the model's envelope). The gate-follow (`key_break`) and one-shot classes, written to make up for key-off writes
+  the firmware now sends, are left as they were; the KN6000's tone generator still answers 0.
+
 ## Notes and comments that newer findings contradict
 
 ### G18 — open
@@ -548,10 +575,8 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
   `mame-pr`, and had no atahle marker. Fixed with G1; it reports IN SYNC.
 - `KN7000/MAME-PR-QUEUE.md` said v5 was not pushed, but the reflog of `origin/technics-kn6000-expansion`
   shows `d497bed5caf` "update by push" at 2026-10-16 07:22. Corrected with G1.
-- Notes received on MIDI IN do not end at their note-off for GM 0 (piano), 48 (strings) and 89 (pad); GM 19
-  (church organ) falls 9 dB and then holds; All Notes Off (CC 123) and All Sound Off (CC 120) do not end them
-  either; GM 80 (square lead) ends. Measured 2026-10-21 on `7336efbe`: `notes/listen-2026-10-21/` (README, "How
-  the file got its order"). Untraced: which release write the firmware sends for a MIDI note-off on these voices.
+- Notes received on MIDI IN did not end at their note-off for most voices (`notes/listen-2026-10-21/`). Became G23,
+  done 2026-10-21: the tone generators' status reads answered 0.
 
 ## Undetermined
 
@@ -598,3 +623,5 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                    |
 | 2026-10-21 | G19: the noise is emulation speed below 100%, not the DSP's output; D2 measured; interpreter drops IRQ0s     |
 | 2026-10-21 | side finding: MIDI-received notes of most voices never end (`notes/listen-2026-10-21/`); D2 on MIDI too      |
+| 2026-10-21 | G23 added: the hanging notes are the TG status reads answering 0 (traced, `notes/tg-release-2026-10-21/`)    |
+| 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                               |

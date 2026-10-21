@@ -170,3 +170,13 @@ driver's default release rate). The driver now implements the full ATTACK->DCY1-
 DCY2->SUS2->RELEASE chain from r0-r2, with the per-sound attack (r0 hi) that this plan's
 "r0-r3 vary per sound" hunch pointed at. The behavioral findings above (which sounds decay/
 sustain/damp) all still hold — only the causal register attribution moved.
+
+## 2026-10-21: CORRECTED — the "odd companion" burst and the "no key-up write" classes were an emulator artefact
+
+The driver answered every tone-generator status read with 0, so the firmware's voice sweep (`TgVoiceStatusSweep`,
+`tg-voice-allocator.md`) saw each fresh voice at level 0 and dropped it 43-82 ms after its note-on. A note's first
+voice was gone before its key-up, and so were the only voices of most MIDI and single-voice notes. That is why the
+burst seemed to go "to the odd companion block even when only the even block sounds", and why some families seemed to
+get no key-up write. With the reads answered (notes/tg-release-2026-10-21), the firmware sends the 6-write burst to
+every voice of every note, and CC 123/120 as well. The release is now that voice's own r0 write with low-byte bit 7
+set (`0x9180`, `0xFF80`, ...); the pair rule, its 20 ms guard and the r3 rule are gone.

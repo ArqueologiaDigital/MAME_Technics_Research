@@ -8,7 +8,8 @@
 # EMU (default ~/compartilhado/kn7000-emulator, the published binary), -bios v13 (program 893), CARD (default
 # technics-roms-disasm kn7000/tools/kn7menu/build/card: the menu, AW\ with KN7APP.BIN 94910f68...) put into a copy
 # of the real card image with kn7menu/fatimg.py, the owner's loader floppy as released, fresh nvram/cfg in OUT.
-# AWI_LEN: emulated seconds of intro (default 64). OUT is scratch (~/compartilhado/tmp/..., never /tmp); the card
+# AWI_LEN: emulated seconds of intro (default 64). AWI_SCRIPT: another autoboot script in place of aw_intro.lua (one
+# that runs it, as ../tg-release-2026-10-21/aw_voices.lua does). OUT is scratch (~/compartilhado/tmp/..., never /tmp); the card
 # and floppy copies are deleted afterwards. The recordings are Another World's audio: never commit them.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -30,7 +31,7 @@ cp "$FLOPPY" "$O/floppy.img"; chmod u+w "$O/floppy.img"
 } > "$O/versions.txt"
 ARGS=(kn7000 -bios v13 -rompath ./roms -pluginspath ./plugins -skip_gameinfo -window -nomaximize
       -harddisk "$O/sd.img" -flop "$O/floppy.img" -wavwrite "$O/run.wav"
-      -nvram_directory "$O/nv" -cfg_directory "$O/cfg" -autoboot_script "$HERE/aw_intro.lua")
+      -nvram_directory "$O/nv" -cfg_directory "$O/cfg" -autoboot_script "${AWI_SCRIPT:-$HERE/aw_intro.lua}")
 ENVS=(AWI_OUT="$O" AWI_MODE="$MODE" AWI_LEN="${AWI_LEN:-64}" DISPLAY="${DISPLAY:-:0}")
 case "$CAP" in
   wav)

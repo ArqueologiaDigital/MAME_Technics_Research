@@ -1,0 +1,13 @@
+// keyoff_trace.dbg -- MAME debugger script for the release probe on -bios v16 (README.md here, run_trace.sh).
+// QUESTION IT SERVES: which of the library's key-off functions run at each note-off, with which arguments?
+// The addresses are program.s's equates for v16 (build 941); v13 has the same code about 0x18 bytes lower here.
+// Each hit goes to error.log (-log) with the CPU's instruction count TINSN for ordering.
+bp 4C036EA4,1,{logerror "TR KeyEvent       d0=%08X d1=%08X d2=%08X d3=%08X a0=%08X n=%d\n",d0,d1,d2,d3,a0,tinsn; g}
+bp 4C02E0F9,1,{logerror "TR HoldQuery      d0=%08X d1=%08X n=%d\n",d0,d1,tinsn; g}
+bp 4C02E2C7,1,{logerror "TR HoldMark       d0=%08X d1=%08X n=%d\n",d0,d1,tinsn; g}
+bp 4C03B0CD,1,{logerror "TR NodeKeyOff     d0=%08X d1=%08X n=%d\n",d0,d1,tinsn; g}
+bp 4C036D3F,1,{logerror "TR SlotService    d0=%08X d1=%08X n=%d\n",d0,d1,tinsn; g}
+bp 4C0376E3,1,{logerror "TR EgBurstWrite   d0=%08X a0=%08X n=%d\n",d0,a0,tinsn; g}
+bp 4C0376A5,1,{logerror "TR GateOff        d0=%08X a0=%08X n=%d\n",d0,a0,tinsn; g}
+bp 4C037398,1,{logerror "TR GateOn         d0=%08X a0=%08X n=%d\n",d0,a0,tinsn; g}
+g

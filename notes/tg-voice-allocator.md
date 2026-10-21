@@ -109,9 +109,11 @@ displaced victim slot is notified via 0x4C00F824.
 `TgVoiceStatusSweep` 0x4C03AA86 polls the TGs 16 slots per pass
 (rotating group counter 0x5000B210):
 
-* command 0xFC08|group returns 16 "gone" bits, edged against the
-  sustain mask 0x500D288C into 0x500D287C. A newly-gone, non-free node
-  is retired: `TgVoiceNodeRetire` decrements the side-active count
+* command 0xFC08|group returns 16 "still sounding" bits (corrected
+  2026-10-21, notes/tg-release-2026-10-21: the answer is ORed with the
+  sustain mask 0x500D288C, held keys counting as 1, and stored in
+  0x500D287C; a bit falling from 1 to 0 is a voice that ended). A
+  newly-ended, non-free node is retired: `TgVoiceNodeRetire` decrements the side-active count
   (never below the quota), moves the node to global-free class 6
   (head 0x500D1274) and clears it.
 * surviving slots get their envelope level polled (cmd 0xFC02|slot<<4,

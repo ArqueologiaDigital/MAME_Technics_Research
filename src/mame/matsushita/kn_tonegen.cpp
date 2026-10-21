@@ -284,21 +284,6 @@ void kn_tonegen_base_device::rom_voice_pitch(int v, uint32_t p18)
 		m_rrate[v] = rom_rate(p18, m_rsamples[m_rsel[v]].exponent);
 }
 
-	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
-	// pairs, resolved at note-on -- see tg_write and notes/tg-envelope-sweep-results.md).
-	// Full stage chain: linear ATTACK to PEAK (r0), exponential DCY1 toward SUS1 (r1),
-	// exponential DCY2 toward SUS2 (r2, the long-tail second stage), then exponential
-	// RELEASE to silence when the gate drops (r3=0x8000 / managed r0 burst / steal mute).
-	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
-
-
-	// Per-voice amplitude envelope DRIVEN BY THE FIRMWARE'S 7-param EG (r0/r1/r2 rate|level
-	// pairs, resolved at note-on -- see tg_write and notes/tg-envelope-sweep-results.md).
-	// Full stage chain: linear ATTACK to PEAK (r0), exponential DCY1 toward SUS1 (r1),
-	// exponential DCY2 toward SUS2 (r2, the long-tail second stage), then exponential
-	// RELEASE to silence when the gate drops (r3=0x8000 / managed r0 burst / steal mute).
-	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
-
 // The effect-send gains are std::atomic<float>, which save_item() cannot register, so they
 // are shadowed into m_gain_save around a save/load. They are genuine runtime state: the
 // firmware writes all nine from its own register traffic (tg_write), and the driver writes

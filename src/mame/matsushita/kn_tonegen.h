@@ -68,7 +68,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -98,9 +100,15 @@ public:
 	//   rec_type:   the voice record's synthesis/release class, or -1 if unknown.
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) = 0;
 
+	// A read of the data port (+2) after an address write: the chip's answer about its voices.
+	// The firmware's voice allocator polls it to see which voices still sound and how loud
+	// they are; a model that does not decode it answers 0 (every voice silent).
+	virtual uint16_t tg_read(int tg, uint16_t addr) { return 0; }
+
 	// Envelope stages (see notes/tg-envelope-sweep-results.md). The firmware's 7-param
 	// amplitude EG: ATTACK to PEAK (r0), DCY1 toward SUS1 (r1), DCY2 toward SUS2 (r2),
-	// RELEASE to silence on the r3 gate-off / managed r0 burst / 0xC000 steal.
+	// RELEASE to silence on an r0 write with the release flag (low-byte bit 7: the key-off burst,
+	// the 0xFF80 reset) or the 0xC000 steal.
 	enum : uint8_t { ST_ATTACK = 0, ST_DECAY1, ST_DECAY2, ST_RELEASE };
 
 	// PROVISIONAL chip rate-byte -> seconds law (higher byte = faster; sweep-calibrated
@@ -153,12 +161,19 @@ protected:
 	// pairs, resolved at note-on -- see tg_write and notes/tg-envelope-sweep-results.md).
 	// Full stage chain: linear ATTACK to PEAK (r0), exponential DCY1 toward SUS1 (r1),
 	// exponential DCY2 toward SUS2 (r2, the long-tail second stage), then exponential
-	// RELEASE to silence when the gate drops (r3=0x8000 / managed r0 burst / steal mute).
-	// A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
+	// RELEASE to silence when the firmware writes r0 with the release flag (low-byte bit 7: its
+	// key-off burst, or the 0xFF80 reset) or the 0xC000 steal mute. A piano (SUS1=SUS2=0) genuinely decays to silence in two stages; an organ
 	// (SUS1=SUS2=max) holds; an edited slow attack (r0 hi below ~0xD0) swells audibly.
 	virtual void sound_stream_update(sound_stream &stream) override;
 
 	static constexpr int MAX_VOICES = 128;   // the KN7000, the largest of the family
+
+	// What the chip reports about voice v (tg_read): whether it still sounds, and its envelope
+	// level as a 13-bit value, full scale 0x1FFF at the EG's level 0x7F. The model's envelope is
+	// already in the EG's level domain (PEAK, SUS1 and SUS2 are the register levels / 0x7F), so
+	// the level is read in that same domain; the chip's own curve is not known.
+	bool voice_sounding(int v) const { return m_stage[v] == ST_ATTACK || voice_level13(v) != 0; }
+	uint16_t voice_level13(int v) const { return uint16_t(std::clamp(std::lround(m_env[v] * 0x1FFF), 0L, 0x1FFFL)); }
 
 	// ---- per-voice state and the effect-send gains ----
 	// Shared MECHANISM (see the header comment for the firmware evidence); the derived
@@ -235,7 +250,7 @@ protected:
 	double   m_d1c[128]  = { };       // per-sample DCY1 coefficient toward SUS1 (r1 hi)
 	double   m_d2c[128]  = { };       // per-sample DCY2 coefficient toward SUS2 (r2 hi)
 	double   m_rlsc[128] = { };       // per-sample release coefficient (rA hi default,
-	                                  // overridden by the managed key-up burst's r0 rate)
+	                                  // overridden by the key-off r0 write's rate)
 	uint32_t m_tgwrites = 0;         // count of firmware pitch writes seen (0 = engine dormant)
 	int      m_num_voices;           // 128 (KN7000) or 64 (KN6000/KN6500)
 

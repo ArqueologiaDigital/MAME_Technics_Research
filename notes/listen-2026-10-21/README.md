@@ -95,6 +95,9 @@ write (`r3` = 0x80xx) or on the managed release burst (`kn7000_tonegen.cpp`). Wh
 MIDI note-off on these voices hasn't been traced. The order of layout 5 works around this: the chord whose release
 matters comes first, into silence. On the real instrument, all five sections should end at their note-offs.
 
+Traced and fixed later on 2026-10-21: the tone generators' status reads answered 0, so the firmware dropped its
+voices within 0.1 s of each note-on (`../tg-release-2026-10-21/README.md`, OVERLAY-GAPS G23).
+
 ## Another World in the tone-generator mode: when RIGHT 2 is read
 
 The first `tg` run pressed PART SELECT RIGHT 2 between the end of the sample bank (80.70 s) and the intro (84.50 s).
