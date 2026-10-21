@@ -625,3 +625,4 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 | 2026-10-21 | side finding: MIDI-received notes of most voices never end (`notes/listen-2026-10-21/`); D2 on MIDI too      |
 | 2026-10-21 | G23 added: the hanging notes are the TG status reads answering 0 (traced, `notes/tg-release-2026-10-21/`)    |
 | 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                               |
+| 2026-10-21 | G23: oracle re-baselined to `d5205327` (keybed piano's 2nd voice ends); gate 16 passed, 1 failed (it)        |

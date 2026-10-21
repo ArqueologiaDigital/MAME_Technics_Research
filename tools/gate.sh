@@ -79,7 +79,12 @@ MODELS="kn7000:11 kn5000:18 kn6000:6 kn6500:7 kn2400:4 kn2600:4 kn1500:0"
 # same sample but lines up best 1.94 ms later; the slower key-on writes to the tone generators change its attack (43% of
 # its energy left once aligned, first second 12% quieter), the decay from second 18 is the same.
 # Evidence: notes/cpu-timing-2026-10-20/README.md.
-ORACLE_MD5="5069aedab573b1c63ef6df7689382bd9"
+# Re-baselined 2026-10-21 from 5069aedab573b1c63ef6df7689382bd9: the tone generators answer the firmware's status reads
+# (G23, 7ad5627), so its voice sweep no longer drops a note's voices 43-82 ms after the note-on, and the key-up reaches
+# both of the keybed piano's voices. Every frame is identical up to 17.0656 s (66 ms after the key-up); after it the
+# second voice ends with the first: second 18 -60.0 -> -89.1 dBFS, digital zero from second 19 (it decayed at -65 to
+# -75 dBFS). Evidence: notes/tg-release-2026-10-21/README.md (oracle_ab.sh, oracle_diff.py).
+ORACLE_MD5="d520532727c7d590066fc888a18a3f5d"
 
 # KN5000 demo-audio oracle. Added 2026-08-15 because the gate passed 16/16 on a
 # detect_period change it structurally COULD NOT SEE: its kn7000 oracle is the wrong machine,

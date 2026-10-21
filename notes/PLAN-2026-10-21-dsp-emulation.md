@@ -239,8 +239,9 @@ E1, E3, E4, E5 and E6 can be one app with five modes, released once, so that Fel
 ## 4. The work plan, in short iterations
 
 Each step is one or two commits with a light, targeted check. Full validation runs only at the four milestones.
-"Oracle" means the gate's KN7000 audio oracle (`tools/gate.sh`, ORACLE_MD5 `5069aeda`). When it moves, it is
-re-baselined in its own commit with an attribution run, as before (`oracle_attribution_msgr.sh`).
+"Oracle" means the gate's KN7000 audio oracle (`tools/gate.sh`, ORACLE_MD5 `5069aeda`; `d5205327` since 2026-10-21,
+G23). When it moves, it is re-baselined in its own commit with an attribution run, as before
+(`oracle_attribution_msgr.sh`).
 
 ### Phase 1: cheap correctness (no unit work needed)
 
