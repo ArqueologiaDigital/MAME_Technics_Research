@@ -216,7 +216,7 @@ lost on every restart. Small, and the most noticeable item here.
   one's-complement checksum (`SumU32Words`, 0x484D78A6) (`technics-roms-disasm/kn7000/kn7000_manual.sym`).
   Whether the chip repeats across the rest of the 16 MB window has not been measured on the unit; a read-only
   dumper pass over 0x44000000 would answer it and back up Felipe's settings at the same time (2026-10-20).
-- **Another World depends on today's wrong model.** Both of its KN7000 builds (`kn5000-anotherworld/kn7000`,
+- **Another World depends on today's wrong model.** Both of its KN7000 builds (`technics-anotherworld/kn7000`,
   the SP7001 ride-along and AW.CNV) keep their VM state and page buffers at 0x44050000-0x4413FFFF
   (`src/vm.inc:43-73`, `src/platform.inc:51-60`, which calls the window "scratch the firmware does not use").
   On the real unit that is IC23, so the game would overwrite the panel memories or crash. Modelling IC23
