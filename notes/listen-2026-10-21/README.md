@@ -12,6 +12,12 @@ Everything was run on the published emulator `~/compartilhado/kn7000-emulator/kn
 DSP at 60 MHz, DRC on), `-bios v13` (program 893), with `-window` and `DISPLAY=:0`. Background:
 `notes/dsp-noise-2026-10-21/README.md` (live capture, speed) and `notes/PLAN-2026-10-21-dsp-emulation.md` (D2).
 
+## Felipe's verdict (2026-10-21)
+
+He listened to `aw-intro-dsp-computed.wav` (Another World's intro in DSP mode, MAME's `-wavwrite` stream) and found
+it "sounding great" -- "perfect"; for him that settles that the noise heard live in MAME is emulation speed, not
+wrongly computed audio (`notes/dsp-noise-2026-10-21/README.md`). The other files were not listened to.
+
 ## The scripts
 
 | file                | question it answers                                                                                                                                                                                                                                                        |
