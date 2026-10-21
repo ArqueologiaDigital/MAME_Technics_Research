@@ -548,6 +548,10 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
   `mame-pr`, and had no atahle marker. Fixed with G1; it reports IN SYNC.
 - `KN7000/MAME-PR-QUEUE.md` said v5 was not pushed, but the reflog of `origin/technics-kn6000-expansion`
   shows `d497bed5caf` "update by push" at 2026-10-16 07:22. Corrected with G1.
+- Notes received on MIDI IN do not end at their note-off for GM 0 (piano), 48 (strings) and 89 (pad); GM 19
+  (church organ) falls 9 dB and then holds; All Notes Off (CC 123) and All Sound Off (CC 120) do not end them
+  either; GM 80 (square lead) ends. Measured 2026-10-21 on `7336efbe`: `notes/listen-2026-10-21/` (README, "How
+  the file got its order"). Untraced: which release write the firmware sends for a MIDI note-off on these voices.
 
 ## Undetermined
 
@@ -593,3 +597,4 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)               |
 | 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                    |
 | 2026-10-21 | G19: the noise is emulation speed below 100%, not the DSP's output; D2 measured; interpreter drops IRQ0s     |
+| 2026-10-21 | side finding: MIDI-received notes of most voices never end (`notes/listen-2026-10-21/`); D2 on MIDI too      |
