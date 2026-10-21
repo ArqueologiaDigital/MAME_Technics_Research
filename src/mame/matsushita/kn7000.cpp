@@ -2547,14 +2547,17 @@ void kn7000_state::kn7000(machine_config &config)
 	m_dspbridge->add_route(0, "lspeaker", 1.0);
 	m_dspbridge->add_route(1, "rspeaker", 1.0);
 
-	// IC306 effects DSP -- Analog Devices ADSP-21065L SHARC (part S21065LKS240, ~60 MHz),
+	// IC306 effects DSP -- Analog Devices ADSP-21065L SHARC (part S21065LKS240, 60 MHz),
 	// host-booted by the MN10300 over the 0x98000000 (index) / 0x9C000000 (data) port.
 	// Phase F.1: instantiate MAME's 2106x SHARC core (the 21065L shares the ISA) in
 	// HOST boot mode so it sits idle until the firmware uploads its program (F.2). The
 	// 21065L's own memory/IOP personality (a subclass) and the SPORT audio path (F.3)
 	// come next; for now this proves the core integrates and the KN7000 still boots.
 	// See notes/sharc-lle-assessment.md.
-	ADSP21065L(config, m_dsp, 66'000'000);   // IC306 rated/run at 66 MHz (was 60 -- faithful correction)
+	// 60 MHz: CLKIN 30 MHz doubled. The kernel's SDRDIV (930) with its IOCTL (CAS latency 2, tRP 2) is the
+	// ADSP-21065L User's Manual's own worked example for CLKIN 30 MHz; the part is the 60 MHz grade. The kernel
+	// meets its frame budget at 60 as at 66 (notes/dsp-frame-budget; notes/PLAN-2026-10-21-dsp-emulation.md, S3).
+	ADSP21065L(config, m_dsp, 60'000'000);
 	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
 	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);

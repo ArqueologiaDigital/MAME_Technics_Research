@@ -27,7 +27,7 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G2  | Main CPU core fixes upstream has                        | mn10300 core       | ~200 lines   | done        |
 | G3  | Effects DSP save state freezes the effects              | KN7000 driver      | trivial      | open        |
 | G4  | Effects DSP branch B fixes                              | SHARC core         | small-medium | open        |
-| G5  | Effects DSP clock, 60 or 66 MHz                         | KN7000 driver      | one line     | decision    |
+| G5  | Effects DSP clock, 60 or 66 MHz                         | KN7000 driver      | one line     | done        |
 | G6  | IC23 battery-backed SRAM (panel memories) as NVRAM      | KN7000 driver      | small        | done        |
 | G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx    | KN7000 driver      | small        | in progress |
 | G8  | Interrupt vectors through IVAR, not per-BIOS addresses  | mn10300 core       | small-medium | open        |
@@ -159,12 +159,18 @@ All SHARC/DSP-side; none touches the MN10300 interrupt model.
 - **Plan** (2026-10-21): `notes/PLAN-2026-10-21-dsp-emulation.md`, steps S7 (core convergence) and S8 (SPORT
   DMA moves the words).
 - **Converging fully onto B (A1.14) would lose:** the DSP self-test handshake on group 0x17, pitch from
-  the voice record and the one-shot mode (A2.3), the wave pack, flushing the bridge rings on reset, and
-  the 66 MHz frame-rate result.
+  the voice record and the one-shot mode (A2.3), the wave pack and flushing the bridge rings on reset.
+  (The clock is 60 MHz on both sides since G5.)
 
-### G5. Effects DSP clock — decision
+### G5. Effects DSP clock — done 2026-10-21 (60 MHz; published)
 
-The overlay runs the ADSP-21065L at 66 MHz (`kn7000.cpp` near 2287, `b1028bd`, to stop frame
+**Done** (Felipe's decision, plan step S3): `kn7000.cpp` runs the ADSP-21065L at 60 MHz. Checked on the new binary
+(md5 `7336efbe`): the gate's audio oracle alone is unchanged at `5069aeda` (`notes/dsp-noise-2026-10-21/oracle_only.sh`;
+the 66 MHz binary gives the same by that recipe); DSPTONE's MAME run 10 of 10 with the dead flag 0; Another World's
+DSP mode (`run_round3.sh OUT keys`) gives the 66 MHz reference's event log line for line, intro audible. E3 (a timer
+probe on the unit) still measures the real clock. The history before the change:
+
+The overlay ran the ADSP-21065L at 66 MHz (`kn7000.cpp` near 2287, `b1028bd`, to stop frame
 overruns); the part is marked S21065LKS240, a 60 MHz grade, and the overlay's own comment says ~60.
 Branch B uses 60. Same trade-off as the ALUSAT item in G4. 2026-10-21: the kernel's SDRDIV (930) with its IOCTL
 (CAS latency 2, tRP 2) is the manual's own worked example for CLKIN 30 MHz, so 60 MHz; plan
@@ -535,7 +541,7 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 ## Undetermined
 
 - What 0x20000070 bit 7 does; whether the rhythm site holds IC18 or IC20; what empty expansion slots read;
-  IC21's real part size; the DSP clock (G5).
+  IC21's real part size; the DSP clock on the unit (G5 set 60 MHz from the manual's SDRDIV example; E3 measures it).
 - Whether B at 60 MHz with run-time ALUSAT still finishes 44,100 DSP frames/s; whether the effect kernel
   reads IOP registers back.
 - The group-0x17 handshake: upstream review round 1 measured zero G17ICR writes in 45 s on all five sets;
@@ -574,3 +580,4 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)     |
 | 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)          |
 | 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)               |
+| 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                    |
