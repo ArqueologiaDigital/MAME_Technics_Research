@@ -126,7 +126,9 @@ serial port, so none conflicts with the overlay's own interrupt model (A1.1 in
 
 The overlay saves only `m_dsp_index` and `m_dsp_dl_words` of the DSP host-boot state. After a state
 load `m_dsp_running` is false, so `dsp_audio_tick` returns before raising IRQ0 and the effects freeze.
-Branch B (`technics-kn7000-dsp`) saves all of it. A real overlay bug; trivial fix.
+Branch B (`technics-kn7000-dsp`) saves all of it. A real overlay bug; trivial fix. Confirmed by a run on 2026-10-21
+(`notes/dsp-plan-2026-10-21/`: after a state load DM 0xC003 stops moving). Plan:
+`notes/PLAN-2026-10-21-dsp-emulation.md`, step S1.
 
 ### G4. Effects DSP branch B (`technics-kn7000-dsp`, `a1c1fe1db93`) — open
 
@@ -154,6 +156,8 @@ All SHARC/DSP-side; none touches the MN10300 interrupt model.
 - **Dual add/subtract**: the add half's AN/AZ corrected after saturation. Trivial.
 - **Recompiler scratch registers I8/I9 instead of I6/I7.** Latent while `DISABLE_FAST_REGISTERS=1`.
   Trivial.
+- **Plan** (2026-10-21): `notes/PLAN-2026-10-21-dsp-emulation.md`, steps S7 (core convergence) and S8 (SPORT
+  DMA moves the words).
 - **Converging fully onto B (A1.14) would lose:** the DSP self-test handshake on group 0x17, pitch from
   the voice record and the one-shot mode (A2.3), the wave pack, flushing the bridge rings on reset, and
   the 66 MHz frame-rate result.
@@ -162,7 +166,10 @@ All SHARC/DSP-side; none touches the MN10300 interrupt model.
 
 The overlay runs the ADSP-21065L at 66 MHz (`kn7000.cpp` near 2287, `b1028bd`, to stop frame
 overruns); the part is marked S21065LKS240, a 60 MHz grade, and the overlay's own comment says ~60.
-Branch B uses 60. Same trade-off as the ALUSAT item in G4.
+Branch B uses 60. Same trade-off as the ALUSAT item in G4. 2026-10-21: the kernel's SDRDIV (930) with its IOCTL
+(CAS latency 2, tRP 2) is the manual's own worked example for CLKIN 30 MHz, so 60 MHz; plan
+`notes/PLAN-2026-10-21-dsp-emulation.md` recommends 60 MHz now (step S3, decision O2) and a DSP-side timer
+probe (E3) to confirm.
 
 ### G16. KN5000 branch work — open
 
@@ -367,7 +374,9 @@ From the sweep, not re-checked:
 The overlay's KN7000 sound is very noisy, and the DSP is the prime suspect. Felipe wants it off for now without
 losing the code: a machine-configuration switch (Bypassed by default, Emulated for DSP research) that keeps
 the SHARC halted, so the bridge passes the tone generator through. The gate keeps a DSP-path oracle with the
-switch on. Plan step 1.
+switch on. Plan step 1. The 2026-10-21 DSP plan (`notes/PLAN-2026-10-21-dsp-emulation.md`, D2, D12)
+names a likelier cause: with REVERB on the bridge outputs unit 0's return alone, and the reverb programs write only
+wet, so the dry sound is probably missing.
 
 ### G20. Probe the DSP (and the tone generators) on the real unit — in progress
 
@@ -399,7 +408,8 @@ start-up underflow (TUVF_A), and the transfers themselves (the driver still read
 The .CNV route can run probes on Felipe's unit and log to the SD card: read back the SHARC's memory and IOP
 registers through the host port, its frame rate, the group-0x17 handshake; for the TG, only what offline
 decoding leaves open. Emulator first on `-bios v13`, same probe files from MAME and the unit, compared byte for
-byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13.
+byte. Volatile I/O writes only. Plan steps 4-6; it feeds G3, G4, G5 and G13. The next DSP probes (RETMAP, DSPCLK,
+DSPMAP, SHARCTEST, the handshake source) are designed in `notes/PLAN-2026-10-21-dsp-emulation.md`, section 3.
 
 ### G21. IC401, the SD sub-CPU: the SDMODE switch and the commands nobody sends — open
 
@@ -563,3 +573,4 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c     |
 | 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)     |
 | 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)          |
+| 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)               |
