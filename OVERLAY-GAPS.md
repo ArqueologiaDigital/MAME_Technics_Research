@@ -384,6 +384,17 @@ switch on. Plan step 1. The 2026-10-21 DSP plan (`notes/PLAN-2026-10-21-dsp-emul
 names a likelier cause: with REVERB on the bridge outputs unit 0's return alone, and the reverb programs write only
 wet, so the dry sound is probably missing.
 
+2026-10-21, measured (`notes/dsp-noise-2026-10-21/`): **the noise is the emulation running below real time.** MAME's
+computed stream (`-wavwrite`) is clean, no broadband noise or clipping, and the same md5 whatever the host speed. A
+live capture (`pw-record`) at 60% speed (DSP emulated, in a window on the VM) plays the passage stretched, about 8%
+flat (C4 at 241 Hz for 261.5), with the floor between the harmonics 13 dB higher; DSP bypassed at 78% it is the same
+(21 dB). At about 100% (`-video none`) the live sound equals the computed stream, DSP or not. On the VM the window
+costs more host time than the SHARC (DRC already on). D2 is confirmed as a separate, non-noise error: REVERB on
+(the boot state) gives the wet only, a held C4 7.2 dB under the dry note. A switch is therefore not what removes the
+noise; it stays planned (S2) for research. The tests used a scratch-only bypass build (`bypass-scratch.patch`, not in
+the overlay). Side finding for G4/S15: the SHARC interpreter (`-nodrc`) drops three frames in four (it takes IRQ0
+only at the start of each `execute_run`); the DRC is right.
+
 ### G20. Probe the DSP (and the tone generators) on the real unit — in progress
 
 Started 2026-10-20. Emulator side done: the 21065L keeps an IOP register file, host reads return it, host
@@ -581,3 +592,4 @@ ran far faster than on the unit (Another World: smooth here, slow on Felipe's KN
 | 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)          |
 | 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)               |
 | 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                    |
+| 2026-10-21 | G19: the noise is emulation speed below 100%, not the DSP's output; D2 measured; interpreter drops IRQ0s     |

@@ -1,0 +1,13 @@
+diff --git a/src/mame/matsushita/kn7000.cpp b/src/mame/matsushita/kn7000.cpp
+index 37fdf40..f933d6d 100644
+--- a/src/mame/matsushita/kn7000.cpp
++++ b/src/mame/matsushita/kn7000.cpp
+@@ -2557,7 +2557,7 @@ void kn7000_state::kn7000(machine_config &config)
+ 	// 60 MHz: CLKIN 30 MHz doubled. The kernel's SDRDIV (930) with its IOCTL (CAS latency 2, tRP 2) is the
+ 	// ADSP-21065L User's Manual's own worked example for CLKIN 30 MHz; the part is the 60 MHz grade. The kernel
+ 	// meets its frame budget at 60 as at 66 (notes/dsp-frame-budget; notes/PLAN-2026-10-21-dsp-emulation.md, S3).
+-	ADSP21065L(config, m_dsp, 60'000'000);
++	ADSP21065L(config, m_dsp, getenv("KN7000_DSP_CLOCK_SCRATCH") ? atoi(getenv("KN7000_DSP_CLOCK_SCRATCH")) : 60'000'000);   // SCRATCH ONLY
+ 	m_dsp->enable_recompiler();   // DRC: the effects kernel is fixed-point-MAC heavy; interpreting
+ 	                              // it drops the machine to ~36% real time, the DRC keeps it near 90%
+ 	m_dsp->set_boot_mode(adsp21065l_device::BOOT_MODE_HOST);

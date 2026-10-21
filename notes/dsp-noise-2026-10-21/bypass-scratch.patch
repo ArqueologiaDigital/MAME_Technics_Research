@@ -1,0 +1,23 @@
+--- a/src/mame/matsushita/kn7000.cpp
++++ b/src/mame/matsushita/kn7000.cpp
+@@ -1358,7 +1358,8 @@
+ 				if (m_kn7000_timing)
+ 					m_maincpu->set_dsp_handshake_selfack(false);   // from now on, once per frame (dsp_audio_tick)
+ 				logerror("DSP: kernel loaded (%u words); releasing SHARC (entry 0x8005)\n", m_dsp_dl_words);
+-				m_dsp->set_input_line(INPUT_LINE_HALT, CLEAR_LINE);   // reset_pc()=0x8004 -> first-executed 0x8005 (JUMP init)
++				if (!getenv("KN7000_DSP_BYPASS_SCRATCH"))   // SCRATCH ONLY (notes/dsp-noise-2026-10-21): keep the SHARC halted
++					m_dsp->set_input_line(INPUT_LINE_HALT, CLEAR_LINE);   // reset_pc()=0x8004 -> first-executed 0x8005 (JUMP init)
+ 				// Start the audio frame tick: the kernel's reset handler enables IRQ0 and then
+ 				// IDLEs (PM 0x8076) waiting for the first IRQ0, which drives its main loop one
+ 				// audio frame per edge. On real hardware IRQ0 comes from the SPORT/codec frame
+@@ -1448,6 +1449,10 @@
+ 		m_dsp->set_flag_input(3, m_dsp_flag3);
+ 	}
+ 
++	static const bool scratch_bypass = getenv("KN7000_DSP_BYPASS_SCRATCH") != nullptr;
++	if (scratch_bypass)   // SCRATCH ONLY: no IRQ0, no ring exchange; the bridge passes the TG through
++		return;
++
+ 	// F.3 audio path -- REAL TOPOLOGY (SPORT DMA-chain RE, workflow wf_b58b1fda-df3):
+ 	// none of the DSP's TX slots feeds a DAC directly. All four SPORT TX pins loop back
+ 	// into the TONE GENERATOR (DT0A/DT0B/DT1A/DT1B -> TG SDIE0-3); the TG mixes its
