@@ -583,6 +583,9 @@ figures: `notes/tg-release-2026-10-21/README.md`.
   shows `d497bed5caf` "update by push" at 2026-10-16 07:22. Corrected with G1.
 - Notes received on MIDI IN did not end at their note-off for most voices (`notes/listen-2026-10-21/`). Became G23,
   done 2026-10-21: the tone generators' status reads answered 0.
+- The KN6000's boot screen (3.8-4.9 s) is garbled because it is a 640x240 picture copied from the undumped table
+  ROM: the firmware finds it through `0x480000EC`, which reads `0xFFFFFFFF` in the font placeholder, so it draws
+  the placeholder's own first 153,600 bytes (`notes/kn6000-boot-picture-2026-10-22/`). Fix: dump IC13/IC14.
 
 ## Undetermined
 
@@ -633,3 +636,4 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 | 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                               |
 | 2026-10-21 | G23: oracle re-baselined to `d5205327` (keybed piano's 2nd voice ends); gate 16 passed, 1 failed (it)        |
 | 2026-10-22 | G23 on the KN6000: same sweep, same fix; 0x98040002 kept out of its TG; published md5 `0f75c6df`             |
+| 2026-10-22 | TG voice code shared (3d8fb52, 8aab4d4; output byte-identical); KN6000 boot picture traced to the table ROM  |
