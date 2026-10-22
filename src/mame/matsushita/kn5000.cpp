@@ -257,7 +257,7 @@ private:
 	// the firmware's software envelope / voice engine treats them like real key
 	// presses. Encoding matches keybed_scan(): note-on = (vel<<8)|(raw|0x80),
 	// note-off = 0xFF00|raw, where raw = MIDI note - 36 (the 61-key bed spans
-	// MIDI 36..96 = C2..C7). Connect a host controller with -kbdmidi <port>.
+	// MIDI 36..96, C1..C6 as the firmware names them). Connect a host controller with -kbdmidi <port>.
 	uint8_t m_kbd_midi_status = 0;      // MIDI running-status byte
 	uint8_t m_kbd_midi_d1 = 0;          // first data byte (note)
 	bool    m_kbd_midi_have_d1 = false;
@@ -275,7 +275,7 @@ private:
 		if (!m_kbd_midi_have_d1) { m_kbd_midi_d1 = b; m_kbd_midi_have_d1 = true; return; }
 		const uint8_t note = m_kbd_midi_d1, vel = b;
 		m_kbd_midi_have_d1 = false;         // ready for the next note in running status
-		if (note < 36 || note > 96) return; // outside the 61-key bed (C2..C7)
+		if (note < 36 || note > 96) return; // outside the 61-key bed (MIDI 36..96)
 		const uint8_t raw = note - 36;
 		const bool on = (cmd == 0x90) && (vel != 0);
 		// Match keybed_scan()'s wire format: note-on sets bit 7 of the key byte and
@@ -1057,12 +1057,25 @@ static INPUT_PORTS_START(kn5000)
 	// the panel sub-CPUs own those inputs. The layout references them as "cpanel:CP*_SEG*".
 
 
-	// 61-key keyboard (C2-C7) — directly connected to tone generator IC303
+	// 61-key keyboard (C1-C6) — directly connected to tone generator IC303
 	// IC303 does hardware key scanning; this HLE injects events at 0x110000
-	// PC keyboard mapping: Z-row = lower octave, Q-row = upper octave (piano layout)
-	// Base octave = C4 (raw notes 24-47 for the two mapped octaves)
+	// Keys are named as the firmware's SPLIT POINT screen names them: middle C (MIDI 60) is C3.
 
-	PORT_START("KEY0")  // C2-B2 (raw notes 0-11, MIDI 36-47)
+	PORT_START("KEY0")  // C1-B1 (raw notes 0-11, MIDI 36-47)
+	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C1")
+	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#1")
+	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D1")
+	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#1")
+	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E1")
+	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F1")
+	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#1")
+	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G1")
+	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#1")
+	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A1")
+	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#1")
+	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B1")
+
+	PORT_START("KEY1")  // C2-B2 (raw notes 12-23, MIDI 48-59)
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C2")
 	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#2")
 	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D2")
@@ -1076,7 +1089,12 @@ static INPUT_PORTS_START(kn5000)
 	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#2")
 	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B2")
 
-	PORT_START("KEY1")  // C3-B3 (raw notes 12-23, MIDI 48-59)
+	// KEY2 and KEY3 have no default PORT_CODE assignments because all candidate
+	// keys (Z/S/X/D/C/V/G/B/H/N/J/M, Q/2/W/3/E/R/5/T/6/Y/7/U) conflict with
+	// control panel button mappings above. Use MAME's input configuration UI
+	// (Tab menu) to assign keyboard keys to these notes.
+
+	PORT_START("KEY2")  // C3-B3 (raw notes 24-35, MIDI 60-71) — Middle C octave
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C3")
 	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#3")
 	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D3")
@@ -1090,12 +1108,7 @@ static INPUT_PORTS_START(kn5000)
 	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#3")
 	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B3")
 
-	// KEY2 and KEY3 have no default PORT_CODE assignments because all candidate
-	// keys (Z/S/X/D/C/V/G/B/H/N/J/M, Q/2/W/3/E/R/5/T/6/Y/7/U) conflict with
-	// control panel button mappings above. Use MAME's input configuration UI
-	// (Tab menu) to assign keyboard keys to these notes.
-
-	PORT_START("KEY2")  // C4-B4 (raw notes 24-35, MIDI 60-71) — Middle C octave
+	PORT_START("KEY3")  // C4-B4 (raw notes 36-47, MIDI 72-83)
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C4")
 	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#4")
 	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D4")
@@ -1109,7 +1122,7 @@ static INPUT_PORTS_START(kn5000)
 	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#4")
 	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B4")
 
-	PORT_START("KEY3")  // C5-B5 (raw notes 36-47, MIDI 72-83)
+	PORT_START("KEY4")  // C5-B5 (raw notes 48-59, MIDI 84-95)
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C5")
 	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#5")
 	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D5")
@@ -1123,22 +1136,8 @@ static INPUT_PORTS_START(kn5000)
 	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#5")
 	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B5")
 
-	PORT_START("KEY4")  // C6-B6 (raw notes 48-59, MIDI 84-95)
+	PORT_START("KEY5")  // C6 (raw note 60, MIDI 96) — highest key
 	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C6")
-	PORT_BIT( 0x002, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C#6")
-	PORT_BIT( 0x004, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D6")
-	PORT_BIT( 0x008, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("D#6")
-	PORT_BIT( 0x010, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("E6")
-	PORT_BIT( 0x020, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F6")
-	PORT_BIT( 0x040, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("F#6")
-	PORT_BIT( 0x080, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G6")
-	PORT_BIT( 0x100, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("G#6")
-	PORT_BIT( 0x200, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A6")
-	PORT_BIT( 0x400, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("A#6")
-	PORT_BIT( 0x800, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("B6")
-
-	PORT_START("KEY5")  // C7 (raw note 60, MIDI 96) — highest key
-	PORT_BIT( 0x001, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("C7")
 	PORT_BIT( 0xffe, IP_ACTIVE_HIGH, IPT_UNUSED )
 INPUT_PORTS_END
 

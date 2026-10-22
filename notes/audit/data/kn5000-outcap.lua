@@ -57,11 +57,11 @@ emu.register_periodic(function()
 		OUT:write(string.format("# ARM t=%.6f writes_before_arm=%d\n", t, NW))
 	elseif st == 1 and t >= T0 + 0.30 then
 		st = 2
-		OUT:write(string.format("# KEYDOWN C4 t=%.6f ok=%s\n", t, tostring(setkey(":KEY2", "C4", 1))))
+		OUT:write(string.format("# KEYDOWN C4 t=%.6f ok=%s\n", t, tostring(setkey(":KEY2", "C3", 1))))
 	elseif st == 2 and t >= T0 + 2.30 then
 		st = 3
 		OUT:write(string.format("# KEYUP C4 t=%.6f\n", t))
-		setkey(":KEY2", "C4", 0)
+		setkey(":KEY2", "C3", 0)
 	elseif st == 3 and t >= T0 + 4.30 then
 		st = 4
 		OUT:write(string.format("# DONE t=%.6f nrec=%d nw=%d\n", t, NREC, NW))

@@ -33,9 +33,9 @@ emu.register_periodic(function()
 		sp:write_u8(0x0413FB+0x23, 0x55); sp:write_u8(0x0413FB+0x24, 0x55)
 		OUT:write("# POKE slot0<-2A slot1<-55  (PREDICT: +0180=002A, +0181=0055)\n")
 	elseif st == 2 and t >= T0 + 0.30 then
-		st = 3; OUT:write("# KEYDOWN ok="..tostring(setkey(":KEY2","C4",1)).."\n")
+		st = 3; OUT:write("# KEYDOWN ok="..tostring(setkey(":KEY2","C3",1)).."\n")
 	elseif st == 3 and t >= T0 + 1.50 then
-		st = 4; OUT:write("# KEYUP\n"); setkey(":KEY2","C4",0)
+		st = 4; OUT:write("# KEYUP\n"); setkey(":KEY2","C3",0)
 	elseif st == 4 and t >= T0 + 2.50 then
 		st = 5; OUT:write("# DONE\n"); OUT:close(); print("PP2 DONE"); mac:exit()
 	end

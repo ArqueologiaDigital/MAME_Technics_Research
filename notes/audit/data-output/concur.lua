@@ -43,12 +43,12 @@ emu.register_periodic(function()
 		st = 2; press(":cpanel:CPR_SEG8","START/STOP",0)
 	elseif st == 2 and t >= T0 + 1.0 then
 		st = 3
-		press(":KEY0","C2",1); press(":KEY0","E2",1); press(":KEY0","G2",1)
+		press(":KEY0","C1",1); press(":KEY0","E1",1); press(":KEY0","G1",1)
 		OUT:write("# LH chord C2-E2-G2\n")
 	elseif st == 3 and t >= T0 + 3.0 then
 		st = 4
-		press(":KEY2","C4",1); press(":KEY2","E4",1); press(":KEY2","G4",1)
-		press(":KEY3","C5",1); press(":KEY3","E5",1); press(":KEY3","G5",1)
+		press(":KEY2","C3",1); press(":KEY2","E3",1); press(":KEY2","G3",1)
+		press(":KEY3","C4",1); press(":KEY3","E4",1); press(":KEY3","G4",1)
 		OUT:write("# RH 6-note chord\n")
 	elseif st == 4 and t >= T0 + 25.0 then
 		st = 5

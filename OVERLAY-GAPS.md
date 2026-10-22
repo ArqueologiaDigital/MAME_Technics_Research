@@ -592,6 +592,9 @@ figures: `notes/tg-release-2026-10-21/README.md`.
   TMP94C241's ports A and B have no control register, so MAME's read-back gave the pins, 0, and the firmware's
   `set 3,(PA)` cleared the sub CPU's `/RESET` bit. They now read back their latch
   (`notes/kn5000-subcpu-reset-porta-2026-10-22/`); found by the Another World style converter's keybed controls.
+- KN5000 keybed inputs were named one octave above the instrument's own names (MIDI 60 was "C4"; the firmware's
+  SPLIT POINT screen calls it C3). Renamed C1..C6 (`notes/kn5000-key-names-2026-10-22/`). The KN7000 driver
+  names its keys the same way ("Key C2" = MIDI 36); not yet compared with the KN7000 firmware's names.
 - The KN6000's boot screen (3.8-4.9 s) is garbled because it is a 640x240 picture copied from the undumped table
   ROM: the firmware finds it through `0x480000EC`, which reads `0xFFFFFFFF` in the font placeholder, so it draws
   the placeholder's own first 153,600 bytes (`notes/kn6000-boot-picture-2026-10-22/`). Fix: dump IC13/IC14.
@@ -649,3 +652,4 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 | 2026-10-22 | KN5000 panel race fixed: v7/v9 buttons and v6 boot error; all six versions open STYLE CONVERT; md5 `73d8d102` |
 | 2026-10-22 | KN5000 panel: every packet of a long answer delivered; demo oracle re-baselined to `3f29427f`; md5 `3e9ee312` |
 | 2026-10-22 | KN5000 sub CPU no longer held in reset by STYLE CONVERT (TMP94C241 port A/B read-back); gate 17 passed        |
+| 2026-10-22 | KN5000 keybed inputs renamed C1..C6 to match the firmware's names; md5 `34596546`                             |

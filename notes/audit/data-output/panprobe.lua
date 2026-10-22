@@ -77,7 +77,7 @@ emu.register_periodic(function()
 		OUT:write("# ARM\n")
 	elseif st == 1 and t >= T0 + 0.30 then
 		st = 2
-		OUT:write("# KEYDOWN C4 ok="..tostring(setkey(":KEY2","C4",1)).."\n")
+		OUT:write("# KEYDOWN C4 ok="..tostring(setkey(":KEY2","C3",1)).."\n")
 	elseif st == 2 and t >= T0 + 0.60 then
 		st = 3
 		dump("HELD")
@@ -96,7 +96,7 @@ emu.register_periodic(function()
 	elseif st == 4 and t >= T0 + 3.00 then
 		st = 5
 		dump("AFTER-POKE")
-		OUT:write("# KEYUP\n"); setkey(":KEY2","C4",0)
+		OUT:write("# KEYUP\n"); setkey(":KEY2","C3",0)
 	elseif st == 5 and t >= T0 + 4.50 then
 		st = 6
 		OUT:write("# DONE\n"); OUT:close()
