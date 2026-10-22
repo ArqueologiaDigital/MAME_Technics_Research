@@ -49,6 +49,8 @@ firmware did with its voices already dropped. They are corrected in those files.
    - `0xFC08 + g`: bit i set if the chip's voice `16g + i` sounds (in attack, or its envelope above zero);
    - `0xFC02 | ch<<4`: the voice's envelope level as 13 bits, `0x1FFF` at the EG's level `0x7F`;
    - `0xFC01 | ch<<4` (`TgVoiceStatusRead`, behind a gate the firmware keeps shut in these runs): the level too.
+     Since 2026-10-22 it answers 0: on the KN6000 the firmware compares this read with a stored target and retries
+     until they agree, so it is not the level (`../tg-release-kn6000-2026-10-22/`). No KN7000 run here reads it.
 2. **The release rule follows the write.** The low byte of r0 is [release flag | level]. In the probe's log after the
    change, all 26 key-off and reset writes have bit 7 set with level 0: `9180`, `9280`, `8D80`, `8580`, `7A80`, `AA80`,
    `C280`, `8780`, CC 120's `A280`, and 13 resets `FF80`. All 13 note-on programmings have it clear, with level `0x7F`:

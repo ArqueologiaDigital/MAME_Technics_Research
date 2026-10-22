@@ -14,7 +14,6 @@
 #include "emu.h"
 #include "kn6000_tonegen.h"
 
-#include <cmath>
 
 DEFINE_DEVICE_TYPE(KN6000_TONEGEN, kn6000_tonegen_device, "kn6000_tonegen", "KN6000 Tone Generator (firmware-driven, placeholder timbre)")
 
@@ -47,16 +46,9 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			// NOTE-ON. Musical pitch comes from the firmware's own notePitch16 in the
 			// library voice record (resolved driver-side, see kn7000.cpp
 			// tg_pitch_resolve) -- the chip's pitch18 is sample-zone-relative and
-			// cannot be sounded directly. With no record available, fall back to the
-			// raw pitch18 read on the KN7000's anchor; that is a rough stand-in, which
-			// is why the driver only enables sound once the record resolve works.
-			const double note = (note_x256 >= 0) ? double(note_x256) / 256.0
-			                                     : 96.0 + (double(p18) - double(0x1C838)) / 1024.0;
-			m_note[v]   = note;
-			m_p18ref[v] = p18;
-			m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
-			m_gate[v]   = 1;
-			m_ton[v]    = machine().time().as_double();
+			// cannot be sounded directly. The fallback without a record is a rough
+			// stand-in, which is why the driver only enables sound once the resolve works.
+			voice_key_on(v, p18, note_x256);
 
 			// Voice life cycle. The KN6000's aux/mode word (the analogue of the
 			// KN7000's class 0x1C02 gate-follow marker) is NOT yet identified, and the
@@ -70,34 +62,13 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			m_srckey[v] = 0xFF;
 			m_wsel[v]   = int16_t(m_wdefault);         // wave ROMs undumped -> fabricated default sine PCM
 			m_wpos[v]   = 0.0;
-			m_phase[v]  = 0.0;                         // clean attack transient
 
-			// Resolve the amplitude envelope from the firmware's own [rate|level] byte
-			// pairs at cls 0x0004/0x0005/0x0006 (the KN7000's r0/r1/r2 shifted by +4).
-			constexpr double FS = 44100.0;
-			const double peak = std::max(double(m_eg012[v][0] & 0x7F) / 127.0, 1.0 / 127.0);
-			const double sus1 = double(m_eg012[v][1] & 0x7F) / 127.0;
-			const double sus2 = double(m_eg012[v][2] & 0x7F) / 127.0;
-			m_peak[v]    = peak;
-			m_sus1[v]    = sus1;
-			m_sus2[v]    = sus2;
-			m_atkstep[v] = peak / (eg_tau(m_eg012[v][0] >> 8) * FS);
-			m_d1c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][1] >> 8) * FS));
-			m_d2c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][2] >> 8) * FS));
-			// Default release rate: the third envelope bank's last register (cls 0x000E),
-			// the positional analogue of the KN7000's rA whose per-sound value tracks the
-			// audible release character. Overridden by the key-up burst's own rate below.
-			m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(m_envreg[v][6] >> 8), 0.02, 12.0) * FS));
-			m_stage[v] = ST_ATTACK;
-			m_env[v]   = 0.0;
+			// The amplitude envelope from cls 0x0004/0x0005/0x0006 (the KN7000's r0/r1/r2
+			// shifted by +4); the default release from cls 0x000E (its rA).
+			voice_start_eg(v, false);
 		}
 		else
-		{
-			// Held voice: a pitch rewrite is a RELATIVE bend (vibrato / portamento /
-			// pitch bend) around the note-on reference, 0x400 pitch18 units per semitone.
-			const double note = m_note[v] + (double(p18) - double(m_p18ref[v])) / 1024.0;
-			m_freq[v] = 440.0 * pow(2.0, (note - 69.0) / 12.0);
-		}
+			voice_bend(v, p18);
 		m_tgwrites++;
 	}
 	// idx 0 (cls 0x0000) is not a gate: the note-on blit writes 0x87FF first and the voice's
@@ -111,22 +82,17 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// the key-off burst on {4,5,8,9,C,D} sets bit 7 with level 0 at the release rate.
 		// So the flag releases this voice, at the write's own rate byte.
 		if (BIT(data, 7))
-		{
-			m_stream->update();
-			m_gate[v]  = 0;
-			m_stage[v] = ST_RELEASE;
-			m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
-		}
+			voice_release(v, data >> 8);
 	}
 	else if (cls == 0x0005)                            // amp EG [DCY1 rate | SUS1 level]
 	{
 		m_eg012[v][1] = data;
-		if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; m_stage[v] = ST_RELEASE; }
+		if (data == 0xC000) voice_mute(v);
 	}
 	else if (cls == 0x0006)                            // amp EG [DCY2 rate | SUS2 level]
 	{
 		m_eg012[v][2] = data;
-		if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; m_stage[v] = ST_RELEASE; }
+		if (data == 0xC000) voice_mute(v);
 	}
 	else if (cls >= 0x0008 && cls <= 0x000E)           // pitch/filter envelope banks
 	{
@@ -141,10 +107,8 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// Written once per note-on from shadow +0x64. The default full-velocity patch
 		// writes 0x3FFF (live capture), so normalise by that to keep the default voice
 		// at unity while honouring the softer values the firmware emits for MIDI
-		// velocity and the mixer's part volumes. PROVISIONAL: the field's exact width
-		// and law are not confirmed, hence the clamp.
-		m_stream->update();
-		m_level[v] = std::clamp(double(data) / double(0x3FFF), 0.0, 1.4);
+		// velocity and the mixer's part volumes.
+		voice_set_level(v, data, 0x3FFF);
 	}
 	// The per-channel effect-send matrix -- the KN7000's group-0x20 (0x8000|row<<8|
 	// part<<4|reg) -- is deliberately NOT decoded here. On the KN6000 the 0x8000-0x9000
@@ -157,29 +121,3 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	// settled the KN6000 is run with the dry TG path, which needs no send decode.
 }
 
-// The firmware's voice sweep (0x4849A499; notes/tg-release-kn6000-2026-10-22) is the KN7000's
-// TgVoiceStatusSweep: every 24 ms it reads 0xFC08 + g for the next group of 16 voices, ORs in its
-// mask of held keys, and retires a voice whose bit falls from 1 to 0; for the voices still
-// sounding and not held it reads 0xFC02 | ch<<4 and keeps (x & 0x1FFF) >> 5 as the level, a
-// released voice below 0x80 being the first to steal. Answering 0 made it retire voices with no
-// key-off write, so notes hung. 0xFC01 | ch<<4, read a few times after some note-ons, is a
-// signed 13-bit value compared with a stored target: not the amplitude, not modelled (0).
-uint16_t kn6000_tonegen_device::tg_read(int tg, uint16_t addr)
-{
-	(void)tg;                                          // one chip, one window
-	if ((addr & 0xFC00) != 0xFC00)
-		return 0;
-	m_stream->update();
-	const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
-	if (ch == 0 && reg >= 0x8 && reg <= 0xB)
-	{
-		uint16_t bits = 0;
-		for (int i = 0; i < 16; i++)
-			if (voice_sounding(((reg - 0x8) << 4) | i))
-				bits |= 1 << i;
-		return bits;
-	}
-	if (reg == 0x2)
-		return voice_level13(ch);
-	return 0;
-}

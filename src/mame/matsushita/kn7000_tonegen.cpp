@@ -13,7 +13,6 @@
 #include "emu.h"
 #include "kn7000_tonegen.h"
 
-#include <cmath>
 
 DEFINE_DEVICE_TYPE(KN7000_TONEGEN, kn7000_tonegen_device, "kn7000_tonegen", "KN7000 Tone Generator (firmware-driven)")
 
@@ -47,7 +46,7 @@ void kn7000_tonegen_device::device_start()
 void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256, int rec_type)
 {
 	if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
-	const int v = (tg << 6) | ((addr >> 4) & 0x3F);   // voice 0..127 (0..63 sub, 64..127 master)
+	const int v = voice_index(tg, (addr >> 4) & 0x3F);  // voice 0..127 (0..63 sub, 64..127 master)
 	const uint16_t cls = addr & 0xFC0F;               // register class (channel masked out)
 	if ((cls & 0xFC0E) == 0x2400)                     // pitch (bit0 = pitch18 bit16)
 	{
@@ -62,16 +61,7 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		for (int k = 0; k < 7; k++) if (m_envreg[v][k] != 0) { eg_programmed = true; break; }
 		if (!m_gate[v] && eg_programmed)
 		{
-			// note-on: musical pitch from the resolved voice-record notePitch16
-			// when available; else the legacy absolute decode (anchored where
-			// pitch18 0x1C838 = MIDI 96, the keybed top-C reference).
-			const double note = (note_x256 >= 0) ? double(note_x256) / 256.0
-			                                     : 96.0 + (double(p18) - double(0x1C838)) / 1024.0;
-			m_note[v]   = note;
-			m_p18ref[v] = p18;
-			m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
-			m_gate[v]   = 1;      // held
-			m_ton[v]    = machine().time().as_double();   // for release detection (reg0 rule)
+			voice_key_on(v, p18, note_x256);
 			// Voice life-cycle class (workflow RE + 11-family sweep, 2026-07-11):
 			//  - GATE_FOLLOW: aux bit15 (brass/sax/organ) -- no firmware key-up write; the
 			//    TG (which hosts the key-bed FIFO) gates them off itself on key release.
@@ -116,46 +106,12 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 						{ m_wsel[v] = int16_t(i); break; }
 				m_wpos[v] = 0.0;
 			}
-			m_phase[v]  = 0.0;    // clean attack transient
-			// Resolve this voice's amplitude envelope from the firmware's 7-param EG.
-			// DECODED 2026-07-20 via the AMPLITUDE EDIT -> ENVELOPE screen sweep
-			// (notes/tg-envelope-sweep-results.md): the EG lives in r0/r1/r2 as
-			// [rate hi | level lo] byte pairs -- r0 = ATK rate | PEAK level,
-			// r1 = DCY1 rate | SUS1 level, r2 = DCY2 rate | SUS2 level. Rate bytes:
-			// HIGHER = FASTER. Levels 0..0x7F. (Piano: D27F/3900/4500 = fast attack
-			// to full peak, two-stage decay to SILENCE; organ: D27F/727F/727F = fast
-			// attack, sustain at max -- exactly the audible behavior.) The chip's
-			// exact rate->seconds law is PROVISIONAL: T = 13 * 2^(-rate/20) s,
-			// calibrated so the piano keeps its shipped ~6 ms attack / ~1.8 s decay.
-			constexpr double FS = 44100.0;
-			const double peak = std::max(double(m_eg012[v][0] & 0x7F) / 127.0, 1.0 / 127.0);
-			double sus1 = double(m_eg012[v][1] & 0x7F) / 127.0;
-			double sus2 = double(m_eg012[v][2] & 0x7F) / 127.0;
-			// ONESHOT plucks (no key-up ramp): the sample dies out naturally -- force
-			// the decay chain to run to silence (the old held-decay behavior).
-			if (m_mode[v] == 2) { sus1 = 0.0; sus2 = 0.0; }
-			m_peak[v]    = peak;
-			m_sus1[v]    = sus1;
-			m_sus2[v]    = sus2;
-			m_atkstep[v] = peak / (eg_tau(m_eg012[v][0] >> 8) * FS);
-			m_d1c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][1] >> 8) * FS));
-			m_d2c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][2] >> 8) * FS));
-			// Default RELEASE rate: the chip-side damp bank's rA high byte (organ
-			// 0xAE = fast stop, pad 0x04 = slow fade -- audibly validated across 11
-			// families). Firmware-managed sounds override this with the key-up
-			// burst's own r0 rate (see cls 0x0000 below).
-			m_rlsc[v] = exp(-1.0 / (std::clamp(eg_tau(m_envreg[v][6] >> 8), 0.02, 12.0) * FS));
-			m_stage[v] = ST_ATTACK;
-			m_env[v]   = 0.0;
+			// The amplitude EG from r0/r1/r2, the default release from rA. ONESHOT plucks (no
+			// key-up ramp) die out naturally: their decay chain runs to silence.
+			voice_start_eg(v, m_mode[v] == 2);
 		}
 		else
-		{
-			// held voice: RELATIVE pitch update (bend/vibrato/portamento) around
-			// the note-on reference, 0x400 pitch18 units per semitone.
-			const double note = m_note[v] + (double(p18) - double(m_p18ref[v])) / 1024.0;
-			m_freq[v] = 440.0 * pow(2.0, (note - 69.0) / 12.0);
-			rom_voice_pitch(v, p18);
-		}
+			voice_bend(v, p18);
 		m_tgwrites++;
 	}
 	else if (cls == 0x0000)                           // r0 = [ATK rate | PEAK level]
@@ -169,20 +125,15 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// the note (notes/tg-release-2026-10-21). So the flag releases this voice, at the
 		// write's own rate byte -- the piano damp 0x91 -> ~85 ms under the provisional law.
 		// (It used to release the even/odd pair after a 20 ms guard: that matched what the
-		// firmware sent while the status reads below answered 0, which made the firmware
+		// firmware sent while the status reads (tg_read) answered 0, which made the firmware
 		// drop all but one voice of a note within 0.1 s of its note-on.)
 		if (BIT(data, 7))
-		{
-			m_stream->update();
-			m_gate[v]  = 0;
-			m_stage[v] = ST_RELEASE;
-			m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
-		}
+			voice_release(v, data >> 8);
 	}
 	else if (cls == 0x0001)                           // r1 = [DCY1 rate | SUS1 level];
 	{                                                 // 0xC000 = mute (boot init / voice-steal)
 		m_eg012[v][1] = data;
-		if (data == 0xC000) { m_stream->update(); m_gate[v] = 0; m_stage[v] = ST_RELEASE; }
+		if (data == 0xC000) voice_mute(v);
 	}
 	else if (cls == 0x0002)                           // r2 = [DCY2 rate | SUS2 level]
 	{
@@ -197,8 +148,7 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// patch it is 0x5FFF, so normalising by 0x5FFF keeps that voice at unity
 		// (no change to the current sound) while honouring softer/louder values
 		// the firmware would emit for MIDI velocity or the mixer's part volumes.
-		m_stream->update();
-		m_level[v] = std::clamp(double(data) / double(0x5FFF), 0.0, 1.4);
+		voice_set_level(v, data, 0x5FFF);
 	}
 	else if ((addr & 0xFC00) == 0x8000)               // group 0x20: per-channel OUTPUT BUS /
 	{                                                  // EFFECT-SEND record (0x80xx-0x83xx)
@@ -230,7 +180,7 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// Per-channel granularity is captured but the routing is applied globally
 		// (single-mix approximation; per-part separation needs per-part TG audio).
 		const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
-		m_busreg[(tg << 6) | ch][reg] = data;
+		m_busreg[voice_index(tg, ch)][reg] = data;
 		if (tg == 1 && ch == 0x03 && reg == 0x0A)
 		{
 			m_gain_direct = float((data >> 8) & 0x7F) / 127.0f;
@@ -291,28 +241,3 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	}
 }
 
-// The firmware's voice sweep (TgVoiceStatusSweep, lib 0x4C03AA86 in v16; notes/tg-release-2026-10-21) reads
-// this chip once per pass for each group of 16 voices: it writes the address 0xFC08 + g, a 0, then reads the
-// data port. It ORs the answer with its own mask of held keys, and a voice whose bit falls from 1 to 0 has
-// ended: its node is retired. For the voices still sounding and not held it reads 0xFC02 | ch<<4 and keeps
-// (x & 0x1FFF) >> 5 as the voice's level; a released voice below 0x80 becomes the first to be stolen.
-// Answering 0 to all of this (as before) told the firmware that every voice it had just keyed was silent: it
-// retired them at its next pass, 43-82 ms after the note-on, and at the note-off it found no voice to release.
-uint16_t kn7000_tonegen_device::tg_read(int tg, uint16_t addr)
-{
-	if ((addr & 0xFC00) != 0xFC00)
-		return 0;
-	m_stream->update();
-	const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
-	if (ch == 0 && reg >= 0x8 && reg <= 0xB)
-	{
-		uint16_t bits = 0;
-		for (int i = 0; i < 16; i++)
-			if (voice_sounding((tg << 6) | ((reg - 0x8) << 4) | i))
-				bits |= 1 << i;
-		return bits;
-	}
-	if (reg == 0x1 || reg == 0x2)
-		return voice_level13((tg << 6) | ch);
-	return 0;
-}

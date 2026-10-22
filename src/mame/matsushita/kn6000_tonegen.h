@@ -95,11 +95,6 @@ public:
 	{ }
 
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
-
-	// The status plane, read back through the data port 0x98050002 (as on the KN7000):
-	//   0xFC08 + g      sixteen "still sounding" bits, bit i = voice 16g + i (g = 0..3)
-	//   0xFC02 | ch<<4  voice ch's envelope level, 13 bits (the firmware keeps (x & 0x1FFF) >> 5)
-	virtual uint16_t tg_read(int tg, uint16_t addr) override;
 };
 
 #endif // MAME_MATSUSHITA_KN6000_TONEGEN_H

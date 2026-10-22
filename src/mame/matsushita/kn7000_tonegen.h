@@ -89,14 +89,10 @@ public:
 	// keybed-anchored absolute decode of pitch18).
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
 
-	// The status plane 0x3F, read back through the data port (notes/tg-release-2026-10-21):
-	//   0xFC08 + g      sixteen "still sounding" bits, bit i = this chip's voice 16g + i (g = 0..3)
-	//   0xFC02 | ch<<4  voice ch's envelope level, 13 bits (the firmware keeps (x & 0x1FFF) >> 5)
-	//   0xFC01 | ch<<4  a second per-voice status word, read only by a path the firmware keeps
-	//                   disabled; answered with the level too (inferred)
-	virtual uint16_t tg_read(int tg, uint16_t addr) override;
-
 protected:
+	// voice 0..127: 0..63 on the chip at 0x98040000 (tg 0), 64..127 on the one at 0x98050000
+	virtual int voice_index(int tg, int ch) const override { return (tg << 6) | ch; }
+
 	// Finds the four wave ROMs (IC203/IC204, IC207/IC208) and, when they are all there,
 	// plays every voice from them instead of the synthetic wave pack.
 	virtual void device_start() override ATTR_COLD;

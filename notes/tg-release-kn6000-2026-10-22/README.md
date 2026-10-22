@@ -110,7 +110,26 @@ silence. So the change is not exercised there yet. Why the KN6500 ignores `probe
   the model's envelope. The release times above come from both.
 - `0xFC01 | ch<<4` is answered 0. The firmware retries those reads until the answer matches its stored target, so it
   now asks more often (602 reads against 24). It has no audible effect in the probe. What the chip reports there is
-  not known.
+  not known. The KN7000 now answers it 0 too (it answered the level); its probe and oracle runs never read it.
+
+## One implementation for both chips (later the same day)
+
+The KN6000 fix was written by copying the KN7000's release code and changing the class number. The behaviour both
+decodes repeated now lives in the base class (`kn_tonegen.cpp`): `voice_key_on`, `voice_start_eg`, `voice_bend`,
+`voice_release`, `voice_mute`, `voice_set_level`, and one `tg_read()` for both chips, with a virtual
+`voice_index(tg, ch)` (the KN7000's `(tg << 6) | ch`). Each model's `tg_write()` keeps only its register numbering
+and what differs between them: the KN7000's gate-follow and one-shot classes and sample select, the level's full
+scale (`0x5FFF` against `0x3FFF`), and which register's `0xC000` mutes.
+
+The refactor changes no output. Binary md5 `2f91bcd6e59b644b0f7c53941b359b47` (published 2026-10-22):
+
+| check                                                   | `0f75c6df` (before)                | `2f91bcd6` (after) |
+|---------------------------------------------------------|------------------------------------|--------------------|
+| KN7000 oracle (`../tg-release-2026-10-21/oracle_ab.sh`) | `d520532727c7d590066fc888a18a3f5d` | same               |
+| KN6000 `run_probe6.sh`: `voices.txt`                    | `89ee8e308a521f7f89a7241e1bf6e849` | same               |
+| KN6000 `run_probe6.sh`: `tgw.txt`                       | `ba0c433cbb3919b91390929f19da489c` | same               |
+| KN6000 `run_probe6.sh`: `tgr.txt`                       | `7df4a01c0a244af34f3965447076da04` | same               |
+| KN6000 `run_probe6.sh`: `run.wav`                       | `5f2424966502372a4db5009ef475ffcd` | same               |
 
 ## The scripts
 
