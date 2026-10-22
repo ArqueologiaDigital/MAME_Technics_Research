@@ -93,7 +93,11 @@ ORACLE_MD5="d520532727c7d590066fc888a18a3f5d"
 # Re-baselined 2026-10-18 from 4c8671b68f446cd3f6c10c8784e7748f (rms 499.8). It had drifted to
 # 6e7c3531... before the resync, and the rebase onto upstream ec20df4a93b moved it to this value
 # (rms 500.1): upstream core changes, not overlay ones (same SYNC notes section).
-KN5000_DEMO_MD5="8bbe54f787f43c4fd82ea25b9486f38d"
+# Re-baselined 2026-10-22 from 8bbe54f7... (rms 500.1) to this value (rms 501.8) by the panel
+# timing fix: the boot's panel answers now arrive whole, the demo starts 5.6 ms earlier, voices
+# are assigned to other slots, and the note-on data is the same sequence plus one note that now
+# fits before the 90 s cut (notes/kn5000-panel-race-2026-10-22: tgseq.lua, tggates.py).
+KN5000_DEMO_MD5="3f29427f5d9b399107b76e5f322b0c60"
 
 PASS=0; FAIL=0; SKIP=0
 FAILED=""

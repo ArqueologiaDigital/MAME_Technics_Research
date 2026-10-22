@@ -586,7 +586,8 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 - KN5000 v7 and v9: panel buttons did the wrong thing (DISK nothing, EXIT transposed) and v6 showed "ERROR in CPU
   data transmission": the panel model asserted INTA before the firmware finished sending a command, leaving the
   receive ring one byte off. Fixed in `kn5000_cpanel.cpp` (`notes/kn5000-panel-race-2026-10-22/`); found by the
-  Another World style-converter runs.
+  Another World style-converter runs. A second fix there: multi-packet answers lost every other packet on all
+  versions (a 20 us INTA re-trigger cleared by the firmware's INTRX1 exit); the kn5000 demo oracle re-baselined.
 - The KN6000's boot screen (3.8-4.9 s) is garbled because it is a 640x240 picture copied from the undumped table
   ROM: the firmware finds it through `0x480000EC`, which reads `0xFFFFFFFF` in the font placeholder, so it draws
   the placeholder's own first 153,600 bytes (`notes/kn6000-boot-picture-2026-10-22/`). Fix: dump IC13/IC14.
@@ -642,3 +643,4 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 | 2026-10-22 | G23 on the KN6000: same sweep, same fix; 0x98040002 kept out of its TG; published md5 `0f75c6df`              |
 | 2026-10-22 | TG voice code shared (3d8fb52, 8aab4d4; output byte-identical); KN6000 boot picture traced to the table ROM   |
 | 2026-10-22 | KN5000 panel race fixed: v7/v9 buttons and v6 boot error; all six versions open STYLE CONVERT; md5 `73d8d102` |
+| 2026-10-22 | KN5000 panel: every packet of a long answer delivered; demo oracle re-baselined to `3f29427f`; md5 `3e9ee312` |

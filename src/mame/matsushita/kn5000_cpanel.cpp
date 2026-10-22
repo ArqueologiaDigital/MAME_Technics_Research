@@ -1067,9 +1067,11 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::idle_detect_callback)
 		// Reset byte counter for this INTA cycle
 		m_self_clock_bytes_sent = 0;
 
-		// Brief delay lets the CPU's INTA ISR enable receive mode
+		// Give the CPU's INTA ISR time to switch SC1 to receive before clocking: under floppy
+		// interrupts it is serviced late, and a packet clocked 20us after INTA overran the
+		// receiver (notes/kn5000-panel-race-2026-10-22).
 		m_self_clocking = true;
-		m_self_clock_timer->adjust(attotime::from_usec(20), 0, attotime::from_hz(250000));
+		m_self_clock_timer->adjust(attotime::from_usec(300), 0, attotime::from_hz(250000));
 	}
 }
 
@@ -1109,8 +1111,10 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::self_clock_callback)
 			m_self_clocking = false;
 			m_self_clock_timer->reset(attotime::never);
 
-			// Schedule next packet after 20µs (enough for INTA ISR)
-			m_idle_detect_timer->adjust(attotime::from_usec(20));
+			// Next packet after 150us. The firmware's INTRX1 handler ends by clearing the INTA
+			// request (INTCLR 0x12); a pulse before it returns is lost with its packet, which
+			// at 20us happened to every other packet of a multi-packet answer.
+			m_idle_detect_timer->adjust(attotime::from_usec(150));
 		}
 	}
 }
