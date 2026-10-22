@@ -694,8 +694,9 @@ private:
 		// KN6000 uses the same field offset but its value set (1/8 plus flag bits
 		// 0x0100/0x0800, written at 0x48492FF0) has not been mapped onto the KN7000's
 		// {04,08,10,20,40} release classes, so report "unknown" rather than guess --
-		// the tone generator then treats every voice as firmware-managed, which is safe
-		// because the KN6000 writes a universal key-up gate for all voice classes.
+		// the tone generator then treats every voice as firmware-managed: it holds until
+		// the firmware's key-off burst, which reaches every voice of a note now that the
+		// status reads are answered (notes/tg-release-kn6000-2026-10-22).
 		if (m_tg_one_chip)
 			return -1;
 		auto &sp = m_maincpu->space(AS_PROGRAM);
@@ -1166,7 +1167,7 @@ uint16_t kn7000_state::io_r(offs_t offset, uint16_t mem_mask)
 	if (offset == 0x28005) return tg_wave_read(1);
 	// Tone-generator data port read (sub 0x98040002 / main 0x98050002): the chip's answer to the latched
 	// status address -- which voices still sound, and how loud (kn7000_tonegen_device::tg_read).
-	if (offset == 0x20001) return m_tonegen->tg_read(0, m_tg_addr[0]);
+	if (offset == 0x20001) return m_tg_one_chip ? 0 : m_tonegen->tg_read(0, m_tg_addr[0]);
 	if (offset == 0x28001) return m_tonegen->tg_read(1, m_tg_addr[1]);
 	// (The FDC is IC103 at 0x98020000 = decoder slot Y2; 0x98010000 = Y1 = FDC.DACK, the DMA-ack strobe,
 	// not the register base -- that is why the old 0x98010000 probe never saw register traffic. The FDC
@@ -1198,6 +1199,11 @@ void kn7000_state::io_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		return;
 	case 0x20000: m_tg_addr[0] = data; return;                    // sub TG: address latch (0x98040000)
 	case 0x20001:                                                 // sub TG: data (0x98040002) -> reg[addr]
+		// The KN6000/KN6500 have no second TG: their one write here is a byte pair from the
+		// unrelated "Device-A" module (0x48510459: register 0x10|n, then a value), which landed
+		// on voices 1, 3, 5 and 7 as release writes (notes/tg-release-kn6000-2026-10-22).
+		if (m_tg_one_chip)
+			return;
 		m_tg_reg[0][m_tg_addr[0]] = data;                         // capture the FULL address (was gated <0x1000)
 		m_tonegen->tg_write(0, m_tg_addr[0], data,                // Stage 2: feed the real TG voice engine
 			tg_pitch_resolve(0, m_tg_addr[0]), tg_type_resolve(0, m_tg_addr[0]));

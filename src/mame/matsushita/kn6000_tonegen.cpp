@@ -61,10 +61,10 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			// Voice life cycle. The KN6000's aux/mode word (the analogue of the
 			// KN7000's class 0x1C02 gate-follow marker) is NOT yet identified, and the
 			// record's type field is not yet decoded either, so every voice is treated
-			// as MANAGED: hold at the sustain level until the firmware's own key-up
-			// arrives. That is the safe default here because the KN6000 writes a
-			// UNIVERSAL key-up gate (0x8000 to cls 0x0000) for every voice class, so no
-			// note can get stuck waiting for a release that never comes.
+			// as MANAGED: hold at the sustain level until the firmware's own key-off
+			// burst arrives (cls 0x0004 with bit 7 set, below). The firmware sends that
+			// burst to every voice of a note, as long as tg_read() tells its voice sweep
+			// that the voice still sounds.
 			m_mode[v]   = 0;
 			(void)rec_type;
 			m_srckey[v] = 0xFF;
@@ -100,41 +100,22 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		}
 		m_tgwrites++;
 	}
-	else if (cls == 0x0000)                            // idx 0 = GATE
-	{
-		// 0x87FF at note-on (written FIRST in the blit, before the envelope is loaded,
-		// so it is not the note-on trigger here), 0x8000 at key-up. The KN7000 carries
-		// this on r3; it is the one register that genuinely moved between the chips.
-		if ((data >> 8) == 0x80)
-		{
-			const double now = machine().time().as_double();
-			if (m_gate[v] && (now - m_ton[v]) > 0.020)
-			{
-				m_stream->update();
-				m_gate[v]  = 0;
-				m_stage[v] = ST_RELEASE;
-			}
-		}
-	}
+	// idx 0 (cls 0x0000) is not a gate: the note-on blit writes 0x87FF first and the voice's
+	// cached word (0x8000) last, inside every note-on, and nothing writes it at key-off -- the
+	// KN7000's r3 key-on strobe, moved (notes/tg-release-kn6000-2026-10-22).
 	else if (cls == 0x0004)                            // amp EG [ATK rate | PEAK level]
 	{
 		m_eg012[v][0] = data;
-		// KEY-RELEASE path 2 (firmware-managed sounds): after the gate-off the firmware
-		// rewrites the first two registers of each envelope bank ({4,5,8,9,C,D}) with a
-		// ramp-down toward level 0, and the ramp's own rate byte is the real release
-		// rate. Mirrors the KN7000's reg0-rewrite rule -- but WITHOUT its even/odd
-		// companion-block pairing, which has no confirmed KN6000 counterpart (spec
-		// section 2): release only this voice, so an unrelated neighbour cannot be cut.
-		if (data != 0 && (data >> 8) < 0xFF)
+		// KEY-RELEASE, as on the KN7000's r0: the low byte is [release flag | level]. The
+		// note-on programs it with bit 7 clear (0xE57F), the reset before it is 0xFF80, and
+		// the key-off burst on {4,5,8,9,C,D} sets bit 7 with level 0 at the release rate.
+		// So the flag releases this voice, at the write's own rate byte.
+		if (BIT(data, 7))
 		{
-			const double now = machine().time().as_double();
-			if ((m_gate[v] || m_stage[v] == ST_RELEASE) && (now - m_ton[v]) > 0.020)
-			{
-				m_stream->update();
-				m_gate[v]  = 0;
-				m_stage[v] = ST_RELEASE;
-				m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
-			}
+			m_stream->update();
+			m_gate[v]  = 0;
+			m_stage[v] = ST_RELEASE;
+			m_rlsc[v]  = exp(-1.0 / (std::clamp(eg_tau(data >> 8), 0.01, 12.0) * 44100.0));
 		}
 	}
 	else if (cls == 0x0005)                            // amp EG [DCY1 rate | SUS1 level]
@@ -174,4 +155,31 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	// rebased), but which row means which effect bus is unverified, so the effect-send
 	// gains keep their defaults rather than being driven from a guess. Until that is
 	// settled the KN6000 is run with the dry TG path, which needs no send decode.
+}
+
+// The firmware's voice sweep (0x4849A499; notes/tg-release-kn6000-2026-10-22) is the KN7000's
+// TgVoiceStatusSweep: every 24 ms it reads 0xFC08 + g for the next group of 16 voices, ORs in its
+// mask of held keys, and retires a voice whose bit falls from 1 to 0; for the voices still
+// sounding and not held it reads 0xFC02 | ch<<4 and keeps (x & 0x1FFF) >> 5 as the level, a
+// released voice below 0x80 being the first to steal. Answering 0 made it retire voices with no
+// key-off write, so notes hung. 0xFC01 | ch<<4, read a few times after some note-ons, is a
+// signed 13-bit value compared with a stored target: not the amplitude, not modelled (0).
+uint16_t kn6000_tonegen_device::tg_read(int tg, uint16_t addr)
+{
+	(void)tg;                                          // one chip, one window
+	if ((addr & 0xFC00) != 0xFC00)
+		return 0;
+	m_stream->update();
+	const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
+	if (ch == 0 && reg >= 0x8 && reg <= 0xB)
+	{
+		uint16_t bits = 0;
+		for (int i = 0; i < 16; i++)
+			if (voice_sounding(((reg - 0x8) << 4) | i))
+				bits |= 1 << i;
+		return bits;
+	}
+	if (reg == 0x2)
+		return voice_level13(ch);
+	return 0;
 }

@@ -494,7 +494,13 @@ figures: `notes/tg-release-2026-10-21/README.md`.
   the history.
 - **Inferred, not measured on the unit:** the sense of the sounding bits (read from the code) and the level's scale
   (the model's envelope). The gate-follow (`key_break`) and one-shot classes, written to make up for key-off writes
-  the firmware now sends, are left as they were; the KN6000's tone generator still answers 0.
+  the firmware now sends, are left as they were.
+- **KN6000** (2026-10-22, `notes/tg-release-kn6000-2026-10-22/`): the same sweep (`0x4849A499`), the same hang.
+  `kn6000_tonegen` answers `0xFC08 + g` and `0xFC02 | ch<<4` and releases on cls `0x0004` bit 7 (its r0). The
+  driver no longer feeds the KN6000's unrelated `0x98040002` byte writes ("Device-A") into the tone generator,
+  where they had released voices 1, 3, 5 and 7. Every probe note now ends 0.6-1.6 s after its note-off (before:
+  none did); KN7000 oracle unchanged; published md5 `0f75c6df`. The KN6500 runs the same sweep but plays nothing
+  from the probe's MIDI, so it is unchecked.
 
 ## Notes and comments that newer findings contradict
 
@@ -626,3 +632,4 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 | 2026-10-21 | G23 added: the hanging notes are the TG status reads answering 0 (traced, `notes/tg-release-2026-10-21/`)    |
 | 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                               |
 | 2026-10-21 | G23: oracle re-baselined to `d5205327` (keybed piano's 2nd voice ends); gate 16 passed, 1 failed (it)        |
+| 2026-10-22 | G23 on the KN6000: same sweep, same fix; 0x98040002 kept out of its TG; published md5 `0f75c6df`             |

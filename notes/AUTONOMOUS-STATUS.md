@@ -411,6 +411,9 @@ boot/enable-gate difference from the KN6000, NOT a decode problem. Stays MACHINE
 LEFT UNDECODED ON PURPOSE (evidence does not support them): effect-send matrix, aux/mode
 word (=> every voice treated as MANAGED; safe because the KN6000 writes a UNIVERSAL key-up
 gate), record type, even/odd companion pairing.
+[2026-10-22: there is no such gate -- `0x0000=8000` closes every note-on. The key-off is the
+cls 0x0004 burst with bit 7 set, sent once the status reads are answered;
+notes/tg-release-kn6000-2026-10-22.]
 
 TOOLING: tools/kn6000_tg_probe.lua NEW (taps the single TG window, locks the first slot of a
 burst, samples the voice record AT the note-on pitch write, scans all 64 records so the

@@ -24,7 +24,7 @@
     OR-ed in as a literal. Reading those literals off in order yields the
     complete per-voice map with no guessing:
 
-      cls 0x0000        idx 0    GATE            (0x87FF note-on / 0x8000 key-up)
+      cls 0x0000        idx 0    KEY-ON STROBE   (0x87FF, then 0x8000, inside the note-on)
       cls 0x0001-0x000F          shadow +0x02..+0x2A, halfword per register
       cls 0x0400/0x0401          shadow +0x2C/+0x2E
       cls 0x5000        <- shadow +0x74  (32-bit: high half extends the index)
@@ -47,8 +47,9 @@
     envelope banks are the KN7000's shifted by +4 (banks at 4/8/C rather than
     0/4/8), and the release burst hits {4,5,8,9,C,D} where the KN7000 hits
     {0,1,4,5,8,9} -- the first two registers of each of the three banks in
-    both cases. The gate is the one register that genuinely MOVES: r3 on the
-    KN7000, r0 here.
+    both cases. The key-on strobe is the one register that genuinely MOVES: r3
+    on the KN7000, r0 here. Neither chip has a key-up gate: a note ends with the
+    release burst, whose first write sets bit 7 of the amp EG's first register.
 
     PITCH. As on the KN7000 the chip's pitch register is sample-zone-relative,
     not absolute musical pitch, so it cannot be sounded directly. The musical
@@ -94,6 +95,11 @@ public:
 	{ }
 
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
+
+	// The status plane, read back through the data port 0x98050002 (as on the KN7000):
+	//   0xFC08 + g      sixteen "still sounding" bits, bit i = voice 16g + i (g = 0..3)
+	//   0xFC02 | ch<<4  voice ch's envelope level, 13 bits (the firmware keeps (x & 0x1FFF) >> 5)
+	virtual uint16_t tg_read(int tg, uint16_t addr) override;
 };
 
 #endif // MAME_MATSUSHITA_KN6000_TONEGEN_H

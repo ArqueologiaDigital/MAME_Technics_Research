@@ -31,7 +31,7 @@ literally a parameterised generalisation of the KN6000's one-chip path.
 | (a) | Write primitive | `TgVoiceRegWrite` entry **0x4C036F6B**: `d0`=slot, `d1`=class<<16, data on stack → `asl 20,d0; or d1,d0; or data,d0` → packed word; then `mov d0,d1; lsr 16,d1; movhu d1,(0x98050000); and 0xffff,d0; movhu d0,(0x98050002)` | Writer **0x4849465B**: packed word pre-assembled by callers (`asl 20,d0; or 0x000CDDDD,d0`), then the identical latch sequence | **SAME** — 20 bytes byte-identical at KN7000 `0x4C036F7C` / KN6000 `0x4849465B`. Same address-halfword-to-+0 / data-halfword-to-+2 discipline, same packed word `(slot<<20)｜(class<<16)｜data`, so **addr halfword = (slot<<4)｜index** on both |
 | (a′) | Second addressing mode | `asl 18` variant at **0x4C036FD9** (channel in a 2-bit-lower field, global/channel regs), 24 sites | `asl 18` variant present, 14 sites (e.g. **0x48493FA8, 0x484940A2, 0x48494171**, class `0x0802`) | **SAME** |
 | (b) | Register file / EG shape | 16 halfword regs per voice, four 4-reg banks. Amp EG = r0/r1/r2 `[rate\|level]` pairs; gate r3; pitch EG r4/r5/r6; depth r7; filter EG r8/r9/rA; rB. Boot reset `0xFF80/0xFF00` → r0/r1 (**0x4C0371BC/0x4C0371CC**); damp `0xA280/0xA200` (**0x4C037220/30**), `0x7F80/0x7F00` (**0x4C037298/0x4C0372A5**); mute `0xC000`; release burst = regs **{0,1,4,5,8,9}** | Same 16 regs, four 4-reg banks, same `[rate\|level]` pairs, **identical literal constants**: `0xFF80/0xFF00` → r4/r5 (0x484946DC region), `0xA280/0xA200` → r4/r5 (**0x484947B3**), `0x7F80/0x7F00` → r4/r5 (**0x48494817, 0x4849487B**), `0xC000` → r5/r6 (**0x484946DC**); release burst = regs **{4,5,8,9,C,D}** | **SHIFTED-BUT-ISOMORPHIC** — identical semantics AND identical constants, but the EG banks sit at 4/8/C instead of 0/4/8, and the **gate register moves r3 → r0**. Not a uniform rotation: a re-assignment |
-| (b′) | Gate value | `0x87FF` note-on at class **0x0003** (`0x4C037378`, `TgVoiceGateOn`); `0x8000` key-up | `0x87FF` note-on at class **0x0000** (`0x484948D7`: `asl 20,d0; or 0x87ff,d0`, no class OR ⇒ index 0); live capture shows `0x0000=0x8000` key-up | **SAME value, DIFFERENT index** |
+| (b′) | Gate value | `0x87FF` note-on at class **0x0003** (`0x4C037378`, `TgVoiceGateOn`); `0x8000` key-up | `0x87FF` note-on at class **0x0000** (`0x484948D7`: `asl 20,d0; or 0x87ff,d0`, no class OR ⇒ index 0); `0x8000` is the last write of the same note-on, not a key-up (2026-10-22, `tg-release-kn6000-2026-10-22/`) | **SAME value, DIFFERENT index** |
 | (c) | Pitch encoding | Gate-on reads shadow rec **+0x54**: `and 0x00018000,d0; or 0x4000,d0; d1=0x30000000` ⇒ class **0x3000\|bit16** (`0x4C03738D`). Runtime pitch class **0x2400/0x2401**, `pitch18 = ((cls&1)<<16)\|data` | Gate-on reads shadow rec **+0x7C**: `and 0x00018000,d0; or 0x58004000,d0` ⇒ class **0x5800\|bit16**, data base 0x4000 (`0x484948E0`) | **Mechanism SAME** (byte-for-byte the same idiom, 17th pitch bit in class bit 0); **plane number DIFFERENT** |
 | (c′) | "Group shifted one bit" hypothesis | plane = class>>10, 6-bit channel at bits 4–9 | callers provably build `slot<<20` ⇒ slot at addr bit 4, 4-bit index — **same split** | **FALSIFIED.** A 7-bit channel would put KN7000 plane 0x0C at `0x6000` and 0x09 at `0x4800`; observed is `0x5800`. The bitfield split is identical; only plane *numbering* is remapped. The live-capture `0x800B/0x8400/0x8804/0x8C0F` vs `0x400B/0x4400/0x4804/0x4C0F` relation is a **local** remap of planes 0x10–0x13 → 0x20–0x23, not a global shift |
 | (c″) | Plane inventory | 0x00–0x14, 0x1F, **0x20** (send matrix `0x8000\|row<<8\|part<<4\|reg`), **0x28** (`0xA000..0xA008` global bank), 0x2C, 0x30, 0x3F | 0x00–0x19, **0x20–0x24** (`0x8000/0x8400/0x8800/0x8C00/0x9000`), **0x28** (`0xA000/0xA002/0xA004`) | **SHIFTED-BUT-ISOMORPHIC** — the two *structural* planes match exactly: plane **0x20 = per-channel send/output matrix** and plane **0x28 = global bank** at the SAME numbers. Only per-voice parameter planes below 0x20 are re-assigned (KN6000 has ~5 more) |
@@ -66,8 +66,8 @@ effect-send/return gains, the synthetic wave pack, the audio stream and renderin
 count is a constructor parameter — pass **64**.
 
 To be written in the derived device:
-1. **`tg_write()` decode** for the KN6000 numbering. Known today: gate at index **0**
-   (`0x87FF` on / `0x8000` up), EG banks at **4/8/C** as `[rate|level]` pairs, mute `0xC000`,
+1. **`tg_write()` decode** for the KN6000 numbering. Known today: key-on strobe at index **0**
+   (`0x87FF` then `0x8000`, both inside the note-on), EG banks at **4/8/C** as `[rate|level]` pairs, mute `0xC000`,
    pitch plane **0x5800** with `pitch18 = ((cls&1)<<16)|data`, send matrix plane **0x20**,
    global bank plane **0x28**. Address split is the same: `(slot<<4)|index`, `cls = addr & 0xFC0F`.
    **Mark the plane map PROVISIONAL** until a per-plane live sweep fills in §2's gaps.
@@ -121,7 +121,7 @@ makes it a map rather than a sample:
 
 | cls | shadow src | width | meaning |
 |---|---|---|---|
-| 0x0000 idx 0 | (literal 0x87FF) | — | **GATE** — 0x87FF note-on, 0x8000 key-up |
+| 0x0000 idx 0 | (literal 0x87FF) | — | **key-on strobe** — 0x87FF, then 0x8000 at the end of the note-on |
 | 0x0001–0x000F | +0x02..+0x2A | u16 | per-voice registers 1..15 (see banks below) |
 | 0x0400 / 0x0401 | +0x2C / +0x2E | u16 | |
 | **0x5000** | **+0x74** | u32 | **18-bit pitch** — high half extends the class nibble |
@@ -139,8 +139,9 @@ makes it a map rather than a sample:
 and `0x484946DC` writes the same `0xC000` mute — to **cls 0x0004/0x0005/0x0006**. So the
 amplitude EG is at 4/5/6, the three banks sit at 4/8/C (KN7000: 0/4/8), and the release
 burst hits {4,5,8,9,C,D} where the KN7000 hits {0,1,4,5,8,9} — the first two registers of
-each of three banks in both cases. The gate is the one register that genuinely moved:
-r3 → r0.
+each of three banks in both cases. The key-on strobe is the one register that genuinely
+moved: r3 → r0. (Neither chip has a key-up gate: the release is the burst's r0/cls 0x0004
+write with low-byte bit 7 set, `tg-release-kn6000-2026-10-22/`.)
 
 ## 2. ★ FALSIFIED: "plane 0x20 = send matrix on both chips"
 
@@ -201,7 +202,8 @@ NOTE 72 -> slot 2 : +0x08 = C8 (active, note 72)  +0x0C = 4880 -> MIDI 72.000
 ```
 
 and the ordered write burst matches the static blit map register-for-register, including
-the universal key-up `0x0000=8000` and the voice-steal `0x0005/0x0006=C000`.
+the `0x0000=8000` that closes each note-on (read here as a key-up until 2026-10-22) and the
+voice-steal `0x0005/0x0006=C000`.
 
 **Audio (the real test)** — `-wavwrite` capture, FFT of the loudest window:
 
@@ -223,8 +225,10 @@ bit-identical across three runs (twice pre-publish, once on the final published 
 - **Effect-send matrix**: not decoded (§2 — the 0xA0xx row map is unverified). The gains
   keep their defaults rather than being driven from a guess.
 - **Aux/mode word**: the analogue of the KN7000's cls 0x1C02 gate-follow marker is not
-  identified, so every voice is treated as MANAGED. Safe here, because the KN6000 writes a
-  **universal** key-up gate for all voice classes — nothing can hang waiting for a release.
+  identified, so every voice is treated as MANAGED: it holds until the firmware's key-off
+  burst. (The "universal key-up gate" once given here as the reason this is safe was the
+  `0x8000` that closes every note-on; the key-off burst only arrives since the status reads
+  are answered, `tg-release-kn6000-2026-10-22/`.)
 - **Record type**: the KN6000's +0x02 values (1/8 plus flags 0x0100/0x0800, written at
   0x48492FF0) are not mapped onto the KN7000's {04,08,10,20,40} release classes, so the
   resolve reports "unknown" rather than guessing.

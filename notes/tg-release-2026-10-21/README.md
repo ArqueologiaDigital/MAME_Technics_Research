@@ -139,7 +139,8 @@ voice (v64), which the old model never released, now ends with the first:
   key-off writes that the firmware now sends. They are left as they were. Both would be worth re-checking against the
   firmware's writes in a sweep of the panel's sound families.
 - The KN6000/KN6500 tone generator (`kn6000_tonegen.cpp`) still answers 0 (the base class's `tg_read`). Whether its
-  firmware polls the same way was not checked.
+  firmware polls the same way was not checked. (2026-10-22: it does, and its notes hung too; fixed the same way,
+  `../tg-release-kn6000-2026-10-22/`.)
 
 ## The scripts
 
