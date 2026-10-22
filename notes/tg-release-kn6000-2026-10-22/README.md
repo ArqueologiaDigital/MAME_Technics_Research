@@ -116,20 +116,22 @@ silence. So the change is not exercised there yet. Why the KN6500 ignores `probe
 
 The KN6000 fix was written by copying the KN7000's release code and changing the class number. The behaviour both
 decodes repeated now lives in the base class (`kn_tonegen.cpp`): `voice_key_on`, `voice_start_eg`, `voice_bend`,
-`voice_release`, `voice_mute`, `voice_set_level`, and one `tg_read()` for both chips, with a virtual
-`voice_index(tg, ch)` (the KN7000's `(tg << 6) | ch`). Each model's `tg_write()` keeps only its register numbering
+`voice_release`, `voice_mute`, `voice_set_level`, and one `tg_read()` for both chips, with
+`voice_index(tg, ch)` mapping a chip's channel to a voice (`(tg << 6) | ch` with two chips, 64 voices each). Each model's `tg_write()` keeps only its register numbering
 and what differs between them: the KN7000's gate-follow and one-shot classes and sample select, the level's full
 scale (`0x5FFF` against `0x3FFF`), and which register's `0xC000` mutes.
 
-The refactor changes no output. Binary md5 `2f91bcd6e59b644b0f7c53941b359b47` (published 2026-10-22):
+The refactor changes no output. Binary md5 `2f91bcd6e59b644b0f7c53941b359b47`, then `7f1205b746cde8c45781ba9eed5a2565`
+after a MAME-style review pass (`voice_index` non-virtual, `key_break` through `voice_mute`, layout and comments),
+published 2026-10-22; both give every row below:
 
-| check                                                   | `0f75c6df` (before)                | `2f91bcd6` (after) |
-|---------------------------------------------------------|------------------------------------|--------------------|
-| KN7000 oracle (`../tg-release-2026-10-21/oracle_ab.sh`) | `d520532727c7d590066fc888a18a3f5d` | same               |
-| KN6000 `run_probe6.sh`: `voices.txt`                    | `89ee8e308a521f7f89a7241e1bf6e849` | same               |
-| KN6000 `run_probe6.sh`: `tgw.txt`                       | `ba0c433cbb3919b91390929f19da489c` | same               |
-| KN6000 `run_probe6.sh`: `tgr.txt`                       | `7df4a01c0a244af34f3965447076da04` | same               |
-| KN6000 `run_probe6.sh`: `run.wav`                       | `5f2424966502372a4db5009ef475ffcd` | same               |
+| check                                                   | `0f75c6df` (before)                | `2f91bcd6`, `7f1205b7` |
+|---------------------------------------------------------|------------------------------------|------------------------|
+| KN7000 oracle (`../tg-release-2026-10-21/oracle_ab.sh`) | `d520532727c7d590066fc888a18a3f5d` | same                   |
+| KN6000 `run_probe6.sh`: `voices.txt`                    | `89ee8e308a521f7f89a7241e1bf6e849` | same                   |
+| KN6000 `run_probe6.sh`: `tgw.txt`                       | `ba0c433cbb3919b91390929f19da489c` | same                   |
+| KN6000 `run_probe6.sh`: `tgr.txt`                       | `7df4a01c0a244af34f3965447076da04` | same                   |
+| KN6000 `run_probe6.sh`: `run.wav`                       | `5f2424966502372a4db5009ef475ffcd` | same                   |
 
 ## The scripts
 

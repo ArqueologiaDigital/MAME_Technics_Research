@@ -57,7 +57,7 @@
 
       DERIVED (kn7000_tonegen.*) -- the NUMBERING: which plane and which
         register index means what, i.e. the tg_write() decode itself, plus
-        the chip/window count (voice_index).
+        the voice count (64 per chip), passed to the base constructor.
 
     kn6000_tonegen_device is that second decode. Its plane map is only
     partly pinned, and its audio is blocked on the undumped IC13/IC14 table
@@ -105,8 +105,8 @@ public:
 	// A read of the data port (+2) after an address write: the chip's answer about its voices.
 	// The firmware's voice allocator polls the status plane to see which voices still sound
 	// and how loud they are. The same numbering on both chips:
-	//   0xFC08 + g      sixteen "still sounding" bits, bit i = this chip's voice 16g + i (g = 0..3)
-	//   0xFC02 | ch<<4  voice ch's envelope level, 13 bits (the firmware keeps (x & 0x1FFF) >> 5)
+	//   0xfc08 + g      sixteen "still sounding" bits, bit i = this chip's voice 16g + i (g = 0..3)
+	//   0xfc02 | ch<<4  voice ch's envelope level, 13 bits (the firmware keeps (x & 0x1fff) >> 5)
 	uint16_t tg_read(int tg, uint16_t addr);
 
 	// Envelope stages (see notes/tg-envelope-sweep-results.md). The firmware's 7-param
@@ -172,15 +172,15 @@ protected:
 
 	static constexpr int MAX_VOICES = 128;   // the KN7000, the largest of the family
 
-	// The voice slot of chip tg's channel ch: ch on a one-chip model; the KN7000 overrides it.
-	virtual int voice_index(int tg, int ch) const { return ch; }
+	// The voice slot of chip tg's channel ch, 64 per chip. A one-chip model has only ch.
+	int voice_index(int tg, int ch) const { return (m_num_voices > 64) ? ((tg << 6) | ch) : ch; }
 
 	// ---- voice events, called by each model's tg_write() decode ----
 	void voice_key_on(int v, uint32_t p18, int32_t note_x256);  // pitch and gate of a note-on
 	void voice_start_eg(int v, bool to_silence);   // resolve m_eg012/m_envreg, start the attack
 	void voice_bend(int v, uint32_t p18);          // pitch rewrite on a held voice
 	void voice_release(int v, uint8_t rate);       // key-off write: release at its rate byte
-	void voice_mute(int v);                        // 0xC000 steal: release at the default rate
+	void voice_mute(int v);                        // 0xc000 steal: release at the default rate
 	void voice_set_level(int v, uint16_t data, uint16_t full);  // per-voice level = data / full
 
 	// What the chip reports about voice v (tg_read): whether it still sounds, and its envelope

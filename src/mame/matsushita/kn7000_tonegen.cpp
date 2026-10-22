@@ -46,7 +46,7 @@ void kn7000_tonegen_device::device_start()
 void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256, int rec_type)
 {
 	if ((addr & 0xFF00) == 0xFC00) return;            // 0xFC0x idle / status refresh
-	const int v = voice_index(tg, (addr >> 4) & 0x3F);  // voice 0..127 (0..63 sub, 64..127 master)
+	const int v = voice_index(tg, (addr >> 4) & 0x3f);  // voice 0..127 (0..63 sub, 64..127 master)
 	const uint16_t cls = addr & 0xFC0F;               // register class (channel masked out)
 	if ((cls & 0xFC0E) == 0x2400)                     // pitch (bit0 = pitch18 bit16)
 	{
@@ -124,16 +124,14 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// a 6-write burst (r0, r1, r4, r5, r8, r9: TgVoiceEgBurstWrite) to EVERY voice of
 		// the note (notes/tg-release-2026-10-21). So the flag releases this voice, at the
 		// write's own rate byte -- the piano damp 0x91 -> ~85 ms under the provisional law.
-		// (It used to release the even/odd pair after a 20 ms guard: that matched what the
-		// firmware sent while the status reads (tg_read) answered 0, which made the firmware
-		// drop all but one voice of a note within 0.1 s of its note-on.)
 		if (BIT(data, 7))
 			voice_release(v, data >> 8);
 	}
 	else if (cls == 0x0001)                           // r1 = [DCY1 rate | SUS1 level];
 	{                                                 // 0xC000 = mute (boot init / voice-steal)
 		m_eg012[v][1] = data;
-		if (data == 0xC000) voice_mute(v);
+		if (data == 0xc000)
+			voice_mute(v);
 	}
 	else if (cls == 0x0002)                           // r2 = [DCY2 rate | SUS2 level]
 	{
@@ -148,7 +146,7 @@ void kn7000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// patch it is 0x5FFF, so normalising by 0x5FFF keeps that voice at unity
 		// (no change to the current sound) while honouring softer/louder values
 		// the firmware would emit for MIDI velocity or the mixer's part volumes.
-		voice_set_level(v, data, 0x5FFF);
+		voice_set_level(v, data, 0x5fff);
 	}
 	else if ((addr & 0xFC00) == 0x8000)               // group 0x20: per-channel OUTPUT BUS /
 	{                                                  // EFFECT-SEND record (0x80xx-0x83xx)

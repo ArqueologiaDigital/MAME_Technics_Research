@@ -64,7 +64,7 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 			m_wpos[v]   = 0.0;
 
 			// The amplitude envelope from cls 0x0004/0x0005/0x0006 (the KN7000's r0/r1/r2
-			// shifted by +4); the default release from cls 0x000E (its rA).
+			// shifted by +4); the default release from cls 0x000e (its rA).
 			voice_start_eg(v, false);
 		}
 		else
@@ -87,12 +87,14 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 	else if (cls == 0x0005)                            // amp EG [DCY1 rate | SUS1 level]
 	{
 		m_eg012[v][1] = data;
-		if (data == 0xC000) voice_mute(v);
+		if (data == 0xc000)
+			voice_mute(v);
 	}
 	else if (cls == 0x0006)                            // amp EG [DCY2 rate | SUS2 level]
 	{
 		m_eg012[v][2] = data;
-		if (data == 0xC000) voice_mute(v);
+		if (data == 0xc000)
+			voice_mute(v);
 	}
 	else if (cls >= 0x0008 && cls <= 0x000E)           // pitch/filter envelope banks
 	{
@@ -108,7 +110,7 @@ void kn6000_tonegen_device::tg_write(int tg, uint16_t addr, uint16_t data, int32
 		// writes 0x3FFF (live capture), so normalise by that to keep the default voice
 		// at unity while honouring the softer values the firmware emits for MIDI
 		// velocity and the mixer's part volumes.
-		voice_set_level(v, data, 0x3FFF);
+		voice_set_level(v, data, 0x3fff);
 	}
 	// The per-channel effect-send matrix -- the KN7000's group-0x20 (0x8000|row<<8|
 	// part<<4|reg) -- is deliberately NOT decoded here. On the KN6000 the 0x8000-0x9000

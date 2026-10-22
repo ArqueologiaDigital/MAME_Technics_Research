@@ -90,9 +90,6 @@ public:
 	virtual void tg_write(int tg, uint16_t addr, uint16_t data, int32_t note_x256 = -1, int rec_type = -1) override;
 
 protected:
-	// voice 0..127: 0..63 on the chip at 0x98040000 (tg 0), 64..127 on the one at 0x98050000
-	virtual int voice_index(int tg, int ch) const override { return (tg << 6) | ch; }
-
 	// Finds the four wave ROMs (IC203/IC204, IC207/IC208) and, when they are all there,
 	// plays every voice from them instead of the synthetic wave pack.
 	virtual void device_start() override ATTR_COLD;

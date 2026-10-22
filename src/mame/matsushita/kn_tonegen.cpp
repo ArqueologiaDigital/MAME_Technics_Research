@@ -37,23 +37,21 @@ double kn_tonegen_base_device::eg_tau(uint8_t rate)
 {
 	return std::clamp(13.0 * pow(2.0, -double(rate) / 20.0), 0.001, 30.0);
 }
+
 void kn_tonegen_base_device::key_break(uint8_t key)
 {
 	for (int v = 0; v < m_num_voices; v++)
 		if (m_gate[v] && m_mode[v] == 1 && m_srckey[v] == key)
-		{
-			m_stream->update();
-			m_gate[v]  = 0;                      // release at the voice's own rA rate
-			m_stage[v] = ST_RELEASE;
-		}
+			voice_mute(v);                      // release at the voice's own rA rate
 }
 
 void kn_tonegen_base_device::voice_key_on(int v, uint32_t p18, int32_t note_x256)
 {
-	// Musical pitch from the resolved voice-record notePitch16 when available; else the legacy
-	// absolute decode, anchored where pitch18 0x1C838 = MIDI 96 (the keybed top-C reference).
-	const double note = (note_x256 >= 0) ? double(note_x256) / 256.0
-	                                     : 96.0 + (double(p18) - double(0x1C838)) / 1024.0;
+	// Musical pitch from the resolved voice-record notePitch16 when available; else the
+	// absolute decode, anchored where pitch18 0x1c838 = MIDI 96 (the keybed top C).
+	const double note = (note_x256 >= 0)
+			? (double(note_x256) / 256.0)
+			: (96.0 + (double(p18) - double(0x1c838)) / 1024.0);
 	m_note[v]   = note;
 	m_p18ref[v] = p18;
 	m_freq[v]   = 440.0 * pow(2.0, (note - 69.0) / 12.0);
@@ -63,25 +61,24 @@ void kn_tonegen_base_device::voice_key_on(int v, uint32_t p18, int32_t note_x256
 
 void kn_tonegen_base_device::voice_start_eg(int v, bool to_silence)
 {
-	// The amplitude EG as [rate hi | level lo] byte pairs, DECODED 2026-07-20 via the AMPLITUDE
-	// EDIT -> ENVELOPE screen sweep (notes/tg-envelope-sweep-results.md): ATK rate | PEAK, DCY1
-	// rate | SUS1, DCY2 rate | SUS2. Rate bytes: HIGHER = FASTER; levels 0..0x7F. (Piano:
-	// D27F/3900/4500 = fast attack to full peak, two-stage decay to SILENCE; organ: D27F/727F/727F
-	// = fast attack, sustain at max.) to_silence runs the decay chain to silence (one-shot plucks).
+	// The amplitude EG is three [rate | level] byte pairs: ATK rate | PEAK, DCY1 rate | SUS1,
+	// DCY2 rate | SUS2 (notes/tg-envelope-sweep-results.md). A higher rate byte is faster;
+	// levels are 0..0x7f. A piano (d27f/3900/4500) decays to silence in two stages; an organ
+	// (d27f/727f/727f) holds at full level. to_silence runs the decay chain to silence, for
+	// voices that get no key-off write (one-shot plucks).
 	constexpr double FS = 44100.0;
-	const double peak = std::max(double(m_eg012[v][0] & 0x7F) / 127.0, 1.0 / 127.0);
-	double sus1 = double(m_eg012[v][1] & 0x7F) / 127.0;
-	double sus2 = double(m_eg012[v][2] & 0x7F) / 127.0;
-	if (to_silence) { sus1 = 0.0; sus2 = 0.0; }
+	const double peak = std::max(double(m_eg012[v][0] & 0x7f) / 127.0, 1.0 / 127.0);
+	const double sus1 = to_silence ? 0.0 : (double(m_eg012[v][1] & 0x7f) / 127.0);
+	const double sus2 = to_silence ? 0.0 : (double(m_eg012[v][2] & 0x7f) / 127.0);
 	m_peak[v]    = peak;
 	m_sus1[v]    = sus1;
 	m_sus2[v]    = sus2;
 	m_atkstep[v] = peak / (eg_tau(m_eg012[v][0] >> 8) * FS);
 	m_d1c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][1] >> 8) * FS));
 	m_d2c[v]     = exp(-1.0 / (eg_tau(m_eg012[v][2] >> 8) * FS));
-	// Default RELEASE rate: the third bank's last register (the KN7000's rA) high byte, organ 0xAE
-	// = fast stop, pad 0x04 = slow fade (audibly validated across 11 families). A key-off write
-	// overrides it with its own rate (voice_release).
+	// The default release rate is the high byte of the third bank's last register (the KN7000's
+	// rA): organ 0xae stops fast, pad 0x04 fades slowly. A key-off write overrides it with its
+	// own rate (voice_release).
 	m_rlsc[v]    = exp(-1.0 / (std::clamp(eg_tau(m_envreg[v][6] >> 8), 0.02, 12.0) * FS));
 	m_phase[v]   = 0.0;    // clean attack transient
 	m_stage[v]   = ST_ATTACK;
@@ -114,28 +111,25 @@ void kn_tonegen_base_device::voice_mute(int v)
 
 void kn_tonegen_base_device::voice_set_level(int v, uint16_t data, uint16_t full)
 {
-	// PROVISIONAL: the field's exact width and law are not confirmed, hence the clamp.
+	// FIXME: the level field's width and law are not known; the clamp bounds a wrong guess.
 	m_stream->update();
 	m_level[v] = std::clamp(double(data) / double(full), 0.0, 1.4);
 }
 
-// The firmware's voice sweep (TgVoiceStatusSweep: lib 0x4C03AA86 in the KN7000's v16, 0x4849A499 on
-// the KN6000; notes/tg-release-2026-10-21, notes/tg-release-kn6000-2026-10-22) reads the chip once per
-// pass for each group of 16 voices: it writes the address 0xFC08 + g, a 0, then reads the data port.
-// It ORs the answer with its own mask of held keys, and a voice whose bit falls from 1 to 0 has ended:
-// its node is retired. For the voices still sounding and not held it reads 0xFC02 | ch<<4 and keeps
-// (x & 0x1FFF) >> 5 as the voice's level; a released voice below 0x80 becomes the first to be stolen.
-// Answering 0 to all of this told the firmware that every voice it had just keyed was silent: it
-// retired them at its next pass and at the note-off found no voice to release.
-// 0xFC01 | ch<<4 is answered 0. On the KN6000 the firmware compares it with a stored target and
-// retries until they agree, so it is not the level; the KN7000 runs measured never read it.
+// The status plane, polled by the firmware's voice sweep (TgVoiceStatusSweep: lib 0x4c03aa86 in the
+// KN7000's v16, 0x4849a499 on the KN6000; notes/tg-release-2026-10-21). Every pass it reads 0xfc08 + g
+// for each group of 16 voices and ORs the answer with its own mask of held keys; a voice whose bit
+// falls from 1 to 0 has ended, and its node is retired. For the voices still sounding and not held
+// it reads 0xfc02 | ch << 4 and keeps (x & 0x1fff) >> 5 as the level; a released voice below 0x80 is
+// the first to be stolen.
+// FIXME: 0xfc01 | ch << 4 is not the level (the KN6000 firmware retries it until it matches a stored target)
 uint16_t kn_tonegen_base_device::tg_read(int tg, uint16_t addr)
 {
-	if ((addr & 0xFC00) != 0xFC00)
+	if ((addr & 0xfc00) != 0xfc00)
 		return 0;
 	m_stream->update();
-	const int ch = (addr >> 4) & 0x3F, reg = addr & 0x0F;
-	if (ch == 0 && reg >= 0x8 && reg <= 0xB)
+	const int ch = (addr >> 4) & 0x3f, reg = addr & 0x0f;
+	if (ch == 0 && reg >= 0x8 && reg <= 0xb)
 	{
 		uint16_t bits = 0;
 		for (int i = 0; i < 16; i++)
@@ -147,6 +141,7 @@ uint16_t kn_tonegen_base_device::tg_read(int tg, uint16_t addr)
 		return voice_level13(voice_index(tg, ch));
 	return 0;
 }
+
 void kn_tonegen_base_device::device_start()
 {
 	m_stream = stream_alloc(0, 2, 44100);
