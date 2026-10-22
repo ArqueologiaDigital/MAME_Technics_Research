@@ -771,12 +771,15 @@ void kn5000_cpanel_device::process_command()
 		break;
 	}
 
-	// Arm idle detection for INTA-based response delivery.  The sliding
-	// window in sioclk() retriggers on every edge and fires 50µs after
-	// the last edge, handling both firmware phantom bytes and polled modes.
+	// Arm idle detection for INTA-based response delivery. The panel answers no sooner than
+	// 150us after a command: the firmware still sends a phantom byte after the command's last
+	// byte, whose clock edges start 75-100us later and then slide the 50us window in sioclk().
+	// INTA asserted before them lands in the middle of the firmware's transmission, and every
+	// later packet is then received one byte off (notes/kn5000-panel-race-2026-10-22). Polled
+	// modes clock their dummy bytes at once and are not delayed.
 	if (!m_self_clocking && (m_tx_clock_count > 0 || !m_tx_queue.empty()))
 	{
-		m_idle_detect_timer->adjust(attotime::from_usec(50));
+		m_idle_detect_timer->adjust(attotime::from_usec(150));
 	}
 }
 
@@ -1122,10 +1125,11 @@ TIMER_CALLBACK_MEMBER(kn5000_cpanel_device::button_scan_callback)
 	if (!m_initialized)
 		return;
 
-	// Don't queue changes while a serial transaction is in progress
+	// Don't queue changes while a serial transaction is in progress, including between the two
+	// bytes of a command
 	if (m_self_clocking || m_inta_asserted)
 		return;
-	if (!m_rx_waiting_for_start)
+	if (!m_rx_waiting_for_start || m_cmd_index != 0)
 		return;
 
 	bool changed = false;

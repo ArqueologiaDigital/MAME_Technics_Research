@@ -583,6 +583,10 @@ figures: `notes/tg-release-2026-10-21/README.md`.
   shows `d497bed5caf` "update by push" at 2026-10-16 07:22. Corrected with G1.
 - Notes received on MIDI IN did not end at their note-off for most voices (`notes/listen-2026-10-21/`). Became G23,
   done 2026-10-21: the tone generators' status reads answered 0.
+- KN5000 v7 and v9: panel buttons did the wrong thing (DISK nothing, EXIT transposed) and v6 showed "ERROR in CPU
+  data transmission": the panel model asserted INTA before the firmware finished sending a command, leaving the
+  receive ring one byte off. Fixed in `kn5000_cpanel.cpp` (`notes/kn5000-panel-race-2026-10-22/`); found by the
+  Another World style-converter runs.
 - The KN6000's boot screen (3.8-4.9 s) is garbled because it is a 640x240 picture copied from the undumped table
   ROM: the firmware finds it through `0x480000EC`, which reads `0xFFFFFFFF` in the font placeholder, so it draws
   the placeholder's own first 153,600 bytes (`notes/kn6000-boot-picture-2026-10-22/`). Fix: dump IC13/IC14.
@@ -608,32 +612,33 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 
 ## History
 
-| date       | change                                                                                                       |
-|------------|--------------------------------------------------------------------------------------------------------------|
-| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                                   |
-| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                                     |
-| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                                  |
-| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                         |
-| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                      |
-| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                           |
-| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)       |
-| 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME   |
-| 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings     |
-| 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high      |
-| 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db         |
-| 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000) |
-| 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1     |
-| 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)      |
-| 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them          |
-| 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c     |
-| 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)     |
-| 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)          |
-| 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)               |
-| 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                    |
-| 2026-10-21 | G19: the noise is emulation speed below 100%, not the DSP's output; D2 measured; interpreter drops IRQ0s     |
-| 2026-10-21 | side finding: MIDI-received notes of most voices never end (`notes/listen-2026-10-21/`); D2 on MIDI too      |
-| 2026-10-21 | G23 added: the hanging notes are the TG status reads answering 0 (traced, `notes/tg-release-2026-10-21/`)    |
-| 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                               |
-| 2026-10-21 | G23: oracle re-baselined to `d5205327` (keybed piano's 2nd voice ends); gate 16 passed, 1 failed (it)        |
-| 2026-10-22 | G23 on the KN6000: same sweep, same fix; 0x98040002 kept out of its TG; published md5 `0f75c6df`             |
-| 2026-10-22 | TG voice code shared (3d8fb52, 8aab4d4; output byte-identical); KN6000 boot picture traced to the table ROM  |
+| date       | change                                                                                                        |
+|------------|---------------------------------------------------------------------------------------------------------------|
+| 2026-10-19 | created from the sweep at `5e0a58a`; G1 and G2 started at Felipe's request                                    |
+| 2026-10-19 | G1 done (`c2d6666`), G2 done (`faee3de`)                                                                      |
+| 2026-10-20 | G6: IC23's extent and checksum; Another World keeps its data in that window                                   |
+| 2026-10-20 | G19, G20 added and G13 planned: `notes/PLAN-2026-10-20-sound-and-hardware-probes.md`                          |
+| 2026-10-20 | G6 done, G7 in progress (work-RAM view), G21 added, G18: SD-board notes                                       |
+| 2026-10-20 | pass 5 on the unit: IC23's 256 KB repeat confirmed (G6), empty slots read FF (G10)                            |
+| 2026-10-20 | G20 in progress: the emulator answers host IOP reads and EPB0 readback (`notes/dsp-probe-2026-10-20/`)        |
+| 2026-10-20 | G20: SYSCON and DMAC0 FS answer like the chip; the DSP probe's passes 6 and 7 are built and tested in MAME    |
+| 2026-10-20 | G20: pass 6 on the unit: set-up as emulated, chip-only state listed, frame rate narrowed to two readings      |
+| 2026-10-20 | G20: pass 7: downloaded DSP code identical to the chip; G4 answered (MSGR2 read-back), FLAG3 never high       |
+| 2026-10-20 | G4: the DSP kernel reads MSGR0-7 back (chip evidence, pass 7); audio oracle re-baselined to 028bb1db          |
+| 2026-10-20 | G20: pass 8 on the unit (44.1 kHz, verdict b); TM4 tick, per-frame DSP handshake and FLAG3 modelled (KN7000)  |
+| 2026-10-20 | G13 in progress: wave ROM format and select decoded (`c3999e8`); voices play the ROMs, strap = subtype 1      |
+| 2026-10-20 | G13: boot unchanged on all eight cases (`ab_boot.sh`); Felipe's firmware 893 plays the same (`849db8b`)       |
+| 2026-10-20 | G20: SPORT DMA registers live (DMASTAT, ring indexes and counts, TX status), as the unit reads them           |
+| 2026-10-20 | G13: the strap reports the unit's 0xF8F7 (pass 9: subtype 2, bit 0 set, bits 7:4 = 0xF); oracle e415cb0c      |
+| 2026-10-20 | G22 added, in progress: the core at the unit's speed, 64 MHz, calibrated to pass 9 (branch `cpu-timing`)      |
+| 2026-10-21 | G13 and G22 marked done: both are in the published emulator (md5 `3077b137`, gate oracle `f01af6b`)           |
+| 2026-10-21 | DSP emulation plan `notes/PLAN-2026-10-21-dsp-emulation.md`; G3 confirmed by a run (`a26eb15`)                |
+| 2026-10-21 | G5 done: the effects DSP at 60 MHz (plan S3); oracle unchanged; published                                     |
+| 2026-10-21 | G19: the noise is emulation speed below 100%, not the DSP's output; D2 measured; interpreter drops IRQ0s      |
+| 2026-10-21 | side finding: MIDI-received notes of most voices never end (`notes/listen-2026-10-21/`); D2 on MIDI too       |
+| 2026-10-21 | G23 added: the hanging notes are the TG status reads answering 0 (traced, `notes/tg-release-2026-10-21/`)     |
+| 2026-10-21 | G23 done: status reads answered, release on r0 bit 7; published md5 `06334896`                                |
+| 2026-10-21 | G23: oracle re-baselined to `d5205327` (keybed piano's 2nd voice ends); gate 16 passed, 1 failed (it)         |
+| 2026-10-22 | G23 on the KN6000: same sweep, same fix; 0x98040002 kept out of its TG; published md5 `0f75c6df`              |
+| 2026-10-22 | TG voice code shared (3d8fb52, 8aab4d4; output byte-identical); KN6000 boot picture traced to the table ROM   |
+| 2026-10-22 | KN5000 panel race fixed: v7/v9 buttons and v6 boot error; all six versions open STYLE CONVERT; md5 `73d8d102` |
