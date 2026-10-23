@@ -70,6 +70,12 @@ public:
 	// thing; unset or 0 means the DSP is never called at all.
 	template <typename T> void set_dsp1(T &&tag) { m_dsp1.set_tag(std::forward<T>(tag)); }
 	template <typename T> void set_dsp1_enable_port(T &&tag) { m_dsp1_enable.set_tag(std::forward<T>(tag)); }
+
+	// Brings the stream, and so IC311's frames, up to the current time.  The DSP's host
+	// port calls it before each byte: IC311 runs inside this device's sound_stream_update(),
+	// so without it a whole stream batch of DSP frames sees only the D-RAM the host left
+	// at the end of the batch.
+	void sync_dsp() { m_stream->update(); }
 	template <typename T> void set_dsp_hle_port(T &&tag) { m_dsp_hle.set_tag(std::forward<T>(tag)); }
 
 	// ---- DIAGNOSTIC render mode ---------------------------------------------

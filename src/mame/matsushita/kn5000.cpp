@@ -1681,7 +1681,10 @@ void kn5000_state::kn5000(machine_config &config)
 				// The sub-CPU uploads microcode regardless; with KN5000_ENABLE_DSP1=0
 				// there is simply nothing on the other end to receive it.
 				if (!BIT(m_subcpu_p7, 5) && m_dsp1.found())
+				{
+					m_tonegen->sync_dsp();
 					m_dsp1->host_w(BIT(m_subcpu_p7, 6), data);
+				}
 			});
 
 	// SUBCPU PORT H (IC27 pins 146..149 = PH0..PH3):
