@@ -243,6 +243,7 @@ void upd6383_device::device_start()
 	space(AS_DELAY).specific(m_delay);
 
 	set_icountptr(m_icount);
+	test_load();
 
 	state_add(STATE_GENPC, "GENPC", m_pc).noshow();
 	state_add(STATE_GENPCBASE, "CURPC", m_pc).noshow();
@@ -1818,6 +1819,8 @@ void upd6383_device::state_string_export(const device_state_entry &entry, std::s
 void upd6383_device::host_w(bool cd, u8 data)
 {
 	capture_byte(cd, data);
+	if (m_test_lock)
+		return;     // a test program owns the chip (UPD6383_TESTPROG)
 
 	if (!cd)
 	{
@@ -6360,6 +6363,99 @@ void upd6383_device::execute_run()
 //      audit in this function.  The first trap has moved off word 0, which is
 //      what makes everything downstream reachable at all.
 
+//-------------------------------------------------
+//  The test-program harness.  UPD6383_TESTPROG names a text file; with it unset nothing
+//  here runs.  Lines (hex numbers):
+//    F frame          apply at this frame (decimal; default 0, the first frame run)
+//    I word w36       an I-RAM word (index 0..383, the 36-bit word)
+//    C cell v24       a C-RAM coefficient       D cell v24   a D-RAM (state RAM) cell
+//    R cell v24       a register-file cell (mode 1 / host tag 0x15)
+//    S cell hz amp    drive a D-RAM cell with a sine every frame from then on (decimal;
+//                     amp in 24-bit units) -- a stand-in for samples a host would write
+//    L n              print DO every n frames (UPD6383TEST lines, decimal)
+//  Once applied, host writes are dropped, so the firmware's own uploads cannot
+//  overwrite the program.  For developing programs of our own (technics-docs
+//  kn5000-dsp-sample-playback-research.md); it changes nothing when unset.
+//-------------------------------------------------
+void upd6383_device::test_load()
+{
+	m_present_asis = getenv("UPD6383_PRESENT_ASIS") && *getenv("UPD6383_PRESENT_ASIS") == '1';
+	if (m_present_asis)
+		osd_printf_info("upd6383: UPD6383_PRESENT_ASIS: the presentation words present the accumulator as is\n");
+	const char *path = getenv("UPD6383_TESTPROG");
+	if (!path || !*path)
+		return;
+	std::ifstream f(path);
+	if (!f)
+	{
+		osd_printf_error("upd6383: UPD6383_TESTPROG %s cannot be read\n", path);
+		return;
+	}
+	std::string line;
+	while (std::getline(f, line))
+	{
+		char k = 0;
+		char a[64] = { 0 }, b[64] = { 0 }, c[64] = { 0 };
+		const int n = sscanf(line.c_str(), " %c %63s %63s %63s", &k, a, b, c);
+		if (n < 2 || k == '#')
+			continue;
+		switch (k)
+		{
+		case 'F': m_test_frame = strtoull(a, nullptr, 10); break;
+		case 'L': m_test_log = u32(strtoul(a, nullptr, 10)); break;
+		case 'I': case 'C': case 'D': case 'R':
+			if (n >= 3)
+				m_test_pokes.push_back({ k, u16(strtoul(a, nullptr, 16)), strtoull(b, nullptr, 16) });
+			break;
+		case 'S':
+			if (n >= 4)
+				m_test_sines.push_back({ u16(strtoul(a, nullptr, 16)), atof(b), atof(c), 0.0 });
+			break;
+		}
+	}
+	m_test_pending = true;
+	osd_printf_info("upd6383: UPD6383_TESTPROG %s: %u pokes, %u sines, at frame %u\n", path,
+			unsigned(m_test_pokes.size()), unsigned(m_test_sines.size()), u32(m_test_frame));
+}
+
+void upd6383_device::test_apply()
+{
+	address_space &iram = space(AS_IRAM);
+	for (const test_poke &t : m_test_pokes)
+	{
+		switch (t.space)
+		{
+		case 'I':
+			for (int i = 0; i < upd6383_disassembler::WORD_BYTES; i++)
+				iram.write_byte(t.addr * upd6383_disassembler::WORD_BYTES + i,
+						u8(t.value >> (8 * (upd6383_disassembler::WORD_BYTES - 1 - i))));
+			break;
+		case 'C': m_cram.write_dword(t.addr, u32(t.value) & 0xffffff); break;
+		case 'D': m_dram.write_dword(t.addr, u32(t.value) & 0xffffff); break;
+		case 'R': m_rf[t.addr & 0xff] = u32(t.value) & 0xffffff; break;
+		}
+	}
+	m_test_pending = false;
+	m_test_lock = true;
+	osd_printf_info("upd6383: test program applied at frame %u\n", u32(m_frames_run));
+}
+
+void upd6383_device::test_frame()
+{
+	if (m_test_pending && m_frames_run >= m_test_frame)
+		test_apply();
+	if (!m_test_lock)
+		return;
+	for (test_sine &t : m_test_sines)
+	{
+		const s32 v = s32(std::lround(t.amp * std::sin(t.phase)));
+		m_dram.write_dword(t.cell, u32(v) & 0xffffff);
+		t.phase += 2.0 * M_PI * t.hz / 44100.0;
+		if (t.phase > 2.0 * M_PI)
+			t.phase -= 2.0 * M_PI;
+	}
+}
+
 bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 {
 	// ---- latch the inputs (the DI1L-R .. DI3R-R registers) -----------------
@@ -6368,6 +6464,8 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	for (int port = 0; port < 3; port++)
 		for (int ch = 0; ch < 2; ch++)
 			m_di[port][ch] = s32(util::sext(u32(di[port][ch]) & 0xffffff, 24));
+
+	test_frame();   // UPD6383_TESTPROG: load the test program / drive its cells (default off)
 
 	// ---- restart the PC, and ONLY the PC -----------------------------------
 	// The register file is NOT reset.  Words 0..41 -- including the whole input
@@ -6650,7 +6748,19 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 						s32(util::sext(m_dram.read_dword(m_dp) & 0xffffff, 24));
 			}
 		}
-		if (!word_ok)
+		if (!word_ok && m_present_asis && (raw == 0x0E30C00404ULL || raw == 0x0A3CD9F287ULL))
+		{
+			// UPD6383_PRESENT_ASIS (default off): the output stage's two presentation words
+			// (epilogue w73, unit 0 -> DO1; w78, unit 1 -> DO2) present their unit's accumulator
+			// UNCHANGED and count as decoded.  Their own arithmetic is not decoded (r2-output.md
+			// reads w73 as `ACCA <- level x ACCA' on the coefficient under the cursor), so this is
+			// only for programs that make that arithmetic not matter -- a program of ours that
+			// puts ~1.0 under the cursor there, as the KN5000 DSP sound's mixer does
+			// (technics-anotherworld kn5000cnv/tools/dspmix.py).  It keeps such a program's frames.
+			m_pres_unit = (raw == 0x0A3CD9F287ULL) ? 1 : 0;
+			do_presentation();
+		}
+		else if (!word_ok)
 		{
 			// UNDECODED -- and that is ONE state with TWO sub-cases, not two
 			// states.  Either way the word's arithmetic is unknown, so it goes on
@@ -7712,6 +7822,11 @@ bool upd6383_device::run_frame(const s32 (&di)[3][2], s32 (&do_)[3][2])
 	for (int port = 0; port < 3; port++)
 		for (int ch = 0; ch < 2; ch++)
 			do_[port][ch] = clean ? m_do[port][ch] : 0;
+	if (m_test_lock && m_test_log && (m_frames_run % m_test_log) == 0)
+		osd_printf_info("UPD6383TEST frame %u slots %u partials %u traps %u wait %d overrun %d -> %s  DO1 %d %d  DO2 %d %d  acc %lld\n",
+				u32(m_frames_run), slots, partials, traps, hit_wait ? 1 : 0, overrun ? 1 : 0,
+				clean ? "kept" : "DISCARDED", m_do[0][0], m_do[0][1], m_do[1][0], m_do[1][1],
+				(long long)util::sext(m_acc, 44));
 
 	return clean;
 }

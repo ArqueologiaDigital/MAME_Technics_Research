@@ -572,6 +572,20 @@ private:
 	s32 m_di[3][2];
 	s32 m_do[3][2];
 
+	// --- test-program harness (UPD6383_TESTPROG, default off; see test_load() in the .cpp) ---
+	struct test_poke { char space; u16 addr; u64 value; };
+	struct test_sine { u16 cell; double hz; double amp; double phase; };
+	std::vector<test_poke> m_test_pokes;
+	std::vector<test_sine> m_test_sines;
+	u64  m_test_frame = 0;      // apply at this frame
+	bool m_test_pending = false;
+	bool m_test_lock = false;   // once applied: host writes are dropped
+	u32  m_test_log = 0;        // log DO every this many frames (0 = never)
+	bool m_present_asis = false; // UPD6383_PRESENT_ASIS: see run_frame()
+	void test_load();
+	void test_apply();
+	void test_frame();
+
 	// --- parallel uC-IF receive state ---
 	u8  m_host_cmd;         // most recent command byte
 	u16 m_host_pos;         // data bytes seen since that command byte
