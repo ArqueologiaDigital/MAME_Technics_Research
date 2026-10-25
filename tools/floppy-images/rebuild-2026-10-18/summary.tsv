@@ -1,5 +1,5 @@
 list	entry	files	clusters	old crc	new crc	new sha1	payload
-kn5000_flop	idd5000	-	-	-	-	-	not rebuilt (no installer)
+kn5000_flop	idd5000	6	1683	04e7983f	3283e937	948b43b189a7ee1dbd704e739f8bb14f7f32d8aa	same files
 kn5000_flop	ca5001	30	2083	5e40ca6c	176ad294	da38a409ba6aa4ec0ecb0b7e3245660e495ca76b	same files
 kn5000_flop	ca5002	28	1989	c71c101c	aa230cb7	5bca4583bcd9303b308d270fccd6b9e3b5e06173	same files
 kn5000_flop	ca5003	29	2168	19e74ac6	5fd326d4	9f613a9ed4216497fcf3eb9c147f508d85244c2e	same files

@@ -102,8 +102,13 @@ of these.
 
 ## The rebuilt software lists (2026-10-18)
 
-`build_all.py` rebuilt all 40 entries that have an installer (`manifest.tsv`; `idd5000` has
-none) on their own instruments' disks, labelled with the entry names. Every image passes
+`build_all.py` rebuilt all 40 entries that have an installer (`manifest.tsv`) on their own
+instruments' disks, labelled with the entry names. *2026-10-25:* `idd5000`, which has no installer,
+is rebuilt the same way from its six loose files (`kn5000_project/idd5000/Initial_Data_Disk`, dated
+July 1997; manifest row `dir:`): 41 entries. Its listed image (crc `04e7983f`, built with pyfatfs,
+FAT starting `F0 0F FF`) makes the KN5000 offer to FORMAT the disk; the rebuilt one (crc `3283e937`)
+is listed as `IDD5000____`, and loading `01CTMINI.RCM` gives the factory panel (16 Beat 1, Piano,
+Bigband Brass, Modern E.P.1). The other 40 rebuilt byte-identical to the 2026-10-18 set. Every image passes
 `verify_floppy.py` and carries the same files as the image it replaces. Two runs gave identical
 zips and lists. Staged, not installed, in
 `~/compartilhado/technics_romsets/floppy-rebuild-2026-10-18/` (private); the new lists and

@@ -15,7 +15,10 @@ For each manifest row with an installer it
      reproducible too),
 and then writes OUT/hash/<list>.xml: MAME's current list (MAME/hash/<list>.xml) with only the
 crc and sha1 of the rebuilt entries changed. OUT/summary.tsv lists old and new hashes per entry.
-Rows without an installer (idd5000) are reported and skipped.
+A row whose installer column is dir:<path> (relative to ~/compartilhado) takes loose files instead of
+an installer: they are zipped first, in upper-case name order, with their own dates and the archive
+attribute, and the zip is used as the installer (idd5000: the factory Initial Data Disk's six files,
+which came without one). Rows with "-" are reported and skipped.
 
 usage: python3 -I build_all.py OUT [--mirror DIR] [--romsets DIR] [--mame DIR]
   defaults: ~/compartilhado/ca-software-mirror/files, ~/compartilhado/technics_romsets,
@@ -28,6 +31,7 @@ import re
 import struct
 import subprocess
 import sys
+import time
 import zipfile
 import zlib
 
@@ -92,6 +96,16 @@ for lst, entry, exe, base in rows:
     d = f"{OUT}/roms/{lst}"
     os.makedirs(d, exist_ok=True)
     img_path, base_path, exe_path = f"{d}/{entry}.img", f"{OUT}/base/{base}", f"{MIRROR}/{exe}"
+    if exe.startswith("dir:"):
+        src = os.path.join(H, exe[4:])
+        os.makedirs(f"{OUT}/payload", exist_ok=True)
+        exe_path = f"{OUT}/payload/{entry}.zip"
+        with zipfile.ZipFile(exe_path, "w") as z:
+            for name in sorted(os.listdir(src), key=str.upper):
+                p = os.path.join(src, name)
+                info = zipfile.ZipInfo(name.upper(), date_time=time.localtime(os.path.getmtime(p))[:6])
+                info.external_attr = 0x20
+                z.writestr(info, open(p, "rb").read())
     rc, out = run(os.path.join(HERE, "technics_floppy.py"), base_path, exe_path, img_path, "--label", entry)
     if rc:
         sys.exit(f"build failed for {entry}:\n{out}")

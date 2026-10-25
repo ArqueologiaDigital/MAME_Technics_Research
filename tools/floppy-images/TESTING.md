@@ -10,7 +10,7 @@ ones. Staging folder (private, not in git):
 
 Every command below runs from the published emulator folder and puts the staging folder
 first in MAME's search paths. A later `-rompath`/`-hashpath` replaces the one `run.sh`
-passes, and `idd5000` (not rebuilt) is then found in `./roms` as before:
+passes (all 41 entries, `idd5000` included since 2026-10-25, are in the staging folder):
 
     cd ~/compartilhado/kn7000-emulator
     NEW=(-rompath "$S/roms;./roms" -hashpath "$S/hash;hash")
