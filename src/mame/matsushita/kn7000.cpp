@@ -818,7 +818,7 @@ private:
 	// m_sdmbx_out) and asserts group 0x1C. Reads return the MISO byte -- i.e.
 	// the register behaves as the usual full-duplex SPI data latch.
 	uint16_t m_sdmbx_out = 0xFF;               // last MISO byte (mailbox read value)
-	uint16_t m_gpio8004 = 0xFFFF;              // GPIO latch 0x36008004 (bit1 = SD SPI CS, active-low)
+	uint16_t m_gpio8004 = 0xFFF7;              // GPIO latch 0x36008004 (bit1 = SD SPI CS, active-low; bit 3 below)
 	uint8_t  m_sdmbx_miso = 0;                 // MISO bit collector (spi_miso callback)
 	void cpsd_mbx_write(uint16_t data);
 	void sd_miso_w(int state) { m_sdmbx_miso = uint8_t(m_sdmbx_miso << 1) | (state & 1); }
@@ -1048,10 +1048,22 @@ void kn7000_state::maincpu_mem(address_map &map)
 			NAME([this](offs_t) -> uint16_t { return m_gpio8004; }),
 			NAME([this](offs_t, uint16_t data, uint16_t mem_mask)
 			{
+				const uint16_t old = m_gpio8004;
 				COMBINE_DATA(&m_gpio8004);
 				if (m_sdcard)
 					m_sdcard->spi_ss_w((m_gpio8004 & 0x0002) ? 0 : 1);   // active-low CS
 				fdc_tc_gpio(m_gpio8004);                                 // bit 4 = FDC TC (active low)
+				// Bit 3 is set only by the firmware's NMI handler (893 0x484D75C2, 941 0x484D77CF),
+				// its last act before it spins, and never cleared: it is clear from power-on.
+				// An NMI with the power still on -- a system error, which the handler does not tell
+				// from a power failure -- restarts the instrument (the owner's KN7000, 2026-10-26:
+				// Pinball/kn7000 notes/session-2026-10-26). During the POWER OFF control's
+				// power-down the session ends instead (poweroff_done).
+				if (!(old & 0x0008) && (m_gpio8004 & 0x0008) && m_ic23_nvram && !m_poweroff_timer->enabled())
+				{
+					logerror("KN7000: GPIO 0x36008004 bit 3 set with the power on: the instrument restarts\n");
+					machine().schedule_hard_reset();
+				}
 			}));
 	else
 		// KN6000/KN6500: the same output latch (bits 0-7 set and cleared, never tested; whole
@@ -2220,7 +2232,7 @@ void kn7000_state::machine_reset()
 			m_sd_insert_timer->adjust(attotime::from_seconds(6));
 		else
 			m_sd_insert_timer->adjust(attotime::never);
-		m_gpio8004 = 0xFFFF;                            // CS released (bit1=1) at reset
+		m_gpio8004 = 0xFFF7;                            // CS released (bit1=1) at reset; bit 3 clear (gpio8004_w)
 		if (m_sdcard)
 			m_sdcard->spi_ss_w(0);                      // deselected until the firmware asserts CS (0x36008004 bit1)
 	}
@@ -2395,6 +2407,9 @@ void kn7000_state::kn7000(machine_config &config)
 	// and the 1 kHz tick (TM4BR 0x7D0 at IOCLK / 8) agrees, as pass 8 measured.
 	MN10300(config, m_maincpu, 16_MHz_XTAL * 4);
 	m_maincpu->set_addrmap(AS_PROGRAM, &kn7000_state::maincpu_mem);
+	// A (d32,An) load raises a system-error NMI (mn10300.cpp execute_fc). Measured on the KN7000;
+	// the KN6000, KN6500 and KN2400, whose configs build on this one, have the same CPU.
+	m_maincpu->set_d32_an_system_error(true);
 
 	// On-chip INTC (now modeled in the core): configure the per-level maskable
 	// vectors -- the firmware installs two distinct handlers in its self-loaded

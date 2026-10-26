@@ -190,6 +190,7 @@ void mn10300_device::device_start()
 	save_item(NAME(m_irq_level));   // check_irq reads it every instruction (from upstream)
 	save_item(NAME(m_nmi_state));
 	save_item(NAME(m_nmi_pending));
+	save_item(NAME(m_nmicr));
 	save_item(NAME(m_sio_config));
 	save_item(NAME(m_sio_control));
 	save_item(NAME(m_sio_rx_fifo));
@@ -323,6 +324,7 @@ void mn10300_device::device_reset()
 	m_dma_timer->adjust(attotime::never);
 
 	m_nmi_pending = false;
+	m_nmicr = 0;
 
 	// Timing model: chip selects as the unit reads them (their reset values are unknown, but
 	// for MEMCTR0 bit 15, which the boot code keeps and the unit reads set), caches off and empty.
@@ -500,7 +502,15 @@ uint16_t mn10300_device::intc_r(offs_t offset, uint16_t mem_mask)
 {
 	const int reg = offset << 1;                  // byte offset within 0x34000100
 	if (reg == 0x00)                              // IAGR: the group latched at interrupt accept
+	{
+		// On the KN7000 this address read 0x0004 after a system-error NMI (Pinball/kn7000
+		// notes/session-2026-10-26, PFT10): it is G0ICR, NMICR, as the firmware's level-6
+		// handler takes it (0x34000100 + IAGR at 0x34000200). The quick handler's dispatch
+		// reads the accepted group here instead; that model stays until an NMI flag is up.
+		if (m_nmicr)
+			return m_nmicr;
 		return m_iagr_latch << 3;
+	}
 	if (reg == 0x04)
 		return 0;
 	if (reg == 0x100)                             // 0x34000200: level-6 group register (latched at accept)
@@ -1874,6 +1884,20 @@ void mn10300_device::execute_fc()
 		const int  type = (op2 >> 5) & 3;
 		const bool a_reg = (type == 1);
 		typed_load_store(type, a_reg, (op2 >> 2) & 3, m_a[op2 & 3] + imm, op2 & 0x10);
+		// On the KN7000, movbu (d32,An),Dn and mov (d32,An),Dn with a displacement of 0x502BAxxx
+		// raised an NMI with NMICR = 0x0004, taken with the next instruction's address pushed
+		// (Pinball/kn7000 notes/session-2026-10-26, probes PFT7, PFT9, PFT10), while the
+		// firmware's own movhu (0x0000b7f8,a0),d1 (893 0x4844B733, run at every boot) does not.
+		// Either the form or the displacement's size decides it; this models only the cases
+		// both rules agree on: mov and movbu loads, displacement outside the 16-bit range.
+		// Whether the access itself happens is not known; stores were not tried.
+		const int32_t disp = int32_t(imm);
+		if (m_d32_an_syserr && ((op2 & 0xF0) == 0x00 || (op2 & 0xF0) == 0x40) && (disp < -0x8000 || disp > 0x7FFF))
+		{
+			logerror("MN10300: (d32,An) operand at %08X: system-error NMI\n", start_pc);
+			m_nmicr |= 0x0004;
+			m_nmi_pending = true;
+		}
 	}
 	else if (op2 < 0xA0)                            // store reg -> (disp32,sp) / (abs32)
 	{

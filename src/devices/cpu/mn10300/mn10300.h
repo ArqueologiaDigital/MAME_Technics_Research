@@ -99,6 +99,9 @@ public:
 	void intc_icr_clear(int group, uint16_t bits) { m_gxicr[group & 0x1f] &= ~bits; }
 	// Per-level maskable vector table (see the delivery note above).
 	void set_maskable_vector(int level, uint32_t vector) { m_level_vector[level & 7] = vector; }
+	// The KN7000's CPU raises a system-error NMI (NMICR bit 2) after a mov or movbu load whose operand is
+	// an address register plus a displacement outside the 16-bit range; see execute_fc.
+	void set_d32_an_system_error(bool on) { m_d32_an_syserr = on; }
 	// Outward event callbacks (all optional):
 	//   intc_ack_cb    (write8, data = group): a GxICR write carried DETECT-ack
 	//        bits (data & mem_mask & 0x000f). The KN7000 uses it for the panel
@@ -415,6 +418,8 @@ private:
 	int      m_irq_level = 7; // priority level of the pending interrupt (0 = highest)
 	bool     m_nmi_state = false;   // NMI pin level (execute_set_input)
 	bool     m_nmi_pending = false; // a rising NMI edge not yet taken
+	bool     m_d32_an_syserr = false; // set_d32_an_system_error
+	uint16_t m_nmicr = 0;           // NMICR (G0ICR, 0x34000100): the NMI causes raised so far
 
 	int m_icount;     // remaining cycles this timeslice (MN10200 named this m_cycles)
 
