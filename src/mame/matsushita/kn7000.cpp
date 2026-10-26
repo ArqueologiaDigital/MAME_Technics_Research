@@ -1937,7 +1937,8 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		}
 		return 0;
 	}
-	// KN7000: the S1D13506 LCD controller ([INFERENCE], technics-roms-disasm kn7000 notes/ic18-boot-rom.md) at
+	// KN7000: the LCD controller, an S1D13806 (the S1D13506 with 1280 KB of memory inside; [INFERENCE]: its registers,
+	// technics-roms-disasm kn7000 notes/ic18-boot-rom.md, and its memory size, Pinball PFT16/PFT17) at
 	// 0x9CC00000 scans its display memory (0x9CE00000) from its LCD display start address (REG[042h]-[044h], in
 	// 16-bit words) with a line offset of REG[046h]-[047h] words, at 16 bits a pixel. REG[040h] bit 4 set with
 	// REG[1FCh] bit 6 clear is its 180-degree SwivelView (S1D13506 Hardware Functional Specification, Table 8-19,
@@ -1952,11 +1953,12 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		const uint32_t offset = reg(0x46) | ((reg(0x47) & 0x07) << 8);
 		const bool backwards = BIT(reg(0x40), 4) && !BIT(reg(0x1fc), 6);
 		// The LCD ink layer (REG[070h] = 2, Ink mode; S1D13506 section 14): a 2-bit overlay of the whole panel at its
-		// own address, REG[071h] = n: the display buffer's size (2 MB on the KN7000) - n x 8 KB (0: - 1 KB), a line of
-		// REG[032h] + 1 words. A dot is colour 0 (REG[076h]-[078h], blue, green, red), colour 1 ([07Ah]-[07Ch]), the
+		// own address, REG[071h] = n: the display buffer's size (1280 KB on the KN7000, S1D13806 Table 8-25: n up to
+		// 160) - n x 8 KB (0: - 1 KB), a line of REG[032h] + 1 words. On the owner's KN7000, n = 5 read the 0x00 the
+		// firmware cleared there (all colour 0) and n = 133 the firmware's frame (Pinball PFT17). A dot is colour 0 (REG[076h]-[078h], blue, green, red), colour 1 ([07Ah]-[07Ch]), the
 		// picture, or the picture inverted.
 		const bool ink = (reg(0x70) & 3) == 2;
-		const uint32_t ink_base = 0x200000 - (reg(0x71) ? reg(0x71) * 8192 : 1024);
+		const uint32_t ink_base = 0x140000 - (reg(0x71) ? reg(0x71) * 8192 : 1024);
 		const uint32_t ink_pitch = (reg(0x32) + 1) * 2;
 		const uint16_t ink_colour[2] = {
 			uint16_t(((reg(0x78) & 0x1f) << 11) | ((reg(0x77) & 0x3f) << 5) | (reg(0x76) & 0x1f)),
@@ -2074,12 +2076,11 @@ void kn7000_state::machine_start()
 		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
 	}
 
-	// KN7000: the CPU reaches only the first 1 MB of the S1D13506's 2 MB display buffer. On the owner's KN7000 a
-	// word written at 0x9CF7FFF0 or 0x9CFFFFF0 reads back 0xFFDF, while 0x9CE7FFF0 and 0x9CEFFFF0 keep their own
-	// (Pinball/kn7000 PFT16, notes/session-2026-10-26). The display fetch from there reads dots of 0 [INFERENCE]: the
-	// game's ink layer placed there turned the whole screen into its colour 0 (black).
+	// KN7000: the LCD controller's display buffer is 1280 KB (an S1D13806's embedded memory, by its Technical Manual;
+	// the firmware clears 0x140000 bytes of it). On the owner's KN7000 a word written at 0x9CF7FFF0 or 0x9CFFFFF0
+	// reads back 0xFFDF, while 0x9CE7FFF0 and 0x9CEFFFF0 keep their own (Pinball/kn7000 PFT16, notes/session-2026-10-26).
 	if (!m_lcd_kn6 && !m_lcd_kn24)
-		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x9cf00000, 0x9cffffff,
+		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x9cf40000, 0x9cffffff,
 				read32smo_delegate(*this, NAME([] () -> uint32_t { return 0xffdfffdf; })),
 				write32smo_delegate(*this, NAME([] (uint32_t) { })));
 
