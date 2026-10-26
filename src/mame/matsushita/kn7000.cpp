@@ -2074,6 +2074,15 @@ void kn7000_state::machine_start()
 		logerror("custom-data flash: IC21 mapped at 0x96800000\n");
 	}
 
+	// KN7000: the CPU reaches only the first 1 MB of the S1D13506's 2 MB display buffer. On the owner's KN7000 a
+	// word written at 0x9CF7FFF0 or 0x9CFFFFF0 reads back 0xFFDF, while 0x9CE7FFF0 and 0x9CEFFFF0 keep their own
+	// (Pinball/kn7000 PFT16, notes/session-2026-10-26). The display fetch from there reads dots of 0 [INFERENCE]: the
+	// game's ink layer placed there turned the whole screen into its colour 0 (black).
+	if (!m_lcd_kn6 && !m_lcd_kn24)
+		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x9cf00000, 0x9cffffff,
+				read32smo_delegate(*this, NAME([] () -> uint32_t { return 0xffdfffdf; })),
+				write32smo_delegate(*this, NAME([] (uint32_t) { })));
+
 	// Cache the wave ROMs (and the synthetic wave pack, the port's fallback) so the
 	// TG wave-read port can source sample words without a region lookup per read (the
 	// §8.9 sweep does millions). Index 0 is the sub TG at 0x98040000, 1 the main one.
