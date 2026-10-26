@@ -1951,6 +1951,16 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		const uint32_t start = reg(0x42) | (reg(0x43) << 8) | ((reg(0x44) & 0x0f) << 16);
 		const uint32_t offset = reg(0x46) | ((reg(0x47) & 0x07) << 8);
 		const bool backwards = BIT(reg(0x40), 4) && !BIT(reg(0x1fc), 6);
+		// The LCD ink layer (REG[070h] = 2, Ink mode; S1D13506 section 14): a 2-bit overlay of the whole panel at its
+		// own address, REG[071h] = n: the display buffer's size (2 MB on the KN7000) - n x 8 KB (0: - 1 KB), a line of
+		// REG[032h] + 1 words. A dot is colour 0 (REG[076h]-[078h], blue, green, red), colour 1 ([07Ah]-[07Ch]), the
+		// picture, or the picture inverted.
+		const bool ink = (reg(0x70) & 3) == 2;
+		const uint32_t ink_base = 0x200000 - (reg(0x71) ? reg(0x71) * 8192 : 1024);
+		const uint32_t ink_pitch = (reg(0x32) + 1) * 2;
+		const uint16_t ink_colour[2] = {
+			uint16_t(((reg(0x78) & 0x1f) << 11) | ((reg(0x77) & 0x3f) << 5) | (reg(0x76) & 0x1f)),
+			uint16_t(((reg(0x7c) & 0x1f) << 11) | ((reg(0x7b) & 0x3f) << 5) | (reg(0x7a) & 0x1f)) };
 		if (offset && (reg(0x40) & 7) == 5)
 		{
 			constexpr offs_t MEM = (0x9ce00000 - 0x9c000000) / 4;
@@ -1961,7 +1971,19 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 				{
 					const uint32_t word = (backwards ? start - offset * uint32_t(239 - y) - uint32_t(639 - x) : start + offset * uint32_t(y) + uint32_t(x)) & 0xfffff;
 					const uint32_t w = m_lcdbuf[MEM + (word >> 1)];
-					const uint16_t v = (word & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian
+					uint16_t v = (word & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian
+					if (ink)
+					{
+						// the ink layer is not turned with the picture (section 15.3.2): it is fetched in the panel's
+						// own order, so the viewer's (x, y) is its (639 - x, 239 - y) when the picture is fetched backwards
+						const uint32_t px = backwards ? 639 - x : x, py = backwards ? 239 - y : y;
+						const uint32_t a = ink_base + py * ink_pitch + (px >> 2);
+						const uint8_t b = uint8_t(m_lcdbuf[(0xe00000 + a) >> 2] >> ((a & 3) * 8));
+						const unsigned sel = (b >> (6 - 2 * (px & 3))) & 3;   // (An, Bn), the first pixel in bits 7-6
+						if (sel == 0) v = ink_colour[0];
+						else if (sel == 1) v = ink_colour[1];
+						else if (sel == 3) v = ~v;
+					}
 					dst[x] = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
 				}
 			}
