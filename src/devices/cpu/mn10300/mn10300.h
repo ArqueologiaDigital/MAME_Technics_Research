@@ -99,8 +99,8 @@ public:
 	void intc_icr_clear(int group, uint16_t bits) { m_gxicr[group & 0x1f] &= ~bits; }
 	// Per-level maskable vector table (see the delivery note above).
 	void set_maskable_vector(int level, uint32_t vector) { m_level_vector[level & 7] = vector; }
-	// The KN7000's CPU raises a system-error NMI (NMICR bit 2) after a mov or movbu load whose operand is
-	// an address register plus a displacement outside the 16-bit range; see execute_fc.
+	// The KN7000's CPU raises a system-error NMI (NMICR bit 2) after a load or store whose operand is an
+	// address register plus a 32-bit displacement with a non-zero top byte; see execute_fc.
 	void set_d32_an_system_error(bool on) { m_d32_an_syserr = on; }
 	// Outward event callbacks (all optional):
 	//   intc_ack_cb    (write8, data = group): a GxICR write carried DETECT-ack

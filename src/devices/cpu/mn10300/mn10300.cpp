@@ -1884,15 +1884,14 @@ void mn10300_device::execute_fc()
 		const int  type = (op2 >> 5) & 3;
 		const bool a_reg = (type == 1);
 		typed_load_store(type, a_reg, (op2 >> 2) & 3, m_a[op2 & 3] + imm, op2 & 0x10);
-		// On the KN7000, movbu (d32,An),Dn and mov (d32,An),Dn with a displacement of 0x502BAxxx
-		// raised an NMI with NMICR = 0x0004, taken with the next instruction's address pushed
-		// (Pinball/kn7000 notes/session-2026-10-26, probes PFT7, PFT9, PFT10), while the
-		// firmware's own movhu (0x0000b7f8,a0),d1 (893 0x4844B733, run at every boot) does not.
-		// Either the form or the displacement's size decides it; this models only the cases
-		// both rules agree on: mov and movbu loads, displacement outside the 16-bit range.
-		// Whether the access itself happens is not known; stores were not tried.
-		const int32_t disp = int32_t(imm);
-		if (m_d32_an_syserr && ((op2 & 0xF0) == 0x00 || (op2 & 0xF0) == 0x40) && (disp < -0x8000 || disp > 0x7FFF))
+		// On the KN7000 a (d32,An) operand whose displacement is 0x502BAxxx raises an NMI with
+		// NMICR = 0x0004, taken with the next instruction's address pushed, for mov, movbu and
+		// movhu loads alike; displacements of 0x00100000 and 0x0000B000 do not, nor program
+		// 893's own movhu (0x0000b7f8,a0),d1, run at every boot (Pinball/kn7000 notes/
+		// session-2026-10-26, probes PFT7, PFT9 to PFT13). Modelled: a displacement whose top
+		// byte is not zero, loads and stores (the threshold lies between 0x00100000 and
+		// 0x502BA000; stores were not tried). Whether the access itself happens is not known.
+		if (m_d32_an_syserr && (imm & 0xFF000000))
 		{
 			logerror("MN10300: (d32,An) operand at %08X: system-error NMI\n", start_pc);
 			m_nmicr |= 0x0004;
