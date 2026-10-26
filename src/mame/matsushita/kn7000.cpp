@@ -1939,12 +1939,12 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 	}
 	// KN7000: the S1D13506 LCD controller ([INFERENCE], technics-roms-disasm kn7000 notes/ic18-boot-rom.md) at
 	// 0x9CC00000 scans its display memory (0x9CE00000) from its LCD display start address (REG[042h]-[044h], in
-	// 16-bit words) with a line offset of REG[046h]-[047h] words, at 16 bits a pixel. With REG[040h] bit 4 set and
-	// REG[1FCh] bit 6 clear, as the firmware sets them, it reads backwards (the panel is mounted upside down): the
-	// viewer's bottom-right pixel is the word at start - offset, the rest going back from it. The firmware's start,
-	// 0x025A7F, so shows its frame's rows 0-239 at 0x9CE00000. On the owner's KN7000 a picture placed by this rule
-	// came out upright and scrolled smoothly as the start moved by a line's words (Pinball/kn7000 PFT14,
-	// notes/session-2026-10-26). Before the controller is set up (offset 0) the frame is read linearly.
+	// 16-bit words) with a line offset of REG[046h]-[047h] words, at 16 bits a pixel. REG[040h] bit 4 set with
+	// REG[1FCh] bit 6 clear is its 180-degree SwivelView (S1D13506 Hardware Functional Specification, Table 8-19,
+	// section 15.3): it fetches backwards, the start address being the bottom-right pixel's word. The firmware's
+	// start, 0x025A7F, one line past IC18's 0x0257FF, so shows its frame's rows 1-240. On the owner's KN7000 a picture
+	// placed by this rule came out upright and scrolled smoothly as the start moved by a line's words (Pinball/kn7000
+	// PFT14, notes/session-2026-10-26). Before the controller is set up (offset 0) the frame is read linearly.
 	if (!m_lcd_kn6)
 	{
 		auto reg = [this](offs_t r) -> uint8_t { const offs_t a = 0xc00000 + r; return uint8_t(m_lcdbuf[a >> 2] >> ((a & 3) * 8)); };
@@ -1959,7 +1959,7 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 				uint32_t *const dst = &bitmap.pix(y);
 				for (int x = cliprect.left(); x <= cliprect.right(); x++)
 				{
-					const uint32_t word = (backwards ? start - offset * uint32_t(240 - y) - uint32_t(639 - x) : start + offset * uint32_t(y) + uint32_t(x)) & 0xfffff;
+					const uint32_t word = (backwards ? start - offset * uint32_t(239 - y) - uint32_t(639 - x) : start + offset * uint32_t(y) + uint32_t(x)) & 0xfffff;
 					const uint32_t w = m_lcdbuf[MEM + (word >> 1)];
 					const uint16_t v = (word & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian
 					dst[x] = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
