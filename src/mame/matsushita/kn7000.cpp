@@ -1937,7 +1937,38 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		}
 		return 0;
 	}
-	// KN7000: 640x240 RGB565, scanned top-to-bottom. KN6000/KN6500: the same composited buffer,
+	// KN7000: the S1D13506 LCD controller ([INFERENCE], technics-roms-disasm kn7000 notes/ic18-boot-rom.md) at
+	// 0x9CC00000 scans its display memory (0x9CE00000) from its LCD display start address (REG[042h]-[044h], in
+	// 16-bit words) with a line offset of REG[046h]-[047h] words, at 16 bits a pixel. With REG[040h] bit 4 set and
+	// REG[1FCh] bit 6 clear, as the firmware sets them, it reads backwards (the panel is mounted upside down): the
+	// viewer's bottom-right pixel is the word at start - offset, the rest going back from it. The firmware's start,
+	// 0x025A7F, so shows its frame's rows 0-239 at 0x9CE00000. On the owner's KN7000 a picture placed by this rule
+	// came out upright and scrolled smoothly as the start moved by a line's words (Pinball/kn7000 PFT14,
+	// notes/session-2026-10-26). Before the controller is set up (offset 0) the frame is read linearly.
+	if (!m_lcd_kn6)
+	{
+		auto reg = [this](offs_t r) -> uint8_t { const offs_t a = 0xc00000 + r; return uint8_t(m_lcdbuf[a >> 2] >> ((a & 3) * 8)); };
+		const uint32_t start = reg(0x42) | (reg(0x43) << 8) | ((reg(0x44) & 0x0f) << 16);
+		const uint32_t offset = reg(0x46) | ((reg(0x47) & 0x07) << 8);
+		const bool backwards = BIT(reg(0x40), 4) && !BIT(reg(0x1fc), 6);
+		if (offset && (reg(0x40) & 7) == 5)
+		{
+			constexpr offs_t MEM = (0x9ce00000 - 0x9c000000) / 4;
+			for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
+			{
+				uint32_t *const dst = &bitmap.pix(y);
+				for (int x = cliprect.left(); x <= cliprect.right(); x++)
+				{
+					const uint32_t word = (backwards ? start - offset * uint32_t(240 - y) - uint32_t(639 - x) : start + offset * uint32_t(y) + uint32_t(x)) & 0xfffff;
+					const uint32_t w = m_lcdbuf[MEM + (word >> 1)];
+					const uint16_t v = (word & 1) ? uint16_t(w >> 16) : uint16_t(w);   // little-endian
+					dst[x] = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
+				}
+			}
+			return 0;
+		}
+	}
+	// KN7000 before its controller is set up: 640x240 RGB565, top-to-bottom. KN6000/KN6500: the same composited buffer,
 	// but the panel is RGB555 and physically mounted rotated 180 degrees -- so read it reversed
 	// (bottom-right to top-left) and decode 5-5-5. (Decoding a 555 gray as 565 tinted it blue.)
 	const bool kn6 = m_lcd_kn6;
