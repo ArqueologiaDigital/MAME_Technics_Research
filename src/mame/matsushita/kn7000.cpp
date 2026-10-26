@@ -2083,6 +2083,12 @@ void kn7000_state::machine_start()
 		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x9cf40000, 0x9cffffff,
 				read32smo_delegate(*this, NAME([] () -> uint32_t { return 0xffdfffdf; })),
 				write32smo_delegate(*this, NAME([] (uint32_t) { })));
+	// and REG[03Ah] bit 7 reads 1 while the LCD's vertical non-display period is on (S1D13506 Hardware Functional
+	// Specification, REG[03Ah]); the rest of the register reads as written.
+	if (!m_lcd_kn6 && !m_lcd_kn24)
+		m_maincpu->space(AS_PROGRAM).install_read_handler(0x9cc00038, 0x9cc0003b,
+				read32smo_delegate(*this, NAME([this] () -> uint32_t {
+					return (m_lcdbuf[0xc00038 >> 2] & ~0x00800000) | (m_screen->vblank() ? 0x00800000 : 0); })));
 
 	// Cache the wave ROMs (and the synthetic wave pack, the port's fallback) so the
 	// TG wave-read port can source sample words without a region lookup per read (the
@@ -2554,11 +2560,11 @@ void kn7000_state::kn7000(machine_config &config)
 	// TODO: confirm resolution, pixel clock and the LCD controller feeding
 	//       the V-RAM at IC104.
 	SCREEN(config, m_screen).set_lcd();
-	m_screen->set_refresh_hz(60);
-	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
-	// 640x240 8bpp LCD (proven from the blitter stride 0x280 and height 0xF0).
-	m_screen->set_size(640, 240);
-	m_screen->set_visarea(0, 640 - 1, 0, 240 - 1);
+	// 640x240 8bpp LCD (proven from the blitter stride 0x280 and height 0xF0). The lines and their non-display
+	// periods are the LCD controller's as IC18's LcdControllerInit sets them: REG[032h] 0x4F (640 dots), REG[034h]
+	// 0x1E (248 more), REG[038h] 0xEF (240 lines), REG[03Ah] 0x0F (16 more). The pixel clock (BUSCLK / 2, REG[014h]
+	// 0x11) is not known: 60 frames a second is kept.
+	m_screen->set_raw(888 * 256 * 60, 888, 0, 640, 256, 0, 240);
 	m_screen->set_screen_update(FUNC(kn7000_state::screen_update));
 
 	// Clickable front-panel artwork: buttons bound to the ioports, LEDs bound to
@@ -2666,6 +2672,10 @@ void kn7000_state::kn6000(machine_config &config)
 	m_strap_fixed = 0x8000;              // its strap is not known: keep the value the driver always gave
 	m_lib_mirror = true;
 	m_lcd_kn6 = true;
+	m_screen->set_refresh_hz(60);        // its LCD controller's timing is not known: no non-display period
+	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
+	m_screen->set_size(640, 240);
+	m_screen->set_visarea(0, 640 - 1, 0, 240 - 1);
 	// KN6000/KN6500 interrupt vectors: ALL maskable IRQs go to the firmware-
 	// built trampoline slot 0 (0x90000000 -> the general handler, which reads
 	// the latched group at 0x34000200 and dispatches). Slot 1 (0x90000006 ->
@@ -2751,6 +2761,8 @@ void kn7000_state::kn2400(machine_config &config)
 	m_strap_fixed = 0x8000;              // its strap is not known: keep the value the driver always gave
 	m_lcd_kn24 = true;
 	// 320x240 4-level grayscale LCD (2bpp framebuffer at 0x9C800000).
+	m_screen->set_refresh_hz(60);
+	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(0));
 	m_screen->set_size(320, 240);
 	m_screen->set_visarea(0, 320 - 1, 0, 240 - 1);
 	// Like the KN6000, the KN2400 firmware builds its own interrupt trampoline
