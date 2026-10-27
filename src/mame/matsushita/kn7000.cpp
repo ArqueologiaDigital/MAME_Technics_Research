@@ -884,10 +884,7 @@ void kn7000_state::maincpu_mem(address_map &map)
 	map(0x48400000, 0x487fffff).rom().region("maincpu", 0);
 
 	// --- Work RAM -------------------------------------------------------
-	// The firmware sets the initial SP to 0x50021CF8 and, when single-stepped
-	// through boot with the mn10300_sim interpreter, touches RAM past 0x50298000
-	// (>2.5 MB), so the real work RAM (IC12/IC13) is larger than the ~1.5 MB BSS.
-	// TODO: confirm the exact size; mapping 4 MB here as a working estimate.
+	// IC12/IC13, two 16 Mbit DRAMs: 4 MB (the KN7000's repeats through CS4: machine_start).
 	map(0x50000000, 0x503fffff).ram().share("workram");
 
 	// --- Device windows found by executing the boot (mn10300_sim) -------
@@ -2297,6 +2294,20 @@ void kn7000_state::machine_start()
 		address_space &prog = m_maincpu->space(AS_PROGRAM);
 		prog.install_ram(0x44000000, 0x4403ffff, 0x00fc0000, m_ic23.get());
 		prog.install_ram(0x84000000, 0x8403ffff, 0x00fc0000, m_ic23.get());
+	}
+
+	// KN7000: the library SRAM (IC14/IC15, two 1 Mbit x16 on A2-A17: 256 KB) and the work DRAM (IC12/IC13, two 16 Mbit:
+	// 4 MB) repeat through their whole 64 MB chip selects, CS3 (0x4C000000, uncached 0x8C000000) and CS4 (0x50000000,
+	// uncached 0x90000000), as the owner's KN7000 reads them (Pinball/kn7000 PFT18, notes/ram-inventory-2026-10-27).
+	if (!m_lcd_kn6 && !m_lcd_kn24)
+	{
+		address_space &prog = m_maincpu->space(AS_PROGRAM);
+		void *const lib = memshare("libram")->ptr();
+		prog.install_ram(0x4c000000, 0x4c03ffff, 0x03fc0000, lib);
+		prog.install_ram(0x8c000000, 0x8c03ffff, 0x03fc0000, lib);
+		prog.install_ram(0x50000000, 0x503fffff, 0x03c00000, m_workram.target());
+		if (m_ram90_workram)
+			prog.install_ram(0x90000000, 0x903fffff, 0x03c00000, m_workram.target());
 	}
 
 	// KN6000/KN6500: the unit on CN105 (the HD-SX6, or nothing) takes over its two chip-select
