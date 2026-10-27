@@ -437,6 +437,8 @@ private:
 	// 0x484AD8E5 takes as "not fitted"; bit 3 clear and bits 9-8 = 00, as the driver always gave;
 	// bit 15 set (as always); bits 14-13 set, read nowhere. Other models: 0x8000, as before.
 	uint16_t m_strap_fixed = 0x8000;
+	uint8_t m_lcd_lut[256][3]{};                 // KN7000: the LCD controller's look-up table (red, green, blue: bits 7-4)
+	uint8_t m_lcd_lut_addr = 0, m_lcd_lut_part = 0;  // REG[1E2h], and which of an entry's three REG[1E4h] writes comes next
 	bool m_lcd_kn6 = false;                      // KN6000/KN6500: LCD framebuffer is RGB555 and mounted rotated 180deg (vs the KN7000's upright RGB565)
 	bool m_lcd_kn24 = false;                     // KN2400/KN2600: 320x240 4-level grayscale panel, 2bpp framebuffer at 0x9C800000
 	bool m_bios_vectors = false;                 // KN7000: take the addresses of the selected BIOS (kn7000_bios_info)
@@ -1963,6 +1965,39 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		const uint16_t ink_colour[2] = {
 			uint16_t(((reg(0x78) & 0x1f) << 11) | ((reg(0x77) & 0x3f) << 5) | (reg(0x76) & 0x1f)),
 			uint16_t(((reg(0x7c) & 0x1f) << 11) | ((reg(0x7b) & 0x3f) << 5) | (reg(0x7a) & 0x1f)) };
+		if (offset && (reg(0x40) & 7) == 3)
+		{
+			// 8 bits a pixel through the look-up table: a line of `offset` words is twice as many pixels, the first in
+			// a word's low byte; backwards, the start address's word holds the bottom-right pixel in its high byte
+			constexpr offs_t MEM = (0x9ce00000 - 0x9c000000) / 4;
+			for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
+			{
+				uint32_t *const dst = &bitmap.pix(y);
+				for (int x = cliprect.left(); x <= cliprect.right(); x++)
+				{
+					const uint32_t byte = (backwards ? start * 2 + 1 - offset * 2 * uint32_t(239 - y) - uint32_t(639 - x)
+							: start * 2 + offset * 2 * uint32_t(y) + uint32_t(x)) & 0x1fffff;
+					const uint8_t *const c = m_lcd_lut[uint8_t(m_lcdbuf[MEM + (byte >> 2)] >> ((byte & 3) * 8))];
+					rgb_t col(c[0] | (c[0] >> 4), c[1] | (c[1] >> 4), c[2] | (c[2] >> 4));
+					if (ink)
+					{
+						const uint32_t px = backwards ? 639 - x : x, py = backwards ? 239 - y : y;
+						const uint32_t a = ink_base + py * ink_pitch + (px >> 2);
+						const uint8_t b = uint8_t(m_lcdbuf[(0xe00000 + a) >> 2] >> ((a & 3) * 8));
+						const unsigned sel = (b >> (6 - 2 * (px & 3))) & 3;
+						if (sel < 2)
+						{
+							const uint16_t v = ink_colour[sel];
+							col = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
+						}
+						else if (sel == 3)
+							col = rgb_t(~col.r(), ~col.g(), ~col.b());
+					}
+					dst[x] = col;
+				}
+			}
+			return 0;
+		}
 		if (offset && (reg(0x40) & 7) == 5)
 		{
 			constexpr offs_t MEM = (0x9ce00000 - 0x9c000000) / 4;
@@ -2083,6 +2118,35 @@ void kn7000_state::machine_start()
 		m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0x9cf40000, 0x9cffffff,
 				read32smo_delegate(*this, NAME([] () -> uint32_t { return 0xffdfffdf; })),
 				write32smo_delegate(*this, NAME([] (uint32_t) { })));
+	// The look-up table, for 8 bits a pixel: REG[1E2h] picks an entry, and REG[1E4h] takes its red, green and blue in
+	// turn (bits 7-4 each), the entry moving on after the blue (S1D13506 Hardware Functional Specification, REG[1E2h]
+	// and REG[1E4h]). Pinball's PFT15 turned it on the owner's KN7000 so, its colour bars moving as on the screen there.
+	if (!m_lcd_kn6 && !m_lcd_kn24)
+		m_maincpu->space(AS_PROGRAM).install_write_tap(0x9cc001e0, 0x9cc001e7, "lcd_lut",
+				[this] (offs_t offset, uint32_t &data, uint32_t mem_mask)
+				{
+					for (int lane = 0; lane < 4; lane++)
+					{
+						if (!((mem_mask >> (8 * lane)) & 0xff))
+							continue;
+						const offs_t r = ((offset & ~3) + lane) & 0xfff;
+						const uint8_t v = uint8_t(data >> (8 * lane));
+						if (r == 0x1e2)
+						{
+							m_lcd_lut_addr = v;
+							m_lcd_lut_part = 0;
+						}
+						else if (r == 0x1e4)
+						{
+							m_lcd_lut[m_lcd_lut_addr][m_lcd_lut_part] = v & 0xf0;
+							if (++m_lcd_lut_part == 3)
+							{
+								m_lcd_lut_part = 0;
+								m_lcd_lut_addr++;
+							}
+						}
+					}
+				});
 	// and REG[03Ah] bit 7 reads 1 while the LCD's vertical non-display period is on (S1D13506 Hardware Functional
 	// Specification, REG[03Ah]); the rest of the register reads as written.
 	if (!m_lcd_kn6 && !m_lcd_kn24)
@@ -2106,6 +2170,9 @@ void kn7000_state::machine_start()
 		m_wavepack_size = wp->bytes();
 	}
 
+	save_item(NAME(m_lcd_lut));
+	save_item(NAME(m_lcd_lut_addr));
+	save_item(NAME(m_lcd_lut_part));
 	save_item(NAME(m_dsp_index));
 	save_item(NAME(m_dsp_rd_n));
 	save_item(NAME(m_dsp_host8));
