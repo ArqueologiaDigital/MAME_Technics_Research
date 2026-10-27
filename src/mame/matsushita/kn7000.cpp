@@ -2308,6 +2308,28 @@ void kn7000_state::machine_start()
 		prog.install_ram(0x50000000, 0x503fffff, 0x03c00000, m_workram.target());
 		if (m_ram90_workram)
 			prog.install_ram(0x90000000, 0x903fffff, 0x03c00000, m_workram.target());
+
+		// CS5 (0x54000000, uncached 0x94000000) and the top of CS0 read as the owner's KN7000 reads them (ROM
+		// survey passes 4 and 5, technics_roms real_dump_v1.3_b893/README.md; OVERLAY-GAPS G7, G10): open bus,
+		// 0xFF (the empty expansion slots at 0x41000000, 0x41800000, 0x56000000 and 0x57000000 too), but IC21's 2 MB
+		// four times from 0x54800000 and IC19's four times from 0x55800000; CS5 ignores A25, so 0x56xxxxxx and
+		// 0x57xxxxxx repeat them.
+		auto open_bus = [this, &prog] (offs_t start, offs_t end)
+		{
+			prog.install_read_handler(start, end, read32smo_delegate(*this, NAME([] () -> uint32_t { return 0xffffffff; })));
+			prog.nop_write(start, end);
+		};
+		open_bus(0x40800000, 0x43ffffff);
+		for (offs_t cs5 : { offs_t(0x54000000), offs_t(0x94000000) })
+		{
+			open_bus(cs5, cs5 + 0x03ffffff);
+			if (m_customflash)
+				prog.install_readwrite_handler(cs5 + 0x00800000, cs5 + 0x009fffff, 0, 0x02600000, 0,
+						read32s_delegate(*this, FUNC(kn7000_state::customflash_r)),
+						write32s_delegate(*this, FUNC(kn7000_state::customflash_w)));
+			if (memory_region *pr = memregion("picture"))
+				prog.install_rom(cs5 + 0x01800000, cs5 + 0x019fffff, 0x02600000, pr->base());
+		}
 	}
 
 	// KN6000/KN6500: the unit on CN105 (the HD-SX6, or nothing) takes over its two chip-select

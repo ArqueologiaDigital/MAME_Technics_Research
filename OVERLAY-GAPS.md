@@ -29,10 +29,10 @@ States: `open`, `planned` (sequenced in a plan, not started), `in progress`, `do
 | G4  | Effects DSP branch B fixes                              | SHARC core         | small-medium | open        |
 | G5  | Effects DSP clock, 60 or 66 MHz                         | KN7000 driver      | one line     | done        |
 | G6  | IC23 battery-backed SRAM (panel memories) as NVRAM      | KN7000 driver      | small        | done        |
-| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx    | KN7000 driver      | small        | in progress |
+| G7  | 0x90000000-0x97FFFFFF is the uncached view of 0x5xxx    | KN7000 driver      | small        | done        |
 | G8  | Interrupt vectors through IVAR, not per-BIOS addresses  | mn10300 core       | small-medium | open        |
 | G9  | Real power-on path from IC18, and the flash updater     | KN7000 driver      | small/large  | open        |
-| G10 | CS5 mirrors and open-bus reads                          | KN7000 driver      | small        | open        |
+| G10 | CS5 mirrors and open-bus reads                          | KN7000 driver      | small        | done        |
 | G11 | IC21 custom data probably halfword-swapped              | KN7000 driver      | small        | open        |
 | G12 | IC414 NO_DUMP, KN6000/6500 Initial Data preload         | ROM records        | small        | open        |
 | G13 | Voices on the real wave ROMs                            | tone generator     | large        | done        |
@@ -236,7 +236,13 @@ lost on every restart. Small, and the most noticeable item here.
   On the real unit that is IC23, so the game would overwrite the panel memories or crash. Modelling IC23
   properly here will make the game fail in the emulator, which is what it would do on the instrument.
 
-### G7. 0x90000000-0x97FFFFFF is the uncached view of 0x50000000-0x57FFFFFF — in progress
+### G7. 0x90000000-0x97FFFFFF is the uncached view of 0x50000000-0x57FFFFFF — done 2026-10-27
+
+Done on the KN7000: the work RAM's 4 MB repeats through all of CS4 in both views, and CS5's uncached view
+0x94000000-0x97FFFFFF is IC21 and IC19 at all their copies, open bus elsewhere (G10). The service ROM test's sum of
+IC19 at 0x97800000 is now 0x21D8 (`notes/bus-windows-2026-10-27/`). The KN6000/KN6500 keep the separate share.
+What follows is the history.
+
 
 Partly done 2026-10-20 with G6: on the KN7000, 0x90000000-0x903FFFFF is now the work-RAM view, as on the KN2400,
 because the NMI's RAM stub is written there. The rest of the window (the IC21 and IC19 views at 0x96800000 and
@@ -281,7 +287,12 @@ hard-codes PC 0x48400000 and SP 0x50021CF8 (`mn10300.cpp:200-207`).
 - What is missing is the power-on flash updater (the device switch at 0x4000A307). It also needs IC16/IC17
   as flash devices behind 0x88000000/0x88400000 and the CS0 write window at 0x80000000/0x81000000. Large.
 
-### G10. CS5 mirrors and open-bus reads — open
+### G10. CS5 mirrors and open-bus reads — done 2026-10-27
+
+Done on the KN7000 (`machine_start`): CS5 in both views and CS0 from 0x40800000 read as the unit does, checked by
+`notes/bus-windows-2026-10-27/bus_check.lua` (9 of 9). The library SRAM (CS3) is 256 KB mirrored, from Pinball
+PFT18 on the unit. What follows is the history.
+
 
 From the ROM survey (`technics_roms/roms/kn7000/real_dump_v1.3_b893/README.md:98-108`):
 

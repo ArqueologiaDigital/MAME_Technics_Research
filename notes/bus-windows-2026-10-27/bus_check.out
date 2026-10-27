@@ -1,0 +1,10 @@
+bus_check: PASS CS0 0x40800000 open bus
+bus_check: PASS CS0 0x41000000 empty slot open bus
+bus_check: PASS CS3 library at +256 KB, +1 MB, +63.75 MB
+bus_check: PASS CS4 work RAM at +4 MB and through 0x93C00000
+bus_check: PASS CS5 0x54000000, 0x55000000, 0x94000000 open bus
+bus_check: PASS CS5 empty slots 0x56000000, 0x57000000 open bus
+bus_check: PASS IC21 at 0x54800000, 0x54A00000, 0x56800000, 0x56E00000, 0x94800000 as at 0x96800000
+bus_check: PASS IC19 at 0x55800000, 0x55E00000, 0x95800000, 0x97800000 as at 0x57800000
+bus_check: PASS IC19 ROM test sum at 0x97800000 = 0x21D8 (want 0x21D8)
+bus_check: 0 failed
