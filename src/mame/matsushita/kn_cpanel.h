@@ -92,6 +92,7 @@ protected:
 private:
 	// Serial frame parse (7-byte TX frames from the main CPU).
 	int     m_panel_pos;                   // position within the 7-byte TX frame
+	attotime m_last_tx;                    // when the main CPU last sent the panel a byte
 	uint8_t m_panel_p1, m_panel_p2;        // frame payload bytes (positions 2 and 4)
 
 	// Response queue (panel -> main).

@@ -53,6 +53,7 @@ void kn_cpanel_base_device::device_start()
 	m_panel_timer = timer_alloc(FUNC(kn_cpanel_base_device::panel_scan), this);
 
 	save_item(NAME(m_panel_pos));
+	save_item(NAME(m_last_tx));
 	save_item(NAME(m_panel_p1));
 	save_item(NAME(m_panel_p2));
 	save_item(NAME(m_panel_resp));
@@ -91,6 +92,7 @@ void kn_cpanel_base_device::device_reset()
 // 0x484AC977 / 0x484AC9FF / 0x484ACA96 / 0x484ACAEA). Parse by position.
 void kn_cpanel_base_device::tx_byte(uint8_t data)
 {
+	m_last_tx = machine().time();
 	switch (m_panel_pos)
 	{
 	case 2: m_panel_p1 = data; break;
@@ -150,8 +152,22 @@ bool kn_cpanel_base_device::panel_queue(const uint8_t *bytes, int n)
 //           RX FIFO and asserts group 0x10 (the state-8 handler reads it from +9).
 TIMER_CALLBACK_MEMBER(kn_cpanel_base_device::panel_event)
 {
+	// The panel raises ATN only once the main CPU has stopped sending to it: the KN7000 firmware clears the ATN
+	// group's request as it starts each burst of frames (library 0x4C03DD57) and enables it again only when its
+	// queue is empty (0x484AC994), so an edge raised in the middle of a burst is lost, and with it every later
+	// reply (Pinball notes/session-2026-10-27: a button let go during the LED frames for START/STOP's own lamp).
+	// The panel's processors receive those bytes themselves, so they see the burst.
 	if (param == 1)
+	{
+		const attotime quiet = attotime::from_usec(300);
+		const attotime since = machine().time() - m_last_tx;
+		if (since < quiet)
+		{
+			m_panel_evt->adjust(quiet - since, 1);
+			return;
+		}
 		m_atn_cb(1);
+	}
 	else if (param == 2 && m_panel_resp_pos < m_panel_resp_len)
 	{
 		m_rxd_cb(m_panel_resp[m_panel_resp_pos++]);
