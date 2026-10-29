@@ -238,7 +238,16 @@ protected:
 
 	virtual void sound_stream_update(sound_stream &stream) override
 	{
-		constexpr float SCALE = 8388607.0f;   // 2^23 - 1
+		// The TG's samples in the DSP's 24-bit words: TG_TO_DSP of the words' full scale, both ways (the
+		// kernel's SPORTs right-justify and sign-extend, so a TG word narrower than 24 bits lands below
+		// it). The factor cancels for everything the firmware's effects do to the TG's sound, and sets the
+		// level of what the DSP makes itself (a homebrew mixer, a test tone) against it. CALIBRATED, not
+		// decoded: on the unit the owner finds the instrument comfortable at MAIN VOLUME 40-50 % and
+		// ProTracker's DSP mix (DSP_GAIN 2) at 70 %, 7.7 dB apart on the v^2 taper below (2026-10-29);
+		// at 1 MAME had them 20.1 dB apart (kn5000_homebrew demos/kn7000_protracker tests/mame/native_vs_pt.py).
+		// 1/4 is two bits, 12.0 dB; the owner's ranges allow 10.4-14.3 dB.
+		constexpr float TG_TO_DSP = 0.25f;
+		constexpr float SCALE = 8388607.0f * TG_TO_DSP;   // (2^23 - 1) x TG_TO_DSP: the TG's full scale
 		for (int s = 0; s < stream.samples(); s++)
 		{
 			// push this TG input frame into the DSP's input ring (float -> 24-bit signed),
@@ -293,8 +302,9 @@ protected:
 				// (notes/effect-return-routing.md) proved each effect owns a distinct RETURN register
 				// and the reverb toggle moves ONLY the reverb's -- so these must NOT follow the reverb
 				// return (gret). Previously they did, which wrongly muted them whenever reverb was off.
-				// - CHORUS has no return register (toggling it moves only its send) -> send-driven wet
-				//   with a fixed makeup (the chsend>0 gate already keeps it 0 when off; bit-exact).
+				// - CHORUS has no return register (toggling it moves only its send): unit 9's return is
+				//   mixed whatever the panel says, at a fixed makeup. On the unit a mix written to units 0
+				//   and 9 is heard with REVERB and CHORUS both off (Another World, 2026-10-21).
 				// - SOUND DSP scales by its own return (ch09.rA = gdsp_ret); MULTI by ch06.rA.
 				const float gdsp_ret = m_gain_dsp_ret, gmul_ret = m_gain_multi_ret;
 				constexpr double CHORUS_WET = 0.60;
@@ -1496,9 +1506,9 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		// (The previous wiring fed chorus to u4 and sound-dsp to u9 -- wrong-slot placeholders
 		// from the old I4-walk inference; each was audible only because the OTHER effect's
 		// algorithm happened to live there.) Feed each unit the TG send scaled by its per-part
-		// send/depth level and sum its return into the DAC. GATED on send > 0 so with the
-		// effect OFF this is byte-for-byte the unit-0-only path -> reverb output provably
-		// unchanged (A/B bit-identical). APPROXIMATION (labelled): the whole TG mix feeds each
+		// send/depth level and sum its return into the DAC. SOUND DSP and MULTI are GATED on
+		// send > 0; the chorus (unit 9) is not: its return is always mixed and its input is 0
+		// while its send is 0 (see the bridge). APPROXIMATION (labelled): the whole TG mix feeds each
 		// effect bus at the send level (per-part separation needs per-bus TG output); correct
 		// for the common single-part case.
 		// CHORUS send. A COLD panel-CHORUS toggle is announced by the firmware ONLY via the
@@ -1515,12 +1525,9 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		const float mulsend = m_tonegen->gain_multi(); // MULTI send (unit 1), same feed pattern
 		const int32_t oL = sx24(dm.read_dword(obuf));
 		const int32_t oR = sx24(dm.read_dword(obuf + 1));
-		int32_t cL = 0, cR = 0, dL = 0, dR = 0, mL = 0, mR = 0;
-		if (chsend > 0.0f)
-		{
-			cL = sx24(dm.read_dword(0xC356));   // chorus (unit 9) return from last frame
-			cR = sx24(dm.read_dword(0xC357));
-		}
+		const int32_t cL = sx24(dm.read_dword(0xC356));   // chorus (unit 9) return from last frame, always mixed
+		const int32_t cR = sx24(dm.read_dword(0xC357));
+		int32_t dL = 0, dR = 0, mL = 0, mR = 0;
 		if (dspsend > 0.0f)
 		{
 			dL = sx24(dm.read_dword(0xC346));   // SOUND DSP (unit 2) return from last frame
@@ -1543,12 +1550,9 @@ TIMER_CALLBACK_MEMBER(kn7000_state::dsp_audio_tick)
 		// poisoned input at 0xC378/79, not diverging).
 		dm.write_dword(ibuf,     uint32_t(il));
 		dm.write_dword(ibuf + 1, uint32_t(ir));
-		if (chsend > 0.0f)
-		{
-			// feed the CHORUS unit (9) its send: raw TG mix scaled by the chorus send level.
-			dm.write_dword(0xC376, uint32_t(int32_t(double(rawl) * chsend)));
-			dm.write_dword(0xC377, uint32_t(int32_t(double(rawr) * chsend)));
-		}
+		// feed the CHORUS unit (9) its send: raw TG mix scaled by the chorus send level (0 with CHORUS off).
+		dm.write_dword(0xC376, uint32_t(int32_t(double(rawl) * chsend)));
+		dm.write_dword(0xC377, uint32_t(int32_t(double(rawr) * chsend)));
 		if (dspsend > 0.0f)
 		{
 			// feed the SOUND DSP insert (unit 2 = RIGHT1): raw TG mix scaled by its send level.

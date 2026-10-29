@@ -582,3 +582,26 @@ Why:
 - **The cause of the DRC/interpreter divergence** (S15). It is open upstream too.
 - **Whether the service manual states X301's frequency.** The 30 MHz figure is by part-number pattern
   (`notes/sound-hw-architecture.md:89`).
+
+## 9. 2026-10-29: D1 done; D8 calibrated from the owner's volume settings
+
+- **D1.** Unit 9's return is now mixed whatever CHORUS says, and unit 9's input is 0 while the chorus send is 0
+  (`kn7000.cpp`, the bridge and the DSP frame). On the unit Another World's mix through unit 9 is heard with REVERB
+  and CHORUS off; in MAME, ProTracker with REVERB off is now heard, 6.3 dB below REVERB on (it was silent).
+- **D8.** The bridge's `TG_TO_DSP` puts the tone generator's samples at 1/4 of the DSP words' full scale, both ways.
+  The factor cancels for everything the firmware's effects do to the tone generator's sound, and raises what the
+  DSP makes itself by 12.0 dB against it. The evidence is the owner's MAIN VOLUME on the unit: the instrument is
+  comfortable at 40-50 %, ProTracker (kn5000_homebrew `demos/kn7000_protracker`, DSP_GAIN 2) at 70 %. On the v^2
+  taper that is 7.7 dB apart (5.8-9.7 dB over the ranges). The same taper also fits the owner's earlier two
+  settings: DSP_GAIN 16 at 25 % is 17.9 dB on it, and the gain step was 18.1 dB. In one MAME session
+  (`tests/mame/native_vs_pt.py`, `PT_NATIVE=1`: four notes and a chord on the power-on panel, then ProTracker):
+
+  | build                                   | ProTracker - the instrument | CHORUS on - off (a chord) |
+  |-----------------------------------------|-----------------------------|---------------------------|
+  | before (unit 9 gated, scale 1)          | -25.9 dB                    | (not measured)            |
+  | unit 9 always, its makeup 4.48          | -7.5 dB                     | +16.8 dB: rejected        |
+  | unit 9 always at 0.60, `TG_TO_DSP` 1/4  | -7.8 dB                     | +4.6 dB                   |
+
+  A return gain alone could not fit: matching ProTracker made CHORUS turn a chord 7 times louder. The files are in
+  kn5000_homebrew `demos/kn7000_protracker/tests/results/native-vs-pt-mame-*.txt`. Unconfirmed: which bit width the
+  tone generator's words really have. E1 (RETMAP) measures the return gains directly and supersedes this.
