@@ -590,7 +590,7 @@ figures: `notes/tg-release-2026-10-21/README.md`.
 - `tlcs900-prescaler-per-device` has a comment that contradicts its own change (G16).
 - `tools/sync-check.sh` still expected the HD-SX3 files and a `technics-kn6000-expansion` branch in
   `mame-pr`, and had no atahle marker. Fixed with G1; it reports IN SYNC.
-- `KN7000/MAME-PR-QUEUE.md` said v5 was not pushed, but the reflog of `origin/technics-kn6000-expansion`
+- `KN7000/MAME-PR-QUEUE.md` (now `mame-pr-queue/`) said v5 was not pushed, but the reflog of `origin/technics-kn6000-expansion`
   shows `d497bed5caf` "update by push" at 2026-10-16 07:22. Corrected with G1.
 - Notes received on MIDI IN did not end at their note-off for most voices (`notes/listen-2026-10-21/`). Became G23,
   done 2026-10-21: the tone generators' status reads answered 0.

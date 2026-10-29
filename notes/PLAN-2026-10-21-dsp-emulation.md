@@ -481,7 +481,7 @@ them is wrong, whatever the oracle says.
 
 Today: upstream has no DSP (`kn7000.cpp:10-11`, all five sets MACHINE_NO_SOUND). Branch B
 (`technics-kn7000-dsp`, `a1c1fe1db93`, 8 commits, never pushed) is queued behind A2 (`technics-kn7000-tonegen`,
-`7f7d1857e20`) in `KN7000/MAME-PR-QUEUE.md` row 4, held since Felipe's "Leave A2 and B for later" (PARKED.md:22-58).
+`7f7d1857e20`) in `mame-pr-queue/MAME-PR-QUEUE.md` row 4 (in `KN7000/` until 2026-10-29), held since Felipe's "Leave A2 and B for later" (PARKED.md:22-58).
 B has not been rebased over upstream's four later `kn7000.cpp` commits (#16394, #16416, #16523, #16524). The cpu.lua
 DRC token bug is still upstream (`technics-cpulua-drc-token`, `947b74a69f8`).
 

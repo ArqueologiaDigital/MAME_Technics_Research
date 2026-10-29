@@ -13,7 +13,8 @@ was written right after the 2026-10-18 resync (`SYNC-2026-10-18.md`).
 - **Overlay files:** 56 when written; 55 after `sed1330.cpp` was retired. 18 do not exist
   upstream (`wsa1_cpanel.*` exists there as `wsa1r_cpanel.*`); 37 replace an upstream file.
 - **Cross-references:**
-  - "board #N" is a row of `KN7000/MAME-PR-QUEUE.md` (2026-10-17).
+  - "board #N" is a row of `KN7000/MAME-PR-QUEUE.md` (2026-10-17; the board moved to
+    `~/compartilhado/mame-pr-queue/` on 2026-10-29, same row numbers).
   - "pos. N" is a position in `KN7000/MAME-PR-PLAN-2026-09-19.md`.
   - "kn5000-NN" is `notes/upstream-patches/kn5000-NN-*.patch`.
   - Branch names refer to `~/compartilhado/mame`.
