@@ -402,6 +402,14 @@ private:
 	uint32_t m_mcrl;  // AM33 MAC accumulator low  (getclx / putchclx / mac)
 	uint32_t m_mcvf;  // AM33 MAC overflow flag
 	uint16_t m_psw;   // processor status word
+	// The flags as ADDC and SUBC read them: a flag update reaches the PSW one cycle late, a write to the
+	// PSW two (MN1030/MN103S Instruction Manual, Chapter 3, 2-3 and 2-4). m_psw_hist[0] and [1] are the PSW
+	// at the start of the previous instruction and of the one before it; m_psw_wrote[] whether those wrote the
+	// PSW (mov dS,psw, and/or imm16,psw); m_psw_late the flags this instruction's ADDC or SUBC uses.
+	uint16_t m_psw_hist[2];
+	bool m_psw_wrote[2];
+	bool m_psw_wrote_now;
+	uint16_t m_psw_late;
 	uint32_t m_lir;   // loop-instruction register (setlb) - modelled for movm completeness
 	uint32_t m_lar;   // loop-address register     (setlb)
 	// TODO(MN10300/AM33): extended registers E0..E7, MDRQ, register banks.

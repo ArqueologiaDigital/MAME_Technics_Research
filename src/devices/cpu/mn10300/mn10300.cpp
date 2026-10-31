@@ -182,6 +182,10 @@ void mn10300_device::device_start()
 	save_item(NAME(m_mcrl));
 	save_item(NAME(m_mcvf));
 	save_item(NAME(m_psw));
+	save_item(NAME(m_psw_hist));
+	save_item(NAME(m_psw_wrote));
+	save_item(NAME(m_psw_wrote_now));
+	save_item(NAME(m_psw_late));
 	save_item(NAME(m_lir));
 	save_item(NAME(m_lar));
 	save_item(NAME(m_possible_irq));
@@ -280,6 +284,8 @@ void mn10300_device::device_reset()
 	m_pc  = 0x48400000;
 	m_sp  = 0x50021CF8;   // initial SP established by the KN7000 firmware
 	m_psw = 0;
+	m_psw_hist[0] = m_psw_hist[1] = m_psw_late = 0;
+	m_psw_wrote[0] = m_psw_wrote[1] = m_psw_wrote_now = false;
 	m_mdr = 0;
 	m_mdrq = m_mcrh = m_mcrl = m_mcvf = 0;
 	std::fill(std::begin(m_d), std::end(m_d), 0);
@@ -1516,9 +1522,22 @@ void mn10300_device::execute_run()
 		// The on-chip INTC line is LEVEL-triggered, so this is checked every
 		// instruction (not just on the assert edge) -- it must fire the moment the
 		// firmware sets PSW.IE while a source is still pending.
+		const uint32_t before_irq = m_pc;
 		if (m_nmi_pending)
 			take_nmi();
 		check_irq();
+
+		// The flags ADDC and SUBC read (Chapter 3, 2-3 and 2-4 of the instruction manual): those from
+		// before the previous instruction, or from before the one ahead of it when that one wrote the
+		// PSW and the previous did not change it again. An interrupt empties the pipeline: none late.
+		if (m_pc != before_irq)
+			m_psw_hist[0] = m_psw_hist[1] = m_psw, m_psw_wrote[0] = m_psw_wrote[1] = m_psw_wrote_now = false;
+		m_psw_wrote[1] = m_psw_wrote[0];
+		m_psw_wrote[0] = m_psw_wrote_now;
+		m_psw_wrote_now = false;
+		m_psw_late = (m_psw_wrote[1] && m_psw_hist[0] == m_psw) ? m_psw_hist[1] : m_psw_hist[0];
+		m_psw_hist[1] = m_psw_hist[0];
+		m_psw_hist[0] = m_psw;
 
 		debugger_instruction_hook(m_pc);
 
@@ -2122,7 +2141,7 @@ void mn10300_device::execute_f1()
 	const uint32_t start_pc = m_pc - 1;
 	const uint8_t op2 = read_arg8(m_pc);
 	const int dst = op2 & 3, src = (op2 >> 2) & 3;
-	const uint32_t C = (m_psw & FLAG_CF) ? 1 : 0;
+	const uint32_t C = (m_psw_late & FLAG_CF) ? 1 : 0;   // (the flags one instruction late: execute_run)
 	charge(mn10300_timing::C_1);
 
 	switch (op2 >> 4)
@@ -2133,11 +2152,11 @@ void mn10300_device::execute_f1()
 		case 0x3: m_a[dst] = do_sub(m_a[dst], m_a[src], 0); break; // sub aS,aD
 		// addc/subc: Z stays set only if it was already set, so a multi-word
 		// result tests as zero only when every word is (GDB simulator; from upstream)
-		case 0x4: { const uint16_t z = m_psw & FLAG_ZF; m_d[dst] = do_add(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // addc dS,dD
+		case 0x4: { const uint16_t z = m_psw_late & FLAG_ZF; m_d[dst] = do_add(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // addc dS,dD
 		case 0x5: m_d[dst] = do_add(m_d[dst], m_a[src], 0); break; // add aS,dD
 		case 0x6: m_a[dst] = do_add(m_a[dst], m_d[src], 0); break; // add dS,aD
 		case 0x7: m_a[dst] = do_add(m_a[dst], m_a[src], 0); break; // add aS,aD
-		case 0x8: { const uint16_t z = m_psw & FLAG_ZF; m_d[dst] = do_sub(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // subc dS,dD
+		case 0x8: { const uint16_t z = m_psw_late & FLAG_ZF; m_d[dst] = do_sub(m_d[dst], m_d[src], C); m_psw &= ~FLAG_ZF | z; break; } // subc dS,dD
 		case 0x9: do_sub(m_d[dst], m_a[src], 0); break;            // cmp aS,dD
 		case 0xA: do_sub(m_a[dst], m_d[src], 0); break;            // cmp dS,aD
 		case 0xD: m_d[dst] = m_a[src]; break;                      // mov aS,dD
@@ -2248,7 +2267,7 @@ void mn10300_device::execute_f2()
 			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
 			break;
 		case 0xF:
-			if (op2 & 2) { if (op2 & 1) m_psw = m_d[src]; else m_mdr = m_d[src]; } // mov dS,psw / mov dS,mdr
+			if (op2 & 2) { if (op2 & 1) m_psw = m_d[src], m_psw_wrote_now = true; else m_mdr = m_d[src]; } // mov dS,psw / mov dS,mdr
 			else if ((op2 & 1) == 0) m_sp = m_a[src];                              // mov aS,sp
 			else logerror("MN10300: illegal F2 %02X @ %08X\n", op2, start_pc);
 			break;
@@ -2372,8 +2391,8 @@ void mn10300_device::execute_fa()
 			case 0xFC:
 				if (op2 == 0xFE)      { m_sp += (int32_t)(int16_t)imm16; }             // add imm16,sp
 				else if (op2 == 0xFF) { write_mem32(m_sp, start_pc + 4); m_mdr = start_pc + 4; m_pc = start_pc + (int32_t)(int16_t)imm16; xfer(mn10300_timing::C_CALLS); return; } // calls (disp16): PC->[SP], SP unchanged
-				else if (op2 == 0xFC) { m_psw &= (uint32_t)imm16; }                    // and imm16,psw
-				else if (op2 == 0xFD) { m_psw |= (uint32_t)imm16; }                    // or imm16,psw
+				else if (op2 == 0xFC) { m_psw &= (uint32_t)imm16; m_psw_wrote_now = true; } // and imm16,psw
+				else if (op2 == 0xFD) { m_psw |= (uint32_t)imm16; m_psw_wrote_now = true; } // or imm16,psw
 				break;
 			default:
 				logerror("MN10300: unimplemented FA %02X @ %08X\n", op2, start_pc);
