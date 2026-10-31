@@ -186,6 +186,7 @@ void mn10300_device::device_start()
 	save_item(NAME(m_psw_wrote));
 	save_item(NAME(m_psw_wrote_now));
 	save_item(NAME(m_psw_late));
+	save_item(NAME(m_psw_flush));
 	save_item(NAME(m_lir));
 	save_item(NAME(m_lar));
 	save_item(NAME(m_possible_irq));
@@ -285,7 +286,7 @@ void mn10300_device::device_reset()
 	m_sp  = 0x50021CF8;   // initial SP established by the KN7000 firmware
 	m_psw = 0;
 	m_psw_hist[0] = m_psw_hist[1] = m_psw_late = 0;
-	m_psw_wrote[0] = m_psw_wrote[1] = m_psw_wrote_now = false;
+	m_psw_wrote[0] = m_psw_wrote[1] = m_psw_wrote_now = m_psw_flush = false;
 	m_mdr = 0;
 	m_mdrq = m_mcrh = m_mcrl = m_mcvf = 0;
 	std::fill(std::begin(m_d), std::end(m_d), 0);
@@ -1529,9 +1530,12 @@ void mn10300_device::execute_run()
 
 		// The flags ADDC and SUBC read (Chapter 3, 2-3 and 2-4 of the instruction manual): those from
 		// before the previous instruction, or from before the one ahead of it when that one wrote the
-		// PSW and the previous did not change it again. An interrupt empties the pipeline: none late.
-		if (m_pc != before_irq)
+		// PSW and the previous did not change it again. An interrupt, or the rti that ends one, empties the pipeline:
+		// none late (with the rti's own PSW taken as the previous instruction's, an ADDC after it would add the handler's
+		// carry).
+		if (m_pc != before_irq || m_psw_flush)
 			m_psw_hist[0] = m_psw_hist[1] = m_psw, m_psw_wrote[0] = m_psw_wrote[1] = m_psw_wrote_now = false;
+		m_psw_flush = false;
 		m_psw_wrote[1] = m_psw_wrote[0];
 		m_psw_wrote[0] = m_psw_wrote_now;
 		m_psw_wrote_now = false;
@@ -2122,7 +2126,7 @@ void mn10300_device::execute_f0()
 			if (op2 <= 0xF3)      { write_mem32(m_sp, start_pc + 2); m_mdr = start_pc + 2; m_pc = m_a[am]; xfer(mn10300_timing::C_CALLS); return; } // calls (aM): PC->[SP], SP unchanged
 			else if (op2 <= 0xF7) { m_pc = m_a[am]; xfer(mn10300_timing::C_JMP_AN); return; }                       // jmp (aM)
 			else if (op2 == 0xFC) { m_pc = read_stack32(m_sp); xfer(mn10300_timing::C_RETS); return; }             // rets: PC from [SP], SP unchanged
-			else if (op2 == 0xFD) { m_psw = pop32(); m_pc = pop32(); m_possible_irq = true; xfer(mn10300_timing::C_RTI); return; } // rti
+			else if (op2 == 0xFD) { m_psw = pop32(); m_pc = pop32(); m_possible_irq = true; m_psw_flush = true; xfer(mn10300_timing::C_RTI); return; } // rti (the pipeline refilled: no flag late after it)
 			// TODO(MN10300): FE trap
 			else logerror("MN10300: unimplemented F0 %02X @ %08X\n", op2, start_pc);
 			break;

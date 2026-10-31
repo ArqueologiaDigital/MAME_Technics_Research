@@ -409,6 +409,7 @@ private:
 	uint16_t m_psw_hist[2];
 	bool m_psw_wrote[2];
 	bool m_psw_wrote_now;
+	bool m_psw_flush;    // set by rti: the pipeline refilled, the next instruction's flags are the PSW as it is
 	uint16_t m_psw_late;
 	uint32_t m_lir;   // loop-instruction register (setlb) - modelled for movm completeness
 	uint32_t m_lar;   // loop-address register     (setlb)
