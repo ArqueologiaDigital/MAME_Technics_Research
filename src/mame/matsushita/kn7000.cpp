@@ -1966,6 +1966,44 @@ uint32_t kn7000_state::screen_update(screen_device &screen, bitmap_rgb32 &bitmap
 		const uint16_t ink_colour[2] = {
 			uint16_t(((reg(0x78) & 0x1f) << 11) | ((reg(0x77) & 0x3f) << 5) | (reg(0x76) & 0x1f)),
 			uint16_t(((reg(0x7c) & 0x1f) << 11) | ((reg(0x7b) & 0x3f) << 5) | (reg(0x7a) & 0x1f)) };
+		if (offset && (reg(0x40) & 7) == 2)
+		{
+			// 4 bits a pixel through the first 16 entries of the look-up table (S1D13506 Hardware Functional Specification
+			// X25B-A-001-12, Figure 11-1: a byte's first pixel in bits 7-4, its second in bits 3-0; Table 8-20: REG[040h]
+			// bits 2-0 = 010b): a line of `offset` words is four times as many pixels. Backwards, the image is fetched in
+			// reverse address order from the start address's word (section 15.3: the start is
+			// MA_Offset x H - (MA_Offset - W/4) - 1 for 4 bpp), so the screen's (x, y) is the image's, as at 8 bpp.
+			constexpr offs_t MEM = (0x9ce00000 - 0x9c000000) / 4;
+			for (int y = cliprect.top(); y <= cliprect.bottom(); y++)
+			{
+				uint32_t *const dst = &bitmap.pix(y);
+				for (int x = cliprect.left(); x <= cliprect.right(); x++)
+				{
+					const uint32_t nib = (backwards ? start * 4 + 3 - offset * 4 * uint32_t(239 - y) - uint32_t(639 - x)
+							: start * 4 + offset * 4 * uint32_t(y) + uint32_t(x)) & 0x3fffff;
+					const uint32_t byte = nib >> 1;
+					const uint8_t b = uint8_t(m_lcdbuf[MEM + (byte >> 2)] >> ((byte & 3) * 8));
+					const uint8_t *const c = m_lcd_lut[(nib & 1) ? (b & 0x0f) : (b >> 4)];
+					rgb_t col(c[0] | (c[0] >> 4), c[1] | (c[1] >> 4), c[2] | (c[2] >> 4));
+					if (ink)
+					{
+						const uint32_t px = backwards ? 639 - x : x, py = backwards ? 239 - y : y;
+						const uint32_t a = ink_base + py * ink_pitch + (px >> 2);
+						const uint8_t ib = uint8_t(m_lcdbuf[(0xe00000 + a) >> 2] >> ((a & 3) * 8));
+						const unsigned sel = (ib >> (6 - 2 * (px & 3))) & 3;
+						if (sel < 2)
+						{
+							const uint16_t v = ink_colour[sel];
+							col = rgb_t(((v >> 11) & 0x1f) << 3, ((v >> 5) & 0x3f) << 2, (v & 0x1f) << 3);
+						}
+						else if (sel == 3)
+							col = rgb_t(~col.r(), ~col.g(), ~col.b());
+					}
+					dst[x] = col;
+				}
+			}
+			return 0;
+		}
 		if (offset && (reg(0x40) & 7) == 3)
 		{
 			// 8 bits a pixel through the look-up table: a line of `offset` words is twice as many pixels, the first in
