@@ -447,3 +447,13 @@ host image (sdtest.hd). Test image: 64MB FAT16 raw, `-harddisk sdtest.hd`.
 - [ ] cmd-3/cmd-4 read/write FAT sectors from the host image; directory listing.
 - [ ] SD-Song (SMF) playback via the sequencer; SD-Audio; lyrics; the 6 SD panel buttons
       (already wired) driving transport; the SD IN USE LED (0x9cc00008 bit6).
+
+## Open: the card reads faster in MAME than on the unit (2026-11-01)
+
+The PDF viewer's loader (kn5000_homebrew demos/kn7000_pdf, KN7APP.BIN raw sector reads through the firmware) logs
+each read's time. The same 385 KB image: **3054 ms on the owner's unit** (`sdcard-stage/from-card/20261101-101936/
+PDF/PDFLOG.TXT`, 385012 bytes, program 893), **1834 ms in MAME** (kn5000_homebrew tests/mame `prof-final` run,
+384948 bytes); 192 bytes: 7 ms on the unit, 5 ms in MAME. The unit's figures fit about 5 ms a request and 3.9 ms a
+512-byte sector (~1 Mbit/s with the firmware's overhead). MAME answers each byte written to 0x9805000C at once;
+the clock-rate latch 0x9805000E (0x81/0x82/0x83) is not modelled. To match the hardware: delay the byte-done
+handshake (ICR group 0x1C) by 8 SPI clocks at the rate the latch selects, calibrated against the numbers above.
