@@ -348,6 +348,199 @@ private:
 
 DEFINE_DEVICE_TYPE(KN7000_DSP_BRIDGE, kn7000_dsp_bridge_device, "kn7000_dsp_bridge", "KN7000 Effects-DSP audio bridge")
 
+DECLARE_DEVICE_TYPE(KN7000_DAC, kn7000_dac_device)
+
+// ---------------------------------------------------------------------------
+// kn7000_dac_device -- IC311, the main D/A converter (C0FBBK000025, MAIN 3/5, service manual
+// p. 110). Its 28 pins are the TI (Burr-Brown) PCM1738's, pin for pin, so it is modelled from
+// the PCM1738 data sheet (SBAS174C). The mode port takes 16-bit words, MSB first, while CS is
+// low, MDI sampled on each MC rising edge, the word taking effect when CS rises: bit 15 is
+// read / write, bits 14-8 the register (16-21), bits 7-0 the data. MDO (pin 11) is not
+// connected and the MUTE pin is grounded. The firmware's two words at boot (DacModeInit)
+// are 0x1220 and 0x1380.
+// Modelled: the digital attenuators (registers 16-17, loaded while ATLD = 1), soft mute (MUTE,
+// stepping the attenuator one step every 1, 2, 4 or 8 sample periods, ATS), the DAC operation
+// control (OPE), the output phase (REV), monaural mode (MONO, CHSL) and the mode register reset
+// (MRST). The rest is logged: data format (the driver hands the converter samples, not its
+// serial stream), de-emphasis, filter roll-off, zero-detect mute, SCKO, filter bypass,
+// oversampling rate and system reset.
+// ---------------------------------------------------------------------------
+class kn7000_dac_device : public device_t, public device_sound_interface
+{
+public:
+	kn7000_dac_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0)
+		: device_t(mconfig, KN7000_DAC, tag, owner, clock)
+		, device_sound_interface(mconfig, *this)
+	{ }
+
+	void mode_w(int cs, int mc, int mdi);   // CS (pin 14), MC (pin 13), MDI (pin 12)
+
+protected:
+	// device_t implementation
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	// device_sound_interface implementation
+	virtual void sound_stream_update(sound_stream &stream) override;
+
+private:
+	enum : uint8_t { REG_ATL = 16, REG_ATR = 17, REG_MODE18 = 18, REG_MODE19 = 19, REG_MODE20 = 20 };
+
+	void reg_w(uint8_t index, uint8_t data);
+	void mode_reset();
+
+	sound_stream *m_stream = nullptr;
+	float m_att_gain[256]{};     // attenuator step -> gain: 0.5 dB a step below 255, mute below 15
+	uint8_t m_reg[5]{};          // registers 16-20
+	uint8_t m_att[2]{};          // the attenuation settings loaded (left, right)
+	uint8_t m_att_now[2]{};      // the attenuators' present steps, moving towards their targets
+	uint8_t m_att_tick = 0;      // sample periods since the last attenuator step
+	uint8_t m_cs = 1;
+	uint8_t m_mc = 1;
+	uint16_t m_shift = 0;
+	uint8_t m_bits = 0;
+};
+
+DEFINE_DEVICE_TYPE(KN7000_DAC, kn7000_dac_device, "kn7000_dac", "KN7000 IC311 DAC (PCM1738)")
+
+void kn7000_dac_device::device_start()
+{
+	m_stream = stream_alloc(2, 2, 44100);
+	for (int i = 0; i < 256; i++)
+		m_att_gain[i] = (i < 15) ? 0.0f : float(std::pow(10.0, 0.5 * (i - 255) / 20.0));
+
+	save_item(NAME(m_reg));
+	save_item(NAME(m_att));
+	save_item(NAME(m_att_now));
+	save_item(NAME(m_att_tick));
+	save_item(NAME(m_cs));
+	save_item(NAME(m_mc));
+	save_item(NAME(m_shift));
+	save_item(NAME(m_bits));
+}
+
+void kn7000_dac_device::device_reset()
+{
+	mode_reset();
+	m_att_now[0] = m_att_now[1] = 0xff;
+	m_att_tick = 0;
+}
+
+void kn7000_dac_device::mode_reset()
+{
+	m_reg[0] = m_reg[1] = 0xff;           // 0 dB
+	m_reg[2] = m_reg[3] = m_reg[4] = 0x00;
+	m_att[0] = m_att[1] = 0xff;
+}
+
+void kn7000_dac_device::mode_w(int cs, int mc, int mdi)
+{
+	if (m_cs && !cs)
+	{
+		m_shift = 0;
+		m_bits = 0;
+	}
+	if (!cs && !m_mc && mc)
+	{
+		m_shift = (m_shift << 1) | (mdi & 1);
+		m_bits++;
+	}
+	if (!m_cs && cs)
+	{
+		if (m_bits != 16)
+			logerror("IC311 mode word of %d bits ignored\n", m_bits);
+		else if (BIT(m_shift, 15))
+			logerror("IC311 mode word %04X: read of register %d (MDO is not connected)\n", m_shift, BIT(m_shift, 8, 7));
+		else
+		{
+			logerror("IC311 mode word %04X: register %d = %02X\n", m_shift, BIT(m_shift, 8, 7), m_shift & 0xff);
+			reg_w(BIT(m_shift, 8, 7), m_shift & 0xff);
+		}
+	}
+	m_cs = cs;
+	m_mc = mc;
+}
+
+void kn7000_dac_device::reg_w(uint8_t index, uint8_t data)
+{
+	static constexpr char const *FORMATS[8] = {
+			"16-bit standard", "20-bit standard", "24-bit standard", "24-bit left-justified",
+			"16-bit I2S", "24-bit I2S", "reserved", "reserved" };
+	static constexpr char const *DEEMPH_RATES[4] = { "none", "48 kHz", "44.1 kHz", "32 kHz" };
+
+	if (index < REG_ATL || index > REG_MODE20)
+	{
+		logerror("IC311: register %d is not writable\n", index);
+		return;
+	}
+	m_stream->update();
+	m_reg[index - REG_ATL] = data;
+	switch (index)
+	{
+	case REG_ATL:
+	case REG_ATR:
+		if (BIT(m_reg[REG_MODE18 - REG_ATL], 7))   // ATLD
+			m_att[index - REG_ATL] = data;
+		break;
+
+	case REG_MODE18:
+		logerror("IC311: ATLD %d, format %s, de-emphasis %s (DMF %s), soft mute %s\n",
+				BIT(data, 7), FORMATS[BIT(data, 4, 3)], BIT(data, 1) ? "on" : "off", DEEMPH_RATES[BIT(data, 2, 2)],
+				BIT(data, 0) ? "on" : "off");
+		if (BIT(data, 1))
+			logerror("IC311: de-emphasis is not modelled\n");
+		break;
+
+	case REG_MODE19:
+		logerror("IC311: output phase %s, attenuation rate LRCK/%d, DAC %s, SCKO %s (%s rate), %s roll-off, zero-detect mute %s\n",
+				BIT(data, 7) ? "inverted" : "normal", 1 << BIT(data, 5, 2), BIT(data, 4) ? "disabled" : "enabled",
+				BIT(data, 2) ? "disabled" : "enabled", BIT(data, 3) ? "half" : "full", BIT(data, 1) ? "slow" : "sharp",
+				BIT(data, 0) ? "on" : "off");
+		break;
+
+	case REG_MODE20:
+		logerror("IC311: system reset %d, mode reset %d, filter bypass %d, mono %d (%s), oversampling %d\n",
+				BIT(data, 6), BIT(data, 5), BIT(data, 4), BIT(data, 3), BIT(data, 2) ? "right" : "left", data & 3);
+		if (BIT(data, 6))
+			logerror("IC311: system reset is not modelled\n");
+		if (BIT(data, 5))
+			mode_reset();
+		break;
+	}
+}
+
+void kn7000_dac_device::sound_stream_update(sound_stream &stream)
+{
+	const bool mute = BIT(m_reg[REG_MODE18 - REG_ATL], 0);
+	const bool rev = BIT(m_reg[REG_MODE19 - REG_ATL], 7);
+	const unsigned ats = BIT(m_reg[REG_MODE19 - REG_ATL], 5, 2);
+	const bool ope = BIT(m_reg[REG_MODE19 - REG_ATL], 4);
+	const bool mono = BIT(m_reg[REG_MODE20 - REG_ATL], 3);
+	const int chsl = BIT(m_reg[REG_MODE20 - REG_ATL], 2);
+
+	for (int s = 0; s < stream.samples(); s++)
+	{
+		if (++m_att_tick >= (1U << ats))
+		{
+			m_att_tick = 0;
+			for (int ch = 0; ch < 2; ch++)
+			{
+				const uint8_t target = mute ? 0 : m_att[ch];
+				if (m_att_now[ch] < target)
+					m_att_now[ch]++;
+				else if (m_att_now[ch] > target)
+					m_att_now[ch]--;
+			}
+		}
+		for (int ch = 0; ch < 2; ch++)
+		{
+			// OPE = 1 holds both outputs at bipolar zero
+			const float out = ope ? 0.0f : stream.get(mono ? chsl : ch, s) * m_att_gain[m_att_now[ch]];
+			stream.put(ch, s, rev ? -out : out);
+		}
+	}
+}
+
 kn7000_sio_uart_device::kn7000_sio_uart_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, KN7000_SIO_UART, tag, owner, clock),
 	device_serial_interface(mconfig, *this),
@@ -383,6 +576,7 @@ public:
 		, m_tonegen(*this, "tonegen")
 		, m_dspbridge(*this, "dspbridge")
 		, m_dsp(*this, "dsp")
+		, m_dac(*this, "dac")
 		, m_dial(*this, "DIAL")
 		, m_rearsw(*this, "REARSW")
 		, m_sdsw(*this, "CPSD_SDSW")
@@ -464,6 +658,14 @@ private:
 	required_device<kn_tonegen_base_device> m_tonegen;   // first-cut audio (Phase C Stage 0)
 	required_device<kn7000_dsp_bridge_device> m_dspbridge;  // F.3: routes TG audio through the effects DSP
 	required_device<adsp21065l_device> m_dsp;           // IC306 effects DSP (ADSP-21065L SHARC; host-boot idle until F.2)
+	optional_device<kn7000_dac_device> m_dac;           // KN7000: IC311, the main D/A converter
+	// KN7000: IC25 (74AHC174, MAIN 1/5 sheet 2, p. 102), the sound-control latch at 0x98060000.
+	// Data bits D16-D21 into Q6-Q1: bit 0 USB.WAITM, 1 SPSW, 2 SDMODE, 3 DAC.ML, 4 DAC.MC,
+	// 5 DAC.MDI. Its RESET is tied high (R35), so nothing clears it.
+	bool m_ic25_latch = false;
+	uint8_t m_ic25 = 0;
+	void ic25_w(uint8_t data);
+	void speaker_gate_update();
 
 	template <int Ch> void midi_rx(uint8_t data) { m_maincpu->sio_rx_push(Ch, data); }
 
@@ -1062,6 +1264,8 @@ void kn7000_state::maincpu_mem(address_map &map)
 				if (m_sdcard)
 					m_sdcard->spi_ss_w((m_gpio8004 & 0x0002) ? 0 : 1);   // active-low CS
 				fdc_tc_gpio(m_gpio8004);                                 // bit 4 = FDC TC (active low)
+				if (m_dac && BIT(old ^ m_gpio8004, 2))
+					speaker_gate_update();                               // bit 2 = PMUT (active low)
 				// Bit 3 is set only by the firmware's NMI handler (893 0x484D75C2, 941 0x484D77CF),
 				// its last act before it spins, and never cleared: it is clear from power-on.
 				// An NMI with the power still on -- a system error, which the handler does not tell
@@ -1099,6 +1303,9 @@ void kn7000_state::maincpu_mem(address_map &map)
 	// FDC.DRQ during read/write/format. (The firmware's group-0x18 ISR at 0x48402109 also moves a single
 	// byte through it, at buffer index count-1; it is not raised by this driver.)
 	map(0x98010000, 0x98010003).rw(FUNC(kn7000_state::fdc_dma_r), FUNC(kn7000_state::fdc_dma_w));
+	// IC25, the sound-control latch (decoder slot Y6, HDDCS on the KN6000), write only.
+	if (m_ic25_latch)
+		map(0x98060000, 0x98060000).w(FUNC(kn7000_state::ic25_w));
 
 	// TODO: replace the logging handlers with real device models: LCD V-RAM
 	//       (IC104), FDC (IC103), tone generators (IC201/IC205), effects DSP
@@ -2307,6 +2514,8 @@ void kn7000_state::machine_start()
 	save_item(NAME(m_fdd_index));
 	save_item(NAME(m_fdc_drq));
 	save_item(NAME(m_gpio8004_kn6));
+	save_item(NAME(m_gpio8004));
+	save_item(NAME(m_ic25));
 
 	// (INTC + TM5 timer state is save_item'd by the MN10300 core now.)
 	save_item(NAME(m_c11_unserviced));
@@ -2446,7 +2655,35 @@ void kn7000_state::machine_reset()
 		m_gpio8004 = 0xFFF7;                            // CS released (bit1=1) at reset; bit 3 clear (gpio8004_w)
 		if (m_sdcard)
 			m_sdcard->spi_ss_w(0);                      // deselected until the firmware asserts CS (0x36008004 bit1)
+		if (m_dac)
+			speaker_gate_update();
 	}
+}
+
+void kn7000_state::ic25_w(uint8_t data)
+{
+	const uint8_t old = m_ic25;
+	m_ic25 = data & 0x3f;
+	if (BIT(old ^ m_ic25, 1))
+		speaker_gate_update();
+	if ((old ^ m_ic25) & 0x38)
+		m_dac->mode_w(BIT(m_ic25, 3), BIT(m_ic25, 4), BIT(m_ic25, 5));
+}
+
+// The path from IC311 to the speakers. IC311's differential currents go to the I/V converters
+// IC313 / IC314 and the balanced stage IC315, wired as the PCM1738 data sheet's Figure 40, then
+// to IC316, an inverting mixer, whose outputs are MIXOUTL / MIXOUTR (MAIN 3/5, p. 110). On the
+// FAJ board (p. 120) the summed sound passes the series FETs Q502 / Q503, conducting while SPSW
+// is high, to IC506, which feeds the headphone amplifier IC509 and the speakers' equaliser
+// IC502 / IC503; the power amplifiers (ASUB, p. 126) are biased from +15PM, which Q514 switches
+// on only while PMUT (GPIO 0x36008004 bit 2) is high (FAJ 2/2, p. 122). MAIN OUT takes the
+// summed sound ahead of Q502 / Q503 and has neither switch. The driver's one stereo output is
+// the speakers: it is fed while PMUT and SPSW are both high. IC316's inversion is the sign of
+// the gain; with REV = 1, as the firmware programs IC311, the two cancel.
+void kn7000_state::speaker_gate_update()
+{
+	const bool on = BIT(m_gpio8004, 2) && BIT(m_ic25, 1);
+	m_dac->set_output_gain(ALL_OUTPUTS, on ? -1.0f : 0.0f);
 }
 
 // ================= FDC (IC103, C1DB00000607, N82077AA-compatible) at 0x98020000 =================
@@ -2780,8 +3017,13 @@ void kn7000_state::kn7000(machine_config &config)
 	KN7000_DSP_BRIDGE(config, m_dspbridge, 0);
 	m_tonegen->add_route(0, *m_dspbridge, 1.0, 0);
 	m_tonegen->add_route(1, *m_dspbridge, 1.0, 1);
-	m_dspbridge->add_route(0, "lspeaker", 1.0);
-	m_dspbridge->add_route(1, "rspeaker", 1.0);
+	m_dspbridge->add_route(0, m_dac, 1.0, 0);
+	m_dspbridge->add_route(1, m_dac, 1.0, 1);
+	// IC311, the main D/A converter, and the analog path to the speakers (speaker_gate_update).
+	KN7000_DAC(config, m_dac);
+	m_dac->add_route(0, "lspeaker", 1.0);
+	m_dac->add_route(1, "rspeaker", 1.0);
+	m_ic25_latch = true;
 
 	// IC306 effects DSP -- Analog Devices ADSP-21065L SHARC (part S21065LKS240, 60 MHz),
 	// host-booted by the MN10300 over the 0x98000000 (index) / 0x9C000000 (data) port.
@@ -2843,6 +3085,12 @@ void kn7000_state::kn6000(machine_config &config)
 	KN6000_TONEGEN(config, m_tonegen, 0);
 	m_tonegen->add_route(0, *m_dspbridge, 1.0, 0);
 	m_tonegen->add_route(1, *m_dspbridge, 1.0, 1);
+	// Its converter is a PCM1728 (IC307), and 0x98060000 is the CN105 unit's HDDCS: no IC25.
+	config.device_remove("dac");
+	m_dspbridge->reset_routes();
+	m_dspbridge->add_route(0, "lspeaker", 1.0);
+	m_dspbridge->add_route(1, "rspeaker", 1.0);
+	m_ic25_latch = false;
 	// ...and the driver-side bindings the resolves need: the KN6000's library voice
 	// record array, its single-chip slot map, and its pitch register class.
 	m_tg_recbase    = 0x5027AF28;      // vs the KN7000's 0x500AF940 (same 0xB4 stride);
@@ -2898,6 +3146,12 @@ void kn7000_state::kn2400(machine_config &config)
 	kn7000(config);
 	config.device_remove("flop_list");   // no KN2400 software list yet
 	config.device_remove("ic23");        // its backup SRAM is not identified: keep the RAM placeholder
+	// Its converter and sound-control lines are not traced: no IC311 / IC25 model.
+	config.device_remove("dac");
+	m_dspbridge->reset_routes();
+	m_dspbridge->add_route(0, "lspeaker", 1.0);
+	m_dspbridge->add_route(1, "rspeaker", 1.0);
+	m_ic25_latch = false;
 	m_ram90_workram = true;
 	m_kn7000_timing = false;             // its tick and DSP timing are not measured: keep the fixed timer
 	m_strap_fixed = 0x8000;              // its strap is not known: keep the value the driver always gave

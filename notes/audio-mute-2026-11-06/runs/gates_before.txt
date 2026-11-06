@@ -1,0 +1,45 @@
+taps armed at power-on: 0x36008004 (PMUT), 0x98060000 (IC25 latch)
+PMUT    0.0000 -1 -> 0
+SPSW    0.0000 -1 -> 1
+DACWORD    1.1481 1220 (16 bits) rw 0 reg 18 data 20
+DACWORD    1.1482 1380 (16 bits) rw 0 reg 19 data 80
+PMUT    6.6283 0 -> 1
+STATE home PMUT 1 SPSW 1 latch EF
+DACREG none (no :dac device)
+[ 19.017] state
+[ 20.017] DOWN C4
+WINDOW W1-normal 20.1000 20.9000
+[ 20.017] window W1-normal
+[ 21.017] UP C4
+PMUT   22.8167 1 -> 0
+[ 22.817] PMUT forced 0
+[ 23.017] DOWN C4
+WINDOW W2-pmut-low 23.1000 23.9000
+[ 23.017] window W2-pmut-low
+[ 24.017] UP C4
+PMUT   24.2167 0 -> 1
+[ 24.217] PMUT forced 1
+[ 26.017] DOWN C4
+WINDOW W3-normal 26.1000 26.9000
+[ 26.017] window W3-normal
+[ 27.017] UP C4
+SPSW   28.8167 1 -> 0
+[ 28.817] SPSW forced 0
+[ 29.017] DOWN C4
+WINDOW W4-spsw-low 29.1000 29.9000
+[ 29.017] window W4-spsw-low
+[ 30.017] UP C4
+SPSW   30.2167 0 -> 1
+[ 30.217] SPSW forced 1
+[ 32.017] DOWN C4
+WINDOW W5-normal 32.1000 32.9000
+[ 32.017] window W5-normal
+[ 33.017] UP C4
+[ 35.017] DOWN C4
+WINDOW W6-before-nmi 35.1000 35.5000
+NMI   35.5167
+DACREG none (no :dac device)
+[ 35.517] POWER OFF
+PMUT   35.5334 1 -> 0
+WINDOW W6-after-pmut 35.5344 35.6333
+END   35.6333 PMUT 0 SPSW 1

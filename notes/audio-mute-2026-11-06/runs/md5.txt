@@ -1,0 +1,4 @@
+8b9865bd2e3849bea134c97315c9781e  /home/fsanches/compartilhado/tmp/kn7000-pmut/before/kn7000
+561a4e4d0d02a6eaeeb5770a0ce3a72a  gates.wav
+20455440aa8db9739bf9f930e6066dec  /home/fsanches/compartilhado/tmp/kn7000-pmut/after2-kn7000
+85f5d693c00340631db00ef3b7e60375  gates.wav

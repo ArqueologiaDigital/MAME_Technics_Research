@@ -1,0 +1,4 @@
+[:dac] IC311 mode word 1220: register 18 = 20
+[:dac] IC311: ATLD 0, format 24-bit standard, de-emphasis off (DMF none), soft mute off
+[:dac] IC311 mode word 1380: register 19 = 80
+[:dac] IC311: output phase inverted, attenuation rate LRCK/1, DAC enabled, SCKO enabled (full rate), sharp roll-off, zero-detect mute off
