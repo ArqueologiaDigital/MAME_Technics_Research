@@ -32,8 +32,10 @@ against then falls straight out of the code.
 `0x487DCE9A` compares flash `0x4000` against ROM `0x4858D730` and sets an error bit at
 `0x5001602C` on mismatch — which made the firmware discard ALL custom data.
 
-**Load flags:** `ROMX_LOAD(..., ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)` for the three signed
-files (CTMINI is a plain `ROM_LOAD_OPTIONAL`).
+**Load flags:** `ROMX_LOAD(..., ROM_GROUPWORD | ROM_REVERSE | ROM_OPTIONAL)` for all four files. Until
+2026-11-07 CTMINI (`kn7000_custom_data.rom`) was a plain `ROM_LOAD_OPTIONAL`, and its CUSTOM bank reached the CPU
+halfword-swapped: the directory's `"IK"` read `"KI"`, and the firmware wrote an empty directory over it
+(`notes/ic21-byte-order-2026-11-07/`).
 ⚠ `ROM_LOAD16_WORD_SWAP` is NOT optional — using it made the machine refuse to boot without the
 files ("Required files are missing"). Keep `ROM_OPTIONAL`.
 
