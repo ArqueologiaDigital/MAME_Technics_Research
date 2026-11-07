@@ -1,0 +1,19 @@
+| file                      | group  | source                      | cut (s in source) | duration | gain      | peak       | RMS         | first note | 1 s windows > -50 dBFS | ch 2 peak   |
+|---------------------------|--------|-----------------------------|-------------------|----------|-----------|------------|-------------|------------|------------------------|-------------|
+| midi-reverb-on.wav        | midi   | midi-on/run.wav ch 0,1      | 29.53-68.03       | 38.50 s  | +5.23 dB  | -5.96 dBFS | -24.85 dBFS | 0.50 s     | 92%                    | -240.0 dBFS |
+| midi-reverb-off.wav       | midi   | midi-off/run.wav ch 0,1     | 29.50-68.00       | 38.50 s  | +5.23 dB  | -1.00 dBFS | -18.63 dBFS | 0.50 s     | 89%                    | -240.0 dBFS |
+| aw-intro-dsp-computed.wav | aw-dsp | aw-dsp-live/run.wav ch 0,1  | 84.66-145.16      | 60.50 s  | +21.22 dB | -1.56 dBFS | -19.15 dBFS | 0.50 s     | 100%                   | -240.0 dBFS |
+| aw-intro-dsp-live.wav     | aw-dsp | aw-dsp-live/live.wav ch 0,1 | 138.40-239.74     | 101.34 s | +21.22 dB | -1.00 dBFS | -18.89 dBFS | 0.50 s     | 100%                   | -           |
+| aw-intro-tg-computed.wav  | aw-tg  | aw-tg/run.wav ch 0,1        | 84.75-145.25      | 60.50 s  | +6.85 dB  | -1.00 dBFS | -15.54 dBFS | 0.49 s     | 100%                   | -240.0 dBFS |
+
+| section of listen.mid (s after the first note) | midi-reverb-on | midi-reverb-off |
+|------------------------------------------------|----------------|-----------------|
+| square-lead chord held 0.5-3                   | -17.9 dBFS     | -11.5 dBFS      |
+| 0.2-0.7 s after its release                    | -31.4 dBFS     | -240.0 dBFS     |
+| 1-2 s after its release                        | -62.1 dBFS     | -240.0 dBFS     |
+| 3-5 s after its release                        | -240.0 dBFS    | -240.0 dBFS     |
+| piano 8-21.3                                   | -33.1 dBFS     | -26.6 dBFS      |
+| strings+drums 22-30                            | -25.4 dBFS     | -19.4 dBFS      |
+| pad held 31.5-35                               | -22.4 dBFS     | -16.1 dBFS      |
+| pad 0.5-1.5 s after release                    | -22.3 dBFS     | -16.1 dBFS      |
+| end 36.5-38                                    | -22.1 dBFS     | -16.3 dBFS      |
