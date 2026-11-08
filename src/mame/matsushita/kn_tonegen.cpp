@@ -310,24 +310,29 @@ int kn_tonegen_base_device::rom_sample_index(uint32_t key)
 			uint32_t pos = 0, ls = 0, le = 0;
 			bool have_ls = false, have_le = false;
 			float gain = 1.0f;
+			// every record word is a run of granules: 256 - value of them for a value of 0x80 or
+			// more (a segment), one otherwise (the split list and the REC_END word), each at
+			// its own 8-bit gain (review of mamedev/mame#16775; wave_record_extent.py)
 			for (int k = 1; k < 1024; k++)
 			{
 				const uint16_t w = uint16_t(rom_word(pair, pbase + A + k));
 				const int flags = w >> 14;
-				if ((w & 0xFF) >= 0x80)
-				{
-					pos += (0x100 - (w & 0xFF)) * L;
-					gain = float(pow(2.0, -double(BIT(w, 8, 3)) / 2.0));
-					if (rs.is8)
-						rs.gain.emplace_back(pos, gain);
-					if ((flags & 1) && !have_ls) { ls = pos; have_ls = true; }
-					if (flags & 2) { le = pos; have_le = true; break; }
-				}
+				pos += ((w & 0xFF) >= 0x80 ? (0x100 - (w & 0xFF)) : 1) * L;
+				gain = float(pow(2.0, -double(BIT(w, 8, 3)) / 2.0));
+				if (rs.is8)
+					rs.gain.emplace_back(pos, gain);
 				if (flags == 3)
 					break;
+				if ((flags & 1) && !have_ls) { ls = pos; have_ls = true; }
+				if (flags & 2) { le = pos; have_le = true; break; }
 			}
-			if (!have_ls) ls = have_le ? 0 : pos;      // a LOOP_END alone loops from the first sample
-			if (!have_le || le <= ls) le = ls + L;
+			if (!have_le)
+			{
+				le = std::max(pos, L);                  // no explicit loop: the record's last granule
+				ls = le - L;
+			}
+			else if (!have_ls)
+				ls = 0;                                 // a LOOP_END alone loops from the first sample
 			if (rs.is8)
 				rs.gain.emplace_back(~0U, gain);          // past the segments: the last segment's gain
 			rs.ls = ls;
