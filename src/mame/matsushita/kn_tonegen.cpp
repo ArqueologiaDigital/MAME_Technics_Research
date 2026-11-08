@@ -298,9 +298,14 @@ int kn_tonegen_base_device::rom_sample_index(uint32_t key)
 			const uint32_t B = uint16_t(rom_word(pair, pbase + 4 * entry + 2));
 			rom_sample rs;
 			rs.pair = pair;
-			rs.base = pbase + B * 16;
+			// P bit 9 reverses the address counter: unit -(B + n) holds samples 16n..16n+15
+			// (32n..32n+31 when 8-bit), last first; base is then one past unit -B's last word
+			// (Main_P00_E0AF, the Reverse Cymbal, is Main_P00_E0AE backwards: KN7000 repo
+			// tools/mame-pr-planning/kn-tonegen-pr/directory_check.py)
+			rs.reverse = BIT(P, 9);
+			rs.base = pbase + (rs.reverse ? (((0x10000 - B) & 0xFFFF) + 1) : B) * 16;
 			rs.is8 = BIT(P, 3);
-			rs.exponent = (P >> 4) & 0xFF;
+			rs.exponent = BIT(P, 4, 5);
 			const uint32_t L = 1U << ((P & 7) + 4);
 			uint32_t pos = 0, ls = 0, le = 0;
 			bool have_ls = false, have_le = false;
@@ -321,14 +326,14 @@ int kn_tonegen_base_device::rom_sample_index(uint32_t key)
 				if (flags == 3)
 					break;
 			}
-			if (!have_ls) ls = pos;
+			if (!have_ls) ls = have_le ? 0 : pos;      // a LOOP_END alone loops from the first sample
 			if (!have_le || le <= ls) le = ls + L;
 			if (rs.is8)
 				rs.gain.emplace_back(~0U, gain);          // past the segments: the last segment's gain
 			rs.ls = ls;
 			rs.le = le;
 			const uint32_t words = rs.is8 ? (le + 1) / 2 : le;
-			if (uint64_t(rs.base) + words + 1 < uint64_t(m_wave_bytes))  // stream words = 2 * bytes / 2
+			if (rs.reverse ? (rs.base >= pbase + words + 1) : (uint64_t(rs.base) + words + 1 < uint64_t(m_wave_bytes)))  // stream words = 2 * bytes / 2
 			{
 				result = int(m_rsamples.size());
 				m_rsamples.push_back(std::move(rs));
@@ -342,9 +347,10 @@ int kn_tonegen_base_device::rom_sample_index(uint32_t key)
 double kn_tonegen_base_device::rom_fetch(const rom_sample &rs, uint32_t i) const
 {
 	if (!rs.is8)
-		return double(rom_word(rs.pair, rs.base + i));
-	const int32_t w = rom_word(rs.pair, rs.base + (i >> 1));
-	const int8_t b = int8_t(BIT(i, 0) ? (w >> 8) : w);
+		return double(rom_word(rs.pair, rs.reverse ? (rs.base - 1 - i) : (rs.base + i)));
+	const uint32_t byte = rs.reverse ? (2 * rs.base - 1 - i) : (2 * rs.base + i);
+	const int32_t w = rom_word(rs.pair, byte >> 1);
+	const int8_t b = int8_t(BIT(byte, 0) ? (w >> 8) : w);
 	auto g = std::upper_bound(rs.gain.begin(), rs.gain.end(), i,
 			[] (uint32_t x, const std::pair<uint32_t, float> &s) { return x < s.first; });
 	return double(b) * 256.0 * (g != rs.gain.end() ? g->second : 1.0f);

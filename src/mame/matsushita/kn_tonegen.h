@@ -278,10 +278,11 @@ protected:
 	struct rom_sample
 	{
 		int      pair;                        // which ROM pair
-		uint32_t base;                        // stream word of the sample's first word
+		uint32_t base;                        // stream word of the sample's first word (reversed: one past its last)
 		uint32_t ls, le;                      // loop start / end, in samples from the start
-		int      exponent;                    // P bits 11:4: a period of 2^(E-9) samples sounds at p18's note
+		int      exponent;                    // P bits 8:4: a period of 2^(E-9) samples sounds at p18's note
 		bool     is8;                         // P bit 3: two 8-bit samples per word, low byte first
+		bool     reverse;                     // P bit 9: plays from base - 1 down
 		std::vector<std::pair<uint32_t, float>> gain;  // 8-bit: (segment end, gain) in order
 	};
 	void set_wave_pair(int pair, const uint8_t *y, const uint8_t *x, uint32_t bytes);
